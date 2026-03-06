@@ -1,0 +1,19 @@
+{
+  "name": "@spatula/cli",
+  "version": "0.0.1",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsx watch src/index.tsx",
+    "clean": "rm -rf dist .turbo"
+  },
+  "dependencies": {
+    "@spatula/core": "workspace:*",
+    "@spatula/shared": "workspace:*"
+  },
+  "devDependencies": {
+    "typescript": "^5.7.0",
+    "tsx": "^4.19.0"
+  }
+}
