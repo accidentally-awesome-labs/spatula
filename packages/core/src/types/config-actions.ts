@@ -66,7 +66,7 @@ const SetMaxPagesAction = BaseConfigAction.extend({
 
 const SetConcurrencyAction = BaseConfigAction.extend({
   type: z.literal('set_concurrency'),
-  payload: z.object({ concurrency: z.number().min(1).max(50) }),
+  payload: z.object({ concurrency: z.number().min(1).max(20) }),
 });
 
 const SetCrawlerTypeAction = BaseConfigAction.extend({

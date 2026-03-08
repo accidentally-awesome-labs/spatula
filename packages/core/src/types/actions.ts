@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { FieldDefinition, FieldRelevance } from './schema.js';
+import { NormalizationRule } from './normalization.js';
 import { PageClassification, ExtractionStrategy } from './extraction.js';
 import { TrustLevel } from './reconciliation.js';
 
@@ -121,7 +122,7 @@ const SetNormalizationRuleAction = BaseAction.extend({
   type: z.literal('set_normalization_rule'),
   payload: z.object({
     fieldName: z.string(),
-    rule: z.any(), // NormalizationRule — using any to avoid circular import complexity
+    rule: NormalizationRule,
     examples: z.array(
       z.object({
         before: z.unknown(),
