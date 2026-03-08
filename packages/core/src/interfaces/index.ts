@@ -7,3 +7,4 @@ export * from './reconciler.js';
 export * from './exporter.js';
 export * from './action-executor.js';
 export * from './config-executor.js';
+export * from './llm-client.js';
