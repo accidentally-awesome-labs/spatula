@@ -21,7 +21,10 @@
     "clean": "rm -rf dist .turbo"
   },
   "dependencies": {
+    "@mendable/firecrawl-js": "^4.15.4",
     "@spatula/shared": "workspace:*",
+    "cheerio": "^1.2.0",
+    "playwright": "^1.58.2",
     "zod": "^3.24.0"
   },
   "devDependencies": {
