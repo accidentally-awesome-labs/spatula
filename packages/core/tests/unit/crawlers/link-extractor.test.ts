@@ -35,6 +35,11 @@ describe('resolveUrl', () => {
   it('strips hash fragments', () => {
     expect(resolveUrl('/page#section', 'https://example.com')).toBe('https://example.com/page');
   });
+
+  it('returns null for fragment-only hrefs', () => {
+    expect(resolveUrl('#', 'https://example.com/page')).toBeNull();
+    expect(resolveUrl('#section', 'https://example.com/page')).toBeNull();
+  });
 });
 
 describe('extractLinks', () => {

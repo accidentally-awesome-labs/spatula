@@ -36,6 +36,17 @@ describe('FirecrawlCrawler', () => {
   });
 
   it('scrapes a URL and returns CrawlResult', async () => {
+    mockScrape.mockResolvedValue({
+      html: '<html><head><title>Test Page</title></head><body><a href="/link">Link</a></body></html>',
+      metadata: {
+        title: 'Test Page',
+        statusCode: 200,
+        contentType: 'text/html',
+        sourceURL: 'https://example.com',
+      },
+      links: ['https://example.com/link'],
+    });
+
     const result = await crawler.crawl('https://example.com');
 
     expect(mockScrape).toHaveBeenCalledWith('https://example.com', {
@@ -46,6 +57,7 @@ describe('FirecrawlCrawler', () => {
     expect(result.html).toContain('<a href="/link">');
     expect(result.title).toBe('Test Page');
     expect(result.statusCode).toBe(200);
+    expect(result.contentType).toBe('text/html');
     expect(result.metadata.crawlerType).toBe('firecrawl');
   });
 

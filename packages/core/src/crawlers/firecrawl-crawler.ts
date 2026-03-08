@@ -35,6 +35,7 @@ export class FirecrawlCrawler implements Crawler {
       const html = response.html ?? '';
       const title = response.metadata?.title ?? undefined;
       const statusCode = response.metadata?.statusCode ?? 200;
+      const contentType = response.metadata?.contentType ?? undefined;
       const responseTimeMs = Date.now() - startTime;
 
       // Use shared link extractor for consistent output with Playwright adapter
@@ -50,6 +51,7 @@ export class FirecrawlCrawler implements Crawler {
         html,
         title,
         statusCode,
+        contentType,
         links,
         metadata: {
           crawledAt: new Date(),

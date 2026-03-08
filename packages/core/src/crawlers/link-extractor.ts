@@ -4,7 +4,7 @@ const IGNORED_PROTOCOLS = ['javascript:', 'mailto:', 'tel:', 'data:', 'blob:'];
 
 export function resolveUrl(href: string, baseUrl: string): string | null {
   const trimmed = href.trim();
-  if (!trimmed) return null;
+  if (!trimmed || trimmed.startsWith('#')) return null;
 
   for (const protocol of IGNORED_PROTOCOLS) {
     if (trimmed.toLowerCase().startsWith(protocol)) return null;
