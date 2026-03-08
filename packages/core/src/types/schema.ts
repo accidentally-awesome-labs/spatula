@@ -1,16 +1,31 @@
 import { z } from 'zod';
 import { NormalizationRule } from './normalization.js';
 
-export const FieldDefinition: z.ZodType<{
+// Recursive type needs explicit annotation; we use the 3-arg form of ZodType
+// to account for .default() fields where Input !== Output.
+export type FieldDefinitionOutput = {
   name: string;
   description: string;
   type: 'string' | 'number' | 'boolean' | 'url' | 'currency' | 'enum' | 'array' | 'object';
   required: boolean;
   normalization?: z.infer<typeof NormalizationRule>;
   enumValues?: string[];
-  arrayItemType?: unknown;
-  objectFields?: unknown[];
-}> = z.lazy(() =>
+  arrayItemType?: FieldDefinitionOutput;
+  objectFields?: FieldDefinitionOutput[];
+};
+
+export type FieldDefinitionInput = {
+  name: string;
+  description: string;
+  type: 'string' | 'number' | 'boolean' | 'url' | 'currency' | 'enum' | 'array' | 'object';
+  required?: boolean;
+  normalization?: z.input<typeof NormalizationRule>;
+  enumValues?: string[];
+  arrayItemType?: FieldDefinitionInput;
+  objectFields?: FieldDefinitionInput[];
+};
+
+export const FieldDefinition: z.ZodType<FieldDefinitionOutput, z.ZodTypeDef, FieldDefinitionInput> = z.lazy(() =>
   z.object({
     name: z.string(),
     description: z.string(),
