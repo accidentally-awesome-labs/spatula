@@ -1,4 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { CrawlError } from '@spatula/shared';
 import { PlaywrightCrawler } from '../../../src/crawlers/playwright-crawler.js';
 import type { Browser, BrowserContext, Page, Response } from 'playwright';
 
@@ -115,13 +116,7 @@ describe('PlaywrightCrawler', () => {
       new Error('net::ERR_NAME_NOT_RESOLVED'),
     );
 
-    try {
-      await crawler.crawl('https://nonexistent.test');
-      expect.unreachable('should have thrown');
-    } catch (error: unknown) {
-      expect((error as { code: string }).code).toBe('CRAWL_ERROR');
-      expect((error as { name: string }).name).toBe('CrawlError');
-    }
+    await expect(crawler.crawl('https://nonexistent.test')).rejects.toThrow(CrawlError);
   });
 
   it('closes page and context even on error', async () => {

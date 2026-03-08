@@ -1,4 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { CrawlError } from '@spatula/shared';
 import { FirecrawlCrawler } from '../../../src/crawlers/firecrawl-crawler.js';
 
 const mockScrape = vi.fn();
@@ -70,13 +71,13 @@ describe('FirecrawlCrawler', () => {
   it('throws CrawlError when scrape throws an SDK error', async () => {
     mockScrape.mockRejectedValue(new Error('Rate limit exceeded'));
 
-    await expect(crawler.crawl('https://example.com')).rejects.toThrow();
+    await expect(crawler.crawl('https://example.com')).rejects.toThrow(CrawlError);
   });
 
   it('throws CrawlError on network error', async () => {
     mockScrape.mockRejectedValue(new Error('Network timeout'));
 
-    await expect(crawler.crawl('https://example.com')).rejects.toThrow();
+    await expect(crawler.crawl('https://example.com')).rejects.toThrow(CrawlError);
   });
 
   it('close() is a no-op (stateless)', async () => {

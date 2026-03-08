@@ -1,4 +1,5 @@
 import { describe, it, expect, vi } from 'vitest';
+import { CrawlError } from '@spatula/shared';
 import { CrawlerFactory } from '../../../src/crawlers/crawler-factory.js';
 import { PlaywrightCrawler } from '../../../src/crawlers/playwright-crawler.js';
 import { FirecrawlCrawler } from '../../../src/crawlers/firecrawl-crawler.js';
@@ -34,7 +35,7 @@ describe('CrawlerFactory', () => {
   });
 
   it('throws on firecrawl without API key', async () => {
-    await expect(CrawlerFactory.create({ type: 'firecrawl' })).rejects.toThrow();
+    await expect(CrawlerFactory.create({ type: 'firecrawl' })).rejects.toThrow(CrawlError);
   });
 
   it('passes playwright launch options', async () => {
