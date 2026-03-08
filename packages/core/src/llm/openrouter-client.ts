@@ -1,0 +1,145 @@
+import { LLMError } from '@spatula/shared';
+import { createLogger, sleep } from '@spatula/shared';
+import type {
+  LLMClient,
+  LLMCompletionRequest,
+  LLMCompletionResponse,
+} from '../interfaces/llm-client.js';
+import type { OpenRouterClientOptions } from './types.js';
+
+const logger = createLogger('openrouter-client');
+
+interface OpenRouterAPIResponse {
+  choices?: Array<{
+    message?: { content?: string };
+    finish_reason?: string;
+  }>;
+  model?: string;
+  usage?: {
+    prompt_tokens?: number;
+    completion_tokens?: number;
+    total_tokens?: number;
+  };
+}
+
+export class OpenRouterClient implements LLMClient {
+  private readonly apiKey: string;
+  private readonly baseUrl: string;
+  private readonly maxRetries: number;
+  private readonly timeoutMs: number;
+  private readonly siteName: string;
+  private readonly siteUrl: string;
+
+  constructor(options: OpenRouterClientOptions) {
+    this.apiKey = options.apiKey;
+    this.baseUrl = options.baseUrl ?? 'https://openrouter.ai/api/v1';
+    this.maxRetries = options.maxRetries ?? 3;
+    this.timeoutMs = options.timeoutMs ?? 60000;
+    this.siteName = options.siteName ?? 'Spatula';
+    this.siteUrl = options.siteUrl ?? 'https://spatula.dev';
+  }
+
+  async complete(request: LLMCompletionRequest): Promise<LLMCompletionResponse> {
+    const body: Record<string, unknown> = {
+      model: request.model,
+      messages: request.messages,
+      temperature: request.temperature ?? 0,
+      max_tokens: request.maxTokens ?? 4096,
+    };
+
+    if (request.jsonMode) {
+      body.response_format = { type: 'json_object' };
+    }
+
+    let lastError: Error | undefined;
+
+    for (let attempt = 0; attempt <= this.maxRetries; attempt++) {
+      if (attempt > 0) {
+        const delay = 1000 * Math.pow(2, attempt - 1);
+        logger.debug({ attempt, delay }, 'retrying LLM call');
+        await sleep(delay);
+      }
+
+      try {
+        const response = await this.doFetch(body);
+        const data = (await response.json()) as OpenRouterAPIResponse;
+
+        const choice = data.choices?.[0];
+        if (!choice?.message?.content) {
+          throw new Error('Empty response from LLM');
+        }
+
+        const result: LLMCompletionResponse = {
+          content: choice.message.content,
+          model: data.model ?? request.model,
+          usage: {
+            promptTokens: data.usage?.prompt_tokens ?? 0,
+            completionTokens: data.usage?.completion_tokens ?? 0,
+            totalTokens: data.usage?.total_tokens ?? 0,
+          },
+          finishReason: choice.finish_reason ?? 'stop',
+        };
+
+        logger.debug(
+          { model: result.model, tokens: result.usage.totalTokens },
+          'LLM call completed',
+        );
+
+        return result;
+      } catch (error) {
+        lastError = error as Error;
+
+        if (attempt < this.maxRetries && this.isRetryable(lastError)) {
+          logger.warn({ error: lastError.message, attempt }, 'retryable LLM error');
+          continue;
+        }
+
+        break;
+      }
+    }
+
+    throw new LLMError(
+      `LLM completion failed: ${lastError?.message ?? 'unknown error'}`,
+      { cause: lastError, context: { model: request.model } },
+    );
+  }
+
+  private async doFetch(body: Record<string, unknown>): Promise<Response> {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), this.timeoutMs);
+
+    try {
+      const response = await fetch(`${this.baseUrl}/chat/completions`, {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${this.apiKey}`,
+          'Content-Type': 'application/json',
+          'HTTP-Referer': this.siteUrl,
+          'X-Title': this.siteName,
+        },
+        body: JSON.stringify(body),
+        signal: controller.signal,
+      });
+
+      if (!response.ok) {
+        const text = await response.text().catch(() => 'unknown');
+        throw new Error(`HTTP ${response.status}: ${text}`);
+      }
+
+      return response;
+    } finally {
+      clearTimeout(timer);
+    }
+  }
+
+  private isRetryable(error: Error): boolean {
+    const msg = error.message;
+    if (msg.includes('HTTP 429')) return true;
+    if (msg.includes('HTTP 500') || msg.includes('HTTP 502')) return true;
+    if (msg.includes('HTTP 503') || msg.includes('HTTP 504')) return true;
+    if (error.name === 'AbortError') return true;
+    if (msg.includes('ECONNRESET') || msg.includes('ETIMEDOUT')) return true;
+    if (msg.includes('fetch failed')) return true;
+    return false;
+  }
+}
