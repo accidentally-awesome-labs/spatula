@@ -13,6 +13,7 @@
 ## Task 1: Initialize Monorepo Scaffolding
 
 **Files:**
+
 - Create: `package.json`
 - Create: `pnpm-workspace.yaml`
 - Create: `turbo.json`
@@ -60,13 +61,15 @@ Then replace `package.json` with:
 **Step 2: Create workspace config files**
 
 `pnpm-workspace.yaml`:
+
 ```yaml
 packages:
-  - "packages/*"
-  - "apps/*"
+  - 'packages/*'
+  - 'apps/*'
 ```
 
 `turbo.json`:
+
 ```json
 {
   "$schema": "https://turbo.build/schema.json",
@@ -97,6 +100,7 @@ packages:
 ```
 
 `tsconfig.base.json`:
+
 ```json
 {
   "compilerOptions": {
@@ -121,11 +125,13 @@ packages:
 ```
 
 `.npmrc`:
+
 ```
 auto-install-peers=true
 ```
 
 `.gitignore`:
+
 ```
 node_modules/
 dist/
@@ -137,6 +143,7 @@ coverage/
 ```
 
 `.env.example`:
+
 ```
 # OpenRouter
 OPENROUTER_API_KEY=
@@ -172,6 +179,7 @@ git commit -m "feat: initialize monorepo with Turborepo + pnpm workspaces"
 ## Task 2: Create Package Scaffolds
 
 **Files:**
+
 - Create: `packages/shared/package.json`
 - Create: `packages/shared/tsconfig.json`
 - Create: `packages/shared/vitest.config.ts`
@@ -192,6 +200,7 @@ git commit -m "feat: initialize monorepo with Turborepo + pnpm workspaces"
 **Step 1: Create shared package**
 
 `packages/shared/package.json`:
+
 ```json
 {
   "name": "@spatula/shared",
@@ -227,6 +236,7 @@ git commit -m "feat: initialize monorepo with Turborepo + pnpm workspaces"
 ```
 
 `packages/shared/tsconfig.json`:
+
 ```json
 {
   "extends": "../../tsconfig.base.json",
@@ -239,6 +249,7 @@ git commit -m "feat: initialize monorepo with Turborepo + pnpm workspaces"
 ```
 
 `packages/shared/vitest.config.ts`:
+
 ```typescript
 import { defineConfig } from 'vitest/config';
 
@@ -251,6 +262,7 @@ export default defineConfig({
 ```
 
 `packages/shared/src/index.ts`:
+
 ```typescript
 export * from './logger.js';
 export * from './errors.js';
@@ -261,6 +273,7 @@ export * from './utils.js';
 **Step 2: Create core package**
 
 `packages/core/package.json`:
+
 ```json
 {
   "name": "@spatula/core",
@@ -296,6 +309,7 @@ export * from './utils.js';
 ```
 
 `packages/core/tsconfig.json`:
+
 ```json
 {
   "extends": "../../tsconfig.base.json",
@@ -304,13 +318,12 @@ export * from './utils.js';
     "rootDir": "src"
   },
   "include": ["src"],
-  "references": [
-    { "path": "../shared" }
-  ]
+  "references": [{ "path": "../shared" }]
 }
 ```
 
 `packages/core/vitest.config.ts`:
+
 ```typescript
 import { defineConfig } from 'vitest/config';
 
@@ -323,6 +336,7 @@ export default defineConfig({
 ```
 
 `packages/core/src/index.ts`:
+
 ```typescript
 // Types
 export * from './types/index.js';
@@ -334,6 +348,7 @@ export * from './interfaces/index.js';
 **Step 3: Create placeholder packages (db, queue, api, cli)**
 
 `packages/db/package.json`:
+
 ```json
 {
   "name": "@spatula/db",
@@ -359,11 +374,13 @@ export * from './interfaces/index.js';
 ```
 
 `packages/db/src/index.ts`:
+
 ```typescript
 // Phase 4: Database layer
 ```
 
 `packages/queue/package.json`:
+
 ```json
 {
   "name": "@spatula/queue",
@@ -389,11 +406,13 @@ export * from './interfaces/index.js';
 ```
 
 `packages/queue/src/index.ts`:
+
 ```typescript
 // Phase 5: Queue layer
 ```
 
 `apps/api/package.json`:
+
 ```json
 {
   "name": "@spatula/api",
@@ -417,11 +436,13 @@ export * from './interfaces/index.js';
 ```
 
 `apps/api/src/index.ts`:
+
 ```typescript
 // Phase 8: API server
 ```
 
 `apps/cli/package.json`:
+
 ```json
 {
   "name": "@spatula/cli",
@@ -445,6 +466,7 @@ export * from './interfaces/index.js';
 ```
 
 `apps/cli/src/index.ts`:
+
 ```typescript
 // Phase 9: CLI
 ```
@@ -472,12 +494,14 @@ git commit -m "feat: scaffold all package and app directories"
 ## Task 3: Shared Package — Logger
 
 **Files:**
+
 - Create: `packages/shared/src/logger.ts`
 - Create: `packages/shared/tests/logger.test.ts`
 
 **Step 1: Write the failing test**
 
 `packages/shared/tests/logger.test.ts`:
+
 ```typescript
 import { describe, it, expect } from 'vitest';
 import { createLogger } from '../src/logger.js';
@@ -509,6 +533,7 @@ Expected: FAIL — cannot resolve `../src/logger.js`
 **Step 3: Write minimal implementation**
 
 `packages/shared/src/logger.ts`:
+
 ```typescript
 import pino from 'pino';
 
@@ -547,12 +572,14 @@ git commit -m "feat(shared): add pino-based logger"
 ## Task 4: Shared Package — Error Classes
 
 **Files:**
+
 - Create: `packages/shared/src/errors.ts`
 - Create: `packages/shared/tests/errors.test.ts`
 
 **Step 1: Write the failing test**
 
 `packages/shared/tests/errors.test.ts`:
+
 ```typescript
 import { describe, it, expect } from 'vitest';
 import {
@@ -627,6 +654,7 @@ Expected: FAIL
 **Step 3: Write minimal implementation**
 
 `packages/shared/src/errors.ts`:
+
 ```typescript
 export interface SpatulaErrorOptions {
   cause?: Error;
@@ -705,6 +733,7 @@ git commit -m "feat(shared): add error class hierarchy"
 ## Task 5: Shared Package — Config & Utils
 
 **Files:**
+
 - Create: `packages/shared/src/config.ts`
 - Create: `packages/shared/src/utils.ts`
 - Create: `packages/shared/tests/config.test.ts`
@@ -713,6 +742,7 @@ git commit -m "feat(shared): add error class hierarchy"
 **Step 1: Write the failing tests**
 
 `packages/shared/tests/config.test.ts`:
+
 ```typescript
 import { describe, it, expect, vi, afterEach } from 'vitest';
 import { getEnvOrThrow, getEnvOrDefault } from '../src/config.js';
@@ -749,6 +779,7 @@ describe('getEnvOrDefault', () => {
 ```
 
 `packages/shared/tests/utils.test.ts`:
+
 ```typescript
 import { describe, it, expect } from 'vitest';
 import { generateId, sleep, chunk, extractDomain } from '../src/utils.js';
@@ -756,9 +787,7 @@ import { generateId, sleep, chunk, extractDomain } from '../src/utils.js';
 describe('generateId', () => {
   it('returns a valid UUID v4', () => {
     const id = generateId();
-    expect(id).toMatch(
-      /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/
-    );
+    expect(id).toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/);
   });
 
   it('returns unique values', () => {
@@ -813,6 +842,7 @@ Expected: FAIL
 **Step 3: Write implementations**
 
 `packages/shared/src/config.ts`:
+
 ```typescript
 import { ConfigError } from './errors.js';
 
@@ -830,6 +860,7 @@ export function getEnvOrDefault(key: string, defaultValue: string): string {
 ```
 
 `packages/shared/src/utils.ts`:
+
 ```typescript
 import { randomUUID } from 'node:crypto';
 
@@ -877,12 +908,14 @@ git commit -m "feat(shared): add config helpers and utility functions"
 ## Task 6: Core Types — Normalization Rules
 
 **Files:**
+
 - Create: `packages/core/src/types/normalization.ts`
 - Create: `packages/core/tests/unit/types/normalization.test.ts`
 
 **Step 1: Write the failing test**
 
 `packages/core/tests/unit/types/normalization.test.ts`:
+
 ```typescript
 import { describe, it, expect } from 'vitest';
 import { NormalizationRule } from '../../../src/types/normalization.js';
@@ -952,9 +985,7 @@ describe('NormalizationRule', () => {
   });
 
   it('rejects invalid type', () => {
-    expect(() =>
-      NormalizationRule.parse({ type: 'invalid', config: {} })
-    ).toThrow();
+    expect(() => NormalizationRule.parse({ type: 'invalid', config: {} })).toThrow();
   });
 });
 ```
@@ -967,6 +998,7 @@ Expected: FAIL
 **Step 3: Write implementation**
 
 `packages/core/src/types/normalization.ts`:
+
 ```typescript
 import { z } from 'zod';
 
@@ -1056,12 +1088,14 @@ git commit -m "feat(core): add NormalizationRule Zod schemas (7 types)"
 ## Task 7: Core Types — Field & Schema Definitions
 
 **Files:**
+
 - Create: `packages/core/src/types/schema.ts`
 - Create: `packages/core/tests/unit/types/schema.test.ts`
 
 **Step 1: Write the failing test**
 
 `packages/core/tests/unit/types/schema.test.ts`:
+
 ```typescript
 import { describe, it, expect } from 'vitest';
 import {
@@ -1135,9 +1169,7 @@ describe('FieldDefinition', () => {
   });
 
   it('rejects invalid type', () => {
-    expect(() =>
-      FieldDefinition.parse({ name: 'x', description: 'x', type: 'invalid' })
-    ).toThrow();
+    expect(() => FieldDefinition.parse({ name: 'x', description: 'x', type: 'invalid' })).toThrow();
   });
 });
 
@@ -1220,6 +1252,7 @@ Expected: FAIL
 **Step 3: Write implementation**
 
 `packages/core/src/types/schema.ts`:
+
 ```typescript
 import { z } from 'zod';
 import { NormalizationRule } from './normalization.js';
@@ -1237,16 +1270,13 @@ export const FieldDefinition: z.ZodType<{
   z.object({
     name: z.string(),
     description: z.string(),
-    type: z.enum([
-      'string', 'number', 'boolean', 'url',
-      'currency', 'enum', 'array', 'object',
-    ]),
+    type: z.enum(['string', 'number', 'boolean', 'url', 'currency', 'enum', 'array', 'object']),
     required: z.boolean().default(false),
     normalization: NormalizationRule.optional(),
     enumValues: z.array(z.string()).optional(),
     arrayItemType: FieldDefinition.optional(),
     objectFields: z.array(FieldDefinition).optional(),
-  })
+  }),
 );
 
 export type FieldDefinition = z.infer<typeof FieldDefinition>;
@@ -1258,7 +1288,7 @@ export const FieldRelevance = z.object({
       category: z.string(),
       frequency: z.number(),
       sampleSize: z.number(),
-    })
+    }),
   ),
   classification: z.enum([
     'universal_required',
@@ -1279,7 +1309,7 @@ export const FieldAlias = z.object({
       name: z.string(),
       sources: z.array(z.string()),
       occurrences: z.number(),
-    })
+    }),
   ),
   mergedAt: z.coerce.date(),
   reasoning: z.string(),
@@ -1315,12 +1345,14 @@ git commit -m "feat(core): add FieldDefinition, FieldRelevance, SchemaDefinition
 ## Task 8: Core Types — Job Configuration
 
 **Files:**
+
 - Create: `packages/core/src/types/job.ts`
 - Create: `packages/core/tests/unit/types/job.test.ts`
 
 **Step 1: Write the failing test**
 
 `packages/core/tests/unit/types/job.test.ts`:
+
 ```typescript
 import { describe, it, expect } from 'vitest';
 import { JobConfig, JobStatus } from '../../../src/types/job.js';
@@ -1349,8 +1381,8 @@ describe('JobConfig', () => {
         maxFields: 50,
         relevanceThresholds: {
           requiredMin: 0.85,
-          optionalMin: 0.40,
-          rareBelow: 0.40,
+          optionalMin: 0.4,
+          rareBelow: 0.4,
           minCategorySampleSize: 5,
         },
         tableStrategy: 'auto' as const,
@@ -1394,15 +1426,11 @@ describe('JobConfig', () => {
   });
 
   it('rejects invalid seed URLs', () => {
-    expect(() =>
-      JobConfig.parse({ ...validConfig, seedUrls: ['not-a-url'] })
-    ).toThrow();
+    expect(() => JobConfig.parse({ ...validConfig, seedUrls: ['not-a-url'] })).toThrow();
   });
 
   it('rejects invalid tenant UUID', () => {
-    expect(() =>
-      JobConfig.parse({ ...validConfig, tenantId: 'not-a-uuid' })
-    ).toThrow();
+    expect(() => JobConfig.parse({ ...validConfig, tenantId: 'not-a-uuid' })).toThrow();
   });
 
   it('rejects crawl depth over 10', () => {
@@ -1410,7 +1438,7 @@ describe('JobConfig', () => {
       JobConfig.parse({
         ...validConfig,
         crawl: { ...validConfig.crawl, maxDepth: 11 },
-      })
+      }),
     ).toThrow();
   });
 
@@ -1426,8 +1454,14 @@ describe('JobConfig', () => {
 describe('JobStatus', () => {
   it('accepts all valid statuses', () => {
     const statuses = [
-      'pending', 'queued', 'running', 'paused',
-      'reconciling', 'completed', 'failed', 'cancelled',
+      'pending',
+      'queued',
+      'running',
+      'paused',
+      'reconciling',
+      'completed',
+      'failed',
+      'cancelled',
     ];
     for (const status of statuses) {
       expect(JobStatus.parse(status)).toBe(status);
@@ -1448,14 +1482,15 @@ Expected: FAIL
 **Step 3: Write implementation**
 
 `packages/core/src/types/job.ts`:
+
 ```typescript
 import { z } from 'zod';
 import { FieldDefinition } from './schema.js';
 
 export const RelevanceThresholds = z.object({
   requiredMin: z.number().default(0.85),
-  optionalMin: z.number().default(0.40),
-  rareBelow: z.number().default(0.40),
+  optionalMin: z.number().default(0.4),
+  rareBelow: z.number().default(0.4),
   minCategorySampleSize: z.number().default(5),
 });
 
@@ -1509,13 +1544,20 @@ export const LLMConfig = z.object({
 export type LLMConfig = z.infer<typeof LLMConfig>;
 
 export const EntityMatchStrategy = z.enum([
-  'exact_name', 'fuzzy_name', 'composite_key', 'llm_assisted',
+  'exact_name',
+  'fuzzy_name',
+  'composite_key',
+  'llm_assisted',
 ]);
 
 export type EntityMatchStrategy = z.infer<typeof EntityMatchStrategy>;
 
 export const ConflictResolution = z.enum([
-  'most_common', 'most_complete', 'source_priority', 'most_recent', 'llm_resolved',
+  'most_common',
+  'most_complete',
+  'source_priority',
+  'most_recent',
+  'llm_resolved',
 ]);
 
 export type ConflictResolution = z.infer<typeof ConflictResolution>;
@@ -1544,8 +1586,14 @@ export const JobConfig = z.object({
 export type JobConfig = z.infer<typeof JobConfig>;
 
 export const JobStatus = z.enum([
-  'pending', 'queued', 'running', 'paused',
-  'reconciling', 'completed', 'failed', 'cancelled',
+  'pending',
+  'queued',
+  'running',
+  'paused',
+  'reconciling',
+  'completed',
+  'failed',
+  'cancelled',
 ]);
 
 export type JobStatus = z.infer<typeof JobStatus>;
@@ -1568,15 +1616,21 @@ git commit -m "feat(core): add JobConfig, ReconciliationConfig, and related type
 ## Task 9: Core Types — Extraction Types
 
 **Files:**
+
 - Create: `packages/core/src/types/extraction.ts`
 - Create: `packages/core/tests/unit/types/extraction.test.ts`
 
 **Step 1: Write the failing test**
 
 `packages/core/tests/unit/types/extraction.test.ts`:
+
 ```typescript
 import { describe, it, expect } from 'vitest';
-import { ExtractionResult, ValueProvenance, PageClassification } from '../../../src/types/extraction.js';
+import {
+  ExtractionResult,
+  ValueProvenance,
+  PageClassification,
+} from '../../../src/types/extraction.js';
 
 describe('ExtractionResult', () => {
   it('parses a valid extraction result', () => {
@@ -1594,9 +1648,7 @@ describe('ExtractionResult', () => {
         modelUsed: 'anthropic/claude-sonnet-4-20250514',
         tokensUsed: 1450,
         extractionTimeMs: 2300,
-        unmappedFields: [
-          { name: 'warranty', value: '2 years', suggestedType: 'string' },
-        ],
+        unmappedFields: [{ name: 'warranty', value: '2 years', suggestedType: 'string' }],
       },
     });
     expect(result.schemaVersion).toBe(3);
@@ -1618,7 +1670,7 @@ describe('ExtractionResult', () => {
           extractionTimeMs: 0,
           unmappedFields: [],
         },
-      })
+      }),
     ).toThrow();
   });
 });
@@ -1650,6 +1702,7 @@ Expected: FAIL
 **Step 3: Write implementation**
 
 `packages/core/src/types/extraction.ts`:
+
 ```typescript
 import { z } from 'zod';
 
@@ -1683,19 +1736,30 @@ export const ExtractionResult = z.object({
 export type ExtractionResult = z.infer<typeof ExtractionResult>;
 
 export const ValueProvenance = z.enum([
-  'extracted', 'normalized', 'merged', 'resolved', 'inferred',
+  'extracted',
+  'normalized',
+  'merged',
+  'resolved',
+  'inferred',
 ]);
 
 export type ValueProvenance = z.infer<typeof ValueProvenance>;
 
 export const PageClassification = z.enum([
-  'single_entry', 'multiple_entries', 'navigation', 'irrelevant', 'partial',
+  'single_entry',
+  'multiple_entries',
+  'navigation',
+  'irrelevant',
+  'partial',
 ]);
 
 export type PageClassification = z.infer<typeof PageClassification>;
 
 export const ExtractionStrategy = z.enum([
-  'full_extraction', 'list_extraction', 'links_only', 'skip',
+  'full_extraction',
+  'list_extraction',
+  'links_only',
+  'skip',
 ]);
 
 export type ExtractionStrategy = z.infer<typeof ExtractionStrategy>;
@@ -1718,12 +1782,14 @@ git commit -m "feat(core): add ExtractionResult, ValueProvenance types"
 ## Task 10: Core Types — Reconciliation Types
 
 **Files:**
+
 - Create: `packages/core/src/types/reconciliation.ts`
 - Create: `packages/core/tests/unit/types/reconciliation.test.ts`
 
 **Step 1: Write the failing test**
 
 `packages/core/tests/unit/types/reconciliation.test.ts`:
+
 ```typescript
 import { describe, it, expect } from 'vitest';
 import { EntityMatch, SourceTrust, TrustLevel } from '../../../src/types/reconciliation.js';
@@ -1759,7 +1825,11 @@ describe('EntityMatch', () => {
           finalValue: 'Sennheiser HD 650',
           provenanceType: 'extracted',
           sources: [
-            { sourceUrl: 'https://amazon.com/hd650', rawValue: 'Sennheiser HD 650', normalizedValue: 'Sennheiser HD 650' },
+            {
+              sourceUrl: 'https://amazon.com/hd650',
+              rawValue: 'Sennheiser HD 650',
+              normalizedValue: 'Sennheiser HD 650',
+            },
           ],
           hadConflict: false,
         },
@@ -1767,7 +1837,11 @@ describe('EntityMatch', () => {
           finalValue: { amount: 299, currency: 'USD' },
           provenanceType: 'normalized',
           sources: [
-            { sourceUrl: 'https://amazon.com/hd650', rawValue: '$299.00', normalizedValue: { amount: 299, currency: 'USD' } },
+            {
+              sourceUrl: 'https://amazon.com/hd650',
+              rawValue: '$299.00',
+              normalizedValue: { amount: 299, currency: 'USD' },
+            },
           ],
           hadConflict: false,
         },
@@ -1806,6 +1880,7 @@ Expected: FAIL
 **Step 3: Write implementation**
 
 `packages/core/src/types/reconciliation.ts`:
+
 ```typescript
 import { z } from 'zod';
 import { ValueProvenance } from './extraction.js';
@@ -1830,7 +1905,7 @@ export const FieldProvenanceEntry = z.object({
       sourceUrl: z.string(),
       rawValue: z.unknown(),
       normalizedValue: z.unknown(),
-    })
+    }),
   ),
   hadConflict: z.boolean(),
   resolution: ConflictResolution.optional(),
@@ -1847,7 +1922,7 @@ export const EntityMatch = z.object({
       sourceDomain: z.string(),
       crawledAt: z.coerce.date(),
       fieldsCovered: z.array(z.string()),
-    })
+    }),
   ),
   mergedData: z.record(z.unknown()),
   fieldProvenance: z.record(FieldProvenanceEntry),
@@ -1873,15 +1948,22 @@ git commit -m "feat(core): add EntityMatch, SourceTrust, FieldProvenance types"
 ## Task 11: Core Types — Pipeline Actions
 
 **Files:**
+
 - Create: `packages/core/src/types/actions.ts`
 - Create: `packages/core/tests/unit/types/actions.test.ts`
 
 **Step 1: Write the failing test**
 
 `packages/core/tests/unit/types/actions.test.ts`:
+
 ```typescript
 import { describe, it, expect } from 'vitest';
-import { PipelineAction, ActionStatus, ActionSource, SafetyPolicy } from '../../../src/types/actions.js';
+import {
+  PipelineAction,
+  ActionStatus,
+  ActionSource,
+  SafetyPolicy,
+} from '../../../src/types/actions.js';
 
 describe('PipelineAction', () => {
   const base = {
@@ -1999,9 +2081,7 @@ describe('PipelineAction', () => {
   });
 
   it('rejects invalid action type', () => {
-    expect(() =>
-      PipelineAction.parse({ ...base, type: 'nonexistent', payload: {} })
-    ).toThrow();
+    expect(() => PipelineAction.parse({ ...base, type: 'nonexistent', payload: {} })).toThrow();
   });
 });
 
@@ -2041,6 +2121,7 @@ Expected: FAIL
 **Step 3: Write implementation**
 
 `packages/core/src/types/actions.ts`:
+
 ```typescript
 import { z } from 'zod';
 import { FieldDefinition, FieldRelevance } from './schema.js';
@@ -2048,17 +2129,27 @@ import { PageClassification, ExtractionStrategy } from './extraction.js';
 import { TrustLevel } from './reconciliation.js';
 
 export const ActionSource = z.enum([
-  'extraction', 'schema_evolution', 'reconciliation', 'quality_audit',
+  'extraction',
+  'schema_evolution',
+  'reconciliation',
+  'quality_audit',
 ]);
 export type ActionSource = z.infer<typeof ActionSource>;
 
 export const ActionStatus = z.enum([
-  'pending_review', 'approved', 'applied', 'rejected', 'rolled_back',
+  'pending_review',
+  'approved',
+  'applied',
+  'rejected',
+  'rolled_back',
 ]);
 export type ActionStatus = z.infer<typeof ActionStatus>;
 
 export const SafetyPolicy = z.enum([
-  'always_auto', 'auto_above_threshold', 'always_review', 'batch_review',
+  'always_auto',
+  'auto_above_threshold',
+  'always_review',
+  'batch_review',
 ]);
 export type SafetyPolicy = z.infer<typeof SafetyPolicy>;
 
@@ -2096,7 +2187,9 @@ const ModifyFieldAction = BaseAction.extend({
   payload: z.object({
     fieldName: z.string(),
     changes: z.object({
-      type: z.enum(['string', 'number', 'boolean', 'url', 'currency', 'enum', 'array', 'object']).optional(),
+      type: z
+        .enum(['string', 'number', 'boolean', 'url', 'currency', 'enum', 'array', 'object'])
+        .optional(),
       required: z.boolean().optional(),
       description: z.string().optional(),
       enumValues: z.array(z.string()).optional(),
@@ -2128,10 +2221,12 @@ const SplitFieldAction = BaseAction.extend({
     sourceField: z.string(),
     targetFields: z.array(FieldDefinition),
     splitLogic: z.string(),
-    examples: z.array(z.object({
-      sourceValue: z.unknown(),
-      targetValues: z.record(z.unknown()),
-    })),
+    examples: z.array(
+      z.object({
+        sourceValue: z.unknown(),
+        targetValues: z.record(z.unknown()),
+      }),
+    ),
   }),
 });
 
@@ -2152,10 +2247,12 @@ const SetNormalizationRuleAction = BaseAction.extend({
   payload: z.object({
     fieldName: z.string(),
     rule: z.any(), // NormalizationRule — using any to avoid circular import complexity
-    examples: z.array(z.object({
-      before: z.unknown(),
-      after: z.unknown(),
-    })),
+    examples: z.array(
+      z.object({
+        before: z.unknown(),
+        after: z.unknown(),
+      }),
+    ),
   }),
 });
 
@@ -2174,11 +2271,13 @@ const DefineCategoryAction = BaseAction.extend({
   type: z.literal('define_category'),
   payload: z.object({
     categoryField: z.string(),
-    categories: z.array(z.object({
-      name: z.string(),
-      description: z.string(),
-      matchCriteria: z.string(),
-    })),
+    categories: z.array(
+      z.object({
+        name: z.string(),
+        description: z.string(),
+        matchCriteria: z.string(),
+      }),
+    ),
   }),
 });
 
@@ -2206,13 +2305,15 @@ const ClassifyPageAction = BaseAction.extend({
 const EnqueueLinksAction = BaseAction.extend({
   type: z.literal('enqueue_links'),
   payload: z.object({
-    links: z.array(z.object({
-      url: z.string().url(),
-      relevanceScore: z.number().min(0).max(1),
-      expectedContent: z.enum(['single_entry', 'listing', 'pagination', 'category', 'unknown']),
-      priority: z.enum(['high', 'medium', 'low']),
-      anchorText: z.string().optional(),
-    })),
+    links: z.array(
+      z.object({
+        url: z.string().url(),
+        relevanceScore: z.number().min(0).max(1),
+        expectedContent: z.enum(['single_entry', 'listing', 'pagination', 'category', 'unknown']),
+        priority: z.enum(['high', 'medium', 'low']),
+        anchorText: z.string().optional(),
+      }),
+    ),
   }),
 });
 
@@ -2240,10 +2341,12 @@ const SplitEntitiesAction = BaseAction.extend({
   type: z.literal('split_entities'),
   payload: z.object({
     entityId: z.string().uuid(),
-    newGroups: z.array(z.object({
-      extractionIds: z.array(z.string().uuid()),
-      reasoning: z.string(),
-    })),
+    newGroups: z.array(
+      z.object({
+        extractionIds: z.array(z.string().uuid()),
+        reasoning: z.string(),
+      }),
+    ),
   }),
 });
 
@@ -2254,10 +2357,12 @@ const ResolveConflictAction = BaseAction.extend({
     fieldName: z.string(),
     resolvedValue: z.unknown(),
     sourcePreferred: z.string(),
-    allValues: z.array(z.object({
-      source: z.string(),
-      value: z.unknown(),
-    })),
+    allValues: z.array(
+      z.object({
+        source: z.string(),
+        value: z.unknown(),
+      }),
+    ),
   }),
 });
 
@@ -2285,11 +2390,13 @@ const CorrectValueAction = BaseAction.extend({
 const SetSourceTrustAction = BaseAction.extend({
   type: z.literal('set_source_trust'),
   payload: z.object({
-    rankings: z.array(z.object({
-      domain: z.string(),
-      trustLevel: TrustLevel,
-      reasoning: z.string(),
-    })),
+    rankings: z.array(
+      z.object({
+        domain: z.string(),
+        trustLevel: TrustLevel,
+        reasoning: z.string(),
+      }),
+    ),
   }),
 });
 
@@ -2310,13 +2417,15 @@ const RecommendTableStructureAction = BaseAction.extend({
   type: z.literal('recommend_table_structure'),
   payload: z.object({
     strategy: z.enum(['single_table', 'multi_table']),
-    tables: z.array(z.object({
-      name: z.string(),
-      description: z.string(),
-      fields: z.array(z.string()),
-      relationship: z.enum(['primary', 'child']).optional(),
-      foreignKey: z.string().optional(),
-    })),
+    tables: z.array(
+      z.object({
+        name: z.string(),
+        description: z.string(),
+        fields: z.array(z.string()),
+        relationship: z.enum(['primary', 'child']).optional(),
+        foreignKey: z.string().optional(),
+      }),
+    ),
   }),
 });
 
@@ -2327,10 +2436,12 @@ const DeriveFieldAction = BaseAction.extend({
     fieldDefinition: FieldDefinition,
     derivedFrom: z.array(z.string()),
     derivationLogic: z.string(),
-    examples: z.array(z.object({
-      inputs: z.record(z.unknown()),
-      output: z.unknown(),
-    })),
+    examples: z.array(
+      z.object({
+        inputs: z.record(z.unknown()),
+        output: z.unknown(),
+      }),
+    ),
   }),
 });
 
@@ -2340,8 +2451,11 @@ const FlagAnomalyAction = BaseAction.extend({
     entityId: z.string().uuid().optional(),
     fieldName: z.string().optional(),
     anomalyType: z.enum([
-      'outlier_value', 'likely_typo', 'contradictory_data',
-      'suspicious_duplicate', 'missing_critical',
+      'outlier_value',
+      'likely_typo',
+      'contradictory_data',
+      'suspicious_duplicate',
+      'missing_critical',
     ]),
     description: z.string(),
     suggestedFix: z.unknown().optional(),
@@ -2351,19 +2465,23 @@ const FlagAnomalyAction = BaseAction.extend({
 const GenerateDocumentationAction = BaseAction.extend({
   type: z.literal('generate_documentation'),
   payload: z.object({
-    dataDictionary: z.array(z.object({
-      fieldName: z.string(),
-      description: z.string(),
-      valueRange: z.string().optional(),
-      exampleValues: z.array(z.unknown()),
-      coveragePercent: z.number(),
-      sources: z.array(z.string()),
-    })),
-    categoryBreakdown: z.array(z.object({
-      category: z.string(),
-      count: z.number(),
-      specificFields: z.array(z.string()),
-    })),
+    dataDictionary: z.array(
+      z.object({
+        fieldName: z.string(),
+        description: z.string(),
+        valueRange: z.string().optional(),
+        exampleValues: z.array(z.unknown()),
+        coveragePercent: z.number(),
+        sources: z.array(z.string()),
+      }),
+    ),
+    categoryBreakdown: z.array(
+      z.object({
+        category: z.string(),
+        count: z.number(),
+        specificFields: z.array(z.string()),
+      }),
+    ),
     qualitySummary: z.object({
       totalEntities: z.number(),
       totalSources: z.number(),
@@ -2424,12 +2542,14 @@ git commit -m "feat(core): add all 25 PipelineAction types with discriminated un
 ## Task 12: Core Types — Config Actions
 
 **Files:**
+
 - Create: `packages/core/src/types/config-actions.ts`
 - Create: `packages/core/tests/unit/types/config-actions.test.ts`
 
 **Step 1: Write the failing test**
 
 `packages/core/tests/unit/types/config-actions.test.ts`:
+
 ```typescript
 import { describe, it, expect } from 'vitest';
 import { ConfigAction } from '../../../src/types/config-actions.js';
@@ -2442,7 +2562,8 @@ describe('ConfigAction', () => {
 
   it('parses set_job_name', () => {
     const result = ConfigAction.parse({
-      ...base, type: 'set_job_name',
+      ...base,
+      type: 'set_job_name',
       payload: { name: 'Audiophile Crawl' },
     });
     expect(result.type).toBe('set_job_name');
@@ -2450,7 +2571,8 @@ describe('ConfigAction', () => {
 
   it('parses add_seed_urls', () => {
     const result = ConfigAction.parse({
-      ...base, type: 'add_seed_urls',
+      ...base,
+      type: 'add_seed_urls',
       payload: {
         urls: [
           { url: 'https://head-fi.org', label: 'Head-Fi' },
@@ -2463,7 +2585,8 @@ describe('ConfigAction', () => {
 
   it('parses set_crawl_depth', () => {
     const result = ConfigAction.parse({
-      ...base, type: 'set_crawl_depth',
+      ...base,
+      type: 'set_crawl_depth',
       payload: { maxDepth: 3 },
     });
     expect(result.payload.maxDepth).toBe(3);
@@ -2471,7 +2594,8 @@ describe('ConfigAction', () => {
 
   it('parses add_user_field', () => {
     const result = ConfigAction.parse({
-      ...base, type: 'add_user_field',
+      ...base,
+      type: 'add_user_field',
       payload: {
         field: { name: 'brand', description: 'Product brand', type: 'string', required: true },
       },
@@ -2481,7 +2605,8 @@ describe('ConfigAction', () => {
 
   it('parses modify_user_field', () => {
     const result = ConfigAction.parse({
-      ...base, type: 'modify_user_field',
+      ...base,
+      type: 'modify_user_field',
       payload: {
         fieldName: 'price',
         changes: { required: true, type: 'currency' },
@@ -2492,7 +2617,8 @@ describe('ConfigAction', () => {
 
   it('parses set_schema_mode', () => {
     const result = ConfigAction.parse({
-      ...base, type: 'set_schema_mode',
+      ...base,
+      type: 'set_schema_mode',
       payload: { mode: 'hybrid' },
     });
     expect(result.payload.mode).toBe('hybrid');
@@ -2500,7 +2626,8 @@ describe('ConfigAction', () => {
 
   it('parses set_primary_model', () => {
     const result = ConfigAction.parse({
-      ...base, type: 'set_primary_model',
+      ...base,
+      type: 'set_primary_model',
       payload: { model: 'anthropic/claude-sonnet-4-20250514' },
     });
     expect(result.payload.model).toContain('claude');
@@ -2508,7 +2635,8 @@ describe('ConfigAction', () => {
 
   it('parses set_model_override', () => {
     const result = ConfigAction.parse({
-      ...base, type: 'set_model_override',
+      ...base,
+      type: 'set_model_override',
       payload: { task: 'pageRelevance', model: 'anthropic/claude-haiku-4-5-20251001' },
     });
     expect(result.payload.task).toBe('pageRelevance');
@@ -2516,7 +2644,8 @@ describe('ConfigAction', () => {
 
   it('parses set_action_approval_policy', () => {
     const result = ConfigAction.parse({
-      ...base, type: 'set_action_approval_policy',
+      ...base,
+      type: 'set_action_approval_policy',
       payload: { preset: 'trust_ai' },
     });
     expect(result.payload.preset).toBe('trust_ai');
@@ -2524,7 +2653,8 @@ describe('ConfigAction', () => {
 
   it('parses save_as_template', () => {
     const result = ConfigAction.parse({
-      ...base, type: 'save_as_template',
+      ...base,
+      type: 'save_as_template',
       payload: { templateName: 'audiophile-default', description: 'Default audiophile config' },
     });
     expect(result.payload.templateName).toBe('audiophile-default');
@@ -2532,7 +2662,8 @@ describe('ConfigAction', () => {
 
   it('parses confirm_and_start', () => {
     const result = ConfigAction.parse({
-      ...base, type: 'confirm_and_start',
+      ...base,
+      type: 'confirm_and_start',
       payload: {},
     });
     expect(result.type).toBe('confirm_and_start');
@@ -2540,16 +2671,15 @@ describe('ConfigAction', () => {
 
   it('parses reset_config', () => {
     const result = ConfigAction.parse({
-      ...base, type: 'reset_config',
+      ...base,
+      type: 'reset_config',
       payload: { keepFields: ['name', 'seedUrls'] },
     });
     expect(result.payload.keepFields).toContain('name');
   });
 
   it('rejects unknown action type', () => {
-    expect(() =>
-      ConfigAction.parse({ ...base, type: 'nonexistent', payload: {} })
-    ).toThrow();
+    expect(() => ConfigAction.parse({ ...base, type: 'nonexistent', payload: {} })).toThrow();
   });
 });
 ```
@@ -2562,6 +2692,7 @@ Expected: FAIL
 **Step 3: Write implementation**
 
 `packages/core/src/types/config-actions.ts`:
+
 ```typescript
 import { z } from 'zod';
 import { FieldDefinition } from './schema.js';
@@ -2589,10 +2720,12 @@ const SetJobDescriptionAction = BaseConfigAction.extend({
 const AddSeedUrlsAction = BaseConfigAction.extend({
   type: z.literal('add_seed_urls'),
   payload: z.object({
-    urls: z.array(z.object({
-      url: z.string().url(),
-      label: z.string().optional(),
-    })),
+    urls: z.array(
+      z.object({
+        url: z.string().url(),
+        label: z.string().optional(),
+      }),
+    ),
   }),
 });
 
@@ -2607,10 +2740,12 @@ const RemoveSeedUrlsAction = BaseConfigAction.extend({
 const ReplaceSeedUrlsAction = BaseConfigAction.extend({
   type: z.literal('replace_seed_urls'),
   payload: z.object({
-    urls: z.array(z.object({
-      url: z.string().url(),
-      label: z.string().optional(),
-    })),
+    urls: z.array(
+      z.object({
+        url: z.string().url(),
+        label: z.string().optional(),
+      }),
+    ),
   }),
 });
 
@@ -2669,7 +2804,9 @@ const ModifyUserFieldAction = BaseConfigAction.extend({
     changes: z.object({
       name: z.string().optional(),
       description: z.string().optional(),
-      type: z.enum(['string', 'number', 'boolean', 'url', 'currency', 'enum', 'array', 'object']).optional(),
+      type: z
+        .enum(['string', 'number', 'boolean', 'url', 'currency', 'enum', 'array', 'object'])
+        .optional(),
       required: z.boolean().optional(),
       enumValues: z.array(z.string()).optional(),
       arrayItemType: FieldDefinition.optional(),
@@ -2715,12 +2852,14 @@ const SetEvolutionConfigAction = BaseConfigAction.extend({
     enabled: z.boolean().optional(),
     batchSize: z.number().optional(),
     maxFields: z.number().optional(),
-    relevanceThresholds: z.object({
-      requiredMin: z.number().optional(),
-      optionalMin: z.number().optional(),
-      rareBelow: z.number().optional(),
-      minCategorySampleSize: z.number().optional(),
-    }).optional(),
+    relevanceThresholds: z
+      .object({
+        requiredMin: z.number().optional(),
+        optionalMin: z.number().optional(),
+        rareBelow: z.number().optional(),
+        minCategorySampleSize: z.number().optional(),
+      })
+      .optional(),
     tableStrategy: z.enum(['single', 'multi', 'auto']).optional(),
   }),
 });
@@ -2728,9 +2867,14 @@ const SetEvolutionConfigAction = BaseConfigAction.extend({
 // --- LLM Config ---
 
 const LLMTask = z.enum([
-  'pageRelevance', 'extraction', 'linkEvaluation',
-  'schemaEvolution', 'entityMatching', 'conflictResolution',
-  'qualityAudit', 'documentation',
+  'pageRelevance',
+  'extraction',
+  'linkEvaluation',
+  'schemaEvolution',
+  'entityMatching',
+  'conflictResolution',
+  'qualityAudit',
+  'documentation',
 ]);
 
 const SetPrimaryModelAction = BaseConfigAction.extend({
@@ -2762,18 +2906,26 @@ const SetMatchStrategyAction = BaseConfigAction.extend({
 const SetConflictResolutionAction = BaseConfigAction.extend({
   type: z.literal('set_conflict_resolution'),
   payload: z.object({
-    strategy: z.enum(['most_common', 'most_complete', 'source_priority', 'most_recent', 'llm_resolved']),
+    strategy: z.enum([
+      'most_common',
+      'most_complete',
+      'source_priority',
+      'most_recent',
+      'llm_resolved',
+    ]),
   }),
 });
 
 const SetSourcePriorityAction = BaseConfigAction.extend({
   type: z.literal('set_source_priority'),
   payload: z.object({
-    rankings: z.array(z.object({
-      domain: z.string(),
-      trustLevel: z.enum(['authoritative', 'high', 'medium', 'low']),
-      reasoning: z.string().optional(),
-    })),
+    rankings: z.array(
+      z.object({
+        domain: z.string(),
+        trustLevel: z.enum(['authoritative', 'high', 'medium', 'low']),
+        reasoning: z.string().optional(),
+      }),
+    ),
   }),
 });
 
@@ -2783,11 +2935,15 @@ const SetActionApprovalPolicyAction = BaseConfigAction.extend({
   type: z.literal('set_action_approval_policy'),
   payload: z.object({
     preset: z.enum(['trust_ai', 'balanced', 'cautious', 'manual']).optional(),
-    overrides: z.array(z.object({
-      actionType: z.string(),
-      policy: z.enum(['always_auto', 'auto_above_threshold', 'always_review', 'batch_review']),
-      threshold: z.number().optional(),
-    })).optional(),
+    overrides: z
+      .array(
+        z.object({
+          actionType: z.string(),
+          policy: z.enum(['always_auto', 'auto_above_threshold', 'always_review', 'batch_review']),
+          threshold: z.number().optional(),
+        }),
+      )
+      .optional(),
   }),
 });
 
@@ -2827,10 +2983,11 @@ const ConfirmAndStartAction = BaseConfigAction.extend({
 const ResetConfigAction = BaseConfigAction.extend({
   type: z.literal('reset_config'),
   payload: z.object({
-    keepFields: z.array(z.enum([
-      'name', 'description', 'seedUrls', 'userFields',
-      'crawlSettings', 'llmConfig',
-    ])).optional(),
+    keepFields: z
+      .array(
+        z.enum(['name', 'description', 'seedUrls', 'userFields', 'crawlSettings', 'llmConfig']),
+      )
+      .optional(),
   }),
 });
 
@@ -2889,11 +3046,13 @@ git commit -m "feat(core): add all 30 ConfigAction types with discriminated unio
 ## Task 13: Core Types — Barrel Exports
 
 **Files:**
+
 - Create: `packages/core/src/types/index.ts`
 
 **Step 1: Create the barrel export**
 
 `packages/core/src/types/index.ts`:
+
 ```typescript
 export * from './normalization.js';
 export * from './schema.js';
@@ -2907,6 +3066,7 @@ export * from './config-actions.js';
 **Step 2: Create interfaces barrel (empty for now)**
 
 `packages/core/src/interfaces/index.ts`:
+
 ```typescript
 export * from './crawler.js';
 export * from './extractor.js';
@@ -2936,6 +3096,7 @@ git commit -m "feat(core): add types barrel export"
 ## Task 14: Core Interfaces
 
 **Files:**
+
 - Create: `packages/core/src/interfaces/crawler.ts`
 - Create: `packages/core/src/interfaces/extractor.ts`
 - Create: `packages/core/src/interfaces/schema-evolver.ts`
@@ -2951,6 +3112,7 @@ git commit -m "feat(core): add types barrel export"
 **Step 1: Write a structural test**
 
 `packages/core/tests/unit/interfaces/interfaces.test.ts`:
+
 ```typescript
 import { describe, it, expect } from 'vitest';
 import * as interfaces from '../../../src/interfaces/index.js';
@@ -2985,6 +3147,7 @@ Expected: FAIL
 **Step 3: Write all interface files**
 
 `packages/core/src/interfaces/crawler.ts`:
+
 ```typescript
 import { z } from 'zod';
 
@@ -3003,11 +3166,13 @@ export const CrawlResult = z.object({
   title: z.string().optional(),
   statusCode: z.number(),
   contentType: z.string().optional(),
-  links: z.array(z.object({
-    url: z.string(),
-    text: z.string().optional(),
-    rel: z.string().optional(),
-  })),
+  links: z.array(
+    z.object({
+      url: z.string(),
+      text: z.string().optional(),
+      rel: z.string().optional(),
+    }),
+  ),
   metadata: z.object({
     crawledAt: z.coerce.date(),
     responseTimeMs: z.number(),
@@ -3026,6 +3191,7 @@ export interface Crawler {
 ```
 
 `packages/core/src/interfaces/extractor.ts`:
+
 ```typescript
 import type { SchemaDefinition } from '../types/schema.js';
 import type { ExtractionResult } from '../types/extraction.js';
@@ -3041,6 +3207,7 @@ export interface Extractor {
 ```
 
 `packages/core/src/interfaces/schema-evolver.ts`:
+
 ```typescript
 import type { SchemaDefinition } from '../types/schema.js';
 import type { ExtractionResult } from '../types/extraction.js';
@@ -3056,6 +3223,7 @@ export interface SchemaEvolver {
 ```
 
 `packages/core/src/interfaces/content-store.ts`:
+
 ```typescript
 export interface ContentStore {
   store(key: string, content: string): Promise<string>;
@@ -3065,6 +3233,7 @@ export interface ContentStore {
 ```
 
 `packages/core/src/interfaces/orchestrator.ts`:
+
 ```typescript
 import type { JobConfig, JobStatus } from '../types/job.js';
 
@@ -3079,6 +3248,7 @@ export interface JobOrchestrator {
 ```
 
 `packages/core/src/interfaces/reconciler.ts`:
+
 ```typescript
 import type { ExtractionResult } from '../types/extraction.js';
 import type { SchemaDefinition } from '../types/schema.js';
@@ -3099,6 +3269,7 @@ export interface DataReconciler {
 ```
 
 `packages/core/src/interfaces/exporter.ts`:
+
 ```typescript
 import { z } from 'zod';
 import type { SchemaDefinition } from '../types/schema.js';
@@ -3136,6 +3307,7 @@ export interface Exporter {
 ```
 
 `packages/core/src/interfaces/action-executor.ts`:
+
 ```typescript
 import { z } from 'zod';
 import type { PipelineAction } from '../types/actions.js';
@@ -3174,6 +3346,7 @@ export interface ActionExecutor {
 ```
 
 `packages/core/src/interfaces/config-executor.ts`:
+
 ```typescript
 import { z } from 'zod';
 import type { JobConfig } from '../types/job.js';
@@ -3189,12 +3362,14 @@ export const ConfigValidationResult = z.object({
 export type ConfigValidationResult = z.infer<typeof ConfigValidationResult>;
 
 export const ConfigDiff = z.object({
-  changes: z.array(z.object({
-    path: z.string(),
-    before: z.unknown(),
-    after: z.unknown(),
-    description: z.string(),
-  })),
+  changes: z.array(
+    z.object({
+      path: z.string(),
+      before: z.unknown(),
+      after: z.unknown(),
+      description: z.string(),
+    }),
+  ),
 });
 
 export type ConfigDiff = z.infer<typeof ConfigDiff>;
@@ -3208,6 +3383,7 @@ export interface ConfigExecutor {
 ```
 
 `packages/core/src/interfaces/index.ts`:
+
 ```typescript
 export * from './crawler.js';
 export * from './extractor.js';
@@ -3242,6 +3418,7 @@ git commit -m "feat(core): add all core interfaces (Crawler, Extractor, SchemaEv
 ## Task 15: ESLint & Prettier Configuration
 
 **Files:**
+
 - Create: `eslint.config.js`
 - Create: `.prettierrc`
 - Create: `.prettierignore`
@@ -3249,6 +3426,7 @@ git commit -m "feat(core): add all core interfaces (Crawler, Extractor, SchemaEv
 **Step 1: Create ESLint config (flat config format)**
 
 `eslint.config.js`:
+
 ```javascript
 import tseslint from '@typescript-eslint/eslint-plugin';
 import tsparser from '@typescript-eslint/parser';
@@ -3282,6 +3460,7 @@ export default [
 **Step 2: Create Prettier config**
 
 `.prettierrc`:
+
 ```json
 {
   "semi": true,
@@ -3293,6 +3472,7 @@ export default [
 ```
 
 `.prettierignore`:
+
 ```
 dist
 node_modules
@@ -3358,6 +3538,7 @@ git commit -m "chore: Phase 1 final verification — all tests pass, builds clea
 ## Summary
 
 Phase 1 delivers:
+
 - **Monorepo scaffold** with 4 packages + 2 apps, Turborepo pipeline, TypeScript config
 - **Shared package** with logger, error hierarchy, config helpers, utility functions
 - **Core types** — 7 NormalizationRule types, FieldDefinition with recursive nesting, category-aware FieldRelevance, SchemaDefinition, JobConfig, ExtractionResult, EntityMatch, 25 PipelineAction types, 30 ConfigAction types

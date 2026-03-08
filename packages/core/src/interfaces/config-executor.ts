@@ -12,12 +12,14 @@ export const ConfigValidationResult = z.object({
 export type ConfigValidationResult = z.infer<typeof ConfigValidationResult>;
 
 export const ConfigDiff = z.object({
-  changes: z.array(z.object({
-    path: z.string(),
-    before: z.unknown(),
-    after: z.unknown(),
-    description: z.string(),
-  })),
+  changes: z.array(
+    z.object({
+      path: z.string(),
+      before: z.unknown(),
+      after: z.unknown(),
+      description: z.string(),
+    }),
+  ),
 });
 
 export type ConfigDiff = z.infer<typeof ConfigDiff>;

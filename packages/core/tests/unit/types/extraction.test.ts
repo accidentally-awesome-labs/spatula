@@ -1,5 +1,9 @@
 import { describe, it, expect } from 'vitest';
-import { ExtractionResult, ValueProvenance, PageClassification } from '../../../src/types/extraction.js';
+import {
+  ExtractionResult,
+  ValueProvenance,
+  PageClassification,
+} from '../../../src/types/extraction.js';
 
 describe('ExtractionResult', () => {
   it('parses a valid extraction result', () => {
@@ -17,9 +21,7 @@ describe('ExtractionResult', () => {
         modelUsed: 'anthropic/claude-sonnet-4-20250514',
         tokensUsed: 1450,
         extractionTimeMs: 2300,
-        unmappedFields: [
-          { name: 'warranty', value: '2 years', suggestedType: 'string' },
-        ],
+        unmappedFields: [{ name: 'warranty', value: '2 years', suggestedType: 'string' }],
       },
     });
     expect(result.schemaVersion).toBe(3);
@@ -41,7 +43,7 @@ describe('ExtractionResult', () => {
           extractionTimeMs: 0,
           unmappedFields: [],
         },
-      })
+      }),
     ).toThrow();
   });
 });

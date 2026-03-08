@@ -25,21 +25,19 @@ export type FieldDefinitionInput = {
   objectFields?: FieldDefinitionInput[];
 };
 
-export const FieldDefinition: z.ZodType<FieldDefinitionOutput, z.ZodTypeDef, FieldDefinitionInput> = z.lazy(() =>
-  z.object({
-    name: z.string(),
-    description: z.string(),
-    type: z.enum([
-      'string', 'number', 'boolean', 'url',
-      'currency', 'enum', 'array', 'object',
-    ]),
-    required: z.boolean().default(false),
-    normalization: NormalizationRule.optional(),
-    enumValues: z.array(z.string()).optional(),
-    arrayItemType: FieldDefinition.optional(),
-    objectFields: z.array(FieldDefinition).optional(),
-  })
-);
+export const FieldDefinition: z.ZodType<FieldDefinitionOutput, z.ZodTypeDef, FieldDefinitionInput> =
+  z.lazy(() =>
+    z.object({
+      name: z.string(),
+      description: z.string(),
+      type: z.enum(['string', 'number', 'boolean', 'url', 'currency', 'enum', 'array', 'object']),
+      required: z.boolean().default(false),
+      normalization: NormalizationRule.optional(),
+      enumValues: z.array(z.string()).optional(),
+      arrayItemType: FieldDefinition.optional(),
+      objectFields: z.array(FieldDefinition).optional(),
+    }),
+  );
 
 export type FieldDefinition = z.infer<typeof FieldDefinition>;
 
@@ -50,7 +48,7 @@ export const FieldRelevance = z.object({
       category: z.string(),
       frequency: z.number(),
       sampleSize: z.number(),
-    })
+    }),
   ),
   classification: z.enum([
     'universal_required',
@@ -71,7 +69,7 @@ export const FieldAlias = z.object({
       name: z.string(),
       sources: z.array(z.string()),
       occurrences: z.number(),
-    })
+    }),
   ),
   mergedAt: z.coerce.date(),
   reasoning: z.string(),

@@ -30,19 +30,30 @@ export const ExtractionResult = z.object({
 export type ExtractionResult = z.infer<typeof ExtractionResult>;
 
 export const ValueProvenance = z.enum([
-  'extracted', 'normalized', 'merged', 'resolved', 'inferred',
+  'extracted',
+  'normalized',
+  'merged',
+  'resolved',
+  'inferred',
 ]);
 
 export type ValueProvenance = z.infer<typeof ValueProvenance>;
 
 export const PageClassification = z.enum([
-  'single_entry', 'multiple_entries', 'navigation', 'irrelevant', 'partial',
+  'single_entry',
+  'multiple_entries',
+  'navigation',
+  'irrelevant',
+  'partial',
 ]);
 
 export type PageClassification = z.infer<typeof PageClassification>;
 
 export const ExtractionStrategy = z.enum([
-  'full_extraction', 'list_extraction', 'links_only', 'skip',
+  'full_extraction',
+  'list_extraction',
+  'links_only',
+  'skip',
 ]);
 
 export type ExtractionStrategy = z.infer<typeof ExtractionStrategy>;

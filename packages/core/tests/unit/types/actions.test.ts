@@ -1,5 +1,10 @@
 import { describe, it, expect } from 'vitest';
-import { PipelineAction, ActionStatus, ActionSource, SafetyPolicy } from '../../../src/types/actions.js';
+import {
+  PipelineAction,
+  ActionStatus,
+  ActionSource,
+  SafetyPolicy,
+} from '../../../src/types/actions.js';
 
 describe('PipelineAction', () => {
   const base = {
@@ -117,9 +122,7 @@ describe('PipelineAction', () => {
   });
 
   it('rejects invalid action type', () => {
-    expect(() =>
-      PipelineAction.parse({ ...base, type: 'nonexistent', payload: {} })
-    ).toThrow();
+    expect(() => PipelineAction.parse({ ...base, type: 'nonexistent', payload: {} })).toThrow();
   });
 });
 

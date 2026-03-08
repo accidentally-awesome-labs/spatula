@@ -23,10 +23,12 @@ const SetJobDescriptionAction = BaseConfigAction.extend({
 const AddSeedUrlsAction = BaseConfigAction.extend({
   type: z.literal('add_seed_urls'),
   payload: z.object({
-    urls: z.array(z.object({
-      url: z.string().url(),
-      label: z.string().optional(),
-    })),
+    urls: z.array(
+      z.object({
+        url: z.string().url(),
+        label: z.string().optional(),
+      }),
+    ),
   }),
 });
 
@@ -41,10 +43,12 @@ const RemoveSeedUrlsAction = BaseConfigAction.extend({
 const ReplaceSeedUrlsAction = BaseConfigAction.extend({
   type: z.literal('replace_seed_urls'),
   payload: z.object({
-    urls: z.array(z.object({
-      url: z.string().url(),
-      label: z.string().optional(),
-    })),
+    urls: z.array(
+      z.object({
+        url: z.string().url(),
+        label: z.string().optional(),
+      }),
+    ),
   }),
 });
 
@@ -103,7 +107,9 @@ const ModifyUserFieldAction = BaseConfigAction.extend({
     changes: z.object({
       name: z.string().optional(),
       description: z.string().optional(),
-      type: z.enum(['string', 'number', 'boolean', 'url', 'currency', 'enum', 'array', 'object']).optional(),
+      type: z
+        .enum(['string', 'number', 'boolean', 'url', 'currency', 'enum', 'array', 'object'])
+        .optional(),
       required: z.boolean().optional(),
       enumValues: z.array(z.string()).optional(),
       arrayItemType: FieldDefinition.optional(),
@@ -149,12 +155,14 @@ const SetEvolutionConfigAction = BaseConfigAction.extend({
     enabled: z.boolean().optional(),
     batchSize: z.number().optional(),
     maxFields: z.number().optional(),
-    relevanceThresholds: z.object({
-      requiredMin: z.number().optional(),
-      optionalMin: z.number().optional(),
-      rareBelow: z.number().optional(),
-      minCategorySampleSize: z.number().optional(),
-    }).optional(),
+    relevanceThresholds: z
+      .object({
+        requiredMin: z.number().optional(),
+        optionalMin: z.number().optional(),
+        rareBelow: z.number().optional(),
+        minCategorySampleSize: z.number().optional(),
+      })
+      .optional(),
     tableStrategy: z.enum(['single', 'multi', 'auto']).optional(),
   }),
 });
@@ -162,9 +170,14 @@ const SetEvolutionConfigAction = BaseConfigAction.extend({
 // --- LLM Config ---
 
 const LLMTask = z.enum([
-  'pageRelevance', 'extraction', 'linkEvaluation',
-  'schemaEvolution', 'entityMatching', 'conflictResolution',
-  'qualityAudit', 'documentation',
+  'pageRelevance',
+  'extraction',
+  'linkEvaluation',
+  'schemaEvolution',
+  'entityMatching',
+  'conflictResolution',
+  'qualityAudit',
+  'documentation',
 ]);
 
 const SetPrimaryModelAction = BaseConfigAction.extend({
@@ -196,18 +209,26 @@ const SetMatchStrategyAction = BaseConfigAction.extend({
 const SetConflictResolutionAction = BaseConfigAction.extend({
   type: z.literal('set_conflict_resolution'),
   payload: z.object({
-    strategy: z.enum(['most_common', 'most_complete', 'source_priority', 'most_recent', 'llm_resolved']),
+    strategy: z.enum([
+      'most_common',
+      'most_complete',
+      'source_priority',
+      'most_recent',
+      'llm_resolved',
+    ]),
   }),
 });
 
 const SetSourcePriorityAction = BaseConfigAction.extend({
   type: z.literal('set_source_priority'),
   payload: z.object({
-    rankings: z.array(z.object({
-      domain: z.string(),
-      trustLevel: z.enum(['authoritative', 'high', 'medium', 'low']),
-      reasoning: z.string().optional(),
-    })),
+    rankings: z.array(
+      z.object({
+        domain: z.string(),
+        trustLevel: z.enum(['authoritative', 'high', 'medium', 'low']),
+        reasoning: z.string().optional(),
+      }),
+    ),
   }),
 });
 
@@ -217,11 +238,15 @@ const SetActionApprovalPolicyAction = BaseConfigAction.extend({
   type: z.literal('set_action_approval_policy'),
   payload: z.object({
     preset: z.enum(['trust_ai', 'balanced', 'cautious', 'manual']).optional(),
-    overrides: z.array(z.object({
-      actionType: z.string(),
-      policy: z.enum(['always_auto', 'auto_above_threshold', 'always_review', 'batch_review']),
-      threshold: z.number().optional(),
-    })).optional(),
+    overrides: z
+      .array(
+        z.object({
+          actionType: z.string(),
+          policy: z.enum(['always_auto', 'auto_above_threshold', 'always_review', 'batch_review']),
+          threshold: z.number().optional(),
+        }),
+      )
+      .optional(),
   }),
 });
 
@@ -261,10 +286,11 @@ const ConfirmAndStartAction = BaseConfigAction.extend({
 const ResetConfigAction = BaseConfigAction.extend({
   type: z.literal('reset_config'),
   payload: z.object({
-    keepFields: z.array(z.enum([
-      'name', 'description', 'seedUrls', 'userFields',
-      'crawlSettings', 'llmConfig',
-    ])).optional(),
+    keepFields: z
+      .array(
+        z.enum(['name', 'description', 'seedUrls', 'userFields', 'crawlSettings', 'llmConfig']),
+      )
+      .optional(),
   }),
 });
 

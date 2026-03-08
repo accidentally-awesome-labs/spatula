@@ -3,8 +3,8 @@ import { FieldDefinition } from './schema.js';
 
 export const RelevanceThresholds = z.object({
   requiredMin: z.number().default(0.85),
-  optionalMin: z.number().default(0.40),
-  rareBelow: z.number().default(0.40),
+  optionalMin: z.number().default(0.4),
+  rareBelow: z.number().default(0.4),
   minCategorySampleSize: z.number().default(5),
 });
 export type RelevanceThresholds = z.infer<typeof RelevanceThresholds>;
@@ -52,12 +52,19 @@ export const LLMConfig = z.object({
 export type LLMConfig = z.infer<typeof LLMConfig>;
 
 export const EntityMatchStrategy = z.enum([
-  'exact_name', 'fuzzy_name', 'composite_key', 'llm_assisted',
+  'exact_name',
+  'fuzzy_name',
+  'composite_key',
+  'llm_assisted',
 ]);
 export type EntityMatchStrategy = z.infer<typeof EntityMatchStrategy>;
 
 export const ConflictResolution = z.enum([
-  'most_common', 'most_complete', 'source_priority', 'most_recent', 'llm_resolved',
+  'most_common',
+  'most_complete',
+  'source_priority',
+  'most_recent',
+  'llm_resolved',
 ]);
 export type ConflictResolution = z.infer<typeof ConflictResolution>;
 
@@ -83,7 +90,13 @@ export const JobConfig = z.object({
 export type JobConfig = z.infer<typeof JobConfig>;
 
 export const JobStatus = z.enum([
-  'pending', 'queued', 'running', 'paused',
-  'reconciling', 'completed', 'failed', 'cancelled',
+  'pending',
+  'queued',
+  'running',
+  'paused',
+  'reconciling',
+  'completed',
+  'failed',
+  'cancelled',
 ]);
 export type JobStatus = z.infer<typeof JobStatus>;

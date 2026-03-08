@@ -21,7 +21,7 @@ export const FieldProvenanceEntry = z.object({
       sourceUrl: z.string(),
       rawValue: z.unknown(),
       normalizedValue: z.unknown(),
-    })
+    }),
   ),
   hadConflict: z.boolean(),
   resolution: ConflictResolution.optional(),
@@ -38,7 +38,7 @@ export const EntityMatch = z.object({
       sourceDomain: z.string(),
       crawledAt: z.coerce.date(),
       fieldsCovered: z.array(z.string()),
-    })
+    }),
   ),
   mergedData: z.record(z.unknown()),
   fieldProvenance: z.record(FieldProvenanceEntry),

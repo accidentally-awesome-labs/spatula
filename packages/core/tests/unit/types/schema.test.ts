@@ -70,9 +70,7 @@ describe('FieldDefinition', () => {
   });
 
   it('rejects invalid type', () => {
-    expect(() =>
-      FieldDefinition.parse({ name: 'x', description: 'x', type: 'invalid' })
-    ).toThrow();
+    expect(() => FieldDefinition.parse({ name: 'x', description: 'x', type: 'invalid' })).toThrow();
   });
 });
 

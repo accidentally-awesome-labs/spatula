@@ -15,11 +15,13 @@ export const CrawlResult = z.object({
   title: z.string().optional(),
   statusCode: z.number(),
   contentType: z.string().optional(),
-  links: z.array(z.object({
-    url: z.string(),
-    text: z.string().optional(),
-    rel: z.string().optional(),
-  })),
+  links: z.array(
+    z.object({
+      url: z.string(),
+      text: z.string().optional(),
+      rel: z.string().optional(),
+    }),
+  ),
   metadata: z.object({
     crawledAt: z.coerce.date(),
     responseTimeMs: z.number(),

@@ -87,18 +87,18 @@ Clients
 
 ## 3. Tech Stack
 
-| Layer | Technology | Rationale |
-|---|---|---|
-| **Language** | TypeScript | Single language across core, API, CLI, future frontend. Strong typing + Zod for runtime schema validation |
-| **Runtime** | Node.js / Bun | Mature ecosystem, excellent async I/O for orchestrating external services |
-| **Monorepo** | Turborepo + pnpm | Build ordering, caching, parallel test runs |
-| **API Server** | Hono | Lightweight, fast, middleware-friendly, works in any runtime |
-| **Database** | PostgreSQL + Drizzle ORM | JSONB for flexible schemas, proven at scale, excellent TS integration |
-| **Queue** | BullMQ + Redis | Battle-tested job queue, retries, backpressure, priority queues |
-| **LLM Provider** | OpenRouter | Single API for Claude, GPT-4o, Gemini, Llama — multi-model on day one |
-| **Crawlers** | Playwright + Firecrawl | Pluggable interface; Playwright for self-hosted, Firecrawl for managed |
-| **CLI Framework** | Ink (React for terminals) | Component-based TUI, live-updating views, flexbox layout |
-| **Testing** | Vitest | Fast, TypeScript-native, compatible with the ecosystem |
+| Layer             | Technology                | Rationale                                                                                                 |
+| ----------------- | ------------------------- | --------------------------------------------------------------------------------------------------------- |
+| **Language**      | TypeScript                | Single language across core, API, CLI, future frontend. Strong typing + Zod for runtime schema validation |
+| **Runtime**       | Node.js / Bun             | Mature ecosystem, excellent async I/O for orchestrating external services                                 |
+| **Monorepo**      | Turborepo + pnpm          | Build ordering, caching, parallel test runs                                                               |
+| **API Server**    | Hono                      | Lightweight, fast, middleware-friendly, works in any runtime                                              |
+| **Database**      | PostgreSQL + Drizzle ORM  | JSONB for flexible schemas, proven at scale, excellent TS integration                                     |
+| **Queue**         | BullMQ + Redis            | Battle-tested job queue, retries, backpressure, priority queues                                           |
+| **LLM Provider**  | OpenRouter                | Single API for Claude, GPT-4o, Gemini, Llama — multi-model on day one                                     |
+| **Crawlers**      | Playwright + Firecrawl    | Pluggable interface; Playwright for self-hosted, Firecrawl for managed                                    |
+| **CLI Framework** | Ink (React for terminals) | Component-based TUI, live-updating views, flexbox layout                                                  |
+| **Testing**       | Vitest                    | Fast, TypeScript-native, compatible with the ecosystem                                                    |
 
 ---
 
@@ -239,10 +239,7 @@ Core depends on `shared`, imports interfaces that `db` and `queue` implement. Ap
 const FieldDefinition = z.object({
   name: z.string(),
   description: z.string(),
-  type: z.enum([
-    'string', 'number', 'boolean', 'url',
-    'currency', 'enum', 'array', 'object'
-  ]),
+  type: z.enum(['string', 'number', 'boolean', 'url', 'currency', 'enum', 'array', 'object']),
   required: z.boolean().default(false),
   normalization: NormalizationRule.optional(),
   enumValues: z.array(z.string()).optional(),
@@ -266,32 +263,36 @@ const JobConfig = z.object({
   schema: z.object({
     mode: z.enum(['fixed', 'discovery', 'hybrid']),
     userFields: z.array(FieldDefinition).optional(),
-    evolutionConfig: z.object({
-      enabled: z.boolean(),
-      batchSize: z.number().default(10),
-      maxFields: z.number().default(50),
-      relevanceThresholds: z.object({
-        requiredMin: z.number().default(0.85),
-        optionalMin: z.number().default(0.40),
-        rareBelow: z.number().default(0.40),
-        minCategorySampleSize: z.number().default(5),
-      }),
-      tableStrategy: z.enum(['single', 'multi', 'auto']).default('auto'),
-    }).optional(),
+    evolutionConfig: z
+      .object({
+        enabled: z.boolean(),
+        batchSize: z.number().default(10),
+        maxFields: z.number().default(50),
+        relevanceThresholds: z.object({
+          requiredMin: z.number().default(0.85),
+          optionalMin: z.number().default(0.4),
+          rareBelow: z.number().default(0.4),
+          minCategorySampleSize: z.number().default(5),
+        }),
+        tableStrategy: z.enum(['single', 'multi', 'auto']).default('auto'),
+      })
+      .optional(),
   }),
 
   llm: z.object({
     primaryModel: z.string().default('anthropic/claude-sonnet-4-20250514'),
-    modelOverrides: z.object({
-      pageRelevance: z.string().optional(),
-      extraction: z.string().optional(),
-      linkEvaluation: z.string().optional(),
-      schemaEvolution: z.string().optional(),
-      entityMatching: z.string().optional(),
-      conflictResolution: z.string().optional(),
-      qualityAudit: z.string().optional(),
-      documentation: z.string().optional(),
-    }).optional(),
+    modelOverrides: z
+      .object({
+        pageRelevance: z.string().optional(),
+        extraction: z.string().optional(),
+        linkEvaluation: z.string().optional(),
+        schemaEvolution: z.string().optional(),
+        entityMatching: z.string().optional(),
+        conflictResolution: z.string().optional(),
+        qualityAudit: z.string().optional(),
+        documentation: z.string().optional(),
+      })
+      .optional(),
   }),
 
   reconciliation: ReconciliationConfig.optional(),
@@ -305,17 +306,19 @@ Instead of a flat confidence threshold (which would discard subset-specific fiel
 ```typescript
 const FieldRelevance = z.object({
   globalFrequency: z.number(),
-  categoryBreakdown: z.array(z.object({
-    category: z.string(),
-    frequency: z.number(),
-    sampleSize: z.number(),
-  })),
+  categoryBreakdown: z.array(
+    z.object({
+      category: z.string(),
+      frequency: z.number(),
+      sampleSize: z.number(),
+    }),
+  ),
   classification: z.enum([
-    'universal_required',     // >85% global frequency
-    'universal_optional',     // 40-85% global frequency
-    'categorical_required',   // >85% within at least one category
-    'categorical_optional',   // 40-85% within at least one category
-    'rare',                   // <40% everywhere
+    'universal_required', // >85% global frequency
+    'universal_optional', // 40-85% global frequency
+    'categorical_required', // >85% within at least one category
+    'categorical_optional', // 40-85% within at least one category
+    'rare', // <40% everywhere
   ]),
   applicableCategories: z.array(z.string()).nullable(),
 });
@@ -328,11 +331,13 @@ Example: `driver_type` has 40% global frequency but 98% within headphones — cl
 ```typescript
 const FieldAlias = z.object({
   canonicalName: z.string(),
-  aliases: z.array(z.object({
-    name: z.string(),
-    sources: z.array(z.string()),
-    occurrences: z.number(),
-  })),
+  aliases: z.array(
+    z.object({
+      name: z.string(),
+      sources: z.array(z.string()),
+      occurrences: z.number(),
+    }),
+  ),
   mergedAt: z.date(),
   reasoning: z.string(),
 });
@@ -416,11 +421,13 @@ const ExtractionResult = z.object({
     modelUsed: z.string(),
     tokensUsed: z.number(),
     extractionTimeMs: z.number(),
-    unmappedFields: z.array(z.object({
-      name: z.string(),
-      value: z.unknown(),
-      suggestedType: z.string(),
-    })),
+    unmappedFields: z.array(
+      z.object({
+        name: z.string(),
+        value: z.unknown(),
+        suggestedType: z.string(),
+      }),
+    ),
   }),
 });
 ```
@@ -428,39 +435,45 @@ const ExtractionResult = z.object({
 ### Reconciliation Types
 
 ```typescript
-const EntityMatchStrategy = z.enum([
-  'exact_name', 'fuzzy_name', 'composite_key', 'llm_assisted',
-]);
+const EntityMatchStrategy = z.enum(['exact_name', 'fuzzy_name', 'composite_key', 'llm_assisted']);
 
 const ConflictResolution = z.enum([
-  'most_common', 'most_complete', 'source_priority', 'most_recent', 'llm_resolved',
+  'most_common',
+  'most_complete',
+  'source_priority',
+  'most_recent',
+  'llm_resolved',
 ]);
 
-const ValueProvenance = z.enum([
-  'extracted', 'normalized', 'merged', 'resolved', 'inferred',
-]);
+const ValueProvenance = z.enum(['extracted', 'normalized', 'merged', 'resolved', 'inferred']);
 
 const EntityMatch = z.object({
   entityId: z.string().uuid(),
-  sourceExtractions: z.array(z.object({
-    extractionId: z.string().uuid(),
-    sourceUrl: z.string().url(),
-    sourceDomain: z.string(),
-    crawledAt: z.date(),
-    fieldsCovered: z.array(z.string()),
-  })),
+  sourceExtractions: z.array(
+    z.object({
+      extractionId: z.string().uuid(),
+      sourceUrl: z.string().url(),
+      sourceDomain: z.string(),
+      crawledAt: z.date(),
+      fieldsCovered: z.array(z.string()),
+    }),
+  ),
   mergedData: z.record(z.unknown()),
-  fieldProvenance: z.record(z.object({
-    finalValue: z.unknown(),
-    provenanceType: ValueProvenance,
-    sources: z.array(z.object({
-      sourceUrl: z.string(),
-      rawValue: z.unknown(),
-      normalizedValue: z.unknown(),
-    })),
-    hadConflict: z.boolean(),
-    resolution: ConflictResolution.optional(),
-  })),
+  fieldProvenance: z.record(
+    z.object({
+      finalValue: z.unknown(),
+      provenanceType: ValueProvenance,
+      sources: z.array(
+        z.object({
+          sourceUrl: z.string(),
+          rawValue: z.unknown(),
+          normalizedValue: z.unknown(),
+        }),
+      ),
+      hadConflict: z.boolean(),
+      resolution: ConflictResolution.optional(),
+    }),
+  ),
 });
 
 const ReconciliationConfig = z.object({
@@ -487,6 +500,7 @@ LLM Call → Structured JSON → Zod Validation → Action[] → Executor → St
 Used during and after crawling:
 
 **Schema Actions:**
+
 - `add_field` — Add a new field to the schema
 - `merge_fields` — Merge synonym fields under a canonical name
 - `modify_field` — Change field type, required status, description
@@ -496,19 +510,23 @@ Used during and after crawling:
 - `group_fields` — Combine flat fields into nested object (e.g., price_amount + price_currency → price)
 
 **Normalization Actions:**
+
 - `set_normalization_rule` — Attach normalization rules to a field
 - `update_enum_map` — Expand enum synonym mappings
 
 **Category Actions:**
+
 - `define_category` — Identify natural groupings in the data
 - `assign_category_fields` — Map fields to categories with required/optional status
 
 **Crawl Actions:**
+
 - `classify_page` — Classify page type (single entry, listing, navigation, irrelevant)
 - `enqueue_links` — Add discovered links to crawl queue with priority
 - `hint_entity_match` — Early hint that two pages describe the same entity
 
 **Reconciliation Actions:**
+
 - `match_entities` — Group extractions as the same real-world entity
 - `split_entities` — Undo incorrect entity match
 - `resolve_conflict` — Choose a value when sources disagree
@@ -517,9 +535,11 @@ Used during and after crawling:
 - `set_source_trust` — Assign trust rankings to source domains
 
 **Reprocessing Actions:**
+
 - `reprocess_extraction` — Re-extract pages with evolved schema
 
 **Finalization Actions:**
+
 - `recommend_table_structure` — Single vs multi-table recommendation
 - `derive_field` — Compute a field from other fields
 - `flag_anomaly` — Flag suspicious values without mutating
@@ -570,12 +590,12 @@ interface ActionResult {
 
 Each action type has a default approval policy:
 
-| Risk Level | Policy | Examples |
-|---|---|---|
-| **None** | `always_auto` | flag_anomaly, generate_documentation, classify_page, enqueue_links |
-| **Low** | `auto_above_threshold` | add_field, set_normalization_rule, define_category |
-| **Medium** | `batch_review` | merge_fields, rename_field, split_field, resolve_conflict |
-| **High** | `always_review` | remove_field, recommend_table_structure, derive_field |
+| Risk Level | Policy                 | Examples                                                           |
+| ---------- | ---------------------- | ------------------------------------------------------------------ |
+| **None**   | `always_auto`          | flag_anomaly, generate_documentation, classify_page, enqueue_links |
+| **Low**    | `auto_above_threshold` | add_field, set_normalization_rule, define_category                 |
+| **Medium** | `batch_review`         | merge_fields, rename_field, split_field, resolve_conflict          |
+| **High**   | `always_review`        | remove_field, recommend_table_structure, derive_field              |
 
 Users can override with presets: `trust_ai`, `balanced` (default), `cautious`, `manual`.
 
@@ -597,41 +617,41 @@ Every step where LLM intelligence is used, with model routing for cost optimizat
 
 ### Crawl Phase
 
-| Step | Model Tier | Purpose |
-|---|---|---|
-| Page relevance check | Fast (Haiku/Flash) | Quick yes/no — does this page contain relevant data? |
-| Data extraction | Primary (Sonnet) | Extract structured data using current schema |
-| Unmapped field detection | Primary (Sonnet) | Capture fields not in schema (piggybacks on extraction) |
-| First-pass normalization | Primary (Sonnet) | Normalize values during extraction via prompt instructions |
-| Link evaluation | Fast (Haiku/Flash) | Score discovered links for relevance and priority |
+| Step                     | Model Tier         | Purpose                                                    |
+| ------------------------ | ------------------ | ---------------------------------------------------------- |
+| Page relevance check     | Fast (Haiku/Flash) | Quick yes/no — does this page contain relevant data?       |
+| Data extraction          | Primary (Sonnet)   | Extract structured data using current schema               |
+| Unmapped field detection | Primary (Sonnet)   | Capture fields not in schema (piggybacks on extraction)    |
+| First-pass normalization | Primary (Sonnet)   | Normalize values during extraction via prompt instructions |
+| Link evaluation          | Fast (Haiku/Flash) | Score discovered links for relevance and priority          |
 
 ### Schema Evolution Phase (batched)
 
-| Step | Model Tier | Purpose |
-|---|---|---|
-| Category detection | Primary (Sonnet) | Identify natural groupings from data patterns |
-| New field proposal | Primary (Sonnet) | Propose fields from unmapped evidence |
-| Field synonym detection | Primary (Sonnet) | Detect cross-source field name synonyms |
-| Normalization rule generation | Primary (Sonnet) | Build rules from observed value patterns |
-| Enum canonicalization | Primary (Sonnet) | Build synonym maps for enum-like values |
-| Category-field relevance | Primary (Sonnet) | Evaluate per-category field importance |
+| Step                          | Model Tier       | Purpose                                       |
+| ----------------------------- | ---------------- | --------------------------------------------- |
+| Category detection            | Primary (Sonnet) | Identify natural groupings from data patterns |
+| New field proposal            | Primary (Sonnet) | Propose fields from unmapped evidence         |
+| Field synonym detection       | Primary (Sonnet) | Detect cross-source field name synonyms       |
+| Normalization rule generation | Primary (Sonnet) | Build rules from observed value patterns      |
+| Enum canonicalization         | Primary (Sonnet) | Build synonym maps for enum-like values       |
+| Category-field relevance      | Primary (Sonnet) | Evaluate per-category field importance        |
 
 ### Reconciliation Phase
 
-| Step | Model Tier | Purpose |
-|---|---|---|
-| Entity matching | Primary (Sonnet) | Confirm ambiguous entity matches |
-| Gap filling | Primary (Sonnet) | Infer obvious missing values (flagged as inferred) |
-| Conflict resolution | Primary (Sonnet) | Pick best value when sources disagree |
-| Value correction | Primary (Sonnet) | Fix typos, outliers, format errors |
+| Step                | Model Tier       | Purpose                                            |
+| ------------------- | ---------------- | -------------------------------------------------- |
+| Entity matching     | Primary (Sonnet) | Confirm ambiguous entity matches                   |
+| Gap filling         | Primary (Sonnet) | Infer obvious missing values (flagged as inferred) |
+| Conflict resolution | Primary (Sonnet) | Pick best value when sources disagree              |
+| Value correction    | Primary (Sonnet) | Fix typos, outliers, format errors                 |
 
 ### Finalization Phase
 
-| Step | Model Tier | Purpose |
-|---|---|---|
-| Schema finalization | Smart (Sonnet/Opus) | Review for redundancy, optimal table design |
-| Data quality audit | Smart (Sonnet/Opus) | Sample and flag anomalies, outliers, errors |
-| Documentation generation | Fast (Haiku) | Auto-generate data dictionary and quality summary |
+| Step                     | Model Tier          | Purpose                                           |
+| ------------------------ | ------------------- | ------------------------------------------------- |
+| Schema finalization      | Smart (Sonnet/Opus) | Review for redundancy, optimal table design       |
+| Data quality audit       | Smart (Sonnet/Opus) | Sample and flag anomalies, outliers, errors       |
+| Documentation generation | Fast (Haiku)        | Auto-generate data dictionary and quality summary |
 
 ### Three-Layer Consolidation Pipeline
 
@@ -936,7 +956,11 @@ apps/cli/src/
 
 ```typescript
 interface Exporter {
-  export(entities: Entity[], schema: SchemaDefinition, options: ExportOptions): Promise<ExportResult>;
+  export(
+    entities: Entity[],
+    schema: SchemaDefinition,
+    options: ExportOptions,
+  ): Promise<ExportResult>;
 }
 ```
 
@@ -963,11 +987,11 @@ Five decisions baked into the foundation:
 
 ### Scale Path
 
-| Scale | Changes Needed |
-|---|---|
-| 1-100 jobs | Current design works as-is |
-| 100-1K jobs | Add read replicas, PgBouncer, worker auto-scaling |
-| 1K+ jobs | Temporal for orchestration, S3 for content, table partitioning |
+| Scale       | Changes Needed                                                 |
+| ----------- | -------------------------------------------------------------- |
+| 1-100 jobs  | Current design works as-is                                     |
+| 100-1K jobs | Add read replicas, PgBouncer, worker auto-scaling              |
+| 1K+ jobs    | Temporal for orchestration, S3 for content, table partitioning |
 
 ---
 
@@ -976,6 +1000,7 @@ Five decisions baked into the foundation:
 Each phase is production-quality: tested, documented, and hardened before the next begins.
 
 ### Phase 1: Project Foundation & Core Types
+
 - Monorepo scaffolding (Turborepo + pnpm)
 - All Zod schemas and types from Section 5
 - Config system, logger, error types
@@ -983,6 +1008,7 @@ Each phase is production-quality: tested, documented, and hardened before the ne
 - **Deliverable:** `npm test` runs, all validators pass, project structure documented
 
 ### Phase 2: Pluggable Crawler
+
 - `Crawler` interface definition
 - Playwright adapter
 - Firecrawl adapter
@@ -990,18 +1016,21 @@ Each phase is production-quality: tested, documented, and hardened before the ne
 - **Deliverable:** Both adapters crawl any URL, return normalized content, fully tested
 
 ### Phase 3: LLM Integration & Static Extraction
+
 - OpenRouter client with retry, rate limiting, model selection
 - Prompt engineering for structured extraction
 - Raw HTML + Zod schema → structured JSON
 - **Deliverable:** Fixture-based test suite (20+ page snapshots)
 
 ### Phase 4: Storage Layer
+
 - PostgreSQL + Drizzle ORM setup
 - All tables from Section 8
 - Repository pattern, migration system
 - **Deliverable:** Full CRUD, integration tests against real Postgres
 
 ### Phase 5: Job Orchestration
+
 - Job state machine (Section 9)
 - BullMQ queues with configurable concurrency
 - AI-powered link relevance filtering + configurable depth
@@ -1009,6 +1038,7 @@ Each phase is production-quality: tested, documented, and hardened before the ne
 - **Deliverable:** E2E test — create job → crawl → extract → store
 
 ### Phase 6: Intelligent Schema Evolution
+
 - Schema analysis engine with category detection
 - Dynamic feature discovery
 - Schema versioning with diff history
@@ -1016,36 +1046,42 @@ Each phase is production-quality: tested, documented, and hardened before the ne
 - **Deliverable:** Test suite feeding sequential pages, verifying evolution
 
 ### Phase 7: Data Reconciliation & Normalization
+
 - Full three-layer consolidation pipeline
 - Entity matching, gap filling, conflict resolution
 - Required vs optional inference, schema finalization
 - **Deliverable:** Given messy multi-source data → clean normalized output
 
 ### Phase 8: API Server
+
 - Hono REST endpoints (Section 10)
 - WebSocket for real-time progress
 - Input validation, structured errors, OpenAPI docs
 - **Deliverable:** Full API test suite, Swagger docs
 
 ### Phase 9a: CLI — Core + Conversational Mode
+
 - Ink setup, component library, WebSocket connection
 - Conversational job creation with LLM (ConfigActions)
 - Basic status/list commands
 - **Deliverable:** Create and start a job through conversation
 
 ### Phase 9b: CLI — Dashboard + Review Mode
+
 - Live dashboard with all panels
 - Interactive action review flow
 - Keyboard navigation
 - **Deliverable:** Monitor full crawl lifecycle interactively
 
 ### Phase 9c: CLI — Results Explorer
+
 - Data table with filtering
 - Natural language filter
 - Provenance display, inline export
 - **Deliverable:** Browse, filter, export results from terminal
 
 ### Phase 10: Export Pipeline
+
 - JSON and CSV exporters
 - Pluggable exporter interface
 - Export from API and CLI
@@ -1057,65 +1093,65 @@ Each phase is production-quality: tested, documented, and hardened before the ne
 
 ### Pipeline Actions (22)
 
-| # | Type | Category | Default Safety |
-|---|---|---|---|
-| 1 | `add_field` | Schema | auto_above_threshold |
-| 2 | `merge_fields` | Schema | batch_review |
-| 3 | `modify_field` | Schema | auto_above_threshold |
-| 4 | `remove_field` | Schema | always_review |
-| 5 | `rename_field` | Schema | batch_review |
-| 6 | `split_field` | Schema | batch_review |
-| 7 | `group_fields` | Schema | batch_review |
-| 8 | `set_normalization_rule` | Normalization | auto_above_threshold |
-| 9 | `update_enum_map` | Normalization | always_auto |
-| 10 | `define_category` | Category | auto_above_threshold |
-| 11 | `assign_category_fields` | Category | auto_above_threshold |
-| 12 | `classify_page` | Crawl | always_auto |
-| 13 | `enqueue_links` | Crawl | always_auto |
-| 14 | `hint_entity_match` | Crawl | always_auto |
-| 15 | `match_entities` | Reconciliation | auto_above_threshold |
-| 16 | `split_entities` | Reconciliation | batch_review |
-| 17 | `resolve_conflict` | Reconciliation | batch_review |
-| 18 | `infer_value` | Reconciliation | batch_review |
-| 19 | `correct_value` | Reconciliation | batch_review |
-| 20 | `set_source_trust` | Reconciliation | auto_above_threshold |
-| 21 | `reprocess_extraction` | Reprocessing | auto_above_threshold |
-| 22 | `recommend_table_structure` | Finalization | always_review |
-| 23 | `derive_field` | Finalization | always_review |
-| 24 | `flag_anomaly` | Finalization | always_auto |
-| 25 | `generate_documentation` | Finalization | always_auto |
+| #   | Type                        | Category       | Default Safety       |
+| --- | --------------------------- | -------------- | -------------------- |
+| 1   | `add_field`                 | Schema         | auto_above_threshold |
+| 2   | `merge_fields`              | Schema         | batch_review         |
+| 3   | `modify_field`              | Schema         | auto_above_threshold |
+| 4   | `remove_field`              | Schema         | always_review        |
+| 5   | `rename_field`              | Schema         | batch_review         |
+| 6   | `split_field`               | Schema         | batch_review         |
+| 7   | `group_fields`              | Schema         | batch_review         |
+| 8   | `set_normalization_rule`    | Normalization  | auto_above_threshold |
+| 9   | `update_enum_map`           | Normalization  | always_auto          |
+| 10  | `define_category`           | Category       | auto_above_threshold |
+| 11  | `assign_category_fields`    | Category       | auto_above_threshold |
+| 12  | `classify_page`             | Crawl          | always_auto          |
+| 13  | `enqueue_links`             | Crawl          | always_auto          |
+| 14  | `hint_entity_match`         | Crawl          | always_auto          |
+| 15  | `match_entities`            | Reconciliation | auto_above_threshold |
+| 16  | `split_entities`            | Reconciliation | batch_review         |
+| 17  | `resolve_conflict`          | Reconciliation | batch_review         |
+| 18  | `infer_value`               | Reconciliation | batch_review         |
+| 19  | `correct_value`             | Reconciliation | batch_review         |
+| 20  | `set_source_trust`          | Reconciliation | auto_above_threshold |
+| 21  | `reprocess_extraction`      | Reprocessing   | auto_above_threshold |
+| 22  | `recommend_table_structure` | Finalization   | always_review        |
+| 23  | `derive_field`              | Finalization   | always_review        |
+| 24  | `flag_anomaly`              | Finalization   | always_auto          |
+| 25  | `generate_documentation`    | Finalization   | always_auto          |
 
 ### Config Actions (30)
 
-| # | Type | Category |
-|---|---|---|
-| 1 | `set_job_name` | Metadata |
-| 2 | `set_job_description` | Metadata |
-| 3 | `add_seed_urls` | Seed URLs |
-| 4 | `remove_seed_urls` | Seed URLs |
-| 5 | `replace_seed_urls` | Seed URLs |
-| 6 | `set_crawl_depth` | Crawl Settings |
-| 7 | `set_max_pages` | Crawl Settings |
-| 8 | `set_concurrency` | Crawl Settings |
-| 9 | `set_crawler_type` | Crawl Settings |
-| 10 | `add_user_field` | Schema Fields |
-| 11 | `add_multiple_user_fields` | Schema Fields |
-| 12 | `remove_user_field` | Schema Fields |
-| 13 | `modify_user_field` | Schema Fields |
-| 14 | `reorder_user_fields` | Schema Fields |
-| 15 | `replace_all_user_fields` | Schema Fields |
-| 16 | `define_nested_field` | Schema Fields |
-| 17 | `set_schema_mode` | Schema Mode |
-| 18 | `set_evolution_config` | Schema Mode |
-| 19 | `set_primary_model` | LLM Config |
-| 20 | `set_model_override` | LLM Config |
-| 21 | `clear_model_override` | LLM Config |
-| 22 | `set_match_strategy` | Reconciliation |
-| 23 | `set_conflict_resolution` | Reconciliation |
-| 24 | `set_source_priority` | Reconciliation |
-| 25 | `set_action_approval_policy` | Safety |
-| 26 | `save_as_template` | Templates |
-| 27 | `load_template` | Templates |
-| 28 | `clone_job_config` | Templates |
-| 29 | `confirm_and_start` | Control |
-| 30 | `reset_config` | Control |
+| #   | Type                         | Category       |
+| --- | ---------------------------- | -------------- |
+| 1   | `set_job_name`               | Metadata       |
+| 2   | `set_job_description`        | Metadata       |
+| 3   | `add_seed_urls`              | Seed URLs      |
+| 4   | `remove_seed_urls`           | Seed URLs      |
+| 5   | `replace_seed_urls`          | Seed URLs      |
+| 6   | `set_crawl_depth`            | Crawl Settings |
+| 7   | `set_max_pages`              | Crawl Settings |
+| 8   | `set_concurrency`            | Crawl Settings |
+| 9   | `set_crawler_type`           | Crawl Settings |
+| 10  | `add_user_field`             | Schema Fields  |
+| 11  | `add_multiple_user_fields`   | Schema Fields  |
+| 12  | `remove_user_field`          | Schema Fields  |
+| 13  | `modify_user_field`          | Schema Fields  |
+| 14  | `reorder_user_fields`        | Schema Fields  |
+| 15  | `replace_all_user_fields`    | Schema Fields  |
+| 16  | `define_nested_field`        | Schema Fields  |
+| 17  | `set_schema_mode`            | Schema Mode    |
+| 18  | `set_evolution_config`       | Schema Mode    |
+| 19  | `set_primary_model`          | LLM Config     |
+| 20  | `set_model_override`         | LLM Config     |
+| 21  | `clear_model_override`       | LLM Config     |
+| 22  | `set_match_strategy`         | Reconciliation |
+| 23  | `set_conflict_resolution`    | Reconciliation |
+| 24  | `set_source_priority`        | Reconciliation |
+| 25  | `set_action_approval_policy` | Safety         |
+| 26  | `save_as_template`           | Templates      |
+| 27  | `load_template`              | Templates      |
+| 28  | `clone_job_config`           | Templates      |
+| 29  | `confirm_and_start`          | Control        |
+| 30  | `reset_config`               | Control        |

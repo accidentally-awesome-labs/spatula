@@ -66,8 +66,6 @@ describe('NormalizationRule', () => {
   });
 
   it('rejects invalid type', () => {
-    expect(() =>
-      NormalizationRule.parse({ type: 'invalid', config: {} })
-    ).toThrow();
+    expect(() => NormalizationRule.parse({ type: 'invalid', config: {} })).toThrow();
   });
 });

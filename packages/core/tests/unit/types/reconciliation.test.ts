@@ -32,7 +32,11 @@ describe('EntityMatch', () => {
           finalValue: 'Sennheiser HD 650',
           provenanceType: 'extracted',
           sources: [
-            { sourceUrl: 'https://amazon.com/hd650', rawValue: 'Sennheiser HD 650', normalizedValue: 'Sennheiser HD 650' },
+            {
+              sourceUrl: 'https://amazon.com/hd650',
+              rawValue: 'Sennheiser HD 650',
+              normalizedValue: 'Sennheiser HD 650',
+            },
           ],
           hadConflict: false,
         },
@@ -40,7 +44,11 @@ describe('EntityMatch', () => {
           finalValue: { amount: 299, currency: 'USD' },
           provenanceType: 'normalized',
           sources: [
-            { sourceUrl: 'https://amazon.com/hd650', rawValue: '$299.00', normalizedValue: { amount: 299, currency: 'USD' } },
+            {
+              sourceUrl: 'https://amazon.com/hd650',
+              rawValue: '$299.00',
+              normalizedValue: { amount: 299, currency: 'USD' },
+            },
           ],
           hadConflict: false,
         },

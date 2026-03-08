@@ -25,8 +25,8 @@ describe('JobConfig', () => {
         maxFields: 50,
         relevanceThresholds: {
           requiredMin: 0.85,
-          optionalMin: 0.40,
-          rareBelow: 0.40,
+          optionalMin: 0.4,
+          rareBelow: 0.4,
           minCategorySampleSize: 5,
         },
         tableStrategy: 'auto' as const,
@@ -70,15 +70,11 @@ describe('JobConfig', () => {
   });
 
   it('rejects invalid seed URLs', () => {
-    expect(() =>
-      JobConfig.parse({ ...validConfig, seedUrls: ['not-a-url'] })
-    ).toThrow();
+    expect(() => JobConfig.parse({ ...validConfig, seedUrls: ['not-a-url'] })).toThrow();
   });
 
   it('rejects invalid tenant UUID', () => {
-    expect(() =>
-      JobConfig.parse({ ...validConfig, tenantId: 'not-a-uuid' })
-    ).toThrow();
+    expect(() => JobConfig.parse({ ...validConfig, tenantId: 'not-a-uuid' })).toThrow();
   });
 
   it('rejects crawl depth over 10', () => {
@@ -86,7 +82,7 @@ describe('JobConfig', () => {
       JobConfig.parse({
         ...validConfig,
         crawl: { ...validConfig.crawl, maxDepth: 11 },
-      })
+      }),
     ).toThrow();
   });
 
@@ -102,8 +98,14 @@ describe('JobConfig', () => {
 describe('JobStatus', () => {
   it('accepts all valid statuses', () => {
     const statuses = [
-      'pending', 'queued', 'running', 'paused',
-      'reconciling', 'completed', 'failed', 'cancelled',
+      'pending',
+      'queued',
+      'running',
+      'paused',
+      'reconciling',
+      'completed',
+      'failed',
+      'cancelled',
     ];
     for (const status of statuses) {
       expect(JobStatus.parse(status)).toBe(status);
