@@ -31,10 +31,8 @@ export async function compareCrawlers(
     firecrawlCrawler.crawl(url, options),
   ]);
 
-  const pw =
-    playwrightResult.status === 'fulfilled' ? playwrightResult.value : null;
-  const fc =
-    firecrawlResult.status === 'fulfilled' ? firecrawlResult.value : null;
+  const pw = playwrightResult.status === 'fulfilled' ? playwrightResult.value : null;
+  const fc = firecrawlResult.status === 'fulfilled' ? firecrawlResult.value : null;
 
   if (playwrightResult.status === 'rejected') {
     const msg = (playwrightResult.reason as Error).message;

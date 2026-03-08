@@ -15,11 +15,13 @@
 ## Task 1: Install Phase 2 Dependencies
 
 **Files:**
+
 - Modify: `packages/core/package.json`
 
 **Step 1: Install production dependencies**
 
 Run:
+
 ```bash
 cd packages/core && pnpm add playwright cheerio @mendable/firecrawl-js
 ```
@@ -27,6 +29,7 @@ cd packages/core && pnpm add playwright cheerio @mendable/firecrawl-js
 **Step 2: Install dev dependencies (types)**
 
 Run:
+
 ```bash
 cd packages/core && pnpm add -D @types/cheerio
 ```
@@ -52,12 +55,14 @@ git commit -m "chore(core): add playwright, firecrawl, cheerio dependencies for 
 A shared utility that extracts and normalizes links from raw HTML. Both crawlers use this so link extraction logic is DRY.
 
 **Files:**
+
 - Create: `packages/core/src/crawlers/link-extractor.ts`
 - Create: `packages/core/tests/unit/crawlers/link-extractor.test.ts`
 
 **Step 1: Write the failing test**
 
 `packages/core/tests/unit/crawlers/link-extractor.test.ts`:
+
 ```typescript
 import { describe, it, expect } from 'vitest';
 import { extractLinks, resolveUrl } from '../../../src/crawlers/link-extractor.js';
@@ -94,9 +99,7 @@ describe('resolveUrl', () => {
   });
 
   it('strips hash fragments', () => {
-    expect(resolveUrl('/page#section', 'https://example.com')).toBe(
-      'https://example.com/page',
-    );
+    expect(resolveUrl('/page#section', 'https://example.com')).toBe('https://example.com/page');
   });
 });
 
@@ -174,6 +177,7 @@ Expected: FAIL — module not found
 **Step 3: Write implementation**
 
 `packages/core/src/crawlers/link-extractor.ts`:
+
 ```typescript
 import * as cheerio from 'cheerio';
 
@@ -245,24 +249,28 @@ git commit -m "feat(core): add link extractor utility with URL resolution"
 ## Task 3: Playwright Crawler Adapter
 
 **Files:**
+
 - Create: `packages/core/src/crawlers/playwright-crawler.ts`
 - Create: `packages/core/tests/unit/crawlers/playwright-crawler.test.ts`
 
 **Step 1: Write the failing test**
 
 `packages/core/tests/unit/crawlers/playwright-crawler.test.ts`:
+
 ```typescript
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { PlaywrightCrawler } from '../../../src/crawlers/playwright-crawler.js';
 import type { Browser, BrowserContext, Page, Response } from 'playwright';
 
-function createMockPage(overrides: Partial<{
-  html: string;
-  title: string;
-  url: string;
-  status: number;
-  contentType: string;
-}> = {}): { page: Page; context: BrowserContext; browser: Browser } {
+function createMockPage(
+  overrides: Partial<{
+    html: string;
+    title: string;
+    url: string;
+    status: number;
+    contentType: string;
+  }> = {},
+): { page: Page; context: BrowserContext; browser: Browser } {
   const {
     html = '<html><head><title>Test</title></head><body><a href="/link">Link</a></body></html>',
     title = 'Test',
@@ -371,9 +379,7 @@ describe('PlaywrightCrawler', () => {
   });
 
   it('closes page and context even on error', async () => {
-    (mocks.page.content as ReturnType<typeof vi.fn>).mockRejectedValue(
-      new Error('page crashed'),
-    );
+    (mocks.page.content as ReturnType<typeof vi.fn>).mockRejectedValue(new Error('page crashed'));
 
     await expect(crawler.crawl('https://example.com')).rejects.toThrow();
     expect(mocks.page.close).toHaveBeenCalled();
@@ -395,6 +401,7 @@ Expected: FAIL
 **Step 3: Write implementation**
 
 `packages/core/src/crawlers/playwright-crawler.ts`:
+
 ```typescript
 import type { Browser, BrowserContext, Page } from 'playwright';
 import { CrawlError } from '@spatula/shared';
@@ -499,12 +506,14 @@ git commit -m "feat(core): add Playwright crawler adapter"
 ## Task 4: Firecrawl Crawler Adapter
 
 **Files:**
+
 - Create: `packages/core/src/crawlers/firecrawl-crawler.ts`
 - Create: `packages/core/tests/unit/crawlers/firecrawl-crawler.test.ts`
 
 **Step 1: Write the failing test**
 
 `packages/core/tests/unit/crawlers/firecrawl-crawler.test.ts`:
+
 ```typescript
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { FirecrawlCrawler } from '../../../src/crawlers/firecrawl-crawler.js';
@@ -606,6 +615,7 @@ Expected: FAIL
 **Step 3: Write implementation**
 
 `packages/core/src/crawlers/firecrawl-crawler.ts`:
+
 ```typescript
 import FirecrawlApp from '@mendable/firecrawl-js';
 import { CrawlError } from '@spatula/shared';
@@ -710,12 +720,14 @@ git commit -m "feat(core): add Firecrawl crawler adapter"
 Creates the right crawler adapter based on configuration. Centralizes Playwright browser launch logic.
 
 **Files:**
+
 - Create: `packages/core/src/crawlers/crawler-factory.ts`
 - Create: `packages/core/tests/unit/crawlers/crawler-factory.test.ts`
 
 **Step 1: Write the failing test**
 
 `packages/core/tests/unit/crawlers/crawler-factory.test.ts`:
+
 ```typescript
 import { describe, it, expect, vi } from 'vitest';
 import { CrawlerFactory } from '../../../src/crawlers/crawler-factory.js';
@@ -753,9 +765,7 @@ describe('CrawlerFactory', () => {
   });
 
   it('throws on firecrawl without API key', async () => {
-    await expect(
-      CrawlerFactory.create({ type: 'firecrawl' }),
-    ).rejects.toThrow('CRAWL_ERROR');
+    await expect(CrawlerFactory.create({ type: 'firecrawl' })).rejects.toThrow('CRAWL_ERROR');
   });
 
   it('passes playwright launch options', async () => {
@@ -786,6 +796,7 @@ Expected: FAIL
 **Step 3: Write implementation**
 
 `packages/core/src/crawlers/crawler-factory.ts`:
+
 ```typescript
 import { CrawlError } from '@spatula/shared';
 import type { Crawler } from '../interfaces/crawler.js';
@@ -848,12 +859,14 @@ git commit -m "feat(core): add CrawlerFactory for creating crawler instances"
 Runs both crawlers against the same URL and produces a structured comparison. This was a design requirement — the user wants to compare how each method performs.
 
 **Files:**
+
 - Create: `packages/core/src/crawlers/crawler-comparison.ts`
 - Create: `packages/core/tests/unit/crawlers/crawler-comparison.test.ts`
 
 **Step 1: Write the failing test**
 
 `packages/core/tests/unit/crawlers/crawler-comparison.test.ts`:
+
 ```typescript
 import { describe, it, expect, vi } from 'vitest';
 import { compareCrawlers } from '../../../src/crawlers/crawler-comparison.js';
@@ -954,6 +967,7 @@ Expected: FAIL
 **Step 3: Write implementation**
 
 `packages/core/src/crawlers/crawler-comparison.ts`:
+
 ```typescript
 import { createLogger } from '@spatula/shared';
 import type { Crawler, CrawlResult, CrawlOptions } from '../interfaces/crawler.js';
@@ -988,10 +1002,8 @@ export async function compareCrawlers(
     firecrawlCrawler.crawl(url, options),
   ]);
 
-  const pw =
-    playwrightResult.status === 'fulfilled' ? playwrightResult.value : null;
-  const fc =
-    firecrawlResult.status === 'fulfilled' ? firecrawlResult.value : null;
+  const pw = playwrightResult.status === 'fulfilled' ? playwrightResult.value : null;
+  const fc = firecrawlResult.status === 'fulfilled' ? firecrawlResult.value : null;
 
   if (playwrightResult.status === 'rejected') {
     const msg = (playwrightResult.reason as Error).message;
@@ -1058,12 +1070,14 @@ git commit -m "feat(core): add crawler comparison utility for benchmarking adapt
 Wire up the crawler modules into the package export tree.
 
 **Files:**
+
 - Create: `packages/core/src/crawlers/index.ts`
 - Modify: `packages/core/src/index.ts`
 
 **Step 1: Create barrel export**
 
 `packages/core/src/crawlers/index.ts`:
+
 ```typescript
 export { extractLinks, resolveUrl } from './link-extractor.js';
 export type { ExtractedLink } from './link-extractor.js';
@@ -1079,6 +1093,7 @@ export type { CrawlerComparisonResult } from './crawler-comparison.js';
 **Step 2: Update core index.ts**
 
 Add to `packages/core/src/index.ts`:
+
 ```typescript
 // Crawlers
 export * from './crawlers/index.js';
@@ -1108,6 +1123,7 @@ git commit -m "feat(core): add crawlers barrel export and wire into package"
 Create realistic HTML fixtures and integration tests that verify end-to-end crawl result quality without hitting real networks.
 
 **Files:**
+
 - Create: `packages/core/tests/fixtures/single-product.html`
 - Create: `packages/core/tests/fixtures/product-listing.html`
 - Create: `packages/core/tests/integration/crawlers/crawl-fixtures.test.ts`
@@ -1115,91 +1131,94 @@ Create realistic HTML fixtures and integration tests that verify end-to-end craw
 **Step 1: Create HTML fixtures**
 
 `packages/core/tests/fixtures/single-product.html`:
+
 ```html
 <!DOCTYPE html>
 <html lang="en">
-<head>
-  <meta charset="utf-8">
-  <title>Sennheiser HD 650 - AudioStore</title>
-</head>
-<body>
-  <nav>
-    <a href="/">Home</a>
-    <a href="/headphones">Headphones</a>
-    <a href="/amps">Amplifiers</a>
-  </nav>
-  <main>
-    <h1>Sennheiser HD 650</h1>
-    <p class="price">$299.99</p>
-    <p class="description">Open-back audiophile headphone with exceptional sound quality.</p>
-    <ul class="specs">
-      <li>Type: Over-ear, Open-back</li>
-      <li>Impedance: 300 Ohm</li>
-      <li>Driver: Dynamic</li>
-      <li>Frequency: 10 - 41,000 Hz</li>
-    </ul>
-    <div class="related">
-      <a href="/products/hd600">Sennheiser HD 600</a>
-      <a href="/products/hd660s">Sennheiser HD 660S</a>
-      <a href="https://sennheiser.com/hd650" rel="nofollow">Official Page</a>
-    </div>
-  </main>
-  <footer>
-    <a href="/privacy">Privacy</a>
-    <a href="mailto:support@audiostore.com">Contact</a>
-  </footer>
-</body>
+  <head>
+    <meta charset="utf-8" />
+    <title>Sennheiser HD 650 - AudioStore</title>
+  </head>
+  <body>
+    <nav>
+      <a href="/">Home</a>
+      <a href="/headphones">Headphones</a>
+      <a href="/amps">Amplifiers</a>
+    </nav>
+    <main>
+      <h1>Sennheiser HD 650</h1>
+      <p class="price">$299.99</p>
+      <p class="description">Open-back audiophile headphone with exceptional sound quality.</p>
+      <ul class="specs">
+        <li>Type: Over-ear, Open-back</li>
+        <li>Impedance: 300 Ohm</li>
+        <li>Driver: Dynamic</li>
+        <li>Frequency: 10 - 41,000 Hz</li>
+      </ul>
+      <div class="related">
+        <a href="/products/hd600">Sennheiser HD 600</a>
+        <a href="/products/hd660s">Sennheiser HD 660S</a>
+        <a href="https://sennheiser.com/hd650" rel="nofollow">Official Page</a>
+      </div>
+    </main>
+    <footer>
+      <a href="/privacy">Privacy</a>
+      <a href="mailto:support@audiostore.com">Contact</a>
+    </footer>
+  </body>
 </html>
 ```
 
 `packages/core/tests/fixtures/product-listing.html`:
+
 ```html
 <!DOCTYPE html>
 <html lang="en">
-<head>
-  <meta charset="utf-8">
-  <title>Headphones - AudioStore</title>
-</head>
-<body>
-  <nav>
-    <a href="/">Home</a>
-    <a href="/headphones">Headphones</a>
-  </nav>
-  <main>
-    <h1>Headphones</h1>
-    <div class="product-grid">
-      <div class="product">
-        <a href="/products/hd650">
-          <h2>Sennheiser HD 650</h2>
-          <p>$299.99</p>
-        </a>
+  <head>
+    <meta charset="utf-8" />
+    <title>Headphones - AudioStore</title>
+  </head>
+  <body>
+    <nav>
+      <a href="/">Home</a>
+      <a href="/headphones">Headphones</a>
+    </nav>
+    <main>
+      <h1>Headphones</h1>
+      <div class="product-grid">
+        <div class="product">
+          <a href="/products/hd650">
+            <h2>Sennheiser HD 650</h2>
+            <p>$299.99</p>
+          </a>
+        </div>
+        <div class="product">
+          <a href="/products/lcd-x">
+            <h2>Audeze LCD-X</h2>
+            <p>$1,199.00</p>
+          </a>
+        </div>
+        <div class="product">
+          <a href="/products/sundara">
+            <h2>HiFiMAN Sundara</h2>
+            <p>$349.00</p>
+          </a>
+        </div>
       </div>
-      <div class="product">
-        <a href="/products/lcd-x">
-          <h2>Audeze LCD-X</h2>
-          <p>$1,199.00</p>
-        </a>
+      <div class="pagination">
+        <a href="/headphones?page=1" class="active">1</a>
+        <a href="/headphones?page=2">2</a>
+        <a href="/headphones?page=3">3</a>
       </div>
-      <div class="product">
-        <a href="/products/sundara">
-          <h2>HiFiMAN Sundara</h2>
-          <p>$349.00</p>
-        </a>
-      </div>
-    </div>
-    <div class="pagination">
-      <a href="/headphones?page=1" class="active">1</a>
-      <a href="/headphones?page=2">2</a>
-      <a href="/headphones?page=3">3</a>
-    </div>
-  </main>
-</body>
+    </main>
+  </body>
 </html>
 ```
 
 **Step 2: Write integration test**
 
 `packages/core/tests/integration/crawlers/crawl-fixtures.test.ts`:
+
 ```typescript
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { readFileSync } from 'node:fs';
@@ -1221,9 +1240,7 @@ function createMockBrowserForHtml(html: string, url: string): Browser {
   const mockPage = {
     goto: vi.fn().mockResolvedValue(mockResponse),
     content: vi.fn().mockResolvedValue(html),
-    title: vi.fn().mockResolvedValue(
-      html.match(/<title>(.*?)<\/title>/)?.[1] ?? '',
-    ),
+    title: vi.fn().mockResolvedValue(html.match(/<title>(.*?)<\/title>/)?.[1] ?? ''),
     url: vi.fn().mockReturnValue(url),
     waitForSelector: vi.fn().mockResolvedValue(null),
     close: vi.fn().mockResolvedValue(undefined),
@@ -1294,9 +1311,7 @@ describe('Crawl Fixtures — Product Listing Page', () => {
   });
 
   it('extracts all product links', () => {
-    const productUrls = result.links
-      .map((l) => l.url)
-      .filter((u) => u.includes('/products/'));
+    const productUrls = result.links.map((l) => l.url).filter((u) => u.includes('/products/'));
     expect(productUrls).toHaveLength(3);
     expect(productUrls).toContain('https://audiostore.com/products/hd650');
     expect(productUrls).toContain('https://audiostore.com/products/lcd-x');
@@ -1304,9 +1319,7 @@ describe('Crawl Fixtures — Product Listing Page', () => {
   });
 
   it('extracts pagination links', () => {
-    const pageUrls = result.links
-      .map((l) => l.url)
-      .filter((u) => u.includes('page='));
+    const pageUrls = result.links.map((l) => l.url).filter((u) => u.includes('page='));
     expect(pageUrls.length).toBeGreaterThanOrEqual(2);
   });
 
@@ -1369,6 +1382,7 @@ git commit -m "chore: Phase 2 final verification — all tests pass, builds clea
 ## Summary
 
 Phase 2 delivers:
+
 - **Link Extractor** — Shared utility for HTML link discovery with URL resolution, dedup, and filtering
 - **Playwright Adapter** — Full `Crawler` implementation using Playwright browser automation with configurable options
 - **Firecrawl Adapter** — Full `Crawler` implementation using Firecrawl managed scraping API
@@ -1378,6 +1392,7 @@ Phase 2 delivers:
 - **~9 commits** with focused, atomic changes
 
 Both adapters:
+
 - Implement the `Crawler` interface from Phase 1
 - Return validated `CrawlResult` with links, metadata, timing
 - Use shared `extractLinks` for consistent link discovery

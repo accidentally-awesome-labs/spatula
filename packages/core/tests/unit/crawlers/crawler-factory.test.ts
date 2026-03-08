@@ -34,9 +34,7 @@ describe('CrawlerFactory', () => {
   });
 
   it('throws on firecrawl without API key', async () => {
-    await expect(
-      CrawlerFactory.create({ type: 'firecrawl' }),
-    ).rejects.toThrow();
+    await expect(CrawlerFactory.create({ type: 'firecrawl' })).rejects.toThrow();
   });
 
   it('passes playwright launch options', async () => {

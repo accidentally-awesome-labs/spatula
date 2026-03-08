@@ -18,9 +18,7 @@ function createMockBrowserForHtml(html: string, url: string): Browser {
   const mockPage = {
     goto: vi.fn().mockResolvedValue(mockResponse),
     content: vi.fn().mockResolvedValue(html),
-    title: vi.fn().mockResolvedValue(
-      html.match(/<title>(.*?)<\/title>/)?.[1] ?? '',
-    ),
+    title: vi.fn().mockResolvedValue(html.match(/<title>(.*?)<\/title>/)?.[1] ?? ''),
     url: vi.fn().mockReturnValue(url),
     waitForSelector: vi.fn().mockResolvedValue(null),
     close: vi.fn().mockResolvedValue(undefined),
@@ -91,9 +89,7 @@ describe('Crawl Fixtures — Product Listing Page', () => {
   });
 
   it('extracts all product links', () => {
-    const productUrls = result.links
-      .map((l) => l.url)
-      .filter((u) => u.includes('/products/'));
+    const productUrls = result.links.map((l) => l.url).filter((u) => u.includes('/products/'));
     expect(productUrls).toHaveLength(3);
     expect(productUrls).toContain('https://audiostore.com/products/hd650');
     expect(productUrls).toContain('https://audiostore.com/products/lcd-x');
@@ -101,9 +97,7 @@ describe('Crawl Fixtures — Product Listing Page', () => {
   });
 
   it('extracts pagination links', () => {
-    const pageUrls = result.links
-      .map((l) => l.url)
-      .filter((u) => u.includes('page='));
+    const pageUrls = result.links.map((l) => l.url).filter((u) => u.includes('page='));
     expect(pageUrls.length).toBeGreaterThanOrEqual(2);
   });
 

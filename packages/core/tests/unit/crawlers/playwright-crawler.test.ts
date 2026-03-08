@@ -2,13 +2,15 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { PlaywrightCrawler } from '../../../src/crawlers/playwright-crawler.js';
 import type { Browser, BrowserContext, Page, Response } from 'playwright';
 
-function createMockPage(overrides: Partial<{
-  html: string;
-  title: string;
-  url: string;
-  status: number;
-  contentType: string;
-}> = {}): { page: Page; context: BrowserContext; browser: Browser } {
+function createMockPage(
+  overrides: Partial<{
+    html: string;
+    title: string;
+    url: string;
+    status: number;
+    contentType: string;
+  }> = {},
+): { page: Page; context: BrowserContext; browser: Browser } {
   const {
     html = '<html><head><title>Test</title></head><body><a href="/link">Link</a></body></html>',
     title = 'Test',
@@ -123,9 +125,7 @@ describe('PlaywrightCrawler', () => {
   });
 
   it('closes page and context even on error', async () => {
-    (mocks.page.content as ReturnType<typeof vi.fn>).mockRejectedValue(
-      new Error('page crashed'),
-    );
+    (mocks.page.content as ReturnType<typeof vi.fn>).mockRejectedValue(new Error('page crashed'));
 
     await expect(crawler.crawl('https://example.com')).rejects.toThrow();
     expect(mocks.page.close).toHaveBeenCalled();

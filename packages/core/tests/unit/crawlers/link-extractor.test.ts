@@ -33,9 +33,7 @@ describe('resolveUrl', () => {
   });
 
   it('strips hash fragments', () => {
-    expect(resolveUrl('/page#section', 'https://example.com')).toBe(
-      'https://example.com/page',
-    );
+    expect(resolveUrl('/page#section', 'https://example.com')).toBe('https://example.com/page');
   });
 });
 
