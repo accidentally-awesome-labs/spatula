@@ -5,6 +5,8 @@ import { jobs } from '../../../src/schema/jobs.js';
 import { schemasTable } from '../../../src/schema/schemas.js';
 import { crawlTasks } from '../../../src/schema/crawl-tasks.js';
 import { rawPages } from '../../../src/schema/raw-pages.js';
+import { extractions } from '../../../src/schema/extractions.js';
+import { entities, entitySources } from '../../../src/schema/entities.js';
 
 describe('core table schemas', () => {
   it('tenants table has correct name and columns', () => {
@@ -70,5 +72,39 @@ describe('crawl & page table schemas', () => {
     expect(rawPages.contentHash).toBeDefined();
     expect(rawPages.metadata).toBeDefined();
     expect(rawPages.createdAt).toBeDefined();
+  });
+});
+
+describe('extraction & entity table schemas', () => {
+  it('extractions table has correct name and all columns', () => {
+    expect(getTableName(extractions)).toBe('extractions');
+    expect(extractions.id).toBeDefined();
+    expect(extractions.jobId).toBeDefined();
+    expect(extractions.tenantId).toBeDefined();
+    expect(extractions.pageId).toBeDefined();
+    expect(extractions.schemaVersion).toBeDefined();
+    expect(extractions.data).toBeDefined();
+    expect(extractions.unmappedFields).toBeDefined();
+    expect(extractions.metadata).toBeDefined();
+    expect(extractions.createdAt).toBeDefined();
+  });
+
+  it('entities table has correct name and all columns', () => {
+    expect(getTableName(entities)).toBe('entities');
+    expect(entities.id).toBeDefined();
+    expect(entities.jobId).toBeDefined();
+    expect(entities.tenantId).toBeDefined();
+    expect(entities.mergedData).toBeDefined();
+    expect(entities.provenance).toBeDefined();
+    expect(entities.categories).toBeDefined();
+    expect(entities.qualityScore).toBeDefined();
+    expect(entities.createdAt).toBeDefined();
+  });
+
+  it('entity_sources join table has correct name and columns', () => {
+    expect(getTableName(entitySources)).toBe('entity_sources');
+    expect(entitySources.entityId).toBeDefined();
+    expect(entitySources.extractionId).toBeDefined();
+    expect(entitySources.matchConfidence).toBeDefined();
   });
 });

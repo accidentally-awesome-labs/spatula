@@ -4,3 +4,5 @@ export * from './jobs.js';
 export * from './schemas.js';
 export * from './crawl-tasks.js';
 export * from './raw-pages.js';
+export * from './extractions.js';
+export * from './entities.js';
