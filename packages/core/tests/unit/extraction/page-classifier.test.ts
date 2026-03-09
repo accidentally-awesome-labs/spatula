@@ -131,6 +131,17 @@ describe('PageClassifier', () => {
     expect(client.complete).toHaveBeenCalledWith(expect.objectContaining({ jsonMode: true }));
   });
 
+  it('returns safe defaults when LLM client throws', async () => {
+    const failClient: LLMClient = {
+      complete: vi.fn().mockRejectedValue(new Error('network failure')),
+    };
+    const classifier = new PageClassifier(failClient, config);
+    const result = await classifier.classify('<p>test</p>', 'https://example.com', 'products');
+    expect(result.classification).toBe('irrelevant');
+    expect(result.strategy).toBe('skip');
+    expect(result.confidence).toBe(0);
+  });
+
   it('returns safe defaults on invalid JSON from LLM', async () => {
     const client = createMockClient('not valid json at all');
     const classifier = new PageClassifier(client, config);

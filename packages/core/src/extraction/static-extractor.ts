@@ -3,7 +3,7 @@ import { ExtractionError, createLogger, generateId } from '@spatula/shared';
 import type { LLMClient } from '../interfaces/llm-client.js';
 import type { Extractor } from '../interfaces/extractor.js';
 import type { LLMConfig } from '../types/job.js';
-import type { SchemaDefinition, FieldDefinitionOutput } from '../types/schema.js';
+import type { SchemaDefinition } from '../types/schema.js';
 import type { ExtractionResult } from '../types/extraction.js';
 import { UnmappedField } from '../types/extraction.js';
 import { resolveModel } from '../llm/model-router.js';
@@ -33,7 +33,7 @@ export class StaticExtractor implements Extractor {
   ): Promise<ExtractionResult> {
     const startTime = Date.now();
     const preprocessed = preprocessHTML(html);
-    const schemaPrompt = schemaToPrompt(schema.fields as FieldDefinitionOutput[]);
+    const schemaPrompt = schemaToPrompt(schema.fields);
     const prompt = buildExtractionPrompt(url, jobDescription, schemaPrompt, preprocessed.content);
 
     try {
@@ -53,8 +53,11 @@ export class StaticExtractor implements Extractor {
       let parsed: z.infer<typeof LLMExtractionResponse>;
       try {
         parsed = LLMExtractionResponse.parse(JSON.parse(response.content));
-      } catch {
-        logger.warn({ url }, 'invalid extraction response from LLM');
+      } catch (parseError) {
+        logger.warn(
+          { url, parseError, rawContent: response.content.slice(0, 500) },
+          'invalid extraction response from LLM',
+        );
         return this.emptyResult(schema.version, extractionTimeMs, response.model, 0);
       }
 

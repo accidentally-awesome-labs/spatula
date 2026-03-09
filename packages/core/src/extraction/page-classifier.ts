@@ -45,7 +45,15 @@ export class PageClassifier {
         maxTokens: 512,
       });
 
-      const parsed = ClassificationResponse.safeParse(JSON.parse(response.content));
+      let rawObject: unknown;
+      try {
+        rawObject = JSON.parse(response.content);
+      } catch {
+        logger.warn({ url }, 'non-JSON classification response from LLM');
+        return safeDefault();
+      }
+
+      const parsed = ClassificationResponse.safeParse(rawObject);
 
       if (!parsed.success) {
         logger.warn({ url, errors: parsed.error.issues }, 'invalid classification response');

@@ -31,6 +31,9 @@ export class OpenRouterClient implements LLMClient {
   private readonly siteUrl: string;
 
   constructor(options: OpenRouterClientOptions) {
+    if (!options.apiKey?.trim()) {
+      throw new LLMError('OpenRouter API key is required');
+    }
     this.apiKey = options.apiKey;
     this.baseUrl = options.baseUrl ?? 'https://openrouter.ai/api/v1';
     this.maxRetries = options.maxRetries ?? 3;
@@ -89,7 +92,7 @@ export class OpenRouterClient implements LLMClient {
       } catch (error) {
         lastError = error as Error;
 
-        if (attempt < this.maxRetries && this.isRetryable(lastError)) {
+        if (this.isRetryable(lastError)) {
           logger.warn({ error: lastError.message, attempt }, 'retryable LLM error');
           continue;
         }

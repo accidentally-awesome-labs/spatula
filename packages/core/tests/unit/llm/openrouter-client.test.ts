@@ -145,6 +145,28 @@ describe('OpenRouterClient', () => {
     await expect(client.complete(basicRequest)).rejects.toThrow(LLMError);
   });
 
+  it('throws if API key is empty', () => {
+    expect(() => new OpenRouterClient({ apiKey: '' })).toThrow(LLMError);
+  });
+
+  it('throws if API key is whitespace only', () => {
+    expect(() => new OpenRouterClient({ apiKey: '   ' })).toThrow(LLMError);
+  });
+
+  it('uses exponential back-off between retries', async () => {
+    const { sleep } = await import('@spatula/shared');
+    (sleep as ReturnType<typeof vi.fn>).mockClear();
+
+    mockFetch
+      .mockResolvedValueOnce(mockResponse('err', false, 429))
+      .mockResolvedValueOnce(mockResponse('err', false, 429))
+      .mockResolvedValueOnce(mockResponse(successBody('result')));
+
+    await client.complete(basicRequest);
+    expect(sleep).toHaveBeenNthCalledWith(1, 1000); // 1000 * 2^0
+    expect(sleep).toHaveBeenNthCalledWith(2, 2000); // 1000 * 2^1
+  });
+
   it('uses custom baseUrl when configured', async () => {
     const customClient = new OpenRouterClient({
       apiKey: 'key',

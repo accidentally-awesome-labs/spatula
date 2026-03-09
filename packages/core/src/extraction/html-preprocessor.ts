@@ -65,7 +65,8 @@ function walkNode($: cheerio.CheerioAPI, node: unknown): string {
     case 'h4':
     case 'h5':
     case 'h6':
-      return `\n${'#'.repeat(parseInt(tag[1]))} ${children.trim()}\n`;
+      const level = Number(tag[1]);
+      return `\n${'#'.repeat(level >= 1 && level <= 6 ? level : 1)} ${children.trim()}\n`;
     case 'p':
       return `\n${children.trim()}\n`;
     case 'li':

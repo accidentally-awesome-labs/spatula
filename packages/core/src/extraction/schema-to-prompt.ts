@@ -68,6 +68,7 @@ function fieldToJsonSchema(field: FieldDefinitionOutput): JsonSchemaProperty {
           amount: { type: 'number' },
           currency: { type: 'string' },
         },
+        required: ['amount', 'currency'],
       };
     case 'enum':
       return {
