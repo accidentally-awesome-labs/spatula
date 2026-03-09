@@ -8,3 +8,4 @@ export * from './extractions.js';
 export * from './entities.js';
 export * from './actions.js';
 export * from './source-trust.js';
+export * from './content.js';

@@ -6,3 +6,5 @@ export { SchemaRepository } from './schema-repository.js';
 export type { CreateSchemaInput } from './schema-repository.js';
 export { ExtractionRepository } from './extraction-repository.js';
 export type { StoreExtractionInput } from './extraction-repository.js';
+export { PageRepository } from './page-repository.js';
+export type { CreatePageInput } from './page-repository.js';
