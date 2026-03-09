@@ -65,7 +65,12 @@ describe('schemaToPrompt', () => {
         description: 'Product features',
         type: 'array',
         required: false,
-        arrayItemType: { name: 'feature', description: 'A feature', type: 'string', required: false },
+        arrayItemType: {
+          name: 'feature',
+          description: 'A feature',
+          type: 'string',
+          required: false,
+        },
       },
     ];
     const prompt = schemaToPrompt(fields);

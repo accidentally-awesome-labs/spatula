@@ -114,9 +114,7 @@ describe('PageClassifier', () => {
     };
     const classifier = new PageClassifier(client, configWithOverride);
     await classifier.classify('<p>test</p>', 'https://example.com', 'test');
-    expect(client.complete).toHaveBeenCalledWith(
-      expect.objectContaining({ model: 'fast-model' }),
-    );
+    expect(client.complete).toHaveBeenCalledWith(expect.objectContaining({ model: 'fast-model' }));
   });
 
   it('enables JSON mode for LLM request', async () => {
@@ -130,19 +128,13 @@ describe('PageClassifier', () => {
     );
     const classifier = new PageClassifier(client, config);
     await classifier.classify('<p>test</p>', 'https://example.com', 'test');
-    expect(client.complete).toHaveBeenCalledWith(
-      expect.objectContaining({ jsonMode: true }),
-    );
+    expect(client.complete).toHaveBeenCalledWith(expect.objectContaining({ jsonMode: true }));
   });
 
   it('returns safe defaults on invalid JSON from LLM', async () => {
     const client = createMockClient('not valid json at all');
     const classifier = new PageClassifier(client, config);
-    const result = await classifier.classify(
-      '<p>content</p>',
-      'https://example.com',
-      'products',
-    );
+    const result = await classifier.classify('<p>content</p>', 'https://example.com', 'products');
     expect(result.classification).toBe('irrelevant');
     expect(result.strategy).toBe('skip');
     expect(result.confidence).toBe(0);

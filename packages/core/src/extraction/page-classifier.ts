@@ -76,11 +76,7 @@ function safeDefault(): PageClassificationResult {
 
 const SYSTEM_PROMPT = `You are a web page classifier. Your job is to determine what type of content a page contains relative to a data collection goal. Respond with JSON only.`;
 
-function buildClassificationPrompt(
-  url: string,
-  jobDescription: string,
-  content: string,
-): string {
+function buildClassificationPrompt(url: string, jobDescription: string, content: string): string {
   return `Classify this web page for data collection.
 
 ## Data Collection Goal

@@ -8,9 +8,7 @@ describe('resolveModel', () => {
   };
 
   it('returns primary model when no overrides configured', () => {
-    expect(resolveModel(defaultConfig, 'extraction')).toBe(
-      'anthropic/claude-sonnet-4-20250514',
-    );
+    expect(resolveModel(defaultConfig, 'extraction')).toBe('anthropic/claude-sonnet-4-20250514');
   });
 
   it('returns primary model for tasks without specific override', () => {
@@ -35,8 +33,14 @@ describe('resolveModel', () => {
 
   it('resolves all task types without error', () => {
     const tasks = [
-      'pageRelevance', 'extraction', 'linkEvaluation', 'schemaEvolution',
-      'entityMatching', 'conflictResolution', 'qualityAudit', 'documentation',
+      'pageRelevance',
+      'extraction',
+      'linkEvaluation',
+      'schemaEvolution',
+      'entityMatching',
+      'conflictResolution',
+      'qualityAudit',
+      'documentation',
     ] as const;
     for (const task of tasks) {
       expect(() => resolveModel(defaultConfig, task)).not.toThrow();

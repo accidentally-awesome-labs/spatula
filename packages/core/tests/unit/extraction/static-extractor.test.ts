@@ -83,16 +83,19 @@ describe('StaticExtractor', () => {
       }),
     );
     const extractor = new StaticExtractor(client, config, 'job-1');
-    const result = await extractor.extract(sampleHtml, 'https://example.com', testSchema, 'products');
+    const result = await extractor.extract(
+      sampleHtml,
+      'https://example.com',
+      testSchema,
+      'products',
+    );
     expect(result.metadata.unmappedFields).toHaveLength(2);
     expect(result.metadata.unmappedFields[0].name).toBe('driver_type');
     expect(result.metadata.unmappedFields[1].name).toBe('weight');
   });
 
   it('uses extraction model from config', async () => {
-    const client = createMockClient(
-      JSON.stringify({ data: {}, _unmapped: [], confidence: 0.5 }),
-    );
+    const client = createMockClient(JSON.stringify({ data: {}, _unmapped: [], confidence: 0.5 }));
     const configWithOverride: LLMConfig = {
       primaryModel: 'primary',
       modelOverrides: { extraction: 'extraction-model' },
@@ -105,25 +108,16 @@ describe('StaticExtractor', () => {
   });
 
   it('enables JSON mode for LLM request', async () => {
-    const client = createMockClient(
-      JSON.stringify({ data: {}, _unmapped: [], confidence: 0.5 }),
-    );
+    const client = createMockClient(JSON.stringify({ data: {}, _unmapped: [], confidence: 0.5 }));
     const extractor = new StaticExtractor(client, config, 'job-1');
     await extractor.extract(sampleHtml, 'https://example.com', testSchema, 'test');
-    expect(client.complete).toHaveBeenCalledWith(
-      expect.objectContaining({ jsonMode: true }),
-    );
+    expect(client.complete).toHaveBeenCalledWith(expect.objectContaining({ jsonMode: true }));
   });
 
   it('returns empty extraction on invalid JSON from LLM', async () => {
     const client = createMockClient('totally not json {}{}');
     const extractor = new StaticExtractor(client, config, 'job-1');
-    const result = await extractor.extract(
-      sampleHtml,
-      'https://example.com',
-      testSchema,
-      'test',
-    );
+    const result = await extractor.extract(sampleHtml, 'https://example.com', testSchema, 'test');
     expect(result.data).toEqual({});
     expect(result.metadata.confidence).toBe(0);
     expect(result.metadata.unmappedFields).toEqual([]);
@@ -151,9 +145,7 @@ describe('StaticExtractor', () => {
   });
 
   it('includes schema fields description in LLM prompt', async () => {
-    const client = createMockClient(
-      JSON.stringify({ data: {}, _unmapped: [], confidence: 0.5 }),
-    );
+    const client = createMockClient(JSON.stringify({ data: {}, _unmapped: [], confidence: 0.5 }));
     const extractor = new StaticExtractor(client, config, 'job-1');
     await extractor.extract(sampleHtml, 'https://example.com', testSchema, 'test');
     const messages = (client.complete as ReturnType<typeof vi.fn>).mock.calls[0][0].messages;

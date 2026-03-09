@@ -136,9 +136,7 @@ describe('OpenRouterClient', () => {
   });
 
   it('throws LLMError on empty response choices', async () => {
-    mockFetch.mockResolvedValue(
-      mockResponse({ choices: [], model: 'test', usage: {} }),
-    );
+    mockFetch.mockResolvedValue(mockResponse({ choices: [], model: 'test', usage: {} }));
     await expect(client.complete(basicRequest)).rejects.toThrow(LLMError);
   });
 

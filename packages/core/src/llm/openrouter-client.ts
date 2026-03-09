@@ -98,10 +98,10 @@ export class OpenRouterClient implements LLMClient {
       }
     }
 
-    throw new LLMError(
-      `LLM completion failed: ${lastError?.message ?? 'unknown error'}`,
-      { cause: lastError, context: { model: request.model } },
-    );
+    throw new LLMError(`LLM completion failed: ${lastError?.message ?? 'unknown error'}`, {
+      cause: lastError,
+      context: { model: request.model },
+    });
   }
 
   private async doFetch(body: Record<string, unknown>): Promise<Response> {

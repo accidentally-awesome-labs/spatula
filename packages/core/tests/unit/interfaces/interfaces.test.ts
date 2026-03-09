@@ -1,6 +1,12 @@
 import { describe, it, expect } from 'vitest';
 import * as interfaces from '../../../src/interfaces/index.js';
-import type { LLMClient, LLMCompletionRequest, LLMCompletionResponse, LLMMessage, LLMUsage } from '../../../src/interfaces/llm-client.js';
+import type {
+  LLMClient,
+  LLMCompletionRequest,
+  LLMCompletionResponse,
+  LLMMessage,
+  LLMUsage,
+} from '../../../src/interfaces/llm-client.js';
 
 describe('core interfaces are exported', () => {
   const expectedExports = [

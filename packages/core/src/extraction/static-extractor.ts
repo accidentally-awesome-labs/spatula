@@ -80,10 +80,10 @@ export class StaticExtractor implements Extractor {
     } catch (error) {
       if (error instanceof ExtractionError) throw error;
 
-      throw new ExtractionError(
-        `Extraction failed for ${url}: ${(error as Error).message}`,
-        { cause: error as Error, context: { url, jobId: this.jobId } },
-      );
+      throw new ExtractionError(`Extraction failed for ${url}: ${(error as Error).message}`, {
+        cause: error as Error,
+        context: { url, jobId: this.jobId },
+      });
     }
   }
 

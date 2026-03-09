@@ -19,8 +19,7 @@ export function preprocessHTML(html: string, options?: PreprocessOptions): Prepr
 
   $(REMOVE_TAGS).remove();
 
-  const title =
-    $('title').first().text().trim() || $('h1').first().text().trim() || undefined;
+  const title = $('title').first().text().trim() || $('h1').first().text().trim() || undefined;
 
   const body = $('body');
   const raw = body.length ? walkNode($, body[0]) : '';
@@ -31,9 +30,7 @@ export function preprocessHTML(html: string, options?: PreprocessOptions): Prepr
     .trim();
 
   const truncated = cleaned.length > maxChars;
-  const finalContent = truncated
-    ? cleaned.slice(0, maxChars) + '\n[...truncated]'
-    : cleaned;
+  const finalContent = truncated ? cleaned.slice(0, maxChars) + '\n[...truncated]' : cleaned;
 
   return {
     content: finalContent,
@@ -53,7 +50,8 @@ function walkNode($: cheerio.CheerioAPI, node: unknown): string {
   if (n.type !== 'tag') return '';
 
   const tag = n.tagName?.toLowerCase() ?? '';
-  const $el = $(node as cheerio.Element);
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const $el = $(node as any);
   const children = $el
     .contents()
     .toArray()
