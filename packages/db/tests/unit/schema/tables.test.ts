@@ -7,6 +7,8 @@ import { crawlTasks } from '../../../src/schema/crawl-tasks.js';
 import { rawPages } from '../../../src/schema/raw-pages.js';
 import { extractions } from '../../../src/schema/extractions.js';
 import { entities, entitySources } from '../../../src/schema/entities.js';
+import { actions } from '../../../src/schema/actions.js';
+import { sourceTrust } from '../../../src/schema/source-trust.js';
 
 describe('core table schemas', () => {
   it('tenants table has correct name and columns', () => {
@@ -106,5 +108,34 @@ describe('extraction & entity table schemas', () => {
     expect(entitySources.entityId).toBeDefined();
     expect(entitySources.extractionId).toBeDefined();
     expect(entitySources.matchConfidence).toBeDefined();
+  });
+});
+
+describe('actions & source trust table schemas', () => {
+  it('actions table has correct name and all columns', () => {
+    expect(getTableName(actions)).toBe('actions');
+    expect(actions.id).toBeDefined();
+    expect(actions.jobId).toBeDefined();
+    expect(actions.tenantId).toBeDefined();
+    expect(actions.type).toBeDefined();
+    expect(actions.payload).toBeDefined();
+    expect(actions.source).toBeDefined();
+    expect(actions.status).toBeDefined();
+    expect(actions.confidence).toBeDefined();
+    expect(actions.reasoning).toBeDefined();
+    expect(actions.stateChanges).toBeDefined();
+    expect(actions.reviewedBy).toBeDefined();
+    expect(actions.createdAt).toBeDefined();
+    expect(actions.appliedAt).toBeDefined();
+  });
+
+  it('source_trust table has correct name and all columns', () => {
+    expect(getTableName(sourceTrust)).toBe('source_trust');
+    expect(sourceTrust.id).toBeDefined();
+    expect(sourceTrust.jobId).toBeDefined();
+    expect(sourceTrust.tenantId).toBeDefined();
+    expect(sourceTrust.domain).toBeDefined();
+    expect(sourceTrust.trustLevel).toBeDefined();
+    expect(sourceTrust.reasoning).toBeDefined();
   });
 });

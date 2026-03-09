@@ -6,3 +6,5 @@ export * from './crawl-tasks.js';
 export * from './raw-pages.js';
 export * from './extractions.js';
 export * from './entities.js';
+export * from './actions.js';
+export * from './source-trust.js';
