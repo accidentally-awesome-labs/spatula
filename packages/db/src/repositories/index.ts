@@ -4,3 +4,5 @@ export { CrawlTaskRepository } from './crawl-task-repository.js';
 export type { EnqueueTaskInput } from './crawl-task-repository.js';
 export { SchemaRepository } from './schema-repository.js';
 export type { CreateSchemaInput } from './schema-repository.js';
+export { ExtractionRepository } from './extraction-repository.js';
+export type { StoreExtractionInput } from './extraction-repository.js';
