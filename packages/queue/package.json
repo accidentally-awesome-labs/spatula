@@ -13,8 +13,11 @@
     "clean": "rm -rf dist .turbo"
   },
   "dependencies": {
+    "@spatula/core": "workspace:*",
+    "@spatula/db": "workspace:*",
     "@spatula/shared": "workspace:*",
-    "@spatula/core": "workspace:*"
+    "bullmq": "^5.70.4",
+    "ioredis": "^5.10.0"
   },
   "devDependencies": {
     "typescript": "^5.7.0",
