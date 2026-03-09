@@ -10,7 +10,7 @@ export class InvalidTransitionError extends Error {
   }
 }
 
-const TRANSITIONS: Record<string, JobStatus[]> = {
+const TRANSITIONS: Record<JobStatus, JobStatus[]> = {
   pending: ['queued'],
   queued: ['running', 'cancelled'],
   running: ['paused', 'reconciling', 'failed', 'cancelled'],

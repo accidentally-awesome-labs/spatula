@@ -7,6 +7,19 @@ const logger = createLogger('crawl-worker');
 
 const EXTRACTABLE_CLASSIFICATIONS = new Set(['single_entry', 'multiple_entries', 'partial']);
 
+function isValidCrawlUrl(url: string): boolean {
+  try {
+    const parsed = new URL(url);
+    if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') return false;
+    const hostname = parsed.hostname.toLowerCase();
+    if (hostname === 'localhost' || hostname === '127.0.0.1' || hostname === '::1') return false;
+    if (/^(10\.|172\.(1[6-9]|2\d|3[01])\.|192\.168\.)/.test(hostname)) return false;
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 export async function processCrawlJob(data: CrawlJobData, deps: WorkerDeps): Promise<void> {
   const { taskId, jobId, tenantId, url, depth } = data;
 
@@ -17,12 +30,16 @@ export async function processCrawlJob(data: CrawlJobData, deps: WorkerDeps): Pro
     logger.debug({ taskId, url, statusCode: crawlResult.statusCode }, 'page crawled');
 
     const contentHash = createHash('sha256').update(crawlResult.html).digest('hex');
-    const contentRef = await deps.contentStore.store(`${jobId}/${contentHash}`, crawlResult.html);
 
+    // Dedup check before storing content to avoid orphaned blobs
     const existingPage = await deps.pageRepo.findByContentHash(contentHash, tenantId);
-    const page =
-      existingPage ??
-      (await deps.pageRepo.create({
+    let page;
+    if (existingPage) {
+      page = existingPage;
+      logger.debug({ taskId, contentHash }, 'duplicate content found, skipping store');
+    } else {
+      const contentRef = await deps.contentStore.store(`${jobId}/${contentHash}`, crawlResult.html);
+      page = await deps.pageRepo.create({
         taskId,
         tenantId,
         contentRef,
@@ -33,7 +50,8 @@ export async function processCrawlJob(data: CrawlJobData, deps: WorkerDeps): Pro
           statusCode: crawlResult.statusCode,
           responseTimeMs: crawlResult.metadata.responseTimeMs,
         },
-      }));
+      });
+    }
 
     const job = await deps.jobRepo.findById(jobId, tenantId);
     if (!job) {
@@ -73,18 +91,28 @@ export async function processCrawlJob(data: CrawlJobData, deps: WorkerDeps): Pro
 
     const maxDepth = job.config.crawl.maxDepth;
     if (depth < maxDepth && crawlResult.links.length > 0) {
+      let enqueued = 0;
       for (const link of crawlResult.links) {
-        if (link.url && link.url.startsWith('http')) {
-          await deps.queues.crawl.add(`crawl:${link.url}`, {
-            taskId: '',
-            jobId,
-            tenantId,
-            url: link.url,
-            depth: depth + 1,
-          });
-        }
+        if (!link.url || !isValidCrawlUrl(link.url)) continue;
+
+        const childTask = await deps.taskRepo.enqueue({
+          jobId,
+          tenantId,
+          url: link.url,
+          depth: depth + 1,
+          parentTaskId: taskId,
+        });
+
+        await deps.queues.crawl.add(`crawl:${link.url}`, {
+          taskId: childTask.id,
+          jobId,
+          tenantId,
+          url: link.url,
+          depth: depth + 1,
+        });
+        enqueued++;
       }
-      logger.debug({ taskId, linksEnqueued: crawlResult.links.length }, 'links enqueued');
+      logger.debug({ taskId, linksEnqueued: enqueued }, 'links enqueued');
     }
 
     await deps.taskRepo.updateStatus(taskId, tenantId, 'completed');

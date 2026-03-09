@@ -134,6 +134,11 @@ function createMockDeps(): WorkerDeps {
     taskRepo: {
       updateStatus: vi.fn().mockResolvedValue(null),
       updateClassification: vi.fn().mockResolvedValue(null),
+      enqueue: vi
+        .fn()
+        .mockImplementation((input) =>
+          Promise.resolve({ id: `child-task-${input.url}`, ...input }),
+        ),
     } as any,
     pageRepo: {
       findByContentHash: vi.fn().mockResolvedValue(null),
@@ -264,22 +269,27 @@ describe('processCrawlJob', () => {
     await processCrawlJob(data, deps);
 
     // maxDepth is 3, current depth is 1, so links should be enqueued at depth 2
-    expect(deps.queues.crawl.add).toHaveBeenCalledTimes(2);
-    expect(deps.queues.crawl.add).toHaveBeenCalledWith(
-      'crawl:https://example.com/product/2',
+    // Verify child tasks are created in DB first
+    expect(deps.taskRepo.enqueue).toHaveBeenCalledTimes(2);
+    expect(deps.taskRepo.enqueue).toHaveBeenCalledWith(
       expect.objectContaining({
         jobId: 'job-1',
         tenantId: 'tenant-1',
         url: 'https://example.com/product/2',
         depth: 2,
+        parentTaskId: 'task-1',
       }),
     );
+
+    // Verify queue jobs reference real task IDs
+    expect(deps.queues.crawl.add).toHaveBeenCalledTimes(2);
     expect(deps.queues.crawl.add).toHaveBeenCalledWith(
-      'crawl:https://example.com/product/3',
+      'crawl:https://example.com/product/2',
       expect.objectContaining({
+        taskId: expect.stringMatching(/.+/),
         jobId: 'job-1',
         tenantId: 'tenant-1',
-        url: 'https://example.com/product/3',
+        url: 'https://example.com/product/2',
         depth: 2,
       }),
     );

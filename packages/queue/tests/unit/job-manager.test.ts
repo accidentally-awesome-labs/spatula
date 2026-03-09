@@ -99,7 +99,7 @@ describe('JobManager', () => {
     });
   });
 
-  it('startJob transitions pending→queued→running, creates schema, enqueues seed URLs', async () => {
+  it('startJob transitions pending→running, creates schema, enqueues seed URLs', async () => {
     jobRepo.findById.mockResolvedValue({
       id: JOB_ID,
       tenantId: TENANT_ID,
@@ -115,10 +115,9 @@ describe('JobManager', () => {
 
     await manager.startJob(JOB_ID, TENANT_ID);
 
-    // Verify state transitions: pending→queued→running
-    expect(jobRepo.updateStatus).toHaveBeenCalledTimes(2);
-    expect(jobRepo.updateStatus).toHaveBeenNthCalledWith(1, JOB_ID, TENANT_ID, 'queued');
-    expect(jobRepo.updateStatus).toHaveBeenNthCalledWith(2, JOB_ID, TENANT_ID, 'running');
+    // Verify state transition: pending→running (validated through queued internally)
+    expect(jobRepo.updateStatus).toHaveBeenCalledTimes(1);
+    expect(jobRepo.updateStatus).toHaveBeenCalledWith(JOB_ID, TENANT_ID, 'running');
 
     // Verify schema creation
     expect(schemaRepo.create).toHaveBeenCalledOnce();

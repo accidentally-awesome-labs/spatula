@@ -40,13 +40,13 @@ export class JobManager {
   async startJob(jobId: string, tenantId: string): Promise<void> {
     const job = await this.getJob(jobId, tenantId);
 
+    // Validate the full transition chain, then write the final state atomically
     JobStateMachine.transition(job.status as JobStatus, 'queued');
-    await this.jobRepo.updateStatus(jobId, tenantId, 'queued');
-
     JobStateMachine.transition('queued', 'running');
     await this.jobRepo.updateStatus(jobId, tenantId, 'running');
 
-    const initialFields = (job.config as JobConfig).schema.userFields ?? [];
+    const config = job.config as JobConfig;
+    const initialFields = config.schema.userFields ?? [];
     await this.schemaRepo.create({
       jobId,
       tenantId,
@@ -60,7 +60,7 @@ export class JobManager {
       },
     });
 
-    for (const url of (job.config as JobConfig).seedUrls) {
+    for (const url of config.seedUrls) {
       const task = await this.taskRepo.enqueue({
         jobId,
         tenantId,
@@ -78,7 +78,7 @@ export class JobManager {
       });
     }
 
-    logger.info({ jobId, seedUrls: (job.config as JobConfig).seedUrls.length }, 'job started');
+    logger.info({ jobId, seedUrls: config.seedUrls.length }, 'job started');
   }
 
   async pauseJob(jobId: string, tenantId: string): Promise<void> {
