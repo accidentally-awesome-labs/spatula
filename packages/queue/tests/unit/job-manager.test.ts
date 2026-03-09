@@ -1,0 +1,243 @@
+import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { JobManager } from '../../src/job-manager.js';
+import { InvalidTransitionError } from '../../src/state-machine.js';
+import { StorageError } from '@spatula/shared';
+
+function createMockJobRepo() {
+  return {
+    create: vi.fn(),
+    findById: vi.fn(),
+    findByTenant: vi.fn(),
+    updateStatus: vi.fn(),
+    updateStats: vi.fn(),
+  };
+}
+
+function createMockTaskRepo() {
+  return {
+    enqueue: vi.fn(),
+    findByJob: vi.fn(),
+    updateStatus: vi.fn(),
+    updateClassification: vi.fn(),
+  };
+}
+
+function createMockSchemaRepo() {
+  return {
+    create: vi.fn(),
+    findLatest: vi.fn(),
+    findByVersion: vi.fn(),
+    findAllVersions: vi.fn(),
+  };
+}
+
+function createMockQueues() {
+  return {
+    crawl: { add: vi.fn() },
+    extract: { add: vi.fn() },
+    schemaEvolution: { add: vi.fn() },
+    closeAll: vi.fn(),
+  };
+}
+
+const TENANT_ID = '00000000-0000-0000-0000-000000000001';
+const JOB_ID = 'job-001';
+
+const baseConfig = {
+  tenantId: TENANT_ID,
+  name: 'Test Job',
+  description: 'A test crawl job',
+  seedUrls: ['https://a.com', 'https://b.com'],
+  crawl: { maxDepth: 2, maxPages: 1000, concurrency: 5, crawlerType: 'playwright' as const },
+  schema: {
+    mode: 'fixed' as const,
+    userFields: [
+      {
+        name: 'title',
+        description: 'Page title',
+        type: 'string' as const,
+        required: true,
+      },
+    ],
+  },
+  llm: { primaryModel: 'anthropic/claude-sonnet-4-20250514' },
+};
+
+describe('JobManager', () => {
+  let jobRepo: ReturnType<typeof createMockJobRepo>;
+  let taskRepo: ReturnType<typeof createMockTaskRepo>;
+  let schemaRepo: ReturnType<typeof createMockSchemaRepo>;
+  let queues: ReturnType<typeof createMockQueues>;
+  let manager: JobManager;
+
+  beforeEach(() => {
+    jobRepo = createMockJobRepo();
+    taskRepo = createMockTaskRepo();
+    schemaRepo = createMockSchemaRepo();
+    queues = createMockQueues();
+
+    manager = new JobManager({
+      jobRepo: jobRepo as any,
+      taskRepo: taskRepo as any,
+      schemaRepo: schemaRepo as any,
+      queues: queues as any,
+    });
+  });
+
+  it('createJob persists job and returns ID', async () => {
+    jobRepo.create.mockResolvedValue({ id: JOB_ID });
+
+    const id = await manager.createJob(baseConfig);
+
+    expect(id).toBe(JOB_ID);
+    expect(jobRepo.create).toHaveBeenCalledOnce();
+    expect(jobRepo.create).toHaveBeenCalledWith({
+      tenantId: TENANT_ID,
+      name: 'Test Job',
+      description: 'A test crawl job',
+      config: baseConfig,
+    });
+  });
+
+  it('startJob transitions pending→queued→running, creates schema, enqueues seed URLs', async () => {
+    jobRepo.findById.mockResolvedValue({
+      id: JOB_ID,
+      tenantId: TENANT_ID,
+      status: 'pending',
+      config: baseConfig,
+    });
+    jobRepo.updateStatus.mockResolvedValue({ id: JOB_ID });
+    schemaRepo.create.mockResolvedValue({ id: 'schema-001' });
+    taskRepo.enqueue
+      .mockResolvedValueOnce({ id: 'task-001' })
+      .mockResolvedValueOnce({ id: 'task-002' });
+    queues.crawl.add.mockResolvedValue({});
+
+    await manager.startJob(JOB_ID, TENANT_ID);
+
+    // Verify state transitions: pending→queued→running
+    expect(jobRepo.updateStatus).toHaveBeenCalledTimes(2);
+    expect(jobRepo.updateStatus).toHaveBeenNthCalledWith(1, JOB_ID, TENANT_ID, 'queued');
+    expect(jobRepo.updateStatus).toHaveBeenNthCalledWith(2, JOB_ID, TENANT_ID, 'running');
+
+    // Verify schema creation
+    expect(schemaRepo.create).toHaveBeenCalledOnce();
+    expect(schemaRepo.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        jobId: JOB_ID,
+        tenantId: TENANT_ID,
+        version: 1,
+        definition: expect.objectContaining({
+          version: 1,
+          fields: baseConfig.schema.userFields,
+          fieldAliases: [],
+          parentVersion: null,
+        }),
+      }),
+    );
+
+    // Verify task enqueueing (once per seed URL)
+    expect(taskRepo.enqueue).toHaveBeenCalledTimes(2);
+    expect(taskRepo.enqueue).toHaveBeenCalledWith(
+      expect.objectContaining({
+        jobId: JOB_ID,
+        tenantId: TENANT_ID,
+        url: 'https://a.com',
+        depth: 0,
+        priority: 'high',
+      }),
+    );
+    expect(taskRepo.enqueue).toHaveBeenCalledWith(
+      expect.objectContaining({
+        jobId: JOB_ID,
+        tenantId: TENANT_ID,
+        url: 'https://b.com',
+        depth: 0,
+        priority: 'high',
+      }),
+    );
+
+    // Verify queue jobs added (once per seed URL)
+    expect(queues.crawl.add).toHaveBeenCalledTimes(2);
+    expect(queues.crawl.add).toHaveBeenCalledWith('crawl:https://a.com', {
+      taskId: 'task-001',
+      jobId: JOB_ID,
+      tenantId: TENANT_ID,
+      url: 'https://a.com',
+      depth: 0,
+    });
+    expect(queues.crawl.add).toHaveBeenCalledWith('crawl:https://b.com', {
+      taskId: 'task-002',
+      jobId: JOB_ID,
+      tenantId: TENANT_ID,
+      url: 'https://b.com',
+      depth: 0,
+    });
+  });
+
+  it('pauseJob transitions running→paused', async () => {
+    jobRepo.findById.mockResolvedValue({
+      id: JOB_ID,
+      tenantId: TENANT_ID,
+      status: 'running',
+      config: baseConfig,
+    });
+    jobRepo.updateStatus.mockResolvedValue({ id: JOB_ID });
+
+    await manager.pauseJob(JOB_ID, TENANT_ID);
+
+    expect(jobRepo.updateStatus).toHaveBeenCalledWith(JOB_ID, TENANT_ID, 'paused');
+  });
+
+  it('resumeJob transitions paused→running', async () => {
+    jobRepo.findById.mockResolvedValue({
+      id: JOB_ID,
+      tenantId: TENANT_ID,
+      status: 'paused',
+      config: baseConfig,
+    });
+    jobRepo.updateStatus.mockResolvedValue({ id: JOB_ID });
+
+    await manager.resumeJob(JOB_ID, TENANT_ID);
+
+    expect(jobRepo.updateStatus).toHaveBeenCalledWith(JOB_ID, TENANT_ID, 'running');
+  });
+
+  it('cancelJob transitions running→cancelled', async () => {
+    jobRepo.findById.mockResolvedValue({
+      id: JOB_ID,
+      tenantId: TENANT_ID,
+      status: 'running',
+      config: baseConfig,
+    });
+    jobRepo.updateStatus.mockResolvedValue({ id: JOB_ID });
+
+    await manager.cancelJob(JOB_ID, TENANT_ID);
+
+    expect(jobRepo.updateStatus).toHaveBeenCalledWith(JOB_ID, TENANT_ID, 'cancelled');
+  });
+
+  it('throws InvalidTransitionError for invalid state transitions', async () => {
+    jobRepo.findById.mockResolvedValue({
+      id: JOB_ID,
+      tenantId: TENANT_ID,
+      status: 'completed',
+      config: baseConfig,
+    });
+
+    await expect(manager.pauseJob(JOB_ID, TENANT_ID)).rejects.toThrow(InvalidTransitionError);
+  });
+
+  it('getJobStatus returns current status', async () => {
+    jobRepo.findById.mockResolvedValue({
+      id: JOB_ID,
+      tenantId: TENANT_ID,
+      status: 'running',
+      config: baseConfig,
+    });
+
+    const status = await manager.getJobStatus(JOB_ID, TENANT_ID);
+
+    expect(status).toBe('running');
+  });
+});
