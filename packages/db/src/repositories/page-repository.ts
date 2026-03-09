@@ -57,10 +57,7 @@ export class PageRepository {
 
   async findByTask(taskId: string) {
     try {
-      const [row] = await this.db
-        .select()
-        .from(rawPages)
-        .where(eq(rawPages.taskId, taskId));
+      const [row] = await this.db.select().from(rawPages).where(eq(rawPages.taskId, taskId));
 
       return row ?? null;
     } catch (error) {

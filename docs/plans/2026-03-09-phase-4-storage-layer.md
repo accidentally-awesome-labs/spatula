@@ -66,12 +66,14 @@ packages/db/
 ## Task 1: Install Dependencies & Configure Drizzle
 
 **Files:**
+
 - Modify: `packages/db/package.json`
 - Create: `packages/db/drizzle.config.ts`
 
 **Step 1: Install dependencies**
 
 Run:
+
 ```bash
 cd packages/db && pnpm add drizzle-orm pg && pnpm add -D @types/pg drizzle-kit
 ```
@@ -110,6 +112,7 @@ git commit -m "feat(db): add Drizzle ORM and node-postgres dependencies"
 ## Task 2: Database Connection Factory
 
 **Files:**
+
 - Create: `packages/db/src/connection.ts`
 - Create: `packages/db/tests/unit/connection.test.ts`
 
@@ -177,7 +180,9 @@ export type Database = ReturnType<typeof createDatabase>;
 export function createDatabase(connectionString?: string) {
   const url = connectionString ?? process.env.DATABASE_URL;
   if (!url) {
-    throw new StorageError('DATABASE_URL is required — pass it directly or set the environment variable');
+    throw new StorageError(
+      'DATABASE_URL is required — pass it directly or set the environment variable',
+    );
   }
 
   return drizzle({
@@ -210,6 +215,7 @@ git commit -m "feat(db): add database connection factory with StorageError"
 ## Task 3: Schema — Enums
 
 **Files:**
+
 - Create: `packages/db/src/schema/enums.ts`
 - Create: `packages/db/tests/unit/schema/enums.test.ts`
 
@@ -233,14 +239,24 @@ import {
 describe('schema enums', () => {
   it('jobStatusEnum has all statuses', () => {
     expect(jobStatusEnum.enumValues).toEqual([
-      'pending', 'queued', 'running', 'paused',
-      'reconciling', 'completed', 'failed', 'cancelled',
+      'pending',
+      'queued',
+      'running',
+      'paused',
+      'reconciling',
+      'completed',
+      'failed',
+      'cancelled',
     ]);
   });
 
   it('crawlTaskStatusEnum has all statuses', () => {
     expect(crawlTaskStatusEnum.enumValues).toEqual([
-      'pending', 'in_progress', 'completed', 'failed', 'skipped',
+      'pending',
+      'in_progress',
+      'completed',
+      'failed',
+      'skipped',
     ]);
   });
 
@@ -250,7 +266,11 @@ describe('schema enums', () => {
 
   it('pageClassificationEnum has all classifications', () => {
     expect(pageClassificationEnum.enumValues).toEqual([
-      'single_entry', 'multiple_entries', 'navigation', 'irrelevant', 'partial',
+      'single_entry',
+      'multiple_entries',
+      'navigation',
+      'irrelevant',
+      'partial',
     ]);
   });
 
@@ -260,20 +280,25 @@ describe('schema enums', () => {
 
   it('actionSourceEnum has all sources', () => {
     expect(actionSourceEnum.enumValues).toEqual([
-      'extraction', 'schema_evolution', 'reconciliation', 'quality_audit',
+      'extraction',
+      'schema_evolution',
+      'reconciliation',
+      'quality_audit',
     ]);
   });
 
   it('actionStatusEnum has all statuses', () => {
     expect(actionStatusEnum.enumValues).toEqual([
-      'pending_review', 'approved', 'applied', 'rejected', 'rolled_back',
+      'pending_review',
+      'approved',
+      'applied',
+      'rejected',
+      'rolled_back',
     ]);
   });
 
   it('trustLevelEnum has all levels', () => {
-    expect(trustLevelEnum.enumValues).toEqual([
-      'authoritative', 'high', 'medium', 'low',
-    ]);
+    expect(trustLevelEnum.enumValues).toEqual(['authoritative', 'high', 'medium', 'low']);
   });
 });
 ```
@@ -291,37 +316,52 @@ Create `packages/db/src/schema/enums.ts`:
 import { pgEnum } from 'drizzle-orm/pg-core';
 
 export const jobStatusEnum = pgEnum('job_status', [
-  'pending', 'queued', 'running', 'paused',
-  'reconciling', 'completed', 'failed', 'cancelled',
+  'pending',
+  'queued',
+  'running',
+  'paused',
+  'reconciling',
+  'completed',
+  'failed',
+  'cancelled',
 ]);
 
 export const crawlTaskStatusEnum = pgEnum('crawl_task_status', [
-  'pending', 'in_progress', 'completed', 'failed', 'skipped',
+  'pending',
+  'in_progress',
+  'completed',
+  'failed',
+  'skipped',
 ]);
 
-export const taskPriorityEnum = pgEnum('task_priority', [
-  'high', 'medium', 'low',
-]);
+export const taskPriorityEnum = pgEnum('task_priority', ['high', 'medium', 'low']);
 
 export const pageClassificationEnum = pgEnum('page_classification', [
-  'single_entry', 'multiple_entries', 'navigation', 'irrelevant', 'partial',
+  'single_entry',
+  'multiple_entries',
+  'navigation',
+  'irrelevant',
+  'partial',
 ]);
 
-export const crawlerTypeEnum = pgEnum('crawler_type', [
-  'playwright', 'firecrawl',
-]);
+export const crawlerTypeEnum = pgEnum('crawler_type', ['playwright', 'firecrawl']);
 
 export const actionSourceEnum = pgEnum('action_source', [
-  'extraction', 'schema_evolution', 'reconciliation', 'quality_audit',
+  'extraction',
+  'schema_evolution',
+  'reconciliation',
+  'quality_audit',
 ]);
 
 export const actionStatusEnum = pgEnum('action_status', [
-  'pending_review', 'approved', 'applied', 'rejected', 'rolled_back',
+  'pending_review',
+  'approved',
+  'applied',
+  'rejected',
+  'rolled_back',
 ]);
 
-export const trustLevelEnum = pgEnum('trust_level', [
-  'authoritative', 'high', 'medium', 'low',
-]);
+export const trustLevelEnum = pgEnum('trust_level', ['authoritative', 'high', 'medium', 'low']);
 ```
 
 Update `packages/db/src/schema/index.ts`:
@@ -347,6 +387,7 @@ git commit -m "feat(db): add PostgreSQL enum declarations for all domain types"
 ## Task 4: Schema — Core Tables (tenants, jobs, schemas)
 
 **Files:**
+
 - Create: `packages/db/src/schema/tenants.ts`
 - Create: `packages/db/src/schema/jobs.ts`
 - Create: `packages/db/src/schema/schemas.ts`
@@ -434,7 +475,9 @@ export const jobs = pgTable(
   'jobs',
   {
     id: uuid('id').primaryKey().defaultRandom(),
-    tenantId: uuid('tenant_id').notNull().references(() => tenants.id),
+    tenantId: uuid('tenant_id')
+      .notNull()
+      .references(() => tenants.id),
     name: text('name').notNull(),
     description: text('description').notNull(),
     config: jsonb('config').$type<JobConfig>().notNull(),
@@ -465,15 +508,15 @@ export const schemasTable = pgTable(
   {
     id: uuid('id').primaryKey().defaultRandom(),
     jobId: uuid('job_id').notNull(),
-    tenantId: uuid('tenant_id').notNull().references(() => tenants.id),
+    tenantId: uuid('tenant_id')
+      .notNull()
+      .references(() => tenants.id),
     version: integer('version').notNull(),
     definition: jsonb('definition').$type<SchemaDefinition>().notNull(),
     parentId: uuid('parent_id').references((): AnyPgColumn => schemasTable.id),
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   },
-  (table) => [
-    index('schemas_job_version_idx').on(table.jobId, table.version),
-  ],
+  (table) => [index('schemas_job_version_idx').on(table.jobId, table.version)],
 );
 ```
 
@@ -505,6 +548,7 @@ git commit -m "feat(db): add tenants, jobs, and schemas table definitions with i
 ## Task 5: Schema — Crawl & Page Tables (crawl_tasks, raw_pages)
 
 **Files:**
+
 - Create: `packages/db/src/schema/crawl-tasks.ts`
 - Create: `packages/db/src/schema/raw-pages.ts`
 - Modify: `packages/db/tests/unit/schema/tables.test.ts` (add tests)
@@ -575,8 +619,12 @@ export const crawlTasks = pgTable(
   'crawl_tasks',
   {
     id: uuid('id').primaryKey().defaultRandom(),
-    jobId: uuid('job_id').notNull().references(() => jobs.id),
-    tenantId: uuid('tenant_id').notNull().references(() => tenants.id),
+    jobId: uuid('job_id')
+      .notNull()
+      .references(() => jobs.id),
+    tenantId: uuid('tenant_id')
+      .notNull()
+      .references(() => tenants.id),
     url: text('url').notNull(),
     depth: integer('depth').notNull().default(0),
     status: crawlTaskStatusEnum('status').notNull().default('pending'),
@@ -608,8 +656,12 @@ export const rawPages = pgTable(
   'raw_pages',
   {
     id: uuid('id').primaryKey().defaultRandom(),
-    taskId: uuid('task_id').notNull().references(() => crawlTasks.id),
-    tenantId: uuid('tenant_id').notNull().references(() => tenants.id),
+    taskId: uuid('task_id')
+      .notNull()
+      .references(() => crawlTasks.id),
+    tenantId: uuid('tenant_id')
+      .notNull()
+      .references(() => tenants.id),
     contentRef: text('content_ref').notNull(),
     contentHash: text('content_hash').notNull(),
     metadata: jsonb('metadata').$type<Record<string, unknown>>().default({}),
@@ -650,6 +702,7 @@ git commit -m "feat(db): add crawl_tasks and raw_pages table definitions with in
 ## Task 6: Schema — Extraction & Entity Tables
 
 **Files:**
+
 - Create: `packages/db/src/schema/extractions.ts`
 - Create: `packages/db/src/schema/entities.ts`
 - Modify: `packages/db/tests/unit/schema/tables.test.ts` (add tests)
@@ -717,9 +770,15 @@ export const extractions = pgTable(
   'extractions',
   {
     id: uuid('id').primaryKey().defaultRandom(),
-    jobId: uuid('job_id').notNull().references(() => jobs.id),
-    tenantId: uuid('tenant_id').notNull().references(() => tenants.id),
-    pageId: uuid('page_id').notNull().references(() => rawPages.id),
+    jobId: uuid('job_id')
+      .notNull()
+      .references(() => jobs.id),
+    tenantId: uuid('tenant_id')
+      .notNull()
+      .references(() => tenants.id),
+    pageId: uuid('page_id')
+      .notNull()
+      .references(() => rawPages.id),
     schemaVersion: integer('schema_version').notNull(),
     data: jsonb('data').$type<Record<string, unknown>>().notNull(),
     unmappedFields: jsonb('unmapped_fields').$type<unknown[]>().default([]),
@@ -736,7 +795,16 @@ export const extractions = pgTable(
 Create `packages/db/src/schema/entities.ts`:
 
 ```typescript
-import { pgTable, uuid, jsonb, text, real, timestamp, index, primaryKey } from 'drizzle-orm/pg-core';
+import {
+  pgTable,
+  uuid,
+  jsonb,
+  text,
+  real,
+  timestamp,
+  index,
+  primaryKey,
+} from 'drizzle-orm/pg-core';
 import { sql } from 'drizzle-orm';
 import { jobs } from './jobs.js';
 import { extractions } from './extractions.js';
@@ -746,11 +814,18 @@ export const entities = pgTable(
   'entities',
   {
     id: uuid('id').primaryKey().defaultRandom(),
-    jobId: uuid('job_id').notNull().references(() => jobs.id),
-    tenantId: uuid('tenant_id').notNull().references(() => tenants.id),
+    jobId: uuid('job_id')
+      .notNull()
+      .references(() => jobs.id),
+    tenantId: uuid('tenant_id')
+      .notNull()
+      .references(() => tenants.id),
     mergedData: jsonb('merged_data').$type<Record<string, unknown>>().notNull(),
     provenance: jsonb('provenance').$type<Record<string, unknown>>().notNull(),
-    categories: text('categories').array().notNull().default(sql`'{}'::text[]`),
+    categories: text('categories')
+      .array()
+      .notNull()
+      .default(sql`'{}'::text[]`),
     qualityScore: real('quality_score').notNull().default(0),
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   },
@@ -763,13 +838,15 @@ export const entities = pgTable(
 export const entitySources = pgTable(
   'entity_sources',
   {
-    entityId: uuid('entity_id').notNull().references(() => entities.id),
-    extractionId: uuid('extraction_id').notNull().references(() => extractions.id),
+    entityId: uuid('entity_id')
+      .notNull()
+      .references(() => entities.id),
+    extractionId: uuid('extraction_id')
+      .notNull()
+      .references(() => extractions.id),
     matchConfidence: real('match_confidence').notNull(),
   },
-  (table) => [
-    primaryKey({ columns: [table.entityId, table.extractionId] }),
-  ],
+  (table) => [primaryKey({ columns: [table.entityId, table.extractionId] })],
 );
 ```
 
@@ -803,6 +880,7 @@ git commit -m "feat(db): add extractions, entities, and entity_sources table def
 ## Task 7: Schema — Actions & Source Trust Tables
 
 **Files:**
+
 - Create: `packages/db/src/schema/actions.ts`
 - Create: `packages/db/src/schema/source-trust.ts`
 - Modify: `packages/db/tests/unit/schema/tables.test.ts` (add tests)
@@ -865,8 +943,12 @@ export const actions = pgTable(
   'actions',
   {
     id: uuid('id').primaryKey().defaultRandom(),
-    jobId: uuid('job_id').notNull().references(() => jobs.id),
-    tenantId: uuid('tenant_id').notNull().references(() => tenants.id),
+    jobId: uuid('job_id')
+      .notNull()
+      .references(() => jobs.id),
+    tenantId: uuid('tenant_id')
+      .notNull()
+      .references(() => tenants.id),
     type: text('type').notNull(),
     payload: jsonb('payload').$type<Record<string, unknown>>().notNull(),
     source: actionSourceEnum('source').notNull(),
@@ -896,8 +978,12 @@ import { tenants } from './tenants.js';
 
 export const sourceTrust = pgTable('source_trust', {
   id: uuid('id').primaryKey().defaultRandom(),
-  jobId: uuid('job_id').notNull().references(() => jobs.id),
-  tenantId: uuid('tenant_id').notNull().references(() => tenants.id),
+  jobId: uuid('job_id')
+    .notNull()
+    .references(() => jobs.id),
+  tenantId: uuid('tenant_id')
+    .notNull()
+    .references(() => tenants.id),
   domain: text('domain').notNull(),
   trustLevel: trustLevelEnum('trust_level').notNull(),
   reasoning: text('reasoning').notNull(),
@@ -936,6 +1022,7 @@ git commit -m "feat(db): add actions and source_trust table definitions with ind
 ## Task 8: Repository — Job Repository
 
 **Files:**
+
 - Create: `packages/db/src/repositories/job-repository.ts`
 - Create: `packages/db/tests/unit/repositories/job-repository.test.ts`
 - Create: `packages/db/src/repositories/index.ts`
@@ -964,7 +1051,11 @@ function createMockDb() {
   chainable.then = vi.fn((resolve: (v: unknown) => void) => resolve([{ id: 'test-id' }]));
 
   return {
-    insert: vi.fn().mockReturnValue({ values: vi.fn().mockReturnValue({ returning: vi.fn().mockResolvedValue([{ id: 'test-id' }]) }) }),
+    insert: vi.fn().mockReturnValue({
+      values: vi
+        .fn()
+        .mockReturnValue({ returning: vi.fn().mockResolvedValue([{ id: 'test-id' }]) }),
+    }),
     update: vi.fn().mockReturnValue(chainable),
     select: vi.fn().mockReturnValue({ from: vi.fn().mockReturnValue(chainable) }),
     delete: vi.fn().mockReturnValue(chainable),
@@ -1177,6 +1268,7 @@ git commit -m "feat(db): add JobRepository with CRUD, status transitions, and te
 ## Task 9: Repository — Crawl Task Repository
 
 **Files:**
+
 - Create: `packages/db/src/repositories/crawl-task-repository.ts`
 - Create: `packages/db/tests/unit/repositories/crawl-task-repository.test.ts`
 - Modify: `packages/db/src/repositories/index.ts`
@@ -1201,7 +1293,11 @@ function createMockDb() {
   chainable.then = vi.fn((resolve: (v: unknown) => void) => resolve([{ id: 'task-id' }]));
 
   return {
-    insert: vi.fn().mockReturnValue({ values: vi.fn().mockReturnValue({ returning: vi.fn().mockResolvedValue([{ id: 'task-id' }]) }) }),
+    insert: vi.fn().mockReturnValue({
+      values: vi
+        .fn()
+        .mockReturnValue({ returning: vi.fn().mockResolvedValue([{ id: 'task-id' }]) }),
+    }),
     update: vi.fn().mockReturnValue(chainable),
     select: vi.fn().mockReturnValue({ from: vi.fn().mockReturnValue(chainable) }),
   };
@@ -1396,6 +1492,7 @@ git commit -m "feat(db): add CrawlTaskRepository with enqueue, status, and class
 ## Task 10: Repository — Schema Repository
 
 **Files:**
+
 - Create: `packages/db/src/repositories/schema-repository.ts`
 - Create: `packages/db/tests/unit/repositories/schema-repository.test.ts`
 - Modify: `packages/db/src/repositories/index.ts`
@@ -1416,10 +1513,16 @@ function createMockDb() {
     returning: vi.fn().mockResolvedValue([{ id: 'schema-id', version: 1 }]),
     then: undefined as unknown,
   };
-  chainable.then = vi.fn((resolve: (v: unknown) => void) => resolve([{ id: 'schema-id', version: 1 }]));
+  chainable.then = vi.fn((resolve: (v: unknown) => void) =>
+    resolve([{ id: 'schema-id', version: 1 }]),
+  );
 
   return {
-    insert: vi.fn().mockReturnValue({ values: vi.fn().mockReturnValue({ returning: vi.fn().mockResolvedValue([{ id: 'schema-id', version: 1 }]) }) }),
+    insert: vi.fn().mockReturnValue({
+      values: vi.fn().mockReturnValue({
+        returning: vi.fn().mockResolvedValue([{ id: 'schema-id', version: 1 }]),
+      }),
+    }),
     select: vi.fn().mockReturnValue({ from: vi.fn().mockReturnValue(chainable) }),
   };
 }
@@ -1592,6 +1695,7 @@ git commit -m "feat(db): add SchemaRepository with versioning and latest-fetch"
 ## Task 11: Repository — Extraction Repository
 
 **Files:**
+
 - Create: `packages/db/src/repositories/extraction-repository.ts`
 - Create: `packages/db/tests/unit/repositories/extraction-repository.test.ts`
 - Modify: `packages/db/src/repositories/index.ts`
@@ -1615,7 +1719,11 @@ function createMockDb() {
   chainable.then = vi.fn((resolve: (v: unknown) => void) => resolve([{ id: 'extraction-id' }]));
 
   return {
-    insert: vi.fn().mockReturnValue({ values: vi.fn().mockReturnValue({ returning: vi.fn().mockResolvedValue([{ id: 'extraction-id' }]) }) }),
+    insert: vi.fn().mockReturnValue({
+      values: vi
+        .fn()
+        .mockReturnValue({ returning: vi.fn().mockResolvedValue([{ id: 'extraction-id' }]) }),
+    }),
     select: vi.fn().mockReturnValue({ from: vi.fn().mockReturnValue(chainable) }),
   };
 }
@@ -1649,7 +1757,13 @@ describe('ExtractionRepository', () => {
       schemaVersion: 1,
       data: { name: 'Test' },
       unmappedFields: [],
-      metadata: { confidence: 0.9, modelUsed: 'test', tokensUsed: 100, extractionTimeMs: 50, unmappedFields: [] },
+      metadata: {
+        confidence: 0.9,
+        modelUsed: 'test',
+        tokensUsed: 100,
+        extractionTimeMs: 50,
+        unmappedFields: [],
+      },
     });
     expect(mockDb.insert).toHaveBeenCalled();
   });
@@ -1718,7 +1832,10 @@ export class ExtractionRepository {
         .from(extractions)
         .where(
           options?.schemaVersion
-            ? and(eq(extractions.jobId, jobId), eq(extractions.schemaVersion, options.schemaVersion))
+            ? and(
+                eq(extractions.jobId, jobId),
+                eq(extractions.schemaVersion, options.schemaVersion),
+              )
             : eq(extractions.jobId, jobId),
         )
         .orderBy(desc(extractions.createdAt));
@@ -1783,6 +1900,7 @@ git commit -m "feat(db): add ExtractionRepository with store, findByJob, and fin
 ## Task 12: Repository — Page Repository & PostgreSQL Content Store
 
 **Files:**
+
 - Create: `packages/db/src/repositories/page-repository.ts`
 - Create: `packages/db/src/content-store/pg-content-store.ts`
 - Create: `packages/db/tests/unit/repositories/page-repository.test.ts`
@@ -1806,7 +1924,11 @@ function createMockDb() {
   chainable.then = vi.fn((resolve: (v: unknown) => void) => resolve([{ id: 'page-id' }]));
 
   return {
-    insert: vi.fn().mockReturnValue({ values: vi.fn().mockReturnValue({ returning: vi.fn().mockResolvedValue([{ id: 'page-id' }]) }) }),
+    insert: vi.fn().mockReturnValue({
+      values: vi
+        .fn()
+        .mockReturnValue({ returning: vi.fn().mockResolvedValue([{ id: 'page-id' }]) }),
+    }),
     select: vi.fn().mockReturnValue({ from: vi.fn().mockReturnValue(chainable) }),
     delete: vi.fn().mockReturnValue(chainable),
   };
@@ -1923,6 +2045,7 @@ export const contentStore = pgTable('content_store', {
 ```
 
 Add to `packages/db/src/schema/index.ts`:
+
 ```typescript
 export * from './content.js';
 ```
@@ -1943,10 +2066,7 @@ export class PgContentStore implements ContentStore {
 
   async store(key: string, content: string): Promise<string> {
     try {
-      const [row] = await this.db
-        .insert(contentStore)
-        .values({ key, content })
-        .returning();
+      const [row] = await this.db.insert(contentStore).values({ key, content }).returning();
 
       const ref = `pg://${row.id}`;
       logger.debug({ ref, key }, 'content stored');
@@ -1962,10 +2082,7 @@ export class PgContentStore implements ContentStore {
   async retrieve(ref: string): Promise<string> {
     const id = ref.replace('pg://', '');
     try {
-      const [row] = await this.db
-        .select()
-        .from(contentStore)
-        .where(eq(contentStore.id, id));
+      const [row] = await this.db.select().from(contentStore).where(eq(contentStore.id, id));
 
       if (!row) {
         throw new StorageError(`Content not found: ${ref}`, { context: { ref } });
@@ -1984,9 +2101,7 @@ export class PgContentStore implements ContentStore {
   async delete(ref: string): Promise<void> {
     const id = ref.replace('pg://', '');
     try {
-      await this.db
-        .delete(contentStore)
-        .where(eq(contentStore.id, id));
+      await this.db.delete(contentStore).where(eq(contentStore.id, id));
 
       logger.debug({ ref }, 'content deleted');
     } catch (error) {
@@ -2061,10 +2176,7 @@ export class PageRepository {
 
   async findByTask(taskId: string) {
     try {
-      const [row] = await this.db
-        .select()
-        .from(rawPages)
-        .where(eq(rawPages.taskId, taskId));
+      const [row] = await this.db.select().from(rawPages).where(eq(rawPages.taskId, taskId));
 
       return row ?? null;
     } catch (error) {
@@ -2109,6 +2221,7 @@ git commit -m "feat(db): add PageRepository, PgContentStore, and content_store t
 ## Task 13: Package Barrel Export
 
 **Files:**
+
 - Modify: `packages/db/src/index.ts`
 - Create: `packages/db/tests/unit/exports.test.ts`
 
@@ -2238,20 +2351,20 @@ git commit -m "chore: format Phase 4 files"
 
 ## Summary
 
-| Task | Component | Tests |
-|------|-----------|-------|
-| 1 | Dependencies & drizzle.config | — |
-| 2 | Connection factory | 3 |
-| 3 | Enum declarations | 8 |
-| 4 | Core tables (tenants, jobs, schemas) | 3 |
-| 5 | Crawl tables (crawl_tasks, raw_pages) | 2 |
-| 6 | Extraction tables (extractions, entities) | 3 |
-| 7 | Audit tables (actions, source_trust) | 2 |
-| 8 | JobRepository | 6 |
-| 9 | CrawlTaskRepository | 5 |
-| 10 | SchemaRepository | 5 |
-| 11 | ExtractionRepository | 4 |
-| 12 | PageRepository + PgContentStore | 8 |
-| 13 | Package barrel export | 5 |
-| 14 | Final verification | — |
-| **Total** | | **~54** |
+| Task      | Component                                 | Tests   |
+| --------- | ----------------------------------------- | ------- |
+| 1         | Dependencies & drizzle.config             | —       |
+| 2         | Connection factory                        | 3       |
+| 3         | Enum declarations                         | 8       |
+| 4         | Core tables (tenants, jobs, schemas)      | 3       |
+| 5         | Crawl tables (crawl_tasks, raw_pages)     | 2       |
+| 6         | Extraction tables (extractions, entities) | 3       |
+| 7         | Audit tables (actions, source_trust)      | 2       |
+| 8         | JobRepository                             | 6       |
+| 9         | CrawlTaskRepository                       | 5       |
+| 10        | SchemaRepository                          | 5       |
+| 11        | ExtractionRepository                      | 4       |
+| 12        | PageRepository + PgContentStore           | 8       |
+| 13        | Package barrel export                     | 5       |
+| 14        | Final verification                        | —       |
+| **Total** |                                           | **~54** |

@@ -50,7 +50,10 @@ export class ExtractionRepository {
         .from(extractions)
         .where(
           options?.schemaVersion
-            ? and(eq(extractions.jobId, jobId), eq(extractions.schemaVersion, options.schemaVersion))
+            ? and(
+                eq(extractions.jobId, jobId),
+                eq(extractions.schemaVersion, options.schemaVersion),
+              )
             : eq(extractions.jobId, jobId),
         )
         .orderBy(desc(extractions.createdAt));

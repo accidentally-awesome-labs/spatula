@@ -12,7 +12,11 @@ function createMockDb() {
   chainable.then = vi.fn((resolve: (v: unknown) => void) => resolve([{ id: 'extraction-id' }]));
 
   return {
-    insert: vi.fn().mockReturnValue({ values: vi.fn().mockReturnValue({ returning: vi.fn().mockResolvedValue([{ id: 'extraction-id' }]) }) }),
+    insert: vi.fn().mockReturnValue({
+      values: vi
+        .fn()
+        .mockReturnValue({ returning: vi.fn().mockResolvedValue([{ id: 'extraction-id' }]) }),
+    }),
     select: vi.fn().mockReturnValue({ from: vi.fn().mockReturnValue(chainable) }),
   };
 }
@@ -46,7 +50,13 @@ describe('ExtractionRepository', () => {
       schemaVersion: 1,
       data: { name: 'Test' },
       unmappedFields: [],
-      metadata: { confidence: 0.9, modelUsed: 'test', tokensUsed: 100, extractionTimeMs: 50, unmappedFields: [] },
+      metadata: {
+        confidence: 0.9,
+        modelUsed: 'test',
+        tokensUsed: 100,
+        extractionTimeMs: 50,
+        unmappedFields: [],
+      },
     });
     expect(mockDb.insert).toHaveBeenCalled();
   });

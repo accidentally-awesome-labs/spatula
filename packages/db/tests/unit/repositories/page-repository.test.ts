@@ -10,7 +10,11 @@ function createMockDb() {
   chainable.then = vi.fn((resolve: (v: unknown) => void) => resolve([{ id: 'page-id' }]));
 
   return {
-    insert: vi.fn().mockReturnValue({ values: vi.fn().mockReturnValue({ returning: vi.fn().mockResolvedValue([{ id: 'page-id' }]) }) }),
+    insert: vi.fn().mockReturnValue({
+      values: vi
+        .fn()
+        .mockReturnValue({ returning: vi.fn().mockResolvedValue([{ id: 'page-id' }]) }),
+    }),
     select: vi.fn().mockReturnValue({ from: vi.fn().mockReturnValue(chainable) }),
     delete: vi.fn().mockReturnValue(chainable),
   };

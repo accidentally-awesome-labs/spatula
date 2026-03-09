@@ -13,8 +13,12 @@ export const crawlTasks = pgTable(
   'crawl_tasks',
   {
     id: uuid('id').primaryKey().defaultRandom(),
-    jobId: uuid('job_id').notNull().references(() => jobs.id),
-    tenantId: uuid('tenant_id').notNull().references(() => tenants.id),
+    jobId: uuid('job_id')
+      .notNull()
+      .references(() => jobs.id),
+    tenantId: uuid('tenant_id')
+      .notNull()
+      .references(() => tenants.id),
     url: text('url').notNull(),
     depth: integer('depth').notNull().default(0),
     status: crawlTaskStatusEnum('status').notNull().default('pending'),

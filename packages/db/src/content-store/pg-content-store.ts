@@ -11,10 +11,7 @@ export class PgContentStore implements ContentStore {
 
   async store(key: string, content: string): Promise<string> {
     try {
-      const [row] = await this.db
-        .insert(contentStore)
-        .values({ key, content })
-        .returning();
+      const [row] = await this.db.insert(contentStore).values({ key, content }).returning();
 
       const ref = `pg://${row.id}`;
       logger.debug({ ref, key }, 'content stored');
@@ -30,10 +27,7 @@ export class PgContentStore implements ContentStore {
   async retrieve(ref: string): Promise<string> {
     const id = ref.replace('pg://', '');
     try {
-      const [row] = await this.db
-        .select()
-        .from(contentStore)
-        .where(eq(contentStore.id, id));
+      const [row] = await this.db.select().from(contentStore).where(eq(contentStore.id, id));
 
       if (!row) {
         throw new StorageError(`Content not found: ${ref}`, { context: { ref } });
@@ -52,9 +46,7 @@ export class PgContentStore implements ContentStore {
   async delete(ref: string): Promise<void> {
     const id = ref.replace('pg://', '');
     try {
-      await this.db
-        .delete(contentStore)
-        .where(eq(contentStore.id, id));
+      await this.db.delete(contentStore).where(eq(contentStore.id, id));
 
       logger.debug({ ref }, 'content deleted');
     } catch (error) {

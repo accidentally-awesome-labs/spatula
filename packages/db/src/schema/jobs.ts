@@ -8,7 +8,9 @@ export const jobs = pgTable(
   'jobs',
   {
     id: uuid('id').primaryKey().defaultRandom(),
-    tenantId: uuid('tenant_id').notNull().references(() => tenants.id),
+    tenantId: uuid('tenant_id')
+      .notNull()
+      .references(() => tenants.id),
     name: text('name').notNull(),
     description: text('description').notNull(),
     config: jsonb('config').$type<JobConfig>().notNull(),

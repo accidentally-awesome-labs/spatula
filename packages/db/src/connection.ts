@@ -7,7 +7,9 @@ export type Database = ReturnType<typeof createDatabase>;
 export function createDatabase(connectionString?: string) {
   const url = connectionString ?? process.env.DATABASE_URL;
   if (!url) {
-    throw new StorageError('DATABASE_URL is required — pass it directly or set the environment variable');
+    throw new StorageError(
+      'DATABASE_URL is required — pass it directly or set the environment variable',
+    );
   }
 
   return drizzle({

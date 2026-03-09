@@ -8,13 +8,13 @@ export const schemasTable = pgTable(
   {
     id: uuid('id').primaryKey().defaultRandom(),
     jobId: uuid('job_id').notNull(),
-    tenantId: uuid('tenant_id').notNull().references(() => tenants.id),
+    tenantId: uuid('tenant_id')
+      .notNull()
+      .references(() => tenants.id),
     version: integer('version').notNull(),
     definition: jsonb('definition').$type<SchemaDefinition>().notNull(),
     parentId: uuid('parent_id').references((): AnyPgColumn => schemasTable.id),
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   },
-  (table) => [
-    index('schemas_job_version_idx').on(table.jobId, table.version),
-  ],
+  (table) => [index('schemas_job_version_idx').on(table.jobId, table.version)],
 );

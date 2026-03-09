@@ -7,9 +7,15 @@ export const extractions = pgTable(
   'extractions',
   {
     id: uuid('id').primaryKey().defaultRandom(),
-    jobId: uuid('job_id').notNull().references(() => jobs.id),
-    tenantId: uuid('tenant_id').notNull().references(() => tenants.id),
-    pageId: uuid('page_id').notNull().references(() => rawPages.id),
+    jobId: uuid('job_id')
+      .notNull()
+      .references(() => jobs.id),
+    tenantId: uuid('tenant_id')
+      .notNull()
+      .references(() => tenants.id),
+    pageId: uuid('page_id')
+      .notNull()
+      .references(() => rawPages.id),
     schemaVersion: integer('schema_version').notNull(),
     data: jsonb('data').$type<Record<string, unknown>>().notNull(),
     unmappedFields: jsonb('unmapped_fields').$type<unknown[]>().default([]),

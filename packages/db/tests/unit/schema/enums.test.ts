@@ -13,14 +13,24 @@ import {
 describe('schema enums', () => {
   it('jobStatusEnum has all statuses', () => {
     expect(jobStatusEnum.enumValues).toEqual([
-      'pending', 'queued', 'running', 'paused',
-      'reconciling', 'completed', 'failed', 'cancelled',
+      'pending',
+      'queued',
+      'running',
+      'paused',
+      'reconciling',
+      'completed',
+      'failed',
+      'cancelled',
     ]);
   });
 
   it('crawlTaskStatusEnum has all statuses', () => {
     expect(crawlTaskStatusEnum.enumValues).toEqual([
-      'pending', 'in_progress', 'completed', 'failed', 'skipped',
+      'pending',
+      'in_progress',
+      'completed',
+      'failed',
+      'skipped',
     ]);
   });
 
@@ -30,7 +40,11 @@ describe('schema enums', () => {
 
   it('pageClassificationEnum has all classifications', () => {
     expect(pageClassificationEnum.enumValues).toEqual([
-      'single_entry', 'multiple_entries', 'navigation', 'irrelevant', 'partial',
+      'single_entry',
+      'multiple_entries',
+      'navigation',
+      'irrelevant',
+      'partial',
     ]);
   });
 
@@ -40,19 +54,24 @@ describe('schema enums', () => {
 
   it('actionSourceEnum has all sources', () => {
     expect(actionSourceEnum.enumValues).toEqual([
-      'extraction', 'schema_evolution', 'reconciliation', 'quality_audit',
+      'extraction',
+      'schema_evolution',
+      'reconciliation',
+      'quality_audit',
     ]);
   });
 
   it('actionStatusEnum has all statuses', () => {
     expect(actionStatusEnum.enumValues).toEqual([
-      'pending_review', 'approved', 'applied', 'rejected', 'rolled_back',
+      'pending_review',
+      'approved',
+      'applied',
+      'rejected',
+      'rolled_back',
     ]);
   });
 
   it('trustLevelEnum has all levels', () => {
-    expect(trustLevelEnum.enumValues).toEqual([
-      'authoritative', 'high', 'medium', 'low',
-    ]);
+    expect(trustLevelEnum.enumValues).toEqual(['authoritative', 'high', 'medium', 'low']);
   });
 });

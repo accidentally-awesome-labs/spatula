@@ -7,8 +7,12 @@ export const actions = pgTable(
   'actions',
   {
     id: uuid('id').primaryKey().defaultRandom(),
-    jobId: uuid('job_id').notNull().references(() => jobs.id),
-    tenantId: uuid('tenant_id').notNull().references(() => tenants.id),
+    jobId: uuid('job_id')
+      .notNull()
+      .references(() => jobs.id),
+    tenantId: uuid('tenant_id')
+      .notNull()
+      .references(() => tenants.id),
     type: text('type').notNull(),
     payload: jsonb('payload').$type<Record<string, unknown>>().notNull(),
     source: actionSourceEnum('source').notNull(),
