@@ -10,3 +10,6 @@ export * from './repositories/index.js';
 
 // Content Store
 export { PgContentStore } from './content-store/pg-content-store.js';
+
+// Migrations
+export { runMigrations } from './migrate.js';
