@@ -2,3 +2,5 @@ export * from './enums.js';
 export * from './tenants.js';
 export * from './jobs.js';
 export * from './schemas.js';
+export * from './crawl-tasks.js';
+export * from './raw-pages.js';
