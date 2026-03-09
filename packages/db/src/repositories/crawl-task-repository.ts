@@ -2,7 +2,7 @@ import { eq, and, asc } from 'drizzle-orm';
 import { createLogger, StorageError } from '@spatula/shared';
 import type { PageClassification } from '@spatula/core';
 import { crawlTasks } from '../schema/crawl-tasks.js';
-import { crawlTaskStatusEnum, taskPriorityEnum, crawlerTypeEnum } from '../schema/enums.js';
+import type { crawlTaskStatusEnum, taskPriorityEnum, crawlerTypeEnum } from '../schema/enums.js';
 import type { Database } from '../connection.js';
 
 const logger = createLogger('crawl-task-repository');
