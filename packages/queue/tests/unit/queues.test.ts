@@ -1,0 +1,41 @@
+import { describe, it, expect, vi } from 'vitest';
+
+vi.mock('bullmq', () => ({
+  Queue: vi.fn().mockImplementation((name, opts) => ({
+    name,
+    opts,
+    add: vi.fn(),
+    close: vi.fn(),
+  })),
+}));
+
+import { createQueues, QUEUE_NAMES } from '../../src/queues.js';
+
+describe('Queue Factory', () => {
+  it('exports queue name constants', () => {
+    expect(QUEUE_NAMES.CRAWL).toBe('spatula:crawl');
+    expect(QUEUE_NAMES.EXTRACT).toBe('spatula:extract');
+    expect(QUEUE_NAMES.SCHEMA_EVOLUTION).toBe('spatula:schema-evolution');
+  });
+
+  it('creates all three queues', () => {
+    const queues = createQueues({ host: 'localhost', port: 6379 });
+    expect(queues.crawl).toBeDefined();
+    expect(queues.extract).toBeDefined();
+    expect(queues.schemaEvolution).toBeDefined();
+  });
+
+  it('passes Redis connection to queues', () => {
+    const connection = { host: 'localhost', port: 6379 };
+    const queues = createQueues(connection);
+    expect(queues.crawl.opts.connection).toEqual(connection);
+  });
+
+  it('closeAll closes all queues', async () => {
+    const queues = createQueues({ host: 'localhost', port: 6379 });
+    await queues.closeAll();
+    expect(queues.crawl.close).toHaveBeenCalled();
+    expect(queues.extract.close).toHaveBeenCalled();
+    expect(queues.schemaEvolution.close).toHaveBeenCalled();
+  });
+});
