@@ -25,5 +25,11 @@ describe('package exports', () => {
     expect(root.preprocessHTML).toBeDefined();
     expect(root.PageClassifier).toBeDefined();
     expect(root.StaticExtractor).toBeDefined();
+    // Phase 1 types still exported
+    expect(root.ExtractionResult).toBeDefined();
+    expect(root.PageClassification).toBeDefined();
+    // Phase 2 crawlers still exported
+    expect(root.PlaywrightCrawler).toBeDefined();
+    expect(root.FirecrawlCrawler).toBeDefined();
   });
 });
