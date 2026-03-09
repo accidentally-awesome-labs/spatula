@@ -1,1 +1,1 @@
-// Schema tables — populated in subsequent tasks
+export * from './enums.js';
