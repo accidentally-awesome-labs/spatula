@@ -43,19 +43,21 @@ export class ExtractionRepository {
     }
   }
 
-  async findByJob(jobId: string, options?: { schemaVersion?: number; limit?: number }) {
+  async findByJob(
+    jobId: string,
+    tenantId: string,
+    options?: { schemaVersion?: number; limit?: number },
+  ) {
     try {
+      const conditions = [eq(extractions.jobId, jobId), eq(extractions.tenantId, tenantId)];
+      if (options?.schemaVersion !== undefined) {
+        conditions.push(eq(extractions.schemaVersion, options.schemaVersion));
+      }
+
       let query = this.db
         .select()
         .from(extractions)
-        .where(
-          options?.schemaVersion
-            ? and(
-                eq(extractions.jobId, jobId),
-                eq(extractions.schemaVersion, options.schemaVersion),
-              )
-            : eq(extractions.jobId, jobId),
-        )
+        .where(and(...conditions))
         .orderBy(desc(extractions.createdAt));
 
       if (options?.limit) {
@@ -71,12 +73,12 @@ export class ExtractionRepository {
     }
   }
 
-  async findByPage(pageId: string) {
+  async findByPage(pageId: string, tenantId: string) {
     try {
       return await this.db
         .select()
         .from(extractions)
-        .where(eq(extractions.pageId, pageId))
+        .where(and(eq(extractions.pageId, pageId), eq(extractions.tenantId, tenantId)))
         .orderBy(desc(extractions.createdAt));
     } catch (error) {
       throw new StorageError(`Failed to find extractions for page: ${(error as Error).message}`, {

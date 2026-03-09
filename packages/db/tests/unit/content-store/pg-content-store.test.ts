@@ -14,7 +14,9 @@ function createMockDb() {
   return {
     insert: vi.fn().mockReturnValue({
       values: vi.fn().mockReturnValue({
-        returning: vi.fn().mockResolvedValue([{ id: 'content-id' }]),
+        onConflictDoUpdate: vi.fn().mockReturnValue({
+          returning: vi.fn().mockResolvedValue([{ id: 'content-id' }]),
+        }),
       }),
     }),
     select: vi.fn().mockReturnValue({ from: vi.fn().mockReturnValue(chainable) }),

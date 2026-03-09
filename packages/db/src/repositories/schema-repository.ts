@@ -40,12 +40,12 @@ export class SchemaRepository {
     }
   }
 
-  async findLatest(jobId: string) {
+  async findLatest(jobId: string, tenantId: string) {
     try {
       const [row] = await this.db
         .select()
         .from(schemasTable)
-        .where(eq(schemasTable.jobId, jobId))
+        .where(and(eq(schemasTable.jobId, jobId), eq(schemasTable.tenantId, tenantId)))
         .orderBy(desc(schemasTable.version))
         .limit(1);
 
@@ -58,12 +58,18 @@ export class SchemaRepository {
     }
   }
 
-  async findByVersion(jobId: string, version: number) {
+  async findByVersion(jobId: string, tenantId: string, version: number) {
     try {
       const [row] = await this.db
         .select()
         .from(schemasTable)
-        .where(and(eq(schemasTable.jobId, jobId), eq(schemasTable.version, version)));
+        .where(
+          and(
+            eq(schemasTable.jobId, jobId),
+            eq(schemasTable.tenantId, tenantId),
+            eq(schemasTable.version, version),
+          ),
+        );
 
       return row ?? null;
     } catch (error) {
@@ -74,12 +80,12 @@ export class SchemaRepository {
     }
   }
 
-  async findAllVersions(jobId: string) {
+  async findAllVersions(jobId: string, tenantId: string) {
     try {
       return await this.db
         .select()
         .from(schemasTable)
-        .where(eq(schemasTable.jobId, jobId))
+        .where(and(eq(schemasTable.jobId, jobId), eq(schemasTable.tenantId, tenantId)))
         .orderBy(desc(schemasTable.version));
     } catch (error) {
       throw new StorageError(`Failed to list schema versions: ${(error as Error).message}`, {

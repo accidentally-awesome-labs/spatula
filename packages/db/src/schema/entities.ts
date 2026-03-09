@@ -33,7 +33,7 @@ export const entities = pgTable(
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   },
   (table) => [
-    index('entities_job_categories_idx').using('gin', table.categories),
+    index('entities_categories_gin_idx').using('gin', table.categories),
     index('entities_job_quality_idx').on(table.jobId, table.qualityScore),
   ],
 );

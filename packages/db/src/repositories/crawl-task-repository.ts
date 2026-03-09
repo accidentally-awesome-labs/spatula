@@ -2,13 +2,14 @@ import { eq, and, asc } from 'drizzle-orm';
 import { createLogger, StorageError } from '@spatula/shared';
 import type { PageClassification } from '@spatula/core';
 import { crawlTasks } from '../schema/crawl-tasks.js';
+import { crawlTaskStatusEnum, taskPriorityEnum, crawlerTypeEnum } from '../schema/enums.js';
 import type { Database } from '../connection.js';
 
 const logger = createLogger('crawl-task-repository');
 
-type CrawlTaskStatus = 'pending' | 'in_progress' | 'completed' | 'failed' | 'skipped';
-type TaskPriority = 'high' | 'medium' | 'low';
-type CrawlerType = 'playwright' | 'firecrawl';
+type CrawlTaskStatus = (typeof crawlTaskStatusEnum.enumValues)[number];
+type TaskPriority = (typeof taskPriorityEnum.enumValues)[number];
+type CrawlerType = (typeof crawlerTypeEnum.enumValues)[number];
 
 export interface EnqueueTaskInput {
   jobId: string;
@@ -73,7 +74,7 @@ export class CrawlTaskRepository {
     }
   }
 
-  async updateStatus(id: string, status: CrawlTaskStatus) {
+  async updateStatus(id: string, tenantId: string, status: CrawlTaskStatus) {
     try {
       const timestamps: Record<string, Date> = {};
       if (status === 'completed' || status === 'failed' || status === 'skipped') {
@@ -83,7 +84,7 @@ export class CrawlTaskRepository {
       const [row] = await this.db
         .update(crawlTasks)
         .set({ status, ...timestamps })
-        .where(eq(crawlTasks.id, id))
+        .where(and(eq(crawlTasks.id, id), eq(crawlTasks.tenantId, tenantId)))
         .returning();
 
       return row ?? null;
@@ -95,12 +96,12 @@ export class CrawlTaskRepository {
     }
   }
 
-  async updateClassification(id: string, classification: PageClassification) {
+  async updateClassification(id: string, tenantId: string, classification: PageClassification) {
     try {
       const [row] = await this.db
         .update(crawlTasks)
         .set({ classification })
-        .where(eq(crawlTasks.id, id))
+        .where(and(eq(crawlTasks.id, id), eq(crawlTasks.tenantId, tenantId)))
         .returning();
 
       return row ?? null;

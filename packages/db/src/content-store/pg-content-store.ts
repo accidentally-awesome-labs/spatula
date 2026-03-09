@@ -11,7 +11,11 @@ export class PgContentStore implements ContentStore {
 
   async store(key: string, content: string): Promise<string> {
     try {
-      const [row] = await this.db.insert(contentStore).values({ key, content }).returning();
+      const [row] = await this.db
+        .insert(contentStore)
+        .values({ key, content })
+        .onConflictDoUpdate({ target: contentStore.key, set: { content } })
+        .returning();
 
       const ref = `pg://${row.id}`;
       logger.debug({ ref, key }, 'content stored');
@@ -25,7 +29,7 @@ export class PgContentStore implements ContentStore {
   }
 
   async retrieve(ref: string): Promise<string> {
-    const id = ref.replace('pg://', '');
+    const id = this.parseRef(ref);
     try {
       const [row] = await this.db.select().from(contentStore).where(eq(contentStore.id, id));
 
@@ -44,7 +48,7 @@ export class PgContentStore implements ContentStore {
   }
 
   async delete(ref: string): Promise<void> {
-    const id = ref.replace('pg://', '');
+    const id = this.parseRef(ref);
     try {
       await this.db.delete(contentStore).where(eq(contentStore.id, id));
 
@@ -55,5 +59,12 @@ export class PgContentStore implements ContentStore {
         context: { ref },
       });
     }
+  }
+
+  private parseRef(ref: string): string {
+    if (!ref.startsWith('pg://')) {
+      throw new StorageError(`Invalid content ref format: ${ref}`, { context: { ref } });
+    }
+    return ref.slice(5);
   }
 }

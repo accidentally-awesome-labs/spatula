@@ -1,4 +1,4 @@
-import { eq } from 'drizzle-orm';
+import { eq, and } from 'drizzle-orm';
 import { createLogger, StorageError } from '@spatula/shared';
 import { rawPages } from '../schema/raw-pages.js';
 import type { Database } from '../connection.js';
@@ -39,12 +39,12 @@ export class PageRepository {
     }
   }
 
-  async findByContentHash(contentHash: string) {
+  async findByContentHash(contentHash: string, tenantId: string) {
     try {
       const [row] = await this.db
         .select()
         .from(rawPages)
-        .where(eq(rawPages.contentHash, contentHash));
+        .where(and(eq(rawPages.contentHash, contentHash), eq(rawPages.tenantId, tenantId)));
 
       return row ?? null;
     } catch (error) {
