@@ -1,0 +1,323 @@
+import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { processCrawlJob } from '../../../src/workers/crawl-worker.js';
+import type { CrawlJobData } from '../../../src/queues.js';
+import type { WorkerDeps } from '../../../src/worker-deps.js';
+
+function createMockCrawlResult() {
+  return {
+    url: 'https://example.com/product/1',
+    html: '<html><body><h1>Product 1</h1></body></html>',
+    title: 'Product 1',
+    statusCode: 200,
+    contentType: 'text/html',
+    links: [
+      { url: 'https://example.com/product/2', text: 'Product 2' },
+      { url: 'https://example.com/product/3', text: 'Product 3' },
+    ],
+    metadata: {
+      crawledAt: new Date(),
+      responseTimeMs: 250,
+      contentLength: 45,
+      crawlerType: 'playwright' as const,
+    },
+  };
+}
+
+function createMockDeps(): WorkerDeps {
+  const mockPage = {
+    id: 'page-1',
+    taskId: 'task-1',
+    tenantId: 'tenant-1',
+    contentRef: 'ref-abc',
+    contentHash: 'hash-abc',
+    metadata: {},
+    createdAt: new Date(),
+    updatedAt: new Date(),
+  };
+
+  const mockJob = {
+    id: 'job-1',
+    tenantId: 'tenant-1',
+    name: 'Test Job',
+    description: 'Scrape product data',
+    status: 'running' as const,
+    config: {
+      tenantId: 'tenant-1',
+      name: 'Test Job',
+      description: 'Scrape product data',
+      seedUrls: ['https://example.com'],
+      crawl: {
+        maxDepth: 3,
+        maxPages: 100,
+        concurrency: 5,
+        crawlerType: 'playwright' as const,
+      },
+      schema: {
+        mode: 'discovery' as const,
+      },
+      llm: {
+        primaryModel: 'anthropic/claude-sonnet-4-20250514',
+      },
+    },
+    stats: {},
+    schemaId: null,
+    startedAt: null,
+    completedAt: null,
+    createdAt: new Date(),
+    updatedAt: new Date(),
+  };
+
+  const mockSchema = {
+    id: 'schema-1',
+    jobId: 'job-1',
+    tenantId: 'tenant-1',
+    version: 1,
+    definition: {
+      version: 1,
+      fields: [
+        {
+          name: 'title',
+          description: 'Product title',
+          type: 'string' as const,
+          required: true,
+        },
+      ],
+      fieldAliases: [],
+      createdAt: new Date(),
+      parentVersion: null,
+    },
+    parentId: null,
+    createdAt: new Date(),
+    updatedAt: new Date(),
+  };
+
+  const mockExtraction = {
+    id: 'extraction-1',
+    jobId: 'job-1',
+    pageId: 'page-1',
+    schemaVersion: 1,
+    data: { title: 'Product 1' },
+    metadata: {
+      confidence: 0.95,
+      modelUsed: 'anthropic/claude-sonnet-4-20250514',
+      tokensUsed: 500,
+      extractionTimeMs: 200,
+      unmappedFields: [],
+    },
+  };
+
+  return {
+    crawler: {
+      type: 'playwright' as const,
+      crawl: vi.fn().mockResolvedValue(createMockCrawlResult()),
+      close: vi.fn().mockResolvedValue(undefined),
+    },
+    classifier: {
+      classify: vi.fn().mockResolvedValue({
+        classification: 'single_entry',
+        confidence: 0.95,
+        strategy: 'full_extraction',
+        reasoning: 'Product page',
+      }),
+    } as any,
+    extractor: {
+      extract: vi.fn().mockResolvedValue(mockExtraction),
+    },
+    contentStore: {
+      store: vi.fn().mockResolvedValue('content-ref-123'),
+      retrieve: vi.fn().mockResolvedValue(''),
+      delete: vi.fn().mockResolvedValue(undefined),
+    },
+    jobRepo: {
+      findById: vi.fn().mockResolvedValue(mockJob),
+    } as any,
+    taskRepo: {
+      updateStatus: vi.fn().mockResolvedValue(null),
+      updateClassification: vi.fn().mockResolvedValue(null),
+    } as any,
+    pageRepo: {
+      findByContentHash: vi.fn().mockResolvedValue(null),
+      create: vi.fn().mockResolvedValue(mockPage),
+    } as any,
+    extractionRepo: {
+      store: vi.fn().mockResolvedValue({ id: 'extraction-1' }),
+    } as any,
+    schemaRepo: {
+      findLatest: vi.fn().mockResolvedValue(mockSchema),
+    } as any,
+    queues: {
+      crawl: {
+        add: vi.fn().mockResolvedValue(undefined),
+      },
+      extract: {
+        add: vi.fn().mockResolvedValue(undefined),
+      },
+      schemaEvolution: {
+        add: vi.fn().mockResolvedValue(undefined),
+      },
+      closeAll: vi.fn().mockResolvedValue(undefined),
+    } as any,
+  } as unknown as WorkerDeps;
+}
+
+function createJobData(overrides?: Partial<CrawlJobData>): CrawlJobData {
+  return {
+    taskId: 'task-1',
+    jobId: 'job-1',
+    tenantId: 'tenant-1',
+    url: 'https://example.com/product/1',
+    depth: 0,
+    ...overrides,
+  };
+}
+
+describe('processCrawlJob', () => {
+  let deps: WorkerDeps;
+
+  beforeEach(() => {
+    deps = createMockDeps();
+  });
+
+  it('crawls URL and stores content', async () => {
+    const data = createJobData();
+
+    await processCrawlJob(data, deps);
+
+    expect(deps.crawler.crawl).toHaveBeenCalledWith('https://example.com/product/1');
+    expect(deps.contentStore.store).toHaveBeenCalledWith(
+      expect.stringContaining('job-1/'),
+      '<html><body><h1>Product 1</h1></body></html>',
+    );
+    expect(deps.pageRepo.findByContentHash).toHaveBeenCalledWith(expect.any(String), 'tenant-1');
+    expect(deps.pageRepo.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        taskId: 'task-1',
+        tenantId: 'tenant-1',
+        contentRef: 'content-ref-123',
+        contentHash: expect.any(String),
+      }),
+    );
+  });
+
+  it('classifies the page', async () => {
+    const data = createJobData();
+
+    await processCrawlJob(data, deps);
+
+    expect(deps.classifier.classify).toHaveBeenCalledWith(
+      '<html><body><h1>Product 1</h1></body></html>',
+      'https://example.com/product/1',
+      'Scrape product data',
+    );
+    expect(deps.taskRepo.updateClassification).toHaveBeenCalledWith(
+      'task-1',
+      'tenant-1',
+      'single_entry',
+    );
+  });
+
+  it('extracts data for relevant pages (single_entry classification)', async () => {
+    const data = createJobData();
+
+    await processCrawlJob(data, deps);
+
+    expect(deps.schemaRepo.findLatest).toHaveBeenCalledWith('job-1', 'tenant-1');
+    expect(deps.extractor.extract).toHaveBeenCalledWith(
+      '<html><body><h1>Product 1</h1></body></html>',
+      'https://example.com/product/1',
+      expect.objectContaining({ version: 1 }),
+      'Scrape product data',
+    );
+    expect(deps.extractionRepo.store).toHaveBeenCalledWith(
+      expect.objectContaining({
+        jobId: 'job-1',
+        tenantId: 'tenant-1',
+        pageId: 'page-1',
+        schemaVersion: 1,
+      }),
+    );
+  });
+
+  it('skips extraction for irrelevant pages', async () => {
+    (deps.classifier.classify as ReturnType<typeof vi.fn>).mockResolvedValue({
+      classification: 'irrelevant',
+      confidence: 0.9,
+      strategy: 'skip',
+      reasoning: 'Not a product page',
+    });
+    const data = createJobData();
+
+    await processCrawlJob(data, deps);
+
+    expect(deps.taskRepo.updateClassification).toHaveBeenCalledWith(
+      'task-1',
+      'tenant-1',
+      'irrelevant',
+    );
+    expect(deps.extractor.extract).not.toHaveBeenCalled();
+    expect(deps.extractionRepo.store).not.toHaveBeenCalled();
+  });
+
+  it('enqueues discovered links within depth limit', async () => {
+    const data = createJobData({ depth: 1 });
+
+    await processCrawlJob(data, deps);
+
+    // maxDepth is 3, current depth is 1, so links should be enqueued at depth 2
+    expect(deps.queues.crawl.add).toHaveBeenCalledTimes(2);
+    expect(deps.queues.crawl.add).toHaveBeenCalledWith(
+      'crawl:https://example.com/product/2',
+      expect.objectContaining({
+        jobId: 'job-1',
+        tenantId: 'tenant-1',
+        url: 'https://example.com/product/2',
+        depth: 2,
+      }),
+    );
+    expect(deps.queues.crawl.add).toHaveBeenCalledWith(
+      'crawl:https://example.com/product/3',
+      expect.objectContaining({
+        jobId: 'job-1',
+        tenantId: 'tenant-1',
+        url: 'https://example.com/product/3',
+        depth: 2,
+      }),
+    );
+  });
+
+  it('does NOT enqueue links at max depth', async () => {
+    const data = createJobData({ depth: 3 });
+
+    await processCrawlJob(data, deps);
+
+    // maxDepth is 3, current depth is 3, so no links should be enqueued
+    expect(deps.queues.crawl.add).not.toHaveBeenCalled();
+  });
+
+  it('marks task as completed on success', async () => {
+    const data = createJobData();
+
+    await processCrawlJob(data, deps);
+
+    const updateStatusCalls = (deps.taskRepo.updateStatus as ReturnType<typeof vi.fn>).mock.calls;
+    expect(updateStatusCalls[0]).toEqual(['task-1', 'tenant-1', 'in_progress']);
+    expect(updateStatusCalls[updateStatusCalls.length - 1]).toEqual([
+      'task-1',
+      'tenant-1',
+      'completed',
+    ]);
+  });
+
+  it('marks task as failed on error', async () => {
+    (deps.crawler.crawl as ReturnType<typeof vi.fn>).mockRejectedValue(
+      new Error('Connection timeout'),
+    );
+    const data = createJobData();
+
+    await processCrawlJob(data, deps);
+
+    const updateStatusCalls = (deps.taskRepo.updateStatus as ReturnType<typeof vi.fn>).mock.calls;
+    expect(updateStatusCalls[0]).toEqual(['task-1', 'tenant-1', 'in_progress']);
+    expect(updateStatusCalls[1]).toEqual(['task-1', 'tenant-1', 'failed']);
+  });
+});
