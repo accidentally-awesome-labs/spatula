@@ -103,7 +103,7 @@ export class GapFiller {
     }
 
     try {
-      const model = resolveModel(this.llmConfig, 'conflictResolution');
+      const model = resolveModel(this.llmConfig, 'qualityAudit');
       const prompt = buildGapFillerPrompt(
         mergedData,
         missingRequired.map((f) => ({ name: f.name, description: f.description, type: f.type })),
@@ -139,8 +139,13 @@ export class GapFiller {
 
       // Filter: only accept inferences for fields that are actually in the missing list
       const missingFieldNames = new Set(missingRequired.map((f) => f.name));
-      const validInferences = parsed.data.inferences.filter((inf) =>
-        missingFieldNames.has(inf.fieldName),
+      const validInferences = parsed.data.inferences.filter(
+        (inf) =>
+          missingFieldNames.has(inf.fieldName) &&
+          inf.inferredValue !== null &&
+          inf.inferredValue !== undefined &&
+          inf.inferredValue !== '' &&
+          inf.confidence >= 0.5,
       );
 
       logger.debug(

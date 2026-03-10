@@ -35,7 +35,15 @@ function makeSchema(
     fields: fields.map((f) => ({
       name: f.name,
       description: f.description,
-      type: f.type as 'string' | 'number' | 'boolean' | 'url' | 'currency' | 'enum' | 'array' | 'object',
+      type: f.type as
+        | 'string'
+        | 'number'
+        | 'boolean'
+        | 'url'
+        | 'currency'
+        | 'enum'
+        | 'array'
+        | 'object',
       required: f.required,
     })),
     fieldAliases: [],
@@ -194,9 +202,7 @@ describe('GapFiller.fillGaps', () => {
   });
 
   it('returns empty array on wrong Zod shape', async () => {
-    const client = createMockClient(
-      JSON.stringify({ wrongField: 'not the right schema' }),
-    );
+    const client = createMockClient(JSON.stringify({ wrongField: 'not the right schema' }));
     const filler = new GapFiller(client, defaultLLMConfig);
 
     const schema = makeSchema([
@@ -264,7 +270,9 @@ describe('GapFiller.fillGaps', () => {
 
     // Only 'brand' should survive — 'name' already present, 'color' not in missing required list
     expect(actions).toHaveLength(1);
-    expect((actions[0] as PipelineAction & { type: 'infer_value' }).payload.fieldName).toBe('brand');
+    expect((actions[0] as PipelineAction & { type: 'infer_value' }).payload.fieldName).toBe(
+      'brand',
+    );
   });
 
   it('includes entity data and missing fields in LLM prompt', async () => {
@@ -411,5 +419,97 @@ describe('GapFiller.fillGaps', () => {
     );
     expect(fieldNames).toContain('brand');
     expect(fieldNames).toContain('category');
+  });
+
+  it('filters out inferences with null inferredValue', async () => {
+    const llmResponse = JSON.stringify({
+      inferences: [
+        {
+          fieldName: 'brand',
+          inferredValue: null,
+          inferredFrom: 'Could not determine brand',
+          confidence: 0.9,
+        },
+        {
+          fieldName: 'category',
+          inferredValue: 'Headphones',
+          inferredFrom: 'Product name suggests headphones category',
+          confidence: 0.85,
+        },
+      ],
+    });
+
+    const client = createMockClient(llmResponse);
+    const filler = new GapFiller(client, defaultLLMConfig);
+
+    const schema = makeSchema([
+      { name: 'name', description: 'Product name', type: 'string', required: true },
+      { name: 'brand', description: 'Brand name', type: 'string', required: true },
+      { name: 'category', description: 'Product category', type: 'string', required: true },
+    ]);
+
+    const mergedData = {
+      name: 'Sony WH-1000XM5',
+      // brand and category missing
+    };
+
+    const actions = await filler.fillGaps(
+      '550e8400-e29b-41d4-a716-446655440000',
+      mergedData,
+      schema,
+      'Collect headphone data',
+    );
+
+    // brand inference has null value — should be filtered out
+    expect(actions).toHaveLength(1);
+    expect((actions[0] as PipelineAction & { type: 'infer_value' }).payload.fieldName).toBe(
+      'category',
+    );
+  });
+
+  it('filters out inferences with confidence below 0.5', async () => {
+    const llmResponse = JSON.stringify({
+      inferences: [
+        {
+          fieldName: 'brand',
+          inferredValue: 'Sony',
+          inferredFrom: 'Wild guess based on price range',
+          confidence: 0.2,
+        },
+        {
+          fieldName: 'category',
+          inferredValue: 'Headphones',
+          inferredFrom: 'Product name suggests headphones category',
+          confidence: 0.85,
+        },
+      ],
+    });
+
+    const client = createMockClient(llmResponse);
+    const filler = new GapFiller(client, defaultLLMConfig);
+
+    const schema = makeSchema([
+      { name: 'name', description: 'Product name', type: 'string', required: true },
+      { name: 'brand', description: 'Brand name', type: 'string', required: true },
+      { name: 'category', description: 'Product category', type: 'string', required: true },
+    ]);
+
+    const mergedData = {
+      name: 'WH-1000XM5',
+      // brand and category missing
+    };
+
+    const actions = await filler.fillGaps(
+      '550e8400-e29b-41d4-a716-446655440000',
+      mergedData,
+      schema,
+      'Collect headphone data',
+    );
+
+    // brand inference has confidence 0.2 — below 0.5 threshold, should be filtered out
+    expect(actions).toHaveLength(1);
+    expect((actions[0] as PipelineAction & { type: 'infer_value' }).payload.fieldName).toBe(
+      'category',
+    );
   });
 });
