@@ -12,3 +12,6 @@ export * from './llm/index.js';
 
 // Extraction
 export * from './extraction/index.js';
+
+// Evolution
+export * from './evolution/index.js';
