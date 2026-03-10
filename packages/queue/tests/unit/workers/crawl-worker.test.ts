@@ -149,6 +149,8 @@ function createMockDeps(): WorkerDeps {
     } as any,
     extractionRepo: {
       store: vi.fn().mockResolvedValue({ id: 'extraction-1' }),
+      findByJob: vi.fn().mockResolvedValue([]),
+      findByPage: vi.fn().mockResolvedValue([]),
     } as any,
     schemaRepo: {
       findLatest: vi.fn().mockResolvedValue(mockSchema),
@@ -332,5 +334,171 @@ describe('processCrawlJob', () => {
     const updateStatusCalls = (deps.taskRepo.updateStatus as ReturnType<typeof vi.fn>).mock.calls;
     expect(updateStatusCalls[0]).toEqual(['task-1', 'tenant-1', 'in_progress']);
     expect(updateStatusCalls[1]).toEqual(['task-1', 'tenant-1', 'failed']);
+  });
+
+  it('enqueues schema evolution job after batch threshold', async () => {
+    // Override job config to enable evolution with batchSize 10
+    const jobWithEvolution = {
+      id: 'job-1',
+      tenantId: 'tenant-1',
+      name: 'Test Job',
+      description: 'Scrape product data',
+      status: 'running' as const,
+      config: {
+        tenantId: 'tenant-1',
+        name: 'Test Job',
+        description: 'Scrape product data',
+        seedUrls: ['https://example.com'],
+        crawl: {
+          maxDepth: 3,
+          maxPages: 100,
+          concurrency: 5,
+          crawlerType: 'playwright' as const,
+        },
+        schema: {
+          mode: 'discovery' as const,
+          evolutionConfig: {
+            enabled: true,
+            batchSize: 10,
+            maxFields: 50,
+            relevanceThresholds: {},
+            tableStrategy: 'auto' as const,
+          },
+        },
+        llm: {
+          primaryModel: 'anthropic/claude-sonnet-4-20250514',
+        },
+      },
+      stats: {},
+      schemaId: null,
+      startedAt: null,
+      completedAt: null,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    };
+    (deps.jobRepo.findById as ReturnType<typeof vi.fn>).mockResolvedValue(jobWithEvolution);
+
+    // Mock findByJob to return exactly batchSize (10) extractions
+    const mockExtractions = Array.from({ length: 10 }, (_, i) => ({
+      id: `extraction-${i + 1}`,
+      jobId: 'job-1',
+      pageId: `page-${i + 1}`,
+      schemaVersion: 1,
+      data: { title: `Product ${i + 1}` },
+      metadata: {},
+    }));
+    (deps.extractionRepo.findByJob as ReturnType<typeof vi.fn>).mockResolvedValue(mockExtractions);
+
+    const data = createJobData();
+    await processCrawlJob(data, deps);
+
+    expect(deps.queues.schemaEvolution.add).toHaveBeenCalledWith(
+      expect.stringMatching(/^schema-evolution:job-1:v\d+$/),
+      {
+        jobId: 'job-1',
+        tenantId: 'tenant-1',
+        extractionIds: mockExtractions.map((e) => e.id),
+      },
+    );
+  });
+
+  it('does NOT trigger schema evolution when batch threshold not met', async () => {
+    // Override job config to enable evolution with batchSize 10
+    const jobWithEvolution = {
+      id: 'job-1',
+      tenantId: 'tenant-1',
+      name: 'Test Job',
+      description: 'Scrape product data',
+      status: 'running' as const,
+      config: {
+        tenantId: 'tenant-1',
+        name: 'Test Job',
+        description: 'Scrape product data',
+        seedUrls: ['https://example.com'],
+        crawl: {
+          maxDepth: 3,
+          maxPages: 100,
+          concurrency: 5,
+          crawlerType: 'playwright' as const,
+        },
+        schema: {
+          mode: 'discovery' as const,
+          evolutionConfig: {
+            enabled: true,
+            batchSize: 10,
+            maxFields: 50,
+            relevanceThresholds: {},
+            tableStrategy: 'auto' as const,
+          },
+        },
+        llm: {
+          primaryModel: 'anthropic/claude-sonnet-4-20250514',
+        },
+      },
+      stats: {},
+      schemaId: null,
+      startedAt: null,
+      completedAt: null,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    };
+    (deps.jobRepo.findById as ReturnType<typeof vi.fn>).mockResolvedValue(jobWithEvolution);
+
+    // Mock findByJob to return fewer than batchSize (3 extractions)
+    const mockExtractions = Array.from({ length: 3 }, (_, i) => ({
+      id: `extraction-${i + 1}`,
+      jobId: 'job-1',
+      pageId: `page-${i + 1}`,
+      schemaVersion: 1,
+      data: { title: `Product ${i + 1}` },
+      metadata: {},
+    }));
+    (deps.extractionRepo.findByJob as ReturnType<typeof vi.fn>).mockResolvedValue(mockExtractions);
+
+    const data = createJobData();
+    await processCrawlJob(data, deps);
+
+    expect(deps.queues.schemaEvolution.add).not.toHaveBeenCalled();
+  });
+
+  it('does NOT trigger schema evolution for fixed schema mode', async () => {
+    // Override job config with fixed mode (no evolutionConfig)
+    const fixedSchemaJob = {
+      id: 'job-1',
+      tenantId: 'tenant-1',
+      name: 'Test Job',
+      description: 'Scrape product data',
+      status: 'running' as const,
+      config: {
+        tenantId: 'tenant-1',
+        name: 'Test Job',
+        description: 'Scrape product data',
+        seedUrls: ['https://example.com'],
+        crawl: {
+          maxDepth: 3,
+          maxPages: 100,
+          concurrency: 5,
+          crawlerType: 'playwright' as const,
+        },
+        schema: {
+          mode: 'fixed' as const,
+        },
+        llm: {
+          primaryModel: 'anthropic/claude-sonnet-4-20250514',
+        },
+      },
+      stats: {},
+      schemaId: null,
+      startedAt: null,
+      completedAt: null,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    };
+    (deps.jobRepo.findById as ReturnType<typeof vi.fn>).mockResolvedValue(fixedSchemaJob);
+
+    const data = createJobData();
+    await processCrawlJob(data, deps);
+
+    expect(deps.queues.schemaEvolution.add).not.toHaveBeenCalled();
   });
 });

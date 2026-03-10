@@ -1,5 +1,6 @@
 import { createLogger } from '@spatula/shared';
 import { createHash } from 'node:crypto';
+import type { JobConfig } from '@spatula/core';
 import type { CrawlJobData } from '../queues.js';
 import type { WorkerDeps } from '../worker-deps.js';
 
@@ -86,6 +87,24 @@ export async function processCrawlJob(data: CrawlJobData, deps: WorkerDeps): Pro
           metadata: extraction.metadata,
         });
         logger.debug({ taskId, pageId: page.id }, 'extraction stored');
+
+        // After storing the extraction, check if we should trigger schema evolution
+        const evolutionConfig = (job.config as JobConfig).schema.evolutionConfig;
+        if (evolutionConfig?.enabled) {
+          const batchSize = evolutionConfig.batchSize ?? 10;
+          const recentExtractions = await deps.extractionRepo.findByJob(jobId, tenantId, {
+            limit: batchSize,
+          });
+
+          if (recentExtractions.length >= batchSize && recentExtractions.length % batchSize === 0) {
+            const extractionIds = recentExtractions.map((e: { id: string }) => e.id);
+            await deps.queues.schemaEvolution.add(
+              `schema-evolution:${jobId}:v${Date.now()}`,
+              { jobId, tenantId, extractionIds },
+            );
+            logger.debug({ jobId, extractionCount: recentExtractions.length }, 'schema evolution triggered');
+          }
+        }
       }
     }
 
