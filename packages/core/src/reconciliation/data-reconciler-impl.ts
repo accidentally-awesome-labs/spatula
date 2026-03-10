@@ -14,7 +14,11 @@ import {
   matchEntitiesLLM,
 } from './entity-matcher.js';
 import { SourceTrustEvaluator } from './source-trust-evaluator.js';
-import { resolveConflict, type FieldConflict, type FieldConflictValue } from './conflict-resolver.js';
+import {
+  resolveConflict,
+  type FieldConflict,
+  type FieldConflictValue,
+} from './conflict-resolver.js';
 import { GapFiller } from './gap-filler.js';
 
 const logger = createLogger('data-reconciler');
@@ -71,7 +75,7 @@ export class DataReconcilerImpl implements DataReconciler {
       {
         extractionCount: extractions.length,
         normalizedCount: normalizedExtractions.filter(
-          (_, i) => (changeMap.get(extractions[i].id)?.length ?? 0) > 0,
+          (ext) => (changeMap.get(ext.id)?.length ?? 0) > 0,
         ).length,
       },
       'normalization step complete',
@@ -108,6 +112,10 @@ export class DataReconcilerImpl implements DataReconciler {
     // -----------------------------------------------------------------------
 
     const keyFields = schema.fields.filter((f) => f.required === true).map((f) => f.name);
+
+    if (keyFields.length === 0) {
+      logger.warn('no required fields in schema — each extraction becomes its own entity');
+    }
 
     let entityGroups: ExtractionWithSource[][];
 
@@ -155,10 +163,10 @@ export class DataReconcilerImpl implements DataReconciler {
     for (const group of entityGroups) {
       const entityId = generateId();
 
-      // Record match_entities action
+      // Record match_entities action (worker stamps correct jobId afterward)
       const matchAction: PipelineAction = {
         id: generateId(),
-        jobId: group[0].jobId,
+        jobId: generateId(),
         type: 'match_entities',
         source: 'reconciliation',
         reasoning: `Matched ${group.length} extraction(s) using ${config.matchStrategy} strategy`,
@@ -231,7 +239,7 @@ export class DataReconcilerImpl implements DataReconciler {
         if (resolved.hadConflict) {
           const conflictAction: PipelineAction = {
             id: generateId(),
-            jobId: group[0].jobId,
+            jobId: generateId(),
             type: 'resolve_conflict',
             source: 'reconciliation',
             reasoning: `Resolved conflict for field "${fieldName}" using ${config.conflictResolution} strategy`,
@@ -256,20 +264,20 @@ export class DataReconcilerImpl implements DataReconciler {
           return changes.some((c) => c.fieldName === fieldName);
         });
 
-        let provenanceType: 'extracted' | 'normalized' | 'resolved';
+        let provenanceType: 'extracted' | 'normalized' | 'merged' | 'resolved';
         if (resolved.hadConflict) {
           provenanceType = 'resolved';
         } else if (wasNormalized) {
           provenanceType = 'normalized';
+        } else if (fieldValues.length > 1) {
+          provenanceType = 'merged';
         } else {
           provenanceType = 'extracted';
         }
 
         // Build source provenance entries
         const sources = group
-          .filter(
-            (ext) => ext.data[fieldName] !== null && ext.data[fieldName] !== undefined,
-          )
+          .filter((ext) => ext.data[fieldName] !== null && ext.data[fieldName] !== undefined)
           .map((ext) => {
             const originalData = originalDataMap.get(ext.id) ?? {};
             return {

@@ -1,4 +1,4 @@
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { DataReconcilerImpl } from '../../../src/reconciliation/data-reconciler-impl.js';
 import type { LLMClient } from '../../../src/interfaces/llm-client.js';
 import type { SchemaDefinition } from '../../../src/types/schema.js';
@@ -77,7 +77,8 @@ function makeExtraction(
 ): ExtractionWithSource {
   extractionCounter++;
   const id =
-    overrides?.id ?? `550e8400-e29b-41d4-a716-44665544${String(extractionCounter).padStart(4, '0')}`;
+    overrides?.id ??
+    `550e8400-e29b-41d4-a716-44665544${String(extractionCounter).padStart(4, '0')}`;
   return {
     id,
     jobId: overrides?.jobId ?? '660e8400-e29b-41d4-a716-446655440000',
@@ -141,7 +142,12 @@ describe('DataReconcilerImpl', () => {
       { sourceDomain: 'bestbuy.com', sourceUrl: 'https://bestbuy.com/p1' },
     );
 
-    const result = await reconciler.reconcile([ext1, ext2], schema, defaultConfig, 'Collect headphone data');
+    const result = await reconciler.reconcile(
+      [ext1, ext2],
+      schema,
+      defaultConfig,
+      'Collect headphone data',
+    );
 
     // Should produce 1 entity (matching on product_name)
     expect(result.entities).toHaveLength(1);
@@ -203,14 +209,21 @@ describe('DataReconcilerImpl', () => {
       { sourceDomain: 'bestbuy.com', sourceUrl: 'https://bestbuy.com/p1' },
     );
 
-    const result = await reconciler.reconcile([ext1, ext2], schema, defaultConfig, 'Collect headphone data');
+    const result = await reconciler.reconcile(
+      [ext1, ext2],
+      schema,
+      defaultConfig,
+      'Collect headphone data',
+    );
 
     const actionTypes = result.actions.map((a) => a.type);
     expect(actionTypes).toContain('match_entities');
     expect(actionTypes).toContain('resolve_conflict');
 
     // Verify match_entities action content
-    const matchAction = result.actions.find((a) => a.type === 'match_entities') as PipelineAction & {
+    const matchAction = result.actions.find(
+      (a) => a.type === 'match_entities',
+    ) as PipelineAction & {
       type: 'match_entities';
     };
     expect(matchAction.payload.extractionIds).toHaveLength(2);
@@ -239,7 +252,12 @@ describe('DataReconcilerImpl', () => {
       { sourceDomain: 'amazon.com', sourceUrl: 'https://amazon.com/p1' },
     );
 
-    const result = await reconciler.reconcile([ext], schema, defaultConfig, 'Collect headphone data');
+    const result = await reconciler.reconcile(
+      [ext],
+      schema,
+      defaultConfig,
+      'Collect headphone data',
+    );
 
     expect(result.entities).toHaveLength(1);
     const entity = result.entities[0];
@@ -265,7 +283,10 @@ describe('DataReconcilerImpl', () => {
         description: 'Product name',
         type: 'string',
         required: true,
-        normalization: { type: 'text', config: { casing: 'title', trim: true, collapseWhitespace: true } },
+        normalization: {
+          type: 'text',
+          config: { casing: 'title', trim: true, collapseWhitespace: true },
+        },
       },
       { name: 'price', description: 'Price', type: 'number', required: false },
     ]);
@@ -280,7 +301,12 @@ describe('DataReconcilerImpl', () => {
       { sourceDomain: 'bestbuy.com', sourceUrl: 'https://bestbuy.com/p1' },
     );
 
-    const result = await reconciler.reconcile([ext1, ext2], schema, defaultConfig, 'Collect headphone data');
+    const result = await reconciler.reconcile(
+      [ext1, ext2],
+      schema,
+      defaultConfig,
+      'Collect headphone data',
+    );
 
     // After normalization, both become "Sony Xm5" so they should match as 1 entity
     expect(result.entities).toHaveLength(1);
@@ -386,7 +412,12 @@ describe('DataReconcilerImpl', () => {
       { sourceDomain: 'amazon.com', sourceUrl: 'https://amazon.com/p1' },
     );
 
-    const result = await reconciler.reconcile([ext], schema, defaultConfig, 'Collect headphone data');
+    const result = await reconciler.reconcile(
+      [ext],
+      schema,
+      defaultConfig,
+      'Collect headphone data',
+    );
 
     expect(result.entities).toHaveLength(1);
     const prov = result.entities[0].fieldProvenance.product_name;
@@ -396,6 +427,40 @@ describe('DataReconcilerImpl', () => {
     // Source should record both raw and normalized values
     expect(prov.sources[0].rawValue).toBe('  sony xm5  ');
     expect(prov.sources[0].normalizedValue).toBe('Sony Xm5');
+  });
+
+  it('marks merged provenance when multiple sources agree', async () => {
+    const client = createMockClient();
+    const reconciler = new DataReconcilerImpl(client, defaultLLMConfig);
+
+    const schema = makeSchema([
+      { name: 'product_name', description: 'Product name', type: 'string', required: true },
+      { name: 'price', description: 'Price', type: 'number', required: false },
+    ]);
+
+    // Both extractions have the same price — no normalization, no conflict, 2 sources
+    const ext1 = makeExtraction(
+      { product_name: 'Sony XM5', price: 349 },
+      { sourceDomain: 'amazon.com', sourceUrl: 'https://amazon.com/p1' },
+    );
+    const ext2 = makeExtraction(
+      { product_name: 'Sony XM5', price: 349 },
+      { sourceDomain: 'bestbuy.com', sourceUrl: 'https://bestbuy.com/p1' },
+    );
+
+    const result = await reconciler.reconcile(
+      [ext1, ext2],
+      schema,
+      defaultConfig,
+      'Collect headphone data',
+    );
+
+    expect(result.entities).toHaveLength(1);
+    // product_name: 2 sources agree, no normalization → 'merged'
+    expect(result.entities[0].fieldProvenance.product_name.provenanceType).toBe('merged');
+    // price: 2 sources agree, no normalization → 'merged'
+    expect(result.entities[0].fieldProvenance.price.provenanceType).toBe('merged');
+    expect(result.entities[0].fieldProvenance.price.hadConflict).toBe(false);
   });
 
   it('marks resolved fields with provenance type resolved', async () => {
@@ -416,7 +481,12 @@ describe('DataReconcilerImpl', () => {
       { sourceDomain: 'bestbuy.com', sourceUrl: 'https://bestbuy.com/p1' },
     );
 
-    const result = await reconciler.reconcile([ext1, ext2], schema, defaultConfig, 'Collect headphone data');
+    const result = await reconciler.reconcile(
+      [ext1, ext2],
+      schema,
+      defaultConfig,
+      'Collect headphone data',
+    );
 
     const priceProv = result.entities[0].fieldProvenance.price;
     expect(priceProv.hadConflict).toBe(true);
