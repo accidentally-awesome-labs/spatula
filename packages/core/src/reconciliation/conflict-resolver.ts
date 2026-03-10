@@ -5,6 +5,20 @@ import type { SourceTrust } from '../types/reconciliation.js';
 const logger = createLogger('conflict-resolver');
 
 // ---------------------------------------------------------------------------
+// Helpers
+// ---------------------------------------------------------------------------
+
+function stableKey(value: unknown): string {
+  if (value === undefined) return '__undefined__';
+  if (typeof value === 'number' && Number.isNaN(value)) return '__nan__';
+  try {
+    return JSON.stringify(value) ?? '__undefined__';
+  } catch {
+    return '__unserializable__';
+  }
+}
+
+// ---------------------------------------------------------------------------
 // Types
 // ---------------------------------------------------------------------------
 
@@ -51,7 +65,7 @@ function resolveMostCommon(values: FieldConflictValue[]): FieldConflictValue {
   const counts = new Map<string, { count: number; first: FieldConflictValue }>();
 
   for (const v of values) {
-    const key = JSON.stringify(v.value);
+    const key = stableKey(v.value);
     const existing = counts.get(key);
     if (existing) {
       existing.count += 1;
@@ -99,10 +113,10 @@ function resolveSourcePriority(
   const trustMap = new Map(trustRankings.map((r) => [r.domain, r.trustLevel]));
 
   let best = values[0];
-  let bestScore = TRUST_LEVEL_ORDER[trustMap.get(best.source) ?? 'medium'] ?? 1;
+  let bestScore = TRUST_LEVEL_ORDER[trustMap.get(best.source) ?? 'low'] ?? 0;
 
   for (let i = 1; i < values.length; i++) {
-    const score = TRUST_LEVEL_ORDER[trustMap.get(values[i].source) ?? 'medium'] ?? 1;
+    const score = TRUST_LEVEL_ORDER[trustMap.get(values[i].source) ?? 'low'] ?? 0;
     if (score > bestScore) {
       best = values[i];
       bestScore = score;
@@ -117,8 +131,8 @@ function resolveSourcePriority(
 // ---------------------------------------------------------------------------
 
 function stringifiedLength(value: unknown): number {
-  const s = JSON.stringify(value);
-  return s === undefined ? 0 : s.length;
+  const s = stableKey(value);
+  return s === '__undefined__' || s === '__unserializable__' ? 0 : s.length;
 }
 
 function resolveMostComplete(values: FieldConflictValue[]): FieldConflictValue {
@@ -142,9 +156,9 @@ function resolveMostComplete(values: FieldConflictValue[]): FieldConflictValue {
 
 function allSameValue(values: FieldConflictValue[]): boolean {
   if (values.length <= 1) return true;
-  const first = JSON.stringify(values[0].value);
+  const first = stableKey(values[0].value);
   for (let i = 1; i < values.length; i++) {
-    if (JSON.stringify(values[i].value) !== first) return false;
+    if (stableKey(values[i].value) !== first) return false;
   }
   return true;
 }
@@ -155,6 +169,17 @@ export function resolveConflict(
   options?: ConflictResolverOptions,
 ): ResolvedField {
   const { fieldName, values } = conflict;
+
+  // Empty values — nothing to resolve
+  if (values.length === 0) {
+    return {
+      fieldName,
+      resolvedValue: undefined,
+      sourcePreferred: '',
+      hadConflict: false,
+      resolution: strategy,
+    };
+  }
 
   // Single value — no actual conflict
   if (values.length === 1) {

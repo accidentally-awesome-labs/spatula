@@ -4,6 +4,7 @@ import {
   type FieldConflict,
   type FieldConflictValue,
   type ResolvedField,
+  type ConflictResolverOptions,
 } from '../../../src/reconciliation/conflict-resolver.js';
 import type { SourceTrust } from '../../../src/types/reconciliation.js';
 
@@ -35,9 +36,7 @@ function makeConflict(fieldName: string, values: FieldConflictValue[]): FieldCon
 
 describe('resolveConflict — single value', () => {
   it('returns the only value with hadConflict = false', () => {
-    const conflict = makeConflict('price', [
-      makeValue('amazon.com', 29.99, 'ext-1'),
-    ]);
+    const conflict = makeConflict('price', [makeValue('amazon.com', 29.99, 'ext-1')]);
 
     const result = resolveConflict(conflict, 'most_common');
 
@@ -205,7 +204,11 @@ describe('resolveConflict — most_complete', () => {
   it('picks the value with the longest JSON representation', () => {
     const conflict = makeConflict('description', [
       makeValue('a.com', 'Short desc', 'ext-1'),
-      makeValue('b.com', 'A much more detailed and complete product description with extra info', 'ext-2'),
+      makeValue(
+        'b.com',
+        'A much more detailed and complete product description with extra info',
+        'ext-2',
+      ),
       makeValue('c.com', 'Medium description text', 'ext-3'),
     ]);
 
@@ -222,7 +225,11 @@ describe('resolveConflict — most_complete', () => {
   it('picks the more detailed object over a simpler one', () => {
     const conflict = makeConflict('specs', [
       makeValue('a.com', { weight: '5 lbs' }, 'ext-1'),
-      makeValue('b.com', { weight: '5 lbs', height: '10 in', width: '6 in', depth: '3 in' }, 'ext-2'),
+      makeValue(
+        'b.com',
+        { weight: '5 lbs', height: '10 in', width: '6 in', depth: '3 in' },
+        'ext-2',
+      ),
     ]);
 
     const result = resolveConflict(conflict, 'most_complete');
@@ -322,5 +329,67 @@ describe('resolveConflict — various data types', () => {
 
     const result = resolveConflict(conflict, 'most_complete');
     expect(result.resolvedValue).toEqual(['tech', 'gadget', 'electronics', 'portable']);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Edge cases
+// ---------------------------------------------------------------------------
+
+describe('resolveConflict — edge cases', () => {
+  it('returns early for an empty values array', () => {
+    const conflict = makeConflict('empty_field', []);
+
+    const result = resolveConflict(conflict, 'most_common');
+
+    expect(result.fieldName).toBe('empty_field');
+    expect(result.resolvedValue).toBeUndefined();
+    expect(result.sourcePreferred).toBe('');
+    expect(result.hadConflict).toBe(false);
+    expect(result.resolution).toBe('most_common');
+  });
+
+  it('counts undefined values properly in most_common', () => {
+    const conflict = makeConflict('maybe_missing', [
+      makeValue('a.com', undefined, 'ext-1'),
+      makeValue('b.com', undefined, 'ext-2'),
+      makeValue('c.com', 'present', 'ext-3'),
+    ]);
+
+    const result = resolveConflict(conflict, 'most_common');
+
+    // undefined appears twice, 'present' once — undefined wins
+    expect(result.resolvedValue).toBeUndefined();
+    expect(result.hadConflict).toBe(true);
+  });
+
+  it('does not treat NaN and null as equal in allSameValue', () => {
+    const conflict = makeConflict('tricky', [
+      makeValue('a.com', NaN, 'ext-1'),
+      makeValue('b.com', null, 'ext-2'),
+    ]);
+
+    const result = resolveConflict(conflict, 'most_common');
+
+    // NaN and null are different values — should detect a conflict
+    expect(result.hadConflict).toBe(true);
+  });
+
+  it('uses typed ConflictResolverOptions', () => {
+    const options: ConflictResolverOptions = {
+      trustRankings: [
+        { domain: 'official.com', trustLevel: 'authoritative', reasoning: 'Official' },
+      ],
+    };
+
+    const conflict = makeConflict('typed_field', [
+      makeValue('official.com', 'official_val', 'ext-1'),
+      makeValue('random.com', 'random_val', 'ext-2'),
+    ]);
+
+    const result = resolveConflict(conflict, 'source_priority', options);
+
+    expect(result.resolvedValue).toBe('official_val');
+    expect(result.sourcePreferred).toBe('official.com');
   });
 });
