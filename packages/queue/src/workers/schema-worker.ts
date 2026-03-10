@@ -77,14 +77,19 @@ export async function processSchemaEvolutionJob(
       return;
     }
 
-    // 7. Apply actions to create new schema version
+    // 7. Stamp the correct jobId on all actions (evolve() doesn't know the jobId)
+    for (const action of actions) {
+      action.jobId = jobId;
+    }
+
+    // 8. Apply actions to create new schema version
     const evolvedSchema = applySchemaActions(currentSchema.definition, actions);
     if (evolvedSchema.version === currentSchema.definition.version) {
       logger.debug({ jobId }, 'no effective schema changes after applying actions');
       return;
     }
 
-    // 8. Persist new schema version
+    // 9. Persist new schema version
     await deps.schemaRepo.create({
       jobId,
       tenantId,

@@ -127,11 +127,15 @@ export class NormalizationProposer {
     extractions: ExtractionResult[],
     jobDescription: string,
   ): Promise<PipelineAction[]> {
-    // Step 1: Filter fields that don't already have a normalization rule
-    const eligibleFields = schema.fields.filter((f) => !f.normalization);
+    // Fields without normalization rules (candidates for new rules)
+    const fieldsNeedingRules = schema.fields.filter((f) => !f.normalization);
+    // Fields with enum normalization (candidates for enum map updates)
+    const fieldsWithEnumNorm = schema.fields.filter((f) => f.normalization?.type === 'enum');
+
+    const eligibleFields = [...fieldsNeedingRules, ...fieldsWithEnumNorm];
 
     if (eligibleFields.length === 0) {
-      logger.debug('no fields need normalization — all already have rules');
+      logger.debug('no fields need normalization — all already have non-enum rules');
       return [];
     }
 

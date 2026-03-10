@@ -207,14 +207,30 @@ describe('NormalizationProposer', () => {
       parentVersion: null,
     };
 
+    // Override the enum-normalized color field to have a non-enum rule
+    const allNonEnumSchema: SchemaDefinition = {
+      ...fullyNormalizedSchema,
+      fields: fullyNormalizedSchema.fields.map((f) =>
+        f.name === 'color'
+          ? {
+              ...f,
+              normalization: {
+                type: 'text' as const,
+                config: { casing: 'lower' as const, trim: true, collapseWhitespace: true },
+              },
+            }
+          : f,
+      ),
+    };
+
     const actions = await proposer.propose(
-      fullyNormalizedSchema,
+      allNonEnumSchema,
       sampleExtractions,
       'audiophile headphones',
     );
 
     expect(actions).toEqual([]);
-    // LLM should NOT have been called since all fields already have normalization
+    // LLM should NOT have been called since no fields need rules or enum updates
     expect(client.complete).not.toHaveBeenCalled();
   });
 

@@ -93,18 +93,20 @@ export async function processCrawlJob(data: CrawlJobData, deps: WorkerDeps): Pro
         if (evolutionConfig?.enabled) {
           const batchSize = evolutionConfig.batchSize ?? 10;
           const recentExtractions = await deps.extractionRepo.findByJob(jobId, tenantId, {
+            schemaVersion: schema.version,
             limit: batchSize,
           });
 
-          if (recentExtractions.length >= batchSize && recentExtractions.length % batchSize === 0) {
+          if (recentExtractions.length >= batchSize) {
             const extractionIds = recentExtractions.map((e: { id: string }) => e.id);
-            await deps.queues.schemaEvolution.add(`schema-evolution:${jobId}:v${Date.now()}`, {
+            // Use schema version in job name for natural dedup: one evolution per schema version
+            await deps.queues.schemaEvolution.add(`schema-evolution:${jobId}:v${schema.version}`, {
               jobId,
               tenantId,
               extractionIds,
             });
             logger.debug(
-              { jobId, extractionCount: recentExtractions.length },
+              { jobId, schemaVersion: schema.version, extractionCount: recentExtractions.length },
               'schema evolution triggered',
             );
           }

@@ -106,12 +106,17 @@ export function applySchemaActions(
       case 'merge_fields': {
         const { canonicalName, aliasNames, canonicalDefinition } = action.payload;
 
-        // Remove alias fields from the fields array
-        fields = fields.filter((f) => !aliasNames.includes(f.name));
+        // Guard: don't remove the canonical from the alias list
+        const safeAliasNames = aliasNames.filter((n) => n !== canonicalName);
 
-        // Add the canonical definition if it doesn't already exist
+        // Remove alias fields from the fields array
+        fields = fields.filter((f) => !safeAliasNames.includes(f.name));
+
+        // Add or update the canonical definition
         const existingCanonical = fields.find((f) => f.name === canonicalName);
-        if (!existingCanonical) {
+        if (existingCanonical) {
+          Object.assign(existingCanonical, structuredClone(canonicalDefinition));
+        } else {
           fields.push(structuredClone(canonicalDefinition));
         }
 
@@ -139,6 +144,16 @@ export function applySchemaActions(
             'Skipping set_normalization_rule: field not found',
           );
           break;
+        }
+        if (field.normalization) {
+          logger.debug(
+            {
+              fieldName: action.payload.fieldName,
+              oldType: field.normalization.type,
+              newType: action.payload.rule.type,
+            },
+            'overwriting existing normalization rule',
+          );
         }
         field.normalization = structuredClone(action.payload.rule);
         applied++;
