@@ -1,10 +1,14 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 import {
   matchEntitiesExact,
   matchEntitiesCompositeKey,
+  matchEntitiesFuzzy,
+  matchEntitiesLLM,
   normalizeKeyValue,
+  levenshteinSimilarity,
 } from '../../../src/reconciliation/entity-matcher.js';
 import type { ExtractionWithSource } from '../../../src/reconciliation/entity-matcher.js';
+import type { LLMClient } from '../../../src/interfaces/llm-client.js';
 
 // ---------------------------------------------------------------------------
 // Test helper
@@ -293,5 +297,218 @@ describe('matchEntitiesCompositeKey', () => {
     const groups = matchEntitiesCompositeKey([a, b], ['name', 'sku'], 0.5);
 
     expect(groups).toHaveLength(2);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// LLM mock helper
+// ---------------------------------------------------------------------------
+
+function createMockClient(content: string): LLMClient {
+  return {
+    complete: vi.fn().mockResolvedValue({
+      content,
+      model: 'test-model',
+      usage: { promptTokens: 200, completionTokens: 150, totalTokens: 350 },
+      finishReason: 'stop',
+    }),
+  };
+}
+
+// ---------------------------------------------------------------------------
+// levenshteinSimilarity
+// ---------------------------------------------------------------------------
+
+describe('levenshteinSimilarity', () => {
+  it('returns 1 for identical strings', () => {
+    expect(levenshteinSimilarity('hello', 'hello')).toBe(1);
+  });
+
+  it('returns 0 for completely different strings of equal length', () => {
+    expect(levenshteinSimilarity('abc', 'xyz')).toBe(0);
+  });
+
+  it('returns high similarity for similar strings', () => {
+    // "kitten" vs "sitten" → distance 1, max length 6 → 1 - 1/6 ≈ 0.833
+    const sim = levenshteinSimilarity('kitten', 'sitten');
+    expect(sim).toBeGreaterThan(0.8);
+    expect(sim).toBeLessThan(0.9);
+  });
+
+  it('is case-insensitive', () => {
+    expect(levenshteinSimilarity('Hello', 'hello')).toBe(1);
+    expect(levenshteinSimilarity('ABC', 'abc')).toBe(1);
+  });
+
+  it('returns 1 for both empty strings', () => {
+    expect(levenshteinSimilarity('', '')).toBe(1);
+  });
+
+  it('returns 0 when one string is empty and the other is not', () => {
+    expect(levenshteinSimilarity('', 'hello')).toBe(0);
+    expect(levenshteinSimilarity('world', '')).toBe(0);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// matchEntitiesFuzzy
+// ---------------------------------------------------------------------------
+
+describe('matchEntitiesFuzzy', () => {
+  it('groups similar names above threshold', () => {
+    const a = makeExtraction('a', { name: 'iPhone 15 Pro' }, 'https://shop1.com/a');
+    const b = makeExtraction('b', { name: 'iPhone 15 pro' }, 'https://shop2.com/b');
+    const c = makeExtraction('c', { name: 'Samsung Galaxy S24' }, 'https://shop3.com/c');
+
+    const groups = matchEntitiesFuzzy([a, b, c], ['name'], 0.8);
+
+    expect(groups).toHaveLength(2);
+    const ids = groups.map((g) => g.map((e) => e.id).sort());
+    expect(ids).toContainEqual([
+      '00000000-0000-0000-0000-00000000000a',
+      '00000000-0000-0000-0000-00000000000b',
+    ]);
+    expect(ids).toContainEqual(['00000000-0000-0000-0000-00000000000c']);
+  });
+
+  it('keeps dissimilar extractions separate', () => {
+    const a = makeExtraction('a', { name: 'Apple' }, 'https://shop1.com/a');
+    const b = makeExtraction('b', { name: 'Orange' }, 'https://shop2.com/b');
+    const c = makeExtraction('c', { name: 'Banana' }, 'https://shop3.com/c');
+
+    const groups = matchEntitiesFuzzy([a, b, c], ['name'], 0.8);
+
+    expect(groups).toHaveLength(3);
+  });
+
+  it('handles one-sided empty fields — counts as comparable with 0 similarity', () => {
+    const a = makeExtraction('a', { name: 'Widget', sku: '123' }, 'https://shop1.com/a');
+    const b = makeExtraction('b', { name: 'Widget' }, 'https://shop2.com/b');
+
+    // name: similarity 1.0, sku: one-sided empty → comparable with 0 similarity
+    // average = (1.0 + 0) / 2 = 0.5
+    const groups = matchEntitiesFuzzy([a, b], ['name', 'sku'], 0.6);
+
+    expect(groups).toHaveLength(2); // below threshold → separate
+  });
+
+  it('skips fields where both values are empty', () => {
+    const a = makeExtraction('a', { name: 'Widget' }, 'https://shop1.com/a');
+    const b = makeExtraction('b', { name: 'Widgett' }, 'https://shop2.com/b');
+
+    // name: similar. sku: both empty → skipped.
+    // Only 1 comparable field: name similarity ≈ 0.857
+    const groups = matchEntitiesFuzzy([a, b], ['name', 'sku'], 0.8);
+
+    expect(groups).toHaveLength(1);
+    expect(groups[0]).toHaveLength(2);
+  });
+
+  it('returns empty array for empty input', () => {
+    const groups = matchEntitiesFuzzy([], ['name'], 0.8);
+    expect(groups).toEqual([]);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// matchEntitiesLLM
+// ---------------------------------------------------------------------------
+
+describe('matchEntitiesLLM', () => {
+  const defaultLLMConfig = {
+    primaryModel: 'anthropic/claude-sonnet-4-20250514',
+  };
+
+  it('groups based on LLM response', async () => {
+    const a = makeExtraction('a', { name: 'Widget A' }, 'https://shop1.com/a');
+    const b = makeExtraction('b', { name: 'Widget B' }, 'https://shop2.com/b');
+    const c = makeExtraction('c', { name: 'Gadget C' }, 'https://shop3.com/c');
+
+    const llmResponse = JSON.stringify({
+      groups: [
+        {
+          extractionIds: [a.id, b.id],
+          reasoning: 'Both are widgets from different shops',
+          confidence: 0.9,
+        },
+        {
+          extractionIds: [c.id],
+          reasoning: 'Gadget is a different product',
+          confidence: 0.95,
+        },
+      ],
+    });
+
+    const client = createMockClient(llmResponse);
+    const groups = await matchEntitiesLLM([a, b, c], client, defaultLLMConfig);
+
+    expect(groups).toHaveLength(2);
+    const ids = groups.map((g) => g.map((e) => e.id).sort());
+    expect(ids).toContainEqual([a.id, b.id].sort());
+    expect(ids).toContainEqual([c.id]);
+  });
+
+  it('falls back to singletons on LLM error', async () => {
+    const a = makeExtraction('a', { name: 'Widget A' }, 'https://shop1.com/a');
+    const b = makeExtraction('b', { name: 'Widget B' }, 'https://shop2.com/b');
+
+    const client: LLMClient = {
+      complete: vi.fn().mockRejectedValue(new Error('LLM service unavailable')),
+    };
+
+    const groups = await matchEntitiesLLM([a, b], client, defaultLLMConfig);
+
+    expect(groups).toHaveLength(2);
+    expect(groups[0]).toHaveLength(1);
+    expect(groups[1]).toHaveLength(1);
+  });
+
+  it('falls back to singletons on invalid JSON', async () => {
+    const a = makeExtraction('a', { name: 'Widget A' }, 'https://shop1.com/a');
+    const b = makeExtraction('b', { name: 'Widget B' }, 'https://shop2.com/b');
+
+    const client = createMockClient('not valid json at all');
+    const groups = await matchEntitiesLLM([a, b], client, defaultLLMConfig);
+
+    expect(groups).toHaveLength(2);
+    expect(groups[0]).toHaveLength(1);
+    expect(groups[1]).toHaveLength(1);
+  });
+
+  it('handles extractions not covered by LLM response — puts them in singleton groups', async () => {
+    const a = makeExtraction('a', { name: 'Widget A' }, 'https://shop1.com/a');
+    const b = makeExtraction('b', { name: 'Widget B' }, 'https://shop2.com/b');
+    const c = makeExtraction('c', { name: 'Gadget C' }, 'https://shop3.com/c');
+
+    // LLM only groups a and b, ignores c
+    const llmResponse = JSON.stringify({
+      groups: [
+        {
+          extractionIds: [a.id, b.id],
+          reasoning: 'Both widgets',
+          confidence: 0.9,
+        },
+      ],
+    });
+
+    const client = createMockClient(llmResponse);
+    const groups = await matchEntitiesLLM([a, b, c], client, defaultLLMConfig);
+
+    expect(groups).toHaveLength(2);
+    const ids = groups.map((g) => g.map((e) => e.id).sort());
+    expect(ids).toContainEqual([a.id, b.id].sort());
+    expect(ids).toContainEqual([c.id]);
+  });
+
+  it('falls back to singletons when LLM returns invalid schema', async () => {
+    const a = makeExtraction('a', { name: 'Widget A' }, 'https://shop1.com/a');
+
+    // Valid JSON but doesn't match the expected Zod schema
+    const client = createMockClient(JSON.stringify({ wrongField: true }));
+    const groups = await matchEntitiesLLM([a], client, defaultLLMConfig);
+
+    expect(groups).toHaveLength(1);
+    expect(groups[0]).toHaveLength(1);
+    expect(groups[0][0].id).toBe(a.id);
   });
 });
