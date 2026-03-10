@@ -128,6 +128,9 @@ function createMockDeps(): WorkerDeps {
       retrieve: vi.fn().mockResolvedValue(''),
       delete: vi.fn().mockResolvedValue(undefined),
     },
+    schemaEvolver: {
+      evolve: vi.fn().mockResolvedValue([]),
+    },
     jobRepo: {
       findById: vi.fn().mockResolvedValue(mockJob),
     } as any,

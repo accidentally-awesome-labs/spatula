@@ -8,6 +8,7 @@ describe('WorkerDeps', () => {
       extractor: { extract: vi.fn() } as any,
       classifier: { classify: vi.fn() } as any,
       contentStore: { store: vi.fn(), retrieve: vi.fn(), delete: vi.fn() } as any,
+      schemaEvolver: { evolve: vi.fn() } as any,
       jobRepo: {} as any,
       taskRepo: {} as any,
       pageRepo: {} as any,
@@ -20,6 +21,7 @@ describe('WorkerDeps', () => {
     expect(deps.extractor).toBeDefined();
     expect(deps.classifier).toBeDefined();
     expect(deps.contentStore).toBeDefined();
+    expect(deps.schemaEvolver).toBeDefined();
     expect(deps.jobRepo).toBeDefined();
     expect(deps.taskRepo).toBeDefined();
     expect(deps.pageRepo).toBeDefined();

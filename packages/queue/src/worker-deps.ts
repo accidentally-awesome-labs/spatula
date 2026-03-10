@@ -1,4 +1,4 @@
-import type { Crawler, Extractor, ContentStore } from '@spatula/core';
+import type { Crawler, Extractor, ContentStore, SchemaEvolver } from '@spatula/core';
 import type { PageClassifier } from '@spatula/core';
 import type {
   JobRepository,
@@ -14,6 +14,7 @@ export interface WorkerDepsConfig {
   extractor: Extractor;
   classifier: PageClassifier;
   contentStore: ContentStore;
+  schemaEvolver: SchemaEvolver;
   jobRepo: JobRepository;
   taskRepo: CrawlTaskRepository;
   pageRepo: PageRepository;
@@ -27,6 +28,7 @@ export class WorkerDeps {
   readonly extractor: Extractor;
   readonly classifier: PageClassifier;
   readonly contentStore: ContentStore;
+  readonly schemaEvolver: SchemaEvolver;
   readonly jobRepo: JobRepository;
   readonly taskRepo: CrawlTaskRepository;
   readonly pageRepo: PageRepository;
@@ -39,6 +41,7 @@ export class WorkerDeps {
     this.extractor = config.extractor;
     this.classifier = config.classifier;
     this.contentStore = config.contentStore;
+    this.schemaEvolver = config.schemaEvolver;
     this.jobRepo = config.jobRepo;
     this.taskRepo = config.taskRepo;
     this.pageRepo = config.pageRepo;
