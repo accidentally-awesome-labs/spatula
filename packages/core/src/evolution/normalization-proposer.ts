@@ -63,9 +63,7 @@ function buildNormalizationPrompt(
   const fieldSection = fields
     .filter((f) => f.name in valueSamples && valueSamples[f.name].length > 0)
     .map((f) => {
-      const samples = valueSamples[f.name]
-        .map((v) => JSON.stringify(v))
-        .join(', ');
+      const samples = valueSamples[f.name].map((v) => JSON.stringify(v)).join(', ');
       return `- ${f.name} (${f.type}${f.required ? ', REQUIRED' : ''}): ${f.description}
     Sample values: ${samples}`;
     })
@@ -142,9 +140,7 @@ export class NormalizationProposer {
     const valueSamples = collectValueSamples(fieldNames, extractions);
 
     // Step 3: Check if any values were found
-    const fieldsWithValues = fieldNames.filter(
-      (name) => valueSamples[name].length > 0,
-    );
+    const fieldsWithValues = fieldNames.filter((name) => valueSamples[name].length > 0);
 
     if (fieldsWithValues.length === 0) {
       logger.debug('no sample values found for eligible fields');
@@ -152,11 +148,7 @@ export class NormalizationProposer {
     }
 
     // Step 4: Build prompt and call LLM
-    const prompt = buildNormalizationPrompt(
-      eligibleFields,
-      valueSamples,
-      jobDescription,
-    );
+    const prompt = buildNormalizationPrompt(eligibleFields, valueSamples, jobDescription);
 
     try {
       const response = await this.llmClient.complete({
@@ -226,9 +218,7 @@ export class NormalizationProposer {
           payload: {
             fieldName: update.fieldName,
             additions: update.additions,
-            ...(update.newCanonicalValues
-              ? { newCanonicalValues: update.newCanonicalValues }
-              : {}),
+            ...(update.newCanonicalValues ? { newCanonicalValues: update.newCanonicalValues } : {}),
           },
         });
       }

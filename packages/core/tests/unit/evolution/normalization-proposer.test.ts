@@ -119,7 +119,8 @@ describe('NormalizationProposer', () => {
     expect(priceRule.id).toBeDefined();
     expect(priceRule.jobId).toBeDefined();
 
-    if (priceRule.type !== 'set_normalization_rule') throw new Error('expected set_normalization_rule');
+    if (priceRule.type !== 'set_normalization_rule')
+      throw new Error('expected set_normalization_rule');
     expect(priceRule.payload.fieldName).toBe('price');
     expect(priceRule.payload.rule.type).toBe('currency');
     expect(priceRule.payload.examples).toHaveLength(2);
@@ -129,7 +130,8 @@ describe('NormalizationProposer', () => {
     // Second action: set_normalization_rule for color
     const colorRule = actions[1];
     expect(colorRule.type).toBe('set_normalization_rule');
-    if (colorRule.type !== 'set_normalization_rule') throw new Error('expected set_normalization_rule');
+    if (colorRule.type !== 'set_normalization_rule')
+      throw new Error('expected set_normalization_rule');
     expect(colorRule.payload.fieldName).toBe('color');
     expect(colorRule.payload.rule.type).toBe('enum');
     expect(colorRule.confidence).toBe(0.88);
@@ -177,7 +179,10 @@ describe('NormalizationProposer', () => {
           description: 'Product name',
           type: 'string',
           required: true,
-          normalization: { type: 'text', config: { casing: 'title', trim: true, collapseWhitespace: true } },
+          normalization: {
+            type: 'text',
+            config: { casing: 'title', trim: true, collapseWhitespace: true },
+          },
         },
         {
           name: 'price',
@@ -218,10 +223,7 @@ describe('NormalizationProposer', () => {
     const proposer = new NormalizationProposer(client, config);
 
     // Extractions with no matching field data
-    const emptyExtractions: ExtractionResult[] = [
-      makeExtraction({}, 1),
-      makeExtraction({}, 2),
-    ];
+    const emptyExtractions: ExtractionResult[] = [makeExtraction({}, 1), makeExtraction({}, 2)];
 
     const actions = await proposer.propose(baseSchema, emptyExtractions, 'audiophile headphones');
 

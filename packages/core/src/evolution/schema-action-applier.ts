@@ -26,9 +26,7 @@ export function applySchemaActions(
   for (const action of actions) {
     switch (action.type) {
       case 'add_field': {
-        const existing = fields.find(
-          (f) => f.name === action.payload.field.name,
-        );
+        const existing = fields.find((f) => f.name === action.payload.field.name);
         if (existing) {
           logger.debug(
             { fieldName: action.payload.field.name },
@@ -38,9 +36,7 @@ export function applySchemaActions(
         }
 
         if (action.payload.insertAfter) {
-          const idx = fields.findIndex(
-            (f) => f.name === action.payload.insertAfter,
-          );
+          const idx = fields.findIndex((f) => f.name === action.payload.insertAfter);
           if (idx !== -1) {
             fields.splice(idx + 1, 0, structuredClone(action.payload.field));
           } else {
@@ -54,9 +50,7 @@ export function applySchemaActions(
       }
 
       case 'remove_field': {
-        const idx = fields.findIndex(
-          (f) => f.name === action.payload.fieldName,
-        );
+        const idx = fields.findIndex((f) => f.name === action.payload.fieldName);
         if (idx === -1) {
           logger.debug(
             { fieldName: action.payload.fieldName },
@@ -70,9 +64,7 @@ export function applySchemaActions(
       }
 
       case 'modify_field': {
-        const field = fields.find(
-          (f) => f.name === action.payload.fieldName,
-        );
+        const field = fields.find((f) => f.name === action.payload.fieldName);
         if (!field) {
           logger.debug(
             { fieldName: action.payload.fieldName },
@@ -98,9 +90,7 @@ export function applySchemaActions(
       }
 
       case 'rename_field': {
-        const field = fields.find(
-          (f) => f.name === action.payload.currentName,
-        );
+        const field = fields.find((f) => f.name === action.payload.currentName);
         if (!field) {
           logger.debug(
             { currentName: action.payload.currentName },
@@ -114,8 +104,7 @@ export function applySchemaActions(
       }
 
       case 'merge_fields': {
-        const { canonicalName, aliasNames, canonicalDefinition, valueMappings } =
-          action.payload;
+        const { canonicalName, aliasNames, canonicalDefinition } = action.payload;
 
         // Remove alias fields from the fields array
         fields = fields.filter((f) => !aliasNames.includes(f.name));
@@ -143,9 +132,7 @@ export function applySchemaActions(
       }
 
       case 'set_normalization_rule': {
-        const field = fields.find(
-          (f) => f.name === action.payload.fieldName,
-        );
+        const field = fields.find((f) => f.name === action.payload.fieldName);
         if (!field) {
           logger.debug(
             { fieldName: action.payload.fieldName },
@@ -159,9 +146,7 @@ export function applySchemaActions(
       }
 
       case 'update_enum_map': {
-        const field = fields.find(
-          (f) => f.name === action.payload.fieldName,
-        );
+        const field = fields.find((f) => f.name === action.payload.fieldName);
         if (!field) {
           logger.debug(
             { fieldName: action.payload.fieldName },
@@ -174,17 +159,13 @@ export function applySchemaActions(
         if (field.normalization?.type === 'enum') {
           // Merge additions into the synonym map
           const currentMap = field.normalization.config.synonymMap;
-          for (const [key, value] of Object.entries(
-            action.payload.additions,
-          )) {
+          for (const [key, value] of Object.entries(action.payload.additions)) {
             currentMap[key] = value;
           }
 
           // Add new canonical values if specified
           if (action.payload.newCanonicalValues) {
-            const existing = new Set(
-              field.normalization.config.canonicalValues,
-            );
+            const existing = new Set(field.normalization.config.canonicalValues);
             for (const v of action.payload.newCanonicalValues) {
               if (!existing.has(v)) {
                 field.normalization.config.canonicalValues.push(v);
@@ -203,10 +184,7 @@ export function applySchemaActions(
       }
 
       default: {
-        logger.debug(
-          { type: (action as PipelineAction).type },
-          'Skipping unsupported action type',
-        );
+        logger.debug({ type: (action as PipelineAction).type }, 'Skipping unsupported action type');
         break;
       }
     }

@@ -24,10 +24,7 @@ export class SchemaEvolverImpl implements SchemaEvolver {
   private readonly synonymDetector: SynonymDetector;
   private readonly normalizationProposer: NormalizationProposer;
 
-  constructor(
-    llmClient: LLMClient,
-    config: LLMConfig,
-  ) {
+  constructor(llmClient: LLMClient, config: LLMConfig) {
     this.fieldProposer = new FieldProposer(llmClient, config);
     this.synonymDetector = new SynonymDetector(llmClient, config);
     this.normalizationProposer = new NormalizationProposer(llmClient, config);

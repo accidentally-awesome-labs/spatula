@@ -98,11 +98,15 @@ export async function processCrawlJob(data: CrawlJobData, deps: WorkerDeps): Pro
 
           if (recentExtractions.length >= batchSize && recentExtractions.length % batchSize === 0) {
             const extractionIds = recentExtractions.map((e: { id: string }) => e.id);
-            await deps.queues.schemaEvolution.add(
-              `schema-evolution:${jobId}:v${Date.now()}`,
-              { jobId, tenantId, extractionIds },
+            await deps.queues.schemaEvolution.add(`schema-evolution:${jobId}:v${Date.now()}`, {
+              jobId,
+              tenantId,
+              extractionIds,
+            });
+            logger.debug(
+              { jobId, extractionCount: recentExtractions.length },
+              'schema evolution triggered',
             );
-            logger.debug({ jobId, extractionCount: recentExtractions.length }, 'schema evolution triggered');
           }
         }
       }

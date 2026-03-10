@@ -160,13 +160,7 @@ describe('SchemaEvolverImpl', () => {
     ]);
     const evolver = new SchemaEvolverImpl(client, config);
 
-    const extractions = [
-      makeExtraction(
-        [],
-        { product_name: 'Headphones', price: 99.99 },
-        1,
-      ),
-    ];
+    const extractions = [makeExtraction([], { product_name: 'Headphones', price: 99.99 }, 1)];
 
     const actions = await evolver.evolve(baseSchema, extractions, 'audiophile headphones');
 

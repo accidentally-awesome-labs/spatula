@@ -89,7 +89,11 @@ describe('FieldProposer', () => {
     const client = createMockClient(validLLMResponse);
     const proposer = new FieldProposer(client, config);
 
-    const actions = await proposer.propose(baseSchema, sampleAggregatedFields, 'audiophile headphones');
+    const actions = await proposer.propose(
+      baseSchema,
+      sampleAggregatedFields,
+      'audiophile headphones',
+    );
 
     expect(actions).toHaveLength(2);
 
@@ -165,7 +169,11 @@ describe('FieldProposer', () => {
     const client = createMockClient('this is not valid json at all');
     const proposer = new FieldProposer(client, config);
 
-    const actions = await proposer.propose(baseSchema, sampleAggregatedFields, 'audiophile headphones');
+    const actions = await proposer.propose(
+      baseSchema,
+      sampleAggregatedFields,
+      'audiophile headphones',
+    );
 
     expect(actions).toEqual([]);
   });
@@ -176,7 +184,11 @@ describe('FieldProposer', () => {
     };
     const proposer = new FieldProposer(failClient, config);
 
-    const actions = await proposer.propose(baseSchema, sampleAggregatedFields, 'audiophile headphones');
+    const actions = await proposer.propose(
+      baseSchema,
+      sampleAggregatedFields,
+      'audiophile headphones',
+    );
 
     expect(actions).toEqual([]);
   });
@@ -191,9 +203,7 @@ describe('FieldProposer', () => {
 
     await proposer.propose(baseSchema, sampleAggregatedFields, 'test');
 
-    expect(client.complete).toHaveBeenCalledWith(
-      expect.objectContaining({ model: 'smart-model' }),
-    );
+    expect(client.complete).toHaveBeenCalledWith(expect.objectContaining({ model: 'smart-model' }));
   });
 
   it('returns empty array when LLM returns valid JSON with wrong shape', async () => {

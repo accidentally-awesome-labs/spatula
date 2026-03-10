@@ -116,9 +116,7 @@ export class FieldProposer {
   ): Promise<PipelineAction[]> {
     // Filter out fields already in the schema
     const existingNames = new Set(currentSchema.fields.map((f) => f.name.toLowerCase()));
-    const candidates = aggregatedFields.filter(
-      (f) => !existingNames.has(f.normalizedName),
-    );
+    const candidates = aggregatedFields.filter((f) => !existingNames.has(f.normalizedName));
 
     if (candidates.length === 0) {
       logger.debug('no candidate unmapped fields after filtering existing schema fields');
@@ -159,24 +157,26 @@ export class FieldProposer {
         'field proposals received from LLM',
       );
 
-      return parsed.data.proposals.map((proposal): PipelineAction => ({
-        id: generateId(),
-        jobId: generateId(),
-        type: 'add_field',
-        source: 'schema_evolution',
-        reasoning: proposal.reasoning,
-        confidence: proposal.confidence,
-        payload: {
-          field: {
-            name: proposal.name,
-            description: proposal.description,
-            type: proposal.type,
-            required: proposal.required,
-            ...(proposal.enumValues ? { enumValues: proposal.enumValues } : {}),
+      return parsed.data.proposals.map(
+        (proposal): PipelineAction => ({
+          id: generateId(),
+          jobId: generateId(),
+          type: 'add_field',
+          source: 'schema_evolution',
+          reasoning: proposal.reasoning,
+          confidence: proposal.confidence,
+          payload: {
+            field: {
+              name: proposal.name,
+              description: proposal.description,
+              type: proposal.type,
+              required: proposal.required,
+              ...(proposal.enumValues ? { enumValues: proposal.enumValues } : {}),
+            },
+            relevance: proposal.relevance,
           },
-          relevance: proposal.relevance,
-        },
-      }));
+        }),
+      );
     } catch (error) {
       logger.error({ error }, 'field proposal LLM call failed');
       return [];

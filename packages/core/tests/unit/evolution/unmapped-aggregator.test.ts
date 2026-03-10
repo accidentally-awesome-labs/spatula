@@ -48,15 +48,9 @@ describe('aggregateUnmappedFields', () => {
 
   it('groups fields by normalized name (case-insensitive, whitespace→underscores)', () => {
     const results = [
-      makeResult([
-        { name: 'Phone Number', value: '555-0100', suggestedType: 'string' },
-      ]),
-      makeResult([
-        { name: 'phone_number', value: '555-0200', suggestedType: 'string' },
-      ]),
-      makeResult([
-        { name: 'PHONE NUMBER', value: '555-0300', suggestedType: 'string' },
-      ]),
+      makeResult([{ name: 'Phone Number', value: '555-0100', suggestedType: 'string' }]),
+      makeResult([{ name: 'phone_number', value: '555-0200', suggestedType: 'string' }]),
+      makeResult([{ name: 'PHONE NUMBER', value: '555-0300', suggestedType: 'string' }]),
     ];
 
     const aggregated = aggregateUnmappedFields(results);
@@ -88,13 +82,9 @@ describe('aggregateUnmappedFields', () => {
     expect(aggregated[0].occurrences).toBe(1);
     expect(aggregated[0].frequency).toBeCloseTo(1.0);
     // But both sample values should be collected
-    expect(aggregated[0].sampleValues).toEqual(
-      expect.arrayContaining(['red', 'blue']),
-    );
+    expect(aggregated[0].sampleValues).toEqual(expect.arrayContaining(['red', 'blue']));
     // Both name variants should be tracked
-    expect(aggregated[0].observedNames).toEqual(
-      expect.arrayContaining(['color', 'Color']),
-    );
+    expect(aggregated[0].observedNames).toEqual(expect.arrayContaining(['color', 'Color']));
   });
 
   it('sorts results by occurrences descending', () => {
@@ -103,12 +93,8 @@ describe('aggregateUnmappedFields', () => {
         { name: 'rare_field', value: 'x', suggestedType: 'string' },
         { name: 'common_field', value: 'a', suggestedType: 'string' },
       ]),
-      makeResult([
-        { name: 'common_field', value: 'b', suggestedType: 'string' },
-      ]),
-      makeResult([
-        { name: 'common_field', value: 'c', suggestedType: 'string' },
-      ]),
+      makeResult([{ name: 'common_field', value: 'b', suggestedType: 'string' }]),
+      makeResult([{ name: 'common_field', value: 'c', suggestedType: 'string' }]),
     ];
 
     const aggregated = aggregateUnmappedFields(results);
@@ -122,9 +108,7 @@ describe('aggregateUnmappedFields', () => {
 
   it('caps sample values at 10', () => {
     const results = Array.from({ length: 15 }, (_, i) =>
-      makeResult([
-        { name: 'field', value: `value-${i}`, suggestedType: 'string' },
-      ]),
+      makeResult([{ name: 'field', value: `value-${i}`, suggestedType: 'string' }]),
     );
 
     const aggregated = aggregateUnmappedFields(results);
@@ -136,18 +120,10 @@ describe('aggregateUnmappedFields', () => {
 
   it('determines the dominant type from the most common suggestedType', () => {
     const results = [
-      makeResult([
-        { name: 'rating', value: '4.5', suggestedType: 'string' },
-      ]),
-      makeResult([
-        { name: 'rating', value: 4.2, suggestedType: 'number' },
-      ]),
-      makeResult([
-        { name: 'rating', value: 3.8, suggestedType: 'number' },
-      ]),
-      makeResult([
-        { name: 'rating', value: 4.9, suggestedType: 'number' },
-      ]),
+      makeResult([{ name: 'rating', value: '4.5', suggestedType: 'string' }]),
+      makeResult([{ name: 'rating', value: 4.2, suggestedType: 'number' }]),
+      makeResult([{ name: 'rating', value: 3.8, suggestedType: 'number' }]),
+      makeResult([{ name: 'rating', value: 4.9, suggestedType: 'number' }]),
     ];
 
     const aggregated = aggregateUnmappedFields(results);
@@ -159,12 +135,8 @@ describe('aggregateUnmappedFields', () => {
 
   it('calculates frequency correctly as occurrences / total extractions', () => {
     const results = [
-      makeResult([
-        { name: 'weight', value: '5kg', suggestedType: 'string' },
-      ]),
-      makeResult([
-        { name: 'weight', value: '3kg', suggestedType: 'string' },
-      ]),
+      makeResult([{ name: 'weight', value: '5kg', suggestedType: 'string' }]),
+      makeResult([{ name: 'weight', value: '3kg', suggestedType: 'string' }]),
       makeResult([]),
       makeResult([]),
     ];
@@ -178,15 +150,9 @@ describe('aggregateUnmappedFields', () => {
 
   it('normalizes names with multiple whitespace characters', () => {
     const results = [
-      makeResult([
-        { name: 'product  name', value: 'Widget', suggestedType: 'string' },
-      ]),
-      makeResult([
-        { name: "product\tname", value: 'Gadget', suggestedType: 'string' },
-      ]),
-      makeResult([
-        { name: 'product_name', value: 'Doohickey', suggestedType: 'string' },
-      ]),
+      makeResult([{ name: 'product  name', value: 'Widget', suggestedType: 'string' }]),
+      makeResult([{ name: 'product\tname', value: 'Gadget', suggestedType: 'string' }]),
+      makeResult([{ name: 'product_name', value: 'Doohickey', suggestedType: 'string' }]),
     ];
 
     const aggregated = aggregateUnmappedFields(results);
@@ -225,12 +191,8 @@ describe('aggregateUnmappedFields', () => {
 
   it('does not include duplicate observed name variants', () => {
     const results = [
-      makeResult([
-        { name: 'Color', value: 'red', suggestedType: 'string' },
-      ]),
-      makeResult([
-        { name: 'Color', value: 'blue', suggestedType: 'string' },
-      ]),
+      makeResult([{ name: 'Color', value: 'red', suggestedType: 'string' }]),
+      makeResult([{ name: 'Color', value: 'blue', suggestedType: 'string' }]),
     ];
 
     const aggregated = aggregateUnmappedFields(results);
@@ -240,15 +202,9 @@ describe('aggregateUnmappedFields', () => {
 
   it('does not include duplicate sample values', () => {
     const results = [
-      makeResult([
-        { name: 'status', value: 'active', suggestedType: 'string' },
-      ]),
-      makeResult([
-        { name: 'status', value: 'active', suggestedType: 'string' },
-      ]),
-      makeResult([
-        { name: 'status', value: 'inactive', suggestedType: 'string' },
-      ]),
+      makeResult([{ name: 'status', value: 'active', suggestedType: 'string' }]),
+      makeResult([{ name: 'status', value: 'active', suggestedType: 'string' }]),
+      makeResult([{ name: 'status', value: 'inactive', suggestedType: 'string' }]),
     ];
 
     const aggregated = aggregateUnmappedFields(results);

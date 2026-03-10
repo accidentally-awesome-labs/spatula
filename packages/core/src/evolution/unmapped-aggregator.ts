@@ -1,4 +1,4 @@
-import type { ExtractionResult, UnmappedField } from '../types/extraction.js';
+import type { ExtractionResult } from '../types/extraction.js';
 
 /**
  * Aggregated view of an unmapped field across multiple extractions.
@@ -64,9 +64,7 @@ interface FieldAccumulator {
  * @param extractions - Array of extraction results to aggregate
  * @returns Aggregated fields sorted by occurrence count (descending)
  */
-export function aggregateUnmappedFields(
-  extractions: ExtractionResult[],
-): AggregatedField[] {
+export function aggregateUnmappedFields(extractions: ExtractionResult[]): AggregatedField[] {
   if (extractions.length === 0) {
     return [];
   }
@@ -104,8 +102,7 @@ export function aggregateUnmappedFields(
       }
 
       // Track type
-      acc.typeCounts[field.suggestedType] =
-        (acc.typeCounts[field.suggestedType] ?? 0) + 1;
+      acc.typeCounts[field.suggestedType] = (acc.typeCounts[field.suggestedType] ?? 0) + 1;
 
       // Track sample value (deduplicated, capped)
       if (acc.sampleValues.length < MAX_SAMPLE_VALUES) {

@@ -148,20 +148,22 @@ export class SynonymDetector {
         'synonym merge proposals received from LLM',
       );
 
-      return parsed.data.merges.map((merge): PipelineAction => ({
-        id: generateId(),
-        jobId: generateId(),
-        type: 'merge_fields',
-        source: 'schema_evolution',
-        reasoning: merge.reasoning,
-        confidence: merge.confidence,
-        payload: {
-          canonicalName: merge.canonicalName,
-          aliasNames: merge.aliasNames,
-          canonicalDefinition: merge.canonicalDefinition,
-          valueMappings: {},
-        },
-      }));
+      return parsed.data.merges.map(
+        (merge): PipelineAction => ({
+          id: generateId(),
+          jobId: generateId(),
+          type: 'merge_fields',
+          source: 'schema_evolution',
+          reasoning: merge.reasoning,
+          confidence: merge.confidence,
+          payload: {
+            canonicalName: merge.canonicalName,
+            aliasNames: merge.aliasNames,
+            canonicalDefinition: merge.canonicalDefinition,
+            valueMappings: {},
+          },
+        }),
+      );
     } catch (error) {
       logger.error({ error }, 'synonym detection LLM call failed');
       return [];

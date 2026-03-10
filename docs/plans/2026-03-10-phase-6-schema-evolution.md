@@ -14,22 +14,22 @@
 
 ### Key Files
 
-| File | Purpose |
-|------|---------|
-| `packages/core/src/interfaces/schema-evolver.ts` | Interface to implement (already exists) |
-| `packages/core/src/types/schema.ts` | `SchemaDefinition`, `FieldDefinition`, `FieldRelevance`, `FieldAlias` |
-| `packages/core/src/types/actions.ts` | All `PipelineAction` types (25 action types) |
-| `packages/core/src/types/extraction.ts` | `ExtractionResult`, `UnmappedField` |
-| `packages/core/src/types/job.ts` | `EvolutionConfig`, `JobConfig`, `LLMConfig` |
-| `packages/core/src/types/normalization.ts` | `NormalizationRule` discriminated union |
-| `packages/core/src/extraction/static-extractor.ts` | Reference LLM integration pattern |
-| `packages/core/src/extraction/page-classifier.ts` | Reference Zod validation pattern |
-| `packages/core/src/llm/model-router.ts` | `resolveModel(config, 'schemaEvolution')` |
-| `packages/queue/src/workers/schema-worker.ts` | Stub to complete |
-| `packages/queue/src/worker-deps.ts` | Dependency container to extend |
-| `packages/queue/src/workers/crawl-worker.ts` | Trigger evolution after N extractions |
-| `packages/db/src/repositories/extraction-repository.ts` | `findByJob()` for batch queries |
-| `packages/db/src/repositories/schema-repository.ts` | `create()`, `findLatest()` for versioning |
+| File                                                    | Purpose                                                               |
+| ------------------------------------------------------- | --------------------------------------------------------------------- |
+| `packages/core/src/interfaces/schema-evolver.ts`        | Interface to implement (already exists)                               |
+| `packages/core/src/types/schema.ts`                     | `SchemaDefinition`, `FieldDefinition`, `FieldRelevance`, `FieldAlias` |
+| `packages/core/src/types/actions.ts`                    | All `PipelineAction` types (25 action types)                          |
+| `packages/core/src/types/extraction.ts`                 | `ExtractionResult`, `UnmappedField`                                   |
+| `packages/core/src/types/job.ts`                        | `EvolutionConfig`, `JobConfig`, `LLMConfig`                           |
+| `packages/core/src/types/normalization.ts`              | `NormalizationRule` discriminated union                               |
+| `packages/core/src/extraction/static-extractor.ts`      | Reference LLM integration pattern                                     |
+| `packages/core/src/extraction/page-classifier.ts`       | Reference Zod validation pattern                                      |
+| `packages/core/src/llm/model-router.ts`                 | `resolveModel(config, 'schemaEvolution')`                             |
+| `packages/queue/src/workers/schema-worker.ts`           | Stub to complete                                                      |
+| `packages/queue/src/worker-deps.ts`                     | Dependency container to extend                                        |
+| `packages/queue/src/workers/crawl-worker.ts`            | Trigger evolution after N extractions                                 |
+| `packages/db/src/repositories/extraction-repository.ts` | `findByJob()` for batch queries                                       |
+| `packages/db/src/repositories/schema-repository.ts`     | `create()`, `findLatest()` for versioning                             |
 
 ### Type Signatures Already Defined
 
@@ -53,12 +53,12 @@ interface SchemaEvolutionJobData {
 // Evolution config (already in job.ts)
 interface EvolutionConfig {
   enabled: boolean;
-  batchSize: number;       // Default 10
-  maxFields: number;       // Default 50
+  batchSize: number; // Default 10
+  maxFields: number; // Default 50
   relevanceThresholds: {
-    requiredMin: number;      // Default 0.85
-    optionalMin: number;      // Default 0.4
-    rareBelow: number;        // Default 0.4
+    requiredMin: number; // Default 0.85
+    optionalMin: number; // Default 0.4
+    rareBelow: number; // Default 0.4
     minCategorySampleSize: number; // Default 5
   };
   tableStrategy: 'single' | 'multi' | 'auto';
@@ -79,6 +79,7 @@ interface EvolutionConfig {
 ## Task 1: Unmapped Field Aggregator
 
 **Files:**
+
 - Create: `packages/core/src/evolution/unmapped-aggregator.ts`
 - Test: `packages/core/tests/unit/evolution/unmapped-aggregator.test.ts`
 
@@ -91,7 +92,9 @@ import { describe, it, expect } from 'vitest';
 import { aggregateUnmappedFields } from '../../../src/evolution/unmapped-aggregator.js';
 import type { ExtractionResult } from '../../../src/types/extraction.js';
 
-function makeExtraction(overrides: Partial<ExtractionResult> & { metadata: any }): ExtractionResult {
+function makeExtraction(
+  overrides: Partial<ExtractionResult> & { metadata: any },
+): ExtractionResult {
   return {
     id: 'ext-1',
     jobId: 'job-1',
@@ -141,9 +144,7 @@ describe('aggregateUnmappedFields', () => {
           modelUsed: 'test',
           tokensUsed: 100,
           extractionTimeMs: 50,
-          unmappedFields: [
-            { name: 'brand_name', value: 'Beyerdynamic', suggestedType: 'string' },
-          ],
+          unmappedFields: [{ name: 'brand_name', value: 'Beyerdynamic', suggestedType: 'string' }],
         },
       }),
     ];
@@ -207,21 +208,30 @@ describe('aggregateUnmappedFields', () => {
       makeExtraction({
         id: 'ext-1',
         metadata: {
-          confidence: 0.9, modelUsed: 'test', tokensUsed: 100, extractionTimeMs: 50,
+          confidence: 0.9,
+          modelUsed: 'test',
+          tokensUsed: 100,
+          extractionTimeMs: 50,
           unmappedFields: [{ name: 'price', value: 299, suggestedType: 'number' }],
         },
       }),
       makeExtraction({
         id: 'ext-2',
         metadata: {
-          confidence: 0.9, modelUsed: 'test', tokensUsed: 100, extractionTimeMs: 50,
+          confidence: 0.9,
+          modelUsed: 'test',
+          tokensUsed: 100,
+          extractionTimeMs: 50,
           unmappedFields: [{ name: 'price', value: '$299', suggestedType: 'currency' }],
         },
       }),
       makeExtraction({
         id: 'ext-3',
         metadata: {
-          confidence: 0.9, modelUsed: 'test', tokensUsed: 100, extractionTimeMs: 50,
+          confidence: 0.9,
+          modelUsed: 'test',
+          tokensUsed: 100,
+          extractionTimeMs: 50,
           unmappedFields: [{ name: 'price', value: 199, suggestedType: 'number' }],
         },
       }),
@@ -258,13 +268,16 @@ export interface AggregatedField {
 const MAX_SAMPLE_VALUES = 10;
 
 export function aggregateUnmappedFields(extractions: ExtractionResult[]): AggregatedField[] {
-  const fieldMap = new Map<string, {
-    observedNames: Set<string>;
-    occurrences: number;
-    typeCounts: Record<string, number>;
-    sampleValues: unknown[];
-    sourceExtractionIds: Set<string>;
-  }>();
+  const fieldMap = new Map<
+    string,
+    {
+      observedNames: Set<string>;
+      occurrences: number;
+      typeCounts: Record<string, number>;
+      sampleValues: unknown[];
+      sourceExtractionIds: Set<string>;
+    }
+  >();
 
   for (const extraction of extractions) {
     const seen = new Set<string>(); // avoid double-counting within one extraction
@@ -304,7 +317,8 @@ export function aggregateUnmappedFields(extractions: ExtractionResult[]): Aggreg
       observedNames: Array.from(entry.observedNames),
       occurrences: entry.occurrences,
       frequency: totalExtractions > 0 ? entry.occurrences / totalExtractions : 0,
-      dominantType: Object.entries(entry.typeCounts).sort((a, b) => b[1] - a[1])[0]?.[0] ?? 'string',
+      dominantType:
+        Object.entries(entry.typeCounts).sort((a, b) => b[1] - a[1])[0]?.[0] ?? 'string',
       typeCounts: entry.typeCounts,
       sampleValues: entry.sampleValues,
     }))
@@ -329,6 +343,7 @@ git commit -m "feat(core): add unmapped field aggregator for schema evolution"
 ## Task 2: Schema Action Applier
 
 **Files:**
+
 - Create: `packages/core/src/evolution/schema-action-applier.ts`
 - Test: `packages/core/tests/unit/evolution/schema-action-applier.test.ts`
 
@@ -379,9 +394,7 @@ describe('applySchemaActions', () => {
       { name: 'title', description: 'Title', type: 'string', required: true },
     ]);
 
-    const actions: PipelineAction[] = [
-      makeAddFieldAction('brand', 'string', false),
-    ];
+    const actions: PipelineAction[] = [makeAddFieldAction('brand', 'string', false)];
 
     const result = applySchemaActions(schema, actions);
 
@@ -456,7 +469,12 @@ describe('applySchemaActions', () => {
         payload: {
           canonicalName: 'price',
           aliasNames: ['retail_price', 'msrp'],
-          canonicalDefinition: { name: 'price', description: 'Product price', type: 'currency', required: true },
+          canonicalDefinition: {
+            name: 'price',
+            description: 'Product price',
+            type: 'currency',
+            required: true,
+          },
           valueMappings: {},
         },
       } as PipelineAction,
@@ -545,9 +563,7 @@ describe('applySchemaActions', () => {
       { name: 'brand', description: 'Brand', type: 'string', required: false },
     ]);
 
-    const actions: PipelineAction[] = [
-      makeAddFieldAction('brand', 'string', false),
-    ];
+    const actions: PipelineAction[] = [makeAddFieldAction('brand', 'string', false)];
 
     const result = applySchemaActions(schema, actions);
     expect(result.fields).toHaveLength(1); // no duplicate
@@ -693,7 +709,8 @@ function applyOne(
       const idx = fields.findIndex((f) => f.name === action.payload.fieldName);
       if (idx === -1) return null;
       const field = fields[idx];
-      if (field.type !== 'enum' || !field.normalization || field.normalization.type !== 'enum') return null;
+      if (field.type !== 'enum' || !field.normalization || field.normalization.type !== 'enum')
+        return null;
       const existingMap = field.normalization.config.synonymMap;
       const newFields = [...fields];
       newFields[idx] = {
@@ -703,7 +720,8 @@ function applyOne(
           config: {
             ...field.normalization.config,
             synonymMap: { ...existingMap, ...action.payload.additions },
-            canonicalValues: action.payload.newCanonicalValues ?? field.normalization.config.canonicalValues,
+            canonicalValues:
+              action.payload.newCanonicalValues ?? field.normalization.config.canonicalValues,
           },
         },
       };
@@ -734,6 +752,7 @@ git commit -m "feat(core): add schema action applier for evolution pipeline"
 ## Task 3: LLM Field Proposer
 
 **Files:**
+
 - Create: `packages/core/src/evolution/field-proposer.ts`
 - Test: `packages/core/tests/unit/evolution/field-proposer.test.ts`
 
@@ -819,10 +838,9 @@ describe('FieldProposer', () => {
   });
 
   it('skips fields already in schema', async () => {
-    const proposer = new FieldProposer(
-      mockLLMClient({ proposals: [] }),
-      { primaryModel: 'test-model' },
-    );
+    const proposer = new FieldProposer(mockLLMClient({ proposals: [] }), {
+      primaryModel: 'test-model',
+    });
 
     const aggregated: AggregatedField[] = [
       {
@@ -851,17 +869,21 @@ describe('FieldProposer', () => {
     };
 
     const proposer = new FieldProposer(badClient, { primaryModel: 'test' });
-    const actions = await proposer.propose(makeSchema(), [
-      {
-        normalizedName: 'brand',
-        observedNames: ['brand'],
-        occurrences: 5,
-        frequency: 0.5,
-        dominantType: 'string',
-        typeCounts: { string: 5 },
-        sampleValues: ['x'],
-      },
-    ], 'products');
+    const actions = await proposer.propose(
+      makeSchema(),
+      [
+        {
+          normalizedName: 'brand',
+          observedNames: ['brand'],
+          occurrences: 5,
+          frequency: 0.5,
+          dominantType: 'string',
+          typeCounts: { string: 5 },
+          sampleValues: ['x'],
+        },
+      ],
+      'products',
+    );
 
     expect(actions).toHaveLength(0);
   });
@@ -942,24 +964,26 @@ export class FieldProposer {
 
       return parsed.proposals
         .filter((p) => !existingNames.has(p.name))
-        .map((proposal): PipelineAction => ({
-          id: generateId(),
-          jobId: '', // caller fills in
-          source: 'schema_evolution',
-          type: 'add_field',
-          reasoning: proposal.reasoning,
-          confidence: proposal.confidence,
-          payload: {
-            field: {
-              name: proposal.name,
-              description: proposal.description,
-              type: proposal.type,
-              required: proposal.required,
-              ...(proposal.enumValues ? { enumValues: proposal.enumValues } : {}),
+        .map(
+          (proposal): PipelineAction => ({
+            id: generateId(),
+            jobId: '', // caller fills in
+            source: 'schema_evolution',
+            type: 'add_field',
+            reasoning: proposal.reasoning,
+            confidence: proposal.confidence,
+            payload: {
+              field: {
+                name: proposal.name,
+                description: proposal.description,
+                type: proposal.type,
+                required: proposal.required,
+                ...(proposal.enumValues ? { enumValues: proposal.enumValues } : {}),
+              },
+              relevance: proposal.relevance,
             },
-            relevance: proposal.relevance,
-          },
-        }));
+          }),
+        );
     } catch (error) {
       logger.error({ error }, 'field proposal LLM call failed');
       return [];
@@ -982,14 +1006,19 @@ function buildProposalPrompt(
   candidates: AggregatedField[],
   jobDescription: string,
 ): string {
-  const existingFields = schema.fields.map((f) => `- ${f.name} (${f.type}): ${f.description}`).join('\n');
+  const existingFields = schema.fields
+    .map((f) => `- ${f.name} (${f.type}): ${f.description}`)
+    .join('\n');
 
   const candidateLines = candidates
     .map(
       (c) =>
         `- "${c.normalizedName}" (observed as: ${c.observedNames.join(', ')})
     Type: ${c.dominantType} | Frequency: ${(c.frequency * 100).toFixed(0)}% (${c.occurrences} occurrences)
-    Sample values: ${c.sampleValues.slice(0, 5).map((v) => JSON.stringify(v)).join(', ')}`,
+    Sample values: ${c.sampleValues
+      .slice(0, 5)
+      .map((v) => JSON.stringify(v))
+      .join(', ')}`,
     )
     .join('\n');
 
@@ -1052,6 +1081,7 @@ git commit -m "feat(core): add LLM-powered field proposer for schema evolution"
 ## Task 4: LLM Synonym Detector
 
 **Files:**
+
 - Create: `packages/core/src/evolution/synonym-detector.ts`
 - Test: `packages/core/tests/unit/evolution/synonym-detector.test.ts`
 
@@ -1133,10 +1163,7 @@ describe('SynonymDetector', () => {
   });
 
   it('returns empty on no synonyms found', async () => {
-    const detector = new SynonymDetector(
-      mockLLMClient({ merges: [] }),
-      { primaryModel: 'test' },
-    );
+    const detector = new SynonymDetector(mockLLMClient({ merges: [] }), { primaryModel: 'test' });
 
     const actions = await detector.detect(makeSchema(), [], 'products');
     expect(actions).toHaveLength(0);
@@ -1209,7 +1236,10 @@ export class SynonymDetector {
         model: resolveModel(this.config, 'schemaEvolution'),
         messages: [
           { role: 'system', content: SYSTEM_PROMPT },
-          { role: 'user', content: buildSynonymPrompt(currentSchema, aggregatedFields, jobDescription) },
+          {
+            role: 'user',
+            content: buildSynonymPrompt(currentSchema, aggregatedFields, jobDescription),
+          },
         ],
         jsonMode: true,
         temperature: 0,
@@ -1224,20 +1254,22 @@ export class SynonymDetector {
         return [];
       }
 
-      return parsed.merges.map((merge): PipelineAction => ({
-        id: generateId(),
-        jobId: '',
-        source: 'schema_evolution',
-        type: 'merge_fields',
-        reasoning: merge.reasoning,
-        confidence: merge.confidence,
-        payload: {
-          canonicalName: merge.canonicalName,
-          aliasNames: merge.aliasNames,
-          canonicalDefinition: merge.canonicalDefinition,
-          valueMappings: {},
-        },
-      }));
+      return parsed.merges.map(
+        (merge): PipelineAction => ({
+          id: generateId(),
+          jobId: '',
+          source: 'schema_evolution',
+          type: 'merge_fields',
+          reasoning: merge.reasoning,
+          confidence: merge.confidence,
+          payload: {
+            canonicalName: merge.canonicalName,
+            aliasNames: merge.aliasNames,
+            canonicalDefinition: merge.canonicalDefinition,
+            valueMappings: {},
+          },
+        }),
+      );
     } catch (error) {
       logger.error({ error }, 'synonym detection failed');
       return [];
@@ -1266,7 +1298,10 @@ function buildSynonymPrompt(
     .map(
       (f) =>
         `- "${f.normalizedName}" (observed as: ${f.observedNames.join(', ')}, type: ${f.dominantType}, freq: ${(f.frequency * 100).toFixed(0)}%)
-    Samples: ${f.sampleValues.slice(0, 3).map((v) => JSON.stringify(v)).join(', ')}`,
+    Samples: ${f.sampleValues
+      .slice(0, 3)
+      .map((v) => JSON.stringify(v))
+      .join(', ')}`,
     )
     .join('\n');
 
@@ -1320,6 +1355,7 @@ git commit -m "feat(core): add LLM-powered synonym detector for schema evolution
 ## Task 5: LLM Normalization Proposer
 
 **Files:**
+
 - Create: `packages/core/src/evolution/normalization-proposer.ts`
 - Test: `packages/core/tests/unit/evolution/normalization-proposer.test.ts`
 
@@ -1350,7 +1386,13 @@ function makeSchema(): SchemaDefinition {
     version: 1,
     fields: [
       { name: 'price', description: 'Price', type: 'currency', required: true },
-      { name: 'device_type', description: 'Type of device', type: 'enum', required: true, enumValues: ['headphone', 'amplifier'] },
+      {
+        name: 'device_type',
+        description: 'Type of device',
+        type: 'enum',
+        required: true,
+        enumValues: ['headphone', 'amplifier'],
+      },
     ],
     fieldAliases: [],
     createdAt: new Date(),
@@ -1361,14 +1403,32 @@ function makeSchema(): SchemaDefinition {
 function makeExtractions(): ExtractionResult[] {
   return [
     {
-      id: 'ext-1', jobId: 'job-1', pageId: 'p-1', schemaVersion: 1,
+      id: 'ext-1',
+      jobId: 'job-1',
+      pageId: 'p-1',
+      schemaVersion: 1,
       data: { price: '$299.99', device_type: 'Headphones' },
-      metadata: { confidence: 0.9, modelUsed: 'test', tokensUsed: 100, extractionTimeMs: 50, unmappedFields: [] },
+      metadata: {
+        confidence: 0.9,
+        modelUsed: 'test',
+        tokensUsed: 100,
+        extractionTimeMs: 50,
+        unmappedFields: [],
+      },
     },
     {
-      id: 'ext-2', jobId: 'job-1', pageId: 'p-2', schemaVersion: 1,
+      id: 'ext-2',
+      jobId: 'job-1',
+      pageId: 'p-2',
+      schemaVersion: 1,
       data: { price: '€199', device_type: 'headphone amp' },
-      metadata: { confidence: 0.9, modelUsed: 'test', tokensUsed: 100, extractionTimeMs: 50, unmappedFields: [] },
+      metadata: {
+        confidence: 0.9,
+        modelUsed: 'test',
+        tokensUsed: 100,
+        extractionTimeMs: 50,
+        unmappedFields: [],
+      },
     },
   ];
 }
@@ -1391,7 +1451,7 @@ describe('NormalizationProposer', () => {
       enumUpdates: [
         {
           fieldName: 'device_type',
-          additions: { 'Headphones': 'headphone', 'headphone amp': 'amplifier' },
+          additions: { Headphones: 'headphone', 'headphone amp': 'amplifier' },
           newCanonicalValues: ['headphone', 'amplifier', 'dac'],
           reasoning: 'Canonicalize device type values',
           confidence: 0.85,
@@ -1399,7 +1459,9 @@ describe('NormalizationProposer', () => {
       ],
     };
 
-    const proposer = new NormalizationProposer(mockLLMClient(llmResponse), { primaryModel: 'test' });
+    const proposer = new NormalizationProposer(mockLLMClient(llmResponse), {
+      primaryModel: 'test',
+    });
 
     const actions = await proposer.propose(makeSchema(), makeExtractions(), 'audiophile products');
 
@@ -1428,7 +1490,10 @@ describe('NormalizationProposer', () => {
       version: 1,
       fields: [
         {
-          name: 'price', description: 'Price', type: 'currency', required: true,
+          name: 'price',
+          description: 'Price',
+          type: 'currency',
+          required: true,
           normalization: { type: 'currency', config: { targetCurrency: 'USD', decimalPlaces: 2 } },
         },
       ],
@@ -1437,10 +1502,9 @@ describe('NormalizationProposer', () => {
       parentVersion: null,
     };
 
-    const proposer = new NormalizationProposer(
-      mockLLMClient({ rules: [], enumUpdates: [] }),
-      { primaryModel: 'test' },
-    );
+    const proposer = new NormalizationProposer(mockLLMClient({ rules: [], enumUpdates: [] }), {
+      primaryModel: 'test',
+    });
 
     const actions = await proposer.propose(schema, makeExtractions(), 'products');
     // The LLM should not even be asked about pre-normalized fields
@@ -1506,7 +1570,10 @@ export class NormalizationProposer {
     const fieldsNeedingNorm = schema.fields.filter((f) => !f.normalization);
     if (fieldsNeedingNorm.length === 0) return [];
 
-    const valueSamples = collectValueSamples(fieldsNeedingNorm.map((f) => f.name), extractions);
+    const valueSamples = collectValueSamples(
+      fieldsNeedingNorm.map((f) => f.name),
+      extractions,
+    );
     if (Object.keys(valueSamples).length === 0) return [];
 
     try {
@@ -1666,6 +1733,7 @@ git commit -m "feat(core): add LLM-powered normalization proposer for schema evo
 ## Task 6: SchemaEvolverImpl — Full Pipeline Orchestrator
 
 **Files:**
+
 - Create: `packages/core/src/evolution/schema-evolver-impl.ts`
 - Create: `packages/core/src/evolution/index.ts`
 - Modify: `packages/core/src/extraction/index.ts` (add evolution exports)
@@ -1708,18 +1776,24 @@ function makeMockLLMClient(): LLMClient {
               },
             ],
           }),
-          model: 'test', usage: { promptTokens: 0, completionTokens: 0, totalTokens: 0 }, finishReason: 'stop',
+          model: 'test',
+          usage: { promptTokens: 0, completionTokens: 0, totalTokens: 0 },
+          finishReason: 'stop',
         });
       }
       if (callCount === 2) {
         return Promise.resolve({
           content: JSON.stringify({ merges: [] }),
-          model: 'test', usage: { promptTokens: 0, completionTokens: 0, totalTokens: 0 }, finishReason: 'stop',
+          model: 'test',
+          usage: { promptTokens: 0, completionTokens: 0, totalTokens: 0 },
+          finishReason: 'stop',
         });
       }
       return Promise.resolve({
         content: JSON.stringify({ rules: [], enumUpdates: [] }),
-        model: 'test', usage: { promptTokens: 0, completionTokens: 0, totalTokens: 0 }, finishReason: 'stop',
+        model: 'test',
+        usage: { promptTokens: 0, completionTokens: 0, totalTokens: 0 },
+        finishReason: 'stop',
       });
     }),
   };
@@ -1728,9 +1802,7 @@ function makeMockLLMClient(): LLMClient {
 function makeSchema(): SchemaDefinition {
   return {
     version: 1,
-    fields: [
-      { name: 'title', description: 'Product title', type: 'string', required: true },
-    ],
+    fields: [{ name: 'title', description: 'Product title', type: 'string', required: true }],
     fieldAliases: [],
     createdAt: new Date(),
     parentVersion: null,
@@ -1740,23 +1812,31 @@ function makeSchema(): SchemaDefinition {
 function makeExtractions(): ExtractionResult[] {
   return [
     {
-      id: 'ext-1', jobId: 'job-1', pageId: 'p-1', schemaVersion: 1,
+      id: 'ext-1',
+      jobId: 'job-1',
+      pageId: 'p-1',
+      schemaVersion: 1,
       data: { title: 'HD 600' },
       metadata: {
-        confidence: 0.9, modelUsed: 'test', tokensUsed: 100, extractionTimeMs: 50,
-        unmappedFields: [
-          { name: 'brand', value: 'Sennheiser', suggestedType: 'string' },
-        ],
+        confidence: 0.9,
+        modelUsed: 'test',
+        tokensUsed: 100,
+        extractionTimeMs: 50,
+        unmappedFields: [{ name: 'brand', value: 'Sennheiser', suggestedType: 'string' }],
       },
     },
     {
-      id: 'ext-2', jobId: 'job-1', pageId: 'p-2', schemaVersion: 1,
+      id: 'ext-2',
+      jobId: 'job-1',
+      pageId: 'p-2',
+      schemaVersion: 1,
       data: { title: 'DT 770 Pro' },
       metadata: {
-        confidence: 0.9, modelUsed: 'test', tokensUsed: 100, extractionTimeMs: 50,
-        unmappedFields: [
-          { name: 'brand', value: 'Beyerdynamic', suggestedType: 'string' },
-        ],
+        confidence: 0.9,
+        modelUsed: 'test',
+        tokensUsed: 100,
+        extractionTimeMs: 50,
+        unmappedFields: [{ name: 'brand', value: 'Beyerdynamic', suggestedType: 'string' }],
       },
     },
   ];
@@ -1777,10 +1857,16 @@ describe('SchemaEvolverImpl', () => {
   it('returns empty when no unmapped fields', async () => {
     const extractions: ExtractionResult[] = [
       {
-        id: 'ext-1', jobId: 'job-1', pageId: 'p-1', schemaVersion: 1,
+        id: 'ext-1',
+        jobId: 'job-1',
+        pageId: 'p-1',
+        schemaVersion: 1,
         data: { title: 'HD 600' },
         metadata: {
-          confidence: 0.9, modelUsed: 'test', tokensUsed: 100, extractionTimeMs: 50,
+          confidence: 0.9,
+          modelUsed: 'test',
+          tokensUsed: 100,
+          extractionTimeMs: 50,
           unmappedFields: [],
         },
       },
@@ -1802,30 +1888,56 @@ describe('SchemaEvolverImpl', () => {
         if (callCount === 1) {
           return Promise.resolve({
             content: JSON.stringify({
-              proposals: [{
-                name: 'brand', description: 'Brand', type: 'string', required: false,
-                reasoning: 'Found in data', confidence: 0.9,
-                relevance: { globalFrequency: 0.8, categoryBreakdown: [], classification: 'universal_optional', applicableCategories: null },
-              }],
+              proposals: [
+                {
+                  name: 'brand',
+                  description: 'Brand',
+                  type: 'string',
+                  required: false,
+                  reasoning: 'Found in data',
+                  confidence: 0.9,
+                  relevance: {
+                    globalFrequency: 0.8,
+                    categoryBreakdown: [],
+                    classification: 'universal_optional',
+                    applicableCategories: null,
+                  },
+                },
+              ],
             }),
-            model: 'test', usage: { promptTokens: 0, completionTokens: 0, totalTokens: 0 }, finishReason: 'stop',
+            model: 'test',
+            usage: { promptTokens: 0, completionTokens: 0, totalTokens: 0 },
+            finishReason: 'stop',
           });
         }
         if (callCount === 2) {
           return Promise.resolve({
             content: JSON.stringify({
-              merges: [{
-                canonicalName: 'name', aliasNames: ['title', 'product_name'],
-                canonicalDefinition: { name: 'name', description: 'Name', type: 'string', required: true },
-                reasoning: 'Same field', confidence: 0.85,
-              }],
+              merges: [
+                {
+                  canonicalName: 'name',
+                  aliasNames: ['title', 'product_name'],
+                  canonicalDefinition: {
+                    name: 'name',
+                    description: 'Name',
+                    type: 'string',
+                    required: true,
+                  },
+                  reasoning: 'Same field',
+                  confidence: 0.85,
+                },
+              ],
             }),
-            model: 'test', usage: { promptTokens: 0, completionTokens: 0, totalTokens: 0 }, finishReason: 'stop',
+            model: 'test',
+            usage: { promptTokens: 0, completionTokens: 0, totalTokens: 0 },
+            finishReason: 'stop',
           });
         }
         return Promise.resolve({
           content: JSON.stringify({ rules: [], enumUpdates: [] }),
-          model: 'test', usage: { promptTokens: 0, completionTokens: 0, totalTokens: 0 }, finishReason: 'stop',
+          model: 'test',
+          usage: { promptTokens: 0, completionTokens: 0, totalTokens: 0 },
+          finishReason: 'stop',
         });
       }),
     };
@@ -1925,6 +2037,7 @@ export { SchemaEvolverImpl } from './schema-evolver-impl.js';
 ```
 
 Update `packages/core/src/index.ts` to add:
+
 ```typescript
 // Evolution
 export * from './evolution/index.js';
@@ -1947,6 +2060,7 @@ git commit -m "feat(core): add SchemaEvolverImpl orchestrating full evolution pi
 ## Task 7: Schema Evolution Worker Implementation
 
 **Files:**
+
 - Modify: `packages/queue/src/workers/schema-worker.ts` (replace stub)
 - Modify: `packages/queue/src/worker-deps.ts` (add `schemaEvolver`)
 - Test: `packages/queue/tests/unit/workers/schema-worker.test.ts` (rewrite from stub tests)
@@ -1998,9 +2112,7 @@ function createMockDeps(): WorkerDeps {
     version: 1,
     definition: {
       version: 1,
-      fields: [
-        { name: 'title', description: 'Product title', type: 'string', required: true },
-      ],
+      fields: [{ name: 'title', description: 'Product title', type: 'string', required: true }],
       fieldAliases: [],
       createdAt: new Date(),
       parentVersion: null,
@@ -2011,17 +2123,37 @@ function createMockDeps(): WorkerDeps {
 
   const mockExtractions = [
     {
-      id: 'ext-1', jobId: 'job-1', tenantId: 'tenant-1', pageId: 'p-1', schemaVersion: 1,
+      id: 'ext-1',
+      jobId: 'job-1',
+      tenantId: 'tenant-1',
+      pageId: 'p-1',
+      schemaVersion: 1,
       data: { title: 'HD 600' },
       unmappedFields: [{ name: 'brand', value: 'Sennheiser', suggestedType: 'string' }],
-      metadata: { confidence: 0.9, modelUsed: 'test', tokensUsed: 100, extractionTimeMs: 50, unmappedFields: [{ name: 'brand', value: 'Sennheiser', suggestedType: 'string' }] },
+      metadata: {
+        confidence: 0.9,
+        modelUsed: 'test',
+        tokensUsed: 100,
+        extractionTimeMs: 50,
+        unmappedFields: [{ name: 'brand', value: 'Sennheiser', suggestedType: 'string' }],
+      },
       createdAt: new Date(),
     },
     {
-      id: 'ext-2', jobId: 'job-1', tenantId: 'tenant-1', pageId: 'p-2', schemaVersion: 1,
+      id: 'ext-2',
+      jobId: 'job-1',
+      tenantId: 'tenant-1',
+      pageId: 'p-2',
+      schemaVersion: 1,
       data: { title: 'DT 770' },
       unmappedFields: [{ name: 'brand', value: 'Beyerdynamic', suggestedType: 'string' }],
-      metadata: { confidence: 0.9, modelUsed: 'test', tokensUsed: 100, extractionTimeMs: 50, unmappedFields: [{ name: 'brand', value: 'Beyerdynamic', suggestedType: 'string' }] },
+      metadata: {
+        confidence: 0.9,
+        modelUsed: 'test',
+        tokensUsed: 100,
+        extractionTimeMs: 50,
+        unmappedFields: [{ name: 'brand', value: 'Beyerdynamic', suggestedType: 'string' }],
+      },
       createdAt: new Date(),
     },
   ];
@@ -2103,7 +2235,8 @@ describe('processSchemaEvolutionJob', () => {
     expect(deps.jobRepo.findById).toHaveBeenCalledWith('job-1', 'tenant-1');
     expect(deps.schemaRepo.findLatest).toHaveBeenCalledWith('job-1', 'tenant-1');
     expect(deps.extractionRepo.findByJob).toHaveBeenCalledWith(
-      'job-1', 'tenant-1',
+      'job-1',
+      'tenant-1',
       expect.objectContaining({ limit: expect.any(Number) }),
     );
     expect(deps.schemaEvolver.evolve).toHaveBeenCalledWith(
@@ -2190,7 +2323,9 @@ describe('processSchemaEvolutionJob', () => {
   });
 
   it('handles errors gracefully without crashing', async () => {
-    (deps.schemaEvolver.evolve as ReturnType<typeof vi.fn>).mockRejectedValue(new Error('LLM down'));
+    (deps.schemaEvolver.evolve as ReturnType<typeof vi.fn>).mockRejectedValue(
+      new Error('LLM down'),
+    );
 
     const data: SchemaEvolutionJobData = {
       jobId: 'job-1',
@@ -2214,6 +2349,7 @@ Expected: FAIL — `schemaEvolver` not on `WorkerDeps`, new function signature
 **Step 3: Write minimal implementation**
 
 Update `packages/queue/src/worker-deps.ts`:
+
 ```typescript
 import type { Crawler, Extractor, ContentStore, SchemaEvolver } from '@spatula/core';
 import type { PageClassifier } from '@spatula/core';
@@ -2270,6 +2406,7 @@ export class WorkerDeps {
 ```
 
 Replace `packages/queue/src/workers/schema-worker.ts`:
+
 ```typescript
 import { createLogger } from '@spatula/shared';
 import { applySchemaActions } from '@spatula/core';
@@ -2389,6 +2526,7 @@ Expected: PASS (6 tests)
 **Step 5: Fix other tests affected by WorkerDeps change**
 
 The `worker-deps.test.ts` and `crawl-worker.test.ts` tests will need `schemaEvolver` added to their mock `WorkerDeps`. Add `schemaEvolver: { evolve: vi.fn() } as any` to every `createMockDeps()` in:
+
 - `packages/queue/tests/unit/worker-deps.test.ts`
 - `packages/queue/tests/unit/workers/crawl-worker.test.ts`
 
@@ -2409,6 +2547,7 @@ git commit -m "feat(queue): implement schema evolution worker with full pipeline
 ## Task 8: Crawl Worker — Trigger Schema Evolution
 
 **Files:**
+
 - Modify: `packages/queue/src/workers/crawl-worker.ts`
 - Modify: `packages/queue/tests/unit/workers/crawl-worker.test.ts`
 
@@ -2438,7 +2577,18 @@ it('enqueues schema evolution job after batch threshold', async () => {
       crawl: { maxDepth: 3, maxPages: 100, concurrency: 5, crawlerType: 'playwright' },
       schema: {
         mode: 'discovery',
-        evolutionConfig: { enabled: true, batchSize: 10, maxFields: 50, relevanceThresholds: { requiredMin: 0.85, optionalMin: 0.4, rareBelow: 0.4, minCategorySampleSize: 5 }, tableStrategy: 'auto' },
+        evolutionConfig: {
+          enabled: true,
+          batchSize: 10,
+          maxFields: 50,
+          relevanceThresholds: {
+            requiredMin: 0.85,
+            optionalMin: 0.4,
+            rareBelow: 0.4,
+            minCategorySampleSize: 5,
+          },
+          tableStrategy: 'auto',
+        },
       },
       llm: { primaryModel: 'anthropic/claude-sonnet-4-20250514' },
     },
@@ -2460,7 +2610,8 @@ it('enqueues schema evolution job after batch threshold', async () => {
 it('does NOT trigger schema evolution when batch threshold not met', async () => {
   // Return fewer than batch size
   (deps.extractionRepo.findByJob as ReturnType<typeof vi.fn>).mockResolvedValue([
-    { id: 'ext-1' }, { id: 'ext-2' },
+    { id: 'ext-1' },
+    { id: 'ext-2' },
   ]);
 
   const data = createJobData();
@@ -2516,7 +2667,10 @@ if (config.schema.evolutionConfig?.enabled) {
       tenantId,
       extractionIds,
     });
-    logger.debug({ jobId, extractionCount: recentExtractions.length }, 'schema evolution triggered');
+    logger.debug(
+      { jobId, extractionCount: recentExtractions.length },
+      'schema evolution triggered',
+    );
   }
 }
 ```
@@ -2540,6 +2694,7 @@ git commit -m "feat(queue): trigger schema evolution from crawl worker after bat
 ## Task 9: Barrel Exports and Full Build Verification
 
 **Files:**
+
 - Verify: `packages/core/src/index.ts` (evolution exports)
 - Verify: `packages/queue/src/index.ts` (schema worker exports)
 - Test: `packages/core/tests/unit/evolution/exports.test.ts`
@@ -2611,15 +2766,15 @@ git commit -m "test(core): add evolution module export verification"
 
 ## Summary
 
-| Task | Component | New Tests | Key Files |
-|------|-----------|-----------|-----------|
-| 1 | Unmapped field aggregator | 4 | `core/src/evolution/unmapped-aggregator.ts` |
-| 2 | Schema action applier | 8 | `core/src/evolution/schema-action-applier.ts` |
-| 3 | LLM field proposer | 3 | `core/src/evolution/field-proposer.ts` |
-| 4 | LLM synonym detector | 3 | `core/src/evolution/synonym-detector.ts` |
-| 5 | LLM normalization proposer | 3 | `core/src/evolution/normalization-proposer.ts` |
-| 6 | SchemaEvolverImpl orchestrator | 3 | `core/src/evolution/schema-evolver-impl.ts` |
-| 7 | Schema evolution worker | 6 | `queue/src/workers/schema-worker.ts` |
-| 8 | Crawl worker evolution trigger | 3 | `queue/src/workers/crawl-worker.ts` |
-| 9 | Exports + full verification | 6 | barrel index files |
-| **Total** | | **~39** | |
+| Task      | Component                      | New Tests | Key Files                                      |
+| --------- | ------------------------------ | --------- | ---------------------------------------------- |
+| 1         | Unmapped field aggregator      | 4         | `core/src/evolution/unmapped-aggregator.ts`    |
+| 2         | Schema action applier          | 8         | `core/src/evolution/schema-action-applier.ts`  |
+| 3         | LLM field proposer             | 3         | `core/src/evolution/field-proposer.ts`         |
+| 4         | LLM synonym detector           | 3         | `core/src/evolution/synonym-detector.ts`       |
+| 5         | LLM normalization proposer     | 3         | `core/src/evolution/normalization-proposer.ts` |
+| 6         | SchemaEvolverImpl orchestrator | 3         | `core/src/evolution/schema-evolver-impl.ts`    |
+| 7         | Schema evolution worker        | 6         | `queue/src/workers/schema-worker.ts`           |
+| 8         | Crawl worker evolution trigger | 3         | `queue/src/workers/crawl-worker.ts`            |
+| 9         | Exports + full verification    | 6         | barrel index files                             |
+| **Total** |                                | **~39**   |                                                |

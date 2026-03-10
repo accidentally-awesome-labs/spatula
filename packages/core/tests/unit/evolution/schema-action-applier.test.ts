@@ -34,10 +34,7 @@ function makeSchema(
 }
 
 /** Helper: create a minimal FieldDefinition. */
-function makeField(
-  name: string,
-  overrides: Partial<FieldDefinition> = {},
-): FieldDefinition {
+function makeField(name: string, overrides: Partial<FieldDefinition> = {}): FieldDefinition {
   return {
     name,
     description: `The ${name} field`,
@@ -114,10 +111,7 @@ describe('applySchemaActions', () => {
   });
 
   it('add_field: inserts after specified field when insertAfter is set', () => {
-    const schema = makeSchema([
-      makeField('title'),
-      makeField('description'),
-    ]);
+    const schema = makeSchema([makeField('title'), makeField('description')]);
 
     const action: PipelineAction = {
       ...baseAction(),
@@ -145,11 +139,7 @@ describe('applySchemaActions', () => {
   // --- remove_field ---
 
   it('remove_field: removes existing field', () => {
-    const schema = makeSchema([
-      makeField('title'),
-      makeField('price'),
-      makeField('description'),
-    ]);
+    const schema = makeSchema([makeField('title'), makeField('price'), makeField('description')]);
 
     const action: PipelineAction = {
       ...baseAction(),
@@ -190,9 +180,7 @@ describe('applySchemaActions', () => {
   // --- modify_field ---
 
   it('modify_field: updates type and required', () => {
-    const schema = makeSchema([
-      makeField('price', { type: 'string', required: false }),
-    ]);
+    const schema = makeSchema([makeField('price', { type: 'string', required: false })]);
 
     const action: PipelineAction = {
       ...baseAction(),
@@ -217,9 +205,7 @@ describe('applySchemaActions', () => {
   });
 
   it('modify_field: updates description and enumValues', () => {
-    const schema = makeSchema([
-      makeField('status', { type: 'enum', enumValues: ['active'] }),
-    ]);
+    const schema = makeSchema([makeField('status', { type: 'enum', enumValues: ['active'] })]);
 
     const action: PipelineAction = {
       ...baseAction(),
@@ -237,11 +223,7 @@ describe('applySchemaActions', () => {
 
     expect(result.version).toBe(2);
     expect(result.fields[0].description).toBe('The item status');
-    expect(result.fields[0].enumValues).toEqual([
-      'active',
-      'inactive',
-      'archived',
-    ]);
+    expect(result.fields[0].enumValues).toEqual(['active', 'inactive', 'archived']);
   });
 
   it('modify_field: skips non-existent field gracefully', () => {
@@ -264,9 +246,7 @@ describe('applySchemaActions', () => {
   // --- rename_field ---
 
   it('rename_field: changes field name', () => {
-    const schema = makeSchema([
-      makeField('product_name', { description: 'Name of the product' }),
-    ]);
+    const schema = makeSchema([makeField('product_name', { description: 'Name of the product' })]);
 
     const action: PipelineAction = {
       ...baseAction(),
@@ -567,9 +547,7 @@ describe('applySchemaActions', () => {
   // --- immutability ---
 
   it('does not mutate the original schema', () => {
-    const schema = makeSchema([
-      makeField('title', { required: false }),
-    ]);
+    const schema = makeSchema([makeField('title', { required: false })]);
 
     const action: PipelineAction = {
       ...baseAction(),
