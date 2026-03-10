@@ -78,10 +78,9 @@ export class SourceTrustEvaluator {
    * LLM-powered trust evaluation. Sends domains + job description to LLM,
    * gets trust rankings back. Returns a single set_source_trust PipelineAction.
    */
-  async evaluate(
-    domains: string[],
-    jobDescription: string,
-  ): Promise<PipelineAction[]> {
+  async evaluate(domains: string[], jobDescription: string): Promise<PipelineAction[]> {
+    if (domains.length === 0) return [];
+
     try {
       const model = resolveModel(this.llmConfig, 'entityMatching');
       const prompt = buildTrustPrompt(domains, jobDescription);
@@ -94,7 +93,7 @@ export class SourceTrustEvaluator {
         ],
         jsonMode: true,
         temperature: 0,
-        maxTokens: 2048,
+        maxTokens: Math.max(2048, domains.length * 200),
       });
 
       let rawObject: unknown;
@@ -108,15 +107,21 @@ export class SourceTrustEvaluator {
       const parsed = LLMTrustResponse.safeParse(rawObject);
 
       if (!parsed.success) {
-        logger.warn(
-          { errors: parsed.error.issues },
-          'invalid trust evaluation response from LLM',
-        );
+        logger.warn({ errors: parsed.error.issues }, 'invalid trust evaluation response from LLM');
         return [];
       }
 
+      const requestedDomains = new Set(domains);
+      const validRankings = parsed.data.rankings.filter((r) => requestedDomains.has(r.domain));
+      if (validRankings.length < domains.length) {
+        logger.warn(
+          { expected: domains.length, received: validRankings.length },
+          'LLM returned rankings for fewer domains than requested',
+        );
+      }
+
       logger.debug(
-        { rankingCount: parsed.data.rankings.length },
+        { rankingCount: validRankings.length },
         'source trust rankings received from LLM',
       );
 
@@ -128,7 +133,7 @@ export class SourceTrustEvaluator {
         reasoning: 'LLM-evaluated source trustworthiness rankings',
         confidence: 1,
         payload: {
-          rankings: parsed.data.rankings,
+          rankings: validRankings,
         },
       };
 
@@ -147,10 +152,9 @@ export class SourceTrustEvaluator {
    * First domain = authoritative, second = high, rest = medium.
    * Domains not in priority list get 'medium'.
    */
-  evaluateWithPriority(
-    domains: string[],
-    sourcePriority: string[],
-  ): PipelineAction[] {
+  evaluateWithPriority(domains: string[], sourcePriority: string[]): PipelineAction[] {
+    if (domains.length === 0) return [];
+
     const rankings = domains.map((domain) => {
       const priorityIndex = sourcePriority.indexOf(domain);
       let trustLevel: z.infer<typeof TrustLevel>;

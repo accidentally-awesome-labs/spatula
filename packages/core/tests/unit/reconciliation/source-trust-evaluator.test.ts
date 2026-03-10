@@ -70,10 +70,7 @@ describe('SourceTrustEvaluator.evaluate', () => {
     };
     const evaluator = new SourceTrustEvaluator(client, defaultLLMConfig);
 
-    const actions = await evaluator.evaluate(
-      ['amazon.com'],
-      'Collect product data',
-    );
+    const actions = await evaluator.evaluate(['amazon.com'], 'Collect product data');
 
     expect(actions).toEqual([]);
   });
@@ -82,24 +79,16 @@ describe('SourceTrustEvaluator.evaluate', () => {
     const client = createMockClient('this is not valid JSON');
     const evaluator = new SourceTrustEvaluator(client, defaultLLMConfig);
 
-    const actions = await evaluator.evaluate(
-      ['amazon.com'],
-      'Collect product data',
-    );
+    const actions = await evaluator.evaluate(['amazon.com'], 'Collect product data');
 
     expect(actions).toEqual([]);
   });
 
   it('returns empty array on wrong Zod shape', async () => {
-    const client = createMockClient(
-      JSON.stringify({ wrongField: 'not the right schema' }),
-    );
+    const client = createMockClient(JSON.stringify({ wrongField: 'not the right schema' }));
     const evaluator = new SourceTrustEvaluator(client, defaultLLMConfig);
 
-    const actions = await evaluator.evaluate(
-      ['amazon.com'],
-      'Collect product data',
-    );
+    const actions = await evaluator.evaluate(['amazon.com'], 'Collect product data');
 
     expect(actions).toEqual([]);
   });
@@ -124,16 +113,14 @@ describe('SourceTrustEvaluator.evaluate', () => {
     );
 
     const call = (client.complete as ReturnType<typeof vi.fn>).mock.calls[0][0];
-    const userMessage = call.messages.find(
-      (m: { role: string }) => m.role === 'user',
-    );
+    const userMessage = call.messages.find((m: { role: string }) => m.role === 'user');
 
     expect(userMessage.content).toContain('shop.example.com');
     expect(userMessage.content).toContain('reviews.example.com');
     expect(userMessage.content).toContain('Collect electronics pricing data');
   });
 
-  it('uses jsonMode, temperature 0, and maxTokens 2048', async () => {
+  it('uses jsonMode, temperature 0, and scales maxTokens with domain count', async () => {
     const llmResponse = JSON.stringify({
       rankings: [
         {
@@ -152,7 +139,17 @@ describe('SourceTrustEvaluator.evaluate', () => {
     const call = (client.complete as ReturnType<typeof vi.fn>).mock.calls[0][0];
     expect(call.jsonMode).toBe(true);
     expect(call.temperature).toBe(0);
-    expect(call.maxTokens).toBe(2048);
+    expect(call.maxTokens).toBe(2048); // Math.max(2048, 1 * 200) = 2048
+  });
+
+  it('returns empty array for empty domains without calling LLM', async () => {
+    const client = createMockClient('');
+    const evaluator = new SourceTrustEvaluator(client, defaultLLMConfig);
+
+    const actions = await evaluator.evaluate([], 'Collect product data');
+
+    expect(actions).toEqual([]);
+    expect(client.complete).not.toHaveBeenCalled();
   });
 
   it('returns empty array when rankings contain invalid trust level', async () => {
@@ -169,10 +166,7 @@ describe('SourceTrustEvaluator.evaluate', () => {
     const client = createMockClient(llmResponse);
     const evaluator = new SourceTrustEvaluator(client, defaultLLMConfig);
 
-    const actions = await evaluator.evaluate(
-      ['example.com'],
-      'Collect data',
-    );
+    const actions = await evaluator.evaluate(['example.com'], 'Collect data');
 
     expect(actions).toEqual([]);
   });
@@ -197,9 +191,7 @@ describe('SourceTrustEvaluator.evaluateWithPriority', () => {
     expect(action.type).toBe('set_source_trust');
     expect(action.source).toBe('reconciliation');
 
-    const rankingMap = new Map(
-      action.payload.rankings.map((r) => [r.domain, r.trustLevel]),
-    );
+    const rankingMap = new Map(action.payload.rankings.map((r) => [r.domain, r.trustLevel]));
 
     expect(rankingMap.get('amazon.com')).toBe('authoritative');
     expect(rankingMap.get('bestbuy.com')).toBe('high');
@@ -219,9 +211,7 @@ describe('SourceTrustEvaluator.evaluateWithPriority', () => {
     expect(actions).toHaveLength(1);
     const action = actions[0] as PipelineAction & { type: 'set_source_trust' };
 
-    const rankingMap = new Map(
-      action.payload.rankings.map((r) => [r.domain, r.trustLevel]),
-    );
+    const rankingMap = new Map(action.payload.rankings.map((r) => [r.domain, r.trustLevel]));
 
     expect(rankingMap.get('known.com')).toBe('authoritative');
     expect(rankingMap.get('unknown1.com')).toBe('medium');
@@ -232,10 +222,7 @@ describe('SourceTrustEvaluator.evaluateWithPriority', () => {
     const client = createMockClient('');
     const evaluator = new SourceTrustEvaluator(client, defaultLLMConfig);
 
-    const actions = evaluator.evaluateWithPriority(
-      ['a.com', 'b.com', 'c.com'],
-      [],
-    );
+    const actions = evaluator.evaluateWithPriority(['a.com', 'b.com', 'c.com'], []);
 
     expect(actions).toHaveLength(1);
     const action = actions[0] as PipelineAction & { type: 'set_source_trust' };
@@ -260,14 +247,21 @@ describe('SourceTrustEvaluator.evaluateWithPriority', () => {
     expect(domains).toEqual(['a.com', 'b.com', 'c.com', 'd.com']);
   });
 
+  it('returns empty array for empty domains without calling LLM', () => {
+    const client = createMockClient('');
+    const evaluator = new SourceTrustEvaluator(client, defaultLLMConfig);
+
+    const actions = evaluator.evaluateWithPriority([], ['amazon.com']);
+
+    expect(actions).toEqual([]);
+    expect(client.complete).not.toHaveBeenCalled();
+  });
+
   it('handles single domain in priority list', () => {
     const client = createMockClient('');
     const evaluator = new SourceTrustEvaluator(client, defaultLLMConfig);
 
-    const actions = evaluator.evaluateWithPriority(
-      ['only.com'],
-      ['only.com'],
-    );
+    const actions = evaluator.evaluateWithPriority(['only.com'], ['only.com']);
 
     const action = actions[0] as PipelineAction & { type: 'set_source_trust' };
     expect(action.payload.rankings).toHaveLength(1);
