@@ -47,7 +47,9 @@ function convertMeasurement(
 
   const baseValue = value * from.factor;
   const converted = baseValue / to.factor;
-  // Round to avoid floating-point noise (up to 10 significant decimals)
+  // toPrecision(10) suppresses floating-point noise that arises in unit
+  // conversions with non-power-of-two factors (e.g. oz↔lb) so that
+  // 32 oz → 2 lb rather than 1.9999999999… lb.
   return { value: Number(converted.toPrecision(10)), unit: toUnit };
 }
 
@@ -56,7 +58,7 @@ function convertMeasurement(
 // ---------------------------------------------------------------------------
 
 const CURRENCY_SYMBOLS = /^[\$\u20AC\u00A3\u00A5]\s*/; // $, EUR sign, GBP sign, JPY sign
-const CURRENCY_CODES = /\s*(USD|EUR|GBP|JPY|CAD|AUD|CHF|CNY|INR|BRL)\s*/gi;
+const CURRENCY_CODES = /\s*(USD|EUR|GBP|JPY|CAD|AUD|CHF|CNY|INR|BRL)\s*/i;
 
 function parseCurrency(raw: string): number | null {
   let cleaned = raw.replace(CURRENCY_SYMBOLS, '').replace(CURRENCY_CODES, '').trim();
@@ -271,6 +273,9 @@ export function normalizeExtractionData(
 
 function deepEqual(a: unknown, b: unknown): boolean {
   if (a === b) return true;
+  // NaN === NaN is false in JS; treat two NaN values as equal to avoid phantom changes
+  if (typeof a === 'number' && typeof b === 'number' && Number.isNaN(a) && Number.isNaN(b))
+    return true;
   if (a === null || b === null) return false;
   if (typeof a !== typeof b) return false;
 

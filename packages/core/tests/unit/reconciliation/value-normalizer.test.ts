@@ -93,19 +93,19 @@ describe('applyNormalizationRule — currency', () => {
   });
 
   it('strips currency code suffix', () => {
-    expect(applyNormalizationRule('329.00 USD', currencyRule)).toBe(329.00);
+    expect(applyNormalizationRule('329.00 USD', currencyRule)).toBe(329.0);
   });
 
   it('strips EUR prefix', () => {
-    expect(applyNormalizationRule('EUR 19.999', currencyRule)).toBe(20.00);
+    expect(applyNormalizationRule('EUR 19.999', currencyRule)).toBe(20.0);
   });
 
   it('rounds already-numeric values to specified decimal places', () => {
-    expect(applyNormalizationRule(19.999, currencyRule)).toBe(20.00);
+    expect(applyNormalizationRule(19.999, currencyRule)).toBe(20.0);
   });
 
   it('handles string numbers without symbols', () => {
-    expect(applyNormalizationRule('549', currencyRule)).toBe(549.00);
+    expect(applyNormalizationRule('549', currencyRule)).toBe(549.0);
   });
 
   it('returns non-parseable values unchanged', () => {
@@ -165,11 +165,7 @@ describe('applyNormalizationRule — list', () => {
   };
 
   it('splits a comma-separated string and trims items', () => {
-    expect(applyNormalizationRule('red, green , blue', listRule)).toEqual([
-      'red',
-      'green',
-      'blue',
-    ]);
+    expect(applyNormalizationRule('red, green , blue', listRule)).toEqual(['red', 'green', 'blue']);
   });
 
   it('returns already-array values unchanged', () => {
@@ -366,7 +362,7 @@ describe('normalizeExtractionData', () => {
   it('returns empty changes for already-normalized data', () => {
     const data = {
       product_name: 'Already Title',
-      price: 100.00,
+      price: 100.0,
       color: 'Red', // not in map — untouched
     };
 
@@ -393,5 +389,58 @@ describe('normalizeExtractionData', () => {
 
     // unknown_field is not in schema — should pass through unchanged
     expect(result.normalizedData.unknown_field).toBe('value');
+  });
+
+  it('normalizes measurement and list fields and records changes', () => {
+    const measurementListSchema: SchemaDefinition = {
+      version: 1,
+      fields: [
+        {
+          name: 'weight',
+          description: 'Product weight',
+          type: 'string',
+          required: false,
+          normalization: { type: 'measurement', config: { targetUnit: 'kg' } },
+        },
+        {
+          name: 'tags',
+          description: 'Comma-separated tags',
+          type: 'string',
+          required: false,
+          normalization: { type: 'list', config: { separator: ',' } },
+        },
+      ],
+      fieldAliases: [],
+      createdAt: new Date('2026-01-01'),
+      parentVersion: null,
+    };
+
+    const data = {
+      weight: '500g',
+      tags: 'electronics, audio, headphones',
+    };
+
+    const result = normalizeExtractionData(data, measurementListSchema);
+
+    // Measurement: 500g → 0.5 kg
+    expect(result.normalizedData.weight).toEqual({ value: 0.5, unit: 'kg' });
+
+    // List: comma-separated string → trimmed array
+    expect(result.normalizedData.tags).toEqual(['electronics', 'audio', 'headphones']);
+
+    // Both fields should appear in changes
+    const changedFields = result.changes.map((c) => c.fieldName);
+    expect(changedFields).toContain('weight');
+    expect(changedFields).toContain('tags');
+
+    // Verify before/after for weight
+    const weightChange = result.changes.find((c) => c.fieldName === 'weight');
+    expect(weightChange!.before).toBe('500g');
+    expect(weightChange!.after).toEqual({ value: 0.5, unit: 'kg' });
+
+    // Verify before/after for tags
+    const tagsChange = result.changes.find((c) => c.fieldName === 'tags');
+    expect(tagsChange!.before).toBe('electronics, audio, headphones');
+    expect(tagsChange!.after).toEqual(['electronics', 'audio', 'headphones']);
   });
 });
