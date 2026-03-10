@@ -222,10 +222,8 @@ export function levenshteinSimilarity(a: string, b: string): number {
   const n = bl.length;
 
   // Use two-row optimisation for O(min(m,n)) space
-  let prev = new Array(n + 1);
-  let curr = new Array(n + 1);
-
-  for (let j = 0; j <= n; j++) prev[j] = j;
+  let prev = Array.from<number>({ length: n + 1 }, (_, j) => j);
+  let curr = new Array<number>(n + 1).fill(0);
 
   for (let i = 1; i <= m; i++) {
     curr[0] = i;
@@ -316,9 +314,9 @@ export function matchEntitiesFuzzy(
 const LLMMatchResponseSchema = z.object({
   groups: z.array(
     z.object({
-      extractionIds: z.array(z.string()),
+      extractionIds: z.array(z.string()).min(1),
       reasoning: z.string(),
-      confidence: z.number(),
+      confidence: z.number().min(0).max(1),
     }),
   ),
 });
@@ -341,8 +339,7 @@ export async function matchEntitiesLLM(
 ): Promise<ExtractionWithSource[][]> {
   if (extractions.length === 0) return [];
 
-  const singletonFallback = (): ExtractionWithSource[][] =>
-    extractions.map((e) => [e]);
+  const singletonFallback = (): ExtractionWithSource[][] => extractions.map((e) => [e]);
 
   try {
     const model = resolveModel(llmConfig, 'entityMatching');
@@ -394,6 +391,10 @@ export async function matchEntitiesLLM(
     for (const group of validated.groups) {
       const members: ExtractionWithSource[] = [];
       for (const id of group.extractionIds) {
+        if (coveredIds.has(id)) {
+          logger.warn({ id }, 'LLM returned duplicate extraction ID across groups, skipping');
+          continue;
+        }
         const ext = extractionMap.get(id);
         if (ext) {
           members.push(ext);

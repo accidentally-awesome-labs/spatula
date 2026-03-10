@@ -348,6 +348,11 @@ describe('levenshteinSimilarity', () => {
     expect(levenshteinSimilarity('', 'hello')).toBe(0);
     expect(levenshteinSimilarity('world', '')).toBe(0);
   });
+
+  it('handles asymmetric length strings', () => {
+    const sim = levenshteinSimilarity('ab', 'abcdef');
+    expect(sim).toBeCloseTo(2 / 6); // 1 - 4/6
+  });
 });
 
 // ---------------------------------------------------------------------------
@@ -495,6 +500,41 @@ describe('matchEntitiesLLM', () => {
     const groups = await matchEntitiesLLM([a, b, c], client, defaultLLMConfig);
 
     expect(groups).toHaveLength(2);
+    const ids = groups.map((g) => g.map((e) => e.id).sort());
+    expect(ids).toContainEqual([a.id, b.id].sort());
+    expect(ids).toContainEqual([c.id]);
+  });
+
+  it('deduplicates extraction IDs that appear in multiple LLM groups', async () => {
+    const a = makeExtraction('a', { name: 'Widget A' }, 'https://shop1.com/a');
+    const b = makeExtraction('b', { name: 'Widget B' }, 'https://shop2.com/b');
+    const c = makeExtraction('c', { name: 'Gadget C' }, 'https://shop3.com/c');
+
+    // LLM erroneously puts b in both groups
+    const llmResponse = JSON.stringify({
+      groups: [
+        {
+          extractionIds: [a.id, b.id],
+          reasoning: 'Both widgets',
+          confidence: 0.9,
+        },
+        {
+          extractionIds: [b.id, c.id],
+          reasoning: 'Related products',
+          confidence: 0.8,
+        },
+      ],
+    });
+
+    const client = createMockClient(llmResponse);
+    const groups = await matchEntitiesLLM([a, b, c], client, defaultLLMConfig);
+
+    // b should appear in exactly one group (the first one encountered)
+    const allIds = groups.flatMap((g) => g.map((e) => e.id));
+    const uniqueIds = new Set(allIds);
+    expect(allIds.length).toBe(uniqueIds.size);
+
+    // b should be in the first group with a, not in the second group
     const ids = groups.map((g) => g.map((e) => e.id).sort());
     expect(ids).toContainEqual([a.id, b.id].sort());
     expect(ids).toContainEqual([c.id]);
