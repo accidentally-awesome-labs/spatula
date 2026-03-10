@@ -16,9 +16,9 @@ function makeExtraction(
   sourceUrl: string,
 ): ExtractionWithSource {
   return {
-    id,
+    id: `00000000-0000-0000-0000-${id.padStart(12, '0')}`,
     jobId: '00000000-0000-0000-0000-000000000001',
-    pageId: `page-${id}`,
+    pageId: `00000000-0000-0000-0001-${id.padStart(12, '0')}`,
     schemaVersion: 1,
     data,
     metadata: {
@@ -70,7 +70,11 @@ describe('matchEntitiesExact', () => {
 
     expect(groups).toHaveLength(1);
     expect(groups[0]).toHaveLength(3);
-    expect(groups[0].map((e) => e.id).sort()).toEqual(['a', 'b', 'c']);
+    expect(groups[0].map((e) => e.id).sort()).toEqual([
+      '00000000-0000-0000-0000-00000000000a',
+      '00000000-0000-0000-0000-00000000000b',
+      '00000000-0000-0000-0000-00000000000c',
+    ]);
   });
 
   it('each unique value combination forms its own group', () => {
@@ -82,8 +86,11 @@ describe('matchEntitiesExact', () => {
 
     expect(groups).toHaveLength(2);
     const ids = groups.map((g) => g.map((e) => e.id).sort());
-    expect(ids).toContainEqual(['a', 'c']);
-    expect(ids).toContainEqual(['b']);
+    expect(ids).toContainEqual([
+      '00000000-0000-0000-0000-00000000000a',
+      '00000000-0000-0000-0000-00000000000c',
+    ]);
+    expect(ids).toContainEqual(['00000000-0000-0000-0000-00000000000b']);
   });
 
   it('performs case-insensitive matching for strings', () => {
@@ -106,8 +113,11 @@ describe('matchEntitiesExact', () => {
 
     expect(groups).toHaveLength(2);
     const ids = groups.map((g) => g.map((e) => e.id).sort());
-    expect(ids).toContainEqual(['a', 'c']);
-    expect(ids).toContainEqual(['b']);
+    expect(ids).toContainEqual([
+      '00000000-0000-0000-0000-00000000000a',
+      '00000000-0000-0000-0000-00000000000c',
+    ]);
+    expect(ids).toContainEqual(['00000000-0000-0000-0000-00000000000b']);
   });
 
   it('missing key fields produce separate groups', () => {
@@ -136,8 +146,11 @@ describe('matchEntitiesExact', () => {
 
     expect(groups).toHaveLength(2);
     const ids = groups.map((g) => g.map((e) => e.id).sort());
-    expect(ids).toContainEqual(['a', 'b']);
-    expect(ids).toContainEqual(['c']);
+    expect(ids).toContainEqual([
+      '00000000-0000-0000-0000-00000000000a',
+      '00000000-0000-0000-0000-00000000000b',
+    ]);
+    expect(ids).toContainEqual(['00000000-0000-0000-0000-00000000000c']);
   });
 });
 
@@ -221,8 +234,11 @@ describe('matchEntitiesCompositeKey', () => {
     const groups1 = matchEntitiesCompositeKey([a, b, c], ['name', 'sku', 'color'], 0.6);
     expect(groups1).toHaveLength(2);
     const ids1 = groups1.map((g) => g.map((e) => e.id).sort());
-    expect(ids1).toContainEqual(['a', 'b']);
-    expect(ids1).toContainEqual(['c']);
+    expect(ids1).toContainEqual([
+      '00000000-0000-0000-0000-00000000000a',
+      '00000000-0000-0000-0000-00000000000b',
+    ]);
+    expect(ids1).toContainEqual(['00000000-0000-0000-0000-00000000000c']);
 
     // Now adjust so B↔C also matches with a lower threshold → transitive grouping
     // A↔B: 2/3 = 0.67 ≥ 0.3 ✓

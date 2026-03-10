@@ -18,16 +18,20 @@ class UnionFind {
   private parent: number[];
   private rank: number[];
 
-  constructor(size: number) {
+  constructor(private readonly size: number) {
     this.parent = Array.from({ length: size }, (_, i) => i);
     this.rank = new Array(size).fill(0);
   }
 
   find(x: number): number {
-    if (this.parent[x] !== x) {
-      this.parent[x] = this.find(this.parent[x]); // path compression
+    let root = x;
+    while (this.parent[root] !== root) root = this.parent[root];
+    while (this.parent[x] !== root) {
+      const next = this.parent[x];
+      this.parent[x] = root;
+      x = next;
     }
-    return this.parent[x];
+    return root;
   }
 
   union(x: number, y: number): void {
@@ -47,9 +51,9 @@ class UnionFind {
     }
   }
 
-  groups(size: number): number[][] {
+  groups(): number[][] {
     const groupMap = new Map<number, number[]>();
-    for (let i = 0; i < size; i++) {
+    for (let i = 0; i < this.size; i++) {
       const root = this.find(i);
       let group = groupMap.get(root);
       if (!group) {
@@ -84,7 +88,7 @@ export function normalizeKeyValue(value: unknown): string {
  * Groups extractions where all key field values match exactly.
  *
  * - Case-insensitive for string values
- * - Build a composite key from all keyFields joined by `||`
+ * - Build a composite key from all keyFields joined by `\0`
  * - Extractions with missing/null/undefined key field values get their own
  *   unique key (won't match anything)
  */
@@ -109,7 +113,7 @@ export function matchEntitiesExact(
       // Unique key so it won't match anything
       compositeKey = `__missing__${missingCounter++}`;
     } else {
-      compositeKey = keyFields.map((field) => normalizeKeyValue(extraction.data[field])).join('||');
+      compositeKey = keyFields.map((field) => normalizeKeyValue(extraction.data[field])).join('\0');
     }
 
     let group = groupMap.get(compositeKey);
@@ -184,6 +188,6 @@ export function matchEntitiesCompositeKey(
   }
 
   // Collect groups
-  const indexGroups = uf.groups(n);
+  const indexGroups = uf.groups();
   return indexGroups.map((indices) => indices.map((i) => extractions[i]));
 }
