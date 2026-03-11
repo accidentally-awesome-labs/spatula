@@ -8,3 +8,8 @@ export { ExtractionRepository } from './extraction-repository.js';
 export type { StoreExtractionInput } from './extraction-repository.js';
 export { PageRepository } from './page-repository.js';
 export type { CreatePageInput } from './page-repository.js';
+export { EntityRepository } from './entity-repository.js';
+export type { CreateEntityInput } from './entity-repository.js';
+export { SourceTrustRepository } from './source-trust-repository.js';
+export type { UpsertSourceTrustInput } from './source-trust-repository.js';
+export { EntitySourceRepository } from './entity-source-repository.js';
