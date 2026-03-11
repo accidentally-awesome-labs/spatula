@@ -222,8 +222,8 @@ export function levenshteinSimilarity(a: string, b: string): number {
   const n = bl.length;
 
   // Use two-row optimisation for O(min(m,n)) space
-  let prev = Array.from<number>({ length: n + 1 }, (_, j) => j);
-  let curr = new Array<number>(n + 1).fill(0);
+  let prev: number[] = Array.from({ length: n + 1 }, (_, j) => j);
+  let curr: number[] = new Array(n + 1).fill(0);
 
   for (let i = 1; i <= m; i++) {
     curr[0] = i;
