@@ -1,4 +1,4 @@
-import { eq, and } from 'drizzle-orm';
+import { eq, and, inArray } from 'drizzle-orm';
 import { createLogger, StorageError } from '@spatula/shared';
 import { rawPages } from '../schema/raw-pages.js';
 import type { Database } from '../connection.js';
@@ -64,6 +64,21 @@ export class PageRepository {
       throw new StorageError(`Failed to find page: ${(error as Error).message}`, {
         cause: error as Error,
         context: { taskId },
+      });
+    }
+  }
+
+  async findByIds(ids: string[], tenantId: string) {
+    try {
+      if (ids.length === 0) return [];
+      return await this.db
+        .select()
+        .from(rawPages)
+        .where(and(inArray(rawPages.id, ids), eq(rawPages.tenantId, tenantId)));
+    } catch (error) {
+      throw new StorageError(`Failed to find pages by ids: ${(error as Error).message}`, {
+        cause: error as Error,
+        context: { count: ids.length },
       });
     }
   }

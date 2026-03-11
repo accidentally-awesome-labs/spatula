@@ -36,6 +36,7 @@ function createMockQueues() {
     crawl: { add: vi.fn() },
     extract: { add: vi.fn() },
     schemaEvolution: { add: vi.fn() },
+    reconciliation: { add: vi.fn() },
     closeAll: vi.fn(),
   };
 }
@@ -238,5 +239,23 @@ describe('JobManager', () => {
     const status = await manager.getJobStatus(JOB_ID, TENANT_ID);
 
     expect(status).toBe('running');
+  });
+
+  it('triggerReconciliation transitions running→reconciling and enqueues reconciliation job', async () => {
+    jobRepo.findById.mockResolvedValue({
+      id: JOB_ID,
+      tenantId: TENANT_ID,
+      status: 'running',
+      config: baseConfig,
+    });
+    jobRepo.updateStatus.mockResolvedValue({ id: JOB_ID });
+
+    await manager.triggerReconciliation(JOB_ID, TENANT_ID);
+
+    expect(jobRepo.updateStatus).toHaveBeenCalledWith(JOB_ID, TENANT_ID, 'reconciling');
+    expect(queues.reconciliation.add).toHaveBeenCalledWith(`reconciliation:${JOB_ID}`, {
+      jobId: JOB_ID,
+      tenantId: TENANT_ID,
+    });
   });
 });

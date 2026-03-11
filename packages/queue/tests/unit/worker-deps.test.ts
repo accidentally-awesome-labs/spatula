@@ -9,12 +9,22 @@ describe('WorkerDeps', () => {
       classifier: { classify: vi.fn() } as any,
       contentStore: { store: vi.fn(), retrieve: vi.fn(), delete: vi.fn() } as any,
       schemaEvolver: { evolve: vi.fn() } as any,
+      reconciler: { reconcile: vi.fn() } as any,
       jobRepo: {} as any,
       taskRepo: {} as any,
       pageRepo: {} as any,
       extractionRepo: {} as any,
       schemaRepo: {} as any,
-      queues: { crawl: {}, extract: {}, schemaEvolution: {}, closeAll: vi.fn() } as any,
+      entityRepo: {} as any,
+      sourceTrustRepo: {} as any,
+      entitySourceRepo: {} as any,
+      queues: {
+        crawl: {},
+        extract: {},
+        schemaEvolution: {},
+        reconciliation: {},
+        closeAll: vi.fn(),
+      } as any,
     });
 
     expect(deps.crawler).toBeDefined();
@@ -22,11 +32,15 @@ describe('WorkerDeps', () => {
     expect(deps.classifier).toBeDefined();
     expect(deps.contentStore).toBeDefined();
     expect(deps.schemaEvolver).toBeDefined();
+    expect(deps.reconciler).toBeDefined();
     expect(deps.jobRepo).toBeDefined();
     expect(deps.taskRepo).toBeDefined();
     expect(deps.pageRepo).toBeDefined();
     expect(deps.extractionRepo).toBeDefined();
     expect(deps.schemaRepo).toBeDefined();
+    expect(deps.entityRepo).toBeDefined();
+    expect(deps.sourceTrustRepo).toBeDefined();
+    expect(deps.entitySourceRepo).toBeDefined();
     expect(deps.queues).toBeDefined();
   });
 });

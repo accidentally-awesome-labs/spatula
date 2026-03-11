@@ -102,6 +102,19 @@ export class JobManager {
     logger.info({ jobId }, 'job cancelled');
   }
 
+  async triggerReconciliation(jobId: string, tenantId: string): Promise<void> {
+    const job = await this.getJob(jobId, tenantId);
+    JobStateMachine.transition(job.status as JobStatus, 'reconciling');
+    await this.jobRepo.updateStatus(jobId, tenantId, 'reconciling');
+
+    await this.queues.reconciliation.add(`reconciliation:${jobId}`, {
+      jobId,
+      tenantId,
+    });
+
+    logger.info({ jobId }, 'reconciliation triggered');
+  }
+
   async getJobStatus(jobId: string, tenantId: string): Promise<JobStatus> {
     const job = await this.getJob(jobId, tenantId);
     return job.status as JobStatus;

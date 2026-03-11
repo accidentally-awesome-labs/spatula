@@ -7,6 +7,7 @@ export type {
   CrawlJobData,
   ExtractJobData,
   SchemaEvolutionJobData,
+  ReconciliationJobData,
   SpatulaQueues,
 } from './queues.js';
 
@@ -21,3 +22,4 @@ export type { WorkerDepsConfig } from './worker-deps.js';
 // Workers
 export { processCrawlJob } from './workers/crawl-worker.js';
 export { processSchemaEvolutionJob } from './workers/schema-worker.js';
+export { processReconciliationJob } from './workers/reconciliation-worker.js';

@@ -131,6 +131,9 @@ function createMockDeps(): WorkerDeps {
     schemaEvolver: {
       evolve: vi.fn().mockResolvedValue([]),
     },
+    reconciler: {
+      reconcile: vi.fn().mockResolvedValue({ entities: [], actions: [] }),
+    },
     jobRepo: {
       findById: vi.fn().mockResolvedValue(mockJob),
     } as any,
@@ -146,6 +149,7 @@ function createMockDeps(): WorkerDeps {
     pageRepo: {
       findByContentHash: vi.fn().mockResolvedValue(null),
       create: vi.fn().mockResolvedValue(mockPage),
+      findByIds: vi.fn().mockResolvedValue([]),
     } as any,
     extractionRepo: {
       store: vi.fn().mockResolvedValue({ id: 'extraction-1' }),
@@ -155,6 +159,15 @@ function createMockDeps(): WorkerDeps {
     schemaRepo: {
       findLatest: vi.fn().mockResolvedValue(mockSchema),
     } as any,
+    entityRepo: {
+      create: vi.fn().mockResolvedValue({ id: 'entity-1' }),
+    } as any,
+    sourceTrustRepo: {
+      upsert: vi.fn().mockResolvedValue({ id: 'trust-1' }),
+    } as any,
+    entitySourceRepo: {
+      bulkLink: vi.fn().mockResolvedValue([]),
+    } as any,
     queues: {
       crawl: {
         add: vi.fn().mockResolvedValue(undefined),
@@ -163,6 +176,9 @@ function createMockDeps(): WorkerDeps {
         add: vi.fn().mockResolvedValue(undefined),
       },
       schemaEvolution: {
+        add: vi.fn().mockResolvedValue(undefined),
+      },
+      reconciliation: {
         add: vi.fn().mockResolvedValue(undefined),
       },
       closeAll: vi.fn().mockResolvedValue(undefined),

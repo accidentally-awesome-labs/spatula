@@ -5,6 +5,7 @@ export const QUEUE_NAMES = {
   CRAWL: 'spatula:crawl',
   EXTRACT: 'spatula:extract',
   SCHEMA_EVOLUTION: 'spatula:schema-evolution',
+  RECONCILIATION: 'spatula:reconciliation',
 } as const;
 
 export interface CrawlJobData {
@@ -30,10 +31,16 @@ export interface SchemaEvolutionJobData {
   extractionIds: string[];
 }
 
+export interface ReconciliationJobData {
+  jobId: string;
+  tenantId: string;
+}
+
 export interface SpatulaQueues {
   crawl: Queue<CrawlJobData>;
   extract: Queue<ExtractJobData>;
   schemaEvolution: Queue<SchemaEvolutionJobData>;
+  reconciliation: Queue<ReconciliationJobData>;
   closeAll(): Promise<void>;
 }
 
@@ -43,13 +50,22 @@ export function createQueues(connection: ConnectionOptions): SpatulaQueues {
   const schemaEvolution = new Queue<SchemaEvolutionJobData>(QUEUE_NAMES.SCHEMA_EVOLUTION, {
     connection,
   });
+  const reconciliation = new Queue<ReconciliationJobData>(QUEUE_NAMES.RECONCILIATION, {
+    connection,
+  });
 
   return {
     crawl,
     extract,
     schemaEvolution,
+    reconciliation,
     async closeAll() {
-      await Promise.all([crawl.close(), extract.close(), schemaEvolution.close()]);
+      await Promise.all([
+        crawl.close(),
+        extract.close(),
+        schemaEvolution.close(),
+        reconciliation.close(),
+      ]);
     },
   };
 }

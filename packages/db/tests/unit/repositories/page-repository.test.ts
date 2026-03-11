@@ -41,6 +41,16 @@ describe('PageRepository', () => {
     expect(typeof repo.findByTask).toBe('function');
   });
 
+  it('has findByIds method', () => {
+    expect(typeof repo.findByIds).toBe('function');
+  });
+
+  it('findByIds returns empty array for empty ids', async () => {
+    const result = await repo.findByIds([], '550e8400-e29b-41d4-a716-446655440001');
+    expect(result).toEqual([]);
+    expect(mockDb.select).not.toHaveBeenCalled();
+  });
+
   it('create calls db.insert', async () => {
     await repo.create({
       taskId: '550e8400-e29b-41d4-a716-446655440000',

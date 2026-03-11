@@ -16,13 +16,15 @@ describe('Queue Factory', () => {
     expect(QUEUE_NAMES.CRAWL).toBe('spatula:crawl');
     expect(QUEUE_NAMES.EXTRACT).toBe('spatula:extract');
     expect(QUEUE_NAMES.SCHEMA_EVOLUTION).toBe('spatula:schema-evolution');
+    expect(QUEUE_NAMES.RECONCILIATION).toBe('spatula:reconciliation');
   });
 
-  it('creates all three queues', () => {
+  it('creates all queues', () => {
     const queues = createQueues({ host: 'localhost', port: 6379 });
     expect(queues.crawl).toBeDefined();
     expect(queues.extract).toBeDefined();
     expect(queues.schemaEvolution).toBeDefined();
+    expect(queues.reconciliation).toBeDefined();
   });
 
   it('passes Redis connection to queues', () => {
@@ -37,5 +39,6 @@ describe('Queue Factory', () => {
     expect(queues.crawl.close).toHaveBeenCalled();
     expect(queues.extract.close).toHaveBeenCalled();
     expect(queues.schemaEvolution.close).toHaveBeenCalled();
+    expect(queues.reconciliation.close).toHaveBeenCalled();
   });
 });
