@@ -65,11 +65,11 @@ export class EntityRepository {
         .where(and(eq(entities.jobId, jobId), eq(entities.tenantId, tenantId)))
         .orderBy(desc(entities.qualityScore));
 
-      if (options?.limit) {
+      if (options?.limit !== undefined) {
         query = query.limit(options.limit) as typeof query;
       }
 
-      if (options?.offset) {
+      if (options?.offset !== undefined) {
         query = query.offset(options.offset) as typeof query;
       }
 

@@ -1,11 +1,12 @@
 import { eq, and } from 'drizzle-orm';
 import { createLogger, StorageError } from '@spatula/shared';
 import { sourceTrust } from '../schema/source-trust.js';
+import { trustLevelEnum } from '../schema/enums.js';
 import type { Database } from '../connection.js';
 
 const logger = createLogger('source-trust-repository');
 
-export type TrustLevel = 'authoritative' | 'high' | 'medium' | 'low';
+export type TrustLevel = (typeof trustLevelEnum.enumValues)[number];
 
 export interface UpsertSourceTrustInput {
   jobId: string;
@@ -20,28 +21,29 @@ export class SourceTrustRepository {
 
   async upsert(input: UpsertSourceTrustInput) {
     try {
-      // Delete existing record for this job+domain, then insert fresh
-      // (no unique constraint on jobId+domain, so onConflictDoUpdate won't work)
-      await this.db
-        .delete(sourceTrust)
-        .where(and(eq(sourceTrust.jobId, input.jobId), eq(sourceTrust.domain, input.domain)));
+      // Wrap delete+insert in a transaction for atomicity
+      return await this.db.transaction(async (tx) => {
+        await tx
+          .delete(sourceTrust)
+          .where(and(eq(sourceTrust.jobId, input.jobId), eq(sourceTrust.domain, input.domain)));
 
-      const [row] = await this.db
-        .insert(sourceTrust)
-        .values({
-          jobId: input.jobId,
-          tenantId: input.tenantId,
-          domain: input.domain,
-          trustLevel: input.trustLevel,
-          reasoning: input.reasoning,
-        })
-        .returning();
+        const [row] = await tx
+          .insert(sourceTrust)
+          .values({
+            jobId: input.jobId,
+            tenantId: input.tenantId,
+            domain: input.domain,
+            trustLevel: input.trustLevel,
+            reasoning: input.reasoning,
+          })
+          .returning();
 
-      logger.debug(
-        { trustId: row.id, domain: input.domain, trustLevel: input.trustLevel },
-        'source trust upserted',
-      );
-      return row;
+        logger.debug(
+          { trustId: row.id, domain: input.domain, trustLevel: input.trustLevel },
+          'source trust upserted',
+        );
+        return row;
+      });
     } catch (error) {
       throw new StorageError(`Failed to upsert source trust: ${(error as Error).message}`, {
         cause: error as Error,
