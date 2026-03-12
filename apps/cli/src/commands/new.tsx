@@ -104,10 +104,10 @@ async function handleConfirmAndStart(
   const validation = state.validateConfig();
 
   if (!validation.valid) {
-    const issues = validation.errors.map((e) => `  - ${e.message}`).join('\n');
+    const issues = validation.missing.map((m: string) => `  - ${m}`).join('\n');
     state.addMessage({
       role: 'assistant',
-      content: `The configuration has issues that need to be fixed:\n${issues}\n\nPlease address these and try again.`,
+      content: `The configuration is incomplete:\n${issues}\n\nPlease address these and try again.`,
     });
     return;
   }

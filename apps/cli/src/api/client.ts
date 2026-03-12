@@ -243,10 +243,11 @@ export class SpatulaApiClient {
       let code: string | undefined;
       let message = `HTTP ${response.status}`;
       try {
-        const errorBody = await response.json();
-        if (errorBody?.error) {
-          code = errorBody.error.code;
-          message = errorBody.error.message ?? message;
+        const errorBody = (await response.json()) as Record<string, unknown>;
+        const err = errorBody?.error as Record<string, unknown> | undefined;
+        if (err) {
+          code = err.code as string | undefined;
+          message = (err.message as string) ?? message;
         }
       } catch {
         // Response body was not valid JSON — fall through with defaults
@@ -254,7 +255,7 @@ export class SpatulaApiClient {
       throw new ApiError(response.status, code, message);
     }
 
-    const json = await response.json();
+    const json = (await response.json()) as Record<string, unknown>;
     return json.data as T;
   }
 }
