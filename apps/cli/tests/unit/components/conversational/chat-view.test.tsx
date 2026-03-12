@@ -60,30 +60,34 @@ describe('ChatView', () => {
     expect(lastFrame()).not.toContain('Thinking');
   });
 
-  it('calls onSubmit when user presses Enter with text', () => {
+  it('calls onSubmit when user presses Enter with text', async () => {
     const onSubmit = vi.fn();
     const { stdin } = render(
       <ChatView messages={[]} onSubmit={onSubmit} isLoading={false} />,
     );
+    // Wait for useEffect to fire (sets up stdin readable listener)
+    await new Promise((r) => setTimeout(r, 0));
     stdin.write('hello world');
     stdin.write('\r');
     expect(onSubmit).toHaveBeenCalledWith('hello world');
   });
 
-  it('does not submit empty input', () => {
+  it('does not submit empty input', async () => {
     const onSubmit = vi.fn();
     const { stdin } = render(
       <ChatView messages={[]} onSubmit={onSubmit} isLoading={false} />,
     );
+    await new Promise((r) => setTimeout(r, 0));
     stdin.write('\r');
     expect(onSubmit).not.toHaveBeenCalled();
   });
 
-  it('does not submit whitespace-only input', () => {
+  it('does not submit whitespace-only input', async () => {
     const onSubmit = vi.fn();
     const { stdin } = render(
       <ChatView messages={[]} onSubmit={onSubmit} isLoading={false} />,
     );
+    await new Promise((r) => setTimeout(r, 0));
     stdin.write('   ');
     stdin.write('\r');
     expect(onSubmit).not.toHaveBeenCalled();

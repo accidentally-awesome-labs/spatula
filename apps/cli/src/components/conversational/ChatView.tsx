@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useRef } from 'react';
 import { Box, Text } from 'ink';
 import TextInput from 'ink-text-input';
 import type { ChatMessage } from '../../store/index.js';
@@ -41,12 +41,20 @@ export function ChatView({
   isLoading,
 }: ChatViewProps): React.ReactElement {
   const [input, setInput] = useState('');
+  const inputRef = useRef(input);
 
-  const handleSubmit = (value: string): void => {
+  const handleChange = (value: string): void => {
+    inputRef.current = value;
+    setInput(value);
+  };
+
+  const handleSubmit = (): void => {
+    const value = inputRef.current;
     if (value.trim().length === 0) {
       return;
     }
     onSubmit(value);
+    inputRef.current = '';
     setInput('');
   };
 
@@ -68,7 +76,7 @@ export function ChatView({
       {/* Input area */}
       <Box>
         <Text bold color="green">{"> "}</Text>
-        <TextInput value={input} onChange={setInput} onSubmit={handleSubmit} />
+        <TextInput value={input} onChange={handleChange} onSubmit={handleSubmit} />
       </Box>
     </Box>
   );
