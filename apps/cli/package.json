@@ -3,19 +3,35 @@
   "version": "0.0.1",
   "private": true,
   "type": "module",
+  "bin": {
+    "spatula": "./dist/index.js"
+  },
   "scripts": {
     "build": "tsc",
     "dev": "tsx watch src/index.tsx",
     "lint": "eslint src/",
     "lint:fix": "eslint src/ --fix",
+    "test": "vitest run",
+    "test:watch": "vitest",
     "clean": "rm -rf dist .turbo"
   },
   "dependencies": {
     "@spatula/core": "workspace:*",
-    "@spatula/shared": "workspace:*"
+    "@spatula/shared": "workspace:*",
+    "ink": "^5.1.0",
+    "ink-spinner": "^5.0.0",
+    "ink-text-input": "^6.0.0",
+    "react": "^18.3.1",
+    "yargs": "^17.7.2",
+    "zustand": "^5.0.0",
+    "zod": "^3.24.0"
   },
   "devDependencies": {
+    "@types/node": "^25.3.5",
+    "@types/react": "^18.3.18",
+    "ink-testing-library": "^4.0.0",
+    "tsx": "^4.19.0",
     "typescript": "^5.7.0",
-    "tsx": "^4.19.0"
+    "vitest": "^2.1.0"
   }
 }
