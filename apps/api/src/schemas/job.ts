@@ -55,7 +55,7 @@ export const listJobsQuerySchema = z.object({
   status: z
     .enum(['pending', 'queued', 'running', 'paused', 'reconciling', 'completed', 'failed', 'cancelled'])
     .optional(),
-  limit: z.coerce.number().int().min(1).max(100).default(50),
+  limit: z.coerce.number().int().min(1).default(50).transform((v) => Math.min(v, 100)),
 });
 
 export type ListJobsQuery = z.infer<typeof listJobsQuerySchema>;

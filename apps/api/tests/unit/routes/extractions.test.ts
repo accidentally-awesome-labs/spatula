@@ -87,11 +87,13 @@ describe('Extraction routes', () => {
       expect(body.error.code).toBe('VALIDATION_ERROR');
     });
 
-    it('returns 400 for limit exceeding max', async () => {
-      const res = await app.request('/api/v1/jobs/job-1/extractions?limit=200');
-      expect(res.status).toBe(400);
-      const body = await res.json();
-      expect(body.error.code).toBe('VALIDATION_ERROR');
+    it('caps limit at 100', async () => {
+      await app.request('/api/v1/jobs/job-1/extractions?limit=200');
+      expect(deps.extractionRepo.findByJob).toHaveBeenCalledWith(
+        'job-1',
+        TENANT_ID,
+        expect.objectContaining({ limit: 100 }),
+      );
     });
   });
 });

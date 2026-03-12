@@ -5,7 +5,7 @@ import { validateQuery } from '../middleware/validate.js';
 
 const listExtractionsQuery = z.object({
   schemaVersion: z.coerce.number().int().min(1).optional(),
-  limit: z.coerce.number().int().min(1).max(100).default(50),
+  limit: z.coerce.number().int().min(1).default(50).transform((v) => Math.min(v, 100)),
 });
 
 export function extractionRoutes(): Hono<AppEnv> {

@@ -8,7 +8,7 @@ const listActionsQuery = z.object({
   status: z
     .enum(['pending_review', 'approved', 'applied', 'rejected', 'rolled_back'])
     .optional(),
-  limit: z.coerce.number().int().min(1).max(100).default(50),
+  limit: z.coerce.number().int().min(1).default(50).transform((v) => Math.min(v, 100)),
   offset: z.coerce.number().int().min(0).default(0),
 });
 
