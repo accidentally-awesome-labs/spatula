@@ -61,6 +61,7 @@ describe('errorHandler middleware', () => {
     expect(res.status).toBe(500);
     const body = await res.json();
     expect(body.error.code).toBe('STORAGE_ERROR');
+    expect(body.error.message).toBe('Internal server error');
   });
 
   it('maps unknown errors to 500 with generic message', async () => {

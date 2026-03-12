@@ -58,9 +58,7 @@ export const errorHandler: ErrorHandler = (error, c) => {
   const code =
     error instanceof SpatulaError ? error.code : 'INTERNAL_ERROR';
   const message =
-    status >= 500 && !(error instanceof SpatulaError)
-      ? 'Internal server error'
-      : error.message;
+    status >= 500 ? 'Internal server error' : error.message;
 
   return c.json(
     {
