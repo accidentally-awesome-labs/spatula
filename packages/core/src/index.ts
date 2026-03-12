@@ -18,3 +18,6 @@ export * from './evolution/index.js';
 
 // Reconciliation
 export * from './reconciliation/index.js';
+
+// Config
+export * from './config/index.js';
