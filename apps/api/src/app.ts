@@ -8,6 +8,7 @@ import { schemaRoutes } from './routes/schemas.js';
 import { extractionRoutes } from './routes/extractions.js';
 import { entityRoutes } from './routes/entities.js';
 import { actionRoutes } from './routes/actions.js';
+import { exportRoutes } from './routes/exports.js';
 import type { AppDeps, AppEnv } from './types.js';
 
 export function createApp(deps: AppDeps): Hono<AppEnv> {
@@ -30,6 +31,7 @@ export function createApp(deps: AppDeps): Hono<AppEnv> {
   app.route('/api/v1/jobs/:jobId/extractions', extractionRoutes());
   app.route('/api/v1/jobs/:jobId/entities', entityRoutes());
   app.route('/api/v1/jobs/:jobId/actions', actionRoutes());
+  app.route('/api/v1/jobs/:jobId', exportRoutes());
 
   return app;
 }
