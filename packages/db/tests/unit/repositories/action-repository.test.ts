@@ -78,6 +78,19 @@ describe('ActionRepository', () => {
     ).rejects.toThrow('Failed to find actions');
   });
 
+  it('updateStatus throws StorageError when action not found', async () => {
+    const notFoundChainable = {
+      set: vi.fn().mockReturnThis(),
+      where: vi.fn().mockReturnThis(),
+      returning: vi.fn().mockResolvedValue([]),
+    };
+    mockDb.update = vi.fn().mockReturnValue(notFoundChainable);
+
+    await expect(
+      repo.updateStatus('nonexistent-id', 'tenant-id', 'approved'),
+    ).rejects.toThrow('Action nonexistent-id not found');
+  });
+
   it('updateStatus wraps errors in StorageError', async () => {
     const failChainable = {
       set: vi.fn().mockReturnThis(),

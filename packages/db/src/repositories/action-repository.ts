@@ -1,11 +1,12 @@
 import { eq, and, desc, inArray } from 'drizzle-orm';
 import { createLogger, StorageError } from '@spatula/shared';
 import { actions } from '../schema/actions.js';
+import { actionStatusEnum } from '../schema/enums.js';
 import type { Database } from '../connection.js';
 
 const logger = createLogger('action-repository');
 
-export type ActionStatus = 'pending_review' | 'approved' | 'applied' | 'rejected' | 'rolled_back';
+export type ActionStatus = (typeof actionStatusEnum.enumValues)[number];
 
 export interface FindActionsOptions {
   type?: string;
@@ -44,7 +45,7 @@ export class ActionRepository {
     } catch (error) {
       throw new StorageError(`Failed to find actions: ${(error as Error).message}`, {
         cause: error as Error,
-        context: { jobId },
+        context: { jobId, tenantId },
       });
     }
   }
@@ -121,7 +122,7 @@ export class ActionRepository {
     } catch (error) {
       throw new StorageError(`Failed to batch update action status: ${(error as Error).message}`, {
         cause: error as Error,
-        context: { count: actionIds.length, status },
+        context: { count: actionIds.length, tenantId, status },
       });
     }
   }
