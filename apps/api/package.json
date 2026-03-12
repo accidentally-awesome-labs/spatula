@@ -8,14 +8,23 @@
     "dev": "tsx watch src/index.ts",
     "lint": "eslint src/",
     "lint:fix": "eslint src/ --fix",
+    "test": "vitest run",
+    "test:watch": "vitest",
     "clean": "rm -rf dist .turbo"
   },
   "dependencies": {
+    "@hono/node-server": "^1.19.11",
     "@spatula/core": "workspace:*",
-    "@spatula/shared": "workspace:*"
+    "@spatula/db": "workspace:*",
+    "@spatula/queue": "workspace:*",
+    "@spatula/shared": "workspace:*",
+    "hono": "^4.12.7",
+    "zod": "^3.24.0"
   },
   "devDependencies": {
+    "@types/node": "^25.3.5",
+    "tsx": "^4.19.0",
     "typescript": "^5.7.0",
-    "tsx": "^4.19.0"
+    "vitest": "^2.1.0"
   }
 }
