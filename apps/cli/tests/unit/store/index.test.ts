@@ -69,6 +69,26 @@ describe('CliStore', () => {
     it('has no error', () => {
       expect(store.getState().error).toBeNull();
     });
+
+    it('has null job data', () => {
+      expect(store.getState().jobData).toBeNull();
+    });
+
+    it('has empty pending actions', () => {
+      expect(store.getState().pendingActions).toEqual([]);
+    });
+
+    it('has null schema data', () => {
+      expect(store.getState().schemaData).toBeNull();
+    });
+
+    it('has empty entity previews', () => {
+      expect(store.getState().entityPreviews).toEqual([]);
+    });
+
+    it('has review index at 0', () => {
+      expect(store.getState().reviewIndex).toBe(0);
+    });
   });
 
   // -------------------------------------------------------------------------
@@ -346,6 +366,80 @@ describe('CliStore', () => {
 
       const result = store.getState().validateConfig();
       expect(result.warnings.length).toBeGreaterThan(0);
+    });
+  });
+
+  // -------------------------------------------------------------------------
+  // Job runtime state
+  // -------------------------------------------------------------------------
+
+  describe('job runtime state', () => {
+    it('stores and retrieves job data', () => {
+      const jobData = { id: 'job-1', status: 'running', progress: 42 };
+      store.getState().setJobData(jobData);
+      expect(store.getState().jobData).toEqual(jobData);
+    });
+
+    it('clears job data', () => {
+      store.getState().setJobData({ id: 'job-1', status: 'running' });
+      store.getState().setJobData(null);
+      expect(store.getState().jobData).toBeNull();
+    });
+
+    it('stores pending actions', () => {
+      const actions = [
+        { id: 'a1', type: 'schema_change', payload: {} },
+        { id: 'a2', type: 'review_entity', payload: {} },
+      ];
+      store.getState().setPendingActions(actions);
+      expect(store.getState().pendingActions).toEqual(actions);
+      expect(store.getState().pendingActions).toHaveLength(2);
+    });
+
+    it('removes action from pending list', () => {
+      const actions = [
+        { id: 'a1', type: 'schema_change', payload: {} },
+        { id: 'a2', type: 'review_entity', payload: {} },
+        { id: 'a3', type: 'approve', payload: {} },
+      ];
+      store.getState().setPendingActions(actions);
+      store.getState().removeAction('a2');
+
+      const remaining = store.getState().pendingActions;
+      expect(remaining).toHaveLength(2);
+      expect(remaining.map((a) => a.id)).toEqual(['a1', 'a3']);
+    });
+
+    it('stores schema data', () => {
+      const schema = { fields: [{ name: 'title', type: 'string' }], version: 3 };
+      store.getState().setSchemaData(schema);
+      expect(store.getState().schemaData).toEqual(schema);
+    });
+
+    it('stores entity previews', () => {
+      const entities = [
+        { id: 'e1', name: 'Apple Inc.', type: 'company' },
+        { id: 'e2', name: 'Google LLC', type: 'company' },
+      ];
+      store.getState().setEntityPreviews(entities);
+      expect(store.getState().entityPreviews).toEqual(entities);
+      expect(store.getState().entityPreviews).toHaveLength(2);
+    });
+
+    it('tracks current review index', () => {
+      store.getState().setReviewIndex(5);
+      expect(store.getState().reviewIndex).toBe(5);
+
+      store.getState().setReviewIndex(10);
+      expect(store.getState().reviewIndex).toBe(10);
+    });
+
+    it('clamps review index to 0 minimum', () => {
+      store.getState().setReviewIndex(-3);
+      expect(store.getState().reviewIndex).toBe(0);
+
+      store.getState().setReviewIndex(-100);
+      expect(store.getState().reviewIndex).toBe(0);
     });
   });
 

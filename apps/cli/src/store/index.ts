@@ -50,6 +50,23 @@ export interface CliState {
   // Error
   error: string | null;
   setError: (error: string | null) => void;
+
+  // Job runtime state (fetched from API for dashboard/review)
+  jobData: Record<string, unknown> | null;
+  setJobData: (data: Record<string, unknown> | null) => void;
+
+  pendingActions: Record<string, unknown>[];
+  setPendingActions: (actions: Record<string, unknown>[]) => void;
+  removeAction: (actionId: string) => void;
+
+  schemaData: Record<string, unknown> | null;
+  setSchemaData: (schema: Record<string, unknown> | null) => void;
+
+  entityPreviews: Record<string, unknown>[];
+  setEntityPreviews: (entities: Record<string, unknown>[]) => void;
+
+  reviewIndex: number;
+  setReviewIndex: (index: number) => void;
 }
 
 export type CliStore = StoreApi<CliState>;
@@ -131,5 +148,27 @@ export function createCliStore(tenantId: string): CliStore {
     // Error
     error: null,
     setError: (error) => set({ error }),
+
+    // Job runtime state
+    jobData: null,
+    setJobData: (data) => set({ jobData: data }),
+
+    pendingActions: [],
+    setPendingActions: (actions) => set({ pendingActions: actions }),
+    removeAction: (actionId) =>
+      set((state) => ({
+        pendingActions: state.pendingActions.filter(
+          (a) => (a as Record<string, unknown>).id !== actionId,
+        ),
+      })),
+
+    schemaData: null,
+    setSchemaData: (schema) => set({ schemaData: schema }),
+
+    entityPreviews: [],
+    setEntityPreviews: (entities) => set({ entityPreviews: entities }),
+
+    reviewIndex: 0,
+    setReviewIndex: (index) => set({ reviewIndex: Math.max(0, index) }),
   }));
 }
