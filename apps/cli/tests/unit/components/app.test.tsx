@@ -3,14 +3,31 @@ import { render } from 'ink-testing-library';
 import React from 'react';
 import { App } from '../../../src/components/App.js';
 import { createCliStore } from '../../../src/store/index.js';
+import type { SpatulaApiClient } from '../../../src/api/client.js';
+
+function createMockApiClient(): SpatulaApiClient {
+  return {
+    getJob: vi.fn().mockResolvedValue({ id: 'job-1', status: 'running', stats: {} }),
+    listActions: vi.fn().mockResolvedValue([]),
+    getSchema: vi.fn().mockResolvedValue(null),
+    listEntities: vi.fn().mockResolvedValue([]),
+    pauseJob: vi.fn().mockResolvedValue({}),
+    resumeJob: vi.fn().mockResolvedValue({}),
+    cancelJob: vi.fn().mockResolvedValue({}),
+    approveAction: vi.fn().mockResolvedValue({}),
+    rejectAction: vi.fn().mockResolvedValue({}),
+    approveAllActions: vi.fn().mockResolvedValue([]),
+  } as unknown as SpatulaApiClient;
+}
 
 describe('App', () => {
   const noop = vi.fn();
 
   it('renders header with current mode', () => {
     const store = createCliStore('test-tenant');
+    const apiClient = createMockApiClient();
     const { lastFrame } = render(
-      <App store={store} onStartJob={noop} onExit={noop} />,
+      <App store={store} apiClient={apiClient} onStartJob={noop} onExit={noop} />,
     );
     const frame = lastFrame()!;
     expect(frame).toContain('Spatula');
@@ -19,20 +36,75 @@ describe('App', () => {
 
   it('renders keyboard hints', () => {
     const store = createCliStore('test-tenant');
+    const apiClient = createMockApiClient();
     const { lastFrame } = render(
-      <App store={store} onStartJob={noop} onExit={noop} />,
+      <App store={store} apiClient={apiClient} onStartJob={noop} onExit={noop} />,
     );
-    const frame = lastFrame()!;
-    expect(frame).toContain('Ctrl+C');
+    expect(lastFrame()!).toContain('Ctrl+C');
   });
 
-  it('shows dashboard stub when mode is dashboard', () => {
+  it('renders DashboardView when mode is dashboard and job is active', () => {
     const store = createCliStore('test-tenant');
     store.getState().setMode('dashboard');
+    store.getState().setActiveJobId('job-1');
+    store.getState().setJobData({
+      id: 'job-1',
+      name: 'Test Job',
+      status: 'running',
+      stats: { pagesFound: 10, pagesCrawled: 5, pagesExtracted: 0, pagesReconciled: 0, actionsPending: 0, actionsApplied: 0 },
+    });
+
+    const apiClient = createMockApiClient();
     const { lastFrame } = render(
-      <App store={store} onStartJob={noop} onExit={noop} />,
+      <App store={store} apiClient={apiClient} onStartJob={noop} onExit={noop} />,
+    );
+    expect(lastFrame()!).toContain('Progress');
+  });
+
+  it('renders ReviewView when mode is review and job is active', () => {
+    const store = createCliStore('test-tenant');
+    store.getState().setMode('review');
+    store.getState().setActiveJobId('job-1');
+
+    // Must also mock listActions to return same data since useJobPolling fires immediately
+    const sampleActions = [
+      { id: 'a1', type: 'add_field', confidence: 0.9, reasoning: 'test', source: 'schema_evolution', payload: { field: { name: 'x', type: 'string', description: '' } }, status: 'pending_review' },
+    ];
+    store.getState().setPendingActions(sampleActions);
+
+    const apiClient = createMockApiClient();
+    // Make polling return the same actions so they don't get wiped
+    (apiClient.listActions as ReturnType<typeof vi.fn>).mockResolvedValue(sampleActions);
+
+    const { lastFrame } = render(
+      <App store={store} apiClient={apiClient} onStartJob={noop} onExit={noop} />,
+    );
+    expect(lastFrame()!).toContain('add_field');
+  });
+
+  it('shows context-appropriate keyboard hints for dashboard mode', () => {
+    const store = createCliStore('test-tenant');
+    store.getState().setMode('dashboard');
+    store.getState().setActiveJobId('job-1');
+    store.getState().setJobData({ id: 'job-1', name: 'Test', status: 'running', stats: {} });
+
+    const apiClient = createMockApiClient();
+    const { lastFrame } = render(
+      <App store={store} apiClient={apiClient} onStartJob={noop} onExit={noop} />,
     );
     const frame = lastFrame()!;
-    expect(frame).toContain('Dashboard mode');
+    expect(frame).toContain('Pause/Resume');
+    expect(frame).toContain('Cancel');
+  });
+
+  it('shows explorer stub', () => {
+    const store = createCliStore('test-tenant');
+    store.getState().setMode('explorer');
+
+    const apiClient = createMockApiClient();
+    const { lastFrame } = render(
+      <App store={store} apiClient={apiClient} onStartJob={noop} onExit={noop} />,
+    );
+    expect(lastFrame()!).toContain('Phase 9c');
   });
 });

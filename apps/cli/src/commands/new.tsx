@@ -176,7 +176,7 @@ export async function runNewCommand(options: NewCommandOptions): Promise<void> {
 
   // Render the Ink application
   const { waitUntilExit } = render(
-    <App store={store} onStartJob={handleStartJob} onExit={handleExit} />,
+    <App store={store} apiClient={apiClient} onStartJob={handleStartJob} onExit={handleExit} />,
   );
 
   // Add a welcome message
