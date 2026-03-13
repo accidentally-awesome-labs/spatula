@@ -49,6 +49,14 @@ export class DefaultConfigExecutor implements ConfigExecutor {
       warnings.push('No user fields defined — the schema has no extraction targets.');
     }
 
+    if (config.crawl.maxPages > 5000) {
+      warnings.push(`High page count (${config.crawl.maxPages}) — may be slow and expensive.`);
+    }
+
+    if (config.crawl.concurrency > 10) {
+      warnings.push(`High concurrency (${config.crawl.concurrency}) — may trigger rate limiting.`);
+    }
+
     if (!config.reconciliation) {
       suggestions.push('Consider configuring reconciliation settings for multi-source crawls.');
     }

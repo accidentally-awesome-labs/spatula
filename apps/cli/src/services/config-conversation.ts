@@ -1,16 +1,5 @@
 import type { LLMClient, LLMCompletionRequest, JobConfig, ConfigAction } from '@spatula/core';
-
-/**
- * A message in the conversation history.
- * Defined locally; should be reconciled with the store's ChatMessage type
- * once the Zustand store (Task 4) is implemented.
- */
-export interface ChatMessage {
-  role: 'user' | 'assistant' | 'system';
-  content: string;
-  actions?: ConfigAction[];
-  timestamp?: number;
-}
+import type { ChatMessage } from '../store/index.js';
 
 interface ConversationResult {
   responseText: string;

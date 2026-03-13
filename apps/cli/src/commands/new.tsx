@@ -52,10 +52,11 @@ async function handleUserMessage(
   state.setError(null);
 
   try {
+    // Exclude the just-added user message from history (processMessage appends it)
     const result = await conversationService.processMessage(
       userMessage,
       state.config,
-      state.messages,
+      state.messages.slice(0, -1),
     );
 
     // Apply config actions from the AI response

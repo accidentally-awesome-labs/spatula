@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import type { LLMClient, LLMCompletionRequest, LLMCompletionResponse, JobConfig, ConfigAction } from '@spatula/core';
-import { ConfigConversationService, ChatMessage } from '../../../src/services/config-conversation.js';
+import { ConfigConversationService } from '../../../src/services/config-conversation.js';
+import type { ChatMessage } from '../../../src/store/index.js';
 
 function createMockLLMClient(response?: Partial<LLMCompletionResponse>): LLMClient {
   return {
