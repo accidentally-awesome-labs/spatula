@@ -34,17 +34,15 @@ function PayloadSummary({ action }: { action: Record<string, unknown> }): React.
 
   switch (type) {
     case 'add_field': {
-      const name = String(payload.name ?? 'unknown');
-      const fieldType = String(payload.fieldType ?? payload.type ?? 'string');
-      const required = payload.required === true;
-      const description = payload.description ? String(payload.description) : null;
+      const field = (payload.field ?? {}) as Record<string, unknown>;
+      const description = field.description ? String(field.description) : null;
       return (
         <Box flexDirection="column">
           <Text>
             <Text bold>{'Field: '}</Text>
-            <Text color="green">{name}</Text>
-            <Text dimColor>{' ('}{fieldType}{')'}</Text>
-            {required && <Text color="red">{' required'}</Text>}
+            <Text color="green">{String(field.name)}</Text>
+            <Text dimColor>{' ('}{String(field.type)}{')'}</Text>
+            {field.required === true && <Text color="red">{' required'}</Text>}
           </Text>
           {description && (
             <Text dimColor>{'  '}{description}</Text>
@@ -53,73 +51,57 @@ function PayloadSummary({ action }: { action: Record<string, unknown> }): React.
       );
     }
     case 'merge_fields': {
-      const aliases = (payload.aliases ?? payload.sources ?? []) as string[];
-      const canonical = String(payload.canonical ?? payload.target ?? 'unknown');
+      const canonical = String(payload.canonicalName ?? '');
+      const aliases = (payload.aliasNames ?? []) as string[];
       return (
         <Box flexDirection="column">
           <Text>
-            <Text dimColor>{'Merge: '}</Text>
+            <Text bold>{'Merge: '}</Text>
             <Text>{aliases.join(', ')}</Text>
-            <Text dimColor>{' -> '}</Text>
-            <Text bold color="cyan">{canonical}</Text>
+            <Text dimColor>{' → '}</Text>
+            <Text color="green">{canonical}</Text>
           </Text>
         </Box>
       );
     }
     case 'remove_field': {
-      const name = String(payload.name ?? payload.field ?? 'unknown');
-      const reason = payload.reason ? String(payload.reason) : null;
       return (
-        <Box flexDirection="column">
-          <Text>
-            <Text bold>{'Field: '}</Text>
-            <Text color="red">{name}</Text>
-          </Text>
-          {reason && (
-            <Text dimColor>{'  Reason: '}{reason}</Text>
-          )}
-        </Box>
+        <Text>
+          <Text bold>{'Remove: '}</Text>
+          <Text color="red">{String(payload.fieldName)}</Text>
+          <Text dimColor>{' ('}{String(payload.reason)}{')'}</Text>
+        </Text>
       );
     }
     case 'modify_field': {
-      const name = String(payload.name ?? payload.field ?? 'unknown');
       const changes = (payload.changes ?? {}) as Record<string, unknown>;
-      const changeKeys = Object.keys(changes);
+      const changeList = Object.entries(changes)
+        .map(([k, v]) => `${k}=${String(v)}`)
+        .join(', ');
       return (
-        <Box flexDirection="column">
-          <Text>
-            <Text bold>{'Field: '}</Text>
-            <Text color="yellow">{name}</Text>
-          </Text>
-          {changeKeys.length > 0 && (
-            <Text dimColor>{'  Changes: '}{changeKeys.join(', ')}</Text>
-          )}
-        </Box>
+        <Text>
+          <Text bold>{'Modify: '}</Text>
+          <Text>{String(payload.fieldName)}</Text>
+          <Text dimColor>{' ('}{changeList}{')'}</Text>
+        </Text>
       );
     }
     case 'resolve_conflict': {
-      const name = String(payload.name ?? payload.field ?? 'unknown');
-      const resolvedValue = payload.resolvedValue ?? payload.resolved ?? 'unknown';
       return (
-        <Box flexDirection="column">
-          <Text>
-            <Text bold>{'Field: '}</Text>
-            <Text color="cyan">{name}</Text>
-          </Text>
-          <Text dimColor>{'  Resolved: '}{String(resolvedValue)}</Text>
-        </Box>
+        <Text>
+          <Text bold>{'Resolve: '}</Text>
+          <Text>{String(payload.fieldName)}</Text>
+          <Text dimColor>{' → '}</Text>
+          <Text>{String(payload.resolvedValue)}</Text>
+        </Text>
       );
     }
     default: {
-      const keys = Object.keys(payload);
+      const keys = Object.keys(payload).slice(0, 3);
       return (
-        <Box flexDirection="column">
-          {keys.length > 0 ? (
-            <Text dimColor>{'Keys: '}{keys.join(', ')}</Text>
-          ) : (
-            <Text dimColor>{'No payload'}</Text>
-          )}
-        </Box>
+        <Text dimColor>
+          {type}{': '}{keys.join(', ')}
+        </Text>
       );
     }
   }
@@ -135,18 +117,19 @@ export function ActionCard({ action, index, total }: ActionCardProps): React.Rea
   const confidencePercent = Math.round(confidence * 100);
 
   return (
-    <Panel title={`Action ${index + 1}/${total}`} borderColor={risk.color}>
+    <Panel title={type} borderColor={risk.color}>
       <Box flexDirection="column" gap={0}>
-        <Text>
-          <Text bold>{'Type: '}</Text>
-          <Text color="white">{type}</Text>
-          <Text>{'  '}</Text>
-          <Text bold>{'Confidence: '}</Text>
-          <Text color={confidenceColor}>{confidencePercent}%</Text>
-          <Text>{'  '}</Text>
-          <Text bold>{'Risk: '}</Text>
-          <Text color={risk.color}>{risk.label}</Text>
-        </Text>
+        <Box gap={2}>
+          <Text dimColor>{index + 1} of {total}</Text>
+          <Text>
+            <Text bold>{'Confidence: '}</Text>
+            <Text color={confidenceColor}>{confidencePercent}%</Text>
+          </Text>
+          <Text>
+            <Text bold>{'Risk: '}</Text>
+            <Text color={risk.color}>{risk.label}</Text>
+          </Text>
+        </Box>
 
         {reasoning && (
           <Text>

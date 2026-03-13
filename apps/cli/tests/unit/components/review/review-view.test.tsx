@@ -10,27 +10,27 @@ const sampleActions = [
     id: 'a1',
     type: 'add_field',
     confidence: 0.92,
-    reasoning: 'Common field',
+    reasoning: 'Common field detected',
     source: 'schema_evolution',
-    payload: { name: 'brand', fieldType: 'string', description: 'Brand name' },
+    payload: { field: { name: 'brand', type: 'string', description: 'Brand name' } },
     status: 'pending_review',
   },
   {
     id: 'a2',
     type: 'merge_fields',
     confidence: 0.85,
-    reasoning: 'Synonyms',
+    reasoning: 'Synonyms detected',
     source: 'schema_evolution',
-    payload: { canonical: 'price', aliases: ['cost'] },
+    payload: { canonicalName: 'price', aliasNames: ['cost'] },
     status: 'pending_review',
   },
   {
     id: 'a3',
     type: 'remove_field',
     confidence: 0.7,
-    reasoning: 'Too rare',
+    reasoning: 'Too rare to be useful',
     source: 'schema_evolution',
-    payload: { name: 'old_field', reason: 'too_rare' },
+    payload: { fieldName: 'old_field', reason: 'too_rare' },
     status: 'pending_review',
   },
 ];
@@ -66,7 +66,7 @@ describe('ReviewView', () => {
 
     const frame = lastFrame()!;
     expect(frame).toContain('add_field');
-    expect(frame).toContain('1/3');
+    expect(frame).toContain('1 of 3');
     expect(frame).toContain('brand');
   });
 
@@ -98,7 +98,7 @@ describe('ReviewView', () => {
     await waitForEffects();
 
     const frame = lastFrame()!;
-    expect(frame).toContain('2/3');
+    expect(frame).toContain('2 of 3');
   });
 
   it('navigates back on up arrow', async () => {
@@ -117,7 +117,7 @@ describe('ReviewView', () => {
     await waitForEffects();
 
     const frame = lastFrame()!;
-    expect(frame).toContain('1/3');
+    expect(frame).toContain('1 of 3');
   });
 
   it('shows keyboard hints', async () => {
@@ -146,6 +146,6 @@ describe('ReviewView', () => {
     await waitForEffects();
 
     const frame = lastFrame()!;
-    expect(frame).toContain('Diff Preview');
+    expect(frame).toContain('Impact Preview');
   });
 });
