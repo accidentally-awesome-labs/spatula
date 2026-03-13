@@ -221,6 +221,12 @@ describe('ConfigConversationService', () => {
             payload: { maxDepth: 3 },
           },
           {
+            type: 'set_concurrency',
+            id: '550e8400-e29b-41d4-a716-446655440004',
+            // missing reasoning
+            payload: { concurrency: 10 },
+          },
+          {
             type: 'set_max_pages',
             id: '550e8400-e29b-41d4-a716-446655440003',
             reasoning: 'Setting max pages',

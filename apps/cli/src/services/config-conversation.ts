@@ -210,6 +210,7 @@ You MUST respond with valid JSON in this exact format:
     return (
       typeof obj.type === 'string' &&
       typeof obj.id === 'string' &&
+      typeof obj.reasoning === 'string' &&
       typeof obj.payload === 'object' &&
       obj.payload !== null
     );
