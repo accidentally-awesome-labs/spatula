@@ -18,6 +18,18 @@ export interface ChatMessage {
   timestamp?: number;
 }
 
+/** Minimal shape for pipeline actions fetched from the API. */
+export interface PendingAction {
+  id: string;
+  type: string;
+  confidence?: number;
+  reasoning?: string;
+  source?: string;
+  status?: string;
+  payload?: Record<string, unknown>;
+  [key: string]: unknown;
+}
+
 export type CliMode = 'conversational' | 'dashboard' | 'review' | 'explorer';
 
 export interface CliState {
@@ -55,12 +67,15 @@ export interface CliState {
   jobData: Record<string, unknown> | null;
   setJobData: (data: Record<string, unknown> | null) => void;
 
-  pendingActions: Record<string, unknown>[];
-  setPendingActions: (actions: Record<string, unknown>[]) => void;
+  pendingActions: PendingAction[];
+  setPendingActions: (actions: PendingAction[]) => void;
   removeAction: (actionId: string) => void;
 
   schemaData: Record<string, unknown> | null;
   setSchemaData: (schema: Record<string, unknown> | null) => void;
+
+  recentActions: PendingAction[];
+  setRecentActions: (actions: PendingAction[]) => void;
 
   entityPreviews: Record<string, unknown>[];
   setEntityPreviews: (entities: Record<string, unknown>[]) => void;
@@ -157,18 +172,22 @@ export function createCliStore(tenantId: string): CliStore {
     setPendingActions: (actions) => set({ pendingActions: actions }),
     removeAction: (actionId) =>
       set((state) => ({
-        pendingActions: state.pendingActions.filter(
-          (a) => (a as Record<string, unknown>).id !== actionId,
-        ),
+        pendingActions: state.pendingActions.filter((a) => a.id !== actionId),
       })),
 
     schemaData: null,
     setSchemaData: (schema) => set({ schemaData: schema }),
 
+    recentActions: [],
+    setRecentActions: (actions) => set({ recentActions: actions }),
+
     entityPreviews: [],
     setEntityPreviews: (entities) => set({ entityPreviews: entities }),
 
     reviewIndex: 0,
-    setReviewIndex: (index) => set({ reviewIndex: Math.max(0, index) }),
+    setReviewIndex: (index) => {
+      const max = Math.max(0, get().pendingActions.length - 1);
+      set({ reviewIndex: Math.max(0, Math.min(index, max)) });
+    },
   }));
 }

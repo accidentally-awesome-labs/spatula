@@ -120,7 +120,7 @@ describe('ReviewView', () => {
     expect(frame).toContain('1 of 3');
   });
 
-  it('shows keyboard hints', async () => {
+  it('does not render its own keyboard hints (App provides them)', async () => {
     const store = createCliStore('test-tenant');
     store.getState().setActiveJobId('job-1');
     store.getState().setPendingActions(sampleActions);
@@ -130,10 +130,10 @@ describe('ReviewView', () => {
     await waitForEffects();
 
     const frame = lastFrame()!;
-    expect(frame).toContain('Y');
-    expect(frame).toContain('Approve');
-    expect(frame).toContain('N');
-    expect(frame).toContain('Reject');
+    // ReviewView should show action content, not keyboard hints
+    expect(frame).toContain('add_field');
+    // Hints like "Approve" should NOT be rendered inside ReviewView
+    expect(frame).not.toContain('Approve');
   });
 
   it('shows DiffPreview', async () => {

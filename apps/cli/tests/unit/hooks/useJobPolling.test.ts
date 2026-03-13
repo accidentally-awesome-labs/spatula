@@ -37,9 +37,6 @@ function TestComponent({
   );
 }
 
-/** Let React effects and microtasks (promise callbacks) settle. */
-const settle = () => new Promise<void>(resolve => setTimeout(resolve, 50));
-
 describe('useJobPolling', () => {
   beforeEach(() => {
     vi.useFakeTimers();
@@ -186,5 +183,20 @@ describe('useJobPolling', () => {
 
     // Should not have fetched again after unmount
     expect(apiClient.getJob).toHaveBeenCalledTimes(1);
+  });
+
+  it('does not fetch when jobId is empty', async () => {
+    const store = createCliStore('test-tenant');
+    const apiClient = createMockApiClient();
+
+    render(
+      React.createElement(TestComponent, { store, apiClient, jobId: '' }),
+    );
+
+    await vi.advanceTimersByTimeAsync(5000);
+
+    expect(apiClient.getJob).not.toHaveBeenCalled();
+    expect(apiClient.listActions).not.toHaveBeenCalled();
+    expect(store.getState().jobData).toBeNull();
   });
 });

@@ -107,4 +107,44 @@ describe('App', () => {
     );
     expect(lastFrame()!).toContain('Phase 9c');
   });
+
+  it('switches from conversational to dashboard on D key', async () => {
+    const store = createCliStore('test-tenant');
+    store.getState().setActiveJobId('job-1');
+    store.getState().setJobData({ id: 'job-1', name: 'Test', status: 'running', stats: {} });
+
+    const apiClient = createMockApiClient();
+    const { stdin, lastFrame } = render(
+      <App store={store} apiClient={apiClient} onStartJob={noop} onExit={noop} />,
+    );
+
+    // Wait for useInput to register
+    await new Promise((r) => setTimeout(r, 50));
+    stdin.write('d');
+    await new Promise((r) => setTimeout(r, 50));
+
+    expect(store.getState().mode).toBe('dashboard');
+  });
+
+  it('switches from conversational to review on R key', async () => {
+    const store = createCliStore('test-tenant');
+    store.getState().setActiveJobId('job-1');
+    const sampleActions = [
+      { id: 'a1', type: 'add_field', confidence: 0.9, reasoning: 'test', source: 'schema_evolution', payload: { field: { name: 'x', type: 'string', description: '' } }, status: 'pending_review' },
+    ];
+    store.getState().setPendingActions(sampleActions);
+
+    const apiClient = createMockApiClient();
+    (apiClient.listActions as ReturnType<typeof vi.fn>).mockResolvedValue(sampleActions);
+
+    const { stdin } = render(
+      <App store={store} apiClient={apiClient} onStartJob={noop} onExit={noop} />,
+    );
+
+    await new Promise((r) => setTimeout(r, 50));
+    stdin.write('r');
+    await new Promise((r) => setTimeout(r, 50));
+
+    expect(store.getState().mode).toBe('review');
+  });
 });

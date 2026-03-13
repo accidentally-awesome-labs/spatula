@@ -22,7 +22,7 @@ export function DashboardView({
 }: DashboardViewProps): React.ReactElement {
   const activeJobId = useStore(store, (s) => s.activeJobId);
   const jobData = useStore(store, (s) => s.jobData);
-  const pendingActions = useStore(store, (s) => s.pendingActions);
+  const recentActions = useStore(store, (s) => s.recentActions);
   const schemaData = useStore(store, (s) => s.schemaData);
   const entityPreviews = useStore(store, (s) => s.entityPreviews);
 
@@ -65,7 +65,7 @@ export function DashboardView({
       <Box flexGrow={1}>
         <Box flexDirection="column" flexGrow={1}>
           <ProgressPanel job={jobData} />
-          <ActivityFeed actions={pendingActions} />
+          <ActivityFeed actions={recentActions} />
         </Box>
         <Box flexDirection="column" width={40}>
           <SchemaPanel schema={schemaData} />

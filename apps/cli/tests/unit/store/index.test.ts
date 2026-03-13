@@ -82,6 +82,10 @@ describe('CliStore', () => {
       expect(store.getState().schemaData).toBeNull();
     });
 
+    it('has empty recent actions', () => {
+      expect(store.getState().recentActions).toEqual([]);
+    });
+
     it('has empty entity previews', () => {
       expect(store.getState().entityPreviews).toEqual([]);
     });
@@ -427,6 +431,12 @@ describe('CliStore', () => {
     });
 
     it('tracks current review index', () => {
+      // Need pending actions for index to be valid
+      const actions = Array.from({ length: 15 }, (_, i) => ({
+        id: `a${i}`, type: 'add_field', payload: {},
+      }));
+      store.getState().setPendingActions(actions);
+
       store.getState().setReviewIndex(5);
       expect(store.getState().reviewIndex).toBe(5);
 
@@ -440,6 +450,40 @@ describe('CliStore', () => {
 
       store.getState().setReviewIndex(-100);
       expect(store.getState().reviewIndex).toBe(0);
+    });
+
+    it('clamps review index to upper bound of pending actions', () => {
+      const actions = [
+        { id: 'a1', type: 'add_field', payload: {} },
+        { id: 'a2', type: 'remove_field', payload: {} },
+        { id: 'a3', type: 'merge_fields', payload: {} },
+      ];
+      store.getState().setPendingActions(actions);
+
+      store.getState().setReviewIndex(100);
+      expect(store.getState().reviewIndex).toBe(2); // max index is 2 (length - 1)
+
+      store.getState().setReviewIndex(2);
+      expect(store.getState().reviewIndex).toBe(2);
+    });
+
+    it('clamps review index to 0 when no pending actions', () => {
+      store.getState().setPendingActions([]);
+      store.getState().setReviewIndex(5);
+      expect(store.getState().reviewIndex).toBe(0);
+    });
+
+    it('stores recent actions separately from pending actions', () => {
+      const pending = [{ id: 'a1', type: 'add_field', status: 'pending_review', payload: {} }];
+      const recent = [
+        { id: 'a1', type: 'add_field', status: 'pending_review', payload: {} },
+        { id: 'a2', type: 'merge_fields', status: 'applied', payload: {} },
+      ];
+      store.getState().setPendingActions(pending);
+      store.getState().setRecentActions(recent);
+
+      expect(store.getState().pendingActions).toHaveLength(1);
+      expect(store.getState().recentActions).toHaveLength(2);
     });
   });
 

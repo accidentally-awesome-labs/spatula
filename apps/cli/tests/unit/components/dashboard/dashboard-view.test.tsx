@@ -70,6 +70,7 @@ describe('DashboardView', () => {
       definition: { fields: [], categories: [] },
     });
     state.setPendingActions([]);
+    state.setRecentActions([]);
     state.setEntityPreviews([]);
 
     const { lastFrame } = render(

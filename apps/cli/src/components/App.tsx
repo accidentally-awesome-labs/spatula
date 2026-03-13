@@ -1,9 +1,10 @@
-import React from 'react';
+import React, { useCallback } from 'react';
 import { Box, Text } from 'ink';
 import { useStore } from 'zustand';
 import type { CliStore } from '../store/index.js';
 import type { SpatulaApiClient } from '../api/client.js';
 import { Header, KeyboardHints } from './shared/index.js';
+import { useKeyboard } from '../hooks/useKeyboard.js';
 import { ConversationalView } from './conversational/ConversationalView.js';
 import { DashboardView } from './dashboard/DashboardView.js';
 import { ReviewView } from './review/ReviewView.js';
@@ -50,9 +51,53 @@ export function App({
   store,
   apiClient,
   onStartJob,
-  onExit: _onExit,
+  onExit,
 }: AppProps): React.ReactElement {
   const mode = useStore(store, (s) => s.mode);
+
+  const switchToDashboard = useCallback(() => {
+    store.getState().setMode('dashboard');
+  }, [store]);
+
+  const switchToReview = useCallback(() => {
+    store.getState().setMode('review');
+  }, [store]);
+
+  const switchToConversational = useCallback(() => {
+    store.getState().setMode('conversational');
+  }, [store]);
+
+  // Mode-switching keys are context-aware:
+  // - Conversational: D→dashboard, R→review
+  // - Dashboard: R→review, C→conversational (c is also "cancel" in DashboardView,
+  //   but mode switching uses uppercase C while cancel uses lowercase c)
+  // - Review: D→dashboard (approve/reject keys handled by ReviewView)
+  const modeKeys: Record<string, Record<string, () => void>> = {
+    conversational: {
+      d: switchToDashboard,
+      D: switchToDashboard,
+      r: switchToReview,
+      R: switchToReview,
+    },
+    dashboard: {
+      r: switchToReview,
+      R: switchToReview,
+    },
+    review: {
+      d: switchToDashboard,
+      D: switchToDashboard,
+    },
+    explorer: {
+      d: switchToDashboard,
+      D: switchToDashboard,
+      r: switchToReview,
+      R: switchToReview,
+      c: switchToConversational,
+      C: switchToConversational,
+    },
+  };
+
+  useKeyboard(modeKeys[mode] ?? {});
 
   return (
     <Box flexDirection="column" flexGrow={1}>

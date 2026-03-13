@@ -5,7 +5,6 @@ import type { CliStore } from '../../store/index.js';
 import type { SpatulaApiClient } from '../../api/client.js';
 import { useJobPolling } from '../../hooks/useJobPolling.js';
 import { useKeyboard } from '../../hooks/useKeyboard.js';
-import { KeyboardHints } from '../shared/KeyboardHints.js';
 import { ActionCard } from './ActionCard.js';
 import { DiffPreview } from './DiffPreview.js';
 
@@ -13,13 +12,6 @@ export interface ReviewViewProps {
   store: CliStore;
   apiClient: SpatulaApiClient;
 }
-
-const reviewHints = [
-  { key: 'Y', description: 'Approve' },
-  { key: 'N', description: 'Reject' },
-  { key: '\u2191/\u2193', description: 'Navigate' },
-  { key: 'A', description: 'Approve all' },
-];
 
 export function ReviewView({ store, apiClient }: ReviewViewProps): React.ReactElement {
   const activeJobId = useStore(store, (s) => s.activeJobId);
@@ -30,33 +22,48 @@ export function ReviewView({ store, apiClient }: ReviewViewProps): React.ReactEl
 
   const currentAction = pendingActions[reviewIndex] ?? null;
 
-  const approve = useCallback(async () => {
+  const approve = useCallback(() => {
     if (!activeJobId || !currentAction) return;
-    const actionId = String((currentAction as Record<string, unknown>).id);
-    await apiClient.approveAction(activeJobId, actionId);
-    store.getState().removeAction(actionId);
-    const remaining = store.getState().pendingActions.length;
-    if (reviewIndex >= remaining && remaining > 0) {
-      store.getState().setReviewIndex(remaining - 1);
-    }
+    const actionId = currentAction.id;
+    void apiClient.approveAction(activeJobId, actionId)
+      .then(() => {
+        store.getState().removeAction(actionId);
+        const remaining = store.getState().pendingActions.length;
+        if (reviewIndex >= remaining && remaining > 0) {
+          store.getState().setReviewIndex(remaining - 1);
+        }
+      })
+      .catch((err) => {
+        store.getState().setError(err instanceof Error ? err.message : 'Failed to approve action');
+      });
   }, [activeJobId, currentAction, apiClient, store, reviewIndex]);
 
-  const reject = useCallback(async () => {
+  const reject = useCallback(() => {
     if (!activeJobId || !currentAction) return;
-    const actionId = String((currentAction as Record<string, unknown>).id);
-    await apiClient.rejectAction(activeJobId, actionId);
-    store.getState().removeAction(actionId);
-    const remaining = store.getState().pendingActions.length;
-    if (reviewIndex >= remaining && remaining > 0) {
-      store.getState().setReviewIndex(remaining - 1);
-    }
+    const actionId = currentAction.id;
+    void apiClient.rejectAction(activeJobId, actionId)
+      .then(() => {
+        store.getState().removeAction(actionId);
+        const remaining = store.getState().pendingActions.length;
+        if (reviewIndex >= remaining && remaining > 0) {
+          store.getState().setReviewIndex(remaining - 1);
+        }
+      })
+      .catch((err) => {
+        store.getState().setError(err instanceof Error ? err.message : 'Failed to reject action');
+      });
   }, [activeJobId, currentAction, apiClient, store, reviewIndex]);
 
-  const approveAll = useCallback(async () => {
+  const approveAll = useCallback(() => {
     if (!activeJobId) return;
-    await apiClient.approveAllActions(activeJobId);
-    store.getState().setPendingActions([]);
-    store.getState().setReviewIndex(0);
+    void apiClient.approveAllActions(activeJobId)
+      .then(() => {
+        store.getState().setPendingActions([]);
+        store.getState().setReviewIndex(0);
+      })
+      .catch((err) => {
+        store.getState().setError(err instanceof Error ? err.message : 'Failed to approve all actions');
+      });
   }, [activeJobId, apiClient, store]);
 
   useKeyboard({
@@ -96,9 +103,6 @@ export function ReviewView({ store, apiClient }: ReviewViewProps): React.ReactEl
         total={pendingActions.length}
       />
       <DiffPreview action={currentAction as Record<string, unknown>} />
-      <Box marginTop={1}>
-        <KeyboardHints hints={reviewHints} />
-      </Box>
     </Box>
   );
 }
