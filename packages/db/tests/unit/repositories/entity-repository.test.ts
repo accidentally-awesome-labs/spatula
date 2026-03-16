@@ -135,4 +135,41 @@ describe('EntityRepository', () => {
       'Failed to update entity quality score',
     );
   });
+
+  it('has countByJob method', () => {
+    expect(typeof repo.countByJob).toBe('function');
+  });
+
+  it('countByJob calls db.select', async () => {
+    await repo.countByJob(
+      '550e8400-e29b-41d4-a716-446655440000',
+      '550e8400-e29b-41d4-a716-446655440001',
+    );
+    expect(mockDb.select).toHaveBeenCalled();
+  });
+
+  it('findByJob accepts search option', async () => {
+    await repo.findByJob(
+      '550e8400-e29b-41d4-a716-446655440000',
+      '550e8400-e29b-41d4-a716-446655440001',
+      { search: 'bluetooth' },
+    );
+    expect(mockDb.select).toHaveBeenCalled();
+  });
+
+  it('countByJob wraps errors in StorageError', async () => {
+    const failChainable = {
+      where: vi.fn().mockRejectedValue(new Error('db error')),
+      from: vi.fn().mockReturnThis(),
+      then: undefined as unknown,
+    };
+    failChainable.then = vi.fn((_: unknown, reject: (v: unknown) => void) =>
+      reject(new Error('db error')),
+    );
+    mockDb.select = vi.fn().mockReturnValue(failChainable);
+
+    await expect(
+      repo.countByJob('job-id', 'tenant-id'),
+    ).rejects.toThrow('Failed to count entities');
+  });
 });

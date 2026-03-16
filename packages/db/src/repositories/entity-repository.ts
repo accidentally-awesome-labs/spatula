@@ -1,4 +1,4 @@
-import { eq, and, desc } from 'drizzle-orm';
+import { eq, and, desc, sql } from 'drizzle-orm';
 import { createLogger, StorageError } from '@spatula/shared';
 import { entities } from '../schema/entities.js';
 import type { Database } from '../connection.js';
@@ -57,12 +57,20 @@ export class EntityRepository {
     }
   }
 
-  async findByJob(jobId: string, tenantId: string, options?: { limit?: number; offset?: number }) {
+  async findByJob(jobId: string, tenantId: string, options?: { limit?: number; offset?: number; search?: string }) {
     try {
+      const conditions = [eq(entities.jobId, jobId), eq(entities.tenantId, tenantId)];
+
+      if (options?.search) {
+        conditions.push(
+          sql`${entities.mergedData}::text ILIKE ${'%' + options.search + '%'}`,
+        );
+      }
+
       let query = this.db
         .select()
         .from(entities)
-        .where(and(eq(entities.jobId, jobId), eq(entities.tenantId, tenantId)))
+        .where(and(...conditions))
         .orderBy(desc(entities.qualityScore));
 
       if (options?.limit !== undefined) {
@@ -76,6 +84,30 @@ export class EntityRepository {
       return await query;
     } catch (error) {
       throw new StorageError(`Failed to find entities: ${(error as Error).message}`, {
+        cause: error as Error,
+        context: { jobId },
+      });
+    }
+  }
+
+  async countByJob(jobId: string, tenantId: string, options?: { search?: string }): Promise<number> {
+    try {
+      const conditions = [eq(entities.jobId, jobId), eq(entities.tenantId, tenantId)];
+
+      if (options?.search) {
+        conditions.push(
+          sql`${entities.mergedData}::text ILIKE ${'%' + options.search + '%'}`,
+        );
+      }
+
+      const [result] = await this.db
+        .select({ count: sql<number>`count(*)::int` })
+        .from(entities)
+        .where(and(...conditions));
+
+      return result?.count ?? 0;
+    } catch (error) {
+      throw new StorageError(`Failed to count entities: ${(error as Error).message}`, {
         cause: error as Error,
         context: { jobId },
       });
