@@ -291,6 +291,49 @@ describe('SpatulaApiClient', () => {
   });
 
   // -----------------------------------------------------------------------
+  // listEntitiesPaginated
+  // -----------------------------------------------------------------------
+  describe('listEntitiesPaginated', () => {
+    it('returns full response with data and total', async () => {
+      vi.stubGlobal(
+        'fetch',
+        vi.fn().mockResolvedValue({
+          ok: true,
+          status: 200,
+          json: () => Promise.resolve({ data: [{ id: 'e1' }], total: 42 }),
+        }),
+      );
+
+      const result = await client.listEntitiesPaginated('job-1');
+      expect(result.data).toEqual([{ id: 'e1' }]);
+      expect(result.total).toBe(42);
+    });
+
+    it('passes query params', async () => {
+      vi.stubGlobal(
+        'fetch',
+        vi.fn().mockResolvedValue({
+          ok: true,
+          status: 200,
+          json: () => Promise.resolve({ data: [], total: 0 }),
+        }),
+      );
+
+      await client.listEntitiesPaginated('job-1', { limit: 10, offset: 20, search: 'test' });
+      const calls = (globalThis.fetch as ReturnType<typeof vi.fn>).mock.calls;
+      const lastUrl = calls[calls.length - 1][0] as string;
+      expect(lastUrl).toContain('limit=10');
+      expect(lastUrl).toContain('offset=20');
+      expect(lastUrl).toContain('search=test');
+    });
+
+    it('throws ApiError on HTTP error', async () => {
+      mockFetchError(500, 'INTERNAL_ERROR', 'Server error');
+      await expect(client.listEntitiesPaginated('job-1')).rejects.toThrow(ApiError);
+    });
+  });
+
+  // -----------------------------------------------------------------------
   // Actions
   // -----------------------------------------------------------------------
   describe('listActions', () => {
