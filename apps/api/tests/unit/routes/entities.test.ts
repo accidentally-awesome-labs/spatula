@@ -18,6 +18,7 @@ function createMockDeps(): AppDeps {
         provenance: { name: { provenanceType: 'extracted' } },
         qualityScore: 0.95,
       }),
+      countByJob: vi.fn().mockResolvedValue(42),
     },
     entitySourceRepo: {
       findByEntity: vi.fn().mockResolvedValue([
@@ -85,6 +86,28 @@ describe('Entity routes', () => {
       expect(res.status).toBe(400);
       const body = await res.json();
       expect(body.error.code).toBe('VALIDATION_ERROR');
+    });
+
+    it('returns total count alongside data', async () => {
+      const res = await app.request('/api/v1/jobs/job-1/entities');
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      expect(body.total).toBe(42);
+      expect(body.data).toHaveLength(1);
+    });
+
+    it('passes search param to repo', async () => {
+      await app.request('/api/v1/jobs/job-1/entities?search=bluetooth');
+      expect(deps.entityRepo.findByJob).toHaveBeenCalledWith(
+        'job-1',
+        TENANT_ID,
+        expect.objectContaining({ search: 'bluetooth' }),
+      );
+      expect(deps.entityRepo.countByJob).toHaveBeenCalledWith(
+        'job-1',
+        TENANT_ID,
+        expect.objectContaining({ search: 'bluetooth' }),
+      );
     });
   });
 

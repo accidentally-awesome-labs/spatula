@@ -1,25 +1,31 @@
 import { Hono } from 'hono';
 import type { AppEnv } from '../types.js';
-import { paginationSchema } from '../schemas/pagination.js';
-import type { PaginationParams } from '../schemas/pagination.js';
+import { entityQuerySchema } from '../schemas/entity-query.js';
+import type { EntityQueryParams } from '../schemas/entity-query.js';
 import { validateQuery } from '../middleware/validate.js';
 import { NotFoundError } from '../middleware/error-handler.js';
 
 export function entityRoutes(): Hono<AppEnv> {
   const router = new Hono<AppEnv>();
 
-  router.get('/', validateQuery(paginationSchema), async (c) => {
+  router.get('/', validateQuery(entityQuerySchema), async (c) => {
     const tenantId = c.get('tenantId');
     const deps = c.get('deps');
     const jobId = c.req.param('jobId') as string;
-    const query = c.get('validatedQuery') as PaginationParams;
+    const query = c.get('validatedQuery') as EntityQueryParams;
 
-    const entities = await deps.entityRepo.findByJob(jobId, tenantId, {
-      limit: query.limit,
-      offset: query.offset,
-    });
+    const [entities, total] = await Promise.all([
+      deps.entityRepo.findByJob(jobId, tenantId, {
+        limit: query.limit,
+        offset: query.offset,
+        search: query.search,
+      }),
+      deps.entityRepo.countByJob(jobId, tenantId, {
+        search: query.search,
+      }),
+    ]);
 
-    return c.json({ data: entities });
+    return c.json({ data: entities, total });
   });
 
   router.get('/:entityId', async (c) => {
