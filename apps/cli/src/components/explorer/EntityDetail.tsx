@@ -5,11 +5,13 @@ import { Panel } from '../shared/index.js';
 
 export interface EntityDetailProps {
   entity: EntityWithProvenance;
+  scrollOffset?: number;
 }
 
-export function EntityDetail({ entity }: EntityDetailProps) {
+export function EntityDetail({ entity, scrollOffset = 0 }: EntityDetailProps) {
   const provenance = entity.provenance;
-  const fields = Object.keys(entity.mergedData);
+  const allFields = Object.keys(entity.mergedData);
+  const fields = allFields.slice(scrollOffset);
 
   return (
     <Box flexDirection="column" flexGrow={1}>

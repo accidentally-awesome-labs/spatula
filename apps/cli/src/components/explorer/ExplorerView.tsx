@@ -25,19 +25,25 @@ type SubView = 'table' | 'detail' | 'export';
 // Keyboard hint sets per sub-view
 // ---------------------------------------------------------------------------
 
-const tableHints: KeyHint[] = [
+const TABLE_HINTS: KeyHint[] = [
   { key: '↑/↓', description: 'Navigate' },
   { key: '←/→', description: 'Scroll columns' },
   { key: 'Enter', description: 'Detail' },
   { key: 'F', description: 'Filter' },
   { key: 'E', description: 'Export' },
   { key: 'N/P', description: 'Next/Prev page' },
+  { key: 'Esc', description: 'Exit' },
 ];
 
-const detailHints: KeyHint[] = [
-  { key: 'Escape', description: 'Back to table' },
-  { key: 'E', description: 'Export entity' },
+const FILTER_HINTS: KeyHint[] = [
+  { key: 'A', description: 'Toggle AI' },
+  { key: 'Esc', description: 'Unfocus' },
+];
+
+const DETAIL_HINTS: KeyHint[] = [
   { key: '↑/↓', description: 'Scroll' },
+  { key: 'E', description: 'Export entity' },
+  { key: 'Esc', description: 'Back to table' },
 ];
 
 // ---------------------------------------------------------------------------
@@ -79,6 +85,7 @@ export function ExplorerView({
   const [columnOffset, setColumnOffset] = useState(0);
   const [detailLoading, setDetailLoading] = useState(false);
   const [detailError, setDetailError] = useState<string | null>(null);
+  const [detailScrollOffset, setDetailScrollOffset] = useState(0);
 
   // Store state
   const activeJobId = useStore(store, (s) => s.activeJobId);
@@ -157,7 +164,10 @@ export function ExplorerView({
     N: nextPage,
     p: prevPage,
     P: prevPage,
-  }), [store, openDetail, nextPage, prevPage]);
+    ']': nextPage,
+    '[': prevPage,
+    escape: () => { store.getState().setMode('conversational'); },
+  }), [store, openDetail, nextPage, prevPage, schemaFields.length]);
 
   useKeyboard(tableKeyMap, subView === 'table' && !filterFocused);
 
@@ -166,9 +176,12 @@ export function ExplorerView({
   // ---------------------------------------------------------------------------
 
   const detailKeyMap = useMemo(() => ({
+    upArrow: () => { setDetailScrollOffset((o) => Math.max(0, o - 1)); },
+    downArrow: () => { setDetailScrollOffset((o) => o + 1); },
     escape: () => {
       store.getState().setExpandedEntity(null);
       setDetailError(null);
+      setDetailScrollOffset(0);
       setSubView('table');
     },
     e: () => { setSubView('export'); },
@@ -222,12 +235,12 @@ export function ExplorerView({
         {detailLoading && <Spinner label="Loading entity details..." />}
         {detailError && <Text color="red">Error: {detailError}</Text>}
         {!detailLoading && !detailError && expandedEntity && (
-          <EntityDetail entity={expandedEntity} />
+          <EntityDetail entity={expandedEntity} scrollOffset={detailScrollOffset} />
         )}
         {!detailLoading && !detailError && !expandedEntity && (
           <Text dimColor>No entity selected.</Text>
         )}
-        <KeyboardHints hints={detailHints} />
+        <KeyboardHints hints={DETAIL_HINTS} />
       </Box>
     );
   }
@@ -270,7 +283,7 @@ export function ExplorerView({
         columnOffset={columnOffset}
         pageSize={pageSize}
       />
-      <KeyboardHints hints={tableHints} />
+      <KeyboardHints hints={filterFocused ? FILTER_HINTS : TABLE_HINTS} />
     </Box>
   );
 }
