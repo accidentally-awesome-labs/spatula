@@ -97,7 +97,7 @@ describe('App', () => {
     expect(frame).toContain('Cancel');
   });
 
-  it('shows explorer stub', () => {
+  it('renders ExplorerView in explorer mode', () => {
     const store = createCliStore('test-tenant');
     store.getState().setMode('explorer');
 
@@ -105,7 +105,8 @@ describe('App', () => {
     const { lastFrame } = render(
       <App store={store} apiClient={apiClient} onStartJob={noop} onExit={noop} />,
     );
-    expect(lastFrame()!).toContain('Phase 9c');
+    // ExplorerView renders "No active job" when activeJobId is null
+    expect(lastFrame()!).toContain('No active job');
   });
 
   it('switches from conversational to dashboard on D key', async () => {

@@ -8,6 +8,7 @@ import { useKeyboard } from '../hooks/useKeyboard.js';
 import { ConversationalView } from './conversational/ConversationalView.js';
 import { DashboardView } from './dashboard/DashboardView.js';
 import { ReviewView } from './review/ReviewView.js';
+import { ExplorerView } from './explorer/index.js';
 import type { KeyHint } from './shared/index.js';
 
 export interface AppProps {
@@ -43,6 +44,7 @@ function hintsForMode(mode: string): KeyHint[] {
   switch (mode) {
     case 'dashboard': return dashboardHints;
     case 'review': return reviewHints;
+    case 'explorer': return []; // ExplorerView manages its own hints
     default: return conversationalHints;
   }
 }
@@ -54,6 +56,7 @@ export function App({
   onExit,
 }: AppProps): React.ReactElement {
   const mode = useStore(store, (s) => s.mode);
+  const filterFocused = useStore(store, (s) => s.filterFocused);
 
   const switchToDashboard = useCallback(() => {
     store.getState().setMode('dashboard');
@@ -97,7 +100,7 @@ export function App({
     },
   };
 
-  useKeyboard(modeKeys[mode] ?? {});
+  useKeyboard(modeKeys[mode] ?? {}, !filterFocused);
 
   return (
     <Box flexDirection="column" flexGrow={1}>
@@ -113,7 +116,7 @@ export function App({
           <ReviewView store={store} apiClient={apiClient} />
         )}
         {mode === 'explorer' && (
-          <Text>Explorer mode — coming in Phase 9c</Text>
+          <ExplorerView store={store} apiClient={apiClient} />
         )}
       </Box>
       <KeyboardHints hints={hintsForMode(mode)} />
