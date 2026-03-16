@@ -5,8 +5,8 @@ import { Text } from 'ink';
 import { useKeyboard } from '../../../src/hooks/useKeyboard.js';
 import type { KeyMap } from '../../../src/hooks/useKeyboard.js';
 
-function TestComponent({ keyMap }: { keyMap: KeyMap }) {
-  useKeyboard(keyMap);
+function TestComponent({ keyMap, isActive }: { keyMap: KeyMap; isActive?: boolean }) {
+  useKeyboard(keyMap, isActive);
   return React.createElement(Text, null, 'listening');
 }
 
@@ -72,5 +72,17 @@ describe('useKeyboard', () => {
     await waitForEffects();
     stdin.write('\u001B');
     expect(handler).toHaveBeenCalledTimes(1);
+  });
+
+  it('does not call handlers when isActive is false', async () => {
+    const handler = vi.fn();
+    const keyMap: KeyMap = { d: handler, upArrow: handler };
+    const { stdin } = render(
+      React.createElement(TestComponent, { keyMap, isActive: false })
+    );
+    await waitForEffects();
+    stdin.write('d');
+    stdin.write('\u001B[A'); // up arrow
+    expect(handler).not.toHaveBeenCalled();
   });
 });

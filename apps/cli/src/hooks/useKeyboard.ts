@@ -10,8 +10,10 @@ export interface KeyMap {
  * Hook that maps keypresses to handler functions.
  * Supports single character keys ('d', 'r', 'y', 'n'), special keys
  * ('upArrow', 'downArrow', 'return', 'escape', 'tab').
+ *
+ * @param isActive - When false, all key handling is disabled. Defaults to true.
  */
-export function useKeyboard(keyMap: KeyMap): void {
+export function useKeyboard(keyMap: KeyMap, isActive = true): void {
   useInput((input, key) => {
     // Check special keys first
     if (key.upArrow && keyMap.upArrow) { keyMap.upArrow(); return; }
@@ -26,5 +28,5 @@ export function useKeyboard(keyMap: KeyMap): void {
     if (input && keyMap[input]) {
       keyMap[input]();
     }
-  });
+  }, { isActive });
 }
