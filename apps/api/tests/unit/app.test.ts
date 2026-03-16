@@ -26,6 +26,7 @@ function createMockDeps(): AppDeps {
     },
     entitySourceRepo: {
       findByEntity: vi.fn().mockResolvedValue([]),
+      findByEntityWithUrls: vi.fn().mockResolvedValue([]),
     },
     actionRepo: {
       findByJob: vi.fn().mockResolvedValue([]),

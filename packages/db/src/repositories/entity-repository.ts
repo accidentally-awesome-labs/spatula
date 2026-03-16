@@ -1,6 +1,6 @@
 import { eq, and, desc, sql } from 'drizzle-orm';
 import { createLogger, StorageError } from '@spatula/shared';
-import { entities } from '../schema/entities.js';
+import { entities, entitySources } from '../schema/entities.js';
 import type { Database } from '../connection.js';
 
 const logger = createLogger('entity-repository');
@@ -68,7 +68,16 @@ export class EntityRepository {
       }
 
       let query = this.db
-        .select()
+        .select({
+          id: entities.id,
+          jobId: entities.jobId,
+          tenantId: entities.tenantId,
+          mergedData: entities.mergedData,
+          categories: entities.categories,
+          qualityScore: entities.qualityScore,
+          createdAt: entities.createdAt,
+          sourceCount: sql<number>`(SELECT count(*)::int FROM entity_sources es WHERE es.entity_id = ${entities.id})`.as('source_count'),
+        })
         .from(entities)
         .where(and(...conditions))
         .orderBy(desc(entities.qualityScore));

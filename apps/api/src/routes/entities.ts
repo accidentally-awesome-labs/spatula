@@ -38,7 +38,7 @@ export function entityRoutes(): Hono<AppEnv> {
       throw new NotFoundError('Entity', entityId);
     }
 
-    const sources = await deps.entitySourceRepo.findByEntity(entityId);
+    const sources = await deps.entitySourceRepo.findByEntityWithUrls(entityId);
 
     return c.json({
       data: {

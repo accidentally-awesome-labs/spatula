@@ -24,6 +24,9 @@ function createMockDeps(): AppDeps {
       findByEntity: vi.fn().mockResolvedValue([
         { extractionId: 'ext-1', matchConfidence: 0.9 },
       ]),
+      findByEntityWithUrls: vi.fn().mockResolvedValue([
+        { extractionId: 'ext-1', matchConfidence: 0.9, sourceUrl: 'https://example.com' },
+      ]),
     },
     jobRepo: {} as any,
     schemaRepo: {} as any,
@@ -121,9 +124,9 @@ describe('Entity routes', () => {
       expect(body.data.provenance).toBeDefined();
     });
 
-    it('calls entitySourceRepo.findByEntity with the entity id', async () => {
+    it('uses findByEntityWithUrls for entity detail', async () => {
       await app.request('/api/v1/jobs/job-1/entities/ent-1');
-      expect(deps.entitySourceRepo.findByEntity).toHaveBeenCalledWith('ent-1');
+      expect(deps.entitySourceRepo.findByEntityWithUrls).toHaveBeenCalledWith('ent-1');
     });
 
     it('returns 404 for missing entity', async () => {
