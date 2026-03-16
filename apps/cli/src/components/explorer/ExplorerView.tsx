@@ -4,6 +4,7 @@ import { useStore } from 'zustand';
 import type { CliStore } from '../../store/index.js';
 import type { SpatulaApiClient } from '../../api/client.js';
 import { useEntityData } from '../../hooks/useEntityData.js';
+import { useEntityFilter } from '../../hooks/useEntityFilter.js';
 import { useKeyboard } from '../../hooks/useKeyboard.js';
 import { KeyboardHints } from '../shared/index.js';
 import type { KeyHint } from '../shared/index.js';
@@ -100,7 +101,14 @@ export function ExplorerView({
     nextPage,
     prevPage,
     fetchEntity,
+    fetchPage,
   } = useEntityData(store, apiClient, activeJobId ?? '');
+
+  // Entity filter hook (local + server-side filtering)
+  const {
+    setFilterQuery: applyFilter,
+    clearFilter,
+  } = useEntityFilter(store, apiClient, activeJobId ?? '', totalEntityCount);
 
   // ---------------------------------------------------------------------------
   // Table keyboard handlers
@@ -138,7 +146,7 @@ export function ExplorerView({
       setColumnOffset((prev) => Math.max(0, prev - 1));
     },
     rightArrow: () => {
-      setColumnOffset((prev) => prev + 1);
+      setColumnOffset((prev) => Math.min(prev + 1, Math.max(0, schemaFields.length - 1)));
     },
     return: () => { void openDetail(); },
     f: () => { store.getState().setFilterFocused(true); },
@@ -174,8 +182,8 @@ export function ExplorerView({
   // ---------------------------------------------------------------------------
 
   const handleFilterQueryChange = useCallback((query: string) => {
-    store.getState().setFilterQuery(query);
-  }, [store]);
+    applyFilter(query);
+  }, [applyFilter]);
 
   const handleFilterToggleMode = useCallback(() => {
     const current = store.getState().filterMode;
@@ -189,7 +197,11 @@ export function ExplorerView({
 
   const handleFilterBlur = useCallback(() => {
     store.getState().setFilterFocused(false);
-  }, [store]);
+    if (filterQuery) {
+      clearFilter();
+      fetchPage(0); // re-fetch unfiltered data
+    }
+  }, [store, filterQuery, clearFilter, fetchPage]);
 
   const handleExportClose = useCallback(() => {
     setSubView(expandedEntity ? 'detail' : 'table');

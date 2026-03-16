@@ -4,22 +4,28 @@ import { join } from 'node:path';
 import type { SpatulaApiClient } from '../api/client.js';
 import type { Entity, EntityWithProvenance } from '@spatula/shared';
 
+const FORMULA_PREFIXES = ['=', '+', '-', '@'];
+
+function csvEscapeValue(str: string): string {
+  // RFC 4180: quote if contains comma, double-quote, or newline; double inner quotes
+  const needsQuoting = str.includes(',') || str.includes('"') || str.includes('\n');
+  // CSV injection: prefix formula-triggering characters with a tab
+  const needsSanitize = FORMULA_PREFIXES.some((p) => str.startsWith(p));
+
+  if (needsQuoting || needsSanitize) {
+    const escaped = str.replace(/"/g, '""');
+    return needsSanitize ? `"\t${escaped}"` : `"${escaped}"`;
+  }
+  return str;
+}
+
 export function entityToCsvRow(entity: Entity, fields: string[]): string {
   return fields
     .map((field) => {
       const val = entity.mergedData[field];
       if (val === null || val === undefined) return '';
-      // Objects are JSON-serialized and wrapped in quotes as opaque blobs;
-      // inner quotes are not doubled to keep JSON readable inside the cell.
-      if (typeof val === 'object') {
-        return `"${JSON.stringify(val)}"`;
-      }
-      const str = String(val);
-      // RFC 4180: quote if contains comma, quote, or newline
-      if (str.includes(',') || str.includes('"') || str.includes('\n')) {
-        return `"${str.replace(/"/g, '""')}"`;
-      }
-      return str;
+      const str = typeof val === 'object' ? JSON.stringify(val) : String(val);
+      return csvEscapeValue(str);
     })
     .join(',');
 }

@@ -25,6 +25,14 @@ vi.mock('../../../../src/hooks/useEntityData.js', () => ({
   }),
 }));
 
+vi.mock('../../../../src/hooks/useEntityFilter.js', () => ({
+  useEntityFilter: vi.fn().mockReturnValue({
+    setFilterQuery: vi.fn(),
+    clearFilter: vi.fn(),
+    applyServerFilter: vi.fn(),
+  }),
+}));
+
 vi.mock('ink-spinner', () => ({
   default: () => React.createElement('ink-text', null, '*'),
 }));

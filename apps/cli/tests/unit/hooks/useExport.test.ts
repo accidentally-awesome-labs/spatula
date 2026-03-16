@@ -57,12 +57,24 @@ describe('entityToCsvRow (exported for testing)', () => {
     expect(row).toBe(',');
   });
 
-  it('serializes objects as JSON strings', async () => {
+  it('serializes objects as JSON strings with proper escaping', async () => {
     const mod = await import('../../../src/hooks/useExport.js');
     const row = mod.entityToCsvRow(
       { mergedData: { data: { nested: true } } } as any,
       ['data'],
     );
-    expect(row).toContain('"nested":true');
+    // JSON is {"nested":true}, RFC 4180 escaped: inner quotes doubled
+    expect(row).toBe('"{""nested"":true}"');
+  });
+
+  it('sanitizes formula injection prefixes', async () => {
+    const mod = await import('../../../src/hooks/useExport.js');
+    const row = mod.entityToCsvRow(
+      { mergedData: { name: '=CMD("hack")' } } as any,
+      ['name'],
+    );
+    // Formula prefix gets tab-prefixed inside quotes
+    expect(row.startsWith('"\t')).toBe(true);
+    expect(row.startsWith('"=')).toBe(false);
   });
 });
