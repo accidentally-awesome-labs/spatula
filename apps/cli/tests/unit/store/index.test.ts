@@ -488,6 +488,89 @@ describe('CliStore', () => {
   });
 
   // -------------------------------------------------------------------------
+  // Explorer state
+  // -------------------------------------------------------------------------
+
+  describe('explorer state', () => {
+    it('has empty entities initially', () => {
+      expect(store.getState().entities).toEqual([]);
+    });
+
+    it('has zero totalEntityCount initially', () => {
+      expect(store.getState().totalEntityCount).toBe(0);
+    });
+
+    it('has currentEntityPage at 0 initially', () => {
+      expect(store.getState().currentEntityPage).toBe(0);
+    });
+
+    it('has selectedEntityIndex at 0 initially', () => {
+      expect(store.getState().selectedEntityIndex).toBe(0);
+    });
+
+    it('has null expandedEntity initially', () => {
+      expect(store.getState().expandedEntity).toBeNull();
+    });
+
+    it('has empty filterQuery initially', () => {
+      expect(store.getState().filterQuery).toBe('');
+    });
+
+    it('has local filterMode initially', () => {
+      expect(store.getState().filterMode).toBe('local');
+    });
+
+    it('has filterFocused false initially', () => {
+      expect(store.getState().filterFocused).toBe(false);
+    });
+
+    it('sets entities', () => {
+      const entities = [{ id: 'e1', mergedData: { name: 'Test' } }];
+      store.getState().setEntities(entities as any);
+      expect(store.getState().entities).toEqual(entities);
+    });
+
+    it('sets totalEntityCount', () => {
+      store.getState().setTotalEntityCount(42);
+      expect(store.getState().totalEntityCount).toBe(42);
+    });
+
+    it('sets currentEntityPage', () => {
+      store.getState().setCurrentEntityPage(3);
+      expect(store.getState().currentEntityPage).toBe(3);
+    });
+
+    it('sets selectedEntityIndex', () => {
+      store.getState().setSelectedEntityIndex(5);
+      expect(store.getState().selectedEntityIndex).toBe(5);
+    });
+
+    it('sets and clears expandedEntity', () => {
+      const entity = { id: 'e1', provenance: {}, sources: [] };
+      store.getState().setExpandedEntity(entity as any);
+      expect(store.getState().expandedEntity).toEqual(entity);
+
+      store.getState().setExpandedEntity(null);
+      expect(store.getState().expandedEntity).toBeNull();
+    });
+
+    it('sets filterQuery', () => {
+      store.getState().setFilterQuery('bluetooth');
+      expect(store.getState().filterQuery).toBe('bluetooth');
+    });
+
+    it('sets filterMode', () => {
+      store.getState().setFilterMode('ai');
+      expect(store.getState().filterMode).toBe('ai');
+    });
+
+    it('sets filterFocused', () => {
+      store.getState().setFilterFocused(true);
+      expect(store.getState().filterFocused).toBe(true);
+    });
+  });
+
+  // -------------------------------------------------------------------------
   // Store isolation
   // -------------------------------------------------------------------------
 

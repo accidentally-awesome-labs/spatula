@@ -6,6 +6,7 @@ import {
   type JobConfig,
   type ConfigValidationResult,
 } from '@spatula/core';
+import type { Entity, EntityWithProvenance } from '@spatula/shared';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -82,6 +83,26 @@ export interface CliState {
 
   reviewIndex: number;
   setReviewIndex: (index: number) => void;
+
+  // Explorer state
+  entities: Entity[];
+  totalEntityCount: number;
+  currentEntityPage: number;
+  selectedEntityIndex: number;
+  expandedEntity: EntityWithProvenance | null;
+  filterQuery: string;
+  filterMode: 'local' | 'ai';
+  filterFocused: boolean;
+
+  // Explorer setters
+  setEntities: (entities: Entity[]) => void;
+  setTotalEntityCount: (count: number) => void;
+  setCurrentEntityPage: (page: number) => void;
+  setSelectedEntityIndex: (index: number) => void;
+  setExpandedEntity: (entity: EntityWithProvenance | null) => void;
+  setFilterQuery: (query: string) => void;
+  setFilterMode: (mode: 'local' | 'ai') => void;
+  setFilterFocused: (focused: boolean) => void;
 }
 
 export type CliStore = StoreApi<CliState>;
@@ -189,5 +210,25 @@ export function createCliStore(tenantId: string): CliStore {
       const max = Math.max(0, get().pendingActions.length - 1);
       set({ reviewIndex: Math.max(0, Math.min(index, max)) });
     },
+
+    // Explorer state
+    entities: [],
+    totalEntityCount: 0,
+    currentEntityPage: 0,
+    selectedEntityIndex: 0,
+    expandedEntity: null,
+    filterQuery: '',
+    filterMode: 'local',
+    filterFocused: false,
+
+    // Explorer setters
+    setEntities: (entities) => set({ entities }),
+    setTotalEntityCount: (totalEntityCount) => set({ totalEntityCount }),
+    setCurrentEntityPage: (currentEntityPage) => set({ currentEntityPage }),
+    setSelectedEntityIndex: (selectedEntityIndex) => set({ selectedEntityIndex }),
+    setExpandedEntity: (expandedEntity) => set({ expandedEntity }),
+    setFilterQuery: (filterQuery) => set({ filterQuery }),
+    setFilterMode: (filterMode) => set({ filterMode }),
+    setFilterFocused: (filterFocused) => set({ filterFocused }),
   }));
 }
