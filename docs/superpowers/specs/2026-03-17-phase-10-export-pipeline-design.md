@@ -385,12 +385,13 @@ interface ExportJobPayload {
 
 1. Update export record: status → `processing`
 2. Fetch schema via `SchemaRepository.findLatest(jobId, tenantId)`
-3. Fetch all entities in batches of 100 via `EntityRepository.findByJob` (which includes the computed `sourceCount` subquery)
-   - JSON with provenance: use a separate query that includes the `provenance` column
-   - CSV or no provenance: use the standard `findByJob` which excludes `provenance` (lighter query)
+3. Fetch all entities by calling `EntityRepository.findByJob` repeatedly with `limit: 100` and incrementing `offset` (batching for DB cursor management — all batches accumulated in memory before serialization)
+   - The existing `findByJob` includes the computed `sourceCount` subquery but omits `provenance`
+   - JSON with provenance: add a `findByJobWithProvenance` method to `EntityRepository` that includes the `provenance` column in the select. Same signature as `findByJob` with an additional option `{ includeProvenance: true }`, or as a separate method.
+   - CSV or no provenance: use the standard `findByJob` (lighter query, no provenance column)
 4. If JSON format: generate data dictionary via `DocumentationGenerator`
 5. Run appropriate exporter (`JsonExporter` or `CsvExporter`)
-6. Write `ExportResult.content` to content store
+6. Write the serialized content (`ExportResult.data`) to content store
    - Key format: `exports/{tenantId}/{jobId}/{exportId}.{format}`
 7. Update export record: status → `completed`, set contentRef, entityCount, fileSize, completedAt
 8. On error at any step: update status → `failed`, save error message
