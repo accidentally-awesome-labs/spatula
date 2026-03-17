@@ -35,6 +35,9 @@ function createMockDeps(): AppDeps {
       batchUpdateStatus: vi.fn().mockResolvedValue([]),
     },
     taskRepo: {},
+    exportRepo: { create: vi.fn(), findById: vi.fn(), findByJob: vi.fn(), updateStatus: vi.fn() },
+    contentStore: { store: vi.fn(), retrieve: vi.fn(), delete: vi.fn() },
+    exportQueue: { add: vi.fn() },
     jobManager: {
       createJob: vi.fn().mockResolvedValue('job-1'),
       startJob: vi.fn(),
