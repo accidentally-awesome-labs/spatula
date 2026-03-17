@@ -9,8 +9,7 @@ import type {
   ExportRepository,
 } from '@spatula/db';
 import type { ContentStore } from '@spatula/core';
-import type { Queue } from 'bullmq';
-import type { JobManager, ExportJobPayload } from '@spatula/queue';
+import type { JobManager, ExportJobPayload, SpatulaQueues } from '@spatula/queue';
 
 export interface AppDeps {
   jobRepo: JobRepository;
@@ -23,7 +22,7 @@ export interface AppDeps {
   jobManager: JobManager;
   exportRepo: ExportRepository;
   contentStore: ContentStore;
-  exportQueue: Queue<ExportJobPayload>;
+  exportQueue: SpatulaQueues['export'];
 }
 
 export interface AppEnv {
