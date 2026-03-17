@@ -38,6 +38,8 @@ Change to:
 jobId: uuid('job_id').notNull().references(() => jobs.id),
 ```
 
+**Circular FK note:** This creates a circular reference — `jobs.schemaId` references `schemas.id`, and `schemas.jobId` will reference `jobs.id`. This is safe for INSERT because `jobs.schemaId` is nullable (set after job creation). For DELETE (Phase 11d), the cascading delete must SET NULL on `jobs.schemaId` first, then delete schemas. The FK from `schemas.jobId` to `jobs.id` should use `ON DELETE CASCADE`; the FK from `jobs.schemaId` to `schemas.id` already allows NULL and the delete transaction sets it to NULL before cascading.
+
 ### 11a.2 Database Infrastructure
 
 **New file: `docker-compose.yml`** at project root.
@@ -79,7 +81,7 @@ async create(input: {
 
 **WorkerDeps change:** Add `actionRepo: ActionRepository` to `packages/queue/src/worker-deps.ts` — it is currently missing.
 
-**Worker integration:** After this change, schema-worker calls `actionRepo.create()` for each action before applying it via `applySchemaActions()`. Reconciliation-worker does the same for source trust actions.
+**Worker integration:** After this change, schema-worker iterates over the actions returned by `schemaEvolver.evolve()`, calls `actionRepo.create()` for each one individually (with status `applied`), then batch-applies them via `applySchemaActions()` to produce the new schema version. This preserves the current batch-apply behavior while adding the audit trail. Reconciliation-worker does the same for source trust actions.
 
 ### 11a.4 Distributed Lock for Schema Evolution
 
@@ -92,14 +94,14 @@ The schema-worker's BullMQ dedup key (`schema-evolution:{jobId}:v{version}`) pro
 ```
 Lock key:    schema-lock:{jobId}
 TTL:         30 seconds
-Acquire:     Before loading current schema (line 31)
-Release:     After persisting new schema version (line 99) in a finally block
+Acquire:     Before the schemaRepo.findLatest() call
+Release:     After schemaRepo.create() persists the new version, in a finally block
 On failure:  Skip silently — another worker has the lock and will handle this batch
 ```
 
 **New file:** `packages/queue/src/redis-lock.ts`
 
-A small utility with `acquire(redis, key, ttl): Promise<boolean>` and `release(redis, key): Promise<void>`. Workers get the Redis connection from BullMQ's existing `ConnectionOptions`.
+A small utility with `acquire(redis, key, ttl): Promise<{ acquired: boolean; token: string }>` and `release(redis, key, token): Promise<void>`. The `acquire()` call stores a random token as the lock value via `SET key token NX EX ttl`. The `release()` call uses a Lua CAS script that only deletes the key if the stored value matches the token — this prevents a worker from accidentally releasing another worker's lock if the TTL expires during a slow evolution. Workers get the Redis connection from BullMQ's existing `ConnectionOptions`.
 
 ### 11a.5 Queue Concurrency & Rate Limiting
 
@@ -155,7 +157,10 @@ Prerequisites: Running Postgres + Redis (via docker-compose).
 12. Verify export content downloadable
 13. Teardown: drop test data
 
-**Key decision:** Use real Postgres + Redis but mock the LLM client (OpenRouter) with fixture responses. Tests the full pipeline wiring without API costs or network flakiness.
+**Key decisions:**
+
+- Use real Postgres + Redis but mock the LLM client (OpenRouter) with fixture responses. Tests the full pipeline wiring without API costs or network flakiness.
+- Use a dedicated test database (`spatula_test`) created and dropped per test run for isolation. The docker-compose Postgres should create both `spatula` and `spatula_test` databases on init.
 
 ---
 
@@ -197,13 +202,18 @@ The executor delegates to domain-specific appliers:
 
 | Action Category | Delegated To | Status |
 |----------------|--------------|--------|
-| Schema (7 types) | `applySchemaActions()` | Exists — `evolution/schema-action-applier.ts` |
+| Schema (7 types) | `applySchemaActions()` | Partially exists — `evolution/schema-action-applier.ts` handles 5 of 7 |
 | Normalization (2) | `applySchemaActions()` | Exists — handled in same reducer |
 | Category (2) | `applyCategoryActions()` | New |
 | Crawl (3) | No-op — produced inline by workers | N/A |
 | Reconciliation (6) | `applyReconciliationActions()` | New |
 | Reprocessing (1) | Enqueue reprocessing jobs | New |
 | Finalization (4) | `applyFinalizationActions()` | New |
+
+**Schema-action-applier gap:** The existing `applySchemaActions()` handles `add_field`, `remove_field`, `modify_field`, `rename_field`, `merge_fields`, `set_normalization_rule`, and `update_enum_map`. It does **not** handle `split_field` or `group_fields` — these fall through to the default case and are silently skipped. As part of 11b, add `split_field` and `group_fields` cases to the applier:
+
+- `split_field`: Remove the source field, insert the target fields at the same position, using `splitLogic` and `examples` as documentation (the actual data re-extraction happens via `reprocess_extraction`).
+- `group_fields`: Remove the source fields, create a new object-typed field with the specified mapping, update `objectFields` on the new field definition.
 
 **New domain applier files:**
 
@@ -269,7 +279,7 @@ Backed by `ActionRepository`:
 
 - `enqueue()` → `actionRepo.create()` with status `pending_review`, stores `ActionPreview` in payload
 - `getPending()` → `actionRepo.findByJob()` filtered by status `pending_review`
-- `approve()` → `actionRepo.updateStatus()` to `approved`, then `ActionExecutor.execute()` (skips policy check for pre-approved actions), then updates to `applied`
+- `approve()` → `actionRepo.updateStatus()` to `approved`, then calls the domain applier directly (not through `ActionExecutor.execute()`, which would create a circular dependency). The ReviewQueue holds references to the same domain appliers the executor uses, but does not hold a reference to the executor itself. After applying, updates status to `applied`.
 - `reject()` → `actionRepo.updateStatus()` to `rejected` with reason
 - `approveAll()` → `actionRepo.batchUpdateStatus()` then executes each
 
@@ -329,7 +339,7 @@ Workers must not know about WebSocket connections. Two options were considered:
 
 - `packages/queue/src/events.ts` — `publishJobEvent(redis, jobId, event)` helper used by workers at key pipeline points (after crawl, after extraction, after schema evolution, on status change)
 - `apps/api/src/ws/job-progress.ts` — On WebSocket connect, validate tenant owns jobId, subscribe to Redis channel, forward events as JSON messages. On disconnect, unsubscribe and clean up.
-- Hono WebSocket via `hono/ws` adapter (built-in, works with Node.js)
+- Hono WebSocket via `@hono/node-ws` adapter (the Node.js-specific package — the built-in `hono/ws` targets Deno/Bun/Cloudflare Workers)
 - Heartbeat ping every 30s to detect stale connections
 
 **CLI integration:**
@@ -374,7 +384,7 @@ interface LinkEvaluator {
 
 **Crawl worker integration:**
 
-Currently `crawl-worker.ts` lines 117–139 extract links and enqueue all with flat priority. After this change:
+Currently the crawl-worker's link-handling section extracts links and enqueues all of them with no priority scoring (default BullMQ ordering). After this change:
 
 1. `LinkExtractor` extracts raw links (existing)
 2. `LinkEvaluator` scores them (new)
@@ -412,7 +422,7 @@ Existing POST routes remain as aliases for backwards compatibility.
 DELETE /api/v1/jobs/:id
 ```
 
-Cascading delete in FK dependency order: job → crawl_tasks → raw_pages → extractions → entities → entity_sources → actions → schemas → exports → content store entries. Implemented as a transaction in a new `JobRepository.deleteWithData(jobId, tenantId)` method.
+Cascading delete in a single transaction. Due to the circular FK between `jobs.schemaId → schemas.id` and `schemas.jobId → jobs.id` (see 11a.1), the delete must first SET NULL on `jobs.schemaId`, then delete in FK dependency order: entity_sources → entities → extractions → raw_pages → crawl_tasks → actions → schemas → exports → content store entries → job. Implemented in a new `JobRepository.deleteWithData(jobId, tenantId)` method.
 
 ### 11d.2 Pagination Consistency
 
@@ -479,7 +489,7 @@ Add missing error types extending `SpatulaError`:
 | `NetworkError` | Connection failures to external services |
 | `StateError` | Invalid state transitions |
 
-**Migration:** Move `InvalidTransitionError` from `packages/queue/src/state-machine.ts` into shared as `StateError extends SpatulaError`. Update state-machine.ts to import from `@spatula/shared`.
+**Migration:** Move `InvalidTransitionError` from `packages/queue/src/state-machine.ts` into shared as `StateError extends SpatulaError`. The current `InvalidTransitionError` stores `from` and `to` properties — the new `StateError` preserves these via the `context` field that `SpatulaError` already supports: `new StateError('Invalid transition', 'STATE_INVALID_TRANSITION', { context: { from, to } })`. Update state-machine.ts to import from `@spatula/shared`.
 
 **Worker error cleanup:** Replace generic `throw new Error(...)` calls in queue workers:
 
@@ -564,13 +574,13 @@ All implement the existing `Exporter` interface.
 
 **Shared utility:** `packages/core/src/exporters/column-mapper.ts` — maps `SchemaDefinition` field types to native column types for each target format.
 
-**ExportWorker:** Add format → exporter factory mapping, similar to `CrawlerFactory`.
+**ExportWorker:** Add format → exporter factory mapping, similar to `CrawlerFactory`. Also update `ExportJobPayload` in `packages/queue/src/queues.ts` — the `format` field is currently typed as `'json' | 'csv'` and must be widened to `'json' | 'csv' | 'parquet' | 'duckdb' | 'sqlite'` (or import the `ExportFormat` type from `@spatula/core/interfaces/exporter` which already includes all 5 formats).
 
 **Content store binary support:**
 
 Parquet, DuckDB, and SQLite produce binary output. The current `PgContentStore` stores text only.
 
-**Decision:** Add `storeBinary(key: string, data: Buffer)` and `retrieveBinary(key: string)` to the `ContentStore` interface with a `bytea` column implementation in `PgContentStore`. Existing text methods remain unchanged.
+**Decision:** Add `storeBinary(key: string, data: Uint8Array)` and `retrieveBinary(key: string): Promise<Uint8Array | null>` to the `ContentStore` interface. Use `Uint8Array` instead of Node.js `Buffer` for runtime portability (Bun compatibility per design doc). Implementation in `PgContentStore`: add a `binary_content bytea` column to the existing `content_store` table (nullable — text content remains in the existing `content` column). The `storeBinary` method writes to `binary_content`; `retrieveBinary` reads from it. This requires a Drizzle migration. Existing text methods remain unchanged.
 
 ---
 
