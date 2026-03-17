@@ -150,6 +150,66 @@ export class SpatulaApiClient {
   }
 
   // -----------------------------------------------------------------------
+  // Exports
+  // -----------------------------------------------------------------------
+
+  async createExport(
+    jobId: string,
+    body: { format: string; includeProvenance?: boolean },
+  ): Promise<Record<string, unknown>> {
+    return this.post(`/api/v1/jobs/${jobId}/export`, body);
+  }
+
+  async getExport(
+    jobId: string,
+    exportId: string,
+  ): Promise<Record<string, unknown>> {
+    return this.get(`/api/v1/jobs/${jobId}/export/${exportId}`);
+  }
+
+  async downloadExport(
+    jobId: string,
+    exportId: string,
+  ): Promise<string> {
+    // This method bypasses the generic request() helper because the download
+    // endpoint returns raw file content (not JSON wrapped in { data: ... }).
+    // It uses response.text() instead of response.json().
+    const url = this.buildUrl(`/api/v1/jobs/${jobId}/export/${exportId}/download`);
+
+    let response: Response;
+    try {
+      response = await fetch(url, { method: 'GET', headers: this.headers() });
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Unknown network error';
+      throw new ApiError(0, 'NETWORK_ERROR', message);
+    }
+
+    if (!response.ok) {
+      let code: string | undefined;
+      let message = `HTTP ${response.status}`;
+      try {
+        const errorBody = (await response.json()) as Record<string, unknown>;
+        const err = errorBody?.error as Record<string, unknown> | undefined;
+        if (err) {
+          code = err.code as string | undefined;
+          message = (err.message as string) ?? message;
+        }
+      } catch {
+        // not JSON error body
+      }
+      throw new ApiError(response.status, code, message);
+    }
+
+    return response.text();
+  }
+
+  async getDocumentation(
+    jobId: string,
+  ): Promise<Record<string, unknown>> {
+    return this.get(`/api/v1/jobs/${jobId}/documentation`);
+  }
+
+  // -----------------------------------------------------------------------
   // Actions
   // -----------------------------------------------------------------------
 

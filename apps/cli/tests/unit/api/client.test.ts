@@ -416,6 +416,48 @@ describe('SpatulaApiClient', () => {
   });
 
   // -----------------------------------------------------------------------
+  // Exports
+  // -----------------------------------------------------------------------
+  describe('createExport', () => {
+    it('sends POST to /export', async () => {
+      mockFetchOk({ id: 'exp-1', status: 'pending' });
+      const result = await client.createExport('job-1', { format: 'json' });
+      expect(result.id).toBe('exp-1');
+      const { url, init } = lastFetchCall();
+      expect(url).toContain('/jobs/job-1/export');
+      expect(init.method).toBe('POST');
+    });
+  });
+
+  describe('getExport', () => {
+    it('fetches export status', async () => {
+      mockFetchOk({ id: 'exp-1', status: 'completed' });
+      const result = await client.getExport('job-1', 'exp-1');
+      expect(result.status).toBe('completed');
+    });
+  });
+
+  describe('downloadExport', () => {
+    it('returns raw content as string', async () => {
+      vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
+        ok: true,
+        status: 200,
+        text: () => Promise.resolve('name,price\nA,10'),
+      }));
+      const content = await client.downloadExport('job-1', 'exp-1');
+      expect(content).toBe('name,price\nA,10');
+    });
+  });
+
+  describe('getDocumentation', () => {
+    it('fetches documentation', async () => {
+      mockFetchOk({ fields: [], schemaVersion: 1 });
+      const result = await client.getDocumentation('job-1');
+      expect(result.schemaVersion).toBe(1);
+    });
+  });
+
+  // -----------------------------------------------------------------------
   // Error handling
   // -----------------------------------------------------------------------
   describe('error handling', () => {
