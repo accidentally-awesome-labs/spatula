@@ -27,6 +27,11 @@ export async function processExportJob(
     // 3. Fetch all entities in batches
     const allEntities: Entity[] = [];
     const total = await deps.entityRepo.countByJob(jobId, tenantId);
+
+    const MAX_EXPORT_ENTITIES = 50_000;
+    if (total > MAX_EXPORT_ENTITIES) {
+      throw new Error(`Export too large: ${total} entities exceeds maximum of ${MAX_EXPORT_ENTITIES}. Consider filtering first.`);
+    }
     let offset = 0;
     while (offset < total) {
       const batch = await deps.entityRepo.findByJob(jobId, tenantId, {
@@ -43,6 +48,10 @@ export async function processExportJob(
       : null;
 
     // 5. Run exporter
+    // Note: findByJob excludes the provenance column for efficiency. When
+    // includeProvenance is true, entity.provenance will be undefined — the
+    // JsonExporter gracefully skips it. A findByJobWithProvenance method is
+    // needed to fully support this flag (tracked as follow-up).
     const exporter = format === 'csv' ? new CsvExporter() : new JsonExporter();
     const result = await exporter.export(allEntities, schema, {
       format,

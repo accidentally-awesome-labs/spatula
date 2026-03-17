@@ -83,9 +83,14 @@ export function useExport(apiClient: SpatulaApiClient) {
         const exportId = exportRecord.id as string;
         setExportProgress({ status: 'pending' });
 
-        // 2. Poll for completion
+        // 2. Poll for completion (max 5 minutes, matching worker timeout)
+        const MAX_POLL_MS = 5 * 60 * 1000;
+        const pollStart = Date.now();
         let status = 'pending';
         while (status !== 'completed' && status !== 'failed' && !abortRef.current) {
+          if (Date.now() - pollStart > MAX_POLL_MS) {
+            throw new Error('Export timed out — check server logs');
+          }
           await new Promise((r) => setTimeout(r, 1000));
           const record = await apiClient.getExport(jobId, exportId);
           status = record.status as string;
