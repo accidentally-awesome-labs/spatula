@@ -6,6 +6,9 @@ import type { WorkerDeps } from '../../../src/worker-deps.js';
 
 function createMockDeps(): WorkerDeps {
   return {
+    jobRepo: {
+      findById: vi.fn().mockResolvedValue({ id: 'job-1', status: 'completed' }),
+    },
     exportRepo: {
       updateStatus: vi.fn().mockResolvedValue({ id: 'exp-1', status: 'completed' }),
     },
@@ -22,6 +25,7 @@ function createMockDeps(): WorkerDeps {
     },
     entityRepo: {
       findByJob: vi.fn().mockResolvedValue([]),
+      findByJobWithProvenance: vi.fn().mockResolvedValue([]),
       countByJob: vi.fn().mockResolvedValue(0),
     },
     contentStore: {

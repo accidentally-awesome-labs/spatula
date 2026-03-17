@@ -99,6 +99,31 @@ export class EntityRepository {
     }
   }
 
+  async findByJobWithProvenance(jobId: string, tenantId: string, options?: { limit?: number; offset?: number }) {
+    try {
+      let query = this.db
+        .select()
+        .from(entities)
+        .where(and(eq(entities.jobId, jobId), eq(entities.tenantId, tenantId)))
+        .orderBy(desc(entities.qualityScore));
+
+      if (options?.limit !== undefined) {
+        query = query.limit(options.limit) as typeof query;
+      }
+
+      if (options?.offset !== undefined) {
+        query = query.offset(options.offset) as typeof query;
+      }
+
+      return await query;
+    } catch (error) {
+      throw new StorageError(`Failed to find entities with provenance: ${(error as Error).message}`, {
+        cause: error as Error,
+        context: { jobId },
+      });
+    }
+  }
+
   async countByJob(jobId: string, tenantId: string, options?: { search?: string }): Promise<number> {
     try {
       const conditions = [eq(entities.jobId, jobId), eq(entities.tenantId, tenantId)];

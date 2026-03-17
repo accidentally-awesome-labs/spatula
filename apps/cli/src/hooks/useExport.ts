@@ -71,7 +71,7 @@ export function useExport(apiClient: SpatulaApiClient) {
     async (
       jobId: string,
       format: 'json' | 'csv',
-      _options: { search?: string; filterQuery?: string; schemaFields: string[] },
+      options: { search?: string; filterQuery?: string; schemaFields: string[]; includeProvenance?: boolean },
     ): Promise<string> => {
       setIsExporting(true);
       setExportProgress({ status: 'pending' });
@@ -79,7 +79,10 @@ export function useExport(apiClient: SpatulaApiClient) {
 
       try {
         // 1. Trigger server-side export
-        const exportRecord = await apiClient.createExport(jobId, { format });
+        const exportRecord = await apiClient.createExport(jobId, {
+          format,
+          includeProvenance: options.includeProvenance,
+        });
         const exportId = exportRecord.id as string;
         setExportProgress({ status: 'pending' });
 

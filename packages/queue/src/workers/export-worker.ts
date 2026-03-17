@@ -14,6 +14,16 @@ export async function processExportJob(
   const { exportId, jobId, tenantId, format, includeProvenance } = data;
 
   try {
+    // 0. Verify job exists and is in a completed state
+    const job = await deps.jobRepo.findById(jobId, tenantId);
+    if (!job) {
+      throw new Error('Job not found');
+    }
+    const jobStatus = (job as { status?: string }).status;
+    if (jobStatus !== 'completed') {
+      throw new Error(`Job is not completed (status: ${jobStatus}). Export requires a completed job.`);
+    }
+
     // 1. Mark as processing
     await deps.exportRepo.updateStatus(exportId, tenantId, { status: 'processing' });
 
@@ -33,11 +43,11 @@ export async function processExportJob(
       throw new Error(`Export too large: ${total} entities exceeds maximum of ${MAX_EXPORT_ENTITIES}. Consider filtering first.`);
     }
     let offset = 0;
+    const useProvenance = includeProvenance && format === 'json';
     while (offset < total) {
-      const batch = await deps.entityRepo.findByJob(jobId, tenantId, {
-        limit: 100,
-        offset,
-      });
+      const batch = useProvenance
+        ? await deps.entityRepo.findByJobWithProvenance(jobId, tenantId, { limit: 100, offset })
+        : await deps.entityRepo.findByJob(jobId, tenantId, { limit: 100, offset });
       allEntities.push(...(batch as unknown as Entity[]));
       offset += 100;
     }
@@ -48,10 +58,6 @@ export async function processExportJob(
       : null;
 
     // 5. Run exporter
-    // Note: findByJob excludes the provenance column for efficiency. When
-    // includeProvenance is true, entity.provenance will be undefined — the
-    // JsonExporter gracefully skips it. A findByJobWithProvenance method is
-    // needed to fully support this flag (tracked as follow-up).
     const exporter = format === 'csv' ? new CsvExporter() : new JsonExporter();
     const result = await exporter.export(allEntities, schema, {
       format,

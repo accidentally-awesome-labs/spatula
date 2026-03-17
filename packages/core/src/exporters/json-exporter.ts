@@ -1,14 +1,6 @@
 import type { Exporter, ExportOptions, ExportResult } from '../interfaces/exporter.js';
 import type { SchemaDefinition } from '../types/schema.js';
-
-interface EntityLike {
-  mergedData: Record<string, unknown>;
-  qualityScore?: number;
-  categories?: string[];
-  sourceCount?: number;
-  provenance?: Record<string, unknown>;
-  sources?: unknown[];
-}
+import type { Entity, EntityWithProvenance } from '@spatula/shared';
 
 export class JsonExporter implements Exporter {
   readonly format = 'json' as const;
@@ -18,16 +10,17 @@ export class JsonExporter implements Exporter {
     _schema: SchemaDefinition,
     options: ExportOptions,
   ): Promise<ExportResult> {
-    const serialized = (entities as EntityLike[]).map((entity) => {
+    const serialized = (entities as (Entity | EntityWithProvenance)[]).map((entity) => {
       const base: Record<string, unknown> = {
         data: entity.mergedData,
         qualityScore: entity.qualityScore,
         categories: entity.categories,
         sourceCount: entity.sourceCount,
       };
-      if (options.includeProvenance && entity.provenance) {
-        base.provenance = entity.provenance;
-        base.sources = entity.sources;
+      if (options.includeProvenance && 'provenance' in entity) {
+        const withProv = entity as EntityWithProvenance;
+        base.provenance = withProv.provenance;
+        base.sources = withProv.sources;
       }
       return base;
     });

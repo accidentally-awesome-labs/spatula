@@ -24,6 +24,10 @@ export function exportRoutes(): Hono<AppEnv> {
     await deps.exportQueue.add('export', {
       exportId: exportRecord.id, jobId, tenantId,
       format: body.format, includeProvenance: body.includeProvenance,
+    }, {
+      attempts: 1,
+      removeOnComplete: true,
+      removeOnFail: true,
     });
 
     return c.json({ data: exportRecord }, 202);
@@ -85,9 +89,8 @@ export function exportRoutes(): Hono<AppEnv> {
     ]);
 
     const documentation = generateDocumentation(schema, entities as unknown as Entity[], jobId);
-    documentation.entityCount = totalCount;
 
-    return c.json({ data: documentation });
+    return c.json({ data: { ...documentation, entityCount: totalCount } });
   });
 
   return router;

@@ -27,6 +27,7 @@ export function ExportDialog({ store, apiClient, fromDetail, onClose }: ExportDi
 
   const [format, setFormat] = useState<ExportFormat>('json');
   const [scope, setScope] = useState<ExportScope>(fromDetail ? 'entity' : 'set');
+  const [includeProvenance, setIncludeProvenance] = useState(false);
   const [result, setResult] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -53,6 +54,7 @@ export function ExportDialog({ store, apiClient, fromDetail, onClose }: ExportDi
           search: filterQuery || undefined,
           filterQuery: filterQuery || undefined,
           schemaFields,
+          includeProvenance,
         });
       }
       setResult(filepath);
@@ -67,6 +69,8 @@ export function ExportDialog({ store, apiClient, fromDetail, onClose }: ExportDi
       rightArrow: () => setFormat((f) => (f === 'json' ? 'csv' : 'json')),
       upArrow: () => fromDetail && setScope((s) => (s === 'entity' ? 'set' : 'entity')),
       downArrow: () => fromDetail && setScope((s) => (s === 'entity' ? 'set' : 'entity')),
+      p: () => format === 'json' && setIncludeProvenance((v) => !v),
+      P: () => format === 'json' && setIncludeProvenance((v) => !v),
       return: () => doExport(),
       escape: () => onClose(),
     },
@@ -132,6 +136,16 @@ export function ExportDialog({ store, apiClient, fromDetail, onClose }: ExportDi
             {scope === 'set' ? `[${setLabel}]` : ` ${setLabel} `}
           </Text>
         </Box>
+
+        {format === 'json' && (
+          <Box>
+            <Text bold>Provenance: </Text>
+            <Text color={includeProvenance ? 'green' : undefined}>
+              {includeProvenance ? '[Yes]' : '[No]'}
+            </Text>
+            <Text dimColor>  (P to toggle)</Text>
+          </Box>
+        )}
 
         <Box marginTop={1}>
           <Text dimColor>Enter to export {'\u00b7'} Escape to cancel</Text>
