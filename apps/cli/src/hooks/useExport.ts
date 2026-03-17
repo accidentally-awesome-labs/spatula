@@ -1,4 +1,4 @@
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useRef } from 'react';
 import { writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import type { SpatulaApiClient } from '../api/client.js';
@@ -38,11 +38,15 @@ function generateFilename(jobId: string, format: 'json' | 'csv'): string {
   return `spatula-${short}-${ts}.${format}`;
 }
 
+export interface ExportProgress {
+  status: string;
+  entityCount?: number;
+}
+
 export function useExport(apiClient: SpatulaApiClient) {
   const [isExporting, setIsExporting] = useState(false);
-  const [exportProgress, setExportProgress] = useState<{ fetched: number; total: number } | null>(
-    null,
-  );
+  const [exportProgress, setExportProgress] = useState<ExportProgress | null>(null);
+  const abortRef = useRef(false);
 
   const exportSingleEntity = useCallback(
     async (
@@ -67,44 +71,43 @@ export function useExport(apiClient: SpatulaApiClient) {
     async (
       jobId: string,
       format: 'json' | 'csv',
-      options: { search?: string; filterQuery?: string; schemaFields: string[] },
+      _options: { search?: string; filterQuery?: string; schemaFields: string[] },
     ): Promise<string> => {
       setIsExporting(true);
-      setExportProgress({ fetched: 0, total: 0 });
+      setExportProgress({ status: 'pending' });
+      abortRef.current = false;
 
       try {
-        // First fetch to get total
-        const first = await apiClient.listEntitiesPaginated(jobId, {
-          limit: 100,
-          offset: 0,
-          ...(options.search ? { search: options.search } : {}),
-        });
+        // 1. Trigger server-side export
+        const exportRecord = await apiClient.createExport(jobId, { format });
+        const exportId = exportRecord.id as string;
+        setExportProgress({ status: 'pending' });
 
-        const allEntities: Entity[] = [...(first.data as unknown as Entity[])];
-        const total = first.total;
-        setExportProgress({ fetched: allEntities.length, total });
-
-        // Fetch remaining pages
-        let offset = 100;
-        while (offset < total) {
-          const page = await apiClient.listEntitiesPaginated(jobId, {
-            limit: 100,
-            offset,
-            ...(options.search ? { search: options.search } : {}),
+        // 2. Poll for completion
+        let status = 'pending';
+        while (status !== 'completed' && status !== 'failed' && !abortRef.current) {
+          await new Promise((r) => setTimeout(r, 1000));
+          const record = await apiClient.getExport(jobId, exportId);
+          status = record.status as string;
+          setExportProgress({
+            status,
+            entityCount: record.entityCount as number | undefined,
           });
-          allEntities.push(...(page.data as unknown as Entity[]));
-          offset += 100;
-          setExportProgress({ fetched: allEntities.length, total });
         }
 
+        if (status === 'failed') {
+          throw new Error('Export failed on server');
+        }
+        if (abortRef.current) {
+          throw new Error('Export cancelled');
+        }
+
+        // 3. Download
+        const content = await apiClient.downloadExport(jobId, exportId);
+
+        // 4. Write to file
         const filename = generateFilename(jobId, format);
         const filepath = join(process.cwd(), filename);
-
-        const content =
-          format === 'csv'
-            ? entitiesToCsv(allEntities, options.schemaFields)
-            : entitiesToJson(allEntities, { jobId, filterQuery: options.filterQuery });
-
         await writeFile(filepath, content, 'utf-8');
         return filepath;
       } finally {

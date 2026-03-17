@@ -98,7 +98,11 @@ export function ExportDialog({ store, apiClient, fromDetail, onClose }: ExportDi
   if (isExporting && exportProgress) {
     return (
       <Panel title="Export">
-        <Text>Fetching entities for export... ({exportProgress.fetched}/{exportProgress.total})</Text>
+        <Text>
+          {exportProgress.status === 'pending' && 'Export pending...'}
+          {exportProgress.status === 'processing' && 'Processing export...'}
+          {exportProgress.entityCount != null && ` (${exportProgress.entityCount} entities)`}
+        </Text>
       </Panel>
     );
   }
