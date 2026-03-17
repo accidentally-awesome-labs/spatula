@@ -9,6 +9,7 @@ import type {
   EntityRepository,
   SourceTrustRepository,
   EntitySourceRepository,
+  ExportRepository,
 } from '@spatula/db';
 import type { SpatulaQueues } from './queues.js';
 
@@ -27,6 +28,7 @@ export interface WorkerDepsConfig {
   entityRepo: EntityRepository;
   sourceTrustRepo: SourceTrustRepository;
   entitySourceRepo: EntitySourceRepository;
+  exportRepo: ExportRepository;
   queues: SpatulaQueues;
 }
 
@@ -45,6 +47,7 @@ export class WorkerDeps {
   readonly entityRepo: EntityRepository;
   readonly sourceTrustRepo: SourceTrustRepository;
   readonly entitySourceRepo: EntitySourceRepository;
+  readonly exportRepo: ExportRepository;
   readonly queues: SpatulaQueues;
 
   constructor(config: WorkerDepsConfig) {
@@ -62,6 +65,7 @@ export class WorkerDeps {
     this.entityRepo = config.entityRepo;
     this.sourceTrustRepo = config.sourceTrustRepo;
     this.entitySourceRepo = config.entitySourceRepo;
+    this.exportRepo = config.exportRepo;
     this.queues = config.queues;
   }
 }

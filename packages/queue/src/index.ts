@@ -8,6 +8,7 @@ export type {
   ExtractJobData,
   SchemaEvolutionJobData,
   ReconciliationJobData,
+  ExportJobPayload,
   SpatulaQueues,
 } from './queues.js';
 
