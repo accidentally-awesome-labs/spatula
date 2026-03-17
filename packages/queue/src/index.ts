@@ -24,3 +24,4 @@ export type { WorkerDepsConfig } from './worker-deps.js';
 export { processCrawlJob } from './workers/crawl-worker.js';
 export { processSchemaEvolutionJob } from './workers/schema-worker.js';
 export { processReconciliationJob } from './workers/reconciliation-worker.js';
+export { processExportJob } from './workers/export-worker.js';
