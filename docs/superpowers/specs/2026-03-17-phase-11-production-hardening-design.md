@@ -281,7 +281,7 @@ Backed by `ActionRepository`:
 - `getPending()` → `actionRepo.findByJob()` filtered by status `pending_review`
 - `approve()` → `actionRepo.updateStatus()` to `approved`, then calls the domain applier directly (not through `ActionExecutor.execute()`, which would create a circular dependency). The ReviewQueue holds references to the same domain appliers the executor uses, but does not hold a reference to the executor itself. After applying, updates status to `applied`.
 - `reject()` → `actionRepo.updateStatus()` to `rejected` with reason
-- `approveAll()` → `actionRepo.batchUpdateStatus()` then executes each
+- `approveAll()` → iterates pending actions, applying each individually (approve + apply + update status). If one fails mid-batch, already-applied actions remain `applied` and the failed action stays `approved` — callers can retry. This is intentionally not atomic: partial progress is better than all-or-nothing for a batch of independent actions.
 
 **Integration points:**
 
@@ -494,7 +494,7 @@ Add missing error types extending `SpatulaError`:
 **Worker error cleanup:** Replace generic `throw new Error(...)` calls in queue workers:
 
 - `export-worker.ts` lines 20, 24, 33, 43 → `QueueError`
-- Verify `crawl-worker.ts` uses `CrawlError` (already exists)
+- `crawl-worker.ts` does not currently use `CrawlError` — add typed error handling (the `CrawlError` class exists in `@spatula/shared` but is not imported by the worker)
 - Verify `schema-worker.ts` uses `LLMError` (already exists)
 
 **API error handler update** (`apps/api/src/middleware/error-handler.ts`):
@@ -580,7 +580,7 @@ All implement the existing `Exporter` interface.
 
 Parquet, DuckDB, and SQLite produce binary output. The current `PgContentStore` stores text only.
 
-**Decision:** Add `storeBinary(key: string, data: Uint8Array)` and `retrieveBinary(key: string): Promise<Uint8Array | null>` to the `ContentStore` interface. Use `Uint8Array` instead of Node.js `Buffer` for runtime portability (Bun compatibility per design doc). Implementation in `PgContentStore`: add a `binary_content bytea` column to the existing `content_store` table (nullable — text content remains in the existing `content` column). The `storeBinary` method writes to `binary_content`; `retrieveBinary` reads from it. This requires a Drizzle migration. Existing text methods remain unchanged.
+**Decision:** Add `storeBinary(key: string, data: Uint8Array)` and `retrieveBinary(key: string): Promise<Uint8Array | null>` to the `ContentStore` interface. Use `Uint8Array` instead of Node.js `Buffer` for runtime portability (Bun compatibility per design doc). Implementation in `PgContentStore`: add a `binary_content bytea` column to the existing `content_store` table (nullable). The existing `content text` column must also be made nullable in the same migration — currently it is `NOT NULL`, which would prevent inserting binary-only rows. After this migration, each row has either `content` (text exports) or `binary_content` (binary exports) populated, never both. The `storeBinary` method writes to `binary_content`; `retrieveBinary` reads from it. Existing text methods remain unchanged.
 
 ---
 
