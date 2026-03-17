@@ -2,3 +2,4 @@ export { csvEscapeValue, csvEscapeHeader, entityToCsvRow, entitiesToCsv } from '
 export { generateDocumentation } from './documentation-generator.js';
 export type { DataDictionary, FieldStats, FieldDocumentation } from './types.js';
 export { CsvExporter } from './csv-exporter.js';
+export { JsonExporter } from './json-exporter.js';
