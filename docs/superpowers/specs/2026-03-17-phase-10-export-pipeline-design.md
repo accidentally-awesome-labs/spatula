@@ -38,8 +38,9 @@ DB Layer (packages/db)
 ├── exports table          — tracks export jobs
 └── ExportRepository       — CRUD for export records
 
-Content Store
-└── stores export file blobs (local FS dev, S3/GCS prod)
+Content Store (existing PgContentStore)
+└── stores export file content as TEXT in Postgres
+    (adequate for v1 — see Content Store Limitations below)
 ```
 
 ### Data Flow
@@ -102,6 +103,44 @@ class ExportRepository {
 }
 ```
 
+## Dependency Injection Changes
+
+### AppDeps (apps/api/src/types.ts)
+
+Add to the existing `AppDeps` interface:
+
+```typescript
+exportRepo: ExportRepository;
+contentStore: ContentStore;
+exportQueue: Queue<ExportJobPayload>;
+```
+
+The `depsMiddleware` and app initialization in `apps/api/src/app.ts` must wire these new dependencies.
+
+### WorkerDeps (packages/queue/src/worker-deps.ts)
+
+Add to the existing `WorkerDepsConfig` and `WorkerDeps`:
+
+```typescript
+exportRepo: ExportRepository;
+```
+
+The worker already has access to `contentStore`, `entityRepo`, and `schemaRepo` via existing `WorkerDeps`.
+
+### SpatulaQueues (packages/queue/src/queues.ts)
+
+Add to `QUEUE_NAMES`:
+```typescript
+EXPORT: 'spatula:export',
+```
+
+Add to `SpatulaQueues` interface:
+```typescript
+export: Queue<ExportJobPayload>;
+```
+
+Add to `createQueues` factory and `closeAll`.
+
 ## API Endpoints
 
 ### POST /api/v1/jobs/:jobId/export
@@ -130,6 +169,8 @@ Creates an export record and enqueues a BullMQ job.
 ```
 
 **Validation:** Uses a Zod schema (`exportRequestSchema`) for body validation. Returns 400 for invalid format.
+
+**Route mounting note:** Export routes are mounted at `/api/v1/jobs/:jobId` (existing stub in `apps/api/src/app.ts` line 34). All paths below are relative to this mount. The existing stubs define `POST /export` and `GET /export/:exportId` — the `/download` sub-route is new and must be added.
 
 ### GET /api/v1/jobs/:jobId/export/:exportId
 
@@ -180,6 +221,8 @@ Computed on demand — no storage needed. Returns the data dictionary for the jo
     schemaVersion: number;
     generatedAt: string;
     entityCount: number;
+    sampled?: boolean;        // true when stats computed from first 1000 entities
+    sampleSize?: number;      // included when sampled is true
     fields: Array<{
       name: string;
       type: string;
@@ -216,14 +259,9 @@ export interface Exporter {
 }
 ```
 
-**ExportResult** needs to be defined (not yet in codebase):
-```typescript
-export interface ExportResult {
-  content: string;
-  entityCount: number;
-  format: ExportFormat;
-}
-```
+**ExportResult already exists** in `packages/core/src/interfaces/exporter.ts` as a Zod schema with fields: `format`, `entityCount`, `filePath` (optional), `data` (optional), and `generatedAt`. The existing `data: z.unknown().optional()` field will hold the serialized content string. The worker writes `result.data` (the serialized string) to the content store. No new type is needed — use the existing `ExportResult` and populate `data` with the serialized content string, `filePath` with the content store ref after write.
+
+**Note on ExportFormat:** The existing `ExportFormat` enum includes `['json', 'csv', 'parquet', 'duckdb', 'sqlite']`. The API request schema (`exportRequestSchema`) narrows this to `z.enum(['json', 'csv'])` for v1. The DB `format` column is plain TEXT intentionally — open for future formats without a migration.
 
 ### JsonExporter
 
@@ -252,7 +290,9 @@ Implements `Exporter`. Produces a self-contained JSON file:
 }
 ```
 
-Pretty-printed with 2-space indent. Streamed or built in memory (entities are already fetched in batches by the worker, passed as array to the exporter).
+Pretty-printed with 2-space indent.
+
+**Passing extra context to the exporter:** The existing `ExportOptions` type has `format`, `includeProvenance`, `includeDocumentation`, and `outputPath`. The `JsonExporter` also needs `jobId` and the pre-computed `DataDictionary`. Rather than expanding the `ExportOptions` Zod schema (which is a validation type), the worker constructs the JSON envelope around the exporter's entity output. The worker passes the entity array and schema to the exporter, then wraps the result with `metadata`, `schema`, and `documentation` before writing to content store. This keeps the `Exporter` interface focused on entity serialization.
 
 ### CsvExporter
 
@@ -271,6 +311,7 @@ Implements `Exporter`. Produces a plain CSV file:
 Extract from `apps/cli/src/hooks/useExport.ts` into `packages/core/src/exporters/csv-utils.ts`:
 
 - `csvEscapeValue(str: string): string`
+- `csvEscapeHeader(field: string): string`
 - `entityToCsvRow(entity: Entity, fields: string[]): string`
 - `entitiesToCsv(entities: Entity[], fields: string[]): string`
 
@@ -343,10 +384,10 @@ interface ExportJobPayload {
 ### Processing Steps
 
 1. Update export record: status → `processing`
-2. Fetch schema via `SchemaRepository.findByJob`
-3. Fetch all entities in batches of 100 via `EntityRepository.findByJob`
-   - JSON with provenance: include `provenance` column in select
-   - CSV or no provenance: exclude `provenance` column (lighter query)
+2. Fetch schema via `SchemaRepository.findLatest(jobId, tenantId)`
+3. Fetch all entities in batches of 100 via `EntityRepository.findByJob` (which includes the computed `sourceCount` subquery)
+   - JSON with provenance: use a separate query that includes the `provenance` column
+   - CSV or no provenance: use the standard `findByJob` which excludes `provenance` (lighter query)
 4. If JSON format: generate data dictionary via `DocumentationGenerator`
 5. Run appropriate exporter (`JsonExporter` or `CsvExporter`)
 6. Write `ExportResult.content` to content store
@@ -360,6 +401,17 @@ interface ExportJobPayload {
 - Concurrency: 2 (I/O-bound, not CPU-bound)
 - No retry on failure (user can re-trigger export)
 - Job timeout: 5 minutes
+
+## Content Store Limitations
+
+The existing `PgContentStore` stores content as PostgreSQL TEXT (up to 1GB per row). For Phase 10 v1, this is adequate — a JSON export of 10,000 entities with full provenance is typically 5-50MB. The entire serialized string is held in memory during generation and stored in a single DB row.
+
+**Known constraints:**
+- Maximum practical export size: ~50MB (Postgres TEXT performance degrades beyond this)
+- The worker materializes all entities in memory before serialization
+- Future binary formats (Parquet, DuckDB) will need a streaming/file-backed content store variant
+
+**When to upgrade:** When exports regularly exceed 50MB or when binary format support is added. The `ContentStore` interface is already abstracted — swapping `PgContentStore` for an S3-backed implementation requires no changes to exporters or the worker, only to the DI wiring.
 
 ## CLI Integration
 
@@ -387,13 +439,14 @@ Minimal UI changes — same format/scope selection. Progress display changes fro
 
 ## File Structure
 
+**New files:**
 ```
 packages/core/src/exporters/
 ├── json-exporter.ts           — JsonExporter implementation
 ├── csv-exporter.ts            — CsvExporter implementation
 ├── csv-utils.ts               — shared CSV serialization utilities
 ├── documentation-generator.ts — data dictionary generator
-├── types.ts                   — ExportResult, DataDictionary, FieldStats types
+├── types.ts                   — DataDictionary, FieldStats, FieldDocumentation types
 └── index.ts                   — barrel export
 
 packages/db/src/schema/
@@ -405,17 +458,20 @@ packages/db/src/repositories/
 packages/queue/src/workers/
 └── export-worker.ts           — BullMQ export job processor
 
-apps/api/src/routes/
-└── exports.ts                 — replace 501 stubs with real endpoints
-
 apps/api/src/schemas/
 └── export-request.ts          — Zod schema for POST /export body
+```
 
-apps/cli/src/hooks/
-└── useExport.ts               — update to use API export pipeline
-
-apps/cli/src/api/
-└── client.ts                  — add export API methods
+**Modified files:**
+```
+packages/queue/src/queues.ts           — add EXPORT queue name, ExportJobPayload, SpatulaQueues.export
+packages/queue/src/worker-deps.ts      — add exportRepo to WorkerDepsConfig/WorkerDeps
+apps/api/src/types.ts                  — add exportRepo, contentStore, exportQueue to AppDeps
+apps/api/src/app.ts                    — wire new deps, update route mounting
+apps/api/src/routes/exports.ts         — replace 501 stubs with real endpoints
+apps/cli/src/hooks/useExport.ts        — update to use API export pipeline
+apps/cli/src/api/client.ts             — add export API methods
+apps/cli/src/components/explorer/ExportDialog.tsx — update progress to poll-based
 ```
 
 ## Out of Scope
