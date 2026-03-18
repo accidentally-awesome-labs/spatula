@@ -18,6 +18,8 @@ describe('WorkerDeps', () => {
       entityRepo: {} as any,
       sourceTrustRepo: {} as any,
       entitySourceRepo: {} as any,
+      exportRepo: {} as any,
+      actionRepo: {} as any,
       queues: {
         crawl: {},
         extract: {},
@@ -41,6 +43,8 @@ describe('WorkerDeps', () => {
     expect(deps.entityRepo).toBeDefined();
     expect(deps.sourceTrustRepo).toBeDefined();
     expect(deps.entitySourceRepo).toBeDefined();
+    expect(deps.exportRepo).toBeDefined();
+    expect(deps.actionRepo).toBeDefined();
     expect(deps.queues).toBeDefined();
   });
 });

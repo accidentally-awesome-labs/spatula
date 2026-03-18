@@ -31,6 +31,13 @@ function createMockDeps(): WorkerDeps {
     contentStore: {
       store: vi.fn().mockResolvedValue('pg://ref-1'),
     },
+    actionRepo: {
+      create: vi.fn().mockResolvedValue({ id: 'action-1' }),
+      findByJob: vi.fn().mockResolvedValue([]),
+      findById: vi.fn().mockResolvedValue(null),
+      updateStatus: vi.fn().mockResolvedValue(null),
+      batchUpdateStatus: vi.fn().mockResolvedValue([]),
+    },
   } as unknown as WorkerDeps;
 }
 
