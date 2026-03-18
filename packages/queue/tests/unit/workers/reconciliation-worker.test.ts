@@ -510,4 +510,51 @@ describe('processReconciliationJob', () => {
     // Should not throw
     await expect(processReconciliationJob(data, deps)).resolves.toBeUndefined();
   });
+
+  it('marks job as failed when reconciler throws', async () => {
+    (deps.reconciler.reconcile as ReturnType<typeof vi.fn>).mockRejectedValue(
+      new Error('LLM matching failed: token limit exceeded'),
+    );
+
+    const data = createJobData();
+
+    // Should not throw — error is caught internally
+    await expect(processReconciliationJob(data, deps)).resolves.toBeUndefined();
+
+    // Job should be marked as failed
+    expect(deps.jobRepo.updateStatus).toHaveBeenCalledWith(JOB_ID, TENANT_ID, 'failed');
+
+    // No entities should be created
+    expect(deps.entityRepo.create).not.toHaveBeenCalled();
+    expect(deps.entitySourceRepo.bulkLink).not.toHaveBeenCalled();
+  });
+
+  it('handles empty extractions by skipping reconciliation and completing', async () => {
+    (deps.extractionRepo.findByJob as ReturnType<typeof vi.fn>).mockResolvedValue([]);
+
+    const data = createJobData();
+    await processReconciliationJob(data, deps);
+
+    // Reconciler should not be called
+    expect(deps.reconciler.reconcile).not.toHaveBeenCalled();
+    // No entities should be created
+    expect(deps.entityRepo.create).not.toHaveBeenCalled();
+    // Job should still be marked as completed (not failed)
+    expect(deps.jobRepo.updateStatus).toHaveBeenCalledWith(JOB_ID, TENANT_ID, 'completed');
+  });
+
+  it('marks job as failed when entity creation throws', async () => {
+    (deps.entityRepo.create as ReturnType<typeof vi.fn>).mockRejectedValue(
+      new Error('Unique constraint violation on entity'),
+    );
+
+    const data = createJobData();
+
+    await expect(processReconciliationJob(data, deps)).resolves.toBeUndefined();
+
+    // Reconciler was called successfully
+    expect(deps.reconciler.reconcile).toHaveBeenCalled();
+    // But the error during entity persistence causes job failure
+    expect(deps.jobRepo.updateStatus).toHaveBeenCalledWith(JOB_ID, TENANT_ID, 'failed');
+  });
 });
