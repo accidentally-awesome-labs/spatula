@@ -13,10 +13,10 @@ import { createQueues, QUEUE_NAMES, DEFAULT_QUEUE_CONFIG } from '../../src/queue
 
 describe('Queue Factory', () => {
   it('exports queue name constants', () => {
-    expect(QUEUE_NAMES.CRAWL).toBe('spatula:crawl');
-    expect(QUEUE_NAMES.EXTRACT).toBe('spatula:extract');
-    expect(QUEUE_NAMES.SCHEMA_EVOLUTION).toBe('spatula:schema-evolution');
-    expect(QUEUE_NAMES.RECONCILIATION).toBe('spatula:reconciliation');
+    expect(QUEUE_NAMES.CRAWL).toBe('spatula.crawl');
+    expect(QUEUE_NAMES.EXTRACT).toBe('spatula.extract');
+    expect(QUEUE_NAMES.SCHEMA_EVOLUTION).toBe('spatula.schema-evolution');
+    expect(QUEUE_NAMES.RECONCILIATION).toBe('spatula.reconciliation');
   });
 
   it('creates all queues', () => {

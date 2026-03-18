@@ -2,11 +2,11 @@ import { Queue } from 'bullmq';
 import type { ConnectionOptions } from 'bullmq';
 
 export const QUEUE_NAMES = {
-  CRAWL: 'spatula:crawl',
-  EXTRACT: 'spatula:extract',
-  SCHEMA_EVOLUTION: 'spatula:schema-evolution',
-  RECONCILIATION: 'spatula:reconciliation',
-  EXPORT: 'spatula:export',
+  CRAWL: 'spatula.crawl',
+  EXTRACT: 'spatula.extract',
+  SCHEMA_EVOLUTION: 'spatula.schema-evolution',
+  RECONCILIATION: 'spatula.reconciliation',
+  EXPORT: 'spatula.export',
 } as const;
 
 export interface CrawlJobData {
