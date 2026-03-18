@@ -14,6 +14,6 @@ export { SourceTrustRepository } from './source-trust-repository.js';
 export type { UpsertSourceTrustInput } from './source-trust-repository.js';
 export { EntitySourceRepository } from './entity-source-repository.js';
 export { ActionRepository } from './action-repository.js';
-export type { ActionStatus, FindActionsOptions } from './action-repository.js';
+export type { ActionStatus, FindActionsOptions, CreateActionInput } from './action-repository.js';
 export { ExportRepository } from './export-repository.js';
 export type { CreateExportInput } from './export-repository.js';
