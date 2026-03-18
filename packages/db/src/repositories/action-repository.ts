@@ -15,8 +15,47 @@ export interface FindActionsOptions {
   offset?: number;
 }
 
+export interface CreateActionInput {
+  jobId: string;
+  tenantId: string;
+  type: string;
+  payload: Record<string, unknown>;
+  source: string;
+  status: string;
+  confidence: number;
+  reasoning: string;
+  stateChanges?: Record<string, unknown>;
+}
+
 export class ActionRepository {
   constructor(private readonly db: Database) {}
+
+  async create(input: CreateActionInput): Promise<{ id: string }> {
+    try {
+      const [row] = await this.db
+        .insert(actions)
+        .values({
+          jobId: input.jobId,
+          tenantId: input.tenantId,
+          type: input.type,
+          payload: input.payload,
+          source: input.source as any,
+          status: (input.status as any) ?? 'pending_review',
+          confidence: input.confidence,
+          reasoning: input.reasoning,
+          stateChanges: input.stateChanges ?? null,
+        })
+        .returning({ id: actions.id });
+
+      logger.debug({ actionId: row.id, type: input.type }, 'action created');
+      return { id: row.id };
+    } catch (error) {
+      throw new StorageError(`Failed to create action: ${(error as Error).message}`, {
+        cause: error as Error,
+        context: { jobId: input.jobId, type: input.type },
+      });
+    }
+  }
 
   async findByJob(jobId: string, tenantId: string, options?: FindActionsOptions) {
     try {

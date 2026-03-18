@@ -2,12 +2,15 @@ import { pgTable, uuid, integer, jsonb, timestamp, index } from 'drizzle-orm/pg-
 import type { AnyPgColumn } from 'drizzle-orm/pg-core';
 import type { SchemaDefinition } from '@spatula/core';
 import { tenants } from './tenants.js';
+import { jobs } from './jobs.js';
 
 export const schemasTable = pgTable(
   'schemas',
   {
     id: uuid('id').primaryKey().defaultRandom(),
-    jobId: uuid('job_id').notNull(),
+    jobId: uuid('job_id')
+      .notNull()
+      .references((): AnyPgColumn => jobs.id, { onDelete: 'cascade' }),
     tenantId: uuid('tenant_id')
       .notNull()
       .references(() => tenants.id),

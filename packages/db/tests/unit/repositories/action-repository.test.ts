@@ -107,4 +107,47 @@ describe('ActionRepository', () => {
       repo.updateStatus('action-id', 'tenant-id', 'approved'),
     ).rejects.toThrow('Failed to update action status');
   });
+
+  it('create inserts an action and returns the id', async () => {
+    const insertChainable = {
+      values: vi.fn().mockReturnThis(),
+      returning: vi.fn().mockResolvedValue([{ id: 'new-action-id' }]),
+    };
+    mockDb.insert = vi.fn().mockReturnValue(insertChainable);
+
+    const result = await repo.create({
+      jobId: '550e8400-e29b-41d4-a716-446655440000',
+      tenantId: '550e8400-e29b-41d4-a716-446655440001',
+      type: 'add_field',
+      payload: { field: { name: 'price' } },
+      source: 'schema_evolution',
+      status: 'applied',
+      confidence: 0.9,
+      reasoning: 'Price field found in multiple extractions',
+    });
+
+    expect(mockDb.insert).toHaveBeenCalled();
+    expect(result).toEqual({ id: 'new-action-id' });
+  });
+
+  it('create wraps errors in StorageError', async () => {
+    const failChainable = {
+      values: vi.fn().mockReturnThis(),
+      returning: vi.fn().mockRejectedValue(new Error('db error')),
+    };
+    mockDb.insert = vi.fn().mockReturnValue(failChainable);
+
+    await expect(
+      repo.create({
+        jobId: 'job-id',
+        tenantId: 'tenant-id',
+        type: 'add_field',
+        payload: {},
+        source: 'schema_evolution',
+        status: 'applied',
+        confidence: 0.9,
+        reasoning: 'test',
+      }),
+    ).rejects.toThrow('Failed to create action');
+  });
 });

@@ -279,6 +279,19 @@ function createMockDeps(): WorkerDeps {
     entitySourceRepo: {
       bulkLink: vi.fn().mockResolvedValue([]),
     } as any,
+    exportRepo: {
+      create: vi.fn().mockResolvedValue({ id: 'export-1' }),
+      findById: vi.fn().mockResolvedValue(null),
+      findByJob: vi.fn().mockResolvedValue([]),
+      updateStatus: vi.fn().mockResolvedValue(null),
+    } as any,
+    actionRepo: {
+      create: vi.fn().mockResolvedValue({ id: 'action-1' }),
+      findByJob: vi.fn().mockResolvedValue([]),
+      findById: vi.fn().mockResolvedValue(null),
+      updateStatus: vi.fn().mockResolvedValue(null),
+      batchUpdateStatus: vi.fn().mockResolvedValue([]),
+    } as any,
     queues: {
       crawl: { add: vi.fn().mockResolvedValue(undefined) },
       extract: { add: vi.fn().mockResolvedValue(undefined) },

@@ -1,16 +1,31 @@
 import { createLogger } from '@spatula/shared';
 import { applySchemaActions } from '@spatula/core';
 import type { JobConfig } from '@spatula/core';
+import type Redis from 'ioredis';
 import type { SchemaEvolutionJobData } from '../queues.js';
 import type { WorkerDeps } from '../worker-deps.js';
+import { acquireLock, releaseLock } from '../redis-lock.js';
 
 const logger = createLogger('schema-worker');
 
 export async function processSchemaEvolutionJob(
   data: SchemaEvolutionJobData,
   deps: WorkerDeps,
+  redis?: Redis,
 ): Promise<void> {
   const { jobId, tenantId } = data;
+  const lockKey = `schema-lock:${jobId}`;
+  let lockToken = '';
+
+  // Acquire distributed lock if Redis available
+  if (redis) {
+    const lock = await acquireLock(redis, lockKey, 30);
+    if (!lock.acquired) {
+      logger.debug({ jobId }, 'could not acquire schema evolution lock, skipping');
+      return;
+    }
+    lockToken = lock.token;
+  }
 
   try {
     // 1. Load job config
@@ -82,6 +97,20 @@ export async function processSchemaEvolutionJob(
       action.jobId = jobId;
     }
 
+    // 7b. Persist each action to the audit log
+    for (const action of actions) {
+      await deps.actionRepo.create({
+        jobId,
+        tenantId,
+        type: action.type,
+        payload: 'payload' in action ? (action as any).payload : {},
+        source: action.source ?? 'schema_evolution',
+        status: 'applied',
+        confidence: action.confidence,
+        reasoning: action.reasoning,
+      });
+    }
+
     // 8. Apply actions to create new schema version
     const evolvedSchema = applySchemaActions(currentSchema.definition, actions);
     if (evolvedSchema.version === currentSchema.definition.version) {
@@ -105,5 +134,9 @@ export async function processSchemaEvolutionJob(
   } catch (error) {
     logger.error({ jobId, error }, 'schema evolution job failed');
     // Don't rethrow -- failed evolution shouldn't crash the worker
+  } finally {
+    if (redis && lockToken) {
+      await releaseLock(redis, lockKey, lockToken);
+    }
   }
 }
