@@ -20,6 +20,9 @@ export type { JobManagerConfig } from './job-manager.js';
 export { WorkerDeps } from './worker-deps.js';
 export type { WorkerDepsConfig } from './worker-deps.js';
 
+// Redis Lock
+export { acquireLock, releaseLock } from './redis-lock.js';
+
 // Workers
 export { processCrawlJob } from './workers/crawl-worker.js';
 export { processSchemaEvolutionJob } from './workers/schema-worker.js';
