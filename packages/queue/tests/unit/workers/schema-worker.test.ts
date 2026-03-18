@@ -1,4 +1,11 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
+
+vi.mock('../../../src/redis-lock.js', () => ({
+  acquireLock: vi.fn().mockResolvedValue({ acquired: true, token: 'test-token' }),
+  releaseLock: vi.fn().mockResolvedValue(undefined),
+}));
+
+import { acquireLock, releaseLock } from '../../../src/redis-lock.js';
 import { processSchemaEvolutionJob } from '../../../src/workers/schema-worker.js';
 import type { SchemaEvolutionJobData } from '../../../src/queues.js';
 import type { WorkerDeps } from '../../../src/worker-deps.js';
@@ -222,8 +229,54 @@ function createJobData(overrides?: Partial<SchemaEvolutionJobData>): SchemaEvolu
 describe('processSchemaEvolutionJob', () => {
   let deps: WorkerDeps;
 
+  const mockRedis = {} as any;
+
   beforeEach(() => {
     deps = createMockDeps();
+  });
+
+  it('skips evolution when lock cannot be acquired', async () => {
+    vi.mocked(acquireLock).mockResolvedValueOnce({ acquired: false, token: '' });
+
+    await processSchemaEvolutionJob(createJobData(), deps, mockRedis);
+
+    expect(deps.schemaEvolver.evolve).not.toHaveBeenCalled();
+  });
+
+  it('releases lock after successful evolution', async () => {
+    await processSchemaEvolutionJob(createJobData(), deps, mockRedis);
+
+    expect(releaseLock).toHaveBeenCalledWith(
+      mockRedis,
+      'schema-lock:job-1',
+      'test-token',
+    );
+  });
+
+  it('releases lock even when evolution throws', async () => {
+    (deps.schemaEvolver.evolve as any).mockRejectedValueOnce(new Error('LLM error'));
+
+    await processSchemaEvolutionJob(createJobData(), deps, mockRedis);
+
+    expect(releaseLock).toHaveBeenCalledWith(
+      mockRedis,
+      'schema-lock:job-1',
+      'test-token',
+    );
+  });
+
+  it('persists each action via actionRepo.create before applying', async () => {
+    await processSchemaEvolutionJob(createJobData(), deps);
+
+    expect(deps.actionRepo.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        jobId: 'job-1',
+        tenantId: 'tenant-1',
+        type: 'add_field',
+        source: 'schema_evolution',
+        status: 'applied',
+      }),
+    );
   });
 
   it('fetches job, schema, extractions and calls evolve()', async () => {
