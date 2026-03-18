@@ -9,7 +9,7 @@ vi.mock('bullmq', () => ({
   })),
 }));
 
-import { createQueues, QUEUE_NAMES } from '../../src/queues.js';
+import { createQueues, QUEUE_NAMES, DEFAULT_QUEUE_CONFIG } from '../../src/queues.js';
 
 describe('Queue Factory', () => {
   it('exports queue name constants', () => {
@@ -40,5 +40,24 @@ describe('Queue Factory', () => {
     expect(queues.extract.close).toHaveBeenCalled();
     expect(queues.schemaEvolution.close).toHaveBeenCalled();
     expect(queues.reconciliation.close).toHaveBeenCalled();
+  });
+
+  it('accepts QueueConfig and applies defaultJobOptions', () => {
+    const config = {
+      crawl: { concurrency: 5, rateLimitMax: 10, rateLimitDuration: 1000 },
+      extract: { concurrency: 3 },
+      schemaEvolution: { concurrency: 1 },
+      reconciliation: { concurrency: 1 },
+      export: { concurrency: 2 },
+    };
+    const result = createQueues({ host: 'localhost', port: 6379 }, config);
+    expect(result.config).toEqual(config);
+  });
+
+  it('uses default config when none provided', () => {
+    const result = createQueues({ host: 'localhost', port: 6379 });
+    expect(result.config).toBeDefined();
+    expect(result.config.crawl.concurrency).toBe(5);
+    expect(result.config.schemaEvolution.concurrency).toBe(1);
   });
 });
