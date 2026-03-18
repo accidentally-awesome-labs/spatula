@@ -677,6 +677,68 @@ describe('applySchemaActions', () => {
     expect(result.fields[0].required).toBe(true);
   });
 
+  // --- group_fields: non-contiguous source fields ---
+
+  it('group_fields: non-contiguous source fields are grouped correctly', () => {
+    const schema = makeSchema([
+      makeField('alpha'),   // position 0 — source
+      makeField('beta'),    // position 1 — non-source
+      makeField('gamma'),   // position 2 — source
+      makeField('delta'),   // position 3 — non-source
+      makeField('epsilon'), // position 4 — source
+    ]);
+
+    const action: PipelineAction = {
+      ...baseAction(),
+      type: 'group_fields',
+      payload: {
+        targetFieldName: 'grouped',
+        targetFieldType: 'object',
+        sourceFields: ['alpha', 'gamma', 'epsilon'],
+        mapping: { alpha: 'a', gamma: 'g', epsilon: 'e' },
+      },
+    };
+
+    const result = applySchemaActions(schema, [action]);
+
+    expect(result.version).toBe(2);
+    // grouped should be at position 0 (where alpha was), then beta, delta
+    expect(result.fields.map((f) => f.name)).toEqual(['grouped', 'beta', 'delta']);
+
+    const groupedField = result.fields.find((f) => f.name === 'grouped')!;
+    expect(groupedField.type).toBe('object');
+    expect(groupedField.objectFields).toHaveLength(3);
+    expect(groupedField.objectFields!.map((f) => f.name)).toEqual(['a', 'g', 'e']);
+  });
+
+  it('group_fields: unmapped source field keeps its original name', () => {
+    const schema = makeSchema([
+      makeField('street'),
+      makeField('city'),
+      makeField('zip'),
+    ]);
+
+    const action: PipelineAction = {
+      ...baseAction(),
+      type: 'group_fields',
+      payload: {
+        targetFieldName: 'address',
+        targetFieldType: 'object',
+        sourceFields: ['street', 'city', 'zip'],
+        mapping: { street: 'streetName', city: 'cityName' }, // zip is NOT in the mapping
+      },
+    };
+
+    const result = applySchemaActions(schema, [action]);
+
+    expect(result.version).toBe(2);
+    expect(result.fields).toHaveLength(1);
+
+    const addressField = result.fields.find((f) => f.name === 'address')!;
+    expect(addressField.objectFields).toHaveLength(3);
+    expect(addressField.objectFields!.map((f) => f.name)).toEqual(['streetName', 'cityName', 'zip']);
+  });
+
   // --- immutability ---
 
   it('does not mutate the original schema', () => {

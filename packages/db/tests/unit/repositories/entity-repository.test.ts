@@ -208,4 +208,59 @@ describe('EntityRepository', () => {
       }),
     ).rejects.toThrow('not found');
   });
+
+  it('updateMergedData wraps DB errors in StorageError', async () => {
+    const updateChainable = {
+      set: vi.fn().mockReturnThis(),
+      where: vi.fn().mockReturnThis(),
+      returning: vi.fn().mockRejectedValue(new Error('connection lost')),
+    };
+    mockDb.update = vi.fn().mockReturnValue(updateChainable);
+
+    await expect(
+      repo.updateMergedData('entity-1', 'tenant-1', {
+        mergedData: { name: 'x' },
+      }),
+    ).rejects.toThrow('Failed to update entity data');
+  });
+
+  it('updateMergedData with only mergedData calls update', async () => {
+    const updateChainable = {
+      set: vi.fn().mockReturnThis(),
+      where: vi.fn().mockReturnThis(),
+      returning: vi.fn().mockResolvedValue([{
+        id: 'entity-1',
+        mergedData: { name: 'Updated' },
+      }]),
+    };
+    mockDb.update = vi.fn().mockReturnValue(updateChainable);
+
+    const result = await repo.updateMergedData('entity-1', 'tenant-1', {
+      mergedData: { name: 'Updated' },
+    });
+
+    expect(mockDb.update).toHaveBeenCalled();
+    expect(updateChainable.set).toHaveBeenCalled();
+    expect(result.mergedData).toEqual({ name: 'Updated' });
+  });
+
+  it('updateMergedData with only categories calls update', async () => {
+    const updateChainable = {
+      set: vi.fn().mockReturnThis(),
+      where: vi.fn().mockReturnThis(),
+      returning: vi.fn().mockResolvedValue([{
+        id: 'entity-1',
+        categories: ['electronics'],
+      }]),
+    };
+    mockDb.update = vi.fn().mockReturnValue(updateChainable);
+
+    const result = await repo.updateMergedData('entity-1', 'tenant-1', {
+      categories: ['electronics'],
+    });
+
+    expect(mockDb.update).toHaveBeenCalled();
+    expect(updateChainable.set).toHaveBeenCalled();
+    expect(result.categories).toEqual(['electronics']);
+  });
 });

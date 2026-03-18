@@ -129,4 +129,47 @@ describe('applyFinalizationAction', () => {
     const result = applyFinalizationAction(action);
     expect(result.applied).toBe(false);
   });
+
+  it('recommend_table_structure omits relationship/foreignKey when not provided', () => {
+    const action: PipelineAction = {
+      ...baseAction(),
+      type: 'recommend_table_structure',
+      payload: {
+        strategy: 'single_table',
+        tables: [
+          { name: 'products', description: 'All products', fields: ['name', 'price'] },
+        ],
+      },
+    };
+
+    const result = applyFinalizationAction(action);
+
+    expect(result.applied).toBe(true);
+    expect(result.metadata?.tableStructure).toBeDefined();
+    expect(result.metadata!.tableStructure!.tables).toHaveLength(1);
+    const table = result.metadata!.tableStructure!.tables[0];
+    expect(table.name).toBe('products');
+    expect(table).not.toHaveProperty('relationship');
+    expect(table).not.toHaveProperty('foreignKey');
+  });
+
+  it('flag_anomaly works with only anomalyType and description', () => {
+    const action: PipelineAction = {
+      ...baseAction(),
+      type: 'flag_anomaly',
+      payload: {
+        anomalyType: 'missing_data',
+        description: 'Several entities are missing required fields',
+      },
+    };
+
+    const result = applyFinalizationAction(action);
+
+    expect(result.applied).toBe(true);
+    expect(result.metadata?.anomaly).toBeDefined();
+    expect(result.metadata!.anomaly!.anomalyType).toBe('missing_data');
+    expect(result.metadata!.anomaly!.description).toBe('Several entities are missing required fields');
+    expect(result.metadata!.anomaly!.entityId).toBeUndefined();
+    expect(result.metadata!.anomaly!.fieldName).toBeUndefined();
+  });
 });

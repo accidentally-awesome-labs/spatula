@@ -126,6 +126,37 @@ describe('applyCategoryActions', () => {
       const result = applyCategoryActions(schema, actions);
       expect(Object.keys(result.categoryFieldAssignments!)).toHaveLength(2);
     });
+
+    it('same-category overwrite replaces previous fields', () => {
+      const schema = makeSchema();
+      const actions: PipelineAction[] = [
+        {
+          ...baseAction(),
+          type: 'assign_category_fields',
+          payload: {
+            category: 'electronics',
+            requiredFields: ['title'],
+            optionalFields: ['warranty'],
+          },
+        },
+        {
+          ...baseAction(),
+          type: 'assign_category_fields',
+          payload: {
+            category: 'electronics',
+            requiredFields: ['title', 'voltage'],
+            optionalFields: ['battery_life'],
+          },
+        },
+      ];
+
+      const result = applyCategoryActions(schema, actions);
+      expect(result.categoryFieldAssignments).toBeDefined();
+      expect(result.categoryFieldAssignments!['electronics']).toEqual({
+        requiredFields: ['title', 'voltage'],
+        optionalFields: ['battery_life'],
+      });
+    });
   });
 
   it('skips non-category action types', () => {

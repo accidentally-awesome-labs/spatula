@@ -221,4 +221,120 @@ describe('applyReconciliationAction', () => {
     const result = await applyReconciliationAction(action, 'tenant-1', deps);
     expect(result.applied).toBe(false);
   });
+
+  it('infer_value returns applied=false when entity not found', async () => {
+    (deps.entityRepo.findById as any).mockResolvedValue(null);
+
+    const action: PipelineAction = {
+      ...baseAction(),
+      type: 'infer_value',
+      payload: {
+        entityId: 'missing-entity',
+        fieldName: 'category',
+        inferredValue: 'electronics',
+        inferredFrom: 'name patterns',
+      },
+    };
+
+    const result = await applyReconciliationAction(action, 'tenant-1', deps);
+    expect(result.applied).toBe(false);
+    expect(result.reason).toContain('not found');
+  });
+
+  it('correct_value returns applied=false when entity not found', async () => {
+    (deps.entityRepo.findById as any).mockResolvedValue(null);
+
+    const action: PipelineAction = {
+      ...baseAction(),
+      type: 'correct_value',
+      payload: {
+        entityId: 'missing-entity',
+        fieldName: 'price',
+        currentValue: 10,
+        correctedValue: 9.99,
+        correctionType: 'format_fix',
+      },
+    };
+
+    const result = await applyReconciliationAction(action, 'tenant-1', deps);
+    expect(result.applied).toBe(false);
+    expect(result.reason).toContain('not found');
+  });
+
+  it('match_entities returns applied=false when entity not found', async () => {
+    (deps.entityRepo.findById as any).mockResolvedValue(null);
+
+    const action: PipelineAction = {
+      ...baseAction(),
+      type: 'match_entities',
+      payload: {
+        entityId: 'missing-entity',
+        extractionIds: ['ext-1', 'ext-2'],
+        matchedOn: ['name'],
+      },
+    };
+
+    const result = await applyReconciliationAction(action, 'tenant-1', deps);
+    expect(result.applied).toBe(false);
+    expect(result.reason).toContain('not found');
+  });
+
+  it('resolve_conflict stateChanges has correct path, before, and after', async () => {
+    const action: PipelineAction = {
+      ...baseAction(),
+      type: 'resolve_conflict',
+      payload: {
+        entityId: 'entity-1',
+        fieldName: 'name',
+        resolvedValue: 'Super Widget',
+        sourcePreferred: 'source-a.com',
+        allValues: [
+          { source: 'source-a.com', value: 'Super Widget' },
+          { source: 'source-b.com', value: 'Widget' },
+        ],
+      },
+    };
+
+    const result = await applyReconciliationAction(action, 'tenant-1', deps);
+
+    expect(result.applied).toBe(true);
+    expect(result.stateChanges).toBeDefined();
+    expect(result.stateChanges).toHaveLength(1);
+    expect(result.stateChanges![0].path).toBe('mergedData.name');
+    expect(result.stateChanges![0].before).toBe('Widget');
+    expect(result.stateChanges![0].after).toBe('Super Widget');
+  });
+
+  it('set_source_trust upsert calls have correct arguments', async () => {
+    const base = baseAction();
+    const action: PipelineAction = {
+      ...base,
+      type: 'set_source_trust',
+      payload: {
+        rankings: [
+          { domain: 'trusted.com', trustLevel: 'high', reasoning: 'Reliable source' },
+          { domain: 'sketchy.com', trustLevel: 'low', reasoning: 'Often inaccurate' },
+        ],
+      },
+    };
+
+    const result = await applyReconciliationAction(action, 'tenant-1', deps);
+
+    expect(result.applied).toBe(true);
+    expect(deps.sourceTrustRepo.upsert).toHaveBeenCalledTimes(2);
+    expect(deps.sourceTrustRepo.upsert).toHaveBeenNthCalledWith(1, {
+      domain: 'trusted.com',
+      trustLevel: 'high',
+      reasoning: 'Reliable source',
+      jobId: base.jobId,
+      tenantId: 'tenant-1',
+    });
+    expect(deps.sourceTrustRepo.upsert).toHaveBeenNthCalledWith(2, {
+      domain: 'sketchy.com',
+      trustLevel: 'low',
+      reasoning: 'Often inaccurate',
+      jobId: base.jobId,
+      tenantId: 'tenant-1',
+    });
+  });
 });
