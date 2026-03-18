@@ -172,4 +172,40 @@ describe('EntityRepository', () => {
       repo.countByJob('job-id', 'tenant-id'),
     ).rejects.toThrow('Failed to count entities');
   });
+
+  it('updateMergedData updates data and provenance', async () => {
+    const updateChainable = {
+      set: vi.fn().mockReturnThis(),
+      where: vi.fn().mockReturnThis(),
+      returning: vi.fn().mockResolvedValue([{
+        id: 'entity-1',
+        mergedData: { name: 'Updated' },
+        provenance: { name: { provenanceType: 'merged' } },
+      }]),
+    };
+    mockDb.update = vi.fn().mockReturnValue(updateChainable);
+
+    const result = await repo.updateMergedData('entity-1', 'tenant-1', {
+      mergedData: { name: 'Updated' },
+      provenance: { name: { provenanceType: 'merged' } },
+    });
+
+    expect(mockDb.update).toHaveBeenCalled();
+    expect(result.mergedData).toEqual({ name: 'Updated' });
+  });
+
+  it('updateMergedData throws StorageError when entity not found', async () => {
+    const updateChainable = {
+      set: vi.fn().mockReturnThis(),
+      where: vi.fn().mockReturnThis(),
+      returning: vi.fn().mockResolvedValue([]),
+    };
+    mockDb.update = vi.fn().mockReturnValue(updateChainable);
+
+    await expect(
+      repo.updateMergedData('nonexistent', 'tenant-1', {
+        mergedData: { name: 'x' },
+      }),
+    ).rejects.toThrow('not found');
+  });
 });
