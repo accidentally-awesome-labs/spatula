@@ -476,6 +476,139 @@ describe('applySchemaActions', () => {
     expect(result.version).toBe(1);
   });
 
+  // --- split_field ---
+
+  it('split_field: removes source and inserts target fields at same position', () => {
+    const schema = makeSchema([
+      makeField('name'),
+      makeField('full_address', { description: 'Full street address' }),
+      makeField('price'),
+    ]);
+
+    const action: PipelineAction = {
+      ...baseAction(),
+      type: 'split_field',
+      payload: {
+        sourceField: 'full_address',
+        targetFields: [
+          makeField('street', { description: 'Street name and number' }),
+          makeField('city', { description: 'City name' }),
+          makeField('zip', { description: 'ZIP/postal code' }),
+        ],
+        splitLogic: 'Parse address components',
+        examples: [
+          {
+            sourceValue: '123 Main St, Springfield, 62701',
+            targetValues: { street: '123 Main St', city: 'Springfield', zip: '62701' },
+          },
+        ],
+      },
+    };
+
+    const result = applySchemaActions(schema, [action]);
+
+    expect(result.version).toBe(2);
+    expect(result.fields).toHaveLength(5); // name + street + city + zip + price
+    expect(result.fields.map((f) => f.name)).toEqual(['name', 'street', 'city', 'zip', 'price']);
+  });
+
+  it('split_field: skips when source field not found', () => {
+    const schema = makeSchema([makeField('title')]);
+
+    const action: PipelineAction = {
+      ...baseAction(),
+      type: 'split_field',
+      payload: {
+        sourceField: 'nonexistent',
+        targetFields: [makeField('a'), makeField('b')],
+        splitLogic: 'test',
+        examples: [],
+      },
+    };
+
+    const result = applySchemaActions(schema, [action]);
+    expect(result.version).toBe(1);
+  });
+
+  // --- group_fields ---
+
+  it('group_fields: removes source fields and creates new object field', () => {
+    const schema = makeSchema([
+      makeField('name'),
+      makeField('street'),
+      makeField('city'),
+      makeField('zip'),
+      makeField('price'),
+    ]);
+
+    const action: PipelineAction = {
+      ...baseAction(),
+      type: 'group_fields',
+      payload: {
+        targetFieldName: 'address',
+        targetFieldType: 'object',
+        sourceFields: ['street', 'city', 'zip'],
+        mapping: { street: 'street', city: 'city', zip: 'zipCode' },
+      },
+    };
+
+    const result = applySchemaActions(schema, [action]);
+
+    expect(result.version).toBe(2);
+    expect(result.fields).toHaveLength(3); // name + address + price
+    expect(result.fields.map((f) => f.name)).toEqual(['name', 'address', 'price']);
+
+    const addressField = result.fields.find((f) => f.name === 'address')!;
+    expect(addressField.type).toBe('object');
+    expect(addressField.objectFields).toHaveLength(3);
+    expect(addressField.objectFields!.map((f) => f.name)).toEqual(['street', 'city', 'zipCode']);
+  });
+
+  it('group_fields: handles partial matches (only some source fields exist)', () => {
+    const schema = makeSchema([
+      makeField('name'),
+      makeField('street'),
+      makeField('price'),
+    ]);
+
+    const action: PipelineAction = {
+      ...baseAction(),
+      type: 'group_fields',
+      payload: {
+        targetFieldName: 'address',
+        targetFieldType: 'object',
+        sourceFields: ['street', 'city', 'zip'], // city and zip don't exist
+        mapping: { street: 'street', city: 'city', zip: 'zipCode' },
+      },
+    };
+
+    const result = applySchemaActions(schema, [action]);
+
+    expect(result.version).toBe(2);
+    expect(result.fields).toHaveLength(3); // name + address + price
+    const addressField = result.fields.find((f) => f.name === 'address')!;
+    expect(addressField.objectFields).toHaveLength(1); // only 'street' matched
+    expect(addressField.objectFields![0].name).toBe('street');
+  });
+
+  it('group_fields: skips when no source fields exist', () => {
+    const schema = makeSchema([makeField('title')]);
+
+    const action: PipelineAction = {
+      ...baseAction(),
+      type: 'group_fields',
+      payload: {
+        targetFieldName: 'address',
+        targetFieldType: 'object',
+        sourceFields: ['nonexistent_a', 'nonexistent_b'],
+        mapping: { nonexistent_a: 'a', nonexistent_b: 'b' },
+      },
+    };
+
+    const result = applySchemaActions(schema, [action]);
+    expect(result.version).toBe(1);
+  });
+
   // --- unsupported action types ---
 
   it('skips unsupported action types silently', () => {
