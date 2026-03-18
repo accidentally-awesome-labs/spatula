@@ -10,7 +10,7 @@ export const schemasTable = pgTable(
     id: uuid('id').primaryKey().defaultRandom(),
     jobId: uuid('job_id')
       .notNull()
-      .references(() => jobs.id, { onDelete: 'cascade' }),
+      .references((): AnyPgColumn => jobs.id, { onDelete: 'cascade' }),
     tenantId: uuid('tenant_id')
       .notNull()
       .references(() => tenants.id),

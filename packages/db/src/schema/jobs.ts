@@ -1,4 +1,5 @@
 import { pgTable, uuid, text, jsonb, timestamp, index } from 'drizzle-orm/pg-core';
+import type { AnyPgColumn } from 'drizzle-orm/pg-core';
 import type { JobConfig } from '@spatula/core';
 import { jobStatusEnum } from './enums.js';
 import { tenants } from './tenants.js';
@@ -15,7 +16,7 @@ export const jobs = pgTable(
     description: text('description').notNull(),
     config: jsonb('config').$type<JobConfig>().notNull(),
     status: jobStatusEnum('status').notNull().default('pending'),
-    schemaId: uuid('schema_id').references(() => schemasTable.id),
+    schemaId: uuid('schema_id').references((): AnyPgColumn => schemasTable.id),
     stats: jsonb('stats').$type<Record<string, number>>().default({}),
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
     startedAt: timestamp('started_at', { withTimezone: true }),
