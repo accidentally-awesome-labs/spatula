@@ -30,6 +30,7 @@ import {
   processExportJob,
   JobManager,
   type SpatulaQueues,
+  type WorkerDepsConfig,
 } from '@spatula/queue';
 
 import type {
@@ -551,5 +552,353 @@ describe('Full Pipeline E2E', () => {
     expect(parsed.metadata.entityCount).toBe(1);
     expect(parsed.entities).toHaveLength(1);
     expect(parsed.entities[0].data.name).toBe('Wireless Headphones XZ-500');
+  });
+
+  // =========================================================================
+  // Error-path tests — each creates its own tenant + job for isolation
+  // =========================================================================
+
+  describe('error paths', () => {
+    // Track IDs for per-test cleanup
+    const cleanupState: Array<{ tenantId: string; jobId?: string }> = [];
+
+    async function createIsolatedTenant(label: string) {
+      const tid = randomUUID();
+      await db.execute(
+        sql`INSERT INTO tenants (id, name) VALUES (${tid}, ${label})`,
+      );
+      return tid;
+    }
+
+    async function cleanupTenant(tid: string, jid?: string) {
+      try {
+        if (jid) {
+          await db.execute(sql`DELETE FROM entity_sources WHERE entity_id IN (SELECT id FROM entities WHERE job_id = ${jid})`);
+          await db.execute(sql`DELETE FROM entities WHERE job_id = ${jid}`);
+          await db.execute(sql`DELETE FROM source_trust WHERE job_id = ${jid}`);
+          await db.execute(sql`DELETE FROM extractions WHERE job_id = ${jid}`);
+          await db.execute(sql`DELETE FROM raw_pages WHERE task_id IN (SELECT id FROM crawl_tasks WHERE job_id = ${jid})`);
+          await db.execute(sql`DELETE FROM crawl_tasks WHERE job_id = ${jid}`);
+          await db.execute(sql`DELETE FROM actions WHERE job_id = ${jid}`);
+          await db.execute(sql`DELETE FROM exports WHERE job_id = ${jid}`);
+          await db.execute(sql`UPDATE jobs SET schema_id = NULL WHERE id = ${jid}`);
+          await db.execute(sql`DELETE FROM schemas WHERE job_id = ${jid}`);
+          await db.execute(sql`DELETE FROM jobs WHERE id = ${jid}`);
+          await db.execute(sql`DELETE FROM content_store WHERE key LIKE ${jid + '%'} OR key LIKE ${'exports/' + tid + '/' + jid + '%'}`);
+        }
+        await db.execute(sql`DELETE FROM tenants WHERE id = ${tid}`);
+      } catch (e) {
+        console.error('Error-path cleanup error:', e);
+      }
+    }
+
+    afterAll(async () => {
+      for (const { tenantId: tid, jobId: jid } of cleanupState) {
+        await cleanupTenant(tid, jid);
+      }
+    });
+
+    function makeJobConfig(tid: string, overrides?: Partial<JobConfig>): JobConfig {
+      return {
+        tenantId: tid,
+        name: 'Error Path Test Job',
+        description: 'Testing error scenarios in E2E pipeline.',
+        seedUrls: [FIXTURE_URL],
+        crawl: {
+          maxDepth: 0,
+          maxPages: 10,
+          concurrency: 1,
+          crawlerType: 'playwright',
+        },
+        schema: {
+          mode: 'discovery',
+          userFields: [
+            { name: 'name', description: 'Product name', type: 'string', required: true },
+            { name: 'price', description: 'Product price', type: 'number', required: true },
+          ],
+          evolutionConfig: {
+            enabled: true,
+            batchSize: 1,
+            maxFields: 50,
+            relevanceThresholds: {
+              requiredMin: 0.85,
+              optionalMin: 0.4,
+              rareBelow: 0.4,
+              minCategorySampleSize: 5,
+            },
+            tableStrategy: 'auto',
+          },
+        },
+        llm: { primaryModel: 'mock/model' },
+        ...overrides,
+      };
+    }
+
+    function buildWorkerDeps(overrides?: Partial<WorkerDepsConfig>): WorkerDeps {
+      const jobRepo = new JobRepository(db);
+      const taskRepo = new CrawlTaskRepository(db);
+      const schemaRepo = new SchemaRepository(db);
+      const extractionRepo = new ExtractionRepository(db);
+      const pageRepo = new PageRepository(db);
+      const entityRepo = new EntityRepository(db);
+      const sourceTrustRepo = new SourceTrustRepository(db);
+      const entitySourceRepo = new EntitySourceRepository(db);
+      const exportRepo = new ExportRepository(db);
+      const actionRepo = new ActionRepository(db);
+      const contentStore: ContentStore = new PgContentStore(db);
+
+      return new WorkerDeps({
+        crawler: createMockCrawler(),
+        extractor: createMockExtractor(),
+        classifier: createMockClassifier() as any,
+        contentStore,
+        schemaEvolver: createMockSchemaEvolver(),
+        reconciler: createMockReconciler('placeholder'),
+        jobRepo,
+        taskRepo,
+        pageRepo,
+        extractionRepo,
+        schemaRepo,
+        entityRepo,
+        sourceTrustRepo,
+        entitySourceRepo,
+        exportRepo,
+        actionRepo,
+        queues,
+        ...overrides,
+      });
+    }
+
+    // -----------------------------------------------------------------
+    // Test 1: Crawl failure is handled gracefully
+    // -----------------------------------------------------------------
+    it('handles crawl failure gracefully', async () => {
+      const tid = await createIsolatedTenant('e2e-crawl-failure');
+
+      const jobRepo = new JobRepository(db);
+      const taskRepo = new CrawlTaskRepository(db);
+      const schemaRepo = new SchemaRepository(db);
+      const extractionRepo = new ExtractionRepository(db);
+
+      const jm = new JobManager({ jobRepo, taskRepo, schemaRepo, queues });
+      const jid = await jm.createJob(makeJobConfig(tid));
+      cleanupState.push({ tenantId: tid, jobId: jid });
+
+      await jm.startJob(jid, tid);
+
+      // Get the crawl task that was created
+      const tasks = await taskRepo.findByJob(jid);
+      expect(tasks.length).toBe(1);
+      const taskId = tasks[0].id;
+
+      // Build deps with a failing crawler
+      const failingCrawler: Crawler = {
+        type: 'playwright' as const,
+        async crawl(_url: string): Promise<CrawlResult> {
+          throw new Error('Network timeout: connection refused');
+        },
+        async close() {},
+      };
+
+      const deps = buildWorkerDeps({ crawler: failingCrawler });
+
+      // Process the crawl job — should NOT throw (error is caught internally)
+      await processCrawlJob(
+        { taskId, jobId: jid, tenantId: tid, url: FIXTURE_URL, depth: 0 },
+        deps,
+      );
+
+      // Verify task status is 'failed'
+      const failedTasks = await taskRepo.findByJob(jid, { status: 'failed' });
+      expect(failedTasks.length).toBe(1);
+      expect(failedTasks[0].id).toBe(taskId);
+
+      // Verify no extraction was created
+      const extractions = await extractionRepo.findByJob(jid, tid);
+      expect(extractions.length).toBe(0);
+
+      // Verify job can still be cancelled
+      await jm.cancelJob(jid, tid);
+      const cancelledJob = await jobRepo.findById(jid, tid);
+      expect(cancelledJob!.status).toBe('cancelled');
+    });
+
+    // -----------------------------------------------------------------
+    // Test 2: Schema evolution with no changes
+    // -----------------------------------------------------------------
+    it('handles schema evolution with no proposed changes', async () => {
+      const tid = await createIsolatedTenant('e2e-no-evolution');
+
+      const jobRepo = new JobRepository(db);
+      const taskRepo = new CrawlTaskRepository(db);
+      const schemaRepo = new SchemaRepository(db);
+      const extractionRepo = new ExtractionRepository(db);
+      const actionRepo = new ActionRepository(db);
+
+      const jm = new JobManager({ jobRepo, taskRepo, schemaRepo, queues });
+      const jid = await jm.createJob(makeJobConfig(tid));
+      cleanupState.push({ tenantId: tid, jobId: jid });
+
+      await jm.startJob(jid, tid);
+
+      // Process crawl so we have an extraction (needed for evolution to run)
+      const tasks = await taskRepo.findByJob(jid);
+      const taskId = tasks[0].id;
+
+      // Use a no-op schema evolver that returns empty actions
+      const noOpEvolver: SchemaEvolver = {
+        async evolve(
+          _currentSchema: SchemaDefinition,
+          _recentExtractions: ExtractionResult[],
+          _jobDescription: string,
+        ): Promise<PipelineAction[]> {
+          return [];
+        },
+      };
+
+      const deps = buildWorkerDeps({ schemaEvolver: noOpEvolver });
+
+      // Crawl first (to produce an extraction for the evolution step)
+      await processCrawlJob(
+        { taskId, jobId: jid, tenantId: tid, url: FIXTURE_URL, depth: 0 },
+        deps,
+      );
+
+      const extractions = await extractionRepo.findByJob(jid, tid);
+      expect(extractions.length).toBe(1);
+
+      // Now run schema evolution with the no-op evolver
+      await processSchemaEvolutionJob(
+        { jobId: jid, tenantId: tid, extractionIds: [extractions[0].id] },
+        deps,
+      );
+
+      // Verify NO new schema version was created (still v1)
+      const latestSchema = await schemaRepo.findLatest(jid, tid);
+      expect(latestSchema).toBeTruthy();
+      expect(latestSchema!.version).toBe(1);
+
+      // Verify no actions were persisted for this job
+      const actions = await actionRepo.findByJob(jid, tid);
+      expect(actions.length).toBe(0);
+    });
+
+    // -----------------------------------------------------------------
+    // Test 3: Export of empty job (no entities)
+    // -----------------------------------------------------------------
+    it('handles export of a job with no entities', async () => {
+      const tid = await createIsolatedTenant('e2e-empty-export');
+
+      const jobRepo = new JobRepository(db);
+      const taskRepo = new CrawlTaskRepository(db);
+      const schemaRepo = new SchemaRepository(db);
+      const exportRepo = new ExportRepository(db);
+
+      const jm = new JobManager({ jobRepo, taskRepo, schemaRepo, queues });
+      const jid = await jm.createJob(makeJobConfig(tid));
+      cleanupState.push({ tenantId: tid, jobId: jid });
+
+      await jm.startJob(jid, tid);
+
+      // Manually set job to 'completed' so export worker accepts it
+      // running → reconciling → completed
+      await jobRepo.updateStatus(jid, tid, 'reconciling');
+      await jobRepo.updateStatus(jid, tid, 'completed');
+
+      const deps = buildWorkerDeps();
+
+      // Create export record and run export
+      const exportRecord = await exportRepo.create({
+        jobId: jid,
+        tenantId: tid,
+        format: 'json',
+        includeProvenance: false,
+      });
+
+      await processExportJob(
+        {
+          exportId: exportRecord.id,
+          jobId: jid,
+          tenantId: tid,
+          format: 'json',
+          includeProvenance: false,
+        },
+        deps,
+      );
+
+      // Verify export completed with zero entities
+      const completedExport = await exportRepo.findById(exportRecord.id, tid);
+      expect(completedExport).toBeTruthy();
+      expect(completedExport!.status).toBe('completed');
+      expect(completedExport!.entityCount).toBe(0);
+
+      // Verify export content is a valid JSON with empty entities array
+      const contentStore: ContentStore = new PgContentStore(db);
+      const exportContent = await contentStore.retrieve(completedExport!.contentRef!);
+      const parsed = JSON.parse(exportContent);
+      expect(parsed.metadata.entityCount).toBe(0);
+      expect(parsed.entities).toHaveLength(0);
+    });
+
+    // -----------------------------------------------------------------
+    // Test 4: Job cancellation mid-pipeline
+    // -----------------------------------------------------------------
+    it('preserves existing data when job is cancelled mid-pipeline', async () => {
+      const tid = await createIsolatedTenant('e2e-cancel-mid');
+
+      const jobRepo = new JobRepository(db);
+      const taskRepo = new CrawlTaskRepository(db);
+      const schemaRepo = new SchemaRepository(db);
+      const extractionRepo = new ExtractionRepository(db);
+      const pageRepo = new PageRepository(db);
+
+      const jm = new JobManager({ jobRepo, taskRepo, schemaRepo, queues });
+      const jid = await jm.createJob(makeJobConfig(tid));
+      cleanupState.push({ tenantId: tid, jobId: jid });
+
+      await jm.startJob(jid, tid);
+
+      // Process one crawl so we have real data in the pipeline
+      const tasks = await taskRepo.findByJob(jid);
+      expect(tasks.length).toBe(1);
+      const taskId = tasks[0].id;
+
+      const deps = buildWorkerDeps();
+
+      await processCrawlJob(
+        { taskId, jobId: jid, tenantId: tid, url: FIXTURE_URL, depth: 0 },
+        deps,
+      );
+
+      // Confirm data exists before cancellation
+      const completedTasks = await taskRepo.findByJob(jid, { status: 'completed' });
+      expect(completedTasks.length).toBe(1);
+
+      const extractions = await extractionRepo.findByJob(jid, tid);
+      expect(extractions.length).toBe(1);
+
+      // Now cancel the job
+      await jm.cancelJob(jid, tid);
+
+      // Verify job status is 'cancelled'
+      const cancelledJob = await jobRepo.findById(jid, tid);
+      expect(cancelledJob!.status).toBe('cancelled');
+
+      // Verify existing data is preserved (NOT deleted)
+      const tasksAfterCancel = await taskRepo.findByJob(jid);
+      expect(tasksAfterCancel.length).toBe(1);
+      expect(tasksAfterCancel[0].status).toBe('completed');
+
+      const extractionsAfterCancel = await extractionRepo.findByJob(jid, tid);
+      expect(extractionsAfterCancel.length).toBe(1);
+      expect((extractionsAfterCancel[0].data as Record<string, unknown>).name).toBe(
+        'Wireless Headphones XZ-500',
+      );
+
+      // Schema should also be preserved
+      const schema = await schemaRepo.findLatest(jid, tid);
+      expect(schema).toBeTruthy();
+      expect(schema!.version).toBeGreaterThanOrEqual(1);
+    });
   });
 });
