@@ -136,6 +136,68 @@ export function applySchemaActions(
         break;
       }
 
+      case 'split_field': {
+        const idx = fields.findIndex((f) => f.name === action.payload.sourceField);
+        if (idx === -1) {
+          logger.debug(
+            { sourceField: action.payload.sourceField },
+            'Skipping split_field: source field not found',
+          );
+          break;
+        }
+        // Remove source field and insert targets at the same position
+        fields.splice(idx, 1, ...structuredClone(action.payload.targetFields));
+        applied++;
+        break;
+      }
+
+      case 'group_fields': {
+        const { targetFieldName, sourceFields: sourceFieldNames, mapping } = action.payload;
+
+        // Find positions of source fields
+        const sourceIndices = sourceFieldNames
+          .map((name) => fields.findIndex((f) => f.name === name))
+          .filter((idx) => idx !== -1);
+
+        if (sourceIndices.length === 0) {
+          logger.debug(
+            { sourceFields: sourceFieldNames },
+            'Skipping group_fields: no source fields found',
+          );
+          break;
+        }
+
+        // Build object sub-fields from source field definitions using the mapping
+        const objectFields: FieldDefinition[] = sourceIndices.map((idx) => {
+          const sourceField = fields[idx];
+          const mappedName = mapping[sourceField.name] ?? sourceField.name;
+          return structuredClone({ ...sourceField, name: mappedName });
+        });
+
+        // Insert position: where the first source field was
+        const insertAt = Math.min(...sourceIndices);
+
+        // Remove source fields (iterate in reverse to preserve indices)
+        for (const idx of [...sourceIndices].sort((a, b) => b - a)) {
+          fields.splice(idx, 1);
+        }
+
+        // Create the new object field
+        const groupField: FieldDefinition = {
+          name: targetFieldName,
+          description: `Grouped from: ${sourceFieldNames.join(', ')}`,
+          type: 'object',
+          required: false,
+          objectFields,
+        };
+
+        // Insert at the position of the first removed field (adjusted for removals before it)
+        const adjustedInsertAt = Math.min(insertAt, fields.length);
+        fields.splice(adjustedInsertAt, 0, groupField);
+        applied++;
+        break;
+      }
+
       case 'set_normalization_rule': {
         const field = fields.find((f) => f.name === action.payload.fieldName);
         if (!field) {

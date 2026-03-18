@@ -41,6 +41,11 @@ export function actionRoutes(): Hono<AppEnv> {
     const body = await c.req.json().catch(() => ({}));
     const reviewedBy = body?.reviewedBy;
 
+    if (deps.reviewQueue) {
+      const results = await deps.reviewQueue.approveAll(jobId, tenantId, reviewedBy);
+      return c.json({ data: results });
+    }
+
     const pending = await deps.actionRepo.findByJob(jobId, tenantId, {
       status: 'pending_review',
     });
@@ -63,6 +68,11 @@ export function actionRoutes(): Hono<AppEnv> {
     const body = await c.req.json().catch(() => ({}));
     const reviewedBy = body?.reviewedBy;
 
+    if (deps.reviewQueue) {
+      const action = await deps.reviewQueue.approve(actionId, tenantId, reviewedBy);
+      return c.json({ data: action });
+    }
+
     const action = await deps.actionRepo.updateStatus(actionId, tenantId, 'approved', reviewedBy);
     return c.json({ data: action });
   });
@@ -75,6 +85,12 @@ export function actionRoutes(): Hono<AppEnv> {
 
     const body = await c.req.json().catch(() => ({}));
     const reviewedBy = body?.reviewedBy;
+    const reason = body?.reason ?? '';
+
+    if (deps.reviewQueue) {
+      await deps.reviewQueue.reject(actionId, tenantId, reviewedBy, reason);
+      return c.json({ data: { id: actionId, status: 'rejected' } });
+    }
 
     const action = await deps.actionRepo.updateStatus(actionId, tenantId, 'rejected', reviewedBy);
     return c.json({ data: action });

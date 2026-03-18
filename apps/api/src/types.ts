@@ -8,7 +8,7 @@ import type {
   CrawlTaskRepository,
   ExportRepository,
 } from '@spatula/db';
-import type { ContentStore } from '@spatula/core';
+import type { ContentStore, ReviewQueue } from '@spatula/core';
 import type { JobManager, ExportJobPayload, SpatulaQueues } from '@spatula/queue';
 
 export interface AppDeps {
@@ -23,6 +23,7 @@ export interface AppDeps {
   exportRepo: ExportRepository;
   contentStore: ContentStore;
   exportQueue: SpatulaQueues['export'];
+  reviewQueue?: ReviewQueue;
 }
 
 export interface AppEnv {

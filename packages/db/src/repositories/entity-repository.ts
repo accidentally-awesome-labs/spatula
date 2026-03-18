@@ -172,4 +172,42 @@ export class EntityRepository {
       });
     }
   }
+
+  async updateMergedData(
+    entityId: string,
+    tenantId: string,
+    changes: {
+      mergedData?: Record<string, unknown>;
+      provenance?: Record<string, unknown>;
+      categories?: string[];
+    },
+  ) {
+    try {
+      const setClause: Record<string, unknown> = {};
+      if (changes.mergedData !== undefined) setClause.mergedData = changes.mergedData;
+      if (changes.provenance !== undefined) setClause.provenance = changes.provenance;
+      if (changes.categories !== undefined) setClause.categories = changes.categories;
+
+      const [row] = await this.db
+        .update(entities)
+        .set(setClause)
+        .where(and(eq(entities.id, entityId), eq(entities.tenantId, tenantId)))
+        .returning();
+
+      if (!row) {
+        throw new StorageError(`Entity ${entityId} not found`, {
+          context: { entityId, tenantId },
+        });
+      }
+
+      logger.debug({ entityId }, 'entity merged data updated');
+      return row;
+    } catch (error) {
+      if (error instanceof StorageError) throw error;
+      throw new StorageError(`Failed to update entity data: ${(error as Error).message}`, {
+        cause: error as Error,
+        context: { entityId, tenantId },
+      });
+    }
+  }
 }

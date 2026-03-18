@@ -151,4 +151,93 @@ describe('Action routes', () => {
       expect(body.data).toEqual([]);
     });
   });
+
+  describe('with ReviewQueue', () => {
+    let depsWithQueue: AppDeps;
+    let appWithQueue: ReturnType<typeof createTestApp>;
+
+    beforeEach(() => {
+      depsWithQueue = {
+        ...createMockDeps(),
+        reviewQueue: {
+          enqueue: vi.fn().mockResolvedValue(undefined),
+          getPending: vi.fn().mockResolvedValue([]),
+          approve: vi.fn().mockResolvedValue({ id: 'act-1', status: 'approved' }),
+          reject: vi.fn().mockResolvedValue(undefined),
+          approveAll: vi.fn().mockResolvedValue([
+            { id: 'act-1', status: 'approved' },
+            { id: 'act-2', status: 'approved' },
+          ]),
+        },
+      } as unknown as AppDeps;
+      appWithQueue = createTestApp(depsWithQueue);
+    });
+
+    it('POST approve delegates to reviewQueue.approve', async () => {
+      const res = await appWithQueue.request('/api/v1/jobs/job-1/actions/act-1/approve', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ reviewedBy: 'user-1' }),
+      });
+
+      expect(res.status).toBe(200);
+      expect(depsWithQueue.reviewQueue!.approve).toHaveBeenCalledWith('act-1', 'tenant-1', 'user-1');
+      // Should NOT fall through to direct actionRepo
+      expect(depsWithQueue.actionRepo.updateStatus).not.toHaveBeenCalled();
+    });
+
+    it('POST approve delegates to reviewQueue.approve without reviewedBy', async () => {
+      const res = await appWithQueue.request('/api/v1/jobs/job-1/actions/act-1/approve', {
+        method: 'POST',
+      });
+
+      expect(res.status).toBe(200);
+      expect(depsWithQueue.reviewQueue!.approve).toHaveBeenCalledWith('act-1', 'tenant-1', undefined);
+    });
+
+    it('POST reject delegates to reviewQueue.reject with reason', async () => {
+      const res = await appWithQueue.request('/api/v1/jobs/job-1/actions/act-1/reject', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ reviewedBy: 'user-1', reason: 'Not needed' }),
+      });
+
+      expect(res.status).toBe(200);
+      expect(depsWithQueue.reviewQueue!.reject).toHaveBeenCalledWith('act-1', 'tenant-1', 'user-1', 'Not needed');
+      expect(depsWithQueue.actionRepo.updateStatus).not.toHaveBeenCalled();
+    });
+
+    it('POST reject with no body still works', async () => {
+      const res = await appWithQueue.request('/api/v1/jobs/job-1/actions/act-1/reject', {
+        method: 'POST',
+      });
+
+      expect(res.status).toBe(200);
+      expect(depsWithQueue.reviewQueue!.reject).toHaveBeenCalledWith('act-1', 'tenant-1', undefined, '');
+    });
+
+    it('POST approve-all delegates to reviewQueue.approveAll', async () => {
+      const res = await appWithQueue.request('/api/v1/jobs/job-1/actions/approve-all', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ reviewedBy: 'user-1' }),
+      });
+
+      expect(res.status).toBe(200);
+      expect(depsWithQueue.reviewQueue!.approveAll).toHaveBeenCalledWith('job-1', 'tenant-1', 'user-1');
+      // Should NOT fall through to direct actionRepo
+      expect(depsWithQueue.actionRepo.findByJob).not.toHaveBeenCalled();
+      expect(depsWithQueue.actionRepo.batchUpdateStatus).not.toHaveBeenCalled();
+    });
+
+    it('POST approve-all returns ReviewQueue results', async () => {
+      const res = await appWithQueue.request('/api/v1/jobs/job-1/actions/approve-all', {
+        method: 'POST',
+      });
+
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      expect(body.data).toHaveLength(2);
+    });
+  });
 });
