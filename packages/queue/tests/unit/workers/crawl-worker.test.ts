@@ -490,6 +490,108 @@ describe('processCrawlJob', () => {
     expect(deps.queues.schemaEvolution.add).not.toHaveBeenCalled();
   });
 
+  it('handles crawler throwing an error gracefully', async () => {
+    (deps.crawler.crawl as ReturnType<typeof vi.fn>).mockRejectedValue(
+      new Error('ECONNREFUSED: Connection refused'),
+    );
+    const data = createJobData();
+
+    // Should not throw — error is caught internally
+    await expect(processCrawlJob(data, deps)).resolves.toBeUndefined();
+
+    const updateStatusCalls = (deps.taskRepo.updateStatus as ReturnType<typeof vi.fn>).mock.calls;
+    expect(updateStatusCalls[0]).toEqual(['task-1', 'tenant-1', 'in_progress']);
+    expect(updateStatusCalls[1]).toEqual(['task-1', 'tenant-1', 'failed']);
+
+    // No page should be created
+    expect(deps.pageRepo.create).not.toHaveBeenCalled();
+    expect(deps.extractor.extract).not.toHaveBeenCalled();
+  });
+
+  it('handles extraction failure by failing the task', async () => {
+    (deps.extractor.extract as ReturnType<typeof vi.fn>).mockRejectedValue(
+      new Error('LLM rate limit exceeded'),
+    );
+    const data = createJobData();
+
+    // The crawl worker wraps everything in a single try/catch,
+    // so an extraction failure causes the task to fail
+    await expect(processCrawlJob(data, deps)).resolves.toBeUndefined();
+
+    // Crawler was still called successfully
+    expect(deps.crawler.crawl).toHaveBeenCalledWith('https://example.com/product/1');
+    // Content was still stored
+    expect(deps.contentStore.store).toHaveBeenCalled();
+    // Page was still created
+    expect(deps.pageRepo.create).toHaveBeenCalled();
+
+    // But the task is marked as failed because the error propagated
+    const updateStatusCalls = (deps.taskRepo.updateStatus as ReturnType<typeof vi.fn>).mock.calls;
+    expect(updateStatusCalls[updateStatusCalls.length - 1]).toEqual([
+      'task-1',
+      'tenant-1',
+      'failed',
+    ]);
+  });
+
+  it('handles content store failure gracefully', async () => {
+    (deps.contentStore.store as ReturnType<typeof vi.fn>).mockRejectedValue(
+      new Error('Storage backend unavailable'),
+    );
+    const data = createJobData();
+
+    await expect(processCrawlJob(data, deps)).resolves.toBeUndefined();
+
+    // Crawler was called
+    expect(deps.crawler.crawl).toHaveBeenCalled();
+    // Task is marked as failed
+    const updateStatusCalls = (deps.taskRepo.updateStatus as ReturnType<typeof vi.fn>).mock.calls;
+    expect(updateStatusCalls[updateStatusCalls.length - 1]).toEqual([
+      'task-1',
+      'tenant-1',
+      'failed',
+    ]);
+    // Extraction should not be attempted since page creation failed
+    expect(deps.extractor.extract).not.toHaveBeenCalled();
+  });
+
+  it('skips extraction when page is classified as irrelevant', async () => {
+    (deps.classifier.classify as ReturnType<typeof vi.fn>).mockResolvedValue({
+      classification: 'irrelevant',
+      confidence: 0.85,
+      strategy: 'skip',
+      reasoning: 'Navigation page, not a product page',
+    });
+    const data = createJobData();
+
+    await processCrawlJob(data, deps);
+
+    // Crawl and content store should still happen
+    expect(deps.crawler.crawl).toHaveBeenCalled();
+    expect(deps.contentStore.store).toHaveBeenCalled();
+    expect(deps.pageRepo.create).toHaveBeenCalled();
+
+    // Classification was recorded
+    expect(deps.taskRepo.updateClassification).toHaveBeenCalledWith(
+      'task-1',
+      'tenant-1',
+      'irrelevant',
+    );
+
+    // But no extraction or schema lookup
+    expect(deps.schemaRepo.findLatest).not.toHaveBeenCalled();
+    expect(deps.extractor.extract).not.toHaveBeenCalled();
+    expect(deps.extractionRepo.store).not.toHaveBeenCalled();
+
+    // Task should still be marked as completed (crawl succeeded)
+    const updateStatusCalls = (deps.taskRepo.updateStatus as ReturnType<typeof vi.fn>).mock.calls;
+    expect(updateStatusCalls[updateStatusCalls.length - 1]).toEqual([
+      'task-1',
+      'tenant-1',
+      'completed',
+    ]);
+  });
+
   it('does NOT trigger schema evolution for fixed schema mode', async () => {
     // Override job config with fixed mode (no evolutionConfig)
     const fixedSchemaJob = {
