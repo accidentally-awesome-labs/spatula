@@ -44,6 +44,12 @@ describe('core table schemas', () => {
     expect(schemasTable.parentId).toBeDefined();
     expect(schemasTable.createdAt).toBeDefined();
   });
+
+  it('schemasTable.jobId is defined and not null', () => {
+    const jobIdCol = schemasTable.jobId;
+    expect(jobIdCol).toBeDefined();
+    expect(jobIdCol.notNull).toBe(true);
+  });
 });
 
 describe('crawl & page table schemas', () => {
