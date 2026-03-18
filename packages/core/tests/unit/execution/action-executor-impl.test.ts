@@ -359,4 +359,199 @@ describe('DefaultActionExecutor', () => {
       );
     });
   });
+
+  describe('domain dispatch', () => {
+    // All tests use trust_ai so actions auto-apply, isolating domain dispatch logic.
+
+    beforeEach(() => {
+      executor = new DefaultActionExecutor({
+        actionRepo: deps.actionRepo as any,
+        schemaRepo: deps.schemaRepo as any,
+        entityRepo: deps.entityRepo as any,
+        entitySourceRepo: deps.entitySourceRepo as any,
+        sourceTrustRepo: deps.sourceTrustRepo as any,
+        reviewQueue: deps.reviewQueue as any,
+        approvalPreset: 'trust_ai',
+        confidenceThreshold: 0.7,
+        tenantId: 'tenant-1',
+      });
+    });
+
+    it('schema action: loads latest schema, applies action, creates new version', async () => {
+      const action: PipelineAction = {
+        ...baseAction({ confidence: 0.9 }),
+        type: 'add_field',
+        payload: {
+          field: { name: 'price', description: 'Price', type: 'number', required: false },
+          relevance: {
+            globalFrequency: 0.8,
+            categoryBreakdown: [],
+            classification: 'universal_optional',
+            applicableCategories: null,
+          },
+        },
+      };
+
+      const result = await executor.execute(action);
+
+      expect(result.status).toBe('applied');
+      expect(deps.schemaRepo.findLatest).toHaveBeenCalledWith('job-1', 'tenant-1');
+      expect(deps.schemaRepo.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          jobId: 'job-1',
+          tenantId: 'tenant-1',
+          version: 2,
+          parentVersion: 1,
+        }),
+      );
+    });
+
+    it('schema action: warns and continues when no schema found', async () => {
+      deps.schemaRepo.findLatest.mockResolvedValue(null);
+
+      const action: PipelineAction = {
+        ...baseAction(),
+        type: 'add_field',
+        payload: {
+          field: { name: 'price', description: 'Price', type: 'number', required: false },
+          relevance: {
+            globalFrequency: 0.8,
+            categoryBreakdown: [],
+            classification: 'universal_optional',
+            applicableCategories: null,
+          },
+        },
+      };
+
+      const result = await executor.execute(action);
+
+      expect(result.status).toBe('applied');
+      expect(deps.schemaRepo.create).not.toHaveBeenCalled();
+    });
+
+    it('schema action: skips schema create when no effective change', async () => {
+      // add_field for a field that already exists → applySchemaActions returns same version
+      const action: PipelineAction = {
+        ...baseAction(),
+        type: 'add_field',
+        payload: {
+          field: { name: 'title', description: 'Title', type: 'string', required: true },
+          relevance: {
+            globalFrequency: 0.8,
+            categoryBreakdown: [],
+            classification: 'universal_optional',
+            applicableCategories: null,
+          },
+        },
+      };
+
+      const result = await executor.execute(action);
+
+      expect(result.status).toBe('applied');
+      expect(deps.schemaRepo.create).not.toHaveBeenCalled();
+    });
+
+    it('category action: captures metadata in stateChanges', async () => {
+      const action: PipelineAction = {
+        ...baseAction(),
+        type: 'define_category',
+        payload: {
+          categoryField: 'product_type',
+          categories: [
+            { name: 'electronics', description: 'Electronic devices', matchCriteria: 'tech products' },
+          ],
+        },
+      };
+
+      const result = await executor.execute(action);
+
+      expect(result.status).toBe('applied');
+      expect(deps.actionRepo.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          status: 'applied',
+          type: 'define_category',
+        }),
+      );
+    });
+
+    it('reconciliation action: delegates to reconciliation applier', async () => {
+      const action: PipelineAction = {
+        ...baseAction(),
+        type: 'resolve_conflict',
+        payload: {
+          entityId: 'entity-1',
+          fieldName: 'name',
+          resolvedValue: 'Super Widget',
+          sourcePreferred: 'source-a.com',
+          allValues: [
+            { source: 'source-a.com', value: 'Super Widget' },
+            { source: 'source-b.com', value: 'Widget' },
+          ],
+        },
+      };
+
+      const result = await executor.execute(action);
+
+      expect(result.status).toBe('applied');
+      expect(deps.entityRepo.findById).toHaveBeenCalledWith('entity-1', 'tenant-1');
+      expect(deps.entityRepo.updateMergedData).toHaveBeenCalled();
+    });
+
+    it('finalization action: captures metadata in stateChanges', async () => {
+      const action: PipelineAction = {
+        ...baseAction(),
+        type: 'flag_anomaly',
+        payload: {
+          anomalyType: 'outlier_value',
+          description: 'Price is way too high',
+        },
+      };
+
+      const result = await executor.execute(action);
+
+      expect(result.status).toBe('applied');
+      expect(deps.actionRepo.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          type: 'flag_anomaly',
+          status: 'applied',
+        }),
+      );
+    });
+
+    it('reprocessing action: applies as no-op', async () => {
+      const action: PipelineAction = {
+        ...baseAction(),
+        type: 'reprocess_extraction',
+        payload: {
+          extractionIds: [generateId()],
+          reason: 'schema_evolved',
+          targetSchemaVersion: 2,
+        },
+      };
+
+      const result = await executor.execute(action);
+      expect(result.status).toBe('applied');
+    });
+
+    it('persists stateChanges from schema action to actionRepo', async () => {
+      const action: PipelineAction = {
+        ...baseAction(),
+        type: 'add_field',
+        payload: {
+          field: { name: 'price', description: 'Price', type: 'number', required: false },
+          relevance: {
+            globalFrequency: 0.8,
+            categoryBreakdown: [],
+            classification: 'universal_optional',
+            applicableCategories: null,
+          },
+        },
+      };
+
+      await executor.execute(action);
+
+      const createCall = deps.actionRepo.create.mock.calls[0][0];
+      expect(createCall.stateChanges).toBeDefined();
+    });
+  });
 });
