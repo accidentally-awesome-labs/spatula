@@ -13,6 +13,7 @@ import type {
   ActionRepository,
 } from '@spatula/db';
 import type { SpatulaQueues } from './queues.js';
+import type { EventPublisher } from './events.js';
 
 export interface WorkerDepsConfig {
   crawler: Crawler;
@@ -31,6 +32,7 @@ export interface WorkerDepsConfig {
   entitySourceRepo: EntitySourceRepository;
   exportRepo: ExportRepository;
   actionRepo: ActionRepository;
+  eventPublisher?: EventPublisher;
   queues: SpatulaQueues;
 }
 
@@ -51,6 +53,7 @@ export class WorkerDeps {
   readonly entitySourceRepo: EntitySourceRepository;
   readonly exportRepo: ExportRepository;
   readonly actionRepo: ActionRepository;
+  readonly eventPublisher?: EventPublisher;
   readonly queues: SpatulaQueues;
 
   constructor(config: WorkerDepsConfig) {
@@ -70,6 +73,7 @@ export class WorkerDeps {
     this.entitySourceRepo = config.entitySourceRepo;
     this.exportRepo = config.exportRepo;
     this.actionRepo = config.actionRepo;
+    this.eventPublisher = config.eventPublisher;
     this.queues = config.queues;
   }
 }

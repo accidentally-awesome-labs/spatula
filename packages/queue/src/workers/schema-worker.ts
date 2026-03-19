@@ -131,6 +131,18 @@ export async function processSchemaEvolutionJob(
       { jobId, newVersion: evolvedSchema.version, actionsApplied: actions.length },
       'schema evolved',
     );
+
+    // Publish schema_evolved event
+    await deps.eventPublisher?.publish(jobId, {
+      type: 'schema_evolved',
+      jobId,
+      tenantId,
+      data: {
+        version: evolvedSchema.version,
+        fieldsAdded: actions.filter((a) => a.type === 'add_field').map((a) => (a as any).payload?.name ?? ''),
+        fieldsMerged: actions.filter((a) => a.type === 'merge_fields').map((a) => (a as any).payload?.canonicalName ?? ''),
+      },
+    });
   } catch (error) {
     logger.error({ jobId, error }, 'schema evolution job failed');
     // Don't rethrow -- failed evolution shouldn't crash the worker

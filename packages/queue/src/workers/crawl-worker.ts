@@ -68,6 +68,14 @@ export async function processCrawlJob(data: CrawlJobData, deps: WorkerDeps): Pro
     );
     await deps.taskRepo.updateClassification(taskId, tenantId, classification.classification);
 
+    // Publish task_completed event
+    await deps.eventPublisher?.publish(jobId, {
+      type: 'task_completed',
+      jobId,
+      tenantId,
+      data: { taskId, url, classification: classification.classification },
+    });
+
     if (EXTRACTABLE_CLASSIFICATIONS.has(classification.classification)) {
       const schema = await deps.schemaRepo.findLatest(jobId, tenantId);
       if (schema) {
@@ -138,6 +146,14 @@ export async function processCrawlJob(data: CrawlJobData, deps: WorkerDeps): Pro
         enqueued++;
       }
       logger.debug({ taskId, linksEnqueued: enqueued }, 'links enqueued');
+
+      // Publish crawl progress
+      await deps.eventPublisher?.publish(jobId, {
+        type: 'crawl_progress',
+        jobId,
+        tenantId,
+        data: { pagesFound: enqueued, taskId, url },
+      });
     }
 
     await deps.taskRepo.updateStatus(taskId, tenantId, 'completed');

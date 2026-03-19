@@ -123,6 +123,17 @@ export async function processReconciliationJob(
         matchConfidence: 1.0,
       }));
       await deps.entitySourceRepo.bulkLink(links);
+
+      // Publish entity_created event
+      await deps.eventPublisher?.publish(jobId, {
+        type: 'entity_created',
+        jobId,
+        tenantId,
+        data: {
+          entityId: dbEntity.id,
+          name: String(entity.mergedData.name ?? entity.mergedData.title ?? `Entity ${dbEntity.id.slice(0, 8)}`),
+        },
+      });
     }
 
     // 9. Persist source trust from set_source_trust actions
@@ -149,6 +160,14 @@ export async function processReconciliationJob(
 
     // 10. Update job status to completed
     await deps.jobRepo.updateStatus(jobId, tenantId, 'completed');
+
+    // Publish job_status_changed event
+    await deps.eventPublisher?.publish(jobId, {
+      type: 'job_status_changed',
+      jobId,
+      tenantId,
+      data: { from: 'reconciling', to: 'completed' },
+    });
 
     logger.info(
       {
