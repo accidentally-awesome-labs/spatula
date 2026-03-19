@@ -1,6 +1,6 @@
 import { createLogger } from '@spatula/shared';
 import { createHash } from 'node:crypto';
-import type { JobConfig } from '@spatula/core';
+import type { JobConfig, LinkEvaluationContext } from '@spatula/core';
 import type { CrawlJobData } from '../queues.js';
 import type { WorkerDeps } from '../worker-deps.js';
 
@@ -68,6 +68,14 @@ export async function processCrawlJob(data: CrawlJobData, deps: WorkerDeps): Pro
     );
     await deps.taskRepo.updateClassification(taskId, tenantId, classification.classification);
 
+    // Publish task_completed event
+    await deps.eventPublisher?.publish(jobId, {
+      type: 'task_completed',
+      jobId,
+      tenantId,
+      data: { taskId, url, classification: classification.classification },
+    });
+
     if (EXTRACTABLE_CLASSIFICATIONS.has(classification.classification)) {
       const schema = await deps.schemaRepo.findLatest(jobId, tenantId);
       if (schema) {
@@ -116,8 +124,34 @@ export async function processCrawlJob(data: CrawlJobData, deps: WorkerDeps): Pro
 
     const maxDepth = job.config.crawl.maxDepth;
     if (depth < maxDepth && crawlResult.links.length > 0) {
+      // Evaluate links if evaluator is available
+      let linksToEnqueue: Array<{ url: string; text?: string; rel?: string; priority?: string }> = crawlResult.links;
+      if (deps.linkEvaluator) {
+        const schema = await deps.schemaRepo.findLatest(jobId, tenantId);
+        if (schema) {
+          const config = job.config as JobConfig;
+          const context: LinkEvaluationContext = {
+            description: config.description,
+            seedDomains: config.seedUrls.map((u: string) => new URL(u).hostname),
+            currentDepth: depth,
+            maxDepth,
+          };
+          const evaluated = await deps.linkEvaluator.evaluate(
+            crawlResult.links,
+            context,
+            schema.definition,
+          );
+          // Filter links below relevance threshold
+          linksToEnqueue = evaluated.filter((l) => l.relevanceScore > 0.3);
+          logger.debug(
+            { taskId, total: crawlResult.links.length, accepted: linksToEnqueue.length },
+            'links evaluated',
+          );
+        }
+      }
+
       let enqueued = 0;
-      for (const link of crawlResult.links) {
+      for (const link of linksToEnqueue) {
         if (!link.url || !isValidCrawlUrl(link.url)) continue;
 
         const childTask = await deps.taskRepo.enqueue({
@@ -128,16 +162,35 @@ export async function processCrawlJob(data: CrawlJobData, deps: WorkerDeps): Pro
           parentTaskId: taskId,
         });
 
-        await deps.queues.crawl.add(`crawl:${link.url}`, {
+        // Map LLM priority to BullMQ priority (lower = higher priority)
+        const bullmqPriority = link.priority
+          ? ({ high: 1, medium: 5, low: 10 } as Record<string, number>)[link.priority]
+          : undefined;
+
+        const jobData = {
           taskId: childTask.id,
           jobId,
           tenantId,
           url: link.url,
           depth: depth + 1,
-        });
+        };
+
+        if (bullmqPriority !== undefined) {
+          await deps.queues.crawl.add(`crawl:${link.url}`, jobData, { priority: bullmqPriority });
+        } else {
+          await deps.queues.crawl.add(`crawl:${link.url}`, jobData);
+        }
         enqueued++;
       }
       logger.debug({ taskId, linksEnqueued: enqueued }, 'links enqueued');
+
+      // Publish crawl progress
+      await deps.eventPublisher?.publish(jobId, {
+        type: 'crawl_progress',
+        jobId,
+        tenantId,
+        data: { pagesFound: enqueued, taskId, url },
+      });
     }
 
     await deps.taskRepo.updateStatus(taskId, tenantId, 'completed');

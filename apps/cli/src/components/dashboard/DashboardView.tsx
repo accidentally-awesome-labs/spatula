@@ -4,6 +4,7 @@ import { useStore } from 'zustand';
 import type { CliStore } from '../../store/index.js';
 import type { SpatulaApiClient } from '../../api/client.js';
 import { useJobPolling } from '../../hooks/useJobPolling.js';
+import { useWebSocket } from '../../hooks/useWebSocket.js';
 import { useKeyboard } from '../../hooks/useKeyboard.js';
 import { Spinner } from '../shared/Spinner.js';
 import { ProgressPanel } from './ProgressPanel.js';
@@ -26,7 +27,22 @@ export function DashboardView({
   const schemaData = useStore(store, (s) => s.schemaData);
   const entityPreviews = useStore(store, (s) => s.entityPreviews);
 
-  const { lastError } = useJobPolling(store, apiClient, activeJobId ?? '', 3000);
+  // Try WebSocket for real-time updates; use slower polling as supplement
+  const { connected: wsConnected } = useWebSocket(
+    store,
+    apiClient.baseUrl,
+    apiClient.tenantId,
+    activeJobId ?? '',
+  );
+
+  // When WebSocket is connected, use slower 15s polling to keep full job data fresh.
+  // When WebSocket is disconnected, poll at normal 3s rate.
+  const { lastError } = useJobPolling(
+    store,
+    apiClient,
+    activeJobId ?? '',
+    wsConnected ? 15000 : 3000,
+  );
 
   useKeyboard({
     ' ': () => {

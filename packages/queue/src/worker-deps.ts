@@ -1,4 +1,4 @@
-import type { Crawler, Extractor, ContentStore, SchemaEvolver } from '@spatula/core';
+import type { Crawler, Extractor, ContentStore, SchemaEvolver, LinkEvaluator } from '@spatula/core';
 import type { PageClassifier, DataReconciler } from '@spatula/core';
 import type {
   JobRepository,
@@ -13,6 +13,7 @@ import type {
   ActionRepository,
 } from '@spatula/db';
 import type { SpatulaQueues } from './queues.js';
+import type { EventPublisher } from './events.js';
 
 export interface WorkerDepsConfig {
   crawler: Crawler;
@@ -31,6 +32,8 @@ export interface WorkerDepsConfig {
   entitySourceRepo: EntitySourceRepository;
   exportRepo: ExportRepository;
   actionRepo: ActionRepository;
+  eventPublisher?: EventPublisher;
+  linkEvaluator?: LinkEvaluator;
   queues: SpatulaQueues;
 }
 
@@ -51,6 +54,8 @@ export class WorkerDeps {
   readonly entitySourceRepo: EntitySourceRepository;
   readonly exportRepo: ExportRepository;
   readonly actionRepo: ActionRepository;
+  readonly eventPublisher?: EventPublisher;
+  readonly linkEvaluator?: LinkEvaluator;
   readonly queues: SpatulaQueues;
 
   constructor(config: WorkerDepsConfig) {
@@ -70,6 +75,8 @@ export class WorkerDeps {
     this.entitySourceRepo = config.entitySourceRepo;
     this.exportRepo = config.exportRepo;
     this.actionRepo = config.actionRepo;
+    this.eventPublisher = config.eventPublisher;
+    this.linkEvaluator = config.linkEvaluator;
     this.queues = config.queues;
   }
 }
