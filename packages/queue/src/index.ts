@@ -24,6 +24,10 @@ export type { WorkerDepsConfig } from './worker-deps.js';
 // Redis Lock
 export { acquireLock, releaseLock } from './redis-lock.js';
 
+// Events
+export { RedisEventPublisher, NoopEventPublisher, channelForJob } from './events.js';
+export type { EventPublisher, JobEvent, JobEventType } from './events.js';
+
 // Workers
 export { processCrawlJob } from './workers/crawl-worker.js';
 export { processSchemaEvolutionJob } from './workers/schema-worker.js';
