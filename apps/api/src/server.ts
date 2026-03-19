@@ -21,14 +21,19 @@ export function startServer(deps: AppDeps, port = 3000) {
     app.get(
       '/ws/jobs/:id/progress',
       upgradeWebSocket((c) => {
-        const jobId = c.req.param('id');
-        const tenantId = c.req.header('x-tenant-id') ?? '';
+        const jobId = c.req.param('id')!;
+        // WebSocket clients can't send custom HTTP headers, so accept tenantId
+        // from either the x-tenant-id header or a query parameter
+        const tenantId =
+          c.req.header('x-tenant-id') ??
+          new URL(c.req.url).searchParams.get('tenantId') ??
+          '';
 
         return {
           async onOpen(_evt, ws) {
-            // Validate tenant header
+            // Validate tenant ID
             if (!tenantId || !UUID_REGEX.test(tenantId)) {
-              ws.close(4001, 'x-tenant-id header required');
+              ws.close(4001, 'tenantId required (via x-tenant-id header or ?tenantId= query param)');
               return;
             }
 

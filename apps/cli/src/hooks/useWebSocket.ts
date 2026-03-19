@@ -91,8 +91,9 @@ export function useWebSocket(
 
     if (!jobId) return;
 
-    // Convert http(s):// to ws(s)://
-    const wsUrl = baseUrl.replace(/^http/, 'ws') + `/ws/jobs/${jobId}/progress`;
+    // Convert http(s):// to ws(s):// and pass tenantId as query param
+    // (WebSocket constructor doesn't support custom HTTP headers)
+    const wsUrl = baseUrl.replace(/^http/, 'ws') + `/ws/jobs/${jobId}/progress?tenantId=${tenantId}`;
     const ws = new WebSocket(wsUrl);
     wsRef.current = ws;
 

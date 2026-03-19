@@ -20,6 +20,7 @@
     "@spatula/queue": "workspace:*",
     "@spatula/shared": "workspace:*",
     "hono": "^4.12.7",
+    "ioredis": "^5.10.0",
     "zod": "^3.24.0"
   },
   "devDependencies": {
