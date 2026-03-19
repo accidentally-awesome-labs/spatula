@@ -10,6 +10,7 @@ import type {
 } from '@spatula/db';
 import type { ContentStore, ReviewQueue } from '@spatula/core';
 import type { JobManager, ExportJobPayload, SpatulaQueues } from '@spatula/queue';
+import type Redis from 'ioredis';
 
 export interface AppDeps {
   jobRepo: JobRepository;
@@ -24,6 +25,7 @@ export interface AppDeps {
   contentStore: ContentStore;
   exportQueue: SpatulaQueues['export'];
   reviewQueue?: ReviewQueue;
+  redisSubscriber?: Redis;
 }
 
 export interface AppEnv {
