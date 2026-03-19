@@ -26,8 +26,8 @@ export class ApiError extends Error {
 // ---------------------------------------------------------------------------
 
 export class SpatulaApiClient {
-  private readonly baseUrl: string;
-  private readonly tenantId: string;
+  public readonly baseUrl: string;
+  public readonly tenantId: string;
 
   constructor(baseUrl: string, tenantId: string) {
     // Strip trailing slash so callers don't need to worry about it

@@ -14,6 +14,10 @@ vi.mock('../../../../src/hooks/useJobPolling.js', () => ({
   useJobPolling: vi.fn().mockReturnValue({ isPolling: false, lastError: null }),
 }));
 
+vi.mock('../../../../src/hooks/useWebSocket.js', () => ({
+  useWebSocket: vi.fn().mockReturnValue({ connected: false, error: null }),
+}));
+
 vi.mock('../../../../src/hooks/useKeyboard.js', () => ({
   useKeyboard: vi.fn(),
 }));
