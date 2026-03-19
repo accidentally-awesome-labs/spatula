@@ -27,3 +27,6 @@ export * from './exporters/index.js';
 
 // Execution
 export * from './execution/index.js';
+
+// Link Evaluation
+export * from './link-evaluation/index.js';
