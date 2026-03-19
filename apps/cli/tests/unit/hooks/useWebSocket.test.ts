@@ -132,6 +132,56 @@ describe('applyWSMessageToStore', () => {
     expect(store._state.setEntityPreviews).toHaveBeenCalled();
   });
 
+  it('increments pagesCrawled on task_completed', () => {
+    store._state.jobData = { status: 'running', pagesCrawled: 5 };
+    applyWSMessageToStore(store, {
+      type: 'task_completed',
+      timestamp: Date.now(),
+      data: { taskId: 't-1', url: 'https://example.com/page', classification: 'single_entry' },
+    });
+
+    expect(store._state.setJobData).toHaveBeenCalledWith(
+      expect.objectContaining({ pagesCrawled: 6 }),
+    );
+  });
+
+  it('initializes pagesCrawled from zero when not present', () => {
+    store._state.jobData = { status: 'running' };
+    applyWSMessageToStore(store, {
+      type: 'task_completed',
+      timestamp: Date.now(),
+      data: { taskId: 't-1', url: 'https://example.com/page', classification: 'single_entry' },
+    });
+
+    expect(store._state.setJobData).toHaveBeenCalledWith(
+      expect.objectContaining({ pagesCrawled: 1 }),
+    );
+  });
+
+  it('accumulates pagesQueued on crawl_progress', () => {
+    store._state.jobData = { status: 'running', pagesQueued: 10 };
+    applyWSMessageToStore(store, {
+      type: 'crawl_progress',
+      timestamp: Date.now(),
+      data: { pagesFound: 3, taskId: 't-1', url: 'https://example.com/page' },
+    });
+
+    expect(store._state.setJobData).toHaveBeenCalledWith(
+      expect.objectContaining({ pagesQueued: 13 }),
+    );
+  });
+
+  it('ignores crawl_progress when pagesFound is not a number', () => {
+    store._state.jobData = { status: 'running' };
+    applyWSMessageToStore(store, {
+      type: 'crawl_progress',
+      timestamp: Date.now(),
+      data: { taskId: 't-1', url: 'https://example.com/page' },
+    });
+
+    expect(store._state.setJobData).not.toHaveBeenCalled();
+  });
+
   it('does not throw on unknown event type', () => {
     expect(() =>
       applyWSMessageToStore(store, {

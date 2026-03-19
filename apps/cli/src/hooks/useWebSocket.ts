@@ -62,7 +62,23 @@ export function applyWSMessageToStore(store: CliStore, msg: WSMessage): void {
       break;
     }
 
-    // crawl_progress, task_completed, error, connected, ping — no store dispatch needed
+    case 'task_completed':
+      // Increment pagesCrawled counter in jobData for real-time progress
+      if (state.jobData) {
+        const prev = Number(state.jobData.pagesCrawled ?? 0);
+        state.setJobData({ ...state.jobData, pagesCrawled: prev + 1 });
+      }
+      break;
+
+    case 'crawl_progress':
+      // Update pagesFound (links enqueued) for real-time progress
+      if (state.jobData && typeof msg.data.pagesFound === 'number') {
+        const prev = Number(state.jobData.pagesQueued ?? 0);
+        state.setJobData({ ...state.jobData, pagesQueued: prev + msg.data.pagesFound });
+      }
+      break;
+
+    // error, connected, ping — no store dispatch needed
     default:
       break;
   }
@@ -85,46 +101,71 @@ export function useWebSocket(
   const [error, setError] = useState<string | null>(null);
   const wsRef = useRef<WebSocket | null>(null);
   const mountedRef = useRef(true);
+  const reconnectDelayRef = useRef(1000); // Start at 1s
+  const reconnectTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const intentionalCloseRef = useRef(false);
 
   useEffect(() => {
     mountedRef.current = true;
+    intentionalCloseRef.current = false;
 
     if (!jobId) return;
 
-    // Convert http(s):// to ws(s):// and pass tenantId as query param
-    // (WebSocket constructor doesn't support custom HTTP headers)
     const wsUrl = baseUrl.replace(/^http/, 'ws') + `/ws/jobs/${jobId}/progress?tenantId=${tenantId}`;
-    const ws = new WebSocket(wsUrl);
-    wsRef.current = ws;
 
-    ws.onopen = () => {
+    function connect() {
       if (!mountedRef.current) return;
-      setConnected(true);
-      setError(null);
-    };
 
-    ws.onmessage = (evt) => {
-      if (!mountedRef.current) return;
-      const msg = parseWSMessage(typeof evt.data === 'string' ? evt.data : '');
-      if (msg) {
-        applyWSMessageToStore(store, msg);
-      }
-    };
+      const ws = new WebSocket(wsUrl);
+      wsRef.current = ws;
 
-    ws.onerror = () => {
-      if (!mountedRef.current) return;
-      setError('WebSocket connection error');
-    };
+      ws.onopen = () => {
+        if (!mountedRef.current) return;
+        setConnected(true);
+        setError(null);
+        reconnectDelayRef.current = 1000; // Reset backoff on success
+      };
 
-    ws.onclose = () => {
-      if (!mountedRef.current) return;
-      setConnected(false);
-    };
+      ws.onmessage = (evt) => {
+        if (!mountedRef.current) return;
+        const msg = parseWSMessage(typeof evt.data === 'string' ? evt.data : '');
+        if (msg) {
+          applyWSMessageToStore(store, msg);
+        }
+      };
+
+      ws.onerror = () => {
+        if (!mountedRef.current) return;
+        setError('WebSocket connection error');
+      };
+
+      ws.onclose = () => {
+        if (!mountedRef.current) return;
+        setConnected(false);
+        wsRef.current = null;
+
+        // Reconnect with exponential backoff unless intentionally closed
+        if (!intentionalCloseRef.current && mountedRef.current) {
+          const delay = reconnectDelayRef.current;
+          reconnectDelayRef.current = Math.min(delay * 2, 30_000); // Max 30s
+          reconnectTimerRef.current = setTimeout(connect, delay);
+        }
+      };
+    }
+
+    connect();
 
     return () => {
       mountedRef.current = false;
-      ws.close();
-      wsRef.current = null;
+      intentionalCloseRef.current = true;
+      if (reconnectTimerRef.current) {
+        clearTimeout(reconnectTimerRef.current);
+        reconnectTimerRef.current = null;
+      }
+      if (wsRef.current) {
+        wsRef.current.close();
+        wsRef.current = null;
+      }
     };
   }, [store, baseUrl, tenantId, jobId]);
 
