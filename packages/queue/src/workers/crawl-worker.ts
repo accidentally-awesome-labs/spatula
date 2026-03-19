@@ -125,7 +125,7 @@ export async function processCrawlJob(data: CrawlJobData, deps: WorkerDeps): Pro
     const maxDepth = job.config.crawl.maxDepth;
     if (depth < maxDepth && crawlResult.links.length > 0) {
       // Evaluate links if evaluator is available
-      let linksToEnqueue: Array<{ url: string; text?: string; rel?: string; [key: string]: unknown }> = crawlResult.links;
+      let linksToEnqueue: Array<{ url: string; text?: string; rel?: string; priority?: string }> = crawlResult.links;
       if (deps.linkEvaluator) {
         const schema = await deps.schemaRepo.findLatest(jobId, tenantId);
         if (schema) {
@@ -163,22 +163,23 @@ export async function processCrawlJob(data: CrawlJobData, deps: WorkerDeps): Pro
         });
 
         // Map LLM priority to BullMQ priority (lower = higher priority)
-        const priority =
-          'priority' in link
-            ? { high: 1, medium: 5, low: 10 }[link.priority as string] ?? 5
-            : undefined;
+        const bullmqPriority = link.priority
+          ? ({ high: 1, medium: 5, low: 10 } as Record<string, number>)[link.priority]
+          : undefined;
 
-        await deps.queues.crawl.add(
-          `crawl:${link.url}`,
-          {
-            taskId: childTask.id,
-            jobId,
-            tenantId,
-            url: link.url,
-            depth: depth + 1,
-          },
-          priority !== undefined ? { priority } : undefined,
-        );
+        const jobData = {
+          taskId: childTask.id,
+          jobId,
+          tenantId,
+          url: link.url,
+          depth: depth + 1,
+        };
+
+        if (bullmqPriority !== undefined) {
+          await deps.queues.crawl.add(`crawl:${link.url}`, jobData, { priority: bullmqPriority });
+        } else {
+          await deps.queues.crawl.add(`crawl:${link.url}`, jobData);
+        }
         enqueued++;
       }
       logger.debug({ taskId, linksEnqueued: enqueued }, 'links enqueued');
