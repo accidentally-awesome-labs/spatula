@@ -632,4 +632,124 @@ describe('processCrawlJob', () => {
 
     expect(deps.queues.schemaEvolution.add).not.toHaveBeenCalled();
   });
+
+  describe('link evaluation', () => {
+    it('calls linkEvaluator.evaluate when evaluator is provided', async () => {
+      const mockEvaluator = {
+        evaluate: vi.fn().mockResolvedValue([
+          { url: 'https://example.com/product/2', text: 'Product 2', relevanceScore: 0.9, expectedContent: 'single_entry', priority: 'high', reasoning: 'Product page' },
+          { url: 'https://example.com/product/3', text: 'Product 3', relevanceScore: 0.8, expectedContent: 'single_entry', priority: 'medium', reasoning: 'Product page' },
+        ]),
+      };
+      (deps as any).linkEvaluator = mockEvaluator;
+      const data = createJobData({ depth: 1 });
+
+      await processCrawlJob(data, deps);
+
+      expect(mockEvaluator.evaluate).toHaveBeenCalledWith(
+        [
+          { url: 'https://example.com/product/2', text: 'Product 2' },
+          { url: 'https://example.com/product/3', text: 'Product 3' },
+        ],
+        expect.objectContaining({
+          description: 'Scrape product data',
+          seedDomains: ['example.com'],
+          currentDepth: 1,
+          maxDepth: 3,
+        }),
+        expect.objectContaining({ version: 1 }),
+      );
+    });
+
+    it('filters out links below 0.3 relevance threshold', async () => {
+      const mockEvaluator = {
+        evaluate: vi.fn().mockResolvedValue([
+          { url: 'https://example.com/product/2', text: 'Product 2', relevanceScore: 0.9, expectedContent: 'single_entry', priority: 'high', reasoning: 'Product page' },
+          { url: 'https://example.com/product/3', text: 'Product 3', relevanceScore: 0.1, expectedContent: 'unknown', priority: 'low', reasoning: 'About page' },
+        ]),
+      };
+      (deps as any).linkEvaluator = mockEvaluator;
+      const data = createJobData({ depth: 1 });
+
+      await processCrawlJob(data, deps);
+
+      // Only 1 link should be enqueued (product/2 with score 0.9)
+      expect(deps.taskRepo.enqueue).toHaveBeenCalledTimes(1);
+      expect(deps.taskRepo.enqueue).toHaveBeenCalledWith(
+        expect.objectContaining({ url: 'https://example.com/product/2' }),
+      );
+    });
+
+    it('maps high priority to BullMQ priority 1', async () => {
+      const mockEvaluator = {
+        evaluate: vi.fn().mockResolvedValue([
+          { url: 'https://example.com/product/2', text: 'Product 2', relevanceScore: 0.9, expectedContent: 'single_entry', priority: 'high', reasoning: 'Product page' },
+        ]),
+      };
+      (deps as any).linkEvaluator = mockEvaluator;
+      const data = createJobData({ depth: 1 });
+
+      await processCrawlJob(data, deps);
+
+      expect(deps.queues.crawl.add).toHaveBeenCalledWith(
+        'crawl:https://example.com/product/2',
+        expect.any(Object),
+        { priority: 1 },
+      );
+    });
+
+    it('maps medium priority to BullMQ priority 5', async () => {
+      const mockEvaluator = {
+        evaluate: vi.fn().mockResolvedValue([
+          { url: 'https://example.com/product/2', text: 'Product 2', relevanceScore: 0.8, expectedContent: 'listing', priority: 'medium', reasoning: 'Listing page' },
+        ]),
+      };
+      (deps as any).linkEvaluator = mockEvaluator;
+      const data = createJobData({ depth: 1 });
+
+      await processCrawlJob(data, deps);
+
+      expect(deps.queues.crawl.add).toHaveBeenCalledWith(
+        'crawl:https://example.com/product/2',
+        expect.any(Object),
+        { priority: 5 },
+      );
+    });
+
+    it('maps low priority to BullMQ priority 10', async () => {
+      const mockEvaluator = {
+        evaluate: vi.fn().mockResolvedValue([
+          { url: 'https://example.com/product/2', text: 'Product 2', relevanceScore: 0.5, expectedContent: 'unknown', priority: 'low', reasoning: 'Low priority' },
+        ]),
+      };
+      (deps as any).linkEvaluator = mockEvaluator;
+      const data = createJobData({ depth: 1 });
+
+      await processCrawlJob(data, deps);
+
+      expect(deps.queues.crawl.add).toHaveBeenCalledWith(
+        'crawl:https://example.com/product/2',
+        expect.any(Object),
+        { priority: 10 },
+      );
+    });
+
+    it('enqueues all links without priority when no evaluator is provided', async () => {
+      // deps.linkEvaluator is undefined by default
+      const data = createJobData({ depth: 1 });
+
+      await processCrawlJob(data, deps);
+
+      // Both links should be enqueued without priority
+      expect(deps.queues.crawl.add).toHaveBeenCalledTimes(2);
+      expect(deps.queues.crawl.add).toHaveBeenCalledWith(
+        'crawl:https://example.com/product/2',
+        expect.objectContaining({ url: 'https://example.com/product/2' }),
+      );
+      expect(deps.queues.crawl.add).toHaveBeenCalledWith(
+        'crawl:https://example.com/product/3',
+        expect.objectContaining({ url: 'https://example.com/product/3' }),
+      );
+    });
+  });
 });
