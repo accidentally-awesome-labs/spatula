@@ -1,6 +1,6 @@
 import { createLogger } from '@spatula/shared';
 import { createHash } from 'node:crypto';
-import type { JobConfig } from '@spatula/core';
+import type { JobConfig, LinkEvaluationContext } from '@spatula/core';
 import type { CrawlJobData } from '../queues.js';
 import type { WorkerDeps } from '../worker-deps.js';
 
@@ -124,8 +124,34 @@ export async function processCrawlJob(data: CrawlJobData, deps: WorkerDeps): Pro
 
     const maxDepth = job.config.crawl.maxDepth;
     if (depth < maxDepth && crawlResult.links.length > 0) {
+      // Evaluate links if evaluator is available
+      let linksToEnqueue: Array<{ url: string; text?: string; rel?: string; [key: string]: unknown }> = crawlResult.links;
+      if (deps.linkEvaluator) {
+        const schema = await deps.schemaRepo.findLatest(jobId, tenantId);
+        if (schema) {
+          const config = job.config as JobConfig;
+          const context: LinkEvaluationContext = {
+            description: config.description,
+            seedDomains: config.seedUrls.map((u: string) => new URL(u).hostname),
+            currentDepth: depth,
+            maxDepth,
+          };
+          const evaluated = await deps.linkEvaluator.evaluate(
+            crawlResult.links,
+            context,
+            schema.definition,
+          );
+          // Filter links below relevance threshold
+          linksToEnqueue = evaluated.filter((l) => l.relevanceScore > 0.3);
+          logger.debug(
+            { taskId, total: crawlResult.links.length, accepted: linksToEnqueue.length },
+            'links evaluated',
+          );
+        }
+      }
+
       let enqueued = 0;
-      for (const link of crawlResult.links) {
+      for (const link of linksToEnqueue) {
         if (!link.url || !isValidCrawlUrl(link.url)) continue;
 
         const childTask = await deps.taskRepo.enqueue({
@@ -136,13 +162,23 @@ export async function processCrawlJob(data: CrawlJobData, deps: WorkerDeps): Pro
           parentTaskId: taskId,
         });
 
-        await deps.queues.crawl.add(`crawl:${link.url}`, {
-          taskId: childTask.id,
-          jobId,
-          tenantId,
-          url: link.url,
-          depth: depth + 1,
-        });
+        // Map LLM priority to BullMQ priority (lower = higher priority)
+        const priority =
+          'priority' in link
+            ? { high: 1, medium: 5, low: 10 }[link.priority as string] ?? 5
+            : undefined;
+
+        await deps.queues.crawl.add(
+          `crawl:${link.url}`,
+          {
+            taskId: childTask.id,
+            jobId,
+            tenantId,
+            url: link.url,
+            depth: depth + 1,
+          },
+          priority !== undefined ? { priority } : undefined,
+        );
         enqueued++;
       }
       logger.debug({ taskId, linksEnqueued: enqueued }, 'links enqueued');
