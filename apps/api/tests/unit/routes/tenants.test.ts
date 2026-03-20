@@ -103,5 +103,38 @@ describe('Tenant routes', () => {
       const body = await res.json();
       expect(body.data.name).toBe('Updated Corp');
     });
+
+    it('accepts partial update with only name', async () => {
+      const app = createApp(deps);
+      const res = await app.request('/api/v1/tenants/tenant-1', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name: 'New Name' }),
+      });
+
+      expect(res.status).toBe(200);
+    });
+
+    it('accepts partial update with only config', async () => {
+      const app = createApp(deps);
+      const res = await app.request('/api/v1/tenants/tenant-1', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ config: { key: 'val' } }),
+      });
+
+      expect(res.status).toBe(200);
+    });
+
+    it('rejects empty body with no fields', async () => {
+      const app = createApp(deps);
+      const res = await app.request('/api/v1/tenants/tenant-1', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({}),
+      });
+
+      expect(res.status).toBe(400);
+    });
   });
 });

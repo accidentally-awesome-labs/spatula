@@ -118,4 +118,43 @@ describe('Full app', () => {
     });
     expect(res.status).toBe(200);
   });
+
+  it('GET /api/openapi.json returns OpenAPI spec without auth', async () => {
+    const app = createApp(createMockDeps());
+    const res = await app.request('/api/openapi.json');
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body.openapi).toBe('3.1.0');
+    expect(body.info.title).toBe('Spatula API');
+    expect(body.paths).toBeDefined();
+  });
+
+  it('GET /api/docs returns Swagger UI without auth', async () => {
+    const app = createApp(createMockDeps());
+    const res = await app.request('/api/docs');
+    expect(res.status).toBe(200);
+    const html = await res.text();
+    expect(html).toContain('swagger');
+  });
+
+  it('GET /api/v1/jobs returns total count alongside data', async () => {
+    const app = createApp(createMockDeps());
+    const res = await app.request('/api/v1/jobs', {
+      headers: { 'x-tenant-id': '550e8400-e29b-41d4-a716-446655440000' },
+    });
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body).toHaveProperty('total');
+    expect(body).toHaveProperty('data');
+  });
+
+  it('GET /api/v1/jobs/:id/extractions returns total count', async () => {
+    const app = createApp(createMockDeps());
+    const res = await app.request('/api/v1/jobs/job-1/extractions', {
+      headers: { 'x-tenant-id': '550e8400-e29b-41d4-a716-446655440000' },
+    });
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body).toHaveProperty('total');
+  });
 });
