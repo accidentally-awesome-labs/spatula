@@ -56,6 +56,13 @@ export const listJobsQuerySchema = z.object({
     .enum(['pending', 'queued', 'running', 'paused', 'reconciling', 'completed', 'failed', 'cancelled'])
     .optional(),
   limit: z.coerce.number().int().min(1).default(50).transform((v) => Math.min(v, 100)),
+  offset: z.coerce.number().int().min(0).default(0),
 });
 
 export type ListJobsQuery = z.infer<typeof listJobsQuerySchema>;
+
+export const patchJobSchema = z.object({
+  action: z.enum(['start', 'pause', 'resume', 'cancel', 'reconcile']),
+});
+
+export type PatchJobBody = z.infer<typeof patchJobSchema>;

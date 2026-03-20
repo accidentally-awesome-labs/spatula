@@ -1,7 +1,16 @@
-import { eq, and, desc } from 'drizzle-orm';
+import { eq, and, desc, inArray } from 'drizzle-orm';
 import { createLogger, StorageError } from '@spatula/shared';
 import type { JobConfig, JobStatus } from '@spatula/core';
 import { jobs } from '../schema/jobs.js';
+import { crawlTasks } from '../schema/crawl-tasks.js';
+import { rawPages } from '../schema/raw-pages.js';
+import { extractions } from '../schema/extractions.js';
+import { entities, entitySources } from '../schema/entities.js';
+import { actions } from '../schema/actions.js';
+import { sourceTrust } from '../schema/source-trust.js';
+import { schemasTable } from '../schema/schemas.js';
+import { exports } from '../schema/exports.js';
+import { contentStore } from '../schema/content.js';
 import type { Database } from '../connection.js';
 
 const logger = createLogger('job-repository');
@@ -56,7 +65,10 @@ export class JobRepository {
     }
   }
 
-  async findByTenant(tenantId: string, options?: { status?: JobStatus; limit?: number }) {
+  async findByTenant(
+    tenantId: string,
+    options?: { status?: JobStatus; limit?: number; offset?: number },
+  ) {
     try {
       let query = this.db
         .select()
@@ -70,6 +82,9 @@ export class JobRepository {
 
       if (options?.limit) {
         query = query.limit(options.limit) as typeof query;
+      }
+      if (options?.offset) {
+        query = query.offset(options.offset) as typeof query;
       }
 
       return await query;
@@ -107,6 +122,108 @@ export class JobRepository {
         cause: error as Error,
         context: { id, tenantId, status },
       });
+    }
+  }
+
+  async deleteWithData(jobId: string, tenantId: string): Promise<void> {
+    try {
+      await this.db.transaction(async (tx) => {
+        // Verify job exists and belongs to tenant
+        const [job] = await tx
+          .select({ id: jobs.id })
+          .from(jobs)
+          .where(and(eq(jobs.id, jobId), eq(jobs.tenantId, tenantId)));
+
+        if (!job) {
+          throw new StorageError(`Job ${jobId} not found`, {
+            context: { jobId, tenantId },
+          });
+        }
+
+        // 1. Break circular FK: NULL out schemaId
+        await tx.update(jobs).set({ schemaId: null }).where(eq(jobs.id, jobId));
+
+        // 2. Collect content refs for later cleanup
+        const taskSubq = tx
+          .select({ id: crawlTasks.id })
+          .from(crawlTasks)
+          .where(eq(crawlTasks.jobId, jobId));
+
+        const pageRefRows = await tx
+          .select({ contentRef: rawPages.contentRef })
+          .from(rawPages)
+          .where(inArray(rawPages.taskId, taskSubq));
+
+        const taskRefRows = await tx
+          .select({ contentRef: crawlTasks.contentRef })
+          .from(crawlTasks)
+          .where(eq(crawlTasks.jobId, jobId));
+
+        const exportRefRows = await tx
+          .select({ contentRef: exports.contentRef })
+          .from(exports)
+          .where(eq(exports.jobId, jobId));
+
+        // 3. Delete entity_sources (FK to entities + extractions)
+        const entitySubq = tx
+          .select({ id: entities.id })
+          .from(entities)
+          .where(eq(entities.jobId, jobId));
+
+        await tx.delete(entitySources).where(inArray(entitySources.entityId, entitySubq));
+
+        // 4. Delete entities
+        await tx.delete(entities).where(eq(entities.jobId, jobId));
+
+        // 5. Delete extractions (via raw_pages → crawl_tasks)
+        const pageSubq = tx
+          .select({ id: rawPages.id })
+          .from(rawPages)
+          .where(inArray(rawPages.taskId, taskSubq));
+
+        await tx.delete(extractions).where(inArray(extractions.pageId, pageSubq));
+
+        // 6. Delete raw_pages
+        await tx.delete(rawPages).where(inArray(rawPages.taskId, taskSubq));
+
+        // 7. Delete crawl_tasks (self-ref parentTaskId safe in single DELETE)
+        await tx.delete(crawlTasks).where(eq(crawlTasks.jobId, jobId));
+
+        // 8. Delete actions
+        await tx.delete(actions).where(eq(actions.jobId, jobId));
+
+        // 9. Delete source_trust
+        await tx.delete(sourceTrust).where(eq(sourceTrust.jobId, jobId));
+
+        // 10. Delete schemas (safe now — schemaId is NULL)
+        await tx.delete(schemasTable).where(eq(schemasTable.jobId, jobId));
+
+        // 11. Delete exports
+        await tx.delete(exports).where(eq(exports.jobId, jobId));
+
+        // 12. Best-effort content store cleanup
+        const allRefs = [
+          ...pageRefRows.map((r) => r.contentRef),
+          ...taskRefRows.map((r) => r.contentRef),
+          ...exportRefRows.map((r) => r.contentRef),
+        ].filter((ref): ref is string => ref != null && ref.startsWith('pg://'));
+
+        if (allRefs.length > 0) {
+          const contentIds = allRefs.map((ref) => ref.slice(5));
+          await tx.delete(contentStore).where(inArray(contentStore.id, contentIds));
+        }
+
+        // 13. Delete the job itself
+        await tx.delete(jobs).where(eq(jobs.id, jobId));
+
+        logger.info({ jobId, tenantId }, 'job and all related data deleted');
+      });
+    } catch (error) {
+      if (error instanceof StorageError) throw error;
+      throw new StorageError(
+        `Failed to delete job ${jobId}: ${(error as Error).message}`,
+        { cause: error as Error, context: { jobId, tenantId } },
+      );
     }
   }
 

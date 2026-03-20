@@ -1,8 +1,8 @@
 import { Hono } from 'hono';
 import { JobConfig } from '@spatula/core';
 import type { AppEnv } from '../types.js';
-import { createJobSchema, listJobsQuerySchema } from '../schemas/job.js';
-import type { CreateJobBody, ListJobsQuery } from '../schemas/job.js';
+import { createJobSchema, listJobsQuerySchema, patchJobSchema } from '../schemas/job.js';
+import type { CreateJobBody, ListJobsQuery, PatchJobBody } from '../schemas/job.js';
 import { validateBody, validateQuery } from '../middleware/validate.js';
 import { NotFoundError } from '../middleware/error-handler.js';
 
@@ -33,6 +33,7 @@ export function jobRoutes(): Hono<AppEnv> {
     const jobs = await deps.jobRepo.findByTenant(tenantId, {
       status: query.status,
       limit: query.limit,
+      offset: query.offset,
     });
 
     return c.json({ data: jobs });
@@ -95,6 +96,35 @@ export function jobRoutes(): Hono<AppEnv> {
     const jobId = c.req.param('id');
     await deps.jobManager.triggerReconciliation(jobId, tenantId);
     return c.json({ data: { id: jobId, message: 'Reconciliation triggered' } });
+  });
+
+  // PATCH /:id — Unified job control
+  router.patch('/:id', validateBody(patchJobSchema), async (c) => {
+    const tenantId = c.get('tenantId');
+    const deps = c.get('deps');
+    const jobId = c.req.param('id');
+    const { action } = c.get('validatedBody') as PatchJobBody;
+
+    const handlers: Record<string, () => Promise<void>> = {
+      start: () => deps.jobManager.startJob(jobId, tenantId),
+      pause: () => deps.jobManager.pauseJob(jobId, tenantId),
+      resume: () => deps.jobManager.resumeJob(jobId, tenantId),
+      cancel: () => deps.jobManager.cancelJob(jobId, tenantId),
+      reconcile: () => deps.jobManager.triggerReconciliation(jobId, tenantId),
+    };
+
+    await handlers[action]();
+    return c.json({ data: { id: jobId, action, message: `Job ${action} successful` } });
+  });
+
+  // DELETE /:id — Delete job with all related data
+  router.delete('/:id', async (c) => {
+    const tenantId = c.get('tenantId');
+    const deps = c.get('deps');
+    const jobId = c.req.param('id');
+
+    await deps.jobRepo.deleteWithData(jobId, tenantId);
+    return c.body(null, 204);
   });
 
   return router;

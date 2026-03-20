@@ -135,6 +135,7 @@ describe('Cross-tenant isolation', () => {
       expect(deps.jobRepo.findByTenant).toHaveBeenCalledWith(TENANT_A, {
         status: undefined,
         limit: 50,
+        offset: 0,
       });
     });
 
@@ -149,6 +150,7 @@ describe('Cross-tenant isolation', () => {
       expect(deps.jobRepo.findByTenant).toHaveBeenCalledWith(TENANT_B, {
         status: undefined,
         limit: 50,
+        offset: 0,
       });
     });
 

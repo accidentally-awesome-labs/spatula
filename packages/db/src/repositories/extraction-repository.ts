@@ -46,7 +46,7 @@ export class ExtractionRepository {
   async findByJob(
     jobId: string,
     tenantId: string,
-    options?: { schemaVersion?: number; limit?: number },
+    options?: { schemaVersion?: number; limit?: number; offset?: number },
   ) {
     try {
       const conditions = [eq(extractions.jobId, jobId), eq(extractions.tenantId, tenantId)];
@@ -62,6 +62,9 @@ export class ExtractionRepository {
 
       if (options?.limit) {
         query = query.limit(options.limit) as typeof query;
+      }
+      if (options?.offset) {
+        query = query.offset(options.offset) as typeof query;
       }
 
       return await query;

@@ -1,11 +1,11 @@
 import { Hono } from 'hono';
-import { z } from 'zod';
 import type { AppEnv } from '../types.js';
+import { paginationSchema } from '../schemas/pagination.js';
 import { validateQuery } from '../middleware/validate.js';
+import { z } from 'zod';
 
-const listExtractionsQuery = z.object({
+const listExtractionsQuery = paginationSchema.extend({
   schemaVersion: z.coerce.number().int().min(1).optional(),
-  limit: z.coerce.number().int().min(1).default(50).transform((v) => Math.min(v, 100)),
 });
 
 export function extractionRoutes(): Hono<AppEnv> {
@@ -20,6 +20,7 @@ export function extractionRoutes(): Hono<AppEnv> {
     const extractions = await deps.extractionRepo.findByJob(jobId, tenantId, {
       schemaVersion: query.schemaVersion,
       limit: query.limit,
+      offset: query.offset,
     });
 
     return c.json({ data: extractions });
