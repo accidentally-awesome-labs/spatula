@@ -154,6 +154,9 @@ export function jobRoutes() {
     const tenantId = c.get('tenantId');
     const deps = c.get('deps');
 
+    const job = await deps.jobRepo.findById(id, tenantId);
+    if (!job) throw new NotFoundError('Job', id);
+
     await deps.jobRepo.deleteWithData(id, tenantId);
     return c.body(null, 204);
   });

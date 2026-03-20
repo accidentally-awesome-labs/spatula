@@ -134,6 +134,7 @@ describe('DELETE /api/v1/jobs/:id', () => {
   });
 
   it('returns 204 on successful delete', async () => {
+    (deps.jobRepo as any).findById = vi.fn().mockResolvedValue({ id: 'job-1' });
     const app = createApp(deps);
     const res = await app.request('/api/v1/jobs/job-1', {
       method: 'DELETE',
@@ -144,14 +145,14 @@ describe('DELETE /api/v1/jobs/:id', () => {
     expect(deps.jobRepo.deleteWithData).toHaveBeenCalledWith('job-1', TENANT_ID);
   });
 
-  it('propagates errors from deleteWithData', async () => {
-    (deps.jobRepo as any).deleteWithData = vi.fn().mockRejectedValue(new Error('Job not found'));
+  it('returns 404 when job does not exist', async () => {
+    (deps.jobRepo as any).findById = vi.fn().mockResolvedValue(null);
     const app = createApp(deps);
-    const res = await app.request('/api/v1/jobs/job-1', {
+    const res = await app.request('/api/v1/jobs/nonexistent', {
       method: 'DELETE',
       headers: { 'x-tenant-id': TENANT_ID },
     });
 
-    expect(res.status).toBe(500);
+    expect(res.status).toBe(404);
   });
 });
