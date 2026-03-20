@@ -1,10 +1,10 @@
-import { OpenAPIHono } from '@hono/zod-openapi';
 import { swaggerUI } from '@hono/swagger-ui';
 import { logger as honoLogger } from 'hono/logger';
 import { errorHandler } from './middleware/error-handler.js';
 import { tenantMiddleware } from './middleware/tenant.js';
 import { depsMiddleware } from './middleware/deps.js';
 import { validateTenantMiddleware } from './middleware/validate-tenant.js';
+import { createOpenAPIRouter } from './openapi-config.js';
 import { jobRoutes } from './routes/jobs.js';
 import { schemaRoutes } from './routes/schemas.js';
 import { extractionRoutes } from './routes/extractions.js';
@@ -12,28 +12,10 @@ import { entityRoutes } from './routes/entities.js';
 import { actionRoutes } from './routes/actions.js';
 import { exportRoutes } from './routes/exports.js';
 import { tenantRoutes } from './routes/tenants.js';
-import type { AppDeps, AppEnv } from './types.js';
+import type { AppDeps } from './types.js';
 
-export function createApp(deps: AppDeps): OpenAPIHono<AppEnv> {
-  const app = new OpenAPIHono<AppEnv>({
-    defaultHook: (result, c) => {
-      if (!result.success) {
-        const requestId = c.req.header('x-request-id') ?? crypto.randomUUID();
-        return c.json(
-          {
-            error: {
-              code: 'VALIDATION_ERROR',
-              message: result.error.issues
-                .map((i) => `${i.path.join('.')}: ${i.message}`)
-                .join(', '),
-              requestId,
-            },
-          },
-          400,
-        );
-      }
-    },
-  });
+export function createApp(deps: AppDeps) {
+  const app = createOpenAPIRouter();
 
   // Global middleware
   app.use('*', honoLogger());

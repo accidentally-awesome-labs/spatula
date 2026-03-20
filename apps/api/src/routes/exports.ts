@@ -1,21 +1,74 @@
-import { Hono } from 'hono';
+import { createRoute, z } from '@hono/zod-openapi';
+import { createOpenAPIRouter } from '../openapi-config.js';
 import type { AppEnv } from '../types.js';
 import { exportRequestSchema } from '../schemas/export-request.js';
-import { validateBody } from '../middleware/validate.js';
+import { exportResponseSchema, errorResponseSchema, dataResponse, jsonContent } from '../schemas/responses.js';
 import { NotFoundError, ConflictError } from '../middleware/error-handler.js';
 import { generateDocumentation } from '@spatula/core';
 import type { SchemaDefinition } from '@spatula/core';
 import type { Entity } from '@spatula/shared';
 
-export function exportRoutes(): Hono<AppEnv> {
-  const router = new Hono<AppEnv>();
+const jobIdParam = z.object({
+  jobId: z.string().openapi({ param: { name: 'jobId', in: 'path' } }),
+});
 
-  // POST /export — trigger export
-  router.post('/export', validateBody(exportRequestSchema), async (c) => {
+const triggerExportRoute = createRoute({
+  method: 'post', path: '/export', tags: ['Exports'],
+  summary: 'Trigger data export',
+  request: {
+    params: jobIdParam,
+    body: { content: { 'application/json': { schema: exportRequestSchema } }, required: true },
+  },
+  responses: { 202: jsonContent(dataResponse(exportResponseSchema), 'Export queued') },
+});
+
+const getExportRoute = createRoute({
+  method: 'get', path: '/export/{exportId}', tags: ['Exports'],
+  summary: 'Check export status',
+  request: {
+    params: jobIdParam.extend({
+      exportId: z.string().openapi({ param: { name: 'exportId', in: 'path' } }),
+    }),
+  },
+  responses: {
+    200: jsonContent(dataResponse(exportResponseSchema), 'Export status'),
+    404: jsonContent(errorResponseSchema, 'Export not found'),
+  },
+});
+
+const downloadExportRoute = createRoute({
+  method: 'get', path: '/export/{exportId}/download', tags: ['Exports'],
+  summary: 'Download export file',
+  request: {
+    params: jobIdParam.extend({
+      exportId: z.string().openapi({ param: { name: 'exportId', in: 'path' } }),
+    }),
+  },
+  responses: {
+    200: { description: 'File download', content: { 'application/octet-stream': { schema: z.string() } } },
+    404: jsonContent(errorResponseSchema, 'Export not found'),
+    409: jsonContent(errorResponseSchema, 'Export not ready'),
+  },
+});
+
+const getDocumentationRoute = createRoute({
+  method: 'get', path: '/documentation', tags: ['Exports'],
+  summary: 'Get data dictionary / documentation',
+  request: { params: jobIdParam },
+  responses: {
+    200: jsonContent(z.object({ data: z.record(z.unknown()) }), 'Data documentation'),
+    404: jsonContent(errorResponseSchema, 'Schema not found'),
+  },
+});
+
+export function exportRoutes() {
+  const router = createOpenAPIRouter();
+
+  router.openapi(triggerExportRoute, async (c) => {
+    const { jobId } = c.req.valid('param');
+    const body = c.req.valid('json');
     const tenantId = c.get('tenantId');
     const deps = c.get('deps');
-    const jobId = c.req.param('jobId') as string;
-    const body = c.get('validatedBody') as { format: 'json' | 'csv'; includeProvenance: boolean };
 
     const exportRecord = await deps.exportRepo.create({
       jobId, tenantId, format: body.format, includeProvenance: body.includeProvenance,
@@ -24,20 +77,15 @@ export function exportRoutes(): Hono<AppEnv> {
     await deps.exportQueue.add('export', {
       exportId: exportRecord.id, jobId, tenantId,
       format: body.format, includeProvenance: body.includeProvenance,
-    }, {
-      attempts: 1,
-      removeOnComplete: true,
-      removeOnFail: true,
-    });
+    }, { attempts: 1, removeOnComplete: true, removeOnFail: true });
 
     return c.json({ data: exportRecord }, 202);
   });
 
-  // GET /export/:exportId — check status
-  router.get('/export/:exportId', async (c) => {
+  router.openapi(getExportRoute, async (c) => {
+    const { exportId } = c.req.valid('param');
     const tenantId = c.get('tenantId');
     const deps = c.get('deps');
-    const exportId = c.req.param('exportId');
 
     const exportRecord = await deps.exportRepo.findById(exportId, tenantId);
     if (!exportRecord) throw new NotFoundError('Export', exportId);
@@ -45,11 +93,10 @@ export function exportRoutes(): Hono<AppEnv> {
     return c.json({ data: exportRecord });
   });
 
-  // GET /export/:exportId/download — download file
-  router.get('/export/:exportId/download', async (c) => {
+  router.openapi(downloadExportRoute, async (c) => {
+    const { exportId } = c.req.valid('param');
     const tenantId = c.get('tenantId');
     const deps = c.get('deps');
-    const exportId = c.req.param('exportId');
 
     const exportRecord = await deps.exportRepo.findById(exportId, tenantId);
     if (!exportRecord) throw new NotFoundError('Export', exportId);
@@ -73,11 +120,10 @@ export function exportRoutes(): Hono<AppEnv> {
     });
   });
 
-  // GET /documentation — data dictionary
-  router.get('/documentation', async (c) => {
+  router.openapi(getDocumentationRoute, async (c) => {
+    const { jobId } = c.req.valid('param');
     const tenantId = c.get('tenantId');
     const deps = c.get('deps');
-    const jobId = c.req.param('jobId') as string;
 
     const schemaRow = await deps.schemaRepo.findLatest(jobId, tenantId);
     if (!schemaRow) throw new NotFoundError('Schema', jobId);
@@ -89,7 +135,6 @@ export function exportRoutes(): Hono<AppEnv> {
     ]);
 
     const documentation = generateDocumentation(schema, entities as unknown as Entity[], jobId);
-
     return c.json({ data: { ...documentation, entityCount: totalCount } });
   });
 

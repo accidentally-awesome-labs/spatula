@@ -1,21 +1,32 @@
-import { Hono } from 'hono';
+import { createRoute, z } from '@hono/zod-openapi';
+import { createOpenAPIRouter } from '../openapi-config.js';
 import type { AppEnv } from '../types.js';
 import { paginationSchema } from '../schemas/pagination.js';
-import { validateQuery } from '../middleware/validate.js';
-import { z } from 'zod';
+import { extractionResponseSchema, listResponse, jsonContent } from '../schemas/responses.js';
+
+const jobIdParam = z.object({
+  jobId: z.string().openapi({ param: { name: 'jobId', in: 'path' } }),
+});
 
 const listExtractionsQuery = paginationSchema.extend({
   schemaVersion: z.coerce.number().int().min(1).optional(),
 });
 
-export function extractionRoutes(): Hono<AppEnv> {
-  const router = new Hono<AppEnv>();
+const listRoute = createRoute({
+  method: 'get', path: '/', tags: ['Extractions'],
+  summary: 'List extractions for a job',
+  request: { params: jobIdParam, query: listExtractionsQuery },
+  responses: { 200: jsonContent(listResponse(extractionResponseSchema), 'List of extractions') },
+});
 
-  router.get('/', validateQuery(listExtractionsQuery), async (c) => {
+export function extractionRoutes() {
+  const router = createOpenAPIRouter();
+
+  router.openapi(listRoute, async (c) => {
+    const { jobId } = c.req.valid('param');
+    const query = c.req.valid('query');
     const tenantId = c.get('tenantId');
     const deps = c.get('deps');
-    const jobId = c.req.param('jobId') as string;
-    const query = c.get('validatedQuery') as z.infer<typeof listExtractionsQuery>;
 
     const extractions = await deps.extractionRepo.findByJob(jobId, tenantId, {
       schemaVersion: query.schemaVersion,
