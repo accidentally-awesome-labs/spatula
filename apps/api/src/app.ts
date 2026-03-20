@@ -1,4 +1,5 @@
-import { Hono } from 'hono';
+import { OpenAPIHono } from '@hono/zod-openapi';
+import { swaggerUI } from '@hono/swagger-ui';
 import { logger as honoLogger } from 'hono/logger';
 import { errorHandler } from './middleware/error-handler.js';
 import { tenantMiddleware } from './middleware/tenant.js';
@@ -13,8 +14,26 @@ import { exportRoutes } from './routes/exports.js';
 import { tenantRoutes } from './routes/tenants.js';
 import type { AppDeps, AppEnv } from './types.js';
 
-export function createApp(deps: AppDeps): Hono<AppEnv> {
-  const app = new Hono<AppEnv>();
+export function createApp(deps: AppDeps): OpenAPIHono<AppEnv> {
+  const app = new OpenAPIHono<AppEnv>({
+    defaultHook: (result, c) => {
+      if (!result.success) {
+        const requestId = c.req.header('x-request-id') ?? crypto.randomUUID();
+        return c.json(
+          {
+            error: {
+              code: 'VALIDATION_ERROR',
+              message: result.error.issues
+                .map((i) => `${i.path.join('.')}: ${i.message}`)
+                .join(', '),
+              requestId,
+            },
+          },
+          400,
+        );
+      }
+    },
+  });
 
   // Global middleware
   app.use('*', honoLogger());
@@ -22,6 +41,17 @@ export function createApp(deps: AppDeps): Hono<AppEnv> {
 
   // Health check (no auth)
   app.get('/health', (c) => c.json({ status: 'ok' }));
+
+  // OpenAPI documentation (no auth)
+  app.doc('/api/openapi.json', {
+    openapi: '3.1.0',
+    info: {
+      title: 'Spatula API',
+      version: '1.0.0',
+      description: 'AI-powered intelligent web crawling platform',
+    },
+  });
+  app.get('/api/docs', swaggerUI({ url: '/api/openapi.json' }));
 
   // Tenant management routes (no x-tenant-id required, only deps)
   app.use('/api/v1/tenants', depsMiddleware(deps));
