@@ -1,4 +1,4 @@
-import { z } from 'zod';
+import { z } from '@hono/zod-openapi';
 import { paginationSchema } from './pagination.js';
 
 export const entityQuerySchema = paginationSchema.extend({

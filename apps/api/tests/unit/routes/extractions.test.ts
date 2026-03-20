@@ -13,6 +13,7 @@ function createMockDeps(): AppDeps {
         { id: 'ext-1', data: { name: 'Product A' }, schemaVersion: 1 },
         { id: 'ext-2', data: { name: 'Product B' }, schemaVersion: 1 },
       ]),
+      countByJob: vi.fn().mockResolvedValue(2),
     },
     jobRepo: {} as any,
     schemaRepo: {} as any,

@@ -17,3 +17,5 @@ export { ActionRepository } from './action-repository.js';
 export type { ActionStatus, FindActionsOptions, CreateActionInput } from './action-repository.js';
 export { ExportRepository } from './export-repository.js';
 export type { CreateExportInput } from './export-repository.js';
+export { TenantRepository } from './tenant-repository.js';
+export type { CreateTenantInput, UpdateTenantInput } from './tenant-repository.js';

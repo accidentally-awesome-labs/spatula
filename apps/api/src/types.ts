@@ -7,6 +7,7 @@ import type {
   ActionRepository,
   CrawlTaskRepository,
   ExportRepository,
+  TenantRepository,
 } from '@spatula/db';
 import type { ContentStore, ReviewQueue } from '@spatula/core';
 import type { JobManager, ExportJobPayload, SpatulaQueues } from '@spatula/queue';
@@ -26,6 +27,7 @@ export interface AppDeps {
   exportQueue: SpatulaQueues['export'];
   reviewQueue?: ReviewQueue;
   redisSubscriber?: Redis;
+  tenantRepo?: TenantRepository;
 }
 
 export interface AppEnv {

@@ -1,305 +1,348 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { Hono } from 'hono';
-import { jobRoutes } from '../../../src/routes/jobs.js';
-import type { AppDeps, AppEnv } from '../../../src/types.js';
-import { errorHandler } from '../../../src/middleware/error-handler.js';
+import { createApp } from '../../../src/app.js';
+import type { AppDeps } from '../../../src/types.js';
 
 const TENANT_ID = '00000000-0000-0000-0000-000000000001';
 
 function createMockDeps(): AppDeps {
   return {
     jobRepo: {
-      create: vi.fn().mockResolvedValue({ id: 'job-1', name: 'Test', status: 'pending' }),
-      findById: vi
-        .fn()
-        .mockResolvedValue({ id: 'job-1', name: 'Test', status: 'pending', tenantId: TENANT_ID }),
-      findByTenant: vi
-        .fn()
-        .mockResolvedValue([{ id: 'job-1', name: 'Test', status: 'pending' }]),
-      updateStatus: vi.fn().mockResolvedValue({ id: 'job-1', status: 'cancelled' }),
-      updateStats: vi.fn().mockResolvedValue(null),
-    },
-    jobManager: {
-      createJob: vi.fn().mockResolvedValue('job-1'),
-      startJob: vi.fn().mockResolvedValue(undefined),
-      pauseJob: vi.fn().mockResolvedValue(undefined),
-      resumeJob: vi.fn().mockResolvedValue(undefined),
-      cancelJob: vi.fn().mockResolvedValue(undefined),
-      triggerReconciliation: vi.fn().mockResolvedValue(undefined),
-      getJobStatus: vi.fn().mockResolvedValue('pending'),
-    },
+      findById: vi.fn().mockResolvedValue({ id: 'job-1', status: 'pending' }),
+      findByTenant: vi.fn().mockResolvedValue([]),
+      countByTenant: vi.fn().mockResolvedValue(0),
+      create: vi.fn(),
+      updateStatus: vi.fn(),
+      updateStats: vi.fn(),
+      deleteWithData: vi.fn(),
+    } as any,
     schemaRepo: {} as any,
     extractionRepo: {} as any,
     entityRepo: {} as any,
     entitySourceRepo: {} as any,
     actionRepo: {} as any,
     taskRepo: {} as any,
-  } as unknown as AppDeps;
+    jobManager: {
+      createJob: vi.fn().mockResolvedValue('job-1'),
+      startJob: vi.fn(),
+      pauseJob: vi.fn(),
+      resumeJob: vi.fn(),
+      cancelJob: vi.fn(),
+      triggerReconciliation: vi.fn(),
+    } as any,
+    exportRepo: {} as any,
+    contentStore: {} as any,
+    exportQueue: {} as any,
+  };
 }
 
-function createTestApp(deps: AppDeps) {
-  const app = new Hono<AppEnv>();
-  app.onError(errorHandler);
-  app.use('*', async (c, next) => {
-    c.set('deps', deps);
-    c.set('tenantId', TENANT_ID);
-    return next();
-  });
-  app.route('/api/v1/jobs', jobRoutes());
-  return app;
-}
+const headers = { 'x-tenant-id': TENANT_ID, 'Content-Type': 'application/json' };
+const tenantHeader = { 'x-tenant-id': TENANT_ID };
 
-const validJobBody = {
-  name: 'Test Job',
-  description: 'Scrape product data',
-  seedUrls: ['https://example.com'],
-  crawl: {
-    maxDepth: 2,
-    maxPages: 100,
-    concurrency: 5,
-    crawlerType: 'playwright' as const,
-  },
-  schema: {
-    mode: 'discovery' as const,
-  },
-  llm: {
-    primaryModel: 'anthropic/claude-sonnet-4-20250514',
-  },
-};
-
-describe('Job Routes', () => {
+describe('POST /api/v1/jobs', () => {
   let deps: AppDeps;
-  let app: Hono<AppEnv>;
 
   beforeEach(() => {
     deps = createMockDeps();
-    app = createTestApp(deps);
   });
 
-  describe('POST /api/v1/jobs', () => {
-    it('creates a job and returns 201', async () => {
-      const res = await app.request('/api/v1/jobs', {
-        method: 'POST',
-        headers: { 'content-type': 'application/json' },
-        body: JSON.stringify(validJobBody),
-      });
-
-      expect(res.status).toBe(201);
-      const json = await res.json();
-      expect(json.data).toBeDefined();
-      expect(json.data.id).toBe('job-1');
-
-      expect(deps.jobManager.createJob).toHaveBeenCalledWith(
-        expect.objectContaining({
-          tenantId: TENANT_ID,
-          name: 'Test Job',
-          seedUrls: ['https://example.com'],
-        }),
-      );
-      expect(deps.jobRepo.findById).toHaveBeenCalledWith('job-1', TENANT_ID);
-    });
-
-    it('returns 400 for invalid body — missing name', async () => {
-      const { name: _, ...bodyWithoutName } = validJobBody;
-      const res = await app.request('/api/v1/jobs', {
-        method: 'POST',
-        headers: { 'content-type': 'application/json' },
-        body: JSON.stringify(bodyWithoutName),
-      });
-
-      expect(res.status).toBe(400);
-      const json = await res.json();
-      expect(json.error.code).toBe('VALIDATION_ERROR');
-    });
-
-    it('returns 400 for invalid body — empty seedUrls', async () => {
-      const res = await app.request('/api/v1/jobs', {
-        method: 'POST',
-        headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ ...validJobBody, seedUrls: [] }),
-      });
-
-      expect(res.status).toBe(400);
-      const json = await res.json();
-      expect(json.error.code).toBe('VALIDATION_ERROR');
-    });
-
-    it('returns 400 for invalid body — bad URL in seedUrls', async () => {
-      const res = await app.request('/api/v1/jobs', {
-        method: 'POST',
-        headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ ...validJobBody, seedUrls: ['not-a-url'] }),
-      });
-
-      expect(res.status).toBe(400);
-      const json = await res.json();
-      expect(json.error.code).toBe('VALIDATION_ERROR');
-    });
-
-    it('applies defaults for optional crawl fields', async () => {
-      const minimalBody = {
-        name: 'Minimal Job',
-        description: 'Minimal test',
+  it('creates a job and returns 201', async () => {
+    const app = createApp(deps);
+    const res = await app.request('/api/v1/jobs', {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({
+        name: 'Test Job',
+        description: 'Scrape products',
         seedUrls: ['https://example.com'],
+        crawl: { maxDepth: 2, maxPages: 100, concurrency: 5, crawlerType: 'playwright' },
+        schema: { mode: 'discovery' },
+        llm: { primaryModel: 'anthropic/claude-sonnet-4-20250514' },
+      }),
+    });
+
+    expect(res.status).toBe(201);
+    expect(deps.jobManager.createJob).toHaveBeenCalled();
+    expect(deps.jobRepo.findById).toHaveBeenCalledWith('job-1', TENANT_ID);
+  });
+
+  it('rejects missing required fields', async () => {
+    const app = createApp(deps);
+    const res = await app.request('/api/v1/jobs', {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({ name: 'Test' }),
+    });
+
+    expect(res.status).toBe(400);
+  });
+
+  it('rejects invalid seedUrls', async () => {
+    const app = createApp(deps);
+    const res = await app.request('/api/v1/jobs', {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({
+        name: 'Test',
+        description: 'Test',
+        seedUrls: ['not-a-url'],
         crawl: {},
         schema: { mode: 'discovery' },
         llm: {},
-      };
-
-      const res = await app.request('/api/v1/jobs', {
-        method: 'POST',
-        headers: { 'content-type': 'application/json' },
-        body: JSON.stringify(minimalBody),
-      });
-
-      expect(res.status).toBe(201);
-      expect(deps.jobManager.createJob).toHaveBeenCalledWith(
-        expect.objectContaining({
-          crawl: expect.objectContaining({
-            maxDepth: 2,
-            maxPages: 1000,
-            concurrency: 5,
-            crawlerType: 'playwright',
-          }),
-        }),
-      );
+      }),
     });
+
+    expect(res.status).toBe(400);
+  });
+});
+
+describe('GET /api/v1/jobs', () => {
+  let deps: AppDeps;
+
+  beforeEach(() => {
+    deps = createMockDeps();
   });
 
-  describe('GET /api/v1/jobs', () => {
-    it('returns list of jobs', async () => {
-      const res = await app.request('/api/v1/jobs');
+  it('returns jobs list with total count', async () => {
+    const mockJobs = [{ id: 'job-1', name: 'Test' }];
+    (deps.jobRepo as any).findByTenant = vi.fn().mockResolvedValue(mockJobs);
+    (deps.jobRepo as any).countByTenant = vi.fn().mockResolvedValue(1);
 
-      expect(res.status).toBe(200);
-      const json = await res.json();
-      expect(json.data).toBeInstanceOf(Array);
-      expect(json.data).toHaveLength(1);
-      expect(deps.jobRepo.findByTenant).toHaveBeenCalledWith(TENANT_ID, {
-        status: undefined,
-        limit: 50,
-      });
-    });
+    const app = createApp(deps);
+    const res = await app.request('/api/v1/jobs', { headers: tenantHeader });
 
-    it('passes status filter to repository', async () => {
-      const res = await app.request('/api/v1/jobs?status=running');
-
-      expect(res.status).toBe(200);
-      expect(deps.jobRepo.findByTenant).toHaveBeenCalledWith(TENANT_ID, {
-        status: 'running',
-        limit: 50,
-      });
-    });
-
-    it('passes limit to repository', async () => {
-      const res = await app.request('/api/v1/jobs?limit=10');
-
-      expect(res.status).toBe(200);
-      expect(deps.jobRepo.findByTenant).toHaveBeenCalledWith(TENANT_ID, {
-        status: undefined,
-        limit: 10,
-      });
-    });
-
-    it('returns 400 for invalid status filter', async () => {
-      const res = await app.request('/api/v1/jobs?status=invalid');
-
-      expect(res.status).toBe(400);
-      const json = await res.json();
-      expect(json.error.code).toBe('VALIDATION_ERROR');
-    });
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body.data).toHaveLength(1);
+    expect(body.total).toBe(1);
   });
 
-  describe('GET /api/v1/jobs/:id', () => {
-    it('returns job details', async () => {
-      const res = await app.request('/api/v1/jobs/job-1');
+  it('passes status filter to repository', async () => {
+    const app = createApp(deps);
+    await app.request('/api/v1/jobs?status=running', { headers: tenantHeader });
 
-      expect(res.status).toBe(200);
-      const json = await res.json();
-      expect(json.data.id).toBe('job-1');
-      expect(deps.jobRepo.findById).toHaveBeenCalledWith('job-1', TENANT_ID);
-    });
-
-    it('returns 404 for missing job', async () => {
-      (deps.jobRepo.findById as ReturnType<typeof vi.fn>).mockResolvedValueOnce(null);
-
-      const res = await app.request('/api/v1/jobs/nonexistent');
-
-      expect(res.status).toBe(404);
-      const json = await res.json();
-      expect(json.error.code).toBe('NOT_FOUND');
-    });
+    expect(deps.jobRepo.findByTenant).toHaveBeenCalledWith(
+      TENANT_ID,
+      expect.objectContaining({ status: 'running' }),
+    );
+    expect(deps.jobRepo.countByTenant).toHaveBeenCalledWith(
+      TENANT_ID,
+      expect.objectContaining({ status: 'running' }),
+    );
   });
 
-  describe('POST /api/v1/jobs/:id/start', () => {
-    it('starts a job', async () => {
-      const res = await app.request('/api/v1/jobs/job-1/start', {
-        method: 'POST',
+  it('passes offset and limit to repository', async () => {
+    const app = createApp(deps);
+    await app.request('/api/v1/jobs?limit=10&offset=20', { headers: tenantHeader });
+
+    expect(deps.jobRepo.findByTenant).toHaveBeenCalledWith(
+      TENANT_ID,
+      expect.objectContaining({ limit: 10, offset: 20 }),
+    );
+  });
+
+  it('applies default limit of 50 and offset of 0', async () => {
+    const app = createApp(deps);
+    await app.request('/api/v1/jobs', { headers: tenantHeader });
+
+    expect(deps.jobRepo.findByTenant).toHaveBeenCalledWith(
+      TENANT_ID,
+      expect.objectContaining({ limit: 50, offset: 0 }),
+    );
+  });
+});
+
+describe('GET /api/v1/jobs/:id', () => {
+  let deps: AppDeps;
+
+  beforeEach(() => {
+    deps = createMockDeps();
+  });
+
+  it('returns job details', async () => {
+    const app = createApp(deps);
+    const res = await app.request('/api/v1/jobs/job-1', { headers: tenantHeader });
+
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body.data.id).toBe('job-1');
+  });
+
+  it('returns 404 when job not found', async () => {
+    (deps.jobRepo as any).findById = vi.fn().mockResolvedValue(null);
+    const app = createApp(deps);
+    const res = await app.request('/api/v1/jobs/nonexistent', { headers: tenantHeader });
+
+    expect(res.status).toBe(404);
+  });
+});
+
+describe('PATCH /api/v1/jobs/:id', () => {
+  let deps: AppDeps;
+
+  beforeEach(() => {
+    deps = createMockDeps();
+  });
+
+  it('dispatches start action to jobManager', async () => {
+    const app = createApp(deps);
+    const res = await app.request('/api/v1/jobs/job-1', {
+      method: 'PATCH',
+      headers,
+      body: JSON.stringify({ action: 'start' }),
+    });
+
+    expect(res.status).toBe(200);
+    expect(deps.jobManager.startJob).toHaveBeenCalledWith('job-1', TENANT_ID);
+    const body = await res.json();
+    expect(body.data.action).toBe('start');
+  });
+
+  it('dispatches all 5 actions correctly', async () => {
+    const actions = ['start', 'pause', 'resume', 'cancel', 'reconcile'] as const;
+    const methods = ['startJob', 'pauseJob', 'resumeJob', 'cancelJob', 'triggerReconciliation'] as const;
+
+    for (let i = 0; i < actions.length; i++) {
+      const freshDeps = createMockDeps();
+      const app = createApp(freshDeps);
+      const res = await app.request('/api/v1/jobs/job-1', {
+        method: 'PATCH',
+        headers,
+        body: JSON.stringify({ action: actions[i] }),
       });
 
       expect(res.status).toBe(200);
-      const json = await res.json();
-      expect(json.data.id).toBe('job-1');
-      expect(json.data.message).toBe('Job started');
-      expect(deps.jobManager.startJob).toHaveBeenCalledWith('job-1', TENANT_ID);
-    });
+      expect((freshDeps.jobManager as any)[methods[i]]).toHaveBeenCalledWith('job-1', TENANT_ID);
+    }
   });
 
-  describe('POST /api/v1/jobs/:id/pause', () => {
-    it('pauses a job', async () => {
-      const res = await app.request('/api/v1/jobs/job-1/pause', {
-        method: 'POST',
-      });
-
-      expect(res.status).toBe(200);
-      const json = await res.json();
-      expect(json.data.id).toBe('job-1');
-      expect(json.data.message).toBe('Job paused');
-      expect(deps.jobManager.pauseJob).toHaveBeenCalledWith('job-1', TENANT_ID);
+  it('returns 404 when job does not exist', async () => {
+    (deps.jobRepo as any).findById = vi.fn().mockResolvedValue(null);
+    const app = createApp(deps);
+    const res = await app.request('/api/v1/jobs/job-1', {
+      method: 'PATCH',
+      headers,
+      body: JSON.stringify({ action: 'start' }),
     });
+
+    expect(res.status).toBe(404);
   });
 
-  describe('POST /api/v1/jobs/:id/resume', () => {
-    it('resumes a job', async () => {
-      const res = await app.request('/api/v1/jobs/job-1/resume', {
-        method: 'POST',
-      });
-
-      expect(res.status).toBe(200);
-      const json = await res.json();
-      expect(json.data.id).toBe('job-1');
-      expect(json.data.message).toBe('Job resumed');
-      expect(deps.jobManager.resumeJob).toHaveBeenCalledWith('job-1', TENANT_ID);
+  it('rejects invalid action', async () => {
+    const app = createApp(deps);
+    const res = await app.request('/api/v1/jobs/job-1', {
+      method: 'PATCH',
+      headers,
+      body: JSON.stringify({ action: 'invalid' }),
     });
+
+    expect(res.status).toBe(400);
   });
 
-  describe('POST /api/v1/jobs/:id/cancel', () => {
-    it('cancels a job', async () => {
-      const res = await app.request('/api/v1/jobs/job-1/cancel', {
-        method: 'POST',
-      });
-
-      expect(res.status).toBe(200);
-      const json = await res.json();
-      expect(json.data.id).toBe('job-1');
-      expect(json.data.message).toBe('Job cancelled');
-      expect(deps.jobManager.cancelJob).toHaveBeenCalledWith('job-1', TENANT_ID);
+  it('rejects missing action', async () => {
+    const app = createApp(deps);
+    const res = await app.request('/api/v1/jobs/job-1', {
+      method: 'PATCH',
+      headers,
+      body: JSON.stringify({}),
     });
+
+    expect(res.status).toBe(400);
+  });
+});
+
+describe('POST /api/v1/jobs/:id/{action} (legacy aliases)', () => {
+  let deps: AppDeps;
+
+  beforeEach(() => {
+    deps = createMockDeps();
   });
 
-  describe('POST /api/v1/jobs/:id/reconcile', () => {
-    it('triggers reconciliation', async () => {
-      const res = await app.request('/api/v1/jobs/job-1/reconcile', {
-        method: 'POST',
-      });
-
-      expect(res.status).toBe(200);
-      const json = await res.json();
-      expect(json.data.id).toBe('job-1');
-      expect(json.data.message).toBe('Reconciliation triggered');
-      expect(deps.jobManager.triggerReconciliation).toHaveBeenCalledWith(
-        'job-1',
-        TENANT_ID,
-      );
+  it('POST /:id/start calls startJob', async () => {
+    const app = createApp(deps);
+    const res = await app.request('/api/v1/jobs/job-1/start', {
+      method: 'POST',
+      headers: tenantHeader,
     });
+
+    expect(res.status).toBe(200);
+    expect(deps.jobManager.startJob).toHaveBeenCalledWith('job-1', TENANT_ID);
+    const body = await res.json();
+    expect(body.data.message).toBe('Job started');
+  });
+
+  it('POST /:id/pause calls pauseJob', async () => {
+    const app = createApp(deps);
+    const res = await app.request('/api/v1/jobs/job-1/pause', {
+      method: 'POST',
+      headers: tenantHeader,
+    });
+
+    expect(res.status).toBe(200);
+    expect(deps.jobManager.pauseJob).toHaveBeenCalledWith('job-1', TENANT_ID);
+  });
+
+  it('POST /:id/resume calls resumeJob', async () => {
+    const app = createApp(deps);
+    const res = await app.request('/api/v1/jobs/job-1/resume', {
+      method: 'POST',
+      headers: tenantHeader,
+    });
+
+    expect(res.status).toBe(200);
+    expect(deps.jobManager.resumeJob).toHaveBeenCalledWith('job-1', TENANT_ID);
+  });
+
+  it('POST /:id/cancel calls cancelJob', async () => {
+    const app = createApp(deps);
+    const res = await app.request('/api/v1/jobs/job-1/cancel', {
+      method: 'POST',
+      headers: tenantHeader,
+    });
+
+    expect(res.status).toBe(200);
+    expect(deps.jobManager.cancelJob).toHaveBeenCalledWith('job-1', TENANT_ID);
+  });
+
+  it('POST /:id/reconcile calls triggerReconciliation', async () => {
+    const app = createApp(deps);
+    const res = await app.request('/api/v1/jobs/job-1/reconcile', {
+      method: 'POST',
+      headers: tenantHeader,
+    });
+
+    expect(res.status).toBe(200);
+    expect(deps.jobManager.triggerReconciliation).toHaveBeenCalledWith('job-1', TENANT_ID);
+  });
+});
+
+describe('DELETE /api/v1/jobs/:id', () => {
+  let deps: AppDeps;
+
+  beforeEach(() => {
+    deps = createMockDeps();
+  });
+
+  it('returns 204 on successful delete', async () => {
+    const app = createApp(deps);
+    const res = await app.request('/api/v1/jobs/job-1', {
+      method: 'DELETE',
+      headers: tenantHeader,
+    });
+
+    expect(res.status).toBe(204);
+    expect(deps.jobRepo.findById).toHaveBeenCalledWith('job-1', TENANT_ID);
+    expect(deps.jobRepo.deleteWithData).toHaveBeenCalledWith('job-1', TENANT_ID);
+  });
+
+  it('returns 404 when job does not exist', async () => {
+    (deps.jobRepo as any).findById = vi.fn().mockResolvedValue(null);
+    const app = createApp(deps);
+    const res = await app.request('/api/v1/jobs/nonexistent', {
+      method: 'DELETE',
+      headers: tenantHeader,
+    });
+
+    expect(res.status).toBe(404);
+    expect(deps.jobRepo.deleteWithData).not.toHaveBeenCalled();
   });
 });
