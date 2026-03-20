@@ -8,6 +8,7 @@ function createMockDeps(): AppDeps {
       create: vi.fn().mockResolvedValue({ id: 'job-1' }),
       findById: vi.fn().mockResolvedValue({ id: 'job-1', name: 'Test', tenantId: 'tenant-1' }),
       findByTenant: vi.fn().mockResolvedValue([]),
+      countByTenant: vi.fn().mockResolvedValue(0),
       updateStatus: vi.fn(),
       updateStats: vi.fn(),
     },
@@ -18,6 +19,7 @@ function createMockDeps(): AppDeps {
     },
     extractionRepo: {
       findByJob: vi.fn().mockResolvedValue([]),
+      countByJob: vi.fn().mockResolvedValue(0),
     },
     entityRepo: {
       findByJob: vi.fn().mockResolvedValue([]),

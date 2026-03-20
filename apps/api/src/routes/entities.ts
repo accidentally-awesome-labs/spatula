@@ -2,7 +2,7 @@ import { createRoute, z } from '@hono/zod-openapi';
 import { createOpenAPIRouter } from '../openapi-config.js';
 import type { AppEnv } from '../types.js';
 import { entityQuerySchema } from '../schemas/entity-query.js';
-import { entityResponseSchema, errorResponseSchema, dataResponse, jsonContent } from '../schemas/responses.js';
+import { entityResponseSchema, entityListItemSchema, errorResponseSchema, dataResponse, jsonContent } from '../schemas/responses.js';
 import { NotFoundError } from '../middleware/error-handler.js';
 
 const jobIdParam = z.object({
@@ -14,7 +14,7 @@ const listEntitiesRoute = createRoute({
   summary: 'List entities for a job',
   request: { params: jobIdParam, query: entityQuerySchema },
   responses: {
-    200: jsonContent(z.object({ data: z.array(entityResponseSchema), total: z.number() }), 'Entities with count'),
+    200: jsonContent(z.object({ data: z.array(entityListItemSchema), total: z.number() }), 'Entities with count'),
   },
 });
 

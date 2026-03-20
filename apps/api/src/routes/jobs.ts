@@ -35,7 +35,7 @@ const listJobsRoute = createRoute({
   tags: ['Jobs'],
   summary: 'List jobs for the current tenant',
   request: { query: listJobsQuerySchema },
-  responses: { 200: jsonContent(listResponse(jobResponseSchema), 'List of jobs') },
+  responses: { 200: jsonContent(z.object({ data: z.array(jobResponseSchema), total: z.number() }), 'List of jobs with count') },
 });
 
 const getJobRoute = createRoute({
@@ -111,13 +111,16 @@ export function jobRoutes() {
     const tenantId = c.get('tenantId');
     const deps = c.get('deps');
 
-    const jobs = await deps.jobRepo.findByTenant(tenantId, {
-      status: query.status,
-      limit: query.limit,
-      offset: query.offset,
-    });
+    const [jobs, total] = await Promise.all([
+      deps.jobRepo.findByTenant(tenantId, {
+        status: query.status,
+        limit: query.limit,
+        offset: query.offset,
+      }),
+      deps.jobRepo.countByTenant(tenantId, { status: query.status }),
+    ]);
 
-    return c.json({ data: jobs });
+    return c.json({ data: jobs, total });
   });
 
   router.openapi(getJobRoute, async (c) => {
@@ -136,6 +139,9 @@ export function jobRoutes() {
     const { action } = c.req.valid('json');
     const tenantId = c.get('tenantId');
     const deps = c.get('deps');
+
+    const job = await deps.jobRepo.findById(id, tenantId);
+    if (!job) throw new NotFoundError('Job', id);
 
     const handlers: Record<string, () => Promise<void>> = {
       start: () => deps.jobManager.startJob(id, tenantId),

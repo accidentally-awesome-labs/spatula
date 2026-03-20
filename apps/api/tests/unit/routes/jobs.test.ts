@@ -7,8 +7,9 @@ const TENANT_ID = '00000000-0000-0000-0000-000000000001';
 function createMockDeps(): AppDeps {
   return {
     jobRepo: {
-      findById: vi.fn(),
-      findByTenant: vi.fn(),
+      findById: vi.fn().mockResolvedValue({ id: 'job-1', status: 'pending' }),
+      findByTenant: vi.fn().mockResolvedValue([]),
+      countByTenant: vi.fn().mockResolvedValue(0),
       create: vi.fn(),
       updateStatus: vi.fn(),
       updateStats: vi.fn(),

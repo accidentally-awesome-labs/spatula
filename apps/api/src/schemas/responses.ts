@@ -45,6 +45,7 @@ export const extractionResponseSchema = z.object({
   createdAt: z.string(),
 }).openapi('Extraction');
 
+// Full entity (returned by GET /:entityId)
 export const entityResponseSchema = z.object({
   id: z.string().uuid(),
   jobId: z.string().uuid(),
@@ -55,6 +56,18 @@ export const entityResponseSchema = z.object({
   qualityScore: z.number(),
   createdAt: z.string(),
 }).openapi('Entity');
+
+// List projection (returned by GET / — no provenance, has sourceCount)
+export const entityListItemSchema = z.object({
+  id: z.string().uuid(),
+  jobId: z.string().uuid(),
+  tenantId: z.string().uuid(),
+  mergedData: z.record(z.unknown()),
+  categories: z.array(z.string()),
+  qualityScore: z.number(),
+  sourceCount: z.number().int(),
+  createdAt: z.string(),
+}).openapi('EntityListItem');
 
 export const actionResponseSchema = z.object({
   id: z.string().uuid(),

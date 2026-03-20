@@ -1,4 +1,4 @@
-import { eq, and, desc, inArray } from 'drizzle-orm';
+import { eq, and, desc, inArray, sql } from 'drizzle-orm';
 import { createLogger, StorageError } from '@spatula/shared';
 import type { JobConfig, JobStatus } from '@spatula/core';
 import { jobs } from '../schema/jobs.js';
@@ -83,13 +83,37 @@ export class JobRepository {
       if (options?.limit) {
         query = query.limit(options.limit) as typeof query;
       }
-      if (options?.offset) {
+      if (options?.offset !== undefined) {
         query = query.offset(options.offset) as typeof query;
       }
 
       return await query;
     } catch (error) {
       throw new StorageError(`Failed to list jobs: ${(error as Error).message}`, {
+        cause: error as Error,
+        context: { tenantId },
+      });
+    }
+  }
+
+  async countByTenant(
+    tenantId: string,
+    options?: { status?: JobStatus },
+  ): Promise<number> {
+    try {
+      const conditions = [eq(jobs.tenantId, tenantId)];
+      if (options?.status) {
+        conditions.push(eq(jobs.status, options.status));
+      }
+
+      const [result] = await this.db
+        .select({ count: sql<number>`count(*)::int` })
+        .from(jobs)
+        .where(and(...conditions));
+
+      return result?.count ?? 0;
+    } catch (error) {
+      throw new StorageError(`Failed to count jobs: ${(error as Error).message}`, {
         cause: error as Error,
         context: { tenantId },
       });

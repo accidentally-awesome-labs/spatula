@@ -1,4 +1,4 @@
-import { eq, and, desc } from 'drizzle-orm';
+import { eq, and, desc, sql } from 'drizzle-orm';
 import { createLogger, StorageError } from '@spatula/shared';
 import { extractions } from '../schema/extractions.js';
 import type { Database } from '../connection.js';
@@ -63,13 +63,38 @@ export class ExtractionRepository {
       if (options?.limit) {
         query = query.limit(options.limit) as typeof query;
       }
-      if (options?.offset) {
+      if (options?.offset !== undefined) {
         query = query.offset(options.offset) as typeof query;
       }
 
       return await query;
     } catch (error) {
       throw new StorageError(`Failed to find extractions: ${(error as Error).message}`, {
+        cause: error as Error,
+        context: { jobId },
+      });
+    }
+  }
+
+  async countByJob(
+    jobId: string,
+    tenantId: string,
+    options?: { schemaVersion?: number },
+  ): Promise<number> {
+    try {
+      const conditions = [eq(extractions.jobId, jobId), eq(extractions.tenantId, tenantId)];
+      if (options?.schemaVersion !== undefined) {
+        conditions.push(eq(extractions.schemaVersion, options.schemaVersion));
+      }
+
+      const [result] = await this.db
+        .select({ count: sql<number>`count(*)::int` })
+        .from(extractions)
+        .where(and(...conditions));
+
+      return result?.count ?? 0;
+    } catch (error) {
+      throw new StorageError(`Failed to count extractions: ${(error as Error).message}`, {
         cause: error as Error,
         context: { jobId },
       });
