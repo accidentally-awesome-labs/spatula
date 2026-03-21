@@ -5,7 +5,7 @@ import {
   NotFoundError,
   ConflictError,
 } from '../../../src/middleware/error-handler.js';
-import { ValidationError, StorageError } from '@spatula/shared';
+import { ValidationError, StorageError, QueueError, TimeoutError, RateLimitError, NetworkError, StateError } from '@spatula/shared';
 
 function createTestApp() {
   const app = new Hono();
@@ -75,6 +75,66 @@ describe('errorHandler middleware', () => {
     const body = await res.json();
     expect(body.error.code).toBe('INTERNAL_ERROR');
     expect(body.error.message).toBe('Internal server error');
+  });
+
+  it('maps QueueError to 503', async () => {
+    const app = createTestApp();
+    app.get('/test', () => {
+      throw new QueueError('queue unavailable');
+    });
+
+    const res = await app.request('/test');
+    expect(res.status).toBe(503);
+    const body = await res.json();
+    expect(body.error.code).toBe('QUEUE_ERROR');
+  });
+
+  it('maps TimeoutError to 504', async () => {
+    const app = createTestApp();
+    app.get('/test', () => {
+      throw new TimeoutError('request timed out');
+    });
+
+    const res = await app.request('/test');
+    expect(res.status).toBe(504);
+    const body = await res.json();
+    expect(body.error.code).toBe('TIMEOUT_ERROR');
+  });
+
+  it('maps RateLimitError to 429', async () => {
+    const app = createTestApp();
+    app.get('/test', () => {
+      throw new RateLimitError('too many requests');
+    });
+
+    const res = await app.request('/test');
+    expect(res.status).toBe(429);
+    const body = await res.json();
+    expect(body.error.code).toBe('RATE_LIMIT_ERROR');
+  });
+
+  it('maps NetworkError to 502', async () => {
+    const app = createTestApp();
+    app.get('/test', () => {
+      throw new NetworkError('upstream unavailable');
+    });
+
+    const res = await app.request('/test');
+    expect(res.status).toBe(502);
+    const body = await res.json();
+    expect(body.error.code).toBe('NETWORK_ERROR');
+  });
+
+  it('maps StateError to 409', async () => {
+    const app = createTestApp();
+    app.get('/test', () => {
+      throw new StateError('invalid state transition');
+    });
+
+    const res = await app.request('/test');
+    expect(res.status).toBe(409);
+    const body = await res.json();
+    expect(body.error.code).toBe('STATE_ERROR');
   });
 
   it('includes requestId in error response', async () => {

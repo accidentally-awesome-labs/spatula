@@ -1,4 +1,4 @@
-import { createLoggerWithContext } from '@spatula/shared';
+import { createLoggerWithContext, QueueError, ValidationError } from '@spatula/shared';
 import { CsvExporter, JsonExporter, generateDocumentation } from '@spatula/core';
 import type { SchemaDefinition } from '@spatula/core';
 import type { Entity } from '@spatula/shared';
@@ -16,11 +16,11 @@ export async function processExportJob(
     // 0. Verify job exists and is in a completed state
     const job = await deps.jobRepo.findById(jobId, tenantId);
     if (!job) {
-      throw new Error('Job not found');
+      throw new QueueError('Job not found', { context: { exportId, jobId } });
     }
     const jobStatus = (job as { status?: string }).status;
     if (jobStatus !== 'completed') {
-      throw new Error(`Job is not completed (status: ${jobStatus}). Export requires a completed job.`);
+      throw new QueueError(`Job is not completed (status: ${jobStatus}). Export requires a completed job.`, { context: { exportId, jobId, status: jobStatus } });
     }
 
     // 1. Mark as processing
@@ -29,7 +29,7 @@ export async function processExportJob(
     // 2. Fetch schema
     const schemaRow = await deps.schemaRepo.findLatest(jobId, tenantId);
     if (!schemaRow) {
-      throw new Error('No schema found for job');
+      throw new QueueError('No schema found for job', { context: { exportId, jobId } });
     }
     const schema = schemaRow.definition as SchemaDefinition;
 
@@ -39,7 +39,7 @@ export async function processExportJob(
 
     const MAX_EXPORT_ENTITIES = 50_000;
     if (total > MAX_EXPORT_ENTITIES) {
-      throw new Error(`Export too large: ${total} entities exceeds maximum of ${MAX_EXPORT_ENTITIES}. Consider filtering first.`);
+      throw new ValidationError(`Export too large: ${total} entities exceeds maximum of ${MAX_EXPORT_ENTITIES}. Consider filtering first.`, { context: { exportId, jobId, total, max: MAX_EXPORT_ENTITIES } });
     }
     let offset = 0;
     const useProvenance = includeProvenance && format === 'json';

@@ -1,4 +1,4 @@
-import { createLoggerWithContext } from '@spatula/shared';
+import { createLoggerWithContext, CrawlError, NetworkError } from '@spatula/shared';
 import { createHash } from 'node:crypto';
 import type { JobConfig, LinkEvaluationContext } from '@spatula/core';
 import type { CrawlJobData } from '../queues.js';
@@ -194,7 +194,10 @@ export async function processCrawlJob(data: CrawlJobData, deps: WorkerDeps): Pro
 
     await deps.taskRepo.updateStatus(taskId, tenantId, 'completed');
   } catch (error) {
-    logger.error({ taskId, url, error }, 'crawl job failed');
+    const wrappedError = error instanceof CrawlError || error instanceof NetworkError
+      ? error
+      : new CrawlError('Crawl job failed', { cause: error as Error, context: { taskId, url } });
+    logger.error({ taskId, url, error: wrappedError }, 'crawl job failed');
     await deps.taskRepo.updateStatus(taskId, tenantId, 'failed').catch((e) => {
       logger.error({ taskId, error: e }, 'failed to mark task as failed');
     });

@@ -28,6 +28,16 @@ function mapErrorToStatus(error: unknown): number {
         return 404;
       case 'CONFLICT':
         return 409;
+      case 'QUEUE_ERROR':
+        return 503;
+      case 'TIMEOUT_ERROR':
+        return 504;
+      case 'RATE_LIMIT_ERROR':
+        return 429;
+      case 'NETWORK_ERROR':
+        return 502;
+      case 'STATE_ERROR':
+        return 409;
       default:
         return 500;
     }
