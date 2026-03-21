@@ -13,7 +13,7 @@ Phase 11e is the final sub-phase of Phase 11 (Production Hardening). It addresse
 
 **Prerequisite:** Phase 11a (migrations, repositories, E2E).
 
-**Relationship to parent spec:** This spec refines and supersedes the Phase 11e section in `docs/superpowers/specs/2026-03-17-phase-11-production-hardening-design.md`. Changes from the parent: expanded `AppConfigSchema` to include `server` config (port/host) and `logging.nodeEnv`; switched Parquet dependency from `hyparquet` to `hyparquet-writer`; switched DuckDB dependency from `duckdb`/`duckdb-async` to `@duckdb/node-api`; corrected DuckDB export flow; added `retryable` flag to error hierarchy; added gap fixes for API schema validation, content store CHECK constraints, and request context middleware.
+**Relationship to parent spec:** This spec refines and supersedes the Phase 11e section in `docs/superpowers/specs/2026-03-17-phase-11-production-hardening-design.md`. Changes from the parent: expanded `AppConfigSchema` to include `server` config (port/host) and `logging.nodeEnv`; switched Parquet dependency from `hyparquet` to `hyparquet-writer`; switched DuckDB dependency from `duckdb`/`duckdb-async` to `@duckdb/node-api`; corrected DuckDB export flow; added `retryable` flag to error hierarchy; changed `StateError` code from `STATE_INVALID_TRANSITION` (parent) to `STATE_ERROR` (consistent with other subclass naming); added gap fixes for API schema validation, content store CHECK constraints, and request context middleware.
 
 ---
 
@@ -31,7 +31,7 @@ export interface SpatulaErrorOptions {
 }
 ```
 
-`SpatulaError` gains a `readonly retryable: boolean` property set from options. Existing subclasses are unaffected (default `false`).
+`SpatulaError` gains a `readonly retryable: boolean` property set from options. The `SpatulaError` constructor signature `(message, code, options?)` does NOT change — only the `SpatulaErrorOptions` interface is extended. Existing subclasses are unaffected (default `false`).
 
 ### New Error Types
 
@@ -67,7 +67,7 @@ export interface SpatulaErrorOptions {
 
 **crawl-worker.ts** — Import `CrawlError` from `@spatula/shared` (exists but not imported). Wrap crawler failures as `CrawlError`, network-level failures as `NetworkError`.
 
-**Export route retry fix** — Remove `attempts: 1` override in `apps/api/src/routes/exports.ts` export enqueue call. Exports inherit the queue default of `attempts: 3` with exponential backoff.
+**Export route retry fix** — Remove `attempts: 1` override in `apps/api/src/routes/exports.ts` export enqueue call. Exports inherit the queue default of `attempts: 3` with exponential backoff. Keep the `removeOnComplete: true` and `removeOnFail: true` overrides in place — export jobs are user-initiated one-off operations where immediate cleanup is appropriate, unlike pipeline jobs where retaining history aids debugging.
 
 ### API Error Handler Mapping
 
@@ -82,6 +82,8 @@ Add to `apps/api/src/middleware/error-handler.ts`:
 | `StateError` | 409 Conflict |
 
 Existing mappings (`ValidationError` → 400, `NotFoundError` → 404, `ConflictError` → 409) remain unchanged. Note: both `StateError` and `ConflictError` map to HTTP 409, but they carry different error codes in the response body (`STATE_ERROR` vs `CONFLICT`), allowing clients to distinguish them. `ConflictError` is for general resource conflicts (e.g., duplicate creation); `StateError` is specifically for invalid state machine transitions.
+
+**Implementation note:** The current `mapErrorToStatus()` function dispatches on `error.code` strings via a switch statement. New mappings are added as additional `case` entries in the same switch (e.g., `case 'QUEUE_ERROR': return 503`). Do not refactor to `instanceof` checking — the code-based switch is the established pattern.
 
 ---
 
@@ -258,6 +260,8 @@ After migration, each row has either `content` (text) or `binary_content` (binar
 CHECK (content IS NOT NULL OR binary_content IS NOT NULL)
 CHECK (NOT (content IS NOT NULL AND binary_content IS NOT NULL))
 ```
+
+The migration must be a single migration that: (1) alters `content` to nullable, (2) adds `binary_content bytea` nullable, (3) adds both CHECK constraints — all in one step to avoid a window where neither constraint is enforced.
 
 **PgContentStore** — Add `storeBinary()` and `retrieveBinary()` methods. Same key/ref pattern as text methods (`pg://{uuid}`).
 
