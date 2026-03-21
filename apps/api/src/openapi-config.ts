@@ -5,7 +5,7 @@ export function createOpenAPIRouter(): OpenAPIHono<AppEnv> {
   return new OpenAPIHono<AppEnv>({
     defaultHook: (result, c) => {
       if (!result.success) {
-        const requestId = c.req.header('x-request-id') ?? crypto.randomUUID();
+        const requestId = c.get('requestId') ?? c.req.header('x-request-id') ?? crypto.randomUUID();
         return c.json(
           {
             error: {

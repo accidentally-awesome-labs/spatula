@@ -37,7 +37,7 @@ function mapErrorToStatus(error: unknown): number {
 
 export const errorHandler: ErrorHandler = (error, c) => {
   const status = mapErrorToStatus(error);
-  const requestId = c.req.header('x-request-id') ?? crypto.randomUUID();
+  const requestId = c.get('requestId') ?? c.req.header('x-request-id') ?? crypto.randomUUID();
 
   if (status >= 500) {
     logger.error(

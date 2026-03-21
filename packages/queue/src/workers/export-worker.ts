@@ -1,16 +1,15 @@
-import { createLogger } from '@spatula/shared';
+import { createLoggerWithContext } from '@spatula/shared';
 import { CsvExporter, JsonExporter, generateDocumentation } from '@spatula/core';
 import type { SchemaDefinition } from '@spatula/core';
 import type { Entity } from '@spatula/shared';
 import type { ExportJobPayload } from '../queues.js';
 import type { WorkerDeps } from '../worker-deps.js';
 
-const logger = createLogger('export-worker');
-
 export async function processExportJob(
   data: ExportJobPayload,
   deps: WorkerDeps,
 ): Promise<void> {
+  const logger = createLoggerWithContext('export-worker', { jobId: data.jobId, tenantId: data.tenantId });
   const { exportId, jobId, tenantId, format, includeProvenance } = data;
 
   try {

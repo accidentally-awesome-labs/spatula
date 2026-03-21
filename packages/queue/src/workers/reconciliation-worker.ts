@@ -1,10 +1,8 @@
-import { createLogger } from '@spatula/shared';
+import { createLoggerWithContext } from '@spatula/shared';
 import type { JobConfig, ReconciliationConfig } from '@spatula/core';
 import type { ExtractionWithSource } from '@spatula/core';
 import type { ReconciliationJobData } from '../queues.js';
 import type { WorkerDeps } from '../worker-deps.js';
-
-const logger = createLogger('reconciliation-worker');
 
 const DEFAULT_RECONCILIATION_CONFIG: ReconciliationConfig = {
   matchStrategy: 'composite_key',
@@ -17,6 +15,7 @@ export async function processReconciliationJob(
   data: ReconciliationJobData,
   deps: WorkerDeps,
 ): Promise<void> {
+  const logger = createLoggerWithContext('reconciliation-worker', { jobId: data.jobId, tenantId: data.tenantId });
   const { jobId, tenantId } = data;
 
   try {

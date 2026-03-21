@@ -1,4 +1,4 @@
-import { createLogger } from '@spatula/shared';
+import { createLoggerWithContext } from '@spatula/shared';
 import { applySchemaActions } from '@spatula/core';
 import type { JobConfig } from '@spatula/core';
 import type Redis from 'ioredis';
@@ -6,13 +6,12 @@ import type { SchemaEvolutionJobData } from '../queues.js';
 import type { WorkerDeps } from '../worker-deps.js';
 import { acquireLock, releaseLock } from '../redis-lock.js';
 
-const logger = createLogger('schema-worker');
-
 export async function processSchemaEvolutionJob(
   data: SchemaEvolutionJobData,
   deps: WorkerDeps,
   redis?: Redis,
 ): Promise<void> {
+  const logger = createLoggerWithContext('schema-worker', { jobId: data.jobId, tenantId: data.tenantId });
   const { jobId, tenantId } = data;
   const lockKey = `schema-lock:${jobId}`;
   let lockToken = '';

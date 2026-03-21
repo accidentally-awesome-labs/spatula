@@ -1,6 +1,7 @@
 import { swaggerUI } from '@hono/swagger-ui';
 import { logger as honoLogger } from 'hono/logger';
 import { errorHandler } from './middleware/error-handler.js';
+import { requestContextMiddleware } from './middleware/request-context.js';
 import { tenantMiddleware } from './middleware/tenant.js';
 import { depsMiddleware } from './middleware/deps.js';
 import { validateTenantMiddleware } from './middleware/validate-tenant.js';
@@ -18,6 +19,7 @@ export function createApp(deps: AppDeps) {
   const app = createOpenAPIRouter();
 
   // Global middleware
+  app.use('*', requestContextMiddleware);  // NEW — first in chain
   app.use('*', honoLogger());
   app.onError(errorHandler);
 

@@ -1,10 +1,8 @@
-import { createLogger } from '@spatula/shared';
+import { createLoggerWithContext } from '@spatula/shared';
 import { createHash } from 'node:crypto';
 import type { JobConfig, LinkEvaluationContext } from '@spatula/core';
 import type { CrawlJobData } from '../queues.js';
 import type { WorkerDeps } from '../worker-deps.js';
-
-const logger = createLogger('crawl-worker');
 
 const EXTRACTABLE_CLASSIFICATIONS = new Set(['single_entry', 'multiple_entries', 'partial']);
 
@@ -23,6 +21,7 @@ function isValidCrawlUrl(url: string): boolean {
 
 export async function processCrawlJob(data: CrawlJobData, deps: WorkerDeps): Promise<void> {
   const { taskId, jobId, tenantId, url, depth } = data;
+  const logger = createLoggerWithContext('crawl-worker', { jobId, tenantId });
 
   try {
     await deps.taskRepo.updateStatus(taskId, tenantId, 'in_progress');

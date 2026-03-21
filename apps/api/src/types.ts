@@ -36,5 +36,7 @@ export interface AppEnv {
     deps: AppDeps;
     validatedBody: unknown;
     validatedQuery: unknown;
+    requestId: string;
+    logger: import('@spatula/shared').Logger;
   };
 }
