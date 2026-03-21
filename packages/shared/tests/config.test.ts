@@ -60,11 +60,19 @@ describe('loadConfig', () => {
   it('applies defaults for optional fields', () => {
     vi.stubEnv('DATABASE_URL', 'postgresql://localhost:5432/spatula');
     vi.stubEnv('OPENROUTER_API_KEY', 'sk-test');
+    vi.stubEnv('NODE_ENV', '');
     const config = loadConfig();
     expect(config.redis.url).toBe('redis://localhost:6379');
     expect(config.server.port).toBe(3000);
     expect(config.server.host).toBe('0.0.0.0');
     expect(config.logging.nodeEnv).toBe('development');
+  });
+
+  it('accepts NODE_ENV=test', () => {
+    vi.stubEnv('DATABASE_URL', 'postgresql://localhost:5432/spatula');
+    vi.stubEnv('OPENROUTER_API_KEY', 'sk-test');
+    vi.stubEnv('NODE_ENV', 'test');
+    expect(loadConfig().logging.nodeEnv).toBe('test');
   });
 
   it('coerces PORT to number', () => {

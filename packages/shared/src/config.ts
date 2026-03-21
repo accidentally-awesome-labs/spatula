@@ -27,12 +27,12 @@ const AppConfigSchema = z.object({
     apiKey: z.string().optional(),
   }),
   server: z.object({
-    port: z.coerce.number().default(3000),
+    port: z.coerce.number().int().min(1).max(65535).default(3000),
     host: z.string().default('0.0.0.0'),
   }),
   logging: z.object({
     level: z.enum(['trace', 'debug', 'info', 'warn', 'error', 'fatal']).default('info'),
-    nodeEnv: z.enum(['development', 'production']).default('development').catch('development'),
+    nodeEnv: z.enum(['development', 'production', 'test']).default('development'),
   }),
 });
 
@@ -57,8 +57,8 @@ function buildRawConfig(): unknown {
       host: process.env['HOST'],
     },
     logging: {
-      level: process.env['LOG_LEVEL'],
-      nodeEnv: process.env['NODE_ENV'],
+      level: process.env['LOG_LEVEL'] || undefined,
+      nodeEnv: process.env['NODE_ENV'] || undefined,
     },
   };
 }
