@@ -38,6 +38,7 @@ function createMockDeps(): AppDeps {
     },
     contentStore: {
       retrieve: vi.fn().mockResolvedValue('{"entities":[]}'),
+      retrieveBinary: vi.fn().mockResolvedValue(null),
     },
     exportQueue: {
       add: vi.fn().mockResolvedValue({ id: 'bull-job-1' }),
@@ -98,7 +99,7 @@ describe('Export routes', () => {
       const res = await app.request('/api/v1/jobs/job-1/export', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ format: 'parquet' }),
+        body: JSON.stringify({ format: 'xlsx' }),
       });
       expect(res.status).toBe(400);
     });

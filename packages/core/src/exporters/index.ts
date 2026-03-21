@@ -3,4 +3,8 @@ export { generateDocumentation } from './documentation-generator.js';
 export type { DataDictionary, FieldStats, FieldDocumentation } from './types.js';
 export { CsvExporter } from './csv-exporter.js';
 export { JsonExporter } from './json-exporter.js';
+export { SqliteExporter } from './sqlite-exporter.js';
 export { ParquetExporter } from './parquet-exporter.js';
+export { DuckDBExporter } from './duckdb-exporter.js';
+export { mapSchema } from './column-mapper.js';
+export type { ColumnDef, ExportTarget } from './column-mapper.js';

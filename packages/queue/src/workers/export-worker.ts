@@ -1,9 +1,20 @@
 import { createLoggerWithContext, QueueError, ValidationError } from '@spatula/shared';
-import { CsvExporter, JsonExporter, generateDocumentation } from '@spatula/core';
-import type { SchemaDefinition } from '@spatula/core';
+import { CsvExporter, JsonExporter, SqliteExporter, ParquetExporter, DuckDBExporter, generateDocumentation } from '@spatula/core';
+import type { Exporter, SchemaDefinition } from '@spatula/core';
 import type { Entity } from '@spatula/shared';
 import type { ExportJobPayload } from '../queues.js';
 import type { WorkerDeps } from '../worker-deps.js';
+
+function getExporter(format: string): Exporter {
+  switch (format) {
+    case 'json': return new JsonExporter();
+    case 'csv': return new CsvExporter();
+    case 'sqlite': return new SqliteExporter();
+    case 'parquet': return new ParquetExporter();
+    case 'duckdb': return new DuckDBExporter();
+    default: throw new QueueError(`Unsupported export format: ${format}`);
+  }
+}
 
 export async function processExportJob(
   data: ExportJobPayload,
@@ -57,44 +68,53 @@ export async function processExportJob(
       : null;
 
     // 5. Run exporter
-    const exporter = format === 'csv' ? new CsvExporter() : new JsonExporter();
+    const exporter = getExporter(format);
     const result = await exporter.export(allEntities, schema, {
-      format,
+      format: format as any,
       includeProvenance,
       includeDocumentation: format === 'json',
     });
 
-    // 6. For JSON, wrap with envelope
-    let content: string;
-    if (format === 'json') {
-      const envelope = {
-        metadata: {
-          jobId,
-          exportedAt: new Date().toISOString(),
-          entityCount: allEntities.length,
-          schemaVersion: schema.version,
-          format: 'json',
-          includeProvenance,
-        },
-        schema,
-        documentation,
-        entities: JSON.parse(result.data as string),
-      };
-      content = JSON.stringify(envelope, null, 2);
+    // 6. Store result
+    const key = `exports/${tenantId}/${jobId}/${exportId}.${format}`;
+    let contentRef: string;
+    let fileSize: number;
+
+    if (result.binaryData) {
+      // Binary formats (parquet, duckdb, sqlite)
+      contentRef = await deps.contentStore.storeBinary(key, result.binaryData);
+      fileSize = result.binaryData.byteLength;
     } else {
-      content = result.data as string;
+      // Text formats (json, csv)
+      let content: string;
+      if (format === 'json') {
+        const envelope = {
+          metadata: {
+            jobId,
+            exportedAt: new Date().toISOString(),
+            entityCount: allEntities.length,
+            schemaVersion: schema.version,
+            format: 'json',
+            includeProvenance,
+          },
+          schema,
+          documentation,
+          entities: JSON.parse(result.data as string),
+        };
+        content = JSON.stringify(envelope, null, 2);
+      } else {
+        content = result.data as string;
+      }
+      contentRef = await deps.contentStore.store(key, content);
+      fileSize = Buffer.byteLength(content, 'utf-8');
     }
 
-    // 7. Store in content store
-    const key = `exports/${tenantId}/${jobId}/${exportId}.${format}`;
-    const contentRef = await deps.contentStore.store(key, content);
-
-    // 8. Mark as completed
+    // 7. Mark as completed
     await deps.exportRepo.updateStatus(exportId, tenantId, {
       status: 'completed',
       entityCount: allEntities.length,
       contentRef,
-      fileSize: Buffer.byteLength(content, 'utf-8'),
+      fileSize,
       completedAt: new Date(),
     });
 

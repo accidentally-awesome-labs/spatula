@@ -1,6 +1,6 @@
 import { serve } from '@hono/node-server';
 import { createNodeWebSocket } from '@hono/node-ws';
-import { createLogger } from '@spatula/shared';
+import { createLogger, loadConfig } from '@spatula/shared';
 import { createApp } from './app.js';
 import { JobProgressManager } from './ws/job-progress.js';
 import type { AppDeps } from './types.js';
@@ -10,7 +10,9 @@ const logger = createLogger('api:server');
 const UUID_REGEX =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
-export function startServer(deps: AppDeps, port = 3000) {
+export function startServer(deps: AppDeps, port?: number) {
+  const config = loadConfig();
+  const serverPort = port ?? config.server.port;
   const app = createApp(deps);
   const { injectWebSocket, upgradeWebSocket } = createNodeWebSocket({ app });
 
@@ -64,11 +66,11 @@ export function startServer(deps: AppDeps, port = 3000) {
 
   const server = serve({
     fetch: app.fetch,
-    port,
+    port: serverPort,
   });
 
   injectWebSocket(server);
 
-  logger.info({ port }, 'API server started');
+  logger.info({ port: serverPort }, 'API server started');
   return server;
 }

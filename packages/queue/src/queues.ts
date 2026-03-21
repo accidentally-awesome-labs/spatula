@@ -41,7 +41,7 @@ export interface ExportJobPayload {
   exportId: string;
   jobId: string;
   tenantId: string;
-  format: 'json' | 'csv';
+  format: 'json' | 'csv' | 'parquet' | 'duckdb' | 'sqlite';
   includeProvenance: boolean;
 }
 

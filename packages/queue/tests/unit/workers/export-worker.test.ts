@@ -30,6 +30,8 @@ function createMockDeps(): WorkerDeps {
     },
     contentStore: {
       store: vi.fn().mockResolvedValue('pg://ref-1'),
+      storeBinary: vi.fn().mockResolvedValue('pg://binary-ref-1'),
+      retrieveBinary: vi.fn().mockResolvedValue(null),
     },
     actionRepo: {
       create: vi.fn().mockResolvedValue({ id: 'action-1' }),
@@ -41,13 +43,16 @@ function createMockDeps(): WorkerDeps {
   } as unknown as WorkerDeps;
 }
 
-const payload: ExportJobPayload = {
+const defaultPayload: ExportJobPayload = {
   exportId: 'exp-1',
   jobId: 'job-1',
   tenantId: 'tenant-1',
   format: 'json',
   includeProvenance: false,
 };
+
+// Keep backward-compat alias used by existing tests
+const payload = defaultPayload;
 
 describe('processExportJob', () => {
   it('updates status to processing then completed', async () => {
@@ -158,6 +163,18 @@ describe('processExportJob', () => {
     expect(deps.exportRepo.updateStatus).toHaveBeenCalledWith(
       'exp-1', 'tenant-1',
       expect.objectContaining({ status: 'completed' }),
+    );
+  });
+
+  it('uses storeBinary for sqlite format', async () => {
+    const deps = createMockDeps();
+    deps.contentStore.storeBinary = vi.fn().mockResolvedValue('pg://binary-ref');
+    const sqlitePayload = { ...defaultPayload, format: 'sqlite' as const };
+    await processExportJob(sqlitePayload, deps);
+    expect(deps.contentStore.storeBinary).toHaveBeenCalled();
+    expect(deps.exportRepo.updateStatus).toHaveBeenCalledWith(
+      expect.anything(), expect.anything(),
+      expect.objectContaining({ status: 'completed', contentRef: 'pg://binary-ref' }),
     );
   });
 });

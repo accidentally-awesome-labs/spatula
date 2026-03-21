@@ -104,13 +104,32 @@ export function exportRoutes() {
       throw new ConflictError('Export is not yet completed');
     }
 
-    const content = await deps.contentStore.retrieve(exportRecord.contentRef);
-    const contentType = exportRecord.format === 'csv' ? 'text/csv' : 'application/json';
     const jobShort = exportRecord.jobId.slice(0, 8);
     const date = new Date().toISOString().slice(0, 10).replace(/-/g, '');
     const filename = `spatula-${jobShort}-${date}.${exportRecord.format}`;
 
-    return new Response(content, {
+    const CONTENT_TYPES: Record<string, string> = {
+      json: 'application/json',
+      csv: 'text/csv',
+      parquet: 'application/vnd.apache.parquet',
+      duckdb: 'application/octet-stream',
+      sqlite: 'application/vnd.sqlite3',
+    };
+    const contentType = CONTENT_TYPES[exportRecord.format] ?? 'application/octet-stream';
+
+    const binaryFormats = new Set(['parquet', 'duckdb', 'sqlite']);
+    const isBinary = binaryFormats.has(exportRecord.format);
+
+    let body: string | Uint8Array;
+    if (isBinary) {
+      const data = await deps.contentStore.retrieveBinary(exportRecord.contentRef);
+      if (!data) throw new NotFoundError('Export content', exportId);
+      body = data;
+    } else {
+      body = await deps.contentStore.retrieve(exportRecord.contentRef);
+    }
+
+    return new Response(body, {
       status: 200,
       headers: {
         'Content-Type': contentType,
