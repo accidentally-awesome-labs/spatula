@@ -21,13 +21,18 @@
     "clean": "rm -rf dist .turbo"
   },
   "dependencies": {
+    "@duckdb/node-api": "1.5.0-r.1",
     "@mendable/firecrawl-js": "^4.15.4",
     "@spatula/shared": "workspace:*",
+    "better-sqlite3": "^12.8.0",
     "cheerio": "^1.2.0",
+    "hyparquet": "^1.25.1",
+    "hyparquet-writer": "^0.13.0",
     "playwright": "^1.58.2",
     "zod": "^3.24.0"
   },
   "devDependencies": {
+    "@types/better-sqlite3": "^7.6.13",
     "typescript": "^5.7.0",
     "vitest": "^2.1.0"
   }
