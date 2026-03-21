@@ -4,7 +4,6 @@ describe('package exports', () => {
   it('exports state machine', async () => {
     const mod = await import('../../src/state-machine.js');
     expect(mod.JobStateMachine).toBeDefined();
-    expect(mod.InvalidTransitionError).toBeDefined();
   });
 
   it('exports queue factory and names', async () => {
@@ -36,7 +35,7 @@ describe('package exports', () => {
   it('exports everything from root index', async () => {
     const root = await import('../../src/index.js');
     expect(root.JobStateMachine).toBeDefined();
-    expect(root.InvalidTransitionError).toBeDefined();
+    expect(root.StateError).toBeDefined();
     expect(root.createQueues).toBeDefined();
     expect(root.QUEUE_NAMES).toBeDefined();
     expect(root.JobManager).toBeDefined();

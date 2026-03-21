@@ -1,14 +1,5 @@
 import type { JobStatus } from '@spatula/core';
-
-export class InvalidTransitionError extends Error {
-  constructor(
-    public readonly from: JobStatus,
-    public readonly to: JobStatus,
-  ) {
-    super(`Invalid job state transition: ${from} → ${to}`);
-    this.name = 'InvalidTransitionError';
-  }
-}
+import { StateError } from '@spatula/shared';
 
 const TRANSITIONS: Record<JobStatus, JobStatus[]> = {
   pending: ['queued'],
@@ -25,7 +16,7 @@ export const JobStateMachine = {
   transition(from: JobStatus, to: JobStatus): JobStatus {
     const allowed = TRANSITIONS[from];
     if (!allowed || !allowed.includes(to)) {
-      throw new InvalidTransitionError(from, to);
+      throw new StateError(`Invalid job state transition: ${from} → ${to}`, { context: { from, to } });
     }
     return to;
   },

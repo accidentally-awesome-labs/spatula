@@ -1,7 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { JobManager } from '../../src/job-manager.js';
-import { InvalidTransitionError } from '../../src/state-machine.js';
-import { StorageError } from '@spatula/shared';
+import { StateError, StorageError } from '@spatula/shared';
 
 function createMockJobRepo() {
   return {
@@ -217,7 +216,7 @@ describe('JobManager', () => {
     expect(jobRepo.updateStatus).toHaveBeenCalledWith(JOB_ID, TENANT_ID, 'cancelled');
   });
 
-  it('throws InvalidTransitionError for invalid state transitions', async () => {
+  it('throws StateError for invalid state transitions', async () => {
     jobRepo.findById.mockResolvedValue({
       id: JOB_ID,
       tenantId: TENANT_ID,
@@ -225,7 +224,11 @@ describe('JobManager', () => {
       config: baseConfig,
     });
 
-    await expect(manager.pauseJob(JOB_ID, TENANT_ID)).rejects.toThrow(InvalidTransitionError);
+    await expect(manager.pauseJob(JOB_ID, TENANT_ID)).rejects.toThrow(StateError);
+    await expect(manager.pauseJob(JOB_ID, TENANT_ID)).rejects.toMatchObject({
+      code: 'STATE_ERROR',
+      context: { from: 'completed', to: 'paused' },
+    });
   });
 
   it('getJobStatus returns current status', async () => {

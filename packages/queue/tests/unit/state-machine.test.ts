@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
-import { JobStateMachine, InvalidTransitionError } from '../../src/state-machine.js';
+import { JobStateMachine } from '../../src/state-machine.js';
+import { StateError } from '@spatula/shared';
 
 describe('JobStateMachine', () => {
   it('allows pending → queued', () => {
@@ -39,19 +40,20 @@ describe('JobStateMachine', () => {
   });
 
   it('rejects invalid transitions', () => {
-    expect(() => JobStateMachine.transition('pending', 'completed')).toThrow(
-      InvalidTransitionError,
-    );
+    expect(() => JobStateMachine.transition('pending', 'completed')).toThrow(StateError);
+    try {
+      JobStateMachine.transition('pending', 'completed');
+    } catch (e) {
+      expect(e).toBeInstanceOf(StateError);
+      expect((e as StateError).code).toBe('STATE_ERROR');
+      expect((e as StateError).context).toMatchObject({ from: 'pending', to: 'completed' });
+    }
   });
 
   it('rejects transitions from terminal states', () => {
-    expect(() => JobStateMachine.transition('completed', 'running')).toThrow(
-      InvalidTransitionError,
-    );
-    expect(() => JobStateMachine.transition('failed', 'running')).toThrow(InvalidTransitionError);
-    expect(() => JobStateMachine.transition('cancelled', 'running')).toThrow(
-      InvalidTransitionError,
-    );
+    expect(() => JobStateMachine.transition('completed', 'running')).toThrow(StateError);
+    expect(() => JobStateMachine.transition('failed', 'running')).toThrow(StateError);
+    expect(() => JobStateMachine.transition('cancelled', 'running')).toThrow(StateError);
   });
 
   it('canTransition returns boolean', () => {

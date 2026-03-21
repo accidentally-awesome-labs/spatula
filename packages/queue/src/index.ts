@@ -1,5 +1,6 @@
 // State Machine
-export { JobStateMachine, InvalidTransitionError } from './state-machine.js';
+export { JobStateMachine } from './state-machine.js';
+export { StateError } from '@spatula/shared';
 
 // Queues
 export { createQueues, QUEUE_NAMES, DEFAULT_QUEUE_CONFIG } from './queues.js';
