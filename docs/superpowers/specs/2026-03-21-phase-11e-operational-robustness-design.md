@@ -13,6 +13,8 @@ Phase 11e is the final sub-phase of Phase 11 (Production Hardening). It addresse
 
 **Prerequisite:** Phase 11a (migrations, repositories, E2E).
 
+**Relationship to parent spec:** This spec refines and supersedes the Phase 11e section in `docs/superpowers/specs/2026-03-17-phase-11-production-hardening-design.md`. Changes from the parent: expanded `AppConfigSchema` to include `server` config (port/host) and `logging.nodeEnv`; switched Parquet dependency from `hyparquet` to `hyparquet-writer`; switched DuckDB dependency from `duckdb`/`duckdb-async` to `@duckdb/node-api`; corrected DuckDB export flow; added `retryable` flag to error hierarchy; added gap fixes for API schema validation, content store CHECK constraints, and request context middleware.
+
 ---
 
 ## 11e.1 Error Hierarchy Refactoring
@@ -41,7 +43,7 @@ export interface SpatulaErrorOptions {
 | `NetworkError` | `NETWORK_ERROR` | `true` | DNS failures, connection refused, SSL errors |
 | `StateError` | `STATE_ERROR` | `false` | Invalid job state transitions |
 
-`RateLimitError` extends `SpatulaError` with an additional `retryAfterMs?: number` property parsed from provider response headers.
+`RateLimitError` extends `SpatulaError` with an additional `retryAfterMs?: number` property. Constructor signature: `new RateLimitError(message: string, options?: SpatulaErrorOptions & { retryAfterMs?: number })`. The `retryAfterMs` is a first-class constructor parameter (not buried in `context`) because callers need direct access for backoff logic.
 
 ### InvalidTransitionError Migration
 
@@ -50,7 +52,7 @@ export interface SpatulaErrorOptions {
 - `StateError` stores `from` and `to` in the `context` field: `new StateError('Invalid transition', { context: { from, to } })`
 - Update `state-machine.ts` to import `StateError` from `@spatula/shared`
 - Update `packages/queue/src/index.ts` to re-export `StateError` instead of `InvalidTransitionError`
-- Update test files (`state-machine.test.ts`, `job-manager.test.ts`) that reference `InvalidTransitionError`
+- Update test files (`state-machine.test.ts`, `job-manager.test.ts`, `exports.test.ts`) that reference `InvalidTransitionError`
 
 ### Worker Error Cleanup
 
@@ -79,7 +81,7 @@ Add to `apps/api/src/middleware/error-handler.ts`:
 | `NetworkError` | 502 Bad Gateway |
 | `StateError` | 409 Conflict |
 
-Existing mappings (`ValidationError` → 400, `NotFoundError` → 404, `ConflictError` → 409) remain unchanged.
+Existing mappings (`ValidationError` → 400, `NotFoundError` → 404, `ConflictError` → 409) remain unchanged. Note: both `StateError` and `ConflictError` map to HTTP 409, but they carry different error codes in the response body (`STATE_ERROR` vs `CONFLICT`), allowing clients to distinguish them. `ConflictError` is for general resource conflicts (e.g., duplicate creation); `StateError` is specifically for invalid state machine transitions.
 
 ---
 
@@ -250,7 +252,12 @@ export interface ContentStore {
 - Add `binary_content bytea` column (nullable)
 - Make existing `content text` column nullable
 
-After migration, each row has either `content` (text) or `binary_content` (binary) populated, never both.
+After migration, each row has either `content` (text) or `binary_content` (binary) populated, never both. This invariant is enforced at the database level with a CHECK constraint:
+
+```sql
+CHECK (content IS NOT NULL OR binary_content IS NOT NULL)
+CHECK (NOT (content IS NOT NULL AND binary_content IS NOT NULL))
+```
 
 **PgContentStore** — Add `storeBinary()` and `retrieveBinary()` methods. Same key/ref pattern as text methods (`pg://{uuid}`).
 
@@ -269,7 +276,7 @@ export const ExportResult = z.object({
 });
 ```
 
-Text exporters set `data`. Binary exporters set `binaryData`. Never both.
+Text exporters set `data`. Binary exporters set `binaryData`. Never both. Note: `z.instanceof(Uint8Array)` works for runtime validation within a single process but would fail across serialization boundaries. This is acceptable because `ExportResult` is only constructed and consumed within the export-worker process (exporter → worker → content store).
 
 ### Column Mapper
 
@@ -288,7 +295,7 @@ Maps `FieldDefinition.type` (8 types) to native column types:
 | `array` | `UTF8` (JSON) | `VARCHAR` (JSON) | `TEXT` (JSON) |
 | `object` | `UTF8` (JSON) | `VARCHAR` (JSON) | `TEXT` (JSON) |
 
-Nested types (`array`, `object`) serialize as JSON strings — true nested Parquet structs add substantial complexity for minimal benefit in a web scraping context.
+Nested types (`array`, `object`) serialize as JSON strings — true nested Parquet structs add substantial complexity for minimal benefit in a web scraping context. Note: `currency` maps to `DOUBLE`/`REAL` for Parquet and SQLite, which is IEEE 754 floating point (lossy for currency). DuckDB uses `DECIMAL(19,4)` which is precise. This is acceptable for the web scraping use case where currency values are extracted as approximate data, not financial ledger entries.
 
 Exports `mapSchema(schema: SchemaDefinition, target: 'parquet' | 'duckdb' | 'sqlite')` returning `{ name, nativeType, nullable }[]`.
 
@@ -296,34 +303,38 @@ Exports `mapSchema(schema: SchemaDefinition, target: 'parquet' | 'duckdb' | 'sql
 
 **New file:** `packages/core/src/exporters/parquet-exporter.ts`
 
-**Dependency:** `hyparquet` — pure JS/WASM, no native bindings. Avoids platform-specific build issues.
+**Dependency:** `hyparquet-writer` — pure JS, no native bindings. Avoids platform-specific build issues. Note: `hyparquet` itself is read-only (parser only); the separate `hyparquet-writer` package provides `parquetWriteBuffer()` for creating Parquet files. Add `hyparquet` as well if read-back verification is needed in tests.
 
 Flow:
 1. Map schema fields via column-mapper
 2. Flatten entities into row arrays
 3. Serialize nested types as JSON strings
-4. Write to Parquet via `hyparquet`'s writer API
+4. Write to Parquet via `parquetWriteBuffer()` from `hyparquet-writer`
 5. Return `ExportResult` with `binaryData: Uint8Array`
 
 ### DuckDB Exporter
 
 **New file:** `packages/core/src/exporters/duckdb-exporter.ts`
 
-**Dependency:** `duckdb` + `duckdb-async` (official Node.js bindings with promise support).
+**Dependency:** `@duckdb/node-api` — the official DuckDB "Neo" Node.js client with native async/promise support. The older `duckdb` + `duckdb-async` packages are deprecated and will not receive updates past DuckDB 1.4.x.
 
 Flow:
-1. Create an in-memory DuckDB instance
-2. Create table using column-mapper types
-3. Insert entities via parameterized statements (batched, 500 rows per batch)
-4. Export database to binary via `EXPORT DATABASE` to a temp directory, then read the `.duckdb` file
-5. Close and clean up
-6. Return `ExportResult` with `binaryData: Uint8Array`
+1. Create a temp file path via `os.tmpdir()` + `crypto.randomUUID()` + `.duckdb`
+2. Open a file-backed DuckDB instance at the temp path (not in-memory — we need the file)
+3. Create table using column-mapper types
+4. Insert entities via parameterized statements (batched, 500 rows per batch)
+5. Close the DuckDB connection (flushes to disk)
+6. Read the temp file into `Uint8Array` via `fs.readFile()`
+7. Delete the temp file in a `finally` block (`fs.rm()`) to prevent leaks on worker crashes
+8. Return `ExportResult` with `binaryData: Uint8Array`
+
+Note: `EXPORT DATABASE` was considered but rejected — it exports CSV/Parquet files to a directory, not a `.duckdb` file. The file-backed approach produces a portable `.duckdb` database directly.
 
 ### SQLite Exporter
 
 **New file:** `packages/core/src/exporters/sqlite-exporter.ts`
 
-**Dependency:** `better-sqlite3` — synchronous API, fastest SQLite binding for Node.js.
+**Dependency:** `better-sqlite3` — synchronous API, fastest SQLite binding for Node.js. Note: unlike `hyparquet-writer` (pure JS), both `better-sqlite3` and `@duckdb/node-api` have native C/C++ bindings requiring compilation. This is acceptable because no pure-JS alternatives exist that perform adequately for these formats, and both packages are widely used with reliable prebuilt binaries for common platforms.
 
 Flow:
 1. Create in-memory database via `new Database(':memory:')`
@@ -393,6 +404,7 @@ Remove `attempts: 1` override in export enqueue call. Exports inherit queue defa
 | `packages/queue/src/workers/export-worker.ts` | Typed errors, binary store branch, exporter factory, format widening |
 | `packages/queue/src/workers/crawl-worker.ts` | Import and use `CrawlError`, `NetworkError` |
 | `packages/queue/src/queues.ts` | `ExportJobPayload.format` widened to `ExportFormat` |
+| `apps/api/src/schemas/export-request.ts` | Widen format enum from `['json', 'csv']` to all 5 formats |
 | `packages/core/src/interfaces/content-store.ts` | `storeBinary()`, `retrieveBinary()` |
 | `packages/core/src/interfaces/exporter.ts` | `binaryData` on `ExportResult` |
 | `packages/db/src/content-store/pg-content-store.ts` | `storeBinary()`, `retrieveBinary()` implementations |
@@ -402,15 +414,17 @@ Remove `attempts: 1` override in export enqueue call. Exports inherit queue defa
 | `apps/api/src/app.ts` | Add `requestContextMiddleware` to chain |
 | `apps/api/src/routes/exports.ts` | Binary content types, remove `attempts: 1`, format widening |
 | `apps/api/src/server.ts` | Call `loadConfig()` at startup |
+| `packages/core/src/exporters/index.ts` | Re-export new exporters and column-mapper |
+| `packages/shared/src/index.ts` | Export new error types |
 
 ### Dependencies Added
 
 | Package | Version | Purpose |
 |---------|---------|---------|
-| `hyparquet` | latest | Pure JS Parquet writer |
-| `duckdb` | latest | DuckDB Node.js bindings |
-| `duckdb-async` | latest | Promise wrapper for duckdb |
-| `better-sqlite3` | latest | SQLite Node.js bindings |
+| `hyparquet-writer` | latest | Pure JS Parquet file writer |
+| `hyparquet` | latest | Parquet reader (for test verification) |
+| `@duckdb/node-api` | latest | Official DuckDB Neo Node.js client |
+| `better-sqlite3` | latest | SQLite Node.js bindings (native) |
 | `@types/better-sqlite3` | latest | TypeScript types |
 
 ---
@@ -419,10 +433,10 @@ Remove `attempts: 1` override in export enqueue call. Exports inherit queue defa
 
 Each section has independent test coverage:
 
-- **Error hierarchy:** Unit tests for each new error type (retryable flag, context, code). Update existing state-machine and job-manager tests for `StateError`.
+- **Error hierarchy:** Unit tests for each new error type (retryable flag, context, code). Update existing `state-machine.test.ts`, `job-manager.test.ts`, and `exports.test.ts` for `StateError` migration.
 - **Config validation:** Unit tests for `loadConfig()` and `loadConfigSafe()` — valid env, missing required, invalid formats, defaults.
 - **Logger context:** Unit tests for `createLoggerWithContext()` verifying child logger fields. Integration test for request-context middleware.
-- **Exporters:** Unit tests for each exporter with a small entity set — verify output is valid Parquet/DuckDB/SQLite by reading it back. Unit tests for column-mapper covering all 8 field types. Integration tests for binary content store round-trip.
+- **Exporters:** Unit tests for each exporter with a small entity set — verify output is valid Parquet/DuckDB/SQLite by reading it back (using `hyparquet` for Parquet read-back, `@duckdb/node-api` for DuckDB read-back, `better-sqlite3` for SQLite read-back). Unit tests for column-mapper covering all 8 field types. Integration tests for binary content store round-trip (`storeBinary` → `retrieveBinary`). Update existing `export-worker.test.ts` to cover the binary code path (the `binaryData` branch in the worker).
 
 ---
 
