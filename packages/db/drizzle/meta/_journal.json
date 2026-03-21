@@ -8,6 +8,13 @@
       "when": 1773855633473,
       "tag": "0000_previous_nova",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1774122674309,
+      "tag": "0001_good_shotgun",
+      "breakpoints": true
     }
   ]
 }

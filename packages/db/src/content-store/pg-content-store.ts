@@ -33,7 +33,7 @@ export class PgContentStore implements ContentStore {
     try {
       const [row] = await this.db.select().from(contentStore).where(eq(contentStore.id, id));
 
-      if (!row) {
+      if (!row || !row.content) {
         throw new StorageError(`Content not found: ${ref}`, { context: { ref } });
       }
 
@@ -55,6 +55,39 @@ export class PgContentStore implements ContentStore {
       logger.debug({ ref }, 'content deleted');
     } catch (error) {
       throw new StorageError(`Failed to delete content: ${(error as Error).message}`, {
+        cause: error as Error,
+        context: { ref },
+      });
+    }
+  }
+
+  async storeBinary(key: string, data: Uint8Array): Promise<string> {
+    try {
+      const [row] = await this.db
+        .insert(contentStore)
+        .values({ key, binaryContent: data })
+        .onConflictDoUpdate({ target: contentStore.key, set: { binaryContent: data } })
+        .returning();
+
+      const ref = `pg://${row.id}`;
+      logger.debug({ ref, key, size: data.byteLength }, 'binary content stored');
+      return ref;
+    } catch (error) {
+      throw new StorageError(`Failed to store binary content: ${(error as Error).message}`, {
+        cause: error as Error,
+        context: { key },
+      });
+    }
+  }
+
+  async retrieveBinary(ref: string): Promise<Uint8Array | null> {
+    const id = this.parseRef(ref);
+    try {
+      const [row] = await this.db.select().from(contentStore).where(eq(contentStore.id, id));
+      if (!row) return null;
+      return row.binaryContent ?? null;
+    } catch (error) {
+      throw new StorageError(`Failed to retrieve binary content: ${(error as Error).message}`, {
         cause: error as Error,
         context: { ref },
       });
