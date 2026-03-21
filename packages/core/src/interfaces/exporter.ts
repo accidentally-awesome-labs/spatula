@@ -18,6 +18,7 @@ export const ExportResult = z.object({
   entityCount: z.number(),
   filePath: z.string().optional(),
   data: z.unknown().optional(),
+  binaryData: z.instanceof(Uint8Array).optional(),
   generatedAt: z.coerce.date(),
 });
 
