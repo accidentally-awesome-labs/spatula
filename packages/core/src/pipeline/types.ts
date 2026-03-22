@@ -10,7 +10,6 @@ import type {
   Exporter,
   SchemaDefinition,
 } from '../index.js';
-import type { Entity } from '@spatula/shared';
 
 // Re-export EventPublisher interface so orchestrators don't import from @spatula/queue
 export interface EventPublisher {
@@ -22,14 +21,14 @@ export interface EventPublisher {
 // but are declared here so @spatula/core has no dependency on @spatula/db
 
 export interface CrawlTaskRepo {
-  updateStatus(taskId: string, tenantId: string, status: string): Promise<void>;
-  updateClassification(taskId: string, tenantId: string, classification: string): Promise<void>;
+  updateStatus(taskId: string, tenantId: string, status: string): Promise<unknown>;
+  updateClassification(taskId: string, tenantId: string, classification: string): Promise<unknown>;
   enqueue(data: { jobId: string; tenantId: string; url: string; depth: number; parentTaskId: string }): Promise<{ id: string }>;
 }
 
 export interface PageRepo {
   findByContentHash(hash: string, tenantId: string): Promise<{ id: string } | null>;
-  findByIds(ids: string[], tenantId: string): Promise<Array<{ id: string; metadata: Record<string, unknown>; createdAt: Date }>>;
+  findByIds(ids: string[], tenantId: string): Promise<Array<{ id: string; metadata: Record<string, unknown> | null; createdAt: Date }>>;
   create(data: {
     taskId: string;
     tenantId: string;
@@ -48,7 +47,7 @@ export interface ExtractionRepo {
     data: Record<string, unknown>;
     unmappedFields: unknown[];
     metadata: unknown;
-  }): Promise<void>;
+  }): Promise<unknown>;
   findByJob(jobId: string, tenantId: string, options?: { schemaVersion?: number; limit?: number; offset?: number }): Promise<Array<{
     id: string;
     jobId: string;
@@ -61,27 +60,27 @@ export interface ExtractionRepo {
 
 export interface SchemaRepo {
   findLatest(jobId: string, tenantId: string): Promise<{ id: string; version: number; definition: SchemaDefinition } | null>;
-  create(data: { jobId: string; tenantId: string; version: number; definition: SchemaDefinition; parentId?: string }): Promise<void>;
+  create(data: { jobId: string; tenantId: string; version: number; definition: SchemaDefinition; parentId?: string }): Promise<unknown>;
 }
 
 export interface JobRepo {
   findById(jobId: string, tenantId: string): Promise<{ id: string; config: unknown; status?: string } | null>;
-  updateStatus(jobId: string, tenantId: string, status: string): Promise<void>;
+  updateStatus(jobId: string, tenantId: string, status: string): Promise<unknown>;
 }
 
 export interface EntityRepo {
-  create(data: { jobId: string; tenantId: string; mergedData: Record<string, unknown>; provenance: unknown; qualityScore: number }): Promise<{ id: string }>;
-  findByJob(jobId: string, tenantId: string, options?: { limit: number; offset: number }): Promise<Entity[]>;
-  findByJobWithProvenance(jobId: string, tenantId: string, options?: { limit: number; offset: number }): Promise<Entity[]>;
+  create(data: { jobId: string; tenantId: string; mergedData: Record<string, unknown>; provenance: Record<string, unknown>; qualityScore: number }): Promise<{ id: string }>;
+  findByJob(jobId: string, tenantId: string, options?: { limit: number; offset: number }): Promise<unknown[]>;
+  findByJobWithProvenance(jobId: string, tenantId: string, options?: { limit: number; offset: number }): Promise<unknown[]>;
   countByJob(jobId: string, tenantId: string): Promise<number>;
 }
 
 export interface EntitySourceRepo {
-  bulkLink(links: Array<{ entityId: string; extractionId: string; matchConfidence: number }>): Promise<void>;
+  bulkLink(links: Array<{ entityId: string; extractionId: string; matchConfidence: number }>): Promise<unknown>;
 }
 
 export interface SourceTrustRepo {
-  upsert(data: { jobId: string; tenantId: string; domain: string; trustLevel: string; reasoning: string }): Promise<void>;
+  upsert(data: { jobId: string; tenantId: string; domain: string; trustLevel: string; reasoning: string }): Promise<unknown>;
 }
 
 export interface ActionRepo {
@@ -94,7 +93,7 @@ export interface ActionRepo {
     status: string;
     confidence?: number;
     reasoning?: string;
-  }): Promise<void>;
+  }): Promise<unknown>;
 }
 
 export interface ExportRepo {
@@ -105,7 +104,7 @@ export interface ExportRepo {
     fileSize?: number;
     error?: string;
     completedAt?: Date;
-  }): Promise<void>;
+  }): Promise<unknown>;
 }
 
 // --- Orchestrator dependency bundles ---
