@@ -179,6 +179,7 @@ export interface CrawlTaskResult {
   deduplicated: boolean;
   schemaVersion: number | null;
   evolutionConfig: { enabled: boolean; batchSize: number } | null;
+  error?: Error;  // Set if the task failed
 }
 
 export interface SchemaEvolutionInput {

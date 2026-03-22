@@ -1,5 +1,5 @@
 // packages/core/src/pipeline/export-orchestrator.ts
-import { createLoggerWithContext, QueueError, ValidationError } from '@spatula/shared';
+import { createLoggerWithContext, StorageError, ValidationError } from '@spatula/shared';
 import type { Entity } from '@spatula/shared';
 import { CsvExporter } from '../exporters/csv-exporter.js';
 import { JsonExporter } from '../exporters/json-exporter.js';
@@ -7,7 +7,7 @@ import { SqliteExporter } from '../exporters/sqlite-exporter.js';
 import { ParquetExporter } from '../exporters/parquet-exporter.js';
 import { DuckDBExporter } from '../exporters/duckdb-exporter.js';
 import { generateDocumentation } from '../exporters/documentation-generator.js';
-import type { Exporter, SchemaDefinition } from '../index.js';
+import type { Exporter, ExportFormat, ExportOptions, SchemaDefinition } from '../index.js';
 import type {
   ExportOrchestratorDeps,
   ExportInput,
@@ -23,7 +23,7 @@ function getExporter(format: string): Exporter {
     case 'sqlite': return new SqliteExporter();
     case 'parquet': return new ParquetExporter();
     case 'duckdb': return new DuckDBExporter();
-    default: throw new QueueError(`Unsupported export format: ${format}`);
+    default: throw new ValidationError(`Unsupported export format: ${format}`);
   }
 }
 
@@ -44,11 +44,11 @@ export async function processExport(
     // 0. Verify job exists and is in a completed state
     const job = await deps.jobRepo.findById(jobId, tenantId);
     if (!job) {
-      throw new QueueError('Job not found', { context: { exportId, jobId } });
+      throw new StorageError('Job not found', { context: { exportId, jobId } });
     }
     const jobStatus = (job as { status?: string }).status;
     if (jobStatus !== 'completed') {
-      throw new QueueError(`Job is not completed (status: ${jobStatus}). Export requires a completed job.`, { context: { exportId, jobId, status: jobStatus } });
+      throw new ValidationError(`Job is not completed (status: ${jobStatus}). Export requires a completed job.`, { context: { exportId, jobId, status: jobStatus } });
     }
 
     // 1. Mark as processing
@@ -57,7 +57,7 @@ export async function processExport(
     // 2. Fetch schema
     const schemaRow = await deps.schemaRepo.findLatest(jobId, tenantId);
     if (!schemaRow) {
-      throw new QueueError('No schema found for job', { context: { exportId, jobId } });
+      throw new StorageError('No schema found for job', { context: { exportId, jobId } });
     }
     const schema = schemaRow.definition as SchemaDefinition;
 
@@ -86,10 +86,10 @@ export async function processExport(
     // 5. Run exporter
     const exporter = getExporter(format);
     const result = await exporter.export(allEntities, schema, {
-      format: format as any,
+      format: format as ExportFormat,
       includeProvenance,
       includeDocumentation: format === 'json',
-    });
+    } as ExportOptions);
 
     // 6. Store result
     const key = `exports/${tenantId}/${jobId}/${exportId}.${format}`;

@@ -202,11 +202,15 @@ describe('processCrawlTask', () => {
     expect(result.classification).toBe('unknown');
   });
 
-  it('marks task as failed and throws on crawl error', async () => {
+  it('marks task as failed and returns error on crawl error', async () => {
     const deps = createMockDeps();
     (deps.crawler.crawl as any).mockRejectedValue(new Error('Network timeout'));
 
-    await expect(processCrawlTask(defaultInput, deps)).rejects.toThrow();
+    const result = await processCrawlTask(defaultInput, deps);
+    expect(result.error).toBeDefined();
+    expect(result.error!.message).toContain('Crawl task failed');
+    expect(result.pageId).toBe('');
+    expect(result.classification).toBe('unknown');
     expect(deps.taskRepo.updateStatus).toHaveBeenCalledWith('task-1', 'tenant-1', 'failed');
   });
 

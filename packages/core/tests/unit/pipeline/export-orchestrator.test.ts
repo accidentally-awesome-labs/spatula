@@ -1,6 +1,6 @@
 // packages/core/tests/unit/pipeline/export-orchestrator.test.ts
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { QueueError, ValidationError } from '@spatula/shared';
+import { StorageError, ValidationError } from '@spatula/shared';
 import type { ExportOrchestratorDeps, ExportInput, PipelineExportResult } from '../../../src/pipeline/types.js';
 
 // Mock generateDocumentation at module level

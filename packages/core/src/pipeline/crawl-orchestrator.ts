@@ -99,7 +99,7 @@ export async function processCrawlTask(
     const classification = await deps.classifier.classify(
       crawlResult.html,
       url,
-      (job.config as JobConfig).description,
+      config.description,
     );
     await deps.taskRepo.updateClassification(taskId, tenantId, classification.classification);
 
@@ -111,16 +111,18 @@ export async function processCrawlTask(
       data: { taskId, url, classification: classification.classification },
     });
 
+    // Cache schema lookup (used in extraction, link evaluation, and return value)
+    const schema = await deps.schemaRepo.findLatest(jobId, tenantId);
+
     // 6. Extract if page is extractable
     let extracted = false;
     if (EXTRACTABLE_CLASSIFICATIONS.has(classification.classification)) {
-      const schema = await deps.schemaRepo.findLatest(jobId, tenantId);
       if (schema) {
         const extraction = await deps.extractor.extract(
           crawlResult.html,
           url,
           schema.definition,
-          (job.config as JobConfig).description,
+          config.description,
         );
         await deps.extractionRepo.store({
           jobId,
@@ -142,7 +144,6 @@ export async function processCrawlTask(
 
     if (depth < maxDepth && crawlResult.links.length > 0) {
       if (deps.linkEvaluator) {
-        const schema = await deps.schemaRepo.findLatest(jobId, tenantId);
         if (schema) {
           const context: LinkEvaluationContext = {
             description: config.description,
@@ -173,8 +174,6 @@ export async function processCrawlTask(
     // 8. Mark task completed
     await deps.taskRepo.updateStatus(taskId, tenantId, 'completed');
 
-    // Cache job config values for schema evolution trigger check (avoids re-fetching)
-    const schema = await deps.schemaRepo.findLatest(jobId, tenantId);
     const evolutionCfg = config.schema.evolutionConfig;
 
     return {
@@ -198,7 +197,18 @@ export async function processCrawlTask(
     await deps.taskRepo.updateStatus(taskId, tenantId, 'failed').catch((e) => {
       logger.error({ taskId, error: e }, 'failed to mark task as failed');
     });
-    throw wrappedError;
+    // Return a failure result instead of throwing — let the caller decide whether to rethrow
+    return {
+      pageId: '',
+      classification: 'unknown',
+      extracted: false,
+      linksFound: [],
+      contentHash: '',
+      deduplicated: false,
+      schemaVersion: null,
+      evolutionConfig: null,
+      error: wrappedError,
+    };
   }
 }
 

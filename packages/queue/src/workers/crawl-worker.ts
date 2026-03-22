@@ -27,6 +27,12 @@ export async function processCrawlJob(data: CrawlJobData, deps: WorkerDeps): Pro
       },
     );
 
+    // Orchestrator returns error field on failure instead of throwing
+    if (result.error) {
+      logger.error({ taskId, url, error: result.error }, 'crawl job failed');
+      return;
+    }
+
     // 2. Check if schema evolution should be triggered (queue-specific)
     if (result.extracted) {
       const evolution = await shouldTriggerSchemaEvolution(
@@ -89,8 +95,8 @@ export async function processCrawlJob(data: CrawlJobData, deps: WorkerDeps): Pro
       });
     }
   } catch (error) {
-    // Orchestrator already marked task as failed and logged the error.
-    // Worker wrapper just ensures the error doesn't crash the BullMQ worker.
+    // Safety net for unexpected errors in the worker's own logic (queue operations, etc.).
+    // Orchestrator-level errors are returned via result.error and handled above.
     logger.error({ taskId, url, error }, 'crawl job failed');
   }
 }

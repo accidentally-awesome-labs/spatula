@@ -760,7 +760,7 @@ describe('processCrawlJob', () => {
       );
       const data = createJobData();
 
-      // Wrapper catches orchestrator's rethrow — must not propagate to BullMQ
+      // Orchestrator returns error field instead of throwing — worker handles it gracefully
       await expect(processCrawlJob(data, deps)).resolves.toBeUndefined();
     });
 
