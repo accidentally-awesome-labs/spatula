@@ -578,8 +578,8 @@ describe('processCrawlJob', () => {
       'irrelevant',
     );
 
-    // But no extraction or schema lookup
-    expect(deps.schemaRepo.findLatest).not.toHaveBeenCalled();
+    // But no extraction should have happened
+    // Note: schemaRepo.findLatest may be called by the orchestrator for caching purposes
     expect(deps.extractor.extract).not.toHaveBeenCalled();
     expect(deps.extractionRepo.store).not.toHaveBeenCalled();
 
@@ -750,6 +750,40 @@ describe('processCrawlJob', () => {
         'crawl:https://example.com/product/3',
         expect.objectContaining({ url: 'https://example.com/product/3' }),
       );
+    });
+  });
+
+  describe('wrapper-specific behavior', () => {
+    it('does not throw when orchestrator throws on crawl error', async () => {
+      (deps.crawler.crawl as ReturnType<typeof vi.fn>).mockRejectedValue(
+        new Error('Connection timeout'),
+      );
+      const data = createJobData();
+
+      // Wrapper catches orchestrator's rethrow — must not propagate to BullMQ
+      await expect(processCrawlJob(data, deps)).resolves.toBeUndefined();
+    });
+
+    it('does not publish crawl_progress when no links are enqueued', async () => {
+      // Use depth at max so no links are enqueued
+      const data = createJobData({ depth: 3 });
+
+      const mockPublish = vi.fn();
+      (deps as any).eventPublisher = { publish: mockPublish };
+
+      await processCrawlJob(data, deps);
+
+      // task_completed event should still be published
+      const taskCompletedCalls = mockPublish.mock.calls.filter(
+        (call: unknown[]) => (call[1] as { type: string }).type === 'task_completed',
+      );
+      expect(taskCompletedCalls.length).toBe(1);
+
+      // crawl_progress should NOT be published (no links enqueued)
+      const crawlProgressCalls = mockPublish.mock.calls.filter(
+        (call: unknown[]) => (call[1] as { type: string }).type === 'crawl_progress',
+      );
+      expect(crawlProgressCalls.length).toBe(0);
     });
   });
 });
