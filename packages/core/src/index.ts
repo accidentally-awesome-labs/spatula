@@ -30,3 +30,6 @@ export * from './execution/index.js';
 
 // Link Evaluation
 export * from './link-evaluation/index.js';
+
+// Pipeline
+export * from './pipeline/index.js';
