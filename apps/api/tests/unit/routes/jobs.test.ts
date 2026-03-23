@@ -1,11 +1,13 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { createApp } from '../../../src/app.js';
 import type { AppDeps } from '../../../src/types.js';
+import type { Pool } from 'pg';
 
 const TENANT_ID = '00000000-0000-0000-0000-000000000001';
 
 function createMockDeps(): AppDeps {
   return {
+    dbPool: { end: vi.fn() } as unknown as Pool,
     jobRepo: {
       findById: vi.fn().mockResolvedValue({ id: 'job-1', status: 'pending' }),
       findByTenant: vi.fn().mockResolvedValue([]),

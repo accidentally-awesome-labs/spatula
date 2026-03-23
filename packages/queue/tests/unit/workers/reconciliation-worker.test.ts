@@ -2,6 +2,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { processReconciliationJob } from '../../../src/workers/reconciliation-worker.js';
 import type { ReconciliationJobData } from '../../../src/queues.js';
 import type { WorkerDeps } from '../../../src/worker-deps.js';
+import type { Pool } from 'pg';
 
 const JOB_ID = 'job-1';
 const TENANT_ID = 'tenant-1';
@@ -226,6 +227,7 @@ function createMockReconciliationResult() {
 
 function createMockDeps(): WorkerDeps {
   return {
+    dbPool: { end: vi.fn() } as unknown as Pool,
     crawler: {
       type: 'playwright' as const,
       crawl: vi.fn().mockResolvedValue({}),

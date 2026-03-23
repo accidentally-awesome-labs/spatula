@@ -124,4 +124,19 @@ export class JobProgressManager {
       this.heartbeatInterval = null;
     }
   }
+
+  closeAll(): void {
+    this.stopHeartbeat();
+    for (const [_jobId, clients] of this.clients.entries()) {
+      for (const client of clients) {
+        try {
+          client.ws.close();
+        } catch {
+          // Client may already be disconnected
+        }
+      }
+      clients.clear();
+    }
+    this.clients.clear();
+  }
 }

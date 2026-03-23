@@ -1,5 +1,7 @@
+// packages/queue/src/worker-entrypoint.ts
 // Standalone executable — NOT exported from the barrel (index.ts).
 // Run via: node dist/worker-entrypoint.js
+
 import { Worker } from 'bullmq';
 import Redis from 'ioredis';
 import { createLogger, loadConfig } from '@spatula/shared';
@@ -9,17 +11,10 @@ import { processSchemaEvolutionJob } from './workers/schema-worker.js';
 import { processReconciliationJob } from './workers/reconciliation-worker.js';
 import { processExportJob } from './workers/export-worker.js';
 import { QUEUE_NAMES, DEFAULT_QUEUE_CONFIG, createQueues } from './queues.js';
-import type {
-  CrawlJobData,
-  SchemaEvolutionJobData,
-  ReconciliationJobData,
-  ExportJobPayload,
-} from './queues.js';
 import type { WorkerDeps } from './worker-deps.js';
+import type { CrawlJobData, SchemaEvolutionJobData, ReconciliationJobData, ExportJobPayload } from './queues.js';
 
 const logger = createLogger('worker-entrypoint');
-
-const SHUTDOWN_TIMEOUT_MS = 25_000;
 
 async function main() {
   const config = loadConfig();
@@ -37,14 +32,15 @@ async function main() {
   };
 
   // BullMQ Workers require maxRetriesPerRequest: null
-  const workerConnection = { ...redisOpts, maxRetriesPerRequest: null };
+  const workerConnection = { ...redisOpts, maxRetriesPerRequest: null as null };
 
   // Separate Redis connection for schema evolution distributed locks.
   // This uses normal settings (not maxRetriesPerRequest: null) because
   // lock semantics need proper retry behavior.
   const redisForLock = new Redis(redisUrl);
 
-  // db is used for content store and repository construction.
+  // db is not used yet — full DI wiring (repositories, content store)
+  // will be added in Wave 2 when service factories are available.
   const { pool } = createDatabasePool();
 
   // Create queues (for enqueuing child jobs from crawl worker)
@@ -92,10 +88,7 @@ async function main() {
       },
     );
     workers.push(worker);
-    logger.info(
-      { queue: QUEUE_NAMES.CRAWL, concurrency: queueConfig.crawl.concurrency },
-      'Crawl worker started',
-    );
+    logger.info({ queue: QUEUE_NAMES.CRAWL, concurrency: queueConfig.crawl.concurrency }, 'Crawl worker started');
   }
 
   if (isEnabled('schema-evolution')) {
@@ -158,12 +151,6 @@ async function main() {
     if (isShuttingDown) return;
     isShuttingDown = true;
     logger.info({ signal }, 'Worker shutdown initiated');
-
-    const forceTimer = setTimeout(() => {
-      logger.warn('Worker shutdown timeout exceeded, forcing exit');
-      process.exit(1);
-    }, SHUTDOWN_TIMEOUT_MS);
-    forceTimer.unref();
 
     try {
       // 1. BullMQ Worker.close() waits for current job to finish,

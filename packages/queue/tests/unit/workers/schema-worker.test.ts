@@ -9,6 +9,7 @@ import { acquireLock, releaseLock } from '../../../src/redis-lock.js';
 import { processSchemaEvolutionJob } from '../../../src/workers/schema-worker.js';
 import type { SchemaEvolutionJobData } from '../../../src/queues.js';
 import type { WorkerDeps } from '../../../src/worker-deps.js';
+import type { Pool } from 'pg';
 
 function createMockSchema() {
   return {
@@ -142,6 +143,7 @@ function createAddFieldAction() {
 
 function createMockDeps(): WorkerDeps {
   return {
+    dbPool: { end: vi.fn() } as unknown as Pool,
     crawler: {
       type: 'playwright' as const,
       crawl: vi.fn().mockResolvedValue({}),

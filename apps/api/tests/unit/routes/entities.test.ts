@@ -3,11 +3,13 @@ import { Hono } from 'hono';
 import { entityRoutes } from '../../../src/routes/entities.js';
 import type { AppDeps, AppEnv } from '../../../src/types.js';
 import { errorHandler } from '../../../src/middleware/error-handler.js';
+import type { Pool } from 'pg';
 
 const TENANT_ID = 'tenant-1';
 
 function createMockDeps(): AppDeps {
   return {
+    dbPool: { end: vi.fn() } as unknown as Pool,
     entityRepo: {
       findByJob: vi.fn().mockResolvedValue([
         { id: 'ent-1', mergedData: { name: 'Product A' }, qualityScore: 0.95 },
