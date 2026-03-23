@@ -1,4 +1,5 @@
 import { serve } from '@hono/node-server';
+import type { ServerType } from '@hono/node-server';
 import { createNodeWebSocket } from '@hono/node-ws';
 import { createLogger, loadConfig } from '@spatula/shared';
 import { createApp } from './app.js';
@@ -10,15 +11,69 @@ const logger = createLogger('api:server');
 const UUID_REGEX =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
+const SHUTDOWN_TIMEOUT_MS = 25_000; // 25s — leaves 5s buffer before k8s SIGKILL at 30s
+
+function setupGracefulShutdown(
+  server: ServerType,
+  deps: AppDeps,
+  progressManager?: JobProgressManager,
+): void {
+  let isShuttingDown = false;
+
+  const shutdown = async (signal: string) => {
+    if (isShuttingDown) return;
+    isShuttingDown = true;
+    logger.info({ signal }, 'Shutdown signal received, draining connections');
+
+    // Force exit after timeout
+    const forceTimer = setTimeout(() => {
+      logger.warn('Shutdown timeout exceeded, forcing exit');
+      process.exit(1);
+    }, SHUTDOWN_TIMEOUT_MS);
+    forceTimer.unref(); // Don't keep process alive just for this timer
+
+    try {
+      // 1. Stop accepting new connections and drain in-flight requests
+      await new Promise<void>((resolve) => server.close(() => resolve()));
+
+      // 2. Close WebSocket connections
+      if (progressManager) {
+        progressManager.closeAll();
+      }
+
+      // 3. Close Redis subscriber
+      if (deps.redisSubscriber) {
+        await deps.redisSubscriber.quit();
+      }
+
+      // 4. Close database pool
+      if (deps.dbPool) {
+        await deps.dbPool.end();
+      }
+
+      logger.info('Shutdown complete');
+      process.exit(0);
+    } catch (err) {
+      logger.error({ err }, 'Error during shutdown');
+      process.exit(1);
+    }
+  };
+
+  process.on('SIGTERM', () => void shutdown('SIGTERM'));
+  process.on('SIGINT', () => void shutdown('SIGINT'));
+}
+
 export function startServer(deps: AppDeps, port?: number) {
   const config = loadConfig();
   const serverPort = port ?? config.server.port;
   const app = createApp(deps);
   const { injectWebSocket, upgradeWebSocket } = createNodeWebSocket({ app });
 
+  let progressManager: JobProgressManager | undefined;
+
   // Mount WebSocket route when Redis subscriber is available
   if (deps.redisSubscriber) {
-    const progressManager = new JobProgressManager(deps.redisSubscriber);
+    progressManager = new JobProgressManager(deps.redisSubscriber);
 
     app.get(
       '/ws/jobs/:id/progress',
@@ -52,10 +107,10 @@ export function startServer(deps: AppDeps, port?: number) {
               return;
             }
 
-            void progressManager.addClient(jobId, tenantId, ws.raw as any);
+            void progressManager!.addClient(jobId, tenantId, ws.raw as any);
           },
           onClose(_evt, ws) {
-            void progressManager.removeClient(jobId, ws.raw as any);
+            void progressManager!.removeClient(jobId, ws.raw as any);
           },
         };
       }),
@@ -70,6 +125,7 @@ export function startServer(deps: AppDeps, port?: number) {
   });
 
   injectWebSocket(server);
+  setupGracefulShutdown(server, deps, progressManager);
 
   logger.info({ port: serverPort }, 'API server started');
   return server;
