@@ -10,7 +10,8 @@
     "test": "vitest run --passWithNoTests",
     "lint": "eslint src/",
     "lint:fix": "eslint src/ --fix",
-    "clean": "rm -rf dist .turbo"
+    "clean": "rm -rf dist .turbo",
+    "start:workers": "node dist/worker-entrypoint.js"
   },
   "dependencies": {
     "@spatula/core": "workspace:*",
