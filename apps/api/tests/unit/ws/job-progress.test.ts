@@ -138,4 +138,83 @@ describe('JobProgressManager', () => {
 
     vi.useRealTimers();
   });
+
+  describe('closeAll', () => {
+    it('closes all connected WebSocket clients', async () => {
+      const ws1 = createMockWS();
+      const ws2 = createMockWS();
+      await manager.addClient('job-1', 'tenant-1', ws1 as any);
+      await manager.addClient('job-2', 'tenant-2', ws2 as any);
+
+      manager.closeAll();
+
+      expect(ws1.close).toHaveBeenCalled();
+      expect(ws2.close).toHaveBeenCalled();
+    });
+
+    it('clears the clients map after closing', async () => {
+      const ws1 = createMockWS();
+      const ws2 = createMockWS();
+      await manager.addClient('job-1', 'tenant-1', ws1 as any);
+      await manager.addClient('job-2', 'tenant-2', ws2 as any);
+
+      manager.closeAll();
+
+      // After closeAll, adding a new client should trigger a fresh subscribe
+      mockRedis.subscribe.mockClear();
+      const ws3 = createMockWS();
+      await manager.addClient('job-1', 'tenant-1', ws3 as any);
+      expect(mockRedis.subscribe).toHaveBeenCalledWith('spatula:events:job-1');
+    });
+
+    it('stops the heartbeat interval', async () => {
+      vi.useFakeTimers();
+      const ws = createMockWS();
+      await manager.addClient('job-1', 'tenant-1', ws as any);
+      expect(ws.send).toHaveBeenCalledTimes(1); // connected
+
+      manager.closeAll();
+
+      // Advance time — no heartbeat should fire since closeAll stopped it
+      vi.advanceTimersByTime(30_000);
+      expect(ws.send).toHaveBeenCalledTimes(1); // still only connected
+
+      vi.useRealTimers();
+    });
+
+    it('handles already-disconnected clients without crashing', async () => {
+      const ws1 = createMockWS();
+      const ws2 = createMockWS();
+      ws1.close = vi.fn(() => {
+        throw new Error('WebSocket already closed');
+      });
+      await manager.addClient('job-1', 'tenant-1', ws1 as any);
+      await manager.addClient('job-2', 'tenant-2', ws2 as any);
+
+      // Should not throw
+      expect(() => manager.closeAll()).not.toThrow();
+      expect(ws2.close).toHaveBeenCalled();
+    });
+
+    it('works with clients across multiple jobs', async () => {
+      const ws1 = createMockWS();
+      const ws2 = createMockWS();
+      const ws3 = createMockWS();
+      await manager.addClient('job-1', 'tenant-1', ws1 as any);
+      await manager.addClient('job-1', 'tenant-1', ws2 as any);
+      await manager.addClient('job-2', 'tenant-2', ws3 as any);
+
+      manager.closeAll();
+
+      expect(ws1.close).toHaveBeenCalled();
+      expect(ws2.close).toHaveBeenCalled();
+      expect(ws3.close).toHaveBeenCalled();
+
+      // Verify map is fully cleared — fresh subscribe needed for any job
+      mockRedis.subscribe.mockClear();
+      const ws4 = createMockWS();
+      await manager.addClient('job-1', 'tenant-1', ws4 as any);
+      expect(mockRedis.subscribe).toHaveBeenCalledWith('spatula:events:job-1');
+    });
+  });
 });

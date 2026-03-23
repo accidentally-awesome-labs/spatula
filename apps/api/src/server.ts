@@ -4,14 +4,13 @@ import { createNodeWebSocket } from '@hono/node-ws';
 import { createLogger, loadConfig } from '@spatula/shared';
 import { createApp } from './app.js';
 import { JobProgressManager } from './ws/job-progress.js';
+import { executeShutdown, SHUTDOWN_TIMEOUT_MS } from './shutdown.js';
 import type { AppDeps } from './types.js';
 
 const logger = createLogger('api:server');
 
 const UUID_REGEX =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-
-const SHUTDOWN_TIMEOUT_MS = 25_000; // 25s — leaves 5s buffer before k8s SIGKILL at 30s
 
 function setupGracefulShutdown(
   server: ServerType,
@@ -33,25 +32,7 @@ function setupGracefulShutdown(
     forceTimer.unref(); // Don't keep process alive just for this timer
 
     try {
-      // 1. Stop accepting new connections and drain in-flight requests
-      await new Promise<void>((resolve) => server.close(() => resolve()));
-
-      // 2. Close WebSocket connections
-      if (progressManager) {
-        progressManager.closeAll();
-      }
-
-      // 3. Close Redis subscriber
-      if (deps.redisSubscriber) {
-        await deps.redisSubscriber.quit();
-      }
-
-      // 4. Close database pool
-      if (deps.dbPool) {
-        await deps.dbPool.end();
-      }
-
-      logger.info('Shutdown complete');
+      await executeShutdown(server, deps, progressManager);
       process.exit(0);
     } catch (err) {
       logger.error({ err }, 'Error during shutdown');

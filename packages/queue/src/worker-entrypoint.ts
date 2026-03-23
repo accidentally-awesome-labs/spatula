@@ -11,6 +11,7 @@ import { processSchemaEvolutionJob } from './workers/schema-worker.js';
 import { processReconciliationJob } from './workers/reconciliation-worker.js';
 import { processExportJob } from './workers/export-worker.js';
 import { QUEUE_NAMES, DEFAULT_QUEUE_CONFIG, createQueues } from './queues.js';
+import { parseEnabledWorkers, isWorkerEnabled } from './worker-selection.js';
 import type { WorkerDeps } from './worker-deps.js';
 import type { CrawlJobData, SchemaEvolutionJobData, ReconciliationJobData, ExportJobPayload } from './queues.js';
 
@@ -57,11 +58,8 @@ async function main() {
   // and skip processing until services are wired.
 
   // Determine which workers to run (default: all)
-  const enabledWorkers = (process.env.SPATULA_WORKERS ?? 'all')
-    .split(',')
-    .map((w) => w.trim().toLowerCase());
-  const isEnabled = (name: string) =>
-    enabledWorkers.includes('all') || enabledWorkers.includes(name);
+  const enabledWorkers = parseEnabledWorkers(process.env.SPATULA_WORKERS);
+  const isEnabled = (name: string) => isWorkerEnabled(enabledWorkers, name);
 
   const queueConfig = DEFAULT_QUEUE_CONFIG;
   const workers: Worker[] = [];
