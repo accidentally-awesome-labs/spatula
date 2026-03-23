@@ -3,11 +3,13 @@ import { Hono } from 'hono';
 import { exportRoutes } from '../../../src/routes/exports.js';
 import type { AppDeps, AppEnv } from '../../../src/types.js';
 import { errorHandler } from '../../../src/middleware/error-handler.js';
+import type { Pool } from 'pg';
 
 const TENANT_ID = 'tenant-1';
 
 function createMockDeps(): AppDeps {
   return {
+    dbPool: { end: vi.fn() } as unknown as Pool,
     exportRepo: {
       create: vi.fn().mockResolvedValue({
         id: 'exp-1', status: 'pending', format: 'json',

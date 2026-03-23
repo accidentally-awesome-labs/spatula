@@ -3,11 +3,13 @@ import { Hono } from 'hono';
 import { extractionRoutes } from '../../../src/routes/extractions.js';
 import type { AppDeps, AppEnv } from '../../../src/types.js';
 import { errorHandler } from '../../../src/middleware/error-handler.js';
+import type { Pool } from 'pg';
 
 const TENANT_ID = 'tenant-1';
 
 function createMockDeps(): AppDeps {
   return {
+    dbPool: { end: vi.fn() } as unknown as Pool,
     extractionRepo: {
       findByJob: vi.fn().mockResolvedValue([
         { id: 'ext-1', data: { name: 'Product A' }, schemaVersion: 1 },

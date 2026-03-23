@@ -2,10 +2,11 @@ import { describe, it, expect, vi } from 'vitest';
 import { Hono } from 'hono';
 import { depsMiddleware } from '../../../src/middleware/deps.js';
 import type { AppDeps } from '../../../src/types.js';
+import type { Pool } from 'pg';
 
 describe('depsMiddleware', () => {
   it('injects deps into context', async () => {
-    const mockDeps = { jobRepo: { findById: vi.fn() } } as unknown as AppDeps;
+    const mockDeps = { dbPool: { end: vi.fn() } as unknown as Pool, jobRepo: { findById: vi.fn() } } as unknown as AppDeps;
     const app = new Hono();
     app.use('*', depsMiddleware(mockDeps));
     app.get('/test', (c) => {

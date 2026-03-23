@@ -3,9 +3,11 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { processExportJob } from '../../../src/workers/export-worker.js';
 import type { ExportJobPayload } from '../../../src/queues.js';
 import type { WorkerDeps } from '../../../src/worker-deps.js';
+import type { Pool } from 'pg';
 
 function createMockDeps(): WorkerDeps {
   return {
+    dbPool: { end: vi.fn() } as unknown as Pool,
     jobRepo: {
       findById: vi.fn().mockResolvedValue({ id: 'job-1', status: 'completed' }),
     },

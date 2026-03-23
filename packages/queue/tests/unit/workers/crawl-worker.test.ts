@@ -2,6 +2,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { processCrawlJob } from '../../../src/workers/crawl-worker.js';
 import type { CrawlJobData } from '../../../src/queues.js';
 import type { WorkerDeps } from '../../../src/worker-deps.js';
+import type { Pool } from 'pg';
 
 function createMockCrawlResult() {
   return {
@@ -107,6 +108,7 @@ function createMockDeps(): WorkerDeps {
   };
 
   return {
+    dbPool: { end: vi.fn() } as unknown as Pool,
     crawler: {
       type: 'playwright' as const,
       crawl: vi.fn().mockResolvedValue(createMockCrawlResult()),

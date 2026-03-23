@@ -12,10 +12,12 @@ import type {
   ExportRepository,
   ActionRepository,
 } from '@spatula/db';
+import type { Pool } from 'pg';
 import type { SpatulaQueues } from './queues.js';
 import type { EventPublisher } from './events.js';
 
 export interface WorkerDepsConfig {
+  dbPool: Pool;
   crawler: Crawler;
   extractor: Extractor;
   classifier: PageClassifier;
@@ -38,6 +40,7 @@ export interface WorkerDepsConfig {
 }
 
 export class WorkerDeps {
+  readonly dbPool: Pool;
   readonly crawler: Crawler;
   readonly extractor: Extractor;
   readonly classifier: PageClassifier;
@@ -59,6 +62,7 @@ export class WorkerDeps {
   readonly queues: SpatulaQueues;
 
   constructor(config: WorkerDepsConfig) {
+    this.dbPool = config.dbPool;
     this.crawler = config.crawler;
     this.extractor = config.extractor;
     this.classifier = config.classifier;

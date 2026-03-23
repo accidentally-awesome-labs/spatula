@@ -12,8 +12,10 @@ import type {
 import type { ContentStore, ReviewQueue } from '@spatula/core';
 import type { JobManager, ExportJobPayload, SpatulaQueues } from '@spatula/queue';
 import type Redis from 'ioredis';
+import type { Pool } from 'pg';
 
 export interface AppDeps {
+  dbPool: Pool;
   jobRepo: JobRepository;
   schemaRepo: SchemaRepository;
   extractionRepo: ExtractionRepository;

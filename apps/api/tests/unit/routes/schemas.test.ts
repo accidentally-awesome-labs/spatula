@@ -3,11 +3,13 @@ import { Hono } from 'hono';
 import { schemaRoutes } from '../../../src/routes/schemas.js';
 import type { AppDeps, AppEnv } from '../../../src/types.js';
 import { errorHandler } from '../../../src/middleware/error-handler.js';
+import type { Pool } from 'pg';
 
 const TENANT_ID = '00000000-0000-0000-0000-000000000001';
 
 function createMockDeps(): AppDeps {
   return {
+    dbPool: { end: vi.fn() } as unknown as Pool,
     schemaRepo: {
       findLatest: vi.fn().mockResolvedValue({
         id: 'schema-1',

@@ -1,9 +1,11 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { createApp } from '../../../src/app.js';
 import type { AppDeps } from '../../../src/types.js';
+import type { Pool } from 'pg';
 
 function createMockDeps(): AppDeps {
   return {
+    dbPool: { end: vi.fn() } as unknown as Pool,
     jobRepo: {} as any,
     schemaRepo: {} as any,
     extractionRepo: {} as any,

@@ -1,9 +1,11 @@
 import { describe, it, expect, vi } from 'vitest';
 import { createApp } from '../../src/app.js';
 import type { AppDeps } from '../../src/types.js';
+import type { Pool } from 'pg';
 
 function createMockDeps(): AppDeps {
   return {
+    dbPool: { end: vi.fn() } as unknown as Pool,
     jobRepo: {
       create: vi.fn().mockResolvedValue({ id: 'job-1' }),
       findById: vi.fn().mockResolvedValue({ id: 'job-1', name: 'Test', tenantId: 'tenant-1' }),

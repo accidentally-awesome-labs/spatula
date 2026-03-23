@@ -3,9 +3,11 @@ import { Hono } from 'hono';
 import { actionRoutes } from '../../../src/routes/actions.js';
 import type { AppDeps, AppEnv } from '../../../src/types.js';
 import { errorHandler } from '../../../src/middleware/error-handler.js';
+import type { Pool } from 'pg';
 
 function createMockDeps(): AppDeps {
   return {
+    dbPool: { end: vi.fn() } as unknown as Pool,
     actionRepo: {
       findByJob: vi.fn().mockResolvedValue([
         { id: 'act-1', type: 'add_field', status: 'pending_review', confidence: 0.9 },
