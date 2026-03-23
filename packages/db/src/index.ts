@@ -2,8 +2,8 @@
 export * from './schema/index.js';
 
 // Connection
-export { createDatabase } from './connection.js';
-export type { Database } from './connection.js';
+export { createDatabase, createDatabasePool } from './connection.js';
+export type { Database, DatabasePool } from './connection.js';
 
 // Repositories
 export * from './repositories/index.js';
