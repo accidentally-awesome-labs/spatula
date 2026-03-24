@@ -9,6 +9,14 @@
     ".": {
       "types": "./dist/index.d.ts",
       "import": "./dist/index.js"
+    },
+    "./pipeline/types.js": {
+      "types": "./dist/pipeline/types.d.ts",
+      "import": "./dist/pipeline/types.js"
+    },
+    "./crawlers/completion-checker.js": {
+      "types": "./dist/crawlers/completion-checker.d.ts",
+      "import": "./dist/crawlers/completion-checker.js"
     }
   },
   "scripts": {

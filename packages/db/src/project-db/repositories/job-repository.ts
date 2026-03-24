@@ -1,0 +1,73 @@
+/**
+ * SQLite synthetic job repository — local project mode.
+ *
+ * There is NO jobs table in the SQLite schema. The "job" IS the project.
+ * This repository composes a synthetic job row from `project_meta` + the
+ * latest `run`, satisfying the JobRepo interface from @spatula/core so
+ * that all four orchestrators work unchanged in local mode.
+ *
+ * Per spec 5.7: constructor takes (db, projectId). The jobId/tenantId
+ * parameters on interface methods are accepted but ignored — the
+ * pre-bound projectId is always used.
+ */
+import { eq, desc } from 'drizzle-orm';
+import type { JobRepo } from '@spatula/core/pipeline/types.js';
+import type { ProjectDatabase } from '../connection.js';
+import { projectMeta } from '../../schema-sqlite/project-meta.js';
+import { runs } from '../../schema-sqlite/runs.js';
+
+export class SqliteJobRepository implements JobRepo {
+  constructor(
+    private readonly db: ProjectDatabase,
+    private readonly projectId: string,
+  ) {}
+
+  async findById(
+    _jobId: string,
+    _tenantId: string,
+  ): Promise<{ id: string; config: unknown; status?: string } | null> {
+    // Build key-value map from project_meta (unused currently, but available
+    // if we need to enrich the synthetic job in the future)
+    const _metaRows = this.db.select().from(projectMeta).all();
+
+    const latestRun = this.db
+      .select()
+      .from(runs)
+      .orderBy(desc(runs.startedAt))
+      .limit(1)
+      .get();
+
+    // If no runs exist yet, return null (orchestrators handle null from findById)
+    if (!latestRun) return null;
+
+    return {
+      id: this.projectId,
+      config: latestRun.configSnapshot,
+      status: latestRun.status,
+    };
+  }
+
+  async updateStatus(
+    _jobId: string,
+    _tenantId: string,
+    status: string,
+  ): Promise<unknown> {
+
+    const latestRun = this.db
+      .select()
+      .from(runs)
+      .orderBy(desc(runs.startedAt))
+      .limit(1)
+      .get();
+
+    if (latestRun) {
+      this.db
+        .update(runs)
+        .set({ status })
+        .where(eq(runs.id, latestRun.id))
+        .run();
+    }
+
+    return {};
+  }
+}
