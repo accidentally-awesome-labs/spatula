@@ -1,0 +1,63 @@
+# -----------------------------------------------------------
+# Stage 1: Install ALL dependencies and build
+# -----------------------------------------------------------
+FROM node:22-alpine AS build
+WORKDIR /app
+RUN corepack enable
+
+COPY package.json pnpm-lock.yaml pnpm-workspace.yaml .npmrc turbo.json ./
+COPY packages/shared/package.json packages/shared/
+COPY packages/db/package.json packages/db/
+COPY packages/core/package.json packages/core/
+COPY packages/queue/package.json packages/queue/
+COPY apps/api/package.json apps/api/
+COPY apps/cli/package.json apps/cli/
+
+RUN pnpm install --frozen-lockfile
+
+COPY tsconfig.base.json ./
+COPY packages/ packages/
+COPY apps/cli/ apps/cli/
+
+RUN pnpm run build
+
+# -----------------------------------------------------------
+# Stage 2: Production dependencies only
+# -----------------------------------------------------------
+FROM node:22-alpine AS prod-deps
+WORKDIR /app
+RUN corepack enable
+
+COPY package.json pnpm-lock.yaml pnpm-workspace.yaml .npmrc ./
+COPY packages/shared/package.json packages/shared/
+COPY packages/db/package.json packages/db/
+COPY packages/core/package.json packages/core/
+COPY packages/queue/package.json packages/queue/
+COPY apps/api/package.json apps/api/
+COPY apps/cli/package.json apps/cli/
+
+RUN pnpm install --frozen-lockfile --prod
+
+# -----------------------------------------------------------
+# Stage 3: Minimal runtime
+# -----------------------------------------------------------
+FROM node:22-alpine AS runtime
+WORKDIR /app
+
+RUN addgroup -g 1001 -S spatula && adduser -S spatula -u 1001
+
+COPY --from=prod-deps /app/node_modules ./node_modules
+COPY --from=prod-deps /app/packages/shared/node_modules ./packages/shared/node_modules
+COPY --from=prod-deps /app/packages/core/node_modules ./packages/core/node_modules
+COPY --from=prod-deps /app/apps/cli/node_modules ./apps/cli/node_modules
+
+COPY --from=build /app/packages/shared/dist ./packages/shared/dist
+COPY --from=build /app/packages/shared/package.json ./packages/shared/
+COPY --from=build /app/packages/core/dist ./packages/core/dist
+COPY --from=build /app/packages/core/package.json ./packages/core/
+COPY --from=build /app/apps/cli/dist ./apps/cli/dist
+COPY --from=build /app/apps/cli/package.json ./apps/cli/
+COPY --from=build /app/package.json ./
+
+USER spatula
+ENTRYPOINT ["node", "apps/cli/dist/index.js"]
