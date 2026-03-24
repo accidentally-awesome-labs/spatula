@@ -145,9 +145,22 @@ Read Postgres originals first:
 
 **Intentional differences from Postgres (document in code comments):**
 - schemas: drop tenantId, keep parentId as text (self-referential, no Drizzle FK declaration needed — enforced by PRAGMA foreign_keys)
-- crawl-tasks: drop tenantId. ADD `priorityScore`, `errorMessage`, `attempts`, `completedAt` as local extensions. Enum columns (`status`, `priority`, `classification`, `crawlerType`) become plain text — validated in app layer, NOT via CHECK constraints (keeps schema flexible)
-- actions: drop tenantId. Enum columns (`source`, `status`) become plain text
-- source-trust: drop tenantId. **IMPORTANT:** Postgres has `reasoning TEXT NOT NULL` — the SQLite version REPLACES this with `score REAL` (numeric trust score) and makes `reasoning` optional. This is an intentional local deviation: the local pipeline uses numeric scores while the server uses text reasoning. Both columns should be present in SQLite (score + optional reasoning) for future compatibility
+- crawl-tasks: drop tenantId. ADD `priorityScore`, `errorMessage`, `attempts`, `completedAt` as local extensions. Enum columns become text WITH CHECK constraints per spec section 5.2:
+  - `status` CHECK IN ('pending','in_progress','completed','failed','skipped')
+  - `priority` CHECK IN ('critical','high','medium','low') — NOTE: `critical` is a LOCAL EXTENSION not in the Postgres `task_priority` enum
+  - `classification` CHECK IN ('single_entry','multiple_entries','navigation','irrelevant','partial')
+  - `crawlerType` — no CHECK (only 2 values, validated at config layer)
+  Use Drizzle's `check()` in the table options callback:
+  ```typescript
+  import { check } from 'drizzle-orm/sqlite-core';
+  import { sql } from 'drizzle-orm';
+  // In table definition third arg:
+  check('status_check', sql`${table.status} IN ('pending','in_progress','completed','failed','skipped')`)
+  ```
+- actions: drop tenantId. Enum columns with CHECK constraints:
+  - `source` CHECK IN ('extraction','schema_evolution','reconciliation','quality_audit')
+  - `status` CHECK IN ('pending_review','approved','applied','rejected','rolled_back')
+- source-trust: drop tenantId. **Spec deviation documented:** Postgres has `reasoning TEXT NOT NULL` — the spec's SQLite DDL (section 5.3) drops `reasoning` and adds `score REAL`. We follow the spec: DROP `reasoning`, ADD `score REAL`, ADD `created_at TEXT`. The parity test must exclude `reasoning` from the Postgres-to-SQLite comparison for this table.
 
 - [ ] **Step 2: Commit**
 
@@ -233,6 +246,10 @@ This reads the SQLite Drizzle schemas and generates SQL migration files in `pack
 
 Verify the generated SQL looks correct (table names, column names, types match the Drizzle schemas).
 
+**Note on regeneration:** Drizzle Kit assigns random tag names (e.g., `0000_previous_nova`) and timestamps to migration files. If you regenerate, the tag name and `when` field in `_journal.json` will differ, producing a git diff. This is expected — only regenerate when the schema actually changes. CI can verify freshness using `drizzle-kit generate --check` (non-zero exit if schema has changed since last generation).
+
+**Note on `dbCredentials`:** The SQLite config intentionally omits `dbCredentials` — only `generate` is used, not `push` or `migrate` via CLI.
+
 - [ ] **Step 5: Create SQLite connection factory**
 
 Create `packages/db/src/project-db/connection.ts` with:
@@ -246,8 +263,23 @@ Create `packages/db/src/project-db/connection.ts` with:
 **`initializeProjectDb(db: ProjectDatabase, meta: { projectId: string; name: string })`** — applies migrations + seeds:
 - Calls `migrate()` from `drizzle-orm/better-sqlite3/migrator` (synchronous)
 - Migration folder: `resolve(__dirname, '../../drizzle-sqlite')` (at compile time __dirname = `packages/db/dist/project-db/`, so `../../drizzle-sqlite` = `packages/db/drizzle-sqlite/`)
-- After migration, seeds `project_meta` via Drizzle ORM with `onConflictDoNothing()` (idempotent)
-- Seeds: schema_version=1, project_id, name, created_at
+- After migration, seeds `project_meta` via Drizzle ORM insert (idempotent via `onConflictDoNothing()`):
+  ```typescript
+  db.insert(projectMeta).values({ key: 'schema_version', value: '1' }).onConflictDoNothing().run();
+  db.insert(projectMeta).values({ key: 'project_id', value: meta.projectId }).onConflictDoNothing().run();
+  // ... etc
+  ```
+  `onConflictDoNothing()` is a method on the SQLite insert builder (maps to `INSERT OR IGNORE`). Call `.run()` at the end (better-sqlite3 is synchronous).
+
+**IMPORTANT — ESM `__dirname` shim:** The package is `"type": "module"`. `__dirname` doesn't exist natively in ESM. Add at the top of connection.ts:
+
+```typescript
+import { fileURLToPath } from 'node:url';
+import { dirname, resolve } from 'node:path';
+const __dirname = dirname(fileURLToPath(import.meta.url));
+```
+
+This matches the pattern used in the existing `packages/db/src/migrate.ts`.
 
 **Key advantages over raw SQL approach:**
 - No hand-written SQL to drift from Drizzle schemas — SQL generated by Drizzle Kit
@@ -323,7 +355,11 @@ Also add these smoke tests:
 
 3. **Multi-table round-trip:** Insert into `runs` table (a local-only table with JSON column), read back, verify JSON is correctly serialized/deserialized. This tests the `text('field', { mode: 'json' })` mode works end-to-end through migrations.
 
-- [ ] **Step 2: Run tests**
+- [ ] **Step 2: Ensure migration files exist before running tests**
+
+The parity smoke tests call `initializeProjectDb` which calls `migrate()`, which reads SQL files from `packages/db/drizzle-sqlite/`. These must exist (generated in Task 5 Step 4). If running tests on a fresh checkout, run `pnpm --filter @spatula/db db:generate:sqlite` first.
+
+- [ ] **Step 3: Run tests**
 
 Run: pnpm --filter @spatula/db test -- --run parity
 
@@ -354,7 +390,12 @@ Run: pnpm --filter @spatula/db build and pnpm --filter @spatula/queue build
 
 Run: ls packages/db/src/schema-sqlite/
 
-Expected: 12 files (7 mirrored: pages, entities, extractions, schemas, crawl-tasks, actions, source-trust; 4 local: runs, llm-usage, exports, project-meta; 1 barrel: index)
+Expected: 12 files defining 13 tables total:
+- 7 mirrored files with 8 mirrored tables: pages, entities + entity_sources (one file), extractions, schemas, crawl-tasks, actions, source-trust
+- 4 local-only files with 4 local tables: runs, llm-usage, exports, project-meta
+- 1 barrel: index.ts
+
+Note: Spec section 5.1 says "9 core tables" — this counts entity_sources separately from entities (8 table objects across 7 files). The plan mirrors all of them.
 
 - [ ] **Step 4: Commit**
 
