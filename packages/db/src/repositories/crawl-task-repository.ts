@@ -1,4 +1,4 @@
-import { eq, and, asc } from 'drizzle-orm';
+import { eq, and, asc, sql } from 'drizzle-orm';
 import { createLogger, StorageError } from '@spatula/shared';
 import type { PageClassification } from '@spatula/core';
 import { crawlTasks } from '../schema/crawl-tasks.js';
@@ -92,6 +92,37 @@ export class CrawlTaskRepository {
       throw new StorageError(`Failed to update task status: ${(error as Error).message}`, {
         cause: error as Error,
         context: { id, status },
+      });
+    }
+  }
+
+  async getJobStats(jobId: string, tenantId: string): Promise<{
+    pending: number;
+    inProgress: number;
+    completed: number;
+    failed: number;
+    skipped: number;
+  }> {
+    try {
+      const rows = await this.db
+        .select({
+          status: crawlTasks.status,
+          count: sql<number>`count(*)`,
+        })
+        .from(crawlTasks)
+        .where(and(eq(crawlTasks.jobId, jobId), eq(crawlTasks.tenantId, tenantId)))
+        .groupBy(crawlTasks.status);
+
+      const stats = { pending: 0, inProgress: 0, completed: 0, failed: 0, skipped: 0 };
+      for (const row of rows) {
+        const key = row.status === 'in_progress' ? 'inProgress' : row.status;
+        if (key in stats) stats[key as keyof typeof stats] = Number(row.count);
+      }
+      return stats;
+    } catch (error) {
+      throw new StorageError(`Failed to get job stats: ${(error as Error).message}`, {
+        cause: error as Error,
+        context: { jobId },
       });
     }
   }

@@ -9,7 +9,35 @@ export async function processCrawlJob(data: CrawlJobData, deps: WorkerDeps): Pro
   const logger = createLoggerWithContext('crawl-worker', { jobId, tenantId });
 
   try {
-    // 1. Delegate to pure orchestrator
+    // Pre-crawl checks (budget → robots → rate limit)
+
+    // 1. Check page budget
+    if (deps.pageBudget) {
+      const allowed = await Promise.resolve(deps.pageBudget.tryIncrement());
+      if (!allowed) {
+        logger.info({ taskId, url }, 'Page budget exhausted, skipping');
+        await deps.taskRepo.updateStatus(taskId, tenantId, 'skipped');
+        return;
+      }
+    }
+
+    // 2. Check robots.txt
+    if (deps.robotsChecker) {
+      const robotsAllowed = await deps.robotsChecker.isAllowed(url);
+      if (!robotsAllowed) {
+        logger.info({ taskId, url }, 'Blocked by robots.txt, skipping');
+        await deps.taskRepo.updateStatus(taskId, tenantId, 'skipped');
+        return;
+      }
+    }
+
+    // 3. Wait for domain rate limit slot
+    if (deps.rateLimiter) {
+      const crawlDelay = deps.robotsChecker?.getCrawlDelay(url) ?? undefined;
+      await deps.rateLimiter.waitForSlot(url, crawlDelay);
+    }
+
+    // 4. Delegate to pure orchestrator
     const result = await processCrawlTask(
       { taskId, jobId, tenantId, url, depth },
       {
@@ -93,6 +121,20 @@ export async function processCrawlJob(data: CrawlJobData, deps: WorkerDeps): Pro
         tenantId,
         data: { pagesFound: enqueued, taskId, url },
       });
+    }
+
+    // 5. Check crawl completion
+    if (deps.completionChecker && !result.error) {
+      const completion = await deps.completionChecker.isComplete(
+        jobId, tenantId, deps.taskRepo as any,
+      );
+      if (completion.complete) {
+        logger.info({ jobId, ...completion.stats }, 'Crawl naturally complete, triggering reconciliation');
+        await deps.queues.reconciliation.add(
+          `reconciliation:${jobId}`,
+          { jobId, tenantId },
+        );
+      }
     }
   } catch (error) {
     // Safety net for unexpected errors in the worker's own logic (queue operations, etc.).
