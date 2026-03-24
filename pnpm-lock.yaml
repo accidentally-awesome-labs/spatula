@@ -102,6 +102,9 @@ importers:
       ink-text-input:
         specifier: ^6.0.0
         version: 6.0.0(ink@5.2.1(@types/react@18.3.28)(react@18.3.1))(react@18.3.1)
+      playwright:
+        specifier: ^1.58.2
+        version: 1.58.2
       react:
         specifier: ^18.3.1
         version: 18.3.1
