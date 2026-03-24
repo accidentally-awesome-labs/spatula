@@ -61,12 +61,44 @@ export const DEFAULT_QUEUE_CONFIG: QueueConfig = {
   export: { concurrency: 2 },
 };
 
-const DEFAULT_JOB_OPTIONS = {
-  attempts: 3,
-  backoff: { type: 'exponential' as const, delay: 2000 },
-  removeOnComplete: { count: 1000 },
-  removeOnFail: { count: 5000 },
-};
+/**
+ * Per-queue retry configurations. Different failure modes need different strategies:
+ * - Crawl: transient network failures → longer delays, more attempts
+ * - Schema evolution: lock contention → flat retry, fewer attempts
+ * - Export: resource exhaustion → moderate backoff
+ */
+export const QUEUE_JOB_OPTIONS = {
+  [QUEUE_NAMES.CRAWL]: {
+    attempts: 3,
+    backoff: { type: 'exponential' as const, delay: 5_000 },  // 5s, 10s, 20s
+    removeOnComplete: { count: 1000 },
+    removeOnFail: { count: 5000 },
+  },
+  [QUEUE_NAMES.EXTRACT]: {
+    attempts: 3,
+    backoff: { type: 'exponential' as const, delay: 2_000 },
+    removeOnComplete: { count: 1000 },
+    removeOnFail: { count: 5000 },
+  },
+  [QUEUE_NAMES.SCHEMA_EVOLUTION]: {
+    attempts: 2,
+    backoff: { type: 'fixed' as const, delay: 10_000 },       // flat 10s retry (lock contention)
+    removeOnComplete: { count: 1000 },
+    removeOnFail: { count: 5000 },
+  },
+  [QUEUE_NAMES.RECONCILIATION]: {
+    attempts: 3,
+    backoff: { type: 'exponential' as const, delay: 2_000 },
+    removeOnComplete: { count: 1000 },
+    removeOnFail: { count: 5000 },
+  },
+  [QUEUE_NAMES.EXPORT]: {
+    attempts: 2,
+    backoff: { type: 'exponential' as const, delay: 3_000 },  // 3s, 6s
+    removeOnComplete: { count: 1000 },
+    removeOnFail: { count: 5000 },
+  },
+} as const;
 
 export interface SpatulaQueues {
   crawl: Queue<CrawlJobData>;
@@ -86,23 +118,23 @@ export function createQueues(
 
   const crawl = new Queue<CrawlJobData>(QUEUE_NAMES.CRAWL, {
     connection,
-    defaultJobOptions: DEFAULT_JOB_OPTIONS,
+    defaultJobOptions: QUEUE_JOB_OPTIONS[QUEUE_NAMES.CRAWL],
   });
   const extract = new Queue<ExtractJobData>(QUEUE_NAMES.EXTRACT, {
     connection,
-    defaultJobOptions: DEFAULT_JOB_OPTIONS,
+    defaultJobOptions: QUEUE_JOB_OPTIONS[QUEUE_NAMES.EXTRACT],
   });
   const schemaEvolution = new Queue<SchemaEvolutionJobData>(QUEUE_NAMES.SCHEMA_EVOLUTION, {
     connection,
-    defaultJobOptions: DEFAULT_JOB_OPTIONS,
+    defaultJobOptions: QUEUE_JOB_OPTIONS[QUEUE_NAMES.SCHEMA_EVOLUTION],
   });
   const reconciliation = new Queue<ReconciliationJobData>(QUEUE_NAMES.RECONCILIATION, {
     connection,
-    defaultJobOptions: DEFAULT_JOB_OPTIONS,
+    defaultJobOptions: QUEUE_JOB_OPTIONS[QUEUE_NAMES.RECONCILIATION],
   });
   const exportQueue = new Queue<ExportJobPayload>(QUEUE_NAMES.EXPORT, {
     connection,
-    defaultJobOptions: DEFAULT_JOB_OPTIONS,
+    defaultJobOptions: QUEUE_JOB_OPTIONS[QUEUE_NAMES.EXPORT],
   });
 
   return {
