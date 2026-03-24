@@ -1,5 +1,4 @@
 // apps/cli/src/commands/test-url.ts
-import { createLogger } from '@spatula/shared';
 import {
   createLLMClient,
   preprocessHTML,
@@ -14,8 +13,6 @@ import type {
   Crawler,
   SchemaDefinition,
 } from '@spatula/core';
-
-const logger = createLogger('cli:test');
 
 export interface TestUrlArgs {
   url: string;
@@ -33,11 +30,16 @@ export async function testUrl(args: TestUrlArgs): Promise<void> {
     url,
     crawler: crawlerType = 'playwright',
     format = 'table',
-    showHtml = false,
     showLinks = false,
     model,
     skipLlm = false,
   } = args;
+  let showHtml = args.showHtml ?? false;
+
+  // Handle --format raw as equivalent to --show-html
+  if (format === 'raw') {
+    showHtml = true;
+  }
 
   // 0. Validate --skip-llm requires --schema
   if (skipLlm && !args.schema) {

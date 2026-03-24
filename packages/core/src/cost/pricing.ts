@@ -1,4 +1,5 @@
 // packages/core/src/cost/pricing.ts
+import type { LLMTask } from '../llm/types.js';
 
 /**
  * Per-model pricing in USD per 1M tokens.
@@ -31,7 +32,7 @@ export const OLLAMA_PRICING: ModelPricing = { promptPer1M: 0, completionPer1M: 0
 /**
  * Average tokens per LLM call type, based on empirical measurement.
  */
-export const AVG_TOKENS_PER_CALL: Record<string, { prompt: number; completion: number }> = {
+export const AVG_TOKENS_PER_CALL: Record<LLMTask, { prompt: number; completion: number }> = {
   pageRelevance: { prompt: 800, completion: 100 },
   extraction: { prompt: 2000, completion: 1500 },
   linkEvaluation: { prompt: 1500, completion: 300 },

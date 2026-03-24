@@ -109,10 +109,9 @@ function estimatePageCount(config: JobConfig): number {
 
 function estimateConfidence(config: JobConfig): 'low' | 'medium' | 'high' {
   const { maxDepth, maxPages } = config.crawl;
-  // Spec: low when maxDepth >= 3 OR maxPages > 1000
   if (maxDepth >= 3 || maxPages > 1000) return 'low';
-  // Spec: high when maxDepth <= 1 AND maxPages <= 1000
   if (maxDepth <= 1) return 'high';
-  // Spec: medium otherwise (maxDepth === 2, maxPages <= 1000)
-  return 'medium';
+  // maxDepth === 2
+  if (maxPages <= 500) return 'medium';
+  return 'low';
 }

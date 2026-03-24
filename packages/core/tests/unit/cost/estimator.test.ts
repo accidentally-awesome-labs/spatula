@@ -78,6 +78,13 @@ describe('estimateCost', () => {
     expect(shallowButWide.confidence).toBe('low');
   });
 
+  it('returns medium confidence for moderate crawls', () => {
+    const moderate = estimateCost(createMinimalConfig({
+      crawl: { maxDepth: 2, maxPages: 300, concurrency: 5, crawlerType: 'playwright' as const },
+    } as any));
+    expect(moderate.confidence).toBe('medium');
+  });
+
   it('includes per-purpose breakdown', () => {
     const estimate = estimateCost(createMinimalConfig());
 
