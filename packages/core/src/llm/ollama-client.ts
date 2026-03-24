@@ -1,4 +1,4 @@
-import { LLMError } from '@spatula/shared';
+import { LLMError, TimeoutError } from '@spatula/shared';
 import type {
   LLMClient,
   LLMCompletionRequest,
@@ -72,6 +72,12 @@ export class OllamaClient implements LLMClient {
       };
     } catch (error) {
       if (error instanceof LLMError) throw error;
+      // AbortSignal.timeout() throws a DOMException with name 'TimeoutError'
+      if (error instanceof DOMException && error.name === 'TimeoutError') {
+        throw new TimeoutError(`Ollama request timed out after ${this.timeoutMs}ms`, {
+          context: { model: request.model, baseUrl: this.baseUrl },
+        });
+      }
       throw new LLMError(`Ollama completion failed: ${(error as Error).message}`, {
         cause: error as Error,
         context: { model: request.model, baseUrl: this.baseUrl },

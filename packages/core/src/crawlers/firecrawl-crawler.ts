@@ -35,7 +35,7 @@ export class FirecrawlCrawler implements Crawler {
     const headers: Record<string, string> = {};
     if (options?.cookies?.length) {
       headers.Cookie = options.cookies
-        .map(c => `${c.name}=${c.value}`)
+        .map(c => `${c.name}=${encodeURIComponent(c.value)}`)
         .join('; ');
     }
 

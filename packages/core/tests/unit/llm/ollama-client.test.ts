@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { LLMError } from '@spatula/shared';
+import { LLMError, TimeoutError } from '@spatula/shared';
 import { OllamaClient } from '../../../src/llm/ollama-client.js';
 import type { LLMCompletionRequest } from '../../../src/interfaces/llm-client.js';
 
@@ -215,5 +215,14 @@ describe('OllamaClient', () => {
 
     const client = new OllamaClient();
     await expect(client.complete(defaultRequest)).rejects.toBeInstanceOf(LLMError);
+  });
+
+  it('throws TimeoutError when request times out', async () => {
+    const timeoutError = new DOMException('The operation was aborted due to timeout', 'TimeoutError');
+    mockFetch.mockRejectedValue(timeoutError);
+
+    const client = new OllamaClient({ timeoutMs: 1000 });
+    await expect(client.complete(defaultRequest)).rejects.toThrow('timed out');
+    await expect(client.complete(defaultRequest)).rejects.toBeInstanceOf(TimeoutError);
   });
 });
