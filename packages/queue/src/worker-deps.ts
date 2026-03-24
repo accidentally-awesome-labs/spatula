@@ -1,5 +1,6 @@
-import type { Crawler, Extractor, ContentStore, SchemaEvolver, LinkEvaluator, CrawlCompletionChecker } from '@spatula/core';
+import type { Crawler, Extractor, ContentStore, SchemaEvolver, LinkEvaluator } from '@spatula/core';
 import type { PageClassifier, DataReconciler } from '@spatula/core';
+import type { RobotsTxtChecker, DomainRateLimiter, PageBudget, CrawlCompletionChecker } from '@spatula/core';
 import type {
   JobRepository,
   CrawlTaskRepository,
@@ -36,6 +37,9 @@ export interface WorkerDepsConfig {
   actionRepo: ActionRepository;
   eventPublisher?: EventPublisher;
   linkEvaluator?: LinkEvaluator;
+  robotsChecker?: RobotsTxtChecker;
+  rateLimiter?: DomainRateLimiter;
+  pageBudget?: PageBudget;
   completionChecker?: CrawlCompletionChecker;
   queues: SpatulaQueues;
 }
@@ -60,6 +64,9 @@ export class WorkerDeps {
   readonly actionRepo: ActionRepository;
   readonly eventPublisher?: EventPublisher;
   readonly linkEvaluator?: LinkEvaluator;
+  readonly robotsChecker?: RobotsTxtChecker;
+  readonly rateLimiter?: DomainRateLimiter;
+  readonly pageBudget?: PageBudget;
   readonly completionChecker?: CrawlCompletionChecker;
   readonly queues: SpatulaQueues;
 
@@ -83,6 +90,9 @@ export class WorkerDeps {
     this.actionRepo = config.actionRepo;
     this.eventPublisher = config.eventPublisher;
     this.linkEvaluator = config.linkEvaluator;
+    this.robotsChecker = config.robotsChecker;
+    this.rateLimiter = config.rateLimiter;
+    this.pageBudget = config.pageBudget;
     this.completionChecker = config.completionChecker;
     this.queues = config.queues;
   }

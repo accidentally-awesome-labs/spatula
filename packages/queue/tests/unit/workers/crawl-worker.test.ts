@@ -755,6 +755,80 @@ describe('processCrawlJob', () => {
     });
   });
 
+  describe('pipeline hardening integration', () => {
+    it('skips task when page budget is exhausted', async () => {
+      const data = createJobData();
+      (deps as any).pageBudget = {
+        tryIncrement: () => false,
+        count: 100,
+        remaining: 0,
+        isExhausted: true,
+        maxPages: 100,
+      };
+
+      await processCrawlJob(data, deps);
+
+      expect(deps.taskRepo.updateStatus).toHaveBeenCalledWith('task-1', 'tenant-1', 'skipped');
+      expect(deps.crawler.crawl).not.toHaveBeenCalled();
+    });
+
+    it('skips task when blocked by robots.txt', async () => {
+      const data = createJobData();
+      (deps as any).robotsChecker = {
+        isAllowed: vi.fn().mockResolvedValue(false),
+        getCrawlDelay: vi.fn(),
+      };
+
+      await processCrawlJob(data, deps);
+
+      expect(deps.taskRepo.updateStatus).toHaveBeenCalledWith('task-1', 'tenant-1', 'skipped');
+      expect(deps.crawler.crawl).not.toHaveBeenCalled();
+    });
+
+    it('waits for rate limiter before crawling', async () => {
+      const data = createJobData();
+      const waitForSlot = vi.fn().mockResolvedValue(undefined);
+      (deps as any).rateLimiter = { waitForSlot };
+
+      await processCrawlJob(data, deps);
+
+      expect(waitForSlot).toHaveBeenCalledWith(data.url, undefined);
+      expect(deps.crawler.crawl).toHaveBeenCalled();
+    });
+
+    it('enqueues reconciliation when crawl is naturally complete', async () => {
+      const data = createJobData();
+      (deps as any).completionChecker = {
+        isComplete: vi.fn().mockResolvedValue({
+          complete: true,
+          reason: 'all_tasks_done',
+          stats: { pending: 0, inProgress: 1, completed: 50, failed: 0, skipped: 0 },
+        }),
+      };
+
+      await processCrawlJob(data, deps);
+
+      expect(deps.queues.reconciliation.add).toHaveBeenCalledWith(
+        expect.stringContaining('reconciliation:'),
+        expect.objectContaining({ jobId: data.jobId, tenantId: data.tenantId }),
+      );
+    });
+
+    it('does not enqueue reconciliation when crawl is not complete', async () => {
+      const data = createJobData();
+      (deps as any).completionChecker = {
+        isComplete: vi.fn().mockResolvedValue({
+          complete: false,
+          stats: { pending: 5, inProgress: 2, completed: 40, failed: 0, skipped: 0 },
+        }),
+      };
+
+      await processCrawlJob(data, deps);
+
+      expect(deps.queues.reconciliation.add).not.toHaveBeenCalled();
+    });
+  });
+
   describe('wrapper-specific behavior', () => {
     it('does not throw when orchestrator throws on crawl error', async () => {
       (deps.crawler.crawl as ReturnType<typeof vi.fn>).mockRejectedValue(
