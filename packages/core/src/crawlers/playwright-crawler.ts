@@ -27,8 +27,31 @@ export class PlaywrightCrawler implements Crawler {
       if (options?.headers) {
         contextOptions.extraHTTPHeaders = options.headers;
       }
+      // Proxy support
+      // Note: proxy credentials are NOT included in error context or logs
+      // to prevent credential leakage. Only the proxy URL (without auth) should be logged.
+      if (options?.proxy) {
+        contextOptions.proxy = {
+          server: options.proxy.url,
+          ...(options.proxy.username ? { username: options.proxy.username } : {}),
+          ...(options.proxy.password ? { password: options.proxy.password } : {}),
+        };
+      }
 
       context = await this.browser.newContext(contextOptions);
+
+      // Cookie support — set cookies before creating page
+      if (options?.cookies?.length) {
+        await context.addCookies(options.cookies.map(c => ({
+          name: c.name,
+          value: c.value,
+          domain: c.domain,
+          path: c.path ?? '/',
+          httpOnly: c.httpOnly ?? false,
+          secure: c.secure ?? false,
+        })));
+      }
+
       page = await context.newPage();
 
       const startTime = Date.now();
@@ -64,6 +87,7 @@ export class PlaywrightCrawler implements Crawler {
           responseTimeMs,
           contentLength: Buffer.byteLength(html, 'utf-8'),
           crawlerType: 'playwright',
+          proxyUsed: !!options?.proxy,
         },
       };
     } catch (error) {
