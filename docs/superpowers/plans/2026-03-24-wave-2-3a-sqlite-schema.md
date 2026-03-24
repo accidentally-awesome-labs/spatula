@@ -4,11 +4,9 @@
 
 **Goal:** Create SQLite schema definitions mirroring 8 core Postgres tables (minus tenant_id, with intentional column differences), add 4 local-only tables, build the SQLite connection factory, and establish parity verification.
 
-**Architecture:** Hand-written SQLite schemas using Drizzle sqliteTable API with consistent type translations. The SQLite schemas are NOT 1:1 copies of Postgres — they deliberately differ in several ways (pages merges columns from crawl_tasks, source_trust replaces reasoning with score, enum values may include local extensions like 'critical' priority). A createProjectDb() function configures SQLite with WAL mode, foreign keys, and busy timeout. Parity tests verify core column coverage while documenting known intentional differences.
+**Architecture:** Hand-written SQLite Drizzle schemas using `sqliteTable` API with consistent type translations. The SQLite schemas are NOT 1:1 copies of Postgres — they deliberately differ (pages merges columns from crawl_tasks, source_trust replaces reasoning with score, local extensions on multiple tables). Table creation uses Drizzle Kit's migration system: `drizzle-kit generate` produces SQL migration files from the Drizzle schemas at build time, and `migrate()` from `drizzle-orm/better-sqlite3/migrator` applies them at runtime. This eliminates raw-SQL/Drizzle-schema drift and enables incremental version upgrades for local project databases.
 
-**Codegen note:** The Phase 13 spec (section 5.10) calls for a build-time codegen script. This is deferred — the Postgres and SQLite Drizzle APIs (pgTable vs sqliteTable) have fundamentally different signatures, making AST-based codegen fragile. Instead, we hand-write schemas and use parity tests as the drift-detection mechanism. If codegen becomes needed, it would be a future enhancement.
-
-**Tech Stack:** TypeScript, Drizzle ORM (drizzle-orm/sqlite-core), better-sqlite3, Vitest
+**Tech Stack:** TypeScript, Drizzle ORM (drizzle-orm/sqlite-core + better-sqlite3/migrator), Drizzle Kit (migration generation), better-sqlite3, Vitest
 
 **Spec references:**
 - Phase 13 spec: section 5 (SQLite Schema and Repository Layer)
@@ -34,14 +32,16 @@
 | packages/db/src/schema-sqlite/exports.ts | Local-only: export file tracking |
 | packages/db/src/schema-sqlite/project-meta.ts | Local-only: key-value project state |
 | packages/db/src/schema-sqlite/index.ts | Barrel export for all SQLite schemas |
-| packages/db/src/project-db/connection.ts | createProjectDb() with SQLite pragmas |
+| packages/db/src/project-db/connection.ts | createProjectDb() + initializeProjectDb() with migrate() |
+| packages/db/drizzle.config.sqlite.ts | Drizzle Kit config for SQLite migration generation |
+| packages/db/drizzle-sqlite/ | Generated migration SQL files (committed to git) |
 | packages/db/tests/unit/schema-sqlite/parity.test.ts | Parity test verifying Postgres and SQLite columns |
 
 ### Modified Files
 
 | File | Change |
 |------|--------|
-| packages/db/package.json | Add better-sqlite3 and types |
+| packages/db/package.json | Add better-sqlite3, types, db:generate:sqlite script |
 | packages/db/src/index.ts | Export project-db connection |
 
 ---
@@ -183,11 +183,13 @@ git commit -m "feat(db): add local-only SQLite tables (runs, llm-usage, exports,
 
 ---
 
-## Task 5: Schema Barrel Export and SQLite Connection
+## Task 5: Schema Barrel, Drizzle Kit Config, Migration Generation & Connection Factory
 
 **Files:**
 - Create: packages/db/src/schema-sqlite/index.ts
+- Create: packages/db/drizzle.config.sqlite.ts
 - Create: packages/db/src/project-db/connection.ts
+- Modify: packages/db/package.json (add script)
 - Modify: packages/db/src/index.ts
 
 - [ ] **Step 1: Create SQLite schema barrel**
@@ -196,57 +198,64 @@ Export all tables from packages/db/src/schema-sqlite/index.ts:
 - 7 mirrored files: pages, entities (includes entitySources), extractions, schemas, crawl-tasks, actions, source-trust
 - 4 local-only files: runs, llm-usage, exports, project-meta
 
-- [ ] **Step 2: Create SQLite connection factory**
+- [ ] **Step 2: Create Drizzle Kit config for SQLite**
 
-Create packages/db/src/project-db/connection.ts with two functions:
+Create `packages/db/drizzle.config.sqlite.ts`:
 
-**`createProjectDb(dbPath: string)`** — returns `{ db: DrizzleSQLite, sqlite: Database }`:
-- Creates a `better-sqlite3` Database instance
+```typescript
+import { defineConfig } from 'drizzle-kit';
+
+export default defineConfig({
+  dialect: 'sqlite',
+  schema: './src/schema-sqlite/index.ts',
+  out: './drizzle-sqlite',
+});
+```
+
+- [ ] **Step 3: Add generation script to package.json**
+
+In `packages/db/package.json`, add to scripts:
+
+```json
+"db:generate:sqlite": "drizzle-kit generate --config drizzle.config.sqlite.ts"
+```
+
+- [ ] **Step 4: Generate initial SQLite migration**
+
+Run:
+```bash
+cd /Users/salar/Projects/spatula && pnpm --filter @spatula/db db:generate:sqlite
+```
+
+This reads the SQLite Drizzle schemas and generates SQL migration files in `packages/db/drizzle-sqlite/`. The output should include:
+- `0000_*.sql` — CREATE TABLE statements for all 12 tables
+- `_journal.json` — migration tracking metadata
+
+Verify the generated SQL looks correct (table names, column names, types match the Drizzle schemas).
+
+- [ ] **Step 5: Create SQLite connection factory**
+
+Create `packages/db/src/project-db/connection.ts` with:
+
+**`createProjectDb(dbPath: string): ProjectDbResult`** — creates a configured SQLite DB:
+- Creates `better-sqlite3` Database instance
 - Sets pragmas: WAL mode, FK enforcement, busy timeout 5s, synchronous NORMAL
 - Wraps with Drizzle using the SQLite schema
-- Returns BOTH the Drizzle instance AND the raw sqlite instance (avoids accessing Drizzle internals via `(db as any).session?.client`)
+- Returns `{ db, sqlite }` — callers use `db` for ORM queries, `sqlite` for shutdown
 
-```typescript
-export function createProjectDb(dbPath: string) {
-  const sqlite = new Database(dbPath);
-  sqlite.pragma('journal_mode = WAL');
-  sqlite.pragma('foreign_keys = ON');
-  sqlite.pragma('busy_timeout = 5000');
-  sqlite.pragma('synchronous = NORMAL');
-  const db = drizzle(sqlite, { schema });
-  return { db, sqlite };
-}
-```
+**`initializeProjectDb(db: ProjectDatabase, meta: { projectId: string; name: string })`** — applies migrations + seeds:
+- Calls `migrate()` from `drizzle-orm/better-sqlite3/migrator` (synchronous)
+- Migration folder: `resolve(__dirname, '../../drizzle-sqlite')` (at compile time __dirname = `packages/db/dist/project-db/`, so `../../drizzle-sqlite` = `packages/db/drizzle-sqlite/`)
+- After migration, seeds `project_meta` via Drizzle ORM with `onConflictDoNothing()` (idempotent)
+- Seeds: schema_version=1, project_id, name, created_at
 
-**`initializeProjectDb(sqlite: Database, meta: { projectId: string; name: string })`** — creates all tables + seeds project_meta:
-- Takes the RAW sqlite instance (not the Drizzle wrapper) — no internal access needed
-- Creates all tables via `sqlite.exec(CREATE TABLE IF NOT EXISTS ...)`
-- Seeds `project_meta` with initial values:
-  - `schema_version` = `'1'`
-  - `project_id` = the synthetic UUID
-  - `name` = project name (from spatula.yaml or directory name)
-  - `created_at` = ISO 8601 timestamp
+**Key advantages over raw SQL approach:**
+- No hand-written SQL to drift from Drizzle schemas — SQL generated by Drizzle Kit
+- Incremental version upgrades: user upgrades Spatula, `migrate()` applies only new migrations
+- Type-safe seeding via Drizzle ORM insert
+- Same pattern as existing Postgres migration runner
 
-```typescript
-export function initializeProjectDb(
-  sqlite: Database.Database,
-  meta: { projectId: string; name: string },
-): void {
-  sqlite.exec(`CREATE TABLE IF NOT EXISTS project_meta (...)`);
-  // ... all other CREATE TABLE statements ...
-
-  // Seed initial project metadata
-  const insert = sqlite.prepare('INSERT OR IGNORE INTO project_meta (key, value) VALUES (?, ?)');
-  insert.run('schema_version', '1');
-  insert.run('project_id', meta.projectId);
-  insert.run('name', meta.name);
-  insert.run('created_at', new Date().toISOString());
-}
-```
-
-The raw SQL must match the Drizzle schema definitions. Since both are hand-written, drift is possible — the parity test in Task 6 catches column-level drift, and the smoke test verifies end-to-end insertion.
-
-- [ ] **Step 3: Update db barrel exports**
+- [ ] **Step 6: Update db barrel exports**
 
 Add to packages/db/src/index.ts:
 
@@ -254,25 +263,18 @@ Add to packages/db/src/index.ts:
 // Project database (SQLite for local mode)
 export { createProjectDb, initializeProjectDb } from './project-db/connection.js';
 export type { ProjectDatabase, ProjectDbResult } from './project-db/connection.js';
-```
-
-Where `ProjectDbResult = { db: ProjectDatabase; sqlite: Database }` — callers use `db` for queries and `sqlite` for initialization and shutdown (`sqlite.close()`).
-
-Also export the SQLite schema namespace:
-
-```typescript
 export * as sqliteSchema from './schema-sqlite/index.js';
 ```
 
-- [ ] **Step 4: Verify build**
+- [ ] **Step 7: Verify build**
 
 Run: pnpm --filter @spatula/db build
 
-- [ ] **Step 5: Commit**
+- [ ] **Step 8: Commit**
 
 ```bash
-git add packages/db/src/schema-sqlite/index.ts packages/db/src/project-db/connection.ts packages/db/src/index.ts
-git commit -m "feat(db): add SQLite connection factory and schema barrel for project database"
+git add packages/db/src/schema-sqlite/index.ts packages/db/drizzle.config.sqlite.ts packages/db/drizzle-sqlite/ packages/db/src/project-db/connection.ts packages/db/src/index.ts packages/db/package.json
+git commit -m "feat(db): add SQLite connection factory with Drizzle Kit migrations"
 ```
 
 ---
@@ -315,9 +317,11 @@ For each mirrored pair:
 
 Also add these smoke tests:
 
-1. **DB initialization smoke test:** Create an in-memory DB (`:memory:`), call `initializeProjectDb`, verify `project_meta` contains `schema_version` and `project_id`.
+1. **DB initialization smoke test:** Create an in-memory DB (`:memory:`), call `createProjectDb` then `initializeProjectDb`, verify `project_meta` contains `schema_version` and `project_id` by reading back via Drizzle ORM.
 
-2. **Drizzle round-trip test:** Create DB, initialize, insert a row via Drizzle ORM (e.g., insert into `projectMeta` using the Drizzle schema), read it back, verify the data matches. This catches column name mismatches between the raw SQL CREATE TABLE statements and the Drizzle schema definitions — if they drift, Drizzle will write to wrong columns and the read-back will fail.
+2. **Drizzle round-trip test:** After initialization, insert a row via Drizzle ORM (e.g., insert into `projectMeta` using the Drizzle schema), read it back, verify the data matches. This verifies that the Drizzle Kit-generated migration SQL creates tables that match the Drizzle ORM schema definitions — if they ever diverge (e.g., due to a drizzle-kit version change), this test catches it.
+
+3. **Multi-table round-trip:** Insert into `runs` table (a local-only table with JSON column), read back, verify JSON is correctly serialized/deserialized. This tests the `text('field', { mode: 'json' })` mode works end-to-end through migrations.
 
 - [ ] **Step 2: Run tests**
 
