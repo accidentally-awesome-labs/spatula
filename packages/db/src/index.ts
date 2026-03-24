@@ -13,3 +13,8 @@ export { PgContentStore } from './content-store/pg-content-store.js';
 
 // Migrations
 export { runMigrations } from './migrate.js';
+
+// Project database (SQLite for local mode)
+export { createProjectDb, initializeProjectDb } from './project-db/connection.js';
+export type { ProjectDatabase, ProjectDbResult } from './project-db/connection.js';
+export * as sqliteSchema from './schema-sqlite/index.js';
