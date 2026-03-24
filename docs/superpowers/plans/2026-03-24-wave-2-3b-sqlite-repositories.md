@@ -86,7 +86,7 @@ export class SqliteSomeRepository {
 - UUIDs generated via `crypto.randomUUID()` (not Postgres `gen_random_uuid()`)
 - Timestamps as `new Date().toISOString()` (not Postgres `now()`)
 - JSON columns auto-serialized by Drizzle `{ mode: 'json' }` — no manual `JSON.stringify`
-- **`returning()` pattern:** Use `this.db.insert(table).values({...}).returning().get()` — the `.get()` at the end is better-sqlite3's synchronous return. Array destructuring `const [row]` also works.
+- **`returning()` pattern:** In drizzle-orm/better-sqlite3, `insert().values().returning()` returns an array synchronously. Use array destructuring: `const [row] = this.db.insert(table).values({...}).returning()`. If `.returning()` doesn't work in the installed version, fall back to a separate select after insert: `this.db.insert(table).values({id, ...}).run(); return { id };`. Verify the exact API at implementation time — Drizzle's better-sqlite3 support evolves between versions.
 - **`count(*)` — NO `::int` cast!** Postgres uses `sql<number>\`count(*)::int\`` but `::int` is invalid in SQLite. Use plain `sql<number>\`count(*)\`` and wrap result with `Number()` in TypeScript.
 - better-sqlite3 is synchronous — Drizzle wraps it but the API is still `async`
 - **Transactions:** Drizzle for better-sqlite3 supports `db.transaction((tx) => {...})` but the callback is synchronous (not async). Use synchronous operations inside transactions.
@@ -119,10 +119,13 @@ export class SqliteJobRepository {
       .limit(1)
       .get();
 
+    // If no runs exist yet, return null (orchestrators handle null from findById)
+    if (!latestRun) return null;
+
     return {
       id: this.projectId,
-      config: latestRun?.configSnapshot ?? {},
-      status: latestRun?.status,
+      config: latestRun.configSnapshot,
+      status: latestRun.status,
     };
   }
 
@@ -278,7 +281,34 @@ git commit -m "feat(db): add SQLite action and source-trust repositories"
 
 ---
 
-## Task 5: Local-Only Repositories
+## Task 5: Fix Exports Schema + Local-Only Repositories
+
+**Pre-step: Add missing columns to SQLite exports schema.**
+
+The `ExportRepo.updateStatus` interface writes `status`, `error`, `completedAt` — columns that the current SQLite `exports` table is missing. The export orchestrator (used by local auto-export) calls `updateStatus`, so these columns are required.
+
+- [ ] **Step 0: Update SQLite exports schema**
+
+Modify `packages/db/src/schema-sqlite/exports.ts` to add the missing columns:
+
+```typescript
+  status: text('status').notNull().default('pending'),
+  error: text('error'),
+  completedAt: text('completed_at'),
+```
+
+Then regenerate the SQLite migration:
+```bash
+cd /Users/salar/Projects/spatula && pnpm --filter @spatula/db db:generate:sqlite
+```
+
+Commit:
+```bash
+git add packages/db/src/schema-sqlite/exports.ts packages/db/drizzle-sqlite/
+git commit -m "fix(db): add status, error, completedAt columns to SQLite exports schema"
+```
+
+---
 
 **Files:**
 - Create: `packages/db/src/project-db/repositories/run-repository.ts`
