@@ -17,7 +17,7 @@ export const sourceTrust = sqliteTable(
     domain: text('domain').notNull(),
     trustLevel: text('trust_level').notNull(),
     score: real('score'),
-    createdAt: text('created_at'),
+    createdAt: text('created_at').notNull(),
   },
   (table) => [
     index('sl_source_trust_job_domain_idx').on(table.jobId, table.domain),

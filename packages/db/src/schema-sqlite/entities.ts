@@ -14,8 +14,8 @@ export const entities = sqliteTable(
     jobId: text('job_id').notNull(),
     mergedData: text('merged_data', { mode: 'json' }).$type<Record<string, unknown>>().notNull(),
     provenance: text('provenance', { mode: 'json' }).$type<Record<string, unknown>>().notNull(),
-    // JSON-encoded array (Postgres uses text[])
-    categories: text('categories').notNull().default('[]'),
+    // JSON-encoded array (Postgres uses text[]; Drizzle auto-serializes via json mode)
+    categories: text('categories', { mode: 'json' }).notNull().default([]),
     qualityScore: real('quality_score').notNull().default(0),
     createdAt: text('created_at').notNull(),
     // Local extensions

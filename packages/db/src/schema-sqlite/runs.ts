@@ -6,7 +6,7 @@
  * - 'local' for crawl runs
  * - 'remote:<name>:<jobId>' for pull operations
  */
-import { sqliteTable, text, integer, real, check } from 'drizzle-orm/sqlite-core';
+import { sqliteTable, text, integer, real, check, index } from 'drizzle-orm/sqlite-core';
 import { sql } from 'drizzle-orm';
 
 export const runs = sqliteTable(
@@ -32,5 +32,6 @@ export const runs = sqliteTable(
       'status_check',
       sql`${table.status} IN ('running','paused','completed','failed','pulled')`,
     ),
+    index('sl_runs_status_idx').on(table.status),
   ],
 );

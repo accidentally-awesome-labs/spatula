@@ -23,6 +23,8 @@ export interface ProjectDbResult {
   db: ProjectDatabase;
   /** Raw better-sqlite3 instance for shutdown (sqlite.close()) and pragmas. */
   sqlite: Database.Database;
+  /** Convenience method to close the underlying SQLite connection. */
+  close(): void;
 }
 
 /**
@@ -44,7 +46,7 @@ export function createProjectDb(dbPath: string): ProjectDbResult {
 
   const db = drizzle(sqlite, { schema });
 
-  return { db, sqlite };
+  return { db, sqlite, close: () => sqlite.close() };
 }
 
 /**
@@ -70,26 +72,14 @@ export function initializeProjectDb(
     );
   }
 
-  // Seed project metadata (idempotent)
-  const now = new Date().toISOString();
-
+  // Seed project metadata (idempotent, batched into single INSERT)
   db.insert(projectMeta)
-    .values({ key: 'schema_version', value: '1' })
-    .onConflictDoNothing()
-    .run();
-
-  db.insert(projectMeta)
-    .values({ key: 'project_id', value: meta.projectId })
-    .onConflictDoNothing()
-    .run();
-
-  db.insert(projectMeta)
-    .values({ key: 'project_name', value: meta.name })
-    .onConflictDoNothing()
-    .run();
-
-  db.insert(projectMeta)
-    .values({ key: 'created_at', value: now })
+    .values([
+      { key: 'schema_version', value: '1' },
+      { key: 'project_id', value: meta.projectId },
+      { key: 'project_name', value: meta.name },
+      { key: 'created_at', value: new Date().toISOString() },
+    ])
     .onConflictDoNothing()
     .run();
 }
