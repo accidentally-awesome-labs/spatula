@@ -1,0 +1,25 @@
+name: Dependency Audit
+
+on:
+  schedule:
+    - cron: '0 9 * * 1'  # Weekly on Monday at 9am UTC
+  push:
+    paths:
+      - 'pnpm-lock.yaml'
+    branches: [main]
+  workflow_dispatch:  # Allow manual trigger
+
+jobs:
+  audit:
+    name: Security Audit
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Run audit
+        run: pnpm audit --audit-level=high

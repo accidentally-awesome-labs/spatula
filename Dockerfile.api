@@ -1,0 +1,79 @@
+# -----------------------------------------------------------
+# Stage 1: Install ALL dependencies (dev + prod) and build
+# -----------------------------------------------------------
+FROM node:22-alpine AS build
+WORKDIR /app
+RUN corepack enable
+
+# Copy workspace config + ALL package.json files (pnpm requires all workspace
+# members present for lockfile resolution, even if not all are used)
+COPY package.json pnpm-lock.yaml pnpm-workspace.yaml .npmrc turbo.json ./
+COPY packages/shared/package.json packages/shared/
+COPY packages/db/package.json packages/db/
+COPY packages/core/package.json packages/core/
+COPY packages/queue/package.json packages/queue/
+COPY apps/api/package.json apps/api/
+COPY apps/cli/package.json apps/cli/
+
+# Install all dependencies (dev included for building)
+RUN pnpm install --frozen-lockfile
+
+# Copy source code
+COPY tsconfig.base.json ./
+COPY packages/ packages/
+COPY apps/api/ apps/api/
+
+# Build the full dependency tree
+RUN pnpm run build
+
+# -----------------------------------------------------------
+# Stage 2: Production dependencies only
+# -----------------------------------------------------------
+FROM node:22-alpine AS prod-deps
+WORKDIR /app
+RUN corepack enable
+
+COPY package.json pnpm-lock.yaml pnpm-workspace.yaml .npmrc ./
+COPY packages/shared/package.json packages/shared/
+COPY packages/db/package.json packages/db/
+COPY packages/core/package.json packages/core/
+COPY packages/queue/package.json packages/queue/
+COPY apps/api/package.json apps/api/
+COPY apps/cli/package.json apps/cli/
+
+RUN pnpm install --frozen-lockfile --prod
+
+# -----------------------------------------------------------
+# Stage 3: Minimal runtime image
+# -----------------------------------------------------------
+FROM node:22-alpine AS runtime
+WORKDIR /app
+
+# Create non-root user
+RUN addgroup -g 1001 -S spatula && adduser -S spatula -u 1001
+
+# Copy production node_modules (preserves pnpm workspace symlinks)
+COPY --from=prod-deps /app/node_modules ./node_modules
+COPY --from=prod-deps /app/packages/shared/node_modules ./packages/shared/node_modules
+COPY --from=prod-deps /app/packages/db/node_modules ./packages/db/node_modules
+COPY --from=prod-deps /app/packages/core/node_modules ./packages/core/node_modules
+COPY --from=prod-deps /app/packages/queue/node_modules ./packages/queue/node_modules
+COPY --from=prod-deps /app/apps/api/node_modules ./apps/api/node_modules
+
+# Copy built output (preserving monorepo directory structure)
+COPY --from=build /app/packages/shared/dist ./packages/shared/dist
+COPY --from=build /app/packages/shared/package.json ./packages/shared/
+COPY --from=build /app/packages/db/dist ./packages/db/dist
+COPY --from=build /app/packages/db/package.json ./packages/db/
+COPY --from=build /app/packages/db/drizzle ./packages/db/drizzle
+COPY --from=build /app/packages/core/dist ./packages/core/dist
+COPY --from=build /app/packages/core/package.json ./packages/core/
+COPY --from=build /app/packages/queue/dist ./packages/queue/dist
+COPY --from=build /app/packages/queue/package.json ./packages/queue/
+COPY --from=build /app/apps/api/dist ./apps/api/dist
+COPY --from=build /app/apps/api/package.json ./apps/api/
+COPY --from=build /app/package.json ./
+
+USER spatula
+EXPOSE 3000
+CMD ["node", "apps/api/dist/index.js"]
