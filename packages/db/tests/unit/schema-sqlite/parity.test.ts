@@ -84,7 +84,10 @@ describe('SQLite ↔ Postgres column parity', () => {
   it('pages mirrors rawPages (minus tenantId, plus local extensions)', () => {
     assertColumnParity('pages', rawPages, sqlitePages, {
       pgExclusions: ['tenantId'],
-      // Merged from crawl_tasks + local extensions
+      // Merged from crawl_tasks (denormalized for local query convenience):
+      //   jobId, url, statusCode, title, classification
+      // Purely local extensions (not in any Postgres table):
+      //   contentPath, needsReextraction, reextractionReason
       sqliteExtensions: [
         'jobId',
         'url',
