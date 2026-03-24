@@ -20,7 +20,11 @@ export const YamlFieldShorthand = z.union([
     description: z.string().optional(),
   }),
   // Shorthand: { product_name: "string" } → single key-value pair (tried second)
-  z.record(z.string(), z.enum(['string', 'number', 'boolean', 'url', 'currency', 'enum', 'array', 'object'])),
+  z.record(z.string(), z.enum(['string', 'number', 'boolean', 'url', 'currency', 'enum', 'array', 'object']))
+    .refine(
+      (obj) => Object.keys(obj).length === 1,
+      'Field shorthand must have exactly one key (e.g., "product_name: string")'
+    ),
 ]);
 export type YamlFieldShorthand = z.infer<typeof YamlFieldShorthand>;
 

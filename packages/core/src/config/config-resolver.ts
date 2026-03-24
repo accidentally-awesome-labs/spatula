@@ -6,7 +6,7 @@ import type { FieldDefinitionOutput } from '../types/schema.js';
 
 export interface YamlToJobConfigOptions {
   tenantId: string;
-  projectId: string;
+  projectId?: string;  // Reserved for Phase 13 — synthetic project ID for local SQLite
   projectRoot: string;
   globalConfig?: GlobalConfig | null;
   cliFlags?: CliFlags;
@@ -19,6 +19,12 @@ export interface YamlToJobConfigOptions {
  * Resolution order (highest priority wins):
  *   Built-in defaults -> Global config -> Project YAML -> CLI flags
  */
+// Note: These SpatulaYaml fields are NOT mapped to JobConfig:
+// - safety: consumed by LocalPipelineRunner action executor (Phase 13 Step 4)
+// - export: consumed by LocalPipelineRunner auto-export (Phase 13 Step 4)
+// - notify: consumed by LocalPipelineRunner notifications (Phase 13 Step 4)
+// They are parsed and validated by SpatulaYamlSchema but not included in JobConfig.
+// The caller should preserve the full SpatulaYaml object for these fields.
 export function yamlToJobConfig(
   yaml: SpatulaYaml,
   options: YamlToJobConfigOptions,
