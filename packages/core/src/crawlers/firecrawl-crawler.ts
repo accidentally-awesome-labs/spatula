@@ -26,10 +26,24 @@ export class FirecrawlCrawler implements Crawler {
     const timeout = options?.timeout ?? 30000;
     const startTime = Date.now();
 
+    // Log proxy warning — Firecrawl uses its own IP rotation
+    if (options?.proxy) {
+      logger.warn('Proxy configuration is ignored for Firecrawl crawler (uses built-in IP rotation)');
+    }
+
+    // Convert cookies to Cookie header
+    const headers: Record<string, string> = {};
+    if (options?.cookies?.length) {
+      headers.Cookie = options.cookies
+        .map(c => `${c.name}=${c.value}`)
+        .join('; ');
+    }
+
     try {
       const response = await this.client.scrape(url, {
         formats: ['html', 'links'],
         timeout,
+        ...(Object.keys(headers).length > 0 ? { headers } : {}),
       });
 
       const html = response.html ?? '';

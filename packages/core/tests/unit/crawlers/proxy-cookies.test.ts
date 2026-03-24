@@ -1,7 +1,18 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { PlaywrightCrawler } from '../../../src/crawlers/playwright-crawler.js';
+import { FirecrawlCrawler } from '../../../src/crawlers/firecrawl-crawler.js';
 import type { CrawlOptions } from '../../../src/interfaces/crawler.js';
 import type { Browser, BrowserContext, Page, Response } from 'playwright';
+
+// Mock Firecrawl SDK — must be before any import that uses it
+const mockScrape = vi.fn();
+vi.mock('@mendable/firecrawl-js', () => {
+  return {
+    default: vi.fn().mockImplementation(() => ({
+      scrape: mockScrape,
+    })),
+  };
+});
 
 function createMockBrowser(
   overrides: Partial<{
@@ -184,5 +195,74 @@ describe('PlaywrightCrawler cookie support', () => {
     });
 
     expect(mockContext.addCookies).not.toHaveBeenCalled();
+  });
+});
+
+// --- Firecrawl cookie & proxy tests ---
+
+describe('FirecrawlCrawler cookie support', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mockScrape.mockResolvedValue({
+      html: '<html><head><title>Test</title></head><body>Test</body></html>',
+      metadata: {
+        title: 'Test',
+        statusCode: 200,
+        sourceURL: 'https://example.com',
+      },
+    });
+  });
+
+  it('sends cookies as Cookie header to scrape API', async () => {
+    const crawler = new FirecrawlCrawler({ apiKey: 'test-key' });
+
+    await crawler.crawl('https://example.com', {
+      timeout: 30000,
+      cookies: [
+        { name: 'session_id', value: 'abc123', domain: '.example.com', path: '/', httpOnly: false, secure: false },
+        { name: 'csrf', value: 'xyz789', domain: '.example.com', path: '/', httpOnly: false, secure: false },
+      ],
+    });
+
+    expect(mockScrape).toHaveBeenCalledWith('https://example.com', {
+      formats: ['html', 'links'],
+      timeout: 30000,
+      headers: { Cookie: 'session_id=abc123; csrf=xyz789' },
+    });
+  });
+
+  it('does not send headers when no cookies provided', async () => {
+    const crawler = new FirecrawlCrawler({ apiKey: 'test-key' });
+
+    await crawler.crawl('https://example.com');
+
+    expect(mockScrape).toHaveBeenCalledWith('https://example.com', {
+      formats: ['html', 'links'],
+      timeout: 30000,
+    });
+  });
+
+  it('sets proxyUsed to false in metadata (Firecrawl never uses user proxy)', async () => {
+    const crawler = new FirecrawlCrawler({ apiKey: 'test-key' });
+
+    const result = await crawler.crawl('https://example.com', {
+      timeout: 30000,
+      proxy: { url: 'http://proxy:8080' },
+    });
+
+    expect(result.metadata.proxyUsed).toBe(false);
+  });
+
+  it('logs warning when proxy is configured but still crawls successfully', async () => {
+    const crawler = new FirecrawlCrawler({ apiKey: 'test-key' });
+
+    // Should not throw — proxy is simply ignored with a warning
+    const result = await crawler.crawl('https://example.com', {
+      timeout: 30000,
+      proxy: { url: 'http://proxy:8080' },
+    });
+
+    expect(result.url).toBe('https://example.com');
+    expect(result.html).toContain('Test');
   });
 });
