@@ -5,6 +5,21 @@ export const CrawlOptions = z.object({
   waitForSelector: z.string().optional(),
   headers: z.record(z.string()).optional(),
   userAgent: z.string().optional(),
+  // Proxy configuration
+  proxy: z.object({
+    url: z.string(),
+    username: z.string().optional(),
+    password: z.string().optional(),
+  }).optional(),
+  // Cookie injection
+  cookies: z.array(z.object({
+    name: z.string(),
+    value: z.string(),
+    domain: z.string(),
+    path: z.string().default('/'),
+    httpOnly: z.boolean().default(false),
+    secure: z.boolean().default(false),
+  })).optional(),
 });
 
 export type CrawlOptions = z.infer<typeof CrawlOptions>;
@@ -27,6 +42,7 @@ export const CrawlResult = z.object({
     responseTimeMs: z.number(),
     contentLength: z.number(),
     crawlerType: z.enum(['playwright', 'firecrawl']),
+    proxyUsed: z.boolean().default(false),
   }),
 });
 

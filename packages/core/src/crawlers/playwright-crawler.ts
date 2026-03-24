@@ -64,6 +64,7 @@ export class PlaywrightCrawler implements Crawler {
           responseTimeMs,
           contentLength: Buffer.byteLength(html, 'utf-8'),
           crawlerType: 'playwright',
+          proxyUsed: !!options?.proxy,
         },
       };
     } catch (error) {

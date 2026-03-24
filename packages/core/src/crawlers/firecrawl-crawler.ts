@@ -58,6 +58,7 @@ export class FirecrawlCrawler implements Crawler {
           responseTimeMs,
           contentLength: Buffer.byteLength(html, 'utf-8'),
           crawlerType: 'firecrawl',
+          proxyUsed: false,
         },
       };
     } catch (error) {
