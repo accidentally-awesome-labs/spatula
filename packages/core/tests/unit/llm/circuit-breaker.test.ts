@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { CircuitBreakerLLMClient } from '../../../src/llm/circuit-breaker.js';
 import type { LLMClient, LLMCompletionRequest, LLMCompletionResponse } from '../../../src/interfaces/llm-client.js';
 
@@ -19,6 +19,10 @@ const defaultRequest: LLMCompletionRequest = {
 };
 
 describe('CircuitBreakerLLMClient', () => {
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
   describe('CLOSED state (normal operation)', () => {
     it('passes calls through to inner client', async () => {
       const inner = createMockClient();
