@@ -131,13 +131,13 @@ describe('OllamaClient', () => {
   });
 
   it('throws LLMError on non-ok response', async () => {
-    mockFetch.mockResolvedValue({
-      ok: false,
-      status: 404,
-    } as any);
+    mockFetch.mockResolvedValue({ ok: false, status: 404 } as any);
 
     const client = new OllamaClient();
-    await expect(client.complete(defaultRequest)).rejects.toThrow('Ollama request failed: 404');
+    const error = await client.complete(defaultRequest).catch(e => e);
+
+    expect(error).toBeInstanceOf(LLMError);
+    expect(error.message).toContain('404');
   });
 
   it('throws LLMError on network error', async () => {
@@ -193,6 +193,9 @@ describe('OllamaClient', () => {
   });
 
   it('respects custom timeout', async () => {
+    // Note: AbortSignal.timeout() returns an opaque signal — the timeout value
+    // is not inspectable. We verify the signal is passed to fetch; the actual
+    // timeout behavior is tested in the 'throws TimeoutError' test case.
     mockFetch.mockResolvedValue({
       ok: true,
       json: vi.fn().mockResolvedValue({
@@ -205,7 +208,6 @@ describe('OllamaClient', () => {
     const client = new OllamaClient({ timeoutMs: 60000 });
     await client.complete(defaultRequest);
 
-    // Verify AbortSignal.timeout was called with custom value
     const callArgs = mockFetch.mock.calls[0][1];
     expect(callArgs.signal).toBeDefined();
   });

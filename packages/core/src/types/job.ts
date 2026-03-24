@@ -25,7 +25,7 @@ export const CrawlConfig = z.object({
   crawlerType: z.enum(['playwright', 'firecrawl']).default('playwright'),
   // Proxy configuration
   proxy: z.object({
-    url: z.string(),
+    url: z.string().min(1, 'Proxy URL is required'),
     username: z.string().optional(),
     password: z.string().optional(),
   }).optional(),

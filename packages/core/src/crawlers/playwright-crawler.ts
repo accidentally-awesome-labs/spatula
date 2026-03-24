@@ -28,6 +28,8 @@ export class PlaywrightCrawler implements Crawler {
         contextOptions.extraHTTPHeaders = options.headers;
       }
       // Proxy support
+      // Note: proxy credentials are NOT included in error context or logs
+      // to prevent credential leakage. Only the proxy URL (without auth) should be logged.
       if (options?.proxy) {
         contextOptions.proxy = {
           server: options.proxy.url,
