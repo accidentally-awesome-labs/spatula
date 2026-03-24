@@ -198,11 +198,53 @@ Export all tables from packages/db/src/schema-sqlite/index.ts:
 
 - [ ] **Step 2: Create SQLite connection factory**
 
-Create packages/db/src/project-db/connection.ts with:
-- createProjectDb(dbPath) -- creates Drizzle SQLite instance with WAL mode, FK enforcement, busy timeout 5s, synchronous NORMAL
-- initializeProjectDb(db) -- creates all tables via raw SQL (CREATE TABLE IF NOT EXISTS for each)
+Create packages/db/src/project-db/connection.ts with two functions:
 
-The initializeProjectDb function uses raw SQL (not Drizzle migrations) because local SQLite DBs are disposable -- spatula reset recreates them. The raw SQL must match the Drizzle schema definitions exactly.
+**`createProjectDb(dbPath: string)`** — returns `{ db: DrizzleSQLite, sqlite: Database }`:
+- Creates a `better-sqlite3` Database instance
+- Sets pragmas: WAL mode, FK enforcement, busy timeout 5s, synchronous NORMAL
+- Wraps with Drizzle using the SQLite schema
+- Returns BOTH the Drizzle instance AND the raw sqlite instance (avoids accessing Drizzle internals via `(db as any).session?.client`)
+
+```typescript
+export function createProjectDb(dbPath: string) {
+  const sqlite = new Database(dbPath);
+  sqlite.pragma('journal_mode = WAL');
+  sqlite.pragma('foreign_keys = ON');
+  sqlite.pragma('busy_timeout = 5000');
+  sqlite.pragma('synchronous = NORMAL');
+  const db = drizzle(sqlite, { schema });
+  return { db, sqlite };
+}
+```
+
+**`initializeProjectDb(sqlite: Database, meta: { projectId: string; name: string })`** — creates all tables + seeds project_meta:
+- Takes the RAW sqlite instance (not the Drizzle wrapper) — no internal access needed
+- Creates all tables via `sqlite.exec(CREATE TABLE IF NOT EXISTS ...)`
+- Seeds `project_meta` with initial values:
+  - `schema_version` = `'1'`
+  - `project_id` = the synthetic UUID
+  - `name` = project name (from spatula.yaml or directory name)
+  - `created_at` = ISO 8601 timestamp
+
+```typescript
+export function initializeProjectDb(
+  sqlite: Database.Database,
+  meta: { projectId: string; name: string },
+): void {
+  sqlite.exec(`CREATE TABLE IF NOT EXISTS project_meta (...)`);
+  // ... all other CREATE TABLE statements ...
+
+  // Seed initial project metadata
+  const insert = sqlite.prepare('INSERT OR IGNORE INTO project_meta (key, value) VALUES (?, ?)');
+  insert.run('schema_version', '1');
+  insert.run('project_id', meta.projectId);
+  insert.run('name', meta.name);
+  insert.run('created_at', new Date().toISOString());
+}
+```
+
+The raw SQL must match the Drizzle schema definitions. Since both are hand-written, drift is possible — the parity test in Task 6 catches column-level drift, and the smoke test verifies end-to-end insertion.
 
 - [ ] **Step 3: Update db barrel exports**
 
@@ -211,8 +253,10 @@ Add to packages/db/src/index.ts:
 ```typescript
 // Project database (SQLite for local mode)
 export { createProjectDb, initializeProjectDb } from './project-db/connection.js';
-export type { ProjectDatabase } from './project-db/connection.js';
+export type { ProjectDatabase, ProjectDbResult } from './project-db/connection.js';
 ```
+
+Where `ProjectDbResult = { db: ProjectDatabase; sqlite: Database }` — callers use `db` for queries and `sqlite` for initialization and shutdown (`sqlite.close()`).
 
 Also export the SQLite schema namespace:
 
@@ -269,7 +313,11 @@ For each mirrored pair:
 3. Assert every Postgres column (minus tenantId and known-dropped columns) exists in SQLite
 4. Assert known local extensions exist
 
-Also add a smoke test for createProjectDb + initializeProjectDb with an in-memory SQLite DB (:memory:).
+Also add these smoke tests:
+
+1. **DB initialization smoke test:** Create an in-memory DB (`:memory:`), call `initializeProjectDb`, verify `project_meta` contains `schema_version` and `project_id`.
+
+2. **Drizzle round-trip test:** Create DB, initialize, insert a row via Drizzle ORM (e.g., insert into `projectMeta` using the Drizzle schema), read it back, verify the data matches. This catches column name mismatches between the raw SQL CREATE TABLE statements and the Drizzle schema definitions — if they drift, Drizzle will write to wrong columns and the read-back will fail.
 
 - [ ] **Step 2: Run tests**
 
