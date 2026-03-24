@@ -7,3 +7,8 @@ export { CrawlerFactory } from './crawler-factory.js';
 export type { CrawlerFactoryOptions } from './crawler-factory.js';
 export { compareCrawlers } from './crawler-comparison.js';
 export type { CrawlerComparisonResult } from './crawler-comparison.js';
+export { RobotsTxtChecker } from './robots-txt.js';
+export { InMemoryDomainRateLimiter } from './domain-rate-limiter.js';
+export type { DomainRateLimiter } from './domain-rate-limiter.js';
+export { CrawlCompletionChecker } from './completion-checker.js';
+export type { TaskStats, CompletionResult, TaskStatsRepo } from './completion-checker.js';

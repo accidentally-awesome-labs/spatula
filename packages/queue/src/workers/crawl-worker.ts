@@ -94,6 +94,22 @@ export async function processCrawlJob(data: CrawlJobData, deps: WorkerDeps): Pro
         data: { pagesFound: enqueued, taskId, url },
       });
     }
+
+    // 4. Check crawl completion (queue-specific)
+    // Note: result.error guard is intentionally absent — we already returned early on error above,
+    // so result.error is always falsy at this point.
+    if (deps.completionChecker) {
+      const completion = await deps.completionChecker.isComplete(
+        jobId, tenantId, deps.taskRepo as any,
+      );
+      if (completion.complete) {
+        logger.info({ jobId, ...completion.stats }, 'Crawl naturally complete, triggering reconciliation');
+        await deps.queues.reconciliation.add(
+          `reconciliation:${jobId}`,
+          { jobId, tenantId },
+        );
+      }
+    }
   } catch (error) {
     // Safety net for unexpected errors in the worker's own logic (queue operations, etc.).
     // Orchestrator-level errors are returned via result.error and handled above.
