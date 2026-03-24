@@ -7,5 +7,6 @@ export { CrawlerFactory } from './crawler-factory.js';
 export type { CrawlerFactoryOptions } from './crawler-factory.js';
 export { compareCrawlers } from './crawler-comparison.js';
 export type { CrawlerComparisonResult } from './crawler-comparison.js';
+export { RobotsTxtChecker } from './robots-txt.js';
 export { InMemoryPageBudget } from './page-budget.js';
 export type { PageBudget } from './page-budget.js';

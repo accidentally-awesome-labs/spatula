@@ -5,6 +5,8 @@ export const CrawlOptions = z.object({
   waitForSelector: z.string().optional(),
   headers: z.record(z.string()).optional(),
   userAgent: z.string().optional(),
+  // robots.txt compliance
+  respectRobotsTxt: z.boolean().default(true),
   // Proxy configuration
   proxy: z.object({
     url: z.string().min(1, 'Proxy URL is required'),
