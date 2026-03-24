@@ -2,16 +2,16 @@
 import { diffSeeds } from './url-normalizer.js';
 import type { JobConfig } from '../types/job.js';
 import type { FieldDefinitionOutput } from '../types/schema.js';
-import type { ConfigDiff, FieldChange, PotentialRename, DiffImpact } from './diff-types.js';
+import type { ProjectConfigDiff, FieldChange, PotentialRename, DiffImpact } from './diff-types.js';
 
 /**
- * Compare two JobConfig objects and produce a ConfigDiff.
+ * Compare two JobConfig objects and produce a ProjectConfigDiff.
  *
  * @param current  The config from the current spatula.yaml
  * @param previous The config snapshot from the last completed/paused run
- * @returns ConfigDiff with categorized changes and computed impact
+ * @returns ProjectConfigDiff with categorized changes and computed impact
  */
-export function diffConfigs(current: JobConfig, previous: JobConfig): ConfigDiff {
+export function diffConfigs(current: JobConfig, previous: JobConfig): ProjectConfigDiff {
   // Seeds
   const { added: seedsAdded, removed: seedsRemoved } = diffSeeds(
     current.seedUrls,
@@ -183,7 +183,7 @@ function diffFieldProperties(
 function diffCrawlSettings(
   current: JobConfig,
   previous: JobConfig,
-): ConfigDiff['crawlChanged'] {
+): ProjectConfigDiff['crawlChanged'] {
   return {
     maxDepth:
       current.crawl.maxDepth !== previous.crawl.maxDepth
@@ -212,7 +212,7 @@ function computeImpact(context: {
   seedsAdded: string[];
   fieldsAdded: FieldDefinitionOutput[];
   fieldsModified: FieldChange[];
-  crawlChanged: ConfigDiff['crawlChanged'];
+  crawlChanged: ProjectConfigDiff['crawlChanged'];
   reconciliationChanged: boolean;
 }): DiffImpact {
   const needsReextraction =

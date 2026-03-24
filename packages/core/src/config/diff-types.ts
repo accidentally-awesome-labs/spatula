@@ -42,7 +42,7 @@ export interface DiffImpact {
 /**
  * Full diff between two config snapshots.
  */
-export interface ConfigDiff {
+export interface ProjectConfigDiff {
   hasChanges: boolean;
 
   // Seeds
