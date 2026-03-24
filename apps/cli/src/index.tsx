@@ -6,6 +6,7 @@
  *   new      Launch interactive conversational mode to configure and start a crawl job
  *   list     List crawl jobs
  *   status   Show details for a specific job
+ *   test     Test extraction on a single page (no DB/API required)
  */
 
 import yargs from 'yargs';
@@ -127,6 +128,37 @@ yargs(hideBin(process.argv))
       const client = getApiClient({ apiUrl: argv.apiUrl, tenantId });
       const job = await runStatusCommand(client, argv.jobId as string);
       console.log(formatJobDetail(job));
+    },
+  )
+
+  // -------------------------------------------------------------------------
+  // test — single-page extraction (no DB/API required)
+  // -------------------------------------------------------------------------
+  .command(
+    'test <url>',
+    'Test extraction on a single page (no DB/API required)',
+    (y) =>
+      y
+        .positional('url', { type: 'string', demandOption: true, describe: 'URL to test' })
+        .option('crawler', { type: 'string', choices: ['playwright', 'firecrawl'] as const, default: 'playwright', describe: 'Crawler backend to use' })
+        .option('format', { type: 'string', choices: ['json', 'table', 'raw'] as const, default: 'table', describe: 'Output format' })
+        .option('schema', { type: 'string', describe: 'Path to schema JSON file' })
+        .option('show-html', { type: 'boolean', default: false, describe: 'Show preprocessed HTML instead of extraction' })
+        .option('show-links', { type: 'boolean', default: false, describe: 'Show evaluated links' })
+        .option('model', { type: 'string', describe: 'Override LLM model' })
+        .option('skip-llm', { type: 'boolean', default: false, describe: 'Skip LLM, CSS selectors only (requires --schema)' }),
+    async (argv) => {
+      const { testUrl } = await import('./commands/test-url.js');
+      await testUrl({
+        url: argv.url as string,
+        crawler: argv.crawler as 'playwright' | 'firecrawl',
+        format: argv.format as 'json' | 'table' | 'raw',
+        schema: argv.schema,
+        showHtml: argv.showHtml,
+        showLinks: argv.showLinks,
+        model: argv.model,
+        skipLlm: argv.skipLlm,
+      });
     },
   )
 
