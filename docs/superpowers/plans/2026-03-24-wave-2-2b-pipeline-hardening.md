@@ -298,7 +298,7 @@ git commit -m "feat(core): add robots.txt compliance checker with per-domain cac
 ```typescript
 // packages/core/tests/unit/crawlers/domain-rate-limiter.test.ts
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { DomainRateLimiter } from '../../../src/crawlers/domain-rate-limiter.js';
+import { InMemoryDomainRateLimiter } from '../../../src/crawlers/domain-rate-limiter.js';
 
 describe('DomainRateLimiter', () => {
   beforeEach(() => {
@@ -310,14 +310,14 @@ describe('DomainRateLimiter', () => {
   });
 
   it('allows first request immediately', async () => {
-    const limiter = new DomainRateLimiter(1000);
+    const limiter = new InMemoryDomainRateLimiter(1000);
     const start = Date.now();
     await limiter.waitForSlot('https://example.com/page1');
     expect(Date.now() - start).toBeLessThan(100);
   });
 
   it('delays second request to same domain', async () => {
-    const limiter = new DomainRateLimiter(1000);
+    const limiter = new InMemoryDomainRateLimiter(1000);
 
     await limiter.waitForSlot('https://example.com/page1');
     const waitPromise = limiter.waitForSlot('https://example.com/page2');
@@ -331,7 +331,7 @@ describe('DomainRateLimiter', () => {
   });
 
   it('allows concurrent requests to different domains', async () => {
-    const limiter = new DomainRateLimiter(1000);
+    const limiter = new InMemoryDomainRateLimiter(1000);
 
     await limiter.waitForSlot('https://a.com/page');
     // Immediately request different domain — should not wait
@@ -341,7 +341,7 @@ describe('DomainRateLimiter', () => {
   });
 
   it('uses custom delay from Crawl-Delay', async () => {
-    const limiter = new DomainRateLimiter(1000);
+    const limiter = new InMemoryDomainRateLimiter(1000);
 
     await limiter.waitForSlot('https://example.com/page1', 5); // 5 seconds Crawl-Delay
     let resolved = false;
@@ -358,7 +358,7 @@ describe('DomainRateLimiter', () => {
   });
 
   it('extracts hostname from URL for domain grouping', async () => {
-    const limiter = new DomainRateLimiter(1000);
+    const limiter = new InMemoryDomainRateLimiter(1000);
 
     await limiter.waitForSlot('https://example.com/page1');
     // Same hostname, different path — should be rate limited
@@ -378,13 +378,19 @@ describe('DomainRateLimiter', () => {
 import { setTimeout as sleep } from 'node:timers/promises';
 
 /**
- * In-memory per-domain rate limiter.
- * Enforces a minimum delay between requests to the same hostname.
- *
- * This is a simple token-bucket alternative — no Redis needed.
- * Suitable for single-process crawling (local mode or single worker).
+ * Domain rate limiter strategy interface.
+ * Server mode: implement with Redis SETEX for cross-worker coordination.
+ * Local mode: use InMemoryDomainRateLimiter below.
  */
-export class DomainRateLimiter {
+export interface DomainRateLimiter {
+  waitForSlot(url: string, crawlDelay?: number): Promise<void>;
+}
+
+/**
+ * In-memory per-domain rate limiter for single-process local mode.
+ * For server mode with multiple workers, implement DomainRateLimiter with Redis.
+ */
+export class InMemoryDomainRateLimiter implements DomainRateLimiter {
   private lastRequestTime = new Map<string, number>();
   private defaultDelayMs: number;
 
@@ -423,7 +429,8 @@ Run: `cd /Users/salar/Projects/spatula && pnpm --filter @spatula/core test -- --
 
 Add to `packages/core/src/crawlers/index.ts`:
 ```typescript
-export { DomainRateLimiter } from './domain-rate-limiter.js';
+export { InMemoryDomainRateLimiter } from './domain-rate-limiter.js';
+export type { DomainRateLimiter } from './domain-rate-limiter.js';
 ```
 
 ```bash
@@ -714,38 +721,75 @@ git commit -m "feat(core): add crawl completion detection heuristic"
 
 - [ ] **Step 1: Add pipeline hardening deps to WorkerDeps**
 
-In `packages/queue/src/worker-deps.ts`, add optional fields for the 4 utilities:
+Read `packages/queue/src/worker-deps.ts` first. Add optional fields for the 4 utilities:
 
 ```typescript
-import type { RobotsTxtChecker, DomainRateLimiter, PageBudget, CrawlCompletionChecker, TaskStatsRepo } from '@spatula/core';
+import type { RobotsTxtChecker, DomainRateLimiter, PageBudget, CrawlCompletionChecker } from '@spatula/core';
 
-// Add to WorkerDepsConfig and WorkerDeps class:
+// Add to WorkerDepsConfig interface and WorkerDeps class:
 robotsChecker?: RobotsTxtChecker;
 rateLimiter?: DomainRateLimiter;
 pageBudget?: PageBudget;
 completionChecker?: CrawlCompletionChecker;
 ```
 
-These are optional so existing code (tests, worker-entrypoint) continues to work without providing them. When the worker DI is fully wired (future task), they'll be required.
+These are optional so existing code (tests, worker-entrypoint) continues to work without providing them.
 
-- [ ] **Step 2: Integrate into crawl-worker.ts**
+**Note on `respectRobotsTxt` config:** The worker checks `if (deps.robotsChecker)` — this is sufficient because the DI wiring layer (not yet built) is responsible for conditionally providing the checker based on the job's `respectRobotsTxt` config. When `respectRobotsTxt: false`, the wiring layer simply doesn't inject the checker.
 
-Read the current `packages/queue/src/workers/crawl-worker.ts`. Add checks BEFORE the `processCrawlTask` call:
+- [ ] **Step 2: Check if `CrawlTaskRepository` has `getJobStats()`**
+
+Read `packages/db/src/repositories/crawl-task-repository.ts` and check if it has a `getJobStats()` method that returns counts by status. If not, add one:
 
 ```typescript
-// Before delegating to orchestrator:
+async getJobStats(jobId: string, tenantId: string): Promise<{
+  pending: number;
+  inProgress: number;
+  completed: number;
+  failed: number;
+  skipped: number;
+}> {
+  // Query crawl_tasks grouped by status for this job
+  const rows = await this.db.select({
+    status: crawlTasks.status,
+    count: sql<number>`count(*)`,
+  })
+  .from(crawlTasks)
+  .where(and(eq(crawlTasks.jobId, jobId), eq(crawlTasks.tenantId, tenantId)))
+  .groupBy(crawlTasks.status);
+
+  const stats = { pending: 0, inProgress: 0, completed: 0, failed: 0, skipped: 0 };
+  for (const row of rows) {
+    const key = row.status === 'in_progress' ? 'inProgress' : row.status;
+    if (key in stats) stats[key as keyof typeof stats] = row.count;
+  }
+  return stats;
+}
+```
+
+If the method already exists, skip this step.
+
+- [ ] **Step 3: Integrate into crawl-worker.ts**
+
+Read the current `packages/queue/src/workers/crawl-worker.ts`. Add checks BEFORE the `processCrawlTask` call and completion check AFTER:
+
+```typescript
+// BEFORE delegating to orchestrator:
 
 // 1. Check page budget
-if (deps.pageBudget && !deps.pageBudget.tryIncrement()) {
-  logger.info({ taskId, url }, 'Page budget exhausted, skipping');
-  await deps.taskRepo.updateStatus(taskId, tenantId, 'skipped');
-  return;
+if (deps.pageBudget) {
+  const allowed = await Promise.resolve(deps.pageBudget.tryIncrement());
+  if (!allowed) {
+    logger.info({ taskId, url }, 'Page budget exhausted, skipping');
+    await deps.taskRepo.updateStatus(taskId, tenantId, 'skipped');
+    return;
+  }
 }
 
 // 2. Check robots.txt
 if (deps.robotsChecker) {
-  const allowed = await deps.robotsChecker.isAllowed(url);
-  if (!allowed) {
+  const robotsAllowed = await deps.robotsChecker.isAllowed(url);
+  if (!robotsAllowed) {
     logger.info({ taskId, url }, 'Blocked by robots.txt, skipping');
     await deps.taskRepo.updateStatus(taskId, tenantId, 'skipped');
     return;
@@ -758,27 +802,34 @@ if (deps.rateLimiter) {
   await deps.rateLimiter.waitForSlot(url, crawlDelay);
 }
 
-// 4. Delegate to orchestrator
+// 4. Delegate to orchestrator (existing processCrawlTask call)
 const result = await processCrawlTask(...);
 
-// ... existing schema evolution + link enqueue code ...
+// ... existing schema evolution + link enqueue code (unchanged) ...
 
-// 5. Check crawl completion (after all processing)
+// AFTER all processing:
+
+// 5. Check crawl completion
 if (deps.completionChecker && !result.error) {
-  const completion = await deps.completionChecker.isComplete(jobId, tenantId, deps.taskRepo as any);
+  const completion = await deps.completionChecker.isComplete(
+    jobId, tenantId, deps.taskRepo as any,
+  );
   if (completion.complete) {
     logger.info({ jobId, ...completion.stats }, 'Crawl naturally complete, triggering reconciliation');
-    // Trigger reconciliation if jobManager is available
-    if (deps.jobManager) {
-      await deps.jobManager.triggerReconciliation(jobId, tenantId);
-    }
+    // Enqueue reconciliation job directly (worker has queues, not jobManager)
+    await deps.queues.reconciliation.add(
+      `reconciliation:${jobId}`,
+      { jobId, tenantId },
+    );
   }
 }
 ```
 
-Note: The `TaskStatsRepo` interface needs `getJobStats()` — verify the existing `CrawlTaskRepository` has this method. If not, add it as a deferred integration note.
+**Key difference from earlier plan:** Completion triggers reconciliation via `deps.queues.reconciliation.add()` — NOT `deps.jobManager.triggerReconciliation()`. The worker has `deps.queues` but NOT `jobManager`. This avoids adding `jobManager` to `WorkerDeps`.
 
-- [ ] **Step 3: Fix test mocks**
+**Note on `pageBudget.tryIncrement()`:** The interface returns `Promise<boolean> | boolean` (sync for in-memory, async for future Redis). Wrapping with `Promise.resolve()` handles both.
+
+- [ ] **Step 4: Fix existing test mocks**
 
 Update worker test mocks to include the new optional deps (set to `undefined` for existing tests):
 
@@ -790,18 +841,89 @@ pageBudget: undefined,
 completionChecker: undefined,
 ```
 
-- [ ] **Step 4: Run worker tests**
+- [ ] **Step 5: Write NEW integration tests**
+
+Add new test cases to `packages/queue/tests/unit/workers/crawl-worker.test.ts`:
+
+```typescript
+describe('pipeline hardening integration', () => {
+  it('skips task when page budget is exhausted', async () => {
+    const deps = createMockDeps();
+    deps.pageBudget = { tryIncrement: () => false, count: 100, remaining: 0, isExhausted: true, maxPages: 100 };
+
+    await processCrawlJob(data, deps);
+
+    expect(deps.taskRepo.updateStatus).toHaveBeenCalledWith(taskId, tenantId, 'skipped');
+    expect(deps.crawler.crawl).not.toHaveBeenCalled(); // didn't even crawl
+  });
+
+  it('skips task when blocked by robots.txt', async () => {
+    const deps = createMockDeps();
+    deps.robotsChecker = { isAllowed: vi.fn().mockResolvedValue(false), getCrawlDelay: vi.fn() };
+
+    await processCrawlJob(data, deps);
+
+    expect(deps.taskRepo.updateStatus).toHaveBeenCalledWith(taskId, tenantId, 'skipped');
+    expect(deps.crawler.crawl).not.toHaveBeenCalled();
+  });
+
+  it('waits for rate limiter before crawling', async () => {
+    const deps = createMockDeps();
+    const waitForSlot = vi.fn().mockResolvedValue(undefined);
+    deps.rateLimiter = { waitForSlot };
+
+    await processCrawlJob(data, deps);
+
+    expect(waitForSlot).toHaveBeenCalledWith(data.url, undefined);
+    expect(deps.crawler.crawl).toHaveBeenCalled(); // crawl happened after wait
+  });
+
+  it('enqueues reconciliation when crawl is naturally complete', async () => {
+    const deps = createMockDeps();
+    deps.completionChecker = {
+      isComplete: vi.fn().mockResolvedValue({
+        complete: true,
+        reason: 'all_tasks_done',
+        stats: { pending: 0, inProgress: 1, completed: 50, failed: 0, skipped: 0 },
+      }),
+    };
+
+    await processCrawlJob(data, deps);
+
+    expect(deps.queues.reconciliation.add).toHaveBeenCalledWith(
+      expect.stringContaining('reconciliation:'),
+      expect.objectContaining({ jobId: data.jobId, tenantId: data.tenantId }),
+    );
+  });
+
+  it('does not enqueue reconciliation when crawl is not complete', async () => {
+    const deps = createMockDeps();
+    deps.completionChecker = {
+      isComplete: vi.fn().mockResolvedValue({
+        complete: false,
+        stats: { pending: 5, inProgress: 2, completed: 40, failed: 0, skipped: 0 },
+      }),
+    };
+
+    await processCrawlJob(data, deps);
+
+    expect(deps.queues.reconciliation.add).not.toHaveBeenCalled();
+  });
+});
+```
+
+- [ ] **Step 6: Run worker tests**
 
 Run: `cd /Users/salar/Projects/spatula && pnpm --filter @spatula/queue test -- --run crawl-worker`
 
-- [ ] **Step 5: Run full queue tests**
+- [ ] **Step 7: Run full queue tests**
 
 Run: `cd /Users/salar/Projects/spatula && pnpm --filter @spatula/queue test -- --run`
 
-- [ ] **Step 6: Commit**
+- [ ] **Step 8: Commit**
 
 ```bash
-git add packages/queue/src/worker-deps.ts packages/queue/src/workers/crawl-worker.ts packages/queue/tests/
+git add packages/queue/src/worker-deps.ts packages/queue/src/workers/crawl-worker.ts packages/queue/tests/ packages/db/src/repositories/crawl-task-repository.ts
 git commit -m "feat(queue): wire robots.txt, rate limiter, page budget, completion into crawl worker"
 ```
 
