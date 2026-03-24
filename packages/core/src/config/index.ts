@@ -1,8 +1,10 @@
 // Existing
 export { DefaultConfigExecutor } from './config-executor.js';
 
-// New types (Phase 13)
+// Project-folder config system (Phase 13)
 export * from './types.js';
-
-// Project detection
+export { parseProjectYaml, expandFieldShorthand, parseProjectYamlFile } from './yaml-parser.js';
+export { loadGlobalConfig, getGlobalConfigPath } from './global-config.js';
+export { yamlToJobConfig } from './config-resolver.js';
+export type { YamlToJobConfigOptions } from './config-resolver.js';
 export { findProjectRoot } from './project-detection.js';
