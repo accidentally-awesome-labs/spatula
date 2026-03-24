@@ -18,7 +18,7 @@ export const extractions = sqliteTable(
     createdAt: text('created_at').notNull(),
   },
   (table) => [
-    index('sqlite_extractions_job_schema_idx').on(table.jobId, table.schemaVersion),
-    index('sqlite_extractions_page_idx').on(table.pageId),
+    index('sl_extractions_job_schema_idx').on(table.jobId, table.schemaVersion),
+    index('sl_extractions_page_idx').on(table.pageId),
   ],
 );

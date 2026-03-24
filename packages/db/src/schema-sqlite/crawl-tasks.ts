@@ -33,9 +33,9 @@ export const crawlTasks = sqliteTable(
     completedAt: text('completed_at'),
   },
   (table) => [
-    index('sqlite_crawl_tasks_job_status_idx').on(table.jobId, table.status),
-    index('sqlite_crawl_tasks_job_depth_idx').on(table.jobId, table.depth),
-    index('sqlite_crawl_tasks_url_idx').on(table.url),
+    index('sl_crawl_tasks_job_status_idx').on(table.jobId, table.status),
+    index('sl_crawl_tasks_job_depth_idx').on(table.jobId, table.depth),
+    index('sl_crawl_tasks_url_idx').on(table.url),
     check('status_check', sql`${table.status} IN ('pending','in_progress','completed','failed','skipped')`),
     check('priority_check', sql`${table.priority} IN ('critical','high','medium','low')`),
     check('classification_check', sql`${table.classification} IN ('single_entry','multiple_entries','navigation','irrelevant','partial') OR ${table.classification} IS NULL`),

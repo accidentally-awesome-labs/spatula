@@ -31,8 +31,8 @@ export const pages = sqliteTable(
     reextractionReason: text('reextraction_reason'),
   },
   (table) => [
-    index('sqlite_pages_task_idx').on(table.taskId),
-    index('sqlite_pages_content_hash_idx').on(table.contentHash),
-    index('sqlite_pages_job_idx').on(table.jobId),
+    index('sl_pages_task_idx').on(table.taskId),
+    index('sl_pages_content_hash_idx').on(table.contentHash),
+    index('sl_pages_job_idx').on(table.jobId),
   ],
 );

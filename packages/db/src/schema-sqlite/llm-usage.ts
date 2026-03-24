@@ -18,7 +18,7 @@ export const llmUsage = sqliteTable(
     createdAt: text('created_at').notNull(),
   },
   (table) => [
-    index('sqlite_llm_usage_run_idx').on(table.runId),
-    index('sqlite_llm_usage_created_idx').on(table.createdAt),
+    index('sl_llm_usage_run_idx').on(table.runId),
+    index('sl_llm_usage_created_idx').on(table.createdAt),
   ],
 );

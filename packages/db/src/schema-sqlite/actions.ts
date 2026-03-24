@@ -24,9 +24,9 @@ export const actions = sqliteTable(
     appliedAt: text('applied_at'),
   },
   (table) => [
-    index('sqlite_actions_job_type_idx').on(table.jobId, table.type),
-    index('sqlite_actions_job_status_idx').on(table.jobId, table.status),
-    index('sqlite_actions_job_created_idx').on(table.jobId, table.createdAt),
+    index('sl_actions_job_type_idx').on(table.jobId, table.type),
+    index('sl_actions_job_status_idx').on(table.jobId, table.status),
+    index('sl_actions_job_created_idx').on(table.jobId, table.createdAt),
     check('source_check', sql`${table.source} IN ('extraction','schema_evolution','reconciliation','quality_audit')`),
     check('status_check', sql`${table.status} IN ('pending_review','approved','applied','rejected','rolled_back')`),
   ],

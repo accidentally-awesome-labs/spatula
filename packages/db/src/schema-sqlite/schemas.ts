@@ -17,5 +17,5 @@ export const schemasTable = sqliteTable(
     parentId: text('parent_id'),
     createdAt: text('created_at').notNull(),
   },
-  (table) => [index('sqlite_schemas_job_version_idx').on(table.jobId, table.version)],
+  (table) => [index('sl_schemas_job_version_idx').on(table.jobId, table.version)],
 );

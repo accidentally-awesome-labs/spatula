@@ -18,5 +18,5 @@ export const sourceTrust = sqliteTable(
     score: real('score'),
     createdAt: text('created_at'),
   },
-  (table) => [index('sqlite_source_trust_job_domain_idx').on(table.jobId, table.domain)],
+  (table) => [index('sl_source_trust_job_domain_idx').on(table.jobId, table.domain)],
 );

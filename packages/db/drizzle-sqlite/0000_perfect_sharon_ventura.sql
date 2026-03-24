@@ -15,9 +15,9 @@ CREATE TABLE `actions` (
 	CONSTRAINT "status_check" CHECK("actions"."status" IN ('pending_review','approved','applied','rejected','rolled_back'))
 );
 --> statement-breakpoint
-CREATE INDEX `sqlite_actions_job_type_idx` ON `actions` (`job_id`,`type`);--> statement-breakpoint
-CREATE INDEX `sqlite_actions_job_status_idx` ON `actions` (`job_id`,`status`);--> statement-breakpoint
-CREATE INDEX `sqlite_actions_job_created_idx` ON `actions` (`job_id`,`created_at`);--> statement-breakpoint
+CREATE INDEX `sl_actions_job_type_idx` ON `actions` (`job_id`,`type`);--> statement-breakpoint
+CREATE INDEX `sl_actions_job_status_idx` ON `actions` (`job_id`,`status`);--> statement-breakpoint
+CREATE INDEX `sl_actions_job_created_idx` ON `actions` (`job_id`,`created_at`);--> statement-breakpoint
 CREATE TABLE `crawl_tasks` (
 	`id` text PRIMARY KEY NOT NULL,
 	`job_id` text NOT NULL,
@@ -41,9 +41,9 @@ CREATE TABLE `crawl_tasks` (
 	CONSTRAINT "classification_check" CHECK("crawl_tasks"."classification" IN ('single_entry','multiple_entries','navigation','irrelevant','partial') OR "crawl_tasks"."classification" IS NULL)
 );
 --> statement-breakpoint
-CREATE INDEX `sqlite_crawl_tasks_job_status_idx` ON `crawl_tasks` (`job_id`,`status`);--> statement-breakpoint
-CREATE INDEX `sqlite_crawl_tasks_job_depth_idx` ON `crawl_tasks` (`job_id`,`depth`);--> statement-breakpoint
-CREATE INDEX `sqlite_crawl_tasks_url_idx` ON `crawl_tasks` (`url`);--> statement-breakpoint
+CREATE INDEX `sl_crawl_tasks_job_status_idx` ON `crawl_tasks` (`job_id`,`status`);--> statement-breakpoint
+CREATE INDEX `sl_crawl_tasks_job_depth_idx` ON `crawl_tasks` (`job_id`,`depth`);--> statement-breakpoint
+CREATE INDEX `sl_crawl_tasks_url_idx` ON `crawl_tasks` (`url`);--> statement-breakpoint
 CREATE TABLE `entities` (
 	`id` text PRIMARY KEY NOT NULL,
 	`job_id` text NOT NULL,
@@ -56,7 +56,7 @@ CREATE TABLE `entities` (
 	`updated_at` text
 );
 --> statement-breakpoint
-CREATE INDEX `sqlite_entities_job_quality_idx` ON `entities` (`job_id`,`quality_score`);--> statement-breakpoint
+CREATE INDEX `sl_entities_job_quality_idx` ON `entities` (`job_id`,`quality_score`);--> statement-breakpoint
 CREATE TABLE `entity_sources` (
 	`entity_id` text NOT NULL,
 	`extraction_id` text NOT NULL,
@@ -86,8 +86,8 @@ CREATE TABLE `extractions` (
 	`created_at` text NOT NULL
 );
 --> statement-breakpoint
-CREATE INDEX `sqlite_extractions_job_schema_idx` ON `extractions` (`job_id`,`schema_version`);--> statement-breakpoint
-CREATE INDEX `sqlite_extractions_page_idx` ON `extractions` (`page_id`);--> statement-breakpoint
+CREATE INDEX `sl_extractions_job_schema_idx` ON `extractions` (`job_id`,`schema_version`);--> statement-breakpoint
+CREATE INDEX `sl_extractions_page_idx` ON `extractions` (`page_id`);--> statement-breakpoint
 CREATE TABLE `llm_usage` (
 	`id` text PRIMARY KEY NOT NULL,
 	`run_id` text,
@@ -100,8 +100,8 @@ CREATE TABLE `llm_usage` (
 	`created_at` text NOT NULL
 );
 --> statement-breakpoint
-CREATE INDEX `sqlite_llm_usage_run_idx` ON `llm_usage` (`run_id`);--> statement-breakpoint
-CREATE INDEX `sqlite_llm_usage_created_idx` ON `llm_usage` (`created_at`);--> statement-breakpoint
+CREATE INDEX `sl_llm_usage_run_idx` ON `llm_usage` (`run_id`);--> statement-breakpoint
+CREATE INDEX `sl_llm_usage_created_idx` ON `llm_usage` (`created_at`);--> statement-breakpoint
 CREATE TABLE `pages` (
 	`id` text PRIMARY KEY NOT NULL,
 	`task_id` text NOT NULL,
@@ -119,9 +119,9 @@ CREATE TABLE `pages` (
 	`reextraction_reason` text
 );
 --> statement-breakpoint
-CREATE INDEX `sqlite_pages_task_idx` ON `pages` (`task_id`);--> statement-breakpoint
-CREATE INDEX `sqlite_pages_content_hash_idx` ON `pages` (`content_hash`);--> statement-breakpoint
-CREATE INDEX `sqlite_pages_job_idx` ON `pages` (`job_id`);--> statement-breakpoint
+CREATE INDEX `sl_pages_task_idx` ON `pages` (`task_id`);--> statement-breakpoint
+CREATE INDEX `sl_pages_content_hash_idx` ON `pages` (`content_hash`);--> statement-breakpoint
+CREATE INDEX `sl_pages_job_idx` ON `pages` (`job_id`);--> statement-breakpoint
 CREATE TABLE `project_meta` (
 	`key` text PRIMARY KEY NOT NULL,
 	`value` text NOT NULL
@@ -152,7 +152,7 @@ CREATE TABLE `schemas` (
 	`created_at` text NOT NULL
 );
 --> statement-breakpoint
-CREATE INDEX `sqlite_schemas_job_version_idx` ON `schemas` (`job_id`,`version`);--> statement-breakpoint
+CREATE INDEX `sl_schemas_job_version_idx` ON `schemas` (`job_id`,`version`);--> statement-breakpoint
 CREATE TABLE `source_trust` (
 	`id` text PRIMARY KEY NOT NULL,
 	`job_id` text NOT NULL,
@@ -162,4 +162,4 @@ CREATE TABLE `source_trust` (
 	`created_at` text
 );
 --> statement-breakpoint
-CREATE INDEX `sqlite_source_trust_job_domain_idx` ON `source_trust` (`job_id`,`domain`);
+CREATE INDEX `sl_source_trust_job_domain_idx` ON `source_trust` (`job_id`,`domain`);
