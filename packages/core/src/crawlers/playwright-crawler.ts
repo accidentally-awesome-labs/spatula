@@ -27,8 +27,29 @@ export class PlaywrightCrawler implements Crawler {
       if (options?.headers) {
         contextOptions.extraHTTPHeaders = options.headers;
       }
+      // Proxy support
+      if (options?.proxy) {
+        contextOptions.proxy = {
+          server: options.proxy.url,
+          ...(options.proxy.username ? { username: options.proxy.username } : {}),
+          ...(options.proxy.password ? { password: options.proxy.password } : {}),
+        };
+      }
 
       context = await this.browser.newContext(contextOptions);
+
+      // Cookie support — set cookies before creating page
+      if (options?.cookies?.length) {
+        await context.addCookies(options.cookies.map(c => ({
+          name: c.name,
+          value: c.value,
+          domain: c.domain,
+          path: c.path ?? '/',
+          httpOnly: c.httpOnly ?? false,
+          secure: c.secure ?? false,
+        })));
+      }
+
       page = await context.newPage();
 
       const startTime = Date.now();
