@@ -10,3 +10,5 @@ export type { CrawlerComparisonResult } from './crawler-comparison.js';
 export { RobotsTxtChecker } from './robots-txt.js';
 export { InMemoryPageBudget } from './page-budget.js';
 export type { PageBudget } from './page-budget.js';
+export { CrawlCompletionChecker } from './completion-checker.js';
+export type { TaskStats, CompletionResult, TaskStatsRepo } from './completion-checker.js';
