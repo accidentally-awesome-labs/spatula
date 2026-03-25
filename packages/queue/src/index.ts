@@ -29,6 +29,9 @@ export { acquireLock, releaseLock } from './redis-lock.js';
 export { RedisEventPublisher, NoopEventPublisher, channelForJob } from './events.js';
 export type { EventPublisher, JobEvent, JobEventType } from './events.js';
 
+// DLQ Handler
+export { createDlqHandler } from './dlq-handler.js';
+
 // Workers
 export { processCrawlJob } from './workers/crawl-worker.js';
 export { processSchemaEvolutionJob } from './workers/schema-worker.js';
