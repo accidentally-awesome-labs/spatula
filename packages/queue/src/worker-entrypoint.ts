@@ -5,7 +5,8 @@
 import { Worker } from 'bullmq';
 import Redis from 'ioredis';
 import { createLogger, loadConfig } from '@spatula/shared';
-import { createDatabasePool } from '@spatula/db';
+import { createDatabasePool, DlqRepository } from '@spatula/db';
+import { createDlqHandler } from './dlq-handler.js';
 import { processCrawlJob } from './workers/crawl-worker.js';
 import { processSchemaEvolutionJob } from './workers/schema-worker.js';
 import { processReconciliationJob } from './workers/reconciliation-worker.js';
@@ -40,9 +41,9 @@ async function main() {
   // lock semantics need proper retry behavior.
   const redisForLock = new Redis(redisUrl);
 
-  // db is not used yet — full DI wiring (repositories, content store)
-  // will be added in Wave 2 when service factories are available.
-  const { pool } = createDatabasePool();
+  const { db, pool } = createDatabasePool();
+  const dlqRepo = new DlqRepository(db);
+  const dlqHandler = createDlqHandler(dlqRepo);
 
   // Create queues (for enqueuing child jobs from crawl worker)
   const queues = createQueues(redisOpts);
@@ -85,6 +86,7 @@ async function main() {
         },
       },
     );
+    worker.on('failed', (job, err) => void dlqHandler(job, err));
     workers.push(worker);
     logger.info({ queue: QUEUE_NAMES.CRAWL, concurrency: queueConfig.crawl.concurrency }, 'Crawl worker started');
   }
@@ -101,6 +103,7 @@ async function main() {
         concurrency: queueConfig.schemaEvolution.concurrency,
       },
     );
+    worker.on('failed', (job, err) => void dlqHandler(job, err));
     workers.push(worker);
     logger.info({ queue: QUEUE_NAMES.SCHEMA_EVOLUTION }, 'Schema evolution worker started');
   }
@@ -117,6 +120,7 @@ async function main() {
         concurrency: queueConfig.reconciliation.concurrency,
       },
     );
+    worker.on('failed', (job, err) => void dlqHandler(job, err));
     workers.push(worker);
     logger.info({ queue: QUEUE_NAMES.RECONCILIATION }, 'Reconciliation worker started');
   }
@@ -133,6 +137,7 @@ async function main() {
         concurrency: queueConfig.export.concurrency,
       },
     );
+    worker.on('failed', (job, err) => void dlqHandler(job, err));
     workers.push(worker);
     logger.info({ queue: QUEUE_NAMES.EXPORT }, 'Export worker started');
   }
