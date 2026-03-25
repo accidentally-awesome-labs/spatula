@@ -40,6 +40,23 @@ describe('CrawlCompletionChecker', () => {
     expect(result.reason).toBe('all_tasks_done');
   });
 
+  it('reports complete when all tasks have failed', async () => {
+    const repo = createMockTaskRepo({ pending: 0, inProgress: 0, completed: 0, failed: 10, skipped: 0 });
+    const checker = new CrawlCompletionChecker();
+    const result = await checker.isComplete('job-1', 'tenant-1', repo);
+    expect(result.complete).toBe(true);
+    expect(result.reason).toBe('all_tasks_done');
+    expect(result.stats.failed).toBe(10);
+  });
+
+  it('reports complete when zero tasks exist', async () => {
+    const repo = createMockTaskRepo({ pending: 0, inProgress: 0, completed: 0, failed: 0, skipped: 0 });
+    const checker = new CrawlCompletionChecker();
+    const result = await checker.isComplete('job-1', 'tenant-1', repo);
+    expect(result.complete).toBe(true);
+    expect(result.reason).toBe('all_tasks_done');
+  });
+
   it('returns stats in the result', async () => {
     const stats = { pending: 0, inProgress: 0, completed: 100, failed: 5, skipped: 10 };
     const repo = createMockTaskRepo(stats);

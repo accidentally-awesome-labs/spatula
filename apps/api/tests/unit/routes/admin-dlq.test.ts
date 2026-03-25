@@ -172,6 +172,37 @@ describe('POST /api/v1/admin/dlq/:id/retry', () => {
     );
   });
 
+  it('skips re-enqueue gracefully when queue name is unknown', async () => {
+    const unknownQueueEntry = {
+      ...SAMPLE_DLQ_ENTRY,
+      queueName: 'spatula.unknown-queue',
+    };
+    (deps as any).dlqRepo.findById = vi.fn().mockResolvedValue(unknownQueueEntry);
+
+    const mockQueues = {
+      crawl: { add: vi.fn() },
+      schemaEvolution: { add: vi.fn() },
+      reconciliation: { add: vi.fn() },
+      export: { add: vi.fn() },
+    };
+    deps = createMockDeps({
+      dlqRepo: (deps as any).dlqRepo,
+      queues: mockQueues as any,
+    });
+
+    const app = createApp(deps);
+    const res = await app.request('/api/v1/admin/dlq/dlq-1/retry', {
+      method: 'POST',
+      headers: tenantHeader,
+    });
+
+    // Should still resolve as retried, just no re-enqueue
+    expect(res.status).toBe(200);
+    expect(mockQueues.crawl.add).not.toHaveBeenCalled();
+    expect(mockQueues.export.add).not.toHaveBeenCalled();
+    expect((deps as any).dlqRepo.resolve).toHaveBeenCalledWith('dlq-1', 'retried');
+  });
+
   it('returns 404 for non-existent entry', async () => {
     (deps as any).dlqRepo.findById = vi.fn().mockResolvedValue(null);
     const app = createApp(deps);

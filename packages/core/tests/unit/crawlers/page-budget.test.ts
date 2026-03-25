@@ -45,4 +45,12 @@ describe('InMemoryPageBudget', () => {
     expect(counter.count).toBe(0);
     expect(counter.maxPages).toBe(100);
   });
+
+  it('rejects all pages when maxPages is 0', () => {
+    const counter = new InMemoryPageBudget(0);
+    expect(counter.tryIncrement()).toBe(false);
+    expect(counter.count).toBe(0);
+    expect(counter.remaining).toBe(0);
+    expect(counter.isExhausted).toBe(true);
+  });
 });

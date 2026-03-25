@@ -173,6 +173,39 @@ describe('yamlToJobConfig', () => {
     expect(result.schema.mode).toBe('hybrid');
   });
 
+  it('full priority stack: CLI > project YAML > global config > defaults', () => {
+    const yaml: SpatulaYaml = {
+      seeds: ['https://example.com'],
+      depth: 3,           // project overrides default (2)
+      limit: 500,         // project overrides default (1000)
+      crawler: 'firecrawl', // project overrides global
+    };
+
+    const globalConfig: GlobalConfig = {
+      version: 1,
+      crawler: 'playwright',     // global sets crawler — overridden by project
+      llm: { model: 'llama3.2:8b' }, // global sets model — not overridden by project
+    };
+
+    const result = yamlToJobConfig(yaml, {
+      tenantId: 'tenant-1',
+      projectRoot: '/test',
+      globalConfig,
+      cliFlags: { depth: 1 },  // CLI overrides project depth (3 → 1)
+    });
+
+    // CLI wins over project
+    expect(result.crawl.maxDepth).toBe(1);
+    // Project wins over global
+    expect(result.crawl.crawlerType).toBe('firecrawl');
+    // Project wins over default
+    expect(result.crawl.maxPages).toBe(500);
+    // Global fills in when project doesn't specify
+    expect(result.llm.primaryModel).toBe('llama3.2:8b');
+    // Default fills in when nobody specifies
+    expect(result.schema.mode).toBe('discovery');
+  });
+
   it('derives name from project root directory when not specified', () => {
     const result = yamlToJobConfig(minimalYaml, {
       tenantId: '00000000-0000-0000-0000-000000000001',

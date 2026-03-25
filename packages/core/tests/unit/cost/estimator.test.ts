@@ -126,6 +126,30 @@ describe('estimateCost', () => {
     expect(estimate.totalCostUsd).toBeLessThan(allSonnet.totalCostUsd);
   });
 
+  it('uses default pricing for unknown model names', () => {
+    const config = createMinimalConfig({
+      llm: { primaryModel: 'totally-unknown/model-xyz' },
+    } as any);
+    const estimate = estimateCost(config);
+    // Should not crash — falls back to DEFAULT_PRICING ($1/$5 per 1M tokens)
+    expect(estimate.totalCostUsd).toBeGreaterThan(0);
+    expect(estimate.llmCallBreakdown.length).toBeGreaterThan(0);
+    for (const entry of estimate.llmCallBreakdown) {
+      expect(entry.model).toBe('totally-unknown/model-xyz');
+    }
+  });
+
+  it('handles single seed at depth 0 (minimum viable crawl)', () => {
+    const config = createMinimalConfig({
+      seedUrls: ['https://example.com'],
+      crawl: { maxDepth: 0, maxPages: 1, concurrency: 1, crawlerType: 'playwright' as const },
+    } as any);
+    const estimate = estimateCost(config);
+    expect(estimate.estimatedPages).toBe(1);
+    expect(estimate.totalTokens).toBeGreaterThan(0);
+    expect(estimate.confidence).toBe('high');
+  });
+
   it('accepts yamlToJobConfig output as valid input (integration)', () => {
     const jobConfig = yamlToJobConfig(
       { seeds: ['https://example.com/products'], depth: 2, limit: 500 },
