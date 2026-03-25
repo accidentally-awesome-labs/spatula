@@ -13,6 +13,7 @@ import { eq, desc } from 'drizzle-orm';
 import type { ExportRepo } from '@spatula/core/pipeline/types.js';
 import type { ProjectDatabase } from '../connection.js';
 import { exports } from '../../schema-sqlite/exports.js';
+import { wrapStorageError } from './utils.js';
 
 export class SqliteExportRepository implements ExportRepo {
   constructor(private readonly db: ProjectDatabase) {}
@@ -94,7 +95,7 @@ export class SqliteExportRepository implements ExportRepo {
     },
   ): Promise<unknown> {
     // contentRef from the interface is ignored in local mode (we use filePath)
-    const updateData: Record<string, unknown> = {
+    const updateData: Partial<typeof exports.$inferInsert> = {
       status: data.status,
     };
 
@@ -107,11 +108,13 @@ export class SqliteExportRepository implements ExportRepo {
         : data.completedAt;
     }
 
-    this.db
-      .update(exports)
-      .set(updateData)
-      .where(eq(exports.id, exportId))
-      .run();
+    wrapStorageError(() => {
+      this.db
+        .update(exports)
+        .set(updateData)
+        .where(eq(exports.id, exportId))
+        .run();
+    }, { method: 'updateStatus', table: 'exports', exportId });
 
     return {};
   }

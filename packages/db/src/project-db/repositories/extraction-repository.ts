@@ -13,6 +13,7 @@ import { eq, and, desc } from 'drizzle-orm';
 import type { ExtractionRepo } from '@spatula/core/pipeline/types.js';
 import type { ProjectDatabase } from '../connection.js';
 import { extractions } from '../../schema-sqlite/extractions.js';
+import { wrapStorageError } from './utils.js';
 
 export class SqliteExtractionRepository implements ExtractionRepo {
   constructor(
@@ -30,19 +31,21 @@ export class SqliteExtractionRepository implements ExtractionRepo {
     metadata: unknown;
   }): Promise<{ id: string }> {
     const id = crypto.randomUUID();
-    this.db
-      .insert(extractions)
-      .values({
-        id,
-        jobId: this.projectId,
-        pageId: data.pageId,
-        schemaVersion: data.schemaVersion,
-        data: data.data,
-        unmappedFields: data.unmappedFields as Record<string, unknown>[],
-        metadata: (data.metadata ?? {}) as Record<string, unknown>,
-        createdAt: new Date().toISOString(),
-      })
-      .run();
+    wrapStorageError(() => {
+      this.db
+        .insert(extractions)
+        .values({
+          id,
+          jobId: this.projectId,
+          pageId: data.pageId,
+          schemaVersion: data.schemaVersion,
+          data: data.data,
+          unmappedFields: data.unmappedFields as Record<string, unknown>[],
+          metadata: (data.metadata ?? {}) as Record<string, unknown>,
+          createdAt: new Date().toISOString(),
+        })
+        .run();
+    }, { method: 'store', table: 'extractions' });
     return { id };
   }
 

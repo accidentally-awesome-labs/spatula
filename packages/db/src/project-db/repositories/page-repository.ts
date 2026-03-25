@@ -12,9 +12,13 @@
  * - UUIDs via crypto.randomUUID(), timestamps via new Date().toISOString()
  */
 import { eq, inArray } from 'drizzle-orm';
+import { createLogger } from '@spatula/shared';
 import type { PageRepo } from '@spatula/core/pipeline/types.js';
 import type { ProjectDatabase } from '../connection.js';
 import { pages } from '../../schema-sqlite/pages.js';
+import { wrapStorageError } from './utils.js';
+
+const logger = createLogger('sqlite:page-repo');
 
 /** Extended create input — includes base PageRepo fields plus SQLite-only columns. */
 export interface CreatePageInput {
@@ -41,26 +45,29 @@ export class SqlitePageRepository implements PageRepo {
 
   async create(data: CreatePageInput): Promise<{ id: string }> {
     const id = crypto.randomUUID();
-    this.db
-      .insert(pages)
-      .values({
-        id,
-        taskId: data.taskId,
-        jobId: this.projectId,
-        contentRef: data.contentRef,
-        contentHash: data.contentHash,
-        metadata: data.metadata ?? {},
-        createdAt: new Date().toISOString(),
-        // SQLite-only extensions
-        ...(data.url !== undefined ? { url: data.url } : {}),
-        ...(data.statusCode !== undefined ? { statusCode: data.statusCode } : {}),
-        ...(data.title !== undefined ? { title: data.title } : {}),
-        ...(data.classification !== undefined ? { classification: data.classification } : {}),
-        ...(data.contentPath !== undefined ? { contentPath: data.contentPath } : {}),
-        ...(data.needsReextraction !== undefined ? { needsReextraction: data.needsReextraction } : {}),
-        ...(data.reextractionReason !== undefined ? { reextractionReason: data.reextractionReason } : {}),
-      })
-      .run();
+    wrapStorageError(() => {
+      this.db
+        .insert(pages)
+        .values({
+          id,
+          taskId: data.taskId,
+          jobId: this.projectId,
+          contentRef: data.contentRef,
+          contentHash: data.contentHash,
+          metadata: data.metadata ?? {},
+          createdAt: new Date().toISOString(),
+          // SQLite-only extensions
+          ...(data.url !== undefined ? { url: data.url } : {}),
+          ...(data.statusCode !== undefined ? { statusCode: data.statusCode } : {}),
+          ...(data.title !== undefined ? { title: data.title } : {}),
+          ...(data.classification !== undefined ? { classification: data.classification } : {}),
+          ...(data.contentPath !== undefined ? { contentPath: data.contentPath } : {}),
+          ...(data.needsReextraction !== undefined ? { needsReextraction: data.needsReextraction } : {}),
+          ...(data.reextractionReason !== undefined ? { reextractionReason: data.reextractionReason } : {}),
+        })
+        .run();
+    }, { method: 'create', table: 'pages' });
+    logger.debug({ id, contentHash: data.contentHash }, 'page created');
     return { id };
   }
 

@@ -9,10 +9,14 @@
  * pre-bound projectId is always used.
  */
 import { eq, and, desc, sql } from 'drizzle-orm';
+import { createLogger } from '@spatula/shared';
 import type { CrawlTaskRepo } from '@spatula/core/pipeline/types.js';
 import type { TaskStatsRepo, TaskStats } from '@spatula/core/crawlers/completion-checker.js';
 import type { ProjectDatabase } from '../connection.js';
 import { crawlTasks } from '../../schema-sqlite/crawl-tasks.js';
+import { wrapStorageError } from './utils.js';
+
+const logger = createLogger('sqlite:crawl-task-repo');
 
 export class SqliteCrawlTaskRepository implements CrawlTaskRepo, TaskStatsRepo {
   constructor(
@@ -28,19 +32,22 @@ export class SqliteCrawlTaskRepository implements CrawlTaskRepo, TaskStatsRepo {
     parentTaskId: string;
   }): Promise<{ id: string }> {
     const id = crypto.randomUUID();
-    this.db
-      .insert(crawlTasks)
-      .values({
-        id,
-        jobId: this.projectId,
-        url: data.url,
-        depth: data.depth,
-        status: 'pending',
-        priority: 'medium',
-        parentTaskId: data.parentTaskId || null,
-        createdAt: new Date().toISOString(),
-      })
-      .run();
+    wrapStorageError(() => {
+      this.db
+        .insert(crawlTasks)
+        .values({
+          id,
+          jobId: this.projectId,
+          url: data.url,
+          depth: data.depth,
+          status: 'pending',
+          priority: 'medium',
+          parentTaskId: data.parentTaskId || null,
+          createdAt: new Date().toISOString(),
+        })
+        .run();
+    }, { method: 'enqueue', table: 'crawl_tasks' });
+    logger.debug({ id, url: data.url, depth: data.depth }, 'crawl task enqueued');
     return { id };
   }
 
@@ -56,11 +63,14 @@ export class SqliteCrawlTaskRepository implements CrawlTaskRepo, TaskStatsRepo {
       timestamps.completedAt = now;
     }
 
-    this.db
-      .update(crawlTasks)
-      .set({ status, ...timestamps })
-      .where(eq(crawlTasks.id, taskId))
-      .run();
+    wrapStorageError(() => {
+      this.db
+        .update(crawlTasks)
+        .set({ status, ...timestamps })
+        .where(eq(crawlTasks.id, taskId))
+        .run();
+    }, { method: 'updateStatus', table: 'crawl_tasks', taskId });
+    logger.debug({ taskId, status }, 'crawl task status updated');
 
     return {};
   }

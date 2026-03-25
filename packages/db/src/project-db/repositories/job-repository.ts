@@ -11,9 +11,12 @@
  * pre-bound projectId is always used.
  */
 import { eq, desc } from 'drizzle-orm';
+import { createLogger } from '@spatula/shared';
 import type { JobRepo } from '@spatula/core/pipeline/types.js';
 import type { ProjectDatabase } from '../connection.js';
 import { runs } from '../../schema-sqlite/runs.js';
+
+const logger = createLogger('sqlite:job-repo');
 
 export class SqliteJobRepository implements JobRepo {
   constructor(
@@ -33,7 +36,10 @@ export class SqliteJobRepository implements JobRepo {
       .get();
 
     // If no runs exist yet, return null (orchestrators handle null from findById)
-    if (!latestRun) return null;
+    if (!latestRun) {
+      logger.debug({ projectId: this.projectId }, 'findById returned null — no runs exist');
+      return null;
+    }
 
     return {
       id: this.projectId,

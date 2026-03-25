@@ -12,6 +12,7 @@ import type { SchemaDefinition } from '@spatula/core';
 import type { SchemaRepo } from '@spatula/core/pipeline/types.js';
 import type { ProjectDatabase } from '../connection.js';
 import { schemasTable } from '../../schema-sqlite/schemas.js';
+import { wrapStorageError } from './utils.js';
 
 export class SqliteSchemaRepository implements SchemaRepo {
   constructor(
@@ -42,17 +43,19 @@ export class SqliteSchemaRepository implements SchemaRepo {
     parentId?: string;
   }): Promise<unknown> {
     const id = crypto.randomUUID();
-    this.db
-      .insert(schemasTable)
-      .values({
-        id,
-        jobId: this.projectId,
-        version: data.version,
-        definition: data.definition,
-        parentId: data.parentId ?? null,
-        createdAt: new Date().toISOString(),
-      })
-      .run();
+    wrapStorageError(() => {
+      this.db
+        .insert(schemasTable)
+        .values({
+          id,
+          jobId: this.projectId,
+          version: data.version,
+          definition: data.definition,
+          parentId: data.parentId ?? null,
+          createdAt: new Date().toISOString(),
+        })
+        .run();
+    }, { method: 'create', table: 'schemas' });
     return { id };
   }
 

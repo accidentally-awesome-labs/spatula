@@ -11,6 +11,7 @@ import { eq, and, desc } from 'drizzle-orm';
 import type { ActionRepo } from '@spatula/core/pipeline/types.js';
 import type { ProjectDatabase } from '../connection.js';
 import { actions } from '../../schema-sqlite/actions.js';
+import { wrapStorageError } from './utils.js';
 
 export class SqliteActionRepository implements ActionRepo {
   constructor(
@@ -29,20 +30,22 @@ export class SqliteActionRepository implements ActionRepo {
     reasoning?: string;
   }): Promise<unknown> {
     const id = crypto.randomUUID();
-    this.db
-      .insert(actions)
-      .values({
-        id,
-        jobId: this.projectId,
-        type: data.type,
-        payload: data.payload as Record<string, unknown>,
-        source: data.source,
-        status: data.status ?? 'pending_review',
-        confidence: data.confidence ?? 0,
-        reasoning: data.reasoning ?? '',
-        createdAt: new Date().toISOString(),
-      })
-      .run();
+    wrapStorageError(() => {
+      this.db
+        .insert(actions)
+        .values({
+          id,
+          jobId: this.projectId,
+          type: data.type,
+          payload: data.payload as Record<string, unknown>,
+          source: data.source,
+          status: data.status ?? 'pending_review',
+          confidence: data.confidence ?? 0,
+          reasoning: data.reasoning ?? '',
+          createdAt: new Date().toISOString(),
+        })
+        .run();
+    }, { method: 'create', table: 'actions' });
     return { id };
   }
 

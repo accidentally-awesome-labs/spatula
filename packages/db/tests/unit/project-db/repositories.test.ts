@@ -385,7 +385,7 @@ describe('SQLite Repositories (in-memory)', () => {
 
     it('handles empty bulk link gracefully', async () => {
       const result = await adapter.entitySourceRepo.bulkLink([]);
-      expect(result).toEqual([]);
+      expect(result).toEqual({ count: 0 });
     });
   });
 

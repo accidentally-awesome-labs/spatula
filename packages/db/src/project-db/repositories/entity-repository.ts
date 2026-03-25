@@ -13,9 +13,13 @@
  * - UUIDs via crypto.randomUUID(), timestamps via new Date().toISOString()
  */
 import { eq, desc, sql } from 'drizzle-orm';
+import { createLogger } from '@spatula/shared';
 import type { EntityRepo, EntitySourceRepo } from '@spatula/core/pipeline/types.js';
 import type { ProjectDatabase } from '../connection.js';
 import { entities, entitySources } from '../../schema-sqlite/entities.js';
+import { wrapStorageError } from './utils.js';
+
+const logger = createLogger('sqlite:entity-repo');
 
 export class SqliteEntityRepository implements EntityRepo {
   constructor(
@@ -32,18 +36,21 @@ export class SqliteEntityRepository implements EntityRepo {
     categories?: unknown[];
   }): Promise<{ id: string }> {
     const id = crypto.randomUUID();
-    this.db
-      .insert(entities)
-      .values({
-        id,
-        jobId: this.projectId,
-        mergedData: data.mergedData,
-        provenance: data.provenance,
-        qualityScore: data.qualityScore,
-        ...(data.categories !== undefined ? { categories: data.categories } : {}),
-        createdAt: new Date().toISOString(),
-      })
-      .run();
+    wrapStorageError(() => {
+      this.db
+        .insert(entities)
+        .values({
+          id,
+          jobId: this.projectId,
+          mergedData: data.mergedData,
+          provenance: data.provenance,
+          qualityScore: data.qualityScore,
+          ...(data.categories !== undefined ? { categories: data.categories } : {}),
+          createdAt: new Date().toISOString(),
+        })
+        .run();
+    }, { method: 'create', table: 'entities' });
+    logger.debug({ id }, 'entity created');
     return { id };
   }
 
@@ -116,10 +123,12 @@ export class SqliteEntitySourceRepository implements EntitySourceRepo {
 
   async bulkLink(
     links: Array<{ entityId: string; extractionId: string; matchConfidence: number }>,
-  ): Promise<unknown> {
-    if (links.length === 0) return [];
+  ): Promise<{ count: number }> {
+    if (links.length === 0) return { count: 0 };
 
-    this.db.insert(entitySources).values(links).run();
+    wrapStorageError(() => {
+      this.db.insert(entitySources).values(links).run();
+    }, { method: 'bulkLink', table: 'entity_sources' });
     return { count: links.length };
   }
 }
