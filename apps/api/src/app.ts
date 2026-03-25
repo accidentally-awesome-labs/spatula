@@ -57,6 +57,10 @@ export function createApp(deps: AppDeps) {
   app.route('/api/v1/jobs/:jobId', exportRoutes());
 
   // Admin routes
+  // TODO(Phase 12 Workstream B): Add requireScope('admin') middleware.
+  // Currently DLQ queries have NO tenant scoping — any authenticated tenant
+  // can view all tenants' failed jobs. Replace tenantMiddleware with proper
+  // admin auth before production deployment.
   app.route('/api/v1/admin/dlq', adminDlqRoutes());
 
   return app;

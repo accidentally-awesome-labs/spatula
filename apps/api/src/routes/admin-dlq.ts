@@ -10,8 +10,8 @@ export function adminDlqRoutes() {
     if (!deps.dlqRepo) return c.json({ error: { code: 'NOT_CONFIGURED', message: 'DLQ not configured' } }, 503);
 
     const queueName = c.req.query('queue');
-    const limit = Math.min(parseInt(c.req.query('limit') ?? '50', 10), 100);
-    const offset = parseInt(c.req.query('offset') ?? '0', 10);
+    const limit = Math.max(1, Math.min(parseInt(c.req.query('limit') ?? '50', 10) || 50, 100));
+    const offset = Math.max(0, parseInt(c.req.query('offset') ?? '0', 10) || 0);
 
     const entries = await deps.dlqRepo.findUnresolved({ queueName, limit, offset });
     const total = await deps.dlqRepo.countUnresolved(queueName);

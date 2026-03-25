@@ -65,6 +65,15 @@ describe('createDlqHandler', () => {
     }));
   });
 
+  it('handles undefined job gracefully', async () => {
+    const dlqRepo = { insert: vi.fn() };
+    const handler = createDlqHandler(dlqRepo as any);
+
+    await handler(undefined as any, new Error('stale job'));
+
+    expect(dlqRepo.insert).not.toHaveBeenCalled();
+  });
+
   it('does not throw if DLQ insert fails', async () => {
     const dlqRepo = { insert: vi.fn().mockRejectedValue(new Error('DB down')) };
     const handler = createDlqHandler(dlqRepo as any);

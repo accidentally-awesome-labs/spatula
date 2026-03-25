@@ -76,10 +76,10 @@ export class DlqRepository {
         resolvedAt: new Date(),
         resolution,
       })
-      .where(eq(deadLetterQueue.id, id))
+      .where(and(eq(deadLetterQueue.id, id), isNull(deadLetterQueue.resolvedAt)))
       .returning();
 
-    if (!row) throw new StorageError('DLQ entry not found', { context: { id } });
+    if (!row) throw new StorageError('DLQ entry not found or already resolved', { context: { id } });
     logger.info({ dlqId: id, resolution }, 'DLQ entry resolved');
     return row;
   }

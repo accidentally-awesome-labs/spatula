@@ -123,7 +123,7 @@ describe('DlqRepository', () => {
   it('resolve throws StorageError when entry not found', async () => {
     db.returning = vi.fn().mockResolvedValue([]);
 
-    await expect(repo.resolve('nonexistent', 'discarded')).rejects.toThrow('DLQ entry not found');
+    await expect(repo.resolve('nonexistent', 'discarded')).rejects.toThrow('DLQ entry not found or already resolved');
   });
 
   it('countUnresolved returns numeric count', async () => {
