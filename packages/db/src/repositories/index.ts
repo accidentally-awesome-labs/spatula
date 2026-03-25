@@ -19,3 +19,5 @@ export { ExportRepository } from './export-repository.js';
 export type { CreateExportInput } from './export-repository.js';
 export { TenantRepository } from './tenant-repository.js';
 export type { CreateTenantInput, UpdateTenantInput } from './tenant-repository.js';
+export { DlqRepository } from './dlq-repository.js';
+export type { DlqInsertInput } from './dlq-repository.js';
