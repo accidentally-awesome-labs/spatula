@@ -13,6 +13,7 @@ import { entityRoutes } from './routes/entities.js';
 import { actionRoutes } from './routes/actions.js';
 import { exportRoutes } from './routes/exports.js';
 import { tenantRoutes } from './routes/tenants.js';
+import { adminDlqRoutes } from './routes/admin-dlq.js';
 import type { AppDeps } from './types.js';
 
 export function createApp(deps: AppDeps) {
@@ -54,6 +55,9 @@ export function createApp(deps: AppDeps) {
   app.route('/api/v1/jobs/:jobId/entities', entityRoutes());
   app.route('/api/v1/jobs/:jobId/actions', actionRoutes());
   app.route('/api/v1/jobs/:jobId', exportRoutes());
+
+  // Admin routes
+  app.route('/api/v1/admin/dlq', adminDlqRoutes());
 
   return app;
 }
