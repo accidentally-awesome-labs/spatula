@@ -13,7 +13,6 @@
 import { eq, desc } from 'drizzle-orm';
 import type { JobRepo } from '@spatula/core/pipeline/types.js';
 import type { ProjectDatabase } from '../connection.js';
-import { projectMeta } from '../../schema-sqlite/project-meta.js';
 import { runs } from '../../schema-sqlite/runs.js';
 
 export class SqliteJobRepository implements JobRepo {
@@ -26,10 +25,6 @@ export class SqliteJobRepository implements JobRepo {
     _jobId: string,
     _tenantId: string,
   ): Promise<{ id: string; config: unknown; status?: string } | null> {
-    // Build key-value map from project_meta (unused currently, but available
-    // if we need to enrich the synthetic job in the future)
-    const _metaRows = this.db.select().from(projectMeta).all();
-
     const latestRun = this.db
       .select()
       .from(runs)

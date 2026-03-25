@@ -79,7 +79,7 @@ export class SqliteCrawlTaskRepository implements CrawlTaskRepo, TaskStatsRepo {
     return {};
   }
 
-  async getJobStats(_jobId: string, _tenantId?: string): Promise<TaskStats> {
+  async getJobStats(_jobId: string, _tenantId: string): Promise<TaskStats> {
     const rows = this.db
       .select({
         status: crawlTasks.status,
