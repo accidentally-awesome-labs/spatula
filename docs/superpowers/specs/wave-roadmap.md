@@ -1,0 +1,317 @@
+# Spatula Wave Roadmap
+
+**Last updated:** 2026-03-25
+**Open-source release target:** End of Wave 4
+
+This document tracks the interleaved execution of Phase 12 (production hardening) and Phase 13 (local project-folder model). Each wave pairs server-layer work from Phase 12 with local-layer work from Phase 13, delivering working, testable increments.
+
+**Specs:**
+- Phase 12: `docs/superpowers/specs/2026-03-21-phase-12-production-readiness-design.md`
+- Phase 13: `docs/superpowers/specs/2026-03-21-phase-13-project-folder-model-design.md`
+
+---
+
+## Status Overview
+
+| Wave | Phase 12 (Server) | Phase 13 (Local) | Status |
+|------|-------------------|------------------|--------|
+| 1 | A: Infrastructure & deployment | Step 1: Extract orchestrators | **Complete** |
+| 2 | D+F+J: Reliability, pipeline, local DX | Steps 2+3: SQLite + config | **Complete** |
+| 3 | B+C+E: Auth, observability, performance | Step 4: Pipeline runner + core CLI | Pending |
+| 4 | G+H: API completeness, open-source readiness | Step 5: Data interaction commands | Pending |
+| 5 | I: Hosted platform layer | Step 6: Remote operations | Pending |
+
+---
+
+## Wave 1 — Foundation (Complete)
+
+### Phase 12A: Infrastructure & Deployment
+Server lifecycle, connection pooling, CI/CD, containerization.
+
+**Deliverables:**
+- `pg.Pool` connection pooling with configurable pool size
+- Graceful shutdown with 25-second timeout (API + workers)
+- 6-job CI workflow (lint, typecheck, format, test, build, E2E)
+- Multi-stage Dockerfiles for API, worker, CLI
+- Production Docker Compose with migration service
+- Worker selection via `SPATULA_WORKERS` env var
+
+### Phase 13 Step 1: Extract Shared Pipeline Orchestrators
+Refactor BullMQ workers into pure orchestrator functions in `@spatula/core`.
+
+**Deliverables:**
+- `crawl-orchestrator.ts`, `schema-orchestrator.ts`, `reconcile-orchestrator.ts`, `export-orchestrator.ts`
+- BullMQ workers refactored to thin wrappers calling orchestrators
+- Pipeline repo interfaces and dependency bundles in `pipeline/types.ts`
+
+**Plans:**
+- `docs/superpowers/plans/2026-03-22-wave-1a-orchestrator-extraction.md`
+- `docs/superpowers/plans/2026-03-22-wave-1b-i-server-lifecycle.md`
+- `docs/superpowers/plans/2026-03-23-wave-1b-ii-ci-cd-containerization.md`
+
+---
+
+## Wave 2 — Resilience & Local Data Layer (Complete)
+
+### Phase 12D: Reliability & Resilience
+Circuit breaker, retry strategies, dead letter queue.
+
+**Deliverables:**
+- `CircuitBreakerLLMClient` with CLOSED/OPEN/HALF_OPEN state machine
+- Per-queue retry strategies (`QUEUE_JOB_OPTIONS`) with different backoff curves
+- `dead_letter_queue` Postgres table with JSONB payload, ON DELETE SET NULL FKs
+- `DlqRepository` with insert, findUnresolved, findById, resolve (TOCTOU-safe), countUnresolved
+- `createDlqHandler()` fire-and-forget BullMQ failed event handler
+- Admin DLQ API routes (list, get, retry with re-enqueue, discard)
+
+### Phase 12F: Data Pipeline Hardening
+Robots.txt, rate limiting, page budget, completion detection.
+
+**Deliverables:**
+- `RobotsTxtChecker` with per-domain cache, 1hr TTL, in-flight dedup, LRU eviction
+- `DomainRateLimiter` interface + `InMemoryDomainRateLimiter` with serialized promise chain
+- `PageBudget` interface + `InMemoryPageBudget`
+- `CrawlCompletionChecker` (pending=0 && inProgress<=1)
+- All 4 guards wired into crawl worker
+
+### Phase 12J: Local Developer Experience
+Ollama support, proxy/cookies, cost estimation, test command.
+
+**Deliverables:**
+- `OllamaClient` for local LLM inference (no retries, 120s timeout)
+- `createLLMClient()` factory selecting OpenRouter/Ollama
+- Proxy support in Playwright (via `newContext`) and Firecrawl (cookie-to-header)
+- `estimateCost()` with per-purpose breakdown and model pricing data
+- `spatula test <url>` single-page extraction command
+
+### Phase 13 Step 2: SQLite Schema & Repository Layer
+Local SQLite database mirroring Postgres.
+
+**Deliverables:**
+- 12 SQLite schema files (8 mirrored from Postgres + 4 local-only)
+- `createProjectDb()` with WAL mode, foreign keys, Drizzle Kit migrations
+- Schema parity test suite verifying SQLite ↔ Postgres column alignment
+- CHECK constraints on enum columns, `sl_` index prefix
+
+### Phase 13 Step 3: Config System
+YAML parsing, global config, config resolution, config diff engine.
+
+**Deliverables:**
+- `parseProjectYaml()` with field shorthand expansion
+- `loadGlobalConfig()` from `~/.spatula/config.yaml`
+- `yamlToJobConfig()` with priority stack (defaults → global → project → CLI → env)
+- `findProjectRoot()` directory walker
+- `diffConfigs()` with field rename detection and URL normalization
+- `ProjectConfigDiff`, `FieldChange`, `DiffImpact` types
+
+### Phase 13 Step 2 continued: SQLite Repositories
+Repository implementations and ProjectAdapter.
+
+**Deliverables:**
+- 12 SQLite repository classes implementing pipeline interfaces
+- `ProjectAdapter` factory with pre-bound `projectId`
+- Synthetic `JobRepository` composing from `project_meta` + `runs`
+- `wrapStorageError()` utility for consistent error handling
+- 65 integration tests against in-memory SQLite
+
+**Plans:**
+- `docs/superpowers/plans/2026-03-23-wave-2-1a-ollama-proxy-support.md`
+- `docs/superpowers/plans/2026-03-24-wave-2-1b-cost-estimation-test-command.md`
+- `docs/superpowers/plans/2026-03-24-wave-2-2a-circuit-breaker-retry.md`
+- `docs/superpowers/plans/2026-03-24-wave-2-2b-pipeline-hardening.md`
+- `docs/superpowers/plans/2026-03-25-wave-2-2c-dead-letter-queue.md`
+- `docs/superpowers/plans/2026-03-24-wave-2-3a-sqlite-schema.md`
+- `docs/superpowers/plans/2026-03-24-wave-2-3b-sqlite-repositories.md`
+- `docs/superpowers/plans/2026-03-24-wave-2-4a-config-system.md`
+- `docs/superpowers/plans/2026-03-24-wave-2-4b-config-diff-engine.md`
+
+---
+
+## Wave 3 — Auth, Observability & Local Execution (Pending)
+
+### Phase 12B: Security & Authentication
+Two-tier auth, rate limiting, tenant quotas, audit logging.
+
+**Key deliverables:**
+- Pluggable `AuthProvider` interface (API key + JWT strategies)
+- API key management endpoints with SHA-256 hashing, expiration, scope-based auth
+- JWT validation via OIDC (Auth0, Clerk, Supabase Auth)
+- 9 scope-based authorization patterns (`jobs:read`, `jobs:write`, etc.)
+- Sliding-window rate limiting with Redis Lua script (free/standard/pro/enterprise tiers)
+- Per-tenant resource quotas (concurrent jobs, pages, storage)
+- Token-based WebSocket authentication (60-second single-use tokens)
+- Append-only audit log table
+- Security headers (HSTS, X-Frame-Options, etc.) + CORS configuration
+
+**Spec:** Phase 12, Section 3
+
+### Phase 12C: Observability & Monitoring
+Metrics, tracing, error aggregation, health checks.
+
+**Key deliverables:**
+- OpenTelemetry SDK with Prometheus exporter (19 metrics: HTTP, queue, LLM, crawl, business)
+- Request timing middleware (duration, method, route, status code)
+- Distributed tracing with context propagation through BullMQ jobs
+- Sentry integration for error aggregation (10% trace sample rate)
+- LLM usage recording per-tenant/per-job with cost API (`GET /api/v1/usage`)
+- Two-tier health endpoints (liveness + readiness probes)
+- Bull Board queue dashboard at `/api/admin/queues`
+
+**Spec:** Phase 12, Section 4
+
+### Phase 12E: Performance & Scalability
+Content storage, streaming exports, query optimization, caching.
+
+**Key deliverables:**
+- `S3ContentStore` for AWS S3 / Cloudflare R2 / MinIO (implements existing `ContentStore` interface)
+- Presigned download URLs for large exports
+- Streaming JSON/CSV exporters via `AsyncIterable<Entity[]>` with chunked fetching
+- Cursor-based entity pagination (keyset: `WHERE id > cursor ORDER BY id`)
+- 4 new database indexes for common query patterns
+- Redis read-through cache (`getOrFetch<T>(key, fetcher, ttlSeconds)`)
+- Cursor-based pagination alongside offset pagination with opaque cursors
+- Incremental fetch (`since` ISO 8601 timestamp)
+
+**Spec:** Phase 12, Section 6
+
+### Phase 13 Step 4: Local Execution Pipeline & Core CLI
+Wire orchestrators + SQLite + config into a working local crawl.
+
+**Key deliverables:**
+- `LocalPipelineRunner` with 13-step execution flow
+- In-memory priority queue, concurrency semaphore (default 5 parallel pages)
+- Checkpoint/resume with Ctrl+C handler (10s drain, orphan recovery)
+- Crash recovery and project lockfile (`.spatula/lock`)
+- `DataSource` interface + `LocalDataSource` implementation (SQLite + EventEmitter)
+- Compact progress display with `[d]` key for dashboard mode
+- CLI commands: `spatula init` (wizard), `spatula run`, `spatula status`, `spatula reset`, `spatula new`
+- Desktop notifications via `node-notifier`
+- Structured JSON logging to `.spatula/logs/`
+
+**Spec:** Phase 13, Section 4 + Sections 3, 10
+
+**Plans:** None yet — to be written.
+
+---
+
+## Wave 4 — API Completeness & Open-Source Release (Pending)
+
+### Phase 12G: API & CLI Completeness
+Webhooks, bulk operations, diagnostics.
+
+**Key deliverables:**
+- Webhook configuration per-job with HMAC-SHA256 signing, event filtering, at-least-once delivery
+- `spatula.webhooks` BullMQ queue + webhook worker
+- Batch endpoints for actions and jobs (max 100 items, partial success)
+- `spatula doctor` command with 9 pluggable health checks
+- Request timeout middleware (30s default, 5min for exports)
+
+**Spec:** Phase 12, Section 8
+
+### Phase 12H: Open-Source Readiness
+Licensing, documentation, community infrastructure.
+
+**Key deliverables:**
+- MIT License
+- Comprehensive README (12 sections: hero, quickstart, architecture, config, CLI, API, etc.)
+- CONTRIBUTING.md with workflow, code style, testing, PR process
+- Auto-generated CHANGELOG via `release-please` GitHub Action
+- GitHub issue/PR templates
+- `docs/architecture.md` with dependency diagram, data flow, interface map
+- 4 example project configurations in `examples/`
+
+**Spec:** Phase 12, Section 9
+
+### Phase 13 Step 5: Data Interaction Commands
+CLI commands for exploring, exporting, and managing project data.
+
+**Key deliverables:**
+- `spatula explore` — Entity explorer TUI backed by `LocalDataSource`
+- `spatula export` — Local export using export orchestrator (all 5 formats)
+- `spatula review` — Action review TUI backed by `LocalDataSource`
+- `spatula schema` — Schema viewer (fields, versions, evolution history)
+- `spatula logs` — Run log viewer
+- `spatula add` — Add seed URLs with dedup
+- `spatula config` — Open `spatula.yaml` in `$EDITOR`
+- `spatula estimate` — Cost estimation integrated with config system
+- `spatula setup` — Global reconfiguration wizard
+
+**Spec:** Phase 13, Section 7
+
+**Plans:** None yet — to be written.
+
+**This wave concludes with the open-source release.**
+
+---
+
+## Wave 5 — Hosted Platform & Remote Operations (Pending)
+
+### Phase 12I: Hosted Platform Layer
+Multi-tenant SaaS with billing, admin, retention.
+
+**Key deliverables:**
+- JWT-based user management via OIDC with `user_tenants` mapping + role-based access
+- Stripe usage-based billing (4 tiers: Free, Starter, Pro, Enterprise)
+- Hourly usage aggregation with metering across jobs, pages, LLM tokens, storage
+- Quota enforcement at job start
+- 11 admin API routes under `/api/v1/admin/`
+- Configurable retention policies (90d completed, 30d failed, 365d audit)
+- Daily cleanup worker at 03:00 UTC with batched deletes
+
+**Spec:** Phase 12, Section 10
+
+### Phase 13 Step 6: Remote Operations & Hosted Integration
+Push/pull bridge between local projects and hosted platform.
+
+**Key deliverables:**
+- `spatula remote add/list/remove` — Remote configuration
+- `spatula push` — Config upload, job creation, old job cancellation prompt
+- `spatula pull` — Results download with cursor pagination, incremental pull, schema conflict resolution
+- `spatula remote start/pause/resume/cancel/status/watch` — Remote job lifecycle
+- `ApiDataSource` implementation wrapping existing `ApiClient`
+- Remote link tracking in `project_meta`
+
+**Spec:** Phase 13, Sections 8-9
+
+**Plans:** None yet — to be written.
+
+---
+
+## Dependency Graph
+
+```
+Wave 1 (Foundation)
+  ├── Phase 12A: Infrastructure
+  └── Phase 13 Step 1: Extract orchestrators
+        |
+Wave 2 (Resilience + Local Data)
+  ├── Phase 12 D+F+J: Reliability, pipeline, local DX
+  ├── Phase 13 Step 2: SQLite schema + repos
+  └── Phase 13 Step 3: Config system
+        |
+Wave 3 (Auth + Observability + Local Execution)
+  ├── Phase 12 B+C+E: Auth, observability, performance
+  └── Phase 13 Step 4: Pipeline runner + core CLI
+        |
+Wave 4 (API Completeness + Open-Source Release)  ← RELEASE TARGET
+  ├── Phase 12 G+H: Webhooks, bulk ops, docs, licensing
+  └── Phase 13 Step 5: Data interaction commands
+        |
+Wave 5 (Hosted Platform)
+  ├── Phase 12I: Billing, admin, retention
+  └── Phase 13 Step 6: Remote operations
+```
+
+Phase 12 touches server code (`apps/api`, `packages/queue`). Phase 13 adds local code (`packages/db/project-db`, `packages/core/pipeline`, CLI commands). Minimal file overlap — the orchestrator extraction in Wave 1 is the shared prerequisite.
+
+---
+
+## Test Counts (as of Wave 2 completion)
+
+| Package | Tests |
+|---------|-------|
+| `@spatula/core` | 813 |
+| `@spatula/db` | 220 |
+| `@spatula/queue` | 134 |
+| `@spatula/api` | 175 |
+| **Total** | **1,342** |
