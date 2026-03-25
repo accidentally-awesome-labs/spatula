@@ -124,62 +124,148 @@ git commit -m "feat(db): add dead_letter_queue table for failed job tracking"
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { DlqRepository } from '../../../src/repositories/dlq-repository.js';
 
+/**
+ * Mock DB that captures the arguments passed to each Drizzle method.
+ * The chain pattern (select().from().where()...) returns `this` at each
+ * step, so we can inspect which methods were called and with what args.
+ */
 function createMockDb() {
-  return {
+  const mock = {
+    insert: vi.fn().mockReturnThis(),
+    values: vi.fn().mockReturnThis(),
+    returning: vi.fn().mockResolvedValue([{ id: 'dlq-1', queueName: 'spatula.crawl', jobId: 'bullmq-123', resolvedAt: null }]),
     select: vi.fn().mockReturnThis(),
     from: vi.fn().mockReturnThis(),
     where: vi.fn().mockReturnThis(),
     orderBy: vi.fn().mockReturnThis(),
     limit: vi.fn().mockReturnThis(),
-    offset: vi.fn().mockReturnThis(),
-    insert: vi.fn().mockReturnThis(),
-    values: vi.fn().mockReturnThis(),
-    returning: vi.fn().mockResolvedValue([{ id: 'dlq-1' }]),
+    offset: vi.fn().mockResolvedValue([]),
     update: vi.fn().mockReturnThis(),
     set: vi.fn().mockReturnThis(),
-    then: vi.fn(),
   };
+  return mock;
 }
 
 describe('DlqRepository', () => {
-  it('inserts a DLQ entry', async () => {
-    const db = createMockDb();
-    const repo = new DlqRepository(db as any);
+  let db: ReturnType<typeof createMockDb>;
+  let repo: DlqRepository;
 
-    await repo.insert({
+  beforeEach(() => {
+    db = createMockDb();
+    repo = new DlqRepository(db as any);
+  });
+
+  it('insert passes all fields to Drizzle insert().values()', async () => {
+    const input = {
       queueName: 'spatula.crawl',
       jobId: 'bullmq-job-123',
       tenantId: 'tenant-1',
       spatulaJobId: 'job-1',
       payload: { taskId: 'task-1', url: 'https://example.com' },
       errorMessage: 'Network timeout',
-      errorStack: 'Error: ...',
+      errorStack: 'Error: Network timeout\n    at ...',
       attempts: 3,
-    });
+    };
 
+    const result = await repo.insert(input);
+
+    expect(result).toEqual({ id: 'dlq-1' });
     expect(db.insert).toHaveBeenCalled();
+    expect(db.values).toHaveBeenCalledWith(expect.objectContaining({
+      queueName: 'spatula.crawl',
+      jobId: 'bullmq-job-123',
+      tenantId: 'tenant-1',
+      spatulaJobId: 'job-1',
+      payload: { taskId: 'task-1', url: 'https://example.com' },
+      errorMessage: 'Network timeout',
+      errorStack: expect.stringContaining('Network timeout'),
+      attempts: 3,
+    }));
+    expect(db.returning).toHaveBeenCalled();
   });
 
-  it('finds unresolved entries', async () => {
-    const db = createMockDb();
-    (db as any).then = vi.fn().mockResolvedValue([
-      { id: 'dlq-1', queueName: 'spatula.crawl', resolvedAt: null },
-    ]);
-    const repo = new DlqRepository(db as any);
+  it('insert wraps DB errors in StorageError', async () => {
+    db.returning = vi.fn().mockRejectedValue(new Error('connection refused'));
 
-    // This tests the method exists and calls the right Drizzle methods
-    // Full integration test would need a real DB
-    expect(repo.findUnresolved).toBeDefined();
+    await expect(
+      repo.insert({ queueName: 'q', jobId: 'j', payload: {}, attempts: 1 }),
+    ).rejects.toThrow('Failed to insert DLQ entry');
   });
 
-  it('marks entry as resolved', async () => {
-    const db = createMockDb();
-    (db as any).returning = vi.fn().mockResolvedValue([{
-      id: 'dlq-1', resolvedAt: new Date(), resolution: 'retried',
-    }]);
-    const repo = new DlqRepository(db as any);
+  it('findUnresolved applies default limit=50, offset=0', async () => {
+    await repo.findUnresolved();
 
-    expect(repo.resolve).toBeDefined();
+    expect(db.select).toHaveBeenCalled();
+    expect(db.where).toHaveBeenCalled();
+    expect(db.orderBy).toHaveBeenCalled();
+    expect(db.limit).toHaveBeenCalledWith(50);
+    expect(db.offset).toHaveBeenCalledWith(0);
+  });
+
+  it('findUnresolved passes queue filter and pagination', async () => {
+    await repo.findUnresolved({ queueName: 'spatula.crawl', limit: 10, offset: 20 });
+
+    expect(db.limit).toHaveBeenCalledWith(10);
+    expect(db.offset).toHaveBeenCalledWith(20);
+    // where() is called with combined conditions (isNull + eq)
+    expect(db.where).toHaveBeenCalled();
+  });
+
+  it('findById returns null when no row found', async () => {
+    db.limit = vi.fn().mockResolvedValue([]);
+
+    const result = await repo.findById('nonexistent');
+
+    expect(result).toBeNull();
+  });
+
+  it('findById returns entry when found', async () => {
+    const entry = { id: 'dlq-1', queueName: 'spatula.crawl' };
+    db.limit = vi.fn().mockResolvedValue([entry]);
+
+    const result = await repo.findById('dlq-1');
+
+    expect(result).toEqual(entry);
+  });
+
+  it('resolve calls update with resolution and resolvedAt', async () => {
+    const resolved = { id: 'dlq-1', resolvedAt: new Date(), resolution: 'retried' };
+    db.returning = vi.fn().mockResolvedValue([resolved]);
+
+    const result = await repo.resolve('dlq-1', 'retried');
+
+    expect(result).toEqual(resolved);
+    expect(db.update).toHaveBeenCalled();
+    expect(db.set).toHaveBeenCalledWith(expect.objectContaining({
+      resolution: 'retried',
+      resolvedAt: expect.any(Date),
+    }));
+    expect(db.where).toHaveBeenCalled();
+  });
+
+  it('resolve throws StorageError when entry not found', async () => {
+    db.returning = vi.fn().mockResolvedValue([]);
+
+    await expect(repo.resolve('nonexistent', 'discarded')).rejects.toThrow('DLQ entry not found');
+  });
+
+  it('countUnresolved returns numeric count', async () => {
+    // countUnresolved uses select({ value: sql`count(*)` }) which returns [{ value }]
+    db.where = vi.fn().mockResolvedValue([{ value: 42 }]);
+
+    const count = await repo.countUnresolved();
+
+    expect(count).toBe(42);
+    expect(db.select).toHaveBeenCalled();
+  });
+
+  it('countUnresolved filters by queueName when provided', async () => {
+    db.where = vi.fn().mockResolvedValue([{ value: 5 }]);
+
+    const count = await repo.countUnresolved('spatula.export');
+
+    expect(count).toBe(5);
+    expect(db.where).toHaveBeenCalled();
   });
 });
 ```
@@ -624,7 +710,7 @@ export function adminDlqRoutes() {
 }
 ```
 
-**Note on retry re-enqueue:** Full re-enqueue requires queue instances in `AppDeps`. For this wave, the retry endpoint marks the entry as "retried" in the DB. Actual re-enqueue to BullMQ is deferred — it requires adding `SpatulaQueues` to `AppDeps` which is a larger change. The retry endpoint provides the admin audit trail; actual re-processing can be triggered manually.
+**Note on retry re-enqueue:** The retry endpoint re-enqueues the original payload to the target BullMQ queue via `deps.queues` and marks the DLQ entry as resolved. `SpatulaQueues` is added as an optional field on `AppDeps` to avoid breaking existing tests. If `deps.queues` is not available (e.g., in test environments without queue infrastructure), the entry is still marked as retried in the DB but no actual re-enqueue occurs.
 
 - [ ] **Step 3: Mount admin routes in app.ts**
 
@@ -643,39 +729,258 @@ app.route('/api/v1/admin/dlq', adminDlqRoutes());
 
 ```typescript
 // apps/api/tests/unit/routes/admin-dlq.test.ts
-import { describe, it, expect, vi } from 'vitest';
-// Test the routes using the existing app test pattern
-// Read apps/api/tests/unit/routes/jobs.test.ts for the mock pattern
+import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { createApp } from '../../../src/app.js';
+import type { AppDeps } from '../../../src/types.js';
+import type { Pool } from 'pg';
 
-describe('Admin DLQ Routes', () => {
-  it('GET /api/v1/admin/dlq returns unresolved entries', async () => {
-    // Mock dlqRepo.findUnresolved and countUnresolved
-    // Verify response shape: { data: [...], pagination: { total, limit, offset } }
+const TENANT_ID = '00000000-0000-0000-0000-000000000001';
+
+const SAMPLE_DLQ_ENTRY = {
+  id: 'dlq-1',
+  queueName: 'spatula.crawl',
+  jobId: 'bullmq-123',
+  tenantId: TENANT_ID,
+  spatulaJobId: 'job-1',
+  payload: { taskId: 'task-1', url: 'https://example.com' },
+  errorMessage: 'Network timeout',
+  errorStack: 'Error: Network timeout\n    at ...',
+  attempts: 3,
+  failedAt: new Date('2026-03-25T10:00:00Z'),
+  resolvedAt: null,
+  resolution: null,
+};
+
+function createMockDeps(overrides: Partial<AppDeps> = {}): AppDeps {
+  return {
+    dbPool: { end: vi.fn() } as unknown as Pool,
+    jobRepo: { findById: vi.fn(), findByTenant: vi.fn(), countByTenant: vi.fn(), create: vi.fn(), updateStatus: vi.fn(), updateStats: vi.fn(), deleteWithData: vi.fn() } as any,
+    schemaRepo: {} as any,
+    extractionRepo: {} as any,
+    entityRepo: {} as any,
+    entitySourceRepo: {} as any,
+    actionRepo: {} as any,
+    taskRepo: {} as any,
+    jobManager: { createJob: vi.fn(), startJob: vi.fn(), pauseJob: vi.fn(), resumeJob: vi.fn(), cancelJob: vi.fn(), triggerReconciliation: vi.fn() } as any,
+    exportRepo: {} as any,
+    contentStore: {} as any,
+    exportQueue: {} as any,
+    dlqRepo: {
+      findUnresolved: vi.fn().mockResolvedValue([SAMPLE_DLQ_ENTRY]),
+      countUnresolved: vi.fn().mockResolvedValue(1),
+      findById: vi.fn().mockResolvedValue(SAMPLE_DLQ_ENTRY),
+      resolve: vi.fn().mockResolvedValue({ ...SAMPLE_DLQ_ENTRY, resolvedAt: new Date(), resolution: 'retried' }),
+      insert: vi.fn(),
+    } as any,
+    ...overrides,
+  };
+}
+
+const tenantHeader = { 'x-tenant-id': TENANT_ID };
+
+describe('GET /api/v1/admin/dlq', () => {
+  let deps: AppDeps;
+
+  beforeEach(() => {
+    deps = createMockDeps();
   });
 
-  it('GET /api/v1/admin/dlq/:id returns single entry', async () => {
-    // Mock dlqRepo.findById
+  it('returns unresolved entries with pagination', async () => {
+    const app = createApp(deps);
+    const res = await app.request('/api/v1/admin/dlq', { headers: tenantHeader });
+
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body.data).toHaveLength(1);
+    expect(body.data[0].queueName).toBe('spatula.crawl');
+    expect(body.pagination).toEqual({ total: 1, limit: 50, offset: 0 });
   });
 
-  it('POST /api/v1/admin/dlq/:id/retry resolves as retried', async () => {
-    // Mock dlqRepo.findById + resolve
+  it('passes queue filter and pagination params to repo', async () => {
+    const app = createApp(deps);
+    await app.request('/api/v1/admin/dlq?queue=spatula.export&limit=10&offset=5', {
+      headers: tenantHeader,
+    });
+
+    expect((deps as any).dlqRepo.findUnresolved).toHaveBeenCalledWith({
+      queueName: 'spatula.export',
+      limit: 10,
+      offset: 5,
+    });
+    expect((deps as any).dlqRepo.countUnresolved).toHaveBeenCalledWith('spatula.export');
   });
 
-  it('POST /api/v1/admin/dlq/:id/discard resolves as discarded', async () => {
-    // Mock dlqRepo.findById + resolve
+  it('clamps limit to max 100', async () => {
+    const app = createApp(deps);
+    await app.request('/api/v1/admin/dlq?limit=500', { headers: tenantHeader });
+
+    expect((deps as any).dlqRepo.findUnresolved).toHaveBeenCalledWith(
+      expect.objectContaining({ limit: 100 }),
+    );
+  });
+
+  it('returns 503 when dlqRepo is not configured', async () => {
+    deps = createMockDeps({ dlqRepo: undefined });
+    const app = createApp(deps);
+    const res = await app.request('/api/v1/admin/dlq', { headers: tenantHeader });
+
+    expect(res.status).toBe(503);
+    const body = await res.json();
+    expect(body.error.code).toBe('NOT_CONFIGURED');
+  });
+});
+
+describe('GET /api/v1/admin/dlq/:id', () => {
+  let deps: AppDeps;
+
+  beforeEach(() => {
+    deps = createMockDeps();
+  });
+
+  it('returns single DLQ entry', async () => {
+    const app = createApp(deps);
+    const res = await app.request('/api/v1/admin/dlq/dlq-1', { headers: tenantHeader });
+
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body.data.id).toBe('dlq-1');
+    expect(body.data.queueName).toBe('spatula.crawl');
   });
 
   it('returns 404 for non-existent entry', async () => {
-    // Mock dlqRepo.findById returning null
+    (deps as any).dlqRepo.findById = vi.fn().mockResolvedValue(null);
+    const app = createApp(deps);
+    const res = await app.request('/api/v1/admin/dlq/nonexistent', { headers: tenantHeader });
+
+    expect(res.status).toBe(404);
+    const body = await res.json();
+    expect(body.error.code).toBe('NOT_FOUND');
+  });
+});
+
+describe('POST /api/v1/admin/dlq/:id/retry', () => {
+  let deps: AppDeps;
+
+  beforeEach(() => {
+    deps = createMockDeps();
+  });
+
+  it('resolves entry as retried', async () => {
+    const app = createApp(deps);
+    const res = await app.request('/api/v1/admin/dlq/dlq-1/retry', {
+      method: 'POST',
+      headers: tenantHeader,
+    });
+
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body.data.resolution).toBe('retried');
+    expect((deps as any).dlqRepo.resolve).toHaveBeenCalledWith('dlq-1', 'retried');
+  });
+
+  it('re-enqueues job to original queue when queues are available', async () => {
+    const mockCrawlQueue = { add: vi.fn().mockResolvedValue({}) };
+    deps = createMockDeps({
+      queues: {
+        crawl: mockCrawlQueue,
+        schemaEvolution: { add: vi.fn() },
+        reconciliation: { add: vi.fn() },
+        export: { add: vi.fn() },
+      } as any,
+    });
+
+    const app = createApp(deps);
+    const res = await app.request('/api/v1/admin/dlq/dlq-1/retry', {
+      method: 'POST',
+      headers: tenantHeader,
+    });
+
+    expect(res.status).toBe(200);
+    expect(mockCrawlQueue.add).toHaveBeenCalledWith(
+      expect.stringContaining('dlq-retry:'),
+      SAMPLE_DLQ_ENTRY.payload,
+    );
+  });
+
+  it('returns 404 for non-existent entry', async () => {
+    (deps as any).dlqRepo.findById = vi.fn().mockResolvedValue(null);
+    const app = createApp(deps);
+    const res = await app.request('/api/v1/admin/dlq/dlq-1/retry', {
+      method: 'POST',
+      headers: tenantHeader,
+    });
+
+    expect(res.status).toBe(404);
   });
 
   it('returns 409 for already-resolved entry', async () => {
-    // Mock dlqRepo.findById returning entry with resolvedAt set
+    (deps as any).dlqRepo.findById = vi.fn().mockResolvedValue({
+      ...SAMPLE_DLQ_ENTRY,
+      resolvedAt: new Date(),
+      resolution: 'discarded',
+    });
+    const app = createApp(deps);
+    const res = await app.request('/api/v1/admin/dlq/dlq-1/retry', {
+      method: 'POST',
+      headers: tenantHeader,
+    });
+
+    expect(res.status).toBe(409);
+    const body = await res.json();
+    expect(body.error.code).toBe('ALREADY_RESOLVED');
+  });
+});
+
+describe('POST /api/v1/admin/dlq/:id/discard', () => {
+  let deps: AppDeps;
+
+  beforeEach(() => {
+    deps = createMockDeps();
+  });
+
+  it('resolves entry as discarded', async () => {
+    (deps as any).dlqRepo.resolve = vi.fn().mockResolvedValue({
+      ...SAMPLE_DLQ_ENTRY, resolvedAt: new Date(), resolution: 'discarded',
+    });
+    const app = createApp(deps);
+    const res = await app.request('/api/v1/admin/dlq/dlq-1/discard', {
+      method: 'POST',
+      headers: tenantHeader,
+    });
+
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body.data.resolution).toBe('discarded');
+    expect((deps as any).dlqRepo.resolve).toHaveBeenCalledWith('dlq-1', 'discarded');
+  });
+
+  it('returns 404 for non-existent entry', async () => {
+    (deps as any).dlqRepo.findById = vi.fn().mockResolvedValue(null);
+    const app = createApp(deps);
+    const res = await app.request('/api/v1/admin/dlq/dlq-1/discard', {
+      method: 'POST',
+      headers: tenantHeader,
+    });
+
+    expect(res.status).toBe(404);
+  });
+
+  it('returns 409 for already-resolved entry', async () => {
+    (deps as any).dlqRepo.findById = vi.fn().mockResolvedValue({
+      ...SAMPLE_DLQ_ENTRY,
+      resolvedAt: new Date(),
+      resolution: 'retried',
+    });
+    const app = createApp(deps);
+    const res = await app.request('/api/v1/admin/dlq/dlq-1/discard', {
+      method: 'POST',
+      headers: tenantHeader,
+    });
+
+    expect(res.status).toBe(409);
   });
 });
 ```
-
-The implementer should read `apps/api/tests/unit/routes/jobs.test.ts` for the app test pattern (create app with mock deps, make fetch requests, assert responses).
 
 - [ ] **Step 5: Update mock deps in existing tests**
 
