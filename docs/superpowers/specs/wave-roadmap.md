@@ -207,7 +207,21 @@ Wire orchestrators + SQLite + config into a working local crawl.
 
 **Spec:** Phase 13, Section 4 + Sections 3, 10
 
-**Plans:** None yet — to be written.
+**Decomposition:** `docs/superpowers/specs/2026-03-25-wave-3-decomposition-design.md`
+
+**Sub-plans (7, server-first then local):**
+
+| Sub-plan | Scope | Status |
+|----------|-------|--------|
+| 3-1a | Auth Core (AuthProvider, API keys, scopes, security headers, CORS) | Pending |
+| 3-1b | Auth Advanced (JWT, rate limiting, quotas, WS auth, audit log) | Pending |
+| 3-2 | Observability (OTel, tracing, Sentry, LLM cost, health, Bull Board) | Pending |
+| 3-3a | Performance: Storage & Exports (S3, streaming, entity cursor) | Pending |
+| 3-3b | Performance: Query & Caching (indexes, cursor pagination, Redis cache) | Pending |
+| 3-4 | Deferred D/F (idempotency, worker health, quality API, export filtering) | Pending |
+| 3-5 | Local Pipeline + Core CLI (LocalPipelineRunner, DataSource, CLI commands) | Pending |
+
+**Plans:** To be written per sub-plan.
 
 ---
 
