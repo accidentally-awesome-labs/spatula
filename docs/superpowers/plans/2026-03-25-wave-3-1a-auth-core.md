@@ -191,13 +191,14 @@ git commit -m "feat(shared): add AuthProvider interface, AuthResult type, and au
 ```typescript
 // packages/db/src/schema/api-keys.ts
 import { pgTable, uuid, text, timestamp, index } from 'drizzle-orm/pg-core';
+import { sql } from 'drizzle-orm';
 import { tenants } from './tenants.js';
 
 export const apiKeys = pgTable('api_keys', {
   id: uuid('id').defaultRandom().primaryKey(),
   tenantId: uuid('tenant_id').notNull().references(() => tenants.id),
   keyHash: text('key_hash').notNull(),
-  keyPrefix: text('key_prefix').notNull(),       // First 8 chars for display
+  keyPrefix: text('key_prefix').notNull(),       // First 12 chars for display (sk_live_ + 4 random)
   name: text('name').notNull(),
   scopes: text('scopes').array().notNull().default([]),
   expiresAt: timestamp('expires_at', { withTimezone: true }),
@@ -205,11 +206,11 @@ export const apiKeys = pgTable('api_keys', {
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   revokedAt: timestamp('revoked_at', { withTimezone: true }),
 }, (table) => [
-  index('idx_api_keys_hash').on(table.keyHash),
+  index('idx_api_keys_hash').on(table.keyHash).where(sql`revoked_at IS NULL`),
 ]);
 ```
 
-**Note:** Drizzle's partial index support (`WHERE revoked_at IS NULL`) varies. We use a full index on `key_hash` and filter `revoked_at IS NULL` in queries. The query planner will still use the index efficiently.
+**Note:** Uses Drizzle's partial index with `.where()`. If the generated migration doesn't include the WHERE clause, fall back to a full index on `key_hash` — the query planner will still use it efficiently since the repository query includes `revoked_at IS NULL`.
 
 - [ ] **Step 2: Export from schema barrel**
 
@@ -971,6 +972,19 @@ describe('authMiddleware', () => {
     expect(provider.authenticate).not.toHaveBeenCalled();
   });
 
+  it('skips auth for /api/v1/tenants prefix', async () => {
+    const provider: AuthProvider = {
+      authenticate: vi.fn().mockRejectedValue(new Error('should not be called')),
+    };
+    const app = createTestApp(provider);
+    // Add a tenant route for testing
+    app.get('/api/v1/tenants', (c) => c.json({ tenants: [] }));
+
+    const res = await app.request('/api/v1/tenants');
+    expect(res.status).toBe(200);
+    expect(provider.authenticate).not.toHaveBeenCalled();
+  });
+
   it('propagates AuthError from provider as-is', async () => {
     const { AuthError } = await import('@spatula/shared');
     const provider: AuthProvider = {
@@ -1012,9 +1026,16 @@ const SKIP_AUTH_PATHS = new Set([
   '/api/openapi.json',
 ]);
 
+const SKIP_AUTH_PREFIXES = [
+  '/api/v1/tenants', // Tenant management is a bootstrap operation — no auth required
+];
+
 export function authMiddleware(provider: AuthProvider): MiddlewareHandler {
   return async (c, next) => {
     if (SKIP_AUTH_PATHS.has(c.req.path)) {
+      return next();
+    }
+    if (SKIP_AUTH_PREFIXES.some((p) => c.req.path.startsWith(p))) {
       return next();
     }
 
@@ -1354,7 +1375,7 @@ describe('API Key routes', () => {
           tenantId: 'tenant-1',
           name: 'Test Key',
           keyHash: expect.any(String),
-          keyPrefix: expect.stringMatching(/^sk_live_/),
+          keyPrefix: expect.stringMatching(/^sk_live_.{4}/),
         }),
       );
     });
@@ -1413,10 +1434,10 @@ import type { AppEnv } from '../types.js';
 import { DEFAULT_API_KEY_SCOPES } from '@spatula/shared';
 
 function generateApiKey(): { raw: string; hash: string; prefix: string } {
-  const random = randomBytes(24).toString('base64url'); // 32 chars
+  const random = randomBytes(24).toString('base64url'); // 32 chars (192 bits of entropy)
   const raw = `sk_live_${random}`;
   const hash = createHash('sha256').update(raw).digest('hex');
-  const prefix = raw.slice(0, 8);
+  const prefix = raw.slice(0, 12); // "sk_live_XXXX" — includes 4 random chars for identification
   return { raw, hash, prefix };
 }
 
@@ -1471,6 +1492,7 @@ export function apiKeyRoutes() {
 
   router.openapi(createKeyRoute, async (c) => {
     const deps = c.get('deps');
+    if (!deps.apiKeyRepo) throw new Error('API key management not configured');
     const tenantId = c.get('tenantId');
     const body = c.req.valid('json');
 
@@ -1478,7 +1500,7 @@ export function apiKeyRoutes() {
     const scopes = body.scopes ?? [...DEFAULT_API_KEY_SCOPES];
     const expiresAt = body.expiresAt ? new Date(body.expiresAt) : undefined;
 
-    const key = await deps.apiKeyRepo!.create({
+    const key = await deps.apiKeyRepo.create({
       tenantId,
       keyHash: hash,
       keyPrefix: prefix,
@@ -1505,9 +1527,10 @@ export function apiKeyRoutes() {
 
   router.openapi(listKeysRoute, async (c) => {
     const deps = c.get('deps');
+    if (!deps.apiKeyRepo) throw new Error('API key management not configured');
     const tenantId = c.get('tenantId');
 
-    const keys = await deps.apiKeyRepo!.listByTenant(tenantId);
+    const keys = await deps.apiKeyRepo.listByTenant(tenantId);
     return c.json({
       data: keys.map((k) => ({
         id: k.id,
@@ -1523,10 +1546,11 @@ export function apiKeyRoutes() {
 
   router.openapi(revokeKeyRoute, async (c) => {
     const deps = c.get('deps');
+    if (!deps.apiKeyRepo) throw new Error('API key management not configured');
     const tenantId = c.get('tenantId');
     const { id } = c.req.valid('param');
 
-    await deps.apiKeyRepo!.revoke(id, tenantId);
+    await deps.apiKeyRepo.revoke(id, tenantId);
     return c.json({ data: { id, revoked: true } });
   });
 
@@ -1571,8 +1595,8 @@ import type { ApiKeyRepository } from '@spatula/db';
 Add to `AppDeps`:
 
 ```typescript
-  authProvider?: AuthProvider;
-  apiKeyRepo?: ApiKeyRepository;
+  authProvider?: AuthProvider;  // Falls back to NoAuthProvider when not provided
+  apiKeyRepo?: ApiKeyRepository;  // Required when AUTH_STRATEGY=api-key; optional for tests
 ```
 
 Add to `AppEnv.Variables`:
@@ -1631,7 +1655,7 @@ export function createApp(deps: AppDeps) {
     cors({
       origin: allowedOrigins,
       allowMethods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
-      allowHeaders: ['Authorization', 'Content-Type', 'X-Request-Id'],
+      allowHeaders: ['Authorization', 'Content-Type', 'X-Request-Id', 'X-Tenant-Id'],
       exposeHeaders: ['X-RateLimit-Limit', 'X-RateLimit-Remaining', 'X-Request-Id'],
       maxAge: 86400,
       credentials: true,
@@ -1660,21 +1684,29 @@ export function createApp(deps: AppDeps) {
   // Tenant management routes
   app.route('/api/v1/tenants', tenantRoutes());
 
-  // API key management routes
-  if (deps.apiKeyRepo) {
-    app.use('/api/v1/api-keys', requireScope('keys:manage'));
-    app.use('/api/v1/api-keys/*', requireScope('keys:manage'));
-    app.route('/api/v1/api-keys', apiKeyRoutes());
-  }
+  // API key management routes (always registered; deps.apiKeyRepo checked at runtime)
+  app.use('/api/v1/api-keys', requireScope('keys:manage'));
+  app.use('/api/v1/api-keys/*', requireScope('keys:manage'));
+  app.route('/api/v1/api-keys', apiKeyRoutes());
 
   // API v1 routes with scope enforcement
-  app.use('/api/v1/jobs', requireScope('jobs:read'));
-  app.use('/api/v1/jobs/*', requireScope('jobs:read'));
+  // Read scopes for GET requests, write scopes for mutations
+  app.get('/api/v1/jobs', requireScope('jobs:read'));
+  app.get('/api/v1/jobs/*', requireScope('jobs:read'));
+  app.post('/api/v1/jobs', requireScope('jobs:write'));
+  app.post('/api/v1/jobs/*', requireScope('jobs:write'));
+  app.patch('/api/v1/jobs/*', requireScope('jobs:write'));
+  app.delete('/api/v1/jobs/*', requireScope('jobs:write'));
   app.route('/api/v1/jobs', jobRoutes());
   app.route('/api/v1/jobs/:jobId/schema', schemaRoutes());
   app.route('/api/v1/jobs/:jobId/extractions', extractionRoutes());
   app.route('/api/v1/jobs/:jobId/entities', entityRoutes());
+  app.get('/api/v1/jobs/:jobId/actions', requireScope('actions:read'));
+  app.post('/api/v1/jobs/:jobId/actions/*', requireScope('actions:write'));
   app.route('/api/v1/jobs/:jobId/actions', actionRoutes());
+  app.get('/api/v1/jobs/:jobId/exports', requireScope('exports:read'));
+  app.get('/api/v1/jobs/:jobId/exports/*', requireScope('exports:read'));
+  app.post('/api/v1/jobs/:jobId/exports', requireScope('exports:write'));
   app.route('/api/v1/jobs/:jobId', exportRoutes());
 
   // Admin routes
@@ -1687,9 +1719,9 @@ export function createApp(deps: AppDeps) {
 
 **Critical design notes:**
 - When `AUTH_STRATEGY=none` (or not set in tests), `NoAuthProvider` extracts `x-tenant-id` header and grants admin scope — so all existing tests pass unchanged since `NoAuthProvider` grants `admin` which satisfies any `requireScope()` check.
-- The old `tenantMiddleware` is removed from the chain when using auth. `authMiddleware` is now the sole source of `tenantId`.
-- Tenant routes no longer get special middleware treatment (they go through auth like everything else).
-- `requireScope('jobs:read')` is applied broadly to all job sub-routes. Mutating routes (POST, PATCH, DELETE) should be scope-checked more granularly — but since `jobs:read` is in the default scopes and `NoAuthProvider` grants `admin`, this is safe for now. Finer-grained per-method scoping can be refined per-route in a later pass.
+- The old `tenantMiddleware` is removed from the chain. `authMiddleware` is now the sole source of `tenantId`.
+- Tenant routes are in `SKIP_AUTH_PREFIXES` — they bypass auth entirely, matching current behavior where tenant management is a bootstrap operation.
+- Scope enforcement is per-method: GET routes require read scopes, POST/PATCH/DELETE routes require write scopes. Actions and exports have their own read/write split.
 
 - [ ] **Step 3: Run ALL existing tests to verify nothing broke**
 
@@ -1697,9 +1729,12 @@ Run: `pnpm --filter @spatula/api test`
 
 Expected: ALL 175+ existing tests PASS.
 
-**If any tests fail**, the most likely cause is:
-- Tests that don't send `x-tenant-id` header for API routes (the `NoAuthProvider` still requires it)
+**Known test updates required:**
+- `apps/api/tests/unit/app.test.ts` line ~66-69: The test "returns 400 when tenant header missing on API routes" must change from `expect(res.status).toBe(400)` to `expect(res.status).toBe(401)`. Under the new auth flow, a missing `x-tenant-id` in no-auth mode causes `NoAuthProvider` to throw `AuthError` (401), not `ValidationError` (400). This is an intentional semantic change — the auth layer now owns credential validation.
+
+**If other tests fail**, the most likely cause is:
 - Tests that construct `createMockDeps()` without `authProvider` or `apiKeyRepo` — these new fields are optional, so existing mocks should still work.
+- Tenant route tests should NOT break — tenant routes are excluded from auth via `SKIP_AUTH_PREFIXES`.
 
 - [ ] **Step 4: Commit**
 
