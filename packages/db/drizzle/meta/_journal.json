@@ -15,6 +15,13 @@
       "when": 1774122674309,
       "tag": "0001_good_shotgun",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1774457871239,
+      "tag": "0002_far_arachne",
+      "breakpoints": true
     }
   ]
 }
