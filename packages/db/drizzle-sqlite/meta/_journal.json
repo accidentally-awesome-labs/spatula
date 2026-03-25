@@ -15,6 +15,13 @@
       "when": 1774389034463,
       "tag": "0001_mighty_kang",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "6",
+      "when": 1774395114527,
+      "tag": "0002_useful_firestar",
+      "breakpoints": true
     }
   ]
 }

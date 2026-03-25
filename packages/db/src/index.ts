@@ -18,3 +18,7 @@ export { runMigrations } from './migrate.js';
 export { createProjectDb, initializeProjectDb } from './project-db/connection.js';
 export type { ProjectDatabase, ProjectDbResult } from './project-db/connection.js';
 export * as sqliteSchema from './schema-sqlite/index.js';
+
+// Project-db repositories and adapter
+export { ProjectAdapter } from './project-db/adapter.js';
+export * from './project-db/repositories/index.js';
