@@ -188,7 +188,7 @@ describe('DlqRepository', () => {
 
 ```typescript
 // packages/db/src/repositories/dlq-repository.ts
-import { eq, isNull, desc, and } from 'drizzle-orm';
+import { eq, isNull, desc, and, sql } from 'drizzle-orm';
 import { createLogger } from '@spatula/shared';
 import { StorageError } from '@spatula/shared';
 import { deadLetterQueue } from '../schema/dead-letter-queue.js';
