@@ -55,27 +55,25 @@ Wave 3 covers 5 workstreams across Phase 12 (server) and Phase 13 (local):
   │      ├──→ 3-2 (Observability)
   │      │      Uses: admin scope for Bull Board
   │      │
-  │      └──→ 3-4 (Deferred D/F)
-  │             Uses: Redis client, admin/jobs:read scopes
-  │
-  ├──→ 3-3a (Storage & Exports)
-  │      Provides: S3ContentStore, streaming exporters, entity cursor
-  │      Independent of auth (content store is backend infrastructure)
+  │      ├──→ 3-3b (Query & Caching)
+  │      │      Uses: Redis client from 3-1b, entity cursor from 3-3a
+  │      │      Provides: cursor pagination, RedisCache
   │      │
-  │      └──→ 3-3b (Query & Caching)
-  │             Uses: entity cursor pattern from 3-3a
-  │             Uses: Redis client from 3-1b
-  │             Provides: cursor pagination, RedisCache
-  │             │
-  │             └──→ 3-4 (Deferred D/F)
-  │                    Uses: cursor pagination, entity indexes
+  │      └──→ 3-4 (Deferred D/F)
+  │             Uses: Redis client, admin/jobs:read scopes,
+  │             cursor pagination from 3-3b, entity indexes from 3-3b
   │
-  └──→ 3-5 (Local Pipeline + Core CLI)
-         Independent of all server sub-plans
-         Uses only: Wave 1 orchestrators, Wave 2 SQLite/config/pipeline-hardening
+3-3a (Storage & Exports)  ← independent root, no auth dependency
+  │  Provides: S3ContentStore, streaming exporters, entity cursor
+  │
+  └──→ 3-3b (see above, also depends on 3-1b for Redis)
+
+3-5 (Local Pipeline + Core CLI)  ← independent root
+       Uses only: Wave 1 orchestrators, Wave 2 SQLite/config/pipeline-hardening
+       No dependency on any Wave 3 server sub-plan
 ```
 
-**Note:** 3-3a is independent of 3-1a/3-1b and could theoretically run in parallel with 3-1b or 3-2. The linear ordering is for simplicity — the plans themselves have no hidden dependencies.
+**Note:** 3-3a and 3-5 are independent roots — they have no dependency on 3-1a/3-1b. 3-3a could run in parallel with 3-1b or 3-2. 3-5 could run in parallel with all server sub-plans. The linear execution order is for simplicity.
 
 ---
 
@@ -100,9 +98,9 @@ Wave 3 covers 5 workstreams across Phase 12 (server) and Phase 13 (local):
 11. CORS configuration — Hono built-in CORS with `CORS_ALLOWED_ORIGINS` env var (comma-separated, default: `http://localhost:3000`)
 12. Wire into middleware chain — when `AUTH_STRATEGY != none`, `tenantMiddleware` is removed; `authMiddleware` becomes sole source of `tenantId`. `validateTenant` remains downstream.
 
-**Existing test impact:** All 175 existing API tests must continue passing. Strategy: `AUTH_STRATEGY` defaults to `none` in test env so existing tests pass unchanged. New auth-specific tests exercise auth paths explicitly.
+**Existing test impact:** All 175 existing API tests must continue passing. Strategy: test environment sets `AUTH_STRATEGY=none` (overriding the production default of `api-key`) so existing tests pass unchanged. New auth-specific tests exercise auth paths explicitly.
 
-**New env vars:** `AUTH_STRATEGY` (default: `none`), `CORS_ALLOWED_ORIGINS`
+**New env vars:** `AUTH_STRATEGY` (default: `api-key` per Phase 12 spec; test environment overrides to `none`), `CORS_ALLOWED_ORIGINS`
 
 **Spec references:** Phase 12, sections 3.1.1–3.1.5, 3.3, 3.7
 
@@ -127,7 +125,7 @@ Wave 3 covers 5 workstreams across Phase 12 (server) and Phase 13 (local):
    - `JobManager.startJob()` — concurrent job count
    - Crawl worker — page count against `maxPagesPerJob`
    - Export worker — entity count (already enforces `MAX_EXPORT_ENTITIES`, make per-tenant)
-   - Content store — `storage_bytes_used` column on `tenants` for tracking, incremented on store, decremented on delete
+   - Content store — `storage_bytes_used` column on `tenants` for tracking, incremented on store, decremented on delete. Initial implementation instruments `PgContentStore` only; 3-3a wires the same tracking into `S3ContentStore`.
 4. WebSocket token auth — `POST /api/v1/ws-token` endpoint (requires valid auth). Returns single-use token stored in Redis (`ws-token:{token}`, value: `{ tenantId, expiresAt }`, 60s TTL). WS upgrade handler validates token, extracts tenantId, deletes token. Legacy `?tenantId=` query param removed when `AUTH_STRATEGY != none`.
 5. Audit logging — `audit_log` Postgres table + migration. Columns: `id`, `tenant_id`, `actor_id`, `actor_type`, `action`, `resource_type`, `resource_id`, `metadata` (JSONB), `ip_address`, `created_at`. Indexes: `idx_audit_tenant_time`, `idx_audit_action_time`. `AuditLogger` service with fire-and-forget writes via `setImmediate`. Events: `auth.login_success`, `auth.login_failure`, `api_key.created`, `api_key.revoked`, `job.created`, `job.started`, `job.cancelled`, `job.deleted`, `export.requested`, `export.downloaded`, `tenant.updated`, `tenant.quota_exceeded`.
 6. Shared Redis client — establish the `ioredis` client pattern added to `AppDeps`. BullMQ has its own internal connection; this shared client is for rate limiting, WS tokens, and later features (idempotency, cache, worker health). Configured via existing `REDIS_URL`.
@@ -160,7 +158,7 @@ Wave 3 covers 5 workstreams across Phase 12 (server) and Phase 13 (local):
 7. Two-tier health checks:
    - `GET /health/live` — lightweight, confirms process is running (200 always)
    - `GET /health/ready` — parallel checks via `Promise.allSettled`: Postgres (`SELECT 1`), Redis (`PING`), BullMQ (`getJobCounts()`). Returns 200 with `status: "ok"` or 503 with `status: "degraded"` and per-check breakdown.
-8. Bull Board queue dashboard — `@bull-board/api` + `@bull-board/hono`. Mount at `/api/admin/queues`. Requires `admin` scope (from 3-1a). Registers all queues with `BullMQAdapter`.
+8. Bull Board queue dashboard — `@bull-board/api` + `@bull-board/hono`. Mount at `/api/admin/queues`. Requires `admin` scope (from 3-1a). Registers the 5 existing queues (crawl, schema-evolution, reconciliation, export, extract) with `BullMQAdapter`. The 6th queue (`webhooks`) is added in Wave 4 (Workstream G).
 
 **New env vars:** `OTEL_EXPORTER_ENDPOINT`, `SENTRY_DSN`, `SENTRY_TRACES_SAMPLE_RATE` (default: 0.1)
 
@@ -209,7 +207,7 @@ Wave 3 covers 5 workstreams across Phase 12 (server) and Phase 13 (local):
 3. Cursor-based pagination — `?cursor=<opaque>` query parameter alongside existing offset/limit (backwards-compatible). Tiebreaker: `id` always included as secondary sort. Response envelope adds `nextCursor` and `hasMore` to existing `pagination` object.
 4. Repository cursor methods — `findByCursor()` variants for `ExtractionRepository`, `ActionRepository`, `ExportRepository` (complementing `EntityRepository.findByJobCursor()` from 3-3a).
 5. Apply cursor pagination to 4 endpoints: `/entities`, `/extractions`, `/actions`, `/exports`.
-6. Incremental fetch — `?since=<ISO 8601>` parameter on the same 4 endpoints. Filters to records with `updated_at` after the given timestamp. Audit: verify all 4 tables have `updated_at` — add migration if any lack it.
+6. Incremental fetch — `?since=<ISO 8601>` parameter on the same 4 endpoints. Filters to records with `updated_at` after the given timestamp. **Migration required:** None of the 4 Postgres tables (`entities`, `extractions`, `actions`, `exports`) currently have `updated_at` columns. This deliverable includes: (a) migration adding `updated_at TIMESTAMPTZ DEFAULT now()` to all 4 tables, (b) index on `updated_at` for each table, (c) application-level writes to set `updated_at` on mutations (not DB triggers, to match the Drizzle ORM pattern), (d) the `?since=` query parameter.
 7. `RedisCache` class (`packages/db/src/cache.ts`) — `getOrFetch<T>(key, fetcher, ttlSeconds)` and `invalidate(pattern)` (uses `SCAN` + `DEL`, not `KEYS`). Uses shared Redis client from 3-1b.
 8. Wire cache to 4 hot paths:
    - `schema:{jobId}:current` — 30s TTL, invalidated on schema evolution
@@ -284,12 +282,12 @@ Wave 3 covers 5 workstreams across Phase 12 (server) and Phase 13 (local):
 
 9. **`DataSource` interface** (`packages/core/src/interfaces/data-source.ts`) — unified interface: `getEntities`, `getEntity`, `searchEntities`, `getSchema`, `getSchemaVersions`, `getActions`, `approveAction`, `rejectAction`, `getStatus`, `createExport`, `getExport`, `downloadExport`, `getDocumentation`, optional `subscribe()`
 10. **`LocalDataSource`** — wraps `ProjectAdapter` + `EventEmitter` from pipeline runner
-11. **`ApiDataSource`** — interface + skeleton with TODO markers for Wave 5 (wraps `ApiClient` + WebSocket)
+11. **`ApiDataSource`** — deferred to Wave 5. Only the `DataSource` interface is delivered in 3-5; the remote implementation wrapping `ApiClient` + WebSocket is built when remote operations are implemented.
 12. **CLI hook adaptation** — refactor `useJobPolling`, `useEntityData`, `useEntityFilter`, `useExport` to accept `DataSource` instead of `ApiClient`
 
 #### CLI Commands
 
-13. **`spatula init`** — setup wizard. First-time: global config (LLM provider, Ollama detection, crawler, politeness) + project. Returning user: project only. Writes `spatula.yaml` + creates `.spatula/` directory structure (`pages/`, `exports/`, `cache/robots/`, `logs/`).
+13. **`spatula init`** — setup wizard. First-time: global config (LLM provider, Ollama detection, crawler, politeness) + project. Returning user: project only. Writes `spatula.yaml` + creates `.spatula/` directory structure (`pages/`, `exports/`, `cache/robots/`, `logs/`). Note: `spatula setup` (global config editor) is deferred to Wave 4 (Step 5), matching the Phase 13 spec's step boundaries.
 14. **`spatula run`** — invokes `LocalPipelineRunner`. Compact progress display: progress bar, page/entity/field counts, current URL, speed, cost, errors. Keybindings: `[d]` dashboard, `[q]` quit, `[space]` pause/resume.
 15. **`spatula status`** — project status: last run, pages/entities, pending actions, schema fields, storage breakdown (pages/DB/exports sizes per Section 10.4).
 16. **`spatula reset`** — clears `.spatula/` state, preserves `spatula.yaml`. Flags: `--keep-exports`, `--keep-entities` for selective reset.
@@ -301,7 +299,7 @@ Wave 3 covers 5 workstreams across Phase 12 (server) and Phase 13 (local):
 19. **`PipelineEvents` emitter** — events: `task:completed`, `entity:created`, `schema:evolved`, `action:pending`, `progress`. Bridges pipeline runner to `LocalDataSource.subscribe()`.
 20. **Structured JSON logging** — Pino-based, writes to `.spatula/logs/{timestamp}.log`. Same format as server mode.
 21. **Desktop notifications** — `node-notifier` for run completion/failure (when `notify.desktop: true`). Silent skip for CI (`process.env.CI`), Docker, headless environments.
-22. **Webhook notifications** — HTTP POST to `notify.webhook` URL on completion/failure events.
+22. **Webhook notifications** — simple HTTP POST to `notify.webhook` URL on completion/failure events (no queue, no retry, no HMAC — distinct from server webhook infrastructure in Wave 4).
 23. **Local content store** — file-based, writes raw HTML to `.spatula/pages/{id}.html`. Implements `ContentStore` interface for local mode.
 
 **Spec references:** Phase 13, sections 3, 4, 10
@@ -324,7 +322,7 @@ Each sub-plan slots its middleware into this chain. Earlier sub-plans should lea
 
 ### 5.2 Existing API Test Impact
 
-Adding auth middleware (3-1a) affects all 175 existing API tests. Strategy: `AUTH_STRATEGY` defaults to `none` in test environment, preserving current behavior. New auth-specific tests exercise auth paths explicitly. No existing test needs auth header changes.
+Adding auth middleware (3-1a) affects all 175 existing API tests. Strategy: test environment sets `AUTH_STRATEGY=none` (overriding the production default of `api-key`), preserving current behavior. New auth-specific tests exercise auth paths explicitly. No existing test needs auth header changes.
 
 ### 5.3 AppDeps Growth
 
