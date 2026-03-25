@@ -16,8 +16,8 @@ This document tracks the interleaved execution of Phase 12 (production hardening
 | Wave | Phase 12 (Server) | Phase 13 (Local) | Status |
 |------|-------------------|------------------|--------|
 | 1 | A: Infrastructure & deployment | Step 1: Extract orchestrators | **Complete** |
-| 2 | D+F+J: Reliability, pipeline, local DX | Steps 2+3: SQLite + config | **Complete** |
-| 3 | B+C+E: Auth, observability, performance | Step 4: Pipeline runner + core CLI | Pending |
+| 2 | D+F+J: Reliability, pipeline, local DX | Steps 2+3: SQLite + config | **Complete** (4 items deferred) |
+| 3 | B+C+E: Auth, observability, performance + D/F deferred | Step 4: Pipeline runner + core CLI | Pending |
 | 4 | G+H: API completeness, open-source readiness | Step 5: Data interaction commands | Pending |
 | 5 | I: Hosted platform layer | Step 6: Remote operations | Pending |
 
@@ -125,6 +125,12 @@ Repository implementations and ProjectAdapter.
 - `docs/superpowers/plans/2026-03-24-wave-2-4a-config-system.md`
 - `docs/superpowers/plans/2026-03-24-wave-2-4b-config-diff-engine.md`
 
+**Deferred to Wave 3:** The following Workstream D and F items were spec'd for Wave 2 but deferred because they depend on server infrastructure (Redis, admin auth) being built in Wave 3:
+- Idempotency middleware with Redis-backed key store (spec 5.4)
+- Worker health monitoring via Redis heartbeat + admin endpoint (spec 5.5)
+- Quality score aggregation API `GET /api/v1/jobs/:id/quality` (spec 7.5)
+- Confidence-based export filtering with `minQuality` parameter (spec 7.6)
+
 ---
 
 ## Wave 3 — Auth, Observability & Local Execution (Pending)
@@ -158,6 +164,17 @@ Metrics, tracing, error aggregation, health checks.
 - Bull Board queue dashboard at `/api/admin/queues`
 
 **Spec:** Phase 12, Section 4
+
+### Phase 12 D/F Deferred Items
+Server-side features from Wave 2 that depend on Redis/auth infrastructure.
+
+**Key deliverables:**
+- Idempotency middleware: `Idempotency-Key` header with Redis-backed cache (24hr TTL) for mutating endpoints (spec 5.4)
+- Worker health monitoring: Redis heartbeat every 30s per worker + `GET /api/v1/admin/workers` endpoint (spec 5.5)
+- Quality score aggregation: `GET /api/v1/jobs/:id/quality` with entity count, avg quality, distribution, field completeness (spec 7.5)
+- Confidence-based export filtering: `minQuality` and `fields` parameters on export creation (spec 7.6)
+
+**Spec:** Phase 12, Sections 5.4-5.5, 7.5-7.6
 
 ### Phase 12E: Performance & Scalability
 Content storage, streaming exports, query optimization, caching.
@@ -285,12 +302,13 @@ Wave 1 (Foundation)
   └── Phase 13 Step 1: Extract orchestrators
         |
 Wave 2 (Resilience + Local Data)
-  ├── Phase 12 D+F+J: Reliability, pipeline, local DX
+  ├── Phase 12 D+F+J: Reliability, pipeline, local DX (core items)
   ├── Phase 13 Step 2: SQLite schema + repos
   └── Phase 13 Step 3: Config system
         |
 Wave 3 (Auth + Observability + Local Execution)
   ├── Phase 12 B+C+E: Auth, observability, performance
+  ├── Phase 12 D/F deferred: Idempotency, worker health, quality API, export filtering
   └── Phase 13 Step 4: Pipeline runner + core CLI
         |
 Wave 4 (API Completeness + Open-Source Release)  ← RELEASE TARGET
