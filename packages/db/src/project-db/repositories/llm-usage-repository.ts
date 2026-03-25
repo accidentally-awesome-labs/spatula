@@ -7,6 +7,7 @@
 import { eq, sql } from 'drizzle-orm';
 import type { ProjectDatabase } from '../connection.js';
 import { llmUsage } from '../../schema-sqlite/llm-usage.js';
+import { wrapStorageError } from './utils.js';
 
 export class LlmUsageRepository {
   constructor(private readonly db: ProjectDatabase) {}
@@ -21,9 +22,8 @@ export class LlmUsageRepository {
     purpose: string;
   }): Promise<{ id: string }> {
     const id = crypto.randomUUID();
-    this.db
-      .insert(llmUsage)
-      .values({
+    wrapStorageError(
+      () => this.db.insert(llmUsage).values({
         id,
         runId: data.runId ?? null,
         model: data.model,
@@ -33,8 +33,9 @@ export class LlmUsageRepository {
         costUsd: data.costUsd,
         purpose: data.purpose,
         createdAt: new Date().toISOString(),
-      })
-      .run();
+      }).run(),
+      { operation: 'record', table: 'llm_usage' },
+    );
     return { id };
   }
 

@@ -4,27 +4,31 @@ import type { AppEnv } from '../types.js';
 export function adminDlqRoutes() {
   const app = new Hono<AppEnv>();
 
-  // List unresolved DLQ entries
+  // List unresolved DLQ entries (scoped to calling tenant)
   app.get('/', async (c) => {
     const deps = c.get('deps');
     if (!deps.dlqRepo) return c.json({ error: { code: 'NOT_CONFIGURED', message: 'DLQ not configured' } }, 503);
 
+    const tenantId = c.get('tenantId');
     const queueName = c.req.query('queue');
     const limit = Math.max(1, Math.min(parseInt(c.req.query('limit') ?? '50', 10) || 50, 100));
     const offset = Math.max(0, parseInt(c.req.query('offset') ?? '0', 10) || 0);
 
-    const entries = await deps.dlqRepo.findUnresolved({ queueName, limit, offset });
-    const total = await deps.dlqRepo.countUnresolved(queueName);
+    // TODO(Phase 12 Workstream B): When admin auth is added, allow admins
+    // to omit tenantId filter to see all tenants' DLQ entries.
+    const entries = await deps.dlqRepo.findUnresolved({ queueName, tenantId, limit, offset });
+    const total = await deps.dlqRepo.countUnresolved(queueName, tenantId);
 
     return c.json({ data: entries, pagination: { total, limit, offset } });
   });
 
-  // Get single DLQ entry
+  // Get single DLQ entry (scoped to calling tenant)
   app.get('/:id', async (c) => {
     const deps = c.get('deps');
     if (!deps.dlqRepo) return c.json({ error: { code: 'NOT_CONFIGURED', message: 'DLQ not configured' } }, 503);
 
-    const entry = await deps.dlqRepo.findById(c.req.param('id'));
+    const tenantId = c.get('tenantId');
+    const entry = await deps.dlqRepo.findById(c.req.param('id'), tenantId);
     if (!entry) return c.json({ error: { code: 'NOT_FOUND', message: 'DLQ entry not found' } }, 404);
 
     return c.json({ data: entry });
@@ -35,7 +39,8 @@ export function adminDlqRoutes() {
     const deps = c.get('deps');
     if (!deps.dlqRepo) return c.json({ error: { code: 'NOT_CONFIGURED', message: 'DLQ not configured' } }, 503);
 
-    const entry = await deps.dlqRepo.findById(c.req.param('id'));
+    const tenantId = c.get('tenantId');
+    const entry = await deps.dlqRepo.findById(c.req.param('id'), tenantId);
     if (!entry) return c.json({ error: { code: 'NOT_FOUND', message: 'DLQ entry not found' } }, 404);
     if (entry.resolvedAt) return c.json({ error: { code: 'ALREADY_RESOLVED', message: 'Entry already resolved' } }, 409);
 
@@ -62,7 +67,8 @@ export function adminDlqRoutes() {
     const deps = c.get('deps');
     if (!deps.dlqRepo) return c.json({ error: { code: 'NOT_CONFIGURED', message: 'DLQ not configured' } }, 503);
 
-    const entry = await deps.dlqRepo.findById(c.req.param('id'));
+    const tenantId = c.get('tenantId');
+    const entry = await deps.dlqRepo.findById(c.req.param('id'), tenantId);
     if (!entry) return c.json({ error: { code: 'NOT_FOUND', message: 'DLQ entry not found' } }, 404);
     if (entry.resolvedAt) return c.json({ error: { code: 'ALREADY_RESOLVED', message: 'Entry already resolved' } }, 409);
 

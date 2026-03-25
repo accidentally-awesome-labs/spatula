@@ -126,7 +126,7 @@ export async function processCrawlJob(data: CrawlJobData, deps: WorkerDeps): Pro
     // 5. Check crawl completion
     if (deps.completionChecker && !result.error) {
       const completion = await deps.completionChecker.isComplete(
-        jobId, tenantId, deps.taskRepo as any,
+        jobId, tenantId, deps.taskRepo,
       );
       if (completion.complete) {
         logger.info({ jobId, ...completion.stats }, 'Crawl naturally complete, triggering reconciliation');

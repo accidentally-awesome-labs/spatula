@@ -1,9 +1,10 @@
-import { LLMError } from '@spatula/shared';
+import { LLMError, ConfigError } from '@spatula/shared';
 import type {
   LLMClient,
   LLMCompletionRequest,
   LLMCompletionResponse,
 } from '../interfaces/llm-client.js';
+import { OllamaClient } from './ollama-client.js';
 
 export type CircuitState = 'closed' | 'open' | 'half_open';
 
@@ -46,8 +47,14 @@ export class CircuitBreakerLLMClient implements LLMClient {
 
   constructor(
     private readonly inner: LLMClient,
-    config?: Partial<CircuitBreakerConfig>,
+    config?: Partial<CircuitBreakerConfig> & { allowOllama?: boolean },
   ) {
+    if (inner instanceof OllamaClient && !config?.allowOllama) {
+      throw new ConfigError(
+        'CircuitBreakerLLMClient should not wrap OllamaClient — Ollama failures are terminal (local server), ' +
+        'not transient. Use CircuitBreakerLLMClient with cloud providers like OpenRouter.',
+      );
+    }
     this.config = { ...DEFAULT_CONFIG, ...config };
   }
 

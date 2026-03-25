@@ -10,6 +10,7 @@
 import { eq } from 'drizzle-orm';
 import type { ProjectDatabase } from '../connection.js';
 import { projectMeta } from '../../schema-sqlite/project-meta.js';
+import { wrapStorageError } from './utils.js';
 
 export class ProjectMetaRepository {
   constructor(private readonly db: ProjectDatabase) {}
@@ -25,15 +26,13 @@ export class ProjectMetaRepository {
   }
 
   async set(key: string, value: string): Promise<void> {
-    // Upsert: insert or update on conflict
-    this.db
-      .insert(projectMeta)
-      .values({ key, value })
-      .onConflictDoUpdate({
+    wrapStorageError(
+      () => this.db.insert(projectMeta).values({ key, value }).onConflictDoUpdate({
         target: projectMeta.key,
         set: { value },
-      })
-      .run();
+      }).run(),
+      { operation: 'set', table: 'project_meta', key },
+    );
   }
 
   async getAll(): Promise<Record<string, string>> {

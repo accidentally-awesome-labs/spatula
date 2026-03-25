@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { estimateCost } from '../../../src/cost/estimator.js';
+import { yamlToJobConfig } from '../../../src/config/config-resolver.js';
 import type { JobConfig } from '../../../src/types/job.js';
 
 function createMinimalConfig(overrides: Partial<JobConfig> = {}): JobConfig {
@@ -123,5 +124,18 @@ describe('estimateCost', () => {
     // Haiku is cheaper — total cost should be less than all-Sonnet
     const allSonnet = estimateCost(createMinimalConfig());
     expect(estimate.totalCostUsd).toBeLessThan(allSonnet.totalCostUsd);
+  });
+
+  it('accepts yamlToJobConfig output as valid input (integration)', () => {
+    const jobConfig = yamlToJobConfig(
+      { seeds: ['https://example.com/products'], depth: 2, limit: 500 },
+      { tenantId: 'tenant-1', projectRoot: '/test' },
+    );
+
+    const estimate = estimateCost(jobConfig);
+
+    expect(estimate.estimatedPages).toBe(500);
+    expect(estimate.totalCostUsd).toBeGreaterThan(0);
+    expect(estimate.llmCallBreakdown.length).toBeGreaterThan(0);
   });
 });

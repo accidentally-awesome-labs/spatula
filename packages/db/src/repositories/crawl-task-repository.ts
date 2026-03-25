@@ -1,6 +1,7 @@
 import { eq, and, asc, sql } from 'drizzle-orm';
 import { createLogger, StorageError } from '@spatula/shared';
 import type { PageClassification } from '@spatula/core';
+import type { TaskStatsRepo } from '@spatula/core/crawlers/completion-checker.js';
 import { crawlTasks } from '../schema/crawl-tasks.js';
 import type { crawlTaskStatusEnum, taskPriorityEnum, crawlerTypeEnum } from '../schema/enums.js';
 import type { Database } from '../connection.js';
@@ -21,7 +22,7 @@ export interface EnqueueTaskInput {
   crawlerType?: CrawlerType;
 }
 
-export class CrawlTaskRepository {
+export class CrawlTaskRepository implements TaskStatsRepo {
   constructor(private readonly db: Database) {}
 
   async enqueue(input: EnqueueTaskInput) {

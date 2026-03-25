@@ -4,6 +4,7 @@ import { createLogger } from '@spatula/shared';
 const logger = createLogger('robots-txt');
 
 const CACHE_TTL_MS = 60 * 60 * 1000; // 1 hour
+const MAX_CACHE_SIZE = 1000;
 
 interface CacheEntry {
   robotsTxt: ReturnType<typeof robotsParser>;
@@ -16,6 +17,8 @@ interface CacheEntry {
  *
  * Fails open: if robots.txt can't be fetched (network error, 5xx),
  * the URL is allowed. Only explicit Disallow rules block crawling.
+ *
+ * Cache is bounded to MAX_CACHE_SIZE entries with LRU eviction.
  */
 export class RobotsTxtChecker {
   private cache = new Map<string, CacheEntry>();
@@ -47,6 +50,9 @@ export class RobotsTxtChecker {
   private async getOrFetch(origin: string): Promise<CacheEntry | null> {
     const existing = this.cache.get(origin);
     if (existing && Date.now() - existing.fetchedAt < CACHE_TTL_MS) {
+      // LRU touch: delete + re-insert to move to end of Map
+      this.cache.delete(origin);
+      this.cache.set(origin, existing);
       return existing;
     }
 
@@ -63,6 +69,18 @@ export class RobotsTxtChecker {
     }
   }
 
+  private evictIfNeeded(): void {
+    if (this.cache.size <= MAX_CACHE_SIZE) return;
+    // Evict oldest entries (Map preserves insertion order)
+    const toEvict = this.cache.size - MAX_CACHE_SIZE;
+    let evicted = 0;
+    for (const key of this.cache.keys()) {
+      if (evicted >= toEvict) break;
+      this.cache.delete(key);
+      evicted++;
+    }
+  }
+
   private async doFetch(origin: string): Promise<CacheEntry | null> {
     try {
       const response = await fetch(`${origin}/robots.txt`, {
@@ -76,6 +94,7 @@ export class RobotsTxtChecker {
           fetchedAt: Date.now(),
         };
         this.cache.set(origin, entry);
+        this.evictIfNeeded();
         return entry;
       }
 
@@ -85,6 +104,7 @@ export class RobotsTxtChecker {
         fetchedAt: Date.now(),
       };
       this.cache.set(origin, entry);
+      this.evictIfNeeded();
       return entry;
     } catch (err) {
       logger.warn({ origin, error: (err as Error).message }, 'Failed to fetch robots.txt, allowing crawl');

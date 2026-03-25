@@ -7,6 +7,7 @@
 import { eq, desc, inArray } from 'drizzle-orm';
 import type { ProjectDatabase } from '../connection.js';
 import { runs } from '../../schema-sqlite/runs.js';
+import { wrapStorageError } from './utils.js';
 
 export class RunRepository {
   constructor(private readonly db: ProjectDatabase) {}
@@ -18,16 +19,16 @@ export class RunRepository {
     startedAt: string;
   }): Promise<{ id: string }> {
     const id = crypto.randomUUID();
-    this.db
-      .insert(runs)
-      .values({
+    wrapStorageError(
+      () => this.db.insert(runs).values({
         id,
         status: data.status,
         source: data.source,
         configSnapshot: data.configSnapshot,
         startedAt: data.startedAt,
-      })
-      .run();
+      }).run(),
+      { operation: 'create', table: 'runs' },
+    );
     return { id };
   }
 
@@ -82,14 +83,13 @@ export class RunRepository {
     status: string,
     completedAt?: string,
   ): Promise<void> {
-    this.db
-      .update(runs)
-      .set({
+    wrapStorageError(
+      () => this.db.update(runs).set({
         status,
         ...(completedAt ? { completedAt } : {}),
-      })
-      .where(eq(runs.id, id))
-      .run();
+      }).where(eq(runs.id, id)).run(),
+      { operation: 'updateStatus', table: 'runs', id },
+    );
   }
 
   async updateStats(
@@ -103,10 +103,9 @@ export class RunRepository {
       errorMessage?: string;
     },
   ): Promise<void> {
-    this.db
-      .update(runs)
-      .set(stats)
-      .where(eq(runs.id, id))
-      .run();
+    wrapStorageError(
+      () => this.db.update(runs).set(stats).where(eq(runs.id, id)).run(),
+      { operation: 'updateStats', table: 'runs', id },
+    );
   }
 }

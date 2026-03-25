@@ -44,6 +44,7 @@ export class DlqRepository {
 
   async findUnresolved(options?: {
     queueName?: string;
+    tenantId?: string;
     limit?: number;
     offset?: number;
   }): Promise<Array<typeof deadLetterQueue.$inferSelect>> {
@@ -51,6 +52,9 @@ export class DlqRepository {
     const conditions = [isNull(deadLetterQueue.resolvedAt)];
     if (options?.queueName) {
       conditions.push(eq(deadLetterQueue.queueName, options.queueName));
+    }
+    if (options?.tenantId) {
+      conditions.push(eq(deadLetterQueue.tenantId, options.tenantId));
     }
 
     return this.db.select().from(deadLetterQueue)
@@ -60,9 +64,13 @@ export class DlqRepository {
       .offset(options?.offset ?? 0);
   }
 
-  async findById(id: string): Promise<typeof deadLetterQueue.$inferSelect | null> {
+  async findById(id: string, tenantId?: string): Promise<typeof deadLetterQueue.$inferSelect | null> {
+    const conditions = [eq(deadLetterQueue.id, id)];
+    if (tenantId) {
+      conditions.push(eq(deadLetterQueue.tenantId, tenantId));
+    }
     const rows = await this.db.select().from(deadLetterQueue)
-      .where(eq(deadLetterQueue.id, id))
+      .where(and(...conditions))
       .limit(1);
     return rows[0] ?? null;
   }
@@ -84,15 +92,15 @@ export class DlqRepository {
     return row;
   }
 
-  async countUnresolved(queueName?: string): Promise<number> {
-    const conditions = queueName
-      ? and(isNull(deadLetterQueue.resolvedAt), eq(deadLetterQueue.queueName, queueName))
-      : isNull(deadLetterQueue.resolvedAt);
+  async countUnresolved(queueName?: string, tenantId?: string): Promise<number> {
+    const conditions = [isNull(deadLetterQueue.resolvedAt)];
+    if (queueName) conditions.push(eq(deadLetterQueue.queueName, queueName));
+    if (tenantId) conditions.push(eq(deadLetterQueue.tenantId, tenantId));
 
     const [{ value }] = await this.db
       .select({ value: sql<number>`count(*)` })
       .from(deadLetterQueue)
-      .where(conditions);
+      .where(and(...conditions));
     return Number(value);
   }
 }

@@ -73,10 +73,11 @@ describe('GET /api/v1/admin/dlq', () => {
 
     expect((deps as any).dlqRepo.findUnresolved).toHaveBeenCalledWith({
       queueName: 'spatula.export',
+      tenantId: TENANT_ID,
       limit: 10,
       offset: 5,
     });
-    expect((deps as any).dlqRepo.countUnresolved).toHaveBeenCalledWith('spatula.export');
+    expect((deps as any).dlqRepo.countUnresolved).toHaveBeenCalledWith('spatula.export', TENANT_ID);
   });
 
   it('clamps limit to max 100', async () => {

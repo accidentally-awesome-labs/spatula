@@ -17,6 +17,7 @@ import { eq, and } from 'drizzle-orm';
 import type { SourceTrustRepo } from '@spatula/core/pipeline/types.js';
 import type { ProjectDatabase } from '../connection.js';
 import { sourceTrust } from '../../schema-sqlite/source-trust.js';
+import { wrapStorageError } from './utils.js';
 
 export class SqliteSourceTrustRepository implements SourceTrustRepo {
   constructor(
@@ -34,30 +35,32 @@ export class SqliteSourceTrustRepository implements SourceTrustRepo {
   }): Promise<unknown> {
     const id = crypto.randomUUID();
 
-    // Synchronous transaction for better-sqlite3
-    this.db.transaction((tx) => {
-      // Delete existing record for this domain (if any)
-      tx.delete(sourceTrust)
-        .where(
-          and(
-            eq(sourceTrust.jobId, this.projectId),
-            eq(sourceTrust.domain, data.domain),
-          ),
-        )
-        .run();
+    wrapStorageError(
+      () => this.db.transaction((tx) => {
+        // Delete existing record for this domain (if any)
+        tx.delete(sourceTrust)
+          .where(
+            and(
+              eq(sourceTrust.jobId, this.projectId),
+              eq(sourceTrust.domain, data.domain),
+            ),
+          )
+          .run();
 
-      // Insert new record — reasoning is NOT persisted (column doesn't exist)
-      tx.insert(sourceTrust)
-        .values({
-          id,
-          jobId: this.projectId,
-          domain: data.domain,
-          trustLevel: data.trustLevel,
-          score: data.score ?? 0.5,
-          createdAt: new Date().toISOString(),
-        })
-        .run();
-    });
+        // Insert new record — reasoning is NOT persisted (column doesn't exist)
+        tx.insert(sourceTrust)
+          .values({
+            id,
+            jobId: this.projectId,
+            domain: data.domain,
+            trustLevel: data.trustLevel,
+            score: data.score ?? 0.5,
+            createdAt: new Date().toISOString(),
+          })
+          .run();
+      }),
+      { operation: 'upsert', table: 'source_trust', domain: data.domain },
+    );
 
     return { id };
   }

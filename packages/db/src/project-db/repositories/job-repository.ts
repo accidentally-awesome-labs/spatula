@@ -15,6 +15,7 @@ import { createLogger } from '@spatula/shared';
 import type { JobRepo } from '@spatula/core/pipeline/types.js';
 import type { ProjectDatabase } from '../connection.js';
 import { runs } from '../../schema-sqlite/runs.js';
+import { wrapStorageError } from './utils.js';
 
 const logger = createLogger('sqlite:job-repo');
 
@@ -62,11 +63,10 @@ export class SqliteJobRepository implements JobRepo {
       .get();
 
     if (latestRun) {
-      this.db
-        .update(runs)
-        .set({ status })
-        .where(eq(runs.id, latestRun.id))
-        .run();
+      wrapStorageError(
+        () => this.db.update(runs).set({ status }).where(eq(runs.id, latestRun.id)).run(),
+        { operation: 'updateStatus', projectId: this.projectId },
+      );
     }
 
     return {};

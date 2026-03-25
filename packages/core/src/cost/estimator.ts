@@ -53,29 +53,12 @@ export function estimateCost(config: JobConfig): CostEstimate {
 
   // Calculate per-page costs
   for (const { purpose, callsPerPage } of perPageCalls) {
-    const calls = Math.ceil(pages * callsPerPage);
-    const model = resolveModel(llmConfig, purpose);
-    const pricing = getModelPricing(model);
-    const avgTokens = AVG_TOKENS_PER_CALL[purpose] ?? { prompt: 1000, completion: 500 };
-    const tokens = calls * (avgTokens.prompt + avgTokens.completion);
-    const costUsd =
-      (calls * avgTokens.prompt * pricing.promptPer1M) / 1_000_000 +
-      (calls * avgTokens.completion * pricing.completionPer1M) / 1_000_000;
-
-    breakdown.push({ purpose, model, calls, tokens, costUsd: Math.round(costUsd * 1000) / 1000 });
+    breakdown.push(computeCallCost(purpose, Math.ceil(pages * callsPerPage), llmConfig));
   }
 
   // Calculate per-job costs
   for (const { purpose, calls } of perJobCalls) {
-    const model = resolveModel(llmConfig, purpose);
-    const pricing = getModelPricing(model);
-    const avgTokens = AVG_TOKENS_PER_CALL[purpose] ?? { prompt: 1000, completion: 500 };
-    const tokens = calls * (avgTokens.prompt + avgTokens.completion);
-    const costUsd =
-      (calls * avgTokens.prompt * pricing.promptPer1M) / 1_000_000 +
-      (calls * avgTokens.completion * pricing.completionPer1M) / 1_000_000;
-
-    breakdown.push({ purpose, model, calls, tokens, costUsd: Math.round(costUsd * 1000) / 1000 });
+    breakdown.push(computeCallCost(purpose, calls, llmConfig));
   }
 
   const totalTokens = breakdown.reduce((sum, e) => sum + e.tokens, 0);
@@ -105,6 +88,17 @@ function estimatePageCount(config: JobConfig): number {
   if (maxDepth === 1) return Math.min(seedCount * 20, maxPages);
   // depth 2+: assume maxPages will be hit
   return maxPages;
+}
+
+function computeCallCost(purpose: LLMTask, calls: number, llmConfig: LLMConfig): CostBreakdownEntry {
+  const model = resolveModel(llmConfig, purpose);
+  const pricing = getModelPricing(model);
+  const avgTokens = AVG_TOKENS_PER_CALL[purpose] ?? { prompt: 1000, completion: 500 };
+  const tokens = calls * (avgTokens.prompt + avgTokens.completion);
+  const costUsd =
+    (calls * avgTokens.prompt * pricing.promptPer1M) / 1_000_000 +
+    (calls * avgTokens.completion * pricing.completionPer1M) / 1_000_000;
+  return { purpose, model, calls, tokens, costUsd: Math.round(costUsd * 1000) / 1000 };
 }
 
 function estimateConfidence(config: JobConfig): 'low' | 'medium' | 'high' {
