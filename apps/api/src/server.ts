@@ -1,7 +1,7 @@
 import { serve } from '@hono/node-server';
 import type { ServerType } from '@hono/node-server';
 import { createNodeWebSocket } from '@hono/node-ws';
-import { createLogger, loadConfig } from '@spatula/shared';
+import { createLogger, loadConfig, getEnvOrDefault } from '@spatula/shared';
 import { createApp } from './app.js';
 import { JobProgressManager } from './ws/job-progress.js';
 import { executeShutdown, SHUTDOWN_TIMEOUT_MS } from './shutdown.js';
@@ -60,19 +60,48 @@ export function startServer(deps: AppDeps, port?: number) {
       '/ws/jobs/:id/progress',
       upgradeWebSocket((c) => {
         const jobId = c.req.param('id')!;
-        // WebSocket clients can't send custom HTTP headers, so accept tenantId
-        // from either the x-tenant-id header or a query parameter
-        const tenantId =
-          c.req.header('x-tenant-id') ??
-          new URL(c.req.url).searchParams.get('tenantId') ??
-          '';
 
         return {
           async onOpen(_evt, ws) {
-            // Validate tenant ID
-            if (!tenantId || !UUID_REGEX.test(tenantId)) {
-              ws.close(4001, 'tenantId required (via x-tenant-id header or ?tenantId= query param)');
-              return;
+            const authStrategy = getEnvOrDefault('AUTH_STRATEGY', 'none');
+            let tenantId: string;
+
+            if (authStrategy === 'none') {
+              // Legacy: accept x-tenant-id header or ?tenantId= query param
+              tenantId =
+                c.req.header('x-tenant-id') ??
+                new URL(c.req.url).searchParams.get('tenantId') ??
+                '';
+              if (!tenantId || !UUID_REGEX.test(tenantId)) {
+                ws.close(4001, 'tenantId required (via x-tenant-id header or ?tenantId= query param)');
+                return;
+              }
+            } else {
+              // Token-based: validate ?token= against Redis
+              const token = new URL(c.req.url).searchParams.get('token');
+              if (!token) {
+                ws.close(4001, 'WebSocket token required (use POST /api/v1/ws-token)');
+                return;
+              }
+              if (!deps.redis) {
+                ws.close(4500, 'Redis not available for token validation');
+                return;
+              }
+              const key = `ws-token:${token}`;
+              const value = await deps.redis.get(key);
+              if (!value) {
+                ws.close(4001, 'Invalid or expired WebSocket token');
+                return;
+              }
+              // Delete token (single-use)
+              await deps.redis.del(key);
+              try {
+                const parsed = JSON.parse(value);
+                tenantId = parsed.tenantId;
+              } catch {
+                ws.close(4500, 'Corrupted token data');
+                return;
+              }
             }
 
             // Validate tenant owns this job
