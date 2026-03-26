@@ -27,6 +27,11 @@ export function createApp(deps: AppDeps) {
   const authStrategy = getEnvOrDefault('AUTH_STRATEGY', 'none');
   const authProvider = deps.authProvider ?? createAuthProvider(authStrategy, {
     apiKeyRepo: deps.apiKeyRepo!,
+    jwtConfig: authStrategy === 'jwt' ? {
+      issuer: getEnvOrDefault('JWT_ISSUER', ''),
+      audience: getEnvOrDefault('JWT_AUDIENCE', ''),
+      jwksUrl: getEnvOrDefault('JWT_JWKS_URL', ''),
+    } : undefined,
   });
 
   // Global middleware chain (order matters)
