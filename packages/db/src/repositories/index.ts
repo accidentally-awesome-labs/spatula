@@ -23,3 +23,5 @@ export { DlqRepository } from './dlq-repository.js';
 export type { DlqInsertInput } from './dlq-repository.js';
 export { ApiKeyRepository } from './api-key-repository.js';
 export type { CreateApiKeyInput } from './api-key-repository.js';
+export { AuditLogRepository } from './audit-log-repository.js';
+export type { AuditLogEntry } from './audit-log-repository.js';
