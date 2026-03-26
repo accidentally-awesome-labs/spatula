@@ -135,14 +135,17 @@ In `apps/api/src/types.ts`, the `Redis` type import already exists. Add to `AppD
   redis?: Redis;  // Shared ioredis client for rate limiting, WS tokens, etc.
 ```
 
-- [ ] **Step 5: Map `QUOTA_EXCEEDED` error code in error handler**
-
-In `apps/api/src/middleware/error-handler.ts`, add after `FORBIDDEN`:
+Also add to `AppEnv.Variables`:
 
 ```typescript
-      case 'QUOTA_EXCEEDED':
-        return 429;
+  rateLimitTier: string;
 ```
+
+This is needed because the rate limit middleware reads `c.get('rateLimitTier')` and quota loading sets `c.set('rateLimitTier', ...)`. Without this, Hono's typed context will reject the calls at compile time.
+
+- [ ] **Step 5: Map `QUOTA_EXCEEDED` error code in error handler**
+
+In `apps/api/src/middleware/error-handler.ts`, add `case 'QUOTA_EXCEEDED': return 429;` inside the `mapErrorToStatus` function's switch statement, before the `default:` case. Place it near the existing `RATE_LIMIT_ERROR` case since both map to 429.
 
 - [ ] **Step 6: Verify build and run existing tests**
 
@@ -475,13 +478,15 @@ describe('rateLimitMiddleware', () => {
     expect(res.headers.get('X-RateLimit-Remaining')).toBe('55');
   });
 
-  it('rejects request when over limit with 429', async () => {
+  it('rejects request when over limit with 429 and Retry-After header', async () => {
     (redis as any).eval.mockResolvedValue([0, 60]);
     const app = createTestApp(redis);
     const res = await app.request('/test');
 
     expect(res.status).toBe(429);
-    expect(res.headers.get('Retry-After')).toBeDefined();
+    expect(res.headers.get('Retry-After')).toBe('60');
+    const body = await res.json();
+    expect(body.error.code).toBe('RATE_LIMIT_ERROR');
   });
 
   it('skips rate limiting for unlimited tier', async () => {
@@ -572,11 +577,19 @@ export function rateLimitMiddleware(redis: Redis): MiddlewareHandler {
     c.header('X-RateLimit-Remaining', remaining.toString());
 
     if (!accepted) {
+      // Return 429 directly (don't throw) to preserve Retry-After header.
+      // Throwing would discard headers set before the throw.
       c.header('Retry-After', '60');
-      throw new RateLimitError('Rate limit exceeded', {
-        retryAfterMs: WINDOW_MS,
-        context: { tenantId, tier: tierName, limit: tier.requestsPerMinute },
-      });
+      return c.json(
+        {
+          error: {
+            code: 'RATE_LIMIT_ERROR',
+            message: 'Rate limit exceeded',
+            requestId: c.get('requestId') ?? '',
+          },
+        },
+        429,
+      );
     }
 
     await next();
@@ -670,7 +683,7 @@ Add methods to the `TenantRepository` class:
     try {
       await this.db
         .update(tenants)
-        .set({ storageBytesUsed: sql`${tenants.storageBytesUsed} + ${bytes}` })
+        .set({ storageBytesUsed: sql`GREATEST(0, ${tenants.storageBytesUsed} + ${bytes})` })
         .where(eq(tenants.id, tenantId));
     } catch (error) {
       throw new StorageError(`Failed to update storage bytes: ${(error as Error).message}`, {
@@ -706,6 +719,7 @@ Read `packages/queue/src/job-manager.ts` first. Add an optional `tenantRepo` to 
 
 ```typescript
 import type { TenantRepository } from '@spatula/db';
+import { QuotaExceededError } from '@spatula/shared';
 ```
 
 Add to interface:
@@ -724,7 +738,6 @@ Add field + constructor assignment. Then in `startJob()`, before the state trans
         const runningJobs = await this.jobRepo.findByTenant(tenantId);
         const runningCount = runningJobs.filter((j: any) => j.status === 'running').length;
         if (runningCount >= maxConcurrent) {
-          const { QuotaExceededError } = await import('@spatula/shared');
           throw new QuotaExceededError(
             `Concurrent job limit reached: ${runningCount}/${maxConcurrent}`,
             { context: { tenantId, current: runningCount, max: maxConcurrent } },
@@ -756,16 +769,56 @@ The export orchestrator function accepts deps/config. Add `maxEntities` as an op
 
 Read the file first to understand the exact function signature and where the validation occurs.
 
-- [ ] **Step 3: Build and test**
+- [ ] **Step 3: Add storage byte tracking to PgContentStore**
 
-Run: `pnpm --filter @spatula/queue build && pnpm --filter @spatula/core build`
-Run: `pnpm --filter @spatula/queue test && pnpm --filter @spatula/core test`
+In `packages/db/src/content-store/pg-content-store.ts`, add an optional `tenantRepo` dependency. The `ContentStore` interface does not include `tenantId`, so byte tracking is best-effort: the caller (export worker, crawl orchestrator) already knows the `tenantId` and can pass it through the content key convention or via a context setter.
 
-- [ ] **Step 4: Commit**
+For now, add a `setTenantContext()` method that stores the tenantId for subsequent calls:
+
+```typescript
+  private tenantId?: string;
+  private tenantRepo?: TenantRepository;
+
+  setTenantContext(tenantId: string, tenantRepo: TenantRepository): void {
+    this.tenantId = tenantId;
+    this.tenantRepo = tenantRepo;
+  }
+```
+
+Then in the `store()` method, after the successful insert:
+
+```typescript
+      // Track storage bytes (fire-and-forget)
+      if (this.tenantId && this.tenantRepo) {
+        const bytes = Buffer.byteLength(content, 'utf-8');
+        void this.tenantRepo.incrementStorageBytes(this.tenantId, bytes)
+          .catch((err) => logger.warn({ err }, 'Failed to track storage bytes'));
+      }
+```
+
+And in `delete()`, after the successful delete:
+
+```typescript
+      // Note: We don't decrement bytes on delete because we don't know the size.
+      // Accurate storage tracking requires either storing sizes per-key or periodic recalculation.
+      // This is acceptable for the initial implementation per the decomposition spec.
+```
+
+Add the import:
+```typescript
+import type { TenantRepository } from '../repositories/tenant-repository.js';
+```
+
+- [ ] **Step 4: Build and test**
+
+Run: `pnpm --filter @spatula/queue build && pnpm --filter @spatula/core build && pnpm --filter @spatula/db build`
+Run: `pnpm --filter @spatula/queue test && pnpm --filter @spatula/core test && pnpm --filter @spatula/db test`
+
+- [ ] **Step 5: Commit**
 
 ```bash
-git add packages/queue/src/job-manager.ts packages/core/src/pipeline/export-orchestrator.ts
-git commit -m "feat: add tenant quota enforcement at job start and export"
+git add packages/queue/src/job-manager.ts packages/core/src/pipeline/export-orchestrator.ts packages/db/src/content-store/pg-content-store.ts
+git commit -m "feat: add tenant quota enforcement at job start, export, and storage"
 ```
 
 ---
