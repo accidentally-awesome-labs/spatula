@@ -13,6 +13,7 @@ import type {
 } from '@spatula/db';
 import type { ContentStore, ReviewQueue } from '@spatula/core';
 import type { JobManager, ExportJobPayload, SpatulaQueues } from '@spatula/queue';
+import type { AuthProvider, AuthResult } from '@spatula/shared';
 import type Redis from 'ioredis';
 import type { Pool } from 'pg';
 
@@ -34,6 +35,7 @@ export interface AppDeps {
   tenantRepo?: TenantRepository;
   dlqRepo?: DlqRepository;
   apiKeyRepo?: ApiKeyRepository;
+  authProvider?: AuthProvider;
   queues?: SpatulaQueues;
 }
 
@@ -45,5 +47,6 @@ export interface AppEnv {
     validatedQuery: unknown;
     requestId: string;
     logger: import('@spatula/shared').Logger;
+    auth: AuthResult;
   };
 }
