@@ -1,4 +1,4 @@
-import { eq } from 'drizzle-orm';
+import { eq, sql } from 'drizzle-orm';
 import { createLogger, StorageError } from '@spatula/shared';
 import { tenants } from '../schema/tenants.js';
 import type { Database } from '../connection.js';
@@ -77,6 +77,41 @@ export class TenantRepository {
       throw new StorageError(`Failed to update tenant: ${(error as Error).message}`, {
         cause: error as Error,
         context: { id },
+      });
+    }
+  }
+
+  async getQuotas(tenantId: string) {
+    try {
+      const [row] = await this.db
+        .select({ quotas: tenants.quotas })
+        .from(tenants)
+        .where(eq(tenants.id, tenantId));
+
+      if (!row) {
+        throw new StorageError(`Tenant ${tenantId} not found`, { context: { id: tenantId } });
+      }
+
+      return row.quotas as Record<string, unknown>;
+    } catch (error) {
+      if (error instanceof StorageError) throw error;
+      throw new StorageError(`Failed to get quotas: ${(error as Error).message}`, {
+        cause: error as Error,
+        context: { id: tenantId },
+      });
+    }
+  }
+
+  async incrementStorageBytes(tenantId: string, bytes: number) {
+    try {
+      await this.db
+        .update(tenants)
+        .set({ storageBytesUsed: sql`GREATEST(0, ${tenants.storageBytesUsed} + ${bytes})` })
+        .where(eq(tenants.id, tenantId));
+    } catch (error) {
+      throw new StorageError(`Failed to update storage bytes: ${(error as Error).message}`, {
+        cause: error as Error,
+        context: { tenantId, bytes },
       });
     }
   }
