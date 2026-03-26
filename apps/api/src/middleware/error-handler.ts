@@ -38,6 +38,8 @@ function mapErrorToStatus(error: unknown): number {
         return 504;
       case 'RATE_LIMIT_ERROR':
         return 429;
+      case 'QUOTA_EXCEEDED':
+        return 429;
       case 'NETWORK_ERROR':
         return 502;
       case 'STATE_ERROR':

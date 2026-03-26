@@ -37,6 +37,7 @@ export interface AppDeps {
   apiKeyRepo?: ApiKeyRepository;
   authProvider?: AuthProvider;
   queues?: SpatulaQueues;
+  redis?: Redis;  // Shared ioredis client for rate limiting, WS tokens, etc.
 }
 
 export interface AppEnv {
@@ -48,5 +49,6 @@ export interface AppEnv {
     requestId: string;
     logger: import('@spatula/shared').Logger;
     auth: AuthResult;
+    rateLimitTier: string;
   };
 }
