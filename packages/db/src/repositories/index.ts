@@ -21,3 +21,5 @@ export { TenantRepository } from './tenant-repository.js';
 export type { CreateTenantInput, UpdateTenantInput } from './tenant-repository.js';
 export { DlqRepository } from './dlq-repository.js';
 export type { DlqInsertInput } from './dlq-repository.js';
+export { ApiKeyRepository } from './api-key-repository.js';
+export type { CreateApiKeyInput } from './api-key-repository.js';

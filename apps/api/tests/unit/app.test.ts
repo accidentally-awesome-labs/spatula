@@ -63,10 +63,10 @@ describe('Full app', () => {
     expect(body.status).toBe('ok');
   });
 
-  it('returns 400 when tenant header missing on API routes', async () => {
+  it('returns 401 when tenant header missing on API routes', async () => {
     const app = createApp(createMockDeps());
     const res = await app.request('/api/v1/jobs');
-    expect(res.status).toBe(400);
+    expect(res.status).toBe(401);
   });
 
   it('GET /api/v1/jobs works with tenant header', async () => {
