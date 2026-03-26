@@ -1,4 +1,4 @@
-import { pgTable, uuid, text, timestamp, index } from 'drizzle-orm/pg-core';
+import { pgTable, uuid, text, timestamp, uniqueIndex } from 'drizzle-orm/pg-core';
 import { sql } from 'drizzle-orm';
 import { tenants } from './tenants.js';
 
@@ -14,5 +14,5 @@ export const apiKeys = pgTable('api_keys', {
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   revokedAt: timestamp('revoked_at', { withTimezone: true }),
 }, (table) => [
-  index('idx_api_keys_hash').on(table.keyHash).where(sql`revoked_at IS NULL`),
+  uniqueIndex('idx_api_keys_hash').on(table.keyHash).where(sql`revoked_at IS NULL`),
 ]);

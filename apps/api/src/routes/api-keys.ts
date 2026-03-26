@@ -12,7 +12,8 @@ import {
   listResponse,
   jsonContent,
 } from '../schemas/responses.js';
-import { DEFAULT_API_KEY_SCOPES } from '@spatula/shared';
+import { DEFAULT_API_KEY_SCOPES, StorageError, ForbiddenError } from '@spatula/shared';
+import { NotFoundError } from '../middleware/error-handler.js';
 
 function generateApiKey(): { raw: string; hash: string; prefix: string } {
   const random = randomBytes(24).toString('base64url');
@@ -79,6 +80,16 @@ export function apiKeyRoutes() {
 
     const { raw, hash, prefix } = generateApiKey();
     const scopes = body.scopes ?? [...DEFAULT_API_KEY_SCOPES];
+
+    // Prevent privilege escalation: requested scopes must be subset of caller's scopes
+    const callerScopes = c.get('auth').scopes;
+    if (!callerScopes.includes('admin')) {
+      const invalidScopes = scopes.filter((s: string) => !callerScopes.includes(s));
+      if (invalidScopes.length > 0) {
+        throw new ForbiddenError(`Cannot grant scopes you don't have: ${invalidScopes.join(', ')}`);
+      }
+    }
+
     const expiresAt = body.expiresAt ? new Date(body.expiresAt) : undefined;
 
     const key = await deps.apiKeyRepo.create({
@@ -131,7 +142,14 @@ export function apiKeyRoutes() {
     const tenantId = c.get('tenantId');
     const { id } = c.req.valid('param');
 
-    await deps.apiKeyRepo.revoke(id, tenantId);
+    try {
+      await deps.apiKeyRepo.revoke(id, tenantId);
+    } catch (error) {
+      if (error instanceof StorageError && error.message.includes('not found')) {
+        throw new NotFoundError('API key', id);
+      }
+      throw error;
+    }
     return c.json({ data: { id, revoked: true } });
   });
 

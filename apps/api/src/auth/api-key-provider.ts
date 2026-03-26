@@ -17,6 +17,9 @@ export class ApiKeyAuthProvider implements AuthProvider {
     }
 
     const token = authHeader.slice(7);
+    if (!token) {
+      throw new AuthError('Bearer token is empty');
+    }
     const keyHash = createHash('sha256').update(token).digest('hex');
 
     const apiKey = await this.apiKeyRepo.findByHash(keyHash);

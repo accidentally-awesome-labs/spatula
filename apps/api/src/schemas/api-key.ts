@@ -1,9 +1,10 @@
 import { z } from '@hono/zod-openapi';
+import { AUTH_SCOPES } from '@spatula/shared';
 
 export const createApiKeySchema = z.object({
   name: z.string().min(1).max(255).openapi({ example: 'Production Key' }),
   scopes: z
-    .array(z.string())
+    .array(z.enum(AUTH_SCOPES))
     .optional()
     .openapi({ example: ['jobs:read', 'jobs:write'] }),
   expiresAt: z.string().datetime().optional().openapi({

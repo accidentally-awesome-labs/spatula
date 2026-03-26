@@ -18,13 +18,16 @@ import { exportRoutes } from './routes/exports.js';
 import { tenantRoutes } from './routes/tenants.js';
 import { adminDlqRoutes } from './routes/admin-dlq.js';
 import { apiKeyRoutes } from './routes/api-keys.js';
-import { NoAuthProvider } from './auth/no-auth-provider.js';
+import { createAuthProvider } from './auth/factory.js';
 import type { AppDeps } from './types.js';
 import { getEnvOrDefault } from '@spatula/shared';
 
 export function createApp(deps: AppDeps) {
   const app = createOpenAPIRouter();
-  const authProvider = deps.authProvider ?? new NoAuthProvider();
+  const authStrategy = getEnvOrDefault('AUTH_STRATEGY', 'none');
+  const authProvider = deps.authProvider ?? createAuthProvider(authStrategy, {
+    apiKeyRepo: deps.apiKeyRepo!,
+  });
 
   // Global middleware chain (order matters)
   app.use('*', requestContextMiddleware);
@@ -69,6 +72,8 @@ export function createApp(deps: AppDeps) {
   app.use('/api/*', validateTenantMiddleware);
 
   // Tenant management routes (auth skipped by authMiddleware prefix check)
+  // TODO(Wave 3-1b): Add admin-only or shared-secret protection for tenant creation
+  // in production. Currently open for bootstrap — acceptable for dev/self-hosted.
   app.route('/api/v1/tenants', tenantRoutes());
 
   // API key management routes

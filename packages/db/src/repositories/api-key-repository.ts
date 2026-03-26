@@ -74,7 +74,7 @@ export class ApiKeyRepository {
 
   async listByTenant(tenantId: string) {
     try {
-      return this.db
+      return await this.db
         .select({
           id: apiKeys.id,
           keyPrefix: apiKeys.keyPrefix,
