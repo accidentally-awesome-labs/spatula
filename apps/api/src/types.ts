@@ -9,6 +9,7 @@ import type {
   ExportRepository,
   TenantRepository,
   DlqRepository,
+  ApiKeyRepository,
 } from '@spatula/db';
 import type { ContentStore, ReviewQueue } from '@spatula/core';
 import type { JobManager, ExportJobPayload, SpatulaQueues } from '@spatula/queue';
@@ -32,6 +33,7 @@ export interface AppDeps {
   redisSubscriber?: Redis;
   tenantRepo?: TenantRepository;
   dlqRepo?: DlqRepository;
+  apiKeyRepo?: ApiKeyRepository;
   queues?: SpatulaQueues;
 }
 
