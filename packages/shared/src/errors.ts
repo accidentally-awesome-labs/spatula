@@ -97,3 +97,17 @@ export class StateError extends SpatulaError {
     this.name = 'StateError';
   }
 }
+
+export class AuthError extends SpatulaError {
+  constructor(message: string, options?: SpatulaErrorOptions) {
+    super(message, 'AUTH_ERROR', options);
+    this.name = 'AuthError';
+  }
+}
+
+export class ForbiddenError extends SpatulaError {
+  constructor(message: string, options?: SpatulaErrorOptions) {
+    super(message, 'FORBIDDEN', options);
+    this.name = 'ForbiddenError';
+  }
+}

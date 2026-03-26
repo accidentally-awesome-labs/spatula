@@ -24,6 +24,10 @@ function mapErrorToStatus(error: unknown): number {
     switch (error.code) {
       case 'VALIDATION_ERROR':
         return 400;
+      case 'AUTH_ERROR':
+        return 401;
+      case 'FORBIDDEN':
+        return 403;
       case 'NOT_FOUND':
         return 404;
       case 'CONFLICT':
