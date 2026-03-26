@@ -13,7 +13,8 @@ import type {
 } from '@spatula/db';
 import type { ContentStore, ReviewQueue } from '@spatula/core';
 import type { JobManager, ExportJobPayload, SpatulaQueues } from '@spatula/queue';
-import type { AuthProvider, AuthResult } from '@spatula/shared';
+import type { AuthProvider, AuthResult, AuditLogger } from '@spatula/shared';
+import type { AuditLogRepository } from '@spatula/db';
 import type Redis from 'ioredis';
 import type { Pool } from 'pg';
 
@@ -38,6 +39,8 @@ export interface AppDeps {
   authProvider?: AuthProvider;
   queues?: SpatulaQueues;
   redis?: Redis;  // Shared ioredis client for rate limiting, WS tokens, etc.
+  auditLogger?: AuditLogger;
+  auditLogRepo?: AuditLogRepository;
 }
 
 export interface AppEnv {

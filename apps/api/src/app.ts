@@ -18,6 +18,8 @@ import { exportRoutes } from './routes/exports.js';
 import { tenantRoutes } from './routes/tenants.js';
 import { adminDlqRoutes } from './routes/admin-dlq.js';
 import { apiKeyRoutes } from './routes/api-keys.js';
+import { rateLimitMiddleware } from './middleware/rate-limit.js';
+import { wsTokenRoutes } from './routes/ws-token.js';
 import { createAuthProvider } from './auth/factory.js';
 import type { AppDeps } from './types.js';
 import { getEnvOrDefault } from '@spatula/shared';
@@ -76,6 +78,25 @@ export function createApp(deps: AppDeps) {
   app.use('/api/*', depsMiddleware(deps));
   app.use('/api/*', validateTenantMiddleware);
 
+  // Load tenant quotas for rate limiting
+  app.use('/api/*', async (c, next) => {
+    const tenantId = c.get('tenantId');
+    if (tenantId && deps.tenantRepo) {
+      try {
+        const quotas = await deps.tenantRepo.getQuotas(tenantId);
+        c.set('rateLimitTier', (quotas as any).rateLimitTier ?? 'free');
+      } catch {
+        c.set('rateLimitTier', 'free');
+      }
+    }
+    return next();
+  });
+
+  // Rate limiting (after auth + quota loading)
+  if (deps.redis) {
+    app.use('/api/*', rateLimitMiddleware(deps.redis));
+  }
+
   // Tenant management routes (auth skipped by authMiddleware prefix check)
   // TODO(Wave 3-1b): Add admin-only or shared-secret protection for tenant creation
   // in production. Currently open for bootstrap — acceptable for dev/self-hosted.
@@ -85,6 +106,11 @@ export function createApp(deps: AppDeps) {
   app.use('/api/v1/api-keys', requireScope('keys:manage'));
   app.use('/api/v1/api-keys/*', requireScope('keys:manage'));
   app.route('/api/v1/api-keys', apiKeyRoutes());
+
+  // WebSocket token endpoint
+  if (deps.redis) {
+    app.route('/api/v1/ws-token', wsTokenRoutes());
+  }
 
   // API v1 routes with per-method scope enforcement
   app.get('/api/v1/jobs', requireScope('jobs:read'));
