@@ -751,7 +751,25 @@ Add field + constructor assignment. Then in `startJob()`, before the state trans
     }
 ```
 
-- [ ] **Step 2: Make export entity limit configurable**
+- [ ] **Step 2: Wire tenant `maxPagesPerJob` into crawl worker page budget**
+
+The existing `PageBudget` interface (`packages/core/src/crawlers/page-budget.ts`) is initialized with `maxPages` from `JobConfig.crawl.maxPages`. The tenant quota `maxPagesPerJob` should cap this value.
+
+In `packages/queue/src/worker-entrypoint.ts` (or wherever `PageBudget` is constructed for crawl workers), the page budget initialization should use:
+
+```typescript
+const tenantQuotaMaxPages = tenantRepo
+  ? ((await tenantRepo.getQuotas(tenantId)) as any).maxPagesPerJob ?? Infinity
+  : Infinity;
+const effectiveMaxPages = Math.min(jobConfig.crawl.maxPages, tenantQuotaMaxPages);
+const pageBudget = new InMemoryPageBudget(effectiveMaxPages);
+```
+
+Read `packages/queue/src/worker-entrypoint.ts` first to understand where worker deps are constructed and where `pageBudget` is set up. The `PageBudget` is passed through `WorkerDepsConfig.pageBudget`. The tenant repo needs to be accessible at this point.
+
+If the page budget is constructed at worker startup (shared across all jobs), rather than per-job, the per-tenant quota check should happen in the crawl orchestrator instead, right before the `pageBudget.tryIncrement()` call. Read the crawl orchestrator to determine the best insertion point.
+
+- [ ] **Step 3: Make export entity limit configurable**
 
 In `packages/core/src/pipeline/export-orchestrator.ts`, find the `MAX_EXPORT_ENTITIES` constant and the validation check. Change the validation to accept a configurable limit:
 
@@ -1226,11 +1244,74 @@ Read `apps/api/src/server.ts`. Replace the WebSocket tenant extraction logic to 
 import { createLogger, loadConfig, getEnvOrDefault } from '@spatula/shared';
 ```
 
-Replace the WS `onOpen` handler to branch on auth strategy:
-- `AUTH_STRATEGY=none`: keep legacy `x-tenant-id` header / `?tenantId=` query param
-- Otherwise: require `?token=` param, validate against Redis (get + delete for single-use), extract tenantId
+Replace the entire `onOpen` handler body inside the `upgradeWebSocket` callback with:
 
-See the full implementation in the plan body above (Task 8, Step 4 from the detailed plan).
+```typescript
+        return {
+          async onOpen(_evt, ws) {
+            const authStrategy = getEnvOrDefault('AUTH_STRATEGY', 'none');
+            let tenantId: string;
+
+            if (authStrategy === 'none') {
+              // Legacy: accept x-tenant-id header or ?tenantId= query param
+              tenantId =
+                c.req.header('x-tenant-id') ??
+                new URL(c.req.url).searchParams.get('tenantId') ??
+                '';
+              if (!tenantId || !UUID_REGEX.test(tenantId)) {
+                ws.close(4001, 'tenantId required (via x-tenant-id header or ?tenantId= query param)');
+                return;
+              }
+            } else {
+              // Token-based: validate ?token= against Redis
+              const token = new URL(c.req.url).searchParams.get('token');
+              if (!token) {
+                ws.close(4001, 'WebSocket token required (use POST /api/v1/ws-token)');
+                return;
+              }
+              if (!deps.redis) {
+                ws.close(4500, 'Redis not available for token validation');
+                return;
+              }
+              const key = `ws-token:${token}`;
+              const value = await deps.redis.get(key);
+              if (!value) {
+                ws.close(4001, 'Invalid or expired WebSocket token');
+                return;
+              }
+              // Delete token (single-use)
+              await deps.redis.del(key);
+              try {
+                const parsed = JSON.parse(value);
+                tenantId = parsed.tenantId;
+              } catch {
+                ws.close(4500, 'Corrupted token data');
+                return;
+              }
+            }
+
+            // Validate tenant owns this job
+            try {
+              const job = await deps.jobRepo.findById(jobId, tenantId);
+              if (!job) {
+                ws.close(4004, 'Job not found for tenant');
+                return;
+              }
+            } catch (err) {
+              logger.warn({ jobId, tenantId, err }, 'WS auth check failed');
+              ws.close(4500, 'Internal error');
+              return;
+            }
+
+            void progressManager!.addClient(jobId, tenantId, ws.raw as any);
+          },
+          onClose(_evt, ws) {
+            void progressManager!.removeClient(jobId, ws.raw as any);
+          },
+        };
+```
+
+The `deps.redis` field is already available since `AppDeps` has `redis?: Redis` (added in Task 1).
 
 - [ ] **Step 4: Run tests**
 
@@ -1321,7 +1402,110 @@ git commit -m "feat(api): wire rate limiting, ws-token route, and quota loading 
 
 ---
 
-## Task 10: Integration Verification
+## Task 10: Wire Audit Event Emission
+
+**Files:**
+- Modify: `apps/api/src/middleware/auth.ts`
+- Modify: `apps/api/src/routes/api-keys.ts`
+- Modify: `apps/api/src/routes/jobs.ts` (if job lifecycle routes exist)
+
+The AuditLogger service is built (Task 7) and available in `AppDeps` (Task 9), but no code calls `auditLogger.log()`. This task wires audit events into the actual route handlers and auth middleware.
+
+- [ ] **Step 1: Add audit logging to auth middleware**
+
+In `apps/api/src/middleware/auth.ts`, add an optional `auditLogger` parameter and log auth success/failure events. The simplest approach: create a wrapper function that accepts both provider and auditLogger:
+
+After a successful `provider.authenticate()`, log:
+```typescript
+    if (auditLogger) {
+      auditLogger.log({
+        tenantId: result.tenantId,
+        actorId: result.userId,
+        actorType: result.userId === 'anonymous' ? 'system' : 'api_key',
+        action: 'auth.login_success',
+        ipAddress: c.req.header('x-forwarded-for') ?? c.req.header('x-real-ip'),
+      });
+    }
+```
+
+On auth failure (wrap the authenticate call in try/catch):
+```typescript
+    } catch (error) {
+      if (auditLogger) {
+        auditLogger.log({
+          actorId: 'unknown',
+          actorType: 'system',
+          action: 'auth.login_failure',
+          metadata: { error: (error as Error).message },
+          ipAddress: c.req.header('x-forwarded-for') ?? c.req.header('x-real-ip'),
+        });
+      }
+      throw error;
+    }
+```
+
+Update the `authMiddleware` function signature to accept an optional second parameter:
+```typescript
+export function authMiddleware(provider: AuthProvider, auditLogger?: AuditLogger): MiddlewareHandler {
+```
+
+Update `app.ts` to pass `deps.auditLogger` as the second argument.
+
+- [ ] **Step 2: Add audit logging to API key routes**
+
+In `apps/api/src/routes/api-keys.ts`, after successful key creation:
+```typescript
+    if (deps.auditLogger) {
+      deps.auditLogger.log({
+        tenantId,
+        actorId: c.get('auth').userId,
+        actorType: 'api_key',
+        action: 'api_key.created',
+        resourceType: 'api_key',
+        resourceId: key.id,
+      });
+    }
+```
+
+After successful key revocation:
+```typescript
+    if (deps.auditLogger) {
+      deps.auditLogger.log({
+        tenantId,
+        actorId: c.get('auth').userId,
+        actorType: 'api_key',
+        action: 'api_key.revoked',
+        resourceType: 'api_key',
+        resourceId: id,
+      });
+    }
+```
+
+- [ ] **Step 3: Add audit logging to job routes (key operations only)**
+
+In `apps/api/src/routes/jobs.ts`, add audit events for job creation and status changes. Read the file first to identify the create and start/pause/cancel handlers. Add `auditLogger.log()` calls for:
+- `job.created` — after `jobManager.createJob()`
+- `job.started` — after `jobManager.startJob()`
+- `job.cancelled` — after `jobManager.cancelJob()`
+
+Follow the same pattern: check `if (deps.auditLogger)`, then fire-and-forget.
+
+- [ ] **Step 4: Run all tests**
+
+Run: `pnpm --filter @spatula/api test`
+
+Existing tests should pass — audit logging is fire-and-forget and `deps.auditLogger` is optional (undefined in test mocks = no logging).
+
+- [ ] **Step 5: Commit**
+
+```bash
+git add apps/api/src/middleware/auth.ts apps/api/src/routes/api-keys.ts apps/api/src/routes/jobs.ts apps/api/src/app.ts
+git commit -m "feat(api): wire audit event emission into auth middleware and route handlers"
+```
+
+---
+
+## Task 11: Integration Verification
 
 - [ ] **Step 1: Run full test suite**
 
