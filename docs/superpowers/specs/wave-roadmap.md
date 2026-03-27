@@ -215,7 +215,7 @@ Wire orchestrators + SQLite + config into a working local crawl.
 |----------|-------|--------|
 | 3-1a | Auth Core (AuthProvider, API keys, scopes, security headers, CORS) | **Complete** |
 | 3-1b | Auth Advanced (JWT, rate limiting, quotas, WS auth, audit log) | **Complete** |
-| 3-2 | Observability (OTel, tracing, Sentry, LLM cost, health, Bull Board) | Pending |
+| 3-2 | Observability (OTel, tracing, Sentry, LLM cost, health, Bull Board) | **Complete** |
 | 3-3a | Performance: Storage & Exports (S3, streaming, entity cursor) | Pending |
 | 3-3b | Performance: Query & Caching (indexes, cursor pagination, Redis cache) | Pending |
 | 3-4 | Deferred D/F (idempotency, worker health, quality API, export filtering) | Pending |
