@@ -25,3 +25,5 @@ export { ApiKeyRepository } from './api-key-repository.js';
 export type { CreateApiKeyInput } from './api-key-repository.js';
 export { AuditLogRepository } from './audit-log-repository.js';
 export type { AuditLogEntry } from './audit-log-repository.js';
+export { LlmUsageRepository } from './llm-usage-repository.js';
+export type { LlmUsageInput, UsageAggregation } from './llm-usage-repository.js';

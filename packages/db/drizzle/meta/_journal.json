@@ -43,6 +43,13 @@
       "when": 1774569114876,
       "tag": "0005_talented_triathlon",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1774574659221,
+      "tag": "0006_spicy_human_robot",
+      "breakpoints": true
     }
   ]
 }
