@@ -385,7 +385,49 @@ git commit -m "feat(api): add request timing middleware with OTel metrics"
 cd /Users/salar/Projects/spatula && pnpm --filter @spatula/shared add @sentry/node
 ```
 
-- [ ] **Step 2: Implement Sentry module**
+- [ ] **Step 2: Write test for Sentry opt-in/opt-out**
+
+```typescript
+// packages/shared/tests/unit/sentry.test.ts
+import { describe, it, expect, vi, beforeEach } from 'vitest';
+
+// Mock @sentry/node before importing
+vi.mock('@sentry/node', () => ({
+  init: vi.fn(),
+  captureException: vi.fn(),
+  withScope: vi.fn((cb) => cb({ setExtra: vi.fn() })),
+}));
+
+import { initSentry, captureException } from '../../src/sentry.js';
+import * as Sentry from '@sentry/node';
+
+describe('sentry', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    delete process.env.SENTRY_DSN;
+  });
+
+  it('does nothing when DSN is not set', () => {
+    initSentry();
+    expect(Sentry.init).not.toHaveBeenCalled();
+  });
+
+  it('initializes when DSN is provided', () => {
+    initSentry({ dsn: 'https://test@sentry.io/123' });
+    expect(Sentry.init).toHaveBeenCalledWith(
+      expect.objectContaining({ dsn: 'https://test@sentry.io/123' }),
+    );
+  });
+
+  it('captureException calls Sentry.captureException', () => {
+    const error = new Error('test');
+    captureException(error);
+    expect(Sentry.captureException).toHaveBeenCalledWith(error);
+  });
+});
+```
+
+- [ ] **Step 3: Implement Sentry module**
 
 ```typescript
 // packages/shared/src/sentry.ts
@@ -462,7 +504,7 @@ cd /Users/salar/Projects/spatula && pnpm --filter @spatula/shared build && pnpm 
 - [ ] **Step 6: Commit**
 
 ```bash
-git add packages/shared/src/sentry.ts packages/shared/src/index.ts packages/shared/package.json pnpm-lock.yaml apps/api/src/middleware/error-handler.ts
+git add packages/shared/src/sentry.ts packages/shared/src/index.ts packages/shared/tests/unit/sentry.test.ts packages/shared/package.json pnpm-lock.yaml apps/api/src/middleware/error-handler.ts
 git commit -m "feat(shared): add Sentry integration with error capture for 5xx responses"
 ```
 
@@ -1081,7 +1123,26 @@ git commit -m "feat(api): add Bull Board queue dashboard at /api/admin/queues"
 cd /Users/salar/Projects/spatula && pnpm --filter @spatula/shared add @opentelemetry/sdk-trace-node @opentelemetry/auto-instrumentations-node @opentelemetry/exporter-trace-otlp-http @opentelemetry/resources @opentelemetry/semantic-conventions
 ```
 
-- [ ] **Step 2: Implement tracing module**
+- [ ] **Step 2: Write tracing tests**
+
+```typescript
+// packages/shared/tests/unit/tracing.test.ts
+import { describe, it, expect } from 'vitest';
+import { initTracing, shutdownTracing } from '../../src/tracing.js';
+
+describe('tracing', () => {
+  it('returns without error when no endpoint is configured', () => {
+    delete process.env.OTEL_EXPORTER_ENDPOINT;
+    expect(() => initTracing()).not.toThrow();
+  });
+
+  it('shutdownTracing is safe to call without prior init', async () => {
+    await expect(shutdownTracing()).resolves.not.toThrow();
+  });
+});
+```
+
+- [ ] **Step 3: Implement tracing module**
 
 ```typescript
 // packages/shared/src/tracing.ts
@@ -1156,7 +1217,7 @@ cd /Users/salar/Projects/spatula && pnpm --filter @spatula/shared build
 - [ ] **Step 5: Commit**
 
 ```bash
-git add packages/shared/src/tracing.ts packages/shared/src/index.ts packages/shared/package.json pnpm-lock.yaml
+git add packages/shared/src/tracing.ts packages/shared/src/index.ts packages/shared/tests/unit/tracing.test.ts packages/shared/package.json pnpm-lock.yaml
 git commit -m "feat(shared): add distributed tracing with OTel NodeTracerProvider"
 ```
 
@@ -1174,7 +1235,32 @@ git commit -m "feat(shared): add distributed tracing with OTel NodeTracerProvide
 cd /Users/salar/Projects/spatula && pnpm --filter @spatula/queue add @opentelemetry/api
 ```
 
-- [ ] **Step 2: Implement trace context helpers**
+- [ ] **Step 2: Write trace context tests**
+
+```typescript
+// packages/queue/tests/unit/trace-context.test.ts
+import { describe, it, expect } from 'vitest';
+import { injectTraceContext, extractTraceContext } from '../../src/trace-context.js';
+
+describe('trace context', () => {
+  it('injectTraceContext returns data unchanged when no active trace', () => {
+    const data = { jobId: 'j1', tenantId: 't1' };
+    const result = injectTraceContext(data);
+    expect(result.jobId).toBe('j1');
+    expect(result.tenantId).toBe('t1');
+    // No _traceContext added when there is no active span
+  });
+
+  it('extractTraceContext returns no-op cleanup when _traceContext is absent', () => {
+    const data = { jobId: 'j1' };
+    const { cleanup } = extractTraceContext(data, 'test-span');
+    expect(cleanup).toBeTypeOf('function');
+    expect(() => cleanup()).not.toThrow();
+  });
+});
+```
+
+- [ ] **Step 3: Implement trace context helpers**
 
 ```typescript
 // packages/queue/src/trace-context.ts
@@ -1235,7 +1321,7 @@ cd /Users/salar/Projects/spatula && pnpm --filter @spatula/queue build
 - [ ] **Step 5: Commit**
 
 ```bash
-git add packages/queue/src/trace-context.ts packages/queue/src/index.ts packages/queue/package.json pnpm-lock.yaml
+git add packages/queue/src/trace-context.ts packages/queue/src/index.ts packages/queue/tests/unit/trace-context.test.ts packages/queue/package.json pnpm-lock.yaml
 git commit -m "feat(queue): add BullMQ trace context propagation helpers"
 ```
 
@@ -1369,6 +1455,7 @@ git commit -m "feat(core): instrument OpenRouterClient with usage recording call
 ## Task 12: Wire Everything into App
 
 **Files:**
+- Create: `apps/api/src/services/usage-recorder.ts`
 - Modify: `apps/api/src/types.ts`
 - Modify: `apps/api/src/app.ts`
 
@@ -1386,7 +1473,113 @@ Add to `AppDeps`:
   metrics?: SpatulaMetrics;
 ```
 
-- [ ] **Step 2: Update app.ts**
+- [ ] **Step 2: Create UsageRecorder implementation**
+
+This is the concrete glue that connects `OpenRouterClient` to both the database and Prometheus counters. Without it, LLM usage tracking produces no data.
+
+```typescript
+// apps/api/src/services/usage-recorder.ts
+import type { LLMUsageRecorder, LLMUsageRecord } from '@spatula/core';
+import type { LlmUsageRepository } from '@spatula/db';
+import type { SpatulaMetrics } from '@spatula/shared';
+import { createLogger } from '@spatula/shared';
+
+const logger = createLogger('usage-recorder');
+
+/**
+ * Bridges OpenRouterClient usage events to both:
+ * 1. LlmUsageRepository (Postgres persistence)
+ * 2. SpatulaMetrics (Prometheus counters)
+ *
+ * All writes are fire-and-forget — usage recording must never
+ * block or fail the LLM call.
+ */
+export class DefaultUsageRecorder implements LLMUsageRecorder {
+  constructor(
+    private readonly tenantId: string,
+    private readonly jobId: string | undefined,
+    private readonly repo?: LlmUsageRepository,
+    private readonly metrics?: SpatulaMetrics,
+  ) {}
+
+  record(usage: LLMUsageRecord): void {
+    const attrs = { tenantId: this.tenantId, jobId: this.jobId ?? 'unknown', model: usage.model };
+
+    // Prometheus counters (immediate, in-process)
+    if (this.metrics) {
+      this.metrics.llmTokensUsed.add(usage.totalTokens, attrs);
+      this.metrics.llmCostUsd.add(usage.costUsd, attrs);
+      this.metrics.llmRequestDuration.record(usage.durationMs, attrs);
+    }
+
+    // Database persistence (fire-and-forget)
+    if (this.repo) {
+      this.repo.insert({
+        tenantId: this.tenantId,
+        jobId: this.jobId,
+        model: usage.model,
+        promptTokens: usage.promptTokens,
+        completionTokens: usage.completionTokens,
+        totalTokens: usage.totalTokens,
+        costUsd: usage.costUsd.toFixed(6),
+        purpose: usage.purpose ?? 'unknown',
+      }).catch((err) => {
+        logger.warn({ err, model: usage.model }, 'Failed to record LLM usage');
+      });
+    }
+  }
+}
+```
+
+**Note:** The `DefaultUsageRecorder` is scoped per tenant+job. It's constructed when building worker deps or in the orchestrator setup, not in `app.ts`. The wiring happens at the point where `OpenRouterClient` is constructed — typically in the worker entry point or orchestrator deps. For now, create the class and export it. The actual connection to `OpenRouterClient.setUsageRecorder()` depends on where the LLM client is instantiated in the codebase.
+
+- [ ] **Step 3: Register observable gauges for queue_depth, active_jobs, tenant_count**
+
+In `app.ts`, after creating the app, register the 3 observable gauges that need repo/queue callbacks. These complete the 19-metric spec:
+
+```typescript
+  // Register observable gauges (need repo/queue access for callbacks)
+  if (deps.metrics) {
+    const meter = (deps.metrics as any)._meter; // Internal — or pass meter through SpatulaMetrics
+    // Alternative: export the meter from createMetrics() and use it here
+  }
+```
+
+**Simpler approach:** Add a `registerObservableGauges()` function to `packages/shared/src/metrics.ts` that accepts the repos/queues and registers the 3 gauges:
+
+```typescript
+export function registerObservableGauges(
+  meter: Meter,
+  deps: {
+    jobRepo?: { countByTenant: (tenantId: string, options?: any) => Promise<number> };
+    tenantRepo?: { findAll?: () => Promise<unknown[]> };
+    queues?: { crawl?: { getJobCounts: () => Promise<Record<string, number>> } };
+  },
+): void {
+  // These are sampled periodically by the Prometheus exporter
+  if (deps.queues?.crawl) {
+    meter.createObservableGauge('queue_depth', {
+      description: 'Current queue depth',
+    }).addCallback(async (result) => {
+      try {
+        const counts = await deps.queues!.crawl!.getJobCounts();
+        result.observe(counts.waiting ?? 0, { queue: 'crawl' });
+      } catch { /* skip */ }
+    });
+  }
+}
+```
+
+**Pragmatic decision:** Observable gauges require async callbacks which have complex lifecycle concerns with the OTel SDK. For the initial implementation, defer the 3 observable gauges to a follow-up and document this as a known limitation. The 16 push-based metrics cover the core monitoring needs. Add a TODO comment in `metrics.ts`:
+
+```typescript
+// TODO: Register observable gauges for queue_depth, active_jobs, tenant_count
+// These need access to JobRepository, TenantRepository, and Queue objects
+// which are not available at metrics creation time. Wire via registerObservableGauges()
+// when the app startup sequence is formalized.
+```
+
+- [ ] **Step 4: Update app.ts**
 
 Add imports:
 ```typescript
@@ -1396,19 +1589,18 @@ import { healthRoutes } from './routes/health.js';
 import { createQueueDashboard } from './routes/admin-queues.js';
 ```
 
-Add timing middleware FIRST in the chain (before security headers), so it captures full request duration:
+Add timing middleware after `requestContextMiddleware` and before `honoLogger()` (per decomposition spec section 5.1 middleware chain order):
 ```typescript
-  // Timing middleware (first — captures full request duration including auth)
-  app.use('*', timingMiddleware(deps.metrics ?? null));
+  app.use('*', requestContextMiddleware);
+  app.use('*', timingMiddleware(deps.metrics ?? null));  // NEW — after requestContext, before logger
+  app.use('*', honoLogger());
 ```
 
-Replace the existing basic `/health` route with the health routes:
+Add health routes (keep existing `/health` for backward compat):
 ```typescript
-  // Health checks (no auth)
+  // Health checks (no auth — these paths are in SKIP_AUTH_PATHS)
   app.route('', healthRoutes({ dbPool: deps.dbPool, redis: deps.redis, queues: deps.queues }));
 ```
-
-Keep the existing `/health` endpoint for backward compatibility, OR remove it and let `healthRoutes` handle `/health/live` and `/health/ready`. The existing `/health` should remain as-is for backward compat.
 
 Add usage route after other API routes:
 ```typescript
@@ -1419,13 +1611,13 @@ Add usage route after other API routes:
 
 Add Bull Board conditionally:
 ```typescript
-  // Queue dashboard (requires admin scope — enforced by /api/v1/admin/* middleware)
+  // Queue dashboard (admin scope enforced by /api/v1/admin/* middleware)
   if (deps.queues) {
     app.route('', createQueueDashboard(deps.queues));
   }
 ```
 
-- [ ] **Step 3: Run ALL tests**
+- [ ] **Step 5: Run ALL tests**
 
 ```bash
 cd /Users/salar/Projects/spatula && pnpm --filter @spatula/api test
@@ -1433,11 +1625,11 @@ cd /Users/salar/Projects/spatula && pnpm --filter @spatula/api test
 
 All tests must pass.
 
-- [ ] **Step 4: Commit**
+- [ ] **Step 6: Commit**
 
 ```bash
-git add apps/api/src/types.ts apps/api/src/app.ts
-git commit -m "feat(api): wire observability — timing, health checks, usage API, Bull Board"
+git add apps/api/src/types.ts apps/api/src/app.ts apps/api/src/services/usage-recorder.ts
+git commit -m "feat(api): wire observability — timing, health checks, usage API, Bull Board, usage recorder"
 ```
 
 ---
