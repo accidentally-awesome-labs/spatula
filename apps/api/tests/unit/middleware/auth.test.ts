@@ -1,11 +1,11 @@
 import { describe, it, expect, vi } from 'vitest';
 import { Hono } from 'hono';
 import { authMiddleware } from '../../../src/middleware/auth.js';
-import type { AuthProvider } from '@spatula/shared';
+import type { AuthProvider, AuditLogger } from '@spatula/shared';
 
-function createTestApp(provider: AuthProvider) {
+function createTestApp(provider: AuthProvider, auditLogger?: AuditLogger) {
   const app = new Hono();
-  app.use('*', authMiddleware(provider));
+  app.use('*', authMiddleware(provider, auditLogger));
   app.get('/api/v1/test', (c) => {
     return c.json({
       tenantId: c.get('tenantId'),
@@ -105,5 +105,78 @@ describe('authMiddleware', () => {
     });
     const res = await app.request('/api/v1/test');
     expect(res.status).toBe(401);
+  });
+
+  describe('audit logging', () => {
+    it('calls auditLogger.log with auth.login_success on successful auth', async () => {
+      const provider: AuthProvider = {
+        authenticate: vi.fn().mockResolvedValue({
+          tenantId: 'tenant-1',
+          userId: 'user-1',
+          scopes: ['jobs:read'],
+        }),
+      };
+      const auditLogger = { log: vi.fn() } as unknown as AuditLogger;
+      const app = createTestApp(provider, auditLogger);
+
+      await app.request('/api/v1/test', {
+        headers: { authorization: 'Bearer test-token' },
+      });
+
+      expect(auditLogger.log).toHaveBeenCalledWith(
+        expect.objectContaining({
+          tenantId: 'tenant-1',
+          actorId: 'user-1',
+          action: 'auth.login_success',
+        }),
+      );
+    });
+
+    it('calls auditLogger.log with auth.login_failure on auth error', async () => {
+      const { AuthError } = await import('@spatula/shared');
+      const provider: AuthProvider = {
+        authenticate: vi.fn().mockRejectedValue(new AuthError('invalid key')),
+      };
+      const auditLogger = { log: vi.fn() } as unknown as AuditLogger;
+      const app = createTestApp(provider, auditLogger);
+      app.onError((err, c) => c.json({ error: 'fail' }, 401));
+
+      await app.request('/api/v1/test');
+
+      expect(auditLogger.log).toHaveBeenCalledWith(
+        expect.objectContaining({
+          actorId: 'unknown',
+          action: 'auth.login_failure',
+          metadata: expect.objectContaining({
+            error: 'invalid key',
+          }),
+        }),
+      );
+    });
+
+    it('extracts IP address from x-forwarded-for header (first IP only)', async () => {
+      const provider: AuthProvider = {
+        authenticate: vi.fn().mockResolvedValue({
+          tenantId: 'tenant-1',
+          userId: 'user-1',
+          scopes: ['jobs:read'],
+        }),
+      };
+      const auditLogger = { log: vi.fn() } as unknown as AuditLogger;
+      const app = createTestApp(provider, auditLogger);
+
+      await app.request('/api/v1/test', {
+        headers: {
+          authorization: 'Bearer test-token',
+          'x-forwarded-for': '192.168.1.1, 10.0.0.1',
+        },
+      });
+
+      expect(auditLogger.log).toHaveBeenCalledWith(
+        expect.objectContaining({
+          ipAddress: '192.168.1.1',
+        }),
+      );
+    });
   });
 });

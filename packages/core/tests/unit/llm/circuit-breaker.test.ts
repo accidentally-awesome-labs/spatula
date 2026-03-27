@@ -231,4 +231,95 @@ describe('CircuitBreakerLLMClient', () => {
       expect(breaker.state).toBe('open');
     });
   });
+
+  describe('metrics emission', () => {
+    function createMockMetrics() {
+      return {
+        circuitBreakerState: { add: vi.fn() },
+        circuitBreakerRejectionsTotal: { add: vi.fn() },
+        // Stubs for other required SpatulaMetrics fields
+        httpRequestDuration: { record: vi.fn() },
+        httpRequestsTotal: { add: vi.fn() },
+        httpActiveConnections: { add: vi.fn() },
+        queueJobDuration: { record: vi.fn() },
+        queueJobsTotal: { add: vi.fn() },
+        llmTokensUsed: { add: vi.fn() },
+        llmRequestDuration: { record: vi.fn() },
+        llmCostUsd: { add: vi.fn() },
+        pagesProcessedTotal: { add: vi.fn() },
+        pageCrawlDuration: { record: vi.fn() },
+        entitiesCreatedTotal: { add: vi.fn() },
+        exportSizeBytes: { record: vi.fn() },
+      } as any;
+    }
+
+    it('emits circuitBreakerState open metric when circuit opens', async () => {
+      const inner = createMockClient();
+      (inner.complete as any).mockRejectedValue(new Error('down'));
+      const metrics = createMockMetrics();
+      const breaker = new CircuitBreakerLLMClient(inner, { failureThreshold: 2 });
+      breaker.setMetrics(metrics);
+
+      // Trip the breaker
+      await expect(breaker.complete(defaultRequest)).rejects.toThrow();
+      await expect(breaker.complete(defaultRequest)).rejects.toThrow();
+      expect(breaker.state).toBe('open');
+
+      expect(metrics.circuitBreakerState.add).toHaveBeenCalledWith(1, { state: 'open' });
+    });
+
+    it('emits circuitBreakerRejectionsTotal when request is rejected (circuit open)', async () => {
+      const inner = createMockClient();
+      (inner.complete as any).mockRejectedValue(new Error('down'));
+      const metrics = createMockMetrics();
+      const breaker = new CircuitBreakerLLMClient(inner, {
+        failureThreshold: 2,
+        resetTimeoutMs: 60_000,
+      });
+      breaker.setMetrics(metrics);
+
+      // Trip the breaker
+      await expect(breaker.complete(defaultRequest)).rejects.toThrow();
+      await expect(breaker.complete(defaultRequest)).rejects.toThrow();
+      expect(breaker.state).toBe('open');
+
+      // Next call is rejected by circuit breaker
+      await expect(breaker.complete(defaultRequest)).rejects.toThrow('Circuit breaker open');
+      expect(metrics.circuitBreakerRejectionsTotal.add).toHaveBeenCalledWith(1);
+    });
+
+    it('emits circuitBreakerState closed metric when circuit closes', async () => {
+      vi.useFakeTimers();
+      const inner = createMockClient();
+      (inner.complete as any).mockRejectedValue(new Error('down'));
+      const metrics = createMockMetrics();
+      const breaker = new CircuitBreakerLLMClient(inner, {
+        failureThreshold: 2,
+        resetTimeoutMs: 1_000,
+        halfOpenMaxAttempts: 1,
+      });
+      breaker.setMetrics(metrics);
+
+      // Trip the breaker
+      await expect(breaker.complete(defaultRequest)).rejects.toThrow();
+      await expect(breaker.complete(defaultRequest)).rejects.toThrow();
+      expect(breaker.state).toBe('open');
+
+      // Move to half-open
+      vi.advanceTimersByTime(1_001);
+
+      // Successful call closes the circuit (halfOpenMaxAttempts = 1)
+      (inner.complete as any).mockResolvedValueOnce({
+        content: 'recovered', model: 'test',
+        usage: { promptTokens: 0, completionTokens: 0, totalTokens: 0 },
+        finishReason: 'stop',
+      });
+      await breaker.complete(defaultRequest);
+      expect(breaker.state).toBe('closed');
+
+      expect(metrics.circuitBreakerState.add).toHaveBeenCalledWith(1, { state: 'closed' });
+
+      vi.useRealTimers();
+    });
+  });
 });

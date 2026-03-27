@@ -179,4 +179,31 @@ describe('OpenRouterClient', () => {
       expect.anything(),
     );
   });
+
+  describe('UsageRecorder integration', () => {
+    it('calls recorder.record() with token counts after successful complete()', async () => {
+      const recorder = { record: vi.fn() };
+      client.setUsageRecorder(recorder);
+      mockFetch.mockResolvedValue(mockResponse(successBody('Hello', 'anthropic/claude-sonnet-4-20250514')));
+
+      await client.complete(basicRequest);
+
+      expect(recorder.record).toHaveBeenCalledWith(
+        expect.objectContaining({
+          model: 'anthropic/claude-sonnet-4-20250514',
+          promptTokens: 100,
+          completionTokens: 50,
+          totalTokens: 150,
+        }),
+      );
+    });
+
+    it('works normally without setUsageRecorder (no error)', async () => {
+      // client has no usage recorder set (default)
+      mockFetch.mockResolvedValue(mockResponse(successBody('Hello')));
+
+      const result = await client.complete(basicRequest);
+      expect(result.content).toBe('Hello');
+    });
+  });
 });
