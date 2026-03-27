@@ -12,6 +12,7 @@ import type {
   EntitySourceRepository,
   ExportRepository,
   ActionRepository,
+  TenantRepository,
 } from '@spatula/db';
 import type { Pool } from 'pg';
 import type { SpatulaQueues } from './queues.js';
@@ -41,6 +42,7 @@ export interface WorkerDepsConfig {
   rateLimiter?: DomainRateLimiter;
   pageBudget?: PageBudget;
   completionChecker?: CrawlCompletionChecker;
+  tenantRepo?: TenantRepository;
   queues: SpatulaQueues;
 }
 
@@ -68,6 +70,7 @@ export class WorkerDeps {
   readonly rateLimiter?: DomainRateLimiter;
   readonly pageBudget?: PageBudget;
   readonly completionChecker?: CrawlCompletionChecker;
+  readonly tenantRepo?: TenantRepository;
   readonly queues: SpatulaQueues;
 
   constructor(config: WorkerDepsConfig) {
@@ -94,6 +97,7 @@ export class WorkerDeps {
     this.rateLimiter = config.rateLimiter;
     this.pageBudget = config.pageBudget;
     this.completionChecker = config.completionChecker;
+    this.tenantRepo = config.tenantRepo;
     this.queues = config.queues;
   }
 }

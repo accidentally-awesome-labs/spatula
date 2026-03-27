@@ -9,9 +9,29 @@ export async function processCrawlJob(data: CrawlJobData, deps: WorkerDeps): Pro
   const logger = createLoggerWithContext('crawl-worker', { jobId, tenantId });
 
   try {
-    // Pre-crawl checks (budget → robots → rate limit)
+    // Pre-crawl checks (tenant quota → budget → robots → rate limit)
 
-    // 1. Check page budget
+    // 1. Check tenant maxPagesPerJob quota
+    if (deps.tenantRepo) {
+      try {
+        const quotas = await deps.tenantRepo.getQuotas(tenantId);
+        const maxPages = (quotas as any).maxPagesPerJob;
+        if (maxPages !== undefined) {
+          // Count completed tasks for this job
+          const tasks = await deps.taskRepo.findByJob(jobId, { status: 'completed' });
+          if (tasks.length >= maxPages) {
+            logger.info({ taskId, url, pageCount: tasks.length, maxPages }, 'Tenant page quota exceeded, skipping');
+            await deps.taskRepo.updateStatus(taskId, tenantId, 'skipped');
+            return;
+          }
+        }
+      } catch (error) {
+        // Fail-open: if quota check fails, allow the crawl to proceed
+        logger.warn({ err: error, tenantId }, 'Failed to check tenant page quota');
+      }
+    }
+
+    // 2. Check page budget (job-level)
     if (deps.pageBudget) {
       const allowed = await Promise.resolve(deps.pageBudget.tryIncrement());
       if (!allowed) {
@@ -21,7 +41,7 @@ export async function processCrawlJob(data: CrawlJobData, deps: WorkerDeps): Pro
       }
     }
 
-    // 2. Check robots.txt
+    // 3. Check robots.txt
     if (deps.robotsChecker) {
       const robotsAllowed = await deps.robotsChecker.isAllowed(url);
       if (!robotsAllowed) {
@@ -31,13 +51,13 @@ export async function processCrawlJob(data: CrawlJobData, deps: WorkerDeps): Pro
       }
     }
 
-    // 3. Wait for domain rate limit slot
+    // 4. Wait for domain rate limit slot
     if (deps.rateLimiter) {
       const crawlDelay = deps.robotsChecker?.getCrawlDelay(url) ?? undefined;
       await deps.rateLimiter.waitForSlot(url, crawlDelay);
     }
 
-    // 4. Delegate to pure orchestrator
+    // 5. Delegate to pure orchestrator
     const result = await processCrawlTask(
       { taskId, jobId, tenantId, url, depth },
       {

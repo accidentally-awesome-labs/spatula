@@ -46,9 +46,7 @@ export class JobManager {
     const job = await this.getJob(jobId, tenantId);
 
     // Check concurrent job quota
-    // TODO(Wave 3): maxPagesPerJob enforcement should be wired into PageBudget
-    // initialization. Currently, PageBudget uses JobConfig.crawl.maxPages only.
-    // When per-job worker config is available, use: Math.min(config.maxPages, quotas.maxPagesPerJob)
+    // Note: maxPagesPerJob quota is enforced per-task in crawl-worker.ts
     if (this.tenantRepo) {
       try {
         const quotas = await this.tenantRepo.getQuotas(tenantId);
