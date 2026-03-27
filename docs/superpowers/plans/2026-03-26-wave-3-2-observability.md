@@ -127,27 +127,30 @@ export interface MetricsConfig {
   port?: number;
 }
 
+// Use OTel API types (cleaner than nested ReturnType chains)
+import type { Histogram, Counter, UpDownCounter } from '@opentelemetry/api';
+
 export interface SpatulaMetrics {
   // API
-  httpRequestDuration: ReturnType<ReturnType<MeterProvider['getMeter']>['createHistogram']>;
-  httpRequestsTotal: ReturnType<ReturnType<MeterProvider['getMeter']>['createCounter']>;
-  httpActiveConnections: ReturnType<ReturnType<MeterProvider['getMeter']>['createUpDownCounter']>;
+  httpRequestDuration: Histogram;
+  httpRequestsTotal: Counter;
+  httpActiveConnections: UpDownCounter;
   // Queue
-  queueJobDuration: ReturnType<ReturnType<MeterProvider['getMeter']>['createHistogram']>;
-  queueJobsTotal: ReturnType<ReturnType<MeterProvider['getMeter']>['createCounter']>;
+  queueJobDuration: Histogram;
+  queueJobsTotal: Counter;
   // LLM
-  llmTokensUsed: ReturnType<ReturnType<MeterProvider['getMeter']>['createCounter']>;
-  llmRequestDuration: ReturnType<ReturnType<MeterProvider['getMeter']>['createHistogram']>;
-  llmCostUsd: ReturnType<ReturnType<MeterProvider['getMeter']>['createCounter']>;
+  llmTokensUsed: Counter;
+  llmRequestDuration: Histogram;
+  llmCostUsd: Counter;
   // Crawl
-  pagesProcessedTotal: ReturnType<ReturnType<MeterProvider['getMeter']>['createCounter']>;
-  pageCrawlDuration: ReturnType<ReturnType<MeterProvider['getMeter']>['createHistogram']>;
-  entitiesCreatedTotal: ReturnType<ReturnType<MeterProvider['getMeter']>['createCounter']>;
+  pagesProcessedTotal: Counter;
+  pageCrawlDuration: Histogram;
+  entitiesCreatedTotal: Counter;
   // Business
-  exportSizeBytes: ReturnType<ReturnType<MeterProvider['getMeter']>['createHistogram']>;
+  exportSizeBytes: Histogram;
   // Circuit breaker
-  circuitBreakerState: ReturnType<ReturnType<MeterProvider['getMeter']>['createUpDownCounter']>;
-  circuitBreakerRejectionsTotal: ReturnType<ReturnType<MeterProvider['getMeter']>['createCounter']>;
+  circuitBreakerState: UpDownCounter;
+  circuitBreakerRejectionsTotal: Counter;
 }
 
 export function createMetrics(config?: MetricsConfig): SpatulaMetrics {
@@ -620,51 +623,67 @@ export class LlmUsageRepository {
 
   async aggregateByTenant(tenantId: string, since: Date): Promise<UsageAggregation> {
     try {
-      const rows = await this.db
-        .select()
+      const conditions = and(
+        eq(llmUsage.tenantId, tenantId),
+        gte(llmUsage.createdAt, since),
+      );
+
+      // Totals via SQL aggregation (not in-memory)
+      const [totals] = await this.db
+        .select({
+          totalTokens: sql<number>`COALESCE(SUM(${llmUsage.totalTokens}), 0)::int`,
+          totalCostUsd: sql<number>`COALESCE(SUM(${llmUsage.costUsd}::numeric), 0)::float`,
+        })
         .from(llmUsage)
-        .where(
-          and(
-            eq(llmUsage.tenantId, tenantId),
-            gte(llmUsage.createdAt, since),
-          ),
-        );
+        .where(conditions);
 
-      let totalTokens = 0;
-      let totalCostUsd = 0;
+      // By model
+      const modelRows = await this.db
+        .select({
+          model: llmUsage.model,
+          tokens: sql<number>`SUM(${llmUsage.totalTokens})::int`,
+          costUsd: sql<number>`SUM(${llmUsage.costUsd}::numeric)::float`,
+        })
+        .from(llmUsage)
+        .where(conditions)
+        .groupBy(llmUsage.model);
+
+      // By purpose
+      const purposeRows = await this.db
+        .select({
+          purpose: llmUsage.purpose,
+          tokens: sql<number>`SUM(${llmUsage.totalTokens})::int`,
+          costUsd: sql<number>`SUM(${llmUsage.costUsd}::numeric)::float`,
+        })
+        .from(llmUsage)
+        .where(conditions)
+        .groupBy(llmUsage.purpose);
+
+      // By job (top jobs)
+      const jobRows = await this.db
+        .select({
+          jobId: llmUsage.jobId,
+          tokens: sql<number>`SUM(${llmUsage.totalTokens})::int`,
+          costUsd: sql<number>`SUM(${llmUsage.costUsd}::numeric)::float`,
+        })
+        .from(llmUsage)
+        .where(and(conditions, sql`${llmUsage.jobId} IS NOT NULL`))
+        .groupBy(llmUsage.jobId)
+        .orderBy(desc(sql`SUM(${llmUsage.costUsd}::numeric)`))
+        .limit(50);
+
       const byModel: Record<string, { tokens: number; costUsd: number }> = {};
+      for (const r of modelRows) byModel[r.model] = { tokens: r.tokens, costUsd: r.costUsd };
+
       const byPurpose: Record<string, { tokens: number; costUsd: number }> = {};
-      const byJobMap: Record<string, { tokens: number; costUsd: number }> = {};
-
-      for (const row of rows) {
-        const cost = parseFloat(row.costUsd);
-        totalTokens += row.totalTokens;
-        totalCostUsd += cost;
-
-        // By model
-        if (!byModel[row.model]) byModel[row.model] = { tokens: 0, costUsd: 0 };
-        byModel[row.model].tokens += row.totalTokens;
-        byModel[row.model].costUsd += cost;
-
-        // By purpose
-        if (!byPurpose[row.purpose]) byPurpose[row.purpose] = { tokens: 0, costUsd: 0 };
-        byPurpose[row.purpose].tokens += row.totalTokens;
-        byPurpose[row.purpose].costUsd += cost;
-
-        // By job
-        if (row.jobId) {
-          if (!byJobMap[row.jobId]) byJobMap[row.jobId] = { tokens: 0, costUsd: 0 };
-          byJobMap[row.jobId].tokens += row.totalTokens;
-          byJobMap[row.jobId].costUsd += cost;
-        }
-      }
+      for (const r of purposeRows) byPurpose[r.purpose] = { tokens: r.tokens, costUsd: r.costUsd };
 
       return {
-        totalTokens,
-        totalCostUsd: Math.round(totalCostUsd * 1_000_000) / 1_000_000,
+        totalTokens: totals?.totalTokens ?? 0,
+        totalCostUsd: totals?.totalCostUsd ?? 0,
         byModel,
         byPurpose,
-        byJob: Object.entries(byJobMap).map(([jobId, data]) => ({ jobId, ...data })),
+        byJob: jobRows.map((r) => ({ jobId: r.jobId!, tokens: r.tokens, costUsd: r.costUsd })),
       };
     } catch (error) {
       throw new StorageError(`Failed to aggregate LLM usage: ${(error as Error).message}`, {
@@ -935,6 +954,8 @@ export interface HealthDeps {
   queues?: SpatulaQueues;
 }
 
+// Health routes receive deps directly (not via c.get('deps')) because they
+// mount before depsMiddleware in the chain — they need to work without auth.
 export function healthRoutes(deps: HealthDeps) {
   const app = new Hono();
 
@@ -1013,11 +1034,13 @@ import type { SpatulaQueues } from '@spatula/queue';
 import { QUEUE_NAMES } from '@spatula/queue';
 
 export function createQueueDashboard(queues: SpatulaQueues) {
-  const serverAdapter = new HonoAdapter('/api/admin/queues');
+  // Mount at /api/v1/admin/queues to leverage existing requireScope('admin') on /api/v1/admin/*
+  const serverAdapter = new HonoAdapter('/api/v1/admin/queues');
 
   createBullBoard({
     queues: [
       new BullMQAdapter(queues.crawl),
+      new BullMQAdapter(queues.extract),
       new BullMQAdapter(queues.schemaEvolution),
       new BullMQAdapter(queues.reconciliation),
       new BullMQAdapter(queues.export),
@@ -1029,7 +1052,7 @@ export function createQueueDashboard(queues: SpatulaQueues) {
 }
 ```
 
-**Note:** Only 4 queues registered (crawl, schemaEvolution, reconciliation, export). The `extract` queue may not exist as a separate queue in the current codebase (extraction happens inline in crawl worker). The webhooks queue is Wave 4. Read `packages/queue/src/queues.ts` to verify which queues exist in `SpatulaQueues`.
+**Note:** All 5 existing queues registered. The webhooks queue (6th) is added in Wave 4. Mounted at `/api/v1/admin/queues` (not `/api/admin/queues`) to leverage the existing `requireScope('admin')` middleware on `/api/v1/admin/*`.
 
 - [ ] **Step 3: Build to verify**
 
@@ -1268,7 +1291,82 @@ git commit -m "feat(core): wire circuit breaker to OTel metrics instruments"
 
 ---
 
-## Task 11: Wire Everything into App
+## Task 11: Instrument OpenRouterClient with Usage Recording
+
+**Files:**
+- Modify: `packages/core/src/llm/openrouter-client.ts`
+- Modify: `packages/core/src/interfaces/llm-client.ts`
+
+This is the critical producer that writes LLM usage records. Without this, the `llm_usage` table and `/api/v1/usage` endpoint are empty.
+
+- [ ] **Step 1: Add onUsage callback to LLMClient interface**
+
+Read `packages/core/src/interfaces/llm-client.ts`. The `LLMCompletionResponse` already includes `usage: LLMUsage`. Add an optional `onUsage` callback interface:
+
+```typescript
+export interface LLMUsageRecord {
+  model: string;
+  promptTokens: number;
+  completionTokens: number;
+  totalTokens: number;
+  costUsd: number;
+  durationMs: number;
+  purpose?: string;
+}
+
+export interface LLMUsageRecorder {
+  record(usage: LLMUsageRecord): void;
+}
+```
+
+- [ ] **Step 2: Add usage recorder to OpenRouterClient**
+
+Read `packages/core/src/llm/openrouter-client.ts`. Add an optional `usageRecorder` to the constructor options or a `setUsageRecorder()` method:
+
+```typescript
+  private usageRecorder?: LLMUsageRecorder;
+
+  setUsageRecorder(recorder: LLMUsageRecorder): void {
+    this.usageRecorder = recorder;
+  }
+```
+
+In the `complete()` method, after a successful API call that returns the response, add:
+
+```typescript
+    // Record usage (fire-and-forget)
+    if (this.usageRecorder && response.usage) {
+      this.usageRecorder.record({
+        model: response.model,
+        promptTokens: response.usage.promptTokens,
+        completionTokens: response.usage.completionTokens,
+        totalTokens: response.usage.totalTokens,
+        costUsd: 0, // OpenRouter cost comes from response headers — extract if available
+        durationMs: duration,
+      });
+    }
+```
+
+The `duration` should be measured around the fetch call. Add `const start = performance.now()` before the fetch and `const duration = performance.now() - start` after.
+
+- [ ] **Step 3: Build and test**
+
+```bash
+cd /Users/salar/Projects/spatula && pnpm --filter @spatula/core build && pnpm --filter @spatula/core test
+```
+
+All existing LLM client tests must pass. The recorder is optional so existing tests won't be affected.
+
+- [ ] **Step 4: Commit**
+
+```bash
+git add packages/core/src/llm/openrouter-client.ts packages/core/src/interfaces/llm-client.ts
+git commit -m "feat(core): instrument OpenRouterClient with usage recording callback"
+```
+
+---
+
+## Task 12: Wire Everything into App
 
 **Files:**
 - Modify: `apps/api/src/types.ts`
@@ -1344,7 +1442,7 @@ git commit -m "feat(api): wire observability — timing, health checks, usage AP
 
 ---
 
-## Task 12: Integration Verification
+## Task 13: Integration Verification
 
 - [ ] **Step 1: Run full test suite**
 
