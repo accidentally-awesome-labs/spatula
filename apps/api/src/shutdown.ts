@@ -1,4 +1,4 @@
-import { createLogger } from '@spatula/shared';
+import { createLogger, shutdownMetrics, shutdownTracing } from '@spatula/shared';
 import type { ServerType } from '@hono/node-server';
 import type { AppDeps } from './types.js';
 import type { JobProgressManager } from './ws/job-progress.js';
@@ -33,6 +33,10 @@ export async function executeShutdown(
   if (deps.dbPool) {
     await deps.dbPool.end();
   }
+
+  // 5. Flush OTel buffered spans and stop Prometheus HTTP server
+  await shutdownTracing();
+  await shutdownMetrics();
 
   logger.info('Shutdown complete');
 }

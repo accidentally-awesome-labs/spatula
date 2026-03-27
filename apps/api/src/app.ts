@@ -19,7 +19,11 @@ import { tenantRoutes } from './routes/tenants.js';
 import { adminDlqRoutes } from './routes/admin-dlq.js';
 import { apiKeyRoutes } from './routes/api-keys.js';
 import { rateLimitMiddleware } from './middleware/rate-limit.js';
+import { timingMiddleware } from './middleware/timing.js';
 import { wsTokenRoutes } from './routes/ws-token.js';
+import { usageRoutes } from './routes/usage.js';
+import { healthRoutes } from './routes/health.js';
+import { createQueueDashboard } from './routes/admin-queues.js';
 import { createAuthProvider } from './auth/factory.js';
 import type { AppDeps } from './types.js';
 import { getEnvOrDefault } from '@spatula/shared';
@@ -38,6 +42,7 @@ export function createApp(deps: AppDeps) {
 
   // Global middleware chain (order matters)
   app.use('*', requestContextMiddleware);
+  app.use('*', timingMiddleware(deps.metrics ?? null));
   app.use('*', honoLogger());
   app.use('*', securityHeaders);
   app.onError(errorHandler);
@@ -60,6 +65,9 @@ export function createApp(deps: AppDeps) {
 
   // Health check (no auth — authMiddleware skips /health)
   app.get('/health', (c) => c.json({ status: 'ok' }));
+
+  // Deep health checks (no auth — paths are in SKIP_AUTH_PATHS)
+  app.route('', healthRoutes({ dbPool: deps.dbPool, redis: deps.redis, queues: deps.queues }));
 
   // OpenAPI documentation (no auth — authMiddleware skips these)
   app.doc('/api/openapi.json', {
@@ -131,9 +139,22 @@ export function createApp(deps: AppDeps) {
   app.post('/api/v1/jobs/:jobId/exports', requireScope('exports:write'));
   app.route('/api/v1/jobs/:jobId', exportRoutes());
 
+  // Usage API (requires jobs:read scope)
+  app.get('/api/v1/usage', requireScope('jobs:read'));
+  app.route('/api/v1/usage', usageRoutes());
+
   // Admin routes
   app.use('/api/v1/admin/*', requireScope('admin'));
   app.route('/api/v1/admin/dlq', adminDlqRoutes());
+
+  // Queue dashboard (admin scope enforced by /api/v1/admin/* middleware)
+  if (deps.queues) {
+    try {
+      app.route('', createQueueDashboard(deps.queues));
+    } catch {
+      // Bull Board requires real BullMQ Queue instances; skip in test/mock environments
+    }
+  }
 
   return app;
 }

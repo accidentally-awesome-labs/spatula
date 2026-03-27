@@ -14,6 +14,7 @@
     "start:workers": "node dist/worker-entrypoint.js"
   },
   "dependencies": {
+    "@opentelemetry/api": "^1.9.1",
     "@spatula/core": "workspace:*",
     "@spatula/db": "workspace:*",
     "@spatula/shared": "workspace:*",
