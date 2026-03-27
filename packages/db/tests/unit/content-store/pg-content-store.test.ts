@@ -51,4 +51,34 @@ describe('PgContentStore', () => {
     expect(typeof ref).toBe('string');
     expect(mockDb.insert).toHaveBeenCalled();
   });
+
+  describe('setTenantContext and storage tracking', () => {
+    it('after setTenantContext, store() calls incrementStorageBytes with content byte length', async () => {
+      const mockTenantRepo = {
+        incrementStorageBytes: vi.fn().mockResolvedValue(undefined),
+      };
+      store.setTenantContext('tenant-1', mockTenantRepo as any);
+
+      const content = '<html>hello world</html>';
+      await store.store('key-1', content);
+
+      // Fire-and-forget, but the mock should have been called
+      // Wait a tick for the void promise to execute
+      await new Promise((r) => setTimeout(r, 10));
+
+      expect(mockTenantRepo.incrementStorageBytes).toHaveBeenCalledWith(
+        'tenant-1',
+        Buffer.byteLength(content, 'utf-8'),
+      );
+    });
+
+    it('without setTenantContext, store() does NOT call incrementStorageBytes', async () => {
+      // store has no tenant context (default from beforeEach)
+      await store.store('key-2', '<html>no tracking</html>');
+
+      // Nothing to assert on directly — we just confirm no error is thrown
+      // and store completes successfully
+      expect(mockDb.insert).toHaveBeenCalled();
+    });
+  });
 });

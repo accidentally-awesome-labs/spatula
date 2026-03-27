@@ -755,6 +755,50 @@ describe('processCrawlJob', () => {
     });
   });
 
+  describe('tenant page quota enforcement', () => {
+    it('skips task when tenant page quota exceeded', async () => {
+      const data = createJobData();
+      (deps as any).tenantRepo = {
+        getQuotas: vi.fn().mockResolvedValue({ maxPagesPerJob: 10 }),
+      };
+      // Add findByJob to taskRepo since it's not in the base mock
+      (deps.taskRepo as any).findByJob = vi.fn().mockResolvedValue(
+        Array.from({ length: 10 }, (_, i) => ({ id: `task-${i}`, status: 'completed' })),
+      );
+
+      await processCrawlJob(data, deps);
+
+      expect(deps.taskRepo.updateStatus).toHaveBeenCalledWith('task-1', 'tenant-1', 'skipped');
+      expect(deps.crawler.crawl).not.toHaveBeenCalled();
+    });
+
+    it('allows crawl when under page quota', async () => {
+      const data = createJobData();
+      (deps as any).tenantRepo = {
+        getQuotas: vi.fn().mockResolvedValue({ maxPagesPerJob: 100 }),
+      };
+      (deps.taskRepo as any).findByJob = vi.fn().mockResolvedValue(
+        Array.from({ length: 5 }, (_, i) => ({ id: `task-${i}`, status: 'completed' })),
+      );
+
+      await processCrawlJob(data, deps);
+
+      expect(deps.crawler.crawl).toHaveBeenCalledWith('https://example.com/product/1');
+    });
+
+    it('fails open when page quota check errors', async () => {
+      const data = createJobData();
+      (deps as any).tenantRepo = {
+        getQuotas: vi.fn().mockRejectedValue(new Error('DB error')),
+      };
+
+      await processCrawlJob(data, deps);
+
+      // Crawl proceeds despite quota check failure
+      expect(deps.crawler.crawl).toHaveBeenCalledWith('https://example.com/product/1');
+    });
+  });
+
   describe('pipeline hardening integration', () => {
     it('skips task when page budget is exhausted', async () => {
       const data = createJobData();

@@ -1,6 +1,8 @@
 import { createLogger, StorageError } from '@spatula/shared';
 import type { JobConfig, JobStatus } from '@spatula/core';
 import type { JobRepository, CrawlTaskRepository, SchemaRepository } from '@spatula/db';
+import type { TenantRepository } from '@spatula/db';
+import { QuotaExceededError } from '@spatula/shared';
 import type { SpatulaQueues } from './queues.js';
 import { JobStateMachine } from './state-machine.js';
 
@@ -11,6 +13,7 @@ export interface JobManagerConfig {
   taskRepo: CrawlTaskRepository;
   schemaRepo: SchemaRepository;
   queues: SpatulaQueues;
+  tenantRepo?: TenantRepository;
 }
 
 export class JobManager {
@@ -18,12 +21,14 @@ export class JobManager {
   private readonly taskRepo: CrawlTaskRepository;
   private readonly schemaRepo: SchemaRepository;
   private readonly queues: SpatulaQueues;
+  private readonly tenantRepo?: TenantRepository;
 
   constructor(config: JobManagerConfig) {
     this.jobRepo = config.jobRepo;
     this.taskRepo = config.taskRepo;
     this.schemaRepo = config.schemaRepo;
     this.queues = config.queues;
+    this.tenantRepo = config.tenantRepo;
   }
 
   async createJob(config: JobConfig): Promise<string> {
@@ -39,6 +44,27 @@ export class JobManager {
 
   async startJob(jobId: string, tenantId: string): Promise<void> {
     const job = await this.getJob(jobId, tenantId);
+
+    // Check concurrent job quota
+    // Note: maxPagesPerJob quota is enforced per-task in crawl-worker.ts
+    if (this.tenantRepo) {
+      try {
+        const quotas = await this.tenantRepo.getQuotas(tenantId);
+        const maxConcurrent = (quotas as any).maxConcurrentJobs ?? 2;
+        const runningCount = await this.jobRepo.countByTenant(tenantId, { status: 'running' });
+        if (runningCount >= maxConcurrent) {
+          // TODO(Wave 3): Log tenant.quota_exceeded audit event here once
+          // auditLogger is available in job-manager (currently only accessible from API layer).
+          throw new QuotaExceededError(
+            `Concurrent job limit reached: ${runningCount}/${maxConcurrent}`,
+            { context: { tenantId, current: runningCount, max: maxConcurrent } },
+          );
+        }
+      } catch (error) {
+        if ((error as any).code === 'QUOTA_EXCEEDED') throw error;
+        logger.warn({ err: error, tenantId }, 'Failed to check job quota');
+      }
+    }
 
     // Validate the full transition chain, then write the final state atomically
     JobStateMachine.transition(job.status as JobStatus, 'queued');

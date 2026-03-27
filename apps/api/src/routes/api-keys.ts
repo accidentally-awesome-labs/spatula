@@ -101,6 +101,18 @@ export function apiKeyRoutes() {
       expiresAt,
     });
 
+    // Audit log
+    if (deps.auditLogger) {
+      deps.auditLogger.log({
+        tenantId,
+        actorId: c.get('auth').userId,
+        actorType: 'user',
+        action: 'api_key.created',
+        resourceType: 'api_key',
+        resourceId: key.id,
+      });
+    }
+
     return c.json(
       {
         data: {
@@ -150,6 +162,19 @@ export function apiKeyRoutes() {
       }
       throw error;
     }
+
+    // Audit log
+    if (deps.auditLogger) {
+      deps.auditLogger.log({
+        tenantId,
+        actorId: c.get('auth').userId,
+        actorType: 'user',
+        action: 'api_key.revoked',
+        resourceType: 'api_key',
+        resourceId: id,
+      });
+    }
+
     return c.json({ data: { id, revoked: true } });
   });
 

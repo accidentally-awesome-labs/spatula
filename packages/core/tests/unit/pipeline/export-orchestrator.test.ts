@@ -372,6 +372,38 @@ describe('processExport', () => {
     expect(result.fileSize).toBeGreaterThan(0);
   });
 
+  it('uses custom maxEntities from input when provided', async () => {
+    const deps = createMockDeps();
+    // 15 entities — above a custom limit of 10
+    (deps.entityRepo.countByJob as any).mockResolvedValue(15);
+
+    const customInput = { ...defaultInput, maxEntities: 10 };
+    await processExport(customInput, deps);
+
+    // Should fail because 15 > 10 (the custom limit)
+    expect(deps.exportRepo.updateStatus).toHaveBeenCalledWith(
+      'exp-1', 'tenant-1',
+      expect.objectContaining({
+        status: 'failed',
+        error: expect.stringContaining('10'),
+      }),
+    );
+  });
+
+  it('falls back to MAX_EXPORT_ENTITIES (50,000) when maxEntities not provided', async () => {
+    const deps = createMockDeps();
+    // 40,000 entities — under the default 50,000 limit
+    (deps.entityRepo.countByJob as any).mockResolvedValue(40_000);
+    (deps.entityRepo.findByJob as any).mockResolvedValue([]);
+
+    await processExport(defaultInput, deps);
+
+    // Should NOT fail — 40,000 < 50,000
+    const calls = (deps.exportRepo.updateStatus as any).mock.calls;
+    const finalCall = calls[calls.length - 1];
+    expect(finalCall[2]).toEqual(expect.objectContaining({ status: 'completed' }));
+  });
+
   it('fetches entities in batches', async () => {
     const deps = createMockDeps();
     // 250 entities = 3 batches (100+100+50)
