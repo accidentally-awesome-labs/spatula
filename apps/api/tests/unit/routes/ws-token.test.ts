@@ -36,4 +36,12 @@ describe('WS Token routes', () => {
       60,
     );
   });
+
+  it('returns error when deps.redis is not configured', async () => {
+    const app = createTestApp(null);
+    const res = await app.request('/api/v1/ws-token', { method: 'POST' });
+
+    // The route throws Error('Redis not configured'), which Hono surfaces as 500
+    expect(res.status).toBe(500);
+  });
 });

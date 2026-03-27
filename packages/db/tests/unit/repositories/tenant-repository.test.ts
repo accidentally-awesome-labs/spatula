@@ -60,4 +60,47 @@ describe('TenantRepository', () => {
       expect(result.name).toBe('Updated Corp');
     });
   });
+
+  describe('getQuotas', () => {
+    it('returns quotas for an existing tenant', async () => {
+      const quotas = { maxConcurrentJobs: 5, maxPagesPerJob: 1000 };
+      const mockWhere = vi.fn().mockResolvedValue([{ quotas }]);
+      const mockFrom = vi.fn().mockReturnValue({ where: mockWhere });
+      const db = {
+        select: vi.fn().mockReturnValue({ from: mockFrom }),
+      };
+
+      const repo = new TenantRepository(db as any);
+      const result = await repo.getQuotas('tenant-1');
+
+      expect(result).toEqual(quotas);
+    });
+
+    it('throws StorageError for non-existent tenant', async () => {
+      const mockWhere = vi.fn().mockResolvedValue([]);
+      const mockFrom = vi.fn().mockReturnValue({ where: mockWhere });
+      const db = {
+        select: vi.fn().mockReturnValue({ from: mockFrom }),
+      };
+
+      const repo = new TenantRepository(db as any);
+      await expect(repo.getQuotas('nonexistent')).rejects.toThrow('Tenant nonexistent not found');
+    });
+  });
+
+  describe('incrementStorageBytes', () => {
+    it('updates the storage counter', async () => {
+      const mockWhere = vi.fn().mockResolvedValue(undefined);
+      const mockSet = vi.fn().mockReturnValue({ where: mockWhere });
+      const db = {
+        update: vi.fn().mockReturnValue({ set: mockSet }),
+      };
+
+      const repo = new TenantRepository(db as any);
+      await expect(repo.incrementStorageBytes('tenant-1', 1024)).resolves.toBeUndefined();
+
+      expect(db.update).toHaveBeenCalled();
+      expect(mockSet).toHaveBeenCalled();
+    });
+  });
 });

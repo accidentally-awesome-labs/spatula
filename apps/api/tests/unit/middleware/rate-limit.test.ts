@@ -58,4 +58,25 @@ describe('rateLimitMiddleware', () => {
     expect(res.headers.get('X-RateLimit-Limit')).toBe('300');
     expect(res.headers.get('X-RateLimit-Remaining')).toBe('290');
   });
+
+  it('skips rate limiting when tenantId is not set', async () => {
+    const app = new Hono();
+    // No tenantId set in context
+    app.use('*', rateLimitMiddleware(redis));
+    app.get('/test', (c) => c.json({ ok: true }));
+
+    const res = await app.request('/test');
+    expect(res.status).toBe(200);
+    expect((redis as any).eval).not.toHaveBeenCalled();
+  });
+
+  it('propagates Redis eval failure as unhandled error', async () => {
+    (redis as any).eval.mockRejectedValue(new Error('REDIS CONN REFUSED'));
+    const app = createTestApp(redis);
+
+    const res = await app.request('/test');
+    // When Redis.eval throws, the middleware does NOT catch it — it bubbles up.
+    // Without an error handler, Hono returns 500.
+    expect(res.status).toBe(500);
+  });
 });

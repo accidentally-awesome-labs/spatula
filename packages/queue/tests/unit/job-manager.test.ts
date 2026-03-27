@@ -244,6 +244,115 @@ describe('JobManager', () => {
     expect(status).toBe('running');
   });
 
+  describe('quota enforcement in startJob', () => {
+    it('throws QuotaExceededError when running job count >= maxConcurrentJobs', async () => {
+      const tenantRepo = {
+        getQuotas: vi.fn().mockResolvedValue({ maxConcurrentJobs: 2 }),
+      };
+      const managerWithTenant = new JobManager({
+        jobRepo: jobRepo as any,
+        taskRepo: taskRepo as any,
+        schemaRepo: schemaRepo as any,
+        queues: queues as any,
+        tenantRepo: tenantRepo as any,
+      });
+
+      jobRepo.findById.mockResolvedValue({
+        id: JOB_ID,
+        tenantId: TENANT_ID,
+        status: 'pending',
+        config: baseConfig,
+      });
+      (jobRepo as any).countByTenant = vi.fn().mockResolvedValue(2);
+
+      await expect(managerWithTenant.startJob(JOB_ID, TENANT_ID)).rejects.toMatchObject({
+        code: 'QUOTA_EXCEEDED',
+      });
+    });
+
+    it('allows job start when running count is under quota', async () => {
+      const tenantRepo = {
+        getQuotas: vi.fn().mockResolvedValue({ maxConcurrentJobs: 5 }),
+      };
+      const managerWithTenant = new JobManager({
+        jobRepo: jobRepo as any,
+        taskRepo: taskRepo as any,
+        schemaRepo: schemaRepo as any,
+        queues: queues as any,
+        tenantRepo: tenantRepo as any,
+      });
+
+      jobRepo.findById.mockResolvedValue({
+        id: JOB_ID,
+        tenantId: TENANT_ID,
+        status: 'pending',
+        config: baseConfig,
+      });
+      (jobRepo as any).countByTenant = vi.fn().mockResolvedValue(2);
+      jobRepo.updateStatus.mockResolvedValue({ id: JOB_ID });
+      schemaRepo.create.mockResolvedValue({ id: 'schema-001' });
+      taskRepo.enqueue
+        .mockResolvedValueOnce({ id: 'task-001' })
+        .mockResolvedValueOnce({ id: 'task-002' });
+      queues.crawl.add.mockResolvedValue({});
+
+      await expect(managerWithTenant.startJob(JOB_ID, TENANT_ID)).resolves.toBeUndefined();
+
+      expect(jobRepo.updateStatus).toHaveBeenCalledWith(JOB_ID, TENANT_ID, 'running');
+    });
+
+    it('fails open when quota check errors (job still starts)', async () => {
+      const tenantRepo = {
+        getQuotas: vi.fn().mockRejectedValue(new Error('DB connection lost')),
+      };
+      const managerWithTenant = new JobManager({
+        jobRepo: jobRepo as any,
+        taskRepo: taskRepo as any,
+        schemaRepo: schemaRepo as any,
+        queues: queues as any,
+        tenantRepo: tenantRepo as any,
+      });
+
+      jobRepo.findById.mockResolvedValue({
+        id: JOB_ID,
+        tenantId: TENANT_ID,
+        status: 'pending',
+        config: baseConfig,
+      });
+      jobRepo.updateStatus.mockResolvedValue({ id: JOB_ID });
+      schemaRepo.create.mockResolvedValue({ id: 'schema-001' });
+      taskRepo.enqueue
+        .mockResolvedValueOnce({ id: 'task-001' })
+        .mockResolvedValueOnce({ id: 'task-002' });
+      queues.crawl.add.mockResolvedValue({});
+
+      await expect(managerWithTenant.startJob(JOB_ID, TENANT_ID)).resolves.toBeUndefined();
+
+      expect(jobRepo.updateStatus).toHaveBeenCalledWith(JOB_ID, TENANT_ID, 'running');
+    });
+
+    it('skips quota check when tenantRepo is not provided', async () => {
+      // manager (from beforeEach) has no tenantRepo
+      jobRepo.findById.mockResolvedValue({
+        id: JOB_ID,
+        tenantId: TENANT_ID,
+        status: 'pending',
+        config: baseConfig,
+      });
+      jobRepo.updateStatus.mockResolvedValue({ id: JOB_ID });
+      schemaRepo.create.mockResolvedValue({ id: 'schema-001' });
+      taskRepo.enqueue
+        .mockResolvedValueOnce({ id: 'task-001' })
+        .mockResolvedValueOnce({ id: 'task-002' });
+      queues.crawl.add.mockResolvedValue({});
+
+      await expect(manager.startJob(JOB_ID, TENANT_ID)).resolves.toBeUndefined();
+
+      // No quota check was attempted — there's no tenantRepo to call
+      expect(jobRepo.updateStatus).toHaveBeenCalledWith(JOB_ID, TENANT_ID, 'running');
+    });
+  });
+
   it('triggerReconciliation transitions running→reconciling and enqueues reconciliation job', async () => {
     jobRepo.findById.mockResolvedValue({
       id: JOB_ID,
