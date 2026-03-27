@@ -32,6 +32,9 @@ export type { EventPublisher, JobEvent, JobEventType } from './events.js';
 // DLQ Handler
 export { createDlqHandler } from './dlq-handler.js';
 
+// Trace Context Propagation
+export { injectTraceContext, extractTraceContext } from './trace-context.js';
+
 // Workers
 export { processCrawlJob } from './workers/crawl-worker.js';
 export { processSchemaEvolutionJob } from './workers/schema-worker.js';
