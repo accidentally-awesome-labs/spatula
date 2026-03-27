@@ -88,13 +88,11 @@ export function startServer(deps: AppDeps, port?: number) {
                 return;
               }
               const key = `ws-token:${token}`;
-              const value = await deps.redis.get(key);
+              const value = await (deps.redis as any).getdel(key);
               if (!value) {
                 ws.close(4001, 'Invalid or expired WebSocket token');
                 return;
               }
-              // Delete token (single-use)
-              await deps.redis.del(key);
               try {
                 const parsed = JSON.parse(value);
                 tenantId = parsed.tenantId;

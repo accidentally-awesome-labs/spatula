@@ -108,7 +108,7 @@ export function jobRoutes() {
       deps.auditLogger.log({
         tenantId,
         actorId: c.get('auth').userId,
-        actorType: 'api_key',
+        actorType: 'user',
         action: 'job.created',
         resourceType: 'job',
         resourceId: jobId,
@@ -170,7 +170,7 @@ export function jobRoutes() {
       deps.auditLogger.log({
         tenantId,
         actorId: c.get('auth').userId,
-        actorType: 'api_key',
+        actorType: 'user',
         action: `job.${action === 'cancel' ? 'cancelled' : action + 'ed'}`,
         resourceType: 'job',
         resourceId: id,
@@ -189,6 +189,19 @@ export function jobRoutes() {
     if (!job) throw new NotFoundError('Job', id);
 
     await deps.jobRepo.deleteWithData(id, tenantId);
+
+    // Audit log
+    if (deps.auditLogger) {
+      deps.auditLogger.log({
+        tenantId,
+        actorId: c.get('auth').userId,
+        actorType: 'user',
+        action: 'job.deleted',
+        resourceType: 'job',
+        resourceId: id,
+      });
+    }
+
     return c.body(null, 204);
   });
 
@@ -197,7 +210,7 @@ export function jobRoutes() {
     const { id } = c.req.valid('param'); const tenantId = c.get('tenantId'); const deps = c.get('deps');
     await deps.jobManager.startJob(id, tenantId);
     if (deps.auditLogger) {
-      deps.auditLogger.log({ tenantId, actorId: c.get('auth').userId, actorType: 'api_key', action: 'job.started', resourceType: 'job', resourceId: id });
+      deps.auditLogger.log({ tenantId, actorId: c.get('auth').userId, actorType: 'user', action: 'job.started', resourceType: 'job', resourceId: id });
     }
     return c.json({ data: { id, message: 'Job started' } });
   });
@@ -205,7 +218,7 @@ export function jobRoutes() {
     const { id } = c.req.valid('param'); const tenantId = c.get('tenantId'); const deps = c.get('deps');
     await deps.jobManager.pauseJob(id, tenantId);
     if (deps.auditLogger) {
-      deps.auditLogger.log({ tenantId, actorId: c.get('auth').userId, actorType: 'api_key', action: 'job.paused', resourceType: 'job', resourceId: id });
+      deps.auditLogger.log({ tenantId, actorId: c.get('auth').userId, actorType: 'user', action: 'job.paused', resourceType: 'job', resourceId: id });
     }
     return c.json({ data: { id, message: 'Job paused' } });
   });
@@ -213,7 +226,7 @@ export function jobRoutes() {
     const { id } = c.req.valid('param'); const tenantId = c.get('tenantId'); const deps = c.get('deps');
     await deps.jobManager.resumeJob(id, tenantId);
     if (deps.auditLogger) {
-      deps.auditLogger.log({ tenantId, actorId: c.get('auth').userId, actorType: 'api_key', action: 'job.resumed', resourceType: 'job', resourceId: id });
+      deps.auditLogger.log({ tenantId, actorId: c.get('auth').userId, actorType: 'user', action: 'job.resumed', resourceType: 'job', resourceId: id });
     }
     return c.json({ data: { id, message: 'Job resumed' } });
   });
@@ -221,7 +234,7 @@ export function jobRoutes() {
     const { id } = c.req.valid('param'); const tenantId = c.get('tenantId'); const deps = c.get('deps');
     await deps.jobManager.cancelJob(id, tenantId);
     if (deps.auditLogger) {
-      deps.auditLogger.log({ tenantId, actorId: c.get('auth').userId, actorType: 'api_key', action: 'job.cancelled', resourceType: 'job', resourceId: id });
+      deps.auditLogger.log({ tenantId, actorId: c.get('auth').userId, actorType: 'user', action: 'job.cancelled', resourceType: 'job', resourceId: id });
     }
     return c.json({ data: { id, message: 'Job cancelled' } });
   });
@@ -229,7 +242,7 @@ export function jobRoutes() {
     const { id } = c.req.valid('param'); const tenantId = c.get('tenantId'); const deps = c.get('deps');
     await deps.jobManager.triggerReconciliation(id, tenantId);
     if (deps.auditLogger) {
-      deps.auditLogger.log({ tenantId, actorId: c.get('auth').userId, actorType: 'api_key', action: 'job.reconciled', resourceType: 'job', resourceId: id });
+      deps.auditLogger.log({ tenantId, actorId: c.get('auth').userId, actorType: 'user', action: 'job.reconciled', resourceType: 'job', resourceId: id });
     }
     return c.json({ data: { id, message: 'Reconciliation triggered' } });
   });

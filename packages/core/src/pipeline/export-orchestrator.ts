@@ -65,7 +65,7 @@ export async function processExport(
     const allEntities: Entity[] = [];
     const total = await deps.entityRepo.countByJob(jobId, tenantId);
 
-    const maxEntities = (input as any)?.maxEntities ?? MAX_EXPORT_ENTITIES;
+    const maxEntities = input.maxEntities ?? MAX_EXPORT_ENTITIES;
     if (total > maxEntities) {
       throw new ValidationError(`Export too large: ${total} entities exceeds maximum of ${maxEntities.toLocaleString()}. Consider filtering first.`, { context: { exportId, jobId, total, max: maxEntities } });
     }

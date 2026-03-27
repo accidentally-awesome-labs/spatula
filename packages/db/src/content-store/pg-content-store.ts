@@ -3,11 +3,20 @@ import { StorageError, createLogger } from '@spatula/shared';
 import type { ContentStore } from '@spatula/core';
 import { contentStore } from '../schema/content.js';
 import type { Database } from '../connection.js';
+import type { TenantRepository } from '../repositories/tenant-repository.js';
 
 const logger = createLogger('pg-content-store');
 
 export class PgContentStore implements ContentStore {
+  private tenantId?: string;
+  private tenantRepo?: TenantRepository;
+
   constructor(private readonly db: Database) {}
+
+  setTenantContext(tenantId: string, tenantRepo: TenantRepository): void {
+    this.tenantId = tenantId;
+    this.tenantRepo = tenantRepo;
+  }
 
   async store(key: string, content: string): Promise<string> {
     try {
@@ -19,6 +28,14 @@ export class PgContentStore implements ContentStore {
 
       const ref = `pg://${row.id}`;
       logger.debug({ ref, key }, 'content stored');
+
+      // Track storage bytes (fire-and-forget)
+      if (this.tenantId && this.tenantRepo) {
+        const bytes = Buffer.byteLength(content, 'utf-8');
+        void this.tenantRepo.incrementStorageBytes(this.tenantId, bytes)
+          .catch((err: unknown) => logger.warn({ err }, 'Failed to track storage bytes'));
+      }
+
       return ref;
     } catch (error) {
       throw new StorageError(`Failed to store content: ${(error as Error).message}`, {
@@ -71,6 +88,13 @@ export class PgContentStore implements ContentStore {
 
       const ref = `pg://${row.id}`;
       logger.debug({ ref, key, size: data.byteLength }, 'binary content stored');
+
+      // Track storage bytes (fire-and-forget)
+      if (this.tenantId && this.tenantRepo) {
+        void this.tenantRepo.incrementStorageBytes(this.tenantId, data.byteLength)
+          .catch((err: unknown) => logger.warn({ err }, 'Failed to track storage bytes'));
+      }
+
       return ref;
     } catch (error) {
       throw new StorageError(`Failed to store binary content: ${(error as Error).message}`, {

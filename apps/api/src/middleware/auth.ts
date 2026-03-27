@@ -32,7 +32,7 @@ export function authMiddleware(provider: AuthProvider, auditLogger?: AuditLogger
           actorType: 'system',
           action: 'auth.login_failure',
           metadata: { error: (error as Error).message, path: c.req.path },
-          ipAddress: c.req.header('x-forwarded-for') ?? c.req.header('x-real-ip'),
+          ipAddress: (c.req.header('x-forwarded-for') ?? c.req.header('x-real-ip'))?.split(',')[0]?.trim(),
         });
       }
       throw error;
@@ -44,7 +44,7 @@ export function authMiddleware(provider: AuthProvider, auditLogger?: AuditLogger
         actorId: result.userId,
         actorType: result.userId === 'anonymous' ? 'system' : 'api_key',
         action: 'auth.login_success',
-        ipAddress: c.req.header('x-forwarded-for') ?? c.req.header('x-real-ip'),
+        ipAddress: (c.req.header('x-forwarded-for') ?? c.req.header('x-real-ip'))?.split(',')[0]?.trim(),
       });
     }
 

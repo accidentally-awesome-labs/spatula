@@ -106,7 +106,7 @@ export function apiKeyRoutes() {
       deps.auditLogger.log({
         tenantId,
         actorId: c.get('auth').userId,
-        actorType: 'api_key',
+        actorType: 'user',
         action: 'api_key.created',
         resourceType: 'api_key',
         resourceId: key.id,
@@ -168,7 +168,7 @@ export function apiKeyRoutes() {
       deps.auditLogger.log({
         tenantId,
         actorId: c.get('auth').userId,
-        actorType: 'api_key',
+        actorType: 'user',
         action: 'api_key.revoked',
         resourceType: 'api_key',
         resourceId: id,

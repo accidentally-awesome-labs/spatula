@@ -212,6 +212,7 @@ export interface ExportInput {
   tenantId: string;
   format: 'json' | 'csv' | 'parquet' | 'duckdb' | 'sqlite';
   includeProvenance: boolean;
+  maxEntities?: number;
 }
 
 export interface PipelineExportResult {

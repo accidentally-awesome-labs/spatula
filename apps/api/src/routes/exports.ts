@@ -79,6 +79,19 @@ export function exportRoutes() {
       format: body.format, includeProvenance: body.includeProvenance,
     }, { removeOnComplete: true, removeOnFail: true });
 
+    // Audit log
+    if (deps.auditLogger) {
+      deps.auditLogger.log({
+        tenantId,
+        actorId: c.get('auth').userId,
+        actorType: 'user',
+        action: 'export.requested',
+        resourceType: 'export',
+        resourceId: exportRecord.id,
+        metadata: { jobId, format: body.format },
+      });
+    }
+
     return c.json({ data: exportRecord }, 202);
   });
 
@@ -127,6 +140,19 @@ export function exportRoutes() {
       body = data;
     } else {
       body = await deps.contentStore.retrieve(exportRecord.contentRef);
+    }
+
+    // Audit log
+    if (deps.auditLogger) {
+      deps.auditLogger.log({
+        tenantId,
+        actorId: c.get('auth').userId,
+        actorType: 'user',
+        action: 'export.downloaded',
+        resourceType: 'export',
+        resourceId: exportId,
+        metadata: { format: exportRecord.format },
+      });
     }
 
     return new Response(body, {

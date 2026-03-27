@@ -46,13 +46,17 @@ export class JobManager {
     const job = await this.getJob(jobId, tenantId);
 
     // Check concurrent job quota
+    // TODO(Wave 3): maxPagesPerJob enforcement should be wired into PageBudget
+    // initialization. Currently, PageBudget uses JobConfig.crawl.maxPages only.
+    // When per-job worker config is available, use: Math.min(config.maxPages, quotas.maxPagesPerJob)
     if (this.tenantRepo) {
       try {
         const quotas = await this.tenantRepo.getQuotas(tenantId);
         const maxConcurrent = (quotas as any).maxConcurrentJobs ?? 2;
-        const runningJobs = await this.jobRepo.findByTenant(tenantId);
-        const runningCount = runningJobs.filter((j: any) => j.status === 'running').length;
+        const runningCount = await this.jobRepo.countByTenant(tenantId, { status: 'running' });
         if (runningCount >= maxConcurrent) {
+          // TODO(Wave 3): Log tenant.quota_exceeded audit event here once
+          // auditLogger is available in job-manager (currently only accessible from API layer).
           throw new QuotaExceededError(
             `Concurrent job limit reached: ${runningCount}/${maxConcurrent}`,
             { context: { tenantId, current: runningCount, max: maxConcurrent } },

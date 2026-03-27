@@ -76,6 +76,19 @@ export function tenantRoutes() {
     const { id } = c.req.valid('param');
     const body = c.req.valid('json');
     const tenant = await deps.tenantRepo.update(id, body);
+
+    // Audit log (tenant routes skip auth, so auth context may be undefined)
+    if (deps.auditLogger) {
+      deps.auditLogger.log({
+        tenantId: id,
+        actorId: c.get('auth')?.userId ?? 'system',
+        actorType: 'user',
+        action: 'tenant.updated',
+        resourceType: 'tenant',
+        resourceId: id,
+      });
+    }
+
     return c.json({ data: tenant });
   });
 
