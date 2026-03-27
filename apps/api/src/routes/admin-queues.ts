@@ -9,15 +9,11 @@ export function createQueueDashboard(queues: SpatulaQueues) {
 
   const queueAdapters = [
     new BullMQAdapter(queues.crawl),
+    new BullMQAdapter(queues.extract),
     new BullMQAdapter(queues.schemaEvolution),
     new BullMQAdapter(queues.reconciliation),
     new BullMQAdapter(queues.export),
   ];
-
-  // Add extract queue if it exists on the type
-  if ('extract' in queues && queues.extract) {
-    queueAdapters.splice(1, 0, new BullMQAdapter(queues.extract));
-  }
 
   createBullBoard({ queues: queueAdapters, serverAdapter });
 

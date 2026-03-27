@@ -9,9 +9,10 @@ describe('trace context', () => {
     expect(result.tenantId).toBe('t1');
   });
 
-  it('extractTraceContext returns no-op cleanup when _traceContext is absent', () => {
+  it('extractTraceContext returns ctx and no-op cleanup when _traceContext is absent', () => {
     const data = { jobId: 'j1' };
-    const { cleanup } = extractTraceContext(data, 'test-span');
+    const { ctx, cleanup } = extractTraceContext(data, 'test-span');
+    expect(ctx).toBeDefined();
     expect(cleanup).toBeTypeOf('function');
     expect(() => cleanup()).not.toThrow();
   });

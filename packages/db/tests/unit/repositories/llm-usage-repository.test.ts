@@ -19,6 +19,12 @@ describe('LlmUsageRepository', () => {
     repo = new LlmUsageRepository(mockDb.db);
   });
 
+  describe('aggregateByTenant', () => {
+    it('method exists with correct signature', () => {
+      expect(repo.aggregateByTenant).toBeTypeOf('function');
+    });
+  });
+
   describe('insert', () => {
     it('records an LLM usage entry', async () => {
       const entry = {

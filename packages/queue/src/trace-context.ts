@@ -10,13 +10,16 @@ export function injectTraceContext<T extends Record<string, unknown>>(data: T): 
 export function extractTraceContext(
   jobData: Record<string, unknown>,
   spanName: string,
-): { cleanup: () => void } {
+): { ctx: import('@opentelemetry/api').Context; cleanup: () => void } {
   const carrier = jobData._traceContext as Record<string, string> | undefined;
-  if (!carrier) return { cleanup: () => {} };
+  if (!carrier) {
+    return { ctx: context.active(), cleanup: () => {} };
+  }
 
   const parentContext = propagation.extract(context.active(), carrier);
   const tracer = trace.getTracer('spatula-worker');
   const span = tracer.startSpan(spanName, { kind: SpanKind.CONSUMER }, parentContext);
+  const ctx = trace.setSpan(parentContext, span);
 
-  return { cleanup: () => span.end() };
+  return { ctx, cleanup: () => span.end() };
 }

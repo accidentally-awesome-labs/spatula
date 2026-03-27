@@ -1,11 +1,13 @@
 import { createRoute, z } from '@hono/zod-openapi';
+import { ValidationError } from '@spatula/shared';
 import { createOpenAPIRouter } from '../openapi-config.js';
 import { jsonContent, errorResponseSchema } from '../schemas/responses.js';
 
 function parsePeriod(period: string): Date {
   const match = period.match(/^(\d+)d$/);
-  if (!match) throw new Error('Invalid period format. Use Nd (e.g., 30d).');
+  if (!match) throw new ValidationError('Invalid period format. Use Nd (e.g., 30d).');
   const days = parseInt(match[1], 10);
+  if (days < 1 || days > 365) throw new ValidationError('Period must be between 1d and 365d.');
   const since = new Date();
   since.setDate(since.getDate() - days);
   return since;

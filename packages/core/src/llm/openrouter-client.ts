@@ -103,7 +103,7 @@ export class OpenRouterClient implements LLMClient {
             promptTokens: result.usage.promptTokens,
             completionTokens: result.usage.completionTokens,
             totalTokens: result.usage.totalTokens,
-            costUsd: 0, // OpenRouter cost from response headers — extract if available
+            costUsd: 0, // TODO: Extract cost from OpenRouter 'x-openrouter-cost' response header when available
             durationMs: duration,
           });
         }

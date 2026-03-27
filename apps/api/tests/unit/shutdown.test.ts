@@ -4,6 +4,15 @@ import type { AppDeps } from '../../src/types.js';
 import type { JobProgressManager } from '../../src/ws/job-progress.js';
 import type { ServerType } from '@hono/node-server';
 
+vi.mock('@spatula/shared', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@spatula/shared')>();
+  return {
+    ...actual,
+    shutdownTracing: vi.fn().mockResolvedValue(undefined),
+    shutdownMetrics: vi.fn().mockResolvedValue(undefined),
+  };
+});
+
 function createMockServer(): ServerType {
   return {
     close: vi.fn((cb: () => void) => cb()),

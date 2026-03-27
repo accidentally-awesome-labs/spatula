@@ -73,6 +73,8 @@ export class CircuitBreakerLLMClient implements LLMClient {
       if (elapsed >= this.config.resetTimeoutMs) {
         this._state = 'half_open';
         this.halfOpenSuccesses = 0;
+        this.metrics?.circuitBreakerState.add(1, { state: 'half_open' });
+        this.metrics?.circuitBreakerState.add(-1, { state: 'open' });
       }
     }
 
@@ -124,6 +126,7 @@ export class CircuitBreakerLLMClient implements LLMClient {
     this.consecutiveFailures = 0;
     this.halfOpenSuccesses = 0;
     this.metrics?.circuitBreakerState.add(1, { state: 'open' });
+    this.metrics?.circuitBreakerState.add(-1, { state: 'closed' });
   }
 
   private close(): void {
@@ -131,5 +134,6 @@ export class CircuitBreakerLLMClient implements LLMClient {
     this.consecutiveFailures = 0;
     this.halfOpenSuccesses = 0;
     this.metrics?.circuitBreakerState.add(-1, { state: 'open' });
+    this.metrics?.circuitBreakerState.add(1, { state: 'closed' });
   }
 }
