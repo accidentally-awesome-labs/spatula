@@ -8,3 +8,5 @@ export { createMetrics, shutdownMetrics } from './metrics.js';
 export type { SpatulaMetrics, MetricsConfig } from './metrics.js';
 export { initSentry, captureException } from './sentry.js';
 export type { SentryConfig } from './sentry.js';
+export { initTracing, shutdownTracing } from './tracing.js';
+export type { TracingConfig } from './tracing.js';
