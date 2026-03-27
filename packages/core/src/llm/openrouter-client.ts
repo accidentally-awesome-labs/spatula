@@ -4,6 +4,7 @@ import type {
   LLMClient,
   LLMCompletionRequest,
   LLMCompletionResponse,
+  LLMUsageRecorder,
 } from '../interfaces/llm-client.js';
 import type { OpenRouterClientOptions } from './types.js';
 
@@ -29,6 +30,7 @@ export class OpenRouterClient implements LLMClient {
   private readonly timeoutMs: number;
   private readonly siteName: string;
   private readonly siteUrl: string;
+  private usageRecorder?: LLMUsageRecorder;
 
   constructor(options: OpenRouterClientOptions) {
     if (!options.apiKey?.trim()) {
@@ -40,6 +42,10 @@ export class OpenRouterClient implements LLMClient {
     this.timeoutMs = options.timeoutMs ?? 60000;
     this.siteName = options.siteName ?? 'Spatula';
     this.siteUrl = options.siteUrl ?? 'https://spatula.dev';
+  }
+
+  setUsageRecorder(recorder: LLMUsageRecorder): void {
+    this.usageRecorder = recorder;
   }
 
   async complete(request: LLMCompletionRequest): Promise<LLMCompletionResponse> {
@@ -64,8 +70,10 @@ export class OpenRouterClient implements LLMClient {
       }
 
       try {
+        const start = performance.now();
         const response = await this.doFetch(body);
         const data = (await response.json()) as OpenRouterAPIResponse;
+        const duration = performance.now() - start;
 
         const choice = data.choices?.[0];
         if (!choice?.message?.content) {
@@ -87,6 +95,18 @@ export class OpenRouterClient implements LLMClient {
           { model: result.model, tokens: result.usage.totalTokens },
           'LLM call completed',
         );
+
+        // Record usage (fire-and-forget)
+        if (this.usageRecorder) {
+          this.usageRecorder.record({
+            model: result.model,
+            promptTokens: result.usage.promptTokens,
+            completionTokens: result.usage.completionTokens,
+            totalTokens: result.usage.totalTokens,
+            costUsd: 0, // OpenRouter cost from response headers — extract if available
+            durationMs: duration,
+          });
+        }
 
         return result;
       } catch (error) {

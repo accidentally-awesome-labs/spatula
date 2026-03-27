@@ -27,3 +27,17 @@ export interface LLMCompletionResponse {
 export interface LLMClient {
   complete(request: LLMCompletionRequest): Promise<LLMCompletionResponse>;
 }
+
+export interface LLMUsageRecord {
+  model: string;
+  promptTokens: number;
+  completionTokens: number;
+  totalTokens: number;
+  costUsd: number;
+  durationMs: number;
+  purpose?: string;
+}
+
+export interface LLMUsageRecorder {
+  record(usage: LLMUsageRecord): void;
+}
