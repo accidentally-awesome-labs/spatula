@@ -1,5 +1,5 @@
 import type { ErrorHandler } from 'hono';
-import { SpatulaError, createLogger } from '@spatula/shared';
+import { SpatulaError, createLogger, captureException } from '@spatula/shared';
 
 const logger = createLogger('api:error-handler');
 
@@ -60,6 +60,7 @@ export const errorHandler: ErrorHandler = (error, c) => {
       { err: error, requestId, path: c.req.path },
       'unhandled error',
     );
+    captureException(error, { requestId, path: c.req.path });
   } else {
     logger.warn(
       {
