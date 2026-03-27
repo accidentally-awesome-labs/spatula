@@ -1,4 +1,5 @@
 import { LLMError, ConfigError } from '@spatula/shared';
+import type { SpatulaMetrics } from '@spatula/shared';
 import type {
   LLMClient,
   LLMCompletionRequest,
@@ -31,9 +32,6 @@ const DEFAULT_CONFIG: CircuitBreakerConfig = {
  * - OPEN: Immediately rejects all calls with LLMError. After resetTimeoutMs, transitions to HALF_OPEN.
  * - HALF_OPEN: Allows calls through. If halfOpenMaxAttempts succeed, closes. If any fail, re-opens.
  *
- * TODO: Emit metrics (circuit_breaker_state gauge, circuit_breaker_rejections_total counter)
- * when Phase 12 Workstream C (Observability) metrics infrastructure is available.
- *
  * This is a per-process circuit breaker (not shared across workers).
  * In a multi-worker deployment, each worker has its own breaker state.
  * This is acceptable because each worker has its own LLM connection.
@@ -44,6 +42,7 @@ export class CircuitBreakerLLMClient implements LLMClient {
   private halfOpenSuccesses = 0;
   private openedAt = 0;
   private readonly config: CircuitBreakerConfig;
+  private metrics?: SpatulaMetrics;
 
   constructor(
     private readonly inner: LLMClient,
@@ -56,6 +55,10 @@ export class CircuitBreakerLLMClient implements LLMClient {
       );
     }
     this.config = { ...DEFAULT_CONFIG, ...config };
+  }
+
+  setMetrics(metrics: SpatulaMetrics): void {
+    this.metrics = metrics;
   }
 
   /** Read-only state accessor. No side effects. */
@@ -76,6 +79,7 @@ export class CircuitBreakerLLMClient implements LLMClient {
     const currentState = this._state;
 
     if (currentState === 'open') {
+      this.metrics?.circuitBreakerRejectionsTotal.add(1);
       throw new LLMError('Circuit breaker open — LLM provider is unavailable', {
         retryable: true,
         context: { state: 'open', model: request.model },
@@ -119,11 +123,13 @@ export class CircuitBreakerLLMClient implements LLMClient {
     this.openedAt = Date.now();
     this.consecutiveFailures = 0;
     this.halfOpenSuccesses = 0;
+    this.metrics?.circuitBreakerState.add(1, { state: 'open' });
   }
 
   private close(): void {
     this._state = 'closed';
     this.consecutiveFailures = 0;
     this.halfOpenSuccesses = 0;
+    this.metrics?.circuitBreakerState.add(-1, { state: 'open' });
   }
 }
