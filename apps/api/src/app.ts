@@ -74,7 +74,7 @@ export function createApp(deps: AppDeps) {
 
   // Auth middleware — uses authProvider (NoAuthProvider when AUTH_STRATEGY=none)
   // Note: authMiddleware skips /health, /api/docs, /api/openapi.json, /api/v1/tenants
-  app.use('/api/*', authMiddleware(authProvider));
+  app.use('/api/*', authMiddleware(authProvider, deps.auditLogger));
   app.use('/api/*', depsMiddleware(deps));
   app.use('/api/*', validateTenantMiddleware);
 

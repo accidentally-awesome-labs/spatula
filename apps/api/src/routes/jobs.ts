@@ -103,6 +103,18 @@ export function jobRoutes() {
     const jobId = await deps.jobManager.createJob(config);
     const job = await deps.jobRepo.findById(jobId, tenantId);
 
+    // Audit log
+    if (deps.auditLogger) {
+      deps.auditLogger.log({
+        tenantId,
+        actorId: c.get('auth').userId,
+        actorType: 'api_key',
+        action: 'job.created',
+        resourceType: 'job',
+        resourceId: jobId,
+      });
+    }
+
     return c.json({ data: job }, 201);
   });
 
@@ -152,6 +164,19 @@ export function jobRoutes() {
     };
 
     await handlers[action]();
+
+    // Audit log
+    if (deps.auditLogger) {
+      deps.auditLogger.log({
+        tenantId,
+        actorId: c.get('auth').userId,
+        actorType: 'api_key',
+        action: `job.${action === 'cancel' ? 'cancelled' : action + 'ed'}`,
+        resourceType: 'job',
+        resourceId: id,
+      });
+    }
+
     return c.json({ data: { id, action, message: `Job ${action} successful` } });
   });
 
@@ -171,26 +196,41 @@ export function jobRoutes() {
   router.openapi(startJobRoute, async (c) => {
     const { id } = c.req.valid('param'); const tenantId = c.get('tenantId'); const deps = c.get('deps');
     await deps.jobManager.startJob(id, tenantId);
+    if (deps.auditLogger) {
+      deps.auditLogger.log({ tenantId, actorId: c.get('auth').userId, actorType: 'api_key', action: 'job.started', resourceType: 'job', resourceId: id });
+    }
     return c.json({ data: { id, message: 'Job started' } });
   });
   router.openapi(pauseJobRoute, async (c) => {
     const { id } = c.req.valid('param'); const tenantId = c.get('tenantId'); const deps = c.get('deps');
     await deps.jobManager.pauseJob(id, tenantId);
+    if (deps.auditLogger) {
+      deps.auditLogger.log({ tenantId, actorId: c.get('auth').userId, actorType: 'api_key', action: 'job.paused', resourceType: 'job', resourceId: id });
+    }
     return c.json({ data: { id, message: 'Job paused' } });
   });
   router.openapi(resumeJobRoute, async (c) => {
     const { id } = c.req.valid('param'); const tenantId = c.get('tenantId'); const deps = c.get('deps');
     await deps.jobManager.resumeJob(id, tenantId);
+    if (deps.auditLogger) {
+      deps.auditLogger.log({ tenantId, actorId: c.get('auth').userId, actorType: 'api_key', action: 'job.resumed', resourceType: 'job', resourceId: id });
+    }
     return c.json({ data: { id, message: 'Job resumed' } });
   });
   router.openapi(cancelJobRoute, async (c) => {
     const { id } = c.req.valid('param'); const tenantId = c.get('tenantId'); const deps = c.get('deps');
     await deps.jobManager.cancelJob(id, tenantId);
+    if (deps.auditLogger) {
+      deps.auditLogger.log({ tenantId, actorId: c.get('auth').userId, actorType: 'api_key', action: 'job.cancelled', resourceType: 'job', resourceId: id });
+    }
     return c.json({ data: { id, message: 'Job cancelled' } });
   });
   router.openapi(reconcileJobRoute, async (c) => {
     const { id } = c.req.valid('param'); const tenantId = c.get('tenantId'); const deps = c.get('deps');
     await deps.jobManager.triggerReconciliation(id, tenantId);
+    if (deps.auditLogger) {
+      deps.auditLogger.log({ tenantId, actorId: c.get('auth').userId, actorType: 'api_key', action: 'job.reconciled', resourceType: 'job', resourceId: id });
+    }
     return c.json({ data: { id, message: 'Reconciliation triggered' } });
   });
 
