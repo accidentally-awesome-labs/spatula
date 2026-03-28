@@ -4,7 +4,7 @@ import type { AppEnv } from '../types.js';
 import { exportRequestSchema } from '../schemas/export-request.js';
 import { exportResponseSchema, errorResponseSchema, dataResponse, jsonContent } from '../schemas/responses.js';
 import { NotFoundError, ConflictError } from '../middleware/error-handler.js';
-import { generateDocumentation } from '@spatula/core';
+import { generateDocumentation, supportsPresignedUrls } from '@spatula/core';
 import type { SchemaDefinition } from '@spatula/core';
 import type { Entity } from '@spatula/shared';
 
@@ -46,6 +46,7 @@ const downloadExportRoute = createRoute({
   },
   responses: {
     200: { description: 'File download', content: { 'application/octet-stream': { schema: z.string() } } },
+    302: { description: 'Redirect to presigned download URL' },
     404: jsonContent(errorResponseSchema, 'Export not found'),
     409: jsonContent(errorResponseSchema, 'Export not ready'),
   },
@@ -115,6 +116,12 @@ export function exportRoutes() {
     if (!exportRecord) throw new NotFoundError('Export', exportId);
     if (exportRecord.status !== 'completed' || !exportRecord.contentRef) {
       throw new ConflictError('Export is not yet completed');
+    }
+
+    // If content store supports presigned URLs, redirect instead of streaming
+    if (supportsPresignedUrls(deps.contentStore)) {
+      const url = await deps.contentStore.getDownloadUrl(exportRecord.contentRef, 3600);
+      return c.redirect(url, 302);
     }
 
     const jobShort = exportRecord.jobId.slice(0, 8);

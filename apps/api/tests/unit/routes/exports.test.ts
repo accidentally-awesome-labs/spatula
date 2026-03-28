@@ -142,6 +142,29 @@ describe('Export routes', () => {
       const res = await app.request('/api/v1/jobs/job-1/export/exp-1/download');
       expect(res.status).toBe(404);
     });
+
+    it('redirects to presigned URL when content store supports it', async () => {
+      const presignedUrl = 'https://s3.example.com/exports/exp-1?X-Amz-Signature=abc123';
+      const presignedDeps: AppDeps = {
+        ...deps,
+        contentStore: {
+          retrieve: vi.fn(),
+          retrieveBinary: vi.fn(),
+          store: vi.fn(),
+          storeBinary: vi.fn(),
+          delete: vi.fn(),
+          getDownloadUrl: vi.fn().mockResolvedValue(presignedUrl),
+        },
+      } as unknown as AppDeps;
+      const presignedApp = createTestApp(presignedDeps);
+
+      const res = await presignedApp.request('/api/v1/jobs/job-1/export/exp-1/download', {
+        redirect: 'manual',
+      });
+
+      expect(res.status).toBe(302);
+      expect(res.headers.get('location')).toBe(presignedUrl);
+    });
   });
 
   describe('GET /documentation', () => {
