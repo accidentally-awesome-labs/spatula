@@ -6,7 +6,10 @@ import { JsonExporter } from '../exporters/json-exporter.js';
 import { SqliteExporter } from '../exporters/sqlite-exporter.js';
 import { ParquetExporter } from '../exporters/parquet-exporter.js';
 import { DuckDBExporter } from '../exporters/duckdb-exporter.js';
+import { StreamingJsonExporter } from '../exporters/streaming-json-exporter.js';
+import { StreamingCsvExporter } from '../exporters/streaming-csv-exporter.js';
 import { generateDocumentation } from '../exporters/documentation-generator.js';
+import { fetchEntitiesCursor } from './entity-cursor.js';
 import type { Exporter, ExportFormat, ExportOptions, SchemaDefinition } from '../index.js';
 import type {
   ExportOrchestratorDeps,
@@ -61,84 +64,144 @@ export async function processExport(
     }
     const schema = schemaRow.definition as SchemaDefinition;
 
-    // 3. Fetch all entities in batches
-    const allEntities: Entity[] = [];
-    const total = await deps.entityRepo.countByJob(jobId, tenantId);
-
-    const maxEntities = input.maxEntities ?? MAX_EXPORT_ENTITIES;
-    if (total > maxEntities) {
-      throw new ValidationError(`Export too large: ${total} entities exceeds maximum of ${maxEntities.toLocaleString()}. Consider filtering first.`, { context: { exportId, jobId, total, max: maxEntities } });
-    }
-    let offset = 0;
+    // 3. Determine export strategy
     const useProvenance = includeProvenance && format === 'json';
-    while (offset < total) {
-      const batch = useProvenance
-        ? await deps.entityRepo.findByJobWithProvenance(jobId, tenantId, { limit: 100, offset })
-        : await deps.entityRepo.findByJob(jobId, tenantId, { limit: 100, offset });
-      allEntities.push(...(batch as unknown as Entity[]));
-      offset += 100;
-    }
+    const streamingFormats = new Set(['json', 'csv']);
+    const canStream = streamingFormats.has(format) && !useProvenance && typeof deps.entityRepo.findByJobCursor === 'function';
 
-    // 4. Generate documentation (for JSON)
-    const documentation = format === 'json'
-      ? generateDocumentation(schema, allEntities, jobId)
-      : null;
+    let allEntities: Entity[] = [];
+    let contentToStore: string | undefined;
+    let binaryToStore: Uint8Array | undefined;
+    let entityCount = 0;
 
-    // 5. Run exporter
-    const exporter = getExporter(format);
-    const result = await exporter.export(allEntities, schema, {
-      format: format as ExportFormat,
-      includeProvenance,
-      includeDocumentation: format === 'json',
-    } as ExportOptions);
+    if (canStream) {
+      // STREAMING PATH: JSON/CSV without provenance
+      const entityStream = fetchEntitiesCursor(deps.entityRepo as any, jobId, tenantId, 500);
+      const streamExporter = format === 'json'
+        ? new StreamingJsonExporter()
+        : new StreamingCsvExporter();
+      const outputStream = streamExporter.export(entityStream);
 
-    // 6. Store result
-    const key = `exports/${tenantId}/${jobId}/${exportId}.${format}`;
-    let contentRef: string;
-    let fileSize: number;
+      // Collect stream to string
+      const reader = outputStream.getReader();
+      const chunks: Uint8Array[] = [];
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        chunks.push(value);
+      }
+      const rawContent = new TextDecoder().decode(Buffer.concat(chunks));
 
-    if (result.binaryData) {
-      // Binary formats (parquet, duckdb, sqlite)
-      contentRef = await deps.contentStore.storeBinary(key, result.binaryData);
-      fileSize = result.binaryData.byteLength;
-    } else {
-      // Text formats (json, csv)
-      let content: string;
       if (format === 'json') {
+        // Wrap in envelope (same structure as non-streaming path)
+        const entitiesArray = JSON.parse(rawContent);
+        entityCount = entitiesArray.length;
+        const documentation = generateDocumentation(schema, entitiesArray as Entity[], jobId);
         const envelope = {
           metadata: {
             jobId,
             exportedAt: new Date().toISOString(),
-            entityCount: allEntities.length,
+            entityCount,
             schemaVersion: schema.version,
             format: 'json',
-            includeProvenance,
+            includeProvenance: false,
           },
           schema,
           documentation,
-          entities: JSON.parse(result.data as string),
+          entities: entitiesArray,
         };
-        content = JSON.stringify(envelope, null, 2);
+        contentToStore = JSON.stringify(envelope, null, 2);
       } else {
-        content = result.data as string;
+        // CSV — raw output is the final content
+        contentToStore = rawContent;
+        entityCount = rawContent.split('\n').filter(Boolean).length - 1; // subtract header
       }
-      contentRef = await deps.contentStore.store(key, content);
-      fileSize = Buffer.byteLength(content, 'utf-8');
+    } else {
+      // OFFSET/BINARY PATH: binary formats, provenance, or no cursor support
+      const total = await deps.entityRepo.countByJob(jobId, tenantId);
+      const maxEntities = input.maxEntities ?? MAX_EXPORT_ENTITIES;
+      if (total > maxEntities) {
+        throw new ValidationError(`Export too large: ${total} entities exceeds maximum of ${maxEntities.toLocaleString()}. Consider filtering first.`, { context: { exportId, jobId, total, max: maxEntities } });
+      }
+
+      // Fetch via cursor if available (and not provenance), otherwise offset
+      if (typeof deps.entityRepo.findByJobCursor === 'function' && !useProvenance) {
+        for await (const batch of fetchEntitiesCursor(deps.entityRepo as any, jobId, tenantId, 500)) {
+          allEntities.push(...(batch as Entity[]));
+        }
+      } else {
+        let offset = 0;
+        while (offset < total) {
+          const batch = useProvenance
+            ? await deps.entityRepo.findByJobWithProvenance(jobId, tenantId, { limit: 100, offset })
+            : await deps.entityRepo.findByJob(jobId, tenantId, { limit: 100, offset });
+          allEntities.push(...(batch as unknown as Entity[]));
+          offset += 100;
+        }
+      }
+      entityCount = allEntities.length;
+
+      // Run existing exporter for this path
+      const documentation = format === 'json'
+        ? generateDocumentation(schema, allEntities, jobId)
+        : null;
+      const exporter = getExporter(format);
+      const result = await exporter.export(allEntities, schema, {
+        format: format as ExportFormat,
+        includeProvenance,
+        includeDocumentation: format === 'json',
+      } as ExportOptions);
+
+      if (result.binaryData) {
+        binaryToStore = result.binaryData;
+      } else {
+        if (format === 'json') {
+          const envelope = {
+            metadata: {
+              jobId,
+              exportedAt: new Date().toISOString(),
+              entityCount: allEntities.length,
+              schemaVersion: schema.version,
+              format: 'json',
+              includeProvenance,
+            },
+            schema,
+            documentation,
+            entities: JSON.parse(result.data as string),
+          };
+          contentToStore = JSON.stringify(envelope, null, 2);
+        } else {
+          contentToStore = result.data as string;
+        }
+      }
+    }
+
+    // 6. Store result (unified for both paths)
+    const key = `exports/${tenantId}/${jobId}/${exportId}.${format}`;
+    let contentRef: string;
+    let fileSize: number;
+
+    if (binaryToStore) {
+      contentRef = await deps.contentStore.storeBinary(key, binaryToStore);
+      fileSize = binaryToStore.byteLength;
+    } else {
+      contentRef = await deps.contentStore.store(key, contentToStore!);
+      fileSize = Buffer.byteLength(contentToStore!, 'utf-8');
     }
 
     // 7. Mark as completed
     await deps.exportRepo.updateStatus(exportId, tenantId, {
       status: 'completed',
-      entityCount: allEntities.length,
+      entityCount,
       contentRef,
       fileSize,
       completedAt: new Date(),
     });
 
-    logger.info({ exportId, jobId, format, entityCount: allEntities.length }, 'export completed');
+    logger.info({ exportId, jobId, format, entityCount }, 'export completed');
 
     return {
-      entityCount: allEntities.length,
+      entityCount,
       fileSize,
       contentRef,
     };
