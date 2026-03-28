@@ -28,6 +28,7 @@ export class EntityRepository {
           provenance: input.provenance,
           ...(input.categories !== undefined ? { categories: input.categories } : {}),
           ...(input.qualityScore !== undefined ? { qualityScore: input.qualityScore } : {}),
+          updatedAt: new Date(),
         })
         .returning();
 
@@ -152,7 +153,7 @@ export class EntityRepository {
     try {
       const [row] = await this.db
         .update(entities)
-        .set({ qualityScore: score })
+        .set({ qualityScore: score, updatedAt: new Date() })
         .where(and(eq(entities.id, entityId), eq(entities.tenantId, tenantId)))
         .returning();
 
@@ -178,12 +179,14 @@ export class EntityRepository {
     tenantId: string,
     limit: number,
     cursor?: string,
+    since?: string,
   ): Promise<{ entities: Array<typeof entities.$inferSelect>; nextCursor: string | null }> {
     try {
       const conditions = [eq(entities.jobId, jobId), eq(entities.tenantId, tenantId)];
       if (cursor) {
         conditions.push(sql`${entities.id} > ${cursor}`);
       }
+      if (since) conditions.push(sql`${entities.updatedAt} > ${since}`);
 
       const rows = await this.db
         .select()
@@ -216,6 +219,7 @@ export class EntityRepository {
       if (changes.mergedData !== undefined) setClause.mergedData = changes.mergedData;
       if (changes.provenance !== undefined) setClause.provenance = changes.provenance;
       if (changes.categories !== undefined) setClause.categories = changes.categories;
+      setClause.updatedAt = new Date();
 
       const [row] = await this.db
         .update(entities)

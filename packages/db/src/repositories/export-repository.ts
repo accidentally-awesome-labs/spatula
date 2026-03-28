@@ -1,4 +1,4 @@
-import { eq, and, desc } from 'drizzle-orm';
+import { eq, and, desc, sql } from 'drizzle-orm';
 import { createLogger, StorageError } from '@spatula/shared';
 import { exports } from '../schema/exports.js';
 import type { Database } from '../connection.js';
@@ -24,6 +24,7 @@ export class ExportRepository {
           tenantId: input.tenantId,
           format: input.format,
           includeProvenance: input.includeProvenance,
+          updatedAt: new Date(),
         })
         .returning();
       logger.debug({ exportId: row.id }, 'export created');
@@ -66,6 +67,48 @@ export class ExportRepository {
     }
   }
 
+  async findByJobCursor(
+    jobId: string,
+    tenantId: string,
+    limit: number,
+    cursor?: string,
+    since?: string,
+  ) {
+    try {
+      const conditions = [eq(exports.jobId, jobId), eq(exports.tenantId, tenantId)];
+      if (cursor) conditions.push(sql`${exports.id} > ${cursor}`);
+      if (since) conditions.push(sql`${exports.updatedAt} > ${since}`);
+
+      const rows = await this.db
+        .select()
+        .from(exports)
+        .where(and(...conditions))
+        .orderBy(exports.id)
+        .limit(limit);
+
+      const nextCursor = rows.length === limit ? rows[rows.length - 1].id : null;
+      return { entities: rows, nextCursor };
+    } catch (error) {
+      throw new StorageError(`Failed to fetch exports by cursor: ${(error as Error).message}`, {
+        cause: error as Error, context: { jobId, tenantId },
+      });
+    }
+  }
+
+  async countByJob(jobId: string, tenantId: string): Promise<number> {
+    try {
+      const [result] = await this.db
+        .select({ count: sql<number>`count(*)::int` })
+        .from(exports)
+        .where(and(eq(exports.jobId, jobId), eq(exports.tenantId, tenantId)));
+      return result?.count ?? 0;
+    } catch (error) {
+      throw new StorageError(`Failed to count exports: ${(error as Error).message}`, {
+        cause: error as Error, context: { jobId, tenantId },
+      });
+    }
+  }
+
   async updateStatus(
     exportId: string,
     tenantId: string,
@@ -81,7 +124,7 @@ export class ExportRepository {
     try {
       const [row] = await this.db
         .update(exports)
-        .set(update)
+        .set({ ...update, updatedAt: new Date() })
         .where(and(eq(exports.id, exportId), eq(exports.tenantId, tenantId)))
         .returning();
       if (!row) {

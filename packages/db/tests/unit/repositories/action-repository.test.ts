@@ -1,23 +1,25 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { ActionRepository } from '../../../src/repositories/action-repository.js';
 
-function createMockDb() {
+function createMockDb(resolveValue?: unknown) {
+  const value = resolveValue ?? [{ id: 'action-id', status: 'pending_review' }];
   const chainable = {
     set: vi.fn().mockReturnThis(),
     where: vi.fn().mockReturnThis(),
     orderBy: vi.fn().mockReturnThis(),
     limit: vi.fn().mockReturnThis(),
     offset: vi.fn().mockReturnThis(),
-    returning: vi.fn().mockResolvedValue([{ id: 'action-id', status: 'pending_review' }]),
+    returning: vi.fn().mockResolvedValue(value),
     then: undefined as unknown,
   };
-  chainable.then = vi.fn((resolve: (v: unknown) => void) =>
-    resolve([{ id: 'action-id', status: 'pending_review' }]),
-  );
+  chainable.then = vi.fn((resolve: (v: unknown) => void) => resolve(value));
 
   return {
     update: vi.fn().mockReturnValue(chainable),
     select: vi.fn().mockReturnValue({ from: vi.fn().mockReturnValue(chainable) }),
+    insert: vi.fn().mockReturnValue({
+      values: vi.fn().mockReturnValue({ returning: vi.fn().mockResolvedValue([{ id: 'action-id' }]) }),
+    }),
   };
 }
 
@@ -149,5 +151,67 @@ describe('ActionRepository', () => {
         reasoning: 'test',
       }),
     ).rejects.toThrow('Failed to create action');
+  });
+});
+
+describe('ActionRepository.findByJobCursor', () => {
+  const JOB_ID = '550e8400-e29b-41d4-a716-446655440000';
+  const TENANT_ID = '550e8400-e29b-41d4-a716-446655440001';
+
+  it('returns entities and nextCursor when batch is full', async () => {
+    const rows = [
+      { id: 'id-1', jobId: JOB_ID, tenantId: TENANT_ID },
+      { id: 'id-2', jobId: JOB_ID, tenantId: TENANT_ID },
+    ];
+    const db = createMockDb(rows);
+    const repo = new ActionRepository(db as any);
+
+    const result = await repo.findByJobCursor(JOB_ID, TENANT_ID, 2);
+
+    expect(result.entities).toEqual(rows);
+    expect(result.nextCursor).toBe('id-2');
+  });
+
+  it('returns null nextCursor on last page', async () => {
+    const rows = [{ id: 'id-1', jobId: JOB_ID, tenantId: TENANT_ID }];
+    const db = createMockDb(rows);
+    const repo = new ActionRepository(db as any);
+
+    const result = await repo.findByJobCursor(JOB_ID, TENANT_ID, 2);
+
+    expect(result.entities).toEqual(rows);
+    expect(result.nextCursor).toBeNull();
+  });
+
+  it('passes cursor and since to query', async () => {
+    const db = createMockDb([]);
+    const repo = new ActionRepository(db as any);
+
+    await repo.findByJobCursor(JOB_ID, TENANT_ID, 10, 'cursor-abc', '2026-03-01T00:00:00Z');
+
+    expect(db.select).toHaveBeenCalled();
+  });
+});
+
+describe('ActionRepository.countByJob', () => {
+  const JOB_ID = '550e8400-e29b-41d4-a716-446655440000';
+  const TENANT_ID = '550e8400-e29b-41d4-a716-446655440001';
+
+  it('returns count from db', async () => {
+    const db = createMockDb([{ count: 7 }]);
+    const repo = new ActionRepository(db as any);
+
+    const count = await repo.countByJob(JOB_ID, TENANT_ID);
+
+    expect(count).toBe(7);
+  });
+
+  it('returns 0 when result is empty', async () => {
+    const db = createMockDb([]);
+    const repo = new ActionRepository(db as any);
+
+    const count = await repo.countByJob(JOB_ID, TENANT_ID);
+
+    expect(count).toBe(0);
   });
 });

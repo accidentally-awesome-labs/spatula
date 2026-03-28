@@ -30,6 +30,7 @@ export class ExtractionRepository {
           data: input.data,
           unmappedFields: input.unmappedFields,
           metadata: input.metadata,
+          updatedAt: new Date(),
         })
         .returning();
 
@@ -97,6 +98,34 @@ export class ExtractionRepository {
       throw new StorageError(`Failed to count extractions: ${(error as Error).message}`, {
         cause: error as Error,
         context: { jobId },
+      });
+    }
+  }
+
+  async findByJobCursor(
+    jobId: string,
+    tenantId: string,
+    limit: number,
+    cursor?: string,
+    since?: string,
+  ) {
+    try {
+      const conditions = [eq(extractions.jobId, jobId), eq(extractions.tenantId, tenantId)];
+      if (cursor) conditions.push(sql`${extractions.id} > ${cursor}`);
+      if (since) conditions.push(sql`${extractions.updatedAt} > ${since}`);
+
+      const rows = await this.db
+        .select()
+        .from(extractions)
+        .where(and(...conditions))
+        .orderBy(extractions.id)
+        .limit(limit);
+
+      const nextCursor = rows.length === limit ? rows[rows.length - 1].id : null;
+      return { entities: rows, nextCursor };
+    } catch (error) {
+      throw new StorageError(`Failed to fetch extractions by cursor: ${(error as Error).message}`, {
+        cause: error as Error, context: { jobId, tenantId },
       });
     }
   }
