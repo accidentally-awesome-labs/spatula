@@ -113,7 +113,10 @@ export class S3ContentStore implements ContentStore {
     const { bucket, key } = this.parseRef(ref);
     try {
       const response = await this.client.send(new GetObjectCommand({ Bucket: bucket, Key: key }));
-      return await response.Body!.transformToString();
+      if (!response.Body) {
+        throw new StorageError('S3 returned empty body', { context: { ref } });
+      }
+      return await response.Body.transformToString();
     } catch (error) {
       throw new StorageError(`Failed to retrieve from S3: ${(error as Error).message}`, {
         cause: error as Error,
@@ -126,7 +129,8 @@ export class S3ContentStore implements ContentStore {
     const { bucket, key } = this.parseRef(ref);
     try {
       const response = await this.client.send(new GetObjectCommand({ Bucket: bucket, Key: key }));
-      return await response.Body!.transformToByteArray();
+      if (!response.Body) return null;
+      return await response.Body.transformToByteArray();
     } catch (error) {
       if ((error as any).name === 'NoSuchKey') return null;
       throw new StorageError(`Failed to retrieve binary from S3: ${(error as Error).message}`, {

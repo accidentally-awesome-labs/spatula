@@ -74,9 +74,28 @@ export async function processExport(
     let binaryToStore: Uint8Array | undefined;
     let entityCount = 0;
 
+    // Entity count guard (applies to ALL paths)
+    const total = await deps.entityRepo.countByJob(jobId, tenantId);
+    const maxEntities = input.maxEntities ?? MAX_EXPORT_ENTITIES;
+    if (total > maxEntities) {
+      throw new ValidationError(
+        `Export too large: ${total} entities exceeds maximum of ${maxEntities.toLocaleString()}. Consider filtering first.`,
+        { context: { exportId, jobId, total, max: maxEntities } },
+      );
+    }
+
     if (canStream) {
       // STREAMING PATH: JSON/CSV without provenance
-      const entityStream = fetchEntitiesCursor(deps.entityRepo as any, jobId, tenantId, 500);
+      let streamEntityCount = 0;
+
+      // Count entities as they stream through
+      async function* countedEntityStream() {
+        for await (const batch of fetchEntitiesCursor(deps.entityRepo as any, jobId, tenantId, 500)) {
+          streamEntityCount += batch.length;
+          yield batch;
+        }
+      }
+      const entityStream = countedEntityStream();
       const streamExporter = format === 'json'
         ? new StreamingJsonExporter()
         : new StreamingCsvExporter();
@@ -95,7 +114,7 @@ export async function processExport(
       if (format === 'json') {
         // Wrap in envelope (same structure as non-streaming path)
         const entitiesArray = JSON.parse(rawContent);
-        entityCount = entitiesArray.length;
+        entityCount = streamEntityCount;
         const documentation = generateDocumentation(schema, entitiesArray as Entity[], jobId);
         const envelope = {
           metadata: {
@@ -112,18 +131,12 @@ export async function processExport(
         };
         contentToStore = JSON.stringify(envelope, null, 2);
       } else {
-        // CSV — raw output is the final content
+        // CSV — count from cursor iteration (not line-splitting, which overcounts for embedded newlines)
         contentToStore = rawContent;
-        entityCount = rawContent.split('\n').filter(Boolean).length - 1; // subtract header
+        entityCount = streamEntityCount;
       }
     } else {
       // OFFSET/BINARY PATH: binary formats, provenance, or no cursor support
-      const total = await deps.entityRepo.countByJob(jobId, tenantId);
-      const maxEntities = input.maxEntities ?? MAX_EXPORT_ENTITIES;
-      if (total > maxEntities) {
-        throw new ValidationError(`Export too large: ${total} entities exceeds maximum of ${maxEntities.toLocaleString()}. Consider filtering first.`, { context: { exportId, jobId, total, max: maxEntities } });
-      }
-
       // Fetch via cursor if available (and not provenance), otherwise offset
       if (typeof deps.entityRepo.findByJobCursor === 'function' && !useProvenance) {
         for await (const batch of fetchEntitiesCursor(deps.entityRepo as any, jobId, tenantId, 500)) {

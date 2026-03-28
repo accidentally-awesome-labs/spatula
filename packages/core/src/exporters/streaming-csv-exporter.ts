@@ -1,12 +1,6 @@
-const encoder = new TextEncoder();
+import { csvEscapeValue } from './csv-utils.js';
 
-function escapeCsvValue(value: unknown): string {
-  const str = value === null || value === undefined ? '' : String(value);
-  if (str.includes(',') || str.includes('"') || str.includes('\n')) {
-    return `"${str.replace(/"/g, '""')}"`;
-  }
-  return str;
-}
+const encoder = new TextEncoder();
 
 export class StreamingCsvExporter {
   export(entityBatches: AsyncIterable<unknown[]>, columns?: string[]): ReadableStream<Uint8Array> {
@@ -23,7 +17,8 @@ export class StreamingCsvExporter {
               controller.enqueue(encoder.encode(resolvedColumns.join(',') + '\n'));
               headerWritten = true;
             }
-            const row = resolvedColumns.map((col) => escapeCsvValue(data[col]));
+            const val = (v: unknown) => (v === null || v === undefined ? '' : String(v));
+            const row = resolvedColumns.map((col) => csvEscapeValue(val(data[col])));
             controller.enqueue(encoder.encode(row.join(',') + '\n'));
           }
         }

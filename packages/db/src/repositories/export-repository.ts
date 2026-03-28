@@ -8,7 +8,7 @@ const logger = createLogger('export-repository');
 export interface CreateExportInput {
   jobId: string;
   tenantId: string;
-  format: 'json' | 'csv';
+  format: 'json' | 'csv' | 'parquet' | 'duckdb' | 'sqlite';
   includeProvenance: boolean;
 }
 

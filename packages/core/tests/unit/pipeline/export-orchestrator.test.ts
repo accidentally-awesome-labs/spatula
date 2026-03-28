@@ -406,7 +406,8 @@ describe('processExport', () => {
     // Streaming path should use findByJobCursor, not findByJob
     expect((deps.entityRepo as any).findByJobCursor).toHaveBeenCalledWith('job-1', 'tenant-1', 500, undefined);
     expect(deps.entityRepo.findByJob).not.toHaveBeenCalled();
-    expect(deps.entityRepo.countByJob).not.toHaveBeenCalled();
+    // countByJob is now called for ALL paths (maxEntities guard)
+    expect(deps.entityRepo.countByJob).toHaveBeenCalled();
     expect(result.entityCount).toBe(2);
     expect(deps.contentStore.store).toHaveBeenCalled();
     // Verify CSV content

@@ -263,4 +263,67 @@ describe('EntityRepository', () => {
     expect(updateChainable.set).toHaveBeenCalled();
     expect(result.categories).toEqual(['electronics']);
   });
+
+  describe('findByJobCursor', () => {
+    it('returns entities and nextCursor when batch is full', async () => {
+      const fullBatch = Array.from({ length: 3 }, (_, i) => ({
+        id: `entity-${i}`,
+        jobId: 'job-1',
+        tenantId: 'tenant-1',
+        mergedData: { name: `Entity ${i}` },
+      }));
+
+      const cursorChainable = {
+        where: vi.fn().mockReturnThis(),
+        orderBy: vi.fn().mockReturnThis(),
+        limit: vi.fn().mockResolvedValue(fullBatch),
+        then: undefined as unknown,
+      };
+      cursorChainable.then = vi.fn((resolve: (v: unknown) => void) => resolve(fullBatch));
+      mockDb.select = vi.fn().mockReturnValue({ from: vi.fn().mockReturnValue(cursorChainable) });
+
+      const result = await repo.findByJobCursor('job-1', 'tenant-1', 3);
+
+      expect(mockDb.select).toHaveBeenCalled();
+      expect(result.entities).toEqual(fullBatch);
+      expect(result.nextCursor).toBe('entity-2');
+    });
+
+    it('returns entities and null nextCursor when batch is partial', async () => {
+      const partialBatch = [
+        { id: 'entity-0', jobId: 'job-1', tenantId: 'tenant-1', mergedData: { name: 'Only' } },
+      ];
+
+      const cursorChainable = {
+        where: vi.fn().mockReturnThis(),
+        orderBy: vi.fn().mockReturnThis(),
+        limit: vi.fn().mockResolvedValue(partialBatch),
+        then: undefined as unknown,
+      };
+      cursorChainable.then = vi.fn((resolve: (v: unknown) => void) => resolve(partialBatch));
+      mockDb.select = vi.fn().mockReturnValue({ from: vi.fn().mockReturnValue(cursorChainable) });
+
+      const result = await repo.findByJobCursor('job-1', 'tenant-1', 3);
+
+      expect(result.entities).toEqual(partialBatch);
+      expect(result.nextCursor).toBeNull();
+    });
+
+    it('wraps errors in StorageError', async () => {
+      const failChainable = {
+        where: vi.fn().mockReturnThis(),
+        orderBy: vi.fn().mockReturnThis(),
+        limit: vi.fn().mockRejectedValue(new Error('db error')),
+        then: undefined as unknown,
+      };
+      failChainable.then = vi.fn((_: unknown, reject: (v: unknown) => void) =>
+        reject(new Error('db error')),
+      );
+      mockDb.select = vi.fn().mockReturnValue({ from: vi.fn().mockReturnValue(failChainable) });
+
+      await expect(
+        repo.findByJobCursor('job-1', 'tenant-1', 10),
+      ).rejects.toThrow('Failed to fetch entities by cursor');
+    });
+  });
 });
