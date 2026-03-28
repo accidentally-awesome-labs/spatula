@@ -258,6 +258,18 @@ export interface S3ContentStoreConfig {
 export class S3ContentStore implements ContentStore {
   private readonly client: S3Client;
   private readonly bucket: string;
+  private tenantId?: string;
+  private tenantRepo?: { incrementStorageBytes(tenantId: string, bytes: number): Promise<void> };
+
+  /**
+   * Set tenant context for storage byte tracking.
+   * Same pattern as PgContentStore.setTenantContext().
+   * Per decomposition spec: "3-3a wires the same tracking into S3ContentStore."
+   */
+  setTenantContext(tenantId: string, tenantRepo: { incrementStorageBytes(tenantId: string, bytes: number): Promise<void> }): void {
+    this.tenantId = tenantId;
+    this.tenantRepo = tenantRepo;
+  }
 
   constructor(config: S3ContentStoreConfig) {
     this.bucket = config.bucket;
@@ -281,6 +293,14 @@ export class S3ContentStore implements ContentStore {
       }));
       const ref = `s3://${this.bucket}/${s3Key}`;
       logger.debug({ ref, key }, 'text content stored');
+
+      // Track storage bytes (fire-and-forget, same pattern as PgContentStore)
+      if (this.tenantId && this.tenantRepo) {
+        const bytes = Buffer.byteLength(content, 'utf-8');
+        void this.tenantRepo.incrementStorageBytes(this.tenantId, bytes)
+          .catch((err: unknown) => logger.warn({ err }, 'Failed to track storage bytes'));
+      }
+
       return ref;
     } catch (error) {
       throw new StorageError(`Failed to store content in S3: ${(error as Error).message}`, {
@@ -301,6 +321,13 @@ export class S3ContentStore implements ContentStore {
       }));
       const ref = `s3://${this.bucket}/${s3Key}`;
       logger.debug({ ref, key, size: data.byteLength }, 'binary content stored');
+
+      // Track storage bytes (fire-and-forget)
+      if (this.tenantId && this.tenantRepo) {
+        void this.tenantRepo.incrementStorageBytes(this.tenantId, data.byteLength)
+          .catch((err: unknown) => logger.warn({ err }, 'Failed to track storage bytes'));
+      }
+
       return ref;
     } catch (error) {
       throw new StorageError(`Failed to store binary in S3: ${(error as Error).message}`, {
@@ -1048,7 +1075,64 @@ pnpm --filter @spatula/api test
 
 Existing tests use `PgContentStore` (no `getDownloadUrl`), so `supportsPresignedUrls` returns false and the existing stream-through path is used. No test breakage.
 
-- [ ] **Step 4: Commit**
+- [ ] **Step 4: Add test for presigned URL redirect path**
+
+In `apps/api/tests/unit/routes/exports.test.ts`, read the existing tests then add a test that provides a content store mock WITH `getDownloadUrl`:
+
+```typescript
+  it('redirects to presigned URL when content store supports it', async () => {
+    // Create mock with getDownloadUrl
+    const mockContentStore = {
+      retrieve: vi.fn(),
+      retrieveBinary: vi.fn(),
+      getDownloadUrl: vi.fn().mockResolvedValue('https://s3.example.com/signed-url'),
+      store: vi.fn(),
+      storeBinary: vi.fn(),
+      delete: vi.fn(),
+    };
+
+    // Create test app with the S3-like content store
+    // ... (follow the existing test pattern but replace contentStore in deps)
+
+    const res = await app.request(`/api/v1/jobs/${jobId}/export/${exportId}/download`);
+    expect(res.status).toBe(302);
+    expect(res.headers.get('Location')).toContain('signed-url');
+  });
+```
+
+Read the existing export test file to understand the mock structure and adapt accordingly.
+
+- [ ] **Step 5: Add env var reading for content store configuration**
+
+Create a helper in `apps/api/src/app.ts` or a dedicated config file that reads the `CONTENT_STORE` env var and constructs the appropriate content store. This enables deployers to switch to S3 via env vars without code changes.
+
+In `apps/api/src/app.ts`, add a helper (or note that the wiring happens in the server bootstrap where `AppDeps` is assembled — typically outside `createApp()`). The most practical approach: document how to wire it in the server entry point:
+
+```typescript
+// Example wiring for server entry point (not in createApp — deps are assembled by deployer):
+//
+// import { createContentStore } from '@spatula/core';
+// import { PgContentStore } from '@spatula/db';
+// import { getEnvOrDefault } from '@spatula/shared';
+//
+// const contentStoreType = getEnvOrDefault('CONTENT_STORE', 'postgres');
+// const contentStore = contentStoreType === 's3'
+//   ? createContentStore({
+//       type: 's3',
+//       s3: {
+//         bucket: getEnvOrDefault('S3_BUCKET', ''),
+//         region: getEnvOrDefault('S3_REGION', 'us-east-1'),
+//         endpoint: process.env.S3_ENDPOINT,
+//         accessKeyId: process.env.S3_ACCESS_KEY_ID,
+//         secretAccessKey: process.env.S3_SECRET_ACCESS_KEY,
+//       },
+//     })
+//   : new PgContentStore(db);
+```
+
+Add this as a comment block in `packages/core/src/content-store/factory.ts` so the wiring pattern is documented alongside the factory.
+
+- [ ] **Step 6: Commit**
 
 ```bash
 git add apps/api/src/routes/exports.ts
