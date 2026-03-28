@@ -1,6 +1,9 @@
 // Schema
 export * from './schema/index.js';
 
+// Cache
+export { RedisCache } from './cache.js';
+
 // Connection
 export { createDatabase, createDatabasePool } from './connection.js';
 export type { Database, DatabasePool } from './connection.js';
