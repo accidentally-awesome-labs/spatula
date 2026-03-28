@@ -212,6 +212,42 @@ describe('S3ContentStore', () => {
     });
   });
 
+  describe('storage byte tracking', () => {
+    it('calls incrementStorageBytes after store() when tenant context is set', async () => {
+      mockSend.mockResolvedValue({});
+      const mockTenantRepo = { incrementStorageBytes: vi.fn().mockResolvedValue(undefined) };
+      store.setTenantContext('tenant-1', mockTenantRepo);
+
+      await store.store('key', 'hello world');
+
+      // Fire-and-forget — give a tick to execute
+      await new Promise((r) => setTimeout(r, 10));
+      expect(mockTenantRepo.incrementStorageBytes).toHaveBeenCalledWith(
+        'tenant-1',
+        Buffer.byteLength('hello world', 'utf-8'),
+      );
+    });
+
+    it('calls incrementStorageBytes after storeBinary() when tenant context is set', async () => {
+      mockSend.mockResolvedValue({});
+      const mockTenantRepo = { incrementStorageBytes: vi.fn().mockResolvedValue(undefined) };
+      store.setTenantContext('tenant-1', mockTenantRepo);
+
+      const data = new Uint8Array([1, 2, 3, 4, 5]);
+      await store.storeBinary('key', data);
+
+      await new Promise((r) => setTimeout(r, 10));
+      expect(mockTenantRepo.incrementStorageBytes).toHaveBeenCalledWith('tenant-1', 5);
+    });
+
+    it('does NOT call incrementStorageBytes when tenant context is not set', async () => {
+      mockSend.mockResolvedValue({});
+      // No setTenantContext called
+      await store.store('key', 'content');
+      // Nothing to assert — just verify no error thrown
+    });
+  });
+
   describe('error handling', () => {
     it('store throws StorageError on S3 failure', async () => {
       mockSend.mockRejectedValue(new Error('AccessDenied'));
@@ -469,6 +505,12 @@ describe('createContentStore', () => {
   it('throws for unknown type', () => {
     expect(() => createContentStore({ type: 'unknown' as any })).toThrow(
       'Unknown content store type: unknown',
+    );
+  });
+
+  it('throws when s3 type is selected but s3 config is missing', () => {
+    expect(() => createContentStore({ type: 's3' })).toThrow(
+      'S3 configuration required when CONTENT_STORE=s3',
     );
   });
 });
@@ -857,6 +899,31 @@ describe('StreamingCsvExporter', () => {
     const stream = exporter.export(makeEntityBatches([]));
     const result = await collectStream(stream);
     expect(result).toBe('');
+  });
+
+  it('uses custom columns parameter for consistent ordering', async () => {
+    const batches = [
+      [{ mergedData: { name: 'Alice', age: 30, city: 'NYC' } }],
+    ];
+    const stream = exporter.export(makeEntityBatches(batches), ['city', 'name', 'age']);
+    const result = await collectStream(stream);
+    const lines = result.trim().split('\n');
+    expect(lines[0]).toBe('city,name,age');
+    expect(lines[1]).toContain('NYC');
+  });
+
+  it('escapes values with commas, quotes, and newlines', async () => {
+    const batches = [
+      [{ mergedData: { name: 'O\'Brien, Jr.', desc: 'said "hello"', note: 'line1\nline2' } }],
+    ];
+    const stream = exporter.export(makeEntityBatches(batches));
+    const result = await collectStream(stream);
+    const lines = result.trim().split('\n');
+    // Header should be clean
+    expect(lines[0]).toBe('name,desc,note');
+    // Data row should have escaped values
+    expect(result).toContain('"O\'Brien, Jr."'); // comma triggers quoting
+    expect(result).toContain('"said ""hello"""'); // quotes doubled
   });
 });
 ```
