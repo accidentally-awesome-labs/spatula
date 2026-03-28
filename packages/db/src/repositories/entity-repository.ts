@@ -173,6 +173,35 @@ export class EntityRepository {
     }
   }
 
+  async findByJobCursor(
+    jobId: string,
+    tenantId: string,
+    limit: number,
+    cursor?: string,
+  ): Promise<{ entities: Array<typeof entities.$inferSelect>; nextCursor: string | null }> {
+    try {
+      const conditions = [eq(entities.jobId, jobId), eq(entities.tenantId, tenantId)];
+      if (cursor) {
+        conditions.push(sql`${entities.id} > ${cursor}`);
+      }
+
+      const rows = await this.db
+        .select()
+        .from(entities)
+        .where(and(...conditions))
+        .orderBy(entities.id)
+        .limit(limit);
+
+      const nextCursor = rows.length === limit ? rows[rows.length - 1].id : null;
+      return { entities: rows, nextCursor };
+    } catch (error) {
+      throw new StorageError(`Failed to fetch entities by cursor: ${(error as Error).message}`, {
+        cause: error as Error,
+        context: { jobId, tenantId, cursor },
+      });
+    }
+  }
+
   async updateMergedData(
     entityId: string,
     tenantId: string,

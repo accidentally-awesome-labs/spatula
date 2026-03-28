@@ -73,6 +73,7 @@ export interface EntityRepo {
   findByJob(jobId: string, tenantId: string, options?: { limit: number; offset: number }): Promise<unknown[]>;
   findByJobWithProvenance(jobId: string, tenantId: string, options?: { limit: number; offset: number }): Promise<unknown[]>;
   countByJob(jobId: string, tenantId: string): Promise<number>;
+  findByJobCursor?(jobId: string, tenantId: string, limit: number, cursor?: string): Promise<{ entities: unknown[]; nextCursor: string | null }>;
 }
 
 export interface EntitySourceRepo {

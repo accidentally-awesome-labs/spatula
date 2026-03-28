@@ -390,6 +390,74 @@ describe('processExport', () => {
     );
   });
 
+  it('uses streaming CSV path when findByJobCursor is available', async () => {
+    const deps = createMockDeps();
+    const entities = [
+      { id: 'e1', mergedData: { name: 'Alice' }, qualityScore: 0.9, categories: [], sourceCount: 1 },
+      { id: 'e2', mergedData: { name: 'Bob' }, qualityScore: 0.8, categories: [], sourceCount: 1 },
+    ];
+    // Add findByJobCursor to trigger streaming path
+    (deps.entityRepo as any).findByJobCursor = vi.fn()
+      .mockResolvedValueOnce({ entities, nextCursor: null });
+
+    const csvInput = { ...defaultInput, format: 'csv' as const };
+    const result = await processExport(csvInput, deps);
+
+    // Streaming path should use findByJobCursor, not findByJob
+    expect((deps.entityRepo as any).findByJobCursor).toHaveBeenCalledWith('job-1', 'tenant-1', 500, undefined);
+    expect(deps.entityRepo.findByJob).not.toHaveBeenCalled();
+    expect(deps.entityRepo.countByJob).not.toHaveBeenCalled();
+    expect(result.entityCount).toBe(2);
+    expect(deps.contentStore.store).toHaveBeenCalled();
+    // Verify CSV content
+    const storedContent = (deps.contentStore.store as any).mock.calls[0][1];
+    expect(storedContent).toContain('name');
+    expect(storedContent).toContain('Alice');
+    expect(storedContent).toContain('Bob');
+  });
+
+  it('falls back to offset path for JSON with provenance even when findByJobCursor is available', async () => {
+    const deps = createMockDeps();
+    const entities = [
+      { id: 'e1', mergedData: { name: 'Test' }, qualityScore: 0.9, categories: [], sourceCount: 1 },
+    ];
+    // Add findByJobCursor — but provenance should bypass it
+    (deps.entityRepo as any).findByJobCursor = vi.fn();
+    (deps.entityRepo.countByJob as any).mockResolvedValue(1);
+    (deps.entityRepo.findByJobWithProvenance as any).mockResolvedValue(entities);
+
+    const provenanceInput = { ...defaultInput, includeProvenance: true };
+    await processExport(provenanceInput, deps);
+
+    // Should NOT use streaming/cursor path — provenance forces offset path
+    expect((deps.entityRepo as any).findByJobCursor).not.toHaveBeenCalled();
+    expect(deps.entityRepo.findByJobWithProvenance).toHaveBeenCalled();
+    expect(deps.entityRepo.findByJob).not.toHaveBeenCalled();
+  });
+
+  it('uses cursor to collect entities for binary format when findByJobCursor is available', async () => {
+    const deps = createMockDeps();
+    const entities = [
+      { id: 'e1', mergedData: { name: 'Test' }, qualityScore: 0.9, categories: [], sourceCount: 1 },
+    ];
+    // Add findByJobCursor — binary format should collect via cursor then pass to exporter
+    (deps.entityRepo as any).findByJobCursor = vi.fn()
+      .mockResolvedValueOnce({ entities, nextCursor: null });
+    (deps.entityRepo.countByJob as any).mockResolvedValue(1);
+
+    const parquetInput = { ...defaultInput, format: 'parquet' as const };
+    await processExport(parquetInput, deps);
+
+    // Should use cursor to collect (not streaming exporter), then pass to binary exporter
+    expect((deps.entityRepo as any).findByJobCursor).toHaveBeenCalled();
+    expect(deps.entityRepo.findByJob).not.toHaveBeenCalled();
+    expect(deps.contentStore.storeBinary).toHaveBeenCalled();
+    expect(deps.exportRepo.updateStatus).toHaveBeenCalledWith(
+      'exp-1', 'tenant-1',
+      expect.objectContaining({ status: 'completed', contentRef: 'pg://binary-ref-1' }),
+    );
+  });
+
   it('falls back to MAX_EXPORT_ENTITIES (50,000) when maxEntities not provided', async () => {
     const deps = createMockDeps();
     // 40,000 entities — under the default 50,000 limit
