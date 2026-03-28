@@ -31,10 +31,13 @@ export const entities = pgTable(
       .default(sql`'{}'::text[]`),
     qualityScore: real('quality_score').notNull().default(0),
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
   },
   (table) => [
     index('entities_categories_gin_idx').using('gin', table.categories),
-    index('entities_job_quality_idx').on(table.jobId, table.qualityScore),
+    index('entities_job_quality_idx').on(table.jobId, table.qualityScore, table.id),
+    index('idx_entities_job_tenant').on(table.jobId, table.tenantId),
+    index('idx_entities_updated').on(table.updatedAt),
   ],
 );
 

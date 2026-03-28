@@ -17,9 +17,12 @@ export const exports = pgTable(
     error: text('error'),
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
     completedAt: timestamp('completed_at', { withTimezone: true }),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
   },
   (table) => [
     index('exports_job_idx').on(table.jobId),
     index('exports_tenant_idx').on(table.tenantId),
+    index('idx_exports_job_tenant').on(table.jobId, table.tenantId),
+    index('idx_exports_updated').on(table.updatedAt),
   ],
 );

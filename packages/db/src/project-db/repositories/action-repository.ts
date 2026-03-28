@@ -43,6 +43,7 @@ export class SqliteActionRepository implements ActionRepo {
           confidence: data.confidence ?? 0,
           reasoning: data.reasoning ?? '',
           createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString(),
         })
         .run();
     }, { method: 'create', table: 'actions' });

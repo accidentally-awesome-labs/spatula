@@ -22,6 +22,7 @@ export const actions = sqliteTable(
     reviewedBy: text('reviewed_by'),
     createdAt: text('created_at').notNull(),
     appliedAt: text('applied_at'),
+    updatedAt: text('updated_at').notNull(),
   },
   (table) => [
     index('sl_actions_job_type_idx').on(table.jobId, table.type),
