@@ -9,3 +9,4 @@ export { DuckDBExporter } from './duckdb-exporter.js';
 export { mapSchema } from './column-mapper.js';
 export type { ColumnDef, ExportTarget } from './column-mapper.js';
 export { StreamingJsonExporter } from './streaming-json-exporter.js';
+export { StreamingCsvExporter } from './streaming-csv-exporter.js';
