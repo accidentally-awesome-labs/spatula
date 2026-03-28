@@ -417,6 +417,36 @@ describe('processExport', () => {
     expect(storedContent).toContain('Bob');
   });
 
+  it('uses streaming JSON path when findByJobCursor is available and no provenance', async () => {
+    const deps = createMockDeps();
+    const entities = [
+      { id: 'e1', mergedData: { name: 'Alice' }, qualityScore: 0.9, categories: [], sourceCount: 1 },
+      { id: 'e2', mergedData: { name: 'Bob' }, qualityScore: 0.8, categories: [], sourceCount: 1 },
+    ];
+    // Add findByJobCursor to trigger streaming path
+    (deps.entityRepo as any).findByJobCursor = vi.fn()
+      .mockResolvedValueOnce({ entities, nextCursor: null });
+
+    const jsonInput = { ...defaultInput, format: 'json' as const, includeProvenance: false };
+    const result = await processExport(jsonInput, deps);
+
+    // Streaming path should use findByJobCursor, not findByJob
+    expect((deps.entityRepo as any).findByJobCursor).toHaveBeenCalledWith('job-1', 'tenant-1', 500, undefined);
+    expect(deps.entityRepo.findByJob).not.toHaveBeenCalled();
+    // countByJob is called for ALL paths (maxEntities guard)
+    expect(deps.entityRepo.countByJob).toHaveBeenCalled();
+    // entityCount should match the number of entities yielded
+    expect(result.entityCount).toBe(2);
+    // Content should be stored
+    expect(deps.contentStore.store).toHaveBeenCalled();
+    // Parse and verify the JSON envelope structure
+    const storedContent = (deps.contentStore.store as any).mock.calls[0][1];
+    const envelope = JSON.parse(storedContent);
+    expect(envelope.metadata.format).toBe('json');
+    expect(Array.isArray(envelope.entities)).toBe(true);
+    expect(envelope).toHaveProperty('schema');
+  });
+
   it('falls back to offset path for JSON with provenance even when findByJobCursor is available', async () => {
     const deps = createMockDeps();
     const entities = [

@@ -54,4 +54,13 @@ describe('StreamingCsvExporter', () => {
     expect(result).toContain('"O\'Brien, Jr."');
     expect(result).toContain('"said ""hello"""');
   });
+
+  it('sanitizes formula injection characters (=, +, -, @)', async () => {
+    const batches = [[{ mergedData: { name: '=SUM(A1)', value: '+cmd' } }]];
+    const stream = exporter.export(makeEntityBatches(batches));
+    const result = await collectStream(stream);
+    // csvEscapeValue from csv-utils.ts prefixes formula chars with a tab inside quotes
+    expect(result).toContain('"\t=SUM(A1)"');
+    expect(result).toContain('"\t+cmd"');
+  });
 });
