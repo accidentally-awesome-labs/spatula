@@ -13,7 +13,7 @@
 - File: `docs/superpowers/specs/2026-03-21-phase-12-production-readiness-design.md`
 - Decomposition: `docs/superpowers/specs/2026-03-25-wave-3-decomposition-design.md` section 4.4
 
-**Depends on:** Wave 3-1b (`PgContentStore` with `setTenantContext`), existing `ContentStore` interface in `packages/core/src/interfaces/content-store.ts`
+**Depends on:** Existing `ContentStore` interface in `packages/core/src/interfaces/content-store.ts` (Wave 1). This sub-plan is an independent root per the decomposition design — no dependency on Wave 3-1a/3-1b.
 
 ---
 
@@ -209,6 +209,22 @@ describe('S3ContentStore', () => {
     it('returns a presigned URL', async () => {
       const url = await store.getDownloadUrl('s3://test-bucket/text/my-key', 3600);
       expect(url).toContain('signed-url');
+    });
+  });
+
+  describe('error handling', () => {
+    it('store throws StorageError on S3 failure', async () => {
+      mockSend.mockRejectedValue(new Error('AccessDenied'));
+      await expect(store.store('key', 'content')).rejects.toThrow('Failed to store content in S3');
+    });
+
+    it('retrieve throws StorageError on S3 failure', async () => {
+      mockSend.mockRejectedValue(new Error('InternalError'));
+      await expect(store.retrieve('s3://test-bucket/text/key')).rejects.toThrow('Failed to retrieve from S3');
+    });
+
+    it('parseRef throws on invalid ref format', async () => {
+      await expect(store.retrieve('pg://wrong-format')).rejects.toThrow('Invalid S3 ref format');
     });
   });
 });
@@ -539,6 +555,8 @@ Read `packages/db/src/repositories/entity-repository.ts`. Add this method:
 
 Add the `sql` import if not already present.
 
+**Note on ordering:** This method orders by `entities.id` (insertion order), while the existing `findByJob` orders by `quality_score DESC`. This is intentional — keyset pagination requires a unique, ordered column. `id` is the natural choice. Streaming exports produce entities in insertion order, not quality score order. This is documented as an acceptable behavioral change.
+
 - [ ] **Step 2: Add findByJobCursor to EntityRepo interface in pipeline types**
 
 Read `packages/core/src/pipeline/types.ts`. Add to `EntityRepo`:
@@ -750,8 +768,14 @@ pnpm --filter @spatula/core test -- --run streaming-json
 - [ ] **Step 4: Commit**
 
 ```bash
-git add packages/core/src/exporters/streaming-json-exporter.ts packages/core/tests/unit/exporters/streaming-json-exporter.test.ts
+git add packages/core/src/exporters/streaming-json-exporter.ts packages/core/tests/unit/exporters/streaming-json-exporter.test.ts packages/core/src/exporters/index.ts
 git commit -m "feat(core): add StreamingJsonExporter for cursor-based entity batches"
+```
+
+**Note:** Also add to `packages/core/src/exporters/index.ts`:
+```typescript
+export { StreamingJsonExporter } from './streaming-json-exporter.js';
+```
 ```
 
 ---
@@ -826,9 +850,14 @@ function escapeCsvValue(value: unknown): string {
 }
 
 export class StreamingCsvExporter {
-  export(entityBatches: AsyncIterable<unknown[]>): ReadableStream<Uint8Array> {
+  /**
+   * @param columns Optional column list for consistent ordering.
+   *                If not provided, columns are derived from the first entity's mergedData keys.
+   *                Pass schema field names for deterministic output.
+   */
+  export(entityBatches: AsyncIterable<unknown[]>, columns?: string[]): ReadableStream<Uint8Array> {
     let headerWritten = false;
-    let columns: string[] = [];
+    let resolvedColumns: string[] = columns ?? [];
 
     return new ReadableStream<Uint8Array>({
       async start(controller) {
@@ -837,12 +866,14 @@ export class StreamingCsvExporter {
             const data = (entity as any).mergedData ?? entity;
 
             if (!headerWritten) {
-              columns = Object.keys(data);
-              controller.enqueue(encoder.encode(columns.join(',') + '\n'));
+              if (resolvedColumns.length === 0) {
+                resolvedColumns = Object.keys(data);
+              }
+              controller.enqueue(encoder.encode(resolvedColumns.join(',') + '\n'));
               headerWritten = true;
             }
 
-            const row = columns.map((col) => escapeCsvValue(data[col]));
+            const row = resolvedColumns.map((col) => escapeCsvValue(data[col]));
             controller.enqueue(encoder.encode(row.join(',') + '\n'));
           }
         }
@@ -862,8 +893,14 @@ pnpm --filter @spatula/core test -- --run streaming-csv
 - [ ] **Step 4: Commit**
 
 ```bash
-git add packages/core/src/exporters/streaming-csv-exporter.ts packages/core/tests/unit/exporters/streaming-csv-exporter.test.ts
+git add packages/core/src/exporters/streaming-csv-exporter.ts packages/core/tests/unit/exporters/streaming-csv-exporter.test.ts packages/core/src/exporters/index.ts
 git commit -m "feat(core): add StreamingCsvExporter for cursor-based entity batches"
+```
+
+**Note:** Also add to `packages/core/src/exporters/index.ts`:
+```typescript
+export { StreamingCsvExporter } from './streaming-csv-exporter.js';
+```
 ```
 
 ---
@@ -930,9 +967,27 @@ Read the file first to understand exact structure, then make the minimal changes
     }
 ```
 
-**Important:** Preserve the existing behavior for binary formats and provenance handling. The streaming path is an optimization for JSON/CSV only.
+**Critical design notes for the streaming path:**
 
-- [ ] **Step 3: Run all export orchestrator tests**
+1. **JSON envelope:** The current JSON export wraps entities in an envelope: `{ metadata, schema, documentation, entities }`. The `StreamingJsonExporter` produces a flat JSON array. For the streaming path, collect the stream output into a string, parse it as the entities array, then construct the envelope around it (same as current logic). This preserves the output structure.
+
+2. **Provenance:** The current orchestrator uses `findByJobWithProvenance` when `includeProvenance && format === 'json'`. The cursor-based `findByJobCursor` does NOT have a provenance variant. When provenance is requested, **fall back to the non-streaming offset-based path**. The conditional should be: `if (streamingFormats.has(format) && !useProvenance && deps.entityRepo.findByJobCursor)`.
+
+3. **Entity count:** Track entity count during streaming by counting in a closure variable, or count after collecting the stream. The count is needed for `exportRepo.updateStatus()`.
+
+4. **Ordering change:** The cursor path orders by `entities.id` (insertion order), while the old offset path orders by `quality_score DESC`. This is an intentional change for streaming mode — keyset pagination requires a unique, ordered column. Document this: "Streaming exports produce entities in insertion order (by ID), not quality score order."
+
+5. **Binary formats:** For Parquet/SQLite/DuckDB, use cursor-based fetching to collect all entities into an array (reducing peak memory via chunked fetching), then pass to the existing exporter. This means binary formats also benefit from cursor fetching even though they materialize.
+
+- [ ] **Step 3: Add tests for the streaming code path**
+
+Add 2-3 new tests to `packages/core/tests/unit/pipeline/export-orchestrator.test.ts`:
+
+- Test that when `entityRepo.findByJobCursor` is available and format is `csv`, the streaming path is used (verify `findByJobCursor` is called instead of `findByJob`)
+- Test that when format is `json` with `includeProvenance`, the old offset path is used (verify `findByJobWithProvenance` is called)
+- Test that binary formats still use the old path even when `findByJobCursor` is available
+
+- [ ] **Step 4: Run all export orchestrator tests**
 
 ```bash
 pnpm --filter @spatula/core test -- --run export-orchestrator
@@ -965,7 +1020,13 @@ Add the import at the top:
 import { supportsPresignedUrls } from '@spatula/core';
 ```
 
-In the download handler, before the existing content retrieval logic, add a presigned URL check:
+First, update the `downloadExportRoute` OpenAPI definition to include a 302 response. Find the `responses` object and add:
+
+```typescript
+  302: { description: 'Redirect to presigned download URL' },
+```
+
+Then in the download handler, before the existing content retrieval logic, add a presigned URL check:
 
 ```typescript
     // If content store supports presigned URLs, redirect instead of streaming
@@ -996,35 +1057,7 @@ git commit -m "feat(api): add presigned URL redirect for S3-backed export downlo
 
 ---
 
-## Task 9: Export Streaming Exporter Barrel Exports
-
-**Files:**
-- Modify: `packages/core/src/exporters/index.ts`
-
-- [ ] **Step 1: Export streaming exporters**
-
-Add to `packages/core/src/exporters/index.ts`:
-```typescript
-export { StreamingJsonExporter } from './streaming-json-exporter.js';
-export { StreamingCsvExporter } from './streaming-csv-exporter.js';
-```
-
-- [ ] **Step 2: Build and test**
-
-```bash
-pnpm --filter @spatula/core build && pnpm --filter @spatula/core test
-```
-
-- [ ] **Step 3: Commit**
-
-```bash
-git add packages/core/src/exporters/index.ts
-git commit -m "feat(core): export streaming JSON and CSV exporters from barrel"
-```
-
----
-
-## Task 10: Integration Verification
+## Task 9: Integration Verification
 
 - [ ] **Step 1: Run full test suite**
 
