@@ -84,6 +84,10 @@ Also extend the existing quality index for keyset pagination. Replace:
 with:
 ```typescript
     index('entities_job_quality_idx').on(table.jobId, table.qualityScore, table.id),
+    // Note: Drizzle's .on() generates ASC-only indexes. The spec wants (job_id, quality_score DESC, id ASC).
+    // Postgres B-tree indexes are traversable in both directions, so ASC index works for DESC queries
+    // with slightly less efficiency. If the generated migration doesn't include DESC, this is acceptable.
+    // Verify the migration output and add a raw SQL index in a separate migration if needed.
 ```
 
 - [ ] **Step 2: Add updated_at to extractions schema and new indexes**
@@ -508,7 +512,7 @@ Read the file. Add a method similar to `EntityRepository.findByJobCursor`:
         .limit(limit);
 
       const nextCursor = rows.length === limit ? rows[rows.length - 1].id : null;
-      return { data: rows, nextCursor };
+      return { entities: rows, nextCursor };  // Match EntityRepository naming convention
     } catch (error) {
       throw new StorageError(`Failed to fetch extractions by cursor: ${(error as Error).message}`, {
         cause: error as Error,
@@ -526,11 +530,23 @@ Also update `store()` to set `updatedAt`:
 
 - [ ] **Step 2: Add findByCursor to ActionRepository**
 
-Same pattern. Read the file, add `findByJobCursor` and update `create()` / `updateStatus()` to set `updatedAt`.
+Same pattern. Read the file, add `findByJobCursor` with `since` parameter. Also add `countByJob()` method (currently missing — needed for `pagination.total` in API response):
+
+```typescript
+  async countByJob(jobId: string, tenantId: string): Promise<number> {
+    const [result] = await this.db
+      .select({ count: sql<number>`count(*)::int` })
+      .from(actions)
+      .where(and(eq(actions.jobId, jobId), eq(actions.tenantId, tenantId)));
+    return result?.count ?? 0;
+  }
+```
+
+Update ALL mutation methods (`create()`, `updateStatus()`, `batchUpdateStatus()`) to set `updatedAt: new Date()`.
 
 - [ ] **Step 3: Add findByCursor to ExportRepository**
 
-Same pattern. Read the file, add `findByJobCursor` and update write methods to set `updatedAt`.
+Same pattern. Read the file, add `findByJobCursor` with `since` parameter. Also add `countByJob()` method (currently missing). Update ALL write methods (`create()`, `updateStatus()`) to set `updatedAt: new Date()`.
 
 - [ ] **Step 4: Update EntityRepository for since parameter**
 
@@ -553,18 +569,29 @@ Add the `since` filter:
       }
 ```
 
-Also update `create()` to set `updatedAt: new Date()`.
+Update ALL mutation methods to set `updatedAt: new Date()`: `create()`, `updateMergedData()` (if exists), `updateQualityScore()` (if exists). Read the file to identify all mutation methods — every write must update `updatedAt` for `?since=` to work correctly.
 
-- [ ] **Step 5: Build and test**
+- [ ] **Step 5: Add tests for cursor methods**
+
+Add tests to at least one repository test file (e.g., `packages/db/tests/unit/repositories/extraction-repository.test.ts` or the entity repo test file). Tests needed:
+
+1. `findByJobCursor` returns `{ entities, nextCursor }` — nextCursor is last ID when batch is full
+2. `findByJobCursor` with `since` parameter filters by updatedAt
+3. `findByJobCursor` returns `nextCursor: null` on last page
+4. `countByJob` returns correct count (for ActionRepository/ExportRepository)
+
+Follow the existing mock-db test patterns in the repository test files.
+
+- [ ] **Step 6: Build and test**
 
 ```bash
 pnpm --filter @spatula/db build && pnpm --filter @spatula/db test
 ```
 
-- [ ] **Step 6: Commit**
+- [ ] **Step 7: Commit**
 
 ```bash
-git add packages/db/src/repositories/
+git add packages/db/src/repositories/ packages/db/tests/
 git commit -m "feat(db): add cursor methods with since filter to all list repositories"
 ```
 
@@ -589,7 +616,7 @@ import { decodeCursor, encodeCursor } from '@spatula/shared';
 In the list handler, check if `cursor` is provided. If so, use `findByJobCursor` instead of `findByJob`:
 
 ```typescript
-    if (query.cursor && deps.entityRepo.findByJobCursor) {
+    if (query.cursor) {
       const { id: cursorId } = decodeCursor(query.cursor);
       const result = await deps.entityRepo.findByJobCursor(
         jobId, tenantId, query.limit, cursorId, query.since,
@@ -606,10 +633,12 @@ In the list handler, check if `cursor` is provided. If so, use `findByJobCursor`
       });
     }
 
-    // Fallback: existing offset pagination
+    // Fallback: existing offset pagination (also returns pagination envelope for consistency)
 ```
 
 Update the `listEntitiesRoute` OpenAPI response to include the pagination envelope with `nextCursor` and `hasMore`.
+
+**Important: Consistent response envelope.** The offset path must also return the `pagination` object (with `hasMore: offset + limit < total`, no `nextCursor`). Both paths return `{ data: [...], pagination: { total, limit, hasMore, nextCursor? } }`. Update the existing offset response from `{ data, total }` to `{ data, pagination: { total, limit, hasMore: false } }`.
 
 Also add `since` support to the offset path by passing it to the repository if available.
 
@@ -619,11 +648,44 @@ Same pattern. Read `apps/api/src/routes/extractions.ts`, add cursor + since supp
 
 - [ ] **Step 3: Update action list endpoint**
 
-Same pattern. Read `apps/api/src/routes/actions.ts`.
+Read `apps/api/src/routes/actions.ts`. **Important:** The actions route defines its OWN inline query schema (`listActionsQuery`) with `type`, `status`, `limit`, `offset` — it does NOT extend `paginationSchema`. Refactor it to extend `paginationSchema` so `cursor` and `since` are available:
 
-- [ ] **Step 4: Update export list endpoint**
+```typescript
+import { paginationSchema } from '../schemas/pagination.js';
 
-Read `apps/api/src/routes/exports.ts`. The export list endpoint may use a different query schema — adapt accordingly.
+const listActionsQuery = paginationSchema.extend({
+  type: z.string().optional(),
+  status: z.enum([...actionStatusEnum.enumValues]).optional(),
+});
+```
+
+Then add cursor support in the handler following the same pattern as entities.
+
+- [ ] **Step 4: Create export list endpoint with cursor pagination**
+
+There is NO existing `GET /exports` list endpoint in `apps/api/src/routes/exports.ts` — only trigger/status/download/docs. Create a new list route:
+
+```typescript
+const listExportsRoute = createRoute({
+  method: 'get', path: '/exports', tags: ['Exports'],
+  summary: 'List exports for a job',
+  request: {
+    params: jobIdParam,
+    query: paginationSchema,
+  },
+  responses: {
+    200: jsonContent(z.object({
+      data: z.array(exportResponseSchema),
+      pagination: z.object({
+        total: z.number(), limit: z.number(),
+        hasMore: z.boolean(), nextCursor: z.string().optional(),
+      }),
+    }), 'Export list'),
+  },
+});
+```
+
+Implement with cursor support from the start (following same pattern as other endpoints). Use `deps.exportRepo.findByJobCursor()` when cursor is provided, `deps.exportRepo.findByJob()` for offset fallback.
 
 - [ ] **Step 5: Run all API tests**
 
@@ -647,6 +709,7 @@ git commit -m "feat(api): add cursor pagination and incremental fetch to all lis
 **Files:**
 - Modify: `apps/api/src/types.ts`
 - Modify: `packages/db/src/repositories/schema-repository.ts`
+- Modify: `packages/db/src/repositories/job-repository.ts`
 - Modify: `packages/db/src/repositories/tenant-repository.ts`
 - Modify: `packages/db/src/repositories/entity-repository.ts`
 
@@ -698,7 +761,31 @@ On schema writes (`create`), invalidate:
     }
 ```
 
-- [ ] **Step 3: Wire cache into tenant quota lookups**
+- [ ] **Step 3: Wire cache into job config lookups**
+
+Read `packages/db/src/repositories/job-repository.ts`. The `findById` method returns job config which is frequently read. Add cache support same pattern as schema:
+
+```typescript
+  async findById(jobId: string, tenantId: string) {
+    if (this.cache) {
+      return this.cache.getOrFetch(
+        `job:${jobId}:config`,
+        () => this.findByIdUncached(jobId, tenantId),
+        60,
+      );
+    }
+    return this.findByIdUncached(jobId, tenantId);
+  }
+```
+
+On job status updates (`updateStatus`, `updateStats`), invalidate:
+```typescript
+    if (this.cache) {
+      void this.cache.invalidate(`job:${jobId}:*`).catch(() => {});
+    }
+```
+
+- [ ] **Step 4: Wire cache into tenant quota lookups**
 
 In `packages/db/src/repositories/tenant-repository.ts`, wrap `getQuotas` with cache:
 
@@ -722,7 +809,7 @@ On `update`, invalidate:
     }
 ```
 
-- [ ] **Step 4: Wire cache into entity count**
+- [ ] **Step 5: Wire cache into entity count**
 
 In `packages/db/src/repositories/entity-repository.ts`, wrap `countByJob` with cache:
 
@@ -747,7 +834,7 @@ On `create`, invalidate:
     }
 ```
 
-- [ ] **Step 5: Build and test**
+- [ ] **Step 6: Build and test**
 
 ```bash
 pnpm --filter @spatula/db build && pnpm --filter @spatula/db test
@@ -755,11 +842,11 @@ pnpm --filter @spatula/db build && pnpm --filter @spatula/db test
 
 Cache is optional (`setCache` not called in tests), so existing tests pass unchanged.
 
-- [ ] **Step 6: Commit**
+- [ ] **Step 7: Commit**
 
 ```bash
 git add apps/api/src/types.ts packages/db/src/repositories/
-git commit -m "feat: wire RedisCache to schema, quota, and entity count hot paths"
+git commit -m "feat: wire RedisCache to schema, job config, quota, and entity count hot paths"
 ```
 
 ---
