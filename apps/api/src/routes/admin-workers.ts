@@ -29,10 +29,12 @@ export function adminWorkerRoutes() {
     do {
       const [nextCursor, keys] = await deps.redis.scan(cursor, 'MATCH', 'worker:heartbeat:*', 'COUNT', 100);
       cursor = nextCursor;
-      for (const key of keys) {
-        const value = await deps.redis.get(key);
-        if (value) {
-          try { workers.push({ ...JSON.parse(value), status: 'healthy' }); } catch { /* skip */ }
+      if (keys.length > 0) {
+        const values = await deps.redis.mget(...keys);
+        for (const value of values) {
+          if (value) {
+            try { workers.push({ ...JSON.parse(value), status: 'healthy' }); } catch { /* skip */ }
+          }
         }
       }
     } while (cursor !== '0');

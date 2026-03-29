@@ -86,6 +86,34 @@ describe('idempotencyMiddleware', () => {
     expect(redis.set).not.toHaveBeenCalled();
   });
 
+  it('caches PATCH response with Idempotency-Key', async () => {
+    redis.get.mockResolvedValue(null);
+    redis.set.mockResolvedValue('OK');
+    const app = new Hono();
+    app.use('*', async (c, next) => { c.set('tenantId', 'tenant-1'); c.set('deps', { redis }); return next(); });
+    app.use('*', idempotencyMiddleware());
+    app.patch('/test', (c) => c.json({ updated: true }, 200));
+    const res = await app.request('/test', {
+      method: 'PATCH',
+      headers: { 'Idempotency-Key': 'patch-key' },
+    });
+    expect(res.status).toBe(200);
+    expect(redis.set).toHaveBeenCalled();
+  });
+
+  it('rejects Idempotency-Key longer than 255 characters', async () => {
+    const app = createTestApp(redis);
+    const longKey = 'x'.repeat(256);
+    const res = await app.request('/test', {
+      method: 'POST',
+      headers: { 'Idempotency-Key': longKey },
+    });
+    expect(res.status).toBe(400);
+    const body = await res.json();
+    expect(body.error.code).toBe('VALIDATION_ERROR');
+    expect(redis.get).not.toHaveBeenCalled();
+  });
+
   it('works without Redis (passes through)', async () => {
     const app = createTestApp(null);
     const res = await app.request('/test', {

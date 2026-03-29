@@ -25,7 +25,7 @@ export class WorkerHeartbeat {
     this.redis = config.redis;
     this.queues = config.queues;
     this.intervalMs = config.intervalMs ?? 30_000;
-    this.ttlSeconds = config.ttlSeconds ?? 60;
+    this.ttlSeconds = config.ttlSeconds ?? 90;
     this.startedAt = Date.now();
   }
 

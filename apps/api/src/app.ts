@@ -144,6 +144,7 @@ export function createApp(deps: AppDeps) {
   app.get('/api/v1/jobs/:jobId/exports/*', requireScope('exports:read'));
   app.post('/api/v1/jobs/:jobId/exports', requireScope('exports:write'));
   app.route('/api/v1/jobs/:jobId', exportRoutes());
+  app.get('/api/v1/jobs/:jobId/quality', requireScope('jobs:read'));
   app.route('/api/v1/jobs/:jobId/quality', qualityRoutes());
 
   // Usage API (requires jobs:read scope)

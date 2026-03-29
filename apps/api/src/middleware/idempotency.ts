@@ -11,6 +11,11 @@ export function idempotencyMiddleware(): MiddlewareHandler {
     const idempotencyKey = c.req.header('idempotency-key');
     if (!idempotencyKey) return next();
 
+    // Validate key format and length
+    if (idempotencyKey.length > 255) {
+      return c.json({ error: { code: 'VALIDATION_ERROR', message: 'Idempotency-Key must be 255 characters or less', requestId: '' } }, 400);
+    }
+
     const redis = c.get('deps')?.redis;
     if (!redis) return next();
 

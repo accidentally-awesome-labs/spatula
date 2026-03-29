@@ -404,7 +404,7 @@ describe('processExport', () => {
     const result = await processExport(csvInput, deps);
 
     // Streaming path should use findByJobCursor, not findByJob
-    expect((deps.entityRepo as any).findByJobCursor).toHaveBeenCalledWith('job-1', 'tenant-1', 500, undefined, undefined);
+    expect((deps.entityRepo as any).findByJobCursor).toHaveBeenCalledWith('job-1', 'tenant-1', 500, undefined, undefined, undefined);
     expect(deps.entityRepo.findByJob).not.toHaveBeenCalled();
     // countByJob is now called for ALL paths (maxEntities guard)
     expect(deps.entityRepo.countByJob).toHaveBeenCalled();
@@ -431,7 +431,7 @@ describe('processExport', () => {
     const result = await processExport(jsonInput, deps);
 
     // Streaming path should use findByJobCursor, not findByJob
-    expect((deps.entityRepo as any).findByJobCursor).toHaveBeenCalledWith('job-1', 'tenant-1', 500, undefined, undefined);
+    expect((deps.entityRepo as any).findByJobCursor).toHaveBeenCalledWith('job-1', 'tenant-1', 500, undefined, undefined, undefined);
     expect(deps.entityRepo.findByJob).not.toHaveBeenCalled();
     // countByJob is called for ALL paths (maxEntities guard)
     expect(deps.entityRepo.countByJob).toHaveBeenCalled();
@@ -501,6 +501,42 @@ describe('processExport', () => {
     const calls = (deps.exportRepo.updateStatus as any).mock.calls;
     const finalCall = calls[calls.length - 1];
     expect(finalCall[2]).toEqual(expect.objectContaining({ status: 'completed' }));
+  });
+
+  it('passes minQuality to findByJobCursor when streaming', async () => {
+    const deps = createMockDeps();
+    const entities = [
+      { id: 'e1', mergedData: { name: 'Alice' }, qualityScore: 0.95, categories: [], sourceCount: 1 },
+    ];
+    (deps.entityRepo as any).findByJobCursor = vi.fn()
+      .mockResolvedValueOnce({ entities, nextCursor: null });
+
+    const qualityInput = { ...defaultInput, format: 'json' as const, minQuality: 0.8 };
+    await processExport(qualityInput, deps);
+
+    // minQuality should be passed as the 6th positional argument (after since=undefined)
+    expect((deps.entityRepo as any).findByJobCursor).toHaveBeenCalledWith('job-1', 'tenant-1', 500, undefined, undefined, 0.8);
+  });
+
+  it('applies field projection when fields option is provided', async () => {
+    const deps = createMockDeps();
+    const entities = [
+      { id: 'e1', mergedData: { name: 'Alice', email: 'alice@test.com', age: 30 }, qualityScore: 0.9, categories: [], sourceCount: 1 },
+    ];
+    (deps.entityRepo as any).findByJobCursor = vi.fn()
+      .mockResolvedValueOnce({ entities, nextCursor: null });
+    (deps.entityRepo.countByJob as any).mockResolvedValue(1);
+
+    const fieldsInput = { ...defaultInput, format: 'json' as const, fields: ['name'] };
+    await processExport(fieldsInput, deps);
+
+    expect(deps.contentStore.store).toHaveBeenCalled();
+    const storedContent = (deps.contentStore.store as any).mock.calls[0][1];
+    const envelope = JSON.parse(storedContent);
+    // Only 'name' field should be in mergedData
+    expect(envelope.entities[0].mergedData).toEqual({ name: 'Alice' });
+    expect(envelope.entities[0].mergedData).not.toHaveProperty('email');
+    expect(envelope.entities[0].mergedData).not.toHaveProperty('age');
   });
 
   it('fetches entities in batches', async () => {

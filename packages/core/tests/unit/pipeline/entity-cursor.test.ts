@@ -41,6 +41,6 @@ describe('fetchEntitiesCursor', () => {
     for await (const batch of fetchEntitiesCursor(mockRepo as any, 'j1', 't1', 500, { minQuality: 0.7 })) {
       batches.push(batch);
     }
-    expect(mockRepo.findByJobCursor).toHaveBeenCalledWith('j1', 't1', 500, undefined, 0.7);
+    expect(mockRepo.findByJobCursor).toHaveBeenCalledWith('j1', 't1', 500, undefined, undefined, 0.7);
   });
 });

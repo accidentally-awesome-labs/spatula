@@ -246,7 +246,7 @@ export class EntityRepository {
           excellent: sql<number>`count(*) FILTER (WHERE ${entities.qualityScore} >= 0.9)::int`,
           good: sql<number>`count(*) FILTER (WHERE ${entities.qualityScore} >= 0.7 AND ${entities.qualityScore} < 0.9)::int`,
           fair: sql<number>`count(*) FILTER (WHERE ${entities.qualityScore} >= 0.5 AND ${entities.qualityScore} < 0.7)::int`,
-          poor: sql<number>`count(*) FILTER (WHERE ${entities.qualityScore} < 0.5)::int`,
+          poor: sql<number>`count(*) FILTER (WHERE COALESCE(${entities.qualityScore}, 0) < 0.5)::int`,
         })
         .from(entities)
         .where(and(...conditions));

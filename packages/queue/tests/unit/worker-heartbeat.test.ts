@@ -21,7 +21,7 @@ describe('WorkerHeartbeat', () => {
     expect(mockRedis.set).toHaveBeenCalledWith(
       expect.stringMatching(/^worker:heartbeat:/),
       expect.any(String),
-      'EX', 60,
+      'EX', 90,
     );
   });
 
@@ -29,6 +29,14 @@ describe('WorkerHeartbeat', () => {
     heartbeat.start();
     heartbeat.stop();
     expect(mockRedis.del).toHaveBeenCalledWith(expect.stringMatching(/^worker:heartbeat:/));
+  });
+
+  it('stop prevents further heartbeat writes', () => {
+    heartbeat.start();
+    mockRedis.set.mockClear();
+    heartbeat.stop();
+    vi.advanceTimersByTime(60000); // Advance past interval
+    expect(mockRedis.set).not.toHaveBeenCalled();
   });
 
   it('heartbeat value contains workerId, queues, pid', () => {
