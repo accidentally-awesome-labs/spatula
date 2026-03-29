@@ -111,7 +111,7 @@ export class ExtractionRepository {
   ) {
     try {
       const conditions = [eq(extractions.jobId, jobId), eq(extractions.tenantId, tenantId)];
-      if (cursor) conditions.push(sql`${extractions.id} > ${cursor}`);
+      if (cursor) conditions.push(sql`${extractions.id} > ${cursor}::uuid`);
       if (since) conditions.push(sql`${extractions.updatedAt} > ${since}`);
 
       const rows = await this.db

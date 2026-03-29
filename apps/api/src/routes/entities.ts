@@ -2,19 +2,13 @@ import { createRoute, z } from '@hono/zod-openapi';
 import { createOpenAPIRouter } from '../openapi-config.js';
 import type { AppEnv } from '../types.js';
 import { entityQuerySchema } from '../schemas/entity-query.js';
+import { paginationEnvelopeSchema } from '../schemas/pagination.js';
 import { entityResponseSchema, entityListItemSchema, errorResponseSchema, dataResponse, jsonContent } from '../schemas/responses.js';
 import { NotFoundError } from '../middleware/error-handler.js';
 import { decodeCursor, encodeCursor } from '@spatula/shared';
 
 const jobIdParam = z.object({
   jobId: z.string().openapi({ param: { name: 'jobId', in: 'path' } }),
-});
-
-const paginationEnvelopeSchema = z.object({
-  total: z.number(),
-  limit: z.number(),
-  hasMore: z.boolean(),
-  nextCursor: z.string().optional(),
 });
 
 const listEntitiesRoute = createRoute({
@@ -52,9 +46,11 @@ export function entityRoutes() {
     const tenantId = c.get('tenantId');
     const deps = c.get('deps');
 
-    if (query.cursor) {
-      const { id: cursorId } = decodeCursor(query.cursor);
+    // Cursor or since path (keyset-based)
+    if (query.cursor || query.since) {
+      const cursorId = query.cursor ? decodeCursor(query.cursor).id : undefined;
       const result = await deps.entityRepo.findByJobCursor(jobId, tenantId, query.limit, cursorId, query.since);
+      // total is the unfiltered job-level count (not filtered by cursor/since)
       const total = await deps.entityRepo.countByJob(jobId, tenantId);
       return c.json({
         data: result.entities,
@@ -67,6 +63,7 @@ export function entityRoutes() {
       });
     }
 
+    // Offset fallback (no cursor, no since)
     const [entityList, total] = await Promise.all([
       deps.entityRepo.findByJob(jobId, tenantId, {
         limit: query.limit,

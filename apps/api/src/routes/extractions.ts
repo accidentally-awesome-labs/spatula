@@ -1,7 +1,7 @@
 import { createRoute, z } from '@hono/zod-openapi';
 import { createOpenAPIRouter } from '../openapi-config.js';
 import type { AppEnv } from '../types.js';
-import { paginationSchema } from '../schemas/pagination.js';
+import { paginationSchema, paginationEnvelopeSchema } from '../schemas/pagination.js';
 import { extractionResponseSchema, listResponse, jsonContent } from '../schemas/responses.js';
 import { decodeCursor, encodeCursor } from '@spatula/shared';
 
@@ -11,13 +11,6 @@ const jobIdParam = z.object({
 
 const listExtractionsQuery = paginationSchema.extend({
   schemaVersion: z.coerce.number().int().min(1).optional(),
-});
-
-const paginationEnvelopeSchema = z.object({
-  total: z.number(),
-  limit: z.number(),
-  hasMore: z.boolean(),
-  nextCursor: z.string().optional(),
 });
 
 const listRoute = createRoute({
@@ -41,9 +34,11 @@ export function extractionRoutes() {
     const tenantId = c.get('tenantId');
     const deps = c.get('deps');
 
-    if (query.cursor) {
-      const { id: cursorId } = decodeCursor(query.cursor);
+    // Cursor or since path (keyset-based)
+    if (query.cursor || query.since) {
+      const cursorId = query.cursor ? decodeCursor(query.cursor).id : undefined;
       const result = await deps.extractionRepo.findByJobCursor(jobId, tenantId, query.limit, cursorId, query.since);
+      // total is the unfiltered job-level count (not filtered by cursor/since)
       const total = await deps.extractionRepo.countByJob(jobId, tenantId, { schemaVersion: query.schemaVersion });
       return c.json({
         data: result.entities,
@@ -56,6 +51,7 @@ export function extractionRoutes() {
       });
     }
 
+    // Offset fallback (no cursor, no since)
     const [extractions, total] = await Promise.all([
       deps.extractionRepo.findByJob(jobId, tenantId, {
         schemaVersion: query.schemaVersion,

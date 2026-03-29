@@ -81,7 +81,7 @@ export class TenantRepository {
 
       // Invalidate cached quotas
       if (this.cache) {
-        await this.cache.invalidate(`tenant:${id}:quotas`);
+        await this.cache.delete(`tenant:${id}:quotas`);
       }
 
       return row;

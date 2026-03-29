@@ -178,7 +178,7 @@ export class ActionRepository {
   ) {
     try {
       const conditions = [eq(actions.jobId, jobId), eq(actions.tenantId, tenantId)];
-      if (cursor) conditions.push(sql`${actions.id} > ${cursor}`);
+      if (cursor) conditions.push(sql`${actions.id} > ${cursor}::uuid`);
       if (since) conditions.push(sql`${actions.updatedAt} > ${since}`);
 
       const rows = await this.db

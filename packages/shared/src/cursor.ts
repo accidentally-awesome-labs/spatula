@@ -1,5 +1,7 @@
 import { ValidationError } from './errors.js';
 
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
 export interface CursorPayload {
   id: string;
   sortValue?: string | number;
@@ -16,6 +18,9 @@ export function decodeCursor(cursor: string): CursorPayload {
     const parsed = JSON.parse(json);
     if (!parsed.id || typeof parsed.id !== 'string') {
       throw new Error('Invalid cursor: missing id');
+    }
+    if (!UUID_RE.test(parsed.id)) {
+      throw new Error('Invalid cursor: id must be a UUID');
     }
     return parsed as CursorPayload;
   } catch {

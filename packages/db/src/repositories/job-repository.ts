@@ -161,7 +161,7 @@ export class JobRepository {
 
       // Invalidate cached job config
       if (this.cache) {
-        await this.cache.invalidate(`job:${id}:config`);
+        await this.cache.delete(`job:${id}:config`);
       }
 
       return row;
@@ -286,7 +286,7 @@ export class JobRepository {
 
       // Invalidate cached job config
       if (this.cache) {
-        await this.cache.invalidate(`job:${id}:config`);
+        await this.cache.delete(`job:${id}:config`);
       }
 
       return row ?? null;

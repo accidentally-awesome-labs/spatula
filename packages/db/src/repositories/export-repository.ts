@@ -52,13 +52,22 @@ export class ExportRepository {
     }
   }
 
-  async findByJob(jobId: string, tenantId: string) {
+  async findByJob(jobId: string, tenantId: string, options?: { limit?: number; offset?: number }) {
     try {
-      return await this.db
+      let query = this.db
         .select()
         .from(exports)
         .where(and(eq(exports.jobId, jobId), eq(exports.tenantId, tenantId)))
         .orderBy(desc(exports.createdAt));
+
+      if (options?.limit !== undefined) {
+        query = query.limit(options.limit) as typeof query;
+      }
+      if (options?.offset !== undefined) {
+        query = query.offset(options.offset) as typeof query;
+      }
+
+      return await query;
     } catch (error) {
       throw new StorageError(`Failed to find exports: ${(error as Error).message}`, {
         cause: error as Error,
@@ -76,7 +85,7 @@ export class ExportRepository {
   ) {
     try {
       const conditions = [eq(exports.jobId, jobId), eq(exports.tenantId, tenantId)];
-      if (cursor) conditions.push(sql`${exports.id} > ${cursor}`);
+      if (cursor) conditions.push(sql`${exports.id} > ${cursor}::uuid`);
       if (since) conditions.push(sql`${exports.updatedAt} > ${since}`);
 
       const rows = await this.db

@@ -19,3 +19,10 @@ export const paginationSchema = z.object({
 });
 
 export type PaginationParams = z.infer<typeof paginationSchema>;
+
+export const paginationEnvelopeSchema = z.object({
+  total: z.number(),
+  limit: z.number(),
+  hasMore: z.boolean(),
+  nextCursor: z.string().optional(),
+});

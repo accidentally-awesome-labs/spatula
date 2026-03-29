@@ -41,7 +41,7 @@ export class SchemaRepository {
 
       // Invalidate cached schema for this job
       if (this.cache) {
-        await this.cache.invalidate(`schema:${input.jobId}:current`);
+        await this.cache.delete(`schema:${input.jobId}:current`);
       }
 
       return row;

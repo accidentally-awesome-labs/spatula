@@ -2,7 +2,7 @@ import { createRoute, z } from '@hono/zod-openapi';
 import { createOpenAPIRouter } from '../openapi-config.js';
 import type { AppEnv } from '../types.js';
 import { actionResponseSchema, listResponse, jsonContent } from '../schemas/responses.js';
-import { paginationSchema } from '../schemas/pagination.js';
+import { paginationSchema, paginationEnvelopeSchema } from '../schemas/pagination.js';
 import { decodeCursor, encodeCursor } from '@spatula/shared';
 
 const jobIdParam = z.object({
@@ -12,13 +12,6 @@ const jobIdParam = z.object({
 const listActionsQuery = paginationSchema.extend({
   type: z.string().optional(),
   status: z.enum(['pending_review', 'approved', 'applied', 'rejected', 'rolled_back']).optional(),
-});
-
-const paginationEnvelopeSchema = z.object({
-  total: z.number(),
-  limit: z.number(),
-  hasMore: z.boolean(),
-  nextCursor: z.string().optional(),
 });
 
 const reviewBodySchema = z.object({ reviewedBy: z.string().optional() });
@@ -79,9 +72,11 @@ export function actionRoutes() {
     const tenantId = c.get('tenantId');
     const deps = c.get('deps');
 
-    if (query.cursor) {
-      const { id: cursorId } = decodeCursor(query.cursor);
+    // Cursor or since path (keyset-based)
+    if (query.cursor || query.since) {
+      const cursorId = query.cursor ? decodeCursor(query.cursor).id : undefined;
       const result = await deps.actionRepo.findByJobCursor(jobId, tenantId, query.limit, cursorId, query.since);
+      // total is the unfiltered job-level count (not filtered by cursor/since)
       const total = await deps.actionRepo.countByJob(jobId, tenantId);
       return c.json({
         data: result.entities,
@@ -94,6 +89,7 @@ export function actionRoutes() {
       });
     }
 
+    // Offset fallback (no cursor, no since)
     const [actionList, total] = await Promise.all([
       deps.actionRepo.findByJob(jobId, tenantId, {
         type: query.type, status: query.status, limit: query.limit, offset: query.offset,

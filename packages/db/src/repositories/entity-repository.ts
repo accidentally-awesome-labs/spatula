@@ -43,7 +43,7 @@ export class EntityRepository {
 
       // Invalidate cached entity count for this job
       if (this.cache) {
-        await this.cache.invalidate(`entity-count:${input.jobId}`);
+        await this.cache.delete(`entity-count:${input.jobId}`);
       }
 
       return row;
@@ -210,7 +210,7 @@ export class EntityRepository {
     try {
       const conditions = [eq(entities.jobId, jobId), eq(entities.tenantId, tenantId)];
       if (cursor) {
-        conditions.push(sql`${entities.id} > ${cursor}`);
+        conditions.push(sql`${entities.id} > ${cursor}::uuid`);
       }
       if (since) conditions.push(sql`${entities.updatedAt} > ${since}`);
 

@@ -47,6 +47,20 @@ describe('RedisCache', () => {
     });
   });
 
+  describe('delete', () => {
+    it('deletes a single exact key', async () => {
+      redis.del.mockResolvedValue(1);
+      await cache.delete('entity-count:job-1');
+      expect(redis.del).toHaveBeenCalledWith('cache:entity-count:job-1');
+      expect(redis.scan).not.toHaveBeenCalled();
+    });
+
+    it('handles Redis errors gracefully', async () => {
+      redis.del.mockRejectedValue(new Error('connection refused'));
+      await expect(cache.delete('some-key')).resolves.not.toThrow();
+    });
+  });
+
   describe('invalidate', () => {
     it('deletes keys matching pattern using SCAN', async () => {
       redis.scan.mockResolvedValueOnce(['10', ['cache:schema:job-1:current', 'cache:schema:job-1:v2']]).mockResolvedValueOnce(['0', []]);

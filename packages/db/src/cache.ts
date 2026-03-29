@@ -29,6 +29,15 @@ export class RedisCache {
     return value;
   }
 
+  async delete(key: string): Promise<void> {
+    const cacheKey = `${KEY_PREFIX}${key}`;
+    try {
+      await this.redis.del(cacheKey);
+    } catch (err) {
+      logger.warn({ err, key }, 'Cache delete failed');
+    }
+  }
+
   async invalidate(pattern: string): Promise<void> {
     const cachePattern = `${KEY_PREFIX}${pattern}`;
     try {

@@ -7,18 +7,11 @@ import { NotFoundError, ConflictError } from '../middleware/error-handler.js';
 import { generateDocumentation, supportsPresignedUrls } from '@spatula/core';
 import type { SchemaDefinition } from '@spatula/core';
 import type { Entity } from '@spatula/shared';
-import { paginationSchema } from '../schemas/pagination.js';
+import { paginationSchema, paginationEnvelopeSchema } from '../schemas/pagination.js';
 import { decodeCursor, encodeCursor } from '@spatula/shared';
 
 const jobIdParam = z.object({
   jobId: z.string().openapi({ param: { name: 'jobId', in: 'path' } }),
-});
-
-const paginationEnvelopeSchema = z.object({
-  total: z.number(),
-  limit: z.number(),
-  hasMore: z.boolean(),
-  nextCursor: z.string().optional(),
 });
 
 const listExportsRoute = createRoute({
@@ -92,9 +85,11 @@ export function exportRoutes() {
     const tenantId = c.get('tenantId');
     const deps = c.get('deps');
 
-    if (query.cursor) {
-      const { id: cursorId } = decodeCursor(query.cursor);
+    // Cursor or since path (keyset-based)
+    if (query.cursor || query.since) {
+      const cursorId = query.cursor ? decodeCursor(query.cursor).id : undefined;
       const result = await deps.exportRepo.findByJobCursor(jobId, tenantId, query.limit, cursorId, query.since);
+      // total is the unfiltered job-level count (not filtered by cursor/since)
       const total = await deps.exportRepo.countByJob(jobId, tenantId);
       return c.json({
         data: result.entities,
@@ -107,18 +102,18 @@ export function exportRoutes() {
       });
     }
 
-    const exportList = await deps.exportRepo.findByJob(jobId, tenantId);
-    const total = await deps.exportRepo.countByJob(jobId, tenantId);
-    const offset = query.offset;
-    const limit = query.limit;
-    const paginated = exportList.slice(offset, offset + limit);
+    // Offset fallback (no cursor, no since)
+    const [exportList, total] = await Promise.all([
+      deps.exportRepo.findByJob(jobId, tenantId, { limit: query.limit, offset: query.offset }),
+      deps.exportRepo.countByJob(jobId, tenantId),
+    ]);
 
     return c.json({
-      data: paginated,
+      data: exportList,
       pagination: {
         total,
-        limit,
-        hasMore: offset + limit < total,
+        limit: query.limit,
+        hasMore: query.offset + query.limit < total,
       },
     });
   });
