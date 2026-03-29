@@ -37,6 +37,8 @@ function createMockDeps(): AppDeps {
       findById: vi.fn().mockResolvedValue(null),
       updateStatus: vi.fn(),
       batchUpdateStatus: vi.fn().mockResolvedValue([]),
+      countByJob: vi.fn().mockResolvedValue(0),
+      findByJobCursor: vi.fn().mockResolvedValue({ entities: [], nextCursor: null }),
     },
     taskRepo: {},
     exportRepo: { create: vi.fn(), findById: vi.fn(), findByJob: vi.fn(), updateStatus: vi.fn() },
@@ -150,13 +152,13 @@ describe('Full app', () => {
     expect(body).toHaveProperty('data');
   });
 
-  it('GET /api/v1/jobs/:id/extractions returns total count', async () => {
+  it('GET /api/v1/jobs/:id/extractions returns pagination envelope', async () => {
     const app = createApp(createMockDeps());
     const res = await app.request('/api/v1/jobs/job-1/extractions', {
       headers: { 'x-tenant-id': '550e8400-e29b-41d4-a716-446655440000' },
     });
     expect(res.status).toBe(200);
     const body = await res.json();
-    expect(body).toHaveProperty('total');
+    expect(body).toHaveProperty('pagination.total');
   });
 });

@@ -7,9 +7,30 @@ import { NotFoundError, ConflictError } from '../middleware/error-handler.js';
 import { generateDocumentation, supportsPresignedUrls } from '@spatula/core';
 import type { SchemaDefinition } from '@spatula/core';
 import type { Entity } from '@spatula/shared';
+import { paginationSchema } from '../schemas/pagination.js';
+import { decodeCursor, encodeCursor } from '@spatula/shared';
 
 const jobIdParam = z.object({
   jobId: z.string().openapi({ param: { name: 'jobId', in: 'path' } }),
+});
+
+const paginationEnvelopeSchema = z.object({
+  total: z.number(),
+  limit: z.number(),
+  hasMore: z.boolean(),
+  nextCursor: z.string().optional(),
+});
+
+const listExportsRoute = createRoute({
+  method: 'get', path: '/exports', tags: ['Exports'],
+  summary: 'List exports for a job',
+  request: { params: jobIdParam, query: paginationSchema },
+  responses: {
+    200: jsonContent(
+      z.object({ data: z.array(exportResponseSchema), pagination: paginationEnvelopeSchema }),
+      'Exports with pagination',
+    ),
+  },
 });
 
 const triggerExportRoute = createRoute({
@@ -64,6 +85,43 @@ const getDocumentationRoute = createRoute({
 
 export function exportRoutes() {
   const router = createOpenAPIRouter();
+
+  router.openapi(listExportsRoute, async (c) => {
+    const { jobId } = c.req.valid('param');
+    const query = c.req.valid('query');
+    const tenantId = c.get('tenantId');
+    const deps = c.get('deps');
+
+    if (query.cursor) {
+      const { id: cursorId } = decodeCursor(query.cursor);
+      const result = await deps.exportRepo.findByJobCursor(jobId, tenantId, query.limit, cursorId, query.since);
+      const total = await deps.exportRepo.countByJob(jobId, tenantId);
+      return c.json({
+        data: result.entities,
+        pagination: {
+          total,
+          limit: query.limit,
+          hasMore: !!result.nextCursor,
+          nextCursor: result.nextCursor ? encodeCursor({ id: result.nextCursor }) : undefined,
+        },
+      });
+    }
+
+    const exportList = await deps.exportRepo.findByJob(jobId, tenantId);
+    const total = await deps.exportRepo.countByJob(jobId, tenantId);
+    const offset = query.offset;
+    const limit = query.limit;
+    const paginated = exportList.slice(offset, offset + limit);
+
+    return c.json({
+      data: paginated,
+      pagination: {
+        total,
+        limit,
+        hasMore: offset + limit < total,
+      },
+    });
+  });
 
   router.openapi(triggerExportRoute, async (c) => {
     const { jobId } = c.req.valid('param');

@@ -4,9 +4,17 @@ import type { AppEnv } from '../types.js';
 import { entityQuerySchema } from '../schemas/entity-query.js';
 import { entityResponseSchema, entityListItemSchema, errorResponseSchema, dataResponse, jsonContent } from '../schemas/responses.js';
 import { NotFoundError } from '../middleware/error-handler.js';
+import { decodeCursor, encodeCursor } from '@spatula/shared';
 
 const jobIdParam = z.object({
   jobId: z.string().openapi({ param: { name: 'jobId', in: 'path' } }),
+});
+
+const paginationEnvelopeSchema = z.object({
+  total: z.number(),
+  limit: z.number(),
+  hasMore: z.boolean(),
+  nextCursor: z.string().optional(),
 });
 
 const listEntitiesRoute = createRoute({
@@ -14,7 +22,10 @@ const listEntitiesRoute = createRoute({
   summary: 'List entities for a job',
   request: { params: jobIdParam, query: entityQuerySchema },
   responses: {
-    200: jsonContent(z.object({ data: z.array(entityListItemSchema), total: z.number() }), 'Entities with count'),
+    200: jsonContent(
+      z.object({ data: z.array(entityListItemSchema), pagination: paginationEnvelopeSchema }),
+      'Entities with pagination',
+    ),
   },
 });
 
@@ -41,7 +52,22 @@ export function entityRoutes() {
     const tenantId = c.get('tenantId');
     const deps = c.get('deps');
 
-    const [entities, total] = await Promise.all([
+    if (query.cursor) {
+      const { id: cursorId } = decodeCursor(query.cursor);
+      const result = await deps.entityRepo.findByJobCursor(jobId, tenantId, query.limit, cursorId, query.since);
+      const total = await deps.entityRepo.countByJob(jobId, tenantId);
+      return c.json({
+        data: result.entities,
+        pagination: {
+          total,
+          limit: query.limit,
+          hasMore: !!result.nextCursor,
+          nextCursor: result.nextCursor ? encodeCursor({ id: result.nextCursor }) : undefined,
+        },
+      });
+    }
+
+    const [entityList, total] = await Promise.all([
       deps.entityRepo.findByJob(jobId, tenantId, {
         limit: query.limit,
         offset: query.offset,
@@ -50,7 +76,14 @@ export function entityRoutes() {
       deps.entityRepo.countByJob(jobId, tenantId, { search: query.search }),
     ]);
 
-    return c.json({ data: entities, total });
+    return c.json({
+      data: entityList,
+      pagination: {
+        total,
+        limit: query.limit,
+        hasMore: query.offset + query.limit < total,
+      },
+    });
   });
 
   router.openapi(getEntityRoute, async (c) => {

@@ -27,6 +27,8 @@ function createMockDeps(): AppDeps {
         { id: 'act-1', status: 'approved' },
         { id: 'act-2', status: 'approved' },
       ]),
+      countByJob: vi.fn().mockResolvedValue(1),
+      findByJobCursor: vi.fn().mockResolvedValue({ entities: [], nextCursor: null }),
     },
   } as unknown as AppDeps;
 }

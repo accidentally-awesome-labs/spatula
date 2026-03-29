@@ -2,16 +2,23 @@ import { createRoute, z } from '@hono/zod-openapi';
 import { createOpenAPIRouter } from '../openapi-config.js';
 import type { AppEnv } from '../types.js';
 import { actionResponseSchema, listResponse, jsonContent } from '../schemas/responses.js';
+import { paginationSchema } from '../schemas/pagination.js';
+import { decodeCursor, encodeCursor } from '@spatula/shared';
 
 const jobIdParam = z.object({
   jobId: z.string().openapi({ param: { name: 'jobId', in: 'path' } }),
 });
 
-const listActionsQuery = z.object({
+const listActionsQuery = paginationSchema.extend({
   type: z.string().optional(),
   status: z.enum(['pending_review', 'approved', 'applied', 'rejected', 'rolled_back']).optional(),
-  limit: z.coerce.number().int().min(1).default(50).transform((v) => Math.min(v, 100)),
-  offset: z.coerce.number().int().min(0).default(0),
+});
+
+const paginationEnvelopeSchema = z.object({
+  total: z.number(),
+  limit: z.number(),
+  hasMore: z.boolean(),
+  nextCursor: z.string().optional(),
 });
 
 const reviewBodySchema = z.object({ reviewedBy: z.string().optional() });
@@ -21,7 +28,12 @@ const listRoute = createRoute({
   method: 'get', path: '/', tags: ['Actions'],
   summary: 'List actions for a job',
   request: { params: jobIdParam, query: listActionsQuery },
-  responses: { 200: jsonContent(listResponse(actionResponseSchema), 'List of actions') },
+  responses: {
+    200: jsonContent(
+      z.object({ data: z.array(actionResponseSchema), pagination: paginationEnvelopeSchema }),
+      'Actions with pagination',
+    ),
+  },
 });
 
 const approveAllRoute = createRoute({
@@ -67,10 +79,36 @@ export function actionRoutes() {
     const tenantId = c.get('tenantId');
     const deps = c.get('deps');
 
-    const actions = await deps.actionRepo.findByJob(jobId, tenantId, {
-      type: query.type, status: query.status, limit: query.limit, offset: query.offset,
+    if (query.cursor) {
+      const { id: cursorId } = decodeCursor(query.cursor);
+      const result = await deps.actionRepo.findByJobCursor(jobId, tenantId, query.limit, cursorId, query.since);
+      const total = await deps.actionRepo.countByJob(jobId, tenantId);
+      return c.json({
+        data: result.entities,
+        pagination: {
+          total,
+          limit: query.limit,
+          hasMore: !!result.nextCursor,
+          nextCursor: result.nextCursor ? encodeCursor({ id: result.nextCursor }) : undefined,
+        },
+      });
+    }
+
+    const [actionList, total] = await Promise.all([
+      deps.actionRepo.findByJob(jobId, tenantId, {
+        type: query.type, status: query.status, limit: query.limit, offset: query.offset,
+      }),
+      deps.actionRepo.countByJob(jobId, tenantId),
+    ]);
+
+    return c.json({
+      data: actionList,
+      pagination: {
+        total,
+        limit: query.limit,
+        hasMore: query.offset + query.limit < total,
+      },
     });
-    return c.json({ data: actions });
   });
 
   router.openapi(approveAllRoute, async (c) => {
