@@ -12,6 +12,7 @@ import { schemasTable } from '../schema/schemas.js';
 import { exports } from '../schema/exports.js';
 import { contentStore } from '../schema/content.js';
 import type { Database } from '../connection.js';
+import type { RedisCache } from '../cache.js';
 
 const logger = createLogger('job-repository');
 
@@ -24,7 +25,13 @@ export interface CreateJobInput {
 }
 
 export class JobRepository {
+  private cache?: RedisCache;
+
   constructor(private readonly db: Database) {}
+
+  setCache(cache: RedisCache): void {
+    this.cache = cache;
+  }
 
   async create(input: CreateJobInput) {
     try {
@@ -50,6 +57,18 @@ export class JobRepository {
   }
 
   async findById(id: string, tenantId: string) {
+    const cacheKey = `job:${id}:config`;
+    if (this.cache) {
+      return this.cache.getOrFetch(
+        cacheKey,
+        () => this._findByIdFromDb(id, tenantId),
+        60,
+      );
+    }
+    return this._findByIdFromDb(id, tenantId);
+  }
+
+  private async _findByIdFromDb(id: string, tenantId: string) {
     try {
       const [row] = await this.db
         .select()
@@ -139,6 +158,12 @@ export class JobRepository {
       }
 
       logger.debug({ jobId: id, status }, 'job status updated');
+
+      // Invalidate cached job config
+      if (this.cache) {
+        await this.cache.invalidate(`job:${id}:config`);
+      }
+
       return row;
     } catch (error) {
       if (error instanceof StorageError) throw error;
@@ -258,6 +283,11 @@ export class JobRepository {
         .set({ stats })
         .where(and(eq(jobs.id, id), eq(jobs.tenantId, tenantId)))
         .returning();
+
+      // Invalidate cached job config
+      if (this.cache) {
+        await this.cache.invalidate(`job:${id}:config`);
+      }
 
       return row ?? null;
     } catch (error) {

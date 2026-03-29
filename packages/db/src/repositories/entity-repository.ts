@@ -2,6 +2,7 @@ import { eq, and, desc, sql } from 'drizzle-orm';
 import { createLogger, StorageError } from '@spatula/shared';
 import { entities, entitySources } from '../schema/entities.js';
 import type { Database } from '../connection.js';
+import type { RedisCache } from '../cache.js';
 
 const logger = createLogger('entity-repository');
 
@@ -15,7 +16,13 @@ export interface CreateEntityInput {
 }
 
 export class EntityRepository {
+  private cache?: RedisCache;
+
   constructor(private readonly db: Database) {}
+
+  setCache(cache: RedisCache): void {
+    this.cache = cache;
+  }
 
   async create(input: CreateEntityInput) {
     try {
@@ -33,6 +40,12 @@ export class EntityRepository {
         .returning();
 
       logger.debug({ entityId: row.id, jobId: input.jobId }, 'entity created');
+
+      // Invalidate cached entity count for this job
+      if (this.cache) {
+        await this.cache.invalidate(`entity-count:${input.jobId}`);
+      }
+
       return row;
     } catch (error) {
       throw new StorageError(`Failed to create entity: ${(error as Error).message}`, {
@@ -126,6 +139,19 @@ export class EntityRepository {
   }
 
   async countByJob(jobId: string, tenantId: string, options?: { search?: string }): Promise<number> {
+    // Only cache when there's no search filter (search results are too dynamic)
+    if (this.cache && !options?.search) {
+      const cacheKey = `entity-count:${jobId}`;
+      return this.cache.getOrFetch(
+        cacheKey,
+        () => this._countByJobFromDb(jobId, tenantId, options),
+        10,
+      );
+    }
+    return this._countByJobFromDb(jobId, tenantId, options);
+  }
+
+  private async _countByJobFromDb(jobId: string, tenantId: string, options?: { search?: string }): Promise<number> {
     try {
       const conditions = [eq(entities.jobId, jobId), eq(entities.tenantId, tenantId)];
 

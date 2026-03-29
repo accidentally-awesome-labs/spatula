@@ -3,6 +3,7 @@ import { createLogger, StorageError } from '@spatula/shared';
 import type { SchemaDefinition } from '@spatula/core';
 import { schemasTable } from '../schema/schemas.js';
 import type { Database } from '../connection.js';
+import type { RedisCache } from '../cache.js';
 
 const logger = createLogger('schema-repository');
 
@@ -15,7 +16,13 @@ export interface CreateSchemaInput {
 }
 
 export class SchemaRepository {
+  private cache?: RedisCache;
+
   constructor(private readonly db: Database) {}
+
+  setCache(cache: RedisCache): void {
+    this.cache = cache;
+  }
 
   async create(input: CreateSchemaInput) {
     try {
@@ -31,6 +38,12 @@ export class SchemaRepository {
         .returning();
 
       logger.debug({ schemaId: row.id, version: input.version }, 'schema version created');
+
+      // Invalidate cached schema for this job
+      if (this.cache) {
+        await this.cache.invalidate(`schema:${input.jobId}:current`);
+      }
+
       return row;
     } catch (error) {
       throw new StorageError(`Failed to create schema: ${(error as Error).message}`, {
@@ -41,6 +54,18 @@ export class SchemaRepository {
   }
 
   async findLatest(jobId: string, tenantId: string) {
+    const cacheKey = `schema:${jobId}:current`;
+    if (this.cache) {
+      return this.cache.getOrFetch(
+        cacheKey,
+        () => this._findLatestFromDb(jobId, tenantId),
+        30,
+      );
+    }
+    return this._findLatestFromDb(jobId, tenantId);
+  }
+
+  private async _findLatestFromDb(jobId: string, tenantId: string) {
     try {
       const [row] = await this.db
         .select()

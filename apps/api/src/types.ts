@@ -11,6 +11,7 @@ import type {
   DlqRepository,
   ApiKeyRepository,
   LlmUsageRepository,
+  RedisCache,
 } from '@spatula/db';
 import type { ContentStore, ReviewQueue } from '@spatula/core';
 import type { JobManager, ExportJobPayload, SpatulaQueues } from '@spatula/queue';
@@ -40,6 +41,7 @@ export interface AppDeps {
   authProvider?: AuthProvider;
   queues?: SpatulaQueues;
   redis?: Redis;  // Shared ioredis client for rate limiting, WS tokens, etc.
+  cache?: RedisCache;
   auditLogger?: AuditLogger;
   auditLogRepo?: AuditLogRepository;
   llmUsageRepo?: LlmUsageRepository;
