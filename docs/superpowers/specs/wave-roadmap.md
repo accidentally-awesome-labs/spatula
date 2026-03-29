@@ -218,7 +218,7 @@ Wire orchestrators + SQLite + config into a working local crawl.
 | 3-2 | Observability (OTel, tracing, Sentry, LLM cost, health, Bull Board) | **Complete** |
 | 3-3a | Performance: Storage & Exports (S3, streaming, entity cursor) | **Complete** |
 | 3-3b | Performance: Query & Caching (indexes, cursor pagination, Redis cache) | **Complete** |
-| 3-4 | Deferred D/F (idempotency, worker health, quality API, export filtering) | Pending |
+| 3-4 | Deferred D/F (idempotency, worker health, quality API, export filtering) | **Complete** |
 | 3-5 | Local Pipeline + Core CLI (LocalPipelineRunner, DataSource, CLI commands) | Pending |
 
 **Plans:** To be written per sub-plan.
