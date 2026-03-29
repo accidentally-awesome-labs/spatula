@@ -43,6 +43,7 @@ export class SqliteExtractionRepository implements ExtractionRepo {
           unmappedFields: data.unmappedFields as Record<string, unknown>[],
           metadata: (data.metadata ?? {}) as Record<string, unknown>,
           createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString(),
         })
         .run();
     }, { method: 'store', table: 'extractions' });

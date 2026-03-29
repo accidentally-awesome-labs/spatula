@@ -1,4 +1,4 @@
-import { eq, and, desc, inArray } from 'drizzle-orm';
+import { eq, and, desc, inArray, sql } from 'drizzle-orm';
 import { createLogger, StorageError } from '@spatula/shared';
 import { actions } from '../schema/actions.js';
 import { actionStatusEnum } from '../schema/enums.js';
@@ -44,6 +44,7 @@ export class ActionRepository {
           confidence: input.confidence,
           reasoning: input.reasoning,
           stateChanges: input.stateChanges ?? null,
+          updatedAt: new Date(),
         })
         .returning({ id: actions.id });
 
@@ -116,6 +117,7 @@ export class ActionRepository {
         .update(actions)
         .set({
           status,
+          updatedAt: new Date(),
           ...(reviewedBy ? { reviewedBy } : {}),
           ...(status === 'applied' ? { appliedAt: new Date() } : {}),
         })
@@ -150,6 +152,7 @@ export class ActionRepository {
         .update(actions)
         .set({
           status,
+          updatedAt: new Date(),
           ...(reviewedBy ? { reviewedBy } : {}),
           ...(status === 'applied' ? { appliedAt: new Date() } : {}),
         })
@@ -162,6 +165,48 @@ export class ActionRepository {
       throw new StorageError(`Failed to batch update action status: ${(error as Error).message}`, {
         cause: error as Error,
         context: { count: actionIds.length, tenantId, status },
+      });
+    }
+  }
+
+  async findByJobCursor(
+    jobId: string,
+    tenantId: string,
+    limit: number,
+    cursor?: string,
+    since?: string,
+  ) {
+    try {
+      const conditions = [eq(actions.jobId, jobId), eq(actions.tenantId, tenantId)];
+      if (cursor) conditions.push(sql`${actions.id} > ${cursor}`);
+      if (since) conditions.push(sql`${actions.updatedAt} > ${since}`);
+
+      const rows = await this.db
+        .select()
+        .from(actions)
+        .where(and(...conditions))
+        .orderBy(actions.id)
+        .limit(limit);
+
+      const nextCursor = rows.length === limit ? rows[rows.length - 1].id : null;
+      return { entities: rows, nextCursor };
+    } catch (error) {
+      throw new StorageError(`Failed to fetch actions by cursor: ${(error as Error).message}`, {
+        cause: error as Error, context: { jobId, tenantId },
+      });
+    }
+  }
+
+  async countByJob(jobId: string, tenantId: string): Promise<number> {
+    try {
+      const [result] = await this.db
+        .select({ count: sql<number>`count(*)::int` })
+        .from(actions)
+        .where(and(eq(actions.jobId, jobId), eq(actions.tenantId, tenantId)));
+      return result?.count ?? 0;
+    } catch (error) {
+      throw new StorageError(`Failed to count actions: ${(error as Error).message}`, {
+        cause: error as Error, context: { jobId, tenantId },
       });
     }
   }

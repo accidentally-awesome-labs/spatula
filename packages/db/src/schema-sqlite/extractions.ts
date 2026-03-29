@@ -18,6 +18,7 @@ export const extractions = sqliteTable(
       .default([]),
     metadata: text('metadata', { mode: 'json' }).$type<Record<string, unknown>>().notNull(),
     createdAt: text('created_at').notNull(),
+    updatedAt: text('updated_at').notNull(),
   },
   (table) => [
     index('sl_extractions_job_schema_idx').on(table.jobId, table.schemaVersion),

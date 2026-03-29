@@ -21,6 +21,7 @@ function createMockDeps(): AppDeps {
         qualityScore: 0.95,
       }),
       countByJob: vi.fn().mockResolvedValue(42),
+      findByJobCursor: vi.fn().mockResolvedValue({ entities: [], nextCursor: null }),
     },
     entitySourceRepo: {
       findByEntity: vi.fn().mockResolvedValue([
@@ -93,11 +94,11 @@ describe('Entity routes', () => {
       expect(body.error.code).toBe('VALIDATION_ERROR');
     });
 
-    it('returns total count alongside data', async () => {
+    it('returns total count alongside data in pagination envelope', async () => {
       const res = await app.request('/api/v1/jobs/job-1/entities');
       expect(res.status).toBe(200);
       const body = await res.json();
-      expect(body.total).toBe(42);
+      expect(body.pagination.total).toBe(42);
       expect(body.data).toHaveLength(1);
     });
 

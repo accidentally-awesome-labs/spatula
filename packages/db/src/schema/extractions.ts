@@ -21,9 +21,12 @@ export const extractions = pgTable(
     unmappedFields: jsonb('unmapped_fields').$type<unknown[]>().default([]),
     metadata: jsonb('metadata').$type<Record<string, unknown>>().notNull(),
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
   },
   (table) => [
     index('extractions_job_schema_idx').on(table.jobId, table.schemaVersion),
     index('extractions_page_idx').on(table.pageId),
+    index('idx_extractions_job').on(table.jobId, table.tenantId),
+    index('idx_extractions_updated').on(table.updatedAt),
   ],
 );

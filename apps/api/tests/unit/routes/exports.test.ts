@@ -22,6 +22,8 @@ function createMockDeps(): AppDeps {
         completedAt: new Date().toISOString(),
       }),
       findByJob: vi.fn().mockResolvedValue([]),
+      findByJobCursor: vi.fn().mockResolvedValue({ entities: [], nextCursor: null }),
+      countByJob: vi.fn().mockResolvedValue(0),
     },
     entityRepo: {
       findByJob: vi.fn().mockResolvedValue([]),
@@ -73,6 +75,22 @@ describe('Export routes', () => {
   beforeEach(() => {
     deps = createMockDeps();
     app = createTestApp(deps);
+  });
+
+  describe('GET /exports', () => {
+    it('returns exports list with pagination envelope', async () => {
+      const res = await app.request('/api/v1/jobs/job-1/exports');
+      expect(res.status).toBe(200);
+      const body = await res.json();
+      expect(body.data).toBeDefined();
+      expect(body.pagination).toBeDefined();
+      expect(body.pagination.total).toBe(0);
+    });
+
+    it('passes limit parameter', async () => {
+      const res = await app.request('/api/v1/jobs/job-1/exports?limit=10');
+      expect(res.status).toBe(200);
+    });
   });
 
   describe('POST /export', () => {

@@ -23,10 +23,12 @@ export const actions = pgTable(
     reviewedBy: text('reviewed_by'),
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
     appliedAt: timestamp('applied_at', { withTimezone: true }),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
   },
   (table) => [
     index('actions_job_type_idx').on(table.jobId, table.type),
     index('actions_job_status_idx').on(table.jobId, table.status),
     index('actions_job_created_idx').on(table.jobId, table.createdAt),
+    index('idx_actions_updated').on(table.updatedAt),
   ],
 );

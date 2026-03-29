@@ -2,6 +2,7 @@ import { eq, sql } from 'drizzle-orm';
 import { createLogger, StorageError } from '@spatula/shared';
 import { tenants } from '../schema/tenants.js';
 import type { Database } from '../connection.js';
+import type { RedisCache } from '../cache.js';
 
 const logger = createLogger('tenant-repository');
 
@@ -16,7 +17,13 @@ export interface UpdateTenantInput {
 }
 
 export class TenantRepository {
+  private cache?: RedisCache;
+
   constructor(private readonly db: Database) {}
+
+  setCache(cache: RedisCache): void {
+    this.cache = cache;
+  }
 
   async create(input: CreateTenantInput) {
     try {
@@ -71,6 +78,12 @@ export class TenantRepository {
       }
 
       logger.debug({ tenantId: id }, 'tenant updated');
+
+      // Invalidate cached quotas
+      if (this.cache) {
+        await this.cache.invalidate(`tenant:${id}:quotas`);
+      }
+
       return row;
     } catch (error) {
       if (error instanceof StorageError) throw error;
@@ -82,6 +95,18 @@ export class TenantRepository {
   }
 
   async getQuotas(tenantId: string) {
+    const cacheKey = `tenant:${tenantId}:quotas`;
+    if (this.cache) {
+      return this.cache.getOrFetch(
+        cacheKey,
+        () => this._getQuotasFromDb(tenantId),
+        300,
+      );
+    }
+    return this._getQuotasFromDb(tenantId);
+  }
+
+  private async _getQuotasFromDb(tenantId: string) {
     try {
       const [row] = await this.db
         .select({ quotas: tenants.quotas })

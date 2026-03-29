@@ -16,6 +16,7 @@ function createMockDeps(): AppDeps {
         { id: 'ext-2', data: { name: 'Product B' }, schemaVersion: 1 },
       ]),
       countByJob: vi.fn().mockResolvedValue(2),
+      findByJobCursor: vi.fn().mockResolvedValue({ entities: [], nextCursor: null }),
     },
     jobRepo: {} as any,
     schemaRepo: {} as any,
