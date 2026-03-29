@@ -90,12 +90,28 @@ export async function processExport(
 
       // Count entities as they stream through
       async function* countedEntityStream() {
-        for await (const batch of fetchEntitiesCursor(deps.entityRepo as any, jobId, tenantId, 500)) {
+        for await (const batch of fetchEntitiesCursor(deps.entityRepo as any, jobId, tenantId, 500, { minQuality: input.minQuality })) {
           streamEntityCount += batch.length;
           yield batch;
         }
       }
-      const entityStream = countedEntityStream();
+
+      // Apply field projection if requested
+      async function* projectedStream() {
+        for await (const batch of countedEntityStream()) {
+          if (input.fields) {
+            yield batch.map((entity: any) => ({
+              ...entity,
+              mergedData: Object.fromEntries(
+                input.fields!.map((f) => [f, (entity.mergedData ?? entity)[f]]),
+              ),
+            }));
+          } else {
+            yield batch;
+          }
+        }
+      }
+      const entityStream = projectedStream();
       const streamExporter = format === 'json'
         ? new StreamingJsonExporter()
         : new StreamingCsvExporter();
@@ -139,7 +155,7 @@ export async function processExport(
       // OFFSET/BINARY PATH: binary formats, provenance, or no cursor support
       // Fetch via cursor if available (and not provenance), otherwise offset
       if (typeof deps.entityRepo.findByJobCursor === 'function' && !useProvenance) {
-        for await (const batch of fetchEntitiesCursor(deps.entityRepo as any, jobId, tenantId, 500)) {
+        for await (const batch of fetchEntitiesCursor(deps.entityRepo as any, jobId, tenantId, 500, { minQuality: input.minQuality })) {
           allEntities.push(...(batch as Entity[]));
         }
       } else {
@@ -151,6 +167,19 @@ export async function processExport(
           allEntities.push(...(batch as unknown as Entity[]));
           offset += 100;
         }
+        // Apply minQuality filter for offset path (cursor path handles it at DB level)
+        if (input.minQuality !== undefined) {
+          allEntities = allEntities.filter((e: any) => (e.qualityScore ?? 0) >= input.minQuality!);
+        }
+      }
+      // Apply field projection if requested
+      if (input.fields) {
+        allEntities = allEntities.map((entity: any) => ({
+          ...entity,
+          mergedData: Object.fromEntries(
+            input.fields!.map((f) => [f, (entity.mergedData ?? entity)[f]]),
+          ),
+        }));
       }
       entityCount = allEntities.length;
 

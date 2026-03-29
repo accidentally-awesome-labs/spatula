@@ -206,6 +206,7 @@ export class EntityRepository {
     limit: number,
     cursor?: string,
     since?: string,
+    minQuality?: number,
   ): Promise<{ entities: Array<typeof entities.$inferSelect>; nextCursor: string | null }> {
     try {
       const conditions = [eq(entities.jobId, jobId), eq(entities.tenantId, tenantId)];
@@ -213,6 +214,9 @@ export class EntityRepository {
         conditions.push(sql`${entities.id} > ${cursor}::uuid`);
       }
       if (since) conditions.push(sql`${entities.updatedAt} > ${since}`);
+      if (minQuality !== undefined) {
+        conditions.push(sql`${entities.qualityScore} >= ${minQuality}`);
+      }
 
       const rows = await this.db
         .select()

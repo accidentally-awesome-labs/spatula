@@ -32,4 +32,15 @@ describe('fetchEntitiesCursor', () => {
 
     expect(batches).toHaveLength(0);
   });
+
+  it('passes minQuality option to findByJobCursor', async () => {
+    const mockRepo = {
+      findByJobCursor: vi.fn().mockResolvedValue({ entities: [{ id: '1' }], nextCursor: null }),
+    };
+    const batches = [];
+    for await (const batch of fetchEntitiesCursor(mockRepo as any, 'j1', 't1', 500, { minQuality: 0.7 })) {
+      batches.push(batch);
+    }
+    expect(mockRepo.findByJobCursor).toHaveBeenCalledWith('j1', 't1', 500, undefined, 0.7);
+  });
 });
