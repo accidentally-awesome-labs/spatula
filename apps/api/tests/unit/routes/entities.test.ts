@@ -3,6 +3,7 @@ import { Hono } from 'hono';
 import { entityRoutes } from '../../../src/routes/entities.js';
 import type { AppDeps, AppEnv } from '../../../src/types.js';
 import { errorHandler } from '../../../src/middleware/error-handler.js';
+import { encodeCursor } from '@spatula/shared';
 import type { Pool } from 'pg';
 
 const TENANT_ID = 'tenant-1';
@@ -113,6 +114,82 @@ describe('Entity routes', () => {
         'job-1',
         TENANT_ID,
         expect.objectContaining({ search: 'bluetooth' }),
+      );
+    });
+
+    it('uses cursor pagination when cursor query param is provided', async () => {
+      const cursorId = '550e8400-e29b-41d4-a716-446655440000';
+      const cursor = encodeCursor({ id: cursorId });
+      const mockEntities = [
+        { id: 'ent-2', mergedData: { name: 'Product B' }, qualityScore: 0.8 },
+        { id: 'ent-3', mergedData: { name: 'Product C' }, qualityScore: 0.7 },
+      ];
+      (deps.entityRepo.findByJobCursor as ReturnType<typeof vi.fn>).mockResolvedValueOnce({
+        entities: mockEntities,
+        nextCursor: 'ent-3',
+      });
+
+      const res = await app.request(`/api/v1/jobs/job-1/entities?cursor=${cursor}`);
+      expect(res.status).toBe(200);
+      const body = await res.json();
+
+      expect(body.data).toHaveLength(2);
+      expect(body.pagination.hasMore).toBe(true);
+      expect(body.pagination.nextCursor).toBeDefined();
+      expect(deps.entityRepo.findByJobCursor).toHaveBeenCalledWith(
+        'job-1',
+        TENANT_ID,
+        50,
+        cursorId,
+        undefined,
+      );
+      // findByJob should NOT have been called
+      expect(deps.entityRepo.findByJob).not.toHaveBeenCalled();
+    });
+
+    it('uses since filter without cursor', async () => {
+      (deps.entityRepo.findByJobCursor as ReturnType<typeof vi.fn>).mockResolvedValueOnce({
+        entities: [],
+        nextCursor: null,
+      });
+
+      const res = await app.request('/api/v1/jobs/job-1/entities?since=2026-03-01T00:00:00Z');
+      expect(res.status).toBe(200);
+      const body = await res.json();
+
+      expect(body.pagination.hasMore).toBe(false);
+      expect(deps.entityRepo.findByJobCursor).toHaveBeenCalledWith(
+        'job-1',
+        TENANT_ID,
+        50,
+        undefined,
+        '2026-03-01T00:00:00Z',
+      );
+      expect(deps.entityRepo.findByJob).not.toHaveBeenCalled();
+    });
+
+    it('passes both cursor and since to findByJobCursor', async () => {
+      const cursorId = '550e8400-e29b-41d4-a716-446655440000';
+      const cursor = encodeCursor({ id: cursorId });
+      (deps.entityRepo.findByJobCursor as ReturnType<typeof vi.fn>).mockResolvedValueOnce({
+        entities: [{ id: 'ent-4', mergedData: {}, qualityScore: 0.5 }],
+        nextCursor: null,
+      });
+
+      const res = await app.request(
+        `/api/v1/jobs/job-1/entities?cursor=${cursor}&since=2026-03-01T00:00:00Z`,
+      );
+      expect(res.status).toBe(200);
+      const body = await res.json();
+
+      expect(body.pagination.hasMore).toBe(false);
+      expect(body.pagination.nextCursor).toBeUndefined();
+      expect(deps.entityRepo.findByJobCursor).toHaveBeenCalledWith(
+        'job-1',
+        TENANT_ID,
+        50,
+        cursorId,
+        '2026-03-01T00:00:00Z',
       );
     });
   });

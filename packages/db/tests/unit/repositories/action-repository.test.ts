@@ -132,6 +132,31 @@ describe('ActionRepository', () => {
     expect(result).toEqual({ id: 'new-action-id' });
   });
 
+  it('create passes updatedAt as a Date in values', async () => {
+    let capturedValues: Record<string, unknown> | undefined;
+    const insertChainable = {
+      values: vi.fn().mockImplementation((vals: Record<string, unknown>) => {
+        capturedValues = vals;
+        return { returning: vi.fn().mockResolvedValue([{ id: 'new-id' }]) };
+      }),
+    };
+    mockDb.insert = vi.fn().mockReturnValue(insertChainable);
+
+    await repo.create({
+      jobId: '550e8400-e29b-41d4-a716-446655440000',
+      tenantId: '550e8400-e29b-41d4-a716-446655440001',
+      type: 'add_field',
+      payload: { field: { name: 'price' } },
+      source: 'schema_evolution',
+      status: 'applied',
+      confidence: 0.9,
+      reasoning: 'Price found',
+    });
+
+    expect(capturedValues).toBeDefined();
+    expect(capturedValues!.updatedAt).toBeInstanceOf(Date);
+  });
+
   it('create wraps errors in StorageError', async () => {
     const failChainable = {
       values: vi.fn().mockReturnThis(),

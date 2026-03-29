@@ -117,3 +117,141 @@ describe('ExportRepository', () => {
     ).rejects.toThrow('Failed to update export');
   });
 });
+
+describe('ExportRepository.findByJobCursor', () => {
+  const JOB_ID = 'job-1';
+  const TENANT_ID = 'tenant-1';
+
+  it('returns entities and nextCursor when batch is full', async () => {
+    const rows = [
+      { id: 'id-1', jobId: JOB_ID, tenantId: TENANT_ID },
+      { id: 'id-2', jobId: JOB_ID, tenantId: TENANT_ID },
+    ];
+    const chainable = {
+      where: vi.fn().mockReturnThis(),
+      orderBy: vi.fn().mockReturnThis(),
+      limit: vi.fn().mockReturnThis(),
+      then: undefined as unknown,
+    };
+    chainable.then = vi.fn((resolve: (v: unknown) => void) => resolve(rows));
+    const db = {
+      select: vi.fn().mockReturnValue({ from: vi.fn().mockReturnValue(chainable) }),
+      insert: vi.fn(),
+      update: vi.fn(),
+    };
+    const repo = new ExportRepository(db as any);
+
+    const result = await repo.findByJobCursor(JOB_ID, TENANT_ID, 2);
+
+    expect(result.entities).toEqual(rows);
+    expect(result.nextCursor).toBe('id-2');
+  });
+
+  it('returns null nextCursor on last page', async () => {
+    const rows = [{ id: 'id-1', jobId: 'job-1', tenantId: 'tenant-1' }];
+    const chainable = {
+      where: vi.fn().mockReturnThis(),
+      orderBy: vi.fn().mockReturnThis(),
+      limit: vi.fn().mockReturnThis(),
+      then: undefined as unknown,
+    };
+    chainable.then = vi.fn((resolve: (v: unknown) => void) => resolve(rows));
+    const db = {
+      select: vi.fn().mockReturnValue({ from: vi.fn().mockReturnValue(chainable) }),
+      insert: vi.fn(),
+      update: vi.fn(),
+    };
+    const repo = new ExportRepository(db as any);
+
+    const result = await repo.findByJobCursor('job-1', 'tenant-1', 2);
+
+    expect(result.entities).toEqual(rows);
+    expect(result.nextCursor).toBeNull();
+  });
+
+  it('passes cursor and since to query', async () => {
+    const chainable = {
+      where: vi.fn().mockReturnThis(),
+      orderBy: vi.fn().mockReturnThis(),
+      limit: vi.fn().mockReturnThis(),
+      then: undefined as unknown,
+    };
+    chainable.then = vi.fn((resolve: (v: unknown) => void) => resolve([]));
+    const db = {
+      select: vi.fn().mockReturnValue({ from: vi.fn().mockReturnValue(chainable) }),
+      insert: vi.fn(),
+      update: vi.fn(),
+    };
+    const repo = new ExportRepository(db as any);
+
+    await repo.findByJobCursor('job-1', 'tenant-1', 10, 'cursor-abc', '2026-03-01T00:00:00Z');
+
+    expect(db.select).toHaveBeenCalled();
+  });
+});
+
+describe('ExportRepository.countByJob', () => {
+  it('returns count from db', async () => {
+    const chainable = {
+      where: vi.fn().mockReturnThis(),
+      then: undefined as unknown,
+    };
+    chainable.then = vi.fn((resolve: (v: unknown) => void) => resolve([{ count: 5 }]));
+    const db = {
+      select: vi.fn().mockReturnValue({ from: vi.fn().mockReturnValue(chainable) }),
+      insert: vi.fn(),
+      update: vi.fn(),
+    };
+    const repo = new ExportRepository(db as any);
+
+    const count = await repo.countByJob('job-1', 'tenant-1');
+
+    expect(count).toBe(5);
+  });
+
+  it('returns 0 when result is empty', async () => {
+    const chainable = {
+      where: vi.fn().mockReturnThis(),
+      then: undefined as unknown,
+    };
+    chainable.then = vi.fn((resolve: (v: unknown) => void) => resolve([]));
+    const db = {
+      select: vi.fn().mockReturnValue({ from: vi.fn().mockReturnValue(chainable) }),
+      insert: vi.fn(),
+      update: vi.fn(),
+    };
+    const repo = new ExportRepository(db as any);
+
+    const count = await repo.countByJob('job-1', 'tenant-1');
+
+    expect(count).toBe(0);
+  });
+});
+
+describe('ExportRepository.findByJob with limit/offset', () => {
+  it('calls db.select with limit and offset options', async () => {
+    const chainable = {
+      where: vi.fn().mockReturnThis(),
+      orderBy: vi.fn().mockReturnThis(),
+      limit: vi.fn().mockReturnThis(),
+      offset: vi.fn().mockReturnThis(),
+      then: undefined as unknown,
+    };
+    chainable.then = vi.fn((resolve: (v: unknown) => void) =>
+      resolve([{ id: 'export-1', status: 'completed' }]),
+    );
+    const db = {
+      select: vi.fn().mockReturnValue({ from: vi.fn().mockReturnValue(chainable) }),
+      insert: vi.fn(),
+      update: vi.fn(),
+    };
+    const repo = new ExportRepository(db as any);
+
+    const result = await repo.findByJob('job-1', 'tenant-1', { limit: 10, offset: 20 });
+
+    expect(db.select).toHaveBeenCalled();
+    expect(chainable.limit).toHaveBeenCalledWith(10);
+    expect(chainable.offset).toHaveBeenCalledWith(20);
+    expect(result).toEqual([{ id: 'export-1', status: 'completed' }]);
+  });
+});

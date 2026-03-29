@@ -3,6 +3,7 @@ import { Hono } from 'hono';
 import { actionRoutes } from '../../../src/routes/actions.js';
 import type { AppDeps, AppEnv } from '../../../src/types.js';
 import { errorHandler } from '../../../src/middleware/error-handler.js';
+import { encodeCursor } from '@spatula/shared';
 import type { Pool } from 'pg';
 
 function createMockDeps(): AppDeps {
@@ -78,6 +79,57 @@ describe('Action routes', () => {
         'tenant-1',
         expect.objectContaining({ limit: 10, offset: 5 }),
       );
+    });
+
+    it('uses cursor pagination when cursor query param is provided', async () => {
+      const cursorId = '550e8400-e29b-41d4-a716-446655440000';
+      const cursor = encodeCursor({ id: cursorId });
+      const mockActions = [
+        { id: 'act-10', type: 'add_field', status: 'pending_review', confidence: 0.85 },
+        { id: 'act-11', type: 'add_field', status: 'pending_review', confidence: 0.75 },
+      ];
+      (deps.actionRepo.findByJobCursor as ReturnType<typeof vi.fn>).mockResolvedValueOnce({
+        entities: mockActions,
+        nextCursor: 'act-11',
+      });
+
+      const res = await app.request(`/api/v1/jobs/job-1/actions?cursor=${cursor}`);
+      expect(res.status).toBe(200);
+      const body = await res.json();
+
+      expect(body.data).toHaveLength(2);
+      expect(body.pagination.hasMore).toBe(true);
+      expect(body.pagination.nextCursor).toBeDefined();
+      expect(deps.actionRepo.findByJobCursor).toHaveBeenCalledWith(
+        'job-1',
+        'tenant-1',
+        50,
+        cursorId,
+        undefined,
+      );
+      // findByJob should NOT have been called
+      expect(deps.actionRepo.findByJob).not.toHaveBeenCalled();
+    });
+
+    it('uses since filter without cursor', async () => {
+      (deps.actionRepo.findByJobCursor as ReturnType<typeof vi.fn>).mockResolvedValueOnce({
+        entities: [],
+        nextCursor: null,
+      });
+
+      const res = await app.request('/api/v1/jobs/job-1/actions?since=2026-03-01T00:00:00Z');
+      expect(res.status).toBe(200);
+      const body = await res.json();
+
+      expect(body.pagination.hasMore).toBe(false);
+      expect(deps.actionRepo.findByJobCursor).toHaveBeenCalledWith(
+        'job-1',
+        'tenant-1',
+        50,
+        undefined,
+        '2026-03-01T00:00:00Z',
+      );
+      expect(deps.actionRepo.findByJob).not.toHaveBeenCalled();
     });
   });
 
