@@ -41,6 +41,7 @@
 | `packages/core/src/pipeline/export-orchestrator.ts` | Apply minQuality filter + fields projection |
 | `packages/core/src/pipeline/entity-cursor.ts` | Accept `minQuality` filter |
 | `packages/queue/src/worker-entrypoint.ts` | Start/stop heartbeat |
+| `packages/queue/src/queues.ts` | Add `minQuality` + `fields` to `ExportJobPayload` |
 | `packages/queue/src/index.ts` | Export heartbeat |
 
 ---
@@ -183,9 +184,11 @@ export function idempotencyMiddleware(): MiddlewareHandler {
     // Proceed with request
     await next();
 
-    // Cache the response (fire-and-forget on error)
+    // Cache only successful (2xx) responses — don't cache errors
+    // A transient 500 should be retryable, not cached for 24 hours
     try {
       const status = c.res.status;
+      if (status < 200 || status >= 300) return; // Don't cache non-2xx
       const cloned = c.res.clone();
       const body = await cloned.json();
       await redis.set(cacheKey, JSON.stringify({ statusCode: status, body }), 'EX', IDEMPOTENCY_TTL);
@@ -297,20 +300,71 @@ After the workers are created and before the shutdown handler:
 ```typescript
 import { WorkerHeartbeat } from './worker-heartbeat.js';
 
-// Start heartbeat (after workers are running)
+// Start heartbeat — reuse the existing redisForLock connection (not a new connection)
 const heartbeat = new WorkerHeartbeat({
-  redis: new Redis(redisUrl),
+  redis: redisForLock,
   queues: workers.map((w) => w.name),
 });
 heartbeat.start();
 ```
+
+**Note:** Reuse `redisForLock` (already created at line 42) rather than creating a new Redis connection. This avoids connection management issues and ensures the heartbeat is cleaned up when `redisForLock` is quit during shutdown.
 
 In the shutdown handler, add:
 ```typescript
     heartbeat.stop();
 ```
 
-- [ ] **Step 3: Export from barrel**
+- [ ] **Step 3: Write heartbeat tests**
+
+Create `packages/queue/tests/unit/worker-heartbeat.test.ts`:
+
+```typescript
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { WorkerHeartbeat } from '../../src/worker-heartbeat.js';
+
+describe('WorkerHeartbeat', () => {
+  let mockRedis: any;
+  let heartbeat: WorkerHeartbeat;
+
+  beforeEach(() => {
+    vi.useFakeTimers();
+    mockRedis = { set: vi.fn().mockResolvedValue('OK'), del: vi.fn().mockResolvedValue(1), quit: vi.fn().mockResolvedValue('OK') };
+    heartbeat = new WorkerHeartbeat({ redis: mockRedis, queues: ['spatula.crawl'] });
+  });
+
+  afterEach(() => {
+    heartbeat.stop();
+    vi.useRealTimers();
+  });
+
+  it('writes heartbeat to Redis on start', () => {
+    heartbeat.start();
+    expect(mockRedis.set).toHaveBeenCalledWith(
+      expect.stringMatching(/^worker:heartbeat:/),
+      expect.any(String),
+      'EX',
+      60,
+    );
+  });
+
+  it('deletes heartbeat key on stop', () => {
+    heartbeat.start();
+    heartbeat.stop();
+    expect(mockRedis.del).toHaveBeenCalledWith(expect.stringMatching(/^worker:heartbeat:/));
+  });
+
+  it('heartbeat value contains workerId, queues, pid', () => {
+    heartbeat.start();
+    const value = JSON.parse(mockRedis.set.mock.calls[0][1]);
+    expect(value.workerId).toBeDefined();
+    expect(value.queues).toEqual(['spatula.crawl']);
+    expect(value.pid).toBe(process.pid);
+  });
+});
+```
+
+- [ ] **Step 4: Export from barrel**
 
 Add to `packages/queue/src/index.ts`:
 ```typescript
@@ -540,6 +594,8 @@ describe('Quality routes', () => {
     expect(body.data.averageQuality).toBe(0.78);
     expect(body.data.distribution.excellent).toBe(120);
     expect(body.data.fieldCompleteness.name).toBe(0.98);
+    // Verify tenant isolation
+    expect(mockEntityRepo.getQualityAggregation).toHaveBeenCalledWith('job-1', 'tenant-1');
   });
 });
 ```
@@ -722,6 +778,8 @@ Read `packages/core/src/pipeline/types.ts`. Add to `ExportInput`:
 
 Read `packages/core/src/pipeline/entity-cursor.ts`. Update `CursorEntityRepo` to accept `minQuality`:
 
+Only add `minQuality` to `CursorEntityRepo` — do NOT add `since` (it's already in the concrete `EntityRepository` but intentionally not in the core interface):
+
 ```typescript
 export interface CursorEntityRepo {
   findByJobCursor(
@@ -729,13 +787,12 @@ export interface CursorEntityRepo {
     tenantId: string,
     limit: number,
     cursor?: string,
-    since?: string,
     minQuality?: number,
   ): Promise<{ entities: unknown[]; nextCursor: string | null }>;
 }
 ```
 
-Update `fetchEntitiesCursor` to pass it:
+Update `fetchEntitiesCursor` to accept and pass `minQuality`:
 
 ```typescript
 export async function* fetchEntitiesCursor(
@@ -747,7 +804,7 @@ export async function* fetchEntitiesCursor(
 ): AsyncIterable<unknown[]> {
   let cursor: string | undefined;
   while (true) {
-    const batch = await entityRepo.findByJobCursor(jobId, tenantId, batchSize, cursor, undefined, options?.minQuality);
+    const batch = await entityRepo.findByJobCursor(jobId, tenantId, batchSize, cursor, options?.minQuality);
     if (batch.entities.length === 0) break;
     yield batch.entities;
     if (!batch.nextCursor) break;
@@ -755,6 +812,8 @@ export async function* fetchEntitiesCursor(
   }
 }
 ```
+
+**Note:** The concrete `EntityRepository.findByJobCursor` has `since` as the 5th parameter. The core interface drops it because `fetchEntitiesCursor` (used by the export orchestrator) never needs `since`. The concrete repo is called directly by the route handlers when `since` is needed.
 
 - [ ] **Step 4: Add minQuality filter to EntityRepository.findByJobCursor**
 
@@ -814,7 +873,21 @@ Also apply `minQuality` to the `countByJob` call so the total reflects filtered 
 
 Read `apps/api/src/routes/exports.ts`. The trigger export handler creates the export job payload. Pass `minQuality` and `fields` from the request body through to the export queue job data and eventually to `ExportInput`.
 
-Read how the export job is enqueued — likely via `deps.exportQueue.add()` with a payload. Add `minQuality` and `fields` to that payload.
+Read how the export job is enqueued — via `deps.exportQueue.add()` with a payload typed as `ExportJobPayload`. First update `packages/queue/src/queues.ts` to add the new fields to `ExportJobPayload`:
+
+```typescript
+export interface ExportJobPayload {
+  exportId: string;
+  jobId: string;
+  tenantId: string;
+  format: 'json' | 'csv' | 'parquet' | 'duckdb' | 'sqlite';
+  includeProvenance: boolean;
+  minQuality?: number;   // NEW
+  fields?: string[];     // NEW
+}
+```
+
+Then in the route handler, pass `body.minQuality` and `body.fields` through to the job payload.
 
 - [ ] **Step 7: Run tests**
 
@@ -824,7 +897,16 @@ pnpm --filter @spatula/core test && pnpm --filter @spatula/api test
 
 All existing export orchestrator tests must pass. The new params are optional so existing tests are unaffected.
 
-- [ ] **Step 8: Commit**
+- [ ] **Step 8: Add export filtering tests**
+
+Add tests to `packages/core/tests/unit/pipeline/entity-cursor.test.ts`:
+- `fetchEntitiesCursor` with `minQuality` option passes it to `findByJobCursor`
+
+Add test to `packages/core/tests/unit/pipeline/export-orchestrator.test.ts`:
+- Export with `minQuality` passes filter to entity cursor
+- Export with `fields` applies field projection to output
+
+- [ ] **Step 9: Commit**
 
 ```bash
 git add apps/api/src/schemas/export-request.ts packages/core/src/pipeline/ packages/db/src/repositories/entity-repository.ts apps/api/src/routes/exports.ts
@@ -845,6 +927,11 @@ Read `apps/api/src/app.ts`. Add import:
 import { idempotencyMiddleware } from './middleware/idempotency.js';
 import { qualityRoutes } from './routes/quality.js';
 import { adminWorkerRoutes } from './routes/admin-workers.js';
+```
+
+Add `'Idempotency-Key'` to the CORS `allowHeaders` array (find the existing `cors()` call and add it):
+```typescript
+  allowHeaders: ['Authorization', 'Content-Type', 'X-Request-Id', 'X-Tenant-Id', 'Idempotency-Key'],
 ```
 
 Add idempotency middleware after rate limiting (per decomposition spec middleware chain order):
