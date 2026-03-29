@@ -17,8 +17,11 @@ import { actionRoutes } from './routes/actions.js';
 import { exportRoutes } from './routes/exports.js';
 import { tenantRoutes } from './routes/tenants.js';
 import { adminDlqRoutes } from './routes/admin-dlq.js';
+import { adminWorkerRoutes } from './routes/admin-workers.js';
 import { apiKeyRoutes } from './routes/api-keys.js';
 import { rateLimitMiddleware } from './middleware/rate-limit.js';
+import { idempotencyMiddleware } from './middleware/idempotency.js';
+import { qualityRoutes } from './routes/quality.js';
 import { timingMiddleware } from './middleware/timing.js';
 import { wsTokenRoutes } from './routes/ws-token.js';
 import { usageRoutes } from './routes/usage.js';
@@ -56,7 +59,7 @@ export function createApp(deps: AppDeps) {
     cors({
       origin: allowedOrigins,
       allowMethods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
-      allowHeaders: ['Authorization', 'Content-Type', 'X-Request-Id', 'X-Tenant-Id'],
+      allowHeaders: ['Authorization', 'Content-Type', 'X-Request-Id', 'X-Tenant-Id', 'Idempotency-Key'],
       exposeHeaders: ['X-RateLimit-Limit', 'X-RateLimit-Remaining', 'X-Request-Id'],
       maxAge: 86400,
       credentials: true,
@@ -105,6 +108,9 @@ export function createApp(deps: AppDeps) {
     app.use('/api/*', rateLimitMiddleware(deps.redis));
   }
 
+  // Idempotency (after rate limiting, before routes)
+  app.use('/api/*', idempotencyMiddleware());
+
   // Tenant management routes (auth skipped by authMiddleware prefix check)
   // TODO(Wave 3-1b): Add admin-only or shared-secret protection for tenant creation
   // in production. Currently open for bootstrap — acceptable for dev/self-hosted.
@@ -138,6 +144,7 @@ export function createApp(deps: AppDeps) {
   app.get('/api/v1/jobs/:jobId/exports/*', requireScope('exports:read'));
   app.post('/api/v1/jobs/:jobId/exports', requireScope('exports:write'));
   app.route('/api/v1/jobs/:jobId', exportRoutes());
+  app.route('/api/v1/jobs/:jobId/quality', qualityRoutes());
 
   // Usage API (requires jobs:read scope)
   app.get('/api/v1/usage', requireScope('jobs:read'));
@@ -146,6 +153,7 @@ export function createApp(deps: AppDeps) {
   // Admin routes
   app.use('/api/v1/admin/*', requireScope('admin'));
   app.route('/api/v1/admin/dlq', adminDlqRoutes());
+  app.route('/api/v1/admin/workers', adminWorkerRoutes());
 
   // Queue dashboard (admin scope enforced by /api/v1/admin/* middleware)
   if (deps.queues) {

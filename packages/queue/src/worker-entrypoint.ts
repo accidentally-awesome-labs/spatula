@@ -13,6 +13,7 @@ import { processReconciliationJob } from './workers/reconciliation-worker.js';
 import { processExportJob } from './workers/export-worker.js';
 import { QUEUE_NAMES, DEFAULT_QUEUE_CONFIG, createQueues } from './queues.js';
 import { parseEnabledWorkers, isWorkerEnabled } from './worker-selection.js';
+import { WorkerHeartbeat } from './worker-heartbeat.js';
 import type { WorkerDeps } from './worker-deps.js';
 import type { CrawlJobData, SchemaEvolutionJobData, ReconciliationJobData, ExportJobPayload } from './queues.js';
 
@@ -147,6 +148,19 @@ async function main() {
 
   logger.info({ workers: workers.length, enabled: enabledWorkers }, 'Worker entrypoint started');
 
+  // Start heartbeat so the admin /workers endpoint can detect this process
+  const enabledQueueNames = Object.entries({
+    crawl: QUEUE_NAMES.CRAWL,
+    'schema-evolution': QUEUE_NAMES.SCHEMA_EVOLUTION,
+    reconciliation: QUEUE_NAMES.RECONCILIATION,
+    export: QUEUE_NAMES.EXPORT,
+  })
+    .filter(([name]) => isEnabled(name))
+    .map(([, queueName]) => queueName);
+
+  const heartbeat = new WorkerHeartbeat({ redis: redisForLock, queues: enabledQueueNames });
+  heartbeat.start();
+
   // Graceful shutdown
   let isShuttingDown = false;
 
@@ -156,25 +170,28 @@ async function main() {
     logger.info({ signal }, 'Worker shutdown initiated');
 
     try {
-      // 1. BullMQ Worker.close() waits for current job to finish,
+      // 1. Stop heartbeat so the worker is removed from the active list
+      heartbeat.stop();
+
+      // 2. BullMQ Worker.close() waits for current job to finish,
       //    then releases lock and stops picking up new jobs
       await Promise.allSettled(workers.map((w) => w.close()));
       logger.info('All workers closed');
 
-      // 2. Close crawler (prevents orphaned browser processes)
+      // 3. Close crawler (prevents orphaned browser processes)
       if (deps?.crawler) {
         await deps.crawler.close();
       }
 
-      // 3. Close queues (stops enqueuing)
+      // 4. Close queues (stops enqueuing)
       await queues.closeAll();
 
-      // 4. Close Redis connections
+      // 5. Close Redis connections
       // Worker connections are closed by Worker.close() above.
       // Only the separate lock connection needs explicit cleanup.
       await redisForLock.quit();
 
-      // 5. Close database pool
+      // 6. Close database pool
       await pool.end();
 
       logger.info('Worker shutdown complete');

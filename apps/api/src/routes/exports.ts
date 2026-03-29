@@ -131,6 +131,8 @@ export function exportRoutes() {
     await deps.exportQueue.add('export', {
       exportId: exportRecord.id, jobId, tenantId,
       format: body.format, includeProvenance: body.includeProvenance,
+      ...(body.minQuality !== undefined ? { minQuality: body.minQuality } : {}),
+      ...(body.fields !== undefined ? { fields: body.fields } : {}),
     }, { removeOnComplete: true, removeOnFail: true });
 
     // Audit log

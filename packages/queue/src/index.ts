@@ -35,6 +35,10 @@ export { createDlqHandler } from './dlq-handler.js';
 // Trace Context Propagation
 export { injectTraceContext, extractTraceContext } from './trace-context.js';
 
+// Worker Heartbeat
+export { WorkerHeartbeat } from './worker-heartbeat.js';
+export type { HeartbeatConfig } from './worker-heartbeat.js';
+
 // Workers
 export { processCrawlJob } from './workers/crawl-worker.js';
 export { processSchemaEvolutionJob } from './workers/schema-worker.js';

@@ -43,6 +43,8 @@ export interface ExportJobPayload {
   tenantId: string;
   format: 'json' | 'csv' | 'parquet' | 'duckdb' | 'sqlite';
   includeProvenance: boolean;
+  minQuality?: number;
+  fields?: string[];
 }
 
 export interface QueueConfig {

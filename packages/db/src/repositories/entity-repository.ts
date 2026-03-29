@@ -206,6 +206,7 @@ export class EntityRepository {
     limit: number,
     cursor?: string,
     since?: string,
+    minQuality?: number,
   ): Promise<{ entities: Array<typeof entities.$inferSelect>; nextCursor: string | null }> {
     try {
       const conditions = [eq(entities.jobId, jobId), eq(entities.tenantId, tenantId)];
@@ -213,6 +214,9 @@ export class EntityRepository {
         conditions.push(sql`${entities.id} > ${cursor}::uuid`);
       }
       if (since) conditions.push(sql`${entities.updatedAt} > ${since}`);
+      if (minQuality !== undefined) {
+        conditions.push(sql`${entities.qualityScore} >= ${minQuality}`);
+      }
 
       const rows = await this.db
         .select()
@@ -227,6 +231,63 @@ export class EntityRepository {
       throw new StorageError(`Failed to fetch entities by cursor: ${(error as Error).message}`, {
         cause: error as Error,
         context: { jobId, tenantId, cursor },
+      });
+    }
+  }
+
+  async getQualityAggregation(jobId: string, tenantId: string) {
+    try {
+      const conditions = [eq(entities.jobId, jobId), eq(entities.tenantId, tenantId)];
+
+      const [stats] = await this.db
+        .select({
+          entityCount: sql<number>`count(*)::int`,
+          averageQuality: sql<number>`COALESCE(avg(${entities.qualityScore}), 0)::float`,
+          excellent: sql<number>`count(*) FILTER (WHERE ${entities.qualityScore} >= 0.9)::int`,
+          good: sql<number>`count(*) FILTER (WHERE ${entities.qualityScore} >= 0.7 AND ${entities.qualityScore} < 0.9)::int`,
+          fair: sql<number>`count(*) FILTER (WHERE ${entities.qualityScore} >= 0.5 AND ${entities.qualityScore} < 0.7)::int`,
+          poor: sql<number>`count(*) FILTER (WHERE ${entities.qualityScore} < 0.5)::int`,
+        })
+        .from(entities)
+        .where(and(...conditions));
+
+      // Field completeness: sample entities and check fill rate
+      const sampleEntities = await this.db
+        .select({ mergedData: entities.mergedData })
+        .from(entities)
+        .where(and(...conditions))
+        .limit(100);
+
+      const fieldCounts: Record<string, number> = {};
+      const sampleSize = sampleEntities.length;
+      for (const entity of sampleEntities) {
+        const data = entity.mergedData as Record<string, unknown>;
+        for (const [key, value] of Object.entries(data)) {
+          if (value !== null && value !== undefined && value !== '') {
+            fieldCounts[key] = (fieldCounts[key] ?? 0) + 1;
+          }
+        }
+      }
+      const fieldCompleteness: Record<string, number> = {};
+      for (const [key, count] of Object.entries(fieldCounts)) {
+        fieldCompleteness[key] = Math.round((count / sampleSize) * 100) / 100;
+      }
+
+      return {
+        entityCount: stats?.entityCount ?? 0,
+        averageQuality: Math.round((stats?.averageQuality ?? 0) * 100) / 100,
+        distribution: {
+          excellent: stats?.excellent ?? 0,
+          good: stats?.good ?? 0,
+          fair: stats?.fair ?? 0,
+          poor: stats?.poor ?? 0,
+        },
+        fieldCompleteness,
+      };
+    } catch (error) {
+      throw new StorageError(`Failed to aggregate quality: ${(error as Error).message}`, {
+        cause: error as Error,
+        context: { jobId, tenantId },
       });
     }
   }

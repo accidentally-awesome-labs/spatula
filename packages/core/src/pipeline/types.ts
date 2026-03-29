@@ -214,6 +214,8 @@ export interface ExportInput {
   format: 'json' | 'csv' | 'parquet' | 'duckdb' | 'sqlite';
   includeProvenance: boolean;
   maxEntities?: number;
+  minQuality?: number;
+  fields?: string[];
 }
 
 export interface PipelineExportResult {
