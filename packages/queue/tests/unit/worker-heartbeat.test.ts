@@ -46,4 +46,11 @@ describe('WorkerHeartbeat', () => {
     expect(value.queues).toEqual(['spatula.crawl']);
     expect(value.pid).toBe(process.pid);
   });
+
+  it('sends heartbeat again after interval', () => {
+    heartbeat.start();
+    expect(mockRedis.set).toHaveBeenCalledTimes(1); // Initial beat
+    vi.advanceTimersByTime(30000); // Advance past interval
+    expect(mockRedis.set).toHaveBeenCalledTimes(2); // Re-beat
+  });
 });

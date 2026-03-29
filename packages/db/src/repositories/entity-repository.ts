@@ -269,8 +269,10 @@ export class EntityRepository {
         }
       }
       const fieldCompleteness: Record<string, number> = {};
-      for (const [key, count] of Object.entries(fieldCounts)) {
-        fieldCompleteness[key] = Math.round((count / sampleSize) * 100) / 100;
+      if (sampleSize > 0) {
+        for (const [key, count] of Object.entries(fieldCounts)) {
+          fieldCompleteness[key] = Math.round((count / sampleSize) * 100) / 100;
+        }
       }
 
       return {

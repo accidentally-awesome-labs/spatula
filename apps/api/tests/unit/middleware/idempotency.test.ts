@@ -122,4 +122,18 @@ describe('idempotencyMiddleware', () => {
     });
     expect(res.status).toBe(201);
   });
+
+  it('skips caching for non-JSON responses', async () => {
+    redis.get.mockResolvedValue(null);
+    const app = new Hono();
+    app.use('*', async (c, next) => { c.set('tenantId', 'tenant-1'); c.set('deps', { redis }); return next(); });
+    app.use('*', idempotencyMiddleware());
+    app.post('/test', (c) => c.text('plain text response'));
+    const res = await app.request('/test', {
+      method: 'POST',
+      headers: { 'Idempotency-Key': 'text-key' },
+    });
+    expect(res.status).toBe(200);
+    expect(redis.set).not.toHaveBeenCalled();
+  });
 });

@@ -38,4 +38,18 @@ describe('Quality routes', () => {
     expect(body.data.fieldCompleteness.name).toBe(0.98);
     expect(mockEntityRepo.getQualityAggregation).toHaveBeenCalledWith('job-1', 'tenant-1');
   });
+
+  it('returns zero values for empty job (no entities)', async () => {
+    mockEntityRepo.getQualityAggregation.mockResolvedValue({
+      entityCount: 0, averageQuality: 0,
+      distribution: { excellent: 0, good: 0, fair: 0, poor: 0 },
+      fieldCompleteness: {},
+    });
+    const app = createTestApp({ entityRepo: mockEntityRepo });
+    const res = await app.request('/api/v1/jobs/empty-job/quality');
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body.data.entityCount).toBe(0);
+    expect(body.data.fieldCompleteness).toEqual({});
+  });
 });

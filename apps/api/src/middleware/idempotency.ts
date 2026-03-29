@@ -39,6 +39,8 @@ export function idempotencyMiddleware(): MiddlewareHandler {
     try {
       const status = c.res.status;
       if (status < 200 || status >= 300) return;
+      const contentType = c.res.headers.get('content-type') ?? '';
+      if (!contentType.includes('application/json')) return; // Only cache JSON responses
       const cloned = c.res.clone();
       const body = await cloned.json();
       await redis.set(cacheKey, JSON.stringify({ statusCode: status, body }), 'EX', IDEMPOTENCY_TTL);

@@ -264,6 +264,12 @@ describe('EntityRepository', () => {
     expect(result.categories).toEqual(['electronics']);
   });
 
+  describe('getQualityAggregation', () => {
+    it('method exists with correct signature', () => {
+      expect(repo.getQualityAggregation).toBeTypeOf('function');
+    });
+  });
+
   describe('findByJobCursor', () => {
     it('returns entities and nextCursor when batch is full', async () => {
       const fullBatch = Array.from({ length: 3 }, (_, i) => ({

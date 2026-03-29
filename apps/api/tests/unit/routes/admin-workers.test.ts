@@ -44,4 +44,11 @@ describe('Admin worker routes', () => {
     const body = await res.json();
     expect(body.data).toHaveLength(0);
   });
+
+  it('returns 500 when Redis unavailable', async () => {
+    const app = createTestApp(null);
+    app.onError((err, c) => c.json({ error: { message: err.message } }, 500));
+    const res = await app.request('/api/v1/admin/workers');
+    expect(res.status).toBe(500);
+  });
 });

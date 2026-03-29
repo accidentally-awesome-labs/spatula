@@ -539,6 +539,27 @@ describe('processExport', () => {
     expect(envelope.entities[0].mergedData).not.toHaveProperty('age');
   });
 
+  it('does not crash when projected fields are missing from entity', async () => {
+    const deps = createMockDeps();
+    const entities = [
+      { id: 'e1', mergedData: { name: 'Alice' }, qualityScore: 0.9, categories: [], sourceCount: 1 },
+    ];
+    (deps.entityRepo as any).findByJobCursor = vi.fn()
+      .mockResolvedValueOnce({ entities, nextCursor: null });
+    (deps.entityRepo.countByJob as any).mockResolvedValue(1);
+
+    // Request 'price' field which is absent from the entity
+    const fieldsInput = { ...defaultInput, format: 'json' as const, fields: ['name', 'price'] };
+    await processExport(fieldsInput, deps);
+
+    expect(deps.contentStore.store).toHaveBeenCalled();
+    const storedContent = (deps.contentStore.store as any).mock.calls[0][1];
+    const envelope = JSON.parse(storedContent);
+    // 'name' present, 'price' absent (undefined serializes away in JSON)
+    expect(envelope.entities[0].mergedData).toHaveProperty('name', 'Alice');
+    expect(envelope.entities[0].mergedData).not.toHaveProperty('price');
+  });
+
   it('fetches entities in batches', async () => {
     const deps = createMockDeps();
     // 250 entities = 3 batches (100+100+50)
