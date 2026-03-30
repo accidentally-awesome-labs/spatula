@@ -14,7 +14,7 @@ import yargs from 'yargs';
 import { hideBin } from 'yargs/helpers';
 import { SpatulaApiClient } from './api/client.js';
 import { runListCommand, formatJobsTable } from './commands/list.js';
-import { runStatusCommand, formatJobDetail } from './commands/status.js';
+import { runStatusCommand, runLocalStatusCommand, formatJobDetail } from './commands/status.js';
 import { runInitCommand, formatInitResult } from './commands/init.js';
 import { runRunCommand } from './commands/run.js';
 
@@ -164,21 +164,30 @@ yargs(hideBin(process.argv))
   )
 
   // -------------------------------------------------------------------------
-  // status — show job details
+  // status — show job details (API mode) or local project status
   // -------------------------------------------------------------------------
   .command(
-    'status <jobId>',
-    'Show details for a specific crawl job',
+    'status [jobId]',
+    'Show details for a specific crawl job, or local project status if no jobId given',
     (y) =>
       y.positional('jobId', {
         type: 'string',
-        demandOption: true,
-        describe: 'The job ID to inspect',
+        describe: 'The job ID to inspect (omit to show local project status)',
       }),
     async (argv) => {
+      if (!argv.jobId) {
+        const found = await runLocalStatusCommand(process.cwd());
+        if (!found) {
+          console.error(
+            'Error: no spatula.yaml found. Provide a jobId or run from a project directory.',
+          );
+          process.exit(1);
+        }
+        return;
+      }
       const tenantId = argv.tenantId || getEnvOrFail('SPATULA_TENANT_ID');
       const client = getApiClient({ apiUrl: argv.apiUrl, tenantId });
-      const job = await runStatusCommand(client, argv.jobId as string);
+      const job = await runStatusCommand(client, argv.jobId);
       console.log(formatJobDetail(job));
     },
   )
