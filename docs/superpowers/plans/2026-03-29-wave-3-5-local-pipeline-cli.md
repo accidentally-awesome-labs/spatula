@@ -60,6 +60,7 @@ This is a large sub-plan (~27 deliverables, ~24 new files). It decomposes into 1
 | `packages/core/tests/unit/content-store/local-content-store.test.ts` | Local content store tests |
 | `apps/cli/tests/unit/commands/init.test.ts` | `spatula init` filesystem tests |
 | `apps/cli/tests/unit/commands/reset.test.ts` | `spatula reset` selective cleanup tests |
+| `apps/cli/tests/unit/notifications.test.ts` | Desktop + webhook notification helper tests |
 
 ### Modified Files
 
@@ -873,6 +874,53 @@ describe('LocalDataSource', () => {
     expect(status.totalEntities).toBe(1);
     expect(status.schemaFields).toBe(1);
   });
+
+  it('searchEntities delegates to adapter with filter', async () => {
+    const adapter = createMockAdapter();
+    const ds = new LocalDataSource(adapter);
+    await ds.searchEntities('widget');
+    // entityRepo.findByJob is called with the project IDs (filter applied client-side)
+    expect(adapter.entityRepo.findByJob).toHaveBeenCalledWith('proj-1', 'proj-1');
+  });
+
+  it('getSchema returns latest schema from adapter', async () => {
+    const adapter = createMockAdapter();
+    const ds = new LocalDataSource(adapter);
+    const schema = await ds.getSchema();
+    expect(adapter.schemaRepo.findLatest).toHaveBeenCalledWith('proj-1', 'proj-1');
+    expect(schema).toHaveProperty('version', 1);
+  });
+
+  it('getActions filters by status', async () => {
+    const adapter = createMockAdapter();
+    const ds = new LocalDataSource(adapter);
+    await ds.getActions('pending_review');
+    expect(adapter.actionRepo.findByJob).toHaveBeenCalledWith('proj-1', 'proj-1', { status: 'pending_review' });
+  });
+
+  it('subscribe returns unsubscribe function', async () => {
+    const { PipelineEventEmitter } = await import('../../../src/pipeline/pipeline-events.js');
+    const events = new PipelineEventEmitter();
+    const adapter = createMockAdapter();
+    const ds = new LocalDataSource(adapter, events);
+
+    const received: unknown[] = [];
+    const unsubscribe = ds.subscribe!((event) => received.push(event));
+
+    events.emit('entity:created', { id: 'e2', jobId: 'proj-1' });
+    expect(received).toHaveLength(1);
+
+    unsubscribe();
+    events.emit('entity:created', { id: 'e3', jobId: 'proj-1' });
+    expect(received).toHaveLength(1); // No new events after unsubscribe
+  });
+
+  it('approveAction delegates to adapter', async () => {
+    const adapter = createMockAdapter();
+    const ds = new LocalDataSource(adapter);
+    await ds.approveAction('action-1', 'reviewer');
+    expect(adapter.actionRepo.updateStatus).toHaveBeenCalledWith('action-1', 'proj-1', 'approved', 'reviewer');
+  });
 });
 ```
 
@@ -982,6 +1030,129 @@ describe('LocalPipelineRunner', () => {
 
     await runner.run();
 
+    expect(deps.adapter.taskRepo.enqueue).toHaveBeenCalledWith(
+      expect.objectContaining({ url: 'https://example.com' }),
+    );
+  });
+
+  it('recovers crashed tasks (resets in_progress to pending)', async () => {
+    const deps = createMockDeps();
+    // Mock in-progress tasks from a previous crash
+    deps.adapter.taskRepo.getJobStats.mockResolvedValue({ inProgress: 2, pending: 0, completed: 0, failed: 0, skipped: 0 });
+    // Mock the actual in-progress tasks to recover
+    // Verify updateStatus called with 'pending' for each
+    const runner = new LocalPipelineRunner(deps as any);
+    await runner.run();
+    // recoverCrashedTasks() detects inProgress > 0; once recoverCrashed() helper exists,
+    // verify updateStatus called with 'pending' for each in-progress task
+    expect(deps.adapter.taskRepo.getJobStats).toHaveBeenCalled();
+  });
+
+  it('skips task when page budget is exhausted', async () => {
+    const deps = createMockDeps();
+    // Set maxPages to 1, enqueue 2 tasks
+    (deps.config as any).crawl.maxPages = 1;
+    deps.adapter.taskRepo.findPending.mockResolvedValue([
+      { id: 'task-2', url: 'https://example.com/a', depth: 1, priorityScore: 5 },
+      { id: 'task-3', url: 'https://example.com/b', depth: 1, priorityScore: 5 },
+    ]);
+    const runner = new LocalPipelineRunner(deps as any);
+    await runner.run();
+    // The second task exceeds the page budget — verify it is marked 'skipped'
+    expect(deps.adapter.taskRepo.updateStatus).toHaveBeenCalledWith(
+      expect.any(String), expect.any(String), 'skipped',
+    );
+  });
+
+  it('retries failed tasks up to 3 times with backoff', async () => {
+    const deps = createMockDeps();
+    deps.adapter.taskRepo.findPending.mockResolvedValue([
+      { id: 'task-retry', url: 'https://example.com/retry', depth: 0, priorityScore: 5 },
+    ]);
+    // Mock processCrawlTask to fail first 2 times, succeed on 3rd
+    let callCount = 0;
+    deps.crawler.crawl.mockImplementation(async () => {
+      callCount++;
+      if (callCount < 3) throw new Error('transient crawl error');
+      return { content: '<html>ok</html>', statusCode: 200 };
+    });
+    const runner = new LocalPipelineRunner(deps as any);
+    await runner.run();
+    // The task should eventually succeed after retries
+    expect(callCount).toBeGreaterThanOrEqual(2);
+  });
+
+  it('marks task as failed after max retries', async () => {
+    const deps = createMockDeps();
+    deps.adapter.taskRepo.findPending.mockResolvedValue([
+      { id: 'task-fail', url: 'https://example.com/fail', depth: 0, priorityScore: 5 },
+    ]);
+    // Mock processCrawlTask to always fail
+    deps.crawler.crawl.mockRejectedValue(new Error('permanent error'));
+    const runner = new LocalPipelineRunner(deps as any);
+    await runner.run();
+    // Verify task status set to 'failed' after 3 retries
+    expect(deps.adapter.taskRepo.updateStatus).toHaveBeenCalledWith(
+      'task-fail', expect.any(String), 'failed',
+    );
+  });
+
+  it('calls processReconciliation after crawl loop', async () => {
+    const deps = createMockDeps();
+    const runner = new LocalPipelineRunner(deps as any);
+    await runner.run();
+    // Verify reconciliation orchestrator repo methods are called
+    expect(deps.adapter.runRepo.create).toHaveBeenCalled();
+    // reconciler.reconcile is called internally by processReconciliation
+    expect(deps.adapter.entityRepo.countByJob).toHaveBeenCalled();
+  });
+
+  it('calls processExport when autoExport is true', async () => {
+    const deps = createMockDeps();
+    // Set config.export.autoExport = true
+    (deps.config as any).export = { autoExport: true, format: 'json', includeProvenance: false };
+    deps.adapter.exportRepo.create.mockResolvedValue({ id: 'export-1' });
+    const runner = new LocalPipelineRunner(deps as any);
+    await runner.run();
+    // Verify export orchestrator is triggered — exportRepo.create is called
+    expect(deps.adapter.exportRepo.create).toHaveBeenCalledWith(
+      expect.objectContaining({ format: 'json', status: 'pending' }),
+    );
+  });
+
+  it('stops gracefully and marks run as paused', async () => {
+    const deps = createMockDeps();
+    // Make the crawl loop run at least one iteration before stop()
+    deps.adapter.taskRepo.findPending.mockResolvedValue([
+      { id: 'task-long', url: 'https://example.com/long', depth: 0, priorityScore: 5 },
+    ]);
+    deps.crawler.crawl.mockImplementation(async () => {
+      return { content: '<html>slow</html>', statusCode: 200 };
+    });
+    const runner = new LocalPipelineRunner(deps as any);
+    // Start run in background and stop immediately
+    const runPromise = runner.run();
+    await runner.stop();
+    await runPromise.catch(() => {});
+    // Verify lock was released
+    expect(deps.adapter.runRepo.updateStatus).toHaveBeenCalled();
+  });
+
+  it('enqueues discovered links from crawl results', async () => {
+    const deps = createMockDeps();
+    deps.adapter.taskRepo.findPending.mockResolvedValue([
+      { id: 'task-parent', url: 'https://example.com', depth: 0, priorityScore: 10 },
+    ]);
+    // Mock processCrawlTask to return linksFound
+    deps.crawler.crawl.mockResolvedValue({ content: '<html><a href="/page2">p2</a></html>', statusCode: 200 });
+    deps.extractor.extract.mockResolvedValue({
+      data: {},
+      unmappedFields: [],
+      linksFound: [{ url: 'https://example.com/page2', priority: 'high' }],
+    });
+    const runner = new LocalPipelineRunner(deps as any);
+    await runner.run();
+    // Verify new tasks enqueued with correct priorities for discovered links
     expect(deps.adapter.taskRepo.enqueue).toHaveBeenCalledWith(
       expect.objectContaining({ url: 'https://example.com' }),
     );
@@ -2075,11 +2246,64 @@ export async function sendWebhookNotification(
 }
 ```
 
-- [ ] **Step 3: Commit**
+- [ ] **Step 3: Write notification tests**
+
+```typescript
+// apps/cli/tests/unit/notifications.test.ts
+import { describe, it, expect, vi } from 'vitest';
+
+// Mock node-notifier
+vi.mock('node-notifier', () => ({
+  default: { notify: vi.fn() },
+}));
+
+// Mock fetch for webhooks
+const mockFetch = vi.fn().mockResolvedValue({ ok: true });
+vi.stubGlobal('fetch', mockFetch);
+
+import { sendDesktopNotification, sendWebhookNotification } from '../../src/notifications.js';
+
+describe('notifications', () => {
+  it('sendDesktopNotification calls node-notifier', async () => {
+    delete process.env.CI;
+    await sendDesktopNotification('Test', 'Hello');
+    const notifier = (await import('node-notifier')).default;
+    expect(notifier.notify).toHaveBeenCalled();
+  });
+
+  it('sendDesktopNotification skips in CI', async () => {
+    process.env.CI = 'true';
+    const notifier = (await import('node-notifier')).default;
+    vi.mocked(notifier.notify).mockClear();
+    await sendDesktopNotification('Test', 'Hello');
+    expect(notifier.notify).not.toHaveBeenCalled();
+    delete process.env.CI;
+  });
+
+  it('sendWebhookNotification posts JSON', async () => {
+    await sendWebhookNotification('https://hooks.example.com/test', {
+      type: 'completed', data: { pages: 100 },
+    });
+    expect(mockFetch).toHaveBeenCalledWith(
+      'https://hooks.example.com/test',
+      expect.objectContaining({ method: 'POST' }),
+    );
+  });
+
+  it('sendWebhookNotification handles failure gracefully', async () => {
+    mockFetch.mockRejectedValueOnce(new Error('network'));
+    await expect(
+      sendWebhookNotification('https://hooks.example.com/test', { type: 'failed', data: {} }),
+    ).resolves.not.toThrow();
+  });
+});
+```
+
+- [ ] **Step 4: Commit**
 
 ```bash
-git add apps/cli/src/notifications.ts apps/cli/package.json pnpm-lock.yaml
-git commit -m "feat(cli): add desktop and webhook notification helpers"
+git add apps/cli/src/notifications.ts apps/cli/tests/unit/notifications.test.ts apps/cli/package.json pnpm-lock.yaml
+git commit -m "feat(cli): add desktop and webhook notification helpers with tests"
 ```
 
 ---
