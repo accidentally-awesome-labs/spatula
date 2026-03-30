@@ -90,6 +90,18 @@ export async function runRunCommand(options: RunOptions = {}): Promise<void> {
     globalConfig,
   });
 
+  // Step 3b: Set up structured logging to .spatula/logs/
+  const logsDir = join(projectRoot, '.spatula', 'logs');
+  const { mkdirSync } = await import('node:fs');
+  mkdirSync(logsDir, { recursive: true });
+  const logFile = join(logsDir, `${new Date().toISOString().replace(/:/g, '-').slice(0, 19)}.log`);
+  const { appendFileSync } = await import('node:fs');
+  // Simple structured JSON log appender (avoids Pino transport complexity)
+  const logToFile = (entry: Record<string, unknown>) => {
+    try { appendFileSync(logFile, JSON.stringify({ ...entry, ts: new Date().toISOString() }) + '\n'); } catch { /* non-fatal */ }
+  };
+  console.log(`  Log: ${logFile}`);
+
   // Step 4: Open SQLite DB and initialise (apply migrations + seed project meta)
   const dbPath = join(projectRoot, '.spatula', 'project.db');
   const { db, close: closeDb } = createProjectDb(dbPath);
@@ -211,7 +223,7 @@ export async function runRunCommand(options: RunOptions = {}): Promise<void> {
   // Step 13: Subscribe to progress events — single overwritten stdout line
   const startTime = Date.now();
 
-  runner.events.on('progress', (stats) => {
+  runner.events.on('progress', (stats: any) => {
     const elapsed = Math.round((Date.now() - startTime) / 1000);
     const pct =
       stats.totalPages > 0
@@ -223,9 +235,11 @@ export async function runRunCommand(options: RunOptions = {}): Promise<void> {
       `  Errors: ${stats.errors}` +
       `  Elapsed: ${elapsed}s  `,
     );
+    // Log to file
+    logToFile({ event: 'progress', ...stats, elapsed });
   });
 
-  runner.events.on('schema:evolved', (schema) => {
+  runner.events.on('schema:evolved', (schema: any) => {
     // Print on a new line so the evolution message isn't overwritten
     process.stdout.write('\n');
     console.log(`  Schema evolved → version ${schema.version}`);
