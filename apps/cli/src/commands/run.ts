@@ -5,9 +5,13 @@
  * opens/initialises the SQLite project database, builds the pipeline
  * component graph, and runs LocalPipelineRunner until completion or SIGINT.
  *
- * Crawler, extractor, and classifier dependencies are stubbed as null with
- * TODO comments for Phase 13 Step 4, when the real implementations will be
- * wired in.
+ * DI wiring:
+ *   - LLM client created from global config (provider, API keys) or env vars
+ *   - Crawler created via CrawlerFactory (default: Playwright)
+ *   - Extractor, Classifier, SchemaEvolver, Reconciler, LinkEvaluator built
+ *     from the LLM client + resolved job config
+ *   - If LLM is unavailable (no API key, no Ollama), crawl-only mode: pages
+ *     are fetched but LLM-dependent steps are skipped.
  *
  * TODO(Wave 3-5 Task 10): Structured file logging — add a Pino file transport
  * that writes newline-delimited JSON to `.spatula/logs/<run-id>.ndjson` so that
@@ -22,9 +26,22 @@ import {
   findProjectRoot,
   parseProjectYaml,
   yamlToJobConfig,
+  loadGlobalConfig,
   LocalContentStore,
   LocalPipelineRunner,
+  CrawlerFactory,
+  RobotsTxtChecker,
+  InMemoryDomainRateLimiter,
+  createLLMClient,
+  CircuitBreakerLLMClient,
+  resolveModel,
+  PageClassifier,
+  StaticExtractor,
+  SchemaEvolverImpl,
+  DataReconcilerImpl,
+  LLMLinkEvaluator,
 } from '@spatula/core';
+import type { LLMClient, Crawler, LLMProvider } from '@spatula/core';
 import { createProjectDb, initializeProjectDb, ProjectAdapter } from '@spatula/db';
 
 // ---------------------------------------------------------------------------
@@ -58,34 +75,103 @@ export async function runRunCommand(options: RunOptions = {}): Promise<void> {
   const projectId = slugify(projectRoot);
   const projectName = projectYaml.name ?? basename(projectRoot);
 
+  // Step 3: Load global config (API keys, provider preferences)
+  let globalConfig: ReturnType<typeof loadGlobalConfig> = null;
+  try {
+    globalConfig = loadGlobalConfig();
+  } catch {
+    // Non-fatal: global config is optional
+  }
+
   const jobConfig = yamlToJobConfig(projectYaml, {
     tenantId: projectId,
     projectId,
     projectRoot,
-    // TODO(Phase 13 Step 4): load ~/.spatula/config.yaml via loadGlobalConfig
-    globalConfig: null,
+    globalConfig,
   });
 
-  // Step 3: Open SQLite DB and initialise (apply migrations + seed project meta)
+  // Step 4: Open SQLite DB and initialise (apply migrations + seed project meta)
   const dbPath = join(projectRoot, '.spatula', 'project.db');
   const { db, close: closeDb } = createProjectDb(dbPath);
   initializeProjectDb(db, { projectId, name: projectName });
 
-  // Step 4: Build ProjectAdapter (assembles all 12 SQLite repositories)
+  // Step 5: Build ProjectAdapter (assembles all 12 SQLite repositories)
   const adapter = new ProjectAdapter(db, projectId);
 
-  // Step 5: Build LocalContentStore (raw HTML under .spatula/pages/)
+  // Step 6: Build LocalContentStore (raw HTML under .spatula/pages/)
   const pagesDir = join(projectRoot, '.spatula', 'pages');
   const contentStore = new LocalContentStore(pagesDir);
 
-  // Step 6: Build LocalPipelineRunner
-  //
-  // Crawler, extractor, and classifier are stubbed as null.
-  // TODO(Phase 13 Step 4): replace with:
-  //   crawler    → new PlaywrightCrawler(...)
-  //   extractor  → new LlmExtractor(...)
-  //   classifier → new PageClassifier(...)
-  // Also wire schemaEvolver and reconciler once those packages land.
+  // Step 7: Create LLM client (graceful degradation if unavailable)
+  // If the LLM provider is unreachable or misconfigured, the pipeline
+  // operates in crawl-only mode (pages fetched, no extraction).
+  let llmClient: LLMClient | null = null;
+  const llmConfig = jobConfig.llm;
+
+  try {
+    const provider: LLMProvider =
+      globalConfig?.llm?.provider ?? 'ollama';
+
+    const rawClient = createLLMClient({
+      provider,
+      openrouter: provider === 'openrouter'
+        ? {
+            apiKey:
+              globalConfig?.openrouterApiKey ??
+              process.env.OPENROUTER_API_KEY ??
+              '',
+            baseUrl: process.env.OPENROUTER_BASE_URL,
+          }
+        : undefined,
+      ollama: provider === 'ollama'
+        ? { baseUrl: process.env.OLLAMA_BASE_URL }
+        : undefined,
+    });
+
+    // Wrap cloud providers with circuit breaker; skip for Ollama (local, terminal failures)
+    llmClient =
+      provider === 'openrouter'
+        ? new CircuitBreakerLLMClient(rawClient)
+        : rawClient;
+  } catch (err) {
+    console.warn(
+      `  Warning: LLM unavailable (${err instanceof Error ? err.message : String(err)}).` +
+      '\n  Pipeline will crawl pages but skip classification, extraction, and reconciliation.\n',
+    );
+  }
+
+  // Step 8: Create crawler (async — Playwright launches a browser)
+  const crawlerType = jobConfig.crawl?.crawlerType ?? 'playwright';
+  let crawler: Crawler | null = null;
+  try {
+    crawler = await CrawlerFactory.create({
+      type: crawlerType as 'playwright' | 'firecrawl',
+      firecrawlApiKey: globalConfig?.firecrawlApiKey ?? process.env.FIRECRAWL_API_KEY,
+    });
+  } catch (err) {
+    console.error(
+      `Error: Failed to create ${crawlerType} crawler: ${err instanceof Error ? err.message : String(err)}`,
+    );
+    closeDb();
+    process.exit(1);
+  }
+
+  // Step 9: Build LLM-dependent components (null when LLM is unavailable)
+  const classifier = llmClient ? new PageClassifier(llmClient, llmConfig) : null;
+  const extractor = llmClient
+    ? new StaticExtractor(llmClient, llmConfig, jobConfig.tenantId)
+    : null;
+  const schemaEvolver = llmClient ? new SchemaEvolverImpl(llmClient, llmConfig) : null;
+  const reconciler = llmClient ? new DataReconcilerImpl(llmClient, llmConfig) : null;
+  const linkEvaluator = llmClient
+    ? new LLMLinkEvaluator(llmClient, resolveModel(llmConfig, 'linkEvaluation'))
+    : null;
+
+  // Step 10: Create crawl infrastructure
+  const robotsChecker = new RobotsTxtChecker();
+  const rateLimiter = new InMemoryDomainRateLimiter();
+
+  // Step 11: Build LocalPipelineRunner
   const runner = new LocalPipelineRunner({
     adapter,
     config: {
@@ -94,20 +180,24 @@ export async function runRunCommand(options: RunOptions = {}): Promise<void> {
       export: projectYaml.export,
     } as any,
     projectDir: projectRoot,
-    crawler: null,       // TODO: replace with PlaywrightCrawler
-    extractor: null,     // TODO: replace with LlmExtractor
-    classifier: null,    // TODO: replace with PageClassifier
+    crawler,
+    extractor,
+    classifier,
     contentStore,
-    schemaEvolver: null, // TODO: replace with SchemaEvolver
-    reconciler: null,    // TODO: replace with Reconciler
+    schemaEvolver,
+    reconciler,
+    linkEvaluator,
+    robotsChecker,
+    rateLimiter,
   } as any);
 
-  // Step 7: SIGINT handler — graceful stop (second Ctrl+C force-quits)
+  // Step 12: SIGINT handler — graceful stop (second Ctrl+C force-quits)
   let stopping = false;
   const handleSigint = () => {
     if (stopping) {
       process.stdout.write('\n');
       console.log('Force-quitting.');
+      crawler?.close().catch(() => {});
       closeDb();
       process.exit(1);
     }
@@ -118,7 +208,7 @@ export async function runRunCommand(options: RunOptions = {}): Promise<void> {
   };
   process.on('SIGINT', handleSigint);
 
-  // Step 8: Subscribe to progress events — single overwritten stdout line
+  // Step 13: Subscribe to progress events — single overwritten stdout line
   const startTime = Date.now();
 
   runner.events.on('progress', (stats) => {
@@ -141,10 +231,12 @@ export async function runRunCommand(options: RunOptions = {}): Promise<void> {
     console.log(`  Schema evolved → version ${schema.version}`);
   });
 
-  // Step 9: Print startup summary and run the pipeline
+  // Step 14: Print startup summary and run the pipeline
   console.log(`\nSpatula — running pipeline for: ${projectName}`);
   console.log(`  Project root : ${projectRoot}`);
   console.log(`  Database     : ${dbPath}`);
+  console.log(`  Crawler      : ${crawlerType}`);
+  console.log(`  LLM          : ${llmClient ? 'available' : 'unavailable (crawl-only mode)'}`);
   console.log(`  Seed URLs    : ${(jobConfig.seedUrls ?? []).join(', ')}`);
   console.log('');
 
@@ -160,6 +252,7 @@ export async function runRunCommand(options: RunOptions = {}): Promise<void> {
     process.exitCode = 1;
   } finally {
     process.off('SIGINT', handleSigint);
+    await crawler?.close().catch(() => {});
     closeDb();
   }
 }
