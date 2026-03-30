@@ -17,6 +17,7 @@ import { runListCommand, formatJobsTable } from './commands/list.js';
 import { runStatusCommand, runLocalStatusCommand, formatJobDetail } from './commands/status.js';
 import { runInitCommand, formatInitResult } from './commands/init.js';
 import { runRunCommand } from './commands/run.js';
+import { runResetCommand, formatResetResult } from './commands/reset.js';
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -107,6 +108,38 @@ yargs(hideBin(process.argv))
       }),
     async (argv) => {
       await runRunCommand({ force: argv.force });
+    },
+  )
+
+  // -------------------------------------------------------------------------
+  // reset — wipe .spatula/ working state
+  // -------------------------------------------------------------------------
+  .command(
+    'reset',
+    'Reset the .spatula/ working directory for the current project',
+    (y) =>
+      y
+        .option('keep-exports', {
+          type: 'boolean',
+          default: false,
+          describe: 'Preserve the exports/ subdirectory',
+        })
+        .option('keep-entities', {
+          type: 'boolean',
+          default: false,
+          describe: 'Preserve the project.db database file',
+        }),
+    async (argv) => {
+      try {
+        const result = await runResetCommand({
+          keepExports: argv.keepExports,
+          keepEntities: argv.keepEntities,
+        });
+        console.log(formatResetResult(result));
+      } catch (err: unknown) {
+        console.error(err instanceof Error ? err.message : 'An unexpected error occurred');
+        process.exit(1);
+      }
     },
   )
 
