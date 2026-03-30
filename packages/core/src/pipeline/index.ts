@@ -12,3 +12,5 @@ export { PriorityQueue } from './priority-queue.js';
 export { Semaphore } from './concurrency.js';
 export { LocalDataSource } from './local-data-source.js';
 export type { ProjectAdapterLike } from './local-data-source.js';
+export { LocalPipelineRunner } from './local-pipeline-runner.js';
+export type { LocalPipelineConfig, ProjectAdapterForRunner } from './local-pipeline-runner.js';
