@@ -21,12 +21,12 @@
 
 ## Scope Note
 
-This is a large sub-plan (~25 deliverables, ~22 new files). It decomposes into 13 tasks grouped by dependency:
+This is a large sub-plan (~27 deliverables, ~24 new files). It decomposes into 14 tasks grouped by dependency:
 
 **Foundation (Tasks 1-2):** Local content store, pipeline infrastructure (events, lock, priority queue, semaphore)
 **DataSource (Task 3):** Interface + LocalDataSource
-**Pipeline Runner (Task 4):** The core 13-step execution engine + checkpoint/resume
-**CLI Commands (Tasks 5-8b):** init, run, status, reset, new
+**Pipeline Runner (Task 4):** The core 13-step execution engine + checkpoint/resume (steps 9-11 fully wired, retry with backoff, robots.txt + rate limiting)
+**CLI Commands (Tasks 5-8c):** init, run (with DI wiring + progress display), status, reset, new, CLI command tests
 **Notifications (Task 9):** Desktop + webhook
 **Logging (Task 10):** Structured per-run log files
 **Integration (Tasks 11-12):** Hook adaptation + final wiring
@@ -58,6 +58,8 @@ This is a large sub-plan (~25 deliverables, ~22 new files). It decomposes into 1
 | `packages/core/tests/unit/pipeline/pipeline-events.test.ts` | PipelineEventEmitter typed emit/on tests |
 | `packages/core/tests/unit/pipeline/local-data-source.test.ts` | LocalDataSource delegation tests |
 | `packages/core/tests/unit/content-store/local-content-store.test.ts` | Local content store tests |
+| `apps/cli/tests/unit/commands/init.test.ts` | `spatula init` filesystem tests |
+| `apps/cli/tests/unit/commands/reset.test.ts` | `spatula reset` selective cleanup tests |
 
 ### Modified Files
 
@@ -949,8 +951,11 @@ function createMockDeps() {
     extractor: { extract: vi.fn().mockResolvedValue({ data: {}, unmappedFields: [] }) },
     classifier: { classify: vi.fn().mockResolvedValue('product') },
     contentStore: { store: vi.fn().mockResolvedValue('file://test'), retrieve: vi.fn(), delete: vi.fn(), storeBinary: vi.fn(), retrieveBinary: vi.fn() },
-    schemaEvolver: { evolve: vi.fn().mockResolvedValue({ actions: [], schema: {} }) },
-    reconciler: { reconcile: vi.fn().mockResolvedValue({ entities: [] }) },
+    schemaEvolver: { evolve: vi.fn().mockResolvedValue([]) },
+    reconciler: { reconcile: vi.fn().mockResolvedValue({ entities: [], actions: [] }) },
+    linkEvaluator: { evaluate: vi.fn().mockResolvedValue([]) },
+    robotsChecker: { isAllowed: vi.fn().mockResolvedValue(true) },
+    rateLimiter: { waitForSlot: vi.fn().mockResolvedValue(undefined) },
   };
 }
 
@@ -1000,6 +1005,8 @@ import { processCrawlTask } from './crawl-orchestrator.js';
 import { processSchemaEvolution } from './schema-orchestrator.js';
 import { processReconciliation } from './reconcile-orchestrator.js';
 import { processExport } from './export-orchestrator.js';
+import type { EventPublisher } from './types.js';
+import type { PageClassifier } from '../extraction/page-classifier.js';
 
 const logger = createLogger('local-pipeline-runner');
 
@@ -1007,16 +1014,18 @@ export interface LocalPipelineConfig {
   adapter: import('@spatula/db').ProjectAdapter;
   config: Record<string, unknown>; // Resolved config from parseProjectYaml + resolveConfig
   projectDir: string;
+  // Core processing deps (required — pipeline crashes without these)
   crawler: import('../interfaces/crawler.js').Crawler;
   extractor: import('../interfaces/extractor.js').Extractor;
-  classifier: import('../interfaces/classifier.js').Classifier;
+  classifier: PageClassifier;                                      // from extraction/page-classifier.ts
   contentStore: import('../interfaces/content-store.js').ContentStore;
-  schemaEvolver?: import('./schema-orchestrator.js').SchemaEvolver;
-  reconciler?: import('./reconcile-orchestrator.js').Reconciler;
-  linkEvaluator?: import('../crawlers/link-evaluator.js').LinkEvaluator;
-  robotsChecker?: import('../crawlers/robots-txt-checker.js').RobotsTxtChecker;
+  // LLM-powered pipeline stages (required for entity production)
+  schemaEvolver: import('../interfaces/schema-evolver.js').SchemaEvolver;    // SchemaEvolverImpl
+  reconciler: import('../interfaces/reconciler.js').DataReconciler;          // DataReconcilerImpl
+  // Optional enhancements
+  linkEvaluator?: import('../link-evaluation/evaluator.js').LinkEvaluator;
+  robotsChecker?: import('../crawlers/robots-txt.js').RobotsTxtChecker;
   rateLimiter?: import('../crawlers/domain-rate-limiter.js').DomainRateLimiter;
-  circuitBreaker?: import('../llm/circuit-breaker-llm-client.js').CircuitBreakerLLMClient;
 }
 
 export class LocalPipelineRunner {
@@ -1027,6 +1036,7 @@ export class LocalPipelineRunner {
   private readonly pageBudget: InMemoryPageBudget;
   private isRunning = false;
   private isPaused = false;
+  private errorCount = 0;
 
   constructor(private readonly deps: LocalPipelineConfig) {
     this.lock = new ProjectLock(deps.projectDir);
@@ -1104,20 +1114,93 @@ export class LocalPipelineRunner {
       await this.crawlLoop();
 
       // Step 9: Schema evolution (post-crawl)
-      // TODO: Batch schema evolution
+      // Calls the same pure orchestrator used by BullMQ workers.
+      // No distributed lock needed in single-process local mode.
+      if (this.deps.config.schema?.evolutionConfig?.enabled) {
+        logger.info({ jobId: projectId }, 'Running schema evolution');
+        const schemaResult = await processSchemaEvolution(
+          { jobId: projectId, tenantId: projectId, extractionIds: [] },
+          {
+            schemaEvolver: this.deps.schemaEvolver!,
+            jobRepo: this.deps.adapter.jobRepo,
+            extractionRepo: this.deps.adapter.extractionRepo,
+            schemaRepo: this.deps.adapter.schemaRepo,
+            actionRepo: this.deps.adapter.actionRepo,
+            eventPublisher: this.localEventPublisher(projectId),
+          },
+        );
+        if (schemaResult.evolved) {
+          this.events.emit('schema:evolved', {
+            version: schemaResult.newVersion!,
+            fields: [],
+          });
+          logger.info({ newVersion: schemaResult.newVersion, actions: schemaResult.actionsApplied }, 'Schema evolved');
+        }
+      }
 
       // Step 10: Reconciliation
-      // TODO: Full or incremental reconciliation
+      // Merges extractions into deduplicated entities with provenance.
+      // Without this step the pipeline produces NO entities.
+      logger.info({ jobId: projectId }, 'Running reconciliation');
+      const reconcileResult = await processReconciliation(
+        { jobId: projectId, tenantId: projectId },
+        {
+          reconciler: this.deps.reconciler!,
+          jobRepo: this.deps.adapter.jobRepo,
+          schemaRepo: this.deps.adapter.schemaRepo,
+          extractionRepo: this.deps.adapter.extractionRepo,
+          pageRepo: this.deps.adapter.pageRepo,
+          entityRepo: this.deps.adapter.entityRepo,
+          entitySourceRepo: this.deps.adapter.entitySourceRepo,
+          sourceTrustRepo: this.deps.adapter.sourceTrustRepo,
+          eventPublisher: this.localEventPublisher(projectId),
+        },
+      );
+      logger.info(
+        { entities: reconcileResult.entitiesCreated, actions: reconcileResult.actionsGenerated },
+        'Reconciliation completed',
+      );
 
       // Step 11: Auto-export
-      // TODO: If export.autoExport is true
+      // If the user configured autoExport, run the export orchestrator immediately.
+      if (this.deps.config.export?.autoExport) {
+        const exportFormat = this.deps.config.export.format ?? 'json';
+        logger.info({ jobId: projectId, format: exportFormat }, 'Running auto-export');
+
+        // Create an export record so the orchestrator can track status
+        const exportRecord = await this.deps.adapter.exportRepo.create({
+          jobId: projectId,
+          tenantId: projectId,
+          format: exportFormat,
+          status: 'pending',
+        });
+
+        await processExport(
+          {
+            exportId: exportRecord.id,
+            jobId: projectId,
+            tenantId: projectId,
+            format: exportFormat,
+            includeProvenance: this.deps.config.export.includeProvenance ?? false,
+          },
+          {
+            jobRepo: this.deps.adapter.jobRepo,
+            schemaRepo: this.deps.adapter.schemaRepo,
+            entityRepo: this.deps.adapter.entityRepo,
+            exportRepo: this.deps.adapter.exportRepo,
+            contentStore: this.deps.contentStore,
+          },
+        );
+        logger.info({ exportId: exportRecord.id, format: exportFormat }, 'Auto-export completed');
+      }
 
       // Step 12: Run summary
+      const entityCount = await this.deps.adapter.entityRepo.countByJob(projectId, projectId);
       const stats = {
         pagesProcessed: this.pageBudget.count,
         totalPages: this.pageBudget.maxPages,
-        entitiesCreated: 0,
-        errors: 0,
+        entitiesCreated: entityCount,
+        errors: this.errorCount,
       };
       this.events.emit('progress', stats);
       logger.info(stats, 'Run completed');
@@ -1160,6 +1243,20 @@ export class LocalPipelineRunner {
     }
   }
 
+  /** Adapts PipelineEventEmitter to the EventPublisher interface used by orchestrators */
+  private localEventPublisher(projectId: string): EventPublisher {
+    return {
+      publish: async (_jobId: string, event: { type: string; jobId: string; tenantId: string; data: unknown }) => {
+        // Bridge orchestrator events to PipelineEventEmitter
+        if (event.type === 'entity_created') {
+          this.events.emit('entity:created', { id: (event.data as any).entityId, jobId: projectId });
+        } else if (event.type === 'schema_evolved') {
+          this.events.emit('schema:evolved', { version: (event.data as any).version, fields: (event.data as any).fieldsAdded ?? [] });
+        }
+      },
+    };
+  }
+
   private async crawlLoop(): Promise<void> {
     while (!this.queue.isEmpty && this.isRunning && !this.isPaused) {
       const batch = this.queue.dequeueBatch(this.semaphore.available || 1);
@@ -1177,57 +1274,97 @@ export class LocalPipelineRunner {
     }
   }
 
-  private async processTask(task: { taskId: string; url: string; depth: number }): Promise<void> {
+  private async processTask(
+    task: { taskId: string; url: string; depth: number },
+    maxRetries = 3,
+  ): Promise<void> {
     const projectId = this.deps.adapter.getProjectId();
-    try {
-      // Check page budget
-      if (!this.pageBudget.tryIncrement()) {
+
+    // Check page budget before any attempt
+    if (!this.pageBudget.tryIncrement()) {
+      await this.deps.adapter.taskRepo.updateStatus(task.taskId, projectId, 'skipped');
+      return;
+    }
+
+    // robots.txt compliance (Gap 6)
+    if (this.deps.robotsChecker) {
+      const allowed = await this.deps.robotsChecker.isAllowed(task.url);
+      if (!allowed) {
+        logger.info({ taskId: task.taskId, url: task.url }, 'Blocked by robots.txt');
         await this.deps.adapter.taskRepo.updateStatus(task.taskId, projectId, 'skipped');
         return;
       }
+    }
 
-      // Delegate to crawl orchestrator
-      const result = await processCrawlTask(
-        { taskId: task.taskId, jobId: projectId, tenantId: projectId, url: task.url, depth: task.depth },
-        {
-          crawler: this.deps.crawler,
-          classifier: this.deps.classifier,
-          extractor: this.deps.extractor,
-          contentStore: this.deps.contentStore,
-          linkEvaluator: this.deps.linkEvaluator,
-          taskRepo: this.deps.adapter.taskRepo,
-          pageRepo: this.deps.adapter.pageRepo,
-          jobRepo: this.deps.adapter.jobRepo,
-          extractionRepo: this.deps.adapter.extractionRepo,
-          schemaRepo: this.deps.adapter.schemaRepo,
-        },
-      );
+    // Per-domain rate limiting (Gap 6)
+    if (this.deps.rateLimiter) {
+      await this.deps.rateLimiter.waitForSlot(task.url);
+    }
 
-      if (!result.error) {
-        this.events.emit('task:completed', { id: task.taskId, url: task.url, status: 'completed' });
+    // Retry loop with exponential backoff (Gap 3)
+    for (let attempt = 0; attempt <= maxRetries; attempt++) {
+      try {
+        // Delegate to crawl orchestrator
+        const result = await processCrawlTask(
+          { taskId: task.taskId, jobId: projectId, tenantId: projectId, url: task.url, depth: task.depth },
+          {
+            crawler: this.deps.crawler,
+            classifier: this.deps.classifier,
+            extractor: this.deps.extractor,
+            contentStore: this.deps.contentStore,
+            linkEvaluator: this.deps.linkEvaluator,
+            taskRepo: this.deps.adapter.taskRepo,
+            pageRepo: this.deps.adapter.pageRepo,
+            jobRepo: this.deps.adapter.jobRepo,
+            extractionRepo: this.deps.adapter.extractionRepo,
+            schemaRepo: this.deps.adapter.schemaRepo,
+          },
+        );
 
-        // Enqueue discovered links
-        for (const link of result.linksFound ?? []) {
-          const childTask = await this.deps.adapter.taskRepo.enqueue({
-            jobId: projectId,
-            tenantId: projectId,
-            url: link.url,
-            depth: task.depth + 1,
-            parentTaskId: task.taskId,
-          });
-          const priority = link.priority === 'high' ? 10 : link.priority === 'medium' ? 5 : 1;
-          this.queue.enqueue({ taskId: childTask.id, url: link.url, depth: task.depth + 1 }, priority, task.depth + 1);
+        if (!result.error) {
+          this.events.emit('task:completed', { id: task.taskId, url: task.url, status: 'completed' });
+
+          // Enqueue discovered links
+          for (const link of result.linksFound ?? []) {
+            const childTask = await this.deps.adapter.taskRepo.enqueue({
+              jobId: projectId,
+              tenantId: projectId,
+              url: link.url,
+              depth: task.depth + 1,
+              parentTaskId: task.taskId,
+            });
+            const priority = link.priority === 'high' ? 10 : link.priority === 'medium' ? 5 : 1;
+            this.queue.enqueue({ taskId: childTask.id, url: link.url, depth: task.depth + 1 }, priority, task.depth + 1);
+          }
+        }
+
+        // Emit progress after each successful task
+        this.events.emit('progress', {
+          pagesProcessed: this.pageBudget.count,
+          totalPages: this.pageBudget.maxPages,
+          entitiesCreated: 0, // Updated at run summary
+          errors: this.errorCount,
+        });
+        return; // Success — exit retry loop
+
+      } catch (error) {
+        if (attempt < maxRetries) {
+          const delay = Math.pow(2, attempt + 1) * 1000; // 2s, 4s, 8s
+          logger.warn({ taskId: task.taskId, url: task.url, attempt, delay }, 'Retrying task after failure');
+          await new Promise((r) => setTimeout(r, delay));
+        } else {
+          // Max retries exhausted
+          logger.error({ taskId: task.taskId, url: task.url, error, attempts: maxRetries + 1 }, 'Task failed after all retries');
+          this.errorCount++;
+          await this.deps.adapter.taskRepo.updateStatus(task.taskId, projectId, 'failed');
         }
       }
-    } catch (error) {
-      logger.error({ taskId: task.taskId, url: task.url, error }, 'Task failed');
-      await this.deps.adapter.taskRepo.updateStatus(task.taskId, projectId, 'failed');
     }
   }
 }
 ```
 
-**Note:** This is a SKELETON. Steps 5 (config diff), 7 (re-extraction), 9 (schema evolution), 10 (reconciliation), 11 (auto-export) are stubs with TODO comments. They will be filled in iteratively. The core crawl loop (step 8) is functional.
+**Note:** Steps 5 (config diff) and 7 (re-extraction) remain as stubs with TODO comments — they are enhancements for incremental re-runs. Steps 8-11 (crawl loop, schema evolution, reconciliation, auto-export) are **fully wired** to the Wave 1 orchestrators. The pipeline produces entities end-to-end. Per-task retry with exponential backoff (2s/4s/8s), robots.txt compliance, and domain rate limiting are included in `processTask`.
 
 - [ ] **Step 3: Run tests**
 
@@ -1378,6 +1515,17 @@ The `run` command:
 import { findProjectRoot, parseProjectYaml, resolveConfig } from '@spatula/core';
 import { createProjectDb, initializeProjectDb, ProjectAdapter } from '@spatula/db';
 import { LocalPipelineRunner, LocalContentStore } from '@spatula/core';
+import { createLLMClient } from '@spatula/core/llm';
+import { CircuitBreakerLLMClient } from '@spatula/core/llm';
+import { CrawlerFactory } from '@spatula/core/crawlers';
+import { StaticExtractor } from '@spatula/core/extraction';
+import { PageClassifier } from '@spatula/core/extraction';
+import { SchemaEvolverImpl } from '@spatula/core/evolution';
+import { DataReconcilerImpl } from '@spatula/core/reconciliation';
+import { LLMLinkEvaluator } from '@spatula/core/link-evaluation';
+import { RobotsTxtChecker } from '@spatula/core/crawlers';
+import { InMemoryDomainRateLimiter } from '@spatula/core/crawlers';
+import { resolveModel } from '@spatula/core/llm';
 import { createLogger } from '@spatula/shared';
 import { join } from 'node:path';
 import { randomUUID } from 'node:crypto';
@@ -1419,23 +1567,90 @@ export async function runRunCommand(options: RunOptions): Promise<void> {
   // Create content store (local file-based)
   const contentStore = new LocalContentStore(join(spatulaDir, 'pages'));
 
-  // TODO: Create crawler, extractor, classifier, etc.
-  // For now, these are placeholders — full DI wiring depends on
-  // which LLM/crawler providers are configured.
+  // --- DI Wiring: LLM Client ---
+  // createLLMClient reads provider from config (openrouter or ollama).
+  // Wrap with CircuitBreakerLLMClient for resilience (Gap 6).
+  const llmProvider = resolvedConfig.llm?.provider ?? 'ollama';
+  const baseLLMClient = createLLMClient({
+    provider: llmProvider,
+    openrouter: llmProvider === 'openrouter'
+      ? { apiKey: process.env.OPENROUTER_API_KEY ?? resolvedConfig.llm?.apiKey ?? '' }
+      : undefined,
+    ollama: llmProvider === 'ollama'
+      ? { baseUrl: resolvedConfig.llm?.baseUrl }
+      : undefined,
+  });
+  const llmClient = new CircuitBreakerLLMClient(baseLLMClient, {
+    failureThreshold: 5,
+    resetTimeoutMs: 30_000,
+    halfOpenMaxAttempts: 2,
+  });
+
+  const llmConfig = {
+    primaryModel: resolvedConfig.llm?.primaryModel ?? 'anthropic/claude-sonnet-4-20250514',
+    modelOverrides: resolvedConfig.llm?.modelOverrides,
+  };
+
+  // --- DI Wiring: Crawler ---
+  // CrawlerFactory.create() returns a Playwright or Firecrawl crawler.
+  const crawlerType = resolvedConfig.crawler?.type ?? 'playwright';
+  const crawler = await CrawlerFactory.create({
+    type: crawlerType,
+    firecrawlApiKey: process.env.FIRECRAWL_API_KEY,
+  });
+
+  // --- DI Wiring: Extractor + Classifier ---
+  // Both need an LLMClient and LLMConfig. StaticExtractor also needs jobId.
+  const extractor = new StaticExtractor(llmClient, llmConfig, projectId);
+  const classifier = new PageClassifier(llmClient, llmConfig);
+
+  // --- DI Wiring: Schema Evolution + Reconciliation ---
+  // These are required for entity production (Gap 1).
+  const schemaEvolver = new SchemaEvolverImpl(llmClient, llmConfig);
+  const reconciler = new DataReconcilerImpl(llmClient, llmConfig);
+
+  // --- DI Wiring: Optional Enhancements ---
+  const linkEvaluator = new LLMLinkEvaluator(
+    llmClient,
+    resolveModel(llmConfig, 'linkEvaluation'),
+  );
+  const robotsChecker = new RobotsTxtChecker();
+  const rateLimiter = new InMemoryDomainRateLimiter(
+    resolvedConfig.politeness?.delayMs ?? 1000,
+  );
+
+  // --- Progress Display (Gap 4) ---
+  // Minimal single-line progress using stdout.write('\r...').
+  // Updated on every 'progress' event from the pipeline runner.
+  const startTime = Date.now();
 
   console.log(`Starting crawl for ${projectRoot}...`);
   console.log(`Seeds: ${resolvedConfig.seedUrls?.join(', ')}`);
   console.log(`Max pages: ${resolvedConfig.crawl?.maxPages ?? 1000}`);
+  console.log(''); // Blank line before progress
 
   // Create and run pipeline
   const runner = new LocalPipelineRunner({
     adapter,
     config: resolvedConfig,
     projectDir: spatulaDir,
-    crawler: null as any, // TODO: Wire real crawler
-    extractor: null as any, // TODO: Wire real extractor
-    classifier: null as any, // TODO: Wire real classifier
+    crawler,
+    extractor,
+    classifier,
     contentStore,
+    schemaEvolver,
+    reconciler,
+    linkEvaluator,
+    robotsChecker,
+    rateLimiter,
+  });
+
+  // Subscribe to progress events for minimal progress display (Gap 4)
+  runner.eventEmitter.on('progress', (stats) => {
+    const elapsed = (Date.now() - startTime) / 1000;
+    const rate = elapsed > 0 ? (stats.pagesProcessed / elapsed).toFixed(1) : '0.0';
+    const line = `  Crawling — ${stats.pagesProcessed}/${stats.totalPages} pages | ${stats.entitiesCreated} entities | ${stats.errors} errors | ${rate} pages/sec`;
+    process.stdout.write(`\r${line.padEnd(80)}`);
   });
 
   // Ctrl+C handler for graceful shutdown
@@ -1443,7 +1658,8 @@ export async function runRunCommand(options: RunOptions): Promise<void> {
   process.on('SIGINT', async () => {
     if (shuttingDown) return;
     shuttingDown = true;
-    console.log('\nPausing... (waiting for in-flight tasks)');
+    process.stdout.write('\n');
+    console.log('Pausing... (waiting for in-flight tasks)');
     await runner.stop();
     console.log(`Paused. Run 'spatula run' to continue.`);
     process.exit(0);
@@ -1451,11 +1667,14 @@ export async function runRunCommand(options: RunOptions): Promise<void> {
 
   try {
     await runner.run({ force: options.force });
+    process.stdout.write('\n'); // Newline after progress line
     console.log('Crawl completed!');
   } catch (error) {
+    process.stdout.write('\n');
     console.error('Crawl failed:', (error as Error).message);
     process.exit(1);
   } finally {
+    await crawler.close();
     dbResult.close();
   }
 }
@@ -1596,6 +1815,178 @@ export async function runResetCommand(options: ResetOptions): Promise<void> {
 ```bash
 git add apps/cli/src/commands/reset.ts apps/cli/src/index.tsx
 git commit -m "feat(cli): add spatula reset command with selective cleanup"
+```
+
+---
+
+## Task 8c: CLI Command Tests — `spatula init` + `spatula reset`
+
+**Files:**
+- Create: `apps/cli/tests/unit/commands/init.test.ts`
+- Create: `apps/cli/tests/unit/commands/reset.test.ts`
+
+These tests use temp directories (same pattern as the local content store tests) to verify filesystem effects without touching the real filesystem.
+
+- [ ] **Step 1: Write init command tests**
+
+```typescript
+// apps/cli/tests/unit/commands/init.test.ts
+import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { mkdtempSync, rmSync, existsSync, readFileSync, writeFileSync } from 'node:fs';
+import { join } from 'node:path';
+import { tmpdir } from 'node:os';
+
+// The init command writes to process.cwd(), so we mock it
+// or extract the core logic into a testable function.
+// Here we test the extracted createProject() helper.
+import { runInitCommand } from '../../../src/commands/init.js';
+
+describe('spatula init', () => {
+  let tempDir: string;
+  let originalCwd: string;
+
+  beforeEach(() => {
+    tempDir = mkdtempSync(join(tmpdir(), 'spatula-init-test-'));
+    originalCwd = process.cwd();
+    process.chdir(tempDir);
+  });
+
+  afterEach(() => {
+    process.chdir(originalCwd);
+    rmSync(tempDir, { recursive: true, force: true });
+  });
+
+  it('creates spatula.yaml with seed URL', async () => {
+    await runInitCommand({ url: 'https://example.com', depth: 3, limit: 500 });
+
+    const yamlPath = join(tempDir, 'spatula.yaml');
+    expect(existsSync(yamlPath)).toBe(true);
+    const content = readFileSync(yamlPath, 'utf-8');
+    expect(content).toContain('https://example.com');
+    expect(content).toContain('depth: 3');
+    expect(content).toContain('limit: 500');
+  });
+
+  it('creates .spatula/ directory structure', async () => {
+    await runInitCommand({ url: 'https://example.com' });
+
+    const spatulaDir = join(tempDir, '.spatula');
+    expect(existsSync(spatulaDir)).toBe(true);
+    expect(existsSync(join(spatulaDir, 'pages'))).toBe(true);
+    expect(existsSync(join(spatulaDir, 'exports'))).toBe(true);
+    expect(existsSync(join(spatulaDir, 'cache', 'robots'))).toBe(true);
+    expect(existsSync(join(spatulaDir, 'logs'))).toBe(true);
+  });
+
+  it('does not overwrite existing spatula.yaml', async () => {
+    writeFileSync(join(tempDir, 'spatula.yaml'), 'existing: true');
+    await runInitCommand({ url: 'https://example.com' });
+
+    const content = readFileSync(join(tempDir, 'spatula.yaml'), 'utf-8');
+    expect(content).toBe('existing: true');
+  });
+
+  it('appends .spatula/ to .gitignore if it exists', async () => {
+    writeFileSync(join(tempDir, '.gitignore'), 'node_modules/\n');
+    await runInitCommand({ url: 'https://example.com' });
+
+    const gitignore = readFileSync(join(tempDir, '.gitignore'), 'utf-8');
+    expect(gitignore).toContain('.spatula');
+  });
+
+  it('does not duplicate .spatula/ in .gitignore', async () => {
+    writeFileSync(join(tempDir, '.gitignore'), 'node_modules/\n.spatula/\n');
+    await runInitCommand({ url: 'https://example.com' });
+
+    const gitignore = readFileSync(join(tempDir, '.gitignore'), 'utf-8');
+    const count = (gitignore.match(/\.spatula/g) || []).length;
+    expect(count).toBe(1);
+  });
+});
+```
+
+- [ ] **Step 2: Write reset command tests**
+
+```typescript
+// apps/cli/tests/unit/commands/reset.test.ts
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
+import { mkdtempSync, rmSync, existsSync, writeFileSync, mkdirSync, readFileSync } from 'node:fs';
+import { join } from 'node:path';
+import { tmpdir } from 'node:os';
+import { runResetCommand } from '../../../src/commands/reset.js';
+
+// Mock findProjectRoot to return our temp dir
+vi.mock('@spatula/core', () => ({
+  findProjectRoot: vi.fn(),
+}));
+
+describe('spatula reset', () => {
+  let tempDir: string;
+  let originalCwd: string;
+
+  beforeEach(async () => {
+    tempDir = mkdtempSync(join(tmpdir(), 'spatula-reset-test-'));
+    originalCwd = process.cwd();
+    process.chdir(tempDir);
+
+    // Create a realistic project structure
+    writeFileSync(join(tempDir, 'spatula.yaml'), 'seeds:\n  - https://example.com\n');
+    const spatulaDir = join(tempDir, '.spatula');
+    for (const dir of ['pages', 'exports', 'cache/robots', 'logs']) {
+      mkdirSync(join(spatulaDir, dir), { recursive: true });
+    }
+    writeFileSync(join(spatulaDir, 'project.db'), 'fake-db');
+    writeFileSync(join(spatulaDir, 'pages', 'p1.html'), '<html>Page 1</html>');
+    writeFileSync(join(spatulaDir, 'exports', 'export.json'), '{}');
+
+    // Set up mock
+    const core = await import('@spatula/core');
+    (core.findProjectRoot as ReturnType<typeof vi.fn>).mockReturnValue(tempDir);
+  });
+
+  afterEach(() => {
+    process.chdir(originalCwd);
+    rmSync(tempDir, { recursive: true, force: true });
+  });
+
+  it('removes .spatula/ contents but preserves spatula.yaml', async () => {
+    await runResetCommand({});
+
+    expect(existsSync(join(tempDir, 'spatula.yaml'))).toBe(true);
+    // DB should be removed
+    expect(existsSync(join(tempDir, '.spatula', 'project.db'))).toBe(false);
+    // Pages should be removed
+    expect(existsSync(join(tempDir, '.spatula', 'pages', 'p1.html'))).toBe(false);
+    // Directory structure should be recreated
+    expect(existsSync(join(tempDir, '.spatula', 'pages'))).toBe(true);
+    expect(existsSync(join(tempDir, '.spatula', 'exports'))).toBe(true);
+    expect(existsSync(join(tempDir, '.spatula', 'logs'))).toBe(true);
+  });
+
+  it('preserves exports when --keep-exports is set', async () => {
+    await runResetCommand({ keepExports: true });
+
+    expect(existsSync(join(tempDir, '.spatula', 'exports', 'export.json'))).toBe(true);
+    // DB and pages should still be removed
+    expect(existsSync(join(tempDir, '.spatula', 'project.db'))).toBe(false);
+  });
+
+  it('preserves database when --keep-entities is set', async () => {
+    await runResetCommand({ keepEntities: true });
+
+    expect(existsSync(join(tempDir, '.spatula', 'project.db'))).toBe(true);
+    // Pages should still be removed
+    expect(existsSync(join(tempDir, '.spatula', 'pages', 'p1.html'))).toBe(false);
+  });
+});
+```
+
+- [ ] **Step 3: Run tests and commit**
+
+```bash
+pnpm --filter @spatula/cli test -- --run commands/init --run commands/reset
+git add apps/cli/tests/unit/commands/
+git commit -m "test(cli): add unit tests for spatula init and spatula reset commands"
 ```
 
 ---
