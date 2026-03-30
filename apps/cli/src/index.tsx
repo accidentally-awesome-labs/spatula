@@ -3,6 +3,7 @@
  * Spatula CLI — AI-powered intelligent web crawling.
  *
  * Commands:
+ *   init     Initialise a new Spatula project in the current directory
  *   new      Launch interactive conversational mode to configure and start a crawl job
  *   list     List crawl jobs
  *   status   Show details for a specific job
@@ -14,6 +15,7 @@ import { hideBin } from 'yargs/helpers';
 import { SpatulaApiClient } from './api/client.js';
 import { runListCommand, formatJobsTable } from './commands/list.js';
 import { runStatusCommand, formatJobDetail } from './commands/status.js';
+import { runInitCommand, formatInitResult } from './commands/init.js';
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -57,6 +59,38 @@ yargs(hideBin(process.argv))
     default: process.env.SPATULA_TENANT_ID ?? '',
     describe: 'Tenant ID (or set SPATULA_TENANT_ID)',
   })
+
+  // -------------------------------------------------------------------------
+  // init — initialise a new project directory
+  // -------------------------------------------------------------------------
+  .command(
+    'init [url]',
+    'Initialise a new Spatula project in the current directory',
+    (y) =>
+      y
+        .positional('url', {
+          type: 'string',
+          describe: 'Seed URL to add to spatula.yaml',
+        })
+        .option('depth', {
+          type: 'number',
+          describe: 'Default crawl depth',
+          default: 2,
+        })
+        .option('limit', {
+          type: 'number',
+          describe: 'Default page limit',
+          default: 1000,
+        }),
+    async (argv) => {
+      const result = await runInitCommand({
+        url: argv.url,
+        depth: argv.depth,
+        limit: argv.limit,
+      });
+      console.log(formatInitResult(result, process.cwd()));
+    },
+  )
 
   // -------------------------------------------------------------------------
   // new — interactive conversational mode
