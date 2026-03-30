@@ -1,3 +1,5 @@
+// TODO(Wave 3-5): Accept DataSource instead of ApiClient for local mode
+// In local mode, call dataSource.getEntities() instead of apiClient.listEntities()
 import { useEffect, useCallback, useMemo } from 'react';
 import { useStdout } from 'ink';
 import { useStore } from 'zustand';

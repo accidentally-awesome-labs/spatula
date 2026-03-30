@@ -1,3 +1,6 @@
+// TODO(Wave 3-5): Accept DataSource instead of ApiClient for local mode
+// In local mode, call dataSource methods instead of apiClient methods
+
 import { useState, useCallback, useRef } from 'react';
 import { writeFile } from 'node:fs/promises';
 import { join } from 'node:path';

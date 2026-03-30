@@ -1,3 +1,6 @@
+// TODO(Wave 3-5): Accept DataSource instead of ApiClient for local mode
+// In local mode, call dataSource methods instead of apiClient methods
+
 import { useEffect, useCallback, useRef } from 'react';
 import type { CliStore } from '../store/index.js';
 import type { SpatulaApiClient } from '../api/client.js';
