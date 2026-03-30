@@ -21,14 +21,15 @@
 
 ## Scope Note
 
-This is a large sub-plan (~23 deliverables, ~20 new files). It decomposes into 12 tasks grouped by dependency:
+This is a large sub-plan (~25 deliverables, ~22 new files). It decomposes into 13 tasks grouped by dependency:
 
-**Foundation (Tasks 1-3):** Local content store, pipeline events emitter, project lockfile
-**DataSource (Task 4):** Interface + LocalDataSource
-**Pipeline Runner (Tasks 5-6):** The core 13-step execution engine + checkpoint/resume
-**CLI Commands (Tasks 7-10):** init, run, status, reset
-**Notifications (Task 11):** Desktop + webhook
-**Integration (Task 12):** Hook adaptation + final wiring
+**Foundation (Tasks 1-2):** Local content store, pipeline infrastructure (events, lock, priority queue, semaphore)
+**DataSource (Task 3):** Interface + LocalDataSource
+**Pipeline Runner (Task 4):** The core 13-step execution engine + checkpoint/resume
+**CLI Commands (Tasks 5-8b):** init, run, status, reset, new
+**Notifications (Task 9):** Desktop + webhook
+**Logging (Task 10):** Structured per-run log files
+**Integration (Tasks 11-12):** Hook adaptation + final wiring
 
 ---
 
@@ -54,6 +55,8 @@ This is a large sub-plan (~23 deliverables, ~20 new files). It decomposes into 1
 | `packages/core/tests/unit/pipeline/priority-queue.test.ts` | Priority queue tests |
 | `packages/core/tests/unit/pipeline/concurrency.test.ts` | Semaphore tests |
 | `packages/core/tests/unit/pipeline/local-pipeline-runner.test.ts` | Pipeline runner tests |
+| `packages/core/tests/unit/pipeline/pipeline-events.test.ts` | PipelineEventEmitter typed emit/on tests |
+| `packages/core/tests/unit/pipeline/local-data-source.test.ts` | LocalDataSource delegation tests |
 | `packages/core/tests/unit/content-store/local-content-store.test.ts` | Local content store tests |
 
 ### Modified Files
@@ -255,6 +258,43 @@ export class PipelineEventEmitter extends EventEmitter {
     return super.on(event, listener as (...args: any[]) => void);
   }
 }
+```
+
+- [ ] **Step 1b: Write PipelineEventEmitter tests (I11)**
+
+```typescript
+// packages/core/tests/unit/pipeline/pipeline-events.test.ts
+import { describe, it, expect, vi } from 'vitest';
+import { PipelineEventEmitter } from '../../../src/pipeline/pipeline-events.js';
+
+describe('PipelineEventEmitter', () => {
+  it('emits and receives typed task:completed events', () => {
+    const emitter = new PipelineEventEmitter();
+    const handler = vi.fn();
+    emitter.on('task:completed', handler);
+    emitter.emit('task:completed', { id: 't1', url: 'https://example.com', status: 'completed' });
+    expect(handler).toHaveBeenCalledWith({ id: 't1', url: 'https://example.com', status: 'completed' });
+  });
+
+  it('emits and receives typed progress events', () => {
+    const emitter = new PipelineEventEmitter();
+    const handler = vi.fn();
+    emitter.on('progress', handler);
+    emitter.emit('progress', { pagesProcessed: 5, totalPages: 100, entitiesCreated: 2, errors: 0 });
+    expect(handler).toHaveBeenCalledWith({ pagesProcessed: 5, totalPages: 100, entitiesCreated: 2, errors: 0 });
+  });
+
+  it('supports multiple listeners on the same event', () => {
+    const emitter = new PipelineEventEmitter();
+    const h1 = vi.fn();
+    const h2 = vi.fn();
+    emitter.on('entity:created', h1);
+    emitter.on('entity:created', h2);
+    emitter.emit('entity:created', { id: 'e1', jobId: 'j1' });
+    expect(h1).toHaveBeenCalled();
+    expect(h2).toHaveBeenCalled();
+  });
+});
 ```
 
 - [ ] **Step 2: Implement ProjectLock**
@@ -619,6 +659,10 @@ export interface DataSource {
   // Exports
   createExport(options: { format: string; includeProvenance?: boolean }): Promise<unknown>;
   getExport(id: string): Promise<unknown>;
+  downloadExport(id: string): Promise<{ data: Uint8Array; filename: string } | null>;
+
+  // Documentation
+  getDocumentation(): Promise<{ schema: unknown; examples: unknown[] } | null>;
 
   // Real-time updates (optional)
   subscribe?(callback: (event: DataEvent) => void): () => void;
@@ -639,63 +683,69 @@ import type { PipelineEventEmitter } from './pipeline-events.js';
  */
 export class LocalDataSource implements DataSource {
   constructor(
-    private readonly adapter: any, // ProjectAdapter from @spatula/db
+    private readonly adapter: import('@spatula/db').ProjectAdapter,
     private readonly events?: PipelineEventEmitter,
   ) {}
 
+  private get projectId(): string {
+    return this.adapter.getProjectId();
+  }
+
   async getEntities(query: PaginationQuery): Promise<PaginatedResult<Entity>> {
     const entities = await this.adapter.entityRepo.findByJob(
-      this.adapter.projectId, this.adapter.projectId,
-      { limit: query.limit ?? 50, offset: query.offset ?? 0, search: query.search },
+      this.projectId, this.projectId,
+      { limit: query.limit ?? 50, offset: query.offset ?? 0 },
     );
     const total = await this.adapter.entityRepo.countByJob(
-      this.adapter.projectId, this.adapter.projectId,
+      this.projectId, this.projectId,
     );
     return { data: entities as Entity[], total };
   }
 
   async getEntity(id: string): Promise<Entity | null> {
-    return this.adapter.entityRepo.findById(id, this.adapter.projectId);
+    return this.adapter.entityRepo.findById(id, this.projectId);
   }
 
   async searchEntities(filter: string): Promise<Entity[]> {
+    // Note: entityRepo.findByJob does not support search filtering;
+    // client-side filtering or a dedicated search method can be added later.
     const result = await this.adapter.entityRepo.findByJob(
-      this.adapter.projectId, this.adapter.projectId,
-      { search: filter },
+      this.projectId, this.projectId,
     );
     return result as Entity[];
   }
 
   async getSchema(): Promise<unknown> {
-    return this.adapter.schemaRepo.findLatest(this.adapter.projectId, this.adapter.projectId);
+    return this.adapter.schemaRepo.findLatest(this.projectId, this.projectId);
   }
 
   async getSchemaVersions(): Promise<unknown[]> {
-    return this.adapter.schemaRepo.findAllVersions(this.adapter.projectId, this.adapter.projectId);
+    return this.adapter.schemaRepo.findAllVersions(this.projectId, this.projectId);
   }
 
   async getActions(status?: string): Promise<unknown[]> {
-    return this.adapter.actionRepo.findByJob(this.adapter.projectId, this.adapter.projectId, { status });
+    return this.adapter.actionRepo.findByJob(this.projectId, this.projectId, { status });
   }
 
   async approveAction(id: string, reviewedBy?: string): Promise<void> {
-    await this.adapter.actionRepo.updateStatus(id, this.adapter.projectId, 'approved', reviewedBy);
+    await this.adapter.actionRepo.updateStatus(id, this.projectId, 'approved', reviewedBy);
   }
 
   async rejectAction(id: string, reviewedBy?: string): Promise<void> {
-    await this.adapter.actionRepo.updateStatus(id, this.adapter.projectId, 'rejected', reviewedBy);
+    await this.adapter.actionRepo.updateStatus(id, this.projectId, 'rejected', reviewedBy);
   }
 
   async getStatus(): Promise<ProjectStatus> {
-    const lastRun = await this.adapter.runRepo.findLatest?.();
-    const totalPages = await this.adapter.taskRepo.countByJob?.(this.adapter.projectId, this.adapter.projectId) ?? 0;
-    const totalEntities = await this.adapter.entityRepo.countByJob(this.adapter.projectId, this.adapter.projectId);
-    const pendingActions = (await this.adapter.actionRepo.findByJob(this.adapter.projectId, this.adapter.projectId, { status: 'pending_review' })).length;
-    const schema = await this.adapter.schemaRepo.findLatest(this.adapter.projectId, this.adapter.projectId);
+    const lastRun = await this.adapter.runRepo.findLatestByStatus(['completed', 'started', 'failed']);
+    const taskStats = await this.adapter.taskRepo.getJobStats(this.projectId, this.projectId);
+    const totalPages = taskStats.completed + taskStats.inProgress + taskStats.pending + taskStats.failed + taskStats.skipped;
+    const totalEntities = await this.adapter.entityRepo.countByJob(this.projectId, this.projectId);
+    const pendingActions = (await this.adapter.actionRepo.findByJob(this.projectId, this.projectId, { status: 'pending_review' })).length;
+    const schema = await this.adapter.schemaRepo.findLatest(this.projectId, this.projectId);
     const schemaFields = schema ? Object.keys((schema as any).definition?.fields ?? {}).length : 0;
 
     return {
-      lastRun: lastRun ? { id: lastRun.id, status: lastRun.status, startedAt: lastRun.startedAt, pagesProcessed: lastRun.pagesProcessed ?? 0, entitiesCreated: lastRun.entitiesCreated ?? 0 } : undefined,
+      lastRun: lastRun ? { id: lastRun.id, status: lastRun.status, startedAt: lastRun.startedAt, pagesProcessed: lastRun.pagesCrawled ?? 0, entitiesCreated: lastRun.entitiesCreated ?? 0 } : undefined,
       totalPages,
       totalEntities,
       pendingActions,
@@ -711,7 +761,30 @@ export class LocalDataSource implements DataSource {
   }
 
   async getExport(id: string): Promise<unknown> {
-    return this.adapter.exportRepo.findById(id, this.adapter.projectId);
+    return this.adapter.exportRepo.findById(id);
+  }
+
+  async downloadExport(id: string): Promise<{ data: Uint8Array; filename: string } | null> {
+    const exp = await this.adapter.exportRepo.findById(id);
+    if (!exp || !exp.filePath) return null;
+    try {
+      const { readFile } = await import('node:fs/promises');
+      const data = await readFile(exp.filePath);
+      const filename = exp.filePath.split('/').pop() ?? `export-${id}`;
+      return { data, filename };
+    } catch {
+      return null;
+    }
+  }
+
+  async getDocumentation(): Promise<{ schema: unknown; examples: unknown[] } | null> {
+    const schema = await this.getSchema();
+    if (!schema) return null;
+    // Return schema + sample entities as documentation
+    const sample = await this.adapter.entityRepo.findByJob(
+      this.projectId, this.projectId, { limit: 3, offset: 0 },
+    );
+    return { schema, examples: sample };
   }
 
   subscribe(callback: (event: DataEvent) => void): () => void {
@@ -739,7 +812,69 @@ export class LocalDataSource implements DataSource {
 }
 ```
 
-- [ ] **Step 3: Export from barrels**
+- [ ] **Step 3: Write LocalDataSource tests (I10)**
+
+```typescript
+// packages/core/tests/unit/pipeline/local-data-source.test.ts
+import { describe, it, expect, vi } from 'vitest';
+import { LocalDataSource } from '../../../src/pipeline/local-data-source.js';
+
+function createMockAdapter() {
+  return {
+    getProjectId: vi.fn().mockReturnValue('proj-1'),
+    entityRepo: {
+      findByJob: vi.fn().mockResolvedValue([{ id: 'e1', mergedData: {} }]),
+      countByJob: vi.fn().mockResolvedValue(1),
+      findById: vi.fn().mockResolvedValue({ id: 'e1', mergedData: {} }),
+    },
+    schemaRepo: {
+      findLatest: vi.fn().mockResolvedValue({ version: 1, definition: { fields: { name: {} } } }),
+      findAllVersions: vi.fn().mockResolvedValue([]),
+    },
+    actionRepo: {
+      findByJob: vi.fn().mockResolvedValue([]),
+      updateStatus: vi.fn(),
+    },
+    taskRepo: {
+      getJobStats: vi.fn().mockResolvedValue({ pending: 0, inProgress: 0, completed: 5, failed: 0, skipped: 0 }),
+    },
+    runRepo: {
+      findLatestByStatus: vi.fn().mockResolvedValue({ id: 'r1', status: 'completed', startedAt: '2026-03-29T00:00:00Z', pagesCrawled: 5, entitiesCreated: 1 }),
+    },
+    exportRepo: {
+      findById: vi.fn().mockResolvedValue(null),
+    },
+  } as any;
+}
+
+describe('LocalDataSource', () => {
+  it('delegates getEntities to entityRepo.findByJob', async () => {
+    const adapter = createMockAdapter();
+    const ds = new LocalDataSource(adapter);
+    const result = await ds.getEntities({ limit: 10, offset: 0 });
+    expect(adapter.entityRepo.findByJob).toHaveBeenCalledWith('proj-1', 'proj-1', { limit: 10, offset: 0 });
+    expect(result.total).toBe(1);
+  });
+
+  it('delegates getEntity to entityRepo.findById', async () => {
+    const adapter = createMockAdapter();
+    const ds = new LocalDataSource(adapter);
+    await ds.getEntity('e1');
+    expect(adapter.entityRepo.findById).toHaveBeenCalledWith('e1', 'proj-1');
+  });
+
+  it('delegates getStatus and returns correct shape', async () => {
+    const adapter = createMockAdapter();
+    const ds = new LocalDataSource(adapter);
+    const status = await ds.getStatus();
+    expect(status.lastRun).toBeDefined();
+    expect(status.totalEntities).toBe(1);
+    expect(status.schemaFields).toBe(1);
+  });
+});
+```
+
+- [ ] **Step 4: Export from barrels**
 
 Add to `packages/core/src/index.ts`:
 ```typescript
@@ -747,11 +882,11 @@ export type { DataSource, PaginationQuery, PaginatedResult, ProjectStatus, DataE
 export { LocalDataSource } from './pipeline/local-data-source.js';
 ```
 
-- [ ] **Step 4: Build and commit**
+- [ ] **Step 5: Build and commit**
 
 ```bash
 pnpm --filter @spatula/core build
-git add packages/core/src/interfaces/data-source.ts packages/core/src/pipeline/local-data-source.ts packages/core/src/index.ts
+git add packages/core/src/interfaces/data-source.ts packages/core/src/pipeline/local-data-source.ts packages/core/tests/unit/pipeline/local-data-source.test.ts packages/core/src/index.ts
 git commit -m "feat(core): add DataSource interface and LocalDataSource for SQLite-backed local mode"
 ```
 
@@ -777,9 +912,10 @@ import { LocalPipelineRunner } from '../../../src/pipeline/local-pipeline-runner
 function createMockDeps() {
   return {
     adapter: {
-      projectId: 'test-project',
+      getProjectId: vi.fn().mockReturnValue('test-project'),
       taskRepo: {
-        findByJob: vi.fn().mockResolvedValue([]),
+        findPending: vi.fn().mockResolvedValue([]),
+        getJobStats: vi.fn().mockResolvedValue({ pending: 0, inProgress: 0, completed: 0, failed: 0, skipped: 0 }),
         updateStatus: vi.fn(),
         enqueue: vi.fn().mockResolvedValue({ id: 'task-1' }),
       },
@@ -790,8 +926,9 @@ function createMockDeps() {
       actionRepo: { findByJob: vi.fn().mockResolvedValue([]) },
       runRepo: {
         create: vi.fn().mockResolvedValue({ id: 'run-1' }),
-        update: vi.fn(),
-        findLatest: vi.fn().mockResolvedValue(null),
+        updateStatus: vi.fn(),
+        updateStats: vi.fn(),
+        findLatestByStatus: vi.fn().mockResolvedValue(null),
       },
       metaRepo: {
         get: vi.fn().mockResolvedValue(null),
@@ -867,19 +1004,19 @@ import { processExport } from './export-orchestrator.js';
 const logger = createLogger('local-pipeline-runner');
 
 export interface LocalPipelineConfig {
-  adapter: any; // ProjectAdapter
-  config: any;  // Resolved JobConfig
+  adapter: import('@spatula/db').ProjectAdapter;
+  config: Record<string, unknown>; // Resolved config from parseProjectYaml + resolveConfig
   projectDir: string;
-  crawler: any;
-  extractor: any;
-  classifier: any;
-  contentStore: any;
-  schemaEvolver?: any;
-  reconciler?: any;
-  linkEvaluator?: any;
-  robotsChecker?: any;
-  rateLimiter?: any;
-  circuitBreaker?: any;
+  crawler: import('../interfaces/crawler.js').Crawler;
+  extractor: import('../interfaces/extractor.js').Extractor;
+  classifier: import('../interfaces/classifier.js').Classifier;
+  contentStore: import('../interfaces/content-store.js').ContentStore;
+  schemaEvolver?: import('./schema-orchestrator.js').SchemaEvolver;
+  reconciler?: import('./reconcile-orchestrator.js').Reconciler;
+  linkEvaluator?: import('../crawlers/link-evaluator.js').LinkEvaluator;
+  robotsChecker?: import('../crawlers/robots-txt-checker.js').RobotsTxtChecker;
+  rateLimiter?: import('../crawlers/domain-rate-limiter.js').DomainRateLimiter;
+  circuitBreaker?: import('../llm/circuit-breaker-llm-client.js').CircuitBreakerLLMClient;
 }
 
 export class LocalPipelineRunner {
@@ -921,17 +1058,22 @@ export class LocalPipelineRunner {
       // Step 5: Config diff (placeholder — full implementation in next iteration)
       // TODO: Compare current config against last run snapshot
 
+      const projectId = this.deps.adapter.getProjectId();
+
       // Step 6: Determine work
-      const pendingTasks = await this.deps.adapter.taskRepo.findByJob(
-        this.deps.adapter.projectId, this.deps.adapter.projectId, { status: 'pending' },
+      const pendingTasks = await this.deps.adapter.taskRepo.findPending(
+        projectId, { limit: 1000 },
       );
 
       if (pendingTasks.length === 0 && this.deps.config.seedUrls?.length > 0) {
-        // First run: enqueue seed URLs
+        // First run: seed a synthetic job record so orchestrators can find config
+        // (SqliteJobRepository.findById reads from the latest run's configSnapshot)
+
+        // Enqueue seed URLs
         for (const url of this.deps.config.seedUrls) {
           const task = await this.deps.adapter.taskRepo.enqueue({
-            jobId: this.deps.adapter.projectId,
-            tenantId: this.deps.adapter.projectId,
+            jobId: projectId,
+            tenantId: projectId,
             url,
             depth: 0,
           });
@@ -947,11 +1089,12 @@ export class LocalPipelineRunner {
         }
       }
 
-      // Create run record
+      // Create run record (I3: use configSnapshot + source, matching RunRepository.create API)
       const run = await this.deps.adapter.runRepo.create({
         status: 'started',
+        source: 'cli',
+        configSnapshot: this.deps.config,
         startedAt: new Date().toISOString(),
-        config: this.deps.config,
       });
 
       // Step 7: Re-extraction pass (placeholder)
@@ -979,11 +1122,11 @@ export class LocalPipelineRunner {
       this.events.emit('progress', stats);
       logger.info(stats, 'Run completed');
 
-      // Update run record
-      await this.deps.adapter.runRepo.update(run.id, {
-        status: 'completed',
-        completedAt: new Date().toISOString(),
-        pagesProcessed: stats.pagesProcessed,
+      // Update run record (I4: use updateStatus + updateStats per RunRepository API)
+      await this.deps.adapter.runRepo.updateStatus(run.id, 'completed', new Date().toISOString());
+      await this.deps.adapter.runRepo.updateStats(run.id, {
+        pagesCrawled: stats.pagesProcessed,
+        entitiesCreated: stats.entitiesCreated,
       });
 
     } finally {
@@ -1005,12 +1148,15 @@ export class LocalPipelineRunner {
   }
 
   private async recoverCrashedTasks(): Promise<void> {
-    const inProgress = await this.deps.adapter.taskRepo.findByJob(
-      this.deps.adapter.projectId, this.deps.adapter.projectId, { status: 'in_progress' },
-    );
-    for (const task of inProgress) {
-      await this.deps.adapter.taskRepo.updateStatus(task.id, this.deps.adapter.projectId, 'pending');
-      logger.info({ taskId: task.id }, 'Recovered crashed task');
+    const projectId = this.deps.adapter.getProjectId();
+    // Note: SqliteCrawlTaskRepository does not expose a "findByStatus" method.
+    // Crash recovery needs a `findInProgress(jobId)` method added to the repo
+    // (or use getJobStats to detect, then a bulk-update helper). For the skeleton,
+    // check stats and log a warning; full recovery will be added when the repo
+    // is extended with a recoverCrashed(jobId) helper.
+    const stats = await this.deps.adapter.taskRepo.getJobStats(projectId, projectId);
+    if (stats.inProgress > 0) {
+      logger.warn({ count: stats.inProgress }, 'Detected in-progress tasks from previous crash — TODO: add recoverCrashed() to CrawlTaskRepository');
     }
   }
 
@@ -1032,16 +1178,17 @@ export class LocalPipelineRunner {
   }
 
   private async processTask(task: { taskId: string; url: string; depth: number }): Promise<void> {
+    const projectId = this.deps.adapter.getProjectId();
     try {
       // Check page budget
       if (!this.pageBudget.tryIncrement()) {
-        await this.deps.adapter.taskRepo.updateStatus(task.taskId, this.deps.adapter.projectId, 'skipped');
+        await this.deps.adapter.taskRepo.updateStatus(task.taskId, projectId, 'skipped');
         return;
       }
 
       // Delegate to crawl orchestrator
       const result = await processCrawlTask(
-        { taskId: task.taskId, jobId: this.deps.adapter.projectId, tenantId: this.deps.adapter.projectId, url: task.url, depth: task.depth },
+        { taskId: task.taskId, jobId: projectId, tenantId: projectId, url: task.url, depth: task.depth },
         {
           crawler: this.deps.crawler,
           classifier: this.deps.classifier,
@@ -1062,8 +1209,8 @@ export class LocalPipelineRunner {
         // Enqueue discovered links
         for (const link of result.linksFound ?? []) {
           const childTask = await this.deps.adapter.taskRepo.enqueue({
-            jobId: this.deps.adapter.projectId,
-            tenantId: this.deps.adapter.projectId,
+            jobId: projectId,
+            tenantId: projectId,
             url: link.url,
             depth: task.depth + 1,
             parentTaskId: task.taskId,
@@ -1074,7 +1221,7 @@ export class LocalPipelineRunner {
       }
     } catch (error) {
       logger.error({ taskId: task.taskId, url: task.url, error }, 'Task failed');
-      await this.deps.adapter.taskRepo.updateStatus(task.taskId, this.deps.adapter.projectId, 'failed');
+      await this.deps.adapter.taskRepo.updateStatus(task.taskId, projectId, 'failed');
     }
   }
 }
@@ -1229,10 +1376,11 @@ The `run` command:
 ```typescript
 // apps/cli/src/commands/run.ts
 import { findProjectRoot, parseProjectYaml, resolveConfig } from '@spatula/core';
-import { createProjectDb, ProjectAdapter } from '@spatula/db';
+import { createProjectDb, initializeProjectDb, ProjectAdapter } from '@spatula/db';
 import { LocalPipelineRunner, LocalContentStore } from '@spatula/core';
 import { createLogger } from '@spatula/shared';
 import { join } from 'node:path';
+import { randomUUID } from 'node:crypto';
 
 const logger = createLogger('cli:run');
 
@@ -1256,9 +1404,17 @@ export async function runRunCommand(options: RunOptions): Promise<void> {
   const config = parseProjectYaml(join(projectRoot, 'spatula.yaml'));
   const resolvedConfig = await resolveConfig(config);
 
-  // Open SQLite DB
+  // Open SQLite DB and apply migrations (I6)
   const dbResult = createProjectDb(join(spatulaDir, 'project.db'));
-  const adapter = new ProjectAdapter(dbResult.db);
+
+  // Read or generate a stable project ID from project meta
+  // initializeProjectDb seeds project_meta with the projectId on first run
+  const projectName = resolvedConfig.name ?? 'unnamed-project';
+  const projectId = resolvedConfig.projectId ?? randomUUID();
+  initializeProjectDb(dbResult.db, { projectId, name: projectName });
+
+  // ProjectAdapter requires both db and projectId (C2)
+  const adapter = new ProjectAdapter(dbResult.db, projectId);
 
   // Create content store (local file-based)
   const contentStore = new LocalContentStore(join(spatulaDir, 'pages'));
@@ -1299,6 +1455,8 @@ export async function runRunCommand(options: RunOptions): Promise<void> {
   } catch (error) {
     console.error('Crawl failed:', (error as Error).message);
     process.exit(1);
+  } finally {
+    dbResult.close();
   }
 }
 ```
@@ -1318,7 +1476,11 @@ Add to yargs:
 })
 ```
 
-- [ ] **Step 3: Build and commit**
+- [ ] **Step 3: Dashboard mode follow-up (I9)**
+
+The `[d]` keybinding during `spatula run` should open the existing Dashboard TUI component in local mode. This requires wiring `LocalDataSource` (wrapping the same `ProjectAdapter` and `PipelineEventEmitter` the runner uses) into the Dashboard components from `apps/cli/src/components/`. The `subscribe()` method on `LocalDataSource` provides real-time updates from the running pipeline. Full implementation may be complex — if so, add a minimal version that prints a summary table on `[d]` press, with full Dashboard integration as a follow-up item within this task.
+
+- [ ] **Step 4: Build and commit**
 
 ```bash
 pnpm --filter @spatula/cli build
@@ -1333,6 +1495,8 @@ git commit -m "feat(cli): add spatula run command with pipeline runner and Ctrl+
 **Files:**
 - Modify: `apps/cli/src/commands/status.ts`
 
+**I12 note:** In local mode, `spatula status` does NOT need a `jobId` argument. The command auto-detects local mode by calling `findProjectRoot(process.cwd())` — if a `spatula.yaml` exists in the directory tree, it uses SQLite/LocalDataSource. Otherwise, it falls back to the API-based flow (which requires `jobId`). The `jobId` positional should be optional.
+
 - [ ] **Step 1: Read existing status command**
 
 Read `apps/cli/src/commands/status.ts`. It currently shows API-based job status. Add a local mode that uses `LocalDataSource` when in a project directory.
@@ -1340,11 +1504,29 @@ Read `apps/cli/src/commands/status.ts`. It currently shows API-based job status.
 - [ ] **Step 2: Add local status display**
 
 Add a `runLocalStatusCommand` function that:
-1. Finds project root
-2. Opens SQLite DB
-3. Creates ProjectAdapter + LocalDataSource
-4. Calls `dataSource.getStatus()`
-5. Prints: last run, pages, entities, pending actions, schema fields, storage
+1. Calls `findProjectRoot(process.cwd())` to auto-detect local mode
+2. If local: opens SQLite DB, creates `ProjectAdapter` + `LocalDataSource`
+3. Calls `dataSource.getStatus()`
+4. Prints: last run, pages, entities, pending actions, schema fields, storage
+5. If NOT local and no `jobId` provided: print error suggesting `spatula init` or passing a jobId
+
+Update the yargs definition to make `jobId` optional:
+```typescript
+.command('status [jobId]', 'Show project or job status', (yargs) => {
+  return yargs.positional('jobId', { type: 'string', describe: 'Job ID (API mode only, optional in local mode)' });
+}, async (argv) => {
+  // Auto-detect local mode
+  const projectRoot = findProjectRoot(process.cwd());
+  if (projectRoot) {
+    await runLocalStatusCommand(projectRoot);
+  } else if (argv.jobId) {
+    await runApiStatusCommand(argv.jobId);
+  } else {
+    console.error('Not in a Spatula project and no jobId provided. Run "spatula init" or pass a jobId.');
+    process.exit(1);
+  }
+})
+```
 
 - [ ] **Step 3: Build and commit**
 
@@ -1414,6 +1596,38 @@ export async function runResetCommand(options: ResetOptions): Promise<void> {
 ```bash
 git add apps/cli/src/commands/reset.ts apps/cli/src/index.tsx
 git commit -m "feat(cli): add spatula reset command with selective cleanup"
+```
+
+---
+
+## Task 8b: CLI Command — `spatula new` (I8)
+
+**Files:**
+- Modify: `apps/cli/src/commands/new.tsx` (existing conversational mode)
+- Modify: `apps/cli/src/index.tsx`
+
+The existing `apps/cli/src/commands/new.tsx` implements a conversational mode that creates API jobs via the server. In local mode, `spatula new` should instead:
+
+1. Start the same conversational Ink TUI (describe what data you want, provide seed URLs, etc.)
+2. Write the result to `spatula.yaml` in the current directory (instead of calling the API)
+3. Create the `.spatula/` directory structure (same as `spatula init`)
+4. If no LLM is configured, fall back to `spatula init` (the non-conversational wizard)
+
+This is primarily a wiring change: the conversational UI collects the same information, but the output target changes from "POST /jobs" to "write spatula.yaml". The LLM-powered field suggestion and schema refinement steps remain the same.
+
+- [ ] **Step 1: Add local-mode output path to new.tsx**
+
+Read `apps/cli/src/commands/new.tsx`. Add a `mode: 'api' | 'local'` prop. When `mode === 'local'`, the final step writes `spatula.yaml` instead of creating an API job.
+
+- [ ] **Step 2: Auto-detect mode in CLI entry point**
+
+If no API server is configured (no `SPATULA_API_URL` env var and no `~/.spatula/config.yaml` server entry), default to local mode.
+
+- [ ] **Step 3: Build and commit**
+
+```bash
+git add apps/cli/src/commands/new.tsx apps/cli/src/index.tsx
+git commit -m "feat(cli): adapt spatula new to write spatula.yaml in local mode"
 ```
 
 ---
