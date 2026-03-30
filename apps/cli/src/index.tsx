@@ -16,6 +16,7 @@ import { SpatulaApiClient } from './api/client.js';
 import { runListCommand, formatJobsTable } from './commands/list.js';
 import { runStatusCommand, formatJobDetail } from './commands/status.js';
 import { runInitCommand, formatInitResult } from './commands/init.js';
+import { runRunCommand } from './commands/run.js';
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -89,6 +90,23 @@ yargs(hideBin(process.argv))
         limit: argv.limit,
       });
       console.log(formatInitResult(result, process.cwd()));
+    },
+  )
+
+  // -------------------------------------------------------------------------
+  // run — execute the local crawl pipeline
+  // -------------------------------------------------------------------------
+  .command(
+    'run',
+    'Run the local crawl pipeline for the current project',
+    (y) =>
+      y.option('force', {
+        type: 'boolean',
+        default: false,
+        describe: 'Bypass the single-instance project lock',
+      }),
+    async (argv) => {
+      await runRunCommand({ force: argv.force });
     },
   )
 
