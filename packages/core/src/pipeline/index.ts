@@ -5,3 +5,8 @@ export { processReconciliation, DEFAULT_RECONCILIATION_CONFIG } from './reconcil
 export { processExport } from './export-orchestrator.js';
 export { fetchEntitiesCursor } from './entity-cursor.js';
 export type { CursorEntityRepo } from './entity-cursor.js';
+export { PipelineEventEmitter } from './pipeline-events.js';
+export type { PipelineEvents } from './pipeline-events.js';
+export { ProjectLock } from './project-lock.js';
+export { PriorityQueue } from './priority-queue.js';
+export { Semaphore } from './concurrency.js';
