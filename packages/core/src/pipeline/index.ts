@@ -10,3 +10,5 @@ export type { PipelineEvents } from './pipeline-events.js';
 export { ProjectLock } from './project-lock.js';
 export { PriorityQueue } from './priority-queue.js';
 export { Semaphore } from './concurrency.js';
+export { LocalDataSource } from './local-data-source.js';
+export type { ProjectAdapterLike } from './local-data-source.js';

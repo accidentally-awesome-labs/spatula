@@ -39,3 +39,7 @@ export * from './cost/index.js';
 
 // Content Store
 export * from './content-store/index.js';
+
+// DataSource interface and local implementation
+export type { DataSource, PaginationQuery, PaginatedResult, ProjectStatus, DataEvent } from './interfaces/data-source.js';
+export { LocalDataSource } from './pipeline/local-data-source.js';

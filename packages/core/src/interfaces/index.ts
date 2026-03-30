@@ -8,3 +8,4 @@ export * from './exporter.js';
 export * from './action-executor.js';
 export * from './config-executor.js';
 export * from './llm-client.js';
+export * from './data-source.js';
