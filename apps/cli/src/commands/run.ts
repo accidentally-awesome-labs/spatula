@@ -8,6 +8,12 @@
  * Crawler, extractor, and classifier dependencies are stubbed as null with
  * TODO comments for Phase 13 Step 4, when the real implementations will be
  * wired in.
+ *
+ * TODO(Wave 3-5 Task 10): Structured file logging — add a Pino file transport
+ * that writes newline-delimited JSON to `.spatula/logs/<run-id>.ndjson` so that
+ * each run produces a persistent, machine-readable audit trail.  The transport
+ * can be created with `pino.transport({ target: 'pino/file', options: { destination: logPath } })`
+ * and passed as the second argument to `createLogger`.
  */
 
 import { join, basename } from 'node:path';
