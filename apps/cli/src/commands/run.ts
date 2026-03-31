@@ -43,6 +43,7 @@ import {
 } from '@spatula/core';
 import type { LLMClient, Crawler, LLMProvider } from '@spatula/core';
 import { createProjectDb, initializeProjectDb, ProjectAdapter } from '@spatula/db';
+import { sendDesktopNotification, sendWebhookNotification } from '../notifications.js';
 
 // ---------------------------------------------------------------------------
 // Public run function
@@ -261,10 +262,29 @@ export async function runRunCommand(options: RunOptions = {}): Promise<void> {
     // Ensure the in-place progress line ends cleanly
     process.stdout.write('\n');
     console.log('\nPipeline complete.');
+
+    // Notifications on success
+    await sendDesktopNotification('Spatula', `Pipeline complete for ${projectName}`);
+    if (projectYaml.notify?.webhook) {
+      await sendWebhookNotification(projectYaml.notify.webhook, {
+        type: 'pipeline:complete',
+        data: { projectName, projectRoot },
+      });
+    }
   } catch (err) {
     process.stdout.write('\n');
     console.error('\nPipeline failed:', err instanceof Error ? err.message : String(err));
     process.exitCode = 1;
+
+    // Notifications on failure
+    const errMsg = err instanceof Error ? err.message : String(err);
+    await sendDesktopNotification('Spatula', `Pipeline failed: ${errMsg}`);
+    if (projectYaml.notify?.webhook) {
+      await sendWebhookNotification(projectYaml.notify.webhook, {
+        type: 'pipeline:failed',
+        data: { projectName, projectRoot, error: errMsg },
+      });
+    }
   } finally {
     process.off('SIGINT', handleSigint);
     await crawler?.close().catch(() => {});
