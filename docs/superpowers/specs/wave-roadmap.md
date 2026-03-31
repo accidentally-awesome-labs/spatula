@@ -1,6 +1,6 @@
 # Spatula Wave Roadmap
 
-**Last updated:** 2026-03-25
+**Last updated:** 2026-03-31
 **Open-source release target:** End of Wave 4
 
 This document tracks the interleaved execution of Phase 12 (production hardening) and Phase 13 (local project-folder model). Each wave pairs server-layer work from Phase 12 with local-layer work from Phase 13, delivering working, testable increments.
@@ -17,7 +17,7 @@ This document tracks the interleaved execution of Phase 12 (production hardening
 |------|-------------------|------------------|--------|
 | 1 | A: Infrastructure & deployment | Step 1: Extract orchestrators | **Complete** |
 | 2 | D+F+J: Reliability, pipeline, local DX | Steps 2+3: SQLite + config | **Complete** (4 items deferred) |
-| 3 | B+C+E: Auth, observability, performance + D/F deferred | Step 4: Pipeline runner + core CLI | Pending |
+| 3 | B+C+E: Auth, observability, performance + D/F deferred | Step 4: Pipeline runner + core CLI | **Complete** |
 | 4 | G+H: API completeness, open-source readiness | Step 5: Data interaction commands | Pending |
 | 5 | I: Hosted platform layer | Step 6: Remote operations | Pending |
 
@@ -219,7 +219,7 @@ Wire orchestrators + SQLite + config into a working local crawl.
 | 3-3a | Performance: Storage & Exports (S3, streaming, entity cursor) | **Complete** |
 | 3-3b | Performance: Query & Caching (indexes, cursor pagination, Redis cache) | **Complete** |
 | 3-4 | Deferred D/F (idempotency, worker health, quality API, export filtering) | **Complete** |
-| 3-5 | Local Pipeline + Core CLI (LocalPipelineRunner, DataSource, CLI commands) | Pending |
+| 3-5 | Local Pipeline + Core CLI (LocalPipelineRunner, DataSource, CLI commands) | **Complete** |
 
 **Plans:** To be written per sub-plan.
 
