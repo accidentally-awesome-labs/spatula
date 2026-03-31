@@ -27,6 +27,9 @@ import { wsTokenRoutes } from './routes/ws-token.js';
 import { usageRoutes } from './routes/usage.js';
 import { healthRoutes } from './routes/health.js';
 import { createQueueDashboard } from './routes/admin-queues.js';
+import { batchActionRoutes } from './routes/batch-actions.js';
+import { batchJobRoutes } from './routes/batch-jobs.js';
+import { timeoutMiddleware } from './middleware/timeout.js';
 import { createAuthProvider } from './auth/factory.js';
 import type { AppDeps } from './types.js';
 import { getEnvOrDefault } from '@spatula/shared';
@@ -48,6 +51,10 @@ export function createApp(deps: AppDeps) {
   app.use('*', timingMiddleware(deps.metrics ?? null));
   app.use('*', honoLogger());
   app.use('*', securityHeaders);
+  app.use('*', timeoutMiddleware({
+    defaultMs: 30_000,
+    overrides: { '/api/v1/exports/:exportId/download': 300_000 },
+  }));
   app.onError(errorHandler);
 
   // CORS
@@ -125,6 +132,12 @@ export function createApp(deps: AppDeps) {
   if (deps.redis) {
     app.route('/api/v1/ws-token', wsTokenRoutes());
   }
+
+  // Batch operations (registered before parameterized routes so /batch matches first)
+  app.post('/api/v1/actions/batch', requireScope('actions:write'));
+  app.route('/api/v1/actions', batchActionRoutes());
+  app.post('/api/v1/jobs/batch', requireScope('jobs:write'));
+  app.route('/api/v1/jobs', batchJobRoutes());
 
   // API v1 routes with per-method scope enforcement
   app.get('/api/v1/jobs', requireScope('jobs:read'));
