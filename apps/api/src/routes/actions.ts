@@ -107,6 +107,7 @@ export function actionRoutes() {
     });
   });
 
+  // @ts-expect-error — OpenAPI handler return type narrowing
   router.openapi(approveAllRoute, async (c) => {
     const { jobId } = c.req.valid('param');
     const tenantId = c.get('tenantId');
@@ -115,7 +116,7 @@ export function actionRoutes() {
     const reviewedBy = body?.reviewedBy;
 
     if (deps.reviewQueue) {
-      const results = await deps.reviewQueue.approveAll(jobId, tenantId, reviewedBy);
+      const results = await deps.reviewQueue.approveAll(jobId, tenantId, reviewedBy ?? '');
       return c.json({ data: results });
     }
 
@@ -127,6 +128,7 @@ export function actionRoutes() {
     return c.json({ data: updated });
   });
 
+  // @ts-expect-error — OpenAPI handler return type narrowing
   router.openapi(approveRoute, async (c) => {
     const { actionId } = c.req.valid('param');
     const tenantId = c.get('tenantId');
@@ -134,7 +136,7 @@ export function actionRoutes() {
     const body = c.req.valid('json');
 
     if (deps.reviewQueue) {
-      const action = await deps.reviewQueue.approve(actionId, tenantId, body?.reviewedBy);
+      const action = await deps.reviewQueue.approve(actionId, tenantId, body?.reviewedBy ?? '');
       return c.json({ data: action });
     }
 
@@ -149,7 +151,7 @@ export function actionRoutes() {
     const body = c.req.valid('json');
 
     if (deps.reviewQueue) {
-      await deps.reviewQueue.reject(actionId, tenantId, body?.reviewedBy, body?.reason ?? '');
+      await deps.reviewQueue.reject(actionId, tenantId, body?.reviewedBy ?? '', body?.reason ?? '');
       return c.json({ data: { id: actionId, status: 'rejected' } });
     }
 

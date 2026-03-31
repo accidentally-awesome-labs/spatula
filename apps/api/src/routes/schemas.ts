@@ -43,6 +43,7 @@ const getVersionRoute = createRoute({
 export function schemaRoutes() {
   const router = createOpenAPIRouter();
 
+  // @ts-expect-error — OpenAPI handler return type narrowing
   router.openapi(getLatestRoute, async (c) => {
     const { jobId } = c.req.valid('param');
     const tenantId = c.get('tenantId');
@@ -63,6 +64,7 @@ export function schemaRoutes() {
     return c.json({ data: versions });
   });
 
+  // @ts-expect-error — OpenAPI handler return type narrowing
   router.openapi(getVersionRoute, async (c) => {
     const { jobId, version: versionStr } = c.req.valid('param');
     const tenantId = c.get('tenantId');

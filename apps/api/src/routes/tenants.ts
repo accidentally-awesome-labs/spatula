@@ -58,6 +58,7 @@ export function tenantRoutes() {
     return c.json({ data: tenant }, 201);
   });
 
+  // @ts-expect-error — OpenAPI handler return type narrowing
   router.openapi(getTenantRoute, async (c) => {
     const deps = c.get('deps');
     if (!deps.tenantRepo) throw new Error('Tenant management not configured');
@@ -69,6 +70,7 @@ export function tenantRoutes() {
     return c.json({ data: tenant });
   });
 
+  // @ts-expect-error — OpenAPI handler return type narrowing
   router.openapi(updateTenantRoute, async (c) => {
     const deps = c.get('deps');
     if (!deps.tenantRepo) throw new Error('Tenant management not configured');

@@ -20,6 +20,7 @@ const listWorkersRoute = createRoute({
 export function adminWorkerRoutes() {
   const router = createOpenAPIRouter();
 
+  // @ts-expect-error — OpenAPI handler return type narrowing
   router.openapi(listWorkersRoute, async (c) => {
     const deps = c.get('deps');
     if (!deps.redis) throw new Error('Redis not configured for worker health monitoring');

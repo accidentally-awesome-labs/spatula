@@ -248,7 +248,7 @@ describe('Action routes', () => {
       });
 
       expect(res.status).toBe(200);
-      expect(depsWithQueue.reviewQueue!.approve).toHaveBeenCalledWith('act-1', 'tenant-1', undefined);
+      expect(depsWithQueue.reviewQueue!.approve).toHaveBeenCalledWith('act-1', 'tenant-1', '');
     });
 
     it('POST reject delegates to reviewQueue.reject with reason', async () => {
@@ -269,7 +269,7 @@ describe('Action routes', () => {
       });
 
       expect(res.status).toBe(200);
-      expect(depsWithQueue.reviewQueue!.reject).toHaveBeenCalledWith('act-1', 'tenant-1', undefined, '');
+      expect(depsWithQueue.reviewQueue!.reject).toHaveBeenCalledWith('act-1', 'tenant-1', '', '');
     });
 
     it('POST approve-all delegates to reviewQueue.approveAll', async () => {

@@ -40,6 +40,7 @@ const getEntityRoute = createRoute({
 export function entityRoutes() {
   const router = createOpenAPIRouter();
 
+  // @ts-expect-error — OpenAPI handler return type narrowing
   router.openapi(listEntitiesRoute, async (c) => {
     const { jobId } = c.req.valid('param');
     const query = c.req.valid('query');
@@ -83,6 +84,7 @@ export function entityRoutes() {
     });
   });
 
+  // @ts-expect-error — OpenAPI handler return type narrowing
   router.openapi(getEntityRoute, async (c) => {
     const { entityId } = c.req.valid('param');
     const tenantId = c.get('tenantId');

@@ -102,6 +102,9 @@ importers:
       '@spatula/core':
         specifier: workspace:*
         version: link:../../packages/core
+      '@spatula/db':
+        specifier: workspace:*
+        version: link:../../packages/db
       '@spatula/shared':
         specifier: workspace:*
         version: link:../../packages/shared

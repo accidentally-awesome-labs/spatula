@@ -148,6 +148,7 @@ export function apiKeyRoutes() {
     });
   });
 
+  // @ts-expect-error — OpenAPI handler return type narrowing
   router.openapi(revokeKeyRoute, async (c) => {
     const deps = c.get('deps');
     if (!deps.apiKeyRepo) throw new Error('API key management not configured');

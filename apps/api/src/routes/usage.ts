@@ -35,6 +35,7 @@ const getUsageRoute = createRoute({
 
 export function usageRoutes() {
   const router = createOpenAPIRouter();
+  // @ts-expect-error — OpenAPI handler return type narrowing
   router.openapi(getUsageRoute, async (c) => {
     const deps = c.get('deps');
     const tenantId = c.get('tenantId');

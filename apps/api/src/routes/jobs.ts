@@ -135,6 +135,7 @@ export function jobRoutes() {
     return c.json({ data: jobs, total });
   });
 
+  // @ts-expect-error — OpenAPI handler return type narrowing
   router.openapi(getJobRoute, async (c) => {
     const { id } = c.req.valid('param');
     const tenantId = c.get('tenantId');
@@ -146,6 +147,7 @@ export function jobRoutes() {
     return c.json({ data: job });
   });
 
+  // @ts-expect-error — OpenAPI handler return type narrowing
   router.openapi(patchJobRoute, async (c) => {
     const { id } = c.req.valid('param');
     const { action } = c.req.valid('json');

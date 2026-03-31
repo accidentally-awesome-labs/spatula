@@ -151,6 +151,7 @@ export function exportRoutes() {
     return c.json({ data: exportRecord }, 202);
   });
 
+  // @ts-expect-error — OpenAPI handler return type narrowing
   router.openapi(getExportRoute, async (c) => {
     const { exportId } = c.req.valid('param');
     const tenantId = c.get('tenantId');
@@ -227,6 +228,7 @@ export function exportRoutes() {
     });
   });
 
+  // @ts-expect-error — OpenAPI handler return type narrowing
   router.openapi(getDocumentationRoute, async (c) => {
     const { jobId } = c.req.valid('param');
     const tenantId = c.get('tenantId');

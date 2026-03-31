@@ -22,6 +22,7 @@ const createWsTokenRoute = createRoute({
 export function wsTokenRoutes() {
   const router = createOpenAPIRouter();
 
+  // @ts-expect-error — OpenAPI handler return type narrowing
   router.openapi(createWsTokenRoute, async (c) => {
     const deps = c.get('deps');
     const tenantId = c.get('tenantId');
