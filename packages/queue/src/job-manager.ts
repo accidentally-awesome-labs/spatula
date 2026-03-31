@@ -5,6 +5,7 @@ import type { TenantRepository } from '@spatula/db';
 import { QuotaExceededError } from '@spatula/shared';
 import type { SpatulaQueues } from './queues.js';
 import { JobStateMachine } from './state-machine.js';
+import { enqueueWebhookIfConfigured } from './webhook-sender.js';
 
 const logger = createLogger('job-manager');
 
@@ -126,6 +127,16 @@ export class JobManager {
     JobStateMachine.transition(job.status as JobStatus, 'cancelled');
     await this.jobRepo.updateStatus(jobId, tenantId, 'cancelled');
     logger.info({ jobId }, 'job cancelled');
+
+    // Fire webhook: job.cancelled
+    if (this.queues.webhook) {
+      enqueueWebhookIfConfigured(
+        this.queues.webhook,
+        (job.config as any)?.webhooks,
+        'job.cancelled',
+        { jobId, tenantId, status: 'cancelled' },
+      );
+    }
   }
 
   async triggerReconciliation(jobId: string, tenantId: string): Promise<void> {

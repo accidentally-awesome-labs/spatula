@@ -4,6 +4,7 @@ import type Redis from 'ioredis';
 import type { SchemaEvolutionJobData } from '../queues.js';
 import type { WorkerDeps } from '../worker-deps.js';
 import { acquireLock, releaseLock } from '../redis-lock.js';
+import { enqueueWebhookIfConfigured } from '../webhook-sender.js';
 
 export async function processSchemaEvolutionJob(
   data: SchemaEvolutionJobData,
@@ -25,7 +26,7 @@ export async function processSchemaEvolutionJob(
   }
 
   try {
-    await processSchemaEvolution(
+    const result = await processSchemaEvolution(
       { jobId: data.jobId, tenantId: data.tenantId, extractionIds: data.extractionIds },
       {
         schemaEvolver: deps.schemaEvolver,
@@ -36,6 +37,17 @@ export async function processSchemaEvolutionJob(
         eventPublisher: deps.eventPublisher,
       },
     );
+
+    // Fire webhook: action.pending (if schema evolution created review actions)
+    if (result.actionsApplied > 0 && deps.queues?.webhook) {
+      const job = await deps.jobRepo.findById(data.jobId, data.tenantId);
+      enqueueWebhookIfConfigured(
+        deps.queues.webhook,
+        (job?.config as any)?.webhooks,
+        'action.pending',
+        { jobId: data.jobId, tenantId: data.tenantId },
+      );
+    }
   } catch (error) {
     logger.error({ jobId: data.jobId, error }, 'schema evolution job failed');
   } finally {

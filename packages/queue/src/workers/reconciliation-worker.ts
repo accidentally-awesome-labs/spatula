@@ -1,4 +1,5 @@
 import { processReconciliation } from '@spatula/core';
+import { enqueueWebhookIfConfigured } from '../webhook-sender.js';
 import type { ReconciliationJobData } from '../queues.js';
 import type { WorkerDeps } from '../worker-deps.js';
 
@@ -6,7 +7,7 @@ export async function processReconciliationJob(
   data: ReconciliationJobData,
   deps: WorkerDeps,
 ): Promise<void> {
-  await processReconciliation(
+  const result = await processReconciliation(
     { jobId: data.jobId, tenantId: data.tenantId },
     {
       reconciler: deps.reconciler,
@@ -20,4 +21,15 @@ export async function processReconciliationJob(
       eventPublisher: deps.eventPublisher,
     },
   );
+
+  // Fire webhook: job.completed (reconciliation marks the job as complete)
+  if (deps.queues?.webhook) {
+    const job = await deps.jobRepo.findById(data.jobId, data.tenantId);
+    enqueueWebhookIfConfigured(
+      deps.queues.webhook,
+      (job?.config as any)?.webhooks,
+      'job.completed',
+      { jobId: data.jobId, tenantId: data.tenantId, status: 'completed', entityCount: result.entitiesCreated },
+    );
+  }
 }
