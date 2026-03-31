@@ -1,11 +1,11 @@
-// TODO(Wave 3-5): Accept DataSource instead of ApiClient for local mode
-// In local mode, call dataSource.getEntities() instead of apiClient.listEntities()
 import { useEffect, useCallback, useMemo } from 'react';
 import { useStdout } from 'ink';
 import { useStore } from 'zustand';
 import type { CliStore } from '../store/index.js';
 import type { SpatulaApiClient } from '../api/client.js';
+import type { DataSource } from '@spatula/core';
 import type { EntityWithProvenance } from '@spatula/shared';
+import { isDataSource } from './useJobPolling.js';
 
 const HEADER_HEIGHT = 3;
 const FILTER_BAR_HEIGHT = 1;
@@ -15,7 +15,7 @@ const PADDING = 2;
 
 export function useEntityData(
   store: CliStore,
-  apiClient: SpatulaApiClient,
+  backend: DataSource | SpatulaApiClient,
   jobId: string,
 ) {
   const { stdout } = useStdout();
@@ -25,32 +25,35 @@ export function useEntityData(
   }, [stdout?.rows]);
 
   const fetchPage = useCallback(async (page: number) => {
-    if (!jobId) return;
+    if (!jobId && !isDataSource(backend)) return;
 
     const state = store.getState();
     const offset = page * pageSize;
 
     try {
-      const result = await apiClient.listEntitiesPaginated(jobId, {
-        limit: pageSize,
-        offset,
-      });
-
-      state.setEntities(result.data as any);
-      state.setTotalEntityCount(result.total);
+      if (isDataSource(backend)) {
+        const result = await backend.getEntities({ limit: pageSize, offset });
+        state.setEntities(result.data as any);
+        state.setTotalEntityCount(result.total);
+      } else {
+        const result = await backend.listEntitiesPaginated(jobId, {
+          limit: pageSize,
+          offset,
+        });
+        state.setEntities(result.data as any);
+        state.setTotalEntityCount(result.total);
+      }
       state.setCurrentEntityPage(page);
       state.setSelectedEntityIndex(0);
     } catch (error) {
       state.setError(`Failed to fetch entities: ${(error as Error).message}`);
     }
-  }, [store, apiClient, jobId, pageSize]);
+  }, [store, backend, jobId, pageSize]);
 
-  // Fetch initial page on mount
   useEffect(() => {
     fetchPage(0);
   }, [fetchPage]);
 
-  // Use reactive store subscription for totalEntityCount
   const totalEntityCount = useStore(store, (s) => s.totalEntityCount);
   const totalPages = useMemo(() => {
     return Math.max(1, Math.ceil(totalEntityCount / pageSize));
@@ -76,9 +79,14 @@ export function useEntityData(
   }, [store, fetchPage]);
 
   const fetchEntity = useCallback(async (entityId: string): Promise<EntityWithProvenance> => {
-    const data = await apiClient.getEntity(jobId, entityId);
+    if (isDataSource(backend)) {
+      const entity = await backend.getEntity(entityId);
+      if (!entity) throw new Error(`Entity not found: ${entityId}`);
+      return entity as unknown as EntityWithProvenance;
+    }
+    const data = await backend.getEntity(jobId, entityId);
     return data as unknown as EntityWithProvenance;
-  }, [apiClient, jobId]);
+  }, [backend, jobId]);
 
   return {
     pageSize,
