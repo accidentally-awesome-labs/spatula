@@ -60,7 +60,24 @@ export async function runDoctorCommand(): Promise<void> {
   if (hasEnv) {
     for (const check of createServerChecks({})) registry.register(check);
   }
-  // Project checks will be registered by Wave 4-2
+
+  if (categories.includes('project')) {
+    const { createProjectChecks, findProjectRoot, parseProjectYamlFile } = await import('@spatula/core');
+    const { join } = await import('node:path');
+    const projectRoot = findProjectRoot(process.cwd());
+    if (projectRoot) {
+      const projectChecks = createProjectChecks({
+        projectRoot,
+        validateYaml: () => {
+          parseProjectYamlFile(join(projectRoot, 'spatula.yaml'));
+          return true;
+        },
+      });
+      for (const check of projectChecks) {
+        registry.register(check);
+      }
+    }
+  }
 
   const results = await registry.runChecks(categories);
   console.log(formatCheckResults(results));
