@@ -45,6 +45,7 @@
 | File | Tests |
 |------|-------|
 | `packages/queue/tests/unit/webhook-sender.test.ts` | WebhookSender sign, send, error handling |
+| `packages/queue/tests/unit/webhook-worker.test.ts` | Worker backoff strategy, sender invocation |
 | `apps/api/tests/unit/routes/batch-actions.test.ts` | Batch approve/reject, partial failure, max 100 |
 | `apps/api/tests/unit/routes/batch-jobs.test.ts` | Batch cancel/delete, partial failure, max 100 |
 | `apps/api/tests/unit/middleware/timeout.test.ts` | Timeout triggers 504, normal request passes |
@@ -402,15 +403,24 @@ In `apps/api/src/routes/admin-queues.ts`, add after the export adapter:
 new BullMQAdapter(queues.webhook),
 ```
 
-- [ ] **Step 5: Run existing tests to verify no breakage**
+- [ ] **Step 5: Export from queue barrel**
+
+In `packages/queue/src/index.ts`, add:
+
+```typescript
+export { WebhookSender, enqueueWebhookIfConfigured } from './webhook-sender.js';
+export type { WebhookJobData } from './queues.js';
+```
+
+- [ ] **Step 6: Run existing tests to verify no breakage**
 
 Run: `pnpm test`
 Expected: All 1,958+ tests pass
 
-- [ ] **Step 6: Commit**
+- [ ] **Step 7: Commit**
 
 ```bash
-git add packages/queue/src/queues.ts packages/queue/src/webhook-worker.ts packages/queue/src/worker-entrypoint.ts apps/api/src/routes/admin-queues.ts
+git add packages/queue/src/queues.ts packages/queue/src/webhook-worker.ts packages/queue/src/webhook-sender.ts packages/queue/src/worker-entrypoint.ts packages/queue/src/index.ts apps/api/src/routes/admin-queues.ts
 git commit -m "feat(queue): add webhook queue, worker, and Bull Board registration"
 ```
 
@@ -539,7 +549,7 @@ function createTestApp(deps: any) {
   app.use('*', async (c, next) => {
     c.set('deps', deps);
     c.set('tenantId', 'tenant-1');
-    c.set('auth', { userId: 'user-1', scopes: ['actions:write'] });
+    c.set('auth', { tenantId: 'tenant-1', userId: 'user-1', scopes: ['actions:write'] });
     return next();
   });
   app.route('/api/v1/actions', batchActionRoutes());
@@ -563,8 +573,8 @@ describe('POST /api/v1/actions/batch', () => {
 
   it('approves multiple actions and returns succeeded/failed', async () => {
     deps.actionRepo.findById
-      .mockResolvedValueOnce({ id: 'act-1', status: 'pending', tenantId: 'tenant-1' })
-      .mockResolvedValueOnce({ id: 'act-2', status: 'pending', tenantId: 'tenant-1' });
+      .mockResolvedValueOnce({ id: 'act-1', status: 'pending_review', tenantId: 'tenant-1' })
+      .mockResolvedValueOnce({ id: 'act-2', status: 'pending_review', tenantId: 'tenant-1' });
     deps.actionRepo.updateStatus.mockResolvedValue({});
 
     const res = await app.request('/api/v1/actions/batch', {
@@ -581,7 +591,7 @@ describe('POST /api/v1/actions/batch', () => {
 
   it('returns partial failure when some actions not found', async () => {
     deps.actionRepo.findById
-      .mockResolvedValueOnce({ id: 'act-1', status: 'pending', tenantId: 'tenant-1' })
+      .mockResolvedValueOnce({ id: 'act-1', status: 'pending_review', tenantId: 'tenant-1' })
       .mockResolvedValueOnce(null);
     deps.actionRepo.updateStatus.mockResolvedValue({});
 
@@ -620,7 +630,7 @@ describe('POST /api/v1/actions/batch', () => {
   });
 
   it('handles reject action', async () => {
-    deps.actionRepo.findById.mockResolvedValue({ id: 'act-1', status: 'pending', tenantId: 'tenant-1' });
+    deps.actionRepo.findById.mockResolvedValue({ id: 'act-1', status: 'pending_review', tenantId: 'tenant-1' });
     deps.actionRepo.updateStatus.mockResolvedValue({});
 
     const res = await app.request('/api/v1/actions/batch', {
@@ -678,7 +688,7 @@ export function batchActionRoutes() {
           failed.push({ id, error: 'Action not found' });
           continue;
         }
-        if (existing.status !== 'pending') {
+        if (existing.status !== 'pending_review') {
           failed.push({ id, error: `Action is already ${existing.status}` });
           continue;
         }
@@ -757,7 +767,7 @@ function createTestApp(deps: any) {
   app.use('*', async (c, next) => {
     c.set('deps', deps);
     c.set('tenantId', 'tenant-1');
-    c.set('auth', { userId: 'user-1', scopes: ['jobs:write'] });
+    c.set('auth', { tenantId: 'tenant-1', userId: 'user-1', scopes: ['jobs:write'] });
     return next();
   });
   app.route('/api/v1/jobs', batchJobRoutes());
@@ -1328,7 +1338,7 @@ describe('System Health Checks', () => {
 
 ```typescript
 // packages/core/tests/unit/diagnostics/server-checks.test.ts
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 import { createServerChecks } from '../../../src/diagnostics/server-checks.js';
 
 describe('Server Health Checks', () => {
@@ -1338,18 +1348,32 @@ describe('Server Health Checks', () => {
     expect(checks.every((c) => c.category === 'server')).toBe(true);
   });
 
-  it('postgres check fails without connection string', async () => {
+  it('postgres check uses provided tester', async () => {
+    const checks = createServerChecks({
+      checkPostgres: vi.fn().mockResolvedValue({ status: 'pass', message: 'Connected' }),
+    });
+    const pgCheck = checks.find((c) => c.name === 'postgres')!;
+    const result = await pgCheck.run();
+    expect(result.status).toBe('pass');
+  });
+
+  it('postgres check warns when no tester and no URL', async () => {
+    const original = process.env.DATABASE_URL;
+    delete process.env.DATABASE_URL;
     const checks = createServerChecks({});
     const pgCheck = checks.find((c) => c.name === 'postgres')!;
     const result = await pgCheck.run();
     expect(result.status).toBe('fail');
+    if (original) process.env.DATABASE_URL = original;
   });
 
-  it('redis check fails without connection string', async () => {
-    const checks = createServerChecks({});
+  it('redis check uses provided tester', async () => {
+    const checks = createServerChecks({
+      checkRedis: vi.fn().mockResolvedValue({ status: 'pass', message: 'PONG' }),
+    });
     const redisCheck = checks.find((c) => c.name === 'redis')!;
     const result = await redisCheck.run();
-    expect(result.status).toBe('fail');
+    expect(result.status).toBe('pass');
   });
 });
 ```
@@ -1443,12 +1467,16 @@ export function createSystemChecks(): HealthCheck[] {
 
 ```typescript
 // packages/core/src/diagnostics/server-checks.ts
-import type { HealthCheck } from './health-check.js';
+import type { HealthCheck, HealthCheckResult } from './health-check.js';
 
 export interface ServerCheckConfig {
-  databaseUrl?: string;
-  redisUrl?: string;
+  /** Test database connectivity. Caller provides the implementation (avoids pg/ioredis dependency in core). */
+  checkPostgres?: () => Promise<HealthCheckResult>;
+  /** Test Redis connectivity. */
+  checkRedis?: () => Promise<HealthCheckResult>;
   apiUrl?: string;
+  /** Test migration state. Returns { applied, available } counts. */
+  checkMigrations?: () => Promise<HealthCheckResult>;
 }
 
 export function createServerChecks(config: ServerCheckConfig): HealthCheck[] {
@@ -1457,37 +1485,24 @@ export function createServerChecks(config: ServerCheckConfig): HealthCheck[] {
       name: 'postgres',
       category: 'server',
       async run() {
-        const url = config.databaseUrl ?? process.env.DATABASE_URL;
-        if (!url) return { status: 'fail', message: 'DATABASE_URL not configured' };
-
-        try {
-          const { default: pg } = await import('pg');
-          const client = new pg.Client({ connectionString: url, connectionTimeoutMillis: 5000 });
-          await client.connect();
-          await client.end();
-          return { status: 'pass', message: 'PostgreSQL is reachable' };
-        } catch (err) {
-          return { status: 'fail', message: `PostgreSQL: ${(err as Error).message}` };
+        if (!config.checkPostgres) {
+          const url = process.env.DATABASE_URL;
+          if (!url) return { status: 'fail', message: 'DATABASE_URL not configured' };
+          return { status: 'warn', message: 'DATABASE_URL set but no connection tester provided' };
         }
+        return config.checkPostgres();
       },
     },
     {
       name: 'redis',
       category: 'server',
       async run() {
-        const url = config.redisUrl ?? process.env.REDIS_URL;
-        if (!url) return { status: 'fail', message: 'REDIS_URL not configured' };
-
-        try {
-          const { default: Redis } = await import('ioredis');
-          const redis = new Redis(url, { connectTimeout: 5000, lazyConnect: true });
-          await redis.connect();
-          await redis.ping();
-          await redis.quit();
-          return { status: 'pass', message: 'Redis is reachable' };
-        } catch (err) {
-          return { status: 'fail', message: `Redis: ${(err as Error).message}` };
+        if (!config.checkRedis) {
+          const url = process.env.REDIS_URL;
+          if (!url) return { status: 'fail', message: 'REDIS_URL not configured' };
+          return { status: 'warn', message: 'REDIS_URL set but no connection tester provided' };
         }
+        return config.checkRedis();
       },
     },
     {
@@ -1508,26 +1523,64 @@ export function createServerChecks(config: ServerCheckConfig): HealthCheck[] {
       name: 'migrations',
       category: 'server',
       async run() {
-        const url = config.databaseUrl ?? process.env.DATABASE_URL;
-        if (!url) return { status: 'fail', message: 'Cannot check migrations without DATABASE_URL' };
-
-        try {
-          const { default: pg } = await import('pg');
-          const client = new pg.Client({ connectionString: url, connectionTimeoutMillis: 5000 });
-          await client.connect();
-          const result = await client.query(
-            "SELECT COUNT(*) FROM drizzle.__drizzle_migrations",
-          );
-          await client.end();
-          const count = parseInt(result.rows[0].count, 10);
-          return { status: 'pass', message: `${count} migrations applied` };
-        } catch (err) {
-          return { status: 'warn', message: `Migration check: ${(err as Error).message}` };
+        if (!config.checkMigrations) {
+          return { status: 'warn', message: 'No migration checker provided' };
         }
+        return config.checkMigrations();
       },
     },
   ];
 }
+```
+
+The doctor command (Task 10) provides the actual `pg`/`ioredis` connection testers when calling `createServerChecks()`, keeping `@spatula/core` database-agnostic:
+
+```typescript
+// In doctor.ts, when hasEnv:
+const serverConfig: ServerCheckConfig = {
+  async checkPostgres() {
+    const url = process.env.DATABASE_URL;
+    if (!url) return { status: 'fail', message: 'DATABASE_URL not configured' };
+    try {
+      const { default: pg } = await import('pg');
+      const client = new pg.Client({ connectionString: url, connectionTimeoutMillis: 5000 });
+      await client.connect();
+      await client.end();
+      return { status: 'pass', message: 'PostgreSQL is reachable' };
+    } catch (err) {
+      return { status: 'fail', message: `PostgreSQL: ${(err as Error).message}` };
+    }
+  },
+  async checkRedis() {
+    const url = process.env.REDIS_URL;
+    if (!url) return { status: 'fail', message: 'REDIS_URL not configured' };
+    try {
+      const { default: Redis } = await import('ioredis');
+      const redis = new Redis(url, { connectTimeout: 5000, lazyConnect: true });
+      await redis.connect();
+      await redis.ping();
+      await redis.quit();
+      return { status: 'pass', message: 'Redis is reachable' };
+    } catch (err) {
+      return { status: 'fail', message: `Redis: ${(err as Error).message}` };
+    }
+  },
+  async checkMigrations() {
+    const url = process.env.DATABASE_URL;
+    if (!url) return { status: 'fail', message: 'Cannot check without DATABASE_URL' };
+    try {
+      const { default: pg } = await import('pg');
+      const client = new pg.Client({ connectionString: url, connectionTimeoutMillis: 5000 });
+      await client.connect();
+      const result = await client.query("SELECT COUNT(*) FROM drizzle.__drizzle_migrations");
+      await client.end();
+      return { status: 'pass', message: `${result.rows[0].count} migrations applied` };
+    } catch (err) {
+      return { status: 'warn', message: `Migration check: ${(err as Error).message}` };
+    }
+  },
+};
+for (const check of createServerChecks(serverConfig)) registry.register(check);
 ```
 
 - [ ] **Step 6: Export from diagnostics barrel**
