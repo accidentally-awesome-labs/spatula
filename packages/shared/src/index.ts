@@ -12,3 +12,4 @@ export { initTracing, shutdownTracing } from './tracing.js';
 export type { TracingConfig } from './tracing.js';
 export { encodeCursor, decodeCursor } from './cursor.js';
 export type { CursorPayload } from './cursor.js';
+export * from './webhook-types.js';
