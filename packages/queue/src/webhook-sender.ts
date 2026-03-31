@@ -1,6 +1,8 @@
-import { createHmac } from 'node:crypto';
+import { createHmac, randomUUID } from 'node:crypto';
 import { createLogger } from '@spatula/shared';
-import type { WebhookEvent } from '@spatula/shared';
+import type { WebhookEvent, WebhookEventType, WebhookConfig } from '@spatula/shared';
+import type { Queue } from 'bullmq';
+import type { WebhookJobData } from './queues.js';
 
 const logger = createLogger('webhook-sender');
 const TIMEOUT_MS = 10_000;
@@ -31,4 +33,33 @@ export class WebhookSender {
 
     logger.debug({ url, eventType: event.type, eventId: event.id }, 'webhook delivered');
   }
+}
+
+/**
+ * Fire-and-forget webhook enqueue. Checks if the job has webhook config
+ * and if the event type is subscribed before enqueuing.
+ */
+export function enqueueWebhookIfConfigured(
+  webhookQueue: Queue<WebhookJobData>,
+  webhookConfig: WebhookConfig | undefined,
+  eventType: WebhookEventType,
+  data: WebhookEvent['data'],
+): void {
+  if (!webhookConfig) return;
+  if (!webhookConfig.events.includes(eventType)) return;
+
+  const event: WebhookEvent = {
+    id: `evt_${randomUUID().slice(0, 12)}`,
+    type: eventType,
+    timestamp: new Date().toISOString(),
+    data,
+  };
+
+  webhookQueue.add('webhook', {
+    url: webhookConfig.url,
+    event,
+    secret: webhookConfig.secret,
+  }).catch((err) => {
+    logger.warn({ err, eventType }, 'failed to enqueue webhook event');
+  });
 }

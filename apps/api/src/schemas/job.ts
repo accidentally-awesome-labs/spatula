@@ -34,6 +34,17 @@ export const createJobSchema = z.object({
     primaryModel: z.string().min(1).default('anthropic/claude-sonnet-4-20250514'),
     modelOverrides: z.record(z.string()).optional(),
   }),
+  webhooks: z
+    .object({
+      url: z.string().url(),
+      secret: z.string().min(16).optional(),
+      events: z
+        .array(
+          z.enum(['job.completed', 'job.failed', 'job.cancelled', 'export.completed', 'action.pending']),
+        )
+        .default(['job.completed', 'job.failed']),
+    })
+    .optional(),
   reconciliation: z
     .object({
       matchStrategy: z
