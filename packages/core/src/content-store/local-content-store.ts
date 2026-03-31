@@ -1,15 +1,19 @@
 import { writeFile, readFile, unlink, mkdir } from 'node:fs/promises';
-import { join, dirname } from 'node:path';
+import { dirname, resolve, sep } from 'node:path';
 import type { ContentStore } from '../interfaces/content-store.js';
 import { createLogger } from '@spatula/shared';
 
 const logger = createLogger('local-content-store');
 
 export class LocalContentStore implements ContentStore {
-  constructor(private readonly basePath: string) {}
+  private readonly resolvedBase: string;
+
+  constructor(basePath: string) {
+    this.resolvedBase = resolve(basePath);
+  }
 
   async store(key: string, content: string): Promise<string> {
-    const filePath = join(this.basePath, `${key}.html`);
+    const filePath = this.safePath(`${key}.html`);
     await mkdir(dirname(filePath), { recursive: true });
     await writeFile(filePath, content, 'utf-8');
     const ref = `file://${filePath}`;
@@ -26,7 +30,7 @@ export class LocalContentStore implements ContentStore {
   }
 
   async storeBinary(key: string, data: Uint8Array): Promise<string> {
-    const filePath = join(this.basePath, key);
+    const filePath = this.safePath(key);
     await mkdir(dirname(filePath), { recursive: true });
     await writeFile(filePath, data);
     return `file://${filePath}`;
@@ -34,6 +38,15 @@ export class LocalContentStore implements ContentStore {
 
   async retrieveBinary(ref: string): Promise<Uint8Array | null> {
     try { const buf = await readFile(this.parseRef(ref)); return new Uint8Array(buf.buffer, buf.byteOffset, buf.byteLength); } catch (err: any) { if (err.code === 'ENOENT') return null; throw err; }
+  }
+
+  /** Resolve key under basePath, rejecting path traversal attempts. */
+  private safePath(key: string): string {
+    const resolved = resolve(this.resolvedBase, key);
+    if (!resolved.startsWith(this.resolvedBase + sep) && resolved !== this.resolvedBase) {
+      throw new Error(`Path traversal detected in content store key: ${key}`);
+    }
+    return resolved;
   }
 
   private parseRef(ref: string): string {

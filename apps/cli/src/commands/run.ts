@@ -201,6 +201,7 @@ export async function runRunCommand(options: RunOptions = {}): Promise<void> {
     linkEvaluator,
     robotsChecker,
     rateLimiter,
+    force: options.force,
   } as any);
 
   // Step 12: SIGINT handler — graceful stop (second Ctrl+C force-quits)

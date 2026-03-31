@@ -12,6 +12,7 @@
  * The optional subscribe() method bridges the PipelineEventEmitter to the
  * DataSource callback pattern.
  */
+import { StorageError } from '@spatula/shared';
 import type { Entity } from '@spatula/shared';
 import type { DataSource, PaginationQuery, PaginatedResult, ProjectStatus, DataEvent } from '../interfaces/data-source.js';
 import type { PipelineEventEmitter } from './pipeline-events.js';
@@ -186,7 +187,7 @@ export class LocalDataSource implements DataSource {
   async downloadExport(id: string): Promise<string> {
     const record = await this.adapter.exportRepo.findById(id);
     if (!record) {
-      throw new Error(`Export not found: ${id}`);
+      throw new StorageError(`Export not found: ${id}`);
     }
     return record.filePath;
   }

@@ -121,8 +121,17 @@ export function createProjectYaml(
   const filePath = join(cwd, PROJECT_FILE);
   if (existsSync(filePath)) return false;
 
-  const seedLine = options.url
-    ? `  - ${options.url}`
+  let validatedUrl: string | undefined;
+  if (options.url) {
+    try {
+      validatedUrl = new URL(options.url).href;
+    } catch {
+      throw new Error(`Invalid seed URL: ${options.url}`);
+    }
+  }
+
+  const seedLine = validatedUrl
+    ? `  - ${validatedUrl}`
     : '  - https://example.com  # Replace with your seed URL';
 
   const content = [

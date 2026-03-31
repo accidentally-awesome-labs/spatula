@@ -152,6 +152,8 @@ export interface LocalPipelineConfig {
   lock?: { acquire(force?: boolean): boolean; release(): void; isAcquired: boolean };
   /** Base retry delay in ms (default 2000). Set to 0 for tests. */
   retryBaseMs?: number;
+  /** Skip the single-instance lock check (useful for debugging). */
+  force?: boolean;
 }
 
 // ---------------------------------------------------------------------------
@@ -176,6 +178,8 @@ export class LocalPipelineRunner {
   private runId: string | null = null;
   private lock: { acquire(force?: boolean): boolean; release(): void; isAcquired: boolean } | null = null;
   private inflightCount = 0;
+  /** Track task IDs currently in-flight to prevent re-enqueue from loadPendingIntoQueue. */
+  private readonly inflightTaskIds = new Set<string>();
 
   // Stats
   private pagesProcessed = 0;
@@ -204,7 +208,7 @@ export class LocalPipelineRunner {
     } else {
       this.lock = new ProjectLock(this.cfg.projectDir);
     }
-    if (!this.lock!.acquire()) {
+    if (!this.lock!.acquire(this.cfg.force ?? false)) {
       throw new Error('Another spatula process is already running for this project');
     }
 
@@ -366,12 +370,14 @@ export class LocalPipelineRunner {
       // Acquire semaphore slot
       await sem.acquire();
       this.inflightCount++;
+      this.inflightTaskIds.add(item.taskId);
 
       // Fire-and-forget (bounded by semaphore)
       this.processTaskWithRetry(item, projectId, jobConfig, queue, budget)
         .finally(() => {
           sem.release();
           this.inflightCount--;
+          this.inflightTaskIds.delete(item.taskId);
         });
     }
 
@@ -513,7 +519,8 @@ export class LocalPipelineRunner {
 
       } catch (err) {
         if (attempt < MAX_RETRIES) {
-          const backoff = RETRY_BASE_MS * Math.pow(2, attempt - 1);
+          const retryBase = this.cfg.retryBaseMs ?? RETRY_BASE_MS;
+          const backoff = retryBase * Math.pow(2, attempt - 1);
           logger.warn(
             { taskId: item.taskId, attempt, backoffMs: backoff, error: (err as Error).message },
             'crawl task threw, retrying',
@@ -625,6 +632,8 @@ export class LocalPipelineRunner {
   ): Promise<void> {
     const pending = await this.cfg.adapter.taskRepo.findPending(projectId, { limit: 100 });
     for (const task of pending) {
+      // Skip tasks that are already in-flight (prevents re-enqueue race)
+      if (this.inflightTaskIds.has(task.id)) continue;
       queue.enqueue(
         {
           taskId: task.id,

@@ -12,7 +12,7 @@ export class PriorityQueue<T> {
 
   dequeueBatch(count: number): T[] {
     const batch: T[] = [];
-    for (let i = 0; i < count; i++) { const item = this.dequeue(); if (!item) break; batch.push(item); }
+    for (let i = 0; i < count; i++) { const item = this.dequeue(); if (item === undefined) break; batch.push(item); }
     return batch;
   }
 
