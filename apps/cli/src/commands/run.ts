@@ -21,6 +21,7 @@
  */
 
 import { join, basename } from 'node:path';
+import { slugifyPath } from '../local-project.js';
 import { readFileSync } from 'node:fs';
 import {
   findProjectRoot,
@@ -73,7 +74,7 @@ export async function runRunCommand(options: RunOptions = {}): Promise<void> {
 
   // Derive a stable, human-readable project ID from the last two path segments.
   // e.g. /home/user/projects/my-crawl → "projects-my-crawl"
-  const projectId = slugify(projectRoot);
+  const projectId = slugifyPath(projectRoot);
   const projectName = projectYaml.name ?? basename(projectRoot);
 
   // Step 3: Load global config (API keys, provider preferences)
@@ -292,23 +293,3 @@ export async function runRunCommand(options: RunOptions = {}): Promise<void> {
   }
 }
 
-// ---------------------------------------------------------------------------
-// Helpers
-// ---------------------------------------------------------------------------
-
-/**
- * Convert an absolute path to a simple project-ID slug using the last two
- * path segments, lowercased and non-alphanumeric characters replaced with `-`.
- *
- * Examples:
- *   /home/user/projects/my-crawl → "projects-my-crawl"
- *   C:\Users\me\data\crawl-test  → "data-crawl-test"
- */
-function slugify(absPath: string): string {
-  const parts = absPath.replace(/\\/g, '/').split('/').filter(Boolean);
-  return parts
-    .slice(-2)
-    .join('-')
-    .toLowerCase()
-    .replace(/[^a-z0-9-]/g, '-');
-}

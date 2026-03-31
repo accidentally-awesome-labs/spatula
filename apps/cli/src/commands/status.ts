@@ -3,8 +3,8 @@
  * or for the local project found in the current directory.
  */
 
-import { join } from 'node:path';
 import type { SpatulaApiClient } from '../api/client.js';
+import { openLocalProject } from '../local-project.js';
 
 // ---------------------------------------------------------------------------
 // Command runner — API mode
@@ -29,27 +29,18 @@ export async function runStatusCommand(
  * Returns true if a project was found and status was printed; false otherwise.
  */
 export async function runLocalStatusCommand(cwd: string): Promise<boolean> {
-  const { findProjectRoot } = await import('@spatula/core');
-  const projectRoot = findProjectRoot(cwd);
-  if (!projectRoot) {
+  let project;
+  try {
+    project = await openLocalProject(cwd);
+  } catch {
     return false;
   }
 
-  const dbPath = join(projectRoot, '.spatula', 'project.db');
-  const { createProjectDb, ProjectAdapter } = await import('@spatula/db');
-  const { LocalDataSource } = await import('@spatula/core');
-
-  // Derive the same projectId slug that `spatula run` uses when it creates the DB.
-  const projectId = slugifyPath(projectRoot);
-
-  const { db, close } = createProjectDb(dbPath);
   try {
-    const adapter = new ProjectAdapter(db, projectId);
-    const dataSource = new LocalDataSource(adapter);
-    const status = await dataSource.getStatus();
-    console.log(formatLocalStatus(status, projectRoot));
+    const status = await project.dataSource.getStatus();
+    console.log(formatLocalStatus(status, project.projectRoot));
   } finally {
-    close();
+    project.close();
   }
 
   return true;
@@ -91,23 +82,6 @@ export function formatJobDetail(job: Record<string, unknown>): string {
   }
 
   return lines.join('\n');
-}
-
-// ---------------------------------------------------------------------------
-// Helpers
-// ---------------------------------------------------------------------------
-
-/**
- * Mirror the slugify logic from `spatula run` so the projectId matches
- * what was used when the DB was first created.
- */
-function slugifyPath(absPath: string): string {
-  const parts = absPath.replace(/\\/g, '/').split('/').filter(Boolean);
-  return parts
-    .slice(-2)
-    .join('-')
-    .toLowerCase()
-    .replace(/[^a-z0-9-]/g, '-');
 }
 
 // ---------------------------------------------------------------------------
