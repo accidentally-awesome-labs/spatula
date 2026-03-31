@@ -44,6 +44,10 @@ export function batchJobRoutes() {
           }
           await deps.jobRepo.updateStatus(id, tenantId, 'cancelled');
         } else {
+          // Cancel active/queued jobs before deleting to avoid orphaned BullMQ work
+          if (CANCELLABLE_STATUSES.has(job.status)) {
+            await deps.jobRepo.updateStatus(id, tenantId, 'cancelled');
+          }
           await deps.jobRepo.deleteWithData(id, tenantId);
         }
 

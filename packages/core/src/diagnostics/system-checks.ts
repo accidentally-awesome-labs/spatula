@@ -1,8 +1,9 @@
 import { execFileSync } from 'node:child_process';
 import { existsSync } from 'node:fs';
+import { join } from 'node:path';
 import type { HealthCheck } from './health-check.js';
 
-export function createSystemChecks(): HealthCheck[] {
+export function createSystemChecks(cwd = process.cwd()): HealthCheck[] {
   return [
     {
       name: 'node-version',
@@ -32,8 +33,12 @@ export function createSystemChecks(): HealthCheck[] {
       category: 'system',
       async run() {
         try {
-          const ollamaUrl = process.env.OLLAMA_BASE_URL ?? 'http://localhost:11434';
-          const res = await fetch(`${ollamaUrl}/api/tags`, {
+          const raw = process.env.OLLAMA_BASE_URL ?? 'http://localhost:11434';
+          const parsed = new URL(raw);
+          if (!['http:', 'https:'].includes(parsed.protocol)) {
+            return { status: 'warn', message: `Invalid OLLAMA_BASE_URL scheme: ${parsed.protocol}` };
+          }
+          const res = await fetch(`${parsed.origin}/api/tags`, {
             signal: AbortSignal.timeout(3000),
           });
           if (res.ok) return { status: 'pass', message: 'Ollama is reachable' };
@@ -62,7 +67,7 @@ export function createSystemChecks(): HealthCheck[] {
       name: 'env-file',
       category: 'system',
       async run() {
-        if (existsSync('.env') || existsSync('.env.local')) {
+        if (existsSync(join(cwd, '.env')) || existsSync(join(cwd, '.env.local'))) {
           return { status: 'pass', message: '.env file found' };
         }
         return { status: 'warn', message: 'No .env file found — copy .env.example to .env' };
