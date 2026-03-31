@@ -156,7 +156,7 @@ Wave 4 covers 3 workstreams across Phase 12 (server) and Phase 13 (local):
    - `apps/cli/src/hooks/useEntityFilter.ts` — local: `dataSource.searchEntities(filter)` (in-memory), remote: API `search` param
    - `apps/cli/src/hooks/useExport.ts` — local: `dataSource.createExport()` calling export orchestrator directly
 
-3. **CSS-only extractor** (`packages/core/src/extraction/css-extractor.ts`) — implements `Extractor` interface using auto-detected CSS selectors (headings, prices, images, links, lists, tables). No LLM dependency — works fully offline. Wire into `spatula test --skip-llm` path in `apps/cli/src/commands/test-url.ts` (replacing current TODO stub). Print hint to configure LLM for better results.
+3. **CSS-only extractor** (`packages/core/src/extraction/css-extractor.ts`) — implements `Extractor` interface using auto-detected CSS selectors (headings, prices, images, links, lists, tables). No LLM dependency — works fully offline. Wire into `apps/cli/src/commands/test-url.ts` in two paths: (a) explicit `--skip-llm` flag, and (b) automatic fallback when no LLM provider is configured (per Phase 13 spec 7.2: "falls back to static extraction with auto-detected CSS selectors and prints a hint to configure an LLM for better results"). Replaces current TODO stub.
 
 4. **Doctor project checks** (`packages/core/src/diagnostics/project-checks.ts`) — 8 checks registered into 4-1's pluggable registry:
    - `spatula.yaml` valid (parses against config schema)
@@ -253,7 +253,7 @@ Wave 4 covers 3 workstreams across Phase 12 (server) and Phase 13 (local):
 
 1. **License** — `LICENSE` at project root, MIT.
 
-2. **Security policy** — `SECURITY.md` at project root. How to report vulnerabilities (email, not public issues), expected response time, scope of supported versions.
+2. **Security policy** — `SECURITY.md` at project root. How to report vulnerabilities (email, not public issues), expected response time, scope of supported versions. *(Added beyond Phase 12 spec — standard for open-source projects.)*
 
 3. **README.md** — 12 sections:
    - Hero: one-line description + badge row (CI status, license, npm version)
@@ -291,20 +291,22 @@ Wave 4 covers 3 workstreams across Phase 12 (server) and Phase 13 (local):
    - `examples/news/` — news article aggregation (`spatula.yaml` + `README.md`)
    - `examples/real-estate/` — property listing extraction (`spatula.yaml` + `README.md`)
 
-9. **`.env.example` update** — add all Wave 3 + Wave 4 env vars organized by category:
+9. **`.env.example` update** — add ALL env vars from Waves 1-4 organized by category. The implementer must audit every sub-plan's "New env vars" section and grep the codebase for `process.env.` references. Categories include (not exhaustive):
    - Database: `DATABASE_URL`, `TEST_DATABASE_URL`
    - Redis: `REDIS_URL`
    - Auth: `AUTH_STRATEGY`, `JWT_ISSUER`, `JWT_AUDIENCE`, `JWT_JWKS_URL`
    - LLM: `OPENROUTER_API_KEY`, `OLLAMA_BASE_URL`, `OPENROUTER_BASE_URL`
    - Crawlers: `FIRECRAWL_API_KEY`
-   - Observability: `SENTRY_DSN`, `OTEL_EXPORTER_PROMETHEUS_PORT`
+   - Storage: `CONTENT_STORE`, `S3_BUCKET`, `S3_REGION`, `S3_ENDPOINT`, `S3_ACCESS_KEY_ID`, `S3_SECRET_ACCESS_KEY`
+   - Observability: `SENTRY_DSN`, `SENTRY_TRACES_SAMPLE_RATE`, `OTEL_EXPORTER_PROMETHEUS_PORT`, `OTEL_EXPORTER_ENDPOINT`
    - Server: `CORS_ALLOWED_ORIGINS`, `PORT`
+   - Workers: `SPATULA_WORKERS`
 
-10. **Package.json metadata** — update all 6 package.json files (`core`, `db`, `queue`, `shared`, `api`, `cli`) with: `license: "MIT"`, `repository`, `description`, `keywords`, `homepage`, `bugs` fields.
+10. **Package.json metadata** — update all 6 package.json files (`core`, `db`, `queue`, `shared`, `api`, `cli`) with: `license: "MIT"`, `repository`, `description`, `keywords`, `homepage`, `bugs` fields. *(Added beyond Phase 12 spec — standard for npm packages.)*
 
 11. **Stale documentation cleanup**:
     - `docs/superpowers/specs/wave-roadmap.md` — mark Wave 4 complete, update final test counts, update Wave 5 scope to explicitly include remote operations deferred from Wave 4
-    - Phase 12 spec — annotate sections 8.3 and 8.5 as "Completed in Wave 2/3" where deferred items landed
+    - Phase 12 spec — annotate sections 8.3 and 8.5 as "Completed in Wave 2/3" where deferred items landed; update section 9.7 example filenames from `job.yaml` to `spatula.yaml`
     - Phase 13 spec — annotate section 7.4 (Remote Operations) as "Deferred to Wave 5"
     - Remove or update stale TODO comments in code that reference completed work
     - Ensure `spatula reset --keep-remote` flag is documented as deferred to Wave 5 alongside remote ops
