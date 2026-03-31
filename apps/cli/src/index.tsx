@@ -18,6 +18,7 @@ import { runStatusCommand, runLocalStatusCommand, formatJobDetail } from './comm
 import { runInitCommand, formatInitResult } from './commands/init.js';
 import { runRunCommand } from './commands/run.js';
 import { runResetCommand, formatResetResult } from './commands/reset.js';
+import { runDoctorCommand } from './commands/doctor.js';
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -140,6 +141,18 @@ yargs(hideBin(process.argv))
         console.error(err instanceof Error ? err.message : 'An unexpected error occurred');
         process.exit(1);
       }
+    },
+  )
+
+  // -------------------------------------------------------------------------
+  // doctor — system health checks
+  // -------------------------------------------------------------------------
+  .command(
+    'doctor',
+    'Run system health checks',
+    () => {},
+    async () => {
+      await runDoctorCommand();
     },
   )
 
