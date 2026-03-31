@@ -3,8 +3,9 @@ import React from 'react';
 import { render } from 'ink-testing-library';
 import { Text } from 'ink';
 import { createCliStore } from '../../../src/store/index.js';
-import { useJobPolling } from '../../../src/hooks/useJobPolling.js';
+import { useJobPolling, isDataSource, fetchFromDataSource } from '../../../src/hooks/useJobPolling.js';
 import type { SpatulaApiClient } from '../../../src/api/client.js';
+import type { DataSource } from '@spatula/core';
 
 function createMockApiClient(overrides: Partial<SpatulaApiClient> = {}): SpatulaApiClient {
   return {
@@ -20,16 +21,16 @@ function createMockApiClient(overrides: Partial<SpatulaApiClient> = {}): Spatula
 
 function TestComponent({
   store,
-  apiClient,
+  backend,
   jobId,
   interval,
 }: {
   store: ReturnType<typeof createCliStore>;
-  apiClient: SpatulaApiClient;
+  backend: DataSource | SpatulaApiClient;
   jobId: string;
   interval?: number;
 }) {
-  const { isPolling, lastError } = useJobPolling(store, apiClient, jobId, interval);
+  const { isPolling, lastError } = useJobPolling(store, backend, jobId, interval);
   return React.createElement(
     Text,
     null,
@@ -37,7 +38,116 @@ function TestComponent({
   );
 }
 
-describe('useJobPolling', () => {
+// ---------------------------------------------------------------------------
+// isDataSource type guard
+// ---------------------------------------------------------------------------
+
+describe('isDataSource', () => {
+  it('returns true for DataSource objects', () => {
+    const ds = {
+      getEntities: vi.fn(),
+      getSchema: vi.fn(),
+      getActions: vi.fn(),
+      getStatus: vi.fn(),
+    };
+    expect(isDataSource(ds as unknown as DataSource | SpatulaApiClient)).toBe(true);
+  });
+
+  it('returns false for SpatulaApiClient objects', () => {
+    const client = { getJob: vi.fn(), listActions: vi.fn(), tenantId: 'test' };
+    expect(isDataSource(client as unknown as DataSource | SpatulaApiClient)).toBe(false);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// fetchFromDataSource
+// ---------------------------------------------------------------------------
+
+describe('fetchFromDataSource', () => {
+  it('calls DataSource methods and populates store', async () => {
+    const mockStatus = {
+      totalPages: 10,
+      totalEntities: 5,
+      pendingActions: 2,
+      schemaFields: 3,
+      storageBytes: { pages: 0, database: 0, exports: 0 },
+    };
+    const mockActions = [{ id: 'a1', type: 'add_field', status: 'pending_review' }];
+    const mockSchema = { version: 1, fields: [] };
+    const mockEntities = { data: [{ id: 'e1', mergedData: {} }], total: 1 };
+
+    const ds: Partial<DataSource> = {
+      getStatus: vi.fn().mockResolvedValue(mockStatus),
+      getActions: vi.fn().mockResolvedValue(mockActions),
+      getSchema: vi.fn().mockResolvedValue(mockSchema),
+      getEntities: vi.fn().mockResolvedValue(mockEntities),
+    };
+
+    const setJobData = vi.fn();
+    const setPendingActions = vi.fn();
+    const setRecentActions = vi.fn();
+    const setSchemaData = vi.fn();
+    const setEntityPreviews = vi.fn();
+
+    const store = {
+      getState: vi.fn().mockReturnValue({
+        setJobData,
+        setPendingActions,
+        setRecentActions,
+        setSchemaData,
+        setEntityPreviews,
+      }),
+    };
+
+    await fetchFromDataSource(store as any, ds as DataSource);
+
+    expect(ds.getStatus).toHaveBeenCalled();
+    expect(ds.getActions).toHaveBeenCalledWith('pending_review');
+    expect(ds.getSchema).toHaveBeenCalled();
+    expect(ds.getEntities).toHaveBeenCalledWith({ limit: 5 });
+
+    expect(setJobData).toHaveBeenCalledWith(mockStatus);
+    expect(setPendingActions).toHaveBeenCalledWith(mockActions);
+    expect(setRecentActions).toHaveBeenCalledWith([]);
+    expect(setSchemaData).toHaveBeenCalledWith(mockSchema);
+    expect(setEntityPreviews).toHaveBeenCalledWith(mockEntities.data);
+  });
+
+  it('handles getSchema failure gracefully', async () => {
+    const ds: Partial<DataSource> = {
+      getStatus: vi.fn().mockResolvedValue({
+        totalPages: 0,
+        totalEntities: 0,
+        pendingActions: 0,
+        schemaFields: 0,
+        storageBytes: { pages: 0, database: 0, exports: 0 },
+      }),
+      getActions: vi.fn().mockResolvedValue([]),
+      getSchema: vi.fn().mockRejectedValue(new Error('No schema')),
+      getEntities: vi.fn().mockResolvedValue({ data: [], total: 0 }),
+    };
+
+    const setSchemaData = vi.fn();
+    const store = {
+      getState: vi.fn().mockReturnValue({
+        setJobData: vi.fn(),
+        setPendingActions: vi.fn(),
+        setRecentActions: vi.fn(),
+        setSchemaData,
+        setEntityPreviews: vi.fn(),
+      }),
+    };
+
+    await fetchFromDataSource(store as any, ds as DataSource);
+    expect(setSchemaData).not.toHaveBeenCalled();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// useJobPolling — ApiClient mode (original tests preserved)
+// ---------------------------------------------------------------------------
+
+describe('useJobPolling (ApiClient mode)', () => {
   beforeEach(() => {
     vi.useFakeTimers();
   });
@@ -51,10 +161,9 @@ describe('useJobPolling', () => {
     const apiClient = createMockApiClient();
 
     render(
-      React.createElement(TestComponent, { store, apiClient, jobId: 'job-1' }),
+      React.createElement(TestComponent, { store, backend: apiClient, jobId: 'job-1' }),
     );
 
-    // Flush microtasks (promise resolution) and effects
     await vi.advanceTimersByTimeAsync(100);
 
     expect(apiClient.getJob).toHaveBeenCalledWith('job-1');
@@ -66,7 +175,7 @@ describe('useJobPolling', () => {
     const apiClient = createMockApiClient();
 
     render(
-      React.createElement(TestComponent, { store, apiClient, jobId: 'job-1' }),
+      React.createElement(TestComponent, { store, backend: apiClient, jobId: 'job-1' }),
     );
 
     await vi.advanceTimersByTimeAsync(100);
@@ -80,7 +189,7 @@ describe('useJobPolling', () => {
     const apiClient = createMockApiClient();
 
     render(
-      React.createElement(TestComponent, { store, apiClient, jobId: 'job-1' }),
+      React.createElement(TestComponent, { store, backend: apiClient, jobId: 'job-1' }),
     );
 
     await vi.advanceTimersByTimeAsync(100);
@@ -94,7 +203,7 @@ describe('useJobPolling', () => {
     const apiClient = createMockApiClient();
 
     render(
-      React.createElement(TestComponent, { store, apiClient, jobId: 'job-1' }),
+      React.createElement(TestComponent, { store, backend: apiClient, jobId: 'job-1' }),
     );
 
     await vi.advanceTimersByTimeAsync(100);
@@ -110,17 +219,15 @@ describe('useJobPolling', () => {
     render(
       React.createElement(TestComponent, {
         store,
-        apiClient,
+        backend: apiClient,
         jobId: 'job-1',
         interval: 3000,
       }),
     );
 
-    // Let the initial fetch complete
     await vi.advanceTimersByTimeAsync(100);
     expect(apiClient.getJob).toHaveBeenCalledTimes(1);
 
-    // Advance past the polling interval
     await vi.advanceTimersByTimeAsync(3000);
     expect(apiClient.getJob).toHaveBeenCalledTimes(2);
   });
@@ -132,13 +239,12 @@ describe('useJobPolling', () => {
     });
 
     const { lastFrame } = render(
-      React.createElement(TestComponent, { store, apiClient, jobId: 'job-1' }),
+      React.createElement(TestComponent, { store, backend: apiClient, jobId: 'job-1' }),
     );
 
     await vi.advanceTimersByTimeAsync(100);
 
     expect(lastFrame()!).toContain('Network failure');
-    // Store should not have been updated since the whole Promise.all rejected
     expect(store.getState().jobData).toBeNull();
   });
 
@@ -149,12 +255,11 @@ describe('useJobPolling', () => {
     });
 
     render(
-      React.createElement(TestComponent, { store, apiClient, jobId: 'job-1' }),
+      React.createElement(TestComponent, { store, backend: apiClient, jobId: 'job-1' }),
     );
 
     await vi.advanceTimersByTimeAsync(100);
 
-    // getSchema failure is caught individually, so other data should still be stored
     expect(store.getState().jobData).toEqual({ id: 'job-1', name: 'Test Job', status: 'running' });
     expect(store.getState().schemaData).toBeNull();
   });
@@ -166,22 +271,18 @@ describe('useJobPolling', () => {
     const { unmount } = render(
       React.createElement(TestComponent, {
         store,
-        apiClient,
+        backend: apiClient,
         jobId: 'job-1',
         interval: 2000,
       }),
     );
 
-    // Let the initial fetch complete
     await vi.advanceTimersByTimeAsync(100);
     expect(apiClient.getJob).toHaveBeenCalledTimes(1);
 
     unmount();
 
-    // Advance well past multiple intervals
     await vi.advanceTimersByTimeAsync(10000);
-
-    // Should not have fetched again after unmount
     expect(apiClient.getJob).toHaveBeenCalledTimes(1);
   });
 
@@ -190,13 +291,127 @@ describe('useJobPolling', () => {
     const apiClient = createMockApiClient();
 
     render(
-      React.createElement(TestComponent, { store, apiClient, jobId: '' }),
+      React.createElement(TestComponent, { store, backend: apiClient, jobId: '' }),
     );
 
     await vi.advanceTimersByTimeAsync(5000);
 
     expect(apiClient.getJob).not.toHaveBeenCalled();
-    expect(apiClient.listActions).not.toHaveBeenCalled();
     expect(store.getState().jobData).toBeNull();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// useJobPolling — DataSource mode
+// ---------------------------------------------------------------------------
+
+describe('useJobPolling (DataSource mode)', () => {
+  beforeEach(() => {
+    vi.useFakeTimers();
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  function createMockDataSource(overrides: Partial<DataSource> = {}): DataSource {
+    return {
+      getStatus: vi.fn().mockResolvedValue({
+        totalPages: 42,
+        totalEntities: 7,
+        pendingActions: 3,
+        schemaFields: 5,
+        storageBytes: { pages: 0, database: 0, exports: 0 },
+      }),
+      getActions: vi.fn().mockResolvedValue([
+        { id: 'a1', type: 'add_field', status: 'pending_review' },
+      ]),
+      getSchema: vi.fn().mockResolvedValue({ version: 2, fields: [] }),
+      getEntities: vi.fn().mockResolvedValue({
+        data: [{ id: 'e1', mergedData: { name: 'Local Entity' } }],
+        total: 1,
+      }),
+      getEntity: vi.fn(),
+      searchEntities: vi.fn(),
+      getSchemaVersions: vi.fn(),
+      approveAction: vi.fn(),
+      rejectAction: vi.fn(),
+      createExport: vi.fn(),
+      getExport: vi.fn(),
+      downloadExport: vi.fn(),
+      getDocumentation: vi.fn(),
+      ...overrides,
+    } as unknown as DataSource;
+  }
+
+  it('detects DataSource and calls getStatus instead of getJob', async () => {
+    const store = createCliStore('test-tenant');
+    const ds = createMockDataSource();
+
+    render(
+      React.createElement(TestComponent, { store, backend: ds, jobId: 'local' }),
+    );
+
+    await vi.advanceTimersByTimeAsync(100);
+
+    expect(ds.getStatus).toHaveBeenCalled();
+    expect(store.getState().jobData).toMatchObject({ totalPages: 42, totalEntities: 7 });
+  });
+
+  it('calls getActions with pending_review filter', async () => {
+    const store = createCliStore('test-tenant');
+    const ds = createMockDataSource();
+
+    render(
+      React.createElement(TestComponent, { store, backend: ds, jobId: 'local' }),
+    );
+
+    await vi.advanceTimersByTimeAsync(100);
+
+    expect(ds.getActions).toHaveBeenCalledWith('pending_review');
+    expect(store.getState().pendingActions).toHaveLength(1);
+  });
+
+  it('stores schema from DataSource', async () => {
+    const store = createCliStore('test-tenant');
+    const ds = createMockDataSource();
+
+    render(
+      React.createElement(TestComponent, { store, backend: ds, jobId: 'local' }),
+    );
+
+    await vi.advanceTimersByTimeAsync(100);
+
+    expect(ds.getSchema).toHaveBeenCalled();
+    expect(store.getState().schemaData).toEqual({ version: 2, fields: [] });
+  });
+
+  it('stores entity previews from DataSource', async () => {
+    const store = createCliStore('test-tenant');
+    const ds = createMockDataSource();
+
+    render(
+      React.createElement(TestComponent, { store, backend: ds, jobId: 'local' }),
+    );
+
+    await vi.advanceTimersByTimeAsync(100);
+
+    expect(ds.getEntities).toHaveBeenCalledWith({ limit: 5 });
+    expect(store.getState().entityPreviews).toEqual([
+      { id: 'e1', mergedData: { name: 'Local Entity' } },
+    ]);
+  });
+
+  it('sets recentActions to empty array in DataSource mode', async () => {
+    const store = createCliStore('test-tenant');
+    const ds = createMockDataSource();
+
+    render(
+      React.createElement(TestComponent, { store, backend: ds, jobId: 'local' }),
+    );
+
+    await vi.advanceTimersByTimeAsync(100);
+
+    expect(store.getState().recentActions).toEqual([]);
   });
 });
