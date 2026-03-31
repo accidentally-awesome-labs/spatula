@@ -30,6 +30,8 @@ import { processCrawlTask, shouldTriggerSchemaEvolution } from './crawl-orchestr
 import { processSchemaEvolution } from './schema-orchestrator.js';
 import { processReconciliation } from './reconcile-orchestrator.js';
 import { processExport } from './export-orchestrator.js';
+import { diffConfigs } from '../config/config-differ.js';
+import type { JobConfigDiff } from '../config/diff-types.js';
 import type {
   CrawlOrchestratorDeps,
   SchemaOrchestratorDeps,
@@ -74,6 +76,7 @@ interface TaskRepoLike {
 
 interface RunRepoLike {
   create(data: { status: string; source: string; configSnapshot: Record<string, unknown>; startedAt: string }): Promise<{ id: string }>;
+  findLatestByStatus(statuses: string[]): Promise<{ id: string; configSnapshot: Record<string, unknown> } | null>;
   updateStatus(id: string, status: string, completedAt?: string): Promise<void>;
   updateStats(id: string, stats: Record<string, unknown>): Promise<void>;
 }
@@ -101,6 +104,12 @@ export interface ProjectAdapterForRunner {
     findByContentHash(hash: string, tenantId: string): Promise<{ id: string } | null>;
     findByIds(ids: string[], tenantId: string): Promise<Array<{ id: string; metadata: Record<string, unknown> | null; createdAt: Date }>>;
     create(data: { taskId: string; tenantId: string; contentRef: string; contentHash: string; metadata: Record<string, unknown> }): Promise<{ id: string }>;
+    /** Flag all pages for a job as needing re-extraction. Optional — re-extraction skipped if missing. */
+    flagForReextraction?(jobId: string, reason: string): Promise<number>;
+    /** Find pages flagged for re-extraction. Optional — re-extraction skipped if missing. */
+    findNeedingReextraction?(jobId: string): Promise<Array<{ id: string; url: string | null; contentRef: string }>>;
+    /** Clear re-extraction flags after processing. Optional. */
+    clearReextractionFlag?(pageIds: string[]): Promise<void>;
   };
   extractionRepo: {
     store(data: unknown): Promise<unknown>;
@@ -232,11 +241,15 @@ export class LocalPipelineRunner {
       // Step 4: Crash recovery — reset in_progress tasks to pending
       await this.recoverCrashedTasks(projectId);
 
-      // Step 5: Seed URL enqueue (if no existing tasks)
+      // Step 5: Config diff against last run
+      const configDiff = await this.diffConfigWithLastRun(projectId, jobConfig);
+
+      // Step 5b: Seed URL enqueue — first run or new seeds from config diff
       const stats = await adapter.taskRepo.getJobStats(projectId, projectId);
       const totalExistingTasks = stats.pending + stats.inProgress + stats.completed + stats.failed + stats.skipped;
 
       if (totalExistingTasks === 0) {
+        // First run — enqueue all seeds
         for (const url of seedUrls) {
           await adapter.taskRepo.enqueue({
             jobId: projectId,
@@ -247,6 +260,18 @@ export class LocalPipelineRunner {
           });
         }
         logger.info({ seedCount: seedUrls.length }, 'seed URLs enqueued');
+      } else if (configDiff?.seedsAdded.length) {
+        // Subsequent run — enqueue only new seeds
+        for (const url of configDiff.seedsAdded) {
+          await adapter.taskRepo.enqueue({
+            jobId: projectId,
+            tenantId: projectId,
+            url,
+            depth: 0,
+            parentTaskId: '',
+          });
+        }
+        logger.info({ seedCount: configDiff.seedsAdded.length }, 'new seed URLs enqueued from config diff');
       }
 
       // Step 7: Initialize page budget
@@ -264,6 +289,11 @@ export class LocalPipelineRunner {
       if (this.isPaused) {
         await this.finalizeRun('paused');
         return;
+      }
+
+      // Step 7b: Re-extraction pass for pages flagged by config diff
+      if (configDiff && this.cfg.extractor) {
+        await this.runReextraction(projectId, jobConfig);
       }
 
       // Step 9: Schema evolution
@@ -326,6 +356,133 @@ export class LocalPipelineRunner {
         'cannot find in_progress tasks to reset — they may remain stuck. Consider using `spatula reset` to clear them.',
       );
     }
+  }
+
+  // -------------------------------------------------------------------------
+  // Config diff
+  // -------------------------------------------------------------------------
+
+  private async diffConfigWithLastRun(
+    projectId: string,
+    currentConfig: any,
+  ): Promise<JobConfigDiff | null> {
+    const previousRun = await this.cfg.adapter.runRepo.findLatestByStatus(['completed', 'paused']);
+    if (!previousRun) return null;
+
+    try {
+      const diff = diffConfigs(currentConfig, previousRun.configSnapshot as any);
+      if (!diff.hasChanges) {
+        logger.debug('config unchanged since last run');
+        return null;
+      }
+
+      logger.info(
+        {
+          seedsAdded: diff.seedsAdded.length,
+          seedsRemoved: diff.seedsRemoved.length,
+          fieldsAdded: diff.fieldsAdded.length,
+          fieldsRemoved: diff.fieldsRemoved.length,
+          fieldsModified: diff.fieldsModified.length,
+          crawlChanged: diff.crawlChanged.proxyChanged || diff.crawlChanged.cookiesChanged,
+          llmChanged: diff.llmChanged,
+        },
+        'config changes detected since last run',
+      );
+
+      // Flag pages for re-extraction if schema fields changed
+      const needsReextraction =
+        diff.fieldsAdded.length > 0 ||
+        diff.fieldsRemoved.length > 0 ||
+        diff.fieldsModified.length > 0 ||
+        diff.schemaModeChanged != null;
+
+      if (needsReextraction && this.cfg.adapter.pageRepo.flagForReextraction) {
+        const reason = [
+          diff.fieldsAdded.length > 0 && `${diff.fieldsAdded.length} fields added`,
+          diff.fieldsRemoved.length > 0 && `${diff.fieldsRemoved.length} fields removed`,
+          diff.fieldsModified.length > 0 && `${diff.fieldsModified.length} fields modified`,
+          diff.schemaModeChanged && `schema mode changed: ${diff.schemaModeChanged.from} → ${diff.schemaModeChanged.to}`,
+        ].filter(Boolean).join(', ');
+
+        const flagged = await this.cfg.adapter.pageRepo.flagForReextraction(projectId, reason);
+        logger.info({ flagged, reason }, 'pages flagged for re-extraction');
+      }
+
+      return diff;
+    } catch (err) {
+      logger.warn({ error: (err as Error).message }, 'config diff failed — continuing without diff');
+      return null;
+    }
+  }
+
+  // -------------------------------------------------------------------------
+  // Re-extraction
+  // -------------------------------------------------------------------------
+
+  private async runReextraction(projectId: string, jobConfig: any): Promise<void> {
+    const { adapter, extractor, contentStore } = this.cfg;
+
+    if (!adapter.pageRepo.findNeedingReextraction) {
+      logger.debug('page repo does not support re-extraction queries — skipping');
+      return;
+    }
+
+    const flaggedPages = await adapter.pageRepo.findNeedingReextraction(projectId);
+    if (flaggedPages.length === 0) return;
+
+    logger.info({ count: flaggedPages.length }, 'running re-extraction on flagged pages');
+
+    const schema = await adapter.schemaRepo.findLatest(projectId, projectId);
+    if (!schema) {
+      logger.warn('no schema found — skipping re-extraction');
+      return;
+    }
+
+    let reextracted = 0;
+
+    for (const page of flaggedPages) {
+      if (this.isPaused) break;
+
+      try {
+        const html = await contentStore.retrieve(page.contentRef);
+        const result = await extractor.extract(
+          html,
+          page.url ?? '',
+          schema.definition,
+          jobConfig.description ?? '',
+        );
+
+        await adapter.extractionRepo.store({
+          jobId: projectId,
+          tenantId: projectId,
+          pageId: page.id,
+          schemaVersion: schema.version,
+          data: result.data,
+          unmappedFields: result.metadata?.unmappedFields ?? [],
+          metadata: result.metadata,
+        });
+
+        reextracted++;
+      } catch (err) {
+        logger.warn(
+          { pageId: page.id, error: (err as Error).message },
+          're-extraction failed for page — skipping',
+        );
+        this.errors++;
+      }
+    }
+
+    // Clear flags for processed pages
+    if (adapter.pageRepo.clearReextractionFlag) {
+      await adapter.pageRepo.clearReextractionFlag(flaggedPages.map((p) => p.id));
+    }
+
+    // Update run stats
+    if (this.runId) {
+      await adapter.runRepo.updateStats(this.runId, { pagesReextracted: reextracted });
+    }
+
+    logger.info({ reextracted, total: flaggedPages.length }, 're-extraction complete');
   }
 
   // -------------------------------------------------------------------------

@@ -216,12 +216,17 @@ vi.mock('../../../src/pipeline/export-orchestrator.js', () => ({
   processExport: vi.fn().mockResolvedValue({ entityCount: 5, fileSize: 1024, contentRef: 'export-ref' }),
 }));
 
+vi.mock('../../../src/config/config-differ.js', () => ({
+  diffConfigs: vi.fn().mockReturnValue({ hasChanges: false }),
+}));
+
 // No-op lock provided via config.lock (avoids file system side effects)
 
 import { processCrawlTask } from '../../../src/pipeline/crawl-orchestrator.js';
 import { processSchemaEvolution } from '../../../src/pipeline/schema-orchestrator.js';
 import { processReconciliation } from '../../../src/pipeline/reconcile-orchestrator.js';
 import { processExport } from '../../../src/pipeline/export-orchestrator.js';
+import { diffConfigs } from '../../../src/config/config-differ.js';
 
 const mockProcessCrawlTask = processCrawlTask as ReturnType<typeof vi.fn>;
 const mockProcessSchemaEvolution = processSchemaEvolution as ReturnType<typeof vi.fn>;
@@ -626,5 +631,134 @@ describe('LocalPipelineRunner', () => {
         depth: 1,
       }),
     );
+  });
+
+  // -------------------------------------------------------------------------
+  // Config diff
+  // -------------------------------------------------------------------------
+
+  it('enqueues new seeds from config diff on subsequent runs', async () => {
+    const { adapter } = cfg;
+    const { taskRepo, runRepo } = adapter;
+    const mockDiffConfigs = diffConfigs as ReturnType<typeof vi.fn>;
+
+    // Simulate existing tasks (not first run)
+    (taskRepo.getJobStats as ReturnType<typeof vi.fn>).mockResolvedValue({
+      pending: 0, inProgress: 0, completed: 5, failed: 0, skipped: 0,
+    });
+
+    // Previous run exists with a config snapshot
+    (runRepo.findLatestByStatus as ReturnType<typeof vi.fn>).mockResolvedValue({
+      id: 'prev-run',
+      configSnapshot: { seedUrls: ['https://example.com'] },
+    });
+
+    // Config diff says new seed was added
+    mockDiffConfigs.mockReturnValue({
+      hasChanges: true,
+      seedsAdded: ['https://example.com/new-page'],
+      seedsRemoved: [],
+      fieldsAdded: [],
+      fieldsRemoved: [],
+      fieldsModified: [],
+      potentialRenames: [],
+      crawlChanged: { proxyChanged: false, cookiesChanged: false },
+      llmChanged: false,
+      reconciliationChanged: false,
+      safetyChanged: false,
+      impact: { newTasksToEnqueue: 1, pagesNeedingReextraction: null, reextractionCostEstimate: 0, failedTasksToRetry: null, skippedTasksToReenqueue: null, forceFullReconciliation: false },
+    });
+
+    const runner = new LocalPipelineRunner(cfg);
+    await runner.run();
+
+    // Should enqueue only the new seed, not all seeds
+    expect(taskRepo.enqueue).toHaveBeenCalledTimes(1);
+    expect(taskRepo.enqueue).toHaveBeenCalledWith(
+      expect.objectContaining({ url: 'https://example.com/new-page', depth: 0 }),
+    );
+  });
+
+  it('flags pages for re-extraction when schema fields change', async () => {
+    const { adapter } = cfg;
+    const { taskRepo, runRepo, pageRepo } = adapter;
+    const mockDiffConfigs = diffConfigs as ReturnType<typeof vi.fn>;
+
+    // Not first run
+    (taskRepo.getJobStats as ReturnType<typeof vi.fn>).mockResolvedValue({
+      pending: 0, inProgress: 0, completed: 3, failed: 0, skipped: 0,
+    });
+
+    // Previous run
+    (runRepo.findLatestByStatus as ReturnType<typeof vi.fn>).mockResolvedValue({
+      id: 'prev-run',
+      configSnapshot: { seedUrls: ['https://example.com'], schema: { mode: 'fixed', userFields: [{ name: 'title' }] } },
+    });
+
+    // Config diff: field added
+    mockDiffConfigs.mockReturnValue({
+      hasChanges: true,
+      seedsAdded: [],
+      seedsRemoved: [],
+      fieldsAdded: [{ name: 'price', type: 'number' }],
+      fieldsRemoved: [],
+      fieldsModified: [],
+      potentialRenames: [],
+      crawlChanged: { proxyChanged: false, cookiesChanged: false },
+      llmChanged: false,
+      reconciliationChanged: false,
+      safetyChanged: false,
+      impact: { newTasksToEnqueue: 0, pagesNeedingReextraction: null, reextractionCostEstimate: 0.5, failedTasksToRetry: null, skippedTasksToReenqueue: null, forceFullReconciliation: false },
+    });
+
+    // Add flagForReextraction to the mock page repo
+    (pageRepo as any).flagForReextraction = vi.fn().mockResolvedValue(3);
+    (pageRepo as any).findNeedingReextraction = vi.fn().mockResolvedValue([
+      { id: 'page-1', url: 'https://example.com', contentRef: 'file:///pages/abc.html' },
+    ]);
+    (pageRepo as any).clearReextractionFlag = vi.fn().mockResolvedValue(undefined);
+
+    // Mock content store retrieve for re-extraction
+    (cfg.contentStore as any).retrieve = vi.fn().mockResolvedValue('<html><body>Cached HTML</body></html>');
+
+    const runner = new LocalPipelineRunner(cfg);
+    await runner.run();
+
+    // Should flag pages
+    expect((pageRepo as any).flagForReextraction).toHaveBeenCalledWith(
+      'proj-1',
+      expect.stringContaining('1 fields added'),
+    );
+
+    // Should re-extract flagged pages
+    expect(cfg.extractor.extract).toHaveBeenCalledWith(
+      '<html><body>Cached HTML</body></html>',
+      'https://example.com',
+      expect.anything(),
+      expect.any(String),
+    );
+
+    // Should clear flags after processing
+    expect((pageRepo as any).clearReextractionFlag).toHaveBeenCalledWith(['page-1']);
+
+    // Should update run stats with reextracted count
+    expect(adapter.runRepo.updateStats).toHaveBeenCalledWith(
+      'run-1',
+      expect.objectContaining({ pagesReextracted: 1 }),
+    );
+  });
+
+  it('skips config diff when no previous run exists', async () => {
+    const { adapter } = cfg;
+    const mockDiffConfigs = diffConfigs as ReturnType<typeof vi.fn>;
+
+    // No previous run
+    (adapter.runRepo.findLatestByStatus as ReturnType<typeof vi.fn>).mockResolvedValue(null);
+
+    const runner = new LocalPipelineRunner(cfg);
+    await runner.run();
+
+    // diffConfigs should never be called
+    expect(mockDiffConfigs).not.toHaveBeenCalled();
   });
 });

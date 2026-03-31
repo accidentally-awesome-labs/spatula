@@ -131,6 +131,35 @@ describe('SQLite Repositories (in-memory)', () => {
       const results = await adapter.pageRepo.findByIds([], tenantId);
       expect(results).toEqual([]);
     });
+
+    it('flags pages for re-extraction and queries them', async () => {
+      // Create a page with contentRef
+      const page = await adapter.pageRepo.create({
+        taskId: 'task-reex',
+        tenantId,
+        contentRef: 'file:///pages/reex.html',
+        contentHash: 'hash-reex',
+        metadata: {},
+        url: 'https://example.com/reextract',
+      });
+
+      // Flag for re-extraction
+      const flagged = await adapter.pageRepo.flagForReextraction(projectId, 'field added');
+      expect(flagged).toBeGreaterThan(0);
+
+      // Query flagged pages
+      const needsReex = await adapter.pageRepo.findNeedingReextraction(projectId);
+      expect(needsReex.length).toBeGreaterThan(0);
+      const match = needsReex.find((p: any) => p.id === page.id);
+      expect(match).toBeDefined();
+      expect(match!.contentRef).toBe('file:///pages/reex.html');
+
+      // Clear flags
+      await adapter.pageRepo.clearReextractionFlag([page.id]);
+      const afterClear = await adapter.pageRepo.findNeedingReextraction(projectId);
+      const stillFlagged = afterClear.find((p: any) => p.id === page.id);
+      expect(stillFlagged).toBeUndefined();
+    });
   });
 
   // ---------------------------------------------------------------------------

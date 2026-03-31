@@ -11,7 +11,7 @@
  *   for local query convenience — the create method accepts these as optional
  * - UUIDs via crypto.randomUUID(), timestamps via new Date().toISOString()
  */
-import { eq, inArray } from 'drizzle-orm';
+import { eq, and, inArray } from 'drizzle-orm';
 import { createLogger } from '@spatula/shared';
 import type { PageRepo } from '@spatula/core/pipeline/types.js';
 import type { ProjectDatabase } from '../connection.js';
@@ -102,5 +102,39 @@ export class SqlitePageRepository implements PageRepo {
       // The interface expects Date; SQLite stores ISO string — convert
       createdAt: new Date(row.createdAt),
     }));
+  }
+
+  /** Flag all pages for a job as needing re-extraction. */
+  async flagForReextraction(
+    jobId: string,
+    reason: string,
+  ): Promise<number> {
+    const result = this.db
+      .update(pages)
+      .set({ needsReextraction: true, reextractionReason: reason })
+      .where(eq(pages.jobId, jobId))
+      .run();
+    return result.changes;
+  }
+
+  /** Find all pages flagged for re-extraction. */
+  async findNeedingReextraction(
+    jobId: string,
+  ): Promise<Array<{ id: string; url: string | null; contentRef: string }>> {
+    return this.db
+      .select({ id: pages.id, url: pages.url, contentRef: pages.contentRef })
+      .from(pages)
+      .where(and(eq(pages.jobId, jobId), eq(pages.needsReextraction, true)))
+      .all();
+  }
+
+  /** Clear re-extraction flags for specific pages. */
+  async clearReextractionFlag(pageIds: string[]): Promise<void> {
+    if (pageIds.length === 0) return;
+    this.db
+      .update(pages)
+      .set({ needsReextraction: false, reextractionReason: null })
+      .where(inArray(pages.id, pageIds))
+      .run();
   }
 }
