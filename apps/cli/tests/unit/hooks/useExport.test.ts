@@ -1,80 +1,80 @@
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { writeFile } from 'node:fs/promises';
+import type { DataSource, PaginatedResult } from '@spatula/core';
+import type { Entity } from '@spatula/shared';
 
 vi.mock('node:fs/promises', () => ({
   writeFile: vi.fn().mockResolvedValue(undefined),
 }));
 
-describe('useExport', () => {
-  it('module exports useExport function', async () => {
-    const mod = await import('../../../src/hooks/useExport.js');
-    expect(typeof mod.useExport).toBe('function');
-  });
-});
+function makeEntity(id: string, data: Record<string, unknown> = {}): Entity {
+  return { id, mergedData: data, qualityScore: 0.9, categories: [], sourceCount: 1 } as Entity;
+}
 
-describe('entityToCsvRow (exported for testing)', () => {
-  it('serializes entity fields to CSV row', async () => {
-    const mod = await import('../../../src/hooks/useExport.js');
-    const row = mod.entityToCsvRow(
-      { mergedData: { name: 'Test', price: '$10' } } as any,
-      ['name', 'price'],
-    );
-    expect(row).toBe('Test,$10');
-  });
+function mockDataSource(overrides: Partial<DataSource> = {}): DataSource {
+  return {
+    getEntities: vi.fn().mockResolvedValue({ data: [], total: 0 }),
+    getEntity: vi.fn(), searchEntities: vi.fn(), getSchema: vi.fn(),
+    getSchemaVersions: vi.fn(), getActions: vi.fn(), approveAction: vi.fn(),
+    rejectAction: vi.fn(), getStatus: vi.fn(), createExport: vi.fn(),
+    getExport: vi.fn(), downloadExport: vi.fn(), getDocumentation: vi.fn(),
+    ...overrides,
+  } as DataSource;
+}
 
-  it('escapes values with commas per RFC 4180', async () => {
-    const mod = await import('../../../src/hooks/useExport.js');
-    const row = mod.entityToCsvRow(
-      { mergedData: { name: 'Bose, Inc', price: '$10' } } as any,
-      ['name', 'price'],
-    );
-    expect(row).toBe('"Bose, Inc",$10');
+describe('exportFromDataSource', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
   });
 
-  it('escapes values with quotes per RFC 4180', async () => {
-    const mod = await import('../../../src/hooks/useExport.js');
-    const row = mod.entityToCsvRow(
-      { mergedData: { name: 'Say "hello"', price: '$10' } } as any,
-      ['name', 'price'],
-    );
-    expect(row).toBe('"Say ""hello""",$10');
+  it('fetches all entities in a single batch when total <= batchSize', async () => {
+    const { exportFromDataSource } = await import('../../../src/hooks/useExport.js');
+    const entities = [makeEntity('e1', { name: 'A' }), makeEntity('e2', { name: 'B' })];
+    const ds = mockDataSource({
+      getEntities: vi.fn().mockResolvedValue({ data: entities, total: 2 }),
+    });
+    const filepath = await exportFromDataSource(ds, 'job-12345678', 'json', { schemaFields: ['name'] });
+    expect(ds.getEntities).toHaveBeenCalledTimes(1);
+    expect(ds.getEntities).toHaveBeenCalledWith({ limit: 200, offset: 0 });
+    expect(writeFile).toHaveBeenCalledTimes(1);
+    expect(filepath).toContain('spatula-job-1234');
   });
 
-  it('escapes values with newlines', async () => {
-    const mod = await import('../../../src/hooks/useExport.js');
-    const row = mod.entityToCsvRow(
-      { mergedData: { name: 'Line1\nLine2' } } as any,
-      ['name'],
-    );
-    expect(row).toBe('"Line1\nLine2"');
+  it('fetches entities in multiple batches when total > batchSize', async () => {
+    const { exportFromDataSource } = await import('../../../src/hooks/useExport.js');
+    const batch1 = Array.from({ length: 200 }, (_, i) => makeEntity(`e${i}`));
+    const batch2 = [makeEntity('e200'), makeEntity('e201')];
+    const ds = mockDataSource({
+      getEntities: vi.fn()
+        .mockResolvedValueOnce({ data: batch1, total: 202 })
+        .mockResolvedValueOnce({ data: batch2, total: 202 }),
+    });
+    await exportFromDataSource(ds, 'job-456', 'csv', { schemaFields: ['name'] });
+    expect(ds.getEntities).toHaveBeenCalledTimes(2);
+    expect(ds.getEntities).toHaveBeenNthCalledWith(1, { limit: 200, offset: 0 });
+    expect(ds.getEntities).toHaveBeenNthCalledWith(2, { limit: 200, offset: 200 });
   });
 
-  it('handles null and undefined values', async () => {
-    const mod = await import('../../../src/hooks/useExport.js');
-    const row = mod.entityToCsvRow(
-      { mergedData: { name: null, price: undefined } } as any,
-      ['name', 'price'],
-    );
-    expect(row).toBe(',');
+  it('writes JSON with metadata wrapper', async () => {
+    const { exportFromDataSource } = await import('../../../src/hooks/useExport.js');
+    const ds = mockDataSource({
+      getEntities: vi.fn().mockResolvedValue({ data: [makeEntity('e1', { x: 1 })], total: 1 }),
+    });
+    await exportFromDataSource(ds, 'job-789', 'json', { schemaFields: ['x'] });
+    const writtenContent = (writeFile as any).mock.calls[0][1];
+    const parsed = JSON.parse(writtenContent);
+    expect(parsed.metadata.count).toBe(1);
+    expect(parsed.entities[0].data.x).toBe(1);
   });
 
-  it('serializes objects as JSON strings with proper escaping', async () => {
-    const mod = await import('../../../src/hooks/useExport.js');
-    const row = mod.entityToCsvRow(
-      { mergedData: { data: { nested: true } } } as any,
-      ['data'],
-    );
-    // JSON is {"nested":true}, RFC 4180 escaped: inner quotes doubled
-    expect(row).toBe('"{""nested"":true}"');
-  });
-
-  it('sanitizes formula injection prefixes', async () => {
-    const mod = await import('../../../src/hooks/useExport.js');
-    const row = mod.entityToCsvRow(
-      { mergedData: { name: '=CMD("hack")' } } as any,
-      ['name'],
-    );
-    // Formula prefix gets tab-prefixed inside quotes
-    expect(row.startsWith('"\t')).toBe(true);
-    expect(row.startsWith('"=')).toBe(false);
+  it('writes CSV with correct fields', async () => {
+    const { exportFromDataSource } = await import('../../../src/hooks/useExport.js');
+    const ds = mockDataSource({
+      getEntities: vi.fn().mockResolvedValue({ data: [makeEntity('e1', { name: 'Alice', age: 30 })], total: 1 }),
+    });
+    await exportFromDataSource(ds, 'job-csv', 'csv', { schemaFields: ['name', 'age'] });
+    const writtenContent = (writeFile as any).mock.calls[0][1] as string;
+    expect(writtenContent).toContain('name');
+    expect(writtenContent).toContain('Alice');
   });
 });

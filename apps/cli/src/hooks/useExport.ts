@@ -1,12 +1,11 @@
-// TODO(Wave 3-5): Accept DataSource instead of ApiClient for local mode
-// In local mode, call dataSource methods instead of apiClient methods
-
 import { useState, useCallback, useRef } from 'react';
 import { writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import type { SpatulaApiClient } from '../api/client.js';
+import type { DataSource } from '@spatula/core';
 import type { Entity, EntityWithProvenance } from '@spatula/shared';
 import { entitiesToCsv, entityToCsvRow } from '@spatula/core';
+import { isDataSource } from './useJobPolling.js';
 
 export { entityToCsvRow };
 
@@ -46,7 +45,7 @@ export interface ExportProgress {
   entityCount?: number;
 }
 
-export function useExport(apiClient: SpatulaApiClient) {
+export function useExport(backend: DataSource | SpatulaApiClient) {
   const [isExporting, setIsExporting] = useState(false);
   const [exportProgress, setExportProgress] = useState<ExportProgress | null>(null);
   const abortRef = useRef(false);
@@ -59,11 +58,9 @@ export function useExport(apiClient: SpatulaApiClient) {
     ): Promise<string> => {
       const filename = generateFilename(options.jobId, format);
       const filepath = join(process.cwd(), filename);
-
       const fields = Object.keys(entity.mergedData);
       const content =
         format === 'csv' ? entitiesToCsv([entity], fields) : entitiesToJson([entity], options);
-
       await writeFile(filepath, content, 'utf-8');
       return filepath;
     },
@@ -72,62 +69,88 @@ export function useExport(apiClient: SpatulaApiClient) {
 
   const exportEntitySet = useCallback(
     async (
-      jobId: string,
+      targetJobId: string,
       format: 'json' | 'csv',
       options: { search?: string; filterQuery?: string; schemaFields: string[]; includeProvenance?: boolean },
     ): Promise<string> => {
       setIsExporting(true);
       setExportProgress({ status: 'pending' });
       abortRef.current = false;
-
       try {
-        // 1. Trigger server-side export
-        const exportRecord = await apiClient.createExport(jobId, {
-          format,
-          includeProvenance: options.includeProvenance,
-        });
-        const exportId = exportRecord.id as string;
-        setExportProgress({ status: 'pending' });
-
-        // 2. Poll for completion (max 5 minutes, matching worker timeout)
-        const MAX_POLL_MS = 5 * 60 * 1000;
-        const pollStart = Date.now();
-        let status = 'pending';
-        while (status !== 'completed' && status !== 'failed' && !abortRef.current) {
-          if (Date.now() - pollStart > MAX_POLL_MS) {
-            throw new Error('Export timed out — check server logs');
-          }
-          await new Promise((r) => setTimeout(r, 1000));
-          const record = await apiClient.getExport(jobId, exportId);
-          status = record.status as string;
-          setExportProgress({
-            status,
-            entityCount: record.entityCount as number | undefined,
-          });
+        if (isDataSource(backend)) {
+          return await exportFromDataSource(backend, targetJobId, format, options);
         }
-
-        if (status === 'failed') {
-          throw new Error('Export failed on server');
-        }
-        if (abortRef.current) {
-          throw new Error('Export cancelled');
-        }
-
-        // 3. Download
-        const content = await apiClient.downloadExport(jobId, exportId);
-
-        // 4. Write to file
-        const filename = generateFilename(jobId, format);
-        const filepath = join(process.cwd(), filename);
-        await writeFile(filepath, content, 'utf-8');
-        return filepath;
+        return await exportFromApi(backend, targetJobId, format, options, abortRef, setExportProgress);
       } finally {
         setIsExporting(false);
         setExportProgress(null);
       }
     },
-    [apiClient],
+    [backend],
   );
 
   return { isExporting, exportProgress, exportSingleEntity, exportEntitySet };
+}
+
+export async function exportFromDataSource(
+  ds: DataSource,
+  jobId: string,
+  format: 'json' | 'csv',
+  options: { filterQuery?: string; schemaFields: string[]; includeProvenance?: boolean },
+): Promise<string> {
+  const allEntities: Entity[] = [];
+  let offset = 0;
+  const batchSize = 200;
+  while (true) {
+    const result = await ds.getEntities({ limit: batchSize, offset });
+    allEntities.push(...result.data);
+    if (allEntities.length >= result.total) break;
+    offset += batchSize;
+  }
+  const filename = generateFilename(jobId, format);
+  const filepath = join(process.cwd(), filename);
+  const content =
+    format === 'csv'
+      ? entitiesToCsv(allEntities, options.schemaFields)
+      : entitiesToJson(allEntities, { jobId, filterQuery: options.filterQuery });
+  await writeFile(filepath, content, 'utf-8');
+  return filepath;
+}
+
+async function exportFromApi(
+  apiClient: SpatulaApiClient,
+  jobId: string,
+  format: 'json' | 'csv',
+  options: { includeProvenance?: boolean },
+  abortRef: { current: boolean },
+  setExportProgress: (p: ExportProgress) => void,
+): Promise<string> {
+  const exportRecord = await apiClient.createExport(jobId, {
+    format,
+    includeProvenance: options.includeProvenance,
+  });
+  const exportId = exportRecord.id as string;
+  setExportProgress({ status: 'pending' });
+  const MAX_POLL_MS = 5 * 60 * 1000;
+  const pollStart = Date.now();
+  let status = 'pending';
+  while (status !== 'completed' && status !== 'failed' && !abortRef.current) {
+    if (Date.now() - pollStart > MAX_POLL_MS) {
+      throw new Error('Export timed out — check server logs');
+    }
+    await new Promise((r) => setTimeout(r, 1000));
+    const record = await apiClient.getExport(jobId, exportId);
+    status = record.status as string;
+    setExportProgress({
+      status,
+      entityCount: record.entityCount as number | undefined,
+    });
+  }
+  if (status === 'failed') throw new Error('Export failed on server');
+  if (abortRef.current) throw new Error('Export cancelled');
+  const content = await apiClient.downloadExport(jobId, exportId);
+  const filename = generateFilename(jobId, format);
+  const filepath = join(process.cwd(), filename);
+  await writeFile(filepath, content, 'utf-8');
+  return filepath;
 }
