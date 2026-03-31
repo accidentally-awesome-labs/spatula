@@ -41,13 +41,6 @@ export async function testUrl(args: TestUrlArgs): Promise<void> {
     showHtml = true;
   }
 
-  // 0. Validate --skip-llm requires --schema
-  if (skipLlm && !args.schema) {
-    console.error('--skip-llm requires --schema <path> with CSS selectors defined per field.');
-    console.error('Example: spatula test https://example.com --skip-llm --schema schema.json');
-    process.exit(1);
-  }
-
   // 0b. Load schema file if provided
   let userSchema: SchemaDefinition | undefined;
   if (args.schema) {
@@ -191,14 +184,53 @@ export async function testUrl(args: TestUrlArgs): Promise<void> {
         }
       }
     } else {
-      // --skip-llm mode: use static extractor with user-provided schema
-      if (userSchema) {
-        console.log('\n  Running CSS-selector-only extraction (--skip-llm mode)');
-        // TODO: Implement CSS-only extraction path when StaticExtractor supports it
-        console.log('  CSS-only extraction not yet implemented. Provide an LLM provider for full extraction.');
+      // No LLM — use CSS-only extractor
+      const { CssExtractor } = await import('@spatula/core');
+      const cssExtractor = new CssExtractor();
+
+      const schema: SchemaDefinition = userSchema ?? {
+        version: 1,
+        fields: [],
+        fieldAliases: [],
+        createdAt: new Date(),
+        parentVersion: null,
+      };
+
+      console.log('\n  Running CSS-only extraction (no LLM configured)');
+      if (!userSchema) {
+        console.log('  Hint: configure an LLM provider for better extraction results.');
+        console.log('  Set LLM_PROVIDER=ollama or OPENROUTER_API_KEY=...\n');
+      }
+
+      const extraction = await cssExtractor.extract(result.html, url, schema, 'Extract data');
+
+      if (format === 'json') {
+        console.log(JSON.stringify({
+          url,
+          crawl: {
+            statusCode: result.statusCode,
+            responseTimeMs: result.metadata.responseTimeMs,
+            contentLength: result.metadata.contentLength,
+          },
+          extractor: 'css-only',
+          extraction: {
+            fields: extraction.data,
+            unmapped: extraction.metadata.unmappedFields,
+          },
+        }, null, 2));
       } else {
-        console.log('\n  No LLM configured. Run with an LLM provider for AI extraction.');
-        console.log('  Set LLM_PROVIDER=ollama or OPENROUTER_API_KEY=...');
+        console.log('\n  Extracted Fields (CSS-only)');
+        console.log('  ' + '-'.repeat(60));
+        const data = extraction.data as Record<string, unknown>;
+        for (const [key, value] of Object.entries(data)) {
+          const valueStr = typeof value === 'string'
+            ? (value.length > 50 ? value.slice(0, 47) + '...' : value)
+            : JSON.stringify(value);
+          console.log(`  ${key.padEnd(20)} ${valueStr}`);
+        }
+        if (Object.keys(data).length === 0) {
+          console.log('  (no data extracted — try providing a --schema file)');
+        }
       }
     }
   } finally {

@@ -26,6 +26,22 @@ vi.mock('@spatula/core', () => {
     StaticExtractor: vi.fn().mockImplementation(() => ({
       extract: vi.fn(),
     })),
+    CssExtractor: vi.fn().mockImplementation(() => ({
+      extract: vi.fn().mockResolvedValue({
+        id: 'test-id',
+        jobId: 'test-job-id',
+        pageId: 'test-page-id',
+        schemaVersion: 1,
+        data: { title: 'Test Title' },
+        metadata: {
+          confidence: 0.3,
+          modelUsed: 'css-extractor',
+          tokensUsed: 0,
+          extractionTimeMs: 0,
+          unmappedFields: [],
+        },
+      }),
+    })),
     preprocessHTML: vi.fn().mockReturnValue({ content: '<html/>' }),
   };
 });
@@ -59,18 +75,29 @@ describe('testUrl error paths', () => {
     delete process.env.FIRECRAWL_API_KEY;
   });
 
-  it('exits with code 1 when --skip-llm is used without --schema', async () => {
+  it('runs CSS-only extraction when --skip-llm is used without --schema', async () => {
+    const { CssExtractor, PlaywrightCrawler } = await import('@spatula/core');
+    const mockCrawl = vi.fn().mockResolvedValue({
+      html: '<html><body><h1>Test</h1></body></html>',
+      statusCode: 200,
+      links: [],
+      contentType: 'text/html',
+      metadata: { responseTimeMs: 100, contentLength: 1024 },
+    });
+    (PlaywrightCrawler as ReturnType<typeof vi.fn>).mockImplementationOnce(() => ({
+      crawl: mockCrawl,
+      close: vi.fn(),
+    }));
+
     const { testUrl } = await import('../../../src/commands/test-url.js');
 
+    // Should not throw — CSS auto-discovery mode works without a schema
     await expect(
       testUrl({ url: 'https://example.com', skipLlm: true }),
-    ).rejects.toThrow('process.exit(1)');
+    ).resolves.toBeUndefined();
 
-    expect(exitSpy).toHaveBeenCalledWith(1);
-
-    // Verify the error message mentions the requirement
-    const errorMessages = errorSpy.mock.calls.map((args) => String(args[0])).join('\n');
-    expect(errorMessages).toContain('--skip-llm requires --schema');
+    expect(exitSpy).not.toHaveBeenCalled();
+    expect(CssExtractor).toHaveBeenCalled();
   });
 
   it('exits with code 1 when firecrawl crawler is used without FIRECRAWL_API_KEY', async () => {
