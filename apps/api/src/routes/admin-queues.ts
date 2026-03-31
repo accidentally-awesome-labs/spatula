@@ -13,6 +13,7 @@ export function createQueueDashboard(queues: SpatulaQueues) {
     new BullMQAdapter(queues.schemaEvolution),
     new BullMQAdapter(queues.reconciliation),
     new BullMQAdapter(queues.export),
+    new BullMQAdapter(queues.webhook),
   ];
 
   createBullBoard({ queues: queueAdapters, serverAdapter });

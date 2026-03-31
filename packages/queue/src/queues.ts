@@ -1,5 +1,6 @@
 import { Queue } from 'bullmq';
 import type { ConnectionOptions } from 'bullmq';
+import type { WebhookEvent } from '@spatula/shared';
 
 export const QUEUE_NAMES = {
   CRAWL: 'spatula.crawl',
@@ -7,6 +8,7 @@ export const QUEUE_NAMES = {
   SCHEMA_EVOLUTION: 'spatula.schema-evolution',
   RECONCILIATION: 'spatula.reconciliation',
   EXPORT: 'spatula.export',
+  WEBHOOK: 'spatula.webhooks',
 } as const;
 
 export interface CrawlJobData {
@@ -45,6 +47,12 @@ export interface ExportJobPayload {
   includeProvenance: boolean;
   minQuality?: number;
   fields?: string[];
+}
+
+export interface WebhookJobData {
+  url: string;
+  event: WebhookEvent;
+  secret?: string;
 }
 
 export interface QueueConfig {
@@ -108,6 +116,7 @@ export interface SpatulaQueues {
   schemaEvolution: Queue<SchemaEvolutionJobData>;
   reconciliation: Queue<ReconciliationJobData>;
   export: Queue<ExportJobPayload>;
+  webhook: Queue<WebhookJobData>;
   config: QueueConfig;
   closeAll(): Promise<void>;
 }
@@ -138,6 +147,15 @@ export function createQueues(
     connection,
     defaultJobOptions: QUEUE_JOB_OPTIONS[QUEUE_NAMES.EXPORT],
   });
+  const webhook = new Queue<WebhookJobData>(QUEUE_NAMES.WEBHOOK, {
+    connection,
+    defaultJobOptions: {
+      attempts: 3,
+      backoff: { type: 'custom' as const },  // Paired with worker's backoffStrategy: 1m, 5m, 30m
+      removeOnComplete: 100,
+      removeOnFail: 500,
+    },
+  });
 
   return {
     crawl,
@@ -145,6 +163,7 @@ export function createQueues(
     schemaEvolution,
     reconciliation,
     export: exportQueue,
+    webhook,
     config,
     async closeAll() {
       await Promise.all([
@@ -153,6 +172,7 @@ export function createQueues(
         schemaEvolution.close(),
         reconciliation.close(),
         exportQueue.close(),
+        webhook.close(),
       ]);
     },
   };

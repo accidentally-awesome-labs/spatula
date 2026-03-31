@@ -14,6 +14,7 @@ import { processExportJob } from './workers/export-worker.js';
 import { QUEUE_NAMES, DEFAULT_QUEUE_CONFIG, createQueues } from './queues.js';
 import { parseEnabledWorkers, isWorkerEnabled } from './worker-selection.js';
 import { WorkerHeartbeat } from './worker-heartbeat.js';
+import { createWebhookWorker } from './webhook-worker.js';
 import type { WorkerDeps } from './worker-deps.js';
 import type { CrawlJobData, SchemaEvolutionJobData, ReconciliationJobData, ExportJobPayload } from './queues.js';
 
@@ -143,6 +144,13 @@ async function main() {
     logger.info({ queue: QUEUE_NAMES.EXPORT }, 'Export worker started');
   }
 
+  if (isEnabled('webhook')) {
+    const webhookWorker = createWebhookWorker(workerConnection);
+    webhookWorker.on('failed', (job, err) => void dlqHandler(job, err));
+    workers.push(webhookWorker);
+    logger.info({ queue: QUEUE_NAMES.WEBHOOK }, 'Webhook worker started');
+  }
+
   // NOTE: No worker for QUEUE_NAMES.EXTRACT — extraction is performed
   // inline by the crawl worker. The extract queue exists for future use.
 
@@ -154,6 +162,7 @@ async function main() {
     'schema-evolution': QUEUE_NAMES.SCHEMA_EVOLUTION,
     reconciliation: QUEUE_NAMES.RECONCILIATION,
     export: QUEUE_NAMES.EXPORT,
+    webhook: QUEUE_NAMES.WEBHOOK,
   })
     .filter(([name]) => isEnabled(name))
     .map(([, queueName]) => queueName);

@@ -10,9 +10,13 @@ export type {
   SchemaEvolutionJobData,
   ReconciliationJobData,
   ExportJobPayload,
+  WebhookJobData,
   SpatulaQueues,
   QueueConfig,
 } from './queues.js';
+
+// Webhook
+export { WebhookSender } from './webhook-sender.js';
 
 // Job Manager
 export { JobManager } from './job-manager.js';
