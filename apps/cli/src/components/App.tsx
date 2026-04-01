@@ -118,6 +118,13 @@ export function App({
         {mode === 'explorer' && apiClient && (
           <ExplorerView store={store} apiClient={apiClient} />
         )}
+        {(mode === 'dashboard' || mode === 'review' || mode === 'explorer') && !apiClient && (
+          <Box paddingX={2} paddingY={1}>
+            <Text color="yellow">
+              {mode.charAt(0).toUpperCase() + mode.slice(1)} mode requires a remote connection. Use `spatula run` for local crawling, or set SPATULA_TENANT_ID for remote mode.
+            </Text>
+          </Box>
+        )}
       </Box>
       <KeyboardHints hints={hintsForMode(mode)} />
     </Box>

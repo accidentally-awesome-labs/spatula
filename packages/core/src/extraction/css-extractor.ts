@@ -138,9 +138,16 @@ function findText($: cheerio.CheerioAPI, fieldName: string): string | null {
 }
 
 function findList($: cheerio.CheerioAPI, fieldName: string): string[] | null {
-  const list = $(`[class*="${fieldName}"] li, ul li, ol li`).slice(0, 20);
-  if (list.length > 0) {
-    const items = list.map((_, el) => $(el).text().trim()).get().filter(Boolean);
+  // Priority 1: lists with matching class
+  const classMatch = $(`[class*="${fieldName}"] li`).slice(0, 20);
+  if (classMatch.length > 0) {
+    const items = classMatch.map((_, el) => $(el).text().trim()).get().filter(Boolean);
+    if (items.length > 0) return items;
+  }
+  // Priority 2: generic lists (only as fallback)
+  const generic = $('ul li, ol li').slice(0, 20);
+  if (generic.length > 0) {
+    const items = generic.map((_, el) => $(el).text().trim()).get().filter(Boolean);
     if (items.length > 0) return items;
   }
   return null;

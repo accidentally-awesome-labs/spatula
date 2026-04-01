@@ -46,11 +46,8 @@ export async function runSetupCommand(): Promise<void> {
       const defaultKey = existing?.openrouterApiKey ? '(keep existing)' : '';
       const key = await prompt(rl, `  OpenRouter API key ${defaultKey}: `);
       answers.openrouterApiKey = key || existing?.openrouterApiKey;
-    } else {
-      const defaultUrl = 'http://localhost:11434';
-      const url = await prompt(rl, `  Ollama base URL [${defaultUrl}]: `);
-      answers.ollamaBaseUrl = url || defaultUrl;
     }
+    // Note: Ollama base URL is configured via OLLAMA_BASE_URL env var, not global config
 
     const defaultModel = existing?.llm?.model ?? '';
     const model = await prompt(rl, `  Default LLM model [${defaultModel || 'auto'}]: `);
