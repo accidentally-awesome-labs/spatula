@@ -3,11 +3,18 @@
  * Spatula CLI — AI-powered intelligent web crawling.
  *
  * Commands:
- *   init     Initialise a new Spatula project in the current directory
- *   new      Launch interactive conversational mode to configure and start a crawl job
- *   list     List crawl jobs
- *   status   Show details for a specific job
- *   test     Test extraction on a single page (no DB/API required)
+ *   init      Initialise a new Spatula project in the current directory
+ *   new       Launch interactive conversational mode to configure a crawl
+ *   run       Run the local crawl pipeline for the current project
+ *   status    Show local project status or remote job details
+ *   add       Add seed URLs to spatula.yaml
+ *   config    Open spatula.yaml in your editor
+ *   setup     Configure global settings (~/.spatula/config.yaml)
+ *   estimate  Estimate the LLM cost for the current project
+ *   doctor    Run system health checks
+ *   reset     Reset the .spatula/ working directory
+ *   test      Test extraction on a single page
+ *   list      (deprecated) List remote crawl jobs
  */
 
 import yargs from 'yargs';
@@ -18,6 +25,8 @@ import { runInitCommand, formatInitResult } from './commands/init.js';
 import { runRunCommand } from './commands/run.js';
 import { runResetCommand, formatResetResult } from './commands/reset.js';
 import { runDoctorCommand } from './commands/doctor.js';
+import { runAddCommand, formatAddResult } from './commands/add.js';
+import { runConfigCommand } from './commands/config.js';
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -152,6 +161,68 @@ yargs(hideBin(process.argv))
     () => {},
     async () => {
       await runDoctorCommand();
+    },
+  )
+
+  // -------------------------------------------------------------------------
+  // add — add seed URLs to spatula.yaml
+  // -------------------------------------------------------------------------
+  .command(
+    'add <urls..>',
+    'Add seed URLs to the project',
+    (y) =>
+      y.positional('urls', {
+        type: 'string',
+        array: true,
+        demandOption: true,
+        describe: 'URLs to add as seeds',
+      }),
+    async (argv) => {
+      try {
+        const result = await runAddCommand(argv.urls as string[]);
+        console.log(formatAddResult(result));
+      } catch (err: unknown) {
+        console.error(err instanceof Error ? err.message : 'An unexpected error occurred');
+        process.exit(1);
+      }
+    },
+  )
+
+  // -------------------------------------------------------------------------
+  // config — open spatula.yaml in editor
+  // -------------------------------------------------------------------------
+  .command(
+    'config',
+    'Open spatula.yaml in your editor',
+    () => {},
+    async () => {
+      await runConfigCommand();
+    },
+  )
+
+  // -------------------------------------------------------------------------
+  // setup — interactive global config setup
+  // -------------------------------------------------------------------------
+  .command(
+    'setup',
+    'Configure global Spatula settings (~/.spatula/config.yaml)',
+    () => {},
+    async () => {
+      const { runSetupCommand } = await import('./commands/setup.js');
+      await runSetupCommand();
+    },
+  )
+
+  // -------------------------------------------------------------------------
+  // estimate — estimate crawl cost
+  // -------------------------------------------------------------------------
+  .command(
+    'estimate',
+    'Estimate the LLM cost for the current project',
+    () => {},
+    async () => {
+      const { runEstimateCommand } = await import('./commands/estimate.js');
+      await runEstimateCommand();
     },
   )
 
