@@ -13,7 +13,7 @@ import type { KeyHint } from './shared/index.js';
 
 export interface AppProps {
   store: CliStore;
-  apiClient: SpatulaApiClient;
+  apiClient: SpatulaApiClient | null;
   onStartJob: (config: Record<string, unknown>) => void;
   onExit: () => void;
 }
@@ -109,13 +109,13 @@ export function App({
         {mode === 'conversational' && (
           <ConversationalView store={store} onStartJob={onStartJob} />
         )}
-        {mode === 'dashboard' && (
+        {mode === 'dashboard' && apiClient && (
           <DashboardView store={store} apiClient={apiClient} />
         )}
-        {mode === 'review' && (
+        {mode === 'review' && apiClient && (
           <ReviewView store={store} apiClient={apiClient} />
         )}
-        {mode === 'explorer' && (
+        {mode === 'explorer' && apiClient && (
           <ExplorerView store={store} apiClient={apiClient} />
         )}
       </Box>

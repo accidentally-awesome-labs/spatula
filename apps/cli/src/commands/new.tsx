@@ -8,8 +8,11 @@
 
 import React from 'react';
 import { render } from 'ink';
+import { writeFileSync, mkdirSync, existsSync } from 'node:fs';
+import { join } from 'node:path';
+import { stringify as stringifyYaml } from 'yaml';
 import { OpenRouterClient } from '@spatula/core';
-import type { ConfigAction } from '@spatula/core';
+import type { ConfigAction, JobConfig } from '@spatula/core';
 import { createCliStore } from '../store/index.js';
 import { SpatulaApiClient } from '../api/client.js';
 import { ConfigConversationService } from '../services/config-conversation.js';
@@ -22,9 +25,39 @@ import type { CliStore } from '../store/index.js';
 
 export interface NewCommandOptions {
   apiUrl: string;
-  tenantId: string;
-  openrouterApiKey: string;
+  tenantId?: string;
+  openrouterApiKey?: string;
   model?: string;
+}
+
+// ---------------------------------------------------------------------------
+// YAML serialisation
+// ---------------------------------------------------------------------------
+
+/**
+ * Convert a JobConfig into the minimal spatula.yaml representation.
+ * Default values are omitted to keep the file clean.
+ */
+export function configToYaml(config: JobConfig): string {
+  const yamlObj: Record<string, unknown> = {
+    name: config.name,
+    description: config.description,
+    seeds: config.seedUrls,
+  };
+  if (config.crawl.maxDepth !== 2) yamlObj.depth = config.crawl.maxDepth;
+  if (config.crawl.maxPages !== 1000) yamlObj.limit = config.crawl.maxPages;
+  if (config.crawl.crawlerType !== 'playwright') yamlObj.crawler = config.crawl.crawlerType;
+  if (config.schema.userFields?.length) {
+    yamlObj.fields = config.schema.userFields.map((f) => ({
+      field: f.name,
+      type: f.type,
+      ...(f.required ? { required: true } : {}),
+    }));
+  }
+  if (config.schema.mode && config.schema.mode !== 'discovery') {
+    yamlObj.schema = { mode: config.schema.mode };
+  }
+  return stringifyYaml(yamlObj, { lineWidth: 0 });
 }
 
 // ---------------------------------------------------------------------------
@@ -45,7 +78,7 @@ async function handleUserMessage(
   userMessage: string,
   store: CliStore,
   conversationService: ConfigConversationService,
-  apiClient: SpatulaApiClient,
+  apiClient: SpatulaApiClient | null,
 ): Promise<void> {
   const state = store.getState();
   state.setLoading(true);
@@ -94,11 +127,12 @@ async function handleUserMessage(
 }
 
 /**
- * Validate configuration, create the job via the API, and start it.
+ * Validate configuration, create the job via the API (or write local files),
+ * and start it.
  */
 async function handleConfirmAndStart(
   store: CliStore,
-  apiClient: SpatulaApiClient,
+  apiClient: SpatulaApiClient | null,
   responseText: string,
 ): Promise<void> {
   const state = store.getState();
@@ -109,6 +143,21 @@ async function handleConfirmAndStart(
     state.addMessage({
       role: 'assistant',
       content: `The configuration is incomplete:\n${issues}\n\nPlease address these and try again.`,
+    });
+    return;
+  }
+
+  // Local mode — no API client configured
+  if (!apiClient) {
+    const cwd = process.cwd();
+    const yamlPath = join(cwd, 'spatula.yaml');
+    const spatulaDir = join(cwd, '.spatula');
+    const yamlContent = configToYaml(state.config as unknown as JobConfig);
+    writeFileSync(yamlPath, yamlContent, 'utf-8');
+    if (!existsSync(spatulaDir)) mkdirSync(spatulaDir, { recursive: true });
+    state.addMessage({
+      role: 'assistant',
+      content: 'Project created! Files written:\n  - spatula.yaml\n  - .spatula/\n\nRun `spatula run` to start crawling.',
     });
     return;
   }
@@ -142,11 +191,20 @@ async function handleConfirmAndStart(
  * Launch the interactive conversational mode.
  */
 export async function runNewCommand(options: NewCommandOptions): Promise<void> {
-  const { apiUrl, tenantId, openrouterApiKey, model } = options;
+  const { apiUrl, model } = options;
 
-  // Create dependencies
+  const openrouterApiKey = options.openrouterApiKey ?? process.env.OPENROUTER_API_KEY;
+  if (!openrouterApiKey) {
+    console.error('OPENROUTER_API_KEY is required for conversational mode.');
+    console.error('To create a project without an LLM, use `spatula init <url>` instead.');
+    process.exit(1);
+  }
+
+  const tenantId = options.tenantId ?? 'local';
   const store = createCliStore(tenantId);
-  const apiClient = new SpatulaApiClient(apiUrl, tenantId);
+  const apiClient = options.tenantId
+    ? new SpatulaApiClient(apiUrl, options.tenantId)
+    : null;
   const llmClient = new OpenRouterClient({ apiKey: openrouterApiKey });
   const conversationService = new ConfigConversationService(
     llmClient,

@@ -13,7 +13,6 @@
 import yargs from 'yargs';
 import { hideBin } from 'yargs/helpers';
 import { SpatulaApiClient } from './api/client.js';
-import { runListCommand, formatJobsTable } from './commands/list.js';
 import { runStatusCommand, runLocalStatusCommand, formatJobDetail } from './commands/status.js';
 import { runInitCommand, formatInitResult } from './commands/init.js';
 import { runRunCommand } from './commands/run.js';
@@ -168,15 +167,15 @@ yargs(hideBin(process.argv))
         describe: 'LLM model to use for conversation',
       }),
     async (argv) => {
-      const tenantId = argv.tenantId || getEnvOrFail('SPATULA_TENANT_ID');
-      const openrouterApiKey = getEnvOrFail('OPENROUTER_API_KEY');
+      const tenantId = argv.tenantId || process.env.SPATULA_TENANT_ID || '';
+      const openrouterApiKey = process.env.OPENROUTER_API_KEY ?? '';
 
       // Dynamic import to avoid loading React/Ink for non-interactive commands
       const { runNewCommand } = await import('./commands/new.js');
       await runNewCommand({
         apiUrl: argv.apiUrl,
-        tenantId,
-        openrouterApiKey,
+        tenantId: tenantId || undefined,
+        openrouterApiKey: openrouterApiKey || undefined,
         model: argv.model,
       });
     },
@@ -199,6 +198,8 @@ yargs(hideBin(process.argv))
           describe: 'Maximum number of jobs to return',
         }),
     async (argv) => {
+      const { runListCommand, formatJobsTable, printListDeprecation } = await import('./commands/list.js');
+      printListDeprecation();
       const tenantId = argv.tenantId || getEnvOrFail('SPATULA_TENANT_ID');
       const client = getApiClient({ apiUrl: argv.apiUrl, tenantId });
       const jobs = await runListCommand(client, {
@@ -231,6 +232,7 @@ yargs(hideBin(process.argv))
         }
         return;
       }
+      console.warn('\n  ⚠ `spatula status <jobId>` (remote) is deprecated. Use `spatula remote status <name>` (coming in a future release).\n');
       const tenantId = argv.tenantId || getEnvOrFail('SPATULA_TENANT_ID');
       const client = getApiClient({ apiUrl: argv.apiUrl, tenantId });
       const job = await runStatusCommand(client, argv.jobId);
