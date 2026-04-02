@@ -12,8 +12,12 @@
  *   setup     Configure global settings (~/.spatula/config.yaml)
  *   estimate  Estimate the LLM cost for the current project
  *   doctor    Run system health checks
- *   reset     Reset the .spatula/ working directory
+ *   schema    Display the current project schema
  *   logs      View structured log files from previous runs
+ *   export    Export entities to a file
+ *   explore   Browse and filter extracted entities
+ *   review    Review pending schema actions
+ *   reset     Reset the .spatula/ working directory
  *   test      Test extraction on a single page
  *   list      (deprecated) List remote crawl jobs
  */
@@ -341,6 +345,94 @@ yargs(hideBin(process.argv))
         errors: argv.errors,
         tail: argv.tail,
       });
+    },
+  )
+
+  // -------------------------------------------------------------------------
+  // schema — show project schema
+  // -------------------------------------------------------------------------
+  .command(
+    'schema',
+    'Display the current project schema',
+    (y) =>
+      y
+        .option('versions', {
+          type: 'boolean',
+          default: false,
+          describe: 'Show version history',
+        })
+        .option('json', {
+          type: 'boolean',
+          default: false,
+          describe: 'Output raw schema as JSON',
+        }),
+    async (argv) => {
+      const { runSchemaCommand } = await import('./commands/schema.js');
+      await runSchemaCommand({ versions: argv.versions, json: argv.json });
+    },
+  )
+
+  // -------------------------------------------------------------------------
+  // export — export entities to file
+  // -------------------------------------------------------------------------
+  .command(
+    'export',
+    'Export entities to a file',
+    (y) =>
+      y
+        .option('format', {
+          type: 'string',
+          choices: ['json', 'csv', 'sqlite', 'parquet', 'duckdb'] as const,
+          default: 'json',
+          describe: 'Export format',
+        })
+        .option('output', {
+          type: 'string',
+          describe: 'Output file path (default: .spatula/exports/<timestamp>.<format>)',
+        })
+        .option('include-provenance', {
+          type: 'boolean',
+          default: false,
+          describe: 'Include provenance data (JSON only)',
+        })
+        .option('min-quality', {
+          type: 'number',
+          describe: 'Minimum quality score filter (0-1)',
+        }),
+    async (argv) => {
+      const { runExportCommand } = await import('./commands/export.js');
+      await runExportCommand({
+        format: argv.format,
+        output: argv.output,
+        includeProvenance: argv.includeProvenance,
+        minQuality: argv.minQuality,
+      });
+    },
+  )
+
+  // -------------------------------------------------------------------------
+  // explore — entity browser TUI
+  // -------------------------------------------------------------------------
+  .command(
+    'explore',
+    'Browse and filter extracted entities',
+    () => {},
+    async () => {
+      const { runExploreCommand } = await import('./commands/explore.js');
+      await runExploreCommand();
+    },
+  )
+
+  // -------------------------------------------------------------------------
+  // review — action review TUI
+  // -------------------------------------------------------------------------
+  .command(
+    'review',
+    'Review pending schema actions',
+    () => {},
+    async () => {
+      const { runReviewCommand } = await import('./commands/review.js');
+      await runReviewCommand();
     },
   )
 
