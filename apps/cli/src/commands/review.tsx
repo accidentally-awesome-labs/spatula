@@ -7,7 +7,7 @@
  */
 
 import React, { useCallback } from 'react';
-import { render, Box, Text } from 'ink';
+import { render, Box } from 'ink';
 import { useStore } from 'zustand';
 import { openLocalProject } from '../local-project.js';
 import { createCliStore } from '../store/index.js';
