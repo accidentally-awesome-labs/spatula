@@ -159,6 +159,7 @@ export function ExplorerView({
     return: () => { void openDetail(); },
     f: () => { store.getState().setFilterFocused(true); },
     F: () => { store.getState().setFilterFocused(true); },
+    '/': () => { store.getState().setFilterFocused(true); },
     e: () => { setSubView('export'); },
     E: () => { setSubView('export'); },
     n: nextPage,

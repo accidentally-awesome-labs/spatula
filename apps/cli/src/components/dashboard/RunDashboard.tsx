@@ -75,8 +75,24 @@ export function RunDashboard({
 
       <Box flexDirection="column" gap={1}>
         <ProgressPanel job={jobData ?? {}} />
-        <SchemaPanel schema={schemaData} />
-        <EntityPreview entities={entityPreviews} />
+        <Box>
+          <Box flexDirection="column" flexGrow={1}>
+            <SchemaPanel schema={schemaData} />
+          </Box>
+          <Box flexDirection="column" width={40}>
+            <EntityPreview entities={entityPreviews} />
+          </Box>
+        </Box>
+        {jobData && Number(jobData.errors ?? jobData.errorCount ?? 0) > 0 && (
+          <Box>
+            <Text color="red" bold>
+              Errors: {String(jobData.errors ?? jobData.errorCount ?? 0)}
+            </Text>
+            {jobData.lastError ? (
+              <Text color="red" dimColor> — {String(jobData.lastError)}</Text>
+            ) : null}
+          </Box>
+        )}
       </Box>
 
       <Box marginTop={1}>

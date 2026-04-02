@@ -102,28 +102,48 @@ export function formatVersionHistory(versions: SchemaVersionRecord[]): string {
   lines.push(`Schema History  (${versions.length} version${versions.length === 1 ? '' : 's'})`);
   lines.push('');
 
+  // Build a map of version → field names for diff computation
+  const versionFieldMap = new Map<number, Set<string>>();
+  for (const v of versions) {
+    versionFieldMap.set(v.version, new Set(v.definition.fields.map((f) => f.name)));
+  }
+
+  function computeDiff(ver: SchemaVersionRecord): string {
+    if (ver.definition.parentVersion == null) return '(initial)';
+    const parentFields = versionFieldMap.get(ver.definition.parentVersion);
+    if (!parentFields) return '';
+    const currentFields = new Set(ver.definition.fields.map((f) => f.name));
+    const added = [...currentFields].filter((f) => !parentFields.has(f));
+    const removed = [...parentFields].filter((f) => !currentFields.has(f));
+    const parts: string[] = [];
+    if (added.length > 0) parts.push(`+${added.length} field${added.length > 1 ? 's' : ''}`);
+    if (removed.length > 0) parts.push(`-${removed.length} field${removed.length > 1 ? 's' : ''}`);
+    return parts.length > 0 ? parts.join(', ') : 'no changes';
+  }
+
   const versionHeader = 'Version';
   const fieldsHeader = 'Fields';
-  const parentHeader = 'Parent';
+  const diffHeader = 'Changes';
   const createdHeader = 'Created At';
 
+  const diffs = versions.map(computeDiff);
   const versionWidth = Math.max(versionHeader.length, ...versions.map((v) => `v${v.version}`.length));
   const fieldsWidth = Math.max(fieldsHeader.length, ...versions.map((v) => String(v.definition.fields.length).length));
-  const parentWidth = Math.max(parentHeader.length, ...versions.map((v) => (v.definition.parentVersion != null ? `v${v.definition.parentVersion}` : '-').length));
+  const diffWidth = Math.max(diffHeader.length, ...diffs.map((d) => d.length));
   const createdWidth = Math.max(createdHeader.length, ...versions.map((v) => v.createdAt.length));
 
-  const header = `  ${versionHeader.padEnd(versionWidth)}  ${fieldsHeader.padEnd(fieldsWidth)}  ${parentHeader.padEnd(parentWidth)}  ${createdHeader.padEnd(createdWidth)}`;
-  const separator = `  ${'-'.repeat(versionWidth)}  ${'-'.repeat(fieldsWidth)}  ${'-'.repeat(parentWidth)}  ${'-'.repeat(createdWidth)}`;
+  const header = `  ${versionHeader.padEnd(versionWidth)}  ${fieldsHeader.padEnd(fieldsWidth)}  ${diffHeader.padEnd(diffWidth)}  ${createdHeader.padEnd(createdWidth)}`;
+  const separator = `  ${'-'.repeat(versionWidth)}  ${'-'.repeat(fieldsWidth)}  ${'-'.repeat(diffWidth)}  ${'-'.repeat(createdWidth)}`;
 
   lines.push(header);
   lines.push(separator);
 
-  for (const ver of versions) {
+  for (let i = 0; i < versions.length; i++) {
+    const ver = versions[i];
     const v = `v${ver.version}`;
     const fields = String(ver.definition.fields.length);
-    const parent = ver.definition.parentVersion != null ? `v${ver.definition.parentVersion}` : '-';
     lines.push(
-      `  ${v.padEnd(versionWidth)}  ${fields.padEnd(fieldsWidth)}  ${parent.padEnd(parentWidth)}  ${ver.createdAt}`,
+      `  ${v.padEnd(versionWidth)}  ${fields.padEnd(fieldsWidth)}  ${diffs[i].padEnd(diffWidth)}  ${ver.createdAt}`,
     );
   }
 

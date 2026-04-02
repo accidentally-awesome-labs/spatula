@@ -143,7 +143,7 @@ describe('formatVersionHistory', () => {
     // Column headers
     expect(output).toContain('Version');
     expect(output).toContain('Fields');
-    expect(output).toContain('Parent');
+    expect(output).toContain('Changes');
     expect(output).toContain('Created At');
 
     // Version rows
@@ -151,13 +151,9 @@ describe('formatVersionHistory', () => {
     expect(output).toContain('v2');
     expect(output).toContain('v1');
 
-    // Field counts
-    expect(output).toContain('3');
-    expect(output).toContain('2');
-    expect(output).toContain('1');
-
-    // Parent column — v1 has no parent
-    expect(output).toContain('-');
+    // Diff summaries — v3 added 1 field vs v2, v2 added 1 field vs v1, v1 is initial
+    expect(output).toContain('+1 field');
+    expect(output).toContain('(initial)');
   });
 
   it('returns a no-versions message when array is empty', () => {

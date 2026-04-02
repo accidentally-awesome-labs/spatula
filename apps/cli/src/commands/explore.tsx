@@ -21,9 +21,9 @@ import { Header } from '../components/shared/index.js';
 // Types
 // ---------------------------------------------------------------------------
 
-type SortOrder = 'default' | 'quality' | 'date';
+type SortOrder = 'default' | 'quality' | 'date' | 'name';
 
-const SORT_CYCLE: SortOrder[] = ['default', 'quality', 'date'];
+const SORT_CYCLE: SortOrder[] = ['default', 'quality', 'date', 'name'];
 
 // ---------------------------------------------------------------------------
 // Store factory -- exported for testability
@@ -70,6 +70,16 @@ function ExploreApp({ store, backend, onQuit }: ExploreAppProps): React.ReactEle
         const sorted = [...state.entities].sort((a, b) =>
           b.createdAt.localeCompare(a.createdAt),
         );
+        state.setEntities(sorted);
+      } else if (next === 'name') {
+        // Sort by first field value alphabetically
+        const sorted = [...state.entities].sort((a, b) => {
+          const aKeys = Object.keys(a.mergedData).sort();
+          const bKeys = Object.keys(b.mergedData).sort();
+          const aVal = String(a.mergedData[aKeys[0]] ?? '');
+          const bVal = String(b.mergedData[bKeys[0]] ?? '');
+          return aVal.localeCompare(bVal);
+        });
         state.setEntities(sorted);
       } else {
         // 'default' -- re-fetch page 0 to restore server order
