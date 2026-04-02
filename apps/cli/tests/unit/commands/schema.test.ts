@@ -1,5 +1,10 @@
-import { describe, it, expect } from 'vitest';
-import { formatSchemaTable, formatVersionHistory } from '../../../src/commands/schema.js';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { formatSchemaTable, formatVersionHistory, runSchemaCommand } from '../../../src/commands/schema.js';
+import { openLocalProject } from '../../../src/local-project.js';
+
+vi.mock('../../../src/local-project.js', () => ({
+  openLocalProject: vi.fn(),
+}));
 
 // ---------------------------------------------------------------------------
 // formatSchemaTable
@@ -181,5 +186,114 @@ describe('formatVersionHistory', () => {
     const output = formatVersionHistory(versions);
     expect(output).toContain('1 version)');
     expect(output).not.toContain('1 versions');
+  });
+});
+
+// ---------------------------------------------------------------------------
+// runSchemaCommand
+// ---------------------------------------------------------------------------
+
+describe('runSchemaCommand', () => {
+  const mockSchema = {
+    id: 'schema-1',
+    version: 2,
+    definition: {
+      version: 2,
+      fields: [
+        { name: 'title', type: 'string', required: true, description: 'Title' },
+      ],
+      fieldAliases: [],
+      createdAt: '2026-03-30T00:00:00Z',
+      parentVersion: 1,
+    },
+  };
+
+  const mockVersions = [
+    {
+      id: 'v1-id',
+      version: 1,
+      definition: {
+        version: 1,
+        fields: [{ name: 'title', type: 'string', required: true, description: 'Title' }],
+        fieldAliases: [],
+        createdAt: '2026-03-30T00:00:00Z',
+        parentVersion: null,
+      },
+      parentId: null,
+      createdAt: '2026-03-30T00:00:00Z',
+    },
+  ];
+
+  let mockClose: ReturnType<typeof vi.fn>;
+  let mockGetSchema: ReturnType<typeof vi.fn>;
+  let mockGetSchemaVersions: ReturnType<typeof vi.fn>;
+  let consoleSpy: ReturnType<typeof vi.spyOn>;
+
+  beforeEach(() => {
+    mockClose = vi.fn();
+    mockGetSchema = vi.fn().mockResolvedValue(mockSchema);
+    mockGetSchemaVersions = vi.fn().mockResolvedValue(mockVersions);
+
+    (openLocalProject as any).mockResolvedValue({
+      dataSource: {
+        getSchema: mockGetSchema,
+        getSchemaVersions: mockGetSchemaVersions,
+      },
+      projectRoot: '/tmp/test',
+      projectId: 'test-project',
+      close: mockClose,
+    });
+
+    consoleSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
+  });
+
+  afterEach(() => {
+    consoleSpy.mockRestore();
+  });
+
+  it('calls getSchema and formats output by default', async () => {
+    await runSchemaCommand({});
+
+    expect(mockGetSchema).toHaveBeenCalled();
+    expect(mockGetSchemaVersions).not.toHaveBeenCalled();
+    expect(consoleSpy).toHaveBeenCalledWith(expect.stringContaining('Schema v2'));
+    expect(mockClose).toHaveBeenCalled();
+  });
+
+  it('calls getSchemaVersions when versions flag is set', async () => {
+    await runSchemaCommand({ versions: true });
+
+    expect(mockGetSchemaVersions).toHaveBeenCalled();
+    expect(mockGetSchema).not.toHaveBeenCalled();
+    expect(consoleSpy).toHaveBeenCalledWith(expect.stringContaining('Schema History'));
+    expect(mockClose).toHaveBeenCalled();
+  });
+
+  it('outputs JSON when json flag is set', async () => {
+    await runSchemaCommand({ json: true });
+
+    expect(mockGetSchema).toHaveBeenCalled();
+    const loggedOutput = consoleSpy.mock.calls[0][0];
+    const parsed = JSON.parse(loggedOutput);
+    expect(parsed.id).toBe('schema-1');
+    expect(mockClose).toHaveBeenCalled();
+  });
+
+  it('outputs JSON for versions when both flags are set', async () => {
+    await runSchemaCommand({ versions: true, json: true });
+
+    expect(mockGetSchemaVersions).toHaveBeenCalled();
+    const loggedOutput = consoleSpy.mock.calls[0][0];
+    const parsed = JSON.parse(loggedOutput);
+    expect(Array.isArray(parsed)).toBe(true);
+    expect(parsed[0].version).toBe(1);
+    expect(mockClose).toHaveBeenCalled();
+  });
+
+  it('calls close even when getSchema throws', async () => {
+    mockGetSchema.mockRejectedValue(new Error('db error'));
+
+    await expect(runSchemaCommand({})).rejects.toThrow('db error');
+    expect(mockClose).toHaveBeenCalled();
   });
 });
