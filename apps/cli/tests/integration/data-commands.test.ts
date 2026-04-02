@@ -19,6 +19,7 @@ import {
   rmSync,
   existsSync,
   readFileSync,
+  readdirSync,
 } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
@@ -589,5 +590,272 @@ describe('LocalDataSource end-to-end (integration)', () => {
     expect((results[0] as any).mergedData.title).toBe('Product 3');
 
     close();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// 6. spatula init (integration)
+// ---------------------------------------------------------------------------
+
+describe('spatula init (integration)', () => {
+  it('creates spatula.yaml and .spatula/ in empty directory', async () => {
+    const initDir = mkdtempSync(join(tmpdir(), 'spatula-init-'));
+    // Point SPATULA_HOME to temp dir so ensureGlobalConfig does not touch real home
+    const fakeHome = join(initDir, '__global__');
+    const origHome = process.env.SPATULA_HOME;
+    process.env.SPATULA_HOME = fakeHome;
+    try {
+      const { runInitCommand } = await import('../../src/commands/init.js');
+      const result = await runInitCommand({ url: 'https://example.com', depth: 3, limit: 500, cwd: initDir });
+
+      // Verify files created
+      expect(existsSync(join(initDir, 'spatula.yaml'))).toBe(true);
+      expect(existsSync(join(initDir, '.spatula'))).toBe(true);
+
+      // Verify standard subdirectories
+      expect(existsSync(join(initDir, '.spatula', 'pages'))).toBe(true);
+      expect(existsSync(join(initDir, '.spatula', 'exports'))).toBe(true);
+      expect(existsSync(join(initDir, '.spatula', 'logs'))).toBe(true);
+
+      // Verify YAML content
+      const yaml = readFileSync(join(initDir, 'spatula.yaml'), 'utf-8');
+      expect(yaml).toContain('https://example.com');
+      expect(yaml).toContain('depth: 3');
+      expect(yaml).toContain('limit: 500');
+
+      // Verify result shape
+      expect(result.createdYaml).toBe(true);
+      expect(result.spatulaDir).toBe(join(initDir, '.spatula'));
+    } finally {
+      if (origHome === undefined) delete process.env.SPATULA_HOME;
+      else process.env.SPATULA_HOME = origHome;
+      rmSync(initDir, { recursive: true, force: true });
+    }
+  });
+
+  it('does not overwrite existing spatula.yaml', async () => {
+    const initDir = mkdtempSync(join(tmpdir(), 'spatula-init-'));
+    const fakeHome = join(initDir, '__global__');
+    const origHome = process.env.SPATULA_HOME;
+    process.env.SPATULA_HOME = fakeHome;
+    try {
+      writeFileSync(join(initDir, 'spatula.yaml'), 'name: existing\n');
+
+      const { runInitCommand } = await import('../../src/commands/init.js');
+      const result = await runInitCommand({ cwd: initDir });
+
+      // Should detect existing project and not overwrite
+      expect(result.createdYaml).toBe(false);
+
+      // Original content preserved
+      const yaml = readFileSync(join(initDir, 'spatula.yaml'), 'utf-8');
+      expect(yaml).toContain('existing');
+    } finally {
+      if (origHome === undefined) delete process.env.SPATULA_HOME;
+      else process.env.SPATULA_HOME = origHome;
+      rmSync(initDir, { recursive: true, force: true });
+    }
+  });
+
+  it('updates .gitignore when it exists', async () => {
+    const initDir = mkdtempSync(join(tmpdir(), 'spatula-init-'));
+    const fakeHome = join(initDir, '__global__');
+    const origHome = process.env.SPATULA_HOME;
+    process.env.SPATULA_HOME = fakeHome;
+    try {
+      writeFileSync(join(initDir, '.gitignore'), 'node_modules/\n');
+
+      const { runInitCommand } = await import('../../src/commands/init.js');
+      const result = await runInitCommand({ url: 'https://example.com', cwd: initDir });
+
+      expect(result.gitignoreUpdated).toBe(true);
+
+      const gitignore = readFileSync(join(initDir, '.gitignore'), 'utf-8');
+      expect(gitignore).toContain('.spatula/');
+      expect(gitignore).toContain('node_modules/');
+    } finally {
+      if (origHome === undefined) delete process.env.SPATULA_HOME;
+      else process.env.SPATULA_HOME = origHome;
+      rmSync(initDir, { recursive: true, force: true });
+    }
+  });
+});
+
+// ---------------------------------------------------------------------------
+// 7. spatula add (integration)
+// ---------------------------------------------------------------------------
+
+describe('spatula add (integration)', () => {
+  it('adds new URLs to spatula.yaml', async () => {
+    const addDir = mkdtempSync(join(tmpdir(), 'spatula-add-'));
+    try {
+      writeFileSync(join(addDir, 'spatula.yaml'), 'name: test\nseeds:\n  - https://existing.com\n');
+      const cwdSpy = vi.spyOn(process, 'cwd').mockReturnValue(addDir);
+
+      const { runAddCommand } = await import('../../src/commands/add.js');
+      const result = await runAddCommand(['https://new.com', 'https://another.com']);
+
+      expect(result.added).toContain('https://new.com');
+      expect(result.added).toContain('https://another.com');
+
+      // Verify YAML updated on disk
+      const yaml = readFileSync(join(addDir, 'spatula.yaml'), 'utf-8');
+      expect(yaml).toContain('https://new.com');
+      expect(yaml).toContain('https://another.com');
+      expect(yaml).toContain('https://existing.com');
+
+      cwdSpy.mockRestore();
+    } finally {
+      rmSync(addDir, { recursive: true, force: true });
+    }
+  });
+
+  it('deduplicates against existing seeds', async () => {
+    const addDir = mkdtempSync(join(tmpdir(), 'spatula-add-'));
+    try {
+      writeFileSync(join(addDir, 'spatula.yaml'), 'name: test\nseeds:\n  - https://existing.com\n');
+      const cwdSpy = vi.spyOn(process, 'cwd').mockReturnValue(addDir);
+
+      const { runAddCommand } = await import('../../src/commands/add.js');
+      const result = await runAddCommand(['https://existing.com', 'https://new.com']);
+
+      expect(result.duplicates).toContain('https://existing.com');
+      expect(result.added).toEqual(['https://new.com']);
+
+      cwdSpy.mockRestore();
+    } finally {
+      rmSync(addDir, { recursive: true, force: true });
+    }
+  });
+
+  it('rejects invalid URLs', async () => {
+    const addDir = mkdtempSync(join(tmpdir(), 'spatula-add-'));
+    try {
+      writeFileSync(join(addDir, 'spatula.yaml'), 'name: test\nseeds: []\n');
+      const cwdSpy = vi.spyOn(process, 'cwd').mockReturnValue(addDir);
+
+      const { runAddCommand } = await import('../../src/commands/add.js');
+      const result = await runAddCommand(['not-a-url', 'https://valid.com']);
+
+      expect(result.invalid).toContain('not-a-url');
+      expect(result.added).toContain('https://valid.com');
+
+      cwdSpy.mockRestore();
+    } finally {
+      rmSync(addDir, { recursive: true, force: true });
+    }
+  });
+});
+
+// ---------------------------------------------------------------------------
+// 8. spatula reset (integration)
+// ---------------------------------------------------------------------------
+
+describe('spatula reset (integration)', () => {
+  it('removes .spatula/ directory contents and recreates structure', async () => {
+    const resetDir = mkdtempSync(join(tmpdir(), 'spatula-reset-'));
+    try {
+      // Set up a project with .spatula/ contents
+      writeFileSync(join(resetDir, 'spatula.yaml'), 'name: test\nseeds: []\n');
+      const spatulaDir = join(resetDir, '.spatula');
+      mkdirSync(join(spatulaDir, 'pages'), { recursive: true });
+      mkdirSync(join(spatulaDir, 'logs'), { recursive: true });
+      mkdirSync(join(spatulaDir, 'exports'), { recursive: true });
+      writeFileSync(join(spatulaDir, 'pages', 'page1.html'), '<html></html>');
+      writeFileSync(join(spatulaDir, 'logs', 'test.log'), 'log');
+      writeFileSync(join(spatulaDir, 'exports', 'export.json'), '{}');
+
+      const { runResetCommand } = await import('../../src/commands/reset.js');
+      const result = await runResetCommand({ cwd: resetDir });
+
+      // All top-level items should have been removed
+      expect(result.removedItems).toContain('pages');
+      expect(result.removedItems).toContain('logs');
+      expect(result.removedItems).toContain('exports');
+      expect(result.keptItems).toEqual([]);
+
+      // Old files should be gone
+      expect(existsSync(join(spatulaDir, 'pages', 'page1.html'))).toBe(false);
+      expect(existsSync(join(spatulaDir, 'logs', 'test.log'))).toBe(false);
+      expect(existsSync(join(spatulaDir, 'exports', 'export.json'))).toBe(false);
+
+      // Standard subdirectories should be recreated (empty)
+      expect(existsSync(join(spatulaDir, 'pages'))).toBe(true);
+      expect(existsSync(join(spatulaDir, 'exports'))).toBe(true);
+      expect(existsSync(join(spatulaDir, 'logs'))).toBe(true);
+
+      // spatula.yaml should be untouched
+      expect(readFileSync(join(resetDir, 'spatula.yaml'), 'utf-8')).toContain('name: test');
+    } finally {
+      rmSync(resetDir, { recursive: true, force: true });
+    }
+  });
+
+  it('preserves exports with --keep-exports flag', async () => {
+    const resetDir = mkdtempSync(join(tmpdir(), 'spatula-reset-'));
+    try {
+      writeFileSync(join(resetDir, 'spatula.yaml'), 'name: test\nseeds: []\n');
+      const spatulaDir = join(resetDir, '.spatula');
+      mkdirSync(join(spatulaDir, 'pages'), { recursive: true });
+      mkdirSync(join(spatulaDir, 'exports'), { recursive: true });
+      writeFileSync(join(spatulaDir, 'pages', 'page1.html'), '<html></html>');
+      writeFileSync(join(spatulaDir, 'exports', 'export.json'), '{}');
+
+      const { runResetCommand } = await import('../../src/commands/reset.js');
+      const result = await runResetCommand({ keepExports: true, cwd: resetDir });
+
+      // Exports should be preserved
+      expect(existsSync(join(spatulaDir, 'exports', 'export.json'))).toBe(true);
+      expect(result.keptItems).toContain('exports');
+
+      // Pages should be removed
+      expect(existsSync(join(spatulaDir, 'pages', 'page1.html'))).toBe(false);
+      expect(result.removedItems).toContain('pages');
+    } finally {
+      rmSync(resetDir, { recursive: true, force: true });
+    }
+  });
+
+  it('preserves project.db with --keep-entities flag', async () => {
+    const resetDir = mkdtempSync(join(tmpdir(), 'spatula-reset-'));
+    try {
+      writeFileSync(join(resetDir, 'spatula.yaml'), 'name: test\nseeds: []\n');
+      const spatulaDir = join(resetDir, '.spatula');
+      mkdirSync(join(spatulaDir, 'pages'), { recursive: true });
+      writeFileSync(join(spatulaDir, 'project.db'), 'fake-db-content');
+      writeFileSync(join(spatulaDir, 'pages', 'page1.html'), '<html></html>');
+
+      const { runResetCommand } = await import('../../src/commands/reset.js');
+      const result = await runResetCommand({ keepEntities: true, cwd: resetDir });
+
+      // DB file should be preserved
+      expect(existsSync(join(spatulaDir, 'project.db'))).toBe(true);
+      expect(result.keptItems).toContain('project.db');
+
+      // Pages should be removed
+      expect(result.removedItems).toContain('pages');
+    } finally {
+      rmSync(resetDir, { recursive: true, force: true });
+    }
+  });
+
+  it('handles missing .spatula/ directory gracefully', async () => {
+    const resetDir = mkdtempSync(join(tmpdir(), 'spatula-reset-'));
+    try {
+      writeFileSync(join(resetDir, 'spatula.yaml'), 'name: test\nseeds: []\n');
+      // No .spatula/ directory exists
+
+      const { runResetCommand } = await import('../../src/commands/reset.js');
+      const result = await runResetCommand({ cwd: resetDir });
+
+      // Should have recreated the directory structure without errors
+      expect(result.removedItems).toEqual([]);
+      expect(result.keptItems).toEqual([]);
+      expect(existsSync(join(resetDir, '.spatula', 'pages'))).toBe(true);
+      expect(existsSync(join(resetDir, '.spatula', 'exports'))).toBe(true);
+      expect(existsSync(join(resetDir, '.spatula', 'logs'))).toBe(true);
+    } finally {
+      rmSync(resetDir, { recursive: true, force: true });
+    }
   });
 });
