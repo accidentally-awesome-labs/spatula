@@ -12,6 +12,9 @@ import { DashboardView } from '../../../../src/components/dashboard/DashboardVie
 
 vi.mock('../../../../src/hooks/useJobPolling.js', () => ({
   useJobPolling: vi.fn().mockReturnValue({ isPolling: false, lastError: null }),
+  isDataSource: (backend: unknown) =>
+    typeof backend === 'object' && backend !== null &&
+    'getEntities' in backend && 'getStatus' in backend && !('getJob' in backend),
 }));
 
 vi.mock('../../../../src/hooks/useWebSocket.js', () => ({
@@ -28,6 +31,8 @@ vi.mock('ink-spinner', () => ({
 
 function createMockApiClient(): SpatulaApiClient {
   return {
+    baseUrl: 'http://localhost:3000',
+    tenantId: 'test-tenant',
     getJob: vi.fn().mockResolvedValue({ id: 'job-1', status: 'running', stats: {} }),
     listActions: vi.fn().mockResolvedValue([]),
     getSchema: vi.fn().mockResolvedValue(null),
@@ -78,7 +83,7 @@ describe('DashboardView', () => {
     state.setEntityPreviews([]);
 
     const { lastFrame } = render(
-      <DashboardView store={store} apiClient={apiClient} />,
+      <DashboardView store={store} backend={apiClient} />,
     );
     const frame = lastFrame()!;
 
@@ -100,7 +105,7 @@ describe('DashboardView', () => {
     });
 
     const { lastFrame } = render(
-      <DashboardView store={store} apiClient={apiClient} />,
+      <DashboardView store={store} backend={apiClient} />,
     );
     const frame = lastFrame()!;
 
@@ -114,7 +119,7 @@ describe('DashboardView', () => {
     // Do NOT set jobData — it remains null
 
     const { lastFrame } = render(
-      <DashboardView store={store} apiClient={apiClient} />,
+      <DashboardView store={store} backend={apiClient} />,
     );
     const frame = lastFrame()!;
 
@@ -125,7 +130,7 @@ describe('DashboardView', () => {
     // Do not set activeJobId — remains null
 
     const { lastFrame } = render(
-      <DashboardView store={store} apiClient={apiClient} />,
+      <DashboardView store={store} backend={apiClient} />,
     );
     const frame = lastFrame()!;
 
@@ -149,7 +154,7 @@ describe('DashboardView', () => {
     });
 
     const { lastFrame } = render(
-      <DashboardView store={store} apiClient={apiClient} />,
+      <DashboardView store={store} backend={apiClient} />,
     );
     const frame = lastFrame()!;
 
@@ -167,7 +172,7 @@ describe('DashboardView', () => {
     });
 
     const { lastFrame } = render(
-      <DashboardView store={store} apiClient={apiClient} />,
+      <DashboardView store={store} backend={apiClient} />,
     );
     const frame = lastFrame()!;
 

@@ -61,7 +61,7 @@ describe('ReviewView', () => {
     store.getState().setPendingActions(sampleActions);
     const apiClient = createMockApiClient(sampleActions);
 
-    const { lastFrame } = render(<ReviewView store={store} apiClient={apiClient} />);
+    const { lastFrame } = render(<ReviewView store={store} backend={apiClient} />);
     await waitForEffects();
 
     const frame = lastFrame()!;
@@ -76,7 +76,7 @@ describe('ReviewView', () => {
     store.getState().setPendingActions([]);
     const apiClient = createMockApiClient([]);
 
-    const { lastFrame } = render(<ReviewView store={store} apiClient={apiClient} />);
+    const { lastFrame } = render(<ReviewView store={store} backend={apiClient} />);
     await waitForEffects();
 
     const frame = lastFrame()!;
@@ -90,7 +90,7 @@ describe('ReviewView', () => {
     const apiClient = createMockApiClient(sampleActions);
 
     const { stdin, lastFrame } = render(
-      <ReviewView store={store} apiClient={apiClient} />,
+      <ReviewView store={store} backend={apiClient} />,
     );
     await waitForEffects();
 
@@ -109,7 +109,7 @@ describe('ReviewView', () => {
     const apiClient = createMockApiClient(sampleActions);
 
     const { stdin, lastFrame } = render(
-      <ReviewView store={store} apiClient={apiClient} />,
+      <ReviewView store={store} backend={apiClient} />,
     );
     await waitForEffects();
 
@@ -126,7 +126,7 @@ describe('ReviewView', () => {
     store.getState().setPendingActions(sampleActions);
     const apiClient = createMockApiClient(sampleActions);
 
-    const { lastFrame } = render(<ReviewView store={store} apiClient={apiClient} />);
+    const { lastFrame } = render(<ReviewView store={store} backend={apiClient} />);
     await waitForEffects();
 
     const frame = lastFrame()!;
@@ -142,7 +142,7 @@ describe('ReviewView', () => {
     store.getState().setPendingActions(sampleActions);
     const apiClient = createMockApiClient(sampleActions);
 
-    const { lastFrame } = render(<ReviewView store={store} apiClient={apiClient} />);
+    const { lastFrame } = render(<ReviewView store={store} backend={apiClient} />);
     await waitForEffects();
 
     const frame = lastFrame()!;

@@ -7,6 +7,8 @@ import type { SpatulaApiClient } from '../../../src/api/client.js';
 
 function createMockApiClient(): SpatulaApiClient {
   return {
+    baseUrl: 'http://localhost:3000',
+    tenantId: 'test-tenant',
     getJob: vi.fn().mockResolvedValue({ id: 'job-1', status: 'running', stats: {} }),
     listActions: vi.fn().mockResolvedValue([]),
     getSchema: vi.fn().mockResolvedValue(null),

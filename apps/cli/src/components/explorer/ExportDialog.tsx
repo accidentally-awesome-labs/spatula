@@ -3,6 +3,7 @@ import { Box, Text } from 'ink';
 import { useStore } from 'zustand';
 import type { CliStore } from '../../store/index.js';
 import type { SpatulaApiClient } from '../../api/client.js';
+import type { DataSource } from '@spatula/core';
 import { useKeyboard } from '../../hooks/useKeyboard.js';
 import { useExport } from '../../hooks/useExport.js';
 import { Panel } from '../shared/index.js';
@@ -10,7 +11,7 @@ import type { EntityWithProvenance } from '@spatula/shared';
 
 export interface ExportDialogProps {
   store: CliStore;
-  apiClient: SpatulaApiClient;
+  backend: DataSource | SpatulaApiClient;
   fromDetail: boolean;
   onClose: () => void;
 }
@@ -18,7 +19,7 @@ export interface ExportDialogProps {
 type ExportFormat = 'json' | 'csv';
 type ExportScope = 'entity' | 'set';
 
-export function ExportDialog({ store, apiClient, fromDetail, onClose }: ExportDialogProps) {
+export function ExportDialog({ store, backend, fromDetail, onClose }: ExportDialogProps) {
   const totalEntityCount = useStore(store, (s) => s.totalEntityCount);
   const filterQuery = useStore(store, (s) => s.filterQuery);
   const expandedEntity = useStore(store, (s) => s.expandedEntity);
@@ -31,7 +32,7 @@ export function ExportDialog({ store, apiClient, fromDetail, onClose }: ExportDi
   const [result, setResult] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
-  const { isExporting, exportProgress, exportSingleEntity, exportEntitySet } = useExport(apiClient);
+  const { isExporting, exportProgress, exportSingleEntity, exportEntitySet } = useExport(backend);
 
   const schemaFields = (() => {
     if (!schemaData) return [];

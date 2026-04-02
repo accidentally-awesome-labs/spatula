@@ -26,7 +26,7 @@ describe('ExportDialog', () => {
 
     const { ExportDialog } = await import('../../../../src/components/explorer/ExportDialog.js');
     const { lastFrame } = render(
-      <ExportDialog store={store} apiClient={apiClient} fromDetail={false} onClose={vi.fn()} />,
+      <ExportDialog store={store} backend={apiClient} fromDetail={false} onClose={vi.fn()} />,
     );
     const frame = lastFrame()!;
     expect(frame).toContain('JSON');
@@ -40,7 +40,7 @@ describe('ExportDialog', () => {
 
     const { ExportDialog } = await import('../../../../src/components/explorer/ExportDialog.js');
     const { lastFrame } = render(
-      <ExportDialog store={store} apiClient={apiClient} fromDetail={false} onClose={vi.fn()} />,
+      <ExportDialog store={store} backend={apiClient} fromDetail={false} onClose={vi.fn()} />,
     );
     expect(lastFrame()).toContain('47');
   });
@@ -52,7 +52,7 @@ describe('ExportDialog', () => {
 
     const { ExportDialog } = await import('../../../../src/components/explorer/ExportDialog.js');
     const { lastFrame } = render(
-      <ExportDialog store={store} apiClient={apiClient} fromDetail={true} onClose={vi.fn()} />,
+      <ExportDialog store={store} backend={apiClient} fromDetail={true} onClose={vi.fn()} />,
     );
     expect(lastFrame()).toContain('Current entity');
   });

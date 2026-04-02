@@ -3,6 +3,7 @@ import { Box, Text } from 'ink';
 import { useStore } from 'zustand';
 import type { CliStore } from '../store/index.js';
 import type { SpatulaApiClient } from '../api/client.js';
+import type { DataSource } from '@spatula/core';
 import { Header, KeyboardHints } from './shared/index.js';
 import { useKeyboard } from '../hooks/useKeyboard.js';
 import { ConversationalView } from './conversational/ConversationalView.js';
@@ -14,6 +15,7 @@ import type { KeyHint } from './shared/index.js';
 export interface AppProps {
   store: CliStore;
   apiClient: SpatulaApiClient | null;
+  backend?: DataSource | SpatulaApiClient | null;
   onStartJob: (config: Record<string, unknown>) => void;
   onExit: () => void;
 }
@@ -52,9 +54,11 @@ function hintsForMode(mode: string): KeyHint[] {
 export function App({
   store,
   apiClient,
+  backend,
   onStartJob,
   onExit,
 }: AppProps): React.ReactElement {
+  const effectiveBackend = backend ?? apiClient;
   const mode = useStore(store, (s) => s.mode);
   const filterFocused = useStore(store, (s) => s.filterFocused);
 
@@ -109,16 +113,16 @@ export function App({
         {mode === 'conversational' && (
           <ConversationalView store={store} onStartJob={onStartJob} />
         )}
-        {mode === 'dashboard' && apiClient && (
-          <DashboardView store={store} apiClient={apiClient} />
+        {mode === 'dashboard' && effectiveBackend && (
+          <DashboardView store={store} backend={effectiveBackend} />
         )}
-        {mode === 'review' && apiClient && (
-          <ReviewView store={store} apiClient={apiClient} />
+        {mode === 'review' && effectiveBackend && (
+          <ReviewView store={store} backend={effectiveBackend} />
         )}
-        {mode === 'explorer' && apiClient && (
-          <ExplorerView store={store} apiClient={apiClient} />
+        {mode === 'explorer' && effectiveBackend && (
+          <ExplorerView store={store} backend={effectiveBackend} />
         )}
-        {(mode === 'dashboard' || mode === 'review' || mode === 'explorer') && !apiClient && (
+        {(mode === 'dashboard' || mode === 'review' || mode === 'explorer') && !effectiveBackend && (
           <Box paddingX={2} paddingY={1}>
             <Text color="yellow">
               {mode.charAt(0).toUpperCase() + mode.slice(1)} mode requires a remote connection. Use `spatula run` for local crawling, or set SPATULA_TENANT_ID for remote mode.

@@ -110,6 +110,7 @@ export function useWebSocket(
     intentionalCloseRef.current = false;
 
     if (!jobId) return;
+    if (!baseUrl) return; // No-op in local DataSource mode
 
     const wsUrl = baseUrl.replace(/^http/, 'ws') + `/ws/jobs/${jobId}/progress?tenantId=${tenantId}`;
 

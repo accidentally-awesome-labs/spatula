@@ -3,6 +3,7 @@ import { Box, Text } from 'ink';
 import { useStore } from 'zustand';
 import type { CliStore } from '../../store/index.js';
 import type { SpatulaApiClient } from '../../api/client.js';
+import type { DataSource } from '@spatula/core';
 import { useEntityData } from '../../hooks/useEntityData.js';
 import { useEntityFilter } from '../../hooks/useEntityFilter.js';
 import { useKeyboard } from '../../hooks/useKeyboard.js';
@@ -16,7 +17,7 @@ import { ExportDialog } from './ExportDialog.js';
 
 export interface ExplorerViewProps {
   store: CliStore;
-  apiClient: SpatulaApiClient;
+  backend: DataSource | SpatulaApiClient;
 }
 
 type SubView = 'table' | 'detail' | 'export';
@@ -78,7 +79,7 @@ function extractSchemaFields(schemaData: Record<string, unknown> | null): string
 
 export function ExplorerView({
   store,
-  apiClient,
+  backend,
 }: ExplorerViewProps): React.ReactElement {
   // Local state
   const [subView, setSubView] = useState<SubView>('table');
@@ -109,13 +110,13 @@ export function ExplorerView({
     prevPage,
     fetchEntity,
     fetchPage,
-  } = useEntityData(store, apiClient, activeJobId ?? '');
+  } = useEntityData(store, backend, activeJobId ?? '');
 
   // Entity filter hook (local + server-side filtering)
   const {
     setFilterQuery: applyFilter,
     clearFilter,
-  } = useEntityFilter(store, apiClient, activeJobId ?? '', totalEntityCount);
+  } = useEntityFilter(store, backend, activeJobId ?? '', totalEntityCount);
 
   // ---------------------------------------------------------------------------
   // Table keyboard handlers
@@ -251,7 +252,7 @@ export function ExplorerView({
       <Box flexDirection="column" flexGrow={1}>
         <ExportDialog
           store={store}
-          apiClient={apiClient}
+          backend={backend}
           fromDetail={expandedEntity !== null}
           onClose={handleExportClose}
         />

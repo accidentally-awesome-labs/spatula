@@ -3,7 +3,8 @@ import { Box, Text } from 'ink';
 import { useStore } from 'zustand';
 import type { CliStore } from '../../store/index.js';
 import type { SpatulaApiClient } from '../../api/client.js';
-import { useJobPolling } from '../../hooks/useJobPolling.js';
+import type { DataSource } from '@spatula/core';
+import { useJobPolling, isDataSource } from '../../hooks/useJobPolling.js';
 import { useWebSocket } from '../../hooks/useWebSocket.js';
 import { useKeyboard } from '../../hooks/useKeyboard.js';
 import { Spinner } from '../shared/Spinner.js';
@@ -14,12 +15,12 @@ import { EntityPreview } from './EntityPreview.js';
 
 export interface DashboardViewProps {
   store: CliStore;
-  apiClient: SpatulaApiClient;
+  backend: DataSource | SpatulaApiClient;
 }
 
 export function DashboardView({
   store,
-  apiClient,
+  backend,
 }: DashboardViewProps): React.ReactElement {
   const activeJobId = useStore(store, (s) => s.activeJobId);
   const jobData = useStore(store, (s) => s.jobData);
@@ -27,11 +28,14 @@ export function DashboardView({
   const schemaData = useStore(store, (s) => s.schemaData);
   const entityPreviews = useStore(store, (s) => s.entityPreviews);
 
-  // Try WebSocket for real-time updates; use slower polling as supplement
+  // Try WebSocket for real-time updates; use slower polling as supplement.
+  // In local DataSource mode, WebSocket is disabled (empty baseUrl triggers early return).
+  const wsBaseUrl = isDataSource(backend) ? '' : backend.baseUrl;
+  const wsTenantId = isDataSource(backend) ? '' : backend.tenantId;
   const { connected: wsConnected } = useWebSocket(
     store,
-    apiClient.baseUrl,
-    apiClient.tenantId,
+    wsBaseUrl,
+    wsTenantId,
     activeJobId ?? '',
   );
 
@@ -39,24 +43,24 @@ export function DashboardView({
   // When WebSocket is disconnected, poll at normal 3s rate.
   const { lastError } = useJobPolling(
     store,
-    apiClient,
+    backend,
     activeJobId ?? '',
     wsConnected ? 15000 : 3000,
   );
 
   useKeyboard({
     ' ': () => {
-      if (!activeJobId || !jobData) return;
+      if (!activeJobId || !jobData || isDataSource(backend)) return;
       const status = String(jobData.status ?? '');
       if (status === 'running') {
-        void apiClient.pauseJob(activeJobId);
+        void backend.pauseJob(activeJobId);
       } else if (status === 'paused') {
-        void apiClient.resumeJob(activeJobId);
+        void backend.resumeJob(activeJobId);
       }
     },
     c: () => {
-      if (!activeJobId) return;
-      void apiClient.cancelJob(activeJobId);
+      if (!activeJobId || isDataSource(backend)) return;
+      void backend.cancelJob(activeJobId);
     },
   });
 

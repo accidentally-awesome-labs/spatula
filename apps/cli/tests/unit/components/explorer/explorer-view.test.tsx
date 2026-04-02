@@ -66,7 +66,7 @@ describe('ExplorerView', () => {
     );
 
     const { lastFrame } = render(
-      <ExplorerView store={store} apiClient={apiClient} />,
+      <ExplorerView store={store} backend={apiClient} />,
     );
     const frame = lastFrame()!;
 
@@ -84,7 +84,7 @@ describe('ExplorerView', () => {
     state.setTotalEntityCount(0);
 
     const { lastFrame } = render(
-      <ExplorerView store={store} apiClient={apiClient} />,
+      <ExplorerView store={store} backend={apiClient} />,
     );
     const frame = lastFrame()!;
 
@@ -131,7 +131,7 @@ describe('ExplorerView', () => {
     });
 
     const { lastFrame } = render(
-      <ExplorerView store={store} apiClient={apiClient} />,
+      <ExplorerView store={store} backend={apiClient} />,
     );
     const frame = lastFrame()!;
 
@@ -170,7 +170,7 @@ describe('ExplorerView', () => {
     });
 
     const { lastFrame } = render(
-      <ExplorerView store={store} apiClient={apiClient} />,
+      <ExplorerView store={store} backend={apiClient} />,
     );
     const frame = lastFrame()!;
 
@@ -188,7 +188,7 @@ describe('ExplorerView', () => {
     state.setActiveJobId('job-hints-test');
 
     const { lastFrame } = render(
-      <ExplorerView store={store} apiClient={apiClient} />,
+      <ExplorerView store={store} backend={apiClient} />,
     );
     const frame = lastFrame()!;
 
