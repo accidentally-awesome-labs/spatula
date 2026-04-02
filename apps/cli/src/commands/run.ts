@@ -42,7 +42,8 @@ import {
   DataReconcilerImpl,
   LLMLinkEvaluator,
 } from '@spatula/core';
-import type { LLMClient, Crawler, LLMProvider } from '@spatula/core';
+import type { LLMClient, Crawler, LLMProvider, DataSource } from '@spatula/core';
+import { LocalDataSource } from '@spatula/core';
 import { createProjectDb, initializeProjectDb, ProjectAdapter } from '@spatula/db';
 import { sendDesktopNotification, sendWebhookNotification } from '../notifications.js';
 
@@ -115,6 +116,9 @@ export async function runRunCommand(options: RunOptions = {}): Promise<void> {
 
   // Step 5: Build ProjectAdapter (assembles all 12 SQLite repositories)
   const adapter = new ProjectAdapter(db, projectId);
+
+  // Step 5b: Create DataSource for dashboard polling
+  const dataSource: DataSource = new LocalDataSource(adapter);
 
   // Step 6: Build LocalContentStore (raw HTML under .spatula/pages/)
   const pagesDir = join(projectRoot, '.spatula', 'pages');
@@ -230,18 +234,25 @@ export async function runRunCommand(options: RunOptions = {}): Promise<void> {
   // Step 13: Subscribe to progress events — single overwritten stdout line
   const startTime = Date.now();
 
+  // Dashboard toggle state (declared here so the progress handler can read suppressProgress)
+  let dashboardActive = false;
+  let dashboardUnmount: (() => void) | null = null;
+  let suppressProgress = false;
+
   runner.events.on('progress', (stats: any) => {
     const elapsed = Math.round((Date.now() - startTime) / 1000);
     const pct =
       stats.totalPages > 0
         ? Math.round((stats.pagesProcessed / stats.totalPages) * 100)
         : 0;
-    process.stdout.write(
-      `\r  Pages: ${stats.pagesProcessed}/${stats.totalPages} (${pct}%)` +
-      `  Entities: ${stats.entitiesCreated}` +
-      `  Errors: ${stats.errors}` +
-      `  Elapsed: ${elapsed}s  `,
-    );
+    if (!suppressProgress) {
+      process.stdout.write(
+        `\r  Pages: ${stats.pagesProcessed}/${stats.totalPages} (${pct}%)` +
+        `  Entities: ${stats.entitiesCreated}` +
+        `  Errors: ${stats.errors}` +
+        `  Elapsed: ${elapsed}s  `,
+      );
+    }
     // Log to file
     logToFile('info', 'Progress', { event: 'progress', pagesProcessed: stats.pagesProcessed, totalPages: stats.totalPages, entitiesCreated: stats.entitiesCreated, errors: stats.errors, elapsed });
   });
@@ -252,6 +263,72 @@ export async function runRunCommand(options: RunOptions = {}): Promise<void> {
     console.log(`  Schema evolved → version ${schema.version}`);
     logToFile('info', `Schema evolved to version ${schema.version}`, { event: 'schema:evolved', version: schema.version });
   });
+
+  // Step 13b: Dashboard toggle handlers
+
+  const handleKeypress = async (key: string) => {
+    if (key === '\x03') { // Ctrl+C
+      handleSigint();
+      return;
+    }
+    if (key === 'd' || key === 'D') {
+      if (dashboardActive) {
+        dismissDashboard();
+      } else {
+        await showDashboard();
+      }
+    }
+  };
+
+  const showDashboard = async () => {
+    dashboardActive = true;
+    suppressProgress = true;
+    process.stdin.removeListener('data', handleKeypress);
+
+    const React = (await import('react')).default;
+    const { render: inkRender } = await import('ink');
+    const { RunDashboard, buildRunDashboardStore } = await import(
+      '../components/dashboard/RunDashboard.js'
+    );
+
+    const dashStore = buildRunDashboardStore(projectId);
+
+    const { unmount } = inkRender(
+      React.createElement(RunDashboard, {
+        store: dashStore,
+        dataSource,
+        projectName,
+        onDismiss: () => dismissDashboard(),
+      }),
+      { exitOnCtrlC: false },
+    );
+
+    dashboardUnmount = unmount;
+  };
+
+  const dismissDashboard = () => {
+    if (dashboardUnmount) {
+      dashboardUnmount();
+      dashboardUnmount = null;
+    }
+    dashboardActive = false;
+    suppressProgress = false;
+    if (process.stdin.isTTY) {
+      process.stdin.setRawMode(true);
+      process.stdin.resume();
+      process.stdin.on('data', handleKeypress);
+    }
+    console.log(''); // Clean line after dashboard
+  };
+
+  // Set up stdin raw mode for keyboard shortcuts
+  if (process.stdin.isTTY) {
+    process.stdin.setRawMode(true);
+    process.stdin.resume();
+    process.stdin.setEncoding('utf-8');
+    process.stdin.on('data', handleKeypress);
+  }
+  console.log('  Press [d] for dashboard view\n');
 
   // Step 14: Print startup summary and run the pipeline
   console.log(`\nSpatula — running pipeline for: ${projectName}`);
@@ -295,6 +372,12 @@ export async function runRunCommand(options: RunOptions = {}): Promise<void> {
       });
     }
   } finally {
+    if (dashboardActive) dismissDashboard();
+    if (process.stdin.isTTY) {
+      process.stdin.removeListener('data', handleKeypress);
+      process.stdin.setRawMode(false);
+      process.stdin.pause();
+    }
     process.off('SIGINT', handleSigint);
     await crawler?.close().catch(() => {});
     closeDb();
