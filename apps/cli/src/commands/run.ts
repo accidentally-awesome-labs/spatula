@@ -99,8 +99,12 @@ export async function runRunCommand(options: RunOptions = {}): Promise<void> {
   const logFile = join(logsDir, `${new Date().toISOString().replace(/:/g, '-').slice(0, 19)}.log`);
   const { appendFileSync } = await import('node:fs');
   // Simple structured JSON log appender (avoids Pino transport complexity)
-  const logToFile = (entry: Record<string, unknown>) => {
-    try { appendFileSync(logFile, JSON.stringify({ ...entry, ts: new Date().toISOString() }) + '\n'); } catch { /* non-fatal */ }
+  const logToFile = (level: string, msg: string, extra: Record<string, unknown> = {}) => {
+    try {
+      appendFileSync(logFile, JSON.stringify({
+        level, msg, ...extra, ts: new Date().toISOString(),
+      }) + '\n');
+    } catch { /* non-fatal */ }
   };
   console.log(`  Log: ${logFile}`);
 
@@ -239,13 +243,14 @@ export async function runRunCommand(options: RunOptions = {}): Promise<void> {
       `  Elapsed: ${elapsed}s  `,
     );
     // Log to file
-    logToFile({ event: 'progress', ...stats, elapsed });
+    logToFile('info', 'Progress', { event: 'progress', pagesProcessed: stats.pagesProcessed, totalPages: stats.totalPages, entitiesCreated: stats.entitiesCreated, errors: stats.errors, elapsed });
   });
 
   runner.events.on('schema:evolved', (schema: any) => {
     // Print on a new line so the evolution message isn't overwritten
     process.stdout.write('\n');
     console.log(`  Schema evolved → version ${schema.version}`);
+    logToFile('info', `Schema evolved to version ${schema.version}`, { event: 'schema:evolved', version: schema.version });
   });
 
   // Step 14: Print startup summary and run the pipeline
@@ -258,11 +263,13 @@ export async function runRunCommand(options: RunOptions = {}): Promise<void> {
   console.log('');
 
   try {
+    logToFile('info', `Pipeline starting for ${projectName}`, { event: 'run:start', projectName, projectRoot, crawler: crawlerType, llm: llmClient ? 'available' : 'unavailable' });
     await runner.run();
 
     // Ensure the in-place progress line ends cleanly
     process.stdout.write('\n');
     console.log('\nPipeline complete.');
+    logToFile('info', 'Pipeline complete', { event: 'run:complete' });
 
     // Notifications on success
     await sendDesktopNotification('Spatula', `Pipeline complete for ${projectName}`);
@@ -279,6 +286,7 @@ export async function runRunCommand(options: RunOptions = {}): Promise<void> {
 
     // Notifications on failure
     const errMsg = err instanceof Error ? err.message : String(err);
+    logToFile('error', `Pipeline failed: ${errMsg}`, { event: 'run:failed', error: errMsg });
     await sendDesktopNotification('Spatula', `Pipeline failed: ${errMsg}`);
     if (projectYaml.notify?.webhook) {
       await sendWebhookNotification(projectYaml.notify.webhook, {

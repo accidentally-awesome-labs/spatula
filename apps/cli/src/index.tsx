@@ -13,6 +13,7 @@
  *   estimate  Estimate the LLM cost for the current project
  *   doctor    Run system health checks
  *   reset     Reset the .spatula/ working directory
+ *   logs      View structured log files from previous runs
  *   test      Test extraction on a single page
  *   list      (deprecated) List remote crawl jobs
  */
@@ -308,6 +309,38 @@ yargs(hideBin(process.argv))
       const client = getApiClient({ apiUrl: argv.apiUrl, tenantId });
       const job = await runStatusCommand(client, argv.jobId);
       console.log(formatJobDetail(job));
+    },
+  )
+
+  // -------------------------------------------------------------------------
+  // logs — view structured run logs
+  // -------------------------------------------------------------------------
+  .command(
+    'logs',
+    'View structured log files from previous runs',
+    (y) =>
+      y
+        .option('run', {
+          type: 'string',
+          describe: 'Find log by filename prefix or run ID',
+        })
+        .option('errors', {
+          type: 'boolean',
+          default: false,
+          describe: 'Show only error-level entries',
+        })
+        .option('tail', {
+          type: 'boolean',
+          default: false,
+          describe: 'Follow mode — watch for new entries',
+        }),
+    async (argv) => {
+      const { runLogsCommand } = await import('./commands/logs.js');
+      await runLogsCommand({
+        run: argv.run,
+        errors: argv.errors,
+        tail: argv.tail,
+      });
     },
   )
 
