@@ -266,7 +266,7 @@ export async function runRunCommand(options: RunOptions = {}): Promise<void> {
 
   // Step 13b: Dashboard toggle handlers
 
-  const handleKeypress = async (key: string) => {
+  const handleKeypress = (key: string) => {
     if (key === '\x03') { // Ctrl+C
       handleSigint();
       return;
@@ -275,7 +275,11 @@ export async function runRunCommand(options: RunOptions = {}): Promise<void> {
       if (dashboardActive) {
         dismissDashboard();
       } else {
-        await showDashboard();
+        showDashboard().catch((err) => {
+          console.error('Dashboard error:', err instanceof Error ? err.message : String(err));
+          dashboardActive = false;
+          suppressProgress = false;
+        });
       }
     }
   };
@@ -307,6 +311,7 @@ export async function runRunCommand(options: RunOptions = {}): Promise<void> {
   };
 
   const dismissDashboard = () => {
+    if (!dashboardActive) return; // Already dismissed
     if (dashboardUnmount) {
       dashboardUnmount();
       dashboardUnmount = null;

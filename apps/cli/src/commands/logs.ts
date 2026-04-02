@@ -230,13 +230,12 @@ export async function runLogsCommand(options: LogsOptions = {}): Promise<void> {
       } catch { /* non-fatal */ }
     });
 
-    // Keep alive until SIGINT
-    process.on('SIGINT', () => {
-      watcher.close();
-      process.exit(0);
+    // Keep alive until SIGINT — use once() to avoid listener leak
+    await new Promise<void>((resolve) => {
+      process.once('SIGINT', () => {
+        watcher.close();
+        resolve();
+      });
     });
-
-    // Keep the event loop running
-    await new Promise(() => {});
   }
 }

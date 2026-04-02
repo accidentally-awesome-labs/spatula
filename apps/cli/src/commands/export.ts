@@ -178,7 +178,10 @@ export async function runExportCommand(opts: ExportCommandOptions = {}): Promise
     const result = await exporter.export(entities, schema, exportOptions);
 
     // 9. Write output file
-    if (BINARY_FORMATS.has(format)) {
+    if (result.filePath) {
+      // Some exporters write directly to disk via outputPath
+      // — nothing to write, just report the path
+    } else if (BINARY_FORMATS.has(format)) {
       if (!result.binaryData) {
         console.error(`Exporter for "${format}" did not produce binary data.`);
         process.exit(1);
@@ -193,7 +196,8 @@ export async function runExportCommand(opts: ExportCommandOptions = {}): Promise
     }
 
     // 10. Show summary
-    const fileSize = statSync(outputPath).size;
+    const finalPath = result.filePath ?? outputPath;
+    const fileSize = statSync(finalPath).size;
     const sizeStr = formatFileSize(fileSize);
 
     console.log('');
@@ -201,7 +205,7 @@ export async function runExportCommand(opts: ExportCommandOptions = {}): Promise
     console.log('  ' + '-'.repeat(50));
     console.log(`  Entities : ${result.entityCount}`);
     console.log(`  Format   : ${format}`);
-    console.log(`  File     : ${outputPath}`);
+    console.log(`  File     : ${finalPath}`);
     console.log(`  Size     : ${sizeStr}`);
     console.log('');
   } finally {

@@ -53,48 +53,35 @@ interface ExploreAppProps {
 function ExploreApp({ store, backend, onQuit }: ExploreAppProps): React.ReactElement {
   const [sortOrder, setSortOrder] = useState<SortOrder>('default');
 
-  const cycleSortOrder = useCallback(() => {
-    setSortOrder((prev) => {
-      const currentIdx = SORT_CYCLE.indexOf(prev);
-      const nextIdx = (currentIdx + 1) % SORT_CYCLE.length;
-      const next = SORT_CYCLE[nextIdx];
-
-      const state = store.getState();
-
-      if (next === 'quality') {
-        const sorted = [...state.entities].sort(
-          (a, b) => b.qualityScore - a.qualityScore,
-        );
-        state.setEntities(sorted);
-      } else if (next === 'date') {
-        const sorted = [...state.entities].sort((a, b) =>
-          b.createdAt.localeCompare(a.createdAt),
-        );
-        state.setEntities(sorted);
-      } else if (next === 'name') {
-        // Sort by first field value alphabetically
-        const sorted = [...state.entities].sort((a, b) => {
-          const aKeys = Object.keys(a.mergedData).sort();
-          const bKeys = Object.keys(b.mergedData).sort();
-          const aVal = String(a.mergedData[aKeys[0]] ?? '');
-          const bVal = String(b.mergedData[bKeys[0]] ?? '');
-          return aVal.localeCompare(bVal);
-        });
-        state.setEntities(sorted);
-      } else {
-        // 'default' -- re-fetch page 0 to restore server order
-        void backend
-          .getEntities({ limit: 20, offset: 0 })
-          .then((result) => {
-            state.setEntities(result.data);
-            state.setCurrentEntityPage(0);
-            state.setSelectedEntityIndex(0);
-          });
-      }
-
-      return next;
-    });
+  const applySort = useCallback((order: SortOrder) => {
+    const state = store.getState();
+    if (order === 'quality') {
+      state.setEntities([...state.entities].sort((a, b) => b.qualityScore - a.qualityScore));
+    } else if (order === 'date') {
+      state.setEntities([...state.entities].sort((a, b) => b.createdAt.localeCompare(a.createdAt)));
+    } else if (order === 'name') {
+      state.setEntities([...state.entities].sort((a, b) => {
+        const aKeys = Object.keys(a.mergedData).sort();
+        const bKeys = Object.keys(b.mergedData).sort();
+        return String(a.mergedData[aKeys[0]] ?? '').localeCompare(String(b.mergedData[bKeys[0]] ?? ''));
+      }));
+    } else {
+      // 'default' — re-fetch page 0 to restore server order
+      void backend.getEntities({ limit: 20, offset: 0 }).then((result) => {
+        state.setEntities(result.data);
+        state.setCurrentEntityPage(0);
+        state.setSelectedEntityIndex(0);
+      });
+    }
   }, [store, backend]);
+
+  const cycleSortOrder = useCallback(() => {
+    const currentIdx = SORT_CYCLE.indexOf(sortOrder);
+    const nextIdx = (currentIdx + 1) % SORT_CYCLE.length;
+    const next = SORT_CYCLE[nextIdx];
+    setSortOrder(next);
+    applySort(next);
+  }, [sortOrder, applySort]);
 
   const keyMap = useMemo(
     () => ({

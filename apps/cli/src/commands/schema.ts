@@ -18,7 +18,7 @@ interface SchemaField {
   name: string;
   type: string;
   required: boolean;
-  description: string;
+  description?: string;
 }
 
 interface SchemaDefinition {
@@ -71,7 +71,7 @@ export function formatSchemaTable(schema: SchemaRecord | null): string {
   const nameWidth = Math.max(nameHeader.length, ...definition.fields.map((f) => f.name.length));
   const typeWidth = Math.max(typeHeader.length, ...definition.fields.map((f) => f.type.length));
   const reqWidth = reqHeader.length; // "Required" is always wider than "yes"/"no"
-  const descWidth = Math.max(descHeader.length, ...definition.fields.map((f) => f.description.length));
+  const descWidth = Math.max(descHeader.length, ...definition.fields.map((f) => (f.description ?? '').length));
 
   const header = `  ${nameHeader.padEnd(nameWidth)}  ${typeHeader.padEnd(typeWidth)}  ${reqHeader.padEnd(reqWidth)}  ${descHeader.padEnd(descWidth)}`;
   const separator = `  ${'-'.repeat(nameWidth)}  ${'-'.repeat(typeWidth)}  ${'-'.repeat(reqWidth)}  ${'-'.repeat(descWidth)}`;
@@ -82,7 +82,7 @@ export function formatSchemaTable(schema: SchemaRecord | null): string {
   for (const field of definition.fields) {
     const req = field.required ? 'yes' : 'no';
     lines.push(
-      `  ${field.name.padEnd(nameWidth)}  ${field.type.padEnd(typeWidth)}  ${req.padEnd(reqWidth)}  ${field.description}`,
+      `  ${field.name.padEnd(nameWidth)}  ${field.type.padEnd(typeWidth)}  ${req.padEnd(reqWidth)}  ${field.description ?? ''}`,
     );
   }
 
