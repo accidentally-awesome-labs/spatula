@@ -78,7 +78,7 @@ export function resolveOutputPath(
 // Exporter factory
 // ---------------------------------------------------------------------------
 
-function createExporter(format: ExportFormat): Exporter {
+export function createExporter(format: ExportFormat): Exporter {
   switch (format) {
     case 'json':
       return new JsonExporter();
@@ -217,7 +217,7 @@ export async function runExportCommand(opts: ExportCommandOptions = {}): Promise
 // Formatting helpers
 // ---------------------------------------------------------------------------
 
-function formatFileSize(bytes: number): string {
+export function formatFileSize(bytes: number): string {
   if (bytes < 1024) return `${bytes} B`;
   if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
