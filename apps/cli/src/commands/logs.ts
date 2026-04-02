@@ -122,10 +122,10 @@ function colorize(text: string, level: string): string {
 }
 
 // ---------------------------------------------------------------------------
-// Internal helpers
+// Internal helpers (exported for testing)
 // ---------------------------------------------------------------------------
 
-function readAndParseLog(filePath: string): LogEntry[] {
+export function readAndParseLog(filePath: string): LogEntry[] {
   const content = readFileSync(filePath, 'utf-8');
   const lines = content.split('\n').filter(Boolean);
   const entries: LogEntry[] = [];
@@ -136,7 +136,7 @@ function readAndParseLog(filePath: string): LogEntry[] {
   return entries;
 }
 
-function findLogFile(logsDir: string, runId: string): string | null {
+export function findLogFile(logsDir: string, runId: string): string | null {
   const files = listLogFiles(logsDir);
 
   // 1. Try matching by filename prefix
