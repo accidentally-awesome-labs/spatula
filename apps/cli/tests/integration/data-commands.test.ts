@@ -20,6 +20,7 @@ import {
   existsSync,
   readFileSync,
   readdirSync,
+  statSync,
 } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
@@ -856,6 +857,157 @@ describe('spatula reset (integration)', () => {
       expect(existsSync(join(resetDir, '.spatula', 'logs'))).toBe(true);
     } finally {
       rmSync(resetDir, { recursive: true, force: true });
+    }
+  });
+});
+
+// ---------------------------------------------------------------------------
+// 9. spatula export — advanced formats and features (integration)
+// ---------------------------------------------------------------------------
+
+describe('spatula export — advanced formats and features (integration)', () => {
+  it('exports entities to SQLite format', async () => {
+    const cwdSpy = vi.spyOn(process, 'cwd').mockReturnValue(projectDir);
+    const consoleSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
+
+    const outputPath = join(projectDir, 'test-export.sqlite');
+    const { runExportCommand } = await import('../../src/commands/export.js');
+    await runExportCommand({ format: 'sqlite', output: outputPath });
+
+    // Verify file was created and is not empty
+    expect(existsSync(outputPath)).toBe(true);
+    const stats = statSync(outputPath);
+    expect(stats.size).toBeGreaterThan(0);
+
+    // Verify summary output mentions sqlite
+    const output = consoleSpy.mock.calls.map(c => String(c[0])).join('\n');
+    expect(output).toContain('sqlite');
+    expect(output).toContain('5'); // 5 entities
+
+    consoleSpy.mockRestore();
+    cwdSpy.mockRestore();
+  });
+
+  it('exports JSON with --include-provenance flag', async () => {
+    const cwdSpy = vi.spyOn(process, 'cwd').mockReturnValue(projectDir);
+    const consoleSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
+
+    const outputPath = join(projectDir, 'test-export-provenance.json');
+    const { runExportCommand } = await import('../../src/commands/export.js');
+    await runExportCommand({ format: 'json', output: outputPath, includeProvenance: true });
+
+    expect(existsSync(outputPath)).toBe(true);
+    const content = readFileSync(outputPath, 'utf-8');
+    // The provenance flag should be passed to the exporter
+    // The exact structure depends on the JsonExporter implementation
+    expect(content.length).toBeGreaterThan(0);
+
+    consoleSpy.mockRestore();
+    cwdSpy.mockRestore();
+  });
+
+  it('batch-loads entities correctly for large datasets (>200)', async () => {
+    // Create a separate project with 450 entities
+    const largeDir = mkdtempSync(join(tmpdir(), 'spatula-large-'));
+    try {
+      writeFileSync(join(largeDir, 'spatula.yaml'), 'name: Large\nseeds:\n  - https://example.com\n');
+      const dbDir = join(largeDir, '.spatula');
+      mkdirSync(dbDir, { recursive: true });
+
+      const { slugifyPath } = await import('../../src/local-project.js');
+      const pid = slugifyPath(largeDir);
+      const { db, close } = createProjectDb(join(dbDir, 'project.db'));
+      initializeProjectDb(db, { projectId: pid, name: 'Large' });
+
+      const adapter = new ProjectAdapter(db, pid);
+
+      // Create schema
+      await adapter.schemaRepo.create({
+        jobId: pid, tenantId: pid, version: 1,
+        definition: {
+          version: 1,
+          fields: [{ name: 'title', type: 'string', required: true, description: 'Title' }],
+          fieldAliases: [], createdAt: new Date(), parentVersion: null,
+        },
+      });
+
+      // Insert 450 entities
+      for (let i = 0; i < 450; i++) {
+        await adapter.entityRepo.create({
+          jobId: pid, tenantId: pid,
+          mergedData: { title: `Item ${i}` },
+          provenance: {},
+          qualityScore: 0.8,
+        });
+      }
+      close();
+
+      // Export and verify all 450 entities are included
+      const cwdSpy = vi.spyOn(process, 'cwd').mockReturnValue(largeDir);
+      const consoleSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
+
+      const outputPath = join(largeDir, 'large-export.json');
+      const { runExportCommand } = await import('../../src/commands/export.js');
+      await runExportCommand({ format: 'json', output: outputPath });
+
+      const output = consoleSpy.mock.calls.map(c => String(c[0])).join('\n');
+      expect(output).toContain('450'); // all entities exported
+
+      // Verify the file actually has all entities
+      const content = readFileSync(outputPath, 'utf-8');
+      // Count entity occurrences (rough check)
+      expect(content).toContain('Item 0');
+      expect(content).toContain('Item 449');
+
+      consoleSpy.mockRestore();
+      cwdSpy.mockRestore();
+    } finally {
+      rmSync(largeDir, { recursive: true, force: true });
+    }
+  });
+
+  it('min-quality filter works correctly on large dataset', async () => {
+    // Create project with entities at various quality levels
+    const qualDir = mkdtempSync(join(tmpdir(), 'spatula-quality-'));
+    try {
+      writeFileSync(join(qualDir, 'spatula.yaml'), 'name: Quality\nseeds:\n  - https://example.com\n');
+      const dbDir = join(qualDir, '.spatula');
+      mkdirSync(dbDir, { recursive: true });
+
+      const { slugifyPath } = await import('../../src/local-project.js');
+      const pid = slugifyPath(qualDir);
+      const { db, close } = createProjectDb(join(dbDir, 'project.db'));
+      initializeProjectDb(db, { projectId: pid, name: 'Quality' });
+
+      const adapter = new ProjectAdapter(db, pid);
+      await adapter.schemaRepo.create({
+        jobId: pid, tenantId: pid, version: 1,
+        definition: { version: 1, fields: [{ name: 'title', type: 'string', required: true, description: 'T' }], fieldAliases: [], createdAt: new Date(), parentVersion: null },
+      });
+
+      // 300 entities: 100 at 0.3 quality, 100 at 0.6, 100 at 0.9
+      for (let i = 0; i < 100; i++) {
+        await adapter.entityRepo.create({ jobId: pid, tenantId: pid, mergedData: { title: `Low ${i}` }, provenance: {}, qualityScore: 0.3 });
+        await adapter.entityRepo.create({ jobId: pid, tenantId: pid, mergedData: { title: `Mid ${i}` }, provenance: {}, qualityScore: 0.6 });
+        await adapter.entityRepo.create({ jobId: pid, tenantId: pid, mergedData: { title: `High ${i}` }, provenance: {}, qualityScore: 0.9 });
+      }
+      close();
+
+      const cwdSpy = vi.spyOn(process, 'cwd').mockReturnValue(qualDir);
+      const consoleSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
+
+      const outputPath = join(qualDir, 'quality-export.json');
+      const { runExportCommand } = await import('../../src/commands/export.js');
+      await runExportCommand({ format: 'json', output: outputPath, minQuality: 0.5 });
+
+      const output = consoleSpy.mock.calls.map(c => String(c[0])).join('\n');
+      // Should include 200 entities (100 mid + 100 high), exclude 100 low
+      expect(output).toContain('200');
+
+      consoleSpy.mockRestore();
+      cwdSpy.mockRestore();
+    } finally {
+      rmSync(qualDir, { recursive: true, force: true });
     }
   });
 });
