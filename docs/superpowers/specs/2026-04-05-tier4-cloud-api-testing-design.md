@@ -77,13 +77,15 @@ export class ServiceRegistry {
 
 | Manager | `dependsOn` | What It Does | `envVars` Provided |
 |---------|-------------|-------------|-------------------|
-| `ollama` | — | Existing Ollama lifecycle (check/install/pull/serve) | `OLLAMA_BASE_URL` |
+| `ollama` | — | Existing Ollama lifecycle (check/install/pull/serve). Constructor accepts `{ model: string }` for model-specific operations (check/pull). The generic `ServiceManager` interface is extended via constructor options, not method params: `new OllamaServiceManager({ model: 'llama3.2:1b' })`. | `OLLAMA_BASE_URL` |
 | `docker-postgres` | — | Docker Compose up Postgres on 5433, run Drizzle migrations | `DATABASE_URL`, `TEST_DATABASE_URL` |
 | `docker-redis` | — | Docker Compose up Redis on 6380, `SELECT 1` + `FLUSHDB` | `REDIS_URL` |
 | `openrouter` | — | Check API key from env/.env.test, validate via `GET /api/v1/models` | `OPENROUTER_API_KEY` |
 | `firecrawl` | — | Check API key from env/.env.test | `FIRECRAWL_API_KEY` |
 
 Note: No `api-server` service manager. The API app is imported directly in test files using Hono's `app.request()` test helper, which runs the full middleware chain without starting an HTTP server.
+
+**Cross-package import:** `@spatula/api` must be added as a devDependency of `@spatula/cli` to enable importing `createApp` from the API package. Add `"@spatula/api": "workspace:*"` to `apps/cli/package.json` devDependencies.
 
 ### 2.4 Tier Registry (Declarative)
 
@@ -133,7 +135,7 @@ const TIERS: Record<string, TierDefinition> = {
     description: 'Deterministic tests only (Tier 2)',
     extends: '2',
     services: [],
-    globs: [],
+    globs: [],  // Empty = add nothing new; inherits all globs from parent (Tier 2)
   },
   binary: {
     name: 'CLI Binary',
@@ -257,15 +259,41 @@ Use Hono's `app.request()` test helper — runs the full middleware chain (auth,
 
 ### Dependency Injection
 
-The API app needs real Postgres and Redis connections. The test helper `createTestApp()`:
+The API app's `createApp(deps: AppDeps)` factory requires 12+ dependencies. For Tier 4 tests:
+
+**Real (from Postgres + Redis):**
+- `dbPool` — real Postgres pool via `createDatabase(DATABASE_URL)`
+- `jobRepo`, `schemaRepo`, `extractionRepo`, `entityRepo`, `entitySourceRepo`, `actionRepo`, `taskRepo`, `exportRepo` — real Drizzle repository instances from the pool
+- `tenantRepo` — real Drizzle tenant repository (needed for `POST /api/v1/tenants`)
+
+**Stubbed (no workers in Tier 4):**
+- `jobManager` — stub that records job dispatch calls but doesn't enqueue BullMQ jobs
+- `exportQueue` — stub that records export requests but doesn't process them
+- `contentStore` — in-memory stub or `LocalContentStore` pointed at a temp dir
+
+The test helper `createTestApp()`:
 1. Reads `DATABASE_URL` and `REDIS_URL` from env (set by orchestrator)
-2. Creates real Drizzle + ioredis instances
-3. Imports/builds the Hono app with real deps
-4. Returns `{ app, cleanup() }`
+2. Creates real Drizzle pool + ioredis instance
+3. Constructs real repository instances from the pool
+4. Stubs jobManager, exportQueue, contentStore
+5. Calls `createApp(deps)` with the mixed real/stub deps
+6. Returns `{ app, db, cleanup() }` where `cleanup()` closes pool + redis
 
-### Tenant Isolation
+### Auth Strategy for Tests
 
-Each test file creates its own tenant via `POST /api/v1/tenants` (bootstrap endpoint, no auth required). All subsequent requests include the tenant's API key. This ensures test files don't interfere with each other's data.
+Tests use `AUTH_STRATEGY=none` (the `NoAuthProvider`). This accepts any `x-tenant-id` header without requiring an API key or JWT. Each test file creates its own tenant via `POST /api/v1/tenants`, then uses the returned `tenantId` in an `x-tenant-id` header for all subsequent requests.
+
+```typescript
+// Auth headers for tests (no API key needed with AUTH_STRATEGY=none)
+function authHeaders(tenantId: string): Record<string, string> {
+  return {
+    'x-tenant-id': tenantId,
+    'Content-Type': 'application/json',
+  };
+}
+```
+
+This ensures test files don't interfere with each other's data while avoiding the complexity of API key management in tests.
 
 ### Data Seeding for Schema/Entity Tests
 
@@ -296,9 +324,9 @@ server.close();
 ### 5.1 `helpers.ts` — Shared utilities
 
 Exports:
-- `createTestApp()` — imports Hono app, creates real DB/Redis connections, returns `{ app, db, cleanup() }`
-- `createTenant(app)` — bootstraps tenant, returns `{ tenantId, apiKey }`
-- `authHeaders(tenantId, apiKey)` — builds auth header object
+- `createTestApp()` — imports Hono app factory, creates real DB/Redis connections + stubbed jobManager/exportQueue/contentStore, returns `{ app, db, cleanup() }`
+- `createTenant(app)` — bootstraps tenant via `POST /api/v1/tenants`, returns `{ tenantId }`
+- `authHeaders(tenantId)` — builds `{ 'x-tenant-id': tenantId, 'Content-Type': 'application/json' }` (uses `AUTH_STRATEGY=none`)
 - `seedJobWithData(db, tenantId)` — inserts a job, schema, entities, and actions directly in Postgres for tests that need pre-existing data
 - `startWebhookReceiver()` — tiny HTTP server collecting webhook POSTs
 - `isDockerAvailable()` — checks `docker info` + `docker compose version`
@@ -311,8 +339,8 @@ Skip if `DATABASE_URL` not set (Docker not running).
 
 | Test | Assertion |
 |------|-----------|
-| Bootstrap creates tenant and returns API key | POST /api/v1/tenants → 201, has tenantId + apiKey |
-| Unauthorized request rejected | GET /api/v1/jobs without auth → 401 |
+| Bootstrap creates tenant | POST /api/v1/tenants → 201, response has tenantId |
+| Missing tenant header rejected | GET /api/v1/jobs without `x-tenant-id` header → 400/401 |
 
 **Job CRUD (5):**
 
@@ -360,8 +388,16 @@ Seed data directly via DB before these tests.
 
 | Test | Assertion |
 |------|-----------|
-| Health endpoint | GET /health → 200 |
-| Deep health | GET /health/deep → 200, shows db + redis status |
+| Health endpoint | GET /health → 200, `{ status: 'ok' }` |
+| Ready check | GET /health/ready → 200, shows db + redis + queue status |
+
+**Extractions & Usage (3):**
+
+| Test | Assertion |
+|------|-----------|
+| List extractions | GET /api/v1/jobs/{id}/extractions → 200, paginated array |
+| Get usage stats | GET /api/v1/usage → 200, has token/cost aggregation |
+| API key management | POST /api/v1/api-keys → 201, GET /api/v1/api-keys → list, DELETE → revoked |
 
 **Rate Limiting (1):**
 
@@ -427,10 +463,10 @@ apps/cli/
 
 | File | Tests | Requires | Est. Runtime |
 |------|-------|----------|-------------|
-| api-lifecycle.test.ts | 20 | Docker (Postgres + Redis) | ~10s |
+| api-lifecycle.test.ts | 23 | Docker (Postgres + Redis) | ~10s |
 | openrouter-integration.test.ts | 6 | OPENROUTER_API_KEY | ~15s |
 | firecrawl-integration.test.ts | 5 | FIRECRAWL_API_KEY | ~20s |
-| **Total** | **31** | | ~45s |
+| **Total** | **34** | | ~45s |
 
 Each requirement is independent. Tests skip gracefully when prerequisites are missing.
 
@@ -441,8 +477,8 @@ Each requirement is independent. Tests skip gracefully when prerequisites are mi
 | 1 | 514 | 514 |
 | 2 | 43 | 557 |
 | 3 | 6 | 563 |
-| 4 | 31 | 594 |
-| Binary | 18 | 612 |
+| 4 | 34 | 597 |
+| Binary | 18 | 615 |
 
 ---
 
