@@ -1,7 +1,13 @@
 import { execSync } from 'node:child_process';
+import { existsSync, readFileSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { createOllamaManager } from './ollama-manager.js';
+import { ServiceRegistry } from './services/service-manager.js';
+import { OllamaServiceManager } from './services/ollama-manager.js';
+import { DockerPostgresManager, DockerRedisManager } from './services/docker-manager.js';
+import { OpenRouterManager } from './services/openrouter-manager.js';
+import { FirecrawlManager } from './services/firecrawl-manager.js';
+import { TIERS, resolveGlobs, resolveServices } from './tier-registry.js';
 
 // ---------------------------------------------------------------------------
 // Directory resolution (works with tsx which supports ESM)
@@ -12,55 +18,25 @@ const __dirname = dirname(__filename);
 const CLI_ROOT = join(__dirname, '..');
 
 // ---------------------------------------------------------------------------
-// Tier definitions
+// .env.test loader
 // ---------------------------------------------------------------------------
 
-const TIER_GLOBS: Record<string, string[]> = {
-  '1': [
-    'tests/unit',
-    'tests/integration',
-    'tests/e2e/contracts-and-resilience.test.ts',
-    'tests/e2e/resource-cleanup.test.ts',
-    'tests/e2e/workflow.test.ts',
-    'tests/e2e/tui-rendering.test.ts',
-  ],
-  '2': [
-    // Tier 1 + mock Ollama tests
-    'tests/unit',
-    'tests/integration',
-    'tests/e2e/contracts-and-resilience.test.ts',
-    'tests/e2e/resource-cleanup.test.ts',
-    'tests/e2e/workflow.test.ts',
-    'tests/e2e/tui-rendering.test.ts',
-    'tests/e2e/tier2/pipeline-mock-llm.test.ts',
-    'tests/e2e/tier2/pipeline-errors.test.ts',
-    'tests/e2e/tier2/conversation.test.ts',
-  ],
-  '3': [
-    // Tier 2 + real Ollama
-    'tests/unit',
-    'tests/integration',
-    'tests/e2e/contracts-and-resilience.test.ts',
-    'tests/e2e/resource-cleanup.test.ts',
-    'tests/e2e/workflow.test.ts',
-    'tests/e2e/tui-rendering.test.ts',
-    'tests/e2e/tier2/', // All tier2 tests including real Ollama
-  ],
-  binary: ['tests/e2e/cli-binary.test.ts'],
-  ci: [
-    // Same as Tier 2 (deterministic, no real Ollama)
-    'tests/unit',
-    'tests/integration',
-    'tests/e2e/contracts-and-resilience.test.ts',
-    'tests/e2e/resource-cleanup.test.ts',
-    'tests/e2e/workflow.test.ts',
-    'tests/e2e/tui-rendering.test.ts',
-    'tests/e2e/tier2/pipeline-mock-llm.test.ts',
-    'tests/e2e/tier2/pipeline-errors.test.ts',
-    'tests/e2e/tier2/conversation.test.ts',
-  ],
-  all: ['tests/unit', 'tests/integration', 'tests/e2e/'],
-};
+function loadEnvFile(path: string): void {
+  if (!existsSync(path)) return;
+  const lines = readFileSync(path, 'utf-8').split('\n');
+  for (const line of lines) {
+    const trimmed = line.trim();
+    if (!trimmed || trimmed.startsWith('#')) continue;
+    const eqIdx = trimmed.indexOf('=');
+    if (eqIdx === -1) continue;
+    const key = trimmed.slice(0, eqIdx).trim();
+    const value = trimmed.slice(eqIdx + 1).trim();
+    if (!process.env[key]) process.env[key] = value;
+  }
+}
+
+// Load env before anything that might read API keys
+loadEnvFile(join(CLI_ROOT, 'tests', 'e2e', 'tier4', '.env.test'));
 
 // ---------------------------------------------------------------------------
 // Arg parsing
@@ -112,47 +88,48 @@ async function main(): Promise<void> {
   const args = parseArgs();
   const { tier, model, yes: autoYes } = args;
 
-  console.log(`\nSpatula Test Runner — Tier ${tier}\n`);
-
-  let ollamaStop: (() => Promise<void>) | null = null;
-
-  // Tier 3 and 'all' need Ollama
-  if (tier === '3' || tier === 'all') {
-    const manager = createOllamaManager();
-
-    const status = await manager.check(model);
-    console.log(
-      `Ollama: ${status.installed ? `installed (${status.version ?? 'unknown version'})` : 'not installed'}`,
-    );
-    console.log(`  Serving: ${status.serving ? 'yes' : 'no'}`);
-    console.log(`  Model ${model}: ${status.modelPulled ? 'ready' : 'not pulled'}\n`);
-
-    let ollamaReady = status.installed;
-
-    if (!ollamaReady) {
-      ollamaReady = await manager.ensureInstalled({ autoYes });
-      if (!ollamaReady) {
-        console.log('Ollama not available — Tier 3 tests will be skipped.\n');
-      }
-    }
-
-    if (ollamaReady) {
-      // Re-check model status (may have just installed Ollama)
-      const serveResult = await manager.ensureServing();
-      if (serveResult.wasStarted) {
-        ollamaStop = serveResult.stop;
-        cleanupFn = ollamaStop;
-        console.log('Started Ollama server (will stop after tests).\n');
-      }
-
-      if (!status.modelPulled) {
-        await manager.ensureModel(model, { autoYes });
-      }
-    }
+  const tierDef = TIERS[tier];
+  if (!tierDef) {
+    console.error(`Unknown tier: "${tier}". Available: ${Object.keys(TIERS).join(', ')}`);
+    process.exitCode = 1;
+    return;
   }
 
-  // Resolve test globs
-  const globs = TIER_GLOBS[tier] ?? TIER_GLOBS['2'];
+  console.log(`\nSpatula Test Runner — Tier ${tier} (${tierDef.name})\n`);
+
+  // Build the service registry with all known managers
+  const registry = new ServiceRegistry();
+  registry.register(new OllamaServiceManager({ model }));
+  registry.register(new DockerPostgresManager());
+  registry.register(new DockerRedisManager());
+  registry.register(new OpenRouterManager());
+  registry.register(new FirecrawlManager());
+
+  // Resolve tier → services + globs
+  const services = resolveServices(tier);
+  const globs = resolveGlobs(tier);
+
+  if (globs.length === 0) {
+    console.log('No test globs for this tier — nothing to run.\n');
+    return;
+  }
+
+  // Start required services (generic — no tier-specific if/else)
+  let startResult: Awaited<ReturnType<ServiceRegistry['startAll']>> | null = null;
+
+  if (services.length > 0) {
+    console.log('Services:');
+    for (const name of services) {
+      const s = await registry.get(name).check();
+      console.log(`  ${name}: ${s.available ? 'available' : 'not available'}`);
+    }
+    console.log();
+
+    startResult = await registry.startAll(services, { autoYes });
+    Object.assign(process.env, startResult.envVars);
+    cleanupFn = startResult.stopAll;
+  }
+
   const startTime = Date.now();
 
   // Run vitest
@@ -164,6 +141,7 @@ async function main(): Promise<void> {
       stdio: 'inherit',
       cwd: CLI_ROOT,
       timeout: args.timeout,
+      env: { ...process.env, ...startResult?.envVars },
     });
   } catch (err: unknown) {
     // vitest exits with non-zero on test failures — still print summary
@@ -174,17 +152,17 @@ async function main(): Promise<void> {
 
   const elapsed = ((Date.now() - startTime) / 1000).toFixed(1);
 
-  // Cleanup Ollama if we started it
-  if (ollamaStop) {
-    console.log('\nStopping Ollama server...');
-    await ollamaStop();
+  // Cleanup services if any were started
+  if (startResult) {
+    console.log('\nStopping services...');
+    await startResult.stopAll();
     cleanupFn = null;
   }
 
   // Summary
   const separator = '\u2500'.repeat(50);
   console.log(`\n${separator}`);
-  console.log(`Tier ${tier} complete in ${elapsed}s`);
+  console.log(`Tier ${tier} (${tierDef.name}) complete in ${elapsed}s`);
   console.log(`${separator}\n`);
 }
 
