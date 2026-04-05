@@ -77,15 +77,28 @@ export function createFixtureProject(fixturePort: number): FixtureProject {
   const projectId = slugifyPath(projectDir);
 
   // Write spatula.yaml
+  // Note: We seed multiple URLs explicitly because the crawl-orchestrator's
+  // isValidCrawlUrl() blocks localhost links discovered during crawling.
+  // In production, discovered links point to real domains and pass the check.
   const yaml = `
 name: Tier 2 Pipeline Test
 description: LLM pipeline integration test
 seeds:
   - http://localhost:${fixturePort}/
+  - http://localhost:${fixturePort}/products/widget-pro
+  - http://localhost:${fixturePort}/products/widget-pro-deluxe
+  - http://localhost:${fixturePort}/products/comparison
+  - http://localhost:${fixturePort}/recipes/pasta-carbonara
+  - http://localhost:${fixturePort}/about
+  - http://localhost:${fixturePort}/blog/review
+  - http://localhost:${fixturePort}/page/2
 depth: 2
 limit: 20
 llm:
   model: llama3.2:1b
+schema:
+  evolution:
+    batchSize: 5
 fields:
   - field: title
     type: string
@@ -105,6 +118,27 @@ fields:
   const dbPath = join(dbDir, 'project.db');
   const { db, close } = createProjectDb(dbPath);
   initializeProjectDb(db, { projectId, name: 'Tier 2 Pipeline Test' });
+
+  // Seed initial schema (version 1) from user-defined fields.
+  // In production, this is done by JobManager (server mode) or `spatula new`.
+  // Without a schema, the crawl-orchestrator skips extraction and link evaluation.
+  const adapter = new ProjectAdapter(db, projectId);
+  adapter.schemaRepo.create({
+    jobId: projectId,
+    tenantId: projectId,
+    version: 1,
+    definition: {
+      version: 1,
+      fields: [
+        { name: 'title', description: 'Title of the entity', type: 'string', required: true },
+        { name: 'price', description: 'Price of the product', type: 'currency', required: false },
+      ],
+      fieldAliases: [],
+      createdAt: new Date(),
+      parentVersion: null,
+    },
+  });
+
   close();
 
   return {

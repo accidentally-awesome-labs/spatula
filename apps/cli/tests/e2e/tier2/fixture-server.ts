@@ -1,4 +1,4 @@
-import { createServer, type Server, type IncomingMessage, type ServerResponse } from 'node:http';
+import { createServer, type IncomingMessage, type ServerResponse } from 'node:http';
 import {
   LISTING_HTML, WIDGET_PRO_HTML, WIDGET_PRO_DELUXE_HTML, COMPARISON_HTML,
   PASTA_CARBONARA_HTML, ABOUT_HTML, BLOG_REVIEW_HTML, PAGE_2_HTML,
@@ -18,7 +18,7 @@ export interface FixtureServer {
   resetLog(): void;
 }
 
-const ROUTES: Record<string, { html: string; status?: number; delay?: number; redirect?: string }> = {
+const ROUTES: Record<string, { html?: string; status?: number; delay?: number; redirect?: string }> = {
   '/': { html: LISTING_HTML },
   '/products/widget-pro': { html: WIDGET_PRO_HTML },
   '/products/widget-pro-deluxe': { html: WIDGET_PRO_DELUXE_HTML },
