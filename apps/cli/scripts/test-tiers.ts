@@ -127,23 +127,26 @@ async function main(): Promise<void> {
     console.log(`  Serving: ${status.serving ? 'yes' : 'no'}`);
     console.log(`  Model ${model}: ${status.modelPulled ? 'ready' : 'not pulled'}\n`);
 
-    if (!status.installed) {
-      const installed = await manager.ensureInstalled({ autoYes });
-      if (!installed) {
+    let ollamaReady = status.installed;
+
+    if (!ollamaReady) {
+      ollamaReady = await manager.ensureInstalled({ autoYes });
+      if (!ollamaReady) {
         console.log('Ollama not available — Tier 3 tests will be skipped.\n');
-        // Fall back: still run whatever globs are configured for this tier
       }
     }
 
-    if (status.installed || (await manager.isAvailable())) {
-      if (!status.modelPulled) {
-        await manager.ensureModel(model, { autoYes });
-      }
+    if (ollamaReady) {
+      // Re-check model status (may have just installed Ollama)
       const serveResult = await manager.ensureServing();
       if (serveResult.wasStarted) {
         ollamaStop = serveResult.stop;
         cleanupFn = ollamaStop;
         console.log('Started Ollama server (will stop after tests).\n');
+      }
+
+      if (!status.modelPulled) {
+        await manager.ensureModel(model, { autoYes });
       }
     }
   }
