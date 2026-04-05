@@ -111,53 +111,78 @@ export class DockerPostgresManager implements ServiceManager {
   }
 
   async start(context: ServiceContext): Promise<ServiceHandle> {
-    this.projectName = `spatula-test-${randomBytes(4).toString('hex')}`;
-
-    // Start only the postgres service
-    compose(this.projectName, ['up', '-d', 'postgres']);
-
-    // Poll until the container is healthy
-    await pollUntil(
-      () => {
-        try {
-          const output = compose(this.projectName, [
-            'ps',
-            '--format',
-            'json',
-          ]);
-          // docker compose ps --format json may return one JSON object per
-          // line or a JSON array depending on the version. We normalise to
-          // a flat string search for robustness.
-          return output.includes('"healthy"') || output.includes('(healthy)');
-        } catch {
-          return false;
-        }
-      },
-      { timeoutMs: 30_000, intervalMs: 1_000, label: 'Postgres healthy' },
-    );
-
     const port = process.env.TEST_POSTGRES_PORT ?? '5433';
     const connectionString = `postgres://spatula:spatula_test@localhost:${port}/spatula_test`;
 
+    // Check if Postgres is already reachable on the expected port
+    const alreadyRunning = await this.isPostgresReachable(port);
+
+    let weStartedIt = false;
+    if (!alreadyRunning) {
+      this.projectName = `spatula-test-${randomBytes(4).toString('hex')}`;
+      compose(this.projectName, ['up', '-d', 'postgres']);
+      weStartedIt = true;
+
+      await pollUntil(
+        () => {
+          try {
+            const output = compose(this.projectName, ['ps', '--format', 'json']);
+            return output.includes('"healthy"') || output.includes('(healthy)');
+          } catch {
+            return false;
+          }
+        },
+        { timeoutMs: 30_000, intervalMs: 1_000, label: 'Postgres healthy' },
+      );
+    } else {
+      console.log('  docker-postgres: reusing existing container on port ' + port);
+    }
+
     // Run database migrations
-    const { runMigrations } = await import('@spatula/db');
-    await runMigrations(connectionString);
+    // NOTE: We call drizzle-orm migrate directly instead of @spatula/db's
+    // runMigrations because the latter resolves migration paths relative to
+    // its own __dirname, which breaks when called via tsx from a different package.
+    const { resolve: pathResolve } = await import('node:path');
+    const { migrate } = await import('drizzle-orm/node-postgres/migrator');
+    const { createDatabase } = await import('@spatula/db');
+    const migrationsDb = createDatabase(connectionString);
+    // Find monorepo root by walking up from this file
+    const { dirname: pathDirname } = await import('node:path');
+    const { fileURLToPath: toPath } = await import('node:url');
+    const thisDir = pathDirname(toPath(import.meta.url));
+    // thisDir = apps/cli/scripts/services → root = ../../../../
+    const monorepoRoot = pathResolve(thisDir, '..', '..', '..', '..');
+    const migrationsFolder = pathResolve(monorepoRoot, 'packages', 'db', 'drizzle');
+    await migrate(migrationsDb, { migrationsFolder });
 
     const projectName = this.projectName;
 
     return {
       async stop() {
-        try {
-          compose(projectName, ['down', '--volumes', '--remove-orphans'], {
-            timeout: 30_000,
-          });
-        } catch {
-          // Best-effort cleanup
+        if (weStartedIt && projectName) {
+          try {
+            compose(projectName, ['down', '--volumes', '--remove-orphans'], { timeout: 30_000 });
+          } catch { /* Best-effort cleanup */ }
         }
+        // If we didn't start it, don't stop it (user manages their own containers)
       },
       connectionInfo: { host: 'localhost', port: Number(port), database: 'spatula_test' },
       envVars: { DATABASE_URL: connectionString },
     };
+  }
+
+  private async isPostgresReachable(port: string): Promise<boolean> {
+    try {
+      const net = await import('node:net');
+      return new Promise((resolve) => {
+        const socket = net.createConnection({ host: 'localhost', port: Number(port) }, () => {
+          socket.destroy();
+          resolve(true);
+        });
+        socket.on('error', () => resolve(false));
+        socket.setTimeout(2000, () => { socket.destroy(); resolve(false); });
+      });
+    } catch { return false; }
   }
 
   async healthCheck(): Promise<boolean> {
@@ -192,30 +217,32 @@ export class DockerRedisManager implements ServiceManager {
   }
 
   async start(context: ServiceContext): Promise<ServiceHandle> {
-    this.projectName = `spatula-test-${randomBytes(4).toString('hex')}`;
-
-    // Start only the redis service
-    compose(this.projectName, ['up', '-d', 'redis']);
-
-    // Poll until the container is healthy
-    await pollUntil(
-      () => {
-        try {
-          const output = compose(this.projectName, [
-            'ps',
-            '--format',
-            'json',
-          ]);
-          return output.includes('"healthy"') || output.includes('(healthy)');
-        } catch {
-          return false;
-        }
-      },
-      { timeoutMs: 15_000, intervalMs: 1_000, label: 'Redis healthy' },
-    );
-
     const port = process.env.TEST_REDIS_PORT ?? '6380';
     const redisUrl = `redis://localhost:${port}/1`;
+
+    // Check if Redis is already reachable
+    const alreadyRunning = await this.isRedisReachable(port);
+
+    let weStartedIt = false;
+    if (!alreadyRunning) {
+      this.projectName = `spatula-test-${randomBytes(4).toString('hex')}`;
+      compose(this.projectName, ['up', '-d', 'redis']);
+      weStartedIt = true;
+
+      await pollUntil(
+        () => {
+          try {
+            const output = compose(this.projectName, ['ps', '--format', 'json']);
+            return output.includes('"healthy"') || output.includes('(healthy)');
+          } catch {
+            return false;
+          }
+        },
+        { timeoutMs: 15_000, intervalMs: 1_000, label: 'Redis healthy' },
+      );
+    } else {
+      console.log('  docker-redis: reusing existing container on port ' + port);
+    }
 
     // Connect to Redis, select DB 1, and flush it for a clean test slate
     const { default: Redis } = await import('ioredis');
@@ -230,12 +257,12 @@ export class DockerRedisManager implements ServiceManager {
 
     return {
       async stop() {
-        try {
-          compose(projectName, ['down', '--volumes', '--remove-orphans'], {
-            timeout: 30_000,
-          });
-        } catch {
-          // Best-effort cleanup
+        if (weStartedIt && projectName) {
+          try {
+            compose(projectName, ['down', '--volumes', '--remove-orphans'], { timeout: 30_000 });
+          } catch {
+            // Best-effort cleanup
+          }
         }
       },
       connectionInfo: { host: 'localhost', port: Number(port), db: 1 },
@@ -243,13 +270,22 @@ export class DockerRedisManager implements ServiceManager {
     };
   }
 
-  async healthCheck(): Promise<boolean> {
-    if (!this.projectName) return false;
+  private async isRedisReachable(port: string): Promise<boolean> {
     try {
-      const output = compose(this.projectName, ['ps', '--format', 'json']);
-      return output.includes('"healthy"') || output.includes('(healthy)');
-    } catch {
-      return false;
-    }
+      const net = await import('node:net');
+      return new Promise((resolve) => {
+        const socket = net.createConnection({ host: 'localhost', port: Number(port) }, () => {
+          socket.destroy();
+          resolve(true);
+        });
+        socket.on('error', () => resolve(false));
+        socket.setTimeout(2000, () => { socket.destroy(); resolve(false); });
+      });
+    } catch { return false; }
+  }
+
+  async healthCheck(): Promise<boolean> {
+    const port = process.env.TEST_REDIS_PORT ?? '6380';
+    return this.isRedisReachable(port);
   }
 }
