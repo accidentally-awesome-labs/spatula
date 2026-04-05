@@ -30,18 +30,18 @@ describe('ConfigConversationService with mock Ollama', () => {
       const executor = new DefaultConfigExecutor();
 
       // Start with empty config
-      let config = {
+      let config: any = {
         tenantId: 'test',
         name: '',
         description: '',
-        seedUrls: [] as string[],
+        seedUrls: [],
         crawl: {
           maxDepth: 2,
           maxPages: 1000,
           concurrency: 5,
-          crawlerType: 'playwright' as const,
+          crawlerType: 'playwright',
         },
-        schema: { mode: 'discovery' as const },
+        schema: { mode: 'discovery' },
         llm: { primaryModel: 'llama3.2:1b' },
       };
 
