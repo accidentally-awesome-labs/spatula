@@ -41,7 +41,7 @@ afterAll(async () => {
 /** Lazily crawl the target page once and reuse for tests 1-3. */
 async function getCachedResult(): Promise<CrawlResult> {
   if (!cachedResult) {
-    cachedResult = await crawler.crawl(TARGET_URL, {});
+    cachedResult = await crawler.crawl(TARGET_URL, { timeout: 30000, respectRobotsTxt: true });
   }
   return cachedResult;
 }
@@ -103,7 +103,7 @@ describe('Firecrawl integration', () => {
     // Firecrawl may either throw a CrawlError or return a result with
     // statusCode 404 — both are acceptable outcomes.
     try {
-      const result = await crawler.crawl(NONEXISTENT_URL, {});
+      const result = await crawler.crawl(NONEXISTENT_URL, { timeout: 30000, respectRobotsTxt: true });
       // If it returns a result, status should indicate the page was not found
       expect(result.statusCode).toBe(404);
     } catch (error: unknown) {
@@ -145,7 +145,7 @@ describe('Firecrawl integration', () => {
     try {
       // Crawl the same page with both crawlers
       const firecrawlResult = await getCachedResult();
-      const playwrightResult = await playwrightCrawler.crawl(TARGET_URL, {});
+      const playwrightResult = await playwrightCrawler.crawl(TARGET_URL, { timeout: 30000, respectRobotsTxt: true });
 
       // Both should return HTML containing the page title
       expect(firecrawlResult.html).toContain('Books to Scrape');
