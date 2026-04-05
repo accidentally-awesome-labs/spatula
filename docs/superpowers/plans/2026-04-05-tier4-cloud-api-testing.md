@@ -58,7 +58,7 @@ Create `apps/cli/scripts/services/service-manager.ts` exporting:
   - `register(manager)` — stores by name
   - `get(name)` — retrieves or throws
   - `resolveStartOrder(names)` — topological sort via DFS on `dependsOn`
-  - `startAll(names, opts)` — iterates in order, calls check → provision → start, accumulates envVars and connectionInfo, returns `{ handles, envVars, stopAll() }`
+  - `startAll(names, opts)` — iterates in order, calls check → provision → start, accumulates envVars and connectionInfo. **On failure:** if a service's `start()` throws, calls `stop()` on all previously started services (reverse order) before re-throwing. Returns `{ handles, envVars, stopAll() }`. If a service fails `provision()` and the tier has `skipIfMissing: true`, skips that service and continues (does not throw).
 
 - [ ] **Step 2: Commit**
 
@@ -207,20 +207,47 @@ git commit -m "refactor: modular test orchestrator with ServiceRegistry and tier
 - Create: `apps/cli/tests/e2e/tier4/helpers.ts`
 - Modify: `apps/cli/package.json`
 
-- [ ] **Step 1: Add @spatula/api devDependency**
+- [ ] **Step 1: Add @spatula/api devDependency and ensure exports**
 
 In `apps/cli/package.json`, add `"@spatula/api": "workspace:*"` to `devDependencies`.
-Run `pnpm install` to update lockfile.
+
+Also check `apps/api/package.json` — if it lacks `main` and `types` fields, add them:
+```json
+"main": "./dist/index.js",
+"types": "./dist/index.d.ts"
+```
+This ensures cross-package imports resolve correctly. With pnpm workspaces + tsx, source resolution may work without these, but the fields make it reliable.
+
+Run: `pnpm install` to update lockfile.
+Run: `pnpm --filter api build` to ensure dist/ exists.
 
 - [ ] **Step 2: Create Tier 4 test helpers**
 
 Create `apps/cli/tests/e2e/tier4/helpers.ts` exporting:
 
-**`createTestApp()`**: Constructs the Hono app with real Postgres repos + stubbed workers:
-- Real: `dbPool`, all repository instances (`jobRepo`, `schemaRepo`, `entityRepo`, etc.), `tenantRepo`
-- Stubbed: `jobManager` (mock createJob/startJob/etc.), `exportQueue` (mock add), `contentStore` (mock store/retrieve/delete)
-- Sets `AUTH_STRATEGY=none` in env before creating app
-- Returns `{ app, pool, cleanup() }` or `null` if `DATABASE_URL` not set
+**`createTestApp()`**: Constructs the Hono app with real Postgres + Redis connections and stubbed workers.
+
+**Real dependencies (from Docker):**
+- `dbPool` — via `createDatabasePool(DATABASE_URL)` from `@spatula/db` (returns `{ db, pool }`)
+- `redis` — via `new Redis(REDIS_URL)` from `ioredis` (needed for rate limiting middleware)
+- `jobRepo` — `new JobRepository(db)`
+- `schemaRepo` — `new SchemaRepository(db)`
+- `extractionRepo` — `new ExtractionRepository(db)`
+- `entityRepo` — `new EntityRepository(db)`
+- `entitySourceRepo` — `new EntitySourceRepository(db)`
+- `actionRepo` — `new ActionRepository(db)`
+- `taskRepo` — `new CrawlTaskRepository(db)` (required by AppDeps)
+- `exportRepo` — `new ExportRepository(db)`
+- `tenantRepo` — `new TenantRepository(db)` (for tenant creation tests)
+
+**Stubbed (no workers in Tier 4):**
+- `jobManager` — mock with `createJob` returning UUID, `startJob`/`pauseJob`/`resumeJob`/`cancelJob`/`triggerReconciliation` as no-ops
+- `exportQueue` — mock with `add()` no-op
+- `contentStore` — mock with `store`/`retrieve`/`delete` no-ops
+
+Sets `AUTH_STRATEGY=none` in env before calling `createApp(deps)`.
+Returns `{ app, pool, redis, cleanup() }` or `null` if `DATABASE_URL` not set.
+`cleanup()` closes both the Postgres pool and Redis connection.
 
 **`createTenant(app, name?)`**: POST to `/api/v1/tenants`, returns `{ tenantId }`.
 
@@ -264,7 +291,7 @@ Actions (3): list pending, approve single, batch approve
 
 Export (2): create export (201), get export status
 
-Webhook (2): delivery on event (use webhook receiver), signature header present
+Webhook (2): Test `WebhookSender.send()` directly (not via queue — BullMQ workers are not started in Tier 4). Import `WebhookSender` from `@spatula/queue`, call `send()` against the webhook receiver started via `startWebhookReceiver()`. Test 1: verify receiver gets POST with correct JSON body. Test 2: verify `X-Spatula-Signature` header is present when a secret is configured.
 
 Health & Admin (2): GET /health (200), GET /health/ready (200 with checks)
 
