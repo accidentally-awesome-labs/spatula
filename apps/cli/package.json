@@ -13,6 +13,12 @@
     "lint:fix": "eslint src/ --fix",
     "test": "vitest run",
     "test:watch": "vitest",
+    "test:tier1": "vitest run tests/unit tests/integration tests/e2e/contracts-and-resilience.test.ts tests/e2e/resource-cleanup.test.ts tests/e2e/workflow.test.ts tests/e2e/tui-rendering.test.ts",
+    "test:tier2": "vitest run --exclude='**/cli-binary*' --exclude='**/pipeline-real*'",
+    "test:tier3": "tsx scripts/test-tiers.ts --tier=3",
+    "test:all": "vitest run --exclude='**/cli-binary*'",
+    "test:binary": "vitest run tests/e2e/cli-binary.test.ts",
+    "test:ci": "vitest run --exclude='**/cli-binary*' --exclude='**/pipeline-real*'",
     "clean": "rm -rf dist .turbo"
   },
   "dependencies": {
