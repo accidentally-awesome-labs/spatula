@@ -37,6 +37,7 @@
     "zustand": "^5.0.0"
   },
   "devDependencies": {
+    "@spatula/api": "workspace:*",
     "@types/node": "^25.3.5",
     "@types/node-notifier": "^8.0.5",
     "@types/react": "^18.3.18",
