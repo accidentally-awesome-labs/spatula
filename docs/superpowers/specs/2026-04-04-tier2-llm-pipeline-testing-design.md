@@ -117,14 +117,16 @@ A lightweight HTTP server impersonating Ollama's `/api/chat` endpoint. Inspects 
 2. Read user prompt (last user message) to identify page/context
 3. Select canned response from response map
 
-| System Prompt Pattern | Component | Context Detection |
-|----------------------|-----------|-------------------|
+**Matching strategy:** All patterns use `systemPrompt.includes(pattern)`. Patterns are checked in order — first match wins. Patterns are chosen to be unique substrings of each component's actual system prompt (verified against source code).
+
+| System Prompt Pattern (substring match) | Component | Context Detection |
+|----------------------------------------|-----------|-------------------|
 | `"web page classifier"` | PageClassifier | HTML content keywords in user prompt |
 | `"data extraction expert"` | StaticExtractor | HTML content + schema field count (detects re-extraction) |
-| `"link evaluation"` | LLMLinkEvaluator | URLs listed in user prompt |
-| `"propose new schema fields"` | FieldProposer | Unmapped field names in prompt |
+| `"web crawl link evaluator"` | LLMLinkEvaluator | URLs listed in user prompt |
+| `"analyze unmapped fields"` | FieldProposer | Unmapped field names in prompt |
 | `"synonym detection"` | SynonymDetector | Always returns empty merges |
-| `"normalization expert"` | NormalizationProposer | Field names in prompt |
+| `"data normalization expert"` | NormalizationProposer | Field names in prompt |
 | `"trustworthiness"` | SourceTrustEvaluator | Domain names in prompt |
 | `"entity resolution"` | EntityMatcher | Extraction summaries — groups by matching titles |
 | `"Infer missing"` | GapFiller | Always returns empty inferences |
@@ -168,13 +170,15 @@ Re-extraction (detected by schema containing `brand` or `cuisine` fields):
 
 #### LLMLinkEvaluator
 
+Response format matches the actual `EvaluatedLink` schema: `{ url, relevanceScore (0-1), expectedContent, priority, reasoning }`.
+
 | Links in Prompt | Response |
 |----------------|----------|
-| Product/recipe URLs from listing | `[{ url: "/products/widget-pro", follow: true, reasoning: "Product page" }, { url: "/recipes/pasta-carbonara", follow: true, reasoning: "Recipe content" }, { url: "/products/comparison", follow: true, reasoning: "Product data" }, { url: "/about", follow: true, reasoning: "Might contain data" }, { url: "/blog/review", follow: true, reasoning: "Product review" }, { url: "https://twitter.com/spatula", follow: false, reasoning: "External domain" }, { url: "/admin", follow: true, reasoning: "Might contain data" }]` |
-| Links from product page (depth 2) | `[{ url: "/products/widget-pro-deluxe", follow: true, reasoning: "Related product" }]` |
-| Pagination links | `[{ url: "/page/2", follow: true, reasoning: "More listings" }]` |
+| Product/recipe URLs from listing | `[{ url: "/products/widget-pro", relevanceScore: 0.95, expectedContent: "single_entry", priority: "high", reasoning: "Product page" }, { url: "/recipes/pasta-carbonara", relevanceScore: 0.90, expectedContent: "single_entry", priority: "high", reasoning: "Recipe content" }, { url: "/products/comparison", relevanceScore: 0.85, expectedContent: "listing", priority: "medium", reasoning: "Product data" }, { url: "/about", relevanceScore: 0.3, expectedContent: "unknown", priority: "low", reasoning: "Might contain data" }, { url: "/blog/review", relevanceScore: 0.6, expectedContent: "single_entry", priority: "medium", reasoning: "Product review" }, { url: "https://twitter.com/spatula", relevanceScore: 0.05, expectedContent: "unknown", priority: "low", reasoning: "External domain" }, { url: "/admin", relevanceScore: 0.7, expectedContent: "unknown", priority: "medium", reasoning: "Might contain data" }]` |
+| Links from product page (depth 2) | `[{ url: "/products/widget-pro-deluxe", relevanceScore: 0.90, expectedContent: "single_entry", priority: "high", reasoning: "Related product" }]` |
+| Pagination links | `[{ url: "/page/2", relevanceScore: 0.80, expectedContent: "listing", priority: "medium", reasoning: "More listings" }]` |
 
-Note: The link evaluator returns `follow: true` for `/admin` — it's the robots.txt checker that prevents the actual crawl. This tests that robots.txt enforcement happens independently of link evaluation.
+Note: The link evaluator returns a high relevanceScore for `/admin` — it's the robots.txt checker that prevents the actual crawl. This tests that robots.txt enforcement happens independently of link evaluation.
 
 #### FieldProposer
 
@@ -264,7 +268,7 @@ Routes by counting user messages in the history:
 
 | Turn (user message count) | Response |
 |--------------------------|----------|
-| 1 ("I want to scrape products from example.com") | `{ response: "I'll set up a product scraping project for example.com.", actions: [{ type: "set_name", id: "<uuid>", reasoning: "Project name", payload: { name: "Example Products" } }, { type: "set_seed_urls", id: "<uuid>", reasoning: "Seed URL", payload: { urls: ["https://example.com"] } }] }` |
+| 1 ("I want to scrape products from example.com") | `{ response: "I'll set up a product scraping project for example.com.", actions: [{ type: "set_job_name", id: "<uuid>", reasoning: "Project name", payload: { name: "Example Products" } }, { type: "add_seed_urls", id: "<uuid>", reasoning: "Seed URL", payload: { urls: [{ url: "https://example.com" }] } }] }` |
 | 2 ("also track the brand") | `{ response: "Added brand as a tracked field.", actions: [{ type: "add_user_field", id: "<uuid>", reasoning: "User requested", payload: { field: { name: "brand", type: "string", required: false, description: "Product brand" } } }] }` |
 | 3 ("looks good, start") | `{ response: "Starting the crawl!", actions: [{ type: "confirm_and_start", id: "<uuid>", reasoning: "User confirmed", payload: {} }] }` |
 
@@ -326,14 +330,25 @@ Returns `{ projectDir, projectId, cleanup() }`.
 
 ### `buildPipelineRunner(projectDir, opts)`
 
-Assembles the full DI graph matching `run.ts`:
-- `OllamaClient` pointed at mock/real Ollama URL
-- Playwright crawler
-- All LLM-dependent components (PageClassifier, StaticExtractor, SchemaEvolverImpl, DataReconcilerImpl, LLMLinkEvaluator)
-- `RobotsTxtChecker`, `InMemoryDomainRateLimiter`
-- `LocalPipelineRunner` with all wiring
+Assembles the full DI graph matching `run.ts` lines 115-210:
 
-Returns `{ runner, adapter, dataSource, crawler, closeAll() }`.
+1. Open SQLite DB via `createProjectDb(join(projectDir, '.spatula', 'project.db'))`
+2. Build `ProjectAdapter(db, projectId)`
+3. Build `LocalContentStore(join(projectDir, '.spatula', 'pages'))`
+4. Create LLM client: `createLLMClient({ provider: 'ollama', ollama: { baseUrl: opts.ollamaBaseUrl } })`
+5. Create crawler: `await CrawlerFactory.create({ type: 'playwright' })`
+6. Build LLM-dependent components:
+   - `new PageClassifier(llmClient, llmConfig)`
+   - `new StaticExtractor(llmClient, llmConfig, projectId)`
+   - `new SchemaEvolverImpl(llmClient, llmConfig)`
+   - `new DataReconcilerImpl(llmClient, llmConfig)`
+   - `new LLMLinkEvaluator(llmClient, resolveModel(llmConfig, 'linkEvaluation'))`
+7. Build infrastructure: `new RobotsTxtChecker()`, `new InMemoryDomainRateLimiter()`
+8. Build `JobConfig` from `parseProjectYaml` + `yamlToJobConfig` (same as run.ts)
+9. Construct `new LocalPipelineRunner({ adapter, config, projectDir, crawler, extractor, classifier, contentStore, schemaEvolver, reconciler, linkEvaluator, robotsChecker, rateLimiter })`
+10. Build `LocalDataSource(adapter)` for post-pipeline assertions
+
+Returns `{ runner, adapter, dataSource, crawler, closeAll() }` where `closeAll()` closes crawler + DB in sequence.
 
 ### `isPlaywrightAvailable()`
 
@@ -380,12 +395,13 @@ Tests 1-27 share a single pipeline run (executed once in `beforeAll`, asserted i
 | Partial page produced low-confidence entity | Blog review entity has lower qualityScore than product entities |
 | Handled slow page without blocking pipeline | Slow page was eventually processed OR timed out; other pages completed concurrently |
 
-**Reconciliation verification (2 tests):**
+**Reconciliation verification (3 tests):**
 
 | Test | Assertion |
 |------|-----------|
 | Merged duplicate Widget Pro entities | Exactly ONE entity with title "Widget Pro", sourceCount === 2 |
 | Non-duplicate entities remain separate | Widget A, Widget B, Widget C, Pasta Carbonara are separate entities |
+| Singleton extractions form individual entities | Each unique extraction produces one entity (tests EntityMatcher with single-item groups) |
 
 **Schema evolution verification (3 tests):**
 
@@ -445,6 +461,7 @@ Each test runs its own pipeline with a specific error mode configured.
 | Extractor timeout → extraction skipped | `timeout` on `extractor` | Other extractions succeeded, pipeline completed |
 | Schema evolution Zod failure → no broken actions | `zod-failure` on `field-proposer` | No actions with missing fields in DB, pipeline completed |
 | All LLM calls fail → crawl-only mode | `malformed-json` on all components | Pages stored in content store, zero entities, run status 'completed' |
+| Zero unmapped fields → schema evolution skips LLM | Mock extractor returns `_unmapped: []` for all pages | FieldProposer receives empty candidates, returns [] without LLM call, pipeline completes |
 
 ### 5.4 `conversation.test.ts` — `spatula new` conversation (2 tests)
 
@@ -455,9 +472,9 @@ No Playwright needed — tests the ConfigConversationService directly.
 | 3-turn conversation produces valid config | After 3 processMessage calls with mock responses, config has seedUrls, name, userFields including 'brand', validates successfully |
 | LLM error in conversation handled gracefully | Mock returns malformed JSON on turn 2, error message returned, can retry on turn 3 |
 
-### 5.5 `prompt-snapshots.test.ts` — Prompt regression detection (6 tests)
+### 5.5 Prompt regression snapshots (6 tests, in `pipeline-mock-llm.test.ts`)
 
-Captures the full prompt text for each major component and snapshots it.
+Merged into the main test file to avoid a redundant pipeline run (vitest runs files in isolation). These tests use the same shared pipeline run from `beforeAll` and inspect `mockOllama.requestLog` for full prompt text.
 
 | Test | Component |
 |------|-----------|
@@ -481,11 +498,10 @@ apps/cli/tests/e2e/tier2/
   fixture-server.ts             ← HTTP server with request logging
   mock-ollama.ts                ← Mock Ollama with routing, canned responses, error modes, request logging
   helpers.ts                    ← createFixtureProject, buildPipelineRunner, isPlaywrightAvailable, isOllamaAvailable
-  pipeline-mock-llm.test.ts     ← 29 tests, always runs (needs Playwright)
+  pipeline-mock-llm.test.ts     ← 36 tests (29 happy path + 6 prompt snapshots + 1 singleton), always runs (needs Playwright)
   pipeline-real-llm.test.ts     ← 6 tests, skipIf(!ollama) (needs Playwright + Ollama)
-  pipeline-errors.test.ts       ← 4 tests, always runs (needs Playwright)
+  pipeline-errors.test.ts       ← 5 tests, always runs (needs Playwright)
   conversation.test.ts          ← 2 tests, always runs (no Playwright needed)
-  prompt-snapshots.test.ts      ← 6 tests, always runs (needs Playwright for one pipeline run)
 ```
 
 ---
@@ -494,12 +510,11 @@ apps/cli/tests/e2e/tier2/
 
 | File | Tests | Needs Playwright | Needs Ollama | Est. Runtime |
 |------|-------|-----------------|-------------|-------------|
-| pipeline-mock-llm.test.ts | 29 | Yes | No | ~30s |
+| pipeline-mock-llm.test.ts | 36 | Yes | No | ~30s |
 | pipeline-real-llm.test.ts | 6 | Yes | Yes | ~3-5min |
-| pipeline-errors.test.ts | 4 | Yes | No | ~20s |
+| pipeline-errors.test.ts | 5 | Yes | No | ~25s |
 | conversation.test.ts | 2 | No | No | ~5s |
-| prompt-snapshots.test.ts | 6 | Yes | No | ~15s |
-| **Total** | **47** | | | ~70s (mock) / ~5min (real) |
+| **Total** | **49** | | | ~60s (mock) / ~5min (real) |
 
 All mock tests are deterministic and CI-friendly. Playwright-dependent tests skip if browsers aren't installed. Real Ollama tests skip if Ollama isn't running.
 
