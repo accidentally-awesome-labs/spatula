@@ -61,8 +61,8 @@ Implementation:
 4. Create `SpatulaQueues` via `createQueues()`
 5. Build LLM components from mock Ollama (same as Tier 2 helpers)
 6. Create Playwright crawler (or skip with mock if not available)
-7. Start 6 workers (crawl, extract, schema-evolution, reconciliation, export, webhook) with concurrency 1
-8. Configure webhook worker with zero-delay retry for fast test execution
+7. Start 5 workers (crawl, schema-evolution, reconciliation, export, webhook) with concurrency 1. Note: there is no separate extract worker — extraction is performed inline by the crawl worker.
+8. Create webhook Worker directly (not via `createWebhookWorker()` which hardcodes backoff) with `backoff: { type: 'fixed', delay: 0 }` for fast test execution.
 9. Start webhook receiver
 10. Return harness with `closeAll()` that stops workers → closes queues → closes crawler → closes Redis → closes pool
 
@@ -78,7 +78,7 @@ export async function waitForJobStatus(
 ```
 Polls every 500ms until job reaches one of `targetStatuses`, throws on timeout.
 
-**Note on `isValidCrawlUrl()`:** The crawl worker blocks localhost URLs. Workaround: the job's seed URLs must be seeded as explicit crawl tasks in the database (same approach as Tier 2), or the fixture server uses a non-localhost hostname. Simplest: seed tasks directly via `taskRepo.enqueue()` after job creation, bypassing `JobManager.startJob()`.
+**Note on `isValidCrawlUrl()`:** This function only filters child links discovered during crawling, NOT seed URLs. `JobManager.startJob()` enqueues seed URLs directly to BullMQ without calling `isValidCrawlUrl()`. The fixture server's localhost URL will be crawled as the seed URL without issues. Child links from the fixture pages pointing to localhost will be filtered out — this is acceptable for testing (the seed pages themselves are crawled).
 
 ### 2.3 Tests (23)
 
@@ -112,8 +112,8 @@ Polls every 500ms until job reaches one of `targetStatuses`, throws on timeout.
 
 | # | Test | Assertion |
 |---|------|-----------|
-| 12 | Job that fails all retries appears in DLQ | Add a crawl job with a URL that causes worker to throw (fixture server `/crash` returns 200 with deliberately unparseable content-type). After retries exhausted, `GET /admin/dlq` returns the entry. |
-| 13 | DLQ retry re-enqueues to original queue | POST `/admin/dlq/:id/retry` → entry status becomes 'resolved' (resolution: 'retried'), job appears in queue again. |
+| 12 | Job that fails all retries appears in DLQ | **Note:** The crawl worker catches all errors and returns normally — BullMQ never sees a failure for crawl jobs. Instead, test DLQ with a dedicated test worker: create a minimal BullMQ worker on a test queue that deliberately throws on every invocation. After retry exhaustion (configure 1 attempt), verify the DLQ handler inserts an entry. Then `GET /admin/dlq` returns the entry. This tests the DLQ plumbing without depending on production workers failing. |
+| 13 | DLQ retry re-enqueues to original queue | POST `/admin/dlq/:id/retry` → entry status becomes 'resolved' (resolution: 'retried'), job re-appears in queue. |
 | 14 | DLQ discard marks as resolved | POST `/admin/dlq/:id/discard` → entry resolution is 'discarded'. |
 
 **State Machine (3):**
@@ -145,9 +145,11 @@ Polls every 500ms until job reaches one of `targetStatuses`, throws on timeout.
 |---|------|-----------|
 | 23 | Migration preserves existing data | Insert test data directly via SQL, run `runMigrations()` again (idempotent), verify data is still present and queryable. |
 
-### 2.4 Fixture Server Addition
+### 2.4 DLQ Testing Strategy
 
-Add a `/crash` route to the fixture server that returns `200 OK` with `Content-Type: application/octet-stream` and binary garbage — this causes the HTML parser to throw, which the crawl worker cannot recover from, triggering retry exhaustion → DLQ.
+The crawl worker catches all errors internally and never throws — BullMQ retry/DLQ mechanisms are bypassed for crawl jobs. To test the DLQ plumbing, the test creates a dedicated test BullMQ worker on a temporary queue (`spatula.test-dlq`) with a processor that deliberately `throw new Error('test failure')`. Configure the queue with `attempts: 1` (no retries). When the job fails, the DLQ handler inserts an entry. This verifies the full DLQ flow (handler → database → admin API) without depending on any production worker's error behavior.
+
+**Note:** This may also indicate a production concern — if crawl workers silently swallow all errors, BullMQ's retry mechanism is never used for crawl failures. This is a separate investigation, not a testing concern.
 
 ---
 
@@ -166,6 +168,13 @@ export async function createTestApp(opts?: {
 ```
 
 For `auth-strategy: 'api-key'`, the helper must provide a real `ApiKeyRepository` and create the app with `AUTH_STRATEGY=api-key`. The auth middleware will then validate bearer tokens against the database.
+
+**API Key Bootstrap Sequence (chicken-and-egg):** The `/api/v1/api-keys` route requires `keys:manage` scope, but you need a key to authenticate. Solution:
+1. Create tenant via `POST /api/v1/tenants` (unauthenticated — auth middleware skips this path)
+2. Insert the first API key directly into the database via `apiKeyRepo.create({ tenantId, keyHash: sha256(rawKey), keyPrefix: rawKey.slice(0,8), name: 'test-admin', scopes: ['admin'] })`
+3. Use that raw key value as `Authorization: Bearer <key>` in subsequent requests
+
+The 5B helpers should provide `createApiKeyDirectly(db, tenantId, scopes)` which handles hashing and insertion, returning `{ rawKey, keyId }`.
 
 For multi-tenant tests, two separate tenants are created, each with their own API key.
 
@@ -214,7 +223,7 @@ For multi-tenant tests, two separate tenants are created, each with their own AP
 | 15 | POST with `Idempotency-Key` → 201 | First call creates resource normally. |
 | 16 | Same key again → cached 201 (no duplicate created) | Second call returns same response, list shows only 1 resource. |
 | 17 | Same key, different body → cached response (body ignored) | Third call with different body returns original cached response. |
-| 18 | 204 response NOT cached | DELETE with idempotency key, same DELETE again → actually executes (404 second time, not cached 204). |
+| 18 | Idempotency only applies to POST/PATCH | DELETE with `Idempotency-Key` header → key is ignored (middleware skips non-POST/PATCH methods). Same DELETE again → executes normally (404 since resource was deleted). Verifies the middleware's method filter. |
 
 **Rate Limiting (2):**
 
@@ -297,10 +306,10 @@ apps/cli/tests/e2e/tier5/
 
 | File | Change |
 |------|--------|
-| `apps/cli/tests/e2e/tier2/fixture-server.ts` | Add `/crash` route for DLQ testing |
 | `apps/cli/tests/e2e/tier4/helpers.ts` | Accept optional `authStrategy` parameter in `createTestApp()` |
 | `apps/cli/scripts/tier-registry.ts` | Add Tier 5A and 5B definitions |
-| `apps/cli/package.json` | Add `test:tier5a`, `test:tier5b`, `test:tier5` scripts |
+| `apps/cli/package.json` | Add `@spatula/queue` as devDependency; add `test:tier5a`, `test:tier5b`, `test:tier5` scripts |
+| `packages/queue/src/index.ts` | Export `createWebhookWorker` (currently not exported from barrel) |
 
 ---
 
