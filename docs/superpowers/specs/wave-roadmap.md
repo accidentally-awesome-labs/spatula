@@ -319,6 +319,7 @@ Push/pull bridge between local projects and hosted platform.
 - `spatula add` SQLite crawl history dedup (DataSource doesn't expose crawled URLs yet)
 - `spatula reset --keep-remote` flag
 - CSS extractor table extraction
+- Audit logging for `tenant.quota_exceeded` in job-manager (`packages/queue/src/job-manager.ts:57`)
 
 ---
 
