@@ -147,7 +147,11 @@ describe('JWT tenant resolution', () => {
 
   it('auto-creates tenant when JWT user has 0 tenants', async () => {
     const provider = createJwtProvider();
-    const userTenantRepo = createMockUserTenantRepo([]); // 0 tenants
+    // First findByUserId returns [] (no tenants), second returns the newly created one
+    const userTenantRepo = createMockUserTenantRepo([]);
+    (userTenantRepo.findByUserId as ReturnType<typeof vi.fn>)
+      .mockResolvedValueOnce([]) // initial check
+      .mockResolvedValueOnce([{ tenantId: 'new-auto-tenant', role: 'owner', createdAt: new Date() }]); // re-query after create
     const tenantRepo = createMockTenantRepo('new-auto-tenant');
     const app = createTestApp(provider, undefined, userTenantRepo, tenantRepo);
 

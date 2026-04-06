@@ -50,10 +50,24 @@ export function authMiddleware(
       let resolvedTenantId: string;
 
       if (entries.length === 0) {
-        // Auto-create a Free tenant for new JWT users
-        const newTenant = await tenantRepo.create({ name: result.userId });
-        await userTenantRepo.create(result.userId, newTenant.id, 'owner');
-        resolvedTenantId = newTenant.id;
+        // Auto-create a Free tenant for new JWT users.
+        // Race condition: two concurrent requests may both see 0 entries.
+        // userTenantRepo.create uses ON CONFLICT DO NOTHING, so the second
+        // insert is a no-op. We re-query after to get the winning tenant.
+        try {
+          const newTenant = await tenantRepo.create({ name: result.userId });
+          await userTenantRepo.create(result.userId, newTenant.id, 'owner');
+        } catch {
+          // Ignore — a racing request may have created the tenant already
+        }
+        const refreshed = await userTenantRepo.findByUserId(result.userId);
+        if (refreshed.length === 0) {
+          return c.json(
+            { error: { code: 'SERVER_ERROR', message: 'Failed to provision tenant' } },
+            500,
+          );
+        }
+        resolvedTenantId = refreshed[0].tenantId;
       } else if (entries.length === 1) {
         // Single tenant: auto-select
         resolvedTenantId = entries[0].tenantId;
