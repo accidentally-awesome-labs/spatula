@@ -140,9 +140,11 @@ describe('Tier 5A — DLQ (Tests 12-14)', () => {
     if (!dbAvailable) return ctx.skip();
 
     // Add a job to the test queue
+    // NOTE: tenantId and jobId (spatulaJobId) must be omitted because the DLQ
+    // table defines them as uuid columns with FK constraints. Non-UUID strings
+    // like 'test' or 'test-job-1' would violate the FK and cause insert failure.
     const job = await testQueue.add('test-job', {
-      tenantId: 'test',
-      jobId: 'test-job-1',
+      payload: 'test-job-1',
     });
 
     // Wait for the worker to process + fail the job
@@ -191,10 +193,9 @@ describe('Tier 5A — DLQ (Tests 12-14)', () => {
   it('14. DLQ discard marks resolved', async (ctx) => {
     if (!dbAvailable) return ctx.skip();
 
-    // Create another failing job
+    // Create another failing job (omit tenantId/jobId — not valid UUIDs for FK)
     const job = await testQueue.add('test-job', {
-      tenantId: 'test',
-      jobId: 'test-job-2',
+      payload: 'test-job-2',
     });
 
     // Wait for the worker to fail this new job
