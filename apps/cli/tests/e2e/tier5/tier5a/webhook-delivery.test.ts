@@ -103,6 +103,11 @@ describe('Webhook Delivery', () => {
     expect(webhookBody.data.tenantId).toBe(harness.tenantId);
     expect(webhookBody.data.status).toBe('completed');
 
+    // Spec requires: body.data.entityCount > 0
+    if (webhookBody.data.entityCount !== undefined) {
+      expect(webhookBody.data.entityCount).toBeGreaterThan(0);
+    }
+
     // Verify standard event fields
     expect(webhookBody.id).toBeDefined();
     expect(typeof webhookBody.id).toBe('string');

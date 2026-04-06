@@ -177,6 +177,12 @@ describe('Tier 5A — DLQ (Tests 12-14)', () => {
     expect(resolved.resolution).toBe('retried');
     expect(resolved.resolvedAt).toBeTruthy();
     expect(resolved.id).toBe(entryId);
+
+    // NOTE: Re-enqueue verification requires the admin API route
+    // (POST /api/v1/admin/dlq/:id/retry) which both re-enqueues AND resolves.
+    // The current test calls dlqRepo.resolve() directly, which only changes
+    // the status without re-enqueuing. This is a known simplification accepted
+    // in the plan — full re-enqueue verification belongs in an API-level test.
   }, 15_000);
 
   // -------------------------------------------------------------------------
