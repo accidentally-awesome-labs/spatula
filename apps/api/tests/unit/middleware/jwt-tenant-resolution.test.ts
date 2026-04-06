@@ -192,6 +192,81 @@ describe('JWT tenant resolution', () => {
     expect(userTenantRepo.findByUserId).not.toHaveBeenCalled();
   });
 
+  it('uses displayName for auto-created tenant name when available', async () => {
+    const provider = createJwtProvider({ displayName: 'Jane Doe' });
+    const userTenantRepo = createMockUserTenantRepo([]);
+    (userTenantRepo.findByUserId as ReturnType<typeof vi.fn>)
+      .mockResolvedValueOnce([])
+      .mockResolvedValueOnce([{ tenantId: 'new-tenant', role: 'owner', createdAt: new Date() }]);
+    const tenantRepo = createMockTenantRepo('new-tenant');
+    const app = createTestApp(provider, undefined, userTenantRepo, tenantRepo);
+
+    const res = await app.request('/api/v1/test', {
+      headers: { authorization: 'Bearer jwt-token' },
+    });
+
+    expect(res.status).toBe(200);
+    expect(tenantRepo.create).toHaveBeenCalledWith({ name: 'Jane Doe' });
+  });
+
+  it('returns 500 when auto-create fails and re-query returns empty', async () => {
+    const provider = createJwtProvider();
+    const userTenantRepo = createMockUserTenantRepo([]);
+    // Both calls return empty — auto-create completely failed
+    (userTenantRepo.findByUserId as ReturnType<typeof vi.fn>)
+      .mockResolvedValueOnce([])
+      .mockResolvedValueOnce([]);
+    const tenantRepo = createMockTenantRepo();
+    (tenantRepo.create as ReturnType<typeof vi.fn>).mockRejectedValue(new Error('DB down'));
+    const app = createTestApp(provider, undefined, userTenantRepo, tenantRepo);
+
+    const res = await app.request('/api/v1/test', {
+      headers: { authorization: 'Bearer jwt-token' },
+    });
+
+    expect(res.status).toBe(500);
+    const body = await res.json();
+    expect(body.error.code).toBe('SERVER_ERROR');
+  });
+
+  it('passes through tenantId unchanged for none strategy', async () => {
+    const provider: AuthProvider = {
+      authenticate: vi.fn().mockResolvedValue({
+        tenantId: 'none-tenant',
+        userId: 'anonymous',
+        scopes: ['admin'],
+        strategy: 'none' as const,
+      }),
+    };
+    const userTenantRepo = createMockUserTenantRepo([]);
+    const tenantRepo = createMockTenantRepo();
+    const app = createTestApp(provider, undefined, userTenantRepo, tenantRepo);
+
+    const res = await app.request('/api/v1/test', {
+      headers: { authorization: 'Bearer tok', 'x-tenant-id': 'none-tenant' },
+    });
+
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body.tenantId).toBe('none-tenant');
+    expect(userTenantRepo.findByUserId).not.toHaveBeenCalled();
+  });
+
+  it('falls through for JWT when repos are not provided (self-hosted without user DB)', async () => {
+    const provider = createJwtProvider();
+    // No userTenantRepo or tenantRepo passed — middleware should skip resolution
+    const app = createTestApp(provider, undefined, undefined, undefined);
+
+    const res = await app.request('/api/v1/test', {
+      headers: { authorization: 'Bearer jwt-token' },
+    });
+
+    // JWT user gets tenantId: '' (empty) — downstream middleware will handle
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body.tenantId).toBe('');
+  });
+
   describe('audit logging for JWT resolution', () => {
     it('logs resolved tenantId (not empty) after JWT tenant resolution', async () => {
       const provider = createJwtProvider();

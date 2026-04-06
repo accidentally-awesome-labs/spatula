@@ -69,6 +69,36 @@ describe('JwtAuthProvider', () => {
     expect(result.strategy).toBe('jwt');
   });
 
+  it('extracts displayName from name claim', async () => {
+    mockedJwtVerify.mockResolvedValue({
+      payload: { sub: 'user-123', name: 'Jane Doe', email: 'jane@example.com' },
+      protectedHeader: { alg: 'RS256' },
+    } as any);
+    const req = await createMockRequest({ authorization: 'Bearer eyJ.test.sig' });
+    const result = await provider.authenticate(req);
+    expect(result.displayName).toBe('Jane Doe');
+  });
+
+  it('falls back to email when name claim is absent', async () => {
+    mockedJwtVerify.mockResolvedValue({
+      payload: { sub: 'user-123', email: 'jane@example.com' },
+      protectedHeader: { alg: 'RS256' },
+    } as any);
+    const req = await createMockRequest({ authorization: 'Bearer eyJ.test.sig' });
+    const result = await provider.authenticate(req);
+    expect(result.displayName).toBe('jane@example.com');
+  });
+
+  it('returns undefined displayName when neither name nor email present', async () => {
+    mockedJwtVerify.mockResolvedValue({
+      payload: { sub: 'user-123' },
+      protectedHeader: { alg: 'RS256' },
+    } as any);
+    const req = await createMockRequest({ authorization: 'Bearer eyJ.test.sig' });
+    const result = await provider.authenticate(req);
+    expect(result.displayName).toBeUndefined();
+  });
+
   it('defaults scopes to empty array when missing', async () => {
     mockedJwtVerify.mockResolvedValue({
       payload: { sub: 'user-123', tenant_id: 'tenant-456' },
