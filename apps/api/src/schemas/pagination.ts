@@ -6,7 +6,7 @@ export const paginationSchema = z.object({
     .int()
     .min(1)
     .default(50)
-    .transform((v) => Math.min(v, 100)),
+    .transform((v) => Math.min(v, 500)),
   offset: z.coerce.number().int().min(0).default(0),
   cursor: z.string().optional().openapi({
     description: 'Opaque cursor for keyset pagination. Mutually exclusive with offset.',

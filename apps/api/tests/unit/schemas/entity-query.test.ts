@@ -27,9 +27,9 @@ describe('entityQuerySchema', () => {
     expect(result.data!.offset).toBe(0);
   });
 
-  it('caps limit at 100', () => {
+  it('caps limit at 500', () => {
     const result = entityQuerySchema.safeParse({ limit: '999' });
     expect(result.success).toBe(true);
-    expect(result.data!.limit).toBe(100);
+    expect(result.data!.limit).toBe(500);
   });
 });

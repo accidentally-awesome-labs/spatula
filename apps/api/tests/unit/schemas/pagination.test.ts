@@ -14,9 +14,9 @@ describe('paginationSchema', () => {
     expect(result.offset).toBe(20);
   });
 
-  it('caps limit at 100', () => {
-    const result = paginationSchema.parse({ limit: '200' });
-    expect(result.limit).toBe(100);
+  it('caps limit at 500', () => {
+    const result = paginationSchema.parse({ limit: '1000' });
+    expect(result.limit).toBe(500);
   });
 
   it('rejects negative offset', () => {

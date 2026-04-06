@@ -91,12 +91,12 @@ describe('Extraction routes', () => {
       expect(body.error.code).toBe('VALIDATION_ERROR');
     });
 
-    it('caps limit at 100', async () => {
-      await app.request('/api/v1/jobs/job-1/extractions?limit=200');
+    it('caps limit at 500', async () => {
+      await app.request('/api/v1/jobs/job-1/extractions?limit=1000');
       expect(deps.extractionRepo.findByJob).toHaveBeenCalledWith(
         'job-1',
         TENANT_ID,
-        expect.objectContaining({ limit: 100 }),
+        expect.objectContaining({ limit: 500 }),
       );
     });
   });
