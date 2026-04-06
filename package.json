@@ -1,5 +1,11 @@
 {
   "name": "spatula",
+  "description": "AI-powered intelligent web crawling platform — describe the data you want, get clean production-ready datasets",
+  "license": "MIT",
+  "repository": { "type": "git", "url": "https://github.com/spatulaai/spatula.git" },
+  "homepage": "https://github.com/spatulaai/spatula#readme",
+  "bugs": { "url": "https://github.com/spatulaai/spatula/issues" },
+  "keywords": ["web-scraping", "ai", "llm", "data-extraction", "crawling", "structured-data"],
   "private": true,
   "packageManager": "pnpm@9.15.4",
   "scripts": {

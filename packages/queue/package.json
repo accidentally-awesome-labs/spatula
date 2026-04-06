@@ -1,6 +1,11 @@
 {
   "name": "@spatula/queue",
   "version": "0.0.1",
+  "description": "BullMQ job queue, workers, and webhook delivery for Spatula",
+  "license": "MIT",
+  "repository": { "type": "git", "url": "https://github.com/spatulaai/spatula.git", "directory": "packages/queue" },
+  "homepage": "https://github.com/spatulaai/spatula#readme",
+  "bugs": { "url": "https://github.com/spatulaai/spatula/issues" },
   "private": true,
   "type": "module",
   "main": "./dist/index.js",
