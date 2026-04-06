@@ -30,6 +30,8 @@ export { ExportRepository } from './repositories/export-repository.js';
 export type { CreateExportInput } from './repositories/export-repository.js';
 export { TenantRepository } from './repositories/tenant-repository.js';
 export type { CreateTenantInput, UpdateTenantInput } from './repositories/tenant-repository.js';
+export { UserTenantRepository } from './repositories/user-tenant-repository.js';
+export type { UserTenantEntry, TenantUserEntry } from './repositories/user-tenant-repository.js';
 export { DlqRepository } from './repositories/dlq-repository.js';
 export type { DlqInsertInput } from './repositories/dlq-repository.js';
 export { ApiKeyRepository } from './repositories/api-key-repository.js';
