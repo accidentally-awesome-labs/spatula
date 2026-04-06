@@ -157,6 +157,9 @@ importers:
       '@types/yargs':
         specifier: ^17.0.35
         version: 17.0.35
+      bullmq:
+        specifier: ^5.70.4
+        version: 5.70.4
       ink-testing-library:
         specifier: ^4.0.0
         version: 4.0.0(@types/react@18.3.28)
