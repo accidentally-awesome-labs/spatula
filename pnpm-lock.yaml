@@ -142,6 +142,9 @@ importers:
       '@spatula/api':
         specifier: workspace:*
         version: link:../api
+      '@spatula/queue':
+        specifier: workspace:*
+        version: link:../../packages/queue
       '@types/node':
         specifier: ^25.3.5
         version: 25.3.5

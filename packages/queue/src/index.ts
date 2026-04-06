@@ -17,6 +17,7 @@ export type {
 
 // Webhook
 export { WebhookSender, enqueueWebhookIfConfigured } from './webhook-sender.js';
+export { createWebhookWorker } from './webhook-worker.js';
 
 // Job Manager
 export { JobManager } from './job-manager.js';

@@ -56,6 +56,13 @@ export const TIERS: Record<string, TierDefinition> = {
     budgetCap: 0.50,
     skipIfMissing: true,
   },
+  '5a': {
+    name: 'Queue/Worker Integration',
+    description: 'Tier 4 + BullMQ workers processing jobs end-to-end',
+    extends: '4',
+    services: ['ollama', 'docker-postgres', 'docker-redis'],
+    globs: ['tests/e2e/tier5/tier5a/'],
+  },
   ci: {
     name: 'CI',
     description: 'Deterministic tests only (Tier 2)',
