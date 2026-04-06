@@ -35,11 +35,15 @@ Wave 5 covers 2 workstreams:
 **Execution order:**
 
 ```
-5-1 → 5-2 ──→ 5-4 → 5-5 → 5-6
-   ↘ 5-3 ──↗
+       ┌→ 5-2 (Billing) ──┐
+5-1 →──┼→ 5-3 (Admin)  ───┼──→ 5-6 (Deferred)
+       └→ 5-4 (Remote) ───┤
+                           └→ 5-5 (Pull)
 ```
 
-5-2 and 5-3 are independent of each other but both require 5-1. 5-4 requires 5-2 (quota enforcement for push). 5-5 requires 5-4 (remote config + linked job). 5-6 requires 5-5 (--keep-remote flag).
+5-2, 5-3, and 5-4 can all proceed in parallel after 5-1. 5-5 requires 5-4 (remote config). 5-6 requires 5-5 (--keep-remote).
+
+5-2 and 5-3 are independent of each other but both require 5-1. 5-4 requires only 5-1 (existing Wave 3 tenant quotas provide basic job-creation limits; full billing-integrated quotas from 5-2 are a refinement, not a prerequisite). 5-5 requires 5-4 (remote config + linked job). 5-6 requires 5-5 (--keep-remote flag).
 
 ---
 
@@ -61,11 +65,11 @@ Wave 5 covers 2 workstreams:
   │                retention policies, cleanup worker, tenant config extension
   │      Uses: user_tenants for role-based admin access
   │
-  └──→ 5-4 (Remote Config & Push) [after 5-2]
+  └──→ 5-4 (Remote Config & Push) [parallel with 5-2 and 5-3]
          Provides: remote add/list/remove CLI commands, push flow,
                    job control (status/watch/pause/resume/cancel),
                    ApiDataSource class
-         Uses: cursor streaming endpoint from 5-1, quota enforcement from 5-2
+         Uses: cursor streaming from 5-1; existing Wave 3 tenant quotas for basic job limits
          │
          └──→ 5-5 (Pull Flow)
                 Provides: pull flow (9 steps), schema conflict resolution TUI,
@@ -121,19 +125,12 @@ Wave 5 covers 2 workstreams:
      - If user has 0 tenants → return 403 (no tenant access).
    - The `X-Tenant-Id` header is validated against the user's actual tenants — can't access a tenant you don't belong to.
    - API key auth path is unchanged (tenant_id comes from the key's tenant association).
+   - **`AUTH_STRATEGY=none` path is unchanged:** When `NoAuthProvider` is active, `tenantId` comes directly from the `X-Tenant-Id` header and `userId` is `'anonymous'`. The new user→tenant resolution logic activates **only** for the JWT auth strategy. The middleware must branch: `if (authResult.strategy === 'jwt') { /* resolve via user_tenants */ } else { /* use tenantId from auth result directly */ }`.
 
-5. **Tenant auto-creation on first JWT login** — When a JWT user has 0 tenants, auto-create a tenant (plan: `free`, default quotas) + `user_tenants` entry with role `owner`. This bootstraps the hosted signup flow: auth provider creates the user, first API call creates their Free-tier tenant. The auto-created tenant gets the tenant name from the JWT `name` or `email` claim.
+5. **Tenant auto-creation on first JWT login** — When a JWT user has 0 tenants, auto-create a tenant (plan: `free`, default quotas) + `user_tenants` entry with role `owner`. This bootstraps the hosted signup flow: auth provider creates the user, first API call creates their Free-tier tenant. The auto-created tenant gets the tenant name from the JWT `name` or `email` claim. **Race condition mitigation:** Use `INSERT INTO user_tenants ... ON CONFLICT (user_id, tenant_id) DO NOTHING` wrapped in a transaction. If two concurrent requests race, the second INSERT is a no-op and the subsequent SELECT picks up the tenant created by the first. Add a unique partial index on `user_tenants(user_id) WHERE role = 'owner'` to prevent duplicate owner tenants for the same user.
 
-6. **Cursor-based entity streaming endpoint** (`apps/api/src/routes/entities.ts` — extend existing):
-   ```
-   GET /api/v1/jobs/:jobId/entities/stream?cursor=<opaque>&limit=100&since=<iso8601>
-   ```
-   - `cursor`: opaque base64-encoded `{id, createdAt}` for keyset pagination
-   - `limit`: batch size (default 100, max 500)
-   - `since`: ISO 8601 timestamp — only entities created/updated after this time (for incremental pulls)
-   - Ordering: `created_at ASC, id ASC` (stable keyset)
-   - Response: `{ data: [...], pagination: { nextCursor, hasMore, total } }`
-   - Uses existing cursor utilities from `@spatula/shared`.
+6. **Cursor-based entity streaming — extend existing endpoint** (`apps/api/src/routes/entities.ts`):
+   The existing `GET /api/v1/jobs/:jobId/entities` endpoint already supports `cursor` and `since` query parameters via `EntityRepository.findByJobCursor()`. The only change needed is raising the `limit` max from 100 to 500 in the Zod pagination schema to support bulk pull batches. No new endpoint is needed — the pull flow uses the existing entity listing route with cursor pagination. Verify the `since` parameter works correctly for incremental pulls (entities created/updated after the given timestamp).
 
 7. **Stripe SDK installation** — `pnpm add stripe` in workspace root or `packages/queue` (for metering worker) and `apps/api` (for billing endpoints). Evaluate which packages need it.
 
@@ -221,7 +218,7 @@ Wave 5 covers 2 workstreams:
     - Marks records as reported
     - Add `METERING: 'spatula.metering'` to `QUEUE_NAMES`
 
-11. **Rate limit tier wiring** — Update `apps/api/src/middleware/rate-limit.ts` to read tenant's `plan` field and map to rate limit tier (free→60/min, starter→300/min, etc.). The tier definitions from `packages/shared/src/auth/rate-limit-tiers.ts` already exist from Wave 3 — wire them to the billing plan.
+11. **Rate limit tier alignment and wiring** — The existing `RATE_LIMIT_TIERS` in `packages/shared/src/auth/rate-limit-tiers.ts` uses names `free/standard/enterprise/unlimited` which don't match the billing tier names `free/starter/pro/enterprise`. Rename the existing tiers: `standard` → `starter`, `enterprise` → `pro`, `unlimited` → `enterprise`. Update all references. Then wire `apps/api/src/middleware/rate-limit.ts` to read tenant's `plan` field and select the matching rate limit tier.
 
 12. **Export format enforcement** — In export creation flow, check tenant's plan against `exportFormats` in tier config. Free tier can only create JSON and CSV exports. Return 403 with upgrade message for restricted formats.
 
@@ -264,8 +261,12 @@ Wave 5 covers 2 workstreams:
 
 8. **Cleanup worker** (`packages/queue/src/cleanup-worker.ts`):
    - BullMQ repeatable job running daily at 03:00 UTC
-   - For each tenant: read retention config (or use defaults), delete expired data in batch (100 records per delete)
-   - Deletion order respects FK constraints: entities → extractions → raw_pages → exports → jobs
+   - **Tenant-configurable retention:** For each tenant, read retention config (or use defaults), delete expired data in batch (100 records per delete). Deletion order respects FK constraints: entities → extractions → raw_pages → exports → jobs.
+   - **Non-configurable retention (system-wide):**
+     - Audit logs: 365 days — delete entries older than 365 days regardless of tenant config
+     - LLM usage records: 365 days — delete entries older than 365 days
+     - DLQ entries: 90 days — delete resolved entries older than 90 days
+   - **Content store cleanup:** After deleting expired exports, scan content store for entries not referenced by any remaining export. Delete orphaned content store entries. Uses `ContentStore.delete()` for filesystem/S3 backends.
    - `llm_usage.job_id` and `dead_letter_queue.spatula_job_id` use `ON DELETE SET NULL` — handled by Postgres automatically
    - Log cleanup statistics per tenant (records deleted by type)
    - Add `CLEANUP: 'spatula.cleanup'` to `QUEUE_NAMES`
@@ -327,7 +328,7 @@ Wave 5 covers 2 workstreams:
    - `spatula remote pause <name>` — `POST /api/v1/jobs/:id/pause`
    - `spatula remote resume <name>` — `POST /api/v1/jobs/:id/resume`
    - `spatula remote cancel <name>` — `POST /api/v1/jobs/:id/cancel`
-   - `spatula remote watch <name>` — connect to remote WebSocket for live dashboard TUI. Uses existing `useWebSocket` hook from Wave 4-2, connecting to remote server's WS endpoint.
+   - `spatula remote watch <name>` — connect to remote WebSocket for live dashboard TUI. Authentication flow: (1) call `POST /api/v1/ws-token` on remote server with API key to obtain a single-use 60-second WS token, (2) connect to `wss://<remote>/ws/jobs/<jobId>/progress?token=<wsToken>`. Uses existing `useWebSocket` hook from Wave 4-2 with the token-based auth path from Wave 3.
 
 7. **`ApiDataSource` class** (`apps/cli/src/data-sources/api-data-source.ts`):
    - Implements `DataSource` interface from `@spatula/core`
@@ -335,10 +336,13 @@ Wave 5 covers 2 workstreams:
    - Methods: `getEntities()`, `getSchema()`, `getActions()`, `getStatus()`, `approveAction()`, `rejectAction()`, `createExport()`, `downloadExport()`
    - Used by: `remote watch` (for dashboard data), pull flow (for entity fetching)
 
-8. **SpatulaApiClient extensions** — Add any missing methods needed for push/pull:
+8. **SpatulaApiClient authentication support** — The existing `SpatulaApiClient` does not send `Authorization` headers. Add constructor option for API key authentication: `new SpatulaApiClient({ baseUrl, apiKey?, tenantId })`. When `apiKey` is provided, inject `Authorization: Bearer <apiKey>` header on all requests. This is required for all remote operations against the hosted server.
+
+9. **SpatulaApiClient method extensions** — Add any missing methods needed for push/pull:
    - `startJob(jobId)`, `pauseJob(jobId)`, `resumeJob(jobId)` (if not already present)
-   - `getEntitiesStream(jobId, cursor?, since?)` — for cursor-based pull
+   - `getEntitiesStream(jobId, cursor?, since?)` — for cursor-based pull (calls existing entity listing with cursor params)
    - `getSubscription()` — for remote add verification
+   - `getWsToken(jobId)` — obtain WebSocket auth token for `remote watch`
 
 9. **Command registration** — Register `remote` (with subcommands) and `push` in `apps/cli/src/index.tsx`.
 
