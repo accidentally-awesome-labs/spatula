@@ -38,6 +38,19 @@ type RedisClient = { disconnect(): void; quit(): Promise<string>; [k: string]: u
 // Types
 // ---------------------------------------------------------------------------
 
+export interface TestRepos {
+  jobRepo: JobRepository;
+  schemaRepo: SchemaRepository;
+  entityRepo: EntityRepository;
+  entitySourceRepo: EntitySourceRepository;
+  actionRepo: ActionRepository;
+  exportRepo: ExportRepository;
+  tenantRepo: TenantRepository;
+  dlqRepo: DlqRepository;
+  apiKeyRepo: ApiKeyRepository;
+  auditLogRepo: AuditLogRepository;
+}
+
 /** Return type of createTestApp() when DATABASE_URL is available. */
 export interface TestApp {
   /** The Hono app instance — call app.request() to exercise routes. */
@@ -45,6 +58,7 @@ export interface TestApp {
   pool: Pool;
   db: Database;
   redis: RedisClient | null;
+  repos: TestRepos;
   cleanup(): Promise<void>;
 }
 
@@ -71,7 +85,9 @@ export interface SeedResult {
  * Returns `null` when `DATABASE_URL` is not set, so tests can be skipped
  * gracefully in environments that lack infrastructure.
  */
-export async function createTestApp(): Promise<TestApp | null> {
+export async function createTestApp(opts?: {
+  authStrategy?: 'none' | 'api-key';
+}): Promise<TestApp | null> {
   const databaseUrl = process.env.DATABASE_URL;
   if (!databaseUrl) return null;
 
@@ -130,10 +146,14 @@ export async function createTestApp(): Promise<TestApp | null> {
     delete: async () => {},
   };
 
-  // 5. Set auth strategy to none so tenant header is accepted without tokens
-  process.env.AUTH_STRATEGY = 'none';
+  // 5. Set auth strategy (defaults to 'none' so tenant header is accepted without tokens)
+  process.env.AUTH_STRATEGY = opts?.authStrategy ?? 'none';
 
-  // 6. Build the Hono app
+  // 6. Create audit logger
+  const { AuditLogger } = await import('@spatula/shared');
+  const auditLogger = new AuditLogger(auditLogRepo);
+
+  // 7. Build the Hono app
   const { createApp } = await import('@spatula/api');
 
   const deps = {
@@ -151,6 +171,7 @@ export async function createTestApp(): Promise<TestApp | null> {
     apiKeyRepo,
     auditLogRepo,
     llmUsageRepo,
+    auditLogger,
     jobManager,
     exportQueue,
     contentStore,
@@ -164,6 +185,18 @@ export async function createTestApp(): Promise<TestApp | null> {
     pool: pool as unknown as Pool,
     db,
     redis,
+    repos: {
+      jobRepo,
+      schemaRepo,
+      entityRepo,
+      entitySourceRepo,
+      actionRepo,
+      exportRepo,
+      tenantRepo,
+      dlqRepo,
+      apiKeyRepo,
+      auditLogRepo,
+    },
     cleanup: async () => {
       await pool.end();
       if (redis) {
