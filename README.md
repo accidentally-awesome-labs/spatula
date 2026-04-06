@@ -3,7 +3,6 @@
 **AI-powered intelligent web crawling. Describe the data you want, get clean production-ready datasets.**
 
 [![CI](https://github.com/spatulaai/spatula/actions/workflows/ci.yml/badge.svg)](https://github.com/spatulaai/spatula/actions/workflows/ci.yml)
-[![npm version](https://img.shields.io/npm/v/@spatula/cli.svg)](https://www.npmjs.com/package/@spatula/cli)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
 ## What is Spatula?

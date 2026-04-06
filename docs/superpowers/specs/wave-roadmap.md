@@ -225,7 +225,7 @@ Wire orchestrators + SQLite + config into a working local crawl.
 
 ---
 
-## Wave 4 — API Completeness & Open-Source Release (Pending)
+## Wave 4 — API Completeness & Open-Source Release (Complete)
 
 ### Phase 12G: API & CLI Completeness
 Webhooks, bulk operations, diagnostics.
@@ -356,10 +356,11 @@ Phase 12 touches server code (`apps/api`, `packages/queue`). Phase 13 adds local
 
 | Package | Test Files |
 |---------|-----------|
-| `@spatula/core` | ~130 |
-| `@spatula/db` | ~25 |
-| `@spatula/queue` | ~10 |
-| `@spatula/api` | ~15 |
-| `@spatula/cli` | ~70 |
-| `tests/e2e` | ~5 |
-| **Total** | **~263** |
+| `@spatula/core` | 90 |
+| `@spatula/db` | 24 |
+| `@spatula/queue` | 17 |
+| `@spatula/shared` | 10 |
+| `@spatula/api` | 42 |
+| `@spatula/cli` | 81 |
+| `tests/e2e` | 1 |
+| **Total** | **265** |
