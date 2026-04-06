@@ -63,6 +63,20 @@ export const TIERS: Record<string, TierDefinition> = {
     services: ['ollama', 'docker-postgres', 'docker-redis'],
     globs: ['tests/e2e/tier5/tier5a/'],
   },
+  '5b': {
+    name: 'API Security & Middleware',
+    description: 'Tier 4 + auth providers, scopes, CORS, idempotency, rate limiting',
+    extends: '4',
+    services: ['docker-postgres', 'docker-redis'],
+    globs: ['tests/e2e/tier5/tier5b/'],
+  },
+  '5': {
+    name: 'Full Server Integration',
+    description: 'All Tier 5 tests (5A + 5B)',
+    extends: '4',
+    services: ['ollama', 'docker-postgres', 'docker-redis'],
+    globs: ['tests/e2e/tier5/'],
+  },
   ci: {
     name: 'CI',
     description: 'Deterministic tests only (Tier 2)',

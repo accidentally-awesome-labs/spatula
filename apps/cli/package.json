@@ -18,6 +18,8 @@
     "test:tier3": "tsx scripts/test-tiers.ts --tier=3",
     "test:tier4": "tsx scripts/test-tiers.ts --tier=4",
     "test:tier5a": "tsx scripts/test-tiers.ts --tier=5a",
+    "test:tier5b": "tsx scripts/test-tiers.ts --tier=5b",
+    "test:tier5": "tsx scripts/test-tiers.ts --tier=5",
     "test:all": "vitest run --exclude='**/cli-binary*'",
     "test:binary": "vitest run tests/e2e/cli-binary.test.ts",
     "test:ci": "vitest run --exclude='**/cli-binary*' --exclude='**/pipeline-real*'",
