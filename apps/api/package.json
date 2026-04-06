@@ -3,9 +3,15 @@
   "version": "0.0.1",
   "description": "Hono REST API server for Spatula",
   "license": "MIT",
-  "repository": { "type": "git", "url": "https://github.com/spatulaai/spatula.git", "directory": "apps/api" },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/spatulaai/spatula.git",
+    "directory": "apps/api"
+  },
   "homepage": "https://github.com/spatulaai/spatula#readme",
-  "bugs": { "url": "https://github.com/spatulaai/spatula/issues" },
+  "bugs": {
+    "url": "https://github.com/spatulaai/spatula/issues"
+  },
   "private": true,
   "type": "module",
   "main": "./dist/index.js",
@@ -33,6 +39,7 @@
     "hono": "^4.12.7",
     "ioredis": "^5.10.0",
     "jose": "^6.2.2",
+    "stripe": "^22.0.0",
     "zod": "^3.24.0"
   },
   "devDependencies": {
