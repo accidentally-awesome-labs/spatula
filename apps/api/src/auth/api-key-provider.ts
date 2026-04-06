@@ -31,6 +31,7 @@ export class ApiKeyAuthProvider implements AuthProvider {
       tenantId: apiKey.tenantId,
       userId: apiKey.id,
       scopes: apiKey.scopes,
+      strategy: 'api-key',
     };
   }
 }

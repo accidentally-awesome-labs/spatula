@@ -39,13 +39,11 @@ export class JwtAuthProvider implements AuthProvider {
       throw new AuthError('Invalid or expired token');
     }
 
-    const tenantId = payload.tenant_id as string | undefined;
-    if (!tenantId) throw new AuthError('Missing tenant_id claim');
-
     return {
-      tenantId,
+      tenantId: '', // Resolved by auth middleware via user_tenants lookup
       userId: payload.sub ?? 'unknown',
       scopes: (payload.scopes as string[] | undefined) ?? [],
+      strategy: 'jwt',
     };
   }
 }

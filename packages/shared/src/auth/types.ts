@@ -4,6 +4,7 @@ export interface AuthResult {
   tenantId: string;
   userId: string;
   scopes: string[];
+  strategy: 'none' | 'api-key' | 'jwt';
 }
 
 export interface AuthProvider {

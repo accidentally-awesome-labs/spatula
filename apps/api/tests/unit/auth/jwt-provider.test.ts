@@ -41,9 +41,10 @@ describe('JwtAuthProvider', () => {
     } as any);
     const req = await createMockRequest({ authorization: 'Bearer eyJ.test.sig' });
     const result = await provider.authenticate(req);
-    expect(result.tenantId).toBe('tenant-456');
+    expect(result.tenantId).toBe(''); // Resolved later by auth middleware
     expect(result.userId).toBe('user-123');
     expect(result.scopes).toEqual(['jobs:read', 'jobs:write']);
+    expect(result.strategy).toBe('jwt');
   });
 
   it('throws when Authorization header is missing', async () => {
@@ -57,13 +58,15 @@ describe('JwtAuthProvider', () => {
     await expect(provider.authenticate(req)).rejects.toThrow('Invalid or expired token');
   });
 
-  it('throws when tenant_id claim is missing', async () => {
+  it('returns empty tenantId when tenant_id claim is missing (resolved by middleware)', async () => {
     mockedJwtVerify.mockResolvedValue({
       payload: { sub: 'user-123', scopes: ['jobs:read'] },
       protectedHeader: { alg: 'RS256' },
     } as any);
     const req = await createMockRequest({ authorization: 'Bearer eyJ.test.sig' });
-    await expect(provider.authenticate(req)).rejects.toThrow('Missing tenant_id claim');
+    const result = await provider.authenticate(req);
+    expect(result.tenantId).toBe('');
+    expect(result.strategy).toBe('jwt');
   });
 
   it('defaults scopes to empty array when missing', async () => {
@@ -74,5 +77,6 @@ describe('JwtAuthProvider', () => {
     const req = await createMockRequest({ authorization: 'Bearer eyJ.test.sig' });
     const result = await provider.authenticate(req);
     expect(result.scopes).toEqual([]);
+    expect(result.strategy).toBe('jwt');
   });
 });

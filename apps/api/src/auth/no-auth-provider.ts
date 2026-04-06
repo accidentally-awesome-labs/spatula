@@ -19,6 +19,7 @@ export class NoAuthProvider implements AuthProvider {
       tenantId,
       userId: 'anonymous',
       scopes: ['admin'],
+      strategy: 'none',
     };
   }
 }
