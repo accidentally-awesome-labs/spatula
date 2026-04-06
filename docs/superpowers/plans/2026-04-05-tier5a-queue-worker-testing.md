@@ -130,29 +130,33 @@ export async function startTestWorkers(opts: {
 
 Implementation:
 1. Return null if `databaseUrl` not set
-2. Start fixture server (from `../../tier2/fixture-server.js`)
-3. Start mock Ollama (from `../../tier2/mock-ollama.js`)
-4. Create Postgres pool via `createDatabasePool(databaseUrl)` from `@spatula/db`
-5. Create all repository instances from the db
-6. Create Redis connection: `{ host: 'localhost', port: 6380, db: 1, maxRetriesPerRequest: null }`
-7. Create `SpatulaQueues` via `createQueues(redisConnection)`
-8. Create DLQ handler via `createDlqHandler(dlqRepo)`
-9. Build LLM components from mock Ollama (PageClassifier, StaticExtractor, SchemaEvolverImpl, DataReconcilerImpl, LLMLinkEvaluator) — same wiring as Tier 2 helpers
-10. Create Playwright crawler (skip tests if not available)
-11. Create `LocalContentStore` pointed at a temp dir
-12. Create `WorkerDeps` with all of the above
-13. Create 5 BullMQ Workers:
-    - Crawl: `new Worker(QUEUE_NAMES.CRAWL, async (job) => processCrawlJob(job.data, workerDeps), { connection: redisConnection, concurrency: 1 })`
-    - Schema evolution: `new Worker(QUEUE_NAMES.SCHEMA_EVOLUTION, async (job) => processSchemaEvolutionJob(job.data, workerDeps), { connection: redisConnection, concurrency: 1 })`
-    - Reconciliation: `new Worker(QUEUE_NAMES.RECONCILIATION, async (job) => processReconciliationJob(job.data, workerDeps), { connection: redisConnection, concurrency: 1 })`
-    - Export: `new Worker(QUEUE_NAMES.EXPORT, async (job) => processExportJob(job.data, workerDeps), { connection: redisConnection, concurrency: 1 })`
-    - Webhook: `new Worker(QUEUE_NAMES.WEBHOOK, async (job) => { const sender = new WebhookSender(); await sender.send(job.data.url, job.data.event, job.data.secret); }, { connection: redisConnection, concurrency: 1 })`
-14. Attach DLQ handler to each worker: `worker.on('failed', dlqHandler)`
-15. Create `JobManager({ jobRepo, taskRepo, schemaRepo, queues, tenantRepo })`
-16. Create webhook receiver
-17. Create API app via `createTestApp()` from Tier 4 helpers (with real jobManager, not stubbed)
-18. Create a test tenant
-19. Return harness with `closeAll()` that: closes workers → closes queues → closes crawler → closes Redis → closes pool → stops fixture server → stops mock Ollama → stops webhook receiver
+2. Check Playwright availability via `isPlaywrightAvailable()` from Tier 2 helpers. If not available, return null (all tests skip).
+3. Start fixture server (from `../../tier2/fixture-server.js`)
+4. Start mock Ollama (from `../../tier2/mock-ollama.js`)
+5. Create Postgres pool via `createDatabasePool(databaseUrl)` from `@spatula/db`
+6. Create all repository instances from the db (JobRepository, SchemaRepository, EntityRepository, ExtractionRepository, CrawlTaskRepository, ActionRepository, PageRepository, EntitySourceRepository, SourceTrustRepository, ExportRepository, TenantRepository, DlqRepository, AuditLogRepository, ApiKeyRepository)
+7. Create Redis connection for BullMQ: `{ host: 'localhost', port: 6380, db: 1, maxRetriesPerRequest: null }`
+8. Create separate Redis client for general use (ioredis instance, same host/port/db but without maxRetriesPerRequest override)
+9. Create `SpatulaQueues` via `createQueues(bullmqRedisConnection)`
+10. Create DLQ handler via `createDlqHandler(dlqRepo)`
+11. Build LLM components from mock Ollama (PageClassifier, StaticExtractor, SchemaEvolverImpl, DataReconcilerImpl, LLMLinkEvaluator) — same wiring as Tier 2 helpers
+12. Create Playwright crawler via `CrawlerFactory.create({ type: 'playwright' })`
+13. Create `LocalContentStore` pointed at a temp dir
+14. Create `CrawlCompletionChecker` from `@spatula/core` — **CRITICAL: without this, the crawl worker never detects completion, never triggers reconciliation, and jobs never reach 'completed' status**
+15. Create `AuditLogger` from `@spatula/shared` wrapping the `AuditLogRepository` — needed for audit log tests (Test 22)
+16. Create `WorkerDeps` with all of the above, including `completionChecker` and `eventPublisher: new NoopEventPublisher()`
+17. Create 5 BullMQ Workers:
+    - Crawl: `new Worker(QUEUE_NAMES.CRAWL, async (job) => processCrawlJob(job.data, workerDeps), { connection: bullmqRedisConnection, concurrency: 1 })`
+    - Schema evolution: `new Worker(QUEUE_NAMES.SCHEMA_EVOLUTION, async (job) => processSchemaEvolutionJob(job.data, workerDeps), { connection: bullmqRedisConnection, concurrency: 1 })` **Known gap:** Redis param for distributed locking not passed — lock code path untested. Acceptable for single-worker test environment.
+    - Reconciliation: `new Worker(QUEUE_NAMES.RECONCILIATION, async (job) => processReconciliationJob(job.data, workerDeps), { connection: bullmqRedisConnection, concurrency: 1 })`
+    - Export: `new Worker(QUEUE_NAMES.EXPORT, async (job) => processExportJob(job.data, workerDeps), { connection: bullmqRedisConnection, concurrency: 1 })`
+    - Webhook: `new Worker(QUEUE_NAMES.WEBHOOK, async (job) => { const sender = new WebhookSender(); await sender.send(job.data.url, job.data.event, job.data.secret); }, { connection: bullmqRedisConnection, concurrency: 1 })`
+18. Attach DLQ handler to each worker: `worker.on('failed', dlqHandler)`
+19. Create `JobManager({ jobRepo, taskRepo, schemaRepo, queues, tenantRepo })`
+20. Create webhook receiver
+21. **Call `createApp(deps)` directly from `@spatula/api`** — NOT `createTestApp()` from Tier 4 (which stubs jobManager/exportQueue/contentStore). Pass the REAL `jobManager`, `queues.export` as `exportQueue`, the shared `LocalContentStore`, the `auditLogger`, and the `redis` client. Set `AUTH_STRATEGY=none` in env first.
+22. Create a test tenant via `POST /api/v1/tenants` on the app
+23. Return harness with `closeAll()` that: closes workers → closes queues → closes crawler → closes Redis → closes pool → stops fixture server → stops mock Ollama → stops webhook receiver
 
 **`waitForJobStatus(jobRepo, jobId, tenantId, targetStatuses, timeoutMs)`:**
 ```typescript
@@ -215,7 +219,7 @@ beforeAll(async () => {
     description: 'Queue worker integration test',
     seedUrls: [`http://localhost:${harness.fixtureServer.port}/`],
     crawl: { maxDepth: 1, maxPages: 10, concurrency: 1, crawlerType: 'playwright' as const },
-    schema: { mode: 'discovery' as const, evolution: { batchSize: 5 } },
+    schema: { mode: 'discovery' as const, evolutionConfig: { enabled: true, batchSize: 5 } },
     llm: { primaryModel: 'llama3.2:1b' },
   };
   jobId = await harness.jobManager.createJob(config as any);
@@ -354,7 +358,7 @@ testWorker.on('failed', dlqHandler);
 **Tests:**
 
 12. `Failed job appears in DLQ` — Add job to test queue, wait for worker to process + fail, query `dlqRepo.findUnresolved()`, verify entry exists with error message 'Deliberate test failure'
-13. `DLQ retry re-enqueues` — Use the admin API `POST /admin/dlq/:id/retry` (or call `dlqRepo.resolve(id, 'retried')` directly), verify entry resolution is 'retried'
+13. `DLQ retry re-enqueues` — Use the admin API `POST /api/v1/admin/dlq/:id/retry` (or call `dlqRepo.resolve(id, 'retried')` directly), verify entry resolution is 'retried'
 14. `DLQ discard marks resolved` — Call `dlqRepo.resolve(id, 'discarded')`, verify entry resolution is 'discarded'
 
 - [ ] **Step 2: Commit**
@@ -379,7 +383,7 @@ git commit -m "test: add 3 DLQ tests with dedicated test worker"
 
 15. `Invalid state transition rejected` — Complete a job, then try `jobManager.startJob(jobId, tenantId)` (completed → queued is invalid) → expect `StateError` thrown
 16. `Cancel running job → workers stop` — Start a job, wait until 'running', call `jobManager.cancelJob()`, verify status becomes 'cancelled'. Verify no new crawl tasks are processed after cancel (check fixture server request log before and after cancel).
-17. `Concurrent job quota enforced` — Start 2 jobs (default quota = 2 concurrent), try to start a 3rd → expect `QuotaExceededError` thrown. Clean up by cancelling the 2 running jobs.
+17. `Concurrent job quota enforced` — Start 2 jobs using the `/slow` fixture URL as seed (3-second delay keeps jobs in `running` state long enough). Try to start a 3rd → expect `QuotaExceededError` thrown. Clean up by cancelling the 2 running jobs.
 
 - [ ] **Step 2: Commit**
 
