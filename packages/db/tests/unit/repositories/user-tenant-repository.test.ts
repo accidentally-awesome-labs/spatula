@@ -164,4 +164,38 @@ describe('UserTenantRepository', () => {
       expect(result).toBe(false);
     });
   });
+
+  describe('error handling', () => {
+    it('throws StorageError when create fails', async () => {
+      const db = createMockDb();
+      db._mocks.mockOnConflictDoNothing.mockRejectedValue(new Error('DB down'));
+      const repo = new UserTenantRepository(db as any);
+
+      await expect(repo.create('user-1', 'tenant-1', 'member')).rejects.toThrow(
+        'Failed to create user-tenant relationship',
+      );
+    });
+
+    it('throws StorageError when findByUserId fails', async () => {
+      const mockWhere = vi.fn().mockRejectedValue(new Error('DB down'));
+      const mockFrom = vi.fn().mockReturnValue({ where: mockWhere });
+      const db = { select: vi.fn().mockReturnValue({ from: mockFrom }) };
+      const repo = new UserTenantRepository(db as any);
+
+      await expect(repo.findByUserId('user-1')).rejects.toThrow(
+        'Failed to find tenants for user',
+      );
+    });
+
+    it('throws StorageError when isAdmin fails', async () => {
+      const mockWhere = vi.fn().mockRejectedValue(new Error('DB down'));
+      const mockFrom = vi.fn().mockReturnValue({ where: mockWhere });
+      const db = { select: vi.fn().mockReturnValue({ from: mockFrom }) };
+      const repo = new UserTenantRepository(db as any);
+
+      await expect(repo.isAdmin('user-1', 'tenant-1')).rejects.toThrow(
+        'Failed to check admin status',
+      );
+    });
+  });
 });

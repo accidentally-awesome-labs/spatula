@@ -2,6 +2,10 @@ import { pgTable, text, uuid, varchar, timestamp, primaryKey, index, uniqueIndex
 import { sql } from 'drizzle-orm';
 import { tenants } from './tenants.js';
 
+// A user can belong to multiple tenants (as member/admin), but can only OWN one tenant.
+// The partial unique index idx_user_tenants_owner enforces this — it prevents a user_id
+// from having role='owner' on more than one tenant. This is intentional: each hosted user
+// gets one personal workspace. They can be invited to other tenants as member/admin.
 export const userTenants = pgTable(
   'user_tenants',
   {

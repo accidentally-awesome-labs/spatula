@@ -44,6 +44,7 @@ export class JwtAuthProvider implements AuthProvider {
       userId: payload.sub ?? 'unknown',
       scopes: (payload.scopes as string[] | undefined) ?? [],
       strategy: 'jwt',
+      displayName: (payload.name as string | undefined) ?? (payload.email as string | undefined),
     };
   }
 }

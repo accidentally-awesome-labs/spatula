@@ -5,6 +5,8 @@ export interface AuthResult {
   userId: string;
   scopes: string[];
   strategy: 'none' | 'api-key' | 'jwt';
+  /** Display name from JWT (name or email claim). Used for auto-tenant naming. */
+  displayName?: string;
 }
 
 export interface AuthProvider {

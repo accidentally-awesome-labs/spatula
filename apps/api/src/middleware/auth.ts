@@ -55,7 +55,8 @@ export function authMiddleware(
         // userTenantRepo.create uses ON CONFLICT DO NOTHING, so the second
         // insert is a no-op. We re-query after to get the winning tenant.
         try {
-          const newTenant = await tenantRepo.create({ name: result.userId });
+          const tenantName = result.displayName ?? result.userId;
+          const newTenant = await tenantRepo.create({ name: tenantName });
           await userTenantRepo.create(result.userId, newTenant.id, 'owner');
         } catch {
           // Ignore — a racing request may have created the tenant already
