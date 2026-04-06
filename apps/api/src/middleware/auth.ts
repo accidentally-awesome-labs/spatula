@@ -1,5 +1,6 @@
 import type { MiddlewareHandler } from 'hono';
 import type { AuthProvider, AuditLogger } from '@spatula/shared';
+import type { UserTenantRepository, TenantRepository } from '@spatula/db';
 
 const SKIP_AUTH_PATHS = new Set([
   '/health',
@@ -13,7 +14,12 @@ const SKIP_AUTH_PREFIXES = [
   '/api/v1/tenants',
 ];
 
-export function authMiddleware(provider: AuthProvider, auditLogger?: AuditLogger): MiddlewareHandler {
+export function authMiddleware(
+  provider: AuthProvider,
+  auditLogger?: AuditLogger,
+  userTenantRepo?: UserTenantRepository,
+  tenantRepo?: TenantRepository,
+): MiddlewareHandler {
   return async (c, next) => {
     if (SKIP_AUTH_PATHS.has(c.req.path)) {
       return next();
@@ -38,6 +44,68 @@ export function authMiddleware(provider: AuthProvider, auditLogger?: AuditLogger
       throw error;
     }
 
+    // JWT tenant resolution: resolve tenant from user_tenants table
+    if (result.strategy === 'jwt' && userTenantRepo && tenantRepo) {
+      const entries = await userTenantRepo.findByUserId(result.userId);
+      let resolvedTenantId: string;
+
+      if (entries.length === 0) {
+        // Auto-create a Free tenant for new JWT users
+        const newTenant = await tenantRepo.create({ name: result.userId });
+        await userTenantRepo.create(result.userId, newTenant.id, 'owner');
+        resolvedTenantId = newTenant.id;
+      } else if (entries.length === 1) {
+        // Single tenant: auto-select
+        resolvedTenantId = entries[0].tenantId;
+      } else {
+        // Multiple tenants: require X-Tenant-Id header
+        const requestedTenantId = c.req.header('x-tenant-id');
+        if (!requestedTenantId) {
+          return c.json(
+            {
+              error: {
+                code: 'TENANT_REQUIRED',
+                message: 'Multiple tenants found. Specify X-Tenant-Id header.',
+                tenants: entries.map((e) => ({ tenantId: e.tenantId, role: e.role })),
+              },
+            },
+            400,
+          );
+        }
+        // Verify user belongs to the specified tenant
+        const match = entries.find((e) => e.tenantId === requestedTenantId);
+        if (!match) {
+          return c.json(
+            {
+              error: {
+                code: 'TENANT_FORBIDDEN',
+                message: 'User does not belong to the specified tenant.',
+              },
+            },
+            403,
+          );
+        }
+        resolvedTenantId = requestedTenantId;
+      }
+
+      const resolvedResult = { ...result, tenantId: resolvedTenantId };
+
+      if (auditLogger) {
+        auditLogger.log({
+          tenantId: resolvedResult.tenantId,
+          actorId: resolvedResult.userId,
+          actorType: 'user',
+          action: 'auth.login_success',
+          ipAddress: (c.req.header('x-forwarded-for') ?? c.req.header('x-real-ip'))?.split(',')[0]?.trim(),
+        });
+      }
+
+      c.set('tenantId', resolvedResult.tenantId);
+      c.set('auth', resolvedResult);
+      return next();
+    }
+
+    // Non-JWT strategies (api-key, none): existing behavior unchanged
     if (auditLogger) {
       auditLogger.log({
         tenantId: result.tenantId,

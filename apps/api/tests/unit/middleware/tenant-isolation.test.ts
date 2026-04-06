@@ -263,8 +263,8 @@ describe('Cross-tenant isolation', () => {
         body: JSON.stringify({}),
       });
 
-      // StorageError from the repo propagates as a 500
-      expect(res.status).toBe(500);
+      // Cross-tenant action approve now returns 404 (not 500)
+      expect(res.status).toBe(404);
       expect(deps.actionRepo.updateStatus).toHaveBeenCalledWith(
         'action-1',
         TENANT_B,

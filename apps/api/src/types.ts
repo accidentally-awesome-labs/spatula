@@ -12,6 +12,7 @@ import type {
   ApiKeyRepository,
   LlmUsageRepository,
   RedisCache,
+  UserTenantRepository,
 } from '@spatula/db';
 import type { ContentStore, ReviewQueue } from '@spatula/core';
 import type { JobManager, ExportJobPayload, SpatulaQueues } from '@spatula/queue';
@@ -45,6 +46,7 @@ export interface AppDeps {
   auditLogger?: AuditLogger;
   auditLogRepo?: AuditLogRepository;
   llmUsageRepo?: LlmUsageRepository;
+  userTenantRepo?: UserTenantRepository;
   metrics?: SpatulaMetrics;
 }
 
