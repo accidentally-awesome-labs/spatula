@@ -90,6 +90,16 @@ describe('Tier 5A -- Worker Lifecycle + Infrastructure (Tests 18-22)', () => {
     // Verify no tasks are stuck in in_progress for this job
     const stats = await harness.workerDeps.taskRepo.getJobStats(jobId, harness.tenantId);
     expect(stats.inProgress).toBe(0);
+
+    // Recreate the crawl worker so subsequent tests can use it
+    const { Worker } = await import('bullmq');
+    const { processCrawlJob, QUEUE_NAMES } = await import('@spatula/queue');
+    const newCrawlWorker = new Worker(
+      QUEUE_NAMES.CRAWL,
+      async (job: any) => processCrawlJob(job.data, harness!.workerDeps),
+      { connection: { host: 'localhost', port: 6380, db: 1, maxRetriesPerRequest: null as null }, concurrency: 1 },
+    );
+    harness!.workers[0] = newCrawlWorker;
   }, 60_000);
 
   // -------------------------------------------------------------------------
@@ -163,22 +173,20 @@ describe('Tier 5A -- Worker Lifecycle + Infrastructure (Tests 18-22)', () => {
 
     // Optionally verify the token exists in Redis
     // Connect to Redis and check the key
-    try {
-      const redisModule = 'ioredis';
-      const mod: any = await import(/* @vite-ignore */ redisModule);
-      const IoRedis = mod.default;
-      const redis = new IoRedis('localhost', { port: 6380, db: 1 });
+    const redisModule = 'ioredis';
+    const mod: any = await import(/* @vite-ignore */ redisModule);
+    const IoRedis = mod.default;
+    const redis = new IoRedis('localhost', { port: 6380, db: 1 });
 
+    try {
       const key = `ws-token:${body.data.token}`;
       const value = await redis.get(key);
       expect(value).toBeTruthy();
 
       const ttl = await redis.ttl(key);
       expect(ttl).toBeGreaterThan(0);
-
+    } finally {
       await redis.quit();
-    } catch {
-      // Redis verification is optional -- the HTTP test above is the primary check
     }
   }, 15_000);
 

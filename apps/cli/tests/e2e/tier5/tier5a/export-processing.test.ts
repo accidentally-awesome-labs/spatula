@@ -19,6 +19,8 @@ import {
 
 let harness: TestWorkerHarness | null = null;
 let jobId: string;
+let completedExportId: string;
+let totalEntityCount: number;
 
 beforeAll(async () => {
   harness = await startTestWorkers({
@@ -102,8 +104,8 @@ describe('Export Processing', () => {
     expect(statusBody.data.entityCount).toBeGreaterThan(0);
 
     // Store exportId for the download test
-    (globalThis as any).__tier5a_exportId = exportId;
-    (globalThis as any).__tier5a_totalEntityCount = statusBody.data.entityCount;
+    completedExportId = exportId;
+    totalEntityCount = statusBody.data.entityCount;
   }, 90_000);
 
   // ------------------------------------------------------------------
@@ -112,7 +114,7 @@ describe('Export Processing', () => {
   it('downloads completed export with non-empty content', async (ctx) => {
     if (!harness) return ctx.skip();
 
-    const exportId = (globalThis as any).__tier5a_exportId;
+    const exportId = completedExportId;
     expect(exportId).toBeDefined();
 
     const res = await harness.app.request(
@@ -145,7 +147,6 @@ describe('Export Processing', () => {
   it('export with minQuality filter has fewer entities than total', async (ctx) => {
     if (!harness) return ctx.skip();
 
-    const totalEntityCount = (globalThis as any).__tier5a_totalEntityCount;
     expect(totalEntityCount).toBeGreaterThan(0);
 
     // Create export with high minQuality filter

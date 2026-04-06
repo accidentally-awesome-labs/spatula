@@ -136,8 +136,8 @@ describe('Tier 5A — DLQ (Tests 12-14)', () => {
   // -------------------------------------------------------------------------
   // Test 12: Failed job appears in DLQ
   // -------------------------------------------------------------------------
-  it('12. Failed job appears in DLQ', async () => {
-    if (!dbAvailable) return;
+  it('12. Failed job appears in DLQ', async (ctx) => {
+    if (!dbAvailable) return ctx.skip();
 
     // Add a job to the test queue
     const job = await testQueue.add('test-job', {
@@ -162,8 +162,8 @@ describe('Tier 5A — DLQ (Tests 12-14)', () => {
   // -------------------------------------------------------------------------
   // Test 13: DLQ retry resolves entry
   // -------------------------------------------------------------------------
-  it('13. DLQ retry resolves entry', async () => {
-    if (!dbAvailable) return;
+  it('13. DLQ retry resolves entry', async (ctx) => {
+    if (!dbAvailable) return ctx.skip();
 
     // Find the unresolved DLQ entry from Test 12
     const entries = await dlqRepo.findUnresolved({ queueName: TEST_QUEUE_NAME });
@@ -188,8 +188,8 @@ describe('Tier 5A — DLQ (Tests 12-14)', () => {
   // -------------------------------------------------------------------------
   // Test 14: DLQ discard marks resolved
   // -------------------------------------------------------------------------
-  it('14. DLQ discard marks resolved', async () => {
-    if (!dbAvailable) return;
+  it('14. DLQ discard marks resolved', async (ctx) => {
+    if (!dbAvailable) return ctx.skip();
 
     // Create another failing job
     const job = await testQueue.add('test-job', {
