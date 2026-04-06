@@ -12,12 +12,6 @@
  *     from the LLM client + resolved job config
  *   - If LLM is unavailable (no API key, no Ollama), crawl-only mode: pages
  *     are fetched but LLM-dependent steps are skipped.
- *
- * TODO(Wave 3-5 Task 10): Structured file logging — add a Pino file transport
- * that writes newline-delimited JSON to `.spatula/logs/<run-id>.ndjson` so that
- * each run produces a persistent, machine-readable audit trail.  The transport
- * can be created with `pino.transport({ target: 'pino/file', options: { destination: logPath } })`
- * and passed as the second argument to `createLogger`.
  */
 
 import { join, basename } from 'node:path';

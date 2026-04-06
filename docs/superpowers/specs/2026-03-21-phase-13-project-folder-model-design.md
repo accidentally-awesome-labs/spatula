@@ -1389,6 +1389,8 @@ On first run, no diff is shown. On resume with no config changes, no diff is sho
 
 ### 7.4 Remote Operations
 
+> **Status: Deferred to Wave 5** — Remote operations will be implemented in Phase 13 Step 6.
+
 | Command | Description |
 |---------|-------------|
 | `spatula remote add <name> [url]` | Configure a remote (interactive if url omitted) |

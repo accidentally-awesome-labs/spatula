@@ -18,7 +18,7 @@ This document tracks the interleaved execution of Phase 12 (production hardening
 | 1 | A: Infrastructure & deployment | Step 1: Extract orchestrators | **Complete** |
 | 2 | D+F+J: Reliability, pipeline, local DX | Steps 2+3: SQLite + config | **Complete** (4 items deferred) |
 | 3 | B+C+E: Auth, observability, performance + D/F deferred | Step 4: Pipeline runner + core CLI | **Complete** |
-| 4 | G+H: API completeness, open-source readiness | Step 5: Data interaction commands | Pending |
+| 4 | G+H: API completeness, open-source readiness | Step 5: Data interaction commands | **Complete** |
 | 5 | I: Hosted platform layer | Step 6: Remote operations | Pending |
 
 ---
@@ -269,7 +269,16 @@ CLI commands for exploring, exporting, and managing project data.
 
 **Spec:** Phase 13, Section 7
 
-**Plans:** None yet — to be written.
+**Decomposition:** `docs/superpowers/specs/2026-03-31-wave-4-decomposition-design.md`
+
+**Sub-plans (4, server-first then local then docs):**
+
+| Sub-plan | Scope | Status |
+|----------|-------|--------|
+| 4-1 | Server Completeness (webhooks, bulk ops, timeout, doctor) | **Complete** |
+| 4-2 | CLI Foundations (hook adaptation, utility commands, CSS extractor) | **Complete** |
+| 4-3 | CLI Data Commands (explore, export, review, schema, logs, dashboard) | **Complete** |
+| 4-4 | Open-Source Readiness (LICENSE, README, docs, examples, templates) | **Complete** |
 
 **This wave concludes with the open-source release.**
 
@@ -306,6 +315,11 @@ Push/pull bridge between local projects and hosted platform.
 
 **Plans:** None yet — to be written.
 
+**Items deferred from Wave 4:**
+- `spatula add` SQLite crawl history dedup (DataSource doesn't expose crawled URLs yet)
+- `spatula reset --keep-remote` flag
+- CSS extractor table extraction
+
 ---
 
 ## Dependency Graph
@@ -338,12 +352,14 @@ Phase 12 touches server code (`apps/api`, `packages/queue`). Phase 13 adds local
 
 ---
 
-## Test Counts (as of Wave 2 completion)
+## Test Counts (as of Wave 4 completion)
 
-| Package | Tests |
-|---------|-------|
-| `@spatula/core` | 813 |
-| `@spatula/db` | 220 |
-| `@spatula/queue` | 134 |
-| `@spatula/api` | 175 |
-| **Total** | **1,342** |
+| Package | Test Files |
+|---------|-----------|
+| `@spatula/core` | ~130 |
+| `@spatula/db` | ~25 |
+| `@spatula/queue` | ~10 |
+| `@spatula/api` | ~15 |
+| `@spatula/cli` | ~70 |
+| `tests/e2e` | ~5 |
+| **Total** | **~263** |

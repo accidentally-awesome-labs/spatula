@@ -1256,6 +1256,8 @@ POST /api/v1/jobs/batch        -- { action: 'cancel'|'delete', ids: string[] }
 
 ### 8.3 CLI Setup Wizard (`spatula init`)
 
+> **Status: Completed in Wave 2** — Phase 13 Step 3 (Config System) implemented `spatula init` as part of the local project-folder model.
+
 **Deferred to Phase 13.** Phase 13 introduces a comprehensive project-folder model where `spatula init` creates a `spatula.yaml` project file and `~/.spatula/config.yaml` global config through an interactive wizard. Building a separate server-setup wizard here would be immediately replaced.
 
 For the Phase 12 open-source release, server setup is documented in the README quickstart (Workstream H, section 9.2): copy `.env.example`, configure, `docker-compose up`, run migrations. This is standard for self-hosted open-source projects.
@@ -1290,6 +1292,8 @@ interface HealthCheck {
 Phase 12 registers `system` and `server` checks. Phase 13 adds `project` checks (SQLite integrity, orphaned tasks, missing page files, pending review actions) without modifying the Phase 12 code. The doctor command runs all registered checks for applicable categories based on context (always runs `system`, runs `server` if `.env` exists, runs `project` if `spatula.yaml` exists).
 
 ### 8.5 Config File Support
+
+> **Status: Completed in Wave 2** — Phase 13 Step 3 (Config System) implemented `spatula.yaml` as the project configuration format.
 
 **Deferred to Phase 13.** Phase 13 introduces `spatula.yaml` as the primary project configuration format with user-friendly field names (`depth` instead of `crawl.maxDepth`, field shorthand syntax). Building a separate YAML format here that uses internal `JobConfig` names would create two competing formats. The Phase 13 `spatula.yaml` format subsumes this feature — projects can be pushed to the hosted server via `spatula push`.
 
@@ -1373,14 +1377,14 @@ Phase 12 registers `system` and `server` checks. Phase 13 adds `project` checks 
 ```
 examples/
   quickstart/
-    job.yaml              -- simple single-site crawl
+    spatula.yaml              -- simple single-site crawl
     docker-compose.yml    -- self-contained with all services
   ecommerce/
-    job.yaml              -- multi-site product catalog
+    spatula.yaml              -- multi-site product catalog
   news/
-    job.yaml              -- news article aggregation
+    spatula.yaml              -- news article aggregation
   real-estate/
-    job.yaml              -- property listing extraction
+    spatula.yaml              -- property listing extraction
 ```
 
 Each example includes a `README.md` with expected output and explanation.
@@ -2048,7 +2052,7 @@ function estimateCost(config: JobConfig): CostEstimate {
 #### 11.5.3 CLI Command
 
 ```bash
-spatula estimate --config job.yaml
+spatula estimate --config spatula.yaml
 ```
 
 **Output:**

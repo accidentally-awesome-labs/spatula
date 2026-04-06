@@ -1,4 +1,3 @@
-// TODO(Wave 3-5): Accept DataSource instead of ApiClient for local mode — DONE
 import { useEffect, useRef, useState } from 'react';
 import type { CliStore, PendingAction } from '../store/index.js';
 import type { SpatulaApiClient } from '../api/client.js';
