@@ -104,9 +104,18 @@ export async function createTestApp(): Promise<TestApp | null> {
     redis = new IoRedis(process.env.REDIS_URL, { maxRetriesPerRequest: 1 });
   }
 
-  // 4. Stubbed services (not needed for API lifecycle tests)
+  // 4. Stubbed services — createJob inserts via jobRepo so the subsequent
+  //    findById in the route handler returns the newly created job.
   const jobManager = {
-    createJob: async () => crypto.randomUUID(),
+    createJob: async (config: any) => {
+      const job = await jobRepo.create({
+        tenantId: config.tenantId,
+        name: config.name,
+        description: config.description,
+        config,
+      });
+      return job.id;
+    },
     startJob: async () => {},
     pauseJob: async () => {},
     resumeJob: async () => {},
