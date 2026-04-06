@@ -1,0 +1,14 @@
+name: Quickstart
+description: Extract product data from a single site
+
+seeds:
+  - https://books.toscrape.com
+
+fields:
+  - title: string
+  - price: currency
+  - availability: string
+  - rating: number
+
+depth: 2
+limit: 50

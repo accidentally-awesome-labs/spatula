@@ -1,0 +1,49 @@
+name: Property Listings
+description: Extract real estate listings with location and pricing data
+
+seeds:
+  - https://listings.example.com/homes
+
+fields:
+  - field: address
+    type: string
+    required: true
+  - field: price
+    type: currency
+    required: true
+  - field: bedrooms
+    type: number
+  - field: bathrooms
+    type: number
+  - field: sqft
+    type: number
+  - field: property_type
+    type: string
+    description: Type of property (house, condo, townhouse, apartment, land)
+  - field: listing_status
+    type: string
+    description: Listing status (active, pending, sold)
+  - field: listing_url
+    type: url
+  - field: images
+    type: array
+    description: Property image URLs
+  - field: description
+    type: string
+
+depth: 3
+limit: 2000
+crawler: playwright
+safety: balanced
+
+crawl:
+  concurrency: 3
+
+reconciliation:
+  strategy: fuzzy_name
+  conflictResolution: most_complete
+  fuzzyThreshold: 0.80
+
+export:
+  format: sqlite
+  autoExport: true

@@ -1,0 +1,54 @@
+name: Product Catalog
+description: Multi-site product catalog extraction with price tracking
+
+seeds:
+  - https://store-one.example.com/products
+  - https://store-two.example.com/catalog
+
+fields:
+  - field: product_name
+    type: string
+    required: true
+  - field: price
+    type: currency
+    required: true
+  - field: currency
+    type: string
+    description: Price currency code (USD, EUR, GBP, CAD)
+  - field: brand
+    type: string
+  - field: category
+    type: string
+  - field: in_stock
+    type: boolean
+  - field: image_url
+    type: url
+  - field: sku
+    type: string
+  - field: description
+    type: string
+
+depth: 3
+limit: 5000
+crawler: playwright
+safety: balanced
+
+schema:
+  mode: hybrid
+  evolution:
+    batchSize: 15
+    maxFields: 40
+
+reconciliation:
+  strategy: composite_key
+  conflictResolution: most_complete
+  fuzzyThreshold: 0.85
+
+llm:
+  overrides:
+    pageRelevance: anthropic/claude-3-haiku-20240307
+    linkEvaluation: anthropic/claude-3-haiku-20240307
+
+export:
+  format: json
+  includeProvenance: true

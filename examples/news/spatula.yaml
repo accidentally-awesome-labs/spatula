@@ -1,0 +1,35 @@
+name: News Articles
+description: Aggregate news articles with structured metadata
+
+seeds:
+  - https://news.example.com
+
+fields:
+  - field: headline
+    type: string
+    required: true
+  - field: author
+    type: string
+  - field: published_date
+    type: string
+  - field: category
+    type: string
+    description: Article category (politics, technology, science, business, sports, entertainment)
+  - field: summary
+    type: string
+  - field: source_url
+    type: url
+    required: true
+  - field: image_url
+    type: url
+
+depth: 2
+limit: 500
+safety: cautious
+
+schema:
+  mode: discovery
+
+reconciliation:
+  strategy: exact_name
+  conflictResolution: most_recent
