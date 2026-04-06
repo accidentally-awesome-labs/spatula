@@ -3,7 +3,8 @@ import { createOpenAPIRouter } from '../openapi-config.js';
 import type { AppEnv } from '../types.js';
 import { actionResponseSchema, listResponse, jsonContent } from '../schemas/responses.js';
 import { paginationSchema, paginationEnvelopeSchema } from '../schemas/pagination.js';
-import { decodeCursor, encodeCursor } from '@spatula/shared';
+import { decodeCursor, encodeCursor, StorageError } from '@spatula/shared';
+import { NotFoundError } from '../middleware/error-handler.js';
 
 const jobIdParam = z.object({
   jobId: z.string().openapi({ param: { name: 'jobId', in: 'path' } }),
@@ -140,8 +141,15 @@ export function actionRoutes() {
       return c.json({ data: action });
     }
 
-    const action = await deps.actionRepo.updateStatus(actionId, tenantId, 'approved', body?.reviewedBy);
-    return c.json({ data: action });
+    try {
+      const action = await deps.actionRepo.updateStatus(actionId, tenantId, 'approved', body?.reviewedBy);
+      return c.json({ data: action });
+    } catch (error) {
+      if (error instanceof StorageError && error.message.includes('not found')) {
+        throw new NotFoundError('Action', actionId);
+      }
+      throw error;
+    }
   });
 
   router.openapi(rejectRoute, async (c) => {
@@ -155,8 +163,15 @@ export function actionRoutes() {
       return c.json({ data: { id: actionId, status: 'rejected' } });
     }
 
-    const action = await deps.actionRepo.updateStatus(actionId, tenantId, 'rejected', body?.reviewedBy);
-    return c.json({ data: action });
+    try {
+      const action = await deps.actionRepo.updateStatus(actionId, tenantId, 'rejected', body?.reviewedBy);
+      return c.json({ data: action });
+    } catch (error) {
+      if (error instanceof StorageError && error.message.includes('not found')) {
+        throw new NotFoundError('Action', actionId);
+      }
+      throw error;
+    }
   });
 
   return router;

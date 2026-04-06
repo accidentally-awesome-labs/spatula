@@ -72,10 +72,6 @@ describe('Tier 5B: Multi-Tenant Isolation', () => {
     }).returning({ id: actions.id });
 
     // Tenant B tries to approve tenant A's action
-    // Note: The action route returns 500 (StorageError) instead of 404 for cross-tenant
-    // access because actionRepo.updateStatus() throws StorageError when no row matches.
-    // This is a known API issue — the route should catch and return 404. For now, we
-    // assert the request is rejected (not 200/2xx) to verify tenant isolation works.
     const res = await ctx.app.request(
       `/api/v1/jobs/${tenantAJobId}/actions/${action.id}/approve`,
       {
@@ -84,6 +80,6 @@ describe('Tier 5B: Multi-Tenant Isolation', () => {
         body: JSON.stringify({}),
       },
     );
-    expect(res.status).toBeGreaterThanOrEqual(400); // Rejected (404 ideal, currently 500)
+    expect(res.status).toBe(404);
   });
 });
