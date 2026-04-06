@@ -65,6 +65,7 @@ export function bearerHeaders(apiKey: string): Record<string, string> {
 export function minimalJobBody(overrides?: Record<string, unknown>) {
   return {
     name: 'Test Job',
+    description: 'Created by tier-5b test',
     seedUrls: ['https://example.com'],
     crawl: { maxDepth: 1, maxPages: 10, concurrency: 1, crawlerType: 'playwright' },
     schema: { mode: 'discovery' },
