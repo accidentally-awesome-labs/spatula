@@ -125,12 +125,3 @@ export async function setupTenantPair(): Promise<{
     tenantB: { tenantId: tenantBId, key: rawKey },
   };
 }
-
-/**
- * Standard skip helper for tests that need database infrastructure.
- */
-export function skipIfNoDb(dbAvailable: boolean) {
-  return (t: { skip: () => void }) => {
-    if (!dbAvailable) t.skip();
-  };
-}

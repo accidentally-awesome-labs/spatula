@@ -17,8 +17,11 @@ describe('Tier 5B: Rate Limiting', () => {
     ctx = result;
     dbAvailable = true;
 
-    // Flush Redis to prevent stale rate limit counters from prior runs
-    if (ctx.redis) await ctx.redis.flushdb();
+    // Clear stale rate limit counters from prior runs (targeted, not flushdb)
+    if (ctx.redis) {
+      const keys = await ctx.redis.keys('ratelimit:*');
+      if (keys.length > 0) await ctx.redis.del(...keys);
+    }
   }, 30_000);
 
   afterAll(async () => {

@@ -117,7 +117,6 @@ describe('Tier 5B: Error Response Consistency', () => {
       body: 'this is not json',
     });
     // Should be 400 (parse/validation error) or 415 (unsupported media type)
-    expect(res.status).toBeGreaterThanOrEqual(400);
-    expect(res.status).toBeLessThan(500);
+    expect([400, 415]).toContain(res.status);
   });
 });
