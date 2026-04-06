@@ -1,0 +1,36 @@
+{
+  "$schema": "https://raw.githubusercontent.com/googleapis/release-please/main/schemas/config.json",
+  "packages": {
+    ".": {
+      "release-type": "node",
+      "component": "spatula",
+      "changelog-path": "CHANGELOG.md",
+      "bump-minor-pre-major": true,
+      "bump-patch-for-minor-pre-major": true
+    },
+    "packages/core": {
+      "release-type": "node",
+      "component": "core"
+    },
+    "packages/db": {
+      "release-type": "node",
+      "component": "db"
+    },
+    "packages/queue": {
+      "release-type": "node",
+      "component": "queue"
+    },
+    "packages/shared": {
+      "release-type": "node",
+      "component": "shared"
+    },
+    "apps/api": {
+      "release-type": "node",
+      "component": "api"
+    },
+    "apps/cli": {
+      "release-type": "node",
+      "component": "cli"
+    }
+  }
+}
