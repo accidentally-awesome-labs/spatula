@@ -276,6 +276,90 @@ export class JobRepository {
     }
   }
 
+  /**
+   * Cross-tenant job listing for admin endpoints.
+   * Supports optional filters by status and tenantId.
+   */
+  async findAll(options?: {
+    status?: JobStatus;
+    tenantId?: string;
+    limit?: number;
+    offset?: number;
+  }) {
+    try {
+      const conditions = [];
+      if (options?.status) conditions.push(eq(jobs.status, options.status));
+      if (options?.tenantId) conditions.push(eq(jobs.tenantId, options.tenantId));
+
+      let query = this.db
+        .select()
+        .from(jobs)
+        .orderBy(desc(jobs.createdAt));
+
+      if (conditions.length > 0) {
+        query = query.where(and(...conditions)) as typeof query;
+      }
+
+      return await query
+        .limit(options?.limit ?? 50)
+        .offset(options?.offset ?? 0);
+    } catch (error) {
+      throw new StorageError(`Failed to list all jobs: ${(error as Error).message}`, {
+        cause: error as Error,
+      });
+    }
+  }
+
+  /**
+   * Count all jobs across tenants with optional filters. For admin endpoints.
+   */
+  async countAll(options?: { status?: JobStatus; tenantId?: string }): Promise<number> {
+    try {
+      const conditions = [];
+      if (options?.status) conditions.push(eq(jobs.status, options.status));
+      if (options?.tenantId) conditions.push(eq(jobs.tenantId, options.tenantId));
+
+      const query = this.db
+        .select({ count: sql<number>`count(*)::int` })
+        .from(jobs);
+
+      const rows = conditions.length > 0
+        ? await query.where(and(...conditions))
+        : await query;
+
+      return (rows[0] as any)?.count ?? 0;
+    } catch (error) {
+      throw new StorageError(`Failed to count all jobs: ${(error as Error).message}`, {
+        cause: error as Error,
+      });
+    }
+  }
+
+  /**
+   * Force-cancel a job without tenant scoping. For admin use only.
+   * Sets status to 'cancelled' and completedAt to now.
+   */
+  async forceCancel(jobId: string): Promise<typeof jobs.$inferSelect | null> {
+    try {
+      const [row] = await this.db
+        .update(jobs)
+        .set({ status: 'cancelled', completedAt: new Date() })
+        .where(eq(jobs.id, jobId))
+        .returning();
+
+      if (row && this.cache) {
+        await this.cache.delete(`job:${jobId}:config`);
+      }
+
+      return row ?? null;
+    } catch (error) {
+      throw new StorageError(`Failed to force-cancel job ${jobId}: ${(error as Error).message}`, {
+        cause: error as Error,
+        context: { jobId },
+      });
+    }
+  }
+
   async updateStats(id: string, tenantId: string, stats: Record<string, number>) {
     try {
       const [row] = await this.db
