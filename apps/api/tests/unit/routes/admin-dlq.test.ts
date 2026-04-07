@@ -71,13 +71,14 @@ describe('GET /api/v1/admin/dlq', () => {
       headers: tenantHeader,
     });
 
+    // NoAuthProvider gives admin scope, so tenantId is omitted for cross-tenant access
     expect((deps as any).dlqRepo.findUnresolved).toHaveBeenCalledWith({
       queueName: 'spatula.export',
-      tenantId: TENANT_ID,
+      tenantId: undefined,
       limit: 10,
       offset: 5,
     });
-    expect((deps as any).dlqRepo.countUnresolved).toHaveBeenCalledWith('spatula.export', TENANT_ID);
+    expect((deps as any).dlqRepo.countUnresolved).toHaveBeenCalledWith('spatula.export', undefined);
   });
 
   it('clamps limit to max 100', async () => {
@@ -279,5 +280,53 @@ describe('POST /api/v1/admin/dlq/:id/discard', () => {
     });
 
     expect(res.status).toBe(409);
+  });
+});
+
+describe('admin cross-tenant DLQ access', () => {
+  it('omits tenantId filter when caller has admin scope', async () => {
+    const deps = createMockDeps();
+    const app = createApp(deps);
+    const res = await app.request('/api/v1/admin/dlq', { headers: tenantHeader });
+    expect(res.status).toBe(200);
+    expect(deps.dlqRepo!.findUnresolved).toHaveBeenCalledWith(
+      expect.objectContaining({ tenantId: undefined }),
+    );
+  });
+
+  it('returns entries from all tenants', async () => {
+    const otherTenantEntry = { ...SAMPLE_DLQ_ENTRY, id: 'dlq-2', tenantId: '00000000-0000-0000-0000-000000000099' };
+    const deps = createMockDeps({
+      dlqRepo: {
+        findUnresolved: vi.fn().mockResolvedValue([SAMPLE_DLQ_ENTRY, otherTenantEntry]),
+        countUnresolved: vi.fn().mockResolvedValue(2),
+        findById: vi.fn(),
+        resolve: vi.fn(),
+        insert: vi.fn(),
+      } as any,
+    });
+    const app = createApp(deps);
+    const res = await app.request('/api/v1/admin/dlq', { headers: tenantHeader });
+    const body = await res.json();
+    expect(body.data).toHaveLength(2);
+  });
+
+  it('admin can access single DLQ entry from any tenant (GET /:id)', async () => {
+    const deps = createMockDeps();
+    const app = createApp(deps);
+    const res = await app.request('/api/v1/admin/dlq/dlq-1', { headers: tenantHeader });
+    expect(res.status).toBe(200);
+    expect(deps.dlqRepo!.findById).toHaveBeenCalledWith('dlq-1', undefined);
+  });
+
+  it('admin can retry DLQ entry from any tenant (POST /:id/retry)', async () => {
+    const deps = createMockDeps();
+    const app = createApp(deps);
+    const res = await app.request('/api/v1/admin/dlq/dlq-1/retry', {
+      method: 'POST',
+      headers: tenantHeader,
+    });
+    expect(res.status).toBe(200);
+    expect(deps.dlqRepo!.findById).toHaveBeenCalledWith('dlq-1', undefined);
   });
 });
