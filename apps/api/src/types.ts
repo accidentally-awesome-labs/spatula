@@ -13,11 +13,13 @@ import type {
   LlmUsageRepository,
   RedisCache,
   UserTenantRepository,
+  UsageRecordRepository,
 } from '@spatula/db';
-import type { ContentStore, ReviewQueue } from '@spatula/core';
+import type { ContentStore, ReviewQueue, QuotaEnforcer } from '@spatula/core';
 import type { JobManager, ExportJobPayload, SpatulaQueues } from '@spatula/queue';
 import type { AuthProvider, AuthResult, AuditLogger, SpatulaMetrics } from '@spatula/shared';
 import type { AuditLogRepository } from '@spatula/db';
+import type { SpatulaStripeClient } from './billing/stripe-client.js';
 import type Redis from 'ioredis';
 import type { Pool } from 'pg';
 
@@ -47,6 +49,9 @@ export interface AppDeps {
   auditLogRepo?: AuditLogRepository;
   llmUsageRepo?: LlmUsageRepository;
   userTenantRepo?: UserTenantRepository;
+  usageRecordRepo?: UsageRecordRepository;
+  stripeClient?: SpatulaStripeClient;
+  quotaEnforcer?: QuotaEnforcer;
   metrics?: SpatulaMetrics;
 }
 

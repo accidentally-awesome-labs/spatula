@@ -1,11 +1,25 @@
 import { QuotaExceededError, BILLING_TIERS, getTierLimit } from '@spatula/shared';
 import type { BillingTierName, UsageDimension } from '@spatula/shared';
-import type { UsageRecordRepository, TenantRepository } from '@spatula/db';
+
+/** Duck-typed interface to avoid cross-package dependency on @spatula/db */
+export interface UsageReader {
+  getCurrentUsage(tenantId: string, dimension: string): Promise<number>;
+}
+
+/** Duck-typed interface to avoid cross-package dependency on @spatula/db */
+export interface UsageRecorder {
+  record(tenantId: string, dimension: string, quantity: number): Promise<void>;
+}
+
+/** Duck-typed interface to avoid cross-package dependency on @spatula/db */
+export interface PlanReader {
+  getPlan(tenantId: string): Promise<string>;
+}
 
 export class QuotaEnforcer {
   constructor(
-    private readonly usageRepo: UsageRecordRepository,
-    private readonly tenantRepo: TenantRepository,
+    private readonly usageRepo: UsageReader & UsageRecorder,
+    private readonly tenantRepo: PlanReader,
   ) {}
 
   /**
