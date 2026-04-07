@@ -15,6 +15,8 @@ import { QUEUE_NAMES, DEFAULT_QUEUE_CONFIG, createQueues } from './queues.js';
 import { parseEnabledWorkers, isWorkerEnabled } from './worker-selection.js';
 import { WorkerHeartbeat } from './worker-heartbeat.js';
 import { createWebhookWorker } from './webhook-worker.js';
+import { processMeteringJob } from './metering-worker.js';
+import type { MeteringDeps } from './metering-worker.js';
 import type { WorkerDeps } from './worker-deps.js';
 import type { CrawlJobData, SchemaEvolutionJobData, ReconciliationJobData, ExportJobPayload } from './queues.js';
 
@@ -151,6 +153,31 @@ async function main() {
     logger.info({ queue: QUEUE_NAMES.WEBHOOK }, 'Webhook worker started');
   }
 
+  let meteringQueue: import('bullmq').Queue | undefined;
+  if (isEnabled('metering')) {
+    const { Queue: BullQueue } = await import('bullmq');
+    meteringQueue = new BullQueue(QUEUE_NAMES.METERING, { connection: redisOpts });
+
+    // Add repeatable job (hourly)
+    await meteringQueue.add('metering', {}, {
+      repeat: { every: 60 * 60 * 1000 },
+      removeOnComplete: true,
+      removeOnFail: 100,
+    });
+
+    const worker = new Worker(
+      QUEUE_NAMES.METERING,
+      async () => {
+        const meteringDeps: MeteringDeps = deps as any;
+        await processMeteringJob(meteringDeps);
+      },
+      { connection: workerConnection, concurrency: 1 },
+    );
+    worker.on('failed', (job, err) => void dlqHandler(job, err));
+    workers.push(worker);
+    logger.info({ queue: QUEUE_NAMES.METERING }, 'Metering worker started (hourly)');
+  }
+
   // NOTE: No worker for QUEUE_NAMES.EXTRACT — extraction is performed
   // inline by the crawl worker. The extract queue exists for future use.
 
@@ -163,6 +190,7 @@ async function main() {
     reconciliation: QUEUE_NAMES.RECONCILIATION,
     export: QUEUE_NAMES.EXPORT,
     webhook: QUEUE_NAMES.WEBHOOK,
+    metering: QUEUE_NAMES.METERING,
   })
     .filter(([name]) => isEnabled(name))
     .map(([, queueName]) => queueName);
@@ -194,6 +222,7 @@ async function main() {
 
       // 4. Close queues (stops enqueuing)
       await queues.closeAll();
+      if (meteringQueue) await meteringQueue.close();
 
       // 5. Close Redis connections
       // Worker connections are closed by Worker.close() above.
