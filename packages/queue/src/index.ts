@@ -49,3 +49,7 @@ export { processCrawlJob } from './workers/crawl-worker.js';
 export { processSchemaEvolutionJob } from './workers/schema-worker.js';
 export { processReconciliationJob } from './workers/reconciliation-worker.js';
 export { processExportJob } from './workers/export-worker.js';
+
+// Cleanup Worker
+export { processCleanupJob } from './cleanup-worker.js';
+export type { CleanupDeps, CleanupResult } from './cleanup-worker.js';
