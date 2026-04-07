@@ -98,13 +98,13 @@ export function createApp(deps: AppDeps) {
   app.use('/api/*', depsMiddleware(deps));
   app.use('/api/*', validateTenantMiddleware);
 
-  // Load tenant quotas for rate limiting
+  // Load tenant plan for rate limiting (plan name matches RATE_LIMIT_TIERS keys)
   app.use('/api/*', async (c, next) => {
     const tenantId = c.get('tenantId');
     if (tenantId && deps.tenantRepo) {
       try {
-        const quotas = await deps.tenantRepo.getQuotas(tenantId);
-        c.set('rateLimitTier', (quotas as any).rateLimitTier ?? 'free');
+        const tenant = await deps.tenantRepo.findById(tenantId);
+        c.set('rateLimitTier', (tenant as any)?.plan ?? 'free');
       } catch {
         c.set('rateLimitTier', 'free');
       }
