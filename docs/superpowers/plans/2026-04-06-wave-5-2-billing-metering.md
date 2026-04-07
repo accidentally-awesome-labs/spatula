@@ -46,6 +46,11 @@
 | Modify | `packages/queue/src/queues.ts` | Add METERING queue name |
 | Modify | `packages/queue/src/worker-entrypoint.ts` | Register metering worker |
 | Modify | `apps/api/src/routes/admin-queues.ts` | Add metering queue to Bull Board |
+| Modify | `packages/shared/src/auth/types.ts` | Add `billing:read` and `billing:write` to AUTH_SCOPES |
+| Modify | `packages/shared/tests/unit/auth/quotas.test.ts` | Update rate limit tier names in tests |
+| Modify | `apps/api/tests/unit/middleware/rate-limit.test.ts` | Update rate limit tier names in tests |
+| Create | `packages/core/src/billing/index.ts` | Barrel export for billing module |
+| Modify | `packages/core/src/index.ts` | Re-export billing module |
 
 ---
 
@@ -156,11 +161,45 @@ In `packages/shared/src/index.ts`, add:
 export * from './billing/index.js';
 ```
 
-- [ ] **Step 4: Commit**
+- [ ] **Step 4: Add `billing:read` and `billing:write` to AUTH_SCOPES**
+
+In `packages/shared/src/auth/types.ts`, add the new scopes to the `AUTH_SCOPES` array:
+
+```typescript
+export const AUTH_SCOPES = [
+  'jobs:read',
+  'jobs:write',
+  'exports:read',
+  'exports:write',
+  'actions:read',
+  'actions:write',
+  'tenants:admin',
+  'keys:manage',
+  'billing:read',
+  'billing:write',
+  'admin',
+] as const;
+```
+
+Also add `billing:read` to `DEFAULT_API_KEY_SCOPES` so API key holders can view their billing:
+
+```typescript
+export const DEFAULT_API_KEY_SCOPES: AuthScope[] = [
+  'jobs:read',
+  'jobs:write',
+  'exports:read',
+  'exports:write',
+  'actions:read',
+  'actions:write',
+  'billing:read',
+];
+```
+
+- [ ] **Step 5: Commit**
 
 ```bash
-git add packages/shared/src/billing/ packages/shared/src/index.ts
-git commit -m "feat(shared): add billing tier constants and types"
+git add packages/shared/src/billing/ packages/shared/src/index.ts packages/shared/src/auth/types.ts
+git commit -m "feat(shared): add billing tier constants, types, and billing auth scopes"
 ```
 
 ---
@@ -192,33 +231,29 @@ export const RATE_LIMIT_TIERS: Record<string, RateLimitTier> = {
 };
 ```
 
-- [ ] **Step 2: Find and update all references to old tier names**
+- [ ] **Step 2: Update test file `packages/shared/tests/unit/auth/quotas.test.ts`**
 
-Grep for `'standard'`, `'unlimited'` in the context of rate limit tiers and quotas:
-- `packages/db/src/schema/tenants.ts` — default quotas object uses `rateLimitTier: 'free'` (unchanged)
-- `packages/shared/src/auth/quotas.ts` — `DEFAULT_TENANT_QUOTAS.rateLimitTier` is `'free'` (unchanged)
-- Any test files referencing `'standard'`, `'enterprise'`, or `'unlimited'` tier names
+Specific changes needed:
+- Line 42: Change expected keys from `['enterprise', 'free', 'standard', 'unlimited']` to `['enterprise', 'free', 'pro', 'starter']`
+- Lines 54-56: Rename `standard` → `starter`, `enterprise` → `pro` in the destructuring and comparisons
+- Lines 59-62: Rename `RATE_LIMIT_TIERS.unlimited` to `RATE_LIMIT_TIERS.enterprise`
 
-Search specifically for: `rateLimitTier.*standard`, `rateLimitTier.*unlimited`, `RATE_LIMIT_TIERS.standard`, `RATE_LIMIT_TIERS.unlimited`, `RATE_LIMIT_TIERS.enterprise` (the last one maps to `pro` now — check if any code uses the old `enterprise` meaning).
+- [ ] **Step 3: Update test file `apps/api/tests/unit/middleware/rate-limit.test.ts`**
 
-**Key rename mapping:**
-- `standard` → `starter`
-- `enterprise` → `pro`  
-- `unlimited` → `enterprise`
+Specific changes needed:
+- Line 47: Change `'unlimited'` to `'enterprise'` in the skip test
+- Lines 54-59: Change `'standard'` to `'starter'` in the tier limit test
 
-The `free` tier name is unchanged.
-
-- [ ] **Step 3: Run tests to verify no breakage**
+- [ ] **Step 4: Run tests to verify no breakage**
 
 ```bash
 pnpm --filter @spatula/shared test && pnpm --filter @spatula/api test
 ```
 
-- [ ] **Step 4: Commit**
+- [ ] **Step 5: Commit**
 
 ```bash
-git add packages/shared/src/auth/rate-limit-tiers.ts
-# Add any modified test files or config references
+git add packages/shared/src/auth/rate-limit-tiers.ts packages/shared/tests/unit/auth/quotas.test.ts apps/api/tests/unit/middleware/rate-limit.test.ts
 git commit -m "refactor(shared): rename rate limit tiers to match billing tiers (standard→starter, enterprise→pro, unlimited→enterprise)"
 ```
 
@@ -789,7 +824,11 @@ export class QuotaEnforcer {
   }
 
   /**
-   * Check quota and record usage atomically (check then record).
+   * Check quota then record usage. NOT atomic — two concurrent calls may both
+   * pass the check before either records. This is acceptable because:
+   * 1. Billing dimensions are soft limits (slight overage is fine)
+   * 2. True atomicity would require DB-level locking (disproportionate cost)
+   * 3. The metering worker reports actual usage to Stripe regardless
    * Use this when the usage should be tracked immediately (e.g., job creation).
    */
   async checkAndRecord(tenantId: string, dimension: UsageDimension, quantity: number): Promise<void> {
@@ -815,10 +854,25 @@ pnpm --filter @spatula/core exec vitest run src/billing/quota-enforcer.test.ts
 
 Expected: 5 tests PASS
 
-- [ ] **Step 5: Commit**
+- [ ] **Step 5: Create barrel export and wire into core index**
+
+Create `packages/core/src/billing/index.ts`:
+
+```typescript
+export { QuotaEnforcer } from './quota-enforcer.js';
+```
+
+Add to `packages/core/src/index.ts`:
+
+```typescript
+// Billing
+export * from './billing/index.js';
+```
+
+- [ ] **Step 6: Commit**
 
 ```bash
-git add packages/core/src/billing/
+git add packages/core/src/billing/ packages/core/src/index.ts
 git commit -m "feat(core): add QuotaEnforcer service for billing dimension checks"
 ```
 
@@ -1178,10 +1232,15 @@ export function billingRoutes() {
       subscription = await deps.stripeClient.getSubscription(tenant.stripeCustomerId);
     }
 
+    // Convert Infinity to -1 for JSON serialization (JSON doesn't support Infinity)
+    const serializableLimits = Object.fromEntries(
+      Object.entries(tier.limits).map(([k, v]) => [k, v === Infinity ? -1 : v]),
+    );
+
     return c.json({
       data: {
         plan,
-        limits: tier.limits,
+        limits: serializableLimits,
         usage: usageMap,
         period: { start: periodStart.toISOString(), end: periodEnd.toISOString() },
         stripeSubscription: subscription ? { id: subscription.id, status: subscription.status } : null,
@@ -1347,6 +1406,32 @@ describe('Stripe webhook handler', () => {
     expect(deps.tenantRepo.updatePlan).toHaveBeenCalledWith('tenant-1', 'free');
   });
 
+  it('handles unknown Stripe customer gracefully', async () => {
+    const deps = createMockDeps({
+      stripeClient: {
+        isConfigured: () => true,
+        verifyWebhook: vi.fn().mockReturnValue({
+          type: 'customer.subscription.updated',
+          data: { object: { customer: 'cus_unknown', status: 'active', metadata: { plan: 'pro' } } },
+        }),
+      },
+      tenantRepo: {
+        findById: vi.fn().mockResolvedValue(null),
+        findByStripeCustomerId: vi.fn().mockResolvedValue(null),
+        updatePlan: vi.fn(),
+      },
+    });
+    const app = createTestApp(deps);
+    const res = await app.request('/api/v1/webhooks/stripe', {
+      method: 'POST',
+      headers: { 'stripe-signature': 'test-sig', 'content-type': 'application/json' },
+      body: '{}',
+    });
+    // Should return 200 (ack to Stripe) even if tenant not found
+    expect(res.status).toBe(200);
+    expect(deps.tenantRepo.updatePlan).not.toHaveBeenCalled();
+  });
+
   it('returns 400 when signature verification fails', async () => {
     const deps = createMockDeps({
       stripeClient: {
@@ -1494,28 +1579,8 @@ async function handleSubscriptionDeleted(deps: any, customerId: string): Promise
   logger.info({ tenantId: tenant.id }, 'Tenant downgraded to free (subscription deleted)');
 }
 
-/**
- * Find tenant by Stripe customer ID.
- * NOTE: This performs a table scan on `tenants.stripe_customer_id`.
- * For scale, add an index on this column. For now, webhook volume is low enough.
- */
 async function findTenantByStripeCustomer(deps: any, customerId: string) {
-  // TenantRepository doesn't have findByStripeCustomerId yet.
-  // Use findById with the tenantRepo — but we need the customer→tenant mapping.
-  // The simplest approach: query the DB directly via the tenant repo's DB handle.
-  // For now, we'll use a simple approach: scan all relevant tenants.
-  // TODO: Add TenantRepository.findByStripeCustomerId() for efficiency.
-  //
-  // Workaround: The webhook includes customer ID. When we created the customer,
-  // we stored tenantId in metadata. But the subscription events don't always
-  // include that. Instead, we rely on the stripe_customer_id column:
-  const tenantRepo = deps.tenantRepo;
-  if (tenantRepo.findByStripeCustomerId) {
-    return tenantRepo.findByStripeCustomerId(customerId);
-  }
-  // Fallback: iterate (acceptable at low webhook volume)
-  logger.warn({ customerId }, 'findByStripeCustomerId not available, using fallback');
-  return null;
+  return deps.tenantRepo.findByStripeCustomerId(customerId);
 }
 ```
 
@@ -1725,14 +1790,20 @@ describe('processMeteringJob', () => {
 import { createLogger } from '@spatula/shared';
 import type { UsageRecordRepository } from '@spatula/db';
 import type { TenantRepository } from '@spatula/db';
-import type { SpatulaStripeClient } from '../../apps/api/src/billing/stripe-client.js';
 
 const logger = createLogger('metering-worker');
+
+/** Duck-typed Stripe client interface — avoids cross-package import from apps/api */
+export interface MeteringStripeClient {
+  isConfigured(): boolean;
+  reportUsage(subscriptionItemId: string, quantity: number): Promise<void>;
+  getSubscription(customerId: string): Promise<{ items: { data: Array<{ id: string }> } } | null>;
+}
 
 export interface MeteringDeps {
   usageRecordRepo: UsageRecordRepository;
   tenantRepo: TenantRepository;
-  stripeClient: { isConfigured(): boolean; reportUsage(subscriptionItemId: string, quantity: number): Promise<void>; getSubscription(customerId: string): Promise<any> };
+  stripeClient: MeteringStripeClient;
 }
 
 /**
@@ -1855,6 +1926,15 @@ if (isEnabled('metering')) {
   logger.info({ queue: QUEUE_NAMES.METERING }, 'Metering worker started (hourly)');
 }
 ```
+
+Add the metering queue to the shutdown handler so it's properly closed:
+
+```typescript
+// In the shutdown function, after queues.closeAll():
+if (meteringQueue) await meteringQueue.close();
+```
+
+The `meteringQueue` variable should be declared at module scope (alongside `workers`) so the shutdown handler can access it.
 
 Also add `QUEUE_NAMES.METERING` to the heartbeat queue list:
 
