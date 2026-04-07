@@ -17,6 +17,8 @@ import { WorkerHeartbeat } from './worker-heartbeat.js';
 import { createWebhookWorker } from './webhook-worker.js';
 import { processMeteringJob } from './metering-worker.js';
 import type { MeteringDeps } from './metering-worker.js';
+import { processCleanupJob } from './cleanup-worker.js';
+import type { CleanupDeps } from './cleanup-worker.js';
 import type { WorkerDeps } from './worker-deps.js';
 import type { CrawlJobData, SchemaEvolutionJobData, ReconciliationJobData, ExportJobPayload } from './queues.js';
 
@@ -197,6 +199,45 @@ async function main() {
     logger.info({ queue: QUEUE_NAMES.METERING }, 'Metering worker started (hourly)');
   }
 
+  let cleanupQueue: import('bullmq').Queue | undefined;
+  if (isEnabled('cleanup')) {
+    const { Queue: BullQueue } = await import('bullmq');
+    cleanupQueue = new BullQueue(QUEUE_NAMES.CLEANUP, { connection: redisOpts });
+
+    // Add repeatable job (daily at 03:00 UTC)
+    await cleanupQueue.add('cleanup', {}, {
+      repeat: { pattern: '0 3 * * *' },
+      removeOnComplete: true,
+      removeOnFail: 100,
+    });
+
+    const worker = new Worker(
+      QUEUE_NAMES.CLEANUP,
+      async () => {
+        if (!deps) {
+          logger.warn('Cleanup skipped — WorkerDeps not initialized');
+          return;
+        }
+        // CleanupDeps.db needs execute() — the Drizzle db instance has this
+        const dbInstance = (deps as any).db ?? (deps as any).jobRepo?.db;
+        const cleanupDeps: CleanupDeps = {
+          db: dbInstance,
+          tenantRepo: (deps as any).tenantRepo,
+          contentStore: (deps as any).contentStore,
+        };
+        if (!cleanupDeps.db || !cleanupDeps.tenantRepo) {
+          logger.warn('Cleanup skipped — required deps not available in WorkerDeps');
+          return;
+        }
+        await processCleanupJob(cleanupDeps);
+      },
+      { connection: workerConnection, concurrency: 1 },
+    );
+    worker.on('failed', (job, err) => void dlqHandler(job, err));
+    workers.push(worker);
+    logger.info({ queue: QUEUE_NAMES.CLEANUP }, 'Cleanup worker started (daily 03:00 UTC)');
+  }
+
   // NOTE: No worker for QUEUE_NAMES.EXTRACT — extraction is performed
   // inline by the crawl worker. The extract queue exists for future use.
 
@@ -210,6 +251,7 @@ async function main() {
     export: QUEUE_NAMES.EXPORT,
     webhook: QUEUE_NAMES.WEBHOOK,
     metering: QUEUE_NAMES.METERING,
+    cleanup: QUEUE_NAMES.CLEANUP,
   })
     .filter(([name]) => isEnabled(name))
     .map(([, queueName]) => queueName);
@@ -242,6 +284,7 @@ async function main() {
       // 4. Close queues (stops enqueuing)
       await queues.closeAll();
       if (meteringQueue) await meteringQueue.close();
+      if (cleanupQueue) await cleanupQueue.close();
 
       // 5. Close Redis connections
       // Worker connections are closed by Worker.close() above.
