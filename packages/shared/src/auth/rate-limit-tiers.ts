@@ -6,7 +6,7 @@ export interface RateLimitTier {
 
 export const RATE_LIMIT_TIERS: Record<string, RateLimitTier> = {
   free: { name: 'free', requestsPerMinute: 60, maxConcurrentJobs: 2 },
-  standard: { name: 'standard', requestsPerMinute: 300, maxConcurrentJobs: 10 },
-  enterprise: { name: 'enterprise', requestsPerMinute: 1500, maxConcurrentJobs: 50 },
-  unlimited: { name: 'unlimited', requestsPerMinute: Infinity, maxConcurrentJobs: Infinity },
+  starter: { name: 'starter', requestsPerMinute: 300, maxConcurrentJobs: 10 },
+  pro: { name: 'pro', requestsPerMinute: 1500, maxConcurrentJobs: 50 },
+  enterprise: { name: 'enterprise', requestsPerMinute: Infinity, maxConcurrentJobs: Infinity },
 };

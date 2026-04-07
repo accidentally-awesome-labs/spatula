@@ -40,7 +40,7 @@ describe('quotas', () => {
 describe('rate-limit-tiers', () => {
   it('defines all expected tiers', () => {
     expect(Object.keys(RATE_LIMIT_TIERS).sort()).toEqual(
-      ['enterprise', 'free', 'standard', 'unlimited'],
+      ['enterprise', 'free', 'pro', 'starter'],
     );
   });
 
@@ -51,15 +51,15 @@ describe('rate-limit-tiers', () => {
   });
 
   it('tiers increase in request limits', () => {
-    const { free, standard, enterprise } = RATE_LIMIT_TIERS;
-    expect(standard.requestsPerMinute).toBeGreaterThan(free.requestsPerMinute);
-    expect(enterprise.requestsPerMinute).toBeGreaterThan(standard.requestsPerMinute);
+    const { free, starter, pro } = RATE_LIMIT_TIERS;
+    expect(starter.requestsPerMinute).toBeGreaterThan(free.requestsPerMinute);
+    expect(pro.requestsPerMinute).toBeGreaterThan(starter.requestsPerMinute);
   });
 
-  it('unlimited tier has Infinity limits', () => {
-    const unlimited = RATE_LIMIT_TIERS.unlimited;
-    expect(unlimited.requestsPerMinute).toBe(Infinity);
-    expect(unlimited.maxConcurrentJobs).toBe(Infinity);
+  it('enterprise tier has Infinity limits', () => {
+    const enterprise = RATE_LIMIT_TIERS.enterprise;
+    expect(enterprise.requestsPerMinute).toBe(Infinity);
+    expect(enterprise.maxConcurrentJobs).toBe(Infinity);
   });
 
   it('each tier has consistent name field', () => {

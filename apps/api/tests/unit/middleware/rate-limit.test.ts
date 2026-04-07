@@ -44,16 +44,16 @@ describe('rateLimitMiddleware', () => {
     expect(body.error.code).toBe('RATE_LIMIT_ERROR');
   });
 
-  it('skips rate limiting for unlimited tier', async () => {
-    const app = createTestApp(redis, 'unlimited');
+  it('skips rate limiting for enterprise tier', async () => {
+    const app = createTestApp(redis, 'enterprise');
     const res = await app.request('/test');
     expect(res.status).toBe(200);
     expect((redis as any).eval).not.toHaveBeenCalled();
   });
 
-  it('uses correct limit for standard tier', async () => {
+  it('uses correct limit for starter tier', async () => {
     (redis as any).eval.mockResolvedValue([1, 10]);
-    const app = createTestApp(redis, 'standard');
+    const app = createTestApp(redis, 'starter');
     const res = await app.request('/test');
     expect(res.headers.get('X-RateLimit-Limit')).toBe('300');
     expect(res.headers.get('X-RateLimit-Remaining')).toBe('290');
