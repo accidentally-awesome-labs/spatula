@@ -1,5 +1,6 @@
 import { createLogger, StorageError } from '@spatula/shared';
 import type { JobConfig, JobStatus } from '@spatula/core';
+import type { QuotaEnforcer } from '@spatula/core';
 import type { JobRepository, CrawlTaskRepository, SchemaRepository } from '@spatula/db';
 import type { TenantRepository } from '@spatula/db';
 import { QuotaExceededError } from '@spatula/shared';
@@ -15,6 +16,7 @@ export interface JobManagerConfig {
   schemaRepo: SchemaRepository;
   queues: SpatulaQueues;
   tenantRepo?: TenantRepository;
+  quotaEnforcer?: QuotaEnforcer;
 }
 
 export class JobManager {
@@ -23,6 +25,7 @@ export class JobManager {
   private readonly schemaRepo: SchemaRepository;
   private readonly queues: SpatulaQueues;
   private readonly tenantRepo?: TenantRepository;
+  private readonly quotaEnforcer?: QuotaEnforcer;
 
   constructor(config: JobManagerConfig) {
     this.jobRepo = config.jobRepo;
@@ -30,6 +33,7 @@ export class JobManager {
     this.schemaRepo = config.schemaRepo;
     this.queues = config.queues;
     this.tenantRepo = config.tenantRepo;
+    this.quotaEnforcer = config.quotaEnforcer;
   }
 
   async createJob(config: JobConfig): Promise<string> {
@@ -46,16 +50,18 @@ export class JobManager {
   async startJob(jobId: string, tenantId: string): Promise<void> {
     const job = await this.getJob(jobId, tenantId);
 
-    // Check concurrent job quota
-    // Note: maxPagesPerJob quota is enforced per-task in crawl-worker.ts
+    // Check monthly job quota via billing-aware QuotaEnforcer
+    if (this.quotaEnforcer) {
+      await this.quotaEnforcer.checkAndRecord(tenantId, 'jobs', 1);
+    }
+
+    // Check concurrent job quota (separate from monthly — limits simultaneous running jobs)
     if (this.tenantRepo) {
       try {
         const quotas = await this.tenantRepo.getQuotas(tenantId);
         const maxConcurrent = (quotas as any).maxConcurrentJobs ?? 2;
         const runningCount = await this.jobRepo.countByTenant(tenantId, { status: 'running' });
         if (runningCount >= maxConcurrent) {
-          // TODO(Wave 3): Log tenant.quota_exceeded audit event here once
-          // auditLogger is available in job-manager (currently only accessible from API layer).
           throw new QuotaExceededError(
             `Concurrent job limit reached: ${runningCount}/${maxConcurrent}`,
             { context: { tenantId, current: runningCount, max: maxConcurrent } },

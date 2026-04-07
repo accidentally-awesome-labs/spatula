@@ -54,6 +54,14 @@ export class QuotaEnforcer {
   }
 
   /**
+   * Record usage without checking quota. Use for dimensions where the quantity
+   * is only known after the work is done (e.g., LLM tokens, storage bytes).
+   */
+  async recordUsage(tenantId: string, dimension: UsageDimension, quantity: number): Promise<void> {
+    await this.usageRepo.record(tenantId, dimension, quantity);
+  }
+
+  /**
    * Check if an export format is allowed for the given tier.
    */
   isExportFormatAllowed(plan: string, format: string): boolean {
