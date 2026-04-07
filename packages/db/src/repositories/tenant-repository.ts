@@ -1,4 +1,4 @@
-import { eq, sql } from 'drizzle-orm';
+import { eq, sql, desc, and } from 'drizzle-orm';
 import { createLogger, StorageError } from '@spatula/shared';
 import { tenants } from '../schema/tenants.js';
 import type { Database } from '../connection.js';
@@ -194,6 +194,72 @@ export class TenantRepository {
       throw new StorageError(`Failed to update storage bytes: ${(error as Error).message}`, {
         cause: error as Error,
         context: { tenantId, bytes },
+      });
+    }
+  }
+
+  async findAll(options?: {
+    plan?: string;
+    limit?: number;
+    offset?: number;
+  }) {
+    try {
+      const conditions = [];
+      if (options?.plan) {
+        conditions.push(eq(tenants.plan, options.plan));
+      }
+
+      let query = this.db
+        .select()
+        .from(tenants)
+        .orderBy(desc(tenants.createdAt));
+
+      if (conditions.length > 0) {
+        query = query.where(and(...conditions)) as typeof query;
+      }
+
+      return await query
+        .limit(options?.limit ?? 50)
+        .offset(options?.offset ?? 0);
+    } catch (error) {
+      throw new StorageError(`Failed to list tenants: ${(error as Error).message}`, {
+        cause: error as Error,
+      });
+    }
+  }
+
+  async countAll(options?: { plan?: string }): Promise<number> {
+    try {
+      const conditions = [];
+      if (options?.plan) {
+        conditions.push(eq(tenants.plan, options.plan));
+      }
+
+      const query = this.db
+        .select({ count: sql<number>`count(*)::int` })
+        .from(tenants);
+
+      const rows = conditions.length > 0
+        ? await query.where(and(...conditions))
+        : await query;
+
+      return (rows[0] as any)?.count ?? 0;
+    } catch (error) {
+      throw new StorageError(`Failed to count tenants: ${(error as Error).message}`, {
+        cause: error as Error,
+      });
+    }
+  }
+
+  async getTotalStorage(): Promise<number> {
+    try {
+      const [row] = await this.db
+        .select({ total: sql<number>`coalesce(sum(storage_bytes_used), 0)::bigint` })
+        .from(tenants);
+      return Number((row as any)?.total ?? 0);
+    } catch (error) {
+      throw new StorageError(`Failed to get total storage: ${(error as Error).message}`, {
+        cause: error as Error,
       });
     }
   }
