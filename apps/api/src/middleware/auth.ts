@@ -12,6 +12,7 @@ const SKIP_AUTH_PATHS = new Set([
 
 const SKIP_AUTH_PREFIXES = [
   '/api/v1/tenants',
+  '/api/v1/webhooks/stripe',
 ];
 
 export function authMiddleware(

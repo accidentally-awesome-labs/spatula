@@ -30,6 +30,8 @@ import { createQueueDashboard } from './routes/admin-queues.js';
 import { batchActionRoutes } from './routes/batch-actions.js';
 import { batchJobRoutes } from './routes/batch-jobs.js';
 import { timeoutMiddleware } from './middleware/timeout.js';
+import { billingRoutes } from './routes/billing.js';
+import { stripeWebhookRoutes } from './routes/stripe-webhook.js';
 import { createAuthProvider } from './auth/factory.js';
 import type { AppDeps } from './types.js';
 import { getEnvOrDefault } from '@spatula/shared';
@@ -163,6 +165,14 @@ export function createApp(deps: AppDeps) {
   // Usage API (requires jobs:read scope)
   app.get('/api/v1/usage', requireScope('jobs:read'));
   app.route('/api/v1/usage', usageRoutes());
+
+  // Billing routes
+  app.get('/api/v1/billing/*', requireScope('billing:read'));
+  app.post('/api/v1/billing/*', requireScope('billing:write'));
+  app.route('/api/v1/billing', billingRoutes());
+
+  // Stripe webhook (no auth — uses Stripe signature verification)
+  app.route('/api/v1/webhooks/stripe', stripeWebhookRoutes());
 
   // Admin routes
   app.use('/api/v1/admin/*', requireScope('admin'));
