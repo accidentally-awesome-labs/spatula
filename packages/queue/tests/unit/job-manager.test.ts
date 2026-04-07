@@ -353,6 +353,65 @@ describe('JobManager', () => {
     });
   });
 
+  describe('billing quota enforcement (monthly jobs)', () => {
+    it('calls quotaEnforcer.checkAndRecord before starting job', async () => {
+      const quotaEnforcer = {
+        checkAndRecord: vi.fn().mockResolvedValue(undefined),
+        check: vi.fn(),
+        recordUsage: vi.fn(),
+        isExportFormatAllowed: vi.fn(),
+      };
+      const managerWithBilling = new JobManager({
+        jobRepo: jobRepo as any,
+        taskRepo: taskRepo as any,
+        schemaRepo: schemaRepo as any,
+        queues: queues as any,
+        quotaEnforcer: quotaEnforcer as any,
+      });
+
+      jobRepo.findById.mockResolvedValue({
+        id: JOB_ID, tenantId: TENANT_ID, status: 'pending', config: baseConfig,
+      });
+      jobRepo.updateStatus.mockResolvedValue({ id: JOB_ID });
+      schemaRepo.create.mockResolvedValue({ id: 'schema-001' });
+      taskRepo.enqueue.mockResolvedValue({ id: 'task-001' });
+      queues.crawl.add.mockResolvedValue({});
+
+      await managerWithBilling.startJob(JOB_ID, TENANT_ID);
+
+      expect(quotaEnforcer.checkAndRecord).toHaveBeenCalledWith(TENANT_ID, 'jobs', 1);
+    });
+
+    it('throws QuotaExceededError when monthly job limit exceeded', async () => {
+      const { QuotaExceededError } = await import('@spatula/shared');
+      const quotaEnforcer = {
+        checkAndRecord: vi.fn().mockRejectedValue(
+          new QuotaExceededError('Quota exceeded for jobs: 6 > 5 (plan: free)'),
+        ),
+        check: vi.fn(),
+        recordUsage: vi.fn(),
+        isExportFormatAllowed: vi.fn(),
+      };
+      const managerWithBilling = new JobManager({
+        jobRepo: jobRepo as any,
+        taskRepo: taskRepo as any,
+        schemaRepo: schemaRepo as any,
+        queues: queues as any,
+        quotaEnforcer: quotaEnforcer as any,
+      });
+
+      jobRepo.findById.mockResolvedValue({
+        id: JOB_ID, tenantId: TENANT_ID, status: 'pending', config: baseConfig,
+      });
+
+      await expect(managerWithBilling.startJob(JOB_ID, TENANT_ID)).rejects.toMatchObject({
+        code: 'QUOTA_EXCEEDED',
+      });
+      // Job should NOT have been started
+      expect(jobRepo.updateStatus).not.toHaveBeenCalled();
+    });
+  });
+
   it('triggerReconciliation transitions running→reconciling and enqueues reconciliation job', async () => {
     jobRepo.findById.mockResolvedValue({
       id: JOB_ID,
