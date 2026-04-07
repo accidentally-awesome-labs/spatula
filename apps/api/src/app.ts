@@ -18,6 +18,8 @@ import { exportRoutes } from './routes/exports.js';
 import { tenantRoutes } from './routes/tenants.js';
 import { adminDlqRoutes } from './routes/admin-dlq.js';
 import { adminWorkerRoutes } from './routes/admin-workers.js';
+import { adminTenantRoutes } from './routes/admin-tenants.js';
+import { adminJobRoutes } from './routes/admin-jobs.js';
 import { apiKeyRoutes } from './routes/api-keys.js';
 import { rateLimitMiddleware } from './middleware/rate-limit.js';
 import { idempotencyMiddleware } from './middleware/idempotency.js';
@@ -178,6 +180,8 @@ export function createApp(deps: AppDeps) {
   app.use('/api/v1/admin/*', requireScope('admin'));
   app.route('/api/v1/admin/dlq', adminDlqRoutes());
   app.route('/api/v1/admin/workers', adminWorkerRoutes());
+  app.route('/api/v1/admin/tenants', adminTenantRoutes());
+  app.route('/api/v1/admin/jobs', adminJobRoutes());
 
   // Queue dashboard (admin scope enforced by /api/v1/admin/* middleware)
   if (deps.queues) {
