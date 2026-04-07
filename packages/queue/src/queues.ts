@@ -10,6 +10,7 @@ export const QUEUE_NAMES = {
   EXPORT: 'spatula.export',
   WEBHOOK: 'spatula.webhooks',
   METERING: 'spatula.metering',
+  CLEANUP: 'spatula.cleanup',
 } as const;
 
 export interface CrawlJobData {
