@@ -1,5 +1,6 @@
 import { Hono } from 'hono';
-import { createLogger } from '@spatula/shared';
+import { createLogger, BILLING_TIERS } from '@spatula/shared';
+import type { BillingTierName } from '@spatula/shared';
 
 const logger = createLogger('stripe-webhook');
 
@@ -50,7 +51,11 @@ export function stripeWebhookRoutes() {
         case 'customer.subscription.updated': {
           const subscription = event.data.object;
           const customerId = subscription.customer as string;
-          const plan = subscription.metadata?.plan ?? 'free';
+          const rawPlan = subscription.metadata?.plan ?? 'free';
+          const plan = BILLING_TIERS[rawPlan as BillingTierName] ? rawPlan : 'free';
+          if (rawPlan !== plan) {
+            logger.warn({ rawPlan, resolvedPlan: plan, customerId }, 'Invalid plan in Stripe metadata — defaulting to free');
+          }
           await handleSubscriptionUpdate(deps, customerId, plan);
           break;
         }

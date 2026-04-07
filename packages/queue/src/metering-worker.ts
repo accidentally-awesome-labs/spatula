@@ -85,7 +85,13 @@ export async function processMeteringJob(deps: MeteringDeps): Promise<void> {
           logger.warn({ dimension }, 'Unknown usage dimension — no meter event mapping');
           continue;
         }
-        const idempotencyKey = `${tenantId}:${dimension}:${Date.now()}`;
+        // Derive idempotency key from record IDs so retries of the same batch are deduplicated
+        const dimensionRecordIds = tenantRecords
+          .filter((r) => r.dimension === dimension)
+          .map((r) => r.id)
+          .sort()
+          .join(',');
+        const idempotencyKey = `${tenantId}:${dimension}:${dimensionRecordIds}`;
         await deps.stripeClient.reportUsage(tenant.stripeCustomerId, eventName, total, idempotencyKey);
         logger.info({ tenantId, dimension, total, eventName }, 'Reported usage to Stripe');
       }

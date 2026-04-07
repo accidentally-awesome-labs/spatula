@@ -1,4 +1,4 @@
-import { pgTable, uuid, text, jsonb, timestamp, bigint, varchar } from 'drizzle-orm/pg-core';
+import { pgTable, uuid, text, jsonb, timestamp, bigint, varchar, uniqueIndex } from 'drizzle-orm/pg-core';
 
 export const tenants = pgTable('tenants', {
   id: uuid('id').primaryKey().defaultRandom(),
@@ -15,4 +15,8 @@ export const tenants = pgTable('tenants', {
   plan: varchar('plan', { length: 20 }).notNull().default('free'),
   stripeCustomerId: text('stripe_customer_id'),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
-});
+},
+(table) => [
+  uniqueIndex('idx_tenants_stripe_customer').on(table.stripeCustomerId),
+],
+);

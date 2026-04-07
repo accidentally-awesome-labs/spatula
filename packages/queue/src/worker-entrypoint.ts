@@ -165,10 +165,29 @@ async function main() {
       removeOnFail: 100,
     });
 
+    // MeteringDeps is constructed lazily from worker-level deps when they become available.
+    // Unlike other workers that receive WorkerDeps directly, the metering worker
+    // needs repos + stripe client which may not be in WorkerDeps yet.
+    // The worker will log a warning and skip if deps are not available.
     const worker = new Worker(
       QUEUE_NAMES.METERING,
       async () => {
-        const meteringDeps: MeteringDeps = deps as any;
+        if (!deps) {
+          logger.warn('Metering skipped — WorkerDeps not initialized');
+          return;
+        }
+        // Construct MeteringDeps from available worker deps.
+        // The metering worker requires usageRecordRepo, tenantRepo, and stripeClient
+        // which are wired into deps by the deployer alongside other repos.
+        const meteringDeps: MeteringDeps = {
+          usageRecordRepo: (deps as any).usageRecordRepo,
+          tenantRepo: (deps as any).tenantRepo,
+          stripeClient: (deps as any).stripeClient ?? { isConfigured: () => false, reportUsage: async () => {} },
+        };
+        if (!meteringDeps.usageRecordRepo || !meteringDeps.tenantRepo) {
+          logger.warn('Metering skipped — required repos not available in WorkerDeps');
+          return;
+        }
         await processMeteringJob(meteringDeps);
       },
       { connection: workerConnection, concurrency: 1 },

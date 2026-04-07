@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { Hono } from 'hono';
 import { stripeWebhookRoutes } from '../../../src/routes/stripe-webhook.js';
 
@@ -47,6 +47,10 @@ const ORIGINAL_ENV = process.env;
 
 beforeEach(() => {
   process.env = { ...ORIGINAL_ENV, STRIPE_WEBHOOK_SECRET: 'whsec_test' };
+});
+
+afterEach(() => {
+  process.env = ORIGINAL_ENV;
 });
 
 describe('Stripe webhook handler', () => {
