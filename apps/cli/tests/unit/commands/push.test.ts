@@ -127,3 +127,104 @@ describe('runPushCommand', () => {
     expect(result.jobId).toBe('new-job-456');
   });
 });
+
+describe('runPushCommand — auto-start and edge cases', () => {
+  beforeEach(() => {
+    mockMetaGet.mockReset();
+    mockMetaSet.mockReset();
+  });
+  afterEach(() => vi.restoreAllMocks());
+
+  it('starts the job after creation when autoStart is true', async () => {
+    mockMetaGet.mockResolvedValue(null);
+
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce({
+        ok: true, status: 200,
+        json: () => Promise.resolve({ data: { id: 'job-auto', status: 'pending' } }),
+      })
+      .mockResolvedValueOnce({
+        ok: true, status: 200,
+        json: () => Promise.resolve({ data: { id: 'job-auto', status: 'running' } }),
+      });
+    vi.stubGlobal('fetch', fetchMock);
+
+    const result = await runPushCommand({
+      remoteName: 'prod',
+      projectRoot: '/tmp/test-project',
+      metaGet: mockMetaGet,
+      metaSet: mockMetaSet,
+      autoStart: true,
+    });
+
+    expect(result.success).toBe(true);
+    expect(result.started).toBe(true);
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    const secondUrl = fetchMock.mock.calls[1][0] as string;
+    expect(secondUrl).toContain('/start');
+  });
+
+  it('stores config hash in project_meta', async () => {
+    mockMetaGet.mockResolvedValue(null);
+    mockFetchOk({ id: 'job-hash', status: 'pending' });
+
+    await runPushCommand({
+      remoteName: 'prod',
+      projectRoot: '/tmp/test-project',
+      metaGet: mockMetaGet,
+      metaSet: mockMetaSet,
+      autoStart: false,
+    });
+
+    const hashCall = mockMetaSet.mock.calls.find(
+      (c: string[]) => c[0] === 'remote:prod:config_hash',
+    );
+    expect(hashCall).toBeDefined();
+    expect(hashCall![1]).toMatch(/^[a-f0-9]{12}$/);
+  });
+
+  it('skips conflict check when forceNew is true', async () => {
+    mockMetaGet.mockImplementation(async (key: string) => {
+      if (key === 'remote:prod:job_id') return 'old-job-running';
+      return null;
+    });
+
+    mockFetchOk({ id: 'forced-job', status: 'pending' });
+
+    const result = await runPushCommand({
+      remoteName: 'prod',
+      projectRoot: '/tmp/test-project',
+      metaGet: mockMetaGet,
+      metaSet: mockMetaSet,
+      autoStart: false,
+      forceNew: true,
+    });
+
+    expect(result.success).toBe(true);
+    expect(result.jobId).toBe('forced-job');
+  });
+
+  it('returns error when createJob fails', async () => {
+    mockMetaGet.mockResolvedValue(null);
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue({
+        ok: false,
+        status: 500,
+        json: () => Promise.resolve({ error: { message: 'Internal server error' } }),
+      }),
+    );
+
+    const result = await runPushCommand({
+      remoteName: 'prod',
+      projectRoot: '/tmp/test-project',
+      metaGet: mockMetaGet,
+      metaSet: mockMetaSet,
+      autoStart: false,
+    });
+
+    expect(result.success).toBe(false);
+    expect(result.error).toContain('Failed to create remote job');
+    expect(mockMetaSet).not.toHaveBeenCalled();
+  });
+});
