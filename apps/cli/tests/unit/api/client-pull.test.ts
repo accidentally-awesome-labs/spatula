@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, afterEach } from 'vitest';
-import { SpatulaApiClient } from '../../../src/api/client.js';
+import { SpatulaApiClient, ApiError } from '../../../src/api/client.js';
 
 function mockFetch(body: unknown, status = 200) {
   vi.stubGlobal(
@@ -46,6 +46,58 @@ describe('SpatulaApiClient pull methods', () => {
       expect(url).toContain('since=');
       expect(url).toContain('limit=100');
     });
+
+    it('network error throws ApiError with status 0 and NETWORK_ERROR code', async () => {
+      const client = new SpatulaApiClient('https://api.test', 't1');
+      vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new TypeError('Failed to fetch')));
+
+      await expect(client.getEntitiesStreamPaginated('job-1', {})).rejects.toSatisfy((err) => {
+        expect(err).toBeInstanceOf(ApiError);
+        const apiErr = err as ApiError;
+        expect(apiErr.status).toBe(0);
+        expect(apiErr.code).toBe('NETWORK_ERROR');
+        expect(apiErr.message).toBe('Failed to fetch');
+        return true;
+      });
+    });
+
+    it('HTTP 401 throws ApiError with status 401', async () => {
+      const client = new SpatulaApiClient('https://api.test', 't1');
+      mockFetch({ error: { code: 'UNAUTHORIZED', message: 'Unauthorized' } }, 401);
+
+      await expect(client.getEntitiesStreamPaginated('job-1', {})).rejects.toSatisfy((err) => {
+        expect(err).toBeInstanceOf(ApiError);
+        const apiErr = err as ApiError;
+        expect(apiErr.status).toBe(401);
+        return true;
+      });
+    });
+
+    it('HTTP 500 with empty body throws ApiError with generic message', async () => {
+      const client = new SpatulaApiClient('https://api.test', 't1');
+      vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
+        ok: false,
+        status: 500,
+        json: () => Promise.reject(new SyntaxError('Unexpected end of JSON')),
+      }));
+
+      await expect(client.getEntitiesStreamPaginated('job-1', {})).rejects.toSatisfy((err) => {
+        expect(err).toBeInstanceOf(ApiError);
+        const apiErr = err as ApiError;
+        expect(apiErr.status).toBe(500);
+        expect(apiErr.message).toBe('HTTP 500');
+        return true;
+      });
+    });
+
+    it('no pagination key in response does not crash', async () => {
+      const client = new SpatulaApiClient('https://api.test', 't1');
+      mockFetch({ data: [{ id: 'e1' }] });
+
+      const result = await client.getEntitiesStreamPaginated('job-1', {});
+      expect(result.data).toHaveLength(1);
+      expect(result.pagination).toBeUndefined();
+    });
   });
 
   describe('getUsage', () => {
@@ -74,6 +126,18 @@ describe('SpatulaApiClient pull methods', () => {
       await client.getUsage();
       const url = (fetch as ReturnType<typeof vi.fn>).mock.calls[0][0] as string;
       expect(url).toContain('period=30d');
+    });
+
+    it('HTTP error throws ApiError', async () => {
+      const client = new SpatulaApiClient('https://api.test', 't1');
+      mockFetch({ error: { code: 'INTERNAL_ERROR', message: 'Server error' } }, 500);
+
+      await expect(client.getUsage()).rejects.toSatisfy((err) => {
+        expect(err).toBeInstanceOf(ApiError);
+        const apiErr = err as ApiError;
+        expect(apiErr.status).toBe(500);
+        return true;
+      });
     });
   });
 });

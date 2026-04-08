@@ -5,6 +5,9 @@ import { render } from 'ink-testing-library';
 import { SchemaConflict } from '../../../src/components/SchemaConflict.js';
 import type { SchemaDiff } from '../../../src/lib/schema-diff.js';
 
+/** Wait for React effects (useEffect in useInput) to settle. */
+const waitForEffects = () => new Promise(resolve => setTimeout(resolve, 50));
+
 describe('SchemaConflict', () => {
   const mockDiff: SchemaDiff = {
     localOnly: [{ name: 'color', description: '', type: 'string', required: false }],
@@ -40,5 +43,29 @@ describe('SchemaConflict', () => {
     expect(output).toContain('Use remote');
     expect(output).toContain('Keep local');
     expect(output).toContain('Merge');
+  });
+
+  it('number key 1 invokes onResolve with remote', async () => {
+    const onResolve = vi.fn();
+    const { stdin } = render(<SchemaConflict diff={mockDiff} onResolve={onResolve} />);
+    await waitForEffects();
+    stdin.write('1');
+    expect(onResolve).toHaveBeenCalledWith('remote');
+  });
+
+  it('number key 2 invokes onResolve with local', async () => {
+    const onResolve = vi.fn();
+    const { stdin } = render(<SchemaConflict diff={mockDiff} onResolve={onResolve} />);
+    await waitForEffects();
+    stdin.write('2');
+    expect(onResolve).toHaveBeenCalledWith('local');
+  });
+
+  it('number key 3 invokes onResolve with merge', async () => {
+    const onResolve = vi.fn();
+    const { stdin } = render(<SchemaConflict diff={mockDiff} onResolve={onResolve} />);
+    await waitForEffects();
+    stdin.write('3');
+    expect(onResolve).toHaveBeenCalledWith('merge');
   });
 });
