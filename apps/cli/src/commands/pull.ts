@@ -59,6 +59,7 @@ export interface PullResult {
   entitiesInserted?: number;
   entitiesUpdated?: number;
   schemaFieldsAdded?: number;
+  newFields?: Array<{ name: string; type: string; required?: boolean }>;
   llmTokens?: number;
   llmCostUsd?: number;
   resumed?: boolean;
@@ -97,6 +98,10 @@ export async function runPullCommand(input: PullInput): Promise<PullResult> {
   }
   const jobStatus = jobData.status as string;
 
+  if (jobStatus === 'cancelled' || jobStatus === 'pending') {
+    logger.warn({ jobId, status: jobStatus }, 'Job is %s — pulled data may be incomplete', jobStatus);
+  }
+
   if (jobStatus === 'running' || jobStatus === 'paused') {
     if (!input.resolveRunningJob) {
       return { success: false, jobStatus, error: `Job is still ${jobStatus}. Use interactive mode for snapshot/wait options.` };
@@ -129,6 +134,7 @@ export async function runPullCommand(input: PullInput): Promise<PullResult> {
 
   // Step 4: Fetch and resolve schema (skip if resuming or skipSchema)
   let schemaFieldsAdded = 0;
+  let newFields: Array<{ name: string; type: string; required?: boolean }> = [];
   if (!resumed && !input.skipSchema) {
     try {
       const remoteSchema = await client.getSchema(jobId) as Record<string, unknown>;
@@ -142,8 +148,9 @@ export async function runPullCommand(input: PullInput): Promise<PullResult> {
           version: (remoteSchema.version as number) ?? 1,
           definition: remoteSchema,
         });
-        const fields = (remoteSchema.fields ?? []) as unknown[];
+        const fields = (remoteSchema.fields ?? []) as Array<{ name: string; type: string; required?: boolean }>;
         schemaFieldsAdded = fields.length;
+        newFields = fields;
       } else if (localSchema && remoteSchema) {
         // Both exist — diff and resolve
         const { diffSchemas } = await import('../lib/schema-diff.js');
@@ -161,6 +168,7 @@ export async function runPullCommand(input: PullInput): Promise<PullResult> {
               parentId: localSchema.id,
             });
             schemaFieldsAdded = diff.remoteOnly.length + diff.changed.length;
+            newFields = diff.remoteOnly;
           } else if (choice === 'merge') {
             const mergedFields = [
               ...(remoteSchema.fields as unknown[]),
@@ -173,6 +181,7 @@ export async function runPullCommand(input: PullInput): Promise<PullResult> {
               parentId: localSchema.id,
             });
             schemaFieldsAdded = diff.remoteOnly.length;
+            newFields = diff.remoteOnly;
           }
           // 'local' choice — no schema changes
         }
@@ -299,6 +308,7 @@ export async function runPullCommand(input: PullInput): Promise<PullResult> {
     entitiesInserted: totalInserted,
     entitiesUpdated: totalUpdated,
     schemaFieldsAdded,
+    newFields: newFields.length > 0 ? newFields : undefined,
     llmTokens,
     llmCostUsd,
     resumed,
@@ -381,18 +391,14 @@ export async function handlePullCommand(opts: {
       return;
     }
 
-    // Handle schema changes — write to spatula.yaml if fields were added
-    if (result.schemaFieldsAdded && result.schemaFieldsAdded > 0) {
+    // Handle schema changes — write only NEW fields to spatula.yaml
+    if (result.newFields && result.newFields.length > 0) {
       try {
         const yamlPath = join(project.projectRoot, 'spatula.yaml');
         const yamlContent = readFileSync(yamlPath, 'utf-8');
-        const schema = await project.adapter.schemaRepo.findLatest(project.projectId);
-        if (schema?.definition) {
-          const fields = ((schema.definition as { fields?: unknown[] }).fields ?? []) as Array<{ name: string; type: string; required?: boolean }>;
-          const date = new Date().toISOString().split('T')[0];
-          const updated = appendFieldsToYaml(yamlContent, fields, date);
-          writeFileSync(yamlPath, updated, 'utf-8');
-        }
+        const date = new Date().toISOString().split('T')[0];
+        const updated = appendFieldsToYaml(yamlContent, result.newFields, date);
+        writeFileSync(yamlPath, updated, 'utf-8');
       } catch {
         // Non-fatal: schema is in DB even if yaml write fails
       }
