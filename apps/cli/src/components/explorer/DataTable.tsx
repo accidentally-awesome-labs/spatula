@@ -13,6 +13,7 @@ export interface DataTableProps {
   totalCount: number;
   columnOffset: number;
   pageSize: number;
+  sourceFilter?: string;
 }
 
 const FIXED_COLS_WIDTH = 18;
@@ -27,6 +28,7 @@ export function DataTable({
   totalCount,
   columnOffset,
   pageSize,
+  sourceFilter,
 }: DataTableProps) {
   const { stdout } = useStdout();
   const termWidth = stdout?.columns ?? 120;
@@ -82,6 +84,9 @@ export function DataTable({
         <Text dimColor>
           {' '}Page {currentPage + 1} of {totalPages} ({totalCount} entities)
         </Text>
+        {sourceFilter && (
+          <Text dimColor>  [Source: {sourceFilter}]</Text>
+        )}
         {totalSchemaColumns > maxVisibleColumns && (
           <Text dimColor>
             {'          '}Showing cols {columnOffset + 1}-{Math.min(columnOffset + maxVisibleColumns, totalSchemaColumns)} of {totalSchemaColumns}

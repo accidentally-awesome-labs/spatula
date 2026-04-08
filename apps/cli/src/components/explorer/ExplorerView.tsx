@@ -12,6 +12,8 @@ import type { KeyHint } from '../shared/index.js';
 import { Spinner } from '../shared/Spinner.js';
 import { DataTable } from './DataTable.js';
 import { FilterBar } from './FilterBar.js';
+import { cycleSourceFilter } from './source-filter.js';
+import type { SourceFilter } from './source-filter.js';
 import { EntityDetail } from './EntityDetail.js';
 import { ExportDialog } from './ExportDialog.js';
 
@@ -33,6 +35,7 @@ const TABLE_HINTS: KeyHint[] = [
   { key: 'F', description: 'Filter' },
   { key: 'E', description: 'Export' },
   { key: 'N/P', description: 'Next/Prev page' },
+  { key: 'S', description: 'Source filter' },
   { key: 'Esc', description: 'Exit' },
 ];
 
@@ -84,6 +87,7 @@ export function ExplorerView({
   // Local state
   const [subView, setSubView] = useState<SubView>('table');
   const [columnOffset, setColumnOffset] = useState(0);
+  const [sourceFilter, setSourceFilter] = useState<SourceFilter>('all');
   const [detailLoading, setDetailLoading] = useState(false);
   const [detailError, setDetailError] = useState<string | null>(null);
   const [detailScrollOffset, setDetailScrollOffset] = useState(0);
@@ -162,6 +166,8 @@ export function ExplorerView({
     '/': () => { store.getState().setFilterFocused(true); },
     e: () => { setSubView('export'); },
     E: () => { setSubView('export'); },
+    s: () => setSourceFilter((f) => cycleSourceFilter(f)),
+    S: () => setSourceFilter((f) => cycleSourceFilter(f)),
     n: nextPage,
     N: nextPage,
     p: prevPage,
@@ -284,6 +290,7 @@ export function ExplorerView({
         totalCount={totalEntityCount}
         columnOffset={columnOffset}
         pageSize={pageSize}
+        sourceFilter={sourceFilter === 'all' ? undefined : sourceFilter}
       />
       <KeyboardHints hints={filterFocused ? FILTER_HINTS : TABLE_HINTS} />
     </Box>
