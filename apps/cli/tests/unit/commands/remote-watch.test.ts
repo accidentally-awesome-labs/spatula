@@ -3,7 +3,7 @@ import { buildWsUrl } from '../../../src/hooks/useWebSocket.js';
 import { getRemoteWatchConfig } from '../../../src/commands/remote-watch.js';
 import type { GlobalConfig } from '@spatula/core';
 
-let mockConfig: GlobalConfig | null;
+let mockConfig: GlobalConfig | null = null;
 vi.mock('@spatula/core', async () => {
   const actual = await vi.importActual<typeof import('@spatula/core')>('@spatula/core');
   return {
