@@ -332,7 +332,7 @@ export async function handlePullCommand(opts: {
       metaGet: (k) => project!.metaRepo.get(k),
       metaSet: (k, v) => project!.metaRepo.set(k, v),
       metaDelete: (k) => project!.adapter.metaRepo.delete(k),
-      adapter: project.adapter,
+      adapter: project.adapter as unknown as PullInput['adapter'],
       projectId: project.projectId,
       projectRoot: project.projectRoot,
       full: opts.full,
