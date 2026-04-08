@@ -178,4 +178,44 @@ describe('DashboardView', () => {
 
     expect(frame).toContain('Untitled Job');
   });
+
+  it('passes wsToken to useWebSocket when provided', async () => {
+    const state = store.getState();
+    state.setActiveJobId('job-wstoken');
+    state.setJobData({ id: 'job-wstoken', name: 'Token Test', status: 'running' });
+
+    const { useWebSocket } = await import('../../../../src/hooks/useWebSocket.js');
+
+    render(
+      <DashboardView store={store} backend={apiClient} wsToken="tok_test_123" />,
+    );
+
+    expect(useWebSocket).toHaveBeenCalledWith(
+      store,
+      'http://localhost:3000',
+      'test-tenant',
+      'job-wstoken',
+      'tok_test_123',
+    );
+  });
+
+  it('passes undefined wsToken to useWebSocket when not provided', async () => {
+    const state = store.getState();
+    state.setActiveJobId('job-no-token');
+    state.setJobData({ id: 'job-no-token', name: 'No Token', status: 'running' });
+
+    const { useWebSocket } = await import('../../../../src/hooks/useWebSocket.js');
+
+    render(
+      <DashboardView store={store} backend={apiClient} />,
+    );
+
+    expect(useWebSocket).toHaveBeenCalledWith(
+      store,
+      'http://localhost:3000',
+      'test-tenant',
+      'job-no-token',
+      undefined,
+    );
+  });
 });

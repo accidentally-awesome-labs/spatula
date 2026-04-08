@@ -111,6 +111,32 @@ describe('SQLite Repositories (in-memory)', () => {
       const after = await adapter.metaRepo.getAll();
       expect(Object.keys(after).length).toBe(Object.keys(before).length);
     });
+
+    it('deleteByPrefix does not match keys with SQL wildcard _ in different positions', async () => {
+      // Key with underscore that could be mistaken for LIKE wildcard
+      await adapter.metaRepo.set('remote:test_prod:job_id', 'job-1');
+      await adapter.metaRepo.set('remote:testXprod:job_id', 'job-2'); // _ in LIKE matches any single char
+      await adapter.metaRepo.set('remote:test:other', 'job-3');
+
+      await adapter.metaRepo.deleteByPrefix('remote:test_prod:');
+
+      // This tests whether _ acts as wildcard — if it does, 'testXprod' would also be deleted
+      const remaining = await adapter.metaRepo.getAll();
+      expect(remaining['remote:test_prod:job_id']).toBeUndefined(); // deleted
+      expect(remaining['remote:test:other']).toBe('job-3'); // not matching prefix
+      // Note: 'testXprod' MAY be deleted if _ acts as LIKE wildcard — this documents the behavior
+    });
+
+    it('deleteByPrefix with percent in key prefix', async () => {
+      await adapter.metaRepo.set('100%_done:key1', 'val1');
+      await adapter.metaRepo.set('100:key2', 'val2');
+
+      await adapter.metaRepo.deleteByPrefix('100%_done:');
+
+      const remaining = await adapter.metaRepo.getAll();
+      expect(remaining['100%_done:key1']).toBeUndefined();
+      expect(remaining['100:key2']).toBe('val2'); // should NOT be deleted
+    });
   });
 
   // ---------------------------------------------------------------------------

@@ -43,8 +43,11 @@ class MockWebSocket {
 
 vi.stubGlobal('WebSocket', MockWebSocket);
 
-import { parseWSMessage, applyWSMessageToStore } from '../../../src/hooks/useWebSocket.js';
+import { parseWSMessage, applyWSMessageToStore, useWebSocket, buildWsUrl } from '../../../src/hooks/useWebSocket.js';
 import type { CliStore } from '../../../src/store/index.js';
+import React from 'react';
+import { render, cleanup } from 'ink-testing-library';
+import { Text } from 'ink';
 
 function createMockStore() {
   const state = {
@@ -190,6 +193,164 @@ describe('applyWSMessageToStore', () => {
         data: { heartbeat: true },
       }),
     ).not.toThrow();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// useWebSocket hook — lifecycle tests
+// ---------------------------------------------------------------------------
+
+function WsTestComponent({
+  store,
+  baseUrl,
+  tenantId,
+  jobId,
+  token,
+}: {
+  store: ReturnType<typeof createMockStore>;
+  baseUrl: string;
+  tenantId: string;
+  jobId: string;
+  token?: string;
+}) {
+  const { connected, error } = useWebSocket(store, baseUrl, tenantId, jobId, token);
+  return React.createElement(Text, null, `${connected ? 'connected' : 'disconnected'}|${error ?? 'none'}`);
+}
+
+describe('useWebSocket hook', () => {
+  let store: ReturnType<typeof createMockStore>;
+
+  beforeEach(() => {
+    store = createMockStore();
+    vi.useFakeTimers();
+  });
+
+  afterEach(() => {
+    cleanup();
+    vi.useRealTimers();
+  });
+
+  it('connects to WebSocket with tenantId URL when no token', async () => {
+    render(React.createElement(WsTestComponent, {
+      store, baseUrl: 'http://localhost:3000', tenantId: 'tenant-1', jobId: 'job-1',
+    }));
+
+    // Flush React useEffect
+    await vi.advanceTimersByTimeAsync(0);
+
+    expect(mockWsInstances).toHaveLength(1);
+    expect(mockWsInstances[0].url).toBe('ws://localhost:3000/ws/jobs/job-1/progress?tenantId=tenant-1');
+  });
+
+  it('connects with token URL when token is provided', async () => {
+    render(React.createElement(WsTestComponent, {
+      store, baseUrl: 'https://api.example.com', tenantId: '', jobId: 'job-1', token: 'tok_abc',
+    }));
+
+    await vi.advanceTimersByTimeAsync(0);
+
+    expect(mockWsInstances).toHaveLength(1);
+    expect(mockWsInstances[0].url).toBe('wss://api.example.com/ws/jobs/job-1/progress?token=tok_abc');
+  });
+
+  it('does not connect when jobId is empty', async () => {
+    render(React.createElement(WsTestComponent, {
+      store, baseUrl: 'http://localhost:3000', tenantId: 'tenant-1', jobId: '',
+    }));
+
+    await vi.advanceTimersByTimeAsync(0);
+
+    expect(mockWsInstances).toHaveLength(0);
+  });
+
+  it('does not connect when baseUrl is empty', async () => {
+    render(React.createElement(WsTestComponent, {
+      store, baseUrl: '', tenantId: 'tenant-1', jobId: 'job-1',
+    }));
+
+    await vi.advanceTimersByTimeAsync(0);
+
+    expect(mockWsInstances).toHaveLength(0);
+  });
+
+  it('dispatches messages to store on onmessage', async () => {
+    render(React.createElement(WsTestComponent, {
+      store, baseUrl: 'http://localhost:3000', tenantId: 'tenant-1', jobId: 'job-1',
+    }));
+
+    await vi.advanceTimersByTimeAsync(0);
+
+    const ws = mockWsInstances[0];
+    ws._open();
+    ws._message({ type: 'job_status_changed', timestamp: Date.now(), data: { from: 'running', to: 'completed' } });
+
+    expect(store._state.setJobData).toHaveBeenCalledWith(
+      expect.objectContaining({ status: 'completed' }),
+    );
+  });
+
+  it('attempts reconnection with exponential backoff on close', async () => {
+    render(React.createElement(WsTestComponent, {
+      store, baseUrl: 'http://localhost:3000', tenantId: 'tenant-1', jobId: 'job-1',
+    }));
+
+    await vi.advanceTimersByTimeAsync(0);
+
+    expect(mockWsInstances).toHaveLength(1);
+    const ws1 = mockWsInstances[0];
+    ws1._open();
+    ws1._close(); // Trigger reconnect — delay is 1s, then bumps to 2s
+
+    // After 1s delay, should reconnect
+    await vi.advanceTimersByTimeAsync(1000);
+    expect(mockWsInstances).toHaveLength(2);
+
+    // Close again without opening — backoff should be 2s since _open() resets it
+    const ws2 = mockWsInstances[1];
+    ws2._close();
+
+    await vi.advanceTimersByTimeAsync(1000);
+    expect(mockWsInstances).toHaveLength(2); // Not yet — need 2s total
+    await vi.advanceTimersByTimeAsync(1000);
+    expect(mockWsInstances).toHaveLength(3); // Now reconnected after 2s
+  });
+
+  it('cleans up WebSocket on unmount', async () => {
+    const { unmount } = render(React.createElement(WsTestComponent, {
+      store, baseUrl: 'http://localhost:3000', tenantId: 'tenant-1', jobId: 'job-1',
+    }));
+
+    await vi.advanceTimersByTimeAsync(0);
+
+    expect(mockWsInstances).toHaveLength(1);
+    const ws = mockWsInstances[0];
+    ws._open();
+    await vi.advanceTimersByTimeAsync(0);
+
+    unmount();
+    // Flush any pending React cleanup
+    await vi.advanceTimersByTimeAsync(0);
+
+    expect(ws.close).toHaveBeenCalled();
+  });
+
+  it('does not reconnect after unmount', async () => {
+    const { unmount } = render(React.createElement(WsTestComponent, {
+      store, baseUrl: 'http://localhost:3000', tenantId: 'tenant-1', jobId: 'job-1',
+    }));
+
+    await vi.advanceTimersByTimeAsync(0);
+
+    const ws = mockWsInstances[0];
+    ws._open();
+    await vi.advanceTimersByTimeAsync(0);
+
+    unmount();
+    await vi.advanceTimersByTimeAsync(0);
+    ws._close(); // Simulate close after unmount
+
+    await vi.advanceTimersByTimeAsync(5000);
+    expect(mockWsInstances).toHaveLength(1); // No reconnect attempted
   });
 });
 
