@@ -397,16 +397,23 @@ In `packages/db/src/schema-sqlite/entities.ts`, add `runId` field after `updated
 
 The column is nullable — existing entities and local crawl entities will have `runId = NULL`. Only pulled entities will have it set.
 
-- [ ] **Step 2: Run existing tests to verify no breakage**
+- [ ] **Step 2: Generate Drizzle migration for the new column**
+
+Run: `cd packages/db && pnpm db:generate:sqlite`
+Expected: Creates a new migration file (e.g., `drizzle-sqlite/0004_add_run_id.sql`) containing `ALTER TABLE entities ADD COLUMN run_id TEXT;`
+
+Verify the migration file exists and contains the expected ALTER TABLE statement.
+
+- [ ] **Step 3: Run existing tests to verify no breakage**
 
 Run: `cd packages/db && pnpm vitest run tests/unit/schema-sqlite/parity.test.ts`
-Expected: PASS — the parity test checks table structure matches between Postgres and SQLite, but `runId` is a local-only column so it should not cause a parity mismatch. If parity test is strict on column names, a test exclusion for `runId` may be needed.
+Expected: PASS — `runId` is a local-only column so it should not cause a parity mismatch. If parity test is strict on column names, a test exclusion for `runId` may be needed.
 
-- [ ] **Step 3: Commit**
+- [ ] **Step 4: Commit**
 
 ```bash
-git add packages/db/src/schema-sqlite/entities.ts
-git commit -m "feat(db): add nullable runId column to SQLite entities table"
+git add packages/db/src/schema-sqlite/entities.ts packages/db/drizzle-sqlite/
+git commit -m "feat(db): add nullable runId column to SQLite entities table with migration"
 ```
 
 ---
@@ -425,9 +432,10 @@ import { describe, it, expect, beforeEach } from 'vitest';
 import Database from 'better-sqlite3';
 import { drizzle } from 'drizzle-orm/better-sqlite3';
 import { sql } from 'drizzle-orm';
-import { SqliteEntityRepository } from '@spatula/db/project-db/repositories/entity-repository.js';
-import { entities } from '@spatula/db/schema-sqlite/entities.js';
-import { runs } from '@spatula/db/schema-sqlite/runs.js';
+import { SqliteEntityRepository, sqliteSchema } from '@spatula/db';
+
+const { entities } = sqliteSchema;
+const { runs } = sqliteSchema;
 
 function createTestDb() {
   const sqlite = new Database(':memory:');
@@ -683,6 +691,54 @@ import { runs } from '../../schema-sqlite/runs.js';
 
     return Number(result[0]?.count ?? 0);
   }
+
+  async findByJobFiltered(
+    _jobId: string,
+    _tenantId: string,
+    options?: { limit: number; offset: number; sourceFilter?: 'all' | 'local' | 'remote' },
+  ): Promise<unknown[]> {
+    const filter = options?.sourceFilter ?? 'all';
+
+    if (filter === 'all') {
+      return this.findByJob(_jobId, _tenantId, options);
+    }
+
+    let query;
+    if (filter === 'local') {
+      query = this.db
+        .select({
+          id: entities.id, jobId: entities.jobId,
+          mergedData: entities.mergedData, categories: entities.categories,
+          qualityScore: entities.qualityScore, createdAt: entities.createdAt,
+          sourceCount: entities.sourceCount,
+        })
+        .from(entities)
+        .leftJoin(runs, eq(entities.runId, runs.id))
+        .where(sql`${entities.jobId} = ${this.projectId} AND (${entities.runId} IS NULL OR ${runs.source} = 'local')`)
+        .orderBy(desc(entities.qualityScore));
+    } else {
+      query = this.db
+        .select({
+          id: entities.id, jobId: entities.jobId,
+          mergedData: entities.mergedData, categories: entities.categories,
+          qualityScore: entities.qualityScore, createdAt: entities.createdAt,
+          sourceCount: entities.sourceCount,
+        })
+        .from(entities)
+        .innerJoin(runs, eq(entities.runId, runs.id))
+        .where(sql`${entities.jobId} = ${this.projectId} AND ${runs.source} LIKE 'remote:%'`)
+        .orderBy(desc(entities.qualityScore));
+    }
+
+    if (options?.limit !== undefined) {
+      query = query.limit(options.limit) as typeof query;
+    }
+    if (options?.offset !== undefined) {
+      query = query.offset(options.offset) as typeof query;
+    }
+
+    return query.all();
+  }
 ```
 
 - [ ] **Step 4: Run tests to verify they pass**
@@ -746,6 +802,7 @@ export interface LocalProject {
   metaRepo: {
     get(key: string): Promise<string | null>;
     set(key: string, value: string): Promise<void>;
+    delete(key: string): Promise<void>;
     deleteByPrefix(prefix: string): Promise<void>;
   };
   adapter: ProjectAdapterType;
@@ -895,7 +952,7 @@ Add to `apps/cli/src/api/client.ts` in the `SpatulaApiClient` class:
 
     const response = await fetch(url, {
       method: 'GET',
-      headers: this.buildHeaders(),
+      headers: this.headers(),
     });
 
     if (!response.ok) {
@@ -932,22 +989,7 @@ Add to `apps/cli/src/api/client.ts` in the `SpatulaApiClient` class:
   }
 ```
 
-The existing `request()` method (line ~379) already builds headers inline. Extract the header construction into a private `buildHeaders()` method and call it from both `request()` and `getEntitiesStreamPaginated()`:
-
-```typescript
-  private buildHeaders(): Record<string, string> {
-    const headers: Record<string, string> = {
-      'Content-Type': 'application/json',
-      'x-tenant-id': this.tenantId,
-    };
-    if (this.apiKey) {
-      headers['Authorization'] = `Bearer ${this.apiKey}`;
-    }
-    return headers;
-  }
-```
-
-Update `request()` to call `this.buildHeaders()` instead of building headers inline.
+The existing client already has a private `headers()` method (line ~325) that returns the correct headers including auth. Use it directly in `getEntitiesStreamPaginated()` — call `this.headers()`. No renaming needed.
 
 - [ ] **Step 4: Run tests to verify they pass**
 
@@ -1924,7 +1966,11 @@ s: () => setSourceFilter((f) => cycleSourceFilter(f)),
 S: () => setSourceFilter((f) => cycleSourceFilter(f)),
 ```
 
-5. Pass `sourceFilter` and `sourceFilterLabel` to `DataTable` as a prop.
+5. Pass `sourceFilter` to `DataTable` as a prop.
+
+6. Wire source filter into data fetching. In the `useEntityData` hook call (or wherever `findByJob` / `dataSource.getEntities` is invoked), pass `sourceFilter` through. For the `LocalDataSource` path, this means the `ExplorerView` needs to check if `backend` is a `LocalDataSource` and call `adapter.entityRepo.findByJobFiltered()` with `{ sourceFilter }` instead of `findByJob()`. For the `ApiDataSource` path, source filtering is N/A (remote data is always "remote").
+
+   Practical approach: if `sourceFilter !== 'all'` and the backend is local, re-fetch entities through `adapter.entityRepo.findByJobFiltered(jobId, '', { limit: pageSize, offset: page * pageSize, sourceFilter })`. The `useEntityData` hook should accept an optional `sourceFilter` parameter and pass it through.
 
 - [ ] **Step 6: Update DataTable footer to show source filter**
 
