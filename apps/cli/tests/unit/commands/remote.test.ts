@@ -23,7 +23,13 @@ vi.mock('@spatula/core', async () => {
 });
 
 // Import after mock setup
-import { runRemoteAdd, runRemoteList, runRemoteRemove } from '../../../src/commands/remote.js';
+import {
+  runRemoteAdd,
+  runRemoteList,
+  runRemoteRemove,
+  runRemoteStatus,
+  runRemoteJobAction,
+} from '../../../src/commands/remote.js';
 
 function mockFetchSequence(responses: Array<{ ok: boolean; data?: unknown; status?: number }>): void {
   const mockFn = vi.fn();
@@ -90,5 +96,141 @@ describe('runRemoteAdd', () => {
     expect(result.success).toBe(false);
     expect(result.error).toContain('auth');
     expect(mockSaveGlobalConfig).not.toHaveBeenCalled();
+  });
+});
+
+describe('runRemoteList', () => {
+  afterEach(() => vi.restoreAllMocks());
+
+  it('returns empty array when no remotes configured', async () => {
+    mockConfig = { version: 1 };
+    const result = await runRemoteList();
+    expect(result.remotes).toEqual([]);
+  });
+
+  it('lists all configured remotes without project context', async () => {
+    mockConfig = {
+      version: 1,
+      remotes: {
+        prod: { url: 'https://api.spatula.dev', apiKey: 'sk_live' },
+        staging: { url: 'https://staging.spatula.dev' },
+      },
+    };
+    const result = await runRemoteList();
+    expect(result.remotes).toHaveLength(2);
+    expect(result.remotes[0]).toMatchObject({ name: 'prod', url: 'https://api.spatula.dev', hasApiKey: true });
+    expect(result.remotes[1]).toMatchObject({ name: 'staging', url: 'https://staging.spatula.dev', hasApiKey: false });
+  });
+
+  it('includes live job status when metaGet is provided', async () => {
+    mockConfig = {
+      version: 1,
+      remotes: {
+        prod: { url: 'https://api.spatula.dev', apiKey: 'sk_live' },
+      },
+    };
+    mockFetchSequence([{ ok: true, data: { data: { id: 'job-1', status: 'running' } } }]);
+    const metaGet = vi.fn().mockResolvedValue('job-1');
+    const result = await runRemoteList(metaGet);
+    expect(result.remotes[0].jobId).toBe('job-1');
+    expect(result.remotes[0].jobStatus).toBe('running');
+  });
+});
+
+describe('runRemoteRemove', () => {
+  beforeEach(() => {
+    mockConfig = {
+      version: 1,
+      remotes: {
+        prod: { url: 'https://api.spatula.dev', apiKey: 'sk_live' },
+      },
+    };
+    mockSaveGlobalConfig.mockClear();
+  });
+  afterEach(() => vi.restoreAllMocks());
+
+  it('removes an existing remote from global config', async () => {
+    const result = await runRemoteRemove('prod');
+    expect(result.success).toBe(true);
+    expect(mockSaveGlobalConfig).toHaveBeenCalledTimes(1);
+    const saved = mockSaveGlobalConfig.mock.calls[0][0] as GlobalConfig;
+    expect(saved.remotes).toBeUndefined();
+  });
+
+  it('cleans up project_meta when metaDeleteByPrefix is provided', async () => {
+    const mockDeleteByPrefix = vi.fn().mockResolvedValue(undefined);
+    const result = await runRemoteRemove('prod', mockDeleteByPrefix);
+    expect(result.success).toBe(true);
+    expect(mockDeleteByPrefix).toHaveBeenCalledWith('remote:prod:');
+  });
+
+  it('returns error for non-existent remote', async () => {
+    const result = await runRemoteRemove('nonexistent');
+    expect(result.success).toBe(false);
+    expect(result.error).toContain('not found');
+  });
+});
+
+describe('runRemoteStatus', () => {
+  beforeEach(() => {
+    mockConfig = {
+      version: 1,
+      remotes: { prod: { url: 'https://api.spatula.dev', apiKey: 'sk_live' } },
+    };
+  });
+  afterEach(() => vi.restoreAllMocks());
+
+  it('returns job data for linked remote', async () => {
+    mockFetchSequence([{ ok: true, data: { data: { id: 'job-1', status: 'running' } } }]);
+    const metaGet = vi.fn().mockResolvedValue('job-1');
+    const result = await runRemoteStatus('prod', metaGet);
+    expect(result.success).toBe(true);
+    expect(result.data).toEqual({ id: 'job-1', status: 'running' });
+    expect(metaGet).toHaveBeenCalledWith('remote:prod:job_id');
+  });
+
+  it('returns error when no linked job', async () => {
+    const metaGet = vi.fn().mockResolvedValue(null);
+    const result = await runRemoteStatus('prod', metaGet);
+    expect(result.success).toBe(false);
+    expect(result.error).toContain('No linked job');
+  });
+});
+
+describe('runRemoteJobAction', () => {
+  beforeEach(() => {
+    mockConfig = {
+      version: 1,
+      remotes: { prod: { url: 'https://api.spatula.dev', apiKey: 'sk_live' } },
+    };
+  });
+  afterEach(() => vi.restoreAllMocks());
+
+  it('pauses a remote job', async () => {
+    mockFetchSequence([{ ok: true, data: { data: { id: 'job-1', status: 'paused' } } }]);
+    const metaGet = vi.fn().mockResolvedValue('job-1');
+    const result = await runRemoteJobAction('prod', 'pause', metaGet);
+    expect(result.success).toBe(true);
+  });
+
+  it('resumes a remote job', async () => {
+    mockFetchSequence([{ ok: true, data: { data: { id: 'job-1', status: 'running' } } }]);
+    const metaGet = vi.fn().mockResolvedValue('job-1');
+    const result = await runRemoteJobAction('prod', 'resume', metaGet);
+    expect(result.success).toBe(true);
+  });
+
+  it('cancels a remote job', async () => {
+    mockFetchSequence([{ ok: true, data: { data: { id: 'job-1', status: 'cancelled' } } }]);
+    const metaGet = vi.fn().mockResolvedValue('job-1');
+    const result = await runRemoteJobAction('prod', 'cancel', metaGet);
+    expect(result.success).toBe(true);
+  });
+
+  it('returns error when remote not configured', async () => {
+    mockConfig = { version: 1 };
+    const metaGet = vi.fn().mockResolvedValue('job-1');
+    await expect(runRemoteJobAction('missing', 'pause', metaGet))
+      .rejects.toThrow('not found');
   });
 });
