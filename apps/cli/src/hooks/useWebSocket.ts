@@ -84,6 +84,24 @@ export function applyWSMessageToStore(store: CliStore, msg: WSMessage): void {
   }
 }
 
+// ─── URL builder (exported for testing) ───────────────────────
+
+/**
+ * Build the WebSocket URL for job progress.
+ * When a token is provided, it's used for authentication (remote mode).
+ * Otherwise, tenantId is passed as a query param (local mode).
+ */
+export function buildWsUrl(
+  baseUrl: string,
+  tenantId: string,
+  jobId: string,
+  token?: string,
+): string {
+  const wsBase = baseUrl.replace(/^http/, 'ws');
+  const authParam = token ? `token=${token}` : `tenantId=${tenantId}`;
+  return `${wsBase}/ws/jobs/${jobId}/progress?${authParam}`;
+}
+
 // ─── React hook ────────────────────────────────────────────────
 
 export interface UseWebSocketResult {
@@ -96,6 +114,7 @@ export function useWebSocket(
   baseUrl: string,
   tenantId: string,
   jobId: string,
+  token?: string,
 ): UseWebSocketResult {
   const [connected, setConnected] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -112,7 +131,7 @@ export function useWebSocket(
     if (!jobId) return;
     if (!baseUrl) return; // No-op in local DataSource mode
 
-    const wsUrl = baseUrl.replace(/^http/, 'ws') + `/ws/jobs/${jobId}/progress?tenantId=${tenantId}`;
+    const wsUrl = buildWsUrl(baseUrl, tenantId, jobId, token);
 
     function connect() {
       if (!mountedRef.current) return;
@@ -168,7 +187,7 @@ export function useWebSocket(
         wsRef.current = null;
       }
     };
-  }, [store, baseUrl, tenantId, jobId]);
+  }, [store, baseUrl, tenantId, jobId, token]);
 
   return { connected, error };
 }
