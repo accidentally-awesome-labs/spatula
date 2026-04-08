@@ -125,7 +125,19 @@ export class SqliteEntityRepository implements EntityRepo {
   }>): Promise<{ inserted: number; updated: number }> {
     if (batch.length === 0) return { inserted: 0, updated: 0 };
 
-    const countBefore = await this.countByJob(this.projectId, '');
+    // Check which IDs already exist to accurately track insert vs update
+    const existingIds = new Set<string>();
+    wrapStorageError(() => {
+      for (const entity of batch) {
+        const row = this.db
+          .select({ id: entities.id })
+          .from(entities)
+          .where(eq(entities.id, entity.id))
+          .get();
+        if (row) existingIds.add(entity.id);
+      }
+    }, { method: 'upsertBatch:check', table: 'entities' });
+
     const now = new Date().toISOString();
 
     wrapStorageError(() => {
@@ -158,20 +170,24 @@ export class SqliteEntityRepository implements EntityRepo {
       }
     }, { method: 'upsertBatch', table: 'entities' });
 
-    const countAfter = await this.countByJob(this.projectId, '');
-    const inserted = countAfter - countBefore;
-    const updated = batch.length - inserted;
+    const updated = existingIds.size;
+    const inserted = batch.length - updated;
     return { inserted, updated };
   }
 
   async deleteByRunIds(runIds: string[]): Promise<number> {
     if (runIds.length === 0) return 0;
-    const countBefore = await this.countByJob(this.projectId, '');
+    // Count matching entities before deleting
+    const [{ count }] = this.db
+      .select({ count: sql<number>`count(*)` })
+      .from(entities)
+      .where(inArray(entities.runId, runIds))
+      .all();
+    if (Number(count) === 0) return 0;
     wrapStorageError(() => {
       this.db.delete(entities).where(inArray(entities.runId, runIds)).run();
     }, { method: 'deleteByRunIds', table: 'entities' });
-    const countAfter = await this.countByJob(this.projectId, '');
-    return countBefore - countAfter;
+    return Number(count);
   }
 
   async countBySource(filter: 'all' | 'local' | 'remote'): Promise<number> {
