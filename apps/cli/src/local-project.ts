@@ -6,6 +6,11 @@ export interface LocalProject {
   dataSource: DataSource;
   projectRoot: string;
   projectId: string;
+  metaRepo: {
+    get(key: string): Promise<string | null>;
+    set(key: string, value: string): Promise<void>;
+    deleteByPrefix(prefix: string): Promise<void>;
+  };
   close(): void;
 }
 
@@ -48,6 +53,7 @@ export async function openLocalProject(cwd: string): Promise<LocalProject> {
     dataSource,
     projectRoot,
     projectId,
+    metaRepo: adapter.metaRepo,
     close: () => dbResult.close(),
   };
 }
