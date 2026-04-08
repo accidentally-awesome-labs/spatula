@@ -62,37 +62,39 @@ Options:
 
 **Step 4: Fetch and resolve schema**
 - Fetch remote schema: `SpatulaApiClient.getSchema(jobId)` → `SchemaDefinition`
-- Load local schema: `SqliteSchemaRepository.findLatest(projectId)`
+- Load local schema: `adapter.schemaRepo.findLatest(projectId, projectId)` (both params ignored, uses pre-bound projectId)
 - If no local schema: accept remote schema, write to local DB and append fields to `spatula.yaml`
 - If schemas differ: show schema conflict resolution TUI (section 3)
 - If schemas match: skip, print "Schema up to date"
 
 **Step 5: Fetch entities (batched cursor streaming)**
-- If `--full` flag: delete all entities from previous pull runs for this remote (`deleteBySource('remote:<name>:*')`)
+- If `--full` flag: delete all entities from previous pull runs for this remote via `deleteByRunIds()` (see section 5 for details)
 - Determine `since` parameter:
   - If resuming (cursor exists): use cursor, no `since` (cursor already encodes position)
   - If incremental (has `remote:<name>:last_pull_at`): use that timestamp as `since`
   - If first pull or `--full`: no cursor, no `since`
 - Loop:
-  1. Call `SpatulaApiClient.getEntitiesStream(jobId, { cursor, since, limit: 500 })`
+  1. Call `SpatulaApiClient.getEntitiesStreamPaginated(jobId, { cursor, since, limit: 500 })` → `{ data: Entity[], pagination: { nextCursor?, hasMore, total } }`
+     **Note:** The existing `getEntitiesStream()` uses the generic `.get()` unwrapper which strips the pagination envelope. A new `getEntitiesStreamPaginated()` method is needed that returns both `data` and `pagination` (similar to existing `listEntitiesPaginated()`).
   2. For each entity in batch:
      - Strip `tenantId`
      - Remap `jobId` → local `projectId`
      - Preserve original entity `id` (required for incremental upsert)
-  3. Upsert batch into local SQLite via `SqliteEntityRepository.upsertBatch(entities)`
-  4. Save cursor to `project_meta`: `remote:<name>:pull_cursor` = response's `nextCursor`
+  3. Upsert batch into local SQLite via `adapter.entityRepo.upsertBatch(entities)`
+  4. Save cursor to `project_meta`: `remote:<name>:pull_cursor` = `pagination.nextCursor`
   5. Update progress display (entities pulled so far, batch number)
-  6. If `nextCursor` is null → done
+  6. If `pagination.nextCursor` is null or `pagination.hasMore` is false → done
 - Track total entities inserted and updated counts
 
 **Step 6: Fetch LLM usage summary**
-- Call `SpatulaApiClient.getUsage(jobId)` → usage aggregation (totalTokens, totalCostUsd, byModel, byPurpose)
-- Store aggregate totals in the pull-run record (`llmTokensUsed`, `llmCostUsd`)
+- Call `SpatulaApiClient.getUsage()` → tenant-wide usage aggregation (totalTokens, totalCostUsd, byModel, byPurpose, byJob)
+- The existing `GET /api/v1/usage` endpoint returns usage for all jobs; extract the linked job's usage from the `byJob` array by matching `jobId`
+- Store job-specific aggregate totals in the pull-run record (`llmTokensUsed`, `llmCostUsd`)
 - Store detailed breakdown in `project_meta` as `remote:<name>:last_pull_usage` (JSON-serialized)
 
 **Step 7: Create pull-run record**
-- `RunRepository.create({ status: 'pulled', source: 'remote:<name>:<jobId>', configSnapshot: { remote, jobId, full, incremental }, startedAt })`
-- Update stats: `entitiesCreated` = insert count, `llmTokensUsed`, `llmCostUsd`
+- `adapter.runRepo.create({ status: 'pulled', source: 'remote:<name>:<jobId>', configSnapshot: { remote, jobId, full, incremental }, startedAt })`
+- Then `adapter.runRepo.updateStats(runId, { entitiesCreated: insertCount, llmTokensUsed, llmCostUsd })` — separate call because `create()` only accepts status/source/config/startedAt
 
 **Step 8: Clear cursor + update timestamps**
 - Delete `remote:<name>:pull_cursor` from `project_meta`
@@ -182,6 +184,12 @@ Appends new fields to the `fields:` section of `spatula.yaml` without destroying
 
 Uses string manipulation (find last field entry, append after it) rather than full YAML parse-serialize to preserve formatting.
 
+**Edge cases:**
+- No `fields:` key → append `fields:` section at end of file
+- Empty `fields:` block (e.g., `fields: []`) → replace with populated block
+- Tab vs space indentation → detect from existing file content, match style
+- `FieldDefinition` type imported from `@spatula/core/types/schema.js`
+
 ---
 
 ## 4. Pull From Running Job
@@ -263,7 +271,7 @@ Pulled and local entities share the `entities` table in SQLite.
 
 ### 8.1 Keybinding
 
-Add `[f]` toggle in `ExplorerView` cycling through:
+Add `[s]` (source) toggle in `ExplorerView` cycling through (`[f]`/`[F]` are already bound to the text filter bar):
 - **All** (default) — show all entities
 - **Local only** — entities from runs where `source = 'local'`
 - **Remote only** — entities from runs where `source LIKE 'remote:%'`
@@ -293,6 +301,27 @@ Show active filter in explorer status bar: `[Filter: All]`, `[Filter: Local]`, `
 
 ## 9. Infrastructure Additions
 
+### 9.0 `LocalProject` Interface Expansion
+
+**File:** `apps/cli/src/local-project.ts`
+
+The current `LocalProject` interface only exposes `dataSource`, `projectRoot`, `projectId`, `metaRepo`, and `close()`. The push/remote commands only need `metaRepo`, but pull needs direct access to `schemaRepo`, `entityRepo`, and `runRepo` for writes.
+
+**Change:** Expose the `ProjectAdapter` as `adapter` on `LocalProject`:
+
+```typescript
+interface LocalProject {
+  dataSource: DataSource;
+  projectRoot: string;
+  projectId: string;
+  metaRepo: ProjectMetaRepository;
+  adapter: ProjectAdapter;            // NEW — exposes all SQLite repos
+  close(): void;
+}
+```
+
+The `ProjectAdapter` is already constructed internally by `openLocalProject()` — just return it. Pull uses `adapter.entityRepo`, `adapter.schemaRepo`, and `adapter.runRepo`.
+
 ### 9.1 `SqliteEntityRepository.upsertBatch()`
 
 New method for bulk upsert of pulled entities:
@@ -308,7 +337,9 @@ async upsertBatch(entities: Array<{
 }>): Promise<{ inserted: number; updated: number }>
 ```
 
-Uses SQLite `INSERT OR REPLACE` (entity `id` is the PK). Returns counts for summary display.
+Uses Drizzle's `onConflictDoUpdate()` on the `id` PK (NOT `INSERT OR REPLACE`, which is destructive — it deletes then re-inserts, wiping any FK-linked `entity_sources` rows). The `onConflictDoUpdate` updates `mergedData`, `provenance`, `qualityScore`, `categories`, `runId`, and `updatedAt` while preserving the row and its FK relationships. Returns counts for summary display.
+
+**Note on UUID collision:** Both local and remote entities use UUIDs. Collision probability is negligible (~2^-122). The spec accepts this risk rather than adding ID namespacing complexity.
 
 ### 9.2 `SqliteEntityRepository.deleteByRunIds()`
 
@@ -330,9 +361,23 @@ async countBySource(filter: 'all' | 'local' | 'remote'): Promise<number>
 
 Add nullable `runId TEXT` column to the `entities` table in `packages/db/src/schema-sqlite/entities.ts`. Requires a Drizzle migration for existing local projects. New entities from local crawls continue to have `runId = NULL` (backward compatible). Pulled entities always have `runId` set.
 
-### 9.5 `SpatulaApiClient.getUsage()`
+### 9.5 `SpatulaApiClient` New Methods
 
-New method wrapping `GET /api/v1/usage`:
+**`getEntitiesStreamPaginated()`** — cursor-based entity fetch that preserves the pagination envelope:
+
+```typescript
+async getEntitiesStreamPaginated(
+  jobId: string,
+  query?: { cursor?: string; since?: string; limit?: number },
+): Promise<{
+  data: Record<string, unknown>[];
+  pagination: { nextCursor?: string; hasMore: boolean; total: number };
+}>
+```
+
+The existing `getEntitiesStream()` uses the generic `.get()` unwrapper which strips pagination. This new method does its own `fetch()` and returns the full response shape (similar to the existing `listEntitiesPaginated()` pattern).
+
+**`getUsage()`** — wraps `GET /api/v1/usage`:
 
 ```typescript
 async getUsage(query?: { period?: string }): Promise<{
@@ -344,6 +389,8 @@ async getUsage(query?: { period?: string }): Promise<{
   byJob: Array<{ jobId: string; tokens: number; costUsd: number }>;
 }>
 ```
+
+Note: This is a tenant-wide endpoint. Job-specific usage is extracted client-side from the `byJob` array.
 
 ### 9.6 Progress Display
 
@@ -400,13 +447,13 @@ All pull-related state stored in `project_meta` (SQLite key-value):
 | `apps/cli/src/lib/schema-diff.ts` | New | Field-level schema comparison |
 | `apps/cli/src/lib/yaml-fields.ts` | New | Append fields to spatula.yaml |
 | `apps/cli/src/lib/pull-progress.tsx` | New | Ink progress display for pull |
-| `apps/cli/src/api/client.ts` | Modify | Add `getUsage()` method |
+| `apps/cli/src/api/client.ts` | Modify | Add `getEntitiesStreamPaginated()` and `getUsage()` methods |
+| `apps/cli/src/local-project.ts` | Modify | Expose `adapter: ProjectAdapter` on `LocalProject` interface |
 | `apps/cli/src/index.tsx` | Modify | Register pull command |
-| `apps/cli/src/components/explorer/ExplorerView.tsx` | Modify | Add source filter toggle |
-| `apps/cli/src/components/explorer/DataTable.tsx` | Modify | Show filter indicator in status |
-| `packages/db/src/schema-sqlite/entities.ts` | Modify | Add `runId` column |
+| `apps/cli/src/components/explorer/ExplorerView.tsx` | Modify | Add `[s]` source filter toggle |
+| `apps/cli/src/components/explorer/DataTable.tsx` | Modify | Show source filter indicator in status |
+| `packages/db/src/schema-sqlite/entities.ts` | Modify | Add nullable `runId` column |
 | `packages/db/src/project-db/repositories/entity-repository.ts` | Modify | Add upsertBatch, deleteByRunIds, countBySource, findByJobFiltered |
-| `packages/db/src/project-db/adapter.ts` | Modify | Expose new entity methods if needed |
 
 ---
 
