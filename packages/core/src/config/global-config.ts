@@ -1,8 +1,8 @@
 // packages/core/src/config/global-config.ts
-import { readFileSync, existsSync } from 'node:fs';
-import { join } from 'node:path';
+import { readFileSync, existsSync, writeFileSync, mkdirSync } from 'node:fs';
+import { join, dirname } from 'node:path';
 import { homedir } from 'node:os';
-import { parse as parseYaml } from 'yaml';
+import { parse as parseYaml, stringify as stringifyYaml } from 'yaml';
 import { ValidationError } from '@spatula/shared';
 import { GlobalConfigSchema } from './types.js';
 import type { GlobalConfig } from './types.js';
@@ -50,4 +50,40 @@ export function loadGlobalConfig(configPath?: string): GlobalConfig | null {
   }
 
   return result.data;
+}
+
+export interface SaveGlobalConfigOptions {
+  merge?: boolean;
+}
+
+/**
+ * Save global config to ~/.spatula/config.yaml (or the given path).
+ * Creates the directory if it does not exist.
+ * When merge is true, deep-merges with existing config.
+ */
+export function saveGlobalConfig(
+  config: GlobalConfig,
+  configPath?: string,
+  options?: SaveGlobalConfigOptions,
+): void {
+  const path = configPath ?? getGlobalConfigPath();
+  const dir = dirname(path);
+
+  if (!existsSync(dir)) {
+    mkdirSync(dir, { recursive: true });
+  }
+
+  let toWrite = config;
+  if (options?.merge) {
+    const existing = loadGlobalConfig(path);
+    if (existing) {
+      toWrite = { ...existing, ...config };
+      // Deep-merge remotes specifically
+      if (existing.remotes || config.remotes) {
+        toWrite.remotes = { ...existing.remotes, ...config.remotes };
+      }
+    }
+  }
+
+  writeFileSync(path, stringifyYaml(toWrite, { lineWidth: 0 }), 'utf-8');
 }

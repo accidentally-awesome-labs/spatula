@@ -1,18 +1,30 @@
 // packages/core/tests/unit/config/global-config.test.ts
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { loadGlobalConfig, getGlobalConfigPath } from '../../../src/config/global-config.js';
+import { loadGlobalConfig, getGlobalConfigPath, saveGlobalConfig } from '../../../src/config/global-config.js';
 import type { GlobalConfig } from '../../../src/config/types.js';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 
-// Mock fs module
-vi.mock('node:fs', () => ({
-  readFileSync: vi.fn(),
-  existsSync: vi.fn(),
-}));
+// Mock fs module — include all functions used by saveGlobalConfig
+vi.mock('node:fs', async () => {
+  const actual = await vi.importActual<typeof import('node:fs')>('node:fs');
+  return {
+    ...actual,
+    readFileSync: vi.fn(),
+    existsSync: vi.fn(),
+    writeFileSync: vi.fn(),
+    mkdirSync: vi.fn(),
+  };
+});
 
 // Mock os module
-vi.mock('node:os', () => ({
-  homedir: vi.fn(() => '/home/testuser'),
-}));
+vi.mock('node:os', async () => {
+  const actual = await vi.importActual<typeof import('node:os')>('node:os');
+  return {
+    ...actual,
+    homedir: vi.fn(() => '/home/testuser'),
+  };
+});
 
 describe('getGlobalConfigPath', () => {
   beforeEach(() => {
@@ -104,5 +116,63 @@ remotes:
     (fs.readFileSync as any).mockReturnValue('{{invalid yaml');
 
     expect(() => loadGlobalConfig()).toThrow();
+  });
+});
+
+describe('saveGlobalConfig', () => {
+  let realFs: typeof import('node:fs');
+
+  beforeEach(async () => {
+    realFs = await vi.importActual<typeof import('node:fs')>('node:fs');
+    const fs = await import('node:fs');
+    // Wire mocked functions to real implementations for saveGlobalConfig tests
+    (fs.readFileSync as any).mockImplementation(realFs.readFileSync);
+    (fs.existsSync as any).mockImplementation(realFs.existsSync);
+    (fs.writeFileSync as any).mockImplementation(realFs.writeFileSync);
+    (fs.mkdirSync as any).mockImplementation(realFs.mkdirSync);
+  });
+
+  afterEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it('writes YAML to the config path, creating directory if needed', () => {
+    const tmpDir = join(tmpdir(), `spatula-save-test-${Date.now()}`);
+    const configPath = join(tmpDir, 'config.yaml');
+
+    const config: GlobalConfig = {
+      version: 1,
+      remotes: {
+        prod: { url: 'https://api.spatula.dev', apiKey: 'sk_live_abc' },
+      },
+    };
+
+    saveGlobalConfig(config, configPath);
+
+    const reloaded = loadGlobalConfig(configPath);
+    expect(reloaded).not.toBeNull();
+    expect(reloaded!.remotes?.prod?.url).toBe('https://api.spatula.dev');
+    expect(reloaded!.remotes?.prod?.apiKey).toBe('sk_live_abc');
+
+    realFs.rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  it('merges with existing config when merge flag is true', () => {
+    const tmpDir = join(tmpdir(), `spatula-merge-test-${Date.now()}`);
+    realFs.mkdirSync(tmpDir, { recursive: true });
+    const configPath = join(tmpDir, 'config.yaml');
+
+    saveGlobalConfig({ version: 1, crawler: 'playwright' } as GlobalConfig, configPath);
+
+    const patch: Partial<GlobalConfig> = {
+      remotes: { staging: { url: 'https://staging.spatula.dev' } },
+    };
+    saveGlobalConfig(patch as GlobalConfig, configPath, { merge: true });
+
+    const reloaded = loadGlobalConfig(configPath);
+    expect(reloaded!.crawler).toBe('playwright');
+    expect(reloaded!.remotes?.staging?.url).toBe('https://staging.spatula.dev');
+
+    realFs.rmSync(tmpDir, { recursive: true, force: true });
   });
 });
