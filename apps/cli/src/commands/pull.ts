@@ -111,9 +111,14 @@ export async function runPullCommand(input: PullInput): Promise<PullResult> {
       return { success: false, error: 'Pull cancelled by user.' };
     }
     if (choice === 'wait') {
-      // Poll until completed
+      // Poll until completed (max 30 minutes)
+      const maxWaitMs = 30 * 60 * 1000;
+      const waitStart = Date.now();
       let pollStatus = jobStatus;
       while (pollStatus === 'running' || pollStatus === 'paused') {
+        if (Date.now() - waitStart > maxWaitMs) {
+          return { success: false, error: 'Timed out waiting for job completion (30 min). Run `spatula pull` again later.' };
+        }
         await new Promise((r) => setTimeout(r, 30_000));
         const pollData = await client.getJob(jobId) as Record<string, unknown>;
         pollStatus = pollData.status as string;
@@ -186,8 +191,8 @@ export async function runPullCommand(input: PullInput): Promise<PullResult> {
           // 'local' choice — no schema changes
         }
       }
-    } catch {
-      logger.warn('Schema fetch failed, continuing with entity pull');
+    } catch (err) {
+      logger.warn({ err }, 'Schema fetch failed, continuing with entity pull');
     }
   }
 
@@ -341,7 +346,7 @@ export async function handlePullCommand(opts: {
       remoteName: opts.remoteName,
       metaGet: (k) => project!.metaRepo.get(k),
       metaSet: (k, v) => project!.metaRepo.set(k, v),
-      metaDelete: (k) => project!.adapter.metaRepo.delete(k),
+      metaDelete: (k) => project!.metaRepo.delete(k),
       adapter: project.adapter as unknown as PullInput['adapter'],
       projectId: project.projectId,
       projectRoot: project.projectRoot,

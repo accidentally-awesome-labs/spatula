@@ -309,10 +309,15 @@ export class SpatulaApiClient {
       ...(query?.limit ? { limit: query.limit } : {}),
     });
 
-    const response = await fetch(url, {
-      method: 'GET',
-      headers: this.headers(),
-    });
+    let response: Response;
+    try {
+      response = await fetch(url, {
+        method: 'GET',
+        headers: this.headers(),
+      });
+    } catch (err) {
+      throw new ApiError(0, 'NETWORK_ERROR', (err as Error).message);
+    }
 
     if (!response.ok) {
       const body = await response.json().catch(() => ({}));
