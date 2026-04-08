@@ -17,9 +17,14 @@ import type { SourceFilter } from './source-filter.js';
 import { EntityDetail } from './EntityDetail.js';
 import { ExportDialog } from './ExportDialog.js';
 
+export interface FilteredFetch {
+  getEntities(query: { limit: number; offset: number; sourceFilter: 'local' | 'remote' }): Promise<{ data: unknown[]; total: number }>;
+}
+
 export interface ExplorerViewProps {
   store: CliStore;
   backend: DataSource | SpatulaApiClient;
+  filteredFetch?: FilteredFetch;
 }
 
 type SubView = 'table' | 'detail' | 'export';
@@ -83,6 +88,7 @@ function extractSchemaFields(schemaData: Record<string, unknown> | null): string
 export function ExplorerView({
   store,
   backend,
+  filteredFetch,
 }: ExplorerViewProps): React.ReactElement {
   // Local state
   const [subView, setSubView] = useState<SubView>('table');
@@ -114,7 +120,10 @@ export function ExplorerView({
     prevPage,
     fetchEntity,
     fetchPage,
-  } = useEntityData(store, backend, activeJobId ?? '');
+  } = useEntityData(store, backend, activeJobId ?? '', {
+    sourceFilter,
+    filteredFetch,
+  });
 
   // Entity filter hook (local + server-side filtering)
   const {

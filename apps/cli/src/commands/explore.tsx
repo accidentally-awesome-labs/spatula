@@ -14,6 +14,7 @@ import { createCliStore } from '../store/index.js';
 import type { CliStore } from '../store/index.js';
 import type { DataSource } from '@spatula/core';
 import { ExplorerView } from '../components/explorer/ExplorerView.js';
+import type { FilteredFetch } from '../components/explorer/ExplorerView.js';
 import { useKeyboard } from '../hooks/useKeyboard.js';
 import { Header } from '../components/shared/index.js';
 
@@ -47,10 +48,11 @@ export function buildExploreStore(projectId: string): CliStore {
 interface ExploreAppProps {
   store: CliStore;
   backend: DataSource;
+  filteredFetch?: FilteredFetch;
   onQuit: () => void;
 }
 
-function ExploreApp({ store, backend, onQuit }: ExploreAppProps): React.ReactElement {
+function ExploreApp({ store, backend, filteredFetch, onQuit }: ExploreAppProps): React.ReactElement {
   const [sortOrder, setSortOrder] = useState<SortOrder>('default');
 
   const applySort = useCallback((order: SortOrder) => {
@@ -101,7 +103,7 @@ function ExploreApp({ store, backend, onQuit }: ExploreAppProps): React.ReactEle
       <Text dimColor>
         Sort: {sortOrder} | Press <Text bold>o</Text> to cycle | <Text bold>q</Text> to quit
       </Text>
-      <ExplorerView store={store} backend={backend} />
+      <ExplorerView store={store} backend={backend} filteredFetch={filteredFetch} />
     </Box>
   );
 }
@@ -126,11 +128,28 @@ export async function runExploreCommand(): Promise<void> {
     // 3. Create store configured for explorer mode
     const store = buildExploreStore(project.projectId);
 
-    // 4. Render the Ink app
+    // 4. Build filtered-fetch bridge from adapter
+    const projectId = project.projectId;
+    const filteredFetch: FilteredFetch = {
+      async getEntities(query) {
+        const [rows, total] = await Promise.all([
+          project.adapter.entityRepo.findByJobFiltered(projectId, projectId, {
+            limit: query.limit,
+            offset: query.offset,
+            sourceFilter: query.sourceFilter,
+          }),
+          project.adapter.entityRepo.countBySource(query.sourceFilter),
+        ]);
+        return { data: rows, total };
+      },
+    };
+
+    // 5. Render the Ink app
     const { unmount, waitUntilExit } = render(
       <ExploreApp
         store={store}
         backend={project.dataSource}
+        filteredFetch={filteredFetch}
         onQuit={() => unmount()}
       />,
     );

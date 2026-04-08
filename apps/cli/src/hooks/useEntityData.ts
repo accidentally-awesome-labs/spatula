@@ -13,16 +13,24 @@ const TABLE_HEADER_HEIGHT = 2;
 const FOOTER_HEIGHT = 1;
 const PADDING = 2;
 
+interface FilteredFetch {
+  getEntities(query: { limit: number; offset: number; sourceFilter: 'local' | 'remote' }): Promise<{ data: unknown[]; total: number }>;
+}
+
 export function useEntityData(
   store: CliStore,
   backend: DataSource | SpatulaApiClient,
   jobId: string,
+  options?: { sourceFilter?: 'all' | 'local' | 'remote'; filteredFetch?: FilteredFetch },
 ) {
   const { stdout } = useStdout();
   const pageSize = useMemo(() => {
     const rows = stdout?.rows ?? 40;
     return Math.max(5, rows - HEADER_HEIGHT - FILTER_BAR_HEIGHT - TABLE_HEADER_HEIGHT - FOOTER_HEIGHT - PADDING);
   }, [stdout?.rows]);
+
+  const sourceFilter = options?.sourceFilter ?? 'all';
+  const filteredFetch = options?.filteredFetch;
 
   const fetchPage = useCallback(async (page: number) => {
     if (!jobId && !isDataSource(backend)) return;
@@ -31,7 +39,16 @@ export function useEntityData(
     const offset = page * pageSize;
 
     try {
-      if (isDataSource(backend)) {
+      // Use filtered fetch when source filter is active and available
+      if (sourceFilter !== 'all' && filteredFetch) {
+        const result = await filteredFetch.getEntities({
+          limit: pageSize,
+          offset,
+          sourceFilter: sourceFilter as 'local' | 'remote',
+        });
+        state.setEntities(result.data as any);
+        state.setTotalEntityCount(result.total);
+      } else if (isDataSource(backend)) {
         const result = await backend.getEntities({ limit: pageSize, offset });
         state.setEntities(result.data as any);
         state.setTotalEntityCount(result.total);
@@ -48,7 +65,7 @@ export function useEntityData(
     } catch (error) {
       state.setError(`Failed to fetch entities: ${(error as Error).message}`);
     }
-  }, [store, backend, jobId, pageSize]);
+  }, [store, backend, jobId, pageSize, sourceFilter, filteredFetch]);
 
   useEffect(() => {
     fetchPage(0);
