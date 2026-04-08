@@ -22,17 +22,28 @@ export class ApiError extends Error {
 }
 
 // ---------------------------------------------------------------------------
+// Options
+// ---------------------------------------------------------------------------
+
+export interface SpatulaApiClientOptions {
+  /** Optional API key for authenticated requests. */
+  apiKey?: string;
+}
+
+// ---------------------------------------------------------------------------
 // Client
 // ---------------------------------------------------------------------------
 
 export class SpatulaApiClient {
   public readonly baseUrl: string;
   public readonly tenantId: string;
+  private readonly apiKey?: string;
 
-  constructor(baseUrl: string, tenantId: string) {
+  constructor(baseUrl: string, tenantId: string, options?: SpatulaApiClientOptions) {
     // Strip trailing slash so callers don't need to worry about it
     this.baseUrl = baseUrl.replace(/\/+$/, '');
     this.tenantId = tenantId;
+    this.apiKey = options?.apiKey;
   }
 
   // -----------------------------------------------------------------------
@@ -266,10 +277,14 @@ export class SpatulaApiClient {
   // -----------------------------------------------------------------------
 
   private headers(): Record<string, string> {
-    return {
+    const h: Record<string, string> = {
       'Content-Type': 'application/json',
       'x-tenant-id': this.tenantId,
     };
+    if (this.apiKey) {
+      h.Authorization = `Bearer ${this.apiKey}`;
+    }
+    return h;
   }
 
   /**
