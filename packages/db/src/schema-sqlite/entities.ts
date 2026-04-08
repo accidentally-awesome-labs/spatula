@@ -21,6 +21,7 @@ export const entities = sqliteTable(
     // Local extensions
     sourceCount: integer('source_count').default(0),
     updatedAt: text('updated_at'),
+    runId: text('run_id'),
   },
   (table) => [
     index('sl_entities_job_quality_idx').on(table.jobId, table.qualityScore),
