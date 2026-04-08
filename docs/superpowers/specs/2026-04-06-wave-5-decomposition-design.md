@@ -400,11 +400,12 @@ Wave 5 covers 2 workstreams:
    - Add toggle keybinding (e.g., `[f]` for filter) cycling: All → Local only → Remote only
    - Filter passed to `DataSource.getEntities()` query
 
-8. **`--include-extractions` and `--include-actions` flags** — Optional pull of extraction records and action history. Default: off (entities + schema + usage only).
+8. ~~**`--include-extractions` and `--include-actions` flags**~~ — **Deferred to 5-6.** Optional pull of extraction records and action history. Rationale: these are explicitly optional, add significant complexity (extraction records have FK dependencies on raw_pages which don't exist locally), and the primary pull use case (entities + schema + usage) is complete without them.
 
 **New env vars:** None.
 
 **Spec references:** Phase 13, Sections 9.1–9.7
+**Detailed design:** `docs/superpowers/specs/2026-04-08-wave-5-5-pull-flow-design.md`
 
 ---
 
@@ -437,9 +438,15 @@ Wave 5 covers 2 workstreams:
    - Map table columns to schema fields when column headers match field names
    - Falls back to raw table data when no schema match
 
+5. **`spatula pull --include-extractions` and `--include-actions` flags** (deferred from 5-5):
+   - Optional pull of extraction records and action history alongside entities
+   - Default: off (entities + schema + usage only)
+   - Extraction pull requires handling FK dependencies on raw_pages (which don't exist locally)
+   - Action pull imports the action history for review in the local explorer
+
 **New env vars:** None.
 
-**Spec references:** Mixed (deferred from Waves 2-4)
+**Spec references:** Mixed (deferred from Waves 2-5)
 
 ---
 
