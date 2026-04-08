@@ -539,6 +539,39 @@ yargs(hideBin(process.argv))
     },
   )
 
+  // -------------------------------------------------------------------------
+  // pull — pull entities and schema from a remote server
+  // -------------------------------------------------------------------------
+  .command(
+    'pull [remote]',
+    'Pull entities and schema from a remote Spatula server to the local project',
+    (y) =>
+      y
+        .positional('remote', {
+          type: 'string',
+          default: 'default',
+          describe: 'Remote name (from `spatula remote add`)',
+        })
+        .option('full', {
+          type: 'boolean',
+          default: false,
+          describe: 'Force complete re-pull (clear previously-pulled entities)',
+        })
+        .option('restart', {
+          type: 'boolean',
+          default: false,
+          describe: 'Clear interrupted pull cursor and start fresh',
+        }),
+    async (argv) => {
+      const { handlePullCommand } = await import('./commands/pull.js');
+      await handlePullCommand({
+        remoteName: argv.remote as string,
+        full: argv.full,
+        restart: argv.restart,
+      });
+    },
+  )
+
   .demandCommand(1, 'Please specify a command. Run with --help to see available commands.')
   .strict()
   .help()
