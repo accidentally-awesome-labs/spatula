@@ -201,4 +201,742 @@ describe('runPullCommand', () => {
 
     expect(mockDeleteByRunIds).toHaveBeenCalled();
   });
+
+  // -------------------------------------------------------------------------
+  // Error resilience tests
+  // -------------------------------------------------------------------------
+
+  it('returns failure when getJob throws a network error', async () => {
+    mockMetaGet.mockImplementation(async (key: string) => {
+      if (key === 'remote:prod:job_id') return 'remote-job-1';
+      return null;
+    });
+
+    vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new Error('DNS resolution failed')));
+
+    const result = await runPullCommand({
+      remoteName: 'prod',
+      metaGet: mockMetaGet,
+      metaSet: mockMetaSet,
+      metaDelete: mockMetaDelete,
+      adapter: buildMockAdapter() as any,
+      projectId: 'test-project',
+      projectRoot: '/tmp/test',
+    });
+
+    expect(result.success).toBe(false);
+    expect(result.error).toContain('DNS resolution failed');
+  });
+
+  it('preserves cursor from first batch when second entity batch throws', async () => {
+    mockMetaGet.mockImplementation(async (key: string) => {
+      if (key === 'remote:prod:job_id') return 'remote-job-1';
+      return null;
+    });
+    mockUpsertBatch.mockResolvedValue({ inserted: 3, updated: 0 });
+
+    let entityCallCount = 0;
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockImplementation(async (url: string) => {
+        if ((url as string).includes('/entities')) {
+          entityCallCount++;
+          if (entityCallCount === 2) throw new Error('Network lost');
+          return {
+            ok: true,
+            status: 200,
+            json: () =>
+              Promise.resolve({
+                data: [
+                  { id: 'e1', mergedData: { title: 'A' }, provenance: {}, categories: [], qualityScore: 0.9, tenantId: 't1', jobId: 'remote-job-1' },
+                ],
+                pagination: { nextCursor: 'cur-2', hasMore: true, total: 10 },
+              }),
+          };
+        }
+        // getJob
+        if ((url as string).includes('/jobs/')) {
+          return {
+            ok: true,
+            status: 200,
+            json: () => Promise.resolve({ data: { id: 'remote-job-1', status: 'completed' } }),
+          };
+        }
+        // getSchema
+        return {
+          ok: true,
+          status: 200,
+          json: () =>
+            Promise.resolve({
+              data: { version: 1, fields: [], fieldAliases: [], createdAt: '2026-01-01', parentVersion: null },
+            }),
+        };
+      }),
+    );
+
+    const result = await runPullCommand({
+      remoteName: 'prod',
+      metaGet: mockMetaGet,
+      metaSet: mockMetaSet,
+      metaDelete: mockMetaDelete,
+      adapter: buildMockAdapter() as any,
+      projectId: 'test-project',
+      projectRoot: '/tmp/test',
+    });
+
+    expect(result.success).toBe(false);
+    expect(result.entitiesInserted).toBe(3);
+    // cursor from the first batch should have been checkpointed
+    expect(mockMetaSet).toHaveBeenCalledWith('remote:prod:pull_cursor', 'cur-2');
+  });
+
+  it('continues entity pull even when schema fetch throws', async () => {
+    mockMetaGet.mockImplementation(async (key: string) => {
+      if (key === 'remote:prod:job_id') return 'remote-job-1';
+      return null;
+    });
+
+    let schemaFetched = false;
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockImplementation(async (url: string) => {
+        if ((url as string).includes('/schema')) {
+          schemaFetched = true;
+          throw new Error('Schema endpoint down');
+        }
+        if ((url as string).includes('/entities')) {
+          return {
+            ok: true,
+            status: 200,
+            json: () =>
+              Promise.resolve({
+                data: [{ id: 'e1', mergedData: {}, provenance: {}, categories: [], qualityScore: 0.8, tenantId: 't1', jobId: 'remote-job-1' }],
+                pagination: { hasMore: false, total: 1 },
+              }),
+          };
+        }
+        if ((url as string).includes('/usage')) {
+          return {
+            ok: true,
+            status: 200,
+            json: () =>
+              Promise.resolve({ data: { period: {}, totalTokens: 0, totalCostUsd: 0, byModel: {}, byPurpose: {}, byJob: [] } }),
+          };
+        }
+        // getJob
+        return {
+          ok: true,
+          status: 200,
+          json: () => Promise.resolve({ data: { id: 'remote-job-1', status: 'completed' } }),
+        };
+      }),
+    );
+
+    const result = await runPullCommand({
+      remoteName: 'prod',
+      metaGet: mockMetaGet,
+      metaSet: mockMetaSet,
+      metaDelete: mockMetaDelete,
+      adapter: buildMockAdapter() as any,
+      projectId: 'test-project',
+      projectRoot: '/tmp/test',
+    });
+
+    expect(schemaFetched).toBe(true);
+    expect(result.success).toBe(true);
+    expect(result.schemaFieldsAdded).toBe(0);
+    expect(mockUpsertBatch).toHaveBeenCalled();
+  });
+
+  it('still succeeds and returns llmTokens=0 when usage fetch throws', async () => {
+    mockMetaGet.mockImplementation(async (key: string) => {
+      if (key === 'remote:prod:job_id') return 'remote-job-1';
+      return null;
+    });
+
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockImplementation(async (url: string) => {
+        if ((url as string).includes('/usage')) throw new Error('Usage service unavailable');
+        if ((url as string).includes('/entities')) {
+          return {
+            ok: true,
+            status: 200,
+            json: () =>
+              Promise.resolve({
+                data: [],
+                pagination: { hasMore: false, total: 0 },
+              }),
+          };
+        }
+        if ((url as string).includes('/schema')) {
+          return {
+            ok: true,
+            status: 200,
+            json: () =>
+              Promise.resolve({
+                data: { version: 1, fields: [], fieldAliases: [], createdAt: '2026-01-01', parentVersion: null },
+              }),
+          };
+        }
+        // getJob
+        return {
+          ok: true,
+          status: 200,
+          json: () => Promise.resolve({ data: { id: 'remote-job-1', status: 'completed' } }),
+        };
+      }),
+    );
+
+    const result = await runPullCommand({
+      remoteName: 'prod',
+      metaGet: mockMetaGet,
+      metaSet: mockMetaSet,
+      metaDelete: mockMetaDelete,
+      adapter: buildMockAdapter() as any,
+      projectId: 'test-project',
+      projectRoot: '/tmp/test',
+    });
+
+    expect(result.success).toBe(true);
+    expect(result.llmTokens).toBe(0);
+  });
+
+  // -------------------------------------------------------------------------
+  // Schema resolution tests
+  // -------------------------------------------------------------------------
+
+  it('creates schema when no local schema exists and remote has fields', async () => {
+    mockMetaGet.mockImplementation(async (key: string) => {
+      if (key === 'remote:prod:job_id') return 'remote-job-1';
+      return null;
+    });
+    // schemaFindLatest returns null (already the default reset value)
+
+    mockFetchSequence([
+      // getJob
+      { data: { id: 'remote-job-1', status: 'completed' } },
+      // getSchema — 2 fields
+      {
+        data: {
+          version: 2,
+          fields: [
+            { name: 'title', type: 'string', required: true, description: '' },
+            { name: 'remote_field', type: 'number', required: false, description: '' },
+          ],
+          fieldAliases: [],
+          createdAt: '2026-01-01',
+          parentVersion: null,
+        },
+      },
+      // getEntitiesStreamPaginated
+      { data: [], pagination: { hasMore: false, total: 0 } },
+      // getUsage
+      { data: { period: {}, totalTokens: 0, totalCostUsd: 0, byModel: {}, byPurpose: {}, byJob: [] } },
+    ]);
+
+    const result = await runPullCommand({
+      remoteName: 'prod',
+      metaGet: mockMetaGet,
+      metaSet: mockMetaSet,
+      metaDelete: mockMetaDelete,
+      adapter: buildMockAdapter() as any,
+      projectId: 'test-project',
+      projectRoot: '/tmp/test',
+    });
+
+    expect(result.success).toBe(true);
+    expect(mockSchemaCreate).toHaveBeenCalled();
+    expect(result.schemaFieldsAdded).toBe(2);
+    expect(result.newFields).toHaveLength(2);
+    expect(result.newFields?.map((f) => f.name)).toContain('title');
+    expect(result.newFields?.map((f) => f.name)).toContain('remote_field');
+  });
+
+  it('creates new schema version with remote definition when conflict resolves as remote', async () => {
+    mockMetaGet.mockImplementation(async (key: string) => {
+      if (key === 'remote:prod:job_id') return 'remote-job-1';
+      return null;
+    });
+    mockSchemaFindLatest.mockResolvedValue({
+      id: 'local-schema-1',
+      version: 1,
+      definition: {
+        version: 1,
+        fields: [
+          { name: 'title', type: 'string', required: true, description: '' },
+          { name: 'local_field', type: 'string', required: false, description: '' },
+        ],
+        fieldAliases: [],
+        createdAt: '2026-01-01',
+        parentVersion: null,
+      },
+    });
+
+    mockFetchSequence([
+      { data: { id: 'remote-job-1', status: 'completed' } },
+      {
+        data: {
+          version: 2,
+          fields: [
+            { name: 'title', type: 'string', required: true, description: '' },
+            { name: 'remote_field', type: 'number', required: false, description: '' },
+          ],
+          fieldAliases: [],
+          createdAt: '2026-01-01',
+          parentVersion: null,
+        },
+      },
+      { data: [], pagination: { hasMore: false, total: 0 } },
+      { data: { period: {}, totalTokens: 0, totalCostUsd: 0, byModel: {}, byPurpose: {}, byJob: [] } },
+    ]);
+
+    const result = await runPullCommand({
+      remoteName: 'prod',
+      metaGet: mockMetaGet,
+      metaSet: mockMetaSet,
+      metaDelete: mockMetaDelete,
+      adapter: buildMockAdapter() as any,
+      projectId: 'test-project',
+      projectRoot: '/tmp/test',
+      resolveSchemaConflict: vi.fn().mockResolvedValue('remote'),
+    });
+
+    expect(result.success).toBe(true);
+    expect(mockSchemaCreate).toHaveBeenCalledWith(
+      expect.objectContaining({ version: 2, parentId: 'local-schema-1' }),
+    );
+    // remoteOnly = ['remote_field'], changed = [] (title is identical), localOnly = ['local_field']
+    expect(result.newFields?.map((f) => f.name)).toContain('remote_field');
+  });
+
+  it('creates merged schema when conflict resolves as merge', async () => {
+    mockMetaGet.mockImplementation(async (key: string) => {
+      if (key === 'remote:prod:job_id') return 'remote-job-1';
+      return null;
+    });
+    mockSchemaFindLatest.mockResolvedValue({
+      id: 'local-schema-1',
+      version: 1,
+      definition: {
+        version: 1,
+        fields: [
+          { name: 'title', type: 'string', required: true, description: '' },
+          { name: 'local_field', type: 'string', required: false, description: '' },
+        ],
+        fieldAliases: [],
+        createdAt: '2026-01-01',
+        parentVersion: null,
+      },
+    });
+
+    mockFetchSequence([
+      { data: { id: 'remote-job-1', status: 'completed' } },
+      {
+        data: {
+          version: 2,
+          fields: [
+            { name: 'title', type: 'string', required: true, description: '' },
+            { name: 'remote_field', type: 'number', required: false, description: '' },
+          ],
+          fieldAliases: [],
+          createdAt: '2026-01-01',
+          parentVersion: null,
+        },
+      },
+      { data: [], pagination: { hasMore: false, total: 0 } },
+      { data: { period: {}, totalTokens: 0, totalCostUsd: 0, byModel: {}, byPurpose: {}, byJob: [] } },
+    ]);
+
+    const result = await runPullCommand({
+      remoteName: 'prod',
+      metaGet: mockMetaGet,
+      metaSet: mockMetaSet,
+      metaDelete: mockMetaDelete,
+      adapter: buildMockAdapter() as any,
+      projectId: 'test-project',
+      projectRoot: '/tmp/test',
+      resolveSchemaConflict: vi.fn().mockResolvedValue('merge'),
+    });
+
+    expect(result.success).toBe(true);
+    expect(mockSchemaCreate).toHaveBeenCalledWith(
+      expect.objectContaining({
+        version: 2,
+        parentId: 'local-schema-1',
+        definition: expect.objectContaining({
+          fields: expect.arrayContaining([
+            expect.objectContaining({ name: 'title' }),
+            expect.objectContaining({ name: 'remote_field' }),
+            expect.objectContaining({ name: 'local_field' }),
+          ]),
+        }),
+      }),
+    );
+  });
+
+  it('does not create schema when conflict resolves as local', async () => {
+    mockMetaGet.mockImplementation(async (key: string) => {
+      if (key === 'remote:prod:job_id') return 'remote-job-1';
+      return null;
+    });
+    mockSchemaFindLatest.mockResolvedValue({
+      id: 'local-schema-1',
+      version: 1,
+      definition: {
+        version: 1,
+        fields: [
+          { name: 'title', type: 'string', required: true, description: '' },
+          { name: 'local_field', type: 'string', required: false, description: '' },
+        ],
+        fieldAliases: [],
+        createdAt: '2026-01-01',
+        parentVersion: null,
+      },
+    });
+
+    mockFetchSequence([
+      { data: { id: 'remote-job-1', status: 'completed' } },
+      {
+        data: {
+          version: 2,
+          fields: [
+            { name: 'title', type: 'string', required: true, description: '' },
+            { name: 'remote_field', type: 'number', required: false, description: '' },
+          ],
+          fieldAliases: [],
+          createdAt: '2026-01-01',
+          parentVersion: null,
+        },
+      },
+      { data: [], pagination: { hasMore: false, total: 0 } },
+      { data: { period: {}, totalTokens: 0, totalCostUsd: 0, byModel: {}, byPurpose: {}, byJob: [] } },
+    ]);
+
+    const result = await runPullCommand({
+      remoteName: 'prod',
+      metaGet: mockMetaGet,
+      metaSet: mockMetaSet,
+      metaDelete: mockMetaDelete,
+      adapter: buildMockAdapter() as any,
+      projectId: 'test-project',
+      projectRoot: '/tmp/test',
+      resolveSchemaConflict: vi.fn().mockResolvedValue('local'),
+    });
+
+    expect(result.success).toBe(true);
+    expect(mockSchemaCreate).not.toHaveBeenCalled();
+    expect(result.schemaFieldsAdded).toBe(0);
+  });
+
+  // -------------------------------------------------------------------------
+  // Incremental pull tests
+  // -------------------------------------------------------------------------
+
+  it('passes since param when last_pull_at is set in meta', async () => {
+    const lastPullAt = '2026-03-01T00:00:00.000Z';
+    mockMetaGet.mockImplementation(async (key: string) => {
+      if (key === 'remote:prod:job_id') return 'remote-job-1';
+      if (key === 'remote:prod:last_pull_at') return lastPullAt;
+      return null;
+    });
+
+    const capturedUrls: string[] = [];
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockImplementation(async (url: string) => {
+        capturedUrls.push(url as string);
+        if ((url as string).includes('/entities')) {
+          return {
+            ok: true,
+            status: 200,
+            json: () => Promise.resolve({ data: [], pagination: { hasMore: false, total: 0 } }),
+          };
+        }
+        if ((url as string).includes('/schema')) {
+          return {
+            ok: true,
+            status: 200,
+            json: () =>
+              Promise.resolve({
+                data: { version: 1, fields: [], fieldAliases: [], createdAt: '2026-01-01', parentVersion: null },
+              }),
+          };
+        }
+        if ((url as string).includes('/usage')) {
+          return {
+            ok: true,
+            status: 200,
+            json: () =>
+              Promise.resolve({ data: { period: {}, totalTokens: 0, totalCostUsd: 0, byModel: {}, byPurpose: {}, byJob: [] } }),
+          };
+        }
+        // getJob
+        return {
+          ok: true,
+          status: 200,
+          json: () => Promise.resolve({ data: { id: 'remote-job-1', status: 'completed' } }),
+        };
+      }),
+    );
+
+    const result = await runPullCommand({
+      remoteName: 'prod',
+      metaGet: mockMetaGet,
+      metaSet: mockMetaSet,
+      metaDelete: mockMetaDelete,
+      adapter: buildMockAdapter() as any,
+      projectId: 'test-project',
+      projectRoot: '/tmp/test',
+    });
+
+    expect(result.success).toBe(true);
+    const entityUrl = capturedUrls.find((u) => u.includes('/entities'));
+    expect(entityUrl).toBeDefined();
+    expect(entityUrl).toContain(`since=${encodeURIComponent(lastPullAt)}`);
+  });
+
+  it('does not pass since param when no last_pull_at in meta', async () => {
+    mockMetaGet.mockImplementation(async (key: string) => {
+      if (key === 'remote:prod:job_id') return 'remote-job-1';
+      return null;
+    });
+
+    const capturedUrls: string[] = [];
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockImplementation(async (url: string) => {
+        capturedUrls.push(url as string);
+        if ((url as string).includes('/entities')) {
+          return {
+            ok: true,
+            status: 200,
+            json: () => Promise.resolve({ data: [], pagination: { hasMore: false, total: 0 } }),
+          };
+        }
+        if ((url as string).includes('/schema')) {
+          return {
+            ok: true,
+            status: 200,
+            json: () =>
+              Promise.resolve({
+                data: { version: 1, fields: [], fieldAliases: [], createdAt: '2026-01-01', parentVersion: null },
+              }),
+          };
+        }
+        if ((url as string).includes('/usage')) {
+          return {
+            ok: true,
+            status: 200,
+            json: () =>
+              Promise.resolve({ data: { period: {}, totalTokens: 0, totalCostUsd: 0, byModel: {}, byPurpose: {}, byJob: [] } }),
+          };
+        }
+        return {
+          ok: true,
+          status: 200,
+          json: () => Promise.resolve({ data: { id: 'remote-job-1', status: 'completed' } }),
+        };
+      }),
+    );
+
+    const result = await runPullCommand({
+      remoteName: 'prod',
+      metaGet: mockMetaGet,
+      metaSet: mockMetaSet,
+      metaDelete: mockMetaDelete,
+      adapter: buildMockAdapter() as any,
+      projectId: 'test-project',
+      projectRoot: '/tmp/test',
+    });
+
+    expect(result.success).toBe(true);
+    const entityUrl = capturedUrls.find((u) => u.includes('/entities'));
+    expect(entityUrl).toBeDefined();
+    expect(entityUrl).not.toContain('since=');
+  });
+
+  // -------------------------------------------------------------------------
+  // Flag tests
+  // -------------------------------------------------------------------------
+
+  it('clears interrupted cursor and sets resumed=false when --restart is used', async () => {
+    mockMetaGet.mockImplementation(async (key: string) => {
+      if (key === 'remote:prod:job_id') return 'remote-job-1';
+      if (key === 'remote:prod:pull_cursor') return 'old-cursor-xyz';
+      return null;
+    });
+
+    mockFetchSequence([
+      { data: { id: 'remote-job-1', status: 'completed' } },
+      { data: { version: 1, fields: [], fieldAliases: [], createdAt: '2026-01-01', parentVersion: null } },
+      { data: [], pagination: { hasMore: false, total: 0 } },
+      { data: { period: {}, totalTokens: 0, totalCostUsd: 0, byModel: {}, byPurpose: {}, byJob: [] } },
+    ]);
+
+    const result = await runPullCommand({
+      remoteName: 'prod',
+      metaGet: mockMetaGet,
+      metaSet: mockMetaSet,
+      metaDelete: mockMetaDelete,
+      adapter: buildMockAdapter() as any,
+      projectId: 'test-project',
+      projectRoot: '/tmp/test',
+      restart: true,
+    });
+
+    expect(result.success).toBe(true);
+    expect(result.resumed).toBe(false);
+    expect(mockMetaDelete).toHaveBeenCalledWith('remote:prod:pull_cursor');
+  });
+
+  it('clears metadata and deletes old entities on --full', async () => {
+    mockMetaGet.mockImplementation(async (key: string) => {
+      if (key === 'remote:prod:job_id') return 'remote-job-1';
+      return null;
+    });
+    mockFindIdsBySourcePrefix.mockResolvedValue(['run-a', 'run-b', 'run-c']);
+
+    mockFetchSequence([
+      { data: { id: 'remote-job-1', status: 'completed' } },
+      { data: { version: 1, fields: [], fieldAliases: [], createdAt: '2026-01-01', parentVersion: null } },
+      { data: [], pagination: { hasMore: false, total: 0 } },
+      { data: { period: {}, totalTokens: 0, totalCostUsd: 0, byModel: {}, byPurpose: {}, byJob: [] } },
+    ]);
+
+    await runPullCommand({
+      remoteName: 'prod',
+      metaGet: mockMetaGet,
+      metaSet: mockMetaSet,
+      metaDelete: mockMetaDelete,
+      adapter: buildMockAdapter() as any,
+      projectId: 'test-project',
+      projectRoot: '/tmp/test',
+      full: true,
+    });
+
+    expect(mockDeleteByRunIds).toHaveBeenCalledWith(['run-a', 'run-b', 'run-c']);
+    expect(mockMetaDelete).toHaveBeenCalledWith('remote:prod:pull_cursor');
+    expect(mockMetaDelete).toHaveBeenCalledWith('remote:prod:last_pull_at');
+  });
+
+  it('clears cursor, entities, and metadata when both --full and --restart are used', async () => {
+    mockMetaGet.mockImplementation(async (key: string) => {
+      if (key === 'remote:prod:job_id') return 'remote-job-1';
+      if (key === 'remote:prod:pull_cursor') return 'stale-cursor';
+      return null;
+    });
+    mockFindIdsBySourcePrefix.mockResolvedValue(['run-old']);
+
+    mockFetchSequence([
+      { data: { id: 'remote-job-1', status: 'completed' } },
+      { data: { version: 1, fields: [], fieldAliases: [], createdAt: '2026-01-01', parentVersion: null } },
+      { data: [], pagination: { hasMore: false, total: 0 } },
+      { data: { period: {}, totalTokens: 0, totalCostUsd: 0, byModel: {}, byPurpose: {}, byJob: [] } },
+    ]);
+
+    const result = await runPullCommand({
+      remoteName: 'prod',
+      metaGet: mockMetaGet,
+      metaSet: mockMetaSet,
+      metaDelete: mockMetaDelete,
+      adapter: buildMockAdapter() as any,
+      projectId: 'test-project',
+      projectRoot: '/tmp/test',
+      full: true,
+      restart: true,
+    });
+
+    expect(result.success).toBe(true);
+    expect(result.resumed).toBe(false);
+    expect(mockDeleteByRunIds).toHaveBeenCalledWith(['run-old']);
+    // pull_cursor deleted by restart path AND full path
+    expect(mockMetaDelete).toHaveBeenCalledWith('remote:prod:pull_cursor');
+    expect(mockMetaDelete).toHaveBeenCalledWith('remote:prod:last_pull_at');
+  });
+
+  // -------------------------------------------------------------------------
+  // Running job tests
+  // -------------------------------------------------------------------------
+
+  it('returns error with jobStatus when job is running and no resolveRunningJob callback', async () => {
+    mockMetaGet.mockImplementation(async (key: string) => {
+      if (key === 'remote:prod:job_id') return 'remote-job-1';
+      return null;
+    });
+
+    mockFetchSequence([
+      { data: { id: 'remote-job-1', status: 'running', stats: { pagesProcessed: 5 } } },
+    ]);
+
+    const result = await runPullCommand({
+      remoteName: 'prod',
+      metaGet: mockMetaGet,
+      metaSet: mockMetaSet,
+      metaDelete: mockMetaDelete,
+      adapter: buildMockAdapter() as any,
+      projectId: 'test-project',
+      projectRoot: '/tmp/test',
+    });
+
+    expect(result.success).toBe(false);
+    expect(result.jobStatus).toBe('running');
+    expect(result.error).toContain('running');
+  });
+
+  it('proceeds with pull when running job resolves as snapshot', async () => {
+    mockMetaGet.mockImplementation(async (key: string) => {
+      if (key === 'remote:prod:job_id') return 'remote-job-1';
+      return null;
+    });
+
+    mockFetchSequence([
+      // getJob — running
+      { data: { id: 'remote-job-1', status: 'running', stats: { pagesProcessed: 7 } } },
+      // getSchema
+      { data: { version: 1, fields: [], fieldAliases: [], createdAt: '2026-01-01', parentVersion: null } },
+      // entities
+      { data: [], pagination: { hasMore: false, total: 0 } },
+      // usage
+      { data: { period: {}, totalTokens: 0, totalCostUsd: 0, byModel: {}, byPurpose: {}, byJob: [] } },
+    ]);
+
+    const result = await runPullCommand({
+      remoteName: 'prod',
+      metaGet: mockMetaGet,
+      metaSet: mockMetaSet,
+      metaDelete: mockMetaDelete,
+      adapter: buildMockAdapter() as any,
+      projectId: 'test-project',
+      projectRoot: '/tmp/test',
+      resolveRunningJob: vi.fn().mockResolvedValue('snapshot'),
+    });
+
+    expect(result.success).toBe(true);
+  });
+
+  it('returns cancelled error when running job resolves as cancel', async () => {
+    mockMetaGet.mockImplementation(async (key: string) => {
+      if (key === 'remote:prod:job_id') return 'remote-job-1';
+      return null;
+    });
+
+    mockFetchSequence([
+      { data: { id: 'remote-job-1', status: 'running', stats: {} } },
+    ]);
+
+    const result = await runPullCommand({
+      remoteName: 'prod',
+      metaGet: mockMetaGet,
+      metaSet: mockMetaSet,
+      metaDelete: mockMetaDelete,
+      adapter: buildMockAdapter() as any,
+      projectId: 'test-project',
+      projectRoot: '/tmp/test',
+      resolveRunningJob: vi.fn().mockResolvedValue('cancel'),
+    });
+
+    expect(result.success).toBe(false);
+    expect(result.error).toContain('cancel');
+  });
 });
