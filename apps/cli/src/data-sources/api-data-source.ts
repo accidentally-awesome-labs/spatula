@@ -3,7 +3,6 @@ import type {
   PaginationQuery,
   PaginatedResult,
   ProjectStatus,
-  DataEvent,
 } from '@spatula/core';
 import type { Entity } from '@spatula/shared';
 import type { SpatulaApiClient } from '../api/client.js';
