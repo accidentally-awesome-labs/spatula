@@ -34,7 +34,7 @@ import { runResetCommand, formatResetResult } from './commands/reset.js';
 import { runDoctorCommand } from './commands/doctor.js';
 import { runAddCommand, formatAddResult } from './commands/add.js';
 import { runConfigCommand } from './commands/config.js';
-import { runRemoteAdd, runRemoteList, runRemoteRemove, runRemoteStatus, runRemoteJobAction } from './commands/remote.js';
+import { handleRemoteCommand } from './commands/remote.js';
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -497,130 +497,12 @@ yargs(hideBin(process.argv))
           describe: 'API key (for add)',
         }),
     async (argv) => {
-      const action = argv.action as string;
-      const name = argv.name as string | undefined;
-
-      if (action === 'list') {
-        let metaGet: ((key: string) => Promise<string | null>) | undefined;
-        let closeProject: (() => void) | undefined;
-        try {
-          const { openLocalProject } = await import('./local-project.js');
-          const project = await openLocalProject(process.cwd());
-          metaGet = (key) => project.metaRepo.get(key);
-          closeProject = () => project.close();
-        } catch { /* Not in a project directory */ }
-
-        try {
-          const result = await runRemoteList(metaGet);
-          if (result.remotes.length === 0) {
-            console.log('  No remotes configured. Run `spatula remote add <name>` to add one.');
-            return;
-          }
-          console.log('\n  Configured remotes:\n');
-          for (const r of result.remotes) {
-            const keyStatus = r.hasApiKey ? '(authenticated)' : '(no key)';
-            const jobInfo = r.jobId ? ` → job ${r.jobId.slice(0, 8)} (${r.jobStatus})` : '';
-            console.log(`    ${r.name}  ${r.url}  ${keyStatus}${jobInfo}`);
-          }
-          console.log('');
-        } finally {
-          closeProject?.();
-        }
-        return;
-      }
-
-      if (!name) {
-        console.error('Error: remote name is required for this action.');
-        process.exit(1);
-      }
-
-      if (action === 'add') {
-        const url = argv.url;
-        const apiKey = argv.key;
-        if (!url || !apiKey) {
-          console.error('Error: --url and --key are required for `remote add`.');
-          process.exit(1);
-        }
-        const result = await runRemoteAdd({ name, url, apiKey });
-        if (result.success) {
-          console.log(`\n  Remote "${name}" added (plan: ${result.plan ?? 'unknown'}).`);
-        } else {
-          console.error(`\n  Error: ${result.error}`);
-          process.exit(1);
-        }
-        return;
-      }
-
-      if (action === 'remove') {
-        let metaDeleteByPrefix: ((prefix: string) => Promise<void>) | undefined;
-        let closeProject: (() => void) | undefined;
-        try {
-          const { openLocalProject } = await import('./local-project.js');
-          const project = await openLocalProject(process.cwd());
-          metaDeleteByPrefix = (prefix) => project.metaRepo.deleteByPrefix(prefix);
-          closeProject = () => project.close();
-        } catch { /* Not in a project directory */ }
-
-        try {
-          const result = await runRemoteRemove(name, metaDeleteByPrefix);
-          if (result.success) {
-            console.log(`\n  Remote "${name}" removed.`);
-          } else {
-            console.error(`\n  Error: ${result.error}`);
-            process.exit(1);
-          }
-        } finally {
-          closeProject?.();
-        }
-        return;
-      }
-
-      // Actions that need project context (status, pause, resume, cancel, watch)
-      const { openLocalProject } = await import('./local-project.js');
-      let project;
-      try {
-        project = await openLocalProject(process.cwd());
-      } catch (err) {
-        console.error((err as Error).message);
-        process.exit(1);
-        return;
-      }
-
-      try {
-        const metaGet = (key: string) => project.metaRepo.get(key);
-
-        if (action === 'status') {
-          const result = await runRemoteStatus(name, metaGet);
-          if (result.success && result.data) {
-            const d = result.data;
-            console.log(`\n  Job: ${d.id}`);
-            console.log(`  Status: ${d.status}`);
-            if (d.pagesCompleted !== undefined) console.log(`  Pages: ${d.pagesCompleted}/${d.pagesDiscovered ?? '?'}`);
-            if (d.entitiesExtracted !== undefined) console.log(`  Entities: ${d.entitiesExtracted}`);
-            console.log('');
-          } else {
-            console.error(`\n  Error: ${result.error}`);
-            process.exit(1);
-          }
-        } else if (action === 'watch') {
-          const { runRemoteWatchCommand } = await import('./commands/remote-watch.js');
-          await runRemoteWatchCommand(name, metaGet);
-        } else if (['pause', 'resume', 'cancel'].includes(action)) {
-          const result = await runRemoteJobAction(
-            name,
-            action as 'pause' | 'resume' | 'cancel',
-            metaGet,
-          );
-          if (result.success) {
-            console.log(`\n  Job ${action}d successfully.`);
-          } else {
-            console.error(`\n  Error: ${result.error}`);
-            process.exit(1);
-          }
-        }
-      } finally {
-        project.close();
-      }
+      await handleRemoteCommand({
+        action: argv.action as string,
+        name: argv.name as string | undefined,
+        url: argv.url,
+        key: argv.key,
+      });
     },
   )
 
@@ -648,49 +530,12 @@ yargs(hideBin(process.argv))
           describe: 'Create new job even if an active job exists',
         }),
     async (argv) => {
-      const remoteName = argv.remote as string;
-
-      const { openLocalProject } = await import('./local-project.js');
-      const { runPushCommand } = await import('./commands/push.js');
-
-      let project;
-      try {
-        project = await openLocalProject(process.cwd());
-      } catch (err) {
-        console.error((err as Error).message);
-        process.exit(1);
-        return;
-      }
-
-      try {
-        const result = await runPushCommand({
-          remoteName,
-          projectRoot: project.projectRoot,
-          metaGet: (key) => project.metaRepo.get(key),
-          metaSet: (key, value) => project.metaRepo.set(key, value),
-          autoStart: argv.start,
-          forceNew: argv.force,
-        });
-
-        if (result.success) {
-          console.log(`\n  Job created: ${result.jobId}`);
-          if (result.started) {
-            console.log('  Crawling started. Use `spatula remote watch` to monitor progress.');
-          } else {
-            console.log('  Use `spatula remote status` to check, or pass --start to begin crawling.');
-          }
-          console.log('');
-        } else if (result.conflict) {
-          console.error(`\n  Conflict: existing job ${result.existingJobId} is ${result.existingJobStatus}.`);
-          console.error('  Cancel it with `spatula remote cancel` or use `spatula push --force`.');
-          process.exit(1);
-        } else {
-          console.error(`\n  Error: ${result.error}`);
-          process.exit(1);
-        }
-      } finally {
-        project.close();
-      }
+      const { handlePushCommand } = await import('./commands/push.js');
+      await handlePushCommand({
+        remoteName: argv.remote as string,
+        start: argv.start,
+        force: argv.force,
+      });
     },
   )
 

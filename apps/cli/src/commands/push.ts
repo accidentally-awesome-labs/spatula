@@ -104,3 +104,56 @@ export async function runPushCommand(input: PushInput): Promise<PushResult> {
 
   return { success: true, jobId, started };
 }
+
+// ---------------------------------------------------------------------------
+// CLI handler — orchestrates project lifecycle around push
+// ---------------------------------------------------------------------------
+
+export interface PushCommandArgs {
+  remoteName: string;
+  start: boolean;
+  force: boolean;
+}
+
+export async function handlePushCommand(argv: PushCommandArgs): Promise<void> {
+  const { openLocalProject } = await import('../local-project.js');
+
+  let project;
+  try {
+    project = await openLocalProject(process.cwd());
+  } catch (err) {
+    console.error((err as Error).message);
+    process.exit(1);
+    return;
+  }
+
+  try {
+    const result = await runPushCommand({
+      remoteName: argv.remoteName,
+      projectRoot: project.projectRoot,
+      metaGet: (key) => project.metaRepo.get(key),
+      metaSet: (key, value) => project.metaRepo.set(key, value),
+      autoStart: argv.start,
+      forceNew: argv.force,
+    });
+
+    if (result.success) {
+      console.log(`\n  Job created: ${result.jobId}`);
+      if (result.started) {
+        console.log('  Crawling started. Use `spatula remote watch` to monitor progress.');
+      } else {
+        console.log('  Use `spatula remote status` to check, or pass --start to begin crawling.');
+      }
+      console.log('');
+    } else if (result.conflict) {
+      console.error(`\n  Conflict: existing job ${result.existingJobId} is ${result.existingJobStatus}.`);
+      console.error('  Cancel it with `spatula remote cancel` or use `spatula push --force`.');
+      process.exit(1);
+    } else {
+      console.error(`\n  Error: ${result.error}`);
+      process.exit(1);
+    }
+  } finally {
+    project.close();
+  }
+}

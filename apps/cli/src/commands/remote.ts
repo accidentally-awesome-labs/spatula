@@ -24,10 +24,6 @@ export interface RemoteEntry {
   hasApiKey: boolean;
 }
 
-export interface RemoteListResult {
-  remotes: RemoteEntry[];
-}
-
 export interface RemoteRemoveResult {
   success: boolean;
   error?: string;
@@ -215,3 +211,139 @@ export async function runRemoteJobAction(
 }
 
 export { getRemoteConfig, createRemoteClient };
+
+// ---------------------------------------------------------------------------
+// CLI handler — orchestrates sub-actions with project lifecycle
+// ---------------------------------------------------------------------------
+
+export interface RemoteCommandArgs {
+  action: string;
+  name?: string;
+  url?: string;
+  key?: string;
+}
+
+export async function handleRemoteCommand(argv: RemoteCommandArgs): Promise<void> {
+  const { action, name } = argv;
+
+  if (action === 'list') {
+    let metaGet: ((key: string) => Promise<string | null>) | undefined;
+    let closeProject: (() => void) | undefined;
+    try {
+      const { openLocalProject } = await import('../local-project.js');
+      const project = await openLocalProject(process.cwd());
+      metaGet = (key) => project.metaRepo.get(key);
+      closeProject = () => project.close();
+    } catch { /* Not in a project directory */ }
+
+    try {
+      const result = await runRemoteList(metaGet);
+      if (result.remotes.length === 0) {
+        console.log('  No remotes configured. Run `spatula remote add <name>` to add one.');
+        return;
+      }
+      console.log('\n  Configured remotes:\n');
+      for (const r of result.remotes) {
+        const keyStatus = r.hasApiKey ? '(authenticated)' : '(no key)';
+        const jobInfo = r.jobId ? ` → job ${r.jobId.slice(0, 8)} (${r.jobStatus})` : '';
+        console.log(`    ${r.name}  ${r.url}  ${keyStatus}${jobInfo}`);
+      }
+      console.log('');
+    } finally {
+      closeProject?.();
+    }
+    return;
+  }
+
+  if (!name) {
+    console.error('Error: remote name is required for this action.');
+    process.exit(1);
+  }
+
+  if (action === 'add') {
+    const { url, key: apiKey } = argv;
+    if (!url || !apiKey) {
+      console.error('Error: --url and --key are required for `remote add`.');
+      process.exit(1);
+    }
+    const result = await runRemoteAdd({ name, url, apiKey });
+    if (result.success) {
+      console.log(`\n  Remote "${name}" added (plan: ${result.plan ?? 'unknown'}).`);
+    } else {
+      console.error(`\n  Error: ${result.error}`);
+      process.exit(1);
+    }
+    return;
+  }
+
+  if (action === 'remove') {
+    let metaDeleteByPrefix: ((prefix: string) => Promise<void>) | undefined;
+    let closeProject: (() => void) | undefined;
+    try {
+      const { openLocalProject } = await import('../local-project.js');
+      const project = await openLocalProject(process.cwd());
+      metaDeleteByPrefix = (prefix) => project.metaRepo.deleteByPrefix(prefix);
+      closeProject = () => project.close();
+    } catch { /* Not in a project directory */ }
+
+    try {
+      const result = await runRemoteRemove(name, metaDeleteByPrefix);
+      if (result.success) {
+        console.log(`\n  Remote "${name}" removed.`);
+      } else {
+        console.error(`\n  Error: ${result.error}`);
+        process.exit(1);
+      }
+    } finally {
+      closeProject?.();
+    }
+    return;
+  }
+
+  // Actions that need project context (status, pause, resume, cancel, watch)
+  const { openLocalProject } = await import('../local-project.js');
+  let project;
+  try {
+    project = await openLocalProject(process.cwd());
+  } catch (err) {
+    console.error((err as Error).message);
+    process.exit(1);
+    return;
+  }
+
+  try {
+    const metaGet = (key: string) => project.metaRepo.get(key);
+
+    if (action === 'status') {
+      const result = await runRemoteStatus(name, metaGet);
+      if (result.success && result.data) {
+        const d = result.data;
+        console.log(`\n  Job: ${d.id}`);
+        console.log(`  Status: ${d.status}`);
+        if (d.pagesCompleted !== undefined) console.log(`  Pages: ${d.pagesCompleted}/${d.pagesDiscovered ?? '?'}`);
+        if (d.entitiesExtracted !== undefined) console.log(`  Entities: ${d.entitiesExtracted}`);
+        console.log('');
+      } else {
+        console.error(`\n  Error: ${result.error}`);
+        process.exit(1);
+      }
+    } else if (action === 'watch') {
+      const { runRemoteWatchCommand } = await import('./remote-watch.js');
+      await runRemoteWatchCommand(name, metaGet);
+    } else if (['pause', 'resume', 'cancel'].includes(action)) {
+      const result = await runRemoteJobAction(
+        name,
+        action as 'pause' | 'resume' | 'cancel',
+        metaGet,
+      );
+      if (result.success) {
+        console.log(`\n  Job ${action}d successfully.`);
+      } else {
+        console.error(`\n  Error: ${result.error}`);
+        process.exit(1);
+      }
+    }
+  } finally {
+    project.close();
+  }
+}
