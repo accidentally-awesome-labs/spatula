@@ -12,11 +12,12 @@
  * - count(*) uses plain sql`count(*)` — NO ::int cast (invalid in SQLite)
  * - UUIDs via crypto.randomUUID(), timestamps via new Date().toISOString()
  */
-import { eq, desc, sql } from 'drizzle-orm';
+import { eq, desc, sql, inArray } from 'drizzle-orm';
 import { createLogger } from '@spatula/shared';
 import type { EntityRepo, EntitySourceRepo } from '@spatula/core/pipeline/types.js';
 import type { ProjectDatabase } from '../connection.js';
 import { entities, entitySources } from '../../schema-sqlite/entities.js';
+import { runs } from '../../schema-sqlite/runs.js';
 import { wrapStorageError } from './utils.js';
 
 const logger = createLogger('sqlite:entity-repo');
@@ -112,6 +113,132 @@ export class SqliteEntityRepository implements EntityRepo {
       .all();
 
     return Number(result?.count ?? 0);
+  }
+
+  async upsertBatch(batch: Array<{
+    id: string;
+    mergedData: Record<string, unknown>;
+    provenance: Record<string, unknown>;
+    qualityScore: number;
+    categories: unknown[];
+    runId: string | null;
+  }>): Promise<{ inserted: number; updated: number }> {
+    if (batch.length === 0) return { inserted: 0, updated: 0 };
+
+    const countBefore = await this.countByJob(this.projectId, '');
+    const now = new Date().toISOString();
+
+    wrapStorageError(() => {
+      for (const entity of batch) {
+        this.db
+          .insert(entities)
+          .values({
+            id: entity.id,
+            jobId: this.projectId,
+            mergedData: entity.mergedData,
+            provenance: entity.provenance,
+            qualityScore: entity.qualityScore,
+            categories: entity.categories,
+            createdAt: now,
+            updatedAt: now,
+            runId: entity.runId,
+          })
+          .onConflictDoUpdate({
+            target: entities.id,
+            set: {
+              mergedData: entity.mergedData,
+              provenance: entity.provenance,
+              qualityScore: entity.qualityScore,
+              categories: entity.categories,
+              updatedAt: now,
+              runId: entity.runId,
+            },
+          })
+          .run();
+      }
+    }, { method: 'upsertBatch', table: 'entities' });
+
+    const countAfter = await this.countByJob(this.projectId, '');
+    const inserted = countAfter - countBefore;
+    const updated = batch.length - inserted;
+    return { inserted, updated };
+  }
+
+  async deleteByRunIds(runIds: string[]): Promise<number> {
+    if (runIds.length === 0) return 0;
+    const countBefore = await this.countByJob(this.projectId, '');
+    wrapStorageError(() => {
+      this.db.delete(entities).where(inArray(entities.runId, runIds)).run();
+    }, { method: 'deleteByRunIds', table: 'entities' });
+    const countAfter = await this.countByJob(this.projectId, '');
+    return countBefore - countAfter;
+  }
+
+  async countBySource(filter: 'all' | 'local' | 'remote'): Promise<number> {
+    if (filter === 'all') {
+      return this.countByJob(this.projectId, '');
+    }
+    let result: { count: number }[];
+    if (filter === 'local') {
+      result = this.db
+        .select({ count: sql<number>`count(*)` })
+        .from(entities)
+        .leftJoin(runs, eq(entities.runId, runs.id))
+        .where(sql`${entities.jobId} = ${this.projectId} AND (${entities.runId} IS NULL OR ${runs.source} = 'local')`)
+        .all();
+    } else {
+      result = this.db
+        .select({ count: sql<number>`count(*)` })
+        .from(entities)
+        .innerJoin(runs, eq(entities.runId, runs.id))
+        .where(sql`${entities.jobId} = ${this.projectId} AND ${runs.source} LIKE 'remote:%'`)
+        .all();
+    }
+    return Number(result[0]?.count ?? 0);
+  }
+
+  async findByJobFiltered(
+    _jobId: string,
+    _tenantId: string,
+    options?: { limit: number; offset: number; sourceFilter?: 'all' | 'local' | 'remote' },
+  ): Promise<unknown[]> {
+    const filter = options?.sourceFilter ?? 'all';
+    if (filter === 'all') {
+      return this.findByJob(_jobId, _tenantId, options);
+    }
+    let query;
+    if (filter === 'local') {
+      query = this.db
+        .select({
+          id: entities.id, jobId: entities.jobId,
+          mergedData: entities.mergedData, categories: entities.categories,
+          qualityScore: entities.qualityScore, createdAt: entities.createdAt,
+          sourceCount: entities.sourceCount,
+        })
+        .from(entities)
+        .leftJoin(runs, eq(entities.runId, runs.id))
+        .where(sql`${entities.jobId} = ${this.projectId} AND (${entities.runId} IS NULL OR ${runs.source} = 'local')`)
+        .orderBy(desc(entities.qualityScore));
+    } else {
+      query = this.db
+        .select({
+          id: entities.id, jobId: entities.jobId,
+          mergedData: entities.mergedData, categories: entities.categories,
+          qualityScore: entities.qualityScore, createdAt: entities.createdAt,
+          sourceCount: entities.sourceCount,
+        })
+        .from(entities)
+        .innerJoin(runs, eq(entities.runId, runs.id))
+        .where(sql`${entities.jobId} = ${this.projectId} AND ${runs.source} LIKE 'remote:%'`)
+        .orderBy(desc(entities.qualityScore));
+    }
+    if (options?.limit !== undefined) {
+      query = query.limit(options.limit) as typeof query;
+    }
+    if (options?.offset !== undefined) {
+      query = query.offset(options.offset) as typeof query;
+    }
+    return query.all();
   }
 }
 

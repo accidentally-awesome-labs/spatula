@@ -4,7 +4,7 @@
  * Tracks each invocation of `spatula run`. This is a local-only
  * repository: constructor takes only (db) with no projectId.
  */
-import { eq, desc, inArray } from 'drizzle-orm';
+import { eq, desc, inArray, like } from 'drizzle-orm';
 import type { ProjectDatabase } from '../connection.js';
 import { runs } from '../../schema-sqlite/runs.js';
 import { wrapStorageError } from './utils.js';
@@ -107,5 +107,14 @@ export class RunRepository {
       () => this.db.update(runs).set(stats).where(eq(runs.id, id)).run(),
       { operation: 'updateStats', table: 'runs', id },
     );
+  }
+
+  async findIdsBySourcePrefix(prefix: string): Promise<string[]> {
+    const rows = this.db
+      .select({ id: runs.id })
+      .from(runs)
+      .where(like(runs.source, `${prefix}%`))
+      .all();
+    return rows.map((r) => r.id);
   }
 }
