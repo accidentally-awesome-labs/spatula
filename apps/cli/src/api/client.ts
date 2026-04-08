@@ -291,6 +291,66 @@ export class SpatulaApiClient {
     return this.get(`/api/v1/jobs/${jobId}/entities`, query);
   }
 
+  /**
+   * Cursor-based entity fetch that preserves the full pagination envelope.
+   * Unlike getEntitiesStream(), this does NOT use this.get() because the
+   * generic request() helper strips the response down to json.data only.
+   */
+  async getEntitiesStreamPaginated(
+    jobId: string,
+    query?: { cursor?: string; since?: string; limit?: number },
+  ): Promise<{
+    data: Record<string, unknown>[];
+    pagination: { nextCursor?: string; hasMore: boolean; total: number };
+  }> {
+    const url = this.buildUrl(`/api/v1/jobs/${jobId}/entities`, {
+      ...(query?.cursor ? { cursor: query.cursor } : {}),
+      ...(query?.since ? { since: query.since } : {}),
+      ...(query?.limit ? { limit: query.limit } : {}),
+    });
+
+    const response = await fetch(url, {
+      method: 'GET',
+      headers: this.headers(),
+    });
+
+    if (!response.ok) {
+      const body = await response.json().catch(() => ({}));
+      throw new ApiError(
+        response.status,
+        (body as { error?: { code?: string } }).error?.code,
+        (body as { error?: { message?: string } }).error?.message ?? `HTTP ${response.status}`,
+      );
+    }
+
+    const json = await response.json();
+    return {
+      data: ((json as { data?: unknown }).data ?? []) as Record<string, unknown>[],
+      pagination: (json as { pagination?: unknown }).pagination as {
+        nextCursor?: string;
+        hasMore: boolean;
+        total: number;
+      },
+    };
+  }
+
+  /**
+   * Fetches tenant-wide LLM usage statistics.
+   * Defaults to the last 30 days if no period is specified.
+   */
+  async getUsage(query?: { period?: string }): Promise<{
+    period: { start: string; end: string };
+    totalTokens: number;
+    totalCostUsd: number;
+    byModel: Record<string, { tokens: number; costUsd: number }>;
+    byPurpose: Record<string, { tokens: number; costUsd: number }>;
+    byJob: Array<{ jobId: string; tokens: number; costUsd: number }>;
+  }> {
+    return this.get('/api/v1/usage', {
+      period: query?.period ?? '30d',
+    });
+  }
+
   // -----------------------------------------------------------------------
   // WebSocket token
   // -----------------------------------------------------------------------
