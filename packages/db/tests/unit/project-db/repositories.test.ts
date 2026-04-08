@@ -66,6 +66,51 @@ describe('SQLite Repositories (in-memory)', () => {
       expect(all).toHaveProperty('created_at');
       expect(all).toHaveProperty('custom_key');
     });
+
+    it('delete removes a single key', async () => {
+      await adapter.metaRepo.set('delete_me', 'gone_soon');
+      expect(await adapter.metaRepo.get('delete_me')).toBe('gone_soon');
+
+      await adapter.metaRepo.delete('delete_me');
+      expect(await adapter.metaRepo.get('delete_me')).toBeNull();
+    });
+
+    it('delete is a no-op for non-existent key', async () => {
+      // Should not throw
+      await adapter.metaRepo.delete('nonexistent_delete_key');
+    });
+
+    it('deleteByPrefix removes all keys matching prefix but leaves others', async () => {
+      // Seed prefixed keys and a non-prefixed key
+      await adapter.metaRepo.set('remote:origin:url', 'https://api.example.com');
+      await adapter.metaRepo.set('remote:origin:token', 'secret');
+      await adapter.metaRepo.set('remote:origin:project_id', 'proj-123');
+      await adapter.metaRepo.set('remote:upstream:url', 'https://other.example.com');
+      await adapter.metaRepo.set('unrelated_key', 'keep_me');
+
+      // Delete all remote:origin:* keys
+      await adapter.metaRepo.deleteByPrefix('remote:origin:');
+
+      // Verify origin keys are gone
+      expect(await adapter.metaRepo.get('remote:origin:url')).toBeNull();
+      expect(await adapter.metaRepo.get('remote:origin:token')).toBeNull();
+      expect(await adapter.metaRepo.get('remote:origin:project_id')).toBeNull();
+
+      // Verify other keys are untouched
+      expect(await adapter.metaRepo.get('remote:upstream:url')).toBe('https://other.example.com');
+      expect(await adapter.metaRepo.get('unrelated_key')).toBe('keep_me');
+
+      // Clean up
+      await adapter.metaRepo.delete('remote:upstream:url');
+      await adapter.metaRepo.delete('unrelated_key');
+    });
+
+    it('deleteByPrefix is a no-op when no keys match', async () => {
+      const before = await adapter.metaRepo.getAll();
+      await adapter.metaRepo.deleteByPrefix('nonexistent_prefix:');
+      const after = await adapter.metaRepo.getAll();
+      expect(Object.keys(after).length).toBe(Object.keys(before).length);
+    });
   });
 
   // ---------------------------------------------------------------------------
