@@ -25,6 +25,7 @@ export const entities = sqliteTable(
   },
   (table) => [
     index('sl_entities_job_quality_idx').on(table.jobId, table.qualityScore),
+    index('sl_entities_run_id_idx').on(table.runId),
   ],
 );
 

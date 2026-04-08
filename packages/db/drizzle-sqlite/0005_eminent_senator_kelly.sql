@@ -1,0 +1,1 @@
+CREATE INDEX `sl_entities_run_id_idx` ON `entities` (`run_id`);
