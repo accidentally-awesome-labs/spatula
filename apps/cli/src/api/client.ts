@@ -273,6 +273,52 @@ export class SpatulaApiClient {
   }
 
   // -----------------------------------------------------------------------
+  // Billing (for remote verification)
+  // -----------------------------------------------------------------------
+
+  async getSubscription(): Promise<Record<string, unknown>> {
+    return this.get('/api/v1/billing/subscription');
+  }
+
+  // -----------------------------------------------------------------------
+  // Entity streaming (for pull flow)
+  // -----------------------------------------------------------------------
+
+  async getEntitiesStream(
+    jobId: string,
+    query?: { cursor?: string; since?: string; limit?: number },
+  ): Promise<Record<string, unknown>> {
+    return this.get(`/api/v1/jobs/${jobId}/entities`, query);
+  }
+
+  // -----------------------------------------------------------------------
+  // WebSocket token
+  // -----------------------------------------------------------------------
+
+  async getWsToken(): Promise<{ token: string; expiresIn: number }> {
+    return this.post('/api/v1/ws-token');
+  }
+
+  // -----------------------------------------------------------------------
+  // Health check (raw — not wrapped in { data })
+  // -----------------------------------------------------------------------
+
+  async getHealth(): Promise<Record<string, unknown>> {
+    const url = this.buildUrl('/health');
+    let response: Response;
+    try {
+      response = await fetch(url, { method: 'GET', headers: this.headers() });
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Unknown network error';
+      throw new ApiError(0, 'NETWORK_ERROR', message);
+    }
+    if (!response.ok) {
+      throw new ApiError(response.status, undefined, `HTTP ${response.status}`);
+    }
+    return response.json() as Promise<Record<string, unknown>>;
+  }
+
+  // -----------------------------------------------------------------------
   // Internal helpers
   // -----------------------------------------------------------------------
 
