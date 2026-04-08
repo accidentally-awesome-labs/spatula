@@ -1,7 +1,12 @@
 // apps/cli/src/commands/pull.ts
+import { readFileSync, writeFileSync } from 'node:fs';
+import { join } from 'node:path';
+import { createInterface } from 'node:readline';
 import { loadGlobalConfig } from '@spatula/core';
 import { SpatulaApiClient } from '../api/client.js';
 import { createLogger } from '@spatula/shared';
+import { openLocalProject } from '../local-project.js';
+import { appendFieldsToYaml } from '../lib/yaml-fields.js';
 
 const logger = createLogger('cli:pull');
 
@@ -298,4 +303,115 @@ export async function runPullCommand(input: PullInput): Promise<PullResult> {
     llmCostUsd,
     resumed,
   };
+}
+
+async function promptChoice(question: string, choices: string[]): Promise<number> {
+  const rl = createInterface({ input: process.stdin, output: process.stdout });
+  return new Promise((resolve) => {
+    const choiceText = choices.map((c, i) => `  [${i + 1}] ${c}`).join('\n');
+    rl.question(`${question}\n${choiceText}\n\nChoice: `, (answer) => {
+      rl.close();
+      const idx = parseInt(answer, 10) - 1;
+      resolve(idx >= 0 && idx < choices.length ? idx : 0);
+    });
+  });
+}
+
+export async function handlePullCommand(opts: {
+  remoteName: string;
+  full?: boolean;
+  restart?: boolean;
+}): Promise<void> {
+  let project: Awaited<ReturnType<typeof openLocalProject>> | null = null;
+
+  try {
+    project = await openLocalProject(process.cwd());
+
+    const result = await runPullCommand({
+      remoteName: opts.remoteName,
+      metaGet: (k) => project!.metaRepo.get(k),
+      metaSet: (k, v) => project!.metaRepo.set(k, v),
+      metaDelete: (k) => project!.adapter.metaRepo.delete(k),
+      adapter: project.adapter,
+      projectId: project.projectId,
+      projectRoot: project.projectRoot,
+      full: opts.full,
+      restart: opts.restart,
+      onProgress: (batch, total) => {
+        process.stderr.write(`\r  Batch ${batch} | ${total} entities fetched`);
+      },
+      resolveRunningJob: async (jobStatus: string, stats?: Record<string, unknown>) => {
+        const pagesInfo = stats?.pagesProcessed ? ` (${stats.pagesProcessed} pages crawled)` : '';
+        const choice = await promptChoice(
+          `Job is still ${jobStatus}${pagesInfo}.`,
+          [
+            'Pull current snapshot (can pull again later)',
+            'Wait for completion (polls every 30s)',
+            'Cancel pull',
+          ],
+        );
+        return (['snapshot', 'wait', 'cancel'] as const)[choice];
+      },
+      resolveSchemaConflict: async (diff) => {
+        const schemaDiff = diff as import('../lib/schema-diff.js').SchemaDiff;
+        if (schemaDiff.remoteOnly.length > 0) {
+          console.log(`\n  Remote has ${schemaDiff.remoteOnly.length} new field(s): ${schemaDiff.remoteOnly.map(f => f.name).join(', ')}`);
+        }
+        if (schemaDiff.changed.length > 0) {
+          console.log(`  ${schemaDiff.changed.length} field(s) changed: ${schemaDiff.changed.map(c => c.name).join(', ')}`);
+        }
+        if (schemaDiff.localOnly.length > 0) {
+          console.log(`  ${schemaDiff.localOnly.length} local-only field(s): ${schemaDiff.localOnly.map(f => f.name).join(', ')}`);
+        }
+        const choice = await promptChoice(
+          '\nHow should schema differences be resolved?',
+          [
+            'Use remote schema (recommended)',
+            'Keep local schema',
+            'Merge (keep all fields from both)',
+          ],
+        );
+        return (['remote', 'local', 'merge'] as const)[choice];
+      },
+    });
+
+    if (!result.success) {
+      console.error(`\nPull failed: ${result.error}`);
+      process.exitCode = 1;
+      return;
+    }
+
+    // Handle schema changes — write to spatula.yaml if fields were added
+    if (result.schemaFieldsAdded && result.schemaFieldsAdded > 0) {
+      try {
+        const yamlPath = join(project.projectRoot, 'spatula.yaml');
+        const yamlContent = readFileSync(yamlPath, 'utf-8');
+        const schema = await project.adapter.schemaRepo.findLatest(project.projectId);
+        if (schema?.definition) {
+          const fields = ((schema.definition as { fields?: unknown[] }).fields ?? []) as Array<{ name: string; type: string; required?: boolean }>;
+          const date = new Date().toISOString().split('T')[0];
+          const updated = appendFieldsToYaml(yamlContent, fields, date);
+          writeFileSync(yamlPath, updated, 'utf-8');
+        }
+      } catch {
+        // Non-fatal: schema is in DB even if yaml write fails
+      }
+    }
+
+    // Print summary
+    process.stderr.write('\r' + ' '.repeat(60) + '\r');
+    console.log(`\nPull complete from '${opts.remoteName}'`);
+    console.log(`  Entities:  ${result.entitiesInserted} new, ${result.entitiesUpdated} updated (${(result.entitiesInserted ?? 0) + (result.entitiesUpdated ?? 0)} total)`);
+    if (result.schemaFieldsAdded) {
+      console.log(`  Schema:    ${result.schemaFieldsAdded} new fields`);
+    }
+    if (result.llmTokens) {
+      console.log(`  LLM usage: ${result.llmTokens?.toLocaleString()} tokens ($${result.llmCostUsd?.toFixed(2)})`);
+    }
+    if (result.resumed) {
+      console.log(`  (Resumed from interrupted pull)`);
+    }
+  } finally {
+    project?.close();
+  }
 }
