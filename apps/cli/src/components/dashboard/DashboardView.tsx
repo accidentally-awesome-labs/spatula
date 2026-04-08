@@ -16,11 +16,13 @@ import { EntityPreview } from './EntityPreview.js';
 export interface DashboardViewProps {
   store: CliStore;
   backend: DataSource | SpatulaApiClient;
+  wsToken?: string;  // For remote watch: token-based WS auth
 }
 
 export function DashboardView({
   store,
   backend,
+  wsToken,
 }: DashboardViewProps): React.ReactElement {
   const activeJobId = useStore(store, (s) => s.activeJobId);
   const jobData = useStore(store, (s) => s.jobData);
@@ -37,6 +39,7 @@ export function DashboardView({
     wsBaseUrl,
     wsTenantId,
     activeJobId ?? '',
+    wsToken,
   );
 
   // When WebSocket is connected, use slower 15s polling to keep full job data fresh.
