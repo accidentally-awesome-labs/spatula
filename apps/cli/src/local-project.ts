@@ -1,6 +1,7 @@
 import { join } from 'node:path';
 import { findProjectRoot } from '@spatula/core';
 import type { DataSource } from '@spatula/core';
+import type { ProjectAdapter as ProjectAdapterType } from '@spatula/db';
 
 export interface LocalProject {
   dataSource: DataSource;
@@ -9,8 +10,10 @@ export interface LocalProject {
   metaRepo: {
     get(key: string): Promise<string | null>;
     set(key: string, value: string): Promise<void>;
+    delete(key: string): Promise<void>;
     deleteByPrefix(prefix: string): Promise<void>;
   };
+  adapter: ProjectAdapterType;
   close(): void;
 }
 
@@ -54,6 +57,7 @@ export async function openLocalProject(cwd: string): Promise<LocalProject> {
     projectRoot,
     projectId,
     metaRepo: adapter.metaRepo,
+    adapter,
     close: () => dbResult.close(),
   };
 }
