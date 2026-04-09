@@ -246,11 +246,28 @@ describe('table extraction', () => {
     expect(result.data.data).toEqual([{ A: 'Wide', B: 'Wide', C: 'Narrow' }]);
   });
 
-  it('includes tables in autoDiscover when present', async () => {
+  it('includes tables in autoDiscover when 3+ data rows exist', async () => {
+    const bigTableHtml = `<html><body><article>
+      <table>
+        <thead><tr><th>A</th><th>B</th></tr></thead>
+        <tbody>
+          <tr><td>1</td><td>2</td></tr>
+          <tr><td>3</td><td>4</td></tr>
+          <tr><td>5</td><td>6</td></tr>
+        </tbody>
+      </table>
+    </article></body></html>`;
+    const schema = { version: 1, fields: [], fieldAliases: [], createdAt: new Date(), parentVersion: null };
+    const result = await extractor.extract(bigTableHtml, 'https://example.com', schema, '');
+    expect(result.data.tables).toBeDefined();
+    expect(result.data.tables).toHaveLength(3);
+  });
+
+  it('skips tables in autoDiscover when fewer than 3 data rows', async () => {
     const schema = { version: 1, fields: [], fieldAliases: [], createdAt: new Date(), parentVersion: null };
     const result = await extractor.extract(tableHtml, 'https://example.com', schema, '');
-    expect(result.data.tables).toBeDefined();
-    expect(result.data.tables).toHaveLength(2);
+    // tableHtml has only 2 rows, below the 3-row threshold
+    expect(result.data.tables).toBeUndefined();
   });
 });
 ```
@@ -269,12 +286,13 @@ Add `findTable` function after `findList`:
 ```typescript
 function findTable($: cheerio.CheerioAPI, fieldName: string): Array<Record<string, string>> | null {
   // Locate table by class/id match or content area fallback
-  const selectors = [
-    `table[class*="${fieldName}"]`,
-    `table[id*="${fieldName}"]`,
-    'article table', 'main table', '.content table',
-    'table',
-  ];
+  // Skip class/id selectors when fieldName is empty (autoDiscover mode)
+  // because table[class*=""] matches ANY table with a class attribute
+  const selectors: string[] = [];
+  if (fieldName) {
+    selectors.push(`table[class*="${fieldName}"]`, `table[id*="${fieldName}"]`);
+  }
+  selectors.push('article table', 'main table', '.content table', 'table');
 
   let table: cheerio.Cheerio<cheerio.Element> | null = null;
   for (const sel of selectors) {
@@ -348,9 +366,9 @@ function extractByField($: cheerio.CheerioAPI, field: FieldDefinition, baseUrl: 
 Update `autoDiscover` — add after the `links` block:
 
 ```typescript
-  // Tables
+  // Tables — require 3+ data rows to avoid extracting layout/nav tables
   const tableData = findTable($, '');
-  if (tableData && tableData.length >= 2) {
+  if (tableData && tableData.length >= 3) {
     data.tables = tableData;
   }
 ```
@@ -681,20 +699,44 @@ git commit -m "fix(api): add shared-secret protection for tenant creation endpoi
 - [ ] **Step 1: Write failing test**
 
 ```typescript
-it('logs audit event on quota exceeded', async () => {
+it('logs audit event on monthly quota exceeded', async () => {
   const auditLog = vi.fn();
   const auditLogger = { log: auditLog } as unknown as AuditLogger;
   const manager = new JobManager({
-    jobRepo, tenantRepo,
-    quotaEnforcer: { checkAndRecord: vi.fn().mockRejectedValue(new QuotaExceededError('jobs', 5, 5)) },
+    jobRepo, taskRepo, schemaRepo, queues, tenantRepo,
+    quotaEnforcer: {
+      checkAndRecord: vi.fn().mockRejectedValue(
+        new QuotaExceededError('Monthly job limit reached: 5/5', { context: { tenantId: 't1', current: 5, max: 5 } }),
+      ),
+    },
     auditLogger,
   });
 
-  await expect(manager.createJob('t1', { /* config */ })).rejects.toThrow(QuotaExceededError);
+  // Quota is checked in startJob, not createJob
+  await expect(manager.startJob('job1', 't1')).rejects.toThrow(QuotaExceededError);
   expect(auditLog).toHaveBeenCalledWith(expect.objectContaining({
     action: 'quota.exceeded',
+    actorId: 'system',
+    actorType: 'system',
     tenantId: 't1',
-    dimension: 'jobs',
+    metadata: expect.objectContaining({ dimension: 'jobs' }),
+  }));
+});
+
+it('logs audit event on concurrent job quota exceeded', async () => {
+  const auditLog = vi.fn();
+  const auditLogger = { log: auditLog } as unknown as AuditLogger;
+  const manager = new JobManager({
+    jobRepo, taskRepo, schemaRepo, queues,
+    tenantRepo: { getQuotas: vi.fn().mockResolvedValue({ maxConcurrentJobs: 2 }) },
+    auditLogger,
+  });
+  jobRepo.countByTenant = vi.fn().mockResolvedValue(2); // at limit
+
+  await expect(manager.startJob('job1', 't1')).rejects.toThrow(QuotaExceededError);
+  expect(auditLog).toHaveBeenCalledWith(expect.objectContaining({
+    action: 'quota.exceeded',
+    metadata: expect.objectContaining({ dimension: 'concurrent_jobs', current: 2, max: 2 }),
   }));
 });
 ```
@@ -703,10 +745,10 @@ it('logs audit event on quota exceeded', async () => {
 
 In `packages/queue/src/job-manager.ts`:
 
-Add `auditLogger?: AuditLogger` to `JobManagerConfig` interface (line 19).
-Store in constructor (line 36).
+Add `auditLogger?: AuditLogger` to `JobManagerConfig` interface (line 19) and import `AuditLogger` from `@spatula/shared`.
+Add `private readonly auditLogger?: AuditLogger` field (line 28) and wire in constructor (line 36).
 
-Wrap the `quotaEnforcer.checkAndRecord` call in a try/catch that logs before re-throwing:
+Wrap the `quotaEnforcer.checkAndRecord` call (line 54-56) in a try/catch:
 
 ```typescript
     if (this.quotaEnforcer) {
@@ -716,10 +758,10 @@ Wrap the `quotaEnforcer.checkAndRecord` call in a try/catch that logs before re-
         if (error instanceof QuotaExceededError && this.auditLogger) {
           this.auditLogger.log({
             action: 'quota.exceeded',
+            actorId: 'system',
+            actorType: 'system',
             tenantId,
-            dimension: 'jobs',
-            current: error.current,
-            max: error.max,
+            metadata: { dimension: 'jobs' },
           });
         }
         throw error;
@@ -727,20 +769,23 @@ Wrap the `quotaEnforcer.checkAndRecord` call in a try/catch that logs before re-
     }
 ```
 
-Same pattern for concurrent job quota (lines 58-72):
+For concurrent job quota (lines 64-68), add audit before throw:
 
 ```typescript
         if (runningCount >= maxConcurrent) {
           if (this.auditLogger) {
             this.auditLogger.log({
               action: 'quota.exceeded',
+              actorId: 'system',
+              actorType: 'system',
               tenantId,
-              dimension: 'concurrent_jobs',
-              current: runningCount,
-              max: maxConcurrent,
+              metadata: { dimension: 'concurrent_jobs', current: runningCount, max: maxConcurrent },
             });
           }
-          throw new QuotaExceededError('concurrent_jobs', runningCount, maxConcurrent);
+          throw new QuotaExceededError(
+            `Concurrent job limit reached: ${runningCount}/${maxConcurrent}`,
+            { context: { tenantId, current: runningCount, max: maxConcurrent } },
+          );
         }
 ```
 
@@ -824,48 +869,60 @@ git commit -m "feat(core): extract cost from OpenRouter x-openrouter-cost respon
 
 ```typescript
 describe('registerGauges', () => {
-  it('registers three observable gauges', () => {
-    const metrics = createMetrics({ enabled: false });
+  it('does not throw when metrics are initialized', () => {
+    // createMetrics stores the meter in module state
+    createMetrics({ enabled: false });
     const deps = {
       jobRepo: { countByStatus: vi.fn().mockResolvedValue(3) },
       tenantRepo: { countAll: vi.fn().mockResolvedValue(10) },
       queueProvider: { getQueueDepth: vi.fn().mockResolvedValue(5) },
     };
-    // Should not throw
-    expect(() => registerGauges(metrics, deps)).not.toThrow();
+    // registerGauges reads the module-level _meter set by createMetrics
+    expect(() => registerGauges(deps)).not.toThrow();
   });
 });
 ```
 
 - [ ] **Step 2: Implement registerGauges**
 
-In `packages/shared/src/metrics.ts`, add after the `createMetrics` function:
+In `packages/shared/src/metrics.ts`:
+
+First, store the meter as a module-level variable. Change the existing code inside `createMetrics`:
+
+```typescript
+// Module-level variable (add near top of file, after imports)
+let _meter: Meter | undefined;
+
+// Inside createMetrics(), after creating the meter:
+  const meter = meterProvider.getMeter('spatula');
+  _meter = meter; // Store for registerGauges
+```
+
+Then add `registerGauges` after `createMetrics`:
 
 ```typescript
 export function registerGauges(
-  metrics: ReturnType<typeof createMetrics>,
   deps: {
     jobRepo: { countByStatus: (status: string) => Promise<number> };
     tenantRepo: { countAll: () => Promise<number> };
     queueProvider: { getQueueDepth: () => Promise<number> };
   },
 ): void {
-  const meter = (metrics as any)._meter ?? meterProvider?.getMeter('spatula');
-  if (!meter) return;
+  if (!_meter) return;
 
-  meter.createObservableGauge('active_jobs', { description: 'Currently running jobs' })
+  _meter.createObservableGauge('active_jobs', { description: 'Currently running jobs' })
     .addCallback(async (result) => {
       try { result.observe(await deps.jobRepo.countByStatus('running')); }
       catch { result.observe(0); }
     });
 
-  meter.createObservableGauge('tenant_count', { description: 'Total tenants' })
+  _meter.createObservableGauge('tenant_count', { description: 'Total tenants' })
     .addCallback(async (result) => {
       try { result.observe(await deps.tenantRepo.countAll()); }
       catch { result.observe(0); }
     });
 
-  meter.createObservableGauge('queue_depth', { description: 'Total pending queue items' })
+  _meter.createObservableGauge('queue_depth', { description: 'Total pending queue items' })
     .addCallback(async (result) => {
       try { result.observe(await deps.queueProvider.getQueueDepth()); }
       catch { result.observe(0); }
@@ -1097,26 +1154,108 @@ Ensure it's within the tenant-scoped middleware chain (after auth middleware).
 
 - [ ] **Step 5: Add findByJobCursor and countByJob to EntitySourceRepository (Postgres)**
 
-In `packages/db/src/repositories/entity-source-repository.ts`, add cursor-paginated query following the same pattern as extraction/action repos.
-
-- [ ] **Step 6: Enrich job stats**
-
-In the job detail query (job repository or job routes), add `pendingActionsCount` and `schemaFieldCount` to the `stats` object:
+In `packages/db/src/repositories/entity-source-repository.ts`, add:
 
 ```typescript
-const pendingActionsCount = await deps.actionRepo.countByJob(jobId, tenantId, { status: 'pending_review' });
-const latestSchema = await deps.schemaRepo.findLatest(jobId, tenantId);
-const schemaFieldCount = latestSchema?.definition?.fields?.length ?? 0;
-// Include in job response stats
+import { sql, and, eq } from 'drizzle-orm';
+import { entities } from '../schema/entities.js';
+
+  async findByJobCursor(
+    jobId: string,
+    tenantId: string,
+    limit: number,
+    cursor?: string,
+    since?: string,
+  ) {
+    try {
+      // entity_sources doesn't have jobId — join through entities
+      const conditions = [eq(entities.jobId, jobId), eq(entities.tenantId, tenantId)];
+      if (cursor) conditions.push(sql`${entitySources.entityId} > ${cursor}::uuid`);
+      if (since) conditions.push(sql`${entities.updatedAt} > ${since}`);
+
+      const rows = await this.db
+        .select({
+          entityId: entitySources.entityId,
+          extractionId: entitySources.extractionId,
+          matchConfidence: entitySources.matchConfidence,
+        })
+        .from(entitySources)
+        .innerJoin(entities, eq(entitySources.entityId, entities.id))
+        .where(and(...conditions))
+        .orderBy(entitySources.entityId)
+        .limit(limit);
+
+      const nextCursor = rows.length === limit ? rows[rows.length - 1].entityId : null;
+      return { entities: rows, nextCursor };
+    } catch (error) {
+      throw new StorageError(`Failed to fetch entity sources by cursor: ${(error as Error).message}`, {
+        cause: error as Error, context: { jobId, tenantId },
+      });
+    }
+  }
+
+  async countByJob(jobId: string, tenantId: string): Promise<number> {
+    try {
+      const [row] = await this.db
+        .select({ count: sql<number>`count(*)` })
+        .from(entitySources)
+        .innerJoin(entities, eq(entitySources.entityId, entities.id))
+        .where(and(eq(entities.jobId, jobId), eq(entities.tenantId, tenantId)));
+      return Number(row?.count ?? 0);
+    } catch (error) {
+      throw new StorageError(`Failed to count entity sources: ${(error as Error).message}`, {
+        cause: error as Error, context: { jobId, tenantId },
+      });
+    }
+  }
 ```
 
-- [ ] **Step 7: Run API tests and commit**
+- [ ] **Step 6: Add countByStatus to ActionRepository (Postgres)**
+
+In `packages/db/src/repositories/action-repository.ts`, add:
+
+```typescript
+  async countByJobAndStatus(jobId: string, tenantId: string, status: string): Promise<number> {
+    try {
+      const [row] = await this.db
+        .select({ count: sql<number>`count(*)` })
+        .from(actions)
+        .where(and(eq(actions.jobId, jobId), eq(actions.tenantId, tenantId), eq(actions.status, status)));
+      return Number(row?.count ?? 0);
+    } catch (error) {
+      throw new StorageError(`Failed to count actions: ${(error as Error).message}`, {
+        cause: error as Error, context: { jobId, tenantId },
+      });
+    }
+  }
+```
+
+- [ ] **Step 7: Enrich job stats in job detail route**
+
+In `apps/api/src/routes/jobs.ts`, in the GET `/:jobId` handler, after fetching the job, compute and merge additional stats:
+
+```typescript
+    // Enrich stats with pending actions count and schema field count
+    const pendingActionsCount = await deps.actionRepo.countByJobAndStatus(jobId, tenantId, 'pending_review');
+    const latestSchema = await deps.schemaRepo.findLatest(jobId, tenantId);
+    const schemaFieldCount = (latestSchema?.definition as any)?.fields?.length ?? 0;
+
+    const enrichedStats = {
+      ...(job.stats as Record<string, number> ?? {}),
+      pendingActionsCount,
+      schemaFieldCount,
+    };
+
+    return c.json({ data: { ...job, stats: enrichedStats } });
+```
+
+- [ ] **Step 8: Run API tests and commit**
 
 Run: `cd apps/api && pnpm test -- --run`
 Expected: ALL PASS
 
 ```bash
-git add apps/api/src/routes/entity-sources.ts apps/api/src/app.ts apps/api/src/schemas/responses.ts packages/db/src/repositories/
+git add apps/api/src/routes/entity-sources.ts apps/api/src/routes/jobs.ts apps/api/src/app.ts apps/api/src/schemas/responses.ts packages/db/src/repositories/
 git commit -m "feat(api): add pageUrl to extractions, entity-sources endpoint, job stats enrichment"
 ```
 
@@ -1159,7 +1298,40 @@ describe('getEntitySourcesStreamPaginated', () => {
 
 - [ ] **Step 2: Implement three paginated methods**
 
-In `apps/cli/src/api/client.ts`, add methods following the `getEntitiesStreamPaginated` pattern (lines 299-340):
+In `apps/cli/src/api/client.ts`, first extract a shared `fetchPaginated` private method from `getEntitiesStreamPaginated`:
+
+```typescript
+  private async fetchPaginated(url: string): Promise<{
+    data: Record<string, unknown>[];
+    pagination: { nextCursor?: string; hasMore: boolean; total: number };
+  }> {
+    let response: Response;
+    try {
+      response = await fetch(url, { method: 'GET', headers: this.headers() });
+    } catch (err) {
+      throw new ApiError(0, 'NETWORK_ERROR', (err as Error).message);
+    }
+
+    if (!response.ok) {
+      const body = await response.json().catch(() => ({}));
+      throw new ApiError(
+        response.status,
+        (body as { error?: { code?: string } }).error?.code,
+        (body as { error?: { message?: string } }).error?.message ?? `HTTP ${response.status}`,
+      );
+    }
+
+    const json = await response.json();
+    return {
+      data: ((json as { data?: unknown }).data ?? []) as Record<string, unknown>[],
+      pagination: (json as { pagination?: unknown }).pagination as {
+        nextCursor?: string; hasMore: boolean; total: number;
+      },
+    };
+  }
+```
+
+Then refactor `getEntitiesStreamPaginated` to use it, and add the three new methods:
 
 ```typescript
   async getExtractionsStreamPaginated(
@@ -1432,24 +1604,25 @@ In `runResetCommand`, after the filesystem cleanup loop, if `keepRemote`:
     // ... existing cleanup loop ...
 
     // Selective DB cleanup for --keep-remote
+    // Note: uses raw better-sqlite3 handle (sqlite) for bulk deletes since Drizzle's
+    // query builder doesn't support complex WHERE with NOT LIKE + IS NULL patterns easily.
+    // createProjectDb returns { db, sqlite, close } where sqlite is the raw handle.
     if (options.keepRemote) {
       const dbPath = join(spatulaDir, DB_FILE);
       if (existsSync(dbPath)) {
         const { createProjectDb } = await import('@spatula/db/project-db');
-        const { db, close } = createProjectDb(dbPath);
+        const { sqlite, close } = createProjectDb(dbPath);
         try {
-          // Delete local entities (runId is null or doesn't start with 'remote:')
-          db.run(sql`DELETE FROM entities WHERE run_id IS NULL OR run_id NOT LIKE 'remote:%'`);
-          // Delete local extractions and actions (same pattern)
-          db.run(sql`DELETE FROM extractions WHERE run_id IS NULL OR run_id NOT LIKE 'remote:%'`);
-          db.run(sql`DELETE FROM actions WHERE run_id IS NULL OR run_id NOT LIKE 'remote:%'`);
-          // Delete all crawl_tasks and pages (always local)
-          db.run(sql`DELETE FROM crawl_tasks`);
-          db.run(sql`DELETE FROM pages`);
-          // Delete local runs
-          db.run(sql`DELETE FROM runs WHERE source = 'local'`);
-          // Keep project_meta remote:* keys, delete others except schema_version/project_id/project_name/created_at
-          db.run(sql`DELETE FROM project_meta WHERE key NOT LIKE 'remote:%' AND key NOT IN ('schema_version','project_id','project_name','created_at')`);
+          // Delete local entities (runId null = pre-pull local, non-remote prefix = local runs)
+          sqlite.prepare(`DELETE FROM entities WHERE run_id IS NULL OR run_id NOT LIKE 'remote:%'`).run();
+          sqlite.prepare(`DELETE FROM extractions WHERE run_id IS NULL OR run_id NOT LIKE 'remote:%'`).run();
+          sqlite.prepare(`DELETE FROM actions WHERE run_id IS NULL OR run_id NOT LIKE 'remote:%'`).run();
+          // crawl_tasks and pages are always local
+          sqlite.prepare(`DELETE FROM crawl_tasks`).run();
+          sqlite.prepare(`DELETE FROM pages`).run();
+          sqlite.prepare(`DELETE FROM runs WHERE source = 'local'`).run();
+          // Preserve remote:* keys and core metadata
+          sqlite.prepare(`DELETE FROM project_meta WHERE key NOT LIKE 'remote:%' AND key NOT IN ('schema_version','project_id','project_name','created_at')`).run();
         } finally {
           close();
         }
@@ -1510,15 +1683,19 @@ Add to `PullInput`:
         runId: string | null;
       }>) => Promise<{ inserted: number; updated: number }>;
       deleteByRunIds: (runIds: string[]) => Promise<number>;
+      findIdsByRunId?: (runId: string) => Promise<string[]>;
     };
     actionRepo: {
       upsertBatch: (batch: Array<{
         id: string; type: string; payload: Record<string, unknown>;
         source: string; status: string; confidence: number;
         reasoning: string; runId: string | null;
-        createdAt: string; appliedAt: string | null;
+        createdAt: string; updatedAt: string; appliedAt: string | null;
+        stateChanges?: Record<string, unknown> | null;
+        reviewedBy?: string | null;
       }>) => Promise<{ inserted: number; updated: number }>;
       deleteByRunIds: (runIds: string[]) => Promise<number>;
+      findIdsByRunId?: (runId: string) => Promise<string[]>;
     };
     entitySourceRepo: {
       upsertBatchSources: (batch: Array<{
@@ -1582,7 +1759,12 @@ After the entity pull loop (around line 290 in current code), add:
     if (input.full) {
       const runIds = await input.adapter.runRepo.findIdsBySourcePrefix(`remote:${input.remoteName}:`);
       // Delete entity_sources referencing these extractions first (FK order)
-      const extractionIds = []; // collect from extractions table by runIds
+      // Collect extraction IDs for these runs so we can clean entity_sources first (FK order)
+      const extractionIds: string[] = [];
+      for (const rid of runIds) {
+        const exRows = await input.adapter.extractionRepo.findIdsByRunId?.(rid) ?? [];
+        extractionIds.push(...exRows);
+      }
       await input.adapter.entitySourceRepo.deleteByExtractionIds(extractionIds);
       await input.adapter.extractionRepo.deleteByRunIds(runIds);
     }
@@ -1699,7 +1881,10 @@ After the entity pull loop (around line 290 in current code), add:
           reasoning: (a.reasoning as string) ?? '',
           runId: runId,
           createdAt: a.createdAt as string,
+          updatedAt: (a.updatedAt as string) ?? new Date().toISOString(),
           appliedAt: (a.appliedAt as string) ?? null,
+          stateChanges: (a.stateChanges as Record<string, unknown>) ?? null,
+          reviewedBy: (a.reviewedBy as string) ?? null,
         }));
         const counts = await input.adapter.actionRepo.upsertBatch(batch);
         actionsInserted += counts.inserted;
