@@ -256,7 +256,10 @@ describe('SqliteEntityRepository pull extensions', () => {
         sourceFilter: 'all',
       });
 
-      expect((result as Array<{ id: string }>).map((r) => r.id)).toHaveLength(2);
+      const ids = (result as Array<{ id: string }>).map((r) => r.id);
+      expect(ids).toHaveLength(2);
+      expect(ids).toContain('e-local');
+      expect(ids).toContain('e-remote');
     });
   });
 

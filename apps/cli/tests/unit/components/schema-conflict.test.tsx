@@ -50,6 +50,7 @@ describe('SchemaConflict', () => {
     const { stdin } = render(<SchemaConflict diff={mockDiff} onResolve={onResolve} />);
     await waitForEffects();
     stdin.write('1');
+    expect(onResolve).toHaveBeenCalledTimes(1);
     expect(onResolve).toHaveBeenCalledWith('remote');
   });
 
@@ -58,6 +59,7 @@ describe('SchemaConflict', () => {
     const { stdin } = render(<SchemaConflict diff={mockDiff} onResolve={onResolve} />);
     await waitForEffects();
     stdin.write('2');
+    expect(onResolve).toHaveBeenCalledTimes(1);
     expect(onResolve).toHaveBeenCalledWith('local');
   });
 
@@ -66,6 +68,7 @@ describe('SchemaConflict', () => {
     const { stdin } = render(<SchemaConflict diff={mockDiff} onResolve={onResolve} />);
     await waitForEffects();
     stdin.write('3');
+    expect(onResolve).toHaveBeenCalledTimes(1);
     expect(onResolve).toHaveBeenCalledWith('merge');
   });
 });

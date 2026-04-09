@@ -214,7 +214,8 @@ describe('runPullCommand', () => {
       full: true,
     });
 
-    expect(mockDeleteByRunIds).toHaveBeenCalled();
+    expect(mockFindIdsBySourcePrefix).toHaveBeenCalledWith('remote:prod:');
+    expect(mockDeleteByRunIds).toHaveBeenCalledWith(['run-old-1', 'run-old-2']);
   });
 
   // -------------------------------------------------------------------------
@@ -936,6 +937,10 @@ describe('runPullCommand', () => {
     });
 
     expect(result.success).toBe(true);
+    // Verify pull actually completed — not just returned success
+    expect(mockRunCreate).toHaveBeenCalled();
+    expect(mockMetaSet).toHaveBeenCalledWith('remote:prod:last_pull_at', expect.any(String));
+    expect(mockMetaDelete).toHaveBeenCalledWith('remote:prod:pull_cursor');
   });
 
   it('returns cancelled error when running job resolves as cancel', async () => {

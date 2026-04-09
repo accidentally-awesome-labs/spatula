@@ -49,6 +49,18 @@ fields:
     expect(result).toContain('    required: true');
   });
 
+  it('uses short format for required string fields', () => {
+    const yaml = `name: Test
+fields:
+  - title: string
+`;
+    const newFields = [{ name: 'slug', type: 'string', required: true }];
+    const result = appendFieldsToYaml(yaml, newFields, '2026-04-08');
+    // Required string fields use short format (implementation quirk: type !== 'string' guard)
+    expect(result).toContain('  - slug: string');
+    expect(result).not.toContain('field: slug');
+  });
+
   it('handles empty fields array as no-op', () => {
     const yaml = `name: Test\nfields:\n  - title: string\n`;
     const result = appendFieldsToYaml(yaml, [], '2026-04-08');
