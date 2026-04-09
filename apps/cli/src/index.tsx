@@ -571,6 +571,16 @@ yargs(hideBin(process.argv))
           type: 'boolean',
           default: false,
           describe: 'Clear interrupted pull cursor and start fresh',
+        })
+        .option('include-extractions', {
+          type: 'boolean',
+          default: false,
+          describe: 'Also pull extraction records from the remote job',
+        })
+        .option('include-actions', {
+          type: 'boolean',
+          default: false,
+          describe: 'Also pull action history from the remote job',
         }),
     async (argv) => {
       const { handlePullCommand } = await import('./commands/pull.js');
@@ -578,6 +588,8 @@ yargs(hideBin(process.argv))
         remoteName: argv.remote as string,
         full: argv.full,
         restart: argv.restart,
+        includeExtractions: argv.includeExtractions,
+        includeActions: argv.includeActions,
       });
     },
   )

@@ -967,4 +967,623 @@ describe('runPullCommand', () => {
     expect(result.success).toBe(false);
     expect(result.error).toContain('cancel');
   });
+
+  // -------------------------------------------------------------------------
+  // Extraction pull tests (--include-extractions)
+  // -------------------------------------------------------------------------
+
+  describe('pull with --include-extractions', () => {
+    const mockExtractionUpsertBatch = vi.fn().mockResolvedValue({ inserted: 3, updated: 0 });
+    const mockExtractionDeleteByRunIds = vi.fn().mockResolvedValue(0);
+    const mockExtractionFindIdsByRunId = vi.fn().mockResolvedValue([]);
+    const mockEntitySourceUpsertBatchSources = vi.fn().mockResolvedValue(2);
+    const mockEntitySourceDeleteByExtractionIds = vi.fn().mockResolvedValue(0);
+
+    function buildAdapterWithExtractions() {
+      return {
+        ...buildMockAdapter(),
+        extractionRepo: {
+          upsertBatch: mockExtractionUpsertBatch,
+          deleteByRunIds: mockExtractionDeleteByRunIds,
+          findIdsByRunId: mockExtractionFindIdsByRunId,
+        },
+        entitySourceRepo: {
+          upsertBatchSources: mockEntitySourceUpsertBatchSources,
+          deleteByExtractionIds: mockEntitySourceDeleteByExtractionIds,
+        },
+      };
+    }
+
+    beforeEach(() => {
+      mockExtractionUpsertBatch.mockReset().mockResolvedValue({ inserted: 3, updated: 0 });
+      mockExtractionDeleteByRunIds.mockReset().mockResolvedValue(0);
+      mockExtractionFindIdsByRunId.mockReset().mockResolvedValue([]);
+      mockEntitySourceUpsertBatchSources.mockReset().mockResolvedValue(2);
+      mockEntitySourceDeleteByExtractionIds.mockReset().mockResolvedValue(0);
+    });
+
+    it('fetches and stores extractions after entities', async () => {
+      mockMetaGet.mockImplementation(async (key: string) => {
+        if (key === 'remote:prod:job_id') return 'remote-job-1';
+        return null;
+      });
+
+      vi.stubGlobal(
+        'fetch',
+        vi.fn().mockImplementation(async (url: string) => {
+          if ((url as string).includes('/extractions')) {
+            return {
+              ok: true,
+              status: 200,
+              json: () =>
+                Promise.resolve({
+                  data: [
+                    { id: 'ext-1', pageUrl: 'https://a.com', schemaVersion: 1, data: { title: 'A' }, unmappedFields: [], metadata: {} },
+                    { id: 'ext-2', pageUrl: 'https://b.com', schemaVersion: 1, data: { title: 'B' }, unmappedFields: [], metadata: {} },
+                    { id: 'ext-3', pageUrl: null, schemaVersion: 2, data: { title: 'C' }, unmappedFields: [{ field: 'x' }], metadata: { source: 'llm' } },
+                  ],
+                  pagination: { hasMore: false, total: 3 },
+                }),
+            };
+          }
+          if ((url as string).includes('/entity-sources')) {
+            return {
+              ok: true,
+              status: 200,
+              json: () =>
+                Promise.resolve({
+                  data: [
+                    { entityId: 'e1', extractionId: 'ext-1', matchConfidence: 0.95 },
+                    { entityId: 'e2', extractionId: 'ext-2', matchConfidence: 0.88 },
+                  ],
+                  pagination: { hasMore: false, total: 2 },
+                }),
+            };
+          }
+          if ((url as string).includes('/entities')) {
+            return {
+              ok: true,
+              status: 200,
+              json: () => Promise.resolve({ data: [], pagination: { hasMore: false, total: 0 } }),
+            };
+          }
+          if ((url as string).includes('/schema')) {
+            return {
+              ok: true,
+              status: 200,
+              json: () =>
+                Promise.resolve({
+                  data: { version: 1, fields: [], fieldAliases: [], createdAt: '2026-01-01', parentVersion: null },
+                }),
+            };
+          }
+          if ((url as string).includes('/usage')) {
+            return {
+              ok: true,
+              status: 200,
+              json: () =>
+                Promise.resolve({ data: { period: {}, totalTokens: 0, totalCostUsd: 0, byModel: {}, byPurpose: {}, byJob: [] } }),
+            };
+          }
+          // getJob
+          return {
+            ok: true,
+            status: 200,
+            json: () => Promise.resolve({ data: { id: 'remote-job-1', status: 'completed' } }),
+          };
+        }),
+      );
+
+      const result = await runPullCommand({
+        remoteName: 'prod',
+        metaGet: mockMetaGet,
+        metaSet: mockMetaSet,
+        metaDelete: mockMetaDelete,
+        adapter: buildAdapterWithExtractions() as any,
+        projectId: 'test-project',
+        projectRoot: '/tmp/test',
+        includeExtractions: true,
+      });
+
+      expect(result.success).toBe(true);
+      expect(result.extractionsInserted).toBe(3);
+      expect(result.extractionsUpdated).toBe(0);
+      expect(mockExtractionUpsertBatch).toHaveBeenCalledTimes(1);
+      const batch = mockExtractionUpsertBatch.mock.calls[0][0];
+      expect(batch).toHaveLength(3);
+      expect(batch[0].id).toBe('ext-1');
+      expect(batch[0].pageUrl).toBe('https://a.com');
+      expect(batch[0].runId).toBe('run-1');
+      expect(batch[2].unmappedFields).toEqual([{ field: 'x' }]);
+
+      // Entity sources pulled automatically
+      expect(result.entitySourcesInserted).toBe(2);
+      expect(mockEntitySourceUpsertBatchSources).toHaveBeenCalledTimes(1);
+      const esBatch = mockEntitySourceUpsertBatchSources.mock.calls[0][0];
+      expect(esBatch).toHaveLength(2);
+      expect(esBatch[0].entityId).toBe('e1');
+      expect(esBatch[0].matchConfidence).toBe(0.95);
+    });
+
+    it('uses separate cursor for extractions', async () => {
+      mockMetaGet.mockImplementation(async (key: string) => {
+        if (key === 'remote:prod:job_id') return 'remote-job-1';
+        return null;
+      });
+
+      let extractionCallCount = 0;
+      vi.stubGlobal(
+        'fetch',
+        vi.fn().mockImplementation(async (url: string) => {
+          if ((url as string).includes('/extractions')) {
+            extractionCallCount++;
+            if (extractionCallCount === 1) {
+              return {
+                ok: true,
+                status: 200,
+                json: () =>
+                  Promise.resolve({
+                    data: [{ id: 'ext-1', pageUrl: 'https://a.com', schemaVersion: 1, data: {}, unmappedFields: [], metadata: {} }],
+                    pagination: { nextCursor: 'extr-cursor-2', hasMore: true, total: 2 },
+                  }),
+              };
+            }
+            return {
+              ok: true,
+              status: 200,
+              json: () =>
+                Promise.resolve({
+                  data: [{ id: 'ext-2', pageUrl: 'https://b.com', schemaVersion: 1, data: {}, unmappedFields: [], metadata: {} }],
+                  pagination: { hasMore: false, total: 2 },
+                }),
+            };
+          }
+          if ((url as string).includes('/entity-sources')) {
+            return {
+              ok: true,
+              status: 200,
+              json: () => Promise.resolve({ data: [], pagination: { hasMore: false, total: 0 } }),
+            };
+          }
+          if ((url as string).includes('/entities')) {
+            return {
+              ok: true,
+              status: 200,
+              json: () => Promise.resolve({ data: [], pagination: { hasMore: false, total: 0 } }),
+            };
+          }
+          if ((url as string).includes('/schema')) {
+            return {
+              ok: true,
+              status: 200,
+              json: () =>
+                Promise.resolve({
+                  data: { version: 1, fields: [], fieldAliases: [], createdAt: '2026-01-01', parentVersion: null },
+                }),
+            };
+          }
+          if ((url as string).includes('/usage')) {
+            return {
+              ok: true,
+              status: 200,
+              json: () =>
+                Promise.resolve({ data: { period: {}, totalTokens: 0, totalCostUsd: 0, byModel: {}, byPurpose: {}, byJob: [] } }),
+            };
+          }
+          return {
+            ok: true,
+            status: 200,
+            json: () => Promise.resolve({ data: { id: 'remote-job-1', status: 'completed' } }),
+          };
+        }),
+      );
+
+      const result = await runPullCommand({
+        remoteName: 'prod',
+        metaGet: mockMetaGet,
+        metaSet: mockMetaSet,
+        metaDelete: mockMetaDelete,
+        adapter: buildAdapterWithExtractions() as any,
+        projectId: 'test-project',
+        projectRoot: '/tmp/test',
+        includeExtractions: true,
+      });
+
+      expect(result.success).toBe(true);
+      expect(mockExtractionUpsertBatch).toHaveBeenCalledTimes(2);
+      // Cursor checkpointed between pages
+      expect(mockMetaSet).toHaveBeenCalledWith('remote:prod:pull_cursor_extractions', 'extr-cursor-2');
+      // Cursor cleared after completion
+      expect(mockMetaDelete).toHaveBeenCalledWith('remote:prod:pull_cursor_extractions');
+    });
+
+    it('does not pull extractions when flag is false', async () => {
+      mockMetaGet.mockImplementation(async (key: string) => {
+        if (key === 'remote:prod:job_id') return 'remote-job-1';
+        return null;
+      });
+
+      mockFetchSequence([
+        { data: { id: 'remote-job-1', status: 'completed' } },
+        { data: { version: 1, fields: [], fieldAliases: [], createdAt: '2026-01-01', parentVersion: null } },
+        { data: [], pagination: { hasMore: false, total: 0 } },
+        { data: { period: {}, totalTokens: 0, totalCostUsd: 0, byModel: {}, byPurpose: {}, byJob: [] } },
+      ]);
+
+      const result = await runPullCommand({
+        remoteName: 'prod',
+        metaGet: mockMetaGet,
+        metaSet: mockMetaSet,
+        metaDelete: mockMetaDelete,
+        adapter: buildAdapterWithExtractions() as any,
+        projectId: 'test-project',
+        projectRoot: '/tmp/test',
+        includeExtractions: false,
+      });
+
+      expect(result.success).toBe(true);
+      expect(result.extractionsInserted).toBe(0);
+      expect(mockExtractionUpsertBatch).not.toHaveBeenCalled();
+      expect(mockEntitySourceUpsertBatchSources).not.toHaveBeenCalled();
+    });
+  });
+
+  // -------------------------------------------------------------------------
+  // Action pull tests (--include-actions)
+  // -------------------------------------------------------------------------
+
+  describe('pull with --include-actions', () => {
+    const mockActionUpsertBatch = vi.fn().mockResolvedValue({ inserted: 2, updated: 1 });
+    const mockActionDeleteByRunIds = vi.fn().mockResolvedValue(0);
+
+    function buildAdapterWithActions() {
+      return {
+        ...buildMockAdapter(),
+        actionRepo: {
+          upsertBatch: mockActionUpsertBatch,
+          deleteByRunIds: mockActionDeleteByRunIds,
+        },
+      };
+    }
+
+    beforeEach(() => {
+      mockActionUpsertBatch.mockReset().mockResolvedValue({ inserted: 2, updated: 1 });
+      mockActionDeleteByRunIds.mockReset().mockResolvedValue(0);
+    });
+
+    it('fetches and stores actions after entities', async () => {
+      mockMetaGet.mockImplementation(async (key: string) => {
+        if (key === 'remote:prod:job_id') return 'remote-job-1';
+        return null;
+      });
+
+      vi.stubGlobal(
+        'fetch',
+        vi.fn().mockImplementation(async (url: string) => {
+          if ((url as string).includes('/actions')) {
+            return {
+              ok: true,
+              status: 200,
+              json: () =>
+                Promise.resolve({
+                  data: [
+                    {
+                      id: 'act-1', type: 'add_field', payload: { field: 'price' },
+                      source: 'llm', status: 'pending', confidence: 0.9,
+                      reasoning: 'Detected numeric field', createdAt: '2026-03-01T00:00:00Z',
+                      updatedAt: '2026-03-01T00:00:00Z', appliedAt: null,
+                      stateChanges: null, reviewedBy: null,
+                    },
+                    {
+                      id: 'act-2', type: 'rename_field', payload: { from: 'name', to: 'title' },
+                      source: 'llm', status: 'applied', confidence: 0.85,
+                      reasoning: 'Field rename detected', createdAt: '2026-03-01T00:00:00Z',
+                      updatedAt: '2026-03-02T00:00:00Z', appliedAt: '2026-03-02T00:00:00Z',
+                      stateChanges: { renamed: true }, reviewedBy: 'user-1',
+                    },
+                  ],
+                  pagination: { hasMore: false, total: 2 },
+                }),
+            };
+          }
+          if ((url as string).includes('/entities')) {
+            return {
+              ok: true,
+              status: 200,
+              json: () => Promise.resolve({ data: [], pagination: { hasMore: false, total: 0 } }),
+            };
+          }
+          if ((url as string).includes('/schema')) {
+            return {
+              ok: true,
+              status: 200,
+              json: () =>
+                Promise.resolve({
+                  data: { version: 1, fields: [], fieldAliases: [], createdAt: '2026-01-01', parentVersion: null },
+                }),
+            };
+          }
+          if ((url as string).includes('/usage')) {
+            return {
+              ok: true,
+              status: 200,
+              json: () =>
+                Promise.resolve({ data: { period: {}, totalTokens: 0, totalCostUsd: 0, byModel: {}, byPurpose: {}, byJob: [] } }),
+            };
+          }
+          return {
+            ok: true,
+            status: 200,
+            json: () => Promise.resolve({ data: { id: 'remote-job-1', status: 'completed' } }),
+          };
+        }),
+      );
+
+      const result = await runPullCommand({
+        remoteName: 'prod',
+        metaGet: mockMetaGet,
+        metaSet: mockMetaSet,
+        metaDelete: mockMetaDelete,
+        adapter: buildAdapterWithActions() as any,
+        projectId: 'test-project',
+        projectRoot: '/tmp/test',
+        includeActions: true,
+      });
+
+      expect(result.success).toBe(true);
+      expect(result.actionsInserted).toBe(2);
+      expect(result.actionsUpdated).toBe(1);
+      expect(mockActionUpsertBatch).toHaveBeenCalledTimes(1);
+      const batch = mockActionUpsertBatch.mock.calls[0][0];
+      expect(batch).toHaveLength(2);
+      expect(batch[0].id).toBe('act-1');
+      expect(batch[0].type).toBe('add_field');
+      expect(batch[0].runId).toBe('run-1');
+      expect(batch[1].appliedAt).toBe('2026-03-02T00:00:00Z');
+      expect(batch[1].stateChanges).toEqual({ renamed: true });
+    });
+
+    it('does not pull actions when flag is false', async () => {
+      mockMetaGet.mockImplementation(async (key: string) => {
+        if (key === 'remote:prod:job_id') return 'remote-job-1';
+        return null;
+      });
+
+      mockFetchSequence([
+        { data: { id: 'remote-job-1', status: 'completed' } },
+        { data: { version: 1, fields: [], fieldAliases: [], createdAt: '2026-01-01', parentVersion: null } },
+        { data: [], pagination: { hasMore: false, total: 0 } },
+        { data: { period: {}, totalTokens: 0, totalCostUsd: 0, byModel: {}, byPurpose: {}, byJob: [] } },
+      ]);
+
+      const result = await runPullCommand({
+        remoteName: 'prod',
+        metaGet: mockMetaGet,
+        metaSet: mockMetaSet,
+        metaDelete: mockMetaDelete,
+        adapter: buildAdapterWithActions() as any,
+        projectId: 'test-project',
+        projectRoot: '/tmp/test',
+        includeActions: false,
+      });
+
+      expect(result.success).toBe(true);
+      expect(result.actionsInserted).toBe(0);
+      expect(mockActionUpsertBatch).not.toHaveBeenCalled();
+    });
+  });
+
+  // -------------------------------------------------------------------------
+  // --full with --include-extractions
+  // -------------------------------------------------------------------------
+
+  describe('pull --full with --include-extractions', () => {
+    const mockExtractionUpsertBatch = vi.fn().mockResolvedValue({ inserted: 0, updated: 0 });
+    const mockExtractionDeleteByRunIds = vi.fn().mockResolvedValue(0);
+    const mockExtractionFindIdsByRunId = vi.fn();
+    const mockEntitySourceUpsertBatchSources = vi.fn().mockResolvedValue(0);
+    const mockEntitySourceDeleteByExtractionIds = vi.fn().mockResolvedValue(0);
+
+    function buildAdapterWithAll() {
+      return {
+        ...buildMockAdapter(),
+        extractionRepo: {
+          upsertBatch: mockExtractionUpsertBatch,
+          deleteByRunIds: mockExtractionDeleteByRunIds,
+          findIdsByRunId: mockExtractionFindIdsByRunId,
+        },
+        entitySourceRepo: {
+          upsertBatchSources: mockEntitySourceUpsertBatchSources,
+          deleteByExtractionIds: mockEntitySourceDeleteByExtractionIds,
+        },
+      };
+    }
+
+    beforeEach(() => {
+      mockExtractionUpsertBatch.mockReset().mockResolvedValue({ inserted: 0, updated: 0 });
+      mockExtractionDeleteByRunIds.mockReset().mockResolvedValue(0);
+      mockExtractionFindIdsByRunId.mockReset();
+      mockEntitySourceUpsertBatchSources.mockReset().mockResolvedValue(0);
+      mockEntitySourceDeleteByExtractionIds.mockReset().mockResolvedValue(0);
+    });
+
+    it('clears entity_sources before extractions on --full', async () => {
+      mockMetaGet.mockImplementation(async (key: string) => {
+        if (key === 'remote:prod:job_id') return 'remote-job-1';
+        return null;
+      });
+      mockFindIdsBySourcePrefix.mockResolvedValue(['run-old-1', 'run-old-2']);
+      mockExtractionFindIdsByRunId.mockImplementation(async (runId: string) => {
+        if (runId === 'run-old-1') return ['ext-a', 'ext-b'];
+        if (runId === 'run-old-2') return ['ext-c'];
+        return [];
+      });
+
+      vi.stubGlobal(
+        'fetch',
+        vi.fn().mockImplementation(async (url: string) => {
+          if ((url as string).includes('/extractions')) {
+            return {
+              ok: true,
+              status: 200,
+              json: () => Promise.resolve({ data: [], pagination: { hasMore: false, total: 0 } }),
+            };
+          }
+          if ((url as string).includes('/entity-sources')) {
+            return {
+              ok: true,
+              status: 200,
+              json: () => Promise.resolve({ data: [], pagination: { hasMore: false, total: 0 } }),
+            };
+          }
+          if ((url as string).includes('/entities')) {
+            return {
+              ok: true,
+              status: 200,
+              json: () => Promise.resolve({ data: [], pagination: { hasMore: false, total: 0 } }),
+            };
+          }
+          if ((url as string).includes('/schema')) {
+            return {
+              ok: true,
+              status: 200,
+              json: () =>
+                Promise.resolve({
+                  data: { version: 1, fields: [], fieldAliases: [], createdAt: '2026-01-01', parentVersion: null },
+                }),
+            };
+          }
+          if ((url as string).includes('/usage')) {
+            return {
+              ok: true,
+              status: 200,
+              json: () =>
+                Promise.resolve({ data: { period: {}, totalTokens: 0, totalCostUsd: 0, byModel: {}, byPurpose: {}, byJob: [] } }),
+            };
+          }
+          return {
+            ok: true,
+            status: 200,
+            json: () => Promise.resolve({ data: { id: 'remote-job-1', status: 'completed' } }),
+          };
+        }),
+      );
+
+      const callOrder: string[] = [];
+      mockEntitySourceDeleteByExtractionIds.mockImplementation(async () => {
+        callOrder.push('deleteByExtractionIds');
+        return 0;
+      });
+      mockExtractionDeleteByRunIds.mockImplementation(async () => {
+        callOrder.push('deleteByRunIds');
+        return 0;
+      });
+
+      await runPullCommand({
+        remoteName: 'prod',
+        metaGet: mockMetaGet,
+        metaSet: mockMetaSet,
+        metaDelete: mockMetaDelete,
+        adapter: buildAdapterWithAll() as any,
+        projectId: 'test-project',
+        projectRoot: '/tmp/test',
+        full: true,
+        includeExtractions: true,
+      });
+
+      // entity_sources deleted before extractions
+      expect(callOrder).toEqual(['deleteByExtractionIds', 'deleteByRunIds']);
+      expect(mockEntitySourceDeleteByExtractionIds).toHaveBeenCalledWith(['ext-a', 'ext-b', 'ext-c']);
+      expect(mockExtractionDeleteByRunIds).toHaveBeenCalledWith(['run-old-1', 'run-old-2']);
+    });
+  });
+
+  // -------------------------------------------------------------------------
+  // --full with --include-actions
+  // -------------------------------------------------------------------------
+
+  describe('pull --full with --include-actions', () => {
+    const mockActionUpsertBatch = vi.fn().mockResolvedValue({ inserted: 0, updated: 0 });
+    const mockActionDeleteByRunIds = vi.fn().mockResolvedValue(0);
+
+    function buildAdapterWithActions() {
+      return {
+        ...buildMockAdapter(),
+        actionRepo: {
+          upsertBatch: mockActionUpsertBatch,
+          deleteByRunIds: mockActionDeleteByRunIds,
+        },
+      };
+    }
+
+    beforeEach(() => {
+      mockActionUpsertBatch.mockReset().mockResolvedValue({ inserted: 0, updated: 0 });
+      mockActionDeleteByRunIds.mockReset().mockResolvedValue(0);
+    });
+
+    it('clears actions on --full before pulling', async () => {
+      mockMetaGet.mockImplementation(async (key: string) => {
+        if (key === 'remote:prod:job_id') return 'remote-job-1';
+        return null;
+      });
+      mockFindIdsBySourcePrefix.mockResolvedValue(['run-old-1']);
+
+      vi.stubGlobal(
+        'fetch',
+        vi.fn().mockImplementation(async (url: string) => {
+          if ((url as string).includes('/actions')) {
+            return {
+              ok: true,
+              status: 200,
+              json: () => Promise.resolve({ data: [], pagination: { hasMore: false, total: 0 } }),
+            };
+          }
+          if ((url as string).includes('/entities')) {
+            return {
+              ok: true,
+              status: 200,
+              json: () => Promise.resolve({ data: [], pagination: { hasMore: false, total: 0 } }),
+            };
+          }
+          if ((url as string).includes('/schema')) {
+            return {
+              ok: true,
+              status: 200,
+              json: () =>
+                Promise.resolve({
+                  data: { version: 1, fields: [], fieldAliases: [], createdAt: '2026-01-01', parentVersion: null },
+                }),
+            };
+          }
+          if ((url as string).includes('/usage')) {
+            return {
+              ok: true,
+              status: 200,
+              json: () =>
+                Promise.resolve({ data: { period: {}, totalTokens: 0, totalCostUsd: 0, byModel: {}, byPurpose: {}, byJob: [] } }),
+            };
+          }
+          return {
+            ok: true,
+            status: 200,
+            json: () => Promise.resolve({ data: { id: 'remote-job-1', status: 'completed' } }),
+          };
+        }),
+      );
+
+      await runPullCommand({
+        remoteName: 'prod',
+        metaGet: mockMetaGet,
+        metaSet: mockMetaSet,
+        metaDelete: mockMetaDelete,
+        adapter: buildAdapterWithActions() as any,
+        projectId: 'test-project',
+        projectRoot: '/tmp/test',
+        full: true,
+        includeActions: true,
+      });
+
+      expect(mockActionDeleteByRunIds).toHaveBeenCalledWith(['run-old-1']);
+    });
+  });
 });
