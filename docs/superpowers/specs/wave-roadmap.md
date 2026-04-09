@@ -19,7 +19,7 @@ This document tracks the interleaved execution of Phase 12 (production hardening
 | 2 | D+F+J: Reliability, pipeline, local DX | Steps 2+3: SQLite + config | **Complete** (4 items deferred) |
 | 3 | B+C+E: Auth, observability, performance + D/F deferred | Step 4: Pipeline runner + core CLI | **Complete** |
 | 4 | G+H: API completeness, open-source readiness | Step 5: Data interaction commands | **Complete** |
-| 5 | I: Hosted platform layer | Step 6: Remote operations | Pending |
+| 5 | I: Hosted platform layer | Step 6: Remote operations | **5-1 to 5-5 Complete**, 5-6 Pending |
 
 ---
 
@@ -313,13 +313,25 @@ Push/pull bridge between local projects and hosted platform.
 
 **Spec:** Phase 13, Sections 8-9
 
-**Plans:** None yet — to be written.
+**Decomposition:** `docs/superpowers/specs/2026-04-06-wave-5-decomposition-design.md`
 
-**Items deferred from Wave 4:**
-- `spatula add` SQLite crawl history dedup (DataSource doesn't expose crawled URLs yet)
-- `spatula reset --keep-remote` flag
-- CSS extractor table extraction
-- Audit logging for `tenant.quota_exceeded` in job-manager (`packages/queue/src/job-manager.ts:57`)
+**Sub-plans (6):**
+
+| Sub-plan | Scope | Status |
+|----------|-------|--------|
+| 5-1 | User & Auth Foundation (user_tenants, JWT tenant resolution, cursor streaming) | **Complete** |
+| 5-2 | Billing & Metering (Stripe, usage_records, quota enforcement, metering worker) | **Complete** |
+| 5-3 | Admin & Retention (admin routes, cleanup worker, tenant suspension) | **Complete** |
+| 5-4 | Remote Config & Push (remote add/list/remove, push, job lifecycle, ApiDataSource) | **Complete** |
+| 5-5 | Pull Flow (pull command, schema conflict TUI, incremental, crash recovery, source filter) | **Complete** |
+| 5-6 | Deferred Items (quota audit, add dedup, reset --keep-remote, CSS tables, pull flags) | Pending |
+
+**Plans:**
+- `docs/superpowers/plans/2026-04-06-wave-5-1-user-auth-foundation.md`
+- `docs/superpowers/plans/2026-04-06-wave-5-2-billing-metering.md`
+- `docs/superpowers/plans/2026-04-07-wave-5-3-admin-retention.md`
+- `docs/superpowers/plans/2026-04-07-wave-5-4-remote-config-push.md`
+- `docs/superpowers/plans/2026-04-08-wave-5-5-pull-flow.md`
 
 ---
 

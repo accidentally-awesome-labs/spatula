@@ -249,8 +249,15 @@ function createMockReconciler(extractionId: string): DataReconciler {
 // ---------------------------------------------------------------------------
 // Describe
 // ---------------------------------------------------------------------------
+let setupOk = false;
+
 describe('Full Pipeline E2E', () => {
   beforeAll(async () => {
+    // Skip if no Postgres/Redis available
+    if (!process.env.TEST_DATABASE_URL && !process.env.DATABASE_URL) {
+      return; // setupOk stays false → all tests skip
+    }
+
     // 1. Start fixture HTTP server
     server = createServer((_req, res) => {
       res.writeHead(200, { 'Content-Type': 'text/html' });
@@ -283,6 +290,8 @@ describe('Full Pipeline E2E', () => {
     await db.execute(
       sql`INSERT INTO tenants (id, name) VALUES (${tenantId}, ${'e2e-test-tenant'})`,
     );
+
+    setupOk = true;
   });
 
   afterAll(async () => {
@@ -310,11 +319,12 @@ describe('Full Pipeline E2E', () => {
     }
 
     // Close connections
-    await queues.closeAll().catch(() => {});
+    await queues?.closeAll().catch(() => {});
     server?.close();
   });
 
-  it('runs the full pipeline: create job → crawl → evolve → reconcile → export', async () => {
+  it('runs the full pipeline: create job → crawl → evolve → reconcile → export', async (ctx) => {
+    if (!setupOk) return ctx.skip();
     // ---------------------------------------------------------------
     // Setup repositories and deps
     // ---------------------------------------------------------------
@@ -672,7 +682,8 @@ describe('Full Pipeline E2E', () => {
     // -----------------------------------------------------------------
     // Test 1: Crawl failure is handled gracefully
     // -----------------------------------------------------------------
-    it('handles crawl failure gracefully', async () => {
+    it('handles crawl failure gracefully', async (ctx) => {
+      if (!setupOk) return ctx.skip();
       const tid = await createIsolatedTenant('e2e-crawl-failure');
 
       const jobRepo = new JobRepository(db);
@@ -726,7 +737,8 @@ describe('Full Pipeline E2E', () => {
     // -----------------------------------------------------------------
     // Test 2: Schema evolution with no changes
     // -----------------------------------------------------------------
-    it('handles schema evolution with no proposed changes', async () => {
+    it('handles schema evolution with no proposed changes', async (ctx) => {
+      if (!setupOk) return ctx.skip();
       const tid = await createIsolatedTenant('e2e-no-evolution');
 
       const jobRepo = new JobRepository(db);
@@ -786,7 +798,8 @@ describe('Full Pipeline E2E', () => {
     // -----------------------------------------------------------------
     // Test 3: Export of empty job (no entities)
     // -----------------------------------------------------------------
-    it('handles export of a job with no entities', async () => {
+    it('handles export of a job with no entities', async (ctx) => {
+      if (!setupOk) return ctx.skip();
       const tid = await createIsolatedTenant('e2e-empty-export');
 
       const jobRepo = new JobRepository(db);
@@ -843,7 +856,8 @@ describe('Full Pipeline E2E', () => {
     // -----------------------------------------------------------------
     // Test 4: Job cancellation mid-pipeline
     // -----------------------------------------------------------------
-    it('preserves existing data when job is cancelled mid-pipeline', async () => {
+    it('preserves existing data when job is cancelled mid-pipeline', async (ctx) => {
+      if (!setupOk) return ctx.skip();
       const tid = await createIsolatedTenant('e2e-cancel-mid');
 
       const jobRepo = new JobRepository(db);
