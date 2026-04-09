@@ -7,7 +7,7 @@
  * parameters on interface methods are accepted but ignored — the
  * pre-bound projectId is always used.
  */
-import { eq, and, desc } from 'drizzle-orm';
+import { eq, and, desc, inArray } from 'drizzle-orm';
 import type { ActionRepo } from '@spatula/core/pipeline/types.js';
 import type { ProjectDatabase } from '../connection.js';
 import { actions } from '../../schema-sqlite/actions.js';
@@ -129,9 +129,11 @@ export class SqliteActionRepository implements ActionRepo {
 
     const existingIds = new Set<string>();
     wrapStorageError(() => {
-      for (const item of batch) {
-        const row = this.db.select({ id: actions.id }).from(actions).where(eq(actions.id, item.id)).get();
-        if (row) existingIds.add(item.id);
+      const ids = batch.map(item => item.id);
+      for (let i = 0; i < ids.length; i += 999) {
+        const chunk = ids.slice(i, i + 999);
+        const rows = this.db.select({ id: actions.id }).from(actions).where(inArray(actions.id, chunk)).all();
+        for (const row of rows) existingIds.add(row.id);
       }
     }, { method: 'upsertBatch:check', table: 'actions' });
 

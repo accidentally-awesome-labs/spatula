@@ -9,7 +9,7 @@
  * - No ::int cast on count(*) — uses plain sql`count(*)` with Number() wrap
  * - UUIDs via crypto.randomUUID(), timestamps via new Date().toISOString()
  */
-import { eq, and, desc } from 'drizzle-orm';
+import { eq, and, desc, inArray } from 'drizzle-orm';
 import type { ExtractionRepo } from '@spatula/core/pipeline/types.js';
 import type { ProjectDatabase } from '../connection.js';
 import { extractions } from '../../schema-sqlite/extractions.js';
@@ -99,9 +99,12 @@ export class SqliteExtractionRepository implements ExtractionRepo {
 
     const existingIds = new Set<string>();
     wrapStorageError(() => {
-      for (const item of batch) {
-        const row = this.db.select({ id: extractions.id }).from(extractions).where(eq(extractions.id, item.id)).get();
-        if (row) existingIds.add(item.id);
+      const ids = batch.map(item => item.id);
+      // Batch existence check (SQLite limit is 999 params)
+      for (let i = 0; i < ids.length; i += 999) {
+        const chunk = ids.slice(i, i + 999);
+        const rows = this.db.select({ id: extractions.id }).from(extractions).where(inArray(extractions.id, chunk)).all();
+        for (const row of rows) existingIds.add(row.id);
       }
     }, { method: 'upsertBatch:check', table: 'extractions' });
 

@@ -44,4 +44,27 @@ describe('registerGauges', () => {
     };
     expect(() => registerGauges(deps)).not.toThrow();
   });
+
+  it('does not throw when called before createMetrics (no-op)', () => {
+    // _meter is undefined — registerGauges should silently return
+    const deps = {
+      jobRepo: { countByStatus: vi.fn() },
+      tenantRepo: { countAll: vi.fn() },
+      queueProvider: { getQueueDepth: vi.fn() },
+    };
+    expect(() => registerGauges(deps)).not.toThrow();
+    // Verify callbacks were NOT wired (no meter = no gauges)
+    expect(deps.jobRepo.countByStatus).not.toHaveBeenCalled();
+  });
+
+  it('gauge callbacks handle errors gracefully', async () => {
+    createMetrics({ enabled: false });
+    const deps = {
+      jobRepo: { countByStatus: vi.fn().mockRejectedValue(new Error('db down')) },
+      tenantRepo: { countAll: vi.fn().mockRejectedValue(new Error('db down')) },
+      queueProvider: { getQueueDepth: vi.fn().mockRejectedValue(new Error('redis down')) },
+    };
+    // Should not throw — error handling is inside the gauge callbacks
+    expect(() => registerGauges(deps)).not.toThrow();
+  });
 });

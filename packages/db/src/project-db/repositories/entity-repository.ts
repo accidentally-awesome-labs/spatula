@@ -128,13 +128,11 @@ export class SqliteEntityRepository implements EntityRepo {
     // Check which IDs already exist to accurately track insert vs update
     const existingIds = new Set<string>();
     wrapStorageError(() => {
-      for (const entity of batch) {
-        const row = this.db
-          .select({ id: entities.id })
-          .from(entities)
-          .where(eq(entities.id, entity.id))
-          .get();
-        if (row) existingIds.add(entity.id);
+      const ids = batch.map(e => e.id);
+      for (let i = 0; i < ids.length; i += 999) {
+        const chunk = ids.slice(i, i + 999);
+        const rows = this.db.select({ id: entities.id }).from(entities).where(inArray(entities.id, chunk)).all();
+        for (const row of rows) existingIds.add(row.id);
       }
     }, { method: 'upsertBatch:check', table: 'entities' });
 

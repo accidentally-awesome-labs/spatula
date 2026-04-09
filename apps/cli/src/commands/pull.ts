@@ -51,7 +51,7 @@ export interface PullInput {
         runId: string | null;
       }>) => Promise<{ inserted: number; updated: number }>;
       deleteByRunIds: (runIds: string[]) => Promise<number>;
-      findIdsByRunId?: (runId: string) => Promise<string[]>;
+      findIdsByRunId: (runId: string) => Promise<string[]>;
     };
     actionRepo?: {
       upsertBatch: (batch: Array<{
@@ -352,7 +352,7 @@ export async function runPullCommand(input: PullInput): Promise<PullResult> {
     // --full cleanup: delete previously-pulled extractions and their entity_sources
     if (input.full) {
       const runIds = await input.adapter.runRepo.findIdsBySourcePrefix(`remote:${input.remoteName}:`);
-      if (input.adapter.extractionRepo.findIdsByRunId && input.adapter.entitySourceRepo) {
+      if (input.adapter.entitySourceRepo) {
         const extractionIds: string[] = [];
         for (const rid of runIds) {
           const ids = await input.adapter.extractionRepo.findIdsByRunId(rid);
