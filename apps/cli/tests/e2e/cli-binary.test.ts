@@ -59,13 +59,13 @@ function runCli(
 // ---------------------------------------------------------------------------
 
 describe('CLI help and discovery', () => {
-  it('--help shows all 17 commands', () => {
+  it('--help shows all 20 commands', () => {
     const { stdout, exitCode } = runCli(['--help']);
     expect(exitCode).toBe(0);
     const commands = [
       'init', 'run', 'reset', 'doctor', 'add', 'config', 'setup',
       'estimate', 'new', 'list', 'status', 'logs', 'schema', 'export',
-      'explore', 'review', 'test',
+      'explore', 'review', 'test', 'push', 'remote', 'pull',
     ];
     for (const cmd of commands) {
       expect(stdout).toContain(cmd);

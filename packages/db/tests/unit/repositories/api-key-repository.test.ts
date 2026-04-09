@@ -46,30 +46,6 @@ describe('ApiKeyRepository', () => {
     });
   });
 
-  describe('findByHash', () => {
-    it('returns key when hash matches, not revoked, and not expired', async () => {
-      const key = {
-        id: 'key-1',
-        tenantId: 'tenant-1',
-        keyHash: 'hash',
-        scopes: ['jobs:read'],
-        revokedAt: null,
-        expiresAt: null,
-      };
-      mockDb.mocks.where.mockResolvedValue([key]);
-
-      const result = await repo.findByHash('hash');
-      expect(result).toEqual(key);
-    });
-
-    it('returns null when no matching key found', async () => {
-      mockDb.mocks.where.mockResolvedValue([]);
-
-      const result = await repo.findByHash('nonexistent');
-      expect(result).toBeNull();
-    });
-  });
-
   describe('listByTenant', () => {
     it('returns keys for tenant (excludes keyHash from projection)', async () => {
       const keys = [

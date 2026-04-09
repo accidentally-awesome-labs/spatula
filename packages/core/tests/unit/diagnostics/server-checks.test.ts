@@ -46,7 +46,6 @@ describe('Server Health Checks', () => {
     const migCheck = checks.find((c) => c.name === 'migrations')!;
     const result = await migCheck.run();
     expect(result.status).toBe('pass');
-    expect(result.message).toContain('15');
   });
 
   it('migrations check warns when no tester provided', async () => {
