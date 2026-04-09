@@ -7,6 +7,7 @@
  * Flags:
  *   --keep-exports   Preserve the exports/ subdirectory
  *   --keep-entities  Preserve the project.db SQLite database
+ *   --keep-remote    Preserve remote job links and pulled data (implies --keep-entities)
  */
 
 import { existsSync, readdirSync, rmSync } from 'node:fs';
@@ -53,6 +54,8 @@ export interface ResetOptions {
   keepExports?: boolean;
   /** Preserve the project.db SQLite database. */
   keepEntities?: boolean;
+  /** Preserve remote job links and pulled data from remote servers. */
+  keepRemote?: boolean;
   /** Working directory to search from (defaults to process.cwd()). */
   cwd?: string;
 }
@@ -69,6 +72,11 @@ export interface ResetResult {
 // ---------------------------------------------------------------------------
 
 export async function runResetCommand(options: ResetOptions = {}): Promise<ResetResult> {
+  // --keep-remote implies --keep-entities (remote state lives in SQLite DB)
+  if (options.keepRemote) {
+    options.keepEntities = true;
+  }
+
   const cwd = options.cwd ?? process.cwd();
 
   const projectRoot = findProjectRoot(cwd);
@@ -119,6 +127,32 @@ export async function runResetCommand(options: ResetOptions = {}): Promise<Reset
 
   // Recreate the standard directory structure (skips dirs that still exist)
   await recreateSubdirs(spatulaDir);
+
+  // Selective DB cleanup for --keep-remote
+  if (options.keepRemote) {
+    const dbPath = join(spatulaDir, DB_FILE);
+    if (existsSync(dbPath)) {
+      // Use raw better-sqlite3 handle for bulk deletes
+      const Database = (await import('better-sqlite3')).default;
+      const sqlite = new Database(dbPath);
+      sqlite.pragma('foreign_keys = ON');
+      try {
+        // Delete local entities (runId null = pre-pull local, non-remote prefix = local runs)
+        sqlite.prepare(`DELETE FROM entities WHERE run_id IS NULL OR run_id NOT LIKE 'remote:%'`).run();
+        sqlite.prepare(`DELETE FROM extractions WHERE run_id IS NULL OR run_id NOT LIKE 'remote:%'`).run();
+        sqlite.prepare(`DELETE FROM actions WHERE run_id IS NULL OR run_id NOT LIKE 'remote:%'`).run();
+        // crawl_tasks and pages are always local
+        sqlite.prepare('DELETE FROM crawl_tasks').run();
+        sqlite.prepare('DELETE FROM pages').run();
+        // Delete local runs
+        sqlite.prepare(`DELETE FROM runs WHERE source = 'local'`).run();
+        // Preserve remote:* keys and core metadata
+        sqlite.prepare(`DELETE FROM project_meta WHERE key NOT LIKE 'remote:%' AND key NOT IN ('schema_version','project_id','project_name','created_at')`).run();
+      } finally {
+        sqlite.close();
+      }
+    }
+  }
 
   return {
     projectRoot,

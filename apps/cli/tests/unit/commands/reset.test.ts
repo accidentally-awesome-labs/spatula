@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import {
   mkdtempSync,
   rmSync,
@@ -9,6 +9,17 @@ import {
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { runResetCommand } from '../../../src/commands/reset.js';
+
+// Mock better-sqlite3 so unit tests don't need a real native module.
+// The DB-level selective cleanup is covered by integration tests.
+vi.mock('better-sqlite3', () => {
+  const mockSqlite = {
+    pragma: vi.fn(),
+    prepare: vi.fn().mockReturnValue({ run: vi.fn() }),
+    close: vi.fn(),
+  };
+  return { default: vi.fn(() => mockSqlite) };
+});
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -110,5 +121,30 @@ describe('runResetCommand', () => {
     // Crawl artefacts in other dirs are removed
     expect(existsSync(join(tmpDir, '.spatula', 'pages', 'page-1.html'))).toBe(false);
     expect(existsSync(join(tmpDir, '.spatula', 'exports', 'results.json'))).toBe(false);
+  });
+});
+
+describe('reset --keep-remote', () => {
+  let projectDir: string;
+
+  beforeEach(() => {
+    projectDir = makeTmpDir();
+    scaffoldProject(projectDir);
+  });
+
+  afterEach(() => {
+    rmSync(projectDir, { recursive: true, force: true });
+  });
+
+  it('implies --keep-entities (DB file preserved)', async () => {
+    const result = await runResetCommand({ keepRemote: true, cwd: projectDir });
+    expect(result.keptItems).toContain('project.db');
+  });
+
+  it('removes .spatula directories but preserves DB', async () => {
+    const result = await runResetCommand({ keepRemote: true, cwd: projectDir });
+    expect(result.removedItems).toContain('pages');
+    expect(result.removedItems).toContain('logs');
+    expect(result.keptItems).toContain('project.db');
   });
 });

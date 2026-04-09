@@ -145,12 +145,18 @@ yargs(hideBin(process.argv))
           type: 'boolean',
           default: false,
           describe: 'Preserve the project.db database file',
+        })
+        .option('keep-remote', {
+          type: 'boolean',
+          default: false,
+          describe: 'Preserve remote job links and pulled data',
         }),
     async (argv) => {
       try {
         const result = await runResetCommand({
           keepExports: argv.keepExports,
           keepEntities: argv.keepEntities,
+          keepRemote: argv.keepRemote,
         });
         console.log(formatResetResult(result));
       } catch (err: unknown) {
