@@ -1,7 +1,7 @@
 import { serve } from '@hono/node-server';
 import type { ServerType } from '@hono/node-server';
 import { createNodeWebSocket } from '@hono/node-ws';
-import { createLogger, loadConfig, getEnvOrDefault } from '@spatula/shared';
+import { createLogger, loadConfig, getEnvOrDefault, registerGauges } from '@spatula/shared';
 import { createApp } from './app.js';
 import { JobProgressManager } from './ws/job-progress.js';
 import { executeShutdown, SHUTDOWN_TIMEOUT_MS } from './shutdown.js';
@@ -47,6 +47,16 @@ function setupGracefulShutdown(
 export function startServer(deps: AppDeps, port?: number) {
   const config = loadConfig();
   const serverPort = port ?? config.server.port;
+
+  // Register observable gauges now that repos are available
+  if (deps.jobRepo && deps.tenantRepo) {
+    registerGauges({
+      jobRepo: { countByStatus: (status: string) => deps.jobRepo.countByTenant('*', { status }) },
+      tenantRepo: { countAll: () => deps.tenantRepo!.countAll() },
+      queueProvider: { getQueueDepth: async () => 0 }, // TODO: wire to BullMQ queue depth
+    });
+  }
+
   const app = createApp(deps);
   const { injectWebSocket, upgradeWebSocket } = createNodeWebSocket({ app });
 

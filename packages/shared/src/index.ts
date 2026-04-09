@@ -4,7 +4,7 @@ export * from './config.js';
 export * from './utils.js';
 export type { Entity, EntityWithProvenance } from './types/entity.js';
 export * from './auth/index.js';
-export { createMetrics, shutdownMetrics } from './metrics.js';
+export { createMetrics, shutdownMetrics, registerGauges } from './metrics.js';
 export type { SpatulaMetrics, MetricsConfig } from './metrics.js';
 export { initSentry, captureException } from './sentry.js';
 export type { SentryConfig } from './sentry.js';

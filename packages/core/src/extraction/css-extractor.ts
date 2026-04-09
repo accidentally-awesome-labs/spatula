@@ -189,17 +189,43 @@ function findTable($: cheerio.CheerioAPI, fieldName: string): Array<Record<strin
     : table.find('tr').slice(1);
 
   const rows: Array<Record<string, string>> = [];
+  // Track rowspan carry-overs: { colIdx: { value, remaining } }
+  const rowspanState: Map<number, { value: string; remaining: number }> = new Map();
+
   bodyRows.each((_, row) => {
     const record: Record<string, string> = {};
     let colIdx = 0;
     $(row).find('th, td').each((_, cell) => {
+      // Skip columns occupied by rowspan from previous rows
+      while (rowspanState.has(colIdx) && colIdx < headers.length) {
+        const rs = rowspanState.get(colIdx)!;
+        record[headers[colIdx]] = rs.value;
+        rs.remaining--;
+        if (rs.remaining <= 0) rowspanState.delete(colIdx);
+        colIdx++;
+      }
+
       const text = $(cell).text().trim();
       const colspan = parseInt($(cell).attr('colspan') ?? '1', 10);
+      const rowspan = parseInt($(cell).attr('rowspan') ?? '1', 10);
+
       for (let i = 0; i < colspan && colIdx < headers.length; i++) {
         record[headers[colIdx]] = text;
+        if (rowspan > 1) {
+          rowspanState.set(colIdx, { value: text, remaining: rowspan - 1 });
+        }
         colIdx++;
       }
     });
+    // Fill any remaining rowspan columns at end of row
+    while (rowspanState.has(colIdx) && colIdx < headers.length) {
+      const rs = rowspanState.get(colIdx)!;
+      record[headers[colIdx]] = rs.value;
+      rs.remaining--;
+      if (rs.remaining <= 0) rowspanState.delete(colIdx);
+      colIdx++;
+    }
+
     if (Object.values(record).some(v => v !== '')) {
       rows.push(record);
     }

@@ -65,7 +65,10 @@ export class JobManager {
             actorId: 'system',
             actorType: 'system',
             tenantId,
-            metadata: { dimension: 'jobs' },
+            metadata: {
+              dimension: 'jobs',
+              ...((error as any).context ?? {}),
+            },
           });
         }
         throw error;
