@@ -87,6 +87,7 @@ Wave 5-6 addresses deferred items from Waves 2–5 that are now unblocked. The i
   - `queue_depth` — sum of waiting + active across all queues
   - `active_jobs` — count of jobs with `status = 'running'`
   - `tenant_count` — total tenant count
+- Gauge callbacks must be wrapped in try/catch, returning 0 on error to prevent crashing the metrics scrape
 - Called once at server startup after repos are constructed (in `apps/api/src/server.ts` or equivalent)
 - Return type of `createMetrics()` unchanged — gauges don't need to be accessed by callers
 
@@ -123,9 +124,11 @@ storageBytes: { pages: (job.stats as any)?.storageBytesUsed ?? 0, database: 0, e
 - `--keep-remote` implies `--keep-entities` (the SQLite DB must survive to preserve remote state)
 - After the filesystem reset (remove/recreate dirs), if `keepRemote` is true, open the DB and selectively clean:
   1. Delete all `runs` rows where `source = 'local'`
-  2. Delete entities where `runId` does NOT match `remote:*` pattern (local entities)
-  3. Delete all `crawl_tasks`, `pages`, `extractions` (local only — remote extractions are tagged by `runId` after 1g migration)
-  4. Preserve all `project_meta` entries matching `remote:*` keys
+  2. Delete local entities: `DELETE FROM entities WHERE run_id IS NULL OR run_id NOT LIKE 'remote:%'` — NULL `runId` means pre-pull-feature local entities, non-`remote:` prefix means local run entities
+  3. Delete all `crawl_tasks`, `pages` (always local — these are never pulled)
+  4. Delete local extractions/actions: `DELETE FROM extractions WHERE run_id IS NULL OR run_id NOT LIKE 'remote:%'` (same pattern for actions)
+  5. Preserve all `project_meta` entries matching `remote:*` keys
+- Note: a new `deleteLocalEntities()` method (and equivalent for extractions/actions) should be added rather than reusing `deleteByRunIds`, since the inverse pattern + NULL handling requires a custom query
 - Without `--keep-remote`: clear everything (current behavior unchanged)
 
 **CLI registration:** Add `--keep-remote` boolean option to `reset` command in `index.tsx`.
@@ -142,11 +145,20 @@ All schema changes in one Drizzle migration:
 - `extractions`: add nullable `runId` text column, add nullable `pageUrl` text column, make `pageId` nullable (for remote records without local page data). Add index on `runId`.
 - `actions`: add nullable `runId` text column. Add index on `runId`.
 
+**SQLite migration note:** Making `pageId` nullable requires table recreation in SQLite (SQLite does not support `ALTER COLUMN ... DROP NOT NULL`). Drizzle Kit handles this automatically via copy-recreate (create temp table, copy data, drop original, rename). **Test the migration against a populated local project DB** to ensure existing extraction data with non-null `pageId` is preserved during the recreation.
+
 #### 2.7.2 Server-Side Changes
 
-**Extraction API response:** Extend `extractionResponseSchema` with `pageUrl: z.string().nullable()`. In the extraction repository's `findByJob` and `findByJobCursor` methods, join with `raw_pages` to include the page URL.
+**Extraction API response:** Update `extractionResponseSchema` in `apps/api/src/schemas/responses.ts`:
+- Change `pageId: z.string().uuid()` → `pageId: z.string().uuid().nullable()`
+- Add `pageUrl: z.string().nullable()`
+In the extraction repository's `findByJob` and `findByJobCursor` methods, LEFT JOIN with `raw_pages` to include the page URL. Note: making `pageId` nullable on the API response is a backward-compatible addition (existing non-null values remain valid), but consumers parsing with strict Zod schemas will need to accept nulls.
 
-**Entity-sources endpoint:** New route `GET /api/v1/jobs/:jobId/entity-sources` with cursor pagination. Returns `{ entityId, extractionId, matchConfidence }` rows. Query param `since` for incremental pull.
+**Entity-sources endpoint:** New route `GET /api/v1/jobs/:jobId/entity-sources` with cursor pagination.
+- Register in `app.ts` under the existing jobs route group (tenant-scoped, same middleware chain)
+- Response schema: `{ data: Array<{ entityId: z.string().uuid(), extractionId: z.string().uuid(), matchConfidence: z.number() }>, pagination: PaginationEnvelope }`
+- Query params: `cursor`, `since`, `limit` (same pattern as extractions/actions endpoints)
+- File: `apps/api/src/routes/entity-sources.ts` (new)
 
 **Job stats enrichment:** Add `pendingActionsCount` and `schemaFieldCount` to job detail stats (see 2.5).
 
@@ -161,7 +173,7 @@ Add to `SpatulaApiClient`:
 
 - `SqliteExtractionRepository`: add `upsertBatch()` (on conflict update by `id`), `deleteByRunIds(runIds)`
 - `SqliteActionRepository`: add `upsertBatch()` (on conflict update by `id`), `deleteByRunIds(runIds)`
-- `SqliteEntitySourceRepository` (or extend existing): add `upsertBatch()`, `deleteByExtractionIds()`
+- Entity source methods (co-located in `packages/db/src/project-db/repositories/entity-repository.ts` alongside entity methods): add `upsertBatchSources()`, `deleteByExtractionIds()`
 
 #### 2.7.5 Pull Flow Extension
 
@@ -170,7 +182,7 @@ After the existing entity pull loop (step 5), when flags are enabled:
 **Step 6 — Extractions** (if `--include-extractions`):
 1. Resume from `remote:{name}:pull_cursor_extractions` (independent cursor)
 2. Fetch batch via `client.getExtractionsStreamPaginated(jobId, { since, limit: 100 })`
-3. For each extraction: store `pageUrl` directly on the record, set `pageId` to null, set `runId` to the current run ID
+3. For each extraction: store `pageUrl` directly on the record, set `pageId` to null, set `runId` to the current pull-run record ID (same run used for entities — all pulled data types share one run ID for cleanup tracking)
 4. Upsert batch into SQLite extractions table
 5. Checkpoint cursor to `project_meta`
 
@@ -208,7 +220,7 @@ actionsUpdated?: number;
 
 #### 2.7.8 Pull Progress Display
 
-Update `PullProgress` Ink component to support multi-phase display:
+The existing pull command uses inline `process.stderr.write` for progress (no Ink component exists yet). Create a `PullProgress` Ink component or extend the inline progress to support multi-phase display:
 - Show current phase label: "Pulling entities...", "Pulling extractions...", "Pulling entity sources...", "Pulling actions..."
 - Show per-phase batch count / total
 - Overall progress across all active phases
@@ -269,6 +281,7 @@ New `findTable($, fieldName)` function:
    - `colspan`: fill adjacent columns with the same value
    - `rowspan`: basic support — propagate value to subsequent rows
    - Nested tables: skip — only extract from the outermost matching table
+   - `<th>` in `<tbody>`: treat as cell values alongside `<td>` (some tables use row headers)
 5. **Return:** `Array<Record<string, string>>` or `null` if no table found
 
 #### 3.1.2 Auto-Discovery Enhancement
@@ -308,10 +321,11 @@ The existing `sl_crawl_tasks_url_idx` index covers URL lookups. A compound `(sta
 #### 3.2.2 Command Changes
 
 In `runAddCommand()`:
-1. After reading `spatula.yaml`, attempt to open the local project DB via `openLocalProject()`
+1. After reading `spatula.yaml`, attempt to open the local project DB via `openLocalProject()` inside a try/catch
 2. If DB exists, call `taskRepo.findCompletedUrls()` and normalize the results with the same `normaliseUrl()` function
 3. Pass crawled URL set as additional dedup source to `validateAndDedup()`
-4. If `.spatula/project.db` doesn't exist (fresh project), skip history check gracefully
+4. If `.spatula/project.db` doesn't exist (ENOENT), or the DB is locked (SQLITE_BUSY), or any other DB error occurs: log a warning and proceed without history dedup — never let DB access failure break URL addition
+5. Always call `close()` on the DB handle in a `finally` block to prevent leaked file descriptors
 
 #### 3.2.3 Interface Extensions
 
@@ -362,16 +376,37 @@ Skipped 3 already crawled:
 ### 4.1 Config Diff Recursive Comparison
 
 **File:** `packages/core/src/config/config-differ.ts:195`
+**Types:** `packages/core/src/config/diff-types.ts`
 
-**Problem:** `diffFieldDefinition()` compares top-level field properties but skips recursive comparison of `objectFields` and `arrayItemType`.
+**Problem:** `diffFieldProperties()` compares top-level field properties but skips recursive comparison of `objectFields` and `arrayItemType`. Returns `Array<{ property: string; from: unknown; to: unknown }>` which feeds into `FieldChange.changes`.
 
 **Design:**
-- After existing property comparisons, add two recursive blocks:
+
+The existing `FieldChange` interface is `{ name: string; changes: Array<{ property, from, to }> }`. Extend the change entry type to support nesting:
+
+```typescript
+// In diff-types.ts, extend the changes array entry type:
+export interface PropertyChange {
+  property: string;
+  from: unknown;
+  to: unknown;
+  nestedChanges?: PropertyChange[];  // for recursive arrayItemType/objectFields
+  addedFields?: string[];            // for objectFields: names of added sub-fields
+  removedFields?: string[];          // for objectFields: names of removed sub-fields
+}
+
+export interface FieldChange {
+  name: string;
+  changes: PropertyChange[];
+}
+```
+
+After existing property comparisons in `diffFieldProperties()` (line 195), add:
 
 **arrayItemType:**
 ```typescript
 if (current.arrayItemType && previous.arrayItemType) {
-  const nestedChanges = diffFieldDefinition(current.arrayItemType, previous.arrayItemType);
+  const nestedChanges = diffFieldProperties(current.arrayItemType, previous.arrayItemType);
   if (nestedChanges.length > 0) {
     changes.push({ property: 'arrayItemType', from: previous.arrayItemType, to: current.arrayItemType, nestedChanges });
   }
@@ -386,26 +421,24 @@ if (current.objectFields || previous.objectFields) {
   const currentFields = new Map((current.objectFields ?? []).map(f => [f.name, f]));
   const previousFields = new Map((previous.objectFields ?? []).map(f => [f.name, f]));
   
-  const added = [...currentFields.keys()].filter(k => !previousFields.has(k));
-  const removed = [...previousFields.keys()].filter(k => !currentFields.has(k));
-  const modified = [...currentFields.keys()]
+  const addedFields = [...currentFields.keys()].filter(k => !previousFields.has(k));
+  const removedFields = [...previousFields.keys()].filter(k => !currentFields.has(k));
+  const nestedChanges = [...currentFields.keys()]
     .filter(k => previousFields.has(k))
-    .flatMap(k => diffFieldDefinition(currentFields.get(k)!, previousFields.get(k)!));
+    .flatMap(k => diffFieldProperties(currentFields.get(k)!, previousFields.get(k)!));
   
-  if (added.length || removed.length || modified.length) {
+  if (addedFields.length || removedFields.length || nestedChanges.length) {
     changes.push({
       property: 'objectFields',
       from: previous.objectFields,
       to: current.objectFields,
-      nestedChanges: modified,
-      addedFields: added,
-      removedFields: removed,
+      nestedChanges,
+      addedFields,
+      removedFields,
     });
   }
 }
 ```
-
-- Extend the `FieldChange` type with optional `nestedChanges?: FieldChange[]`, `addedFields?: string[]`, `removedFields?: string[]`
 
 ---
 
@@ -445,7 +478,7 @@ Add to `.env.example`.
 
 ### 5.5 Testing Strategy
 
-Each item requires unit tests. Integration tests for:
+Each item requires unit tests. The SQLite migration (section 5.1) requires a dedicated migration test that exercises the upgrade path from a populated local project DB — verifying that existing extraction records with non-null `pageId` survive the table recreation. Integration tests for:
 - Pull with `--include-extractions` / `--include-actions` (end-to-end with mocked API)
 - Reset with `--keep-remote` (verify remote data preserved, local cleared)
 - Add with crawl history (verify dedup against DB)
