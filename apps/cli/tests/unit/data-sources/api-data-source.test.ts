@@ -74,6 +74,40 @@ describe('ApiDataSource', () => {
     expect(status.lastRun?.status).toBe('running');
   });
 
+  it('reads pendingActions and schemaFields from job stats', async () => {
+    mockFetchOk({
+      id: 'j1',
+      status: 'running',
+      startedAt: '2026-01-01T00:00:00Z',
+      pagesDiscovered: 0,
+      pagesCompleted: 0,
+      entitiesExtracted: 0,
+      stats: { pendingActionsCount: 5, schemaFieldCount: 12, storageBytesUsed: 1024 },
+    });
+    ds = new ApiDataSource(client, 'j1');
+    const status = await ds.getStatus();
+    expect(status.pendingActions).toBe(5);
+    expect(status.schemaFields).toBe(12);
+    expect(status.storageBytes.pages).toBe(1024);
+    expect(status.storageBytes.database).toBe(0);
+    expect(status.storageBytes.exports).toBe(0);
+  });
+
+  it('defaults stats fields to 0 when job.stats is missing', async () => {
+    mockFetchOk({
+      id: 'j2',
+      status: 'pending',
+      pagesDiscovered: 0,
+      pagesCompleted: 0,
+      entitiesExtracted: 0,
+    });
+    ds = new ApiDataSource(client, 'j2');
+    const status = await ds.getStatus();
+    expect(status.pendingActions).toBe(0);
+    expect(status.schemaFields).toBe(0);
+    expect(status.storageBytes.pages).toBe(0);
+  });
+
   it('approveAction calls client.approveAction', async () => {
     mockFetchOk({});
     ds = new ApiDataSource(client, 'job-1');
