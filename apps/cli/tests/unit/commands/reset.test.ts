@@ -10,15 +10,16 @@ import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { runResetCommand } from '../../../src/commands/reset.js';
 
-// Mock better-sqlite3 so unit tests don't need a real native module.
+// Mock @spatula/db so unit tests don't need a real SQLite native module.
 // The DB-level selective cleanup is covered by integration tests.
-vi.mock('better-sqlite3', () => {
+vi.mock('@spatula/db', () => {
   const mockSqlite = {
-    pragma: vi.fn(),
     prepare: vi.fn().mockReturnValue({ run: vi.fn() }),
     close: vi.fn(),
   };
-  return { default: vi.fn(() => mockSqlite) };
+  return {
+    createProjectDb: vi.fn(() => ({ sqlite: mockSqlite, close: vi.fn() })),
+  };
 });
 
 // ---------------------------------------------------------------------------

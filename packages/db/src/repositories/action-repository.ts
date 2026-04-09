@@ -210,4 +210,18 @@ export class ActionRepository {
       });
     }
   }
+
+  async countByJobAndStatus(jobId: string, tenantId: string, status: string): Promise<number> {
+    try {
+      const [row] = await this.db
+        .select({ count: sql<number>`count(*)` })
+        .from(actions)
+        .where(and(eq(actions.jobId, jobId), eq(actions.tenantId, tenantId), eq(actions.status, status as any)));
+      return Number(row?.count ?? 0);
+    } catch (error) {
+      throw new StorageError(`Failed to count actions: ${(error as Error).message}`, {
+        cause: error as Error, context: { jobId, tenantId },
+      });
+    }
+  }
 }

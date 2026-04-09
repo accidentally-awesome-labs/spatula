@@ -25,6 +25,7 @@ import { apiKeyRoutes } from './routes/api-keys.js';
 import { rateLimitMiddleware } from './middleware/rate-limit.js';
 import { idempotencyMiddleware } from './middleware/idempotency.js';
 import { qualityRoutes } from './routes/quality.js';
+import { entitySourceRoutes } from './routes/entity-sources.js';
 import { timingMiddleware } from './middleware/timing.js';
 import { wsTokenRoutes } from './routes/ws-token.js';
 import { usageRoutes } from './routes/usage.js';
@@ -161,6 +162,7 @@ export function createApp(deps: AppDeps) {
   app.route('/api/v1/jobs', jobRoutes());
   app.route('/api/v1/jobs/:jobId/schema', schemaRoutes());
   app.route('/api/v1/jobs/:jobId/extractions', extractionRoutes());
+  app.route('/api/v1/jobs/:jobId/entity-sources', entitySourceRoutes());
   app.route('/api/v1/jobs/:jobId/entities', entityRoutes());
   app.get('/api/v1/jobs/:jobId/actions', requireScope('actions:read'));
   app.post('/api/v1/jobs/:jobId/actions/*', requireScope('actions:write'));

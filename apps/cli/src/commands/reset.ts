@@ -132,10 +132,9 @@ export async function runResetCommand(options: ResetOptions = {}): Promise<Reset
   if (options.keepRemote) {
     const dbPath = join(spatulaDir, DB_FILE);
     if (existsSync(dbPath)) {
-      // Use raw better-sqlite3 handle for bulk deletes
-      const Database = (await import('better-sqlite3')).default;
-      const sqlite = new Database(dbPath);
-      sqlite.pragma('foreign_keys = ON');
+      // Use createProjectDb which returns { sqlite } — the raw better-sqlite3 handle
+      const { createProjectDb } = await import('@spatula/db');
+      const { sqlite, close } = createProjectDb(dbPath);
       try {
         // Delete local entities (runId null = pre-pull local, non-remote prefix = local runs)
         sqlite.prepare(`DELETE FROM entities WHERE run_id IS NULL OR run_id NOT LIKE 'remote:%'`).run();
@@ -149,7 +148,7 @@ export async function runResetCommand(options: ResetOptions = {}): Promise<Reset
         // Preserve remote:* keys and core metadata
         sqlite.prepare(`DELETE FROM project_meta WHERE key NOT LIKE 'remote:%' AND key NOT IN ('schema_version','project_id','project_name','created_at')`).run();
       } finally {
-        sqlite.close();
+        close();
       }
     }
   }

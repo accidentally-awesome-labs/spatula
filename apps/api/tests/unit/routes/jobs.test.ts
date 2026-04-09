@@ -17,11 +17,15 @@ function createMockDeps(): AppDeps {
       updateStats: vi.fn(),
       deleteWithData: vi.fn(),
     } as any,
-    schemaRepo: {} as any,
+    schemaRepo: {
+      findLatest: vi.fn().mockResolvedValue(null),
+    } as any,
     extractionRepo: {} as any,
     entityRepo: {} as any,
     entitySourceRepo: {} as any,
-    actionRepo: {} as any,
+    actionRepo: {
+      countByJobAndStatus: vi.fn().mockResolvedValue(0),
+    } as any,
     taskRepo: {} as any,
     jobManager: {
       createJob: vi.fn().mockResolvedValue('job-1'),

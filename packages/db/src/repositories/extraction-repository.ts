@@ -1,6 +1,8 @@
 import { eq, and, desc, sql } from 'drizzle-orm';
 import { createLogger, StorageError } from '@spatula/shared';
 import { extractions } from '../schema/extractions.js';
+import { rawPages } from '../schema/raw-pages.js';
+import { crawlTasks } from '../schema/crawl-tasks.js';
 import type { Database } from '../connection.js';
 
 const logger = createLogger('extraction-repository');
@@ -56,8 +58,21 @@ export class ExtractionRepository {
       }
 
       let query = this.db
-        .select()
+        .select({
+          id: extractions.id,
+          jobId: extractions.jobId,
+          tenantId: extractions.tenantId,
+          pageId: extractions.pageId,
+          pageUrl: crawlTasks.url,
+          schemaVersion: extractions.schemaVersion,
+          data: extractions.data,
+          unmappedFields: extractions.unmappedFields,
+          metadata: extractions.metadata,
+          createdAt: extractions.createdAt,
+        })
         .from(extractions)
+        .leftJoin(rawPages, eq(extractions.pageId, rawPages.id))
+        .leftJoin(crawlTasks, eq(rawPages.taskId, crawlTasks.id))
         .where(and(...conditions))
         .orderBy(desc(extractions.createdAt));
 
@@ -115,8 +130,21 @@ export class ExtractionRepository {
       if (since) conditions.push(sql`${extractions.updatedAt} > ${since}`);
 
       const rows = await this.db
-        .select()
+        .select({
+          id: extractions.id,
+          jobId: extractions.jobId,
+          tenantId: extractions.tenantId,
+          pageId: extractions.pageId,
+          pageUrl: crawlTasks.url,
+          schemaVersion: extractions.schemaVersion,
+          data: extractions.data,
+          unmappedFields: extractions.unmappedFields,
+          metadata: extractions.metadata,
+          createdAt: extractions.createdAt,
+        })
         .from(extractions)
+        .leftJoin(rawPages, eq(extractions.pageId, rawPages.id))
+        .leftJoin(crawlTasks, eq(rawPages.taskId, crawlTasks.id))
         .where(and(...conditions))
         .orderBy(extractions.id)
         .limit(limit);

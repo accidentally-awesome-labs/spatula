@@ -1,6 +1,6 @@
-import { eq } from 'drizzle-orm';
+import { eq, and, sql } from 'drizzle-orm';
 import { createLogger, StorageError } from '@spatula/shared';
-import { entitySources } from '../schema/entities.js';
+import { entities, entitySources } from '../schema/entities.js';
 import { extractions } from '../schema/extractions.js';
 import { rawPages } from '../schema/raw-pages.js';
 import { crawlTasks } from '../schema/crawl-tasks.js';
@@ -77,6 +77,54 @@ export class EntitySourceRepository {
       throw new StorageError(`Failed to find entity sources with URLs: ${(error as Error).message}`, {
         cause: error as Error,
         context: { entityId },
+      });
+    }
+  }
+
+  async findByJobCursor(
+    jobId: string,
+    tenantId: string,
+    limit: number,
+    cursor?: string,
+    since?: string,
+  ) {
+    try {
+      const conditions = [eq(entities.jobId, jobId), eq(entities.tenantId, tenantId)];
+      if (cursor) conditions.push(sql`${entitySources.entityId} > ${cursor}::uuid`);
+      if (since) conditions.push(sql`${entities.updatedAt} > ${since}`);
+
+      const rows = await this.db
+        .select({
+          entityId: entitySources.entityId,
+          extractionId: entitySources.extractionId,
+          matchConfidence: entitySources.matchConfidence,
+        })
+        .from(entitySources)
+        .innerJoin(entities, eq(entitySources.entityId, entities.id))
+        .where(and(...conditions))
+        .orderBy(entitySources.entityId)
+        .limit(limit);
+
+      const nextCursor = rows.length === limit ? rows[rows.length - 1].entityId : null;
+      return { entities: rows, nextCursor };
+    } catch (error) {
+      throw new StorageError(`Failed to fetch entity sources by cursor: ${(error as Error).message}`, {
+        cause: error as Error, context: { jobId, tenantId },
+      });
+    }
+  }
+
+  async countByJob(jobId: string, tenantId: string): Promise<number> {
+    try {
+      const [row] = await this.db
+        .select({ count: sql<number>`count(*)` })
+        .from(entitySources)
+        .innerJoin(entities, eq(entitySources.entityId, entities.id))
+        .where(and(eq(entities.jobId, jobId), eq(entities.tenantId, tenantId)));
+      return Number(row?.count ?? 0);
+    } catch (error) {
+      throw new StorageError(`Failed to count entity sources: ${(error as Error).message}`, {
+        cause: error as Error, context: { jobId, tenantId },
       });
     }
   }

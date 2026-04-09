@@ -38,6 +38,7 @@ function createMockDeps(): AppDeps {
       updateStatus: vi.fn(),
       batchUpdateStatus: vi.fn().mockResolvedValue([]),
       countByJob: vi.fn().mockResolvedValue(0),
+      countByJobAndStatus: vi.fn().mockResolvedValue(0),
       findByJobCursor: vi.fn().mockResolvedValue({ entities: [], nextCursor: null }),
     },
     taskRepo: {},
