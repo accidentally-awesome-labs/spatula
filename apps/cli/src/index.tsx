@@ -184,10 +184,14 @@ yargs(hideBin(process.argv))
         array: true,
         demandOption: true,
         describe: 'URLs to add as seeds',
+      }).option('no-history', {
+        type: 'boolean',
+        default: false,
+        describe: 'Skip crawl history dedup (allow re-adding crawled URLs)',
       }),
     async (argv) => {
       try {
-        const result = await runAddCommand(argv.urls as string[]);
+        const result = await runAddCommand(argv.urls as string[], { noHistory: argv.noHistory });
         console.log(formatAddResult(result));
       } catch (err: unknown) {
         console.error(err instanceof Error ? err.message : 'An unexpected error occurred');

@@ -111,6 +111,20 @@ export class SqliteCrawlTaskRepository implements CrawlTaskRepo, TaskStatsRepo {
     return stats;
   }
 
+  async findCompletedUrls(): Promise<string[]> {
+    const rows = this.db
+      .select({ url: crawlTasks.url })
+      .from(crawlTasks)
+      .where(
+        and(
+          eq(crawlTasks.jobId, this.projectId),
+          eq(crawlTasks.status, 'completed'),
+        ),
+      )
+      .all();
+    return rows.map(r => r.url);
+  }
+
   /**
    * Find pending tasks ordered by priority score descending.
    * Not part of the pipeline interface — used by local pipeline's priority queue.
