@@ -78,14 +78,15 @@ describe('runPullCommand', () => {
       if (key === 'remote:prod:job_id') return 'remote-job-1';
       return null;
     });
+    mockUpsertBatch.mockResolvedValue({ inserted: 1, updated: 0 });
 
     mockFetchSequence([
       // getJob
       { data: { id: 'remote-job-1', status: 'completed', stats: { pagesProcessed: 10 } } },
       // getSchema
       { data: { version: 1, fields: [{ name: 'title', type: 'string', required: true, description: '' }], fieldAliases: [], createdAt: '2026-01-01', parentVersion: null } },
-      // getEntitiesStreamPaginated — single batch
-      { data: [{ id: 'e1', mergedData: { title: 'A' }, provenance: {}, categories: [], qualityScore: 0.9, tenantId: 't1', jobId: 'remote-job-1' }], pagination: { hasMore: false, total: 1 } },
+      // getEntitiesStreamPaginated — single batch with 1 entity
+      { data: [{ id: 'e1', mergedData: { title: 'A' }, provenance: { title: {} }, categories: ['product'], qualityScore: 0.9, tenantId: 't1', jobId: 'remote-job-1' }], pagination: { hasMore: false, total: 1 } },
       // getUsage
       { data: { period: {}, totalTokens: 1000, totalCostUsd: 0.05, byModel: {}, byPurpose: {}, byJob: [{ jobId: 'remote-job-1', tokens: 1000, costUsd: 0.05 }] } },
     ]);
@@ -101,8 +102,22 @@ describe('runPullCommand', () => {
     });
 
     expect(result.success).toBe(true);
-    expect(result.entitiesInserted).toBe(5);
-    expect(mockUpsertBatch).toHaveBeenCalled();
+    expect(result.entitiesInserted).toBe(1);
+    expect(result.llmTokens).toBe(1000);
+    expect(result.llmCostUsd).toBe(0.05);
+
+    // Verify entity transformation: tenantId stripped, runId set
+    expect(mockUpsertBatch).toHaveBeenCalledTimes(1);
+    const batch = mockUpsertBatch.mock.calls[0][0];
+    expect(batch).toHaveLength(1);
+    expect(batch[0].id).toBe('e1');
+    expect(batch[0].mergedData).toEqual({ title: 'A' });
+    expect(batch[0].qualityScore).toBe(0.9);
+    expect(batch[0].categories).toEqual(['product']);
+    expect(batch[0].runId).toBe('run-1'); // from mockRunCreate
+    expect(batch[0]).not.toHaveProperty('tenantId');
+    expect(batch[0]).not.toHaveProperty('jobId'); // stripped, not remapped into batch
+
     expect(mockRunCreate).toHaveBeenCalledWith(expect.objectContaining({
       status: 'pulled',
       source: 'remote:prod:remote-job-1',
@@ -233,7 +248,7 @@ describe('runPullCommand', () => {
       if (key === 'remote:prod:job_id') return 'remote-job-1';
       return null;
     });
-    mockUpsertBatch.mockResolvedValue({ inserted: 3, updated: 0 });
+    mockUpsertBatch.mockResolvedValue({ inserted: 1, updated: 0 });
 
     let entityCallCount = 0;
     vi.stubGlobal(
@@ -285,7 +300,8 @@ describe('runPullCommand', () => {
     });
 
     expect(result.success).toBe(false);
-    expect(result.entitiesInserted).toBe(3);
+    expect(result.entitiesInserted).toBe(1); // 1 entity from first batch
+    expect(result.error).toContain('Pull interrupted');
     // cursor from the first batch should have been checkpointed
     expect(mockMetaSet).toHaveBeenCalledWith('remote:prod:pull_cursor', 'cur-2');
   });
@@ -491,6 +507,7 @@ describe('runPullCommand', () => {
       { data: { period: {}, totalTokens: 0, totalCostUsd: 0, byModel: {}, byPurpose: {}, byJob: [] } },
     ]);
 
+    const resolveCallback = vi.fn().mockResolvedValue('remote');
     const result = await runPullCommand({
       remoteName: 'prod',
       metaGet: mockMetaGet,
@@ -499,15 +516,20 @@ describe('runPullCommand', () => {
       adapter: buildMockAdapter() as any,
       projectId: 'test-project',
       projectRoot: '/tmp/test',
-      resolveSchemaConflict: vi.fn().mockResolvedValue('remote'),
+      resolveSchemaConflict: resolveCallback,
     });
 
     expect(result.success).toBe(true);
     expect(mockSchemaCreate).toHaveBeenCalledWith(
       expect.objectContaining({ version: 2, parentId: 'local-schema-1' }),
     );
-    // remoteOnly = ['remote_field'], changed = [] (title is identical), localOnly = ['local_field']
-    expect(result.newFields?.map((f) => f.name)).toContain('remote_field');
+    // Verify the diff passed to the callback was computed correctly
+    expect(resolveCallback).toHaveBeenCalledTimes(1);
+    const diff = resolveCallback.mock.calls[0][0] as { localOnly: { name: string }[]; remoteOnly: { name: string }[]; changed: unknown[] };
+    expect(diff.remoteOnly.map((f: { name: string }) => f.name)).toEqual(['remote_field']);
+    expect(diff.localOnly.map((f: { name: string }) => f.name)).toEqual(['local_field']);
+    expect(diff.changed).toHaveLength(0); // title is identical in both
+    expect(result.newFields?.map((f) => f.name)).toEqual(['remote_field']);
   });
 
   it('creates merged schema when conflict resolves as merge', async () => {
@@ -815,6 +837,7 @@ describe('runPullCommand', () => {
       full: true,
     });
 
+    expect(mockFindIdsBySourcePrefix).toHaveBeenCalledWith('remote:prod:');
     expect(mockDeleteByRunIds).toHaveBeenCalledWith(['run-a', 'run-b', 'run-c']);
     expect(mockMetaDelete).toHaveBeenCalledWith('remote:prod:pull_cursor');
     expect(mockMetaDelete).toHaveBeenCalledWith('remote:prod:last_pull_at');
