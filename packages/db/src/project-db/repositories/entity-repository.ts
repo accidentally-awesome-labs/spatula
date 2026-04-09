@@ -274,4 +274,37 @@ export class SqliteEntitySourceRepository implements EntitySourceRepo {
     }, { method: 'bulkLink', table: 'entity_sources' });
     return { count: links.length };
   }
+
+  async upsertBatchSources(batch: Array<{
+    entityId: string;
+    extractionId: string;
+    matchConfidence: number;
+  }>): Promise<number> {
+    if (batch.length === 0) return 0;
+    let count = 0;
+    wrapStorageError(() => {
+      for (const item of batch) {
+        this.db.insert(entitySources).values(item)
+          .onConflictDoUpdate({
+            target: [entitySources.entityId, entitySources.extractionId],
+            set: { matchConfidence: item.matchConfidence },
+          }).run();
+        count++;
+      }
+    }, { method: 'upsertBatchSources', table: 'entity_sources' });
+    return count;
+  }
+
+  async deleteByExtractionIds(extractionIds: string[]): Promise<number> {
+    if (extractionIds.length === 0) return 0;
+    let total = 0;
+    wrapStorageError(() => {
+      for (const id of extractionIds) {
+        const result = this.db.delete(entitySources)
+          .where(eq(entitySources.extractionId, id)).run();
+        total += result.changes;
+      }
+    }, { method: 'deleteByExtractionIds', table: 'entity_sources' });
+    return total;
+  }
 }
