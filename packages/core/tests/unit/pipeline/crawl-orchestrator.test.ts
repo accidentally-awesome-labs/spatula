@@ -132,9 +132,9 @@ describe('processCrawlTask', () => {
     const result = await processCrawlTask(defaultInput, deps);
 
     expect(deps.crawler.crawl).toHaveBeenCalledWith('https://example.com/product/1');
-    expect(deps.classifier.classify).toHaveBeenCalled();
-    expect(deps.extractor.extract).toHaveBeenCalled();
-    expect(deps.extractionRepo.store).toHaveBeenCalled();
+    expect(deps.classifier.classify).toHaveBeenCalledTimes(1);
+    expect(deps.extractor.extract).toHaveBeenCalledTimes(1);
+    expect(deps.extractionRepo.store).toHaveBeenCalledTimes(1);
     expect(result.extracted).toBe(true);
     expect(result.classification).toBe('single_entry');
   });
@@ -220,7 +220,13 @@ describe('processCrawlTask', () => {
 
     expect(deps.eventPublisher!.publish).toHaveBeenCalledWith(
       'job-1',
-      expect.objectContaining({ type: 'task_completed' }),
+      expect.objectContaining({
+        type: 'task_completed',
+        data: expect.objectContaining({
+          url: 'https://example.com/product/1',
+          taskId: 'task-1',
+        }),
+      }),
     );
   });
 });

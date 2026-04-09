@@ -109,8 +109,12 @@ describe('applyWSMessageToStore', () => {
       data: { actionId: 'a-1', type: 'add_field', confidence: 0.9 },
     });
 
-    expect(store._state.setRecentActions).toHaveBeenCalled();
-    expect(store._state.setPendingActions).toHaveBeenCalled();
+    const recentCall = (store._state.setRecentActions as ReturnType<typeof vi.fn>).mock.calls[0][0];
+    expect(recentCall).toHaveLength(1);
+    expect(recentCall[0]).toMatchObject({ id: 'a-1', type: 'add_field' });
+    const pendingCall = (store._state.setPendingActions as ReturnType<typeof vi.fn>).mock.calls[0][0];
+    expect(pendingCall).toHaveLength(1);
+    expect(pendingCall[0]).toMatchObject({ id: 'a-1' });
   });
 
   it('updates schemaData on schema_evolved', () => {
@@ -132,7 +136,9 @@ describe('applyWSMessageToStore', () => {
       data: { entityId: 'e-1', name: 'Test Entity' },
     });
 
-    expect(store._state.setEntityPreviews).toHaveBeenCalled();
+    const previewCall = (store._state.setEntityPreviews as ReturnType<typeof vi.fn>).mock.calls[0][0];
+    expect(previewCall).toHaveLength(1);
+    expect(previewCall[0]).toMatchObject({ id: 'e-1', name: 'Test Entity' });
   });
 
   it('increments pagesCrawled on task_completed', () => {
