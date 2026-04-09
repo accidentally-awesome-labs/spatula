@@ -137,9 +137,16 @@ export class SqliteEntityRepository implements EntityRepo {
     }, { method: 'upsertBatch:check', table: 'entities' });
 
     const now = new Date().toISOString();
+    // Track IDs seen within this batch to count within-batch duplicates as updates
+    const seenInBatch = new Set<string>();
 
     wrapStorageError(() => {
       for (const entity of batch) {
+        if (!existingIds.has(entity.id) && !seenInBatch.has(entity.id)) {
+          seenInBatch.add(entity.id);
+        } else {
+          existingIds.add(entity.id);
+        }
         this.db
           .insert(entities)
           .values({
