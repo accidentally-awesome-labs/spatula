@@ -82,7 +82,7 @@ export class SqliteExtractionRepository implements ExtractionRepo {
       query = query.offset(options.offset) as typeof query;
     }
 
-    return query.all();
+    return query.all() as any;
   }
 
   async upsertBatch(batch: Array<{
