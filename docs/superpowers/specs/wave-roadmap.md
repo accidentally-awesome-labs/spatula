@@ -1,6 +1,6 @@
 # Spatula Wave Roadmap
 
-**Last updated:** 2026-03-31
+**Last updated:** 2026-04-09
 **Open-source release target:** End of Wave 4
 
 This document tracks the interleaved execution of Phase 12 (production hardening) and Phase 13 (local project-folder model). Each wave pairs server-layer work from Phase 12 with local-layer work from Phase 13, delivering working, testable increments.
@@ -19,7 +19,7 @@ This document tracks the interleaved execution of Phase 12 (production hardening
 | 2 | D+F+J: Reliability, pipeline, local DX | Steps 2+3: SQLite + config | **Complete** (4 items deferred) |
 | 3 | B+C+E: Auth, observability, performance + D/F deferred | Step 4: Pipeline runner + core CLI | **Complete** |
 | 4 | G+H: API completeness, open-source readiness | Step 5: Data interaction commands | **Complete** |
-| 5 | I: Hosted platform layer | Step 6: Remote operations | **5-1 to 5-5 Complete**, 5-6 Pending |
+| 5 | I: Hosted platform layer | Step 6: Remote operations | **Complete** |
 
 ---
 
@@ -284,7 +284,7 @@ CLI commands for exploring, exporting, and managing project data.
 
 ---
 
-## Wave 5 — Hosted Platform & Remote Operations (Pending)
+## Wave 5 — Hosted Platform & Remote Operations (Complete)
 
 ### Phase 12I: Hosted Platform Layer
 Multi-tenant SaaS with billing, admin, retention.
@@ -324,7 +324,7 @@ Push/pull bridge between local projects and hosted platform.
 | 5-3 | Admin & Retention (admin routes, cleanup worker, tenant suspension) | **Complete** |
 | 5-4 | Remote Config & Push (remote add/list/remove, push, job lifecycle, ApiDataSource) | **Complete** |
 | 5-5 | Pull Flow (pull command, schema conflict TUI, incremental, crash recovery, source filter) | **Complete** |
-| 5-6 | Deferred Items (quota audit, add dedup, reset --keep-remote, CSS tables, pull flags) | Pending |
+| 5-6 | Deferred Items (quota audit, add dedup, reset --keep-remote, CSS tables, pull flags) | **Complete** |
 
 **Plans:**
 - `docs/superpowers/plans/2026-04-06-wave-5-1-user-auth-foundation.md`
@@ -332,6 +332,7 @@ Push/pull bridge between local projects and hosted platform.
 - `docs/superpowers/plans/2026-04-07-wave-5-3-admin-retention.md`
 - `docs/superpowers/plans/2026-04-07-wave-5-4-remote-config-push.md`
 - `docs/superpowers/plans/2026-04-08-wave-5-5-pull-flow.md`
+- `docs/superpowers/plans/2026-04-09-wave-5-6-deferred-items.md`
 
 ---
 
@@ -365,15 +366,15 @@ Phase 12 touches server code (`apps/api`, `packages/queue`). Phase 13 adds local
 
 ---
 
-## Test Counts (as of Wave 4 completion)
+## Test Counts (as of Wave 5 completion)
 
 | Package | Test Files |
 |---------|-----------|
 | `@spatula/core` | 90 |
-| `@spatula/db` | 24 |
-| `@spatula/queue` | 17 |
+| `@spatula/db` | 29 |
+| `@spatula/queue` | 18 |
 | `@spatula/shared` | 10 |
-| `@spatula/api` | 42 |
-| `@spatula/cli` | 81 |
+| `@spatula/api` | 49 |
+| `@spatula/cli` | 97 |
 | `tests/e2e` | 1 |
-| **Total** | **265** |
+| **Total** | **294** |
