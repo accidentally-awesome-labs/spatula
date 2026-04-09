@@ -144,7 +144,18 @@ export function jobRoutes() {
     const job = await deps.jobRepo.findById(id, tenantId);
     if (!job) throw new NotFoundError('Job', id);
 
-    return c.json({ data: job });
+    // Enrich stats with pending actions count and schema field count
+    const pendingActionsCount = await deps.actionRepo.countByJobAndStatus(id, tenantId, 'pending_review');
+    const latestSchema = await deps.schemaRepo.findLatest(id, tenantId);
+    const schemaFieldCount = (latestSchema?.definition as any)?.fields?.length ?? 0;
+
+    const enrichedStats = {
+      ...(job.stats as Record<string, number> ?? {}),
+      pendingActionsCount,
+      schemaFieldCount,
+    };
+
+    return c.json({ data: { ...job, stats: enrichedStats } });
   });
 
   // @ts-expect-error — OpenAPI handler return type narrowing

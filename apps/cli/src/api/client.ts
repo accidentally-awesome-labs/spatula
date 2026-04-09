@@ -308,35 +308,52 @@ export class SpatulaApiClient {
       ...(query?.since ? { since: query.since } : {}),
       ...(query?.limit ? { limit: query.limit } : {}),
     });
+    return this.fetchPaginated(url);
+  }
 
-    let response: Response;
-    try {
-      response = await fetch(url, {
-        method: 'GET',
-        headers: this.headers(),
-      });
-    } catch (err) {
-      throw new ApiError(0, 'NETWORK_ERROR', (err as Error).message);
-    }
+  async getExtractionsStreamPaginated(
+    jobId: string,
+    query?: { cursor?: string; since?: string; limit?: number },
+  ): Promise<{
+    data: Record<string, unknown>[];
+    pagination: { nextCursor?: string; hasMore: boolean; total: number };
+  }> {
+    const url = this.buildUrl(`/api/v1/jobs/${jobId}/extractions`, {
+      ...(query?.cursor ? { cursor: query.cursor } : {}),
+      ...(query?.since ? { since: query.since } : {}),
+      ...(query?.limit ? { limit: query.limit } : {}),
+    });
+    return this.fetchPaginated(url);
+  }
 
-    if (!response.ok) {
-      const body = await response.json().catch(() => ({}));
-      throw new ApiError(
-        response.status,
-        (body as { error?: { code?: string } }).error?.code,
-        (body as { error?: { message?: string } }).error?.message ?? `HTTP ${response.status}`,
-      );
-    }
+  async getActionsStreamPaginated(
+    jobId: string,
+    query?: { cursor?: string; since?: string; limit?: number },
+  ): Promise<{
+    data: Record<string, unknown>[];
+    pagination: { nextCursor?: string; hasMore: boolean; total: number };
+  }> {
+    const url = this.buildUrl(`/api/v1/jobs/${jobId}/actions`, {
+      ...(query?.cursor ? { cursor: query.cursor } : {}),
+      ...(query?.since ? { since: query.since } : {}),
+      ...(query?.limit ? { limit: query.limit } : {}),
+    });
+    return this.fetchPaginated(url);
+  }
 
-    const json = await response.json();
-    return {
-      data: ((json as { data?: unknown }).data ?? []) as Record<string, unknown>[],
-      pagination: (json as { pagination?: unknown }).pagination as {
-        nextCursor?: string;
-        hasMore: boolean;
-        total: number;
-      },
-    };
+  async getEntitySourcesStreamPaginated(
+    jobId: string,
+    query?: { cursor?: string; since?: string; limit?: number },
+  ): Promise<{
+    data: Record<string, unknown>[];
+    pagination: { nextCursor?: string; hasMore: boolean; total: number };
+  }> {
+    const url = this.buildUrl(`/api/v1/jobs/${jobId}/entity-sources`, {
+      ...(query?.cursor ? { cursor: query.cursor } : {}),
+      ...(query?.since ? { since: query.since } : {}),
+      ...(query?.limit ? { limit: query.limit } : {}),
+    });
+    return this.fetchPaginated(url);
   }
 
   /**
@@ -396,6 +413,40 @@ export class SpatulaApiClient {
       h.Authorization = `Bearer ${this.apiKey}`;
     }
     return h;
+  }
+
+  /**
+   * Shared fetch + parse logic for cursor-paginated endpoints.
+   * Returns the full { data, pagination } envelope without going through
+   * the generic request() helper (which strips responses down to json.data).
+   */
+  private async fetchPaginated(url: string): Promise<{
+    data: Record<string, unknown>[];
+    pagination: { nextCursor?: string; hasMore: boolean; total: number };
+  }> {
+    let response: Response;
+    try {
+      response = await fetch(url, { method: 'GET', headers: this.headers() });
+    } catch (err) {
+      throw new ApiError(0, 'NETWORK_ERROR', (err as Error).message);
+    }
+
+    if (!response.ok) {
+      const body = await response.json().catch(() => ({}));
+      throw new ApiError(
+        response.status,
+        (body as { error?: { code?: string } }).error?.code,
+        (body as { error?: { message?: string } }).error?.message ?? `HTTP ${response.status}`,
+      );
+    }
+
+    const json = await response.json();
+    return {
+      data: ((json as { data?: unknown }).data ?? []) as Record<string, unknown>[],
+      pagination: (json as { pagination?: unknown }).pagination as {
+        nextCursor?: string; hasMore: boolean; total: number;
+      },
+    };
   }
 
   /**

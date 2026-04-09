@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { createApp } from '../../../src/app.js';
 import type { AppDeps } from '../../../src/types.js';
 import type { Pool } from 'pg';
@@ -39,6 +39,88 @@ function createMockDeps(): AppDeps {
     } as any,
   };
 }
+
+describe('tenant creation auth protection', () => {
+  let deps: AppDeps;
+
+  beforeEach(() => {
+    deps = createMockDeps();
+  });
+
+  afterEach(() => {
+    vi.unstubAllEnvs();
+  });
+
+  it('returns 403 when secret is set and header is missing', async () => {
+    vi.stubEnv('TENANT_CREATION_SECRET', 'super-secret');
+    const app = createApp(deps);
+    const res = await app.request('/api/v1/tenants', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name: 'Test Corp' }),
+    });
+
+    expect(res.status).toBe(403);
+    const body = await res.json();
+    expect(body.error.code).toBe('FORBIDDEN');
+  });
+
+  it('returns 403 when secret is set and header is wrong', async () => {
+    vi.stubEnv('TENANT_CREATION_SECRET', 'super-secret');
+    const app = createApp(deps);
+    const res = await app.request('/api/v1/tenants', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-Creation-Secret': 'wrong-secret',
+      },
+      body: JSON.stringify({ name: 'Test Corp' }),
+    });
+
+    expect(res.status).toBe(403);
+    const body = await res.json();
+    expect(body.error.code).toBe('FORBIDDEN');
+  });
+
+  it('allows creation when secret matches', async () => {
+    vi.stubEnv('TENANT_CREATION_SECRET', 'super-secret');
+    const app = createApp(deps);
+    const res = await app.request('/api/v1/tenants', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-Creation-Secret': 'super-secret',
+      },
+      body: JSON.stringify({ name: 'Test Corp' }),
+    });
+
+    expect(res.status).toBe(201);
+    const body = await res.json();
+    expect(body.data.name).toBe('Test Corp');
+  });
+
+  it('allows creation when TENANT_CREATION_SECRET is not set', async () => {
+    vi.stubEnv('TENANT_CREATION_SECRET', '');
+    const app = createApp(deps);
+    const res = await app.request('/api/v1/tenants', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name: 'Test Corp' }),
+    });
+
+    expect(res.status).toBe(201);
+    const body = await res.json();
+    expect(body.data.name).toBe('Test Corp');
+  });
+
+  it('allows GET requests without secret when secret is set', async () => {
+    vi.stubEnv('TENANT_CREATION_SECRET', 'super-secret');
+    const app = createApp(deps);
+    const res = await app.request('/api/v1/tenants/tenant-1');
+
+    expect(res.status).toBe(200);
+  });
+});
 
 describe('Tenant routes', () => {
   let deps: AppDeps;

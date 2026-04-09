@@ -109,4 +109,77 @@ export class SqliteActionRepository implements ActionRepo {
 
     return {};
   }
+
+  async upsertBatch(batch: Array<{
+    id: string;
+    type: string;
+    payload: Record<string, unknown>;
+    source: string;
+    status: string;
+    confidence: number;
+    reasoning: string;
+    runId: string | null;
+    createdAt: string;
+    updatedAt: string;
+    appliedAt: string | null;
+    stateChanges?: Record<string, unknown> | null;
+    reviewedBy?: string | null;
+  }>): Promise<{ inserted: number; updated: number }> {
+    if (batch.length === 0) return { inserted: 0, updated: 0 };
+
+    const existingIds = new Set<string>();
+    wrapStorageError(() => {
+      for (const item of batch) {
+        const row = this.db.select({ id: actions.id }).from(actions).where(eq(actions.id, item.id)).get();
+        if (row) existingIds.add(item.id);
+      }
+    }, { method: 'upsertBatch:check', table: 'actions' });
+
+    wrapStorageError(() => {
+      for (const item of batch) {
+        this.db.insert(actions).values({
+          id: item.id,
+          jobId: this.projectId,
+          type: item.type,
+          payload: item.payload,
+          source: item.source,
+          status: item.status,
+          confidence: item.confidence,
+          reasoning: item.reasoning,
+          stateChanges: item.stateChanges ?? null,
+          reviewedBy: item.reviewedBy ?? null,
+          createdAt: item.createdAt,
+          updatedAt: item.updatedAt,
+          appliedAt: item.appliedAt,
+          runId: item.runId,
+        }).onConflictDoUpdate({
+          target: actions.id,
+          set: {
+            status: item.status,
+            reasoning: item.reasoning,
+            updatedAt: item.updatedAt,
+            runId: item.runId,
+            stateChanges: item.stateChanges ?? null,
+            reviewedBy: item.reviewedBy ?? null,
+          },
+        }).run();
+      }
+    }, { method: 'upsertBatch', table: 'actions' });
+
+    return { inserted: batch.length - existingIds.size, updated: existingIds.size };
+  }
+
+  async deleteByRunIds(runIds: string[]): Promise<number> {
+    if (runIds.length === 0) return 0;
+    let total = 0;
+    wrapStorageError(() => {
+      for (const runId of runIds) {
+        const result = this.db.delete(actions).where(
+          and(eq(actions.jobId, this.projectId), eq(actions.runId, runId)),
+        ).run();
+        total += result.changes;
+      }
+    }, { method: 'deleteByRunIds', table: 'actions' });
+    return total;
+  }
 }

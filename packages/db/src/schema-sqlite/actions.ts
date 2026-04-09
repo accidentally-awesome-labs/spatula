@@ -23,11 +23,13 @@ export const actions = sqliteTable(
     createdAt: text('created_at').notNull(),
     appliedAt: text('applied_at'),
     updatedAt: text('updated_at').notNull(),
+    runId: text('run_id'),
   },
   (table) => [
     index('sl_actions_job_type_idx').on(table.jobId, table.type),
     index('sl_actions_job_status_idx').on(table.jobId, table.status),
     index('sl_actions_job_created_idx').on(table.jobId, table.createdAt),
+    index('sl_actions_run_id_idx').on(table.runId),
     check(
       'source_check',
       sql`${table.source} IN ('extraction','schema_evolution','reconciliation','quality_audit')`,

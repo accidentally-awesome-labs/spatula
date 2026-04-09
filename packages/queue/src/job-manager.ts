@@ -1,4 +1,5 @@
 import { createLogger, StorageError } from '@spatula/shared';
+import type { AuditLogger } from '@spatula/shared';
 import type { JobConfig, JobStatus } from '@spatula/core';
 import type { QuotaEnforcer } from '@spatula/core';
 import type { JobRepository, CrawlTaskRepository, SchemaRepository } from '@spatula/db';
@@ -17,6 +18,7 @@ export interface JobManagerConfig {
   queues: SpatulaQueues;
   tenantRepo?: TenantRepository;
   quotaEnforcer?: QuotaEnforcer;
+  auditLogger?: AuditLogger;
 }
 
 export class JobManager {
@@ -26,6 +28,7 @@ export class JobManager {
   private readonly queues: SpatulaQueues;
   private readonly tenantRepo?: TenantRepository;
   private readonly quotaEnforcer?: QuotaEnforcer;
+  private readonly auditLogger?: AuditLogger;
 
   constructor(config: JobManagerConfig) {
     this.jobRepo = config.jobRepo;
@@ -34,6 +37,7 @@ export class JobManager {
     this.queues = config.queues;
     this.tenantRepo = config.tenantRepo;
     this.quotaEnforcer = config.quotaEnforcer;
+    this.auditLogger = config.auditLogger;
   }
 
   async createJob(config: JobConfig): Promise<string> {
@@ -52,7 +56,20 @@ export class JobManager {
 
     // Check monthly job quota via billing-aware QuotaEnforcer
     if (this.quotaEnforcer) {
-      await this.quotaEnforcer.checkAndRecord(tenantId, 'jobs', 1);
+      try {
+        await this.quotaEnforcer.checkAndRecord(tenantId, 'jobs', 1);
+      } catch (error) {
+        if (error instanceof QuotaExceededError && this.auditLogger) {
+          this.auditLogger.log({
+            action: 'quota.exceeded',
+            actorId: 'system',
+            actorType: 'system',
+            tenantId,
+            metadata: { dimension: 'jobs' },
+          });
+        }
+        throw error;
+      }
     }
 
     // Check concurrent job quota (separate from monthly — limits simultaneous running jobs)
@@ -62,6 +79,15 @@ export class JobManager {
         const maxConcurrent = (quotas as any).maxConcurrentJobs ?? 2;
         const runningCount = await this.jobRepo.countByTenant(tenantId, { status: 'running' });
         if (runningCount >= maxConcurrent) {
+          if (this.auditLogger) {
+            this.auditLogger.log({
+              action: 'quota.exceeded',
+              actorId: 'system',
+              actorType: 'system',
+              tenantId,
+              metadata: { dimension: 'concurrent_jobs', current: runningCount, max: maxConcurrent },
+            });
+          }
           throw new QuotaExceededError(
             `Concurrent job limit reached: ${runningCount}/${maxConcurrent}`,
             { context: { tenantId, current: runningCount, max: maxConcurrent } },

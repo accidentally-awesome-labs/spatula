@@ -43,13 +43,44 @@ export interface PullInput {
       findLatestByStatus?: (statuses: string[]) => Promise<{ id: string; source: string } | null>;
       findIdsBySourcePrefix: (prefix: string) => Promise<string[]>;
     };
+    extractionRepo?: {
+      upsertBatch: (batch: Array<{
+        id: string; pageId: string | null; pageUrl: string | null;
+        schemaVersion: number; data: Record<string, unknown>;
+        unmappedFields: Record<string, unknown>[]; metadata: Record<string, unknown>;
+        runId: string | null;
+      }>) => Promise<{ inserted: number; updated: number }>;
+      deleteByRunIds: (runIds: string[]) => Promise<number>;
+      findIdsByRunId?: (runId: string) => Promise<string[]>;
+    };
+    actionRepo?: {
+      upsertBatch: (batch: Array<{
+        id: string; type: string; payload: Record<string, unknown>;
+        source: string; status: string; confidence: number;
+        reasoning: string; runId: string | null;
+        createdAt: string; updatedAt: string; appliedAt: string | null;
+        stateChanges?: Record<string, unknown> | null;
+        reviewedBy?: string | null;
+      }>) => Promise<{ inserted: number; updated: number }>;
+      deleteByRunIds: (runIds: string[]) => Promise<number>;
+    };
+    entitySourceRepo?: {
+      upsertBatchSources: (batch: Array<{
+        entityId: string; extractionId: string; matchConfidence: number;
+      }>) => Promise<number>;
+      deleteByExtractionIds: (extractionIds: string[]) => Promise<number>;
+    };
   };
   projectId: string;
   projectRoot: string;
   full?: boolean;
   restart?: boolean;
   skipSchema?: boolean;
+  includeExtractions?: boolean;
+  includeActions?: boolean;
   onProgress?: (batch: number, total: number) => void;
+  onExtractionProgress?: (batch: number, total: number) => void;
+  onActionProgress?: (batch: number, total: number) => void;
   resolveSchemaConflict?: (diff: unknown) => Promise<'remote' | 'local' | 'merge'>;
   resolveRunningJob?: (status: string, stats?: Record<string, unknown>) => Promise<'snapshot' | 'wait' | 'cancel'>;
 }
@@ -58,6 +89,11 @@ export interface PullResult {
   success: boolean;
   entitiesInserted?: number;
   entitiesUpdated?: number;
+  extractionsInserted?: number;
+  extractionsUpdated?: number;
+  entitySourcesInserted?: number;
+  actionsInserted?: number;
+  actionsUpdated?: number;
   schemaFieldsAdded?: number;
   newFields?: Array<{ name: string; type: string; required?: boolean }>;
   llmTokens?: number;
@@ -307,11 +343,173 @@ export async function runPullCommand(input: PullInput): Promise<PullResult> {
   await input.metaDelete(`remote:${input.remoteName}:pull_cursor`);
   await input.metaSet(`remote:${input.remoteName}:last_pull_at`, new Date().toISOString());
 
-  // Step 9: Return summary
+  // Step 9: Pull extractions + entity sources (if --include-extractions)
+  let extractionsInserted = 0;
+  let extractionsUpdated = 0;
+  let entitySourcesInserted = 0;
+
+  if (input.includeExtractions && input.adapter.extractionRepo) {
+    // --full cleanup: delete previously-pulled extractions and their entity_sources
+    if (input.full) {
+      const runIds = await input.adapter.runRepo.findIdsBySourcePrefix(`remote:${input.remoteName}:`);
+      if (input.adapter.extractionRepo.findIdsByRunId && input.adapter.entitySourceRepo) {
+        const extractionIds: string[] = [];
+        for (const rid of runIds) {
+          const ids = await input.adapter.extractionRepo.findIdsByRunId(rid);
+          extractionIds.push(...ids);
+        }
+        await input.adapter.entitySourceRepo.deleteByExtractionIds(extractionIds);
+      }
+      await input.adapter.extractionRepo.deleteByRunIds(runIds);
+    }
+
+    // Resume from cursor
+    if (input.restart) {
+      await input.metaDelete(`remote:${input.remoteName}:pull_cursor_extractions`);
+    }
+    let extrCursor = await input.metaGet(`remote:${input.remoteName}:pull_cursor_extractions`);
+    let extrBatch = 0;
+    let extrTotal = 0;
+
+    while (true) {
+      const page = await client.getExtractionsStreamPaginated(jobId, {
+        cursor: extrCursor ?? undefined,
+        since: input.full ? undefined : since ?? undefined,
+        limit: 100,
+      });
+
+      if (page.data.length > 0) {
+        const batch = page.data.map((e: Record<string, unknown>) => ({
+          id: e.id as string,
+          pageId: null,
+          pageUrl: (e.pageUrl as string) ?? null,
+          schemaVersion: e.schemaVersion as number,
+          data: e.data as Record<string, unknown>,
+          unmappedFields: (e.unmappedFields ?? []) as Record<string, unknown>[],
+          metadata: (e.metadata ?? {}) as Record<string, unknown>,
+          runId: run.id,
+        }));
+        const counts = await input.adapter.extractionRepo.upsertBatch(batch);
+        extractionsInserted += counts.inserted;
+        extractionsUpdated += counts.updated;
+        extrTotal += page.data.length;
+      }
+
+      extrBatch++;
+      input.onExtractionProgress?.(extrBatch, extrTotal);
+
+      if (!page.pagination.hasMore) break;
+      extrCursor = page.pagination.nextCursor ?? null;
+      if (extrCursor) {
+        await input.metaSet(`remote:${input.remoteName}:pull_cursor_extractions`, extrCursor);
+      }
+    }
+
+    await input.metaDelete(`remote:${input.remoteName}:pull_cursor_extractions`);
+
+    // Pull entity sources (pulled automatically with extractions)
+    if (input.adapter.entitySourceRepo) {
+      if (input.restart) {
+        await input.metaDelete(`remote:${input.remoteName}:pull_cursor_entity_sources`);
+      }
+      let esCursor = await input.metaGet(`remote:${input.remoteName}:pull_cursor_entity_sources`);
+
+      while (true) {
+        const page = await client.getEntitySourcesStreamPaginated(jobId, {
+          cursor: esCursor ?? undefined,
+          since: input.full ? undefined : since ?? undefined,
+          limit: 500,
+        });
+
+        if (page.data.length > 0) {
+          const batch = page.data.map((es: Record<string, unknown>) => ({
+            entityId: es.entityId as string,
+            extractionId: es.extractionId as string,
+            matchConfidence: es.matchConfidence as number,
+          }));
+          entitySourcesInserted += await input.adapter.entitySourceRepo.upsertBatchSources(batch);
+        }
+
+        if (!page.pagination.hasMore) break;
+        esCursor = page.pagination.nextCursor ?? null;
+        if (esCursor) {
+          await input.metaSet(`remote:${input.remoteName}:pull_cursor_entity_sources`, esCursor);
+        }
+      }
+
+      await input.metaDelete(`remote:${input.remoteName}:pull_cursor_entity_sources`);
+    }
+  }
+
+  // Step 10: Pull actions (if --include-actions)
+  let actionsInserted = 0;
+  let actionsUpdated = 0;
+
+  if (input.includeActions && input.adapter.actionRepo) {
+    if (input.full) {
+      const runIds = await input.adapter.runRepo.findIdsBySourcePrefix(`remote:${input.remoteName}:`);
+      await input.adapter.actionRepo.deleteByRunIds(runIds);
+    }
+
+    if (input.restart) {
+      await input.metaDelete(`remote:${input.remoteName}:pull_cursor_actions`);
+    }
+    let actCursor = await input.metaGet(`remote:${input.remoteName}:pull_cursor_actions`);
+    let actBatch = 0;
+    let actTotal = 0;
+
+    while (true) {
+      const page = await client.getActionsStreamPaginated(jobId, {
+        cursor: actCursor ?? undefined,
+        since: input.full ? undefined : since ?? undefined,
+        limit: 100,
+      });
+
+      if (page.data.length > 0) {
+        const batch = page.data.map((a: Record<string, unknown>) => ({
+          id: a.id as string,
+          type: a.type as string,
+          payload: a.payload as Record<string, unknown>,
+          source: a.source as string,
+          status: a.status as string,
+          confidence: a.confidence as number,
+          reasoning: (a.reasoning as string) ?? '',
+          runId: run.id,
+          createdAt: a.createdAt as string,
+          updatedAt: (a.updatedAt as string) ?? new Date().toISOString(),
+          appliedAt: (a.appliedAt as string) ?? null,
+          stateChanges: (a.stateChanges as Record<string, unknown>) ?? null,
+          reviewedBy: (a.reviewedBy as string) ?? null,
+        }));
+        const counts = await input.adapter.actionRepo.upsertBatch(batch);
+        actionsInserted += counts.inserted;
+        actionsUpdated += counts.updated;
+        actTotal += page.data.length;
+      }
+
+      actBatch++;
+      input.onActionProgress?.(actBatch, actTotal);
+
+      if (!page.pagination.hasMore) break;
+      actCursor = page.pagination.nextCursor ?? null;
+      if (actCursor) {
+        await input.metaSet(`remote:${input.remoteName}:pull_cursor_actions`, actCursor);
+      }
+    }
+
+    await input.metaDelete(`remote:${input.remoteName}:pull_cursor_actions`);
+  }
+
+  // Step 11: Return summary
   return {
     success: true,
     entitiesInserted: totalInserted,
     entitiesUpdated: totalUpdated,
+    extractionsInserted,
+    extractionsUpdated,
+    entitySourcesInserted,
+    actionsInserted,
+    actionsUpdated,
     schemaFieldsAdded,
     newFields: newFields.length > 0 ? newFields : undefined,
     llmTokens,
@@ -336,6 +534,8 @@ export async function handlePullCommand(opts: {
   remoteName: string;
   full?: boolean;
   restart?: boolean;
+  includeExtractions?: boolean;
+  includeActions?: boolean;
 }): Promise<void> {
   let project: Awaited<ReturnType<typeof openLocalProject>> | null = null;
 
@@ -347,13 +547,23 @@ export async function handlePullCommand(opts: {
       metaGet: (k) => project!.metaRepo.get(k),
       metaSet: (k, v) => project!.metaRepo.set(k, v),
       metaDelete: (k) => project!.metaRepo.delete(k),
-      adapter: project.adapter as unknown as PullInput['adapter'],
+      adapter: {
+        ...(project.adapter as unknown as PullInput['adapter']),
+      },
       projectId: project.projectId,
       projectRoot: project.projectRoot,
       full: opts.full,
       restart: opts.restart,
+      includeExtractions: opts.includeExtractions,
+      includeActions: opts.includeActions,
       onProgress: (batch, total) => {
         process.stderr.write(`\r  Batch ${batch} | ${total} entities fetched`);
+      },
+      onExtractionProgress: (batch, total) => {
+        process.stderr.write(`\r  Extractions: batch ${batch} | ${total} fetched`);
+      },
+      onActionProgress: (batch, total) => {
+        process.stderr.write(`\r  Actions: batch ${batch} | ${total} fetched`);
       },
       resolveRunningJob: async (jobStatus: string, stats?: Record<string, unknown>) => {
         const pagesInfo = stats?.pagesProcessed ? ` (${stats.pagesProcessed} pages crawled)` : '';
@@ -415,6 +625,15 @@ export async function handlePullCommand(opts: {
     console.log(`  Entities:  ${result.entitiesInserted} new, ${result.entitiesUpdated} updated (${(result.entitiesInserted ?? 0) + (result.entitiesUpdated ?? 0)} total)`);
     if (result.schemaFieldsAdded) {
       console.log(`  Schema:    ${result.schemaFieldsAdded} new fields`);
+    }
+    if (result.extractionsInserted || result.extractionsUpdated) {
+      console.log(`  Extractions: ${result.extractionsInserted} new, ${result.extractionsUpdated} updated`);
+    }
+    if (result.entitySourcesInserted) {
+      console.log(`  Provenance:  ${result.entitySourcesInserted} entity-source links`);
+    }
+    if (result.actionsInserted || result.actionsUpdated) {
+      console.log(`  Actions:     ${result.actionsInserted} new, ${result.actionsUpdated} updated`);
     }
     if (result.llmTokens) {
       console.log(`  LLM usage: ${result.llmTokens?.toLocaleString()} tokens ($${result.llmCostUsd?.toFixed(2)})`);

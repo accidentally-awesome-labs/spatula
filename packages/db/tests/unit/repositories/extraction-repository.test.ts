@@ -8,6 +8,7 @@ function createMockDb(resolveValue?: unknown) {
     orderBy: vi.fn().mockReturnThis(),
     limit: vi.fn().mockReturnThis(),
     offset: vi.fn().mockReturnThis(),
+    leftJoin: vi.fn().mockReturnThis(),
     returning: vi.fn().mockResolvedValue(value),
     then: undefined as unknown,
   };

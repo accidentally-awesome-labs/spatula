@@ -51,7 +51,9 @@ function createMockDeps(): AppDeps {
       triggerReconciliation: vi.fn().mockResolvedValue(undefined),
       getJobStatus: vi.fn().mockResolvedValue('pending'),
     },
-    schemaRepo: {} as any,
+    schemaRepo: {
+      findLatest: vi.fn().mockResolvedValue(null),
+    } as any,
     extractionRepo: {} as any,
     entityRepo: {
       findByJob: vi.fn().mockImplementation((jobId: string, tenantId: string) => {
@@ -92,6 +94,7 @@ function createMockDeps(): AppDeps {
         },
       ),
       batchUpdateStatus: vi.fn().mockResolvedValue([]),
+      countByJobAndStatus: vi.fn().mockResolvedValue(0),
     },
     taskRepo: {} as any,
     exportRepo: {} as any,

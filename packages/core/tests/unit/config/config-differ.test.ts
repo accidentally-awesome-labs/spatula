@@ -291,3 +291,70 @@ describe('diffConfigs', () => {
     expect(diff.hasChanges).toBe(false);
   });
 });
+
+function makeConfig(overrides: { fields: any[] }) {
+  return createBaseConfig({
+    schema: {
+      mode: 'hybrid' as const,
+      userFields: overrides.fields,
+    },
+  } as any);
+}
+
+describe('diffConfigs nested fields', () => {
+  it('detects arrayItemType changes', () => {
+    const prev = makeConfig({
+      fields: [{ name: 'tags', description: 'Tags', type: 'array', arrayItemType: { name: 'item', description: 'tag', type: 'string', required: false } }],
+    });
+    const curr = makeConfig({
+      fields: [{ name: 'tags', description: 'Tags', type: 'array', arrayItemType: { name: 'item', description: 'tag', type: 'number', required: false } }],
+    });
+    const diff = diffConfigs(curr, prev);
+    expect(diff.fieldsModified).toHaveLength(1);
+    const tagChanges = diff.fieldsModified[0].changes;
+    const arrayChange = tagChanges.find(c => c.property === 'arrayItemType');
+    expect(arrayChange).toBeDefined();
+    expect(arrayChange!.nestedChanges).toBeDefined();
+    expect(arrayChange!.nestedChanges).toContainEqual(
+      expect.objectContaining({ property: 'type', from: 'string', to: 'number' }),
+    );
+  });
+
+  it('detects objectFields added/removed/modified', () => {
+    const prev = makeConfig({
+      fields: [{
+        name: 'address', description: 'Address', type: 'object',
+        objectFields: [
+          { name: 'street', description: 'Street', type: 'string', required: true },
+          { name: 'zip', description: 'Zip', type: 'string', required: false },
+        ],
+      }],
+    });
+    const curr = makeConfig({
+      fields: [{
+        name: 'address', description: 'Address', type: 'object',
+        objectFields: [
+          { name: 'street', description: 'Street', type: 'string', required: false },
+          { name: 'city', description: 'City', type: 'string', required: true },
+        ],
+      }],
+    });
+    const diff = diffConfigs(curr, prev);
+    expect(diff.fieldsModified).toHaveLength(1);
+    const objChange = diff.fieldsModified[0].changes.find(c => c.property === 'objectFields');
+    expect(objChange).toBeDefined();
+    expect(objChange!.addedFields).toContain('city');
+    expect(objChange!.removedFields).toContain('zip');
+    expect(objChange!.nestedChanges).toContainEqual(
+      expect.objectContaining({ property: 'required', from: true, to: false }),
+    );
+  });
+
+  it('ignores unchanged nested fields', () => {
+    const config = makeConfig({
+      fields: [{ name: 'tags', description: 'Tags', type: 'array', arrayItemType: { name: 'item', description: 'tag', type: 'string', required: false } }],
+    });
+    const diff = diffConfigs(config, config);
+    expect(diff.hasChanges).toBe(false);
+  });
+});

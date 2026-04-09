@@ -43,6 +43,13 @@
       "when": 1775688593005,
       "tag": "0005_eminent_senator_kelly",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "6",
+      "when": 1775773627709,
+      "tag": "0006_concerned_wolf_cub",
+      "breakpoints": true
     }
   ]
 }

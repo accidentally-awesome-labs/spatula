@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import {
   mkdtempSync,
   rmSync,
@@ -9,6 +9,18 @@ import {
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { runResetCommand } from '../../../src/commands/reset.js';
+
+// Mock @spatula/db so unit tests don't need a real SQLite native module.
+// The DB-level selective cleanup is covered by integration tests.
+vi.mock('@spatula/db', () => {
+  const mockSqlite = {
+    prepare: vi.fn().mockReturnValue({ run: vi.fn() }),
+    close: vi.fn(),
+  };
+  return {
+    createProjectDb: vi.fn(() => ({ sqlite: mockSqlite, close: vi.fn() })),
+  };
+});
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -110,5 +122,30 @@ describe('runResetCommand', () => {
     // Crawl artefacts in other dirs are removed
     expect(existsSync(join(tmpDir, '.spatula', 'pages', 'page-1.html'))).toBe(false);
     expect(existsSync(join(tmpDir, '.spatula', 'exports', 'results.json'))).toBe(false);
+  });
+});
+
+describe('reset --keep-remote', () => {
+  let projectDir: string;
+
+  beforeEach(() => {
+    projectDir = makeTmpDir();
+    scaffoldProject(projectDir);
+  });
+
+  afterEach(() => {
+    rmSync(projectDir, { recursive: true, force: true });
+  });
+
+  it('implies --keep-entities (DB file preserved)', async () => {
+    const result = await runResetCommand({ keepRemote: true, cwd: projectDir });
+    expect(result.keptItems).toContain('project.db');
+  });
+
+  it('removes .spatula directories but preserves DB', async () => {
+    const result = await runResetCommand({ keepRemote: true, cwd: projectDir });
+    expect(result.removedItems).toContain('pages');
+    expect(result.removedItems).toContain('logs');
+    expect(result.keptItems).toContain('project.db');
   });
 });

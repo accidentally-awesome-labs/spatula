@@ -32,3 +32,22 @@ describe('validateAndDedup', () => {
     expect(result.duplicates).toHaveLength(0);
   });
 });
+
+describe('validateAndDedup with crawl history', () => {
+  it('marks already-crawled URLs separately from config duplicates', () => {
+    const result = validateAndDedup(
+      ['https://new.com', 'https://crawled.com', 'https://in-yaml.com'],
+      ['https://in-yaml.com'],
+      ['https://crawled.com'],
+    );
+    expect(result.valid).toEqual(['https://new.com']);
+    expect(result.duplicates).toEqual(['https://in-yaml.com']);
+    expect(result.alreadyCrawled).toEqual(['https://crawled.com']);
+  });
+
+  it('works without crawl history (backward compatible)', () => {
+    const result = validateAndDedup(['https://a.com'], ['https://b.com']);
+    expect(result.valid).toEqual(['https://a.com']);
+    expect(result.alreadyCrawled).toEqual([]);
+  });
+});

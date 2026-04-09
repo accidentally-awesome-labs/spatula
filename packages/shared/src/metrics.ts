@@ -1,11 +1,12 @@
 import { MeterProvider } from '@opentelemetry/sdk-metrics';
 import { PrometheusExporter } from '@opentelemetry/exporter-prometheus';
-import type { Histogram, Counter, UpDownCounter } from '@opentelemetry/api';
+import type { Histogram, Counter, UpDownCounter, Meter } from '@opentelemetry/api';
 import { createLogger } from './logger.js';
 
 const logger = createLogger('metrics');
 
 let meterProvider: MeterProvider | undefined;
+let _meter: Meter | undefined;
 
 export interface MetricsConfig {
   enabled?: boolean;
@@ -42,10 +43,7 @@ export function createMetrics(config?: MetricsConfig): SpatulaMetrics {
   }
 
   const meter = meterProvider.getMeter('spatula');
-
-  // TODO: Register observable gauges for queue_depth, active_jobs, tenant_count
-  // These need access to JobRepository, TenantRepository, and Queue objects
-  // which are not available at metrics creation time.
+  _meter = meter;
 
   return {
     httpRequestDuration: meter.createHistogram('http_request_duration_ms', { description: 'HTTP request duration in milliseconds', unit: 'ms' }),
@@ -65,9 +63,38 @@ export function createMetrics(config?: MetricsConfig): SpatulaMetrics {
   };
 }
 
+export function registerGauges(
+  deps: {
+    jobRepo: { countByStatus: (status: string) => Promise<number> };
+    tenantRepo: { countAll: () => Promise<number> };
+    queueProvider: { getQueueDepth: () => Promise<number> };
+  },
+): void {
+  if (!_meter) return;
+
+  _meter.createObservableGauge('active_jobs', { description: 'Currently running jobs' })
+    .addCallback(async (result) => {
+      try { result.observe(await deps.jobRepo.countByStatus('running')); }
+      catch { result.observe(0); }
+    });
+
+  _meter.createObservableGauge('tenant_count', { description: 'Total tenants' })
+    .addCallback(async (result) => {
+      try { result.observe(await deps.tenantRepo.countAll()); }
+      catch { result.observe(0); }
+    });
+
+  _meter.createObservableGauge('queue_depth', { description: 'Total pending queue items' })
+    .addCallback(async (result) => {
+      try { result.observe(await deps.queueProvider.getQueueDepth()); }
+      catch { result.observe(0); }
+    });
+}
+
 export async function shutdownMetrics(): Promise<void> {
   if (meterProvider) {
     await meterProvider.shutdown();
     meterProvider = undefined;
+    _meter = undefined;
   }
 }

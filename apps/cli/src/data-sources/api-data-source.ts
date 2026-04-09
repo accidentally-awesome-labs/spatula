@@ -71,9 +71,13 @@ export class ApiDataSource implements DataSource {
       },
       totalPages: (job.pagesDiscovered as number) ?? 0,
       totalEntities: (job.entitiesExtracted as number) ?? 0,
-      pendingActions: 0, // TODO: fetch from actions endpoint when available
-      schemaFields: 0,  // TODO: fetch from schema endpoint when available
-      storageBytes: { pages: 0, database: 0, exports: 0 }, // TODO: not exposed by job endpoint
+      pendingActions: (job.stats as Record<string, number>)?.pendingActionsCount ?? 0,
+      schemaFields: (job.stats as Record<string, number>)?.schemaFieldCount ?? 0,
+      storageBytes: {
+        pages: (job.stats as Record<string, number>)?.storageBytesUsed ?? 0,
+        database: 0,
+        exports: 0,
+      },
     };
   }
 

@@ -145,12 +145,18 @@ yargs(hideBin(process.argv))
           type: 'boolean',
           default: false,
           describe: 'Preserve the project.db database file',
+        })
+        .option('keep-remote', {
+          type: 'boolean',
+          default: false,
+          describe: 'Preserve remote job links and pulled data',
         }),
     async (argv) => {
       try {
         const result = await runResetCommand({
           keepExports: argv.keepExports,
           keepEntities: argv.keepEntities,
+          keepRemote: argv.keepRemote,
         });
         console.log(formatResetResult(result));
       } catch (err: unknown) {
@@ -184,10 +190,14 @@ yargs(hideBin(process.argv))
         array: true,
         demandOption: true,
         describe: 'URLs to add as seeds',
+      }).option('no-history', {
+        type: 'boolean',
+        default: false,
+        describe: 'Skip crawl history dedup (allow re-adding crawled URLs)',
       }),
     async (argv) => {
       try {
-        const result = await runAddCommand(argv.urls as string[]);
+        const result = await runAddCommand(argv.urls as string[], { noHistory: argv.noHistory });
         console.log(formatAddResult(result));
       } catch (err: unknown) {
         console.error(err instanceof Error ? err.message : 'An unexpected error occurred');
@@ -561,6 +571,16 @@ yargs(hideBin(process.argv))
           type: 'boolean',
           default: false,
           describe: 'Clear interrupted pull cursor and start fresh',
+        })
+        .option('include-extractions', {
+          type: 'boolean',
+          default: false,
+          describe: 'Also pull extraction records from the remote job',
+        })
+        .option('include-actions', {
+          type: 'boolean',
+          default: false,
+          describe: 'Also pull action history from the remote job',
         }),
     async (argv) => {
       const { handlePullCommand } = await import('./commands/pull.js');
@@ -568,6 +588,8 @@ yargs(hideBin(process.argv))
         remoteName: argv.remote as string,
         full: argv.full,
         restart: argv.restart,
+        includeExtractions: argv.includeExtractions,
+        includeActions: argv.includeActions,
       });
     },
   )

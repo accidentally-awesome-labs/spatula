@@ -115,3 +115,99 @@ describe('CssExtractor', () => {
     expect(result.metadata.confidence).toBeLessThanOrEqual(0.6);
   });
 });
+
+describe('table extraction', () => {
+  const extractor = new CssExtractor();
+  const tableHtml = `<html><body><article>
+    <table class="specs">
+      <thead><tr><th>Name</th><th>Price</th><th>Rating</th></tr></thead>
+      <tbody>
+        <tr><td>Widget A</td><td>$10</td><td>4.5</td></tr>
+        <tr><td>Widget B</td><td>$20</td><td>3.8</td></tr>
+      </tbody>
+    </table>
+  </article></body></html>`;
+
+  it('extracts table as array of objects when field is array+object', async () => {
+    const schema = {
+      version: 1,
+      fields: [{
+        name: 'specs', description: 'Specs table', type: 'array' as const,
+        required: false,
+        arrayItemType: { name: 'row', description: 'Row', type: 'object' as const, required: false },
+      }],
+      fieldAliases: [], createdAt: new Date(), parentVersion: null,
+    };
+    const result = await extractor.extract(tableHtml, 'https://example.com', schema, '');
+    expect(result.data.specs).toEqual([
+      { Name: 'Widget A', Price: '$10', Rating: '4.5' },
+      { Name: 'Widget B', Price: '$20', Rating: '3.8' },
+    ]);
+  });
+
+  it('returns null when no table found', async () => {
+    const schema = {
+      version: 1,
+      fields: [{
+        name: 'specs', description: 'Specs', type: 'array' as const, required: false,
+        arrayItemType: { name: 'row', description: 'Row', type: 'object' as const, required: false },
+      }],
+      fieldAliases: [], createdAt: new Date(), parentVersion: null,
+    };
+    const result = await extractor.extract('<html><body><p>No tables</p></body></html>', 'https://example.com', schema, '');
+    expect(result.data.specs).toBeUndefined();
+  });
+
+  it('generates column headers when thead is missing', async () => {
+    const html = `<html><body><table>
+      <tr><td>A</td><td>B</td></tr>
+      <tr><td>C</td><td>D</td></tr>
+    </table></body></html>`;
+    const schema = {
+      version: 1,
+      fields: [{ name: 'data', description: 'Data', type: 'array' as const, required: false,
+        arrayItemType: { name: 'row', description: 'Row', type: 'object' as const, required: false } }],
+      fieldAliases: [], createdAt: new Date(), parentVersion: null,
+    };
+    const result = await extractor.extract(html, 'https://example.com', schema, '');
+    expect(result.data.data).toEqual([{ A: 'C', B: 'D' }]);
+  });
+
+  it('handles colspan by filling adjacent columns', async () => {
+    const html = `<html><body><table>
+      <thead><tr><th>A</th><th>B</th><th>C</th></tr></thead>
+      <tbody><tr><td colspan="2">Wide</td><td>Narrow</td></tr></tbody>
+    </table></body></html>`;
+    const schema = {
+      version: 1,
+      fields: [{ name: 'data', description: 'Data', type: 'array' as const, required: false,
+        arrayItemType: { name: 'row', description: 'Row', type: 'object' as const, required: false } }],
+      fieldAliases: [], createdAt: new Date(), parentVersion: null,
+    };
+    const result = await extractor.extract(html, 'https://example.com', schema, '');
+    expect(result.data.data).toEqual([{ A: 'Wide', B: 'Wide', C: 'Narrow' }]);
+  });
+
+  it('includes tables in autoDiscover when 3+ data rows exist', async () => {
+    const bigTableHtml = `<html><body><article>
+      <table>
+        <thead><tr><th>A</th><th>B</th></tr></thead>
+        <tbody>
+          <tr><td>1</td><td>2</td></tr>
+          <tr><td>3</td><td>4</td></tr>
+          <tr><td>5</td><td>6</td></tr>
+        </tbody>
+      </table>
+    </article></body></html>`;
+    const schema = { version: 1, fields: [], fieldAliases: [], createdAt: new Date(), parentVersion: null };
+    const result = await extractor.extract(bigTableHtml, 'https://example.com', schema, '');
+    expect(result.data.tables).toBeDefined();
+    expect(result.data.tables).toHaveLength(3);
+  });
+
+  it('skips tables in autoDiscover when fewer than 3 data rows', async () => {
+    const schema = { version: 1, fields: [], fieldAliases: [], createdAt: new Date(), parentVersion: null };
+    const result = await extractor.extract(tableHtml, 'https://example.com', schema, '');
+    expect(result.data.tables).toBeUndefined();
+  });
+});
