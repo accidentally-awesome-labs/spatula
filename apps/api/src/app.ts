@@ -123,9 +123,16 @@ export function createApp(deps: AppDeps) {
   // Idempotency (after rate limiting, before routes)
   app.use('/api/*', idempotencyMiddleware());
 
-  // Tenant management routes (auth skipped by authMiddleware prefix check)
-  // TODO(Wave 3-1b): Add admin-only or shared-secret protection for tenant creation
-  // in production. Currently open for bootstrap — acceptable for dev/self-hosted.
+  // Tenant management routes — protected by shared secret in production
+  const creationSecret = process.env.TENANT_CREATION_SECRET;
+  if (creationSecret) {
+    app.post('/api/v1/tenants', async (c, next) => {
+      if (c.req.header('X-Creation-Secret') !== creationSecret) {
+        return c.json({ error: { code: 'FORBIDDEN', message: 'Invalid creation secret' } }, 403);
+      }
+      return next();
+    });
+  }
   app.route('/api/v1/tenants', tenantRoutes());
 
   // API key management routes
