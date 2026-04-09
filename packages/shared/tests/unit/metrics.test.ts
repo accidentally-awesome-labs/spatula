@@ -1,5 +1,5 @@
-import { describe, it, expect, afterEach } from 'vitest';
-import { createMetrics, shutdownMetrics } from '../../src/metrics.js';
+import { describe, it, expect, afterEach, vi } from 'vitest';
+import { createMetrics, shutdownMetrics, registerGauges } from '../../src/metrics.js';
 
 describe('metrics', () => {
   afterEach(async () => {
@@ -31,5 +31,17 @@ describe('metrics', () => {
     expect(metrics.httpRequestsTotal).toBeDefined();
     // Verify no-op instruments don't throw when used
     expect(() => metrics.httpRequestsTotal.add(1)).not.toThrow();
+  });
+});
+
+describe('registerGauges', () => {
+  it('does not throw when metrics are initialized', () => {
+    createMetrics({ enabled: false });
+    const deps = {
+      jobRepo: { countByStatus: vi.fn().mockResolvedValue(3) },
+      tenantRepo: { countAll: vi.fn().mockResolvedValue(10) },
+      queueProvider: { getQueueDepth: vi.fn().mockResolvedValue(5) },
+    };
+    expect(() => registerGauges(deps)).not.toThrow();
   });
 });
