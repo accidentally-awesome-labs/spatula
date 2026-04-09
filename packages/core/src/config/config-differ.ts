@@ -2,7 +2,7 @@
 import { diffSeeds } from './url-normalizer.js';
 import type { JobConfig } from '../types/job.js';
 import type { FieldDefinitionOutput } from '../types/schema.js';
-import type { JobConfigDiff, FieldChange, PotentialRename, DiffImpact } from './diff-types.js';
+import type { JobConfigDiff, FieldChange, PropertyChange, PotentialRename, DiffImpact } from './diff-types.js';
 
 /**
  * Compare two JobConfig objects and produce a JobConfigDiff.
@@ -174,8 +174,8 @@ function diffFields(
 function diffFieldProperties(
   current: FieldDefinitionOutput,
   previous: FieldDefinitionOutput,
-): Array<{ property: string; from: unknown; to: unknown }> {
-  const changes: Array<{ property: string; from: unknown; to: unknown }> = [];
+): PropertyChange[] {
+  const changes: PropertyChange[] = [];
 
   if (current.type !== previous.type) {
     changes.push({ property: 'type', from: previous.type, to: current.type });
@@ -192,7 +192,35 @@ function diffFieldProperties(
   if (JSON.stringify(current.normalization) !== JSON.stringify(previous.normalization)) {
     changes.push({ property: 'normalization', from: previous.normalization, to: current.normalization });
   }
-  // TODO: recursive comparison for objectFields and arrayItemType
+
+  // Recursive: arrayItemType
+  if (current.arrayItemType && previous.arrayItemType) {
+    const nested = diffFieldProperties(current.arrayItemType, previous.arrayItemType);
+    if (nested.length > 0) {
+      changes.push({ property: 'arrayItemType', from: previous.arrayItemType, to: current.arrayItemType, nestedChanges: nested });
+    }
+  } else if (current.arrayItemType !== previous.arrayItemType) {
+    changes.push({ property: 'arrayItemType', from: previous.arrayItemType, to: current.arrayItemType });
+  }
+
+  // Recursive: objectFields
+  if (current.objectFields || previous.objectFields) {
+    const currMap = new Map((current.objectFields ?? []).map(f => [f.name, f]));
+    const prevMap = new Map((previous.objectFields ?? []).map(f => [f.name, f]));
+
+    const addedFields = [...currMap.keys()].filter(k => !prevMap.has(k));
+    const removedFields = [...prevMap.keys()].filter(k => !currMap.has(k));
+    const nestedChanges = [...currMap.keys()]
+      .filter(k => prevMap.has(k))
+      .flatMap(k => diffFieldProperties(currMap.get(k)!, prevMap.get(k)!));
+
+    if (addedFields.length || removedFields.length || nestedChanges.length) {
+      changes.push({
+        property: 'objectFields', from: previous.objectFields, to: current.objectFields,
+        nestedChanges, addedFields, removedFields,
+      });
+    }
+  }
 
   return changes;
 }

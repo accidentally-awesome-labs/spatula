@@ -1,16 +1,21 @@
 // packages/core/src/config/diff-types.ts
 import type { FieldDefinitionOutput } from '../types/schema.js';
 
+export interface PropertyChange {
+  property: string;     // 'type', 'required', 'selector', 'description'
+  from: unknown;
+  to: unknown;
+  nestedChanges?: PropertyChange[];
+  addedFields?: string[];
+  removedFields?: string[];
+}
+
 /**
  * Describes how a field was modified between config snapshots.
  */
 export interface FieldChange {
   name: string;
-  changes: Array<{
-    property: string;     // 'type', 'required', 'selector', 'description'
-    from: unknown;
-    to: unknown;
-  }>;
+  changes: PropertyChange[];
 }
 
 /**
