@@ -24,29 +24,7 @@ describe('useEntityData DataSource support', () => {
     expect(isDataSource(ds)).toBe(true);
   });
 
-  it('DataSource getEntities is called with limit and offset', async () => {
-    const mockResult: PaginatedResult<Entity> = {
-      data: [{ id: 'e1', mergedData: { name: 'Test' }, qualityScore: 0.9, categories: [], sourceCount: 1 } as Entity],
-      total: 15,
-    };
-    const ds = mockDataSource({ getEntities: vi.fn().mockResolvedValue(mockResult) });
-    const result = await ds.getEntities({ limit: 10, offset: 10 });
-    expect(ds.getEntities).toHaveBeenCalledWith({ limit: 10, offset: 10 });
-    expect(result.data).toHaveLength(1);
-    expect(result.total).toBe(15);
-  });
-
-  it('DataSource getEntity is called with single argument', async () => {
-    const mockEntity = { id: 'e1', mergedData: { name: 'Test' } };
-    const ds = mockDataSource({ getEntity: vi.fn().mockResolvedValue(mockEntity) });
-    const entity = await ds.getEntity('e1');
-    expect(ds.getEntity).toHaveBeenCalledWith('e1');
-    expect(entity).toEqual(mockEntity);
-  });
-
-  it('DataSource getEntity returns null for missing entity', async () => {
-    const ds = mockDataSource({ getEntity: vi.fn().mockResolvedValue(null) });
-    const entity = await ds.getEntity('nonexistent');
-    expect(entity).toBeNull();
-  });
+  // Note: DataSource method-level tests removed — they were tautological
+  // (calling mocks and asserting mock return values). The DataSource contract
+  // is tested by real implementations in LocalDataSource and ApiDataSource tests.
 });

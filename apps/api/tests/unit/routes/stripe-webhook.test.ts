@@ -64,6 +64,7 @@ describe('Stripe webhook handler', () => {
     });
     expect(res.status).toBe(200);
     expect(deps.stripeClient.verifyWebhook).toHaveBeenCalled();
+    expect(deps.tenantRepo.findByStripeCustomerId).toHaveBeenCalledWith('cus_1');
     expect(deps.tenantRepo.updatePlan).toHaveBeenCalledWith('tenant-1', 'pro');
   });
 

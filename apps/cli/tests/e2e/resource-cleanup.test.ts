@@ -70,8 +70,11 @@ describe('resource cleanup', () => {
         project.close();
       }
 
-      // If we get here without OOM or "too many open files", no leak
-      expect(true).toBe(true);
+      // Verify DB is still usable after 20 open/close cycles
+      const finalProject = await openLocalProject(dir);
+      const status = await finalProject.dataSource.getStatus();
+      expect(status).toBeDefined();
+      finalProject.close();
     } finally {
       rmSync(dir, { recursive: true, force: true });
     }

@@ -42,6 +42,8 @@ describe('Usage routes', () => {
     const app = createTestApp({ llmUsageRepo: mockLlmUsageRepo });
     const res = await app.request('/api/v1/usage?period=7d');
     expect(res.status).toBe(200);
-    expect(mockLlmUsageRepo.aggregateByTenant).toHaveBeenCalledWith('tenant-1', expect.any(Date));
+    const since = (mockLlmUsageRepo.aggregateByTenant as ReturnType<typeof vi.fn>).mock.calls[0][1] as Date;
+    const sevenDaysAgo = Date.now() - 7 * 24 * 60 * 60 * 1000;
+    expect(Math.abs(since.getTime() - sevenDaysAgo)).toBeLessThan(5000);
   });
 });

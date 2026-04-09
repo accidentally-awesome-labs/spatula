@@ -77,7 +77,7 @@ describe('ConfigAction', () => {
       type: 'set_primary_model',
       payload: { model: 'anthropic/claude-sonnet-4-20250514' },
     });
-    expect(result.payload.model).toContain('claude');
+    expect(result.payload.model).toBe('anthropic/claude-sonnet-4-20250514');
   });
 
   it('parses set_model_override', () => {

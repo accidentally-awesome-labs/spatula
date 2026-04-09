@@ -90,6 +90,9 @@ describe('Export routes', () => {
     it('passes limit parameter', async () => {
       const res = await app.request('/api/v1/jobs/job-1/exports?limit=10');
       expect(res.status).toBe(200);
+      expect(deps.exportRepo.findByJob).toHaveBeenCalledWith(
+        'job-1', expect.any(String), expect.objectContaining({ limit: 10 }),
+      );
     });
   });
 

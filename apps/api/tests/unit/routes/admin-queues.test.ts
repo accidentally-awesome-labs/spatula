@@ -54,8 +54,4 @@ describe('createQueueDashboard', () => {
       }),
     );
   });
-
-  it('does not throw', () => {
-    expect(() => createQueueDashboard(mockQueues())).not.toThrow();
-  });
 });

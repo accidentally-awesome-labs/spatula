@@ -29,5 +29,7 @@ describe('metrics', () => {
     const metrics = createMetrics({ enabled: false });
     expect(metrics).toBeDefined();
     expect(metrics.httpRequestsTotal).toBeDefined();
+    // Verify no-op instruments don't throw when used
+    expect(() => metrics.httpRequestsTotal.add(1)).not.toThrow();
   });
 });

@@ -12,7 +12,9 @@ describe('notifications', () => {
   it('desktop calls node-notifier', async () => {
     await sendDesktopNotification('Test', 'Hello');
     const notifier = (await import('node-notifier')).default;
-    expect(notifier.notify).toHaveBeenCalled();
+    expect(notifier.notify).toHaveBeenCalledWith(
+      expect.objectContaining({ title: 'Test', message: 'Hello' }),
+    );
   });
 
   it('desktop skips in CI', async () => {
