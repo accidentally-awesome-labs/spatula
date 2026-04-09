@@ -58,7 +58,11 @@ function extractByField($: cheerio.CheerioAPI, field: FieldDefinition, baseUrl: 
     case 'currency': return findPrice($);
     case 'url': return findUrl($, nameLower, baseUrl);
     case 'number': return findNumber($, nameLower);
-    case 'array': return findList($, nameLower);
+    case 'array':
+      if (field.arrayItemType?.type === 'object' || field.objectFields) {
+        return findTable($, nameLower);
+      }
+      return findList($, nameLower);
     case 'string': default: return findText($, nameLower);
   }
 }
@@ -153,6 +157,57 @@ function findList($: cheerio.CheerioAPI, fieldName: string): string[] | null {
   return null;
 }
 
+function findTable($: cheerio.CheerioAPI, fieldName: string): Array<Record<string, string>> | null {
+  const selectors: string[] = [];
+  if (fieldName) {
+    selectors.push(`table[class*="${fieldName}"]`, `table[id*="${fieldName}"]`);
+  }
+  selectors.push('article table', 'main table', '.content table', 'table');
+
+  let table: ReturnType<typeof $> | null = null;
+  for (const sel of selectors) {
+    const found = $(sel).first();
+    if (found.length && found.find('tr').length >= 2) {
+      table = found;
+      break;
+    }
+  }
+  if (!table) return null;
+
+  let headers: string[] = [];
+  const theadCells = table.find('thead th, thead td');
+  if (theadCells.length > 0) {
+    headers = theadCells.map((_, el) => $(el).text().trim()).get();
+  } else {
+    const firstRow = table.find('tr').first();
+    headers = firstRow.find('th, td').map((_, el) => $(el).text().trim()).get();
+  }
+  if (headers.length === 0) return null;
+
+  const bodyRows = theadCells.length > 0
+    ? table.find('tbody tr')
+    : table.find('tr').slice(1);
+
+  const rows: Array<Record<string, string>> = [];
+  bodyRows.each((_, row) => {
+    const record: Record<string, string> = {};
+    let colIdx = 0;
+    $(row).find('th, td').each((_, cell) => {
+      const text = $(cell).text().trim();
+      const colspan = parseInt($(cell).attr('colspan') ?? '1', 10);
+      for (let i = 0; i < colspan && colIdx < headers.length; i++) {
+        record[headers[colIdx]] = text;
+        colIdx++;
+      }
+    });
+    if (Object.values(record).some(v => v !== '')) {
+      rows.push(record);
+    }
+  });
+
+  return rows.length > 0 ? rows : null;
+}
+
 function autoDiscover($: cheerio.CheerioAPI, baseUrl: string): Record<string, unknown> {
   const data: Record<string, unknown> = {};
   const h1 = $('h1').first().text().trim();
@@ -177,6 +232,11 @@ function autoDiscover($: cheerio.CheerioAPI, baseUrl: string): Record<string, un
     .get()
     .filter((l) => l.text);
   if (links.length > 0) data.links = links;
+  // Tables — require 3+ data rows to avoid extracting layout/nav tables
+  const tableData = findTable($, '');
+  if (tableData && tableData.length >= 3) {
+    data.tables = tableData;
+  }
   return data;
 }
 
