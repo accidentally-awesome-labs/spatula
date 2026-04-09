@@ -371,38 +371,43 @@ export async function runPullCommand(input: PullInput): Promise<PullResult> {
     let extrBatch = 0;
     let extrTotal = 0;
 
-    while (true) {
-      const page = await client.getExtractionsStreamPaginated(jobId, {
-        cursor: extrCursor ?? undefined,
-        since: input.full ? undefined : since ?? undefined,
-        limit: 100,
-      });
+    try {
+      while (true) {
+        const page = await client.getExtractionsStreamPaginated(jobId, {
+          cursor: extrCursor ?? undefined,
+          since: input.full ? undefined : since ?? undefined,
+          limit: 100,
+        });
 
-      if (page.data.length > 0) {
-        const batch = page.data.map((e: Record<string, unknown>) => ({
-          id: e.id as string,
-          pageId: null,
-          pageUrl: (e.pageUrl as string) ?? null,
-          schemaVersion: e.schemaVersion as number,
-          data: e.data as Record<string, unknown>,
-          unmappedFields: (e.unmappedFields ?? []) as Record<string, unknown>[],
-          metadata: (e.metadata ?? {}) as Record<string, unknown>,
-          runId: run.id,
-        }));
-        const counts = await input.adapter.extractionRepo.upsertBatch(batch);
-        extractionsInserted += counts.inserted;
-        extractionsUpdated += counts.updated;
-        extrTotal += page.data.length;
+        if (page.data.length > 0) {
+          const batch = page.data.map((e: Record<string, unknown>) => ({
+            id: e.id as string,
+            pageId: null,
+            pageUrl: (e.pageUrl as string) ?? null,
+            schemaVersion: e.schemaVersion as number,
+            data: e.data as Record<string, unknown>,
+            unmappedFields: (e.unmappedFields ?? []) as Record<string, unknown>[],
+            metadata: (e.metadata ?? {}) as Record<string, unknown>,
+            runId: run.id,
+          }));
+          const counts = await input.adapter.extractionRepo.upsertBatch(batch);
+          extractionsInserted += counts.inserted;
+          extractionsUpdated += counts.updated;
+          extrTotal += page.data.length;
+        }
+
+        extrBatch++;
+        input.onExtractionProgress?.(extrBatch, extrTotal);
+
+        if (!page.pagination.hasMore) break;
+        extrCursor = page.pagination.nextCursor ?? null;
+        if (extrCursor) {
+          await input.metaSet(`remote:${input.remoteName}:pull_cursor_extractions`, extrCursor);
+        }
       }
-
-      extrBatch++;
-      input.onExtractionProgress?.(extrBatch, extrTotal);
-
-      if (!page.pagination.hasMore) break;
-      extrCursor = page.pagination.nextCursor ?? null;
-      if (extrCursor) {
-        await input.metaSet(`remote:${input.remoteName}:pull_cursor_extractions`, extrCursor);
-      }
+    } catch (err) {
+      logger.error({ err }, 'Extraction pull interrupted — cursor checkpointed, resume with next pull');
+      return { success: false, entitiesInserted: totalInserted, entitiesUpdated: totalUpdated, extractionsInserted, extractionsUpdated, error: `Extraction pull failed: ${(err as Error).message}` };
     }
 
     await input.metaDelete(`remote:${input.remoteName}:pull_cursor_extractions`);
@@ -458,43 +463,48 @@ export async function runPullCommand(input: PullInput): Promise<PullResult> {
     let actBatch = 0;
     let actTotal = 0;
 
-    while (true) {
-      const page = await client.getActionsStreamPaginated(jobId, {
-        cursor: actCursor ?? undefined,
-        since: input.full ? undefined : since ?? undefined,
-        limit: 100,
-      });
+    try {
+      while (true) {
+        const page = await client.getActionsStreamPaginated(jobId, {
+          cursor: actCursor ?? undefined,
+          since: input.full ? undefined : since ?? undefined,
+          limit: 100,
+        });
 
-      if (page.data.length > 0) {
-        const batch = page.data.map((a: Record<string, unknown>) => ({
-          id: a.id as string,
-          type: a.type as string,
-          payload: a.payload as Record<string, unknown>,
-          source: a.source as string,
-          status: a.status as string,
-          confidence: a.confidence as number,
-          reasoning: (a.reasoning as string) ?? '',
-          runId: run.id,
-          createdAt: a.createdAt as string,
-          updatedAt: (a.updatedAt as string) ?? new Date().toISOString(),
-          appliedAt: (a.appliedAt as string) ?? null,
-          stateChanges: (a.stateChanges as Record<string, unknown>) ?? null,
-          reviewedBy: (a.reviewedBy as string) ?? null,
-        }));
-        const counts = await input.adapter.actionRepo.upsertBatch(batch);
-        actionsInserted += counts.inserted;
-        actionsUpdated += counts.updated;
-        actTotal += page.data.length;
+        if (page.data.length > 0) {
+          const batch = page.data.map((a: Record<string, unknown>) => ({
+            id: a.id as string,
+            type: a.type as string,
+            payload: a.payload as Record<string, unknown>,
+            source: a.source as string,
+            status: a.status as string,
+            confidence: a.confidence as number,
+            reasoning: (a.reasoning as string) ?? '',
+            runId: run.id,
+            createdAt: a.createdAt as string,
+            updatedAt: (a.updatedAt as string) ?? new Date().toISOString(),
+            appliedAt: (a.appliedAt as string) ?? null,
+            stateChanges: (a.stateChanges as Record<string, unknown>) ?? null,
+            reviewedBy: (a.reviewedBy as string) ?? null,
+          }));
+          const counts = await input.adapter.actionRepo.upsertBatch(batch);
+          actionsInserted += counts.inserted;
+          actionsUpdated += counts.updated;
+          actTotal += page.data.length;
+        }
+
+        actBatch++;
+        input.onActionProgress?.(actBatch, actTotal);
+
+        if (!page.pagination.hasMore) break;
+        actCursor = page.pagination.nextCursor ?? null;
+        if (actCursor) {
+          await input.metaSet(`remote:${input.remoteName}:pull_cursor_actions`, actCursor);
+        }
       }
-
-      actBatch++;
-      input.onActionProgress?.(actBatch, actTotal);
-
-      if (!page.pagination.hasMore) break;
-      actCursor = page.pagination.nextCursor ?? null;
-      if (actCursor) {
-        await input.metaSet(`remote:${input.remoteName}:pull_cursor_actions`, actCursor);
-      }
+    } catch (err) {
+      logger.error({ err }, 'Action pull interrupted — cursor checkpointed, resume with next pull');
+      return { success: false, entitiesInserted: totalInserted, entitiesUpdated: totalUpdated, extractionsInserted, extractionsUpdated, actionsInserted, actionsUpdated, error: `Action pull failed: ${(err as Error).message}` };
     }
 
     await input.metaDelete(`remote:${input.remoteName}:pull_cursor_actions`);

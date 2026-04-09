@@ -153,6 +153,7 @@ export function jobRoutes() {
       ...(job.stats as Record<string, number> ?? {}),
       pendingActionsCount,
       schemaFieldCount,
+      // storageBytesUsed: deferred — requires raw_pages SUM query not available in current deps
     };
 
     return c.json({ data: { ...job, stats: enrichedStats } });
