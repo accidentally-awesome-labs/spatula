@@ -32,22 +32,6 @@ describe('CrawlTaskRepository', () => {
     repo = new CrawlTaskRepository(mockDb as any);
   });
 
-  it('has enqueue method', () => {
-    expect(typeof repo.enqueue).toBe('function');
-  });
-
-  it('has findByJob method', () => {
-    expect(typeof repo.findByJob).toBe('function');
-  });
-
-  it('has updateStatus method', () => {
-    expect(typeof repo.updateStatus).toBe('function');
-  });
-
-  it('has updateClassification method', () => {
-    expect(typeof repo.updateClassification).toBe('function');
-  });
-
   it('enqueue calls db.insert', async () => {
     await repo.enqueue({
       jobId: '550e8400-e29b-41d4-a716-446655440000',

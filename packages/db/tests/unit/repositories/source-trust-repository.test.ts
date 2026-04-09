@@ -51,18 +51,6 @@ describe('SourceTrustRepository', () => {
     repo = new SourceTrustRepository(mockDb as any);
   });
 
-  it('has upsert method', () => {
-    expect(typeof repo.upsert).toBe('function');
-  });
-
-  it('has findByJob method', () => {
-    expect(typeof repo.findByJob).toBe('function');
-  });
-
-  it('has findByDomain method', () => {
-    expect(typeof repo.findByDomain).toBe('function');
-  });
-
   it('upsert wraps delete+insert in a transaction', async () => {
     await repo.upsert({
       jobId: '550e8400-e29b-41d4-a716-446655440000',

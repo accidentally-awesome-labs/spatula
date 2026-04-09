@@ -33,22 +33,6 @@ describe('ExportRepository', () => {
     repo = new ExportRepository(mockDb as any);
   });
 
-  it('has create method', () => {
-    expect(typeof repo.create).toBe('function');
-  });
-
-  it('has findById method', () => {
-    expect(typeof repo.findById).toBe('function');
-  });
-
-  it('has findByJob method', () => {
-    expect(typeof repo.findByJob).toBe('function');
-  });
-
-  it('has updateStatus method', () => {
-    expect(typeof repo.updateStatus).toBe('function');
-  });
-
   it('create calls db.insert', async () => {
     await repo.create({ jobId: 'j1', tenantId: 't1', format: 'json', includeProvenance: false });
     expect(mockDb.insert).toHaveBeenCalled();

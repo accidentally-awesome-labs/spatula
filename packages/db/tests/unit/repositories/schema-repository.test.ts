@@ -32,22 +32,6 @@ describe('SchemaRepository', () => {
     repo = new SchemaRepository(mockDb as any);
   });
 
-  it('has create method', () => {
-    expect(typeof repo.create).toBe('function');
-  });
-
-  it('has findLatest method', () => {
-    expect(typeof repo.findLatest).toBe('function');
-  });
-
-  it('has findByVersion method', () => {
-    expect(typeof repo.findByVersion).toBe('function');
-  });
-
-  it('has findAllVersions method', () => {
-    expect(typeof repo.findAllVersions).toBe('function');
-  });
-
   it('create calls db.insert', async () => {
     await repo.create({
       jobId: '550e8400-e29b-41d4-a716-446655440000',

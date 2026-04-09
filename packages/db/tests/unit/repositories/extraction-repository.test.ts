@@ -32,18 +32,6 @@ describe('ExtractionRepository', () => {
     repo = new ExtractionRepository(mockDb as any);
   });
 
-  it('has store method', () => {
-    expect(typeof repo.store).toBe('function');
-  });
-
-  it('has findByJob method', () => {
-    expect(typeof repo.findByJob).toBe('function');
-  });
-
-  it('has findByPage method', () => {
-    expect(typeof repo.findByPage).toBe('function');
-  });
-
   it('store calls db.insert', async () => {
     await repo.store({
       jobId: '550e8400-e29b-41d4-a716-446655440000',

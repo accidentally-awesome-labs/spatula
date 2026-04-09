@@ -29,22 +29,6 @@ describe('PageRepository', () => {
     repo = new PageRepository(mockDb as any);
   });
 
-  it('has create method', () => {
-    expect(typeof repo.create).toBe('function');
-  });
-
-  it('has findByContentHash method', () => {
-    expect(typeof repo.findByContentHash).toBe('function');
-  });
-
-  it('has findByTask method', () => {
-    expect(typeof repo.findByTask).toBe('function');
-  });
-
-  it('has findByIds method', () => {
-    expect(typeof repo.findByIds).toBe('function');
-  });
-
   it('findByIds returns empty array for empty ids', async () => {
     const result = await repo.findByIds([], '550e8400-e29b-41d4-a716-446655440001');
     expect(result).toEqual([]);

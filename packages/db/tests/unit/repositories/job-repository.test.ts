@@ -37,26 +37,6 @@ describe('JobRepository', () => {
     repo = new JobRepository(mockDb as any);
   });
 
-  it('has create method', () => {
-    expect(typeof repo.create).toBe('function');
-  });
-
-  it('has findById method', () => {
-    expect(typeof repo.findById).toBe('function');
-  });
-
-  it('has findByTenant method', () => {
-    expect(typeof repo.findByTenant).toBe('function');
-  });
-
-  it('has updateStatus method', () => {
-    expect(typeof repo.updateStatus).toBe('function');
-  });
-
-  it('has updateStats method', () => {
-    expect(typeof repo.updateStats).toBe('function');
-  });
-
   it('create calls db.insert', async () => {
     await repo.create({
       tenantId: '550e8400-e29b-41d4-a716-446655440000',

@@ -33,22 +33,6 @@ describe('EntityRepository', () => {
     repo = new EntityRepository(mockDb as any);
   });
 
-  it('has create method', () => {
-    expect(typeof repo.create).toBe('function');
-  });
-
-  it('has findById method', () => {
-    expect(typeof repo.findById).toBe('function');
-  });
-
-  it('has findByJob method', () => {
-    expect(typeof repo.findByJob).toBe('function');
-  });
-
-  it('has updateQualityScore method', () => {
-    expect(typeof repo.updateQualityScore).toBe('function');
-  });
-
   it('create calls db.insert', async () => {
     await repo.create({
       jobId: '550e8400-e29b-41d4-a716-446655440000',
@@ -134,10 +118,6 @@ describe('EntityRepository', () => {
     await expect(repo.updateQualityScore('id', 'tenant', 0.5)).rejects.toThrow(
       'Failed to update entity quality score',
     );
-  });
-
-  it('has countByJob method', () => {
-    expect(typeof repo.countByJob).toBe('function');
   });
 
   it('countByJob calls db.select', async () => {
@@ -262,12 +242,6 @@ describe('EntityRepository', () => {
     expect(mockDb.update).toHaveBeenCalled();
     expect(updateChainable.set).toHaveBeenCalled();
     expect(result.categories).toEqual(['electronics']);
-  });
-
-  describe('getQualityAggregation', () => {
-    it('method exists with correct signature', () => {
-      expect(repo.getQualityAggregation).toBeTypeOf('function');
-    });
   });
 
   describe('findByJobCursor', () => {
