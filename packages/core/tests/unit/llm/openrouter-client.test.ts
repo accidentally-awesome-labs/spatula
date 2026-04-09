@@ -205,5 +205,37 @@ describe('OpenRouterClient', () => {
       const result = await client.complete(basicRequest);
       expect(result.content).toBe('Hello');
     });
+
+    it('extracts cost from x-openrouter-cost header', async () => {
+      const recorder = { record: vi.fn() };
+      client.setUsageRecorder(recorder);
+
+      const headers = new Headers({ 'x-openrouter-cost': '0.00042' });
+      mockFetch.mockResolvedValue({
+        ok: true,
+        status: 200,
+        json: () => Promise.resolve(successBody('Hello', 'anthropic/claude-sonnet-4-20250514')),
+        text: () => Promise.resolve(''),
+        headers,
+      } as unknown as Response);
+
+      await client.complete(basicRequest);
+
+      expect(recorder.record).toHaveBeenCalledWith(
+        expect.objectContaining({ costUsd: 0.00042 }),
+      );
+    });
+
+    it('defaults costUsd to 0 when x-openrouter-cost header is absent', async () => {
+      const recorder = { record: vi.fn() };
+      client.setUsageRecorder(recorder);
+      mockFetch.mockResolvedValue(mockResponse(successBody('Hello')));
+
+      await client.complete(basicRequest);
+
+      expect(recorder.record).toHaveBeenCalledWith(
+        expect.objectContaining({ costUsd: 0 }),
+      );
+    });
   });
 });

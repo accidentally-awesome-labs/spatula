@@ -72,6 +72,7 @@ export class OpenRouterClient implements LLMClient {
       try {
         const start = performance.now();
         const response = await this.doFetch(body);
+        const costUsd = parseFloat(response.headers.get('x-openrouter-cost') ?? '') || 0;
         const data = (await response.json()) as OpenRouterAPIResponse;
         const duration = performance.now() - start;
 
@@ -103,7 +104,7 @@ export class OpenRouterClient implements LLMClient {
             promptTokens: result.usage.promptTokens,
             completionTokens: result.usage.completionTokens,
             totalTokens: result.usage.totalTokens,
-            costUsd: 0, // TODO: Extract cost from OpenRouter 'x-openrouter-cost' response header when available
+            costUsd,
             durationMs: duration,
           });
         }
