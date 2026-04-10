@@ -1,7 +1,8 @@
 /**
  * Integration tests for UserTenantRepository against real Postgres.
  *
- * Requires: TEST_DATABASE_URL pointing to a Postgres instance with migrations applied.
+ * Requires: TEST_DATABASE_URL pointing to a Postgres instance.
+ * Migrations are applied automatically in beforeAll.
  * Run: pnpm --filter @spatula/db exec vitest run tests/integration/user-tenant-repository.integration.test.ts
  */
 import { describe, it, expect, beforeAll, afterAll, beforeEach } from 'vitest';
@@ -10,6 +11,7 @@ import { randomUUID } from 'node:crypto';
 import { createDatabasePool, type DatabasePool } from '../../src/connection.js';
 import { TenantRepository } from '../../src/repositories/tenant-repository.js';
 import { UserTenantRepository } from '../../src/repositories/user-tenant-repository.js';
+import { runMigrations } from '../../src/migrate.js';
 
 const TEST_DB_URL =
   process.env.TEST_DATABASE_URL ?? 'postgresql://spatula:spatula@localhost:5432/spatula_test';
@@ -21,7 +23,15 @@ let repo: UserTenantRepository;
 // Track created tenants for cleanup
 const createdTenantIds: string[] = [];
 
-beforeAll(() => {
+beforeAll(async () => {
+  // Apply pending migrations before running tests
+  try {
+    await runMigrations(TEST_DB_URL);
+  } catch (err) {
+    // If DB is unreachable, tests will fail at connection — that's fine
+    console.warn('Migration warning (may be harmless if DB is fresh):', (err as Error).message);
+  }
+
   dbPool = createDatabasePool(TEST_DB_URL);
   tenantRepo = new TenantRepository(dbPool.db);
   repo = new UserTenantRepository(dbPool.db);
