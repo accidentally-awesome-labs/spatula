@@ -85,12 +85,18 @@ export class EntitySourceRepository {
     jobId: string,
     tenantId: string,
     limit: number,
-    cursor?: string,
+    cursor?: { entityId: string; extractionId: string },
     since?: string,
   ) {
     try {
       const conditions = [eq(entities.jobId, jobId), eq(entities.tenantId, tenantId)];
-      if (cursor) conditions.push(sql`${entitySources.entityId} > ${cursor}::uuid`);
+      if (cursor) {
+        // Composite cursor: PK is (entity_id, extraction_id). Single-column
+        // cursor would drop rows for an entityId split across page boundary.
+        conditions.push(
+          sql`(${entitySources.entityId}, ${entitySources.extractionId}) > (${cursor.entityId}::uuid, ${cursor.extractionId}::uuid)`,
+        );
+      }
       if (since) conditions.push(sql`${entities.updatedAt} > ${since}`);
 
       const rows = await this.db
@@ -102,10 +108,14 @@ export class EntitySourceRepository {
         .from(entitySources)
         .innerJoin(entities, eq(entitySources.entityId, entities.id))
         .where(and(...conditions))
-        .orderBy(entitySources.entityId)
+        .orderBy(entitySources.entityId, entitySources.extractionId)
         .limit(limit);
 
-      const nextCursor = rows.length === limit ? rows[rows.length - 1].entityId : null;
+      const last = rows[rows.length - 1];
+      const nextCursor =
+        rows.length === limit && last
+          ? { entityId: last.entityId, extractionId: last.extractionId }
+          : null;
       return { entities: rows, nextCursor };
     } catch (error) {
       throw new StorageError(`Failed to fetch entity sources by cursor: ${(error as Error).message}`, {
