@@ -12,13 +12,19 @@ import { runResetCommand } from '../../../src/commands/reset.js';
 
 // Mock @spatula/db so unit tests don't need a real SQLite native module.
 // The DB-level selective cleanup is covered by integration tests.
+const preparedSql: string[] = [];
 vi.mock('@spatula/db', () => {
-  const mockSqlite = {
-    prepare: vi.fn().mockReturnValue({ run: vi.fn() }),
-    close: vi.fn(),
-  };
   return {
-    createProjectDb: vi.fn(() => ({ sqlite: mockSqlite, close: vi.fn() })),
+    createProjectDb: vi.fn(() => ({
+      sqlite: {
+        prepare: vi.fn((sql: string) => {
+          preparedSql.push(sql);
+          return { run: vi.fn() };
+        }),
+        close: vi.fn(),
+      },
+      close: vi.fn(),
+    })),
   };
 });
 
@@ -131,6 +137,7 @@ describe('reset --keep-remote', () => {
   beforeEach(() => {
     projectDir = makeTmpDir();
     scaffoldProject(projectDir);
+    preparedSql.length = 0;
   });
 
   afterEach(() => {
@@ -147,5 +154,18 @@ describe('reset --keep-remote', () => {
     expect(result.removedItems).toContain('pages');
     expect(result.removedItems).toContain('logs');
     expect(result.keptItems).toContain('project.db');
+  });
+
+  it('deletes orphan entity_sources rows before deleting entities/extractions', async () => {
+    await runResetCommand({ keepRemote: true, cwd: projectDir });
+
+    const entitySourcesIdx = preparedSql.findIndex(s => s.includes('DELETE FROM entity_sources'));
+    const entitiesIdx = preparedSql.findIndex(s => s.match(/DELETE FROM entities\b/));
+    const extractionsIdx = preparedSql.findIndex(s => s.includes('DELETE FROM extractions'));
+
+    expect(entitySourcesIdx).toBeGreaterThanOrEqual(0);
+    // Must run BEFORE entities/extractions deletes, otherwise the subselect matches nothing
+    expect(entitySourcesIdx).toBeLessThan(entitiesIdx);
+    expect(entitySourcesIdx).toBeLessThan(extractionsIdx);
   });
 });

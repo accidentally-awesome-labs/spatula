@@ -136,6 +136,19 @@ export async function runResetCommand(options: ResetOptions = {}): Promise<Reset
       const { createProjectDb } = await import('@spatula/db');
       const { sqlite, close } = createProjectDb(dbPath);
       try {
+        // Delete entity_sources rows that reference local entities or extractions
+        // BEFORE deleting those rows, otherwise the subselect matches nothing.
+        // No FK constraints on SQLite entity_sources, so orphans accumulate silently
+        // if this is skipped.
+        sqlite.prepare(
+          `DELETE FROM entity_sources
+           WHERE extraction_id IN (
+             SELECT id FROM extractions WHERE run_id IS NULL OR run_id NOT LIKE 'remote:%'
+           )
+           OR entity_id IN (
+             SELECT id FROM entities WHERE run_id IS NULL OR run_id NOT LIKE 'remote:%'
+           )`,
+        ).run();
         // Delete local entities (runId null = pre-pull local, non-remote prefix = local runs)
         sqlite.prepare(`DELETE FROM entities WHERE run_id IS NULL OR run_id NOT LIKE 'remote:%'`).run();
         sqlite.prepare(`DELETE FROM extractions WHERE run_id IS NULL OR run_id NOT LIKE 'remote:%'`).run();
