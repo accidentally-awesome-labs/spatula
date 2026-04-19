@@ -1197,6 +1197,72 @@ describe('runPullCommand', () => {
       expect(mockMetaDelete).toHaveBeenCalledWith('remote:prod:pull_cursor_extractions');
     });
 
+    it('returns structured failure when entity-source pull throws mid-loop', async () => {
+      mockMetaGet.mockImplementation(async (key: string) => {
+        if (key === 'remote:prod:job_id') return 'remote-job-1';
+        return null;
+      });
+
+      let esCallCount = 0;
+      vi.stubGlobal(
+        'fetch',
+        vi.fn().mockImplementation(async (url: string) => {
+          if ((url as string).includes('/extractions')) {
+            return {
+              ok: true,
+              status: 200,
+              json: () => Promise.resolve({
+                data: [{ id: 'ext-1', pageUrl: 'https://a.com', schemaVersion: 1, data: {}, unmappedFields: [], metadata: {} }],
+                pagination: { hasMore: false, total: 1 },
+              }),
+            };
+          }
+          if ((url as string).includes('/entity-sources')) {
+            esCallCount++;
+            if (esCallCount === 1) {
+              return {
+                ok: true,
+                status: 200,
+                json: () => Promise.resolve({
+                  data: [{ entityId: 'e1', extractionId: 'ext-1', matchConfidence: 0.9 }],
+                  pagination: { nextCursor: 'es-cursor-2', hasMore: true, total: 3 },
+                }),
+              };
+            }
+            throw new Error('Network lost during entity-sources pull');
+          }
+          if ((url as string).includes('/entities')) {
+            return { ok: true, status: 200, json: () => Promise.resolve({ data: [], pagination: { hasMore: false, total: 0 } }) };
+          }
+          if ((url as string).includes('/schema')) {
+            return { ok: true, status: 200, json: () => Promise.resolve({ data: { version: 1, fields: [], fieldAliases: [], createdAt: '2026-01-01', parentVersion: null } }) };
+          }
+          if ((url as string).includes('/usage')) {
+            return { ok: true, status: 200, json: () => Promise.resolve({ data: { period: {}, totalTokens: 0, totalCostUsd: 0, byModel: {}, byPurpose: {}, byJob: [] } }) };
+          }
+          return { ok: true, status: 200, json: () => Promise.resolve({ data: { id: 'remote-job-1', status: 'completed' } }) };
+        }),
+      );
+
+      const result = await runPullCommand({
+        remoteName: 'prod',
+        metaGet: mockMetaGet,
+        metaSet: mockMetaSet,
+        metaDelete: mockMetaDelete,
+        adapter: buildAdapterWithExtractions() as any,
+        projectId: 'test-project',
+        projectRoot: '/tmp/test',
+        includeExtractions: true,
+      });
+
+      // Must not throw — returns structured failure like extraction/action loops
+      expect(result.success).toBe(false);
+      expect(result.error).toContain('Entity-source pull failed');
+      expect(result.entitySourcesInserted).toBe(2); // from mock upsert return value
+      // Cursor checkpointed before the throw
+      expect(mockMetaSet).toHaveBeenCalledWith('remote:prod:pull_cursor_entity_sources', 'es-cursor-2');
+    });
+
     it('does not pull extractions when flag is false', async () => {
       mockMetaGet.mockImplementation(async (key: string) => {
         if (key === 'remote:prod:job_id') return 'remote-job-1';

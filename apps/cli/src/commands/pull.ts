@@ -419,27 +419,40 @@ export async function runPullCommand(input: PullInput): Promise<PullResult> {
       }
       let esCursor = await input.metaGet(`remote:${input.remoteName}:pull_cursor_entity_sources`);
 
-      while (true) {
-        const page = await client.getEntitySourcesStreamPaginated(jobId, {
-          cursor: esCursor ?? undefined,
-          since: input.full ? undefined : since ?? undefined,
-          limit: 500,
-        });
+      try {
+        while (true) {
+          const page = await client.getEntitySourcesStreamPaginated(jobId, {
+            cursor: esCursor ?? undefined,
+            since: input.full ? undefined : since ?? undefined,
+            limit: 500,
+          });
 
-        if (page.data.length > 0) {
-          const batch = page.data.map((es: Record<string, unknown>) => ({
-            entityId: es.entityId as string,
-            extractionId: es.extractionId as string,
-            matchConfidence: es.matchConfidence as number,
-          }));
-          entitySourcesInserted += await input.adapter.entitySourceRepo.upsertBatchSources(batch);
-        }
+          if (page.data.length > 0) {
+            const batch = page.data.map((es: Record<string, unknown>) => ({
+              entityId: es.entityId as string,
+              extractionId: es.extractionId as string,
+              matchConfidence: es.matchConfidence as number,
+            }));
+            entitySourcesInserted += await input.adapter.entitySourceRepo.upsertBatchSources(batch);
+          }
 
-        if (!page.pagination.hasMore) break;
-        esCursor = page.pagination.nextCursor ?? null;
-        if (esCursor) {
-          await input.metaSet(`remote:${input.remoteName}:pull_cursor_entity_sources`, esCursor);
+          if (!page.pagination.hasMore) break;
+          esCursor = page.pagination.nextCursor ?? null;
+          if (esCursor) {
+            await input.metaSet(`remote:${input.remoteName}:pull_cursor_entity_sources`, esCursor);
+          }
         }
+      } catch (err) {
+        logger.error({ err }, 'Entity-source pull interrupted — cursor checkpointed, resume with next pull');
+        return {
+          success: false,
+          entitiesInserted: totalInserted,
+          entitiesUpdated: totalUpdated,
+          extractionsInserted,
+          extractionsUpdated,
+          entitySourcesInserted,
+          error: `Entity-source pull failed: ${(err as Error).message}`,
+        };
       }
 
       await input.metaDelete(`remote:${input.remoteName}:pull_cursor_entity_sources`);
