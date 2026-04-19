@@ -101,6 +101,20 @@ describe('SQLite Batch Methods (in-memory)', () => {
         const result = await extractionRepo.upsertBatch(batch);
         expect(result).toEqual({ inserted: 0, updated: 2 });
       });
+
+      it('counts within-batch duplicate ids as 1 insert + 1 update', async () => {
+        // ext-dup-1 is brand new but appears twice in the same batch.
+        // First occurrence = insert; second occurrence = update of the
+        // row inserted moments ago. Wrong impl would count both as inserts.
+        // Use isolated runId so it doesn't pollute downstream findIdsByRunId tests.
+        const dupRun = 'run-ext-dup';
+        const batch = [
+          makeExtraction('ext-dup-1', dupRun),
+          makeExtraction('ext-dup-1', dupRun),
+        ];
+        const result = await extractionRepo.upsertBatch(batch);
+        expect(result).toEqual({ inserted: 1, updated: 1 });
+      });
     });
 
     describe('deleteByRunIds', () => {
@@ -228,6 +242,15 @@ describe('SQLite Batch Methods (in-memory)', () => {
         ];
         const result = await actionRepo.upsertBatch(batch);
         expect(result).toEqual({ inserted: 0, updated: 2 });
+      });
+
+      it('counts within-batch duplicate ids as 1 insert + 1 update', async () => {
+        const batch = [
+          makeAction('act-dup-1', runId1),
+          makeAction('act-dup-1', runId1),
+        ];
+        const result = await actionRepo.upsertBatch(batch);
+        expect(result).toEqual({ inserted: 1, updated: 1 });
       });
 
       it('correctly sets optional fields stateChanges and reviewedBy', async () => {

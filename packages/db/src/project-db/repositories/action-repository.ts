@@ -137,8 +137,15 @@ export class SqliteActionRepository implements ActionRepo {
       }
     }, { method: 'upsertBatch:check', table: 'actions' });
 
+    // Track IDs seen within this batch to count within-batch duplicates as updates
+    const seenInBatch = new Set<string>();
     wrapStorageError(() => {
       for (const item of batch) {
+        if (!existingIds.has(item.id) && !seenInBatch.has(item.id)) {
+          seenInBatch.add(item.id);
+        } else {
+          existingIds.add(item.id);
+        }
         this.db.insert(actions).values({
           id: item.id,
           jobId: this.projectId,

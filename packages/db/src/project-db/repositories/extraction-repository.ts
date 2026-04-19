@@ -109,8 +109,15 @@ export class SqliteExtractionRepository implements ExtractionRepo {
     }, { method: 'upsertBatch:check', table: 'extractions' });
 
     const now = new Date().toISOString();
+    // Track IDs seen within this batch to count within-batch duplicates as updates
+    const seenInBatch = new Set<string>();
     wrapStorageError(() => {
       for (const item of batch) {
+        if (!existingIds.has(item.id) && !seenInBatch.has(item.id)) {
+          seenInBatch.add(item.id);
+        } else {
+          existingIds.add(item.id);
+        }
         this.db.insert(extractions).values({
           id: item.id,
           jobId: this.projectId,
