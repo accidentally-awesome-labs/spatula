@@ -3,6 +3,7 @@ import type { ServerType } from '@hono/node-server';
 import { createNodeWebSocket } from '@hono/node-ws';
 import { createLogger, loadConfig, getEnvOrDefault, registerGauges } from '@spatula/shared';
 import type { SpatulaQueues } from '@spatula/queue';
+import type { JobStatus } from '@spatula/core';
 import { createApp } from './app.js';
 import { JobProgressManager } from './ws/job-progress.js';
 import { executeShutdown, SHUTDOWN_TIMEOUT_MS } from './shutdown.js';
@@ -74,7 +75,7 @@ export function startServer(deps: AppDeps, port?: number) {
   // Register observable gauges now that repos are available
   if (deps.jobRepo && deps.tenantRepo) {
     registerGauges({
-      jobRepo: { countByStatus: (status: string) => deps.jobRepo.countByTenant('*', { status }) },
+      jobRepo: { countByStatus: (status: string) => deps.jobRepo.countByTenant('*', { status: status as JobStatus }) },
       tenantRepo: { countAll: () => deps.tenantRepo!.countAll() },
       queueProvider: { getQueueDepth: () => getTotalQueueDepth(deps.queues) },
     });

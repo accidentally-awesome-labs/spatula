@@ -2,8 +2,7 @@ import { createBullBoard } from '@bull-board/api';
 import { BullMQAdapter } from '@bull-board/api/bullMQAdapter';
 import { HonoAdapter } from '@bull-board/hono';
 import { serveStatic } from '@hono/node-server/serve-static';
-import type { Queue } from 'bullmq';
-import type { SpatulaQueues } from '@spatula/queue';
+import type { Queue, SpatulaQueues } from '@spatula/queue';
 
 export function createQueueDashboard(queues: SpatulaQueues, extraQueues?: Queue[]) {
   const serverAdapter = new HonoAdapter(serveStatic).setBasePath('/api/v1/admin/queues');

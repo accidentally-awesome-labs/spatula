@@ -33,7 +33,10 @@ const triggerExportRoute = createRoute({
     params: jobIdParam,
     body: { content: { 'application/json': { schema: exportRequestSchema } }, required: true },
   },
-  responses: { 202: jsonContent(dataResponse(exportResponseSchema), 'Export queued') },
+  responses: {
+    202: jsonContent(dataResponse(exportResponseSchema), 'Export queued'),
+    403: jsonContent(errorResponseSchema, 'Export format not available on current plan'),
+  },
 });
 
 const getExportRoute = createRoute({
@@ -133,6 +136,7 @@ export function exportRoutes() {
           error: {
             code: 'EXPORT_FORMAT_RESTRICTED',
             message: `Export format '${body.format}' is not available on the ${plan} plan. Upgrade to access this format.`,
+            requestId: c.get('requestId'),
           },
         }, 403);
       }

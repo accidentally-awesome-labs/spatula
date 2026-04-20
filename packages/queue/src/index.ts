@@ -14,6 +14,9 @@ export type {
   SpatulaQueues,
   QueueConfig,
 } from './queues.js';
+// Re-export bullmq types consumers need so downstream packages don't have to
+// depend on bullmq directly.
+export type { Queue, Worker, Job } from 'bullmq';
 
 // Webhook
 export { WebhookSender, enqueueWebhookIfConfigured } from './webhook-sender.js';
