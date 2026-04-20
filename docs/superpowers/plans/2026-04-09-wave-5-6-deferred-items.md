@@ -2114,7 +2114,15 @@ defects found in retrospective superpowers review (2026-04-19) were closed:
   extraction/action loops from `733f298`)
 - `51d088d` — `reset --keep-remote` deletes orphan `entity_sources` rows
   before wiping local entities/extractions
-- _(pending commit)_ — `queue_depth` gauge wired to BullMQ
+- `0d80b47` — `queue_depth` gauge wired to BullMQ
   `getJobCounts('waiting','active','delayed')` summed across all 6 queues
   via `getTotalQueueDepth()` helper in `apps/api/src/server.ts`. Per-queue
   errors tolerated so a single Redis hiccup does not zero the gauge.
+- `46cf144` — Cleared three pre-existing TypeScript errors blocking
+  `pnpm --filter @spatula/api build`: bullmq direct import (re-export
+  `Queue/Worker/Job` from `@spatula/queue` instead), missing 403 schema
+  on `triggerExportRoute`, and `JobStatus` narrowing in `registerGauges`.
+- _(pending commit)_ — Root-cause fix for f101936: migrations now
+  applied once via vitest `globalSetup` in `packages/db/vitest.config.ts`,
+  and `runMigrations` closes its pg pool in a try/finally so setup
+  doesn't leak connections.
