@@ -19,7 +19,7 @@
 - Modify: `packages/core/src/config/config-differ.ts:174-198`
 - Test: `packages/core/tests/unit/config/config-differ.test.ts`
 
-- [ ] **Step 1: Write failing tests for nested field diff**
+- [x] **Step 1: Write failing tests for nested field diff**
 
 In `packages/core/tests/unit/config/config-differ.test.ts`, add tests:
 
@@ -86,12 +86,12 @@ describe('diffConfigs nested fields', () => {
 
 Note: `makeConfig` is a helper that wraps fields in a full `JobConfig`. Check if it exists in the test file; if not, create a minimal one that constructs a valid `JobConfig` with the given fields.
 
-- [ ] **Step 2: Run tests to verify they fail**
+- [x] **Step 2: Run tests to verify they fail**
 
 Run: `cd packages/core && pnpm test -- --run config-differ`
 Expected: FAIL — `nestedChanges` and `addedFields` don't exist on change entries
 
-- [ ] **Step 3: Extend PropertyChange type in diff-types.ts**
+- [x] **Step 3: Extend PropertyChange type in diff-types.ts**
 
 In `packages/core/src/config/diff-types.ts`, replace the inline type with a named interface:
 
@@ -111,7 +111,7 @@ export interface FieldChange {
 }
 ```
 
-- [ ] **Step 4: Add recursive comparison to diffFieldProperties**
+- [x] **Step 4: Add recursive comparison to diffFieldProperties**
 
 In `packages/core/src/config/config-differ.ts`, after line 195 (the TODO comment), add:
 
@@ -148,12 +148,12 @@ In `packages/core/src/config/config-differ.ts`, after line 195 (the TODO comment
 
 Remove the TODO comment at line 195.
 
-- [ ] **Step 5: Run tests to verify they pass**
+- [x] **Step 5: Run tests to verify they pass**
 
 Run: `cd packages/core && pnpm test -- --run config-differ`
 Expected: ALL PASS
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add packages/core/src/config/diff-types.ts packages/core/src/config/config-differ.ts packages/core/tests/unit/config/config-differ.test.ts
@@ -168,7 +168,7 @@ git commit -m "feat(core): add recursive objectFields/arrayItemType comparison t
 - Modify: `packages/core/src/extraction/css-extractor.ts:55-63` (extractByField) and add `findTable` function
 - Test: `packages/core/tests/unit/extraction/css-extractor.test.ts`
 
-- [ ] **Step 1: Write failing tests for table extraction**
+- [x] **Step 1: Write failing tests for table extraction**
 
 In `packages/core/tests/unit/extraction/css-extractor.test.ts`, add:
 
@@ -272,12 +272,12 @@ describe('table extraction', () => {
 });
 ```
 
-- [ ] **Step 2: Run tests to verify they fail**
+- [x] **Step 2: Run tests to verify they fail**
 
 Run: `cd packages/core && pnpm test -- --run css-extractor`
 Expected: FAIL — no table extraction logic exists
 
-- [ ] **Step 3: Implement findTable function and wire into extractByField**
+- [x] **Step 3: Implement findTable function and wire into extractByField**
 
 In `packages/core/src/extraction/css-extractor.ts`:
 
@@ -373,12 +373,12 @@ Update `autoDiscover` — add after the `links` block:
   }
 ```
 
-- [ ] **Step 4: Run tests to verify they pass**
+- [x] **Step 4: Run tests to verify they pass**
 
 Run: `cd packages/core && pnpm test -- --run css-extractor`
 Expected: ALL PASS
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add packages/core/src/extraction/css-extractor.ts packages/core/tests/unit/extraction/css-extractor.test.ts
@@ -395,7 +395,7 @@ git commit -m "feat(core): add HTML table extraction to CSS extractor via array+
 - Modify: `apps/cli/src/index.tsx:178-196`
 - Test: `apps/cli/tests/unit/commands/add.test.ts`
 
-- [ ] **Step 1: Write failing test for findCompletedUrls**
+- [x] **Step 1: Write failing test for findCompletedUrls**
 
 In the appropriate test file (create `packages/db/tests/unit/project-db/crawl-task-repo.test.ts` if needed or use existing):
 
@@ -424,7 +424,7 @@ describe('SqliteCrawlTaskRepository.findCompletedUrls', () => {
 });
 ```
 
-- [ ] **Step 2: Implement findCompletedUrls**
+- [x] **Step 2: Implement findCompletedUrls**
 
 In `packages/db/src/project-db/repositories/crawl-task-repository.ts`, add:
 
@@ -444,12 +444,12 @@ In `packages/db/src/project-db/repositories/crawl-task-repository.ts`, add:
   }
 ```
 
-- [ ] **Step 3: Run repo test to verify it passes**
+- [x] **Step 3: Run repo test to verify it passes**
 
 Run: `cd packages/db && pnpm test -- --run crawl-task`
 Expected: PASS
 
-- [ ] **Step 4: Write failing tests for add command with history dedup**
+- [x] **Step 4: Write failing tests for add command with history dedup**
 
 In `apps/cli/tests/unit/commands/add.test.ts`, add:
 
@@ -474,7 +474,7 @@ describe('validateAndDedup with crawl history', () => {
 });
 ```
 
-- [ ] **Step 5: Update validateAndDedup and interfaces**
+- [x] **Step 5: Update validateAndDedup and interfaces**
 
 In `apps/cli/src/commands/add.ts`:
 
@@ -561,7 +561,7 @@ if (result.alreadyCrawled.length > 0) {
 }
 ```
 
-- [ ] **Step 6: Register --no-history flag in CLI**
+- [x] **Step 6: Register --no-history flag in CLI**
 
 In `apps/cli/src/index.tsx`, update the `add` command (around line 178):
 
@@ -592,12 +592,12 @@ In `apps/cli/src/index.tsx`, update the `add` command (around line 178):
   )
 ```
 
-- [ ] **Step 7: Run all add tests**
+- [x] **Step 7: Run all add tests**
 
 Run: `cd apps/cli && pnpm test -- --run add`
 Expected: ALL PASS
 
-- [ ] **Step 8: Commit**
+- [x] **Step 8: Commit**
 
 ```bash
 git add packages/db/src/project-db/repositories/crawl-task-repository.ts apps/cli/src/commands/add.ts apps/cli/src/index.tsx apps/cli/tests/unit/commands/add.test.ts
@@ -612,7 +612,7 @@ git commit -m "feat(cli): add crawl history dedup to spatula add with --no-histo
 - Modify: `apps/api/src/app.ts:126-129`
 - Test: `apps/api/tests/unit/routes/tenants.test.ts` (or appropriate test file)
 
-- [ ] **Step 1: Write failing test**
+- [x] **Step 1: Write failing test**
 
 ```typescript
 describe('POST /api/v1/tenants auth protection', () => {
@@ -646,12 +646,12 @@ describe('POST /api/v1/tenants auth protection', () => {
 });
 ```
 
-- [ ] **Step 2: Run test to verify it fails**
+- [x] **Step 2: Run test to verify it fails**
 
 Run: `cd apps/api && pnpm test -- --run tenants`
 Expected: FAIL — no auth check exists
 
-- [ ] **Step 3: Add creation secret middleware**
+- [x] **Step 3: Add creation secret middleware**
 
 In `apps/api/src/app.ts`, replace lines 126-129:
 
@@ -669,7 +669,7 @@ In `apps/api/src/app.ts`, replace lines 126-129:
   app.route('/api/v1/tenants', tenantRoutes());
 ```
 
-- [ ] **Step 4: Add env var to .env.example**
+- [x] **Step 4: Add env var to .env.example**
 
 Append to `.env.example`:
 
@@ -678,7 +678,7 @@ Append to `.env.example`:
 # TENANT_CREATION_SECRET=your-secret-here
 ```
 
-- [ ] **Step 5: Run tests and commit**
+- [x] **Step 5: Run tests and commit**
 
 Run: `cd apps/api && pnpm test -- --run tenants`
 Expected: ALL PASS
@@ -696,7 +696,7 @@ git commit -m "fix(api): add shared-secret protection for tenant creation endpoi
 - Modify: `packages/queue/src/job-manager.ts:19,28,36,53-72`
 - Test: `packages/queue/tests/unit/job-manager.test.ts`
 
-- [ ] **Step 1: Write failing test**
+- [x] **Step 1: Write failing test**
 
 ```typescript
 it('logs audit event on monthly quota exceeded', async () => {
@@ -741,7 +741,7 @@ it('logs audit event on concurrent job quota exceeded', async () => {
 });
 ```
 
-- [ ] **Step 2: Implement audit logging in JobManager**
+- [x] **Step 2: Implement audit logging in JobManager**
 
 In `packages/queue/src/job-manager.ts`:
 
@@ -789,7 +789,7 @@ For concurrent job quota (lines 64-68), add audit before throw:
         }
 ```
 
-- [ ] **Step 3: Run tests and commit**
+- [x] **Step 3: Run tests and commit**
 
 Run: `cd packages/queue && pnpm test -- --run job-manager`
 Expected: ALL PASS
@@ -807,7 +807,7 @@ git commit -m "feat(queue): add audit logging for quota exceeded events in JobMa
 - Modify: `packages/core/src/llm/openrouter-client.ts:74-108`
 - Test: `packages/core/tests/unit/llm/openrouter-client.test.ts`
 
-- [ ] **Step 1: Write failing test**
+- [x] **Step 1: Write failing test**
 
 ```typescript
 it('extracts cost from x-openrouter-cost header', async () => {
@@ -831,7 +831,7 @@ it('extracts cost from x-openrouter-cost header', async () => {
 });
 ```
 
-- [ ] **Step 2: Implement cost extraction**
+- [x] **Step 2: Implement cost extraction**
 
 In `packages/core/src/llm/openrouter-client.ts`, after line 74 (`const response = await this.doFetch(body);`), before the `.json()` call:
 
@@ -847,7 +847,7 @@ Then at line 106, replace `costUsd: 0` with `costUsd`:
 
 Remove the TODO comment.
 
-- [ ] **Step 3: Run tests and commit**
+- [x] **Step 3: Run tests and commit**
 
 Run: `cd packages/core && pnpm test -- --run openrouter`
 Expected: ALL PASS
@@ -865,7 +865,7 @@ git commit -m "feat(core): extract cost from OpenRouter x-openrouter-cost respon
 - Modify: `packages/shared/src/metrics.ts:46-48`
 - Test: `packages/shared/tests/unit/metrics.test.ts`
 
-- [ ] **Step 1: Write failing test**
+- [x] **Step 1: Write failing test**
 
 ```typescript
 describe('registerGauges', () => {
@@ -883,7 +883,7 @@ describe('registerGauges', () => {
 });
 ```
 
-- [ ] **Step 2: Implement registerGauges**
+- [x] **Step 2: Implement registerGauges**
 
 In `packages/shared/src/metrics.ts`:
 
@@ -934,7 +934,7 @@ Remove the TODO comment at line 46. Store `meter` as a module-level variable acc
 
 Note: The exact API for `ObservableGauge.addCallback` depends on the OpenTelemetry SDK version. Check `node_modules/@opentelemetry/api/build/src/metrics/Meter.d.ts` for the correct callback signature.
 
-- [ ] **Step 3: Run tests and commit**
+- [x] **Step 3: Run tests and commit**
 
 Run: `cd packages/shared && pnpm test -- --run metrics`
 Expected: ALL PASS
@@ -953,7 +953,7 @@ git commit -m "feat(shared): register observable gauges for active_jobs, tenant_
 - Modify: `packages/db/src/schema-sqlite/actions.ts`
 - Create: `packages/db/drizzle-sqlite/0006_*.sql` (generated by Drizzle Kit)
 
-- [ ] **Step 1: Update extraction schema**
+- [x] **Step 1: Update extraction schema**
 
 In `packages/db/src/schema-sqlite/extractions.ts`, change `pageId` to nullable and add `runId` + `pageUrl`:
 
@@ -971,7 +971,7 @@ In `packages/db/src/schema-sqlite/extractions.ts`, change `pageId` to nullable a
   ],
 ```
 
-- [ ] **Step 2: Update action schema**
+- [x] **Step 2: Update action schema**
 
 In `packages/db/src/schema-sqlite/actions.ts`, add `runId`:
 
@@ -987,13 +987,13 @@ In `packages/db/src/schema-sqlite/actions.ts`, add `runId`:
     // ... existing CHECK constraints unchanged
 ```
 
-- [ ] **Step 3: Generate migration**
+- [x] **Step 3: Generate migration**
 
 Run: `cd packages/db && pnpm db:generate:sqlite`
 
 This generates a new migration file in `drizzle-sqlite/`. Because `pageId` is changing from NOT NULL to nullable, Drizzle Kit will generate a table recreation migration for the extractions table. Verify the generated SQL preserves existing data (should use a temporary table copy pattern).
 
-- [ ] **Step 4: Test migration against populated DB**
+- [x] **Step 4: Test migration against populated DB**
 
 Create a test that seeds data into extractions and actions, runs the migration, and verifies data is preserved:
 
@@ -1008,7 +1008,7 @@ it('preserves existing extraction data after migration', () => {
 
 Run: `cd packages/db && pnpm test -- --run migration`
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add packages/db/src/schema-sqlite/extractions.ts packages/db/src/schema-sqlite/actions.ts packages/db/drizzle-sqlite/
@@ -1027,7 +1027,7 @@ git commit -m "feat(db): add runId/pageUrl columns to SQLite extractions and act
 - Modify: `packages/db/src/repositories/job-repository.ts` (stats enrichment)
 - Test: `apps/api/tests/unit/routes/extractions.test.ts`, `apps/api/tests/unit/routes/entity-sources.test.ts`
 
-- [ ] **Step 1: Update extractionResponseSchema**
+- [x] **Step 1: Update extractionResponseSchema**
 
 In `apps/api/src/schemas/responses.ts`:
 
@@ -1046,7 +1046,7 @@ export const extractionResponseSchema = z.object({
 }).openapi('Extraction');
 ```
 
-- [ ] **Step 2: Add pageUrl join to Postgres extraction repository**
+- [x] **Step 2: Add pageUrl join to Postgres extraction repository**
 
 In `packages/db/src/repositories/extraction-repository.ts`, update `findByJobCursor` to LEFT JOIN with `rawPages`:
 
@@ -1076,7 +1076,7 @@ const rows = await this.db
 
 Apply the same join to the `findByJob` offset-based query.
 
-- [ ] **Step 3: Create entity-sources route**
+- [x] **Step 3: Create entity-sources route**
 
 Create `apps/api/src/routes/entity-sources.ts`:
 
@@ -1140,7 +1140,7 @@ export function entitySourceRoutes() {
 }
 ```
 
-- [ ] **Step 4: Register route in app.ts**
+- [x] **Step 4: Register route in app.ts**
 
 In `apps/api/src/app.ts`, add after the extractions route registration:
 
@@ -1152,7 +1152,7 @@ In `apps/api/src/app.ts`, add after the extractions route registration:
 
 Ensure it's within the tenant-scoped middleware chain (after auth middleware).
 
-- [ ] **Step 5: Add findByJobCursor and countByJob to EntitySourceRepository (Postgres)**
+- [x] **Step 5: Add findByJobCursor and countByJob to EntitySourceRepository (Postgres)**
 
 In `packages/db/src/repositories/entity-source-repository.ts`, add:
 
@@ -1210,7 +1210,7 @@ import { entities } from '../schema/entities.js';
   }
 ```
 
-- [ ] **Step 6: Add countByStatus to ActionRepository (Postgres)**
+- [x] **Step 6: Add countByStatus to ActionRepository (Postgres)**
 
 In `packages/db/src/repositories/action-repository.ts`, add:
 
@@ -1230,7 +1230,7 @@ In `packages/db/src/repositories/action-repository.ts`, add:
   }
 ```
 
-- [ ] **Step 7: Enrich job stats in job detail route**
+- [x] **Step 7: Enrich job stats in job detail route**
 
 In `apps/api/src/routes/jobs.ts`, in the GET `/:jobId` handler, after fetching the job, compute and merge additional stats:
 
@@ -1249,7 +1249,7 @@ In `apps/api/src/routes/jobs.ts`, in the GET `/:jobId` handler, after fetching t
     return c.json({ data: { ...job, stats: enrichedStats } });
 ```
 
-- [ ] **Step 8: Run API tests and commit**
+- [x] **Step 8: Run API tests and commit**
 
 Run: `cd apps/api && pnpm test -- --run`
 Expected: ALL PASS
@@ -1267,7 +1267,7 @@ git commit -m "feat(api): add pageUrl to extractions, entity-sources endpoint, j
 - Modify: `apps/cli/src/api/client.ts`
 - Test: `apps/cli/tests/unit/api/client-pull.test.ts`
 
-- [ ] **Step 1: Write failing tests**
+- [x] **Step 1: Write failing tests**
 
 ```typescript
 describe('getExtractionsStreamPaginated', () => {
@@ -1296,7 +1296,7 @@ describe('getEntitySourcesStreamPaginated', () => {
 });
 ```
 
-- [ ] **Step 2: Implement three paginated methods**
+- [x] **Step 2: Implement three paginated methods**
 
 In `apps/cli/src/api/client.ts`, first extract a shared `fetchPaginated` private method from `getEntitiesStreamPaginated`:
 
@@ -1382,7 +1382,7 @@ Then refactor `getEntitiesStreamPaginated` to use it, and add the three new meth
 
 Extract a shared `fetchPaginated` private method from `getEntitiesStreamPaginated` to DRY up the common fetch+parse logic.
 
-- [ ] **Step 3: Run tests and commit**
+- [x] **Step 3: Run tests and commit**
 
 Run: `cd apps/cli && pnpm test -- --run client`
 Expected: ALL PASS
@@ -1402,7 +1402,7 @@ git commit -m "feat(cli): add paginated API client methods for extractions, acti
 - Modify: `packages/db/src/project-db/repositories/entity-repository.ts` (entity source batch methods)
 - Test: corresponding test files
 
-- [ ] **Step 1: Write failing tests for extraction upsertBatch and deleteByRunIds**
+- [x] **Step 1: Write failing tests for extraction upsertBatch and deleteByRunIds**
 
 ```typescript
 describe('SqliteExtractionRepository.upsertBatch', () => {
@@ -1435,7 +1435,7 @@ describe('SqliteExtractionRepository.deleteByRunIds', () => {
 });
 ```
 
-- [ ] **Step 2: Implement extraction upsertBatch and deleteByRunIds**
+- [x] **Step 2: Implement extraction upsertBatch and deleteByRunIds**
 
 In `packages/db/src/project-db/repositories/extraction-repository.ts`, add methods following the entity `upsertBatch` pattern:
 
@@ -1500,11 +1500,11 @@ In `packages/db/src/project-db/repositories/extraction-repository.ts`, add metho
   }
 ```
 
-- [ ] **Step 3: Implement action upsertBatch and deleteByRunIds**
+- [x] **Step 3: Implement action upsertBatch and deleteByRunIds**
 
 Same pattern in `packages/db/src/project-db/repositories/action-repository.ts`. Note: action `source` column has a CHECK constraint — pulled actions must have a valid source value from `('extraction','schema_evolution','reconciliation','quality_audit')`.
 
-- [ ] **Step 4: Add entity source batch methods**
+- [x] **Step 4: Add entity source batch methods**
 
 In `packages/db/src/project-db/repositories/entity-repository.ts` (where `SqliteEntitySourceRepository` lives), add:
 
@@ -1543,12 +1543,12 @@ In `packages/db/src/project-db/repositories/entity-repository.ts` (where `Sqlite
   }
 ```
 
-- [ ] **Step 5: Run all repo tests**
+- [x] **Step 5: Run all repo tests**
 
 Run: `cd packages/db && pnpm test -- --run`
 Expected: ALL PASS
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add packages/db/src/project-db/repositories/
@@ -1564,7 +1564,7 @@ git commit -m "feat(db): add upsertBatch/deleteByRunIds for extractions, actions
 - Modify: `apps/cli/src/index.tsx` (flag registration)
 - Test: `apps/cli/tests/unit/commands/reset.test.ts`
 
-- [ ] **Step 1: Write failing tests**
+- [x] **Step 1: Write failing tests**
 
 ```typescript
 describe('reset --keep-remote', () => {
@@ -1587,7 +1587,7 @@ describe('reset --keep-remote', () => {
 });
 ```
 
-- [ ] **Step 2: Implement --keep-remote**
+- [x] **Step 2: Implement --keep-remote**
 
 In `apps/cli/src/commands/reset.ts`:
 
@@ -1630,7 +1630,7 @@ In `runResetCommand`, after the filesystem cleanup loop, if `keepRemote`:
     }
 ```
 
-- [ ] **Step 3: Register flag in CLI**
+- [x] **Step 3: Register flag in CLI**
 
 In `apps/cli/src/index.tsx`, add to the reset command options:
 
@@ -1644,7 +1644,7 @@ In `apps/cli/src/index.tsx`, add to the reset command options:
 
 Pass `keepRemote: argv.keepRemote` to `runResetCommand`.
 
-- [ ] **Step 4: Run tests and commit**
+- [x] **Step 4: Run tests and commit**
 
 Run: `cd apps/cli && pnpm test -- --run reset`
 Expected: ALL PASS
@@ -1665,7 +1665,7 @@ git commit -m "feat(cli): add --keep-remote flag to spatula reset"
 
 This is the largest task. It extends the pull command with three new optional phases.
 
-- [ ] **Step 1: Extend PullInput and PullResult interfaces**
+- [x] **Step 1: Extend PullInput and PullResult interfaces**
 
 In `apps/cli/src/commands/pull.ts`:
 
@@ -1717,7 +1717,7 @@ Add to `PullResult`:
   actionsUpdated?: number;
 ```
 
-- [ ] **Step 2: Write failing tests for extraction pull**
+- [x] **Step 2: Write failing tests for extraction pull**
 
 ```typescript
 describe('pull with --include-extractions', () => {
@@ -1744,7 +1744,7 @@ describe('pull with --include-extractions', () => {
 });
 ```
 
-- [ ] **Step 3: Implement extraction pull phase in runPullCommand**
+- [x] **Step 3: Implement extraction pull phase in runPullCommand**
 
 After the entity pull loop (around line 290 in current code), add:
 
@@ -1843,7 +1843,7 @@ After the entity pull loop (around line 290 in current code), add:
   }
 ```
 
-- [ ] **Step 4: Implement action pull phase**
+- [x] **Step 4: Implement action pull phase**
 
 ```typescript
   // Step 8: Pull actions (optional)
@@ -1904,7 +1904,7 @@ After the entity pull loop (around line 290 in current code), add:
   }
 ```
 
-- [ ] **Step 5: Update PullResult return value**
+- [x] **Step 5: Update PullResult return value**
 
 Add the new counts to the return object at the end of `runPullCommand`:
 
@@ -1921,7 +1921,7 @@ Add the new counts to the return object at the end of `runPullCommand`:
   };
 ```
 
-- [ ] **Step 6: Update handlePullCommand for new flags and summary**
+- [x] **Step 6: Update handlePullCommand for new flags and summary**
 
 In `handlePullCommand`, pass the new flags and add progress callbacks:
 
@@ -1957,7 +1957,7 @@ Update summary output:
       }
 ```
 
-- [ ] **Step 7: Register CLI flags**
+- [x] **Step 7: Register CLI flags**
 
 In `apps/cli/src/index.tsx`, add to pull command options:
 
@@ -1986,12 +1986,12 @@ Pass to `handlePullCommand`:
       });
 ```
 
-- [ ] **Step 8: Run all pull tests**
+- [x] **Step 8: Run all pull tests**
 
 Run: `cd apps/cli && pnpm test -- --run pull`
 Expected: ALL PASS
 
-- [ ] **Step 9: Commit**
+- [x] **Step 9: Commit**
 
 ```bash
 git add apps/cli/src/commands/pull.ts apps/cli/src/index.tsx apps/cli/tests/
@@ -2006,7 +2006,7 @@ git commit -m "feat(cli): add --include-extractions and --include-actions flags 
 - Modify: `apps/cli/src/data-sources/api-data-source.ts:74-76`
 - Test: `apps/cli/tests/unit/data-sources/api-data-source.test.ts`
 
-- [ ] **Step 1: Update ApiDataSource.getStatus() to read from job stats**
+- [x] **Step 1: Update ApiDataSource.getStatus() to read from job stats**
 
 In `apps/cli/src/data-sources/api-data-source.ts`:
 
@@ -2022,7 +2022,7 @@ In `apps/cli/src/data-sources/api-data-source.ts`:
 
 Remove the TODO comments.
 
-- [ ] **Step 2: Write test verifying stats are read from job response**
+- [x] **Step 2: Write test verifying stats are read from job response**
 
 ```typescript
 it('reads pendingActions and schemaFields from job stats', async () => {
@@ -2037,7 +2037,7 @@ it('reads pendingActions and schemaFields from job stats', async () => {
 });
 ```
 
-- [ ] **Step 3: Run tests and commit**
+- [x] **Step 3: Run tests and commit**
 
 Run: `cd apps/cli && pnpm test -- --run api-data-source`
 Expected: ALL PASS
@@ -2054,16 +2054,16 @@ git commit -m "fix(cli): wire ApiDataSource status fields to job stats instead o
 **Files:**
 - Modify: `docs/superpowers/specs/wave-roadmap.md`
 
-- [ ] **Step 1: Update wave roadmap**
+- [x] **Step 1: Update wave roadmap**
 
 Mark Wave 5-6 as complete. Update final test counts (run `find . -name '*.test.ts' | wc -l` and test runner output).
 
-- [ ] **Step 2: Run full test suite**
+- [x] **Step 2: Run full test suite**
 
 Run: `pnpm test -- --run` from project root.
 Verify all tests pass across all packages.
 
-- [ ] **Step 3: Commit**
+- [x] **Step 3: Commit**
 
 ```bash
 git add docs/superpowers/specs/wave-roadmap.md
@@ -2097,3 +2097,26 @@ Task 15 (roadmap update) ─────────── last
 - Tasks 8-11: sequential within Group 1
 - Tasks 12-14: can run in parallel after their dependencies
 - Task 15: final
+
+---
+
+## Post-ship follow-ups (closed)
+
+All 15 tasks shipped in 413ac19 and surrounding feature commits. Subsequent
+defects found in retrospective superpowers review (2026-04-19) were closed:
+
+- `9a19bc2` — composite cursor for `EntitySourceRepository.findByJobCursor`
+  (single-column cursor dropped rows when an entityId's sources split across
+  a page boundary)
+- `a39dc2d` — within-batch dup count fix applied to extraction + action
+  upsertBatch (`c1d7b1c` had only fixed entity-repository)
+- `d775ef6` — error boundary around entity-sources pull loop (matching
+  extraction/action loops from `733f298`)
+- `51d088d` — `reset --keep-remote` deletes orphan `entity_sources` rows
+  before wiping local entities/extractions
+
+## Known deferred
+
+- `queue_depth` observable gauge is registered but hardcoded to `0` with a
+  TODO in `apps/api/src/server.ts`. Wire to BullMQ `queue.getJobCounts()` in
+  a later wave, or drop the registration.
