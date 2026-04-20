@@ -2,12 +2,35 @@ import { serve } from '@hono/node-server';
 import type { ServerType } from '@hono/node-server';
 import { createNodeWebSocket } from '@hono/node-ws';
 import { createLogger, loadConfig, getEnvOrDefault, registerGauges } from '@spatula/shared';
+import type { SpatulaQueues } from '@spatula/queue';
 import { createApp } from './app.js';
 import { JobProgressManager } from './ws/job-progress.js';
 import { executeShutdown, SHUTDOWN_TIMEOUT_MS } from './shutdown.js';
 import type { AppDeps } from './types.js';
 
 const logger = createLogger('api:server');
+
+const QUEUE_NAMES = ['crawl', 'extract', 'schemaEvolution', 'reconciliation', 'export', 'webhook'] as const;
+
+/**
+ * Sum waiting + active + delayed job counts across every BullMQ queue.
+ * Per-queue errors are tolerated: one Redis hiccup should not zero the
+ * gauge for the rest.
+ */
+export async function getTotalQueueDepth(queues: SpatulaQueues | undefined): Promise<number> {
+  if (!queues) return 0;
+  const counts = await Promise.all(
+    QUEUE_NAMES.map(async (name) => {
+      try {
+        const c = await queues[name].getJobCounts('waiting', 'active', 'delayed');
+        return (c.waiting ?? 0) + (c.active ?? 0) + (c.delayed ?? 0);
+      } catch {
+        return 0;
+      }
+    }),
+  );
+  return counts.reduce((a, b) => a + b, 0);
+}
 
 const UUID_REGEX =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -53,7 +76,7 @@ export function startServer(deps: AppDeps, port?: number) {
     registerGauges({
       jobRepo: { countByStatus: (status: string) => deps.jobRepo.countByTenant('*', { status }) },
       tenantRepo: { countAll: () => deps.tenantRepo!.countAll() },
-      queueProvider: { getQueueDepth: async () => 0 }, // TODO: wire to BullMQ queue depth
+      queueProvider: { getQueueDepth: () => getTotalQueueDepth(deps.queues) },
     });
   }
 

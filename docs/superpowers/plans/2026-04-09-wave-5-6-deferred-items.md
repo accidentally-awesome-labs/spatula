@@ -2114,9 +2114,7 @@ defects found in retrospective superpowers review (2026-04-19) were closed:
   extraction/action loops from `733f298`)
 - `51d088d` — `reset --keep-remote` deletes orphan `entity_sources` rows
   before wiping local entities/extractions
-
-## Known deferred
-
-- `queue_depth` observable gauge is registered but hardcoded to `0` with a
-  TODO in `apps/api/src/server.ts`. Wire to BullMQ `queue.getJobCounts()` in
-  a later wave, or drop the registration.
+- _(pending commit)_ — `queue_depth` gauge wired to BullMQ
+  `getJobCounts('waiting','active','delayed')` summed across all 6 queues
+  via `getTotalQueueDepth()` helper in `apps/api/src/server.ts`. Per-queue
+  errors tolerated so a single Redis hiccup does not zero the gauge.
