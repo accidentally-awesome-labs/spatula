@@ -127,11 +127,11 @@ All moved files are `git filter-repo`'d into a new private repo `accidentallyawe
 
 OSS migrations `001..N` contain billing table creations. **No public installs exist pre-v1** (beta invitees in 6-7 install *from* the `v1.0.0-rc.1` cut forward, not from pre-v1 snapshots). So: squash all migrations into a single `000_v1_baseline.sql` at the cut. Billing tables are *absent* from the baseline.
 
-**Migration namespacing to prevent OSS/private collisions:**
-- OSS migrations: `0001_*`, `0002_*` ... (sequential, starting at `0001` after `000_v1_baseline.sql`)
-- Private repo migrations: `saas_0001_billing_init`, `saas_0002_*` ... (prefixed, stored in a separate Drizzle migration folder in `spatula-saas` repo)
-- Both migration folders run against the same database in the hosted deploy. Drizzle supports multiple migration folders via separate `migrate()` calls; documented in `spatula-saas/README.md`.
-- Migration-tracking table (`drizzle_migrations`) distinguishes entries by name prefix; no version-number collision.
+**Migration namespacing to prevent OSS/private collisions (Drizzle-correct mechanism):**
+- OSS migrations: `0001_*`, `0002_*` ... (sequential, starting at `0001` after `000_v1_baseline.sql`), stored in `packages/db/drizzle/` with tracking table `__drizzle_migrations_oss` (via `migrationsTable: '__drizzle_migrations_oss'` in the Drizzle config).
+- Private repo migrations: `saas_0001_billing_init`, `saas_0002_*` ... stored in `spatula-saas/drizzle/` with tracking table `__drizzle_migrations_saas` (via `migrationsTable: '__drizzle_migrations_saas'`).
+- In the hosted deploy, **two separate `migrate()` calls** run against the same database — one per folder/tracking-table pair. Each call manages its own `_journal.json` and tracking table; they do not interact. Documented in `spatula-saas/README.md` with a runnable example and in `docs/runbooks/upgrade.md`.
+- **Why two tracking tables, not one with prefix-distinction:** Drizzle's migrator identifies applied migrations by `hash` in the tracking table, not by name-prefix matching. Running two folders against a single tracking table is undefined behavior and risks one clobbering the other when hashes collide or journal indexes overlap.
 
 **Prior-dev-DB handling:** Any pre-Wave-6 dev DBs held by the copyright holder are wiped and re-seeded from the `000_v1_baseline.sql`. This is the only pre-v1 data that exists and it is disposable. Documented as a one-shot step in `docs/runbooks/upgrade.md`.
 
@@ -143,10 +143,20 @@ OSS git history is **not rewritten**. Billing code remains visible in `git log` 
 
 #### 3.1.5 Private ↔ OSS dependency model
 
-- **Default:** `spatula-saas` consumes OSS via npm (`@spatula/core`, `@spatula/db`, `@spatula/queue`, `@spatula/shared` — these are workspace-internal in OSS but published via the release workflow with an explicit no-compat disclaimer).
-- **Dev mode:** submodule or `pnpm link:` for heavy co-development.
+**Consumption model (pinned):** `spatula-saas` is a **Hono app composition** — it imports `@spatula/api`'s app-factory export and mounts additional billing/subscription routes on the same Hono instance; imports `@spatula/core`, `@spatula/db`, `@spatula/queue`, `@spatula/shared` for internals; runs as its own server process (not as a sidecar to the OSS binary).
 
-Both workflows documented in `spatula-saas/README.md`.
+**Packages consumed from OSS by `spatula-saas` (authoritative list — mirrored in §3.1.6 and §3.2.4):**
+1. `@spatula/core` — extractors, orchestrators, interfaces
+2. `@spatula/db` — schema + repositories + migrator
+3. `@spatula/queue` — workers + job manager
+4. `@spatula/shared` — auth primitives, redaction, logging
+5. `@spatula/api` — app factory (`createApp()`) + route mount points
+
+All five carry **no compat guarantee at the package API level** (see §3.2.4). The HTTP contract stability promise from §3.2.5 applies to the **running server binary's REST surface**, not to the internal TypeScript API of any package. This is the crucial distinction:
+- A minor bump may rename `createApp()` to `buildApp()` — that's a private-repo integration update, not a public breakage.
+- A minor bump may **not** remove or change the shape of `POST /api/v1/jobs` — that's a public REST surface covered by §3.2.5.
+
+**Default delivery:** npm (`@spatula/*` packages). **Dev mode:** submodule or `pnpm link:` for heavy co-development. Both workflows documented in `spatula-saas/README.md`.
 
 #### 3.1.6 Carve-out verification (bidirectional)
 
@@ -160,9 +170,10 @@ Two test surfaces — **OSS-alone** and **OSS-composed-with-private** — since 
 - OpenAPI shape has no billing/stripe paths
 
 **Reverse (private-consumer smoke) — `tests/private-contract/` in OSS:**
-- A **mocked contract consumer** test that simulates how `spatula-saas` composes OSS: imports from `@spatula/core`, `@spatula/db`, `@spatula/queue`, `@spatula/shared` exactly as the private repo does; verifies the public API surface (exports, types, DB schema joinability) that private relies on. Breaks if OSS silently removes or renames a private-consumed symbol. Contract list maintained jointly in `docs/private-contract.md` and mirrored in `spatula-saas/docs/oss-surface.md`.
+- A **mocked contract consumer** test that simulates how `spatula-saas` composes OSS: imports from `@spatula/core`, `@spatula/db`, `@spatula/queue`, `@spatula/shared`, `@spatula/api` (all 5 packages — see §3.1.5) exactly as the private repo does; verifies the public TS surface (exports, types, DB schema joinability, `createApp()` shape) that private relies on. Breaks if OSS silently removes or renames a private-consumed symbol. Contract list maintained jointly in `docs/private-contract.md` and mirrored in `spatula-saas/docs/oss-surface.md`.
+- **Residual-risk acknowledgment** in `docs/private-contract.md`: mocked consumer catches renamed symbols + missing exports but **does not catch** (a) SQL-level breakage where private FKs reference OSS columns, (b) runtime-behavior changes (same function shape, different return data), (c) DB-level trigger or RLS policy changes. These are caught only by `spatula-saas` pre-release integration (below) + solo-maintainer human review during GA-cut checklist (§8.2). Explicitly documented as a known limitation, not a guarantee.
 - Pre-release integration in `spatula-saas`: private repo's CI runs against OSS pre-release tags (`v1.x.x-next.N` published from `main`) before any OSS GA. This cannot gate OSS from inside OSS; it gates GA-cut via checklist in §8.2.
-- **Composed migration smoke** in `spatula-saas` CI: apply OSS `0001_*` + private `saas_0001_*` migrations to a clean Postgres, assert no collision, FKs resolve, indexes build.
+- **Composed migration smoke** in `spatula-saas` CI: apply OSS `0001_*` + private `saas_0001_*` migrations to a clean Postgres (with separate tracking tables per §3.1.3), assert no collision, FKs resolve, indexes build.
 
 ### 3.2 New Packages (npm-publishable)
 
@@ -197,13 +208,13 @@ apps/cli/                 @spatula/cli            dual ESM+CJS
 - `files` allowlist (not `.npmignore`).
 - `engines`: Node 22+.
 - Playwright browsers: `spatula setup` prompts + runs `npx playwright install chromium`. No automatic postinstall (npm warns, users hate it).
-- SQLite backend: **decision deferred to 6-2 first task** — benchmark `node:sqlite` (Node 22.5+ builtin) vs existing `better-sqlite3`; switch only if (a) feature parity for WAL mode + FTS holds, (b) no regression on existing query perf, (c) `node:sqlite` is stable (not `--experimental`). Otherwise stay on `better-sqlite3`. Decision + benchmark numbers committed to `docs/architecture.md`.
+- SQLite backend: **default stay on `better-sqlite3`.** Benchmark `node:sqlite` (Node 22.5+ builtin) as 6-2 first task; switch only if (a) feature parity for WAL mode + FTS holds, (b) zero regression on existing query perf, (c) `node:sqlite` is stable (not `--experimental`). If all three hold and migration proceeds, **add 3 sessions to 6-2 budget** for driver swap + call-site updates + re-testing. If any fail, keep `better-sqlite3` and the decision is ~1 session (benchmark + doc). Decision + benchmark numbers committed to `docs/architecture.md`.
 
 #### 3.2.4 Internal packages — explicit no-compat declaration
 
-`@spatula/core`, `@spatula/db`, `@spatula/queue`, `@spatula/api`, `@spatula/shared` are published (so `spatula-saas` can consume) but carry **no semver guarantee**. Documented in each package's README:
+`@spatula/core`, `@spatula/db`, `@spatula/queue`, `@spatula/api`, `@spatula/shared` are published (so `spatula-saas` can consume — see §3.1.5 for the authoritative 5-package list) but carry **no semver guarantee at the TypeScript API level**. Documented in each package's README:
 
-> This is an internal implementation package. Its API may change without notice across minor versions. SDK consumers should use `@spatula/client` instead.
+> This is an internal implementation package. Its TypeScript API may change without notice across minor versions. **This is distinct from the server's public REST contract**, which is stable per the compat matrix in §3.2.5. SDK consumers of the REST API should use `@spatula/client`; Node consumers embedding Spatula (e.g., the `spatula-saas` hosted tier) must track OSS releases and adapt.
 
 #### 3.2.5 SDK ↔ server ↔ core-types compatibility matrix
 
@@ -301,14 +312,7 @@ All routes live under `/api/v1/`. At v2 cut, `/api/v2/` runs alongside; v1 suppo
 
 #### 3.3.11 `experimental:` tag policy
 
-Surfaces marked `experimental:` (OpenAPI extension `x-spatula-experimental: true`, or CLI help text prefix `[experimental]`):
-
-- **Lifetime:** max 6 months from first release. At the 6-month mark, surface must either graduate (drop tag, enter stability promise) or be removed. No "experimental forever."
-- **Change rules:** additive or breaking changes allowed at any time; clients must not rely on shape.
-- **SDK exposure:** `@spatula/client` exposes experimental endpoints via a namespaced `experimental` accessor (`client.experimental.someMethod()`) — users opt in explicitly.
-- **Deprecation path:** when graduating or removing, surface emits `Deprecation` + `Sunset` headers for 30 days before removal (for removal) or becomes stable on the graduation date (for graduation).
-- **Documentation:** every experimental surface lists its `introducedIn` version + `reviewBy` date in API reference.
-- Documented in `docs/deprecation-policy.md`.
+**v1.0 ships with zero experimental surfaces.** Policy is dormant at launch; documented in `docs/deprecation-policy.md` for future additions (6-month max lifetime, graduate-or-remove at review date, `@spatula/client` exposes under `client.experimental.*` namespace, `Deprecation`+`Sunset` headers on removal). If v1.x adds experimental surfaces, each gets a tracking issue with `reviewBy` date.
 
 ### 3.4 Auth Surface for OIDC Browser Flow
 
@@ -362,11 +366,13 @@ spatula/                                # OSS public
 │       ├── backup-restore.md           # NEW
 │       ├── upgrade.md                  # NEW
 │       ├── hardware-sizing.md          # NEW (includes measured baselines)
-│       ├── reverse-proxy.md            # NEW — nginx/traefik/caddy + token-in-URL masking
+│       ├── reverse-proxy.md            # NEW — nginx tested + traefik/caddy community stubs
 │       ├── secret-scan-audit.md        # NEW — reproducible pre-flip checklist
 │       ├── post-publish-smoke.md       # NEW — artifact verification procedure
-│       └── user-journey-baseline.md    # NEW — 10-min fresh-machine specification
+│       ├── user-journey-baseline.md    # NEW — 10-min fresh-machine specification
+│       └── incident-response.md        # NEW — launch-day on-call plan + status-page procedure
 ├── brand/                              # NEW — logo, favicon, og-card, palette
+│   └── LICENSE-BRAND.md                # NEW — brand assets NOT under MIT; see TRADEMARK.md
 ├── examples/
 │   ├── ecommerce/                      # existing
 │   ├── news/                           # existing
@@ -437,9 +443,14 @@ Crawled HTML is untrusted input fed to the LLM extractor. Adversarial content ca
 #### 3.7.3 Forensic provenance
 
 When suspicious-extraction or off-schema-retry fires:
-- Raw HTML archived in content store with `forensic:true` tag (retention: 1 year; cleanup worker respects tag)
-- Extraction request/response pair logged to `dead_letter_queue` with kind `suspicious_extraction` (redaction rules still apply)
-- Admin `GET /api/v1/admin/forensic/extractions` endpoint lists suspicious extractions for audit
+- Raw HTML archived in content store with `forensic:true` tag. **Retention: 1 year OR until tenant deletion, whichever is sooner** (GDPR: DSR-delete MUST cascade to forensic blobs — §6-4's data-deletion verification test covers this). Cleanup worker respects tag for expiry.
+- Extraction request/response pair logged to `dead_letter_queue` with kind `suspicious_extraction` (redaction rules still apply).
+- **Admin `GET /api/v1/admin/forensic/extractions` — ships as the sole v1 experimental surface** (see §3.3.11). Marked `x-spatula-experimental: true` in OpenAPI; exposed only via `client.experimental.forensic.*` in SDK. Allows shape iteration post-v1 without breaking stability. Contract summary:
+  - Auth scope: `admin:forensic:read` (added to authoritative scope list in `docs/api-auth.md`)
+  - Response: metadata + `contentRef` (signed URL to raw HTML blob, 15-min TTL), not inline HTML
+  - Pagination: cursor-first per §3.3.5
+  - Rate-limit: per §3.3.4
+  - GDPR: deleted tenant's forensic blobs are gone — endpoint returns only live-tenant entries
 
 #### 3.7.4 What defense does NOT cover (v1 limits)
 
@@ -589,6 +600,7 @@ Planning each sub-plan should **not** assume unconstrained parallelism. Work in 
 - `TRADEMARK.md` + `brand/LICENSE-BRAND.md` + `LICENSE` copyright-line update (with interim-name fallback path if entity not formed)
 - `SECURITY.md` audit (disclosure process, GPG key, response SLA)
 - CLA wired via `cla-assistant.io`; CLA text versioned in `.github/CLA.md`; re-sign-on-text-change policy
+- **CONTRIBUTING.md CLA-explainer section** written in 6-4 (not deferred to 6-6b) — any PR landing between 6-4 and 6-6b must see matching docs when the CLA bot comments. Prevents CLA-present-docs-absent transition window.
 - Historical-contributor enumeration (`git log --format='%ae' | sort -u` → `.github/HISTORICAL_CONTRIBUTORS.md`); pre-sign outreach complete before public flip
 - Legal disclaimer banner in README
 - Robots.txt override flag with prominent docs warning
@@ -615,14 +627,14 @@ Planning each sub-plan should **not** assume unconstrained parallelism. Work in 
 - Distroless base for api/worker/migrate; Debian-slim for cli image
 - `docs/runbooks/backup-restore.md` — pg_dump + content-store + Redis reconciliation; time-to-restore estimates
 - `docs/runbooks/upgrade.md` — version-to-version migration guide template; no-downgrade policy
-- `docs/runbooks/reverse-proxy.md` — nginx/traefik/caddy recipes including token-in-URL log-masking (see §3.3.2)
+- `docs/runbooks/reverse-proxy.md` — **nginx recipe tested** (token-in-URL log masking per §3.3.2); traefik + caddy shipped as community-contributed stubs with a prominent "not first-party tested" disclaimer; community PRs welcome to promote
 - `docs/support-matrix.md` — Node 22+, Postgres 14+, Redis 7+, macOS/Linux/WSL; min-version CI matrix
 - DB expand-contract migration policy documented
 - `docs/runbooks/hardware-sizing.md` — RAM/CPU/disk recommendations with measured baseline table (1k-page crawl timings on defined hardware, LLM cost per page by model)
 - Disaster-recovery time-to-restore estimates
 - **Helm limitation note** in `ROADMAP.md` v1.1 section: "Helm chart — community-contributed chart welcome in v1.x; first-party chart targeted for v1.1."
 
-**Acceptance:** kustomize applies cleanly to a kind cluster; Render blueprint deploys in a free-tier account; backup→restore round-trip verified; min-version CI matrix green; reverse-proxy recipes tested against at least nginx.
+**Acceptance:** kustomize applies cleanly to a kind cluster; Render blueprint deploys in a free-tier account; backup→restore round-trip verified; min-version CI matrix green; nginx reverse-proxy recipe tested end-to-end (with token-in-URL masking verified in access logs); traefik/caddy stubs carry disclaimer.
 
 ### 6-6a — Docs Site Infrastructure + Content
 
@@ -734,7 +746,7 @@ Cross-cutting. Enumerated so nothing slips between sub-plans.
 |------------|----------|----------------|-------|
 | OpenAPI contract tests | `tests/contract/` | 6-2 | Every route, every error status code; examples validate |
 | Carve-out verification | `tests/carveout/` | 6-1 | OSS-only satisfies remote push/pull contract |
-| Prompt-injection adversarial | `packages/core/.../tests/extraction/` | 6-4 | ≥10 HTML fixtures; OpenRouter + Ollama |
+| Prompt-injection adversarial (pinned models) | `packages/core/src/extraction/__tests__/` | 6-4 | ≥10 HTML fixtures against pinned OpenRouter `anthropic/claude-3-5-sonnet-20240620` + Ollama `llama3.1:8b-instruct-q4_0`; corpus refreshed quarterly; re-validated on pin bump |
 | Log redaction | `packages/shared/.../tests/` | 6-4 | Known-sensitive strings never appear in any sink |
 | SDK integration smoke | `packages/client/tests/integration/` | 6-2 | Every major endpoint via SDK |
 | SSE reconnect | `apps/api/.../tests/events/` | 6-3 | Disconnect mid-stream, resume via Last-Event-ID |
@@ -745,24 +757,22 @@ Cross-cutting. Enumerated so nothing slips between sub-plans.
 | Multi-arch container smoke | CI | 6-5 | api+worker+cli on amd64+arm64 |
 | License allowlist | CI | 6-4 | No GPL/AGPL in deps |
 | Secret scan | CI + pre-flip gate | 6-4 + 6-7 | Full-history scan before public flip |
-| Upgrade-path test | `tests/upgrade/` | 6-5 | Seed v1.0 DB → apply v1.1 migrations → runtime works |
+| Upgrade-path integration | `tests/upgrade/` | 6-5 | Seed v1.0 DB → apply v1.1 migrations → runtime verified (governs expand-contract policy) |
 | Config migration | `tests/config/` | 6-5 | v1.0 `spatula.yaml` parses on v1.1 runtime |
 | Cross-tenant isolation | `tests/isolation/` | 6-3 | Tenant A cannot read tenant B via any route |
 | Error envelope conformance | `tests/contract/errors/` | 6-2 | Every 4xx/5xx response matches schema |
 | Deprecation-warning | `tests/contract/deprecation/` | 6-2 | Sunset/Deprecation headers on deprecated routes |
 | SDK bundle-size guard | CI | 6-2 | `@spatula/client` gzipped <50KB |
-| Docs site build + dead-link | CI | 6-6 | Broken anchors fail the build |
+| Docs site build + dead-link | CI | 6-6a | Broken anchors fail the build |
 | Release dry-run | CI on `main` | 6-7 | Full release pipeline minus publish/sign |
 | OpenAPI examples validation | `tests/contract/examples/` | 6-2 | Examples parse against their schemas |
-| GDPR-delete verification | `tests/e2e/deletion/` | 6-4 | All rows + content-store blobs + logs vanish |
+| GDPR-delete verification | `tests/e2e/dsr/deletion/` | 6-4 | All rows + content-store blobs + logs vanish; forensic blobs cascade-deleted |
+| DSR export round-trip | `tests/e2e/dsr/portability/` | 6-4 | Tenant dump → re-import → data parity |
 | PII redaction across sinks | `tests/shared/redaction/` | 6-4 | Not just stdout — Sentry + OTel + file logs |
 | Reverse carve-out contract | `tests/private-contract/` | 6-1 | Mocked private consumer; surfaces breaking changes to OSS exports |
 | Post-publish smoke | manual runbook | 6-7 | Fresh-machine install of published npm + pulled GHCR image; cosign verify |
 | Composed-migration smoke | (`spatula-saas` CI) | 6-1 + `spatula-saas` | OSS + private migrations apply without collision; FKs resolve |
-| DSR export round-trip | `tests/e2e/deletion/` | 6-4 | Tenant dump → re-import → data parity |
-| Adversarial fixtures against pinned models | `packages/core/.../extraction/__tests__/` | 6-4 | Pinned OpenRouter + Ollama revisions; refresh on pin bump |
 | Axe-core accessibility | docs CI | 6-6a | Docs site routes meet WCAG 2.1 AA |
-| Upgrade-path integration | `tests/upgrade/` | 6-5 | v1.0 seed → v1.1 migrations → runtime verified (governs expand-contract policy) |
 
 ### CI job topology after Wave 6
 
@@ -817,7 +827,7 @@ Flagged for the implementation plan to resolve in-context.
 5. **npm org `@spatula` ownership** — registered? If taken, fallback (`@spatulaai`, `@aalabs/spatula`, etc.) must be chosen before 6-2 publishes.
 6. **GitHub namespace** — `accidentallyawesomelabs/spatula` is the target. Any prior `spatulaai/*` references must be reconciled or transferred. Forks, badges, URLs all break on rename — settle pre-launch, communicate in announcement.
 7. **OIDC scope naming convention** — current `jobs:read` / `jobs:write` sufficient for hosted SaaS later? Review during 6-3.
-8. **Deprecation offset-pagination removal date** — pick a target (e.g., v2.0, ~12 months post-v1.0); write into policy.
+8. **Deprecation offset-pagination removal date** — fixed at **v2.0**, targeted 12 months post-v1.0 GA. Committed to `docs/deprecation-policy.md`.
 9. **Beta group recruitment** — need 5–10 names by start of 6-7. Who? Include at least one non-developer (content/data-ops role) to surface docs gaps.
 10. **Release cadence intent** — as-needed patch-per-fix + monthly-ish minors. Re-confirm during 6-6b `ROADMAP.md` authoring.
 11. **Historical contributor enumeration** — `git log --format='%ae' | sort -u` on OSS repo during 6-4; if single author, single-paragraph note; if multi, real CLA-outreach work.
@@ -832,6 +842,12 @@ Flagged for the implementation plan to resolve in-context.
 20. **Cloudflare Pages vs Vercel for docs hosting** — resolved to Cloudflare Pages in 6-6a. Pre-launch: confirm `docs.spatula.dev` DNS points to Pages, not Vercel.
 21. **SBOM tool pin** — `license-checker-rseidelsohn` chosen for `THIRD_PARTY_NOTICES.md`. Re-evaluate if it goes unmaintained.
 22. **Release-dry-run CI cost** — adds ~5–10 min per main push. Non-blocking parallel job; acceptable. Revisit if CI minutes budget trips.
+23. **Launch-day on-call reality** — bus-factor=1 + HN/PH front page + 24h Critical SLA (§8.6) = solo maintainer monitoring laptop for 72 hours. Mitigations:
+    - Pre-launch: recruit a trusted second (family member, co-maintainer-to-be, or community volunteer) to screen incoming GH issues + DMs during sleep hours; they don't fix anything, just escalate.
+    - Status page (simple static `status.spatula.dev`) displays current known-issue state; README links to it; removes pressure to reply instantly.
+    - Auto-reply GH issue template acknowledges receipt + sets expectation of triage time.
+    - If unrecoverable exhaustion: announced pause with link to tracking issue is acceptable and honest. Better than a public burnout.
+    - Logged in `docs/runbooks/incident-response.md` pre-launch.
 
 ---
 
@@ -843,17 +859,29 @@ Each sub-plan has its own acceptance criteria listed in Section 4. Green CI is n
 
 ### 8.2 Pre-RC (before `v1.0.0-rc.1` tag)
 
+Grouped for the operator's pre-flip checklist run.
+
+**Code / Infrastructure:**
 - All 6-1 through 6-6b sub-plans complete and acceptance-verified
-- **Full-history secret scan + manual category audit clean** — scanners AND walk of `.env*` history, test DB dumps, snapshot HTML, auth fixtures, log-output files. Both required.
 - License-allowlist clean (no GPL/AGPL)
-- Historical-contributor CLA outreach complete; `.github/HISTORICAL_CONTRIBUTORS.md` committed
-- All legal docs (LICENSE, TRADEMARK, `brand/LICENSE-BRAND.md`, THIRD_PARTY_NOTICES, SECURITY, CODE_OF_CONDUCT, GOVERNANCE, ROADMAP, `docs/compat-policy.md`, `docs/deprecation-policy.md`) reviewed and committed
-- Brand assets finalized; `brand/LICENSE-BRAND.md` in place
-- npm org + GitHub namespace + trademark + domain confirmed (not placeholders)
-- Legal entity status confirmed (formed, or interim-name path explicitly accepted and documented)
-- `spatula-saas` private repo exists with extracted history; composed-migration smoke green
-- Beta invitee list confirmed (5–10 names; includes at least one non-developer)
 - Reverse carve-out contract test green
+- `spatula-saas` private repo exists with extracted history; composed-migration smoke green
+- CI release-dry-run green on `main`
+
+**Security / Audit:**
+- **Full-history secret scan + manual category audit clean** — scanners AND walk of `.env*` history, test DB dumps, snapshot HTML, auth fixtures, log-output files. Both required.
+
+**Legal / Docs:**
+- Historical-contributor CLA outreach complete; `.github/HISTORICAL_CONTRIBUTORS.md` committed
+- All legal docs (LICENSE, TRADEMARK, `brand/LICENSE-BRAND.md`, THIRD_PARTY_NOTICES, NOTICE.md, SECURITY, CODE_OF_CONDUCT, GOVERNANCE, ROADMAP, `docs/compat-policy.md`, `docs/deprecation-policy.md`, `docs/private-contract.md`) reviewed and committed
+- Brand assets finalized; `brand/LICENSE-BRAND.md` in place
+- Legal entity status confirmed (formed, or interim-name path explicitly accepted and documented)
+
+**External / Operational:**
+- npm org + GitHub namespace + trademark + domain confirmed (not placeholders)
+- `docs.spatula.dev` DNS points to Cloudflare Pages; docs site serves
+- Beta invitee list confirmed (5–10 names; includes at least one non-developer)
+- Launch-day on-call mitigations set: status page live, second-pair recruited or fallback accepted, `docs/runbooks/incident-response.md` committed
 
 ### 8.3 Post-RC-publish (immediately after `v1.0.0-rc.1` tag)
 
