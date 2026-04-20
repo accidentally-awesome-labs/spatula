@@ -326,6 +326,8 @@ Push/pull bridge between local projects and hosted platform.
 | 5-5 | Pull Flow (pull command, schema conflict TUI, incremental, crash recovery, source filter) | **Complete** |
 | 5-6 | Deferred Items (quota audit, add dedup, reset --keep-remote, CSS tables, pull flags) | **Complete** |
 
+**Wave 5-6 post-review cleanup (2026-04-20):** retrospective superpowers review found 5 defects (1 Critical composite-cursor, 3 Important, 1 Minor) + pre-existing TS errors + migration orchestration root-cause. All closed in commits `9a19bc2`, `a39dc2d`, `d775ef6`, `51d088d`, `0d80b47`, `46cf144`, `a492c7f`. Plan checkboxes flipped in `e66b59e`. See the plan file's "Post-ship follow-ups" section for commit-by-commit detail.
+
 **Plans:**
 - `docs/superpowers/plans/2026-04-06-wave-5-1-user-auth-foundation.md`
 - `docs/superpowers/plans/2026-04-06-wave-5-2-billing-metering.md`
