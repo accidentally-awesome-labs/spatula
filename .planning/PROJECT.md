@@ -1,0 +1,111 @@
+# Spatula
+
+## What This Is
+
+Spatula is an AI-powered web crawling platform: users describe in plain language what data they want, provide seed URLs, and get a clean, unified, production-ready dataset. It runs as a hosted multi-tenant API plus a local-first CLI (Ink TUI) with push/pull between the two.
+
+## Core Value
+
+Turn "I want X data from these sites" into a production-quality dataset with provenance — without writing extractors, schemas, or reconciliation code.
+
+## Requirements
+
+### Validated
+
+<!-- Shipped and confirmed valuable. -->
+
+- ✓ **Pure core engine** — `@spatula/core` orchestrators (crawl/schema/reconcile/export) with zero HTTP/queue knowledge — Wave 1
+- ✓ **Action-based execution model** — 52 action types (25 pipeline + 30 config) with safety policies and review queue — Phases 1–6
+- ✓ **Pluggable crawlers** — Playwright + Firecrawl behind a `Crawler` interface — Phase 2
+- ✓ **LLM-powered extraction with smart routing** — OpenRouter + Ollama, three-tier model routing (fast/primary/smart), circuit breaker — Phases 3, Wave 2
+- ✓ **Intelligent schema evolution** — batched, distributed-locked, category-aware field relevance — Phase 6
+- ✓ **Three-layer reconciliation** — synonym detection → normalization → entity reconciliation with provenance — Phase 7
+- ✓ **Storage layer** — Postgres (production) + SQLite (local), `ContentStore` interface with S3/Postgres/local backends — Phase 4, Wave 3-3a
+- ✓ **Job orchestration** — BullMQ workers (crawl, extract, schema, reconciliation, export), retries, DLQ, rate limiting, page budget, robots.txt — Phase 5, Wave 2
+- ✓ **REST API** — Hono server with multi-tenant routing, OpenAPI, WebSockets, Bull Board admin — Phase 8, Wave 3
+- ✓ **Auth + tenancy** — pluggable AuthProvider (NoAuth/API key/JWT-OIDC), 9 scopes, sliding-window rate limiting, per-tenant quotas, audit log — Wave 3-1a/3-1b
+- ✓ **Observability** — OpenTelemetry (Prometheus + traces), Sentry, LLM usage/cost API, two-tier health checks — Wave 3-2
+- ✓ **Performance** — S3 content store, streaming JSON/CSV/Parquet exports, cursor-based pagination, Redis read-through cache — Wave 3-3a/3-3b
+- ✓ **Idempotency + worker health + quality API** — `Idempotency-Key` middleware, Redis heartbeats, `/jobs/:id/quality`, `minQuality` export filter — Wave 3-4
+- ✓ **Local execution mode** — `LocalPipelineRunner` (in-process priority queue + semaphore), SQLite project DB, project lockfile, crash recovery — Wave 3-5
+- ✓ **Conversational + dashboard + review + explorer CLI** — Ink TUI: init / run / status / reset / review / explore / dashboard — Phase 9a/9b/9c, Wave 3/4
+- ✓ **Webhooks + bulk ops + doctor** — HMAC-signed webhooks, batch action/job endpoints, `spatula doctor` 9-check diagnostics — Wave 4-1
+- ✓ **Open-source release readiness** — MIT license, CONTRIBUTING, SECURITY, README (12 sections), `release-please`, examples, GitHub templates — Wave 4-4
+- ✓ **Hosted platform layer** — JWT/OIDC users, `user_tenants`, Stripe usage-based billing (Free/Starter/Pro/Enterprise), hourly metering, 11 admin routes, retention policies, daily cleanup worker — Wave 5-1/5-2/5-3
+- ✓ **Remote operations** — `spatula remote/push/pull` with config upload, cursor-paginated incremental pull, schema conflict resolution TUI, crash recovery, run-record cleanup — Wave 5-4/5-5
+- ✓ **Wave-5 deferred items** — `spatula add` history dedup, CSS table extraction, `reset --keep-remote`, `ApiDataSource`, audit logging for quota events, OpenRouter cost extraction, observable gauges — Wave 5-6
+
+### Active
+
+<!-- Current scope. Building toward these. -->
+
+(None — defining v1.1 milestone)
+
+### Out of Scope
+
+<!-- Explicit boundaries. Includes reasoning to prevent re-adding. -->
+
+- **Visual scrape-builder UI** — out of scope for v1.0; CLI + API are the primary interfaces. Web dashboard is post-launch.
+- **Custom non-LLM scraping rules language** — replaced by action-based config + LLM-driven schema evolution.
+- **Per-page schema evolution** — replaced by batched evaluation under distributed lock to eliminate races and reduce LLM cost.
+- **Hardcoded worker counts** — replaced by config-driven, per-tenant resource quotas.
+- **Hosted-only deployment** — local-first via SQLite + LocalPipelineRunner is a first-class mode, not just a debug option.
+
+## Context
+
+- **Origin design doc:** `docs/plans/2026-03-06-spatula-design.md` (approved 2026-03-06).
+- **Wave roadmap:** `docs/superpowers/specs/wave-roadmap.md` tracks Phase 12 (server) × Phase 13 (local) interleave through Waves 1–5.
+- **Codebase mapping:** `.planning/codebase/{STACK,ARCHITECTURE,STRUCTURE,CONVENTIONS,INTEGRATIONS,TESTING,CONCERNS}.md` — generated 2026-05-06.
+- **Wave 6 / Phase 14 — public-launch design spec** exists at `docs/superpowers/specs/2026-04-20-wave-6-phase-14-public-launch-design.md`; Wave 6-1 carve-out + migration squash plan exists at `docs/superpowers/plans/2026-04-20-wave-6-1-carveout-migration-squash.md`. Neither has been executed yet.
+- **Test footprint at v1.0 close:** ~294 test files across 5 packages, 2,302 unit + 71 integration tests in CLI flow alone.
+- **Stack snapshot:** TypeScript monorepo (pnpm + Turborepo), Hono API, Drizzle (Postgres + SQLite), BullMQ, Ink CLI, OpenRouter + Ollama, Playwright + Firecrawl, OpenTelemetry, Stripe.
+
+## Constraints
+
+- **Tech stack:** TypeScript only across core, API, CLI, workers — Single-language monorepo eliminates context-switch tax and lets types flow end-to-end.
+- **Language model:** OpenRouter as primary, Ollama as local fallback — Multi-model from day one; smart routing tier (fast/primary/smart) controls cost.
+- **Database:** Postgres 16 production, SQLite (better-sqlite3) for local-mode projects — JSONB and CHECK constraints; SQLite migration parity tested.
+- **Queue:** BullMQ + Redis 7 today; orchestrators must remain pure so Temporal/Inngest can swap in — Reliability bar rises with multi-tenancy.
+- **Tenancy:** Every table, query, and queue scoped by `tenant_id` — Single-tenant tooling cannot retroactively become safe; multi-tenant is the floor.
+- **Workers:** Stateless, all state in Postgres/Redis — Horizontal scale and replaceability.
+- **Local-first parity:** Anything users can do via the hosted API must also work via `spatula run` against SQLite — Open-source story depends on this.
+- **Open-source:** MIT license, public roadmap, no proprietary lock-ins in core — Wave 4 shipped on this premise.
+
+## Key Decisions
+
+<!-- Decisions that constrain future work. Add throughout project lifecycle. -->
+
+| Decision | Rationale | Outcome |
+|----------|-----------|---------|
+| Pure orchestrators in `@spatula/core` (no BullMQ/HTTP imports) | Lets the CLI run the same pipeline in-process via `LocalPipelineRunner`, and lets BullMQ be replaced later | ✓ Good |
+| Action-based execution (52 typed actions) over imperative state mutation | Auditable, reviewable, replayable, and gives the LLM a constrained surface to recommend changes | ✓ Good |
+| Three-tier LLM routing (fast / primary / smart) via `model-router.ts` | Cost control without sacrificing quality on hard tasks | ✓ Good |
+| Batched schema evolution under distributed lock | Eliminates race conditions and cuts LLM cost vs per-page evolution | ✓ Good |
+| `ContentStore` interface with Postgres/Local/S3 implementations | Lets dev/local stay simple while production swaps to S3/R2 without code changes | ✓ Good |
+| Single Hono API + tenant scoping baked into every middleware | Multi-tenancy retrofit later would have been worse than the up-front cost | ✓ Good |
+| Ink (React for terminals) for the CLI | Conversational + dashboard + review + explorer modes share components and state | ✓ Good |
+| Stripe usage-based billing instead of seat-based | Aligns price with actual crawl/LLM cost per tenant | ✓ Good |
+| `DataSource` interface (`LocalDataSource` SQLite, `ApiDataSource` HTTP) | One CLI codebase, two execution modes; pull-flow and explorer reuse the same adapter | ✓ Good |
+| Composite `(entity_id, extraction_id)` cursor for `EntitySourceRepository.findByJobCursor` | Single-column cursor dropped rows when an `entityId`'s sources split across a page boundary (Wave 5-6 post-review) | ✓ Good |
+| `release-please` for changelog automation | One-click public releases without hand-written CHANGELOG drift | — Pending (post-launch) |
+| Wave 6 (public launch) carve-out + migration squash planned but unexecuted | Squashing migrations before first public version cleans the on-disk schema; carve-out separates internal infra from public OSS surface | — Pending |
+
+## Evolution
+
+This document evolves at phase transitions and milestone boundaries.
+
+**After each phase transition** (via `/gsd:transition`):
+1. Requirements invalidated? → Move to Out of Scope with reason
+2. Requirements validated? → Move to Validated with phase reference
+3. New requirements emerged? → Add to Active
+4. Decisions to log? → Add to Key Decisions
+5. "What This Is" still accurate? → Update if drifted
+
+**After each milestone** (via `/gsd:complete-milestone`):
+1. Full review of all sections
+2. Core Value check — still the right priority?
+3. Audit Out of Scope — reasons still valid?
+4. Update Context with current state
+
+---
+*Last updated: 2026-05-06 after bootstrap from existing artifacts (v1.0 closed; v1.1 not yet defined)*
