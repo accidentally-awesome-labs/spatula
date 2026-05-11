@@ -39,7 +39,42 @@ Turn "I want X data from these sites" into a production-quality dataset with pro
 
 <!-- Current scope. Building toward these. -->
 
-(None — defining v1.1 milestone)
+## Current Milestone: v1.1 Public Launch (Wave 6 / Phase 14)
+
+**Goal:** Ship Spatula v1.0.0 as a public OSS project — public GitHub repo, npm packages with provenance, signed multi-arch container images on GHCR, docs site live at `docs.spatula.dev`, clean OSS-vs-private-SaaS carve-out, stable public REST contract, web-UI enablement (SDK + SSE + browser OIDC) in place.
+
+**Target features (8 phases, 15–22; spec: `docs/superpowers/specs/2026-04-20-wave-6-phase-14-public-launch-design.md`):**
+
+- Carve-out billing/Stripe/metering → private `spatula-saas` repo; squash OSS migrations to `000_v1_baseline.sql`; reverse-contract test
+- API contract hardening: error envelope, rate-limit headers, cursor-first pagination, OpenAPI runtime endpoint, frozen error codes
+- SDK packages: `@spatula/client` (<50KB gzipped) + `@spatula/core-types`; SDK ↔ server compat matrix; npm `--provenance` publishing
+- Browser auth + SSE (`GET /api/v1/jobs/:id/events` with Last-Event-ID resume) + CORS + Dex OIDC recipe + cross-tenant isolation audit
+- Security hardening: prompt-injection defense + ≥10 adversarial fixtures vs pinned models, secret/PII redaction across all sinks, full DSR (delete/export/rectify) surface
+- Legal: CLA via cla-assistant.io, TRADEMARK + brand-license (non-MIT), CONTRIBUTOR enumeration, README legal disclaimer, abuse-contact User-Agent
+- Deployment: k8s kustomize, Render blueprint, multi-arch cosign-signed container images + SBOM, distroless bases, backup-restore + upgrade + reverse-proxy + hardware-sizing runbooks
+- Docs: VitePress on Cloudflare Pages, WCAG 2.1 AA, auto-gen API ref from OpenAPI, auto-gen CLI ref from yargs, OIDC cookbooks (Auth0/Keycloak/Google Workspace)
+- Contributor infra: CODE_OF_CONDUCT (Contributor Covenant 2.1), GOVERNANCE, ROADMAP, CODEOWNERS, dependabot/renovate, GH Discussions, devcontainer, CI topology (preflight/unit+int/contract/e2e/audit/release/release-dry-run), mock-vs-live LLM test split
+- Launch mechanics: brand assets, pre-flip secret-scan + manual category audit gate, RC.1 cut, 2-week beta with public `preview-bug` issue label, zero-Critical gate, GA cut, coordinated announcement (blog/HN/PH/X/LinkedIn), 72h launch-day monitoring with status page
+
+**Pre-launch blockers (all open as of 2026-05-11; see spec §7):**
+
+- [ ] `accidentallyawesomelabs/spatula-saas` private repo created
+- [ ] Legal entity formed (or interim-name fallback explicitly accepted)
+- [ ] `spatula.dev` + `docs.spatula.dev` domains owned
+- [ ] npm `@spatula` org owned (or fallback chosen)
+- [ ] GitHub `accidentallyawesomelabs/spatula` namespace claimed
+- [ ] Trademark "Spatula" USPTO search done; conflict-free
+- [ ] Beta invitees lined up (5–10 names, ≥1 non-developer)
+- [ ] Cloudflare Pages account + DNS for docs site
+- [ ] OpenRouter CI secret rotation plan committed
+
+**Key constraints from spec:**
+
+- Reference web UI is **non-goal** — belongs in sibling repo or private SaaS; this milestone ships **web-UI enablement** (SDK, OpenAPI, SSE, browser OIDC), not the UI itself
+- Internal packages (`@spatula/core`, `@spatula/db`, `@spatula/queue`, `@spatula/api`, `@spatula/shared`) carry **no compat guarantee**; only `@spatula/cli`, `@spatula/client`, `@spatula/core-types` follow strict semver
+- v1.0 ships with **zero experimental surfaces** except the forensic-extractions admin endpoint (§3.7.3); future experimentals governed by deprecation policy (6-month max lifetime)
+- Two separate Drizzle migration folders + tracking tables (`__drizzle_migrations_oss`, `__drizzle_migrations_saas`) — no shared journal
+- Spec-budget: ~36–38 active sessions + 2-week RC + 3-day launch ≈ 10 weeks wall-clock; budget at least one `rc.2` cycle
 
 ### Out of Scope
 
@@ -108,4 +143,4 @@ This document evolves at phase transitions and milestone boundaries.
 4. Update Context with current state
 
 ---
-*Last updated: 2026-05-06 after bootstrap from existing artifacts (v1.0 closed; v1.1 not yet defined)*
+*Last updated: 2026-05-11 after starting milestone v1.1 (Public Launch / Wave 6)*

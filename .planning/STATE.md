@@ -2,29 +2,34 @@
 
 ## Project Reference
 
-See: `.planning/PROJECT.md` (updated 2026-05-06)
+See: `.planning/PROJECT.md` (updated 2026-05-11)
 
 **Core value:** Turn "I want X data from these sites" into a production-quality dataset with provenance.
-**Current focus:** Defining v1.1 milestone (post-v1.0 close).
+**Current focus:** v1.1 Public Launch (Wave 6 / Phase 14) — defining requirements.
 
 ## Current Position
 
 Phase: Not started (defining requirements)
 Plan: —
-Status: Defining requirements (v1.1 milestone bootstrap)
-Last activity: 2026-05-06 — bootstrapped `.planning/` from existing artifacts; v1.0 marked complete.
+Status: Defining requirements
+Last activity: 2026-05-11 — Milestone v1.1 started (Public Launch / Wave 6)
 
 ## Accumulated Context
 
 - v1.0 (Foundation through Hosted Platform) shipped 2026-04-20. Codebase, tests, OSS scaffolding all in place.
-- Wave 6 (public launch) and Wave 6-1 (carve-out + migration squash) have written specs/plans but no implementation commits yet — see `MILESTONES.md` carry-over section.
-- Codebase mapping (`.planning/codebase/`) regenerated 2026-05-06.
-- Existing planning lives under `docs/plans/` (phase plans) and `docs/superpowers/{plans,specs}/` (wave plans). New GSD artifacts live under `.planning/`.
+- v1.1 = execute existing Wave 6 spec end-to-end as 8 phases (15–22).
+- Authoritative spec: `docs/superpowers/specs/2026-04-20-wave-6-phase-14-public-launch-design.md`.
+- Wave 6-1 sub-plan exists: `docs/superpowers/plans/2026-04-20-wave-6-1-carveout-migration-squash.md` — will be reconciled with Phase 15 plan when discuss-phase/plan-phase fires.
+- Codebase mapping (`.planning/codebase/`) generated 2026-05-06.
+- Reference web UI is **non-goal** for this milestone (spec §2.2).
+- All pre-launch blockers open — see PROJECT.md "Pre-launch blockers" list.
 
 ## Pending Decisions
 
-- v1.1 scope (e.g., execute Wave 6 public launch, ship a new feature set, refactor, etc.)
-- Whether Wave 6 / Wave 6-1 specs become v1.1 phases or are superseded
+- Phase 15 first move: confirm private `spatula-saas` repo created before carve-out PR.
+- Legal entity timing: form before public flip or accept interim-name LICENSE path.
+- npm org / GitHub namespace / domain availability checks.
+- SQLite driver decision in Phase 16 (`better-sqlite3` vs `node:sqlite`).
 
 ---
-*Last updated: 2026-05-06*
+*Last updated: 2026-05-11*
