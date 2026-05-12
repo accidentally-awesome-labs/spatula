@@ -1,35 +1,73 @@
-# State
+# Project State
 
 ## Project Reference
 
 See: `.planning/PROJECT.md` (updated 2026-05-11)
 
 **Core value:** Turn "I want X data from these sites" into a production-quality dataset with provenance.
-**Current focus:** v1.1 Public Launch (Wave 6 / Phase 14) — defining requirements.
+**Current focus:** v1.1 Public Launch (Wave 6 / Phase 14) — roadmap approved; Phase 15 next.
 
 ## Current Position
 
-Phase: Not started (defining requirements)
-Plan: —
-Status: Defining requirements
-Last activity: 2026-05-11 — Milestone v1.1 started (Public Launch / Wave 6)
+Phase: 15 of 22 (Carve-out & Migration Squash) — first v1.1 phase
+Plan: — (no plans drafted yet)
+Status: Roadmap approved; ready to discuss/plan phase 15
+Last activity: 2026-05-12 — ROADMAP.md created mapping 120 v1.1 requirements across 8 phases (15–22)
+
+Progress: [░░░░░░░░░░] 0% (0/8 v1.1 phases complete)
+
+## Performance Metrics
+
+**Velocity (v1.0 cumulative, carried over):**
+- v1.0 shipped 2026-04-20 across Phases 1–13 (Waves 1–5 + 2026-04-20 cleanup)
+- ~294 test files; 2,302 unit + 71 integration tests at close
+
+**v1.1 (this milestone):**
+
+| Phase | Plans | Total | Avg/Plan |
+|-------|-------|-------|----------|
+| 15 | — | — | — |
+
+*v1.1 metrics will populate as plans execute.*
 
 ## Accumulated Context
 
-- v1.0 (Foundation through Hosted Platform) shipped 2026-04-20. Codebase, tests, OSS scaffolding all in place.
-- v1.1 = execute existing Wave 6 spec end-to-end as 8 phases (15–22).
-- Authoritative spec: `docs/superpowers/specs/2026-04-20-wave-6-phase-14-public-launch-design.md`.
-- Wave 6-1 sub-plan exists: `docs/superpowers/plans/2026-04-20-wave-6-1-carveout-migration-squash.md` — will be reconciled with Phase 15 plan when discuss-phase/plan-phase fires.
-- Codebase mapping (`.planning/codebase/`) generated 2026-05-06.
-- Reference web UI is **non-goal** for this milestone (spec §2.2).
-- All pre-launch blockers open — see PROJECT.md "Pre-launch blockers" list.
+### Decisions
 
-## Pending Decisions
+Full decision log lives in PROJECT.md Key Decisions table. Recent decisions relevant to v1.1:
+
+- Wave 6 carve-out + migration squash planned but unexecuted at v1.0 close — Phase 15 entry.
+- Reference web UI is a non-goal for v1.1; ship web-UI **enablement** (SDK + OpenAPI + SSE + browser OIDC) only.
+- Internal packages (`@spatula/core`, `db`, `queue`, `api`, `shared`) carry no TS-API compat guarantee; only `@spatula/cli`, `@spatula/client`, `@spatula/core-types` follow strict semver.
+- Two separate Drizzle migration tracking tables (`__drizzle_migrations_oss`, `__drizzle_migrations_saas`) — no shared journal.
+
+### Pending Todos
+
+None captured yet.
+
+### Blockers/Concerns
+
+All 9 pre-launch blockers are open as of 2026-05-12 (see PROJECT.md "Pre-launch blockers" list and REQUIREMENTS.md BLOCK-01..BLOCK-09). Each is mapped to the phase it gates in `.planning/ROADMAP.md`:
+
+- BLOCK-01 → Phase 15 entry gate (private `spatula-saas` repo)
+- BLOCK-02 → Phase 18 / Phase 22 (legal entity or interim-name fallback)
+- BLOCK-03 → Phase 20 entry gate (`spatula.dev` / `docs.spatula.dev` domains)
+- BLOCK-04 → Phase 16 entry gate (npm `@spatula` org)
+- BLOCK-05 → Phase 22 entry gate (GitHub namespace)
+- BLOCK-06 → Phase 18 / Phase 22 (USPTO trademark search)
+- BLOCK-07 → Phase 22 entry gate (beta invitee list)
+- BLOCK-08 → Phase 20 entry gate (Cloudflare Pages + DNS)
+- BLOCK-09 → Phase 18 / Phase 22 (historical-contributor enumeration + outreach)
+
+### Pending Decisions
 
 - Phase 15 first move: confirm private `spatula-saas` repo created before carve-out PR.
 - Legal entity timing: form before public flip or accept interim-name LICENSE path.
 - npm org / GitHub namespace / domain availability checks.
 - SQLite driver decision in Phase 16 (`better-sqlite3` vs `node:sqlite`).
 
----
-*Last updated: 2026-05-11*
+## Session Continuity
+
+Last session: 2026-05-12
+Stopped at: ROADMAP.md written for v1.1; 8 phases (15–22) defined with success criteria; 120/120 requirements mapped.
+Resume file: None
