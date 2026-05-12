@@ -1,3 +1,19 @@
+---
+gsd_state_version: 1.0
+milestone: v1.1
+milestone_name: Public Launch (Wave 6 / Phase 14)
+status: Roadmap approved; ready to discuss/plan phase 15
+stopped_at: Phase 15 context gathered
+last_updated: "2026-05-12T15:59:13.491Z"
+last_activity: 2026-05-12 — ROADMAP.md created mapping 120 v1.1 requirements across 8 phases (15–22)
+progress:
+  total_phases: 1
+  completed_phases: 0
+  total_plans: 0
+  completed_plans: 0
+  percent: 0
+---
+
 # Project State
 
 ## Project Reference
@@ -19,6 +35,7 @@ Progress: [░░░░░░░░░░] 0% (0/8 v1.1 phases complete)
 ## Performance Metrics
 
 **Velocity (v1.0 cumulative, carried over):**
+
 - v1.0 shipped 2026-04-20 across Phases 1–13 (Waves 1–5 + 2026-04-20 cleanup)
 - ~294 test files; 2,302 unit + 71 integration tests at close
 
@@ -68,6 +85,6 @@ All 9 pre-launch blockers are open as of 2026-05-12 (see PROJECT.md "Pre-launch 
 
 ## Session Continuity
 
-Last session: 2026-05-12
-Stopped at: ROADMAP.md written for v1.1; 8 phases (15–22) defined with success criteria; 120/120 requirements mapped.
-Resume file: None
+Last session: 2026-05-12T15:59:13.487Z
+Stopped at: Phase 15 context gathered
+Resume file: .planning/phases/15-carveout-migration-squash/15-CONTEXT.md
