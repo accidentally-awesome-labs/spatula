@@ -8,3 +8,10 @@ dist/
 coverage/
 .worktrees/
 .spatula/
+
+# macOS metadata
+.DS_Store
+**/.DS_Store
+
+# GSD transient runtime config
+.planning/config.json
