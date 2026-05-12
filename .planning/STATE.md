@@ -2,14 +2,14 @@
 gsd_state_version: 1.0
 milestone: v1.1
 milestone_name: Public Launch (Wave 6 / Phase 14)
-status: Roadmap approved; ready to discuss/plan phase 15
-stopped_at: Phase 15 context gathered
-last_updated: "2026-05-12T15:59:13.491Z"
-last_activity: 2026-05-12 — ROADMAP.md created mapping 120 v1.1 requirements across 8 phases (15–22)
+status: executing
+stopped_at: "Phase 15 Plan 15-01 Task 1: BLOCK-01 gate FAILED — private spatula-saas repo not reachable"
+last_updated: "2026-05-12T16:27:29.341Z"
+last_activity: 2026-05-12 -- Phase 15 execution started
 progress:
   total_phases: 1
   completed_phases: 0
-  total_plans: 0
+  total_plans: 6
   completed_plans: 0
   percent: 0
 ---
@@ -21,14 +21,14 @@ progress:
 See: `.planning/PROJECT.md` (updated 2026-05-11)
 
 **Core value:** Turn "I want X data from these sites" into a production-quality dataset with provenance.
-**Current focus:** v1.1 Public Launch (Wave 6 / Phase 14) — roadmap approved; Phase 15 next.
+**Current focus:** Phase 15 — carveout-migration-squash
 
 ## Current Position
 
-Phase: 15 of 22 (Carve-out & Migration Squash) — first v1.1 phase
-Plan: — (no plans drafted yet)
-Status: Roadmap approved; ready to discuss/plan phase 15
-Last activity: 2026-05-12 — ROADMAP.md created mapping 120 v1.1 requirements across 8 phases (15–22)
+Phase: 15 (carveout-migration-squash) — EXECUTING
+Plan: 1 of 6
+Status: Executing Phase 15
+Last activity: 2026-05-12 -- Phase 15 execution started
 
 Progress: [░░░░░░░░░░] 0% (0/8 v1.1 phases complete)
 
@@ -75,6 +75,7 @@ All 9 pre-launch blockers are open as of 2026-05-12 (see PROJECT.md "Pre-launch 
 - BLOCK-07 → Phase 22 entry gate (beta invitee list)
 - BLOCK-08 → Phase 20 entry gate (Cloudflare Pages + DNS)
 - BLOCK-09 → Phase 18 / Phase 22 (historical-contributor enumeration + outreach)
+- BLOCK-01: private GitHub repo accidentallyawesomelabs/spatula-saas not reachable. gh repo view + git ls-remote both return 'Repository not found' for user salarsayyad. git-filter-repo binary IS installed (good). Phase 15 execution paused at Plan 15-01 Task 1 awaiting user to: (a) create the private repo at https://github.com/organizations/accidentallyawesomelabs/repositories/new, (b) grant CI automation account write access, (c) ensure salarsayyad gh CLI has read:org+repo scopes for accidentallyawesomelabs org.
 
 ### Pending Decisions
 
@@ -85,6 +86,6 @@ All 9 pre-launch blockers are open as of 2026-05-12 (see PROJECT.md "Pre-launch 
 
 ## Session Continuity
 
-Last session: 2026-05-12T15:59:13.487Z
-Stopped at: Phase 15 context gathered
-Resume file: .planning/phases/15-carveout-migration-squash/15-CONTEXT.md
+Last session: 2026-05-12T16:27:29.337Z
+Stopped at: Phase 15 Plan 15-01 Task 1: BLOCK-01 gate FAILED — private spatula-saas repo not reachable
+Resume file: None
