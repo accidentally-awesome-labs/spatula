@@ -30,6 +30,7 @@ import { timingMiddleware } from './middleware/timing.js';
 import { wsTokenRoutes } from './routes/ws-token.js';
 import { usageRoutes } from './routes/usage.js';
 import { healthRoutes } from './routes/health.js';
+import { authRoutes } from './routes/auth.js';
 import { createQueueDashboard } from './routes/admin-queues.js';
 import { batchActionRoutes } from './routes/batch-actions.js';
 import { batchJobRoutes } from './routes/batch-jobs.js';
@@ -124,6 +125,9 @@ export function createApp(deps: AppDeps) {
   app.use('/api/v1/api-keys', requireScope('keys:manage'));
   app.use('/api/v1/api-keys/*', requireScope('keys:manage'));
   app.route('/api/v1/api-keys', apiKeyRoutes());
+
+  // Auth introspection — replaces the CLI's billing-subscription probe
+  app.route('/api/v1/auth', authRoutes());
 
   // WebSocket token endpoint
   if (deps.redis) {
