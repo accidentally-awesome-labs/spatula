@@ -3,9 +3,9 @@ gsd_state_version: 1.0
 milestone: v1.1
 milestone_name: Public Launch (Wave 6 / Phase 14)
 status: executing
-stopped_at: "Phase 15 Plan 15-01 Task 1: BLOCK-01 gate FAILED — private spatula-saas repo not reachable"
-last_updated: "2026-05-12T16:27:29.341Z"
-last_activity: 2026-05-12 -- Phase 15 execution started
+stopped_at: "Phase 15 Plan 15-01 in progress — BLOCK-01 cleared, executing remaining tasks"
+last_updated: "2026-05-17T16:52:39Z"
+last_activity: 2026-05-17 -- Phase 15 Plan 15-01 resumed after BLOCK-01 resolution
 progress:
   total_phases: 1
   completed_phases: 0
@@ -27,8 +27,8 @@ See: `.planning/PROJECT.md` (updated 2026-05-11)
 
 Phase: 15 (carveout-migration-squash) — EXECUTING
 Plan: 1 of 6
-Status: Executing Phase 15
-Last activity: 2026-05-12 -- Phase 15 execution started
+Status: Executing Phase 15 (BLOCK-01 cleared 2026-05-17; Plan 15-01 in progress)
+Last activity: 2026-05-17 -- Phase 15 Plan 15-01 resumed after BLOCK-01 resolution
 
 Progress: [░░░░░░░░░░] 0% (0/8 v1.1 phases complete)
 
@@ -66,7 +66,7 @@ None captured yet.
 
 All 9 pre-launch blockers are open as of 2026-05-12 (see PROJECT.md "Pre-launch blockers" list and REQUIREMENTS.md BLOCK-01..BLOCK-09). Each is mapped to the phase it gates in `.planning/ROADMAP.md`:
 
-- BLOCK-01 → Phase 15 entry gate (private `spatula-saas` repo)
+- ✅ BLOCK-01 → Phase 15 entry gate (private `spatula-saas` repo) — **CLEARED 2026-05-17**. Repo `accidentally-awesome-labs/spatula-saas` exists (PRIVATE, empty), reachable via SSH, `git-filter-repo` installed. Evidence: `docs/superpowers/plans/6-1-block01-evidence.md` (commit `2399516`).
 - BLOCK-02 → Phase 18 / Phase 22 (legal entity or interim-name fallback)
 - BLOCK-03 → Phase 20 entry gate (`spatula.dev` / `docs.spatula.dev` domains)
 - BLOCK-04 → Phase 16 entry gate (npm `@spatula` org)
@@ -75,17 +75,15 @@ All 9 pre-launch blockers are open as of 2026-05-12 (see PROJECT.md "Pre-launch 
 - BLOCK-07 → Phase 22 entry gate (beta invitee list)
 - BLOCK-08 → Phase 20 entry gate (Cloudflare Pages + DNS)
 - BLOCK-09 → Phase 18 / Phase 22 (historical-contributor enumeration + outreach)
-- BLOCK-01: private GitHub repo accidentally-awesome-labs/spatula-saas not reachable. gh repo view + git ls-remote both return 'Repository not found' for user salarsayyad. git-filter-repo binary IS installed (good). Phase 15 execution paused at Plan 15-01 Task 1 awaiting user to: (a) create the private repo at https://github.com/organizations/accidentally-awesome-labs/repositories/new, (b) grant CI automation account write access, (c) ensure salarsayyad gh CLI has read:org+repo scopes for accidentally-awesome-labs org.
 
 ### Pending Decisions
 
-- Phase 15 first move: confirm private `spatula-saas` repo created before carve-out PR.
 - Legal entity timing: form before public flip or accept interim-name LICENSE path.
 - npm org / GitHub namespace / domain availability checks.
 - SQLite driver decision in Phase 16 (`better-sqlite3` vs `node:sqlite`).
 
 ## Session Continuity
 
-Last session: 2026-05-12T16:27:29.337Z
-Stopped at: Phase 15 Plan 15-01 Task 1: BLOCK-01 gate FAILED — private spatula-saas repo not reachable
+Last session: 2026-05-17T16:52:39Z
+Stopped at: Phase 15 Plan 15-01 in progress — BLOCK-01 cleared, executing Tasks 2–4
 Resume file: None
