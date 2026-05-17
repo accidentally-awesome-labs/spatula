@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v1.1
 milestone_name: Public Launch (Wave 6 / Phase 14)
 status: executing
-stopped_at: Completed 15-01-PLAN.md — BLOCK-01 cleared, baseline + branch ready for Plan 15-02
-last_updated: "2026-05-17T17:31:45.189Z"
+stopped_at: Completed 15-02-PLAN.md — Section A extracted to spatula-saas (13 commits, 19 files); OSS deletion landed; Plan 15-03 next (Section B in-place strip)
+last_updated: "2026-05-17T17:41:15.629Z"
 last_activity: 2026-05-17
 progress:
   total_phases: 1
   completed_phases: 0
   total_plans: 6
-  completed_plans: 1
+  completed_plans: 2
   percent: 0
 ---
 
@@ -26,7 +26,7 @@ See: `.planning/PROJECT.md` (updated 2026-05-11)
 ## Current Position
 
 Phase: 15 (carveout-migration-squash) — EXECUTING
-Plan: 2 of 6
+Plan: 3 of 6
 Status: Ready to execute
 Last activity: 2026-05-17
 
@@ -47,6 +47,7 @@ Progress: [░░░░░░░░░░] 0% (0/8 v1.1 phases complete)
 
 *v1.1 metrics will populate as plans execute.*
 | Phase 15 P01 | 70 min | 4 tasks | 3 files |
+| Phase 15 P02 | 4min | 3 tasks | 19 files |
 
 ## Accumulated Context
 
@@ -61,6 +62,8 @@ Full decision log lives in PROJECT.md Key Decisions table. Recent decisions rele
 - [Phase 15]: Inventory deltas (4 files) absorb into Plan 15-03 Section B (no Plan 15-02 file-move impact)
 - [Phase 15]: Typecheck baseline proxied via 'pnpm --filter X build' (tsc) — no typecheck script defined in packages
 - [Phase 15]: Pre-existing CLI e2e flakes (workflow.test.ts + tier2/pipeline-errors.test.ts) deferred to Plan 15-05 fixture work
+- [Phase 15]: Plan 15-02: Section A extracted (19 files, 13 commits) to spatula-saas via filter-repo on mirror clone; OSS history NOT rewritten; forward-deletion commit 20318a6 leaves OSS build intentionally broken (5 stale-import files routed to Plan 15-03)
+- [Phase 15]: spatula-saas default branch is feat/wave-6-1-carveout (alphabetical alphabetical first-push artifact); benign — both refs at SHA c02d333; owner can flip to main in GitHub Settings
 
 ### Pending Todos
 
@@ -88,6 +91,6 @@ All 9 pre-launch blockers are open as of 2026-05-12 (see PROJECT.md "Pre-launch 
 
 ## Session Continuity
 
-Last session: 2026-05-17T17:31:34.297Z
-Stopped at: Completed 15-01-PLAN.md — BLOCK-01 cleared, baseline + branch ready for Plan 15-02
+Last session: 2026-05-17T17:41:15.625Z
+Stopped at: Completed 15-02-PLAN.md — Section A extracted to spatula-saas (13 commits, 19 files); OSS deletion landed; Plan 15-03 next (Section B in-place strip)
 Resume file: None
