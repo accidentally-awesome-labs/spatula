@@ -100,10 +100,9 @@ export async function startCarveoutServer(databaseUrl: string): Promise<ForwardT
       const request = new Request(url.toString(), {
         method: req.method ?? 'GET',
         headers,
-        body,
-        // @ts-expect-error — required when body is non-null in undici
+        body: body as BodyInit | undefined,
         duplex: body ? 'half' : undefined,
-      });
+      } as RequestInit & { duplex?: 'half' });
 
       const response = await app.fetch(request);
       res.statusCode = response.status;
