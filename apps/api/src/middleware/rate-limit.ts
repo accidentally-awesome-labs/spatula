@@ -1,6 +1,6 @@
 import type { MiddlewareHandler } from 'hono';
 import type Redis from 'ioredis';
-import { RATE_LIMIT_TIERS } from '@spatula/shared';
+import { DEFAULT_RATE_LIMIT } from '@spatula/shared';
 
 const WINDOW_MS = 60_000;
 
@@ -26,8 +26,7 @@ export function rateLimitMiddleware(redis: Redis): MiddlewareHandler {
     const tenantId = c.get('tenantId') as string | undefined;
     if (!tenantId) return next();
 
-    const tierName = (c.get('rateLimitTier') as string) ?? 'free';
-    const tier = RATE_LIMIT_TIERS[tierName] ?? RATE_LIMIT_TIERS.free;
+    const tier = DEFAULT_RATE_LIMIT;
 
     if (tier.requestsPerMinute === Infinity) return next();
 
