@@ -25,9 +25,9 @@ Requirements for the v1.0.0 public launch. Each maps to one of phases 15–22. R
 ### Carve-out (Phase 15 — Wave 6-1)
 
 - [x] **CARVE-01**: All billing / Stripe / metering files (per spec §3.1.1) are extracted into the private `spatula-saas` repo with history preserved via `git filter-repo`.
-- [ ] **CARVE-02**: OSS code is stripped of tier presets and Stripe coupling per spec §3.1.2 (admin tenants drop plan/stripe fields, job manager loses tier-quota lookup, rate-limit loses tier presets, admin-system metrics has no `usage_records` reference, `.env.example` has no `STRIPE_*`, OpenAPI examples and seed fixtures have no billing).
+- [x] **CARVE-02**: OSS code is stripped of tier presets and Stripe coupling per spec §3.1.2 (admin tenants drop plan/stripe fields, job manager loses tier-quota lookup, rate-limit loses tier presets, admin-system metrics has no `usage_records` reference, `.env.example` has no `STRIPE_*`, OpenAPI examples and seed fixtures have no billing).
 - [ ] **CARVE-03**: All pre-Wave-6 migrations are squashed into a single `000_v1_baseline.sql` with billing tables absent.
-- [ ] **CARVE-04**: OSS Drizzle migrations live under `packages/db/drizzle/` with `migrationsTable: '__drizzle_migrations_oss'`; documented in `docs/runbooks/upgrade.md`.
+- [x] **CARVE-04**: OSS Drizzle migrations live under `packages/db/drizzle/` with `migrationsTable: '__drizzle_migrations_oss'`; documented in `docs/runbooks/upgrade.md`.
 - [ ] **CARVE-05**: `tests/carveout/` verification suite passes — OSS-only server satisfies remote push/pull contract, tenant CRUD has no plan fields, quota enforcement is config-driven, admin metrics aggregates without `usage_records`, OpenAPI has no billing/stripe paths.
 - [ ] **CARVE-06**: `tests/private-contract/` reverse-contract test exists — mocked private consumer imports `@spatula/core`, `@spatula/db`, `@spatula/queue`, `@spatula/shared`, `@spatula/api` as `spatula-saas` does; breaks on silent removal of consumed symbols; residual-risk acknowledgment in `docs/private-contract.md`.
 - [ ] **CARVE-07**: `docs/architecture.md` refreshed; no billing mentions remain; dependency diagram republished.

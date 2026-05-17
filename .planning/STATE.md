@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v1.1
 milestone_name: Public Launch (Wave 6 / Phase 14)
 status: executing
-stopped_at: Completed 15-02-PLAN.md — Section A extracted to spatula-saas (13 commits, 19 files); OSS deletion landed; Plan 15-03 next (Section B in-place strip)
-last_updated: "2026-05-17T17:41:15.629Z"
+stopped_at: Completed 15-03-PLAN.md — Section B in-place strip + GET /api/v1/auth/me endpoint + CLI rewire (13 tasks, 14 commits, OSS TS build GREEN, zero billing residues)
+last_updated: "2026-05-17T18:19:44.756Z"
 last_activity: 2026-05-17
 progress:
   total_phases: 1
   completed_phases: 0
   total_plans: 6
-  completed_plans: 2
+  completed_plans: 3
   percent: 0
 ---
 
@@ -26,7 +26,7 @@ See: `.planning/PROJECT.md` (updated 2026-05-11)
 ## Current Position
 
 Phase: 15 (carveout-migration-squash) — EXECUTING
-Plan: 3 of 6
+Plan: 4 of 6
 Status: Ready to execute
 Last activity: 2026-05-17
 
@@ -48,6 +48,7 @@ Progress: [░░░░░░░░░░] 0% (0/8 v1.1 phases complete)
 *v1.1 metrics will populate as plans execute.*
 | Phase 15 P01 | 70 min | 4 tasks | 3 files |
 | Phase 15 P02 | 4min | 3 tasks | 19 files |
+| Phase 15 P03 | 33min | 13 tasks | 35 files |
 
 ## Accumulated Context
 
@@ -64,6 +65,11 @@ Full decision log lives in PROJECT.md Key Decisions table. Recent decisions rele
 - [Phase 15]: Pre-existing CLI e2e flakes (workflow.test.ts + tier2/pipeline-errors.test.ts) deferred to Plan 15-05 fixture work
 - [Phase 15]: Plan 15-02: Section A extracted (19 files, 13 commits) to spatula-saas via filter-repo on mirror clone; OSS history NOT rewritten; forward-deletion commit 20318a6 leaves OSS build intentionally broken (5 stale-import files routed to Plan 15-03)
 - [Phase 15]: spatula-saas default branch is feat/wave-6-1-carveout (alphabetical alphabetical first-push artifact); benign — both refs at SHA c02d333; owner can flip to main in GitHub Settings
+- [Phase 15]: Plan 15-03: 5 packages stripped of billing coupling (api, queue, core, db, shared); zero billing residues; OSS TS build GREEN
+- [Phase 15]: Plan 15-03: GET /api/v1/auth/me added — returns {tenantId, scopes, subject, authenticated} top-level (no {data} envelope); CLI's getSubscription replaced by getAuthMe
+- [Phase 15]: Plan 15-03: RATE_LIMIT_TIERS preset collapsed to DEFAULT_RATE_LIMIT (300 rpm, 10 concurrent); per-route customization deferred to Phase 16 config/rate-limits.yaml
+- [Phase 15]: Plan 15-03: tenants schema reduced to 6 columns (id, name, config, quotas, storage_bytes_used, created_at); no plan/stripeCustomerId/idx_tenants_stripe_customer
+- [Phase 15]: Plan 15-03: all 4 Plan 15-01 inventory deltas absorbed inline into natural Section B edits (no separate commits — auth.ts allowlist, api-keys.test scopes, remote-commands.test mock, db barrel)
 
 ### Pending Todos
 
@@ -91,6 +97,6 @@ All 9 pre-launch blockers are open as of 2026-05-12 (see PROJECT.md "Pre-launch 
 
 ## Session Continuity
 
-Last session: 2026-05-17T17:41:15.625Z
-Stopped at: Completed 15-02-PLAN.md — Section A extracted to spatula-saas (13 commits, 19 files); OSS deletion landed; Plan 15-03 next (Section B in-place strip)
+Last session: 2026-05-17T18:19:20.975Z
+Stopped at: Completed 15-03-PLAN.md — Section B in-place strip + GET /api/v1/auth/me endpoint + CLI rewire (13 tasks, 14 commits, OSS TS build GREEN, zero billing residues)
 Resume file: None
