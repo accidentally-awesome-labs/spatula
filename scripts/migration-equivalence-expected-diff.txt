@@ -1,0 +1,24 @@
+-
+-    ADD CONSTRAINT usage_records_pkey PRIMARY KEY (id);
+-    ADD CONSTRAINT usage_records_tenant_id_tenants_id_fk FOREIGN KEY (tenant_id) REFERENCES public.tenants(id) ON DELETE CASCADE;
+-    created_at timestamp with time zone DEFAULT now() NOT NULL,
+-    dimension character varying(50) NOT NULL,
+-    id uuid DEFAULT gen_random_uuid() NOT NULL,
+-    period_end date NOT NULL,
+-    period_start date NOT NULL,
+-    plan character varying(20) DEFAULT 'free'::character varying NOT NULL,
+-    quantity bigint NOT NULL,
+-    quotas jsonb DEFAULT '{"maxStorageMb": 1000, "rateLimitTier": "free", "maxPagesPerJob": 5000, "maxConcurrentJobs": 2, "maxEntitiesPerExport": 50000}'::jsonb NOT NULL,
+-    reported_to_stripe boolean DEFAULT false NOT NULL,
+-    stripe_customer_id text
+-    tenant_id uuid NOT NULL,
+-);
+-ALTER TABLE ONLY public.usage_records
+-ALTER TABLE public.tenants OWNER TO spatula;
+-ALTER TABLE public.usage_records OWNER TO spatula;
+-CREATE INDEX idx_usage_tenant_period ON public.usage_records USING btree (tenant_id, period_start, dimension);
+-CREATE TABLE public.usage_records (
+-CREATE UNIQUE INDEX idx_tenants_stripe_customer ON public.tenants USING btree (stripe_customer_id);
++    created_at timestamp with time zone DEFAULT now() NOT NULL,
++    quotas jsonb DEFAULT '{"maxStorageMb": 1000, "maxPagesPerJob": 5000, "maxConcurrentJobs": 2, "maxEntitiesPerExport": 50000}'::jsonb NOT NULL,
++ALTER TABLE public.tenants OWNER TO spatula;
