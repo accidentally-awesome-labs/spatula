@@ -19,13 +19,41 @@ CREATE TABLE "actions" (
 	"state_changes" jsonb,
 	"reviewed_by" text,
 	"created_at" timestamp with time zone DEFAULT now() NOT NULL,
-	"applied_at" timestamp with time zone
+	"applied_at" timestamp with time zone,
+	"updated_at" timestamp with time zone DEFAULT now() NOT NULL
+);
+--> statement-breakpoint
+CREATE TABLE "api_keys" (
+	"id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
+	"tenant_id" uuid NOT NULL,
+	"key_hash" text NOT NULL,
+	"key_prefix" text NOT NULL,
+	"name" text NOT NULL,
+	"scopes" text[] DEFAULT '{}' NOT NULL,
+	"expires_at" timestamp with time zone,
+	"last_used_at" timestamp with time zone,
+	"created_at" timestamp with time zone DEFAULT now() NOT NULL,
+	"revoked_at" timestamp with time zone
+);
+--> statement-breakpoint
+CREATE TABLE "audit_log" (
+	"id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
+	"tenant_id" uuid,
+	"actor_id" text NOT NULL,
+	"actor_type" text NOT NULL,
+	"action" text NOT NULL,
+	"resource_type" text,
+	"resource_id" text,
+	"metadata" jsonb DEFAULT '{}'::jsonb,
+	"ip_address" "inet",
+	"created_at" timestamp with time zone DEFAULT now() NOT NULL
 );
 --> statement-breakpoint
 CREATE TABLE "content_store" (
 	"id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
 	"key" text NOT NULL,
-	"content" text NOT NULL,
+	"content" text,
+	"binary_content" "bytea",
 	"created_at" timestamp with time zone DEFAULT now() NOT NULL,
 	CONSTRAINT "content_store_key_unique" UNIQUE("key")
 );
@@ -47,6 +75,21 @@ CREATE TABLE "crawl_tasks" (
 	"processed_at" timestamp with time zone
 );
 --> statement-breakpoint
+CREATE TABLE "dead_letter_queue" (
+	"id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
+	"queue_name" text NOT NULL,
+	"job_id" text NOT NULL,
+	"tenant_id" uuid,
+	"spatula_job_id" uuid,
+	"payload" jsonb NOT NULL,
+	"error_message" text,
+	"error_stack" text,
+	"attempts" integer NOT NULL,
+	"failed_at" timestamp with time zone DEFAULT now() NOT NULL,
+	"resolved_at" timestamp with time zone,
+	"resolution" text
+);
+--> statement-breakpoint
 CREATE TABLE "entities" (
 	"id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
 	"job_id" uuid NOT NULL,
@@ -55,7 +98,8 @@ CREATE TABLE "entities" (
 	"provenance" jsonb NOT NULL,
 	"categories" text[] DEFAULT '{}'::text[] NOT NULL,
 	"quality_score" real DEFAULT 0 NOT NULL,
-	"created_at" timestamp with time zone DEFAULT now() NOT NULL
+	"created_at" timestamp with time zone DEFAULT now() NOT NULL,
+	"updated_at" timestamp with time zone DEFAULT now() NOT NULL
 );
 --> statement-breakpoint
 CREATE TABLE "entity_sources" (
@@ -77,7 +121,8 @@ CREATE TABLE "exports" (
 	"file_size" integer,
 	"error" text,
 	"created_at" timestamp with time zone DEFAULT now() NOT NULL,
-	"completed_at" timestamp with time zone
+	"completed_at" timestamp with time zone,
+	"updated_at" timestamp with time zone DEFAULT now() NOT NULL
 );
 --> statement-breakpoint
 CREATE TABLE "extractions" (
@@ -89,13 +134,16 @@ CREATE TABLE "extractions" (
 	"data" jsonb NOT NULL,
 	"unmapped_fields" jsonb DEFAULT '[]'::jsonb,
 	"metadata" jsonb NOT NULL,
-	"created_at" timestamp with time zone DEFAULT now() NOT NULL
+	"created_at" timestamp with time zone DEFAULT now() NOT NULL,
+	"updated_at" timestamp with time zone DEFAULT now() NOT NULL
 );
 --> statement-breakpoint
 CREATE TABLE "tenants" (
 	"id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
 	"name" text NOT NULL,
 	"config" jsonb DEFAULT '{}'::jsonb,
+	"quotas" jsonb DEFAULT '{"maxConcurrentJobs":2,"maxPagesPerJob":5000,"maxEntitiesPerExport":50000,"maxStorageMb":1000}'::jsonb NOT NULL,
+	"storage_bytes_used" bigint DEFAULT 0 NOT NULL,
 	"created_at" timestamp with time zone DEFAULT now() NOT NULL
 );
 --> statement-breakpoint
@@ -142,11 +190,36 @@ CREATE TABLE "source_trust" (
 	"reasoning" text NOT NULL
 );
 --> statement-breakpoint
+CREATE TABLE "llm_usage" (
+	"id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
+	"tenant_id" uuid NOT NULL,
+	"job_id" uuid,
+	"model" text NOT NULL,
+	"prompt_tokens" integer NOT NULL,
+	"completion_tokens" integer NOT NULL,
+	"total_tokens" integer NOT NULL,
+	"cost_usd" numeric(10, 6) NOT NULL,
+	"purpose" text NOT NULL,
+	"created_at" timestamp with time zone DEFAULT now() NOT NULL
+);
+--> statement-breakpoint
+CREATE TABLE "user_tenants" (
+	"user_id" text NOT NULL,
+	"tenant_id" uuid NOT NULL,
+	"role" varchar(20) DEFAULT 'member' NOT NULL,
+	"created_at" timestamp with time zone DEFAULT now() NOT NULL,
+	CONSTRAINT "user_tenants_user_id_tenant_id_pk" PRIMARY KEY("user_id","tenant_id")
+);
+--> statement-breakpoint
 ALTER TABLE "actions" ADD CONSTRAINT "actions_job_id_jobs_id_fk" FOREIGN KEY ("job_id") REFERENCES "public"."jobs"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "actions" ADD CONSTRAINT "actions_tenant_id_tenants_id_fk" FOREIGN KEY ("tenant_id") REFERENCES "public"."tenants"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "api_keys" ADD CONSTRAINT "api_keys_tenant_id_tenants_id_fk" FOREIGN KEY ("tenant_id") REFERENCES "public"."tenants"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "audit_log" ADD CONSTRAINT "audit_log_tenant_id_tenants_id_fk" FOREIGN KEY ("tenant_id") REFERENCES "public"."tenants"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "crawl_tasks" ADD CONSTRAINT "crawl_tasks_job_id_jobs_id_fk" FOREIGN KEY ("job_id") REFERENCES "public"."jobs"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "crawl_tasks" ADD CONSTRAINT "crawl_tasks_tenant_id_tenants_id_fk" FOREIGN KEY ("tenant_id") REFERENCES "public"."tenants"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "crawl_tasks" ADD CONSTRAINT "crawl_tasks_parent_task_id_crawl_tasks_id_fk" FOREIGN KEY ("parent_task_id") REFERENCES "public"."crawl_tasks"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "dead_letter_queue" ADD CONSTRAINT "dead_letter_queue_tenant_id_tenants_id_fk" FOREIGN KEY ("tenant_id") REFERENCES "public"."tenants"("id") ON DELETE set null ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "dead_letter_queue" ADD CONSTRAINT "dead_letter_queue_spatula_job_id_jobs_id_fk" FOREIGN KEY ("spatula_job_id") REFERENCES "public"."jobs"("id") ON DELETE set null ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "entities" ADD CONSTRAINT "entities_job_id_jobs_id_fk" FOREIGN KEY ("job_id") REFERENCES "public"."jobs"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "entities" ADD CONSTRAINT "entities_tenant_id_tenants_id_fk" FOREIGN KEY ("tenant_id") REFERENCES "public"."tenants"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "entity_sources" ADD CONSTRAINT "entity_sources_entity_id_entities_id_fk" FOREIGN KEY ("entity_id") REFERENCES "public"."entities"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
@@ -165,22 +238,41 @@ ALTER TABLE "raw_pages" ADD CONSTRAINT "raw_pages_task_id_crawl_tasks_id_fk" FOR
 ALTER TABLE "raw_pages" ADD CONSTRAINT "raw_pages_tenant_id_tenants_id_fk" FOREIGN KEY ("tenant_id") REFERENCES "public"."tenants"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "source_trust" ADD CONSTRAINT "source_trust_job_id_jobs_id_fk" FOREIGN KEY ("job_id") REFERENCES "public"."jobs"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "source_trust" ADD CONSTRAINT "source_trust_tenant_id_tenants_id_fk" FOREIGN KEY ("tenant_id") REFERENCES "public"."tenants"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "llm_usage" ADD CONSTRAINT "llm_usage_tenant_id_tenants_id_fk" FOREIGN KEY ("tenant_id") REFERENCES "public"."tenants"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "llm_usage" ADD CONSTRAINT "llm_usage_job_id_jobs_id_fk" FOREIGN KEY ("job_id") REFERENCES "public"."jobs"("id") ON DELETE set null ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "user_tenants" ADD CONSTRAINT "user_tenants_tenant_id_tenants_id_fk" FOREIGN KEY ("tenant_id") REFERENCES "public"."tenants"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 CREATE INDEX "actions_job_type_idx" ON "actions" USING btree ("job_id","type");--> statement-breakpoint
 CREATE INDEX "actions_job_status_idx" ON "actions" USING btree ("job_id","status");--> statement-breakpoint
 CREATE INDEX "actions_job_created_idx" ON "actions" USING btree ("job_id","created_at");--> statement-breakpoint
+CREATE INDEX "idx_actions_updated" ON "actions" USING btree ("updated_at");--> statement-breakpoint
+CREATE UNIQUE INDEX "idx_api_keys_hash" ON "api_keys" USING btree ("key_hash") WHERE revoked_at IS NULL;--> statement-breakpoint
+CREATE INDEX "idx_audit_tenant_time" ON "audit_log" USING btree ("tenant_id","created_at");--> statement-breakpoint
+CREATE INDEX "idx_audit_action_time" ON "audit_log" USING btree ("action","created_at");--> statement-breakpoint
 CREATE INDEX "crawl_tasks_job_status_idx" ON "crawl_tasks" USING btree ("job_id","status");--> statement-breakpoint
 CREATE INDEX "crawl_tasks_job_depth_idx" ON "crawl_tasks" USING btree ("job_id","depth");--> statement-breakpoint
 CREATE INDEX "crawl_tasks_url_idx" ON "crawl_tasks" USING btree ("url");--> statement-breakpoint
+CREATE INDEX "dlq_queue_failed_idx" ON "dead_letter_queue" USING btree ("queue_name","failed_at");--> statement-breakpoint
+CREATE INDEX "dlq_tenant_idx" ON "dead_letter_queue" USING btree ("tenant_id");--> statement-breakpoint
 CREATE INDEX "entities_categories_gin_idx" ON "entities" USING gin ("categories");--> statement-breakpoint
-CREATE INDEX "entities_job_quality_idx" ON "entities" USING btree ("job_id","quality_score");--> statement-breakpoint
+CREATE INDEX "entities_job_quality_idx" ON "entities" USING btree ("job_id","quality_score","id");--> statement-breakpoint
+CREATE INDEX "idx_entities_job_tenant" ON "entities" USING btree ("job_id","tenant_id");--> statement-breakpoint
+CREATE INDEX "idx_entities_updated" ON "entities" USING btree ("updated_at");--> statement-breakpoint
 CREATE INDEX "exports_job_idx" ON "exports" USING btree ("job_id");--> statement-breakpoint
 CREATE INDEX "exports_tenant_idx" ON "exports" USING btree ("tenant_id");--> statement-breakpoint
+CREATE INDEX "idx_exports_job_tenant" ON "exports" USING btree ("job_id","tenant_id");--> statement-breakpoint
+CREATE INDEX "idx_exports_updated" ON "exports" USING btree ("updated_at");--> statement-breakpoint
 CREATE INDEX "extractions_job_schema_idx" ON "extractions" USING btree ("job_id","schema_version");--> statement-breakpoint
 CREATE INDEX "extractions_page_idx" ON "extractions" USING btree ("page_id");--> statement-breakpoint
+CREATE INDEX "idx_extractions_job" ON "extractions" USING btree ("job_id","tenant_id");--> statement-breakpoint
+CREATE INDEX "idx_extractions_updated" ON "extractions" USING btree ("updated_at");--> statement-breakpoint
 CREATE INDEX "jobs_tenant_status_idx" ON "jobs" USING btree ("tenant_id","status");--> statement-breakpoint
 CREATE INDEX "jobs_tenant_created_idx" ON "jobs" USING btree ("tenant_id","created_at");--> statement-breakpoint
 CREATE INDEX "schemas_job_version_idx" ON "schemas" USING btree ("job_id","version");--> statement-breakpoint
 CREATE INDEX "raw_pages_task_idx" ON "raw_pages" USING btree ("task_id");--> statement-breakpoint
 CREATE INDEX "raw_pages_content_hash_idx" ON "raw_pages" USING btree ("content_hash");--> statement-breakpoint
 CREATE INDEX "source_trust_job_domain_idx" ON "source_trust" USING btree ("job_id","domain");--> statement-breakpoint
-CREATE INDEX "source_trust_tenant_idx" ON "source_trust" USING btree ("tenant_id");
+CREATE INDEX "source_trust_tenant_idx" ON "source_trust" USING btree ("tenant_id");--> statement-breakpoint
+CREATE INDEX "idx_llm_usage_tenant_time" ON "llm_usage" USING btree ("tenant_id","created_at");--> statement-breakpoint
+CREATE INDEX "idx_llm_usage_job" ON "llm_usage" USING btree ("job_id") WHERE job_id IS NOT NULL;--> statement-breakpoint
+CREATE INDEX "idx_user_tenants_user" ON "user_tenants" USING btree ("user_id");--> statement-breakpoint
+CREATE UNIQUE INDEX "idx_user_tenants_owner" ON "user_tenants" USING btree ("user_id") WHERE role = 'owner';

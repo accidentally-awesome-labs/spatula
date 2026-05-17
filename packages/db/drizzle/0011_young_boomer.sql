@@ -1,1 +1,0 @@
-CREATE UNIQUE INDEX "idx_tenants_stripe_customer" ON "tenants" USING btree ("stripe_customer_id");
