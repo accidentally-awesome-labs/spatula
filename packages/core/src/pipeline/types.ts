@@ -7,7 +7,6 @@ import type {
   LinkEvaluator,
   PageClassifier,
   DataReconciler,
-  Exporter,
   SchemaDefinition,
 } from '../index.js';
 

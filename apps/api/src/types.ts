@@ -15,8 +15,8 @@ import type {
   UserTenantRepository,
 } from '@spatula/db';
 import type { ContentStore, ReviewQueue } from '@spatula/core';
-import type { JobManager, ExportJobPayload, SpatulaQueues } from '@spatula/queue';
-import type { AuthProvider, AuthResult, AuditLogger, SpatulaMetrics } from '@spatula/shared';
+import type { JobManager, SpatulaQueues } from '@spatula/queue';
+import type { AuthProvider, AuthResult, AuditLogger, SpatulaMetrics, Logger } from '@spatula/shared';
 import type { AuditLogRepository } from '@spatula/db';
 import type Redis from 'ioredis';
 import type { Pool } from 'pg';
@@ -57,7 +57,7 @@ export interface AppEnv {
     validatedBody: unknown;
     validatedQuery: unknown;
     requestId: string;
-    logger: import('@spatula/shared').Logger;
+    logger: Logger;
     auth: AuthResult;
   };
 }

@@ -151,7 +151,7 @@ export async function runRemoteRemove(
     return { success: false, error: `Remote "${name}" not found` };
   }
 
-  const { [name]: _removed, ...rest } = config.remotes;
+  const { [name]: _removed, ...rest } = config.remotes;  // eslint-disable-line @typescript-eslint/no-unused-vars
   const updated: GlobalConfig = {
     ...config,
     remotes: Object.keys(rest).length > 0 ? rest : undefined,
@@ -312,7 +312,6 @@ export async function handleRemoteCommand(argv: RemoteCommandArgs): Promise<void
   } catch (err) {
     console.error((err as Error).message);
     process.exit(1);
-    return;
   }
 
   try {
