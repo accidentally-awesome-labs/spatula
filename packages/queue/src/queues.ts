@@ -9,7 +9,6 @@ export const QUEUE_NAMES = {
   RECONCILIATION: 'spatula.reconciliation',
   EXPORT: 'spatula.export',
   WEBHOOK: 'spatula.webhooks',
-  METERING: 'spatula.metering',
   CLEANUP: 'spatula.cleanup',
 } as const;
 

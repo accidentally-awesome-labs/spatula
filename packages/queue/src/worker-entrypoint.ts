@@ -15,8 +15,6 @@ import { QUEUE_NAMES, DEFAULT_QUEUE_CONFIG, createQueues } from './queues.js';
 import { parseEnabledWorkers, isWorkerEnabled } from './worker-selection.js';
 import { WorkerHeartbeat } from './worker-heartbeat.js';
 import { createWebhookWorker } from './webhook-worker.js';
-import { processMeteringJob } from './metering-worker.js';
-import type { MeteringDeps } from './metering-worker.js';
 import { processCleanupJob } from './cleanup-worker.js';
 import type { CleanupDeps } from './cleanup-worker.js';
 import type { WorkerDeps } from './worker-deps.js';
@@ -155,50 +153,6 @@ async function main() {
     logger.info({ queue: QUEUE_NAMES.WEBHOOK }, 'Webhook worker started');
   }
 
-  let meteringQueue: import('bullmq').Queue | undefined;
-  if (isEnabled('metering')) {
-    const { Queue: BullQueue } = await import('bullmq');
-    meteringQueue = new BullQueue(QUEUE_NAMES.METERING, { connection: redisOpts });
-
-    // Add repeatable job (hourly)
-    await meteringQueue.add('metering', {}, {
-      repeat: { every: 60 * 60 * 1000 },
-      removeOnComplete: true,
-      removeOnFail: 100,
-    });
-
-    // MeteringDeps is constructed lazily from worker-level deps when they become available.
-    // Unlike other workers that receive WorkerDeps directly, the metering worker
-    // needs repos + stripe client which may not be in WorkerDeps yet.
-    // The worker will log a warning and skip if deps are not available.
-    const worker = new Worker(
-      QUEUE_NAMES.METERING,
-      async () => {
-        if (!deps) {
-          logger.warn('Metering skipped — WorkerDeps not initialized');
-          return;
-        }
-        // Construct MeteringDeps from available worker deps.
-        // The metering worker requires usageRecordRepo, tenantRepo, and stripeClient
-        // which are wired into deps by the deployer alongside other repos.
-        const meteringDeps: MeteringDeps = {
-          usageRecordRepo: (deps as any).usageRecordRepo,
-          tenantRepo: (deps as any).tenantRepo,
-          stripeClient: (deps as any).stripeClient ?? { isConfigured: () => false, reportUsage: async () => {} },
-        };
-        if (!meteringDeps.usageRecordRepo || !meteringDeps.tenantRepo) {
-          logger.warn('Metering skipped — required repos not available in WorkerDeps');
-          return;
-        }
-        await processMeteringJob(meteringDeps);
-      },
-      { connection: workerConnection, concurrency: 1 },
-    );
-    worker.on('failed', (job, err) => void dlqHandler(job, err));
-    workers.push(worker);
-    logger.info({ queue: QUEUE_NAMES.METERING }, 'Metering worker started (hourly)');
-  }
-
   let cleanupQueue: import('bullmq').Queue | undefined;
   if (isEnabled('cleanup')) {
     const { Queue: BullQueue } = await import('bullmq');
@@ -250,7 +204,6 @@ async function main() {
     reconciliation: QUEUE_NAMES.RECONCILIATION,
     export: QUEUE_NAMES.EXPORT,
     webhook: QUEUE_NAMES.WEBHOOK,
-    metering: QUEUE_NAMES.METERING,
     cleanup: QUEUE_NAMES.CLEANUP,
   })
     .filter(([name]) => isEnabled(name))
@@ -283,7 +236,6 @@ async function main() {
 
       // 4. Close queues (stops enqueuing)
       await queues.closeAll();
-      if (meteringQueue) await meteringQueue.close();
       if (cleanupQueue) await cleanupQueue.close();
 
       // 5. Close Redis connections
