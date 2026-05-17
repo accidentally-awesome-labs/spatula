@@ -79,5 +79,71 @@ gate is the merge gate.
 4. **Reference the spatula-saas PR** in the OSS PR description.
 5. **Update this test** to the new surface as part of the OSS PR.
 
-For SQL schema changes specifically, see the `SQL schema lint` section appended
-below by `schema-lint.test.ts`.
+For SQL schema changes specifically, see the `SQL schema lint` section below.
+
+## SQL schema lint (`schema-lint.test.ts`)
+
+Applies `packages/db/drizzle/0000_v1_baseline.sql` to an ephemeral Postgres via
+`pnpm --filter @spatula/db exec tsx src/run-migrate.ts` (which honors the
+namespaced `__drizzle_migrations_oss` journal from Plan 15-04), runs `pg_dump
+--schema-only --no-owner --no-acl` against the result, pipes through
+`scripts/normalize-schema-dump.sh` (the Wave-4 normalizer that strips pg_dump
+14+ `\restrict`/`\unrestrict` random tokens + preamble + journal-row noise),
+and asserts the output equals `tests/private-contract/baseline.schema.sql`
+byte-for-byte.
+
+**Why pg_dump and not `drizzle-kit introspect`?** Per CONTEXT.md D-03 the
+planner chose between the two. We picked pg_dump because:
+
+1. It reuses the Wave-4 normalizer (already battle-tested for `\restrict`
+   token noise and journal-row stripping)
+2. pg_dump output is human-readable SQL — PR diffs against `baseline.schema.sql`
+   tell a reviewer "you added a column" in plain text
+3. drizzle-kit introspect's JSON output shape is undocumented and varies
+   across drizzle-kit versions — fragile across minor upgrades
+4. Plan 15-04 already uses pg_dump as the authoritative ground truth for the
+   migration-equivalence gate — same tool, same normalizer, one consistent
+   story
+
+**This catches:** table additions / removals, column additions / removals /
+type changes, FK changes, index additions / removals, constraint changes
+(including CHECK constraints from `0000_v1_baseline.sql`), enum-type changes,
+sequence changes.
+
+**This does NOT catch:**
+- RLS (Row-Level Security) policy changes — pg_dump emits them as `ALTER TABLE
+  ... ENABLE ROW LEVEL SECURITY` + `CREATE POLICY` statements, but the OSS
+  schema doesn't use RLS today; if added later, the normalizer + baseline
+  pick them up automatically.
+- Trigger-function semantics — pg_dump emits the trigger declaration and the
+  function body, so signature changes ARE caught; runtime semantic drift
+  inside an unchanged function body is NOT.
+- Database-level grants / roles — stripped by `--no-acl`.
+- Migration-journal state — stripped by the normalizer.
+
+### Updating the baseline after an intentional schema change
+
+1. Apply your schema change in `packages/db/src/schema/*.ts` (or hand-edit
+   `packages/db/drizzle/0000_v1_baseline.sql` if it's a raw-SQL change like
+   the CHECK constraints from Plan 15-04).
+2. Apply the migration to a fresh empty Postgres:
+   ```bash
+   createdb -h localhost -U spatula spatula_baseline_regen
+   DATABASE_URL="postgresql://spatula:spatula@localhost:5432/spatula_baseline_regen" \
+     pnpm --filter @spatula/db exec tsx src/run-migrate.ts
+   ```
+3. Regenerate `baseline.schema.sql`:
+   ```bash
+   pg_dump --schema-only --no-owner --no-acl \
+     "postgresql://spatula:spatula@localhost:5432/spatula_baseline_regen" \
+     | bash scripts/normalize-schema-dump.sh \
+     > tests/private-contract/baseline.schema.sql
+   dropdb -h localhost -U spatula spatula_baseline_regen
+   ```
+4. Open a mirror PR in `accidentally-awesome-labs/spatula-saas` that adapts
+   the consumer to the new schema (column rename → consumer query update, FK
+   drop → consumer relation handling update, etc.).
+5. Reference the spatula-saas PR in the OSS PR description and label the OSS
+   PR `private-contract-change`.
+6. Commit the regenerated `baseline.schema.sql` in the OSS PR alongside the
+   schema change.
