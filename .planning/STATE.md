@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v1.1
 milestone_name: Public Launch (Wave 6 / Phase 14)
 status: executing
-stopped_at: Completed 15-03-PLAN.md — Section B in-place strip + GET /api/v1/auth/me endpoint + CLI rewire (13 tasks, 14 commits, OSS TS build GREEN, zero billing residues)
-last_updated: "2026-05-17T18:19:44.756Z"
+stopped_at: "Completed 15-04-PLAN.md — Migration squash to 0000_v1_baseline + __drizzle_migrations_oss + pg_dump equivalence gate (3 tasks, 4 commits: namespace journal, squash, CHECK fix, equivalence gate; 17 tables produced, zero billing residue, gate proves byte-equivalence to expected billing-removal fixture)"
+last_updated: "2026-05-17T18:40:11.736Z"
 last_activity: 2026-05-17
 progress:
   total_phases: 1
   completed_phases: 0
   total_plans: 6
-  completed_plans: 3
+  completed_plans: 4
   percent: 0
 ---
 
@@ -26,7 +26,7 @@ See: `.planning/PROJECT.md` (updated 2026-05-11)
 ## Current Position
 
 Phase: 15 (carveout-migration-squash) — EXECUTING
-Plan: 4 of 6
+Plan: 5 of 6
 Status: Ready to execute
 Last activity: 2026-05-17
 
@@ -49,6 +49,7 @@ Progress: [░░░░░░░░░░] 0% (0/8 v1.1 phases complete)
 | Phase 15 P01 | 70 min | 4 tasks | 3 files |
 | Phase 15 P02 | 4min | 3 tasks | 19 files |
 | Phase 15 P03 | 33min | 13 tasks | 35 files |
+| Phase 15 P04 | 11min | 3 tasks | 10 files |
 
 ## Accumulated Context
 
@@ -70,6 +71,9 @@ Full decision log lives in PROJECT.md Key Decisions table. Recent decisions rele
 - [Phase 15]: Plan 15-03: RATE_LIMIT_TIERS preset collapsed to DEFAULT_RATE_LIMIT (300 rpm, 10 concurrent); per-route customization deferred to Phase 16 config/rate-limits.yaml
 - [Phase 15]: Plan 15-03: tenants schema reduced to 6 columns (id, name, config, quotas, storage_bytes_used, created_at); no plan/stripeCustomerId/idx_tenants_stripe_customer
 - [Phase 15]: Plan 15-03: all 4 Plan 15-01 inventory deltas absorbed inline into natural Section B edits (no separate commits — auth.ts allowlist, api-keys.test scopes, remote-commands.test mock, db barrel)
+- [Phase 15]: [Phase 15 Plan 04]: Rule-4 reformulation of D-05 pg_dump gate from 'diff must be empty' to 'diff matches frozen expected-billing-removal fixture'. Original D-05 (2026-05-12) predates Plan 15-03's billing strip — literal diff can never be empty by design. Reformulation preserves D-05's INTENT (detect accidental drift) via scripts/migration-equivalence-expected-diff.txt fixture.
+- [Phase 15]: [Phase 15 Plan 04]: Rule-1 fix — content_store CHECK constraints (content_at_least_one, content_not_both) re-added to squashed baseline + meta/0000_snapshot.json. drizzle-kit generate omitted them because Drizzle TS only documents them in a // comment, not via check() API.
+- [Phase 15]: [Phase 15 Plan 04]: Normalizer strips Postgres 14+ \restrict / \unrestrict random-token psql metacommands — required for any deterministic schema-diff tooling using pg_dump 14+.
 
 ### Pending Todos
 
@@ -97,6 +101,6 @@ All 9 pre-launch blockers are open as of 2026-05-12 (see PROJECT.md "Pre-launch 
 
 ## Session Continuity
 
-Last session: 2026-05-17T18:19:20.975Z
-Stopped at: Completed 15-03-PLAN.md — Section B in-place strip + GET /api/v1/auth/me endpoint + CLI rewire (13 tasks, 14 commits, OSS TS build GREEN, zero billing residues)
+Last session: 2026-05-17T18:40:11.732Z
+Stopped at: Completed 15-04-PLAN.md — Migration squash to 0000_v1_baseline + __drizzle_migrations_oss + pg_dump equivalence gate (3 tasks, 4 commits: namespace journal, squash, CHECK fix, equivalence gate; 17 tables produced, zero billing residue, gate proves byte-equivalence to expected billing-removal fixture)
 Resume file: None
