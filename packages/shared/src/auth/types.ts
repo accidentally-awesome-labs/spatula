@@ -22,8 +22,6 @@ export const AUTH_SCOPES = [
   'actions:write',
   'tenants:admin',
   'keys:manage',
-  'billing:read',
-  'billing:write',
   'admin',
 ] as const;
 
@@ -36,5 +34,4 @@ export const DEFAULT_API_KEY_SCOPES: AuthScope[] = [
   'exports:write',
   'actions:read',
   'actions:write',
-  'billing:read',
 ];

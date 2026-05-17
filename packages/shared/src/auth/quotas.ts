@@ -6,7 +6,6 @@ export interface TenantQuotas {
   maxPagesPerJob: number;
   maxEntitiesPerExport: number;
   maxStorageMb: number;
-  rateLimitTier: string;
 }
 
 export const DEFAULT_TENANT_QUOTAS: TenantQuotas = {
@@ -14,7 +13,6 @@ export const DEFAULT_TENANT_QUOTAS: TenantQuotas = {
   maxPagesPerJob: 5000,
   maxEntitiesPerExport: 50000,
   maxStorageMb: 1000,
-  rateLimitTier: 'free',
 };
 
 export class QuotaExceededError extends SpatulaError {
