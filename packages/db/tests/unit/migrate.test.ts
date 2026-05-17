@@ -34,6 +34,7 @@ describe('runMigrations', () => {
     expect(mockMigrate).toHaveBeenCalledOnce();
     expect(mockMigrate).toHaveBeenCalledWith(mockDb, {
       migrationsFolder: expect.stringMatching(/\/drizzle$/),
+      migrationsTable: '__drizzle_migrations_oss',
     });
   });
 

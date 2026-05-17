@@ -12,7 +12,10 @@ export async function runMigrations(connectionString?: string) {
   // folder lives one level up from the containing directory (packages/db/).
   const pkgRoot = resolve(__dirname, '..');
   try {
-    await migrate(db, { migrationsFolder: resolve(pkgRoot, 'drizzle') });
+    await migrate(db, {
+      migrationsFolder: resolve(pkgRoot, 'drizzle'),
+      migrationsTable: '__drizzle_migrations_oss',
+    });
   } finally {
     await pool.end();
   }
