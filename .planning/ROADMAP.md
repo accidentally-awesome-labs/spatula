@@ -84,7 +84,7 @@ Phase 16 (API Contract + SDK)        ← biggest; unblocks most downstream
 **Goal**: OSS-only server has zero Stripe/billing/metering surface area; pre-Wave-6 migrations collapse into a single baseline; the contract the private `spatula-saas` repo will consume is locked down with a reverse-contract test.
 **Depends on**: Nothing (entry phase). v1.0 codebase + Wave-5 cleanup is the substrate.
 **Requirements**: CARVE-01, CARVE-02, CARVE-03, CARVE-04, CARVE-05, CARVE-06, CARVE-07, CARVE-08
-**Pre-phase gate**: BLOCK-01 (`accidentallyawesomelabs/spatula-saas` private GitHub repo exists before the carve-out PR merges).
+**Pre-phase gate**: BLOCK-01 (`accidentally-awesome-labs/spatula-saas` private GitHub repo exists before the carve-out PR merges).
 **Success Criteria** (what must be TRUE):
   1. `tests/carveout/` passes end-to-end against an OSS-only server: remote push/pull, tenant CRUD without plan fields, config-driven quota enforcement, admin metrics aggregation with no `usage_records` reference, OpenAPI shape with no billing/stripe paths.
   2. `tests/private-contract/` passes — a mocked private consumer importing `@spatula/core`, `@spatula/db`, `@spatula/queue`, `@spatula/shared`, `@spatula/api` exactly as `spatula-saas` does breaks the build when a consumed export is silently removed; `docs/private-contract.md` records residual-risk acknowledgments (SQL FK breakage, runtime-behavior drift, RLS/trigger changes).
@@ -191,7 +191,7 @@ Plans:
 **Goal**: Spatula `v1.0.0` is publicly tagged, npm-published with provenance, GHCR-signed, announced same-day across blog/HN/PH/X/LinkedIn, and actively monitored for the first 72 hours.
 **Depends on**: ALL prior phases (15–21) acceptance-verified. Strictly the last phase.
 **Requirements**: LAUNCH-01, LAUNCH-02, LAUNCH-03, LAUNCH-04, LAUNCH-05, LAUNCH-06, LAUNCH-07, LAUNCH-08, LAUNCH-09, LAUNCH-10, LAUNCH-11, LAUNCH-12, LAUNCH-13, LAUNCH-14, LAUNCH-15, LAUNCH-16, LAUNCH-17, LAUNCH-18, LAUNCH-19, LAUNCH-20
-**Pre-phase gate**: BLOCK-05 (`accidentallyawesomelabs/spatula` GitHub namespace claimed; `spatulaai/*` references reconciled); BLOCK-07 (beta invitee list of 5–10 names with ≥1 non-developer confirmed). Re-validates: BLOCK-02 (entity status), BLOCK-06 (USPTO conflict-free), BLOCK-09 (historical-contributor outreach complete).
+**Pre-phase gate**: BLOCK-05 (`accidentally-awesome-labs/spatula` GitHub namespace claimed; `spatulaai/*` references reconciled); BLOCK-07 (beta invitee list of 5–10 names with ≥1 non-developer confirmed). Re-validates: BLOCK-02 (entity status), BLOCK-06 (USPTO conflict-free), BLOCK-09 (historical-contributor outreach complete).
 **Success Criteria** (what must be TRUE):
   1. The pre-flip gate passes — `trufflehog` + `gitleaks` full-history scan AND manual category audit (`.env*` history, test DB dumps, snapshot HTML, auth fixtures, log-output files) both clean and recorded against the reproducible checklist in `docs/runbooks/secret-scan-audit.md`; only after that gate does the repo flip public.
   2. `v1.0.0-rc.1` is tagged and the release workflow publishes npm (with `--provenance`) + GHCR (multi-arch, cosign-signed) + SBOM successfully; the post-publish smoke (`docs/runbooks/post-publish-smoke.md`) passes on a fresh M-series MacBook — `npm install @spatula/cli@1.0.0-rc.1`, `docker pull ghcr.io/.../spatula-api:1.0.0-rc.1`, `cosign verify` for all four images, and 3 canned flows (`spatula doctor`, local crawl, push/pull round-trip).

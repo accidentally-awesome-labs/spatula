@@ -111,7 +111,7 @@ packages/db/src/repositories/usage-repository.ts
 packages/db/src/repositories/subscription-repository.ts
 ```
 
-All moved files are `git filter-repo`'d into a new private repo `accidentallyawesomelabs/spatula-saas` with history preserved for those paths.
+All moved files are `git filter-repo`'d into a new private repo `accidentally-awesome-labs/spatula-saas` with history preserved for those paths.
 
 #### 3.1.2 Files edited in-place (strip coupling, keep shell)
 
@@ -411,7 +411,7 @@ spatula/                                # OSS public
 Each `v1.x.x` release produces:
 
 - **npm:** `@spatula/cli`, `@spatula/client`, `@spatula/core-types` published with `--provenance`; internal packages (`@spatula/core`, `db`, `queue`, `api`, `shared`) published without compat guarantee.
-- **GHCR:** `ghcr.io/accidentallyawesomelabs/spatula-api:<tag>`, `spatula-worker:<tag>`, `spatula-migrate:<tag>`, `spatula-cli:<tag>`. Multi-arch (`linux/amd64` + `linux/arm64`). Distroless for api/worker/migrate; Debian-slim for cli. All `cosign`-signed.
+- **GHCR:** `ghcr.io/accidentally-awesome-labs/spatula-api:<tag>`, `spatula-worker:<tag>`, `spatula-migrate:<tag>`, `spatula-cli:<tag>`. Multi-arch (`linux/amd64` + `linux/arm64`). Distroless for api/worker/migrate; Debian-slim for cli. All `cosign`-signed.
 - **GitHub release:** SBOM (cyclonedx-json), CHANGELOG excerpt (from release-please), OpenAPI spec JSON, checksums, signatures.
 
 ### 3.7 Prompt Injection Defense (concrete)
@@ -528,7 +528,7 @@ Planning each sub-plan should **not** assume unconstrained parallelism. Work in 
 **Scope:** Extract billing/Stripe/metering → private SaaS repo; strip coupling in remaining code; squash OSS migrations; refresh `docs/architecture.md`; verify OSS-alone satisfies remote push/pull contract.
 
 **Deliverables:**
-- filter-repo'd `accidentallyawesomelabs/spatula-saas` repo (private) with preserved history for moved files
+- filter-repo'd `accidentally-awesome-labs/spatula-saas` repo (private) with preserved history for moved files
 - Single removal PR on OSS `main` deleting billing code + stripping coupling
 - New `000_v1_baseline.sql` migration with billing tables absent
 - `tests/carveout/` verification suite
@@ -820,12 +820,12 @@ Cross-cutting. Enumerated so nothing slips between sub-plans.
 
 Flagged for the implementation plan to resolve in-context.
 
-1. **Private repo creation timing** — `accidentallyawesomelabs/spatula-saas` must exist before 6-1 carve-out PR merges. If delayed, carve-out work piles on a local branch.
+1. **Private repo creation timing** — `accidentally-awesome-labs/spatula-saas` must exist before 6-1 carve-out PR merges. If delayed, carve-out work piles on a local branch.
 2. **Accidentally Awesome Labs legal entity** — if not yet formed at v1.0 cut, interim `LICENSE` reads `Copyright (c) 2026 <Individual Name>`. Entity formation triggers an assignment commit updating the LICENSE line + `NOTICE.md` recording assignment date. Forming the entity **before public launch** is strongly preferred; interim path is acknowledged as suboptimal but recoverable.
 3. **Trademark "Spatula" USPTO search** — 10-min TESS search during 6-4. If conflict, rename pre-launch (worst case).
 4. **`spatula.dev` / `docs.spatula.dev` domain ownership** — own it? Pre-launch block if not.
 5. **npm org `@spatula` ownership** — registered? If taken, fallback (`@spatulaai`, `@aalabs/spatula`, etc.) must be chosen before 6-2 publishes.
-6. **GitHub namespace** — `accidentallyawesomelabs/spatula` is the target. Any prior `spatulaai/*` references must be reconciled or transferred. Forks, badges, URLs all break on rename — settle pre-launch, communicate in announcement.
+6. **GitHub namespace** — `accidentally-awesome-labs/spatula` is the target. Any prior `spatulaai/*` references must be reconciled or transferred. Forks, badges, URLs all break on rename — settle pre-launch, communicate in announcement.
 7. **OIDC scope naming convention** — current `jobs:read` / `jobs:write` sufficient for hosted SaaS later? Review during 6-3.
 8. **Deprecation offset-pagination removal date** — fixed at **v2.0**, targeted 12 months post-v1.0 GA. Committed to `docs/deprecation-policy.md`.
 9. **Beta group recruitment** — need 5–10 names by start of 6-7. Who? Include at least one non-developer (content/data-ops role) to surface docs gaps.

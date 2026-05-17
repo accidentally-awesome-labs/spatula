@@ -12,11 +12,11 @@ Requirements for the v1.0.0 public launch. Each maps to one of phases 15–22. R
 
 ### Pre-Launch Blockers (cross-cutting; resolved before any phase begins or before Phase 22 launch gate)
 
-- [ ] **BLOCK-01**: `accidentallyawesomelabs/spatula-saas` private GitHub repo exists before Phase 15 carve-out PR merges.
+- [ ] **BLOCK-01**: `accidentally-awesome-labs/spatula-saas` private GitHub repo exists before Phase 15 carve-out PR merges.
 - [ ] **BLOCK-02**: Legal entity "Accidentally Awesome Labs" is formed, OR interim-name LICENSE path is explicitly accepted and `NOTICE.md` records the future assignment.
 - [ ] **BLOCK-03**: `spatula.dev` + `docs.spatula.dev` domains are owned, with DNS access for the docs-site DNS record.
 - [ ] **BLOCK-04**: npm `@spatula` org is owned, or a fallback scope (e.g., `@spatulaai`, `@aalabs/spatula`) is chosen and documented before any `@spatula/*` package is published.
-- [ ] **BLOCK-05**: GitHub namespace `accidentallyawesomelabs/spatula` is claimed; prior `spatulaai/*` references reconciled.
+- [ ] **BLOCK-05**: GitHub namespace `accidentally-awesome-labs/spatula` is claimed; prior `spatulaai/*` references reconciled.
 - [ ] **BLOCK-06**: USPTO TESS search for "Spatula" trademark is completed; conflict-free OR rename pre-launch.
 - [ ] **BLOCK-07**: Beta invitee list (5–10 names, ≥1 non-developer) is confirmed before Phase 22 RC cut.
 - [ ] **BLOCK-08**: Cloudflare Pages account + DNS for `docs.spatula.dev` are in place before Phase 20 publishes.

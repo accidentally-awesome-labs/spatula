@@ -22,7 +22,7 @@ Two product calls were made before this plan rev (see review at `docs/superpower
 
 These must be complete before any task in this plan runs. They are outside the PR's diff.
 
-1. **Create the private GitHub repo** `accidentallyawesomelabs/spatula-saas` (empty, no README). Give the CI automation account write access.
+1. **Create the private GitHub repo** `accidentally-awesome-labs/spatula-saas` (empty, no README). Give the CI automation account write access.
 2. **Install `git filter-repo`** locally: `brew install git-filter-repo` or equivalent.
 3. **Confirm working tree is clean** (`git status` shows nothing staged or unstaged) and branch is `main` at commit `42761d5` or later.
 4. **Create feature branch:** `git checkout -b feat/wave-6-1-carveout`. All subsequent tasks commit on this branch. Final task opens a PR to `main`.
@@ -292,7 +292,7 @@ Expected: `git ls-files` returns only paths from the allowlist. Log retains hist
 
 ```bash
 # Assumes the empty private repo exists (prerequisite step)
-git remote add saas git@github.com:accidentallyawesomelabs/spatula-saas.git
+git remote add saas git@github.com:accidentally-awesome-labs/spatula-saas.git
 git push --mirror saas
 ```
 
@@ -309,7 +309,7 @@ Extracted paths (see /tmp/saas-paths.txt):
 <paste list from step 2>
 
 Commits carried over: <N> (from `git log --oneline | wc -l` on mirror)
-Private repo URL: github.com/accidentallyawesomelabs/spatula-saas
+Private repo URL: github.com/accidentally-awesome-labs/spatula-saas
 Pushed: <timestamp>
 EOF
 
@@ -2336,7 +2336,7 @@ cat > docs/superpowers/plans/6-1-completion-summary.md <<EOF
 **Packages affected:** api, core, db, queue, shared
 **New tests:** tests/carveout/ (3 files), tests/private-contract/ (1 file)
 **Migration squash:** 12 files → 1 baseline
-**Private repo:** accidentallyawesomelabs/spatula-saas (created + populated)
+**Private repo:** accidentally-awesome-labs/spatula-saas (created + populated)
 **Spec sections implemented:** §3.1, §3.1.3, §3.1.6
 EOF
 git add docs/superpowers/plans/6-1-completion-summary.md

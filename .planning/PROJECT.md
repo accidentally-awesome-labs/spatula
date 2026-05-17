@@ -58,11 +58,11 @@ Turn "I want X data from these sites" into a production-quality dataset with pro
 
 **Pre-launch blockers (all open as of 2026-05-11; see spec §7):**
 
-- [ ] `accidentallyawesomelabs/spatula-saas` private repo created
+- [ ] `accidentally-awesome-labs/spatula-saas` private repo created
 - [ ] Legal entity formed (or interim-name fallback explicitly accepted)
 - [ ] `spatula.dev` + `docs.spatula.dev` domains owned
 - [ ] npm `@spatula` org owned (or fallback chosen)
-- [ ] GitHub `accidentallyawesomelabs/spatula` namespace claimed
+- [ ] GitHub `accidentally-awesome-labs/spatula` namespace claimed
 - [ ] Trademark "Spatula" USPTO search done; conflict-free
 - [ ] Beta invitees lined up (5–10 names, ≥1 non-developer)
 - [ ] Cloudflare Pages account + DNS for docs site

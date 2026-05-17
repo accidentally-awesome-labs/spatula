@@ -53,7 +53,7 @@ Out of scope: standing up `spatula-saas` private repo itself (BLOCK-01 prereq), 
 - `docs/runbooks/` directory structure — first runbook is `upgrade.md`. Future runbooks (`backup-restore.md` etc.) are Phase 19 scope; layout the dir but don't pre-stub.
 - SQL schema lint implementation — `drizzle-kit introspect` JSON diff OR normalized `pg_dump` snapshot. Either is acceptable; planner picks based on tooling ergonomics.
 - Per-stage commit count granularity within "Single PR, organized commits" — 27 is the plan's target; planner may merge trivial commits if it improves reviewability.
-- BLOCK-01 verification step format — Task 1 in plan should fail-fast if `accidentallyawesomelabs/spatula-saas` is not a writable remote (curl + auth check). Planner decides exact form.
+- BLOCK-01 verification step format — Task 1 in plan should fail-fast if `accidentally-awesome-labs/spatula-saas` is not a writable remote (curl + auth check). Planner decides exact form.
 
 ### Folded Todos
 None — `gsd-tools todo match-phase 15` returned zero matches.
@@ -120,7 +120,7 @@ None — `gsd-tools todo match-phase 15` returned zero matches.
 ### Constraints
 - **History rewrite on OSS prohibited** (per spec §3.1.4) — billing files are *deleted* from OSS main forward; history is preserved via `git filter-repo` into the *private* repo, not by rewriting OSS.
 - **No backward compat shim for `/billing/subscription`** — CLI + server ship together in v1.0 release window; self-hosters do an atomic upgrade. Already a locked decision in pre-drafted plan.
-- **BLOCK-01 is a hard gate.** Plan Task 1 must fail-fast if `accidentallyawesomelabs/spatula-saas` is not reachable as a writable remote with the CI automation account's credentials.
+- **BLOCK-01 is a hard gate.** Plan Task 1 must fail-fast if `accidentally-awesome-labs/spatula-saas` is not reachable as a writable remote with the CI automation account's credentials.
 
 </code_context>
 

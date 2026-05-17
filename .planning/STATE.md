@@ -75,7 +75,7 @@ All 9 pre-launch blockers are open as of 2026-05-12 (see PROJECT.md "Pre-launch 
 - BLOCK-07 → Phase 22 entry gate (beta invitee list)
 - BLOCK-08 → Phase 20 entry gate (Cloudflare Pages + DNS)
 - BLOCK-09 → Phase 18 / Phase 22 (historical-contributor enumeration + outreach)
-- BLOCK-01: private GitHub repo accidentallyawesomelabs/spatula-saas not reachable. gh repo view + git ls-remote both return 'Repository not found' for user salarsayyad. git-filter-repo binary IS installed (good). Phase 15 execution paused at Plan 15-01 Task 1 awaiting user to: (a) create the private repo at https://github.com/organizations/accidentallyawesomelabs/repositories/new, (b) grant CI automation account write access, (c) ensure salarsayyad gh CLI has read:org+repo scopes for accidentallyawesomelabs org.
+- BLOCK-01: private GitHub repo accidentally-awesome-labs/spatula-saas not reachable. gh repo view + git ls-remote both return 'Repository not found' for user salarsayyad. git-filter-repo binary IS installed (good). Phase 15 execution paused at Plan 15-01 Task 1 awaiting user to: (a) create the private repo at https://github.com/organizations/accidentally-awesome-labs/repositories/new, (b) grant CI automation account write access, (c) ensure salarsayyad gh CLI has read:org+repo scopes for accidentally-awesome-labs org.
 
 ### Pending Decisions
 
