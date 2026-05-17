@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v1.1
 milestone_name: Public Launch (Wave 6 / Phase 14)
 status: executing
-stopped_at: "Phase 15 Plan 15-01 in progress — BLOCK-01 cleared, executing remaining tasks"
-last_updated: "2026-05-17T16:52:39Z"
-last_activity: 2026-05-17 -- Phase 15 Plan 15-01 resumed after BLOCK-01 resolution
+stopped_at: Completed 15-01-PLAN.md — BLOCK-01 cleared, baseline + branch ready for Plan 15-02
+last_updated: "2026-05-17T17:31:45.189Z"
+last_activity: 2026-05-17
 progress:
   total_phases: 1
   completed_phases: 0
   total_plans: 6
-  completed_plans: 0
+  completed_plans: 1
   percent: 0
 ---
 
@@ -26,9 +26,9 @@ See: `.planning/PROJECT.md` (updated 2026-05-11)
 ## Current Position
 
 Phase: 15 (carveout-migration-squash) — EXECUTING
-Plan: 1 of 6
-Status: Executing Phase 15 (BLOCK-01 cleared 2026-05-17; Plan 15-01 in progress)
-Last activity: 2026-05-17 -- Phase 15 Plan 15-01 resumed after BLOCK-01 resolution
+Plan: 2 of 6
+Status: Ready to execute
+Last activity: 2026-05-17
 
 Progress: [░░░░░░░░░░] 0% (0/8 v1.1 phases complete)
 
@@ -46,6 +46,7 @@ Progress: [░░░░░░░░░░] 0% (0/8 v1.1 phases complete)
 | 15 | — | — | — |
 
 *v1.1 metrics will populate as plans execute.*
+| Phase 15 P01 | 70 min | 4 tasks | 3 files |
 
 ## Accumulated Context
 
@@ -57,6 +58,9 @@ Full decision log lives in PROJECT.md Key Decisions table. Recent decisions rele
 - Reference web UI is a non-goal for v1.1; ship web-UI **enablement** (SDK + OpenAPI + SSE + browser OIDC) only.
 - Internal packages (`@spatula/core`, `db`, `queue`, `api`, `shared`) carry no TS-API compat guarantee; only `@spatula/cli`, `@spatula/client`, `@spatula/core-types` follow strict semver.
 - Two separate Drizzle migration tracking tables (`__drizzle_migrations_oss`, `__drizzle_migrations_saas`) — no shared journal.
+- [Phase 15]: Inventory deltas (4 files) absorb into Plan 15-03 Section B (no Plan 15-02 file-move impact)
+- [Phase 15]: Typecheck baseline proxied via 'pnpm --filter X build' (tsc) — no typecheck script defined in packages
+- [Phase 15]: Pre-existing CLI e2e flakes (workflow.test.ts + tier2/pipeline-errors.test.ts) deferred to Plan 15-05 fixture work
 
 ### Pending Todos
 
@@ -84,6 +88,6 @@ All 9 pre-launch blockers are open as of 2026-05-12 (see PROJECT.md "Pre-launch 
 
 ## Session Continuity
 
-Last session: 2026-05-17T16:52:39Z
-Stopped at: Phase 15 Plan 15-01 in progress — BLOCK-01 cleared, executing Tasks 2–4
+Last session: 2026-05-17T17:31:34.297Z
+Stopped at: Completed 15-01-PLAN.md — BLOCK-01 cleared, baseline + branch ready for Plan 15-02
 Resume file: None

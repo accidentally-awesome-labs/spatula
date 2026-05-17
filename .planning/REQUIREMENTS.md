@@ -24,7 +24,7 @@ Requirements for the v1.0.0 public launch. Each maps to one of phases 15–22. R
 
 ### Carve-out (Phase 15 — Wave 6-1)
 
-- [ ] **CARVE-01**: All billing / Stripe / metering files (per spec §3.1.1) are extracted into the private `spatula-saas` repo with history preserved via `git filter-repo`.
+- [x] **CARVE-01**: All billing / Stripe / metering files (per spec §3.1.1) are extracted into the private `spatula-saas` repo with history preserved via `git filter-repo`.
 - [ ] **CARVE-02**: OSS code is stripped of tier presets and Stripe coupling per spec §3.1.2 (admin tenants drop plan/stripe fields, job manager loses tier-quota lookup, rate-limit loses tier presets, admin-system metrics has no `usage_records` reference, `.env.example` has no `STRIPE_*`, OpenAPI examples and seed fixtures have no billing).
 - [ ] **CARVE-03**: All pre-Wave-6 migrations are squashed into a single `000_v1_baseline.sql` with billing tables absent.
 - [ ] **CARVE-04**: OSS Drizzle migrations live under `packages/db/drizzle/` with `migrationsTable: '__drizzle_migrations_oss'`; documented in `docs/runbooks/upgrade.md`.
