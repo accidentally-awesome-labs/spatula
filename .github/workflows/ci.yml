@@ -130,6 +130,88 @@ jobs:
         run: pnpm --filter @spatula/db db:migrate
       - run: pnpm run test:e2e
 
+  test-carveout:
+    name: Forward Carve-out Tests
+    runs-on: ubuntu-latest
+    # Runs on every PR push per .planning/phases/15-carveout-migration-squash/
+    # 15-CONTEXT.md §"Reverse-Contract Test (CARVE-06)" D-04. Forward + reverse
+    # suites are merge gates for the v1.1 launch contract.
+    services:
+      postgres:
+        image: postgres:16-alpine
+        ports:
+          - 5432:5432
+        env:
+          POSTGRES_USER: spatula
+          POSTGRES_PASSWORD: spatula
+          POSTGRES_DB: spatula_test
+        options: >-
+          --health-cmd "pg_isready -U spatula"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 5
+    env:
+      TEST_DATABASE_URL: postgresql://spatula:spatula@localhost:5432/spatula_test
+      DATABASE_URL: postgresql://spatula:spatula@localhost:5432/spatula_test
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - uses: actions/cache@v4
+        with:
+          path: .turbo
+          key: turbo-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml') }}
+          restore-keys: turbo-${{ runner.os }}-
+      - run: pnpm install --frozen-lockfile
+      - name: Build workspace (forward tests import from apps/api source)
+        run: pnpm run build
+      - name: Apply v1 baseline migration to test DB
+        run: pnpm --filter @spatula/db exec tsx src/run-migrate.ts
+      - name: Forward carve-out tests
+        run: pnpm run test:carveout
+
+  test-private-contract:
+    name: Reverse Private-Contract Tests
+    runs-on: ubuntu-latest
+    # TS-surface freeze + SQL schema lint. Runs on every PR per CONTEXT.md D-04.
+    services:
+      postgres:
+        image: postgres:16-alpine
+        ports:
+          - 5432:5432
+        env:
+          POSTGRES_USER: spatula
+          POSTGRES_PASSWORD: spatula
+          POSTGRES_DB: spatula_private_contract_test
+        options: >-
+          --health-cmd "pg_isready -U spatula"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 5
+    env:
+      TEST_DATABASE_URL: postgresql://spatula:spatula@localhost:5432/spatula_private_contract_test
+      DATABASE_URL: postgresql://spatula:spatula@localhost:5432/spatula_private_contract_test
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - uses: actions/cache@v4
+        with:
+          path: .turbo
+          key: turbo-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml') }}
+          restore-keys: turbo-${{ runner.os }}-
+      - run: pnpm install --frozen-lockfile
+      - name: Build workspace (TS-surface test imports from package barrels)
+        run: pnpm run build
+      - name: Reverse private-contract tests (TS surface + SQL schema lint)
+        run: pnpm run test:private-contract
+
   build:
     name: Build
     runs-on: ubuntu-latest

@@ -18,7 +18,9 @@
     "format:check": "prettier --check .",
     "clean": "turbo run clean",
     "typecheck": "turbo run typecheck",
-    "test:e2e": "vitest run --config tests/e2e/vitest.config.ts"
+    "test:e2e": "vitest run --config tests/e2e/vitest.config.ts",
+    "test:carveout": "vitest run --config tests/carveout/vitest.config.ts",
+    "test:private-contract": "vitest run --config tests/private-contract/vitest.config.ts"
   },
   "devDependencies": {
     "@typescript-eslint/eslint-plugin": "^8.18.0",
