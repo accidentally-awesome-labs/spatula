@@ -2,15 +2,15 @@
 gsd_state_version: 1.0
 milestone: v1.1
 milestone_name: Public Launch (Wave 6 / Phase 14)
-status: executing
-stopped_at: Completed 15-05-PLAN.md (carveout + private-contract tests + PR CI gates)
-last_updated: "2026-05-17T18:59:04.931Z"
+status: verifying
+stopped_at: "Completed 15-06-PLAN.md Tasks 1-5; Task 6 PR-open paused at checkpoint:human-action awaiting user approval to fire gh pr create"
+last_updated: "2026-05-17T19:15:04.707Z"
 last_activity: 2026-05-17
 progress:
   total_phases: 1
-  completed_phases: 0
+  completed_phases: 1
   total_plans: 6
-  completed_plans: 5
+  completed_plans: 6
   percent: 0
 ---
 
@@ -27,7 +27,7 @@ See: `.planning/PROJECT.md` (updated 2026-05-11)
 
 Phase: 15 (carveout-migration-squash) — EXECUTING
 Plan: 6 of 6
-Status: Ready to execute
+Status: Phase complete — ready for verification
 Last activity: 2026-05-17
 
 Progress: [░░░░░░░░░░] 0% (0/8 v1.1 phases complete)
@@ -51,6 +51,7 @@ Progress: [░░░░░░░░░░] 0% (0/8 v1.1 phases complete)
 | Phase 15 P03 | 33min | 13 tasks | 35 files |
 | Phase 15 P04 | 11min | 3 tasks | 10 files |
 | Phase 15-carveout-migration-squash P05 | 13min | 4 tasks | 13 files |
+| Phase 15-carveout-migration-squash P06 | 25min | 6 tasks | 11 files |
 
 ## Accumulated Context
 
@@ -78,6 +79,9 @@ Full decision log lives in PROJECT.md Key Decisions table. Recent decisions rele
 - [Phase 15-carveout-migration-squash]: Plan B (pg_dump + Wave-4 normalizer) chosen over drizzle-kit introspect for SQL schema lint — pg_dump SQL is human-readable in PR diffs, reuses Plan 15-04's normalizer (one tool/one story), and avoids drizzle-kit JSON volatility across minor versions
 - [Phase 15-carveout-migration-squash]: Node-builtin http.Server adapter (~30 lines) used in tests/carveout/fixtures/server.ts instead of @hono/node-server because pnpm did not hoist @hono/node-server to workspace root and adding it to root devDependencies would create an unnecessary root → app coupling
 - [Phase 15-carveout-migration-squash]: Two separate CI jobs (test-carveout + test-private-contract) instead of one combined — gives clean per-contract PR check signal, parallel execution on GitHub runners, and DB isolation (separate spatula_test vs spatula_private_contract_test) so a forward-test seed leak cannot pollute the schema-lint diff
+- [Phase 15-carveout-migration-squash]: Plan 15-06: Dropped dead 'stripe' dep from apps/api/package.json — Rule-1 fix; survived prior 5 plans because package.json wasn't in Section A filter-repo allowlist. Build + tests still green post-drop (purely subtractive). Final CARVE-04 grep gate now 0 hits across all 3 scopes.
+- [Phase 15-carveout-migration-squash]: Plan 15-06: docs/private-contract.md authored in hybrid format per CONTEXT.md D-03 — surface enumeration per package + SQL FK reference + 8-row Residual Risk Register (runtime/RLS/trigger/column-default/ORM-major-drift/TS-type-shape/grants/journal-divergence) + change-procedure section + two-journal model. 153 lines.
+- [Phase 15-carveout-migration-squash]: Plan 15-06: docs/runbooks/upgrade.md commits no-migration-downgrade (forward-only + pre-flight pg_dump) + expand-contract-only (with rename/type-change/split examples and additive-only exemptions) per ROADMAP success #5 + CARVE-08; PR description (Task 6) references both policies.
 
 ### Pending Todos
 
@@ -105,6 +109,6 @@ All 9 pre-launch blockers are open as of 2026-05-12 (see PROJECT.md "Pre-launch 
 
 ## Session Continuity
 
-Last session: 2026-05-17T18:58:57.674Z
-Stopped at: Completed 15-05-PLAN.md (carveout + private-contract tests + PR CI gates)
+Last session: 2026-05-17T19:15:04.703Z
+Stopped at: Completed 15-06-PLAN.md Tasks 1-5; Task 6 PR-open paused at checkpoint:human-action awaiting user approval to fire gh pr create
 Resume file: None

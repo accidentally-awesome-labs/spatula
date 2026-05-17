@@ -34,7 +34,7 @@ See `.planning/MILESTONES.md` for the full v1.0 wave breakdown and per-phase del
 
 ### v1.1 Public Launch (in progress)
 
-- [ ] **Phase 15: Carve-out & Migration Squash** — Extract billing/Stripe/metering to private `spatula-saas`; squash OSS migrations to `000_v1_baseline.sql`; ship reverse-contract test.
+- [x] **Phase 15: Carve-out & Migration Squash** — Extract billing/Stripe/metering to private `spatula-saas`; squash OSS migrations to `000_v1_baseline.sql`; ship reverse-contract test. (completed 2026-05-17)
 - [ ] **Phase 16: API Contract Hardening + SDK Packages** — Freeze error envelope, rate-limit headers, cursor-first pagination, runtime OpenAPI; ship `@spatula/client` + `@spatula/core-types` with npm provenance.
 - [ ] **Phase 17: Browser Auth, SSE, CORS** — Ship `GET /api/v1/jobs/:id/events` SSE with `Last-Event-ID` resume, wildcard-subdomain CORS, Dex-OIDC local recipe, key rotation, cross-tenant isolation audit.
 - [ ] **Phase 18: Security Hardening & Legal** — Prompt-injection defense (≥10 adversarial fixtures vs pinned models), redaction sweep, full DSR surface; CLA, TRADEMARK, brand license, audit-CI hardening.
@@ -91,14 +91,14 @@ Phase 16 (API Contract + SDK)        ← biggest; unblocks most downstream
   3. Fresh `pnpm db:migrate` on an empty Postgres applies exactly `000_v1_baseline.sql` (under `__drizzle_migrations_oss`); no billing tables exist in the resulting schema; pre-Wave-6 dev DBs documented as wipe-and-reseed in `docs/runbooks/upgrade.md`.
   4. `git grep -i 'stripe\|billing\|usage_records\|plan: '` returns zero hits under `apps/api/`, `packages/db/`, `packages/queue/`, `.env.example`, and OpenAPI seed fixtures; `docs/architecture.md` republished with the new dependency diagram and zero billing mentions.
   5. No-migration-downgrade policy and expand-contract-only schema-change rule are committed to `docs/runbooks/upgrade.md` and referenced from the carve-out PR description.
-**Plans:** 5/6 plans executed
+**Plans:** 6/6 plans complete
 Plans:
 - [x] 15-01-PLAN.md — BLOCK-01 verify + pre-cut snapshot + coupling re-grep + feature branch
 - [x] 15-02-PLAN.md — Filter-repo move of Section A files → spatula-saas (history preserved) + OSS deletion
 - [x] 15-03-PLAN.md — Strip in-place coupling across 5 packages + new GET /api/v1/auth/me + CLI rewire
 - [x] 15-04-PLAN.md — Migration squash to 0000_v1_baseline.sql + __drizzle_migrations_oss + pg_dump equivalence gate
 - [x] 15-05-PLAN.md — Forward tests/carveout/ + reverse tests/private-contract/ (TS surface + SQL schema lint) + PR CI wiring
-- [ ] 15-06-PLAN.md — docs/architecture.md refresh + docs/private-contract.md + docs/runbooks/upgrade.md + final grep gate + open PR (merge-commit)
+- [x] 15-06-PLAN.md — docs/architecture.md refresh + docs/private-contract.md + docs/runbooks/upgrade.md + final grep gate + open PR (merge-commit)
 **Estimated effort**: 3 active sessions
 
 ### Phase 16: API Contract Hardening + SDK Packages
@@ -233,7 +233,7 @@ Authoritative requirement → phase mapping lives in `.planning/REQUIREMENTS.md`
 | Phase | Milestone | Plans Complete | Status | Completed |
 |-------|-----------|----------------|--------|-----------|
 | 1–13 | v1.0 | (collapsed) | Complete | 2026-04-20 |
-| 15. Carve-out & Migration Squash | v1.1 | 5/6 | In Progress|  |
+| 15. Carve-out & Migration Squash | v1.1 | 6/6 | Complete   | 2026-05-17 |
 | 16. API Contract Hardening + SDK Packages | v1.1 | 0/TBD | Not started | - |
 | 17. Browser Auth, SSE, CORS | v1.1 | 0/TBD | Not started | - |
 | 18. Security Hardening & Legal | v1.1 | 0/TBD | Not started | - |

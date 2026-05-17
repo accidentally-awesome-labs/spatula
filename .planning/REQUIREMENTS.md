@@ -30,8 +30,8 @@ Requirements for the v1.0.0 public launch. Each maps to one of phases 15–22. R
 - [x] **CARVE-04**: OSS Drizzle migrations live under `packages/db/drizzle/` with `migrationsTable: '__drizzle_migrations_oss'`; documented in `docs/runbooks/upgrade.md`.
 - [x] **CARVE-05**: `tests/carveout/` verification suite passes — OSS-only server satisfies remote push/pull contract, tenant CRUD has no plan fields, quota enforcement is config-driven, admin metrics aggregates without `usage_records`, OpenAPI has no billing/stripe paths.
 - [x] **CARVE-06**: `tests/private-contract/` reverse-contract test exists — mocked private consumer imports `@spatula/core`, `@spatula/db`, `@spatula/queue`, `@spatula/shared`, `@spatula/api` as `spatula-saas` does; breaks on silent removal of consumed symbols; residual-risk acknowledgment in `docs/private-contract.md`.
-- [ ] **CARVE-07**: `docs/architecture.md` refreshed; no billing mentions remain; dependency diagram republished.
-- [ ] **CARVE-08**: No-migration-downgrade policy committed to `docs/runbooks/upgrade.md`; expand-contract documented as the only schema-change path post-v1.
+- [x] **CARVE-07**: `docs/architecture.md` refreshed; no billing mentions remain; dependency diagram republished.
+- [x] **CARVE-08**: No-migration-downgrade policy committed to `docs/runbooks/upgrade.md`; expand-contract documented as the only schema-change path post-v1.
 
 ### API Contract Hardening (Phase 16)
 
