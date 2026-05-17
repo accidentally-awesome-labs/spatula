@@ -231,13 +231,6 @@ export async function processExport(
       fileSize = Buffer.byteLength(contentToStore!, 'utf-8');
     }
 
-    // 6b. Record storage usage for billing metering
-    if (deps.quotaEnforcer) {
-      deps.quotaEnforcer.recordUsage(tenantId, 'storage_bytes', fileSize).catch((err: unknown) => {
-        logger.warn({ err, tenantId, fileSize }, 'Failed to record storage usage for billing');
-      });
-    }
-
     // 7. Mark as completed
     await deps.exportRepo.updateStatus(exportId, tenantId, {
       status: 'completed',

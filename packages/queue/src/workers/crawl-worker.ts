@@ -9,21 +9,7 @@ export async function processCrawlJob(data: CrawlJobData, deps: WorkerDeps): Pro
   const logger = createLoggerWithContext('crawl-worker', { jobId, tenantId });
 
   try {
-    // Pre-crawl checks (billing quota → tenant quota → budget → robots → rate limit)
-
-    // 0. Check monthly pages billing quota
-    if (deps.quotaEnforcer) {
-      try {
-        await deps.quotaEnforcer.check(tenantId, 'pages', 1);
-      } catch (error) {
-        if ((error as any).code === 'QUOTA_EXCEEDED') {
-          logger.info({ taskId, url, error: (error as Error).message }, 'Monthly page quota exceeded, skipping');
-          await deps.taskRepo.updateStatus(taskId, tenantId, 'skipped');
-          return;
-        }
-        logger.warn({ err: error, tenantId }, 'Failed to check billing page quota');
-      }
-    }
+    // Pre-crawl checks (tenant quota → budget → robots → rate limit)
 
     // 1. Check tenant maxPagesPerJob quota
     if (deps.tenantRepo) {
@@ -93,13 +79,6 @@ export async function processCrawlJob(data: CrawlJobData, deps: WorkerDeps): Pro
     if (result.error) {
       logger.error({ taskId, url, error: result.error }, 'crawl job failed');
       return;
-    }
-
-    // Record page usage for billing metering (fire-and-forget)
-    if (deps.quotaEnforcer) {
-      deps.quotaEnforcer.recordUsage(tenantId, 'pages', 1).catch((err: unknown) => {
-        logger.warn({ err, tenantId }, 'Failed to record page usage');
-      });
     }
 
     // 2. Check if schema evolution should be triggered (queue-specific)

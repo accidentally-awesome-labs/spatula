@@ -35,7 +35,6 @@ const triggerExportRoute = createRoute({
   },
   responses: {
     202: jsonContent(dataResponse(exportResponseSchema), 'Export queued'),
-    403: jsonContent(errorResponseSchema, 'Export format not available on current plan'),
   },
 });
 
@@ -126,21 +125,6 @@ export function exportRoutes() {
     const body = c.req.valid('json');
     const tenantId = c.get('tenantId');
     const deps = c.get('deps');
-
-    // Check export format against tenant's billing plan
-    if (deps.quotaEnforcer) {
-      const tenant = await deps.tenantRepo!.findById(tenantId);
-      const plan = (tenant as any)?.plan ?? 'free';
-      if (!deps.quotaEnforcer.isExportFormatAllowed(plan, body.format)) {
-        return c.json({
-          error: {
-            code: 'EXPORT_FORMAT_RESTRICTED',
-            message: `Export format '${body.format}' is not available on the ${plan} plan. Upgrade to access this format.`,
-            requestId: c.get('requestId'),
-          },
-        }, 403);
-      }
-    }
 
     const exportRecord = await deps.exportRepo.create({
       jobId, tenantId, format: body.format, includeProvenance: body.includeProvenance,

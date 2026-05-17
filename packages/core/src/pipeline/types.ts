@@ -151,7 +151,6 @@ export interface ExportOrchestratorDeps {
   entityRepo: EntityRepo;
   exportRepo: ExportRepo;
   contentStore: ContentStore;
-  quotaEnforcer?: { recordUsage(tenantId: string, dimension: string, quantity: number): Promise<void> };
 }
 
 // --- Input/Output types ---
