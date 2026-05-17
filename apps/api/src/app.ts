@@ -34,8 +34,6 @@ import { createQueueDashboard } from './routes/admin-queues.js';
 import { batchActionRoutes } from './routes/batch-actions.js';
 import { batchJobRoutes } from './routes/batch-jobs.js';
 import { timeoutMiddleware } from './middleware/timeout.js';
-import { billingRoutes } from './routes/billing.js';
-import { stripeWebhookRoutes } from './routes/stripe-webhook.js';
 import { createAuthProvider } from './auth/factory.js';
 import type { AppDeps } from './types.js';
 import { getEnvOrDefault } from '@spatula/shared';
@@ -102,20 +100,6 @@ export function createApp(deps: AppDeps) {
   app.use('/api/*', depsMiddleware(deps));
   app.use('/api/*', validateTenantMiddleware);
 
-  // Load tenant plan for rate limiting (plan name matches RATE_LIMIT_TIERS keys)
-  app.use('/api/*', async (c, next) => {
-    const tenantId = c.get('tenantId');
-    if (tenantId && deps.tenantRepo) {
-      try {
-        const tenant = await deps.tenantRepo.findById(tenantId);
-        c.set('rateLimitTier', (tenant as any)?.plan ?? 'free');
-      } catch {
-        c.set('rateLimitTier', 'free');
-      }
-    }
-    return next();
-  });
-
   // Rate limiting (after auth + quota loading)
   if (deps.redis) {
     app.use('/api/*', rateLimitMiddleware(deps.redis));
@@ -177,14 +161,6 @@ export function createApp(deps: AppDeps) {
   // Usage API (requires jobs:read scope)
   app.get('/api/v1/usage', requireScope('jobs:read'));
   app.route('/api/v1/usage', usageRoutes());
-
-  // Billing routes
-  app.get('/api/v1/billing/*', requireScope('billing:read'));
-  app.post('/api/v1/billing/*', requireScope('billing:write'));
-  app.route('/api/v1/billing', billingRoutes());
-
-  // Stripe webhook (no auth — uses Stripe signature verification)
-  app.route('/api/v1/webhooks/stripe', stripeWebhookRoutes());
 
   // Admin routes
   app.use('/api/v1/admin/*', requireScope('admin'));
