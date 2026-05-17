@@ -204,14 +204,14 @@ describe('Export routes', () => {
     });
   });
 
-  describe('export format availability (post-carveout: no plan gating)', () => {
-    it('allows parquet export for any tenant (billing gating removed)', async () => {
+  describe('export format availability (post-carveout: no tier gating)', () => {
+    it('allows parquet export for any tenant (tier gating removed)', async () => {
       const res = await app.request('/api/v1/jobs/job-1/export', {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
         body: JSON.stringify({ format: 'parquet', includeProvenance: false }),
       });
-      // All formats now available — no billing tier check
+      // All formats now available — no per-tier feature gate
       expect(res.status).toBe(202);
     });
 

@@ -6,8 +6,8 @@ export function authRoutes() {
 
   // GET /me — return the authenticated tenant + scopes.
   // Used by clients (including the spatula CLI `remote add` command) to verify
-  // an API key is valid and discover assigned scopes. Replaces the pre-carve
-  // GET /api/v1/billing/subscription probe.
+  // an API key is valid and discover assigned scopes. This is the canonical
+  // auth-introspection endpoint as of v1.1.
   app.get('/me', (c) => {
     const tenantId = c.get('tenantId');
     if (!tenantId) {

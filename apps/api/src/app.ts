@@ -126,7 +126,7 @@ export function createApp(deps: AppDeps) {
   app.use('/api/v1/api-keys/*', requireScope('keys:manage'));
   app.route('/api/v1/api-keys', apiKeyRoutes());
 
-  // Auth introspection — replaces the CLI's billing-subscription probe
+  // Auth introspection endpoint — see apps/api/src/routes/auth.ts
   app.route('/api/v1/auth', authRoutes());
 
   // WebSocket token endpoint
