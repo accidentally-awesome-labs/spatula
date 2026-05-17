@@ -503,7 +503,16 @@
         }
       },
       "policies": {},
-      "checkConstraints": {},
+      "checkConstraints": {
+        "content_at_least_one": {
+          "name": "content_at_least_one",
+          "value": "\"content\" IS NOT NULL OR \"binary_content\" IS NOT NULL"
+        },
+        "content_not_both": {
+          "name": "content_not_both",
+          "value": "NOT (\"content\" IS NOT NULL AND \"binary_content\" IS NOT NULL)"
+        }
+      },
       "isRLSEnabled": false
     },
     "public.crawl_tasks": {

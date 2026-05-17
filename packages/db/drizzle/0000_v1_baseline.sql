@@ -275,4 +275,7 @@ CREATE INDEX "source_trust_tenant_idx" ON "source_trust" USING btree ("tenant_id
 CREATE INDEX "idx_llm_usage_tenant_time" ON "llm_usage" USING btree ("tenant_id","created_at");--> statement-breakpoint
 CREATE INDEX "idx_llm_usage_job" ON "llm_usage" USING btree ("job_id") WHERE job_id IS NOT NULL;--> statement-breakpoint
 CREATE INDEX "idx_user_tenants_user" ON "user_tenants" USING btree ("user_id");--> statement-breakpoint
-CREATE UNIQUE INDEX "idx_user_tenants_owner" ON "user_tenants" USING btree ("user_id") WHERE role = 'owner';
+CREATE UNIQUE INDEX "idx_user_tenants_owner" ON "user_tenants" USING btree ("user_id") WHERE role = 'owner';--> statement-breakpoint
+-- content_store CHECK constraints (carried forward from 0001_good_shotgun; not modeled in Drizzle TS so drizzle-kit doesn't regenerate them automatically). See packages/db/src/schema/content.ts for the documented invariant.
+ALTER TABLE "content_store" ADD CONSTRAINT "content_at_least_one" CHECK ("content" IS NOT NULL OR "binary_content" IS NOT NULL);--> statement-breakpoint
+ALTER TABLE "content_store" ADD CONSTRAINT "content_not_both" CHECK (NOT ("content" IS NOT NULL AND "binary_content" IS NOT NULL));
