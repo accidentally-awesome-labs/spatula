@@ -40,8 +40,6 @@ export { AuditLogRepository } from './repositories/audit-log-repository.js';
 export type { AuditLogEntry } from './repositories/audit-log-repository.js';
 export { LlmUsageRepository } from './repositories/llm-usage-repository.js';
 export type { LlmUsageInput, UsageAggregation } from './repositories/llm-usage-repository.js';
-export { UsageRecordRepository } from './repositories/usage-record-repository.js';
-export type { UsageRecord, DimensionUsage } from './repositories/usage-record-repository.js';
 
 // Content Store
 export { PgContentStore } from './content-store/pg-content-store.js';
