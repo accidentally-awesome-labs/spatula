@@ -138,8 +138,8 @@ describe('remote add (integration)', () => {
     mockFetchSequence([
       // health check
       { ok: true, data: { status: 'ok' } },
-      // subscription/auth check
-      { ok: true, data: { data: { plan: 'pro', usage: {} } } },
+      // auth check — /api/v1/auth/me returns top-level fields (no { data } envelope)
+      { ok: true, data: { tenantId: 'tenant-prod', scopes: ['jobs:read', 'jobs:write'], subject: 'user-1', authenticated: true } },
     ]);
 
     const result = await runRemoteAdd({
@@ -149,7 +149,8 @@ describe('remote add (integration)', () => {
     });
 
     expect(result.success).toBe(true);
-    expect(result.plan).toBe('pro');
+    expect(result.tenantId).toBe('tenant-prod');
+    expect(result.scopes).toEqual(['jobs:read', 'jobs:write']);
     expect(mockSaveGlobalConfig).toHaveBeenCalledTimes(1);
 
     const savedConfig = mockSaveGlobalConfig.mock.calls[0][0] as GlobalConfig;

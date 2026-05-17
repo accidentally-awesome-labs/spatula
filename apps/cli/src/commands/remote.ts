@@ -14,7 +14,8 @@ export interface RemoteAddInput {
 
 export interface RemoteAddResult {
   success: boolean;
-  plan?: string;
+  tenantId?: string;
+  scopes?: string[];
   error?: string;
 }
 
@@ -71,10 +72,12 @@ export async function runRemoteAdd(input: RemoteAddInput): Promise<RemoteAddResu
     return { success: false, error: `Server health check failed for ${url}` };
   }
 
-  let plan: string | undefined;
+  let tenantId: string | undefined;
+  let scopes: string[] | undefined;
   try {
-    const sub = await client.getSubscription();
-    plan = sub.plan as string | undefined;
+    const me = await client.getAuthMe();
+    tenantId = me.tenantId;
+    scopes = me.scopes;
   } catch {
     return { success: false, error: `Authentication failed — check your API key (auth verification failed)` };
   }
@@ -89,7 +92,7 @@ export async function runRemoteAdd(input: RemoteAddInput): Promise<RemoteAddResu
   };
   saveGlobalConfig(updated);
 
-  return { success: true, plan };
+  return { success: true, tenantId, scopes };
 }
 
 // ---------------------------------------------------------------------------
@@ -268,7 +271,8 @@ export async function handleRemoteCommand(argv: RemoteCommandArgs): Promise<void
     }
     const result = await runRemoteAdd({ name, url, apiKey });
     if (result.success) {
-      console.log(`\n  Remote "${name}" added (plan: ${result.plan ?? 'unknown'}).`);
+      const tenantSuffix = result.tenantId ? ` (tenant: ${result.tenantId})` : '';
+      console.log(`\n  Remote "${name}" added${tenantSuffix}.`);
     } else {
       console.error(`\n  Error: ${result.error}`);
       process.exit(1);

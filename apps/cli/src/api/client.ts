@@ -273,11 +273,54 @@ export class SpatulaApiClient {
   }
 
   // -----------------------------------------------------------------------
-  // Billing (for remote verification)
+  // Auth introspection (for remote verification)
   // -----------------------------------------------------------------------
 
-  async getSubscription(): Promise<Record<string, unknown>> {
-    return this.get('/api/v1/billing/subscription');
+  /**
+   * Verify the configured API key by hitting GET /api/v1/auth/me.
+   * Returns the authenticated tenant + scopes. A non-200 response is normalized
+   * to an ApiError so callers can branch on .status / .code.
+   *
+   * Replaces the pre-carve billing-subscription probe.
+   */
+  async getAuthMe(): Promise<{
+    tenantId: string;
+    scopes: string[];
+    subject: string | null;
+    authenticated: true;
+  }> {
+    const url = this.buildUrl('/api/v1/auth/me');
+
+    let response: Response;
+    try {
+      response = await fetch(url, { method: 'GET', headers: this.headers() });
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Unknown network error';
+      throw new ApiError(0, 'NETWORK_ERROR', message);
+    }
+
+    if (!response.ok) {
+      let code: string | undefined;
+      let message = `HTTP ${response.status}`;
+      try {
+        const errorBody = (await response.json()) as Record<string, unknown>;
+        const err = errorBody?.error as Record<string, unknown> | undefined;
+        if (err) {
+          code = err.code as string | undefined;
+          message = (err.message as string) ?? message;
+        }
+      } catch {
+        // Response body was not valid JSON
+      }
+      throw new ApiError(response.status, code, message);
+    }
+
+    return response.json() as Promise<{
+      tenantId: string;
+      scopes: string[];
+      subject: string | null;
+      authenticated: true;
+    }>;
   }
 
   // -----------------------------------------------------------------------

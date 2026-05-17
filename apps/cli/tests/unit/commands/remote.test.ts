@@ -56,7 +56,8 @@ describe('runRemoteAdd', () => {
   it('saves remote config after verifying health and auth', async () => {
     mockFetchSequence([
       { ok: true, data: { status: 'ok' } },
-      { ok: true, data: { data: { plan: 'starter', usage: {} } } },
+      // /api/v1/auth/me returns top-level fields (no { data } envelope)
+      { ok: true, data: { tenantId: 'tenant-prod', scopes: ['jobs:read', 'jobs:write'], subject: 'user-1', authenticated: true } },
     ]);
     const result = await runRemoteAdd({
       name: 'prod',
@@ -64,7 +65,8 @@ describe('runRemoteAdd', () => {
       apiKey: 'sk_live_abc',
     });
     expect(result.success).toBe(true);
-    expect(result.plan).toBe('starter');
+    expect(result.tenantId).toBe('tenant-prod');
+    expect(result.scopes).toEqual(['jobs:read', 'jobs:write']);
     expect(mockSaveGlobalConfig).toHaveBeenCalledTimes(1);
     const savedConfig = mockSaveGlobalConfig.mock.calls[0][0] as GlobalConfig;
     expect(savedConfig.remotes?.prod?.url).toBe('https://api.spatula.dev');
