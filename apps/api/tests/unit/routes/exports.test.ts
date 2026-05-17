@@ -204,52 +204,23 @@ describe('Export routes', () => {
     });
   });
 
-  describe('export format billing restriction', () => {
-    it('returns 403 when format is restricted by billing tier', async () => {
-      (deps as any).quotaEnforcer = {
-        isExportFormatAllowed: vi.fn().mockReturnValue(false),
-      };
-      (deps as any).tenantRepo = {
-        findById: vi.fn().mockResolvedValue({ id: TENANT_ID, plan: 'free' }),
-      };
-
-      const restrictedApp = createTestApp(deps);
-      const res = await restrictedApp.request('/api/v1/jobs/job-1/export', {
-        method: 'POST',
-        headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ format: 'parquet', includeProvenance: false }),
-      });
-      expect(res.status).toBe(403);
-      const body = await res.json() as any;
-      expect(body.error.code).toBe('EXPORT_FORMAT_RESTRICTED');
-    });
-
-    it('allows export when format is permitted by tier', async () => {
-      (deps as any).quotaEnforcer = {
-        isExportFormatAllowed: vi.fn().mockReturnValue(true),
-      };
-      (deps as any).tenantRepo = {
-        findById: vi.fn().mockResolvedValue({ id: TENANT_ID, plan: 'pro' }),
-      };
-
-      const allowedApp = createTestApp(deps);
-      const res = await allowedApp.request('/api/v1/jobs/job-1/export', {
-        method: 'POST',
-        headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ format: 'json', includeProvenance: false }),
-      });
-      // Should proceed to create export (202)
-      expect(res.status).toBe(202);
-    });
-
-    it('skips format check when quotaEnforcer is not available', async () => {
-      // deps has no quotaEnforcer by default
+  describe('export format availability (post-carveout: no plan gating)', () => {
+    it('allows parquet export for any tenant (billing gating removed)', async () => {
       const res = await app.request('/api/v1/jobs/job-1/export', {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
         body: JSON.stringify({ format: 'parquet', includeProvenance: false }),
       });
-      // Should proceed without billing check (202)
+      // All formats now available — no billing tier check
+      expect(res.status).toBe(202);
+    });
+
+    it('allows json export for any tenant', async () => {
+      const res = await app.request('/api/v1/jobs/job-1/export', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ format: 'json', includeProvenance: false }),
+      });
       expect(res.status).toBe(202);
     });
   });
