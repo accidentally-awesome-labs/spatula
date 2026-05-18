@@ -17,5 +17,3 @@
 -CREATE INDEX idx_usage_tenant_period ON public.usage_records USING btree (tenant_id, period_start, dimension);
 -CREATE TABLE public.usage_records (
 -CREATE UNIQUE INDEX idx_tenants_stripe_customer ON public.tenants USING btree (stripe_customer_id);
-+    created_at timestamp with time zone DEFAULT now() NOT NULL,
-+    quotas jsonb DEFAULT '{"maxStorageMb": 1000, "maxPagesPerJob": 5000, "maxConcurrentJobs": 2, "maxEntitiesPerExport": 50000}'::jsonb NOT NULL,
