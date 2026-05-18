@@ -3,7 +3,10 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 // Use vi.doMock (not vi.mock) so mocks survive vi.resetModules()
 // Each test re-imports modules dynamically to test env var handling
 
-describe('createDatabasePool', () => {
+// First-load of pg + drizzle on cold CI runners can push createDatabasePool
+// past vitest's 5s default; bumping to 30s mirrors the queue/db exports.test
+// timeout pattern.
+describe('createDatabasePool', { timeout: 30_000 }, () => {
   beforeEach(() => {
     vi.resetModules();
     vi.clearAllMocks();

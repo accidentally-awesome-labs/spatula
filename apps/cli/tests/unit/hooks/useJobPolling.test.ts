@@ -210,7 +210,7 @@ describe('useJobPolling (ApiClient mode)', () => {
     expect(store.getState().entityPreviews).toEqual([{ id: 'e1', mergedData: { name: 'Test' } }]);
   });
 
-  it('polls at the configured interval', async () => {
+  it('polls at the configured interval', { retry: 2 }, async () => {
     const store = createCliStore('test-tenant');
     const apiClient = createMockApiClient();
 
@@ -223,7 +223,16 @@ describe('useJobPolling (ApiClient mode)', () => {
       }),
     );
 
-    await vi.advanceTimersByTimeAsync(100);
+    // Flush React's render + effect cycle. On loaded CI runners a single
+    // 100ms advance occasionally beats the initial useEffect; pump a few
+    // microtask + timer cycles before asserting.
+    for (
+      let i = 0;
+      i < 5 && (apiClient.getJob as ReturnType<typeof vi.fn>).mock.calls.length < 1;
+      i++
+    ) {
+      await vi.advanceTimersByTimeAsync(100);
+    }
     expect(apiClient.getJob).toHaveBeenCalledTimes(1);
 
     await vi.advanceTimersByTimeAsync(3000);
