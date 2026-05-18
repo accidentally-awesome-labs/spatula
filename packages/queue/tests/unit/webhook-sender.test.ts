@@ -7,7 +7,10 @@ vi.stubGlobal('fetch', mockFetch);
 
 vi.mock('@spatula/shared', async (importOriginal) => {
   const actual = await importOriginal<typeof import('@spatula/shared')>();
-  return { ...actual, createLogger: () => ({ debug: vi.fn(), info: vi.fn(), warn: vi.fn(), error: vi.fn() }) };
+  return {
+    ...actual,
+    createLogger: () => ({ debug: vi.fn(), info: vi.fn(), warn: vi.fn(), error: vi.fn() }),
+  };
 });
 
 function makeEvent(overrides?: Partial<WebhookEvent>): WebhookEvent {
@@ -63,15 +66,17 @@ describe('WebhookSender', () => {
   it('throws on non-2xx response', async () => {
     mockFetch.mockResolvedValue({ ok: false, status: 500, statusText: 'Internal Server Error' });
 
-    await expect(sender.send('https://example.com/webhook', makeEvent()))
-      .rejects.toThrow('Webhook delivery failed: 500');
+    await expect(sender.send('https://example.com/webhook', makeEvent())).rejects.toThrow(
+      'Webhook delivery failed: 500',
+    );
   });
 
   it('throws on network failure', async () => {
     mockFetch.mockRejectedValue(new Error('ECONNREFUSED'));
 
-    await expect(sender.send('https://example.com/webhook', makeEvent()))
-      .rejects.toThrow('ECONNREFUSED');
+    await expect(sender.send('https://example.com/webhook', makeEvent())).rejects.toThrow(
+      'ECONNREFUSED',
+    );
   });
 
   it('uses AbortSignal for timeout', async () => {

@@ -72,7 +72,10 @@ function assertColumnParity(
 
   // Known local extensions must exist in SQLite
   for (const ext of extensions) {
-    expect(sqliteCols.has(ext), `${label}: expected local extension '${ext}' missing in SQLite`).toBe(true);
+    expect(
+      sqliteCols.has(ext),
+      `${label}: expected local extension '${ext}' missing in SQLite`,
+    ).toBe(true);
   }
 }
 
@@ -156,13 +159,23 @@ describe('SQLite ↔ Postgres column parity', () => {
       exclude: string[];
     }> = [
       { label: 'pages', pg: rawPages, sqlite: sqlitePages, exclude: ['tenantId'] },
-      { label: 'schemasTable', pg: pgSchemasTable, sqlite: sqliteSchemasTable, exclude: ['tenantId'] },
+      {
+        label: 'schemasTable',
+        pg: pgSchemasTable,
+        sqlite: sqliteSchemasTable,
+        exclude: ['tenantId'],
+      },
       { label: 'crawlTasks', pg: pgCrawlTasks, sqlite: sqliteCrawlTasks, exclude: ['tenantId'] },
       { label: 'entities', pg: pgEntities, sqlite: sqliteEntities, exclude: ['tenantId'] },
       { label: 'entitySources', pg: pgEntitySources, sqlite: sqliteEntitySources, exclude: [] },
       { label: 'extractions', pg: pgExtractions, sqlite: sqliteExtractions, exclude: ['tenantId'] },
       { label: 'actions', pg: pgActions, sqlite: sqliteActions, exclude: ['tenantId'] },
-      { label: 'sourceTrust', pg: pgSourceTrust, sqlite: sqliteSourceTrust, exclude: ['tenantId', 'reasoning'] },
+      {
+        label: 'sourceTrust',
+        pg: pgSourceTrust,
+        sqlite: sqliteSourceTrust,
+        exclude: ['tenantId', 'reasoning'],
+      },
     ];
 
     const missing: string[] = [];
@@ -214,11 +227,7 @@ describe('SQLite DB initialization', () => {
   });
 
   it('project_meta contains project_id after initialization', () => {
-    const row = result.db
-      .select()
-      .from(projectMeta)
-      .where(eq(projectMeta.key, 'project_id'))
-      .get();
+    const row = result.db.select().from(projectMeta).where(eq(projectMeta.key, 'project_id')).get();
 
     expect(row).toBeDefined();
     expect(row!.key).toBe('project_id');
@@ -237,11 +246,7 @@ describe('SQLite DB initialization', () => {
   });
 
   it('project_meta contains created_at after initialization', () => {
-    const row = result.db
-      .select()
-      .from(projectMeta)
-      .where(eq(projectMeta.key, 'created_at'))
-      .get();
+    const row = result.db.select().from(projectMeta).where(eq(projectMeta.key, 'created_at')).get();
 
     expect(row).toBeDefined();
     expect(row!.value).toMatch(/^\d{4}-\d{2}-\d{2}T/); // ISO 8601
@@ -268,10 +273,7 @@ describe('Drizzle ORM round-trip', () => {
   });
 
   it('insert and read back from projectMeta', () => {
-    result.db
-      .insert(projectMeta)
-      .values({ key: 'custom_setting', value: 'hello world' })
-      .run();
+    result.db.insert(projectMeta).values({ key: 'custom_setting', value: 'hello world' }).run();
 
     const row = result.db
       .select()
@@ -302,11 +304,7 @@ describe('Drizzle ORM round-trip', () => {
       })
       .run();
 
-    const row = result.db
-      .select()
-      .from(runs)
-      .where(eq(runs.id, 'run-001'))
-      .get();
+    const row = result.db.select().from(runs).where(eq(runs.id, 'run-001')).get();
 
     expect(row).toBeDefined();
     expect(row!.id).toBe('run-001');
@@ -316,15 +314,13 @@ describe('Drizzle ORM round-trip', () => {
     // JSON round-trip: text({ mode: 'json' }) should serialize/deserialize
     expect(row!.configSnapshot).toEqual(configSnapshot);
     expect((row!.configSnapshot as Record<string, unknown>).maxDepth).toBe(3);
-    expect((row!.configSnapshot as Record<string, unknown>).seedUrls).toEqual(['https://example.com']);
+    expect((row!.configSnapshot as Record<string, unknown>).seedUrls).toEqual([
+      'https://example.com',
+    ]);
   });
 
   it('runs default counters are correct', () => {
-    const row = result.db
-      .select()
-      .from(runs)
-      .where(eq(runs.id, 'run-001'))
-      .get();
+    const row = result.db.select().from(runs).where(eq(runs.id, 'run-001')).get();
 
     expect(row).toBeDefined();
     expect(row!.pagesCrawled).toBe(0);

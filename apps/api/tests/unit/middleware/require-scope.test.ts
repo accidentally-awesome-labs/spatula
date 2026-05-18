@@ -6,9 +6,12 @@ import { ForbiddenError } from '@spatula/shared';
 function createTestApp(requiredScope: string) {
   const app = new Hono();
   app.use('*', async (c, next) => {
-    c.set('auth', c.req.header('x-test-scopes')
-      ? { tenantId: 't', userId: 'u', scopes: JSON.parse(c.req.header('x-test-scopes')!) }
-      : undefined);
+    c.set(
+      'auth',
+      c.req.header('x-test-scopes')
+        ? { tenantId: 't', userId: 'u', scopes: JSON.parse(c.req.header('x-test-scopes')!) }
+        : undefined,
+    );
     return next();
   });
   app.use('*', requireScope(requiredScope));

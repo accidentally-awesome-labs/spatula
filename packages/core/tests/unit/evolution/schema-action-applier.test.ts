@@ -565,11 +565,7 @@ describe('applySchemaActions', () => {
   });
 
   it('group_fields: handles partial matches (only some source fields exist)', () => {
-    const schema = makeSchema([
-      makeField('name'),
-      makeField('street'),
-      makeField('price'),
-    ]);
+    const schema = makeSchema([makeField('name'), makeField('street'), makeField('price')]);
 
     const action: PipelineAction = {
       ...baseAction(),
@@ -681,10 +677,10 @@ describe('applySchemaActions', () => {
 
   it('group_fields: non-contiguous source fields are grouped correctly', () => {
     const schema = makeSchema([
-      makeField('alpha'),   // position 0 — source
-      makeField('beta'),    // position 1 — non-source
-      makeField('gamma'),   // position 2 — source
-      makeField('delta'),   // position 3 — non-source
+      makeField('alpha'), // position 0 — source
+      makeField('beta'), // position 1 — non-source
+      makeField('gamma'), // position 2 — source
+      makeField('delta'), // position 3 — non-source
       makeField('epsilon'), // position 4 — source
     ]);
 
@@ -712,11 +708,7 @@ describe('applySchemaActions', () => {
   });
 
   it('group_fields: unmapped source field keeps its original name', () => {
-    const schema = makeSchema([
-      makeField('street'),
-      makeField('city'),
-      makeField('zip'),
-    ]);
+    const schema = makeSchema([makeField('street'), makeField('city'), makeField('zip')]);
 
     const action: PipelineAction = {
       ...baseAction(),
@@ -736,7 +728,11 @@ describe('applySchemaActions', () => {
 
     const addressField = result.fields.find((f) => f.name === 'address')!;
     expect(addressField.objectFields).toHaveLength(3);
-    expect(addressField.objectFields!.map((f) => f.name)).toEqual(['streetName', 'cityName', 'zip']);
+    expect(addressField.objectFields!.map((f) => f.name)).toEqual([
+      'streetName',
+      'cityName',
+      'zip',
+    ]);
   });
 
   // --- immutability ---

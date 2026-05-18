@@ -14,31 +14,32 @@
 
 ### New files
 
-| File | Responsibility |
-|------|---------------|
-| `apps/cli/tests/e2e/tier5/tier5b/helpers.ts` | `createApiKeyDirectly()`, `bearerHeaders()`, `setupAuthContext()`, `setupTenantPair()`, `minimalJobBody()` |
-| `apps/cli/tests/e2e/tier5/tier5b/auth-and-scopes.test.ts` | Tests 1–8: API key CRUD, valid/revoked/malformed auth, scope enforcement |
-| `apps/cli/tests/e2e/tier5/tier5b/multi-tenant.test.ts` | Tests 9–11: Tenant A invisible to B, cross-tenant job/action 404 |
-| `apps/cli/tests/e2e/tier5/tier5b/cors.test.ts` | Tests 12–14: Preflight allowed/disallowed origin, exposed headers |
-| `apps/cli/tests/e2e/tier5/tier5b/idempotency.test.ts` | Tests 15–18: POST cache, replay, different body, DELETE bypass |
-| `apps/cli/tests/e2e/tier5/tier5b/rate-limiting.test.ts` | Tests 19–20: 61st request → 429, per-tenant independence |
-| `apps/cli/tests/e2e/tier5/tier5b/error-consistency.test.ts` | Tests 21–25: 400/404/409/500 format, wrong Content-Type |
-| `apps/cli/tests/e2e/tier5/tier5b/pagination-and-headers.test.ts` | Tests 26–29: Zero/negative limit, large offset, security headers, X-Request-Id |
-| `apps/cli/tests/e2e/tier5/tier5b/audit-and-validation.test.ts` | Tests 30–33: Auth audit events, tenant header validation, OpenAPI spec |
+| File                                                             | Responsibility                                                                                             |
+| ---------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------- |
+| `apps/cli/tests/e2e/tier5/tier5b/helpers.ts`                     | `createApiKeyDirectly()`, `bearerHeaders()`, `setupAuthContext()`, `setupTenantPair()`, `minimalJobBody()` |
+| `apps/cli/tests/e2e/tier5/tier5b/auth-and-scopes.test.ts`        | Tests 1–8: API key CRUD, valid/revoked/malformed auth, scope enforcement                                   |
+| `apps/cli/tests/e2e/tier5/tier5b/multi-tenant.test.ts`           | Tests 9–11: Tenant A invisible to B, cross-tenant job/action 404                                           |
+| `apps/cli/tests/e2e/tier5/tier5b/cors.test.ts`                   | Tests 12–14: Preflight allowed/disallowed origin, exposed headers                                          |
+| `apps/cli/tests/e2e/tier5/tier5b/idempotency.test.ts`            | Tests 15–18: POST cache, replay, different body, DELETE bypass                                             |
+| `apps/cli/tests/e2e/tier5/tier5b/rate-limiting.test.ts`          | Tests 19–20: 61st request → 429, per-tenant independence                                                   |
+| `apps/cli/tests/e2e/tier5/tier5b/error-consistency.test.ts`      | Tests 21–25: 400/404/409/500 format, wrong Content-Type                                                    |
+| `apps/cli/tests/e2e/tier5/tier5b/pagination-and-headers.test.ts` | Tests 26–29: Zero/negative limit, large offset, security headers, X-Request-Id                             |
+| `apps/cli/tests/e2e/tier5/tier5b/audit-and-validation.test.ts`   | Tests 30–33: Auth audit events, tenant header validation, OpenAPI spec                                     |
 
 ### Modified files
 
-| File | Change |
-|------|--------|
+| File                                  | Change                                                                                          |
+| ------------------------------------- | ----------------------------------------------------------------------------------------------- |
 | `apps/cli/tests/e2e/tier4/helpers.ts` | Accept optional `authStrategy` param in `createTestApp()`, expose `repos`, create `AuditLogger` |
-| `apps/cli/scripts/tier-registry.ts` | Add `5b` and `5` tier definitions |
-| `apps/cli/package.json` | Add `test:tier5b` and `test:tier5` scripts |
+| `apps/cli/scripts/tier-registry.ts`   | Add `5b` and `5` tier definitions                                                               |
+| `apps/cli/package.json`               | Add `test:tier5b` and `test:tier5` scripts                                                      |
 
 ---
 
 ## Task 1: Modify Tier 4 helpers for auth strategy support
 
 **Files:**
+
 - Modify: `apps/cli/tests/e2e/tier4/helpers.ts`
 
 - [ ] **Step 1: Add `TestRepos` interface and extend `TestApp`**
@@ -160,6 +161,7 @@ git commit -m "feat: extend createTestApp with authStrategy param, repos, auditL
 ## Task 2: Create Tier 5B test helpers
 
 **Files:**
+
 - Create: `apps/cli/tests/e2e/tier5/tier5b/helpers.ts`
 
 - [ ] **Step 1: Write the helpers file**
@@ -205,13 +207,16 @@ export async function createApiKeyDirectly(
   const prefix = raw.slice(0, 12);
 
   const { apiKeys } = await import('@spatula/db/dist/schema/index.js');
-  const [row] = await db.insert(apiKeys).values({
-    tenantId,
-    keyHash: hash,
-    keyPrefix: prefix,
-    name,
-    scopes,
-  }).returning({ id: apiKeys.id });
+  const [row] = await db
+    .insert(apiKeys)
+    .values({
+      tenantId,
+      keyHash: hash,
+      keyPrefix: prefix,
+      name,
+      scopes,
+    })
+    .returning({ id: apiKeys.id });
 
   return { rawKey: raw, keyId: row.id };
 }
@@ -320,6 +325,7 @@ git commit -m "feat: add Tier 5B test helpers for API key auth"
 ## Task 3: Update tier registry and package.json
 
 **Files:**
+
 - Modify: `apps/cli/scripts/tier-registry.ts`
 - Modify: `apps/cli/package.json`
 
@@ -365,6 +371,7 @@ git commit -m "feat: register Tier 5B and Tier 5 in tier registry"
 ## Task 4: Auth & scope enforcement tests (Tests 1–8)
 
 **Files:**
+
 - Create: `apps/cli/tests/e2e/tier5/tier5b/auth-and-scopes.test.ts`
 
 - [ ] **Step 1: Write the test file**
@@ -471,7 +478,12 @@ describe('Tier 5B: API Key Authentication & Scope Enforcement', () => {
   // ── Test 6: Key with jobs:read → POST jobs rejected → 403 ─────────
   it('rejects POST with jobs:read-only scope', async (t) => {
     if (!dbAvailable) return t.skip();
-    const { rawKey } = await createApiKeyDirectly(ctx.db, ctx.tenantId, ['jobs:read'], 'read-only-2');
+    const { rawKey } = await createApiKeyDirectly(
+      ctx.db,
+      ctx.tenantId,
+      ['jobs:read'],
+      'read-only-2',
+    );
     const res = await ctx.app.request('/api/v1/jobs', {
       method: 'POST',
       headers: bearerHeaders(rawKey),
@@ -545,18 +557,14 @@ git commit -m "test: add API key auth and scope enforcement tests (Tier 5B, test
 ## Task 5: Multi-tenant isolation tests (Tests 9–11)
 
 **Files:**
+
 - Create: `apps/cli/tests/e2e/tier5/tier5b/multi-tenant.test.ts`
 
 - [ ] **Step 1: Write the test file**
 
 ```typescript
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
-import {
-  setupTenantPair,
-  bearerHeaders,
-  minimalJobBody,
-  type AuthTestContext,
-} from './helpers.js';
+import { setupTenantPair, bearerHeaders, minimalJobBody, type AuthTestContext } from './helpers.js';
 
 describe('Tier 5B: Multi-Tenant Isolation', () => {
   let ctx: AuthTestContext;
@@ -612,26 +620,26 @@ describe('Tier 5B: Multi-Tenant Isolation', () => {
     // Insert an action for tenant A's job directly via DB
     // Note: actions table requires source, confidence, reasoning (NOT NULL columns)
     const { actions } = await import('@spatula/db/dist/schema/index.js');
-    const [action] = await ctx.db.insert(actions).values({
-      jobId: tenantAJobId,
-      tenantId: ctx.tenantId,
-      type: 'add_field',
-      status: 'pending_review',
-      payload: { field: 'test', reason: 'test action' },
-      source: 'schema_evolution',
-      confidence: 0.9,
-      reasoning: 'test action for multi-tenant isolation',
-    }).returning({ id: actions.id });
+    const [action] = await ctx.db
+      .insert(actions)
+      .values({
+        jobId: tenantAJobId,
+        tenantId: ctx.tenantId,
+        type: 'add_field',
+        status: 'pending_review',
+        payload: { field: 'test', reason: 'test action' },
+        source: 'schema_evolution',
+        confidence: 0.9,
+        reasoning: 'test action for multi-tenant isolation',
+      })
+      .returning({ id: actions.id });
 
     // Tenant B tries to approve tenant A's action
-    const res = await ctx.app.request(
-      `/api/v1/jobs/${tenantAJobId}/actions/${action.id}/approve`,
-      {
-        method: 'POST',
-        headers: bearerHeaders(tenantB.key),
-        body: JSON.stringify({}),
-      },
-    );
+    const res = await ctx.app.request(`/api/v1/jobs/${tenantAJobId}/actions/${action.id}/approve`, {
+      method: 'POST',
+      headers: bearerHeaders(tenantB.key),
+      body: JSON.stringify({}),
+    });
     expect(res.status).toBe(404);
   });
 });
@@ -654,6 +662,7 @@ git commit -m "test: add multi-tenant isolation tests (Tier 5B, tests 9-11)"
 ## Task 6: CORS tests (Tests 12–14)
 
 **Files:**
+
 - Create: `apps/cli/tests/e2e/tier5/tier5b/cors.test.ts`
 
 - [ ] **Step 1: Write the test file**
@@ -742,6 +751,7 @@ git commit -m "test: add CORS tests (Tier 5B, tests 12-14)"
 ## Task 7: Idempotency tests (Tests 15–18)
 
 **Files:**
+
 - Create: `apps/cli/tests/e2e/tier5/tier5b/idempotency.test.ts`
 
 - [ ] **Step 1: Write the test file**
@@ -750,7 +760,12 @@ Idempotency middleware: applies to POST/PATCH only, uses Redis (`idempotency:{te
 
 ```typescript
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
-import { setupAuthContext, bearerHeaders, minimalJobBody, type AuthTestContext } from './helpers.js';
+import {
+  setupAuthContext,
+  bearerHeaders,
+  minimalJobBody,
+  type AuthTestContext,
+} from './helpers.js';
 
 describe('Tier 5B: Idempotency', () => {
   let ctx: AuthTestContext;
@@ -871,6 +886,7 @@ git commit -m "test: add idempotency middleware tests (Tier 5B, tests 15-18)"
 ## Task 8: Rate limiting tests (Tests 19–20)
 
 **Files:**
+
 - Create: `apps/cli/tests/e2e/tier5/tier5b/rate-limiting.test.ts`
 
 - [ ] **Step 1: Write the test file**
@@ -971,6 +987,7 @@ git commit -m "test: add rate limiting tests (Tier 5B, tests 19-20)"
 ## Task 9: Error response consistency tests (Tests 21–25)
 
 **Files:**
+
 - Create: `apps/cli/tests/e2e/tier5/tier5b/error-consistency.test.ts`
 
 - [ ] **Step 1: Write the test file**
@@ -979,7 +996,12 @@ Error format: `{ error: { code: string, message: string, requestId?: string } }`
 
 ```typescript
 import { describe, it, expect, beforeAll, afterAll, vi } from 'vitest';
-import { setupAuthContext, bearerHeaders, minimalJobBody, type AuthTestContext } from './helpers.js';
+import {
+  setupAuthContext,
+  bearerHeaders,
+  minimalJobBody,
+  type AuthTestContext,
+} from './helpers.js';
 
 describe('Tier 5B: Error Response Consistency', () => {
   let ctx: AuthTestContext;
@@ -1069,9 +1091,9 @@ describe('Tier 5B: Error Response Consistency', () => {
 
     // Now spy on findById to throw — set up AFTER job creation to avoid
     // accidental consumption by unrelated middleware calls
-    const spy = vi.spyOn(ctx.repos.jobRepo, 'findById').mockRejectedValueOnce(
-      new Error('database exploded'),
-    );
+    const spy = vi
+      .spyOn(ctx.repos.jobRepo, 'findById')
+      .mockRejectedValueOnce(new Error('database exploded'));
 
     const res = await ctx.app.request(`/api/v1/jobs/${job.id}`, {
       headers: bearerHeaders(ctx.adminKey),
@@ -1120,6 +1142,7 @@ git commit -m "test: add error response consistency tests (Tier 5B, tests 21-25)
 ## Task 10: Pagination & headers tests (Tests 26–29)
 
 **Files:**
+
 - Create: `apps/cli/tests/e2e/tier5/tier5b/pagination-and-headers.test.ts`
 
 - [ ] **Step 1: Write the test file**
@@ -1206,6 +1229,7 @@ git commit -m "test: add pagination edge case and security header tests (Tier 5B
 ## Task 11: Audit logging, tenant validation & OpenAPI tests (Tests 30–33)
 
 **Files:**
+
 - Create: `apps/cli/tests/e2e/tier5/tier5b/audit-and-validation.test.ts`
 
 - [ ] **Step 1: Write the test file**
@@ -1215,11 +1239,7 @@ Audit events are written asynchronously via `setImmediate()`. Tests wait 100ms a
 ```typescript
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { createTestApp, createTenant } from '../../tier4/helpers.js';
-import {
-  setupAuthContext,
-  bearerHeaders,
-  type AuthTestContext,
-} from './helpers.js';
+import { setupAuthContext, bearerHeaders, type AuthTestContext } from './helpers.js';
 
 /** Small delay to let async audit writes complete (setImmediate-based). */
 const waitForAudit = () => new Promise((resolve) => setTimeout(resolve, 150));
@@ -1266,7 +1286,10 @@ describe('Tier 5B: Audit Logging, Tenant Validation & OpenAPI', () => {
 
     // Make a request with an invalid token
     await ctx.app.request('/api/v1/jobs', {
-      headers: { Authorization: 'Bearer invalid-key-for-audit', 'Content-Type': 'application/json' },
+      headers: {
+        Authorization: 'Bearer invalid-key-for-audit',
+        'Content-Type': 'application/json',
+      },
     });
     await waitForAudit();
 
@@ -1278,10 +1301,7 @@ describe('Tier 5B: Audit Logging, Tenant Validation & OpenAPI', () => {
     const failures = await ctx.db
       .select()
       .from(auditLog)
-      .where(and(
-        eq(auditLog.action, 'auth.login_failure'),
-        gte(auditLog.createdAt, before),
-      ))
+      .where(and(eq(auditLog.action, 'auth.login_failure'), gte(auditLog.createdAt, before)))
       .limit(10);
     expect(failures.length).toBeGreaterThan(0);
     expect(failures[0].action).toBe('auth.login_failure');
@@ -1346,17 +1366,17 @@ git commit -m "test: add audit logging, tenant validation, and OpenAPI tests (Ti
 
 ## Test Summary
 
-| File | Tests | Needs Redis |
-|------|-------|-------------|
-| auth-and-scopes.test.ts | 8 | No |
-| multi-tenant.test.ts | 3 | No |
-| cors.test.ts | 3 | No |
-| idempotency.test.ts | 4 | Yes |
-| rate-limiting.test.ts | 2 | Yes |
-| error-consistency.test.ts | 5 | No |
-| pagination-and-headers.test.ts | 4 | No |
-| audit-and-validation.test.ts | 4 | No |
-| **Total** | **33** | |
+| File                           | Tests  | Needs Redis |
+| ------------------------------ | ------ | ----------- |
+| auth-and-scopes.test.ts        | 8      | No          |
+| multi-tenant.test.ts           | 3      | No          |
+| cors.test.ts                   | 3      | No          |
+| idempotency.test.ts            | 4      | Yes         |
+| rate-limiting.test.ts          | 2      | Yes         |
+| error-consistency.test.ts      | 5      | No          |
+| pagination-and-headers.test.ts | 4      | No          |
+| audit-and-validation.test.ts   | 4      | No          |
+| **Total**                      | **33** |             |
 
 ---
 

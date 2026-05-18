@@ -1,6 +1,9 @@
 import { describe, it, expect } from 'vitest';
 
-describe('package exports', () => {
+// Dynamic `import()` of the package barrel pulls in pg, drizzle, etc. —
+// first-load on a cold CI runner can exceed vitest's 5s default. Mirrors
+// the queue package's exports.test.ts timeout bump.
+describe('package exports', { timeout: 30_000 }, () => {
   it('exports connection factory', async () => {
     const mod = await import('../../src/index.js');
     expect(mod.createDatabase).toBeDefined();

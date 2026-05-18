@@ -5,7 +5,12 @@ export interface PipelineEvents {
   'entity:created': (entity: { id: string; jobId: string }) => void;
   'schema:evolved': (schema: { version: number; fields: unknown[] }) => void;
   'action:pending': (action: { id: string; type: string }) => void;
-  'progress': (stats: { pagesProcessed: number; totalPages: number; entitiesCreated: number; errors: number }) => void;
+  progress: (stats: {
+    pagesProcessed: number;
+    totalPages: number;
+    entitiesCreated: number;
+    errors: number;
+  }) => void;
 }
 
 export class PipelineEventEmitter extends EventEmitter {

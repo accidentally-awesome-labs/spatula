@@ -23,10 +23,16 @@ describe('Admin worker routes', () => {
 
   it('returns list of healthy workers', async () => {
     mockRedis.scan.mockResolvedValueOnce(['0', ['worker:heartbeat:host1-1234']]);
-    mockRedis.mget.mockResolvedValue([JSON.stringify({
-      workerId: 'host1-1234', queues: ['spatula.crawl'], pid: 1234,
-      uptime: 3600, activeJobs: 2, lastBeat: new Date().toISOString(),
-    })]);
+    mockRedis.mget.mockResolvedValue([
+      JSON.stringify({
+        workerId: 'host1-1234',
+        queues: ['spatula.crawl'],
+        pid: 1234,
+        uptime: 3600,
+        activeJobs: 2,
+        lastBeat: new Date().toISOString(),
+      }),
+    ]);
     const app = createTestApp(mockRedis);
     const res = await app.request('/api/v1/admin/workers');
     expect(res.status).toBe(200);

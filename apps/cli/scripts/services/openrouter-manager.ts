@@ -1,4 +1,10 @@
-import type { ServiceManager, ServiceStatus, ProvisionOpts, ServiceContext, ServiceHandle } from './service-manager.js';
+import type {
+  ServiceManager,
+  ServiceStatus,
+  ProvisionOpts,
+  ServiceContext,
+  ServiceHandle,
+} from './service-manager.js';
 
 export class OpenRouterManager implements ServiceManager {
   name = 'openrouter';

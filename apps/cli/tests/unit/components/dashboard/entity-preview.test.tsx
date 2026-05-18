@@ -16,9 +16,7 @@ describe('EntityPreview', () => {
   });
 
   it('shows categories for entities', () => {
-    const entities = [
-      { mergedData: { name: 'Acme Corp' }, categories: ['tech', 'startup'] },
-    ];
+    const entities = [{ mergedData: { name: 'Acme Corp' }, categories: ['tech', 'startup'] }];
     const { lastFrame } = render(<EntityPreview entities={entities} />);
     const frame = lastFrame()!;
     expect(frame).toContain('[tech, startup]');

@@ -44,9 +44,9 @@ pnpm --filter @spatula/api start
 
 ## What This Extracts
 
-| Field | Type | Example |
-|-------|------|---------|
-| `title` | string | "A Light in the Attic" |
-| `price` | currency | 51.77 |
-| `availability` | string | "In stock" |
-| `rating` | number | 3 |
+| Field          | Type     | Example                |
+| -------------- | -------- | ---------------------- |
+| `title`        | string   | "A Light in the Attic" |
+| `price`        | currency | 51.77                  |
+| `availability` | string   | "In stock"             |
+| `rating`       | number   | 3                      |

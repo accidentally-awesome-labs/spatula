@@ -142,9 +142,7 @@ You MUST respond with valid JSON in this exact format:
     history: ChatMessage[],
     userMessage: string,
   ): LLMCompletionRequest['messages'] {
-    const messages: LLMCompletionRequest['messages'] = [
-      { role: 'system', content: systemPrompt },
-    ];
+    const messages: LLMCompletionRequest['messages'] = [{ role: 'system', content: systemPrompt }];
 
     for (const msg of history) {
       if (msg.role === 'user' || msg.role === 'assistant') {

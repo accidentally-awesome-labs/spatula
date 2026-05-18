@@ -12,34 +12,35 @@
 
 ## File Map
 
-| File | Action | Responsibility |
-|------|--------|----------------|
-| `apps/api/src/middleware/validate-tenant.ts` | Modify | Add suspended tenant check |
-| `apps/api/src/routes/admin-dlq.ts` | Modify | Admin cross-tenant DLQ access |
-| `apps/api/src/routes/admin-tenants.ts` | Create | 3 admin tenant endpoints |
-| `apps/api/src/routes/admin-jobs.ts` | Create | 2 admin job endpoints |
-| `apps/api/src/routes/admin-system.ts` | Create | 2 admin system endpoints |
-| `apps/api/src/routes/admin-queues.ts` | Modify | Add cleanup+metering to Bull Board |
-| `apps/api/src/app.ts` | Modify | Register new admin routes |
-| `apps/api/src/types.ts` | No change | AppDeps already has all needed fields |
-| `packages/db/src/repositories/tenant-repository.ts` | Modify | Add `findAll`, `updateStatus` methods |
-| `packages/db/src/repositories/job-repository.ts` | Modify | Add `findAll` (cross-tenant) method |
-| `packages/queue/src/queues.ts` | Modify | Add `CLEANUP` queue name |
-| `packages/queue/src/cleanup-worker.ts` | Create | Daily cleanup processor |
-| `packages/queue/src/worker-entrypoint.ts` | Modify | Register cleanup worker |
-| `packages/queue/src/index.ts` | Modify | Export cleanup worker |
-| `apps/api/tests/unit/middleware/validate-tenant.test.ts` | Modify | Add suspended tests |
-| `apps/api/tests/unit/routes/admin-dlq.test.ts` | Modify | Add cross-tenant tests |
-| `apps/api/tests/unit/routes/admin-tenants.test.ts` | Create | Admin tenant route tests |
-| `apps/api/tests/unit/routes/admin-jobs.test.ts` | Create | Admin job route tests |
-| `apps/api/tests/unit/routes/admin-system.test.ts` | Create | Admin system route tests |
-| `packages/queue/tests/unit/cleanup-worker.test.ts` | Create | Cleanup worker tests |
+| File                                                     | Action    | Responsibility                        |
+| -------------------------------------------------------- | --------- | ------------------------------------- |
+| `apps/api/src/middleware/validate-tenant.ts`             | Modify    | Add suspended tenant check            |
+| `apps/api/src/routes/admin-dlq.ts`                       | Modify    | Admin cross-tenant DLQ access         |
+| `apps/api/src/routes/admin-tenants.ts`                   | Create    | 3 admin tenant endpoints              |
+| `apps/api/src/routes/admin-jobs.ts`                      | Create    | 2 admin job endpoints                 |
+| `apps/api/src/routes/admin-system.ts`                    | Create    | 2 admin system endpoints              |
+| `apps/api/src/routes/admin-queues.ts`                    | Modify    | Add cleanup+metering to Bull Board    |
+| `apps/api/src/app.ts`                                    | Modify    | Register new admin routes             |
+| `apps/api/src/types.ts`                                  | No change | AppDeps already has all needed fields |
+| `packages/db/src/repositories/tenant-repository.ts`      | Modify    | Add `findAll`, `updateStatus` methods |
+| `packages/db/src/repositories/job-repository.ts`         | Modify    | Add `findAll` (cross-tenant) method   |
+| `packages/queue/src/queues.ts`                           | Modify    | Add `CLEANUP` queue name              |
+| `packages/queue/src/cleanup-worker.ts`                   | Create    | Daily cleanup processor               |
+| `packages/queue/src/worker-entrypoint.ts`                | Modify    | Register cleanup worker               |
+| `packages/queue/src/index.ts`                            | Modify    | Export cleanup worker                 |
+| `apps/api/tests/unit/middleware/validate-tenant.test.ts` | Modify    | Add suspended tests                   |
+| `apps/api/tests/unit/routes/admin-dlq.test.ts`           | Modify    | Add cross-tenant tests                |
+| `apps/api/tests/unit/routes/admin-tenants.test.ts`       | Create    | Admin tenant route tests              |
+| `apps/api/tests/unit/routes/admin-jobs.test.ts`          | Create    | Admin job route tests                 |
+| `apps/api/tests/unit/routes/admin-system.test.ts`        | Create    | Admin system route tests              |
+| `packages/queue/tests/unit/cleanup-worker.test.ts`       | Create    | Cleanup worker tests                  |
 
 ---
 
 ## Task 1: Tenant Status Enforcement (validate-tenant middleware)
 
 **Files:**
+
 - Modify: `apps/api/src/middleware/validate-tenant.ts`
 - Modify: `apps/api/tests/unit/middleware/validate-tenant.test.ts`
 
@@ -157,6 +158,7 @@ git commit -m "feat(auth): enforce 403 for suspended tenants in validate-tenant 
 ## Task 2: Admin DLQ Cross-Tenant Access
 
 **Files:**
+
 - Modify: `apps/api/src/routes/admin-dlq.ts`
 - Modify: `apps/api/tests/unit/routes/admin-dlq.test.ts`
 
@@ -183,7 +185,11 @@ describe('admin cross-tenant DLQ access', () => {
   });
 
   it('returns entries from all tenants', async () => {
-    const otherTenantEntry = { ...SAMPLE_DLQ_ENTRY, id: 'dlq-2', tenantId: '00000000-0000-0000-0000-000000000099' };
+    const otherTenantEntry = {
+      ...SAMPLE_DLQ_ENTRY,
+      id: 'dlq-2',
+      tenantId: '00000000-0000-0000-0000-000000000099',
+    };
     const deps = createMockDeps({
       dlqRepo: {
         findUnresolved: vi.fn().mockResolvedValue([SAMPLE_DLQ_ENTRY, otherTenantEntry]),
@@ -242,7 +248,8 @@ export function adminDlqRoutes() {
   // Admin-scoped callers see all tenants; others see only their own.
   app.get('/', async (c) => {
     const deps = c.get('deps');
-    if (!deps.dlqRepo) return c.json({ error: { code: 'NOT_CONFIGURED', message: 'DLQ not configured' } }, 503);
+    if (!deps.dlqRepo)
+      return c.json({ error: { code: 'NOT_CONFIGURED', message: 'DLQ not configured' } }, 503);
 
     const auth = c.get('auth') as AuthResult | undefined;
     const isAdmin = auth?.scopes.includes('admin') ?? false;
@@ -261,14 +268,16 @@ export function adminDlqRoutes() {
   // Get single DLQ entry — admins can access any tenant's entries
   app.get('/:id', async (c) => {
     const deps = c.get('deps');
-    if (!deps.dlqRepo) return c.json({ error: { code: 'NOT_CONFIGURED', message: 'DLQ not configured' } }, 503);
+    if (!deps.dlqRepo)
+      return c.json({ error: { code: 'NOT_CONFIGURED', message: 'DLQ not configured' } }, 503);
 
     const auth = c.get('auth') as AuthResult | undefined;
     const isAdmin = auth?.scopes.includes('admin') ?? false;
     const tenantId = isAdmin ? undefined : c.get('tenantId');
 
     const entry = await deps.dlqRepo.findById(c.req.param('id'), tenantId);
-    if (!entry) return c.json({ error: { code: 'NOT_FOUND', message: 'DLQ entry not found' } }, 404);
+    if (!entry)
+      return c.json({ error: { code: 'NOT_FOUND', message: 'DLQ entry not found' } }, 404);
 
     return c.json({ data: entry });
   });
@@ -276,15 +285,21 @@ export function adminDlqRoutes() {
   // Retry a DLQ entry
   app.post('/:id/retry', async (c) => {
     const deps = c.get('deps');
-    if (!deps.dlqRepo) return c.json({ error: { code: 'NOT_CONFIGURED', message: 'DLQ not configured' } }, 503);
+    if (!deps.dlqRepo)
+      return c.json({ error: { code: 'NOT_CONFIGURED', message: 'DLQ not configured' } }, 503);
 
     const auth = c.get('auth') as AuthResult | undefined;
     const isAdmin = auth?.scopes.includes('admin') ?? false;
     const tenantId = isAdmin ? undefined : c.get('tenantId');
 
     const entry = await deps.dlqRepo.findById(c.req.param('id'), tenantId);
-    if (!entry) return c.json({ error: { code: 'NOT_FOUND', message: 'DLQ entry not found' } }, 404);
-    if (entry.resolvedAt) return c.json({ error: { code: 'ALREADY_RESOLVED', message: 'Entry already resolved' } }, 409);
+    if (!entry)
+      return c.json({ error: { code: 'NOT_FOUND', message: 'DLQ entry not found' } }, 404);
+    if (entry.resolvedAt)
+      return c.json(
+        { error: { code: 'ALREADY_RESOLVED', message: 'Entry already resolved' } },
+        409,
+      );
 
     if (deps.queues) {
       const queueMap: Record<string, any> = {
@@ -306,15 +321,21 @@ export function adminDlqRoutes() {
   // Discard a DLQ entry
   app.post('/:id/discard', async (c) => {
     const deps = c.get('deps');
-    if (!deps.dlqRepo) return c.json({ error: { code: 'NOT_CONFIGURED', message: 'DLQ not configured' } }, 503);
+    if (!deps.dlqRepo)
+      return c.json({ error: { code: 'NOT_CONFIGURED', message: 'DLQ not configured' } }, 503);
 
     const auth = c.get('auth') as AuthResult | undefined;
     const isAdmin = auth?.scopes.includes('admin') ?? false;
     const tenantId = isAdmin ? undefined : c.get('tenantId');
 
     const entry = await deps.dlqRepo.findById(c.req.param('id'), tenantId);
-    if (!entry) return c.json({ error: { code: 'NOT_FOUND', message: 'DLQ entry not found' } }, 404);
-    if (entry.resolvedAt) return c.json({ error: { code: 'ALREADY_RESOLVED', message: 'Entry already resolved' } }, 409);
+    if (!entry)
+      return c.json({ error: { code: 'NOT_FOUND', message: 'DLQ entry not found' } }, 404);
+    if (entry.resolvedAt)
+      return c.json(
+        { error: { code: 'ALREADY_RESOLVED', message: 'Entry already resolved' } },
+        409,
+      );
 
     const resolved = await deps.dlqRepo.resolve(c.req.param('id'), 'discarded');
     return c.json({ data: resolved });
@@ -341,6 +362,7 @@ git commit -m "feat(admin): enable cross-tenant DLQ access for admin-scoped call
 ## Task 3: Tenant Repository Extensions
 
 **Files:**
+
 - Modify: `packages/db/src/repositories/tenant-repository.ts`
 - Modify: `packages/db/src/index.ts` (if new types need exporting)
 - Test: `packages/db/tests/unit/repositories/tenant-repository.test.ts` (create or extend)
@@ -358,13 +380,25 @@ import { TenantRepository } from '../../src/repositories/tenant-repository.js';
 // Use a mock db that captures queries for assertion
 function createMockDb() {
   const chain: any = {};
-  const methods = ['select', 'from', 'where', 'orderBy', 'limit', 'offset', 'update', 'set', 'returning'];
+  const methods = [
+    'select',
+    'from',
+    'where',
+    'orderBy',
+    'limit',
+    'offset',
+    'update',
+    'set',
+    'returning',
+  ];
   for (const m of methods) {
     chain[m] = vi.fn().mockReturnValue(chain);
   }
   // select().from().where().orderBy().limit().offset() → resolves to rows
   chain.offset = vi.fn().mockResolvedValue([]);
-  chain.returning = vi.fn().mockResolvedValue([{ id: 'tenant-1', name: 'Test', config: {}, plan: 'free' }]);
+  chain.returning = vi
+    .fn()
+    .mockResolvedValue([{ id: 'tenant-1', name: 'Test', config: {}, plan: 'free' }]);
   chain.select = vi.fn().mockReturnValue(chain);
   return chain;
 }
@@ -372,9 +406,11 @@ function createMockDb() {
 describe('TenantRepository.findAll', () => {
   it('returns paginated tenants with plan filter', async () => {
     const db = createMockDb();
-    db.offset = vi.fn().mockResolvedValue([
-      { id: 't1', name: 'Tenant 1', plan: 'free', config: {}, createdAt: new Date() },
-    ]);
+    db.offset = vi
+      .fn()
+      .mockResolvedValue([
+        { id: 't1', name: 'Tenant 1', plan: 'free', config: {}, createdAt: new Date() },
+      ]);
     const repo = new TenantRepository(db as any);
     const results = await repo.findAll({ plan: 'free', limit: 10, offset: 0 });
     expect(results).toHaveLength(1);
@@ -505,6 +541,7 @@ git commit -m "feat(db): add findAll and countAll methods to TenantRepository"
 ## Task 4: Job Repository Cross-Tenant Extension
 
 **Files:**
+
 - Modify: `packages/db/src/repositories/job-repository.ts`
 - Test: `packages/db/tests/unit/repositories/job-repository-admin.test.ts` (create)
 
@@ -520,7 +557,17 @@ import { JobRepository } from '../../src/repositories/job-repository.js';
 
 function createMockDb() {
   const chain: any = {};
-  const methods = ['select', 'from', 'where', 'orderBy', 'limit', 'offset', 'update', 'set', 'returning'];
+  const methods = [
+    'select',
+    'from',
+    'where',
+    'orderBy',
+    'limit',
+    'offset',
+    'update',
+    'set',
+    'returning',
+  ];
   for (const m of methods) {
     chain[m] = vi.fn().mockReturnValue(chain);
   }
@@ -693,6 +740,7 @@ git commit -m "feat(db): add cross-tenant findAll and forceCancel to JobReposito
 ## Task 5: Admin Tenant Routes
 
 **Files:**
+
 - Create: `apps/api/src/routes/admin-tenants.ts`
 - Create: `apps/api/tests/unit/routes/admin-tenants.test.ts`
 
@@ -726,9 +774,13 @@ function createMockDeps(overrides: Partial<AppDeps> = {}): AppDeps {
   return {
     dbPool: { end: vi.fn() } as unknown as Pool,
     jobRepo: {
-      findById: vi.fn(), findByTenant: vi.fn().mockResolvedValue([]),
-      countByTenant: vi.fn().mockResolvedValue(0), create: vi.fn(),
-      updateStatus: vi.fn(), updateStats: vi.fn(), deleteWithData: vi.fn(),
+      findById: vi.fn(),
+      findByTenant: vi.fn().mockResolvedValue([]),
+      countByTenant: vi.fn().mockResolvedValue(0),
+      create: vi.fn(),
+      updateStatus: vi.fn(),
+      updateStats: vi.fn(),
+      deleteWithData: vi.fn(),
       findAll: vi.fn().mockResolvedValue([]),
       forceCancel: vi.fn(),
     } as any,
@@ -738,7 +790,14 @@ function createMockDeps(overrides: Partial<AppDeps> = {}): AppDeps {
     entitySourceRepo: {} as any,
     actionRepo: {} as any,
     taskRepo: {} as any,
-    jobManager: { createJob: vi.fn(), startJob: vi.fn(), pauseJob: vi.fn(), resumeJob: vi.fn(), cancelJob: vi.fn(), triggerReconciliation: vi.fn() } as any,
+    jobManager: {
+      createJob: vi.fn(),
+      startJob: vi.fn(),
+      pauseJob: vi.fn(),
+      resumeJob: vi.fn(),
+      cancelJob: vi.fn(),
+      triggerReconciliation: vi.fn(),
+    } as any,
     exportRepo: {} as any,
     contentStore: {} as any,
     exportQueue: {} as any,
@@ -750,14 +809,12 @@ function createMockDeps(overrides: Partial<AppDeps> = {}): AppDeps {
       updatePlan: vi.fn(),
     } as any,
     userTenantRepo: {
-      findByTenantId: vi.fn().mockResolvedValue([
-        { userId: 'user-1', role: 'owner', createdAt: new Date() },
-      ]),
+      findByTenantId: vi
+        .fn()
+        .mockResolvedValue([{ userId: 'user-1', role: 'owner', createdAt: new Date() }]),
     } as any,
     usageRecordRepo: {
-      aggregateByTenant: vi.fn().mockResolvedValue([
-        { dimension: 'pages', total: 500 },
-      ]),
+      aggregateByTenant: vi.fn().mockResolvedValue([{ dimension: 'pages', total: 500 }]),
     } as any,
     auditLogger: { log: vi.fn() } as any,
     ...overrides,
@@ -803,7 +860,10 @@ describe('GET /api/v1/admin/tenants/:id', () => {
     const deps = createMockDeps({
       tenantRepo: {
         findById: vi.fn().mockResolvedValueOnce(SAMPLE_TENANT).mockResolvedValueOnce(null),
-        findAll: vi.fn(), countAll: vi.fn(), update: vi.fn(), updatePlan: vi.fn(),
+        findAll: vi.fn(),
+        countAll: vi.fn(),
+        update: vi.fn(),
+        updatePlan: vi.fn(),
       } as any,
     });
     const app = createApp(deps);
@@ -889,7 +949,12 @@ import type { AppEnv } from '../types.js';
 const VALID_PLANS = Object.keys(BILLING_TIERS);
 const MIN_RETENTION_DAYS = 7;
 
-const RETENTION_FIELDS = ['completedJobsDays', 'failedJobsDays', 'rawPagesDays', 'exportsDays'] as const;
+const RETENTION_FIELDS = [
+  'completedJobsDays',
+  'failedJobsDays',
+  'rawPagesDays',
+  'exportsDays',
+] as const;
 
 export function adminTenantRoutes() {
   const app = new Hono<AppEnv>();
@@ -897,7 +962,11 @@ export function adminTenantRoutes() {
   // GET / — list all tenants with pagination and plan filter
   app.get('/', async (c) => {
     const deps = c.get('deps');
-    if (!deps.tenantRepo) return c.json({ error: { code: 'NOT_CONFIGURED', message: 'Tenant repo not configured' } }, 503);
+    if (!deps.tenantRepo)
+      return c.json(
+        { error: { code: 'NOT_CONFIGURED', message: 'Tenant repo not configured' } },
+        503,
+      );
 
     const plan = c.req.query('plan');
     const limit = Math.max(1, Math.min(parseInt(c.req.query('limit') ?? '50', 10) || 50, 100));
@@ -935,7 +1004,11 @@ export function adminTenantRoutes() {
   app.get('/:id', async (c) => {
     const deps = c.get('deps');
     const id = c.req.param('id');
-    if (!deps.tenantRepo) return c.json({ error: { code: 'NOT_CONFIGURED', message: 'Tenant repo not configured' } }, 503);
+    if (!deps.tenantRepo)
+      return c.json(
+        { error: { code: 'NOT_CONFIGURED', message: 'Tenant repo not configured' } },
+        503,
+      );
 
     const tenant = await deps.tenantRepo.findById(id);
     if (!tenant) return c.json({ error: { code: 'NOT_FOUND', message: 'Tenant not found' } }, 404);
@@ -977,7 +1050,11 @@ export function adminTenantRoutes() {
   app.patch('/:id', async (c) => {
     const deps = c.get('deps');
     const id = c.req.param('id');
-    if (!deps.tenantRepo) return c.json({ error: { code: 'NOT_CONFIGURED', message: 'Tenant repo not configured' } }, 503);
+    if (!deps.tenantRepo)
+      return c.json(
+        { error: { code: 'NOT_CONFIGURED', message: 'Tenant repo not configured' } },
+        503,
+      );
 
     const body = await c.req.json();
     const auth = c.get('auth');
@@ -986,7 +1063,9 @@ export function adminTenantRoutes() {
     // Validate plan if provided
     if (body.plan !== undefined) {
       if (!VALID_PLANS.includes(body.plan)) {
-        throw new ValidationError(`Invalid plan: ${body.plan}. Must be one of: ${VALID_PLANS.join(', ')}`);
+        throw new ValidationError(
+          `Invalid plan: ${body.plan}. Must be one of: ${VALID_PLANS.join(', ')}`,
+        );
       }
     }
 
@@ -1004,7 +1083,8 @@ export function adminTenantRoutes() {
 
     // Fetch current tenant to merge config
     const existing = await deps.tenantRepo.findById(id);
-    if (!existing) return c.json({ error: { code: 'NOT_FOUND', message: 'Tenant not found' } }, 404);
+    if (!existing)
+      return c.json({ error: { code: 'NOT_FOUND', message: 'Tenant not found' } }, 404);
 
     // Apply plan change
     if (body.plan !== undefined) {
@@ -1028,7 +1108,7 @@ export function adminTenantRoutes() {
       // Deep merge retention
       if (body.config.retention) {
         mergedConfig.retention = {
-          ...(existingConfig.retention as Record<string, unknown> ?? {}),
+          ...((existingConfig.retention as Record<string, unknown>) ?? {}),
           ...body.config.retention,
         };
       }
@@ -1059,13 +1139,15 @@ export function adminTenantRoutes() {
 In `apps/api/src/app.ts`, add the import and route registration:
 
 Import (add near line 19):
+
 ```typescript
 import { adminTenantRoutes } from './routes/admin-tenants.js';
 ```
 
 Route registration (add after line 180):
+
 ```typescript
-  app.route('/api/v1/admin/tenants', adminTenantRoutes());
+app.route('/api/v1/admin/tenants', adminTenantRoutes());
 ```
 
 - [ ] **Step 5: Run tests to verify they pass**
@@ -1090,6 +1172,7 @@ git commit -m "feat(admin): add tenant management routes (list, detail, update p
 ## Task 6: Admin Job Routes
 
 **Files:**
+
 - Create: `apps/api/src/routes/admin-jobs.ts`
 - Create: `apps/api/tests/unit/routes/admin-jobs.test.ts`
 - Modify: `apps/api/src/app.ts` (register route)
@@ -1139,13 +1222,23 @@ function createMockDeps(overrides: Partial<AppDeps> = {}): AppDeps {
     entitySourceRepo: {} as any,
     actionRepo: {} as any,
     taskRepo: {} as any,
-    jobManager: { createJob: vi.fn(), startJob: vi.fn(), pauseJob: vi.fn(), resumeJob: vi.fn(), cancelJob: vi.fn(), triggerReconciliation: vi.fn() } as any,
+    jobManager: {
+      createJob: vi.fn(),
+      startJob: vi.fn(),
+      pauseJob: vi.fn(),
+      resumeJob: vi.fn(),
+      cancelJob: vi.fn(),
+      triggerReconciliation: vi.fn(),
+    } as any,
     exportRepo: {} as any,
     contentStore: {} as any,
     exportQueue: {} as any,
     tenantRepo: {
       findById: vi.fn().mockResolvedValue({ id: TENANT_ID, plan: 'free', config: {} }),
-      findAll: vi.fn(), countAll: vi.fn(), update: vi.fn(), updatePlan: vi.fn(),
+      findAll: vi.fn(),
+      countAll: vi.fn(),
+      update: vi.fn(),
+      updatePlan: vi.fn(),
     } as any,
     auditLogger: { log: vi.fn() } as any,
     ...overrides,
@@ -1263,7 +1356,13 @@ export function adminJobRoutes() {
     // Drain BullMQ jobs for this job if queues are available
     if (deps.queues) {
       // Best-effort removal of pending queue jobs for this spatula job
-      for (const queue of [deps.queues.crawl, deps.queues.extract, deps.queues.schemaEvolution, deps.queues.reconciliation, deps.queues.export]) {
+      for (const queue of [
+        deps.queues.crawl,
+        deps.queues.extract,
+        deps.queues.schemaEvolution,
+        deps.queues.reconciliation,
+        deps.queues.export,
+      ]) {
         try {
           const waiting = await queue.getJobs(['waiting', 'delayed']);
           for (const queueJob of waiting) {
@@ -1297,13 +1396,15 @@ export function adminJobRoutes() {
 - [ ] **Step 4: Register admin job routes in app.ts**
 
 Import (add near the admin-tenants import):
+
 ```typescript
 import { adminJobRoutes } from './routes/admin-jobs.js';
 ```
 
 Route registration (add after the admin/tenants route):
+
 ```typescript
-  app.route('/api/v1/admin/jobs', adminJobRoutes());
+app.route('/api/v1/admin/jobs', adminJobRoutes());
 ```
 
 - [ ] **Step 5: Run tests to verify they pass**
@@ -1323,6 +1424,7 @@ git commit -m "feat(admin): add cross-tenant job listing and force-cancel endpoi
 ## Task 7: Admin System Routes
 
 **Files:**
+
 - Create: `apps/api/src/routes/admin-system.ts`
 - Create: `apps/api/tests/unit/routes/admin-system.test.ts`
 - Modify: `apps/api/src/app.ts` (register route)
@@ -1352,9 +1454,13 @@ function createMockDeps(overrides: Partial<AppDeps> = {}): AppDeps {
       waitingCount: 0,
     } as unknown as Pool,
     jobRepo: {
-      findById: vi.fn(), findByTenant: vi.fn().mockResolvedValue([]),
-      countByTenant: vi.fn().mockResolvedValue(0), create: vi.fn(),
-      updateStatus: vi.fn(), updateStats: vi.fn(), deleteWithData: vi.fn(),
+      findById: vi.fn(),
+      findByTenant: vi.fn().mockResolvedValue([]),
+      countByTenant: vi.fn().mockResolvedValue(0),
+      create: vi.fn(),
+      updateStatus: vi.fn(),
+      updateStats: vi.fn(),
+      deleteWithData: vi.fn(),
       findAll: vi.fn().mockResolvedValue([]),
       countAll: vi.fn().mockResolvedValue(5),
       forceCancel: vi.fn(),
@@ -1365,27 +1471,60 @@ function createMockDeps(overrides: Partial<AppDeps> = {}): AppDeps {
     entitySourceRepo: {} as any,
     actionRepo: {} as any,
     taskRepo: {} as any,
-    jobManager: { createJob: vi.fn(), startJob: vi.fn(), pauseJob: vi.fn(), resumeJob: vi.fn(), cancelJob: vi.fn(), triggerReconciliation: vi.fn() } as any,
+    jobManager: {
+      createJob: vi.fn(),
+      startJob: vi.fn(),
+      pauseJob: vi.fn(),
+      resumeJob: vi.fn(),
+      cancelJob: vi.fn(),
+      triggerReconciliation: vi.fn(),
+    } as any,
     exportRepo: {} as any,
     contentStore: {} as any,
     exportQueue: {} as any,
     tenantRepo: {
       findById: vi.fn().mockResolvedValue({ id: TENANT_ID, plan: 'free', config: {} }),
-      findAll: vi.fn(), countAll: vi.fn().mockResolvedValue(3),
+      findAll: vi.fn(),
+      countAll: vi.fn().mockResolvedValue(3),
       getTotalStorage: vi.fn().mockResolvedValue(1048576),
-      update: vi.fn(), updatePlan: vi.fn(),
+      update: vi.fn(),
+      updatePlan: vi.fn(),
     } as any,
     redis: {
       ping: vi.fn().mockResolvedValue('PONG'),
       info: vi.fn().mockResolvedValue('used_memory:1024000\r\nused_memory_human:1M'),
     } as any,
     queues: {
-      crawl: { getJobCounts: vi.fn().mockResolvedValue({ waiting: 1, active: 2, completed: 10, failed: 0, delayed: 0 }) },
-      extract: { getJobCounts: vi.fn().mockResolvedValue({ waiting: 0, active: 0, completed: 5, failed: 0, delayed: 0 }) },
-      schemaEvolution: { getJobCounts: vi.fn().mockResolvedValue({ waiting: 0, active: 0, completed: 0, failed: 0, delayed: 0 }) },
-      reconciliation: { getJobCounts: vi.fn().mockResolvedValue({ waiting: 0, active: 0, completed: 0, failed: 0, delayed: 0 }) },
-      export: { getJobCounts: vi.fn().mockResolvedValue({ waiting: 0, active: 0, completed: 0, failed: 0, delayed: 0 }) },
-      webhook: { getJobCounts: vi.fn().mockResolvedValue({ waiting: 0, active: 0, completed: 0, failed: 0, delayed: 0 }) },
+      crawl: {
+        getJobCounts: vi
+          .fn()
+          .mockResolvedValue({ waiting: 1, active: 2, completed: 10, failed: 0, delayed: 0 }),
+      },
+      extract: {
+        getJobCounts: vi
+          .fn()
+          .mockResolvedValue({ waiting: 0, active: 0, completed: 5, failed: 0, delayed: 0 }),
+      },
+      schemaEvolution: {
+        getJobCounts: vi
+          .fn()
+          .mockResolvedValue({ waiting: 0, active: 0, completed: 0, failed: 0, delayed: 0 }),
+      },
+      reconciliation: {
+        getJobCounts: vi
+          .fn()
+          .mockResolvedValue({ waiting: 0, active: 0, completed: 0, failed: 0, delayed: 0 }),
+      },
+      export: {
+        getJobCounts: vi
+          .fn()
+          .mockResolvedValue({ waiting: 0, active: 0, completed: 0, failed: 0, delayed: 0 }),
+      },
+      webhook: {
+        getJobCounts: vi
+          .fn()
+          .mockResolvedValue({ waiting: 0, active: 0, completed: 0, failed: 0, delayed: 0 }),
+      },
     } as any,
     dlqRepo: { countUnresolved: vi.fn().mockResolvedValue(2) } as any,
     ...overrides,
@@ -1418,7 +1557,9 @@ describe('GET /api/v1/admin/system/health', () => {
       dbPool: {
         end: vi.fn(),
         query: vi.fn().mockRejectedValue(new Error('connection refused')),
-        totalCount: 0, idleCount: 0, waitingCount: 0,
+        totalCount: 0,
+        idleCount: 0,
+        waitingCount: 0,
       } as unknown as Pool,
     });
     const app = createApp(deps);
@@ -1488,10 +1629,23 @@ export function adminSystemRoutes() {
     // Queue health
     const queues: Record<string, unknown> = {};
     if (deps.queues) {
-      const queueNames = ['crawl', 'extract', 'schemaEvolution', 'reconciliation', 'export', 'webhook'] as const;
+      const queueNames = [
+        'crawl',
+        'extract',
+        'schemaEvolution',
+        'reconciliation',
+        'export',
+        'webhook',
+      ] as const;
       for (const name of queueNames) {
         try {
-          const counts = await deps.queues[name].getJobCounts('waiting', 'active', 'completed', 'failed', 'delayed');
+          const counts = await deps.queues[name].getJobCounts(
+            'waiting',
+            'active',
+            'completed',
+            'failed',
+            'delayed',
+          );
           queues[name] = counts;
         } catch {
           queues[name] = { error: 'unavailable' };
@@ -1538,7 +1692,14 @@ export function adminSystemRoutes() {
     // Queue depths
     const queues: Record<string, unknown> = {};
     if (deps.queues) {
-      const queueNames = ['crawl', 'extract', 'schemaEvolution', 'reconciliation', 'export', 'webhook'] as const;
+      const queueNames = [
+        'crawl',
+        'extract',
+        'schemaEvolution',
+        'reconciliation',
+        'export',
+        'webhook',
+      ] as const;
       for (const name of queueNames) {
         try {
           const counts = await deps.queues[name].getJobCounts('waiting', 'active', 'failed');
@@ -1567,13 +1728,15 @@ export function adminSystemRoutes() {
 - [ ] **Step 4: Register admin system routes in app.ts**
 
 Import:
+
 ```typescript
 import { adminSystemRoutes } from './routes/admin-system.js';
 ```
 
 Route registration (add after the admin/jobs route):
+
 ```typescript
-  app.route('/api/v1/admin/system', adminSystemRoutes());
+app.route('/api/v1/admin/system', adminSystemRoutes());
 ```
 
 - [ ] **Step 5: Run tests to verify they pass**
@@ -1593,6 +1756,7 @@ git commit -m "feat(admin): add system health and metrics endpoints"
 ## Task 8: Add CLEANUP Queue Name and Bull Board Registration
 
 **Files:**
+
 - Modify: `packages/queue/src/queues.ts`
 - Modify: `apps/api/src/routes/admin-queues.ts`
 
@@ -1625,11 +1789,13 @@ git commit -m "feat(queue): add CLEANUP queue name constant"
 ## Task 9: Cleanup Worker
 
 **Files:**
+
 - Create: `packages/queue/src/cleanup-worker.ts`
 - Create: `packages/queue/tests/unit/cleanup-worker.test.ts`
 - Modify: `packages/queue/src/index.ts`
 
 The cleanup worker runs daily at 03:00 UTC. Three-phase cleanup strategy:
+
 - **Phase A:** Sub-job resource cleanup — delete raw pages (+ their extractions) and exports independently of job lifecycle per tenant retention config. This is a storage optimization (e.g., delete raw HTML after 30 days while keeping the job for 90 days).
 - **Phase B:** Full expired job cascade — find completed/failed jobs past retention, delete with full FK-safe cascade (mirroring `deleteWithData` in `job-repository.ts`).
 - **Phase C:** System-wide cleanup (audit logs 365d, LLM usage 365d, DLQ 90d) + content store orphan scan.
@@ -1655,7 +1821,12 @@ function createMockDeps(overrides?: Partial<CleanupDeps>): CleanupDeps {
         {
           id: 'tenant-1',
           config: {
-            retention: { completedJobsDays: 90, failedJobsDays: 30, rawPagesDays: 30, exportsDays: 30 },
+            retention: {
+              completedJobsDays: 90,
+              failedJobsDays: 30,
+              rawPagesDays: 30,
+              exportsDays: 30,
+            },
           },
         },
       ]),
@@ -1678,9 +1849,7 @@ describe('processCleanupJob', () => {
   it('uses default retention when tenant has no config', async () => {
     const deps = createMockDeps({
       tenantRepo: {
-        findAll: vi.fn().mockResolvedValue([
-          { id: 'tenant-2', config: {} },
-        ]),
+        findAll: vi.fn().mockResolvedValue([{ id: 'tenant-2', config: {} }]),
       } as any,
     });
     const result = await processCleanupJob(deps);
@@ -1725,10 +1894,12 @@ describe('processCleanupJob', () => {
       db: {
         execute: vi.fn().mockImplementation(async (query: any) => {
           // Capture the SQL string to verify ordering
-          const queryStr = query?.queryChunks?.map((c: any) => c.value ?? c).join('') ?? String(query);
+          const queryStr =
+            query?.queryChunks?.map((c: any) => c.value ?? c).join('') ?? String(query);
           if (queryStr.includes('extractions')) executeCalls.push('extractions');
           if (queryStr.includes('raw_pages')) executeCalls.push('raw_pages');
-          if (queryStr.includes('exports') && !queryStr.includes('content_ref')) executeCalls.push('exports');
+          if (queryStr.includes('exports') && !queryStr.includes('content_ref'))
+            executeCalls.push('exports');
           return { rows: [], rowCount: 0 };
         }),
       } as any,
@@ -1747,10 +1918,13 @@ describe('processCleanupJob', () => {
     const deps = createMockDeps({
       db: {
         execute: vi.fn().mockImplementation(async (query: any) => {
-          const queryStr = query?.queryChunks?.map((c: any) => c.value ?? c).join('') ?? String(query);
+          const queryStr =
+            query?.queryChunks?.map((c: any) => c.value ?? c).join('') ?? String(query);
           if (queryStr.includes('entity_sources')) executeCalls.push('entity_sources');
-          if (queryStr.includes('entities') && !queryStr.includes('entity_sources')) executeCalls.push('entities');
-          if (queryStr.includes("status = 'completed'") || queryStr.includes("status = 'failed'")) executeCalls.push('jobs');
+          if (queryStr.includes('entities') && !queryStr.includes('entity_sources'))
+            executeCalls.push('entities');
+          if (queryStr.includes("status = 'completed'") || queryStr.includes("status = 'failed'"))
+            executeCalls.push('jobs');
           return { rows: [], rowCount: 0 };
         }),
       } as any,
@@ -1773,7 +1947,8 @@ describe('processCleanupJob', () => {
       tenantRepo: { findAll: vi.fn().mockResolvedValue([]) } as any,
       db: {
         execute: vi.fn().mockImplementation(async (query: any) => {
-          const queryStr = query?.queryChunks?.map((c: any) => c.value ?? c).join('') ?? String(query);
+          const queryStr =
+            query?.queryChunks?.map((c: any) => c.value ?? c).join('') ?? String(query);
           // Return orphan refs for the orphan scan query
           if (queryStr.includes('content_store') && queryStr.includes('NOT IN')) {
             return { rows: [{ id: 'orphan-1', key: 'pg://orphan-1' }], rowCount: 1 };
@@ -1804,7 +1979,8 @@ describe('processCleanupJob', () => {
       } as any,
       db: {
         execute: vi.fn().mockImplementation(async (query: any) => {
-          const queryStr = query?.queryChunks?.map((c: any) => c.value ?? c).join('') ?? String(query);
+          const queryStr =
+            query?.queryChunks?.map((c: any) => c.value ?? c).join('') ?? String(query);
           // Return 2 expired jobs
           if (queryStr.includes('SELECT id FROM jobs') && queryStr.includes('completed')) {
             return { rows: [{ id: 'job-1' }, { id: 'job-2' }], rowCount: 2 };
@@ -1864,10 +2040,12 @@ export interface CleanupDeps {
     execute(query: any): Promise<{ rows: any[]; rowCount: number }>;
   };
   tenantRepo: {
-    findAll(options?: { limit?: number; offset?: number }): Promise<Array<{
-      id: string;
-      config: Record<string, unknown>;
-    }>>;
+    findAll(options?: { limit?: number; offset?: number }): Promise<
+      Array<{
+        id: string;
+        config: Record<string, unknown>;
+      }>
+    >;
   };
   contentStore?: ContentStore;
 }
@@ -1911,7 +2089,10 @@ export async function processCleanupJob(deps: CleanupDeps): Promise<CleanupResul
         await cleanupTenantPhaseA(deps, tenant);
         await cleanupTenantPhaseB(deps, tenant);
       } catch (err) {
-        logger.error({ tenantId: tenant.id, error: (err as Error).message }, 'Tenant cleanup failed');
+        logger.error(
+          { tenantId: tenant.id, error: (err as Error).message },
+          'Tenant cleanup failed',
+        );
         result.errors++;
       }
       result.tenantsProcessed++;
@@ -1995,7 +2176,9 @@ async function cleanupTenantPhaseA(
   // A5. Content store cleanup for deleted exports/pages
   if (deps.contentStore && contentRefs.length > 0) {
     for (const ref of contentRefs) {
-      try { await deps.contentStore.delete(ref); } catch (err) {
+      try {
+        await deps.contentStore.delete(ref);
+      } catch (err) {
         logger.warn({ ref, error: (err as Error).message }, 'Failed to delete content store entry');
       }
     }
@@ -2093,7 +2276,10 @@ async function cleanupTenantPhaseB(
       // B11. Delete the job itself (llm_usage.job_id and dlq.spatula_job_id are ON DELETE SET NULL)
       await deps.db.execute(sql`DELETE FROM jobs WHERE id = ${jobId}`);
     } catch (err) {
-      logger.error({ tenantId, jobId, error: (err as Error).message }, 'Failed to delete expired job');
+      logger.error(
+        { tenantId, jobId, error: (err as Error).message },
+        'Failed to delete expired job',
+      );
       // Continue with next job
     }
   }
@@ -2144,12 +2330,15 @@ async function cleanupSystemData(deps: CleanupDeps): Promise<Record<string, numb
       LIMIT ${BATCH_SIZE}
     `);
     let orphanCount = 0;
-    for (const row of (orphans.rows ?? [])) {
+    for (const row of orphans.rows ?? []) {
       try {
         await deps.contentStore.delete((row as any).key);
         orphanCount++;
       } catch (err) {
-        logger.warn({ key: (row as any).key, error: (err as Error).message }, 'Failed to delete orphan content');
+        logger.warn(
+          { key: (row as any).key, error: (err as Error).message },
+          'Failed to delete orphan content',
+        );
       }
     }
     stats.contentOrphans = orphanCount;
@@ -2193,6 +2382,7 @@ git commit -m "feat(queue): add daily cleanup worker for tenant retention and sy
 ## Task 10: Register Cleanup Worker in Worker Entrypoint
 
 **Files:**
+
 - Modify: `packages/queue/src/worker-entrypoint.ts`
 
 Follow the metering worker pattern: create a BullMQ repeatable job and register the worker.
@@ -2209,44 +2399,48 @@ import type { CleanupDeps } from './cleanup-worker.js';
 Add the cleanup worker registration after the metering worker block (after line 198). Follow the exact metering pattern:
 
 ```typescript
-  let cleanupQueue: import('bullmq').Queue | undefined;
-  if (isEnabled('cleanup')) {
-    const { Queue: BullQueue } = await import('bullmq');
-    cleanupQueue = new BullQueue(QUEUE_NAMES.CLEANUP, { connection: redisOpts });
+let cleanupQueue: import('bullmq').Queue | undefined;
+if (isEnabled('cleanup')) {
+  const { Queue: BullQueue } = await import('bullmq');
+  cleanupQueue = new BullQueue(QUEUE_NAMES.CLEANUP, { connection: redisOpts });
 
-    // Add repeatable job (daily at 03:00 UTC)
-    await cleanupQueue.add('cleanup', {}, {
+  // Add repeatable job (daily at 03:00 UTC)
+  await cleanupQueue.add(
+    'cleanup',
+    {},
+    {
       repeat: { pattern: '0 3 * * *' },
       removeOnComplete: true,
       removeOnFail: 100,
-    });
+    },
+  );
 
-    const worker = new Worker(
-      QUEUE_NAMES.CLEANUP,
-      async () => {
-        if (!deps) {
-          logger.warn('Cleanup skipped — WorkerDeps not initialized');
-          return;
-        }
-        // CleanupDeps.db needs execute() — the Drizzle db instance has this
-        const dbInstance = (deps as any).db ?? (deps as any).jobRepo?.db;
-        const cleanupDeps: CleanupDeps = {
-          db: dbInstance,
-          tenantRepo: (deps as any).tenantRepo,
-          contentStore: (deps as any).contentStore,
-        };
-        if (!cleanupDeps.db || !cleanupDeps.tenantRepo) {
-          logger.warn('Cleanup skipped — required deps not available in WorkerDeps');
-          return;
-        }
-        await processCleanupJob(cleanupDeps);
-      },
-      { connection: workerConnection, concurrency: 1 },
-    );
-    worker.on('failed', (job, err) => void dlqHandler(job, err));
-    workers.push(worker);
-    logger.info({ queue: QUEUE_NAMES.CLEANUP }, 'Cleanup worker started (daily 03:00 UTC)');
-  }
+  const worker = new Worker(
+    QUEUE_NAMES.CLEANUP,
+    async () => {
+      if (!deps) {
+        logger.warn('Cleanup skipped — WorkerDeps not initialized');
+        return;
+      }
+      // CleanupDeps.db needs execute() — the Drizzle db instance has this
+      const dbInstance = (deps as any).db ?? (deps as any).jobRepo?.db;
+      const cleanupDeps: CleanupDeps = {
+        db: dbInstance,
+        tenantRepo: (deps as any).tenantRepo,
+        contentStore: (deps as any).contentStore,
+      };
+      if (!cleanupDeps.db || !cleanupDeps.tenantRepo) {
+        logger.warn('Cleanup skipped — required deps not available in WorkerDeps');
+        return;
+      }
+      await processCleanupJob(cleanupDeps);
+    },
+    { connection: workerConnection, concurrency: 1 },
+  );
+  worker.on('failed', (job, err) => void dlqHandler(job, err));
+  workers.push(worker);
+  logger.info({ queue: QUEUE_NAMES.CLEANUP }, 'Cleanup worker started (daily 03:00 UTC)');
+}
 ```
 
 - [ ] **Step 2: Add 'cleanup' to the heartbeat queue list**
@@ -2262,7 +2456,7 @@ In the `enabledQueueNames` block (around line 206), add `cleanup` to the map:
 In the shutdown function, after `if (meteringQueue) await meteringQueue.close();` (around line 244), add:
 
 ```typescript
-      if (cleanupQueue) await cleanupQueue.close();
+if (cleanupQueue) await cleanupQueue.close();
 ```
 
 - [ ] **Step 4: Run existing worker tests for regressions**
@@ -2302,26 +2496,26 @@ Expected: No lint errors.
 
 ## Summary of Deliverables
 
-| Spec Requirement | Task | Status |
-|-----------------|------|--------|
-| Admin scope guard on existing routes | Already done — `app.ts:178` applies `requireScope('admin')` to `/api/v1/admin/*` | Pre-existing |
-| Tenant status enforcement (suspended → 403) | Task 1 | — |
-| Admin DLQ cross-tenant access | Task 2 | — |
-| `GET /admin/tenants` (list) | Task 5 | — |
-| `GET /admin/tenants/:id` (detail) | Task 5 | — |
-| `PATCH /admin/tenants/:id` (update) | Task 5 | — |
-| `GET /admin/jobs` (cross-tenant list) | Task 6 | — |
-| `POST /admin/jobs/:id/force-cancel` | Task 6 | — |
-| `GET /admin/system/health` (detailed) | Task 7 | — |
-| `GET /admin/system/metrics` | Task 7 | — |
-| Tenant retention config extension | Task 5 (PATCH config.retention) | — |
-| Cleanup worker (daily 03:00 UTC) | Tasks 8-10 | — |
-| Cleanup Phase A: sub-job resource retention | Task 9 | — |
-| Cleanup Phase B: FK-safe expired job cascade | Task 9 | — |
-| Cleanup Phase C: system-wide + orphan scan | Task 9 | — |
-| Audit log entries for admin actions | Tasks 5, 6 | — |
-| Bull Board `extraQueues` support | Pre-existing (`admin-queues.ts` already supports it) | Pre-existing |
-| CLEANUP queue name | Task 8 | — |
+| Spec Requirement                             | Task                                                                             | Status       |
+| -------------------------------------------- | -------------------------------------------------------------------------------- | ------------ |
+| Admin scope guard on existing routes         | Already done — `app.ts:178` applies `requireScope('admin')` to `/api/v1/admin/*` | Pre-existing |
+| Tenant status enforcement (suspended → 403)  | Task 1                                                                           | —            |
+| Admin DLQ cross-tenant access                | Task 2                                                                           | —            |
+| `GET /admin/tenants` (list)                  | Task 5                                                                           | —            |
+| `GET /admin/tenants/:id` (detail)            | Task 5                                                                           | —            |
+| `PATCH /admin/tenants/:id` (update)          | Task 5                                                                           | —            |
+| `GET /admin/jobs` (cross-tenant list)        | Task 6                                                                           | —            |
+| `POST /admin/jobs/:id/force-cancel`          | Task 6                                                                           | —            |
+| `GET /admin/system/health` (detailed)        | Task 7                                                                           | —            |
+| `GET /admin/system/metrics`                  | Task 7                                                                           | —            |
+| Tenant retention config extension            | Task 5 (PATCH config.retention)                                                  | —            |
+| Cleanup worker (daily 03:00 UTC)             | Tasks 8-10                                                                       | —            |
+| Cleanup Phase A: sub-job resource retention  | Task 9                                                                           | —            |
+| Cleanup Phase B: FK-safe expired job cascade | Task 9                                                                           | —            |
+| Cleanup Phase C: system-wide + orphan scan   | Task 9                                                                           | —            |
+| Audit log entries for admin actions          | Tasks 5, 6                                                                       | —            |
+| Bull Board `extraQueues` support             | Pre-existing (`admin-queues.ts` already supports it)                             | Pre-existing |
+| CLEANUP queue name                           | Task 8                                                                           | —            |
 
 **Total new admin routes:** 7 (3 tenant + 2 job + 2 system)
 **Total scope-guarded existing routes:** 3 (DLQ, queues, workers) — already protected by `app.ts:178`

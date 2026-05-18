@@ -63,14 +63,14 @@ Triggers on push to `main` and all PRs.
 
 **Jobs (parallel where possible):**
 
-| Job | Steps | Runs on |
-|-----|-------|---------|
-| `lint` | pnpm install, `turbo run lint` | ubuntu-latest |
-| `typecheck` | pnpm install, `turbo run typecheck` | ubuntu-latest |
-| `format-check` | pnpm install, `pnpm format:check` | ubuntu-latest |
-| `test-unit` | pnpm install, `turbo run test` | ubuntu-latest |
-| `test-e2e` | pnpm install, docker-compose up -d, wait-for-healthy, `pnpm test:e2e` | ubuntu-latest (services: postgres:16, redis:7) |
-| `build` | pnpm install, `turbo run build` | ubuntu-latest |
+| Job            | Steps                                                                 | Runs on                                        |
+| -------------- | --------------------------------------------------------------------- | ---------------------------------------------- |
+| `lint`         | pnpm install, `turbo run lint`                                        | ubuntu-latest                                  |
+| `typecheck`    | pnpm install, `turbo run typecheck`                                   | ubuntu-latest                                  |
+| `format-check` | pnpm install, `pnpm format:check`                                     | ubuntu-latest                                  |
+| `test-unit`    | pnpm install, `turbo run test`                                        | ubuntu-latest                                  |
+| `test-e2e`     | pnpm install, docker-compose up -d, wait-for-healthy, `pnpm test:e2e` | ubuntu-latest (services: postgres:16, redis:7) |
+| `build`        | pnpm install, `turbo run build`                                       | ubuntu-latest                                  |
 
 **Caching:** pnpm store (`~/.pnpm-store`) and Turborepo cache (`.turbo`).
 
@@ -81,6 +81,7 @@ Triggers on push to `main` and all PRs.
 Triggers on git tags matching `v*`.
 
 **Steps:**
+
 1. Run full CI (reuse ci.yml as called workflow)
 2. Build Docker images (API, worker, CLI)
 3. Push to GitHub Container Registry (`ghcr.io/spatula/api`, `ghcr.io/spatula/worker`, `ghcr.io/spatula/cli`)
@@ -163,6 +164,7 @@ CMD ["node", "apps/api/dist/index.js"]
 Same build stages. Runtime stage runs a new `worker-entrypoint.ts` (see section 2.4).
 
 **Key differences:**
+
 - No `EXPOSE` (workers do not serve HTTP)
 - `CMD ["node", "packages/queue/dist/worker-entrypoint.js"]`
 
@@ -197,6 +199,7 @@ Listens on both `SIGTERM` and `SIGINT`.
 BullMQ `Worker.close()` is the correct method -- it finishes the current job, releases the lock, and stops picking up new jobs. This prevents orphaned jobs.
 
 On SIGTERM/SIGINT:
+
 1. Call `Worker.close()` on all worker instances (via `Promise.allSettled`)
 2. Quit Redis connection
 3. End database pool
@@ -213,10 +216,19 @@ Creates BullMQ Worker instances for each queue, wires up WorkerDeps via DI, hand
 
 ```typescript
 const workers = [
-  new Worker(QUEUE_NAMES.CRAWL, processCrawlJob, { connection, concurrency: config.crawl.concurrency }),
-  new Worker(QUEUE_NAMES.SCHEMA_EVOLUTION, processSchemaEvolutionJob, { connection, concurrency: 1 }),
+  new Worker(QUEUE_NAMES.CRAWL, processCrawlJob, {
+    connection,
+    concurrency: config.crawl.concurrency,
+  }),
+  new Worker(QUEUE_NAMES.SCHEMA_EVOLUTION, processSchemaEvolutionJob, {
+    connection,
+    concurrency: 1,
+  }),
   new Worker(QUEUE_NAMES.RECONCILIATION, processReconciliationJob, { connection, concurrency: 1 }),
-  new Worker(QUEUE_NAMES.EXPORT, processExportJob, { connection, concurrency: config.export.concurrency }),
+  new Worker(QUEUE_NAMES.EXPORT, processExportJob, {
+    connection,
+    concurrency: config.export.concurrency,
+  }),
 ];
 ```
 
@@ -268,12 +280,14 @@ export function createDatabasePool(connectionString?: string): { db: Database; p
 ```
 
 **New env vars:**
+
 - `DB_POOL_MAX` -- maximum connections (default: 20 for API, 5 for workers)
 - `DB_POOL_IDLE_TIMEOUT` -- idle connection timeout in ms (default: 30000)
 
 **Impact:** `pool` is returned alongside `db` so shutdown handlers can call `pool.end()`.
 
 **AppDeps update:** Add `dbPool: Pool` to `AppDeps` (in `apps/api/src/types.ts`) and `WorkerDeps` (in `packages/queue/src/worker-deps.ts`). All call sites that construct these deps objects must be updated:
+
 - `apps/api/src/index.ts` -- where `AppDeps` is assembled before `startServer()`
 - `packages/queue/src/worker-entrypoint.ts` -- where `WorkerDeps` is assembled
 - All test files that construct mock `AppDeps` -- add `dbPool` as a mock/stub
@@ -291,6 +305,7 @@ Extends existing `docker-compose.yml` with application services:
 - `migrate` service: one-shot init container (restart: none), runs migrations before app starts
 
 **Design decisions:**
+
 - `migrate` runs as a one-shot init container (restart: none)
 - API and worker scale independently
 - Both depend on healthy postgres + redis before starting
@@ -324,7 +339,7 @@ Both strategies implement a common `AuthProvider` interface:
 interface AuthResult {
   tenantId: string;
   userId: string;
-  scopes: string[];         // e.g., ['jobs:read', 'jobs:write', 'admin']
+  scopes: string[]; // e.g., ['jobs:read', 'jobs:write', 'admin']
 }
 
 interface AuthProvider {
@@ -357,12 +372,14 @@ CREATE INDEX idx_api_keys_hash ON api_keys(key_hash) WHERE revoked_at IS NULL;
 **Key format:** `sk_live_{32-char-random}` (total 40 chars). Only the hash is stored; the raw key is shown once at creation.
 
 **Auth flow:**
+
 1. Client sends `Authorization: Bearer sk_live_...`
 2. Middleware computes SHA-256 of key
 3. Looks up `api_keys` by hash WHERE `revoked_at IS NULL` AND (`expires_at IS NULL` OR `expires_at > now()`)
 4. Returns `{ tenantId, userId: key.id, scopes }` or 401
 
 **Endpoints:**
+
 - `POST /api/v1/api-keys` -- create key (returns raw key once)
 - `GET /api/v1/api-keys` -- list keys (prefix + name only, never hash)
 - `DELETE /api/v1/api-keys/:id` -- revoke key (soft delete via `revoked_at`)
@@ -372,6 +389,7 @@ CREATE INDEX idx_api_keys_hash ON api_keys(key_hash) WHERE revoked_at IS NULL;
 **Provider:** Configurable -- supports any OIDC-compliant provider (Auth0, Clerk, Supabase Auth, custom).
 
 **Configuration:**
+
 ```
 AUTH_STRATEGY=jwt
 JWT_ISSUER=https://auth.spatula.dev
@@ -380,6 +398,7 @@ JWT_JWKS_URL=https://auth.spatula.dev/.well-known/jwks.json
 ```
 
 **Auth flow:**
+
 1. Client sends `Authorization: Bearer <jwt>`
 2. Middleware validates signature using cached JWKS
 3. Validates `iss`, `aud`, `exp` claims
@@ -395,11 +414,13 @@ JWT_JWKS_URL=https://auth.spatula.dev/.well-known/jwks.json
 Wraps the `AuthProvider` interface. Extracts token from `Authorization` header, calls `provider.authenticate()`, sets `auth` and `tenantId` on the Hono context.
 
 **Middleware chain update (app.ts):**
+
 ```
 requestContext -> logger -> errorHandler -> authMiddleware -> depsMiddleware -> validateTenant -> routes
 ```
 
 **Tenant middleware transition:**
+
 - When `AUTH_STRATEGY=none`: The existing `tenantMiddleware` (header-based `x-tenant-id` extraction) remains active. No `authMiddleware` is applied. This is the current behavior and preserves backward compatibility for local development.
 - When `AUTH_STRATEGY=api-key` or `jwt`: `tenantMiddleware` is **removed** from the middleware chain entirely. The `authMiddleware` is the sole source of `tenantId` (derived from API key lookup or JWT claims). The `x-tenant-id` header is **ignored** to prevent impersonation. This is a breaking change for API clients — see section 13.5 for migration guidance.
 
@@ -409,17 +430,17 @@ requestContext -> logger -> errorHandler -> authMiddleware -> depsMiddleware -> 
 
 Scopes follow the pattern `resource:action`:
 
-| Scope | Allows |
-|-------|--------|
-| `jobs:read` | List/get jobs, schemas, extractions, entities |
-| `jobs:write` | Create/start/pause/cancel jobs |
-| `exports:read` | List/download exports |
-| `exports:write` | Trigger exports |
-| `actions:read` | List pending actions |
-| `actions:write` | Approve/reject actions |
-| `tenants:admin` | Manage tenant settings |
-| `keys:manage` | Create/revoke API keys |
-| `admin` | Full admin access (system-wide) |
+| Scope           | Allows                                        |
+| --------------- | --------------------------------------------- |
+| `jobs:read`     | List/get jobs, schemas, extractions, entities |
+| `jobs:write`    | Create/start/pause/cancel jobs                |
+| `exports:read`  | List/download exports                         |
+| `exports:write` | Trigger exports                               |
+| `actions:read`  | List pending actions                          |
+| `actions:write` | Approve/reject actions                        |
+| `tenants:admin` | Manage tenant settings                        |
+| `keys:manage`   | Create/revoke API keys                        |
+| `admin`         | Full admin access (system-wide)               |
 
 **Default scopes for new API keys:** `['jobs:read', 'jobs:write', 'exports:read', 'exports:write', 'actions:read', 'actions:write']`
 
@@ -433,12 +454,12 @@ Scopes follow the pattern `resource:action`:
 
 #### 3.2.1 Rate Limit Tiers
 
-| Tier | Requests/min | Concurrent Jobs | Applies to |
-|------|-------------|-----------------|------------|
-| `free` | 60 | 2 | Default |
-| `standard` | 300 | 10 | Paid plans |
-| `enterprise` | 1500 | 50 | Enterprise |
-| `unlimited` | -- | -- | Internal/admin |
+| Tier         | Requests/min | Concurrent Jobs | Applies to     |
+| ------------ | ------------ | --------------- | -------------- |
+| `free`       | 60           | 2               | Default        |
+| `standard`   | 300          | 10              | Paid plans     |
+| `enterprise` | 1500         | 50              | Enterprise     |
+| `unlimited`  | --           | --              | Internal/admin |
 
 **Storage:** Redis sorted sets with sliding window algorithm.
 
@@ -471,6 +492,7 @@ return {1, count + 1}  -- accepted, new count
 The Lua script returns `{accepted, currentCount}`. The middleware uses this to set response headers.
 
 **Response headers (all responses):**
+
 - `X-RateLimit-Limit` -- max requests per window
 - `X-RateLimit-Remaining` -- requests remaining
 - `Retry-After` -- seconds until reset (on 429 only)
@@ -484,6 +506,7 @@ The Lua script returns `{accepted, currentCount}`. The middleware uses this to s
 **New env var:** `CORS_ALLOWED_ORIGINS` -- comma-separated list of allowed origins. Default: `http://localhost:3000`.
 
 **Configuration:**
+
 - `allowMethods`: GET, POST, PUT, PATCH, DELETE, OPTIONS
 - `allowHeaders`: Authorization, Content-Type, X-Request-Id
 - `exposeHeaders`: X-RateLimit-Limit, X-RateLimit-Remaining, X-Request-Id
@@ -509,6 +532,7 @@ ALTER TABLE tenants ADD COLUMN quotas JSONB NOT NULL DEFAULT '{
 ```
 
 **Enforcement points:**
+
 - `JobManager.startJob()` -- check concurrent job count against `maxConcurrentJobs`
 - Crawl worker -- check page count against `maxPagesPerJob` (see section 7.2)
 - Export worker -- already enforces MAX_EXPORT_ENTITIES; make configurable per-tenant
@@ -521,6 +545,7 @@ ALTER TABLE tenants ADD COLUMN quotas JSONB NOT NULL DEFAULT '{
 **Design:** Token-based WebSocket auth.
 
 **Flow:**
+
 1. Client calls `POST /api/v1/ws-token` (authenticated) -- returns a short-lived token (60s TTL, single-use)
 2. Client connects to `ws://host/ws/jobs/:id/progress?token=<ws-token>`
 3. Server validates token from Redis, extracts tenantId, deletes token (single-use)
@@ -554,6 +579,7 @@ CREATE INDEX idx_audit_action_time ON audit_log(action, created_at DESC);  -- sy
 ```
 
 **Events logged:**
+
 - `auth.login_success`, `auth.login_failure`
 - `api_key.created`, `api_key.revoked`
 - `job.created`, `job.started`, `job.cancelled`, `job.deleted`
@@ -593,26 +619,31 @@ Creates a `MeterProvider` with `PrometheusExporter` on port 9464.
 **Metrics defined:**
 
 API metrics:
+
 - `http_request_duration_ms` (histogram)
 - `http_requests_total` (counter)
 - `http_active_connections` (up-down counter)
 
 Queue metrics:
+
 - `queue_job_duration_ms` (histogram)
 - `queue_jobs_total` (counter)
 - `queue_depth` (observable gauge)
 
 LLM metrics:
+
 - `llm_tokens_used` (counter)
 - `llm_request_duration_ms` (histogram)
 - `llm_cost_usd` (counter)
 
 Crawl metrics:
+
 - `pages_processed_total` (counter)
 - `page_crawl_duration_ms` (histogram)
 - `entities_created_total` (counter)
 
 Business metrics:
+
 - `active_jobs` (observable gauge)
 - `tenant_count` (observable gauge)
 - `export_size_bytes` (histogram)
@@ -666,6 +697,7 @@ This links API request traces to worker processing traces end-to-end.
 Initializes Sentry with DSN, environment, and configurable sample rate.
 
 **Integration points:**
+
 - API error handler: `Sentry.captureException(err)` for 5xx errors
 - Worker error handlers: capture failed job errors with job context
 - LLM client: capture unexpected response format errors
@@ -681,6 +713,7 @@ Initializes Sentry with DSN, environment, and configurable sample rate.
 #### 4.4.1 Token Usage Recording
 
 After each LLM call, emit a usage record containing:
+
 - `tenantId`, `jobId`, `model`
 - `promptTokens`, `completionTokens`, `totalTokens`
 - `costUsd` (from OpenRouter response headers)
@@ -723,8 +756,8 @@ Returns aggregated LLM usage for the authenticated tenant:
     "period": { "start": "2026-02-19T00:00:00Z", "end": "2026-03-21T00:00:00Z" },
     "totalTokens": 1250000,
     "totalCostUsd": 4.23,
-    "byModel": { "anthropic/claude-3-haiku": { "tokens": 800000, "costUsd": 0.80 } },
-    "byPurpose": { "extraction": { "tokens": 500000, "costUsd": 2.10 } },
+    "byModel": { "anthropic/claude-3-haiku": { "tokens": 800000, "costUsd": 0.8 } },
+    "byPurpose": { "extraction": { "tokens": 500000, "costUsd": 2.1 } },
     "byJob": [{ "jobId": "...", "tokens": 125000, "costUsd": 0.42 }]
   }
 }
@@ -749,11 +782,13 @@ Used by k8s `livenessProbe`. No dependency checks (avoids cascade restarts).
 #### 4.5.2 Readiness Probe (`GET /health/ready`)
 
 Checks all dependencies in parallel via `Promise.allSettled`:
+
 - Postgres: `SELECT 1`
 - Redis: `PING`
 - BullMQ: `getJobCounts()`
 
 **Response codes:**
+
 - **200** when all checks pass: `{ "status": "ok", "checks": { "database": "ok", "redis": "ok", "queue": "ok" } }`
 - **503** when any check fails: `{ "status": "degraded", "checks": { "database": "ok", "redis": "fail", "queue": "ok" } }`
 
@@ -831,11 +866,13 @@ POST   /api/v1/admin/dlq/:id/discard  -- mark as resolved with resolution='disca
 **States:** `CLOSED` (normal) -> `OPEN` (failing, reject all) -> `HALF_OPEN` (testing recovery)
 
 **Configuration:**
+
 - `failureThreshold`: Failures before opening (default: 5)
 - `resetTimeoutMs`: Time in OPEN before trying HALF_OPEN (default: 30,000)
 - `halfOpenMaxAttempts`: Successful calls needed to close (default: 2)
 
 **Behavior:**
+
 - `CLOSED`: Passes calls through. Counts consecutive failures. Opens after `failureThreshold` consecutive failures.
 - `OPEN`: Immediately rejects with `LLMError('Circuit breaker open', { retryable: true })`. After `resetTimeoutMs`, transitions to HALF_OPEN.
 - `HALF_OPEN`: Allows `halfOpenMaxAttempts` calls through. If all succeed, closes. If any fail, re-opens.
@@ -873,6 +910,7 @@ Redis-based with 24-hour TTL.
 #### 5.4.2 Idempotency Middleware
 
 For non-GET requests with an `Idempotency-Key` header:
+
 1. Check Redis for cached response
 2. If found, return cached response (same status code + body)
 3. If not found, proceed with request, then cache the response
@@ -886,6 +924,7 @@ For non-GET requests with an `Idempotency-Key` header:
 **Design:** Worker heartbeat via Redis.
 
 Each worker writes a heartbeat every 30s:
+
 - Key: `worker:heartbeat:{workerId}`
 - Value: `{ workerId, queues, pid, uptime, activeJobs }`
 - TTL: 60s
@@ -908,6 +947,7 @@ Scans `worker:heartbeat:*` keys. Workers missing heartbeat for >60s are flagged 
 **New file:** `packages/core/src/content-store/s3-content-store.ts`
 
 Implements all 5 methods of the `ContentStore` interface:
+
 - `store(key, content)` -- uploads text to `text/{key}`
 - `storeBinary(key, data)` -- uploads binary to `binary/{key}`
 - `retrieve(ref)` -- downloads text content
@@ -921,6 +961,7 @@ Implements all 5 methods of the `ContentStore` interface:
 #### 6.1.2 Configuration
 
 **New env vars:**
+
 - `CONTENT_STORE` -- `postgres` (default) or `s3`
 - `S3_BUCKET` -- bucket name
 - `S3_REGION` -- AWS region
@@ -943,7 +984,7 @@ interface ContentStore {
   delete(ref: string): Promise<void>;
   storeBinary(key: string, data: Uint8Array): Promise<string>;
   retrieveBinary(ref: string): Promise<Uint8Array | null>;
-  getDownloadUrl?(ref: string, expiresInSeconds?: number): Promise<string>;  // NEW, optional
+  getDownloadUrl?(ref: string, expiresInSeconds?: number): Promise<string>; // NEW, optional
 }
 ```
 
@@ -952,7 +993,9 @@ interface ContentStore {
 **Type guard for the export download endpoint:**
 
 ```typescript
-function supportsPresignedUrls(store: ContentStore): store is ContentStore & { getDownloadUrl: (ref: string, expiresIn?: number) => Promise<string> } {
+function supportsPresignedUrls(store: ContentStore): store is ContentStore & {
+  getDownloadUrl: (ref: string, expiresIn?: number) => Promise<string>;
+} {
   return typeof (store as any).getDownloadUrl === 'function';
 }
 ```
@@ -1018,6 +1061,7 @@ CREATE INDEX IF NOT EXISTS idx_content_store_key ON content_store(key);
 ```
 
 The following indexes already exist in the Drizzle schema and do NOT need to be re-created:
+
 - `crawl_tasks_job_status_idx` on `crawl_tasks(job_id, status)`
 - `crawl_tasks_job_depth_idx` on `crawl_tasks(job_id, depth)`
 - `actions_job_status_idx` on `actions(job_id, status)`
@@ -1038,12 +1082,12 @@ The following indexes already exist in the Drizzle schema and do NOT need to be 
 
 **Cached paths:**
 
-| Key Pattern | TTL | Invalidated On |
-|-------------|-----|---------------|
-| `schema:{jobId}:current` | 30s | Schema evolution |
-| `job:{jobId}:config` | 60s | Job update |
-| `tenant:{tenantId}:quotas` | 300s | Tenant update |
-| `entity-count:{jobId}` | 10s | Entity creation |
+| Key Pattern                | TTL  | Invalidated On   |
+| -------------------------- | ---- | ---------------- |
+| `schema:{jobId}:current`   | 30s  | Schema evolution |
+| `job:{jobId}:config`       | 60s  | Job update       |
+| `tenant:{tenantId}:quotas` | 300s | Tenant update    |
+| `entity-count:{jobId}`     | 10s  | Entity creation  |
 
 ### 6.5 Cursor-Based Pagination
 
@@ -1094,6 +1138,7 @@ GET /api/v1/jobs/:id/entities?cursor=<opaque>&limit=100&since=2026-03-21T14:32:0
 **Library:** `robots-parser` (lightweight, well-tested).
 
 `RobotsTxtChecker` class with:
+
 - `isAllowed(url, userAgent)` -- fetches and caches robots.txt per origin (1-hour cache), returns boolean
 - `getCrawlDelay(origin, userAgent)` -- returns Crawl-Delay value if specified
 
@@ -1116,6 +1161,7 @@ The `crawl_task_status` enum already includes `skipped` (added in Phase 11). Use
 **Design:** Atomic page counter in Redis, checked before each crawl.
 
 **Implementation in crawl-worker:**
+
 1. `INCR` the key `job:{jobId}:page-count`
 2. If count exceeds `config.crawl.maxPages`, decrement (rollback), mark task as `skipped`, return
 3. Set 7-day TTL on first use (cleanup after job completes)
@@ -1151,6 +1197,7 @@ Crawl worker calls `domainRateLimiter.waitForSlot(url, crawlDelay)` before each 
 #### 7.4.1 Completion Signals
 
 A job is considered "naturally complete" when ALL of these hold:
+
 1. **No pending crawl tasks** -- all enqueued tasks are completed, skipped, or failed
 2. **No in-progress crawl tasks** -- no active workers processing for this job (accounting for the current task being the last one)
 
@@ -1167,6 +1214,7 @@ After each crawl task completes, query `taskRepo.getJobStats(jobId)` for counts 
 **New endpoint:** `GET /api/v1/jobs/:id/quality`
 
 Returns:
+
 - `entityCount`, `averageQuality`
 - `distribution` (excellent >= 0.9, good >= 0.7, fair >= 0.5, poor < 0.5)
 - `fieldCompleteness` (per-field fill rate)
@@ -1197,6 +1245,7 @@ Returns:
 #### 8.1.1 Webhook Configuration
 
 Extend `JobConfig` with optional `webhooks` field:
+
 - `url` -- webhook endpoint (required URL)
 - `secret` -- HMAC signing secret (optional, min 16 chars)
 - `events` -- array of event types to subscribe to (default: `['job.completed', 'job.failed']`)
@@ -1208,6 +1257,7 @@ Available events: `job.completed`, `job.failed`, `job.cancelled`, `export.comple
 **New file:** `packages/queue/src/webhook-sender.ts`
 
 `WebhookSender` class that:
+
 1. Serializes the event as JSON
 2. Signs with HMAC-SHA256 if secret provided (sets `X-Spatula-Signature` header)
 3. POSTs to the webhook URL with 10s timeout
@@ -1267,6 +1317,7 @@ For the Phase 12 open-source release, server setup is documented in the README q
 **New command:** `apps/cli/src/commands/doctor.ts`
 
 **Checks:**
+
 1. `.env` exists and has required keys
 2. Postgres is reachable (connection test)
 3. Redis is reachable (PING)
@@ -1322,6 +1373,7 @@ Phase 12 registers `system` and `server` checks. Phase 13 adds `project` checks 
 **File:** `README.md` in project root.
 
 **Sections:**
+
 1. **Hero** -- one-line description + badge row (CI, license, npm version)
 2. **What is Spatula?** -- 3-sentence elevator pitch
 3. **Features** -- bullet list of core capabilities
@@ -1338,6 +1390,7 @@ Phase 12 registers `system` and `server` checks. Phase 13 adds `project` checks 
 ### 9.3 CONTRIBUTING.md
 
 **Sections:**
+
 1. **Getting Started** -- fork, clone, install, run tests
 2. **Development Workflow** -- branch naming, commit conventions (conventional commits)
 3. **Code Style** -- refer to eslint + prettier configs
@@ -1355,6 +1408,7 @@ Phase 12 registers `system` and `server` checks. Phase 13 adds `project` checks 
 ### 9.5 GitHub Issue & PR Templates
 
 **Files:**
+
 - `.github/ISSUE_TEMPLATE/bug_report.md` -- steps to reproduce, expected vs actual
 - `.github/ISSUE_TEMPLATE/feature_request.md` -- use case, proposed solution
 - `.github/PULL_REQUEST_TEMPLATE.md` -- checklist (tests, lint, docs)
@@ -1364,6 +1418,7 @@ Phase 12 registers `system` and `server` checks. Phase 13 adds `project` checks 
 **File:** `docs/architecture.md`
 
 **Contents:**
+
 - Package dependency diagram (Mermaid)
 - Data flow diagram: seed URL to crawl to extract to evolve schema to reconcile to export
 - Interface map: which interfaces exist and who implements them
@@ -1402,6 +1457,7 @@ Each example includes a `README.md` with expected output and explanation.
 #### 10.1.1 Auth Provider Integration
 
 The hosted frontend (web app, out of scope for this spec) handles:
+
 - Signup/login UI
 - Password reset
 - Email verification
@@ -1434,15 +1490,15 @@ CREATE INDEX idx_user_tenants_user ON user_tenants(user_id);
 
 #### 10.2.1 Billing Model
 
-| Dimension | Free | Starter | Pro | Enterprise |
-|-----------|------|---------|-----|------------|
-| Jobs/month | 5 | 50 | 500 | Unlimited |
-| Pages/month | 1,000 | 10,000 | 100,000 | Custom |
-| LLM tokens/month | 100K | 1M | 10M | Custom |
-| Storage | 100MB | 1GB | 10GB | Custom |
-| Export formats | JSON, CSV | All | All | All |
-| API rate limit | 60/min | 300/min | 1,500/min | Custom |
-| Support | Community | Email | Priority | Dedicated |
+| Dimension        | Free      | Starter | Pro       | Enterprise |
+| ---------------- | --------- | ------- | --------- | ---------- |
+| Jobs/month       | 5         | 50      | 500       | Unlimited  |
+| Pages/month      | 1,000     | 10,000  | 100,000   | Custom     |
+| LLM tokens/month | 100K      | 1M      | 10M       | Custom     |
+| Storage          | 100MB     | 1GB     | 10GB      | Custom     |
+| Export formats   | JSON, CSV | All     | All       | All        |
+| API rate limit   | 60/min    | 300/min | 1,500/min | Custom     |
+| Support          | Community | Email   | Priority  | Dedicated  |
 
 #### 10.2.2 Metering Infrastructure
 
@@ -1514,21 +1570,22 @@ GET    /admin/workers               -- worker health (section 5.5)
 
 **Default retention periods:**
 
-| Data Type | Default Retention | Configurable Per-Tenant |
-|-----------|-------------------|------------------------|
-| Completed jobs + entities | 90 days | Yes |
-| Failed jobs | 30 days | Yes |
-| Raw pages | 30 days | Yes |
-| Exports | 30 days | Yes |
-| Audit logs | 365 days | No |
-| LLM usage records | 365 days | No |
-| DLQ entries | 90 days | No |
+| Data Type                 | Default Retention | Configurable Per-Tenant |
+| ------------------------- | ----------------- | ----------------------- |
+| Completed jobs + entities | 90 days           | Yes                     |
+| Failed jobs               | 30 days           | Yes                     |
+| Raw pages                 | 30 days           | Yes                     |
+| Exports                   | 30 days           | Yes                     |
+| Audit logs                | 365 days          | No                      |
+| LLM usage records         | 365 days          | No                      |
+| DLQ entries               | 90 days           | No                      |
 
 #### 10.4.2 Cleanup Worker
 
 **New repeatable BullMQ job:** Runs daily at 03:00 UTC.
 
 For each tenant:
+
 1. Delete completed jobs older than retention period (cascades to entities, extractions, pages, exports)
 2. Delete content store entries not referenced by any active export
 3. Log cleanup statistics
@@ -1536,6 +1593,7 @@ For each tenant:
 **Safety:** Cleanup runs in batches (100 records per delete) to avoid long-running transactions.
 
 **FK ordering:** The cleanup worker must account for new Phase 12 tables that reference `jobs`:
+
 - `llm_usage.job_id` uses `ON DELETE SET NULL` -- handled automatically by Postgres
 - `dead_letter_queue.spatula_job_id` uses `ON DELETE SET NULL` -- handled automatically by Postgres
 - `audit_log.tenant_id` uses nullable reference -- no job FK, no conflict
@@ -1545,6 +1603,7 @@ No explicit pre-deletion step is needed because all new job-referencing FKs use 
 #### 10.4.3 Tenant Configuration Extension
 
 Extend tenant config with optional `retention` object:
+
 - `completedJobsDays` (min: 7, default: 90)
 - `failedJobsDays` (min: 7, default: 30)
 - `rawPagesDays` (min: 7, default: 30)
@@ -1626,8 +1685,8 @@ export class OllamaClient implements LLMClient {
 
 ```typescript
 interface OllamaClientOptions {
-  baseUrl: string;       // Default: 'http://localhost:11434'
-  timeoutMs?: number;    // Default: 120000 (local models are slower)
+  baseUrl: string; // Default: 'http://localhost:11434'
+  timeoutMs?: number; // Default: 120000 (local models are slower)
 }
 ```
 
@@ -1677,24 +1736,25 @@ No change to `resolveModel` is needed -- the user sets `LLM_PRIMARY_MODEL=llama3
 
 **Recommended local models:**
 
-| Use Case | Model | Size | Quality |
-|----------|-------|------|---------|
-| Fast experimentation | `llama3.2:3b` | 2GB | Good for classification, link eval |
-| Balanced | `llama3.2:8b` | 5GB | Good for extraction |
-| Best local quality | `qwen2.5:32b` | 18GB | Approaches cloud quality |
+| Use Case             | Model         | Size | Quality                            |
+| -------------------- | ------------- | ---- | ---------------------------------- |
+| Fast experimentation | `llama3.2:3b` | 2GB  | Good for classification, link eval |
+| Balanced             | `llama3.2:8b` | 5GB  | Good for extraction                |
+| Best local quality   | `qwen2.5:32b` | 18GB | Approaches cloud quality           |
 
 #### 11.2.4 Configuration
 
 **New env vars:**
 
-| Variable | Default | Required | Notes |
-|----------|---------|----------|-------|
-| `LLM_PROVIDER` | `openrouter` | No | `openrouter` or `ollama` |
-| `OLLAMA_BASE_URL` | `http://localhost:11434` | If ollama | Ollama server address |
-| `OLLAMA_TIMEOUT_MS` | `120000` | No | Higher default for local inference |
-| `LLM_PRIMARY_MODEL` | `anthropic/claude-sonnet-4-20250514` | No | Overrides `LLMConfig.primaryModel` |
+| Variable            | Default                              | Required  | Notes                              |
+| ------------------- | ------------------------------------ | --------- | ---------------------------------- |
+| `LLM_PROVIDER`      | `openrouter`                         | No        | `openrouter` or `ollama`           |
+| `OLLAMA_BASE_URL`   | `http://localhost:11434`             | If ollama | Ollama server address              |
+| `OLLAMA_TIMEOUT_MS` | `120000`                             | No        | Higher default for local inference |
+| `LLM_PRIMARY_MODEL` | `anthropic/claude-sonnet-4-20250514` | No        | Overrides `LLMConfig.primaryModel` |
 
 **Validation:**
+
 - When `LLM_PROVIDER=openrouter`: `OPENROUTER_API_KEY` is required (existing behavior)
 - When `LLM_PROVIDER=ollama`: `OPENROUTER_API_KEY` is not required. On startup, the factory verifies Ollama is reachable (`GET /api/tags`) and the configured model is available, throwing `ConfigError` with actionable message if not:
 
@@ -1804,6 +1864,7 @@ The test command runs entirely in-process. No API server, no Redis, no queue, no
 #### 11.3.4 No-LLM Mode
 
 When `--no-llm` is passed:
+
 - Skip page classification (treat page as generic)
 - Require `--schema` with CSS selectors defined per field
 - Use `StaticExtractor` only (no LLM calls)
@@ -1814,6 +1875,7 @@ This makes `spatula test` usable with zero external dependencies for developers 
 #### 11.3.5 Dependencies
 
 The test command imports directly from `@spatula/core` (crawlers, extractors, LLM client). It does NOT import from `@spatula/db`, `@spatula/queue`, or `@spatula/api`. This means:
+
 - No database connection needed
 - No Redis connection needed
 - No API server running needed
@@ -1836,24 +1898,30 @@ export const CrawlOptions = z.object({
   waitForSelector: z.string().optional(),
   headers: z.record(z.string()).optional(),
   userAgent: z.string().optional(),
-  respectRobotsTxt: z.boolean().default(true),      // Added in Workstream F
+  respectRobotsTxt: z.boolean().default(true), // Added in Workstream F
 
   // New: Proxy configuration
-  proxy: z.object({
-    url: z.string(),                                 // e.g., 'http://proxy:8080' or 'socks5://proxy:1080'
-    username: z.string().optional(),
-    password: z.string().optional(),
-  }).optional(),
+  proxy: z
+    .object({
+      url: z.string(), // e.g., 'http://proxy:8080' or 'socks5://proxy:1080'
+      username: z.string().optional(),
+      password: z.string().optional(),
+    })
+    .optional(),
 
   // New: Cookie injection
-  cookies: z.array(z.object({
-    name: z.string(),
-    value: z.string(),
-    domain: z.string(),
-    path: z.string().default('/'),
-    httpOnly: z.boolean().default(false),
-    secure: z.boolean().default(false),
-  })).optional(),
+  cookies: z
+    .array(
+      z.object({
+        name: z.string(),
+        value: z.string(),
+        domain: z.string(),
+        path: z.string().default('/'),
+        httpOnly: z.boolean().default(false),
+        secure: z.boolean().default(false),
+      }),
+    )
+    .optional(),
 });
 ```
 
@@ -1879,11 +1947,13 @@ Playwright natively supports proxies and cookies. The `PlaywrightCrawler` implem
 
 ```typescript
 const browser = await chromium.launch({
-  proxy: options.proxy ? {
-    server: options.proxy.url,
-    username: options.proxy.username,
-    password: options.proxy.password,
-  } : undefined,
+  proxy: options.proxy
+    ? {
+        server: options.proxy.url,
+        username: options.proxy.username,
+        password: options.proxy.password,
+      }
+    : undefined,
 });
 ```
 
@@ -1892,14 +1962,16 @@ const browser = await chromium.launch({
 ```typescript
 if (options.cookies?.length) {
   const context = await browser.newContext();
-  await context.addCookies(options.cookies.map(c => ({
-    name: c.name,
-    value: c.value,
-    domain: c.domain,
-    path: c.path,
-    httpOnly: c.httpOnly,
-    secure: c.secure,
-  })));
+  await context.addCookies(
+    options.cookies.map((c) => ({
+      name: c.name,
+      value: c.value,
+      domain: c.domain,
+      path: c.path,
+      httpOnly: c.httpOnly,
+      secure: c.secure,
+    })),
+  );
   page = await context.newPage();
 }
 ```
@@ -1910,9 +1982,7 @@ Firecrawl's API supports headers but not direct proxy configuration (it runs its
 
 ```typescript
 if (options.cookies?.length) {
-  const cookieHeader = options.cookies
-    .map(c => `${c.name}=${c.value}`)
-    .join('; ');
+  const cookieHeader = options.cookies.map((c) => `${c.name}=${c.value}`).join('; ');
   headers['Cookie'] = cookieHeader;
 }
 ```
@@ -1931,17 +2001,23 @@ const CrawlConfig = z.object({
   crawlerType: z.enum(['playwright', 'firecrawl']).default('playwright'),
 
   // New
-  proxy: z.object({
-    url: z.string(),
-    username: z.string().optional(),
-    password: z.string().optional(),
-  }).optional(),
-  cookies: z.array(z.object({
-    name: z.string(),
-    value: z.string(),
-    domain: z.string(),
-    path: z.string().default('/'),
-  })).optional(),
+  proxy: z
+    .object({
+      url: z.string(),
+      username: z.string().optional(),
+      password: z.string().optional(),
+    })
+    .optional(),
+  cookies: z
+    .array(
+      z.object({
+        name: z.string(),
+        value: z.string(),
+        domain: z.string(),
+        path: z.string().default('/'),
+      }),
+    )
+    .optional(),
 });
 ```
 
@@ -1962,6 +2038,7 @@ crawl:
 #### 11.4.6 Security Consideration
 
 Proxy credentials and cookie values are sensitive. When stored in `JobConfig`:
+
 - They are persisted in the `jobs.config` JSONB column
 - They are visible via `GET /api/v1/jobs/:id`
 
@@ -1979,14 +2056,14 @@ LLM cost estimation uses average token counts per call type, derived from empiri
 
 ```typescript
 const AVG_TOKENS_PER_CALL: Record<string, { prompt: number; completion: number }> = {
-  pageRelevance:     { prompt: 800,  completion: 100  },
-  extraction:        { prompt: 2000, completion: 1500 },
-  linkEvaluation:    { prompt: 1500, completion: 300  },  // per batch of 20 links
-  schemaEvolution:   { prompt: 3000, completion: 1000 },
-  entityMatching:    { prompt: 1500, completion: 500  },
-  conflictResolution:{ prompt: 1000, completion: 300  },
-  qualityAudit:      { prompt: 2000, completion: 500  },
-  documentation:     { prompt: 1000, completion: 2000 },
+  pageRelevance: { prompt: 800, completion: 100 },
+  extraction: { prompt: 2000, completion: 1500 },
+  linkEvaluation: { prompt: 1500, completion: 300 }, // per batch of 20 links
+  schemaEvolution: { prompt: 3000, completion: 1000 },
+  entityMatching: { prompt: 1500, completion: 500 },
+  conflictResolution: { prompt: 1000, completion: 300 },
+  qualityAudit: { prompt: 2000, completion: 500 },
+  documentation: { prompt: 1000, completion: 2000 },
 };
 ```
 
@@ -1994,11 +2071,11 @@ const AVG_TOKENS_PER_CALL: Record<string, { prompt: number; completion: number }
 
 ```typescript
 const MODEL_PRICING: Record<string, { promptPer1M: number; completionPer1M: number }> = {
-  'anthropic/claude-sonnet-4-20250514':  { promptPer1M: 3.00,  completionPer1M: 15.00 },
-  'anthropic/claude-3-haiku-20240307':   { promptPer1M: 0.25,  completionPer1M: 1.25  },
-  'anthropic/claude-opus-4-20250514':    { promptPer1M: 15.00, completionPer1M: 75.00 },
+  'anthropic/claude-sonnet-4-20250514': { promptPer1M: 3.0, completionPer1M: 15.0 },
+  'anthropic/claude-3-haiku-20240307': { promptPer1M: 0.25, completionPer1M: 1.25 },
+  'anthropic/claude-opus-4-20250514': { promptPer1M: 15.0, completionPer1M: 75.0 },
   // Ollama models
-  'ollama/*':                            { promptPer1M: 0,     completionPer1M: 0     },
+  'ollama/*': { promptPer1M: 0, completionPer1M: 0 },
 };
 ```
 
@@ -2022,8 +2099,8 @@ function estimateCost(config: JobConfig): CostEstimate {
   // Per-page LLM calls
   const callsPerPage = {
     pageRelevance: 1,
-    extraction: 0.7,              // ~70% of pages are extractable
-    linkEvaluation: 0.05,         // 1 batch call per ~20 links
+    extraction: 0.7, // ~70% of pages are extractable
+    linkEvaluation: 0.05, // 1 batch call per ~20 links
   };
 
   // Per-job LLM calls (not per-page)
@@ -2040,11 +2117,13 @@ function estimateCost(config: JobConfig): CostEstimate {
 ```
 
 **`estimatePageCount(config)`:** Heuristic based on `maxDepth` and `maxPages`:
+
 - `maxDepth=0`: 1 page (seed URLs only)
 - `maxDepth=1`: `min(seeds * 20, maxPages)` (typical link fan-out)
 - `maxDepth=2+`: `maxPages` (assume the limit will be hit)
 
 **Confidence levels:**
+
 - `high`: `maxDepth <= 1` (predictable page count)
 - `medium`: `maxDepth == 2` and `maxPages <= 500`
 - `low`: `maxDepth >= 3` or `maxPages > 1000` (wide crawl, unpredictable)
@@ -2157,6 +2236,7 @@ For an initial open-source release, the minimum required workstreams are:
 - **Step 5** -- Data interaction commands (`spatula explore`, `spatula export`, `spatula review`)
 
 This yields a platform with BOTH deployment models from day one:
+
 - **Self-hosted server mode** for production (Postgres + Redis + BullMQ)
 - **Local project-folder mode** for development (`spatula init` -> `spatula run`)
 
@@ -2164,13 +2244,13 @@ This yields a platform with BOTH deployment models from day one:
 
 Phase 12 and Phase 13 parallelize naturally because they touch different layers:
 
-| Wave | Phase 12 (server layer) | Phase 13 (local layer) |
-|------|------------------------|----------------------|
-| **1** | A: CI/CD, Dockerfiles, shutdown, pooling, orchestrators | Step 1: Extract orchestrators (shared) |
-| **2** | D + F + J: circuit breaker, robots.txt, Ollama, proxy | Steps 2 + 3: SQLite schema + config system |
-| **3** | B + C + E: auth, observability, performance | Step 4: Pipeline runner + core CLI |
-| **4** | G + H: webhooks, bulk ops, LICENSE, README | Step 5: Data commands |
-| **5** | I: billing, admin, data retention | Step 6: Remote ops (push/pull) |
+| Wave  | Phase 12 (server layer)                                 | Phase 13 (local layer)                     |
+| ----- | ------------------------------------------------------- | ------------------------------------------ |
+| **1** | A: CI/CD, Dockerfiles, shutdown, pooling, orchestrators | Step 1: Extract orchestrators (shared)     |
+| **2** | D + F + J: circuit breaker, robots.txt, Ollama, proxy   | Steps 2 + 3: SQLite schema + config system |
+| **3** | B + C + E: auth, observability, performance             | Step 4: Pipeline runner + core CLI         |
+| **4** | G + H: webhooks, bulk ops, LICENSE, README              | Step 5: Data commands                      |
+| **5** | I: billing, admin, data retention                       | Step 6: Remote ops (push/pull)             |
 
 Phase 12 modifies server code (`apps/api`, `packages/queue` workers, middleware). Phase 13 adds new local code (`packages/db/project-db`, `packages/core/pipeline`, new CLI commands). Minimal file overlap — the orchestrator extraction in Wave 1 is the shared prerequisite.
 
@@ -2182,13 +2262,13 @@ The open-source release targets the end of Wave 4, including Phase 13 Steps 1-5.
 
 ### 13.1 New Test Categories
 
-| Category | What's Tested | Tool |
-|----------|---------------|------|
-| **Integration (DB)** | Repositories against real Postgres | Vitest + testcontainers |
-| **Integration (Redis)** | Rate limiter, cache, circuit breaker | Vitest + testcontainers |
-| **Contract** | CLI to API request/response shapes | Vitest + OpenAPI schema validation |
-| **Load** | API throughput, queue saturation | k6 scripts |
-| **Security** | Auth bypass, injection, header validation | Vitest + custom security test suite |
+| Category                | What's Tested                             | Tool                                |
+| ----------------------- | ----------------------------------------- | ----------------------------------- |
+| **Integration (DB)**    | Repositories against real Postgres        | Vitest + testcontainers             |
+| **Integration (Redis)** | Rate limiter, cache, circuit breaker      | Vitest + testcontainers             |
+| **Contract**            | CLI to API request/response shapes        | Vitest + OpenAPI schema validation  |
+| **Load**                | API throughput, queue saturation          | k6 scripts                          |
+| **Security**            | Auth bypass, injection, header validation | Vitest + custom security test suite |
 
 ### 13.2 Integration Test Infrastructure
 
@@ -2249,6 +2329,7 @@ Uses `@testcontainers/postgresql` and `@testcontainers/redis` for ephemeral cont
 This spec introduces 6 new tables and 1 table modification requiring a Drizzle migration:
 
 **New tables:**
+
 1. `api_keys` (section 3.1.2)
 2. `audit_log` (section 3.6)
 3. `llm_usage` (section 4.4.1)
@@ -2257,6 +2338,7 @@ This spec introduces 6 new tables and 1 table modification requiring a Drizzle m
 6. `user_tenants` (section 10.1.2)
 
 **Table modifications:**
+
 1. `tenants` -- add `quotas` JSONB column (section 3.4)
 
 **Note:** `crawl_task_status` enum already includes `skipped` from Phase 11. No enum migration needed.
@@ -2267,56 +2349,57 @@ This spec introduces 6 new tables and 1 table modification requiring a Drizzle m
 
 ### 14.2 Environment Variable Additions
 
-| Variable | Default | Required | Workstream |
-|----------|---------|----------|------------|
-| `AUTH_STRATEGY` | `none` | No | B |
-| `JWT_ISSUER` | -- | If jwt | B |
-| `JWT_AUDIENCE` | -- | If jwt | B |
-| `JWT_JWKS_URL` | -- | If jwt | B |
-| `CORS_ALLOWED_ORIGINS` | `http://localhost:3000` | No | B |
-| `DB_POOL_MAX` | `20` | No | A |
-| `DB_POOL_IDLE_TIMEOUT` | `30000` | No | A |
-| `CONTENT_STORE` | `postgres` | No | E |
-| `S3_BUCKET` | -- | If s3 | E |
-| `S3_REGION` | -- | If s3 | E |
-| `S3_ENDPOINT` | -- | If s3 (R2/MinIO) | E |
-| `S3_ACCESS_KEY_ID` | -- | If s3 | E |
-| `S3_SECRET_ACCESS_KEY` | -- | If s3 | E |
-| `SENTRY_DSN` | -- | No | C |
-| `SENTRY_TRACES_SAMPLE_RATE` | `0.1` | No | C |
-| `OTEL_EXPORTER_ENDPOINT` | -- | No | C |
-| `CRAWL_DEFAULT_DELAY_MS` | `1000` | No | F |
-| `SPATULA_WORKERS` | `all` | No | A |
-| `STRIPE_SECRET_KEY` | -- | If hosted | I |
-| `STRIPE_WEBHOOK_SECRET` | -- | If hosted | I |
-| `LLM_PROVIDER` | `openrouter` | No | J |
-| `OLLAMA_BASE_URL` | `http://localhost:11434` | If ollama | J |
-| `OLLAMA_TIMEOUT_MS` | `120000` | No | J |
-| `LLM_PRIMARY_MODEL` | `anthropic/claude-sonnet-4-20250514` | No | J |
+| Variable                    | Default                              | Required         | Workstream |
+| --------------------------- | ------------------------------------ | ---------------- | ---------- |
+| `AUTH_STRATEGY`             | `none`                               | No               | B          |
+| `JWT_ISSUER`                | --                                   | If jwt           | B          |
+| `JWT_AUDIENCE`              | --                                   | If jwt           | B          |
+| `JWT_JWKS_URL`              | --                                   | If jwt           | B          |
+| `CORS_ALLOWED_ORIGINS`      | `http://localhost:3000`              | No               | B          |
+| `DB_POOL_MAX`               | `20`                                 | No               | A          |
+| `DB_POOL_IDLE_TIMEOUT`      | `30000`                              | No               | A          |
+| `CONTENT_STORE`             | `postgres`                           | No               | E          |
+| `S3_BUCKET`                 | --                                   | If s3            | E          |
+| `S3_REGION`                 | --                                   | If s3            | E          |
+| `S3_ENDPOINT`               | --                                   | If s3 (R2/MinIO) | E          |
+| `S3_ACCESS_KEY_ID`          | --                                   | If s3            | E          |
+| `S3_SECRET_ACCESS_KEY`      | --                                   | If s3            | E          |
+| `SENTRY_DSN`                | --                                   | No               | C          |
+| `SENTRY_TRACES_SAMPLE_RATE` | `0.1`                                | No               | C          |
+| `OTEL_EXPORTER_ENDPOINT`    | --                                   | No               | C          |
+| `CRAWL_DEFAULT_DELAY_MS`    | `1000`                               | No               | F          |
+| `SPATULA_WORKERS`           | `all`                                | No               | A          |
+| `STRIPE_SECRET_KEY`         | --                                   | If hosted        | I          |
+| `STRIPE_WEBHOOK_SECRET`     | --                                   | If hosted        | I          |
+| `LLM_PROVIDER`              | `openrouter`                         | No               | J          |
+| `OLLAMA_BASE_URL`           | `http://localhost:11434`             | If ollama        | J          |
+| `OLLAMA_TIMEOUT_MS`         | `120000`                             | No               | J          |
+| `LLM_PRIMARY_MODEL`         | `anthropic/claude-sonnet-4-20250514` | No               | J          |
 
 ### 14.3 New Package Dependencies
 
-| Package | Version | Workstream | Purpose |
-|---------|---------|------------|---------|
-| `jose` | ^6.x | B | JWT validation (lightweight) |
-| `@aws-sdk/client-s3` | ^3.x | E | S3/R2 content store |
-| `@aws-sdk/s3-request-presigner` | ^3.x | E | Presigned download URLs |
-| `robots-parser` | ^3.x | F | robots.txt parsing |
-| `@opentelemetry/sdk-metrics` | ^1.x | C | Metrics collection |
-| `@opentelemetry/exporter-prometheus` | ^0.x | C | Prometheus export |
-| `@opentelemetry/sdk-trace-node` | ^1.x | C | Distributed tracing |
-| `@opentelemetry/auto-instrumentations-node` | ^0.x | C | Auto-instrumentation |
-| `@sentry/node` | ^9.x | C | Error aggregation |
-| `@bull-board/api` | ^6.x | C | Queue dashboard |
-| `@bull-board/hono` | ^6.x | C | Hono adapter for Bull Board |
-| `stripe` | ^18.x | I | Billing integration |
-| `@testcontainers/postgresql` | ^10.x | Testing | Integration test containers |
-| `@testcontainers/redis` | ^10.x | Testing | Integration test containers |
-| `k6` | (system) | Testing | Load testing (installed globally) |
+| Package                                     | Version  | Workstream | Purpose                           |
+| ------------------------------------------- | -------- | ---------- | --------------------------------- |
+| `jose`                                      | ^6.x     | B          | JWT validation (lightweight)      |
+| `@aws-sdk/client-s3`                        | ^3.x     | E          | S3/R2 content store               |
+| `@aws-sdk/s3-request-presigner`             | ^3.x     | E          | Presigned download URLs           |
+| `robots-parser`                             | ^3.x     | F          | robots.txt parsing                |
+| `@opentelemetry/sdk-metrics`                | ^1.x     | C          | Metrics collection                |
+| `@opentelemetry/exporter-prometheus`        | ^0.x     | C          | Prometheus export                 |
+| `@opentelemetry/sdk-trace-node`             | ^1.x     | C          | Distributed tracing               |
+| `@opentelemetry/auto-instrumentations-node` | ^0.x     | C          | Auto-instrumentation              |
+| `@sentry/node`                              | ^9.x     | C          | Error aggregation                 |
+| `@bull-board/api`                           | ^6.x     | C          | Queue dashboard                   |
+| `@bull-board/hono`                          | ^6.x     | C          | Hono adapter for Bull Board       |
+| `stripe`                                    | ^18.x    | I          | Billing integration               |
+| `@testcontainers/postgresql`                | ^10.x    | Testing    | Integration test containers       |
+| `@testcontainers/redis`                     | ^10.x    | Testing    | Integration test containers       |
+| `k6`                                        | (system) | Testing    | Load testing (installed globally) |
 
 ### 14.4 Backward Compatibility
 
 All changes are additive. No breaking changes to existing:
+
 - API endpoints (new endpoints only, existing unchanged)
 - Database schema (new columns have defaults, new tables are independent)
 - Configuration (new env vars have sensible defaults, `AUTH_STRATEGY=none` preserves current behavior)
@@ -2329,6 +2412,7 @@ All changes are additive. No breaking changes to existing:
 Switching `AUTH_STRATEGY` from `none` to `api-key` is a **breaking change** for all existing API clients (CLI, test scripts, E2E tests, any integration using `x-tenant-id` header).
 
 **Migration steps:**
+
 1. Deploy with `AUTH_STRATEGY=none` (current behavior preserved)
 2. Create API keys for each tenant via `POST /api/v1/api-keys` (works with header-based auth)
 3. Distribute API keys to all clients
@@ -2383,6 +2467,7 @@ llm: z.object({
 ```
 
 **Validation rules:**
+
 - When `auth.strategy === 'jwt'`: `jwtIssuer`, `jwtAudience`, and `jwtJwksUrl` are required
 - When `contentStore.type === 's3'`: `s3Bucket` is required; `S3_ACCESS_KEY_ID` and `S3_SECRET_ACCESS_KEY` env vars are required (validated outside Zod via AWS SDK credential chain)
 - When `llm.provider === 'openrouter'`: `OPENROUTER_API_KEY` is required (existing behavior)
@@ -2392,73 +2477,73 @@ llm: z.object({
 
 ## Appendix A: New Files Summary
 
-| Path | Workstream | Purpose |
-|------|------------|---------|
-| `.github/workflows/ci.yml` | A | CI pipeline |
-| `.github/workflows/release.yml` | A | Release + Docker push |
-| `.github/workflows/audit.yml` | A | Dependency audit |
-| `Dockerfile.api` | A | API container |
-| `Dockerfile.worker` | A | Worker container |
-| `Dockerfile.cli` | A | CLI container |
-| `docker-compose.prod.yml` | A | Production compose |
-| `packages/queue/src/worker-entrypoint.ts` | A | Worker lifecycle |
-| `apps/api/src/middleware/auth.ts` | B | Auth middleware |
-| `apps/api/src/middleware/rate-limit.ts` | B | Rate limiting |
-| `apps/api/src/middleware/timing.ts` | C | Request timing |
-| `packages/shared/src/metrics.ts` | C | Metrics collection |
-| `packages/shared/src/tracing.ts` | C | Distributed tracing |
-| `packages/shared/src/sentry.ts` | C | Error aggregation |
-| `packages/core/src/llm/circuit-breaker.ts` | D | Circuit breaker |
-| `packages/core/src/content-store/s3-content-store.ts` | E | S3 content store |
-| `packages/db/src/cache.ts` | E | Redis cache |
-| `packages/core/src/crawlers/robots-txt.ts` | F | robots.txt compliance |
-| `packages/core/src/crawlers/domain-rate-limiter.ts` | F | Per-domain politeness |
-| `packages/core/src/pipeline/crawl-orchestrator.ts` | A | Shared crawl logic (if orchestrator extraction done in Phase 12) |
-| `packages/core/src/pipeline/schema-orchestrator.ts` | A | Shared schema evolution logic |
-| `packages/core/src/pipeline/reconcile-orchestrator.ts` | A | Shared reconciliation logic |
-| `packages/core/src/pipeline/export-orchestrator.ts` | A | Shared export logic |
-| `packages/queue/src/webhook-sender.ts` | G | Webhook delivery |
-| `apps/cli/src/commands/doctor.ts` | G | Diagnostics (extensible for Phase 13) |
-| `LICENSE` | H | MIT license |
-| `README.md` | H | Project documentation |
-| `CONTRIBUTING.md` | H | Contributor guide |
-| `docs/architecture.md` | H | Architecture docs |
-| `examples/quickstart/` | H | Example configs |
-| `tests/integration/setup.ts` | Testing | Testcontainers setup |
-| `tests/load/*.js` | Testing | k6 load tests |
-| `tests/security/*.test.ts` | Testing | Security tests |
-| `packages/core/src/llm/ollama-client.ts` | J | Ollama LLM provider |
-| `packages/core/src/llm/llm-factory.ts` | J | LLM provider factory |
-| `packages/core/src/cost/estimator.ts` | J | Cost estimation library |
-| `apps/cli/src/commands/test.ts` | J | Single-page test command |
-| `apps/cli/src/commands/estimate.ts` | J | Cost estimation command |
+| Path                                                   | Workstream | Purpose                                                          |
+| ------------------------------------------------------ | ---------- | ---------------------------------------------------------------- |
+| `.github/workflows/ci.yml`                             | A          | CI pipeline                                                      |
+| `.github/workflows/release.yml`                        | A          | Release + Docker push                                            |
+| `.github/workflows/audit.yml`                          | A          | Dependency audit                                                 |
+| `Dockerfile.api`                                       | A          | API container                                                    |
+| `Dockerfile.worker`                                    | A          | Worker container                                                 |
+| `Dockerfile.cli`                                       | A          | CLI container                                                    |
+| `docker-compose.prod.yml`                              | A          | Production compose                                               |
+| `packages/queue/src/worker-entrypoint.ts`              | A          | Worker lifecycle                                                 |
+| `apps/api/src/middleware/auth.ts`                      | B          | Auth middleware                                                  |
+| `apps/api/src/middleware/rate-limit.ts`                | B          | Rate limiting                                                    |
+| `apps/api/src/middleware/timing.ts`                    | C          | Request timing                                                   |
+| `packages/shared/src/metrics.ts`                       | C          | Metrics collection                                               |
+| `packages/shared/src/tracing.ts`                       | C          | Distributed tracing                                              |
+| `packages/shared/src/sentry.ts`                        | C          | Error aggregation                                                |
+| `packages/core/src/llm/circuit-breaker.ts`             | D          | Circuit breaker                                                  |
+| `packages/core/src/content-store/s3-content-store.ts`  | E          | S3 content store                                                 |
+| `packages/db/src/cache.ts`                             | E          | Redis cache                                                      |
+| `packages/core/src/crawlers/robots-txt.ts`             | F          | robots.txt compliance                                            |
+| `packages/core/src/crawlers/domain-rate-limiter.ts`    | F          | Per-domain politeness                                            |
+| `packages/core/src/pipeline/crawl-orchestrator.ts`     | A          | Shared crawl logic (if orchestrator extraction done in Phase 12) |
+| `packages/core/src/pipeline/schema-orchestrator.ts`    | A          | Shared schema evolution logic                                    |
+| `packages/core/src/pipeline/reconcile-orchestrator.ts` | A          | Shared reconciliation logic                                      |
+| `packages/core/src/pipeline/export-orchestrator.ts`    | A          | Shared export logic                                              |
+| `packages/queue/src/webhook-sender.ts`                 | G          | Webhook delivery                                                 |
+| `apps/cli/src/commands/doctor.ts`                      | G          | Diagnostics (extensible for Phase 13)                            |
+| `LICENSE`                                              | H          | MIT license                                                      |
+| `README.md`                                            | H          | Project documentation                                            |
+| `CONTRIBUTING.md`                                      | H          | Contributor guide                                                |
+| `docs/architecture.md`                                 | H          | Architecture docs                                                |
+| `examples/quickstart/`                                 | H          | Example configs                                                  |
+| `tests/integration/setup.ts`                           | Testing    | Testcontainers setup                                             |
+| `tests/load/*.js`                                      | Testing    | k6 load tests                                                    |
+| `tests/security/*.test.ts`                             | Testing    | Security tests                                                   |
+| `packages/core/src/llm/ollama-client.ts`               | J          | Ollama LLM provider                                              |
+| `packages/core/src/llm/llm-factory.ts`                 | J          | LLM provider factory                                             |
+| `packages/core/src/cost/estimator.ts`                  | J          | Cost estimation library                                          |
+| `apps/cli/src/commands/test.ts`                        | J          | Single-page test command                                         |
+| `apps/cli/src/commands/estimate.ts`                    | J          | Cost estimation command                                          |
 
 ## Appendix B: Modified Files Summary
 
-| Path | Workstream | Change |
-|------|------------|--------|
-| `packages/db/src/connection.ts` | A | Pool-based connections |
-| `apps/api/src/server.ts` | A | Graceful shutdown |
-| `apps/api/src/app.ts` | A, B, C | Middleware chain updates |
-| `packages/shared/src/config.ts` | A, B, C, E | AppConfigSchema extension (section 13.6) |
-| `apps/api/src/types.ts` | A | Add `dbPool: Pool` to AppDeps |
-| `packages/queue/src/worker-deps.ts` | A | Add `dbPool: Pool` to WorkerDeps |
-| `packages/core/src/interfaces/crawler.ts` | F | `respectRobotsTxt` option |
-| `packages/core/src/llm/openrouter-client.ts` | C | Token usage recording |
-| `packages/queue/src/queues.ts` | D, G | Per-queue retry config, add WEBHOOK queue |
-| `packages/core/src/interfaces/content-store.ts` | E | Add optional `getDownloadUrl` method |
-| `apps/api/src/ws/job-progress.ts` | B | Remove `?tenantId=` fallback when auth active |
-| `packages/queue/src/workers/crawl-worker.ts` | A, F | Refactor to thin wrapper (if orchestrator extraction), maxPages, robots.txt, politeness, completion |
-| `packages/queue/src/workers/schema-worker.ts` | A | Refactor to thin wrapper (if orchestrator extraction) |
-| `packages/queue/src/workers/reconciliation-worker.ts` | A | Refactor to thin wrapper (if orchestrator extraction) |
-| `packages/queue/src/workers/export-worker.ts` | A, E, F | Refactor to thin wrapper (if orchestrator extraction), streaming, quality filter |
-| `apps/api/src/routes/exports.ts` | E | Presigned URL redirects |
-| `.env.example` | All | New variables documented |
-| `docker-compose.yml` | A | Network config for prod |
-| `packages/core/src/interfaces/crawler.ts` | J | Add proxy + cookies to CrawlOptions |
-| `packages/core/src/crawlers/playwright-crawler.ts` | J | Proxy and cookie support |
-| `packages/core/src/crawlers/firecrawl-crawler.ts` | J | Cookie-to-header conversion |
-| `packages/core/src/types/job.ts` | J | Add proxy + cookies to CrawlConfig |
-| `packages/core/src/llm/model-router.ts` | J | Works as-is (no changes, but documented) |
-| `packages/shared/src/config.ts` | J | Add LLM provider config to AppConfigSchema |
-| `apps/api/src/routes/jobs.ts` | J | Redact proxy credentials in responses |
+| Path                                                  | Workstream | Change                                                                                              |
+| ----------------------------------------------------- | ---------- | --------------------------------------------------------------------------------------------------- |
+| `packages/db/src/connection.ts`                       | A          | Pool-based connections                                                                              |
+| `apps/api/src/server.ts`                              | A          | Graceful shutdown                                                                                   |
+| `apps/api/src/app.ts`                                 | A, B, C    | Middleware chain updates                                                                            |
+| `packages/shared/src/config.ts`                       | A, B, C, E | AppConfigSchema extension (section 13.6)                                                            |
+| `apps/api/src/types.ts`                               | A          | Add `dbPool: Pool` to AppDeps                                                                       |
+| `packages/queue/src/worker-deps.ts`                   | A          | Add `dbPool: Pool` to WorkerDeps                                                                    |
+| `packages/core/src/interfaces/crawler.ts`             | F          | `respectRobotsTxt` option                                                                           |
+| `packages/core/src/llm/openrouter-client.ts`          | C          | Token usage recording                                                                               |
+| `packages/queue/src/queues.ts`                        | D, G       | Per-queue retry config, add WEBHOOK queue                                                           |
+| `packages/core/src/interfaces/content-store.ts`       | E          | Add optional `getDownloadUrl` method                                                                |
+| `apps/api/src/ws/job-progress.ts`                     | B          | Remove `?tenantId=` fallback when auth active                                                       |
+| `packages/queue/src/workers/crawl-worker.ts`          | A, F       | Refactor to thin wrapper (if orchestrator extraction), maxPages, robots.txt, politeness, completion |
+| `packages/queue/src/workers/schema-worker.ts`         | A          | Refactor to thin wrapper (if orchestrator extraction)                                               |
+| `packages/queue/src/workers/reconciliation-worker.ts` | A          | Refactor to thin wrapper (if orchestrator extraction)                                               |
+| `packages/queue/src/workers/export-worker.ts`         | A, E, F    | Refactor to thin wrapper (if orchestrator extraction), streaming, quality filter                    |
+| `apps/api/src/routes/exports.ts`                      | E          | Presigned URL redirects                                                                             |
+| `.env.example`                                        | All        | New variables documented                                                                            |
+| `docker-compose.yml`                                  | A          | Network config for prod                                                                             |
+| `packages/core/src/interfaces/crawler.ts`             | J          | Add proxy + cookies to CrawlOptions                                                                 |
+| `packages/core/src/crawlers/playwright-crawler.ts`    | J          | Proxy and cookie support                                                                            |
+| `packages/core/src/crawlers/firecrawl-crawler.ts`     | J          | Cookie-to-header conversion                                                                         |
+| `packages/core/src/types/job.ts`                      | J          | Add proxy + cookies to CrawlConfig                                                                  |
+| `packages/core/src/llm/model-router.ts`               | J          | Works as-is (no changes, but documented)                                                            |
+| `packages/shared/src/config.ts`                       | J          | Add LLM provider config to AppConfigSchema                                                          |
+| `apps/api/src/routes/jobs.ts`                         | J          | Redact proxy credentials in responses                                                               |

@@ -1,6 +1,10 @@
 // packages/core/tests/unit/config/global-config.test.ts
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { loadGlobalConfig, getGlobalConfigPath, saveGlobalConfig } from '../../../src/config/global-config.js';
+import {
+  loadGlobalConfig,
+  getGlobalConfigPath,
+  saveGlobalConfig,
+} from '../../../src/config/global-config.js';
 import type { GlobalConfig } from '../../../src/config/types.js';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';

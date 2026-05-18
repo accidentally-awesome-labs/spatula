@@ -54,10 +54,7 @@ import type { PageClassificationResult } from '@spatula/core';
 // ---------------------------------------------------------------------------
 // Fixture HTML
 // ---------------------------------------------------------------------------
-const FIXTURE_HTML = readFileSync(
-  join(__dirname, 'fixtures', 'product-page.html'),
-  'utf-8',
-);
+const FIXTURE_HTML = readFileSync(join(__dirname, 'fixtures', 'product-page.html'), 'utf-8');
 
 const FIXTURE_URL = 'https://example.com/products/xz-500';
 
@@ -98,7 +95,13 @@ function createMockCrawler(): Crawler {
   };
 }
 
-function createMockClassifier(): { classify: (html: string, url: string, jobDescription: string) => Promise<PageClassificationResult> } {
+function createMockClassifier(): {
+  classify: (
+    html: string,
+    url: string,
+    jobDescription: string,
+  ) => Promise<PageClassificationResult>;
+} {
   return {
     async classify(
       _html: string,
@@ -140,9 +143,7 @@ function createMockExtractor(): Extractor {
           modelUsed: 'mock-model',
           tokensUsed: 500,
           extractionTimeMs: 100,
-          unmappedFields: [
-            { name: 'color', value: 'black', suggestedType: 'string' },
-          ],
+          unmappedFields: [{ name: 'color', value: 'black', suggestedType: 'string' }],
         },
       };
     },
@@ -173,9 +174,7 @@ function createMockSchemaEvolver(): SchemaEvolver {
             },
             relevance: {
               globalFrequency: 0.8,
-              categoryBreakdown: [
-                { category: 'electronics', frequency: 0.9, sampleSize: 10 },
-              ],
+              categoryBreakdown: [{ category: 'electronics', frequency: 0.9, sampleSize: 10 }],
               classification: 'universal_optional',
               applicableCategories: null,
             },
@@ -273,8 +272,7 @@ describe('Full Pipeline E2E', () => {
 
     // 2. Connect to test database
     const dbUrl =
-      process.env.TEST_DATABASE_URL ??
-      'postgresql://spatula:spatula@localhost:5432/spatula_test';
+      process.env.TEST_DATABASE_URL ?? 'postgresql://spatula:spatula@localhost:5432/spatula_test';
     db = createDatabase(dbUrl);
 
     // 3. Create BullMQ queues against real Redis
@@ -298,18 +296,24 @@ describe('Full Pipeline E2E', () => {
     // Cleanup in FK dependency order
     try {
       if (jobId && tenantId) {
-        await db.execute(sql`DELETE FROM entity_sources WHERE entity_id IN (SELECT id FROM entities WHERE job_id = ${jobId})`);
+        await db.execute(
+          sql`DELETE FROM entity_sources WHERE entity_id IN (SELECT id FROM entities WHERE job_id = ${jobId})`,
+        );
         await db.execute(sql`DELETE FROM entities WHERE job_id = ${jobId}`);
         await db.execute(sql`DELETE FROM source_trust WHERE job_id = ${jobId}`);
         await db.execute(sql`DELETE FROM extractions WHERE job_id = ${jobId}`);
-        await db.execute(sql`DELETE FROM raw_pages WHERE task_id IN (SELECT id FROM crawl_tasks WHERE job_id = ${jobId})`);
+        await db.execute(
+          sql`DELETE FROM raw_pages WHERE task_id IN (SELECT id FROM crawl_tasks WHERE job_id = ${jobId})`,
+        );
         await db.execute(sql`DELETE FROM crawl_tasks WHERE job_id = ${jobId}`);
         await db.execute(sql`DELETE FROM actions WHERE job_id = ${jobId}`);
         await db.execute(sql`DELETE FROM exports WHERE job_id = ${jobId}`);
         await db.execute(sql`UPDATE jobs SET schema_id = NULL WHERE id = ${jobId}`);
         await db.execute(sql`DELETE FROM schemas WHERE job_id = ${jobId}`);
         await db.execute(sql`DELETE FROM jobs WHERE id = ${jobId}`);
-        await db.execute(sql`DELETE FROM content_store WHERE key LIKE ${jobId + '%'} OR key LIKE ${'exports/' + tenantId + '/' + jobId + '%'}`);
+        await db.execute(
+          sql`DELETE FROM content_store WHERE key LIKE ${jobId + '%'} OR key LIKE ${'exports/' + tenantId + '/' + jobId + '%'}`,
+        );
       }
       if (tenantId) {
         await db.execute(sql`DELETE FROM tenants WHERE id = ${tenantId}`);
@@ -366,7 +370,12 @@ describe('Full Pipeline E2E', () => {
         userFields: [
           { name: 'name', description: 'Product name', type: 'string', required: true },
           { name: 'price', description: 'Product price', type: 'number', required: true },
-          { name: 'description', description: 'Product description', type: 'string', required: false },
+          {
+            name: 'description',
+            description: 'Product description',
+            type: 'string',
+            required: false,
+          },
           { name: 'brand', description: 'Product brand', type: 'string', required: false },
         ],
         evolutionConfig: {
@@ -479,9 +488,7 @@ describe('Full Pipeline E2E', () => {
     const evolvedSchema = await schemaRepo.findLatest(jobId, tenantId);
     expect(evolvedSchema).toBeTruthy();
     expect(evolvedSchema!.version).toBe(2);
-    const fieldNames = evolvedSchema!.definition.fields.map(
-      (f: { name: string }) => f.name,
-    );
+    const fieldNames = evolvedSchema!.definition.fields.map((f: { name: string }) => f.name);
     expect(fieldNames).toContain('color');
 
     // Verify action was persisted
@@ -505,10 +512,7 @@ describe('Full Pipeline E2E', () => {
       reconciler: realReconciler,
     } as any);
 
-    await processReconciliationJob(
-      { jobId, tenantId },
-      reconDeps,
-    );
+    await processReconciliationJob({ jobId, tenantId }, reconDeps);
 
     // Verify entities were created
     const entityCount = await entityRepo.countByJob(jobId, tenantId);
@@ -574,27 +578,31 @@ describe('Full Pipeline E2E', () => {
 
     async function createIsolatedTenant(label: string) {
       const tid = randomUUID();
-      await db.execute(
-        sql`INSERT INTO tenants (id, name) VALUES (${tid}, ${label})`,
-      );
+      await db.execute(sql`INSERT INTO tenants (id, name) VALUES (${tid}, ${label})`);
       return tid;
     }
 
     async function cleanupTenant(tid: string, jid?: string) {
       try {
         if (jid) {
-          await db.execute(sql`DELETE FROM entity_sources WHERE entity_id IN (SELECT id FROM entities WHERE job_id = ${jid})`);
+          await db.execute(
+            sql`DELETE FROM entity_sources WHERE entity_id IN (SELECT id FROM entities WHERE job_id = ${jid})`,
+          );
           await db.execute(sql`DELETE FROM entities WHERE job_id = ${jid}`);
           await db.execute(sql`DELETE FROM source_trust WHERE job_id = ${jid}`);
           await db.execute(sql`DELETE FROM extractions WHERE job_id = ${jid}`);
-          await db.execute(sql`DELETE FROM raw_pages WHERE task_id IN (SELECT id FROM crawl_tasks WHERE job_id = ${jid})`);
+          await db.execute(
+            sql`DELETE FROM raw_pages WHERE task_id IN (SELECT id FROM crawl_tasks WHERE job_id = ${jid})`,
+          );
           await db.execute(sql`DELETE FROM crawl_tasks WHERE job_id = ${jid}`);
           await db.execute(sql`DELETE FROM actions WHERE job_id = ${jid}`);
           await db.execute(sql`DELETE FROM exports WHERE job_id = ${jid}`);
           await db.execute(sql`UPDATE jobs SET schema_id = NULL WHERE id = ${jid}`);
           await db.execute(sql`DELETE FROM schemas WHERE job_id = ${jid}`);
           await db.execute(sql`DELETE FROM jobs WHERE id = ${jid}`);
-          await db.execute(sql`DELETE FROM content_store WHERE key LIKE ${jid + '%'} OR key LIKE ${'exports/' + tid + '/' + jid + '%'}`);
+          await db.execute(
+            sql`DELETE FROM content_store WHERE key LIKE ${jid + '%'} OR key LIKE ${'exports/' + tid + '/' + jid + '%'}`,
+          );
         }
         await db.execute(sql`DELETE FROM tenants WHERE id = ${tid}`);
       } catch (e) {

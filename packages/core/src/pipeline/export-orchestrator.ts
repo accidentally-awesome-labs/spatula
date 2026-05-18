@@ -11,22 +11,24 @@ import { StreamingCsvExporter } from '../exporters/streaming-csv-exporter.js';
 import { generateDocumentation } from '../exporters/documentation-generator.js';
 import { fetchEntitiesCursor } from './entity-cursor.js';
 import type { Exporter, ExportFormat, ExportOptions, SchemaDefinition } from '../index.js';
-import type {
-  ExportOrchestratorDeps,
-  ExportInput,
-  PipelineExportResult,
-} from './types.js';
+import type { ExportOrchestratorDeps, ExportInput, PipelineExportResult } from './types.js';
 
 const MAX_EXPORT_ENTITIES = 50_000;
 
 function getExporter(format: string): Exporter {
   switch (format) {
-    case 'json': return new JsonExporter();
-    case 'csv': return new CsvExporter();
-    case 'sqlite': return new SqliteExporter();
-    case 'parquet': return new ParquetExporter();
-    case 'duckdb': return new DuckDBExporter();
-    default: throw new ValidationError(`Unsupported export format: ${format}`);
+    case 'json':
+      return new JsonExporter();
+    case 'csv':
+      return new CsvExporter();
+    case 'sqlite':
+      return new SqliteExporter();
+    case 'parquet':
+      return new ParquetExporter();
+    case 'duckdb':
+      return new DuckDBExporter();
+    default:
+      throw new ValidationError(`Unsupported export format: ${format}`);
   }
 }
 
@@ -51,7 +53,10 @@ export async function processExport(
     }
     const jobStatus = (job as { status?: string }).status;
     if (jobStatus !== 'completed') {
-      throw new ValidationError(`Job is not completed (status: ${jobStatus}). Export requires a completed job.`, { context: { exportId, jobId, status: jobStatus } });
+      throw new ValidationError(
+        `Job is not completed (status: ${jobStatus}). Export requires a completed job.`,
+        { context: { exportId, jobId, status: jobStatus } },
+      );
     }
 
     // 1. Mark as processing
@@ -67,7 +72,10 @@ export async function processExport(
     // 3. Determine export strategy
     const useProvenance = includeProvenance && format === 'json';
     const streamingFormats = new Set(['json', 'csv']);
-    const canStream = streamingFormats.has(format) && !useProvenance && typeof deps.entityRepo.findByJobCursor === 'function';
+    const canStream =
+      streamingFormats.has(format) &&
+      !useProvenance &&
+      typeof deps.entityRepo.findByJobCursor === 'function';
 
     let allEntities: Entity[] = [];
     let contentToStore: string | undefined;
@@ -90,7 +98,13 @@ export async function processExport(
 
       // Count entities as they stream through
       async function* countedEntityStream() {
-        for await (const batch of fetchEntitiesCursor(deps.entityRepo as any, jobId, tenantId, 500, { minQuality: input.minQuality })) {
+        for await (const batch of fetchEntitiesCursor(
+          deps.entityRepo as any,
+          jobId,
+          tenantId,
+          500,
+          { minQuality: input.minQuality },
+        )) {
           streamEntityCount += batch.length;
           yield batch;
         }
@@ -112,9 +126,8 @@ export async function processExport(
         }
       }
       const entityStream = projectedStream();
-      const streamExporter = format === 'json'
-        ? new StreamingJsonExporter()
-        : new StreamingCsvExporter();
+      const streamExporter =
+        format === 'json' ? new StreamingJsonExporter() : new StreamingCsvExporter();
       const outputStream = streamExporter.export(entityStream);
 
       // Collect stream to string
@@ -155,7 +168,13 @@ export async function processExport(
       // OFFSET/BINARY PATH: binary formats, provenance, or no cursor support
       // Fetch via cursor if available (and not provenance), otherwise offset
       if (typeof deps.entityRepo.findByJobCursor === 'function' && !useProvenance) {
-        for await (const batch of fetchEntitiesCursor(deps.entityRepo as any, jobId, tenantId, 500, { minQuality: input.minQuality })) {
+        for await (const batch of fetchEntitiesCursor(
+          deps.entityRepo as any,
+          jobId,
+          tenantId,
+          500,
+          { minQuality: input.minQuality },
+        )) {
           allEntities.push(...(batch as Entity[]));
         }
       } else {
@@ -184,9 +203,8 @@ export async function processExport(
       entityCount = allEntities.length;
 
       // Run existing exporter for this path
-      const documentation = format === 'json'
-        ? generateDocumentation(schema, allEntities, jobId)
-        : null;
+      const documentation =
+        format === 'json' ? generateDocumentation(schema, allEntities, jobId) : null;
       const exporter = getExporter(format);
       const result = await exporter.export(allEntities, schema, {
         format: format as ExportFormat,
@@ -231,13 +249,6 @@ export async function processExport(
       fileSize = Buffer.byteLength(contentToStore!, 'utf-8');
     }
 
-    // 6b. Record storage usage for billing metering
-    if (deps.quotaEnforcer) {
-      deps.quotaEnforcer.recordUsage(tenantId, 'storage_bytes', fileSize).catch((err: unknown) => {
-        logger.warn({ err, tenantId, fileSize }, 'Failed to record storage usage for billing');
-      });
-    }
-
     // 7. Mark as completed
     await deps.exportRepo.updateStatus(exportId, tenantId, {
       status: 'completed',
@@ -256,12 +267,14 @@ export async function processExport(
     };
   } catch (error) {
     logger.error({ exportId, jobId, error }, 'export failed');
-    await deps.exportRepo.updateStatus(exportId, tenantId, {
-      status: 'failed',
-      error: error instanceof Error ? error.message : 'Unknown error',
-    }).catch((e: unknown) => {
-      logger.error({ exportId, error: e }, 'failed to mark export as failed');
-    });
+    await deps.exportRepo
+      .updateStatus(exportId, tenantId, {
+        status: 'failed',
+        error: error instanceof Error ? error.message : 'Unknown error',
+      })
+      .catch((e: unknown) => {
+        logger.error({ exportId, error: e }, 'failed to mark export as failed');
+      });
     // Return a zero-result to indicate failure without throwing
     return { entityCount: 0, fileSize: 0, contentRef: '' };
   }

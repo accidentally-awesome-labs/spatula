@@ -65,7 +65,9 @@ describe('Health routes', () => {
       const deps = {
         dbPool: { query: vi.fn().mockResolvedValue({}) } as unknown as Pool,
         redis: { ping: vi.fn().mockResolvedValue('PONG') } as any,
-        queues: { crawl: { getJobCounts: vi.fn().mockRejectedValue(new Error('queue error')) } } as any,
+        queues: {
+          crawl: { getJobCounts: vi.fn().mockRejectedValue(new Error('queue error')) },
+        } as any,
       };
       const app = new Hono();
       app.route('', healthRoutes(deps));
@@ -82,7 +84,9 @@ describe('Health routes', () => {
       const deps = {
         dbPool: { query: vi.fn().mockRejectedValue(new Error('db down')) } as unknown as Pool,
         redis: { ping: vi.fn().mockRejectedValue(new Error('redis down')) } as any,
-        queues: { crawl: { getJobCounts: vi.fn().mockRejectedValue(new Error('queue down')) } } as any,
+        queues: {
+          crawl: { getJobCounts: vi.fn().mockRejectedValue(new Error('queue down')) },
+        } as any,
       };
       const app = new Hono();
       app.route('', healthRoutes(deps));

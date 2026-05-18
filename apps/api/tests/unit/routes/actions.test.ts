@@ -10,9 +10,11 @@ function createMockDeps(): AppDeps {
   return {
     dbPool: { end: vi.fn() } as unknown as Pool,
     actionRepo: {
-      findByJob: vi.fn().mockResolvedValue([
-        { id: 'act-1', type: 'add_field', status: 'pending_review', confidence: 0.9 },
-      ]),
+      findByJob: vi
+        .fn()
+        .mockResolvedValue([
+          { id: 'act-1', type: 'add_field', status: 'pending_review', confidence: 0.9 },
+        ]),
       findById: vi.fn().mockResolvedValue({
         id: 'act-1',
         type: 'add_field',
@@ -237,7 +239,11 @@ describe('Action routes', () => {
       });
 
       expect(res.status).toBe(200);
-      expect(depsWithQueue.reviewQueue!.approve).toHaveBeenCalledWith('act-1', 'tenant-1', 'user-1');
+      expect(depsWithQueue.reviewQueue!.approve).toHaveBeenCalledWith(
+        'act-1',
+        'tenant-1',
+        'user-1',
+      );
       // Should NOT fall through to direct actionRepo
       expect(depsWithQueue.actionRepo.updateStatus).not.toHaveBeenCalled();
     });
@@ -259,7 +265,12 @@ describe('Action routes', () => {
       });
 
       expect(res.status).toBe(200);
-      expect(depsWithQueue.reviewQueue!.reject).toHaveBeenCalledWith('act-1', 'tenant-1', 'user-1', 'Not needed');
+      expect(depsWithQueue.reviewQueue!.reject).toHaveBeenCalledWith(
+        'act-1',
+        'tenant-1',
+        'user-1',
+        'Not needed',
+      );
       expect(depsWithQueue.actionRepo.updateStatus).not.toHaveBeenCalled();
     });
 
@@ -280,7 +291,11 @@ describe('Action routes', () => {
       });
 
       expect(res.status).toBe(200);
-      expect(depsWithQueue.reviewQueue!.approveAll).toHaveBeenCalledWith('job-1', 'tenant-1', 'user-1');
+      expect(depsWithQueue.reviewQueue!.approveAll).toHaveBeenCalledWith(
+        'job-1',
+        'tenant-1',
+        'user-1',
+      );
       // Should NOT fall through to direct actionRepo
       expect(depsWithQueue.actionRepo.findByJob).not.toHaveBeenCalled();
       expect(depsWithQueue.actionRepo.batchUpdateStatus).not.toHaveBeenCalled();

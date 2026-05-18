@@ -29,12 +29,7 @@ export class SqliteJobRepository implements JobRepo {
     _jobId: string,
     _tenantId: string,
   ): Promise<{ id: string; config: unknown; status?: string } | null> {
-    const latestRun = this.db
-      .select()
-      .from(runs)
-      .orderBy(desc(runs.startedAt))
-      .limit(1)
-      .get();
+    const latestRun = this.db.select().from(runs).orderBy(desc(runs.startedAt)).limit(1).get();
 
     // If no runs exist yet, return null (orchestrators handle null from findById)
     if (!latestRun) {
@@ -49,18 +44,8 @@ export class SqliteJobRepository implements JobRepo {
     };
   }
 
-  async updateStatus(
-    _jobId: string,
-    _tenantId: string,
-    status: string,
-  ): Promise<unknown> {
-
-    const latestRun = this.db
-      .select()
-      .from(runs)
-      .orderBy(desc(runs.startedAt))
-      .limit(1)
-      .get();
+  async updateStatus(_jobId: string, _tenantId: string, status: string): Promise<unknown> {
+    const latestRun = this.db.select().from(runs).orderBy(desc(runs.startedAt)).limit(1).get();
 
     if (latestRun) {
       wrapStorageError(

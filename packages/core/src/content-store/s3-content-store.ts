@@ -43,7 +43,12 @@ export class S3ContentStore implements ContentStore {
       region: config.region,
       ...(config.endpoint ? { endpoint: config.endpoint, forcePathStyle: true } : {}),
       ...(config.accessKeyId && config.secretAccessKey
-        ? { credentials: { accessKeyId: config.accessKeyId, secretAccessKey: config.secretAccessKey } }
+        ? {
+            credentials: {
+              accessKeyId: config.accessKeyId,
+              secretAccessKey: config.secretAccessKey,
+            },
+          }
         : {}),
     });
   }
@@ -156,11 +161,9 @@ export class S3ContentStore implements ContentStore {
   async getDownloadUrl(ref: string, expiresInSeconds = 3600): Promise<string> {
     const { bucket, key } = this.parseRef(ref);
     try {
-      return await getSignedUrl(
-        this.client,
-        new GetObjectCommand({ Bucket: bucket, Key: key }),
-        { expiresIn: expiresInSeconds },
-      );
+      return await getSignedUrl(this.client, new GetObjectCommand({ Bucket: bucket, Key: key }), {
+        expiresIn: expiresInSeconds,
+      });
     } catch (error) {
       throw new StorageError(`Failed to generate presigned URL: ${(error as Error).message}`, {
         cause: error as Error,

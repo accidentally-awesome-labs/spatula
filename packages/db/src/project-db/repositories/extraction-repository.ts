@@ -31,22 +31,25 @@ export class SqliteExtractionRepository implements ExtractionRepo {
     metadata: unknown;
   }): Promise<{ id: string }> {
     const id = crypto.randomUUID();
-    wrapStorageError(() => {
-      this.db
-        .insert(extractions)
-        .values({
-          id,
-          jobId: this.projectId,
-          pageId: data.pageId,
-          schemaVersion: data.schemaVersion,
-          data: data.data,
-          unmappedFields: data.unmappedFields as Record<string, unknown>[],
-          metadata: (data.metadata ?? {}) as Record<string, unknown>,
-          createdAt: new Date().toISOString(),
-          updatedAt: new Date().toISOString(),
-        })
-        .run();
-    }, { method: 'store', table: 'extractions' });
+    wrapStorageError(
+      () => {
+        this.db
+          .insert(extractions)
+          .values({
+            id,
+            jobId: this.projectId,
+            pageId: data.pageId,
+            schemaVersion: data.schemaVersion,
+            data: data.data,
+            unmappedFields: data.unmappedFields as Record<string, unknown>[],
+            metadata: (data.metadata ?? {}) as Record<string, unknown>,
+            createdAt: new Date().toISOString(),
+            updatedAt: new Date().toISOString(),
+          })
+          .run();
+      },
+      { method: 'store', table: 'extractions' },
+    );
     return { id };
   }
 
@@ -85,63 +88,79 @@ export class SqliteExtractionRepository implements ExtractionRepo {
     return query.all() as any;
   }
 
-  async upsertBatch(batch: Array<{
-    id: string;
-    pageId: string | null;
-    pageUrl: string | null;
-    schemaVersion: number;
-    data: Record<string, unknown>;
-    unmappedFields: Record<string, unknown>[];
-    metadata: Record<string, unknown>;
-    runId: string | null;
-  }>): Promise<{ inserted: number; updated: number }> {
+  async upsertBatch(
+    batch: Array<{
+      id: string;
+      pageId: string | null;
+      pageUrl: string | null;
+      schemaVersion: number;
+      data: Record<string, unknown>;
+      unmappedFields: Record<string, unknown>[];
+      metadata: Record<string, unknown>;
+      runId: string | null;
+    }>,
+  ): Promise<{ inserted: number; updated: number }> {
     if (batch.length === 0) return { inserted: 0, updated: 0 };
 
     const existingIds = new Set<string>();
-    wrapStorageError(() => {
-      const ids = batch.map(item => item.id);
-      // Batch existence check (SQLite limit is 999 params)
-      for (let i = 0; i < ids.length; i += 999) {
-        const chunk = ids.slice(i, i + 999);
-        const rows = this.db.select({ id: extractions.id }).from(extractions).where(inArray(extractions.id, chunk)).all();
-        for (const row of rows) existingIds.add(row.id);
-      }
-    }, { method: 'upsertBatch:check', table: 'extractions' });
+    wrapStorageError(
+      () => {
+        const ids = batch.map((item) => item.id);
+        // Batch existence check (SQLite limit is 999 params)
+        for (let i = 0; i < ids.length; i += 999) {
+          const chunk = ids.slice(i, i + 999);
+          const rows = this.db
+            .select({ id: extractions.id })
+            .from(extractions)
+            .where(inArray(extractions.id, chunk))
+            .all();
+          for (const row of rows) existingIds.add(row.id);
+        }
+      },
+      { method: 'upsertBatch:check', table: 'extractions' },
+    );
 
     const now = new Date().toISOString();
     // Track IDs seen within this batch to count within-batch duplicates as updates
     const seenInBatch = new Set<string>();
-    wrapStorageError(() => {
-      for (const item of batch) {
-        if (!existingIds.has(item.id) && !seenInBatch.has(item.id)) {
-          seenInBatch.add(item.id);
-        } else {
-          existingIds.add(item.id);
+    wrapStorageError(
+      () => {
+        for (const item of batch) {
+          if (!existingIds.has(item.id) && !seenInBatch.has(item.id)) {
+            seenInBatch.add(item.id);
+          } else {
+            existingIds.add(item.id);
+          }
+          this.db
+            .insert(extractions)
+            .values({
+              id: item.id,
+              jobId: this.projectId,
+              pageId: item.pageId,
+              pageUrl: item.pageUrl,
+              schemaVersion: item.schemaVersion,
+              data: item.data,
+              unmappedFields: item.unmappedFields,
+              metadata: item.metadata,
+              createdAt: now,
+              updatedAt: now,
+              runId: item.runId,
+            })
+            .onConflictDoUpdate({
+              target: extractions.id,
+              set: {
+                data: item.data,
+                unmappedFields: item.unmappedFields,
+                metadata: item.metadata,
+                updatedAt: now,
+                runId: item.runId,
+              },
+            })
+            .run();
         }
-        this.db.insert(extractions).values({
-          id: item.id,
-          jobId: this.projectId,
-          pageId: item.pageId,
-          pageUrl: item.pageUrl,
-          schemaVersion: item.schemaVersion,
-          data: item.data,
-          unmappedFields: item.unmappedFields,
-          metadata: item.metadata,
-          createdAt: now,
-          updatedAt: now,
-          runId: item.runId,
-        }).onConflictDoUpdate({
-          target: extractions.id,
-          set: {
-            data: item.data,
-            unmappedFields: item.unmappedFields,
-            metadata: item.metadata,
-            updatedAt: now,
-            runId: item.runId,
-          },
-        }).run();
-      }
-    }, { method: 'upsertBatch', table: 'extractions' });
+      },
+      { method: 'upsertBatch', table: 'extractions' },
+    );
 
     return { inserted: batch.length - existingIds.size, updated: existingIds.size };
   }
@@ -149,14 +168,18 @@ export class SqliteExtractionRepository implements ExtractionRepo {
   async deleteByRunIds(runIds: string[]): Promise<number> {
     if (runIds.length === 0) return 0;
     let total = 0;
-    wrapStorageError(() => {
-      for (const runId of runIds) {
-        const result = this.db.delete(extractions).where(
-          and(eq(extractions.jobId, this.projectId), eq(extractions.runId, runId)),
-        ).run();
-        total += result.changes;
-      }
-    }, { method: 'deleteByRunIds', table: 'extractions' });
+    wrapStorageError(
+      () => {
+        for (const runId of runIds) {
+          const result = this.db
+            .delete(extractions)
+            .where(and(eq(extractions.jobId, this.projectId), eq(extractions.runId, runId)))
+            .run();
+          total += result.changes;
+        }
+      },
+      { method: 'deleteByRunIds', table: 'extractions' },
+    );
     return total;
   }
 
@@ -166,6 +189,6 @@ export class SqliteExtractionRepository implements ExtractionRepo {
       .from(extractions)
       .where(and(eq(extractions.jobId, this.projectId), eq(extractions.runId, runId)))
       .all();
-    return rows.map(r => r.id);
+    return rows.map((r) => r.id);
   }
 }

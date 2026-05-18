@@ -1,4 +1,4 @@
-import { eq, sql, desc, and } from 'drizzle-orm';
+import { eq, sql, desc } from 'drizzle-orm';
 import { createLogger, StorageError } from '@spatula/shared';
 import { tenants } from '../schema/tenants.js';
 import type { Database } from '../connection.js';
@@ -47,10 +47,7 @@ export class TenantRepository {
 
   async findById(id: string) {
     try {
-      const [row] = await this.db
-        .select()
-        .from(tenants)
-        .where(eq(tenants.id, id));
+      const [row] = await this.db.select().from(tenants).where(eq(tenants.id, id));
 
       return row ?? null;
     } catch (error) {
@@ -97,11 +94,7 @@ export class TenantRepository {
   async getQuotas(tenantId: string) {
     const cacheKey = `tenant:${tenantId}:quotas`;
     if (this.cache) {
-      return this.cache.getOrFetch(
-        cacheKey,
-        () => this._getQuotasFromDb(tenantId),
-        300,
-      );
+      return this.cache.getOrFetch(cacheKey, () => this._getQuotasFromDb(tenantId), 300);
     }
     return this._getQuotasFromDb(tenantId);
   }
@@ -127,63 +120,6 @@ export class TenantRepository {
     }
   }
 
-  async updatePlan(tenantId: string, plan: string, stripeCustomerId?: string): Promise<void> {
-    try {
-      const updates: Record<string, unknown> = { plan };
-      if (stripeCustomerId !== undefined) {
-        updates.stripeCustomerId = stripeCustomerId;
-      }
-      await this.db
-        .update(tenants)
-        .set(updates)
-        .where(eq(tenants.id, tenantId));
-
-      // Invalidate cached quotas (plan change affects rate limit tier)
-      if (this.cache) {
-        await this.cache.delete(`tenant:${tenantId}:quotas`);
-      }
-
-      logger.info({ tenantId, plan }, 'tenant plan updated');
-    } catch (error) {
-      throw new StorageError(`Failed to update tenant plan: ${(error as Error).message}`, {
-        cause: error as Error,
-        context: { tenantId, plan },
-      });
-    }
-  }
-
-  async getPlan(tenantId: string): Promise<string> {
-    try {
-      const [row] = await this.db
-        .select({ plan: tenants.plan })
-        .from(tenants)
-        .where(eq(tenants.id, tenantId));
-      if (!row) throw new StorageError(`Tenant ${tenantId} not found`, { context: { id: tenantId } });
-      return row.plan;
-    } catch (error) {
-      if (error instanceof StorageError) throw error;
-      throw new StorageError(`Failed to get plan: ${(error as Error).message}`, {
-        cause: error as Error,
-        context: { tenantId },
-      });
-    }
-  }
-
-  async findByStripeCustomerId(stripeCustomerId: string) {
-    try {
-      const [row] = await this.db
-        .select()
-        .from(tenants)
-        .where(eq(tenants.stripeCustomerId, stripeCustomerId));
-      return row ?? null;
-    } catch (error) {
-      throw new StorageError(`Failed to find tenant by Stripe customer: ${(error as Error).message}`, {
-        cause: error as Error,
-        context: { stripeCustomerId },
-      });
-    }
-  }
-
   async incrementStorageBytes(tenantId: string, bytes: number) {
     try {
       await this.db
@@ -198,27 +134,12 @@ export class TenantRepository {
     }
   }
 
-  async findAll(options?: {
-    plan?: string;
-    limit?: number;
-    offset?: number;
-  }) {
+  async findAll(options?: { limit?: number; offset?: number }) {
     try {
-      const conditions = [];
-      if (options?.plan) {
-        conditions.push(eq(tenants.plan, options.plan));
-      }
-
-      let query = this.db
+      return await this.db
         .select()
         .from(tenants)
-        .orderBy(desc(tenants.createdAt));
-
-      if (conditions.length > 0) {
-        query = query.where(and(...conditions)) as typeof query;
-      }
-
-      return await query
+        .orderBy(desc(tenants.createdAt))
         .limit(options?.limit ?? 50)
         .offset(options?.offset ?? 0);
     } catch (error) {
@@ -228,20 +149,9 @@ export class TenantRepository {
     }
   }
 
-  async countAll(options?: { plan?: string }): Promise<number> {
+  async countAll(): Promise<number> {
     try {
-      const conditions = [];
-      if (options?.plan) {
-        conditions.push(eq(tenants.plan, options.plan));
-      }
-
-      const query = this.db
-        .select({ count: sql<number>`count(*)::int` })
-        .from(tenants);
-
-      const rows = conditions.length > 0
-        ? await query.where(and(...conditions))
-        : await query;
+      const rows = await this.db.select({ count: sql<number>`count(*)::int` }).from(tenants);
 
       return (rows[0] as any)?.count ?? 0;
     } catch (error) {

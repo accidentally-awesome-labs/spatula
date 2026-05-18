@@ -13,6 +13,7 @@
 ## Task 1: Project Setup — Dependencies, JSX Config, Vitest
 
 **Files:**
+
 - Modify: `apps/cli/package.json`
 - Modify: `apps/cli/tsconfig.json`
 - Create: `apps/cli/vitest.config.ts`
@@ -137,6 +138,7 @@ git commit -m "feat(cli): add Ink, React, Zustand, yargs dependencies and JSX co
 The `ConfigExecutor` interface is defined in `packages/core/src/interfaces/config-executor.ts` but has no implementation. The CLI needs it to apply ConfigActions to a JobConfig.
 
 **Files:**
+
 - Create: `packages/core/src/config/config-executor.ts`
 - Create: `packages/core/src/config/index.ts`
 - Modify: `packages/core/src/index.ts` (add export)
@@ -175,13 +177,19 @@ describe('DefaultConfigExecutor', () => {
   describe('apply — metadata', () => {
     it('applies set_job_name', () => {
       const config = baseConfig();
-      const result = executor.apply(config, action('set_job_name', { name: 'Audiophile Products' }));
+      const result = executor.apply(
+        config,
+        action('set_job_name', { name: 'Audiophile Products' }),
+      );
       expect(result.name).toBe('Audiophile Products');
     });
 
     it('applies set_job_description', () => {
       const config = baseConfig();
-      const result = executor.apply(config, action('set_job_description', { description: 'Crawl headphones' }));
+      const result = executor.apply(
+        config,
+        action('set_job_description', { description: 'Crawl headphones' }),
+      );
       expect(result.description).toBe('Crawl headphones');
     });
   });
@@ -189,31 +197,46 @@ describe('DefaultConfigExecutor', () => {
   describe('apply — seed URLs', () => {
     it('applies add_seed_urls', () => {
       const config = baseConfig();
-      const result = executor.apply(config, action('add_seed_urls', {
-        urls: [{ url: 'https://headfi.org' }, { url: 'https://canjam.org' }],
-      }));
+      const result = executor.apply(
+        config,
+        action('add_seed_urls', {
+          urls: [{ url: 'https://headfi.org' }, { url: 'https://canjam.org' }],
+        }),
+      );
       expect(result.seedUrls).toEqual(['https://headfi.org', 'https://canjam.org']);
     });
 
     it('applies add_seed_urls to existing list without duplicates', () => {
       const config = { ...baseConfig(), seedUrls: ['https://headfi.org'] };
-      const result = executor.apply(config, action('add_seed_urls', {
-        urls: [{ url: 'https://headfi.org' }, { url: 'https://canjam.org' }],
-      }));
+      const result = executor.apply(
+        config,
+        action('add_seed_urls', {
+          urls: [{ url: 'https://headfi.org' }, { url: 'https://canjam.org' }],
+        }),
+      );
       expect(result.seedUrls).toEqual(['https://headfi.org', 'https://canjam.org']);
     });
 
     it('applies remove_seed_urls', () => {
-      const config = { ...baseConfig(), seedUrls: ['https://a.com', 'https://b.com', 'https://c.com'] };
-      const result = executor.apply(config, action('remove_seed_urls', { urls: ['https://b.com'] }));
+      const config = {
+        ...baseConfig(),
+        seedUrls: ['https://a.com', 'https://b.com', 'https://c.com'],
+      };
+      const result = executor.apply(
+        config,
+        action('remove_seed_urls', { urls: ['https://b.com'] }),
+      );
       expect(result.seedUrls).toEqual(['https://a.com', 'https://c.com']);
     });
 
     it('applies replace_seed_urls', () => {
       const config = { ...baseConfig(), seedUrls: ['https://old.com'] };
-      const result = executor.apply(config, action('replace_seed_urls', {
-        urls: [{ url: 'https://new.com' }],
-      }));
+      const result = executor.apply(
+        config,
+        action('replace_seed_urls', {
+          urls: [{ url: 'https://new.com' }],
+        }),
+      );
       expect(result.seedUrls).toEqual(['https://new.com']);
     });
   });
@@ -239,7 +262,10 @@ describe('DefaultConfigExecutor', () => {
 
     it('applies set_crawler_type', () => {
       const config = baseConfig();
-      const result = executor.apply(config, action('set_crawler_type', { crawlerType: 'firecrawl' }));
+      const result = executor.apply(
+        config,
+        action('set_crawler_type', { crawlerType: 'firecrawl' }),
+      );
       expect(result.crawl.crawlerType).toBe('firecrawl');
     });
   });
@@ -247,22 +273,28 @@ describe('DefaultConfigExecutor', () => {
   describe('apply — schema fields', () => {
     it('applies add_user_field', () => {
       const config = { ...baseConfig(), schema: { mode: 'fixed' as const, userFields: [] } };
-      const result = executor.apply(config, action('add_user_field', {
-        field: { name: 'price', description: 'Product price', type: 'currency', required: true },
-        position: 'last',
-      }));
+      const result = executor.apply(
+        config,
+        action('add_user_field', {
+          field: { name: 'price', description: 'Product price', type: 'currency', required: true },
+          position: 'last',
+        }),
+      );
       expect(result.schema.userFields).toHaveLength(1);
       expect(result.schema.userFields![0].name).toBe('price');
     });
 
     it('applies add_multiple_user_fields', () => {
       const config = { ...baseConfig(), schema: { mode: 'fixed' as const, userFields: [] } };
-      const result = executor.apply(config, action('add_multiple_user_fields', {
-        fields: [
-          { name: 'price', description: 'Price', type: 'currency', required: true },
-          { name: 'brand', description: 'Brand', type: 'string', required: false },
-        ],
-      }));
+      const result = executor.apply(
+        config,
+        action('add_multiple_user_fields', {
+          fields: [
+            { name: 'price', description: 'Price', type: 'currency', required: true },
+            { name: 'brand', description: 'Brand', type: 'string', required: false },
+          ],
+        }),
+      );
       expect(result.schema.userFields).toHaveLength(2);
     });
 
@@ -287,12 +319,17 @@ describe('DefaultConfigExecutor', () => {
         ...baseConfig(),
         schema: {
           mode: 'fixed' as const,
-          userFields: [{ name: 'old', description: 'Old', type: 'string' as const, required: false }],
+          userFields: [
+            { name: 'old', description: 'Old', type: 'string' as const, required: false },
+          ],
         },
       };
-      const result = executor.apply(config, action('replace_all_user_fields', {
-        fields: [{ name: 'new', description: 'New', type: 'number' as const, required: true }],
-      }));
+      const result = executor.apply(
+        config,
+        action('replace_all_user_fields', {
+          fields: [{ name: 'new', description: 'New', type: 'number' as const, required: true }],
+        }),
+      );
       expect(result.schema.userFields).toHaveLength(1);
       expect(result.schema.userFields![0].name).toBe('new');
     });
@@ -307,7 +344,10 @@ describe('DefaultConfigExecutor', () => {
 
     it('applies set_evolution_config', () => {
       const config = baseConfig();
-      const result = executor.apply(config, action('set_evolution_config', { enabled: true, batchSize: 20 }));
+      const result = executor.apply(
+        config,
+        action('set_evolution_config', { enabled: true, batchSize: 20 }),
+      );
       expect(result.schema.evolutionConfig?.enabled).toBe(true);
       expect(result.schema.evolutionConfig?.batchSize).toBe(20);
     });
@@ -316,20 +356,29 @@ describe('DefaultConfigExecutor', () => {
   describe('apply — LLM config', () => {
     it('applies set_primary_model', () => {
       const config = baseConfig();
-      const result = executor.apply(config, action('set_primary_model', { model: 'openai/gpt-4o' }));
+      const result = executor.apply(
+        config,
+        action('set_primary_model', { model: 'openai/gpt-4o' }),
+      );
       expect(result.llm.primaryModel).toBe('openai/gpt-4o');
     });
 
     it('applies set_model_override', () => {
       const config = baseConfig();
-      const result = executor.apply(config, action('set_model_override', { task: 'extraction', model: 'openai/gpt-4o-mini' }));
+      const result = executor.apply(
+        config,
+        action('set_model_override', { task: 'extraction', model: 'openai/gpt-4o-mini' }),
+      );
       expect(result.llm.modelOverrides?.extraction).toBe('openai/gpt-4o-mini');
     });
 
     it('applies clear_model_override', () => {
       const config = {
         ...baseConfig(),
-        llm: { primaryModel: 'anthropic/claude-sonnet-4-20250514', modelOverrides: { extraction: 'openai/gpt-4o-mini' } },
+        llm: {
+          primaryModel: 'anthropic/claude-sonnet-4-20250514',
+          modelOverrides: { extraction: 'openai/gpt-4o-mini' },
+        },
       };
       const result = executor.apply(config, action('clear_model_override', { task: 'extraction' }));
       expect(result.llm.modelOverrides?.extraction).toBeUndefined();
@@ -339,17 +388,23 @@ describe('DefaultConfigExecutor', () => {
   describe('apply — reconciliation', () => {
     it('applies set_match_strategy', () => {
       const config = baseConfig();
-      const result = executor.apply(config, action('set_match_strategy', {
-        matchStrategy: 'fuzzy_name',
-        fuzzyMatchThreshold: 0.9,
-      }));
+      const result = executor.apply(
+        config,
+        action('set_match_strategy', {
+          matchStrategy: 'fuzzy_name',
+          fuzzyMatchThreshold: 0.9,
+        }),
+      );
       expect(result.reconciliation?.matchStrategy).toBe('fuzzy_name');
       expect(result.reconciliation?.fuzzyMatchThreshold).toBe(0.9);
     });
 
     it('applies set_conflict_resolution', () => {
       const config = baseConfig();
-      const result = executor.apply(config, action('set_conflict_resolution', { strategy: 'source_priority' }));
+      const result = executor.apply(
+        config,
+        action('set_conflict_resolution', { strategy: 'source_priority' }),
+      );
       expect(result.reconciliation?.conflictResolution).toBe('source_priority');
     });
   });
@@ -459,7 +514,11 @@ Expected: FAIL — `DefaultConfigExecutor` not found.
 Create `packages/core/src/config/config-executor.ts`:
 
 ```typescript
-import type { ConfigExecutor, ConfigValidationResult, ConfigDiff } from '../interfaces/config-executor.js';
+import type {
+  ConfigExecutor,
+  ConfigValidationResult,
+  ConfigDiff,
+} from '../interfaces/config-executor.js';
 import type { JobConfig } from '../types/job.js';
 import type { ConfigAction } from '../types/config-actions.js';
 
@@ -547,9 +606,7 @@ export class DefaultConfigExecutor implements ConfigExecutor {
 
       case 'modify_user_field': {
         if (next.schema.userFields) {
-          const idx = next.schema.userFields.findIndex(
-            (f) => f.name === action.payload.fieldName,
-          );
+          const idx = next.schema.userFields.findIndex((f) => f.name === action.payload.fieldName);
           if (idx >= 0) {
             next.schema.userFields[idx] = {
               ...next.schema.userFields[idx],
@@ -747,7 +804,10 @@ export class DefaultConfigExecutor implements ConfigExecutor {
     if (!config.description || config.description.trim() === '') missing.push('description');
     if (!config.seedUrls || config.seedUrls.length === 0) missing.push('seedUrls');
 
-    if (config.schema.mode === 'fixed' && (!config.schema.userFields || config.schema.userFields.length === 0)) {
+    if (
+      config.schema.mode === 'fixed' &&
+      (!config.schema.userFields || config.schema.userFields.length === 0)
+    ) {
       missing.push('userFields (required for fixed schema mode)');
     }
 
@@ -760,7 +820,9 @@ export class DefaultConfigExecutor implements ConfigExecutor {
     }
 
     if (config.schema.mode === 'discovery' && config.schema.userFields?.length) {
-      suggestions.push('Consider "hybrid" mode since you have user-defined fields with discovery enabled');
+      suggestions.push(
+        'Consider "hybrid" mode since you have user-defined fields with discovery enabled',
+      );
     }
 
     return {
@@ -775,25 +837,60 @@ export class DefaultConfigExecutor implements ConfigExecutor {
     const changes: ConfigDiff['changes'] = [];
 
     if (before.name !== after.name) {
-      changes.push({ path: 'name', before: before.name, after: after.name, description: 'Job name changed' });
+      changes.push({
+        path: 'name',
+        before: before.name,
+        after: after.name,
+        description: 'Job name changed',
+      });
     }
     if (before.description !== after.description) {
-      changes.push({ path: 'description', before: before.description, after: after.description, description: 'Description changed' });
+      changes.push({
+        path: 'description',
+        before: before.description,
+        after: after.description,
+        description: 'Description changed',
+      });
     }
     if (JSON.stringify(before.seedUrls) !== JSON.stringify(after.seedUrls)) {
-      changes.push({ path: 'seedUrls', before: before.seedUrls, after: after.seedUrls, description: 'Seed URLs changed' });
+      changes.push({
+        path: 'seedUrls',
+        before: before.seedUrls,
+        after: after.seedUrls,
+        description: 'Seed URLs changed',
+      });
     }
     if (JSON.stringify(before.crawl) !== JSON.stringify(after.crawl)) {
-      changes.push({ path: 'crawl', before: before.crawl, after: after.crawl, description: 'Crawl settings changed' });
+      changes.push({
+        path: 'crawl',
+        before: before.crawl,
+        after: after.crawl,
+        description: 'Crawl settings changed',
+      });
     }
     if (JSON.stringify(before.schema) !== JSON.stringify(after.schema)) {
-      changes.push({ path: 'schema', before: before.schema, after: after.schema, description: 'Schema config changed' });
+      changes.push({
+        path: 'schema',
+        before: before.schema,
+        after: after.schema,
+        description: 'Schema config changed',
+      });
     }
     if (JSON.stringify(before.llm) !== JSON.stringify(after.llm)) {
-      changes.push({ path: 'llm', before: before.llm, after: after.llm, description: 'LLM config changed' });
+      changes.push({
+        path: 'llm',
+        before: before.llm,
+        after: after.llm,
+        description: 'LLM config changed',
+      });
     }
     if (JSON.stringify(before.reconciliation) !== JSON.stringify(after.reconciliation)) {
-      changes.push({ path: 'reconciliation', before: before.reconciliation, after: after.reconciliation, description: 'Reconciliation config changed' });
+      changes.push({
+        path: 'reconciliation',
+        before: before.reconciliation,
+        after: after.reconciliation,
+        description: 'Reconciliation config changed',
+      });
     }
 
     return { changes };
@@ -855,6 +952,7 @@ git commit -m "feat(core): implement DefaultConfigExecutor for all 30 ConfigActi
 ## Task 3: API Client — HTTP Communication Layer
 
 **Files:**
+
 - Create: `apps/cli/src/api/client.ts`
 - Test: `apps/cli/tests/unit/api/client.test.ts`
 
@@ -928,10 +1026,7 @@ describe('SpatulaApiClient', () => {
     it('fetches without params when none given', async () => {
       mockResponse({ data: [] });
       await client.listJobs();
-      expect(fetchSpy).toHaveBeenCalledWith(
-        `${BASE_URL}/api/v1/jobs`,
-        expect.anything(),
-      );
+      expect(fetchSpy).toHaveBeenCalledWith(`${BASE_URL}/api/v1/jobs`, expect.anything());
     });
   });
 
@@ -1108,13 +1203,19 @@ export class SpatulaApiClient {
 
   // --- Extractions ---
 
-  async listExtractions(jobId: string, query?: Record<string, unknown>): Promise<Record<string, unknown>[]> {
+  async listExtractions(
+    jobId: string,
+    query?: Record<string, unknown>,
+  ): Promise<Record<string, unknown>[]> {
     return this.getList(`/api/v1/jobs/${jobId}/extractions`, query);
   }
 
   // --- Entities ---
 
-  async listEntities(jobId: string, query?: Record<string, unknown>): Promise<Record<string, unknown>[]> {
+  async listEntities(
+    jobId: string,
+    query?: Record<string, unknown>,
+  ): Promise<Record<string, unknown>[]> {
     return this.getList(`/api/v1/jobs/${jobId}/entities`, query);
   }
 
@@ -1124,20 +1225,40 @@ export class SpatulaApiClient {
 
   // --- Actions ---
 
-  async listActions(jobId: string, query?: Record<string, unknown>): Promise<Record<string, unknown>[]> {
+  async listActions(
+    jobId: string,
+    query?: Record<string, unknown>,
+  ): Promise<Record<string, unknown>[]> {
     return this.getList(`/api/v1/jobs/${jobId}/actions`, query);
   }
 
-  async approveAction(jobId: string, actionId: string, reviewedBy?: string): Promise<Record<string, unknown>> {
-    return this.post(`/api/v1/jobs/${jobId}/actions/${actionId}/approve`, reviewedBy ? { reviewedBy } : undefined);
+  async approveAction(
+    jobId: string,
+    actionId: string,
+    reviewedBy?: string,
+  ): Promise<Record<string, unknown>> {
+    return this.post(
+      `/api/v1/jobs/${jobId}/actions/${actionId}/approve`,
+      reviewedBy ? { reviewedBy } : undefined,
+    );
   }
 
-  async rejectAction(jobId: string, actionId: string, reviewedBy?: string): Promise<Record<string, unknown>> {
-    return this.post(`/api/v1/jobs/${jobId}/actions/${actionId}/reject`, reviewedBy ? { reviewedBy } : undefined);
+  async rejectAction(
+    jobId: string,
+    actionId: string,
+    reviewedBy?: string,
+  ): Promise<Record<string, unknown>> {
+    return this.post(
+      `/api/v1/jobs/${jobId}/actions/${actionId}/reject`,
+      reviewedBy ? { reviewedBy } : undefined,
+    );
   }
 
   async approveAllActions(jobId: string, reviewedBy?: string): Promise<Record<string, unknown>[]> {
-    const result = await this.post(`/api/v1/jobs/${jobId}/actions/approve-all`, reviewedBy ? { reviewedBy } : undefined);
+    const result = await this.post(
+      `/api/v1/jobs/${jobId}/actions/approve-all`,
+      reviewedBy ? { reviewedBy } : undefined,
+    );
     return Array.isArray(result) ? result : [];
   }
 
@@ -1172,14 +1293,10 @@ export class SpatulaApiClient {
         ...(body !== undefined && { body: JSON.stringify(body) }),
       });
     } catch (error) {
-      throw new ApiError(
-        `Network error: ${(error as Error).message}`,
-        0,
-        'NETWORK_ERROR',
-      );
+      throw new ApiError(`Network error: ${(error as Error).message}`, 0, 'NETWORK_ERROR');
     }
 
-    const data = await response.json() as Record<string, unknown>;
+    const data = (await response.json()) as Record<string, unknown>;
 
     if (!response.ok) {
       const err = data.error as Record<string, unknown> | undefined;
@@ -1197,7 +1314,10 @@ export class SpatulaApiClient {
     return this.request('GET', path) as Promise<Record<string, unknown>>;
   }
 
-  private async getList(path: string, query?: Record<string, unknown>): Promise<Record<string, unknown>[]> {
+  private async getList(
+    path: string,
+    query?: Record<string, unknown>,
+  ): Promise<Record<string, unknown>[]> {
     let response: Response;
     try {
       response = await fetch(this.buildUrl(path, query), {
@@ -1205,14 +1325,10 @@ export class SpatulaApiClient {
         headers: this.headers(),
       });
     } catch (error) {
-      throw new ApiError(
-        `Network error: ${(error as Error).message}`,
-        0,
-        'NETWORK_ERROR',
-      );
+      throw new ApiError(`Network error: ${(error as Error).message}`, 0, 'NETWORK_ERROR');
     }
 
-    const data = await response.json() as Record<string, unknown>;
+    const data = (await response.json()) as Record<string, unknown>;
 
     if (!response.ok) {
       const err = data.error as Record<string, unknown> | undefined;
@@ -1252,6 +1368,7 @@ git commit -m "feat(cli): add SpatulaApiClient HTTP wrapper for all API endpoint
 ## Task 4: Zustand Store — Global CLI State
 
 **Files:**
+
 - Create: `apps/cli/src/store/index.ts`
 - Test: `apps/cli/tests/unit/store/index.test.ts`
 
@@ -1306,10 +1423,12 @@ describe('CliStore', () => {
     });
 
     it('applies multiple config actions', () => {
-      store.getState().applyActions([
-        action('set_job_name', { name: 'Test' }),
-        action('add_seed_urls', { urls: [{ url: 'https://example.com' }] }),
-      ]);
+      store
+        .getState()
+        .applyActions([
+          action('set_job_name', { name: 'Test' }),
+          action('add_seed_urls', { urls: [{ url: 'https://example.com' }] }),
+        ]);
       expect(store.getState().config.name).toBe('Test');
       expect(store.getState().config.seedUrls).toEqual(['https://example.com']);
     });
@@ -1342,7 +1461,9 @@ describe('CliStore', () => {
     });
 
     it('adds an assistant message', () => {
-      store.getState().addMessage({ role: 'assistant', content: 'I will help you set up a crawl.' });
+      store
+        .getState()
+        .addMessage({ role: 'assistant', content: 'I will help you set up a crawl.' });
       expect(store.getState().messages[0].role).toBe('assistant');
     });
 
@@ -1377,11 +1498,13 @@ describe('CliStore', () => {
     });
 
     it('passes validation for complete config', () => {
-      store.getState().applyActions([
-        action('set_job_name', { name: 'Test' }),
-        action('set_job_description', { description: 'Test desc' }),
-        action('add_seed_urls', { urls: [{ url: 'https://example.com' }] }),
-      ]);
+      store
+        .getState()
+        .applyActions([
+          action('set_job_name', { name: 'Test' }),
+          action('set_job_description', { description: 'Test desc' }),
+          action('add_seed_urls', { urls: [{ url: 'https://example.com' }] }),
+        ]);
       const result = store.getState().validateConfig();
       expect(result.valid).toBe(true);
     });
@@ -1472,8 +1595,7 @@ export function createCliStore(tenantId: string) {
         config: executor.applyBatch(state.config, actions),
         actionHistory: [...state.actionHistory, ...actions],
       })),
-    resetConfig: () =>
-      set({ config: emptyConfig(tenantId), actionHistory: [] }),
+    resetConfig: () => set({ config: emptyConfig(tenantId), actionHistory: [] }),
     validateConfig: () => executor.validate(get().config),
 
     actionHistory: [],
@@ -1519,6 +1641,7 @@ git commit -m "feat(cli): add Zustand store with config action reducer and chat 
 ## Task 5: Shared UI Components — Panel, Header, Spinner, KeyboardHints
 
 **Files:**
+
 - Create: `apps/cli/src/components/shared/Panel.tsx`
 - Create: `apps/cli/src/components/shared/Header.tsx`
 - Create: `apps/cli/src/components/shared/Spinner.tsx`
@@ -1767,6 +1890,7 @@ git commit -m "feat(cli): add shared UI components — Panel, Header, Spinner, K
 ## Task 6: ConfigPanel — Job Config Display Component
 
 **Files:**
+
 - Create: `apps/cli/src/components/conversational/ConfigPanel.tsx`
 - Test: `apps/cli/tests/unit/components/conversational/config-panel.test.tsx`
 
@@ -1810,7 +1934,9 @@ describe('ConfigPanel', () => {
 
   it('shows seed URLs when set', () => {
     const { lastFrame } = render(
-      <ConfigPanel config={makeConfig({ seedUrls: ['https://headfi.org', 'https://canjam.org'] })} />,
+      <ConfigPanel
+        config={makeConfig({ seedUrls: ['https://headfi.org', 'https://canjam.org'] })}
+      />,
     );
     const frame = lastFrame();
     expect(frame).toContain('headfi.org');
@@ -1935,9 +2061,7 @@ export function ConfigPanel({ config, isValid }: ConfigPanelProps) {
           <Box flexDirection="column" paddingLeft={2}>
             {config.schema.userFields!.map((f) => (
               <Box key={f.name}>
-                <Text>
-                  {f.name}
-                </Text>
+                <Text>{f.name}</Text>
                 <Text dimColor> ({f.type})</Text>
                 {f.required && <Text color="red"> *</Text>}
               </Box>
@@ -1994,6 +2118,7 @@ git commit -m "feat(cli): add ConfigPanel component for displaying evolving job 
 ## Task 7: ChatView — Conversational Message Display + Input
 
 **Files:**
+
 - Create: `apps/cli/src/components/conversational/ChatView.tsx`
 - Test: `apps/cli/tests/unit/components/conversational/chat-view.test.tsx`
 
@@ -2012,9 +2137,7 @@ describe('ChatView', () => {
   const noOp = vi.fn();
 
   it('renders welcome message when no messages', () => {
-    const { lastFrame } = render(
-      <ChatView messages={[]} onSubmit={noOp} isLoading={false} />,
-    );
+    const { lastFrame } = render(<ChatView messages={[]} onSubmit={noOp} isLoading={false} />);
     expect(lastFrame()).toContain('Describe');
   });
 
@@ -2030,7 +2153,11 @@ describe('ChatView', () => {
 
   it('renders assistant messages', () => {
     const messages: ChatMessage[] = [
-      { role: 'assistant', content: 'Setting up your audiophile crawl now.', timestamp: Date.now() },
+      {
+        role: 'assistant',
+        content: 'Setting up your audiophile crawl now.',
+        timestamp: Date.now(),
+      },
     ];
     const { lastFrame } = render(
       <ChatView messages={messages} onSubmit={noOp} isLoading={false} />,
@@ -2039,26 +2166,20 @@ describe('ChatView', () => {
   });
 
   it('shows loading indicator when processing', () => {
-    const { lastFrame } = render(
-      <ChatView messages={[]} onSubmit={noOp} isLoading={true} />,
-    );
+    const { lastFrame } = render(<ChatView messages={[]} onSubmit={noOp} isLoading={true} />);
     expect(lastFrame()).toContain('Thinking');
   });
 
   it('calls onSubmit when user submits text', () => {
     const onSubmit = vi.fn();
-    const { stdin } = render(
-      <ChatView messages={[]} onSubmit={onSubmit} isLoading={false} />,
-    );
+    const { stdin } = render(<ChatView messages={[]} onSubmit={onSubmit} isLoading={false} />);
     stdin.write('hello\r');
     expect(onSubmit).toHaveBeenCalledWith('hello');
   });
 
   it('does not submit empty input', () => {
     const onSubmit = vi.fn();
-    const { stdin } = render(
-      <ChatView messages={[]} onSubmit={onSubmit} isLoading={false} />,
-    );
+    const { stdin } = render(<ChatView messages={[]} onSubmit={onSubmit} isLoading={false} />);
     stdin.write('\r');
     expect(onSubmit).not.toHaveBeenCalled();
   });
@@ -2107,8 +2228,8 @@ export function ChatView({ messages, onSubmit, isLoading }: ChatViewProps) {
         {messages.length === 0 && (
           <Box paddingX={1}>
             <Text dimColor>
-              Describe what you want to crawl. For example: "I want to crawl audiophile
-              products from headfi.org"
+              Describe what you want to crawl. For example: "I want to crawl audiophile products
+              from headfi.org"
             </Text>
           </Box>
         )}
@@ -2180,6 +2301,7 @@ git commit -m "feat(cli): add ChatView component with message display and text i
 This is the core intelligence of conversational mode. It sends user messages to the LLM along with a system prompt explaining ConfigActions, and parses the response into structured actions.
 
 **Files:**
+
 - Create: `apps/cli/src/services/config-conversation.ts`
 - Test: `apps/cli/tests/unit/services/config-conversation.test.ts`
 
@@ -2409,13 +2531,7 @@ export class ConfigConversationService {
       // Validate each action loosely — keep valid ones, skip invalid
       const actions: ConfigAction[] = [];
       for (const raw of rawActions) {
-        if (
-          raw &&
-          typeof raw === 'object' &&
-          'type' in raw &&
-          'id' in raw &&
-          'payload' in raw
-        ) {
+        if (raw && typeof raw === 'object' && 'type' in raw && 'id' in raw && 'payload' in raw) {
           actions.push(raw as ConfigAction);
         }
       }
@@ -2533,6 +2649,7 @@ git commit -m "feat(cli): add ConfigConversationService with LLM-powered config 
 ## Task 9: ConversationalView + App Root — Wire Everything Together
 
 **Files:**
+
 - Create: `apps/cli/src/components/conversational/ConversationalView.tsx`
 - Create: `apps/cli/src/components/conversational/index.tsx`
 - Create: `apps/cli/src/components/App.tsx`
@@ -2553,9 +2670,7 @@ import { createCliStore } from '../../../../src/store/index.js';
 describe('ConversationalView', () => {
   it('renders both chat and config panels', () => {
     const store = createCliStore('test-tenant');
-    const { lastFrame } = render(
-      <ConversationalView store={store} onStartJob={vi.fn()} />,
-    );
+    const { lastFrame } = render(<ConversationalView store={store} onStartJob={vi.fn()} />);
     const frame = lastFrame();
     // Chat area should show welcome message
     expect(frame).toContain('Describe');
@@ -2574,9 +2689,7 @@ describe('ConversationalView', () => {
       } as any,
     ]);
 
-    const { lastFrame } = render(
-      <ConversationalView store={store} onStartJob={vi.fn()} />,
-    );
+    const { lastFrame } = render(<ConversationalView store={store} onStartJob={vi.fn()} />);
     expect(lastFrame()).toContain('Test Job');
   });
 });
@@ -2594,9 +2707,7 @@ import { createCliStore } from '../../../src/store/index.js';
 describe('App', () => {
   it('renders header with current mode', () => {
     const store = createCliStore('test-tenant');
-    const { lastFrame } = render(
-      <App store={store} onStartJob={vi.fn()} onExit={vi.fn()} />,
-    );
+    const { lastFrame } = render(<App store={store} onStartJob={vi.fn()} onExit={vi.fn()} />);
     const frame = lastFrame();
     expect(frame).toContain('Spatula');
     expect(frame).toContain('conversational');
@@ -2604,18 +2715,14 @@ describe('App', () => {
 
   it('renders keyboard hints', () => {
     const store = createCliStore('test-tenant');
-    const { lastFrame } = render(
-      <App store={store} onStartJob={vi.fn()} onExit={vi.fn()} />,
-    );
+    const { lastFrame } = render(<App store={store} onStartJob={vi.fn()} onExit={vi.fn()} />);
     expect(lastFrame()).toContain('Ctrl+C');
   });
 
   it('shows dashboard stub when mode is dashboard', () => {
     const store = createCliStore('test-tenant');
     store.getState().setMode('dashboard');
-    const { lastFrame } = render(
-      <App store={store} onStartJob={vi.fn()} onExit={vi.fn()} />,
-    );
+    const { lastFrame } = render(<App store={store} onStartJob={vi.fn()} onExit={vi.fn()} />);
     expect(lastFrame()).toContain('Dashboard');
   });
 });
@@ -2667,11 +2774,7 @@ export function ConversationalView({ store, onStartJob }: ConversationalViewProp
     <Box flexDirection="row" flexGrow={1}>
       {/* Chat panel — left side */}
       <Box flexDirection="column" flexGrow={1} marginRight={1}>
-        <ChatView
-          messages={messages}
-          onSubmit={handleSubmit}
-          isLoading={isLoading}
-        />
+        <ChatView messages={messages} onSubmit={handleSubmit} isLoading={isLoading} />
       </Box>
 
       {/* Config panel — right side */}
@@ -2723,9 +2826,7 @@ export function App({ store, onStartJob, onExit }: AppProps) {
       <Header mode={mode} />
 
       <Box flexGrow={1}>
-        {mode === 'conversational' && (
-          <ConversationalView store={store} onStartJob={onStartJob} />
-        )}
+        {mode === 'conversational' && <ConversationalView store={store} onStartJob={onStartJob} />}
         {mode === 'dashboard' && (
           <Box paddingX={1}>
             <Text dimColor>Dashboard mode — coming in Phase 9b</Text>
@@ -2769,6 +2870,7 @@ git commit -m "feat(cli): add ConversationalView and App root with mode routing"
 ## Task 10: CLI Entry Point — yargs Commands + Ink Render
 
 **Files:**
+
 - Modify: `apps/cli/src/index.tsx`
 - Create: `apps/cli/src/commands/new.tsx`
 - Create: `apps/cli/src/commands/list.ts`
@@ -2910,8 +3012,12 @@ export function formatJobsTable(jobs: Record<string, unknown>[]): string {
   const header = 'ID                    | Name                      | Status     ';
   const separator = '─'.repeat(header.length);
   const rows = jobs.map((j) => {
-    const id = String(j.id ?? '').slice(0, 21).padEnd(21);
-    const name = String(j.name ?? '').slice(0, 25).padEnd(25);
+    const id = String(j.id ?? '')
+      .slice(0, 21)
+      .padEnd(21);
+    const name = String(j.name ?? '')
+      .slice(0, 25)
+      .padEnd(25);
     const status = String(j.status ?? '').padEnd(10);
     return `${id} | ${name} | ${status}`;
   });
@@ -2933,18 +3039,16 @@ export async function runStatusCommand(
 }
 
 export function formatJobDetail(job: Record<string, unknown>): string {
-  const lines = [
-    `Job: ${job.name ?? 'Unnamed'}`,
-    `ID: ${job.id}`,
-    `Status: ${job.status}`,
-  ];
+  const lines = [`Job: ${job.name ?? 'Unnamed'}`, `ID: ${job.id}`, `Status: ${job.status}`];
 
   const stats = job.stats as Record<string, unknown> | undefined;
   if (stats) {
     lines.push('');
     lines.push('Stats:');
-    if (stats.pagesDiscovered !== undefined) lines.push(`  Pages discovered: ${stats.pagesDiscovered}`);
-    if (stats.pagesCompleted !== undefined) lines.push(`  Pages completed: ${stats.pagesCompleted}`);
+    if (stats.pagesDiscovered !== undefined)
+      lines.push(`  Pages discovered: ${stats.pagesDiscovered}`);
+    if (stats.pagesCompleted !== undefined)
+      lines.push(`  Pages completed: ${stats.pagesCompleted}`);
     if (stats.entitiesFound !== undefined) lines.push(`  Entities found: ${stats.entitiesFound}`);
     if (stats.extractionCount !== undefined) lines.push(`  Extractions: ${stats.extractionCount}`);
   }
@@ -3040,12 +3144,8 @@ async function handleUserMessage(
     );
 
     // Check for confirm_and_start
-    const confirmAction = result.actions.find(
-      (a: ConfigAction) => a.type === 'confirm_and_start',
-    );
-    const otherActions = result.actions.filter(
-      (a: ConfigAction) => a.type !== 'confirm_and_start',
-    );
+    const confirmAction = result.actions.find((a: ConfigAction) => a.type === 'confirm_and_start');
+    const otherActions = result.actions.filter((a: ConfigAction) => a.type !== 'confirm_and_start');
 
     // Apply config actions
     if (otherActions.length > 0) {
@@ -3175,7 +3275,16 @@ yargs(hideBin(process.argv))
         .option('status', {
           type: 'string',
           description: 'Filter by status',
-          choices: ['pending', 'queued', 'running', 'paused', 'reconciling', 'completed', 'failed', 'cancelled'],
+          choices: [
+            'pending',
+            'queued',
+            'running',
+            'paused',
+            'reconciling',
+            'completed',
+            'failed',
+            'cancelled',
+          ],
         })
         .option('limit', {
           type: 'number',
@@ -3232,6 +3341,7 @@ git commit -m "feat(cli): add yargs CLI entry point with new, list, and status c
 ## Task 11: Full Build Verification + Barrel Exports
 
 **Files:**
+
 - Modify: `apps/cli/src/index.tsx` (ensure shebang for bin)
 - Verify: all packages build
 
@@ -3250,6 +3360,7 @@ pnpm test
 ```
 
 Expected: All tests pass across all packages. The CLI should have tests passing for:
+
 - `tests/unit/api/client.test.ts`
 - `tests/unit/store/index.test.ts`
 - `tests/unit/components/shared/*.test.tsx`
@@ -3288,6 +3399,7 @@ git commit -m "feat(cli): Phase 9a complete — CLI core + conversational mode w
 ## Summary
 
 **Phase 9a delivers:**
+
 - 11 tasks following TDD workflow
 - `DefaultConfigExecutor` in core (all 30 ConfigAction types)
 - `SpatulaApiClient` HTTP wrapper for all Phase 8 endpoints

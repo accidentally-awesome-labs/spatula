@@ -182,9 +182,7 @@ describe('UserTenantRepository', () => {
       const db = { select: vi.fn().mockReturnValue({ from: mockFrom }) };
       const repo = new UserTenantRepository(db as any);
 
-      await expect(repo.findByUserId('user-1')).rejects.toThrow(
-        'Failed to find tenants for user',
-      );
+      await expect(repo.findByUserId('user-1')).rejects.toThrow('Failed to find tenants for user');
     });
 
     it('throws StorageError when isAdmin fails', async () => {

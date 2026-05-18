@@ -98,7 +98,9 @@ describe('EntitySourceRepository', () => {
   });
 
   describe('findByJobCursor composite cursor', () => {
-    function makeCursorMockDb(rows: Array<{ entityId: string; extractionId: string; matchConfidence: number }>) {
+    function makeCursorMockDb(
+      rows: Array<{ entityId: string; extractionId: string; matchConfidence: number }>,
+    ) {
       const orderBy = vi.fn().mockReturnThis();
       const limit = vi.fn().mockResolvedValue(rows);
       const where = vi.fn().mockReturnValue({ orderBy, limit });
@@ -113,8 +115,16 @@ describe('EntitySourceRepository', () => {
 
     it('returns composite nextCursor (entityId + extractionId) when page is full', async () => {
       const rows = [
-        { entityId: 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa', extractionId: '11111111-1111-1111-1111-111111111111', matchConfidence: 0.9 },
-        { entityId: 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa', extractionId: '22222222-2222-2222-2222-222222222222', matchConfidence: 0.8 },
+        {
+          entityId: 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa',
+          extractionId: '11111111-1111-1111-1111-111111111111',
+          matchConfidence: 0.9,
+        },
+        {
+          entityId: 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa',
+          extractionId: '22222222-2222-2222-2222-222222222222',
+          matchConfidence: 0.8,
+        },
       ];
       const db = makeCursorMockDb(rows);
       const r = new EntitySourceRepository(db as any);
@@ -133,7 +143,11 @@ describe('EntitySourceRepository', () => {
 
     it('returns null nextCursor when rows < limit', async () => {
       const db = makeCursorMockDb([
-        { entityId: 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa', extractionId: '11111111-1111-1111-1111-111111111111', matchConfidence: 0.9 },
+        {
+          entityId: 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa',
+          extractionId: '11111111-1111-1111-1111-111111111111',
+          matchConfidence: 0.9,
+        },
       ]);
       const r = new EntitySourceRepository(db as any);
       const result = await r.findByJobCursor('job-1', 'tenant-1', 10);

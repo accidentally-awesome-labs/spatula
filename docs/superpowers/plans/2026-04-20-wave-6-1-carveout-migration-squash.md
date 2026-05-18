@@ -70,6 +70,7 @@ packages/db/tests/unit/repositories/usage-record-repository.test.ts
 **Note:** Inventory was re-verified by grep immediately before plan rev 2. Files below are confirmed to contain live coupling as of commit `42761d5`. Task 1 Step 2 re-runs the grep with the expanded pattern below; if it surfaces anything NOT in this list, add to this section before proceeding.
 
 **API layer:**
+
 ```
 apps/api/src/app.ts                                   # unmount billing + stripe routes + plan-loading middleware + rateLimitTier var
 apps/api/src/types.ts                                 # drop quotaEnforcer, usageRecordRepo from AppDeps; drop rateLimitTier from AppEnv
@@ -80,6 +81,7 @@ apps/api/tests/unit/middleware/rate-limit.test.ts     # drop c.set('rateLimitTie
 ```
 
 **Queue layer (expanded vs plan rev 1 — crawl-worker had quota calls that weren't listed):**
+
 ```
 packages/queue/src/job-manager.ts                     # remove QuotaEnforcer coupling
 packages/queue/src/worker-entrypoint.ts               # remove metering worker wiring
@@ -90,6 +92,7 @@ packages/queue/tests/unit/workers/crawl-worker.test.ts # drop quotaEnforcer-rela
 ```
 
 **Core layer (expanded — export-orchestrator had a quota call):**
+
 ```
 packages/core/src/pipeline/export-orchestrator.ts     # remove deps.quotaEnforcer.recordUsage (line 235)
 packages/core/src/pipeline/types.ts                   # remove quotaEnforcer? from ExportDeps / CrawlDeps
@@ -97,6 +100,7 @@ packages/core/src/index.ts                            # drop QuotaEnforcer / Bil
 ```
 
 **Shared layer (expanded — auth scopes + TenantQuotas interface + quotas.test.ts):**
+
 ```
 packages/shared/src/auth/types.ts                     # drop 'billing:read', 'billing:write' from AUTH_SCOPES + DEFAULT_API_KEY_SCOPES
 packages/shared/src/auth/quotas.ts                    # drop rateLimitTier field from TenantQuotas interface + DEFAULT_TENANT_QUOTAS
@@ -107,6 +111,7 @@ packages/shared/tests/unit/auth/rate-limit-tiers.test.ts  # delete or rewrite (d
 ```
 
 **DB layer:**
+
 ```
 packages/db/src/schema/tenants.ts                     # drop plan + stripeCustomerId columns + idx_tenants_stripe_customer + rateLimitTier from quotas JSONB default
 packages/db/src/schema/index.ts                       # drop usage-records export
@@ -116,6 +121,7 @@ packages/db/tests/unit/repositories/tenant-repository.test.ts  # drop billing-re
 ```
 
 **CLI layer (NEW vs plan rev 1 — product decision 2):**
+
 ```
 apps/cli/src/api/client.ts                            # remove getSubscription(); add getAuthMe()
 apps/cli/src/commands/remote.ts                       # replace getSubscription() probe with getAuthMe(); drop `plan` display
@@ -123,6 +129,7 @@ apps/cli/tests/unit/api/client-auth.test.ts           # swap getSubscription moc
 ```
 
 **Other:**
+
 ```
 .env.example                                          # (verify-only — already clean)
 docs/architecture.md                                  # (verify-only — already clean)
@@ -170,6 +177,7 @@ packages/db/drizzle/meta/*.json                       # all existing snapshots
 ## Task 1: Take pre-cut snapshot + re-verify inventory
 
 **Files:**
+
 - Create: `docs/superpowers/plans/6-1-snapshot-pre-cut.md`
 
 - [ ] **Step 1: Capture test baseline**
@@ -322,6 +330,7 @@ git commit -m "docs(6-1): filter-repo extraction evidence for spatula-saas"
 ## Task 3: Unmount billing + stripe routes from `app.ts`
 
 **Files:**
+
 - Modify: `apps/api/src/app.ts`
 
 - [ ] **Step 1: Open `apps/api/src/app.ts` and remove the billing route imports**
@@ -338,19 +347,19 @@ import { stripeWebhookRoutes } from './routes/stripe-webhook.js';
 Locate and delete the block (currently lines ~104-120 in app.ts):
 
 ```typescript
-  // Load tenant plan for rate limiting (plan name matches RATE_LIMIT_TIERS keys)
-  app.use('/api/*', async (c, next) => {
-    const tenantId = c.get('tenantId');
-    if (tenantId && deps.tenantRepo) {
-      try {
-        const tenant = await deps.tenantRepo.findById(tenantId);
-        c.set('rateLimitTier', (tenant as any)?.plan ?? 'free');
-      } catch {
-        c.set('rateLimitTier', 'free');
-      }
+// Load tenant plan for rate limiting (plan name matches RATE_LIMIT_TIERS keys)
+app.use('/api/*', async (c, next) => {
+  const tenantId = c.get('tenantId');
+  if (tenantId && deps.tenantRepo) {
+    try {
+      const tenant = await deps.tenantRepo.findById(tenantId);
+      c.set('rateLimitTier', (tenant as any)?.plan ?? 'free');
+    } catch {
+      c.set('rateLimitTier', 'free');
     }
-    return next();
-  });
+  }
+  return next();
+});
 ```
 
 This middleware read `tenant.plan` which no longer exists after Task 12.
@@ -360,13 +369,13 @@ This middleware read `tenant.plan` which no longer exists after Task 12.
 Delete these lines:
 
 ```typescript
-  // Billing routes
-  app.get('/api/v1/billing/*', requireScope('billing:read'));
-  app.post('/api/v1/billing/*', requireScope('billing:write'));
-  app.route('/api/v1/billing', billingRoutes());
+// Billing routes
+app.get('/api/v1/billing/*', requireScope('billing:read'));
+app.post('/api/v1/billing/*', requireScope('billing:write'));
+app.route('/api/v1/billing', billingRoutes());
 
-  // Stripe webhook (no auth — uses Stripe signature verification)
-  app.route('/api/v1/webhooks/stripe', stripeWebhookRoutes());
+// Stripe webhook (no auth — uses Stripe signature verification)
+app.route('/api/v1/webhooks/stripe', stripeWebhookRoutes());
 ```
 
 - [ ] **Step 4: Typecheck**
@@ -389,6 +398,7 @@ git commit -m "refactor(api): unmount billing + stripe-webhook routes + plan-loa
 ## Task 4: Delete billing + stripe route files + their tests
 
 **Files:**
+
 - Delete: `apps/api/src/routes/billing.ts`, `apps/api/src/routes/stripe-webhook.ts`, `apps/api/src/billing/stripe-client.ts`, `apps/api/tests/unit/routes/billing.test.ts`, `apps/api/tests/unit/routes/stripe-webhook.test.ts`, `apps/api/tests/unit/billing/stripe-client.test.ts`
 - Delete empty dir: `apps/api/src/billing/`, `apps/api/tests/unit/billing/`
 
@@ -434,6 +444,7 @@ git commit -m "refactor(api): delete billing + stripe-webhook route files + test
 ## Task 5: Strip `BILLING_TIERS` + plan handling + usage aggregation from `admin-tenants.ts`
 
 **Files:**
+
 - Modify: `apps/api/src/routes/admin-tenants.ts`
 
 Three handlers touch billing/usage: `GET /` (list), `GET /:id` (detail — aggregates usage_records), `PATCH /:id` (plan update). All three edited here.
@@ -451,6 +462,7 @@ const VALID_PLANS = Object.keys(BILLING_TIERS);
 - [ ] **Step 2: Edit `GET /` — remove `plan` query/filter/response**
 
 Before:
+
 ```typescript
 const plan = c.req.query('plan');
 // ...
@@ -468,6 +480,7 @@ data: tenantList.map((t: any, i: number) => ({
 ```
 
 After:
+
 ```typescript
 const [tenantList, total] = await Promise.all([
   deps.tenantRepo.findAll({ limit, offset }),
@@ -488,6 +501,7 @@ data: tenantList.map((t: any, i: number) => ({
 - [ ] **Step 3: Edit `GET /:id` — remove `usageRecordRepo.aggregateByTenant` block + `usage` response field**
 
 Before (around lines 59-85):
+
 ```typescript
 const [users, usage, recentJobs] = await Promise.all([
   deps.userTenantRepo?.findByTenantId(id) ?? [],
@@ -512,13 +526,17 @@ return c.json({
     users: users.map((u: any) => ({ userId: u.userId, role: u.role })),
     usage: usageMap,
     recentJobs: recentJobs.map((j: any) => ({
-      id: j.id, name: j.name, status: j.status, createdAt: j.createdAt,
+      id: j.id,
+      name: j.name,
+      status: j.status,
+      createdAt: j.createdAt,
     })),
   },
 });
 ```
 
 After:
+
 ```typescript
 const [users, recentJobs] = await Promise.all([
   deps.userTenantRepo?.findByTenantId(id) ?? [],
@@ -530,7 +548,10 @@ return c.json({
     ...(tenant as any),
     users: users.map((u: any) => ({ userId: u.userId, role: u.role })),
     recentJobs: recentJobs.map((j: any) => ({
-      id: j.id, name: j.name, status: j.status, createdAt: j.createdAt,
+      id: j.id,
+      name: j.name,
+      status: j.status,
+      createdAt: j.createdAt,
     })),
   },
 });
@@ -539,6 +560,7 @@ return c.json({
 - [ ] **Step 4: Edit `PATCH /:id` — remove plan validation + plan-change**
 
 Delete:
+
 - The `if (body.plan !== undefined) { if (!VALID_PLANS.includes(body.plan)) throw new ValidationError(...) }` block
 - The `if (body.plan !== undefined) { await deps.tenantRepo.updatePlan(...); await deps.auditLogger.log(...) }` block
 
@@ -564,6 +586,7 @@ git commit -m "refactor(api): strip BILLING_TIERS + plan + usage aggregation fro
 ## Task 6: Remove `QuotaEnforcer` coupling from queue + core + api
 
 **Files:**
+
 - Modify: `packages/queue/src/job-manager.ts`
 - Modify: `packages/queue/src/worker-deps.ts`
 - Modify: `packages/queue/src/workers/crawl-worker.ts`
@@ -579,11 +602,13 @@ QuotaEnforcer is referenced in 5 separate call sites. Strip them all in this tas
 - [ ] **Step 1: Strip QuotaEnforcer from `job-manager.ts`**
 
 Remove import:
+
 ```typescript
 import type { QuotaEnforcer } from '@spatula/core';
 ```
 
 Remove constructor field + parameter:
+
 ```typescript
 quotaEnforcer?: QuotaEnforcer;
 // ...
@@ -605,7 +630,9 @@ Delete two blocks (at lines ~15 and ~99):
 if (deps.quotaEnforcer) {
   try {
     await deps.quotaEnforcer.check(tenantId, 'pages', 1);
-  } catch (err) { /* ... */ }
+  } catch (err) {
+    /* ... */
+  }
 }
 
 // Block 2 (line 99):
@@ -635,6 +662,7 @@ Grep the file; remove the field from every `*Deps` interface that has it. Remove
 - [ ] **Step 6: Strip from `apps/api/src/types.ts`**
 
 Remove from import:
+
 ```typescript
 import type { ContentStore, ReviewQueue, QuotaEnforcer } from '@spatula/core';
 // becomes:
@@ -686,6 +714,7 @@ git commit -m "refactor: remove QuotaEnforcer coupling from queue, core, and api
 ## Task 7: Remove metering worker wiring from `worker-entrypoint.ts`
 
 **Files:**
+
 - Modify: `packages/queue/src/worker-entrypoint.ts`
 
 - [ ] **Step 1: Delete metering imports**
@@ -731,6 +760,7 @@ git commit -m "refactor(queue): remove metering worker wiring + METERING queue n
 ## Task 8: Delete `metering-worker.ts` + test
 
 **Files:**
+
 - Delete: `packages/queue/src/metering-worker.ts`, `packages/queue/tests/unit/metering-worker.test.ts`
 
 - [ ] **Step 1: Delete the files**
@@ -769,6 +799,7 @@ git commit -m "refactor(queue): delete metering-worker + test"
 ## Task 9: Delete `packages/core/src/billing/` directory
 
 **Files:**
+
 - Delete: `packages/core/src/billing/quota-enforcer.ts`, `quota-enforcer.test.ts`, `billing-usage-recorder.ts`, `billing-usage-recorder.test.ts`, `index.ts`
 
 - [ ] **Step 1: Find all `@spatula/core` imports that reference billing**
@@ -814,6 +845,7 @@ git commit -m "refactor(core): delete billing/ directory (QuotaEnforcer + Billin
 ## Task 10: Clean `packages/shared` — billing module + tier presets + auth scopes + TenantQuotas
 
 **Files:**
+
 - Delete: `packages/shared/src/billing/index.ts`, `packages/shared/src/billing/tiers.ts`
 - Modify: `packages/shared/src/index.ts`, `packages/shared/src/auth/rate-limit-tiers.ts`, `packages/shared/src/auth/types.ts`, `packages/shared/src/auth/quotas.ts`
 - Modify: `packages/shared/tests/unit/auth/quotas.test.ts`
@@ -856,6 +888,7 @@ export const DEFAULT_RATE_LIMIT: RateLimitConfig = {
 - [ ] **Step 4: Drop `billing:read` / `billing:write` scopes from `auth/types.ts`**
 
 Grep first:
+
 ```bash
 grep -n "billing" packages/shared/src/auth/types.ts
 ```
@@ -867,6 +900,7 @@ Expected matches at lines 25, 26, 39 (per inventory). Delete both occurrences in
 Edit `packages/shared/src/auth/quotas.ts`:
 
 Before:
+
 ```typescript
 export interface TenantQuotas {
   maxConcurrentJobs: number;
@@ -886,6 +920,7 @@ export const DEFAULT_TENANT_QUOTAS: TenantQuotas = {
 ```
 
 After:
+
 ```typescript
 export interface TenantQuotas {
   maxConcurrentJobs: number;
@@ -909,6 +944,7 @@ head -70 packages/shared/tests/unit/auth/quotas.test.ts
 ```
 
 The test imports `RATE_LIMIT_TIERS` and asserts tier names exist (lines 3, 17, 42, 48, 54, 60, 66 per review). Since tiers are gone, rewrite the affected assertions to:
+
 - Remove the `RATE_LIMIT_TIERS` import
 - Drop any test block that asserts tier-name existence
 - Keep tests for `DEFAULT_TENANT_QUOTAS` defaults (sans `rateLimitTier`), `QuotaExceededError`, and any quota-validation logic
@@ -944,11 +980,13 @@ git commit -m "refactor(shared): remove billing module, tier presets, billing sc
 ## Task 11: Update rate-limit middleware to drop tier lookup
 
 **Files:**
+
 - Modify: `apps/api/src/middleware/rate-limit.ts`
 
 - [ ] **Step 1: Replace `RATE_LIMIT_TIERS` usage with `DEFAULT_RATE_LIMIT`**
 
 Before:
+
 ```typescript
 import { RATE_LIMIT_TIERS } from '@spatula/shared';
 // ...
@@ -957,6 +995,7 @@ const tier = RATE_LIMIT_TIERS[tierName] ?? RATE_LIMIT_TIERS.free;
 ```
 
 After:
+
 ```typescript
 import { DEFAULT_RATE_LIMIT } from '@spatula/shared';
 // ...
@@ -994,6 +1033,7 @@ git commit -m "refactor(api): drop tier-based rate-limit lookup; use DEFAULT_RAT
 ## Task 12: Drop `plan` + `stripeCustomerId` columns from `tenants` schema
 
 **Files:**
+
 - Modify: `packages/db/src/schema/tenants.ts`
 - Modify: `packages/db/src/repositories/tenant-repository.ts`
 - Modify: `packages/db/tests/unit/repositories/tenant-repository.test.ts`
@@ -1001,32 +1041,43 @@ git commit -m "refactor(api): drop tier-based rate-limit lookup; use DEFAULT_RAT
 - [ ] **Step 1: Edit `tenants.ts` schema**
 
 Before:
-```typescript
-import { pgTable, uuid, text, jsonb, timestamp, bigint, varchar, uniqueIndex } from 'drizzle-orm/pg-core';
 
-export const tenants = pgTable('tenants', {
-  id: uuid('id').primaryKey().defaultRandom(),
-  name: text('name').notNull(),
-  config: jsonb('config').$type<Record<string, unknown>>().default({}),
-  quotas: jsonb('quotas').notNull().default({
-    maxConcurrentJobs: 2,
-    maxPagesPerJob: 5000,
-    maxEntitiesPerExport: 50000,
-    maxStorageMb: 1000,
-    rateLimitTier: 'free',
-  }),
-  storageBytesUsed: bigint('storage_bytes_used', { mode: 'number' }).notNull().default(0),
-  plan: varchar('plan', { length: 20 }).notNull().default('free'),
-  stripeCustomerId: text('stripe_customer_id'),
-  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
-},
-(table) => [
-  uniqueIndex('idx_tenants_stripe_customer').on(table.stripeCustomerId),
-],
+```typescript
+import {
+  pgTable,
+  uuid,
+  text,
+  jsonb,
+  timestamp,
+  bigint,
+  varchar,
+  uniqueIndex,
+} from 'drizzle-orm/pg-core';
+
+export const tenants = pgTable(
+  'tenants',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    name: text('name').notNull(),
+    config: jsonb('config').$type<Record<string, unknown>>().default({}),
+    quotas: jsonb('quotas').notNull().default({
+      maxConcurrentJobs: 2,
+      maxPagesPerJob: 5000,
+      maxEntitiesPerExport: 50000,
+      maxStorageMb: 1000,
+      rateLimitTier: 'free',
+    }),
+    storageBytesUsed: bigint('storage_bytes_used', { mode: 'number' }).notNull().default(0),
+    plan: varchar('plan', { length: 20 }).notNull().default('free'),
+    stripeCustomerId: text('stripe_customer_id'),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [uniqueIndex('idx_tenants_stripe_customer').on(table.stripeCustomerId)],
 );
 ```
 
 After:
+
 ```typescript
 import { pgTable, uuid, text, jsonb, timestamp, bigint } from 'drizzle-orm/pg-core';
 
@@ -1079,6 +1130,7 @@ git commit -m "refactor(db): drop plan + stripeCustomerId columns from tenants s
 ## Task 13: Remove `usage_records` schema + repo + all references
 
 **Files:**
+
 - Delete: `packages/db/src/schema/usage-records.ts`, `packages/db/src/repositories/usage-record-repository.ts`, `packages/db/tests/unit/repositories/usage-record-repository.test.ts`
 - Modify: `packages/db/src/schema/index.ts`, `packages/db/src/repositories/index.ts`
 
@@ -1093,6 +1145,7 @@ rm packages/db/tests/unit/repositories/usage-record-repository.test.ts
 - [ ] **Step 2: Remove exports from `packages/db/src/schema/index.ts`**
 
 Delete:
+
 ```typescript
 export * from './usage-records.js';
 ```
@@ -1134,6 +1187,7 @@ git commit -m "refactor(db): remove usage_records schema + repository"
 ## Task 14: Verify SQLite schema parity — check `packages/db/src/schema-sqlite/` has no billing tables
 
 **Files:**
+
 - Verify-only: `packages/db/src/schema-sqlite/`
 
 (Plan rev-1 incorrectly targeted `admin-system.ts` for `usage_records` aggregation. That aggregation is in `admin-tenants.ts GET /:id` and is handled by Task 5. Task 14 is re-cast as a SQLite parity check since the SQLite mirror must stay aligned with Postgres.)
@@ -1180,6 +1234,7 @@ If Step 1 returned `clean`, this task is a no-op — commit the empty result as:
 ## Task 15: Verify `.env.example` is clean (likely no-op)
 
 **Files:**
+
 - Possibly modify: `.env.example`
 
 Plan rev-1 assumed STRIPE vars existed; inventory grep confirmed they do not. This task is a confirmation checkpoint.
@@ -1208,6 +1263,7 @@ git commit -m "chore(env): remove Stripe + billing env vars from .env.example"
 ## Task 16: Verify docs / OpenAPI / fixtures are clean (likely near-no-op)
 
 **Files:**
+
 - Possibly modify: `docs/architecture.md`, `apps/api/src/schemas/*.ts`, `tests/e2e/fixtures/*`, `examples/*/spatula.yaml`
 
 Plan rev-1 assumed `architecture.md` had billing mentions; inventory grep confirmed it does not. This task is a confirmation checkpoint over docs + OpenAPI + fixtures + examples.
@@ -1260,6 +1316,7 @@ git commit -m "docs: strip billing references from architecture, OpenAPI schemas
 ## Task 16.5: Add `GET /api/v1/auth/me` endpoint (replaces CLI's billing-subscription probe)
 
 **Files:**
+
 - Create: `apps/api/src/routes/auth.ts`
 - Create: `apps/api/tests/unit/routes/auth.test.ts`
 - Modify: `apps/api/src/app.ts`
@@ -1285,10 +1342,7 @@ export function authRoutes() {
     const scopes = c.get('scopes') ?? [];
     const authSubject = c.get('authSubject') ?? null;
     if (!tenantId) {
-      return c.json(
-        { error: { code: 'UNAUTHENTICATED', message: 'No tenant context' } },
-        401,
-      );
+      return c.json({ error: { code: 'UNAUTHENTICATED', message: 'No tenant context' } }, 401);
     }
     return c.json({
       tenantId,
@@ -1303,6 +1357,7 @@ export function authRoutes() {
 ```
 
 Notes:
+
 - `AppEnv` already exposes `tenantId` and `scopes` via `c.get()` (set by auth middleware). If `authSubject` is not in the env type, drop that line and/or add the type in `apps/api/src/types.ts`. Grep `types.ts` for the existing `AppEnv` shape to match.
 - No new scope required — the route is accessible to any authenticated caller; the auth middleware gates access. Unauthenticated calls return 401 via the normal middleware, not the handler.
 
@@ -1386,6 +1441,7 @@ git commit -m "feat(api): add GET /api/v1/auth/me — auth introspection for API
 ## Task 16.6: Update CLI `remote add` to use `/auth/me` instead of `/billing/subscription`
 
 **Files:**
+
 - Modify: `apps/cli/src/api/client.ts`
 - Modify: `apps/cli/src/commands/remote.ts`
 - Modify: `apps/cli/tests/unit/api/client-auth.test.ts`
@@ -1401,6 +1457,7 @@ grep -n "getSubscription" apps/cli/src/api/client.ts
 Replace the method definition (line ~279):
 
 Before:
+
 ```typescript
 async getSubscription(): Promise<Record<string, unknown>> {
   // ... call /api/v1/billing/subscription
@@ -1408,6 +1465,7 @@ async getSubscription(): Promise<Record<string, unknown>> {
 ```
 
 After:
+
 ```typescript
 async getAuthMe(): Promise<{
   tenantId: string;
@@ -1430,22 +1488,30 @@ Keep the same private `fetch` + error-handling patterns the rest of the file use
 Around lines 74-80 (current code):
 
 Before:
+
 ```typescript
 let plan: string | undefined;
 try {
   const sub = await client.getSubscription();
   plan = sub.plan as string | undefined;
 } catch {
-  return { success: false, error: `Authentication failed — check your API key (auth verification failed)` };
+  return {
+    success: false,
+    error: `Authentication failed — check your API key (auth verification failed)`,
+  };
 }
 ```
 
 After:
+
 ```typescript
 try {
   await client.getAuthMe();
 } catch {
-  return { success: false, error: `Authentication failed — check your API key (auth verification failed)` };
+  return {
+    success: false,
+    error: `Authentication failed — check your API key (auth verification failed)`,
+  };
 }
 ```
 
@@ -1516,6 +1582,7 @@ Expected: PASS. Test count is lower than pre-cut baseline by roughly (billing un
 - [ ] **Step 4: If any failure — triage**
 
 Common surviving coupling:
+
 - A middleware file still importing `RATE_LIMIT_TIERS`
 - An OpenAPI route-builder still referencing deleted paths
 - A test fixture seeding `tenants` with `plan: 'free'`
@@ -1531,6 +1598,7 @@ Fix each at its source; commit per fix with message `refactor(<area>): clean up 
 ## Task 18: Configure `__drizzle_migrations_oss` namespaced tracking table (do this BEFORE squash)
 
 **Files:**
+
 - Modify: `packages/db/drizzle.config.ts`
 - Modify: `packages/db/src/migrate.ts`
 - Modify: `packages/db/src/run-migrate.ts`
@@ -1541,6 +1609,7 @@ Reordered from plan rev-1: this must precede Task 19 (squash) because Task 19's 
 - [ ] **Step 1: Set `migrationsTable` in `drizzle.config.ts`**
 
 Current:
+
 ```typescript
 import { defineConfig } from 'drizzle-kit';
 
@@ -1555,6 +1624,7 @@ export default defineConfig({
 ```
 
 Update to:
+
 ```typescript
 import { defineConfig } from 'drizzle-kit';
 
@@ -1576,11 +1646,13 @@ export default defineConfig({
 - [ ] **Step 2: Update the programmatic wrapper `migrate.ts`**
 
 Current:
+
 ```typescript
 await migrate(db, { migrationsFolder: resolve(pkgRoot, 'drizzle') });
 ```
 
 Update to:
+
 ```typescript
 await migrate(db, {
   migrationsFolder: resolve(pkgRoot, 'drizzle'),
@@ -1591,16 +1663,18 @@ await migrate(db, {
 - [ ] **Step 3: Update the standalone script `run-migrate.ts` (second call site)**
 
 Current:
+
 ```typescript
-migrate(db, { migrationsFolder: resolve(__dirname, '../drizzle') })
+migrate(db, { migrationsFolder: resolve(__dirname, '../drizzle') });
 ```
 
 Update to:
+
 ```typescript
 migrate(db, {
   migrationsFolder: resolve(__dirname, '../drizzle'),
   migrationsTable: '__drizzle_migrations_oss',
-})
+});
 ```
 
 - [ ] **Step 4: Update the migrate unit test**
@@ -1634,6 +1708,7 @@ git commit -m "feat(db): namespace OSS migrations via __drizzle_migrations_oss t
 ## Task 19: Regenerate migrations as `0000_v1_baseline.sql`
 
 **Files:**
+
 - Delete: all files in `packages/db/drizzle/` except the directory itself
 - Create: `packages/db/drizzle/0000_v1_baseline.sql`, `packages/db/drizzle/meta/_journal.json`, `packages/db/drizzle/meta/0000_snapshot.json`
 
@@ -1724,6 +1799,7 @@ git commit -m "chore(db): squash migrations into 0000_v1_baseline for v1.0"
 ## Task 20: Write forward carve-out test suite
 
 **Files:**
+
 - Create: `tests/carveout/vitest.config.ts`, `tests/carveout/openapi-shape.test.ts`
 
 - [ ] **Step 1: Write the vitest config**
@@ -1803,6 +1879,7 @@ git commit -m "test(carveout): OpenAPI shape suite — no billing / stripe paths
 ## Task 21: Write admin-metrics smoke test
 
 **Files:**
+
 - Create: `tests/carveout/admin-metrics-smoke.test.ts`
 
 - [ ] **Step 1: Write the test**
@@ -1873,6 +1950,7 @@ git commit -m "test(carveout): admin-system/metrics smoke — no usage_records r
 ## Task 22: Extract minimal server/tenant fixtures + write forward carve-out test
 
 **Files:**
+
 - Create: `tests/carveout/fixtures/server.ts` (extracted helpers from `tests/e2e/full-pipeline.test.ts`)
 - Create: `tests/carveout/forward.test.ts`
 
@@ -1885,6 +1963,7 @@ cat tests/e2e/full-pipeline.test.ts
 ```
 
 Identify how it:
+
 - Creates an HTTP server from `createApp(deps)` + bindings
 - Seeds a tenant directly via the repository / DB
 - Mints an API key
@@ -1966,9 +2045,14 @@ export async function seedTenantAndKey(
 ```typescript
 // tests/carveout/forward.test.ts
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
-import { startCarveoutServer, seedTenantAndKey, type ForwardTestHandle } from './fixtures/server.js';
+import {
+  startCarveoutServer,
+  seedTenantAndKey,
+  type ForwardTestHandle,
+} from './fixtures/server.js';
 
-const databaseUrl = process.env.TEST_DATABASE_URL ?? 'postgresql://spatula:spatula@localhost:5432/spatula_test';
+const databaseUrl =
+  process.env.TEST_DATABASE_URL ?? 'postgresql://spatula:spatula@localhost:5432/spatula_test';
 
 let handle: ForwardTestHandle;
 let tenantId: string;
@@ -2009,7 +2093,7 @@ describe('carve-out forward — OSS-only server satisfies contract', () => {
       const body = await res.json();
       expect(body.data).not.toHaveProperty('plan');
       expect(body.data).not.toHaveProperty('stripeCustomerId');
-      expect(body.data).not.toHaveProperty('usage');  // Task 5 removed the usage field
+      expect(body.data).not.toHaveProperty('usage'); // Task 5 removed the usage field
     }
   });
 
@@ -2050,6 +2134,7 @@ git commit -m "test(carveout): forward test + minimal server fixture helpers"
 ## Task 23: Write reverse private-contract test
 
 **Files:**
+
 - Create: `tests/private-contract/vitest.config.ts`, `tests/private-contract/oss-surface.test.ts`, `tests/private-contract/README.md`
 - Create: `docs/private-contract.md`
 
@@ -2066,6 +2151,7 @@ export default defineConfig({
 - [ ] **Step 2: Write the OSS-surface test with verified export names**
 
 Export names below were grepped from actual barrel files at commit `42761d5`:
+
 - `@spatula/core/pipeline/index.ts`: `processCrawlTask`, `processSchemaEvolution`, `processReconciliation`, `processExport`
 - `@spatula/db/src/index.ts`: `createDatabasePool`, `TenantRepository`, `JobRepository`, `ApiKeyRepository`, `DlqRepository`, `UserTenantRepository`, `AuditLogRepository`, Drizzle schemas `tenants`, `jobs`, `api_keys`
 - `@spatula/queue/src/index.ts`: `createQueues`, `QUEUE_NAMES`, `DEFAULT_QUEUE_CONFIG`, `JobManager`
@@ -2101,7 +2187,7 @@ describe('OSS TS surface consumed by spatula-saas', () => {
     expect(typeof db.DlqRepository).toBe('function');
     expect(typeof db.UserTenantRepository).toBe('function');
     expect(typeof db.AuditLogRepository).toBe('function');
-    expect(typeof db.tenants).toBe('object');  // Drizzle schema
+    expect(typeof db.tenants).toBe('object'); // Drizzle schema
     expect(typeof db.jobs).toBe('object');
     expect(typeof db.apiKeys).toBe('object');
   });
@@ -2158,11 +2244,13 @@ Mocked-consumer contract test for the 5-package OSS surface consumed by the
 private `spatula-saas` repo. Mirrors `docs/private-contract.md`.
 
 ## What this catches
+
 - Renamed or removed exports
 - Changed call shapes / type arity
 - Accidentally introduced billing/stripe symbols
 
 ## What this does NOT catch (residual risk — documented in docs/private-contract.md)
+
 - SQL-level breakage where private FK references an OSS column that changed
 - Runtime-behavior changes (same signature, different returned data)
 - DB-level trigger / RLS policy changes
@@ -2183,24 +2271,29 @@ composed-migration smoke run before OSS GA tags (see spec §3.1.6).
 ## Consumed packages
 
 ### @spatula/core
+
 Pipeline processors used by spatula-saas to compose the hosted-tier pipeline:
+
 - `processCrawlTask(...)`
 - `processSchemaEvolution(...)`
 - `processReconciliation(...)`
 - `processExport(...)`
 
 ### @spatula/db
+
 - `createDatabase(connectionString?)`
 - `createDatabasePool(connectionString?)`
 - Repositories: `TenantRepository`, `JobRepository`, `ApiKeyRepository`, `DlqRepository`, `UserTenantRepository`, `AuditLogRepository`
 - Drizzle schemas (full public schema — private repo's billing migrations use FKs against these): `tenants`, `jobs`, `apiKeys`, `userTenants`, `auditLog`, `entities`, `extractions`, `rawPages`, `crawlTasks`, `actions`, `exports`, `sourceTrust`, `content`, `deadLetterQueue`, `llmUsage`, `schemas`, `entitySources`
 
 ### @spatula/queue
+
 - `createQueues(redisOpts)`
 - `QUEUE_NAMES`, `DEFAULT_QUEUE_CONFIG`, `QUEUE_JOB_OPTIONS`
 - `JobManager`
 
 ### @spatula/shared
+
 - `createLogger(name)`
 - `loadConfig()`
 - `DEFAULT_RATE_LIMIT` (replaces `RATE_LIMIT_TIERS` post-carve-out)
@@ -2209,6 +2302,7 @@ Pipeline processors used by spatula-saas to compose the hosted-tier pipeline:
 - `AUTH_SCOPES` array + `DEFAULT_API_KEY_SCOPES`
 
 ### @spatula/api
+
 - `createApp(deps: AppDeps)` — Hono app factory; spatula-saas mounts billing / subscription routes on the returned instance.
 - `AppDeps` type
 - `authRoutes()` (new in this carve-out, see Task 16.5)
@@ -2216,11 +2310,13 @@ Pipeline processors used by spatula-saas to compose the hosted-tier pipeline:
 ## Residual risk (NOT caught by the mocked test)
 
 The `tests/private-contract/` suite is a symbol+shape check. It does not catch:
+
 - SQL-level breakage (private FK references an OSS column whose name changed)
 - Runtime-behavior changes (same function signature, different returned data shape)
 - DB-level trigger / row-level-security policy changes
 
 These failure modes are caught by:
+
 - `spatula-saas` pre-release integration: spatula-saas CI runs against each OSS `v1.x.x-next.N` tag before OSS cuts GA.
 - Composed-migration smoke in spatula-saas CI (OSS `0001_*` + private `saas_0001_*` applied together).
 - Human GA-cut checklist verification in spec §8.2.
@@ -2228,6 +2324,7 @@ These failure modes are caught by:
 ## Changing this surface
 
 Any OSS PR that alters exports listed here MUST:
+
 1. Update this document.
 2. Update `tests/private-contract/oss-surface.test.ts` to match.
 3. Open a mirror PR in `spatula-saas` to adapt the consumer.
@@ -2255,6 +2352,7 @@ git commit -m "test(private-contract): mocked consumer surface for spatula-saas 
 ## Task 24: Wire the new test directories into the root test runner
 
 **Files:**
+
 - Modify: `package.json` (root), possibly `turbo.json`
 
 - [ ] **Step 1: Inspect root test script**
@@ -2395,6 +2493,7 @@ EOF
 ## Self-review against spec (revision 2 — after second-pass review)
 
 Spec coverage:
+
 - [x] §3.1.1 files that move — Task 2 allowlist
 - [x] §3.1.2 files edited in-place — Tasks 3, 5, 6, 7, 10, 11, 12, 14, 15, 16
 - [x] §3.1.3 migration squash + namespacing — Tasks 18 (namespace first), 19 (squash + verify)
@@ -2404,6 +2503,7 @@ Spec coverage:
 - [x] 6-1 acceptance criteria: existing tests pass (Task 17, 25); new carve-out suite passes (Tasks 20, 21, 22); CLI push/pull against OSS-only green (Task 22); admin metrics smoke (Task 21)
 
 Coverage of second-pass review findings:
+
 - [x] C1: 10 missed files — added to inventory section B (Queue + Core + Shared + CLI expansions); Task 6 expanded to 10 steps covering all quotaEnforcer sites
 - [x] C2: Task 14 target fixed — re-cast as SQLite parity check (original `admin-system` target was wrong; admin-tenants GET /:id coverage moved to Task 5 Step 3)
 - [x] C3: Task 23 + doc use verified export names (`processCrawlTask` etc.)

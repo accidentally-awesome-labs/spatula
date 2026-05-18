@@ -30,10 +30,7 @@ let project: FixtureProject;
 let harness: PipelineTestHarness;
 
 beforeAll(async () => {
-  const [pw, ollama] = await Promise.all([
-    isPlaywrightAvailable(),
-    isOllamaAvailable(),
-  ]);
+  const [pw, ollama] = await Promise.all([isPlaywrightAvailable(), isOllamaAvailable()]);
   canRun = pw && ollama;
   if (!canRun) return;
 
@@ -59,12 +56,18 @@ afterAll(async () => {
 
 describe('full pipeline with real Ollama', () => {
   it('pipeline completes', (ctx) => {
-    if (!canRun) { ctx.skip(); return; }
+    if (!canRun) {
+      ctx.skip();
+      return;
+    }
     expect(harness).toBeDefined();
   });
 
   it('pages were crawled', async (ctx) => {
-    if (!canRun) { ctx.skip(); return; }
+    if (!canRun) {
+      ctx.skip();
+      return;
+    }
     const status = await harness.dataSource.getStatus();
     // Pages should always be crawled even if extraction fails
     expect(status.totalPages).toBeGreaterThan(0);
@@ -73,33 +76,45 @@ describe('full pipeline with real Ollama', () => {
   });
 
   it('schema has fields', async (ctx) => {
-    if (!canRun) { ctx.skip(); return; }
-    const schema = await harness.dataSource.getSchema() as any;
+    if (!canRun) {
+      ctx.skip();
+      return;
+    }
+    const schema = (await harness.dataSource.getSchema()) as any;
     expect(schema).toBeDefined();
     const fields = schema?.definition?.fields ?? schema?.fields ?? [];
     expect(fields.length).toBeGreaterThan(0);
   });
 
   it('run record complete', async (ctx) => {
-    if (!canRun) { ctx.skip(); return; }
+    if (!canRun) {
+      ctx.skip();
+      return;
+    }
     const status = await harness.dataSource.getStatus();
     expect(status.lastRun?.status).toBe('completed');
   });
 
   it('about page likely skipped', async (ctx) => {
-    if (!canRun) { ctx.skip(); return; }
+    if (!canRun) {
+      ctx.skip();
+      return;
+    }
     const entities = await harness.dataSource.getEntities({ limit: 50, offset: 0 });
-    const aboutEntities = entities.data.filter(e => {
+    const aboutEntities = entities.data.filter((e) => {
       const data = e.mergedData as Record<string, unknown>;
-      return Object.values(data).some(v =>
-        typeof v === 'string' && v.toLowerCase().includes('company history')
+      return Object.values(data).some(
+        (v) => typeof v === 'string' && v.toLowerCase().includes('company history'),
       );
     });
     expect(aboutEntities).toHaveLength(0);
   });
 
   it('LLM was called for classification', async (ctx) => {
-    if (!canRun) { ctx.skip(); return; }
+    if (!canRun) {
+      ctx.skip();
+      return;
+    }
     // Even if extraction fails, classification should have been attempted
     // The pipeline always classifies pages before deciding to extract
     // We verify indirectly: pages were crawled (status check above) means

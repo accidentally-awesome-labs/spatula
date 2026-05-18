@@ -9,6 +9,7 @@
 **Tech Stack:** TypeScript, Vitest, `@spatula/core`, `@spatula/queue`, `@spatula/db` (repository interfaces), `@spatula/shared` (logging, errors)
 
 **Spec references:**
+
 - Phase 12 spec: section 2.5 (Extract Shared Pipeline Orchestrators)
 - Phase 13 spec: section 4.1.1 (Prerequisite Refactoring)
 
@@ -18,44 +19,45 @@
 
 ### New Files
 
-| File | Responsibility |
-|------|---------------|
-| `packages/core/src/pipeline/crawl-orchestrator.ts` | Pure crawl logic: URL validation, content dedup, classify, extract, link evaluation, schema evolution trigger check |
-| `packages/core/src/pipeline/schema-orchestrator.ts` | Pure schema evolution logic: config check, extraction batching, evolve, action persistence, version bump |
-| `packages/core/src/pipeline/reconcile-orchestrator.ts` | Pure reconciliation logic: load extractions, enrich with page metadata, reconcile, persist entities + trust |
-| `packages/core/src/pipeline/export-orchestrator.ts` | Pure export logic: validate job, fetch entities, select exporter, format output, store result |
-| `packages/core/src/pipeline/types.ts` | Shared types: `CrawlOrchestratorDeps`, `SchemaOrchestratorDeps`, `ReconcileOrchestratorDeps`, `ExportOrchestratorDeps`, `CrawlTaskInput`, `CrawlTaskResult`, `LinkToEnqueue`, `EventPublisher` interface |
-| `packages/core/src/pipeline/index.ts` | Barrel export |
-| `packages/core/tests/unit/pipeline/crawl-orchestrator.test.ts` | Tests for crawl orchestrator |
-| `packages/core/tests/unit/pipeline/schema-orchestrator.test.ts` | Tests for schema orchestrator |
-| `packages/core/tests/unit/pipeline/reconcile-orchestrator.test.ts` | Tests for reconciliation orchestrator |
-| `packages/core/tests/unit/pipeline/export-orchestrator.test.ts` | Tests for export orchestrator |
+| File                                                               | Responsibility                                                                                                                                                                                           |
+| ------------------------------------------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `packages/core/src/pipeline/crawl-orchestrator.ts`                 | Pure crawl logic: URL validation, content dedup, classify, extract, link evaluation, schema evolution trigger check                                                                                      |
+| `packages/core/src/pipeline/schema-orchestrator.ts`                | Pure schema evolution logic: config check, extraction batching, evolve, action persistence, version bump                                                                                                 |
+| `packages/core/src/pipeline/reconcile-orchestrator.ts`             | Pure reconciliation logic: load extractions, enrich with page metadata, reconcile, persist entities + trust                                                                                              |
+| `packages/core/src/pipeline/export-orchestrator.ts`                | Pure export logic: validate job, fetch entities, select exporter, format output, store result                                                                                                            |
+| `packages/core/src/pipeline/types.ts`                              | Shared types: `CrawlOrchestratorDeps`, `SchemaOrchestratorDeps`, `ReconcileOrchestratorDeps`, `ExportOrchestratorDeps`, `CrawlTaskInput`, `CrawlTaskResult`, `LinkToEnqueue`, `EventPublisher` interface |
+| `packages/core/src/pipeline/index.ts`                              | Barrel export                                                                                                                                                                                            |
+| `packages/core/tests/unit/pipeline/crawl-orchestrator.test.ts`     | Tests for crawl orchestrator                                                                                                                                                                             |
+| `packages/core/tests/unit/pipeline/schema-orchestrator.test.ts`    | Tests for schema orchestrator                                                                                                                                                                            |
+| `packages/core/tests/unit/pipeline/reconcile-orchestrator.test.ts` | Tests for reconciliation orchestrator                                                                                                                                                                    |
+| `packages/core/tests/unit/pipeline/export-orchestrator.test.ts`    | Tests for export orchestrator                                                                                                                                                                            |
 
 ### Modified Files
 
-| File | Change |
-|------|--------|
-| `packages/queue/src/workers/crawl-worker.ts` | Replace business logic with call to `processCrawlTask()` |
-| `packages/queue/src/workers/schema-worker.ts` | Replace business logic with call to `processSchemaEvolution()` |
-| `packages/queue/src/workers/reconciliation-worker.ts` | Replace business logic with call to `processReconciliation()` |
-| `packages/queue/src/workers/export-worker.ts` | Replace business logic with call to `processExport()` |
-| `packages/core/src/index.ts` | Add pipeline barrel export |
+| File                                                  | Change                                                         |
+| ----------------------------------------------------- | -------------------------------------------------------------- |
+| `packages/queue/src/workers/crawl-worker.ts`          | Replace business logic with call to `processCrawlTask()`       |
+| `packages/queue/src/workers/schema-worker.ts`         | Replace business logic with call to `processSchemaEvolution()` |
+| `packages/queue/src/workers/reconciliation-worker.ts` | Replace business logic with call to `processReconciliation()`  |
+| `packages/queue/src/workers/export-worker.ts`         | Replace business logic with call to `processExport()`          |
+| `packages/core/src/index.ts`                          | Add pipeline barrel export                                     |
 
 ### Unchanged Files (but referenced)
 
-| File | Why Referenced |
-|------|---------------|
-| `packages/queue/src/worker-deps.ts` | `WorkerDeps` type — workers continue to use this, orchestrators use narrower dep types |
-| `packages/queue/src/queues.ts` | Job data interfaces (`CrawlJobData`, etc.) — still used by worker wrappers |
-| `packages/queue/src/redis-lock.ts` | Lock functions — still called by schema worker wrapper |
-| `packages/queue/src/events.ts` | `EventPublisher` — re-exported via pipeline types |
-| All existing worker tests in `packages/queue/tests/` | Must continue to pass after refactoring |
+| File                                                 | Why Referenced                                                                         |
+| ---------------------------------------------------- | -------------------------------------------------------------------------------------- |
+| `packages/queue/src/worker-deps.ts`                  | `WorkerDeps` type — workers continue to use this, orchestrators use narrower dep types |
+| `packages/queue/src/queues.ts`                       | Job data interfaces (`CrawlJobData`, etc.) — still used by worker wrappers             |
+| `packages/queue/src/redis-lock.ts`                   | Lock functions — still called by schema worker wrapper                                 |
+| `packages/queue/src/events.ts`                       | `EventPublisher` — re-exported via pipeline types                                      |
+| All existing worker tests in `packages/queue/tests/` | Must continue to pass after refactoring                                                |
 
 ---
 
 ## Task 1: Define Pipeline Types
 
 **Files:**
+
 - Create: `packages/core/src/pipeline/types.ts`
 - Create: `packages/core/src/pipeline/index.ts`
 - Modify: `packages/core/src/index.ts`
@@ -79,7 +81,10 @@ import type { Entity } from '@spatula/shared';
 
 // Re-export EventPublisher interface so orchestrators don't import from @spatula/queue
 export interface EventPublisher {
-  publish(jobId: string, event: { type: string; jobId: string; tenantId: string; data: unknown }): Promise<void>;
+  publish(
+    jobId: string,
+    event: { type: string; jobId: string; tenantId: string; data: unknown },
+  ): Promise<void>;
 }
 
 // --- Repository interfaces (narrowed from full repo types) ---
@@ -89,12 +94,21 @@ export interface EventPublisher {
 export interface CrawlTaskRepo {
   updateStatus(taskId: string, tenantId: string, status: string): Promise<void>;
   updateClassification(taskId: string, tenantId: string, classification: string): Promise<void>;
-  enqueue(data: { jobId: string; tenantId: string; url: string; depth: number; parentTaskId: string }): Promise<{ id: string }>;
+  enqueue(data: {
+    jobId: string;
+    tenantId: string;
+    url: string;
+    depth: number;
+    parentTaskId: string;
+  }): Promise<{ id: string }>;
 }
 
 export interface PageRepo {
   findByContentHash(hash: string, tenantId: string): Promise<{ id: string } | null>;
-  findByIds(ids: string[], tenantId: string): Promise<Array<{ id: string; metadata: Record<string, unknown>; createdAt: Date }>>;
+  findByIds(
+    ids: string[],
+    tenantId: string,
+  ): Promise<Array<{ id: string; metadata: Record<string, unknown>; createdAt: Date }>>;
   create(data: {
     taskId: string;
     tenantId: string;
@@ -114,39 +128,79 @@ export interface ExtractionRepo {
     unmappedFields: unknown[];
     metadata: unknown;
   }): Promise<void>;
-  findByJob(jobId: string, tenantId: string, options?: { schemaVersion?: number; limit?: number; offset?: number }): Promise<Array<{
-    id: string;
-    jobId: string;
-    pageId: string;
-    schemaVersion: number;
-    data: unknown;
-    metadata: unknown;
-  }>>;
+  findByJob(
+    jobId: string,
+    tenantId: string,
+    options?: { schemaVersion?: number; limit?: number; offset?: number },
+  ): Promise<
+    Array<{
+      id: string;
+      jobId: string;
+      pageId: string;
+      schemaVersion: number;
+      data: unknown;
+      metadata: unknown;
+    }>
+  >;
 }
 
 export interface SchemaRepo {
-  findLatest(jobId: string, tenantId: string): Promise<{ id: string; version: number; definition: SchemaDefinition } | null>;
-  create(data: { jobId: string; tenantId: string; version: number; definition: SchemaDefinition; parentId?: string }): Promise<void>;
+  findLatest(
+    jobId: string,
+    tenantId: string,
+  ): Promise<{ id: string; version: number; definition: SchemaDefinition } | null>;
+  create(data: {
+    jobId: string;
+    tenantId: string;
+    version: number;
+    definition: SchemaDefinition;
+    parentId?: string;
+  }): Promise<void>;
 }
 
 export interface JobRepo {
-  findById(jobId: string, tenantId: string): Promise<{ id: string; config: unknown; status?: string } | null>;
+  findById(
+    jobId: string,
+    tenantId: string,
+  ): Promise<{ id: string; config: unknown; status?: string } | null>;
   updateStatus(jobId: string, tenantId: string, status: string): Promise<void>;
 }
 
 export interface EntityRepo {
-  create(data: { jobId: string; tenantId: string; mergedData: Record<string, unknown>; provenance: unknown; qualityScore: number }): Promise<{ id: string }>;
-  findByJob(jobId: string, tenantId: string, options?: { limit: number; offset: number }): Promise<Entity[]>;
-  findByJobWithProvenance(jobId: string, tenantId: string, options?: { limit: number; offset: number }): Promise<Entity[]>;
+  create(data: {
+    jobId: string;
+    tenantId: string;
+    mergedData: Record<string, unknown>;
+    provenance: unknown;
+    qualityScore: number;
+  }): Promise<{ id: string }>;
+  findByJob(
+    jobId: string,
+    tenantId: string,
+    options?: { limit: number; offset: number },
+  ): Promise<Entity[]>;
+  findByJobWithProvenance(
+    jobId: string,
+    tenantId: string,
+    options?: { limit: number; offset: number },
+  ): Promise<Entity[]>;
   countByJob(jobId: string, tenantId: string): Promise<number>;
 }
 
 export interface EntitySourceRepo {
-  bulkLink(links: Array<{ entityId: string; extractionId: string; matchConfidence: number }>): Promise<void>;
+  bulkLink(
+    links: Array<{ entityId: string; extractionId: string; matchConfidence: number }>,
+  ): Promise<void>;
 }
 
 export interface SourceTrustRepo {
-  upsert(data: { jobId: string; tenantId: string; domain: string; trustLevel: string; reasoning: string }): Promise<void>;
+  upsert(data: {
+    jobId: string;
+    tenantId: string;
+    domain: string;
+    trustLevel: string;
+    reasoning: string;
+  }): Promise<void>;
 }
 
 export interface ActionRepo {
@@ -163,14 +217,18 @@ export interface ActionRepo {
 }
 
 export interface ExportRepo {
-  updateStatus(exportId: string, tenantId: string, data: {
-    status: 'processing' | 'completed' | 'failed';
-    entityCount?: number;
-    contentRef?: string;
-    fileSize?: number;
-    error?: string;
-    completedAt?: Date;
-  }): Promise<void>;
+  updateStatus(
+    exportId: string,
+    tenantId: string,
+    data: {
+      status: 'processing' | 'completed' | 'failed';
+      entityCount?: number;
+      contentRef?: string;
+      fileSize?: number;
+      error?: string;
+      completedAt?: Date;
+    },
+  ): Promise<void>;
 }
 
 // --- Orchestrator dependency bundles ---
@@ -243,16 +301,16 @@ export interface CrawlTaskResult {
   linksFound: LinkToEnqueue[];
   contentHash: string;
   deduplicated: boolean;
-  schemaVersion: number | null;       // For schema evolution trigger check — avoids re-fetching
-  evolutionConfig: { enabled: boolean; batchSize: number } | null;  // From job config
+  schemaVersion: number | null; // For schema evolution trigger check — avoids re-fetching
+  evolutionConfig: { enabled: boolean; batchSize: number } | null; // From job config
 }
 
 export interface SchemaEvolutionInput {
   jobId: string;
   tenantId: string;
-  extractionIds: string[];  // Note: currently unused by the orchestrator (it fetches latest batch from DB).
-                            // Preserved for backward compat with queue job data. Future optimization:
-                            // use these IDs to fetch specific extractions instead of latest N.
+  extractionIds: string[]; // Note: currently unused by the orchestrator (it fetches latest batch from DB).
+  // Preserved for backward compat with queue job data. Future optimization:
+  // use these IDs to fetch specific extractions instead of latest N.
 }
 
 export interface SchemaEvolutionResult {
@@ -324,6 +382,7 @@ git commit -m "feat(core): add pipeline orchestrator types and interfaces"
 ## Task 2: Extract Crawl Orchestrator
 
 **Files:**
+
 - Create: `packages/core/src/pipeline/crawl-orchestrator.ts`
 - Create: `packages/core/tests/unit/pipeline/crawl-orchestrator.test.ts`
 
@@ -535,8 +594,7 @@ export async function processCrawlTask(
         }
       } else {
         // No evaluator — use all valid links
-        linksFound = crawlResult.links
-          .filter((l) => l.url && isValidCrawlUrl(l.url));
+        linksFound = crawlResult.links.filter((l) => l.url && isValidCrawlUrl(l.url));
       }
     }
 
@@ -585,7 +643,10 @@ export async function processCrawlTask(
 export async function shouldTriggerSchemaEvolution(
   jobId: string,
   tenantId: string,
-  cached: { schemaVersion: number | null; evolutionConfig: { enabled: boolean; batchSize: number } | null },
+  cached: {
+    schemaVersion: number | null;
+    evolutionConfig: { enabled: boolean; batchSize: number } | null;
+  },
   deps: {
     extractionRepo: CrawlOrchestratorDeps['extractionRepo'];
   },
@@ -617,7 +678,10 @@ export async function shouldTriggerSchemaEvolution(
 ```typescript
 // packages/core/tests/unit/pipeline/crawl-orchestrator.test.ts
 // (append to the file from Step 1)
-import { processCrawlTask, shouldTriggerSchemaEvolution } from '../../src/pipeline/crawl-orchestrator.js';
+import {
+  processCrawlTask,
+  shouldTriggerSchemaEvolution,
+} from '../../src/pipeline/crawl-orchestrator.js';
 
 function createMockDeps(): CrawlOrchestratorDeps {
   return {
@@ -629,9 +693,7 @@ function createMockDeps(): CrawlOrchestratorDeps {
         title: 'Product 1',
         statusCode: 200,
         contentType: 'text/html',
-        links: [
-          { url: 'https://example.com/product/2', text: 'Product 2' },
-        ],
+        links: [{ url: 'https://example.com/product/2', text: 'Product 2' }],
         metadata: {
           crawledAt: new Date(),
           responseTimeMs: 250,
@@ -745,7 +807,10 @@ describe('processCrawlTask', () => {
 
   it('skips extraction for non-extractable classifications', async () => {
     const deps = createMockDeps();
-    (deps.classifier.classify as any).mockResolvedValue({ classification: 'navigation', confidence: 0.8 });
+    (deps.classifier.classify as any).mockResolvedValue({
+      classification: 'navigation',
+      confidence: 0.8,
+    });
 
     const result = await processCrawlTask(defaultInput, deps);
 
@@ -765,9 +830,17 @@ describe('processCrawlTask', () => {
         { url: 'http://localhost/admin', text: 'Invalid' },
         { url: 'javascript:alert(1)', text: 'XSS' },
       ],
-      metadata: { crawledAt: new Date(), responseTimeMs: 100, contentLength: 10, crawlerType: 'playwright' },
+      metadata: {
+        crawledAt: new Date(),
+        responseTimeMs: 100,
+        contentLength: 10,
+        crawlerType: 'playwright',
+      },
     });
-    (deps.classifier.classify as any).mockResolvedValue({ classification: 'navigation', confidence: 0.8 });
+    (deps.classifier.classify as any).mockResolvedValue({
+      classification: 'navigation',
+      confidence: 0.8,
+    });
 
     const result = await processCrawlTask(defaultInput, deps);
 
@@ -832,7 +905,9 @@ describe('shouldTriggerSchemaEvolution', () => {
       config: { schema: { mode: 'hybrid', evolutionConfig: { enabled: true, batchSize: 3 } } },
     });
     (deps.extractionRepo.findByJob as any).mockResolvedValue([
-      { id: 'e1' }, { id: 'e2' }, { id: 'e3' },
+      { id: 'e1' },
+      { id: 'e2' },
+      { id: 'e3' },
     ]);
 
     const result = await shouldTriggerSchemaEvolution('job-1', 'tenant-1', deps);
@@ -859,6 +934,7 @@ git commit -m "feat(core): add crawl orchestrator with pure business logic extra
 ## Task 3: Refactor Crawl Worker to Thin Wrapper
 
 **Files:**
+
 - Modify: `packages/queue/src/workers/crawl-worker.ts`
 
 - [ ] **Step 1: Replace crawl worker with thin wrapper**
@@ -908,7 +984,11 @@ export async function processCrawlJob(data: CrawlJobData, deps: WorkerDeps): Pro
           { jobId, tenantId, extractionIds: evolution.extractionIds },
         );
         logger.debug(
-          { jobId, schemaVersion: evolution.schemaVersion, extractionCount: evolution.extractionIds.length },
+          {
+            jobId,
+            schemaVersion: evolution.schemaVersion,
+            extractionCount: evolution.extractionIds.length,
+          },
           'schema evolution triggered',
         );
       }
@@ -1009,6 +1089,7 @@ git commit -m "refactor(queue): crawl worker delegates to core orchestrator"
 ## Task 4: Extract Schema Orchestrator
 
 **Files:**
+
 - Create: `packages/core/src/pipeline/schema-orchestrator.ts`
 - Create: `packages/core/tests/unit/pipeline/schema-orchestrator.test.ts`
 
@@ -1151,8 +1232,12 @@ export async function processSchemaEvolution(
     tenantId,
     data: {
       version: evolvedSchema.version,
-      fieldsAdded: actions.filter((a) => a.type === 'add_field').map((a) => (a as any).payload?.name ?? ''),
-      fieldsMerged: actions.filter((a) => a.type === 'merge_fields').map((a) => (a as any).payload?.canonicalName ?? ''),
+      fieldsAdded: actions
+        .filter((a) => a.type === 'add_field')
+        .map((a) => (a as any).payload?.name ?? ''),
+      fieldsMerged: actions
+        .filter((a) => a.type === 'merge_fields')
+        .map((a) => (a as any).payload?.canonicalName ?? ''),
     },
   });
 
@@ -1181,6 +1266,7 @@ git commit -m "feat(core): add schema evolution orchestrator"
 ## Task 5: Refactor Schema Worker to Thin Wrapper
 
 **Files:**
+
 - Modify: `packages/queue/src/workers/schema-worker.ts`
 
 - [ ] **Step 1: Replace schema worker with thin wrapper**
@@ -1201,7 +1287,10 @@ export async function processSchemaEvolutionJob(
   deps: WorkerDeps,
   redis?: Redis,
 ): Promise<void> {
-  const logger = createLoggerWithContext('schema-worker', { jobId: data.jobId, tenantId: data.tenantId });
+  const logger = createLoggerWithContext('schema-worker', {
+    jobId: data.jobId,
+    tenantId: data.tenantId,
+  });
   const lockKey = `schema-lock:${data.jobId}`;
   let lockToken = '';
 
@@ -1254,6 +1343,7 @@ git commit -m "refactor(queue): schema worker delegates to core orchestrator"
 ## Task 6: Extract Reconciliation Orchestrator + Refactor Worker
 
 **Files:**
+
 - Create: `packages/core/src/pipeline/reconcile-orchestrator.ts`
 - Create: `packages/core/tests/unit/pipeline/reconcile-orchestrator.test.ts`
 - Modify: `packages/queue/src/workers/reconciliation-worker.ts`
@@ -1296,6 +1386,7 @@ git commit -m "feat(core): add reconciliation orchestrator, refactor worker to w
 ## Task 7: Extract Export Orchestrator + Refactor Worker
 
 **Files:**
+
 - Create: `packages/core/src/pipeline/export-orchestrator.ts`
 - Create: `packages/core/tests/unit/pipeline/export-orchestrator.test.ts`
 - Modify: `packages/queue/src/workers/export-worker.ts`
@@ -1338,6 +1429,7 @@ git commit -m "feat(core): add export orchestrator, refactor worker to wrapper"
 ## Task 8: Full Integration Verification
 
 **Files:**
+
 - No new files — verification only
 
 - [ ] **Step 1: Run complete core package tests**

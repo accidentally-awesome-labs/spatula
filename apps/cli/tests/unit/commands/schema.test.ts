@@ -1,5 +1,9 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { formatSchemaTable, formatVersionHistory, runSchemaCommand } from '../../../src/commands/schema.js';
+import {
+  formatSchemaTable,
+  formatVersionHistory,
+  runSchemaCommand,
+} from '../../../src/commands/schema.js';
 import { openLocalProject } from '../../../src/local-project.js';
 
 vi.mock('../../../src/local-project.js', () => ({
@@ -127,9 +131,7 @@ describe('formatVersionHistory', () => {
         version: 1,
         definition: {
           version: 1,
-          fields: [
-            { name: 'title', type: 'string', required: true, description: 'Title' },
-          ],
+          fields: [{ name: 'title', type: 'string', required: true, description: 'Title' }],
           fieldAliases: [],
           createdAt: '2026-03-30T00:00:00Z',
           parentVersion: null,
@@ -199,9 +201,7 @@ describe('runSchemaCommand', () => {
     version: 2,
     definition: {
       version: 2,
-      fields: [
-        { name: 'title', type: 'string', required: true, description: 'Title' },
-      ],
+      fields: [{ name: 'title', type: 'string', required: true, description: 'Title' }],
       fieldAliases: [],
       createdAt: '2026-03-30T00:00:00Z',
       parentVersion: 1,

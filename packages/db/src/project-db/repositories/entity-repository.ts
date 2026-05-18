@@ -37,20 +37,23 @@ export class SqliteEntityRepository implements EntityRepo {
     categories?: unknown[];
   }): Promise<{ id: string }> {
     const id = crypto.randomUUID();
-    wrapStorageError(() => {
-      this.db
-        .insert(entities)
-        .values({
-          id,
-          jobId: this.projectId,
-          mergedData: data.mergedData,
-          provenance: data.provenance,
-          qualityScore: data.qualityScore,
-          ...(data.categories !== undefined ? { categories: data.categories } : {}),
-          createdAt: new Date().toISOString(),
-        })
-        .run();
-    }, { method: 'create', table: 'entities' });
+    wrapStorageError(
+      () => {
+        this.db
+          .insert(entities)
+          .values({
+            id,
+            jobId: this.projectId,
+            mergedData: data.mergedData,
+            provenance: data.provenance,
+            qualityScore: data.qualityScore,
+            ...(data.categories !== undefined ? { categories: data.categories } : {}),
+            createdAt: new Date().toISOString(),
+          })
+          .run();
+      },
+      { method: 'create', table: 'entities' },
+    );
     logger.debug({ id }, 'entity created');
     return { id };
   }
@@ -115,65 +118,77 @@ export class SqliteEntityRepository implements EntityRepo {
     return Number(result?.count ?? 0);
   }
 
-  async upsertBatch(batch: Array<{
-    id: string;
-    mergedData: Record<string, unknown>;
-    provenance: Record<string, unknown>;
-    qualityScore: number;
-    categories: unknown[];
-    runId: string | null;
-  }>): Promise<{ inserted: number; updated: number }> {
+  async upsertBatch(
+    batch: Array<{
+      id: string;
+      mergedData: Record<string, unknown>;
+      provenance: Record<string, unknown>;
+      qualityScore: number;
+      categories: unknown[];
+      runId: string | null;
+    }>,
+  ): Promise<{ inserted: number; updated: number }> {
     if (batch.length === 0) return { inserted: 0, updated: 0 };
 
     // Check which IDs already exist to accurately track insert vs update
     const existingIds = new Set<string>();
-    wrapStorageError(() => {
-      const ids = batch.map(e => e.id);
-      for (let i = 0; i < ids.length; i += 999) {
-        const chunk = ids.slice(i, i + 999);
-        const rows = this.db.select({ id: entities.id }).from(entities).where(inArray(entities.id, chunk)).all();
-        for (const row of rows) existingIds.add(row.id);
-      }
-    }, { method: 'upsertBatch:check', table: 'entities' });
+    wrapStorageError(
+      () => {
+        const ids = batch.map((e) => e.id);
+        for (let i = 0; i < ids.length; i += 999) {
+          const chunk = ids.slice(i, i + 999);
+          const rows = this.db
+            .select({ id: entities.id })
+            .from(entities)
+            .where(inArray(entities.id, chunk))
+            .all();
+          for (const row of rows) existingIds.add(row.id);
+        }
+      },
+      { method: 'upsertBatch:check', table: 'entities' },
+    );
 
     const now = new Date().toISOString();
     // Track IDs seen within this batch to count within-batch duplicates as updates
     const seenInBatch = new Set<string>();
 
-    wrapStorageError(() => {
-      for (const entity of batch) {
-        if (!existingIds.has(entity.id) && !seenInBatch.has(entity.id)) {
-          seenInBatch.add(entity.id);
-        } else {
-          existingIds.add(entity.id);
-        }
-        this.db
-          .insert(entities)
-          .values({
-            id: entity.id,
-            jobId: this.projectId,
-            mergedData: entity.mergedData,
-            provenance: entity.provenance,
-            qualityScore: entity.qualityScore,
-            categories: entity.categories,
-            createdAt: now,
-            updatedAt: now,
-            runId: entity.runId,
-          })
-          .onConflictDoUpdate({
-            target: entities.id,
-            set: {
+    wrapStorageError(
+      () => {
+        for (const entity of batch) {
+          if (!existingIds.has(entity.id) && !seenInBatch.has(entity.id)) {
+            seenInBatch.add(entity.id);
+          } else {
+            existingIds.add(entity.id);
+          }
+          this.db
+            .insert(entities)
+            .values({
+              id: entity.id,
+              jobId: this.projectId,
               mergedData: entity.mergedData,
               provenance: entity.provenance,
               qualityScore: entity.qualityScore,
               categories: entity.categories,
+              createdAt: now,
               updatedAt: now,
               runId: entity.runId,
-            },
-          })
-          .run();
-      }
-    }, { method: 'upsertBatch', table: 'entities' });
+            })
+            .onConflictDoUpdate({
+              target: entities.id,
+              set: {
+                mergedData: entity.mergedData,
+                provenance: entity.provenance,
+                qualityScore: entity.qualityScore,
+                categories: entity.categories,
+                updatedAt: now,
+                runId: entity.runId,
+              },
+            })
+            .run();
+        }
+      },
+      { method: 'upsertBatch', table: 'entities' },
+    );
 
     const updated = existingIds.size;
     const inserted = batch.length - updated;
@@ -189,9 +204,12 @@ export class SqliteEntityRepository implements EntityRepo {
       .where(inArray(entities.runId, runIds))
       .all();
     if (Number(count) === 0) return 0;
-    wrapStorageError(() => {
-      this.db.delete(entities).where(inArray(entities.runId, runIds)).run();
-    }, { method: 'deleteByRunIds', table: 'entities' });
+    wrapStorageError(
+      () => {
+        this.db.delete(entities).where(inArray(entities.runId, runIds)).run();
+      },
+      { method: 'deleteByRunIds', table: 'entities' },
+    );
     return Number(count);
   }
 
@@ -205,7 +223,9 @@ export class SqliteEntityRepository implements EntityRepo {
         .select({ count: sql<number>`count(*)` })
         .from(entities)
         .leftJoin(runs, eq(entities.runId, runs.id))
-        .where(sql`${entities.jobId} = ${this.projectId} AND (${entities.runId} IS NULL OR ${runs.source} = 'local')`)
+        .where(
+          sql`${entities.jobId} = ${this.projectId} AND (${entities.runId} IS NULL OR ${runs.source} = 'local')`,
+        )
         .all();
     } else {
       result = this.db
@@ -231,21 +251,29 @@ export class SqliteEntityRepository implements EntityRepo {
     if (filter === 'local') {
       query = this.db
         .select({
-          id: entities.id, jobId: entities.jobId,
-          mergedData: entities.mergedData, categories: entities.categories,
-          qualityScore: entities.qualityScore, createdAt: entities.createdAt,
+          id: entities.id,
+          jobId: entities.jobId,
+          mergedData: entities.mergedData,
+          categories: entities.categories,
+          qualityScore: entities.qualityScore,
+          createdAt: entities.createdAt,
           sourceCount: entities.sourceCount,
         })
         .from(entities)
         .leftJoin(runs, eq(entities.runId, runs.id))
-        .where(sql`${entities.jobId} = ${this.projectId} AND (${entities.runId} IS NULL OR ${runs.source} = 'local')`)
+        .where(
+          sql`${entities.jobId} = ${this.projectId} AND (${entities.runId} IS NULL OR ${runs.source} = 'local')`,
+        )
         .orderBy(desc(entities.qualityScore));
     } else {
       query = this.db
         .select({
-          id: entities.id, jobId: entities.jobId,
-          mergedData: entities.mergedData, categories: entities.categories,
-          qualityScore: entities.qualityScore, createdAt: entities.createdAt,
+          id: entities.id,
+          jobId: entities.jobId,
+          mergedData: entities.mergedData,
+          categories: entities.categories,
+          qualityScore: entities.qualityScore,
+          createdAt: entities.createdAt,
           sourceCount: entities.sourceCount,
         })
         .from(entities)
@@ -274,42 +302,58 @@ export class SqliteEntitySourceRepository implements EntitySourceRepo {
   ): Promise<{ count: number }> {
     if (links.length === 0) return { count: 0 };
 
-    wrapStorageError(() => {
-      this.db.insert(entitySources).values(links).run();
-    }, { method: 'bulkLink', table: 'entity_sources' });
+    wrapStorageError(
+      () => {
+        this.db.insert(entitySources).values(links).run();
+      },
+      { method: 'bulkLink', table: 'entity_sources' },
+    );
     return { count: links.length };
   }
 
-  async upsertBatchSources(batch: Array<{
-    entityId: string;
-    extractionId: string;
-    matchConfidence: number;
-  }>): Promise<number> {
+  async upsertBatchSources(
+    batch: Array<{
+      entityId: string;
+      extractionId: string;
+      matchConfidence: number;
+    }>,
+  ): Promise<number> {
     if (batch.length === 0) return 0;
     let count = 0;
-    wrapStorageError(() => {
-      for (const item of batch) {
-        this.db.insert(entitySources).values(item)
-          .onConflictDoUpdate({
-            target: [entitySources.entityId, entitySources.extractionId],
-            set: { matchConfidence: item.matchConfidence },
-          }).run();
-        count++;
-      }
-    }, { method: 'upsertBatchSources', table: 'entity_sources' });
+    wrapStorageError(
+      () => {
+        for (const item of batch) {
+          this.db
+            .insert(entitySources)
+            .values(item)
+            .onConflictDoUpdate({
+              target: [entitySources.entityId, entitySources.extractionId],
+              set: { matchConfidence: item.matchConfidence },
+            })
+            .run();
+          count++;
+        }
+      },
+      { method: 'upsertBatchSources', table: 'entity_sources' },
+    );
     return count;
   }
 
   async deleteByExtractionIds(extractionIds: string[]): Promise<number> {
     if (extractionIds.length === 0) return 0;
     let total = 0;
-    wrapStorageError(() => {
-      for (const id of extractionIds) {
-        const result = this.db.delete(entitySources)
-          .where(eq(entitySources.extractionId, id)).run();
-        total += result.changes;
-      }
-    }, { method: 'deleteByExtractionIds', table: 'entity_sources' });
+    wrapStorageError(
+      () => {
+        for (const id of extractionIds) {
+          const result = this.db
+            .delete(entitySources)
+            .where(eq(entitySources.extractionId, id))
+            .run();
+          total += result.changes;
+        }
+      },
+      { method: 'deleteByExtractionIds', table: 'entity_sources' },
+    );
     return total;
   }
 }

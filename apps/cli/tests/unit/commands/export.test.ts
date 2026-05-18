@@ -97,10 +97,12 @@ function makeEntity(overrides: Partial<Entity> = {}): Entity {
 
 function createMockDataSource(entities: Entity[], schema: any) {
   return {
-    getEntities: vi.fn().mockImplementation(({ limit, offset }: { limit: number; offset: number }) => {
-      const slice = entities.slice(offset, offset + limit);
-      return Promise.resolve({ data: slice, total: entities.length });
-    }),
+    getEntities: vi
+      .fn()
+      .mockImplementation(({ limit, offset }: { limit: number; offset: number }) => {
+        const slice = entities.slice(offset, offset + limit);
+        return Promise.resolve({ data: slice, total: entities.length });
+      }),
     getSchema: vi.fn().mockResolvedValue(schema),
     getStatus: vi.fn().mockResolvedValue({ totalEntities: entities.length }),
   };
@@ -120,9 +122,7 @@ function createMockProject(entities: Entity[], schema: any) {
 const DEFAULT_SCHEMA = {
   definition: {
     version: 1,
-    fields: [
-      { name: 'title', type: 'string', required: true, description: 'Title' },
-    ],
+    fields: [{ name: 'title', type: 'string', required: true, description: 'Title' }],
     fieldAliases: [],
     createdAt: '2026-03-30T00:00:00Z',
     parentVersion: null,
@@ -310,9 +310,7 @@ describe('runExportCommand', () => {
 
   it('batch-loads entities correctly with >200 entities', async () => {
     // Create 450 entities to test batching (200 + 200 + 50)
-    const entities = Array.from({ length: 450 }, (_, i) =>
-      makeEntity({ id: `ent-${i}` }),
-    );
+    const entities = Array.from({ length: 450 }, (_, i) => makeEntity({ id: `ent-${i}` }));
     const project = await setupProject(entities, DEFAULT_SCHEMA);
 
     await runExportCommand({ output: '/tmp/test-export.json' });
@@ -342,9 +340,7 @@ describe('runExportCommand', () => {
   it('exits with error when no schema exists', async () => {
     const project = await setupProject([makeEntity()], null);
 
-    await expect(runExportCommand({ output: '/tmp/test.json' })).rejects.toThrow(
-      'process.exit',
-    );
+    await expect(runExportCommand({ output: '/tmp/test.json' })).rejects.toThrow('process.exit');
 
     expect(consoleErrorSpy).toHaveBeenCalledWith(
       'No schema found. Run `spatula run` to crawl and build a schema first.',
@@ -354,10 +350,7 @@ describe('runExportCommand', () => {
   });
 
   it('exits with message when no entities match quality filter', async () => {
-    const entities = [
-      makeEntity({ qualityScore: 0.2 }),
-      makeEntity({ qualityScore: 0.1 }),
-    ];
+    const entities = [makeEntity({ qualityScore: 0.2 }), makeEntity({ qualityScore: 0.1 })];
     const project = await setupProject(entities, DEFAULT_SCHEMA);
 
     await runExportCommand({ output: '/tmp/test.json', minQuality: 0.9 });
@@ -377,9 +370,7 @@ describe('runExportCommand', () => {
 
     mockExportFn.mockRejectedValueOnce(new Error('exporter boom'));
 
-    await expect(
-      runExportCommand({ output: '/tmp/test.json' }),
-    ).rejects.toThrow('exporter boom');
+    await expect(runExportCommand({ output: '/tmp/test.json' })).rejects.toThrow('exporter boom');
 
     // close() should still be called despite the error
     expect(project.close).toHaveBeenCalledOnce();
@@ -389,9 +380,7 @@ describe('runExportCommand', () => {
     // Schema object exists but definition is null/undefined
     const project = await setupProject([makeEntity()], { definition: null });
 
-    await expect(runExportCommand({ output: '/tmp/test.json' })).rejects.toThrow(
-      'process.exit',
-    );
+    await expect(runExportCommand({ output: '/tmp/test.json' })).rejects.toThrow('process.exit');
 
     expect(consoleErrorSpy).toHaveBeenCalledWith(
       'No schema found. Run `spatula run` to crawl and build a schema first.',

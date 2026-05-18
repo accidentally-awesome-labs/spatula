@@ -11,16 +11,45 @@ const mockSchema: SchemaDefinition = {
     { name: 'brand', description: 'Brand name', type: 'string', required: false },
   ],
   fieldAliases: [
-    { canonicalName: 'name', aliases: [{ name: 'title', sources: ['site-a.com'], occurrences: 3 }], mergedAt: new Date(), reasoning: 'synonym' },
+    {
+      canonicalName: 'name',
+      aliases: [{ name: 'title', sources: ['site-a.com'], occurrences: 3 }],
+      mergedAt: new Date(),
+      reasoning: 'synonym',
+    },
   ],
   createdAt: new Date(),
   parentVersion: null,
 };
 
 const mockEntities: Entity[] = [
-  { id: 'e1', jobId: 'j1', mergedData: { name: 'Widget A', price: 10, brand: 'Acme' }, categories: [], qualityScore: 0.9, createdAt: '', sourceCount: 2 },
-  { id: 'e2', jobId: 'j1', mergedData: { name: 'Widget B', price: 20, brand: 'Acme' }, categories: [], qualityScore: 0.8, createdAt: '', sourceCount: 1 },
-  { id: 'e3', jobId: 'j1', mergedData: { name: 'Widget C', price: null, brand: null }, categories: [], qualityScore: 0.7, createdAt: '', sourceCount: 1 },
+  {
+    id: 'e1',
+    jobId: 'j1',
+    mergedData: { name: 'Widget A', price: 10, brand: 'Acme' },
+    categories: [],
+    qualityScore: 0.9,
+    createdAt: '',
+    sourceCount: 2,
+  },
+  {
+    id: 'e2',
+    jobId: 'j1',
+    mergedData: { name: 'Widget B', price: 20, brand: 'Acme' },
+    categories: [],
+    qualityScore: 0.8,
+    createdAt: '',
+    sourceCount: 1,
+  },
+  {
+    id: 'e3',
+    jobId: 'j1',
+    mergedData: { name: 'Widget C', price: null, brand: null },
+    categories: [],
+    qualityScore: 0.7,
+    createdAt: '',
+    sourceCount: 1,
+  },
 ] as any;
 
 describe('generateDocumentation', () => {
@@ -73,8 +102,13 @@ describe('generateDocumentation', () => {
 
   it('sets sampled flag when entities exceed 1000', () => {
     const largeEntities = Array.from({ length: 1500 }, (_, i) => ({
-      id: `e${i}`, jobId: 'j1', mergedData: { name: `Item ${i}` },
-      categories: [], qualityScore: 0.5, createdAt: '', sourceCount: 1,
+      id: `e${i}`,
+      jobId: 'j1',
+      mergedData: { name: `Item ${i}` },
+      categories: [],
+      qualityScore: 0.5,
+      createdAt: '',
+      sourceCount: 1,
     })) as any;
     const doc = generateDocumentation(mockSchema, largeEntities, 'j1');
     expect(doc.sampled).toBe(true);

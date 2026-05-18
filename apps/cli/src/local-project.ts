@@ -44,9 +44,7 @@ export async function openLocalProject(cwd: string): Promise<LocalProject> {
   try {
     dbResult = createProjectDb(dbPath);
   } catch (err) {
-    throw new Error(
-      `Failed to open project database at ${dbPath}: ${(err as Error).message}`,
-    );
+    throw new Error(`Failed to open project database at ${dbPath}: ${(err as Error).message}`);
   }
 
   const adapter = new ProjectAdapter(dbResult.db, projectId);

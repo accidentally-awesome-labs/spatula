@@ -31,16 +31,16 @@ import {
   runRemoteJobAction,
 } from '../../../src/commands/remote.js';
 
-function mockFetchSequence(responses: Array<{ ok: boolean; data?: unknown; status?: number }>): void {
+function mockFetchSequence(
+  responses: Array<{ ok: boolean; data?: unknown; status?: number }>,
+): void {
   const mockFn = vi.fn();
   for (const r of responses) {
     mockFn.mockResolvedValueOnce({
       ok: r.ok,
       status: r.status ?? (r.ok ? 200 : 500),
       json: () =>
-        Promise.resolve(
-          r.ok ? (r.data ?? { status: 'ok' }) : { error: { message: 'fail' } },
-        ),
+        Promise.resolve(r.ok ? (r.data ?? { status: 'ok' }) : { error: { message: 'fail' } }),
     });
   }
   vi.stubGlobal('fetch', mockFn);
@@ -56,7 +56,16 @@ describe('runRemoteAdd', () => {
   it('saves remote config after verifying health and auth', async () => {
     mockFetchSequence([
       { ok: true, data: { status: 'ok' } },
-      { ok: true, data: { data: { plan: 'starter', usage: {} } } },
+      // /api/v1/auth/me returns top-level fields (no { data } envelope)
+      {
+        ok: true,
+        data: {
+          tenantId: 'tenant-prod',
+          scopes: ['jobs:read', 'jobs:write'],
+          subject: 'user-1',
+          authenticated: true,
+        },
+      },
     ]);
     const result = await runRemoteAdd({
       name: 'prod',
@@ -64,7 +73,8 @@ describe('runRemoteAdd', () => {
       apiKey: 'sk_live_abc',
     });
     expect(result.success).toBe(true);
-    expect(result.plan).toBe('starter');
+    expect(result.tenantId).toBe('tenant-prod');
+    expect(result.scopes).toEqual(['jobs:read', 'jobs:write']);
     expect(mockSaveGlobalConfig).toHaveBeenCalledTimes(1);
     const savedConfig = mockSaveGlobalConfig.mock.calls[0][0] as GlobalConfig;
     expect(savedConfig.remotes?.prod?.url).toBe('https://api.spatula.dev');
@@ -118,8 +128,16 @@ describe('runRemoteList', () => {
     };
     const result = await runRemoteList();
     expect(result.remotes).toHaveLength(2);
-    expect(result.remotes[0]).toMatchObject({ name: 'prod', url: 'https://api.spatula.dev', hasApiKey: true });
-    expect(result.remotes[1]).toMatchObject({ name: 'staging', url: 'https://staging.spatula.dev', hasApiKey: false });
+    expect(result.remotes[0]).toMatchObject({
+      name: 'prod',
+      url: 'https://api.spatula.dev',
+      hasApiKey: true,
+    });
+    expect(result.remotes[1]).toMatchObject({
+      name: 'staging',
+      url: 'https://staging.spatula.dev',
+      hasApiKey: false,
+    });
   });
 
   it('includes live job status when metaGet is provided', async () => {
@@ -230,7 +248,6 @@ describe('runRemoteJobAction', () => {
   it('returns error when remote not configured', async () => {
     mockConfig = { version: 1 };
     const metaGet = vi.fn().mockResolvedValue('job-1');
-    await expect(runRemoteJobAction('missing', 'pause', metaGet))
-      .rejects.toThrow('not found');
+    await expect(runRemoteJobAction('missing', 'pause', metaGet)).rejects.toThrow('not found');
   });
 });

@@ -36,13 +36,18 @@ export function createSystemChecks(cwd = process.cwd()): HealthCheck[] {
           const raw = process.env.OLLAMA_BASE_URL ?? 'http://localhost:11434';
           const parsed = new URL(raw);
           if (!['http:', 'https:'].includes(parsed.protocol)) {
-            return { status: 'warn', message: `Invalid OLLAMA_BASE_URL scheme: ${parsed.protocol}` };
+            return {
+              status: 'warn',
+              message: `Invalid OLLAMA_BASE_URL scheme: ${parsed.protocol}`,
+            };
           }
           const res = await fetch(`${parsed.origin}/api/tags`, {
             signal: AbortSignal.timeout(3000),
           });
           if (res.ok) return { status: 'pass', message: 'Ollama is reachable' };
-        } catch { /* ignore */ }
+        } catch {
+          /* ignore */
+        }
 
         if (process.env.OPENROUTER_API_KEY) {
           return { status: 'pass', message: 'OpenRouter API key configured' };
@@ -59,7 +64,10 @@ export function createSystemChecks(cwd = process.cwd()): HealthCheck[] {
           execFileSync('npx', ['playwright', '--version'], { stdio: 'pipe', timeout: 10000 });
           return { status: 'pass', message: 'Playwright browsers installed' };
         } catch {
-          return { status: 'warn', message: 'Playwright not installed (run: npx playwright install)' };
+          return {
+            status: 'warn',
+            message: 'Playwright not installed (run: npx playwright install)',
+          };
         }
       },
     },

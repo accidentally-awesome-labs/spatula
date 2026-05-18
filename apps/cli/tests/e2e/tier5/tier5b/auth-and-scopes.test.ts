@@ -96,7 +96,12 @@ describe('Tier 5B: API Key Authentication & Scope Enforcement', () => {
   // ── Test 6: Key with jobs:read → POST jobs rejected → 403 ─────────
   it('rejects POST with jobs:read-only scope', async (t) => {
     if (!dbAvailable) return t.skip();
-    const { rawKey } = await createApiKeyDirectly(ctx.db, ctx.tenantId, ['jobs:read'], 'read-only-2');
+    const { rawKey } = await createApiKeyDirectly(
+      ctx.db,
+      ctx.tenantId,
+      ['jobs:read'],
+      'read-only-2',
+    );
     const res = await ctx.app.request('/api/v1/jobs', {
       method: 'POST',
       headers: bearerHeaders(rawKey),

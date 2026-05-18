@@ -89,9 +89,7 @@ describe('ReviewView', () => {
     store.getState().setPendingActions(sampleActions);
     const apiClient = createMockApiClient(sampleActions);
 
-    const { stdin, lastFrame } = render(
-      <ReviewView store={store} backend={apiClient} />,
-    );
+    const { stdin, lastFrame } = render(<ReviewView store={store} backend={apiClient} />);
     await waitForEffects();
 
     stdin.write('\u001B[B'); // down arrow
@@ -108,9 +106,7 @@ describe('ReviewView', () => {
     store.getState().setReviewIndex(1);
     const apiClient = createMockApiClient(sampleActions);
 
-    const { stdin, lastFrame } = render(
-      <ReviewView store={store} backend={apiClient} />,
-    );
+    const { stdin, lastFrame } = render(<ReviewView store={store} backend={apiClient} />);
     await waitForEffects();
 
     stdin.write('\u001B[A'); // up arrow

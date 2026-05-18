@@ -6,27 +6,27 @@ import { SchemaConflict } from '../../../src/components/SchemaConflict.js';
 import type { SchemaDiff } from '../../../src/lib/schema-diff.js';
 
 /** Wait for React effects (useEffect in useInput) to settle. */
-const waitForEffects = () => new Promise(resolve => setTimeout(resolve, 50));
+const waitForEffects = () => new Promise((resolve) => setTimeout(resolve, 50));
 
 describe('SchemaConflict', () => {
   const mockDiff: SchemaDiff = {
     localOnly: [{ name: 'color', description: '', type: 'string', required: false }],
     remoteOnly: [{ name: 'rating', description: '', type: 'number', required: false }],
-    changed: [{
-      name: 'price',
-      local: { name: 'price', description: '', type: 'string', required: false },
-      remote: { name: 'price', description: '', type: 'currency', required: true },
-      differences: ['type: string → currency', 'required: false → true'],
-    }],
+    changed: [
+      {
+        name: 'price',
+        local: { name: 'price', description: '', type: 'string', required: false },
+        remote: { name: 'price', description: '', type: 'currency', required: true },
+        differences: ['type: string → currency', 'required: false → true'],
+      },
+    ],
     unchanged: [{ name: 'title', description: '', type: 'string', required: true }],
     hasChanges: true,
   };
 
   it('renders the diff summary', () => {
     const onResolve = vi.fn();
-    const { lastFrame } = render(
-      <SchemaConflict diff={mockDiff} onResolve={onResolve} />,
-    );
+    const { lastFrame } = render(<SchemaConflict diff={mockDiff} onResolve={onResolve} />);
     const output = lastFrame();
     expect(output).toContain('Schema differences detected');
     expect(output).toContain('color');
@@ -36,9 +36,7 @@ describe('SchemaConflict', () => {
 
   it('shows the three resolution options', () => {
     const onResolve = vi.fn();
-    const { lastFrame } = render(
-      <SchemaConflict diff={mockDiff} onResolve={onResolve} />,
-    );
+    const { lastFrame } = render(<SchemaConflict diff={mockDiff} onResolve={onResolve} />);
     const output = lastFrame();
     expect(output).toContain('Use remote');
     expect(output).toContain('Keep local');

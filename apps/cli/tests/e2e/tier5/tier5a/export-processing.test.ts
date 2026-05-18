@@ -92,13 +92,10 @@ describe('Export Processing', () => {
     expect(finalStatus).toBe('completed');
 
     // Verify entityCount > 0 via the get-export endpoint
-    const statusRes = await harness.app.request(
-      `/api/v1/jobs/${jobId}/export/${exportId}`,
-      {
-        method: 'GET',
-        headers: { 'x-tenant-id': harness.tenantId },
-      },
-    );
+    const statusRes = await harness.app.request(`/api/v1/jobs/${jobId}/export/${exportId}`, {
+      method: 'GET',
+      headers: { 'x-tenant-id': harness.tenantId },
+    });
     expect(statusRes.status).toBe(200);
     const statusBody = await statusRes.json();
     expect(statusBody.data.entityCount).toBeGreaterThan(0);
@@ -117,13 +114,10 @@ describe('Export Processing', () => {
     const exportId = completedExportId;
     expect(exportId).toBeDefined();
 
-    const res = await harness.app.request(
-      `/api/v1/jobs/${jobId}/export/${exportId}/download`,
-      {
-        method: 'GET',
-        headers: { 'x-tenant-id': harness.tenantId },
-      },
-    );
+    const res = await harness.app.request(`/api/v1/jobs/${jobId}/export/${exportId}/download`, {
+      method: 'GET',
+      headers: { 'x-tenant-id': harness.tenantId },
+    });
 
     expect(res.status).toBe(200);
 

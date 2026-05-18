@@ -43,24 +43,28 @@ Options:
 ### 2.2 The 9-Step Flow
 
 **Step 1: Resolve remote**
+
 - Read remote config from `~/.spatula/config.yaml` under `remotes.<name>`
 - Read linked job ID from `project_meta` key `remote:<name>:job_id`
 - If no linked job: error "No job linked for remote '<name>'. Run `spatula push` first."
 - If no remote configured: error "No remote '<name>'. Run `spatula remote add` first."
 
 **Step 2: Check job status**
+
 - `GET /api/v1/jobs/:jobId` via `SpatulaApiClient.getJob()`
 - If `completed` or `failed` → proceed normally
 - If `running` or `paused` → trigger pull-from-running-job flow (section 4)
 - If `cancelled` or `pending` → warn and confirm
 
 **Step 3: Check for interrupted pull**
+
 - Read `remote:<name>:pull_cursor` from `project_meta`
 - If present and `--restart` not passed: print "Resuming interrupted pull from cursor..." and skip to step 5 with saved cursor
 - If present and `--restart` passed: clear cursor, proceed fresh
 - If not present: proceed fresh
 
 **Step 4: Fetch and resolve schema**
+
 - Fetch remote schema: `SpatulaApiClient.getSchema(jobId)` → `SchemaDefinition`
 - Load local schema: `adapter.schemaRepo.findLatest(projectId, projectId)` (both params ignored, uses pre-bound projectId)
 - If no local schema: accept remote schema, write to local DB and append fields to `spatula.yaml`
@@ -68,6 +72,7 @@ Options:
 - If schemas match: skip, print "Schema up to date"
 
 **Step 5: Fetch entities (batched cursor streaming)**
+
 - If `--full` flag: delete all entities from previous pull runs for this remote via `deleteByRunIds()` (see section 5 for details)
 - Determine `since` parameter:
   - If resuming (cursor exists): use cursor, no `since` (cursor already encodes position)
@@ -87,20 +92,24 @@ Options:
 - Track total entities inserted and updated counts
 
 **Step 6: Fetch LLM usage summary**
+
 - Call `SpatulaApiClient.getUsage()` → tenant-wide usage aggregation (totalTokens, totalCostUsd, byModel, byPurpose, byJob)
 - The existing `GET /api/v1/usage` endpoint returns usage for all jobs; extract the linked job's usage from the `byJob` array by matching `jobId`
 - Store job-specific aggregate totals in the pull-run record (`llmTokensUsed`, `llmCostUsd`)
 - Store detailed breakdown in `project_meta` as `remote:<name>:last_pull_usage` (JSON-serialized)
 
 **Step 7: Create pull-run record**
+
 - `adapter.runRepo.create({ status: 'pulled', source: 'remote:<name>:<jobId>', configSnapshot: { remote, jobId, full, incremental }, startedAt })`
 - Then `adapter.runRepo.updateStats(runId, { entitiesCreated: insertCount, llmTokensUsed, llmCostUsd })` — separate call because `create()` only accepts status/source/config/startedAt
 
 **Step 8: Clear cursor + update timestamps**
+
 - Delete `remote:<name>:pull_cursor` from `project_meta`
 - Set `remote:<name>:last_pull_at` = current ISO timestamp
 
 **Step 9: Print summary**
+
 ```
 Pull complete from 'prod' (job abc123)
   Entities:  142 new, 28 updated (170 total)
@@ -148,19 +157,19 @@ Choice (1/2/3):
 
 ```typescript
 interface SchemaDiff {
-  localOnly: FieldDefinition[];     // fields in local but not remote
-  remoteOnly: FieldDefinition[];    // fields in remote but not local
+  localOnly: FieldDefinition[]; // fields in local but not remote
+  remoteOnly: FieldDefinition[]; // fields in remote but not local
   changed: Array<{
     name: string;
     local: FieldDefinition;
     remote: FieldDefinition;
-    differences: string[];          // human-readable diff descriptions
+    differences: string[]; // human-readable diff descriptions
   }>;
   unchanged: FieldDefinition[];
   hasChanges: boolean;
 }
 
-function diffSchemas(local: SchemaDefinition, remote: SchemaDefinition): SchemaDiff
+function diffSchemas(local: SchemaDefinition, remote: SchemaDefinition): SchemaDiff;
 ```
 
 Fields are matched by `name`. Type changes, required flag changes, and nested field changes are detected.
@@ -175,16 +184,17 @@ Appends new fields to the `fields:` section of `spatula.yaml` without destroying
 
 ```yaml
 # Discovered by remote crawl (2026-04-08):
-  - field: remote_field_1
-    type: string
-  - field: remote_field_2
-    type: number
-    required: true
+- field: remote_field_1
+  type: string
+- field: remote_field_2
+  type: number
+  required: true
 ```
 
 Uses string manipulation (find last field entry, append after it) rather than full YAML parse-serialize to preserve formatting.
 
 **Edge cases:**
+
 - No `fields:` key → append `fields:` section at end of file
 - Empty `fields:` block (e.g., `fields: []`) → replace with populated block
 - Tab vs space indentation → detect from existing file content, match style
@@ -225,6 +235,7 @@ On subsequent pulls after the first:
 5. On completion: `last_pull_at` updated to current time
 
 **`--full` flag behavior:**
+
 1. Delete all entities belonging to pull runs from this remote
    - Query: find all runs where `source LIKE 'remote:<name>:%'`
    - Delete entities where `jobId = projectId` and entity was created by those runs
@@ -244,6 +255,7 @@ remote:<name>:pull_cursor = <base64url cursor from API response>
 ```
 
 **Recovery flow:**
+
 - On `spatula pull`, step 3 checks for existing cursor
 - If found: resume from that cursor (entities before cursor already upserted)
 - If user wants to start over: `spatula pull --restart` clears cursor
@@ -257,10 +269,12 @@ remote:<name>:pull_cursor = <base64url cursor from API response>
 Pulled and local entities share the `entities` table in SQLite.
 
 **Distinction:** Via `runs.source` field:
+
 - `'local'` — from local crawl runs
 - `'remote:<name>:<jobId>'` — from pull operations
 
 **Rules for pulled entities:**
+
 - NOT flagged for re-extraction (no local HTML exists)
 - Preserve original entity IDs from remote (for incremental upsert)
 - `runId` column links entity → pull run for cleanup/filtering
@@ -272,6 +286,7 @@ Pulled and local entities share the `entities` table in SQLite.
 ### 8.1 Keybinding
 
 Add `[s]` (source) toggle in `ExplorerView` cycling through (`[f]`/`[F]` are already bound to the text filter bar):
+
 - **All** (default) — show all entities
 - **Local only** — entities from runs where `source = 'local'`
 - **Remote only** — entities from runs where `source LIKE 'remote:%'`
@@ -289,6 +304,7 @@ async findByJobFiltered(
 ```
 
 When `sourceFilter` is `'local'` or `'remote'`:
+
 - JOIN `entities` with `runs` via `runId`
 - Filter on `runs.source = 'local'` or `runs.source LIKE 'remote:%'`
 - Entities with `runId = NULL` (pre-existing, from before pull feature) treated as local
@@ -315,7 +331,7 @@ interface LocalProject {
   projectRoot: string;
   projectId: string;
   metaRepo: ProjectMetaRepository;
-  adapter: ProjectAdapter;            // NEW — exposes all SQLite repos
+  adapter: ProjectAdapter; // NEW — exposes all SQLite repos
   close(): void;
 }
 ```
@@ -413,46 +429,46 @@ Register `pull` command in `apps/cli/src/index.tsx` alongside existing `push` an
 
 All pull-related state stored in `project_meta` (SQLite key-value):
 
-| Key | Value | Lifecycle |
-|-----|-------|-----------|
-| `remote:<name>:job_id` | Remote job UUID | Set by push, read by pull |
-| `remote:<name>:pushed_at` | ISO timestamp | Set by push |
-| `remote:<name>:config_hash` | 12-char SHA256 | Set by push |
-| `remote:<name>:pull_cursor` | Base64url cursor | Set per batch, cleared on completion |
-| `remote:<name>:last_pull_at` | ISO timestamp | Set on pull completion |
-| `remote:<name>:last_pull_usage` | JSON usage summary | Set on pull completion |
+| Key                             | Value              | Lifecycle                            |
+| ------------------------------- | ------------------ | ------------------------------------ |
+| `remote:<name>:job_id`          | Remote job UUID    | Set by push, read by pull            |
+| `remote:<name>:pushed_at`       | ISO timestamp      | Set by push                          |
+| `remote:<name>:config_hash`     | 12-char SHA256     | Set by push                          |
+| `remote:<name>:pull_cursor`     | Base64url cursor   | Set per batch, cleared on completion |
+| `remote:<name>:last_pull_at`    | ISO timestamp      | Set on pull completion               |
+| `remote:<name>:last_pull_usage` | JSON usage summary | Set on pull completion               |
 
 ---
 
 ## 11. Error Handling
 
-| Scenario | Behavior |
-|----------|----------|
-| Remote unreachable | Error with "Cannot reach remote '<name>' at <url>. Check connection." |
-| Auth failure (401/403) | Error with "Authentication failed. Run `spatula remote add` to reconfigure." |
-| Job not found (404) | Error with "Job <id> not found on remote. It may have been deleted." Clear stale meta. |
-| Network error mid-pull | Cursor already checkpointed. Next `spatula pull` resumes. |
-| Schema fetch fails | Error before entity pull starts. No partial state. |
-| Entity batch fails | Cursor from last successful batch is saved. Resume on retry. |
-| Local DB write fails | SQLite transaction per batch. Failed batch is not partially written. |
+| Scenario               | Behavior                                                                               |
+| ---------------------- | -------------------------------------------------------------------------------------- |
+| Remote unreachable     | Error with "Cannot reach remote '<name>' at <url>. Check connection."                  |
+| Auth failure (401/403) | Error with "Authentication failed. Run `spatula remote add` to reconfigure."           |
+| Job not found (404)    | Error with "Job <id> not found on remote. It may have been deleted." Clear stale meta. |
+| Network error mid-pull | Cursor already checkpointed. Next `spatula pull` resumes.                              |
+| Schema fetch fails     | Error before entity pull starts. No partial state.                                     |
+| Entity batch fails     | Cursor from last successful batch is saved. Resume on retry.                           |
+| Local DB write fails   | SQLite transaction per batch. Failed batch is not partially written.                   |
 
 ---
 
 ## 12. File Map
 
-| File | Action | Purpose |
-|------|--------|---------|
-| `apps/cli/src/commands/pull.ts` | New | Pull command implementation |
-| `apps/cli/src/components/SchemaConflict.tsx` | New | Schema conflict resolution TUI |
-| `apps/cli/src/lib/schema-diff.ts` | New | Field-level schema comparison |
-| `apps/cli/src/lib/yaml-fields.ts` | New | Append fields to spatula.yaml |
-| `apps/cli/src/lib/pull-progress.tsx` | New | Ink progress display for pull |
-| `apps/cli/src/api/client.ts` | Modify | Add `getEntitiesStreamPaginated()` and `getUsage()` methods |
-| `apps/cli/src/local-project.ts` | Modify | Expose `adapter: ProjectAdapter` on `LocalProject` interface |
-| `apps/cli/src/index.tsx` | Modify | Register pull command |
-| `apps/cli/src/components/explorer/ExplorerView.tsx` | Modify | Add `[s]` source filter toggle |
-| `apps/cli/src/components/explorer/DataTable.tsx` | Modify | Show source filter indicator in status |
-| `packages/db/src/schema-sqlite/entities.ts` | Modify | Add nullable `runId` column |
+| File                                                           | Action | Purpose                                                           |
+| -------------------------------------------------------------- | ------ | ----------------------------------------------------------------- |
+| `apps/cli/src/commands/pull.ts`                                | New    | Pull command implementation                                       |
+| `apps/cli/src/components/SchemaConflict.tsx`                   | New    | Schema conflict resolution TUI                                    |
+| `apps/cli/src/lib/schema-diff.ts`                              | New    | Field-level schema comparison                                     |
+| `apps/cli/src/lib/yaml-fields.ts`                              | New    | Append fields to spatula.yaml                                     |
+| `apps/cli/src/lib/pull-progress.tsx`                           | New    | Ink progress display for pull                                     |
+| `apps/cli/src/api/client.ts`                                   | Modify | Add `getEntitiesStreamPaginated()` and `getUsage()` methods       |
+| `apps/cli/src/local-project.ts`                                | Modify | Expose `adapter: ProjectAdapter` on `LocalProject` interface      |
+| `apps/cli/src/index.tsx`                                       | Modify | Register pull command                                             |
+| `apps/cli/src/components/explorer/ExplorerView.tsx`            | Modify | Add `[s]` source filter toggle                                    |
+| `apps/cli/src/components/explorer/DataTable.tsx`               | Modify | Show source filter indicator in status                            |
+| `packages/db/src/schema-sqlite/entities.ts`                    | Modify | Add nullable `runId` column                                       |
 | `packages/db/src/project-db/repositories/entity-repository.ts` | Modify | Add upsertBatch, deleteByRunIds, countBySource, findByJobFiltered |
 
 ---

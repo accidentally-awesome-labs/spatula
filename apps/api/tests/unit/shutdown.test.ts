@@ -124,8 +124,6 @@ describe('executeShutdown', () => {
       } as any,
     });
 
-    await expect(executeShutdown(server, failingDeps)).rejects.toThrow(
-      'Redis connection lost',
-    );
+    await expect(executeShutdown(server, failingDeps)).rejects.toThrow('Redis connection lost');
   });
 });

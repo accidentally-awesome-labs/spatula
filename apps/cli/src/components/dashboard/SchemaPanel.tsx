@@ -37,13 +37,17 @@ export function SchemaPanel({ schema }: SchemaPanelProps): React.ReactElement {
           <Box flexDirection="column" marginTop={1}>
             {fields.slice(0, 10).map((field, i) => (
               <Text key={i}>
-                {'  '}{String(field.name)}{' '}
-                <Text dimColor>({String(field.type)})</Text>
+                {'  '}
+                {String(field.name)} <Text dimColor>({String(field.type)})</Text>
                 {field.required === true ? <Text color="red">{' *'}</Text> : null}
               </Text>
             ))}
             {fields.length > 10 && (
-              <Text dimColor>{'  ... and '}{fields.length - 10}{' more'}</Text>
+              <Text dimColor>
+                {'  ... and '}
+                {fields.length - 10}
+                {' more'}
+              </Text>
             )}
           </Box>
         )}
@@ -52,7 +56,10 @@ export function SchemaPanel({ schema }: SchemaPanelProps): React.ReactElement {
           <Box flexDirection="column" marginTop={1}>
             <Text bold>{'Categories:'}</Text>
             {categories.map((cat, i) => (
-              <Text key={i} color="cyan">{'  '}{cat}</Text>
+              <Text key={i} color="cyan">
+                {'  '}
+                {cat}
+              </Text>
             ))}
           </Box>
         )}

@@ -17,7 +17,16 @@ export const createJobSchema = z.object({
         z.object({
           name: z.string().min(1),
           description: z.string(),
-          type: z.enum(['string', 'number', 'boolean', 'url', 'currency', 'enum', 'array', 'object']),
+          type: z.enum([
+            'string',
+            'number',
+            'boolean',
+            'url',
+            'currency',
+            'enum',
+            'array',
+            'object',
+          ]),
           required: z.boolean().default(false),
         }),
       )
@@ -40,7 +49,13 @@ export const createJobSchema = z.object({
       secret: z.string().min(16).optional(),
       events: z
         .array(
-          z.enum(['job.completed', 'job.failed', 'job.cancelled', 'export.completed', 'action.pending']),
+          z.enum([
+            'job.completed',
+            'job.failed',
+            'job.cancelled',
+            'export.completed',
+            'action.pending',
+          ]),
         )
         .default(['job.completed', 'job.failed']),
     })
@@ -64,9 +79,23 @@ export type CreateJobBody = z.infer<typeof createJobSchema>;
 
 export const listJobsQuerySchema = z.object({
   status: z
-    .enum(['pending', 'queued', 'running', 'paused', 'reconciling', 'completed', 'failed', 'cancelled'])
+    .enum([
+      'pending',
+      'queued',
+      'running',
+      'paused',
+      'reconciling',
+      'completed',
+      'failed',
+      'cancelled',
+    ])
     .optional(),
-  limit: z.coerce.number().int().min(1).default(50).transform((v) => Math.min(v, 100)),
+  limit: z.coerce
+    .number()
+    .int()
+    .min(1)
+    .default(50)
+    .transform((v) => Math.min(v, 100)),
   offset: z.coerce.number().int().min(0).default(0),
 });
 

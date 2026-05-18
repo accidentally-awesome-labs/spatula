@@ -7,6 +7,7 @@ import { SpatulaApiClient } from '../api/client.js';
 import { createLogger } from '@spatula/shared';
 import { openLocalProject } from '../local-project.js';
 import { appendFieldsToYaml } from '../lib/yaml-fields.js';
+import type { SchemaDiff } from '../lib/schema-diff.js';
 
 const logger = createLogger('cli:pull');
 
@@ -17,57 +18,86 @@ export interface PullInput {
   metaDelete: (key: string) => Promise<void>;
   adapter: {
     entityRepo: {
-      upsertBatch: (batch: Array<{
-        id: string;
-        mergedData: Record<string, unknown>;
-        provenance: Record<string, unknown>;
-        qualityScore: number;
-        categories: unknown[];
-        runId: string | null;
-      }>) => Promise<{ inserted: number; updated: number }>;
+      upsertBatch: (
+        batch: Array<{
+          id: string;
+          mergedData: Record<string, unknown>;
+          provenance: Record<string, unknown>;
+          qualityScore: number;
+          categories: unknown[];
+          runId: string | null;
+        }>,
+      ) => Promise<{ inserted: number; updated: number }>;
       deleteByRunIds: (runIds: string[]) => Promise<number>;
     };
     schemaRepo: {
-      findLatest: (jobId: string, tenantId?: string) => Promise<{ id: string; version: number; definition: unknown } | null>;
+      findLatest: (
+        jobId: string,
+        tenantId?: string,
+      ) => Promise<{ id: string; version: number; definition: unknown } | null>;
       create: (data: {
-        jobId: string; tenantId: string; version: number;
-        definition: unknown; parentId?: string;
+        jobId: string;
+        tenantId: string;
+        version: number;
+        definition: unknown;
+        parentId?: string;
       }) => Promise<unknown>;
     };
     runRepo: {
       create: (data: {
-        status: string; source: string;
-        configSnapshot: Record<string, unknown>; startedAt: string;
+        status: string;
+        source: string;
+        configSnapshot: Record<string, unknown>;
+        startedAt: string;
       }) => Promise<{ id: string }>;
       updateStats: (id: string, stats: Record<string, unknown>) => Promise<void>;
       findLatestByStatus?: (statuses: string[]) => Promise<{ id: string; source: string } | null>;
       findIdsBySourcePrefix: (prefix: string) => Promise<string[]>;
     };
     extractionRepo?: {
-      upsertBatch: (batch: Array<{
-        id: string; pageId: string | null; pageUrl: string | null;
-        schemaVersion: number; data: Record<string, unknown>;
-        unmappedFields: Record<string, unknown>[]; metadata: Record<string, unknown>;
-        runId: string | null;
-      }>) => Promise<{ inserted: number; updated: number }>;
+      upsertBatch: (
+        batch: Array<{
+          id: string;
+          pageId: string | null;
+          pageUrl: string | null;
+          schemaVersion: number;
+          data: Record<string, unknown>;
+          unmappedFields: Record<string, unknown>[];
+          metadata: Record<string, unknown>;
+          runId: string | null;
+        }>,
+      ) => Promise<{ inserted: number; updated: number }>;
       deleteByRunIds: (runIds: string[]) => Promise<number>;
       findIdsByRunId: (runId: string) => Promise<string[]>;
     };
     actionRepo?: {
-      upsertBatch: (batch: Array<{
-        id: string; type: string; payload: Record<string, unknown>;
-        source: string; status: string; confidence: number;
-        reasoning: string; runId: string | null;
-        createdAt: string; updatedAt: string; appliedAt: string | null;
-        stateChanges?: Record<string, unknown> | null;
-        reviewedBy?: string | null;
-      }>) => Promise<{ inserted: number; updated: number }>;
+      upsertBatch: (
+        batch: Array<{
+          id: string;
+          type: string;
+          payload: Record<string, unknown>;
+          source: string;
+          status: string;
+          confidence: number;
+          reasoning: string;
+          runId: string | null;
+          createdAt: string;
+          updatedAt: string;
+          appliedAt: string | null;
+          stateChanges?: Record<string, unknown> | null;
+          reviewedBy?: string | null;
+        }>,
+      ) => Promise<{ inserted: number; updated: number }>;
       deleteByRunIds: (runIds: string[]) => Promise<number>;
     };
     entitySourceRepo?: {
-      upsertBatchSources: (batch: Array<{
-        entityId: string; extractionId: string; matchConfidence: number;
-      }>) => Promise<number>;
+      upsertBatchSources: (
+        batch: Array<{
+          entityId: string;
+          extractionId: string;
+          matchConfidence: number;
+        }>,
+      ) => Promise<number>;
       deleteByExtractionIds: (extractionIds: string[]) => Promise<number>;
     };
   };
@@ -82,7 +112,10 @@ export interface PullInput {
   onExtractionProgress?: (batch: number, total: number) => void;
   onActionProgress?: (batch: number, total: number) => void;
   resolveSchemaConflict?: (diff: unknown) => Promise<'remote' | 'local' | 'merge'>;
-  resolveRunningJob?: (status: string, stats?: Record<string, unknown>) => Promise<'snapshot' | 'wait' | 'cancel'>;
+  resolveRunningJob?: (
+    status: string,
+    stats?: Record<string, unknown>,
+  ) => Promise<'snapshot' | 'wait' | 'cancel'>;
 }
 
 export interface PullResult {
@@ -114,12 +147,18 @@ export async function runPullCommand(input: PullInput): Promise<PullResult> {
   // Step 1: Resolve remote
   const remote = getRemoteConfig(input.remoteName);
   if (!remote) {
-    return { success: false, error: `Remote "${input.remoteName}" not found or missing API key. Run \`spatula remote add\` first.` };
+    return {
+      success: false,
+      error: `Remote "${input.remoteName}" not found or missing API key. Run \`spatula remote add\` first.`,
+    };
   }
 
   const jobId = await input.metaGet(`remote:${input.remoteName}:job_id`);
   if (!jobId) {
-    return { success: false, error: `No job linked for remote '${input.remoteName}'. Run \`spatula push\` first.` };
+    return {
+      success: false,
+      error: `No job linked for remote '${input.remoteName}'. Run \`spatula push\` first.`,
+    };
   }
 
   const client = new SpatulaApiClient(remote.url, '', { apiKey: remote.apiKey });
@@ -128,21 +167,32 @@ export async function runPullCommand(input: PullInput): Promise<PullResult> {
   // Step 2: Check job status
   let jobData: Record<string, unknown>;
   try {
-    jobData = await client.getJob(jobId) as Record<string, unknown>;
+    jobData = (await client.getJob(jobId)) as Record<string, unknown>;
   } catch (err) {
     return { success: false, error: `Failed to fetch job ${jobId}: ${(err as Error).message}` };
   }
   const jobStatus = jobData.status as string;
 
   if (jobStatus === 'cancelled' || jobStatus === 'pending') {
-    logger.warn({ jobId, status: jobStatus }, 'Job is %s — pulled data may be incomplete', jobStatus);
+    logger.warn(
+      { jobId, status: jobStatus },
+      'Job is %s — pulled data may be incomplete',
+      jobStatus,
+    );
   }
 
   if (jobStatus === 'running' || jobStatus === 'paused') {
     if (!input.resolveRunningJob) {
-      return { success: false, jobStatus, error: `Job is still ${jobStatus}. Use interactive mode for snapshot/wait options.` };
+      return {
+        success: false,
+        jobStatus,
+        error: `Job is still ${jobStatus}. Use interactive mode for snapshot/wait options.`,
+      };
     }
-    const choice = await input.resolveRunningJob(jobStatus, jobData.stats as Record<string, unknown>);
+    const choice = await input.resolveRunningJob(
+      jobStatus,
+      jobData.stats as Record<string, unknown>,
+    );
     if (choice === 'cancel') {
       return { success: false, error: 'Pull cancelled by user.' };
     }
@@ -153,10 +203,13 @@ export async function runPullCommand(input: PullInput): Promise<PullResult> {
       let pollStatus = jobStatus;
       while (pollStatus === 'running' || pollStatus === 'paused') {
         if (Date.now() - waitStart > maxWaitMs) {
-          return { success: false, error: 'Timed out waiting for job completion (30 min). Run `spatula pull` again later.' };
+          return {
+            success: false,
+            error: 'Timed out waiting for job completion (30 min). Run `spatula pull` again later.',
+          };
         }
         await new Promise((r) => setTimeout(r, 30_000));
-        const pollData = await client.getJob(jobId) as Record<string, unknown>;
+        const pollData = (await client.getJob(jobId)) as Record<string, unknown>;
         pollStatus = pollData.status as string;
       }
     }
@@ -178,8 +231,11 @@ export async function runPullCommand(input: PullInput): Promise<PullResult> {
   let newFields: Array<{ name: string; type: string; required?: boolean }> = [];
   if (!resumed && !input.skipSchema) {
     try {
-      const remoteSchema = await client.getSchema(jobId) as Record<string, unknown>;
-      const localSchema = await input.adapter.schemaRepo.findLatest(input.projectId, input.projectId);
+      const remoteSchema = (await client.getSchema(jobId)) as Record<string, unknown>;
+      const localSchema = await input.adapter.schemaRepo.findLatest(
+        input.projectId,
+        input.projectId,
+      );
 
       if (!localSchema && remoteSchema) {
         // No local schema — accept remote
@@ -189,21 +245,32 @@ export async function runPullCommand(input: PullInput): Promise<PullResult> {
           version: (remoteSchema.version as number) ?? 1,
           definition: remoteSchema,
         });
-        const fields = (remoteSchema.fields ?? []) as Array<{ name: string; type: string; required?: boolean }>;
+        const fields = (remoteSchema.fields ?? []) as Array<{
+          name: string;
+          type: string;
+          required?: boolean;
+        }>;
         schemaFieldsAdded = fields.length;
         newFields = fields;
       } else if (localSchema && remoteSchema) {
         // Both exist — diff and resolve
         const { diffSchemas } = await import('../lib/schema-diff.js');
         const diff = diffSchemas(
-          localSchema.definition as { version: number; fields: Array<{ name: string; description: string; type: string; required: boolean }> },
-          remoteSchema as { version: number; fields: Array<{ name: string; description: string; type: string; required: boolean }> },
+          localSchema.definition as {
+            version: number;
+            fields: Array<{ name: string; description: string; type: string; required: boolean }>;
+          },
+          remoteSchema as {
+            version: number;
+            fields: Array<{ name: string; description: string; type: string; required: boolean }>;
+          },
         );
         if (diff.hasChanges && input.resolveSchemaConflict) {
           const choice = await input.resolveSchemaConflict(diff);
           if (choice === 'remote') {
             await input.adapter.schemaRepo.create({
-              jobId: input.projectId, tenantId: input.projectId,
+              jobId: input.projectId,
+              tenantId: input.projectId,
               version: (localSchema.version ?? 0) + 1,
               definition: remoteSchema,
               parentId: localSchema.id,
@@ -211,12 +278,10 @@ export async function runPullCommand(input: PullInput): Promise<PullResult> {
             schemaFieldsAdded = diff.remoteOnly.length + diff.changed.length;
             newFields = diff.remoteOnly;
           } else if (choice === 'merge') {
-            const mergedFields = [
-              ...(remoteSchema.fields as unknown[]),
-              ...diff.localOnly,
-            ];
+            const mergedFields = [...(remoteSchema.fields as unknown[]), ...diff.localOnly];
             await input.adapter.schemaRepo.create({
-              jobId: input.projectId, tenantId: input.projectId,
+              jobId: input.projectId,
+              tenantId: input.projectId,
               version: (localSchema.version ?? 0) + 1,
               definition: { ...remoteSchema, fields: mergedFields },
               parentId: localSchema.id,
@@ -324,10 +389,7 @@ export async function runPullCommand(input: PullInput): Promise<PullResult> {
       llmTokens = jobUsage.tokens;
       llmCostUsd = jobUsage.costUsd;
     }
-    await input.metaSet(
-      `remote:${input.remoteName}:last_pull_usage`,
-      JSON.stringify(usage),
-    );
+    await input.metaSet(`remote:${input.remoteName}:last_pull_usage`, JSON.stringify(usage));
   } catch {
     logger.warn('Usage fetch failed, continuing');
   }
@@ -351,7 +413,9 @@ export async function runPullCommand(input: PullInput): Promise<PullResult> {
   if (input.includeExtractions && input.adapter.extractionRepo) {
     // --full cleanup: delete previously-pulled extractions and their entity_sources
     if (input.full) {
-      const runIds = await input.adapter.runRepo.findIdsBySourcePrefix(`remote:${input.remoteName}:`);
+      const runIds = await input.adapter.runRepo.findIdsBySourcePrefix(
+        `remote:${input.remoteName}:`,
+      );
       if (input.adapter.entitySourceRepo) {
         const extractionIds: string[] = [];
         for (const rid of runIds) {
@@ -375,7 +439,7 @@ export async function runPullCommand(input: PullInput): Promise<PullResult> {
       while (true) {
         const page = await client.getExtractionsStreamPaginated(jobId, {
           cursor: extrCursor ?? undefined,
-          since: input.full ? undefined : since ?? undefined,
+          since: input.full ? undefined : (since ?? undefined),
           limit: 100,
         });
 
@@ -406,8 +470,18 @@ export async function runPullCommand(input: PullInput): Promise<PullResult> {
         }
       }
     } catch (err) {
-      logger.error({ err }, 'Extraction pull interrupted — cursor checkpointed, resume with next pull');
-      return { success: false, entitiesInserted: totalInserted, entitiesUpdated: totalUpdated, extractionsInserted, extractionsUpdated, error: `Extraction pull failed: ${(err as Error).message}` };
+      logger.error(
+        { err },
+        'Extraction pull interrupted — cursor checkpointed, resume with next pull',
+      );
+      return {
+        success: false,
+        entitiesInserted: totalInserted,
+        entitiesUpdated: totalUpdated,
+        extractionsInserted,
+        extractionsUpdated,
+        error: `Extraction pull failed: ${(err as Error).message}`,
+      };
     }
 
     await input.metaDelete(`remote:${input.remoteName}:pull_cursor_extractions`);
@@ -423,7 +497,7 @@ export async function runPullCommand(input: PullInput): Promise<PullResult> {
         while (true) {
           const page = await client.getEntitySourcesStreamPaginated(jobId, {
             cursor: esCursor ?? undefined,
-            since: input.full ? undefined : since ?? undefined,
+            since: input.full ? undefined : (since ?? undefined),
             limit: 500,
           });
 
@@ -443,7 +517,10 @@ export async function runPullCommand(input: PullInput): Promise<PullResult> {
           }
         }
       } catch (err) {
-        logger.error({ err }, 'Entity-source pull interrupted — cursor checkpointed, resume with next pull');
+        logger.error(
+          { err },
+          'Entity-source pull interrupted — cursor checkpointed, resume with next pull',
+        );
         return {
           success: false,
           entitiesInserted: totalInserted,
@@ -465,7 +542,9 @@ export async function runPullCommand(input: PullInput): Promise<PullResult> {
 
   if (input.includeActions && input.adapter.actionRepo) {
     if (input.full) {
-      const runIds = await input.adapter.runRepo.findIdsBySourcePrefix(`remote:${input.remoteName}:`);
+      const runIds = await input.adapter.runRepo.findIdsBySourcePrefix(
+        `remote:${input.remoteName}:`,
+      );
       await input.adapter.actionRepo.deleteByRunIds(runIds);
     }
 
@@ -480,7 +559,7 @@ export async function runPullCommand(input: PullInput): Promise<PullResult> {
       while (true) {
         const page = await client.getActionsStreamPaginated(jobId, {
           cursor: actCursor ?? undefined,
-          since: input.full ? undefined : since ?? undefined,
+          since: input.full ? undefined : (since ?? undefined),
           limit: 100,
         });
 
@@ -517,7 +596,16 @@ export async function runPullCommand(input: PullInput): Promise<PullResult> {
       }
     } catch (err) {
       logger.error({ err }, 'Action pull interrupted — cursor checkpointed, resume with next pull');
-      return { success: false, entitiesInserted: totalInserted, entitiesUpdated: totalUpdated, extractionsInserted, extractionsUpdated, actionsInserted, actionsUpdated, error: `Action pull failed: ${(err as Error).message}` };
+      return {
+        success: false,
+        entitiesInserted: totalInserted,
+        entitiesUpdated: totalUpdated,
+        extractionsInserted,
+        extractionsUpdated,
+        actionsInserted,
+        actionsUpdated,
+        error: `Action pull failed: ${(err as Error).message}`,
+      };
     }
 
     await input.metaDelete(`remote:${input.remoteName}:pull_cursor_actions`);
@@ -590,35 +678,35 @@ export async function handlePullCommand(opts: {
       },
       resolveRunningJob: async (jobStatus: string, stats?: Record<string, unknown>) => {
         const pagesInfo = stats?.pagesProcessed ? ` (${stats.pagesProcessed} pages crawled)` : '';
-        const choice = await promptChoice(
-          `Job is still ${jobStatus}${pagesInfo}.`,
-          [
-            'Pull current snapshot (can pull again later)',
-            'Wait for completion (polls every 30s)',
-            'Cancel pull',
-          ],
-        );
+        const choice = await promptChoice(`Job is still ${jobStatus}${pagesInfo}.`, [
+          'Pull current snapshot (can pull again later)',
+          'Wait for completion (polls every 30s)',
+          'Cancel pull',
+        ]);
         return (['snapshot', 'wait', 'cancel'] as const)[choice];
       },
       resolveSchemaConflict: async (diff) => {
-        const schemaDiff = diff as import('../lib/schema-diff.js').SchemaDiff;
+        const schemaDiff = diff as SchemaDiff;
         if (schemaDiff.remoteOnly.length > 0) {
-          console.log(`\n  Remote has ${schemaDiff.remoteOnly.length} new field(s): ${schemaDiff.remoteOnly.map(f => f.name).join(', ')}`);
+          console.log(
+            `\n  Remote has ${schemaDiff.remoteOnly.length} new field(s): ${schemaDiff.remoteOnly.map((f) => f.name).join(', ')}`,
+          );
         }
         if (schemaDiff.changed.length > 0) {
-          console.log(`  ${schemaDiff.changed.length} field(s) changed: ${schemaDiff.changed.map(c => c.name).join(', ')}`);
+          console.log(
+            `  ${schemaDiff.changed.length} field(s) changed: ${schemaDiff.changed.map((c) => c.name).join(', ')}`,
+          );
         }
         if (schemaDiff.localOnly.length > 0) {
-          console.log(`  ${schemaDiff.localOnly.length} local-only field(s): ${schemaDiff.localOnly.map(f => f.name).join(', ')}`);
+          console.log(
+            `  ${schemaDiff.localOnly.length} local-only field(s): ${schemaDiff.localOnly.map((f) => f.name).join(', ')}`,
+          );
         }
-        const choice = await promptChoice(
-          '\nHow should schema differences be resolved?',
-          [
-            'Use remote schema (recommended)',
-            'Keep local schema',
-            'Merge (keep all fields from both)',
-          ],
-        );
+        const choice = await promptChoice('\nHow should schema differences be resolved?', [
+          'Use remote schema (recommended)',
+          'Keep local schema',
+          'Merge (keep all fields from both)',
+        ]);
         return (['remote', 'local', 'merge'] as const)[choice];
       },
     });
@@ -645,12 +733,16 @@ export async function handlePullCommand(opts: {
     // Print summary
     process.stderr.write('\r' + ' '.repeat(60) + '\r');
     console.log(`\nPull complete from '${opts.remoteName}'`);
-    console.log(`  Entities:  ${result.entitiesInserted} new, ${result.entitiesUpdated} updated (${(result.entitiesInserted ?? 0) + (result.entitiesUpdated ?? 0)} total)`);
+    console.log(
+      `  Entities:  ${result.entitiesInserted} new, ${result.entitiesUpdated} updated (${(result.entitiesInserted ?? 0) + (result.entitiesUpdated ?? 0)} total)`,
+    );
     if (result.schemaFieldsAdded) {
       console.log(`  Schema:    ${result.schemaFieldsAdded} new fields`);
     }
     if (result.extractionsInserted || result.extractionsUpdated) {
-      console.log(`  Extractions: ${result.extractionsInserted} new, ${result.extractionsUpdated} updated`);
+      console.log(
+        `  Extractions: ${result.extractionsInserted} new, ${result.extractionsUpdated} updated`,
+      );
     }
     if (result.entitySourcesInserted) {
       console.log(`  Provenance:  ${result.entitySourcesInserted} entity-source links`);
@@ -659,7 +751,9 @@ export async function handlePullCommand(opts: {
       console.log(`  Actions:     ${result.actionsInserted} new, ${result.actionsUpdated} updated`);
     }
     if (result.llmTokens) {
-      console.log(`  LLM usage: ${result.llmTokens?.toLocaleString()} tokens ($${result.llmCostUsd?.toFixed(2)})`);
+      console.log(
+        `  LLM usage: ${result.llmTokens?.toLocaleString()} tokens ($${result.llmCostUsd?.toFixed(2)})`,
+      );
     }
     if (result.resumed) {
       console.log(`  (Resumed from interrupted pull)`);

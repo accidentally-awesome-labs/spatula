@@ -81,9 +81,7 @@ export async function runResetCommand(options: ResetOptions = {}): Promise<Reset
 
   const projectRoot = findProjectRoot(cwd);
   if (!projectRoot) {
-    const err = new Error(
-      'No spatula.yaml found. Run `spatula init` to create a project here.',
-    );
+    const err = new Error('No spatula.yaml found. Run `spatula init` to create a project here.');
     (err as any).code = 'ENOPROJECT';
     throw err;
   }
@@ -140,26 +138,38 @@ export async function runResetCommand(options: ResetOptions = {}): Promise<Reset
         // BEFORE deleting those rows, otherwise the subselect matches nothing.
         // No FK constraints on SQLite entity_sources, so orphans accumulate silently
         // if this is skipped.
-        sqlite.prepare(
-          `DELETE FROM entity_sources
+        sqlite
+          .prepare(
+            `DELETE FROM entity_sources
            WHERE extraction_id IN (
              SELECT id FROM extractions WHERE run_id IS NULL OR run_id NOT LIKE 'remote:%'
            )
            OR entity_id IN (
              SELECT id FROM entities WHERE run_id IS NULL OR run_id NOT LIKE 'remote:%'
            )`,
-        ).run();
+          )
+          .run();
         // Delete local entities (runId null = pre-pull local, non-remote prefix = local runs)
-        sqlite.prepare(`DELETE FROM entities WHERE run_id IS NULL OR run_id NOT LIKE 'remote:%'`).run();
-        sqlite.prepare(`DELETE FROM extractions WHERE run_id IS NULL OR run_id NOT LIKE 'remote:%'`).run();
-        sqlite.prepare(`DELETE FROM actions WHERE run_id IS NULL OR run_id NOT LIKE 'remote:%'`).run();
+        sqlite
+          .prepare(`DELETE FROM entities WHERE run_id IS NULL OR run_id NOT LIKE 'remote:%'`)
+          .run();
+        sqlite
+          .prepare(`DELETE FROM extractions WHERE run_id IS NULL OR run_id NOT LIKE 'remote:%'`)
+          .run();
+        sqlite
+          .prepare(`DELETE FROM actions WHERE run_id IS NULL OR run_id NOT LIKE 'remote:%'`)
+          .run();
         // crawl_tasks and pages are always local
         sqlite.prepare('DELETE FROM crawl_tasks').run();
         sqlite.prepare('DELETE FROM pages').run();
         // Delete local runs
         sqlite.prepare(`DELETE FROM runs WHERE source = 'local'`).run();
         // Preserve remote:* keys and core metadata
-        sqlite.prepare(`DELETE FROM project_meta WHERE key NOT LIKE 'remote:%' AND key NOT IN ('schema_version','project_id','project_name','created_at')`).run();
+        sqlite
+          .prepare(
+            `DELETE FROM project_meta WHERE key NOT LIKE 'remote:%' AND key NOT IN ('schema_version','project_id','project_name','created_at')`,
+          )
+          .run();
       } finally {
         close();
       }

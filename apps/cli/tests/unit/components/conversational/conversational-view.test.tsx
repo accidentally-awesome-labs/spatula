@@ -9,9 +9,7 @@ describe('ConversationalView', () => {
 
   it('renders both chat and config panels', () => {
     const store = createCliStore('test-tenant');
-    const { lastFrame } = render(
-      <ConversationalView store={store} onStartJob={noop} />,
-    );
+    const { lastFrame } = render(<ConversationalView store={store} onStartJob={noop} />);
     const frame = lastFrame()!;
     // ChatView welcome text
     expect(frame).toContain('Describe');
@@ -21,12 +19,8 @@ describe('ConversationalView', () => {
 
   it('shows config panel with updated state', () => {
     const store = createCliStore('test-tenant');
-    store.getState().applyActions([
-      { type: 'set_job_name', payload: { name: 'Recipe Scraper' } },
-    ]);
-    const { lastFrame } = render(
-      <ConversationalView store={store} onStartJob={noop} />,
-    );
+    store.getState().applyActions([{ type: 'set_job_name', payload: { name: 'Recipe Scraper' } }]);
+    const { lastFrame } = render(<ConversationalView store={store} onStartJob={noop} />);
     const frame = lastFrame()!;
     expect(frame).toContain('Recipe Scraper');
   });

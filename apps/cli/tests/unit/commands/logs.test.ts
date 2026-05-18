@@ -27,7 +27,8 @@ describe('spatula logs', () => {
   // -------------------------------------------------------------------------
   describe('parseLogEntry', () => {
     it('parses valid JSON into a LogEntry', () => {
-      const line = '{"level":"info","msg":"Progress","ts":"2026-03-31T12:00:00.000Z","event":"progress"}';
+      const line =
+        '{"level":"info","msg":"Progress","ts":"2026-03-31T12:00:00.000Z","event":"progress"}';
       const entry = parseLogEntry(line);
       expect(entry).not.toBeNull();
       expect(entry!.level).toBe('info');
@@ -204,7 +205,12 @@ describe('spatula logs', () => {
       try {
         const lines = [
           JSON.stringify({ level: 'info', msg: 'Starting', ts: '2026-03-31T12:00:00.000Z' }),
-          JSON.stringify({ level: 'warn', msg: 'Slow page', ts: '2026-03-31T12:00:01.000Z', url: 'https://example.com' }),
+          JSON.stringify({
+            level: 'warn',
+            msg: 'Slow page',
+            ts: '2026-03-31T12:00:01.000Z',
+            url: 'https://example.com',
+          }),
           JSON.stringify({ level: 'error', msg: 'Failed', ts: '2026-03-31T12:00:02.000Z' }),
         ];
         writeFileSync(filePath, lines.join('\n') + '\n');
@@ -281,12 +287,22 @@ describe('spatula logs', () => {
         // First file has no matching runId
         writeFileSync(
           join(tmpDir, '2026-03-29T08-00-00.log'),
-          JSON.stringify({ level: 'info', msg: 'No match', ts: '2026-03-29T08:00:00.000Z', runId: 'xyz-999' }) + '\n',
+          JSON.stringify({
+            level: 'info',
+            msg: 'No match',
+            ts: '2026-03-29T08:00:00.000Z',
+            runId: 'xyz-999',
+          }) + '\n',
         );
         // Second file contains the target runId
         writeFileSync(
           join(tmpDir, '2026-03-30T10-00-00.log'),
-          JSON.stringify({ level: 'info', msg: 'Match', ts: '2026-03-30T10:00:00.000Z', runId: 'abc-123' }) + '\n',
+          JSON.stringify({
+            level: 'info',
+            msg: 'Match',
+            ts: '2026-03-30T10:00:00.000Z',
+            runId: 'abc-123',
+          }) + '\n',
         );
 
         const result = findLogFile(tmpDir, 'abc-123');
@@ -333,9 +349,11 @@ describe('spatula logs', () => {
     let cwdSpy: ReturnType<typeof vi.spyOn>;
 
     beforeEach(() => {
-      exitSpy = vi.spyOn(process, 'exit').mockImplementation((_code?: string | number | null | undefined) => {
-        throw new Error(`process.exit(${_code})`);
-      });
+      exitSpy = vi
+        .spyOn(process, 'exit')
+        .mockImplementation((_code?: string | number | null | undefined) => {
+          throw new Error(`process.exit(${_code})`);
+        });
       errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
       logSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
       cwdSpy = vi.spyOn(process, 'cwd');

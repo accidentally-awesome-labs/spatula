@@ -10,7 +10,11 @@ function createMockDb() {
   const mock = {
     insert: vi.fn().mockReturnThis(),
     values: vi.fn().mockReturnThis(),
-    returning: vi.fn().mockResolvedValue([{ id: 'dlq-1', queueName: 'spatula.crawl', jobId: 'bullmq-123', resolvedAt: null }]),
+    returning: vi
+      .fn()
+      .mockResolvedValue([
+        { id: 'dlq-1', queueName: 'spatula.crawl', jobId: 'bullmq-123', resolvedAt: null },
+      ]),
     select: vi.fn().mockReturnThis(),
     from: vi.fn().mockReturnThis(),
     where: vi.fn().mockReturnThis(),
@@ -48,16 +52,18 @@ describe('DlqRepository', () => {
 
     expect(result).toEqual({ id: 'dlq-1' });
     expect(db.insert).toHaveBeenCalled();
-    expect(db.values).toHaveBeenCalledWith(expect.objectContaining({
-      queueName: 'spatula.crawl',
-      jobId: 'bullmq-job-123',
-      tenantId: 'tenant-1',
-      spatulaJobId: 'job-1',
-      payload: { taskId: 'task-1', url: 'https://example.com' },
-      errorMessage: 'Network timeout',
-      errorStack: expect.stringContaining('Network timeout'),
-      attempts: 3,
-    }));
+    expect(db.values).toHaveBeenCalledWith(
+      expect.objectContaining({
+        queueName: 'spatula.crawl',
+        jobId: 'bullmq-job-123',
+        tenantId: 'tenant-1',
+        spatulaJobId: 'job-1',
+        payload: { taskId: 'task-1', url: 'https://example.com' },
+        errorMessage: 'Network timeout',
+        errorStack: expect.stringContaining('Network timeout'),
+        attempts: 3,
+      }),
+    );
     expect(db.returning).toHaveBeenCalled();
   });
 
@@ -113,17 +119,21 @@ describe('DlqRepository', () => {
 
     expect(result).toEqual(resolved);
     expect(db.update).toHaveBeenCalled();
-    expect(db.set).toHaveBeenCalledWith(expect.objectContaining({
-      resolution: 'retried',
-      resolvedAt: expect.any(Date),
-    }));
+    expect(db.set).toHaveBeenCalledWith(
+      expect.objectContaining({
+        resolution: 'retried',
+        resolvedAt: expect.any(Date),
+      }),
+    );
     expect(db.where).toHaveBeenCalled();
   });
 
   it('resolve throws StorageError when entry not found', async () => {
     db.returning = vi.fn().mockResolvedValue([]);
 
-    await expect(repo.resolve('nonexistent', 'discarded')).rejects.toThrow('DLQ entry not found or already resolved');
+    await expect(repo.resolve('nonexistent', 'discarded')).rejects.toThrow(
+      'DLQ entry not found or already resolved',
+    );
   });
 
   it('countUnresolved returns numeric count', async () => {

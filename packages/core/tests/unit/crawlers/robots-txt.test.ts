@@ -62,7 +62,8 @@ describe('RobotsTxtChecker', () => {
   it('uses SpatulaBot as default user agent', async () => {
     mockFetch.mockResolvedValue({
       ok: true,
-      text: () => Promise.resolve('User-agent: SpatulaBot\nDisallow: /blocked/\n\nUser-agent: *\nDisallow:'),
+      text: () =>
+        Promise.resolve('User-agent: SpatulaBot\nDisallow: /blocked/\n\nUser-agent: *\nDisallow:'),
     });
     const allowed = await checker.isAllowed('https://example.com/blocked/page');
     expect(allowed).toBe(false);
@@ -112,7 +113,9 @@ describe('RobotsTxtChecker', () => {
 
   it('deduplicates concurrent fetches for the same domain (thundering herd)', async () => {
     let resolveResponse: (v: unknown) => void;
-    const slowResponse = new Promise((resolve) => { resolveResponse = resolve; });
+    const slowResponse = new Promise((resolve) => {
+      resolveResponse = resolve;
+    });
 
     mockFetch.mockReturnValue(slowResponse);
 

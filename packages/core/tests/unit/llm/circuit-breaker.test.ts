@@ -1,6 +1,10 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { CircuitBreakerLLMClient } from '../../../src/llm/circuit-breaker.js';
-import type { LLMClient, LLMCompletionRequest, LLMCompletionResponse } from '../../../src/interfaces/llm-client.js';
+import type {
+  LLMClient,
+  LLMCompletionRequest,
+  LLMCompletionResponse,
+} from '../../../src/interfaces/llm-client.js';
 
 function createMockClient(): LLMClient {
   return {
@@ -61,7 +65,10 @@ describe('CircuitBreakerLLMClient', () => {
 
       // 1 success — resets counter
       (inner.complete as any).mockResolvedValueOnce({
-        content: 'ok', model: 'test', usage: { promptTokens: 0, completionTokens: 0, totalTokens: 0 }, finishReason: 'stop',
+        content: 'ok',
+        model: 'test',
+        usage: { promptTokens: 0, completionTokens: 0, totalTokens: 0 },
+        finishReason: 'stop',
       });
       await breaker.complete(defaultRequest);
       expect(breaker.state).toBe('closed');
@@ -115,7 +122,8 @@ describe('CircuitBreakerLLMClient', () => {
 
       // Next call triggers OPEN -> HALF_OPEN promotion and goes through
       (inner.complete as any).mockResolvedValueOnce({
-        content: 'recovered', model: 'test',
+        content: 'recovered',
+        model: 'test',
         usage: { promptTokens: 0, completionTokens: 0, totalTokens: 0 },
         finishReason: 'stop',
       });
@@ -148,7 +156,8 @@ describe('CircuitBreakerLLMClient', () => {
 
       // Success in half-open
       (inner.complete as any).mockResolvedValue({
-        content: 'recovered', model: 'test',
+        content: 'recovered',
+        model: 'test',
         usage: { promptTokens: 0, completionTokens: 0, totalTokens: 0 },
         finishReason: 'stop',
       });
@@ -177,7 +186,8 @@ describe('CircuitBreakerLLMClient', () => {
 
       // 2 successes -> closes
       const successResponse = {
-        content: 'ok', model: 'test',
+        content: 'ok',
+        model: 'test',
         usage: { promptTokens: 0, completionTokens: 0, totalTokens: 0 },
         finishReason: 'stop',
       };
@@ -310,7 +320,8 @@ describe('CircuitBreakerLLMClient', () => {
 
       // Successful call closes the circuit (halfOpenMaxAttempts = 1)
       (inner.complete as any).mockResolvedValueOnce({
-        content: 'recovered', model: 'test',
+        content: 'recovered',
+        model: 'test',
         usage: { promptTokens: 0, completionTokens: 0, totalTokens: 0 },
         finishReason: 'stop',
       });

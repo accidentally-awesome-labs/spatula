@@ -1,10 +1,6 @@
 import { createHash } from 'node:crypto';
 import { join } from 'node:path';
-import {
-  loadGlobalConfig,
-  parseProjectYamlFile,
-  yamlToJobConfig,
-} from '@spatula/core';
+import { loadGlobalConfig, parseProjectYamlFile, yamlToJobConfig } from '@spatula/core';
 import { SpatulaApiClient } from '../api/client.js';
 
 export interface PushInput {
@@ -27,14 +23,7 @@ export interface PushResult {
 }
 
 export async function runPushCommand(input: PushInput): Promise<PushResult> {
-  const {
-    remoteName,
-    projectRoot,
-    metaGet,
-    metaSet,
-    autoStart = false,
-    forceNew = false,
-  } = input;
+  const { remoteName, projectRoot, metaGet, metaSet, autoStart = false, forceNew = false } = input;
 
   const config = loadGlobalConfig();
   const remote = config?.remotes?.[remoteName];
@@ -146,7 +135,9 @@ export async function handlePushCommand(argv: PushCommandArgs): Promise<void> {
       }
       console.log('');
     } else if (result.conflict) {
-      console.error(`\n  Conflict: existing job ${result.existingJobId} is ${result.existingJobStatus}.`);
+      console.error(
+        `\n  Conflict: existing job ${result.existingJobId} is ${result.existingJobStatus}.`,
+      );
       console.error('  Cancel it with `spatula remote cancel` or use `spatula push --force`.');
       process.exit(1);
     } else {

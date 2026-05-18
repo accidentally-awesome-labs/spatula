@@ -17,6 +17,7 @@
 ### Task 1: Extract CSV utilities from CLI to core
 
 **Files:**
+
 - Create: `packages/core/src/exporters/csv-utils.ts`
 - Create: `packages/core/src/exporters/index.ts`
 - Modify: `apps/cli/src/hooks/useExport.ts` (import from core instead of local copy)
@@ -29,7 +30,12 @@ The CLI `useExport.ts` already has working CSV functions. Extract them to a shar
 ```typescript
 // packages/core/tests/unit/exporters/csv-utils.test.ts
 import { describe, it, expect } from 'vitest';
-import { csvEscapeValue, entityToCsvRow, entitiesToCsv, csvEscapeHeader } from '../../../src/exporters/csv-utils.js';
+import {
+  csvEscapeValue,
+  entityToCsvRow,
+  entitiesToCsv,
+  csvEscapeHeader,
+} from '../../../src/exporters/csv-utils.js';
 
 describe('csvEscapeValue', () => {
   it('returns plain strings unchanged', () => {
@@ -188,6 +194,7 @@ git commit -m "refactor: extract CSV utilities from CLI to @spatula/core"
 ### Task 2: Exporter types (DataDictionary, FieldStats, FieldDocumentation)
 
 **Files:**
+
 - Create: `packages/core/src/exporters/types.ts`
 - Modify: `packages/core/src/exporters/index.ts`
 
@@ -226,6 +233,7 @@ export interface DataDictionary {
 - [ ] **Step 2: Add to barrel export**
 
 In `packages/core/src/exporters/index.ts`, add:
+
 ```typescript
 export type { DataDictionary, FieldStats, FieldDocumentation } from './types.js';
 ```
@@ -233,6 +241,7 @@ export type { DataDictionary, FieldStats, FieldDocumentation } from './types.js'
 - [ ] **Step 3: Add exporters to core barrel export**
 
 In `packages/core/src/index.ts`, add:
+
 ```typescript
 export * from './exporters/index.js';
 ```
@@ -256,6 +265,7 @@ git commit -m "feat(core): add DataDictionary and FieldStats types for export"
 ### Task 3: DocumentationGenerator
 
 **Files:**
+
 - Create: `packages/core/src/exporters/documentation-generator.ts`
 - Create: `packages/core/tests/unit/exporters/documentation-generator.test.ts`
 - Modify: `packages/core/src/exporters/index.ts`
@@ -277,16 +287,45 @@ const mockSchema: SchemaDefinition = {
     { name: 'brand', description: 'Brand name', type: 'string', required: false },
   ],
   fieldAliases: [
-    { canonicalName: 'name', aliases: [{ name: 'title', sources: ['site-a.com'], occurrences: 3 }], mergedAt: new Date(), reasoning: 'synonym' },
+    {
+      canonicalName: 'name',
+      aliases: [{ name: 'title', sources: ['site-a.com'], occurrences: 3 }],
+      mergedAt: new Date(),
+      reasoning: 'synonym',
+    },
   ],
   createdAt: new Date(),
   parentVersion: null,
 };
 
 const mockEntities: Entity[] = [
-  { id: 'e1', jobId: 'j1', mergedData: { name: 'Widget A', price: 10, brand: 'Acme' }, categories: [], qualityScore: 0.9, createdAt: '', sourceCount: 2 },
-  { id: 'e2', jobId: 'j1', mergedData: { name: 'Widget B', price: 20, brand: 'Acme' }, categories: [], qualityScore: 0.8, createdAt: '', sourceCount: 1 },
-  { id: 'e3', jobId: 'j1', mergedData: { name: 'Widget C', price: null, brand: null }, categories: [], qualityScore: 0.7, createdAt: '', sourceCount: 1 },
+  {
+    id: 'e1',
+    jobId: 'j1',
+    mergedData: { name: 'Widget A', price: 10, brand: 'Acme' },
+    categories: [],
+    qualityScore: 0.9,
+    createdAt: '',
+    sourceCount: 2,
+  },
+  {
+    id: 'e2',
+    jobId: 'j1',
+    mergedData: { name: 'Widget B', price: 20, brand: 'Acme' },
+    categories: [],
+    qualityScore: 0.8,
+    createdAt: '',
+    sourceCount: 1,
+  },
+  {
+    id: 'e3',
+    jobId: 'j1',
+    mergedData: { name: 'Widget C', price: null, brand: null },
+    categories: [],
+    qualityScore: 0.7,
+    createdAt: '',
+    sourceCount: 1,
+  },
 ] as any;
 
 describe('generateDocumentation', () => {
@@ -339,8 +378,13 @@ describe('generateDocumentation', () => {
 
   it('sets sampled flag when entities exceed 1000', () => {
     const largeEntities = Array.from({ length: 1500 }, (_, i) => ({
-      id: `e${i}`, jobId: 'j1', mergedData: { name: `Item ${i}` },
-      categories: [], qualityScore: 0.5, createdAt: '', sourceCount: 1,
+      id: `e${i}`,
+      jobId: 'j1',
+      mergedData: { name: `Item ${i}` },
+      categories: [],
+      qualityScore: 0.5,
+      createdAt: '',
+      sourceCount: 1,
     })) as any;
     const doc = generateDocumentation(mockSchema, largeEntities, 'j1');
     expect(doc.sampled).toBe(true);
@@ -462,6 +506,7 @@ function computeFieldStats(
 - [ ] **Step 4: Add to barrel export**
 
 In `packages/core/src/exporters/index.ts`, add:
+
 ```typescript
 export { generateDocumentation } from './documentation-generator.js';
 ```
@@ -483,6 +528,7 @@ git commit -m "feat(core): add DocumentationGenerator for data dictionary"
 ### Task 4: CsvExporter
 
 **Files:**
+
 - Create: `packages/core/src/exporters/csv-exporter.ts`
 - Create: `packages/core/tests/unit/exporters/csv-exporter.test.ts`
 - Modify: `packages/core/src/exporters/index.ts`
@@ -583,6 +629,7 @@ export class CsvExporter implements Exporter {
 - [ ] **Step 4: Add to barrel export and run tests**
 
 Add to `packages/core/src/exporters/index.ts`:
+
 ```typescript
 export { CsvExporter } from './csv-exporter.js';
 ```
@@ -602,6 +649,7 @@ git commit -m "feat(core): add CsvExporter implementing Exporter interface"
 ### Task 5: JsonExporter
 
 **Files:**
+
 - Create: `packages/core/src/exporters/json-exporter.ts`
 - Create: `packages/core/tests/unit/exporters/json-exporter.test.ts`
 - Modify: `packages/core/src/exporters/index.ts`
@@ -747,6 +795,7 @@ export class JsonExporter implements Exporter {
 - [ ] **Step 4: Add to barrel export and run tests**
 
 Add to `packages/core/src/exporters/index.ts`:
+
 ```typescript
 export { JsonExporter } from './json-exporter.js';
 ```
@@ -768,6 +817,7 @@ git commit -m "feat(core): add JsonExporter implementing Exporter interface"
 ### Task 6: Exports table and ExportRepository
 
 **Files:**
+
 - Create: `packages/db/src/schema/exports.ts`
 - Modify: `packages/db/src/schema/index.ts`
 - Create: `packages/db/src/repositories/export-repository.ts`
@@ -810,6 +860,7 @@ export const exports = pgTable(
 ```
 
 Add to `packages/db/src/schema/index.ts`:
+
 ```typescript
 export * from './exports.js';
 ```
@@ -829,11 +880,15 @@ function createMockDb() {
     returning: vi.fn().mockResolvedValue([{ id: 'export-id', status: 'pending' }]),
     then: undefined as unknown,
   };
-  chainable.then = vi.fn((resolve: (v: unknown) => void) => resolve([{ id: 'export-id', status: 'pending' }]));
+  chainable.then = vi.fn((resolve: (v: unknown) => void) =>
+    resolve([{ id: 'export-id', status: 'pending' }]),
+  );
 
   return {
     insert: vi.fn().mockReturnValue({
-      values: vi.fn().mockReturnValue({ returning: vi.fn().mockResolvedValue([{ id: 'export-id', status: 'pending' }]) }),
+      values: vi.fn().mockReturnValue({
+        returning: vi.fn().mockResolvedValue([{ id: 'export-id', status: 'pending' }]),
+      }),
     }),
     update: vi.fn().mockReturnValue(chainable),
     select: vi.fn().mockReturnValue({ from: vi.fn().mockReturnValue(chainable) }),
@@ -1007,6 +1062,7 @@ export class ExportRepository {
 - [ ] **Step 5: Add to repository index**
 
 In `packages/db/src/repositories/index.ts`, add:
+
 ```typescript
 export { ExportRepository } from './export-repository.js';
 export type { CreateExportInput } from './export-repository.js';
@@ -1029,6 +1085,7 @@ git commit -m "feat(db): add exports table and ExportRepository"
 ### Task 7: Queue additions (ExportJobPayload, QUEUE_NAMES, SpatulaQueues)
 
 **Files:**
+
 - Modify: `packages/queue/src/queues.ts`
 - Modify: `packages/queue/src/worker-deps.ts`
 - Modify: `packages/queue/src/index.ts`
@@ -1038,11 +1095,13 @@ git commit -m "feat(db): add exports table and ExportRepository"
 In `packages/queue/src/queues.ts`:
 
 Add to `QUEUE_NAMES` (after RECONCILIATION):
+
 ```typescript
 EXPORT: 'spatula:export',
 ```
 
 Add interface (after ReconciliationJobData):
+
 ```typescript
 export interface ExportJobPayload {
   exportId: string;
@@ -1054,6 +1113,7 @@ export interface ExportJobPayload {
 ```
 
 Add to `SpatulaQueues` interface:
+
 ```typescript
 export: Queue<ExportJobPayload>;
 ```
@@ -1065,11 +1125,13 @@ Update `createQueues` to create the export queue and include it in `closeAll`.
 In `packages/queue/src/worker-deps.ts`:
 
 Add import:
+
 ```typescript
 import type { ExportRepository } from '@spatula/db';
 ```
 
 Add to `WorkerDepsConfig`:
+
 ```typescript
 exportRepo: ExportRepository;
 ```
@@ -1097,6 +1159,7 @@ git commit -m "feat(queue): add export queue and ExportJobPayload"
 ### Task 8: ExportWorker
 
 **Files:**
+
 - Create: `packages/queue/src/workers/export-worker.ts`
 - Create: `packages/queue/tests/unit/workers/export-worker.test.ts`
 
@@ -1149,11 +1212,13 @@ describe('processExportJob', () => {
     await processExportJob(payload, deps);
 
     expect(deps.exportRepo.updateStatus).toHaveBeenCalledWith(
-      'exp-1', 'tenant-1',
+      'exp-1',
+      'tenant-1',
       expect.objectContaining({ status: 'processing' }),
     );
     expect(deps.exportRepo.updateStatus).toHaveBeenCalledWith(
-      'exp-1', 'tenant-1',
+      'exp-1',
+      'tenant-1',
       expect.objectContaining({ status: 'completed' }),
     );
   });
@@ -1175,7 +1240,8 @@ describe('processExportJob', () => {
 
     await processExportJob(payload, deps);
     expect(deps.exportRepo.updateStatus).toHaveBeenCalledWith(
-      'exp-1', 'tenant-1',
+      'exp-1',
+      'tenant-1',
       expect.objectContaining({ status: 'failed', error: expect.any(String) }),
     );
   });
@@ -1200,10 +1266,7 @@ import type { WorkerDeps } from '../worker-deps.js';
 
 const logger = createLogger('export-worker');
 
-export async function processExportJob(
-  data: ExportJobPayload,
-  deps: WorkerDeps,
-): Promise<void> {
+export async function processExportJob(data: ExportJobPayload, deps: WorkerDeps): Promise<void> {
   const { exportId, jobId, tenantId, format, includeProvenance } = data;
 
   try {
@@ -1235,9 +1298,8 @@ export async function processExportJob(
     }
 
     // 4. Generate documentation (for JSON)
-    const documentation = format === 'json'
-      ? generateDocumentation(schema, allEntities, jobId)
-      : null;
+    const documentation =
+      format === 'json' ? generateDocumentation(schema, allEntities, jobId) : null;
 
     // 5. Run exporter
     const exporter = format === 'csv' ? new CsvExporter() : new JsonExporter();
@@ -1284,12 +1346,14 @@ export async function processExportJob(
     logger.info({ exportId, jobId, format, entityCount: allEntities.length }, 'export completed');
   } catch (error) {
     logger.error({ exportId, jobId, error }, 'export job failed');
-    await deps.exportRepo.updateStatus(exportId, tenantId, {
-      status: 'failed',
-      error: error instanceof Error ? error.message : 'Unknown error',
-    }).catch((e: unknown) => {
-      logger.error({ exportId, error: e }, 'failed to mark export as failed');
-    });
+    await deps.exportRepo
+      .updateStatus(exportId, tenantId, {
+        status: 'failed',
+        error: error instanceof Error ? error.message : 'Unknown error',
+      })
+      .catch((e: unknown) => {
+        logger.error({ exportId, error: e }, 'failed to mark export as failed');
+      });
   }
 }
 ```
@@ -1297,6 +1361,7 @@ export async function processExportJob(
 - [ ] **Step 4: Export processExportJob from queue index**
 
 In `packages/queue/src/index.ts`, add:
+
 ```typescript
 export { processExportJob } from './workers/export-worker.js';
 ```
@@ -1322,6 +1387,7 @@ git commit -m "feat(queue): add ExportWorker for async export generation"
 ### Task 9: Export request schema + AppDeps update
 
 **Files:**
+
 - Create: `apps/api/src/schemas/export-request.ts`
 - Modify: `apps/api/src/types.ts`
 
@@ -1351,6 +1417,7 @@ import type { ExportJobPayload } from '@spatula/queue';
 ```
 
 Add to `AppDeps`:
+
 ```typescript
 exportRepo: ExportRepository;
 contentStore: ContentStore;
@@ -1360,6 +1427,7 @@ exportQueue: Queue<ExportJobPayload>;
 - [ ] **Step 3: Update app.test.ts mock deps**
 
 In `apps/api/tests/unit/app.test.ts`, add to the `createMockDeps()` function:
+
 ```typescript
 exportRepo: { create: vi.fn(), findById: vi.fn(), findByJob: vi.fn(), updateStatus: vi.fn() },
 contentStore: { store: vi.fn(), retrieve: vi.fn(), delete: vi.fn() },
@@ -1385,6 +1453,7 @@ git commit -m "feat(api): add export request schema and update AppDeps"
 ### Task 10: Export API routes (replace stubs)
 
 **Files:**
+
 - Modify: `apps/api/src/routes/exports.ts`
 - Modify: `apps/api/tests/unit/routes/exports.test.ts`
 
@@ -1406,13 +1475,21 @@ function createMockDeps(): AppDeps {
   return {
     exportRepo: {
       create: vi.fn().mockResolvedValue({
-        id: 'exp-1', status: 'pending', format: 'json',
-        includeProvenance: false, createdAt: new Date().toISOString(),
+        id: 'exp-1',
+        status: 'pending',
+        format: 'json',
+        includeProvenance: false,
+        createdAt: new Date().toISOString(),
       }),
       findById: vi.fn().mockResolvedValue({
-        id: 'exp-1', status: 'completed', format: 'json',
-        includeProvenance: false, entityCount: 42, fileSize: 1024,
-        contentRef: 'pg://ref-1', createdAt: new Date().toISOString(),
+        id: 'exp-1',
+        status: 'completed',
+        format: 'json',
+        includeProvenance: false,
+        entityCount: 42,
+        fileSize: 1024,
+        contentRef: 'pg://ref-1',
+        createdAt: new Date().toISOString(),
         completedAt: new Date().toISOString(),
       }),
       findByJob: vi.fn().mockResolvedValue([]),
@@ -1525,7 +1602,10 @@ describe('Export routes', () => {
     });
 
     it('returns 409 when export not completed', async () => {
-      (deps.exportRepo.findById as any).mockResolvedValueOnce({ id: 'exp-1', status: 'processing' });
+      (deps.exportRepo.findById as any).mockResolvedValueOnce({
+        id: 'exp-1',
+        status: 'processing',
+      });
       const res = await app.request('/api/v1/jobs/job-1/export/exp-1/download');
       expect(res.status).toBe(409);
     });
@@ -1690,6 +1770,7 @@ git commit -m "feat(api): implement export endpoints replacing 501 stubs"
 ### Task 11: API client export methods
 
 **Files:**
+
 - Modify: `apps/cli/src/api/client.ts`
 - Modify: `apps/cli/tests/unit/api/client.test.ts`
 
@@ -1719,11 +1800,14 @@ describe('getExport', () => {
 
 describe('downloadExport', () => {
   it('returns raw content as string', async () => {
-    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
-      ok: true,
-      status: 200,
-      text: () => Promise.resolve('name,price\nA,10'),
-    }));
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue({
+        ok: true,
+        status: 200,
+        text: () => Promise.resolve('name,price\nA,10'),
+      }),
+    );
     const content = await client.downloadExport('job-1', 'exp-1');
     expect(content).toBe('name,price\nA,10');
   });
@@ -1823,6 +1907,7 @@ git commit -m "feat(cli): add export API client methods"
 ### Task 12: Update CLI useExport to use API pipeline
 
 **Files:**
+
 - Modify: `apps/cli/src/hooks/useExport.ts`
 - Modify: `apps/cli/tests/unit/hooks/useExport.test.ts`
 
@@ -1864,6 +1949,7 @@ git commit -m "feat(cli): update useExport and ExportDialog to use API export pi
 ### Task 13: Final integration and full test run
 
 **Files:**
+
 - No new files — verify everything works together
 
 - [ ] **Step 1: Run full core tests**

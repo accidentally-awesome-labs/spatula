@@ -24,7 +24,9 @@ describe('JsonExporter', () => {
 
   it('exports entities as JSON array', async () => {
     const result = await new JsonExporter().export(entities, schema, {
-      format: 'json', includeProvenance: false, includeDocumentation: false,
+      format: 'json',
+      includeProvenance: false,
+      includeDocumentation: false,
     });
     expect(result.entityCount).toBe(1);
     expect(result.format).toBe('json');
@@ -35,13 +37,20 @@ describe('JsonExporter', () => {
   });
 
   it('includes provenance when requested', async () => {
-    const withProv = [{
-      mergedData: { name: 'A' }, qualityScore: 0.9, categories: [], sourceCount: 1,
-      provenance: { name: { provenanceType: 'extracted' } },
-      sources: [{ extractionId: 'ext-1', matchConfidence: 0.9 }],
-    }];
+    const withProv = [
+      {
+        mergedData: { name: 'A' },
+        qualityScore: 0.9,
+        categories: [],
+        sourceCount: 1,
+        provenance: { name: { provenanceType: 'extracted' } },
+        sources: [{ extractionId: 'ext-1', matchConfidence: 0.9 }],
+      },
+    ];
     const result = await new JsonExporter().export(withProv, schema, {
-      format: 'json', includeProvenance: true, includeDocumentation: false,
+      format: 'json',
+      includeProvenance: true,
+      includeDocumentation: false,
     });
     const parsed = JSON.parse(result.data as string);
     expect(parsed[0].provenance).toBeDefined();
@@ -50,7 +59,9 @@ describe('JsonExporter', () => {
 
   it('excludes provenance by default', async () => {
     const result = await new JsonExporter().export(entities, schema, {
-      format: 'json', includeProvenance: false, includeDocumentation: false,
+      format: 'json',
+      includeProvenance: false,
+      includeDocumentation: false,
     });
     const parsed = JSON.parse(result.data as string);
     expect(parsed[0].provenance).toBeUndefined();
@@ -71,7 +82,9 @@ describe('JsonExporter', () => {
       },
     ];
     const result = await new JsonExporter().export(specialEntities, schema, {
-      format: 'json', includeProvenance: false, includeDocumentation: false,
+      format: 'json',
+      includeProvenance: false,
+      includeDocumentation: false,
     });
     const json = result.data as string;
     const parsed = JSON.parse(json);
@@ -97,7 +110,9 @@ describe('JsonExporter', () => {
       },
     ];
     const result = await new JsonExporter().export(nestedEntities, schema, {
-      format: 'json', includeProvenance: false, includeDocumentation: false,
+      format: 'json',
+      includeProvenance: false,
+      includeDocumentation: false,
     });
     const parsed = JSON.parse(result.data as string);
     expect(parsed[0].data.details).toEqual({ color: 'red', sizes: [1, 2, 3] });
@@ -107,7 +122,9 @@ describe('JsonExporter', () => {
 
   it('produces valid JSON for empty dataset', async () => {
     const result = await new JsonExporter().export([], schema, {
-      format: 'json', includeProvenance: false, includeDocumentation: false,
+      format: 'json',
+      includeProvenance: false,
+      includeDocumentation: false,
     });
     expect(result.entityCount).toBe(0);
     const parsed = JSON.parse(result.data as string);
@@ -125,7 +142,9 @@ describe('JsonExporter', () => {
       },
     ];
     const result = await new JsonExporter().export(largeEntities, schema, {
-      format: 'json', includeProvenance: false, includeDocumentation: false,
+      format: 'json',
+      includeProvenance: false,
+      includeDocumentation: false,
     });
     const parsed = JSON.parse(result.data as string);
     expect(parsed[0].data.name).toHaveLength(10 * 1024);
@@ -142,7 +161,9 @@ describe('JsonExporter', () => {
       },
     ];
     const result = await new JsonExporter().export(nullEntities, schema, {
-      format: 'json', includeProvenance: false, includeDocumentation: false,
+      format: 'json',
+      includeProvenance: false,
+      includeDocumentation: false,
     });
     const json = result.data as string;
     const parsed = JSON.parse(json);

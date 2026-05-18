@@ -1,6 +1,9 @@
 import { describe, it, expect } from 'vitest';
 
-describe('package exports', () => {
+// These tests `import()` real module files which transitively bring in BullMQ,
+// pg, opentelemetry, etc. — first-load can exceed vitest's 5s default on CI
+// runners. Locally ~700ms each.
+describe('package exports', { timeout: 30_000 }, () => {
   it('exports state machine', async () => {
     const mod = await import('../../src/state-machine.js');
     expect(mod.JobStateMachine).toBeDefined();

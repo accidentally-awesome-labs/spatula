@@ -16,14 +16,10 @@ import { EntityPreview } from './EntityPreview.js';
 export interface DashboardViewProps {
   store: CliStore;
   backend: DataSource | SpatulaApiClient;
-  wsToken?: string;  // For remote watch: token-based WS auth
+  wsToken?: string; // For remote watch: token-based WS auth
 }
 
-export function DashboardView({
-  store,
-  backend,
-  wsToken,
-}: DashboardViewProps): React.ReactElement {
+export function DashboardView({ store, backend, wsToken }: DashboardViewProps): React.ReactElement {
   const activeJobId = useStore(store, (s) => s.activeJobId);
   const jobData = useStore(store, (s) => s.jobData);
   const recentActions = useStore(store, (s) => s.recentActions);
@@ -82,7 +78,12 @@ export function DashboardView({
       <Box gap={1}>
         <Text bold>{jobName}</Text>
         <Text dimColor>({activeJobId.slice(0, 8)})</Text>
-        {lastError && <Text color="red">{' Error: '}{lastError}</Text>}
+        {lastError && (
+          <Text color="red">
+            {' Error: '}
+            {lastError}
+          </Text>
+        )}
       </Box>
 
       <Box flexGrow={1}>

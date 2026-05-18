@@ -12,33 +12,33 @@ History of shipped milestones. Bootstrapped 2026-05-06 from existing wave roadma
 
 ### Phases shipped
 
-| # | Phase | Highlights |
-|---|-------|------------|
-| 1 | Foundation & Core Types | Monorepo, Zod schemas, action types, Drizzle schemas |
-| 2 | Pluggable Crawler | Playwright + Firecrawl behind `Crawler` interface |
-| 3 | LLM Integration & Static Extraction | OpenRouter client, three-tier model router, prompt library, heuristic fallbacks |
-| 4 | Storage Layer | `ContentStore` interface (Postgres + local), repositories, hashing/dedup |
-| 5 | Job Orchestration | BullMQ queues + workers (crawl/extract/schema/reconcile/export), retries, DLQ |
-| 6 | Schema Evolution | Batched evaluation, distributed lock, action-driven mutations |
-| 7 | Data Reconciliation | Synonym detection → normalization → entity reconciliation with provenance |
-| 8 | API Server | Hono routes, OpenAPI, WebSockets, Bull Board admin |
-| 9a | CLI Core / Conversational | `init`, `run`, `status`, `reset`, conversational Ink prompts |
-| 9b | Dashboard + Review Mode | Live progress dashboard, action review TUI |
-| 9c | Results Explorer | Entity explorer Ink TUI |
-| 10 | Export Pipeline | JSON / CSV / Parquet / SQLite / DuckDB exporters with cursor pagination |
-| 11a/b/c/d | Minimal Viable E2E + hardening + DX | E2E happy path, action exec/review, hardening, developer-experience polish |
-| 12 (interleaved as Waves 1–5) | Production hardening | Lifecycle, reliability, auth, observability, perf, completeness, OSS, hosted layer |
-| 13 (interleaved as Waves 1–5) | Local project-folder model | Orchestrator extraction, SQLite schema, config system, LocalPipelineRunner, data commands, remote ops |
+| #                             | Phase                               | Highlights                                                                                            |
+| ----------------------------- | ----------------------------------- | ----------------------------------------------------------------------------------------------------- |
+| 1                             | Foundation & Core Types             | Monorepo, Zod schemas, action types, Drizzle schemas                                                  |
+| 2                             | Pluggable Crawler                   | Playwright + Firecrawl behind `Crawler` interface                                                     |
+| 3                             | LLM Integration & Static Extraction | OpenRouter client, three-tier model router, prompt library, heuristic fallbacks                       |
+| 4                             | Storage Layer                       | `ContentStore` interface (Postgres + local), repositories, hashing/dedup                              |
+| 5                             | Job Orchestration                   | BullMQ queues + workers (crawl/extract/schema/reconcile/export), retries, DLQ                         |
+| 6                             | Schema Evolution                    | Batched evaluation, distributed lock, action-driven mutations                                         |
+| 7                             | Data Reconciliation                 | Synonym detection → normalization → entity reconciliation with provenance                             |
+| 8                             | API Server                          | Hono routes, OpenAPI, WebSockets, Bull Board admin                                                    |
+| 9a                            | CLI Core / Conversational           | `init`, `run`, `status`, `reset`, conversational Ink prompts                                          |
+| 9b                            | Dashboard + Review Mode             | Live progress dashboard, action review TUI                                                            |
+| 9c                            | Results Explorer                    | Entity explorer Ink TUI                                                                               |
+| 10                            | Export Pipeline                     | JSON / CSV / Parquet / SQLite / DuckDB exporters with cursor pagination                               |
+| 11a/b/c/d                     | Minimal Viable E2E + hardening + DX | E2E happy path, action exec/review, hardening, developer-experience polish                            |
+| 12 (interleaved as Waves 1–5) | Production hardening                | Lifecycle, reliability, auth, observability, perf, completeness, OSS, hosted layer                    |
+| 13 (interleaved as Waves 1–5) | Local project-folder model          | Orchestrator extraction, SQLite schema, config system, LocalPipelineRunner, data commands, remote ops |
 
 ### Wave-by-wave summary
 
-| Wave | Theme | Server side | Local side | Status |
-|------|-------|-------------|------------|--------|
-| 1 | Foundation | 12A: server lifecycle, pooling, CI/CD, containers | 13.1: orchestrator extraction | ✓ |
-| 2 | Resilience & Local Data Layer | 12D/F/J: circuit breaker, DLQ, robots/budget, Ollama, cost estimate | 13.2/3: SQLite schema + repos, YAML config, diff engine | ✓ |
-| 3 | Auth, Observability & Local Execution | 12B/C/E + D/F deferred: auth (API key + JWT), OTel + Sentry, S3, streaming, indexes, Redis cache, idempotency, worker health, quality API | 13.4: `LocalPipelineRunner`, `DataSource`, core CLI | ✓ |
-| 4 | API Completeness & OSS Release | 12G/H: webhooks, bulk ops, doctor, request timeout, MIT license, README, CONTRIBUTING, examples, release-please | 13.5: data interaction commands (`explore`, `export`, `review`, `schema`, `logs`, etc.) | ✓ |
-| 5 | Hosted Platform & Remote Ops | 12I: JWT/OIDC users, Stripe billing (4 tiers), metering, 11 admin routes, retention | 13.6: `remote add/list/remove`, `push`, `pull`, `ApiDataSource` | ✓ |
+| Wave | Theme                                 | Server side                                                                                                                               | Local side                                                                              | Status |
+| ---- | ------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------- | ------ |
+| 1    | Foundation                            | 12A: server lifecycle, pooling, CI/CD, containers                                                                                         | 13.1: orchestrator extraction                                                           | ✓      |
+| 2    | Resilience & Local Data Layer         | 12D/F/J: circuit breaker, DLQ, robots/budget, Ollama, cost estimate                                                                       | 13.2/3: SQLite schema + repos, YAML config, diff engine                                 | ✓      |
+| 3    | Auth, Observability & Local Execution | 12B/C/E + D/F deferred: auth (API key + JWT), OTel + Sentry, S3, streaming, indexes, Redis cache, idempotency, worker health, quality API | 13.4: `LocalPipelineRunner`, `DataSource`, core CLI                                     | ✓      |
+| 4    | API Completeness & OSS Release        | 12G/H: webhooks, bulk ops, doctor, request timeout, MIT license, README, CONTRIBUTING, examples, release-please                           | 13.5: data interaction commands (`explore`, `export`, `review`, `schema`, `logs`, etc.) | ✓      |
+| 5    | Hosted Platform & Remote Ops          | 12I: JWT/OIDC users, Stripe billing (4 tiers), metering, 11 admin routes, retention                                                       | 13.6: `remote add/list/remove`, `push`, `pull`, `ApiDataSource`                         | ✓      |
 
 ### Wave-5 deferred items + post-review cleanup
 

@@ -116,10 +116,7 @@ export class SpatulaApiClient {
     return this.get(`/api/v1/jobs/${jobId}/entities`, query);
   }
 
-  async getEntity(
-    jobId: string,
-    entityId: string,
-  ): Promise<Record<string, unknown>> {
+  async getEntity(jobId: string, entityId: string): Promise<Record<string, unknown>> {
     return this.get(`/api/v1/jobs/${jobId}/entities/${entityId}`);
   }
 
@@ -171,17 +168,11 @@ export class SpatulaApiClient {
     return this.post(`/api/v1/jobs/${jobId}/export`, body);
   }
 
-  async getExport(
-    jobId: string,
-    exportId: string,
-  ): Promise<Record<string, unknown>> {
+  async getExport(jobId: string, exportId: string): Promise<Record<string, unknown>> {
     return this.get(`/api/v1/jobs/${jobId}/export/${exportId}`);
   }
 
-  async downloadExport(
-    jobId: string,
-    exportId: string,
-  ): Promise<string> {
+  async downloadExport(jobId: string, exportId: string): Promise<string> {
     // This method bypasses the generic request() helper because the download
     // endpoint returns raw file content (not JSON wrapped in { data: ... }).
     // It uses response.text() instead of response.json().
@@ -214,9 +205,7 @@ export class SpatulaApiClient {
     return response.text();
   }
 
-  async getDocumentation(
-    jobId: string,
-  ): Promise<Record<string, unknown>> {
+  async getDocumentation(jobId: string): Promise<Record<string, unknown>> {
     return this.get(`/api/v1/jobs/${jobId}/documentation`);
   }
 
@@ -240,10 +229,7 @@ export class SpatulaApiClient {
     if (reviewedBy !== undefined) {
       body.reviewedBy = reviewedBy;
     }
-    return this.post(
-      `/api/v1/jobs/${jobId}/actions/${actionId}/approve`,
-      body,
-    );
+    return this.post(`/api/v1/jobs/${jobId}/actions/${actionId}/approve`, body);
   }
 
   async rejectAction(
@@ -255,16 +241,10 @@ export class SpatulaApiClient {
     if (reviewedBy !== undefined) {
       body.reviewedBy = reviewedBy;
     }
-    return this.post(
-      `/api/v1/jobs/${jobId}/actions/${actionId}/reject`,
-      body,
-    );
+    return this.post(`/api/v1/jobs/${jobId}/actions/${actionId}/reject`, body);
   }
 
-  async approveAllActions(
-    jobId: string,
-    reviewedBy?: string,
-  ): Promise<Record<string, unknown>[]> {
+  async approveAllActions(jobId: string, reviewedBy?: string): Promise<Record<string, unknown>[]> {
     const body: Record<string, unknown> = {};
     if (reviewedBy !== undefined) {
       body.reviewedBy = reviewedBy;
@@ -273,11 +253,54 @@ export class SpatulaApiClient {
   }
 
   // -----------------------------------------------------------------------
-  // Billing (for remote verification)
+  // Auth introspection (for remote verification)
   // -----------------------------------------------------------------------
 
-  async getSubscription(): Promise<Record<string, unknown>> {
-    return this.get('/api/v1/billing/subscription');
+  /**
+   * Verify the configured API key by hitting GET /api/v1/auth/me.
+   * Returns the authenticated tenant + scopes. A non-200 response is normalized
+   * to an ApiError so callers can branch on .status / .code.
+   *
+   * Replaces the pre-carve billing-subscription probe.
+   */
+  async getAuthMe(): Promise<{
+    tenantId: string;
+    scopes: string[];
+    subject: string | null;
+    authenticated: true;
+  }> {
+    const url = this.buildUrl('/api/v1/auth/me');
+
+    let response: Response;
+    try {
+      response = await fetch(url, { method: 'GET', headers: this.headers() });
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Unknown network error';
+      throw new ApiError(0, 'NETWORK_ERROR', message);
+    }
+
+    if (!response.ok) {
+      let code: string | undefined;
+      let message = `HTTP ${response.status}`;
+      try {
+        const errorBody = (await response.json()) as Record<string, unknown>;
+        const err = errorBody?.error as Record<string, unknown> | undefined;
+        if (err) {
+          code = err.code as string | undefined;
+          message = (err.message as string) ?? message;
+        }
+      } catch {
+        // Response body was not valid JSON
+      }
+      throw new ApiError(response.status, code, message);
+    }
+
+    return response.json() as Promise<{
+      tenantId: string;
+      scopes: string[];
+      subject: string | null;
+      authenticated: true;
+    }>;
   }
 
   // -----------------------------------------------------------------------
@@ -444,7 +467,9 @@ export class SpatulaApiClient {
     return {
       data: ((json as { data?: unknown }).data ?? []) as Record<string, unknown>[],
       pagination: (json as { pagination?: unknown }).pagination as {
-        nextCursor?: string; hasMore: boolean; total: number;
+        nextCursor?: string;
+        hasMore: boolean;
+        total: number;
       },
     };
   }
@@ -453,10 +478,7 @@ export class SpatulaApiClient {
    * Build a URL with optional query parameters.
    * Null / undefined values are silently dropped.
    */
-  private buildUrl(
-    path: string,
-    query?: Record<string, unknown>,
-  ): string {
+  private buildUrl(path: string, query?: Record<string, unknown>): string {
     let url = `${this.baseUrl}${path}`;
 
     if (query) {
@@ -476,18 +498,12 @@ export class SpatulaApiClient {
   }
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  private async get<T = any>(
-    path: string,
-    query?: Record<string, unknown>,
-  ): Promise<T> {
+  private async get<T = any>(path: string, query?: Record<string, unknown>): Promise<T> {
     return this.request('GET', path, undefined, query);
   }
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  private async post<T = any>(
-    path: string,
-    body?: Record<string, unknown>,
-  ): Promise<T> {
+  private async post<T = any>(path: string, body?: Record<string, unknown>): Promise<T> {
     return this.request('POST', path, body);
   }
 
@@ -508,8 +524,7 @@ export class SpatulaApiClient {
         body: body !== undefined ? JSON.stringify(body) : undefined,
       });
     } catch (err) {
-      const message =
-        err instanceof Error ? err.message : 'Unknown network error';
+      const message = err instanceof Error ? err.message : 'Unknown network error';
       throw new ApiError(0, 'NETWORK_ERROR', message);
     }
 

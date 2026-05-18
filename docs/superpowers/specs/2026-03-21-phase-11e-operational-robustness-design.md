@@ -35,13 +35,13 @@ export interface SpatulaErrorOptions {
 
 ### New Error Types
 
-| Type | Code | Default `retryable` | When Thrown |
-|------|------|---------------------|------------|
-| `QueueError` | `QUEUE_ERROR` | `false` | Job enqueue failures, invalid job state in workers, missing job/schema lookups |
-| `TimeoutError` | `TIMEOUT_ERROR` | `true` | Crawl timeouts, LLM call timeouts |
-| `RateLimitError` | `RATE_LIMIT_ERROR` | `true` | LLM provider 429s, domain crawl throttling. Carries optional `retryAfterMs` field |
-| `NetworkError` | `NETWORK_ERROR` | `true` | DNS failures, connection refused, SSL errors |
-| `StateError` | `STATE_ERROR` | `false` | Invalid job state transitions |
+| Type             | Code               | Default `retryable` | When Thrown                                                                       |
+| ---------------- | ------------------ | ------------------- | --------------------------------------------------------------------------------- |
+| `QueueError`     | `QUEUE_ERROR`      | `false`             | Job enqueue failures, invalid job state in workers, missing job/schema lookups    |
+| `TimeoutError`   | `TIMEOUT_ERROR`    | `true`              | Crawl timeouts, LLM call timeouts                                                 |
+| `RateLimitError` | `RATE_LIMIT_ERROR` | `true`              | LLM provider 429s, domain crawl throttling. Carries optional `retryAfterMs` field |
+| `NetworkError`   | `NETWORK_ERROR`    | `true`              | DNS failures, connection refused, SSL errors                                      |
+| `StateError`     | `STATE_ERROR`      | `false`             | Invalid job state transitions                                                     |
 
 `RateLimitError` extends `SpatulaError` with an additional `retryAfterMs?: number` property. Constructor signature: `new RateLimitError(message: string, options?: SpatulaErrorOptions & { retryAfterMs?: number })`. The `retryAfterMs` is a first-class constructor parameter (not buried in `context`) because callers need direct access for backoff logic.
 
@@ -58,12 +58,12 @@ export interface SpatulaErrorOptions {
 
 **export-worker.ts** — Replace 4 `throw new Error(...)`:
 
-| Current Message | New Error Type | Retryable |
-|----------------|---------------|-----------|
-| `'Job not found'` | `QueueError` | No |
-| `'Job is not completed...'` | `QueueError` | No |
-| `'No schema found for job'` | `QueueError` | No |
-| `'Export too large: ...'` | `ValidationError` | No |
+| Current Message             | New Error Type    | Retryable |
+| --------------------------- | ----------------- | --------- |
+| `'Job not found'`           | `QueueError`      | No        |
+| `'Job is not completed...'` | `QueueError`      | No        |
+| `'No schema found for job'` | `QueueError`      | No        |
+| `'Export too large: ...'`   | `ValidationError` | No        |
 
 **crawl-worker.ts** — Import `CrawlError` from `@spatula/shared` (exists but not imported). Wrap crawler failures as `CrawlError`, network-level failures as `NetworkError`.
 
@@ -73,13 +73,13 @@ export interface SpatulaErrorOptions {
 
 Add to `apps/api/src/middleware/error-handler.ts`:
 
-| Error Type | HTTP Status |
-|-----------|-------------|
-| `QueueError` | 503 Service Unavailable |
-| `TimeoutError` | 504 Gateway Timeout |
-| `RateLimitError` | 429 Too Many Requests |
-| `NetworkError` | 502 Bad Gateway |
-| `StateError` | 409 Conflict |
+| Error Type       | HTTP Status             |
+| ---------------- | ----------------------- |
+| `QueueError`     | 503 Service Unavailable |
+| `TimeoutError`   | 504 Gateway Timeout     |
+| `RateLimitError` | 429 Too Many Requests   |
+| `NetworkError`   | 502 Bad Gateway         |
+| `StateError`     | 409 Conflict            |
 
 Existing mappings (`ValidationError` → 400, `NotFoundError` → 404, `ConflictError` → 409) remain unchanged. Note: both `StateError` and `ConflictError` map to HTTP 409, but they carry different error codes in the response body (`STATE_ERROR` vs `CONFLICT`), allowing clients to distinguish them. `ConflictError` is for general resource conflicts (e.g., duplicate creation); `StateError` is specifically for invalid state machine transitions.
 
@@ -122,16 +122,16 @@ const AppConfigSchema = z.object({
 
 Explicit mapping from environment variables to schema paths:
 
-| Schema Path | Env Var |
-|------------|---------|
-| `database.url` | `DATABASE_URL` |
-| `redis.url` | `REDIS_URL` |
+| Schema Path         | Env Var              |
+| ------------------- | -------------------- |
+| `database.url`      | `DATABASE_URL`       |
+| `redis.url`         | `REDIS_URL`          |
 | `openrouter.apiKey` | `OPENROUTER_API_KEY` |
-| `firecrawl.apiKey` | `FIRECRAWL_API_KEY` |
-| `server.port` | `PORT` |
-| `server.host` | `HOST` |
-| `logging.level` | `LOG_LEVEL` |
-| `logging.nodeEnv` | `NODE_ENV` |
+| `firecrawl.apiKey`  | `FIRECRAWL_API_KEY`  |
+| `server.port`       | `PORT`               |
+| `server.host`       | `HOST`               |
+| `logging.level`     | `LOG_LEVEL`          |
+| `logging.nodeEnv`   | `NODE_ENV`           |
 
 ### Load Functions
 
@@ -288,16 +288,16 @@ Text exporters set `data`. Binary exporters set `binaryData`. Never both. Note: 
 
 Maps `FieldDefinition.type` (8 types) to native column types:
 
-| Field Type | Parquet | DuckDB | SQLite |
-|-----------|---------|--------|--------|
-| `string` | `UTF8` | `VARCHAR` | `TEXT` |
-| `number` | `DOUBLE` | `DOUBLE` | `REAL` |
-| `boolean` | `BOOLEAN` | `BOOLEAN` | `INTEGER` |
-| `url` | `UTF8` | `VARCHAR` | `TEXT` |
-| `currency` | `DOUBLE` | `DECIMAL(19,4)` | `REAL` |
-| `enum` | `UTF8` | `VARCHAR` | `TEXT` |
-| `array` | `UTF8` (JSON) | `VARCHAR` (JSON) | `TEXT` (JSON) |
-| `object` | `UTF8` (JSON) | `VARCHAR` (JSON) | `TEXT` (JSON) |
+| Field Type | Parquet       | DuckDB           | SQLite        |
+| ---------- | ------------- | ---------------- | ------------- |
+| `string`   | `UTF8`        | `VARCHAR`        | `TEXT`        |
+| `number`   | `DOUBLE`      | `DOUBLE`         | `REAL`        |
+| `boolean`  | `BOOLEAN`     | `BOOLEAN`        | `INTEGER`     |
+| `url`      | `UTF8`        | `VARCHAR`        | `TEXT`        |
+| `currency` | `DOUBLE`      | `DECIMAL(19,4)`  | `REAL`        |
+| `enum`     | `UTF8`        | `VARCHAR`        | `TEXT`        |
+| `array`    | `UTF8` (JSON) | `VARCHAR` (JSON) | `TEXT` (JSON) |
+| `object`   | `UTF8` (JSON) | `VARCHAR` (JSON) | `TEXT` (JSON) |
 
 Nested types (`array`, `object`) serialize as JSON strings — true nested Parquet structs add substantial complexity for minimal benefit in a web scraping context. Note: `currency` maps to `DOUBLE`/`REAL` for Parquet and SQLite, which is IEEE 754 floating point (lossy for currency). DuckDB uses `DECIMAL(19,4)` which is precise. This is acceptable for the web scraping use case where currency values are extracted as approximate data, not financial ledger entries.
 
@@ -310,6 +310,7 @@ Exports `mapSchema(schema: SchemaDefinition, target: 'parquet' | 'duckdb' | 'sql
 **Dependency:** `hyparquet-writer` — pure JS, no native bindings. Avoids platform-specific build issues. Note: `hyparquet` itself is read-only (parser only); the separate `hyparquet-writer` package provides `parquetWriteBuffer()` for creating Parquet files. Add `hyparquet` as well if read-back verification is needed in tests.
 
 Flow:
+
 1. Map schema fields via column-mapper
 2. Flatten entities into row arrays
 3. Serialize nested types as JSON strings
@@ -323,6 +324,7 @@ Flow:
 **Dependency:** `@duckdb/node-api` — the official DuckDB "Neo" Node.js client with native async/promise support. The older `duckdb` + `duckdb-async` packages are deprecated and will not receive updates past DuckDB 1.4.x.
 
 Flow:
+
 1. Create a temp file path via `os.tmpdir()` + `crypto.randomUUID()` + `.duckdb`
 2. Open a file-backed DuckDB instance at the temp path (not in-memory — we need the file)
 3. Create table using column-mapper types
@@ -341,6 +343,7 @@ Note: `EXPORT DATABASE` was considered but rejected — it exports CSV/Parquet f
 **Dependency:** `better-sqlite3` — synchronous API, fastest SQLite binding for Node.js. Note: unlike `hyparquet-writer` (pure JS), both `better-sqlite3` and `@duckdb/node-api` have native C/C++ bindings requiring compilation. This is acceptable because no pure-JS alternatives exist that perform adequately for these formats, and both packages are widely used with reliable prebuilt binaries for common platforms.
 
 Flow:
+
 1. Create in-memory database via `new Database(':memory:')`
 2. Create table using column-mapper types
 3. Insert entities via prepared statement in a transaction (batched, using `better-sqlite3`'s transaction helper)
@@ -368,13 +371,13 @@ Flow:
 
 Update download route with format-aware content types:
 
-| Format | Content-Type | Extension |
-|--------|-------------|-----------|
-| `json` | `application/json` | `.json` |
-| `csv` | `text/csv` | `.csv` |
+| Format    | Content-Type                     | Extension  |
+| --------- | -------------------------------- | ---------- |
+| `json`    | `application/json`               | `.json`    |
+| `csv`     | `text/csv`                       | `.csv`     |
 | `parquet` | `application/vnd.apache.parquet` | `.parquet` |
-| `duckdb` | `application/octet-stream` | `.duckdb` |
-| `sqlite` | `application/vnd.sqlite3` | `.sqlite` |
+| `duckdb`  | `application/octet-stream`       | `.duckdb`  |
+| `sqlite`  | `application/vnd.sqlite3`        | `.sqlite`  |
 
 Binary formats use `contentStore.retrieveBinary(ref)`. Text formats use existing `contentStore.retrieve(ref)`.
 
@@ -388,48 +391,48 @@ Remove `attempts: 1` override in export enqueue call. Exports inherit queue defa
 
 ### Created
 
-| File | Purpose |
-|------|---------|
-| `apps/api/src/middleware/request-context.ts` | RequestId generation + context logger middleware |
-| `packages/core/src/exporters/parquet-exporter.ts` | Apache Parquet exporter |
-| `packages/core/src/exporters/duckdb-exporter.ts` | DuckDB exporter |
-| `packages/core/src/exporters/sqlite-exporter.ts` | SQLite exporter |
-| `packages/core/src/exporters/column-mapper.ts` | Schema field → native column type mapping |
+| File                                              | Purpose                                          |
+| ------------------------------------------------- | ------------------------------------------------ |
+| `apps/api/src/middleware/request-context.ts`      | RequestId generation + context logger middleware |
+| `packages/core/src/exporters/parquet-exporter.ts` | Apache Parquet exporter                          |
+| `packages/core/src/exporters/duckdb-exporter.ts`  | DuckDB exporter                                  |
+| `packages/core/src/exporters/sqlite-exporter.ts`  | SQLite exporter                                  |
+| `packages/core/src/exporters/column-mapper.ts`    | Schema field → native column type mapping        |
 
 ### Modified
 
-| File | Changes |
-|------|---------|
-| `packages/shared/src/errors.ts` | `retryable` on SpatulaError, 5 new error types |
-| `packages/shared/src/config.ts` | `AppConfigSchema`, `loadConfig()`, `loadConfigSafe()` |
-| `packages/shared/src/logger.ts` | `createLoggerWithContext()`, LOG_LEVEL validation |
-| `packages/queue/src/state-machine.ts` | Replace `InvalidTransitionError` with `StateError` import |
-| `packages/queue/src/index.ts` | Re-export `StateError` |
-| `packages/queue/src/workers/export-worker.ts` | Typed errors, binary store branch, exporter factory, format widening |
-| `packages/queue/src/workers/crawl-worker.ts` | Import and use `CrawlError`, `NetworkError` |
-| `packages/queue/src/queues.ts` | `ExportJobPayload.format` widened to `ExportFormat` |
-| `apps/api/src/schemas/export-request.ts` | Widen format enum from `['json', 'csv']` to all 5 formats |
-| `packages/core/src/interfaces/content-store.ts` | `storeBinary()`, `retrieveBinary()` |
-| `packages/core/src/interfaces/exporter.ts` | `binaryData` on `ExportResult` |
-| `packages/db/src/content-store/pg-content-store.ts` | `storeBinary()`, `retrieveBinary()` implementations |
-| `packages/db/src/schema/content.ts` | `binary_content bytea` column, `content` nullable |
-| `apps/api/src/middleware/error-handler.ts` | New error type → HTTP status mappings, read requestId from context |
-| `apps/api/src/openapi-config.ts` | Read requestId from context |
-| `apps/api/src/app.ts` | Add `requestContextMiddleware` to chain |
-| `apps/api/src/routes/exports.ts` | Binary content types, remove `attempts: 1`, format widening |
-| `apps/api/src/server.ts` | Call `loadConfig()` at startup |
-| `packages/core/src/exporters/index.ts` | Re-export new exporters and column-mapper |
-| `packages/shared/src/index.ts` | Export new error types |
+| File                                                | Changes                                                              |
+| --------------------------------------------------- | -------------------------------------------------------------------- |
+| `packages/shared/src/errors.ts`                     | `retryable` on SpatulaError, 5 new error types                       |
+| `packages/shared/src/config.ts`                     | `AppConfigSchema`, `loadConfig()`, `loadConfigSafe()`                |
+| `packages/shared/src/logger.ts`                     | `createLoggerWithContext()`, LOG_LEVEL validation                    |
+| `packages/queue/src/state-machine.ts`               | Replace `InvalidTransitionError` with `StateError` import            |
+| `packages/queue/src/index.ts`                       | Re-export `StateError`                                               |
+| `packages/queue/src/workers/export-worker.ts`       | Typed errors, binary store branch, exporter factory, format widening |
+| `packages/queue/src/workers/crawl-worker.ts`        | Import and use `CrawlError`, `NetworkError`                          |
+| `packages/queue/src/queues.ts`                      | `ExportJobPayload.format` widened to `ExportFormat`                  |
+| `apps/api/src/schemas/export-request.ts`            | Widen format enum from `['json', 'csv']` to all 5 formats            |
+| `packages/core/src/interfaces/content-store.ts`     | `storeBinary()`, `retrieveBinary()`                                  |
+| `packages/core/src/interfaces/exporter.ts`          | `binaryData` on `ExportResult`                                       |
+| `packages/db/src/content-store/pg-content-store.ts` | `storeBinary()`, `retrieveBinary()` implementations                  |
+| `packages/db/src/schema/content.ts`                 | `binary_content bytea` column, `content` nullable                    |
+| `apps/api/src/middleware/error-handler.ts`          | New error type → HTTP status mappings, read requestId from context   |
+| `apps/api/src/openapi-config.ts`                    | Read requestId from context                                          |
+| `apps/api/src/app.ts`                               | Add `requestContextMiddleware` to chain                              |
+| `apps/api/src/routes/exports.ts`                    | Binary content types, remove `attempts: 1`, format widening          |
+| `apps/api/src/server.ts`                            | Call `loadConfig()` at startup                                       |
+| `packages/core/src/exporters/index.ts`              | Re-export new exporters and column-mapper                            |
+| `packages/shared/src/index.ts`                      | Export new error types                                               |
 
 ### Dependencies Added
 
-| Package | Version | Purpose |
-|---------|---------|---------|
-| `hyparquet-writer` | latest | Pure JS Parquet file writer |
-| `hyparquet` | latest | Parquet reader (for test verification) |
-| `@duckdb/node-api` | latest | Official DuckDB Neo Node.js client |
-| `better-sqlite3` | latest | SQLite Node.js bindings (native) |
-| `@types/better-sqlite3` | latest | TypeScript types |
+| Package                 | Version | Purpose                                |
+| ----------------------- | ------- | -------------------------------------- |
+| `hyparquet-writer`      | latest  | Pure JS Parquet file writer            |
+| `hyparquet`             | latest  | Parquet reader (for test verification) |
+| `@duckdb/node-api`      | latest  | Official DuckDB Neo Node.js client     |
+| `better-sqlite3`        | latest  | SQLite Node.js bindings (native)       |
+| `@types/better-sqlite3` | latest  | TypeScript types                       |
 
 ---
 

@@ -46,48 +46,89 @@ export function createMetrics(config?: MetricsConfig): SpatulaMetrics {
   _meter = meter;
 
   return {
-    httpRequestDuration: meter.createHistogram('http_request_duration_ms', { description: 'HTTP request duration in milliseconds', unit: 'ms' }),
-    httpRequestsTotal: meter.createCounter('http_requests_total', { description: 'Total HTTP requests' }),
-    httpActiveConnections: meter.createUpDownCounter('http_active_connections', { description: 'Active HTTP connections' }),
-    queueJobDuration: meter.createHistogram('queue_job_duration_ms', { description: 'Queue job duration in milliseconds', unit: 'ms' }),
-    queueJobsTotal: meter.createCounter('queue_jobs_total', { description: 'Total queue jobs processed' }),
-    llmTokensUsed: meter.createCounter('llm_tokens_used', { description: 'Total LLM tokens consumed' }),
-    llmRequestDuration: meter.createHistogram('llm_request_duration_ms', { description: 'LLM request duration in milliseconds', unit: 'ms' }),
+    httpRequestDuration: meter.createHistogram('http_request_duration_ms', {
+      description: 'HTTP request duration in milliseconds',
+      unit: 'ms',
+    }),
+    httpRequestsTotal: meter.createCounter('http_requests_total', {
+      description: 'Total HTTP requests',
+    }),
+    httpActiveConnections: meter.createUpDownCounter('http_active_connections', {
+      description: 'Active HTTP connections',
+    }),
+    queueJobDuration: meter.createHistogram('queue_job_duration_ms', {
+      description: 'Queue job duration in milliseconds',
+      unit: 'ms',
+    }),
+    queueJobsTotal: meter.createCounter('queue_jobs_total', {
+      description: 'Total queue jobs processed',
+    }),
+    llmTokensUsed: meter.createCounter('llm_tokens_used', {
+      description: 'Total LLM tokens consumed',
+    }),
+    llmRequestDuration: meter.createHistogram('llm_request_duration_ms', {
+      description: 'LLM request duration in milliseconds',
+      unit: 'ms',
+    }),
     llmCostUsd: meter.createCounter('llm_cost_usd', { description: 'Total LLM cost in USD' }),
-    pagesProcessedTotal: meter.createCounter('pages_processed_total', { description: 'Total pages crawled' }),
-    pageCrawlDuration: meter.createHistogram('page_crawl_duration_ms', { description: 'Page crawl duration in milliseconds', unit: 'ms' }),
-    entitiesCreatedTotal: meter.createCounter('entities_created_total', { description: 'Total entities created' }),
-    exportSizeBytes: meter.createHistogram('export_size_bytes', { description: 'Export file size in bytes', unit: 'bytes' }),
-    circuitBreakerState: meter.createUpDownCounter('circuit_breaker_state', { description: 'Circuit breaker state' }),
-    circuitBreakerRejectionsTotal: meter.createCounter('circuit_breaker_rejections_total', { description: 'Circuit breaker rejections' }),
+    pagesProcessedTotal: meter.createCounter('pages_processed_total', {
+      description: 'Total pages crawled',
+    }),
+    pageCrawlDuration: meter.createHistogram('page_crawl_duration_ms', {
+      description: 'Page crawl duration in milliseconds',
+      unit: 'ms',
+    }),
+    entitiesCreatedTotal: meter.createCounter('entities_created_total', {
+      description: 'Total entities created',
+    }),
+    exportSizeBytes: meter.createHistogram('export_size_bytes', {
+      description: 'Export file size in bytes',
+      unit: 'bytes',
+    }),
+    circuitBreakerState: meter.createUpDownCounter('circuit_breaker_state', {
+      description: 'Circuit breaker state',
+    }),
+    circuitBreakerRejectionsTotal: meter.createCounter('circuit_breaker_rejections_total', {
+      description: 'Circuit breaker rejections',
+    }),
   };
 }
 
-export function registerGauges(
-  deps: {
-    jobRepo: { countByStatus: (status: string) => Promise<number> };
-    tenantRepo: { countAll: () => Promise<number> };
-    queueProvider: { getQueueDepth: () => Promise<number> };
-  },
-): void {
+export function registerGauges(deps: {
+  jobRepo: { countByStatus: (status: string) => Promise<number> };
+  tenantRepo: { countAll: () => Promise<number> };
+  queueProvider: { getQueueDepth: () => Promise<number> };
+}): void {
   if (!_meter) return;
 
-  _meter.createObservableGauge('active_jobs', { description: 'Currently running jobs' })
+  _meter
+    .createObservableGauge('active_jobs', { description: 'Currently running jobs' })
     .addCallback(async (result) => {
-      try { result.observe(await deps.jobRepo.countByStatus('running')); }
-      catch { result.observe(0); }
+      try {
+        result.observe(await deps.jobRepo.countByStatus('running'));
+      } catch {
+        result.observe(0);
+      }
     });
 
-  _meter.createObservableGauge('tenant_count', { description: 'Total tenants' })
+  _meter
+    .createObservableGauge('tenant_count', { description: 'Total tenants' })
     .addCallback(async (result) => {
-      try { result.observe(await deps.tenantRepo.countAll()); }
-      catch { result.observe(0); }
+      try {
+        result.observe(await deps.tenantRepo.countAll());
+      } catch {
+        result.observe(0);
+      }
     });
 
-  _meter.createObservableGauge('queue_depth', { description: 'Total pending queue items' })
+  _meter
+    .createObservableGauge('queue_depth', { description: 'Total pending queue items' })
     .addCallback(async (result) => {
-      try { result.observe(await deps.queueProvider.getQueueDepth()); }
-      catch { result.observe(0); }
+      try {
+        result.observe(await deps.queueProvider.getQueueDepth());
+      } catch {
+        result.observe(0);
+      }
     });
 }
 

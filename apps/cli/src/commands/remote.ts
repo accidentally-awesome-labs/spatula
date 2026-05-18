@@ -14,7 +14,8 @@ export interface RemoteAddInput {
 
 export interface RemoteAddResult {
   success: boolean;
-  plan?: string;
+  tenantId?: string;
+  scopes?: string[];
   error?: string;
 }
 
@@ -71,12 +72,17 @@ export async function runRemoteAdd(input: RemoteAddInput): Promise<RemoteAddResu
     return { success: false, error: `Server health check failed for ${url}` };
   }
 
-  let plan: string | undefined;
+  let tenantId: string | undefined;
+  let scopes: string[] | undefined;
   try {
-    const sub = await client.getSubscription();
-    plan = sub.plan as string | undefined;
+    const me = await client.getAuthMe();
+    tenantId = me.tenantId;
+    scopes = me.scopes;
   } catch {
-    return { success: false, error: `Authentication failed — check your API key (auth verification failed)` };
+    return {
+      success: false,
+      error: `Authentication failed — check your API key (auth verification failed)`,
+    };
   }
 
   const existing = loadGlobalConfig() ?? { version: 1 };
@@ -89,7 +95,7 @@ export async function runRemoteAdd(input: RemoteAddInput): Promise<RemoteAddResu
   };
   saveGlobalConfig(updated);
 
-  return { success: true, plan };
+  return { success: true, tenantId, scopes };
 }
 
 // ---------------------------------------------------------------------------
@@ -148,7 +154,7 @@ export async function runRemoteRemove(
     return { success: false, error: `Remote "${name}" not found` };
   }
 
-  const { [name]: _removed, ...rest } = config.remotes;
+  const { [name]: _removed, ...rest } = config.remotes; // eslint-disable-line @typescript-eslint/no-unused-vars
   const updated: GlobalConfig = {
     ...config,
     remotes: Object.keys(rest).length > 0 ? rest : undefined,
@@ -173,7 +179,10 @@ export async function runRemoteStatus(
   const { client } = createRemoteClient(name);
   const jobId = await metaGet(`remote:${name}:job_id`);
   if (!jobId) {
-    return { success: false, error: `No linked job for remote "${name}". Run \`spatula push\` first.` };
+    return {
+      success: false,
+      error: `No linked job for remote "${name}". Run \`spatula push\` first.`,
+    };
   }
   try {
     const job = await client.getJob(jobId);
@@ -195,7 +204,10 @@ export async function runRemoteJobAction(
   const { client } = createRemoteClient(name);
   const jobId = await metaGet(`remote:${name}:job_id`);
   if (!jobId) {
-    return { success: false, error: `No linked job for remote "${name}". Run \`spatula push\` first.` };
+    return {
+      success: false,
+      error: `No linked job for remote "${name}". Run \`spatula push\` first.`,
+    };
   }
   try {
     const methods = {
@@ -234,7 +246,9 @@ export async function handleRemoteCommand(argv: RemoteCommandArgs): Promise<void
       const project = await openLocalProject(process.cwd());
       metaGet = (key) => project.metaRepo.get(key);
       closeProject = () => project.close();
-    } catch { /* Not in a project directory */ }
+    } catch {
+      /* Not in a project directory */
+    }
 
     try {
       const result = await runRemoteList(metaGet);
@@ -268,7 +282,8 @@ export async function handleRemoteCommand(argv: RemoteCommandArgs): Promise<void
     }
     const result = await runRemoteAdd({ name, url, apiKey });
     if (result.success) {
-      console.log(`\n  Remote "${name}" added (plan: ${result.plan ?? 'unknown'}).`);
+      const tenantSuffix = result.tenantId ? ` (tenant: ${result.tenantId})` : '';
+      console.log(`\n  Remote "${name}" added${tenantSuffix}.`);
     } else {
       console.error(`\n  Error: ${result.error}`);
       process.exit(1);
@@ -284,7 +299,9 @@ export async function handleRemoteCommand(argv: RemoteCommandArgs): Promise<void
       const project = await openLocalProject(process.cwd());
       metaDeleteByPrefix = (prefix) => project.metaRepo.deleteByPrefix(prefix);
       closeProject = () => project.close();
-    } catch { /* Not in a project directory */ }
+    } catch {
+      /* Not in a project directory */
+    }
 
     try {
       const result = await runRemoteRemove(name, metaDeleteByPrefix);
@@ -308,7 +325,6 @@ export async function handleRemoteCommand(argv: RemoteCommandArgs): Promise<void
   } catch (err) {
     console.error((err as Error).message);
     process.exit(1);
-    return;
   }
 
   try {
@@ -320,7 +336,8 @@ export async function handleRemoteCommand(argv: RemoteCommandArgs): Promise<void
         const d = result.data;
         console.log(`\n  Job: ${d.id}`);
         console.log(`  Status: ${d.status}`);
-        if (d.pagesCompleted !== undefined) console.log(`  Pages: ${d.pagesCompleted}/${d.pagesDiscovered ?? '?'}`);
+        if (d.pagesCompleted !== undefined)
+          console.log(`  Pages: ${d.pagesCompleted}/${d.pagesDiscovered ?? '?'}`);
         if (d.entitiesExtracted !== undefined) console.log(`  Entities: ${d.entitiesExtracted}`);
         console.log('');
       } else {

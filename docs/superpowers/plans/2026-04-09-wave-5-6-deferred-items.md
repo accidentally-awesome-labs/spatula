@@ -15,6 +15,7 @@
 ## Task 1: Config Diff Recursive Comparison
 
 **Files:**
+
 - Modify: `packages/core/src/config/diff-types.ts:7-14`
 - Modify: `packages/core/src/config/config-differ.ts:174-198`
 - Test: `packages/core/tests/unit/config/config-differ.test.ts`
@@ -27,15 +28,29 @@ In `packages/core/tests/unit/config/config-differ.test.ts`, add tests:
 describe('diffConfigs nested fields', () => {
   it('detects arrayItemType changes', () => {
     const prev = makeConfig({
-      fields: [{ name: 'tags', description: 'Tags', type: 'array', arrayItemType: { name: 'item', description: 'tag', type: 'string', required: false } }],
+      fields: [
+        {
+          name: 'tags',
+          description: 'Tags',
+          type: 'array',
+          arrayItemType: { name: 'item', description: 'tag', type: 'string', required: false },
+        },
+      ],
     });
     const curr = makeConfig({
-      fields: [{ name: 'tags', description: 'Tags', type: 'array', arrayItemType: { name: 'item', description: 'tag', type: 'number', required: false } }],
+      fields: [
+        {
+          name: 'tags',
+          description: 'Tags',
+          type: 'array',
+          arrayItemType: { name: 'item', description: 'tag', type: 'number', required: false },
+        },
+      ],
     });
     const diff = diffConfigs(curr, prev);
     expect(diff.fieldsModified).toHaveLength(1);
     const tagChanges = diff.fieldsModified[0].changes;
-    const arrayChange = tagChanges.find(c => c.property === 'arrayItemType');
+    const arrayChange = tagChanges.find((c) => c.property === 'arrayItemType');
     expect(arrayChange).toBeDefined();
     expect(arrayChange!.nestedChanges).toBeDefined();
     expect(arrayChange!.nestedChanges).toContainEqual(
@@ -45,27 +60,35 @@ describe('diffConfigs nested fields', () => {
 
   it('detects objectFields added/removed/modified', () => {
     const prev = makeConfig({
-      fields: [{
-        name: 'address', description: 'Address', type: 'object',
-        objectFields: [
-          { name: 'street', description: 'Street', type: 'string', required: true },
-          { name: 'zip', description: 'Zip', type: 'string', required: false },
-        ],
-      }],
+      fields: [
+        {
+          name: 'address',
+          description: 'Address',
+          type: 'object',
+          objectFields: [
+            { name: 'street', description: 'Street', type: 'string', required: true },
+            { name: 'zip', description: 'Zip', type: 'string', required: false },
+          ],
+        },
+      ],
     });
     const curr = makeConfig({
-      fields: [{
-        name: 'address', description: 'Address', type: 'object',
-        objectFields: [
-          { name: 'street', description: 'Street', type: 'string', required: false }, // changed
-          { name: 'city', description: 'City', type: 'string', required: true },      // added
-          // zip removed
-        ],
-      }],
+      fields: [
+        {
+          name: 'address',
+          description: 'Address',
+          type: 'object',
+          objectFields: [
+            { name: 'street', description: 'Street', type: 'string', required: false }, // changed
+            { name: 'city', description: 'City', type: 'string', required: true }, // added
+            // zip removed
+          ],
+        },
+      ],
     });
     const diff = diffConfigs(curr, prev);
     expect(diff.fieldsModified).toHaveLength(1);
-    const objChange = diff.fieldsModified[0].changes.find(c => c.property === 'objectFields');
+    const objChange = diff.fieldsModified[0].changes.find((c) => c.property === 'objectFields');
     expect(objChange).toBeDefined();
     expect(objChange!.addedFields).toContain('city');
     expect(objChange!.removedFields).toContain('zip');
@@ -76,7 +99,14 @@ describe('diffConfigs nested fields', () => {
 
   it('ignores unchanged nested fields', () => {
     const config = makeConfig({
-      fields: [{ name: 'tags', description: 'Tags', type: 'array', arrayItemType: { name: 'item', description: 'tag', type: 'string', required: false } }],
+      fields: [
+        {
+          name: 'tags',
+          description: 'Tags',
+          type: 'array',
+          arrayItemType: { name: 'item', description: 'tag', type: 'string', required: false },
+        },
+      ],
     });
     const diff = diffConfigs(config, config);
     expect(diff.hasChanges).toBe(false);
@@ -116,34 +146,47 @@ export interface FieldChange {
 In `packages/core/src/config/config-differ.ts`, after line 195 (the TODO comment), add:
 
 ```typescript
-  // Recursive: arrayItemType
-  if (current.arrayItemType && previous.arrayItemType) {
-    const nested = diffFieldProperties(current.arrayItemType, previous.arrayItemType);
-    if (nested.length > 0) {
-      changes.push({ property: 'arrayItemType', from: previous.arrayItemType, to: current.arrayItemType, nestedChanges: nested });
-    }
-  } else if (current.arrayItemType !== previous.arrayItemType) {
-    changes.push({ property: 'arrayItemType', from: previous.arrayItemType, to: current.arrayItemType });
+// Recursive: arrayItemType
+if (current.arrayItemType && previous.arrayItemType) {
+  const nested = diffFieldProperties(current.arrayItemType, previous.arrayItemType);
+  if (nested.length > 0) {
+    changes.push({
+      property: 'arrayItemType',
+      from: previous.arrayItemType,
+      to: current.arrayItemType,
+      nestedChanges: nested,
+    });
   }
+} else if (current.arrayItemType !== previous.arrayItemType) {
+  changes.push({
+    property: 'arrayItemType',
+    from: previous.arrayItemType,
+    to: current.arrayItemType,
+  });
+}
 
-  // Recursive: objectFields
-  if (current.objectFields || previous.objectFields) {
-    const currMap = new Map((current.objectFields ?? []).map(f => [f.name, f]));
-    const prevMap = new Map((previous.objectFields ?? []).map(f => [f.name, f]));
+// Recursive: objectFields
+if (current.objectFields || previous.objectFields) {
+  const currMap = new Map((current.objectFields ?? []).map((f) => [f.name, f]));
+  const prevMap = new Map((previous.objectFields ?? []).map((f) => [f.name, f]));
 
-    const addedFields = [...currMap.keys()].filter(k => !prevMap.has(k));
-    const removedFields = [...prevMap.keys()].filter(k => !currMap.has(k));
-    const nestedChanges = [...currMap.keys()]
-      .filter(k => prevMap.has(k))
-      .flatMap(k => diffFieldProperties(currMap.get(k)!, prevMap.get(k)!));
+  const addedFields = [...currMap.keys()].filter((k) => !prevMap.has(k));
+  const removedFields = [...prevMap.keys()].filter((k) => !currMap.has(k));
+  const nestedChanges = [...currMap.keys()]
+    .filter((k) => prevMap.has(k))
+    .flatMap((k) => diffFieldProperties(currMap.get(k)!, prevMap.get(k)!));
 
-    if (addedFields.length || removedFields.length || nestedChanges.length) {
-      changes.push({
-        property: 'objectFields', from: previous.objectFields, to: current.objectFields,
-        nestedChanges, addedFields, removedFields,
-      });
-    }
+  if (addedFields.length || removedFields.length || nestedChanges.length) {
+    changes.push({
+      property: 'objectFields',
+      from: previous.objectFields,
+      to: current.objectFields,
+      nestedChanges,
+      addedFields,
+      removedFields,
+    });
   }
+}
 ```
 
 Remove the TODO comment at line 195.
@@ -165,6 +208,7 @@ git commit -m "feat(core): add recursive objectFields/arrayItemType comparison t
 ## Task 2: CSS Extractor Table Extraction
 
 **Files:**
+
 - Modify: `packages/core/src/extraction/css-extractor.ts:55-63` (extractByField) and add `findTable` function
 - Test: `packages/core/tests/unit/extraction/css-extractor.test.ts`
 
@@ -188,12 +232,23 @@ describe('table extraction', () => {
   it('extracts table as array of objects when field is array+object', async () => {
     const schema = {
       version: 1,
-      fields: [{
-        name: 'specs', description: 'Specs table', type: 'array' as const,
-        required: false,
-        arrayItemType: { name: 'row', description: 'Row', type: 'object' as const, required: false },
-      }],
-      fieldAliases: [], createdAt: new Date(), parentVersion: null,
+      fields: [
+        {
+          name: 'specs',
+          description: 'Specs table',
+          type: 'array' as const,
+          required: false,
+          arrayItemType: {
+            name: 'row',
+            description: 'Row',
+            type: 'object' as const,
+            required: false,
+          },
+        },
+      ],
+      fieldAliases: [],
+      createdAt: new Date(),
+      parentVersion: null,
     };
     const result = await extractor.extract(tableHtml, 'https://example.com', schema, '');
     expect(result.data.specs).toEqual([
@@ -205,13 +260,30 @@ describe('table extraction', () => {
   it('returns null when no table found', async () => {
     const schema = {
       version: 1,
-      fields: [{
-        name: 'specs', description: 'Specs', type: 'array' as const, required: false,
-        arrayItemType: { name: 'row', description: 'Row', type: 'object' as const, required: false },
-      }],
-      fieldAliases: [], createdAt: new Date(), parentVersion: null,
+      fields: [
+        {
+          name: 'specs',
+          description: 'Specs',
+          type: 'array' as const,
+          required: false,
+          arrayItemType: {
+            name: 'row',
+            description: 'Row',
+            type: 'object' as const,
+            required: false,
+          },
+        },
+      ],
+      fieldAliases: [],
+      createdAt: new Date(),
+      parentVersion: null,
     };
-    const result = await extractor.extract('<html><body><p>No tables</p></body></html>', 'https://example.com', schema, '');
+    const result = await extractor.extract(
+      '<html><body><p>No tables</p></body></html>',
+      'https://example.com',
+      schema,
+      '',
+    );
     expect(result.data.specs).toBeUndefined();
   });
 
@@ -222,9 +294,23 @@ describe('table extraction', () => {
     </table></body></html>`;
     const schema = {
       version: 1,
-      fields: [{ name: 'data', description: 'Data', type: 'array' as const, required: false,
-        arrayItemType: { name: 'row', description: 'Row', type: 'object' as const, required: false } }],
-      fieldAliases: [], createdAt: new Date(), parentVersion: null,
+      fields: [
+        {
+          name: 'data',
+          description: 'Data',
+          type: 'array' as const,
+          required: false,
+          arrayItemType: {
+            name: 'row',
+            description: 'Row',
+            type: 'object' as const,
+            required: false,
+          },
+        },
+      ],
+      fieldAliases: [],
+      createdAt: new Date(),
+      parentVersion: null,
     };
     const result = await extractor.extract(html, 'https://example.com', schema, '');
     // First row becomes headers
@@ -238,9 +324,23 @@ describe('table extraction', () => {
     </table></body></html>`;
     const schema = {
       version: 1,
-      fields: [{ name: 'data', description: 'Data', type: 'array' as const, required: false,
-        arrayItemType: { name: 'row', description: 'Row', type: 'object' as const, required: false } }],
-      fieldAliases: [], createdAt: new Date(), parentVersion: null,
+      fields: [
+        {
+          name: 'data',
+          description: 'Data',
+          type: 'array' as const,
+          required: false,
+          arrayItemType: {
+            name: 'row',
+            description: 'Row',
+            type: 'object' as const,
+            required: false,
+          },
+        },
+      ],
+      fieldAliases: [],
+      createdAt: new Date(),
+      parentVersion: null,
     };
     const result = await extractor.extract(html, 'https://example.com', schema, '');
     expect(result.data.data).toEqual([{ A: 'Wide', B: 'Wide', C: 'Narrow' }]);
@@ -257,14 +357,26 @@ describe('table extraction', () => {
         </tbody>
       </table>
     </article></body></html>`;
-    const schema = { version: 1, fields: [], fieldAliases: [], createdAt: new Date(), parentVersion: null };
+    const schema = {
+      version: 1,
+      fields: [],
+      fieldAliases: [],
+      createdAt: new Date(),
+      parentVersion: null,
+    };
     const result = await extractor.extract(bigTableHtml, 'https://example.com', schema, '');
     expect(result.data.tables).toBeDefined();
     expect(result.data.tables).toHaveLength(3);
   });
 
   it('skips tables in autoDiscover when fewer than 3 data rows', async () => {
-    const schema = { version: 1, fields: [], fieldAliases: [], createdAt: new Date(), parentVersion: null };
+    const schema = {
+      version: 1,
+      fields: [],
+      fieldAliases: [],
+      createdAt: new Date(),
+      parentVersion: null,
+    };
     const result = await extractor.extract(tableHtml, 'https://example.com', schema, '');
     // tableHtml has only 2 rows, below the 3-row threshold
     expect(result.data.tables).toBeUndefined();
@@ -312,30 +424,33 @@ function findTable($: cheerio.CheerioAPI, fieldName: string): Array<Record<strin
   } else {
     // Use first row as headers
     const firstRow = table.find('tr').first();
-    headers = firstRow.find('th, td').map((_, el) => $(el).text().trim()).get();
+    headers = firstRow
+      .find('th, td')
+      .map((_, el) => $(el).text().trim())
+      .get();
   }
 
   if (headers.length === 0) return null;
 
   // Extract body rows
-  const bodyRows = theadCells.length > 0
-    ? table.find('tbody tr')
-    : table.find('tr').slice(1); // skip header row
+  const bodyRows = theadCells.length > 0 ? table.find('tbody tr') : table.find('tr').slice(1); // skip header row
 
   const rows: Array<Record<string, string>> = [];
   bodyRows.each((_, row) => {
     const record: Record<string, string> = {};
     let colIdx = 0;
-    $(row).find('th, td').each((_, cell) => {
-      const text = $(cell).text().trim();
-      const colspan = parseInt($(cell).attr('colspan') ?? '1', 10);
-      for (let i = 0; i < colspan && colIdx < headers.length; i++) {
-        record[headers[colIdx]] = text;
-        colIdx++;
-      }
-    });
+    $(row)
+      .find('th, td')
+      .each((_, cell) => {
+        const text = $(cell).text().trim();
+        const colspan = parseInt($(cell).attr('colspan') ?? '1', 10);
+        for (let i = 0; i < colspan && colIdx < headers.length; i++) {
+          record[headers[colIdx]] = text;
+          colIdx++;
+        }
+      });
     // Skip entirely empty rows
-    if (Object.values(record).some(v => v !== '')) {
+    if (Object.values(record).some((v) => v !== '')) {
       rows.push(record);
     }
   });
@@ -350,15 +465,20 @@ Update `extractByField` to route array+object to table extraction:
 function extractByField($: cheerio.CheerioAPI, field: FieldDefinition, baseUrl: string): unknown {
   const nameLower = field.name.toLowerCase();
   switch (field.type) {
-    case 'currency': return findPrice($);
-    case 'url': return findUrl($, nameLower, baseUrl);
-    case 'number': return findNumber($, nameLower);
+    case 'currency':
+      return findPrice($);
+    case 'url':
+      return findUrl($, nameLower, baseUrl);
+    case 'number':
+      return findNumber($, nameLower);
     case 'array':
       if (field.arrayItemType?.type === 'object' || field.objectFields) {
         return findTable($, nameLower);
       }
       return findList($, nameLower);
-    case 'string': default: return findText($, nameLower);
+    case 'string':
+    default:
+      return findText($, nameLower);
   }
 }
 ```
@@ -366,11 +486,11 @@ function extractByField($: cheerio.CheerioAPI, field: FieldDefinition, baseUrl: 
 Update `autoDiscover` — add after the `links` block:
 
 ```typescript
-  // Tables — require 3+ data rows to avoid extracting layout/nav tables
-  const tableData = findTable($, '');
-  if (tableData && tableData.length >= 3) {
-    data.tables = tableData;
-  }
+// Tables — require 3+ data rows to avoid extracting layout/nav tables
+const tableData = findTable($, '');
+if (tableData && tableData.length >= 3) {
+  data.tables = tableData;
+}
 ```
 
 - [x] **Step 4: Run tests to verify they pass**
@@ -390,6 +510,7 @@ git commit -m "feat(core): add HTML table extraction to CSS extractor via array+
 ## Task 3: `spatula add` Crawl History Dedup
 
 **Files:**
+
 - Modify: `packages/db/src/project-db/repositories/crawl-task-repository.ts`
 - Modify: `apps/cli/src/commands/add.ts`
 - Modify: `apps/cli/src/index.tsx:178-196`
@@ -406,9 +527,27 @@ import { describe, it, expect, beforeEach } from 'vitest';
 describe('SqliteCrawlTaskRepository.findCompletedUrls', () => {
   it('returns URLs of completed tasks', async () => {
     // Insert tasks with various statuses
-    await repo.enqueue({ jobId: 'j1', tenantId: 't1', url: 'https://a.com', depth: 0, parentTaskId: '' });
-    await repo.enqueue({ jobId: 'j1', tenantId: 't1', url: 'https://b.com', depth: 0, parentTaskId: '' });
-    await repo.enqueue({ jobId: 'j1', tenantId: 't1', url: 'https://c.com', depth: 0, parentTaskId: '' });
+    await repo.enqueue({
+      jobId: 'j1',
+      tenantId: 't1',
+      url: 'https://a.com',
+      depth: 0,
+      parentTaskId: '',
+    });
+    await repo.enqueue({
+      jobId: 'j1',
+      tenantId: 't1',
+      url: 'https://b.com',
+      depth: 0,
+      parentTaskId: '',
+    });
+    await repo.enqueue({
+      jobId: 'j1',
+      tenantId: 't1',
+      url: 'https://c.com',
+      depth: 0,
+      parentTaskId: '',
+    });
     // Mark first two as completed
     // (get IDs from inserts and update status)
     const urls = await repo.findCompletedUrls();
@@ -500,10 +639,21 @@ export function validateAndDedup(
   const seenNorm = new Set<string>();
 
   for (const url of urls) {
-    try { new URL(url); } catch { invalid.push(url); continue; }
+    try {
+      new URL(url);
+    } catch {
+      invalid.push(url);
+      continue;
+    }
     const norm = normaliseUrl(url);
-    if (existingNorm.has(norm)) { duplicates.push(url); continue; }
-    if (crawledNorm.has(norm)) { alreadyCrawled.push(url); continue; }
+    if (existingNorm.has(norm)) {
+      duplicates.push(url);
+      continue;
+    }
+    if (crawledNorm.has(norm)) {
+      alreadyCrawled.push(url);
+      continue;
+    }
     if (seenNorm.has(norm)) continue;
     seenNorm.add(norm);
     valid.push(url);
@@ -517,9 +667,13 @@ Update `AddResult` to include `alreadyCrawled: string[]`.
 Update `runAddCommand` to open the DB:
 
 ```typescript
-export async function runAddCommand(urls: string[], options?: { noHistory?: boolean }): Promise<AddResult> {
+export async function runAddCommand(
+  urls: string[],
+  options?: { noHistory?: boolean },
+): Promise<AddResult> {
   const projectRoot = findProjectRoot(process.cwd());
-  if (!projectRoot) throw new Error('No spatula.yaml found. Run `spatula init` to create a project first.');
+  if (!projectRoot)
+    throw new Error('No spatula.yaml found. Run `spatula init` to create a project first.');
 
   const yamlPath = join(projectRoot, 'spatula.yaml');
   const content = readFileSync(yamlPath, 'utf-8');
@@ -542,7 +696,11 @@ export async function runAddCommand(urls: string[], options?: { noHistory?: bool
     }
   }
 
-  const { valid, invalid, duplicates, alreadyCrawled } = validateAndDedup(urls, existingSeeds, crawledUrls);
+  const { valid, invalid, duplicates, alreadyCrawled } = validateAndDedup(
+    urls,
+    existingSeeds,
+    crawledUrls,
+  );
 
   if (valid.length > 0) {
     doc.seeds = [...existingSeeds, ...valid];
@@ -609,6 +767,7 @@ git commit -m "feat(cli): add crawl history dedup to spatula add with --no-histo
 ## Task 4: Tenant Creation Auth Protection
 
 **Files:**
+
 - Modify: `apps/api/src/app.ts:126-129`
 - Test: `apps/api/tests/unit/routes/tenants.test.ts` (or appropriate test file)
 
@@ -618,7 +777,10 @@ git commit -m "feat(cli): add crawl history dedup to spatula add with --no-histo
 describe('POST /api/v1/tenants auth protection', () => {
   it('returns 403 when TENANT_CREATION_SECRET is set and header is missing', async () => {
     process.env.TENANT_CREATION_SECRET = 'test-secret-123';
-    const res = await app.request('/api/v1/tenants', { method: 'POST', body: JSON.stringify({ name: 'test' }) });
+    const res = await app.request('/api/v1/tenants', {
+      method: 'POST',
+      body: JSON.stringify({ name: 'test' }),
+    });
     expect(res.status).toBe(403);
     delete process.env.TENANT_CREATION_SECRET;
   });
@@ -656,17 +818,17 @@ Expected: FAIL — no auth check exists
 In `apps/api/src/app.ts`, replace lines 126-129:
 
 ```typescript
-  // Tenant management routes — protected by shared secret in production
-  const creationSecret = process.env.TENANT_CREATION_SECRET;
-  if (creationSecret) {
-    app.post('/api/v1/tenants', async (c, next) => {
-      if (c.req.header('X-Creation-Secret') !== creationSecret) {
-        return c.json({ error: { code: 'FORBIDDEN', message: 'Invalid creation secret' } }, 403);
-      }
-      return next();
-    });
-  }
-  app.route('/api/v1/tenants', tenantRoutes());
+// Tenant management routes — protected by shared secret in production
+const creationSecret = process.env.TENANT_CREATION_SECRET;
+if (creationSecret) {
+  app.post('/api/v1/tenants', async (c, next) => {
+    if (c.req.header('X-Creation-Secret') !== creationSecret) {
+      return c.json({ error: { code: 'FORBIDDEN', message: 'Invalid creation secret' } }, 403);
+    }
+    return next();
+  });
+}
+app.route('/api/v1/tenants', tenantRoutes());
 ```
 
 - [x] **Step 4: Add env var to .env.example**
@@ -693,6 +855,7 @@ git commit -m "fix(api): add shared-secret protection for tenant creation endpoi
 ## Task 5: Quota Audit Logging
 
 **Files:**
+
 - Modify: `packages/queue/src/job-manager.ts:19,28,36,53-72`
 - Test: `packages/queue/tests/unit/job-manager.test.ts`
 
@@ -703,10 +866,16 @@ it('logs audit event on monthly quota exceeded', async () => {
   const auditLog = vi.fn();
   const auditLogger = { log: auditLog } as unknown as AuditLogger;
   const manager = new JobManager({
-    jobRepo, taskRepo, schemaRepo, queues, tenantRepo,
+    jobRepo,
+    taskRepo,
+    schemaRepo,
+    queues,
+    tenantRepo,
     quotaEnforcer: {
       checkAndRecord: vi.fn().mockRejectedValue(
-        new QuotaExceededError('Monthly job limit reached: 5/5', { context: { tenantId: 't1', current: 5, max: 5 } }),
+        new QuotaExceededError('Monthly job limit reached: 5/5', {
+          context: { tenantId: 't1', current: 5, max: 5 },
+        }),
       ),
     },
     auditLogger,
@@ -714,30 +883,37 @@ it('logs audit event on monthly quota exceeded', async () => {
 
   // Quota is checked in startJob, not createJob
   await expect(manager.startJob('job1', 't1')).rejects.toThrow(QuotaExceededError);
-  expect(auditLog).toHaveBeenCalledWith(expect.objectContaining({
-    action: 'quota.exceeded',
-    actorId: 'system',
-    actorType: 'system',
-    tenantId: 't1',
-    metadata: expect.objectContaining({ dimension: 'jobs' }),
-  }));
+  expect(auditLog).toHaveBeenCalledWith(
+    expect.objectContaining({
+      action: 'quota.exceeded',
+      actorId: 'system',
+      actorType: 'system',
+      tenantId: 't1',
+      metadata: expect.objectContaining({ dimension: 'jobs' }),
+    }),
+  );
 });
 
 it('logs audit event on concurrent job quota exceeded', async () => {
   const auditLog = vi.fn();
   const auditLogger = { log: auditLog } as unknown as AuditLogger;
   const manager = new JobManager({
-    jobRepo, taskRepo, schemaRepo, queues,
+    jobRepo,
+    taskRepo,
+    schemaRepo,
+    queues,
     tenantRepo: { getQuotas: vi.fn().mockResolvedValue({ maxConcurrentJobs: 2 }) },
     auditLogger,
   });
   jobRepo.countByTenant = vi.fn().mockResolvedValue(2); // at limit
 
   await expect(manager.startJob('job1', 't1')).rejects.toThrow(QuotaExceededError);
-  expect(auditLog).toHaveBeenCalledWith(expect.objectContaining({
-    action: 'quota.exceeded',
-    metadata: expect.objectContaining({ dimension: 'concurrent_jobs', current: 2, max: 2 }),
-  }));
+  expect(auditLog).toHaveBeenCalledWith(
+    expect.objectContaining({
+      action: 'quota.exceeded',
+      metadata: expect.objectContaining({ dimension: 'concurrent_jobs', current: 2, max: 2 }),
+    }),
+  );
 });
 ```
 
@@ -751,42 +927,41 @@ Add `private readonly auditLogger?: AuditLogger` field (line 28) and wire in con
 Wrap the `quotaEnforcer.checkAndRecord` call (line 54-56) in a try/catch:
 
 ```typescript
-    if (this.quotaEnforcer) {
-      try {
-        await this.quotaEnforcer.checkAndRecord(tenantId, 'jobs', 1);
-      } catch (error) {
-        if (error instanceof QuotaExceededError && this.auditLogger) {
-          this.auditLogger.log({
-            action: 'quota.exceeded',
-            actorId: 'system',
-            actorType: 'system',
-            tenantId,
-            metadata: { dimension: 'jobs' },
-          });
-        }
-        throw error;
-      }
+if (this.quotaEnforcer) {
+  try {
+    await this.quotaEnforcer.checkAndRecord(tenantId, 'jobs', 1);
+  } catch (error) {
+    if (error instanceof QuotaExceededError && this.auditLogger) {
+      this.auditLogger.log({
+        action: 'quota.exceeded',
+        actorId: 'system',
+        actorType: 'system',
+        tenantId,
+        metadata: { dimension: 'jobs' },
+      });
     }
+    throw error;
+  }
+}
 ```
 
 For concurrent job quota (lines 64-68), add audit before throw:
 
 ```typescript
-        if (runningCount >= maxConcurrent) {
-          if (this.auditLogger) {
-            this.auditLogger.log({
-              action: 'quota.exceeded',
-              actorId: 'system',
-              actorType: 'system',
-              tenantId,
-              metadata: { dimension: 'concurrent_jobs', current: runningCount, max: maxConcurrent },
-            });
-          }
-          throw new QuotaExceededError(
-            `Concurrent job limit reached: ${runningCount}/${maxConcurrent}`,
-            { context: { tenantId, current: runningCount, max: maxConcurrent } },
-          );
-        }
+if (runningCount >= maxConcurrent) {
+  if (this.auditLogger) {
+    this.auditLogger.log({
+      action: 'quota.exceeded',
+      actorId: 'system',
+      actorType: 'system',
+      tenantId,
+      metadata: { dimension: 'concurrent_jobs', current: runningCount, max: maxConcurrent },
+    });
+  }
+  throw new QuotaExceededError(`Concurrent job limit reached: ${runningCount}/${maxConcurrent}`, {
+    context: { tenantId, current: runningCount, max: maxConcurrent },
+  });
+}
 ```
 
 - [x] **Step 3: Run tests and commit**
@@ -804,6 +979,7 @@ git commit -m "feat(queue): add audit logging for quota exceeded events in JobMa
 ## Task 6: OpenRouter Cost Header Extraction
 
 **Files:**
+
 - Modify: `packages/core/src/llm/openrouter-client.ts:74-108`
 - Test: `packages/core/tests/unit/llm/openrouter-client.test.ts`
 
@@ -813,21 +989,22 @@ git commit -m "feat(queue): add audit logging for quota exceeded events in JobMa
 it('extracts cost from x-openrouter-cost header', async () => {
   const recorder = { record: vi.fn() };
   // Mock fetch to return response with cost header
-  const mockResponse = new Response(JSON.stringify({
-    choices: [{ message: { content: 'hi' }, finish_reason: 'stop' }],
-    usage: { prompt_tokens: 10, completion_tokens: 5, total_tokens: 15 },
-    model: 'test-model',
-  }), {
-    headers: { 'x-openrouter-cost': '0.00042' },
-  });
+  const mockResponse = new Response(
+    JSON.stringify({
+      choices: [{ message: { content: 'hi' }, finish_reason: 'stop' }],
+      usage: { prompt_tokens: 10, completion_tokens: 5, total_tokens: 15 },
+      model: 'test-model',
+    }),
+    {
+      headers: { 'x-openrouter-cost': '0.00042' },
+    },
+  );
   vi.spyOn(global, 'fetch').mockResolvedValue(mockResponse);
 
   const client = new OpenRouterClient({ apiKey: 'k', usageRecorder: recorder });
   await client.complete({ model: 'test', messages: [{ role: 'user', content: 'hi' }] });
 
-  expect(recorder.record).toHaveBeenCalledWith(
-    expect.objectContaining({ costUsd: 0.00042 }),
-  );
+  expect(recorder.record).toHaveBeenCalledWith(expect.objectContaining({ costUsd: 0.00042 }));
 });
 ```
 
@@ -836,7 +1013,7 @@ it('extracts cost from x-openrouter-cost header', async () => {
 In `packages/core/src/llm/openrouter-client.ts`, after line 74 (`const response = await this.doFetch(body);`), before the `.json()` call:
 
 ```typescript
-        const costUsd = parseFloat(response.headers.get('x-openrouter-cost') ?? '') || 0;
+const costUsd = parseFloat(response.headers.get('x-openrouter-cost') ?? '') || 0;
 ```
 
 Then at line 106, replace `costUsd: 0` with `costUsd`:
@@ -862,6 +1039,7 @@ git commit -m "feat(core): extract cost from OpenRouter x-openrouter-cost respon
 ## Task 7: Observable Gauge Registration
 
 **Files:**
+
 - Modify: `packages/shared/src/metrics.ts:46-48`
 - Test: `packages/shared/tests/unit/metrics.test.ts`
 
@@ -894,38 +1072,48 @@ First, store the meter as a module-level variable. Change the existing code insi
 let _meter: Meter | undefined;
 
 // Inside createMetrics(), after creating the meter:
-  const meter = meterProvider.getMeter('spatula');
-  _meter = meter; // Store for registerGauges
+const meter = meterProvider.getMeter('spatula');
+_meter = meter; // Store for registerGauges
 ```
 
 Then add `registerGauges` after `createMetrics`:
 
 ```typescript
-export function registerGauges(
-  deps: {
-    jobRepo: { countByStatus: (status: string) => Promise<number> };
-    tenantRepo: { countAll: () => Promise<number> };
-    queueProvider: { getQueueDepth: () => Promise<number> };
-  },
-): void {
+export function registerGauges(deps: {
+  jobRepo: { countByStatus: (status: string) => Promise<number> };
+  tenantRepo: { countAll: () => Promise<number> };
+  queueProvider: { getQueueDepth: () => Promise<number> };
+}): void {
   if (!_meter) return;
 
-  _meter.createObservableGauge('active_jobs', { description: 'Currently running jobs' })
+  _meter
+    .createObservableGauge('active_jobs', { description: 'Currently running jobs' })
     .addCallback(async (result) => {
-      try { result.observe(await deps.jobRepo.countByStatus('running')); }
-      catch { result.observe(0); }
+      try {
+        result.observe(await deps.jobRepo.countByStatus('running'));
+      } catch {
+        result.observe(0);
+      }
     });
 
-  _meter.createObservableGauge('tenant_count', { description: 'Total tenants' })
+  _meter
+    .createObservableGauge('tenant_count', { description: 'Total tenants' })
     .addCallback(async (result) => {
-      try { result.observe(await deps.tenantRepo.countAll()); }
-      catch { result.observe(0); }
+      try {
+        result.observe(await deps.tenantRepo.countAll());
+      } catch {
+        result.observe(0);
+      }
     });
 
-  _meter.createObservableGauge('queue_depth', { description: 'Total pending queue items' })
+  _meter
+    .createObservableGauge('queue_depth', { description: 'Total pending queue items' })
     .addCallback(async (result) => {
-      try { result.observe(await deps.queueProvider.getQueueDepth()); }
-      catch { result.observe(0); }
+      try {
+        result.observe(await deps.queueProvider.getQueueDepth());
+      } catch {
+        result.observe(0);
+      }
     });
 }
 ```
@@ -949,6 +1137,7 @@ git commit -m "feat(shared): register observable gauges for active_jobs, tenant_
 ## Task 8: SQLite Migration — Add runId and pageUrl Columns
 
 **Files:**
+
 - Modify: `packages/db/src/schema-sqlite/extractions.ts`
 - Modify: `packages/db/src/schema-sqlite/actions.ts`
 - Create: `packages/db/drizzle-sqlite/0006_*.sql` (generated by Drizzle Kit)
@@ -1020,6 +1209,7 @@ git commit -m "feat(db): add runId/pageUrl columns to SQLite extractions and act
 ## Task 9: Server-Side Changes — Extraction pageUrl Join + Entity-Sources Endpoint + Job Stats
 
 **Files:**
+
 - Modify: `packages/db/src/repositories/extraction-repository.ts` (Postgres — add pageUrl join)
 - Modify: `apps/api/src/schemas/responses.ts:36-46` (extractionResponseSchema)
 - Create: `apps/api/src/routes/entity-sources.ts`
@@ -1032,18 +1222,20 @@ git commit -m "feat(db): add runId/pageUrl columns to SQLite extractions and act
 In `apps/api/src/schemas/responses.ts`:
 
 ```typescript
-export const extractionResponseSchema = z.object({
-  id: z.string().uuid(),
-  jobId: z.string().uuid(),
-  tenantId: z.string().uuid(),
-  pageId: z.string().uuid().nullable(),
-  pageUrl: z.string().nullable(),
-  schemaVersion: z.number().int(),
-  data: z.record(z.unknown()),
-  unmappedFields: z.array(z.unknown()).nullable(),
-  metadata: z.record(z.unknown()),
-  createdAt: z.string(),
-}).openapi('Extraction');
+export const extractionResponseSchema = z
+  .object({
+    id: z.string().uuid(),
+    jobId: z.string().uuid(),
+    tenantId: z.string().uuid(),
+    pageId: z.string().uuid().nullable(),
+    pageUrl: z.string().nullable(),
+    schemaVersion: z.number().int(),
+    data: z.record(z.unknown()),
+    unmappedFields: z.array(z.unknown()).nullable(),
+    metadata: z.record(z.unknown()),
+    createdAt: z.string(),
+  })
+  .openapi('Extraction');
 ```
 
 - [x] **Step 2: Add pageUrl join to Postgres extraction repository**
@@ -1099,7 +1291,9 @@ const entitySourceSchema = z.object({
 });
 
 const listRoute = createRoute({
-  method: 'get', path: '/', tags: ['EntitySources'],
+  method: 'get',
+  path: '/',
+  tags: ['EntitySources'],
   summary: 'List entity-extraction linkages for a job',
   request: { params: jobIdParam, query: paginationSchema },
   responses: {
@@ -1121,7 +1315,11 @@ export function entitySourceRoutes() {
 
     const cursorId = query.cursor ? decodeCursor(query.cursor).id : undefined;
     const result = await deps.entitySourceRepo.findByJobCursor(
-      jobId, tenantId, query.limit, cursorId, query.since,
+      jobId,
+      tenantId,
+      query.limit,
+      cursorId,
+      query.since,
     );
     const total = await deps.entitySourceRepo.countByJob(jobId, tenantId);
 
@@ -1145,9 +1343,9 @@ export function entitySourceRoutes() {
 In `apps/api/src/app.ts`, add after the extractions route registration:
 
 ```typescript
-  import { entitySourceRoutes } from './routes/entity-sources.js';
-  // ...
-  app.route('/api/v1/jobs/:jobId/entity-sources', entitySourceRoutes());
+import { entitySourceRoutes } from './routes/entity-sources.js';
+// ...
+app.route('/api/v1/jobs/:jobId/entity-sources', entitySourceRoutes());
 ```
 
 Ensure it's within the tenant-scoped middleware chain (after auth middleware).
@@ -1235,18 +1433,22 @@ In `packages/db/src/repositories/action-repository.ts`, add:
 In `apps/api/src/routes/jobs.ts`, in the GET `/:jobId` handler, after fetching the job, compute and merge additional stats:
 
 ```typescript
-    // Enrich stats with pending actions count and schema field count
-    const pendingActionsCount = await deps.actionRepo.countByJobAndStatus(jobId, tenantId, 'pending_review');
-    const latestSchema = await deps.schemaRepo.findLatest(jobId, tenantId);
-    const schemaFieldCount = (latestSchema?.definition as any)?.fields?.length ?? 0;
+// Enrich stats with pending actions count and schema field count
+const pendingActionsCount = await deps.actionRepo.countByJobAndStatus(
+  jobId,
+  tenantId,
+  'pending_review',
+);
+const latestSchema = await deps.schemaRepo.findLatest(jobId, tenantId);
+const schemaFieldCount = (latestSchema?.definition as any)?.fields?.length ?? 0;
 
-    const enrichedStats = {
-      ...(job.stats as Record<string, number> ?? {}),
-      pendingActionsCount,
-      schemaFieldCount,
-    };
+const enrichedStats = {
+  ...((job.stats as Record<string, number>) ?? {}),
+  pendingActionsCount,
+  schemaFieldCount,
+};
 
-    return c.json({ data: { ...job, stats: enrichedStats } });
+return c.json({ data: { ...job, stats: enrichedStats } });
 ```
 
 - [x] **Step 8: Run API tests and commit**
@@ -1264,6 +1466,7 @@ git commit -m "feat(api): add pageUrl to extractions, entity-sources endpoint, j
 ## Task 10: API Client Paginated Methods
 
 **Files:**
+
 - Modify: `apps/cli/src/api/client.ts`
 - Test: `apps/cli/tests/unit/api/client-pull.test.ts`
 
@@ -1289,7 +1492,10 @@ describe('getActionsStreamPaginated', () => {
 
 describe('getEntitySourcesStreamPaginated', () => {
   it('returns data with pagination envelope', async () => {
-    mockFetch({ data: [{ entityId: 'e1', extractionId: 'x1', matchConfidence: 0.9 }], pagination: { hasMore: false, total: 1 } });
+    mockFetch({
+      data: [{ entityId: 'e1', extractionId: 'x1', matchConfidence: 0.9 }],
+      pagination: { hasMore: false, total: 1 },
+    });
     const result = await client.getEntitySourcesStreamPaginated('job1');
     expect(result.data).toHaveLength(1);
   });
@@ -1397,6 +1603,7 @@ git commit -m "feat(cli): add paginated API client methods for extractions, acti
 ## Task 11: SQLite Repo Batch Methods
 
 **Files:**
+
 - Modify: `packages/db/src/project-db/repositories/extraction-repository.ts`
 - Modify: `packages/db/src/project-db/repositories/action-repository.ts`
 - Modify: `packages/db/src/project-db/repositories/entity-repository.ts` (entity source batch methods)
@@ -1408,16 +1615,56 @@ git commit -m "feat(cli): add paginated API client methods for extractions, acti
 describe('SqliteExtractionRepository.upsertBatch', () => {
   it('inserts new extractions and returns counts', async () => {
     const result = await repo.upsertBatch([
-      { id: 'e1', pageId: null, pageUrl: 'https://a.com', schemaVersion: 1, data: { a: 1 }, unmappedFields: [], metadata: {}, runId: 'run-1' },
-      { id: 'e2', pageId: null, pageUrl: 'https://b.com', schemaVersion: 1, data: { b: 2 }, unmappedFields: [], metadata: {}, runId: 'run-1' },
+      {
+        id: 'e1',
+        pageId: null,
+        pageUrl: 'https://a.com',
+        schemaVersion: 1,
+        data: { a: 1 },
+        unmappedFields: [],
+        metadata: {},
+        runId: 'run-1',
+      },
+      {
+        id: 'e2',
+        pageId: null,
+        pageUrl: 'https://b.com',
+        schemaVersion: 1,
+        data: { b: 2 },
+        unmappedFields: [],
+        metadata: {},
+        runId: 'run-1',
+      },
     ]);
     expect(result.inserted).toBe(2);
     expect(result.updated).toBe(0);
   });
 
   it('updates existing extractions on conflict', async () => {
-    await repo.upsertBatch([{ id: 'e1', pageId: null, pageUrl: 'https://a.com', schemaVersion: 1, data: { a: 1 }, unmappedFields: [], metadata: {}, runId: 'run-1' }]);
-    const result = await repo.upsertBatch([{ id: 'e1', pageId: null, pageUrl: 'https://a.com', schemaVersion: 1, data: { a: 999 }, unmappedFields: [], metadata: {}, runId: 'run-2' }]);
+    await repo.upsertBatch([
+      {
+        id: 'e1',
+        pageId: null,
+        pageUrl: 'https://a.com',
+        schemaVersion: 1,
+        data: { a: 1 },
+        unmappedFields: [],
+        metadata: {},
+        runId: 'run-1',
+      },
+    ]);
+    const result = await repo.upsertBatch([
+      {
+        id: 'e1',
+        pageId: null,
+        pageUrl: 'https://a.com',
+        schemaVersion: 1,
+        data: { a: 999 },
+        unmappedFields: [],
+        metadata: {},
+        runId: 'run-2',
+      },
+    ]);
     expect(result.inserted).toBe(0);
     expect(result.updated).toBe(1);
   });
@@ -1426,8 +1673,26 @@ describe('SqliteExtractionRepository.upsertBatch', () => {
 describe('SqliteExtractionRepository.deleteByRunIds', () => {
   it('deletes extractions matching given runIds', async () => {
     await repo.upsertBatch([
-      { id: 'e1', pageId: null, pageUrl: 'https://a.com', schemaVersion: 1, data: {}, unmappedFields: [], metadata: {}, runId: 'run-1' },
-      { id: 'e2', pageId: null, pageUrl: 'https://b.com', schemaVersion: 1, data: {}, unmappedFields: [], metadata: {}, runId: 'run-2' },
+      {
+        id: 'e1',
+        pageId: null,
+        pageUrl: 'https://a.com',
+        schemaVersion: 1,
+        data: {},
+        unmappedFields: [],
+        metadata: {},
+        runId: 'run-1',
+      },
+      {
+        id: 'e2',
+        pageId: null,
+        pageUrl: 'https://b.com',
+        schemaVersion: 1,
+        data: {},
+        unmappedFields: [],
+        metadata: {},
+        runId: 'run-2',
+      },
     ]);
     const deleted = await repo.deleteByRunIds(['run-1']);
     expect(deleted).toBe(1);
@@ -1560,6 +1825,7 @@ git commit -m "feat(db): add upsertBatch/deleteByRunIds for extractions, actions
 ## Task 12: `spatula reset --keep-remote`
 
 **Files:**
+
 - Modify: `apps/cli/src/commands/reset.ts`
 - Modify: `apps/cli/src/index.tsx` (flag registration)
 - Test: `apps/cli/tests/unit/commands/reset.test.ts`
@@ -1596,38 +1862,48 @@ Add `keepRemote?: boolean` to `ResetOptions`.
 In `runResetCommand`, after the filesystem cleanup loop, if `keepRemote`:
 
 ```typescript
-    // --keep-remote implies --keep-entities
-    if (options.keepRemote) {
-      options.keepEntities = true;
-    }
+// --keep-remote implies --keep-entities
+if (options.keepRemote) {
+  options.keepEntities = true;
+}
 
-    // ... existing cleanup loop ...
+// ... existing cleanup loop ...
 
-    // Selective DB cleanup for --keep-remote
-    // Note: uses raw better-sqlite3 handle (sqlite) for bulk deletes since Drizzle's
-    // query builder doesn't support complex WHERE with NOT LIKE + IS NULL patterns easily.
-    // createProjectDb returns { db, sqlite, close } where sqlite is the raw handle.
-    if (options.keepRemote) {
-      const dbPath = join(spatulaDir, DB_FILE);
-      if (existsSync(dbPath)) {
-        const { createProjectDb } = await import('@spatula/db/project-db');
-        const { sqlite, close } = createProjectDb(dbPath);
-        try {
-          // Delete local entities (runId null = pre-pull local, non-remote prefix = local runs)
-          sqlite.prepare(`DELETE FROM entities WHERE run_id IS NULL OR run_id NOT LIKE 'remote:%'`).run();
-          sqlite.prepare(`DELETE FROM extractions WHERE run_id IS NULL OR run_id NOT LIKE 'remote:%'`).run();
-          sqlite.prepare(`DELETE FROM actions WHERE run_id IS NULL OR run_id NOT LIKE 'remote:%'`).run();
-          // crawl_tasks and pages are always local
-          sqlite.prepare(`DELETE FROM crawl_tasks`).run();
-          sqlite.prepare(`DELETE FROM pages`).run();
-          sqlite.prepare(`DELETE FROM runs WHERE source = 'local'`).run();
-          // Preserve remote:* keys and core metadata
-          sqlite.prepare(`DELETE FROM project_meta WHERE key NOT LIKE 'remote:%' AND key NOT IN ('schema_version','project_id','project_name','created_at')`).run();
-        } finally {
-          close();
-        }
-      }
+// Selective DB cleanup for --keep-remote
+// Note: uses raw better-sqlite3 handle (sqlite) for bulk deletes since Drizzle's
+// query builder doesn't support complex WHERE with NOT LIKE + IS NULL patterns easily.
+// createProjectDb returns { db, sqlite, close } where sqlite is the raw handle.
+if (options.keepRemote) {
+  const dbPath = join(spatulaDir, DB_FILE);
+  if (existsSync(dbPath)) {
+    const { createProjectDb } = await import('@spatula/db/project-db');
+    const { sqlite, close } = createProjectDb(dbPath);
+    try {
+      // Delete local entities (runId null = pre-pull local, non-remote prefix = local runs)
+      sqlite
+        .prepare(`DELETE FROM entities WHERE run_id IS NULL OR run_id NOT LIKE 'remote:%'`)
+        .run();
+      sqlite
+        .prepare(`DELETE FROM extractions WHERE run_id IS NULL OR run_id NOT LIKE 'remote:%'`)
+        .run();
+      sqlite
+        .prepare(`DELETE FROM actions WHERE run_id IS NULL OR run_id NOT LIKE 'remote:%'`)
+        .run();
+      // crawl_tasks and pages are always local
+      sqlite.prepare(`DELETE FROM crawl_tasks`).run();
+      sqlite.prepare(`DELETE FROM pages`).run();
+      sqlite.prepare(`DELETE FROM runs WHERE source = 'local'`).run();
+      // Preserve remote:* keys and core metadata
+      sqlite
+        .prepare(
+          `DELETE FROM project_meta WHERE key NOT LIKE 'remote:%' AND key NOT IN ('schema_version','project_id','project_name','created_at')`,
+        )
+        .run();
+    } finally {
+      close();
     }
+  }
+}
 ```
 
 - [x] **Step 3: Register flag in CLI**
@@ -1659,6 +1935,7 @@ git commit -m "feat(cli): add --keep-remote flag to spatula reset"
 ## Task 13: Pull Flow Extension — Extractions, Entity Sources, Actions
 
 **Files:**
+
 - Modify: `apps/cli/src/commands/pull.ts` (PullInput, PullResult, runPullCommand, handlePullCommand)
 - Modify: `apps/cli/src/index.tsx` (flag registration)
 - Test: `apps/cli/tests/unit/commands/pull.test.ts`
@@ -1670,6 +1947,7 @@ This is the largest task. It extends the pull command with three new optional ph
 In `apps/cli/src/commands/pull.ts`:
 
 Add to `PullInput`:
+
 ```typescript
   includeExtractions?: boolean;
   includeActions?: boolean;
@@ -1709,6 +1987,7 @@ Add to `PullInput`:
 ```
 
 Add to `PullResult`:
+
 ```typescript
   extractionsInserted?: number;
   extractionsUpdated?: number;
@@ -1724,7 +2003,17 @@ describe('pull with --include-extractions', () => {
   it('fetches and stores extractions after entities', async () => {
     // Mock client to return extractions
     mockClient.getExtractionsStreamPaginated.mockResolvedValueOnce({
-      data: [{ id: 'x1', pageId: 'p1', pageUrl: 'https://a.com', schemaVersion: 1, data: { a: 1 }, unmappedFields: [], metadata: {} }],
+      data: [
+        {
+          id: 'x1',
+          pageId: 'p1',
+          pageUrl: 'https://a.com',
+          schemaVersion: 1,
+          data: { a: 1 },
+          unmappedFields: [],
+          metadata: {},
+        },
+      ],
       pagination: { hasMore: false, total: 1 },
     });
     mockClient.getEntitySourcesStreamPaginated.mockResolvedValueOnce({
@@ -1749,159 +2038,159 @@ describe('pull with --include-extractions', () => {
 After the entity pull loop (around line 290 in current code), add:
 
 ```typescript
-  // Step 6: Pull extractions (optional)
-  let extractionsInserted = 0;
-  let extractionsUpdated = 0;
-  let entitySourcesInserted = 0;
+// Step 6: Pull extractions (optional)
+let extractionsInserted = 0;
+let extractionsUpdated = 0;
+let entitySourcesInserted = 0;
 
-  if (input.includeExtractions && input.adapter.extractionRepo) {
-    // --full cleanup
-    if (input.full) {
-      const runIds = await input.adapter.runRepo.findIdsBySourcePrefix(`remote:${input.remoteName}:`);
-      // Delete entity_sources referencing these extractions first (FK order)
-      // Collect extraction IDs for these runs so we can clean entity_sources first (FK order)
-      const extractionIds: string[] = [];
-      for (const rid of runIds) {
-        const exRows = await input.adapter.extractionRepo.findIdsByRunId?.(rid) ?? [];
-        extractionIds.push(...exRows);
-      }
-      await input.adapter.entitySourceRepo.deleteByExtractionIds(extractionIds);
-      await input.adapter.extractionRepo.deleteByRunIds(runIds);
+if (input.includeExtractions && input.adapter.extractionRepo) {
+  // --full cleanup
+  if (input.full) {
+    const runIds = await input.adapter.runRepo.findIdsBySourcePrefix(`remote:${input.remoteName}:`);
+    // Delete entity_sources referencing these extractions first (FK order)
+    // Collect extraction IDs for these runs so we can clean entity_sources first (FK order)
+    const extractionIds: string[] = [];
+    for (const rid of runIds) {
+      const exRows = (await input.adapter.extractionRepo.findIdsByRunId?.(rid)) ?? [];
+      extractionIds.push(...exRows);
     }
-
-    // Resume from cursor
-    if (input.restart) {
-      await input.metaDelete(`remote:${input.remoteName}:pull_cursor_extractions`);
-    }
-    let extrCursor = await input.metaGet(`remote:${input.remoteName}:pull_cursor_extractions`);
-    let extrBatch = 0;
-    let extrTotal = 0;
-
-    while (true) {
-      const page = await client.getExtractionsStreamPaginated(jobId, {
-        cursor: extrCursor ?? undefined,
-        since: input.full ? undefined : since ?? undefined,
-        limit: 100,
-      });
-
-      if (page.data.length > 0) {
-        const batch = page.data.map((e: Record<string, unknown>) => ({
-          id: e.id as string,
-          pageId: null, // remote records don't have local pages
-          pageUrl: (e.pageUrl as string) ?? null,
-          schemaVersion: e.schemaVersion as number,
-          data: e.data as Record<string, unknown>,
-          unmappedFields: (e.unmappedFields ?? []) as Record<string, unknown>[],
-          metadata: (e.metadata ?? {}) as Record<string, unknown>,
-          runId: runId,
-        }));
-        const counts = await input.adapter.extractionRepo.upsertBatch(batch);
-        extractionsInserted += counts.inserted;
-        extractionsUpdated += counts.updated;
-        extrTotal += page.data.length;
-      }
-
-      extrBatch++;
-      input.onExtractionProgress?.(extrBatch, extrTotal);
-
-      if (!page.pagination.hasMore) break;
-      extrCursor = page.pagination.nextCursor ?? null;
-      await input.metaSet(`remote:${input.remoteName}:pull_cursor_extractions`, extrCursor!);
-    }
-
-    await input.metaDelete(`remote:${input.remoteName}:pull_cursor_extractions`);
-
-    // Step 7: Pull entity sources
-    let esCursor = await input.metaGet(`remote:${input.remoteName}:pull_cursor_entity_sources`);
-    if (input.restart) {
-      await input.metaDelete(`remote:${input.remoteName}:pull_cursor_entity_sources`);
-      esCursor = null;
-    }
-
-    while (true) {
-      const page = await client.getEntitySourcesStreamPaginated(jobId, {
-        cursor: esCursor ?? undefined,
-        since: input.full ? undefined : since ?? undefined,
-        limit: 500,
-      });
-
-      if (page.data.length > 0) {
-        const batch = page.data.map((es: Record<string, unknown>) => ({
-          entityId: es.entityId as string,
-          extractionId: es.extractionId as string,
-          matchConfidence: es.matchConfidence as number,
-        }));
-        entitySourcesInserted += await input.adapter.entitySourceRepo.upsertBatchSources(batch);
-      }
-
-      if (!page.pagination.hasMore) break;
-      esCursor = page.pagination.nextCursor ?? null;
-      await input.metaSet(`remote:${input.remoteName}:pull_cursor_entity_sources`, esCursor!);
-    }
-
-    await input.metaDelete(`remote:${input.remoteName}:pull_cursor_entity_sources`);
+    await input.adapter.entitySourceRepo.deleteByExtractionIds(extractionIds);
+    await input.adapter.extractionRepo.deleteByRunIds(runIds);
   }
+
+  // Resume from cursor
+  if (input.restart) {
+    await input.metaDelete(`remote:${input.remoteName}:pull_cursor_extractions`);
+  }
+  let extrCursor = await input.metaGet(`remote:${input.remoteName}:pull_cursor_extractions`);
+  let extrBatch = 0;
+  let extrTotal = 0;
+
+  while (true) {
+    const page = await client.getExtractionsStreamPaginated(jobId, {
+      cursor: extrCursor ?? undefined,
+      since: input.full ? undefined : (since ?? undefined),
+      limit: 100,
+    });
+
+    if (page.data.length > 0) {
+      const batch = page.data.map((e: Record<string, unknown>) => ({
+        id: e.id as string,
+        pageId: null, // remote records don't have local pages
+        pageUrl: (e.pageUrl as string) ?? null,
+        schemaVersion: e.schemaVersion as number,
+        data: e.data as Record<string, unknown>,
+        unmappedFields: (e.unmappedFields ?? []) as Record<string, unknown>[],
+        metadata: (e.metadata ?? {}) as Record<string, unknown>,
+        runId: runId,
+      }));
+      const counts = await input.adapter.extractionRepo.upsertBatch(batch);
+      extractionsInserted += counts.inserted;
+      extractionsUpdated += counts.updated;
+      extrTotal += page.data.length;
+    }
+
+    extrBatch++;
+    input.onExtractionProgress?.(extrBatch, extrTotal);
+
+    if (!page.pagination.hasMore) break;
+    extrCursor = page.pagination.nextCursor ?? null;
+    await input.metaSet(`remote:${input.remoteName}:pull_cursor_extractions`, extrCursor!);
+  }
+
+  await input.metaDelete(`remote:${input.remoteName}:pull_cursor_extractions`);
+
+  // Step 7: Pull entity sources
+  let esCursor = await input.metaGet(`remote:${input.remoteName}:pull_cursor_entity_sources`);
+  if (input.restart) {
+    await input.metaDelete(`remote:${input.remoteName}:pull_cursor_entity_sources`);
+    esCursor = null;
+  }
+
+  while (true) {
+    const page = await client.getEntitySourcesStreamPaginated(jobId, {
+      cursor: esCursor ?? undefined,
+      since: input.full ? undefined : (since ?? undefined),
+      limit: 500,
+    });
+
+    if (page.data.length > 0) {
+      const batch = page.data.map((es: Record<string, unknown>) => ({
+        entityId: es.entityId as string,
+        extractionId: es.extractionId as string,
+        matchConfidence: es.matchConfidence as number,
+      }));
+      entitySourcesInserted += await input.adapter.entitySourceRepo.upsertBatchSources(batch);
+    }
+
+    if (!page.pagination.hasMore) break;
+    esCursor = page.pagination.nextCursor ?? null;
+    await input.metaSet(`remote:${input.remoteName}:pull_cursor_entity_sources`, esCursor!);
+  }
+
+  await input.metaDelete(`remote:${input.remoteName}:pull_cursor_entity_sources`);
+}
 ```
 
 - [x] **Step 4: Implement action pull phase**
 
 ```typescript
-  // Step 8: Pull actions (optional)
-  let actionsInserted = 0;
-  let actionsUpdated = 0;
+// Step 8: Pull actions (optional)
+let actionsInserted = 0;
+let actionsUpdated = 0;
 
-  if (input.includeActions && input.adapter.actionRepo) {
-    if (input.full) {
-      const runIds = await input.adapter.runRepo.findIdsBySourcePrefix(`remote:${input.remoteName}:`);
-      await input.adapter.actionRepo.deleteByRunIds(runIds);
-    }
+if (input.includeActions && input.adapter.actionRepo) {
+  if (input.full) {
+    const runIds = await input.adapter.runRepo.findIdsBySourcePrefix(`remote:${input.remoteName}:`);
+    await input.adapter.actionRepo.deleteByRunIds(runIds);
+  }
 
-    if (input.restart) {
-      await input.metaDelete(`remote:${input.remoteName}:pull_cursor_actions`);
-    }
-    let actCursor = await input.metaGet(`remote:${input.remoteName}:pull_cursor_actions`);
-    let actBatch = 0;
-    let actTotal = 0;
-
-    while (true) {
-      const page = await client.getActionsStreamPaginated(jobId, {
-        cursor: actCursor ?? undefined,
-        since: input.full ? undefined : since ?? undefined,
-        limit: 100,
-      });
-
-      if (page.data.length > 0) {
-        const batch = page.data.map((a: Record<string, unknown>) => ({
-          id: a.id as string,
-          type: a.type as string,
-          payload: a.payload as Record<string, unknown>,
-          source: a.source as string,
-          status: a.status as string,
-          confidence: a.confidence as number,
-          reasoning: (a.reasoning as string) ?? '',
-          runId: runId,
-          createdAt: a.createdAt as string,
-          updatedAt: (a.updatedAt as string) ?? new Date().toISOString(),
-          appliedAt: (a.appliedAt as string) ?? null,
-          stateChanges: (a.stateChanges as Record<string, unknown>) ?? null,
-          reviewedBy: (a.reviewedBy as string) ?? null,
-        }));
-        const counts = await input.adapter.actionRepo.upsertBatch(batch);
-        actionsInserted += counts.inserted;
-        actionsUpdated += counts.updated;
-        actTotal += page.data.length;
-      }
-
-      actBatch++;
-      input.onActionProgress?.(actBatch, actTotal);
-
-      if (!page.pagination.hasMore) break;
-      actCursor = page.pagination.nextCursor ?? null;
-      await input.metaSet(`remote:${input.remoteName}:pull_cursor_actions`, actCursor!);
-    }
-
+  if (input.restart) {
     await input.metaDelete(`remote:${input.remoteName}:pull_cursor_actions`);
   }
+  let actCursor = await input.metaGet(`remote:${input.remoteName}:pull_cursor_actions`);
+  let actBatch = 0;
+  let actTotal = 0;
+
+  while (true) {
+    const page = await client.getActionsStreamPaginated(jobId, {
+      cursor: actCursor ?? undefined,
+      since: input.full ? undefined : (since ?? undefined),
+      limit: 100,
+    });
+
+    if (page.data.length > 0) {
+      const batch = page.data.map((a: Record<string, unknown>) => ({
+        id: a.id as string,
+        type: a.type as string,
+        payload: a.payload as Record<string, unknown>,
+        source: a.source as string,
+        status: a.status as string,
+        confidence: a.confidence as number,
+        reasoning: (a.reasoning as string) ?? '',
+        runId: runId,
+        createdAt: a.createdAt as string,
+        updatedAt: (a.updatedAt as string) ?? new Date().toISOString(),
+        appliedAt: (a.appliedAt as string) ?? null,
+        stateChanges: (a.stateChanges as Record<string, unknown>) ?? null,
+        reviewedBy: (a.reviewedBy as string) ?? null,
+      }));
+      const counts = await input.adapter.actionRepo.upsertBatch(batch);
+      actionsInserted += counts.inserted;
+      actionsUpdated += counts.updated;
+      actTotal += page.data.length;
+    }
+
+    actBatch++;
+    input.onActionProgress?.(actBatch, actTotal);
+
+    if (!page.pagination.hasMore) break;
+    actCursor = page.pagination.nextCursor ?? null;
+    await input.metaSet(`remote:${input.remoteName}:pull_cursor_actions`, actCursor!);
+  }
+
+  await input.metaDelete(`remote:${input.remoteName}:pull_cursor_actions`);
+}
 ```
 
 - [x] **Step 5: Update PullResult return value**
@@ -1909,16 +2198,22 @@ After the entity pull loop (around line 290 in current code), add:
 Add the new counts to the return object at the end of `runPullCommand`:
 
 ```typescript
-  return {
-    success: true,
-    entitiesInserted, entitiesUpdated,
-    extractionsInserted, extractionsUpdated,
-    entitySourcesInserted,
-    actionsInserted, actionsUpdated,
-    schemaFieldsAdded, newFields,
-    llmTokens, llmCostUsd,
-    resumed, jobStatus,
-  };
+return {
+  success: true,
+  entitiesInserted,
+  entitiesUpdated,
+  extractionsInserted,
+  extractionsUpdated,
+  entitySourcesInserted,
+  actionsInserted,
+  actionsUpdated,
+  schemaFieldsAdded,
+  newFields,
+  llmTokens,
+  llmCostUsd,
+  resumed,
+  jobStatus,
+};
 ```
 
 - [x] **Step 6: Update handlePullCommand for new flags and summary**
@@ -1946,15 +2241,17 @@ In `handlePullCommand`, pass the new flags and add progress callbacks:
 Update summary output:
 
 ```typescript
-      if (result.extractionsInserted || result.extractionsUpdated) {
-        console.log(`  Extractions: ${result.extractionsInserted} new, ${result.extractionsUpdated} updated`);
-      }
-      if (result.entitySourcesInserted) {
-        console.log(`  Provenance links: ${result.entitySourcesInserted}`);
-      }
-      if (result.actionsInserted || result.actionsUpdated) {
-        console.log(`  Actions: ${result.actionsInserted} new, ${result.actionsUpdated} updated`);
-      }
+if (result.extractionsInserted || result.extractionsUpdated) {
+  console.log(
+    `  Extractions: ${result.extractionsInserted} new, ${result.extractionsUpdated} updated`,
+  );
+}
+if (result.entitySourcesInserted) {
+  console.log(`  Provenance links: ${result.entitySourcesInserted}`);
+}
+if (result.actionsInserted || result.actionsUpdated) {
+  console.log(`  Actions: ${result.actionsInserted} new, ${result.actionsUpdated} updated`);
+}
 ```
 
 - [x] **Step 7: Register CLI flags**
@@ -1977,13 +2274,13 @@ In `apps/cli/src/index.tsx`, add to pull command options:
 Pass to `handlePullCommand`:
 
 ```typescript
-      await handlePullCommand({
-        remoteName: argv.remote as string,
-        full: argv.full,
-        restart: argv.restart,
-        includeExtractions: argv.includeExtractions,
-        includeActions: argv.includeActions,
-      });
+await handlePullCommand({
+  remoteName: argv.remote as string,
+  full: argv.full,
+  restart: argv.restart,
+  includeExtractions: argv.includeExtractions,
+  includeActions: argv.includeActions,
+});
 ```
 
 - [x] **Step 8: Run all pull tests**
@@ -2003,6 +2300,7 @@ git commit -m "feat(cli): add --include-extractions and --include-actions flags 
 ## Task 14: ApiDataSource Status Stubs
 
 **Files:**
+
 - Modify: `apps/cli/src/data-sources/api-data-source.ts:74-76`
 - Test: `apps/cli/tests/unit/data-sources/api-data-source.test.ts`
 
@@ -2027,7 +2325,8 @@ Remove the TODO comments.
 ```typescript
 it('reads pendingActions and schemaFields from job stats', async () => {
   mockClient.getJob.mockResolvedValue({
-    id: 'j1', status: 'running',
+    id: 'j1',
+    status: 'running',
     stats: { pendingActionsCount: 5, schemaFieldCount: 12, storageBytesUsed: 1024 },
   });
   const status = await dataSource.getStatus();
@@ -2052,6 +2351,7 @@ git commit -m "fix(cli): wire ApiDataSource status fields to job stats instead o
 ## Task 15: Roadmap Update
 
 **Files:**
+
 - Modify: `docs/superpowers/specs/wave-roadmap.md`
 
 - [x] **Step 1: Update wave roadmap**
@@ -2093,6 +2393,7 @@ Task 15 (roadmap update) ─────────── last
 ```
 
 **Parallelizable groups:**
+
 - Tasks 1-7: all independent, can run in any order or parallel
 - Tasks 8-11: sequential within Group 1
 - Tasks 12-14: can run in parallel after their dependencies

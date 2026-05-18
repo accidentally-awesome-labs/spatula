@@ -117,7 +117,13 @@ describe('diffConfigs', () => {
       schema: {
         mode: 'hybrid' as const,
         userFields: [
-          { name: 'status', type: 'enum' as const, description: 'Status', required: false, enumValues: ['active', 'inactive', 'pending'] },
+          {
+            name: 'status',
+            type: 'enum' as const,
+            description: 'Status',
+            required: false,
+            enumValues: ['active', 'inactive', 'pending'],
+          },
         ],
       },
     } as any);
@@ -125,7 +131,13 @@ describe('diffConfigs', () => {
       schema: {
         mode: 'hybrid' as const,
         userFields: [
-          { name: 'status', type: 'enum' as const, description: 'Status', required: false, enumValues: ['active', 'inactive'] },
+          {
+            name: 'status',
+            type: 'enum' as const,
+            description: 'Status',
+            required: false,
+            enumValues: ['active', 'inactive'],
+          },
         ],
       },
     } as any);
@@ -143,7 +155,13 @@ describe('diffConfigs', () => {
       schema: {
         mode: 'hybrid' as const,
         userFields: [
-          { name: 'price', type: 'currency' as const, description: 'Price', required: false, normalization: { type: 'currency' as const, targetCurrency: 'EUR' } },
+          {
+            name: 'price',
+            type: 'currency' as const,
+            description: 'Price',
+            required: false,
+            normalization: { type: 'currency' as const, targetCurrency: 'EUR' },
+          },
         ],
       },
     } as any);
@@ -151,7 +169,13 @@ describe('diffConfigs', () => {
       schema: {
         mode: 'hybrid' as const,
         userFields: [
-          { name: 'price', type: 'currency' as const, description: 'Price', required: false, normalization: { type: 'currency' as const, targetCurrency: 'USD' } },
+          {
+            name: 'price',
+            type: 'currency' as const,
+            description: 'Price',
+            required: false,
+            normalization: { type: 'currency' as const, targetCurrency: 'USD' },
+          },
         ],
       },
     } as any);
@@ -169,7 +193,13 @@ describe('diffConfigs', () => {
       schema: {
         mode: 'hybrid' as const,
         userFields: [
-          { name: 'price', type: 'currency' as const, description: 'Price', required: false, normalization: { type: 'currency' as const, targetCurrency: 'EUR' } },
+          {
+            name: 'price',
+            type: 'currency' as const,
+            description: 'Price',
+            required: false,
+            normalization: { type: 'currency' as const, targetCurrency: 'EUR' },
+          },
         ],
       },
     } as any);
@@ -177,7 +207,13 @@ describe('diffConfigs', () => {
       schema: {
         mode: 'hybrid' as const,
         userFields: [
-          { name: 'price', type: 'currency' as const, description: 'Price', required: false, normalization: { type: 'currency' as const, targetCurrency: 'USD' } },
+          {
+            name: 'price',
+            type: 'currency' as const,
+            description: 'Price',
+            required: false,
+            normalization: { type: 'currency' as const, targetCurrency: 'USD' },
+          },
         ],
       },
     } as any);
@@ -198,7 +234,12 @@ describe('diffConfigs', () => {
       schema: {
         mode: 'hybrid' as const,
         userFields: [
-          { name: 'product_name', type: 'string' as const, description: 'Product Name', required: false },
+          {
+            name: 'product_name',
+            type: 'string' as const,
+            description: 'Product Name',
+            required: false,
+          },
         ],
       },
     } as any);
@@ -232,7 +273,10 @@ describe('diffConfigs', () => {
   it('detects proxy changes', () => {
     const current = createBaseConfig({
       crawl: {
-        maxDepth: 2, maxPages: 1000, concurrency: 5, crawlerType: 'playwright' as const,
+        maxDepth: 2,
+        maxPages: 1000,
+        concurrency: 5,
+        crawlerType: 'playwright' as const,
         proxy: { url: 'socks5://localhost:1080' },
       },
     } as any);
@@ -252,7 +296,11 @@ describe('diffConfigs', () => {
 
   it('detects reconciliation strategy change', () => {
     const current = createBaseConfig({
-      reconciliation: { matchStrategy: 'fuzzy_name' as const, conflictResolution: 'most_complete' as const, fuzzyMatchThreshold: 0.85 },
+      reconciliation: {
+        matchStrategy: 'fuzzy_name' as const,
+        conflictResolution: 'most_complete' as const,
+        fuzzyMatchThreshold: 0.85,
+      },
     } as any);
     const previous = createBaseConfig();
     const diff = diffConfigs(current, previous);
@@ -268,7 +316,11 @@ describe('diffConfigs', () => {
 
   it('computes impact: force full reconciliation on strategy change', () => {
     const current = createBaseConfig({
-      reconciliation: { matchStrategy: 'fuzzy_name' as const, conflictResolution: 'most_complete' as const, fuzzyMatchThreshold: 0.85 },
+      reconciliation: {
+        matchStrategy: 'fuzzy_name' as const,
+        conflictResolution: 'most_complete' as const,
+        fuzzyMatchThreshold: 0.85,
+      },
     } as any);
     const previous = createBaseConfig();
     const diff = diffConfigs(current, previous);
@@ -304,15 +356,29 @@ function makeConfig(overrides: { fields: any[] }) {
 describe('diffConfigs nested fields', () => {
   it('detects arrayItemType changes', () => {
     const prev = makeConfig({
-      fields: [{ name: 'tags', description: 'Tags', type: 'array', arrayItemType: { name: 'item', description: 'tag', type: 'string', required: false } }],
+      fields: [
+        {
+          name: 'tags',
+          description: 'Tags',
+          type: 'array',
+          arrayItemType: { name: 'item', description: 'tag', type: 'string', required: false },
+        },
+      ],
     });
     const curr = makeConfig({
-      fields: [{ name: 'tags', description: 'Tags', type: 'array', arrayItemType: { name: 'item', description: 'tag', type: 'number', required: false } }],
+      fields: [
+        {
+          name: 'tags',
+          description: 'Tags',
+          type: 'array',
+          arrayItemType: { name: 'item', description: 'tag', type: 'number', required: false },
+        },
+      ],
     });
     const diff = diffConfigs(curr, prev);
     expect(diff.fieldsModified).toHaveLength(1);
     const tagChanges = diff.fieldsModified[0].changes;
-    const arrayChange = tagChanges.find(c => c.property === 'arrayItemType');
+    const arrayChange = tagChanges.find((c) => c.property === 'arrayItemType');
     expect(arrayChange).toBeDefined();
     expect(arrayChange!.nestedChanges).toBeDefined();
     expect(arrayChange!.nestedChanges).toContainEqual(
@@ -322,26 +388,34 @@ describe('diffConfigs nested fields', () => {
 
   it('detects objectFields added/removed/modified', () => {
     const prev = makeConfig({
-      fields: [{
-        name: 'address', description: 'Address', type: 'object',
-        objectFields: [
-          { name: 'street', description: 'Street', type: 'string', required: true },
-          { name: 'zip', description: 'Zip', type: 'string', required: false },
-        ],
-      }],
+      fields: [
+        {
+          name: 'address',
+          description: 'Address',
+          type: 'object',
+          objectFields: [
+            { name: 'street', description: 'Street', type: 'string', required: true },
+            { name: 'zip', description: 'Zip', type: 'string', required: false },
+          ],
+        },
+      ],
     });
     const curr = makeConfig({
-      fields: [{
-        name: 'address', description: 'Address', type: 'object',
-        objectFields: [
-          { name: 'street', description: 'Street', type: 'string', required: false },
-          { name: 'city', description: 'City', type: 'string', required: true },
-        ],
-      }],
+      fields: [
+        {
+          name: 'address',
+          description: 'Address',
+          type: 'object',
+          objectFields: [
+            { name: 'street', description: 'Street', type: 'string', required: false },
+            { name: 'city', description: 'City', type: 'string', required: true },
+          ],
+        },
+      ],
     });
     const diff = diffConfigs(curr, prev);
     expect(diff.fieldsModified).toHaveLength(1);
-    const objChange = diff.fieldsModified[0].changes.find(c => c.property === 'objectFields');
+    const objChange = diff.fieldsModified[0].changes.find((c) => c.property === 'objectFields');
     expect(objChange).toBeDefined();
     expect(objChange!.addedFields).toContain('city');
     expect(objChange!.removedFields).toContain('zip');
@@ -352,7 +426,14 @@ describe('diffConfigs nested fields', () => {
 
   it('ignores unchanged nested fields', () => {
     const config = makeConfig({
-      fields: [{ name: 'tags', description: 'Tags', type: 'array', arrayItemType: { name: 'item', description: 'tag', type: 'string', required: false } }],
+      fields: [
+        {
+          name: 'tags',
+          description: 'Tags',
+          type: 'array',
+          arrayItemType: { name: 'item', description: 'tag', type: 'string', required: false },
+        },
+      ],
     });
     const diff = diffConfigs(config, config);
     expect(diff.hasChanges).toBe(false);

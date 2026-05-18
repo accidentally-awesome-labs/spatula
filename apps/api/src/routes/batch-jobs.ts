@@ -19,7 +19,16 @@ export function batchJobRoutes() {
     const raw = await c.req.json();
     const parsed = batchJobSchema.safeParse(raw);
     if (!parsed.success) {
-      return c.json({ error: { code: 'VALIDATION_ERROR', message: parsed.error.issues[0]?.message ?? 'Invalid request', requestId: '' } }, 400);
+      return c.json(
+        {
+          error: {
+            code: 'VALIDATION_ERROR',
+            message: parsed.error.issues[0]?.message ?? 'Invalid request',
+            requestId: '',
+          },
+        },
+        400,
+      );
     }
     const { action, ids } = parsed.data;
     const tenantId = c.get('tenantId');
@@ -69,7 +78,10 @@ export function batchJobRoutes() {
       });
     }
 
-    logger.info({ action, total: ids.length, succeeded: succeeded.length, failed: failed.length }, 'batch job operation complete');
+    logger.info(
+      { action, total: ids.length, succeeded: succeeded.length, failed: failed.length },
+      'batch job operation complete',
+    );
     return c.json({ data: { succeeded, failed } });
   });
 

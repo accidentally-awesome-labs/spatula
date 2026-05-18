@@ -11,7 +11,7 @@ function TestComponent({ keyMap, isActive }: { keyMap: KeyMap; isActive?: boolea
 }
 
 /** Wait for React effects (useEffect in useInput) to settle. */
-const waitForEffects = () => new Promise(resolve => setTimeout(resolve, 50));
+const waitForEffects = () => new Promise((resolve) => setTimeout(resolve, 50));
 
 describe('useKeyboard', () => {
   it('calls handler when matching key is pressed', async () => {
@@ -77,9 +77,7 @@ describe('useKeyboard', () => {
   it('does not call handlers when isActive is false', async () => {
     const handler = vi.fn();
     const keyMap: KeyMap = { d: handler, upArrow: handler };
-    const { stdin } = render(
-      React.createElement(TestComponent, { keyMap, isActive: false })
-    );
+    const { stdin } = render(React.createElement(TestComponent, { keyMap, isActive: false }));
     await waitForEffects();
     stdin.write('d');
     stdin.write('\u001B[A'); // up arrow

@@ -13,7 +13,8 @@ export const paginationSchema = z.object({
     example: 'eyJpZCI6Ijk4NzYifQ',
   }),
   since: z.string().datetime().optional().openapi({
-    description: 'ISO 8601 timestamp for incremental fetch. Returns records updated after this time.',
+    description:
+      'ISO 8601 timestamp for incremental fetch. Returns records updated after this time.',
     example: '2026-03-21T14:32:00Z',
   }),
 });

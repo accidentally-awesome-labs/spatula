@@ -2,11 +2,7 @@ import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { mkdtempSync, rmSync, writeFileSync, existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
-import {
-  runInitCommand,
-  createProjectYaml,
-  updateGitignore,
-} from '../../../src/commands/init.js';
+import { runInitCommand, createProjectYaml, updateGitignore } from '../../../src/commands/init.js';
 
 // ---------------------------------------------------------------------------
 // Helpers

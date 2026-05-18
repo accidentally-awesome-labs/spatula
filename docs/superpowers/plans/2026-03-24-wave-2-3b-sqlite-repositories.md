@@ -9,6 +9,7 @@
 **Tech Stack:** TypeScript, Drizzle ORM (better-sqlite3), Vitest
 
 **Spec references:**
+
 - Phase 13 spec: section 5.7 (Repository Layer), 5.6 (Synthetic Project ID)
 - File: `docs/superpowers/specs/2026-03-21-phase-13-project-folder-model-design.md`
 
@@ -18,28 +19,28 @@
 
 ### New Files
 
-| File | Responsibility |
-|------|---------------|
-| `packages/db/src/project-db/repositories/job-repository.ts` | SQLite job repo (synthetic — composes from project_meta + runs) |
-| `packages/db/src/project-db/repositories/page-repository.ts` | SQLite page repo (create, findByContentHash, findByIds) |
-| `packages/db/src/project-db/repositories/extraction-repository.ts` | SQLite extraction repo (store, findByJob) |
-| `packages/db/src/project-db/repositories/entity-repository.ts` | SQLite entity + entity-source repos |
-| `packages/db/src/project-db/repositories/schema-repository.ts` | SQLite schema repo (findLatest, create, versions) |
-| `packages/db/src/project-db/repositories/crawl-task-repository.ts` | SQLite crawl task repo (enqueue, updateStatus, getJobStats) |
-| `packages/db/src/project-db/repositories/action-repository.ts` | SQLite action repo (create, findByJob, updateStatus) |
-| `packages/db/src/project-db/repositories/source-trust-repository.ts` | SQLite source trust repo (upsert, findByJob) |
-| `packages/db/src/project-db/repositories/run-repository.ts` | Local-only: run CRUD |
-| `packages/db/src/project-db/repositories/llm-usage-repository.ts` | Local-only: LLM cost tracking |
-| `packages/db/src/project-db/repositories/export-repository.ts` | Local-only: export file tracking |
-| `packages/db/src/project-db/repositories/project-meta-repository.ts` | Local-only: key-value store |
-| `packages/db/src/project-db/repositories/index.ts` | Barrel export |
-| `packages/db/src/project-db/adapter.ts` | ProjectAdapter factory |
-| `packages/db/tests/unit/project-db/repositories.test.ts` | Integration tests against in-memory SQLite |
+| File                                                                 | Responsibility                                                  |
+| -------------------------------------------------------------------- | --------------------------------------------------------------- |
+| `packages/db/src/project-db/repositories/job-repository.ts`          | SQLite job repo (synthetic — composes from project_meta + runs) |
+| `packages/db/src/project-db/repositories/page-repository.ts`         | SQLite page repo (create, findByContentHash, findByIds)         |
+| `packages/db/src/project-db/repositories/extraction-repository.ts`   | SQLite extraction repo (store, findByJob)                       |
+| `packages/db/src/project-db/repositories/entity-repository.ts`       | SQLite entity + entity-source repos                             |
+| `packages/db/src/project-db/repositories/schema-repository.ts`       | SQLite schema repo (findLatest, create, versions)               |
+| `packages/db/src/project-db/repositories/crawl-task-repository.ts`   | SQLite crawl task repo (enqueue, updateStatus, getJobStats)     |
+| `packages/db/src/project-db/repositories/action-repository.ts`       | SQLite action repo (create, findByJob, updateStatus)            |
+| `packages/db/src/project-db/repositories/source-trust-repository.ts` | SQLite source trust repo (upsert, findByJob)                    |
+| `packages/db/src/project-db/repositories/run-repository.ts`          | Local-only: run CRUD                                            |
+| `packages/db/src/project-db/repositories/llm-usage-repository.ts`    | Local-only: LLM cost tracking                                   |
+| `packages/db/src/project-db/repositories/export-repository.ts`       | Local-only: export file tracking                                |
+| `packages/db/src/project-db/repositories/project-meta-repository.ts` | Local-only: key-value store                                     |
+| `packages/db/src/project-db/repositories/index.ts`                   | Barrel export                                                   |
+| `packages/db/src/project-db/adapter.ts`                              | ProjectAdapter factory                                          |
+| `packages/db/tests/unit/project-db/repositories.test.ts`             | Integration tests against in-memory SQLite                      |
 
 ### Modified Files
 
-| File | Change |
-|------|--------|
+| File                       | Change                          |
+| -------------------------- | ------------------------------- |
 | `packages/db/src/index.ts` | Export ProjectAdapter and repos |
 
 ---
@@ -56,38 +57,44 @@ import { someTable } from '../../schema-sqlite/some-table.js';
 export class SqliteSomeRepository {
   constructor(
     private readonly db: ProjectDatabase,
-    private readonly projectId: string,  // pre-bound synthetic project ID
+    private readonly projectId: string, // pre-bound synthetic project ID
   ) {}
 
   // jobId/tenantId accepted but ignored — uses this.projectId
   async someMethod(_jobId: string, _tenantId?: string): Promise<Something> {
-    const row = await this.db.select().from(someTable)
-      .where(eq(someTable.jobId, this.projectId))  // uses pre-bound projectId
+    const row = await this.db
+      .select()
+      .from(someTable)
+      .where(eq(someTable.jobId, this.projectId)) // uses pre-bound projectId
       .limit(1)
-      .then(rows => rows[0] ?? null);
+      .then((rows) => rows[0] ?? null);
     return row;
   }
 
   async create(data: CreateInput): Promise<{ id: string }> {
     const id = crypto.randomUUID();
-    this.db.insert(someTable).values({
-      id,
-      jobId: this.projectId,  // auto-set from pre-bound projectId
-      ...data,
-      createdAt: new Date().toISOString(),
-    }).run();
+    this.db
+      .insert(someTable)
+      .values({
+        id,
+        jobId: this.projectId, // auto-set from pre-bound projectId
+        ...data,
+        createdAt: new Date().toISOString(),
+      })
+      .run();
     return { id };
   }
 }
 ```
 
 **Key differences from Postgres repos:**
+
 - **Pre-bound projectId:** Every repo constructor takes `(db, projectId)`. Methods ignore the `jobId`/`tenantId` parameters and use `this.projectId` instead. This matches spec section 5.7.
 - UUIDs generated via `crypto.randomUUID()` (not Postgres `gen_random_uuid()`)
 - Timestamps as `new Date().toISOString()` (not Postgres `now()`)
 - JSON columns auto-serialized by Drizzle `{ mode: 'json' }` — no manual `JSON.stringify`
 - **`returning()` pattern:** In drizzle-orm/better-sqlite3, `insert().values().returning()` returns an array synchronously. Use array destructuring: `const [row] = this.db.insert(table).values({...}).returning()`. If `.returning()` doesn't work in the installed version, fall back to a separate select after insert: `this.db.insert(table).values({id, ...}).run(); return { id };`. Verify the exact API at implementation time — Drizzle's better-sqlite3 support evolves between versions.
-- **`count(*)` — NO `::int` cast!** Postgres uses `sql<number>\`count(*)::int\`` but `::int` is invalid in SQLite. Use plain `sql<number>\`count(*)\`` and wrap result with `Number()` in TypeScript.
+- **`count(*)` — NO `::int` cast!** Postgres uses `sql<number>\`count(_)::int\``but`::int`is invalid in SQLite. Use plain`sql<number>\`count(_)\``and wrap result with`Number()` in TypeScript.
 - better-sqlite3 is synchronous — Drizzle wraps it but the API is still `async`
 - **Transactions:** Drizzle for better-sqlite3 supports `db.transaction((tx) => {...})` but the callback is synchronous (not async). Use synchronous operations inside transactions.
 
@@ -96,6 +103,7 @@ export class SqliteSomeRepository {
 ## Task 0: Job Repository (Synthetic)
 
 **Files:**
+
 - Create: `packages/db/src/project-db/repositories/job-repository.ts`
 
 - [ ] **Step 1: Create SQLite job repository**
@@ -109,15 +117,15 @@ export class SqliteJobRepository {
     private readonly projectId: string,
   ) {}
 
-  async findById(_jobId: string, _tenantId?: string): Promise<{ id: string; config: unknown; status?: string } | null> {
+  async findById(
+    _jobId: string,
+    _tenantId?: string,
+  ): Promise<{ id: string; config: unknown; status?: string } | null> {
     // Return synthetic job from project_meta + latest run
     const metaRows = this.db.select().from(projectMeta).all();
-    const meta = Object.fromEntries(metaRows.map(r => [r.key, r.value]));
+    const meta = Object.fromEntries(metaRows.map((r) => [r.key, r.value]));
 
-    const latestRun = this.db.select().from(runs)
-      .orderBy(desc(runs.startedAt))
-      .limit(1)
-      .get();
+    const latestRun = this.db.select().from(runs).orderBy(desc(runs.startedAt)).limit(1).get();
 
     // If no runs exist yet, return null (orchestrators handle null from findById)
     if (!latestRun) return null;
@@ -131,15 +139,9 @@ export class SqliteJobRepository {
 
   async updateStatus(_jobId: string, _tenantId?: string, status: string): Promise<unknown> {
     // Update the latest run's status
-    const latestRun = this.db.select().from(runs)
-      .orderBy(desc(runs.startedAt))
-      .limit(1)
-      .get();
+    const latestRun = this.db.select().from(runs).orderBy(desc(runs.startedAt)).limit(1).get();
     if (latestRun) {
-      this.db.update(runs)
-        .set({ status })
-        .where(eq(runs.id, latestRun.id))
-        .run();
+      this.db.update(runs).set({ status }).where(eq(runs.id, latestRun.id)).run();
     }
     return {};
   }
@@ -158,12 +160,14 @@ git commit -m "feat(db): add synthetic SQLite job repository for local project m
 ## Task 1: Page + Extraction Repositories
 
 **Files:**
+
 - Create: `packages/db/src/project-db/repositories/page-repository.ts`
 - Create: `packages/db/src/project-db/repositories/extraction-repository.ts`
 
 - [ ] **Step 1: Create SQLite page repository**
 
 Implements `PageRepo` from `pipeline/types.ts`. Methods:
+
 - `create(data)` — insert into pages table, generate UUID, return `{ id }`
 - `findByContentHash(hash, _tenantId?)` — select where contentHash matches
 - `findByIds(ids, _tenantId?)` — select where id IN ids
@@ -175,6 +179,7 @@ Read the Postgres `PageRepository` at `packages/db/src/repositories/page-reposit
 - [ ] **Step 2: Create SQLite extraction repository**
 
 Implements `ExtractionRepo` from `pipeline/types.ts`. Methods:
+
 - `store(data)` — insert into extractions table, generate UUID
 - `findByJob(jobId, _tenantId?, options?)` — select with optional schemaVersion filter, limit, offset
 
@@ -190,6 +195,7 @@ git commit -m "feat(db): add SQLite page and extraction repositories"
 ## Task 2: Entity + EntitySource Repositories
 
 **Files:**
+
 - Create: `packages/db/src/project-db/repositories/entity-repository.ts`
 
 - [ ] **Step 1: Create SQLite entity + entity-source repository**
@@ -197,12 +203,14 @@ git commit -m "feat(db): add SQLite page and extraction repositories"
 Implements `EntityRepo` and `EntitySourceRepo` from `pipeline/types.ts`. Both in one file since entity_sources is a junction table tightly coupled to entities.
 
 Methods for EntityRepo:
+
 - `create(data)` — insert entity, generate UUID, return `{ id }`
 - `findByJob(jobId, _tenantId?, options?)` — select with limit/offset
 - `findByJobWithProvenance(jobId, _tenantId?, options?)` — same but includes provenance field
 - `countByJob(jobId, _tenantId?)` — count entities
 
 Methods for EntitySourceRepo:
+
 - `bulkLink(links)` — insert multiple entity_source rows
 
 **Important for `categories`:** The SQLite schema uses `text('categories', { mode: 'json' })`. Drizzle auto-serializes arrays. The Postgres version uses `text[]` with different serialization.
@@ -219,27 +227,32 @@ git commit -m "feat(db): add SQLite entity and entity-source repositories"
 ## Task 3: Schema + CrawlTask Repositories
 
 **Files:**
+
 - Create: `packages/db/src/project-db/repositories/schema-repository.ts`
 - Create: `packages/db/src/project-db/repositories/crawl-task-repository.ts`
 
 - [ ] **Step 1: Create SQLite schema repository**
 
 Implements `SchemaRepo` from `pipeline/types.ts`. Methods:
+
 - `findLatest(jobId, _tenantId?)` — select order by version DESC limit 1
 - `create(data)` — insert with generated UUID, parentId optional
 
 Additional methods (not in pipeline interface but needed by CLI):
+
 - `findAllVersions(jobId)` — list all schema versions ordered by version
 
 - [ ] **Step 2: Create SQLite crawl-task repository**
 
 Implements BOTH `CrawlTaskRepo` from `pipeline/types.ts` AND `TaskStatsRepo` from `@spatula/core/crawlers/completion-checker.js`. Declare as: `class SqliteCrawlTaskRepository implements CrawlTaskRepo, TaskStatsRepo`. Methods:
+
 - `enqueue(data)` — insert task with generated UUID, default status='pending'
 - `updateStatus(taskId, _tenantId?, status)` — update status field
 - `updateClassification(taskId, _tenantId?, classification)` — update classification field
 - `getJobStats(jobId, _tenantId?)` — group by status, count per status
 
 Additional methods:
+
 - `findPending(jobId, options?)` — find pending tasks ordered by priorityScore DESC (for the local pipeline's priority queue)
 
 - [ ] **Step 3: Commit**
@@ -254,12 +267,14 @@ git commit -m "feat(db): add SQLite schema and crawl-task repositories"
 ## Task 4: Action + SourceTrust Repositories
 
 **Files:**
+
 - Create: `packages/db/src/project-db/repositories/action-repository.ts`
 - Create: `packages/db/src/project-db/repositories/source-trust-repository.ts`
 
 - [ ] **Step 1: Create SQLite action repository**
 
 Implements `ActionRepo` from `pipeline/types.ts`. Methods:
+
 - `create(data)` — insert with generated UUID
 - `findByJob(jobId, options?)` — find actions with optional status filter
 - `updateStatus(actionId, _tenantId?, status, reviewedBy?)` — update status
@@ -267,6 +282,7 @@ Implements `ActionRepo` from `pipeline/types.ts`. Methods:
 - [ ] **Step 2: Create SQLite source-trust repository**
 
 Implements `SourceTrustRepo` from `pipeline/types.ts`. Methods:
+
 - `upsert(data)` — delete existing for domain + insert new (transaction)
 - `findByJob(jobId)` — list all trust records for a job
 
@@ -298,11 +314,13 @@ Modify `packages/db/src/schema-sqlite/exports.ts` to add the missing columns:
 ```
 
 Then regenerate the SQLite migration:
+
 ```bash
 cd /Users/salar/Projects/spatula && pnpm --filter @spatula/db db:generate:sqlite
 ```
 
 Commit:
+
 ```bash
 git add packages/db/src/schema-sqlite/exports.ts packages/db/drizzle-sqlite/
 git commit -m "fix(db): add status, error, completedAt columns to SQLite exports schema"
@@ -311,6 +329,7 @@ git commit -m "fix(db): add status, error, completedAt columns to SQLite exports
 ---
 
 **Files:**
+
 - Create: `packages/db/src/project-db/repositories/run-repository.ts`
 - Create: `packages/db/src/project-db/repositories/llm-usage-repository.ts`
 - Create: `packages/db/src/project-db/repositories/export-repository.ts`
@@ -319,6 +338,7 @@ git commit -m "fix(db): add status, error, completedAt columns to SQLite exports
 - [ ] **Step 1: Create run repository**
 
 No Postgres equivalent. Methods:
+
 - `create(data)` — insert run with generated UUID
 - `findLatestByStatus(statuses)` — find most recent run with status in given list (for config diff baseline)
 - `findById(id)` — get single run
@@ -328,6 +348,7 @@ No Postgres equivalent. Methods:
 - [ ] **Step 2: Create LLM usage repository**
 
 No Postgres equivalent. Methods:
+
 - `record(data)` — insert usage record with generated UUID
 - `findByRun(runId)` — list usage for a run
 - `aggregateByRun(runId)` — sum tokens/cost grouped by purpose for a single run (llm_usage has runId, not jobId)
@@ -337,6 +358,7 @@ No Postgres equivalent. Methods:
 Implements `ExportRepo` from `pipeline/types.ts`. The local exports table has a simpler schema (no `contentRef`, has `filePath`), but must still satisfy the `updateStatus` interface method for the export orchestrator.
 
 Methods:
+
 - `create(data)` — insert with generated UUID
 - `findAll()` — list all exports
 - `findById(id)` — get single export
@@ -345,6 +367,7 @@ Methods:
 - [ ] **Step 4: Create project-meta repository**
 
 Simple key-value store. Methods:
+
 - `get(key)` — get value by key, return null if not found
 - `set(key, value)` — upsert key-value pair
 - `getAll()` — return all key-value pairs as Record
@@ -361,6 +384,7 @@ git commit -m "feat(db): add local-only SQLite repositories (run, llm-usage, exp
 ## Task 6: Repository Barrel + ProjectAdapter
 
 **Files:**
+
 - Create: `packages/db/src/project-db/repositories/index.ts`
 - Create: `packages/db/src/project-db/adapter.ts`
 - Modify: `packages/db/src/index.ts`
@@ -378,7 +402,10 @@ The `ProjectAdapter` is a factory that creates all repos from a single DB instan
 import type { ProjectDatabase } from './connection.js';
 import { SqlitePageRepository } from './repositories/page-repository.js';
 import { SqliteExtractionRepository } from './repositories/extraction-repository.js';
-import { SqliteEntityRepository, SqliteEntitySourceRepository } from './repositories/entity-repository.js';
+import {
+  SqliteEntityRepository,
+  SqliteEntitySourceRepository,
+} from './repositories/entity-repository.js';
 import { SqliteSchemaRepository } from './repositories/schema-repository.js';
 import { SqliteCrawlTaskRepository } from './repositories/crawl-task-repository.js';
 import { SqliteActionRepository } from './repositories/action-repository.js';
@@ -465,6 +492,7 @@ git commit -m "feat(db): add ProjectAdapter factory and repository barrel export
 ## Task 7: Repository Integration Tests
 
 **Files:**
+
 - Create: `packages/db/tests/unit/project-db/repositories.test.ts`
 
 - [ ] **Step 1: Write integration tests against in-memory SQLite**
@@ -553,7 +581,13 @@ describe('SQLite Repositories (in-memory)', () => {
         jobId: projectId,
         tenantId,
         version: 1,
-        definition: { version: 1, fields: [], fieldAliases: [], createdAt: new Date(), parentVersion: null } as any,
+        definition: {
+          version: 1,
+          fields: [],
+          fieldAliases: [],
+          createdAt: new Date(),
+          parentVersion: null,
+        } as any,
       });
 
       const latest = await adapter.schemaRepo.findLatest(projectId, tenantId);

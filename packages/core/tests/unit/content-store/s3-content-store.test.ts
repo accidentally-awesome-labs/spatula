@@ -135,7 +135,9 @@ describe('S3ContentStore', () => {
 
     it('retrieve throws StorageError on S3 failure', async () => {
       mockSend.mockRejectedValue(new Error('InternalError'));
-      await expect(store.retrieve('s3://test-bucket/text/key')).rejects.toThrow('Failed to retrieve from S3');
+      await expect(store.retrieve('s3://test-bucket/text/key')).rejects.toThrow(
+        'Failed to retrieve from S3',
+      );
     });
 
     it('parseRef throws on invalid ref format', async () => {

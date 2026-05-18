@@ -10,10 +10,7 @@ const SKIP_AUTH_PATHS = new Set([
   '/api/openapi.json',
 ]);
 
-const SKIP_AUTH_PREFIXES = [
-  '/api/v1/tenants',
-  '/api/v1/webhooks/stripe',
-];
+const SKIP_AUTH_PREFIXES = ['/api/v1/tenants'];
 
 export function authMiddleware(
   provider: AuthProvider,
@@ -39,7 +36,9 @@ export function authMiddleware(
           actorType: 'system',
           action: 'auth.login_failure',
           metadata: { error: (error as Error).message, path: c.req.path },
-          ipAddress: (c.req.header('x-forwarded-for') ?? c.req.header('x-real-ip'))?.split(',')[0]?.trim(),
+          ipAddress: (c.req.header('x-forwarded-for') ?? c.req.header('x-real-ip'))
+            ?.split(',')[0]
+            ?.trim(),
         });
       }
       throw error;
@@ -112,7 +111,9 @@ export function authMiddleware(
           actorId: resolvedResult.userId,
           actorType: 'user',
           action: 'auth.login_success',
-          ipAddress: (c.req.header('x-forwarded-for') ?? c.req.header('x-real-ip'))?.split(',')[0]?.trim(),
+          ipAddress: (c.req.header('x-forwarded-for') ?? c.req.header('x-real-ip'))
+            ?.split(',')[0]
+            ?.trim(),
         });
       }
 
@@ -128,7 +129,9 @@ export function authMiddleware(
         actorId: result.userId,
         actorType: result.userId === 'anonymous' ? 'system' : 'api_key',
         action: 'auth.login_success',
-        ipAddress: (c.req.header('x-forwarded-for') ?? c.req.header('x-real-ip'))?.split(',')[0]?.trim(),
+        ipAddress: (c.req.header('x-forwarded-for') ?? c.req.header('x-real-ip'))
+          ?.split(',')[0]
+          ?.trim(),
       });
     }
 

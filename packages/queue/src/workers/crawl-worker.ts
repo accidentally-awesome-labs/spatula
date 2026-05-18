@@ -9,21 +9,7 @@ export async function processCrawlJob(data: CrawlJobData, deps: WorkerDeps): Pro
   const logger = createLoggerWithContext('crawl-worker', { jobId, tenantId });
 
   try {
-    // Pre-crawl checks (billing quota → tenant quota → budget → robots → rate limit)
-
-    // 0. Check monthly pages billing quota
-    if (deps.quotaEnforcer) {
-      try {
-        await deps.quotaEnforcer.check(tenantId, 'pages', 1);
-      } catch (error) {
-        if ((error as any).code === 'QUOTA_EXCEEDED') {
-          logger.info({ taskId, url, error: (error as Error).message }, 'Monthly page quota exceeded, skipping');
-          await deps.taskRepo.updateStatus(taskId, tenantId, 'skipped');
-          return;
-        }
-        logger.warn({ err: error, tenantId }, 'Failed to check billing page quota');
-      }
-    }
+    // Pre-crawl checks (tenant quota → budget → robots → rate limit)
 
     // 1. Check tenant maxPagesPerJob quota
     if (deps.tenantRepo) {
@@ -34,7 +20,10 @@ export async function processCrawlJob(data: CrawlJobData, deps: WorkerDeps): Pro
           // Count completed tasks for this job
           const tasks = await deps.taskRepo.findByJob(jobId, { status: 'completed' });
           if (tasks.length >= maxPages) {
-            logger.info({ taskId, url, pageCount: tasks.length, maxPages }, 'Tenant page quota exceeded, skipping');
+            logger.info(
+              { taskId, url, pageCount: tasks.length, maxPages },
+              'Tenant page quota exceeded, skipping',
+            );
             await deps.taskRepo.updateStatus(taskId, tenantId, 'skipped');
             return;
           }
@@ -95,13 +84,6 @@ export async function processCrawlJob(data: CrawlJobData, deps: WorkerDeps): Pro
       return;
     }
 
-    // Record page usage for billing metering (fire-and-forget)
-    if (deps.quotaEnforcer) {
-      deps.quotaEnforcer.recordUsage(tenantId, 'pages', 1).catch((err: unknown) => {
-        logger.warn({ err, tenantId }, 'Failed to record page usage');
-      });
-    }
-
     // 2. Check if schema evolution should be triggered (queue-specific)
     if (result.extracted) {
       const evolution = await shouldTriggerSchemaEvolution(
@@ -117,7 +99,11 @@ export async function processCrawlJob(data: CrawlJobData, deps: WorkerDeps): Pro
           { jobId, tenantId, extractionIds: evolution.extractionIds },
         );
         logger.debug(
-          { jobId, schemaVersion: evolution.schemaVersion, extractionCount: evolution.extractionIds.length },
+          {
+            jobId,
+            schemaVersion: evolution.schemaVersion,
+            extractionCount: evolution.extractionIds.length,
+          },
           'schema evolution triggered',
         );
       }
@@ -166,15 +152,13 @@ export async function processCrawlJob(data: CrawlJobData, deps: WorkerDeps): Pro
 
     // 5. Check crawl completion
     if (deps.completionChecker && !result.error) {
-      const completion = await deps.completionChecker.isComplete(
-        jobId, tenantId, deps.taskRepo,
-      );
+      const completion = await deps.completionChecker.isComplete(jobId, tenantId, deps.taskRepo);
       if (completion.complete) {
-        logger.info({ jobId, ...completion.stats }, 'Crawl naturally complete, triggering reconciliation');
-        await deps.queues.reconciliation.add(
-          `reconciliation:${jobId}`,
-          { jobId, tenantId },
+        logger.info(
+          { jobId, ...completion.stats },
+          'Crawl naturally complete, triggering reconciliation',
         );
+        await deps.queues.reconciliation.add(`reconciliation:${jobId}`, { jobId, tenantId });
       }
     }
   } catch (error) {

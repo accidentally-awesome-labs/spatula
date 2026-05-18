@@ -13,13 +13,17 @@ import type {
   LlmUsageRepository,
   RedisCache,
   UserTenantRepository,
-  UsageRecordRepository,
 } from '@spatula/db';
-import type { ContentStore, ReviewQueue, QuotaEnforcer } from '@spatula/core';
-import type { JobManager, ExportJobPayload, SpatulaQueues } from '@spatula/queue';
-import type { AuthProvider, AuthResult, AuditLogger, SpatulaMetrics } from '@spatula/shared';
+import type { ContentStore, ReviewQueue } from '@spatula/core';
+import type { JobManager, SpatulaQueues } from '@spatula/queue';
+import type {
+  AuthProvider,
+  AuthResult,
+  AuditLogger,
+  SpatulaMetrics,
+  Logger,
+} from '@spatula/shared';
 import type { AuditLogRepository } from '@spatula/db';
-import type { SpatulaStripeClient } from './billing/stripe-client.js';
 import type Redis from 'ioredis';
 import type { Pool } from 'pg';
 
@@ -43,15 +47,12 @@ export interface AppDeps {
   apiKeyRepo?: ApiKeyRepository;
   authProvider?: AuthProvider;
   queues?: SpatulaQueues;
-  redis?: Redis;  // Shared ioredis client for rate limiting, WS tokens, etc.
+  redis?: Redis; // Shared ioredis client for rate limiting, WS tokens, etc.
   cache?: RedisCache;
   auditLogger?: AuditLogger;
   auditLogRepo?: AuditLogRepository;
   llmUsageRepo?: LlmUsageRepository;
   userTenantRepo?: UserTenantRepository;
-  usageRecordRepo?: UsageRecordRepository;
-  stripeClient?: SpatulaStripeClient;
-  quotaEnforcer?: QuotaEnforcer;
   metrics?: SpatulaMetrics;
 }
 
@@ -62,8 +63,7 @@ export interface AppEnv {
     validatedBody: unknown;
     validatedQuery: unknown;
     requestId: string;
-    logger: import('@spatula/shared').Logger;
+    logger: Logger;
     auth: AuthResult;
-    rateLimitTier: string;
   };
 }

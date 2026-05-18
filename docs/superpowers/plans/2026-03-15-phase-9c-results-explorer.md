@@ -17,6 +17,7 @@
 ### Task 1: Entity and EntityWithProvenance types
 
 **Files:**
+
 - Create: `packages/shared/src/types/entity.ts`
 - Modify: `packages/shared/src/index.ts`
 
@@ -51,6 +52,7 @@ export interface EntityWithProvenance extends Entity {
 - [ ] **Step 2: Re-export from shared index**
 
 Add to `packages/shared/src/index.ts`:
+
 ```typescript
 export type { Entity, EntityWithProvenance } from './types/entity.js';
 ```
@@ -72,6 +74,7 @@ git commit -m "feat(shared): add Entity and EntityWithProvenance types"
 ### Task 2: Entity query schema
 
 **Files:**
+
 - Create: `apps/api/src/schemas/entity-query.ts`
 - Create: `apps/api/tests/unit/schemas/entity-query.test.ts`
 
@@ -152,6 +155,7 @@ git commit -m "feat(api): add entityQuerySchema with search parameter"
 ### Task 3: EntityRepository — countByJob and search support
 
 **Files:**
+
 - Modify: `packages/db/src/repositories/entity-repository.ts`
 - Modify: `packages/db/tests/unit/repositories/entity-repository.test.ts`
 
@@ -192,9 +196,7 @@ it('countByJob wraps errors in StorageError', async () => {
   );
   mockDb.select = vi.fn().mockReturnValue(failChainable);
 
-  await expect(
-    repo.countByJob('job-id', 'tenant-id'),
-  ).rejects.toThrow('Failed to count entities');
+  await expect(repo.countByJob('job-id', 'tenant-id')).rejects.toThrow('Failed to count entities');
 });
 ```
 
@@ -206,12 +208,15 @@ Expected: FAIL — `countByJob` not defined.
 - [ ] **Step 3: Implement countByJob and search in findByJob**
 
 In `packages/db/src/repositories/entity-repository.ts`, add these imports at line 1:
+
 ```typescript
 import { eq, and, desc, sql, ilike } from 'drizzle-orm';
 ```
+
 (Add `sql` and `ilike` to existing imports.)
 
 Add `countByJob` method after `findByJob`:
+
 ```typescript
 async countByJob(jobId: string, tenantId: string, options?: { search?: string }): Promise<number> {
   try {
@@ -239,11 +244,13 @@ async countByJob(jobId: string, tenantId: string, options?: { search?: string })
 ```
 
 Modify existing `findByJob` to support `search` option. Change the options type on line 60:
+
 ```typescript
 async findByJob(jobId: string, tenantId: string, options?: { limit?: number; offset?: number; search?: string }) {
 ```
 
 Inside the try block, before building the query (line 62), add search condition:
+
 ```typescript
 try {
   const conditions = [eq(entities.jobId, jobId), eq(entities.tenantId, tenantId)];
@@ -278,6 +285,7 @@ git commit -m "feat(db): add countByJob and search support to EntityRepository"
 ### Task 4: Entity list route — total count, search, sourceCount
 
 **Files:**
+
 - Modify: `apps/api/src/routes/entities.ts`
 - Modify: `apps/api/tests/unit/routes/entities.test.ts`
 
@@ -286,6 +294,7 @@ git commit -m "feat(db): add countByJob and search support to EntityRepository"
 Update `apps/api/tests/unit/routes/entities.test.ts`. Replace the entire `createMockDeps()` function to add `countByJob` (the existing tests that call `findByJob` will also need `countByJob` mocked to avoid calling undefined):
 
 Replace the `entityRepo` in `createMockDeps()`:
+
 ```typescript
 entityRepo: {
   findByJob: vi.fn().mockResolvedValue([
@@ -302,6 +311,7 @@ entityRepo: {
 ```
 
 Add tests inside `describe('GET /api/v1/jobs/:jobId/entities')`:
+
 ```typescript
 it('returns total count alongside data', async () => {
   const res = await app.request('/api/v1/jobs/job-1/entities');
@@ -391,6 +401,7 @@ git commit -m "feat(api): add total count and search to entity list endpoint"
 ### Task 5: Entity list — sourceCount subquery + detail — sourceUrl join
 
 **Files:**
+
 - Modify: `packages/db/src/repositories/entity-repository.ts`
 - Modify: `apps/api/src/routes/entities.ts`
 - Modify: `packages/db/src/repositories/entity-source-repository.ts`
@@ -428,7 +439,10 @@ let query = this.db
     categories: entities.categories,
     qualityScore: entities.qualityScore,
     createdAt: entities.createdAt,
-    sourceCount: sql<number>`(SELECT count(*)::int FROM entity_sources es WHERE es.entity_id = ${entities.id})`.as('source_count'),
+    sourceCount:
+      sql<number>`(SELECT count(*)::int FROM entity_sources es WHERE es.entity_id = ${entities.id})`.as(
+        'source_count',
+      ),
   })
   .from(entities)
   .where(and(...conditions))
@@ -498,6 +512,7 @@ const sources = await deps.entitySourceRepo.findByEntityWithUrls(entityId);
 - [ ] **Step 6: Update createMockDeps in test to include new methods**
 
 In the test's `createMockDeps`, add:
+
 ```typescript
 entitySourceRepo: {
   findByEntity: vi.fn().mockResolvedValue([...]),
@@ -526,6 +541,7 @@ git commit -m "feat(api): add sourceCount subquery and sourceUrl join for entiti
 Note: This method returns `{ data: Entity[]; total: number }` using the shared `Entity` type. Import `Entity` from `@spatula/shared` at the top of `client.ts`.
 
 **Files:**
+
 - Modify: `apps/cli/src/api/client.ts`
 - Modify: `apps/cli/tests/unit/api/client.test.ts`
 
@@ -641,6 +657,7 @@ git commit -m "feat(cli): add listEntitiesPaginated API client method"
 ### Task 7: useKeyboard — isActive parameter
 
 **Files:**
+
 - Modify: `apps/cli/src/hooks/useKeyboard.ts`
 - Modify: `apps/cli/tests/unit/hooks/useKeyboard.test.ts`
 
@@ -685,21 +702,45 @@ export interface KeyMap {
  * @param isActive - When false, all key handling is disabled. Defaults to true.
  */
 export function useKeyboard(keyMap: KeyMap, isActive = true): void {
-  useInput((input, key) => {
-    // Check special keys first
-    if (key.upArrow && keyMap.upArrow) { keyMap.upArrow(); return; }
-    if (key.downArrow && keyMap.downArrow) { keyMap.downArrow(); return; }
-    if (key.leftArrow && keyMap.leftArrow) { keyMap.leftArrow(); return; }
-    if (key.rightArrow && keyMap.rightArrow) { keyMap.rightArrow(); return; }
-    if (key.return && keyMap.return) { keyMap.return(); return; }
-    if (key.escape && keyMap.escape) { keyMap.escape(); return; }
-    if (key.tab && keyMap.tab) { keyMap.tab(); return; }
+  useInput(
+    (input, key) => {
+      // Check special keys first
+      if (key.upArrow && keyMap.upArrow) {
+        keyMap.upArrow();
+        return;
+      }
+      if (key.downArrow && keyMap.downArrow) {
+        keyMap.downArrow();
+        return;
+      }
+      if (key.leftArrow && keyMap.leftArrow) {
+        keyMap.leftArrow();
+        return;
+      }
+      if (key.rightArrow && keyMap.rightArrow) {
+        keyMap.rightArrow();
+        return;
+      }
+      if (key.return && keyMap.return) {
+        keyMap.return();
+        return;
+      }
+      if (key.escape && keyMap.escape) {
+        keyMap.escape();
+        return;
+      }
+      if (key.tab && keyMap.tab) {
+        keyMap.tab();
+        return;
+      }
 
-    // Check character keys
-    if (input && keyMap[input]) {
-      keyMap[input]();
-    }
-  }, { isActive });
+      // Check character keys
+      if (input && keyMap[input]) {
+        keyMap[input]();
+      }
+    },
+    { isActive },
+  );
 }
 ```
 
@@ -725,6 +766,7 @@ git commit -m "feat(cli): add isActive parameter to useKeyboard hook"
 ### Task 8: Store extensions for explorer state
 
 **Files:**
+
 - Modify: `apps/cli/src/store/index.ts`
 - Modify: `apps/cli/tests/unit/store/index.test.ts`
 
@@ -823,11 +865,13 @@ Expected: FAIL — properties don't exist.
 In `apps/cli/src/store/index.ts`:
 
 Add imports at top:
+
 ```typescript
 import type { Entity, EntityWithProvenance } from '@spatula/shared';
 ```
 
 Add to `CliState` interface (after `reviewIndex` / `setReviewIndex` around line 84):
+
 ```typescript
 // Explorer state
 entities: Entity[];
@@ -851,6 +895,7 @@ setFilterFocused: (focused: boolean) => void;
 ```
 
 Add initial values and setters in `createCliStore` implementation (after `setReviewIndex`):
+
 ```typescript
 // Explorer state
 entities: [],
@@ -890,6 +935,7 @@ git commit -m "feat(cli): add explorer state and setters to store"
 ### Task 9: useEntityData hook
 
 **Files:**
+
 - Create: `apps/cli/src/hooks/useEntityData.ts`
 - Create: `apps/cli/tests/unit/hooks/useEntityData.test.ts`
 
@@ -944,37 +990,39 @@ const TABLE_HEADER_HEIGHT = 2;
 const FOOTER_HEIGHT = 1;
 const PADDING = 2;
 
-export function useEntityData(
-  store: CliStore,
-  apiClient: SpatulaApiClient,
-  jobId: string,
-) {
+export function useEntityData(store: CliStore, apiClient: SpatulaApiClient, jobId: string) {
   const { stdout } = useStdout();
   const pageSize = useMemo(() => {
     const rows = stdout?.rows ?? 40;
-    return Math.max(5, rows - HEADER_HEIGHT - FILTER_BAR_HEIGHT - TABLE_HEADER_HEIGHT - FOOTER_HEIGHT - PADDING);
+    return Math.max(
+      5,
+      rows - HEADER_HEIGHT - FILTER_BAR_HEIGHT - TABLE_HEADER_HEIGHT - FOOTER_HEIGHT - PADDING,
+    );
   }, [stdout?.rows]);
 
-  const fetchPage = useCallback(async (page: number) => {
-    if (!jobId) return;
+  const fetchPage = useCallback(
+    async (page: number) => {
+      if (!jobId) return;
 
-    const state = store.getState();
-    const offset = page * pageSize;
+      const state = store.getState();
+      const offset = page * pageSize;
 
-    try {
-      const result = await apiClient.listEntitiesPaginated(jobId, {
-        limit: pageSize,
-        offset,
-      });
+      try {
+        const result = await apiClient.listEntitiesPaginated(jobId, {
+          limit: pageSize,
+          offset,
+        });
 
-      state.setEntities(result.data as any);
-      state.setTotalEntityCount(result.total);
-      state.setCurrentEntityPage(page);
-      state.setSelectedEntityIndex(0);
-    } catch (error) {
-      state.setError(`Failed to fetch entities: ${(error as Error).message}`);
-    }
-  }, [store, apiClient, jobId, pageSize]);
+        state.setEntities(result.data as any);
+        state.setTotalEntityCount(result.total);
+        state.setCurrentEntityPage(page);
+        state.setSelectedEntityIndex(0);
+      } catch (error) {
+        state.setError(`Failed to fetch entities: ${(error as Error).message}`);
+      }
+    },
+    [store, apiClient, jobId, pageSize],
+  );
 
   // Fetch initial page on mount
   useEffect(() => {
@@ -987,10 +1035,13 @@ export function useEntityData(
     return Math.max(1, Math.ceil(totalEntityCount / pageSize));
   }, [totalEntityCount, pageSize]);
 
-  const goToPage = useCallback((page: number) => {
-    const clamped = Math.max(0, Math.min(page, totalPages - 1));
-    fetchPage(clamped);
-  }, [fetchPage, totalPages]);
+  const goToPage = useCallback(
+    (page: number) => {
+      const clamped = Math.max(0, Math.min(page, totalPages - 1));
+      fetchPage(clamped);
+    },
+    [fetchPage, totalPages],
+  );
 
   const nextPage = useCallback(() => {
     const current = store.getState().currentEntityPage;
@@ -1006,10 +1057,13 @@ export function useEntityData(
     }
   }, [store, fetchPage]);
 
-  const fetchEntity = useCallback(async (entityId: string): Promise<EntityWithProvenance> => {
-    const data = await apiClient.getEntity(jobId, entityId);
-    return data as unknown as EntityWithProvenance;
-  }, [apiClient, jobId]);
+  const fetchEntity = useCallback(
+    async (entityId: string): Promise<EntityWithProvenance> => {
+      const data = await apiClient.getEntity(jobId, entityId);
+      return data as unknown as EntityWithProvenance;
+    },
+    [apiClient, jobId],
+  );
 
   return {
     pageSize,
@@ -1040,6 +1094,7 @@ git commit -m "feat(cli): add useEntityData hook for paginated entity fetching"
 ### Task 10: DataTable and TableRow components
 
 **Files:**
+
 - Create: `apps/cli/src/components/explorer/TableRow.tsx`
 - Create: `apps/cli/src/components/explorer/DataTable.tsx`
 - Create: `apps/cli/tests/unit/components/explorer/data-table.test.tsx`
@@ -1294,6 +1349,7 @@ git commit -m "feat(cli): add DataTable and TableRow components for explorer"
 ### Task 11: FilterBar component
 
 **Files:**
+
 - Create: `apps/cli/src/components/explorer/FilterBar.tsx`
 - Create: `apps/cli/tests/unit/components/explorer/filter-bar.test.tsx`
 
@@ -1429,6 +1485,7 @@ git commit -m "feat(cli): add FilterBar component for explorer"
 ### Task 12: ExplorerView orchestrator + App.tsx integration
 
 **Files:**
+
 - Create: `apps/cli/src/components/explorer/ExplorerView.tsx`
 - Create: `apps/cli/src/components/explorer/index.ts`
 - Modify: `apps/cli/src/components/App.tsx`
@@ -1796,26 +1853,31 @@ Note: EntityDetail and ExportDialog will be added in Tasks 12-14.
 In `apps/cli/src/components/App.tsx`:
 
 1. Add import:
+
 ```typescript
 import { ExplorerView } from './explorer/index.js';
 ```
 
 2. Replace the explorer placeholder (around line 116) with:
+
 ```typescript
 {mode === 'explorer' && <ExplorerView store={store} apiClient={apiClient} />}
 ```
 
 3. Read `filterFocused` from store (add near line 56):
+
 ```typescript
 const filterFocused = useStore(store, (s) => s.filterFocused);
 ```
 
 4. Pass `isActive` to the `useKeyboard` call (line 100):
+
 ```typescript
 useKeyboard(modeKeys[mode] ?? {}, !filterFocused);
 ```
 
 5. Update `hintsForMode` to return empty array for explorer (ExplorerView manages its own hints):
+
 ```typescript
 if (mode === 'explorer') return [];
 ```
@@ -1842,6 +1904,7 @@ git commit -m "feat(cli): add ExplorerView orchestrator and App.tsx integration"
 ### Task 13: EntityDetail component
 
 **Files:**
+
 - Modify: `apps/cli/src/components/explorer/EntityDetail.tsx` (replace stub)
 - Create: `apps/cli/tests/unit/components/explorer/entity-detail.test.tsx`
 
@@ -2032,6 +2095,7 @@ git commit -m "feat(cli): implement EntityDetail with provenance tree display"
 ### Task 14: useExport hook
 
 **Files:**
+
 - Create: `apps/cli/src/hooks/useExport.ts`
 - Create: `apps/cli/tests/unit/hooks/useExport.test.ts`
 
@@ -2229,6 +2293,7 @@ git commit -m "feat(cli): add useExport hook for JSON/CSV entity export"
 ### Task 15: ExportDialog component
 
 **Files:**
+
 - Modify: `apps/cli/src/components/explorer/ExportDialog.tsx` (replace stub)
 - Create: `apps/cli/tests/unit/components/explorer/export-dialog.test.tsx`
 
@@ -2437,6 +2502,7 @@ export function ExportDialog({ store, apiClient, fromDetail, onClose }: ExportDi
 - [ ] **Step 4: Update explorer/index.ts**
 
 Add to `apps/cli/src/components/explorer/index.ts`:
+
 ```typescript
 export { EntityDetail } from './EntityDetail.js';
 export { ExportDialog } from './ExportDialog.js';
@@ -2459,6 +2525,7 @@ git commit -m "feat(cli): implement ExportDialog with JSON/CSV format selection"
 ### Task 16: useEntityFilter hook (local filtering)
 
 **Files:**
+
 - Create: `apps/cli/src/hooks/useEntityFilter.ts`
 - Create: `apps/cli/tests/unit/hooks/useEntityFilter.test.ts`
 
@@ -2495,9 +2562,7 @@ describe('filterEntitiesLocally', () => {
 
   it('is case-insensitive', async () => {
     const { filterEntitiesLocally } = await import('../../../src/hooks/useEntityFilter.js');
-    const entities = [
-      { id: 'e1', mergedData: { name: 'SONY Headphones' } },
-    ];
+    const entities = [{ id: 'e1', mergedData: { name: 'SONY Headphones' } }];
     const result = filterEntitiesLocally(entities as any, 'sony');
     expect(result).toHaveLength(1);
   });
@@ -2668,6 +2733,7 @@ git commit -m "feat(cli): add useEntityFilter hook with local text filtering"
 ### Task 17: Final integration and full test run
 
 **Files:**
+
 - No new files — verify everything works together
 
 - [ ] **Step 1: Run full DB package tests**

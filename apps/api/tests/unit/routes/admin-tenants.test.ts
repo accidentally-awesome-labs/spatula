@@ -8,7 +8,6 @@ const TENANT_ID = '00000000-0000-0000-0000-000000000001';
 const SAMPLE_TENANT = {
   id: TENANT_ID,
   name: 'Acme Corp',
-  plan: 'starter',
   storageBytesUsed: 1024,
   createdAt: new Date('2026-03-01T00:00:00Z'),
   config: { retention: { completedJobsDays: 30 } },
@@ -17,7 +16,6 @@ const SAMPLE_TENANT = {
 const SAMPLE_TENANT_2 = {
   id: '00000000-0000-0000-0000-000000000002',
   name: 'Beta Inc',
-  plan: 'free',
   storageBytesUsed: 512,
   createdAt: new Date('2026-03-10T00:00:00Z'),
   config: {},
@@ -29,7 +27,12 @@ function createMockDeps(overrides: Partial<AppDeps> = {}): AppDeps {
     jobRepo: {
       findById: vi.fn(),
       findByTenant: vi.fn().mockResolvedValue([
-        { id: 'job-1', name: 'My Job', status: 'running', createdAt: new Date('2026-03-20T00:00:00Z') },
+        {
+          id: 'job-1',
+          name: 'My Job',
+          status: 'running',
+          createdAt: new Date('2026-03-20T00:00:00Z'),
+        },
       ]),
       countByTenant: vi.fn(),
       create: vi.fn(),
@@ -44,8 +47,12 @@ function createMockDeps(overrides: Partial<AppDeps> = {}): AppDeps {
     actionRepo: {} as any,
     taskRepo: {} as any,
     jobManager: {
-      createJob: vi.fn(), startJob: vi.fn(), pauseJob: vi.fn(),
-      resumeJob: vi.fn(), cancelJob: vi.fn(), triggerReconciliation: vi.fn(),
+      createJob: vi.fn(),
+      startJob: vi.fn(),
+      pauseJob: vi.fn(),
+      resumeJob: vi.fn(),
+      cancelJob: vi.fn(),
+      triggerReconciliation: vi.fn(),
     } as any,
     exportRepo: {} as any,
     contentStore: {} as any,
@@ -55,18 +62,11 @@ function createMockDeps(overrides: Partial<AppDeps> = {}): AppDeps {
       findAll: vi.fn().mockResolvedValue([SAMPLE_TENANT, SAMPLE_TENANT_2]),
       countAll: vi.fn().mockResolvedValue(2),
       update: vi.fn().mockResolvedValue(SAMPLE_TENANT),
-      updatePlan: vi.fn().mockResolvedValue(undefined),
     } as any,
     userTenantRepo: {
       findByTenantId: vi.fn().mockResolvedValue([
         { userId: 'user-1', role: 'owner' },
         { userId: 'user-2', role: 'member' },
-      ]),
-    } as any,
-    usageRecordRepo: {
-      aggregateByTenant: vi.fn().mockResolvedValue([
-        { dimension: 'pages', total: 500 },
-        { dimension: 'llm_tokens', total: 10000 },
       ]),
     } as any,
     auditLogger: { log: vi.fn() } as any,
@@ -97,23 +97,21 @@ describe('GET /api/v1/admin/tenants', () => {
     expect(body.pagination).toEqual({ total: 2, limit: 50, offset: 0 });
   });
 
-  it('passes plan filter to repo', async () => {
+  it('passes pagination options to repo (plan filter removed post-carveout)', async () => {
     const app = createApp(deps);
-    await app.request('/api/v1/admin/tenants?plan=free&limit=10&offset=5', {
+    await app.request('/api/v1/admin/tenants?limit=10&offset=5', {
       headers: tenantHeader,
     });
 
-    expect(deps.tenantRepo!.findAll).toHaveBeenCalledWith({ plan: 'free', limit: 10, offset: 5 });
-    expect(deps.tenantRepo!.countAll).toHaveBeenCalledWith({ plan: 'free' });
+    expect(deps.tenantRepo!.findAll).toHaveBeenCalledWith({ limit: 10, offset: 5 });
+    expect(deps.tenantRepo!.countAll).toHaveBeenCalledWith();
   });
 
   it('clamps limit to max 100', async () => {
     const app = createApp(deps);
     await app.request('/api/v1/admin/tenants?limit=500', { headers: tenantHeader });
 
-    expect(deps.tenantRepo!.findAll).toHaveBeenCalledWith(
-      expect.objectContaining({ limit: 100 }),
-    );
+    expect(deps.tenantRepo!.findAll).toHaveBeenCalledWith(expect.objectContaining({ limit: 100 }));
   });
 
   it('returns 503 when tenantRepo is not configured', async () => {
@@ -134,7 +132,7 @@ describe('GET /api/v1/admin/tenants/:id', () => {
     deps = createMockDeps();
   });
 
-  it('returns detail with users, usage, and recent jobs', async () => {
+  it('returns detail with users and recent jobs (usage aggregation removed post-carveout)', async () => {
     const app = createApp(deps);
     const res = await app.request(`/api/v1/admin/tenants/${TENANT_ID}`, { headers: tenantHeader });
 
@@ -146,7 +144,8 @@ describe('GET /api/v1/admin/tenants/:id', () => {
       { userId: 'user-1', role: 'owner' },
       { userId: 'user-2', role: 'member' },
     ]);
-    expect(body.data.usage).toEqual({ pages: 500, llm_tokens: 10000 });
+    // usage aggregation removed in carveout — no longer in response
+    expect(body.data).not.toHaveProperty('usage');
     expect(body.data.recentJobs).toHaveLength(1);
     expect(body.data.recentJobs[0].id).toBe('job-1');
   });
@@ -177,42 +176,14 @@ describe('PATCH /api/v1/admin/tenants/:id', () => {
     deps = createMockDeps();
   });
 
-  it('updates plan and writes audit log', async () => {
-    // findById is called 4 times: rate-limit-tier, validate-tenant, existing check, return after update
-    const updatedTenant = { ...SAMPLE_TENANT, plan: 'pro' };
-    (deps.tenantRepo as any).findById = vi.fn()
-      .mockResolvedValueOnce(SAMPLE_TENANT) // rate-limit-tier middleware
-      .mockResolvedValueOnce(SAMPLE_TENANT) // validate-tenant middleware
-      .mockResolvedValueOnce(SAMPLE_TENANT) // existing check
-      .mockResolvedValueOnce(updatedTenant); // return after update
-
-    const app = createApp(deps);
-    const res = await app.request(`/api/v1/admin/tenants/${TENANT_ID}`, {
-      method: 'PATCH',
-      headers: { ...tenantHeader, 'content-type': 'application/json' },
-      body: JSON.stringify({ plan: 'pro' }),
-    });
-
-    expect(res.status).toBe(200);
-    const body = await res.json();
-    expect(body.data.plan).toBe('pro');
-    expect(deps.tenantRepo!.updatePlan).toHaveBeenCalledWith(TENANT_ID, 'pro', undefined);
-    expect(deps.auditLogger!.log).toHaveBeenCalledWith(
-      expect.objectContaining({
-        action: 'admin.tenant.plan_change',
-        metadata: { oldPlan: 'starter', newPlan: 'pro' },
-      }),
-    );
-  });
-
   it('updates config with retention and writes audit log', async () => {
     const configPayload = { retention: { completedJobsDays: 14, failedJobsDays: 10 } };
     const updatedTenant = {
       ...SAMPLE_TENANT,
       config: { retention: { completedJobsDays: 14, failedJobsDays: 10 } },
     };
-    (deps.tenantRepo as any).findById = vi.fn()
-      .mockResolvedValueOnce(SAMPLE_TENANT) // rate-limit-tier middleware
+    (deps.tenantRepo as any).findById = vi
+      .fn()
       .mockResolvedValueOnce(SAMPLE_TENANT) // validate-tenant middleware
       .mockResolvedValueOnce(SAMPLE_TENANT) // existing check
       .mockResolvedValueOnce(updatedTenant); // return after update
@@ -238,19 +209,6 @@ describe('PATCH /api/v1/admin/tenants/:id', () => {
     );
   });
 
-  it('rejects invalid plan with 400', async () => {
-    const app = createApp(deps);
-    const res = await app.request(`/api/v1/admin/tenants/${TENANT_ID}`, {
-      method: 'PATCH',
-      headers: { ...tenantHeader, 'content-type': 'application/json' },
-      body: JSON.stringify({ plan: 'mega-plan' }),
-    });
-
-    expect(res.status).toBe(400);
-    const body = await res.json();
-    expect(body.error.message).toContain('Invalid plan');
-  });
-
   it('enforces minimum retention days with 400', async () => {
     const app = createApp(deps);
     const res = await app.request(`/api/v1/admin/tenants/${TENANT_ID}`, {
@@ -271,7 +229,7 @@ describe('PATCH /api/v1/admin/tenants/:id', () => {
     const res = await app.request(`/api/v1/admin/tenants/${TENANT_ID}`, {
       method: 'PATCH',
       headers: { ...tenantHeader, 'content-type': 'application/json' },
-      body: JSON.stringify({ plan: 'pro' }),
+      body: JSON.stringify({ config: { retention: { completedJobsDays: 30 } } }),
     });
 
     expect(res.status).toBe(404);
@@ -285,7 +243,7 @@ describe('PATCH /api/v1/admin/tenants/:id', () => {
     const res = await app.request(`/api/v1/admin/tenants/${TENANT_ID}`, {
       method: 'PATCH',
       headers: { ...tenantHeader, 'content-type': 'application/json' },
-      body: JSON.stringify({ plan: 'pro' }),
+      body: JSON.stringify({ config: {} }),
     });
 
     expect(res.status).toBe(503);

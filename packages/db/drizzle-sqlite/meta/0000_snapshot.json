@@ -96,26 +96,17 @@
       "indexes": {
         "sl_actions_job_type_idx": {
           "name": "sl_actions_job_type_idx",
-          "columns": [
-            "job_id",
-            "type"
-          ],
+          "columns": ["job_id", "type"],
           "isUnique": false
         },
         "sl_actions_job_status_idx": {
           "name": "sl_actions_job_status_idx",
-          "columns": [
-            "job_id",
-            "status"
-          ],
+          "columns": ["job_id", "status"],
           "isUnique": false
         },
         "sl_actions_job_created_idx": {
           "name": "sl_actions_job_created_idx",
-          "columns": [
-            "job_id",
-            "created_at"
-          ],
+          "columns": ["job_id", "created_at"],
           "isUnique": false
         }
       },
@@ -264,25 +255,17 @@
       "indexes": {
         "sl_crawl_tasks_job_status_idx": {
           "name": "sl_crawl_tasks_job_status_idx",
-          "columns": [
-            "job_id",
-            "status"
-          ],
+          "columns": ["job_id", "status"],
           "isUnique": false
         },
         "sl_crawl_tasks_job_depth_idx": {
           "name": "sl_crawl_tasks_job_depth_idx",
-          "columns": [
-            "job_id",
-            "depth"
-          ],
+          "columns": ["job_id", "depth"],
           "isUnique": false
         },
         "sl_crawl_tasks_url_idx": {
           "name": "sl_crawl_tasks_url_idx",
-          "columns": [
-            "url"
-          ],
+          "columns": ["url"],
           "isUnique": false
         }
       },
@@ -377,10 +360,7 @@
       "indexes": {
         "sl_entities_job_quality_idx": {
           "name": "sl_entities_job_quality_idx",
-          "columns": [
-            "job_id",
-            "quality_score"
-          ],
+          "columns": ["job_id", "quality_score"],
           "isUnique": false
         }
       },
@@ -418,10 +398,7 @@
       "foreignKeys": {},
       "compositePrimaryKeys": {
         "entity_sources_entity_id_extraction_id_pk": {
-          "columns": [
-            "entity_id",
-            "extraction_id"
-          ],
+          "columns": ["entity_id", "extraction_id"],
           "name": "entity_sources_entity_id_extraction_id_pk"
         }
       },
@@ -559,17 +536,12 @@
       "indexes": {
         "sl_extractions_job_schema_idx": {
           "name": "sl_extractions_job_schema_idx",
-          "columns": [
-            "job_id",
-            "schema_version"
-          ],
+          "columns": ["job_id", "schema_version"],
           "isUnique": false
         },
         "sl_extractions_page_idx": {
           "name": "sl_extractions_page_idx",
-          "columns": [
-            "page_id"
-          ],
+          "columns": ["page_id"],
           "isUnique": false
         }
       },
@@ -648,16 +620,12 @@
       "indexes": {
         "sl_llm_usage_run_idx": {
           "name": "sl_llm_usage_run_idx",
-          "columns": [
-            "run_id"
-          ],
+          "columns": ["run_id"],
           "isUnique": false
         },
         "sl_llm_usage_created_idx": {
           "name": "sl_llm_usage_created_idx",
-          "columns": [
-            "created_at"
-          ],
+          "columns": ["created_at"],
           "isUnique": false
         }
       },
@@ -773,23 +741,17 @@
       "indexes": {
         "sl_pages_task_idx": {
           "name": "sl_pages_task_idx",
-          "columns": [
-            "task_id"
-          ],
+          "columns": ["task_id"],
           "isUnique": false
         },
         "sl_pages_content_hash_idx": {
           "name": "sl_pages_content_hash_idx",
-          "columns": [
-            "content_hash"
-          ],
+          "columns": ["content_hash"],
           "isUnique": false
         },
         "sl_pages_job_idx": {
           "name": "sl_pages_job_idx",
-          "columns": [
-            "job_id"
-          ],
+          "columns": ["job_id"],
           "isUnique": false
         }
       },
@@ -976,10 +938,7 @@
       "indexes": {
         "sl_schemas_job_version_idx": {
           "name": "sl_schemas_job_version_idx",
-          "columns": [
-            "job_id",
-            "version"
-          ],
+          "columns": ["job_id", "version"],
           "isUnique": false
         }
       },
@@ -1037,10 +996,7 @@
       "indexes": {
         "sl_source_trust_job_domain_idx": {
           "name": "sl_source_trust_job_domain_idx",
-          "columns": [
-            "job_id",
-            "domain"
-          ],
+          "columns": ["job_id", "domain"],
           "isUnique": false
         }
       },

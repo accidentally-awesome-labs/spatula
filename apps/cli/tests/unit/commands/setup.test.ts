@@ -3,7 +3,12 @@ import { buildGlobalConfig } from '../../../src/commands/setup.js';
 
 describe('buildGlobalConfig', () => {
   it('builds config from openrouter answers', () => {
-    const config = buildGlobalConfig({ provider: 'openrouter', openrouterApiKey: 'sk-test', model: 'anthropic/claude-sonnet-4-20250514', crawler: 'playwright' });
+    const config = buildGlobalConfig({
+      provider: 'openrouter',
+      openrouterApiKey: 'sk-test',
+      model: 'anthropic/claude-sonnet-4-20250514',
+      crawler: 'playwright',
+    });
     expect(config.version).toBe(1);
     expect(config.openrouterApiKey).toBe('sk-test');
     expect(config.llm?.provider).toBe('openrouter');
@@ -12,7 +17,12 @@ describe('buildGlobalConfig', () => {
   });
 
   it('builds config for ollama provider', () => {
-    const config = buildGlobalConfig({ provider: 'ollama', ollamaBaseUrl: 'http://localhost:11434', model: 'llama3.1', crawler: 'playwright' });
+    const config = buildGlobalConfig({
+      provider: 'ollama',
+      ollamaBaseUrl: 'http://localhost:11434',
+      model: 'llama3.1',
+      crawler: 'playwright',
+    });
     expect(config.openrouterApiKey).toBeUndefined();
     expect(config.llm?.provider).toBe('ollama');
   });

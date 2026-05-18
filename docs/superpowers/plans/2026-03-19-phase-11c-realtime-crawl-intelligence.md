@@ -48,6 +48,7 @@ Modified:
 ## Task 1: Event Types & Redis Publisher
 
 **Files:**
+
 - Create: `packages/queue/src/events.ts`
 - Create: `packages/queue/tests/unit/events.test.ts`
 - Modify: `packages/queue/src/index.ts`
@@ -86,10 +87,7 @@ describe('RedisEventPublisher', () => {
       data: { pagesFound: 10, pagesCrawled: 5, pagesExtracted: 3 },
     });
 
-    expect(mockRedis.publish).toHaveBeenCalledWith(
-      'spatula:events:job-123',
-      expect.any(String),
-    );
+    expect(mockRedis.publish).toHaveBeenCalledWith('spatula:events:job-123', expect.any(String));
   });
 
   it('serializes event as JSON with timestamp', async () => {
@@ -242,6 +240,7 @@ git commit -m "feat(queue): add job event types and Redis publisher for real-tim
 ## Task 2: Worker Event Integration
 
 **Files:**
+
 - Modify: `packages/queue/src/worker-deps.ts`
 - Modify: `packages/queue/src/workers/crawl-worker.ts`
 - Modify: `packages/queue/src/workers/schema-worker.ts`
@@ -274,25 +273,25 @@ In `packages/queue/src/workers/crawl-worker.ts`, add two event publish calls.
 After `await deps.taskRepo.updateClassification(taskId, tenantId, classification.classification);` (line 69), add:
 
 ```typescript
-    // Publish task_completed event
-    await deps.eventPublisher?.publish(jobId, {
-      type: 'task_completed',
-      jobId,
-      tenantId,
-      data: { taskId, url, classification: classification.classification },
-    });
+// Publish task_completed event
+await deps.eventPublisher?.publish(jobId, {
+  type: 'task_completed',
+  jobId,
+  tenantId,
+  data: { taskId, url, classification: classification.classification },
+});
 ```
 
 After the `logger.debug({ taskId, linksEnqueued: enqueued }, 'links enqueued');` line (line 140), add:
 
 ```typescript
-      // Publish crawl progress
-      await deps.eventPublisher?.publish(jobId, {
-        type: 'crawl_progress',
-        jobId,
-        tenantId,
-        data: { pagesFound: enqueued, taskId, url },
-      });
+// Publish crawl progress
+await deps.eventPublisher?.publish(jobId, {
+  type: 'crawl_progress',
+  jobId,
+  tenantId,
+  data: { pagesFound: enqueued, taskId, url },
+});
 ```
 
 - [ ] **Step 3: Add event publishing to schema-worker**
@@ -300,17 +299,21 @@ After the `logger.debug({ taskId, linksEnqueued: enqueued }, 'links enqueued');`
 In `packages/queue/src/workers/schema-worker.ts`, after the `logger.info(...)` that logs `'schema evolved'` (line 130-133), add:
 
 ```typescript
-    // Publish schema_evolved event
-    await deps.eventPublisher?.publish(jobId, {
-      type: 'schema_evolved',
-      jobId,
-      tenantId,
-      data: {
-        version: evolvedSchema.version,
-        fieldsAdded: actions.filter((a) => a.type === 'add_field').map((a) => (a as any).payload?.name ?? ''),
-        fieldsMerged: actions.filter((a) => a.type === 'merge_fields').map((a) => (a as any).payload?.canonicalName ?? ''),
-      },
-    });
+// Publish schema_evolved event
+await deps.eventPublisher?.publish(jobId, {
+  type: 'schema_evolved',
+  jobId,
+  tenantId,
+  data: {
+    version: evolvedSchema.version,
+    fieldsAdded: actions
+      .filter((a) => a.type === 'add_field')
+      .map((a) => (a as any).payload?.name ?? ''),
+    fieldsMerged: actions
+      .filter((a) => a.type === 'merge_fields')
+      .map((a) => (a as any).payload?.canonicalName ?? ''),
+  },
+});
 ```
 
 - [ ] **Step 4: Add event publishing to reconciliation-worker**
@@ -318,28 +321,30 @@ In `packages/queue/src/workers/schema-worker.ts`, after the `logger.info(...)` t
 In `packages/queue/src/workers/reconciliation-worker.ts`, inside the entity creation loop, after `await deps.entitySourceRepo.bulkLink(links);` (line 125), add:
 
 ```typescript
-      // Publish entity_created event
-      await deps.eventPublisher?.publish(jobId, {
-        type: 'entity_created',
-        jobId,
-        tenantId,
-        data: {
-          entityId: dbEntity.id,
-          name: String(entity.mergedData.name ?? entity.mergedData.title ?? `Entity ${dbEntity.id.slice(0, 8)}`),
-        },
-      });
+// Publish entity_created event
+await deps.eventPublisher?.publish(jobId, {
+  type: 'entity_created',
+  jobId,
+  tenantId,
+  data: {
+    entityId: dbEntity.id,
+    name: String(
+      entity.mergedData.name ?? entity.mergedData.title ?? `Entity ${dbEntity.id.slice(0, 8)}`,
+    ),
+  },
+});
 ```
 
 After `await deps.jobRepo.updateStatus(jobId, tenantId, 'completed');` (line 151), add:
 
 ```typescript
-    // Publish job_status_changed event
-    await deps.eventPublisher?.publish(jobId, {
-      type: 'job_status_changed',
-      jobId,
-      tenantId,
-      data: { from: 'reconciling', to: 'completed' },
-    });
+// Publish job_status_changed event
+await deps.eventPublisher?.publish(jobId, {
+  type: 'job_status_changed',
+  jobId,
+  tenantId,
+  data: { from: 'reconciling', to: 'completed' },
+});
 ```
 
 - [ ] **Step 5: Verify existing tests still pass**
@@ -359,6 +364,7 @@ git commit -m "feat(queue): publish job events from workers via optional EventPu
 ## Task 3: WebSocket Server
 
 **Files:**
+
 - Create: `apps/api/src/ws/types.ts`
 - Create: `apps/api/src/ws/job-progress.ts`
 - Create: `apps/api/tests/unit/ws/job-progress.test.ts`
@@ -448,9 +454,7 @@ describe('JobProgressManager', () => {
     const ws = createMockWS();
     await manager.addClient('job-1', 'tenant-1', ws as any);
 
-    expect(ws.send).toHaveBeenCalledWith(
-      expect.stringContaining('"type":"connected"'),
-    );
+    expect(ws.send).toHaveBeenCalledWith(expect.stringContaining('"type":"connected"'));
   });
 
   it('forwards matching Redis events to WebSocket client', async () => {
@@ -595,11 +599,7 @@ export class JobProgressManager {
     });
   }
 
-  async addClient(
-    jobId: string,
-    tenantId: string,
-    ws: ClientEntry['ws'],
-  ): Promise<void> {
+  async addClient(jobId: string, tenantId: string, ws: ClientEntry['ws']): Promise<void> {
     const entry: ClientEntry = { ws, tenantId };
 
     if (!this.clients.has(jobId)) {
@@ -619,10 +619,7 @@ export class JobProgressManager {
     this.safeSend(ws, msg);
   }
 
-  async removeClient(
-    jobId: string,
-    ws: ClientEntry['ws'],
-  ): Promise<void> {
+  async removeClient(jobId: string, ws: ClientEntry['ws']): Promise<void> {
     const clients = this.clients.get(jobId);
     if (!clients) return;
 
@@ -730,8 +727,7 @@ import type { AppDeps } from './types.js';
 
 const logger = createLogger('api:server');
 
-const UUID_REGEX =
-  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 export function startServer(deps: AppDeps, port = 3000) {
   const app = createApp(deps);
@@ -809,6 +805,7 @@ git commit -m "feat(api): add WebSocket server for real-time job progress via Re
 ## Task 4: CLI WebSocket Hook
 
 **Files:**
+
 - Create: `apps/cli/src/hooks/useWebSocket.ts`
 - Create: `apps/cli/tests/unit/hooks/useWebSocket.test.ts`
 - Modify: `apps/cli/src/components/dashboard/DashboardView.tsx`
@@ -1144,24 +1141,24 @@ import { EntityPreview } from './EntityPreview.js';
 Replace the existing `useJobPolling` call and add WebSocket with fallback. Change the body of the function after the `useStore` calls:
 
 ```typescript
-  // Try WebSocket for real-time updates; use slower polling as supplement
-  const { connected: wsConnected } = useWebSocket(
-    store,
-    apiClient.baseUrl,
-    apiClient.tenantId,
-    activeJobId ?? '',
-  );
+// Try WebSocket for real-time updates; use slower polling as supplement
+const { connected: wsConnected } = useWebSocket(
+  store,
+  apiClient.baseUrl,
+  apiClient.tenantId,
+  activeJobId ?? '',
+);
 
-  // When WebSocket is connected, use slower 15s polling to keep full job data fresh
-  // (WebSocket provides incremental updates; polling refreshes full state including
-  // progress counters that individual WS events don't aggregate).
-  // When WebSocket is disconnected, poll at normal 3s rate.
-  const { lastError } = useJobPolling(
-    store,
-    apiClient,
-    activeJobId ?? '',
-    wsConnected ? 15000 : 3000,
-  );
+// When WebSocket is connected, use slower 15s polling to keep full job data fresh
+// (WebSocket provides incremental updates; polling refreshes full state including
+// progress counters that individual WS events don't aggregate).
+// When WebSocket is disconnected, poll at normal 3s rate.
+const { lastError } = useJobPolling(
+  store,
+  apiClient,
+  activeJobId ?? '',
+  wsConnected ? 15000 : 3000,
+);
 ```
 
 No change needed to `useJobPolling.ts` — slowing the interval from 3s to 15s works with the existing implementation.
@@ -1192,6 +1189,7 @@ git commit -m "feat(cli): add WebSocket hook for real-time dashboard updates wit
 ## Task 5: Link Evaluator
 
 **Files:**
+
 - Create: `packages/core/src/link-evaluation/evaluator.ts`
 - Create: `packages/core/src/link-evaluation/index.ts`
 - Create: `packages/core/tests/unit/link-evaluation/evaluator.test.ts`
@@ -1200,6 +1198,7 @@ git commit -m "feat(cli): add WebSocket hook for real-time dashboard updates wit
 The `LinkEvaluator` uses the fast LLM tier (Haiku/Flash) to score discovered links by relevance before the crawl worker enqueues them. It batches up to 20 links per LLM call to reduce API costs, returning scored links with `relevanceScore`, `expectedContent` classification, priority level, and reasoning.
 
 **Design notes:**
+
 - `LLMTask` type already includes `'linkEvaluation'` (`packages/core/src/llm/types.ts:3`)
 - The `resolveModel()` function (`packages/core/src/llm/model-router.ts`) routes it to the appropriate model tier
 - `ExtractedLink` is already defined in `packages/core/src/crawlers/link-extractor.ts:23-27`
@@ -1330,9 +1329,7 @@ describe('LLMLinkEvaluator', () => {
   });
 
   it('falls back to low-confidence scores on LLM failure', async () => {
-    const links: ExtractedLink[] = [
-      { url: 'https://example.com/page', text: 'Page' },
-    ];
+    const links: ExtractedLink[] = [{ url: 'https://example.com/page', text: 'Page' }];
 
     const llm = createMockLLM('invalid json');
     const evaluator = new LLMLinkEvaluator(llm, 'test-model');
@@ -1345,17 +1342,19 @@ describe('LLMLinkEvaluator', () => {
   });
 
   it('includes schema field names and job description in prompt', async () => {
-    const links: ExtractedLink[] = [
-      { url: 'https://example.com/page', text: 'Test' },
-    ];
+    const links: ExtractedLink[] = [{ url: 'https://example.com/page', text: 'Test' }];
 
-    const llm = createMockLLM(JSON.stringify([{
-      url: 'https://example.com/page',
-      relevanceScore: 0.5,
-      expectedContent: 'unknown',
-      priority: 'medium',
-      reasoning: 'test',
-    }]));
+    const llm = createMockLLM(
+      JSON.stringify([
+        {
+          url: 'https://example.com/page',
+          relevanceScore: 0.5,
+          expectedContent: 'unknown',
+          priority: 'medium',
+          reasoning: 'test',
+        },
+      ]),
+    );
 
     const evaluator = new LLMLinkEvaluator(llm, 'test-model');
     await evaluator.evaluate(links, MOCK_CONTEXT, MOCK_SCHEMA);
@@ -1480,7 +1479,11 @@ Return ONLY the JSON array, no other text.`;
       const response = await this.llm.complete({
         model: this.model,
         messages: [
-          { role: 'system', content: 'You are a web crawl link evaluator. You evaluate links for relevance to data extraction jobs. Respond only with JSON.' },
+          {
+            role: 'system',
+            content:
+              'You are a web crawl link evaluator. You evaluate links for relevance to data extraction jobs. Respond only with JSON.',
+          },
           { role: 'user', content: prompt },
         ],
         temperature: 0.1,
@@ -1489,7 +1492,10 @@ Return ONLY the JSON array, no other text.`;
 
       return this.parseResponse(response.content, links);
     } catch (err) {
-      logger.warn({ err, linkCount: links.length }, 'LLM link evaluation failed, using fallback scores');
+      logger.warn(
+        { err, linkCount: links.length },
+        'LLM link evaluation failed, using fallback scores',
+      );
       return this.fallbackScores(links);
     }
   }
@@ -1516,7 +1522,13 @@ Return ONLY the JSON array, no other text.`;
             reasoning: String(evaluated.reasoning || ''),
           };
         }
-        return { ...link, relevanceScore: 0.5, expectedContent: 'unknown' as const, priority: 'medium' as const, reasoning: 'Not evaluated by LLM' };
+        return {
+          ...link,
+          relevanceScore: 0.5,
+          expectedContent: 'unknown' as const,
+          priority: 'medium' as const,
+          reasoning: 'Not evaluated by LLM',
+        };
       });
     } catch {
       logger.warn('Failed to parse LLM link evaluation response, using fallback');
@@ -1541,7 +1553,13 @@ function clamp(value: number, min: number, max: number): number {
   return Math.max(min, Math.min(max, value));
 }
 
-const VALID_CONTENT_TYPES = new Set(['single_entry', 'listing', 'pagination', 'category', 'unknown']);
+const VALID_CONTENT_TYPES = new Set([
+  'single_entry',
+  'listing',
+  'pagination',
+  'category',
+  'unknown',
+]);
 function validateExpectedContent(value: unknown): ExpectedContentType {
   return VALID_CONTENT_TYPES.has(value as string) ? (value as ExpectedContentType) : 'unknown';
 }
@@ -1593,12 +1611,14 @@ git commit -m "feat(core): add LLM-powered link evaluator for intelligent crawl 
 ## Task 6: Crawl Worker Link Evaluation Integration
 
 **Files:**
+
 - Modify: `packages/queue/src/worker-deps.ts`
 - Modify: `packages/queue/src/workers/crawl-worker.ts`
 
 The crawl worker's link-handling section currently enqueues all discovered links at equal priority. This task integrates the `LinkEvaluator` so links are scored and filtered (relevanceScore > 0.3) before enqueuing, with LLM-assigned priority mapped to BullMQ job priority.
 
 **Design notes:**
+
 - `linkEvaluator` is optional in WorkerDeps — when absent, all links enqueue as before (backwards compatible)
 - Priority mapping: `high` → BullMQ priority 1, `medium` → 5, `low` → 10 (lower number = higher priority in BullMQ)
 - Links below 0.3 relevance threshold are skipped entirely
@@ -1632,75 +1652,76 @@ import type { JobConfig, LinkEvaluationContext } from '@spatula/core';
 Replace the link-handling section (lines 117–141 — from `const maxDepth` to the closing brace after `logger.debug` for links enqueued) with:
 
 ```typescript
-    const maxDepth = job.config.crawl.maxDepth;
-    if (depth < maxDepth && crawlResult.links.length > 0) {
-      // Evaluate links if evaluator is available
-      let linksToEnqueue: Array<{ url: string; text?: string; rel?: string; [key: string]: unknown }> = crawlResult.links;
-      if (deps.linkEvaluator) {
-        const schema = await deps.schemaRepo.findLatest(jobId, tenantId);
-        if (schema) {
-          const config = job.config as JobConfig;
-          const context: LinkEvaluationContext = {
-            description: config.description,
-            seedDomains: config.seedUrls.map((u: string) => new URL(u).hostname),
-            currentDepth: depth,
-            maxDepth,
-          };
-          const evaluated = await deps.linkEvaluator.evaluate(
-            crawlResult.links,
-            context,
-            schema.definition,
-          );
-          // Filter links below relevance threshold
-          linksToEnqueue = evaluated.filter((l) => l.relevanceScore > 0.3);
-          logger.debug(
-            { taskId, total: crawlResult.links.length, accepted: linksToEnqueue.length },
-            'links evaluated',
-          );
-        }
-      }
+const maxDepth = job.config.crawl.maxDepth;
+if (depth < maxDepth && crawlResult.links.length > 0) {
+  // Evaluate links if evaluator is available
+  let linksToEnqueue: Array<{ url: string; text?: string; rel?: string; [key: string]: unknown }> =
+    crawlResult.links;
+  if (deps.linkEvaluator) {
+    const schema = await deps.schemaRepo.findLatest(jobId, tenantId);
+    if (schema) {
+      const config = job.config as JobConfig;
+      const context: LinkEvaluationContext = {
+        description: config.description,
+        seedDomains: config.seedUrls.map((u: string) => new URL(u).hostname),
+        currentDepth: depth,
+        maxDepth,
+      };
+      const evaluated = await deps.linkEvaluator.evaluate(
+        crawlResult.links,
+        context,
+        schema.definition,
+      );
+      // Filter links below relevance threshold
+      linksToEnqueue = evaluated.filter((l) => l.relevanceScore > 0.3);
+      logger.debug(
+        { taskId, total: crawlResult.links.length, accepted: linksToEnqueue.length },
+        'links evaluated',
+      );
+    }
+  }
 
-      let enqueued = 0;
-      for (const link of linksToEnqueue) {
-        if (!link.url || !isValidCrawlUrl(link.url)) continue;
+  let enqueued = 0;
+  for (const link of linksToEnqueue) {
+    if (!link.url || !isValidCrawlUrl(link.url)) continue;
 
-        const childTask = await deps.taskRepo.enqueue({
-          jobId,
-          tenantId,
-          url: link.url,
-          depth: depth + 1,
-          parentTaskId: taskId,
-        });
+    const childTask = await deps.taskRepo.enqueue({
+      jobId,
+      tenantId,
+      url: link.url,
+      depth: depth + 1,
+      parentTaskId: taskId,
+    });
 
-        // Map LLM priority to BullMQ priority (lower = higher priority)
-        const priority =
-          'priority' in link
-            ? { high: 1, medium: 5, low: 10 }[link.priority as string] ?? 5
-            : undefined;
+    // Map LLM priority to BullMQ priority (lower = higher priority)
+    const priority =
+      'priority' in link
+        ? ({ high: 1, medium: 5, low: 10 }[link.priority as string] ?? 5)
+        : undefined;
 
-        await deps.queues.crawl.add(
-          `crawl:${link.url}`,
-          {
-            taskId: childTask.id,
-            jobId,
-            tenantId,
-            url: link.url,
-            depth: depth + 1,
-          },
-          priority !== undefined ? { priority } : undefined,
-        );
-        enqueued++;
-      }
-      logger.debug({ taskId, linksEnqueued: enqueued }, 'links enqueued');
-
-      // Publish crawl progress
-      await deps.eventPublisher?.publish(jobId, {
-        type: 'crawl_progress',
+    await deps.queues.crawl.add(
+      `crawl:${link.url}`,
+      {
+        taskId: childTask.id,
         jobId,
         tenantId,
-        data: { pagesFound: enqueued, taskId, url },
-      });
-    }
+        url: link.url,
+        depth: depth + 1,
+      },
+      priority !== undefined ? { priority } : undefined,
+    );
+    enqueued++;
+  }
+  logger.debug({ taskId, linksEnqueued: enqueued }, 'links enqueued');
+
+  // Publish crawl progress
+  await deps.eventPublisher?.publish(jobId, {
+    type: 'crawl_progress',
+    jobId,
+    tenantId,
+    data: { pagesFound: enqueued, taskId, url },
+  });
+}
 ```
 
 - [ ] **Step 3: Verify existing crawl-worker tests pass**

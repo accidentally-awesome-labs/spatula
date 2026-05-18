@@ -74,10 +74,13 @@ export class EntitySourceRepository {
         .where(eq(entitySources.entityId, entityId));
       return rows;
     } catch (error) {
-      throw new StorageError(`Failed to find entity sources with URLs: ${(error as Error).message}`, {
-        cause: error as Error,
-        context: { entityId },
-      });
+      throw new StorageError(
+        `Failed to find entity sources with URLs: ${(error as Error).message}`,
+        {
+          cause: error as Error,
+          context: { entityId },
+        },
+      );
     }
   }
 
@@ -118,9 +121,13 @@ export class EntitySourceRepository {
           : null;
       return { entities: rows, nextCursor };
     } catch (error) {
-      throw new StorageError(`Failed to fetch entity sources by cursor: ${(error as Error).message}`, {
-        cause: error as Error, context: { jobId, tenantId },
-      });
+      throw new StorageError(
+        `Failed to fetch entity sources by cursor: ${(error as Error).message}`,
+        {
+          cause: error as Error,
+          context: { jobId, tenantId },
+        },
+      );
     }
   }
 
@@ -134,7 +141,8 @@ export class EntitySourceRepository {
       return Number(row?.count ?? 0);
     } catch (error) {
       throw new StorageError(`Failed to count entity sources: ${(error as Error).message}`, {
-        cause: error as Error, context: { jobId, tenantId },
+        cause: error as Error,
+        context: { jobId, tenantId },
       });
     }
   }

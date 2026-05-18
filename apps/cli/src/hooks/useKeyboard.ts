@@ -14,19 +14,43 @@ export interface KeyMap {
  * @param isActive - When false, all key handling is disabled. Defaults to true.
  */
 export function useKeyboard(keyMap: KeyMap, isActive = true): void {
-  useInput((input, key) => {
-    // Check special keys first
-    if (key.upArrow && keyMap.upArrow) { keyMap.upArrow(); return; }
-    if (key.downArrow && keyMap.downArrow) { keyMap.downArrow(); return; }
-    if (key.leftArrow && keyMap.leftArrow) { keyMap.leftArrow(); return; }
-    if (key.rightArrow && keyMap.rightArrow) { keyMap.rightArrow(); return; }
-    if (key.return && keyMap.return) { keyMap.return(); return; }
-    if (key.escape && keyMap.escape) { keyMap.escape(); return; }
-    if (key.tab && keyMap.tab) { keyMap.tab(); return; }
+  useInput(
+    (input, key) => {
+      // Check special keys first
+      if (key.upArrow && keyMap.upArrow) {
+        keyMap.upArrow();
+        return;
+      }
+      if (key.downArrow && keyMap.downArrow) {
+        keyMap.downArrow();
+        return;
+      }
+      if (key.leftArrow && keyMap.leftArrow) {
+        keyMap.leftArrow();
+        return;
+      }
+      if (key.rightArrow && keyMap.rightArrow) {
+        keyMap.rightArrow();
+        return;
+      }
+      if (key.return && keyMap.return) {
+        keyMap.return();
+        return;
+      }
+      if (key.escape && keyMap.escape) {
+        keyMap.escape();
+        return;
+      }
+      if (key.tab && keyMap.tab) {
+        keyMap.tab();
+        return;
+      }
 
-    // Check character keys
-    if (input && keyMap[input]) {
-      keyMap[input]();
-    }
-  }, { isActive });
+      // Check character keys
+      if (input && keyMap[input]) {
+        keyMap[input]();
+      }
+    },
+    { isActive },
+  );
 }

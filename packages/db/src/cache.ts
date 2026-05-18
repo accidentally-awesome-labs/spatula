@@ -43,7 +43,13 @@ export class RedisCache {
     try {
       let cursor = '0';
       do {
-        const [nextCursor, keys] = await this.redis.scan(cursor, 'MATCH', cachePattern, 'COUNT', 100);
+        const [nextCursor, keys] = await this.redis.scan(
+          cursor,
+          'MATCH',
+          cachePattern,
+          'COUNT',
+          100,
+        );
         cursor = nextCursor;
         if (keys.length > 0) {
           await this.redis.del(...keys);

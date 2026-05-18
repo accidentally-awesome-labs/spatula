@@ -9,6 +9,7 @@
 **Tech Stack:** TypeScript, Hono, `jose` (JWT), `ioredis`, Drizzle ORM (Postgres), Vitest
 
 **Spec references:**
+
 - Phase 12 spec: sections 3.1.3, 3.2, 3.4-3.6
 - File: `docs/superpowers/specs/2026-03-21-phase-12-production-readiness-design.md`
 - Decomposition: `docs/superpowers/specs/2026-03-25-wave-3-decomposition-design.md` section 4.2
@@ -21,47 +22,48 @@
 
 ### New Files
 
-| File | Responsibility |
-|------|---------------|
-| `apps/api/src/auth/jwt-provider.ts` | `JwtAuthProvider` -- OIDC JWT validation via `jose` |
-| `apps/api/src/middleware/rate-limit.ts` | Sliding-window rate limiter middleware (Redis Lua) |
-| `apps/api/src/routes/ws-token.ts` | `POST /api/v1/ws-token` endpoint |
-| `packages/db/src/schema/audit-log.ts` | `audit_log` Drizzle table definition |
-| `packages/db/src/repositories/audit-log-repository.ts` | Audit log insert + query |
-| `packages/shared/src/auth/audit-logger.ts` | `AuditLogger` service (fire-and-forget writes) |
-| `packages/shared/src/auth/rate-limit-tiers.ts` | Rate limit tier definitions and types |
-| `packages/shared/src/auth/quotas.ts` | `TenantQuotas` type, defaults, `QuotaExceededError` |
-| `apps/api/tests/unit/auth/jwt-provider.test.ts` | JWT provider tests |
-| `apps/api/tests/unit/middleware/rate-limit.test.ts` | Rate limit middleware tests |
-| `apps/api/tests/unit/routes/ws-token.test.ts` | WS token endpoint tests |
-| `packages/db/tests/unit/repositories/audit-log-repository.test.ts` | Audit log repo tests |
-| `packages/shared/tests/unit/auth/audit-logger.test.ts` | AuditLogger tests |
+| File                                                               | Responsibility                                      |
+| ------------------------------------------------------------------ | --------------------------------------------------- |
+| `apps/api/src/auth/jwt-provider.ts`                                | `JwtAuthProvider` -- OIDC JWT validation via `jose` |
+| `apps/api/src/middleware/rate-limit.ts`                            | Sliding-window rate limiter middleware (Redis Lua)  |
+| `apps/api/src/routes/ws-token.ts`                                  | `POST /api/v1/ws-token` endpoint                    |
+| `packages/db/src/schema/audit-log.ts`                              | `audit_log` Drizzle table definition                |
+| `packages/db/src/repositories/audit-log-repository.ts`             | Audit log insert + query                            |
+| `packages/shared/src/auth/audit-logger.ts`                         | `AuditLogger` service (fire-and-forget writes)      |
+| `packages/shared/src/auth/rate-limit-tiers.ts`                     | Rate limit tier definitions and types               |
+| `packages/shared/src/auth/quotas.ts`                               | `TenantQuotas` type, defaults, `QuotaExceededError` |
+| `apps/api/tests/unit/auth/jwt-provider.test.ts`                    | JWT provider tests                                  |
+| `apps/api/tests/unit/middleware/rate-limit.test.ts`                | Rate limit middleware tests                         |
+| `apps/api/tests/unit/routes/ws-token.test.ts`                      | WS token endpoint tests                             |
+| `packages/db/tests/unit/repositories/audit-log-repository.test.ts` | Audit log repo tests                                |
+| `packages/shared/tests/unit/auth/audit-logger.test.ts`             | AuditLogger tests                                   |
 
 ### Modified Files
 
-| File | Change |
-|------|--------|
-| `apps/api/src/auth/factory.ts` | Add `JwtAuthProvider` case, extend `AuthProviderDeps` |
-| `apps/api/src/auth/index.ts` | Export JWT provider |
-| `apps/api/src/types.ts` | Add `redis`, `auditLogger`, `auditLogRepo` to `AppDeps` |
-| `apps/api/src/app.ts` | Add rate limit middleware, ws-token route, quota loading |
-| `apps/api/src/server.ts` | WS token auth replacing legacy `?tenantId=` fallback |
-| `packages/db/src/schema/tenants.ts` | Add `quotas` JSONB column + `storageBytesUsed` |
-| `packages/db/src/schema/index.ts` | Export `auditLog` table |
-| `packages/db/src/repositories/index.ts` | Export `AuditLogRepository` |
-| `packages/db/src/repositories/tenant-repository.ts` | Add `getQuotas()` and `incrementStorageBytes()` methods |
-| `packages/shared/src/auth/index.ts` | Export audit logger, quotas, rate limit tiers |
-| `packages/shared/src/index.ts` | Already exports auth barrel |
-| `packages/queue/src/job-manager.ts` | Quota check in `startJob()` |
-| `packages/core/src/pipeline/export-orchestrator.ts` | Per-tenant `maxEntitiesPerExport` |
-| `packages/db/src/content-store/pg-content-store.ts` | Storage byte tracking |
-| `apps/api/src/middleware/error-handler.ts` | Map `QUOTA_EXCEEDED` to 429 |
+| File                                                | Change                                                   |
+| --------------------------------------------------- | -------------------------------------------------------- |
+| `apps/api/src/auth/factory.ts`                      | Add `JwtAuthProvider` case, extend `AuthProviderDeps`    |
+| `apps/api/src/auth/index.ts`                        | Export JWT provider                                      |
+| `apps/api/src/types.ts`                             | Add `redis`, `auditLogger`, `auditLogRepo` to `AppDeps`  |
+| `apps/api/src/app.ts`                               | Add rate limit middleware, ws-token route, quota loading |
+| `apps/api/src/server.ts`                            | WS token auth replacing legacy `?tenantId=` fallback     |
+| `packages/db/src/schema/tenants.ts`                 | Add `quotas` JSONB column + `storageBytesUsed`           |
+| `packages/db/src/schema/index.ts`                   | Export `auditLog` table                                  |
+| `packages/db/src/repositories/index.ts`             | Export `AuditLogRepository`                              |
+| `packages/db/src/repositories/tenant-repository.ts` | Add `getQuotas()` and `incrementStorageBytes()` methods  |
+| `packages/shared/src/auth/index.ts`                 | Export audit logger, quotas, rate limit tiers            |
+| `packages/shared/src/index.ts`                      | Already exports auth barrel                              |
+| `packages/queue/src/job-manager.ts`                 | Quota check in `startJob()`                              |
+| `packages/core/src/pipeline/export-orchestrator.ts` | Per-tenant `maxEntitiesPerExport`                        |
+| `packages/db/src/content-store/pg-content-store.ts` | Storage byte tracking                                    |
+| `apps/api/src/middleware/error-handler.ts`          | Map `QUOTA_EXCEEDED` to 429                              |
 
 ---
 
 ## Task 1: Shared Redis Client + Rate Limit Types
 
 **Files:**
+
 - Create: `packages/shared/src/auth/rate-limit-tiers.ts`
 - Create: `packages/shared/src/auth/quotas.ts`
 - Modify: `packages/shared/src/auth/index.ts`
@@ -138,7 +140,7 @@ In `apps/api/src/types.ts`, the `Redis` type import already exists. Add to `AppD
 Also add to `AppEnv.Variables`:
 
 ```typescript
-  rateLimitTier: string;
+rateLimitTier: string;
 ```
 
 This is needed because the rate limit middleware reads `c.get('rateLimitTier')` and quota loading sets `c.set('rateLimitTier', ...)`. Without this, Hono's typed context will reject the calls at compile time.
@@ -164,6 +166,7 @@ git commit -m "feat(shared): add rate limit tiers, tenant quota types, and share
 ## Task 2: JWT Auth Provider
 
 **Files:**
+
 - Create: `apps/api/src/auth/jwt-provider.ts`
 - Create: `apps/api/tests/unit/auth/jwt-provider.test.ts`
 - Modify: `apps/api/src/auth/factory.ts`
@@ -239,9 +242,7 @@ describe('JwtAuthProvider', () => {
 
   it('throws AuthError when Authorization header is missing', async () => {
     const req = await createMockRequest({});
-    await expect(provider.authenticate(req)).rejects.toThrow(
-      'Authorization header is required',
-    );
+    await expect(provider.authenticate(req)).rejects.toThrow('Authorization header is required');
   });
 
   it('throws AuthError when JWT is invalid', async () => {
@@ -250,9 +251,7 @@ describe('JwtAuthProvider', () => {
     const req = await createMockRequest({
       authorization: 'Bearer invalid.jwt.token',
     });
-    await expect(provider.authenticate(req)).rejects.toThrow(
-      'Invalid or expired token',
-    );
+    await expect(provider.authenticate(req)).rejects.toThrow('Invalid or expired token');
   });
 
   it('throws AuthError when tenant_id claim is missing', async () => {
@@ -264,9 +263,7 @@ describe('JwtAuthProvider', () => {
     const req = await createMockRequest({
       authorization: 'Bearer eyJhbGciOiJSUzI1NiJ9.test.signature',
     });
-    await expect(provider.authenticate(req)).rejects.toThrow(
-      'Missing tenant_id claim',
-    );
+    await expect(provider.authenticate(req)).rejects.toThrow('Missing tenant_id claim');
   });
 
   it('defaults scopes to empty array when scopes claim is missing', async () => {
@@ -397,13 +394,18 @@ export type { JwtProviderConfig } from './jwt-provider.js';
 In `apps/api/src/app.ts`, update the `createAuthProvider` call:
 
 ```typescript
-  const authProvider = deps.authProvider ?? createAuthProvider(authStrategy, {
+const authProvider =
+  deps.authProvider ??
+  createAuthProvider(authStrategy, {
     apiKeyRepo: deps.apiKeyRepo!,
-    jwtConfig: authStrategy === 'jwt' ? {
-      issuer: getEnvOrDefault('JWT_ISSUER', ''),
-      audience: getEnvOrDefault('JWT_AUDIENCE', ''),
-      jwksUrl: getEnvOrDefault('JWT_JWKS_URL', ''),
-    } : undefined,
+    jwtConfig:
+      authStrategy === 'jwt'
+        ? {
+            issuer: getEnvOrDefault('JWT_ISSUER', ''),
+            audience: getEnvOrDefault('JWT_AUDIENCE', ''),
+            jwksUrl: getEnvOrDefault('JWT_JWKS_URL', ''),
+          }
+        : undefined,
   });
 ```
 
@@ -429,6 +431,7 @@ git commit -m "feat(api): add JwtAuthProvider with OIDC validation via jose"
 ## Task 3: Rate Limit Middleware
 
 **Files:**
+
 - Create: `apps/api/src/middleware/rate-limit.ts`
 - Create: `apps/api/tests/unit/middleware/rate-limit.test.ts`
 
@@ -615,6 +618,7 @@ git commit -m "feat(api): add sliding-window rate limit middleware with Redis Lu
 ## Task 4: Tenant Quotas Schema + Repository
 
 **Files:**
+
 - Modify: `packages/db/src/schema/tenants.ts`
 - Modify: `packages/db/src/repositories/tenant-repository.ts`
 
@@ -710,6 +714,7 @@ git commit -m "feat(db): add tenant quotas JSONB column and storage tracking"
 ## Task 5: Quota Enforcement
 
 **Files:**
+
 - Modify: `packages/queue/src/job-manager.ts`
 - Modify: `packages/core/src/pipeline/export-orchestrator.ts`
 
@@ -723,6 +728,7 @@ import { QuotaExceededError } from '@spatula/shared';
 ```
 
 Add to interface:
+
 ```typescript
   tenantRepo?: TenantRepository;
 ```
@@ -730,25 +736,25 @@ Add to interface:
 Add field + constructor assignment. Then in `startJob()`, before the state transition, add:
 
 ```typescript
-    // Check concurrent job quota
-    if (this.tenantRepo) {
-      try {
-        const quotas = await this.tenantRepo.getQuotas(tenantId);
-        const maxConcurrent = (quotas as any).maxConcurrentJobs ?? 2;
-        const runningJobs = await this.jobRepo.findByTenant(tenantId);
-        const runningCount = runningJobs.filter((j: any) => j.status === 'running').length;
-        if (runningCount >= maxConcurrent) {
-          throw new QuotaExceededError(
-            `Concurrent job limit reached: ${runningCount}/${maxConcurrent}`,
-            { context: { tenantId, current: runningCount, max: maxConcurrent } },
-          );
-        }
-      } catch (error) {
-        // Re-throw QuotaExceededError, swallow other errors (fail-open)
-        if ((error as any).code === 'QUOTA_EXCEEDED') throw error;
-        logger.warn({ err: error, tenantId }, 'Failed to check job quota');
-      }
+// Check concurrent job quota
+if (this.tenantRepo) {
+  try {
+    const quotas = await this.tenantRepo.getQuotas(tenantId);
+    const maxConcurrent = (quotas as any).maxConcurrentJobs ?? 2;
+    const runningJobs = await this.jobRepo.findByTenant(tenantId);
+    const runningCount = runningJobs.filter((j: any) => j.status === 'running').length;
+    if (runningCount >= maxConcurrent) {
+      throw new QuotaExceededError(
+        `Concurrent job limit reached: ${runningCount}/${maxConcurrent}`,
+        { context: { tenantId, current: runningCount, max: maxConcurrent } },
+      );
     }
+  } catch (error) {
+    // Re-throw QuotaExceededError, swallow other errors (fail-open)
+    if ((error as any).code === 'QUOTA_EXCEEDED') throw error;
+    logger.warn({ err: error, tenantId }, 'Failed to check job quota');
+  }
+}
 ```
 
 - [ ] **Step 2: Wire tenant `maxPagesPerJob` into crawl worker page budget**
@@ -759,7 +765,7 @@ In `packages/queue/src/worker-entrypoint.ts` (or wherever `PageBudget` is constr
 
 ```typescript
 const tenantQuotaMaxPages = tenantRepo
-  ? ((await tenantRepo.getQuotas(tenantId)) as any).maxPagesPerJob ?? Infinity
+  ? (((await tenantRepo.getQuotas(tenantId)) as any).maxPagesPerJob ?? Infinity)
   : Infinity;
 const effectiveMaxPages = Math.min(jobConfig.crawl.maxPages, tenantQuotaMaxPages);
 const pageBudget = new InMemoryPageBudget(effectiveMaxPages);
@@ -776,13 +782,13 @@ In `packages/core/src/pipeline/export-orchestrator.ts`, find the `MAX_EXPORT_ENT
 The export orchestrator function accepts deps/config. Add `maxEntities` as an optional parameter to the export config or deps. The simplest approach: check if a `maxEntitiesPerExport` field exists in the export options passed to the orchestrator:
 
 ```typescript
-    const maxEntities = (options as any)?.maxEntities ?? MAX_EXPORT_ENTITIES;
-    if (total > maxEntities) {
-      throw new ValidationError(
-        `Export too large: ${total} entities exceeds maximum of ${maxEntities.toLocaleString()}.`,
-        { context: { exportId, jobId, total, max: maxEntities } },
-      );
-    }
+const maxEntities = (options as any)?.maxEntities ?? MAX_EXPORT_ENTITIES;
+if (total > maxEntities) {
+  throw new ValidationError(
+    `Export too large: ${total} entities exceeds maximum of ${maxEntities.toLocaleString()}.`,
+    { context: { exportId, jobId, total, max: maxEntities } },
+  );
+}
 ```
 
 Read the file first to understand the exact function signature and where the validation occurs.
@@ -806,23 +812,25 @@ For now, add a `setTenantContext()` method that stores the tenantId for subseque
 Then in the `store()` method, after the successful insert:
 
 ```typescript
-      // Track storage bytes (fire-and-forget)
-      if (this.tenantId && this.tenantRepo) {
-        const bytes = Buffer.byteLength(content, 'utf-8');
-        void this.tenantRepo.incrementStorageBytes(this.tenantId, bytes)
-          .catch((err) => logger.warn({ err }, 'Failed to track storage bytes'));
-      }
+// Track storage bytes (fire-and-forget)
+if (this.tenantId && this.tenantRepo) {
+  const bytes = Buffer.byteLength(content, 'utf-8');
+  void this.tenantRepo
+    .incrementStorageBytes(this.tenantId, bytes)
+    .catch((err) => logger.warn({ err }, 'Failed to track storage bytes'));
+}
 ```
 
 And in `delete()`, after the successful delete:
 
 ```typescript
-      // Note: We don't decrement bytes on delete because we don't know the size.
-      // Accurate storage tracking requires either storing sizes per-key or periodic recalculation.
-      // This is acceptable for the initial implementation per the decomposition spec.
+// Note: We don't decrement bytes on delete because we don't know the size.
+// Accurate storage tracking requires either storing sizes per-key or periodic recalculation.
+// This is acceptable for the initial implementation per the decomposition spec.
 ```
 
 Add the import:
+
 ```typescript
 import type { TenantRepository } from '../repositories/tenant-repository.js';
 ```
@@ -844,6 +852,7 @@ git commit -m "feat: add tenant quota enforcement at job start, export, and stor
 ## Task 6: Audit Log Table + Repository
 
 **Files:**
+
 - Create: `packages/db/src/schema/audit-log.ts`
 - Create: `packages/db/src/repositories/audit-log-repository.ts`
 - Create: `packages/db/tests/unit/repositories/audit-log-repository.test.ts`
@@ -857,26 +866,31 @@ git commit -m "feat: add tenant quota enforcement at job start, export, and stor
 import { pgTable, uuid, text, jsonb, timestamp, index, inet } from 'drizzle-orm/pg-core';
 import { tenants } from './tenants.js';
 
-export const auditLog = pgTable('audit_log', {
-  id: uuid('id').defaultRandom().primaryKey(),
-  tenantId: uuid('tenant_id').references(() => tenants.id),
-  actorId: text('actor_id').notNull(),
-  actorType: text('actor_type').notNull(),
-  action: text('action').notNull(),
-  resourceType: text('resource_type'),
-  resourceId: text('resource_id'),
-  metadata: jsonb('metadata').$type<Record<string, unknown>>().default({}),
-  ipAddress: inet('ip_address'),
-  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
-}, (table) => [
-  index('idx_audit_tenant_time').on(table.tenantId, table.createdAt),
-  index('idx_audit_action_time').on(table.action, table.createdAt),
-]);
+export const auditLog = pgTable(
+  'audit_log',
+  {
+    id: uuid('id').defaultRandom().primaryKey(),
+    tenantId: uuid('tenant_id').references(() => tenants.id),
+    actorId: text('actor_id').notNull(),
+    actorType: text('actor_type').notNull(),
+    action: text('action').notNull(),
+    resourceType: text('resource_type'),
+    resourceId: text('resource_id'),
+    metadata: jsonb('metadata').$type<Record<string, unknown>>().default({}),
+    ipAddress: inet('ip_address'),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    index('idx_audit_tenant_time').on(table.tenantId, table.createdAt),
+    index('idx_audit_action_time').on(table.action, table.createdAt),
+  ],
+);
 ```
 
 - [ ] **Step 2: Export from schema barrel and generate migration**
 
 Add to `packages/db/src/schema/index.ts`:
+
 ```typescript
 export * from './audit-log.js';
 ```
@@ -999,6 +1013,7 @@ export class AuditLogRepository {
 - [ ] **Step 5: Export from barrels**
 
 Add to `packages/db/src/repositories/index.ts`:
+
 ```typescript
 export { AuditLogRepository } from './audit-log-repository.js';
 export type { AuditLogEntry } from './audit-log-repository.js';
@@ -1020,6 +1035,7 @@ git commit -m "feat(db): add audit_log table and AuditLogRepository"
 ## Task 7: AuditLogger Service
 
 **Files:**
+
 - Create: `packages/shared/src/auth/audit-logger.ts`
 - Create: `packages/shared/tests/unit/auth/audit-logger.test.ts`
 - Modify: `packages/shared/src/auth/index.ts`
@@ -1115,6 +1131,7 @@ export class AuditLogger {
 - [ ] **Step 4: Export from barrel**
 
 Add to `packages/shared/src/auth/index.ts`:
+
 ```typescript
 export { AuditLogger } from './audit-logger.js';
 export type { AuditEvent, AuditLogRepo } from './audit-logger.js';
@@ -1138,6 +1155,7 @@ git commit -m "feat(shared): add AuditLogger service with fire-and-forget writes
 ## Task 8: WebSocket Token Auth
 
 **Files:**
+
 - Create: `apps/api/src/routes/ws-token.ts`
 - Create: `apps/api/tests/unit/routes/ws-token.test.ts`
 - Modify: `apps/api/src/server.ts`
@@ -1247,68 +1265,66 @@ import { createLogger, loadConfig, getEnvOrDefault } from '@spatula/shared';
 Replace the entire `onOpen` handler body inside the `upgradeWebSocket` callback with:
 
 ```typescript
-        return {
-          async onOpen(_evt, ws) {
-            const authStrategy = getEnvOrDefault('AUTH_STRATEGY', 'none');
-            let tenantId: string;
+return {
+  async onOpen(_evt, ws) {
+    const authStrategy = getEnvOrDefault('AUTH_STRATEGY', 'none');
+    let tenantId: string;
 
-            if (authStrategy === 'none') {
-              // Legacy: accept x-tenant-id header or ?tenantId= query param
-              tenantId =
-                c.req.header('x-tenant-id') ??
-                new URL(c.req.url).searchParams.get('tenantId') ??
-                '';
-              if (!tenantId || !UUID_REGEX.test(tenantId)) {
-                ws.close(4001, 'tenantId required (via x-tenant-id header or ?tenantId= query param)');
-                return;
-              }
-            } else {
-              // Token-based: validate ?token= against Redis
-              const token = new URL(c.req.url).searchParams.get('token');
-              if (!token) {
-                ws.close(4001, 'WebSocket token required (use POST /api/v1/ws-token)');
-                return;
-              }
-              if (!deps.redis) {
-                ws.close(4500, 'Redis not available for token validation');
-                return;
-              }
-              const key = `ws-token:${token}`;
-              const value = await deps.redis.get(key);
-              if (!value) {
-                ws.close(4001, 'Invalid or expired WebSocket token');
-                return;
-              }
-              // Delete token (single-use)
-              await deps.redis.del(key);
-              try {
-                const parsed = JSON.parse(value);
-                tenantId = parsed.tenantId;
-              } catch {
-                ws.close(4500, 'Corrupted token data');
-                return;
-              }
-            }
+    if (authStrategy === 'none') {
+      // Legacy: accept x-tenant-id header or ?tenantId= query param
+      tenantId =
+        c.req.header('x-tenant-id') ?? new URL(c.req.url).searchParams.get('tenantId') ?? '';
+      if (!tenantId || !UUID_REGEX.test(tenantId)) {
+        ws.close(4001, 'tenantId required (via x-tenant-id header or ?tenantId= query param)');
+        return;
+      }
+    } else {
+      // Token-based: validate ?token= against Redis
+      const token = new URL(c.req.url).searchParams.get('token');
+      if (!token) {
+        ws.close(4001, 'WebSocket token required (use POST /api/v1/ws-token)');
+        return;
+      }
+      if (!deps.redis) {
+        ws.close(4500, 'Redis not available for token validation');
+        return;
+      }
+      const key = `ws-token:${token}`;
+      const value = await deps.redis.get(key);
+      if (!value) {
+        ws.close(4001, 'Invalid or expired WebSocket token');
+        return;
+      }
+      // Delete token (single-use)
+      await deps.redis.del(key);
+      try {
+        const parsed = JSON.parse(value);
+        tenantId = parsed.tenantId;
+      } catch {
+        ws.close(4500, 'Corrupted token data');
+        return;
+      }
+    }
 
-            // Validate tenant owns this job
-            try {
-              const job = await deps.jobRepo.findById(jobId, tenantId);
-              if (!job) {
-                ws.close(4004, 'Job not found for tenant');
-                return;
-              }
-            } catch (err) {
-              logger.warn({ jobId, tenantId, err }, 'WS auth check failed');
-              ws.close(4500, 'Internal error');
-              return;
-            }
+    // Validate tenant owns this job
+    try {
+      const job = await deps.jobRepo.findById(jobId, tenantId);
+      if (!job) {
+        ws.close(4004, 'Job not found for tenant');
+        return;
+      }
+    } catch (err) {
+      logger.warn({ jobId, tenantId, err }, 'WS auth check failed');
+      ws.close(4500, 'Internal error');
+      return;
+    }
 
-            void progressManager!.addClient(jobId, tenantId, ws.raw as any);
-          },
-          onClose(_evt, ws) {
-            void progressManager!.removeClient(jobId, ws.raw as any);
-          },
-        };
+    void progressManager!.addClient(jobId, tenantId, ws.raw as any);
+  },
+  onClose(_evt, ws) {
+    void progressManager!.removeClient(jobId, ws.raw as any);
+  },
+};
 ```
 
 The `deps.redis` field is already available since `AppDeps` has `redis?: Redis` (added in Task 1).
@@ -1329,6 +1345,7 @@ git commit -m "feat(api): add WebSocket token auth with Redis-backed single-use 
 ## Task 9: Wire Rate Limiting + WS Token Route into App
 
 **Files:**
+
 - Modify: `apps/api/src/types.ts`
 - Modify: `apps/api/src/app.ts`
 
@@ -1342,6 +1359,7 @@ import type { AuditLogRepository } from '@spatula/db';
 ```
 
 Add to `AppDeps`:
+
 ```typescript
   auditLogger?: AuditLogger;
   auditLogRepo?: AuditLogRepository;
@@ -1350,6 +1368,7 @@ Add to `AppDeps`:
 - [ ] **Step 2: Update app.ts**
 
 Add imports:
+
 ```typescript
 import { rateLimitMiddleware } from './middleware/rate-limit.js';
 import { wsTokenRoutes } from './routes/ws-token.js';
@@ -1358,33 +1377,33 @@ import { wsTokenRoutes } from './routes/ws-token.js';
 After the auth/deps/validateTenant middleware block, add quota loading middleware:
 
 ```typescript
-  // Load tenant quotas for rate limiting
-  app.use('/api/*', async (c, next) => {
-    const tenantId = c.get('tenantId');
-    if (tenantId && deps.tenantRepo) {
-      try {
-        const quotas = await deps.tenantRepo.getQuotas(tenantId);
-        c.set('rateLimitTier', (quotas as any).rateLimitTier ?? 'free');
-      } catch {
-        c.set('rateLimitTier', 'free');
-      }
+// Load tenant quotas for rate limiting
+app.use('/api/*', async (c, next) => {
+  const tenantId = c.get('tenantId');
+  if (tenantId && deps.tenantRepo) {
+    try {
+      const quotas = await deps.tenantRepo.getQuotas(tenantId);
+      c.set('rateLimitTier', (quotas as any).rateLimitTier ?? 'free');
+    } catch {
+      c.set('rateLimitTier', 'free');
     }
-    return next();
-  });
-
-  // Rate limiting (after auth + quota loading)
-  if (deps.redis) {
-    app.use('/api/*', rateLimitMiddleware(deps.redis));
   }
+  return next();
+});
+
+// Rate limiting (after auth + quota loading)
+if (deps.redis) {
+  app.use('/api/*', rateLimitMiddleware(deps.redis));
+}
 ```
 
 Add ws-token route after api-keys:
 
 ```typescript
-  // WebSocket token endpoint
-  if (deps.redis) {
-    app.route('/api/v1/ws-token', wsTokenRoutes());
-  }
+// WebSocket token endpoint
+if (deps.redis) {
+  app.route('/api/v1/ws-token', wsTokenRoutes());
+}
 ```
 
 - [ ] **Step 3: Run ALL tests**
@@ -1405,6 +1424,7 @@ git commit -m "feat(api): wire rate limiting, ws-token route, and quota loading 
 ## Task 10: Wire Audit Event Emission
 
 **Files:**
+
 - Modify: `apps/api/src/middleware/auth.ts`
 - Modify: `apps/api/src/routes/api-keys.ts`
 - Modify: `apps/api/src/routes/jobs.ts` (if job lifecycle routes exist)
@@ -1416,19 +1436,21 @@ The AuditLogger service is built (Task 7) and available in `AppDeps` (Task 9), b
 In `apps/api/src/middleware/auth.ts`, add an optional `auditLogger` parameter and log auth success/failure events. The simplest approach: create a wrapper function that accepts both provider and auditLogger:
 
 After a successful `provider.authenticate()`, log:
+
 ```typescript
-    if (auditLogger) {
-      auditLogger.log({
-        tenantId: result.tenantId,
-        actorId: result.userId,
-        actorType: result.userId === 'anonymous' ? 'system' : 'api_key',
-        action: 'auth.login_success',
-        ipAddress: c.req.header('x-forwarded-for') ?? c.req.header('x-real-ip'),
-      });
-    }
+if (auditLogger) {
+  auditLogger.log({
+    tenantId: result.tenantId,
+    actorId: result.userId,
+    actorType: result.userId === 'anonymous' ? 'system' : 'api_key',
+    action: 'auth.login_success',
+    ipAddress: c.req.header('x-forwarded-for') ?? c.req.header('x-real-ip'),
+  });
+}
 ```
 
 On auth failure (wrap the authenticate call in try/catch):
+
 ```typescript
     } catch (error) {
       if (auditLogger) {
@@ -1445,6 +1467,7 @@ On auth failure (wrap the authenticate call in try/catch):
 ```
 
 Update the `authMiddleware` function signature to accept an optional second parameter:
+
 ```typescript
 export function authMiddleware(provider: AuthProvider, auditLogger?: AuditLogger): MiddlewareHandler {
 ```
@@ -1454,36 +1477,39 @@ Update `app.ts` to pass `deps.auditLogger` as the second argument.
 - [ ] **Step 2: Add audit logging to API key routes**
 
 In `apps/api/src/routes/api-keys.ts`, after successful key creation:
+
 ```typescript
-    if (deps.auditLogger) {
-      deps.auditLogger.log({
-        tenantId,
-        actorId: c.get('auth').userId,
-        actorType: 'api_key',
-        action: 'api_key.created',
-        resourceType: 'api_key',
-        resourceId: key.id,
-      });
-    }
+if (deps.auditLogger) {
+  deps.auditLogger.log({
+    tenantId,
+    actorId: c.get('auth').userId,
+    actorType: 'api_key',
+    action: 'api_key.created',
+    resourceType: 'api_key',
+    resourceId: key.id,
+  });
+}
 ```
 
 After successful key revocation:
+
 ```typescript
-    if (deps.auditLogger) {
-      deps.auditLogger.log({
-        tenantId,
-        actorId: c.get('auth').userId,
-        actorType: 'api_key',
-        action: 'api_key.revoked',
-        resourceType: 'api_key',
-        resourceId: id,
-      });
-    }
+if (deps.auditLogger) {
+  deps.auditLogger.log({
+    tenantId,
+    actorId: c.get('auth').userId,
+    actorType: 'api_key',
+    action: 'api_key.revoked',
+    resourceType: 'api_key',
+    resourceId: id,
+  });
+}
 ```
 
 - [ ] **Step 3: Add audit logging to job routes (key operations only)**
 
 In `apps/api/src/routes/jobs.ts`, add audit events for job creation and status changes. Read the file first to identify the create and start/pause/cancel handlers. Add `auditLogger.log()` calls for:
+
 - `job.created` — after `jobManager.createJob()`
 - `job.started` — after `jobManager.startJob()`
 - `job.cancelled` — after `jobManager.cancelJob()`
@@ -1516,6 +1542,7 @@ Expected: All tests pass. New test count should be ~225+ total.
 - [ ] **Step 2: Verify key functionality**
 
 Check:
+
 - JWT provider tests pass (5 tests)
 - Rate limit middleware tests pass (4 tests)
 - WS token tests pass (1+ tests)

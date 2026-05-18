@@ -54,6 +54,7 @@ Test files (new or modified):
 ## Task 1: Fix `schemas.jobId` Foreign Key
 
 **Files:**
+
 - Modify: `packages/db/src/schema/schemas.ts`
 - Modify: `packages/db/tests/unit/schema/tables.test.ts`
 
@@ -118,6 +119,7 @@ git commit -m "fix(db): add missing FK reference from schemas.jobId to jobs.id"
 ## Task 2: Docker Compose + Environment
 
 **Files:**
+
 - Create: `docker-compose.yml`
 - Create: `scripts/init-test-db.sql`
 - Create: `.env`
@@ -129,7 +131,7 @@ services:
   postgres:
     image: postgres:16-alpine
     ports:
-      - "5432:5432"
+      - '5432:5432'
     environment:
       POSTGRES_USER: spatula
       POSTGRES_PASSWORD: spatula
@@ -138,7 +140,7 @@ services:
       - pgdata:/var/lib/postgresql/data
       - ./scripts/init-test-db.sql:/docker-entrypoint-initdb.d/init-test-db.sql
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U spatula"]
+      test: ['CMD-SHELL', 'pg_isready -U spatula']
       interval: 5s
       timeout: 3s
       retries: 5
@@ -146,11 +148,11 @@ services:
   redis:
     image: redis:7-alpine
     ports:
-      - "6379:6379"
+      - '6379:6379'
     volumes:
       - redisdata:/data
     healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
+      test: ['CMD', 'redis-cli', 'ping']
       interval: 5s
       timeout: 3s
       retries: 5
@@ -223,6 +225,7 @@ Note: `.env` is NOT committed (it's gitignored). Only `.env.example` is tracked.
 ## Task 3: Generate Drizzle Migrations + DB Scripts
 
 **Files:**
+
 - Modify: `packages/db/package.json`
 - Create: `packages/db/src/run-migrate.ts`
 - Create: `packages/db/drizzle/` (generated)
@@ -264,6 +267,7 @@ Run: `docker compose up -d`
 Run: `cd /Users/salar/Projects/spatula/packages/db && pnpm db:generate`
 
 This creates SQL files in `packages/db/drizzle/`. Inspect the generated SQL to verify it includes:
+
 - All 12 tables (tenants, jobs, schemas, crawl_tasks, raw_pages, extractions, entities, entity_sources, actions, source_trust, content_store, exports)
 - The new `schemas.job_id` FK to `jobs.id`
 - All enum types
@@ -291,6 +295,7 @@ git commit -m "feat(db): generate Drizzle migrations and add db:generate/db:migr
 ## Task 4: Add `ActionRepository.create()`
 
 **Files:**
+
 - Modify: `packages/db/src/repositories/action-repository.ts`
 - Modify: `packages/db/src/repositories/index.ts`
 - Modify: `packages/db/tests/unit/repositories/action-repository.test.ts`
@@ -424,6 +429,7 @@ git commit -m "feat(db): add ActionRepository.create() for action audit trail pe
 ## Task 5: Add `actionRepo` to WorkerDeps
 
 **Files:**
+
 - Modify: `packages/queue/src/worker-deps.ts`
 - Modify: `packages/queue/tests/unit/worker-deps.test.ts`
 - Modify: `packages/queue/tests/unit/workers/schema-worker.test.ts`
@@ -454,21 +460,25 @@ Expected: FAIL — TypeScript or runtime error about `actionRepo`
 In `packages/queue/src/worker-deps.ts`:
 
 Add `ActionRepository` to the import from `@spatula/db`:
+
 ```typescript
 ActionRepository,
 ```
 
 Add to `WorkerDepsConfig` interface (after `exportRepo`):
+
 ```typescript
 actionRepo: ActionRepository;
 ```
 
 Add to `WorkerDeps` class readonly fields (after `readonly exportRepo`):
+
 ```typescript
 readonly actionRepo: ActionRepository;
 ```
 
 Add to the constructor (after `this.exportRepo = config.exportRepo;`):
+
 ```typescript
 this.actionRepo = config.actionRepo;
 ```
@@ -504,6 +514,7 @@ git commit -m "feat(queue): add actionRepo to WorkerDeps for action audit trail"
 ## Task 6: Redis Distributed Lock
 
 **Files:**
+
 - Create: `packages/queue/src/redis-lock.ts`
 - Create: `packages/queue/tests/unit/redis-lock.test.ts`
 - Modify: `packages/queue/src/index.ts`
@@ -540,13 +551,7 @@ describe('Redis Distributed Lock', () => {
       expect(result.token).toBeDefined();
       expect(typeof result.token).toBe('string');
       expect(result.token.length).toBeGreaterThan(0);
-      expect(redis.set).toHaveBeenCalledWith(
-        'test-lock',
-        expect.any(String),
-        'EX',
-        30,
-        'NX',
-      );
+      expect(redis.set).toHaveBeenCalledWith('test-lock', expect.any(String), 'EX', 30, 'NX');
     });
 
     it('returns acquired=false when SET NX fails (lock held)', async () => {
@@ -577,9 +582,7 @@ describe('Redis Distributed Lock', () => {
     it('does not throw when key does not exist', async () => {
       redis.call.mockResolvedValue(0);
 
-      await expect(
-        releaseLock(redis as any, 'test-lock', 'wrong-token'),
-      ).resolves.toBeUndefined();
+      await expect(releaseLock(redis as any, 'test-lock', 'wrong-token')).resolves.toBeUndefined();
     });
   });
 });
@@ -621,11 +624,7 @@ export async function acquireLock(
   return { acquired: false, token: '' };
 }
 
-export async function releaseLock(
-  redis: Redis,
-  key: string,
-  token: string,
-): Promise<void> {
+export async function releaseLock(redis: Redis, key: string, token: string): Promise<void> {
   await redis.call('EVAL', RELEASE_SCRIPT, '1', key, token);
 }
 ```
@@ -656,6 +655,7 @@ git commit -m "feat(queue): add Redis distributed lock with token-based CAS rele
 ## Task 7: Add Distributed Lock to Schema Worker
 
 **Files:**
+
 - Modify: `packages/queue/src/workers/schema-worker.ts`
 - Modify: `packages/queue/tests/unit/workers/schema-worker.test.ts`
 
@@ -688,11 +688,7 @@ it('skips evolution when lock cannot be acquired', async () => {
 it('releases lock after successful evolution', async () => {
   await processSchemaEvolutionJob(createJobData(), deps, mockRedis);
 
-  expect(releaseLock).toHaveBeenCalledWith(
-    mockRedis,
-    'schema-lock:job-1',
-    'test-token',
-  );
+  expect(releaseLock).toHaveBeenCalledWith(mockRedis, 'schema-lock:job-1', 'test-token');
 });
 
 it('releases lock even when evolution throws', async () => {
@@ -700,11 +696,7 @@ it('releases lock even when evolution throws', async () => {
 
   await processSchemaEvolutionJob(createJobData(), deps, mockRedis);
 
-  expect(releaseLock).toHaveBeenCalledWith(
-    mockRedis,
-    'schema-lock:job-1',
-    'test-token',
-  );
+  expect(releaseLock).toHaveBeenCalledWith(mockRedis, 'schema-lock:job-1', 'test-token');
 });
 ```
 
@@ -778,6 +770,7 @@ git commit -m "feat(queue): add distributed lock to schema evolution worker"
 ## Task 8: Add Action Persistence to Schema Worker
 
 **Files:**
+
 - Modify: `packages/queue/src/workers/schema-worker.ts`
 - Modify: `packages/queue/tests/unit/workers/schema-worker.test.ts`
 
@@ -843,6 +836,7 @@ git commit -m "feat(queue): persist schema evolution actions to audit log via Ac
 ## Task 9: Queue Concurrency & Rate Limiting
 
 **Files:**
+
 - Modify: `packages/queue/src/queues.ts`
 - Modify: `packages/queue/tests/unit/queues.test.ts`
 - Modify: `packages/queue/src/index.ts`
@@ -949,6 +943,7 @@ git commit -m "feat(queue): add QueueConfig with concurrency, rate limiting, and
 ## Task 10: E2E Integration Test
 
 **Files:**
+
 - Create: `tests/e2e/vitest.config.ts`
 - Create: `tests/e2e/fixtures/product-page.html`
 - Create: `tests/e2e/full-pipeline.test.ts`
@@ -989,19 +984,21 @@ Create `tests/e2e/fixtures/product-page.html`:
 ```html
 <!DOCTYPE html>
 <html>
-<head><title>Test Product</title></head>
-<body>
-  <h1>Wireless Headphones XZ-500</h1>
-  <span class="price">$149.99</span>
-  <p class="description">Premium wireless headphones with active noise cancellation.</p>
-  <span class="brand">AudioTech</span>
-  <ul class="features">
-    <li>Active Noise Cancellation</li>
-    <li>40-hour battery life</li>
-    <li>Bluetooth 5.3</li>
-  </ul>
-  <a href="/products/xz-600">Next Model: XZ-600</a>
-</body>
+  <head>
+    <title>Test Product</title>
+  </head>
+  <body>
+    <h1>Wireless Headphones XZ-500</h1>
+    <span class="price">$149.99</span>
+    <p class="description">Premium wireless headphones with active noise cancellation.</p>
+    <span class="brand">AudioTech</span>
+    <ul class="features">
+      <li>Active Noise Cancellation</li>
+      <li>40-hour battery life</li>
+      <li>Bluetooth 5.3</li>
+    </ul>
+    <a href="/products/xz-600">Next Model: XZ-600</a>
+  </body>
 </html>
 ```
 
@@ -1025,24 +1022,29 @@ See the full test code in the spec discussion — adapt based on actual reposito
 - [ ] **Step 6: Run the E2E test**
 
 Ensure Docker is running:
+
 ```bash
 docker compose up -d
 ```
 
 Run E2E migrations against test DB:
+
 ```bash
 TEST_DATABASE_URL=postgresql://spatula:spatula@localhost:5432/spatula_test pnpm --filter @spatula/db db:migrate
 ```
 
 Run E2E test:
+
 ```bash
 TEST_DATABASE_URL=postgresql://spatula:spatula@localhost:5432/spatula_test REDIS_URL=redis://localhost:6379 pnpm test:e2e
 ```
+
 Expected: PASS — full pipeline completes.
 
 - [ ] **Step 7: Fix any issues discovered during E2E**
 
 The E2E test exercises real DB queries for the first time. Expect potential issues with:
+
 - Column name mismatches between Drizzle schema and generated SQL
 - Missing NOT NULL defaults
 - FK constraint ordering on INSERT
@@ -1066,6 +1068,7 @@ git commit -m "test: add E2E integration test for full crawl pipeline against re
 ```bash
 cd /Users/salar/Projects/spatula && pnpm test
 ```
+
 Expected: All tests pass.
 
 - [ ] **Step 2: Run E2E test**
@@ -1073,6 +1076,7 @@ Expected: All tests pass.
 ```bash
 docker compose up -d && pnpm test:e2e
 ```
+
 Expected: All tests pass.
 
 - [ ] **Step 3: Run build**
@@ -1080,6 +1084,7 @@ Expected: All tests pass.
 ```bash
 cd /Users/salar/Projects/spatula && pnpm build
 ```
+
 Expected: Build succeeds with no type errors.
 
 - [ ] **Step 4: Final commit if any stragglers**

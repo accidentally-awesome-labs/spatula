@@ -115,7 +115,9 @@ describe('createDatabasePool', () => {
     process.env.DATABASE_URL = 'postgresql://test@localhost/db';
     process.env.DB_POOL_IDLE_TIMEOUT = 'xyz';
     const { createDatabasePool } = await import('../../src/connection.js');
-    expect(() => createDatabasePool()).toThrow('DB_POOL_IDLE_TIMEOUT must be a non-negative integer');
+    expect(() => createDatabasePool()).toThrow(
+      'DB_POOL_IDLE_TIMEOUT must be a non-negative integer',
+    );
   });
 });
 

@@ -96,9 +96,7 @@ export class ServiceRegistry {
     const visit = (name: string): void => {
       if (visited.has(name)) return;
       if (visiting.has(name)) {
-        throw new Error(
-          `ServiceRegistry: dependency cycle detected involving "${name}"`,
-        );
+        throw new Error(`ServiceRegistry: dependency cycle detected involving "${name}"`);
       }
 
       visiting.add(name);
@@ -136,10 +134,7 @@ export class ServiceRegistry {
    * service is skipped — callers can inspect the returned handles to see
    * which services actually started.
    */
-  async startAll(
-    names: string[],
-    opts: ProvisionOpts,
-  ): Promise<StartAllResult> {
+  async startAll(names: string[], opts: ProvisionOpts): Promise<StartAllResult> {
     const order = this.resolveStartOrder(names);
     const handles = new Map<string, ServiceHandle>();
     const startedNames: string[] = []; // tracks order for rollback

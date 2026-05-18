@@ -28,12 +28,11 @@ describe('runMigrations', () => {
   it('calls drizzle migrate with a migrationsFolder ending in /drizzle', async () => {
     await runMigrations('postgresql://localhost:5432/spatula_test');
 
-    expect(mockCreateDatabasePool).toHaveBeenCalledWith(
-      'postgresql://localhost:5432/spatula_test',
-    );
+    expect(mockCreateDatabasePool).toHaveBeenCalledWith('postgresql://localhost:5432/spatula_test');
     expect(mockMigrate).toHaveBeenCalledOnce();
     expect(mockMigrate).toHaveBeenCalledWith(mockDb, {
       migrationsFolder: expect.stringMatching(/\/drizzle$/),
+      migrationsTable: '__drizzle_migrations_oss',
     });
   });
 
@@ -47,9 +46,7 @@ describe('runMigrations', () => {
     const error = new Error('migration failed');
     mockMigrate.mockRejectedValueOnce(error);
 
-    await expect(runMigrations('postgresql://localhost:5432/spatula_test')).rejects.toThrow(
-      error,
-    );
+    await expect(runMigrations('postgresql://localhost:5432/spatula_test')).rejects.toThrow(error);
   });
 
   it('closes the pool on success', async () => {

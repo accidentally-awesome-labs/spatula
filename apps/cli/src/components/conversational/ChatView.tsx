@@ -15,14 +15,18 @@ function MessageItem({ message }: { message: ChatMessage }): React.ReactElement 
     case 'user':
       return (
         <Box>
-          <Text bold color="green">You: </Text>
+          <Text bold color="green">
+            You:{' '}
+          </Text>
           <Text>{message.content}</Text>
         </Box>
       );
     case 'assistant':
       return (
         <Box>
-          <Text bold color="magenta">AI: </Text>
+          <Text bold color="magenta">
+            AI:{' '}
+          </Text>
           <Text>{message.content}</Text>
         </Box>
       );
@@ -35,11 +39,7 @@ function MessageItem({ message }: { message: ChatMessage }): React.ReactElement 
   }
 }
 
-export function ChatView({
-  messages,
-  onSubmit,
-  isLoading,
-}: ChatViewProps): React.ReactElement {
+export function ChatView({ messages, onSubmit, isLoading }: ChatViewProps): React.ReactElement {
   const [input, setInput] = useState('');
   const inputRef = useRef(input);
 
@@ -75,7 +75,9 @@ export function ChatView({
 
       {/* Input area */}
       <Box>
-        <Text bold color="green">{"> "}</Text>
+        <Text bold color="green">
+          {'> '}
+        </Text>
         <TextInput value={input} onChange={handleChange} onSubmit={handleSubmit} />
       </Box>
     </Box>

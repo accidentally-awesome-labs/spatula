@@ -1,8 +1,16 @@
 import { createServer, type IncomingMessage, type ServerResponse } from 'node:http';
 import {
-  LISTING_HTML, WIDGET_PRO_HTML, WIDGET_PRO_DELUXE_HTML, COMPARISON_HTML,
-  PASTA_CARBONARA_HTML, ABOUT_HTML, BLOG_REVIEW_HTML, PAGE_2_HTML,
-  SLOW_PAGE_HTML, ADMIN_HTML, ROBOTS_TXT,
+  LISTING_HTML,
+  WIDGET_PRO_HTML,
+  WIDGET_PRO_DELUXE_HTML,
+  COMPARISON_HTML,
+  PASTA_CARBONARA_HTML,
+  ABOUT_HTML,
+  BLOG_REVIEW_HTML,
+  PAGE_2_HTML,
+  SLOW_PAGE_HTML,
+  ADMIN_HTML,
+  ROBOTS_TXT,
 } from './fixtures/pages.js';
 
 export interface FixtureRequest {
@@ -18,7 +26,10 @@ export interface FixtureServer {
   resetLog(): void;
 }
 
-const ROUTES: Record<string, { html?: string; status?: number; delay?: number; redirect?: string }> = {
+const ROUTES: Record<
+  string,
+  { html?: string; status?: number; delay?: number; redirect?: string }
+> = {
   '/': { html: LISTING_HTML },
   '/products/widget-pro': { html: WIDGET_PRO_HTML },
   '/products/widget-pro-deluxe': { html: WIDGET_PRO_DELUXE_HTML },
@@ -77,6 +88,8 @@ export async function startFixtureServer(): Promise<FixtureServer> {
     port,
     requestLog,
     close: () => new Promise<void>((resolve) => server.close(() => resolve())),
-    resetLog: () => { requestLog.length = 0; },
+    resetLog: () => {
+      requestLog.length = 0;
+    },
   };
 }

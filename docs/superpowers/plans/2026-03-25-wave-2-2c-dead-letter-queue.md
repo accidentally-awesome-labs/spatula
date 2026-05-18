@@ -9,6 +9,7 @@
 **Tech Stack:** TypeScript, Drizzle ORM (Postgres), BullMQ Worker events, Hono routes, Vitest
 
 **Spec references:**
+
 - Phase 12 spec: section 5.1 (Dead Letter Queue)
 - File: `docs/superpowers/specs/2026-03-21-phase-12-production-readiness-design.md`
 
@@ -18,33 +19,34 @@
 
 ### New Files
 
-| File | Responsibility |
-|------|---------------|
-| `packages/db/src/schema/dead-letter-queue.ts` | DLQ table schema |
-| `packages/db/src/repositories/dlq-repository.ts` | DLQ CRUD operations |
-| `packages/queue/src/dlq-handler.ts` | BullMQ failed event handler |
-| `apps/api/src/routes/admin-dlq.ts` | Admin DLQ API routes |
-| `packages/db/tests/unit/repositories/dlq-repository.test.ts` | DLQ repo tests |
-| `packages/queue/tests/unit/dlq-handler.test.ts` | Failed handler tests |
-| `apps/api/tests/unit/routes/admin-dlq.test.ts` | Admin route tests |
+| File                                                         | Responsibility              |
+| ------------------------------------------------------------ | --------------------------- |
+| `packages/db/src/schema/dead-letter-queue.ts`                | DLQ table schema            |
+| `packages/db/src/repositories/dlq-repository.ts`             | DLQ CRUD operations         |
+| `packages/queue/src/dlq-handler.ts`                          | BullMQ failed event handler |
+| `apps/api/src/routes/admin-dlq.ts`                           | Admin DLQ API routes        |
+| `packages/db/tests/unit/repositories/dlq-repository.test.ts` | DLQ repo tests              |
+| `packages/queue/tests/unit/dlq-handler.test.ts`              | Failed handler tests        |
+| `apps/api/tests/unit/routes/admin-dlq.test.ts`               | Admin route tests           |
 
 ### Modified Files
 
-| File | Change |
-|------|--------|
-| `packages/db/src/schema/index.ts` | Export DLQ table |
-| `packages/db/src/repositories/index.ts` | Export DlqRepository |
-| `packages/db/src/index.ts` | Re-export DlqRepository |
+| File                                      | Change                            |
+| ----------------------------------------- | --------------------------------- |
+| `packages/db/src/schema/index.ts`         | Export DLQ table                  |
+| `packages/db/src/repositories/index.ts`   | Export DlqRepository              |
+| `packages/db/src/index.ts`                | Re-export DlqRepository           |
 | `packages/queue/src/worker-entrypoint.ts` | Attach failed handlers to workers |
-| `packages/queue/src/index.ts` | Export DLQ handler |
-| `apps/api/src/app.ts` | Mount admin DLQ routes |
-| `apps/api/src/types.ts` | Add dlqRepo to AppDeps |
+| `packages/queue/src/index.ts`             | Export DLQ handler                |
+| `apps/api/src/app.ts`                     | Mount admin DLQ routes            |
+| `apps/api/src/types.ts`                   | Add dlqRepo to AppDeps            |
 
 ---
 
 ## Task 1: DLQ Database Table
 
 **Files:**
+
 - Create: `packages/db/src/schema/dead-letter-queue.ts`
 - Modify: `packages/db/src/schema/index.ts`
 
@@ -56,24 +58,28 @@ import { pgTable, uuid, text, jsonb, integer, timestamp, index } from 'drizzle-o
 import { tenants } from './tenants.js';
 import { jobs } from './jobs.js';
 
-export const deadLetterQueue = pgTable('dead_letter_queue', {
-  id: uuid('id').defaultRandom().primaryKey(),
-  queueName: text('queue_name').notNull(),
-  jobId: text('job_id').notNull(),                    // BullMQ job ID (string, not UUID)
-  tenantId: uuid('tenant_id').references(() => tenants.id, { onDelete: 'set null' }),
-  spatulaJobId: uuid('spatula_job_id').references(() => jobs.id, { onDelete: 'set null' }),
-  payload: jsonb('payload').notNull(),                 // Full job data as JSONB (per spec 5.1.1)
-  errorMessage: text('error_message'),
-  errorStack: text('error_stack'),
-  attempts: integer('attempts').notNull(),
-  failedAt: timestamp('failed_at', { withTimezone: true }).notNull().defaultNow(),
-  resolvedAt: timestamp('resolved_at', { withTimezone: true }),
-  resolution: text('resolution'),                      // 'retried', 'discarded', 'fixed'
-}, (table) => [
-  // Regular index (not partial — Drizzle's index().where() support varies)
-  index('dlq_queue_failed_idx').on(table.queueName, table.failedAt),
-  index('dlq_tenant_idx').on(table.tenantId),
-]);
+export const deadLetterQueue = pgTable(
+  'dead_letter_queue',
+  {
+    id: uuid('id').defaultRandom().primaryKey(),
+    queueName: text('queue_name').notNull(),
+    jobId: text('job_id').notNull(), // BullMQ job ID (string, not UUID)
+    tenantId: uuid('tenant_id').references(() => tenants.id, { onDelete: 'set null' }),
+    spatulaJobId: uuid('spatula_job_id').references(() => jobs.id, { onDelete: 'set null' }),
+    payload: jsonb('payload').notNull(), // Full job data as JSONB (per spec 5.1.1)
+    errorMessage: text('error_message'),
+    errorStack: text('error_stack'),
+    attempts: integer('attempts').notNull(),
+    failedAt: timestamp('failed_at', { withTimezone: true }).notNull().defaultNow(),
+    resolvedAt: timestamp('resolved_at', { withTimezone: true }),
+    resolution: text('resolution'), // 'retried', 'discarded', 'fixed'
+  },
+  (table) => [
+    // Regular index (not partial — Drizzle's index().where() support varies)
+    index('dlq_queue_failed_idx').on(table.queueName, table.failedAt),
+    index('dlq_tenant_idx').on(table.tenantId),
+  ],
+);
 ```
 
 **Note on partial index:** Drizzle's `index().where()` support varies by version. If not available, use a regular index on `(queue_name, failed_at)` and filter `resolved_at IS NULL` in queries. The spec's `WHERE resolved_at IS NULL` partial index is a performance optimization, not a correctness requirement.
@@ -91,6 +97,7 @@ export * from './dead-letter-queue.js';
 - [ ] **Step 3: Generate Postgres migration**
 
 Run:
+
 ```bash
 cd /Users/salar/Projects/spatula && pnpm --filter @spatula/db db:generate
 ```
@@ -113,6 +120,7 @@ git commit -m "feat(db): add dead_letter_queue table for failed job tracking"
 ## Task 2: DLQ Repository
 
 **Files:**
+
 - Create: `packages/db/src/repositories/dlq-repository.ts`
 - Create: `packages/db/tests/unit/repositories/dlq-repository.test.ts`
 - Modify: `packages/db/src/repositories/index.ts`
@@ -133,7 +141,11 @@ function createMockDb() {
   const mock = {
     insert: vi.fn().mockReturnThis(),
     values: vi.fn().mockReturnThis(),
-    returning: vi.fn().mockResolvedValue([{ id: 'dlq-1', queueName: 'spatula.crawl', jobId: 'bullmq-123', resolvedAt: null }]),
+    returning: vi
+      .fn()
+      .mockResolvedValue([
+        { id: 'dlq-1', queueName: 'spatula.crawl', jobId: 'bullmq-123', resolvedAt: null },
+      ]),
     select: vi.fn().mockReturnThis(),
     from: vi.fn().mockReturnThis(),
     where: vi.fn().mockReturnThis(),
@@ -171,16 +183,18 @@ describe('DlqRepository', () => {
 
     expect(result).toEqual({ id: 'dlq-1' });
     expect(db.insert).toHaveBeenCalled();
-    expect(db.values).toHaveBeenCalledWith(expect.objectContaining({
-      queueName: 'spatula.crawl',
-      jobId: 'bullmq-job-123',
-      tenantId: 'tenant-1',
-      spatulaJobId: 'job-1',
-      payload: { taskId: 'task-1', url: 'https://example.com' },
-      errorMessage: 'Network timeout',
-      errorStack: expect.stringContaining('Network timeout'),
-      attempts: 3,
-    }));
+    expect(db.values).toHaveBeenCalledWith(
+      expect.objectContaining({
+        queueName: 'spatula.crawl',
+        jobId: 'bullmq-job-123',
+        tenantId: 'tenant-1',
+        spatulaJobId: 'job-1',
+        payload: { taskId: 'task-1', url: 'https://example.com' },
+        errorMessage: 'Network timeout',
+        errorStack: expect.stringContaining('Network timeout'),
+        attempts: 3,
+      }),
+    );
     expect(db.returning).toHaveBeenCalled();
   });
 
@@ -236,10 +250,12 @@ describe('DlqRepository', () => {
 
     expect(result).toEqual(resolved);
     expect(db.update).toHaveBeenCalled();
-    expect(db.set).toHaveBeenCalledWith(expect.objectContaining({
-      resolution: 'retried',
-      resolvedAt: expect.any(Date),
-    }));
+    expect(db.set).toHaveBeenCalledWith(
+      expect.objectContaining({
+        resolution: 'retried',
+        resolvedAt: expect.any(Date),
+      }),
+    );
     expect(db.where).toHaveBeenCalled();
   });
 
@@ -298,17 +314,23 @@ export class DlqRepository {
 
   async insert(input: DlqInsertInput): Promise<{ id: string }> {
     try {
-      const [row] = await this.db.insert(deadLetterQueue).values({
-        queueName: input.queueName,
-        jobId: input.jobId,
-        tenantId: input.tenantId,
-        spatulaJobId: input.spatulaJobId,
-        payload: input.payload,  // JSONB — Drizzle handles serialization
-        errorMessage: input.errorMessage,
-        errorStack: input.errorStack,
-        attempts: input.attempts,
-      }).returning();
-      logger.info({ dlqId: row.id, queueName: input.queueName, jobId: input.jobId }, 'Job moved to DLQ');
+      const [row] = await this.db
+        .insert(deadLetterQueue)
+        .values({
+          queueName: input.queueName,
+          jobId: input.jobId,
+          tenantId: input.tenantId,
+          spatulaJobId: input.spatulaJobId,
+          payload: input.payload, // JSONB — Drizzle handles serialization
+          errorMessage: input.errorMessage,
+          errorStack: input.errorStack,
+          attempts: input.attempts,
+        })
+        .returning();
+      logger.info(
+        { dlqId: row.id, queueName: input.queueName, jobId: input.jobId },
+        'Job moved to DLQ',
+      );
       return { id: row.id };
     } catch (error) {
       throw new StorageError('Failed to insert DLQ entry', {
@@ -329,7 +351,9 @@ export class DlqRepository {
       conditions.push(eq(deadLetterQueue.queueName, options.queueName));
     }
 
-    return this.db.select().from(deadLetterQueue)
+    return this.db
+      .select()
+      .from(deadLetterQueue)
       .where(and(...conditions))
       .orderBy(desc(deadLetterQueue.failedAt))
       .limit(options?.limit ?? 50)
@@ -337,7 +361,9 @@ export class DlqRepository {
   }
 
   async findById(id: string): Promise<typeof deadLetterQueue.$inferSelect | null> {
-    const rows = await this.db.select().from(deadLetterQueue)
+    const rows = await this.db
+      .select()
+      .from(deadLetterQueue)
       .where(eq(deadLetterQueue.id, id))
       .limit(1);
     return rows[0] ?? null;
@@ -347,7 +373,8 @@ export class DlqRepository {
     id: string,
     resolution: 'retried' | 'discarded' | 'fixed',
   ): Promise<typeof deadLetterQueue.$inferSelect> {
-    const [row] = await this.db.update(deadLetterQueue)
+    const [row] = await this.db
+      .update(deadLetterQueue)
       .set({
         resolvedAt: new Date(),
         resolution,
@@ -377,6 +404,7 @@ export class DlqRepository {
 - [ ] **Step 3: Export from repo barrel**
 
 Add to `packages/db/src/repositories/index.ts`:
+
 ```typescript
 export { DlqRepository } from './dlq-repository.js';
 export type { DlqInsertInput } from './dlq-repository.js';
@@ -398,6 +426,7 @@ git commit -m "feat(db): add DLQ repository for dead letter queue operations"
 ## Task 3: Failed Job Handler
 
 **Files:**
+
 - Create: `packages/queue/src/dlq-handler.ts`
 - Create: `packages/queue/tests/unit/dlq-handler.test.ts`
 - Modify: `packages/queue/src/index.ts`
@@ -417,7 +446,13 @@ describe('createDlqHandler', () => {
     const mockJob = {
       id: 'bullmq-123',
       name: 'crawl:https://example.com',
-      data: { taskId: 'task-1', jobId: 'job-1', tenantId: 'tenant-1', url: 'https://example.com', depth: 0 },
+      data: {
+        taskId: 'task-1',
+        jobId: 'job-1',
+        tenantId: 'tenant-1',
+        url: 'https://example.com',
+        depth: 0,
+      },
       attemptsMade: 3,
       opts: { attempts: 3 },
       queueName: 'spatula.crawl',
@@ -426,14 +461,16 @@ describe('createDlqHandler', () => {
 
     await handler(mockJob as any, error);
 
-    expect(dlqRepo.insert).toHaveBeenCalledWith(expect.objectContaining({
-      queueName: 'spatula.crawl',
-      jobId: 'bullmq-123',
-      tenantId: 'tenant-1',
-      spatulaJobId: 'job-1',
-      errorMessage: 'Network timeout after 3 retries',
-      attempts: 3,
-    }));
+    expect(dlqRepo.insert).toHaveBeenCalledWith(
+      expect.objectContaining({
+        queueName: 'spatula.crawl',
+        jobId: 'bullmq-123',
+        tenantId: 'tenant-1',
+        spatulaJobId: 'job-1',
+        errorMessage: 'Network timeout after 3 retries',
+        attempts: 3,
+      }),
+    );
   });
 
   it('does NOT insert when job has remaining attempts', async () => {
@@ -467,10 +504,12 @@ describe('createDlqHandler', () => {
 
     await handler(mockJob as any, new Error('failed'));
 
-    expect(dlqRepo.insert).toHaveBeenCalledWith(expect.objectContaining({
-      tenantId: undefined,
-      spatulaJobId: undefined,
-    }));
+    expect(dlqRepo.insert).toHaveBeenCalledWith(
+      expect.objectContaining({
+        tenantId: undefined,
+        spatulaJobId: undefined,
+      }),
+    );
   });
 
   it('does not throw if DLQ insert fails', async () => {
@@ -550,6 +589,7 @@ export function createDlqHandler(dlqRepo: DlqRepository) {
 - [ ] **Step 3: Export from queue barrel**
 
 Add to `packages/queue/src/index.ts`:
+
 ```typescript
 export { createDlqHandler } from './dlq-handler.js';
 ```
@@ -570,6 +610,7 @@ git commit -m "feat(queue): add DLQ handler for permanently failed BullMQ jobs"
 ## Task 4: Wire DLQ Handler into Worker Entrypoint
 
 **Files:**
+
 - Modify: `packages/queue/src/worker-entrypoint.ts`
 
 - [ ] **Step 1: Attach failed handlers to all workers**
@@ -609,6 +650,7 @@ git commit -m "feat(queue): wire DLQ handler into all worker instances"
 ## Task 5: Admin DLQ API Routes
 
 **Files:**
+
 - Create: `apps/api/src/routes/admin-dlq.ts`
 - Create: `apps/api/tests/unit/routes/admin-dlq.test.ts`
 - Modify: `apps/api/src/app.ts`
@@ -617,6 +659,7 @@ git commit -m "feat(queue): wire DLQ handler into all worker instances"
 - [ ] **Step 1: Add dlqRepo to AppDeps**
 
 In `apps/api/src/types.ts`, add:
+
 ```typescript
 import type { DlqRepository } from '@spatula/db';
 
@@ -640,7 +683,8 @@ export function adminDlqRoutes() {
   // List unresolved DLQ entries
   app.get('/', async (c) => {
     const deps = c.get('deps');
-    if (!deps.dlqRepo) return c.json({ error: { code: 'NOT_CONFIGURED', message: 'DLQ not configured' } }, 503);
+    if (!deps.dlqRepo)
+      return c.json({ error: { code: 'NOT_CONFIGURED', message: 'DLQ not configured' } }, 503);
 
     const queueName = c.req.query('queue');
     const limit = Math.min(parseInt(c.req.query('limit') ?? '50', 10), 100);
@@ -655,10 +699,12 @@ export function adminDlqRoutes() {
   // Get single DLQ entry
   app.get('/:id', async (c) => {
     const deps = c.get('deps');
-    if (!deps.dlqRepo) return c.json({ error: { code: 'NOT_CONFIGURED', message: 'DLQ not configured' } }, 503);
+    if (!deps.dlqRepo)
+      return c.json({ error: { code: 'NOT_CONFIGURED', message: 'DLQ not configured' } }, 503);
 
     const entry = await deps.dlqRepo.findById(c.req.param('id'));
-    if (!entry) return c.json({ error: { code: 'NOT_FOUND', message: 'DLQ entry not found' } }, 404);
+    if (!entry)
+      return c.json({ error: { code: 'NOT_FOUND', message: 'DLQ entry not found' } }, 404);
 
     return c.json({ data: entry });
   });
@@ -666,11 +712,17 @@ export function adminDlqRoutes() {
   // Retry a DLQ entry (re-enqueue to original queue + mark resolved)
   app.post('/:id/retry', async (c) => {
     const deps = c.get('deps');
-    if (!deps.dlqRepo) return c.json({ error: { code: 'NOT_CONFIGURED', message: 'DLQ not configured' } }, 503);
+    if (!deps.dlqRepo)
+      return c.json({ error: { code: 'NOT_CONFIGURED', message: 'DLQ not configured' } }, 503);
 
     const entry = await deps.dlqRepo.findById(c.req.param('id'));
-    if (!entry) return c.json({ error: { code: 'NOT_FOUND', message: 'DLQ entry not found' } }, 404);
-    if (entry.resolvedAt) return c.json({ error: { code: 'ALREADY_RESOLVED', message: 'Entry already resolved' } }, 409);
+    if (!entry)
+      return c.json({ error: { code: 'NOT_FOUND', message: 'DLQ entry not found' } }, 404);
+    if (entry.resolvedAt)
+      return c.json(
+        { error: { code: 'ALREADY_RESOLVED', message: 'Entry already resolved' } },
+        409,
+      );
 
     // Re-enqueue the original job data to the original queue
     // Note: Full re-enqueue requires SpatulaQueues in AppDeps.
@@ -695,11 +747,17 @@ export function adminDlqRoutes() {
   // Discard a DLQ entry
   app.post('/:id/discard', async (c) => {
     const deps = c.get('deps');
-    if (!deps.dlqRepo) return c.json({ error: { code: 'NOT_CONFIGURED', message: 'DLQ not configured' } }, 503);
+    if (!deps.dlqRepo)
+      return c.json({ error: { code: 'NOT_CONFIGURED', message: 'DLQ not configured' } }, 503);
 
     const entry = await deps.dlqRepo.findById(c.req.param('id'));
-    if (!entry) return c.json({ error: { code: 'NOT_FOUND', message: 'DLQ entry not found' } }, 404);
-    if (entry.resolvedAt) return c.json({ error: { code: 'ALREADY_RESOLVED', message: 'Entry already resolved' } }, 409);
+    if (!entry)
+      return c.json({ error: { code: 'NOT_FOUND', message: 'DLQ entry not found' } }, 404);
+    if (entry.resolvedAt)
+      return c.json(
+        { error: { code: 'ALREADY_RESOLVED', message: 'Entry already resolved' } },
+        409,
+      );
 
     const resolved = await deps.dlqRepo.resolve(c.req.param('id'), 'discarded');
 
@@ -754,14 +812,29 @@ const SAMPLE_DLQ_ENTRY = {
 function createMockDeps(overrides: Partial<AppDeps> = {}): AppDeps {
   return {
     dbPool: { end: vi.fn() } as unknown as Pool,
-    jobRepo: { findById: vi.fn(), findByTenant: vi.fn(), countByTenant: vi.fn(), create: vi.fn(), updateStatus: vi.fn(), updateStats: vi.fn(), deleteWithData: vi.fn() } as any,
+    jobRepo: {
+      findById: vi.fn(),
+      findByTenant: vi.fn(),
+      countByTenant: vi.fn(),
+      create: vi.fn(),
+      updateStatus: vi.fn(),
+      updateStats: vi.fn(),
+      deleteWithData: vi.fn(),
+    } as any,
     schemaRepo: {} as any,
     extractionRepo: {} as any,
     entityRepo: {} as any,
     entitySourceRepo: {} as any,
     actionRepo: {} as any,
     taskRepo: {} as any,
-    jobManager: { createJob: vi.fn(), startJob: vi.fn(), pauseJob: vi.fn(), resumeJob: vi.fn(), cancelJob: vi.fn(), triggerReconciliation: vi.fn() } as any,
+    jobManager: {
+      createJob: vi.fn(),
+      startJob: vi.fn(),
+      pauseJob: vi.fn(),
+      resumeJob: vi.fn(),
+      cancelJob: vi.fn(),
+      triggerReconciliation: vi.fn(),
+    } as any,
     exportRepo: {} as any,
     contentStore: {} as any,
     exportQueue: {} as any,
@@ -769,7 +842,9 @@ function createMockDeps(overrides: Partial<AppDeps> = {}): AppDeps {
       findUnresolved: vi.fn().mockResolvedValue([SAMPLE_DLQ_ENTRY]),
       countUnresolved: vi.fn().mockResolvedValue(1),
       findById: vi.fn().mockResolvedValue(SAMPLE_DLQ_ENTRY),
-      resolve: vi.fn().mockResolvedValue({ ...SAMPLE_DLQ_ENTRY, resolvedAt: new Date(), resolution: 'retried' }),
+      resolve: vi
+        .fn()
+        .mockResolvedValue({ ...SAMPLE_DLQ_ENTRY, resolvedAt: new Date(), resolution: 'retried' }),
       insert: vi.fn(),
     } as any,
     ...overrides,
@@ -940,7 +1015,9 @@ describe('POST /api/v1/admin/dlq/:id/discard', () => {
 
   it('resolves entry as discarded', async () => {
     (deps as any).dlqRepo.resolve = vi.fn().mockResolvedValue({
-      ...SAMPLE_DLQ_ENTRY, resolvedAt: new Date(), resolution: 'discarded',
+      ...SAMPLE_DLQ_ENTRY,
+      resolvedAt: new Date(),
+      resolution: 'discarded',
     });
     const app = createApp(deps);
     const res = await app.request('/api/v1/admin/dlq/dlq-1/discard', {
@@ -989,6 +1066,7 @@ Add `dlqRepo: undefined` to any test file that constructs `AppDeps` mocks (if Ty
 - [ ] **Step 6: Run tests**
 
 Run:
+
 ```bash
 cd /Users/salar/Projects/spatula && pnpm --filter @spatula/api test -- --run admin-dlq
 ```

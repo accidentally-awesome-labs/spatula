@@ -14,7 +14,10 @@ const mockedJwtVerify = vi.mocked(jwtVerify);
 async function createMockRequest(headers: Record<string, string> = {}) {
   const app = new Hono();
   let capturedReq: any;
-  app.get('/test', (c) => { capturedReq = c.req; return c.text('ok'); });
+  app.get('/test', (c) => {
+    capturedReq = c.req;
+    return c.text('ok');
+  });
   await app.request('/test', { headers });
   return capturedReq;
 }
@@ -34,7 +37,8 @@ describe('JwtAuthProvider', () => {
   it('authenticates a valid JWT and extracts claims', async () => {
     mockedJwtVerify.mockResolvedValue({
       payload: {
-        sub: 'user-123', tenant_id: 'tenant-456',
+        sub: 'user-123',
+        tenant_id: 'tenant-456',
         scopes: ['jobs:read', 'jobs:write'],
       },
       protectedHeader: { alg: 'RS256' },

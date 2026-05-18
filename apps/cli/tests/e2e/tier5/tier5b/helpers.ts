@@ -38,13 +38,16 @@ export async function createApiKeyDirectly(
   const prefix = raw.slice(0, 12);
 
   const { apiKeys } = await import('@spatula/db/dist/schema/index.js');
-  const [row] = await db.insert(apiKeys).values({
-    tenantId,
-    keyHash: hash,
-    keyPrefix: prefix,
-    name,
-    scopes,
-  }).returning({ id: apiKeys.id });
+  const [row] = await db
+    .insert(apiKeys)
+    .values({
+      tenantId,
+      keyHash: hash,
+      keyPrefix: prefix,
+      name,
+      scopes,
+    })
+    .returning({ id: apiKeys.id });
 
   return { rawKey: raw, keyId: row.id };
 }

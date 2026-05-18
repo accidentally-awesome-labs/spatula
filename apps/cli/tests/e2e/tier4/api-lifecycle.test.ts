@@ -224,10 +224,9 @@ describe('Schema & Entities', () => {
   it('10 — get entity detail', async (ctx) => {
     skip(ctx);
     const entityId = seed.entityIds[0];
-    const res = await app.request(
-      `/api/v1/jobs/${seed.jobId}/entities/${entityId}`,
-      { headers: authHeaders(tenantId) },
-    );
+    const res = await app.request(`/api/v1/jobs/${seed.jobId}/entities/${entityId}`, {
+      headers: authHeaders(tenantId),
+    });
 
     expect(res.status).toBe(200);
     const body = await res.json();
@@ -243,10 +242,9 @@ describe('Schema & Entities', () => {
 describe('Actions', () => {
   it('11 — list pending actions', async (ctx) => {
     skip(ctx);
-    const res = await app.request(
-      `/api/v1/jobs/${seed.jobId}/actions?status=pending_review`,
-      { headers: authHeaders(tenantId) },
-    );
+    const res = await app.request(`/api/v1/jobs/${seed.jobId}/actions?status=pending_review`, {
+      headers: authHeaders(tenantId),
+    });
 
     expect(res.status).toBe(200);
     const body = await res.json();
@@ -256,14 +254,11 @@ describe('Actions', () => {
   it('12 — approve action', async (ctx) => {
     skip(ctx);
     const actionId = seed.actionIds[0];
-    const res = await app.request(
-      `/api/v1/jobs/${seed.jobId}/actions/${actionId}/approve`,
-      {
-        method: 'POST',
-        headers: authHeaders(tenantId),
-        body: JSON.stringify({}),
-      },
-    );
+    const res = await app.request(`/api/v1/jobs/${seed.jobId}/actions/${actionId}/approve`, {
+      method: 'POST',
+      headers: authHeaders(tenantId),
+      body: JSON.stringify({}),
+    });
 
     expect(res.status).toBe(200);
     const body = await res.json();
@@ -312,10 +307,9 @@ describe('Export', () => {
 
   it('15 — get export status', async (ctx) => {
     skip(ctx);
-    const res = await app.request(
-      `/api/v1/jobs/${seed.jobId}/export/${exportId}`,
-      { headers: authHeaders(tenantId) },
-    );
+    const res = await app.request(`/api/v1/jobs/${seed.jobId}/export/${exportId}`, {
+      headers: authHeaders(tenantId),
+    });
 
     expect(res.status).toBe(200);
     const body = await res.json();
@@ -405,9 +399,7 @@ describe('Webhook', () => {
     expect(sigHeader).toMatch(/^sha256=/);
 
     // Verify the HMAC is correct
-    const expectedSig = createHmac('sha256', secret)
-      .update(payload)
-      .digest('hex');
+    const expectedSig = createHmac('sha256', secret).update(payload).digest('hex');
     expect(sigHeader).toBe(`sha256=${expectedSig}`);
   });
 });
@@ -442,10 +434,9 @@ describe('Health', () => {
 describe('Extractions, Usage, API Keys', () => {
   it('20 — list extractions', async (ctx) => {
     skip(ctx);
-    const res = await app.request(
-      `/api/v1/jobs/${seed.jobId}/extractions`,
-      { headers: authHeaders(tenantId) },
-    );
+    const res = await app.request(`/api/v1/jobs/${seed.jobId}/extractions`, {
+      headers: authHeaders(tenantId),
+    });
 
     expect(res.status).toBe(200);
     const body = await res.json();

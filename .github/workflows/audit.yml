@@ -2,12 +2,12 @@ name: Dependency Audit
 
 on:
   schedule:
-    - cron: '0 9 * * 1'  # Weekly on Monday at 9am UTC
+    - cron: '0 9 * * 1' # Weekly on Monday at 9am UTC
   push:
     paths:
       - 'pnpm-lock.yaml'
     branches: [main]
-  workflow_dispatch:  # Allow manual trigger
+  workflow_dispatch: # Allow manual trigger
 
 jobs:
   audit:

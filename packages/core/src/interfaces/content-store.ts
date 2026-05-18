@@ -7,8 +7,8 @@ export interface ContentStore {
   getDownloadUrl?(ref: string, expiresInSeconds?: number): Promise<string>;
 }
 
-export function supportsPresignedUrls(
-  store: ContentStore,
-): store is ContentStore & { getDownloadUrl: (ref: string, expiresIn?: number) => Promise<string> } {
+export function supportsPresignedUrls(store: ContentStore): store is ContentStore & {
+  getDownloadUrl: (ref: string, expiresIn?: number) => Promise<string>;
+} {
   return typeof (store as any).getDownloadUrl === 'function';
 }

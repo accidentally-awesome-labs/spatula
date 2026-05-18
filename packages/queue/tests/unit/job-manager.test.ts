@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { JobManager } from '../../src/job-manager.js';
-import { StateError, StorageError } from '@spatula/shared';
+import { StateError } from '@spatula/shared';
 
 function createMockJobRepo() {
   return {
@@ -353,137 +353,10 @@ describe('JobManager', () => {
     });
   });
 
-  describe('billing quota enforcement (monthly jobs)', () => {
-    it('calls quotaEnforcer.checkAndRecord before starting job', async () => {
-      const quotaEnforcer = {
-        checkAndRecord: vi.fn().mockResolvedValue(undefined),
-        check: vi.fn(),
-        recordUsage: vi.fn(),
-        isExportFormatAllowed: vi.fn(),
-      };
-      const managerWithBilling = new JobManager({
-        jobRepo: jobRepo as any,
-        taskRepo: taskRepo as any,
-        schemaRepo: schemaRepo as any,
-        queues: queues as any,
-        quotaEnforcer: quotaEnforcer as any,
-      });
-
-      jobRepo.findById.mockResolvedValue({
-        id: JOB_ID, tenantId: TENANT_ID, status: 'pending', config: baseConfig,
-      });
-      jobRepo.updateStatus.mockResolvedValue({ id: JOB_ID });
-      schemaRepo.create.mockResolvedValue({ id: 'schema-001' });
-      taskRepo.enqueue.mockResolvedValue({ id: 'task-001' });
-      queues.crawl.add.mockResolvedValue({});
-
-      await managerWithBilling.startJob(JOB_ID, TENANT_ID);
-
-      expect(quotaEnforcer.checkAndRecord).toHaveBeenCalledWith(TENANT_ID, 'jobs', 1);
-    });
-
-    it('throws QuotaExceededError when monthly job limit exceeded', async () => {
-      const { QuotaExceededError } = await import('@spatula/shared');
-      const quotaEnforcer = {
-        checkAndRecord: vi.fn().mockRejectedValue(
-          new QuotaExceededError('Quota exceeded for jobs: 6 > 5 (plan: free)'),
-        ),
-        check: vi.fn(),
-        recordUsage: vi.fn(),
-        isExportFormatAllowed: vi.fn(),
-      };
-      const managerWithBilling = new JobManager({
-        jobRepo: jobRepo as any,
-        taskRepo: taskRepo as any,
-        schemaRepo: schemaRepo as any,
-        queues: queues as any,
-        quotaEnforcer: quotaEnforcer as any,
-      });
-
-      jobRepo.findById.mockResolvedValue({
-        id: JOB_ID, tenantId: TENANT_ID, status: 'pending', config: baseConfig,
-      });
-
-      await expect(managerWithBilling.startJob(JOB_ID, TENANT_ID)).rejects.toMatchObject({
-        code: 'QUOTA_EXCEEDED',
-      });
-      // Job should NOT have been started
-      expect(jobRepo.updateStatus).not.toHaveBeenCalled();
-    });
-  });
-
-  describe('audit logging for quota exceeded events', () => {
+  describe('audit logging for concurrent quota exceeded events', () => {
     function createMockAuditLogger() {
       return { log: vi.fn() };
     }
-
-    it('logs audit event when monthly job quota is exceeded', async () => {
-      const { QuotaExceededError } = await import('@spatula/shared');
-      const quotaEnforcer = {
-        checkAndRecord: vi.fn().mockRejectedValue(
-          new QuotaExceededError('Quota exceeded for jobs: 6 > 5 (plan: free)'),
-        ),
-        check: vi.fn(),
-        recordUsage: vi.fn(),
-        isExportFormatAllowed: vi.fn(),
-      };
-      const auditLogger = createMockAuditLogger();
-      const managerWithAudit = new JobManager({
-        jobRepo: jobRepo as any,
-        taskRepo: taskRepo as any,
-        schemaRepo: schemaRepo as any,
-        queues: queues as any,
-        quotaEnforcer: quotaEnforcer as any,
-        auditLogger: auditLogger as any,
-      });
-
-      jobRepo.findById.mockResolvedValue({
-        id: JOB_ID, tenantId: TENANT_ID, status: 'pending', config: baseConfig,
-      });
-
-      await expect(managerWithAudit.startJob(JOB_ID, TENANT_ID)).rejects.toMatchObject({
-        code: 'QUOTA_EXCEEDED',
-      });
-
-      expect(auditLogger.log).toHaveBeenCalledOnce();
-      expect(auditLogger.log).toHaveBeenCalledWith(expect.objectContaining({
-        action: 'quota.exceeded',
-        actorId: 'system',
-        actorType: 'system',
-        tenantId: TENANT_ID,
-        metadata: expect.objectContaining({ dimension: 'jobs' }),
-      }));
-    });
-
-    it('does not log audit event when monthly quota check passes', async () => {
-      const quotaEnforcer = {
-        checkAndRecord: vi.fn().mockResolvedValue(undefined),
-        check: vi.fn(),
-        recordUsage: vi.fn(),
-        isExportFormatAllowed: vi.fn(),
-      };
-      const auditLogger = createMockAuditLogger();
-      const managerWithAudit = new JobManager({
-        jobRepo: jobRepo as any,
-        taskRepo: taskRepo as any,
-        schemaRepo: schemaRepo as any,
-        queues: queues as any,
-        quotaEnforcer: quotaEnforcer as any,
-        auditLogger: auditLogger as any,
-      });
-
-      jobRepo.findById.mockResolvedValue({
-        id: JOB_ID, tenantId: TENANT_ID, status: 'pending', config: baseConfig,
-      });
-      jobRepo.updateStatus.mockResolvedValue({ id: JOB_ID });
-      schemaRepo.create.mockResolvedValue({ id: 'schema-001' });
-      taskRepo.enqueue.mockResolvedValue({ id: 'task-001' });
-      queues.crawl.add.mockResolvedValue({});
-
-      await managerWithAudit.startJob(JOB_ID, TENANT_ID);
-
-      expect(auditLogger.log).not.toHaveBeenCalled();
-    });
 
     it('logs audit event when concurrent job quota is exceeded', async () => {
       const tenantRepo = {
@@ -500,7 +373,10 @@ describe('JobManager', () => {
       });
 
       jobRepo.findById.mockResolvedValue({
-        id: JOB_ID, tenantId: TENANT_ID, status: 'pending', config: baseConfig,
+        id: JOB_ID,
+        tenantId: TENANT_ID,
+        status: 'pending',
+        config: baseConfig,
       });
       (jobRepo as any).countByTenant = vi.fn().mockResolvedValue(2);
 
@@ -509,46 +385,19 @@ describe('JobManager', () => {
       });
 
       expect(auditLogger.log).toHaveBeenCalledOnce();
-      expect(auditLogger.log).toHaveBeenCalledWith(expect.objectContaining({
-        action: 'quota.exceeded',
-        actorId: 'system',
-        actorType: 'system',
-        tenantId: TENANT_ID,
-        metadata: expect.objectContaining({
-          dimension: 'concurrent_jobs',
-          current: 2,
-          max: 2,
+      expect(auditLogger.log).toHaveBeenCalledWith(
+        expect.objectContaining({
+          action: 'quota.exceeded',
+          actorId: 'system',
+          actorType: 'system',
+          tenantId: TENANT_ID,
+          metadata: expect.objectContaining({
+            dimension: 'concurrent_jobs',
+            current: 2,
+            max: 2,
+          }),
         }),
-      }));
-    });
-
-    it('does not log audit event when no auditLogger provided (quota exceeded still throws)', async () => {
-      const { QuotaExceededError } = await import('@spatula/shared');
-      const quotaEnforcer = {
-        checkAndRecord: vi.fn().mockRejectedValue(
-          new QuotaExceededError('Quota exceeded for jobs: 6 > 5 (plan: free)'),
-        ),
-        check: vi.fn(),
-        recordUsage: vi.fn(),
-        isExportFormatAllowed: vi.fn(),
-      };
-      const managerNoBilling = new JobManager({
-        jobRepo: jobRepo as any,
-        taskRepo: taskRepo as any,
-        schemaRepo: schemaRepo as any,
-        queues: queues as any,
-        quotaEnforcer: quotaEnforcer as any,
-        // no auditLogger
-      });
-
-      jobRepo.findById.mockResolvedValue({
-        id: JOB_ID, tenantId: TENANT_ID, status: 'pending', config: baseConfig,
-      });
-
-      // Should still throw, just no audit log
-      await expect(managerNoBilling.startJob(JOB_ID, TENANT_ID)).rejects.toMatchObject({
-        code: 'QUOTA_EXCEEDED',
-      });
+      );
     });
   });
 

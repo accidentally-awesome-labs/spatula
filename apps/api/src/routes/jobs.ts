@@ -1,19 +1,28 @@
 import { createRoute, z } from '@hono/zod-openapi';
 import { createOpenAPIRouter } from '../openapi-config.js';
 import { JobConfig } from '@spatula/core';
-import type { AppEnv } from '../types.js';
 import { createJobSchema, listJobsQuerySchema, patchJobSchema } from '../schemas/job.js';
-import { jobResponseSchema, errorResponseSchema, dataResponse, listResponse, jsonContent } from '../schemas/responses.js';
+import {
+  jobResponseSchema,
+  errorResponseSchema,
+  dataResponse,
+  jsonContent,
+} from '../schemas/responses.js';
 import { NotFoundError } from '../middleware/error-handler.js';
 
 // --- Route definitions ---
 
 const idParam = z.object({
-  id: z.string().openapi({ param: { name: 'id', in: 'path' }, example: '550e8400-e29b-41d4-a716-446655440000' }),
+  id: z.string().openapi({
+    param: { name: 'id', in: 'path' },
+    example: '550e8400-e29b-41d4-a716-446655440000',
+  }),
 });
 
 const actionMessageSchema = z.object({ data: z.object({ id: z.string(), message: z.string() }) });
-const patchResponseSchema = z.object({ data: z.object({ id: z.string(), action: z.string(), message: z.string() }) });
+const patchResponseSchema = z.object({
+  data: z.object({ id: z.string(), action: z.string(), message: z.string() }),
+});
 
 const createJobRoute = createRoute({
   method: 'post',
@@ -35,7 +44,12 @@ const listJobsRoute = createRoute({
   tags: ['Jobs'],
   summary: 'List jobs for the current tenant',
   request: { query: listJobsQuerySchema },
-  responses: { 200: jsonContent(z.object({ data: z.array(jobResponseSchema), total: z.number() }), 'List of jobs with count') },
+  responses: {
+    200: jsonContent(
+      z.object({ data: z.array(jobResponseSchema), total: z.number() }),
+      'List of jobs with count',
+    ),
+  },
 });
 
 const getJobRoute = createRoute({
@@ -78,16 +92,46 @@ const deleteJobRoute = createRoute({
 });
 
 // Legacy POST aliases
-const startJobRoute = createRoute({ method: 'post', path: '/{id}/start', tags: ['Jobs'], summary: 'Start job (alias for PATCH)',
-  request: { params: idParam }, responses: { 200: jsonContent(actionMessageSchema, 'Job started') } });
-const pauseJobRoute = createRoute({ method: 'post', path: '/{id}/pause', tags: ['Jobs'], summary: 'Pause job (alias for PATCH)',
-  request: { params: idParam }, responses: { 200: jsonContent(actionMessageSchema, 'Job paused') } });
-const resumeJobRoute = createRoute({ method: 'post', path: '/{id}/resume', tags: ['Jobs'], summary: 'Resume job (alias for PATCH)',
-  request: { params: idParam }, responses: { 200: jsonContent(actionMessageSchema, 'Job resumed') } });
-const cancelJobRoute = createRoute({ method: 'post', path: '/{id}/cancel', tags: ['Jobs'], summary: 'Cancel job (alias for PATCH)',
-  request: { params: idParam }, responses: { 200: jsonContent(actionMessageSchema, 'Job cancelled') } });
-const reconcileJobRoute = createRoute({ method: 'post', path: '/{id}/reconcile', tags: ['Jobs'], summary: 'Trigger reconciliation (alias for PATCH)',
-  request: { params: idParam }, responses: { 200: jsonContent(actionMessageSchema, 'Reconciliation triggered') } });
+const startJobRoute = createRoute({
+  method: 'post',
+  path: '/{id}/start',
+  tags: ['Jobs'],
+  summary: 'Start job (alias for PATCH)',
+  request: { params: idParam },
+  responses: { 200: jsonContent(actionMessageSchema, 'Job started') },
+});
+const pauseJobRoute = createRoute({
+  method: 'post',
+  path: '/{id}/pause',
+  tags: ['Jobs'],
+  summary: 'Pause job (alias for PATCH)',
+  request: { params: idParam },
+  responses: { 200: jsonContent(actionMessageSchema, 'Job paused') },
+});
+const resumeJobRoute = createRoute({
+  method: 'post',
+  path: '/{id}/resume',
+  tags: ['Jobs'],
+  summary: 'Resume job (alias for PATCH)',
+  request: { params: idParam },
+  responses: { 200: jsonContent(actionMessageSchema, 'Job resumed') },
+});
+const cancelJobRoute = createRoute({
+  method: 'post',
+  path: '/{id}/cancel',
+  tags: ['Jobs'],
+  summary: 'Cancel job (alias for PATCH)',
+  request: { params: idParam },
+  responses: { 200: jsonContent(actionMessageSchema, 'Job cancelled') },
+});
+const reconcileJobRoute = createRoute({
+  method: 'post',
+  path: '/{id}/reconcile',
+  tags: ['Jobs'],
+  summary: 'Trigger reconciliation (alias for PATCH)',
+  request: { params: idParam },
+  responses: { 200: jsonContent(actionMessageSchema, 'Reconciliation triggered') },
+});
 
 // --- Handlers ---
 
@@ -145,12 +189,16 @@ export function jobRoutes() {
     if (!job) throw new NotFoundError('Job', id);
 
     // Enrich stats with pending actions count and schema field count
-    const pendingActionsCount = await deps.actionRepo.countByJobAndStatus(id, tenantId, 'pending_review');
+    const pendingActionsCount = await deps.actionRepo.countByJobAndStatus(
+      id,
+      tenantId,
+      'pending_review',
+    );
     const latestSchema = await deps.schemaRepo.findLatest(id, tenantId);
     const schemaFieldCount = (latestSchema?.definition as any)?.fields?.length ?? 0;
 
     const enrichedStats = {
-      ...(job.stats as Record<string, number> ?? {}),
+      ...((job.stats as Record<string, number>) ?? {}),
       pendingActionsCount,
       schemaFieldCount,
       // storageBytesUsed: deferred — requires raw_pages SUM query not available in current deps
@@ -221,42 +269,87 @@ export function jobRoutes() {
 
   // Legacy POST aliases
   router.openapi(startJobRoute, async (c) => {
-    const { id } = c.req.valid('param'); const tenantId = c.get('tenantId'); const deps = c.get('deps');
+    const { id } = c.req.valid('param');
+    const tenantId = c.get('tenantId');
+    const deps = c.get('deps');
     await deps.jobManager.startJob(id, tenantId);
     if (deps.auditLogger) {
-      deps.auditLogger.log({ tenantId, actorId: c.get('auth').userId, actorType: 'user', action: 'job.started', resourceType: 'job', resourceId: id });
+      deps.auditLogger.log({
+        tenantId,
+        actorId: c.get('auth').userId,
+        actorType: 'user',
+        action: 'job.started',
+        resourceType: 'job',
+        resourceId: id,
+      });
     }
     return c.json({ data: { id, message: 'Job started' } });
   });
   router.openapi(pauseJobRoute, async (c) => {
-    const { id } = c.req.valid('param'); const tenantId = c.get('tenantId'); const deps = c.get('deps');
+    const { id } = c.req.valid('param');
+    const tenantId = c.get('tenantId');
+    const deps = c.get('deps');
     await deps.jobManager.pauseJob(id, tenantId);
     if (deps.auditLogger) {
-      deps.auditLogger.log({ tenantId, actorId: c.get('auth').userId, actorType: 'user', action: 'job.paused', resourceType: 'job', resourceId: id });
+      deps.auditLogger.log({
+        tenantId,
+        actorId: c.get('auth').userId,
+        actorType: 'user',
+        action: 'job.paused',
+        resourceType: 'job',
+        resourceId: id,
+      });
     }
     return c.json({ data: { id, message: 'Job paused' } });
   });
   router.openapi(resumeJobRoute, async (c) => {
-    const { id } = c.req.valid('param'); const tenantId = c.get('tenantId'); const deps = c.get('deps');
+    const { id } = c.req.valid('param');
+    const tenantId = c.get('tenantId');
+    const deps = c.get('deps');
     await deps.jobManager.resumeJob(id, tenantId);
     if (deps.auditLogger) {
-      deps.auditLogger.log({ tenantId, actorId: c.get('auth').userId, actorType: 'user', action: 'job.resumed', resourceType: 'job', resourceId: id });
+      deps.auditLogger.log({
+        tenantId,
+        actorId: c.get('auth').userId,
+        actorType: 'user',
+        action: 'job.resumed',
+        resourceType: 'job',
+        resourceId: id,
+      });
     }
     return c.json({ data: { id, message: 'Job resumed' } });
   });
   router.openapi(cancelJobRoute, async (c) => {
-    const { id } = c.req.valid('param'); const tenantId = c.get('tenantId'); const deps = c.get('deps');
+    const { id } = c.req.valid('param');
+    const tenantId = c.get('tenantId');
+    const deps = c.get('deps');
     await deps.jobManager.cancelJob(id, tenantId);
     if (deps.auditLogger) {
-      deps.auditLogger.log({ tenantId, actorId: c.get('auth').userId, actorType: 'user', action: 'job.cancelled', resourceType: 'job', resourceId: id });
+      deps.auditLogger.log({
+        tenantId,
+        actorId: c.get('auth').userId,
+        actorType: 'user',
+        action: 'job.cancelled',
+        resourceType: 'job',
+        resourceId: id,
+      });
     }
     return c.json({ data: { id, message: 'Job cancelled' } });
   });
   router.openapi(reconcileJobRoute, async (c) => {
-    const { id } = c.req.valid('param'); const tenantId = c.get('tenantId'); const deps = c.get('deps');
+    const { id } = c.req.valid('param');
+    const tenantId = c.get('tenantId');
+    const deps = c.get('deps');
     await deps.jobManager.triggerReconciliation(id, tenantId);
     if (deps.auditLogger) {
-      deps.auditLogger.log({ tenantId, actorId: c.get('auth').userId, actorType: 'user', action: 'job.reconciled', resourceType: 'job', resourceId: id });
+      deps.auditLogger.log({
+        tenantId,
+        actorId: c.get('auth').userId,
+        actorType: 'user',
+        action: 'job.reconciled',
+        resourceType: 'job',
+        resourceId: id,
+      });
     }
     return c.json({ data: { id, message: 'Reconciliation triggered' } });
   });

@@ -4,7 +4,8 @@ import { fetchEntitiesCursor } from '../../../src/pipeline/entity-cursor.js';
 describe('fetchEntitiesCursor', () => {
   it('yields entity batches until no more results', async () => {
     const mockRepo = {
-      findByJobCursor: vi.fn()
+      findByJobCursor: vi
+        .fn()
         .mockResolvedValueOnce({ entities: [{ id: '1' }, { id: '2' }], nextCursor: '2' })
         .mockResolvedValueOnce({ entities: [{ id: '3' }], nextCursor: null }),
     };
@@ -38,9 +39,18 @@ describe('fetchEntitiesCursor', () => {
       findByJobCursor: vi.fn().mockResolvedValue({ entities: [{ id: '1' }], nextCursor: null }),
     };
     const batches = [];
-    for await (const batch of fetchEntitiesCursor(mockRepo as any, 'j1', 't1', 500, { minQuality: 0.7 })) {
+    for await (const batch of fetchEntitiesCursor(mockRepo as any, 'j1', 't1', 500, {
+      minQuality: 0.7,
+    })) {
       batches.push(batch);
     }
-    expect(mockRepo.findByJobCursor).toHaveBeenCalledWith('j1', 't1', 500, undefined, undefined, 0.7);
+    expect(mockRepo.findByJobCursor).toHaveBeenCalledWith(
+      'j1',
+      't1',
+      500,
+      undefined,
+      undefined,
+      0.7,
+    );
   });
 });

@@ -30,7 +30,9 @@ function createMockDeps(overrides: Partial<AppDeps> = {}): AppDeps {
       deleteWithData: vi.fn(),
       findAll: vi.fn().mockResolvedValue([SAMPLE_JOB]),
       countAll: vi.fn().mockResolvedValue(1),
-      forceCancel: vi.fn().mockResolvedValue({ ...SAMPLE_JOB, status: 'cancelled', completedAt: new Date() }),
+      forceCancel: vi
+        .fn()
+        .mockResolvedValue({ ...SAMPLE_JOB, status: 'cancelled', completedAt: new Date() }),
     } as any,
     schemaRepo: {} as any,
     extractionRepo: {} as any,
@@ -38,7 +40,14 @@ function createMockDeps(overrides: Partial<AppDeps> = {}): AppDeps {
     entitySourceRepo: {} as any,
     actionRepo: {} as any,
     taskRepo: {} as any,
-    jobManager: { createJob: vi.fn(), startJob: vi.fn(), pauseJob: vi.fn(), resumeJob: vi.fn(), cancelJob: vi.fn(), triggerReconciliation: vi.fn() } as any,
+    jobManager: {
+      createJob: vi.fn(),
+      startJob: vi.fn(),
+      pauseJob: vi.fn(),
+      resumeJob: vi.fn(),
+      cancelJob: vi.fn(),
+      triggerReconciliation: vi.fn(),
+    } as any,
     exportRepo: {} as any,
     contentStore: {} as any,
     exportQueue: {} as any,
@@ -82,10 +91,9 @@ describe('GET /api/v1/admin/jobs', () => {
 
   it('passes status and tenantId filters to repo', async () => {
     const app = createApp(deps);
-    await app.request(
-      `/api/v1/admin/jobs?status=running&tenantId=${TENANT_ID}&limit=10&offset=5`,
-      { headers: tenantHeader },
-    );
+    await app.request(`/api/v1/admin/jobs?status=running&tenantId=${TENANT_ID}&limit=10&offset=5`, {
+      headers: tenantHeader,
+    });
 
     expect((deps.jobRepo as any).findAll).toHaveBeenCalledWith({
       status: 'running',

@@ -30,7 +30,4 @@ export {
   type ReviewQueueActionRepo,
 } from './review-queue.js';
 
-export {
-  DefaultActionExecutor,
-  type ActionExecutorConfig,
-} from './action-executor-impl.js';
+export { DefaultActionExecutor, type ActionExecutorConfig } from './action-executor-impl.js';

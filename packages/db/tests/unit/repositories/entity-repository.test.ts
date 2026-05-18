@@ -148,20 +148,22 @@ describe('EntityRepository', () => {
     );
     mockDb.select = vi.fn().mockReturnValue(failChainable);
 
-    await expect(
-      repo.countByJob('job-id', 'tenant-id'),
-    ).rejects.toThrow('Failed to count entities');
+    await expect(repo.countByJob('job-id', 'tenant-id')).rejects.toThrow(
+      'Failed to count entities',
+    );
   });
 
   it('updateMergedData updates data and provenance', async () => {
     const updateChainable = {
       set: vi.fn().mockReturnThis(),
       where: vi.fn().mockReturnThis(),
-      returning: vi.fn().mockResolvedValue([{
-        id: 'entity-1',
-        mergedData: { name: 'Updated' },
-        provenance: { name: { provenanceType: 'merged' } },
-      }]),
+      returning: vi.fn().mockResolvedValue([
+        {
+          id: 'entity-1',
+          mergedData: { name: 'Updated' },
+          provenance: { name: { provenanceType: 'merged' } },
+        },
+      ]),
     };
     mockDb.update = vi.fn().mockReturnValue(updateChainable);
 
@@ -208,10 +210,12 @@ describe('EntityRepository', () => {
     const updateChainable = {
       set: vi.fn().mockReturnThis(),
       where: vi.fn().mockReturnThis(),
-      returning: vi.fn().mockResolvedValue([{
-        id: 'entity-1',
-        mergedData: { name: 'Updated' },
-      }]),
+      returning: vi.fn().mockResolvedValue([
+        {
+          id: 'entity-1',
+          mergedData: { name: 'Updated' },
+        },
+      ]),
     };
     mockDb.update = vi.fn().mockReturnValue(updateChainable);
 
@@ -228,10 +232,12 @@ describe('EntityRepository', () => {
     const updateChainable = {
       set: vi.fn().mockReturnThis(),
       where: vi.fn().mockReturnThis(),
-      returning: vi.fn().mockResolvedValue([{
-        id: 'entity-1',
-        categories: ['electronics'],
-      }]),
+      returning: vi.fn().mockResolvedValue([
+        {
+          id: 'entity-1',
+          categories: ['electronics'],
+        },
+      ]),
     };
     mockDb.update = vi.fn().mockReturnValue(updateChainable);
 
@@ -301,9 +307,9 @@ describe('EntityRepository', () => {
       );
       mockDb.select = vi.fn().mockReturnValue({ from: vi.fn().mockReturnValue(failChainable) });
 
-      await expect(
-        repo.findByJobCursor('job-1', 'tenant-1', 10),
-      ).rejects.toThrow('Failed to fetch entities by cursor');
+      await expect(repo.findByJobCursor('job-1', 'tenant-1', 10)).rejects.toThrow(
+        'Failed to fetch entities by cursor',
+      );
     });
   });
 });

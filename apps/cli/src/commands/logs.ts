@@ -113,11 +113,16 @@ const ANSI = {
 
 function colorize(text: string, level: string): string {
   switch (level) {
-    case 'error': return `${ANSI.red}${text}${ANSI.reset}`;
-    case 'warn': return `${ANSI.yellow}${text}${ANSI.reset}`;
-    case 'info': return `${ANSI.cyan}${text}${ANSI.reset}`;
-    case 'debug': return `${ANSI.gray}${text}${ANSI.reset}`;
-    default: return text;
+    case 'error':
+      return `${ANSI.red}${text}${ANSI.reset}`;
+    case 'warn':
+      return `${ANSI.yellow}${text}${ANSI.reset}`;
+    case 'info':
+      return `${ANSI.cyan}${text}${ANSI.reset}`;
+    case 'debug':
+      return `${ANSI.gray}${text}${ANSI.reset}`;
+    default:
+      return text;
   }
 }
 
@@ -150,7 +155,9 @@ export function findLogFile(logsDir: string, runId: string): string | null {
     try {
       const content = readFileSync(f, 'utf-8');
       if (content.includes(runId)) return f;
-    } catch { /* skip unreadable files */ }
+    } catch {
+      /* skip unreadable files */
+    }
   }
 
   return null;
@@ -227,7 +234,9 @@ export async function runLogsCommand(options: LogsOptions = {}): Promise<void> {
             console.log(formatLogEntry(entry));
           }
         }
-      } catch { /* non-fatal */ }
+      } catch {
+        /* non-fatal */
+      }
     });
 
     // Keep alive until SIGINT — use once() to avoid listener leak

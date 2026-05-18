@@ -224,9 +224,7 @@ export class DefaultConfigExecutor implements ConfigExecutor {
 
       case 'modify_user_field': {
         if (config.schema.userFields) {
-          const field = config.schema.userFields.find(
-            (f) => f.name === action.payload.fieldName,
-          );
+          const field = config.schema.userFields.find((f) => f.name === action.payload.fieldName);
           if (field) {
             const changes = action.payload.changes;
             if (changes.name !== undefined) field.name = changes.name;
@@ -441,11 +439,7 @@ export class DefaultConfigExecutor implements ConfigExecutor {
 
   // --- Diff helpers ---
 
-  private diffCrawl(
-    before: JobConfig,
-    after: JobConfig,
-    changes: ConfigDiff['changes'],
-  ) {
+  private diffCrawl(before: JobConfig, after: JobConfig, changes: ConfigDiff['changes']) {
     const crawlKeys = ['maxDepth', 'maxPages', 'concurrency', 'crawlerType'] as const;
     for (const key of crawlKeys) {
       if (before.crawl[key] !== after.crawl[key]) {
@@ -459,11 +453,7 @@ export class DefaultConfigExecutor implements ConfigExecutor {
     }
   }
 
-  private diffSchema(
-    before: JobConfig,
-    after: JobConfig,
-    changes: ConfigDiff['changes'],
-  ) {
+  private diffSchema(before: JobConfig, after: JobConfig, changes: ConfigDiff['changes']) {
     if (before.schema.mode !== after.schema.mode) {
       changes.push({
         path: 'schema.mode',
@@ -492,11 +482,7 @@ export class DefaultConfigExecutor implements ConfigExecutor {
     }
   }
 
-  private diffLLM(
-    before: JobConfig,
-    after: JobConfig,
-    changes: ConfigDiff['changes'],
-  ) {
+  private diffLLM(before: JobConfig, after: JobConfig, changes: ConfigDiff['changes']) {
     if (before.llm.primaryModel !== after.llm.primaryModel) {
       changes.push({
         path: 'llm.primaryModel',

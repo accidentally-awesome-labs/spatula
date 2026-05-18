@@ -18,7 +18,13 @@ import type { FieldDefinitionInput } from '../types/schema.js';
 export function expandFieldShorthand(entry: YamlFieldShorthand): FieldDefinitionInput {
   // Expanded form: has 'field' key
   if ('field' in entry && typeof entry.field === 'string') {
-    const expanded = entry as { field: string; type: FieldDefinitionInput['type']; required?: boolean; selector?: string; description?: string };
+    const expanded = entry as {
+      field: string;
+      type: FieldDefinitionInput['type'];
+      required?: boolean;
+      selector?: string;
+      description?: string;
+    };
     return {
       name: expanded.field,
       type: expanded.type,

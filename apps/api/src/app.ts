@@ -30,12 +30,11 @@ import { timingMiddleware } from './middleware/timing.js';
 import { wsTokenRoutes } from './routes/ws-token.js';
 import { usageRoutes } from './routes/usage.js';
 import { healthRoutes } from './routes/health.js';
+import { authRoutes } from './routes/auth.js';
 import { createQueueDashboard } from './routes/admin-queues.js';
 import { batchActionRoutes } from './routes/batch-actions.js';
 import { batchJobRoutes } from './routes/batch-jobs.js';
 import { timeoutMiddleware } from './middleware/timeout.js';
-import { billingRoutes } from './routes/billing.js';
-import { stripeWebhookRoutes } from './routes/stripe-webhook.js';
 import { createAuthProvider } from './auth/factory.js';
 import type { AppDeps } from './types.js';
 import { getEnvOrDefault } from '@spatula/shared';
@@ -43,24 +42,32 @@ import { getEnvOrDefault } from '@spatula/shared';
 export function createApp(deps: AppDeps) {
   const app = createOpenAPIRouter();
   const authStrategy = getEnvOrDefault('AUTH_STRATEGY', 'none');
-  const authProvider = deps.authProvider ?? createAuthProvider(authStrategy, {
-    apiKeyRepo: deps.apiKeyRepo!,
-    jwtConfig: authStrategy === 'jwt' ? {
-      issuer: getEnvOrDefault('JWT_ISSUER', ''),
-      audience: getEnvOrDefault('JWT_AUDIENCE', ''),
-      jwksUrl: getEnvOrDefault('JWT_JWKS_URL', ''),
-    } : undefined,
-  });
+  const authProvider =
+    deps.authProvider ??
+    createAuthProvider(authStrategy, {
+      apiKeyRepo: deps.apiKeyRepo!,
+      jwtConfig:
+        authStrategy === 'jwt'
+          ? {
+              issuer: getEnvOrDefault('JWT_ISSUER', ''),
+              audience: getEnvOrDefault('JWT_AUDIENCE', ''),
+              jwksUrl: getEnvOrDefault('JWT_JWKS_URL', ''),
+            }
+          : undefined,
+    });
 
   // Global middleware chain (order matters)
   app.use('*', requestContextMiddleware);
   app.use('*', timingMiddleware(deps.metrics ?? null));
   app.use('*', honoLogger());
   app.use('*', securityHeaders);
-  app.use('*', timeoutMiddleware({
-    defaultMs: 30_000,
-    overrides: { '/api/v1/exports/:exportId/download': 300_000 },
-  }));
+  app.use(
+    '*',
+    timeoutMiddleware({
+      defaultMs: 30_000,
+      overrides: { '/api/v1/exports/:exportId/download': 300_000 },
+    }),
+  );
   app.onError(errorHandler);
 
   // CORS
@@ -72,7 +79,13 @@ export function createApp(deps: AppDeps) {
     cors({
       origin: allowedOrigins,
       allowMethods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
-      allowHeaders: ['Authorization', 'Content-Type', 'X-Request-Id', 'X-Tenant-Id', 'Idempotency-Key'],
+      allowHeaders: [
+        'Authorization',
+        'Content-Type',
+        'X-Request-Id',
+        'X-Tenant-Id',
+        'Idempotency-Key',
+      ],
       exposeHeaders: ['X-RateLimit-Limit', 'X-RateLimit-Remaining', 'X-Request-Id'],
       maxAge: 86400,
       credentials: true,
@@ -98,23 +111,12 @@ export function createApp(deps: AppDeps) {
 
   // Auth middleware — uses authProvider (NoAuthProvider when AUTH_STRATEGY=none)
   // Note: authMiddleware skips /health, /api/docs, /api/openapi.json, /api/v1/tenants
-  app.use('/api/*', authMiddleware(authProvider, deps.auditLogger, deps.userTenantRepo, deps.tenantRepo));
+  app.use(
+    '/api/*',
+    authMiddleware(authProvider, deps.auditLogger, deps.userTenantRepo, deps.tenantRepo),
+  );
   app.use('/api/*', depsMiddleware(deps));
   app.use('/api/*', validateTenantMiddleware);
-
-  // Load tenant plan for rate limiting (plan name matches RATE_LIMIT_TIERS keys)
-  app.use('/api/*', async (c, next) => {
-    const tenantId = c.get('tenantId');
-    if (tenantId && deps.tenantRepo) {
-      try {
-        const tenant = await deps.tenantRepo.findById(tenantId);
-        c.set('rateLimitTier', (tenant as any)?.plan ?? 'free');
-      } catch {
-        c.set('rateLimitTier', 'free');
-      }
-    }
-    return next();
-  });
 
   // Rate limiting (after auth + quota loading)
   if (deps.redis) {
@@ -140,6 +142,9 @@ export function createApp(deps: AppDeps) {
   app.use('/api/v1/api-keys', requireScope('keys:manage'));
   app.use('/api/v1/api-keys/*', requireScope('keys:manage'));
   app.route('/api/v1/api-keys', apiKeyRoutes());
+
+  // Auth introspection endpoint — see apps/api/src/routes/auth.ts
+  app.route('/api/v1/auth', authRoutes());
 
   // WebSocket token endpoint
   if (deps.redis) {
@@ -177,14 +182,6 @@ export function createApp(deps: AppDeps) {
   // Usage API (requires jobs:read scope)
   app.get('/api/v1/usage', requireScope('jobs:read'));
   app.route('/api/v1/usage', usageRoutes());
-
-  // Billing routes
-  app.get('/api/v1/billing/*', requireScope('billing:read'));
-  app.post('/api/v1/billing/*', requireScope('billing:write'));
-  app.route('/api/v1/billing', billingRoutes());
-
-  // Stripe webhook (no auth — uses Stripe signature verification)
-  app.route('/api/v1/webhooks/stripe', stripeWebhookRoutes());
 
   // Admin routes
   app.use('/api/v1/admin/*', requireScope('admin'));

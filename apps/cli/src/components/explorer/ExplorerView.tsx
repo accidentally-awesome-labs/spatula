@@ -18,7 +18,11 @@ import { EntityDetail } from './EntityDetail.js';
 import { ExportDialog } from './ExportDialog.js';
 
 export interface FilteredFetch {
-  getEntities(query: { limit: number; offset: number; sourceFilter: 'local' | 'remote' }): Promise<{ data: unknown[]; total: number }>;
+  getEntities(query: {
+    limit: number;
+    offset: number;
+    sourceFilter: 'local' | 'remote';
+  }): Promise<{ data: unknown[]; total: number }>;
 }
 
 export interface ExplorerViewProps {
@@ -65,9 +69,7 @@ function extractSchemaFields(schemaData: Record<string, unknown> | null): string
   // Try schemaData.fields (flat structure)
   const topFields = schemaData.fields;
   if (Array.isArray(topFields)) {
-    return topFields
-      .map((f: Record<string, unknown>) => String(f.name ?? ''))
-      .filter(Boolean);
+    return topFields.map((f: Record<string, unknown>) => String(f.name ?? '')).filter(Boolean);
   }
 
   // Try schemaData.definition.fields (nested structure)
@@ -113,23 +115,23 @@ export function ExplorerView({
   const schemaFields = useMemo(() => extractSchemaFields(schemaData), [schemaData]);
 
   // Entity data hook (pagination)
-  const {
-    pageSize,
-    totalPages,
-    nextPage,
-    prevPage,
-    fetchEntity,
-    fetchPage,
-  } = useEntityData(store, backend, activeJobId ?? '', {
-    sourceFilter,
-    filteredFetch,
-  });
+  const { pageSize, totalPages, nextPage, prevPage, fetchEntity, fetchPage } = useEntityData(
+    store,
+    backend,
+    activeJobId ?? '',
+    {
+      sourceFilter,
+      filteredFetch,
+    },
+  );
 
   // Entity filter hook (local + server-side filtering)
-  const {
-    setFilterQuery: applyFilter,
-    clearFilter,
-  } = useEntityFilter(store, backend, activeJobId ?? '', totalEntityCount);
+  const { setFilterQuery: applyFilter, clearFilter } = useEntityFilter(
+    store,
+    backend,
+    activeJobId ?? '',
+    totalEntityCount,
+  );
 
   // ---------------------------------------------------------------------------
   // Table keyboard handlers
@@ -153,38 +155,55 @@ export function ExplorerView({
     }
   }, [entities, selectedEntityIndex, fetchEntity, store]);
 
-  const tableKeyMap = useMemo(() => ({
-    upArrow: () => {
-      const idx = store.getState().selectedEntityIndex;
-      if (idx > 0) store.getState().setSelectedEntityIndex(idx - 1);
-    },
-    downArrow: () => {
-      const idx = store.getState().selectedEntityIndex;
-      const max = store.getState().entities.length - 1;
-      if (idx < max) store.getState().setSelectedEntityIndex(idx + 1);
-    },
-    leftArrow: () => {
-      setColumnOffset((prev) => Math.max(0, prev - 1));
-    },
-    rightArrow: () => {
-      setColumnOffset((prev) => Math.min(prev + 1, Math.max(0, schemaFields.length - 1)));
-    },
-    return: () => { void openDetail(); },
-    f: () => { store.getState().setFilterFocused(true); },
-    F: () => { store.getState().setFilterFocused(true); },
-    '/': () => { store.getState().setFilterFocused(true); },
-    e: () => { setSubView('export'); },
-    E: () => { setSubView('export'); },
-    s: () => setSourceFilter((f) => cycleSourceFilter(f)),
-    S: () => setSourceFilter((f) => cycleSourceFilter(f)),
-    n: nextPage,
-    N: nextPage,
-    p: prevPage,
-    P: prevPage,
-    ']': nextPage,
-    '[': prevPage,
-    escape: () => { store.getState().setMode('conversational'); },
-  }), [store, openDetail, nextPage, prevPage, schemaFields.length]);
+  const tableKeyMap = useMemo(
+    () => ({
+      upArrow: () => {
+        const idx = store.getState().selectedEntityIndex;
+        if (idx > 0) store.getState().setSelectedEntityIndex(idx - 1);
+      },
+      downArrow: () => {
+        const idx = store.getState().selectedEntityIndex;
+        const max = store.getState().entities.length - 1;
+        if (idx < max) store.getState().setSelectedEntityIndex(idx + 1);
+      },
+      leftArrow: () => {
+        setColumnOffset((prev) => Math.max(0, prev - 1));
+      },
+      rightArrow: () => {
+        setColumnOffset((prev) => Math.min(prev + 1, Math.max(0, schemaFields.length - 1)));
+      },
+      return: () => {
+        void openDetail();
+      },
+      f: () => {
+        store.getState().setFilterFocused(true);
+      },
+      F: () => {
+        store.getState().setFilterFocused(true);
+      },
+      '/': () => {
+        store.getState().setFilterFocused(true);
+      },
+      e: () => {
+        setSubView('export');
+      },
+      E: () => {
+        setSubView('export');
+      },
+      s: () => setSourceFilter((f) => cycleSourceFilter(f)),
+      S: () => setSourceFilter((f) => cycleSourceFilter(f)),
+      n: nextPage,
+      N: nextPage,
+      p: prevPage,
+      P: prevPage,
+      ']': nextPage,
+      '[': prevPage,
+      escape: () => {
+        store.getState().setMode('conversational');
+      },
+    }),
+    [store, openDetail, nextPage, prevPage, schemaFields.length],
+  );
 
   useKeyboard(tableKeyMap, subView === 'table' && !filterFocused);
 
@@ -192,18 +211,29 @@ export function ExplorerView({
   // Detail keyboard handlers
   // ---------------------------------------------------------------------------
 
-  const detailKeyMap = useMemo(() => ({
-    upArrow: () => { setDetailScrollOffset((o) => Math.max(0, o - 1)); },
-    downArrow: () => { setDetailScrollOffset((o) => o + 1); },
-    escape: () => {
-      store.getState().setExpandedEntity(null);
-      setDetailError(null);
-      setDetailScrollOffset(0);
-      setSubView('table');
-    },
-    e: () => { setSubView('export'); },
-    E: () => { setSubView('export'); },
-  }), [store]);
+  const detailKeyMap = useMemo(
+    () => ({
+      upArrow: () => {
+        setDetailScrollOffset((o) => Math.max(0, o - 1));
+      },
+      downArrow: () => {
+        setDetailScrollOffset((o) => o + 1);
+      },
+      escape: () => {
+        store.getState().setExpandedEntity(null);
+        setDetailError(null);
+        setDetailScrollOffset(0);
+        setSubView('table');
+      },
+      e: () => {
+        setSubView('export');
+      },
+      E: () => {
+        setSubView('export');
+      },
+    }),
+    [store],
+  );
 
   useKeyboard(detailKeyMap, subView === 'detail');
 
@@ -211,9 +241,12 @@ export function ExplorerView({
   // Filter callbacks
   // ---------------------------------------------------------------------------
 
-  const handleFilterQueryChange = useCallback((query: string) => {
-    applyFilter(query);
-  }, [applyFilter]);
+  const handleFilterQueryChange = useCallback(
+    (query: string) => {
+      applyFilter(query);
+    },
+    [applyFilter],
+  );
 
   const handleFilterToggleMode = useCallback(() => {
     const current = store.getState().filterMode;

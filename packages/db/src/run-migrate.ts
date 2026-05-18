@@ -6,7 +6,10 @@ import { createDatabase } from './connection.js';
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
 const db = createDatabase();
-migrate(db, { migrationsFolder: resolve(__dirname, '../drizzle') })
+migrate(db, {
+  migrationsFolder: resolve(__dirname, '../drizzle'),
+  migrationsTable: '__drizzle_migrations_oss',
+})
   .then(() => {
     console.log('Migrations complete');
     process.exit(0);

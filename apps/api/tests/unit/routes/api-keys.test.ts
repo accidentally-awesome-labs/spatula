@@ -6,7 +6,19 @@ function createTestApp(mockDeps: any) {
   const app = new Hono();
   app.use('*', async (c, next) => {
     c.set('tenantId', 'tenant-1');
-    c.set('auth', { tenantId: 'tenant-1', userId: 'user-1', scopes: ['keys:manage', 'jobs:read', 'jobs:write', 'exports:read', 'exports:write', 'actions:read', 'actions:write', 'billing:read'] });
+    c.set('auth', {
+      tenantId: 'tenant-1',
+      userId: 'user-1',
+      scopes: [
+        'keys:manage',
+        'jobs:read',
+        'jobs:write',
+        'exports:read',
+        'exports:write',
+        'actions:read',
+        'actions:write',
+      ],
+    });
     c.set('deps', mockDeps);
     return next();
   });
@@ -206,7 +218,14 @@ describe('API Key routes', () => {
       expect(res.status).toBe(201);
       expect(mockApiKeyRepo.create).toHaveBeenCalledWith(
         expect.objectContaining({
-          scopes: expect.arrayContaining(['jobs:read', 'jobs:write', 'exports:read', 'exports:write', 'actions:read', 'actions:write']),
+          scopes: expect.arrayContaining([
+            'jobs:read',
+            'jobs:write',
+            'exports:read',
+            'exports:write',
+            'actions:read',
+            'actions:write',
+          ]),
         }),
       );
     });

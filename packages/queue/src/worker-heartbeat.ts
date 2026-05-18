@@ -37,7 +37,10 @@ export class WorkerHeartbeat {
   }
 
   stop(): void {
-    if (this.timer) { clearInterval(this.timer); this.timer = undefined; }
+    if (this.timer) {
+      clearInterval(this.timer);
+      this.timer = undefined;
+    }
     const key = `worker:heartbeat:${this.workerId}`;
     this.redis.del(key).catch(() => {});
     logger.info({ workerId: this.workerId }, 'Heartbeat stopped');

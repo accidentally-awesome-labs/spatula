@@ -22,9 +22,13 @@ describe('RedisCache', () => {
   describe('getOrFetch', () => {
     it('returns cached value on hit', async () => {
       redis.get.mockResolvedValue(JSON.stringify({ version: 1 }));
-      const result = await cache.getOrFetch('schema:job-1:current', async () => {
-        throw new Error('should not be called');
-      }, 30);
+      const result = await cache.getOrFetch(
+        'schema:job-1:current',
+        async () => {
+          throw new Error('should not be called');
+        },
+        30,
+      );
       expect(result).toEqual({ version: 1 });
       expect(redis.set).not.toHaveBeenCalled();
     });
@@ -36,7 +40,12 @@ describe('RedisCache', () => {
       const result = await cache.getOrFetch('schema:job-1:current', fetcher, 30);
       expect(result).toEqual({ version: 2 });
       expect(fetcher).toHaveBeenCalledOnce();
-      expect(redis.set).toHaveBeenCalledWith('cache:schema:job-1:current', JSON.stringify({ version: 2 }), 'EX', 30);
+      expect(redis.set).toHaveBeenCalledWith(
+        'cache:schema:job-1:current',
+        JSON.stringify({ version: 2 }),
+        'EX',
+        30,
+      );
     });
 
     it('returns fetcher result when Redis is unavailable', async () => {
@@ -63,7 +72,9 @@ describe('RedisCache', () => {
 
   describe('invalidate', () => {
     it('deletes keys matching pattern using SCAN', async () => {
-      redis.scan.mockResolvedValueOnce(['10', ['cache:schema:job-1:current', 'cache:schema:job-1:v2']]).mockResolvedValueOnce(['0', []]);
+      redis.scan
+        .mockResolvedValueOnce(['10', ['cache:schema:job-1:current', 'cache:schema:job-1:v2']])
+        .mockResolvedValueOnce(['0', []]);
       redis.del.mockResolvedValue(2);
       await cache.invalidate('schema:job-1:*');
       expect(redis.del).toHaveBeenCalledWith('cache:schema:job-1:current', 'cache:schema:job-1:v2');

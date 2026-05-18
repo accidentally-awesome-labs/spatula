@@ -297,7 +297,15 @@ describe('SQLite Repositories (in-memory)', () => {
         version: 1,
         definition: {
           version: 1,
-          fields: [{ name: 'title', type: 'string', confidence: 0.9, provenance: 'extracted', sources: [] }],
+          fields: [
+            {
+              name: 'title',
+              type: 'string',
+              confidence: 0.9,
+              provenance: 'extracted',
+              sources: [],
+            },
+          ],
           fieldAliases: [],
           createdAt: new Date(),
           parentVersion: null,
@@ -321,8 +329,20 @@ describe('SQLite Repositories (in-memory)', () => {
         definition: {
           version: 2,
           fields: [
-            { name: 'title', type: 'string', confidence: 0.95, provenance: 'extracted', sources: [] },
-            { name: 'price', type: 'number', confidence: 0.8, provenance: 'extracted', sources: [] },
+            {
+              name: 'title',
+              type: 'string',
+              confidence: 0.95,
+              provenance: 'extracted',
+              sources: [],
+            },
+            {
+              name: 'price',
+              type: 'number',
+              confidence: 0.8,
+              provenance: 'extracted',
+              sources: [],
+            },
           ],
           fieldAliases: [],
           createdAt: new Date(),
@@ -447,7 +467,10 @@ describe('SQLite Repositories (in-memory)', () => {
     });
 
     it('respects limit option', async () => {
-      const entities = await adapter.entityRepo.findByJob(projectId, tenantId, { limit: 1, offset: 0 });
+      const entities = await adapter.entityRepo.findByJob(projectId, tenantId, {
+        limit: 1,
+        offset: 0,
+      });
       expect(entities).toHaveLength(1);
     });
   });
@@ -497,7 +520,7 @@ describe('SQLite Repositories (in-memory)', () => {
     let actionId: string;
 
     it('creates an action and returns an id', async () => {
-      const result = await adapter.actionRepo.create({
+      const result = (await adapter.actionRepo.create({
         jobId: projectId,
         tenantId,
         type: 'add_field',
@@ -506,7 +529,7 @@ describe('SQLite Repositories (in-memory)', () => {
         status: 'pending_review',
         confidence: 0.85,
         reasoning: 'Multiple pages contain description data',
-      }) as { id: string };
+      })) as { id: string };
       expect(result.id).toBeDefined();
       actionId = result.id;
     });
@@ -543,14 +566,14 @@ describe('SQLite Repositories (in-memory)', () => {
 
   describe('SourceTrustRepository', () => {
     it('upserts a source trust record', async () => {
-      const result = await adapter.sourceTrustRepo.upsert({
+      const result = (await adapter.sourceTrustRepo.upsert({
         jobId: projectId,
         tenantId,
         domain: 'example.com',
         trustLevel: 'high',
         reasoning: 'Consistent data quality', // silently dropped per spec
         score: 0.9,
-      }) as { id: string };
+      })) as { id: string };
       expect(result.id).toBeDefined();
     });
 

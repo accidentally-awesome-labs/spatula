@@ -15,7 +15,7 @@ export function createLLMClient(config: LLMFactoryConfig): LLMClient {
       if (!apiKey) {
         throw new ConfigError(
           'OpenRouter API key is required when provider is "openrouter". ' +
-          'Set OPENROUTER_API_KEY or use provider "ollama" for local inference.',
+            'Set OPENROUTER_API_KEY or use provider "ollama" for local inference.',
         );
       }
       return new OpenRouterClient({

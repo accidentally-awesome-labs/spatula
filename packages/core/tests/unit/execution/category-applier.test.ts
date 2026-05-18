@@ -4,7 +4,10 @@ import type { SchemaDefinition } from '../../../src/types/schema.js';
 import type { PipelineAction } from '../../../src/types/actions.js';
 import { generateId } from '@spatula/shared';
 
-function baseAction(): Pick<PipelineAction, 'id' | 'jobId' | 'source' | 'reasoning' | 'confidence'> {
+function baseAction(): Pick<
+  PipelineAction,
+  'id' | 'jobId' | 'source' | 'reasoning' | 'confidence'
+> {
   return {
     id: generateId(),
     jobId: generateId(),
@@ -38,7 +41,11 @@ describe('applyCategoryActions', () => {
         payload: {
           categoryField: 'product_type',
           categories: [
-            { name: 'electronics', description: 'Electronic devices', matchCriteria: 'tech products' },
+            {
+              name: 'electronics',
+              description: 'Electronic devices',
+              matchCriteria: 'tech products',
+            },
             { name: 'clothing', description: 'Apparel', matchCriteria: 'wearable items' },
           ],
         },

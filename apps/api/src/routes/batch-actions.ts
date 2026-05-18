@@ -17,7 +17,16 @@ export function batchActionRoutes() {
     const raw = await c.req.json();
     const parsed = batchActionSchema.safeParse(raw);
     if (!parsed.success) {
-      return c.json({ error: { code: 'VALIDATION_ERROR', message: parsed.error.issues[0]?.message ?? 'Invalid request', requestId: '' } }, 400);
+      return c.json(
+        {
+          error: {
+            code: 'VALIDATION_ERROR',
+            message: parsed.error.issues[0]?.message ?? 'Invalid request',
+            requestId: '',
+          },
+        },
+        400,
+      );
     }
     const { action, ids } = parsed.data;
     const tenantId = c.get('tenantId');
@@ -59,7 +68,10 @@ export function batchActionRoutes() {
       });
     }
 
-    logger.info({ action, total: ids.length, succeeded: succeeded.length, failed: failed.length }, 'batch action complete');
+    logger.info(
+      { action, total: ids.length, succeeded: succeeded.length, failed: failed.length },
+      'batch action complete',
+    );
     return c.json({ data: { succeeded, failed } });
   });
 

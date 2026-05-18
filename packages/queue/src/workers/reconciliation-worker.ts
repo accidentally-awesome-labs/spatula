@@ -29,7 +29,12 @@ export async function processReconciliationJob(
       deps.queues.webhook,
       (job?.config as any)?.webhooks,
       'job.completed',
-      { jobId: data.jobId, tenantId: data.tenantId, status: 'completed', entityCount: result.entitiesCreated },
+      {
+        jobId: data.jobId,
+        tenantId: data.tenantId,
+        status: 'completed',
+        entityCount: result.entitiesCreated,
+      },
     );
   }
 }

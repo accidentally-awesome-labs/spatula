@@ -1,5 +1,10 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
-import { setupAuthContext, bearerHeaders, minimalJobBody, type AuthTestContext } from './helpers.js';
+import {
+  setupAuthContext,
+  bearerHeaders,
+  minimalJobBody,
+  type AuthTestContext,
+} from './helpers.js';
 
 describe('Tier 5B: Idempotency', () => {
   let ctx: AuthTestContext;

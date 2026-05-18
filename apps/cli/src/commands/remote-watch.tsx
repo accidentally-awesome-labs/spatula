@@ -23,9 +23,7 @@ export async function getRemoteWatchConfig(
 
   const jobId = await metaGet(`remote:${remoteName}:job_id`);
   if (!jobId) {
-    throw new Error(
-      `No linked job for remote "${remoteName}". Run \`spatula push\` first.`,
-    );
+    throw new Error(`No linked job for remote "${remoteName}". Run \`spatula push\` first.`);
   }
 
   return { baseUrl: remote.url, apiKey: remote.apiKey, jobId };

@@ -16,47 +16,48 @@
 
 ## File Map
 
-| Action | Path | Responsibility |
-|--------|------|----------------|
-| Create | `packages/shared/src/billing/tiers.ts` | Billing tier constants and types |
-| Create | `packages/db/src/schema/usage-records.ts` | Drizzle schema for usage_records table |
-| Create | `packages/db/src/repositories/usage-record-repository.ts` | Usage record CRUD + aggregation |
-| Create | `packages/db/tests/unit/repositories/usage-record-repository.test.ts` | Repository unit tests |
-| Create | `packages/core/src/billing/quota-enforcer.ts` | Quota enforcement service |
-| Create | `packages/core/src/billing/quota-enforcer.test.ts` | QuotaEnforcer unit tests |
-| Create | `apps/api/src/billing/stripe-client.ts` | Stripe API wrapper |
-| Create | `apps/api/tests/unit/billing/stripe-client.test.ts` | Stripe client unit tests |
-| Create | `apps/api/src/routes/billing.ts` | Billing API routes |
-| Create | `apps/api/tests/unit/routes/billing.test.ts` | Billing route tests |
-| Create | `apps/api/src/routes/stripe-webhook.ts` | Stripe webhook handler |
-| Create | `apps/api/tests/unit/routes/stripe-webhook.test.ts` | Webhook handler tests |
-| Create | `packages/queue/src/metering-worker.ts` | Hourly usage→Stripe metering worker |
-| Create | `packages/queue/tests/unit/metering-worker.test.ts` | Metering worker tests |
-| Modify | `packages/shared/src/billing/index.ts` | New barrel export for billing module |
-| Modify | `packages/shared/src/index.ts` | Re-export billing module |
-| Modify | `packages/shared/src/auth/rate-limit-tiers.ts` | Rename tiers: standard→starter, enterprise→pro, unlimited→enterprise |
-| Modify | `packages/db/src/schema/tenants.ts` | Add `plan` and `stripeCustomerId` columns |
-| Modify | `packages/db/src/schema/index.ts` | Re-export usage-records schema |
-| Modify | `packages/db/src/index.ts` | Export UsageRecordRepository |
-| Modify | `packages/db/src/repositories/tenant-repository.ts` | Add `updatePlan()` method |
-| Modify | `apps/api/src/types.ts` | Add usageRecordRepo, stripeClient, quotaEnforcer to AppDeps |
-| Modify | `apps/api/src/app.ts` | Register billing routes, webhook route (skip auth), wire new deps |
-| Modify | `apps/api/src/middleware/auth.ts` | Add webhook path to SKIP_AUTH_PATHS |
-| Modify | `apps/api/src/routes/exports.ts` | Add format restriction check per tier |
-| Modify | `packages/queue/src/queues.ts` | Add METERING queue name |
-| Modify | `packages/queue/src/worker-entrypoint.ts` | Register metering worker |
-| Modify | `apps/api/src/routes/admin-queues.ts` | Add metering queue to Bull Board |
-| Modify | `packages/shared/src/auth/types.ts` | Add `billing:read` and `billing:write` to AUTH_SCOPES |
-| Modify | `packages/shared/tests/unit/auth/quotas.test.ts` | Update rate limit tier names in tests |
-| Modify | `apps/api/tests/unit/middleware/rate-limit.test.ts` | Update rate limit tier names in tests |
-| Create | `packages/core/src/billing/index.ts` | Barrel export for billing module |
-| Modify | `packages/core/src/index.ts` | Re-export billing module |
+| Action | Path                                                                  | Responsibility                                                       |
+| ------ | --------------------------------------------------------------------- | -------------------------------------------------------------------- |
+| Create | `packages/shared/src/billing/tiers.ts`                                | Billing tier constants and types                                     |
+| Create | `packages/db/src/schema/usage-records.ts`                             | Drizzle schema for usage_records table                               |
+| Create | `packages/db/src/repositories/usage-record-repository.ts`             | Usage record CRUD + aggregation                                      |
+| Create | `packages/db/tests/unit/repositories/usage-record-repository.test.ts` | Repository unit tests                                                |
+| Create | `packages/core/src/billing/quota-enforcer.ts`                         | Quota enforcement service                                            |
+| Create | `packages/core/src/billing/quota-enforcer.test.ts`                    | QuotaEnforcer unit tests                                             |
+| Create | `apps/api/src/billing/stripe-client.ts`                               | Stripe API wrapper                                                   |
+| Create | `apps/api/tests/unit/billing/stripe-client.test.ts`                   | Stripe client unit tests                                             |
+| Create | `apps/api/src/routes/billing.ts`                                      | Billing API routes                                                   |
+| Create | `apps/api/tests/unit/routes/billing.test.ts`                          | Billing route tests                                                  |
+| Create | `apps/api/src/routes/stripe-webhook.ts`                               | Stripe webhook handler                                               |
+| Create | `apps/api/tests/unit/routes/stripe-webhook.test.ts`                   | Webhook handler tests                                                |
+| Create | `packages/queue/src/metering-worker.ts`                               | Hourly usage→Stripe metering worker                                  |
+| Create | `packages/queue/tests/unit/metering-worker.test.ts`                   | Metering worker tests                                                |
+| Modify | `packages/shared/src/billing/index.ts`                                | New barrel export for billing module                                 |
+| Modify | `packages/shared/src/index.ts`                                        | Re-export billing module                                             |
+| Modify | `packages/shared/src/auth/rate-limit-tiers.ts`                        | Rename tiers: standard→starter, enterprise→pro, unlimited→enterprise |
+| Modify | `packages/db/src/schema/tenants.ts`                                   | Add `plan` and `stripeCustomerId` columns                            |
+| Modify | `packages/db/src/schema/index.ts`                                     | Re-export usage-records schema                                       |
+| Modify | `packages/db/src/index.ts`                                            | Export UsageRecordRepository                                         |
+| Modify | `packages/db/src/repositories/tenant-repository.ts`                   | Add `updatePlan()` method                                            |
+| Modify | `apps/api/src/types.ts`                                               | Add usageRecordRepo, stripeClient, quotaEnforcer to AppDeps          |
+| Modify | `apps/api/src/app.ts`                                                 | Register billing routes, webhook route (skip auth), wire new deps    |
+| Modify | `apps/api/src/middleware/auth.ts`                                     | Add webhook path to SKIP_AUTH_PATHS                                  |
+| Modify | `apps/api/src/routes/exports.ts`                                      | Add format restriction check per tier                                |
+| Modify | `packages/queue/src/queues.ts`                                        | Add METERING queue name                                              |
+| Modify | `packages/queue/src/worker-entrypoint.ts`                             | Register metering worker                                             |
+| Modify | `apps/api/src/routes/admin-queues.ts`                                 | Add metering queue to Bull Board                                     |
+| Modify | `packages/shared/src/auth/types.ts`                                   | Add `billing:read` and `billing:write` to AUTH_SCOPES                |
+| Modify | `packages/shared/tests/unit/auth/quotas.test.ts`                      | Update rate limit tier names in tests                                |
+| Modify | `apps/api/tests/unit/middleware/rate-limit.test.ts`                   | Update rate limit tier names in tests                                |
+| Create | `packages/core/src/billing/index.ts`                                  | Barrel export for billing module                                     |
+| Modify | `packages/core/src/index.ts`                                          | Re-export billing module                                             |
 
 ---
 
 ### Task 1: Billing Tier Constants
 
 **Files:**
+
 - Create: `packages/shared/src/billing/tiers.ts`
 - Create: `packages/shared/src/billing/index.ts`
 - Modify: `packages/shared/src/index.ts`
@@ -136,11 +137,16 @@ export type UsageDimension = 'jobs' | 'pages' | 'llm_tokens' | 'storage_bytes';
 export function getTierLimit(tier: BillingTierName, dimension: UsageDimension): number {
   const limits = BILLING_TIERS[tier]?.limits ?? BILLING_TIERS.free.limits;
   switch (dimension) {
-    case 'jobs': return limits.jobsPerMonth;
-    case 'pages': return limits.pagesPerMonth;
-    case 'llm_tokens': return limits.llmTokensPerMonth;
-    case 'storage_bytes': return limits.storageMb * 1_024 * 1_024;
-    default: return Infinity;
+    case 'jobs':
+      return limits.jobsPerMonth;
+    case 'pages':
+      return limits.pagesPerMonth;
+    case 'llm_tokens':
+      return limits.llmTokensPerMonth;
+    case 'storage_bytes':
+      return limits.storageMb * 1_024 * 1_024;
+    default:
+      return Infinity;
   }
 }
 ```
@@ -207,6 +213,7 @@ git commit -m "feat(shared): add billing tier constants, types, and billing auth
 ### Task 2: Rename Rate Limit Tiers to Match Billing Tiers
 
 **Files:**
+
 - Modify: `packages/shared/src/auth/rate-limit-tiers.ts`
 - Grep + fix all references to old tier names
 
@@ -234,6 +241,7 @@ export const RATE_LIMIT_TIERS: Record<string, RateLimitTier> = {
 - [ ] **Step 2: Update test file `packages/shared/tests/unit/auth/quotas.test.ts`**
 
 Specific changes needed:
+
 - Line 42: Change expected keys from `['enterprise', 'free', 'standard', 'unlimited']` to `['enterprise', 'free', 'pro', 'starter']`
 - Lines 54-56: Rename `standard` → `starter`, `enterprise` → `pro` in the destructuring and comparisons
 - Lines 59-62: Rename `RATE_LIMIT_TIERS.unlimited` to `RATE_LIMIT_TIERS.enterprise`
@@ -241,6 +249,7 @@ Specific changes needed:
 - [ ] **Step 3: Update test file `apps/api/tests/unit/middleware/rate-limit.test.ts`**
 
 Specific changes needed:
+
 - Line 47: Change `'unlimited'` to `'enterprise'` in the skip test
 - Lines 54-59: Change `'standard'` to `'starter'` in the tier limit test
 
@@ -262,6 +271,7 @@ git commit -m "refactor(shared): rename rate limit tiers to match billing tiers 
 ### Task 3: Tenant Schema Extension (plan + stripe_customer_id)
 
 **Files:**
+
 - Modify: `packages/db/src/schema/tenants.ts`
 - Modify: `packages/db/src/repositories/tenant-repository.ts`
 
@@ -368,6 +378,7 @@ git commit -m "feat(db): add plan and stripe_customer_id columns to tenants tabl
 ### Task 4: usage_records Schema + Repository
 
 **Files:**
+
 - Create: `packages/db/src/schema/usage-records.ts`
 - Create: `packages/db/src/repositories/usage-record-repository.ts`
 - Create: `packages/db/tests/unit/repositories/usage-record-repository.test.ts`
@@ -379,7 +390,16 @@ git commit -m "feat(db): add plan and stripe_customer_id columns to tenants tabl
 `packages/db/src/schema/usage-records.ts`:
 
 ```typescript
-import { pgTable, uuid, varchar, bigint, date, boolean, timestamp, index } from 'drizzle-orm/pg-core';
+import {
+  pgTable,
+  uuid,
+  varchar,
+  bigint,
+  date,
+  boolean,
+  timestamp,
+  index,
+} from 'drizzle-orm/pg-core';
 import { tenants } from './tenants.js';
 
 export const usageRecords = pgTable(
@@ -482,7 +502,11 @@ describe('UsageRecordRepository', () => {
       { dimension: 'llm_tokens', total: 10000 },
     ]);
     const repo = new UsageRecordRepository(db as any);
-    const result = await repo.aggregateByTenant('tenant-1', new Date('2026-03-01'), new Date('2026-03-31'));
+    const result = await repo.aggregateByTenant(
+      'tenant-1',
+      new Date('2026-03-01'),
+      new Date('2026-03-31'),
+    );
     expect(result).toBeDefined();
   });
 });
@@ -696,6 +720,7 @@ git commit -m "feat(db): add usage_records schema and UsageRecordRepository"
 ### Task 5: Quota Enforcement Service
 
 **Files:**
+
 - Create: `packages/core/src/billing/quota-enforcer.ts`
 - Create: `packages/core/src/billing/quota-enforcer.test.ts`
 
@@ -709,9 +734,11 @@ import { QuotaEnforcer } from './quota-enforcer.js';
 
 function createMockUsageRepo(usage: Record<string, number> = {}) {
   return {
-    getCurrentUsage: vi.fn().mockImplementation((_tenantId: string, dimension: string) =>
-      Promise.resolve(usage[dimension] ?? 0),
-    ),
+    getCurrentUsage: vi
+      .fn()
+      .mockImplementation((_tenantId: string, dimension: string) =>
+        Promise.resolve(usage[dimension] ?? 0),
+      ),
     record: vi.fn(),
     getUnreported: vi.fn(),
     markReported: vi.fn(),
@@ -809,7 +836,7 @@ export class QuotaEnforcer {
    * Throws QuotaExceededError if the request would exceed the tier limit.
    */
   async check(tenantId: string, dimension: UsageDimension, requested: number): Promise<void> {
-    const plan = await this.tenantRepo.getPlan(tenantId) as BillingTierName;
+    const plan = (await this.tenantRepo.getPlan(tenantId)) as BillingTierName;
     const limit = getTierLimit(plan, dimension);
 
     if (limit === Infinity) return; // Enterprise — no limit
@@ -831,7 +858,11 @@ export class QuotaEnforcer {
    * 3. The metering worker reports actual usage to Stripe regardless
    * Use this when the usage should be tracked immediately (e.g., job creation).
    */
-  async checkAndRecord(tenantId: string, dimension: UsageDimension, quantity: number): Promise<void> {
+  async checkAndRecord(
+    tenantId: string,
+    dimension: UsageDimension,
+    quantity: number,
+  ): Promise<void> {
     await this.check(tenantId, dimension, quantity);
     await this.usageRepo.record(tenantId, dimension, quantity);
   }
@@ -881,6 +912,7 @@ git commit -m "feat(core): add QuotaEnforcer service for billing dimension check
 ### Task 6: Stripe Client Wrapper
 
 **Files:**
+
 - Create: `apps/api/src/billing/stripe-client.ts`
 - Create: `apps/api/tests/unit/billing/stripe-client.test.ts`
 
@@ -903,16 +935,22 @@ function createMockStripe() {
       },
     },
     subscriptions: {
-      list: vi.fn().mockResolvedValue({ data: [{ id: 'sub_1', status: 'active', items: { data: [{ id: 'si_1' }] } }] }),
+      list: vi.fn().mockResolvedValue({
+        data: [{ id: 'sub_1', status: 'active', items: { data: [{ id: 'si_1' }] } }],
+      }),
     },
     invoices: {
-      list: vi.fn().mockResolvedValue({ data: [{ id: 'inv_1', amount_due: 1000, status: 'paid' }] }),
+      list: vi
+        .fn()
+        .mockResolvedValue({ data: [{ id: 'inv_1', amount_due: 1000, status: 'paid' }] }),
     },
     subscriptionItems: {
       createUsageRecord: vi.fn().mockResolvedValue({ id: 'mbur_1' }),
     },
     webhooks: {
-      constructEvent: vi.fn().mockReturnValue({ type: 'customer.subscription.updated', data: { object: {} } }),
+      constructEvent: vi
+        .fn()
+        .mockReturnValue({ type: 'customer.subscription.updated', data: { object: {} } }),
     },
   };
 }
@@ -1079,6 +1117,7 @@ git commit -m "feat(api): add SpatulaStripeClient wrapper for Stripe API"
 ### Task 7: Billing API Routes
 
 **Files:**
+
 - Create: `apps/api/src/routes/billing.ts`
 - Create: `apps/api/tests/unit/routes/billing.test.ts`
 - Modify: `apps/api/src/types.ts` (add new deps)
@@ -1136,7 +1175,12 @@ function createTestApp(stripeConfigured = true, plan = 'free', stripeCustomerId 
 
   app.use('*', async (c, next) => {
     c.set('tenantId', 'tenant-1');
-    c.set('auth', { tenantId: 'tenant-1', userId: 'user-1', scopes: ['billing:read', 'billing:write'], strategy: 'jwt' });
+    c.set('auth', {
+      tenantId: 'tenant-1',
+      userId: 'user-1',
+      scopes: ['billing:read', 'billing:write'],
+      strategy: 'jwt',
+    });
     c.set('deps', {
       stripeClient: mockStripeClient,
       tenantRepo: mockTenantRepo,
@@ -1243,7 +1287,9 @@ export function billingRoutes() {
         limits: serializableLimits,
         usage: usageMap,
         period: { start: periodStart.toISOString(), end: periodEnd.toISOString() },
-        stripeSubscription: subscription ? { id: subscription.id, status: subscription.status } : null,
+        stripeSubscription: subscription
+          ? { id: subscription.id, status: subscription.status }
+          : null,
       },
     });
   });
@@ -1284,7 +1330,12 @@ export function billingRoutes() {
     const tenantId = c.get('tenantId');
     const tenant = await deps.tenantRepo!.findById(tenantId);
     if (!tenant?.stripeCustomerId) {
-      return c.json({ error: { code: 'NO_CUSTOMER', message: 'No Stripe customer. Subscribe to a plan first.' } }, 400);
+      return c.json(
+        {
+          error: { code: 'NO_CUSTOMER', message: 'No Stripe customer. Subscribe to a plan first.' },
+        },
+        400,
+      );
     }
 
     const body = await c.req.json().catch(() => ({}));
@@ -1318,6 +1369,7 @@ git commit -m "feat(api): add billing routes (subscription, invoices, portal)"
 ### Task 8: Stripe Webhook Handler
 
 **Files:**
+
 - Create: `apps/api/src/routes/stripe-webhook.ts`
 - Create: `apps/api/tests/unit/routes/stripe-webhook.test.ts`
 - Modify: `apps/api/src/middleware/auth.ts` (skip auth for webhook path)
@@ -1351,7 +1403,9 @@ function createMockDeps(overrides: Record<string, any> = {}) {
       ...overrides.stripeClient,
     },
     tenantRepo: {
-      findById: vi.fn().mockResolvedValue({ id: 'tenant-1', plan: 'free', stripeCustomerId: 'cus_1' }),
+      findById: vi
+        .fn()
+        .mockResolvedValue({ id: 'tenant-1', plan: 'free', stripeCustomerId: 'cus_1' }),
       updatePlan: vi.fn().mockResolvedValue(undefined),
       ...overrides.tenantRepo,
     },
@@ -1412,7 +1466,9 @@ describe('Stripe webhook handler', () => {
         isConfigured: () => true,
         verifyWebhook: vi.fn().mockReturnValue({
           type: 'customer.subscription.updated',
-          data: { object: { customer: 'cus_unknown', status: 'active', metadata: { plan: 'pro' } } },
+          data: {
+            object: { customer: 'cus_unknown', status: 'active', metadata: { plan: 'pro' } },
+          },
         }),
       },
       tenantRepo: {
@@ -1436,7 +1492,9 @@ describe('Stripe webhook handler', () => {
     const deps = createMockDeps({
       stripeClient: {
         isConfigured: () => true,
-        verifyWebhook: vi.fn().mockImplementation(() => { throw new Error('Invalid signature'); }),
+        verifyWebhook: vi.fn().mockImplementation(() => {
+          throw new Error('Invalid signature');
+        }),
       },
     });
     const app = createTestApp(deps);
@@ -1482,12 +1540,18 @@ export function stripeWebhookRoutes() {
 
     const webhookSecret = process.env.STRIPE_WEBHOOK_SECRET;
     if (!webhookSecret) {
-      return c.json({ error: { code: 'NOT_CONFIGURED', message: 'Webhook secret not configured' } }, 503);
+      return c.json(
+        { error: { code: 'NOT_CONFIGURED', message: 'Webhook secret not configured' } },
+        503,
+      );
     }
 
     const signature = c.req.header('stripe-signature');
     if (!signature) {
-      return c.json({ error: { code: 'BAD_REQUEST', message: 'Missing stripe-signature header' } }, 400);
+      return c.json(
+        { error: { code: 'BAD_REQUEST', message: 'Missing stripe-signature header' } },
+        400,
+      );
     }
 
     const rawBody = await c.req.text();
@@ -1497,7 +1561,10 @@ export function stripeWebhookRoutes() {
       event = stripeClient.verifyWebhook(rawBody, signature, webhookSecret);
     } catch (err) {
       logger.warn({ error: (err as Error).message }, 'Webhook signature verification failed');
-      return c.json({ error: { code: 'INVALID_SIGNATURE', message: 'Invalid webhook signature' } }, 400);
+      return c.json(
+        { error: { code: 'INVALID_SIGNATURE', message: 'Invalid webhook signature' } },
+        400,
+      );
     }
 
     logger.info({ eventType: event.type, eventId: event.id }, 'Stripe webhook received');
@@ -1528,7 +1595,10 @@ export function stripeWebhookRoutes() {
           logger.debug({ eventType: event.type }, 'Unhandled Stripe event type');
       }
     } catch (err) {
-      logger.error({ eventType: event.type, error: (err as Error).message }, 'Error handling webhook event');
+      logger.error(
+        { eventType: event.type, error: (err as Error).message },
+        'Error handling webhook event',
+      );
       // Return 200 anyway — Stripe will retry on 5xx, but we don't want retries for business logic errors
     }
 
@@ -1538,7 +1608,11 @@ export function stripeWebhookRoutes() {
   return app;
 }
 
-async function handleSubscriptionUpdate(deps: any, customerId: string, plan: string): Promise<void> {
+async function handleSubscriptionUpdate(
+  deps: any,
+  customerId: string,
+  plan: string,
+): Promise<void> {
   const tenant = await findTenantByStripeCustomer(deps, customerId);
   if (!tenant) {
     logger.warn({ customerId }, 'No tenant found for Stripe customer');
@@ -1610,10 +1684,7 @@ async findByStripeCustomerId(stripeCustomerId: string) {
 In `apps/api/src/middleware/auth.ts`, add to `SKIP_AUTH_PREFIXES`:
 
 ```typescript
-const SKIP_AUTH_PREFIXES = [
-  '/api/v1/tenants',
-  '/api/v1/webhooks/stripe',
-];
+const SKIP_AUTH_PREFIXES = ['/api/v1/tenants', '/api/v1/webhooks/stripe'];
 ```
 
 - [ ] **Step 5: Register webhook route in app.ts (BEFORE auth middleware)**
@@ -1651,6 +1722,7 @@ git commit -m "feat(api): add Stripe webhook handler with signature verification
 ### Task 9: Export Format Restriction per Tier
 
 **Files:**
+
 - Modify: `apps/api/src/routes/exports.ts`
 
 - [ ] **Step 1: Add format check before export creation**
@@ -1663,12 +1735,15 @@ if (deps.quotaEnforcer) {
   const tenant = await deps.tenantRepo!.findById(tenantId);
   const plan = tenant?.plan ?? 'free';
   if (!deps.quotaEnforcer.isExportFormatAllowed(plan, body.format)) {
-    return c.json({
-      error: {
-        code: 'EXPORT_FORMAT_RESTRICTED',
-        message: `Export format '${body.format}' is not available on the ${plan} plan. Upgrade to access this format.`,
+    return c.json(
+      {
+        error: {
+          code: 'EXPORT_FORMAT_RESTRICTED',
+          message: `Export format '${body.format}' is not available on the ${plan} plan. Upgrade to access this format.`,
+        },
       },
-    }, 403);
+      403,
+    );
   }
 }
 ```
@@ -1693,6 +1768,7 @@ git commit -m "feat(api): restrict export formats based on billing tier"
 ### Task 10: Metering Queue + Worker
 
 **Files:**
+
 - Modify: `packages/queue/src/queues.ts` (add METERING queue name)
 - Create: `packages/queue/src/metering-worker.ts`
 - Create: `packages/queue/tests/unit/metering-worker.test.ts`
@@ -1737,7 +1813,9 @@ function createMockDeps(records: any[] = []) {
       }),
     },
     tenantRepo: {
-      findById: vi.fn().mockResolvedValue({ id: 'tenant-1', stripeCustomerId: 'cus_1', plan: 'starter' }),
+      findById: vi
+        .fn()
+        .mockResolvedValue({ id: 'tenant-1', stripeCustomerId: 'cus_1', plan: 'starter' }),
     },
   };
 }
@@ -1769,11 +1847,13 @@ describe('processMeteringJob', () => {
   });
 
   it('skips tenants without Stripe customer ID', async () => {
-    const records = [
-      { id: 'r1', tenantId: 'tenant-no-stripe', dimension: 'pages', quantity: 100 },
-    ];
+    const records = [{ id: 'r1', tenantId: 'tenant-no-stripe', dimension: 'pages', quantity: 100 }];
     const deps = createMockDeps(records);
-    deps.tenantRepo.findById.mockResolvedValue({ id: 'tenant-no-stripe', stripeCustomerId: null, plan: 'free' });
+    deps.tenantRepo.findById.mockResolvedValue({
+      id: 'tenant-no-stripe',
+      stripeCustomerId: null,
+      plan: 'free',
+    });
     await processMeteringJob(deps as any);
     // Should still mark as reported (to avoid re-processing) but skip Stripe call
     expect(deps.stripeClient.reportUsage).not.toHaveBeenCalled();
@@ -1875,7 +1955,10 @@ export async function processMeteringJob(deps: MeteringDeps): Promise<void> {
 
       reportedIds.push(...tenantRecords.map((r) => r.id));
     } catch (err) {
-      logger.error({ tenantId, error: (err as Error).message }, 'Failed to report usage for tenant');
+      logger.error(
+        { tenantId, error: (err as Error).message },
+        'Failed to report usage for tenant',
+      );
       // Don't mark as reported — will retry next hour
     }
   }
@@ -1906,11 +1989,15 @@ if (isEnabled('metering')) {
   const meteringQueue = new Queue(QUEUE_NAMES.METERING, { connection: redisOpts });
 
   // Add repeatable job (hourly)
-  await meteringQueue.add('metering', {}, {
-    repeat: { every: 60 * 60 * 1000 }, // every hour
-    removeOnComplete: true,
-    removeOnFail: 100,
-  });
+  await meteringQueue.add(
+    'metering',
+    {},
+    {
+      repeat: { every: 60 * 60 * 1000 }, // every hour
+      removeOnComplete: true,
+      removeOnFail: 100,
+    },
+  );
 
   const worker = new Worker(
     QUEUE_NAMES.METERING,
@@ -1946,7 +2033,7 @@ const enabledQueueNames = Object.entries({
   export: QUEUE_NAMES.EXPORT,
   webhook: QUEUE_NAMES.WEBHOOK,
   metering: QUEUE_NAMES.METERING,
-})
+});
 ```
 
 - [ ] **Step 5: Add metering queue to Bull Board**
@@ -1989,6 +2076,7 @@ git commit -m "feat(queue): add hourly metering worker for Stripe usage reportin
 ### Task 11: Wire Billing into App + Rate Limit Alignment
 
 **Files:**
+
 - Modify: `apps/api/src/app.ts` (register billing routes, wire deps)
 - Modify: `apps/api/src/app.ts` (update quota-loading middleware to use tenant.plan for rate limit tier)
 
@@ -2081,32 +2169,33 @@ git commit -m "fix: address Wave 5-2 integration issues"
 
 ## Execution Summary
 
-| Task | Files | Description |
-|------|-------|-------------|
-| 1 | 3 | Billing tier constants + types |
-| 2 | 1+ | Rename rate limit tiers to match billing names |
-| 3 | 3 | Tenant schema extension (plan, stripe_customer_id) + migration |
-| 4 | 5 | usage_records schema + UsageRecordRepository + tests |
-| 5 | 2 | QuotaEnforcer service + tests |
-| 6 | 2 | SpatulaStripeClient wrapper + tests |
-| 7 | 3 | Billing API routes (subscription, invoices, portal) + tests |
-| 8 | 5 | Stripe webhook handler + auth bypass + tests |
-| 9 | 1 | Export format restriction per billing tier |
-| 10 | 5 | Metering queue + worker + tests + Bull Board |
-| 11 | 1 | Wire billing into app, align rate limiting |
-| 12 | 0 | Full suite verification |
-| **Total** | **~31** | **~12 commits** |
+| Task      | Files   | Description                                                    |
+| --------- | ------- | -------------------------------------------------------------- |
+| 1         | 3       | Billing tier constants + types                                 |
+| 2         | 1+      | Rename rate limit tiers to match billing names                 |
+| 3         | 3       | Tenant schema extension (plan, stripe_customer_id) + migration |
+| 4         | 5       | usage_records schema + UsageRecordRepository + tests           |
+| 5         | 2       | QuotaEnforcer service + tests                                  |
+| 6         | 2       | SpatulaStripeClient wrapper + tests                            |
+| 7         | 3       | Billing API routes (subscription, invoices, portal) + tests    |
+| 8         | 5       | Stripe webhook handler + auth bypass + tests                   |
+| 9         | 1       | Export format restriction per billing tier                     |
+| 10        | 5       | Metering queue + worker + tests + Bull Board                   |
+| 11        | 1       | Wire billing into app, align rate limiting                     |
+| 12        | 0       | Full suite verification                                        |
+| **Total** | **~31** | **~12 commits**                                                |
 
 ## New Environment Variables
 
-| Variable | Required | Default | Purpose |
-|----------|----------|---------|---------|
-| `STRIPE_SECRET_KEY` | No (hosted only) | — | Stripe API authentication |
-| `STRIPE_WEBHOOK_SECRET` | No (hosted only) | — | Stripe webhook signature verification |
+| Variable                | Required         | Default | Purpose                               |
+| ----------------------- | ---------------- | ------- | ------------------------------------- |
+| `STRIPE_SECRET_KEY`     | No (hosted only) | —       | Stripe API authentication             |
+| `STRIPE_WEBHOOK_SECRET` | No (hosted only) | —       | Stripe webhook signature verification |
 
 ## Graceful Degradation (Self-Hosted)
 
 When `STRIPE_SECRET_KEY` is not set:
+
 - `SpatulaStripeClient.isConfigured()` returns false
 - Billing routes return 503 "Billing not configured"
 - Webhook route returns 503

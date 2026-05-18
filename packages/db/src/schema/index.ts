@@ -15,4 +15,3 @@ export * from './api-keys.js';
 export * from './audit-log.js';
 export * from './llm-usage.js';
 export * from './user-tenants.js';
-export * from './usage-records.js';

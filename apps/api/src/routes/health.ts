@@ -19,9 +19,27 @@ export function healthRoutes(deps: HealthDeps) {
     const checks: Record<string, 'ok' | 'fail'> = {};
 
     const results = await Promise.allSettled([
-      deps.dbPool ? deps.dbPool.query('SELECT 1').then(() => { checks.database = 'ok'; }) : Promise.resolve().then(() => { checks.database = 'ok'; }),
-      deps.redis ? deps.redis.ping().then(() => { checks.redis = 'ok'; }) : Promise.resolve().then(() => { checks.redis = 'ok'; }),
-      deps.queues?.crawl ? deps.queues.crawl.getJobCounts().then(() => { checks.queue = 'ok'; }) : Promise.resolve().then(() => { checks.queue = 'ok'; }),
+      deps.dbPool
+        ? deps.dbPool.query('SELECT 1').then(() => {
+            checks.database = 'ok';
+          })
+        : Promise.resolve().then(() => {
+            checks.database = 'ok';
+          }),
+      deps.redis
+        ? deps.redis.ping().then(() => {
+            checks.redis = 'ok';
+          })
+        : Promise.resolve().then(() => {
+            checks.redis = 'ok';
+          }),
+      deps.queues?.crawl
+        ? deps.queues.crawl.getJobCounts().then(() => {
+            checks.queue = 'ok';
+          })
+        : Promise.resolve().then(() => {
+            checks.queue = 'ok';
+          }),
     ]);
 
     if (results[0].status === 'rejected') checks.database = 'fail';
@@ -29,7 +47,7 @@ export function healthRoutes(deps: HealthDeps) {
     if (results[2].status === 'rejected') checks.queue = 'fail';
 
     const allOk = Object.values(checks).every((v) => v === 'ok');
-    return c.json({ status: allOk ? 'ok' : 'degraded', checks }, allOk ? 200 : 503 as any);
+    return c.json({ status: allOk ? 'ok' : 'degraded', checks }, allOk ? 200 : (503 as any));
   });
 
   return app;

@@ -20,9 +20,10 @@ describe('Usage routes', () => {
   beforeEach(() => {
     mockLlmUsageRepo = {
       aggregateByTenant: vi.fn().mockResolvedValue({
-        totalTokens: 1250000, totalCostUsd: 4.23,
-        byModel: { 'anthropic/claude-3-haiku': { tokens: 800000, costUsd: 0.80 } },
-        byPurpose: { extraction: { tokens: 500000, costUsd: 2.10 } },
+        totalTokens: 1250000,
+        totalCostUsd: 4.23,
+        byModel: { 'anthropic/claude-3-haiku': { tokens: 800000, costUsd: 0.8 } },
+        byPurpose: { extraction: { tokens: 500000, costUsd: 2.1 } },
         byJob: [{ jobId: 'job-1', tokens: 125000, costUsd: 0.42 }],
       }),
     };
@@ -42,7 +43,8 @@ describe('Usage routes', () => {
     const app = createTestApp({ llmUsageRepo: mockLlmUsageRepo });
     const res = await app.request('/api/v1/usage?period=7d');
     expect(res.status).toBe(200);
-    const since = (mockLlmUsageRepo.aggregateByTenant as ReturnType<typeof vi.fn>).mock.calls[0][1] as Date;
+    const since = (mockLlmUsageRepo.aggregateByTenant as ReturnType<typeof vi.fn>).mock
+      .calls[0][1] as Date;
     const sevenDaysAgo = Date.now() - 7 * 24 * 60 * 60 * 1000;
     expect(Math.abs(since.getTime() - sevenDaysAgo)).toBeLessThan(5000);
   });

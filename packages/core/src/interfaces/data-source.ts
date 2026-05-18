@@ -12,7 +12,13 @@ export interface PaginatedResult<T> {
 }
 
 export interface ProjectStatus {
-  lastRun?: { id: string; status: string; startedAt: string; pagesProcessed: number; entitiesCreated: number };
+  lastRun?: {
+    id: string;
+    status: string;
+    startedAt: string;
+    pagesProcessed: number;
+    entitiesCreated: number;
+  };
   totalPages: number;
   totalEntities: number;
   pendingActions: number;

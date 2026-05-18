@@ -23,18 +23,20 @@ export class DefaultUsageRecorder implements LLMUsageRecorder {
     }
 
     if (this.repo) {
-      this.repo.insert({
-        tenantId: this.tenantId,
-        jobId: this.jobId,
-        model: usage.model,
-        promptTokens: usage.promptTokens,
-        completionTokens: usage.completionTokens,
-        totalTokens: usage.totalTokens,
-        costUsd: usage.costUsd.toFixed(6),
-        purpose: usage.purpose ?? 'unknown',
-      }).catch((err) => {
-        logger.warn({ err, model: usage.model }, 'Failed to record LLM usage');
-      });
+      this.repo
+        .insert({
+          tenantId: this.tenantId,
+          jobId: this.jobId,
+          model: usage.model,
+          promptTokens: usage.promptTokens,
+          completionTokens: usage.completionTokens,
+          totalTokens: usage.totalTokens,
+          costUsd: usage.costUsd.toFixed(6),
+          purpose: usage.purpose ?? 'unknown',
+        })
+        .catch((err) => {
+          logger.warn({ err, model: usage.model }, 'Failed to record LLM usage');
+        });
     }
   }
 }

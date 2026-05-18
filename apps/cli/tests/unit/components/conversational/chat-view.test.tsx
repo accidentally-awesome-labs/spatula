@@ -8,16 +8,12 @@ describe('ChatView', () => {
   const noop = vi.fn();
 
   it('renders welcome message when no messages', () => {
-    const { lastFrame } = render(
-      <ChatView messages={[]} onSubmit={noop} isLoading={false} />,
-    );
+    const { lastFrame } = render(<ChatView messages={[]} onSubmit={noop} isLoading={false} />);
     expect(lastFrame()).toContain('Describe what you want to crawl');
   });
 
   it('renders user messages with "You: " prefix', () => {
-    const messages: ChatMessage[] = [
-      { role: 'user', content: 'I want to scrape recipes' },
-    ];
+    const messages: ChatMessage[] = [{ role: 'user', content: 'I want to scrape recipes' }];
     const { lastFrame } = render(
       <ChatView messages={messages} onSubmit={noop} isLoading={false} />,
     );
@@ -26,9 +22,7 @@ describe('ChatView', () => {
   });
 
   it('renders assistant messages with "AI: " prefix', () => {
-    const messages: ChatMessage[] = [
-      { role: 'assistant', content: 'I can help with that!' },
-    ];
+    const messages: ChatMessage[] = [{ role: 'assistant', content: 'I can help with that!' }];
     const { lastFrame } = render(
       <ChatView messages={messages} onSubmit={noop} isLoading={false} />,
     );
@@ -37,9 +31,7 @@ describe('ChatView', () => {
   });
 
   it('renders system messages in dim style', () => {
-    const messages: ChatMessage[] = [
-      { role: 'system', content: 'Configuration updated' },
-    ];
+    const messages: ChatMessage[] = [{ role: 'system', content: 'Configuration updated' }];
     const { lastFrame } = render(
       <ChatView messages={messages} onSubmit={noop} isLoading={false} />,
     );
@@ -47,24 +39,18 @@ describe('ChatView', () => {
   });
 
   it('shows loading indicator when isLoading is true', () => {
-    const { lastFrame } = render(
-      <ChatView messages={[]} onSubmit={noop} isLoading={true} />,
-    );
+    const { lastFrame } = render(<ChatView messages={[]} onSubmit={noop} isLoading={true} />);
     expect(lastFrame()).toContain('Thinking');
   });
 
   it('does not show loading indicator when isLoading is false', () => {
-    const { lastFrame } = render(
-      <ChatView messages={[]} onSubmit={noop} isLoading={false} />,
-    );
+    const { lastFrame } = render(<ChatView messages={[]} onSubmit={noop} isLoading={false} />);
     expect(lastFrame()).not.toContain('Thinking');
   });
 
   it('calls onSubmit when user presses Enter with text', async () => {
     const onSubmit = vi.fn();
-    const { stdin } = render(
-      <ChatView messages={[]} onSubmit={onSubmit} isLoading={false} />,
-    );
+    const { stdin } = render(<ChatView messages={[]} onSubmit={onSubmit} isLoading={false} />);
     // Wait for useEffect to fire (sets up stdin readable listener)
     await new Promise((r) => setTimeout(r, 0));
     stdin.write('hello world');
@@ -74,9 +60,7 @@ describe('ChatView', () => {
 
   it('does not submit empty input', async () => {
     const onSubmit = vi.fn();
-    const { stdin } = render(
-      <ChatView messages={[]} onSubmit={onSubmit} isLoading={false} />,
-    );
+    const { stdin } = render(<ChatView messages={[]} onSubmit={onSubmit} isLoading={false} />);
     await new Promise((r) => setTimeout(r, 0));
     stdin.write('\r');
     expect(onSubmit).not.toHaveBeenCalled();
@@ -84,9 +68,7 @@ describe('ChatView', () => {
 
   it('does not submit whitespace-only input', async () => {
     const onSubmit = vi.fn();
-    const { stdin } = render(
-      <ChatView messages={[]} onSubmit={onSubmit} isLoading={false} />,
-    );
+    const { stdin } = render(<ChatView messages={[]} onSubmit={onSubmit} isLoading={false} />);
     await new Promise((r) => setTimeout(r, 0));
     stdin.write('   ');
     stdin.write('\r');
@@ -94,9 +76,7 @@ describe('ChatView', () => {
   });
 
   it('renders the input prompt', () => {
-    const { lastFrame } = render(
-      <ChatView messages={[]} onSubmit={noop} isLoading={false} />,
-    );
+    const { lastFrame } = render(<ChatView messages={[]} onSubmit={noop} isLoading={false} />);
     expect(lastFrame()).toContain('>');
   });
 

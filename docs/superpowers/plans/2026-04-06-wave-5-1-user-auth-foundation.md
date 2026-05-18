@@ -14,28 +14,29 @@
 
 ## File Map
 
-| Action | Path | Responsibility |
-|--------|------|----------------|
-| Create | `packages/db/src/schema/user-tenants.ts` | Drizzle schema for user_tenants table |
-| Create | `packages/db/src/repositories/user-tenant-repository.ts` | CRUD for user-tenant relationships |
-| Create | `packages/db/tests/unit/repositories/user-tenant-repository.test.ts` | Repository tests |
-| Create | `apps/api/tests/unit/middleware/jwt-tenant-resolution.test.ts` | Auth middleware tenant resolution tests |
-| Modify | `packages/db/src/schema/index.ts` | Re-export user-tenants schema |
-| Modify | `packages/db/src/index.ts` | Export UserTenantRepository |
-| Modify | `packages/shared/src/auth/types.ts` | Add `strategy` field to AuthResult |
-| Modify | `apps/api/src/auth/jwt-provider.ts` | Stop requiring tenant_id claim, extract user_id from sub |
-| Modify | `apps/api/src/auth/no-auth-provider.ts` | Add strategy: 'none' to AuthResult |
-| Modify | `apps/api/src/auth/api-key-provider.ts` | Add strategy: 'api-key' to AuthResult |
-| Modify | `apps/api/src/middleware/auth.ts` | Add JWT user→tenant resolution branching |
-| Modify | `apps/api/src/types.ts` | Add userTenantRepo to AppDeps |
-| Modify | `apps/api/src/app.ts` | Wire userTenantRepo, pass to auth middleware |
-| Modify | `apps/api/src/schemas/pagination.ts` | Raise limit max from 100 to 500 |
+| Action | Path                                                                 | Responsibility                                           |
+| ------ | -------------------------------------------------------------------- | -------------------------------------------------------- |
+| Create | `packages/db/src/schema/user-tenants.ts`                             | Drizzle schema for user_tenants table                    |
+| Create | `packages/db/src/repositories/user-tenant-repository.ts`             | CRUD for user-tenant relationships                       |
+| Create | `packages/db/tests/unit/repositories/user-tenant-repository.test.ts` | Repository tests                                         |
+| Create | `apps/api/tests/unit/middleware/jwt-tenant-resolution.test.ts`       | Auth middleware tenant resolution tests                  |
+| Modify | `packages/db/src/schema/index.ts`                                    | Re-export user-tenants schema                            |
+| Modify | `packages/db/src/index.ts`                                           | Export UserTenantRepository                              |
+| Modify | `packages/shared/src/auth/types.ts`                                  | Add `strategy` field to AuthResult                       |
+| Modify | `apps/api/src/auth/jwt-provider.ts`                                  | Stop requiring tenant_id claim, extract user_id from sub |
+| Modify | `apps/api/src/auth/no-auth-provider.ts`                              | Add strategy: 'none' to AuthResult                       |
+| Modify | `apps/api/src/auth/api-key-provider.ts`                              | Add strategy: 'api-key' to AuthResult                    |
+| Modify | `apps/api/src/middleware/auth.ts`                                    | Add JWT user→tenant resolution branching                 |
+| Modify | `apps/api/src/types.ts`                                              | Add userTenantRepo to AppDeps                            |
+| Modify | `apps/api/src/app.ts`                                                | Wire userTenantRepo, pass to auth middleware             |
+| Modify | `apps/api/src/schemas/pagination.ts`                                 | Raise limit max from 100 to 500                          |
 
 ---
 
 ### Task 1: user_tenants Drizzle Schema + Migration
 
 **Files:**
+
 - Create: `packages/db/src/schema/user-tenants.ts`
 - Modify: `packages/db/src/schema/index.ts`
 
@@ -44,7 +45,16 @@
 `packages/db/src/schema/user-tenants.ts`:
 
 ```typescript
-import { pgTable, text, uuid, varchar, timestamp, primaryKey, index, uniqueIndex } from 'drizzle-orm/pg-core';
+import {
+  pgTable,
+  text,
+  uuid,
+  varchar,
+  timestamp,
+  primaryKey,
+  index,
+  uniqueIndex,
+} from 'drizzle-orm/pg-core';
 import { sql } from 'drizzle-orm';
 import { tenants } from './tenants.js';
 
@@ -61,7 +71,9 @@ export const userTenants = pgTable(
   (table) => [
     primaryKey({ columns: [table.userId, table.tenantId] }),
     index('idx_user_tenants_user').on(table.userId),
-    uniqueIndex('idx_user_tenants_owner').on(table.userId).where(sql`role = 'owner'`),
+    uniqueIndex('idx_user_tenants_owner')
+      .on(table.userId)
+      .where(sql`role = 'owner'`),
   ],
 );
 ```
@@ -100,6 +112,7 @@ git commit -m "feat(db): add user_tenants schema and migration"
 ### Task 2: UserTenantRepository
 
 **Files:**
+
 - Create: `packages/db/src/repositories/user-tenant-repository.ts`
 - Create: `packages/db/tests/unit/repositories/user-tenant-repository.test.ts`
 - Modify: `packages/db/src/index.ts`
@@ -249,10 +262,7 @@ export class UserTenantRepository {
   constructor(private readonly db: Database) {}
 
   async create(userId: string, tenantId: string, role: string): Promise<void> {
-    await this.db
-      .insert(userTenants)
-      .values({ userId, tenantId, role })
-      .onConflictDoNothing();
+    await this.db.insert(userTenants).values({ userId, tenantId, role }).onConflictDoNothing();
   }
 
   async findByUserId(userId: string): Promise<UserTenantEntry[]> {
@@ -332,6 +342,7 @@ git commit -m "feat(db): add UserTenantRepository with CRUD operations"
 ### Task 3: AuthResult Strategy Extension
 
 **Files:**
+
 - Modify: `packages/shared/src/auth/types.ts`
 - Modify: `apps/api/src/auth/jwt-provider.ts`
 - Modify: `apps/api/src/auth/no-auth-provider.ts`
@@ -414,6 +425,7 @@ git commit -m "feat(auth): add strategy field to AuthResult, stop requiring tena
 ### Task 4: JWT Tenant Resolution in Auth Middleware
 
 **Files:**
+
 - Modify: `apps/api/src/middleware/auth.ts`
 - Modify: `apps/api/src/types.ts`
 - Modify: `apps/api/src/app.ts`
@@ -489,11 +501,7 @@ function createMockTenantRepo() {
   };
 }
 
-function createTestApp(
-  provider: AuthProvider,
-  userTenantRepo?: any,
-  tenantRepo?: any,
-) {
+function createTestApp(provider: AuthProvider, userTenantRepo?: any, tenantRepo?: any) {
   const app = new Hono();
   app.use('*', authMiddleware(provider, undefined, userTenantRepo, tenantRepo));
   app.get('/api/v1/test', (c) => {
@@ -613,17 +621,23 @@ if (result.strategy === 'jwt' && userTenantRepo && tenantRepo) {
     // Multiple tenants — require X-Tenant-Id header
     const headerTenantId = c.req.header('x-tenant-id');
     if (!headerTenantId) {
-      return c.json({
-        error: {
-          code: 'TENANT_REQUIRED',
-          message: 'User belongs to multiple tenants. Set X-Tenant-Id header.',
-          tenants: entries.map((ut) => ({ tenantId: ut.tenantId, role: ut.role })),
+      return c.json(
+        {
+          error: {
+            code: 'TENANT_REQUIRED',
+            message: 'User belongs to multiple tenants. Set X-Tenant-Id header.',
+            tenants: entries.map((ut) => ({ tenantId: ut.tenantId, role: ut.role })),
+          },
         },
-      }, 400);
+        400,
+      );
     }
     const match = entries.find((ut) => ut.tenantId === headerTenantId);
     if (!match) {
-      return c.json({ error: { code: 'FORBIDDEN', message: 'User does not belong to the specified tenant' } }, 403);
+      return c.json(
+        { error: { code: 'FORBIDDEN', message: 'User does not belong to the specified tenant' } },
+        403,
+      );
     }
     resolvedTenantId = headerTenantId;
   }
@@ -635,7 +649,11 @@ if (result.strategy === 'jwt' && userTenantRepo && tenantRepo) {
 
   // Audit log AFTER tenant resolution so tenantId is populated
   if (auditLogger) {
-    auditLogger.log({ action: 'api.request', tenantId: resolvedResult.tenantId, userId: resolvedResult.userId });
+    auditLogger.log({
+      action: 'api.request',
+      tenantId: resolvedResult.tenantId,
+      userId: resolvedResult.userId,
+    });
   }
 
   await next();
@@ -649,6 +667,7 @@ c.set('auth', result);
 ```
 
 Key decisions:
+
 - Uses closure-captured `userTenantRepo` and `tenantRepo`, NOT `c.get('deps')` (deps middleware hasn't run yet)
 - Creates new `AuthResult` object instead of mutating the original
 - Audit logging fires AFTER tenant resolution for JWT path, so tenantId is correct
@@ -660,12 +679,16 @@ In `apps/api/src/app.ts`, pass the `userTenantRepo` (which the caller constructs
 
 ```typescript
 // Update auth middleware call (around line 95):
-app.use('/api/*', authMiddleware(authProvider, deps.auditLogger, deps.userTenantRepo, deps.tenantRepo));
+app.use(
+  '/api/*',
+  authMiddleware(authProvider, deps.auditLogger, deps.userTenantRepo, deps.tenantRepo),
+);
 ```
 
 The `UserTenantRepository` is constructed in the server entrypoint (`apps/api/src/index.ts`) alongside other repos, from the same Drizzle `Database` instance, and passed into `deps`. This follows the existing pattern — all repos are constructed outside `createApp()` and injected via `AppDeps`.
 
 The caller (entrypoint) creates it:
+
 ```typescript
 import { UserTenantRepository } from '@spatula/db';
 // ...
@@ -704,6 +727,7 @@ git commit -m "feat(auth): JWT user→tenant resolution via user_tenants table"
 ### Task 5: Entity Pagination Limit Increase
 
 **Files:**
+
 - Modify: `apps/api/src/schemas/pagination.ts`
 
 - [ ] **Step 1: Raise limit max from 100 to 500**
@@ -735,6 +759,7 @@ git commit -m "feat(api): raise entity pagination limit from 100 to 500 for bulk
 ### Task 6: Stripe SDK Installation
 
 **Files:**
+
 - Modify: `package.json` (root or apps/api)
 
 - [ ] **Step 1: Install Stripe SDK**
@@ -762,12 +787,12 @@ git commit -m "chore: install Stripe SDK for billing integration"
 
 ## Execution Summary
 
-| Task | Files | Description |
-|------|-------|-------------|
-| 1 | 3 | user_tenants schema + migration |
-| 2 | 3 | UserTenantRepository with CRUD + tests |
-| 3 | 4 | AuthResult strategy extension across all providers |
-| 4 | 4 | JWT tenant resolution middleware + auto-creation + tests |
-| 5 | 1 | Entity pagination limit 100→500 |
-| 6 | 2 | Stripe SDK installation |
-| **Total** | **17** | **6 commits** |
+| Task      | Files  | Description                                              |
+| --------- | ------ | -------------------------------------------------------- |
+| 1         | 3      | user_tenants schema + migration                          |
+| 2         | 3      | UserTenantRepository with CRUD + tests                   |
+| 3         | 4      | AuthResult strategy extension across all providers       |
+| 4         | 4      | JWT tenant resolution middleware + auto-creation + tests |
+| 5         | 1      | Entity pagination limit 100→500                          |
+| 6         | 2      | Stripe SDK installation                                  |
+| **Total** | **17** | **6 commits**                                            |

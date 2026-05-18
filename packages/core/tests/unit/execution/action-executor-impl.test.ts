@@ -458,7 +458,11 @@ describe('DefaultActionExecutor', () => {
         payload: {
           categoryField: 'product_type',
           categories: [
-            { name: 'electronics', description: 'Electronic devices', matchCriteria: 'tech products' },
+            {
+              name: 'electronics',
+              description: 'Electronic devices',
+              matchCriteria: 'tech products',
+            },
           ],
         },
       };

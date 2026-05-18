@@ -42,14 +42,16 @@ export class PlaywrightCrawler implements Crawler {
 
       // Cookie support — set cookies before creating page
       if (options?.cookies?.length) {
-        await context.addCookies(options.cookies.map(c => ({
-          name: c.name,
-          value: c.value,
-          domain: c.domain,
-          path: c.path ?? '/',
-          httpOnly: c.httpOnly ?? false,
-          secure: c.secure ?? false,
-        })));
+        await context.addCookies(
+          options.cookies.map((c) => ({
+            name: c.name,
+            value: c.value,
+            domain: c.domain,
+            path: c.path ?? '/',
+            httpOnly: c.httpOnly ?? false,
+            secure: c.secure ?? false,
+          })),
+        );
       }
 
       page = await context.newPage();

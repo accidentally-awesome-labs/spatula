@@ -11,7 +11,10 @@ export async function processSchemaEvolutionJob(
   deps: WorkerDeps,
   redis?: Redis,
 ): Promise<void> {
-  const logger = createLoggerWithContext('schema-worker', { jobId: data.jobId, tenantId: data.tenantId });
+  const logger = createLoggerWithContext('schema-worker', {
+    jobId: data.jobId,
+    tenantId: data.tenantId,
+  });
   const lockKey = `schema-lock:${data.jobId}`;
   let lockToken = '';
 

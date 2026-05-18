@@ -18,7 +18,14 @@ export async function* fetchEntitiesCursor(
 ): AsyncIterable<unknown[]> {
   let cursor: string | undefined;
   while (true) {
-    const batch = await entityRepo.findByJobCursor(jobId, tenantId, batchSize, cursor, undefined, options?.minQuality);
+    const batch = await entityRepo.findByJobCursor(
+      jobId,
+      tenantId,
+      batchSize,
+      cursor,
+      undefined,
+      options?.minQuality,
+    );
     if (batch.entities.length === 0) break;
     yield batch.entities;
     if (!batch.nextCursor) break;

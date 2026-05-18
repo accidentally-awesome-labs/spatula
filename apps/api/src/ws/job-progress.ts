@@ -24,11 +24,7 @@ export class JobProgressManager {
     });
   }
 
-  async addClient(
-    jobId: string,
-    tenantId: string,
-    ws: ClientEntry['ws'],
-  ): Promise<void> {
+  async addClient(jobId: string, tenantId: string, ws: ClientEntry['ws']): Promise<void> {
     const entry: ClientEntry = { ws, tenantId };
 
     if (!this.clients.has(jobId)) {
@@ -48,10 +44,7 @@ export class JobProgressManager {
     this.safeSend(ws, msg);
   }
 
-  async removeClient(
-    jobId: string,
-    ws: ClientEntry['ws'],
-  ): Promise<void> {
+  async removeClient(jobId: string, ws: ClientEntry['ws']): Promise<void> {
     const clients = this.clients.get(jobId);
     if (!clients) return;
 
@@ -127,7 +120,7 @@ export class JobProgressManager {
 
   closeAll(): void {
     this.stopHeartbeat();
-    for (const [_jobId, clients] of this.clients.entries()) {
+    for (const clients of this.clients.values()) {
       for (const client of clients) {
         try {
           client.ws.close();

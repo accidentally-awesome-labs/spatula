@@ -16,7 +16,7 @@ export interface CostEstimate {
   totalTokens: number;
   totalCostUsd: number;
   confidence: 'low' | 'medium' | 'high';
-  llmCallBreakdown: CostBreakdownEntry[];  // Array (not Record) — includes model per entry
+  llmCallBreakdown: CostBreakdownEntry[]; // Array (not Record) — includes model per entry
   warnings: string[];
 }
 
@@ -35,8 +35,8 @@ export function estimateCost(config: JobConfig): CostEstimate {
   // Per-page LLM calls
   const perPageCalls: Array<{ purpose: LLMTask; callsPerPage: number }> = [
     { purpose: 'pageRelevance', callsPerPage: 1 },
-    { purpose: 'extraction', callsPerPage: 0.7 },       // ~70% of pages are extractable
-    { purpose: 'linkEvaluation', callsPerPage: 0.05 },   // 1 batch call per ~20 links
+    { purpose: 'extraction', callsPerPage: 0.7 }, // ~70% of pages are extractable
+    { purpose: 'linkEvaluation', callsPerPage: 0.05 }, // 1 batch call per ~20 links
   ];
 
   // Per-job LLM calls (not per-page)
@@ -90,7 +90,11 @@ function estimatePageCount(config: JobConfig): number {
   return maxPages;
 }
 
-function computeCallCost(purpose: LLMTask, calls: number, llmConfig: LLMConfig): CostBreakdownEntry {
+function computeCallCost(
+  purpose: LLMTask,
+  calls: number,
+  llmConfig: LLMConfig,
+): CostBreakdownEntry {
   const model = resolveModel(llmConfig, purpose);
   const pricing = getModelPricing(model);
   const avgTokens = AVG_TOKENS_PER_CALL[purpose] ?? { prompt: 1000, completion: 500 };

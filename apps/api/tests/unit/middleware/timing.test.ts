@@ -15,8 +15,14 @@ describe('timingMiddleware', () => {
 
     const res = await app.request('/test');
     expect(res.status).toBe(200);
-    expect(mockMetrics.httpRequestsTotal.add).toHaveBeenCalledWith(1, expect.objectContaining({ method: 'GET', status: 200 }));
-    expect(mockMetrics.httpRequestDuration.record).toHaveBeenCalledWith(expect.any(Number), expect.objectContaining({ method: 'GET', status: 200 }));
+    expect(mockMetrics.httpRequestsTotal.add).toHaveBeenCalledWith(
+      1,
+      expect.objectContaining({ method: 'GET', status: 200 }),
+    );
+    expect(mockMetrics.httpRequestDuration.record).toHaveBeenCalledWith(
+      expect.any(Number),
+      expect.objectContaining({ method: 'GET', status: 200 }),
+    );
   });
 
   it('tracks active connections (increment then decrement)', async () => {

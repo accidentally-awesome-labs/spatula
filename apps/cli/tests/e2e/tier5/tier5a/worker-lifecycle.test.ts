@@ -97,7 +97,10 @@ describe('Tier 5A -- Worker Lifecycle + Infrastructure (Tests 18-22)', () => {
     const newCrawlWorker = new Worker(
       QUEUE_NAMES.CRAWL,
       async (job: any) => processCrawlJob(job.data, harness!.workerDeps),
-      { connection: { host: 'localhost', port: 6380, db: 1, maxRetriesPerRequest: null as null }, concurrency: 1 },
+      {
+        connection: { host: 'localhost', port: 6380, db: 1, maxRetriesPerRequest: null as null },
+        concurrency: 1,
+      },
     );
     harness!.workers[0] = newCrawlWorker;
   }, 60_000);
@@ -129,10 +132,7 @@ describe('Tier 5A -- Worker Lifecycle + Infrastructure (Tests 18-22)', () => {
     const secondJobId = await harness.jobManager.createJob(
       jobConfig({
         name: 'Tier 5A Second Run (extra seed)',
-        seedUrls: [
-          `http://localhost:${harness.fixtureServer.port}/`,
-          newSeedUrl,
-        ],
+        seedUrls: [`http://localhost:${harness.fixtureServer.port}/`, newSeedUrl],
       }) as any,
     );
     await harness.jobManager.startJob(secondJobId, harness.tenantId);
@@ -145,9 +145,7 @@ describe('Tier 5A -- Worker Lifecycle + Infrastructure (Tests 18-22)', () => {
     );
 
     // Verify the fixture server was hit with the /about path
-    const aboutRequests = harness.fixtureServer.requestLog.filter(
-      (r) => r.path === '/about',
-    );
+    const aboutRequests = harness.fixtureServer.requestLog.filter((r) => r.path === '/about');
     expect(aboutRequests.length).toBeGreaterThan(0);
   }, 120_000);
 
@@ -221,7 +219,13 @@ describe('Tier 5A -- Worker Lifecycle + Infrastructure (Tests 18-22)', () => {
       const keys: string[] = [];
       let cursor = '0';
       do {
-        const [nextCursor, batch] = await redis.scan(cursor, 'MATCH', 'worker:heartbeat:*', 'COUNT', 100);
+        const [nextCursor, batch] = await redis.scan(
+          cursor,
+          'MATCH',
+          'worker:heartbeat:*',
+          'COUNT',
+          100,
+        );
         cursor = nextCursor;
         keys.push(...batch);
       } while (cursor !== '0');
@@ -309,9 +313,7 @@ describe('Tier 5A -- Worker Lifecycle + Infrastructure (Tests 18-22)', () => {
       expect(entries.length).toBeGreaterThanOrEqual(2);
 
       // Check for specific action types related to our job
-      const actions = entries
-        .filter((e) => e.resourceId === auditJobId)
-        .map((e) => e.action);
+      const actions = entries.filter((e) => e.resourceId === auditJobId).map((e) => e.action);
 
       expect(actions).toContain('job.created');
       expect(actions).toContain('job.started');

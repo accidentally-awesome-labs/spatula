@@ -7,12 +7,15 @@ vi.mock('@spatula/core', async () => {
   const actual = await vi.importActual<typeof import('@spatula/core')>('@spatula/core');
   return {
     ...actual,
-    loadGlobalConfig: vi.fn(() => ({
-      version: 1,
-      remotes: {
-        prod: { url: 'https://api.spatula.dev', apiKey: 'sk_live_abc' },
-      },
-    } as GlobalConfig)),
+    loadGlobalConfig: vi.fn(
+      () =>
+        ({
+          version: 1,
+          remotes: {
+            prod: { url: 'https://api.spatula.dev', apiKey: 'sk_live_abc' },
+          },
+        }) as GlobalConfig,
+    ),
   };
 });
 
@@ -33,11 +36,17 @@ function buildMockAdapter() {
   return {
     entityRepo: { upsertBatch: mockUpsertBatch, deleteByRunIds: mockDeleteByRunIds },
     schemaRepo: { findLatest: mockSchemaFindLatest, create: mockSchemaCreate },
-    runRepo: { create: mockRunCreate, updateStats: mockRunUpdateStats, findIdsBySourcePrefix: mockFindIdsBySourcePrefix },
+    runRepo: {
+      create: mockRunCreate,
+      updateStats: mockRunUpdateStats,
+      findIdsBySourcePrefix: mockFindIdsBySourcePrefix,
+    },
   };
 }
 
-function mockFetchSequence(responses: Array<{ data: unknown; pagination?: unknown; status?: number }>) {
+function mockFetchSequence(
+  responses: Array<{ data: unknown; pagination?: unknown; status?: number }>,
+) {
   let callIdx = 0;
   vi.stubGlobal(
     'fetch',
@@ -48,11 +57,12 @@ function mockFetchSequence(responses: Array<{ data: unknown; pagination?: unknow
       return Promise.resolve({
         ok: status >= 200 && status < 300,
         status,
-        json: () => Promise.resolve(
-          resp.pagination
-            ? { data: resp.data, pagination: resp.pagination }
-            : { data: resp.data },
-        ),
+        json: () =>
+          Promise.resolve(
+            resp.pagination
+              ? { data: resp.data, pagination: resp.pagination }
+              : { data: resp.data },
+          ),
       });
     }),
   );
@@ -84,11 +94,41 @@ describe('runPullCommand', () => {
       // getJob
       { data: { id: 'remote-job-1', status: 'completed', stats: { pagesProcessed: 10 } } },
       // getSchema
-      { data: { version: 1, fields: [{ name: 'title', type: 'string', required: true, description: '' }], fieldAliases: [], createdAt: '2026-01-01', parentVersion: null } },
+      {
+        data: {
+          version: 1,
+          fields: [{ name: 'title', type: 'string', required: true, description: '' }],
+          fieldAliases: [],
+          createdAt: '2026-01-01',
+          parentVersion: null,
+        },
+      },
       // getEntitiesStreamPaginated — single batch with 1 entity
-      { data: [{ id: 'e1', mergedData: { title: 'A' }, provenance: { title: {} }, categories: ['product'], qualityScore: 0.9, tenantId: 't1', jobId: 'remote-job-1' }], pagination: { hasMore: false, total: 1 } },
+      {
+        data: [
+          {
+            id: 'e1',
+            mergedData: { title: 'A' },
+            provenance: { title: {} },
+            categories: ['product'],
+            qualityScore: 0.9,
+            tenantId: 't1',
+            jobId: 'remote-job-1',
+          },
+        ],
+        pagination: { hasMore: false, total: 1 },
+      },
       // getUsage
-      { data: { period: {}, totalTokens: 1000, totalCostUsd: 0.05, byModel: {}, byPurpose: {}, byJob: [{ jobId: 'remote-job-1', tokens: 1000, costUsd: 0.05 }] } },
+      {
+        data: {
+          period: {},
+          totalTokens: 1000,
+          totalCostUsd: 0.05,
+          byModel: {},
+          byPurpose: {},
+          byJob: [{ jobId: 'remote-job-1', tokens: 1000, costUsd: 0.05 }],
+        },
+      },
     ]);
 
     const result = await runPullCommand({
@@ -118,10 +158,12 @@ describe('runPullCommand', () => {
     expect(batch[0]).not.toHaveProperty('tenantId');
     expect(batch[0]).not.toHaveProperty('jobId'); // stripped, not remapped into batch
 
-    expect(mockRunCreate).toHaveBeenCalledWith(expect.objectContaining({
-      status: 'pulled',
-      source: 'remote:prod:remote-job-1',
-    }));
+    expect(mockRunCreate).toHaveBeenCalledWith(
+      expect.objectContaining({
+        status: 'pulled',
+        source: 'remote:prod:remote-job-1',
+      }),
+    );
     expect(mockMetaSet).toHaveBeenCalledWith('remote:prod:last_pull_at', expect.any(String));
     expect(mockMetaDelete).toHaveBeenCalledWith('remote:prod:pull_cursor');
   });
@@ -169,9 +211,31 @@ describe('runPullCommand', () => {
       // getJob (still needed for status check)
       { data: { id: 'remote-job-1', status: 'completed' } },
       // getEntitiesStreamPaginated — resumes from cursor
-      { data: [{ id: 'e5', mergedData: {}, provenance: {}, categories: [], qualityScore: 0.8, tenantId: 't1', jobId: 'j1' }], pagination: { hasMore: false, total: 1 } },
+      {
+        data: [
+          {
+            id: 'e5',
+            mergedData: {},
+            provenance: {},
+            categories: [],
+            qualityScore: 0.8,
+            tenantId: 't1',
+            jobId: 'j1',
+          },
+        ],
+        pagination: { hasMore: false, total: 1 },
+      },
       // getUsage
-      { data: { period: {}, totalTokens: 0, totalCostUsd: 0, byModel: {}, byPurpose: {}, byJob: [] } },
+      {
+        data: {
+          period: {},
+          totalTokens: 0,
+          totalCostUsd: 0,
+          byModel: {},
+          byPurpose: {},
+          byJob: [],
+        },
+      },
     ]);
 
     const result = await runPullCommand({
@@ -198,9 +262,26 @@ describe('runPullCommand', () => {
 
     mockFetchSequence([
       { data: { id: 'remote-job-1', status: 'completed' } },
-      { data: { version: 1, fields: [], fieldAliases: [], createdAt: '2026-01-01', parentVersion: null } },
+      {
+        data: {
+          version: 1,
+          fields: [],
+          fieldAliases: [],
+          createdAt: '2026-01-01',
+          parentVersion: null,
+        },
+      },
       { data: [], pagination: { hasMore: false, total: 0 } },
-      { data: { period: {}, totalTokens: 0, totalCostUsd: 0, byModel: {}, byPurpose: {}, byJob: [] } },
+      {
+        data: {
+          period: {},
+          totalTokens: 0,
+          totalCostUsd: 0,
+          byModel: {},
+          byPurpose: {},
+          byJob: [],
+        },
+      },
     ]);
 
     await runPullCommand({
@@ -264,7 +345,15 @@ describe('runPullCommand', () => {
             json: () =>
               Promise.resolve({
                 data: [
-                  { id: 'e1', mergedData: { title: 'A' }, provenance: {}, categories: [], qualityScore: 0.9, tenantId: 't1', jobId: 'remote-job-1' },
+                  {
+                    id: 'e1',
+                    mergedData: { title: 'A' },
+                    provenance: {},
+                    categories: [],
+                    qualityScore: 0.9,
+                    tenantId: 't1',
+                    jobId: 'remote-job-1',
+                  },
                 ],
                 pagination: { nextCursor: 'cur-2', hasMore: true, total: 10 },
               }),
@@ -284,7 +373,13 @@ describe('runPullCommand', () => {
           status: 200,
           json: () =>
             Promise.resolve({
-              data: { version: 1, fields: [], fieldAliases: [], createdAt: '2026-01-01', parentVersion: null },
+              data: {
+                version: 1,
+                fields: [],
+                fieldAliases: [],
+                createdAt: '2026-01-01',
+                parentVersion: null,
+              },
             }),
         };
       }),
@@ -327,7 +422,17 @@ describe('runPullCommand', () => {
             status: 200,
             json: () =>
               Promise.resolve({
-                data: [{ id: 'e1', mergedData: {}, provenance: {}, categories: [], qualityScore: 0.8, tenantId: 't1', jobId: 'remote-job-1' }],
+                data: [
+                  {
+                    id: 'e1',
+                    mergedData: {},
+                    provenance: {},
+                    categories: [],
+                    qualityScore: 0.8,
+                    tenantId: 't1',
+                    jobId: 'remote-job-1',
+                  },
+                ],
                 pagination: { hasMore: false, total: 1 },
               }),
           };
@@ -337,7 +442,16 @@ describe('runPullCommand', () => {
             ok: true,
             status: 200,
             json: () =>
-              Promise.resolve({ data: { period: {}, totalTokens: 0, totalCostUsd: 0, byModel: {}, byPurpose: {}, byJob: [] } }),
+              Promise.resolve({
+                data: {
+                  period: {},
+                  totalTokens: 0,
+                  totalCostUsd: 0,
+                  byModel: {},
+                  byPurpose: {},
+                  byJob: [],
+                },
+              }),
           };
         }
         // getJob
@@ -392,7 +506,13 @@ describe('runPullCommand', () => {
             status: 200,
             json: () =>
               Promise.resolve({
-                data: { version: 1, fields: [], fieldAliases: [], createdAt: '2026-01-01', parentVersion: null },
+                data: {
+                  version: 1,
+                  fields: [],
+                  fieldAliases: [],
+                  createdAt: '2026-01-01',
+                  parentVersion: null,
+                },
               }),
           };
         }
@@ -449,7 +569,16 @@ describe('runPullCommand', () => {
       // getEntitiesStreamPaginated
       { data: [], pagination: { hasMore: false, total: 0 } },
       // getUsage
-      { data: { period: {}, totalTokens: 0, totalCostUsd: 0, byModel: {}, byPurpose: {}, byJob: [] } },
+      {
+        data: {
+          period: {},
+          totalTokens: 0,
+          totalCostUsd: 0,
+          byModel: {},
+          byPurpose: {},
+          byJob: [],
+        },
+      },
     ]);
 
     const result = await runPullCommand({
@@ -505,7 +634,16 @@ describe('runPullCommand', () => {
         },
       },
       { data: [], pagination: { hasMore: false, total: 0 } },
-      { data: { period: {}, totalTokens: 0, totalCostUsd: 0, byModel: {}, byPurpose: {}, byJob: [] } },
+      {
+        data: {
+          period: {},
+          totalTokens: 0,
+          totalCostUsd: 0,
+          byModel: {},
+          byPurpose: {},
+          byJob: [],
+        },
+      },
     ]);
 
     const resolveCallback = vi.fn().mockResolvedValue('remote');
@@ -526,7 +664,11 @@ describe('runPullCommand', () => {
     );
     // Verify the diff passed to the callback was computed correctly
     expect(resolveCallback).toHaveBeenCalledTimes(1);
-    const diff = resolveCallback.mock.calls[0][0] as { localOnly: { name: string }[]; remoteOnly: { name: string }[]; changed: unknown[] };
+    const diff = resolveCallback.mock.calls[0][0] as {
+      localOnly: { name: string }[];
+      remoteOnly: { name: string }[];
+      changed: unknown[];
+    };
     expect(diff.remoteOnly.map((f: { name: string }) => f.name)).toEqual(['remote_field']);
     expect(diff.localOnly.map((f: { name: string }) => f.name)).toEqual(['local_field']);
     expect(diff.changed).toHaveLength(0); // title is identical in both
@@ -568,7 +710,16 @@ describe('runPullCommand', () => {
         },
       },
       { data: [], pagination: { hasMore: false, total: 0 } },
-      { data: { period: {}, totalTokens: 0, totalCostUsd: 0, byModel: {}, byPurpose: {}, byJob: [] } },
+      {
+        data: {
+          period: {},
+          totalTokens: 0,
+          totalCostUsd: 0,
+          byModel: {},
+          byPurpose: {},
+          byJob: [],
+        },
+      },
     ]);
 
     const result = await runPullCommand({
@@ -633,7 +784,16 @@ describe('runPullCommand', () => {
         },
       },
       { data: [], pagination: { hasMore: false, total: 0 } },
-      { data: { period: {}, totalTokens: 0, totalCostUsd: 0, byModel: {}, byPurpose: {}, byJob: [] } },
+      {
+        data: {
+          period: {},
+          totalTokens: 0,
+          totalCostUsd: 0,
+          byModel: {},
+          byPurpose: {},
+          byJob: [],
+        },
+      },
     ]);
 
     const result = await runPullCommand({
@@ -682,7 +842,13 @@ describe('runPullCommand', () => {
             status: 200,
             json: () =>
               Promise.resolve({
-                data: { version: 1, fields: [], fieldAliases: [], createdAt: '2026-01-01', parentVersion: null },
+                data: {
+                  version: 1,
+                  fields: [],
+                  fieldAliases: [],
+                  createdAt: '2026-01-01',
+                  parentVersion: null,
+                },
               }),
           };
         }
@@ -691,7 +857,16 @@ describe('runPullCommand', () => {
             ok: true,
             status: 200,
             json: () =>
-              Promise.resolve({ data: { period: {}, totalTokens: 0, totalCostUsd: 0, byModel: {}, byPurpose: {}, byJob: [] } }),
+              Promise.resolve({
+                data: {
+                  period: {},
+                  totalTokens: 0,
+                  totalCostUsd: 0,
+                  byModel: {},
+                  byPurpose: {},
+                  byJob: [],
+                },
+              }),
           };
         }
         // getJob
@@ -743,7 +918,13 @@ describe('runPullCommand', () => {
             status: 200,
             json: () =>
               Promise.resolve({
-                data: { version: 1, fields: [], fieldAliases: [], createdAt: '2026-01-01', parentVersion: null },
+                data: {
+                  version: 1,
+                  fields: [],
+                  fieldAliases: [],
+                  createdAt: '2026-01-01',
+                  parentVersion: null,
+                },
               }),
           };
         }
@@ -752,7 +933,16 @@ describe('runPullCommand', () => {
             ok: true,
             status: 200,
             json: () =>
-              Promise.resolve({ data: { period: {}, totalTokens: 0, totalCostUsd: 0, byModel: {}, byPurpose: {}, byJob: [] } }),
+              Promise.resolve({
+                data: {
+                  period: {},
+                  totalTokens: 0,
+                  totalCostUsd: 0,
+                  byModel: {},
+                  byPurpose: {},
+                  byJob: [],
+                },
+              }),
           };
         }
         return {
@@ -792,9 +982,26 @@ describe('runPullCommand', () => {
 
     mockFetchSequence([
       { data: { id: 'remote-job-1', status: 'completed' } },
-      { data: { version: 1, fields: [], fieldAliases: [], createdAt: '2026-01-01', parentVersion: null } },
+      {
+        data: {
+          version: 1,
+          fields: [],
+          fieldAliases: [],
+          createdAt: '2026-01-01',
+          parentVersion: null,
+        },
+      },
       { data: [], pagination: { hasMore: false, total: 0 } },
-      { data: { period: {}, totalTokens: 0, totalCostUsd: 0, byModel: {}, byPurpose: {}, byJob: [] } },
+      {
+        data: {
+          period: {},
+          totalTokens: 0,
+          totalCostUsd: 0,
+          byModel: {},
+          byPurpose: {},
+          byJob: [],
+        },
+      },
     ]);
 
     const result = await runPullCommand({
@@ -822,9 +1029,26 @@ describe('runPullCommand', () => {
 
     mockFetchSequence([
       { data: { id: 'remote-job-1', status: 'completed' } },
-      { data: { version: 1, fields: [], fieldAliases: [], createdAt: '2026-01-01', parentVersion: null } },
+      {
+        data: {
+          version: 1,
+          fields: [],
+          fieldAliases: [],
+          createdAt: '2026-01-01',
+          parentVersion: null,
+        },
+      },
       { data: [], pagination: { hasMore: false, total: 0 } },
-      { data: { period: {}, totalTokens: 0, totalCostUsd: 0, byModel: {}, byPurpose: {}, byJob: [] } },
+      {
+        data: {
+          period: {},
+          totalTokens: 0,
+          totalCostUsd: 0,
+          byModel: {},
+          byPurpose: {},
+          byJob: [],
+        },
+      },
     ]);
 
     await runPullCommand({
@@ -854,9 +1078,26 @@ describe('runPullCommand', () => {
 
     mockFetchSequence([
       { data: { id: 'remote-job-1', status: 'completed' } },
-      { data: { version: 1, fields: [], fieldAliases: [], createdAt: '2026-01-01', parentVersion: null } },
+      {
+        data: {
+          version: 1,
+          fields: [],
+          fieldAliases: [],
+          createdAt: '2026-01-01',
+          parentVersion: null,
+        },
+      },
       { data: [], pagination: { hasMore: false, total: 0 } },
-      { data: { period: {}, totalTokens: 0, totalCostUsd: 0, byModel: {}, byPurpose: {}, byJob: [] } },
+      {
+        data: {
+          period: {},
+          totalTokens: 0,
+          totalCostUsd: 0,
+          byModel: {},
+          byPurpose: {},
+          byJob: [],
+        },
+      },
     ]);
 
     const result = await runPullCommand({
@@ -918,11 +1159,28 @@ describe('runPullCommand', () => {
       // getJob — running
       { data: { id: 'remote-job-1', status: 'running', stats: { pagesProcessed: 7 } } },
       // getSchema
-      { data: { version: 1, fields: [], fieldAliases: [], createdAt: '2026-01-01', parentVersion: null } },
+      {
+        data: {
+          version: 1,
+          fields: [],
+          fieldAliases: [],
+          createdAt: '2026-01-01',
+          parentVersion: null,
+        },
+      },
       // entities
       { data: [], pagination: { hasMore: false, total: 0 } },
       // usage
-      { data: { period: {}, totalTokens: 0, totalCostUsd: 0, byModel: {}, byPurpose: {}, byJob: [] } },
+      {
+        data: {
+          period: {},
+          totalTokens: 0,
+          totalCostUsd: 0,
+          byModel: {},
+          byPurpose: {},
+          byJob: [],
+        },
+      },
     ]);
 
     const result = await runPullCommand({
@@ -949,9 +1207,7 @@ describe('runPullCommand', () => {
       return null;
     });
 
-    mockFetchSequence([
-      { data: { id: 'remote-job-1', status: 'running', stats: {} } },
-    ]);
+    mockFetchSequence([{ data: { id: 'remote-job-1', status: 'running', stats: {} } }]);
 
     const result = await runPullCommand({
       remoteName: 'prod',
@@ -1018,9 +1274,30 @@ describe('runPullCommand', () => {
               json: () =>
                 Promise.resolve({
                   data: [
-                    { id: 'ext-1', pageUrl: 'https://a.com', schemaVersion: 1, data: { title: 'A' }, unmappedFields: [], metadata: {} },
-                    { id: 'ext-2', pageUrl: 'https://b.com', schemaVersion: 1, data: { title: 'B' }, unmappedFields: [], metadata: {} },
-                    { id: 'ext-3', pageUrl: null, schemaVersion: 2, data: { title: 'C' }, unmappedFields: [{ field: 'x' }], metadata: { source: 'llm' } },
+                    {
+                      id: 'ext-1',
+                      pageUrl: 'https://a.com',
+                      schemaVersion: 1,
+                      data: { title: 'A' },
+                      unmappedFields: [],
+                      metadata: {},
+                    },
+                    {
+                      id: 'ext-2',
+                      pageUrl: 'https://b.com',
+                      schemaVersion: 1,
+                      data: { title: 'B' },
+                      unmappedFields: [],
+                      metadata: {},
+                    },
+                    {
+                      id: 'ext-3',
+                      pageUrl: null,
+                      schemaVersion: 2,
+                      data: { title: 'C' },
+                      unmappedFields: [{ field: 'x' }],
+                      metadata: { source: 'llm' },
+                    },
                   ],
                   pagination: { hasMore: false, total: 3 },
                 }),
@@ -1053,7 +1330,13 @@ describe('runPullCommand', () => {
               status: 200,
               json: () =>
                 Promise.resolve({
-                  data: { version: 1, fields: [], fieldAliases: [], createdAt: '2026-01-01', parentVersion: null },
+                  data: {
+                    version: 1,
+                    fields: [],
+                    fieldAliases: [],
+                    createdAt: '2026-01-01',
+                    parentVersion: null,
+                  },
                 }),
             };
           }
@@ -1062,7 +1345,16 @@ describe('runPullCommand', () => {
               ok: true,
               status: 200,
               json: () =>
-                Promise.resolve({ data: { period: {}, totalTokens: 0, totalCostUsd: 0, byModel: {}, byPurpose: {}, byJob: [] } }),
+                Promise.resolve({
+                  data: {
+                    period: {},
+                    totalTokens: 0,
+                    totalCostUsd: 0,
+                    byModel: {},
+                    byPurpose: {},
+                    byJob: [],
+                  },
+                }),
             };
           }
           // getJob
@@ -1123,7 +1415,16 @@ describe('runPullCommand', () => {
                 status: 200,
                 json: () =>
                   Promise.resolve({
-                    data: [{ id: 'ext-1', pageUrl: 'https://a.com', schemaVersion: 1, data: {}, unmappedFields: [], metadata: {} }],
+                    data: [
+                      {
+                        id: 'ext-1',
+                        pageUrl: 'https://a.com',
+                        schemaVersion: 1,
+                        data: {},
+                        unmappedFields: [],
+                        metadata: {},
+                      },
+                    ],
                     pagination: { nextCursor: 'extr-cursor-2', hasMore: true, total: 2 },
                   }),
               };
@@ -1133,7 +1434,16 @@ describe('runPullCommand', () => {
               status: 200,
               json: () =>
                 Promise.resolve({
-                  data: [{ id: 'ext-2', pageUrl: 'https://b.com', schemaVersion: 1, data: {}, unmappedFields: [], metadata: {} }],
+                  data: [
+                    {
+                      id: 'ext-2',
+                      pageUrl: 'https://b.com',
+                      schemaVersion: 1,
+                      data: {},
+                      unmappedFields: [],
+                      metadata: {},
+                    },
+                  ],
                   pagination: { hasMore: false, total: 2 },
                 }),
             };
@@ -1158,7 +1468,13 @@ describe('runPullCommand', () => {
               status: 200,
               json: () =>
                 Promise.resolve({
-                  data: { version: 1, fields: [], fieldAliases: [], createdAt: '2026-01-01', parentVersion: null },
+                  data: {
+                    version: 1,
+                    fields: [],
+                    fieldAliases: [],
+                    createdAt: '2026-01-01',
+                    parentVersion: null,
+                  },
                 }),
             };
           }
@@ -1167,7 +1483,16 @@ describe('runPullCommand', () => {
               ok: true,
               status: 200,
               json: () =>
-                Promise.resolve({ data: { period: {}, totalTokens: 0, totalCostUsd: 0, byModel: {}, byPurpose: {}, byJob: [] } }),
+                Promise.resolve({
+                  data: {
+                    period: {},
+                    totalTokens: 0,
+                    totalCostUsd: 0,
+                    byModel: {},
+                    byPurpose: {},
+                    byJob: [],
+                  },
+                }),
             };
           }
           return {
@@ -1192,7 +1517,10 @@ describe('runPullCommand', () => {
       expect(result.success).toBe(true);
       expect(mockExtractionUpsertBatch).toHaveBeenCalledTimes(2);
       // Cursor checkpointed between pages
-      expect(mockMetaSet).toHaveBeenCalledWith('remote:prod:pull_cursor_extractions', 'extr-cursor-2');
+      expect(mockMetaSet).toHaveBeenCalledWith(
+        'remote:prod:pull_cursor_extractions',
+        'extr-cursor-2',
+      );
       // Cursor cleared after completion
       expect(mockMetaDelete).toHaveBeenCalledWith('remote:prod:pull_cursor_extractions');
     });
@@ -1211,10 +1539,20 @@ describe('runPullCommand', () => {
             return {
               ok: true,
               status: 200,
-              json: () => Promise.resolve({
-                data: [{ id: 'ext-1', pageUrl: 'https://a.com', schemaVersion: 1, data: {}, unmappedFields: [], metadata: {} }],
-                pagination: { hasMore: false, total: 1 },
-              }),
+              json: () =>
+                Promise.resolve({
+                  data: [
+                    {
+                      id: 'ext-1',
+                      pageUrl: 'https://a.com',
+                      schemaVersion: 1,
+                      data: {},
+                      unmappedFields: [],
+                      metadata: {},
+                    },
+                  ],
+                  pagination: { hasMore: false, total: 1 },
+                }),
             };
           }
           if ((url as string).includes('/entity-sources')) {
@@ -1223,24 +1561,60 @@ describe('runPullCommand', () => {
               return {
                 ok: true,
                 status: 200,
-                json: () => Promise.resolve({
-                  data: [{ entityId: 'e1', extractionId: 'ext-1', matchConfidence: 0.9 }],
-                  pagination: { nextCursor: 'es-cursor-2', hasMore: true, total: 3 },
-                }),
+                json: () =>
+                  Promise.resolve({
+                    data: [{ entityId: 'e1', extractionId: 'ext-1', matchConfidence: 0.9 }],
+                    pagination: { nextCursor: 'es-cursor-2', hasMore: true, total: 3 },
+                  }),
               };
             }
             throw new Error('Network lost during entity-sources pull');
           }
           if ((url as string).includes('/entities')) {
-            return { ok: true, status: 200, json: () => Promise.resolve({ data: [], pagination: { hasMore: false, total: 0 } }) };
+            return {
+              ok: true,
+              status: 200,
+              json: () => Promise.resolve({ data: [], pagination: { hasMore: false, total: 0 } }),
+            };
           }
           if ((url as string).includes('/schema')) {
-            return { ok: true, status: 200, json: () => Promise.resolve({ data: { version: 1, fields: [], fieldAliases: [], createdAt: '2026-01-01', parentVersion: null } }) };
+            return {
+              ok: true,
+              status: 200,
+              json: () =>
+                Promise.resolve({
+                  data: {
+                    version: 1,
+                    fields: [],
+                    fieldAliases: [],
+                    createdAt: '2026-01-01',
+                    parentVersion: null,
+                  },
+                }),
+            };
           }
           if ((url as string).includes('/usage')) {
-            return { ok: true, status: 200, json: () => Promise.resolve({ data: { period: {}, totalTokens: 0, totalCostUsd: 0, byModel: {}, byPurpose: {}, byJob: [] } }) };
+            return {
+              ok: true,
+              status: 200,
+              json: () =>
+                Promise.resolve({
+                  data: {
+                    period: {},
+                    totalTokens: 0,
+                    totalCostUsd: 0,
+                    byModel: {},
+                    byPurpose: {},
+                    byJob: [],
+                  },
+                }),
+            };
           }
-          return { ok: true, status: 200, json: () => Promise.resolve({ data: { id: 'remote-job-1', status: 'completed' } }) };
+          return {
+            ok: true,
+            status: 200,
+            json: () => Promise.resolve({ data: { id: 'remote-job-1', status: 'completed' } }),
+          };
         }),
       );
 
@@ -1260,7 +1634,10 @@ describe('runPullCommand', () => {
       expect(result.error).toContain('Entity-source pull failed');
       expect(result.entitySourcesInserted).toBe(2); // from mock upsert return value
       // Cursor checkpointed before the throw
-      expect(mockMetaSet).toHaveBeenCalledWith('remote:prod:pull_cursor_entity_sources', 'es-cursor-2');
+      expect(mockMetaSet).toHaveBeenCalledWith(
+        'remote:prod:pull_cursor_entity_sources',
+        'es-cursor-2',
+      );
     });
 
     it('does not pull extractions when flag is false', async () => {
@@ -1271,9 +1648,26 @@ describe('runPullCommand', () => {
 
       mockFetchSequence([
         { data: { id: 'remote-job-1', status: 'completed' } },
-        { data: { version: 1, fields: [], fieldAliases: [], createdAt: '2026-01-01', parentVersion: null } },
+        {
+          data: {
+            version: 1,
+            fields: [],
+            fieldAliases: [],
+            createdAt: '2026-01-01',
+            parentVersion: null,
+          },
+        },
         { data: [], pagination: { hasMore: false, total: 0 } },
-        { data: { period: {}, totalTokens: 0, totalCostUsd: 0, byModel: {}, byPurpose: {}, byJob: [] } },
+        {
+          data: {
+            period: {},
+            totalTokens: 0,
+            totalCostUsd: 0,
+            byModel: {},
+            byPurpose: {},
+            byJob: [],
+          },
+        },
       ]);
 
       const result = await runPullCommand({
@@ -1334,18 +1728,32 @@ describe('runPullCommand', () => {
                 Promise.resolve({
                   data: [
                     {
-                      id: 'act-1', type: 'add_field', payload: { field: 'price' },
-                      source: 'llm', status: 'pending', confidence: 0.9,
-                      reasoning: 'Detected numeric field', createdAt: '2026-03-01T00:00:00Z',
-                      updatedAt: '2026-03-01T00:00:00Z', appliedAt: null,
-                      stateChanges: null, reviewedBy: null,
+                      id: 'act-1',
+                      type: 'add_field',
+                      payload: { field: 'price' },
+                      source: 'llm',
+                      status: 'pending',
+                      confidence: 0.9,
+                      reasoning: 'Detected numeric field',
+                      createdAt: '2026-03-01T00:00:00Z',
+                      updatedAt: '2026-03-01T00:00:00Z',
+                      appliedAt: null,
+                      stateChanges: null,
+                      reviewedBy: null,
                     },
                     {
-                      id: 'act-2', type: 'rename_field', payload: { from: 'name', to: 'title' },
-                      source: 'llm', status: 'applied', confidence: 0.85,
-                      reasoning: 'Field rename detected', createdAt: '2026-03-01T00:00:00Z',
-                      updatedAt: '2026-03-02T00:00:00Z', appliedAt: '2026-03-02T00:00:00Z',
-                      stateChanges: { renamed: true }, reviewedBy: 'user-1',
+                      id: 'act-2',
+                      type: 'rename_field',
+                      payload: { from: 'name', to: 'title' },
+                      source: 'llm',
+                      status: 'applied',
+                      confidence: 0.85,
+                      reasoning: 'Field rename detected',
+                      createdAt: '2026-03-01T00:00:00Z',
+                      updatedAt: '2026-03-02T00:00:00Z',
+                      appliedAt: '2026-03-02T00:00:00Z',
+                      stateChanges: { renamed: true },
+                      reviewedBy: 'user-1',
                     },
                   ],
                   pagination: { hasMore: false, total: 2 },
@@ -1365,7 +1773,13 @@ describe('runPullCommand', () => {
               status: 200,
               json: () =>
                 Promise.resolve({
-                  data: { version: 1, fields: [], fieldAliases: [], createdAt: '2026-01-01', parentVersion: null },
+                  data: {
+                    version: 1,
+                    fields: [],
+                    fieldAliases: [],
+                    createdAt: '2026-01-01',
+                    parentVersion: null,
+                  },
                 }),
             };
           }
@@ -1374,7 +1788,16 @@ describe('runPullCommand', () => {
               ok: true,
               status: 200,
               json: () =>
-                Promise.resolve({ data: { period: {}, totalTokens: 0, totalCostUsd: 0, byModel: {}, byPurpose: {}, byJob: [] } }),
+                Promise.resolve({
+                  data: {
+                    period: {},
+                    totalTokens: 0,
+                    totalCostUsd: 0,
+                    byModel: {},
+                    byPurpose: {},
+                    byJob: [],
+                  },
+                }),
             };
           }
           return {
@@ -1417,9 +1840,26 @@ describe('runPullCommand', () => {
 
       mockFetchSequence([
         { data: { id: 'remote-job-1', status: 'completed' } },
-        { data: { version: 1, fields: [], fieldAliases: [], createdAt: '2026-01-01', parentVersion: null } },
+        {
+          data: {
+            version: 1,
+            fields: [],
+            fieldAliases: [],
+            createdAt: '2026-01-01',
+            parentVersion: null,
+          },
+        },
         { data: [], pagination: { hasMore: false, total: 0 } },
-        { data: { period: {}, totalTokens: 0, totalCostUsd: 0, byModel: {}, byPurpose: {}, byJob: [] } },
+        {
+          data: {
+            period: {},
+            totalTokens: 0,
+            totalCostUsd: 0,
+            byModel: {},
+            byPurpose: {},
+            byJob: [],
+          },
+        },
       ]);
 
       const result = await runPullCommand({
@@ -1515,7 +1955,13 @@ describe('runPullCommand', () => {
               status: 200,
               json: () =>
                 Promise.resolve({
-                  data: { version: 1, fields: [], fieldAliases: [], createdAt: '2026-01-01', parentVersion: null },
+                  data: {
+                    version: 1,
+                    fields: [],
+                    fieldAliases: [],
+                    createdAt: '2026-01-01',
+                    parentVersion: null,
+                  },
                 }),
             };
           }
@@ -1524,7 +1970,16 @@ describe('runPullCommand', () => {
               ok: true,
               status: 200,
               json: () =>
-                Promise.resolve({ data: { period: {}, totalTokens: 0, totalCostUsd: 0, byModel: {}, byPurpose: {}, byJob: [] } }),
+                Promise.resolve({
+                  data: {
+                    period: {},
+                    totalTokens: 0,
+                    totalCostUsd: 0,
+                    byModel: {},
+                    byPurpose: {},
+                    byJob: [],
+                  },
+                }),
             };
           }
           return {
@@ -1559,7 +2014,11 @@ describe('runPullCommand', () => {
 
       // entity_sources deleted before extractions
       expect(callOrder).toEqual(['deleteByExtractionIds', 'deleteByRunIds']);
-      expect(mockEntitySourceDeleteByExtractionIds).toHaveBeenCalledWith(['ext-a', 'ext-b', 'ext-c']);
+      expect(mockEntitySourceDeleteByExtractionIds).toHaveBeenCalledWith([
+        'ext-a',
+        'ext-b',
+        'ext-c',
+      ]);
       expect(mockExtractionDeleteByRunIds).toHaveBeenCalledWith(['run-old-1', 'run-old-2']);
     });
   });
@@ -1617,7 +2076,13 @@ describe('runPullCommand', () => {
               status: 200,
               json: () =>
                 Promise.resolve({
-                  data: { version: 1, fields: [], fieldAliases: [], createdAt: '2026-01-01', parentVersion: null },
+                  data: {
+                    version: 1,
+                    fields: [],
+                    fieldAliases: [],
+                    createdAt: '2026-01-01',
+                    parentVersion: null,
+                  },
                 }),
             };
           }
@@ -1626,7 +2091,16 @@ describe('runPullCommand', () => {
               ok: true,
               status: 200,
               json: () =>
-                Promise.resolve({ data: { period: {}, totalTokens: 0, totalCostUsd: 0, byModel: {}, byPurpose: {}, byJob: [] } }),
+                Promise.resolve({
+                  data: {
+                    period: {},
+                    totalTokens: 0,
+                    totalCostUsd: 0,
+                    byModel: {},
+                    byPurpose: {},
+                    byJob: [],
+                  },
+                }),
             };
           }
           return {

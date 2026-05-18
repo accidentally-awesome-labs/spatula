@@ -131,9 +131,7 @@ describe('runRemoteWatchCommand', () => {
 
     const metaGet = vi.fn().mockResolvedValue('job-remote-1');
 
-    const { runRemoteWatchCommand } = await import(
-      '../../../src/commands/remote-watch.js'
-    );
+    const { runRemoteWatchCommand } = await import('../../../src/commands/remote-watch.js');
     await runRemoteWatchCommand('prod', metaGet);
 
     // Verify WS token was fetched via POST /api/v1/ws-token

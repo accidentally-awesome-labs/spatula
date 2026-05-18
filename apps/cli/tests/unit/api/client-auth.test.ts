@@ -53,13 +53,30 @@ describe('SpatulaApiClient new methods', () => {
 
   afterEach(() => vi.restoreAllMocks());
 
-  it('getSubscription calls GET /api/v1/billing/subscription', async () => {
-    const sub = { plan: 'free', limits: {}, usage: {} };
-    mockFetchOk(sub);
-    const result = await client.getSubscription();
-    expect(result).toEqual(sub);
+  it('getAuthMe calls GET /api/v1/auth/me and returns raw body (no data unwrap)', async () => {
+    const me = {
+      tenantId: 'tenant-1',
+      scopes: ['jobs:read', 'jobs:write'],
+      subject: 'user-1',
+      authenticated: true,
+    };
+    // /api/v1/auth/me returns the fields at the top level (not wrapped in { data })
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue({
+        ok: true,
+        status: 200,
+        json: () => Promise.resolve(me),
+      }),
+    );
+    const result = await client.getAuthMe();
+    expect(result).toEqual(me);
+    expect(result.tenantId).toBe('tenant-1');
+    expect(Array.isArray(result.scopes)).toBe(true);
+    expect(result.authenticated).toBe(true);
     const calls = (globalThis.fetch as ReturnType<typeof vi.fn>).mock.calls;
-    expect(calls[0][0]).toContain('/api/v1/billing/subscription');
+    expect(calls[0][0]).toContain('/api/v1/auth/me');
+    expect((calls[0][1] as RequestInit).method).toBe('GET');
   });
 
   it('getEntitiesStream calls entities endpoint with cursor/since params', async () => {

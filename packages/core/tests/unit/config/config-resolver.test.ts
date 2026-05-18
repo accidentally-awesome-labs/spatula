@@ -46,10 +46,7 @@ describe('yamlToJobConfig', () => {
   it('expands field shorthand to FieldDefinition', () => {
     const yaml: SpatulaYaml = {
       seeds: ['https://example.com'],
-      fields: [
-        { product_name: 'string' },
-        { field: 'price', type: 'currency', required: true },
-      ],
+      fields: [{ product_name: 'string' }, { field: 'price', type: 'currency', required: true }],
     };
 
     const result = yamlToJobConfig(yaml, {
@@ -176,14 +173,14 @@ describe('yamlToJobConfig', () => {
   it('full priority stack: CLI > project YAML > global config > defaults', () => {
     const yaml: SpatulaYaml = {
       seeds: ['https://example.com'],
-      depth: 3,           // project overrides default (2)
-      limit: 500,         // project overrides default (1000)
+      depth: 3, // project overrides default (2)
+      limit: 500, // project overrides default (1000)
       crawler: 'firecrawl', // project overrides global
     };
 
     const globalConfig: GlobalConfig = {
       version: 1,
-      crawler: 'playwright',     // global sets crawler — overridden by project
+      crawler: 'playwright', // global sets crawler — overridden by project
       llm: { model: 'llama3.2:8b' }, // global sets model — not overridden by project
     };
 
@@ -191,7 +188,7 @@ describe('yamlToJobConfig', () => {
       tenantId: 'tenant-1',
       projectRoot: '/test',
       globalConfig,
-      cliFlags: { depth: 1 },  // CLI overrides project depth (3 → 1)
+      cliFlags: { depth: 1 }, // CLI overrides project depth (3 → 1)
     });
 
     // CLI wins over project

@@ -1,0 +1,171 @@
+name: migration-equivalence
+
+# Proves the squashed 0000_v1_baseline.sql produces a schema byte-equivalent
+# to applying the original 12 migrations (0000_previous_nova -> 0011_young_boomer)
+# sequentially. Required to merge the carve-out PR per CONTEXT.md D-05/D-06.
+#
+# The two old-migration source-of-truth retrieval works only while the PR base
+# branch still contains them at $(git merge-base origin/main HEAD). After the
+# carve-out PR merges, this gate may be removed (D-05 leaves retention to repo
+# maintainer discretion).
+#
+# Security note: all run: blocks use static refs (origin/main, HEAD, literal
+# paths) — no PR-author-controlled input (titles, body, head-ref) is interpolated
+# into shell. Safe per GitHub Actions injection guidelines.
+
+on:
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: migration-equivalence-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  pg-dump-diff:
+    name: pg_dump --schema-only diff (sequential vs squashed)
+    runs-on: ubuntu-latest
+
+    services:
+      postgres-sequential:
+        image: postgres:16
+        env:
+          POSTGRES_USER: spatula
+          POSTGRES_PASSWORD: spatula
+          POSTGRES_DB: spatula_seq
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+      postgres-squashed:
+        image: postgres:16
+        env:
+          POSTGRES_USER: spatula
+          POSTGRES_PASSWORD: spatula
+          POSTGRES_DB: spatula_sq
+        ports:
+          - 5433:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    steps:
+      - name: Checkout PR head
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # need full history to retrieve deleted migrations from the PR base
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        # Version is auto-detected from package.json `packageManager` field
+        # (pnpm@9.15.4). Explicit `version: 9` here would conflict and fail.
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+      # The trailing `...` syntax pulls in @spatula/db's workspace dependencies
+      # (@spatula/shared, @spatula/core). Without it tsc fails to resolve the
+      # type-only imports those packages provide.
+      - run: pnpm --filter @spatula/db... build
+
+      - name: DB-A — apply sequential 0000-0011 (retrieved from PR base)
+        env:
+          PGPASSWORD: spatula
+        run: |
+          # Resolve the merge-base with main; old migrations still live there.
+          BASE_SHA="$(git merge-base origin/main HEAD)"
+          echo "Using base SHA: $BASE_SHA"
+          mkdir -p /tmp/old-migrations
+          # Find every 0000-0011 .sql under packages/db/drizzle/ at BASE_SHA and
+          # write each to /tmp/old-migrations/ for sequential application.
+          for f in $(git ls-tree -r --name-only "$BASE_SHA" -- packages/db/drizzle/ \
+              | grep -E '^packages/db/drizzle/00(0[0-9]|10|11)_.+\.sql$' \
+              | sort); do
+            git show "$BASE_SHA:$f" > "/tmp/old-migrations/$(basename "$f")"
+          done
+          ls /tmp/old-migrations
+          if [ -z "$(ls -A /tmp/old-migrations)" ]; then
+            echo "::error::No 0000-0011 migrations found at base SHA — equivalence gate cannot run."
+            exit 1
+          fi
+          # Apply each file in numeric order; Drizzle's statement-breakpoint comments
+          # are valid SQL comments so psql tolerates them.
+          for f in $(ls /tmp/old-migrations/*.sql | sort); do
+            echo ">>> applying $f"
+            psql -h localhost -p 5432 -U spatula -d spatula_seq \
+              -v ON_ERROR_STOP=1 -f "$f"
+          done
+
+      - name: DB-B — apply squashed 0000_v1_baseline.sql (PR head)
+        env:
+          PGPASSWORD: spatula
+        run: |
+          psql -h localhost -p 5433 -U spatula -d spatula_sq \
+            -v ON_ERROR_STOP=1 -f packages/db/drizzle/0000_v1_baseline.sql
+
+      - name: pg_dump --schema-only both DBs (normalized)
+        env:
+          PGPASSWORD: spatula
+        run: |
+          pg_dump --schema-only -h localhost -p 5432 -U spatula -d spatula_seq \
+            | ./scripts/normalize-schema-dump.sh > /tmp/dump-sequential.sql
+          pg_dump --schema-only -h localhost -p 5433 -U spatula -d spatula_sq \
+            | ./scripts/normalize-schema-dump.sh > /tmp/dump-squashed.sql
+          echo "--- sequential dump (first 50 lines) ---"
+          head -50 /tmp/dump-sequential.sql
+          echo "--- squashed dump (first 50 lines) ---"
+          head -50 /tmp/dump-squashed.sql
+          echo "--- sequential line count: $(wc -l < /tmp/dump-sequential.sql) ---"
+          echo "--- squashed line count:   $(wc -l < /tmp/dump-squashed.sql) ---"
+
+      - name: Diff (must match expected billing-removal fixture)
+        # CONTEXT.md D-05 originally specified "diff must be empty", which assumed
+        # DB-A and DB-B describe the same schema. Plan 15-03 intentionally removed
+        # billing surface (usage_records, tenants.plan, tenants.stripe_customer_id,
+        # idx_tenants_stripe_customer, rateLimitTier key in quotas JSONB default),
+        # so the sequential (pre-strip) vs squashed (post-strip) diff has a known,
+        # bounded set of expected differences. The gate's purpose is unchanged:
+        # detect ACCIDENTAL drift. We do this by comparing the actual change-only
+        # lines (sorted, deduped) against a frozen fixture. Adding/removing any
+        # column, table, index, or FK that isn't in the fixture fails the gate.
+        run: |
+          diff -u /tmp/dump-sequential.sql /tmp/dump-squashed.sql > /tmp/dump-diff.txt || true
+          # Extract just the added/removed content lines (drop +++/--- headers).
+          grep -E '^[+-]' /tmp/dump-diff.txt \
+            | grep -v -E '^(\+\+\+|---)' \
+            | sort -u > /tmp/dump-diff-changes.txt
+          if ! diff -u scripts/migration-equivalence-expected-diff.txt /tmp/dump-diff-changes.txt > /tmp/fixture-diff.txt; then
+            echo "::error::pg_dump diff does not match scripts/migration-equivalence-expected-diff.txt"
+            echo "Either the squashed baseline drifted from the intended billing-removal delta,"
+            echo "or the expected-diff fixture needs to be re-frozen (intentional schema change)."
+            echo "--- fixture-vs-actual delta ---"
+            head -100 /tmp/fixture-diff.txt
+            echo ""
+            echo "--- actual change-only lines (first 100) ---"
+            head -100 /tmp/dump-diff-changes.txt
+            exit 1
+          fi
+          echo "Squashed baseline matches expected billing-removal delta exactly."
+
+      - name: Upload dumps + diff on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: migration-equivalence-dumps
+          path: |
+            /tmp/dump-sequential.sql
+            /tmp/dump-squashed.sql
+            /tmp/dump-diff.txt
+          retention-days: 7

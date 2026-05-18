@@ -21,7 +21,8 @@ describe('WorkerHeartbeat', () => {
     expect(mockRedis.set).toHaveBeenCalledWith(
       expect.stringMatching(/^worker:heartbeat:/),
       expect.any(String),
-      'EX', 90,
+      'EX',
+      90,
     );
   });
 

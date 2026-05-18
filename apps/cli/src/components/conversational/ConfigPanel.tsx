@@ -52,9 +52,7 @@ export function ConfigPanel({ config, isValid }: ConfigPanelProps): React.ReactE
               {config.schema.userFields.map((field, i) => (
                 <Text key={i}>
                   {'  '}
-                  {field.name}
-                  {' '}
-                  <Text dimColor>({field.type})</Text>
+                  {field.name} <Text dimColor>({field.type})</Text>
                   {field.required ? <Text color="red">{' *'}</Text> : null}
                 </Text>
               ))}
@@ -66,10 +64,14 @@ export function ConfigPanel({ config, isValid }: ConfigPanelProps): React.ReactE
         <Text>
           <Text bold>{'Crawl: '}</Text>
           <Text>
-            {'depth=' + config.crawl.maxDepth +
-              ' pages=' + config.crawl.maxPages +
-              ' concurrency=' + config.crawl.concurrency +
-              ' ' + config.crawl.crawlerType}
+            {'depth=' +
+              config.crawl.maxDepth +
+              ' pages=' +
+              config.crawl.maxPages +
+              ' concurrency=' +
+              config.crawl.concurrency +
+              ' ' +
+              config.crawl.crawlerType}
           </Text>
         </Text>
 
@@ -82,7 +84,9 @@ export function ConfigPanel({ config, isValid }: ConfigPanelProps): React.ReactE
         {/* Validation status */}
         <Box marginTop={1}>
           {isValid === true ? (
-            <Text color="green" bold>{'✓ Ready to start'}</Text>
+            <Text color="green" bold>
+              {'✓ Ready to start'}
+            </Text>
           ) : (
             <Text color="yellow">{'○ Incomplete — keep configuring'}</Text>
           )}

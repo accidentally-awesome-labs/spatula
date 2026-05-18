@@ -20,7 +20,8 @@ describe('Quality routes', () => {
   beforeEach(() => {
     mockEntityRepo = {
       getQualityAggregation: vi.fn().mockResolvedValue({
-        entityCount: 500, averageQuality: 0.78,
+        entityCount: 500,
+        averageQuality: 0.78,
         distribution: { excellent: 120, good: 200, fair: 130, poor: 50 },
         fieldCompleteness: { name: 0.98, price: 0.85, description: 0.72 },
       }),
@@ -41,7 +42,8 @@ describe('Quality routes', () => {
 
   it('returns zero values for empty job (no entities)', async () => {
     mockEntityRepo.getQualityAggregation.mockResolvedValue({
-      entityCount: 0, averageQuality: 0,
+      entityCount: 0,
+      averageQuality: 0,
       distribution: { excellent: 0, good: 0, fair: 0, poor: 0 },
       fieldCompleteness: {},
     });

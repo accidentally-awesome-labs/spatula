@@ -13,7 +13,16 @@ export function idempotencyMiddleware(): MiddlewareHandler {
 
     // Validate key format and length
     if (idempotencyKey.length > 255) {
-      return c.json({ error: { code: 'VALIDATION_ERROR', message: 'Idempotency-Key must be 255 characters or less', requestId: '' } }, 400);
+      return c.json(
+        {
+          error: {
+            code: 'VALIDATION_ERROR',
+            message: 'Idempotency-Key must be 255 characters or less',
+            requestId: '',
+          },
+        },
+        400,
+      );
     }
 
     const redis = c.get('deps')?.redis;
@@ -43,7 +52,12 @@ export function idempotencyMiddleware(): MiddlewareHandler {
       if (!contentType.includes('application/json')) return; // Only cache JSON responses
       const cloned = c.res.clone();
       const body = await cloned.json();
-      await redis.set(cacheKey, JSON.stringify({ statusCode: status, body }), 'EX', IDEMPOTENCY_TTL);
+      await redis.set(
+        cacheKey,
+        JSON.stringify({ statusCode: status, body }),
+        'EX',
+        IDEMPOTENCY_TTL,
+      );
     } catch (err) {
       logger.warn({ err, cacheKey }, 'Idempotency cache write failed');
     }

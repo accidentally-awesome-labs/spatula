@@ -92,14 +92,18 @@ class ExportRepository {
   create(input: CreateExportInput): Promise<ExportRow>;
   findById(exportId: string, tenantId: string): Promise<ExportRow | null>;
   findByJob(jobId: string, tenantId: string): Promise<ExportRow[]>;
-  updateStatus(exportId: string, tenantId: string, update: {
-    status: 'processing' | 'completed' | 'failed';
-    entityCount?: number;
-    contentRef?: string;
-    fileSize?: number;
-    error?: string;
-    completedAt?: Date;
-  }): Promise<ExportRow>;
+  updateStatus(
+    exportId: string,
+    tenantId: string,
+    update: {
+      status: 'processing' | 'completed' | 'failed';
+      entityCount?: number;
+      contentRef?: string;
+      fileSize?: number;
+      error?: string;
+      completedAt?: Date;
+    },
+  ): Promise<ExportRow>;
 }
 ```
 
@@ -130,11 +134,13 @@ The worker already has access to `contentStore`, `entityRepo`, and `schemaRepo` 
 ### SpatulaQueues (packages/queue/src/queues.ts)
 
 Add to `QUEUE_NAMES`:
+
 ```typescript
 EXPORT: 'spatula:export',
 ```
 
 Add to `SpatulaQueues` interface:
+
 ```typescript
 export: Queue<ExportJobPayload>;
 ```
@@ -148,6 +154,7 @@ Add to `createQueues` factory and `closeAll`.
 Creates an export record and enqueues a BullMQ job.
 
 **Request body:**
+
 ```typescript
 {
   format: 'json' | 'csv';
@@ -156,6 +163,7 @@ Creates an export record and enqueues a BullMQ job.
 ```
 
 **Response (202 Accepted):**
+
 ```typescript
 {
   data: {
@@ -177,6 +185,7 @@ Creates an export record and enqueues a BullMQ job.
 Returns export status and metadata.
 
 **Response (200):**
+
 ```typescript
 {
   data: {
@@ -184,12 +193,12 @@ Returns export status and metadata.
     status: 'pending' | 'processing' | 'completed' | 'failed';
     format: string;
     includeProvenance: boolean;
-    entityCount: number | null;     // populated when completed
-    fileSize: number | null;        // populated when completed
-    contentRef: string | null;      // populated when completed
-    error: string | null;           // populated when failed
+    entityCount: number | null; // populated when completed
+    fileSize: number | null; // populated when completed
+    contentRef: string | null; // populated when completed
+    error: string | null; // populated when failed
     createdAt: string;
-    completedAt: string | null;     // populated when completed
+    completedAt: string | null; // populated when completed
   }
 }
 ```
@@ -201,11 +210,13 @@ Returns 404 if export not found.
 Streams the export file from content store.
 
 **Response headers:**
+
 - `Content-Type`: `application/json` for JSON, `text/csv` for CSV
 - `Content-Disposition`: `attachment; filename="spatula-{jobId-short}-{date}.{format}"`
 - `Content-Length`: file size from export record
 
 **Error cases:**
+
 - 404 if export not found
 - 409 if export not yet completed (status is not `completed`)
 
@@ -214,6 +225,7 @@ Streams the export file from content store.
 Computed on demand — no storage needed. Returns the data dictionary for the job's current schema and entity data.
 
 **Response (200):**
+
 ```typescript
 {
   data: {
@@ -326,10 +338,11 @@ function generateDocumentation(
   schema: SchemaDefinition,
   entities: Entity[],
   jobId: string,
-): DataDictionary
+): DataDictionary;
 ```
 
 **DataDictionary type:**
+
 ```typescript
 export interface FieldStats {
   fillRate: number;
@@ -353,13 +366,14 @@ export interface DataDictionary {
   schemaVersion: number;
   generatedAt: string;
   entityCount: number;
-  sampled?: boolean;         // true when stats computed from sample
-  sampleSize?: number;       // included when sampled
+  sampled?: boolean; // true when stats computed from sample
+  sampleSize?: number; // included when sampled
   fields: FieldDocumentation[];
 }
 ```
 
 **Stats computation:**
+
 - Single pass over entities
 - Per field: count non-null values (fillRate), collect unique values via Set (capped at 1000 entries for memory), track min/max for numeric values
 - `sampleValues`: up to 5 distinct non-null values
@@ -408,6 +422,7 @@ interface ExportJobPayload {
 The existing `PgContentStore` stores content as PostgreSQL TEXT (up to 1GB per row). For Phase 10 v1, this is adequate — a JSON export of 10,000 entities with full provenance is typically 5-50MB. The entire serialized string is held in memory during generation and stored in a single DB row.
 
 **Known constraints:**
+
 - Maximum practical export size: ~50MB (Postgres TEXT performance degrades beyond this)
 - The worker materializes all entities in memory before serialization
 - Future binary formats (Parquet, DuckDB) will need a streaming/file-backed content store variant
@@ -441,6 +456,7 @@ Minimal UI changes — same format/scope selection. Progress display changes fro
 ## File Structure
 
 **New files:**
+
 ```
 packages/core/src/exporters/
 ├── json-exporter.ts           — JsonExporter implementation
@@ -464,6 +480,7 @@ apps/api/src/schemas/
 ```
 
 **Modified files:**
+
 ```
 packages/queue/src/queues.ts           — add EXPORT queue name, ExportJobPayload, SpatulaQueues.export
 packages/queue/src/worker-deps.ts      — add exportRepo to WorkerDepsConfig/WorkerDeps

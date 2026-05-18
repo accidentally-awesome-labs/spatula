@@ -53,8 +53,12 @@ function createMockDeps(overrides: Partial<AppDeps> = {}): AppDeps {
     actionRepo: {} as any,
     taskRepo: {} as any,
     jobManager: {
-      createJob: vi.fn(), startJob: vi.fn(), pauseJob: vi.fn(),
-      resumeJob: vi.fn(), cancelJob: vi.fn(), triggerReconciliation: vi.fn(),
+      createJob: vi.fn(),
+      startJob: vi.fn(),
+      pauseJob: vi.fn(),
+      resumeJob: vi.fn(),
+      cancelJob: vi.fn(),
+      triggerReconciliation: vi.fn(),
     } as any,
     exportRepo: {} as any,
     contentStore: {} as any,
@@ -100,7 +104,13 @@ describe('GET /api/v1/admin/system/health', () => {
     const body = await res.json();
     expect(body.data.postgres).toBe('ok');
     expect(body.data.redis).toBe('ok');
-    expect(body.data.queues.crawl).toEqual({ waiting: 1, active: 2, completed: 10, failed: 0, delayed: 3 });
+    expect(body.data.queues.crawl).toEqual({
+      waiting: 1,
+      active: 2,
+      completed: 10,
+      failed: 0,
+      delayed: 3,
+    });
     expect(body.data.queues.extract).toBeDefined();
     expect(body.data.queues.webhook).toBeDefined();
     expect(body.data.pool).toEqual({ total: 10, idle: 5, waiting: 0 });
@@ -179,7 +189,13 @@ describe('GET /api/v1/admin/system/health', () => {
     expect(res.status).toBe(200);
     const body = await res.json();
     expect(body.data.queues.crawl).toEqual({ error: 'unavailable' });
-    expect(body.data.queues.extract).toEqual({ waiting: 1, active: 2, completed: 10, failed: 0, delayed: 3 });
+    expect(body.data.queues.extract).toEqual({
+      waiting: 1,
+      active: 2,
+      completed: 10,
+      failed: 0,
+      delayed: 3,
+    });
   });
 });
 

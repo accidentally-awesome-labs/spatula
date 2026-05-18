@@ -121,10 +121,7 @@ describe('entitiesToCsv', () => {
   });
 
   it('produces correct CSV for multiple entities', () => {
-    const entities = [
-      makeEntity({ name: 'Alice', age: 30 }),
-      makeEntity({ name: 'Bob', age: 25 }),
-    ];
+    const entities = [makeEntity({ name: 'Alice', age: 30 }), makeEntity({ name: 'Bob', age: 25 })];
     const csv = entitiesToCsv(entities, ['name', 'age']);
     expect(csv).toBe('name,age\nAlice,30\nBob,25');
   });

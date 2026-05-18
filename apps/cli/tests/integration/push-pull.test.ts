@@ -6,12 +6,7 @@
  * entities, runs, schema, and meta were persisted correctly.
  */
 
-import {
-  mkdtempSync,
-  writeFileSync,
-  mkdirSync,
-  rmSync,
-} from 'node:fs';
+import { mkdtempSync, writeFileSync, mkdirSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { describe, it, expect, beforeAll, beforeEach, afterAll, afterEach, vi } from 'vitest';
@@ -28,12 +23,15 @@ vi.mock('@spatula/core', async () => {
   const actual = await vi.importActual<typeof import('@spatula/core')>('@spatula/core');
   return {
     ...actual,
-    loadGlobalConfig: vi.fn(() => ({
-      version: 1,
-      remotes: {
-        prod: { url: 'https://api.spatula.dev', apiKey: 'sk_live_abc' },
-      },
-    } as GlobalConfig)),
+    loadGlobalConfig: vi.fn(
+      () =>
+        ({
+          version: 1,
+          remotes: {
+            prod: { url: 'https://api.spatula.dev', apiKey: 'sk_live_abc' },
+          },
+        }) as GlobalConfig,
+    ),
     parseProjectYamlFile: vi.fn(() => ({
       name: 'integration-test',
       seeds: ['https://example.com'],
@@ -100,92 +98,126 @@ afterEach(() => {
 // ---------------------------------------------------------------------------
 
 function stubFetchRouted(overrides: Record<string, () => unknown> = {}) {
-  vi.stubGlobal('fetch', vi.fn().mockImplementation(async (url: string, init?: RequestInit) => {
-    const urlStr = url.toString();
-    const method = init?.method ?? 'GET';
+  vi.stubGlobal(
+    'fetch',
+    vi.fn().mockImplementation(async (url: string, init?: RequestInit) => {
+      const urlStr = url.toString();
+      const method = init?.method ?? 'GET';
 
-    // Allow per-test overrides keyed on partial URL match
-    for (const [pattern, handler] of Object.entries(overrides)) {
-      if (urlStr.includes(pattern)) {
-        return handler();
+      // Allow per-test overrides keyed on partial URL match
+      for (const [pattern, handler] of Object.entries(overrides)) {
+        if (urlStr.includes(pattern)) {
+          return handler();
+        }
       }
-    }
 
-    // Job creation (POST to /jobs)
-    if (urlStr.match(/\/jobs\/?$/) && method === 'POST') {
-      return {
-        ok: true, status: 200,
-        json: () => Promise.resolve({ data: { id: 'remote-job-1', status: 'pending' } }),
-      };
-    }
+      // Job creation (POST to /jobs)
+      if (urlStr.match(/\/jobs\/?$/) && method === 'POST') {
+        return {
+          ok: true,
+          status: 200,
+          json: () => Promise.resolve({ data: { id: 'remote-job-1', status: 'pending' } }),
+        };
+      }
 
-    // Job start
-    if (urlStr.includes('/start')) {
-      return {
-        ok: true, status: 200,
-        json: () => Promise.resolve({ data: { id: 'remote-job-1', status: 'running' } }),
-      };
-    }
+      // Job start
+      if (urlStr.includes('/start')) {
+        return {
+          ok: true,
+          status: 200,
+          json: () => Promise.resolve({ data: { id: 'remote-job-1', status: 'running' } }),
+        };
+      }
 
-    // Job status (GET /jobs/:id — not /entities, /schema)
-    if (urlStr.match(/\/jobs\/[^/]+\/?$/) && method === 'GET') {
-      return {
-        ok: true, status: 200,
-        json: () => Promise.resolve({ data: { id: 'remote-job-1', status: 'completed', stats: { pagesProcessed: 10 } } }),
-      };
-    }
+      // Job status (GET /jobs/:id — not /entities, /schema)
+      if (urlStr.match(/\/jobs\/[^/]+\/?$/) && method === 'GET') {
+        return {
+          ok: true,
+          status: 200,
+          json: () =>
+            Promise.resolve({
+              data: { id: 'remote-job-1', status: 'completed', stats: { pagesProcessed: 10 } },
+            }),
+        };
+      }
 
-    // Schema
-    if (urlStr.includes('/schema')) {
-      return {
-        ok: true, status: 200,
-        json: () => Promise.resolve({
-          data: {
-            version: 1,
-            fields: [
-              { name: 'title', type: 'string', required: true, description: 'Product title' },
-              { name: 'price', type: 'currency', required: false, description: 'Product price' },
-            ],
-            fieldAliases: [],
-            createdAt: '2026-03-20',
-            parentVersion: null,
-          },
-        }),
-      };
-    }
+      // Schema
+      if (urlStr.includes('/schema')) {
+        return {
+          ok: true,
+          status: 200,
+          json: () =>
+            Promise.resolve({
+              data: {
+                version: 1,
+                fields: [
+                  { name: 'title', type: 'string', required: true, description: 'Product title' },
+                  {
+                    name: 'price',
+                    type: 'currency',
+                    required: false,
+                    description: 'Product price',
+                  },
+                ],
+                fieldAliases: [],
+                createdAt: '2026-03-20',
+                parentVersion: null,
+              },
+            }),
+        };
+      }
 
-    // Entities
-    if (urlStr.includes('/entities')) {
-      return {
-        ok: true, status: 200,
-        json: () => Promise.resolve({
-          data: [
-            { id: 'remote-e1', mergedData: { title: 'Remote Product A', price: 19.99 }, provenance: { title: { source: 'crawl' } }, categories: ['product'], qualityScore: 0.95 },
-            { id: 'remote-e2', mergedData: { title: 'Remote Product B', price: 29.99 }, provenance: { title: { source: 'crawl' } }, categories: ['product'], qualityScore: 0.88 },
-          ],
-          pagination: { hasMore: false, total: 2 },
-        }),
-      };
-    }
+      // Entities
+      if (urlStr.includes('/entities')) {
+        return {
+          ok: true,
+          status: 200,
+          json: () =>
+            Promise.resolve({
+              data: [
+                {
+                  id: 'remote-e1',
+                  mergedData: { title: 'Remote Product A', price: 19.99 },
+                  provenance: { title: { source: 'crawl' } },
+                  categories: ['product'],
+                  qualityScore: 0.95,
+                },
+                {
+                  id: 'remote-e2',
+                  mergedData: { title: 'Remote Product B', price: 29.99 },
+                  provenance: { title: { source: 'crawl' } },
+                  categories: ['product'],
+                  qualityScore: 0.88,
+                },
+              ],
+              pagination: { hasMore: false, total: 2 },
+            }),
+        };
+      }
 
-    // Usage
-    if (urlStr.includes('/usage')) {
-      return {
-        ok: true, status: 200,
-        json: () => Promise.resolve({
-          data: {
-            period: { start: '2026-03-01', end: '2026-03-31' },
-            totalTokens: 2000, totalCostUsd: 0.10,
-            byModel: {}, byPurpose: {},
-            byJob: [{ jobId: 'remote-job-1', tokens: 2000, costUsd: 0.10 }],
-          },
-        }),
-      };
-    }
+      // Usage
+      if (urlStr.includes('/usage')) {
+        return {
+          ok: true,
+          status: 200,
+          json: () =>
+            Promise.resolve({
+              data: {
+                period: { start: '2026-03-01', end: '2026-03-31' },
+                totalTokens: 2000,
+                totalCostUsd: 0.1,
+                byModel: {},
+                byPurpose: {},
+                byJob: [{ jobId: 'remote-job-1', tokens: 2000, costUsd: 0.1 }],
+              },
+            }),
+        };
+      }
 
-    // Fallback
-    return { ok: true, status: 200, json: () => Promise.resolve({ data: {} }) };
-  }));
+      // Fallback
+      return { ok: true, status: 200, json: () => Promise.resolve({ data: {} }) };
+    }),
+  );
 }
 
 // ---------------------------------------------------------------------------
@@ -235,7 +267,8 @@ describe('Push integration', () => {
       stubFetchRouted({
         // GET job status returns running
         '/jobs/existing-running-job': () => ({
-          ok: true, status: 200,
+          ok: true,
+          status: 200,
           json: () => Promise.resolve({ data: { id: 'existing-running-job', status: 'running' } }),
         }),
       });
@@ -300,15 +333,18 @@ describe('Pull integration', () => {
       expect(result.entitiesUpdated).toBe(0);
 
       // Verify entities in DB
-      const entitiesInDb = await adapter.entityRepo.findByJob(PROJECT_ID, PROJECT_ID) as Array<{
-        id: string; mergedData: Record<string, unknown>; qualityScore: number;
+      const entitiesInDb = (await adapter.entityRepo.findByJob(PROJECT_ID, PROJECT_ID)) as Array<{
+        id: string;
+        mergedData: Record<string, unknown>;
+        qualityScore: number;
       }>;
       const pulledEntities = entitiesInDb.filter(
         (e) => e.id === 'remote-e1' || e.id === 'remote-e2',
       );
       expect(pulledEntities).toHaveLength(2);
       expect(pulledEntities.find((e) => e.id === 'remote-e1')!.mergedData).toEqual({
-        title: 'Remote Product A', price: 19.99,
+        title: 'Remote Product A',
+        price: 19.99,
       });
 
       // Verify last_pull_at meta
@@ -371,11 +407,21 @@ describe('Pull integration', () => {
         '/entities': () => {
           // The entities URL will include the since parameter for incremental pull
           return {
-            ok: true, status: 200,
-            json: () => Promise.resolve({
-              data: [{ id: 'remote-e3', mergedData: { title: 'New Product' }, provenance: {}, categories: ['product'], qualityScore: 0.9 }],
-              pagination: { hasMore: false, total: 1 },
-            }),
+            ok: true,
+            status: 200,
+            json: () =>
+              Promise.resolve({
+                data: [
+                  {
+                    id: 'remote-e3',
+                    mergedData: { title: 'New Product' },
+                    provenance: {},
+                    categories: ['product'],
+                    qualityScore: 0.9,
+                  },
+                ],
+                pagination: { hasMore: false, total: 1 },
+              }),
           };
         },
       });
@@ -401,8 +447,8 @@ describe('Pull integration', () => {
       expect(result.entitiesInserted).toBe(1);
 
       // Verify the entities URL included the since parameter
-      const entityCall = fetchSpy.mock.calls.find(
-        (call) => (call[0] as string).includes('/entities'),
+      const entityCall = fetchSpy.mock.calls.find((call) =>
+        (call[0] as string).includes('/entities'),
       );
       expect(entityCall).toBeDefined();
       capturedUrl = entityCall![0] as string;
@@ -428,19 +474,22 @@ describe('Pull integration', () => {
         configSnapshot: { remote: 'prod' },
         startedAt: '2026-03-25T10:00:00Z',
       });
-      await adapter.entityRepo.upsertBatch([{
-        id: 'old-entity-1',
-        mergedData: { title: 'Old Product' },
-        provenance: {},
-        qualityScore: 0.8,
-        categories: ['product'],
-        runId: existingRun.id,
-      }]);
+      await adapter.entityRepo.upsertBatch([
+        {
+          id: 'old-entity-1',
+          mergedData: { title: 'Old Product' },
+          provenance: {},
+          qualityScore: 0.8,
+          categories: ['product'],
+          runId: existingRun.id,
+        },
+      ]);
 
       // Confirm old entity exists
       const beforeCount = await adapter.entityRepo.countByJob(PROJECT_ID, PROJECT_ID);
-      const beforePulled = (await adapter.entityRepo.findByJob(PROJECT_ID, PROJECT_ID) as Array<{ id: string }>)
-        .filter((e) => e.id === 'old-entity-1');
+      const beforePulled = (
+        (await adapter.entityRepo.findByJob(PROJECT_ID, PROJECT_ID)) as Array<{ id: string }>
+      ).filter((e) => e.id === 'old-entity-1');
       expect(beforePulled).toHaveLength(1);
 
       stubFetchRouted();
@@ -462,13 +511,15 @@ describe('Pull integration', () => {
       expect(result.entitiesInserted).toBe(2);
 
       // Verify old entity was cleared and new ones exist
-      const remaining = (await adapter.entityRepo.findByJob(PROJECT_ID, PROJECT_ID) as Array<{ id: string }>)
-        .filter((e) => e.id === 'old-entity-1');
+      const remaining = (
+        (await adapter.entityRepo.findByJob(PROJECT_ID, PROJECT_ID)) as Array<{ id: string }>
+      ).filter((e) => e.id === 'old-entity-1');
       expect(remaining).toHaveLength(0);
 
       // New entities should be present
-      const newEntities = (await adapter.entityRepo.findByJob(PROJECT_ID, PROJECT_ID) as Array<{ id: string }>)
-        .filter((e) => e.id === 'remote-e1' || e.id === 'remote-e2');
+      const newEntities = (
+        (await adapter.entityRepo.findByJob(PROJECT_ID, PROJECT_ID)) as Array<{ id: string }>
+      ).filter((e) => e.id === 'remote-e1' || e.id === 'remote-e2');
       expect(newEntities).toHaveLength(2);
     } finally {
       close();
@@ -513,41 +564,55 @@ describe('Pull integration', () => {
 
     try {
       let callCount = 0;
-      vi.stubGlobal('fetch', vi.fn().mockImplementation(async (url: string, init?: RequestInit) => {
-        const urlStr = url.toString();
-        const method = init?.method ?? 'GET';
+      vi.stubGlobal(
+        'fetch',
+        vi.fn().mockImplementation(async (url: string, init?: RequestInit) => {
+          const urlStr = url.toString();
+          const method = init?.method ?? 'GET';
 
-        // Job status
-        if (urlStr.match(/\/jobs\/[^/]+\/?$/) && method === 'GET') {
-          return {
-            ok: true, status: 200,
-            json: () => Promise.resolve({ data: { id: 'remote-job-1', status: 'completed' } }),
-          };
-        }
-
-        // Entities — first batch succeeds, second throws (simulating network failure)
-        if (urlStr.includes('/entities')) {
-          callCount++;
-          if (callCount === 1) {
+          // Job status
+          if (urlStr.match(/\/jobs\/[^/]+\/?$/) && method === 'GET') {
             return {
-              ok: true, status: 200,
-              json: () => Promise.resolve({
-                data: [{ id: 'batch1-e1', mergedData: { title: 'Batch 1' }, provenance: {}, categories: [], qualityScore: 0.9 }],
-                pagination: { nextCursor: 'cursor-page2', hasMore: true, total: 3 },
-              }),
+              ok: true,
+              status: 200,
+              json: () => Promise.resolve({ data: { id: 'remote-job-1', status: 'completed' } }),
             };
           }
-          // Second call — network error
-          throw new Error('Network connection lost');
-        }
 
-        // Usage (might not be reached)
-        if (urlStr.includes('/usage')) {
-          return { ok: true, status: 200, json: () => Promise.resolve({ data: { byJob: [] } }) };
-        }
+          // Entities — first batch succeeds, second throws (simulating network failure)
+          if (urlStr.includes('/entities')) {
+            callCount++;
+            if (callCount === 1) {
+              return {
+                ok: true,
+                status: 200,
+                json: () =>
+                  Promise.resolve({
+                    data: [
+                      {
+                        id: 'batch1-e1',
+                        mergedData: { title: 'Batch 1' },
+                        provenance: {},
+                        categories: [],
+                        qualityScore: 0.9,
+                      },
+                    ],
+                    pagination: { nextCursor: 'cursor-page2', hasMore: true, total: 3 },
+                  }),
+              };
+            }
+            // Second call — network error
+            throw new Error('Network connection lost');
+          }
 
-        return { ok: true, status: 200, json: () => Promise.resolve({ data: {} }) };
-      }));
+          // Usage (might not be reached)
+          if (urlStr.includes('/usage')) {
+            return { ok: true, status: 200, json: () => Promise.resolve({ data: { byJob: [] } }) };
+          }
+
+          return { ok: true, status: 200, json: () => Promise.resolve({ data: {} }) };
+        }),
+      );
 
       const { runPullCommand } = await import('../../src/commands/pull.js');
       const result = await runPullCommand({
@@ -570,7 +635,9 @@ describe('Pull integration', () => {
       expect(cursor).toBe('cursor-page2');
 
       // The first batch entity should be in the DB
-      const entities = await adapter.entityRepo.findByJob(PROJECT_ID, PROJECT_ID) as Array<{ id: string }>;
+      const entities = (await adapter.entityRepo.findByJob(PROJECT_ID, PROJECT_ID)) as Array<{
+        id: string;
+      }>;
       const batch1 = entities.filter((e) => e.id === 'batch1-e1');
       expect(batch1).toHaveLength(1);
     } finally {
@@ -620,14 +687,28 @@ describe('Push -> Pull roundtrip', () => {
       vi.unstubAllGlobals();
       stubFetchRouted({
         '/entities': () => ({
-          ok: true, status: 200,
-          json: () => Promise.resolve({
-            data: [
-              { id: 'roundtrip-e1', mergedData: { title: 'Roundtrip Product X', price: 49.99 }, provenance: { title: { source: 'crawl' } }, categories: ['product'], qualityScore: 0.92 },
-              { id: 'roundtrip-e2', mergedData: { title: 'Roundtrip Product Y', price: 59.99 }, provenance: { title: { source: 'crawl' } }, categories: ['product'], qualityScore: 0.85 },
-            ],
-            pagination: { hasMore: false, total: 2 },
-          }),
+          ok: true,
+          status: 200,
+          json: () =>
+            Promise.resolve({
+              data: [
+                {
+                  id: 'roundtrip-e1',
+                  mergedData: { title: 'Roundtrip Product X', price: 49.99 },
+                  provenance: { title: { source: 'crawl' } },
+                  categories: ['product'],
+                  qualityScore: 0.92,
+                },
+                {
+                  id: 'roundtrip-e2',
+                  mergedData: { title: 'Roundtrip Product Y', price: 59.99 },
+                  provenance: { title: { source: 'crawl' } },
+                  categories: ['product'],
+                  qualityScore: 0.85,
+                },
+              ],
+              pagination: { hasMore: false, total: 2 },
+            }),
         }),
       });
 
@@ -646,13 +727,15 @@ describe('Push -> Pull roundtrip', () => {
       expect(pullResult.success).toBe(true);
       expect(pullResult.entitiesInserted).toBe(2);
       expect(pullResult.llmTokens).toBe(2000);
-      expect(pullResult.llmCostUsd).toBe(0.10);
+      expect(pullResult.llmCostUsd).toBe(0.1);
 
       // --- Step 3: Verify DB state ---
 
       // Entities exist
-      const allEntities = await adapter.entityRepo.findByJob(PROJECT_ID, PROJECT_ID) as Array<{
-        id: string; mergedData: Record<string, unknown>; qualityScore: number;
+      const allEntities = (await adapter.entityRepo.findByJob(PROJECT_ID, PROJECT_ID)) as Array<{
+        id: string;
+        mergedData: Record<string, unknown>;
+        qualityScore: number;
       }>;
       const pulledEntities = allEntities.filter(
         (e) => e.id === 'roundtrip-e1' || e.id === 'roundtrip-e2',

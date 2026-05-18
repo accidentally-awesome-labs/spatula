@@ -11,6 +11,7 @@
 **Tech Stack:** TypeScript, Vitest, `robots-parser` (robots.txt parsing), `node:timers/promises` (sleep)
 
 **Spec references:**
+
 - Phase 12 spec: sections 7.1 (robots.txt), 7.2 (maxPages), 7.3 (politeness), 7.4 (completion)
 - File: `docs/superpowers/specs/2026-03-21-phase-12-production-readiness-design.md`
 
@@ -20,30 +21,31 @@
 
 ### New Files
 
-| File | Responsibility |
-|------|---------------|
-| `packages/core/src/crawlers/robots-txt.ts` | Fetch, parse, cache robots.txt per domain |
-| `packages/core/src/crawlers/domain-rate-limiter.ts` | In-memory per-domain request delay |
-| `packages/core/src/crawlers/page-budget.ts` | maxPages tracking with atomic increment |
-| `packages/core/src/crawlers/completion-checker.ts` | Detect when all crawl tasks are done |
-| `packages/core/tests/unit/crawlers/robots-txt.test.ts` | robots.txt tests |
-| `packages/core/tests/unit/crawlers/domain-rate-limiter.test.ts` | Rate limiter tests |
-| `packages/core/tests/unit/crawlers/page-budget.test.ts` | Page budget tests |
-| `packages/core/tests/unit/crawlers/completion-checker.test.ts` | Completion detection tests |
+| File                                                            | Responsibility                            |
+| --------------------------------------------------------------- | ----------------------------------------- |
+| `packages/core/src/crawlers/robots-txt.ts`                      | Fetch, parse, cache robots.txt per domain |
+| `packages/core/src/crawlers/domain-rate-limiter.ts`             | In-memory per-domain request delay        |
+| `packages/core/src/crawlers/page-budget.ts`                     | maxPages tracking with atomic increment   |
+| `packages/core/src/crawlers/completion-checker.ts`              | Detect when all crawl tasks are done      |
+| `packages/core/tests/unit/crawlers/robots-txt.test.ts`          | robots.txt tests                          |
+| `packages/core/tests/unit/crawlers/domain-rate-limiter.test.ts` | Rate limiter tests                        |
+| `packages/core/tests/unit/crawlers/page-budget.test.ts`         | Page budget tests                         |
+| `packages/core/tests/unit/crawlers/completion-checker.test.ts`  | Completion detection tests                |
 
 ### Modified Files
 
-| File | Change |
-|------|--------|
+| File                                      | Change                                 |
+| ----------------------------------------- | -------------------------------------- |
 | `packages/core/src/interfaces/crawler.ts` | Add `respectRobotsTxt` to CrawlOptions |
-| `packages/core/src/crawlers/index.ts` | Export new modules |
-| `packages/core/package.json` | Add `robots-parser` dependency |
+| `packages/core/src/crawlers/index.ts`     | Export new modules                     |
+| `packages/core/package.json`              | Add `robots-parser` dependency         |
 
 ---
 
 ## Task 1: robots.txt Checker
 
 **Files:**
+
 - Create: `packages/core/src/crawlers/robots-txt.ts`
 - Create: `packages/core/tests/unit/crawlers/robots-txt.test.ts`
 - Modify: `packages/core/src/interfaces/crawler.ts` (add respectRobotsTxt)
@@ -131,7 +133,8 @@ describe('RobotsTxtChecker', () => {
   it('uses SpatulaBot as default user agent', async () => {
     mockFetch.mockResolvedValue({
       ok: true,
-      text: () => Promise.resolve('User-agent: SpatulaBot\nDisallow: /blocked/\n\nUser-agent: *\nDisallow:'),
+      text: () =>
+        Promise.resolve('User-agent: SpatulaBot\nDisallow: /blocked/\n\nUser-agent: *\nDisallow:'),
     });
     const allowed = await checker.isAllowed('https://example.com/blocked/page');
     expect(allowed).toBe(false);
@@ -259,7 +262,10 @@ export class RobotsTxtChecker {
       this.cache.set(origin, entry);
       return entry;
     } catch (err) {
-      logger.warn({ origin, error: (err as Error).message }, 'Failed to fetch robots.txt, allowing crawl');
+      logger.warn(
+        { origin, error: (err as Error).message },
+        'Failed to fetch robots.txt, allowing crawl',
+      );
       return null;
     }
   }
@@ -290,6 +296,7 @@ git commit -m "feat(core): add robots.txt compliance checker with per-domain cac
 ## Task 2: Domain Rate Limiter
 
 **Files:**
+
 - Create: `packages/core/src/crawlers/domain-rate-limiter.ts`
 - Create: `packages/core/tests/unit/crawlers/domain-rate-limiter.test.ts`
 
@@ -345,7 +352,9 @@ describe('DomainRateLimiter', () => {
 
     await limiter.waitForSlot('https://example.com/page1', 5); // 5 seconds Crawl-Delay
     let resolved = false;
-    const waitPromise = limiter.waitForSlot('https://example.com/page2').then(() => { resolved = true; });
+    const waitPromise = limiter.waitForSlot('https://example.com/page2').then(() => {
+      resolved = true;
+    });
 
     // 1 second is not enough — verify NOT resolved yet
     await vi.advanceTimersByTimeAsync(1001);
@@ -428,6 +437,7 @@ Run: `cd /Users/salar/Projects/spatula && pnpm --filter @spatula/core test -- --
 - [ ] **Step 4: Export and commit**
 
 Add to `packages/core/src/crawlers/index.ts`:
+
 ```typescript
 export { InMemoryDomainRateLimiter } from './domain-rate-limiter.js';
 export type { DomainRateLimiter } from './domain-rate-limiter.js';
@@ -443,6 +453,7 @@ git commit -m "feat(core): add per-domain rate limiter for crawl politeness"
 ## Task 3: Page Budget Counter
 
 **Files:**
+
 - Create: `packages/core/src/crawlers/page-budget.ts`
 - Create: `packages/core/tests/unit/crawlers/page-budget.test.ts`
 
@@ -560,6 +571,7 @@ Run: `cd /Users/salar/Projects/spatula && pnpm --filter @spatula/core test -- --
 - [ ] **Step 4: Export and commit**
 
 Add to `packages/core/src/crawlers/index.ts`:
+
 ```typescript
 export { InMemoryPageBudget } from './page-budget.js';
 export type { PageBudget } from './page-budget.js';
@@ -575,6 +587,7 @@ git commit -m "feat(core): add page budget counter for maxPages enforcement"
 ## Task 4: Crawl Completion Checker
 
 **Files:**
+
 - Create: `packages/core/src/crawlers/completion-checker.ts`
 - Create: `packages/core/tests/unit/crawlers/completion-checker.test.ts`
 
@@ -585,7 +598,13 @@ git commit -m "feat(core): add page budget counter for maxPages enforcement"
 import { describe, it, expect, vi } from 'vitest';
 import { CrawlCompletionChecker } from '../../../src/crawlers/completion-checker.js';
 
-function createMockTaskRepo(stats: { pending: number; inProgress: number; completed: number; failed: number; skipped: number }) {
+function createMockTaskRepo(stats: {
+  pending: number;
+  inProgress: number;
+  completed: number;
+  failed: number;
+  skipped: number;
+}) {
   return {
     getJobStats: vi.fn().mockResolvedValue(stats),
   };
@@ -593,7 +612,13 @@ function createMockTaskRepo(stats: { pending: number; inProgress: number; comple
 
 describe('CrawlCompletionChecker', () => {
   it('returns complete when no pending or in-progress tasks', async () => {
-    const repo = createMockTaskRepo({ pending: 0, inProgress: 0, completed: 50, failed: 2, skipped: 3 });
+    const repo = createMockTaskRepo({
+      pending: 0,
+      inProgress: 0,
+      completed: 50,
+      failed: 2,
+      skipped: 3,
+    });
     const checker = new CrawlCompletionChecker();
     const result = await checker.isComplete('job-1', 'tenant-1', repo);
     expect(result.complete).toBe(true);
@@ -601,14 +626,26 @@ describe('CrawlCompletionChecker', () => {
   });
 
   it('returns incomplete when tasks are pending', async () => {
-    const repo = createMockTaskRepo({ pending: 5, inProgress: 2, completed: 50, failed: 0, skipped: 0 });
+    const repo = createMockTaskRepo({
+      pending: 5,
+      inProgress: 2,
+      completed: 50,
+      failed: 0,
+      skipped: 0,
+    });
     const checker = new CrawlCompletionChecker();
     const result = await checker.isComplete('job-1', 'tenant-1', repo);
     expect(result.complete).toBe(false);
   });
 
   it('returns incomplete when tasks are in progress', async () => {
-    const repo = createMockTaskRepo({ pending: 0, inProgress: 3, completed: 50, failed: 0, skipped: 0 });
+    const repo = createMockTaskRepo({
+      pending: 0,
+      inProgress: 3,
+      completed: 50,
+      failed: 0,
+      skipped: 0,
+    });
     const checker = new CrawlCompletionChecker();
     const result = await checker.isComplete('job-1', 'tenant-1', repo);
     expect(result.complete).toBe(false);
@@ -616,7 +653,13 @@ describe('CrawlCompletionChecker', () => {
 
   it('accounts for the current task (inProgress <= 1 with pending 0)', async () => {
     // The current task is still "in_progress" when this check runs
-    const repo = createMockTaskRepo({ pending: 0, inProgress: 1, completed: 49, failed: 0, skipped: 0 });
+    const repo = createMockTaskRepo({
+      pending: 0,
+      inProgress: 1,
+      completed: 49,
+      failed: 0,
+      skipped: 0,
+    });
     const checker = new CrawlCompletionChecker();
     const result = await checker.isComplete('job-1', 'tenant-1', repo);
     expect(result.complete).toBe(true);
@@ -679,10 +722,7 @@ export class CrawlCompletionChecker {
     const complete = stats.pending === 0 && stats.inProgress <= 1;
 
     if (complete) {
-      logger.info(
-        { jobId, ...stats },
-        'Crawl naturally complete — all tasks processed',
-      );
+      logger.info({ jobId, ...stats }, 'Crawl naturally complete — all tasks processed');
     }
 
     return {
@@ -701,6 +741,7 @@ Run: `cd /Users/salar/Projects/spatula && pnpm --filter @spatula/core test -- --
 - [ ] **Step 4: Export and commit**
 
 Add to `packages/core/src/crawlers/index.ts`:
+
 ```typescript
 export { CrawlCompletionChecker } from './completion-checker.js';
 export type { TaskStats, CompletionResult, TaskStatsRepo } from './completion-checker.js';
@@ -716,6 +757,7 @@ git commit -m "feat(core): add crawl completion detection heuristic"
 ## Task 5: Wire Utilities into Crawl Worker
 
 **Files:**
+
 - Modify: `packages/queue/src/worker-deps.ts` (add new deps)
 - Modify: `packages/queue/src/workers/crawl-worker.ts` (integrate all 4 utilities)
 
@@ -849,7 +891,13 @@ Add new test cases to `packages/queue/tests/unit/workers/crawl-worker.test.ts`:
 describe('pipeline hardening integration', () => {
   it('skips task when page budget is exhausted', async () => {
     const deps = createMockDeps();
-    deps.pageBudget = { tryIncrement: () => false, count: 100, remaining: 0, isExhausted: true, maxPages: 100 };
+    deps.pageBudget = {
+      tryIncrement: () => false,
+      count: 100,
+      remaining: 0,
+      isExhausted: true,
+      maxPages: 100,
+    };
 
     await processCrawlJob(data, deps);
 

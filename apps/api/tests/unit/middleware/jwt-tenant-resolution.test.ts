@@ -151,7 +151,9 @@ describe('JWT tenant resolution', () => {
     const userTenantRepo = createMockUserTenantRepo([]);
     (userTenantRepo.findByUserId as ReturnType<typeof vi.fn>)
       .mockResolvedValueOnce([]) // initial check
-      .mockResolvedValueOnce([{ tenantId: 'new-auto-tenant', role: 'owner', createdAt: new Date() }]); // re-query after create
+      .mockResolvedValueOnce([
+        { tenantId: 'new-auto-tenant', role: 'owner', createdAt: new Date() },
+      ]); // re-query after create
     const tenantRepo = createMockTenantRepo('new-auto-tenant');
     const app = createTestApp(provider, undefined, userTenantRepo, tenantRepo);
 

@@ -46,7 +46,9 @@ describe('DomainRateLimiter', () => {
 
     await limiter.waitForSlot('https://example.com/page1', 5); // 5 seconds Crawl-Delay
     let resolved = false;
-    const waitPromise = limiter.waitForSlot('https://example.com/page2').then(() => { resolved = true; });
+    const waitPromise = limiter.waitForSlot('https://example.com/page2').then(() => {
+      resolved = true;
+    });
 
     // 1 second is not enough — verify NOT resolved yet
     await vi.advanceTimersByTimeAsync(1001);
@@ -75,9 +77,15 @@ describe('DomainRateLimiter', () => {
     const order: number[] = [];
 
     // Start three concurrent requests — they should be serialized via promise chain
-    const p1 = limiter.waitForSlot('https://example.com/page1').then(() => { order.push(1); });
-    const p2 = limiter.waitForSlot('https://example.com/page2').then(() => { order.push(2); });
-    const p3 = limiter.waitForSlot('https://example.com/page3').then(() => { order.push(3); });
+    const p1 = limiter.waitForSlot('https://example.com/page1').then(() => {
+      order.push(1);
+    });
+    const p2 = limiter.waitForSlot('https://example.com/page2').then(() => {
+      order.push(2);
+    });
+    const p3 = limiter.waitForSlot('https://example.com/page3').then(() => {
+      order.push(3);
+    });
 
     await vi.advanceTimersByTimeAsync(2000);
     await Promise.all([p1, p2, p3]);

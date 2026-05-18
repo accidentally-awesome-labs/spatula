@@ -62,7 +62,16 @@ export function ExportDialog({ store, backend, fromDetail, onClose }: ExportDial
     } catch (err) {
       setError((err as Error).message);
     }
-  }, [activeJobId, scope, expandedEntity, format, filterQuery, schemaFields, exportSingleEntity, exportEntitySet]);
+  }, [
+    activeJobId,
+    scope,
+    expandedEntity,
+    format,
+    filterQuery,
+    schemaFields,
+    exportSingleEntity,
+    exportEntitySet,
+  ]);
 
   useKeyboard(
     {
@@ -116,7 +125,7 @@ export function ExportDialog({ store, backend, fromDetail, onClose }: ExportDial
     <Panel title="Export">
       <Box flexDirection="column">
         <Box>
-          <Text bold>Format:   </Text>
+          <Text bold>Format: </Text>
           <Text color={format === 'json' ? 'cyan' : undefined} bold={format === 'json'}>
             {format === 'json' ? '[JSON]' : ' JSON '}
           </Text>
@@ -127,7 +136,7 @@ export function ExportDialog({ store, backend, fromDetail, onClose }: ExportDial
         </Box>
 
         <Box flexDirection="column">
-          <Text bold>Scope:    </Text>
+          <Text bold>Scope: </Text>
           {fromDetail && (
             <Text color={scope === 'entity' ? 'cyan' : undefined} bold={scope === 'entity'}>
               {scope === 'entity' ? '[Current entity]' : ' Current entity '}
@@ -144,7 +153,7 @@ export function ExportDialog({ store, backend, fromDetail, onClose }: ExportDial
             <Text color={includeProvenance ? 'green' : undefined}>
               {includeProvenance ? '[Yes]' : '[No]'}
             </Text>
-            <Text dimColor>  (P to toggle)</Text>
+            <Text dimColor> (P to toggle)</Text>
           </Box>
         )}
 

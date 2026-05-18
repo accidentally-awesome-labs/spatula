@@ -24,18 +24,24 @@ export const CrawlConfig = z.object({
   concurrency: z.number().min(1).max(20).default(5),
   crawlerType: z.enum(['playwright', 'firecrawl']).default('playwright'),
   // Proxy configuration
-  proxy: z.object({
-    url: z.string().min(1, 'Proxy URL is required'),
-    username: z.string().optional(),
-    password: z.string().optional(),
-  }).optional(),
+  proxy: z
+    .object({
+      url: z.string().min(1, 'Proxy URL is required'),
+      username: z.string().optional(),
+      password: z.string().optional(),
+    })
+    .optional(),
   // Cookie injection (omits httpOnly/secure — those are CrawlOptions-level details)
-  cookies: z.array(z.object({
-    name: z.string(),
-    value: z.string(),
-    domain: z.string(),
-    path: z.string().default('/'),
-  })).optional(),
+  cookies: z
+    .array(
+      z.object({
+        name: z.string(),
+        value: z.string(),
+        domain: z.string(),
+        path: z.string().default('/'),
+      }),
+    )
+    .optional(),
 });
 export type CrawlConfig = z.infer<typeof CrawlConfig>;
 

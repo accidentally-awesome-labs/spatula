@@ -12,7 +12,12 @@ function createMockDeps(overrides?: Partial<CleanupDeps>): CleanupDeps {
         {
           id: 'tenant-1',
           config: {
-            retention: { completedJobsDays: 90, failedJobsDays: 30, rawPagesDays: 30, exportsDays: 30 },
+            retention: {
+              completedJobsDays: 90,
+              failedJobsDays: 30,
+              rawPagesDays: 30,
+              exportsDays: 30,
+            },
           },
         },
       ]),
@@ -87,7 +92,8 @@ describe('processCleanupJob', () => {
       tenantRepo: { findAll: vi.fn().mockResolvedValue([]) } as any,
       db: {
         execute: vi.fn().mockImplementation(async (query: any) => {
-          const queryStr = query?.queryChunks?.map((c: any) => c.value ?? c).join('') ?? String(query);
+          const queryStr =
+            query?.queryChunks?.map((c: any) => c.value ?? c).join('') ?? String(query);
           if (queryStr.includes('content_store') && queryStr.includes('NOT IN')) {
             return { rows: [{ id: 'orphan-1', key: 'pg://orphan-1' }], rowCount: 1 };
           }

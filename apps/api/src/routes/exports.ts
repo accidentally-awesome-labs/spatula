@@ -1,8 +1,12 @@
 import { createRoute, z } from '@hono/zod-openapi';
 import { createOpenAPIRouter } from '../openapi-config.js';
-import type { AppEnv } from '../types.js';
 import { exportRequestSchema } from '../schemas/export-request.js';
-import { exportResponseSchema, errorResponseSchema, dataResponse, jsonContent } from '../schemas/responses.js';
+import {
+  exportResponseSchema,
+  errorResponseSchema,
+  dataResponse,
+  jsonContent,
+} from '../schemas/responses.js';
 import { NotFoundError, ConflictError } from '../middleware/error-handler.js';
 import { generateDocumentation, supportsPresignedUrls } from '@spatula/core';
 import type { SchemaDefinition } from '@spatula/core';
@@ -15,7 +19,9 @@ const jobIdParam = z.object({
 });
 
 const listExportsRoute = createRoute({
-  method: 'get', path: '/exports', tags: ['Exports'],
+  method: 'get',
+  path: '/exports',
+  tags: ['Exports'],
   summary: 'List exports for a job',
   request: { params: jobIdParam, query: paginationSchema },
   responses: {
@@ -27,7 +33,9 @@ const listExportsRoute = createRoute({
 });
 
 const triggerExportRoute = createRoute({
-  method: 'post', path: '/export', tags: ['Exports'],
+  method: 'post',
+  path: '/export',
+  tags: ['Exports'],
   summary: 'Trigger data export',
   request: {
     params: jobIdParam,
@@ -35,12 +43,13 @@ const triggerExportRoute = createRoute({
   },
   responses: {
     202: jsonContent(dataResponse(exportResponseSchema), 'Export queued'),
-    403: jsonContent(errorResponseSchema, 'Export format not available on current plan'),
   },
 });
 
 const getExportRoute = createRoute({
-  method: 'get', path: '/export/{exportId}', tags: ['Exports'],
+  method: 'get',
+  path: '/export/{exportId}',
+  tags: ['Exports'],
   summary: 'Check export status',
   request: {
     params: jobIdParam.extend({
@@ -54,7 +63,9 @@ const getExportRoute = createRoute({
 });
 
 const downloadExportRoute = createRoute({
-  method: 'get', path: '/export/{exportId}/download', tags: ['Exports'],
+  method: 'get',
+  path: '/export/{exportId}/download',
+  tags: ['Exports'],
   summary: 'Download export file',
   request: {
     params: jobIdParam.extend({
@@ -62,7 +73,10 @@ const downloadExportRoute = createRoute({
     }),
   },
   responses: {
-    200: { description: 'File download', content: { 'application/octet-stream': { schema: z.string() } } },
+    200: {
+      description: 'File download',
+      content: { 'application/octet-stream': { schema: z.string() } },
+    },
     302: { description: 'Redirect to presigned download URL' },
     404: jsonContent(errorResponseSchema, 'Export not found'),
     409: jsonContent(errorResponseSchema, 'Export not ready'),
@@ -70,7 +84,9 @@ const downloadExportRoute = createRoute({
 });
 
 const getDocumentationRoute = createRoute({
-  method: 'get', path: '/documentation', tags: ['Exports'],
+  method: 'get',
+  path: '/documentation',
+  tags: ['Exports'],
   summary: 'Get data dictionary / documentation',
   request: { params: jobIdParam },
   responses: {
@@ -91,7 +107,13 @@ export function exportRoutes() {
     // Cursor or since path (keyset-based)
     if (query.cursor || query.since) {
       const cursorId = query.cursor ? decodeCursor(query.cursor).id : undefined;
-      const result = await deps.exportRepo.findByJobCursor(jobId, tenantId, query.limit, cursorId, query.since);
+      const result = await deps.exportRepo.findByJobCursor(
+        jobId,
+        tenantId,
+        query.limit,
+        cursorId,
+        query.since,
+      );
       // total is the unfiltered job-level count (not filtered by cursor/since)
       const total = await deps.exportRepo.countByJob(jobId, tenantId);
       return c.json({
@@ -127,31 +149,26 @@ export function exportRoutes() {
     const tenantId = c.get('tenantId');
     const deps = c.get('deps');
 
-    // Check export format against tenant's billing plan
-    if (deps.quotaEnforcer) {
-      const tenant = await deps.tenantRepo!.findById(tenantId);
-      const plan = (tenant as any)?.plan ?? 'free';
-      if (!deps.quotaEnforcer.isExportFormatAllowed(plan, body.format)) {
-        return c.json({
-          error: {
-            code: 'EXPORT_FORMAT_RESTRICTED',
-            message: `Export format '${body.format}' is not available on the ${plan} plan. Upgrade to access this format.`,
-            requestId: c.get('requestId'),
-          },
-        }, 403);
-      }
-    }
-
     const exportRecord = await deps.exportRepo.create({
-      jobId, tenantId, format: body.format, includeProvenance: body.includeProvenance,
+      jobId,
+      tenantId,
+      format: body.format,
+      includeProvenance: body.includeProvenance,
     });
 
-    await deps.exportQueue.add('export', {
-      exportId: exportRecord.id, jobId, tenantId,
-      format: body.format, includeProvenance: body.includeProvenance,
-      ...(body.minQuality !== undefined ? { minQuality: body.minQuality } : {}),
-      ...(body.fields !== undefined ? { fields: body.fields } : {}),
-    }, { removeOnComplete: true, removeOnFail: true });
+    await deps.exportQueue.add(
+      'export',
+      {
+        exportId: exportRecord.id,
+        jobId,
+        tenantId,
+        format: body.format,
+        includeProvenance: body.includeProvenance,
+        ...(body.minQuality !== undefined ? { minQuality: body.minQuality } : {}),
+        ...(body.fields !== undefined ? { fields: body.fields } : {}),
+      },
+      { removeOnComplete: true, removeOnFail: true },
+    );
 
     // Audit log
     if (deps.auditLogger) {

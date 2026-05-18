@@ -18,7 +18,9 @@ function createMockDb(resolveValue?: unknown) {
     update: vi.fn().mockReturnValue(chainable),
     select: vi.fn().mockReturnValue({ from: vi.fn().mockReturnValue(chainable) }),
     insert: vi.fn().mockReturnValue({
-      values: vi.fn().mockReturnValue({ returning: vi.fn().mockResolvedValue([{ id: 'action-id' }]) }),
+      values: vi
+        .fn()
+        .mockReturnValue({ returning: vi.fn().mockResolvedValue([{ id: 'action-id' }]) }),
     }),
   };
 }
@@ -46,11 +48,7 @@ describe('ActionRepository', () => {
   });
 
   it('updateStatus calls db.update', async () => {
-    await repo.updateStatus(
-      'action-id',
-      '550e8400-e29b-41d4-a716-446655440001',
-      'approved',
-    );
+    await repo.updateStatus('action-id', '550e8400-e29b-41d4-a716-446655440001', 'approved');
     expect(mockDb.update).toHaveBeenCalled();
   });
 
@@ -75,9 +73,7 @@ describe('ActionRepository', () => {
     );
     mockDb.select = vi.fn().mockReturnValue({ from: vi.fn().mockReturnValue(failChainable) });
 
-    await expect(
-      repo.findByJob('job-id', 'tenant-id'),
-    ).rejects.toThrow('Failed to find actions');
+    await expect(repo.findByJob('job-id', 'tenant-id')).rejects.toThrow('Failed to find actions');
   });
 
   it('updateStatus throws StorageError when action not found', async () => {
@@ -88,9 +84,9 @@ describe('ActionRepository', () => {
     };
     mockDb.update = vi.fn().mockReturnValue(notFoundChainable);
 
-    await expect(
-      repo.updateStatus('nonexistent-id', 'tenant-id', 'approved'),
-    ).rejects.toThrow('Action nonexistent-id not found');
+    await expect(repo.updateStatus('nonexistent-id', 'tenant-id', 'approved')).rejects.toThrow(
+      'Action nonexistent-id not found',
+    );
   });
 
   it('updateStatus wraps errors in StorageError', async () => {
@@ -105,9 +101,9 @@ describe('ActionRepository', () => {
     );
     mockDb.update = vi.fn().mockReturnValue(failChainable);
 
-    await expect(
-      repo.updateStatus('action-id', 'tenant-id', 'approved'),
-    ).rejects.toThrow('Failed to update action status');
+    await expect(repo.updateStatus('action-id', 'tenant-id', 'approved')).rejects.toThrow(
+      'Failed to update action status',
+    );
   });
 
   it('create inserts an action and returns the id', async () => {

@@ -6,9 +6,7 @@ export interface SpinnerProps {
   label?: string;
 }
 
-export function Spinner({
-  label = 'Loading...',
-}: SpinnerProps): React.ReactElement {
+export function Spinner({ label = 'Loading...' }: SpinnerProps): React.ReactElement {
   return (
     <Box gap={1}>
       <Text color="cyan">

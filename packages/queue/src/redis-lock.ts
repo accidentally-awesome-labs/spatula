@@ -24,10 +24,6 @@ export async function acquireLock(
   return { acquired: false, token: '' };
 }
 
-export async function releaseLock(
-  redis: Redis,
-  key: string,
-  token: string,
-): Promise<void> {
+export async function releaseLock(redis: Redis, key: string, token: string): Promise<void> {
   await redis.call('EVAL', RELEASE_SCRIPT, '1', key, token);
 }

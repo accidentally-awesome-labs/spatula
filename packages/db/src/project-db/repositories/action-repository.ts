@@ -30,23 +30,26 @@ export class SqliteActionRepository implements ActionRepo {
     reasoning?: string;
   }): Promise<unknown> {
     const id = crypto.randomUUID();
-    wrapStorageError(() => {
-      this.db
-        .insert(actions)
-        .values({
-          id,
-          jobId: this.projectId,
-          type: data.type,
-          payload: data.payload as Record<string, unknown>,
-          source: data.source,
-          status: data.status ?? 'pending_review',
-          confidence: data.confidence ?? 0,
-          reasoning: data.reasoning ?? '',
-          createdAt: new Date().toISOString(),
-          updatedAt: new Date().toISOString(),
-        })
-        .run();
-    }, { method: 'create', table: 'actions' });
+    wrapStorageError(
+      () => {
+        this.db
+          .insert(actions)
+          .values({
+            id,
+            jobId: this.projectId,
+            type: data.type,
+            payload: data.payload as Record<string, unknown>,
+            source: data.source,
+            status: data.status ?? 'pending_review',
+            confidence: data.confidence ?? 0,
+            reasoning: data.reasoning ?? '',
+            createdAt: new Date().toISOString(),
+            updatedAt: new Date().toISOString(),
+          })
+          .run();
+      },
+      { method: 'create', table: 'actions' },
+    );
     return { id };
   }
 
@@ -57,18 +60,20 @@ export class SqliteActionRepository implements ActionRepo {
   async findByJob(
     _jobId: string,
     options?: { status?: string; limit?: number; offset?: number },
-  ): Promise<Array<{
-    id: string;
-    type: string;
-    payload: Record<string, unknown>;
-    source: string;
-    status: string;
-    confidence: number;
-    reasoning: string;
-    reviewedBy: string | null;
-    createdAt: string;
-    appliedAt: string | null;
-  }>> {
+  ): Promise<
+    Array<{
+      id: string;
+      type: string;
+      payload: Record<string, unknown>;
+      source: string;
+      status: string;
+      confidence: number;
+      reasoning: string;
+      reviewedBy: string | null;
+      createdAt: string;
+      appliedAt: string | null;
+    }>
+  > {
     const conditions = [eq(actions.jobId, this.projectId)];
     if (options?.status) {
       conditions.push(eq(actions.status, options.status));
@@ -110,70 +115,86 @@ export class SqliteActionRepository implements ActionRepo {
     return {};
   }
 
-  async upsertBatch(batch: Array<{
-    id: string;
-    type: string;
-    payload: Record<string, unknown>;
-    source: string;
-    status: string;
-    confidence: number;
-    reasoning: string;
-    runId: string | null;
-    createdAt: string;
-    updatedAt: string;
-    appliedAt: string | null;
-    stateChanges?: Record<string, unknown> | null;
-    reviewedBy?: string | null;
-  }>): Promise<{ inserted: number; updated: number }> {
+  async upsertBatch(
+    batch: Array<{
+      id: string;
+      type: string;
+      payload: Record<string, unknown>;
+      source: string;
+      status: string;
+      confidence: number;
+      reasoning: string;
+      runId: string | null;
+      createdAt: string;
+      updatedAt: string;
+      appliedAt: string | null;
+      stateChanges?: Record<string, unknown> | null;
+      reviewedBy?: string | null;
+    }>,
+  ): Promise<{ inserted: number; updated: number }> {
     if (batch.length === 0) return { inserted: 0, updated: 0 };
 
     const existingIds = new Set<string>();
-    wrapStorageError(() => {
-      const ids = batch.map(item => item.id);
-      for (let i = 0; i < ids.length; i += 999) {
-        const chunk = ids.slice(i, i + 999);
-        const rows = this.db.select({ id: actions.id }).from(actions).where(inArray(actions.id, chunk)).all();
-        for (const row of rows) existingIds.add(row.id);
-      }
-    }, { method: 'upsertBatch:check', table: 'actions' });
+    wrapStorageError(
+      () => {
+        const ids = batch.map((item) => item.id);
+        for (let i = 0; i < ids.length; i += 999) {
+          const chunk = ids.slice(i, i + 999);
+          const rows = this.db
+            .select({ id: actions.id })
+            .from(actions)
+            .where(inArray(actions.id, chunk))
+            .all();
+          for (const row of rows) existingIds.add(row.id);
+        }
+      },
+      { method: 'upsertBatch:check', table: 'actions' },
+    );
 
     // Track IDs seen within this batch to count within-batch duplicates as updates
     const seenInBatch = new Set<string>();
-    wrapStorageError(() => {
-      for (const item of batch) {
-        if (!existingIds.has(item.id) && !seenInBatch.has(item.id)) {
-          seenInBatch.add(item.id);
-        } else {
-          existingIds.add(item.id);
+    wrapStorageError(
+      () => {
+        for (const item of batch) {
+          if (!existingIds.has(item.id) && !seenInBatch.has(item.id)) {
+            seenInBatch.add(item.id);
+          } else {
+            existingIds.add(item.id);
+          }
+          this.db
+            .insert(actions)
+            .values({
+              id: item.id,
+              jobId: this.projectId,
+              type: item.type,
+              payload: item.payload,
+              source: item.source,
+              status: item.status,
+              confidence: item.confidence,
+              reasoning: item.reasoning,
+              stateChanges: item.stateChanges ?? null,
+              reviewedBy: item.reviewedBy ?? null,
+              createdAt: item.createdAt,
+              updatedAt: item.updatedAt,
+              appliedAt: item.appliedAt,
+              runId: item.runId,
+            })
+            .onConflictDoUpdate({
+              target: actions.id,
+              set: {
+                status: item.status,
+                reasoning: item.reasoning,
+                updatedAt: item.updatedAt,
+                runId: item.runId,
+                stateChanges: item.stateChanges ?? null,
+                reviewedBy: item.reviewedBy ?? null,
+              },
+            })
+            .run();
         }
-        this.db.insert(actions).values({
-          id: item.id,
-          jobId: this.projectId,
-          type: item.type,
-          payload: item.payload,
-          source: item.source,
-          status: item.status,
-          confidence: item.confidence,
-          reasoning: item.reasoning,
-          stateChanges: item.stateChanges ?? null,
-          reviewedBy: item.reviewedBy ?? null,
-          createdAt: item.createdAt,
-          updatedAt: item.updatedAt,
-          appliedAt: item.appliedAt,
-          runId: item.runId,
-        }).onConflictDoUpdate({
-          target: actions.id,
-          set: {
-            status: item.status,
-            reasoning: item.reasoning,
-            updatedAt: item.updatedAt,
-            runId: item.runId,
-            stateChanges: item.stateChanges ?? null,
-            reviewedBy: item.reviewedBy ?? null,
-          },
-        }).run();
-      }
-    }, { method: 'upsertBatch', table: 'actions' });
+      },
+      { method: 'upsertBatch', table: 'actions' },
+    );
 
     return { inserted: batch.length - existingIds.size, updated: existingIds.size };
   }
@@ -181,14 +202,18 @@ export class SqliteActionRepository implements ActionRepo {
   async deleteByRunIds(runIds: string[]): Promise<number> {
     if (runIds.length === 0) return 0;
     let total = 0;
-    wrapStorageError(() => {
-      for (const runId of runIds) {
-        const result = this.db.delete(actions).where(
-          and(eq(actions.jobId, this.projectId), eq(actions.runId, runId)),
-        ).run();
-        total += result.changes;
-      }
-    }, { method: 'deleteByRunIds', table: 'actions' });
+    wrapStorageError(
+      () => {
+        for (const runId of runIds) {
+          const result = this.db
+            .delete(actions)
+            .where(and(eq(actions.jobId, this.projectId), eq(actions.runId, runId)))
+            .run();
+          total += result.changes;
+        }
+      },
+      { method: 'deleteByRunIds', table: 'actions' },
+    );
     return total;
   }
 }

@@ -9,6 +9,7 @@
 **Tech Stack:** TypeScript, Drizzle ORM (drizzle-orm/sqlite-core + better-sqlite3/migrator), Drizzle Kit (migration generation), better-sqlite3, Vitest
 
 **Spec references:**
+
 - Phase 13 spec: section 5 (SQLite Schema and Repository Layer)
 - File: docs/superpowers/specs/2026-03-21-phase-13-project-folder-model-design.md
 
@@ -18,48 +19,48 @@
 
 ### New Files
 
-| File | Responsibility |
-|------|---------------|
-| packages/db/src/schema-sqlite/pages.ts | Pages table (HTML stored on disk) |
-| packages/db/src/schema-sqlite/entities.ts | Entities + entity_sources tables |
-| packages/db/src/schema-sqlite/extractions.ts | Extraction results |
-| packages/db/src/schema-sqlite/schemas.ts | Schema versions with parentId |
-| packages/db/src/schema-sqlite/crawl-tasks.ts | Crawl task tree |
-| packages/db/src/schema-sqlite/actions.ts | Schema evolution actions |
-| packages/db/src/schema-sqlite/source-trust.ts | Domain trust scoring |
-| packages/db/src/schema-sqlite/runs.ts | Local-only: run tracking |
-| packages/db/src/schema-sqlite/llm-usage.ts | Local-only: LLM cost tracking |
-| packages/db/src/schema-sqlite/exports.ts | Local-only: export file tracking |
-| packages/db/src/schema-sqlite/project-meta.ts | Local-only: key-value project state |
-| packages/db/src/schema-sqlite/index.ts | Barrel export for all SQLite schemas |
-| packages/db/src/project-db/connection.ts | createProjectDb() + initializeProjectDb() with migrate() |
-| packages/db/drizzle.config.sqlite.ts | Drizzle Kit config for SQLite migration generation |
-| packages/db/drizzle-sqlite/ | Generated migration SQL files (committed to git) |
-| packages/db/tests/unit/schema-sqlite/parity.test.ts | Parity test verifying Postgres and SQLite columns |
+| File                                                | Responsibility                                           |
+| --------------------------------------------------- | -------------------------------------------------------- |
+| packages/db/src/schema-sqlite/pages.ts              | Pages table (HTML stored on disk)                        |
+| packages/db/src/schema-sqlite/entities.ts           | Entities + entity_sources tables                         |
+| packages/db/src/schema-sqlite/extractions.ts        | Extraction results                                       |
+| packages/db/src/schema-sqlite/schemas.ts            | Schema versions with parentId                            |
+| packages/db/src/schema-sqlite/crawl-tasks.ts        | Crawl task tree                                          |
+| packages/db/src/schema-sqlite/actions.ts            | Schema evolution actions                                 |
+| packages/db/src/schema-sqlite/source-trust.ts       | Domain trust scoring                                     |
+| packages/db/src/schema-sqlite/runs.ts               | Local-only: run tracking                                 |
+| packages/db/src/schema-sqlite/llm-usage.ts          | Local-only: LLM cost tracking                            |
+| packages/db/src/schema-sqlite/exports.ts            | Local-only: export file tracking                         |
+| packages/db/src/schema-sqlite/project-meta.ts       | Local-only: key-value project state                      |
+| packages/db/src/schema-sqlite/index.ts              | Barrel export for all SQLite schemas                     |
+| packages/db/src/project-db/connection.ts            | createProjectDb() + initializeProjectDb() with migrate() |
+| packages/db/drizzle.config.sqlite.ts                | Drizzle Kit config for SQLite migration generation       |
+| packages/db/drizzle-sqlite/                         | Generated migration SQL files (committed to git)         |
+| packages/db/tests/unit/schema-sqlite/parity.test.ts | Parity test verifying Postgres and SQLite columns        |
 
 ### Modified Files
 
-| File | Change |
-|------|--------|
+| File                     | Change                                               |
+| ------------------------ | ---------------------------------------------------- |
 | packages/db/package.json | Add better-sqlite3, types, db:generate:sqlite script |
-| packages/db/src/index.ts | Export project-db connection |
+| packages/db/src/index.ts | Export project-db connection                         |
 
 ---
 
 ## Type Translation Reference
 
-| Postgres | SQLite (Drizzle) | Notes |
-|----------|-----------------|-------|
-| uuid().defaultRandom() | text('id').primaryKey() | UUID generated in JS |
-| text() | text() | Direct |
-| integer() | integer() | Direct |
-| real() | real() | Direct (float) |
-| boolean() | integer('field', { mode: 'boolean' }) | 0/1 |
-| timestamp({ withTimezone: true }) | text('field') | ISO 8601 strings |
-| jsonb().$type<T>() | text('field', { mode: 'json' }) | JSON string |
-| text().array() | text('field') | JSON-encoded array |
-| bytea (customType) | blob('field') | SQLite BLOB |
-| pgEnum values | text('field') | Validated in app layer |
+| Postgres                          | SQLite (Drizzle)                      | Notes                  |
+| --------------------------------- | ------------------------------------- | ---------------------- |
+| uuid().defaultRandom()            | text('id').primaryKey()               | UUID generated in JS   |
+| text()                            | text()                                | Direct                 |
+| integer()                         | integer()                             | Direct                 |
+| real()                            | real()                                | Direct (float)         |
+| boolean()                         | integer('field', { mode: 'boolean' }) | 0/1                    |
+| timestamp({ withTimezone: true }) | text('field')                         | ISO 8601 strings       |
+| jsonb().$type<T>()                | text('field', { mode: 'json' })       | JSON string            |
+| text().array()                    | text('field')                         | JSON-encoded array     |
+| bytea (customType)                | blob('field')                         | SQLite BLOB            |
+| pgEnum values                     | text('field')                         | Validated in app layer |
 
 Dropped from all tables: tenantId column. Kept unchanged: jobId column (maps to synthetic project ID).
 
@@ -68,11 +69,13 @@ Dropped from all tables: tenantId column. Kept unchanged: jobId column (maps to 
 ## Task 1: Install Dependencies
 
 **Files:**
+
 - Modify: packages/db/package.json
 
 - [ ] **Step 1: Add better-sqlite3 dependency**
 
 Run:
+
 ```bash
 cd /Users/salar/Projects/spatula
 pnpm --filter @spatula/db add better-sqlite3
@@ -95,6 +98,7 @@ git commit -m "feat(db): add better-sqlite3 dependency for project database"
 ## Task 2: Core SQLite Schemas (Pages, Entities, Extractions)
 
 **Files:**
+
 - Create: packages/db/src/schema-sqlite/pages.ts
 - Create: packages/db/src/schema-sqlite/entities.ts
 - Create: packages/db/src/schema-sqlite/extractions.ts
@@ -102,6 +106,7 @@ git commit -m "feat(db): add better-sqlite3 dependency for project database"
 - [ ] **Step 1: Create pages, entities, extractions schemas**
 
 Read the Postgres originals first:
+
 - packages/db/src/schema/raw-pages.ts (exports as `rawPages`)
 - packages/db/src/schema/entities.ts (exports as `entities`, `entitySources`)
 - packages/db/src/schema/extractions.ts (exports as `extractions`)
@@ -109,6 +114,7 @@ Read the Postgres originals first:
 Create SQLite equivalents following the type translation reference above.
 
 **Intentional differences from Postgres (document in code comments):**
+
 - pages: maps to Postgres `raw_pages`. Drop tenantId. ADD `url`, `statusCode`, `title`, `classification` (merged from crawl_tasks for local query convenience — in Postgres these live on crawl_tasks, but locally it's simpler to have them on pages). ADD `contentPath`, `needsReextraction`, `reextractionReason` as local extensions.
 - entities: drop tenantId, categories is text (JSON array not text[]), add sourceCount/updatedAt
 - entity_sources: keep matchConfidence, composite PK (identical to Postgres minus no tenant scoping)
@@ -130,6 +136,7 @@ git commit -m "feat(db): add SQLite schemas for pages, entities, and extractions
 ## Task 3: Remaining Mirrored SQLite Schemas
 
 **Files:**
+
 - Create: packages/db/src/schema-sqlite/schemas.ts
 - Create: packages/db/src/schema-sqlite/crawl-tasks.ts
 - Create: packages/db/src/schema-sqlite/actions.ts
@@ -138,24 +145,29 @@ git commit -m "feat(db): add SQLite schemas for pages, entities, and extractions
 - [ ] **Step 1: Create schemas, crawl-tasks, actions, source-trust**
 
 Read Postgres originals first:
+
 - packages/db/src/schema/schemas.ts (exports as `schemasTable`, has self-referential parentId)
 - packages/db/src/schema/crawl-tasks.ts (exports as `crawlTasks`, has self-referential parentTaskId)
 - packages/db/src/schema/actions.ts (exports as `actions`)
 - packages/db/src/schema/source-trust.ts (exports as `sourceTrust`)
 
 **Intentional differences from Postgres (document in code comments):**
+
 - schemas: drop tenantId, keep parentId as text (self-referential, no Drizzle FK declaration needed — enforced by PRAGMA foreign_keys)
 - crawl-tasks: drop tenantId. ADD `priorityScore`, `errorMessage`, `attempts`, `completedAt` as local extensions. Enum columns become text WITH CHECK constraints per spec section 5.2:
   - `status` CHECK IN ('pending','in_progress','completed','failed','skipped')
   - `priority` CHECK IN ('critical','high','medium','low') — NOTE: `critical` is a LOCAL EXTENSION not in the Postgres `task_priority` enum
   - `classification` CHECK IN ('single_entry','multiple_entries','navigation','irrelevant','partial')
   - `crawlerType` — no CHECK (only 2 values, validated at config layer)
-  Use Drizzle's `check()` in the table options callback:
+    Use Drizzle's `check()` in the table options callback:
   ```typescript
   import { check } from 'drizzle-orm/sqlite-core';
   import { sql } from 'drizzle-orm';
   // In table definition third arg:
-  check('status_check', sql`${table.status} IN ('pending','in_progress','completed','failed','skipped')`)
+  check(
+    'status_check',
+    sql`${table.status} IN ('pending','in_progress','completed','failed','skipped')`,
+  );
   ```
 - actions: drop tenantId. Enum columns with CHECK constraints:
   - `source` CHECK IN ('extraction','schema_evolution','reconciliation','quality_audit')
@@ -174,6 +186,7 @@ git commit -m "feat(db): add SQLite schemas for schemas, crawl-tasks, actions, s
 ## Task 4: Local-Only SQLite Tables
 
 **Files:**
+
 - Create: packages/db/src/schema-sqlite/runs.ts
 - Create: packages/db/src/schema-sqlite/llm-usage.ts
 - Create: packages/db/src/schema-sqlite/exports.ts
@@ -182,6 +195,7 @@ git commit -m "feat(db): add SQLite schemas for schemas, crawl-tasks, actions, s
 - [ ] **Step 1: Create local-only tables**
 
 These have no Postgres equivalent. Follow the spec section 5.5:
+
 - runs: id, status, source, configSnapshot (json), timestamps, stats counters, errorMessage
 - llm-usage: id, runId, model, prompt/completion/total tokens, costUsd, purpose, createdAt
 - exports: id, runId, format, filePath, entityCount, fileSize, includeProvenance, createdAt
@@ -199,6 +213,7 @@ git commit -m "feat(db): add local-only SQLite tables (runs, llm-usage, exports,
 ## Task 5: Schema Barrel, Drizzle Kit Config, Migration Generation & Connection Factory
 
 **Files:**
+
 - Create: packages/db/src/schema-sqlite/index.ts
 - Create: packages/db/drizzle.config.sqlite.ts
 - Create: packages/db/src/project-db/connection.ts
@@ -208,6 +223,7 @@ git commit -m "feat(db): add local-only SQLite tables (runs, llm-usage, exports,
 - [ ] **Step 1: Create SQLite schema barrel**
 
 Export all tables from packages/db/src/schema-sqlite/index.ts:
+
 - 7 mirrored files: pages, entities (includes entitySources), extractions, schemas, crawl-tasks, actions, source-trust
 - 4 local-only files: runs, llm-usage, exports, project-meta
 
@@ -236,11 +252,13 @@ In `packages/db/package.json`, add to scripts:
 - [ ] **Step 4: Generate initial SQLite migration**
 
 Run:
+
 ```bash
 cd /Users/salar/Projects/spatula && pnpm --filter @spatula/db db:generate:sqlite
 ```
 
 This reads the SQLite Drizzle schemas and generates SQL migration files in `packages/db/drizzle-sqlite/`. The output should include:
+
 - `0000_*.sql` — CREATE TABLE statements for all 12 tables
 - `_journal.json` — migration tracking metadata
 
@@ -255,18 +273,23 @@ Verify the generated SQL looks correct (table names, column names, types match t
 Create `packages/db/src/project-db/connection.ts` with:
 
 **`createProjectDb(dbPath: string): ProjectDbResult`** — creates a configured SQLite DB:
+
 - Creates `better-sqlite3` Database instance
 - Sets pragmas: WAL mode, FK enforcement, busy timeout 5s, synchronous NORMAL
 - Wraps with Drizzle using the SQLite schema
 - Returns `{ db, sqlite }` — callers use `db` for ORM queries, `sqlite` for shutdown
 
 **`initializeProjectDb(db: ProjectDatabase, meta: { projectId: string; name: string })`** — applies migrations + seeds:
+
 - Calls `migrate()` from `drizzle-orm/better-sqlite3/migrator` (synchronous)
-- Migration folder: `resolve(__dirname, '../../drizzle-sqlite')` (at compile time __dirname = `packages/db/dist/project-db/`, so `../../drizzle-sqlite` = `packages/db/drizzle-sqlite/`)
+- Migration folder: `resolve(__dirname, '../../drizzle-sqlite')` (at compile time \_\_dirname = `packages/db/dist/project-db/`, so `../../drizzle-sqlite` = `packages/db/drizzle-sqlite/`)
 - After migration, seeds `project_meta` via Drizzle ORM insert (idempotent via `onConflictDoNothing()`):
   ```typescript
   db.insert(projectMeta).values({ key: 'schema_version', value: '1' }).onConflictDoNothing().run();
-  db.insert(projectMeta).values({ key: 'project_id', value: meta.projectId }).onConflictDoNothing().run();
+  db.insert(projectMeta)
+    .values({ key: 'project_id', value: meta.projectId })
+    .onConflictDoNothing()
+    .run();
   // ... etc
   ```
   `onConflictDoNothing()` is a method on the SQLite insert builder (maps to `INSERT OR IGNORE`). Call `.run()` at the end (better-sqlite3 is synchronous).
@@ -282,6 +305,7 @@ const __dirname = dirname(fileURLToPath(import.meta.url));
 This matches the pattern used in the existing `packages/db/src/migrate.ts`.
 
 **Key advantages over raw SQL approach:**
+
 - No hand-written SQL to drift from Drizzle schemas — SQL generated by Drizzle Kit
 - Incremental version upgrades: user upgrades Spatula, `migrate()` applies only new migrations
 - Type-safe seeding via Drizzle ORM insert
@@ -314,6 +338,7 @@ git commit -m "feat(db): add SQLite connection factory with Drizzle Kit migratio
 ## Task 6: Parity Verification Tests
 
 **Files:**
+
 - Create: packages/db/tests/unit/schema-sqlite/parity.test.ts
 
 - [ ] **Step 1: Write parity tests**
@@ -321,6 +346,7 @@ git commit -m "feat(db): add SQLite connection factory with Drizzle Kit migratio
 Use Drizzle getTableColumns() to programmatically compare Postgres and SQLite schemas.
 
 **Critical: Postgres table variable names (from packages/db/src/schema/index.ts):**
+
 - `rawPages` (NOT `pages`) — maps to SQLite `pages`
 - `schemasTable` (NOT `schemas`) — maps to SQLite `schemas`
 - `crawlTasks` — maps to SQLite `crawlTasks`
@@ -331,17 +357,20 @@ Use Drizzle getTableColumns() to programmatically compare Postgres and SQLite sc
 - `sourceTrust` — maps to SQLite `sourceTrust`
 
 **DO NOT include in parity comparison:**
+
 - Postgres `tenants` — dropped entirely (no SQLite equivalent)
 - Postgres `jobs` — replaced by SQLite `runs`
 - Postgres `contentStore` — dropped (content on disk locally)
 - Postgres `exports` — the SQLite `exports` is a LOCAL-ONLY table with a DIFFERENT shape (no status, no contentRef; has filePath, runId instead)
 
 **Known intentional differences to document in tests:**
+
 - `pages`: SQLite adds `url`, `statusCode`, `title`, `classification`, `contentPath`, `needsReextraction`, `reextractionReason` (merged from crawl_tasks + local extensions)
 - `source_trust`: Postgres has `reasoning NOT NULL`; SQLite has both `score REAL` and optional `reasoning`
 - All tables: `tenantId` dropped
 
 For each mirrored pair:
+
 1. Get Postgres column names, remove `tenantId`
 2. Get SQLite column names
 3. Assert every Postgres column (minus tenantId and known-dropped columns) exists in SQLite
@@ -391,6 +420,7 @@ Run: pnpm --filter @spatula/db build and pnpm --filter @spatula/queue build
 Run: ls packages/db/src/schema-sqlite/
 
 Expected: 12 files defining 13 tables total:
+
 - 7 mirrored files with 8 mirrored tables: pages, entities + entity_sources (one file), extractions, schemas, crawl-tasks, actions, source-trust
 - 4 local-only files with 4 local tables: runs, llm-usage, exports, project-meta
 - 1 barrel: index.ts

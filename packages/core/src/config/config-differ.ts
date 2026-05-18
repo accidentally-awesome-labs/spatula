@@ -2,7 +2,13 @@
 import { diffSeeds } from './url-normalizer.js';
 import type { JobConfig } from '../types/job.js';
 import type { FieldDefinitionOutput } from '../types/schema.js';
-import type { JobConfigDiff, FieldChange, PropertyChange, PotentialRename, DiffImpact } from './diff-types.js';
+import type {
+  JobConfigDiff,
+  FieldChange,
+  PropertyChange,
+  PotentialRename,
+  DiffImpact,
+} from './diff-types.js';
 
 /**
  * Compare two JobConfig objects and produce a JobConfigDiff.
@@ -21,8 +27,12 @@ export function diffConfigs(current: JobConfig, previous: JobConfig): JobConfigD
   // Schema fields
   const currentFields = current.schema.userFields ?? [];
   const previousFields = previous.schema.userFields ?? [];
-  const { added: fieldsAdded, removed: fieldsRemoved, modified: fieldsModified, renames: potentialRenames } =
-    diffFields(currentFields, previousFields);
+  const {
+    added: fieldsAdded,
+    removed: fieldsRemoved,
+    modified: fieldsModified,
+    renames: potentialRenames,
+  } = diffFields(currentFields, previousFields);
 
   // Schema mode
   const schemaModeChanged =
@@ -190,34 +200,51 @@ function diffFieldProperties(
     changes.push({ property: 'enumValues', from: previous.enumValues, to: current.enumValues });
   }
   if (JSON.stringify(current.normalization) !== JSON.stringify(previous.normalization)) {
-    changes.push({ property: 'normalization', from: previous.normalization, to: current.normalization });
+    changes.push({
+      property: 'normalization',
+      from: previous.normalization,
+      to: current.normalization,
+    });
   }
 
   // Recursive: arrayItemType
   if (current.arrayItemType && previous.arrayItemType) {
     const nested = diffFieldProperties(current.arrayItemType, previous.arrayItemType);
     if (nested.length > 0) {
-      changes.push({ property: 'arrayItemType', from: previous.arrayItemType, to: current.arrayItemType, nestedChanges: nested });
+      changes.push({
+        property: 'arrayItemType',
+        from: previous.arrayItemType,
+        to: current.arrayItemType,
+        nestedChanges: nested,
+      });
     }
   } else if (current.arrayItemType !== previous.arrayItemType) {
-    changes.push({ property: 'arrayItemType', from: previous.arrayItemType, to: current.arrayItemType });
+    changes.push({
+      property: 'arrayItemType',
+      from: previous.arrayItemType,
+      to: current.arrayItemType,
+    });
   }
 
   // Recursive: objectFields
   if (current.objectFields || previous.objectFields) {
-    const currMap = new Map((current.objectFields ?? []).map(f => [f.name, f]));
-    const prevMap = new Map((previous.objectFields ?? []).map(f => [f.name, f]));
+    const currMap = new Map((current.objectFields ?? []).map((f) => [f.name, f]));
+    const prevMap = new Map((previous.objectFields ?? []).map((f) => [f.name, f]));
 
-    const addedFields = [...currMap.keys()].filter(k => !prevMap.has(k));
-    const removedFields = [...prevMap.keys()].filter(k => !currMap.has(k));
+    const addedFields = [...currMap.keys()].filter((k) => !prevMap.has(k));
+    const removedFields = [...prevMap.keys()].filter((k) => !currMap.has(k));
     const nestedChanges = [...currMap.keys()]
-      .filter(k => prevMap.has(k))
-      .flatMap(k => diffFieldProperties(currMap.get(k)!, prevMap.get(k)!));
+      .filter((k) => prevMap.has(k))
+      .flatMap((k) => diffFieldProperties(currMap.get(k)!, prevMap.get(k)!));
 
     if (addedFields.length || removedFields.length || nestedChanges.length) {
       changes.push({
-        property: 'objectFields', from: previous.objectFields, to: current.objectFields,
-        nestedChanges, addedFields, removedFields,
+        property: 'objectFields',
+        from: previous.objectFields,
+        to: current.objectFields,
+        nestedChanges,
+        addedFields,
+        removedFields,
       });
     }
   }
@@ -225,10 +252,7 @@ function diffFieldProperties(
   return changes;
 }
 
-function diffCrawlSettings(
-  current: JobConfig,
-  previous: JobConfig,
-): JobConfigDiff['crawlChanged'] {
+function diffCrawlSettings(current: JobConfig, previous: JobConfig): JobConfigDiff['crawlChanged'] {
   return {
     maxDepth:
       current.crawl.maxDepth !== previous.crawl.maxDepth
@@ -246,8 +270,7 @@ function diffCrawlSettings(
       current.crawl.crawlerType !== previous.crawl.crawlerType
         ? { from: previous.crawl.crawlerType, to: current.crawl.crawlerType }
         : undefined,
-    proxyChanged:
-      JSON.stringify(current.crawl.proxy) !== JSON.stringify(previous.crawl.proxy),
+    proxyChanged: JSON.stringify(current.crawl.proxy) !== JSON.stringify(previous.crawl.proxy),
     cookiesChanged:
       JSON.stringify(current.crawl.cookies) !== JSON.stringify(previous.crawl.cookies),
   };
@@ -262,8 +285,8 @@ function computeImpact(context: {
 }): DiffImpact {
   const needsReextraction =
     context.fieldsAdded.length > 0 ||
-    context.fieldsModified.some((f) =>
-      f.changes.some((c) => c.property === 'type' || c.property === 'normalization'),
+    context.fieldsModified.some(
+      (f) => f.changes.some((c) => c.property === 'type' || c.property === 'normalization'),
       // Note: 'selector' changes are not detectable here because selectors
       // are not carried through to FieldDefinitionOutput/JobConfig.
       // See design note above about selector change detection.
@@ -275,7 +298,8 @@ function computeImpact(context: {
     // 0 = definitively no work needed
     pagesNeedingReextraction: needsReextraction ? null : 0,
     reextractionCostEstimate: 0, // Computed by caller using estimateCost()
-    failedTasksToRetry: context.crawlChanged.proxyChanged || context.crawlChanged.cookiesChanged ? null : 0,
+    failedTasksToRetry:
+      context.crawlChanged.proxyChanged || context.crawlChanged.cookiesChanged ? null : 0,
     skippedTasksToReenqueue: null, // Always needs DB query (robots.txt toggle detected externally)
     forceFullReconciliation: context.reconciliationChanged,
   };

@@ -20,4 +20,3 @@ describe('core interfaces are exported', () => {
     });
   }
 });
-

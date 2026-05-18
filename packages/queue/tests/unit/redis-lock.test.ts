@@ -25,13 +25,7 @@ describe('Redis Distributed Lock', () => {
       expect(result.token).toBeDefined();
       expect(typeof result.token).toBe('string');
       expect(result.token.length).toBeGreaterThan(0);
-      expect(redis.set).toHaveBeenCalledWith(
-        'test-lock',
-        expect.any(String),
-        'EX',
-        30,
-        'NX',
-      );
+      expect(redis.set).toHaveBeenCalledWith('test-lock', expect.any(String), 'EX', 30, 'NX');
     });
 
     it('returns acquired=false when SET NX fails (lock held)', async () => {
@@ -62,9 +56,7 @@ describe('Redis Distributed Lock', () => {
     it('does not throw when key does not exist or token mismatches', async () => {
       redis.call.mockResolvedValue(0);
 
-      await expect(
-        releaseLock(redis as any, 'test-lock', 'wrong-token'),
-      ).resolves.toBeUndefined();
+      await expect(releaseLock(redis as any, 'test-lock', 'wrong-token')).resolves.toBeUndefined();
     });
   });
 });

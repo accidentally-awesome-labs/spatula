@@ -10,9 +10,7 @@ export interface KeyboardHintsProps {
   hints: KeyHint[];
 }
 
-export function KeyboardHints({
-  hints,
-}: KeyboardHintsProps): React.ReactElement {
+export function KeyboardHints({ hints }: KeyboardHintsProps): React.ReactElement {
   return (
     <Box gap={2}>
       {hints.map((hint) => (

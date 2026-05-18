@@ -51,7 +51,7 @@ describe('new command (interactive conversational mode)', () => {
     store.getState().addMessage({
       role: 'assistant',
       content:
-        'Welcome to Spatula! Tell me what data you want to collect and I\'ll help you set up a crawl job.',
+        "Welcome to Spatula! Tell me what data you want to collect and I'll help you set up a crawl job.",
     });
 
     const { lastFrame } = render(
@@ -77,9 +77,7 @@ describe('new command (interactive conversational mode)', () => {
     const apiClient = createMockApiClient();
 
     // Simulate AI applying a set_job_name action
-    store.getState().applyActions([
-      { type: 'set_job_name', payload: { name: 'Product Scraper' } },
-    ]);
+    store.getState().applyActions([{ type: 'set_job_name', payload: { name: 'Product Scraper' } }]);
 
     const { lastFrame } = render(
       <App store={store} apiClient={apiClient} onStartJob={noop} onExit={noop} />,

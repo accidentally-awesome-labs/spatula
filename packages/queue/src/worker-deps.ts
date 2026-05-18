@@ -1,7 +1,11 @@
 import type { Crawler, Extractor, ContentStore, SchemaEvolver, LinkEvaluator } from '@spatula/core';
 import type { PageClassifier, DataReconciler } from '@spatula/core';
-import type { RobotsTxtChecker, DomainRateLimiter, PageBudget, CrawlCompletionChecker } from '@spatula/core';
-import type { QuotaEnforcer } from '@spatula/core';
+import type {
+  RobotsTxtChecker,
+  DomainRateLimiter,
+  PageBudget,
+  CrawlCompletionChecker,
+} from '@spatula/core';
 import type {
   JobRepository,
   CrawlTaskRepository,
@@ -44,7 +48,6 @@ export interface WorkerDepsConfig {
   pageBudget?: PageBudget;
   completionChecker?: CrawlCompletionChecker;
   tenantRepo?: TenantRepository;
-  quotaEnforcer?: QuotaEnforcer;
   queues: SpatulaQueues;
 }
 
@@ -73,7 +76,6 @@ export class WorkerDeps {
   readonly pageBudget?: PageBudget;
   readonly completionChecker?: CrawlCompletionChecker;
   readonly tenantRepo?: TenantRepository;
-  readonly quotaEnforcer?: QuotaEnforcer;
   readonly queues: SpatulaQueues;
 
   constructor(config: WorkerDepsConfig) {
@@ -101,7 +103,6 @@ export class WorkerDeps {
     this.pageBudget = config.pageBudget;
     this.completionChecker = config.completionChecker;
     this.tenantRepo = config.tenantRepo;
-    this.quotaEnforcer = config.quotaEnforcer;
     this.queues = config.queues;
   }
 }

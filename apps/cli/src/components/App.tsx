@@ -44,10 +44,14 @@ const reviewHints: KeyHint[] = [
 
 function hintsForMode(mode: string): KeyHint[] {
   switch (mode) {
-    case 'dashboard': return dashboardHints;
-    case 'review': return reviewHints;
-    case 'explorer': return []; // ExplorerView manages its own hints
-    default: return conversationalHints;
+    case 'dashboard':
+      return dashboardHints;
+    case 'review':
+      return reviewHints;
+    case 'explorer':
+      return []; // ExplorerView manages its own hints
+    default:
+      return conversationalHints;
   }
 }
 
@@ -56,7 +60,7 @@ export function App({
   apiClient,
   backend,
   onStartJob,
-  onExit,
+  onExit: _onExit,
 }: AppProps): React.ReactElement {
   const effectiveBackend = backend ?? apiClient;
   const mode = useStore(store, (s) => s.mode);
@@ -110,9 +114,7 @@ export function App({
     <Box flexDirection="column" flexGrow={1}>
       <Header mode={mode} />
       <Box flexGrow={1}>
-        {mode === 'conversational' && (
-          <ConversationalView store={store} onStartJob={onStartJob} />
-        )}
+        {mode === 'conversational' && <ConversationalView store={store} onStartJob={onStartJob} />}
         {mode === 'dashboard' && effectiveBackend && (
           <DashboardView store={store} backend={effectiveBackend} />
         )}
@@ -122,13 +124,15 @@ export function App({
         {mode === 'explorer' && effectiveBackend && (
           <ExplorerView store={store} backend={effectiveBackend} />
         )}
-        {(mode === 'dashboard' || mode === 'review' || mode === 'explorer') && !effectiveBackend && (
-          <Box paddingX={2} paddingY={1}>
-            <Text color="yellow">
-              {mode.charAt(0).toUpperCase() + mode.slice(1)} mode requires a remote connection. Use `spatula run` for local crawling, or set SPATULA_TENANT_ID for remote mode.
-            </Text>
-          </Box>
-        )}
+        {(mode === 'dashboard' || mode === 'review' || mode === 'explorer') &&
+          !effectiveBackend && (
+            <Box paddingX={2} paddingY={1}>
+              <Text color="yellow">
+                {mode.charAt(0).toUpperCase() + mode.slice(1)} mode requires a remote connection.
+                Use `spatula run` for local crawling, or set SPATULA_TENANT_ID for remote mode.
+              </Text>
+            </Box>
+          )}
       </Box>
       <KeyboardHints hints={hintsForMode(mode)} />
     </Box>

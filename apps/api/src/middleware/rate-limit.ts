@@ -1,6 +1,6 @@
 import type { MiddlewareHandler } from 'hono';
 import type Redis from 'ioredis';
-import { RATE_LIMIT_TIERS } from '@spatula/shared';
+import { DEFAULT_RATE_LIMIT } from '@spatula/shared';
 
 const WINDOW_MS = 60_000;
 
@@ -26,8 +26,7 @@ export function rateLimitMiddleware(redis: Redis): MiddlewareHandler {
     const tenantId = c.get('tenantId') as string | undefined;
     if (!tenantId) return next();
 
-    const tierName = (c.get('rateLimitTier') as string) ?? 'free';
-    const tier = RATE_LIMIT_TIERS[tierName] ?? RATE_LIMIT_TIERS.free;
+    const tier = DEFAULT_RATE_LIMIT;
 
     if (tier.requestsPerMinute === Infinity) return next();
 
@@ -37,9 +36,13 @@ export function rateLimitMiddleware(redis: Redis): MiddlewareHandler {
 
     // redis.eval() executes a Lua script atomically on the Redis server — not JS eval
     const result = await redis.eval(
-      RATE_LIMIT_SCRIPT, 1, key,
-      now.toString(), WINDOW_MS.toString(),
-      tier.requestsPerMinute.toString(), member,
+      RATE_LIMIT_SCRIPT,
+      1,
+      key,
+      now.toString(),
+      WINDOW_MS.toString(),
+      tier.requestsPerMinute.toString(),
+      member,
     );
     const [accepted, count] = result as [number, number];
 
@@ -49,13 +52,16 @@ export function rateLimitMiddleware(redis: Redis): MiddlewareHandler {
     if (!accepted) {
       // Return 429 directly (don't throw) to preserve Retry-After header
       c.header('Retry-After', '60');
-      return c.json({
-        error: {
-          code: 'RATE_LIMIT_ERROR',
-          message: 'Rate limit exceeded',
-          requestId: c.get('requestId') ?? '',
+      return c.json(
+        {
+          error: {
+            code: 'RATE_LIMIT_ERROR',
+            message: 'Rate limit exceeded',
+            requestId: c.get('requestId') ?? '',
+          },
         },
-      }, 429);
+        429,
+      );
     }
 
     await next();

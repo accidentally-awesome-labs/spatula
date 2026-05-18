@@ -340,8 +340,16 @@ describe('processReconciliation', () => {
 
     expect(deps.entitySourceRepo.bulkLink).toHaveBeenCalledWith(
       expect.arrayContaining([
-        expect.objectContaining({ entityId: 'db-entity-1', extractionId: 'ext-1', matchConfidence: 1.0 }),
-        expect.objectContaining({ entityId: 'db-entity-1', extractionId: 'ext-2', matchConfidence: 1.0 }),
+        expect.objectContaining({
+          entityId: 'db-entity-1',
+          extractionId: 'ext-1',
+          matchConfidence: 1.0,
+        }),
+        expect.objectContaining({
+          entityId: 'db-entity-1',
+          extractionId: 'ext-2',
+          matchConfidence: 1.0,
+        }),
       ]),
     );
   });
@@ -454,7 +462,8 @@ describe('processReconciliation', () => {
   it('stamps jobId on all returned actions', async () => {
     await processReconciliation(createInput(), deps);
 
-    const result = await (deps.reconciler.reconcile as ReturnType<typeof vi.fn>).mock.results[0].value;
+    const result = await (deps.reconciler.reconcile as ReturnType<typeof vi.fn>).mock.results[0]
+      .value;
     for (const action of result.actions) {
       expect(action.jobId).toBe(JOB_ID);
     }

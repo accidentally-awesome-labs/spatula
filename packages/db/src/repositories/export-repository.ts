@@ -99,7 +99,8 @@ export class ExportRepository {
       return { entities: rows, nextCursor };
     } catch (error) {
       throw new StorageError(`Failed to fetch exports by cursor: ${(error as Error).message}`, {
-        cause: error as Error, context: { jobId, tenantId },
+        cause: error as Error,
+        context: { jobId, tenantId },
       });
     }
   }
@@ -113,7 +114,8 @@ export class ExportRepository {
       return result?.count ?? 0;
     } catch (error) {
       throw new StorageError(`Failed to count exports: ${(error as Error).message}`, {
-        cause: error as Error, context: { jobId, tenantId },
+        cause: error as Error,
+        context: { jobId, tenantId },
       });
     }
   }

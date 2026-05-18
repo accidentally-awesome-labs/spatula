@@ -1,7 +1,6 @@
 import { createLogger, StorageError } from '@spatula/shared';
 import type { AuditLogger } from '@spatula/shared';
 import type { JobConfig, JobStatus } from '@spatula/core';
-import type { QuotaEnforcer } from '@spatula/core';
 import type { JobRepository, CrawlTaskRepository, SchemaRepository } from '@spatula/db';
 import type { TenantRepository } from '@spatula/db';
 import { QuotaExceededError } from '@spatula/shared';
@@ -17,7 +16,6 @@ export interface JobManagerConfig {
   schemaRepo: SchemaRepository;
   queues: SpatulaQueues;
   tenantRepo?: TenantRepository;
-  quotaEnforcer?: QuotaEnforcer;
   auditLogger?: AuditLogger;
 }
 
@@ -27,7 +25,6 @@ export class JobManager {
   private readonly schemaRepo: SchemaRepository;
   private readonly queues: SpatulaQueues;
   private readonly tenantRepo?: TenantRepository;
-  private readonly quotaEnforcer?: QuotaEnforcer;
   private readonly auditLogger?: AuditLogger;
 
   constructor(config: JobManagerConfig) {
@@ -36,7 +33,6 @@ export class JobManager {
     this.schemaRepo = config.schemaRepo;
     this.queues = config.queues;
     this.tenantRepo = config.tenantRepo;
-    this.quotaEnforcer = config.quotaEnforcer;
     this.auditLogger = config.auditLogger;
   }
 
@@ -54,28 +50,7 @@ export class JobManager {
   async startJob(jobId: string, tenantId: string): Promise<void> {
     const job = await this.getJob(jobId, tenantId);
 
-    // Check monthly job quota via billing-aware QuotaEnforcer
-    if (this.quotaEnforcer) {
-      try {
-        await this.quotaEnforcer.checkAndRecord(tenantId, 'jobs', 1);
-      } catch (error) {
-        if (error instanceof QuotaExceededError && this.auditLogger) {
-          this.auditLogger.log({
-            action: 'quota.exceeded',
-            actorId: 'system',
-            actorType: 'system',
-            tenantId,
-            metadata: {
-              dimension: 'jobs',
-              ...((error as any).context ?? {}),
-            },
-          });
-        }
-        throw error;
-      }
-    }
-
-    // Check concurrent job quota (separate from monthly — limits simultaneous running jobs)
+    // Check concurrent job quota (config-driven; limits simultaneous running jobs)
     if (this.tenantRepo) {
       try {
         const quotas = await this.tenantRepo.getQuotas(tenantId);

@@ -25,10 +25,12 @@ export interface CleanupDeps {
     execute(query: any): Promise<{ rows: any[]; rowCount: number }>;
   };
   tenantRepo: {
-    findAll(options?: { limit?: number; offset?: number }): Promise<Array<{
-      id: string;
-      config: Record<string, unknown>;
-    }>>;
+    findAll(options?: { limit?: number; offset?: number }): Promise<
+      Array<{
+        id: string;
+        config: Record<string, unknown>;
+      }>
+    >;
   };
   contentStore?: ContentStore;
 }
@@ -68,7 +70,10 @@ export async function processCleanupJob(deps: CleanupDeps): Promise<CleanupResul
         await cleanupTenantPhaseA(deps, tenant);
         await cleanupTenantPhaseB(deps, tenant);
       } catch (err) {
-        logger.error({ tenantId: tenant.id, error: (err as Error).message }, 'Tenant cleanup failed');
+        logger.error(
+          { tenantId: tenant.id, error: (err as Error).message },
+          'Tenant cleanup failed',
+        );
         result.errors++;
       }
       result.tenantsProcessed++;
@@ -151,7 +156,9 @@ async function cleanupTenantPhaseA(
   // A5. Content store cleanup
   if (deps.contentStore && contentRefs.length > 0) {
     for (const ref of contentRefs) {
-      try { await deps.contentStore.delete(ref); } catch (err) {
+      try {
+        await deps.contentStore.delete(ref);
+      } catch (err) {
         logger.warn({ ref, error: (err as Error).message }, 'Failed to delete content store entry');
       }
     }
@@ -227,7 +234,10 @@ async function cleanupTenantPhaseB(
       // B11. Delete the job (llm_usage.job_id and dlq.spatula_job_id are ON DELETE SET NULL)
       await deps.db.execute(sql`DELETE FROM jobs WHERE id = ${jobId}`);
     } catch (err) {
-      logger.error({ tenantId, jobId, error: (err as Error).message }, 'Failed to delete expired job');
+      logger.error(
+        { tenantId, jobId, error: (err as Error).message },
+        'Failed to delete expired job',
+      );
     }
   }
 
@@ -273,12 +283,15 @@ async function cleanupSystemData(deps: CleanupDeps): Promise<Record<string, numb
       LIMIT ${BATCH_SIZE}
     `);
     let orphanCount = 0;
-    for (const row of (orphans.rows ?? [])) {
+    for (const row of orphans.rows ?? []) {
       try {
         await deps.contentStore.delete((row as any).key);
         orphanCount++;
       } catch (err) {
-        logger.warn({ key: (row as any).key, error: (err as Error).message }, 'Failed to delete orphan content');
+        logger.warn(
+          { key: (row as any).key, error: (err as Error).message },
+          'Failed to delete orphan content',
+        );
       }
     }
     stats.contentOrphans = orphanCount;

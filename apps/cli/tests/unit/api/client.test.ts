@@ -28,10 +28,7 @@ function mockFetchError(status: number, code: string, message: string): void {
 }
 
 function mockFetchNetworkError(): void {
-  vi.stubGlobal(
-    'fetch',
-    vi.fn().mockRejectedValue(new TypeError('fetch failed')),
-  );
+  vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new TypeError('fetch failed')));
 }
 
 function lastFetchCall(): { url: string; init: RequestInit } {
@@ -243,9 +240,7 @@ describe('SpatulaApiClient', () => {
       await client.listExtractions('j1', { schemaVersion: 2, limit: 25 });
 
       const { url } = lastFetchCall();
-      expect(url).toBe(
-        `${BASE_URL}/api/v1/jobs/j1/extractions?schemaVersion=2&limit=25`,
-      );
+      expect(url).toBe(`${BASE_URL}/api/v1/jobs/j1/extractions?schemaVersion=2&limit=25`);
     });
   });
 
@@ -270,9 +265,7 @@ describe('SpatulaApiClient', () => {
       await client.listEntities('j1', { limit: 20, offset: 40 });
 
       const { url } = lastFetchCall();
-      expect(url).toBe(
-        `${BASE_URL}/api/v1/jobs/j1/entities?limit=20&offset=40`,
-      );
+      expect(url).toBe(`${BASE_URL}/api/v1/jobs/j1/entities?limit=20&offset=40`);
     });
   });
 
@@ -439,11 +432,14 @@ describe('SpatulaApiClient', () => {
 
   describe('downloadExport', () => {
     it('returns raw content as string', async () => {
-      vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
-        ok: true,
-        status: 200,
-        text: () => Promise.resolve('name,price\nA,10'),
-      }));
+      vi.stubGlobal(
+        'fetch',
+        vi.fn().mockResolvedValue({
+          ok: true,
+          status: 200,
+          text: () => Promise.resolve('name,price\nA,10'),
+        }),
+      );
       const content = await client.downloadExport('job-1', 'exp-1');
       expect(content).toBe('name,price\nA,10');
     });

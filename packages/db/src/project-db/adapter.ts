@@ -11,7 +11,10 @@ import type { ProjectDatabase } from './connection.js';
 import { SqliteJobRepository } from './repositories/job-repository.js';
 import { SqlitePageRepository } from './repositories/page-repository.js';
 import { SqliteExtractionRepository } from './repositories/extraction-repository.js';
-import { SqliteEntityRepository, SqliteEntitySourceRepository } from './repositories/entity-repository.js';
+import {
+  SqliteEntityRepository,
+  SqliteEntitySourceRepository,
+} from './repositories/entity-repository.js';
 import { SqliteSchemaRepository } from './repositories/schema-repository.js';
 import { SqliteCrawlTaskRepository } from './repositories/crawl-task-repository.js';
 import { SqliteActionRepository } from './repositories/action-repository.js';

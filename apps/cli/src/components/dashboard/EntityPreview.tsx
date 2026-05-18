@@ -16,9 +16,10 @@ export function EntityPreview({ entities, totalCount }: EntityPreviewProps): Rea
     );
   }
 
-  const countLabel = totalCount !== undefined
-    ? `Entities (${entities.length} of ${totalCount})`
-    : `Entities (${entities.length})`;
+  const countLabel =
+    totalCount !== undefined
+      ? `Entities (${entities.length} of ${totalCount})`
+      : `Entities (${entities.length})`;
 
   return (
     <Panel title={countLabel}>
@@ -31,9 +32,7 @@ export function EntityPreview({ entities, totalCount }: EntityPreviewProps): Rea
           return (
             <Box key={i} gap={1}>
               <Text bold>{name}</Text>
-              {categories.length > 0 && (
-                <Text dimColor>[{categories.join(', ')}]</Text>
-              )}
+              {categories.length > 0 && <Text dimColor>[{categories.join(', ')}]</Text>}
               <Text dimColor>({fieldCount} fields)</Text>
             </Box>
           );

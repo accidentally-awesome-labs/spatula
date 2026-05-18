@@ -157,7 +157,8 @@ async function handleConfirmAndStart(
     if (!existsSync(spatulaDir)) mkdirSync(spatulaDir, { recursive: true });
     state.addMessage({
       role: 'assistant',
-      content: 'Project created! Files written:\n  - spatula.yaml\n  - .spatula/\n\nRun `spatula run` to start crawling.',
+      content:
+        'Project created! Files written:\n  - spatula.yaml\n  - .spatula/\n\nRun `spatula run` to start crawling.',
     });
     return;
   }
@@ -202,14 +203,9 @@ export async function runNewCommand(options: NewCommandOptions): Promise<void> {
 
   const tenantId = options.tenantId ?? 'local';
   const store = createCliStore(tenantId);
-  const apiClient = options.tenantId
-    ? new SpatulaApiClient(apiUrl, options.tenantId)
-    : null;
+  const apiClient = options.tenantId ? new SpatulaApiClient(apiUrl, options.tenantId) : null;
   const llmClient = new OpenRouterClient({ apiKey: openrouterApiKey });
-  const conversationService = new ConfigConversationService(
-    llmClient,
-    model ?? DEFAULT_MODEL,
-  );
+  const conversationService = new ConfigConversationService(llmClient, model ?? DEFAULT_MODEL);
 
   // Subscribe to store — process new user messages automatically
   const unsubscribe = store.subscribe((state, prevState) => {

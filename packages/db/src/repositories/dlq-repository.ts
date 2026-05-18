@@ -22,17 +22,23 @@ export class DlqRepository {
 
   async insert(input: DlqInsertInput): Promise<{ id: string }> {
     try {
-      const [row] = await this.db.insert(deadLetterQueue).values({
-        queueName: input.queueName,
-        jobId: input.jobId,
-        tenantId: input.tenantId,
-        spatulaJobId: input.spatulaJobId,
-        payload: input.payload,  // JSONB — Drizzle handles serialization
-        errorMessage: input.errorMessage,
-        errorStack: input.errorStack,
-        attempts: input.attempts,
-      }).returning();
-      logger.info({ dlqId: row.id, queueName: input.queueName, jobId: input.jobId }, 'Job moved to DLQ');
+      const [row] = await this.db
+        .insert(deadLetterQueue)
+        .values({
+          queueName: input.queueName,
+          jobId: input.jobId,
+          tenantId: input.tenantId,
+          spatulaJobId: input.spatulaJobId,
+          payload: input.payload, // JSONB — Drizzle handles serialization
+          errorMessage: input.errorMessage,
+          errorStack: input.errorStack,
+          attempts: input.attempts,
+        })
+        .returning();
+      logger.info(
+        { dlqId: row.id, queueName: input.queueName, jobId: input.jobId },
+        'Job moved to DLQ',
+      );
       return { id: row.id };
     } catch (error) {
       throw new StorageError('Failed to insert DLQ entry', {
@@ -57,19 +63,26 @@ export class DlqRepository {
       conditions.push(eq(deadLetterQueue.tenantId, options.tenantId));
     }
 
-    return this.db.select().from(deadLetterQueue)
+    return this.db
+      .select()
+      .from(deadLetterQueue)
       .where(and(...conditions))
       .orderBy(desc(deadLetterQueue.failedAt))
       .limit(options?.limit ?? 50)
       .offset(options?.offset ?? 0);
   }
 
-  async findById(id: string, tenantId?: string): Promise<typeof deadLetterQueue.$inferSelect | null> {
+  async findById(
+    id: string,
+    tenantId?: string,
+  ): Promise<typeof deadLetterQueue.$inferSelect | null> {
     const conditions = [eq(deadLetterQueue.id, id)];
     if (tenantId) {
       conditions.push(eq(deadLetterQueue.tenantId, tenantId));
     }
-    const rows = await this.db.select().from(deadLetterQueue)
+    const rows = await this.db
+      .select()
+      .from(deadLetterQueue)
       .where(and(...conditions))
       .limit(1);
     return rows[0] ?? null;
@@ -79,7 +92,8 @@ export class DlqRepository {
     id: string,
     resolution: 'retried' | 'discarded' | 'fixed',
   ): Promise<typeof deadLetterQueue.$inferSelect> {
-    const [row] = await this.db.update(deadLetterQueue)
+    const [row] = await this.db
+      .update(deadLetterQueue)
       .set({
         resolvedAt: new Date(),
         resolution,
@@ -87,7 +101,8 @@ export class DlqRepository {
       .where(and(eq(deadLetterQueue.id, id), isNull(deadLetterQueue.resolvedAt)))
       .returning();
 
-    if (!row) throw new StorageError('DLQ entry not found or already resolved', { context: { id } });
+    if (!row)
+      throw new StorageError('DLQ entry not found or already resolved', { context: { id } });
     logger.info({ dlqId: id, resolution }, 'DLQ entry resolved');
     return row;
   }

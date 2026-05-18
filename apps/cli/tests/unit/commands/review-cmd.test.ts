@@ -1,5 +1,9 @@
 import { describe, it, expect, vi, afterEach } from 'vitest';
-import { buildReviewStore, formatReviewSummary, runReviewCommand } from '../../../src/commands/review.js';
+import {
+  buildReviewStore,
+  formatReviewSummary,
+  runReviewCommand,
+} from '../../../src/commands/review.js';
 import { openLocalProject } from '../../../src/local-project.js';
 
 vi.mock('../../../src/local-project.js', () => ({

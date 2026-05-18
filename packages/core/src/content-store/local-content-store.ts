@@ -26,7 +26,11 @@ export class LocalContentStore implements ContentStore {
   }
 
   async delete(ref: string): Promise<void> {
-    try { await unlink(this.parseRef(ref)); } catch (err: any) { if (err.code !== 'ENOENT') throw err; }
+    try {
+      await unlink(this.parseRef(ref));
+    } catch (err: any) {
+      if (err.code !== 'ENOENT') throw err;
+    }
   }
 
   async storeBinary(key: string, data: Uint8Array): Promise<string> {
@@ -37,7 +41,13 @@ export class LocalContentStore implements ContentStore {
   }
 
   async retrieveBinary(ref: string): Promise<Uint8Array | null> {
-    try { const buf = await readFile(this.parseRef(ref)); return new Uint8Array(buf.buffer, buf.byteOffset, buf.byteLength); } catch (err: any) { if (err.code === 'ENOENT') return null; throw err; }
+    try {
+      const buf = await readFile(this.parseRef(ref));
+      return new Uint8Array(buf.buffer, buf.byteOffset, buf.byteLength);
+    } catch (err: any) {
+      if (err.code === 'ENOENT') return null;
+      throw err;
+    }
   }
 
   /** Resolve key under basePath, rejecting path traversal attempts. */

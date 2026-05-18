@@ -20,21 +20,23 @@ export class RunRepository {
   }): Promise<{ id: string }> {
     const id = crypto.randomUUID();
     wrapStorageError(
-      () => this.db.insert(runs).values({
-        id,
-        status: data.status,
-        source: data.source,
-        configSnapshot: data.configSnapshot,
-        startedAt: data.startedAt,
-      }).run(),
+      () =>
+        this.db
+          .insert(runs)
+          .values({
+            id,
+            status: data.status,
+            source: data.source,
+            configSnapshot: data.configSnapshot,
+            startedAt: data.startedAt,
+          })
+          .run(),
       { operation: 'create', table: 'runs' },
     );
     return { id };
   }
 
-  async findLatestByStatus(
-    statuses: string[],
-  ): Promise<{
+  async findLatestByStatus(statuses: string[]): Promise<{
     id: string;
     status: string;
     source: string;
@@ -69,25 +71,22 @@ export class RunRepository {
     llmCostUsd: number | null;
     errorMessage: string | null;
   } | null> {
-    const row = this.db
-      .select()
-      .from(runs)
-      .where(eq(runs.id, id))
-      .get();
+    const row = this.db.select().from(runs).where(eq(runs.id, id)).get();
 
     return row ?? null;
   }
 
-  async updateStatus(
-    id: string,
-    status: string,
-    completedAt?: string,
-  ): Promise<void> {
+  async updateStatus(id: string, status: string, completedAt?: string): Promise<void> {
     wrapStorageError(
-      () => this.db.update(runs).set({
-        status,
-        ...(completedAt ? { completedAt } : {}),
-      }).where(eq(runs.id, id)).run(),
+      () =>
+        this.db
+          .update(runs)
+          .set({
+            status,
+            ...(completedAt ? { completedAt } : {}),
+          })
+          .where(eq(runs.id, id))
+          .run(),
       { operation: 'updateStatus', table: 'runs', id },
     );
   }
@@ -103,10 +102,11 @@ export class RunRepository {
       errorMessage?: string;
     },
   ): Promise<void> {
-    wrapStorageError(
-      () => this.db.update(runs).set(stats).where(eq(runs.id, id)).run(),
-      { operation: 'updateStats', table: 'runs', id },
-    );
+    wrapStorageError(() => this.db.update(runs).set(stats).where(eq(runs.id, id)).run(), {
+      operation: 'updateStats',
+      table: 'runs',
+      id,
+    });
   }
 
   async findIdsBySourcePrefix(prefix: string): Promise<string[]> {

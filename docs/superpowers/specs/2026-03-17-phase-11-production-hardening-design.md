@@ -8,13 +8,13 @@ Phases 1–10 built Spatula's full feature surface: types, crawlers, extraction,
 
 Phase 11 is split into five independent sub-phases. Only 11a is a prerequisite for the others — 11b through 11e can be done in any order after 11a.
 
-| Phase | Name | Focus | Prerequisite |
-|-------|------|-------|-------------|
-| **11a** | Minimal Viable E2E | DB migrations, FK fix, action persistence, distributed lock, queue config, E2E test | — |
-| **11b** | Action Execution & Review | ActionExecutor, Review Queue, safety policies | 11a |
-| **11c** | Real-Time & Crawl Intelligence | WebSocket, link evaluator | 11a |
-| **11d** | API Hardening & DX | REST semantics, OpenAPI, tenant repo | 11a |
-| **11e** | Operational Robustness | Error hierarchy, config validation, logger context, additional exporters | 11a |
+| Phase   | Name                           | Focus                                                                               | Prerequisite |
+| ------- | ------------------------------ | ----------------------------------------------------------------------------------- | ------------ |
+| **11a** | Minimal Viable E2E             | DB migrations, FK fix, action persistence, distributed lock, queue config, E2E test | —            |
+| **11b** | Action Execution & Review      | ActionExecutor, Review Queue, safety policies                                       | 11a          |
+| **11c** | Real-Time & Crawl Intelligence | WebSocket, link evaluator                                                           | 11a          |
+| **11d** | API Hardening & DX             | REST semantics, OpenAPI, tenant repo                                                | 11a          |
+| **11e** | Operational Robustness         | Error hierarchy, config validation, logger context, additional exporters            | 11a          |
 
 ---
 
@@ -29,11 +29,13 @@ Phase 11 is split into five independent sub-phases. Only 11a is a prerequisite f
 The `jobId` column is defined without a foreign key reference to the jobs table. This must be fixed before migration generation so the FK constraint is baked into the initial SQL.
 
 Current:
+
 ```typescript
 jobId: uuid('job_id').notNull(),
 ```
 
 Change to:
+
 ```typescript
 jobId: uuid('job_id').notNull().references(() => jobs.id),
 ```
@@ -113,23 +115,23 @@ Currently all queues are created with only `{ connection }` — no concurrency l
 
 ```typescript
 interface QueueConfig {
-  crawl:           { concurrency: number; rateLimitMax: number; rateLimitDuration: number };
-  extract:         { concurrency: number };
+  crawl: { concurrency: number; rateLimitMax: number; rateLimitDuration: number };
+  extract: { concurrency: number };
   schemaEvolution: { concurrency: number };
-  reconciliation:  { concurrency: number };
-  export:          { concurrency: number };
+  reconciliation: { concurrency: number };
+  export: { concurrency: number };
 }
 ```
 
 **Defaults** (used when no overrides provided):
 
-| Queue | Concurrency | Rate Limit |
-|-------|-------------|------------|
-| crawl | 5 | 10 req/sec |
-| extract | 3 | — |
-| schemaEvolution | 1 (singleton by design) | — |
-| reconciliation | 1 | — |
-| export | 2 | — |
+| Queue           | Concurrency             | Rate Limit |
+| --------------- | ----------------------- | ---------- |
+| crawl           | 5                       | 10 req/sec |
+| extract         | 3                       | —          |
+| schemaEvolution | 1 (singleton by design) | —          |
+| reconciliation  | 1                       | —          |
+| export          | 2                       | —          |
 
 BullMQ `concurrency` is set on the **Worker**, not the Queue. Queue-level changes are `defaultJobOptions` (attempts: 3, exponential backoff). The config needs to flow to wherever workers are instantiated.
 
@@ -178,21 +180,21 @@ The `ActionExecutor` interface (already defined in `interfaces/action-executor.t
 
 **Safety policy map** (static mapping from action type to default policy):
 
-| Policy | Action Types |
-|--------|-------------|
-| `always_auto` | classify_page, enqueue_links, hint_entity_match, update_enum_map, flag_anomaly, generate_documentation |
+| Policy                 | Action Types                                                                                                                                     |
+| ---------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `always_auto`          | classify_page, enqueue_links, hint_entity_match, update_enum_map, flag_anomaly, generate_documentation                                           |
 | `auto_above_threshold` | add_field, modify_field, set_normalization_rule, define_category, assign_category_fields, match_entities, set_source_trust, reprocess_extraction |
-| `batch_review` | merge_fields, rename_field, split_field, group_fields, resolve_conflict, infer_value, correct_value, split_entities |
-| `always_review` | remove_field, recommend_table_structure, derive_field |
+| `batch_review`         | merge_fields, rename_field, split_field, group_fields, resolve_conflict, infer_value, correct_value, split_entities                              |
+| `always_review`        | remove_field, recommend_table_structure, derive_field                                                                                            |
 
 **User-configurable approval presets:**
 
-| Preset | Behavior |
-|--------|----------|
-| `trust_ai` | Everything auto-applies |
-| `balanced` (default) | Use the policy map above |
-| `cautious` | `auto_above_threshold` becomes `batch_review` |
-| `manual` | Everything requires review |
+| Preset               | Behavior                                      |
+| -------------------- | --------------------------------------------- |
+| `trust_ai`           | Everything auto-applies                       |
+| `balanced` (default) | Use the policy map above                      |
+| `cautious`           | `auto_above_threshold` becomes `batch_review` |
+| `manual`             | Everything requires review                    |
 
 For `auto_above_threshold`, the executor checks the action's `confidence` against a configurable threshold (default 0.7). Above → auto-apply. Below → defer to review queue.
 
@@ -200,15 +202,15 @@ For `auto_above_threshold`, the executor checks the action's `confidence` agains
 
 The executor delegates to domain-specific appliers:
 
-| Action Category | Delegated To | Status |
-|----------------|--------------|--------|
-| Schema (7 types) | `applySchemaActions()` | Partially exists — `evolution/schema-action-applier.ts` handles 5 of 7 |
-| Normalization (2) | `applySchemaActions()` | Exists — handled in same reducer |
-| Category (2) | `applyCategoryActions()` | New |
-| Crawl (3) | No-op — produced inline by workers | N/A |
-| Reconciliation (6) | `applyReconciliationActions()` | New |
-| Reprocessing (1) | Enqueue reprocessing jobs | New |
-| Finalization (4) | `applyFinalizationActions()` | New |
+| Action Category    | Delegated To                       | Status                                                                 |
+| ------------------ | ---------------------------------- | ---------------------------------------------------------------------- |
+| Schema (7 types)   | `applySchemaActions()`             | Partially exists — `evolution/schema-action-applier.ts` handles 5 of 7 |
+| Normalization (2)  | `applySchemaActions()`             | Exists — handled in same reducer                                       |
+| Category (2)       | `applyCategoryActions()`           | New                                                                    |
+| Crawl (3)          | No-op — produced inline by workers | N/A                                                                    |
+| Reconciliation (6) | `applyReconciliationActions()`     | New                                                                    |
+| Reprocessing (1)   | Enqueue reprocessing jobs          | New                                                                    |
+| Finalization (4)   | `applyFinalizationActions()`       | New                                                                    |
 
 **Schema-action-applier gap:** The existing `applySchemaActions()` handles `add_field`, `remove_field`, `modify_field`, `rename_field`, `merge_fields`, `set_normalization_rule`, and `update_enum_map`. It does **not** handle `split_field` or `group_fields` — these fall through to the default case and are silently skipped. As part of 11b, add `split_field` and `group_fields` cases to the applier:
 
@@ -317,13 +319,19 @@ After 11b, workers can optionally route actions through the `ActionExecutor`:
 
 ```typescript
 type WSMessage =
-  | { type: 'crawl_progress'; data: { pagesFound: number; pagesCrawled: number; pagesExtracted: number } }
+  | {
+      type: 'crawl_progress';
+      data: { pagesFound: number; pagesCrawled: number; pagesExtracted: number };
+    }
   | { type: 'task_completed'; data: { taskId: string; url: string; classification: string } }
-  | { type: 'schema_evolved'; data: { version: number; fieldsAdded: string[]; fieldsMerged: string[] } }
+  | {
+      type: 'schema_evolved';
+      data: { version: number; fieldsAdded: string[]; fieldsMerged: string[] };
+    }
   | { type: 'action_pending'; data: { actionId: string; type: string; confidence: number } }
   | { type: 'job_status_changed'; data: { from: string; to: string } }
   | { type: 'entity_created'; data: { entityId: string; name: string } }
-  | { type: 'error'; data: { message: string } }
+  | { type: 'error'; data: { message: string } };
 ```
 
 **Architecture: Redis Pub/Sub.**
@@ -358,7 +366,12 @@ Workers must not know about WebSocket connections. Two options were considered:
 interface LinkEvaluator {
   evaluate(
     links: ExtractedLink[],
-    jobContext: { description: string; seedDomains: string[]; currentDepth: number; maxDepth: number },
+    jobContext: {
+      description: string;
+      seedDomains: string[];
+      currentDepth: number;
+      maxDepth: number;
+    },
     schema: SchemaDefinition,
   ): Promise<EvaluatedLink[]>;
 }
@@ -368,7 +381,7 @@ interface LinkEvaluator {
 
 ```typescript
 {
-  relevanceScore: number;       // 0-1
+  relevanceScore: number; // 0-1
   expectedContent: 'single_entry' | 'listing' | 'pagination' | 'category' | 'unknown';
   priority: 'high' | 'medium' | 'low';
   reasoning: string;
@@ -429,7 +442,7 @@ Cascading delete in a single transaction. Due to the circular FK between `jobs.s
 **File:** `apps/api/src/schemas/job.ts` — Add `offset` to `listJobsQuerySchema`:
 
 ```typescript
-offset: z.coerce.number().int().min(0).default(0)
+offset: z.coerce.number().int().min(0).default(0);
 ```
 
 **File:** `apps/api/src/routes/extractions.ts` — Refactor inline extraction query to use the shared `paginationSchema` from `schemas/pagination.ts` (which already has `limit` and `offset`), extended with `schemaVersion`.
@@ -481,13 +494,13 @@ Currently the tenant header (`x-tenant-id`) is trusted blindly. The tenant repo 
 
 Add missing error types extending `SpatulaError`:
 
-| New Type | Purpose |
-|----------|---------|
-| `QueueError` | Queue processing failures (workers, job lifecycle) |
-| `TimeoutError` | Crawl timeouts, LLM timeouts |
-| `RateLimitError` | LLM rate limiting, crawl rate limiting |
-| `NetworkError` | Connection failures to external services |
-| `StateError` | Invalid state transitions |
+| New Type         | Purpose                                            |
+| ---------------- | -------------------------------------------------- |
+| `QueueError`     | Queue processing failures (workers, job lifecycle) |
+| `TimeoutError`   | Crawl timeouts, LLM timeouts                       |
+| `RateLimitError` | LLM rate limiting, crawl rate limiting             |
+| `NetworkError`   | Connection failures to external services           |
+| `StateError`     | Invalid state transitions                          |
 
 **Migration:** Move `InvalidTransitionError` from `packages/queue/src/state-machine.ts` into shared as `StateError extends SpatulaError`. The current `InvalidTransitionError` stores `from` and `to` properties — the new `StateError` preserves these via the `context` field that `SpatulaError` already supports: `new StateError('Invalid transition', 'STATE_INVALID_TRANSITION', { context: { from, to } })`. Update state-machine.ts to import from `@spatula/shared`.
 
@@ -499,13 +512,13 @@ Add missing error types extending `SpatulaError`:
 
 **API error handler update** (`apps/api/src/middleware/error-handler.ts`):
 
-| Error Type | HTTP Status |
-|-----------|-------------|
-| `QueueError` | 503 Service Unavailable |
-| `TimeoutError` | 504 Gateway Timeout |
-| `RateLimitError` | 429 Too Many Requests |
-| `NetworkError` | 502 Bad Gateway |
-| `StateError` | 409 Conflict |
+| Error Type       | HTTP Status             |
+| ---------------- | ----------------------- |
+| `QueueError`     | 503 Service Unavailable |
+| `TimeoutError`   | 504 Gateway Timeout     |
+| `RateLimitError` | 429 Too Many Requests   |
+| `NetworkError`   | 502 Bad Gateway         |
+| `StateError`     | 409 Conflict            |
 
 ### 11e.2 Centralized Config Validation
 
@@ -566,11 +579,11 @@ Creates a Pino child logger with context fields included in every log line.
 
 All implement the existing `Exporter` interface.
 
-| Exporter | Dependency | Output | Use Case |
-|----------|-----------|--------|----------|
-| Parquet | `parquet-wasm` or `hyparquet` | Binary `.parquet` | Analytics (DuckDB, Pandas, Spark) |
-| DuckDB | `duckdb` (Node.js bindings) | Binary `.duckdb` | Immediate SQL querying |
-| SQLite | `better-sqlite3` | Binary `.sqlite` | Most portable format |
+| Exporter | Dependency                    | Output            | Use Case                          |
+| -------- | ----------------------------- | ----------------- | --------------------------------- |
+| Parquet  | `parquet-wasm` or `hyparquet` | Binary `.parquet` | Analytics (DuckDB, Pandas, Spark) |
+| DuckDB   | `duckdb` (Node.js bindings)   | Binary `.duckdb`  | Immediate SQL querying            |
+| SQLite   | `better-sqlite3`              | Binary `.sqlite`  | Most portable format              |
 
 **Shared utility:** `packages/core/src/exporters/column-mapper.ts` — maps `SchemaDefinition` field types to native column types for each target format.
 

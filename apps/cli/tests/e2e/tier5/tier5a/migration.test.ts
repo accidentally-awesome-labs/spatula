@@ -83,9 +83,7 @@ describe('Tier 5A -- Migration (Test 23)', () => {
     }
 
     // 3. Query the row back and verify it survived the migration run
-    const queryResult = await db.execute(
-      sql`SELECT id, name FROM tenants WHERE id = ${tenantId}`,
-    );
+    const queryResult = await db.execute(sql`SELECT id, name FROM tenants WHERE id = ${tenantId}`);
 
     const queriedRow = queryResult.rows?.[0] ?? queryResult[0];
     expect(queriedRow).toBeDefined();

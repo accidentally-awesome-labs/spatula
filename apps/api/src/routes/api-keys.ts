@@ -35,7 +35,10 @@ const createKeyRoute = createRoute({
     },
   },
   responses: {
-    201: jsonContent(dataResponse(apiKeyCreatedResponseSchema), 'API key created (raw key shown once)'),
+    201: jsonContent(
+      dataResponse(apiKeyCreatedResponseSchema),
+      'API key created (raw key shown once)',
+    ),
     400: jsonContent(errorResponseSchema, 'Validation error'),
   },
 });

@@ -9,6 +9,7 @@
 **Tech Stack:** TypeScript, Hono, ioredis, Drizzle ORM (Postgres), Vitest
 
 **Spec references:**
+
 - Phase 12 spec: sections 5.4-5.5, 7.5-7.6
 - File: `docs/superpowers/specs/2026-03-21-phase-12-production-readiness-design.md`
 - Decomposition: `docs/superpowers/specs/2026-03-25-wave-3-decomposition-design.md` section 4.6
@@ -21,34 +22,35 @@
 
 ### New Files
 
-| File | Responsibility |
-|------|---------------|
-| `apps/api/src/middleware/idempotency.ts` | Idempotency middleware (Redis-backed) |
-| `apps/api/src/routes/admin-workers.ts` | `GET /api/v1/admin/workers` endpoint |
-| `apps/api/src/routes/quality.ts` | `GET /api/v1/jobs/:id/quality` endpoint |
-| `packages/queue/src/worker-heartbeat.ts` | Heartbeat writer (setInterval + Redis) |
-| `apps/api/tests/unit/middleware/idempotency.test.ts` | Idempotency tests |
-| `apps/api/tests/unit/routes/admin-workers.test.ts` | Worker health tests |
-| `apps/api/tests/unit/routes/quality.test.ts` | Quality aggregation tests |
+| File                                                 | Responsibility                          |
+| ---------------------------------------------------- | --------------------------------------- |
+| `apps/api/src/middleware/idempotency.ts`             | Idempotency middleware (Redis-backed)   |
+| `apps/api/src/routes/admin-workers.ts`               | `GET /api/v1/admin/workers` endpoint    |
+| `apps/api/src/routes/quality.ts`                     | `GET /api/v1/jobs/:id/quality` endpoint |
+| `packages/queue/src/worker-heartbeat.ts`             | Heartbeat writer (setInterval + Redis)  |
+| `apps/api/tests/unit/middleware/idempotency.test.ts` | Idempotency tests                       |
+| `apps/api/tests/unit/routes/admin-workers.test.ts`   | Worker health tests                     |
+| `apps/api/tests/unit/routes/quality.test.ts`         | Quality aggregation tests               |
 
 ### Modified Files
 
-| File | Change |
-|------|--------|
-| `apps/api/src/app.ts` | Mount idempotency middleware, quality route, workers route |
-| `apps/api/src/schemas/export-request.ts` | Add `minQuality` and `fields` params |
-| `apps/api/src/routes/exports.ts` | Pass filtering params to export orchestrator |
-| `packages/core/src/pipeline/export-orchestrator.ts` | Apply minQuality filter + fields projection |
-| `packages/core/src/pipeline/entity-cursor.ts` | Accept `minQuality` filter |
-| `packages/queue/src/worker-entrypoint.ts` | Start/stop heartbeat |
-| `packages/queue/src/queues.ts` | Add `minQuality` + `fields` to `ExportJobPayload` |
-| `packages/queue/src/index.ts` | Export heartbeat |
+| File                                                | Change                                                     |
+| --------------------------------------------------- | ---------------------------------------------------------- |
+| `apps/api/src/app.ts`                               | Mount idempotency middleware, quality route, workers route |
+| `apps/api/src/schemas/export-request.ts`            | Add `minQuality` and `fields` params                       |
+| `apps/api/src/routes/exports.ts`                    | Pass filtering params to export orchestrator               |
+| `packages/core/src/pipeline/export-orchestrator.ts` | Apply minQuality filter + fields projection                |
+| `packages/core/src/pipeline/entity-cursor.ts`       | Accept `minQuality` filter                                 |
+| `packages/queue/src/worker-entrypoint.ts`           | Start/stop heartbeat                                       |
+| `packages/queue/src/queues.ts`                      | Add `minQuality` + `fields` to `ExportJobPayload`          |
+| `packages/queue/src/index.ts`                       | Export heartbeat                                           |
 
 ---
 
 ## Task 1: Idempotency Middleware
 
 **Files:**
+
 - Create: `apps/api/src/middleware/idempotency.ts`
 - Create: `apps/api/tests/unit/middleware/idempotency.test.ts`
 
@@ -191,7 +193,12 @@ export function idempotencyMiddleware(): MiddlewareHandler {
       if (status < 200 || status >= 300) return; // Don't cache non-2xx
       const cloned = c.res.clone();
       const body = await cloned.json();
-      await redis.set(cacheKey, JSON.stringify({ statusCode: status, body }), 'EX', IDEMPOTENCY_TTL);
+      await redis.set(
+        cacheKey,
+        JSON.stringify({ statusCode: status, body }),
+        'EX',
+        IDEMPOTENCY_TTL,
+      );
     } catch (err) {
       logger.warn({ err, cacheKey }, 'Idempotency cache write failed');
     }
@@ -217,6 +224,7 @@ git commit -m "feat(api): add idempotency middleware with Redis-backed 24hr cach
 ## Task 2: Worker Health Monitoring — Heartbeat Writer
 
 **Files:**
+
 - Create: `packages/queue/src/worker-heartbeat.ts`
 - Modify: `packages/queue/src/worker-entrypoint.ts`
 - Modify: `packages/queue/src/index.ts`
@@ -297,6 +305,7 @@ export class WorkerHeartbeat {
 Read `packages/queue/src/worker-entrypoint.ts`. Add heartbeat start before the shutdown handler, and stop in the shutdown handler.
 
 After the workers are created and before the shutdown handler:
+
 ```typescript
 import { WorkerHeartbeat } from './worker-heartbeat.js';
 
@@ -311,8 +320,9 @@ heartbeat.start();
 **Note:** Reuse `redisForLock` (already created at line 42) rather than creating a new Redis connection. This avoids connection management issues and ensures the heartbeat is cleaned up when `redisForLock` is quit during shutdown.
 
 In the shutdown handler, add:
+
 ```typescript
-    heartbeat.stop();
+heartbeat.stop();
 ```
 
 - [ ] **Step 3: Write heartbeat tests**
@@ -329,7 +339,11 @@ describe('WorkerHeartbeat', () => {
 
   beforeEach(() => {
     vi.useFakeTimers();
-    mockRedis = { set: vi.fn().mockResolvedValue('OK'), del: vi.fn().mockResolvedValue(1), quit: vi.fn().mockResolvedValue('OK') };
+    mockRedis = {
+      set: vi.fn().mockResolvedValue('OK'),
+      del: vi.fn().mockResolvedValue(1),
+      quit: vi.fn().mockResolvedValue('OK'),
+    };
     heartbeat = new WorkerHeartbeat({ redis: mockRedis, queues: ['spatula.crawl'] });
   });
 
@@ -367,6 +381,7 @@ describe('WorkerHeartbeat', () => {
 - [ ] **Step 4: Export from barrel**
 
 Add to `packages/queue/src/index.ts`:
+
 ```typescript
 export { WorkerHeartbeat } from './worker-heartbeat.js';
 export type { HeartbeatConfig } from './worker-heartbeat.js';
@@ -390,6 +405,7 @@ git commit -m "feat(queue): add worker heartbeat with Redis TTL for health monit
 ## Task 3: Worker Health Monitoring — Admin Endpoint
 
 **Files:**
+
 - Create: `apps/api/src/routes/admin-workers.ts`
 - Create: `apps/api/tests/unit/routes/admin-workers.test.ts`
 
@@ -424,16 +440,17 @@ describe('Admin worker routes', () => {
   });
 
   it('returns list of healthy workers', async () => {
-    mockRedis.scan
-      .mockResolvedValueOnce(['0', ['worker:heartbeat:host1-1234']])
-    mockRedis.get.mockResolvedValue(JSON.stringify({
-      workerId: 'host1-1234',
-      queues: ['spatula.crawl'],
-      pid: 1234,
-      uptime: 3600,
-      activeJobs: 2,
-      lastBeat: new Date().toISOString(),
-    }));
+    mockRedis.scan.mockResolvedValueOnce(['0', ['worker:heartbeat:host1-1234']]);
+    mockRedis.get.mockResolvedValue(
+      JSON.stringify({
+        workerId: 'host1-1234',
+        queues: ['spatula.crawl'],
+        pid: 1234,
+        uptime: 3600,
+        activeJobs: 2,
+        lastBeat: new Date().toISOString(),
+      }),
+    );
 
     const app = createTestApp(mockRedis);
     const res = await app.request('/api/v1/admin/workers');
@@ -477,15 +494,17 @@ const listWorkersRoute = createRoute({
   responses: {
     200: jsonContent(
       z.object({
-        data: z.array(z.object({
-          workerId: z.string(),
-          queues: z.array(z.string()),
-          pid: z.number(),
-          uptime: z.number(),
-          activeJobs: z.number(),
-          lastBeat: z.string(),
-          status: z.enum(['healthy', 'unhealthy']),
-        })),
+        data: z.array(
+          z.object({
+            workerId: z.string(),
+            queues: z.array(z.string()),
+            pid: z.number(),
+            uptime: z.number(),
+            activeJobs: z.number(),
+            lastBeat: z.string(),
+            status: z.enum(['healthy', 'unhealthy']),
+          }),
+        ),
       }),
       'Worker list',
     ),
@@ -506,7 +525,13 @@ export function adminWorkerRoutes() {
     let cursor = '0';
 
     do {
-      const [nextCursor, keys] = await deps.redis.scan(cursor, 'MATCH', 'worker:heartbeat:*', 'COUNT', 100);
+      const [nextCursor, keys] = await deps.redis.scan(
+        cursor,
+        'MATCH',
+        'worker:heartbeat:*',
+        'COUNT',
+        100,
+      );
       cursor = nextCursor;
 
       for (const key of keys) {
@@ -515,7 +540,9 @@ export function adminWorkerRoutes() {
           try {
             const data = JSON.parse(value);
             workers.push({ ...data, status: 'healthy' });
-          } catch { /* skip malformed */ }
+          } catch {
+            /* skip malformed */
+          }
         }
       }
     } while (cursor !== '0');
@@ -548,6 +575,7 @@ git commit -m "feat(api): add GET /api/v1/admin/workers endpoint for worker heal
 ## Task 4: Quality Score Aggregation API
 
 **Files:**
+
 - Create: `apps/api/src/routes/quality.ts`
 - Create: `apps/api/tests/unit/routes/quality.test.ts`
 
@@ -741,6 +769,7 @@ git commit -m "feat(api): add GET /api/v1/jobs/:id/quality for quality score agg
 ## Task 5: Confidence-Based Export Filtering
 
 **Files:**
+
 - Modify: `apps/api/src/schemas/export-request.ts`
 - Modify: `packages/core/src/pipeline/export-orchestrator.ts`
 - Modify: `packages/core/src/pipeline/entity-cursor.ts`
@@ -755,13 +784,18 @@ export const exportRequestSchema = z.object({
   format: z.enum(['json', 'csv', 'parquet', 'duckdb', 'sqlite']),
   includeProvenance: z.boolean().default(false),
   minQuality: z.number().min(0).max(1).optional().openapi({
-    description: 'Minimum quality score filter (0-1). Only entities with quality_score >= this value are included.',
+    description:
+      'Minimum quality score filter (0-1). Only entities with quality_score >= this value are included.',
     example: 0.7,
   }),
-  fields: z.array(z.string()).optional().openapi({
-    description: 'Subset of fields to include in the export. If omitted, all fields are included.',
-    example: ['name', 'price', 'description'],
-  }),
+  fields: z
+    .array(z.string())
+    .optional()
+    .openapi({
+      description:
+        'Subset of fields to include in the export. If omitted, all fields are included.',
+      example: ['name', 'price', 'description'],
+    }),
 });
 ```
 
@@ -804,7 +838,13 @@ export async function* fetchEntitiesCursor(
 ): AsyncIterable<unknown[]> {
   let cursor: string | undefined;
   while (true) {
-    const batch = await entityRepo.findByJobCursor(jobId, tenantId, batchSize, cursor, options?.minQuality);
+    const batch = await entityRepo.findByJobCursor(
+      jobId,
+      tenantId,
+      batchSize,
+      cursor,
+      options?.minQuality,
+    );
     if (batch.entities.length === 0) break;
     yield batch.entities;
     if (!batch.nextCursor) break;
@@ -831,10 +871,11 @@ Read `packages/db/src/repositories/entity-repository.ts`. Update `findByJobCurso
 ```
 
 Add:
+
 ```typescript
-      if (minQuality !== undefined) {
-        conditions.push(sql`${entities.qualityScore} >= ${minQuality}`);
-      }
+if (minQuality !== undefined) {
+  conditions.push(sql`${entities.qualityScore} >= ${minQuality}`);
+}
 ```
 
 - [ ] **Step 5: Apply minQuality and fields in export orchestrator**
@@ -842,27 +883,30 @@ Add:
 Read `packages/core/src/pipeline/export-orchestrator.ts`. The `processExport` function receives `ExportInput` which now has `minQuality` and `fields`.
 
 For `minQuality`: pass to `fetchEntitiesCursor`:
+
 ```typescript
-const entityStream = fetchEntitiesCursor(deps.entityRepo as any, jobId, tenantId, 500, { minQuality: input.minQuality });
+const entityStream = fetchEntitiesCursor(deps.entityRepo as any, jobId, tenantId, 500, {
+  minQuality: input.minQuality,
+});
 ```
 
 For `fields`: apply field projection to each entity before passing to the exporter. For streaming JSON/CSV, wrap the entity stream with a projection:
 
 ```typescript
-    async function* projectedStream() {
-      for await (const batch of countedEntityStream()) {
-        if (input.fields) {
-          yield batch.map((entity: any) => ({
-            ...entity,
-            mergedData: Object.fromEntries(
-              input.fields!.map((f) => [f, (entity.mergedData ?? entity)[f]]),
-            ),
-          }));
-        } else {
-          yield batch;
-        }
-      }
+async function* projectedStream() {
+  for await (const batch of countedEntityStream()) {
+    if (input.fields) {
+      yield batch.map((entity: any) => ({
+        ...entity,
+        mergedData: Object.fromEntries(
+          input.fields!.map((f) => [f, (entity.mergedData ?? entity)[f]]),
+        ),
+      }));
+    } else {
+      yield batch;
     }
+  }
+}
 ```
 
 Also apply fields projection in the offset/binary path when collecting entities.
@@ -882,8 +926,8 @@ export interface ExportJobPayload {
   tenantId: string;
   format: 'json' | 'csv' | 'parquet' | 'duckdb' | 'sqlite';
   includeProvenance: boolean;
-  minQuality?: number;   // NEW
-  fields?: string[];     // NEW
+  minQuality?: number; // NEW
+  fields?: string[]; // NEW
 }
 ```
 
@@ -900,9 +944,11 @@ All existing export orchestrator tests must pass. The new params are optional so
 - [ ] **Step 8: Add export filtering tests**
 
 Add tests to `packages/core/tests/unit/pipeline/entity-cursor.test.ts`:
+
 - `fetchEntitiesCursor` with `minQuality` option passes it to `findByJobCursor`
 
 Add test to `packages/core/tests/unit/pipeline/export-orchestrator.test.ts`:
+
 - Export with `minQuality` passes filter to entity cursor
 - Export with `fields` applies field projection to output
 
@@ -918,11 +964,13 @@ git commit -m "feat: add confidence-based export filtering with minQuality and f
 ## Task 6: Wire into App + Integration Verification
 
 **Files:**
+
 - Modify: `apps/api/src/app.ts`
 
 - [ ] **Step 1: Wire idempotency middleware into app.ts**
 
 Read `apps/api/src/app.ts`. Add import:
+
 ```typescript
 import { idempotencyMiddleware } from './middleware/idempotency.js';
 import { qualityRoutes } from './routes/quality.js';
@@ -930,26 +978,30 @@ import { adminWorkerRoutes } from './routes/admin-workers.js';
 ```
 
 Add `'Idempotency-Key'` to the CORS `allowHeaders` array (find the existing `cors()` call and add it):
+
 ```typescript
   allowHeaders: ['Authorization', 'Content-Type', 'X-Request-Id', 'X-Tenant-Id', 'Idempotency-Key'],
 ```
 
 Add idempotency middleware after rate limiting (per decomposition spec middleware chain order):
+
 ```typescript
-  // Idempotency (after rate limiting, before routes)
-  app.use('/api/*', idempotencyMiddleware());
+// Idempotency (after rate limiting, before routes)
+app.use('/api/*', idempotencyMiddleware());
 ```
 
 Add quality route:
+
 ```typescript
-  // Quality aggregation
-  app.get('/api/v1/jobs/:jobId/quality', requireScope('jobs:read'));
-  app.route('/api/v1/jobs/:jobId/quality', qualityRoutes());
+// Quality aggregation
+app.get('/api/v1/jobs/:jobId/quality', requireScope('jobs:read'));
+app.route('/api/v1/jobs/:jobId/quality', qualityRoutes());
 ```
 
 Add workers route (under existing admin scope):
+
 ```typescript
-  app.route('/api/v1/admin/workers', adminWorkerRoutes());
+app.route('/api/v1/admin/workers', adminWorkerRoutes());
 ```
 
 - [ ] **Step 2: Run ALL tests**

@@ -61,31 +61,23 @@ describe('ExplorerView', () => {
   });
 
   it('shows no-active-job message when activeJobId is null', async () => {
-    const { ExplorerView } = await import(
-      '../../../../src/components/explorer/ExplorerView.js'
-    );
+    const { ExplorerView } = await import('../../../../src/components/explorer/ExplorerView.js');
 
-    const { lastFrame } = render(
-      <ExplorerView store={store} backend={apiClient} />,
-    );
+    const { lastFrame } = render(<ExplorerView store={store} backend={apiClient} />);
     const frame = lastFrame()!;
 
     expect(frame).toContain('No active job');
   });
 
   it('renders empty state when no entities', async () => {
-    const { ExplorerView } = await import(
-      '../../../../src/components/explorer/ExplorerView.js'
-    );
+    const { ExplorerView } = await import('../../../../src/components/explorer/ExplorerView.js');
 
     const state = store.getState();
     state.setActiveJobId('job-test-1234');
     state.setEntities([]);
     state.setTotalEntityCount(0);
 
-    const { lastFrame } = render(
-      <ExplorerView store={store} backend={apiClient} />,
-    );
+    const { lastFrame } = render(<ExplorerView store={store} backend={apiClient} />);
     const frame = lastFrame()!;
 
     // DataTable shows "No entities found" when entities is empty
@@ -95,9 +87,7 @@ describe('ExplorerView', () => {
   });
 
   it('renders data table when entities are present', async () => {
-    const { ExplorerView } = await import(
-      '../../../../src/components/explorer/ExplorerView.js'
-    );
+    const { ExplorerView } = await import('../../../../src/components/explorer/ExplorerView.js');
 
     const state = store.getState();
     state.setActiveJobId('job-table-test');
@@ -130,9 +120,7 @@ describe('ExplorerView', () => {
       ],
     });
 
-    const { lastFrame } = render(
-      <ExplorerView store={store} backend={apiClient} />,
-    );
+    const { lastFrame } = render(<ExplorerView store={store} backend={apiClient} />);
     const frame = lastFrame()!;
 
     expect(frame).toContain('Widget A');
@@ -142,9 +130,7 @@ describe('ExplorerView', () => {
   });
 
   it('extracts schema fields from nested definition.fields', async () => {
-    const { ExplorerView } = await import(
-      '../../../../src/components/explorer/ExplorerView.js'
-    );
+    const { ExplorerView } = await import('../../../../src/components/explorer/ExplorerView.js');
 
     const state = store.getState();
     state.setActiveJobId('job-schema-nested');
@@ -169,9 +155,7 @@ describe('ExplorerView', () => {
       },
     });
 
-    const { lastFrame } = render(
-      <ExplorerView store={store} backend={apiClient} />,
-    );
+    const { lastFrame } = render(<ExplorerView store={store} backend={apiClient} />);
     const frame = lastFrame()!;
 
     // The column header should include the extracted field name
@@ -180,16 +164,12 @@ describe('ExplorerView', () => {
   });
 
   it('renders keyboard hints for table view', async () => {
-    const { ExplorerView } = await import(
-      '../../../../src/components/explorer/ExplorerView.js'
-    );
+    const { ExplorerView } = await import('../../../../src/components/explorer/ExplorerView.js');
 
     const state = store.getState();
     state.setActiveJobId('job-hints-test');
 
-    const { lastFrame } = render(
-      <ExplorerView store={store} backend={apiClient} />,
-    );
+    const { lastFrame } = render(<ExplorerView store={store} backend={apiClient} />);
     const frame = lastFrame()!;
 
     expect(frame).toContain('Navigate');

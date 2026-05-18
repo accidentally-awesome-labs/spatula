@@ -36,7 +36,12 @@ export function createWebhookWorker(connection: ConnectionOptions): Worker<Webho
 
   worker.on('failed', (job, err) => {
     logger.warn(
-      { jobId: job?.id, eventId: job?.data.event.id, error: err.message, attempt: job?.attemptsMade },
+      {
+        jobId: job?.id,
+        eventId: job?.data.event.id,
+        error: err.message,
+        attempt: job?.attemptsMade,
+      },
       'webhook delivery failed',
     );
   });

@@ -32,30 +32,39 @@ export function SchemaConflict({ diff, onResolve }: SchemaConflictProps) {
 
       {diff.localOnly.length > 0 && (
         <Box flexDirection="column">
-          <Text dimColor>  Local only:</Text>
+          <Text dimColor> Local only:</Text>
           {diff.localOnly.map((f) => (
-            <Text key={f.name} color="yellow">    - {f.name} ({f.type})</Text>
+            <Text key={f.name} color="yellow">
+              {' '}
+              - {f.name} ({f.type})
+            </Text>
           ))}
         </Box>
       )}
 
       {diff.remoteOnly.length > 0 && (
         <Box flexDirection="column">
-          <Text dimColor>  Remote only:</Text>
+          <Text dimColor> Remote only:</Text>
           {diff.remoteOnly.map((f) => (
-            <Text key={f.name} color="green">    + {f.name} ({f.type})</Text>
+            <Text key={f.name} color="green">
+              {' '}
+              + {f.name} ({f.type})
+            </Text>
           ))}
         </Box>
       )}
 
       {diff.changed.length > 0 && (
         <Box flexDirection="column">
-          <Text dimColor>  Changed:</Text>
+          <Text dimColor> Changed:</Text>
           {diff.changed.map((c) => (
             <Box key={c.name} flexDirection="column">
-              <Text color="cyan">    ~ {c.name}</Text>
+              <Text color="cyan"> ~ {c.name}</Text>
               {c.differences.map((d, i) => (
-                <Text key={i} dimColor>      {d}</Text>
+                <Text key={i} dimColor>
+                  {' '}
+                  {d}
+                </Text>
               ))}
             </Box>
           ))}
@@ -67,7 +76,9 @@ export function SchemaConflict({ diff, onResolve }: SchemaConflictProps) {
       {options.map((opt, i) => (
         <Text key={opt.key}>
           {i === selected ? ' ❯ ' : '   '}
-          <Text bold={i === selected}>[{i + 1}] {opt.label}</Text>
+          <Text bold={i === selected}>
+            [{i + 1}] {opt.label}
+          </Text>
           <Text dimColor> — {opt.desc}</Text>
         </Text>
       ))}

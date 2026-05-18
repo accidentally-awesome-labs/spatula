@@ -14,57 +14,58 @@
 
 ### New Files
 
-| File | Responsibility |
-|------|---------------|
-| `apps/cli/src/local-project.ts` | `openLocalProject(cwd)` shared utility + `slugifyPath()` |
-| `packages/core/src/extraction/css-extractor.ts` | CSS-only extraction using auto-detected selectors |
-| `packages/core/src/diagnostics/project-checks.ts` | 8 project-level health checks |
-| `apps/cli/src/commands/add.ts` | `spatula add <url>` — add seed URLs |
-| `apps/cli/src/commands/config.ts` | `spatula config` — open spatula.yaml in editor |
-| `apps/cli/src/commands/setup.ts` | `spatula setup` — global config editor |
-| `apps/cli/src/commands/estimate.ts` | `spatula estimate` — cost estimation |
+| File                                              | Responsibility                                           |
+| ------------------------------------------------- | -------------------------------------------------------- |
+| `apps/cli/src/local-project.ts`                   | `openLocalProject(cwd)` shared utility + `slugifyPath()` |
+| `packages/core/src/extraction/css-extractor.ts`   | CSS-only extraction using auto-detected selectors        |
+| `packages/core/src/diagnostics/project-checks.ts` | 8 project-level health checks                            |
+| `apps/cli/src/commands/add.ts`                    | `spatula add <url>` — add seed URLs                      |
+| `apps/cli/src/commands/config.ts`                 | `spatula config` — open spatula.yaml in editor           |
+| `apps/cli/src/commands/setup.ts`                  | `spatula setup` — global config editor                   |
+| `apps/cli/src/commands/estimate.ts`               | `spatula estimate` — cost estimation                     |
 
 ### Modified Files
 
-| File | Change |
-|------|--------|
-| `apps/cli/src/hooks/useJobPolling.ts` | Accept `DataSource \| SpatulaApiClient` |
-| `apps/cli/src/hooks/useEntityData.ts` | Accept `DataSource \| SpatulaApiClient` |
-| `apps/cli/src/hooks/useEntityFilter.ts` | Accept `DataSource \| SpatulaApiClient` |
-| `apps/cli/src/hooks/useExport.ts` | Accept `DataSource \| SpatulaApiClient` |
-| `apps/cli/src/commands/status.ts` | Use `openLocalProject` instead of inline setup |
-| `apps/cli/src/commands/run.ts` | Use `slugifyPath` from local-project.ts, remove local `slugify()` |
-| `apps/cli/src/commands/test-url.ts` | Wire CSS extractor for `--skip-llm` + auto-fallback |
-| `apps/cli/src/commands/new.tsx` | Local mode when no `--api-url` — write spatula.yaml |
-| `apps/cli/src/commands/list.ts` | Add deprecation warning |
-| `apps/cli/src/index.tsx` | Register new commands, wire deprecation for status |
-| `packages/core/src/extraction/index.ts` | Export `CssExtractor` |
-| `packages/core/src/diagnostics/index.ts` | Export project checks |
+| File                                     | Change                                                            |
+| ---------------------------------------- | ----------------------------------------------------------------- |
+| `apps/cli/src/hooks/useJobPolling.ts`    | Accept `DataSource \| SpatulaApiClient`                           |
+| `apps/cli/src/hooks/useEntityData.ts`    | Accept `DataSource \| SpatulaApiClient`                           |
+| `apps/cli/src/hooks/useEntityFilter.ts`  | Accept `DataSource \| SpatulaApiClient`                           |
+| `apps/cli/src/hooks/useExport.ts`        | Accept `DataSource \| SpatulaApiClient`                           |
+| `apps/cli/src/commands/status.ts`        | Use `openLocalProject` instead of inline setup                    |
+| `apps/cli/src/commands/run.ts`           | Use `slugifyPath` from local-project.ts, remove local `slugify()` |
+| `apps/cli/src/commands/test-url.ts`      | Wire CSS extractor for `--skip-llm` + auto-fallback               |
+| `apps/cli/src/commands/new.tsx`          | Local mode when no `--api-url` — write spatula.yaml               |
+| `apps/cli/src/commands/list.ts`          | Add deprecation warning                                           |
+| `apps/cli/src/index.tsx`                 | Register new commands, wire deprecation for status                |
+| `packages/core/src/extraction/index.ts`  | Export `CssExtractor`                                             |
+| `packages/core/src/diagnostics/index.ts` | Export project checks                                             |
 
 ### Test Files
 
-| File | Tests |
-|------|-------|
-| `apps/cli/tests/unit/local-project.test.ts` | openLocalProject, slugifyPath, error cases |
-| `apps/cli/tests/unit/hooks/useJobPolling.test.ts` | Type guard, fetchFromDataSource calls + store population, error handling |
-| `apps/cli/tests/unit/hooks/useEntityData.test.ts` | Type guard, DataSource pagination, fetchEntity single-arg vs two-arg |
-| `apps/cli/tests/unit/hooks/useEntityFilter.test.ts` | Local filter pure function, null values |
-| `apps/cli/tests/unit/hooks/useExport.test.ts` | exportFromDataSource batch fetch, single batch, multi-batch, JSON/CSV output |
-| `packages/core/tests/unit/extraction/css-extractor.test.ts` | Headings, prices, images, links, discovery, relative URLs, malformed HTML, lists, confidence cap |
+| File                                                          | Tests                                                                                                  |
+| ------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------ |
+| `apps/cli/tests/unit/local-project.test.ts`                   | openLocalProject, slugifyPath, error cases                                                             |
+| `apps/cli/tests/unit/hooks/useJobPolling.test.ts`             | Type guard, fetchFromDataSource calls + store population, error handling                               |
+| `apps/cli/tests/unit/hooks/useEntityData.test.ts`             | Type guard, DataSource pagination, fetchEntity single-arg vs two-arg                                   |
+| `apps/cli/tests/unit/hooks/useEntityFilter.test.ts`           | Local filter pure function, null values                                                                |
+| `apps/cli/tests/unit/hooks/useExport.test.ts`                 | exportFromDataSource batch fetch, single batch, multi-batch, JSON/CSV output                           |
+| `packages/core/tests/unit/extraction/css-extractor.test.ts`   | Headings, prices, images, links, discovery, relative URLs, malformed HTML, lists, confidence cap       |
 | `packages/core/tests/unit/diagnostics/project-checks.test.ts` | All 8 checks: YAML, DB integrity, WAL, orphaned tasks, pages, pending actions, disk usage, remote link |
-| `apps/cli/tests/unit/commands/add.test.ts` | URL validation, dedup, normalization, intra-batch dedup |
-| `apps/cli/tests/unit/commands/config.test.ts` | Editor resolution ($EDITOR, $VISUAL, vi fallback) |
-| `apps/cli/tests/unit/commands/setup.test.ts` | buildGlobalConfig for openrouter, ollama, empty fields |
-| `apps/cli/tests/unit/commands/estimate.test.ts` | Cost table formatting, warnings, empty breakdown |
-| `apps/cli/tests/unit/commands/new-local.test.ts` | configToYaml conversion, fields, default omission, round-trip parse |
-| `apps/cli/tests/unit/commands/list-deprecation.test.ts` | Deprecation warning text, remote mention, status alternative |
-| `apps/cli/tests/unit/commands/registration.test.ts` | All 12 commands registered |
+| `apps/cli/tests/unit/commands/add.test.ts`                    | URL validation, dedup, normalization, intra-batch dedup                                                |
+| `apps/cli/tests/unit/commands/config.test.ts`                 | Editor resolution ($EDITOR, $VISUAL, vi fallback)                                                      |
+| `apps/cli/tests/unit/commands/setup.test.ts`                  | buildGlobalConfig for openrouter, ollama, empty fields                                                 |
+| `apps/cli/tests/unit/commands/estimate.test.ts`               | Cost table formatting, warnings, empty breakdown                                                       |
+| `apps/cli/tests/unit/commands/new-local.test.ts`              | configToYaml conversion, fields, default omission, round-trip parse                                    |
+| `apps/cli/tests/unit/commands/list-deprecation.test.ts`       | Deprecation warning text, remote mention, status alternative                                           |
+| `apps/cli/tests/unit/commands/registration.test.ts`           | All 12 commands registered                                                                             |
 
 ---
 
 ## Task 1: Shared Project Utility — `openLocalProject` + `slugifyPath`
 
 **Files:**
+
 - Create: `apps/cli/src/local-project.ts`
 - Create: `apps/cli/tests/unit/local-project.test.ts`
 - Modify: `apps/cli/src/commands/status.ts`
@@ -160,9 +161,7 @@ export async function openLocalProject(cwd: string): Promise<LocalProject> {
   try {
     dbResult = createProjectDb(dbPath);
   } catch (err) {
-    throw new Error(
-      `Failed to open project database at ${dbPath}: ${(err as Error).message}`,
-    );
+    throw new Error(`Failed to open project database at ${dbPath}: ${(err as Error).message}`);
   }
 
   const adapter = new ProjectAdapter(dbResult.db, projectId);
@@ -234,6 +233,7 @@ Remove the `slugifyPath` function (lines 100-111) and the `findProjectRoot`, `cr
 - [ ] **Step 8: Refactor `run.ts` to use shared `slugifyPath`**
 
 In `apps/cli/src/commands/run.ts`, replace:
+
 - Import: add `import { slugifyPath } from '../local-project.js';`
 - Line 76: change `const projectId = slugify(projectRoot);` to `const projectId = slugifyPath(projectRoot);`
 - Remove the local `slugify` function at line 307-314.
@@ -258,6 +258,7 @@ git commit -m "feat(cli): add openLocalProject utility and consolidate slugifyPa
 ## Task 2: Hook Adaptation — `useJobPolling`
 
 **Files:**
+
 - Modify: `apps/cli/src/hooks/useJobPolling.ts`
 - Create: `apps/cli/tests/unit/hooks/useJobPolling.test.ts`
 
@@ -274,7 +275,12 @@ import { isDataSource } from '../../src/hooks/useJobPolling.js';
 
 describe('isDataSource', () => {
   it('returns true for DataSource objects', () => {
-    const ds = { getEntities: vi.fn(), getSchema: vi.fn(), getActions: vi.fn(), getStatus: vi.fn() };
+    const ds = {
+      getEntities: vi.fn(),
+      getSchema: vi.fn(),
+      getActions: vi.fn(),
+      getStatus: vi.fn(),
+    };
     expect(isDataSource(ds)).toBe(true);
   });
 
@@ -288,7 +294,13 @@ describe('fetchFromDataSource', () => {
   it('calls DataSource methods and populates store', async () => {
     const { fetchFromDataSource } = await import('../../src/hooks/useJobPolling.js');
 
-    const mockStatus = { totalPages: 10, totalEntities: 5, pendingActions: 2, schemaFields: 3, storageBytes: { pages: 0, database: 0, exports: 0 } };
+    const mockStatus = {
+      totalPages: 10,
+      totalEntities: 5,
+      pendingActions: 2,
+      schemaFields: 3,
+      storageBytes: { pages: 0, database: 0, exports: 0 },
+    };
     const mockActions = [{ id: 'a1', type: 'add_field', status: 'pending_review' }];
     const mockSchema = { version: 1, fields: [] };
     const mockEntities = { data: [{ id: 'e1', mergedData: {} }], total: 1 };
@@ -329,7 +341,13 @@ describe('fetchFromDataSource', () => {
     const { fetchFromDataSource } = await import('../../src/hooks/useJobPolling.js');
 
     const ds: Partial<DataSource> = {
-      getStatus: vi.fn().mockResolvedValue({ totalPages: 0, totalEntities: 0, pendingActions: 0, schemaFields: 0, storageBytes: { pages: 0, database: 0, exports: 0 } }),
+      getStatus: vi.fn().mockResolvedValue({
+        totalPages: 0,
+        totalEntities: 0,
+        pendingActions: 0,
+        schemaFields: 0,
+        storageBytes: { pages: 0, database: 0, exports: 0 },
+      }),
       getActions: vi.fn().mockResolvedValue([]),
       getSchema: vi.fn().mockRejectedValue(new Error('No schema')),
       getEntities: vi.fn().mockResolvedValue({ data: [], total: 0 }),
@@ -490,6 +508,7 @@ git commit -m "feat(cli): adapt useJobPolling hook to accept DataSource | Spatul
 ## Task 3: Hook Adaptation — `useEntityData`
 
 **Files:**
+
 - Modify: `apps/cli/src/hooks/useEntityData.ts`
 - Create: `apps/cli/tests/unit/hooks/useEntityData.test.ts`
 
@@ -514,7 +533,13 @@ function mockDataSource(overrides: Partial<DataSource> = {}): DataSource {
     getActions: vi.fn().mockResolvedValue([]),
     approveAction: vi.fn(),
     rejectAction: vi.fn(),
-    getStatus: vi.fn().mockResolvedValue({ totalPages: 0, totalEntities: 0, pendingActions: 0, schemaFields: 0, storageBytes: { pages: 0, database: 0, exports: 0 } }),
+    getStatus: vi.fn().mockResolvedValue({
+      totalPages: 0,
+      totalEntities: 0,
+      pendingActions: 0,
+      schemaFields: 0,
+      storageBytes: { pages: 0, database: 0, exports: 0 },
+    }),
     createExport: vi.fn(),
     getExport: vi.fn(),
     downloadExport: vi.fn(),
@@ -547,7 +572,15 @@ describe('useEntityData DataSource support', () => {
 
   it('fetchPage with DataSource calls getEntities with limit and offset', async () => {
     const mockResult: PaginatedResult<Entity> = {
-      data: [{ id: 'e1', mergedData: { name: 'Test' }, qualityScore: 0.9, categories: [], sourceCount: 1 } as Entity],
+      data: [
+        {
+          id: 'e1',
+          mergedData: { name: 'Test' },
+          qualityScore: 0.9,
+          categories: [],
+          sourceCount: 1,
+        } as Entity,
+      ],
       total: 15,
     };
     const ds = mockDataSource({ getEntities: vi.fn().mockResolvedValue(mockResult) });
@@ -612,34 +645,40 @@ export function useEntityData(
   const { stdout } = useStdout();
   const pageSize = useMemo(() => {
     const rows = stdout?.rows ?? 40;
-    return Math.max(5, rows - HEADER_HEIGHT - FILTER_BAR_HEIGHT - TABLE_HEADER_HEIGHT - FOOTER_HEIGHT - PADDING);
+    return Math.max(
+      5,
+      rows - HEADER_HEIGHT - FILTER_BAR_HEIGHT - TABLE_HEADER_HEIGHT - FOOTER_HEIGHT - PADDING,
+    );
   }, [stdout?.rows]);
 
-  const fetchPage = useCallback(async (page: number) => {
-    if (!jobId && !isDataSource(backend)) return;
+  const fetchPage = useCallback(
+    async (page: number) => {
+      if (!jobId && !isDataSource(backend)) return;
 
-    const state = store.getState();
-    const offset = page * pageSize;
+      const state = store.getState();
+      const offset = page * pageSize;
 
-    try {
-      if (isDataSource(backend)) {
-        const result = await backend.getEntities({ limit: pageSize, offset });
-        state.setEntities(result.data as any);
-        state.setTotalEntityCount(result.total);
-      } else {
-        const result = await backend.listEntitiesPaginated(jobId, {
-          limit: pageSize,
-          offset,
-        });
-        state.setEntities(result.data as any);
-        state.setTotalEntityCount(result.total);
+      try {
+        if (isDataSource(backend)) {
+          const result = await backend.getEntities({ limit: pageSize, offset });
+          state.setEntities(result.data as any);
+          state.setTotalEntityCount(result.total);
+        } else {
+          const result = await backend.listEntitiesPaginated(jobId, {
+            limit: pageSize,
+            offset,
+          });
+          state.setEntities(result.data as any);
+          state.setTotalEntityCount(result.total);
+        }
+        state.setCurrentEntityPage(page);
+        state.setSelectedEntityIndex(0);
+      } catch (error) {
+        state.setError(`Failed to fetch entities: ${(error as Error).message}`);
       }
-      state.setCurrentEntityPage(page);
-      state.setSelectedEntityIndex(0);
-    } catch (error) {
-      state.setError(`Failed to fetch entities: ${(error as Error).message}`);
-    }
-  }, [store, backend, jobId, pageSize]);
+    },
+    [store, backend, jobId, pageSize],
+  );
 
   useEffect(() => {
     fetchPage(0);
@@ -650,10 +689,13 @@ export function useEntityData(
     return Math.max(1, Math.ceil(totalEntityCount / pageSize));
   }, [totalEntityCount, pageSize]);
 
-  const goToPage = useCallback((page: number) => {
-    const clamped = Math.max(0, Math.min(page, totalPages - 1));
-    fetchPage(clamped);
-  }, [fetchPage, totalPages]);
+  const goToPage = useCallback(
+    (page: number) => {
+      const clamped = Math.max(0, Math.min(page, totalPages - 1));
+      fetchPage(clamped);
+    },
+    [fetchPage, totalPages],
+  );
 
   const nextPage = useCallback(() => {
     const current = store.getState().currentEntityPage;
@@ -669,15 +711,18 @@ export function useEntityData(
     }
   }, [store, fetchPage]);
 
-  const fetchEntity = useCallback(async (entityId: string): Promise<EntityWithProvenance> => {
-    if (isDataSource(backend)) {
-      const entity = await backend.getEntity(entityId);
-      if (!entity) throw new Error(`Entity not found: ${entityId}`);
-      return entity as unknown as EntityWithProvenance;
-    }
-    const data = await backend.getEntity(jobId, entityId);
-    return data as unknown as EntityWithProvenance;
-  }, [backend, jobId]);
+  const fetchEntity = useCallback(
+    async (entityId: string): Promise<EntityWithProvenance> => {
+      if (isDataSource(backend)) {
+        const entity = await backend.getEntity(entityId);
+        if (!entity) throw new Error(`Entity not found: ${entityId}`);
+        return entity as unknown as EntityWithProvenance;
+      }
+      const data = await backend.getEntity(jobId, entityId);
+      return data as unknown as EntityWithProvenance;
+    },
+    [backend, jobId],
+  );
 
   return {
     pageSize,
@@ -708,6 +753,7 @@ git commit -m "feat(cli): adapt useEntityData hook to accept DataSource | Spatul
 ## Task 4: Hook Adaptation — `useEntityFilter`
 
 **Files:**
+
 - Modify: `apps/cli/src/hooks/useEntityFilter.ts`
 - Create: `apps/cli/tests/unit/hooks/useEntityFilter.test.ts`
 
@@ -723,8 +769,20 @@ import type { Entity } from '@spatula/shared';
 
 describe('filterEntitiesLocally', () => {
   const entities: Entity[] = [
-    { id: '1', mergedData: { name: 'Apple iPhone' }, qualityScore: 0.9, categories: [], sourceCount: 1 } as Entity,
-    { id: '2', mergedData: { name: 'Samsung Galaxy' }, qualityScore: 0.8, categories: [], sourceCount: 1 } as Entity,
+    {
+      id: '1',
+      mergedData: { name: 'Apple iPhone' },
+      qualityScore: 0.9,
+      categories: [],
+      sourceCount: 1,
+    } as Entity,
+    {
+      id: '2',
+      mergedData: { name: 'Samsung Galaxy' },
+      qualityScore: 0.8,
+      categories: [],
+      sourceCount: 1,
+    } as Entity,
   ];
 
   it('filters case-insensitively', () => {
@@ -887,6 +945,7 @@ git commit -m "feat(cli): adapt useEntityFilter hook to accept DataSource | Spat
 ## Task 5: Hook Adaptation — `useExport`
 
 **Files:**
+
 - Modify: `apps/cli/src/hooks/useExport.ts`
 - Create: `apps/cli/tests/unit/hooks/useExport.test.ts`
 
@@ -912,10 +971,18 @@ function makeEntity(id: string, data: Record<string, unknown> = {}): Entity {
 function mockDataSource(overrides: Partial<DataSource> = {}): DataSource {
   return {
     getEntities: vi.fn().mockResolvedValue({ data: [], total: 0 }),
-    getEntity: vi.fn(), searchEntities: vi.fn(), getSchema: vi.fn(),
-    getSchemaVersions: vi.fn(), getActions: vi.fn(), approveAction: vi.fn(),
-    rejectAction: vi.fn(), getStatus: vi.fn(), createExport: vi.fn(),
-    getExport: vi.fn(), downloadExport: vi.fn(), getDocumentation: vi.fn(),
+    getEntity: vi.fn(),
+    searchEntities: vi.fn(),
+    getSchema: vi.fn(),
+    getSchemaVersions: vi.fn(),
+    getActions: vi.fn(),
+    approveAction: vi.fn(),
+    rejectAction: vi.fn(),
+    getStatus: vi.fn(),
+    createExport: vi.fn(),
+    getExport: vi.fn(),
+    downloadExport: vi.fn(),
+    getDocumentation: vi.fn(),
     ...overrides,
   } as DataSource;
 }
@@ -947,7 +1014,8 @@ describe('exportFromDataSource', () => {
     const batch2 = [makeEntity('e200'), makeEntity('e201')];
 
     const ds = mockDataSource({
-      getEntities: vi.fn()
+      getEntities: vi
+        .fn()
         .mockResolvedValueOnce({ data: batch1, total: 202 })
         .mockResolvedValueOnce({ data: batch2, total: 202 }),
     });
@@ -976,7 +1044,9 @@ describe('exportFromDataSource', () => {
   it('writes CSV with correct fields', async () => {
     const { exportFromDataSource } = await import('../../src/hooks/useExport.js');
     const ds = mockDataSource({
-      getEntities: vi.fn().mockResolvedValue({ data: [makeEntity('e1', { name: 'Alice', age: 30 })], total: 1 }),
+      getEntities: vi
+        .fn()
+        .mockResolvedValue({ data: [makeEntity('e1', { name: 'Alice', age: 30 })], total: 1 }),
     });
 
     await exportFromDataSource(ds, 'job-csv', 'csv', { schemaFields: ['name', 'age'] });
@@ -1074,7 +1144,12 @@ export function useExport(backend: DataSource | SpatulaApiClient) {
     async (
       targetJobId: string,
       format: 'json' | 'csv',
-      options: { search?: string; filterQuery?: string; schemaFields: string[]; includeProvenance?: boolean },
+      options: {
+        search?: string;
+        filterQuery?: string;
+        schemaFields: string[];
+        includeProvenance?: boolean;
+      },
     ): Promise<string> => {
       setIsExporting(true);
       setExportProgress({ status: 'pending' });
@@ -1084,7 +1159,14 @@ export function useExport(backend: DataSource | SpatulaApiClient) {
         if (isDataSource(backend)) {
           return await exportFromDataSource(backend, targetJobId, format, options);
         }
-        return await exportFromApi(backend, targetJobId, format, options, abortRef, setExportProgress);
+        return await exportFromApi(
+          backend,
+          targetJobId,
+          format,
+          options,
+          abortRef,
+          setExportProgress,
+        );
       } finally {
         setIsExporting(false);
         setExportProgress(null);
@@ -1184,6 +1266,7 @@ git commit -m "feat(cli): adapt useExport hook to accept DataSource | SpatulaApi
 ## Task 6: CSS-Only Extractor
 
 **Files:**
+
 - Create: `packages/core/src/extraction/css-extractor.ts`
 - Create: `packages/core/tests/unit/extraction/css-extractor.test.ts`
 - Modify: `packages/core/src/extraction/index.ts`
@@ -1218,7 +1301,12 @@ describe('CssExtractor', () => {
   it('extracts text from headings', async () => {
     const html = '<html><body><h1>Product Name</h1><p>Description here</p></body></html>';
     const schema = makeSchema([{ name: 'title', type: 'string' }]);
-    const result = await extractor.extract(html, 'https://example.com', schema, 'Extract product data');
+    const result = await extractor.extract(
+      html,
+      'https://example.com',
+      schema,
+      'Extract product data',
+    );
 
     expect(result.data).toBeDefined();
     expect(result.metadata.confidence).toBeGreaterThan(0);
@@ -1234,7 +1322,8 @@ describe('CssExtractor', () => {
   });
 
   it('extracts image URLs', async () => {
-    const html = '<html><body><img src="https://example.com/photo.jpg" alt="Product"></body></html>';
+    const html =
+      '<html><body><img src="https://example.com/photo.jpg" alt="Product"></body></html>';
     const schema = makeSchema([{ name: 'image', type: 'url' }]);
     const result = await extractor.extract(html, 'https://example.com', schema, 'Extract images');
 
@@ -1275,7 +1364,12 @@ describe('CssExtractor', () => {
   it('resolves relative image URLs against base URL', async () => {
     const html = '<html><body><img src="/images/photo.jpg" alt="Photo"></body></html>';
     const schema = makeSchema([{ name: 'image', type: 'url' }]);
-    const result = await extractor.extract(html, 'https://example.com/products/1', schema, 'Extract images');
+    const result = await extractor.extract(
+      html,
+      'https://example.com/products/1',
+      schema,
+      'Extract images',
+    );
 
     expect(result.data.image).toBe('https://example.com/images/photo.jpg');
   });
@@ -1415,11 +1509,7 @@ export class CssExtractor implements Extractor {
 const PRICE_PATTERN = /[$€£¥₹]\s*[\d,]+\.?\d*/;
 const NUMBER_PATTERN = /^[\d,]+\.?\d*$/;
 
-function extractByField(
-  $: cheerio.CheerioAPI,
-  field: FieldDefinition,
-  baseUrl: string,
-): unknown {
+function extractByField($: cheerio.CheerioAPI, field: FieldDefinition, baseUrl: string): unknown {
   const nameLower = field.name.toLowerCase();
 
   switch (field.type) {
@@ -1444,8 +1534,11 @@ function extractByField(
 function findPrice($: cheerio.CheerioAPI): string | null {
   // Look for elements with price-related classes/attributes first
   const priceSelectors = [
-    '[class*="price"]', '[class*="cost"]', '[class*="amount"]',
-    '[data-price]', '[itemprop="price"]',
+    '[class*="price"]',
+    '[class*="cost"]',
+    '[class*="amount"]',
+    '[data-price]',
+    '[itemprop="price"]',
   ];
 
   for (const sel of priceSelectors) {
@@ -1495,9 +1588,7 @@ function findUrl($: cheerio.CheerioAPI, fieldName: string, baseUrl: string): str
 }
 
 function findNumber($: cheerio.CheerioAPI, fieldName: string): number | null {
-  const selectors = [
-    `[class*="${fieldName}"]`, `[data-${fieldName}]`, `[itemprop="${fieldName}"]`,
-  ];
+  const selectors = [`[class*="${fieldName}"]`, `[data-${fieldName}]`, `[itemprop="${fieldName}"]`];
   for (const sel of selectors) {
     const text = $(sel).first().text().trim();
     const cleaned = text.replace(/[^0-9.,]/g, '');
@@ -1508,9 +1599,7 @@ function findNumber($: cheerio.CheerioAPI, fieldName: string): number | null {
 
 function findText($: cheerio.CheerioAPI, fieldName: string): string | null {
   // Priority 1: elements with matching class/itemprop/id
-  const attrSelectors = [
-    `[class*="${fieldName}"]`, `[itemprop="${fieldName}"]`, `#${fieldName}`,
-  ];
+  const attrSelectors = [`[class*="${fieldName}"]`, `[itemprop="${fieldName}"]`, `#${fieldName}`];
   for (const sel of attrSelectors) {
     try {
       const el = $(sel).first();
@@ -1546,7 +1635,10 @@ function findList($: cheerio.CheerioAPI, fieldName: string): string[] | null {
   // Look for lists with matching class
   const list = $(`[class*="${fieldName}"] li, ul li, ol li`).slice(0, 20);
   if (list.length > 0) {
-    const items = list.map((_, el) => $(el).text().trim()).get().filter(Boolean);
+    const items = list
+      .map((_, el) => $(el).text().trim())
+      .get()
+      .filter(Boolean);
     if (items.length > 0) return items;
   }
   return null;
@@ -1696,6 +1788,7 @@ git commit -m "feat(core): add CssExtractor for offline CSS-only extraction + wi
 ## Task 7: Doctor Project Checks
 
 **Files:**
+
 - Create: `packages/core/src/diagnostics/project-checks.ts`
 - Create: `packages/core/tests/unit/diagnostics/project-checks.test.ts`
 - Modify: `packages/core/src/diagnostics/index.ts`
@@ -1735,7 +1828,9 @@ describe('createProjectChecks', () => {
   it('spatula-yaml check fails for invalid config', async () => {
     const checks = createProjectChecks({
       projectRoot: '/tmp/test',
-      validateYaml: vi.fn().mockImplementation(() => { throw new Error('Invalid YAML'); }),
+      validateYaml: vi.fn().mockImplementation(() => {
+        throw new Error('Invalid YAML');
+      }),
     });
     const yamlCheck = checks.find((c: HealthCheck) => c.name === 'spatula-yaml');
     const result = await yamlCheck!.run();
@@ -1934,7 +2029,10 @@ export function createProjectChecks(config: ProjectCheckConfig): HealthCheck[] {
         }
         const count = await config.getOrphanedTaskCount();
         if (count > 0) {
-          return { status: 'warn', message: `${count} orphaned in_progress task(s) — prior crash detected. Run \`spatula run\` to retry.` };
+          return {
+            status: 'warn',
+            message: `${count} orphaned in_progress task(s) — prior crash detected. Run \`spatula run\` to retry.`,
+          };
         }
         return { status: 'pass', message: 'No orphaned tasks' };
       },
@@ -1953,7 +2051,10 @@ export function createProjectChecks(config: ProjectCheckConfig): HealthCheck[] {
           const entries = readdirSync(pagesDir);
           return { status: 'pass', message: `${entries.length} page file(s) stored` };
         } catch (err) {
-          return { status: 'fail', message: `Cannot read pages directory: ${(err as Error).message}` };
+          return {
+            status: 'fail',
+            message: `Cannot read pages directory: ${(err as Error).message}`,
+          };
         }
       },
     },
@@ -1968,7 +2069,10 @@ export function createProjectChecks(config: ProjectCheckConfig): HealthCheck[] {
         }
         const count = await config.getPendingActionCount();
         if (count > 0) {
-          return { status: 'warn', message: `${count} pending review action(s) — run \`spatula review\` to resolve` };
+          return {
+            status: 'warn',
+            message: `${count} pending review action(s) — run \`spatula review\` to resolve`,
+          };
         }
         return { status: 'pass', message: 'No pending actions' };
       },
@@ -2009,7 +2113,10 @@ export function createProjectChecks(config: ProjectCheckConfig): HealthCheck[] {
           breakdown.push(`exports: ${formatBytes(exportsSize)}`);
         }
 
-        return { status: 'pass', message: `Total: ${formatBytes(totalBytes)} (${breakdown.join(', ')})` };
+        return {
+          status: 'pass',
+          message: `Total: ${formatBytes(totalBytes)} (${breakdown.join(', ')})`,
+        };
       },
     },
 
@@ -2018,7 +2125,10 @@ export function createProjectChecks(config: ProjectCheckConfig): HealthCheck[] {
       name: 'remote-link',
       category: 'project',
       async run() {
-        return { status: 'pass', message: 'Remote links not configured (available in a future release)' };
+        return {
+          status: 'pass',
+          message: 'Remote links not configured (available in a future release)',
+        };
       },
     },
   ];
@@ -2109,6 +2219,7 @@ git commit -m "feat(core): add 8 project-level health checks for spatula doctor"
 ## Task 8: `spatula add` Command
 
 **Files:**
+
 - Create: `apps/cli/src/commands/add.ts`
 - Create: `apps/cli/tests/unit/commands/add.test.ts`
 
@@ -2138,27 +2249,18 @@ describe('validateAndDedup', () => {
   });
 
   it('normalises trailing slashes for dedup', () => {
-    const result = validateAndDedup(
-      ['https://example.com/'],
-      ['https://example.com'],
-    );
+    const result = validateAndDedup(['https://example.com/'], ['https://example.com']);
     expect(result.duplicates).toContain('https://example.com/');
     expect(result.valid).toHaveLength(0);
   });
 
   it('deduplicates within provided URLs', () => {
-    const result = validateAndDedup(
-      ['https://example.com', 'https://example.com'],
-      [],
-    );
+    const result = validateAndDedup(['https://example.com', 'https://example.com'], []);
     expect(result.valid).toEqual(['https://example.com']);
   });
 
   it('returns all valid when no duplicates', () => {
-    const result = validateAndDedup(
-      ['https://a.com', 'https://b.com'],
-      [],
-    );
+    const result = validateAndDedup(['https://a.com', 'https://b.com'], []);
     expect(result.valid).toEqual(['https://a.com', 'https://b.com']);
     expect(result.invalid).toHaveLength(0);
     expect(result.duplicates).toHaveLength(0);
@@ -2335,6 +2437,7 @@ git commit -m "feat(cli): add spatula add command for adding seed URLs"
 ## Task 9: `spatula config` Command
 
 **Files:**
+
 - Create: `apps/cli/src/commands/config.ts`
 - Create: `apps/cli/tests/unit/commands/config.test.ts`
 
@@ -2439,6 +2542,7 @@ git commit -m "feat(cli): add spatula config command to open spatula.yaml in edi
 ## Task 10: `spatula setup` Command
 
 **Files:**
+
 - Create: `apps/cli/src/commands/setup.ts`
 - Create: `apps/cli/tests/unit/commands/setup.test.ts`
 
@@ -2587,7 +2691,10 @@ export async function runSetupCommand(): Promise<void> {
     answers.model = model || defaultModel || undefined;
 
     const defaultCrawler = existing?.crawler ?? 'playwright';
-    const crawler = await prompt(rl, `  Default crawler (playwright/firecrawl) [${defaultCrawler}]: `);
+    const crawler = await prompt(
+      rl,
+      `  Default crawler (playwright/firecrawl) [${defaultCrawler}]: `,
+    );
     answers.crawler = (crawler || defaultCrawler) as 'playwright' | 'firecrawl';
 
     const firecrawlKey = await prompt(rl, `  Firecrawl API key (optional): `);
@@ -2626,6 +2733,7 @@ git commit -m "feat(cli): add spatula setup command for global config editor"
 ## Task 11: `spatula estimate` Command
 
 **Files:**
+
 - Create: `apps/cli/src/commands/estimate.ts`
 - Create: `apps/cli/tests/unit/commands/estimate.test.ts`
 
@@ -2648,7 +2756,13 @@ describe('formatCostEstimate', () => {
     llmCallBreakdown: [
       { purpose: 'extraction', model: 'claude-sonnet', calls: 35, tokens: 105000, costUsd: 0.3 },
       { purpose: 'pageRelevance', model: 'claude-sonnet', calls: 50, tokens: 25000, costUsd: 0.1 },
-      { purpose: 'schemaEvolution', model: 'claude-sonnet', calls: 5, tokens: 20000, costUsd: 0.05 },
+      {
+        purpose: 'schemaEvolution',
+        model: 'claude-sonnet',
+        calls: 5,
+        tokens: 20000,
+        costUsd: 0.05,
+      },
     ],
     warnings: [],
   };
@@ -2732,7 +2846,9 @@ export function formatCostEstimate(estimate: CostEstimate): string {
 
   lines.push('\n  Breakdown');
   lines.push('  ' + '-'.repeat(60));
-  lines.push(`  ${'Task'.padEnd(22)} ${'Model'.padEnd(18)} ${'Calls'.padEnd(8)} ${'Cost'.padEnd(8)}`);
+  lines.push(
+    `  ${'Task'.padEnd(22)} ${'Model'.padEnd(18)} ${'Calls'.padEnd(8)} ${'Cost'.padEnd(8)}`,
+  );
   lines.push('  ' + '-'.repeat(60));
 
   for (const entry of estimate.llmCallBreakdown) {
@@ -2798,6 +2914,7 @@ git commit -m "feat(cli): add spatula estimate command for cost estimation"
 ## Task 12: `spatula new` Local Adaptation
 
 **Files:**
+
 - Modify: `apps/cli/src/commands/new.tsx`
 - Create: `apps/cli/tests/unit/commands/new-local.test.ts`
 
@@ -2908,7 +3025,7 @@ This requires four changes to `apps/cli/src/commands/new.tsx`:
 ```typescript
 export interface NewCommandOptions {
   apiUrl: string;
-  tenantId?: string;         // was required — now optional for local mode
+  tenantId?: string; // was required — now optional for local mode
   openrouterApiKey?: string; // was required — now optional (LLM still needed for conversation)
   model?: string;
 }
@@ -3005,7 +3122,7 @@ async function handleUserMessage(
   store: CliStore,
   llmClient: LLMClient,
   conversationService: ConfigConversationService,
-  apiClient: SpatulaApiClient | null,  // was required SpatulaApiClient
+  apiClient: SpatulaApiClient | null, // was required SpatulaApiClient
 ): Promise<void> {
   // ... existing message processing logic ...
   // On confirm_and_start action, call handleConfirmAndStart(store, apiClient)
@@ -3079,6 +3196,7 @@ git commit -m "feat(cli): adapt spatula new for local mode — writes spatula.ya
 ## Task 13: Legacy Command Migration
 
 **Files:**
+
 - Modify: `apps/cli/src/commands/list.ts`
 - Modify: `apps/cli/src/index.tsx`
 
@@ -3137,7 +3255,7 @@ In `apps/cli/src/commands/list.ts`, add:
 export function printListDeprecation(): void {
   console.warn(
     '\n  ⚠ `spatula list` is deprecated. Use `spatula remote jobs <name>` (coming in a future release).\n' +
-    '  For local project status, use `spatula status`.\n',
+      '  For local project status, use `spatula status`.\n',
   );
 }
 ```
@@ -3176,6 +3294,7 @@ git commit -m "feat(cli): add deprecation warnings for list and remote status co
 ## Task 14: Command Registration + Final Wiring
 
 **Files:**
+
 - Modify: `apps/cli/src/index.tsx`
 
 Register `add`, `config`, `setup`, `estimate` in the yargs CLI definition.
@@ -3288,8 +3407,18 @@ import { describe, it, expect } from 'vitest';
 describe('CLI command registration', () => {
   // Verify all expected commands are registered by parsing --help output
   const expectedCommands = [
-    'init', 'run', 'reset', 'doctor', 'new', 'list', 'status', 'test',
-    'add', 'config', 'setup', 'estimate',
+    'init',
+    'run',
+    'reset',
+    'doctor',
+    'new',
+    'list',
+    'status',
+    'test',
+    'add',
+    'config',
+    'setup',
+    'estimate',
   ];
 
   for (const cmd of expectedCommands) {

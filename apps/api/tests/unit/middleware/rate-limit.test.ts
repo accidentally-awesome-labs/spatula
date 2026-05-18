@@ -7,12 +7,11 @@ function createMockRedis() {
   return { eval: vi.fn() } as unknown as Redis;
 }
 
-function createTestApp(redis: Redis, tier = 'free') {
+function createTestApp(redis: Redis) {
   const app = new Hono();
   app.use('*', async (c, next) => {
     c.set('tenantId', 'tenant-1');
     c.set('auth', { tenantId: 'tenant-1', userId: 'u', scopes: ['admin'] });
-    c.set('rateLimitTier', tier);
     return next();
   });
   app.use('*', rateLimitMiddleware(redis));
@@ -23,40 +22,28 @@ function createTestApp(redis: Redis, tier = 'free') {
 describe('rateLimitMiddleware', () => {
   let redis: Redis;
 
-  beforeEach(() => { redis = createMockRedis(); });
+  beforeEach(() => {
+    redis = createMockRedis();
+  });
 
   it('allows request when under limit', async () => {
     (redis as any).eval.mockResolvedValue([1, 5]);
     const app = createTestApp(redis);
     const res = await app.request('/test');
     expect(res.status).toBe(200);
-    expect(res.headers.get('X-RateLimit-Limit')).toBe('60');
-    expect(res.headers.get('X-RateLimit-Remaining')).toBe('55');
+    // DEFAULT_RATE_LIMIT.requestsPerMinute === 300
+    expect(res.headers.get('X-RateLimit-Limit')).toBe('300');
+    expect(res.headers.get('X-RateLimit-Remaining')).toBe('295');
   });
 
   it('rejects request when over limit with 429 and Retry-After header', async () => {
-    (redis as any).eval.mockResolvedValue([0, 60]);
+    (redis as any).eval.mockResolvedValue([0, 300]);
     const app = createTestApp(redis);
     const res = await app.request('/test');
     expect(res.status).toBe(429);
     expect(res.headers.get('Retry-After')).toBe('60');
     const body = await res.json();
     expect(body.error.code).toBe('RATE_LIMIT_ERROR');
-  });
-
-  it('skips rate limiting for enterprise tier', async () => {
-    const app = createTestApp(redis, 'enterprise');
-    const res = await app.request('/test');
-    expect(res.status).toBe(200);
-    expect((redis as any).eval).not.toHaveBeenCalled();
-  });
-
-  it('uses correct limit for starter tier', async () => {
-    (redis as any).eval.mockResolvedValue([1, 10]);
-    const app = createTestApp(redis, 'starter');
-    const res = await app.request('/test');
-    expect(res.headers.get('X-RateLimit-Limit')).toBe('300');
-    expect(res.headers.get('X-RateLimit-Remaining')).toBe('290');
   });
 
   it('skips rate limiting when tenantId is not set', async () => {

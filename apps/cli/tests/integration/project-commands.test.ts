@@ -10,12 +10,7 @@
  *   3. spatula doctor   (health checks framework)
  */
 
-import {
-  mkdtempSync,
-  writeFileSync,
-  mkdirSync,
-  rmSync,
-} from 'node:fs';
+import { mkdtempSync, writeFileSync, mkdirSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { describe, it, expect, beforeAll, afterAll, vi } from 'vitest';
@@ -304,29 +299,52 @@ describe('spatula doctor (integration)', () => {
     const { determineCategoriesFromContext } = await import('../../src/commands/doctor.js');
 
     // No env, no project
-    expect(determineCategoriesFromContext({ hasEnv: false, hasProject: false }))
-      .toEqual(['system']);
+    expect(determineCategoriesFromContext({ hasEnv: false, hasProject: false })).toEqual([
+      'system',
+    ]);
 
     // With env file
-    expect(determineCategoriesFromContext({ hasEnv: true, hasProject: false }))
-      .toEqual(['system', 'server']);
+    expect(determineCategoriesFromContext({ hasEnv: true, hasProject: false })).toEqual([
+      'system',
+      'server',
+    ]);
 
     // With project
-    expect(determineCategoriesFromContext({ hasEnv: false, hasProject: true }))
-      .toEqual(['system', 'project']);
+    expect(determineCategoriesFromContext({ hasEnv: false, hasProject: true })).toEqual([
+      'system',
+      'project',
+    ]);
 
     // Both
-    expect(determineCategoriesFromContext({ hasEnv: true, hasProject: true }))
-      .toEqual(['system', 'server', 'project']);
+    expect(determineCategoriesFromContext({ hasEnv: true, hasProject: true })).toEqual([
+      'system',
+      'server',
+      'project',
+    ]);
   });
 
   it('formatCheckResults produces readable output', async () => {
     const { formatCheckResults } = await import('../../src/commands/doctor.js');
 
     const results = [
-      { name: 'test-pass', category: 'system' as const, status: 'pass' as const, message: 'All good' },
-      { name: 'test-warn', category: 'system' as const, status: 'warn' as const, message: 'Minor issue' },
-      { name: 'test-fail', category: 'project' as const, status: 'fail' as const, message: 'Critical' },
+      {
+        name: 'test-pass',
+        category: 'system' as const,
+        status: 'pass' as const,
+        message: 'All good',
+      },
+      {
+        name: 'test-warn',
+        category: 'system' as const,
+        status: 'warn' as const,
+        message: 'Minor issue',
+      },
+      {
+        name: 'test-fail',
+        category: 'project' as const,
+        status: 'fail' as const,
+        message: 'Critical',
+      },
     ];
 
     const output = formatCheckResults(results);
@@ -407,7 +425,13 @@ describe('formatCostEstimate (unit)', () => {
       confidence: 'medium',
       llmCallBreakdown: [
         { purpose: 'extraction', model: 'claude-sonnet', calls: 35, tokens: 80000, costUsd: 0.3 },
-        { purpose: 'pageRelevance', model: 'claude-haiku', calls: 50, tokens: 45000, costUsd: 0.15 },
+        {
+          purpose: 'pageRelevance',
+          model: 'claude-haiku',
+          calls: 50,
+          tokens: 45000,
+          costUsd: 0.15,
+        },
       ],
       warnings: [],
     });

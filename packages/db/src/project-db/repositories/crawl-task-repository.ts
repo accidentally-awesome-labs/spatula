@@ -32,30 +32,29 @@ export class SqliteCrawlTaskRepository implements CrawlTaskRepo, TaskStatsRepo {
     parentTaskId: string;
   }): Promise<{ id: string }> {
     const id = crypto.randomUUID();
-    wrapStorageError(() => {
-      this.db
-        .insert(crawlTasks)
-        .values({
-          id,
-          jobId: this.projectId,
-          url: data.url,
-          depth: data.depth,
-          status: 'pending',
-          priority: 'medium',
-          parentTaskId: data.parentTaskId || null,
-          createdAt: new Date().toISOString(),
-        })
-        .run();
-    }, { method: 'enqueue', table: 'crawl_tasks' });
+    wrapStorageError(
+      () => {
+        this.db
+          .insert(crawlTasks)
+          .values({
+            id,
+            jobId: this.projectId,
+            url: data.url,
+            depth: data.depth,
+            status: 'pending',
+            priority: 'medium',
+            parentTaskId: data.parentTaskId || null,
+            createdAt: new Date().toISOString(),
+          })
+          .run();
+      },
+      { method: 'enqueue', table: 'crawl_tasks' },
+    );
     logger.debug({ id, url: data.url, depth: data.depth }, 'crawl task enqueued');
     return { id };
   }
 
-  async updateStatus(
-    taskId: string,
-    _tenantId: string,
-    status: string,
-  ): Promise<unknown> {
+  async updateStatus(taskId: string, _tenantId: string, status: string): Promise<unknown> {
     const timestamps: Record<string, string> = {};
     if (status === 'completed' || status === 'failed' || status === 'skipped') {
       const now = new Date().toISOString();
@@ -63,13 +62,16 @@ export class SqliteCrawlTaskRepository implements CrawlTaskRepo, TaskStatsRepo {
       timestamps.completedAt = now;
     }
 
-    wrapStorageError(() => {
-      this.db
-        .update(crawlTasks)
-        .set({ status, ...timestamps })
-        .where(eq(crawlTasks.id, taskId))
-        .run();
-    }, { method: 'updateStatus', table: 'crawl_tasks', taskId });
+    wrapStorageError(
+      () => {
+        this.db
+          .update(crawlTasks)
+          .set({ status, ...timestamps })
+          .where(eq(crawlTasks.id, taskId))
+          .run();
+      },
+      { method: 'updateStatus', table: 'crawl_tasks', taskId },
+    );
     logger.debug({ taskId, status }, 'crawl task status updated');
 
     return {};
@@ -80,11 +82,7 @@ export class SqliteCrawlTaskRepository implements CrawlTaskRepo, TaskStatsRepo {
     _tenantId: string,
     classification: string,
   ): Promise<unknown> {
-    this.db
-      .update(crawlTasks)
-      .set({ classification })
-      .where(eq(crawlTasks.id, taskId))
-      .run();
+    this.db.update(crawlTasks).set({ classification }).where(eq(crawlTasks.id, taskId)).run();
 
     return {};
   }
@@ -115,14 +113,9 @@ export class SqliteCrawlTaskRepository implements CrawlTaskRepo, TaskStatsRepo {
     const rows = this.db
       .select({ url: crawlTasks.url })
       .from(crawlTasks)
-      .where(
-        and(
-          eq(crawlTasks.jobId, this.projectId),
-          eq(crawlTasks.status, 'completed'),
-        ),
-      )
+      .where(and(eq(crawlTasks.jobId, this.projectId), eq(crawlTasks.status, 'completed')))
       .all();
-    return rows.map(r => r.url);
+    return rows.map((r) => r.url);
   }
 
   /**
@@ -132,14 +125,16 @@ export class SqliteCrawlTaskRepository implements CrawlTaskRepo, TaskStatsRepo {
   async findPending(
     _jobId: string,
     options?: { limit?: number },
-  ): Promise<Array<{
-    id: string;
-    url: string;
-    depth: number;
-    priorityScore: number | null;
-    parentTaskId: string | null;
-    createdAt: string;
-  }>> {
+  ): Promise<
+    Array<{
+      id: string;
+      url: string;
+      depth: number;
+      priorityScore: number | null;
+      parentTaskId: string | null;
+      createdAt: string;
+    }>
+  > {
     let query = this.db
       .select({
         id: crawlTasks.id,
@@ -150,12 +145,7 @@ export class SqliteCrawlTaskRepository implements CrawlTaskRepo, TaskStatsRepo {
         createdAt: crawlTasks.createdAt,
       })
       .from(crawlTasks)
-      .where(
-        and(
-          eq(crawlTasks.jobId, this.projectId),
-          eq(crawlTasks.status, 'pending'),
-        ),
-      )
+      .where(and(eq(crawlTasks.jobId, this.projectId), eq(crawlTasks.status, 'pending')))
       .orderBy(desc(crawlTasks.priorityScore));
 
     if (options?.limit) {

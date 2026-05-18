@@ -166,8 +166,7 @@ export async function processCrawlTask(
         }
       } else {
         // No evaluator — use all valid links
-        linksFound = crawlResult.links
-          .filter((l) => l.url && isValidCrawlUrl(l.url));
+        linksFound = crawlResult.links.filter((l) => l.url && isValidCrawlUrl(l.url));
       }
     }
 
@@ -225,7 +224,10 @@ export async function processCrawlTask(
 export async function shouldTriggerSchemaEvolution(
   jobId: string,
   tenantId: string,
-  cached: { schemaVersion: number | null; evolutionConfig: { enabled: boolean; batchSize: number } | null },
+  cached: {
+    schemaVersion: number | null;
+    evolutionConfig: { enabled: boolean; batchSize: number } | null;
+  },
   deps: {
     extractionRepo: CrawlOrchestratorDeps['extractionRepo'];
   },

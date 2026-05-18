@@ -147,40 +147,40 @@ See [examples/](examples/) for complete configuration examples covering ecommerc
 
 ### Environment Variables
 
-| Variable | Required | Default | Description |
-|----------|----------|---------|-------------|
-| `OPENROUTER_API_KEY` | Yes* | — | OpenRouter API key for cloud LLM |
-| `OLLAMA_BASE_URL` | No | `http://localhost:11434` | Ollama endpoint for local LLM |
-| `DATABASE_URL` | Server | — | PostgreSQL connection string |
-| `REDIS_URL` | Server | — | Redis connection string |
-| `AUTH_STRATEGY` | No | `none` | Auth mode: `none`, `api-key`, `jwt` |
-| `FIRECRAWL_API_KEY` | No | — | Firecrawl API key (if using Firecrawl crawler) |
-| `CONTENT_STORE` | No | `filesystem` | Storage backend: `filesystem` or `s3` |
-| `SENTRY_DSN` | No | — | Sentry error tracking endpoint |
-| `LOG_LEVEL` | No | `info` | Log level: `debug`, `info`, `warn`, `error` |
+| Variable             | Required | Default                  | Description                                    |
+| -------------------- | -------- | ------------------------ | ---------------------------------------------- |
+| `OPENROUTER_API_KEY` | Yes\*    | —                        | OpenRouter API key for cloud LLM               |
+| `OLLAMA_BASE_URL`    | No       | `http://localhost:11434` | Ollama endpoint for local LLM                  |
+| `DATABASE_URL`       | Server   | —                        | PostgreSQL connection string                   |
+| `REDIS_URL`          | Server   | —                        | Redis connection string                        |
+| `AUTH_STRATEGY`      | No       | `none`                   | Auth mode: `none`, `api-key`, `jwt`            |
+| `FIRECRAWL_API_KEY`  | No       | —                        | Firecrawl API key (if using Firecrawl crawler) |
+| `CONTENT_STORE`      | No       | `filesystem`             | Storage backend: `filesystem` or `s3`          |
+| `SENTRY_DSN`         | No       | —                        | Sentry error tracking endpoint                 |
+| `LOG_LEVEL`          | No       | `info`                   | Log level: `debug`, `info`, `warn`, `error`    |
 
 \* Not required when using Ollama. See [.env.example](.env.example) for the full list.
 
 ## CLI Usage
 
-| Command | Description |
-|---------|-------------|
-| `spatula init` | Initialize a new project in the current directory |
-| `spatula new` | Interactive project creation wizard |
-| `spatula run` | Run the crawl pipeline (press `[d]` for dashboard) |
-| `spatula status` | Show project status and run history |
-| `spatula explore` | Browse extracted entities in a TUI |
-| `spatula review` | Review pending schema actions in a TUI |
-| `spatula export` | Export data (json, csv, sqlite, parquet, duckdb) |
-| `spatula schema` | View current schema and version history |
-| `spatula logs` | View run logs (`--tail` for live follow) |
-| `spatula add <url>` | Add seed URLs to the project |
-| `spatula estimate` | Estimate crawl cost before running |
-| `spatula doctor` | Diagnose environment and project health |
-| `spatula test <url>` | Test extraction on a single page |
-| `spatula config` | Open project config in your editor |
-| `spatula setup` | Reconfigure global settings (LLM, crawler) |
-| `spatula reset` | Reset project data for a fresh crawl |
+| Command              | Description                                        |
+| -------------------- | -------------------------------------------------- |
+| `spatula init`       | Initialize a new project in the current directory  |
+| `spatula new`        | Interactive project creation wizard                |
+| `spatula run`        | Run the crawl pipeline (press `[d]` for dashboard) |
+| `spatula status`     | Show project status and run history                |
+| `spatula explore`    | Browse extracted entities in a TUI                 |
+| `spatula review`     | Review pending schema actions in a TUI             |
+| `spatula export`     | Export data (json, csv, sqlite, parquet, duckdb)   |
+| `spatula schema`     | View current schema and version history            |
+| `spatula logs`       | View run logs (`--tail` for live follow)           |
+| `spatula add <url>`  | Add seed URLs to the project                       |
+| `spatula estimate`   | Estimate crawl cost before running                 |
+| `spatula doctor`     | Diagnose environment and project health            |
+| `spatula test <url>` | Test extraction on a single page                   |
+| `spatula config`     | Open project config in your editor                 |
+| `spatula setup`      | Reconfigure global settings (LLM, crawler)         |
+| `spatula reset`      | Reset project data for a fresh crawl               |
 
 ## API Reference
 
@@ -190,32 +190,32 @@ The API server exposes a RESTful JSON API with OpenAPI documentation.
 
 **Key endpoints:**
 
-| Method | Path | Description |
-|--------|------|-------------|
-| `POST` | `/api/v1/jobs` | Create a crawl job |
-| `GET` | `/api/v1/jobs/:jobId` | Get job status |
-| `GET` | `/api/v1/jobs/:jobId/entities` | List extracted entities |
-| `GET` | `/api/v1/jobs/:jobId/schema` | Get current schema |
-| `GET` | `/api/v1/jobs/:jobId/actions` | List pending actions |
-| `POST` | `/api/v1/jobs/:jobId/actions/:actionId/approve` | Approve a schema action |
-| `POST` | `/api/v1/jobs/:jobId/export` | Create an export |
-| `GET` | `/api/v1/jobs/:jobId/exports/:exportId/download` | Download export file |
-| `POST` | `/api/v1/actions/batch` | Bulk approve/reject actions |
-| `POST` | `/api/v1/jobs/batch` | Bulk cancel/delete jobs |
-| `GET` | `/api/v1/usage` | LLM usage and cost breakdown |
-| `GET` | `/health` | Health check |
+| Method | Path                                             | Description                  |
+| ------ | ------------------------------------------------ | ---------------------------- |
+| `POST` | `/api/v1/jobs`                                   | Create a crawl job           |
+| `GET`  | `/api/v1/jobs/:jobId`                            | Get job status               |
+| `GET`  | `/api/v1/jobs/:jobId/entities`                   | List extracted entities      |
+| `GET`  | `/api/v1/jobs/:jobId/schema`                     | Get current schema           |
+| `GET`  | `/api/v1/jobs/:jobId/actions`                    | List pending actions         |
+| `POST` | `/api/v1/jobs/:jobId/actions/:actionId/approve`  | Approve a schema action      |
+| `POST` | `/api/v1/jobs/:jobId/export`                     | Create an export             |
+| `GET`  | `/api/v1/jobs/:jobId/exports/:exportId/download` | Download export file         |
+| `POST` | `/api/v1/actions/batch`                          | Bulk approve/reject actions  |
+| `POST` | `/api/v1/jobs/batch`                             | Bulk cancel/delete jobs      |
+| `GET`  | `/api/v1/usage`                                  | LLM usage and cost breakdown |
+| `GET`  | `/health`                                        | Health check                 |
 
 All endpoints require authentication when `AUTH_STRATEGY` is set. See [.env.example](.env.example) for auth configuration.
 
 ## Export Formats
 
-| Format | Extension | Best For | Streaming | Provenance |
-|--------|-----------|----------|-----------|------------|
-| JSON | `.json` | APIs, nested data | Yes | Yes |
-| CSV | `.csv` | Spreadsheets, simple tabular data | Yes | No |
-| Parquet | `.parquet` | Big data analytics (Spark, DuckDB) | No | Yes |
-| SQLite | `.db` | Local querying, portable database | No | Yes |
-| DuckDB | `.duckdb` | Analytics, columnar queries | No | Yes |
+| Format  | Extension  | Best For                           | Streaming | Provenance |
+| ------- | ---------- | ---------------------------------- | --------- | ---------- |
+| JSON    | `.json`    | APIs, nested data                  | Yes       | Yes        |
+| CSV     | `.csv`     | Spreadsheets, simple tabular data  | Yes       | No         |
+| Parquet | `.parquet` | Big data analytics (Spark, DuckDB) | No        | Yes        |
+| SQLite  | `.db`      | Local querying, portable database  | No        | Yes        |
+| DuckDB  | `.duckdb`  | Analytics, columnar queries        | No        | Yes        |
 
 ```bash
 # Export with provenance metadata

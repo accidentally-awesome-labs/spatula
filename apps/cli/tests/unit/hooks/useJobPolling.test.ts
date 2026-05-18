@@ -3,16 +3,22 @@ import React from 'react';
 import { render } from 'ink-testing-library';
 import { Text } from 'ink';
 import { createCliStore } from '../../../src/store/index.js';
-import { useJobPolling, isDataSource, fetchFromDataSource } from '../../../src/hooks/useJobPolling.js';
+import {
+  useJobPolling,
+  isDataSource,
+  fetchFromDataSource,
+} from '../../../src/hooks/useJobPolling.js';
 import type { SpatulaApiClient } from '../../../src/api/client.js';
 import type { DataSource } from '@spatula/core';
 
 function createMockApiClient(overrides: Partial<SpatulaApiClient> = {}): SpatulaApiClient {
   return {
     getJob: vi.fn().mockResolvedValue({ id: 'job-1', name: 'Test Job', status: 'running' }),
-    listActions: vi.fn().mockResolvedValue([
-      { id: 'a1', type: 'add_field', status: 'pending_review', confidence: 0.9 },
-    ]),
+    listActions: vi
+      .fn()
+      .mockResolvedValue([
+        { id: 'a1', type: 'add_field', status: 'pending_review', confidence: 0.9 },
+      ]),
     getSchema: vi.fn().mockResolvedValue({ mode: 'hybrid', version: 2 }),
     listEntities: vi.fn().mockResolvedValue([{ id: 'e1', mergedData: { name: 'Test' } }]),
     ...overrides,
@@ -160,9 +166,7 @@ describe('useJobPolling (ApiClient mode)', () => {
     const store = createCliStore('test-tenant');
     const apiClient = createMockApiClient();
 
-    render(
-      React.createElement(TestComponent, { store, backend: apiClient, jobId: 'job-1' }),
-    );
+    render(React.createElement(TestComponent, { store, backend: apiClient, jobId: 'job-1' }));
 
     await vi.advanceTimersByTimeAsync(100);
 
@@ -174,9 +178,7 @@ describe('useJobPolling (ApiClient mode)', () => {
     const store = createCliStore('test-tenant');
     const apiClient = createMockApiClient();
 
-    render(
-      React.createElement(TestComponent, { store, backend: apiClient, jobId: 'job-1' }),
-    );
+    render(React.createElement(TestComponent, { store, backend: apiClient, jobId: 'job-1' }));
 
     await vi.advanceTimersByTimeAsync(100);
 
@@ -188,9 +190,7 @@ describe('useJobPolling (ApiClient mode)', () => {
     const store = createCliStore('test-tenant');
     const apiClient = createMockApiClient();
 
-    render(
-      React.createElement(TestComponent, { store, backend: apiClient, jobId: 'job-1' }),
-    );
+    render(React.createElement(TestComponent, { store, backend: apiClient, jobId: 'job-1' }));
 
     await vi.advanceTimersByTimeAsync(100);
 
@@ -202,9 +202,7 @@ describe('useJobPolling (ApiClient mode)', () => {
     const store = createCliStore('test-tenant');
     const apiClient = createMockApiClient();
 
-    render(
-      React.createElement(TestComponent, { store, backend: apiClient, jobId: 'job-1' }),
-    );
+    render(React.createElement(TestComponent, { store, backend: apiClient, jobId: 'job-1' }));
 
     await vi.advanceTimersByTimeAsync(100);
 
@@ -254,9 +252,7 @@ describe('useJobPolling (ApiClient mode)', () => {
       getSchema: vi.fn().mockRejectedValue(new Error('Schema not found')),
     });
 
-    render(
-      React.createElement(TestComponent, { store, backend: apiClient, jobId: 'job-1' }),
-    );
+    render(React.createElement(TestComponent, { store, backend: apiClient, jobId: 'job-1' }));
 
     await vi.advanceTimersByTimeAsync(100);
 
@@ -290,9 +286,7 @@ describe('useJobPolling (ApiClient mode)', () => {
     const store = createCliStore('test-tenant');
     const apiClient = createMockApiClient();
 
-    render(
-      React.createElement(TestComponent, { store, backend: apiClient, jobId: '' }),
-    );
+    render(React.createElement(TestComponent, { store, backend: apiClient, jobId: '' }));
 
     await vi.advanceTimersByTimeAsync(5000);
 
@@ -323,9 +317,9 @@ describe('useJobPolling (DataSource mode)', () => {
         schemaFields: 5,
         storageBytes: { pages: 0, database: 0, exports: 0 },
       }),
-      getActions: vi.fn().mockResolvedValue([
-        { id: 'a1', type: 'add_field', status: 'pending_review' },
-      ]),
+      getActions: vi
+        .fn()
+        .mockResolvedValue([{ id: 'a1', type: 'add_field', status: 'pending_review' }]),
       getSchema: vi.fn().mockResolvedValue({ version: 2, fields: [] }),
       getEntities: vi.fn().mockResolvedValue({
         data: [{ id: 'e1', mergedData: { name: 'Local Entity' } }],
@@ -348,9 +342,7 @@ describe('useJobPolling (DataSource mode)', () => {
     const store = createCliStore('test-tenant');
     const ds = createMockDataSource();
 
-    render(
-      React.createElement(TestComponent, { store, backend: ds, jobId: 'local' }),
-    );
+    render(React.createElement(TestComponent, { store, backend: ds, jobId: 'local' }));
 
     await vi.advanceTimersByTimeAsync(100);
 
@@ -362,9 +354,7 @@ describe('useJobPolling (DataSource mode)', () => {
     const store = createCliStore('test-tenant');
     const ds = createMockDataSource();
 
-    render(
-      React.createElement(TestComponent, { store, backend: ds, jobId: 'local' }),
-    );
+    render(React.createElement(TestComponent, { store, backend: ds, jobId: 'local' }));
 
     await vi.advanceTimersByTimeAsync(100);
 
@@ -376,9 +366,7 @@ describe('useJobPolling (DataSource mode)', () => {
     const store = createCliStore('test-tenant');
     const ds = createMockDataSource();
 
-    render(
-      React.createElement(TestComponent, { store, backend: ds, jobId: 'local' }),
-    );
+    render(React.createElement(TestComponent, { store, backend: ds, jobId: 'local' }));
 
     await vi.advanceTimersByTimeAsync(100);
 
@@ -390,9 +378,7 @@ describe('useJobPolling (DataSource mode)', () => {
     const store = createCliStore('test-tenant');
     const ds = createMockDataSource();
 
-    render(
-      React.createElement(TestComponent, { store, backend: ds, jobId: 'local' }),
-    );
+    render(React.createElement(TestComponent, { store, backend: ds, jobId: 'local' }));
 
     await vi.advanceTimersByTimeAsync(100);
 
@@ -406,9 +392,7 @@ describe('useJobPolling (DataSource mode)', () => {
     const store = createCliStore('test-tenant');
     const ds = createMockDataSource();
 
-    render(
-      React.createElement(TestComponent, { store, backend: ds, jobId: 'local' }),
-    );
+    render(React.createElement(TestComponent, { store, backend: ds, jobId: 'local' }));
 
     await vi.advanceTimersByTimeAsync(100);
 

@@ -1,12 +1,18 @@
 import { createRoute, z } from '@hono/zod-openapi';
 import { createOpenAPIRouter } from '../openapi-config.js';
-import type { AppEnv } from '../types.js';
 import { createTenantSchema, updateTenantSchema } from '../schemas/tenant.js';
-import { tenantResponseSchema, errorResponseSchema, dataResponse, jsonContent } from '../schemas/responses.js';
+import {
+  tenantResponseSchema,
+  errorResponseSchema,
+  dataResponse,
+  jsonContent,
+} from '../schemas/responses.js';
 import { NotFoundError } from '../middleware/error-handler.js';
 
 const createTenantRoute = createRoute({
-  method: 'post', path: '/', tags: ['Tenants'],
+  method: 'post',
+  path: '/',
+  tags: ['Tenants'],
   summary: 'Create a new tenant',
   request: {
     body: { content: { 'application/json': { schema: createTenantSchema } }, required: true },
@@ -18,7 +24,9 @@ const createTenantRoute = createRoute({
 });
 
 const getTenantRoute = createRoute({
-  method: 'get', path: '/{id}', tags: ['Tenants'],
+  method: 'get',
+  path: '/{id}',
+  tags: ['Tenants'],
   summary: 'Get tenant by ID',
   request: {
     params: z.object({
@@ -32,7 +40,9 @@ const getTenantRoute = createRoute({
 });
 
 const updateTenantRoute = createRoute({
-  method: 'patch', path: '/{id}', tags: ['Tenants'],
+  method: 'patch',
+  path: '/{id}',
+  tags: ['Tenants'],
   summary: 'Update tenant name or config',
   request: {
     params: z.object({

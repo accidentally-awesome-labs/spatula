@@ -1,6 +1,6 @@
 import { eq, and, desc, sql } from 'drizzle-orm';
 import { createLogger, StorageError } from '@spatula/shared';
-import { entities, entitySources } from '../schema/entities.js';
+import { entities } from '../schema/entities.js';
 import type { Database } from '../connection.js';
 import type { RedisCache } from '../cache.js';
 
@@ -71,14 +71,16 @@ export class EntityRepository {
     }
   }
 
-  async findByJob(jobId: string, tenantId: string, options?: { limit?: number; offset?: number; search?: string }) {
+  async findByJob(
+    jobId: string,
+    tenantId: string,
+    options?: { limit?: number; offset?: number; search?: string },
+  ) {
     try {
       const conditions = [eq(entities.jobId, jobId), eq(entities.tenantId, tenantId)];
 
       if (options?.search) {
-        conditions.push(
-          sql`${entities.mergedData}::text ILIKE ${'%' + options.search + '%'}`,
-        );
+        conditions.push(sql`${entities.mergedData}::text ILIKE ${'%' + options.search + '%'}`);
       }
 
       let query = this.db
@@ -90,7 +92,10 @@ export class EntityRepository {
           categories: entities.categories,
           qualityScore: entities.qualityScore,
           createdAt: entities.createdAt,
-          sourceCount: sql<number>`(SELECT count(*)::int FROM entity_sources es WHERE es.entity_id = ${entities.id})`.as('source_count'),
+          sourceCount:
+            sql<number>`(SELECT count(*)::int FROM entity_sources es WHERE es.entity_id = ${entities.id})`.as(
+              'source_count',
+            ),
         })
         .from(entities)
         .where(and(...conditions))
@@ -113,7 +118,11 @@ export class EntityRepository {
     }
   }
 
-  async findByJobWithProvenance(jobId: string, tenantId: string, options?: { limit?: number; offset?: number }) {
+  async findByJobWithProvenance(
+    jobId: string,
+    tenantId: string,
+    options?: { limit?: number; offset?: number },
+  ) {
     try {
       let query = this.db
         .select()
@@ -131,14 +140,21 @@ export class EntityRepository {
 
       return await query;
     } catch (error) {
-      throw new StorageError(`Failed to find entities with provenance: ${(error as Error).message}`, {
-        cause: error as Error,
-        context: { jobId },
-      });
+      throw new StorageError(
+        `Failed to find entities with provenance: ${(error as Error).message}`,
+        {
+          cause: error as Error,
+          context: { jobId },
+        },
+      );
     }
   }
 
-  async countByJob(jobId: string, tenantId: string, options?: { search?: string }): Promise<number> {
+  async countByJob(
+    jobId: string,
+    tenantId: string,
+    options?: { search?: string },
+  ): Promise<number> {
     // Only cache when there's no search filter (search results are too dynamic)
     if (this.cache && !options?.search) {
       const cacheKey = `entity-count:${jobId}`;
@@ -151,14 +167,16 @@ export class EntityRepository {
     return this._countByJobFromDb(jobId, tenantId, options);
   }
 
-  private async _countByJobFromDb(jobId: string, tenantId: string, options?: { search?: string }): Promise<number> {
+  private async _countByJobFromDb(
+    jobId: string,
+    tenantId: string,
+    options?: { search?: string },
+  ): Promise<number> {
     try {
       const conditions = [eq(entities.jobId, jobId), eq(entities.tenantId, tenantId)];
 
       if (options?.search) {
-        conditions.push(
-          sql`${entities.mergedData}::text ILIKE ${'%' + options.search + '%'}`,
-        );
+        conditions.push(sql`${entities.mergedData}::text ILIKE ${'%' + options.search + '%'}`);
       }
 
       const [result] = await this.db

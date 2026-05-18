@@ -56,10 +56,7 @@ export const errorHandler: ErrorHandler = (error, c) => {
   const requestId = c.get('requestId') ?? c.req.header('x-request-id') ?? crypto.randomUUID();
 
   if (status >= 500) {
-    logger.error(
-      { err: error, requestId, path: c.req.path },
-      'unhandled error',
-    );
+    logger.error({ err: error, requestId, path: c.req.path }, 'unhandled error');
     captureException(error, { requestId, path: c.req.path });
   } else {
     logger.warn(
@@ -72,10 +69,8 @@ export const errorHandler: ErrorHandler = (error, c) => {
     );
   }
 
-  const code =
-    error instanceof SpatulaError ? error.code : 'INTERNAL_ERROR';
-  const message =
-    status >= 500 ? 'Internal server error' : error.message;
+  const code = error instanceof SpatulaError ? error.code : 'INTERNAL_ERROR';
+  const message = status >= 500 ? 'Internal server error' : error.message;
 
   return c.json(
     {

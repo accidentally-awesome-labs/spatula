@@ -1,9 +1,9 @@
 ---
 name: Feature Request
 about: Suggest an idea for Spatula
-title: ""
+title: ''
 labels: enhancement
-assignees: ""
+assignees: ''
 ---
 
 ## Use Case

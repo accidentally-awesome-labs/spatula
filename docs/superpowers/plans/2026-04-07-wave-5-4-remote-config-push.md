@@ -14,35 +14,36 @@
 
 ### New files
 
-| File | Responsibility |
-|------|---------------|
-| `apps/cli/src/commands/remote.ts` | `remote add/list/remove/status/pause/resume/cancel` command logic |
-| `apps/cli/src/commands/push.ts` | `push` command — transform YAML → JobConfig, POST to remote, store link |
-| `apps/cli/src/commands/remote-watch.tsx` | `remote watch` — Ink TUI connecting to remote WebSocket |
-| `apps/cli/src/data-sources/api-data-source.ts` | `ApiDataSource` implementing `DataSource` via `SpatulaApiClient` |
-| `apps/cli/tests/unit/commands/remote.test.ts` | Tests for remote add/list/remove/status/pause/resume/cancel |
-| `apps/cli/tests/unit/commands/push.test.ts` | Tests for push command |
-| `apps/cli/tests/unit/commands/remote-watch.test.ts` | Tests for remote watch |
-| `apps/cli/tests/unit/data-sources/api-data-source.test.ts` | Tests for ApiDataSource |
-| `apps/cli/tests/unit/api/client-auth.test.ts` | Tests for SpatulaApiClient auth header injection + new methods |
+| File                                                       | Responsibility                                                          |
+| ---------------------------------------------------------- | ----------------------------------------------------------------------- |
+| `apps/cli/src/commands/remote.ts`                          | `remote add/list/remove/status/pause/resume/cancel` command logic       |
+| `apps/cli/src/commands/push.ts`                            | `push` command — transform YAML → JobConfig, POST to remote, store link |
+| `apps/cli/src/commands/remote-watch.tsx`                   | `remote watch` — Ink TUI connecting to remote WebSocket                 |
+| `apps/cli/src/data-sources/api-data-source.ts`             | `ApiDataSource` implementing `DataSource` via `SpatulaApiClient`        |
+| `apps/cli/tests/unit/commands/remote.test.ts`              | Tests for remote add/list/remove/status/pause/resume/cancel             |
+| `apps/cli/tests/unit/commands/push.test.ts`                | Tests for push command                                                  |
+| `apps/cli/tests/unit/commands/remote-watch.test.ts`        | Tests for remote watch                                                  |
+| `apps/cli/tests/unit/data-sources/api-data-source.test.ts` | Tests for ApiDataSource                                                 |
+| `apps/cli/tests/unit/api/client-auth.test.ts`              | Tests for SpatulaApiClient auth header injection + new methods          |
 
 ### Modified files
 
-| File | Change |
-|------|--------|
-| `apps/cli/src/api/client.ts` | Add optional `apiKey` to constructor, inject `Authorization` header, add `getSubscription()`, `getEntitiesStream()`, `getWsToken()` methods |
-| `packages/core/src/config/global-config.ts` | Add `saveGlobalConfig()` function |
-| `packages/core/src/config/index.ts` | Export `saveGlobalConfig` |
-| `apps/cli/src/index.tsx` | Register `remote` and `push` commands |
-| `apps/cli/src/hooks/useWebSocket.ts` | Support optional `token` query param for authenticated WS connections |
-| `apps/cli/src/components/dashboard/DashboardView.tsx` | Add optional `wsToken` prop, pass to `useWebSocket` |
-| `apps/cli/src/local-project.ts` | Expose `metaRepo` on `LocalProject` for remote link access |
+| File                                                  | Change                                                                                                                                      |
+| ----------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------- |
+| `apps/cli/src/api/client.ts`                          | Add optional `apiKey` to constructor, inject `Authorization` header, add `getSubscription()`, `getEntitiesStream()`, `getWsToken()` methods |
+| `packages/core/src/config/global-config.ts`           | Add `saveGlobalConfig()` function                                                                                                           |
+| `packages/core/src/config/index.ts`                   | Export `saveGlobalConfig`                                                                                                                   |
+| `apps/cli/src/index.tsx`                              | Register `remote` and `push` commands                                                                                                       |
+| `apps/cli/src/hooks/useWebSocket.ts`                  | Support optional `token` query param for authenticated WS connections                                                                       |
+| `apps/cli/src/components/dashboard/DashboardView.tsx` | Add optional `wsToken` prop, pass to `useWebSocket`                                                                                         |
+| `apps/cli/src/local-project.ts`                       | Expose `metaRepo` on `LocalProject` for remote link access                                                                                  |
 
 ---
 
 ## Task 1: SpatulaApiClient — Auth Header Support
 
 **Files:**
+
 - Modify: `apps/cli/src/api/client.ts`
 - Test: `apps/cli/tests/unit/api/client-auth.test.ts`
 
@@ -155,6 +156,7 @@ git commit -m "feat(cli): add API key auth support to SpatulaApiClient"
 ## Task 2: SpatulaApiClient — New Methods
 
 **Files:**
+
 - Modify: `apps/cli/src/api/client.ts`
 - Test: `apps/cli/tests/unit/api/client-auth.test.ts` (append)
 
@@ -299,6 +301,7 @@ git commit -m "feat(cli): add getSubscription, getEntitiesStream, getWsToken, ge
 ## Task 3: saveGlobalConfig Utility
 
 **Files:**
+
 - Modify: `packages/core/src/config/global-config.ts`
 - Modify: `packages/core/src/config/index.ts`
 - Test: `packages/core/tests/unit/config/global-config.test.ts` (append)
@@ -368,9 +371,9 @@ Expected: FAIL — `saveGlobalConfig` does not exist
 In `packages/core/src/config/global-config.ts`, add:
 
 ```typescript
-import { writeFileSync, mkdirSync } from 'node:fs';  // add to existing imports
-import { dirname } from 'node:path';                   // add to existing imports
-import { stringify as stringifyYaml } from 'yaml';      // add new import
+import { writeFileSync, mkdirSync } from 'node:fs'; // add to existing imports
+import { dirname } from 'node:path'; // add to existing imports
+import { stringify as stringifyYaml } from 'yaml'; // add new import
 
 export interface SaveGlobalConfigOptions {
   merge?: boolean;
@@ -434,6 +437,7 @@ git commit -m "feat(core): add saveGlobalConfig utility with merge support"
 ## Task 4: Remote Add Command
 
 **Files:**
+
 - Create: `apps/cli/src/commands/remote.ts`
 - Test: `apps/cli/tests/unit/commands/remote.test.ts`
 
@@ -460,16 +464,16 @@ vi.mock('@spatula/core', async () => {
 });
 
 // Mock fetch for health + subscription checks
-function mockFetchSequence(responses: Array<{ ok: boolean; data?: unknown; status?: number }>): void {
+function mockFetchSequence(
+  responses: Array<{ ok: boolean; data?: unknown; status?: number }>,
+): void {
   const mockFn = vi.fn();
   for (const r of responses) {
     mockFn.mockResolvedValueOnce({
       ok: r.ok,
       status: r.status ?? (r.ok ? 200 : 500),
       json: () =>
-        Promise.resolve(
-          r.ok ? (r.data ?? { status: 'ok' }) : { error: { message: 'fail' } },
-        ),
+        Promise.resolve(r.ok ? (r.data ?? { status: 'ok' }) : { error: { message: 'fail' } }),
     });
   }
   vi.stubGlobal('fetch', mockFn);
@@ -484,8 +488,8 @@ describe('runRemoteAdd', () => {
 
   it('saves remote config after verifying health and auth', async () => {
     mockFetchSequence([
-      { ok: true, data: { status: 'ok' } },               // GET /health
-      { ok: true, data: { plan: 'starter', usage: {} } },  // GET /api/v1/billing/subscription
+      { ok: true, data: { status: 'ok' } }, // GET /health
+      { ok: true, data: { plan: 'starter', usage: {} } }, // GET /api/v1/billing/subscription
     ]);
 
     const result = await runRemoteAdd({
@@ -518,8 +522,8 @@ describe('runRemoteAdd', () => {
 
   it('returns error when auth check fails', async () => {
     mockFetchSequence([
-      { ok: true, data: { status: 'ok' } },  // health OK
-      { ok: false, status: 401 },             // subscription 401
+      { ok: true, data: { status: 'ok' } }, // health OK
+      { ok: false, status: 401 }, // subscription 401
     ]);
 
     const result = await runRemoteAdd({
@@ -629,7 +633,10 @@ export async function runRemoteAdd(input: RemoteAddInput): Promise<RemoteAddResu
     const sub = await client.getSubscription();
     plan = sub.plan as string | undefined;
   } catch {
-    return { success: false, error: `Authentication failed — check your API key (auth verification failed)` };
+    return {
+      success: false,
+      error: `Authentication failed — check your API key (auth verification failed)`,
+    };
   }
 
   // 3. Save to global config
@@ -738,7 +745,10 @@ export async function runRemoteStatus(
   const { client } = createRemoteClient(name);
   const jobId = await metaGet(`remote:${name}:job_id`);
   if (!jobId) {
-    return { success: false, error: `No linked job for remote "${name}". Run \`spatula push\` first.` };
+    return {
+      success: false,
+      error: `No linked job for remote "${name}". Run \`spatula push\` first.`,
+    };
   }
   try {
     const job = await client.getJob(jobId);
@@ -760,7 +770,10 @@ export async function runRemoteJobAction(
   const { client } = createRemoteClient(name);
   const jobId = await metaGet(`remote:${name}:job_id`);
   if (!jobId) {
-    return { success: false, error: `No linked job for remote "${name}". Run \`spatula push\` first.` };
+    return {
+      success: false,
+      error: `No linked job for remote "${name}". Run \`spatula push\` first.`,
+    };
   }
   try {
     const methods = {
@@ -795,6 +808,7 @@ git commit -m "feat(cli): add remote add/list/remove commands with auth verifica
 ## Task 5: Remote List / Remove Tests
 
 **Files:**
+
 - Test: `apps/cli/tests/unit/commands/remote.test.ts` (append)
 
 - [ ] **Step 1: Append tests for list and remove**
@@ -821,8 +835,16 @@ describe('runRemoteList', () => {
     };
     const result = await runRemoteList();
     expect(result.remotes).toHaveLength(2);
-    expect(result.remotes[0]).toMatchObject({ name: 'prod', url: 'https://api.spatula.dev', hasApiKey: true });
-    expect(result.remotes[1]).toMatchObject({ name: 'staging', url: 'https://staging.spatula.dev', hasApiKey: false });
+    expect(result.remotes[0]).toMatchObject({
+      name: 'prod',
+      url: 'https://api.spatula.dev',
+      hasApiKey: true,
+    });
+    expect(result.remotes[1]).toMatchObject({
+      name: 'staging',
+      url: 'https://staging.spatula.dev',
+      hasApiKey: false,
+    });
   });
 
   it('includes live job status when metaGet is provided', async () => {
@@ -893,6 +915,7 @@ git commit -m "test(cli): add remote list/remove command tests"
 ## Task 6: Remote Status / Pause / Resume / Cancel Tests
 
 **Files:**
+
 - Test: `apps/cli/tests/unit/commands/remote.test.ts` (append)
 
 - [ ] **Step 1: Append tests for job control commands**
@@ -959,8 +982,7 @@ describe('runRemoteJobAction', () => {
   it('returns error when remote not configured', async () => {
     mockConfig = { version: 1 };
     const metaGet = vi.fn().mockResolvedValue('job-1');
-    await expect(runRemoteJobAction('missing', 'pause', metaGet))
-      .rejects.toThrow('not found');
+    await expect(runRemoteJobAction('missing', 'pause', metaGet)).rejects.toThrow('not found');
   });
 });
 ```
@@ -982,6 +1004,7 @@ git commit -m "test(cli): add remote status/pause/resume/cancel tests"
 ## Task 7: Push Command
 
 **Files:**
+
 - Create: `apps/cli/src/commands/push.ts`
 - Test: `apps/cli/tests/unit/commands/push.test.ts`
 
@@ -999,12 +1022,15 @@ vi.mock('@spatula/core', async () => {
   const actual = await vi.importActual<typeof import('@spatula/core')>('@spatula/core');
   return {
     ...actual,
-    loadGlobalConfig: vi.fn(() => ({
-      version: 1,
-      remotes: {
-        prod: { url: 'https://api.spatula.dev', apiKey: 'sk_live_abc' },
-      },
-    } as GlobalConfig)),
+    loadGlobalConfig: vi.fn(
+      () =>
+        ({
+          version: 1,
+          remotes: {
+            prod: { url: 'https://api.spatula.dev', apiKey: 'sk_live_abc' },
+          },
+        }) as GlobalConfig,
+    ),
     parseProjectYamlFile: vi.fn(() => ({
       name: 'test-crawl',
       seeds: ['https://example.com'],
@@ -1059,10 +1085,7 @@ describe('runPushCommand', () => {
     expect(result.success).toBe(true);
     expect(result.jobId).toBe('remote-job-123');
     expect(mockMetaSet).toHaveBeenCalledWith('remote:prod:job_id', 'remote-job-123');
-    expect(mockMetaSet).toHaveBeenCalledWith(
-      'remote:prod:pushed_at',
-      expect.any(String),
-    );
+    expect(mockMetaSet).toHaveBeenCalledWith('remote:prod:pushed_at', expect.any(String));
   });
 
   it('returns existing job conflict when linked job is still running', async () => {
@@ -1102,13 +1125,16 @@ describe('runPushCommand', () => {
     });
 
     // First call = getJob (check existing, completed), second = createJob
-    const fetchMock = vi.fn()
+    const fetchMock = vi
+      .fn()
       .mockResolvedValueOnce({
-        ok: true, status: 200,
+        ok: true,
+        status: 200,
         json: () => Promise.resolve({ data: { id: 'old-job-done', status: 'completed' } }),
       })
       .mockResolvedValueOnce({
-        ok: true, status: 200,
+        ok: true,
+        status: 200,
         json: () => Promise.resolve({ data: { id: 'new-job-456', status: 'pending' } }),
       });
     vi.stubGlobal('fetch', fetchMock);
@@ -1173,14 +1199,7 @@ export interface PushResult {
 // ---------------------------------------------------------------------------
 
 export async function runPushCommand(input: PushInput): Promise<PushResult> {
-  const {
-    remoteName,
-    projectRoot,
-    metaGet,
-    metaSet,
-    autoStart = false,
-    forceNew = false,
-  } = input;
+  const { remoteName, projectRoot, metaGet, metaSet, autoStart = false, forceNew = false } = input;
 
   // 1. Resolve remote config
   const config = loadGlobalConfig();
@@ -1276,6 +1295,7 @@ git commit -m "feat(cli): add push command — creates remote jobs from local co
 ## Task 8: ApiDataSource
 
 **Files:**
+
 - Create: `apps/cli/src/data-sources/api-data-source.ts`
 - Test: `apps/cli/tests/unit/data-sources/api-data-source.test.ts`
 
@@ -1464,7 +1484,7 @@ export class ApiDataSource implements DataSource {
       totalPages: (job.pagesDiscovered as number) ?? 0,
       totalEntities: (job.entitiesExtracted as number) ?? 0,
       pendingActions: 0, // Not available from job endpoint
-      schemaFields: 0,   // Not available from job endpoint
+      schemaFields: 0, // Not available from job endpoint
       storageBytes: { pages: 0, database: 0, exports: 0 },
     };
   }
@@ -1504,6 +1524,7 @@ git commit -m "feat(cli): add ApiDataSource implementing DataSource for remote a
 ## Task 9: WebSocket Token Auth Support
 
 **Files:**
+
 - Modify: `apps/cli/src/hooks/useWebSocket.ts`
 - Test: `apps/cli/tests/unit/commands/remote-watch.test.ts`
 
@@ -1584,7 +1605,7 @@ export function useWebSocket(
     const wsUrl = buildWsUrl(baseUrl, tenantId, jobId, token);
 
     // ... rest of connect() and cleanup unchanged ...
-  }, [store, baseUrl, tenantId, jobId, token]);  // Add token to deps
+  }, [store, baseUrl, tenantId, jobId, token]); // Add token to deps
 
   return { connected, error };
 }
@@ -1612,6 +1633,7 @@ git commit -m "feat(cli): add token-based WS auth for remote watch connections"
 ## Task 10: Remote Watch Command (Ink TUI) + DashboardView wsToken Support
 
 **Files:**
+
 - Modify: `apps/cli/src/components/dashboard/DashboardView.tsx`
 - Create: `apps/cli/src/commands/remote-watch.tsx`
 - Test: `apps/cli/tests/unit/commands/remote-watch.test.ts` (append)
@@ -1639,13 +1661,13 @@ export function DashboardView({
 Then update the `useWebSocket` call to pass the token:
 
 ```typescript
-  const { connected: wsConnected } = useWebSocket(
-    store,
-    wsBaseUrl,
-    wsTenantId,
-    activeJobId ?? '',
-    wsToken,
-  );
+const { connected: wsConnected } = useWebSocket(
+  store,
+  wsBaseUrl,
+  wsTenantId,
+  activeJobId ?? '',
+  wsToken,
+);
 ```
 
 - [ ] **Step 2: Append test for getRemoteWatchConfig helper**
@@ -1736,9 +1758,7 @@ export async function getRemoteWatchConfig(
 
   const jobId = await metaGet(`remote:${remoteName}:job_id`);
   if (!jobId) {
-    throw new Error(
-      `No linked job for remote "${remoteName}". Run \`spatula push\` first.`,
-    );
+    throw new Error(`No linked job for remote "${remoteName}". Run \`spatula push\` first.`);
   }
 
   return { baseUrl: remote.url, apiKey: remote.apiKey, jobId };
@@ -1798,6 +1818,7 @@ git commit -m "feat(cli): add remote watch command with WS token auth and dashbo
 ## Task 11: Expose metaRepo on LocalProject + CLI Command Registration
 
 **Files:**
+
 - Modify: `apps/cli/src/local-project.ts`
 - Modify: `apps/cli/src/index.tsx`
 
@@ -1820,13 +1841,13 @@ export interface LocalProject {
 Then in `openLocalProject`, add `metaRepo` to the return:
 
 ```typescript
-  return {
-    dataSource,
-    projectRoot,
-    projectId,
-    metaRepo: adapter.metaRepo,
-    close: () => dbResult.close(),
-  };
+return {
+  dataSource,
+  projectRoot,
+  projectId,
+  metaRepo: adapter.metaRepo,
+  close: () => dbResult.close(),
+};
 ```
 
 - [ ] **Step 2: Add remote and push commands to CLI**
@@ -1834,7 +1855,13 @@ Then in `openLocalProject`, add `metaRepo` to the return:
 In `apps/cli/src/index.tsx`, add the imports at the top of the file:
 
 ```typescript
-import { runRemoteAdd, runRemoteList, runRemoteRemove, runRemoteStatus, runRemoteJobAction } from './commands/remote.js';
+import {
+  runRemoteAdd,
+  runRemoteList,
+  runRemoteRemove,
+  runRemoteStatus,
+  runRemoteJobAction,
+} from './commands/remote.js';
 ```
 
 Then add the `remote` command block before `.demandCommand(1, ...)`:
@@ -2090,6 +2117,7 @@ git commit -m "feat(cli): register remote and push commands in CLI entrypoint"
 > **Ordering note:** This task MUST be completed before Task 11 (CLI registration), which wires `deleteByPrefix` into the `remote remove` handler. It can be executed any time after Task 3.
 
 **Files:**
+
 - Modify: `packages/db/src/project-db/repositories/project-meta-repository.ts`
 - Test: existing project-meta tests (append)
 
@@ -2178,6 +2206,7 @@ git commit -m "feat(db): add delete and deleteByPrefix to ProjectMetaRepository"
 ## Task 13: Full Integration Test — Push Flow
 
 **Files:**
+
 - Test: `apps/cli/tests/unit/commands/push.test.ts` (append)
 
 - [ ] **Step 1: Add auto-start test**
@@ -2192,13 +2221,16 @@ describe('runPushCommand — auto-start', () => {
     mockMetaGet.mockResolvedValue(null);
 
     // First call = createJob, second call = startJob
-    const fetchMock = vi.fn()
+    const fetchMock = vi
+      .fn()
       .mockResolvedValueOnce({
-        ok: true, status: 200,
+        ok: true,
+        status: 200,
         json: () => Promise.resolve({ data: { id: 'job-auto', status: 'pending' } }),
       })
       .mockResolvedValueOnce({
-        ok: true, status: 200,
+        ok: true,
+        status: 200,
         json: () => Promise.resolve({ data: { id: 'job-auto', status: 'running' } }),
       });
     vi.stubGlobal('fetch', fetchMock);
@@ -2334,22 +2366,22 @@ git commit -m "fix: update existing tests for SpatulaApiClient optional options 
 
 ## Summary
 
-| Task | What | New/Modified Files |
-|------|------|-------------------|
-| 1 | API client auth headers | `client.ts`, `client-auth.test.ts` |
-| 2 | API client new methods | `client.ts`, `client-auth.test.ts` |
-| 3 | saveGlobalConfig utility | `global-config.ts`, `index.ts`, test |
-| 4 | Remote add command | `remote.ts`, `remote.test.ts` |
-| 5 | Remote list/remove tests | `remote.test.ts` |
-| 6 | Remote status/control tests | `remote.test.ts` |
-| 7 | Push command | `push.ts`, `push.test.ts` |
-| 8 | ApiDataSource | `api-data-source.ts`, test |
-| 9 | WS token auth | `useWebSocket.ts`, test |
-| 10 | Remote watch + DashboardView wsToken | `DashboardView.tsx`, `remote-watch.tsx`, test |
-| 11 | Expose metaRepo + CLI registration | `local-project.ts`, `index.tsx` |
-| 12 | Meta delete methods (before Task 11) | `project-meta-repository.ts`, test |
-| 13 | Push integration tests | `push.test.ts` |
-| 14 | Full suite verification | — |
+| Task | What                                 | New/Modified Files                            |
+| ---- | ------------------------------------ | --------------------------------------------- |
+| 1    | API client auth headers              | `client.ts`, `client-auth.test.ts`            |
+| 2    | API client new methods               | `client.ts`, `client-auth.test.ts`            |
+| 3    | saveGlobalConfig utility             | `global-config.ts`, `index.ts`, test          |
+| 4    | Remote add command                   | `remote.ts`, `remote.test.ts`                 |
+| 5    | Remote list/remove tests             | `remote.test.ts`                              |
+| 6    | Remote status/control tests          | `remote.test.ts`                              |
+| 7    | Push command                         | `push.ts`, `push.test.ts`                     |
+| 8    | ApiDataSource                        | `api-data-source.ts`, test                    |
+| 9    | WS token auth                        | `useWebSocket.ts`, test                       |
+| 10   | Remote watch + DashboardView wsToken | `DashboardView.tsx`, `remote-watch.tsx`, test |
+| 11   | Expose metaRepo + CLI registration   | `local-project.ts`, `index.tsx`               |
+| 12   | Meta delete methods (before Task 11) | `project-meta-repository.ts`, test            |
+| 13   | Push integration tests               | `push.test.ts`                                |
+| 14   | Full suite verification              | —                                             |
 
 **Execution order:** 1→2→3→4→5→6→7→8→9→10→12→11→13→14 (Task 12 before Task 11)
 

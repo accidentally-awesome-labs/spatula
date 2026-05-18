@@ -13,6 +13,7 @@
 ## Context & Pre-existing Code
 
 **Already defined (Phase 1 types):**
+
 - `NormalizationRule` — 7 discriminated union types in `packages/core/src/types/normalization.ts`
 - `EntityMatch`, `FieldProvenanceEntry`, `SourceTrust` — in `packages/core/src/types/reconciliation.ts`
 - `ReconciliationConfig`, `EntityMatchStrategy`, `ConflictResolution` — in `packages/core/src/types/job.ts`
@@ -22,11 +23,13 @@
 - LLM model routing — `resolveModel(config, 'entityMatching' | 'conflictResolution')` in `packages/core/src/llm/model-router.ts`
 
 **Already defined (Phase 4 DB):**
+
 - `entities` table + `entitySources` join table — in `packages/db/src/schema/entities.ts`
 - `sourceTrust` table — in `packages/db/src/schema/source-trust.ts`
 - DB connection type, repository patterns — `packages/db/src/repositories/`
 
 **Already defined (Phase 5 queue):**
+
 - `JobStateMachine` with `reconciling` state — `packages/queue/src/state-machine.ts`
 - `JobManager` — `packages/queue/src/job-manager.ts`
 - `WorkerDeps` pattern — `packages/queue/src/worker-deps.ts`
@@ -40,6 +43,7 @@
 Apply `NormalizationRule` objects to extraction data values. This is Layer 2 of the three-layer consolidation pipeline.
 
 **Files:**
+
 - Create: `packages/core/src/reconciliation/value-normalizer.ts`
 - Test: `packages/core/tests/unit/reconciliation/value-normalizer.test.ts`
 
@@ -129,15 +133,15 @@ describe('applyNormalizationRule', () => {
     });
 
     it('strips currency suffix', () => {
-      expect(applyNormalizationRule('329.00 USD', rule)).toBe(329.00);
+      expect(applyNormalizationRule('329.00 USD', rule)).toBe(329.0);
     });
 
     it('parses plain number string', () => {
-      expect(applyNormalizationRule('549', rule)).toBe(549.00);
+      expect(applyNormalizationRule('549', rule)).toBe(549.0);
     });
 
     it('rounds to configured decimal places', () => {
-      expect(applyNormalizationRule('$99.999', rule)).toBe(100.00);
+      expect(applyNormalizationRule('$99.999', rule)).toBe(100.0);
     });
 
     it('returns already-numeric values rounded', () => {
@@ -221,7 +225,10 @@ describe('normalizeExtractionData', () => {
         description: 'Name',
         type: 'string',
         required: true,
-        normalization: { type: 'text', config: { casing: 'title', trim: true, collapseWhitespace: true } },
+        normalization: {
+          type: 'text',
+          config: { casing: 'title', trim: true, collapseWhitespace: true },
+        },
       },
       {
         name: 'price',
@@ -265,7 +272,7 @@ describe('normalizeExtractionData', () => {
   });
 
   it('does not track unchanged fields', () => {
-    const data = { product_name: 'Already Title', price: 100.00 };
+    const data = { product_name: 'Already Title', price: 100.0 };
     const result = normalizeExtractionData(data, schema);
 
     // price 100.00 is already normalized, product_name title case matches
@@ -335,7 +342,11 @@ export function applyNormalizationRule(value: unknown, rule: NormalizationRule):
 
 function normalizeText(
   value: unknown,
-  config: { casing: 'title' | 'lower' | 'upper' | 'preserve'; trim: boolean; collapseWhitespace: boolean },
+  config: {
+    casing: 'title' | 'lower' | 'upper' | 'preserve';
+    trim: boolean;
+    collapseWhitespace: boolean;
+  },
 ): unknown {
   if (typeof value !== 'string') return value;
 
@@ -349,9 +360,7 @@ function normalizeText(
     case 'upper':
       return result.toUpperCase();
     case 'title':
-      return result
-        .toLowerCase()
-        .replace(/\b\w/g, (c) => c.toUpperCase());
+      return result.toLowerCase().replace(/\b\w/g, (c) => c.toUpperCase());
     case 'preserve':
       return result;
   }
@@ -397,10 +406,7 @@ function normalizeBoolean(
   return value;
 }
 
-function normalizeList(
-  value: unknown,
-  config: { separator?: string },
-): unknown {
+function normalizeList(value: unknown, config: { separator?: string }): unknown {
   if (Array.isArray(value)) return value;
   if (typeof value !== 'string') return value;
 
@@ -488,6 +494,7 @@ git commit -m "feat(core): add value normalizer for applying normalization rules
 Pure matching logic that groups extractions representing the same real-world entity.
 
 **Files:**
+
 - Create: `packages/core/src/reconciliation/entity-matcher.ts`
 - Test: `packages/core/tests/unit/reconciliation/entity-matcher.test.ts`
 
@@ -765,6 +772,7 @@ git commit -m "feat(core): add entity matcher with exact and composite key strat
 Extend the entity matcher with fuzzy string matching and LLM-assisted matching for ambiguous cases.
 
 **Files:**
+
 - Modify: `packages/core/src/reconciliation/entity-matcher.ts`
 - Test: `packages/core/tests/unit/reconciliation/entity-matcher.test.ts` (extend)
 
@@ -848,7 +856,11 @@ describe('matchEntitiesLLM', () => {
 
     const llmResponse = JSON.stringify({
       groups: [
-        { extractionIds: ['e1', 'e2'], reasoning: 'Same product, Sony WH-1000XM5', confidence: 0.95 },
+        {
+          extractionIds: ['e1', 'e2'],
+          reasoning: 'Same product, Sony WH-1000XM5',
+          confidence: 0.95,
+        },
         { extractionIds: ['e3'], reasoning: 'Distinct product, Bose QC45', confidence: 0.99 },
       ],
     });
@@ -974,7 +986,12 @@ export function matchEntitiesFuzzy(
 
   for (let i = 0; i < n; i++) {
     for (let j = i + 1; j < n; j++) {
-      const similarity = computeFuzzyKeyOverlap(extractions[i], extractions[j], keyFields, threshold);
+      const similarity = computeFuzzyKeyOverlap(
+        extractions[i],
+        extractions[j],
+        keyFields,
+        threshold,
+      );
       if (similarity >= threshold) {
         union(i, j);
       }
@@ -1077,6 +1094,7 @@ Respond with JSON: { "groups": [{ "extractionIds": ["id1", "id2"], "reasoning": 
 ```
 
 ### Step 4: Run tests — expect PASS
+
 ### Step 5: Commit
 
 ---
@@ -1086,6 +1104,7 @@ Respond with JSON: { "groups": [{ "extractionIds": ["id1", "id2"], "reasoning": 
 LLM-powered evaluation of source domain trustworthiness. Produces `set_source_trust` actions.
 
 **Files:**
+
 - Create: `packages/core/src/reconciliation/source-trust-evaluator.ts`
 - Test: `packages/core/tests/unit/reconciliation/source-trust-evaluator.test.ts`
 
@@ -1114,8 +1133,16 @@ describe('SourceTrustEvaluator', () => {
   it('evaluates domain trust levels via LLM', async () => {
     const response = JSON.stringify({
       rankings: [
-        { domain: 'amazon.com', trustLevel: 'high', reasoning: 'Major retailer with accurate product data' },
-        { domain: 'sketchy-deals.com', trustLevel: 'low', reasoning: 'Unknown reseller, possibly inaccurate' },
+        {
+          domain: 'amazon.com',
+          trustLevel: 'high',
+          reasoning: 'Major retailer with accurate product data',
+        },
+        {
+          domain: 'sketchy-deals.com',
+          trustLevel: 'low',
+          reasoning: 'Unknown reseller, possibly inaccurate',
+        },
       ],
     });
 
@@ -1136,10 +1163,7 @@ describe('SourceTrustEvaluator', () => {
   });
 
   it('respects user-provided source priority', async () => {
-    const evaluator = new SourceTrustEvaluator(
-      createMockClient('{}'),
-      llmConfig,
-    );
+    const evaluator = new SourceTrustEvaluator(createMockClient('{}'), llmConfig);
 
     const actions = await evaluator.evaluateWithPriority(
       ['official.sony.com', 'amazon.com', 'random-site.com'],
@@ -1168,11 +1192,13 @@ describe('SourceTrustEvaluator', () => {
 ```
 
 ### Step 2: Run tests — expect FAIL
+
 ### Step 3: Implement source trust evaluator
 
 The evaluator should use `generateId()` from `@spatula/shared`, call LLM with `resolveModel(config, 'entityMatching')`, produce `set_source_trust` PipelineAction objects, and also support a non-LLM `evaluateWithPriority()` method that assigns trust based on user-provided source priority order.
 
 ### Step 4: Run tests — expect PASS
+
 ### Step 5: Commit
 
 ---
@@ -1182,6 +1208,7 @@ The evaluator should use `generateId()` from `@spatula/shared`, call LLM with `r
 When matched entities have conflicting field values across sources, resolve using one of 5 strategies.
 
 **Files:**
+
 - Create: `packages/core/src/reconciliation/conflict-resolver.ts`
 - Test: `packages/core/tests/unit/reconciliation/conflict-resolver.test.ts`
 
@@ -1201,9 +1228,24 @@ describe('resolveConflict', () => {
   const conflict: FieldConflict = {
     fieldName: 'price',
     values: [
-      { source: 'amazon.com', value: 379.99, extractionId: 'e1', crawledAt: new Date('2026-01-01') },
-      { source: 'bestbuy.com', value: 349.99, extractionId: 'e2', crawledAt: new Date('2026-01-05') },
-      { source: 'walmart.com', value: 379.99, extractionId: 'e3', crawledAt: new Date('2026-01-03') },
+      {
+        source: 'amazon.com',
+        value: 379.99,
+        extractionId: 'e1',
+        crawledAt: new Date('2026-01-01'),
+      },
+      {
+        source: 'bestbuy.com',
+        value: 349.99,
+        extractionId: 'e2',
+        crawledAt: new Date('2026-01-05'),
+      },
+      {
+        source: 'walmart.com',
+        value: 379.99,
+        extractionId: 'e3',
+        crawledAt: new Date('2026-01-03'),
+      },
     ],
   };
 
@@ -1241,7 +1283,12 @@ describe('resolveConflict', () => {
       fieldName: 'name',
       values: [
         { source: 'a.com', value: 'Sony', extractionId: 'e1', crawledAt: new Date() },
-        { source: 'b.com', value: 'Sony WH-1000XM5 Wireless Headphones', extractionId: 'e2', crawledAt: new Date() },
+        {
+          source: 'b.com',
+          value: 'Sony WH-1000XM5 Wireless Headphones',
+          extractionId: 'e2',
+          crawledAt: new Date(),
+        },
       ],
     };
 
@@ -1264,9 +1311,11 @@ describe('resolveConflict', () => {
 ```
 
 ### Step 2: Run tests — expect FAIL
+
 ### Step 3: Implement conflict resolver
 
 The resolver should:
+
 - Accept a `FieldConflict` (field name + array of source/value pairs)
 - Return a `ResolvedField` with resolvedValue, sourcePreferred, hadConflict, and resolution strategy used
 - For `most_common`: count occurrences, pick the most frequent value
@@ -1276,6 +1325,7 @@ The resolver should:
 - For `llm_resolved`: call LLM (separate async function)
 
 ### Step 4: Run tests — expect PASS
+
 ### Step 5: Commit
 
 ---
@@ -1285,6 +1335,7 @@ The resolver should:
 LLM-powered inference for filling missing values in matched entities.
 
 **Files:**
+
 - Create: `packages/core/src/reconciliation/gap-filler.ts`
 - Test: `packages/core/tests/unit/reconciliation/gap-filler.test.ts`
 
@@ -1376,9 +1427,11 @@ describe('GapFiller', () => {
 ```
 
 ### Step 2: Run tests — expect FAIL
+
 ### Step 3: Implement gap filler
 
 The GapFiller should:
+
 - Identify missing required fields from the schema
 - Skip LLM call if no gaps exist
 - Call LLM with entity data + schema fields + job description
@@ -1387,6 +1440,7 @@ The GapFiller should:
 - Use `resolveModel(config, 'conflictResolution')` for LLM calls
 
 ### Step 4: Run tests — expect PASS
+
 ### Step 5: Commit
 
 ---
@@ -1396,6 +1450,7 @@ The GapFiller should:
 Implements the `DataReconciler` interface. Orchestrates: normalize → evaluate trust → match entities → merge → resolve conflicts → fill gaps → build EntityMatch objects.
 
 **Files:**
+
 - Create: `packages/core/src/reconciliation/data-reconciler-impl.ts`
 - Test: `packages/core/tests/unit/reconciliation/data-reconciler-impl.test.ts`
 
@@ -1433,7 +1488,10 @@ const schema: SchemaDefinition = {
       description: 'Product name',
       type: 'string',
       required: true,
-      normalization: { type: 'text', config: { casing: 'title', trim: true, collapseWhitespace: true } },
+      normalization: {
+        type: 'text',
+        config: { casing: 'title', trim: true, collapseWhitespace: true },
+      },
     },
     { name: 'price', description: 'Price', type: 'currency', required: true },
     { name: 'brand', description: 'Brand', type: 'string', required: false },
@@ -1462,7 +1520,13 @@ describe('DataReconcilerImpl', () => {
         pageId: '00000000-0000-0000-0000-000000000010',
         schemaVersion: 1,
         data: { product_name: '  sony xm5  ', price: 379.99, brand: 'Sony' },
-        metadata: { confidence: 0.9, modelUsed: 'test', tokensUsed: 100, extractionTimeMs: 50, unmappedFields: [] },
+        metadata: {
+          confidence: 0.9,
+          modelUsed: 'test',
+          tokensUsed: 100,
+          extractionTimeMs: 50,
+          unmappedFields: [],
+        },
         sourceUrl: 'https://amazon.com/p1',
         sourceDomain: 'amazon.com',
         crawledAt: new Date('2026-01-01'),
@@ -1473,7 +1537,13 @@ describe('DataReconcilerImpl', () => {
         pageId: '00000000-0000-0000-0000-000000000020',
         schemaVersion: 1,
         data: { product_name: 'sony xm5', price: 349.99 },
-        metadata: { confidence: 0.85, modelUsed: 'test', tokensUsed: 100, extractionTimeMs: 50, unmappedFields: [] },
+        metadata: {
+          confidence: 0.85,
+          modelUsed: 'test',
+          tokensUsed: 100,
+          extractionTimeMs: 50,
+          unmappedFields: [],
+        },
         sourceUrl: 'https://bestbuy.com/p1',
         sourceDomain: 'bestbuy.com',
         crawledAt: new Date('2026-01-05'),
@@ -1510,7 +1580,13 @@ describe('DataReconcilerImpl', () => {
         pageId: '00000000-0000-0000-0000-000000000010',
         schemaVersion: 1,
         data: { product_name: 'Sony XM5', price: 379.99 },
-        metadata: { confidence: 0.9, modelUsed: 'test', tokensUsed: 100, extractionTimeMs: 50, unmappedFields: [] },
+        metadata: {
+          confidence: 0.9,
+          modelUsed: 'test',
+          tokensUsed: 100,
+          extractionTimeMs: 50,
+          unmappedFields: [],
+        },
         sourceUrl: 'https://a.com/1',
         sourceDomain: 'a.com',
         crawledAt: new Date('2026-01-01'),
@@ -1521,7 +1597,13 @@ describe('DataReconcilerImpl', () => {
         pageId: '00000000-0000-0000-0000-000000000020',
         schemaVersion: 1,
         data: { product_name: 'Sony XM5', price: 349.99 },
-        metadata: { confidence: 0.85, modelUsed: 'test', tokensUsed: 100, extractionTimeMs: 50, unmappedFields: [] },
+        metadata: {
+          confidence: 0.85,
+          modelUsed: 'test',
+          tokensUsed: 100,
+          extractionTimeMs: 50,
+          unmappedFields: [],
+        },
         sourceUrl: 'https://b.com/1',
         sourceDomain: 'b.com',
         crawledAt: new Date('2026-01-05'),
@@ -1540,9 +1622,11 @@ describe('DataReconcilerImpl', () => {
 ```
 
 ### Step 2: Run tests — expect FAIL
+
 ### Step 3: Implement DataReconcilerImpl
 
 The implementation should:
+
 1. Normalize all extraction data against schema rules
 2. Match entities using the configured strategy (exact/composite/fuzzy/llm)
 3. For each entity group: merge data, detect conflicts, resolve conflicts, build provenance
@@ -1553,6 +1637,7 @@ The implementation should:
 Note: The `DataReconciler` interface signature needs a minor update — add `jobDescription: string` parameter and accept `ExtractionWithSource[]` instead of plain `ExtractionResult[]`. Update the interface in `packages/core/src/interfaces/reconciler.ts` accordingly.
 
 ### Step 4: Run tests — expect PASS
+
 ### Step 5: Commit
 
 ---
@@ -1562,6 +1647,7 @@ Note: The `DataReconciler` interface signature needs a minor update — add `job
 Create barrel exports for the reconciliation module and update core package exports.
 
 **Files:**
+
 - Create: `packages/core/src/reconciliation/index.ts`
 - Modify: `packages/core/src/index.ts`
 - Test: `packages/core/tests/unit/reconciliation/exports.test.ts`
@@ -1625,10 +1711,7 @@ describe('reconciliation exports', () => {
 
 ```typescript
 // packages/core/src/reconciliation/index.ts
-export {
-  applyNormalizationRule,
-  normalizeExtractionData,
-} from './value-normalizer.js';
+export { applyNormalizationRule, normalizeExtractionData } from './value-normalizer.js';
 export type { NormalizationChange, NormalizedResult } from './value-normalizer.js';
 export {
   matchEntitiesExact,
@@ -1648,6 +1731,7 @@ export { DataReconcilerImpl } from './data-reconciler-impl.js';
 Update `packages/core/src/index.ts` — add `export * from './reconciliation/index.js';`
 
 ### Step 4: Run tests — expect PASS
+
 ### Step 5: Commit
 
 ---
@@ -1657,6 +1741,7 @@ Update `packages/core/src/index.ts` — add `export * from './reconciliation/ind
 Implement repositories for the three Phase 7 database tables.
 
 **Files:**
+
 - Create: `packages/db/src/repositories/entity-repository.ts`
 - Create: `packages/db/src/repositories/source-trust-repository.ts`
 - Create: `packages/db/src/repositories/entity-source-repository.ts`
@@ -1678,11 +1763,21 @@ import { EntityRepository } from '../../../src/repositories/entity-repository.js
 // Test methods: create, findById, findByJob, updateQualityScore
 
 describe('EntityRepository', () => {
-  it('creates an entity with merged data and provenance', async () => { /* ... */ });
-  it('finds entities by job with optional category filter', async () => { /* ... */ });
-  it('finds entity by id', async () => { /* ... */ });
-  it('updates quality score', async () => { /* ... */ });
-  it('wraps errors in StorageError', async () => { /* ... */ });
+  it('creates an entity with merged data and provenance', async () => {
+    /* ... */
+  });
+  it('finds entities by job with optional category filter', async () => {
+    /* ... */
+  });
+  it('finds entity by id', async () => {
+    /* ... */
+  });
+  it('updates quality score', async () => {
+    /* ... */
+  });
+  it('wraps errors in StorageError', async () => {
+    /* ... */
+  });
 });
 ```
 
@@ -1690,9 +1785,15 @@ describe('EntityRepository', () => {
 
 ```typescript
 describe('SourceTrustRepository', () => {
-  it('upserts source trust for a domain', async () => { /* ... */ });
-  it('finds all trust records for a job', async () => { /* ... */ });
-  it('finds trust for a specific domain', async () => { /* ... */ });
+  it('upserts source trust for a domain', async () => {
+    /* ... */
+  });
+  it('finds all trust records for a job', async () => {
+    /* ... */
+  });
+  it('finds trust for a specific domain', async () => {
+    /* ... */
+  });
 });
 ```
 
@@ -1700,26 +1801,35 @@ describe('SourceTrustRepository', () => {
 
 ```typescript
 describe('EntitySourceRepository', () => {
-  it('links an extraction to an entity', async () => { /* ... */ });
-  it('finds all extractions linked to an entity', async () => { /* ... */ });
-  it('bulk links multiple extractions', async () => { /* ... */ });
+  it('links an extraction to an entity', async () => {
+    /* ... */
+  });
+  it('finds all extractions linked to an entity', async () => {
+    /* ... */
+  });
+  it('bulk links multiple extractions', async () => {
+    /* ... */
+  });
 });
 ```
 
 ### Step 4: Implement all three repositories
 
 **EntityRepository:**
+
 - `create(input)` — insert into entities table, return row
 - `findById(entityId, tenantId)` — select by id + tenant
 - `findByJob(jobId, tenantId, options?)` — select by job, optional category filter via `arrayContains`, limit, offset
 - `updateQualityScore(entityId, tenantId, score)` — update quality_score
 
 **SourceTrustRepository:**
+
 - `upsert(input)` — insert or update on conflict (jobId + domain)
 - `findByJob(jobId, tenantId)` — all trust records for a job
 - `findByDomain(domain, jobId, tenantId)` — single domain trust
 
 **EntitySourceRepository:**
+
 - `link(entityId, extractionId, matchConfidence)` — insert into entity_sources
 - `bulkLink(links: Array<{entityId, extractionId, matchConfidence}>)` — batch insert
 - `findByEntity(entityId)` — all linked extractions
@@ -1727,6 +1837,7 @@ describe('EntitySourceRepository', () => {
 ### Step 5: Update barrel exports
 
 Add to `packages/db/src/repositories/index.ts`:
+
 ```typescript
 export { EntityRepository } from './entity-repository.js';
 export { SourceTrustRepository } from './source-trust-repository.js';
@@ -1734,6 +1845,7 @@ export { EntitySourceRepository } from './entity-source-repository.js';
 ```
 
 ### Step 6: Run all DB tests — expect PASS
+
 ### Step 7: Commit
 
 ---
@@ -1743,6 +1855,7 @@ export { EntitySourceRepository } from './entity-source-repository.js';
 Add a reconciliation BullMQ queue, implement the worker, update WorkerDeps, and wire reconciliation trigger into JobManager.
 
 **Files:**
+
 - Modify: `packages/queue/src/queues.ts`
 - Modify: `packages/queue/src/worker-deps.ts`
 - Create: `packages/queue/src/workers/reconciliation-worker.ts`
@@ -1772,6 +1885,7 @@ Add reconciliation queue to `SpatulaQueues` and `createQueues`.
 ### Step 2: Update WorkerDeps
 
 Add to `WorkerDepsConfig` and `WorkerDeps`:
+
 ```typescript
 reconciler: DataReconciler;
 entityRepo: EntityRepository;
@@ -1793,10 +1907,18 @@ describe('processReconciliationJob', () => {
     //   entitySourceRepo.bulkLink called, jobRepo.updateStatus → 'completed'
   });
 
-  it('transitions job to completed on success', async () => { /* ... */ });
-  it('transitions job to failed on error', async () => { /* ... */ });
-  it('skips if job not found', async () => { /* ... */ });
-  it('enriches extractions with page metadata before reconciling', async () => { /* ... */ });
+  it('transitions job to completed on success', async () => {
+    /* ... */
+  });
+  it('transitions job to failed on error', async () => {
+    /* ... */
+  });
+  it('skips if job not found', async () => {
+    /* ... */
+  });
+  it('enriches extractions with page metadata before reconciling', async () => {
+    /* ... */
+  });
 });
 ```
 
@@ -1812,13 +1934,18 @@ export async function processReconciliationJob(
   try {
     // 1. Load job config
     const job = await deps.jobRepo.findById(jobId, tenantId);
-    if (!job) { logger.warn({ jobId }, 'job not found'); return; }
+    if (!job) {
+      logger.warn({ jobId }, 'job not found');
+      return;
+    }
 
     const config = job.config as JobConfig;
 
     // 2. Load final schema
     const currentSchema = await deps.schemaRepo.findLatest(jobId, tenantId);
-    if (!currentSchema) { /* skip */ return; }
+    if (!currentSchema) {
+      /* skip */ return;
+    }
 
     // 3. Load ALL extractions for the job
     const extractions = await deps.extractionRepo.findByJob(jobId, tenantId);
@@ -1844,7 +1971,8 @@ export async function processReconciliationJob(
     // 6. Persist entities
     for (const entity of result.entities) {
       const row = await deps.entityRepo.create({
-        jobId, tenantId,
+        jobId,
+        tenantId,
         mergedData: entity.mergedData,
         provenance: entity.fieldProvenance as Record<string, unknown>,
         categories: [],
@@ -1865,7 +1993,8 @@ export async function processReconciliationJob(
       if (action.type === 'set_source_trust') {
         for (const ranking of action.payload.rankings) {
           await deps.sourceTrustRepo.upsert({
-            jobId, tenantId,
+            jobId,
+            tenantId,
             domain: ranking.domain,
             trustLevel: ranking.trustLevel,
             reasoning: ranking.reasoning,
@@ -1907,6 +2036,7 @@ async triggerReconciliation(jobId: string, tenantId: string): Promise<void> {
 Ensure `ReconciliationJobData`, the worker, and updated `JobManager` are exported.
 
 ### Step 7: Run all tests — expect PASS
+
 ### Step 8: Commit
 
 ---

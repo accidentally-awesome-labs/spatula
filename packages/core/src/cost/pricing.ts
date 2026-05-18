@@ -13,18 +13,18 @@ export interface ModelPricing {
 
 export const MODEL_PRICING: Record<string, ModelPricing> = {
   // Anthropic models
-  'anthropic/claude-sonnet-4-20250514': { promptPer1M: 3.00, completionPer1M: 15.00 },
+  'anthropic/claude-sonnet-4-20250514': { promptPer1M: 3.0, completionPer1M: 15.0 },
   'anthropic/claude-3-haiku-20240307': { promptPer1M: 0.25, completionPer1M: 1.25 },
-  'anthropic/claude-opus-4-20250514': { promptPer1M: 15.00, completionPer1M: 75.00 },
+  'anthropic/claude-opus-4-20250514': { promptPer1M: 15.0, completionPer1M: 75.0 },
   // Google models
-  'google/gemini-2.5-flash': { promptPer1M: 0.15, completionPer1M: 0.60 },
-  'google/gemini-2.5-pro': { promptPer1M: 1.25, completionPer1M: 10.00 },
+  'google/gemini-2.5-flash': { promptPer1M: 0.15, completionPer1M: 0.6 },
+  'google/gemini-2.5-pro': { promptPer1M: 1.25, completionPer1M: 10.0 },
   // Meta models (via OpenRouter)
-  'meta-llama/llama-3.3-70b-instruct': { promptPer1M: 0.40, completionPer1M: 0.40 },
+  'meta-llama/llama-3.3-70b-instruct': { promptPer1M: 0.4, completionPer1M: 0.4 },
 };
 
 /** Default pricing for unknown models */
-export const DEFAULT_PRICING: ModelPricing = { promptPer1M: 1.00, completionPer1M: 5.00 };
+export const DEFAULT_PRICING: ModelPricing = { promptPer1M: 1.0, completionPer1M: 5.0 };
 
 /** Ollama models are always free */
 export const OLLAMA_PRICING: ModelPricing = { promptPer1M: 0, completionPer1M: 0 };

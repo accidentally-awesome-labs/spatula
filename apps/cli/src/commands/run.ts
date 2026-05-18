@@ -56,9 +56,7 @@ export async function runRunCommand(options: RunOptions = {}): Promise<void> {
   // Step 1: Find project root by walking up from cwd
   const projectRoot = findProjectRoot(cwd);
   if (!projectRoot) {
-    console.error(
-      'Error: no spatula.yaml found. Run `spatula init` to create a project here.',
-    );
+    console.error('Error: no spatula.yaml found. Run `spatula init` to create a project here.');
     process.exit(1);
   }
 
@@ -96,10 +94,18 @@ export async function runRunCommand(options: RunOptions = {}): Promise<void> {
   // Simple structured JSON log appender (avoids Pino transport complexity)
   const logToFile = (level: string, msg: string, extra: Record<string, unknown> = {}) => {
     try {
-      appendFileSync(logFile, JSON.stringify({
-        level, msg, ...extra, ts: new Date().toISOString(),
-      }) + '\n');
-    } catch { /* non-fatal */ }
+      appendFileSync(
+        logFile,
+        JSON.stringify({
+          level,
+          msg,
+          ...extra,
+          ts: new Date().toISOString(),
+        }) + '\n',
+      );
+    } catch {
+      /* non-fatal */
+    }
   };
   console.log(`  Log: ${logFile}`);
 
@@ -125,34 +131,26 @@ export async function runRunCommand(options: RunOptions = {}): Promise<void> {
   const llmConfig = jobConfig.llm;
 
   try {
-    const provider: LLMProvider =
-      globalConfig?.llm?.provider ?? 'ollama';
+    const provider: LLMProvider = globalConfig?.llm?.provider ?? 'ollama';
 
     const rawClient = createLLMClient({
       provider,
-      openrouter: provider === 'openrouter'
-        ? {
-            apiKey:
-              globalConfig?.openrouterApiKey ??
-              process.env.OPENROUTER_API_KEY ??
-              '',
-            baseUrl: process.env.OPENROUTER_BASE_URL,
-          }
-        : undefined,
-      ollama: provider === 'ollama'
-        ? { baseUrl: process.env.OLLAMA_BASE_URL }
-        : undefined,
+      openrouter:
+        provider === 'openrouter'
+          ? {
+              apiKey: globalConfig?.openrouterApiKey ?? process.env.OPENROUTER_API_KEY ?? '',
+              baseUrl: process.env.OPENROUTER_BASE_URL,
+            }
+          : undefined,
+      ollama: provider === 'ollama' ? { baseUrl: process.env.OLLAMA_BASE_URL } : undefined,
     });
 
     // Wrap cloud providers with circuit breaker; skip for Ollama (local, terminal failures)
-    llmClient =
-      provider === 'openrouter'
-        ? new CircuitBreakerLLMClient(rawClient)
-        : rawClient;
+    llmClient = provider === 'openrouter' ? new CircuitBreakerLLMClient(rawClient) : rawClient;
   } catch (err) {
     console.warn(
       `  Warning: LLM unavailable (${err instanceof Error ? err.message : String(err)}).` +
-      '\n  Pipeline will crawl pages but skip classification, extraction, and reconciliation.\n',
+        '\n  Pipeline will crawl pages but skip classification, extraction, and reconciliation.\n',
     );
   }
 
@@ -236,32 +234,41 @@ export async function runRunCommand(options: RunOptions = {}): Promise<void> {
   runner.events.on('progress', (stats: any) => {
     const elapsed = Math.round((Date.now() - startTime) / 1000);
     const pct =
-      stats.totalPages > 0
-        ? Math.round((stats.pagesProcessed / stats.totalPages) * 100)
-        : 0;
+      stats.totalPages > 0 ? Math.round((stats.pagesProcessed / stats.totalPages) * 100) : 0;
     if (!suppressProgress) {
       process.stdout.write(
         `\r  Pages: ${stats.pagesProcessed}/${stats.totalPages} (${pct}%)` +
-        `  Entities: ${stats.entitiesCreated}` +
-        `  Errors: ${stats.errors}` +
-        `  Elapsed: ${elapsed}s  `,
+          `  Entities: ${stats.entitiesCreated}` +
+          `  Errors: ${stats.errors}` +
+          `  Elapsed: ${elapsed}s  `,
       );
     }
     // Log to file
-    logToFile('info', 'Progress', { event: 'progress', pagesProcessed: stats.pagesProcessed, totalPages: stats.totalPages, entitiesCreated: stats.entitiesCreated, errors: stats.errors, elapsed });
+    logToFile('info', 'Progress', {
+      event: 'progress',
+      pagesProcessed: stats.pagesProcessed,
+      totalPages: stats.totalPages,
+      entitiesCreated: stats.entitiesCreated,
+      errors: stats.errors,
+      elapsed,
+    });
   });
 
   runner.events.on('schema:evolved', (schema: any) => {
     // Print on a new line so the evolution message isn't overwritten
     process.stdout.write('\n');
     console.log(`  Schema evolved → version ${schema.version}`);
-    logToFile('info', `Schema evolved to version ${schema.version}`, { event: 'schema:evolved', version: schema.version });
+    logToFile('info', `Schema evolved to version ${schema.version}`, {
+      event: 'schema:evolved',
+      version: schema.version,
+    });
   });
 
   // Step 13b: Dashboard toggle handlers
 
   const handleKeypress = (key: string) => {
-    if (key === '\x03') { // Ctrl+C
+    if (key === '\x03') {
+      // Ctrl+C
       handleSigint();
       return;
     }
@@ -285,9 +292,8 @@ export async function runRunCommand(options: RunOptions = {}): Promise<void> {
 
     const React = (await import('react')).default;
     const { render: inkRender } = await import('ink');
-    const { RunDashboard, buildRunDashboardStore } = await import(
-      '../components/dashboard/RunDashboard.js'
-    );
+    const { RunDashboard, buildRunDashboardStore } =
+      await import('../components/dashboard/RunDashboard.js');
 
     const dashStore = buildRunDashboardStore(projectId);
 
@@ -339,7 +345,13 @@ export async function runRunCommand(options: RunOptions = {}): Promise<void> {
   console.log('');
 
   try {
-    logToFile('info', `Pipeline starting for ${projectName}`, { event: 'run:start', projectName, projectRoot, crawler: crawlerType, llm: llmClient ? 'available' : 'unavailable' });
+    logToFile('info', `Pipeline starting for ${projectName}`, {
+      event: 'run:start',
+      projectName,
+      projectRoot,
+      crawler: crawlerType,
+      llm: llmClient ? 'available' : 'unavailable',
+    });
     await runner.run();
 
     // Ensure the in-place progress line ends cleanly
@@ -382,4 +394,3 @@ export async function runRunCommand(options: RunOptions = {}): Promise<void> {
     closeDb();
   }
 }
-

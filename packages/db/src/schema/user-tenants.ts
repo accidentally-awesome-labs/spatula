@@ -1,4 +1,13 @@
-import { pgTable, text, uuid, varchar, timestamp, primaryKey, index, uniqueIndex } from 'drizzle-orm/pg-core';
+import {
+  pgTable,
+  text,
+  uuid,
+  varchar,
+  timestamp,
+  primaryKey,
+  index,
+  uniqueIndex,
+} from 'drizzle-orm/pg-core';
 import { sql } from 'drizzle-orm';
 import { tenants } from './tenants.js';
 
@@ -19,6 +28,8 @@ export const userTenants = pgTable(
   (table) => [
     primaryKey({ columns: [table.userId, table.tenantId] }),
     index('idx_user_tenants_user').on(table.userId),
-    uniqueIndex('idx_user_tenants_owner').on(table.userId).where(sql`role = 'owner'`),
+    uniqueIndex('idx_user_tenants_owner')
+      .on(table.userId)
+      .where(sql`role = 'owner'`),
   ],
 );

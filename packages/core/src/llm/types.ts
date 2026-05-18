@@ -18,8 +18,8 @@ export interface OpenRouterClientOptions {
 }
 
 export interface OllamaClientOptions {
-  baseUrl?: string;       // Default: 'http://localhost:11434'
-  timeoutMs?: number;     // Default: 120000 (local models are slower)
+  baseUrl?: string; // Default: 'http://localhost:11434'
+  timeoutMs?: number; // Default: 120000 (local models are slower)
 }
 
 export type LLMProvider = 'openrouter' | 'ollama';

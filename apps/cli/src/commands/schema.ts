@@ -71,7 +71,10 @@ export function formatSchemaTable(schema: SchemaRecord | null): string {
   const nameWidth = Math.max(nameHeader.length, ...definition.fields.map((f) => f.name.length));
   const typeWidth = Math.max(typeHeader.length, ...definition.fields.map((f) => f.type.length));
   const reqWidth = reqHeader.length; // "Required" is always wider than "yes"/"no"
-  const descWidth = Math.max(descHeader.length, ...definition.fields.map((f) => (f.description ?? '').length));
+  const descWidth = Math.max(
+    descHeader.length,
+    ...definition.fields.map((f) => (f.description ?? '').length),
+  );
 
   const header = `  ${nameHeader.padEnd(nameWidth)}  ${typeHeader.padEnd(typeWidth)}  ${reqHeader.padEnd(reqWidth)}  ${descHeader.padEnd(descWidth)}`;
   const separator = `  ${'-'.repeat(nameWidth)}  ${'-'.repeat(typeWidth)}  ${'-'.repeat(reqWidth)}  ${'-'.repeat(descWidth)}`;
@@ -127,8 +130,14 @@ export function formatVersionHistory(versions: SchemaVersionRecord[]): string {
   const createdHeader = 'Created At';
 
   const diffs = versions.map(computeDiff);
-  const versionWidth = Math.max(versionHeader.length, ...versions.map((v) => `v${v.version}`.length));
-  const fieldsWidth = Math.max(fieldsHeader.length, ...versions.map((v) => String(v.definition.fields.length).length));
+  const versionWidth = Math.max(
+    versionHeader.length,
+    ...versions.map((v) => `v${v.version}`.length),
+  );
+  const fieldsWidth = Math.max(
+    fieldsHeader.length,
+    ...versions.map((v) => String(v.definition.fields.length).length),
+  );
   const diffWidth = Math.max(diffHeader.length, ...diffs.map((d) => d.length));
   const createdWidth = Math.max(createdHeader.length, ...versions.map((v) => v.createdAt.length));
 

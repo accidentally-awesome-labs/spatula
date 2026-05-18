@@ -2,10 +2,22 @@
   "name": "spatula",
   "description": "AI-powered intelligent web crawling platform — describe the data you want, get clean production-ready datasets",
   "license": "MIT",
-  "repository": { "type": "git", "url": "https://github.com/spatulaai/spatula.git" },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/spatulaai/spatula.git"
+  },
   "homepage": "https://github.com/spatulaai/spatula#readme",
-  "bugs": { "url": "https://github.com/spatulaai/spatula/issues" },
-  "keywords": ["web-scraping", "ai", "llm", "data-extraction", "crawling", "structured-data"],
+  "bugs": {
+    "url": "https://github.com/spatulaai/spatula/issues"
+  },
+  "keywords": [
+    "web-scraping",
+    "ai",
+    "llm",
+    "data-extraction",
+    "crawling",
+    "structured-data"
+  ],
   "private": true,
   "packageManager": "pnpm@9.15.4",
   "scripts": {
@@ -18,7 +30,9 @@
     "format:check": "prettier --check .",
     "clean": "turbo run clean",
     "typecheck": "turbo run typecheck",
-    "test:e2e": "vitest run --config tests/e2e/vitest.config.ts"
+    "test:e2e": "vitest run --config tests/e2e/vitest.config.ts",
+    "test:carveout": "vitest run --config tests/carveout/vitest.config.ts",
+    "test:private-contract": "vitest run --config tests/private-contract/vitest.config.ts"
   },
   "devDependencies": {
     "@typescript-eslint/eslint-plugin": "^8.18.0",

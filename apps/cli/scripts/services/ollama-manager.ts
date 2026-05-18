@@ -1,4 +1,10 @@
-import type { ServiceManager, ServiceStatus, ProvisionOpts, ServiceContext, ServiceHandle } from './service-manager.js';
+import type {
+  ServiceManager,
+  ServiceStatus,
+  ProvisionOpts,
+  ServiceContext,
+  ServiceHandle,
+} from './service-manager.js';
 import { createOllamaManager } from '../ollama-manager.js';
 
 export class OllamaServiceManager implements ServiceManager {

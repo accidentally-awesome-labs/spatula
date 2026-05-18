@@ -1,6 +1,5 @@
 import { createRoute, z } from '@hono/zod-openapi';
 import { createOpenAPIRouter } from '../openapi-config.js';
-import type { AppEnv } from '../types.js';
 import { paginationSchema, paginationEnvelopeSchema } from '../schemas/pagination.js';
 import { jsonContent } from '../schemas/responses.js';
 import { decodeCursor, encodeCursor } from '@spatula/shared';
@@ -16,7 +15,9 @@ const entitySourceSchema = z.object({
 });
 
 const listRoute = createRoute({
-  method: 'get', path: '/', tags: ['EntitySources'],
+  method: 'get',
+  path: '/',
+  tags: ['EntitySources'],
   summary: 'List entity-extraction linkages for a job',
   request: { params: jobIdParam, query: paginationSchema },
   responses: {
@@ -45,7 +46,11 @@ export function entitySourceRoutes() {
       cursor = { entityId: decoded.id, extractionId: decoded.sortValue };
     }
     const result = await deps.entitySourceRepo.findByJobCursor(
-      jobId, tenantId, query.limit, cursor, query.since,
+      jobId,
+      tenantId,
+      query.limit,
+      cursor,
+      query.since,
     );
     const total = await deps.entitySourceRepo.countByJob(jobId, tenantId);
 

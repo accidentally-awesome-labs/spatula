@@ -11,9 +11,19 @@ function mockDataSource(overrides: Partial<DataSource> = {}): DataSource {
     getSchema: vi.fn().mockResolvedValue(null),
     getSchemaVersions: vi.fn().mockResolvedValue([]),
     getActions: vi.fn().mockResolvedValue([]),
-    approveAction: vi.fn(), rejectAction: vi.fn(),
-    getStatus: vi.fn().mockResolvedValue({ totalPages: 0, totalEntities: 0, pendingActions: 0, schemaFields: 0, storageBytes: { pages: 0, database: 0, exports: 0 } }),
-    createExport: vi.fn(), getExport: vi.fn(), downloadExport: vi.fn(), getDocumentation: vi.fn(),
+    approveAction: vi.fn(),
+    rejectAction: vi.fn(),
+    getStatus: vi.fn().mockResolvedValue({
+      totalPages: 0,
+      totalEntities: 0,
+      pendingActions: 0,
+      schemaFields: 0,
+      storageBytes: { pages: 0, database: 0, exports: 0 },
+    }),
+    createExport: vi.fn(),
+    getExport: vi.fn(),
+    downloadExport: vi.fn(),
+    getDocumentation: vi.fn(),
     ...overrides,
   } as DataSource;
 }

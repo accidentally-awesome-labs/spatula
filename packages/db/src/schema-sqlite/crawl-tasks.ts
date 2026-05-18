@@ -39,10 +39,7 @@ export const crawlTasks = sqliteTable(
       'status_check',
       sql`${table.status} IN ('pending','in_progress','completed','failed','skipped')`,
     ),
-    check(
-      'priority_check',
-      sql`${table.priority} IN ('critical','high','medium','low')`,
-    ),
+    check('priority_check', sql`${table.priority} IN ('critical','high','medium','low')`),
     check(
       'classification_check',
       sql`${table.classification} IN ('single_entry','multiple_entries','navigation','irrelevant','partial') OR ${table.classification} IS NULL`,

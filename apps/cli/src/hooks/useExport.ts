@@ -71,7 +71,12 @@ export function useExport(backend: DataSource | SpatulaApiClient) {
     async (
       targetJobId: string,
       format: 'json' | 'csv',
-      options: { search?: string; filterQuery?: string; schemaFields: string[]; includeProvenance?: boolean },
+      options: {
+        search?: string;
+        filterQuery?: string;
+        schemaFields: string[];
+        includeProvenance?: boolean;
+      },
     ): Promise<string> => {
       setIsExporting(true);
       setExportProgress({ status: 'pending' });
@@ -80,7 +85,14 @@ export function useExport(backend: DataSource | SpatulaApiClient) {
         if (isDataSource(backend)) {
           return await exportFromDataSource(backend, targetJobId, format, options);
         }
-        return await exportFromApi(backend, targetJobId, format, options, abortRef, setExportProgress);
+        return await exportFromApi(
+          backend,
+          targetJobId,
+          format,
+          options,
+          abortRef,
+          setExportProgress,
+        );
       } finally {
         setIsExporting(false);
         setExportProgress(null);

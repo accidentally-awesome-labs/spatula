@@ -23,47 +23,51 @@ export class LlmUsageRepository {
   }): Promise<{ id: string }> {
     const id = crypto.randomUUID();
     wrapStorageError(
-      () => this.db.insert(llmUsage).values({
-        id,
-        runId: data.runId ?? null,
-        model: data.model,
-        promptTokens: data.promptTokens,
-        completionTokens: data.completionTokens,
-        totalTokens: data.totalTokens,
-        costUsd: data.costUsd,
-        purpose: data.purpose,
-        createdAt: new Date().toISOString(),
-      }).run(),
+      () =>
+        this.db
+          .insert(llmUsage)
+          .values({
+            id,
+            runId: data.runId ?? null,
+            model: data.model,
+            promptTokens: data.promptTokens,
+            completionTokens: data.completionTokens,
+            totalTokens: data.totalTokens,
+            costUsd: data.costUsd,
+            purpose: data.purpose,
+            createdAt: new Date().toISOString(),
+          })
+          .run(),
       { operation: 'record', table: 'llm_usage' },
     );
     return { id };
   }
 
-  async findByRun(runId: string): Promise<Array<{
-    id: string;
-    model: string;
-    promptTokens: number;
-    completionTokens: number;
-    totalTokens: number;
-    costUsd: number;
-    purpose: string;
-    createdAt: string;
-  }>> {
-    return this.db
-      .select()
-      .from(llmUsage)
-      .where(eq(llmUsage.runId, runId))
-      .all();
+  async findByRun(runId: string): Promise<
+    Array<{
+      id: string;
+      model: string;
+      promptTokens: number;
+      completionTokens: number;
+      totalTokens: number;
+      costUsd: number;
+      purpose: string;
+      createdAt: string;
+    }>
+  > {
+    return this.db.select().from(llmUsage).where(eq(llmUsage.runId, runId)).all();
   }
 
-  async aggregateByRun(runId: string): Promise<Array<{
-    purpose: string;
-    totalPromptTokens: number;
-    totalCompletionTokens: number;
-    totalTokens: number;
-    totalCostUsd: number;
-    callCount: number;
-  }>> {
+  async aggregateByRun(runId: string): Promise<
+    Array<{
+      purpose: string;
+      totalPromptTokens: number;
+      totalCompletionTokens: number;
+      totalTokens: number;
+      totalCostUsd: number;
+      callCount: number;
+    }>
+  > {
     const rows = this.db
       .select({
         purpose: llmUsage.purpose,

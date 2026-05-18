@@ -12,35 +12,86 @@ function buildMockAdapter(overrides: Partial<ProjectAdapterLike> = {}): ProjectA
     getProjectId: vi.fn().mockReturnValue('project-123'),
     entityRepo: {
       findByJob: vi.fn().mockResolvedValue([
-        { id: 'e1', jobId: 'project-123', mergedData: { name: 'Acme' }, categories: [], qualityScore: 0.9, createdAt: '2026-01-01T00:00:00Z', sourceCount: 1 },
+        {
+          id: 'e1',
+          jobId: 'project-123',
+          mergedData: { name: 'Acme' },
+          categories: [],
+          qualityScore: 0.9,
+          createdAt: '2026-01-01T00:00:00Z',
+          sourceCount: 1,
+        },
       ]),
       findByJobWithProvenance: vi.fn().mockResolvedValue([
-        { id: 'e1', jobId: 'project-123', mergedData: { name: 'Acme' }, categories: [], qualityScore: 0.9, createdAt: '2026-01-01T00:00:00Z', sourceCount: 1, provenance: {} },
+        {
+          id: 'e1',
+          jobId: 'project-123',
+          mergedData: { name: 'Acme' },
+          categories: [],
+          qualityScore: 0.9,
+          createdAt: '2026-01-01T00:00:00Z',
+          sourceCount: 1,
+          provenance: {},
+        },
       ]),
       countByJob: vi.fn().mockResolvedValue(1),
     },
     schemaRepo: {
-      findLatest: vi.fn().mockResolvedValue({ id: 's1', version: 2, definition: { fields: { name: {}, url: {} } } }),
+      findLatest: vi
+        .fn()
+        .mockResolvedValue({ id: 's1', version: 2, definition: { fields: { name: {}, url: {} } } }),
       findAllVersions: vi.fn().mockResolvedValue([
-        { id: 's1', version: 2, definition: { fields: { name: {} } }, parentId: null, createdAt: '2026-01-01T00:00:00Z' },
-        { id: 's0', version: 1, definition: { fields: {} }, parentId: null, createdAt: '2026-01-01T00:00:00Z' },
+        {
+          id: 's1',
+          version: 2,
+          definition: { fields: { name: {} } },
+          parentId: null,
+          createdAt: '2026-01-01T00:00:00Z',
+        },
+        {
+          id: 's0',
+          version: 1,
+          definition: { fields: {} },
+          parentId: null,
+          createdAt: '2026-01-01T00:00:00Z',
+        },
       ]),
     },
     actionRepo: {
       findByJob: vi.fn().mockResolvedValue([
-        { id: 'a1', type: 'add_field', status: 'pending_review', payload: {}, source: 'llm', confidence: 0.85, reasoning: 'needed', reviewedBy: null, createdAt: '2026-01-01T00:00:00Z', appliedAt: null },
+        {
+          id: 'a1',
+          type: 'add_field',
+          status: 'pending_review',
+          payload: {},
+          source: 'llm',
+          confidence: 0.85,
+          reasoning: 'needed',
+          reviewedBy: null,
+          createdAt: '2026-01-01T00:00:00Z',
+          appliedAt: null,
+        },
       ]),
       updateStatus: vi.fn().mockResolvedValue({}),
     },
     taskRepo: {
-      getJobStats: vi.fn().mockResolvedValue({ pending: 2, inProgress: 0, completed: 10, failed: 1, skipped: 0 }),
+      getJobStats: vi
+        .fn()
+        .mockResolvedValue({ pending: 2, inProgress: 0, completed: 10, failed: 1, skipped: 0 }),
     },
     runRepo: {
-      findLatestByStatus: vi.fn().mockResolvedValue({ id: 'run-1', status: 'completed', startedAt: '2026-01-01T00:00:00Z' }),
+      findLatestByStatus: vi
+        .fn()
+        .mockResolvedValue({ id: 'run-1', status: 'completed', startedAt: '2026-01-01T00:00:00Z' }),
     },
     exportRepo: {
       create: vi.fn().mockResolvedValue({ id: 'exp-1' }),
-      findById: vi.fn().mockResolvedValue({ id: 'exp-1', filePath: '/tmp/export.json', format: 'json', status: 'completed' }),
+      findById: vi.fn().mockResolvedValue({
+        id: 'exp-1',
+        filePath: '/tmp/export.json',
+        format: 'json',
+        status: 'completed',
+      }),
     },
     metaRepo: {
       getAll: vi.fn().mockResolvedValue({ project_id: 'project-123', name: 'Test Project' }),
@@ -65,7 +116,10 @@ describe('LocalDataSource', () => {
   it('getEntities delegates to adapter with pagination params', async () => {
     const result = await ds.getEntities({ limit: 10, offset: 20 });
 
-    expect(adapter.entityRepo.findByJob).toHaveBeenCalledWith('project-123', 'project-123', { limit: 10, offset: 20 });
+    expect(adapter.entityRepo.findByJob).toHaveBeenCalledWith('project-123', 'project-123', {
+      limit: 10,
+      offset: 20,
+    });
     expect(adapter.entityRepo.countByJob).toHaveBeenCalledWith('project-123', 'project-123');
     expect(result.data).toHaveLength(1);
     expect(result.total).toBe(1);
@@ -73,14 +127,20 @@ describe('LocalDataSource', () => {
 
   it('getEntities uses default pagination when no query is provided', async () => {
     await ds.getEntities({});
-    expect(adapter.entityRepo.findByJob).toHaveBeenCalledWith('project-123', 'project-123', { limit: 50, offset: 0 });
+    expect(adapter.entityRepo.findByJob).toHaveBeenCalledWith('project-123', 'project-123', {
+      limit: 50,
+      offset: 0,
+    });
   });
 
   it('getEntity returns entity by ID', async () => {
     const entity = await ds.getEntity('e1');
     expect(entity).not.toBeNull();
     expect(entity!.id).toBe('e1');
-    expect(adapter.entityRepo.findByJobWithProvenance).toHaveBeenCalledWith('project-123', 'project-123');
+    expect(adapter.entityRepo.findByJobWithProvenance).toHaveBeenCalledWith(
+      'project-123',
+      'project-123',
+    );
   });
 
   it('getEntity returns null for unknown ID', async () => {
@@ -111,7 +171,9 @@ describe('LocalDataSource', () => {
 
   it('getActions delegates with status filter', async () => {
     const actions = await ds.getActions('pending_review');
-    expect(adapter.actionRepo.findByJob).toHaveBeenCalledWith('project-123', { status: 'pending_review' });
+    expect(adapter.actionRepo.findByJob).toHaveBeenCalledWith('project-123', {
+      status: 'pending_review',
+    });
     expect(actions).toHaveLength(1);
   });
 
@@ -122,12 +184,22 @@ describe('LocalDataSource', () => {
 
   it('approveAction delegates to adapter', async () => {
     await ds.approveAction('a1', 'user@example.com');
-    expect(adapter.actionRepo.updateStatus).toHaveBeenCalledWith('a1', 'project-123', 'approved', 'user@example.com');
+    expect(adapter.actionRepo.updateStatus).toHaveBeenCalledWith(
+      'a1',
+      'project-123',
+      'approved',
+      'user@example.com',
+    );
   });
 
   it('rejectAction delegates to adapter', async () => {
     await ds.rejectAction('a1');
-    expect(adapter.actionRepo.updateStatus).toHaveBeenCalledWith('a1', 'project-123', 'rejected', undefined);
+    expect(adapter.actionRepo.updateStatus).toHaveBeenCalledWith(
+      'a1',
+      'project-123',
+      'rejected',
+      undefined,
+    );
   });
 
   it('getStatus returns project status summary', async () => {
@@ -208,8 +280,14 @@ describe('LocalDataSource', () => {
     emitter.emit('progress', { pagesProcessed: 5, totalPages: 10, entitiesCreated: 3, errors: 0 });
 
     expect(received).toHaveLength(3);
-    expect(received[0]).toEqual({ type: 'entity:created', data: { id: 'e2', jobId: 'project-123' } });
-    expect(received[1]).toEqual({ type: 'task:completed', data: { id: 't1', url: 'https://example.com', status: 'completed' } });
+    expect(received[0]).toEqual({
+      type: 'entity:created',
+      data: { id: 'e2', jobId: 'project-123' },
+    });
+    expect(received[1]).toEqual({
+      type: 'task:completed',
+      data: { id: 't1', url: 'https://example.com', status: 'completed' },
+    });
     expect(received[2].type).toBe('progress');
 
     // Unsubscribe and verify no more events received

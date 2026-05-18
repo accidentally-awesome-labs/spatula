@@ -104,7 +104,7 @@ function handleClassifier(userPrompt: string): object {
       classification: 'single_entry',
       strategy: 'full_extraction',
       estimatedEntryCount: 1,
-      confidence: 0.90,
+      confidence: 0.9,
       reasoning: 'Recipe page',
     };
   }
@@ -158,8 +158,10 @@ function handleExtractor(userPrompt: string, emptyUnmapped: boolean): object {
   const lc = userPrompt.toLowerCase();
 
   // Detect re-extraction: schema in prompt contains evolved fields
-  const hasSchemaWithBrand = lc.includes('"brand"') || lc.includes("'brand'") || lc.includes('brand');
-  const hasSchemaWithCuisine = lc.includes('"cuisine"') || lc.includes("'cuisine'") || lc.includes('cuisine');
+  const hasSchemaWithBrand =
+    lc.includes('"brand"') || lc.includes("'brand'") || lc.includes('brand');
+  const hasSchemaWithCuisine =
+    lc.includes('"cuisine"') || lc.includes("'cuisine'") || lc.includes('cuisine');
 
   // More precise schema detection: look for brand/cuisine in the schema section
   // The system prompt typically includes the schema fields. We check if these appear
@@ -173,7 +175,7 @@ function handleExtractor(userPrompt: string, emptyUnmapped: boolean): object {
       `name: ${fieldName}`,
       `field.*${fieldName}`,
     ];
-    return schemaIndicators.some(indicator => {
+    return schemaIndicators.some((indicator) => {
       if (indicator.includes('.*')) {
         return new RegExp(indicator).test(userPrompt);
       }
@@ -231,7 +233,11 @@ function handleExtractor(userPrompt: string, emptyUnmapped: boolean): object {
     };
     let unmapped: object[] = [
       { name: 'cuisine', value: 'Italian', suggestedType: 'string' },
-      { name: 'ingredients', value: ['pasta', 'eggs', 'pecorino', 'guanciale'], suggestedType: 'array' },
+      {
+        name: 'ingredients',
+        value: ['pasta', 'eggs', 'pecorino', 'guanciale'],
+        suggestedType: 'array',
+      },
     ];
 
     if (cuisineInSchema) {
@@ -301,7 +307,7 @@ function handleLinkEvaluator(userPrompt: string): object {
     return [
       {
         url: '/products/widget-pro-deluxe',
-        relevanceScore: 0.90,
+        relevanceScore: 0.9,
         expectedContent: 'single_entry',
         priority: 'high',
         reasoning: 'Related product',
@@ -314,7 +320,7 @@ function handleLinkEvaluator(userPrompt: string): object {
     return [
       {
         url: '/page/2',
-        relevanceScore: 0.80,
+        relevanceScore: 0.8,
         expectedContent: 'listing',
         priority: 'medium',
         reasoning: 'More listings',
@@ -333,7 +339,7 @@ function handleLinkEvaluator(userPrompt: string): object {
     },
     {
       url: '/recipes/pasta-carbonara',
-      relevanceScore: 0.90,
+      relevanceScore: 0.9,
       expectedContent: 'single_entry',
       priority: 'high',
       reasoning: 'Recipe content',
@@ -790,8 +796,7 @@ export async function startMockOllama(
       requestLog.length = 0;
       componentCallCounts.clear();
     },
-    getLogByComponent: (comp: string) =>
-      requestLog.filter((entry) => entry.component === comp),
+    getLogByComponent: (comp: string) => requestLog.filter((entry) => entry.component === comp),
     getCallCount: () => requestLog.length,
   };
 }

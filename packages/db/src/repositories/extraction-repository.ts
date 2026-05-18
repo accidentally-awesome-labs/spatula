@@ -153,7 +153,8 @@ export class ExtractionRepository {
       return { entities: rows, nextCursor };
     } catch (error) {
       throw new StorageError(`Failed to fetch extractions by cursor: ${(error as Error).message}`, {
-        cause: error as Error, context: { jobId, tenantId },
+        cause: error as Error,
+        context: { jobId, tenantId },
       });
     }
   }

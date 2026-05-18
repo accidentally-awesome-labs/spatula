@@ -1,10 +1,5 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
-import {
-  setupTenantPair,
-  bearerHeaders,
-  minimalJobBody,
-  type AuthTestContext,
-} from './helpers.js';
+import { setupTenantPair, bearerHeaders, minimalJobBody, type AuthTestContext } from './helpers.js';
 
 describe('Tier 5B: Multi-Tenant Isolation', () => {
   let ctx: AuthTestContext;
@@ -60,26 +55,26 @@ describe('Tier 5B: Multi-Tenant Isolation', () => {
     // Insert an action for tenant A's job directly via DB
     // Note: actions table requires source, confidence, reasoning (NOT NULL columns)
     const { actions } = await import('@spatula/db/dist/schema/index.js');
-    const [action] = await ctx.db.insert(actions).values({
-      jobId: tenantAJobId,
-      tenantId: ctx.tenantId,
-      type: 'add_field',
-      status: 'pending_review',
-      payload: { field: 'test', reason: 'test action' },
-      source: 'schema_evolution',
-      confidence: 0.9,
-      reasoning: 'test action for multi-tenant isolation',
-    }).returning({ id: actions.id });
+    const [action] = await ctx.db
+      .insert(actions)
+      .values({
+        jobId: tenantAJobId,
+        tenantId: ctx.tenantId,
+        type: 'add_field',
+        status: 'pending_review',
+        payload: { field: 'test', reason: 'test action' },
+        source: 'schema_evolution',
+        confidence: 0.9,
+        reasoning: 'test action for multi-tenant isolation',
+      })
+      .returning({ id: actions.id });
 
     // Tenant B tries to approve tenant A's action
-    const res = await ctx.app.request(
-      `/api/v1/jobs/${tenantAJobId}/actions/${action.id}/approve`,
-      {
-        method: 'POST',
-        headers: bearerHeaders(tenantB.key),
-        body: JSON.stringify({}),
-      },
-    );
+    const res = await ctx.app.request(`/api/v1/jobs/${tenantAJobId}/actions/${action.id}/approve`, {
+      method: 'POST',
+      headers: bearerHeaders(tenantB.key),
+      body: JSON.stringify({}),
+    });
     expect(res.status).toBe(404);
   });
 });
