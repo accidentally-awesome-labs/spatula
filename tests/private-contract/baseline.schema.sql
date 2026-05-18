@@ -114,7 +114,6 @@ CREATE TYPE public.trust_level AS ENUM (
 
 SET default_tablespace = '';
 
-SET default_table_access_method = heap;
 
 --
 -- Name: __drizzle_migrations_oss; Type: TABLE; Schema: drizzle; Owner: -

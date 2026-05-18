@@ -21,6 +21,14 @@
 #     journal data is not part of the schema equivalence proof and varies
 #     trivially between the two application paths (one row per migration vs
 #     a single row for the squash).
+#   - Strip `ALTER TABLE ... OWNER TO ...` and `ALTER ... OWNER TO ...`. Object
+#     ownership is a deployment-time concern (depends on which DB role psql
+#     connected as), not part of the schema definition. Local macOS Homebrew
+#     pg_dump frequently omits these; CI's Docker postgres image always emits
+#     them. Stripping on both sides keeps dumps comparable across environments.
+#   - Strip `SET default_table_access_method = ...` (only emitted when the
+#     running cluster differs from the dump-creator's default; varies between
+#     Postgres minor versions).
 #
 # Belt-and-suspenders: pg_dump --schema-only usually emits no data rows, so
 # the COPY-skip block is defensive — if it ever produces noise, simplify.
@@ -32,9 +40,10 @@ sed -E \
   -e '/^-- PostgreSQL database dump( complete)?$/d' \
   -e '/^-- Started on /d' \
   -e '/^-- Completed on /d' \
-  -e '/^SET (statement_timeout|lock_timeout|idle_in_transaction_session_timeout|client_encoding|standard_conforming_strings|xmloption|client_min_messages|row_security)/d' \
+  -e '/^SET (statement_timeout|lock_timeout|idle_in_transaction_session_timeout|client_encoding|standard_conforming_strings|xmloption|client_min_messages|row_security|default_table_access_method)/d' \
   -e '/^SELECT pg_catalog\.set_config/d' \
   -e '/^\\(un)?restrict /d' \
+  -e '/^ALTER .* OWNER TO /d' \
   | awk '
     # Skip COPY blocks targeting __drizzle_migrations* (journal data, not schema).
     /^COPY (public\.|drizzle\.)?__drizzle_migrations/ { skipping = 1; next }
