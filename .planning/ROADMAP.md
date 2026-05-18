@@ -233,7 +233,7 @@ Authoritative requirement → phase mapping lives in `.planning/REQUIREMENTS.md`
 | Phase | Milestone | Plans Complete | Status | Completed |
 |-------|-----------|----------------|--------|-----------|
 | 1–13 | v1.0 | (collapsed) | Complete | 2026-04-20 |
-| 15. Carve-out & Migration Squash | v1.1 | 6/6 | Complete   | 2026-05-17 |
+| 15. Carve-out & Migration Squash | v1.1 | 6/6 | Complete    | 2026-05-18 |
 | 16. API Contract Hardening + SDK Packages | v1.1 | 0/TBD | Not started | - |
 | 17. Browser Auth, SSE, CORS | v1.1 | 0/TBD | Not started | - |
 | 18. Security Hardening & Legal | v1.1 | 0/TBD | Not started | - |

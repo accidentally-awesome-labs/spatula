@@ -4,8 +4,8 @@ milestone: v1.1
 milestone_name: Public Launch (Wave 6 / Phase 14)
 status: verifying
 stopped_at: "Completed 15-06-PLAN.md Tasks 1-5; Task 6 PR-open paused at checkpoint:human-action awaiting user approval to fire gh pr create"
-last_updated: "2026-05-17T19:15:04.707Z"
-last_activity: 2026-05-17
+last_updated: "2026-05-18T00:47:05.483Z"
+last_activity: 2026-05-18
 progress:
   total_phases: 1
   completed_phases: 1
@@ -25,10 +25,10 @@ See: `.planning/PROJECT.md` (updated 2026-05-11)
 
 ## Current Position
 
-Phase: 15 (carveout-migration-squash) — EXECUTING
-Plan: 6 of 6
+Phase: 15
+Plan: Not started
 Status: Phase complete — ready for verification
-Last activity: 2026-05-17
+Last activity: 2026-05-18
 
 Progress: [░░░░░░░░░░] 0% (0/8 v1.1 phases complete)
 
