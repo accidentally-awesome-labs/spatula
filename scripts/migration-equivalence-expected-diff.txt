@@ -1,3 +1,5 @@
++    created_at timestamp with time zone DEFAULT now() NOT NULL,
++    quotas jsonb DEFAULT '{"maxStorageMb": 1000, "maxPagesPerJob": 5000, "maxConcurrentJobs": 2, "maxEntitiesPerExport": 50000}'::jsonb NOT NULL,
 -
 -    ADD CONSTRAINT usage_records_pkey PRIMARY KEY (id);
 -    ADD CONSTRAINT usage_records_tenant_id_tenants_id_fk FOREIGN KEY (tenant_id) REFERENCES public.tenants(id) ON DELETE CASCADE;
