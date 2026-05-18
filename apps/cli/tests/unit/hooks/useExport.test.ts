@@ -30,7 +30,9 @@ function mockDataSource(overrides: Partial<DataSource> = {}): DataSource {
   } as DataSource;
 }
 
-describe('exportFromDataSource', () => {
+// Cold CI first-load + parallel turbo load can push these past vitest's 5s
+// default; same pattern as connection/auth/queue exports timeout bumps.
+describe('exportFromDataSource', { timeout: 30_000 }, () => {
   beforeEach(() => {
     vi.clearAllMocks();
   });
