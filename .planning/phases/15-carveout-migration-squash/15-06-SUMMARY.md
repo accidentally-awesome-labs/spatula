@@ -120,7 +120,9 @@ completed: 2026-05-17
 | 3 | docs(carveout): upgrade runbook — no-downgrade + expand-contract + two-journal + dev DB wipe | `feb781e` |
 | 4 | fix(carveout): drop dead stripe dep + scrub remaining billing-keyword comments (CARVE-04 final gate) | `3e7610b` |
 | 5 | docs(carveout): completion summary | `c87849e` |
-| 6 | (checkpoint:human-action — PR open) | — |
+| 6 | (checkpoint:human-action — PR open) | PR #1 |
+
+**PR opened:** https://github.com/accidentally-awesome-labs/spatula/pull/1 (PR #1, base `main`, head `feat/wave-6-1-carveout`, state OPEN, mergeable: MERGEABLE).
 
 **Plan metadata commit:** will follow this summary (also includes STATE.md + ROADMAP.md + REQUIREMENTS.md updates).
 
@@ -210,15 +212,20 @@ None — every document authored is substantive and complete:
 
 ## Next Phase Readiness
 
-**Phase 15 complete after PR opens + merges.** Phase 16 (API Contract Hardening + SDK Packages) is the next executable phase per ROADMAP. Depends on the carve-out PR landing on `main`.
+**Phase 15 complete after PR #1 merges.** Phase 16 (API Contract Hardening + SDK Packages) is the next executable phase per ROADMAP. Depends on the carve-out PR landing on `main`.
 
-Pre-checkpoint state of the branch:
-- Branch tip after this SUMMARY's plan-metadata commit will be `<computed-post-commit>`
-- 36 commits total since `main@5d19c2b`
+Post-PR-open state of the branch:
+- Branch tip prior to SUMMARY-update commit: `877c790` (plan-metadata commit from prior run)
+- 38 commits total since `main@5d19c2b`
 - Working tree clean
 - All CI gates locally green (build + tests + grep)
+- Origin tracking established for both `main` and `feat/wave-6-1-carveout`
 
-The Task 6 checkpoint returns the drafted PR body + push status to the orchestrator for user approval before `gh pr create` fires.
+**PR-open resolution (post-BLOCK-05):** The OSS GitHub repo `accidentally-awesome-labs/spatula` was created PUBLIC by the user mid-execution; `origin` was added and both branches pushed. GitHub push-protection blocked once on a pre-Phase-15 test-fixture Stripe placeholder string (`sk_live_<32-char-test-placeholder>`) in 3 historical commits — user bypassed via the GitHub-provided URL after marking the strings as test placeholders. PR #1 then opened cleanly via `gh pr create` against `main`.
+
+**Merge-strategy finding (D-08 enforcement check):** The new repo allows all 3 merge methods (`allow_merge_commit: true`, `allow_squash_merge: true`, `allow_rebase_merge: true`). D-08 requires merge-commit specifically (preserves bisect). The PR description includes explicit "Use merge-commit (NOT squash)" guidance. **Recommendation:** Before clicking merge, confirm in repo Settings → General → "Pull Requests" that "Allow merge commits" is checked (it is) and that reviewer selects "Create a merge commit" from the dropdown — GitHub may default to whichever was used last. No repo-policy changes are needed.
+
+**Follow-up (out of scope for Phase 15):** A test-fixture Stripe placeholder string remains in 1 plan doc + 1 test file (the 3 commits push-protection flagged). These predate Phase 15 (Wave 3) and are clearly-marked test placeholders, not real secrets. Worth a one-line cleanup PR in a future phase to silence future push-protection prompts.
 
 ## Self-Check: PASSED
 
