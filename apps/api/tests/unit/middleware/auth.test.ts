@@ -20,7 +20,9 @@ function createTestApp(provider: AuthProvider, auditLogger?: AuditLogger) {
   return app;
 }
 
-describe('authMiddleware', () => {
+// Auth middleware boots a Hono app + Pino logger per test; that first-load
+// can exceed vitest's 5s default on cold CI runners. Bumped to 30s.
+describe('authMiddleware', { timeout: 30_000 }, () => {
   it('sets tenantId and auth on context for authenticated requests', async () => {
     const provider: AuthProvider = {
       authenticate: vi.fn().mockResolvedValue({
