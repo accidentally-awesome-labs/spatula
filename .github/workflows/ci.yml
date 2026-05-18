@@ -121,14 +121,6 @@ jobs:
   test-e2e:
     name: E2E Tests
     runs-on: ubuntu-latest
-    # Known fragile: tests/e2e/full-pipeline.test.ts uses a hardcoded
-    # FIXTURE_URL ('https://example.com/products/xz-500') with a real
-    # Playwright crawl path, so it 'fetch failed's whenever the runner
-    # can't reach example.com (or the page returns the wrong shape).
-    # Forward + reverse contract suites are the authoritative carve-out
-    # gates; this stays non-blocking until the test is reworked to point
-    # at the in-process fixture server (tracked: post-launch).
-    continue-on-error: true
     services:
       postgres:
         image: postgres:16-alpine

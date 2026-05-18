@@ -565,7 +565,9 @@ describe('Full Pipeline E2E', () => {
     const parsed = JSON.parse(exportContent);
     expect(parsed.metadata.entityCount).toBe(1);
     expect(parsed.entities).toHaveLength(1);
-    expect(parsed.entities[0].data.name).toBe('Wireless Headphones XZ-500');
+    // Entity rows from findByJobCursor expose mergedData (DB column), not .data.
+    // .data is the extractions table's column shape; entities use .mergedData.
+    expect(parsed.entities[0].mergedData.name).toBe('Wireless Headphones XZ-500');
   });
 
   // =========================================================================
