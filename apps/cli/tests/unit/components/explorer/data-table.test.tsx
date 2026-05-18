@@ -33,8 +33,24 @@ describe('DataTable', () => {
   it('renders entity rows with schema columns', async () => {
     const { DataTable } = await import('../../../../src/components/explorer/DataTable.js');
     const entities = [
-      { id: 'e1', mergedData: { name: 'Product A', price: '$10' }, qualityScore: 0.95, sourceCount: 3, categories: [], jobId: 'j1', createdAt: '' },
-      { id: 'e2', mergedData: { name: 'Product B', price: '$20' }, qualityScore: 0.8, sourceCount: 1, categories: [], jobId: 'j1', createdAt: '' },
+      {
+        id: 'e1',
+        mergedData: { name: 'Product A', price: '$10' },
+        qualityScore: 0.95,
+        sourceCount: 3,
+        categories: [],
+        jobId: 'j1',
+        createdAt: '',
+      },
+      {
+        id: 'e2',
+        mergedData: { name: 'Product B', price: '$20' },
+        qualityScore: 0.8,
+        sourceCount: 1,
+        categories: [],
+        jobId: 'j1',
+        createdAt: '',
+      },
     ];
     const { lastFrame } = render(
       <DataTable

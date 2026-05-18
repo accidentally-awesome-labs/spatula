@@ -47,10 +47,7 @@ export class TenantRepository {
 
   async findById(id: string) {
     try {
-      const [row] = await this.db
-        .select()
-        .from(tenants)
-        .where(eq(tenants.id, id));
+      const [row] = await this.db.select().from(tenants).where(eq(tenants.id, id));
 
       return row ?? null;
     } catch (error) {
@@ -97,11 +94,7 @@ export class TenantRepository {
   async getQuotas(tenantId: string) {
     const cacheKey = `tenant:${tenantId}:quotas`;
     if (this.cache) {
-      return this.cache.getOrFetch(
-        cacheKey,
-        () => this._getQuotasFromDb(tenantId),
-        300,
-      );
+      return this.cache.getOrFetch(cacheKey, () => this._getQuotasFromDb(tenantId), 300);
     }
     return this._getQuotasFromDb(tenantId);
   }
@@ -141,10 +134,7 @@ export class TenantRepository {
     }
   }
 
-  async findAll(options?: {
-    limit?: number;
-    offset?: number;
-  }) {
+  async findAll(options?: { limit?: number; offset?: number }) {
     try {
       return await this.db
         .select()
@@ -161,9 +151,7 @@ export class TenantRepository {
 
   async countAll(): Promise<number> {
     try {
-      const rows = await this.db
-        .select({ count: sql<number>`count(*)::int` })
-        .from(tenants);
+      const rows = await this.db.select({ count: sql<number>`count(*)::int` }).from(tenants);
 
       return (rows[0] as any)?.count ?? 0;
     } catch (error) {

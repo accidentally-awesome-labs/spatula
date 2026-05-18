@@ -45,42 +45,41 @@ export class SqlitePageRepository implements PageRepo {
 
   async create(data: CreatePageInput): Promise<{ id: string }> {
     const id = crypto.randomUUID();
-    wrapStorageError(() => {
-      this.db
-        .insert(pages)
-        .values({
-          id,
-          taskId: data.taskId,
-          jobId: this.projectId,
-          contentRef: data.contentRef,
-          contentHash: data.contentHash,
-          metadata: data.metadata ?? {},
-          createdAt: new Date().toISOString(),
-          // SQLite-only extensions
-          ...(data.url !== undefined ? { url: data.url } : {}),
-          ...(data.statusCode !== undefined ? { statusCode: data.statusCode } : {}),
-          ...(data.title !== undefined ? { title: data.title } : {}),
-          ...(data.classification !== undefined ? { classification: data.classification } : {}),
-          ...(data.contentPath !== undefined ? { contentPath: data.contentPath } : {}),
-          ...(data.needsReextraction !== undefined ? { needsReextraction: data.needsReextraction } : {}),
-          ...(data.reextractionReason !== undefined ? { reextractionReason: data.reextractionReason } : {}),
-        })
-        .run();
-    }, { method: 'create', table: 'pages' });
+    wrapStorageError(
+      () => {
+        this.db
+          .insert(pages)
+          .values({
+            id,
+            taskId: data.taskId,
+            jobId: this.projectId,
+            contentRef: data.contentRef,
+            contentHash: data.contentHash,
+            metadata: data.metadata ?? {},
+            createdAt: new Date().toISOString(),
+            // SQLite-only extensions
+            ...(data.url !== undefined ? { url: data.url } : {}),
+            ...(data.statusCode !== undefined ? { statusCode: data.statusCode } : {}),
+            ...(data.title !== undefined ? { title: data.title } : {}),
+            ...(data.classification !== undefined ? { classification: data.classification } : {}),
+            ...(data.contentPath !== undefined ? { contentPath: data.contentPath } : {}),
+            ...(data.needsReextraction !== undefined
+              ? { needsReextraction: data.needsReextraction }
+              : {}),
+            ...(data.reextractionReason !== undefined
+              ? { reextractionReason: data.reextractionReason }
+              : {}),
+          })
+          .run();
+      },
+      { method: 'create', table: 'pages' },
+    );
     logger.debug({ id, contentHash: data.contentHash }, 'page created');
     return { id };
   }
 
-  async findByContentHash(
-    hash: string,
-    _tenantId: string,
-  ): Promise<{ id: string } | null> {
-    const row = this.db
-      .select()
-      .from(pages)
-      .where(eq(pages.contentHash, hash))
-      .limit(1)
-      .get();
+  async findByContentHash(hash: string, _tenantId: string): Promise<{ id: string } | null> {
+    const row = this.db.select().from(pages).where(eq(pages.contentHash, hash)).limit(1).get();
     return row ?? null;
   }
 
@@ -90,11 +89,7 @@ export class SqlitePageRepository implements PageRepo {
   ): Promise<Array<{ id: string; metadata: Record<string, unknown> | null; createdAt: Date }>> {
     if (ids.length === 0) return [];
 
-    const rows = this.db
-      .select()
-      .from(pages)
-      .where(inArray(pages.id, ids))
-      .all();
+    const rows = this.db.select().from(pages).where(inArray(pages.id, ids)).all();
 
     return rows.map((row) => ({
       id: row.id,
@@ -105,10 +100,7 @@ export class SqlitePageRepository implements PageRepo {
   }
 
   /** Flag all pages for a job as needing re-extraction. */
-  async flagForReextraction(
-    jobId: string,
-    reason: string,
-  ): Promise<number> {
+  async flagForReextraction(jobId: string, reason: string): Promise<number> {
     const result = this.db
       .update(pages)
       .set({ needsReextraction: true, reextractionReason: reason })

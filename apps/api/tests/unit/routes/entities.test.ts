@@ -12,9 +12,11 @@ function createMockDeps(): AppDeps {
   return {
     dbPool: { end: vi.fn() } as unknown as Pool,
     entityRepo: {
-      findByJob: vi.fn().mockResolvedValue([
-        { id: 'ent-1', mergedData: { name: 'Product A' }, qualityScore: 0.95 },
-      ]),
+      findByJob: vi
+        .fn()
+        .mockResolvedValue([
+          { id: 'ent-1', mergedData: { name: 'Product A' }, qualityScore: 0.95 },
+        ]),
       findById: vi.fn().mockResolvedValue({
         id: 'ent-1',
         mergedData: { name: 'Product A' },
@@ -25,12 +27,12 @@ function createMockDeps(): AppDeps {
       findByJobCursor: vi.fn().mockResolvedValue({ entities: [], nextCursor: null }),
     },
     entitySourceRepo: {
-      findByEntity: vi.fn().mockResolvedValue([
-        { extractionId: 'ext-1', matchConfidence: 0.9 },
-      ]),
-      findByEntityWithUrls: vi.fn().mockResolvedValue([
-        { extractionId: 'ext-1', matchConfidence: 0.9, sourceUrl: 'https://example.com' },
-      ]),
+      findByEntity: vi.fn().mockResolvedValue([{ extractionId: 'ext-1', matchConfidence: 0.9 }]),
+      findByEntityWithUrls: vi
+        .fn()
+        .mockResolvedValue([
+          { extractionId: 'ext-1', matchConfidence: 0.9, sourceUrl: 'https://example.com' },
+        ]),
     },
     jobRepo: {} as any,
     schemaRepo: {} as any,

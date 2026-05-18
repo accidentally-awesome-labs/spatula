@@ -205,7 +205,13 @@ describe('PATCH /api/v1/jobs/:id', () => {
 
   it('dispatches all 5 actions correctly', async () => {
     const actions = ['start', 'pause', 'resume', 'cancel', 'reconcile'] as const;
-    const methods = ['startJob', 'pauseJob', 'resumeJob', 'cancelJob', 'triggerReconciliation'] as const;
+    const methods = [
+      'startJob',
+      'pauseJob',
+      'resumeJob',
+      'cancelJob',
+      'triggerReconciliation',
+    ] as const;
 
     for (let i = 0; i < actions.length; i++) {
       const freshDeps = createMockDeps();

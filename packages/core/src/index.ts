@@ -44,5 +44,11 @@ export * from './content-store/index.js';
 export * from './diagnostics/index.js';
 
 // DataSource interface and local implementation
-export type { DataSource, PaginationQuery, PaginatedResult, ProjectStatus, DataEvent } from './interfaces/data-source.js';
+export type {
+  DataSource,
+  PaginationQuery,
+  PaginatedResult,
+  ProjectStatus,
+  DataEvent,
+} from './interfaces/data-source.js';
 export { LocalDataSource } from './pipeline/local-data-source.js';

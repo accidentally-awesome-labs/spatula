@@ -41,7 +41,9 @@ describe('Server Health Checks', () => {
 
   it('migrations check uses provided tester', async () => {
     const checks = createServerChecks({
-      checkMigrations: vi.fn().mockResolvedValue({ status: 'pass', message: '15 migrations applied' }),
+      checkMigrations: vi
+        .fn()
+        .mockResolvedValue({ status: 'pass', message: '15 migrations applied' }),
     });
     const migCheck = checks.find((c) => c.name === 'migrations')!;
     const result = await migCheck.run();

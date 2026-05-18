@@ -13,8 +13,11 @@ import { DashboardView } from '../../../../src/components/dashboard/DashboardVie
 vi.mock('../../../../src/hooks/useJobPolling.js', () => ({
   useJobPolling: vi.fn().mockReturnValue({ isPolling: false, lastError: null }),
   isDataSource: (backend: unknown) =>
-    typeof backend === 'object' && backend !== null &&
-    'getEntities' in backend && 'getStatus' in backend && !('getJob' in backend),
+    typeof backend === 'object' &&
+    backend !== null &&
+    'getEntities' in backend &&
+    'getStatus' in backend &&
+    !('getJob' in backend),
 }));
 
 vi.mock('../../../../src/hooks/useWebSocket.js', () => ({
@@ -82,9 +85,7 @@ describe('DashboardView', () => {
     state.setRecentActions([]);
     state.setEntityPreviews([]);
 
-    const { lastFrame } = render(
-      <DashboardView store={store} backend={apiClient} />,
-    );
+    const { lastFrame } = render(<DashboardView store={store} backend={apiClient} />);
     const frame = lastFrame()!;
 
     // All four panel titles should be present
@@ -104,9 +105,7 @@ describe('DashboardView', () => {
       stats: {},
     });
 
-    const { lastFrame } = render(
-      <DashboardView store={store} backend={apiClient} />,
-    );
+    const { lastFrame } = render(<DashboardView store={store} backend={apiClient} />);
     const frame = lastFrame()!;
 
     expect(frame).toContain('My Awesome Crawl');
@@ -118,9 +117,7 @@ describe('DashboardView', () => {
     state.setActiveJobId('job-loading-test');
     // Do NOT set jobData — it remains null
 
-    const { lastFrame } = render(
-      <DashboardView store={store} backend={apiClient} />,
-    );
+    const { lastFrame } = render(<DashboardView store={store} backend={apiClient} />);
     const frame = lastFrame()!;
 
     expect(frame).toContain('Loading job data...');
@@ -129,9 +126,7 @@ describe('DashboardView', () => {
   it('shows no-active-job message when activeJobId is null', () => {
     // Do not set activeJobId — remains null
 
-    const { lastFrame } = render(
-      <DashboardView store={store} backend={apiClient} />,
-    );
+    const { lastFrame } = render(<DashboardView store={store} backend={apiClient} />);
     const frame = lastFrame()!;
 
     expect(frame).toContain('No active job');
@@ -153,9 +148,7 @@ describe('DashboardView', () => {
       stats: {},
     });
 
-    const { lastFrame } = render(
-      <DashboardView store={store} backend={apiClient} />,
-    );
+    const { lastFrame } = render(<DashboardView store={store} backend={apiClient} />);
     const frame = lastFrame()!;
 
     expect(frame).toContain('Error:');
@@ -171,9 +164,7 @@ describe('DashboardView', () => {
       stats: {},
     });
 
-    const { lastFrame } = render(
-      <DashboardView store={store} backend={apiClient} />,
-    );
+    const { lastFrame } = render(<DashboardView store={store} backend={apiClient} />);
     const frame = lastFrame()!;
 
     expect(frame).toContain('Untitled Job');
@@ -186,9 +177,7 @@ describe('DashboardView', () => {
 
     const { useWebSocket } = await import('../../../../src/hooks/useWebSocket.js');
 
-    render(
-      <DashboardView store={store} backend={apiClient} wsToken="tok_test_123" />,
-    );
+    render(<DashboardView store={store} backend={apiClient} wsToken="tok_test_123" />);
 
     expect(useWebSocket).toHaveBeenCalledWith(
       store,
@@ -206,9 +195,7 @@ describe('DashboardView', () => {
 
     const { useWebSocket } = await import('../../../../src/hooks/useWebSocket.js');
 
-    render(
-      <DashboardView store={store} backend={apiClient} />,
-    );
+    render(<DashboardView store={store} backend={apiClient} />);
 
     expect(useWebSocket).toHaveBeenCalledWith(
       store,

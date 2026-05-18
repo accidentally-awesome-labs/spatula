@@ -81,7 +81,7 @@ export const DEFAULT_QUEUE_CONFIG: QueueConfig = {
 export const QUEUE_JOB_OPTIONS = {
   [QUEUE_NAMES.CRAWL]: {
     attempts: 3,
-    backoff: { type: 'exponential' as const, delay: 5_000 },  // 5s, 10s, 20s
+    backoff: { type: 'exponential' as const, delay: 5_000 }, // 5s, 10s, 20s
     removeOnComplete: { count: 1000 },
     removeOnFail: { count: 5000 },
   },
@@ -93,7 +93,7 @@ export const QUEUE_JOB_OPTIONS = {
   },
   [QUEUE_NAMES.SCHEMA_EVOLUTION]: {
     attempts: 2,
-    backoff: { type: 'fixed' as const, delay: 10_000 },       // flat 10s retry (lock contention)
+    backoff: { type: 'fixed' as const, delay: 10_000 }, // flat 10s retry (lock contention)
     removeOnComplete: { count: 1000 },
     removeOnFail: { count: 5000 },
   },
@@ -105,7 +105,7 @@ export const QUEUE_JOB_OPTIONS = {
   },
   [QUEUE_NAMES.EXPORT]: {
     attempts: 2,
-    backoff: { type: 'exponential' as const, delay: 3_000 },  // 3s, 6s
+    backoff: { type: 'exponential' as const, delay: 3_000 }, // 3s, 6s
     removeOnComplete: { count: 1000 },
     removeOnFail: { count: 5000 },
   },
@@ -152,7 +152,7 @@ export function createQueues(
     connection,
     defaultJobOptions: {
       attempts: 3,
-      backoff: { type: 'custom' as const },  // Paired with worker's backoffStrategy: 1m, 5m, 30m
+      backoff: { type: 'custom' as const }, // Paired with worker's backoffStrategy: 1m, 5m, 30m
       removeOnComplete: 100,
       removeOnFail: 500,
     },

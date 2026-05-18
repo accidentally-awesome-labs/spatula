@@ -146,10 +146,7 @@ describe('resource cleanup', () => {
       const p2 = await openLocalProject(dir);
 
       // Both should be able to read concurrently
-      const [s1, s2] = await Promise.all([
-        p1.dataSource.getStatus(),
-        p2.dataSource.getStatus(),
-      ]);
+      const [s1, s2] = await Promise.all([p1.dataSource.getStatus(), p2.dataSource.getStatus()]);
 
       expect(s1.totalEntities).toBe(10);
       expect(s2.totalEntities).toBe(10);

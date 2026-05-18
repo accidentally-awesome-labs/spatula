@@ -41,11 +41,18 @@ function PayloadSummary({ action }: { action: Record<string, unknown> }): React.
           <Text>
             <Text bold>{'Field: '}</Text>
             <Text color="green">{String(field.name)}</Text>
-            <Text dimColor>{' ('}{String(field.type)}{')'}</Text>
+            <Text dimColor>
+              {' ('}
+              {String(field.type)}
+              {')'}
+            </Text>
             {field.required === true && <Text color="red">{' required'}</Text>}
           </Text>
           {description && (
-            <Text dimColor>{'  '}{description}</Text>
+            <Text dimColor>
+              {'  '}
+              {description}
+            </Text>
           )}
         </Box>
       );
@@ -69,7 +76,11 @@ function PayloadSummary({ action }: { action: Record<string, unknown> }): React.
         <Text>
           <Text bold>{'Remove: '}</Text>
           <Text color="red">{String(payload.fieldName)}</Text>
-          <Text dimColor>{' ('}{String(payload.reason)}{')'}</Text>
+          <Text dimColor>
+            {' ('}
+            {String(payload.reason)}
+            {')'}
+          </Text>
         </Text>
       );
     }
@@ -82,7 +93,11 @@ function PayloadSummary({ action }: { action: Record<string, unknown> }): React.
         <Text>
           <Text bold>{'Modify: '}</Text>
           <Text>{String(payload.fieldName)}</Text>
-          <Text dimColor>{' ('}{changeList}{')'}</Text>
+          <Text dimColor>
+            {' ('}
+            {changeList}
+            {')'}
+          </Text>
         </Text>
       );
     }
@@ -100,7 +115,9 @@ function PayloadSummary({ action }: { action: Record<string, unknown> }): React.
       const keys = Object.keys(payload).slice(0, 3);
       return (
         <Text dimColor>
-          {type}{': '}{keys.join(', ')}
+          {type}
+          {': '}
+          {keys.join(', ')}
         </Text>
       );
     }
@@ -120,7 +137,9 @@ export function ActionCard({ action, index, total }: ActionCardProps): React.Rea
     <Panel title={type} borderColor={risk.color}>
       <Box flexDirection="column" gap={0}>
         <Box gap={2}>
-          <Text dimColor>{index + 1} of {total}</Text>
+          <Text dimColor>
+            {index + 1} of {total}
+          </Text>
           <Text>
             <Text bold>{'Confidence: '}</Text>
             <Text color={confidenceColor}>{confidencePercent}%</Text>

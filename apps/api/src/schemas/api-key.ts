@@ -13,25 +13,29 @@ export const createApiKeySchema = z.object({
   }),
 });
 
-export const apiKeyResponseSchema = z.object({
-  id: z.string().uuid(),
-  keyPrefix: z.string(),
-  name: z.string(),
-  scopes: z.array(z.string()),
-  expiresAt: z.string().nullable(),
-  lastUsedAt: z.string().nullable(),
-  createdAt: z.string(),
-}).openapi('ApiKey');
+export const apiKeyResponseSchema = z
+  .object({
+    id: z.string().uuid(),
+    keyPrefix: z.string(),
+    name: z.string(),
+    scopes: z.array(z.string()),
+    expiresAt: z.string().nullable(),
+    lastUsedAt: z.string().nullable(),
+    createdAt: z.string(),
+  })
+  .openapi('ApiKey');
 
-export const apiKeyCreatedResponseSchema = z.object({
-  id: z.string().uuid(),
-  key: z.string().openapi({
-    description: 'The raw API key. This is the only time it will be shown.',
-    example: 'sk_live_abc123...',
-  }),
-  keyPrefix: z.string(),
-  name: z.string(),
-  scopes: z.array(z.string()),
-  expiresAt: z.string().nullable(),
-  createdAt: z.string(),
-}).openapi('ApiKeyCreated');
+export const apiKeyCreatedResponseSchema = z
+  .object({
+    id: z.string().uuid(),
+    key: z.string().openapi({
+      description: 'The raw API key. This is the only time it will be shown.',
+      example: 'sk_live_abc123...',
+    }),
+    keyPrefix: z.string(),
+    name: z.string(),
+    scopes: z.array(z.string()),
+    expiresAt: z.string().nullable(),
+    createdAt: z.string(),
+  })
+  .openapi('ApiKeyCreated');

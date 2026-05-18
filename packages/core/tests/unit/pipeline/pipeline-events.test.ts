@@ -14,7 +14,12 @@ describe('PipelineEventEmitter', () => {
     const emitter = new PipelineEventEmitter();
     const handler = vi.fn();
     emitter.on('progress', handler);
-    emitter.emit('progress', { pagesProcessed: 10, totalPages: 100, entitiesCreated: 5, errors: 1 });
+    emitter.emit('progress', {
+      pagesProcessed: 10,
+      totalPages: 100,
+      entitiesCreated: 5,
+      errors: 1,
+    });
     expect(handler).toHaveBeenCalledWith(expect.objectContaining({ pagesProcessed: 10 }));
   });
 });

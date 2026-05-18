@@ -4,8 +4,20 @@ import type { Entity } from '@spatula/shared';
 
 describe('filterEntitiesLocally', () => {
   const entities: Entity[] = [
-    { id: '1', mergedData: { name: 'Apple iPhone' }, qualityScore: 0.9, categories: [], sourceCount: 1 } as Entity,
-    { id: '2', mergedData: { name: 'Samsung Galaxy' }, qualityScore: 0.8, categories: [], sourceCount: 1 } as Entity,
+    {
+      id: '1',
+      mergedData: { name: 'Apple iPhone' },
+      qualityScore: 0.9,
+      categories: [],
+      sourceCount: 1,
+    } as Entity,
+    {
+      id: '2',
+      mergedData: { name: 'Samsung Galaxy' },
+      qualityScore: 0.8,
+      categories: [],
+      sourceCount: 1,
+    } as Entity,
   ];
 
   it('filters case-insensitively', () => {

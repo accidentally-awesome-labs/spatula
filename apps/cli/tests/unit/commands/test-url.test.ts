@@ -56,9 +56,11 @@ describe('testUrl error paths', () => {
 
   beforeEach(() => {
     // Prevent process.exit from terminating the test process
-    exitSpy = vi.spyOn(process, 'exit').mockImplementation((_code?: string | number | null | undefined) => {
-      throw new Error(`process.exit(${_code})`);
-    });
+    exitSpy = vi
+      .spyOn(process, 'exit')
+      .mockImplementation((_code?: string | number | null | undefined) => {
+        throw new Error(`process.exit(${_code})`);
+      });
 
     errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
 
@@ -92,9 +94,7 @@ describe('testUrl error paths', () => {
     const { testUrl } = await import('../../../src/commands/test-url.js');
 
     // Should not throw — CSS auto-discovery mode works without a schema
-    await expect(
-      testUrl({ url: 'https://example.com', skipLlm: true }),
-    ).resolves.toBeUndefined();
+    await expect(testUrl({ url: 'https://example.com', skipLlm: true })).resolves.toBeUndefined();
 
     expect(exitSpy).not.toHaveBeenCalled();
     expect(CssExtractor).toHaveBeenCalled();
@@ -103,9 +103,9 @@ describe('testUrl error paths', () => {
   it('exits with code 1 when firecrawl crawler is used without FIRECRAWL_API_KEY', async () => {
     const { testUrl } = await import('../../../src/commands/test-url.js');
 
-    await expect(
-      testUrl({ url: 'https://example.com', crawler: 'firecrawl' }),
-    ).rejects.toThrow('process.exit(1)');
+    await expect(testUrl({ url: 'https://example.com', crawler: 'firecrawl' })).rejects.toThrow(
+      'process.exit(1)',
+    );
 
     expect(exitSpy).toHaveBeenCalledWith(1);
 

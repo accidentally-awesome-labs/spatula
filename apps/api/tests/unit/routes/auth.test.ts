@@ -3,11 +3,7 @@ import { Hono } from 'hono';
 import { authRoutes } from '../../../src/routes/auth.js';
 import type { AppEnv } from '../../../src/types.js';
 
-function createTestApp(opts: {
-  tenantId?: string;
-  scopes?: string[];
-  authUserId?: string | null;
-}) {
+function createTestApp(opts: { tenantId?: string; scopes?: string[]; authUserId?: string | null }) {
   const app = new Hono<AppEnv>();
   app.use('*', async (c, next) => {
     if (opts.tenantId !== undefined) c.set('tenantId', opts.tenantId);

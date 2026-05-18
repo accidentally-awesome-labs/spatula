@@ -44,7 +44,12 @@ describe('AuditLogRepository', () => {
       const now = new Date();
       const entries = [
         { id: 'log-2', tenantId: 'tenant-1', action: 'job.started', createdAt: now },
-        { id: 'log-1', tenantId: 'tenant-1', action: 'job.created', createdAt: new Date(now.getTime() - 1000) },
+        {
+          id: 'log-1',
+          tenantId: 'tenant-1',
+          action: 'job.created',
+          createdAt: new Date(now.getTime() - 1000),
+        },
       ];
 
       const mockOffset = vi.fn().mockResolvedValue(entries);

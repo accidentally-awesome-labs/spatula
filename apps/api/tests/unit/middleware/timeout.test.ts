@@ -28,10 +28,13 @@ describe('timeoutMiddleware', () => {
 
   it('uses route-specific timeout when configured', async () => {
     const app = new Hono();
-    app.use('*', timeoutMiddleware({
-      defaultMs: 50,
-      overrides: { '/api/v1/exports/:exportId/download': 5000 },
-    }));
+    app.use(
+      '*',
+      timeoutMiddleware({
+        defaultMs: 50,
+        overrides: { '/api/v1/exports/:exportId/download': 5000 },
+      }),
+    );
     app.get('/api/v1/exports/:exportId/download', async (c) => {
       await new Promise((r) => setTimeout(r, 100));
       return c.json({ ok: true });
@@ -43,10 +46,13 @@ describe('timeoutMiddleware', () => {
 
   it('does not timeout on normal route with override configured', async () => {
     const app = new Hono();
-    app.use('*', timeoutMiddleware({
-      defaultMs: 5000,
-      overrides: { '/api/v1/exports/:exportId/download': 300000 },
-    }));
+    app.use(
+      '*',
+      timeoutMiddleware({
+        defaultMs: 5000,
+        overrides: { '/api/v1/exports/:exportId/download': 300000 },
+      }),
+    );
     app.get('/api/v1/fast', (c) => c.json({ ok: true }));
 
     const res = await app.request('/api/v1/fast');

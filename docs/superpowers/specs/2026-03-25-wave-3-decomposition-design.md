@@ -24,15 +24,15 @@ Wave 3 covers 5 workstreams across Phase 12 (server) and Phase 13 (local):
 
 ## 2. Sub-plan Summary
 
-| Sub-plan | Scope | Spec Sections | Est. New Files | Order |
-|----------|-------|---------------|----------------|-------|
-| **3-1a** | Auth Core | 12: 3.1.1–3.1.5, 3.3, 3.7 | ~8 | 1 |
-| **3-1b** | Auth Advanced | 12: 3.1.3, 3.2, 3.4–3.6 | ~8 | 2 |
-| **3-2** | Observability & Monitoring | 12: 4.1–4.6 | ~10 | 3 |
-| **3-3a** | Performance: Storage & Exports | 12: 6.1–6.2 | ~8 | 4 |
-| **3-3b** | Performance: Query & Caching | 12: 6.3–6.5 | ~7 | 5 |
-| **3-4** | Deferred D/F Items | 12: 5.4–5.5, 7.5–7.6 | ~6 | 6 |
-| **3-5** | Local Pipeline + Core CLI | 13: 3, 4, 10 | ~20 | 7 |
+| Sub-plan | Scope                          | Spec Sections             | Est. New Files | Order |
+| -------- | ------------------------------ | ------------------------- | -------------- | ----- |
+| **3-1a** | Auth Core                      | 12: 3.1.1–3.1.5, 3.3, 3.7 | ~8             | 1     |
+| **3-1b** | Auth Advanced                  | 12: 3.1.3, 3.2, 3.4–3.6   | ~8             | 2     |
+| **3-2**  | Observability & Monitoring     | 12: 4.1–4.6               | ~10            | 3     |
+| **3-3a** | Performance: Storage & Exports | 12: 6.1–6.2               | ~8             | 4     |
+| **3-3b** | Performance: Query & Caching   | 12: 6.3–6.5               | ~7             | 5     |
+| **3-4**  | Deferred D/F Items             | 12: 5.4–5.5, 7.5–7.6      | ~6             | 6     |
+| **3-5**  | Local Pipeline + Core CLI      | 13: 3, 4, 10              | ~20            | 7     |
 
 **Execution order:**
 
@@ -244,6 +244,7 @@ Wave 3 covers 5 workstreams across Phase 12 (server) and Phase 13 (local):
 **Goal:** Wire orchestrators (Wave 1), SQLite repos (Wave 2), and config system (Wave 2) into a working local crawl with CLI commands.
 
 **Dependencies (all from Wave 1/2, not from Wave 3 server sub-plans):**
+
 - Wave 1: `crawl-orchestrator`, `schema-orchestrator`, `reconcile-orchestrator`, `export-orchestrator`
 - Wave 2: `ProjectAdapter` (SQLite repos), `parseProjectYaml`, `resolveConfig`, `diffConfigs`, `RobotsTxtChecker`, `InMemoryDomainRateLimiter`, `InMemoryPageBudget`, `CrawlCompletionChecker`, `CircuitBreakerLLMClient`, `estimateCost()`
 
@@ -328,13 +329,13 @@ Adding auth middleware (3-1a) affects all 175 existing API tests. Strategy: test
 
 Wave 3 adds significant services to `AppDeps` (in `apps/api/src/types.ts`):
 
-| Sub-plan | New AppDeps fields |
-|----------|-------------------|
-| 3-1a | `authProvider: AuthProvider` |
-| 3-1b | `redis: Redis`, `auditLogger: AuditLogger` |
-| 3-2 | `meter: Meter`, `tracer: Tracer`, `llmUsageRepo: LlmUsageRepository` |
-| 3-3a | `contentStore: ContentStore` (replaces direct `PgContentStore`) |
-| 3-3b | `cache: RedisCache` |
+| Sub-plan | New AppDeps fields                                                   |
+| -------- | -------------------------------------------------------------------- |
+| 3-1a     | `authProvider: AuthProvider`                                         |
+| 3-1b     | `redis: Redis`, `auditLogger: AuditLogger`                           |
+| 3-2      | `meter: Meter`, `tracer: Tracer`, `llmUsageRepo: LlmUsageRepository` |
+| 3-3a     | `contentStore: ContentStore` (replaces direct `PgContentStore`)      |
+| 3-3b     | `cache: RedisCache`                                                  |
 
 Each sub-plan updates the `AppDeps` type and its construction in `apps/api/src/index.ts`.
 

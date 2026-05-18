@@ -13,6 +13,7 @@
 ## Context & Pre-existing Code
 
 **Already defined (Phase 1-7):**
+
 - `JobConfig`, `JobStatus`, `SchemaDefinition`, `FieldDefinition` — in `packages/core/src/types/`
 - `ExtractionResult`, `EntityMatch`, `FieldProvenanceEntry` — in `packages/core/src/types/`
 - 25 `PipelineAction` types + `ActionStatus`, `ActionSource` — in `packages/core/src/types/actions.ts`
@@ -20,6 +21,7 @@
 - `createLogger()` — in `packages/shared/src/logger.ts`
 
 **Already defined (Phase 4 DB):**
+
 - `JobRepository` — create, findById, findByTenant, updateStatus, updateStats
 - `SchemaRepository` — create, findLatest, findByVersion, findAllVersions
 - `ExtractionRepository` — store, findByJob, findByPage
@@ -32,16 +34,19 @@
 - Actions table schema exists but **NO ActionRepository yet** — must create in this phase
 
 **Already defined (Phase 5 queue):**
+
 - `JobManager` — createJob, startJob, pauseJob, resumeJob, cancelJob, triggerReconciliation, getJobStatus
 - `JobStateMachine` — validates state transitions
 - `createQueues()`, `QUEUE_NAMES`, `SpatulaQueues`
 
 **DB Enums (from `packages/db/src/schema/enums.ts`):**
+
 - `job_status`: pending, queued, running, paused, reconciling, completed, failed, cancelled
 - `action_status`: pending_review, approved, applied, rejected, rolled_back
 - `action_source`: extraction, schema_evolution, reconciliation, quality_audit
 
 **Current API app state:**
+
 - `apps/api/package.json` — has only `@spatula/core` and `@spatula/shared` deps; NO Hono
 - `apps/api/src/index.ts` — placeholder comment only
 
@@ -52,6 +57,7 @@
 Install Hono and set up the test runner for the API package.
 
 **Files:**
+
 - Modify: `apps/api/package.json`
 - Create: `apps/api/vitest.config.ts`
 - Modify: `apps/api/tsconfig.json` (add test path if needed)
@@ -59,6 +65,7 @@ Install Hono and set up the test runner for the API package.
 ### Step 1: Install Hono and related dependencies
 
 Run:
+
 ```bash
 cd apps/api && pnpm add hono @hono/node-server zod @spatula/db @spatula/queue
 ```
@@ -66,6 +73,7 @@ cd apps/api && pnpm add hono @hono/node-server zod @spatula/db @spatula/queue
 ### Step 2: Install test dev dependencies
 
 Run:
+
 ```bash
 cd apps/api && pnpm add -D vitest @types/node
 ```
@@ -73,6 +81,7 @@ cd apps/api && pnpm add -D vitest @types/node
 ### Step 3: Create vitest config
 
 Create `apps/api/vitest.config.ts`:
+
 ```typescript
 import { defineConfig } from 'vitest/config';
 
@@ -88,6 +97,7 @@ export default defineConfig({
 ### Step 4: Add test script to package.json
 
 Add to `apps/api/package.json` scripts:
+
 ```json
 "test": "vitest run",
 "test:watch": "vitest"
@@ -96,9 +106,11 @@ Add to `apps/api/package.json` scripts:
 ### Step 5: Verify setup
 
 Run:
+
 ```bash
 cd apps/api && pnpm build
 ```
+
 Expected: Success (no source changes yet)
 
 ### Step 6: Commit
@@ -115,6 +127,7 @@ git commit -m "chore(api): install hono, zod, db/queue deps and vitest config"
 The actions table exists but has no repository. API endpoints need CRUD access to actions for the review workflow.
 
 **Files:**
+
 - Create: `packages/db/src/repositories/action-repository.ts`
 - Modify: `packages/db/src/repositories/index.ts` (add export)
 - Test: `packages/db/tests/unit/repositories/action-repository.test.ts`
@@ -192,9 +205,7 @@ describe('ActionRepository', () => {
     };
     mockDb.select = vi.fn().mockReturnValue({ from: vi.fn().mockReturnValue(failChainable) });
 
-    await expect(repo.findByJob('job-id', 'tenant-id')).rejects.toThrow(
-      'Failed to find actions',
-    );
+    await expect(repo.findByJob('job-id', 'tenant-id')).rejects.toThrow('Failed to find actions');
   });
 
   it('updateStatus wraps errors in StorageError', async () => {
@@ -206,9 +217,9 @@ describe('ActionRepository', () => {
     };
     mockDb.update = vi.fn().mockReturnValue(failChainable);
 
-    await expect(
-      repo.updateStatus('action-id', 'tenant-id', 'approved', 'user-1'),
-    ).rejects.toThrow('Failed to update action status');
+    await expect(repo.updateStatus('action-id', 'tenant-id', 'approved', 'user-1')).rejects.toThrow(
+      'Failed to update action status',
+    );
   });
 });
 ```
@@ -221,6 +232,7 @@ Expected: FAIL — module not found
 ### Step 3: Write the ActionRepository
 
 Create `packages/db/src/repositories/action-repository.ts`:
+
 ```typescript
 import { eq, and, desc, inArray } from 'drizzle-orm';
 import { createLogger, StorageError } from '@spatula/shared';
@@ -251,13 +263,21 @@ export class ActionRepository {
 
       if (options?.type) {
         query = query.where(
-          and(eq(actions.jobId, jobId), eq(actions.tenantId, tenantId), eq(actions.type, options.type)),
+          and(
+            eq(actions.jobId, jobId),
+            eq(actions.tenantId, tenantId),
+            eq(actions.type, options.type),
+          ),
         ) as typeof query;
       }
 
       if (options?.status) {
         query = query.where(
-          and(eq(actions.jobId, jobId), eq(actions.tenantId, tenantId), eq(actions.status, options.status)),
+          and(
+            eq(actions.jobId, jobId),
+            eq(actions.tenantId, tenantId),
+            eq(actions.status, options.status),
+          ),
         ) as typeof query;
       }
 
@@ -360,6 +380,7 @@ export class ActionRepository {
 ### Step 4: Export from repositories barrel
 
 Add to `packages/db/src/repositories/index.ts`:
+
 ```typescript
 export { ActionRepository } from './action-repository.js';
 export type { ActionStatus, FindActionsOptions } from './action-repository.js';
@@ -389,6 +410,7 @@ git commit -m "feat(db): add ActionRepository for actions table CRUD"
 Create the Hono app factory with structured error handling middleware that maps domain errors to HTTP responses.
 
 **Files:**
+
 - Create: `apps/api/src/middleware/error-handler.ts`
 - Create: `apps/api/src/app.ts`
 - Test: `apps/api/tests/unit/middleware/error-handler.test.ts`
@@ -466,6 +488,7 @@ Expected: FAIL — module not found
 ### Step 3: Write error handler middleware
 
 Create `apps/api/src/middleware/error-handler.ts`:
+
 ```typescript
 import type { ErrorHandler } from 'hono';
 import { SpatulaError, ValidationError, createLogger } from '@spatula/shared';
@@ -510,12 +533,9 @@ export const errorHandler: ErrorHandler = (error, c) => {
     logger.warn({ code: (error as SpatulaError).code, requestId, path: c.req.path }, error.message);
   }
 
-  const code =
-    error instanceof SpatulaError ? error.code : 'INTERNAL_ERROR';
+  const code = error instanceof SpatulaError ? error.code : 'INTERNAL_ERROR';
   const message =
-    status >= 500 && !(error instanceof SpatulaError)
-      ? 'Internal server error'
-      : error.message;
+    status >= 500 && !(error instanceof SpatulaError) ? 'Internal server error' : error.message;
 
   return c.json(
     {
@@ -533,6 +553,7 @@ export const errorHandler: ErrorHandler = (error, c) => {
 ### Step 4: Write the app factory
 
 Create `apps/api/src/app.ts`:
+
 ```typescript
 import { Hono } from 'hono';
 import { logger as honoLogger } from 'hono/logger';
@@ -556,8 +577,17 @@ export function createApp(): Hono<AppEnv> {
 ```
 
 Create `apps/api/src/types.ts`:
+
 ```typescript
-import type { JobRepository, SchemaRepository, ExtractionRepository, EntityRepository, EntitySourceRepository, ActionRepository, CrawlTaskRepository } from '@spatula/db';
+import type {
+  JobRepository,
+  SchemaRepository,
+  ExtractionRepository,
+  EntityRepository,
+  EntitySourceRepository,
+  ActionRepository,
+  CrawlTaskRepository,
+} from '@spatula/db';
 import type { JobManager } from '@spatula/queue';
 
 export interface AppDeps {
@@ -603,6 +633,7 @@ git commit -m "feat(api): add error handler middleware and Hono app factory"
 Create middleware that extracts tenant ID from request headers and injects dependencies into the Hono context.
 
 **Files:**
+
 - Create: `apps/api/src/middleware/tenant.ts`
 - Create: `apps/api/src/middleware/deps.ts`
 - Test: `apps/api/tests/unit/middleware/tenant.test.ts`
@@ -696,6 +727,7 @@ Expected: FAIL — modules not found
 ### Step 4: Write tenant middleware
 
 Create `apps/api/src/middleware/tenant.ts`:
+
 ```typescript
 import type { MiddlewareHandler } from 'hono';
 import { ValidationError } from '@spatula/shared';
@@ -725,6 +757,7 @@ export const tenantMiddleware: MiddlewareHandler = async (c, next) => {
 ### Step 5: Write deps middleware
 
 Create `apps/api/src/middleware/deps.ts`:
+
 ```typescript
 import type { MiddlewareHandler } from 'hono';
 import type { AppDeps } from '../types.js';
@@ -761,6 +794,7 @@ git commit -m "feat(api): add tenant extraction and dependency injection middlew
 Create Zod-based request validation utilities and a shared pagination schema used across all list endpoints.
 
 **Files:**
+
 - Create: `apps/api/src/middleware/validate.ts`
 - Create: `apps/api/src/schemas/pagination.ts`
 - Test: `apps/api/tests/unit/middleware/validate.test.ts`
@@ -873,6 +907,7 @@ Expected: FAIL
 ### Step 4: Write pagination schema
 
 Create `apps/api/src/schemas/pagination.ts`:
+
 ```typescript
 import { z } from 'zod';
 
@@ -887,6 +922,7 @@ export type PaginationParams = z.infer<typeof paginationSchema>;
 ### Step 5: Write validate middleware
 
 Create `apps/api/src/middleware/validate.ts`:
+
 ```typescript
 import type { MiddlewareHandler } from 'hono';
 import type { z } from 'zod';
@@ -949,6 +985,7 @@ git commit -m "feat(api): add request validation middleware and pagination schem
 Implement all job-related endpoints: create, list, get, update lifecycle (start, pause, resume, cancel, trigger reconciliation), and delete.
 
 **Files:**
+
 - Create: `apps/api/src/routes/jobs.ts`
 - Create: `apps/api/src/schemas/job.ts`
 - Test: `apps/api/tests/unit/routes/jobs.test.ts`
@@ -966,7 +1003,9 @@ function createMockDeps(): AppDeps {
   return {
     jobRepo: {
       create: vi.fn().mockResolvedValue({ id: 'job-1', name: 'Test', status: 'pending' }),
-      findById: vi.fn().mockResolvedValue({ id: 'job-1', name: 'Test', status: 'pending', tenantId: 'tenant-1' }),
+      findById: vi
+        .fn()
+        .mockResolvedValue({ id: 'job-1', name: 'Test', status: 'pending', tenantId: 'tenant-1' }),
       findByTenant: vi.fn().mockResolvedValue([{ id: 'job-1', name: 'Test', status: 'pending' }]),
       updateStatus: vi.fn().mockResolvedValue({ id: 'job-1', status: 'cancelled' }),
       updateStats: vi.fn().mockResolvedValue(null),
@@ -1114,6 +1153,7 @@ Expected: FAIL — modules not found
 ### Step 3: Write job request/response schemas
 
 Create `apps/api/src/schemas/job.ts`:
+
 ```typescript
 import { z } from 'zod';
 
@@ -1134,7 +1174,16 @@ export const createJobSchema = z.object({
         z.object({
           name: z.string().min(1),
           description: z.string(),
-          type: z.enum(['string', 'number', 'boolean', 'url', 'currency', 'enum', 'array', 'object']),
+          type: z.enum([
+            'string',
+            'number',
+            'boolean',
+            'url',
+            'currency',
+            'enum',
+            'array',
+            'object',
+          ]),
           required: z.boolean().default(false),
         }),
       )
@@ -1170,7 +1219,16 @@ export type CreateJobBody = z.infer<typeof createJobSchema>;
 
 export const listJobsQuerySchema = z.object({
   status: z
-    .enum(['pending', 'queued', 'running', 'paused', 'reconciling', 'completed', 'failed', 'cancelled'])
+    .enum([
+      'pending',
+      'queued',
+      'running',
+      'paused',
+      'reconciling',
+      'completed',
+      'failed',
+      'cancelled',
+    ])
     .optional(),
   limit: z.coerce.number().int().min(1).max(100).default(50),
 });
@@ -1181,6 +1239,7 @@ export type ListJobsQuery = z.infer<typeof listJobsQuerySchema>;
 ### Step 4: Write job routes
 
 Create `apps/api/src/routes/jobs.ts`:
+
 ```typescript
 import { Hono } from 'hono';
 import type { AppEnv } from '../types.js';
@@ -1310,6 +1369,7 @@ git commit -m "feat(api): add job CRUD and lifecycle routes"
 Implement endpoints for reading schema versions: current schema, all versions, and specific version.
 
 **Files:**
+
 - Create: `apps/api/src/routes/schemas.ts`
 - Test: `apps/api/tests/unit/routes/schemas.test.ts`
 
@@ -1417,6 +1477,7 @@ Expected: FAIL
 ### Step 3: Write schema routes
 
 Create `apps/api/src/routes/schemas.ts`:
+
 ```typescript
 import { Hono } from 'hono';
 import type { AppEnv } from '../types.js';
@@ -1457,7 +1518,9 @@ export function schemaRoutes(): Hono<AppEnv> {
     const version = parseInt(c.req.param('version'), 10);
 
     if (isNaN(version) || version < 1) {
-      throw new (await import('@spatula/shared')).ValidationError('Version must be a positive integer');
+      throw new (await import('@spatula/shared')).ValidationError(
+        'Version must be a positive integer',
+      );
     }
 
     const schema = await deps.schemaRepo.findByVersion(jobId, tenantId, version);
@@ -1496,6 +1559,7 @@ git commit -m "feat(api): add schema version routes"
 Implement endpoints for listing extractions and entities with pagination, plus entity detail with provenance.
 
 **Files:**
+
 - Create: `apps/api/src/routes/extractions.ts`
 - Create: `apps/api/src/routes/entities.ts`
 - Test: `apps/api/tests/unit/routes/extractions.test.ts`
@@ -1583,9 +1647,11 @@ import { errorHandler } from '../../../src/middleware/error-handler.js';
 function createMockDeps(): AppDeps {
   return {
     entityRepo: {
-      findByJob: vi.fn().mockResolvedValue([
-        { id: 'ent-1', mergedData: { name: 'Product A' }, qualityScore: 0.95 },
-      ]),
+      findByJob: vi
+        .fn()
+        .mockResolvedValue([
+          { id: 'ent-1', mergedData: { name: 'Product A' }, qualityScore: 0.95 },
+        ]),
       findById: vi.fn().mockResolvedValue({
         id: 'ent-1',
         mergedData: { name: 'Product A' },
@@ -1594,9 +1660,7 @@ function createMockDeps(): AppDeps {
       }),
     },
     entitySourceRepo: {
-      findByEntity: vi.fn().mockResolvedValue([
-        { extractionId: 'ext-1', matchConfidence: 0.9 },
-      ]),
+      findByEntity: vi.fn().mockResolvedValue([{ extractionId: 'ext-1', matchConfidence: 0.9 }]),
     },
   } as unknown as AppDeps;
 }
@@ -1666,6 +1730,7 @@ Expected: FAIL
 ### Step 4: Write extraction routes
 
 Create `apps/api/src/routes/extractions.ts`:
+
 ```typescript
 import { Hono } from 'hono';
 import { z } from 'zod';
@@ -1702,6 +1767,7 @@ export function extractionRoutes(): Hono<AppEnv> {
 ### Step 5: Write entity routes
 
 Create `apps/api/src/routes/entities.ts`:
+
 ```typescript
 import { Hono } from 'hono';
 import type { AppEnv } from '../types.js';
@@ -1776,6 +1842,7 @@ git commit -m "feat(api): add extraction and entity routes with pagination"
 Implement action review workflow endpoints.
 
 **Files:**
+
 - Create: `apps/api/src/routes/actions.ts`
 - Test: `apps/api/tests/unit/routes/actions.test.ts`
 
@@ -1791,9 +1858,11 @@ import { errorHandler } from '../../../src/middleware/error-handler.js';
 function createMockDeps(): AppDeps {
   return {
     actionRepo: {
-      findByJob: vi.fn().mockResolvedValue([
-        { id: 'act-1', type: 'add_field', status: 'pending_review', confidence: 0.9 },
-      ]),
+      findByJob: vi
+        .fn()
+        .mockResolvedValue([
+          { id: 'act-1', type: 'add_field', status: 'pending_review', confidence: 0.9 },
+        ]),
       findById: vi.fn().mockResolvedValue({
         id: 'act-1',
         type: 'add_field',
@@ -1927,6 +1996,7 @@ Expected: FAIL
 ### Step 3: Write action routes
 
 Create `apps/api/src/routes/actions.ts`:
+
 ```typescript
 import { Hono } from 'hono';
 import { z } from 'zod';
@@ -1935,9 +2005,7 @@ import { validateQuery } from '../middleware/validate.js';
 
 const listActionsQuery = z.object({
   type: z.string().optional(),
-  status: z
-    .enum(['pending_review', 'approved', 'applied', 'rejected', 'rolled_back'])
-    .optional(),
+  status: z.enum(['pending_review', 'approved', 'applied', 'rejected', 'rolled_back']).optional(),
   limit: z.coerce.number().int().min(1).max(100).default(50),
   offset: z.coerce.number().int().min(0).default(0),
 });
@@ -2039,6 +2107,7 @@ git commit -m "feat(api): add action review workflow routes (approve, reject, ba
 Wire all routes into the app factory, add middleware ordering, and create the server entry point.
 
 **Files:**
+
 - Modify: `apps/api/src/app.ts` (add route registration)
 - Create: `apps/api/src/server.ts` (Hono node server)
 - Modify: `apps/api/src/index.ts` (export app + start server)
@@ -2161,6 +2230,7 @@ Expected: FAIL — `createApp` doesn't accept deps or register routes
 ### Step 3: Update app.ts to wire all routes
 
 Update `apps/api/src/app.ts`:
+
 ```typescript
 import { Hono } from 'hono';
 import { logger as honoLogger } from 'hono/logger';
@@ -2202,6 +2272,7 @@ export function createApp(deps: AppDeps): Hono<AppEnv> {
 ### Step 4: Create server entry point
 
 Create `apps/api/src/server.ts`:
+
 ```typescript
 import { serve } from '@hono/node-server';
 import { createLogger } from '@spatula/shared';
@@ -2226,6 +2297,7 @@ export function startServer(deps: AppDeps, port = 3000) {
 ### Step 5: Update index.ts entry point
 
 Update `apps/api/src/index.ts`:
+
 ```typescript
 export { createApp } from './app.js';
 export { startServer } from './server.js';
@@ -2256,6 +2328,7 @@ git commit -m "feat(api): wire all routes, add server entry point and integratio
 Add stub endpoints for export and documentation (Phase 10 will implement the logic). This ensures the full API surface from the design doc is defined.
 
 **Files:**
+
 - Create: `apps/api/src/routes/exports.ts`
 - Test: `apps/api/tests/unit/routes/exports.test.ts`
 
@@ -2311,6 +2384,7 @@ Expected: FAIL
 ### Step 3: Write stub routes
 
 Create `apps/api/src/routes/exports.ts`:
+
 ```typescript
 import { Hono } from 'hono';
 import type { AppEnv } from '../types.js';
@@ -2329,7 +2403,12 @@ export function exportRoutes(): Hono<AppEnv> {
   // GET /export/:exportId — Download export (Phase 10)
   router.get('/export/:exportId', (c) => {
     return c.json(
-      { error: { code: 'NOT_IMPLEMENTED', message: 'Export download will be implemented in Phase 10' } },
+      {
+        error: {
+          code: 'NOT_IMPLEMENTED',
+          message: 'Export download will be implemented in Phase 10',
+        },
+      },
       501 as any,
     );
   });
@@ -2337,7 +2416,12 @@ export function exportRoutes(): Hono<AppEnv> {
   // GET /documentation — Auto-generated data dictionary (Phase 10)
   router.get('/documentation', (c) => {
     return c.json(
-      { error: { code: 'NOT_IMPLEMENTED', message: 'Documentation will be implemented in Phase 10' } },
+      {
+        error: {
+          code: 'NOT_IMPLEMENTED',
+          message: 'Documentation will be implemented in Phase 10',
+        },
+      },
       501 as any,
     );
   });
@@ -2349,11 +2433,13 @@ export function exportRoutes(): Hono<AppEnv> {
 ### Step 4: Register in app.ts
 
 Add to `apps/api/src/app.ts` imports:
+
 ```typescript
 import { exportRoutes } from './routes/exports.js';
 ```
 
 Add route registration (after action routes):
+
 ```typescript
 app.route('/api/v1/jobs/:jobId', exportRoutes());
 ```
@@ -2382,6 +2468,7 @@ git commit -m "feat(api): add export and documentation stub routes (Phase 10 pla
 Final verification: ensure all packages build clean, all tests pass across the monorepo, and the API package exports are complete.
 
 **Files:**
+
 - Verify: `apps/api/src/index.ts` (all public exports)
 - Verify: `packages/db/src/index.ts` (ActionRepository export)
 
@@ -2403,6 +2490,7 @@ Expected: No errors (fix any that appear)
 ### Step 4: Verify API exports are complete
 
 Read `apps/api/src/index.ts` and ensure it exports:
+
 - `createApp` — app factory
 - `startServer` — server launcher
 - `AppDeps`, `AppEnv` types
@@ -2418,34 +2506,35 @@ git commit -m "chore(api): phase 8 final build verification and cleanup"
 
 ## Summary of Endpoints Implemented
 
-| Method | Path | Task | Description |
-|--------|------|------|-------------|
-| GET | `/health` | 3 | Health check |
-| POST | `/api/v1/jobs` | 6 | Create job |
-| GET | `/api/v1/jobs` | 6 | List jobs |
-| GET | `/api/v1/jobs/:id` | 6 | Get job details |
-| POST | `/api/v1/jobs/:id/start` | 6 | Start job |
-| POST | `/api/v1/jobs/:id/pause` | 6 | Pause job |
-| POST | `/api/v1/jobs/:id/resume` | 6 | Resume job |
-| POST | `/api/v1/jobs/:id/cancel` | 6 | Cancel job |
-| POST | `/api/v1/jobs/:id/reconcile` | 6 | Trigger reconciliation |
-| GET | `/api/v1/jobs/:id/schema` | 7 | Get current schema |
-| GET | `/api/v1/jobs/:id/schema/versions` | 7 | List schema versions |
-| GET | `/api/v1/jobs/:id/schema/versions/:v` | 7 | Get specific version |
-| GET | `/api/v1/jobs/:id/extractions` | 8 | List extractions |
-| GET | `/api/v1/jobs/:id/entities` | 8 | List entities |
-| GET | `/api/v1/jobs/:id/entities/:eid` | 8 | Entity detail + provenance |
-| GET | `/api/v1/jobs/:id/actions` | 9 | List actions |
-| POST | `/api/v1/jobs/:id/actions/:aid/approve` | 9 | Approve action |
-| POST | `/api/v1/jobs/:id/actions/:aid/reject` | 9 | Reject action |
-| POST | `/api/v1/jobs/:id/actions/approve-all` | 9 | Batch approve |
-| POST | `/api/v1/jobs/:id/export` | 11 | Export (stub) |
-| GET | `/api/v1/jobs/:id/export/:eid` | 11 | Download export (stub) |
-| GET | `/api/v1/jobs/:id/documentation` | 11 | Data dictionary (stub) |
+| Method | Path                                    | Task | Description                |
+| ------ | --------------------------------------- | ---- | -------------------------- |
+| GET    | `/health`                               | 3    | Health check               |
+| POST   | `/api/v1/jobs`                          | 6    | Create job                 |
+| GET    | `/api/v1/jobs`                          | 6    | List jobs                  |
+| GET    | `/api/v1/jobs/:id`                      | 6    | Get job details            |
+| POST   | `/api/v1/jobs/:id/start`                | 6    | Start job                  |
+| POST   | `/api/v1/jobs/:id/pause`                | 6    | Pause job                  |
+| POST   | `/api/v1/jobs/:id/resume`               | 6    | Resume job                 |
+| POST   | `/api/v1/jobs/:id/cancel`               | 6    | Cancel job                 |
+| POST   | `/api/v1/jobs/:id/reconcile`            | 6    | Trigger reconciliation     |
+| GET    | `/api/v1/jobs/:id/schema`               | 7    | Get current schema         |
+| GET    | `/api/v1/jobs/:id/schema/versions`      | 7    | List schema versions       |
+| GET    | `/api/v1/jobs/:id/schema/versions/:v`   | 7    | Get specific version       |
+| GET    | `/api/v1/jobs/:id/extractions`          | 8    | List extractions           |
+| GET    | `/api/v1/jobs/:id/entities`             | 8    | List entities              |
+| GET    | `/api/v1/jobs/:id/entities/:eid`        | 8    | Entity detail + provenance |
+| GET    | `/api/v1/jobs/:id/actions`              | 9    | List actions               |
+| POST   | `/api/v1/jobs/:id/actions/:aid/approve` | 9    | Approve action             |
+| POST   | `/api/v1/jobs/:id/actions/:aid/reject`  | 9    | Reject action              |
+| POST   | `/api/v1/jobs/:id/actions/approve-all`  | 9    | Batch approve              |
+| POST   | `/api/v1/jobs/:id/export`               | 11   | Export (stub)              |
+| GET    | `/api/v1/jobs/:id/export/:eid`          | 11   | Download export (stub)     |
+| GET    | `/api/v1/jobs/:id/documentation`        | 11   | Data dictionary (stub)     |
 
 ## Files Created/Modified
 
 **New files (API):**
+
 - `apps/api/vitest.config.ts`
 - `apps/api/src/types.ts`
 - `apps/api/src/app.ts`
@@ -2465,10 +2554,12 @@ git commit -m "chore(api): phase 8 final build verification and cleanup"
 - 10 test files in `apps/api/tests/unit/`
 
 **New files (DB):**
+
 - `packages/db/src/repositories/action-repository.ts`
 - `packages/db/tests/unit/repositories/action-repository.test.ts`
 
 **Modified files:**
+
 - `apps/api/package.json` (deps + scripts)
 - `apps/api/src/index.ts` (exports)
 - `packages/db/src/repositories/index.ts` (ActionRepository export)

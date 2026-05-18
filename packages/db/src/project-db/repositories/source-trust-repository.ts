@@ -36,46 +36,40 @@ export class SqliteSourceTrustRepository implements SourceTrustRepo {
     const id = crypto.randomUUID();
 
     wrapStorageError(
-      () => this.db.transaction((tx) => {
-        // Delete existing record for this domain (if any)
-        tx.delete(sourceTrust)
-          .where(
-            and(
-              eq(sourceTrust.jobId, this.projectId),
-              eq(sourceTrust.domain, data.domain),
-            ),
-          )
-          .run();
+      () =>
+        this.db.transaction((tx) => {
+          // Delete existing record for this domain (if any)
+          tx.delete(sourceTrust)
+            .where(and(eq(sourceTrust.jobId, this.projectId), eq(sourceTrust.domain, data.domain)))
+            .run();
 
-        // Insert new record — reasoning is NOT persisted (column doesn't exist)
-        tx.insert(sourceTrust)
-          .values({
-            id,
-            jobId: this.projectId,
-            domain: data.domain,
-            trustLevel: data.trustLevel,
-            score: data.score ?? 0.5,
-            createdAt: new Date().toISOString(),
-          })
-          .run();
-      }),
+          // Insert new record — reasoning is NOT persisted (column doesn't exist)
+          tx.insert(sourceTrust)
+            .values({
+              id,
+              jobId: this.projectId,
+              domain: data.domain,
+              trustLevel: data.trustLevel,
+              score: data.score ?? 0.5,
+              createdAt: new Date().toISOString(),
+            })
+            .run();
+        }),
       { operation: 'upsert', table: 'source_trust', domain: data.domain },
     );
 
     return { id };
   }
 
-  async findByJob(_jobId: string): Promise<Array<{
-    id: string;
-    domain: string;
-    trustLevel: string;
-    score: number | null;
-    createdAt: string;
-  }>> {
-    return this.db
-      .select()
-      .from(sourceTrust)
-      .where(eq(sourceTrust.jobId, this.projectId))
-      .all();
+  async findByJob(_jobId: string): Promise<
+    Array<{
+      id: string;
+      domain: string;
+      trustLevel: string;
+      score: number | null;
+      createdAt: string;
+    }>
+  > {
+    return this.db.select().from(sourceTrust).where(eq(sourceTrust.jobId, this.projectId)).all();
   }
 }

@@ -10,7 +10,7 @@ export const extractions = sqliteTable(
   {
     id: text('id').primaryKey(),
     jobId: text('job_id').notNull(),
-    pageId: text('page_id'),  // nullable for remote-pulled records
+    pageId: text('page_id'), // nullable for remote-pulled records
     schemaVersion: integer('schema_version').notNull(),
     data: text('data', { mode: 'json' }).$type<Record<string, unknown>>().notNull(),
     unmappedFields: text('unmapped_fields', { mode: 'json' })

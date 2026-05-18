@@ -2,7 +2,7 @@
 // Standalone executable — NOT exported from the barrel (index.ts).
 // Run via: node dist/worker-entrypoint.js
 
-import { Worker } from 'bullmq';
+import { Worker, type Queue as BullQueueType } from 'bullmq';
 import Redis from 'ioredis';
 import { createLogger, loadConfig } from '@spatula/shared';
 import { createDatabasePool, DlqRepository } from '@spatula/db';
@@ -18,7 +18,12 @@ import { createWebhookWorker } from './webhook-worker.js';
 import { processCleanupJob } from './cleanup-worker.js';
 import type { CleanupDeps } from './cleanup-worker.js';
 import type { WorkerDeps } from './worker-deps.js';
-import type { CrawlJobData, SchemaEvolutionJobData, ReconciliationJobData, ExportJobPayload } from './queues.js';
+import type {
+  CrawlJobData,
+  SchemaEvolutionJobData,
+  ReconciliationJobData,
+  ExportJobPayload,
+} from './queues.js';
 
 const logger = createLogger('worker-entrypoint');
 
@@ -92,7 +97,10 @@ async function main() {
     );
     worker.on('failed', (job, err) => void dlqHandler(job, err));
     workers.push(worker);
-    logger.info({ queue: QUEUE_NAMES.CRAWL, concurrency: queueConfig.crawl.concurrency }, 'Crawl worker started');
+    logger.info(
+      { queue: QUEUE_NAMES.CRAWL, concurrency: queueConfig.crawl.concurrency },
+      'Crawl worker started',
+    );
   }
 
   if (isEnabled('schema-evolution')) {
@@ -153,17 +161,21 @@ async function main() {
     logger.info({ queue: QUEUE_NAMES.WEBHOOK }, 'Webhook worker started');
   }
 
-  let cleanupQueue: import('bullmq').Queue | undefined;
+  let cleanupQueue: BullQueueType | undefined;
   if (isEnabled('cleanup')) {
     const { Queue: BullQueue } = await import('bullmq');
     cleanupQueue = new BullQueue(QUEUE_NAMES.CLEANUP, { connection: redisOpts });
 
     // Add repeatable job (daily at 03:00 UTC)
-    await cleanupQueue.add('cleanup', {}, {
-      repeat: { pattern: '0 3 * * *' },
-      removeOnComplete: true,
-      removeOnFail: 100,
-    });
+    await cleanupQueue.add(
+      'cleanup',
+      {},
+      {
+        repeat: { pattern: '0 3 * * *' },
+        removeOnComplete: true,
+        removeOnFail: 100,
+      },
+    );
 
     const worker = new Worker(
       QUEUE_NAMES.CLEANUP,

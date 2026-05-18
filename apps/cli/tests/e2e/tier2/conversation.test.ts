@@ -21,9 +21,8 @@ describe('ConfigConversationService with mock Ollama', () => {
         ollama: { baseUrl: `http://localhost:${mockOllama.port}` },
       });
 
-      const { ConfigConversationService } = await import(
-        '../../../src/services/config-conversation.js'
-      );
+      const { ConfigConversationService } =
+        await import('../../../src/services/config-conversation.js');
       const service = new ConfigConversationService(llmClient, 'llama3.2:1b');
 
       const { DefaultConfigExecutor } = await import('@spatula/core');
@@ -56,28 +55,20 @@ describe('ConfigConversationService with mock Ollama', () => {
       config = executor.applyBatch(config, r1.actions);
 
       // Turn 2: User adds a field
-      const r2 = await service.processMessage(
-        'also track the brand',
-        config,
-        [
-          { role: 'user' as const, content: 'I want to scrape products from example.com' },
-          { role: 'assistant' as const, content: r1.responseText },
-        ],
-      );
+      const r2 = await service.processMessage('also track the brand', config, [
+        { role: 'user' as const, content: 'I want to scrape products from example.com' },
+        { role: 'assistant' as const, content: r1.responseText },
+      ]);
       expect(r2.actions.length).toBeGreaterThan(0);
       config = executor.applyBatch(config, r2.actions);
 
       // Turn 3: User confirms
-      const r3 = await service.processMessage(
-        'looks good, start',
-        config,
-        [
-          { role: 'user' as const, content: 'I want to scrape products from example.com' },
-          { role: 'assistant' as const, content: r1.responseText },
-          { role: 'user' as const, content: 'also track the brand' },
-          { role: 'assistant' as const, content: r2.responseText },
-        ],
-      );
+      const r3 = await service.processMessage('looks good, start', config, [
+        { role: 'user' as const, content: 'I want to scrape products from example.com' },
+        { role: 'assistant' as const, content: r1.responseText },
+        { role: 'user' as const, content: 'also track the brand' },
+        { role: 'assistant' as const, content: r2.responseText },
+      ]);
 
       // Verify config has expected values after turns 1-2
       expect(config.name).toBeTruthy();
@@ -109,9 +100,8 @@ describe('ConfigConversationService with mock Ollama', () => {
         ollama: { baseUrl: `http://localhost:${mockOllama.port}` },
       });
 
-      const { ConfigConversationService } = await import(
-        '../../../src/services/config-conversation.js'
-      );
+      const { ConfigConversationService } =
+        await import('../../../src/services/config-conversation.js');
       const service = new ConfigConversationService(llmClient, 'llama3.2:1b');
 
       const config = {

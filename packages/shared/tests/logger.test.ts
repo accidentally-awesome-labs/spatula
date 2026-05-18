@@ -38,7 +38,9 @@ describe('createLoggerWithContext', () => {
 });
 
 describe('LOG_LEVEL validation', () => {
-  afterEach(() => { vi.unstubAllEnvs(); });
+  afterEach(() => {
+    vi.unstubAllEnvs();
+  });
 
   it('throws ConfigError for invalid LOG_LEVEL', () => {
     vi.stubEnv('LOG_LEVEL', 'verbose');

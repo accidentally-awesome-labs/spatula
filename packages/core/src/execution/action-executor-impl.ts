@@ -9,10 +9,7 @@ import type {
 import { resolvePolicy, shouldAutoApply, type ApprovalPreset } from './safety-policy.js';
 import { applySchemaActions } from '../evolution/schema-action-applier.js';
 import { applyCategoryActions } from './category-applier.js';
-import {
-  applyReconciliationAction,
-  type ReconciliationDeps,
-} from './reconciliation-applier.js';
+import { applyReconciliationAction, type ReconciliationDeps } from './reconciliation-applier.js';
 import { applyFinalizationAction } from './finalization-applier.js';
 import type { ReviewQueue } from './review-queue.js';
 import type { SchemaDefinition } from '../types/schema.js';
@@ -180,9 +177,7 @@ export class DefaultActionExecutor implements ActionExecutor {
       status: 'applied',
       confidence: action.confidence,
       reasoning: action.reasoning,
-      ...(stateChanges.length > 0
-        ? { stateChanges: { changes: stateChanges } }
-        : {}),
+      ...(stateChanges.length > 0 ? { stateChanges: { changes: stateChanges } } : {}),
     });
 
     return {
@@ -220,9 +215,7 @@ export class DefaultActionExecutor implements ActionExecutor {
 
     // Reconciliation rollback not supported in v1
     if (RECONCILIATION_ACTIONS.has(action.type)) {
-      throw new Error(
-        `Rollback of reconciliation action ${action.type} not supported in v1`,
-      );
+      throw new Error(`Rollback of reconciliation action ${action.type} not supported in v1`);
     }
 
     await actionRepo.updateStatus(actionId, tenantId, 'rolled_back');
@@ -364,10 +357,7 @@ export class DefaultActionExecutor implements ActionExecutor {
     const result = applyFinalizationAction(action);
 
     if (!result.applied) {
-      logger.warn(
-        { type: action.type, reason: result.reason },
-        'finalization action not applied',
-      );
+      logger.warn({ type: action.type, reason: result.reason }, 'finalization action not applied');
       return [];
     }
 

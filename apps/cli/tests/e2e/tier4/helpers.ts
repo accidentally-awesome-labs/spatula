@@ -214,10 +214,7 @@ export async function createTestApp(opts?: {
  * Create a tenant via the API and return its ID.
  * Throws if the request fails (e.g. tenantRepo not wired).
  */
-export async function createTenant(
-  app: any,
-  name = 'Test Tenant',
-): Promise<{ tenantId: string }> {
+export async function createTenant(app: any, name = 'Test Tenant'): Promise<{ tenantId: string }> {
   const res = await app.request('/api/v1/tenants', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -260,15 +257,11 @@ export function authHeaders(tenantId: string): Record<string, string> {
  *
  * Returns the IDs of all created records.
  */
-export async function seedJobWithData(
-  db: Database,
-  tenantId: string,
-): Promise<SeedResult> {
+export async function seedJobWithData(db: Database, tenantId: string): Promise<SeedResult> {
   // Lazy-import the schema tables so this file can be loaded even when
   // @spatula/db isn't built yet (type-checking only).
-  const { jobs, schemasTable, entities, actions } = await import(
-    '@spatula/db/dist/schema/index.js'
-  );
+  const { jobs, schemasTable, entities, actions } =
+    await import('@spatula/db/dist/schema/index.js');
 
   // -- Job ------------------------------------------------------------------
   const jobConfig = {
@@ -359,10 +352,7 @@ export async function seedJobWithData(
     },
   ];
 
-  const insertedEntities = await db
-    .insert(entities)
-    .values(entityValues)
-    .returning();
+  const insertedEntities = await db.insert(entities).values(entityValues).returning();
 
   const entityIds = insertedEntities.map((e) => e.id);
 
@@ -394,10 +384,7 @@ export async function seedJobWithData(
     },
   ];
 
-  const insertedActions = await db
-    .insert(actions)
-    .values(actionValues)
-    .returning();
+  const insertedActions = await db.insert(actions).values(actionValues).returning();
 
   const actionIds = insertedActions.map((a) => a.id);
 

@@ -32,14 +32,18 @@ describe('estimateCost', () => {
   });
 
   it('estimates page count from maxDepth heuristic', () => {
-    const depth0 = estimateCost(createMinimalConfig({
-      crawl: { maxDepth: 0, maxPages: 1000, concurrency: 5, crawlerType: 'playwright' as const },
-    } as any));
+    const depth0 = estimateCost(
+      createMinimalConfig({
+        crawl: { maxDepth: 0, maxPages: 1000, concurrency: 5, crawlerType: 'playwright' as const },
+      } as any),
+    );
     expect(depth0.estimatedPages).toBe(1); // depth 0 = seed pages only
 
-    const depth1 = estimateCost(createMinimalConfig({
-      crawl: { maxDepth: 1, maxPages: 1000, concurrency: 5, crawlerType: 'playwright' as const },
-    } as any));
+    const depth1 = estimateCost(
+      createMinimalConfig({
+        crawl: { maxDepth: 1, maxPages: 1000, concurrency: 5, crawlerType: 'playwright' as const },
+      } as any),
+    );
     expect(depth1.estimatedPages).toBeLessThanOrEqual(1000);
     expect(depth1.estimatedPages).toBeGreaterThan(1);
   });
@@ -62,27 +66,35 @@ describe('estimateCost', () => {
   });
 
   it('sets confidence based on depth and maxPages', () => {
-    const shallow = estimateCost(createMinimalConfig({
-      crawl: { maxDepth: 1, maxPages: 100, concurrency: 5, crawlerType: 'playwright' as const },
-    } as any));
+    const shallow = estimateCost(
+      createMinimalConfig({
+        crawl: { maxDepth: 1, maxPages: 100, concurrency: 5, crawlerType: 'playwright' as const },
+      } as any),
+    );
     expect(shallow.confidence).toBe('high');
 
-    const deep = estimateCost(createMinimalConfig({
-      crawl: { maxDepth: 3, maxPages: 5000, concurrency: 5, crawlerType: 'playwright' as const },
-    } as any));
+    const deep = estimateCost(
+      createMinimalConfig({
+        crawl: { maxDepth: 3, maxPages: 5000, concurrency: 5, crawlerType: 'playwright' as const },
+      } as any),
+    );
     expect(deep.confidence).toBe('low');
 
     // maxPages > 1000 at shallow depth should still be low
-    const shallowButWide = estimateCost(createMinimalConfig({
-      crawl: { maxDepth: 1, maxPages: 5000, concurrency: 5, crawlerType: 'playwright' as const },
-    } as any));
+    const shallowButWide = estimateCost(
+      createMinimalConfig({
+        crawl: { maxDepth: 1, maxPages: 5000, concurrency: 5, crawlerType: 'playwright' as const },
+      } as any),
+    );
     expect(shallowButWide.confidence).toBe('low');
   });
 
   it('returns medium confidence for moderate crawls', () => {
-    const moderate = estimateCost(createMinimalConfig({
-      crawl: { maxDepth: 2, maxPages: 300, concurrency: 5, crawlerType: 'playwright' as const },
-    } as any));
+    const moderate = estimateCost(
+      createMinimalConfig({
+        crawl: { maxDepth: 2, maxPages: 300, concurrency: 5, crawlerType: 'playwright' as const },
+      } as any),
+    );
     expect(moderate.confidence).toBe('medium');
   });
 

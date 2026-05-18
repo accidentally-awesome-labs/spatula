@@ -14,7 +14,11 @@ const FOOTER_HEIGHT = 1;
 const PADDING = 2;
 
 interface FilteredFetch {
-  getEntities(query: { limit: number; offset: number; sourceFilter: 'local' | 'remote' }): Promise<{ data: unknown[]; total: number }>;
+  getEntities(query: {
+    limit: number;
+    offset: number;
+    sourceFilter: 'local' | 'remote';
+  }): Promise<{ data: unknown[]; total: number }>;
 }
 
 export function useEntityData(
@@ -26,46 +30,52 @@ export function useEntityData(
   const { stdout } = useStdout();
   const pageSize = useMemo(() => {
     const rows = stdout?.rows ?? 40;
-    return Math.max(5, rows - HEADER_HEIGHT - FILTER_BAR_HEIGHT - TABLE_HEADER_HEIGHT - FOOTER_HEIGHT - PADDING);
+    return Math.max(
+      5,
+      rows - HEADER_HEIGHT - FILTER_BAR_HEIGHT - TABLE_HEADER_HEIGHT - FOOTER_HEIGHT - PADDING,
+    );
   }, [stdout?.rows]);
 
   const sourceFilter = options?.sourceFilter ?? 'all';
   const filteredFetch = options?.filteredFetch;
 
-  const fetchPage = useCallback(async (page: number) => {
-    if (!jobId && !isDataSource(backend)) return;
+  const fetchPage = useCallback(
+    async (page: number) => {
+      if (!jobId && !isDataSource(backend)) return;
 
-    const state = store.getState();
-    const offset = page * pageSize;
+      const state = store.getState();
+      const offset = page * pageSize;
 
-    try {
-      // Use filtered fetch when source filter is active and available
-      if (sourceFilter !== 'all' && filteredFetch) {
-        const result = await filteredFetch.getEntities({
-          limit: pageSize,
-          offset,
-          sourceFilter: sourceFilter as 'local' | 'remote',
-        });
-        state.setEntities(result.data as any);
-        state.setTotalEntityCount(result.total);
-      } else if (isDataSource(backend)) {
-        const result = await backend.getEntities({ limit: pageSize, offset });
-        state.setEntities(result.data as any);
-        state.setTotalEntityCount(result.total);
-      } else {
-        const result = await backend.listEntitiesPaginated(jobId, {
-          limit: pageSize,
-          offset,
-        });
-        state.setEntities(result.data as any);
-        state.setTotalEntityCount(result.total);
+      try {
+        // Use filtered fetch when source filter is active and available
+        if (sourceFilter !== 'all' && filteredFetch) {
+          const result = await filteredFetch.getEntities({
+            limit: pageSize,
+            offset,
+            sourceFilter: sourceFilter as 'local' | 'remote',
+          });
+          state.setEntities(result.data as any);
+          state.setTotalEntityCount(result.total);
+        } else if (isDataSource(backend)) {
+          const result = await backend.getEntities({ limit: pageSize, offset });
+          state.setEntities(result.data as any);
+          state.setTotalEntityCount(result.total);
+        } else {
+          const result = await backend.listEntitiesPaginated(jobId, {
+            limit: pageSize,
+            offset,
+          });
+          state.setEntities(result.data as any);
+          state.setTotalEntityCount(result.total);
+        }
+        state.setCurrentEntityPage(page);
+        state.setSelectedEntityIndex(0);
+      } catch (error) {
+        state.setError(`Failed to fetch entities: ${(error as Error).message}`);
       }
-      state.setCurrentEntityPage(page);
-      state.setSelectedEntityIndex(0);
-    } catch (error) {
-      state.setError(`Failed to fetch entities: ${(error as Error).message}`);
-    }
-  }, [store, backend, jobId, pageSize, sourceFilter, filteredFetch]);
+    },
+    [store, backend, jobId, pageSize, sourceFilter, filteredFetch],
+  );
 
   useEffect(() => {
     fetchPage(0);
@@ -76,10 +86,13 @@ export function useEntityData(
     return Math.max(1, Math.ceil(totalEntityCount / pageSize));
   }, [totalEntityCount, pageSize]);
 
-  const goToPage = useCallback((page: number) => {
-    const clamped = Math.max(0, Math.min(page, totalPages - 1));
-    fetchPage(clamped);
-  }, [fetchPage, totalPages]);
+  const goToPage = useCallback(
+    (page: number) => {
+      const clamped = Math.max(0, Math.min(page, totalPages - 1));
+      fetchPage(clamped);
+    },
+    [fetchPage, totalPages],
+  );
 
   const nextPage = useCallback(() => {
     const current = store.getState().currentEntityPage;
@@ -95,15 +108,18 @@ export function useEntityData(
     }
   }, [store, fetchPage]);
 
-  const fetchEntity = useCallback(async (entityId: string): Promise<EntityWithProvenance> => {
-    if (isDataSource(backend)) {
-      const entity = await backend.getEntity(entityId);
-      if (!entity) throw new Error(`Entity not found: ${entityId}`);
-      return entity as unknown as EntityWithProvenance;
-    }
-    const data = await backend.getEntity(jobId, entityId);
-    return data as unknown as EntityWithProvenance;
-  }, [backend, jobId]);
+  const fetchEntity = useCallback(
+    async (entityId: string): Promise<EntityWithProvenance> => {
+      if (isDataSource(backend)) {
+        const entity = await backend.getEntity(entityId);
+        if (!entity) throw new Error(`Entity not found: ${entityId}`);
+        return entity as unknown as EntityWithProvenance;
+      }
+      const data = await backend.getEntity(jobId, entityId);
+      return data as unknown as EntityWithProvenance;
+    },
+    [backend, jobId],
+  );
 
   return {
     pageSize,

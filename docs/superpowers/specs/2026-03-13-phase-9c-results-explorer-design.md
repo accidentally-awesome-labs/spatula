@@ -43,7 +43,12 @@ The explorer is the first CLI mode with a text input field (FilterBar). This cre
 
 ```typescript
 export function useKeyboard(keyMap: KeyMap, isActive = true): void {
-  useInput((input, key) => { /* existing logic */ }, { isActive });
+  useInput(
+    (input, key) => {
+      /* existing logic */
+    },
+    { isActive },
+  );
 }
 ```
 
@@ -95,6 +100,7 @@ Use `FieldDefinition` from `@spatula/core/types/schema.ts` (not `SchemaField` �
 ### ExplorerView
 
 Orchestrator component. Responsibilities:
+
 - Initializes entity data fetching via `useEntityData`
 - Manages `subView` transitions (local state)
 - Manages `filterFocused` via the store (so App.tsx can suppress global keys)
@@ -142,9 +148,11 @@ Paginated entity table with fixed and scrollable columns.
 - Footer shows page info and column scroll position
 
 **Page size**: Auto-calculated from terminal height using Ink's `useStdout()`:
+
 ```typescript
 const { stdout } = useStdout();
-const pageSize = stdout.rows - HEADER_HEIGHT - FILTER_BAR_HEIGHT - TABLE_HEADER_HEIGHT - FOOTER_HEIGHT - 2;
+const pageSize =
+  stdout.rows - HEADER_HEIGHT - FILTER_BAR_HEIGHT - TABLE_HEADER_HEIGHT - FOOTER_HEIGHT - 2;
 // Typically 15–25 rows depending on terminal
 ```
 
@@ -276,17 +284,20 @@ useEntityFilter(
 ```
 
 **Local filtering:**
+
 - Case-insensitive text search across all field values
 - Debounced at ~200ms, updates as user types
 - Operates on loaded entities
 
 **Dataset size strategy:**
+
 - Small datasets (<500 entities based on `totalCount`): fetch all upfront, filter locally
 - Large datasets (500+): send `search` param to API, paginate server-filtered results
 
 The hook manages its own pagination state when filtering, independent of `useEntityData`'s pagination. This avoids tangling filtered vs. unfiltered page state.
 
 **AI filtering (stretch goal):**
+
 - Sends user query + `FieldDefinition[]` to OpenRouter via direct client-side call (fast model tier)
 - Prompt template: system prompt describing the schema fields and their types, user query as input
 - LLM returns structured JSON: `{ filters: Array<{ field: string, operator: 'eq'|'contains'|'lt'|'gt'|'in', value: unknown }> }`
@@ -324,48 +335,53 @@ useExport(apiClient: SpatulaApiClient): {
 ## Keyboard Navigation
 
 ### Table View (active when `!filterFocused`)
-| Key | Action |
-|-----|--------|
-| `↑/↓` | Move row cursor |
-| `←/→` | Scroll schema columns horizontally |
-| `N` or `]` | Next page |
-| `P` or `[` | Previous page |
-| `Enter` | Open detail view for selected entity |
-| `F` | Focus filter input |
-| `E` | Open export dialog |
-| `Escape` | Exit to previous mode |
+
+| Key        | Action                               |
+| ---------- | ------------------------------------ |
+| `↑/↓`      | Move row cursor                      |
+| `←/→`      | Scroll schema columns horizontally   |
+| `N` or `]` | Next page                            |
+| `P` or `[` | Previous page                        |
+| `Enter`    | Open detail view for selected entity |
+| `F`        | Focus filter input                   |
+| `E`        | Open export dialog                   |
+| `Escape`   | Exit to previous mode                |
 
 ### Filter Focused (active when `filterFocused`)
-| Key | Action |
-|-----|--------|
-| Printable chars | Append to filter query |
-| `Backspace` | Delete last character |
-| `A` | Toggle AI filter mode |
-| `Enter` | Submit AI filter query (in AI mode) |
-| `Escape` | Clear filter and unfocus (return keyboard to table) |
+
+| Key             | Action                                              |
+| --------------- | --------------------------------------------------- |
+| Printable chars | Append to filter query                              |
+| `Backspace`     | Delete last character                               |
+| `A`             | Toggle AI filter mode                               |
+| `Enter`         | Submit AI filter query (in AI mode)                 |
+| `Escape`        | Clear filter and unfocus (return keyboard to table) |
 
 All other keys (including global mode-switching D/R/C) are suppressed while filter is focused.
 
 ### Detail View
-| Key | Action |
-|-----|--------|
-| `↑/↓` | Scroll fields |
-| `E` | Open export dialog (scoped to current entity) |
-| `Escape` | Return to table (cursor preserved) |
+
+| Key      | Action                                        |
+| -------- | --------------------------------------------- |
+| `↑/↓`    | Scroll fields                                 |
+| `E`      | Open export dialog (scoped to current entity) |
+| `Escape` | Return to table (cursor preserved)            |
 
 ### Export Dialog
-| Key | Action |
-|-----|--------|
-| `←/→` | Toggle format (JSON/CSV) |
-| `↑/↓` | Toggle scope |
-| `Enter` | Execute export |
+
+| Key      | Action                          |
+| -------- | ------------------------------- |
+| `←/→`    | Toggle format (JSON/CSV)        |
+| `↑/↓`    | Toggle scope                    |
+| `Enter`  | Execute export                  |
 | `Escape` | Cancel, return to previous view |
 
 ### Global Mode Switching (from App.tsx, active when `!filterFocused`)
-| Key | Action |
-|-----|--------|
-| `D` | Switch to dashboard mode |
-| `R` | Switch to review mode |
+
+| Key | Action                        |
+| --- | ----------------------------- |
+| `D` | Switch to dashboard mode      |
+| `R` | Switch to review mode         |
 | `C` | Switch to conversational mode |
 
 ## Store Extensions
@@ -407,10 +423,11 @@ Note: `explorerSubView` is intentionally NOT in the store — it lives as local 
 The `listEntities` endpoint (`apps/api/src/routes/entities.ts`) currently returns `{ data: entities }`. It needs two changes:
 
 **Response format change** — include total count for pagination:
+
 ```typescript
 return c.json({
   data: entities,
-  total: count,  // new field
+  total: count, // new field
 });
 ```
 
@@ -431,6 +448,7 @@ async listEntitiesPaginated(
 ```
 
 **Entity query schema** — create a new `entityQuerySchema` extending `paginationSchema` (not modifying the shared one):
+
 ```typescript
 // apps/api/src/schemas/entity-query.ts
 export const entityQuerySchema = paginationSchema.extend({
@@ -458,6 +476,7 @@ async findByJob(
 ```
 
 **Search implementation**: Cast `mergedData` JSONB to text and use `ILIKE`:
+
 ```sql
 WHERE merged_data::text ILIKE '%search_term%'
 ```
@@ -480,6 +499,7 @@ This is done in `EntityRepository.findByJob` using Drizzle's `sql` template lite
 The `entity_sources` table only stores `entityId`, `extractionId`, and `matchConfidence` — it has no `sourceUrl`. To populate `EntityWithProvenance.sources[].sourceUrl`, the detail endpoint must join through `entity_sources` → `extractions` → `pages` (or use the extraction's metadata) to resolve the source URL. The `sourceUrl` field is marked optional in the type since the join may not always resolve (e.g., if the extraction or page was deleted).
 
 The implementation should use a single query with JOINs rather than multiple round-trips:
+
 ```sql
 SELECT es.extraction_id, es.match_confidence, p.url as source_url
 FROM entity_sources es

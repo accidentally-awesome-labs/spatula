@@ -34,35 +34,63 @@ describe('POST /api/v1/jobs/batch', () => {
 
   it('cancels multiple jobs', async () => {
     deps.jobRepo.findById
-      .mockResolvedValueOnce({ id: '00000000-0000-0000-0000-000000000001', status: 'running', tenantId: 'tenant-1' })
-      .mockResolvedValueOnce({ id: '00000000-0000-0000-0000-000000000002', status: 'paused', tenantId: 'tenant-1' });
+      .mockResolvedValueOnce({
+        id: '00000000-0000-0000-0000-000000000001',
+        status: 'running',
+        tenantId: 'tenant-1',
+      })
+      .mockResolvedValueOnce({
+        id: '00000000-0000-0000-0000-000000000002',
+        status: 'paused',
+        tenantId: 'tenant-1',
+      });
 
     const res = await app.request('/api/v1/jobs/batch', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ action: 'cancel', ids: ['00000000-0000-0000-0000-000000000001', '00000000-0000-0000-0000-000000000002'] }),
+      body: JSON.stringify({
+        action: 'cancel',
+        ids: ['00000000-0000-0000-0000-000000000001', '00000000-0000-0000-0000-000000000002'],
+      }),
     });
 
     expect(res.status).toBe(200);
     const body = await res.json();
-    expect(body.data.succeeded).toEqual(['00000000-0000-0000-0000-000000000001', '00000000-0000-0000-0000-000000000002']);
+    expect(body.data.succeeded).toEqual([
+      '00000000-0000-0000-0000-000000000001',
+      '00000000-0000-0000-0000-000000000002',
+    ]);
     expect(deps.jobRepo.updateStatus).toHaveBeenCalledTimes(2);
   });
 
   it('deletes multiple jobs', async () => {
     deps.jobRepo.findById
-      .mockResolvedValueOnce({ id: '00000000-0000-0000-0000-000000000001', status: 'completed', tenantId: 'tenant-1' })
-      .mockResolvedValueOnce({ id: '00000000-0000-0000-0000-000000000002', status: 'failed', tenantId: 'tenant-1' });
+      .mockResolvedValueOnce({
+        id: '00000000-0000-0000-0000-000000000001',
+        status: 'completed',
+        tenantId: 'tenant-1',
+      })
+      .mockResolvedValueOnce({
+        id: '00000000-0000-0000-0000-000000000002',
+        status: 'failed',
+        tenantId: 'tenant-1',
+      });
 
     const res = await app.request('/api/v1/jobs/batch', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ action: 'delete', ids: ['00000000-0000-0000-0000-000000000001', '00000000-0000-0000-0000-000000000002'] }),
+      body: JSON.stringify({
+        action: 'delete',
+        ids: ['00000000-0000-0000-0000-000000000001', '00000000-0000-0000-0000-000000000002'],
+      }),
     });
 
     expect(res.status).toBe(200);
     const body = await res.json();
-    expect(body.data.succeeded).toEqual(['00000000-0000-0000-0000-000000000001', '00000000-0000-0000-0000-000000000002']);
+    expect(body.data.succeeded).toEqual([
+      '00000000-0000-0000-0000-000000000001',
+      '00000000-0000-0000-0000-000000000002',
+    ]);
     expect(deps.jobRepo.deleteWithData).toHaveBeenCalledTimes(2);
   });
 
@@ -78,11 +106,17 @@ describe('POST /api/v1/jobs/batch', () => {
     expect(res.status).toBe(200);
     const body = await res.json();
     expect(body.data.succeeded).toEqual([]);
-    expect(body.data.failed).toEqual([{ id: '00000000-0000-0000-0000-000000000099', error: 'Job not found' }]);
+    expect(body.data.failed).toEqual([
+      { id: '00000000-0000-0000-0000-000000000099', error: 'Job not found' },
+    ]);
   });
 
   it('rejects cancel on completed job', async () => {
-    deps.jobRepo.findById.mockResolvedValue({ id: '00000000-0000-0000-0000-000000000001', status: 'completed', tenantId: 'tenant-1' });
+    deps.jobRepo.findById.mockResolvedValue({
+      id: '00000000-0000-0000-0000-000000000001',
+      status: 'completed',
+      tenantId: 'tenant-1',
+    });
 
     const res = await app.request('/api/v1/jobs/batch', {
       method: 'POST',
@@ -95,7 +129,10 @@ describe('POST /api/v1/jobs/batch', () => {
   });
 
   it('rejects batch larger than 100', async () => {
-    const ids = Array.from({ length: 101 }, (_, i) => `00000000-0000-0000-0000-${String(i).padStart(12, '0')}`);
+    const ids = Array.from(
+      { length: 101 },
+      (_, i) => `00000000-0000-0000-0000-${String(i).padStart(12, '0')}`,
+    );
 
     const res = await app.request('/api/v1/jobs/batch', {
       method: 'POST',

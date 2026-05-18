@@ -56,10 +56,7 @@ export function applyCategoryActions(
           requiredFields: [...action.payload.requiredFields],
           optionalFields: [...action.payload.optionalFields],
         };
-        logger.debug(
-          { category: action.payload.category },
-          'category fields assigned',
-        );
+        logger.debug({ category: action.payload.category }, 'category fields assigned');
         break;
       }
 

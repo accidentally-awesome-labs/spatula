@@ -1,6 +1,11 @@
 import type { Crawler, Extractor, ContentStore, SchemaEvolver, LinkEvaluator } from '@spatula/core';
 import type { PageClassifier, DataReconciler } from '@spatula/core';
-import type { RobotsTxtChecker, DomainRateLimiter, PageBudget, CrawlCompletionChecker } from '@spatula/core';
+import type {
+  RobotsTxtChecker,
+  DomainRateLimiter,
+  PageBudget,
+  CrawlCompletionChecker,
+} from '@spatula/core';
 import type {
   JobRepository,
   CrawlTaskRepository,

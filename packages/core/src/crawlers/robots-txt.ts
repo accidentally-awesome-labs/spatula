@@ -107,7 +107,10 @@ export class RobotsTxtChecker {
       this.evictIfNeeded();
       return entry;
     } catch (err) {
-      logger.warn({ origin, error: (err as Error).message }, 'Failed to fetch robots.txt, allowing crawl');
+      logger.warn(
+        { origin, error: (err as Error).message },
+        'Failed to fetch robots.txt, allowing crawl',
+      );
       return null;
     }
   }

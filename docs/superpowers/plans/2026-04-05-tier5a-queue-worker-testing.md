@@ -16,30 +16,31 @@
 
 ### New files
 
-| File | Responsibility |
-|------|---------------|
-| `apps/cli/tests/e2e/tier5/tier5a/helpers.ts` | `startTestWorkers()`, `waitForJobStatus()`, `createTestJobManager()` |
-| `apps/cli/tests/e2e/tier5/tier5a/job-lifecycle.test.ts` | Tests 1-5: job create/complete/entities/schema/pause-resume |
-| `apps/cli/tests/e2e/tier5/tier5a/export-processing.test.ts` | Tests 6-8: export via worker |
-| `apps/cli/tests/e2e/tier5/tier5a/webhook-delivery.test.ts` | Tests 9-11: webhook via queue |
-| `apps/cli/tests/e2e/tier5/tier5a/dlq.test.ts` | Tests 12-14: dead letter queue |
-| `apps/cli/tests/e2e/tier5/tier5a/state-machine.test.ts` | Tests 15-17: transitions, cancel, quota |
-| `apps/cli/tests/e2e/tier5/tier5a/worker-lifecycle.test.ts` | Tests 18-22: shutdown, re-run, ws-token, heartbeat, audit |
-| `apps/cli/tests/e2e/tier5/tier5a/migration.test.ts` | Test 23: migration preserves data |
+| File                                                        | Responsibility                                                       |
+| ----------------------------------------------------------- | -------------------------------------------------------------------- |
+| `apps/cli/tests/e2e/tier5/tier5a/helpers.ts`                | `startTestWorkers()`, `waitForJobStatus()`, `createTestJobManager()` |
+| `apps/cli/tests/e2e/tier5/tier5a/job-lifecycle.test.ts`     | Tests 1-5: job create/complete/entities/schema/pause-resume          |
+| `apps/cli/tests/e2e/tier5/tier5a/export-processing.test.ts` | Tests 6-8: export via worker                                         |
+| `apps/cli/tests/e2e/tier5/tier5a/webhook-delivery.test.ts`  | Tests 9-11: webhook via queue                                        |
+| `apps/cli/tests/e2e/tier5/tier5a/dlq.test.ts`               | Tests 12-14: dead letter queue                                       |
+| `apps/cli/tests/e2e/tier5/tier5a/state-machine.test.ts`     | Tests 15-17: transitions, cancel, quota                              |
+| `apps/cli/tests/e2e/tier5/tier5a/worker-lifecycle.test.ts`  | Tests 18-22: shutdown, re-run, ws-token, heartbeat, audit            |
+| `apps/cli/tests/e2e/tier5/tier5a/migration.test.ts`         | Test 23: migration preserves data                                    |
 
 ### Modified files
 
-| File | Change |
-|------|--------|
-| `apps/cli/package.json` | Add `@spatula/queue` devDependency; add `test:tier5a` script |
-| `packages/queue/src/index.ts` | Export `createWebhookWorker` |
-| `apps/cli/scripts/tier-registry.ts` | Add tier `5a` definition |
+| File                                | Change                                                       |
+| ----------------------------------- | ------------------------------------------------------------ |
+| `apps/cli/package.json`             | Add `@spatula/queue` devDependency; add `test:tier5a` script |
+| `packages/queue/src/index.ts`       | Export `createWebhookWorker`                                 |
+| `apps/cli/scripts/tier-registry.ts` | Add tier `5a` definition                                     |
 
 ---
 
 ## Task 1: Dependencies + Exports
 
 **Files:**
+
 - Modify: `apps/cli/package.json`
 - Modify: `packages/queue/src/index.ts`
 - Modify: `apps/cli/scripts/tier-registry.ts`
@@ -47,6 +48,7 @@
 - [ ] **Step 1: Add @spatula/queue devDependency**
 
 In `apps/cli/package.json`, add to `devDependencies`:
+
 ```json
 "@spatula/queue": "workspace:*"
 ```
@@ -56,6 +58,7 @@ Run: `cd /Users/salar/Projects/spatula && pnpm install`
 - [ ] **Step 2: Export createWebhookWorker from queue barrel**
 
 In `packages/queue/src/index.ts`, add:
+
 ```typescript
 export { createWebhookWorker } from './webhook-worker.js';
 ```
@@ -63,6 +66,7 @@ export { createWebhookWorker } from './webhook-worker.js';
 - [ ] **Step 3: Add tier 5a to registry**
 
 In `apps/cli/scripts/tier-registry.ts`, add to the `TIERS` object:
+
 ```typescript
 '5a': {
   name: 'Queue/Worker Integration',
@@ -74,6 +78,7 @@ In `apps/cli/scripts/tier-registry.ts`, add to the `TIERS` object:
 ```
 
 Add `test:tier5a` to `apps/cli/package.json` scripts:
+
 ```json
 "test:tier5a": "tsx scripts/test-tiers.ts --tier=5a"
 ```
@@ -90,11 +95,13 @@ git commit -m "feat: add @spatula/queue devDep, export createWebhookWorker, add 
 ## Task 2: Tier 5A Test Helpers
 
 **Files:**
+
 - Create: `apps/cli/tests/e2e/tier5/tier5a/helpers.ts`
 
 - [ ] **Step 1: Create the helpers module**
 
 This is the most complex helper — it wires the full worker dep graph. Read these files before implementing:
+
 - `packages/queue/src/worker-deps.ts` — `WorkerDepsConfig` interface
 - `packages/queue/src/queues.ts` — `createQueues`, `SpatulaQueues`
 - `packages/queue/src/job-manager.ts` — `JobManager`, `JobManagerConfig`
@@ -106,6 +113,7 @@ This is the most complex helper — it wires the full worker dep graph. Read the
 The helper exports:
 
 **`startTestWorkers(opts)`:**
+
 ```typescript
 export interface TestWorkerHarness {
   workers: Worker[];
@@ -125,10 +133,11 @@ export interface TestWorkerHarness {
 export async function startTestWorkers(opts: {
   databaseUrl: string;
   redisUrl: string;
-}): Promise<TestWorkerHarness | null>
+}): Promise<TestWorkerHarness | null>;
 ```
 
 Implementation:
+
 1. Return null if `databaseUrl` not set
 2. Check Playwright availability via `isPlaywrightAvailable()` from Tier 2 helpers. If not available, return null (all tests skip).
 3. Start fixture server (from `../../tier2/fixture-server.js`)
@@ -159,6 +168,7 @@ Implementation:
 23. Return harness with `closeAll()` that: closes workers → closes queues → closes crawler → closes Redis → closes pool → stops fixture server → stops mock Ollama → stops webhook receiver
 
 **`waitForJobStatus(jobRepo, jobId, tenantId, targetStatuses, timeoutMs)`:**
+
 ```typescript
 export async function waitForJobStatus(
   jobRepo: any,
@@ -171,7 +181,7 @@ export async function waitForJobStatus(
   while (Date.now() - start < timeoutMs) {
     const job = await jobRepo.findById(jobId, tenantId);
     if (job && targetStatuses.includes(job.status)) return job.status;
-    await new Promise(r => setTimeout(r, 500));
+    await new Promise((r) => setTimeout(r, 500));
   }
   throw new Error(`Job ${jobId} did not reach ${targetStatuses.join('|')} within ${timeoutMs}ms`);
 }
@@ -192,6 +202,7 @@ git commit -m "feat: add Tier 5A test helpers with startTestWorkers and completi
 ## Task 3: Job Lifecycle Tests
 
 **Files:**
+
 - Create: `apps/cli/tests/e2e/tier5/tier5a/job-lifecycle.test.ts`
 
 5 tests sharing a single worker harness via `beforeAll`. Tests verify the full job lifecycle: create → start → workers process → complete → entities and schema visible.
@@ -226,7 +237,13 @@ beforeAll(async () => {
   await harness.jobManager.startJob(jobId, harness.tenantId);
 
   // Wait for job to complete (workers process asynchronously)
-  await waitForJobStatus(harness.workerDeps.jobRepo, jobId, harness.tenantId, ['completed', 'failed'], 90_000);
+  await waitForJobStatus(
+    harness.workerDeps.jobRepo,
+    jobId,
+    harness.tenantId,
+    ['completed', 'failed'],
+    90_000,
+  );
 }, 120_000);
 
 afterAll(async () => {
@@ -261,6 +278,7 @@ git commit -m "test: add 5 job lifecycle tests with real BullMQ workers"
 ## Task 4: Export Processing Tests
 
 **Files:**
+
 - Create: `apps/cli/tests/e2e/tier5/tier5a/export-processing.test.ts`
 
 3 tests. Requires a completed job (from the harness setup). Creates exports via API, waits for worker to process, verifies output.
@@ -287,6 +305,7 @@ git commit -m "test: add 3 export processing tests with real BullMQ export worke
 ## Task 5: Webhook Delivery Tests
 
 **Files:**
+
 - Create: `apps/cli/tests/e2e/tier5/tier5a/webhook-delivery.test.ts`
 
 3 tests. Creates a job with webhook config, waits for completion, verifies webhook receiver got the POST.
@@ -294,6 +313,7 @@ git commit -m "test: add 3 export processing tests with real BullMQ export worke
 - [ ] **Step 1: Create the test file**
 
 Setup: same `startTestWorkers` pattern. Create a job with:
+
 ```typescript
 {
   ...config,
@@ -322,6 +342,7 @@ git commit -m "test: add 3 webhook delivery tests via BullMQ webhook worker"
 ## Task 6: DLQ Tests
 
 **Files:**
+
 - Create: `apps/cli/tests/e2e/tier5/tier5a/dlq.test.ts`
 
 3 tests using a dedicated test worker that deliberately throws, to test DLQ plumbing.
@@ -338,7 +359,12 @@ import { DlqRepository, createDatabasePool } from '@spatula/db';
 const TEST_QUEUE_NAME = 'spatula.test-dlq';
 
 // In beforeAll:
-const redisConnection = { host: 'localhost', port: 6380, db: 1, maxRetriesPerRequest: null as null };
+const redisConnection = {
+  host: 'localhost',
+  port: 6380,
+  db: 1,
+  maxRetriesPerRequest: null as null,
+};
 const { db, pool } = createDatabasePool(process.env.DATABASE_URL!);
 const dlqRepo = new DlqRepository(db);
 const dlqHandler = createDlqHandler(dlqRepo);
@@ -348,9 +374,13 @@ const testQueue = new Queue(TEST_QUEUE_NAME, {
   defaultJobOptions: { attempts: 1 },
 });
 
-const testWorker = new Worker(TEST_QUEUE_NAME, async () => {
-  throw new Error('Deliberate test failure');
-}, { connection: redisConnection, concurrency: 1 });
+const testWorker = new Worker(
+  TEST_QUEUE_NAME,
+  async () => {
+    throw new Error('Deliberate test failure');
+  },
+  { connection: redisConnection, concurrency: 1 },
+);
 
 testWorker.on('failed', dlqHandler);
 ```
@@ -373,6 +403,7 @@ git commit -m "test: add 3 DLQ tests with dedicated test worker"
 ## Task 7: State Machine + Quota Tests
 
 **Files:**
+
 - Create: `apps/cli/tests/e2e/tier5/tier5a/state-machine.test.ts`
 
 3 tests for state transition enforcement and concurrent job quota.
@@ -397,6 +428,7 @@ git commit -m "test: add 3 state machine and quota enforcement tests"
 ## Task 8: Worker Lifecycle + Infrastructure Tests
 
 **Files:**
+
 - Create: `apps/cli/tests/e2e/tier5/tier5a/worker-lifecycle.test.ts`
 
 5 tests for graceful shutdown, config diff re-run, WebSocket token, worker heartbeat, and audit logging.
@@ -427,6 +459,7 @@ git commit -m "test: add 5 worker lifecycle and infrastructure tests"
 ## Task 9: Migration Test
 
 **Files:**
+
 - Create: `apps/cli/tests/e2e/tier5/tier5a/migration.test.ts`
 
 1 test verifying that re-running migrations on a database with data doesn't lose data.

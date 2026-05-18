@@ -18,7 +18,12 @@ gh repo view accidentally-awesome-labs/spatula-saas --json name,visibility,isEmp
 **stdout:**
 
 ```json
-{"isEmpty":true,"name":"spatula-saas","sshUrl":"git@github.com:accidentally-awesome-labs/spatula-saas.git","visibility":"PRIVATE"}
+{
+  "isEmpty": true,
+  "name": "spatula-saas",
+  "sshUrl": "git@github.com:accidentally-awesome-labs/spatula-saas.git",
+  "visibility": "PRIVATE"
+}
 ```
 
 **Exit:** `0`

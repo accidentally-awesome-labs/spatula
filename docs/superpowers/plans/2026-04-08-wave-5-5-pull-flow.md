@@ -15,6 +15,7 @@
 ### Task 1: Schema Diff Utility
 
 **Files:**
+
 - Create: `apps/cli/src/lib/schema-diff.ts`
 - Test: `apps/cli/tests/unit/lib/schema-diff.test.ts`
 
@@ -206,6 +207,7 @@ git commit -m "feat(cli): add schema diff utility for pull flow"
 ### Task 2: YAML Field Appender
 
 **Files:**
+
 - Create: `apps/cli/src/lib/yaml-fields.ts`
 - Test: `apps/cli/tests/unit/lib/yaml-fields.test.ts`
 
@@ -383,6 +385,7 @@ git commit -m "feat(cli): add YAML field appender for pull schema merge"
 ### Task 3: SQLite Entities Table — Add `runId` Column
 
 **Files:**
+
 - Modify: `packages/db/src/schema-sqlite/entities.ts`
 - Test: `packages/db/tests/unit/schema-sqlite/parity.test.ts` (verify no breakage)
 
@@ -421,6 +424,7 @@ git commit -m "feat(db): add nullable runId column to SQLite entities table with
 ### Task 4: Entity Repository Extensions
 
 **Files:**
+
 - Modify: `packages/db/src/project-db/repositories/entity-repository.ts`
 - Test: `apps/cli/tests/unit/lib/entity-repo-pull.test.ts`
 
@@ -511,24 +515,28 @@ describe('SqliteEntityRepository pull extensions', () => {
 
     it('updates existing entities on conflict', async () => {
       // Insert first
-      await repo.upsertBatch([{
-        id: 'ent-1',
-        mergedData: { name: 'Original' },
-        provenance: {},
-        qualityScore: 0.5,
-        categories: [],
-        runId: 'run-1',
-      }]);
+      await repo.upsertBatch([
+        {
+          id: 'ent-1',
+          mergedData: { name: 'Original' },
+          provenance: {},
+          qualityScore: 0.5,
+          categories: [],
+          runId: 'run-1',
+        },
+      ]);
 
       // Upsert with updated data
-      const result = await repo.upsertBatch([{
-        id: 'ent-1',
-        mergedData: { name: 'Updated' },
-        provenance: { name: { finalValue: 'Updated' } },
-        qualityScore: 0.9,
-        categories: ['product'],
-        runId: 'run-2',
-      }]);
+      const result = await repo.upsertBatch([
+        {
+          id: 'ent-1',
+          mergedData: { name: 'Updated' },
+          provenance: { name: { finalValue: 'Updated' } },
+          qualityScore: 0.9,
+          categories: ['product'],
+          runId: 'run-2',
+        },
+      ]);
       expect(result.inserted).toBe(0);
       expect(result.updated).toBe(1);
 
@@ -546,9 +554,30 @@ describe('SqliteEntityRepository pull extensions', () => {
   describe('deleteByRunIds', () => {
     it('deletes entities matching the given run IDs', async () => {
       await repo.upsertBatch([
-        { id: 'e1', mergedData: {}, provenance: {}, qualityScore: 0, categories: [], runId: 'run-a' },
-        { id: 'e2', mergedData: {}, provenance: {}, qualityScore: 0, categories: [], runId: 'run-a' },
-        { id: 'e3', mergedData: {}, provenance: {}, qualityScore: 0, categories: [], runId: 'run-b' },
+        {
+          id: 'e1',
+          mergedData: {},
+          provenance: {},
+          qualityScore: 0,
+          categories: [],
+          runId: 'run-a',
+        },
+        {
+          id: 'e2',
+          mergedData: {},
+          provenance: {},
+          qualityScore: 0,
+          categories: [],
+          runId: 'run-a',
+        },
+        {
+          id: 'e3',
+          mergedData: {},
+          provenance: {},
+          qualityScore: 0,
+          categories: [],
+          runId: 'run-b',
+        },
       ]);
       const deleted = await repo.deleteByRunIds(['run-a']);
       expect(deleted).toBe(2);
@@ -564,18 +593,49 @@ describe('SqliteEntityRepository pull extensions', () => {
   describe('countBySource', () => {
     it('counts all entities', async () => {
       // Insert a run, then entities
-      db.insert(runs).values({
-        id: 'run-local', status: 'completed', source: 'local',
-        configSnapshot: {}, startedAt: new Date().toISOString(),
-      }).run();
-      db.insert(runs).values({
-        id: 'run-remote', status: 'pulled', source: 'remote:prod:job-1',
-        configSnapshot: {}, startedAt: new Date().toISOString(),
-      }).run();
+      db.insert(runs)
+        .values({
+          id: 'run-local',
+          status: 'completed',
+          source: 'local',
+          configSnapshot: {},
+          startedAt: new Date().toISOString(),
+        })
+        .run();
+      db.insert(runs)
+        .values({
+          id: 'run-remote',
+          status: 'pulled',
+          source: 'remote:prod:job-1',
+          configSnapshot: {},
+          startedAt: new Date().toISOString(),
+        })
+        .run();
       await repo.upsertBatch([
-        { id: 'e1', mergedData: {}, provenance: {}, qualityScore: 0, categories: [], runId: 'run-local' },
-        { id: 'e2', mergedData: {}, provenance: {}, qualityScore: 0, categories: [], runId: 'run-remote' },
-        { id: 'e3', mergedData: {}, provenance: {}, qualityScore: 0, categories: [], runId: null as unknown as string },
+        {
+          id: 'e1',
+          mergedData: {},
+          provenance: {},
+          qualityScore: 0,
+          categories: [],
+          runId: 'run-local',
+        },
+        {
+          id: 'e2',
+          mergedData: {},
+          provenance: {},
+          qualityScore: 0,
+          categories: [],
+          runId: 'run-remote',
+        },
+        {
+          id: 'e3',
+          mergedData: {},
+          provenance: {},
+          qualityScore: 0,
+          categories: [],
+          runId: null as unknown as string,
+        },
       ]);
 
       expect(await repo.countBySource('all')).toBe(3);
@@ -782,6 +842,7 @@ git commit -m "feat(db): add pull-flow methods to SQLite entity and run repos"
 ### Task 5: Expand `LocalProject` Interface
 
 **Files:**
+
 - Modify: `apps/cli/src/local-project.ts`
 
 - [ ] **Step 1: Add `adapter` to the `LocalProject` interface and return value**
@@ -789,11 +850,13 @@ git commit -m "feat(db): add pull-flow methods to SQLite entity and run repos"
 In `apps/cli/src/local-project.ts`:
 
 Add the import:
+
 ```typescript
 import type { ProjectAdapter as ProjectAdapterType } from '@spatula/db';
 ```
 
 Add to the `LocalProject` interface:
+
 ```typescript
 export interface LocalProject {
   dataSource: DataSource;
@@ -811,15 +874,16 @@ export interface LocalProject {
 ```
 
 Add to the return object in `openLocalProject()`:
+
 ```typescript
-  return {
-    dataSource,
-    projectRoot,
-    projectId,
-    metaRepo: adapter.metaRepo,
-    adapter,
-    close: () => dbResult.close(),
-  };
+return {
+  dataSource,
+  projectRoot,
+  projectId,
+  metaRepo: adapter.metaRepo,
+  adapter,
+  close: () => dbResult.close(),
+};
 ```
 
 - [ ] **Step 2: Run existing tests that use LocalProject**
@@ -839,6 +903,7 @@ git commit -m "feat(cli): expose ProjectAdapter on LocalProject interface"
 ### Task 6: `SpatulaApiClient` Extensions
 
 **Files:**
+
 - Modify: `apps/cli/src/api/client.ts`
 - Test: `apps/cli/tests/unit/api/client-pull.test.ts`
 
@@ -917,7 +982,16 @@ describe('SpatulaApiClient pull methods', () => {
 
     it('defaults to 30d period', async () => {
       const client = new SpatulaApiClient('https://api.test', 't1');
-      mockFetch({ data: { totalTokens: 0, totalCostUsd: 0, byModel: {}, byPurpose: {}, byJob: [], period: {} } });
+      mockFetch({
+        data: {
+          totalTokens: 0,
+          totalCostUsd: 0,
+          byModel: {},
+          byPurpose: {},
+          byJob: [],
+          period: {},
+        },
+      });
 
       await client.getUsage();
       const url = (fetch as ReturnType<typeof vi.fn>).mock.calls[0][0] as string;
@@ -1013,6 +1087,7 @@ git commit -m "feat(cli): add getEntitiesStreamPaginated and getUsage to Spatula
 ### Task 7: Pull Command — Core Flow
 
 **Files:**
+
 - Create: `apps/cli/src/commands/pull.ts`
 - Test: `apps/cli/tests/unit/commands/pull.test.ts`
 
@@ -1028,12 +1103,15 @@ vi.mock('@spatula/core', async () => {
   const actual = await vi.importActual<typeof import('@spatula/core')>('@spatula/core');
   return {
     ...actual,
-    loadGlobalConfig: vi.fn(() => ({
-      version: 1,
-      remotes: {
-        prod: { url: 'https://api.spatula.dev', apiKey: 'sk_live_abc' },
-      },
-    } as GlobalConfig)),
+    loadGlobalConfig: vi.fn(
+      () =>
+        ({
+          version: 1,
+          remotes: {
+            prod: { url: 'https://api.spatula.dev', apiKey: 'sk_live_abc' },
+          },
+        }) as GlobalConfig,
+    ),
   };
 });
 
@@ -1054,11 +1132,17 @@ function buildMockAdapter() {
   return {
     entityRepo: { upsertBatch: mockUpsertBatch, deleteByRunIds: mockDeleteByRunIds },
     schemaRepo: { findLatest: mockSchemaFindLatest, create: mockSchemaCreate },
-    runRepo: { create: mockRunCreate, updateStats: mockRunUpdateStats, findIdsBySourcePrefix: mockFindIdsBySourcePrefix },
+    runRepo: {
+      create: mockRunCreate,
+      updateStats: mockRunUpdateStats,
+      findIdsBySourcePrefix: mockFindIdsBySourcePrefix,
+    },
   };
 }
 
-function mockFetchSequence(responses: Array<{ data: unknown; pagination?: unknown; status?: number }>) {
+function mockFetchSequence(
+  responses: Array<{ data: unknown; pagination?: unknown; status?: number }>,
+) {
   let callIdx = 0;
   vi.stubGlobal(
     'fetch',
@@ -1069,11 +1153,12 @@ function mockFetchSequence(responses: Array<{ data: unknown; pagination?: unknow
       return Promise.resolve({
         ok: status >= 200 && status < 300,
         status,
-        json: () => Promise.resolve(
-          resp.pagination
-            ? { data: resp.data, pagination: resp.pagination }
-            : { data: resp.data },
-        ),
+        json: () =>
+          Promise.resolve(
+            resp.pagination
+              ? { data: resp.data, pagination: resp.pagination }
+              : { data: resp.data },
+          ),
       });
     }),
   );
@@ -1102,11 +1187,41 @@ describe('runPullCommand', () => {
       // getJob
       { data: { id: 'remote-job-1', status: 'completed', stats: { pagesProcessed: 10 } } },
       // getSchema
-      { data: { version: 1, fields: [{ name: 'title', type: 'string', required: true, description: '' }], fieldAliases: [], createdAt: '2026-01-01', parentVersion: null } },
+      {
+        data: {
+          version: 1,
+          fields: [{ name: 'title', type: 'string', required: true, description: '' }],
+          fieldAliases: [],
+          createdAt: '2026-01-01',
+          parentVersion: null,
+        },
+      },
       // getEntitiesStreamPaginated — single batch
-      { data: [{ id: 'e1', mergedData: { title: 'A' }, provenance: {}, categories: [], qualityScore: 0.9, tenantId: 't1', jobId: 'remote-job-1' }], pagination: { hasMore: false, total: 1 } },
+      {
+        data: [
+          {
+            id: 'e1',
+            mergedData: { title: 'A' },
+            provenance: {},
+            categories: [],
+            qualityScore: 0.9,
+            tenantId: 't1',
+            jobId: 'remote-job-1',
+          },
+        ],
+        pagination: { hasMore: false, total: 1 },
+      },
       // getUsage
-      { data: { period: {}, totalTokens: 1000, totalCostUsd: 0.05, byModel: {}, byPurpose: {}, byJob: [{ jobId: 'remote-job-1', tokens: 1000, costUsd: 0.05 }] } },
+      {
+        data: {
+          period: {},
+          totalTokens: 1000,
+          totalCostUsd: 0.05,
+          byModel: {},
+          byPurpose: {},
+          byJob: [{ jobId: 'remote-job-1', tokens: 1000, costUsd: 0.05 }],
+        },
+      },
     ]);
 
     const result = await runPullCommand({
@@ -1122,10 +1237,12 @@ describe('runPullCommand', () => {
     expect(result.success).toBe(true);
     expect(result.entitiesInserted).toBe(5);
     expect(mockUpsertBatch).toHaveBeenCalled();
-    expect(mockRunCreate).toHaveBeenCalledWith(expect.objectContaining({
-      status: 'pulled',
-      source: 'remote:prod:remote-job-1',
-    }));
+    expect(mockRunCreate).toHaveBeenCalledWith(
+      expect.objectContaining({
+        status: 'pulled',
+        source: 'remote:prod:remote-job-1',
+      }),
+    );
     expect(mockMetaSet).toHaveBeenCalledWith('remote:prod:last_pull_at', expect.any(String));
     expect(mockMetaDelete).toHaveBeenCalledWith('remote:prod:pull_cursor');
   });
@@ -1173,9 +1290,31 @@ describe('runPullCommand', () => {
       // getJob (still needed for status check)
       { data: { id: 'remote-job-1', status: 'completed' } },
       // getEntitiesStreamPaginated — resumes from cursor
-      { data: [{ id: 'e5', mergedData: {}, provenance: {}, categories: [], qualityScore: 0.8, tenantId: 't1', jobId: 'j1' }], pagination: { hasMore: false, total: 1 } },
+      {
+        data: [
+          {
+            id: 'e5',
+            mergedData: {},
+            provenance: {},
+            categories: [],
+            qualityScore: 0.8,
+            tenantId: 't1',
+            jobId: 'j1',
+          },
+        ],
+        pagination: { hasMore: false, total: 1 },
+      },
       // getUsage
-      { data: { period: {}, totalTokens: 0, totalCostUsd: 0, byModel: {}, byPurpose: {}, byJob: [] } },
+      {
+        data: {
+          period: {},
+          totalTokens: 0,
+          totalCostUsd: 0,
+          byModel: {},
+          byPurpose: {},
+          byJob: [],
+        },
+      },
     ]);
 
     const result = await runPullCommand({
@@ -1201,9 +1340,26 @@ describe('runPullCommand', () => {
 
     mockFetchSequence([
       { data: { id: 'remote-job-1', status: 'completed' } },
-      { data: { version: 1, fields: [], fieldAliases: [], createdAt: '2026-01-01', parentVersion: null } },
+      {
+        data: {
+          version: 1,
+          fields: [],
+          fieldAliases: [],
+          createdAt: '2026-01-01',
+          parentVersion: null,
+        },
+      },
       { data: [], pagination: { hasMore: false, total: 0 } },
-      { data: { period: {}, totalTokens: 0, totalCostUsd: 0, byModel: {}, byPurpose: {}, byJob: [] } },
+      {
+        data: {
+          period: {},
+          totalTokens: 0,
+          totalCostUsd: 0,
+          byModel: {},
+          byPurpose: {},
+          byJob: [],
+        },
+      },
     ]);
 
     await runPullCommand({
@@ -1244,27 +1400,37 @@ export interface PullInput {
   metaDelete: (key: string) => Promise<void>;
   adapter: {
     entityRepo: {
-      upsertBatch: (batch: Array<{
-        id: string;
-        mergedData: Record<string, unknown>;
-        provenance: Record<string, unknown>;
-        qualityScore: number;
-        categories: unknown[];
-        runId: string | null;
-      }>) => Promise<{ inserted: number; updated: number }>;
+      upsertBatch: (
+        batch: Array<{
+          id: string;
+          mergedData: Record<string, unknown>;
+          provenance: Record<string, unknown>;
+          qualityScore: number;
+          categories: unknown[];
+          runId: string | null;
+        }>,
+      ) => Promise<{ inserted: number; updated: number }>;
       deleteByRunIds: (runIds: string[]) => Promise<number>;
     };
     schemaRepo: {
-      findLatest: (jobId: string, tenantId?: string) => Promise<{ id: string; version: number; definition: unknown } | null>;
+      findLatest: (
+        jobId: string,
+        tenantId?: string,
+      ) => Promise<{ id: string; version: number; definition: unknown } | null>;
       create: (data: {
-        jobId: string; tenantId: string; version: number;
-        definition: unknown; parentId?: string;
+        jobId: string;
+        tenantId: string;
+        version: number;
+        definition: unknown;
+        parentId?: string;
       }) => Promise<unknown>;
     };
     runRepo: {
       create: (data: {
-        status: string; source: string;
-        configSnapshot: Record<string, unknown>; startedAt: string;
+        status: string;
+        source: string;
+        configSnapshot: Record<string, unknown>;
+        startedAt: string;
       }) => Promise<{ id: string }>;
       updateStats: (id: string, stats: Record<string, unknown>) => Promise<void>;
       findLatestByStatus?: (statuses: string[]) => Promise<{ id: string; source: string } | null>;
@@ -1278,7 +1444,10 @@ export interface PullInput {
   skipSchema?: boolean;
   onProgress?: (batch: number, total: number) => void;
   resolveSchemaConflict?: (diff: unknown) => Promise<'remote' | 'local' | 'merge'>;
-  resolveRunningJob?: (status: string, stats?: Record<string, unknown>) => Promise<'snapshot' | 'wait' | 'cancel'>;
+  resolveRunningJob?: (
+    status: string,
+    stats?: Record<string, unknown>,
+  ) => Promise<'snapshot' | 'wait' | 'cancel'>;
 }
 
 export interface PullResult {
@@ -1304,12 +1473,18 @@ export async function runPullCommand(input: PullInput): Promise<PullResult> {
   // Step 1: Resolve remote
   const remote = getRemoteConfig(input.remoteName);
   if (!remote) {
-    return { success: false, error: `Remote "${input.remoteName}" not found or missing API key. Run \`spatula remote add\` first.` };
+    return {
+      success: false,
+      error: `Remote "${input.remoteName}" not found or missing API key. Run \`spatula remote add\` first.`,
+    };
   }
 
   const jobId = await input.metaGet(`remote:${input.remoteName}:job_id`);
   if (!jobId) {
-    return { success: false, error: `No job linked for remote '${input.remoteName}'. Run \`spatula push\` first.` };
+    return {
+      success: false,
+      error: `No job linked for remote '${input.remoteName}'. Run \`spatula push\` first.`,
+    };
   }
 
   const client = new SpatulaApiClient(remote.url, '', { apiKey: remote.apiKey });
@@ -1318,7 +1493,7 @@ export async function runPullCommand(input: PullInput): Promise<PullResult> {
   // Step 2: Check job status
   let jobData: Record<string, unknown>;
   try {
-    jobData = await client.getJob(jobId) as Record<string, unknown>;
+    jobData = (await client.getJob(jobId)) as Record<string, unknown>;
   } catch (err) {
     return { success: false, error: `Failed to fetch job ${jobId}: ${(err as Error).message}` };
   }
@@ -1326,9 +1501,16 @@ export async function runPullCommand(input: PullInput): Promise<PullResult> {
 
   if (jobStatus === 'running' || jobStatus === 'paused') {
     if (!input.resolveRunningJob) {
-      return { success: false, jobStatus, error: `Job is still ${jobStatus}. Use interactive mode for snapshot/wait options.` };
+      return {
+        success: false,
+        jobStatus,
+        error: `Job is still ${jobStatus}. Use interactive mode for snapshot/wait options.`,
+      };
     }
-    const choice = await input.resolveRunningJob(jobStatus, jobData.stats as Record<string, unknown>);
+    const choice = await input.resolveRunningJob(
+      jobStatus,
+      jobData.stats as Record<string, unknown>,
+    );
     if (choice === 'cancel') {
       return { success: false, error: 'Pull cancelled by user.' };
     }
@@ -1337,7 +1519,7 @@ export async function runPullCommand(input: PullInput): Promise<PullResult> {
       let pollStatus = jobStatus;
       while (pollStatus === 'running' || pollStatus === 'paused') {
         await new Promise((r) => setTimeout(r, 30_000));
-        const pollData = await client.getJob(jobId) as Record<string, unknown>;
+        const pollData = (await client.getJob(jobId)) as Record<string, unknown>;
         pollStatus = pollData.status as string;
       }
     }
@@ -1358,8 +1540,11 @@ export async function runPullCommand(input: PullInput): Promise<PullResult> {
   let schemaFieldsAdded = 0;
   if (!resumed && !input.skipSchema) {
     try {
-      const remoteSchema = await client.getSchema(jobId) as Record<string, unknown>;
-      const localSchema = await input.adapter.schemaRepo.findLatest(input.projectId, input.projectId);
+      const remoteSchema = (await client.getSchema(jobId)) as Record<string, unknown>;
+      const localSchema = await input.adapter.schemaRepo.findLatest(
+        input.projectId,
+        input.projectId,
+      );
 
       if (!localSchema && remoteSchema) {
         // No local schema — accept remote
@@ -1375,26 +1560,31 @@ export async function runPullCommand(input: PullInput): Promise<PullResult> {
         // Both exist — diff and resolve
         const { diffSchemas } = await import('../lib/schema-diff.js');
         const diff = diffSchemas(
-          localSchema.definition as { version: number; fields: Array<{ name: string; description: string; type: string; required: boolean }> },
-          remoteSchema as { version: number; fields: Array<{ name: string; description: string; type: string; required: boolean }> },
+          localSchema.definition as {
+            version: number;
+            fields: Array<{ name: string; description: string; type: string; required: boolean }>;
+          },
+          remoteSchema as {
+            version: number;
+            fields: Array<{ name: string; description: string; type: string; required: boolean }>;
+          },
         );
         if (diff.hasChanges && input.resolveSchemaConflict) {
           const choice = await input.resolveSchemaConflict(diff);
           if (choice === 'remote') {
             await input.adapter.schemaRepo.create({
-              jobId: input.projectId, tenantId: input.projectId,
+              jobId: input.projectId,
+              tenantId: input.projectId,
               version: (localSchema.version ?? 0) + 1,
               definition: remoteSchema,
               parentId: localSchema.id,
             });
             schemaFieldsAdded = diff.remoteOnly.length + diff.changed.length;
           } else if (choice === 'merge') {
-            const mergedFields = [
-              ...(remoteSchema.fields as unknown[]),
-              ...diff.localOnly,
-            ];
+            const mergedFields = [...(remoteSchema.fields as unknown[]), ...diff.localOnly];
             await input.adapter.schemaRepo.create({
-              jobId: input.projectId, tenantId: input.projectId,
+              jobId: input.projectId,
+              tenantId: input.projectId,
               version: (localSchema.version ?? 0) + 1,
               definition: { ...remoteSchema, fields: mergedFields },
               parentId: localSchema.id,
@@ -1501,10 +1691,7 @@ export async function runPullCommand(input: PullInput): Promise<PullResult> {
       llmTokens = jobUsage.tokens;
       llmCostUsd = jobUsage.costUsd;
     }
-    await input.metaSet(
-      `remote:${input.remoteName}:last_pull_usage`,
-      JSON.stringify(usage),
-    );
+    await input.metaSet(`remote:${input.remoteName}:last_pull_usage`, JSON.stringify(usage));
   } catch {
     logger.warn('Usage fetch failed, continuing');
   }
@@ -1550,6 +1737,7 @@ git commit -m "feat(cli): implement core pull command with 9-step flow"
 ### Task 8: Schema Conflict Resolution TUI
 
 **Files:**
+
 - Create: `apps/cli/src/components/SchemaConflict.tsx`
 - Test: `apps/cli/tests/unit/components/schema-conflict.test.tsx`
 
@@ -1644,30 +1832,39 @@ export function SchemaConflict({ diff, onResolve }: SchemaConflictProps) {
 
       {diff.localOnly.length > 0 && (
         <Box flexDirection="column">
-          <Text dimColor>  Local only:</Text>
+          <Text dimColor> Local only:</Text>
           {diff.localOnly.map((f) => (
-            <Text key={f.name} color="yellow">    - {f.name} ({f.type})</Text>
+            <Text key={f.name} color="yellow">
+              {' '}
+              - {f.name} ({f.type})
+            </Text>
           ))}
         </Box>
       )}
 
       {diff.remoteOnly.length > 0 && (
         <Box flexDirection="column">
-          <Text dimColor>  Remote only:</Text>
+          <Text dimColor> Remote only:</Text>
           {diff.remoteOnly.map((f) => (
-            <Text key={f.name} color="green">    + {f.name} ({f.type})</Text>
+            <Text key={f.name} color="green">
+              {' '}
+              + {f.name} ({f.type})
+            </Text>
           ))}
         </Box>
       )}
 
       {diff.changed.length > 0 && (
         <Box flexDirection="column">
-          <Text dimColor>  Changed:</Text>
+          <Text dimColor> Changed:</Text>
           {diff.changed.map((c) => (
             <Box key={c.name} flexDirection="column">
-              <Text color="cyan">    ~ {c.name}</Text>
+              <Text color="cyan"> ~ {c.name}</Text>
               {c.differences.map((d, i) => (
-                <Text key={i} dimColor>      {d}</Text>
+                <Text key={i} dimColor>
+                  {' '}
+                  {d}
+                </Text>
               ))}
             </Box>
           ))}
@@ -1679,7 +1876,9 @@ export function SchemaConflict({ diff, onResolve }: SchemaConflictProps) {
       {options.map((opt, i) => (
         <Text key={opt.key}>
           {i === selected ? ' \u276f ' : '   '}
-          <Text bold={i === selected}>[{i + 1}] {opt.label}</Text>
+          <Text bold={i === selected}>
+            [{i + 1}] {opt.label}
+          </Text>
           <Text dimColor> \u2014 {opt.desc}</Text>
         </Text>
       ))}
@@ -1705,6 +1904,7 @@ git commit -m "feat(cli): add SchemaConflict TUI component for pull flow"
 ### Task 9: Pull Progress Display
 
 **Files:**
+
 - Create: `apps/cli/src/lib/pull-progress.tsx`
 
 - [ ] **Step 1: Create the progress component**
@@ -1730,7 +1930,9 @@ export function PullProgress({ remoteName, batch, entityCount, elapsed }: PullPr
         <Spinner type="dots" />
       </Text>
       <Text>
-        {' '}Pulling from &apos;{remoteName}&apos;... Batch {batch} | {entityCount.toLocaleString()} entities | {elapsedStr}s
+        {' '}
+        Pulling from &apos;{remoteName}&apos;... Batch {batch} | {entityCount.toLocaleString()}{' '}
+        entities | {elapsedStr}s
       </Text>
     </Box>
   );
@@ -1749,6 +1951,7 @@ git commit -m "feat(cli): add PullProgress ink component"
 ### Task 10: Pull Command Handler (Interactive Wrapper)
 
 **Files:**
+
 - Modify: `apps/cli/src/commands/pull.ts`
 
 - [ ] **Step 1: Add the `handlePullCommand` function that wraps `runPullCommand` with TUI interactions**
@@ -1800,35 +2003,35 @@ export async function handlePullCommand(opts: {
       },
       resolveRunningJob: async (jobStatus: string, stats?: Record<string, unknown>) => {
         const pagesInfo = stats?.pagesProcessed ? ` (${stats.pagesProcessed} pages crawled)` : '';
-        const choice = await promptChoice(
-          `Job is still ${jobStatus}${pagesInfo}.`,
-          [
-            'Pull current snapshot (can pull again later)',
-            'Wait for completion (polls every 30s)',
-            'Cancel pull',
-          ],
-        );
+        const choice = await promptChoice(`Job is still ${jobStatus}${pagesInfo}.`, [
+          'Pull current snapshot (can pull again later)',
+          'Wait for completion (polls every 30s)',
+          'Cancel pull',
+        ]);
         return (['snapshot', 'wait', 'cancel'] as const)[choice];
       },
       resolveSchemaConflict: async (diff) => {
         const schemaDiff = diff as import('../lib/schema-diff.js').SchemaDiff;
         if (schemaDiff.remoteOnly.length > 0) {
-          console.log(`\n  Remote has ${schemaDiff.remoteOnly.length} new field(s): ${schemaDiff.remoteOnly.map(f => f.name).join(', ')}`);
+          console.log(
+            `\n  Remote has ${schemaDiff.remoteOnly.length} new field(s): ${schemaDiff.remoteOnly.map((f) => f.name).join(', ')}`,
+          );
         }
         if (schemaDiff.changed.length > 0) {
-          console.log(`  ${schemaDiff.changed.length} field(s) changed: ${schemaDiff.changed.map(c => c.name).join(', ')}`);
+          console.log(
+            `  ${schemaDiff.changed.length} field(s) changed: ${schemaDiff.changed.map((c) => c.name).join(', ')}`,
+          );
         }
         if (schemaDiff.localOnly.length > 0) {
-          console.log(`  ${schemaDiff.localOnly.length} local-only field(s): ${schemaDiff.localOnly.map(f => f.name).join(', ')}`);
+          console.log(
+            `  ${schemaDiff.localOnly.length} local-only field(s): ${schemaDiff.localOnly.map((f) => f.name).join(', ')}`,
+          );
         }
-        const choice = await promptChoice(
-          '\nHow should schema differences be resolved?',
-          [
-            'Use remote schema (recommended)',
-            'Keep local schema',
-            'Merge (keep all fields from both)',
-          ],
-        );
+        const choice = await promptChoice('\nHow should schema differences be resolved?', [
+          'Use remote schema (recommended)',
+          'Keep local schema',
+          'Merge (keep all fields from both)',
+        ]);
         return (['remote', 'local', 'merge'] as const)[choice];
       },
     });
@@ -1846,7 +2049,11 @@ export async function handlePullCommand(opts: {
         const yamlContent = readFileSync(yamlPath, 'utf-8');
         const schema = await project.adapter.schemaRepo.findLatest(project.projectId);
         if (schema?.definition) {
-          const fields = ((schema.definition as { fields?: unknown[] }).fields ?? []) as Array<{ name: string; type: string; required?: boolean }>;
+          const fields = ((schema.definition as { fields?: unknown[] }).fields ?? []) as Array<{
+            name: string;
+            type: string;
+            required?: boolean;
+          }>;
           const date = new Date().toISOString().split('T')[0];
           const updated = appendFieldsToYaml(yamlContent, fields, date);
           writeFileSync(yamlPath, updated, 'utf-8');
@@ -1859,12 +2066,16 @@ export async function handlePullCommand(opts: {
     // Print summary
     process.stderr.write('\r' + ' '.repeat(60) + '\r'); // Clear progress line
     console.log(`\nPull complete from '${opts.remoteName}'`);
-    console.log(`  Entities:  ${result.entitiesInserted} new, ${result.entitiesUpdated} updated (${(result.entitiesInserted ?? 0) + (result.entitiesUpdated ?? 0)} total)`);
+    console.log(
+      `  Entities:  ${result.entitiesInserted} new, ${result.entitiesUpdated} updated (${(result.entitiesInserted ?? 0) + (result.entitiesUpdated ?? 0)} total)`,
+    );
     if (result.schemaFieldsAdded) {
       console.log(`  Schema:    ${result.schemaFieldsAdded} new fields`);
     }
     if (result.llmTokens) {
-      console.log(`  LLM usage: ${result.llmTokens?.toLocaleString()} tokens ($${result.llmCostUsd?.toFixed(2)})`);
+      console.log(
+        `  LLM usage: ${result.llmTokens?.toLocaleString()} tokens ($${result.llmCostUsd?.toFixed(2)})`,
+      );
     }
     if (result.resumed) {
       console.log(`  (Resumed from interrupted pull)`);
@@ -1892,6 +2103,7 @@ git commit -m "feat(cli): add handlePullCommand interactive wrapper"
 ### Task 11: Explorer Source Filtering
 
 **Files:**
+
 - Modify: `apps/cli/src/components/explorer/ExplorerView.tsx`
 - Modify: `apps/cli/src/components/explorer/DataTable.tsx`
 - Test: `apps/cli/tests/unit/components/explorer-source-filter.test.ts`
@@ -1945,22 +2157,26 @@ Expected: PASS
 In `apps/cli/src/components/explorer/ExplorerView.tsx`:
 
 1. Add import at top:
+
 ```typescript
 import { cycleSourceFilter, sourceFilterLabel } from './source-filter.js';
 import type { SourceFilter } from './source-filter.js';
 ```
 
 2. Add state inside the component:
+
 ```typescript
 const [sourceFilter, setSourceFilter] = useState<SourceFilter>('all');
 ```
 
 3. Add to `TABLE_HINTS` array:
+
 ```typescript
 { key: 'S', description: 'Source filter' },
 ```
 
 4. Add to keyboard map (in the table keyboard section):
+
 ```typescript
 s: () => setSourceFilter((f) => cycleSourceFilter(f)),
 S: () => setSourceFilter((f) => cycleSourceFilter(f)),
@@ -1978,9 +2194,9 @@ In `apps/cli/src/components/explorer/DataTable.tsx`, add `sourceFilter?: string`
 
 ```tsx
 // Add to the footer Box, after the page info:
-{sourceFilter && sourceFilter !== 'all' && (
-  <Text dimColor>  [Source: {sourceFilter}]</Text>
-)}
+{
+  sourceFilter && sourceFilter !== 'all' && <Text dimColor> [Source: {sourceFilter}]</Text>;
+}
 ```
 
 - [ ] **Step 7: Run existing explorer tests for regressions**
@@ -2000,6 +2216,7 @@ git commit -m "feat(cli): add source filter toggle to explorer view"
 ### Task 12: Command Registration
 
 **Files:**
+
 - Modify: `apps/cli/src/index.tsx`
 
 - [ ] **Step 1: Register the pull command in yargs**
@@ -2060,6 +2277,7 @@ git commit -m "feat(cli): register pull command in CLI entrypoint"
 ### Task 13: Integration Test — Full Pull Flow
 
 **Files:**
+
 - Test: `apps/cli/tests/unit/commands/pull-integration.test.ts`
 
 - [ ] **Step 1: Write integration test covering the end-to-end happy path**
@@ -2074,10 +2292,13 @@ vi.mock('@spatula/core', async () => {
   const actual = await vi.importActual<typeof import('@spatula/core')>('@spatula/core');
   return {
     ...actual,
-    loadGlobalConfig: vi.fn(() => ({
-      version: 1,
-      remotes: { prod: { url: 'https://api.test', apiKey: 'sk_test' } },
-    } as GlobalConfig)),
+    loadGlobalConfig: vi.fn(
+      () =>
+        ({
+          version: 1,
+          remotes: { prod: { url: 'https://api.test', apiKey: 'sk_test' } },
+        }) as GlobalConfig,
+    ),
   };
 });
 
@@ -2088,46 +2309,115 @@ describe('Pull flow integration', () => {
     const meta: Record<string, string> = { 'remote:prod:job_id': 'j1' };
     let fetchCallCount = 0;
 
-    vi.stubGlobal('fetch', vi.fn().mockImplementation(async (url: string) => {
-      fetchCallCount++;
-      const urlStr = url.toString();
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockImplementation(async (url: string) => {
+        fetchCallCount++;
+        const urlStr = url.toString();
 
-      if (urlStr.includes('/jobs/j1') && !urlStr.includes('/entities')) {
-        return { ok: true, status: 200, json: () => Promise.resolve({ data: { id: 'j1', status: 'completed' } }) };
-      }
-      if (urlStr.includes('/schema')) {
-        return { ok: true, status: 200, json: () => Promise.resolve({ data: { version: 1, fields: [], fieldAliases: [], createdAt: '2026-01-01', parentVersion: null } }) };
-      }
-      if (urlStr.includes('/entities')) {
-        const hasCursor = urlStr.includes('cursor=');
-        if (!hasCursor) {
-          return { ok: true, status: 200, json: () => Promise.resolve({
-            data: [{ id: 'e1', mergedData: { x: 1 }, provenance: {}, categories: [], qualityScore: 0.9, tenantId: 't', jobId: 'j1' }],
-            pagination: { nextCursor: 'cursor-page2', hasMore: true, total: 2 },
-          }) };
+        if (urlStr.includes('/jobs/j1') && !urlStr.includes('/entities')) {
+          return {
+            ok: true,
+            status: 200,
+            json: () => Promise.resolve({ data: { id: 'j1', status: 'completed' } }),
+          };
         }
-        return { ok: true, status: 200, json: () => Promise.resolve({
-          data: [{ id: 'e2', mergedData: { x: 2 }, provenance: {}, categories: [], qualityScore: 0.8, tenantId: 't', jobId: 'j1' }],
-          pagination: { hasMore: false, total: 2 },
-        }) };
-      }
-      if (urlStr.includes('/usage')) {
-        return { ok: true, status: 200, json: () => Promise.resolve({
-          data: { period: {}, totalTokens: 500, totalCostUsd: 0.01, byModel: {}, byPurpose: {}, byJob: [{ jobId: 'j1', tokens: 500, costUsd: 0.01 }] },
-        }) };
-      }
-      return { ok: true, status: 200, json: () => Promise.resolve({ data: {} }) };
-    }));
+        if (urlStr.includes('/schema')) {
+          return {
+            ok: true,
+            status: 200,
+            json: () =>
+              Promise.resolve({
+                data: {
+                  version: 1,
+                  fields: [],
+                  fieldAliases: [],
+                  createdAt: '2026-01-01',
+                  parentVersion: null,
+                },
+              }),
+          };
+        }
+        if (urlStr.includes('/entities')) {
+          const hasCursor = urlStr.includes('cursor=');
+          if (!hasCursor) {
+            return {
+              ok: true,
+              status: 200,
+              json: () =>
+                Promise.resolve({
+                  data: [
+                    {
+                      id: 'e1',
+                      mergedData: { x: 1 },
+                      provenance: {},
+                      categories: [],
+                      qualityScore: 0.9,
+                      tenantId: 't',
+                      jobId: 'j1',
+                    },
+                  ],
+                  pagination: { nextCursor: 'cursor-page2', hasMore: true, total: 2 },
+                }),
+            };
+          }
+          return {
+            ok: true,
+            status: 200,
+            json: () =>
+              Promise.resolve({
+                data: [
+                  {
+                    id: 'e2',
+                    mergedData: { x: 2 },
+                    provenance: {},
+                    categories: [],
+                    qualityScore: 0.8,
+                    tenantId: 't',
+                    jobId: 'j1',
+                  },
+                ],
+                pagination: { hasMore: false, total: 2 },
+              }),
+          };
+        }
+        if (urlStr.includes('/usage')) {
+          return {
+            ok: true,
+            status: 200,
+            json: () =>
+              Promise.resolve({
+                data: {
+                  period: {},
+                  totalTokens: 500,
+                  totalCostUsd: 0.01,
+                  byModel: {},
+                  byPurpose: {},
+                  byJob: [{ jobId: 'j1', tokens: 500, costUsd: 0.01 }],
+                },
+              }),
+          };
+        }
+        return { ok: true, status: 200, json: () => Promise.resolve({ data: {} }) };
+      }),
+    );
 
     const upsertCalls: unknown[][] = [];
     const result = await runPullCommand({
       remoteName: 'prod',
       metaGet: async (k) => meta[k] ?? null,
-      metaSet: async (k, v) => { meta[k] = v; },
-      metaDelete: async (k) => { delete meta[k]; },
+      metaSet: async (k, v) => {
+        meta[k] = v;
+      },
+      metaDelete: async (k) => {
+        delete meta[k];
+      },
       adapter: {
         entityRepo: {
-          upsertBatch: async (batch) => { upsertCalls.push(batch); return { inserted: batch.length, updated: 0 }; },
+          upsertBatch: async (batch) => {
+            upsertCalls.push(batch);
+            return { inserted: batch.length, updated: 0 };
+          },
           deleteByRunIds: async () => 0,
         },
         schemaRepo: {

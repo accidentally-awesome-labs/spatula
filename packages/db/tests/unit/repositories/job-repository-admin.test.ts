@@ -3,7 +3,17 @@ import { JobRepository } from '../../../src/repositories/job-repository.js';
 
 function createMockDb() {
   const chain: any = {};
-  const methods = ['select', 'from', 'where', 'orderBy', 'limit', 'offset', 'update', 'set', 'returning'];
+  const methods = [
+    'select',
+    'from',
+    'where',
+    'orderBy',
+    'limit',
+    'offset',
+    'update',
+    'set',
+    'returning',
+  ];
   for (const m of methods) {
     chain[m] = vi.fn().mockReturnValue(chain);
   }

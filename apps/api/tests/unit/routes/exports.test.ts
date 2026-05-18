@@ -12,13 +12,22 @@ function createMockDeps(): AppDeps {
     dbPool: { end: vi.fn() } as unknown as Pool,
     exportRepo: {
       create: vi.fn().mockResolvedValue({
-        id: 'exp-1', status: 'pending', format: 'json',
-        includeProvenance: false, createdAt: new Date().toISOString(),
+        id: 'exp-1',
+        status: 'pending',
+        format: 'json',
+        includeProvenance: false,
+        createdAt: new Date().toISOString(),
       }),
       findById: vi.fn().mockResolvedValue({
-        id: 'exp-1', jobId: 'job-1', status: 'completed', format: 'json',
-        includeProvenance: false, entityCount: 42, fileSize: 1024,
-        contentRef: 'pg://ref-1', createdAt: new Date().toISOString(),
+        id: 'exp-1',
+        jobId: 'job-1',
+        status: 'completed',
+        format: 'json',
+        includeProvenance: false,
+        entityCount: 42,
+        fileSize: 1024,
+        contentRef: 'pg://ref-1',
+        createdAt: new Date().toISOString(),
         completedAt: new Date().toISOString(),
       }),
       findByJob: vi.fn().mockResolvedValue([]),
@@ -91,7 +100,9 @@ describe('Export routes', () => {
       const res = await app.request('/api/v1/jobs/job-1/exports?limit=10');
       expect(res.status).toBe(200);
       expect(deps.exportRepo.findByJob).toHaveBeenCalledWith(
-        'job-1', expect.any(String), expect.objectContaining({ limit: 10 }),
+        'job-1',
+        expect.any(String),
+        expect.objectContaining({ limit: 10 }),
       );
     });
   });
@@ -153,7 +164,10 @@ describe('Export routes', () => {
     });
 
     it('returns 409 when export not completed', async () => {
-      (deps.exportRepo.findById as any).mockResolvedValueOnce({ id: 'exp-1', status: 'processing' });
+      (deps.exportRepo.findById as any).mockResolvedValueOnce({
+        id: 'exp-1',
+        status: 'processing',
+      });
       const res = await app.request('/api/v1/jobs/job-1/export/exp-1/download');
       expect(res.status).toBe(409);
     });

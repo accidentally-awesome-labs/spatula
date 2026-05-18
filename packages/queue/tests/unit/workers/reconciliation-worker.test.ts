@@ -22,7 +22,8 @@ function createMockDeps(overrides?: Record<string, unknown>) {
     reconciler: { reconcile: vi.fn() },
     jobRepo: {
       findById: vi.fn().mockResolvedValue({
-        id: JOB_ID, config: { webhooks: { url: 'https://hooks.test' } },
+        id: JOB_ID,
+        config: { webhooks: { url: 'https://hooks.test' } },
       }),
     },
     schemaRepo: {},

@@ -15,8 +15,6 @@ describe('securityHeaders', () => {
       'max-age=31536000; includeSubDomains',
     );
     expect(res.headers.get('X-XSS-Protection')).toBe('0');
-    expect(res.headers.get('Referrer-Policy')).toBe(
-      'strict-origin-when-cross-origin',
-    );
+    expect(res.headers.get('Referrer-Policy')).toBe('strict-origin-when-cross-origin');
   });
 });

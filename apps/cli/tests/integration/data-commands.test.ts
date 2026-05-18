@@ -335,10 +335,7 @@ describe('spatula explore (integration)', () => {
   it('shows no-entities message when database is empty', async () => {
     // Create a separate empty project
     const emptyDir = mkdtempSync(join(tmpdir(), 'spatula-empty-'));
-    writeFileSync(
-      join(emptyDir, 'spatula.yaml'),
-      'name: Empty\nseeds:\n  - https://example.com\n',
-    );
+    writeFileSync(join(emptyDir, 'spatula.yaml'), 'name: Empty\nseeds:\n  - https://example.com\n');
     const emptyDbDir = join(emptyDir, '.spatula');
     mkdirSync(emptyDbDir, { recursive: true });
     const { db, close } = createProjectDb(join(emptyDbDir, 'project.db'));
@@ -607,7 +604,12 @@ describe('spatula init (integration)', () => {
     process.env.SPATULA_HOME = fakeHome;
     try {
       const { runInitCommand } = await import('../../src/commands/init.js');
-      const result = await runInitCommand({ url: 'https://example.com', depth: 3, limit: 500, cwd: initDir });
+      const result = await runInitCommand({
+        url: 'https://example.com',
+        depth: 3,
+        limit: 500,
+        cwd: initDir,
+      });
 
       // Verify files created
       expect(existsSync(join(initDir, 'spatula.yaml'))).toBe(true);
@@ -880,7 +882,7 @@ describe('spatula export — advanced formats and features (integration)', () =>
     expect(stats.size).toBeGreaterThan(0);
 
     // Verify summary output mentions sqlite
-    const output = consoleSpy.mock.calls.map(c => String(c[0])).join('\n');
+    const output = consoleSpy.mock.calls.map((c) => String(c[0])).join('\n');
     expect(output).toContain('sqlite');
     expect(output).toContain('5'); // 5 entities
 
@@ -910,7 +912,10 @@ describe('spatula export — advanced formats and features (integration)', () =>
     // Create a separate project with 450 entities
     const largeDir = mkdtempSync(join(tmpdir(), 'spatula-large-'));
     try {
-      writeFileSync(join(largeDir, 'spatula.yaml'), 'name: Large\nseeds:\n  - https://example.com\n');
+      writeFileSync(
+        join(largeDir, 'spatula.yaml'),
+        'name: Large\nseeds:\n  - https://example.com\n',
+      );
       const dbDir = join(largeDir, '.spatula');
       mkdirSync(dbDir, { recursive: true });
 
@@ -923,18 +928,23 @@ describe('spatula export — advanced formats and features (integration)', () =>
 
       // Create schema
       await adapter.schemaRepo.create({
-        jobId: pid, tenantId: pid, version: 1,
+        jobId: pid,
+        tenantId: pid,
+        version: 1,
         definition: {
           version: 1,
           fields: [{ name: 'title', type: 'string', required: true, description: 'Title' }],
-          fieldAliases: [], createdAt: new Date(), parentVersion: null,
+          fieldAliases: [],
+          createdAt: new Date(),
+          parentVersion: null,
         },
       });
 
       // Insert 450 entities
       for (let i = 0; i < 450; i++) {
         await adapter.entityRepo.create({
-          jobId: pid, tenantId: pid,
+          jobId: pid,
+          tenantId: pid,
           mergedData: { title: `Item ${i}` },
           provenance: {},
           qualityScore: 0.8,
@@ -950,7 +960,7 @@ describe('spatula export — advanced formats and features (integration)', () =>
       const { runExportCommand } = await import('../../src/commands/export.js');
       await runExportCommand({ format: 'json', output: outputPath });
 
-      const output = consoleSpy.mock.calls.map(c => String(c[0])).join('\n');
+      const output = consoleSpy.mock.calls.map((c) => String(c[0])).join('\n');
       expect(output).toContain('450'); // all entities exported
 
       // Verify the file actually has all entities
@@ -970,7 +980,10 @@ describe('spatula export — advanced formats and features (integration)', () =>
     // Create project with entities at various quality levels
     const qualDir = mkdtempSync(join(tmpdir(), 'spatula-quality-'));
     try {
-      writeFileSync(join(qualDir, 'spatula.yaml'), 'name: Quality\nseeds:\n  - https://example.com\n');
+      writeFileSync(
+        join(qualDir, 'spatula.yaml'),
+        'name: Quality\nseeds:\n  - https://example.com\n',
+      );
       const dbDir = join(qualDir, '.spatula');
       mkdirSync(dbDir, { recursive: true });
 
@@ -981,15 +994,41 @@ describe('spatula export — advanced formats and features (integration)', () =>
 
       const adapter = new ProjectAdapter(db, pid);
       await adapter.schemaRepo.create({
-        jobId: pid, tenantId: pid, version: 1,
-        definition: { version: 1, fields: [{ name: 'title', type: 'string', required: true, description: 'T' }], fieldAliases: [], createdAt: new Date(), parentVersion: null },
+        jobId: pid,
+        tenantId: pid,
+        version: 1,
+        definition: {
+          version: 1,
+          fields: [{ name: 'title', type: 'string', required: true, description: 'T' }],
+          fieldAliases: [],
+          createdAt: new Date(),
+          parentVersion: null,
+        },
       });
 
       // 300 entities: 100 at 0.3 quality, 100 at 0.6, 100 at 0.9
       for (let i = 0; i < 100; i++) {
-        await adapter.entityRepo.create({ jobId: pid, tenantId: pid, mergedData: { title: `Low ${i}` }, provenance: {}, qualityScore: 0.3 });
-        await adapter.entityRepo.create({ jobId: pid, tenantId: pid, mergedData: { title: `Mid ${i}` }, provenance: {}, qualityScore: 0.6 });
-        await adapter.entityRepo.create({ jobId: pid, tenantId: pid, mergedData: { title: `High ${i}` }, provenance: {}, qualityScore: 0.9 });
+        await adapter.entityRepo.create({
+          jobId: pid,
+          tenantId: pid,
+          mergedData: { title: `Low ${i}` },
+          provenance: {},
+          qualityScore: 0.3,
+        });
+        await adapter.entityRepo.create({
+          jobId: pid,
+          tenantId: pid,
+          mergedData: { title: `Mid ${i}` },
+          provenance: {},
+          qualityScore: 0.6,
+        });
+        await adapter.entityRepo.create({
+          jobId: pid,
+          tenantId: pid,
+          mergedData: { title: `High ${i}` },
+          provenance: {},
+          qualityScore: 0.9,
+        });
       }
       close();
 
@@ -1000,7 +1039,7 @@ describe('spatula export — advanced formats and features (integration)', () =>
       const { runExportCommand } = await import('../../src/commands/export.js');
       await runExportCommand({ format: 'json', output: outputPath, minQuality: 0.5 });
 
-      const output = consoleSpy.mock.calls.map(c => String(c[0])).join('\n');
+      const output = consoleSpy.mock.calls.map((c) => String(c[0])).join('\n');
       // Should include 200 entities (100 mid + 100 high), exclude 100 low
       expect(output).toContain('200');
 

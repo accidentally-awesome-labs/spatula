@@ -639,8 +639,22 @@ describe('processCrawlJob', () => {
     it('calls linkEvaluator.evaluate when evaluator is provided', async () => {
       const mockEvaluator = {
         evaluate: vi.fn().mockResolvedValue([
-          { url: 'https://example.com/product/2', text: 'Product 2', relevanceScore: 0.9, expectedContent: 'single_entry', priority: 'high', reasoning: 'Product page' },
-          { url: 'https://example.com/product/3', text: 'Product 3', relevanceScore: 0.8, expectedContent: 'single_entry', priority: 'medium', reasoning: 'Product page' },
+          {
+            url: 'https://example.com/product/2',
+            text: 'Product 2',
+            relevanceScore: 0.9,
+            expectedContent: 'single_entry',
+            priority: 'high',
+            reasoning: 'Product page',
+          },
+          {
+            url: 'https://example.com/product/3',
+            text: 'Product 3',
+            relevanceScore: 0.8,
+            expectedContent: 'single_entry',
+            priority: 'medium',
+            reasoning: 'Product page',
+          },
         ]),
       };
       (deps as any).linkEvaluator = mockEvaluator;
@@ -666,8 +680,22 @@ describe('processCrawlJob', () => {
     it('filters out links below 0.3 relevance threshold', async () => {
       const mockEvaluator = {
         evaluate: vi.fn().mockResolvedValue([
-          { url: 'https://example.com/product/2', text: 'Product 2', relevanceScore: 0.9, expectedContent: 'single_entry', priority: 'high', reasoning: 'Product page' },
-          { url: 'https://example.com/product/3', text: 'Product 3', relevanceScore: 0.1, expectedContent: 'unknown', priority: 'low', reasoning: 'About page' },
+          {
+            url: 'https://example.com/product/2',
+            text: 'Product 2',
+            relevanceScore: 0.9,
+            expectedContent: 'single_entry',
+            priority: 'high',
+            reasoning: 'Product page',
+          },
+          {
+            url: 'https://example.com/product/3',
+            text: 'Product 3',
+            relevanceScore: 0.1,
+            expectedContent: 'unknown',
+            priority: 'low',
+            reasoning: 'About page',
+          },
         ]),
       };
       (deps as any).linkEvaluator = mockEvaluator;
@@ -685,7 +713,14 @@ describe('processCrawlJob', () => {
     it('maps high priority to BullMQ priority 1', async () => {
       const mockEvaluator = {
         evaluate: vi.fn().mockResolvedValue([
-          { url: 'https://example.com/product/2', text: 'Product 2', relevanceScore: 0.9, expectedContent: 'single_entry', priority: 'high', reasoning: 'Product page' },
+          {
+            url: 'https://example.com/product/2',
+            text: 'Product 2',
+            relevanceScore: 0.9,
+            expectedContent: 'single_entry',
+            priority: 'high',
+            reasoning: 'Product page',
+          },
         ]),
       };
       (deps as any).linkEvaluator = mockEvaluator;
@@ -703,7 +738,14 @@ describe('processCrawlJob', () => {
     it('maps medium priority to BullMQ priority 5', async () => {
       const mockEvaluator = {
         evaluate: vi.fn().mockResolvedValue([
-          { url: 'https://example.com/product/2', text: 'Product 2', relevanceScore: 0.8, expectedContent: 'listing', priority: 'medium', reasoning: 'Listing page' },
+          {
+            url: 'https://example.com/product/2',
+            text: 'Product 2',
+            relevanceScore: 0.8,
+            expectedContent: 'listing',
+            priority: 'medium',
+            reasoning: 'Listing page',
+          },
         ]),
       };
       (deps as any).linkEvaluator = mockEvaluator;
@@ -721,7 +763,14 @@ describe('processCrawlJob', () => {
     it('maps low priority to BullMQ priority 10', async () => {
       const mockEvaluator = {
         evaluate: vi.fn().mockResolvedValue([
-          { url: 'https://example.com/product/2', text: 'Product 2', relevanceScore: 0.5, expectedContent: 'unknown', priority: 'low', reasoning: 'Low priority' },
+          {
+            url: 'https://example.com/product/2',
+            text: 'Product 2',
+            relevanceScore: 0.5,
+            expectedContent: 'unknown',
+            priority: 'low',
+            reasoning: 'Low priority',
+          },
         ]),
       };
       (deps as any).linkEvaluator = mockEvaluator;
@@ -762,9 +811,11 @@ describe('processCrawlJob', () => {
         getQuotas: vi.fn().mockResolvedValue({ maxPagesPerJob: 10 }),
       };
       // Add findByJob to taskRepo since it's not in the base mock
-      (deps.taskRepo as any).findByJob = vi.fn().mockResolvedValue(
-        Array.from({ length: 10 }, (_, i) => ({ id: `task-${i}`, status: 'completed' })),
-      );
+      (deps.taskRepo as any).findByJob = vi
+        .fn()
+        .mockResolvedValue(
+          Array.from({ length: 10 }, (_, i) => ({ id: `task-${i}`, status: 'completed' })),
+        );
 
       await processCrawlJob(data, deps);
 
@@ -777,9 +828,11 @@ describe('processCrawlJob', () => {
       (deps as any).tenantRepo = {
         getQuotas: vi.fn().mockResolvedValue({ maxPagesPerJob: 100 }),
       };
-      (deps.taskRepo as any).findByJob = vi.fn().mockResolvedValue(
-        Array.from({ length: 5 }, (_, i) => ({ id: `task-${i}`, status: 'completed' })),
-      );
+      (deps.taskRepo as any).findByJob = vi
+        .fn()
+        .mockResolvedValue(
+          Array.from({ length: 5 }, (_, i) => ({ id: `task-${i}`, status: 'completed' })),
+        );
 
       await processCrawlJob(data, deps);
 
@@ -906,5 +959,4 @@ describe('processCrawlJob', () => {
       expect(crawlProgressCalls.length).toBe(0);
     });
   });
-
 });

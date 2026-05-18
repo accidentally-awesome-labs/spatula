@@ -101,19 +101,19 @@ flowchart LR
 
 Spatula is interface-driven — every major component is a contract with pluggable implementations.
 
-| Interface | File | Implementations |
-|-----------|------|-----------------|
-| `Crawler` | `packages/core/src/interfaces/crawler.ts` | `PlaywrightCrawler`, `FirecrawlCrawler` |
-| `Extractor` | `packages/core/src/interfaces/extractor.ts` | `LLMExtractor`, `CssExtractor` |
-| `LLMClient` | `packages/core/src/interfaces/llm-client.ts` | `OpenRouterClient`, `OllamaClient`, `CircuitBreakerLLMClient` |
-| `ContentStore` | `packages/core/src/interfaces/content-store.ts` | `FilesystemContentStore`, `S3ContentStore` |
-| `DataSource` | `packages/core/src/interfaces/data-source.ts` | `LocalDataSource` (SQLite), API client (planned) |
-| `SchemaEvolver` | `packages/core/src/interfaces/schema-evolver.ts` | `LLMSchemaEvolver` |
-| `Reconciler` | `packages/core/src/interfaces/reconciler.ts` | `LLMReconciler` |
-| `Exporter` | `packages/core/src/interfaces/exporter.ts` | `JsonExporter`, `CsvExporter`, `ParquetExporter`, `SqliteExporter`, `DuckDbExporter` |
-| `ActionExecutor` | `packages/core/src/interfaces/action-executor.ts` | Pipeline action executor |
-| `ConfigExecutor` | `packages/core/src/interfaces/config-executor.ts` | Config action executor |
-| `Orchestrator` | `packages/core/src/interfaces/orchestrator.ts` | `CrawlOrchestrator`, `SchemaOrchestrator`, `ReconcileOrchestrator`, `ExportOrchestrator` |
+| Interface        | File                                              | Implementations                                                                          |
+| ---------------- | ------------------------------------------------- | ---------------------------------------------------------------------------------------- |
+| `Crawler`        | `packages/core/src/interfaces/crawler.ts`         | `PlaywrightCrawler`, `FirecrawlCrawler`                                                  |
+| `Extractor`      | `packages/core/src/interfaces/extractor.ts`       | `LLMExtractor`, `CssExtractor`                                                           |
+| `LLMClient`      | `packages/core/src/interfaces/llm-client.ts`      | `OpenRouterClient`, `OllamaClient`, `CircuitBreakerLLMClient`                            |
+| `ContentStore`   | `packages/core/src/interfaces/content-store.ts`   | `FilesystemContentStore`, `S3ContentStore`                                               |
+| `DataSource`     | `packages/core/src/interfaces/data-source.ts`     | `LocalDataSource` (SQLite), API client (planned)                                         |
+| `SchemaEvolver`  | `packages/core/src/interfaces/schema-evolver.ts`  | `LLMSchemaEvolver`                                                                       |
+| `Reconciler`     | `packages/core/src/interfaces/reconciler.ts`      | `LLMReconciler`                                                                          |
+| `Exporter`       | `packages/core/src/interfaces/exporter.ts`        | `JsonExporter`, `CsvExporter`, `ParquetExporter`, `SqliteExporter`, `DuckDbExporter`     |
+| `ActionExecutor` | `packages/core/src/interfaces/action-executor.ts` | Pipeline action executor                                                                 |
+| `ConfigExecutor` | `packages/core/src/interfaces/config-executor.ts` | Config action executor                                                                   |
+| `Orchestrator`   | `packages/core/src/interfaces/orchestrator.ts`    | `CrawlOrchestrator`, `SchemaOrchestrator`, `ReconcileOrchestrator`, `ExportOrchestrator` |
 
 ### Dual Execution Model
 
@@ -130,17 +130,17 @@ All data mutations flow through typed **actions**. Actions are proposals that ma
 
 ### Action Categories
 
-| Category | Count | Examples |
-|----------|-------|---------|
-| **Schema** | 9 | `ADD_FIELD`, `MODIFY_FIELD`, `REMOVE_FIELD`, `RENAME_FIELD`, `SPLIT_FIELD`, `GROUP_FIELDS`, `MERGE_FIELDS`, `RECOMMEND_TABLE_STRUCTURE`, `DERIVE_FIELD` |
-| **Normalization** | 2 | `SET_NORMALIZATION_RULE`, `UPDATE_ENUM_MAP` |
-| **Category** | 3 | `DEFINE_CATEGORY`, `ASSIGN_CATEGORY_FIELDS`, `CLASSIFY_PAGE` |
-| **Crawl** | 1 | `ENQUEUE_LINKS` |
-| **Reconciliation** | 7 | `HINT_ENTITY_MATCH`, `MATCH_ENTITIES`, `SPLIT_ENTITIES`, `RESOLVE_CONFLICT`, `INFER_VALUE`, `CORRECT_VALUE`, `SET_SOURCE_TRUST` |
-| **Reprocessing** | 1 | `REPROCESS_EXTRACTION` |
-| **Quality** | 1 | `FLAG_ANOMALY` |
-| **Documentation** | 1 | `GENERATE_DOCUMENTATION` |
-| **Config** | 30 | Seed management, field configuration, crawl settings, LLM tuning, export preferences |
+| Category           | Count | Examples                                                                                                                                                |
+| ------------------ | ----- | ------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Schema**         | 9     | `ADD_FIELD`, `MODIFY_FIELD`, `REMOVE_FIELD`, `RENAME_FIELD`, `SPLIT_FIELD`, `GROUP_FIELDS`, `MERGE_FIELDS`, `RECOMMEND_TABLE_STRUCTURE`, `DERIVE_FIELD` |
+| **Normalization**  | 2     | `SET_NORMALIZATION_RULE`, `UPDATE_ENUM_MAP`                                                                                                             |
+| **Category**       | 3     | `DEFINE_CATEGORY`, `ASSIGN_CATEGORY_FIELDS`, `CLASSIFY_PAGE`                                                                                            |
+| **Crawl**          | 1     | `ENQUEUE_LINKS`                                                                                                                                         |
+| **Reconciliation** | 7     | `HINT_ENTITY_MATCH`, `MATCH_ENTITIES`, `SPLIT_ENTITIES`, `RESOLVE_CONFLICT`, `INFER_VALUE`, `CORRECT_VALUE`, `SET_SOURCE_TRUST`                         |
+| **Reprocessing**   | 1     | `REPROCESS_EXTRACTION`                                                                                                                                  |
+| **Quality**        | 1     | `FLAG_ANOMALY`                                                                                                                                          |
+| **Documentation**  | 1     | `GENERATE_DOCUMENTATION`                                                                                                                                |
+| **Config**         | 30    | Seed management, field configuration, crawl settings, LLM tuning, export preferences                                                                    |
 
 **Total: 55 action types** (25 pipeline + 30 config).
 
@@ -148,26 +148,26 @@ All data mutations flow through typed **actions**. Actions are proposals that ma
 
 Each project defines a `safety` level controlling how actions are handled:
 
-| Level | Behavior |
-|-------|----------|
-| `trust_ai` | All actions auto-approved |
+| Level      | Behavior                                            |
+| ---------- | --------------------------------------------------- |
+| `trust_ai` | All actions auto-approved                           |
 | `balanced` | Low-risk auto-approved, high-risk queued for review |
-| `cautious` | Most actions queued for review |
-| `manual` | All actions queued for review |
+| `cautious` | Most actions queued for review                      |
+| `manual`   | All actions queued for review                       |
 
 ## LLM Usage Map
 
 LLM inference is used at 8 decision points, each routable to a different model tier:
 
-| Task | Purpose | Default Tier | Why |
-|------|---------|-------------|-----|
-| `pageRelevance` | Is this page about our target data? | Fast (Haiku) | High volume, simple yes/no |
-| `linkEvaluation` | Should we follow this link? | Fast (Haiku) | High volume, scoring task |
-| `extraction` | Extract structured fields from page | Primary (Sonnet) | Core accuracy requirement |
-| `schemaEvolution` | Propose new fields from unmapped data | Primary (Sonnet) | Complex reasoning |
-| `entityMatching` | Are these the same real-world entity? | Primary (Sonnet) | Fuzzy matching |
-| `conflictResolution` | Which value is correct when sources disagree? | Primary (Sonnet) | Judgment call |
-| `qualityAudit` | Verify extraction quality | Primary (Sonnet) | Accuracy check |
-| `documentation` | Generate field descriptions | Fast (Haiku) | Simple text generation |
+| Task                 | Purpose                                       | Default Tier     | Why                        |
+| -------------------- | --------------------------------------------- | ---------------- | -------------------------- |
+| `pageRelevance`      | Is this page about our target data?           | Fast (Haiku)     | High volume, simple yes/no |
+| `linkEvaluation`     | Should we follow this link?                   | Fast (Haiku)     | High volume, scoring task  |
+| `extraction`         | Extract structured fields from page           | Primary (Sonnet) | Core accuracy requirement  |
+| `schemaEvolution`    | Propose new fields from unmapped data         | Primary (Sonnet) | Complex reasoning          |
+| `entityMatching`     | Are these the same real-world entity?         | Primary (Sonnet) | Fuzzy matching             |
+| `conflictResolution` | Which value is correct when sources disagree? | Primary (Sonnet) | Judgment call              |
+| `qualityAudit`       | Verify extraction quality                     | Primary (Sonnet) | Accuracy check             |
+| `documentation`      | Generate field descriptions                   | Fast (Haiku)     | Simple text generation     |
 
 Model routing is configured per-project in `spatula.yaml` under `llm.overrides`. The `model-router.ts` resolves the model for each task by checking: task-specific override > project default > global config default.

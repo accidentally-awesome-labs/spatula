@@ -1,5 +1,8 @@
 import { describe, it, expect } from 'vitest';
-import { formatCheckResults, determineCategoriesFromContext } from '../../../src/commands/doctor.js';
+import {
+  formatCheckResults,
+  determineCategoriesFromContext,
+} from '../../../src/commands/doctor.js';
 
 describe('spatula doctor', () => {
   it('formats pass results', () => {

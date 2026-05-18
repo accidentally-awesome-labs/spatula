@@ -3,9 +3,15 @@
   "version": "0.0.1",
   "description": "Command-line interface and TUI for Spatula",
   "license": "MIT",
-  "repository": { "type": "git", "url": "https://github.com/spatulaai/spatula.git", "directory": "apps/cli" },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/spatulaai/spatula.git",
+    "directory": "apps/cli"
+  },
   "homepage": "https://github.com/spatulaai/spatula#readme",
-  "bugs": { "url": "https://github.com/spatulaai/spatula/issues" },
+  "bugs": {
+    "url": "https://github.com/spatulaai/spatula/issues"
+  },
   "private": true,
   "type": "module",
   "bin": {

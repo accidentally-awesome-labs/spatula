@@ -156,9 +156,7 @@ describe('extraction verification', () => {
   it('extracted product entity with correct fields', async (ctx) => {
     requirePlaywright(ctx);
     const entities = await harness.dataSource.getEntities({ limit: 50, offset: 0 });
-    const widgetPro = entities.data.find(
-      (e) => (e.mergedData as any).title === 'Widget Pro',
-    );
+    const widgetPro = entities.data.find((e) => (e.mergedData as any).title === 'Widget Pro');
     expect(widgetPro).toBeDefined();
     expect((widgetPro!.mergedData as any).price).toBeDefined();
   });
@@ -166,9 +164,7 @@ describe('extraction verification', () => {
   it('extracted recipe entity with category-specific fields', async (ctx) => {
     requirePlaywright(ctx);
     const entities = await harness.dataSource.getEntities({ limit: 50, offset: 0 });
-    const carbonara = entities.data.find(
-      (e) => (e.mergedData as any).title === 'Pasta Carbonara',
-    );
+    const carbonara = entities.data.find((e) => (e.mergedData as any).title === 'Pasta Carbonara');
     expect(carbonara).toBeDefined();
   });
 
@@ -189,9 +185,7 @@ describe('extraction verification', () => {
       ((e.mergedData as any).title ?? '').includes('Review'),
     );
     if (review) {
-      const products = entities.data.filter(
-        (e) => (e.mergedData as any).title === 'Widget Pro',
-      );
+      const products = entities.data.filter((e) => (e.mergedData as any).title === 'Widget Pro');
       if (products.length > 0) {
         expect(review.qualityScore).toBeLessThanOrEqual(products[0].qualityScore);
       }
@@ -214,9 +208,7 @@ describe('reconciliation verification', () => {
   it('merged duplicate Widget Pro entities', async (ctx) => {
     requirePlaywright(ctx);
     const entities = await harness.dataSource.getEntities({ limit: 50, offset: 0 });
-    const widgetPros = entities.data.filter(
-      (e) => (e.mergedData as any).title === 'Widget Pro',
-    );
+    const widgetPros = entities.data.filter((e) => (e.mergedData as any).title === 'Widget Pro');
     // The mock entity matcher groups by title, so both Widget Pro extractions
     // (from /products/widget-pro and /products/widget-pro-deluxe) merge into one.
     expect(widgetPros).toHaveLength(1);
@@ -234,9 +226,7 @@ describe('reconciliation verification', () => {
   it('singleton extractions form individual entities', async (ctx) => {
     requirePlaywright(ctx);
     const entities = await harness.dataSource.getEntities({ limit: 50, offset: 0 });
-    const carbonara = entities.data.find(
-      (e) => (e.mergedData as any).title === 'Pasta Carbonara',
-    );
+    const carbonara = entities.data.find((e) => (e.mergedData as any).title === 'Pasta Carbonara');
     expect(carbonara).toBeDefined();
   });
 });
@@ -379,64 +369,53 @@ describe('cross-command verification', () => {
 // ===========================================================================
 
 describe('re-run and lifecycle', () => {
-  it(
-    're-run with config change only crawls new pages',
-    async (ctx) => {
-      requirePlaywright(ctx);
-      // Add a new seed URL to the project YAML by inserting after the last seed
-      const yamlPath = join(project.projectDir, 'spatula.yaml');
-      const yaml = readFileSync(yamlPath, 'utf-8');
-      const newSeedUrl = `http://localhost:${fixtureServer.port}/slow`;
-      // Insert the new seed URL after the last existing seed line
-      const updatedYaml = yaml.replace(
-        /(seeds:\n(?:  - [^\n]+\n)+)/,
-        `$1  - ${newSeedUrl}\n`,
-      );
-      writeFileSync(yamlPath, updatedYaml);
+  it('re-run with config change only crawls new pages', async (ctx) => {
+    requirePlaywright(ctx);
+    // Add a new seed URL to the project YAML by inserting after the last seed
+    const yamlPath = join(project.projectDir, 'spatula.yaml');
+    const yaml = readFileSync(yamlPath, 'utf-8');
+    const newSeedUrl = `http://localhost:${fixtureServer.port}/slow`;
+    // Insert the new seed URL after the last existing seed line
+    const updatedYaml = yaml.replace(/(seeds:\n(?:  - [^\n]+\n)+)/, `$1  - ${newSeedUrl}\n`);
+    writeFileSync(yamlPath, updatedYaml);
 
-      mockOllama.resetLog();
+    mockOllama.resetLog();
 
-      const harness2 = await buildPipelineRunner(project.projectDir, {
-        ollamaBaseUrl: `http://localhost:${mockOllama.port}`,
-        fixturePort: fixtureServer.port,
-      });
+    const harness2 = await buildPipelineRunner(project.projectDir, {
+      ollamaBaseUrl: `http://localhost:${mockOllama.port}`,
+      fixturePort: fixtureServer.port,
+    });
 
-      await harness2.runner.run();
-      await harness2.closeAll();
+    await harness2.runner.run();
+    await harness2.closeAll();
 
-      // Should have made some LLM calls for the newly added content
-      expect(mockOllama.getCallCount()).toBeGreaterThan(0);
-    },
-    120_000,
-  );
+    // Should have made some LLM calls for the newly added content
+    expect(mockOllama.getCallCount()).toBeGreaterThan(0);
+  }, 120_000);
 
-  it(
-    'graceful stop completes without orphaned tasks',
-    async (ctx) => {
-      requirePlaywright(ctx);
-      const stopProject = createFixtureProject(fixtureServer.port);
-      const stopHarness = await buildPipelineRunner(stopProject.projectDir, {
-        ollamaBaseUrl: `http://localhost:${mockOllama.port}`,
-        fixturePort: fixtureServer.port,
-      });
+  it('graceful stop completes without orphaned tasks', async (ctx) => {
+    requirePlaywright(ctx);
+    const stopProject = createFixtureProject(fixtureServer.port);
+    const stopHarness = await buildPipelineRunner(stopProject.projectDir, {
+      ollamaBaseUrl: `http://localhost:${mockOllama.port}`,
+      fixturePort: fixtureServer.port,
+    });
 
-      // Start the pipeline, then stop after a brief delay
-      const runPromise = stopHarness.runner.run();
-      await new Promise((r) => setTimeout(r, 2000));
-      stopHarness.runner.stop();
-      await runPromise;
+    // Start the pipeline, then stop after a brief delay
+    const runPromise = stopHarness.runner.run();
+    await new Promise((r) => setTimeout(r, 2000));
+    stopHarness.runner.stop();
+    await runPromise;
 
-      // Verify run completed without an error status
-      const status = await stopHarness.dataSource.getStatus();
-      if (status.lastRun) {
-        expect(status.lastRun.status).toBe('completed');
-      }
+    // Verify run completed without an error status
+    const status = await stopHarness.dataSource.getStatus();
+    if (status.lastRun) {
+      expect(status.lastRun.status).toBe('completed');
+    }
 
-      await stopHarness.closeAll();
-      stopProject.cleanup();
-    },
-    120_000,
-  );
+    await stopHarness.closeAll();
+    stopProject.cleanup();
+  }, 120_000);
 });
 
 // ===========================================================================

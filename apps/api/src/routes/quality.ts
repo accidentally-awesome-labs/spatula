@@ -7,17 +7,28 @@ const jobIdParam = z.object({
 });
 
 const getQualityRoute = createRoute({
-  method: 'get', path: '/', tags: ['Quality'],
+  method: 'get',
+  path: '/',
+  tags: ['Quality'],
   summary: 'Get quality score aggregation for a job',
   request: { params: jobIdParam },
   responses: {
-    200: jsonContent(z.object({
-      data: z.object({
-        entityCount: z.number(), averageQuality: z.number(),
-        distribution: z.object({ excellent: z.number(), good: z.number(), fair: z.number(), poor: z.number() }),
-        fieldCompleteness: z.record(z.number()),
+    200: jsonContent(
+      z.object({
+        data: z.object({
+          entityCount: z.number(),
+          averageQuality: z.number(),
+          distribution: z.object({
+            excellent: z.number(),
+            good: z.number(),
+            fair: z.number(),
+            poor: z.number(),
+          }),
+          fieldCompleteness: z.record(z.number()),
+        }),
       }),
-    }), 'Quality aggregation'),
+      'Quality aggregation',
+    ),
   },
 });
 

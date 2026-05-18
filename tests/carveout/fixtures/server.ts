@@ -3,12 +3,7 @@ import { createServer, type Server, type IncomingMessage, type ServerResponse } 
 import { createApp } from '../../../apps/api/src/app.js';
 import { ApiKeyAuthProvider } from '../../../apps/api/src/auth/api-key-provider.js';
 import type { AppDeps } from '../../../apps/api/src/types.js';
-import {
-  createDatabasePool,
-  TenantRepository,
-  ApiKeyRepository,
-  JobRepository,
-} from '@spatula/db';
+import { createDatabasePool, TenantRepository, ApiKeyRepository, JobRepository } from '@spatula/db';
 import type { Pool } from 'pg';
 
 export interface ForwardTestHandle {
@@ -23,8 +18,8 @@ export interface ForwardTestHandle {
 
 export interface SeededIdentity {
   tenantId: string;
-  apiKey: string;        // plaintext sk_live_* token (use as Bearer)
-  apiKeyId: string;      // for cleanup
+  apiKey: string; // plaintext sk_live_* token (use as Bearer)
+  apiKeyId: string; // for cleanup
   scopes: string[];
 }
 
@@ -114,7 +109,9 @@ export async function startCarveoutServer(databaseUrl: string): Promise<ForwardT
     } catch (err) {
       res.statusCode = 500;
       res.setHeader('content-type', 'application/json');
-      res.end(JSON.stringify({ error: { code: 'ADAPTER_ERROR', message: (err as Error).message } }));
+      res.end(
+        JSON.stringify({ error: { code: 'ADAPTER_ERROR', message: (err as Error).message } }),
+      );
     }
   });
 

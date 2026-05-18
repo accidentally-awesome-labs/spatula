@@ -9,6 +9,7 @@
 **Tech Stack:** TypeScript, Vitest, Ollama REST API (fetch-based), Playwright proxy/cookie APIs, Zod schema extensions
 
 **Spec references:**
+
 - Phase 12 spec: Workstream J sections 11.2 (Ollama), 11.4 (Proxy/Sessions)
 - Phase 13 spec: section 11.2 (Ollama integration details)
 - File: `docs/superpowers/specs/2026-03-21-phase-12-production-readiness-design.md`
@@ -19,30 +20,31 @@
 
 ### New Files
 
-| File | Responsibility |
-|------|---------------|
-| `packages/core/src/llm/ollama-client.ts` | Ollama LLM client implementing `LLMClient` interface |
-| `packages/core/src/llm/llm-factory.ts` | Factory function to create OpenRouter or Ollama client |
-| `packages/core/tests/unit/llm/ollama-client.test.ts` | Tests for Ollama client |
-| `packages/core/tests/unit/llm/llm-factory.test.ts` | Tests for factory |
-| `packages/core/tests/unit/crawlers/proxy-cookies.test.ts` | Tests for proxy/cookie support in crawlers |
+| File                                                      | Responsibility                                         |
+| --------------------------------------------------------- | ------------------------------------------------------ |
+| `packages/core/src/llm/ollama-client.ts`                  | Ollama LLM client implementing `LLMClient` interface   |
+| `packages/core/src/llm/llm-factory.ts`                    | Factory function to create OpenRouter or Ollama client |
+| `packages/core/tests/unit/llm/ollama-client.test.ts`      | Tests for Ollama client                                |
+| `packages/core/tests/unit/llm/llm-factory.test.ts`        | Tests for factory                                      |
+| `packages/core/tests/unit/crawlers/proxy-cookies.test.ts` | Tests for proxy/cookie support in crawlers             |
 
 ### Modified Files
 
-| File | Change |
-|------|--------|
-| `packages/core/src/interfaces/crawler.ts` | Add `proxy` and `cookies` to `CrawlOptions` schema |
-| `packages/core/src/types/job.ts` | Add `proxy` and `cookies` to `CrawlConfig` schema |
-| `packages/core/src/crawlers/playwright-crawler.ts` | Pass proxy to `browser.newContext()`, set cookies |
-| `packages/core/src/crawlers/firecrawl-crawler.ts` | Convert cookies to `Cookie` header |
-| `packages/core/src/llm/types.ts` | Add `OllamaClientOptions` type |
-| `packages/core/src/llm/index.ts` | Export new files |
+| File                                               | Change                                             |
+| -------------------------------------------------- | -------------------------------------------------- |
+| `packages/core/src/interfaces/crawler.ts`          | Add `proxy` and `cookies` to `CrawlOptions` schema |
+| `packages/core/src/types/job.ts`                   | Add `proxy` and `cookies` to `CrawlConfig` schema  |
+| `packages/core/src/crawlers/playwright-crawler.ts` | Pass proxy to `browser.newContext()`, set cookies  |
+| `packages/core/src/crawlers/firecrawl-crawler.ts`  | Convert cookies to `Cookie` header                 |
+| `packages/core/src/llm/types.ts`                   | Add `OllamaClientOptions` type                     |
+| `packages/core/src/llm/index.ts`                   | Export new files                                   |
 
 ---
 
 ## Task 1: Ollama Client Types
 
 **Files:**
+
 - Modify: `packages/core/src/llm/types.ts`
 
 - [ ] **Step 1: Add OllamaClientOptions to types.ts**
@@ -51,8 +53,8 @@ Append to the existing file:
 
 ```typescript
 export interface OllamaClientOptions {
-  baseUrl?: string;       // Default: 'http://localhost:11434'
-  timeoutMs?: number;     // Default: 120000 (local models are slower)
+  baseUrl?: string; // Default: 'http://localhost:11434'
+  timeoutMs?: number; // Default: 120000 (local models are slower)
 }
 
 export type LLMProvider = 'openrouter' | 'ollama';
@@ -76,6 +78,7 @@ git commit -m "feat(core): add Ollama client types and LLM factory config"
 ## Task 2: Ollama Client Implementation
 
 **Files:**
+
 - Create: `packages/core/src/llm/ollama-client.ts`
 - Create: `packages/core/tests/unit/llm/ollama-client.test.ts`
 
@@ -174,10 +177,7 @@ describe('OllamaClient', () => {
     const client = new OllamaClient();
     await client.complete(defaultRequest);
 
-    expect(fetch).toHaveBeenCalledWith(
-      'http://localhost:11434/api/chat',
-      expect.any(Object),
-    );
+    expect(fetch).toHaveBeenCalledWith('http://localhost:11434/api/chat', expect.any(Object));
   });
 
   it('sets json format when jsonMode is true', async () => {
@@ -405,6 +405,7 @@ git commit -m "feat(core): add Ollama LLM client for local/offline inference"
 ## Task 3: LLM Provider Factory
 
 **Files:**
+
 - Create: `packages/core/src/llm/llm-factory.ts`
 - Create: `packages/core/tests/unit/llm/llm-factory.test.ts`
 - Modify: `packages/core/src/llm/index.ts`
@@ -494,7 +495,7 @@ export function createLLMClient(config: LLMFactoryConfig): LLMClient {
       if (!apiKey) {
         throw new ConfigError(
           'OpenRouter API key is required when provider is "openrouter". ' +
-          'Set OPENROUTER_API_KEY or use provider "ollama" for local inference.',
+            'Set OPENROUTER_API_KEY or use provider "ollama" for local inference.',
         );
       }
       return new OpenRouterClient({
@@ -551,6 +552,7 @@ git commit -m "feat(core): add LLM provider factory for OpenRouter/Ollama select
 ## Task 4: Proxy & Cookie Support in CrawlOptions
 
 **Files:**
+
 - Modify: `packages/core/src/interfaces/crawler.ts`
 - Modify: `packages/core/src/types/job.ts`
 
@@ -565,20 +567,26 @@ export const CrawlOptions = z.object({
   headers: z.record(z.string()).optional(),
   userAgent: z.string().optional(),
   // Proxy configuration
-  proxy: z.object({
-    url: z.string(),
-    username: z.string().optional(),
-    password: z.string().optional(),
-  }).optional(),
+  proxy: z
+    .object({
+      url: z.string(),
+      username: z.string().optional(),
+      password: z.string().optional(),
+    })
+    .optional(),
   // Cookie injection
-  cookies: z.array(z.object({
-    name: z.string(),
-    value: z.string(),
-    domain: z.string(),
-    path: z.string().default('/'),
-    httpOnly: z.boolean().default(false),
-    secure: z.boolean().default(false),
-  })).optional(),
+  cookies: z
+    .array(
+      z.object({
+        name: z.string(),
+        value: z.string(),
+        domain: z.string(),
+        path: z.string().default('/'),
+        httpOnly: z.boolean().default(false),
+        secure: z.boolean().default(false),
+      }),
+    )
+    .optional(),
 });
 ```
 
@@ -605,18 +613,24 @@ export const CrawlConfig = z.object({
   concurrency: z.number().min(1).max(20).default(5),
   crawlerType: z.enum(['playwright', 'firecrawl']).default('playwright'),
   // Proxy configuration
-  proxy: z.object({
-    url: z.string(),
-    username: z.string().optional(),
-    password: z.string().optional(),
-  }).optional(),
+  proxy: z
+    .object({
+      url: z.string(),
+      username: z.string().optional(),
+      password: z.string().optional(),
+    })
+    .optional(),
   // Cookie injection
-  cookies: z.array(z.object({
-    name: z.string(),
-    value: z.string(),
-    domain: z.string(),
-    path: z.string().default('/'),
-  })).optional(),
+  cookies: z
+    .array(
+      z.object({
+        name: z.string(),
+        value: z.string(),
+        domain: z.string(),
+        path: z.string().default('/'),
+      }),
+    )
+    .optional(),
 });
 ```
 
@@ -642,6 +656,7 @@ git commit -m "feat(core): add proxy and cookie options to CrawlOptions and Craw
 ## Task 5: Playwright Proxy & Cookie Integration
 
 **Files:**
+
 - Modify: `packages/core/src/crawlers/playwright-crawler.ts`
 - Create: `packages/core/tests/unit/crawlers/proxy-cookies.test.ts`
 
@@ -723,7 +738,14 @@ describe('PlaywrightCrawler cookie support', () => {
     const options: CrawlOptions = {
       timeout: 30000,
       cookies: [
-        { name: 'session_id', value: 'abc123', domain: '.example.com', path: '/', httpOnly: false, secure: false },
+        {
+          name: 'session_id',
+          value: 'abc123',
+          domain: '.example.com',
+          path: '/',
+          httpOnly: false,
+          secure: false,
+        },
       ],
     };
 
@@ -823,6 +845,7 @@ git commit -m "feat(core): add proxy and cookie support to Playwright crawler"
 ## Task 6: Firecrawl Cookie Support
 
 **Files:**
+
 - Modify: `packages/core/src/crawlers/firecrawl-crawler.ts`
 
 - [ ] **Step 1: Add cookie-to-header conversion to Firecrawl crawler**
@@ -897,6 +920,7 @@ git commit -m "feat(core): add cookie-to-header support for Firecrawl crawler"
 ## Task 7: Integration Verification
 
 **Files:**
+
 - No new files — verification only
 
 - [ ] **Step 1: Run full core test suite**

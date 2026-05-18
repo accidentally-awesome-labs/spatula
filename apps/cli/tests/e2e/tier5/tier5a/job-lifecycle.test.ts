@@ -88,10 +88,7 @@ describe('Job Lifecycle', () => {
   it('3 — entities created by workers visible via API', async (ctx) => {
     if (!harness) return ctx.skip();
 
-    const res = await harness.app.request(
-      `/api/v1/jobs/${jobId}/entities`,
-      { headers: headers() },
-    );
+    const res = await harness.app.request(`/api/v1/jobs/${jobId}/entities`, { headers: headers() });
 
     expect(res.status).toBe(200);
     const body = await res.json();
@@ -103,10 +100,7 @@ describe('Job Lifecycle', () => {
   it('4 — schema discovered by workers visible via API', async (ctx) => {
     if (!harness) return ctx.skip();
 
-    const res = await harness.app.request(
-      `/api/v1/jobs/${jobId}/schema`,
-      { headers: headers() },
-    );
+    const res = await harness.app.request(`/api/v1/jobs/${jobId}/schema`, { headers: headers() });
 
     // Schema may or may not have been created by the mock-driven schema
     // evolution workers. Accept both: (a) 200 with fields, or (b) 404.

@@ -23,10 +23,26 @@ describe('mapSchema', () => {
   it('maps all 8 field types for sqlite', () => {
     const cols = mapSchema(testSchema, 'sqlite');
     expect(cols).toHaveLength(8);
-    expect(cols.find((c) => c.name === 'title')).toEqual({ name: 'title', nativeType: 'TEXT', nullable: false });
-    expect(cols.find((c) => c.name === 'price')).toEqual({ name: 'price', nativeType: 'REAL', nullable: true });
-    expect(cols.find((c) => c.name === 'available')).toEqual({ name: 'available', nativeType: 'INTEGER', nullable: false });
-    expect(cols.find((c) => c.name === 'tags')).toEqual({ name: 'tags', nativeType: 'TEXT', nullable: true });
+    expect(cols.find((c) => c.name === 'title')).toEqual({
+      name: 'title',
+      nativeType: 'TEXT',
+      nullable: false,
+    });
+    expect(cols.find((c) => c.name === 'price')).toEqual({
+      name: 'price',
+      nativeType: 'REAL',
+      nullable: true,
+    });
+    expect(cols.find((c) => c.name === 'available')).toEqual({
+      name: 'available',
+      nativeType: 'INTEGER',
+      nullable: false,
+    });
+    expect(cols.find((c) => c.name === 'tags')).toEqual({
+      name: 'tags',
+      nativeType: 'TEXT',
+      nullable: true,
+    });
   });
 
   it('maps all 8 field types for duckdb', () => {

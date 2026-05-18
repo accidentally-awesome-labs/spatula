@@ -14,7 +14,9 @@ export class StreamingCsvExporter {
             const data = (entity as any).mergedData ?? entity;
             if (!headerWritten) {
               if (resolvedColumns.length === 0) resolvedColumns = Object.keys(data);
-              controller.enqueue(encoder.encode(resolvedColumns.map(csvEscapeHeader).join(',') + '\n'));
+              controller.enqueue(
+                encoder.encode(resolvedColumns.map(csvEscapeHeader).join(',') + '\n'),
+              );
               headerWritten = true;
             }
             const val = (v: unknown) => (v === null || v === undefined ? '' : String(v));

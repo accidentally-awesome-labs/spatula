@@ -28,14 +28,16 @@ export class FirecrawlCrawler implements Crawler {
 
     // Log proxy warning — Firecrawl uses its own IP rotation
     if (options?.proxy) {
-      logger.warn('Proxy configuration is ignored for Firecrawl crawler (uses built-in IP rotation)');
+      logger.warn(
+        'Proxy configuration is ignored for Firecrawl crawler (uses built-in IP rotation)',
+      );
     }
 
     // Convert cookies to Cookie header
     const headers: Record<string, string> = {};
     if (options?.cookies?.length) {
       headers.Cookie = options.cookies
-        .map(c => `${c.name}=${encodeURIComponent(c.value)}`)
+        .map((c) => `${c.name}=${encodeURIComponent(c.value)}`)
         .join('; ');
     }
 

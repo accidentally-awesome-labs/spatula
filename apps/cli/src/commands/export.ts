@@ -8,12 +8,7 @@
 import { existsSync, mkdirSync, statSync, writeFileSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 
-import type {
-  Exporter,
-  ExportFormat,
-  ExportOptions,
-  SchemaDefinition,
-} from '@spatula/core';
+import type { Exporter, ExportFormat, ExportOptions, SchemaDefinition } from '@spatula/core';
 import {
   JsonExporter,
   CsvExporter,
@@ -65,11 +60,7 @@ export function resolveOutputPath(
     return resolve(providedPath);
   }
 
-  const timestamp = new Date()
-    .toISOString()
-    .replace(/[:.]/g, '-')
-    .replace('T', '_')
-    .slice(0, 19);
+  const timestamp = new Date().toISOString().replace(/[:.]/g, '-').replace('T', '_').slice(0, 19);
 
   return join(projectRoot, '.spatula', 'exports', `${timestamp}.${format}`);
 }
@@ -118,9 +109,7 @@ export async function runExportCommand(opts: ExportCommandOptions = {}): Promise
     } | null;
 
     if (!schemaResult || !schemaResult.definition) {
-      console.error(
-        'No schema found. Run `spatula run` to crawl and build a schema first.',
-      );
+      console.error('No schema found. Run `spatula run` to crawl and build a schema first.');
       process.exit(1);
     }
 

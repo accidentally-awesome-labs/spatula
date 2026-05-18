@@ -99,7 +99,11 @@ Return ONLY the JSON array, no other text.`;
       const response = await this.llm.complete({
         model: this.model,
         messages: [
-          { role: 'system', content: 'You are a web crawl link evaluator. You evaluate links for relevance to data extraction jobs. Respond only with JSON.' },
+          {
+            role: 'system',
+            content:
+              'You are a web crawl link evaluator. You evaluate links for relevance to data extraction jobs. Respond only with JSON.',
+          },
           { role: 'user', content: prompt },
         ],
         temperature: 0.1,
@@ -108,7 +112,10 @@ Return ONLY the JSON array, no other text.`;
 
       return this.parseResponse(response.content, links);
     } catch (err) {
-      logger.warn({ err, linkCount: links.length }, 'LLM link evaluation failed, using fallback scores');
+      logger.warn(
+        { err, linkCount: links.length },
+        'LLM link evaluation failed, using fallback scores',
+      );
       return this.fallbackScores(links);
     }
   }
@@ -134,7 +141,13 @@ Return ONLY the JSON array, no other text.`;
             reasoning: String(evaluated.reasoning || ''),
           };
         }
-        return { ...link, relevanceScore: 0.5, expectedContent: 'unknown' as const, priority: 'medium' as const, reasoning: 'Not evaluated by LLM' };
+        return {
+          ...link,
+          relevanceScore: 0.5,
+          expectedContent: 'unknown' as const,
+          priority: 'medium' as const,
+          reasoning: 'Not evaluated by LLM',
+        };
       });
     } catch {
       logger.warn('Failed to parse LLM link evaluation response, using fallback');
@@ -159,7 +172,13 @@ function clamp(value: number, min: number, max: number): number {
   return Math.max(min, Math.min(max, value));
 }
 
-const VALID_CONTENT_TYPES = new Set(['single_entry', 'listing', 'pagination', 'category', 'unknown']);
+const VALID_CONTENT_TYPES = new Set([
+  'single_entry',
+  'listing',
+  'pagination',
+  'category',
+  'unknown',
+]);
 function validateExpectedContent(value: unknown): ExpectedContentType {
   return VALID_CONTENT_TYPES.has(value as string) ? (value as ExpectedContentType) : 'unknown';
 }

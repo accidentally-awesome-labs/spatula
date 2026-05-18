@@ -14,8 +14,16 @@ const mockEntity: EntityWithProvenance = {
       finalValue: 'Bose QC Ultra',
       provenanceType: 'merged',
       sources: [
-        { sourceUrl: 'https://amazon.com', rawValue: 'Bose QuietComfort Ultra', normalizedValue: 'Bose QC Ultra' },
-        { sourceUrl: 'https://bestbuy.com', rawValue: 'BOSE QC Ultra Headphones', normalizedValue: 'Bose QC Ultra' },
+        {
+          sourceUrl: 'https://amazon.com',
+          rawValue: 'Bose QuietComfort Ultra',
+          normalizedValue: 'Bose QC Ultra',
+        },
+        {
+          sourceUrl: 'https://bestbuy.com',
+          rawValue: 'BOSE QC Ultra Headphones',
+          normalizedValue: 'Bose QC Ultra',
+        },
       ],
       hadConflict: false,
       resolution: 'most_complete',

@@ -26,6 +26,7 @@ Tier 4 tests API routes with stubbed workers. Tier 5 closes the two biggest rema
 **New:** BullMQ workers started in-process via `new Worker(queueName, processor, { connection })`.
 
 **Worker dependencies:** The `WorkerDeps` interface requires ~20 fields:
+
 - **Real (from Postgres):** All repository instances (jobRepo, schemaRepo, entityRepo, taskRepo, extractionRepo, actionRepo, entitySourceRepo, sourceTrustRepo, exportRepo, tenantRepo, pageRepo)
 - **Real (from Redis):** BullMQ queues via `createQueues({ host, port, maxRetriesPerRequest: null })`
 - **Real (from Tier 2 infrastructure):** Fixture HTTP server (serves HTML pages), mock Ollama (canned LLM responses)
@@ -55,6 +56,7 @@ export async function startTestWorkers(opts: {
 ```
 
 Implementation:
+
 1. Start fixture server (from Tier 2) + mock Ollama (from Tier 2)
 2. Create Postgres pool + all repository instances
 3. Create Redis connection with `maxRetriesPerRequest: null`
@@ -67,6 +69,7 @@ Implementation:
 10. Return harness with `closeAll()` that stops workers → closes queues → closes crawler → closes Redis → closes pool
 
 **Completion polling helper:**
+
 ```typescript
 export async function waitForJobStatus(
   jobRepo: JobRepository,
@@ -76,6 +79,7 @@ export async function waitForJobStatus(
   timeoutMs: number = 60_000,
 ): Promise<string>;
 ```
+
 Polls every 500ms until job reaches one of `targetStatuses`, throws on timeout.
 
 **Note on `isValidCrawlUrl()`:** This function only filters child links discovered during crawling, NOT seed URLs. `JobManager.startJob()` enqueues seed URLs directly to BullMQ without calling `isValidCrawlUrl()`. The fixture server's localhost URL will be crawled as the seed URL without issues. Child links from the fixture pages pointing to localhost will be filtered out — this is acceptable for testing (the seed pages themselves are crawled).
@@ -84,66 +88,66 @@ Polls every 500ms until job reaches one of `targetStatuses`, throws on timeout.
 
 **Job Lifecycle (5):**
 
-| # | Test | Assertion |
-|---|------|-----------|
-| 1 | Create job via API → start → workers begin processing | Poll job status until 'running'. Verify crawl queue has pending jobs. |
-| 2 | Job completes after all pages crawled and reconciled | Poll until status 'completed'. Verify `totalPages > 0` in job stats. |
-| 3 | Entities created by workers visible via entity API | After completion, `GET /api/v1/jobs/{id}/entities` returns entities with mergedData. |
-| 4 | Schema discovered by workers visible via schema API | `GET /api/v1/jobs/{id}/schema` returns schema with fields beyond user-defined. |
-| 5 | Pause job → worker stops → resume → continues | Start job, poll until running, pause (PATCH), verify status 'paused', resume (PATCH), poll until completed. |
+| #   | Test                                                  | Assertion                                                                                                   |
+| --- | ----------------------------------------------------- | ----------------------------------------------------------------------------------------------------------- |
+| 1   | Create job via API → start → workers begin processing | Poll job status until 'running'. Verify crawl queue has pending jobs.                                       |
+| 2   | Job completes after all pages crawled and reconciled  | Poll until status 'completed'. Verify `totalPages > 0` in job stats.                                        |
+| 3   | Entities created by workers visible via entity API    | After completion, `GET /api/v1/jobs/{id}/entities` returns entities with mergedData.                        |
+| 4   | Schema discovered by workers visible via schema API   | `GET /api/v1/jobs/{id}/schema` returns schema with fields beyond user-defined.                              |
+| 5   | Pause job → worker stops → resume → continues         | Start job, poll until running, pause (PATCH), verify status 'paused', resume (PATCH), poll until completed. |
 
 **Export Processing (3):**
 
-| # | Test | Assertion |
-|---|------|-----------|
-| 6 | Create export via API → worker processes → completed | POST export, poll export status until 'completed', verify entityCount > 0. |
-| 7 | Download completed export returns file content | GET download endpoint returns non-empty content with correct content-type. |
-| 8 | Export with min-quality filter produces fewer entities | Create export with `minQuality: 0.8`, verify entityCount < total. |
+| #   | Test                                                   | Assertion                                                                  |
+| --- | ------------------------------------------------------ | -------------------------------------------------------------------------- |
+| 6   | Create export via API → worker processes → completed   | POST export, poll export status until 'completed', verify entityCount > 0. |
+| 7   | Download completed export returns file content         | GET download endpoint returns non-empty content with correct content-type. |
+| 8   | Export with min-quality filter produces fewer entities | Create export with `minQuality: 0.8`, verify entityCount < total.          |
 
 **Webhook Delivery (3):**
 
-| # | Test | Assertion |
-|---|------|-----------|
-| 9 | Job with webhook config → job completes → receiver gets POST | Create job with `webhooks: { url, events: ['job.completed'] }`, complete job, `webhookReceiver.waitForRequest()`. |
-| 10 | Webhook event has correct type and data | Verify `body.type === 'job.completed'`, `body.data.jobId` matches, `body.data.entityCount > 0`. |
-| 11 | Webhook has `X-Spatula-Signature` with secret | Create job with webhook secret, verify receiver request has `X-Spatula-Signature` header, verify HMAC-SHA256 matches. |
+| #   | Test                                                         | Assertion                                                                                                             |
+| --- | ------------------------------------------------------------ | --------------------------------------------------------------------------------------------------------------------- |
+| 9   | Job with webhook config → job completes → receiver gets POST | Create job with `webhooks: { url, events: ['job.completed'] }`, complete job, `webhookReceiver.waitForRequest()`.     |
+| 10  | Webhook event has correct type and data                      | Verify `body.type === 'job.completed'`, `body.data.jobId` matches, `body.data.entityCount > 0`.                       |
+| 11  | Webhook has `X-Spatula-Signature` with secret                | Create job with webhook secret, verify receiver request has `X-Spatula-Signature` header, verify HMAC-SHA256 matches. |
 
 **Dead Letter Queue (3):**
 
-| # | Test | Assertion |
-|---|------|-----------|
-| 12 | Job that fails all retries appears in DLQ | **Note:** The crawl worker catches all errors and returns normally — BullMQ never sees a failure for crawl jobs. Instead, test DLQ with a dedicated test worker: create a minimal BullMQ worker on a test queue that deliberately throws on every invocation. After retry exhaustion (configure 1 attempt), verify the DLQ handler inserts an entry. Then `GET /admin/dlq` returns the entry. This tests the DLQ plumbing without depending on production workers failing. |
-| 13 | DLQ retry re-enqueues to original queue | POST `/admin/dlq/:id/retry` → entry status becomes 'resolved' (resolution: 'retried'), job re-appears in queue. |
-| 14 | DLQ discard marks as resolved | POST `/admin/dlq/:id/discard` → entry resolution is 'discarded'. |
+| #   | Test                                      | Assertion                                                                                                                                                                                                                                                                                                                                                                                                                                                                  |
+| --- | ----------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 12  | Job that fails all retries appears in DLQ | **Note:** The crawl worker catches all errors and returns normally — BullMQ never sees a failure for crawl jobs. Instead, test DLQ with a dedicated test worker: create a minimal BullMQ worker on a test queue that deliberately throws on every invocation. After retry exhaustion (configure 1 attempt), verify the DLQ handler inserts an entry. Then `GET /admin/dlq` returns the entry. This tests the DLQ plumbing without depending on production workers failing. |
+| 13  | DLQ retry re-enqueues to original queue   | POST `/admin/dlq/:id/retry` → entry status becomes 'resolved' (resolution: 'retried'), job re-appears in queue.                                                                                                                                                                                                                                                                                                                                                            |
+| 14  | DLQ discard marks as resolved             | POST `/admin/dlq/:id/discard` → entry resolution is 'discarded'.                                                                                                                                                                                                                                                                                                                                                                                                           |
 
 **State Machine (3):**
 
-| # | Test | Assertion |
-|---|------|-----------|
-| 15 | Invalid state transition rejected | Try to transition completed job to 'running' → error response. |
-| 16 | Cancel running job → workers stop | Start job, cancel via API, verify status 'cancelled', no new crawl tasks processed after cancel. |
-| 17 | Concurrent job quota enforced | Start 2 jobs (default quota = 2), try to start 3rd → rejected with quota error. |
+| #   | Test                              | Assertion                                                                                        |
+| --- | --------------------------------- | ------------------------------------------------------------------------------------------------ |
+| 15  | Invalid state transition rejected | Try to transition completed job to 'running' → error response.                                   |
+| 16  | Cancel running job → workers stop | Start job, cancel via API, verify status 'cancelled', no new crawl tasks processed after cancel. |
+| 17  | Concurrent job quota enforced     | Start 2 jobs (default quota = 2), try to start 3rd → rejected with quota error.                  |
 
 **Graceful Shutdown (2):**
 
-| # | Test | Assertion |
-|---|------|-----------|
-| 18 | Worker close mid-job → finishes current, no orphans | Start job, wait for 1 crawl task to begin processing, call `worker.close()`, verify the in-progress task completes, no tasks left with `in_progress` status. |
-| 19 | Config diff re-run → only new URLs crawled | Complete a job, add a new seed URL to the config, re-create and start a new job, verify only the new URL is crawled (check fixture server request log). |
+| #   | Test                                                | Assertion                                                                                                                                                    |
+| --- | --------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| 18  | Worker close mid-job → finishes current, no orphans | Start job, wait for 1 crawl task to begin processing, call `worker.close()`, verify the in-progress task completes, no tasks left with `in_progress` status. |
+| 19  | Config diff re-run → only new URLs crawled          | Complete a job, add a new seed URL to the config, re-create and start a new job, verify only the new URL is crawled (check fixture server request log).      |
 
 **Infrastructure Verification (3):**
 
-| # | Test | Assertion |
-|---|------|-----------|
-| 20 | WebSocket token endpoint returns valid token | `POST /api/v1/ws-token` → 200, token string present, verify token key exists in Redis with correct TTL. |
-| 21 | Worker heartbeat present in Redis | After starting workers, check Redis for heartbeat key matching `worker:heartbeat:*`. Verify it contains queue list and timestamp. |
-| 22 | Audit log entries for job lifecycle | After job create/start/cancel, query audit log table, verify entries exist with correct `action` values (job.created, job.started, job.cancelled). |
+| #   | Test                                         | Assertion                                                                                                                                          |
+| --- | -------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 20  | WebSocket token endpoint returns valid token | `POST /api/v1/ws-token` → 200, token string present, verify token key exists in Redis with correct TTL.                                            |
+| 21  | Worker heartbeat present in Redis            | After starting workers, check Redis for heartbeat key matching `worker:heartbeat:*`. Verify it contains queue list and timestamp.                  |
+| 22  | Audit log entries for job lifecycle          | After job create/start/cancel, query audit log table, verify entries exist with correct `action` values (job.created, job.started, job.cancelled). |
 
 **Database Migration (1):**
 
-| # | Test | Assertion |
-|---|------|-----------|
-| 23 | Migration preserves existing data | Insert test data directly via SQL, run `runMigrations()` again (idempotent), verify data is still present and queryable. |
+| #   | Test                              | Assertion                                                                                                                |
+| --- | --------------------------------- | ------------------------------------------------------------------------------------------------------------------------ |
+| 23  | Migration preserves existing data | Insert test data directly via SQL, run `runMigrations()` again (idempotent), verify data is still present and queryable. |
 
 ### 2.4 DLQ Testing Strategy
 
@@ -170,6 +174,7 @@ export async function createTestApp(opts?: {
 For `auth-strategy: 'api-key'`, the helper must provide a real `ApiKeyRepository` and create the app with `AUTH_STRATEGY=api-key`. The auth middleware will then validate bearer tokens against the database.
 
 **API Key Bootstrap Sequence (chicken-and-egg):** The `/api/v1/api-keys` route requires `keys:manage` scope, but you need a key to authenticate. Solution:
+
 1. Create tenant via `POST /api/v1/tenants` (unauthenticated — auth middleware skips this path)
 2. Insert the first API key directly into the database via `apiKeyRepo.create({ tenantId, keyHash: sha256(rawKey), keyPrefix: rawKey.slice(0,8), name: 'test-admin', scopes: ['admin'] })`
 3. Use that raw key value as `Authorization: Bearer <key>` in subsequent requests
@@ -184,96 +189,96 @@ For multi-tenant tests, two separate tenants are created, each with their own AP
 
 **API Key Authentication (4):**
 
-| # | Test | Assertion |
-|---|------|-----------|
-| 1 | Create API key → returns key string and id | POST `/api/v1/api-keys` with admin auth → 201, response has `key` and `id` fields. |
-| 2 | Authenticate with valid API key | GET `/api/v1/jobs` with `Authorization: Bearer <key>` → 200, `x-tenant-id` not required (derived from key). |
-| 3 | Authenticate with revoked key → 401 | Delete key via API, then use it → 401. |
-| 4 | Authenticate with malformed token → 401 | `Authorization: Bearer garbage123` → 401 with error format. |
+| #   | Test                                       | Assertion                                                                                                   |
+| --- | ------------------------------------------ | ----------------------------------------------------------------------------------------------------------- |
+| 1   | Create API key → returns key string and id | POST `/api/v1/api-keys` with admin auth → 201, response has `key` and `id` fields.                          |
+| 2   | Authenticate with valid API key            | GET `/api/v1/jobs` with `Authorization: Bearer <key>` → 200, `x-tenant-id` not required (derived from key). |
+| 3   | Authenticate with revoked key → 401        | Delete key via API, then use it → 401.                                                                      |
+| 4   | Authenticate with malformed token → 401    | `Authorization: Bearer garbage123` → 401 with error format.                                                 |
 
 **Scope Enforcement (4):**
 
-| # | Test | Assertion |
-|---|------|-----------|
-| 5 | Key with `jobs:read` → GET jobs succeeds | 200 |
-| 6 | Key with `jobs:read` → POST jobs rejected | 403 with "requires jobs:write" |
-| 7 | Key with `admin` scope → all endpoints succeed | Admin bypasses all scope checks. |
-| 8 | Key with empty scopes → all write endpoints rejected | 403 on every write endpoint. |
+| #   | Test                                                 | Assertion                        |
+| --- | ---------------------------------------------------- | -------------------------------- |
+| 5   | Key with `jobs:read` → GET jobs succeeds             | 200                              |
+| 6   | Key with `jobs:read` → POST jobs rejected            | 403 with "requires jobs:write"   |
+| 7   | Key with `admin` scope → all endpoints succeed       | Admin bypasses all scope checks. |
+| 8   | Key with empty scopes → all write endpoints rejected | 403 on every write endpoint.     |
 
 **Multi-Tenant Isolation (3):**
 
-| # | Test | Assertion |
-|---|------|-----------|
-| 9 | Tenant A data invisible to Tenant B | Create job in A, list jobs from B → empty. |
-| 10 | Tenant A job → Tenant B GET by ID → 404 | Cross-tenant job access returns not found. |
-| 11 | Tenant A action → Tenant B approve → 404 | Cross-tenant action modification returns not found. |
+| #   | Test                                     | Assertion                                           |
+| --- | ---------------------------------------- | --------------------------------------------------- |
+| 9   | Tenant A data invisible to Tenant B      | Create job in A, list jobs from B → empty.          |
+| 10  | Tenant A job → Tenant B GET by ID → 404  | Cross-tenant job access returns not found.          |
+| 11  | Tenant A action → Tenant B approve → 404 | Cross-tenant action modification returns not found. |
 
 **CORS (3):**
 
-| # | Test | Assertion |
-|---|------|-----------|
-| 12 | Preflight from allowed origin → correct headers | OPTIONS request with `Origin: http://localhost:3000` → `Access-Control-Allow-Origin` present. |
-| 13 | Preflight from disallowed origin → no ACAO header | OPTIONS with `Origin: https://evil.com` → no `Access-Control-Allow-Origin`. |
-| 14 | Response exposes rate limit and request-id headers | Check `Access-Control-Expose-Headers` includes `X-RateLimit-Limit`, `X-Request-Id`. |
+| #   | Test                                               | Assertion                                                                                     |
+| --- | -------------------------------------------------- | --------------------------------------------------------------------------------------------- |
+| 12  | Preflight from allowed origin → correct headers    | OPTIONS request with `Origin: http://localhost:3000` → `Access-Control-Allow-Origin` present. |
+| 13  | Preflight from disallowed origin → no ACAO header  | OPTIONS with `Origin: https://evil.com` → no `Access-Control-Allow-Origin`.                   |
+| 14  | Response exposes rate limit and request-id headers | Check `Access-Control-Expose-Headers` includes `X-RateLimit-Limit`, `X-Request-Id`.           |
 
 **Idempotency (4):**
 
-| # | Test | Assertion |
-|---|------|-----------|
-| 15 | POST with `Idempotency-Key` → 201 | First call creates resource normally. |
-| 16 | Same key again → cached 201 (no duplicate created) | Second call returns same response, list shows only 1 resource. |
-| 17 | Same key, different body → cached response (body ignored) | Third call with different body returns original cached response. |
-| 18 | Idempotency only applies to POST/PATCH | DELETE with `Idempotency-Key` header → key is ignored (middleware skips non-POST/PATCH methods). Same DELETE again → executes normally (404 since resource was deleted). Verifies the middleware's method filter. |
+| #   | Test                                                      | Assertion                                                                                                                                                                                                         |
+| --- | --------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 15  | POST with `Idempotency-Key` → 201                         | First call creates resource normally.                                                                                                                                                                             |
+| 16  | Same key again → cached 201 (no duplicate created)        | Second call returns same response, list shows only 1 resource.                                                                                                                                                    |
+| 17  | Same key, different body → cached response (body ignored) | Third call with different body returns original cached response.                                                                                                                                                  |
+| 18  | Idempotency only applies to POST/PATCH                    | DELETE with `Idempotency-Key` header → key is ignored (middleware skips non-POST/PATCH methods). Same DELETE again → executes normally (404 since resource was deleted). Verifies the middleware's method filter. |
 
 **Rate Limiting (2):**
 
-| # | Test | Assertion |
-|---|------|-----------|
-| 19 | 61 rapid requests → 61st returns 429 | Free tier = 60/min. Send 61 GETs. Last response has status 429, `Retry-After: 60`, `X-RateLimit-Remaining: 0`. |
-| 20 | Rate limit per-tenant | Tenant A hits limit, Tenant B still succeeds. |
+| #   | Test                                 | Assertion                                                                                                      |
+| --- | ------------------------------------ | -------------------------------------------------------------------------------------------------------------- |
+| 19  | 61 rapid requests → 61st returns 429 | Free tier = 60/min. Send 61 GETs. Last response has status 429, `Retry-After: 60`, `X-RateLimit-Remaining: 0`. |
+| 20  | Rate limit per-tenant                | Tenant A hits limit, Tenant B still succeeds.                                                                  |
 
 **Error Response Consistency (5):**
 
-| # | Test | Assertion |
-|---|------|-----------|
-| 21 | 400 validation error format | POST job with invalid body → `{ error: { code: 'VALIDATION_ERROR', message: '...' } }`. |
-| 22 | 404 not found format | GET nonexistent job → `{ error: { code: 'NOT_FOUND', message: '...' } }`. |
-| 23 | 409 conflict format | DLQ discard on already-resolved entry → `{ error: { code: '...', message: '...' } }`. |
-| 24 | 500 unhandled exception format | Stub a repo method to throw, make request → `{ error: { code: 'INTERNAL_ERROR', message: '...' } }`. |
-| 25 | POST with wrong Content-Type | Send `Content-Type: text/plain` → 400 or 415. |
+| #   | Test                           | Assertion                                                                                            |
+| --- | ------------------------------ | ---------------------------------------------------------------------------------------------------- |
+| 21  | 400 validation error format    | POST job with invalid body → `{ error: { code: 'VALIDATION_ERROR', message: '...' } }`.              |
+| 22  | 404 not found format           | GET nonexistent job → `{ error: { code: 'NOT_FOUND', message: '...' } }`.                            |
+| 23  | 409 conflict format            | DLQ discard on already-resolved entry → `{ error: { code: '...', message: '...' } }`.                |
+| 24  | 500 unhandled exception format | Stub a repo method to throw, make request → `{ error: { code: 'INTERNAL_ERROR', message: '...' } }`. |
+| 25  | POST with wrong Content-Type   | Send `Content-Type: text/plain` → 400 or 415.                                                        |
 
 **Pagination Edge Cases (2):**
 
-| # | Test | Assertion |
-|---|------|-----------|
-| 26 | Zero or negative limit → 400 | GET `/api/v1/jobs?limit=0` → validation error. |
-| 27 | Offset beyond total → 200 with empty data | GET with large offset → `{ data: [], total: N }` where N is actual count. |
+| #   | Test                                      | Assertion                                                                 |
+| --- | ----------------------------------------- | ------------------------------------------------------------------------- |
+| 26  | Zero or negative limit → 400              | GET `/api/v1/jobs?limit=0` → validation error.                            |
+| 27  | Offset beyond total → 200 with empty data | GET with large offset → `{ data: [], total: N }` where N is actual count. |
 
 **Security Headers & Request ID (2):**
 
-| # | Test | Assertion |
-|---|------|-----------|
-| 28 | Security headers present | Any response has `X-Content-Type-Options: nosniff`, `X-Frame-Options: DENY`. |
-| 29 | `X-Request-Id` header present | Any response has `X-Request-Id` with a UUID-like value. |
+| #   | Test                          | Assertion                                                                    |
+| --- | ----------------------------- | ---------------------------------------------------------------------------- |
+| 28  | Security headers present      | Any response has `X-Content-Type-Options: nosniff`, `X-Frame-Options: DENY`. |
+| 29  | `X-Request-Id` header present | Any response has `X-Request-Id` with a UUID-like value.                      |
 
 **Audit Logging (2):**
 
-| # | Test | Assertion |
-|---|------|-----------|
-| 30 | Successful auth → `auth.login_success` audit entry | After authenticated request, query audit log table for the event. |
-| 31 | Failed auth → `auth.login_failure` audit entry | After 401 response, query audit log for failure event with IP address. |
+| #   | Test                                               | Assertion                                                              |
+| --- | -------------------------------------------------- | ---------------------------------------------------------------------- |
+| 30  | Successful auth → `auth.login_success` audit entry | After authenticated request, query audit log table for the event.      |
+| 31  | Failed auth → `auth.login_failure` audit entry     | After 401 response, query audit log for failure event with IP address. |
 
 **Tenant Header Validation (1):**
 
-| # | Test | Assertion |
-|---|------|-----------|
-| 32 | Empty or invalid UUID in `x-tenant-id` → 400/401 | `x-tenant-id: ''` and `x-tenant-id: not-a-uuid` both rejected. |
+| #   | Test                                             | Assertion                                                      |
+| --- | ------------------------------------------------ | -------------------------------------------------------------- |
+| 32  | Empty or invalid UUID in `x-tenant-id` → 400/401 | `x-tenant-id: ''` and `x-tenant-id: not-a-uuid` both rejected. |
 
 **OpenAPI Spec (1):**
 
-| # | Test | Assertion |
-|---|------|-----------|
-| 33 | `/api/openapi.json` returns valid spec | Response is valid JSON with `paths` object containing all registered route paths. Spot-check: `/api/v1/jobs` path exists with GET and POST operations. |
+| #   | Test                                   | Assertion                                                                                                                                              |
+| --- | -------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| 33  | `/api/openapi.json` returns valid spec | Response is valid JSON with `paths` object containing all registered route paths. Spot-check: `/api/v1/jobs` path exists with GET and POST operations. |
 
 ---
 
@@ -304,12 +309,12 @@ apps/cli/tests/e2e/tier5/
 
 ### Modified files
 
-| File | Change |
-|------|--------|
-| `apps/cli/tests/e2e/tier4/helpers.ts` | Accept optional `authStrategy` parameter in `createTestApp()` |
-| `apps/cli/scripts/tier-registry.ts` | Add Tier 5A and 5B definitions |
-| `apps/cli/package.json` | Add `@spatula/queue` as devDependency; add `test:tier5a`, `test:tier5b`, `test:tier5` scripts |
-| `packages/queue/src/index.ts` | Export `createWebhookWorker` (currently not exported from barrel) |
+| File                                  | Change                                                                                        |
+| ------------------------------------- | --------------------------------------------------------------------------------------------- |
+| `apps/cli/tests/e2e/tier4/helpers.ts` | Accept optional `authStrategy` parameter in `createTestApp()`                                 |
+| `apps/cli/scripts/tier-registry.ts`   | Add Tier 5A and 5B definitions                                                                |
+| `apps/cli/package.json`               | Add `@spatula/queue` as devDependency; add `test:tier5a`, `test:tier5b`, `test:tier5` scripts |
+| `packages/queue/src/index.ts`         | Export `createWebhookWorker` (currently not exported from barrel)                             |
 
 ---
 
@@ -343,36 +348,36 @@ apps/cli/tests/e2e/tier5/
 
 ## 6. Test Counts and Runtime
 
-| Sub-spec | File | Tests | Needs Workers | Est. Runtime |
-|----------|------|-------|--------------|-------------|
-| **5A** | job-lifecycle.test.ts | 5 | Yes | ~30s |
-| **5A** | export-processing.test.ts | 3 | Yes | ~15s |
-| **5A** | webhook-delivery.test.ts | 3 | Yes | ~10s |
-| **5A** | dlq.test.ts | 3 | Yes | ~15s |
-| **5A** | state-machine.test.ts | 3 | Yes | ~10s |
-| **5A** | worker-lifecycle.test.ts | 5 | Yes | ~20s |
-| **5A** | migration.test.ts | 1 | No | ~3s |
-| **5B** | auth-and-scopes.test.ts | 8 | No | ~5s |
-| **5B** | multi-tenant.test.ts | 3 | No | ~3s |
-| **5B** | cors.test.ts | 3 | No | ~2s |
-| **5B** | idempotency.test.ts | 4 | No | ~3s |
-| **5B** | rate-limiting.test.ts | 2 | No | ~5s |
-| **5B** | error-consistency.test.ts | 5 | No | ~3s |
-| **5B** | pagination-and-headers.test.ts | 4 | No | ~2s |
-| **5B** | audit-and-validation.test.ts | 4 | No | ~3s |
-| | **Total** | **56** | | **~130s** |
+| Sub-spec | File                           | Tests  | Needs Workers | Est. Runtime |
+| -------- | ------------------------------ | ------ | ------------- | ------------ |
+| **5A**   | job-lifecycle.test.ts          | 5      | Yes           | ~30s         |
+| **5A**   | export-processing.test.ts      | 3      | Yes           | ~15s         |
+| **5A**   | webhook-delivery.test.ts       | 3      | Yes           | ~10s         |
+| **5A**   | dlq.test.ts                    | 3      | Yes           | ~15s         |
+| **5A**   | state-machine.test.ts          | 3      | Yes           | ~10s         |
+| **5A**   | worker-lifecycle.test.ts       | 5      | Yes           | ~20s         |
+| **5A**   | migration.test.ts              | 1      | No            | ~3s          |
+| **5B**   | auth-and-scopes.test.ts        | 8      | No            | ~5s          |
+| **5B**   | multi-tenant.test.ts           | 3      | No            | ~3s          |
+| **5B**   | cors.test.ts                   | 3      | No            | ~2s          |
+| **5B**   | idempotency.test.ts            | 4      | No            | ~3s          |
+| **5B**   | rate-limiting.test.ts          | 2      | No            | ~5s          |
+| **5B**   | error-consistency.test.ts      | 5      | No            | ~3s          |
+| **5B**   | pagination-and-headers.test.ts | 4      | No            | ~2s          |
+| **5B**   | audit-and-validation.test.ts   | 4      | No            | ~3s          |
+|          | **Total**                      | **56** |               | **~130s**    |
 
 **Combined with previous tiers:**
 
-| Tier | Tests | Cumulative |
-|------|-------|-----------|
-| 1 | 514 | 514 |
-| 2 | 43 | 557 |
-| 3 | 6 | 563 |
-| 4 | 34 | 597 |
-| 5A | 23 | 620 |
-| 5B | 33 | 653 |
-| Binary | 18 | 671 |
+| Tier   | Tests | Cumulative |
+| ------ | ----- | ---------- |
+| 1      | 514   | 514        |
+| 2      | 43    | 557        |
+| 3      | 6     | 563        |
+| 4      | 34    | 597        |
+| 5A     | 23    | 620        |
+| 5B     | 33    | 653        |
+| Binary | 18    | 671        |
 
 ---
 
@@ -388,9 +393,11 @@ apps/cli/tests/e2e/tier5/
 ### Completion Polling
 
 All async tests use polling with timeout:
+
 ```typescript
 await waitForJobStatus(jobRepo, jobId, tenantId, ['completed', 'failed'], 60_000);
 ```
+
 Poll interval: 500ms. Timeout: 60s (configurable).
 
 ### Redis Cleanup
@@ -404,9 +411,11 @@ Poll interval: 500ms. Timeout: 60s (configurable).
 ### DLQ Testing: `/crash` Route
 
 The fixture server gets a new route:
+
 ```
 GET /crash → 200, Content-Type: application/octet-stream, body: binary garbage
 ```
+
 The crawl worker fetches this, the HTML parser throws on the binary content, the worker fails, retries exhaust, entry lands in DLQ.
 
 ### Rate Limit Testing

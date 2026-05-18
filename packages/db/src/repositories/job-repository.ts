@@ -59,11 +59,7 @@ export class JobRepository {
   async findById(id: string, tenantId: string) {
     const cacheKey = `job:${id}:config`;
     if (this.cache) {
-      return this.cache.getOrFetch(
-        cacheKey,
-        () => this._findByIdFromDb(id, tenantId),
-        60,
-      );
+      return this.cache.getOrFetch(cacheKey, () => this._findByIdFromDb(id, tenantId), 60);
     }
     return this._findByIdFromDb(id, tenantId);
   }
@@ -115,10 +111,7 @@ export class JobRepository {
     }
   }
 
-  async countByTenant(
-    tenantId: string,
-    options?: { status?: JobStatus },
-  ): Promise<number> {
+  async countByTenant(tenantId: string, options?: { status?: JobStatus }): Promise<number> {
     try {
       const conditions = [eq(jobs.tenantId, tenantId)];
       if (options?.status) {
@@ -269,10 +262,10 @@ export class JobRepository {
       });
     } catch (error) {
       if (error instanceof StorageError) throw error;
-      throw new StorageError(
-        `Failed to delete job ${jobId}: ${(error as Error).message}`,
-        { cause: error as Error, context: { jobId, tenantId } },
-      );
+      throw new StorageError(`Failed to delete job ${jobId}: ${(error as Error).message}`, {
+        cause: error as Error,
+        context: { jobId, tenantId },
+      });
     }
   }
 
@@ -291,18 +284,13 @@ export class JobRepository {
       if (options?.status) conditions.push(eq(jobs.status, options.status));
       if (options?.tenantId) conditions.push(eq(jobs.tenantId, options.tenantId));
 
-      let query = this.db
-        .select()
-        .from(jobs)
-        .orderBy(desc(jobs.createdAt));
+      let query = this.db.select().from(jobs).orderBy(desc(jobs.createdAt));
 
       if (conditions.length > 0) {
         query = query.where(and(...conditions)) as typeof query;
       }
 
-      return await query
-        .limit(options?.limit ?? 50)
-        .offset(options?.offset ?? 0);
+      return await query.limit(options?.limit ?? 50).offset(options?.offset ?? 0);
     } catch (error) {
       throw new StorageError(`Failed to list all jobs: ${(error as Error).message}`, {
         cause: error as Error,
@@ -319,13 +307,9 @@ export class JobRepository {
       if (options?.status) conditions.push(eq(jobs.status, options.status));
       if (options?.tenantId) conditions.push(eq(jobs.tenantId, options.tenantId));
 
-      const query = this.db
-        .select({ count: sql<number>`count(*)::int` })
-        .from(jobs);
+      const query = this.db.select({ count: sql<number>`count(*)::int` }).from(jobs);
 
-      const rows = conditions.length > 0
-        ? await query.where(and(...conditions))
-        : await query;
+      const rows = conditions.length > 0 ? await query.where(and(...conditions)) : await query;
 
       return (rows[0] as any)?.count ?? 0;
     } catch (error) {

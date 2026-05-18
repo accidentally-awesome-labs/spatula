@@ -1,6 +1,12 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import type { ConfigAction, JobConfig, ConfigValidationResult } from '@spatula/core';
-import { createCliStore, type CliStore, type ChatMessage, type CliMode, type CliState } from '../../../src/store/index.js';
+import {
+  createCliStore,
+  type CliStore,
+  type ChatMessage,
+  type CliMode,
+  type CliState,
+} from '../../../src/store/index.js';
 
 const TEST_TENANT_ID = '550e8400-e29b-41d4-a716-446655440000';
 
@@ -194,10 +200,12 @@ describe('CliStore', () => {
 
   describe('resetConfig', () => {
     it('resets config to empty defaults', () => {
-      store.getState().applyActions([
-        makeAction('set_job_name', { name: 'To Be Reset' }),
-        makeAction('add_seed_urls', { urls: [{ url: 'https://example.com' }] }),
-      ]);
+      store
+        .getState()
+        .applyActions([
+          makeAction('set_job_name', { name: 'To Be Reset' }),
+          makeAction('add_seed_urls', { urls: [{ url: 'https://example.com' }] }),
+        ]);
 
       store.getState().resetConfig();
 
@@ -214,9 +222,7 @@ describe('CliStore', () => {
     });
 
     it('clears action history on reset', () => {
-      store.getState().applyActions([
-        makeAction('set_job_name', { name: 'Job' }),
-      ]);
+      store.getState().applyActions([makeAction('set_job_name', { name: 'Job' })]);
       expect(store.getState().actionHistory).toHaveLength(1);
 
       store.getState().resetConfig();
@@ -433,7 +439,9 @@ describe('CliStore', () => {
     it('tracks current review index', () => {
       // Need pending actions for index to be valid
       const actions = Array.from({ length: 15 }, (_, i) => ({
-        id: `a${i}`, type: 'add_field', payload: {},
+        id: `a${i}`,
+        type: 'add_field',
+        payload: {},
       }));
       store.getState().setPendingActions(actions);
 
@@ -579,9 +587,7 @@ describe('CliStore', () => {
       const store1 = createCliStore(TEST_TENANT_ID);
       const store2 = createCliStore('660e8400-e29b-41d4-a716-446655440001');
 
-      store1.getState().applyActions([
-        makeAction('set_job_name', { name: 'Store 1 Job' }),
-      ]);
+      store1.getState().applyActions([makeAction('set_job_name', { name: 'Store 1 Job' })]);
 
       expect(store1.getState().config.name).toBe('Store 1 Job');
       expect(store2.getState().config.name).toBe('');

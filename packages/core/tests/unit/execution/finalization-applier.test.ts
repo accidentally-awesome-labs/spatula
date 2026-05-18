@@ -6,7 +6,10 @@ import {
 import type { PipelineAction } from '../../../src/types/actions.js';
 import { generateId } from '@spatula/shared';
 
-function baseAction(): Pick<PipelineAction, 'id' | 'jobId' | 'source' | 'reasoning' | 'confidence'> {
+function baseAction(): Pick<
+  PipelineAction,
+  'id' | 'jobId' | 'source' | 'reasoning' | 'confidence'
+> {
   return {
     id: generateId(),
     jobId: generateId(),
@@ -24,8 +27,19 @@ describe('applyFinalizationAction', () => {
       payload: {
         strategy: 'multi_table',
         tables: [
-          { name: 'products', description: 'Main products', fields: ['name', 'price'], relationship: 'primary' },
-          { name: 'reviews', description: 'Product reviews', fields: ['rating', 'text'], relationship: 'child', foreignKey: 'product_id' },
+          {
+            name: 'products',
+            description: 'Main products',
+            fields: ['name', 'price'],
+            relationship: 'primary',
+          },
+          {
+            name: 'reviews',
+            description: 'Product reviews',
+            fields: ['rating', 'text'],
+            relationship: 'child',
+            foreignKey: 'product_id',
+          },
         ],
       },
     };
@@ -44,7 +58,12 @@ describe('applyFinalizationAction', () => {
       type: 'derive_field',
       payload: {
         fieldName: 'price_per_unit',
-        fieldDefinition: { name: 'price_per_unit', description: 'Price per unit', type: 'number', required: false },
+        fieldDefinition: {
+          name: 'price_per_unit',
+          description: 'Price per unit',
+          type: 'number',
+          required: false,
+        },
         derivedFrom: ['price', 'quantity'],
         derivationLogic: 'price / quantity',
         examples: [{ inputs: { price: 10, quantity: 2 }, output: 5 }],
@@ -92,9 +111,7 @@ describe('applyFinalizationAction', () => {
             sources: ['site-a.com'],
           },
         ],
-        categoryBreakdown: [
-          { category: 'electronics', count: 50, specificFields: ['voltage'] },
-        ],
+        categoryBreakdown: [{ category: 'electronics', count: 50, specificFields: ['voltage'] }],
         qualitySummary: {
           totalEntities: 100,
           totalSources: 5,
@@ -136,9 +153,7 @@ describe('applyFinalizationAction', () => {
       type: 'recommend_table_structure',
       payload: {
         strategy: 'single_table',
-        tables: [
-          { name: 'products', description: 'All products', fields: ['name', 'price'] },
-        ],
+        tables: [{ name: 'products', description: 'All products', fields: ['name', 'price'] }],
       },
     };
 
@@ -168,7 +183,9 @@ describe('applyFinalizationAction', () => {
     expect(result.applied).toBe(true);
     expect(result.metadata?.anomaly).toBeDefined();
     expect(result.metadata!.anomaly!.anomalyType).toBe('missing_data');
-    expect(result.metadata!.anomaly!.description).toBe('Several entities are missing required fields');
+    expect(result.metadata!.anomaly!.description).toBe(
+      'Several entities are missing required fields',
+    );
     expect(result.metadata!.anomaly!.entityId).toBeUndefined();
     expect(result.metadata!.anomaly!.fieldName).toBeUndefined();
   });

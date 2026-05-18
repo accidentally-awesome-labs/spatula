@@ -3,8 +3,8 @@ gsd_state_version: 1.0
 milestone: v1.1
 milestone_name: Public Launch (Wave 6 / Phase 14)
 status: verifying
-stopped_at: "Completed 15-06-PLAN.md Tasks 1-5; Task 6 PR-open paused at checkpoint:human-action awaiting user approval to fire gh pr create"
-last_updated: "2026-05-18T00:47:05.483Z"
+stopped_at: 'Completed 15-06-PLAN.md Tasks 1-5; Task 6 PR-open paused at checkpoint:human-action awaiting user approval to fire gh pr create'
+last_updated: '2026-05-18T00:47:05.483Z'
 last_activity: 2026-05-18
 progress:
   total_phases: 1
@@ -42,10 +42,10 @@ Progress: [░░░░░░░░░░] 0% (0/8 v1.1 phases complete)
 **v1.1 (this milestone):**
 
 | Phase | Plans | Total | Avg/Plan |
-|-------|-------|-------|----------|
-| 15 | — | — | — |
+| ----- | ----- | ----- | -------- |
+| 15    | —     | —     | —        |
 
-*v1.1 metrics will populate as plans execute.*
+_v1.1 metrics will populate as plans execute._
 | Phase 15 P01 | 70 min | 4 tasks | 3 files |
 | Phase 15 P02 | 4min | 3 tasks | 19 files |
 | Phase 15 P03 | 33min | 13 tasks | 35 files |

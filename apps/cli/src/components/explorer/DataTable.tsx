@@ -82,14 +82,14 @@ export function DataTable({
       {/* Footer */}
       <Box marginTop={1}>
         <Text dimColor>
-          {' '}Page {currentPage + 1} of {totalPages} ({totalCount} entities)
+          {' '}
+          Page {currentPage + 1} of {totalPages} ({totalCount} entities)
         </Text>
-        {sourceFilter && (
-          <Text dimColor>  [Source: {sourceFilter}]</Text>
-        )}
+        {sourceFilter && <Text dimColor> [Source: {sourceFilter}]</Text>}
         {totalSchemaColumns > maxVisibleColumns && (
           <Text dimColor>
-            {'          '}Showing cols {columnOffset + 1}-{Math.min(columnOffset + maxVisibleColumns, totalSchemaColumns)} of {totalSchemaColumns}
+            {'          '}Showing cols {columnOffset + 1}-
+            {Math.min(columnOffset + maxVisibleColumns, totalSchemaColumns)} of {totalSchemaColumns}
             {columnOffset + maxVisibleColumns < totalSchemaColumns ? ' \u2192' : ''}
           </Text>
         )}

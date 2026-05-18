@@ -13,8 +13,6 @@ export function requireScope(scope: string): MiddlewareHandler {
       return next();
     }
 
-    throw new ForbiddenError(
-      `Insufficient permissions: requires "${scope}"`,
-    );
+    throw new ForbiddenError(`Insufficient permissions: requires "${scope}"`);
   };
 }

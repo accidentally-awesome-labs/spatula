@@ -1,11 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
-import {
-  mkdtempSync,
-  rmSync,
-  mkdirSync,
-  writeFileSync,
-  existsSync,
-} from 'node:fs';
+import { mkdtempSync, rmSync, mkdirSync, writeFileSync, existsSync } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { runResetCommand } from '../../../src/commands/reset.js';
@@ -159,9 +153,9 @@ describe('reset --keep-remote', () => {
   it('deletes orphan entity_sources rows before deleting entities/extractions', async () => {
     await runResetCommand({ keepRemote: true, cwd: projectDir });
 
-    const entitySourcesIdx = preparedSql.findIndex(s => s.includes('DELETE FROM entity_sources'));
-    const entitiesIdx = preparedSql.findIndex(s => s.match(/DELETE FROM entities\b/));
-    const extractionsIdx = preparedSql.findIndex(s => s.includes('DELETE FROM extractions'));
+    const entitySourcesIdx = preparedSql.findIndex((s) => s.includes('DELETE FROM entity_sources'));
+    const entitiesIdx = preparedSql.findIndex((s) => s.match(/DELETE FROM entities\b/));
+    const extractionsIdx = preparedSql.findIndex((s) => s.includes('DELETE FROM extractions'));
 
     expect(entitySourcesIdx).toBeGreaterThanOrEqual(0);
     // Must run BEFORE entities/extractions deletes, otherwise the subselect matches nothing

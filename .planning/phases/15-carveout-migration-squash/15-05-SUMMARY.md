@@ -2,7 +2,18 @@
 phase: 15-carveout-migration-squash
 plan: 05
 subsystem: testing+ci
-tags: [carveout, reverse-contract, forward-contract, vitest, pg-dump, schema-lint, openapi-shape, hono-test-server, github-actions-pr-gate]
+tags:
+  [
+    carveout,
+    reverse-contract,
+    forward-contract,
+    vitest,
+    pg-dump,
+    schema-lint,
+    openapi-shape,
+    hono-test-server,
+    github-actions-pr-gate,
+  ]
 
 # Dependency graph
 requires:
@@ -24,10 +35,10 @@ tech-stack:
   added: []
   patterns:
     - "Hono-on-Node-http-builtin adapter for test servers: when @hono/node-server isn't hoisted to a workspace's top-level node_modules, wrap app.fetch in a node:http server manually. Avoids root devDep bloat and pnpm workspace resolution gotchas."
-    - "Realistic-shape mock-consumer import block: top-level destructure of @spatula/* barrels mirrors what spatula-saas would write, so missing-symbol failures surface at module-evaluation time (clear stack trace at import line, not buried in test body)."
-    - "Affirmative-absent assertions: `expect(shared.BILLING_TIERS).toBeUndefined()` plus a regex sweep over Object.keys filtering /stripe|billing|quotaEnforcer|usageRecord|metering/i. Two-layered guard: per-symbol pin AND structural deny."
+    - 'Realistic-shape mock-consumer import block: top-level destructure of @spatula/* barrels mirrors what spatula-saas would write, so missing-symbol failures surface at module-evaluation time (clear stack trace at import line, not buried in test body).'
+    - 'Affirmative-absent assertions: `expect(shared.BILLING_TIERS).toBeUndefined()` plus a regex sweep over Object.keys filtering /stripe|billing|quotaEnforcer|usageRecord|metering/i. Two-layered guard: per-symbol pin AND structural deny.'
     - "Reuse-don't-rebuild for schema lint: pg_dump + Wave-4 normalizer (already handles \\restrict/\\unrestrict noise + journal-row stripping) chosen over drizzle-kit introspect — human-readable PR diffs, version-stable, single source of truth alongside Plan 15-04's equivalence gate."
-    - "Two-tier graceful-skip for live-server suites: beforeAll catches DB/migration errors and sets a setupOk flag; per-test `if (!setupOk) return ctx.skip()` guards. Lets `pnpm test:carveout` and `pnpm test:private-contract` pass cleanly on cold contributor checkouts without Postgres."
+    - 'Two-tier graceful-skip for live-server suites: beforeAll catches DB/migration errors and sets a setupOk flag; per-test `if (!setupOk) return ctx.skip()` guards. Lets `pnpm test:carveout` and `pnpm test:private-contract` pass cleanly on cold contributor checkouts without Postgres.'
 
 key-files:
   created:
@@ -51,11 +62,11 @@ key-decisions:
   - "Replaced @hono/node-server with a Node-builtin http.createServer adapter in tests/carveout/fixtures/server.ts. @hono/node-server is only declared in apps/api/package.json and pnpm did not hoist it to the workspace root; Vite couldn't resolve it from tests/carveout/. Rather than add it to root devDependencies (would create a root → app dep coupling), wrote a ~30-line adapter that maps node:http IncomingMessage → fetch Request → app.fetch → Response → ServerResponse. Pure stdlib, no new deps."
   - "Committed baseline as SQL text (baseline.schema.sql, 1086 lines) not JSON. Trade-off vs the plan's drizzle-kit-introspect-suggesting baseline.schema.json: SQL diffs are human-readable in PR reviews ('you added a column' is plain to a reviewer); JSON shape varies across drizzle-kit minor versions and is fragile."
   - "Forward test (forward.test.ts) seeds with scopes:['admin'] by default — gives 200 from /admin/tenants/:id; documented [200, 403] acceptance to keep the test resilient to a future seed-default change to non-admin scopes."
-  - "turbo.json untouched. The new test:* scripts are root-level vitest invocations (like the existing test:e2e), not turbo task graph entries. Adding them to turbo.json would conflict with the per-package `test` task that already exists. Same pattern as test:e2e."
+  - 'turbo.json untouched. The new test:* scripts are root-level vitest invocations (like the existing test:e2e), not turbo task graph entries. Adding them to turbo.json would conflict with the per-package `test` task that already exists. Same pattern as test:e2e.'
   - "Two separate CI jobs (test-carveout + test-private-contract) instead of one combined job. Separation gives clean PR-checks-page signal ('which contract broke?'), parallel execution on GitHub runners, and independent Postgres service isolation (separate DB names spatula_test vs spatula_private_contract_test) so a forward-test seed leak can't pollute the schema-lint baseline diff."
 
 patterns-established:
-  - "Forward + reverse contract tests as PR merge gates: forward (tests/carveout/) proves the OSS server satisfies the post-carve contract; reverse (tests/private-contract/) proves nothing the private consumer reaches for has been silently removed. Together they bracket the carve-out: forward catches OSS-side regressions, reverse catches accidental private-coupling-restoration."
+  - 'Forward + reverse contract tests as PR merge gates: forward (tests/carveout/) proves the OSS server satisfies the post-carve contract; reverse (tests/private-contract/) proves nothing the private consumer reaches for has been silently removed. Together they bracket the carve-out: forward catches OSS-side regressions, reverse catches accidental private-coupling-restoration.'
   - "Schema snapshot via SQL text not JSON: when the goal is 'reviewer can see what changed at PR time', commit pg_dump --schema-only output normalized by a tool-stable script. Reviewers read SQL; PR diffs are self-documenting."
   - "Mock-consumer test = realistic destructure block: not a synthetic enumeration. Top-level destructure of all consumed symbols mimics what the consumer's real code looks like and lets missing-symbol errors surface at module-evaluation time."
 
@@ -106,28 +117,29 @@ completed: 2026-05-17
 
 ## Task Commits
 
-| Task | Description | Commit |
-| ---- | ----------- | ------ |
-| 1 | Forward carve-out suite (openapi-shape + admin-metrics-smoke + forward.test.ts + fixtures/server.ts) | `6f893eb` |
-| 2 | Private-contract TS-surface test (oss-surface.test.ts) + README | `4e30630` |
-| 3 | Private-contract SQL schema lint (schema-lint.test.ts + baseline.schema.sql + README append) | `b791fa9` |
-| 4 | Wire carveout + private-contract suites into PR CI (package.json + ci.yml) | `650f124` |
+| Task | Description                                                                                          | Commit    |
+| ---- | ---------------------------------------------------------------------------------------------------- | --------- |
+| 1    | Forward carve-out suite (openapi-shape + admin-metrics-smoke + forward.test.ts + fixtures/server.ts) | `6f893eb` |
+| 2    | Private-contract TS-surface test (oss-surface.test.ts) + README                                      | `4e30630` |
+| 3    | Private-contract SQL schema lint (schema-lint.test.ts + baseline.schema.sql + README append)         | `b791fa9` |
+| 4    | Wire carveout + private-contract suites into PR CI (package.json + ci.yml)                           | `650f124` |
 
 **Plan metadata commit:** will follow this summary.
 
 ## Test Counts
 
-| Suite | Files | Tests | Passing | Runtime (local) |
-| ----- | ----- | ----- | ------- | --------------- |
-| `tests/carveout/` | 3 | 7 | 7 | ~2.5s |
-| `tests/private-contract/` | 2 | 22 | 22 | ~3.1s |
-| **Total new** | **5** | **29** | **29** | **~5.6s** |
+| Suite                     | Files | Tests  | Passing | Runtime (local) |
+| ------------------------- | ----- | ------ | ------- | --------------- |
+| `tests/carveout/`         | 3     | 7      | 7       | ~2.5s           |
+| `tests/private-contract/` | 2     | 22     | 22      | ~3.1s           |
+| **Total new**             | **5** | **29** | **29**  | **~5.6s**       |
 
 Both suites verified end-to-end against fresh Postgres DBs (full schema reset + re-migrate + test run) immediately before the final commit.
 
 ## Files Created/Modified
 
 **Created (11):**
+
 - `tests/carveout/vitest.config.ts` — vitest config (Node env, 30s timeout, workspace aliases mirroring tests/e2e)
 - `tests/carveout/openapi-shape.test.ts` — 3 forbidden-surface assertions against /api/openapi.json
 - `tests/carveout/admin-metrics-smoke.test.ts` — 1 no-500-on-usage_records smoke test
@@ -141,6 +153,7 @@ Both suites verified end-to-end against fresh Postgres DBs (full schema reset + 
 - `.planning/phases/15-carveout-migration-squash/15-05-SUMMARY.md` — this file
 
 **Modified (2):**
+
 - `package.json` — added `test:carveout` and `test:private-contract` scripts
 - `.github/workflows/ci.yml` — added `test-carveout` and `test-private-contract` jobs, both with Postgres 16 services, both running on existing PR + push + workflow_call triggers
 
@@ -169,6 +182,7 @@ Both suites verified end-to-end against fresh Postgres DBs (full schema reset + 
 ### Auto-fixed Issues
 
 **1. [Rule 3 - Blocker] `@hono/node-server` not resolvable from `tests/carveout/fixtures/server.ts`**
+
 - **Found during:** Task 1, first vitest run of the forward suite
 - **Issue:** First fixture draft imported `serve` from `@hono/node-server` (modeled on `apps/api/src/server.ts`). vitest+Vite failed to resolve the bare import because pnpm only installs `@hono/node-server` under `apps/api/node_modules` — not hoisted to the workspace root, so `tests/carveout/` (a top-level test dir) couldn't see it. Error: `Failed to load url @hono/node-server`.
 - **Fix:** Rewrote the fixture to use `node:http` `createServer` and adapt `IncomingMessage` → standard `Request` → `app.fetch` → standard `Response` → `ServerResponse`. ~30 lines, zero new deps. The adapter handles GET/HEAD body absence, multi-header values, and request-context errors with a 500 fallback.
@@ -179,6 +193,7 @@ Both suites verified end-to-end against fresh Postgres DBs (full schema reset + 
 ### Documented (intentional planner choice, not a deviation)
 
 **2. SQL baseline file extension differs from plan listing**
+
 - **Detail:** Plan frontmatter `files_modified` lists `tests/private-contract/baseline.schema.json`. Implementation committed `tests/private-contract/baseline.schema.sql` (SQL text under Plan B, not JSON under Plan A).
 - **Reason:** CONTEXT.md D-03 says "planner picks" between drizzle-kit JSON and pg_dump SQL; the plan's `<action>` block in Task 3 explicitly documents the Plan-B fallback. The extension change is a natural consequence of the format choice — `.json` would be misleading next to text content.
 - **Files affected:** Test, README, and acceptance-criteria check all updated to reference the SQL file.
@@ -204,6 +219,7 @@ None — Plan 15-05 is fully automated. Plan 15-06 (CARVE-04 final grep gate + `
 ## Known Stubs
 
 None — every assertion is real:
+
 - `tests/carveout/openapi-shape.test.ts` reads the actual generated OpenAPI doc from a live `createApp` instance.
 - `tests/carveout/admin-metrics-smoke.test.ts` uses the actual `/api/v1/admin/system/metrics` handler with realistic mock deps.
 - `tests/carveout/forward.test.ts` boots a real http server, seeds a real tenant + API key via real repos, and round-trips real HTTP requests.
@@ -252,5 +268,6 @@ None — every assertion is real:
 - [x] `grep -c "schema-lint\|baseline.schema" tests/private-contract/README.md` returns 8 (≥2)
 
 ---
-*Phase: 15-carveout-migration-squash*
-*Completed: 2026-05-17*
+
+_Phase: 15-carveout-migration-squash_
+_Completed: 2026-05-17_

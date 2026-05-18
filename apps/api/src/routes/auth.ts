@@ -11,10 +11,7 @@ export function authRoutes() {
   app.get('/me', (c) => {
     const tenantId = c.get('tenantId');
     if (!tenantId) {
-      return c.json(
-        { error: { code: 'UNAUTHENTICATED', message: 'No tenant context' } },
-        401,
-      );
+      return c.json({ error: { code: 'UNAUTHENTICATED', message: 'No tenant context' } }, 401);
     }
 
     // Pull scopes + subject from the AuthResult set by authMiddleware.

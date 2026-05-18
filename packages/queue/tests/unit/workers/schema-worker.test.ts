@@ -27,7 +27,8 @@ function createMockDeps(overrides?: Record<string, unknown>) {
     schemaEvolver: {},
     jobRepo: {
       findById: vi.fn().mockResolvedValue({
-        id: JOB_ID, config: { webhooks: { url: 'https://hooks.test' } },
+        id: JOB_ID,
+        config: { webhooks: { url: 'https://hooks.test' } },
       }),
     },
     extractionRepo: {},
@@ -49,7 +50,10 @@ describe('processSchemaEvolutionJob', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mockProcessSchemaEvolution.mockResolvedValue({ actionsApplied: 0 });
-    (acquireLock as ReturnType<typeof vi.fn>).mockResolvedValue({ acquired: true, token: 'test-token' });
+    (acquireLock as ReturnType<typeof vi.fn>).mockResolvedValue({
+      acquired: true,
+      token: 'test-token',
+    });
   });
 
   // --- Lock tests (queue-specific concern) ---

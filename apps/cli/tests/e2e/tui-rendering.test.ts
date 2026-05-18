@@ -196,9 +196,7 @@ describe('TUI rendering with real DataSource', () => {
       if (schema) store.getState().setSchemaData(schema as any);
 
       // Render with mocked hooks but real store data
-      const { ExplorerView } = await import(
-        '../../src/components/explorer/ExplorerView.js'
-      );
+      const { ExplorerView } = await import('../../src/components/explorer/ExplorerView.js');
       const { lastFrame, unmount } = render(
         React.createElement(ExplorerView, { store, backend: dataSource }),
       );
@@ -232,9 +230,7 @@ describe('TUI rendering with real DataSource', () => {
       const schema = await dataSource.getSchema();
       if (schema) store.getState().setSchemaData(schema as any);
 
-      const { ExplorerView } = await import(
-        '../../src/components/explorer/ExplorerView.js'
-      );
+      const { ExplorerView } = await import('../../src/components/explorer/ExplorerView.js');
       const { lastFrame, unmount } = render(
         React.createElement(ExplorerView, { store, backend: dataSource }),
       );
@@ -262,9 +258,7 @@ describe('TUI rendering with real DataSource', () => {
       store.getState().setEntities(entities.data as any);
 
       // Sort by quality descending (simulates what applySort('quality') does)
-      const sorted = [...store.getState().entities].sort(
-        (a, b) => b.qualityScore - a.qualityScore,
-      );
+      const sorted = [...store.getState().entities].sort((a, b) => b.qualityScore - a.qualityScore);
       store.getState().setEntities(sorted);
 
       // After sort, highest quality entity should be first
@@ -303,15 +297,15 @@ describe('TUI rendering with real DataSource', () => {
 
       // Load real actions from the DataSource
       const actions = await dataSource.getActions('pending_review');
-      store.getState().setPendingActions(
-        (actions as any[]).filter(
-          (a) => a && typeof a.id === 'string' && typeof a.type === 'string',
-        ),
-      );
+      store
+        .getState()
+        .setPendingActions(
+          (actions as any[]).filter(
+            (a) => a && typeof a.id === 'string' && typeof a.type === 'string',
+          ),
+        );
 
-      const { ReviewView } = await import(
-        '../../src/components/review/ReviewView.js'
-      );
+      const { ReviewView } = await import('../../src/components/review/ReviewView.js');
       const { lastFrame, unmount } = render(
         React.createElement(ReviewView, { store, backend: dataSource }),
       );
@@ -341,15 +335,11 @@ describe('TUI rendering with real DataSource', () => {
       store.getState().setActiveJobId(PROJECT_ID);
 
       const actions = await dataSource.getActions('pending_review');
-      store.getState().setPendingActions(
-        (actions as any[]).filter(
-          (a) => a && typeof a.id === 'string',
-        ),
-      );
+      store
+        .getState()
+        .setPendingActions((actions as any[]).filter((a) => a && typeof a.id === 'string'));
 
-      const { ReviewView } = await import(
-        '../../src/components/review/ReviewView.js'
-      );
+      const { ReviewView } = await import('../../src/components/review/ReviewView.js');
       const { lastFrame, unmount } = render(
         React.createElement(ReviewView, { store, backend: dataSource }),
       );

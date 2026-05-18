@@ -47,7 +47,17 @@ describe('ExportDialog', () => {
 
   it('shows Current entity option when fromDetail is true', async () => {
     const store = createCliStore('test-tenant');
-    store.getState().setExpandedEntity({ id: 'e1', mergedData: {}, provenance: {}, sources: [], categories: [], qualityScore: 0.9, createdAt: '', sourceCount: 1, jobId: 'j1' } as any);
+    store.getState().setExpandedEntity({
+      id: 'e1',
+      mergedData: {},
+      provenance: {},
+      sources: [],
+      categories: [],
+      qualityScore: 0.9,
+      createdAt: '',
+      sourceCount: 1,
+      jobId: 'j1',
+    } as any);
     const apiClient = {} as SpatulaApiClient;
 
     const { ExportDialog } = await import('../../../../src/components/explorer/ExportDialog.js');

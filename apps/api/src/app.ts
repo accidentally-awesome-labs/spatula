@@ -42,24 +42,32 @@ import { getEnvOrDefault } from '@spatula/shared';
 export function createApp(deps: AppDeps) {
   const app = createOpenAPIRouter();
   const authStrategy = getEnvOrDefault('AUTH_STRATEGY', 'none');
-  const authProvider = deps.authProvider ?? createAuthProvider(authStrategy, {
-    apiKeyRepo: deps.apiKeyRepo!,
-    jwtConfig: authStrategy === 'jwt' ? {
-      issuer: getEnvOrDefault('JWT_ISSUER', ''),
-      audience: getEnvOrDefault('JWT_AUDIENCE', ''),
-      jwksUrl: getEnvOrDefault('JWT_JWKS_URL', ''),
-    } : undefined,
-  });
+  const authProvider =
+    deps.authProvider ??
+    createAuthProvider(authStrategy, {
+      apiKeyRepo: deps.apiKeyRepo!,
+      jwtConfig:
+        authStrategy === 'jwt'
+          ? {
+              issuer: getEnvOrDefault('JWT_ISSUER', ''),
+              audience: getEnvOrDefault('JWT_AUDIENCE', ''),
+              jwksUrl: getEnvOrDefault('JWT_JWKS_URL', ''),
+            }
+          : undefined,
+    });
 
   // Global middleware chain (order matters)
   app.use('*', requestContextMiddleware);
   app.use('*', timingMiddleware(deps.metrics ?? null));
   app.use('*', honoLogger());
   app.use('*', securityHeaders);
-  app.use('*', timeoutMiddleware({
-    defaultMs: 30_000,
-    overrides: { '/api/v1/exports/:exportId/download': 300_000 },
-  }));
+  app.use(
+    '*',
+    timeoutMiddleware({
+      defaultMs: 30_000,
+      overrides: { '/api/v1/exports/:exportId/download': 300_000 },
+    }),
+  );
   app.onError(errorHandler);
 
   // CORS
@@ -71,7 +79,13 @@ export function createApp(deps: AppDeps) {
     cors({
       origin: allowedOrigins,
       allowMethods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
-      allowHeaders: ['Authorization', 'Content-Type', 'X-Request-Id', 'X-Tenant-Id', 'Idempotency-Key'],
+      allowHeaders: [
+        'Authorization',
+        'Content-Type',
+        'X-Request-Id',
+        'X-Tenant-Id',
+        'Idempotency-Key',
+      ],
       exposeHeaders: ['X-RateLimit-Limit', 'X-RateLimit-Remaining', 'X-Request-Id'],
       maxAge: 86400,
       credentials: true,
@@ -97,7 +111,10 @@ export function createApp(deps: AppDeps) {
 
   // Auth middleware — uses authProvider (NoAuthProvider when AUTH_STRATEGY=none)
   // Note: authMiddleware skips /health, /api/docs, /api/openapi.json, /api/v1/tenants
-  app.use('/api/*', authMiddleware(authProvider, deps.auditLogger, deps.userTenantRepo, deps.tenantRepo));
+  app.use(
+    '/api/*',
+    authMiddleware(authProvider, deps.auditLogger, deps.userTenantRepo, deps.tenantRepo),
+  );
   app.use('/api/*', depsMiddleware(deps));
   app.use('/api/*', validateTenantMiddleware);
 

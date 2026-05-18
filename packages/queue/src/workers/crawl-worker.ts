@@ -20,7 +20,10 @@ export async function processCrawlJob(data: CrawlJobData, deps: WorkerDeps): Pro
           // Count completed tasks for this job
           const tasks = await deps.taskRepo.findByJob(jobId, { status: 'completed' });
           if (tasks.length >= maxPages) {
-            logger.info({ taskId, url, pageCount: tasks.length, maxPages }, 'Tenant page quota exceeded, skipping');
+            logger.info(
+              { taskId, url, pageCount: tasks.length, maxPages },
+              'Tenant page quota exceeded, skipping',
+            );
             await deps.taskRepo.updateStatus(taskId, tenantId, 'skipped');
             return;
           }
@@ -96,7 +99,11 @@ export async function processCrawlJob(data: CrawlJobData, deps: WorkerDeps): Pro
           { jobId, tenantId, extractionIds: evolution.extractionIds },
         );
         logger.debug(
-          { jobId, schemaVersion: evolution.schemaVersion, extractionCount: evolution.extractionIds.length },
+          {
+            jobId,
+            schemaVersion: evolution.schemaVersion,
+            extractionCount: evolution.extractionIds.length,
+          },
           'schema evolution triggered',
         );
       }
@@ -145,15 +152,13 @@ export async function processCrawlJob(data: CrawlJobData, deps: WorkerDeps): Pro
 
     // 5. Check crawl completion
     if (deps.completionChecker && !result.error) {
-      const completion = await deps.completionChecker.isComplete(
-        jobId, tenantId, deps.taskRepo,
-      );
+      const completion = await deps.completionChecker.isComplete(jobId, tenantId, deps.taskRepo);
       if (completion.complete) {
-        logger.info({ jobId, ...completion.stats }, 'Crawl naturally complete, triggering reconciliation');
-        await deps.queues.reconciliation.add(
-          `reconciliation:${jobId}`,
-          { jobId, tenantId },
+        logger.info(
+          { jobId, ...completion.stats },
+          'Crawl naturally complete, triggering reconciliation',
         );
+        await deps.queues.reconciliation.add(`reconciliation:${jobId}`, { jobId, tenantId });
       }
     }
   } catch (error) {

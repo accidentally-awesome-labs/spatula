@@ -27,7 +27,9 @@ describe('CsvExporter', () => {
   it('exports entities as CSV', async () => {
     const exporter = new CsvExporter();
     const result = await exporter.export(entities, schema, {
-      format: 'csv', includeProvenance: false, includeDocumentation: false,
+      format: 'csv',
+      includeProvenance: false,
+      includeDocumentation: false,
     });
     expect(result.entityCount).toBe(2);
     expect(result.format).toBe('csv');
@@ -40,7 +42,9 @@ describe('CsvExporter', () => {
   it('uses schema field order for columns', async () => {
     const exporter = new CsvExporter();
     const result = await exporter.export(entities, schema, {
-      format: 'csv', includeProvenance: false, includeDocumentation: false,
+      format: 'csv',
+      includeProvenance: false,
+      includeDocumentation: false,
     });
     expect((result.data as string).startsWith('name,price')).toBe(true);
   });
@@ -53,7 +57,9 @@ describe('CsvExporter', () => {
     ];
     const exporter = new CsvExporter();
     const result = await exporter.export(specialEntities, schema, {
-      format: 'csv', includeProvenance: false, includeDocumentation: false,
+      format: 'csv',
+      includeProvenance: false,
+      includeDocumentation: false,
     });
     const csv = result.data as string;
     const lines = csv.split('\n');
@@ -69,7 +75,9 @@ describe('CsvExporter', () => {
   it('outputs header row only for empty dataset', async () => {
     const exporter = new CsvExporter();
     const result = await exporter.export([], schema, {
-      format: 'csv', includeProvenance: false, includeDocumentation: false,
+      format: 'csv',
+      includeProvenance: false,
+      includeDocumentation: false,
     });
     expect(result.entityCount).toBe(0);
     const csv = result.data as string;
@@ -83,7 +91,9 @@ describe('CsvExporter', () => {
     ];
     const exporter = new CsvExporter();
     const result = await exporter.export(nullEntities, schema, {
-      format: 'csv', includeProvenance: false, includeDocumentation: false,
+      format: 'csv',
+      includeProvenance: false,
+      includeDocumentation: false,
     });
     const csv = result.data as string;
     const lines = csv.split('\n');
@@ -108,20 +118,22 @@ describe('CsvExporter', () => {
       parentVersion: null,
     };
     const mixedEntities = [
-      { mergedData: { name: 'A', price: 10 } },          // missing color
-      { mergedData: { name: 'B', color: 'red' } },        // missing price
+      { mergedData: { name: 'A', price: 10 } }, // missing color
+      { mergedData: { name: 'B', color: 'red' } }, // missing price
       { mergedData: { name: 'C', price: 30, color: 'blue' } }, // all fields
     ];
     const exporter = new CsvExporter();
     const result = await exporter.export(mixedEntities, mixedSchema, {
-      format: 'csv', includeProvenance: false, includeDocumentation: false,
+      format: 'csv',
+      includeProvenance: false,
+      includeDocumentation: false,
     });
     const csv = result.data as string;
     const lines = csv.split('\n');
     expect(lines[0]).toBe('name,price,color');
-    expect(lines[1]).toBe('A,10,');          // missing color => empty
-    expect(lines[2]).toBe('B,,red');          // missing price => empty
-    expect(lines[3]).toBe('C,30,blue');       // all present
+    expect(lines[1]).toBe('A,10,'); // missing color => empty
+    expect(lines[2]).toBe('B,,red'); // missing price => empty
+    expect(lines[3]).toBe('C,30,blue'); // all present
   });
 
   it('handles unicode in field names and values', async () => {
@@ -142,7 +154,9 @@ describe('CsvExporter', () => {
     ];
     const exporter = new CsvExporter();
     const result = await exporter.export(unicodeEntities, unicodeSchema, {
-      format: 'csv', includeProvenance: false, includeDocumentation: false,
+      format: 'csv',
+      includeProvenance: false,
+      includeDocumentation: false,
     });
     const csv = result.data as string;
     const lines = csv.split('\n');

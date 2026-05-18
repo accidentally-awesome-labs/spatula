@@ -14,21 +14,27 @@ function parsePeriod(period: string): Date {
 }
 
 const getUsageRoute = createRoute({
-  method: 'get', path: '/', tags: ['Usage'],
+  method: 'get',
+  path: '/',
+  tags: ['Usage'],
   summary: 'Get LLM usage for the authenticated tenant',
   request: {
     query: z.object({ period: z.string().default('30d').openapi({ example: '30d' }) }),
   },
   responses: {
-    200: jsonContent(z.object({
-      data: z.object({
-        period: z.object({ start: z.string(), end: z.string() }),
-        totalTokens: z.number(), totalCostUsd: z.number(),
-        byModel: z.record(z.object({ tokens: z.number(), costUsd: z.number() })),
-        byPurpose: z.record(z.object({ tokens: z.number(), costUsd: z.number() })),
-        byJob: z.array(z.object({ jobId: z.string(), tokens: z.number(), costUsd: z.number() })),
+    200: jsonContent(
+      z.object({
+        data: z.object({
+          period: z.object({ start: z.string(), end: z.string() }),
+          totalTokens: z.number(),
+          totalCostUsd: z.number(),
+          byModel: z.record(z.object({ tokens: z.number(), costUsd: z.number() })),
+          byPurpose: z.record(z.object({ tokens: z.number(), costUsd: z.number() })),
+          byJob: z.array(z.object({ jobId: z.string(), tokens: z.number(), costUsd: z.number() })),
+        }),
       }),
-    }), 'LLM usage aggregation'),
+      'LLM usage aggregation',
+    ),
     400: jsonContent(errorResponseSchema, 'Invalid period'),
   },
 });
@@ -43,7 +49,12 @@ export function usageRoutes() {
     if (!deps.llmUsageRepo) throw new Error('LLM usage tracking not configured');
     const since = parsePeriod(period);
     const aggregation = await deps.llmUsageRepo.aggregateByTenant(tenantId, since);
-    return c.json({ data: { period: { start: since.toISOString(), end: new Date().toISOString() }, ...aggregation } });
+    return c.json({
+      data: {
+        period: { start: since.toISOString(), end: new Date().toISOString() },
+        ...aggregation,
+      },
+    });
   });
   return router;
 }

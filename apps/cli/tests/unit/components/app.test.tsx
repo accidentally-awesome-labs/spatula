@@ -53,7 +53,14 @@ describe('App', () => {
       id: 'job-1',
       name: 'Test Job',
       status: 'running',
-      stats: { pagesFound: 10, pagesCrawled: 5, pagesExtracted: 0, pagesReconciled: 0, actionsPending: 0, actionsApplied: 0 },
+      stats: {
+        pagesFound: 10,
+        pagesCrawled: 5,
+        pagesExtracted: 0,
+        pagesReconciled: 0,
+        actionsPending: 0,
+        actionsApplied: 0,
+      },
     });
 
     const apiClient = createMockApiClient();
@@ -70,7 +77,15 @@ describe('App', () => {
 
     // Must also mock listActions to return same data since useJobPolling fires immediately
     const sampleActions = [
-      { id: 'a1', type: 'add_field', confidence: 0.9, reasoning: 'test', source: 'schema_evolution', payload: { field: { name: 'x', type: 'string', description: '' } }, status: 'pending_review' },
+      {
+        id: 'a1',
+        type: 'add_field',
+        confidence: 0.9,
+        reasoning: 'test',
+        source: 'schema_evolution',
+        payload: { field: { name: 'x', type: 'string', description: '' } },
+        status: 'pending_review',
+      },
     ];
     store.getState().setPendingActions(sampleActions);
 
@@ -133,7 +148,15 @@ describe('App', () => {
     const store = createCliStore('test-tenant');
     store.getState().setActiveJobId('job-1');
     const sampleActions = [
-      { id: 'a1', type: 'add_field', confidence: 0.9, reasoning: 'test', source: 'schema_evolution', payload: { field: { name: 'x', type: 'string', description: '' } }, status: 'pending_review' },
+      {
+        id: 'a1',
+        type: 'add_field',
+        confidence: 0.9,
+        reasoning: 'test',
+        source: 'schema_evolution',
+        payload: { field: { name: 'x', type: 'string', description: '' } },
+        status: 'pending_review',
+      },
     ];
     store.getState().setPendingActions(sampleActions);
 

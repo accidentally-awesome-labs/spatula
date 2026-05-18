@@ -262,9 +262,7 @@ export function createOllamaManager(): OllamaManager {
       } catch {
         // ignore
       }
-      throw new Error(
-        `Ollama serve did not become ready within ${SERVE_POLL_TIMEOUT_MS / 1000}s`,
-      );
+      throw new Error(`Ollama serve did not become ready within ${SERVE_POLL_TIMEOUT_MS / 1000}s`);
     },
 
     // ----- isAvailable ----------------------------------------------------

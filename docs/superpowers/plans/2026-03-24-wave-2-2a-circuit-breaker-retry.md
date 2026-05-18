@@ -9,6 +9,7 @@
 **Tech Stack:** TypeScript, Vitest
 
 **Spec references:**
+
 - Phase 12 spec: section 5.2 (Circuit Breaker), section 5.3 (Queue-Level Retry)
 - File: `docs/superpowers/specs/2026-03-21-phase-12-production-readiness-design.md`
 
@@ -18,23 +19,24 @@
 
 ### New Files
 
-| File | Responsibility |
-|------|---------------|
-| `packages/core/src/llm/circuit-breaker.ts` | Circuit breaker wrapping LLMClient |
-| `packages/core/tests/unit/llm/circuit-breaker.test.ts` | Circuit breaker tests |
+| File                                                   | Responsibility                     |
+| ------------------------------------------------------ | ---------------------------------- |
+| `packages/core/src/llm/circuit-breaker.ts`             | Circuit breaker wrapping LLMClient |
+| `packages/core/tests/unit/llm/circuit-breaker.test.ts` | Circuit breaker tests              |
 
 ### Modified Files
 
-| File | Change |
-|------|--------|
-| `packages/core/src/llm/index.ts` | Export CircuitBreakerLLMClient |
-| `packages/queue/src/queues.ts` | Per-queue job options replacing DEFAULT_JOB_OPTIONS |
+| File                             | Change                                              |
+| -------------------------------- | --------------------------------------------------- |
+| `packages/core/src/llm/index.ts` | Export CircuitBreakerLLMClient                      |
+| `packages/queue/src/queues.ts`   | Per-queue job options replacing DEFAULT_JOB_OPTIONS |
 
 ---
 
 ## Task 1: Circuit Breaker
 
 **Files:**
+
 - Create: `packages/core/src/llm/circuit-breaker.ts`
 - Create: `packages/core/tests/unit/llm/circuit-breaker.test.ts`
 - Modify: `packages/core/src/llm/index.ts`
@@ -45,7 +47,11 @@
 // packages/core/tests/unit/llm/circuit-breaker.test.ts
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { CircuitBreakerLLMClient } from '../../../src/llm/circuit-breaker.js';
-import type { LLMClient, LLMCompletionRequest, LLMCompletionResponse } from '../../../src/interfaces/llm-client.js';
+import type {
+  LLMClient,
+  LLMCompletionRequest,
+  LLMCompletionResponse,
+} from '../../../src/interfaces/llm-client.js';
 
 function createMockClient(): LLMClient {
   return {
@@ -102,7 +108,10 @@ describe('CircuitBreakerLLMClient', () => {
 
       // 1 success — resets counter
       (inner.complete as any).mockResolvedValueOnce({
-        content: 'ok', model: 'test', usage: { promptTokens: 0, completionTokens: 0, totalTokens: 0 }, finishReason: 'stop',
+        content: 'ok',
+        model: 'test',
+        usage: { promptTokens: 0, completionTokens: 0, totalTokens: 0 },
+        finishReason: 'stop',
       });
       await breaker.complete(defaultRequest);
       expect(breaker.state).toBe('closed');
@@ -153,7 +162,8 @@ describe('CircuitBreakerLLMClient', () => {
 
       // Next call triggers OPEN → HALF_OPEN promotion and goes through
       (inner.complete as any).mockResolvedValueOnce({
-        content: 'recovered', model: 'test',
+        content: 'recovered',
+        model: 'test',
         usage: { promptTokens: 0, completionTokens: 0, totalTokens: 0 },
         finishReason: 'stop',
       });
@@ -187,7 +197,8 @@ describe('CircuitBreakerLLMClient', () => {
 
       // Success in half-open
       (inner.complete as any).mockResolvedValue({
-        content: 'recovered', model: 'test',
+        content: 'recovered',
+        model: 'test',
         usage: { promptTokens: 0, completionTokens: 0, totalTokens: 0 },
         finishReason: 'stop',
       });
@@ -216,7 +227,8 @@ describe('CircuitBreakerLLMClient', () => {
 
       // 2 successes → closes
       const successResponse = {
-        content: 'ok', model: 'test',
+        content: 'ok',
+        model: 'test',
         usage: { promptTokens: 0, completionTokens: 0, totalTokens: 0 },
         finishReason: 'stop',
       };
@@ -442,6 +454,7 @@ git commit -m "feat(core): add circuit breaker for LLM client with CLOSED/OPEN/H
 ## Task 2: Per-Queue Retry Config
 
 **Files:**
+
 - Modify: `packages/queue/src/queues.ts`
 
 - [ ] **Step 1: Replace DEFAULT_JOB_OPTIONS with per-queue options**
@@ -460,7 +473,7 @@ In `packages/queue/src/queues.ts`, replace the single `DEFAULT_JOB_OPTIONS` cons
 const QUEUE_JOB_OPTIONS = {
   [QUEUE_NAMES.CRAWL]: {
     attempts: 3,
-    backoff: { type: 'exponential' as const, delay: 5_000 },  // 5s, 10s, 20s
+    backoff: { type: 'exponential' as const, delay: 5_000 }, // 5s, 10s, 20s
     removeOnComplete: { count: 1000 },
     removeOnFail: { count: 5000 },
   },
@@ -472,7 +485,7 @@ const QUEUE_JOB_OPTIONS = {
   },
   [QUEUE_NAMES.SCHEMA_EVOLUTION]: {
     attempts: 2,
-    backoff: { type: 'fixed' as const, delay: 10_000 },       // flat 10s retry (lock contention)
+    backoff: { type: 'fixed' as const, delay: 10_000 }, // flat 10s retry (lock contention)
     removeOnComplete: { count: 1000 },
     removeOnFail: { count: 5000 },
   },
@@ -484,7 +497,7 @@ const QUEUE_JOB_OPTIONS = {
   },
   [QUEUE_NAMES.EXPORT]: {
     attempts: 2,
-    backoff: { type: 'exponential' as const, delay: 3_000 },  // 3s, 6s
+    backoff: { type: 'exponential' as const, delay: 3_000 }, // 3s, 6s
     removeOnComplete: { count: 1000 },
     removeOnFail: { count: 5000 },
   },
@@ -544,6 +557,7 @@ git commit -m "feat(queue): add per-queue retry strategies for different failure
 ## Task 3: Integration Verification
 
 **Files:**
+
 - No new files — verification only
 
 - [ ] **Step 1: Run full core test suite**

@@ -90,10 +90,7 @@ describe('OllamaClient', () => {
     const client = new OllamaClient();
     await client.complete(defaultRequest);
 
-    expect(fetch).toHaveBeenCalledWith(
-      'http://localhost:11434/api/chat',
-      expect.any(Object),
-    );
+    expect(fetch).toHaveBeenCalledWith('http://localhost:11434/api/chat', expect.any(Object));
   });
 
   it('sets json format when jsonMode is true', async () => {
@@ -134,7 +131,7 @@ describe('OllamaClient', () => {
     mockFetch.mockResolvedValue({ ok: false, status: 404 } as any);
 
     const client = new OllamaClient();
-    const error = await client.complete(defaultRequest).catch(e => e);
+    const error = await client.complete(defaultRequest).catch((e) => e);
 
     expect(error).toBeInstanceOf(LLMError);
     expect(error.message).toContain('404');
@@ -220,7 +217,10 @@ describe('OllamaClient', () => {
   });
 
   it('throws TimeoutError when request times out', async () => {
-    const timeoutError = new DOMException('The operation was aborted due to timeout', 'TimeoutError');
+    const timeoutError = new DOMException(
+      'The operation was aborted due to timeout',
+      'TimeoutError',
+    );
     mockFetch.mockRejectedValue(timeoutError);
 
     const client = new OllamaClient({ timeoutMs: 1000 });

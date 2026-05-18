@@ -32,7 +32,8 @@ export class PgContentStore implements ContentStore {
       // Track storage bytes (fire-and-forget)
       if (this.tenantId && this.tenantRepo) {
         const bytes = Buffer.byteLength(content, 'utf-8');
-        void this.tenantRepo.incrementStorageBytes(this.tenantId, bytes)
+        void this.tenantRepo
+          .incrementStorageBytes(this.tenantId, bytes)
           .catch((err: unknown) => logger.warn({ err }, 'Failed to track storage bytes'));
       }
 
@@ -91,7 +92,8 @@ export class PgContentStore implements ContentStore {
 
       // Track storage bytes (fire-and-forget)
       if (this.tenantId && this.tenantRepo) {
-        void this.tenantRepo.incrementStorageBytes(this.tenantId, data.byteLength)
+        void this.tenantRepo
+          .incrementStorageBytes(this.tenantId, data.byteLength)
           .catch((err: unknown) => logger.warn({ err }, 'Failed to track storage bytes'));
       }
 

@@ -9,6 +9,7 @@
 **Tech Stack:** TypeScript, `@opentelemetry/sdk-metrics`, `@opentelemetry/exporter-prometheus`, `@opentelemetry/sdk-trace-node`, `@sentry/node`, `@bull-board/api`, `@bull-board/hono`, Drizzle ORM, Hono, Vitest
 
 **Spec references:**
+
 - Phase 12 spec: sections 4.1-4.6
 - File: `docs/superpowers/specs/2026-03-21-phase-12-production-readiness-design.md`
 - Decomposition: `docs/superpowers/specs/2026-03-25-wave-3-decomposition-design.md` section 4.3
@@ -21,44 +22,45 @@
 
 ### New Files
 
-| File | Responsibility |
-|------|---------------|
-| `packages/shared/src/metrics.ts` | MeterProvider + PrometheusExporter + 19 metric instruments |
-| `packages/shared/src/tracing.ts` | NodeTracerProvider + BatchSpanProcessor + auto-instrumentation |
-| `packages/shared/src/sentry.ts` | Sentry init + captureException helper |
-| `apps/api/src/middleware/timing.ts` | Request timing middleware (duration, method, route, status) |
-| `apps/api/src/routes/usage.ts` | `GET /api/v1/usage` cost API endpoint |
-| `apps/api/src/routes/health.ts` | `/health/live` and `/health/ready` endpoints |
-| `apps/api/src/routes/admin-queues.ts` | Bull Board mount at `/api/admin/queues` |
-| `packages/db/src/schema/llm-usage.ts` | `llm_usage` Drizzle table |
-| `packages/db/src/repositories/llm-usage-repository.ts` | Insert + aggregation queries |
-| `packages/queue/src/trace-context.ts` | BullMQ trace context inject/extract helpers |
-| `apps/api/tests/unit/middleware/timing.test.ts` | Timing middleware tests |
-| `apps/api/tests/unit/routes/usage.test.ts` | Usage API tests |
-| `apps/api/tests/unit/routes/health.test.ts` | Health check tests |
-| `packages/db/tests/unit/repositories/llm-usage-repository.test.ts` | LLM usage repo tests |
-| `packages/shared/tests/unit/metrics.test.ts` | Metrics setup tests |
+| File                                                               | Responsibility                                                 |
+| ------------------------------------------------------------------ | -------------------------------------------------------------- |
+| `packages/shared/src/metrics.ts`                                   | MeterProvider + PrometheusExporter + 19 metric instruments     |
+| `packages/shared/src/tracing.ts`                                   | NodeTracerProvider + BatchSpanProcessor + auto-instrumentation |
+| `packages/shared/src/sentry.ts`                                    | Sentry init + captureException helper                          |
+| `apps/api/src/middleware/timing.ts`                                | Request timing middleware (duration, method, route, status)    |
+| `apps/api/src/routes/usage.ts`                                     | `GET /api/v1/usage` cost API endpoint                          |
+| `apps/api/src/routes/health.ts`                                    | `/health/live` and `/health/ready` endpoints                   |
+| `apps/api/src/routes/admin-queues.ts`                              | Bull Board mount at `/api/admin/queues`                        |
+| `packages/db/src/schema/llm-usage.ts`                              | `llm_usage` Drizzle table                                      |
+| `packages/db/src/repositories/llm-usage-repository.ts`             | Insert + aggregation queries                                   |
+| `packages/queue/src/trace-context.ts`                              | BullMQ trace context inject/extract helpers                    |
+| `apps/api/tests/unit/middleware/timing.test.ts`                    | Timing middleware tests                                        |
+| `apps/api/tests/unit/routes/usage.test.ts`                         | Usage API tests                                                |
+| `apps/api/tests/unit/routes/health.test.ts`                        | Health check tests                                             |
+| `packages/db/tests/unit/repositories/llm-usage-repository.test.ts` | LLM usage repo tests                                           |
+| `packages/shared/tests/unit/metrics.test.ts`                       | Metrics setup tests                                            |
 
 ### Modified Files
 
-| File | Change |
-|------|--------|
-| `packages/shared/src/index.ts` | Export metrics, tracing, sentry |
-| `packages/db/src/schema/index.ts` | Export `llmUsage` table |
-| `packages/db/src/repositories/index.ts` | Export `LlmUsageRepository` |
-| `apps/api/src/types.ts` | Add `llmUsageRepo` to `AppDeps` |
-| `apps/api/src/app.ts` | Add timing middleware, health routes, Bull Board, usage route |
-| `apps/api/src/middleware/error-handler.ts` | Add Sentry capture for 5xx |
-| `packages/core/src/llm/openrouter-client.ts` | Instrument with usage recording + metrics |
-| `packages/core/src/llm/circuit-breaker.ts` | Wire OTel metrics for breaker state |
-| `packages/queue/src/queues.ts` | Inject trace context on job enqueue |
-| `packages/queue/src/workers/crawl-worker.ts` | Extract trace context, create child span |
+| File                                         | Change                                                        |
+| -------------------------------------------- | ------------------------------------------------------------- |
+| `packages/shared/src/index.ts`               | Export metrics, tracing, sentry                               |
+| `packages/db/src/schema/index.ts`            | Export `llmUsage` table                                       |
+| `packages/db/src/repositories/index.ts`      | Export `LlmUsageRepository`                                   |
+| `apps/api/src/types.ts`                      | Add `llmUsageRepo` to `AppDeps`                               |
+| `apps/api/src/app.ts`                        | Add timing middleware, health routes, Bull Board, usage route |
+| `apps/api/src/middleware/error-handler.ts`   | Add Sentry capture for 5xx                                    |
+| `packages/core/src/llm/openrouter-client.ts` | Instrument with usage recording + metrics                     |
+| `packages/core/src/llm/circuit-breaker.ts`   | Wire OTel metrics for breaker state                           |
+| `packages/queue/src/queues.ts`               | Inject trace context on job enqueue                           |
+| `packages/queue/src/workers/crawl-worker.ts` | Extract trace context, create child span                      |
 
 ---
 
 ## Task 1: OTel Metrics Setup
 
 **Files:**
+
 - Create: `packages/shared/src/metrics.ts`
 - Create: `packages/shared/tests/unit/metrics.test.ts`
 - Modify: `packages/shared/src/index.ts`
@@ -237,6 +239,7 @@ export async function shutdownMetrics(): Promise<void> {
 - [ ] **Step 4: Export from barrel**
 
 Add to `packages/shared/src/index.ts`:
+
 ```typescript
 export { createMetrics, shutdownMetrics } from './metrics.js';
 export type { SpatulaMetrics, MetricsConfig } from './metrics.js';
@@ -260,6 +263,7 @@ git commit -m "feat(shared): add OpenTelemetry metrics setup with Prometheus exp
 ## Task 2: Request Timing Middleware
 
 **Files:**
+
 - Create: `apps/api/src/middleware/timing.ts`
 - Create: `apps/api/tests/unit/middleware/timing.test.ts`
 
@@ -286,10 +290,13 @@ describe('timingMiddleware', () => {
     const res = await app.request('/test');
     expect(res.status).toBe(200);
 
-    expect(mockMetrics.httpRequestsTotal.add).toHaveBeenCalledWith(1, expect.objectContaining({
-      method: 'GET',
-      status: 200,
-    }));
+    expect(mockMetrics.httpRequestsTotal.add).toHaveBeenCalledWith(
+      1,
+      expect.objectContaining({
+        method: 'GET',
+        status: 200,
+      }),
+    );
     expect(mockMetrics.httpRequestDuration.record).toHaveBeenCalledWith(
       expect.any(Number),
       expect.objectContaining({ method: 'GET', status: 200 }),
@@ -376,6 +383,7 @@ git commit -m "feat(api): add request timing middleware with OTel metrics"
 ## Task 3: Sentry Integration
 
 **Files:**
+
 - Create: `packages/shared/src/sentry.ts`
 - Modify: `packages/shared/src/index.ts`
 
@@ -452,8 +460,8 @@ export function initSentry(config?: SentryConfig): void {
   Sentry.init({
     dsn,
     environment: config?.environment ?? process.env.NODE_ENV ?? 'development',
-    tracesSampleRate: config?.tracesSampleRate ??
-      parseFloat(process.env.SENTRY_TRACES_SAMPLE_RATE ?? '0.1'),
+    tracesSampleRate:
+      config?.tracesSampleRate ?? parseFloat(process.env.SENTRY_TRACES_SAMPLE_RATE ?? '0.1'),
   });
 
   logger.info('Sentry initialized');
@@ -478,6 +486,7 @@ export { Sentry };
 - [ ] **Step 3: Export from barrel**
 
 Add to `packages/shared/src/index.ts`:
+
 ```typescript
 export { initSentry, captureException } from './sentry.js';
 export type { SentryConfig } from './sentry.js';
@@ -486,13 +495,15 @@ export type { SentryConfig } from './sentry.js';
 - [ ] **Step 4: Add Sentry capture to error handler**
 
 In `apps/api/src/middleware/error-handler.ts`, add import:
+
 ```typescript
 import { captureException } from '@spatula/shared';
 ```
 
 In the `errorHandler` function, after the `if (status >= 500)` block's logger.error call, add:
+
 ```typescript
-    captureException(error, { requestId, path: c.req.path });
+captureException(error, { requestId, path: c.req.path });
 ```
 
 - [ ] **Step 5: Build and test**
@@ -513,6 +524,7 @@ git commit -m "feat(shared): add Sentry integration with error capture for 5xx r
 ## Task 4: LLM Usage Table + Repository
 
 **Files:**
+
 - Create: `packages/db/src/schema/llm-usage.ts`
 - Create: `packages/db/src/repositories/llm-usage-repository.ts`
 - Create: `packages/db/tests/unit/repositories/llm-usage-repository.test.ts`
@@ -528,26 +540,35 @@ import { sql } from 'drizzle-orm';
 import { tenants } from './tenants.js';
 import { jobs } from './jobs.js';
 
-export const llmUsage = pgTable('llm_usage', {
-  id: uuid('id').defaultRandom().primaryKey(),
-  tenantId: uuid('tenant_id').notNull().references(() => tenants.id, { onDelete: 'cascade' }),
-  jobId: uuid('job_id').references(() => jobs.id, { onDelete: 'set null' }),
-  model: text('model').notNull(),
-  promptTokens: integer('prompt_tokens').notNull(),
-  completionTokens: integer('completion_tokens').notNull(),
-  totalTokens: integer('total_tokens').notNull(),
-  costUsd: numeric('cost_usd', { precision: 10, scale: 6 }).notNull(),
-  purpose: text('purpose').notNull(),
-  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
-}, (table) => [
-  index('idx_llm_usage_tenant_time').on(table.tenantId, table.createdAt),
-  index('idx_llm_usage_job').on(table.jobId).where(sql`job_id IS NOT NULL`),
-]);
+export const llmUsage = pgTable(
+  'llm_usage',
+  {
+    id: uuid('id').defaultRandom().primaryKey(),
+    tenantId: uuid('tenant_id')
+      .notNull()
+      .references(() => tenants.id, { onDelete: 'cascade' }),
+    jobId: uuid('job_id').references(() => jobs.id, { onDelete: 'set null' }),
+    model: text('model').notNull(),
+    promptTokens: integer('prompt_tokens').notNull(),
+    completionTokens: integer('completion_tokens').notNull(),
+    totalTokens: integer('total_tokens').notNull(),
+    costUsd: numeric('cost_usd', { precision: 10, scale: 6 }).notNull(),
+    purpose: text('purpose').notNull(),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    index('idx_llm_usage_tenant_time').on(table.tenantId, table.createdAt),
+    index('idx_llm_usage_job')
+      .on(table.jobId)
+      .where(sql`job_id IS NOT NULL`),
+  ],
+);
 ```
 
 - [ ] **Step 2: Export from schema barrel and generate migration**
 
 Add to `packages/db/src/schema/index.ts`:
+
 ```typescript
 export * from './llm-usage.js';
 ```
@@ -665,10 +686,7 @@ export class LlmUsageRepository {
 
   async aggregateByTenant(tenantId: string, since: Date): Promise<UsageAggregation> {
     try {
-      const conditions = and(
-        eq(llmUsage.tenantId, tenantId),
-        gte(llmUsage.createdAt, since),
-      );
+      const conditions = and(eq(llmUsage.tenantId, tenantId), gte(llmUsage.createdAt, since));
 
       // Totals via SQL aggregation (not in-memory)
       const [totals] = await this.db
@@ -740,6 +758,7 @@ export class LlmUsageRepository {
 - [ ] **Step 5: Export from barrels**
 
 Add to `packages/db/src/repositories/index.ts`:
+
 ```typescript
 export { LlmUsageRepository } from './llm-usage-repository.js';
 export type { LlmUsageInput, UsageAggregation } from './llm-usage-repository.js';
@@ -763,6 +782,7 @@ git commit -m "feat(db): add llm_usage table and LlmUsageRepository with aggrega
 ## Task 5: Cost API Endpoint
 
 **Files:**
+
 - Create: `apps/api/src/routes/usage.ts`
 - Create: `apps/api/tests/unit/routes/usage.test.ts`
 
@@ -794,8 +814,8 @@ describe('Usage routes', () => {
       aggregateByTenant: vi.fn().mockResolvedValue({
         totalTokens: 1250000,
         totalCostUsd: 4.23,
-        byModel: { 'anthropic/claude-3-haiku': { tokens: 800000, costUsd: 0.80 } },
-        byPurpose: { extraction: { tokens: 500000, costUsd: 2.10 } },
+        byModel: { 'anthropic/claude-3-haiku': { tokens: 800000, costUsd: 0.8 } },
+        byPurpose: { extraction: { tokens: 500000, costUsd: 2.1 } },
         byJob: [{ jobId: 'job-1', tokens: 125000, costUsd: 0.42 }],
       }),
     };
@@ -818,10 +838,7 @@ describe('Usage routes', () => {
     const res = await app.request('/api/v1/usage?period=7d');
 
     expect(res.status).toBe(200);
-    expect(mockLlmUsageRepo.aggregateByTenant).toHaveBeenCalledWith(
-      'tenant-1',
-      expect.any(Date),
-    );
+    expect(mockLlmUsageRepo.aggregateByTenant).toHaveBeenCalledWith('tenant-1', expect.any(Date));
   });
 });
 ```
@@ -916,6 +933,7 @@ git commit -m "feat(api): add GET /api/v1/usage endpoint for LLM cost tracking"
 ## Task 6: Health Check Endpoints
 
 **Files:**
+
 - Create: `apps/api/src/routes/health.ts`
 - Create: `apps/api/tests/unit/routes/health.test.ts`
 
@@ -962,7 +980,9 @@ describe('Health routes', () => {
 
     it('returns 503 when database check fails', async () => {
       const deps = {
-        dbPool: { query: vi.fn().mockRejectedValue(new Error('connection refused')) } as unknown as Pool,
+        dbPool: {
+          query: vi.fn().mockRejectedValue(new Error('connection refused')),
+        } as unknown as Pool,
         redis: { ping: vi.fn().mockResolvedValue('PONG') } as any,
         queues: {
           crawl: { getJobCounts: vi.fn().mockResolvedValue({ waiting: 0 }) },
@@ -1011,16 +1031,28 @@ export function healthRoutes(deps: HealthDeps) {
     const results = await Promise.allSettled([
       // Database check
       deps.dbPool
-        ? deps.dbPool.query('SELECT 1').then(() => { checks.database = 'ok'; })
-        : Promise.resolve().then(() => { checks.database = 'ok'; }),
+        ? deps.dbPool.query('SELECT 1').then(() => {
+            checks.database = 'ok';
+          })
+        : Promise.resolve().then(() => {
+            checks.database = 'ok';
+          }),
       // Redis check
       deps.redis
-        ? deps.redis.ping().then(() => { checks.redis = 'ok'; })
-        : Promise.resolve().then(() => { checks.redis = 'ok'; }),
+        ? deps.redis.ping().then(() => {
+            checks.redis = 'ok';
+          })
+        : Promise.resolve().then(() => {
+            checks.redis = 'ok';
+          }),
       // Queue check
       deps.queues?.crawl
-        ? deps.queues.crawl.getJobCounts().then(() => { checks.queue = 'ok'; })
-        : Promise.resolve().then(() => { checks.queue = 'ok'; }),
+        ? deps.queues.crawl.getJobCounts().then(() => {
+            checks.queue = 'ok';
+          })
+        : Promise.resolve().then(() => {
+            checks.queue = 'ok';
+          }),
     ]);
 
     // Mark failed checks
@@ -1057,6 +1089,7 @@ git commit -m "feat(api): add two-tier health checks (liveness + readiness probe
 ## Task 7: Bull Board Queue Dashboard
 
 **Files:**
+
 - Create: `apps/api/src/routes/admin-queues.ts`
 
 - [ ] **Step 1: Install Bull Board**
@@ -1114,6 +1147,7 @@ git commit -m "feat(api): add Bull Board queue dashboard at /api/admin/queues"
 ## Task 8: Distributed Tracing Setup
 
 **Files:**
+
 - Create: `packages/shared/src/tracing.ts`
 - Modify: `packages/shared/src/index.ts`
 
@@ -1203,6 +1237,7 @@ export async function shutdownTracing(): Promise<void> {
 - [ ] **Step 3: Export from barrel**
 
 Add to `packages/shared/src/index.ts`:
+
 ```typescript
 export { initTracing, shutdownTracing } from './tracing.js';
 export type { TracingConfig } from './tracing.js';
@@ -1226,6 +1261,7 @@ git commit -m "feat(shared): add distributed tracing with OTel NodeTracerProvide
 ## Task 9: BullMQ Trace Context Propagation
 
 **Files:**
+
 - Create: `packages/queue/src/trace-context.ts`
 - Modify: `packages/queue/src/index.ts`
 
@@ -1270,7 +1306,9 @@ import { context, propagation, trace, SpanKind } from '@opentelemetry/api';
  * Inject current trace context into job data.
  * Call before enqueuing a BullMQ job.
  */
-export function injectTraceContext<T extends Record<string, unknown>>(data: T): T & { _traceContext?: Record<string, string> } {
+export function injectTraceContext<T extends Record<string, unknown>>(
+  data: T,
+): T & { _traceContext?: Record<string, string> } {
   const carrier: Record<string, string> = {};
   propagation.inject(context.active(), carrier);
 
@@ -1308,6 +1346,7 @@ export function extractTraceContext(
 - [ ] **Step 3: Export from barrel**
 
 Add to `packages/queue/src/index.ts`:
+
 ```typescript
 export { injectTraceContext, extractTraceContext } from './trace-context.js';
 ```
@@ -1330,6 +1369,7 @@ git commit -m "feat(queue): add BullMQ trace context propagation helpers"
 ## Task 10: Circuit Breaker OTel Wiring
 
 **Files:**
+
 - Modify: `packages/core/src/llm/circuit-breaker.ts`
 
 - [ ] **Step 1: Read the circuit breaker file**
@@ -1345,6 +1385,7 @@ import type { SpatulaMetrics } from '@spatula/shared';
 ```
 
 Add to the class:
+
 ```typescript
   private metrics?: SpatulaMetrics;
 
@@ -1354,8 +1395,9 @@ Add to the class:
 ```
 
 In the `complete()` method, when a request is rejected (circuit open):
+
 ```typescript
-    this.metrics?.circuitBreakerRejectionsTotal.add(1);
+this.metrics?.circuitBreakerRejectionsTotal.add(1);
 ```
 
 On state transitions, update the state gauge. Remove the TODO comment.
@@ -1380,6 +1422,7 @@ git commit -m "feat(core): wire circuit breaker to OTel metrics instruments"
 ## Task 11: Instrument OpenRouterClient with Usage Recording
 
 **Files:**
+
 - Modify: `packages/core/src/llm/openrouter-client.ts`
 - Modify: `packages/core/src/interfaces/llm-client.ts`
 
@@ -1420,17 +1463,17 @@ Read `packages/core/src/llm/openrouter-client.ts`. Add an optional `usageRecorde
 In the `complete()` method, after a successful API call that returns the response, add:
 
 ```typescript
-    // Record usage (fire-and-forget)
-    if (this.usageRecorder && response.usage) {
-      this.usageRecorder.record({
-        model: response.model,
-        promptTokens: response.usage.promptTokens,
-        completionTokens: response.usage.completionTokens,
-        totalTokens: response.usage.totalTokens,
-        costUsd: 0, // OpenRouter cost comes from response headers — extract if available
-        durationMs: duration,
-      });
-    }
+// Record usage (fire-and-forget)
+if (this.usageRecorder && response.usage) {
+  this.usageRecorder.record({
+    model: response.model,
+    promptTokens: response.usage.promptTokens,
+    completionTokens: response.usage.completionTokens,
+    totalTokens: response.usage.totalTokens,
+    costUsd: 0, // OpenRouter cost comes from response headers — extract if available
+    durationMs: duration,
+  });
+}
 ```
 
 The `duration` should be measured around the fetch call. Add `const start = performance.now()` before the fetch and `const duration = performance.now() - start` after.
@@ -1455,6 +1498,7 @@ git commit -m "feat(core): instrument OpenRouterClient with usage recording call
 ## Task 12: Wire Everything into App
 
 **Files:**
+
 - Create: `apps/api/src/services/usage-recorder.ts`
 - Modify: `apps/api/src/types.ts`
 - Modify: `apps/api/src/app.ts`
@@ -1462,12 +1506,14 @@ git commit -m "feat(core): instrument OpenRouterClient with usage recording call
 - [ ] **Step 1: Add new deps to AppDeps**
 
 In `apps/api/src/types.ts`, add:
+
 ```typescript
 import type { LlmUsageRepository } from '@spatula/db';
 import type { SpatulaMetrics } from '@spatula/shared';
 ```
 
 Add to `AppDeps`:
+
 ```typescript
   llmUsageRepo?: LlmUsageRepository;
   metrics?: SpatulaMetrics;
@@ -1514,18 +1560,20 @@ export class DefaultUsageRecorder implements LLMUsageRecorder {
 
     // Database persistence (fire-and-forget)
     if (this.repo) {
-      this.repo.insert({
-        tenantId: this.tenantId,
-        jobId: this.jobId,
-        model: usage.model,
-        promptTokens: usage.promptTokens,
-        completionTokens: usage.completionTokens,
-        totalTokens: usage.totalTokens,
-        costUsd: usage.costUsd.toFixed(6),
-        purpose: usage.purpose ?? 'unknown',
-      }).catch((err) => {
-        logger.warn({ err, model: usage.model }, 'Failed to record LLM usage');
-      });
+      this.repo
+        .insert({
+          tenantId: this.tenantId,
+          jobId: this.jobId,
+          model: usage.model,
+          promptTokens: usage.promptTokens,
+          completionTokens: usage.completionTokens,
+          totalTokens: usage.totalTokens,
+          costUsd: usage.costUsd.toFixed(6),
+          purpose: usage.purpose ?? 'unknown',
+        })
+        .catch((err) => {
+          logger.warn({ err, model: usage.model }, 'Failed to record LLM usage');
+        });
     }
   }
 }
@@ -1538,11 +1586,11 @@ export class DefaultUsageRecorder implements LLMUsageRecorder {
 In `app.ts`, after creating the app, register the 3 observable gauges that need repo/queue callbacks. These complete the 19-metric spec:
 
 ```typescript
-  // Register observable gauges (need repo/queue access for callbacks)
-  if (deps.metrics) {
-    const meter = (deps.metrics as any)._meter; // Internal — or pass meter through SpatulaMetrics
-    // Alternative: export the meter from createMetrics() and use it here
-  }
+// Register observable gauges (need repo/queue access for callbacks)
+if (deps.metrics) {
+  const meter = (deps.metrics as any)._meter; // Internal — or pass meter through SpatulaMetrics
+  // Alternative: export the meter from createMetrics() and use it here
+}
 ```
 
 **Simpler approach:** Add a `registerObservableGauges()` function to `packages/shared/src/metrics.ts` that accepts the repos/queues and registers the 3 gauges:
@@ -1558,14 +1606,18 @@ export function registerObservableGauges(
 ): void {
   // These are sampled periodically by the Prometheus exporter
   if (deps.queues?.crawl) {
-    meter.createObservableGauge('queue_depth', {
-      description: 'Current queue depth',
-    }).addCallback(async (result) => {
-      try {
-        const counts = await deps.queues!.crawl!.getJobCounts();
-        result.observe(counts.waiting ?? 0, { queue: 'crawl' });
-      } catch { /* skip */ }
-    });
+    meter
+      .createObservableGauge('queue_depth', {
+        description: 'Current queue depth',
+      })
+      .addCallback(async (result) => {
+        try {
+          const counts = await deps.queues!.crawl!.getJobCounts();
+          result.observe(counts.waiting ?? 0, { queue: 'crawl' });
+        } catch {
+          /* skip */
+        }
+      });
   }
 }
 ```
@@ -1582,6 +1634,7 @@ export function registerObservableGauges(
 - [ ] **Step 4: Update app.ts**
 
 Add imports:
+
 ```typescript
 import { timingMiddleware } from './middleware/timing.js';
 import { usageRoutes } from './routes/usage.js';
@@ -1590,31 +1643,35 @@ import { createQueueDashboard } from './routes/admin-queues.js';
 ```
 
 Add timing middleware after `requestContextMiddleware` and before `honoLogger()` (per decomposition spec section 5.1 middleware chain order):
+
 ```typescript
-  app.use('*', requestContextMiddleware);
-  app.use('*', timingMiddleware(deps.metrics ?? null));  // NEW — after requestContext, before logger
-  app.use('*', honoLogger());
+app.use('*', requestContextMiddleware);
+app.use('*', timingMiddleware(deps.metrics ?? null)); // NEW — after requestContext, before logger
+app.use('*', honoLogger());
 ```
 
 Add health routes (keep existing `/health` for backward compat):
+
 ```typescript
-  // Health checks (no auth — these paths are in SKIP_AUTH_PATHS)
-  app.route('', healthRoutes({ dbPool: deps.dbPool, redis: deps.redis, queues: deps.queues }));
+// Health checks (no auth — these paths are in SKIP_AUTH_PATHS)
+app.route('', healthRoutes({ dbPool: deps.dbPool, redis: deps.redis, queues: deps.queues }));
 ```
 
 Add usage route after other API routes:
+
 ```typescript
-  // Usage API (requires jobs:read scope)
-  app.get('/api/v1/usage', requireScope('jobs:read'));
-  app.route('/api/v1/usage', usageRoutes());
+// Usage API (requires jobs:read scope)
+app.get('/api/v1/usage', requireScope('jobs:read'));
+app.route('/api/v1/usage', usageRoutes());
 ```
 
 Add Bull Board conditionally:
+
 ```typescript
-  // Queue dashboard (admin scope enforced by /api/v1/admin/* middleware)
-  if (deps.queues) {
-    app.route('', createQueueDashboard(deps.queues));
-  }
+// Queue dashboard (admin scope enforced by /api/v1/admin/* middleware)
+if (deps.queues) {
+  app.route('', createQueueDashboard(deps.queues));
+}
 ```
 
 - [ ] **Step 5: Run ALL tests**
@@ -1647,6 +1704,7 @@ cd /Users/salar/Projects/spatula && pnpm test
 Expected: ~1,449 existing + ~15-20 new = ~1,465+ tests.
 
 New test breakdown:
+
 - Metrics setup: 2 tests
 - Timing middleware: 3 tests
 - LLM usage repo: 1+ tests

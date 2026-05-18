@@ -6,7 +6,10 @@ import type { Pool } from 'pg';
 
 describe('depsMiddleware', () => {
   it('injects deps into context', async () => {
-    const mockDeps = { dbPool: { end: vi.fn() } as unknown as Pool, jobRepo: { findById: vi.fn() } } as unknown as AppDeps;
+    const mockDeps = {
+      dbPool: { end: vi.fn() } as unknown as Pool,
+      jobRepo: { findById: vi.fn() },
+    } as unknown as AppDeps;
     const app = new Hono();
     app.use('*', depsMiddleware(mockDeps));
     app.get('/test', (c) => {

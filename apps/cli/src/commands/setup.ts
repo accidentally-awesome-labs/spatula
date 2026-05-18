@@ -16,7 +16,8 @@ export interface SetupAnswers {
 
 export function buildGlobalConfig(answers: SetupAnswers): GlobalConfig {
   const config: GlobalConfig = { version: 1 };
-  if (answers.provider === 'openrouter' && answers.openrouterApiKey) config.openrouterApiKey = answers.openrouterApiKey;
+  if (answers.provider === 'openrouter' && answers.openrouterApiKey)
+    config.openrouterApiKey = answers.openrouterApiKey;
   if (answers.firecrawlApiKey) config.firecrawlApiKey = answers.firecrawlApiKey;
   config.llm = { provider: answers.provider };
   if (answers.model) config.llm.model = answers.model;
@@ -25,7 +26,9 @@ export function buildGlobalConfig(answers: SetupAnswers): GlobalConfig {
 }
 
 async function prompt(rl: ReturnType<typeof createInterface>, question: string): Promise<string> {
-  return new Promise((resolve) => { rl.question(question, (answer) => resolve(answer.trim())); });
+  return new Promise((resolve) => {
+    rl.question(question, (answer) => resolve(answer.trim()));
+  });
 }
 
 export async function runSetupCommand(): Promise<void> {
@@ -54,7 +57,10 @@ export async function runSetupCommand(): Promise<void> {
     answers.model = model || defaultModel || undefined;
 
     const defaultCrawler = existing?.crawler ?? 'playwright';
-    const crawler = await prompt(rl, `  Default crawler (playwright/firecrawl) [${defaultCrawler}]: `);
+    const crawler = await prompt(
+      rl,
+      `  Default crawler (playwright/firecrawl) [${defaultCrawler}]: `,
+    );
     answers.crawler = (crawler || defaultCrawler) as 'playwright' | 'firecrawl';
 
     const firecrawlKey = await prompt(rl, `  Firecrawl API key (optional): `);
@@ -66,5 +72,7 @@ export async function runSetupCommand(): Promise<void> {
     if (!existsSync(dir)) mkdirSync(dir, { recursive: true });
     writeFileSync(configPath, stringifyYaml(merged, { lineWidth: 0 }), 'utf-8');
     console.log(`\n  Config saved to ${configPath}`);
-  } finally { rl.close(); }
+  } finally {
+    rl.close();
+  }
 }

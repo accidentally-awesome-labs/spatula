@@ -373,7 +373,10 @@ describe('JobManager', () => {
       });
 
       jobRepo.findById.mockResolvedValue({
-        id: JOB_ID, tenantId: TENANT_ID, status: 'pending', config: baseConfig,
+        id: JOB_ID,
+        tenantId: TENANT_ID,
+        status: 'pending',
+        config: baseConfig,
       });
       (jobRepo as any).countByTenant = vi.fn().mockResolvedValue(2);
 
@@ -382,17 +385,19 @@ describe('JobManager', () => {
       });
 
       expect(auditLogger.log).toHaveBeenCalledOnce();
-      expect(auditLogger.log).toHaveBeenCalledWith(expect.objectContaining({
-        action: 'quota.exceeded',
-        actorId: 'system',
-        actorType: 'system',
-        tenantId: TENANT_ID,
-        metadata: expect.objectContaining({
-          dimension: 'concurrent_jobs',
-          current: 2,
-          max: 2,
+      expect(auditLogger.log).toHaveBeenCalledWith(
+        expect.objectContaining({
+          action: 'quota.exceeded',
+          actorId: 'system',
+          actorType: 'system',
+          tenantId: TENANT_ID,
+          metadata: expect.objectContaining({
+            dimension: 'concurrent_jobs',
+            current: 2,
+            max: 2,
+          }),
         }),
-      }));
+      );
     });
   });
 

@@ -1,7 +1,12 @@
 import { createRoute, z } from '@hono/zod-openapi';
 import { createOpenAPIRouter } from '../openapi-config.js';
-import type { AppEnv } from '../types.js';
-import { schemaVersionResponseSchema, errorResponseSchema, dataResponse, listResponse, jsonContent } from '../schemas/responses.js';
+import {
+  schemaVersionResponseSchema,
+  errorResponseSchema,
+  dataResponse,
+  listResponse,
+  jsonContent,
+} from '../schemas/responses.js';
 import { NotFoundError } from '../middleware/error-handler.js';
 import { ValidationError } from '@spatula/shared';
 
@@ -10,7 +15,9 @@ const jobIdParam = z.object({
 });
 
 const getLatestRoute = createRoute({
-  method: 'get', path: '/', tags: ['Schemas'],
+  method: 'get',
+  path: '/',
+  tags: ['Schemas'],
   summary: 'Get latest schema version for a job',
   request: { params: jobIdParam },
   responses: {
@@ -20,14 +27,18 @@ const getLatestRoute = createRoute({
 });
 
 const listVersionsRoute = createRoute({
-  method: 'get', path: '/versions', tags: ['Schemas'],
+  method: 'get',
+  path: '/versions',
+  tags: ['Schemas'],
   summary: 'List all schema versions',
   request: { params: jobIdParam },
   responses: { 200: jsonContent(listResponse(schemaVersionResponseSchema), 'All schema versions') },
 });
 
 const getVersionRoute = createRoute({
-  method: 'get', path: '/versions/{version}', tags: ['Schemas'],
+  method: 'get',
+  path: '/versions/{version}',
+  tags: ['Schemas'],
   summary: 'Get a specific schema version',
   request: {
     params: jobIdParam.extend({

@@ -55,11 +55,13 @@ export function enqueueWebhookIfConfigured(
     data,
   };
 
-  webhookQueue.add('webhook', {
-    url: webhookConfig.url,
-    event,
-    secret: webhookConfig.secret,
-  }).catch((err) => {
-    logger.warn({ err, eventType }, 'failed to enqueue webhook event');
-  });
+  webhookQueue
+    .add('webhook', {
+      url: webhookConfig.url,
+      event,
+      secret: webhookConfig.secret,
+    })
+    .catch((err) => {
+      logger.warn({ err, eventType }, 'failed to enqueue webhook event');
+    });
 }

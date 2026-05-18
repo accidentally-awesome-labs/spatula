@@ -4,17 +4,21 @@ import { Semaphore } from '../../../src/pipeline/concurrency.js';
 describe('Semaphore', () => {
   it('allows up to max concurrent', async () => {
     const sem = new Semaphore(2);
-    await sem.acquire(); await sem.acquire();
+    await sem.acquire();
+    await sem.acquire();
     expect(sem.activeCount).toBe(2);
     expect(sem.available).toBe(0);
-    sem.release(); sem.release();
+    sem.release();
+    sem.release();
   });
 
   it('blocks beyond max and resumes on release', async () => {
     const sem = new Semaphore(1);
     await sem.acquire();
     let resolved = false;
-    const pending = sem.acquire().then(() => { resolved = true; });
+    const pending = sem.acquire().then(() => {
+      resolved = true;
+    });
     await new Promise((r) => setTimeout(r, 10));
     expect(resolved).toBe(false);
     sem.release();

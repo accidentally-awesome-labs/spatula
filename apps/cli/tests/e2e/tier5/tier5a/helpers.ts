@@ -388,5 +388,7 @@ export async function waitForExportStatus(
     if (exp && targetStatuses.includes(exp.status)) return exp.status;
     await new Promise((r) => setTimeout(r, 500));
   }
-  throw new Error(`Export ${exportId} did not reach ${targetStatuses.join('|')} within ${timeoutMs}ms`);
+  throw new Error(
+    `Export ${exportId} did not reach ${targetStatuses.join('|')} within ${timeoutMs}ms`,
+  );
 }

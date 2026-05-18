@@ -19,26 +19,26 @@ affects: [15-02, 15-03, 15-04, 15-05, 15-06]
 tech-stack:
   added: []
   patterns:
-    - "Phase entry gate verified by automated probe + committed evidence file (BLOCK-01 pattern)"
-    - "Pre-cut snapshot file co-located with substrate plan in docs/superpowers/plans/"
-    - "Per-package isolated test runs as baseline when full turbo run has parallel-I/O timeouts"
+    - 'Phase entry gate verified by automated probe + committed evidence file (BLOCK-01 pattern)'
+    - 'Pre-cut snapshot file co-located with substrate plan in docs/superpowers/plans/'
+    - 'Per-package isolated test runs as baseline when full turbo run has parallel-I/O timeouts'
 
 key-files:
   created:
     - docs/superpowers/plans/6-1-block01-evidence.md
     - docs/superpowers/plans/6-1-snapshot-pre-cut.md
   modified:
-    - .planning/STATE.md  # cleared BLOCK-01 blocker entry, updated session continuity
+    - .planning/STATE.md # cleared BLOCK-01 blocker entry, updated session continuity
 
 key-decisions:
-  - "Inventory deltas (4 files) absorb into Plan 15-03 Section B (no Plan 15-02 file-move impact)"
+  - 'Inventory deltas (4 files) absorb into Plan 15-03 Section B (no Plan 15-02 file-move impact)'
   - "Typecheck baseline proxied via 'pnpm --filter X build' (tsc) since no package has a typecheck script — plan command resolved to no-op"
-  - "exports.test.ts cold-import 5s-timeout failures classified as pre-existing parallel-I/O flakes (per-package isolated runs pass cleanly) — out of scope for carve-out"
-  - "CLI e2e flakes (workflow.test.ts + tier2/pipeline-errors.test.ts) acknowledged as pre-existing (commits fd59aba, ba53386 pre-date Phase 15) — deferred to Plan 15-05 fixture cleanup"
+  - 'exports.test.ts cold-import 5s-timeout failures classified as pre-existing parallel-I/O flakes (per-package isolated runs pass cleanly) — out of scope for carve-out'
+  - 'CLI e2e flakes (workflow.test.ts + tier2/pipeline-errors.test.ts) acknowledged as pre-existing (commits fd59aba, ba53386 pre-date Phase 15) — deferred to Plan 15-05 fixture cleanup'
 
 patterns-established:
-  - "BLOCK-N evidence file format: 3 probes (existence/access/tooling) with stdout/exit codes, gate-clearance verdict, acceptance-criteria checklist"
-  - "Coupling delta reconciliation: every grep hit cross-referenced against substrate Section A/B; deltas tagged with downstream-plan absorption note"
+  - 'BLOCK-N evidence file format: 3 probes (existence/access/tooling) with stdout/exit codes, gate-clearance verdict, acceptance-criteria checklist'
+  - 'Coupling delta reconciliation: every grep hit cross-referenced against substrate Section A/B; deltas tagged with downstream-plan absorption note'
 
 requirements-completed: [CARVE-01]
 
@@ -93,6 +93,7 @@ _Note: Tasks 2 and 3 produce a single snapshot file that is committed in Task 4,
 ### Auto-fixed Issues
 
 **1. [Rule 3 - Blocking] Rebuilt `better-sqlite3` native module after Node v26 ABI mismatch**
+
 - **Found during:** Task 2 (full `pnpm test` baseline run)
 - **Issue:** `@spatula/core` SqliteExporter test failed at module load with `NODE_MODULE_VERSION 141` vs `147` mismatch — local node was upgraded to v26.0.0 since the better-sqlite3 native binding was last compiled. Pre-cut baseline cannot be all-green if a single native module bindings issue blocks tests.
 - **Fix:** Ran `pnpm rebuild better-sqlite3`; binding recompiled against Node v26 (NODE_MODULE_VERSION 147).
@@ -101,6 +102,7 @@ _Note: Tasks 2 and 3 produce a single snapshot file that is committed in Task 4,
 - **Committed in:** N/A (no git-tracked change)
 
 **2. [Rule 3 - Blocking] Substituted `build` for missing `typecheck` script**
+
 - **Found during:** Task 2 (typecheck baseline step)
 - **Issue:** Plan 15-01 Task 2 instructs `pnpm --filter @spatula/{api,queue,db} typecheck`, but no package defines a `typecheck` script — each `pnpm --filter` call returned "None of the selected packages has a 'typecheck' script" (exit 0 with warning, but no actual typecheck performed). The plan's intent is clearly to verify `tsc` passes; the existing `build` script in each package runs exactly `tsc`.
 - **Fix:** Substituted `pnpm --filter X build` for the three packages.
@@ -111,12 +113,14 @@ _Note: Tasks 2 and 3 produce a single snapshot file that is committed in Task 4,
 ### Documented (not auto-fixed; out of scope)
 
 **3. `exports.test.ts` cold-import 5s-timeout flake (db + queue packages)**
+
 - **Found during:** Task 2 (full `pnpm test` parallel turbo run)
 - **Issue:** Under parallel turbo I/O pressure, the first `await import('../../src/index.js')` in each package's `exports.test.ts` exceeds vitest's default 5-second `testTimeout`. Cached imports complete in <100 ms; the failure is purely a cold-start race against CPU/I/O.
 - **Decision:** Pre-existing flake unrelated to the carve-out — documented in the snapshot file under per-package notes, and the baseline is captured from per-package isolated runs (which pass cleanly). Out of scope to fix here per scope boundary.
 - **Files modified:** None (documentation only).
 
 **4. CLI e2e pre-existing failures (2 files)**
+
 - **Found during:** Task 2 (`pnpm --filter @spatula/cli test`)
 - **Issue:** `tests/e2e/workflow.test.ts > extracts data from local fixture page with --skip-llm` times out at 5s; `tests/e2e/tier2/pipeline-errors.test.ts` fails at file-level load. `git log` confirms both test files were authored in commits that pre-date Phase 15 (`fd59aba`, `ba53386`).
 - **Decision:** Deferred to Plan 15-05 (forward tests/carveout/) per the planner's note that e2e fixture extraction is in 15-05's scope. Snapshot file records the exact failure signatures so Plan 15-05 can verify it's not introducing them.
@@ -158,5 +162,6 @@ None — BLOCK-01 was the only user-setup item and it is now cleared. Plan 15-02
 - [x] `gh repo view accidentally-awesome-labs/spatula-saas --json visibility -q .visibility` → `PRIVATE`
 
 ---
-*Phase: 15-carveout-migration-squash*
-*Completed: 2026-05-17*
+
+_Phase: 15-carveout-migration-squash_
+_Completed: 2026-05-17_

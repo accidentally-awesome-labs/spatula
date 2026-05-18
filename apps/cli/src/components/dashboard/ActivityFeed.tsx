@@ -10,11 +10,16 @@ const MAX_ITEMS = 8;
 
 function statusIndicator(status: string): { symbol: string; color: string } {
   switch (status) {
-    case 'applied': return { symbol: '✓', color: 'green' };
-    case 'approved': return { symbol: '✔', color: 'green' };
-    case 'pending_review': return { symbol: '○', color: 'yellow' };
-    case 'rejected': return { symbol: '✗', color: 'red' };
-    default: return { symbol: '·', color: 'white' };
+    case 'applied':
+      return { symbol: '✓', color: 'green' };
+    case 'approved':
+      return { symbol: '✔', color: 'green' };
+    case 'pending_review':
+      return { symbol: '○', color: 'yellow' };
+    case 'rejected':
+      return { symbol: '✗', color: 'red' };
+    default:
+      return { symbol: '·', color: 'white' };
   }
 }
 

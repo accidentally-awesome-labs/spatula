@@ -9,6 +9,7 @@
 **Tech Stack:** TypeScript, Hono, Drizzle ORM (Postgres), `@hono/zod-openapi`, Vitest
 
 **Spec references:**
+
 - Phase 12 spec: sections 3.1.1–3.1.5, 3.3, 3.7
 - File: `docs/superpowers/specs/2026-03-21-phase-12-production-readiness-design.md`
 - Decomposition: `docs/superpowers/specs/2026-03-25-wave-3-decomposition-design.md` section 4.1
@@ -19,57 +20,58 @@
 
 ### New Files
 
-| File | Responsibility |
-|------|---------------|
-| `packages/shared/src/auth/types.ts` | `AuthProvider` interface, `AuthResult` type, `AuthError` class, scope constants |
-| `packages/shared/src/auth/index.ts` | Barrel export |
-| `packages/db/src/schema/api-keys.ts` | `api_keys` Drizzle table definition |
-| `packages/db/src/repositories/api-key-repository.ts` | API key CRUD: create, findByHash, listByTenant, revoke |
-| `apps/api/src/auth/api-key-provider.ts` | `ApiKeyAuthProvider` implements `AuthProvider` |
-| `apps/api/src/auth/no-auth-provider.ts` | `NoAuthProvider` — pass-through using `x-tenant-id` header (current behavior) |
-| `apps/api/src/auth/factory.ts` | `createAuthProvider()` factory |
-| `apps/api/src/auth/index.ts` | Barrel export |
-| `apps/api/src/middleware/auth.ts` | Auth middleware — extracts token, calls provider, sets context |
-| `apps/api/src/middleware/require-scope.ts` | `requireScope()` middleware factory |
-| `apps/api/src/middleware/security-headers.ts` | Security headers middleware |
-| `apps/api/src/routes/api-keys.ts` | API key CRUD routes (POST, GET, DELETE) |
-| `apps/api/src/schemas/api-key.ts` | Zod schemas for API key request/response |
-| `packages/db/tests/unit/repositories/api-key-repository.test.ts` | API key repo tests |
-| `apps/api/tests/unit/auth/api-key-provider.test.ts` | API key auth provider tests |
-| `apps/api/tests/unit/auth/no-auth-provider.test.ts` | No-auth provider tests |
-| `apps/api/tests/unit/auth/factory.test.ts` | Factory tests |
-| `apps/api/tests/unit/middleware/auth.test.ts` | Auth middleware tests |
-| `apps/api/tests/unit/middleware/require-scope.test.ts` | Scope enforcement tests |
-| `apps/api/tests/unit/middleware/security-headers.test.ts` | Security headers tests |
-| `apps/api/tests/unit/routes/api-keys.test.ts` | API key route tests |
+| File                                                             | Responsibility                                                                  |
+| ---------------------------------------------------------------- | ------------------------------------------------------------------------------- |
+| `packages/shared/src/auth/types.ts`                              | `AuthProvider` interface, `AuthResult` type, `AuthError` class, scope constants |
+| `packages/shared/src/auth/index.ts`                              | Barrel export                                                                   |
+| `packages/db/src/schema/api-keys.ts`                             | `api_keys` Drizzle table definition                                             |
+| `packages/db/src/repositories/api-key-repository.ts`             | API key CRUD: create, findByHash, listByTenant, revoke                          |
+| `apps/api/src/auth/api-key-provider.ts`                          | `ApiKeyAuthProvider` implements `AuthProvider`                                  |
+| `apps/api/src/auth/no-auth-provider.ts`                          | `NoAuthProvider` — pass-through using `x-tenant-id` header (current behavior)   |
+| `apps/api/src/auth/factory.ts`                                   | `createAuthProvider()` factory                                                  |
+| `apps/api/src/auth/index.ts`                                     | Barrel export                                                                   |
+| `apps/api/src/middleware/auth.ts`                                | Auth middleware — extracts token, calls provider, sets context                  |
+| `apps/api/src/middleware/require-scope.ts`                       | `requireScope()` middleware factory                                             |
+| `apps/api/src/middleware/security-headers.ts`                    | Security headers middleware                                                     |
+| `apps/api/src/routes/api-keys.ts`                                | API key CRUD routes (POST, GET, DELETE)                                         |
+| `apps/api/src/schemas/api-key.ts`                                | Zod schemas for API key request/response                                        |
+| `packages/db/tests/unit/repositories/api-key-repository.test.ts` | API key repo tests                                                              |
+| `apps/api/tests/unit/auth/api-key-provider.test.ts`              | API key auth provider tests                                                     |
+| `apps/api/tests/unit/auth/no-auth-provider.test.ts`              | No-auth provider tests                                                          |
+| `apps/api/tests/unit/auth/factory.test.ts`                       | Factory tests                                                                   |
+| `apps/api/tests/unit/middleware/auth.test.ts`                    | Auth middleware tests                                                           |
+| `apps/api/tests/unit/middleware/require-scope.test.ts`           | Scope enforcement tests                                                         |
+| `apps/api/tests/unit/middleware/security-headers.test.ts`        | Security headers tests                                                          |
+| `apps/api/tests/unit/routes/api-keys.test.ts`                    | API key route tests                                                             |
 
 ### Modified Files
 
-| File | Change |
-|------|--------|
-| `packages/shared/src/index.ts` | Export auth types |
-| `packages/shared/src/errors.ts` | Add `AuthError` class |
-| `packages/db/src/schema/index.ts` | Export `apiKeys` table |
-| `packages/db/src/repositories/index.ts` | Export `ApiKeyRepository` |
-| `packages/db/src/index.ts` | Re-export `ApiKeyRepository` |
-| `apps/api/src/types.ts` | Add `authProvider` and `apiKeyRepo` to `AppDeps`, add `auth` to `AppEnv.Variables` |
-| `apps/api/src/app.ts` | Add security headers, CORS, auth middleware, scope enforcement on routes |
-| `apps/api/src/middleware/error-handler.ts` | Map `AUTH_ERROR` to 401, `FORBIDDEN` to 403 |
+| File                                       | Change                                                                             |
+| ------------------------------------------ | ---------------------------------------------------------------------------------- |
+| `packages/shared/src/index.ts`             | Export auth types                                                                  |
+| `packages/shared/src/errors.ts`            | Add `AuthError` class                                                              |
+| `packages/db/src/schema/index.ts`          | Export `apiKeys` table                                                             |
+| `packages/db/src/repositories/index.ts`    | Export `ApiKeyRepository`                                                          |
+| `packages/db/src/index.ts`                 | Re-export `ApiKeyRepository`                                                       |
+| `apps/api/src/types.ts`                    | Add `authProvider` and `apiKeyRepo` to `AppDeps`, add `auth` to `AppEnv.Variables` |
+| `apps/api/src/app.ts`                      | Add security headers, CORS, auth middleware, scope enforcement on routes           |
+| `apps/api/src/middleware/error-handler.ts` | Map `AUTH_ERROR` to 401, `FORBIDDEN` to 403                                        |
 
 ### Unchanged Files (but referenced)
 
-| File | Why Referenced |
-|------|---------------|
-| `apps/api/src/middleware/tenant.ts` | `tenantMiddleware` — still used when `AUTH_STRATEGY=none` |
-| `apps/api/src/middleware/validate-tenant.ts` | `validateTenantMiddleware` — remains downstream of auth |
-| `apps/api/src/middleware/deps.ts` | `depsMiddleware` — unchanged, still injects deps |
-| All existing route tests in `apps/api/tests/` | Must continue to pass with `AUTH_STRATEGY=none` |
+| File                                          | Why Referenced                                            |
+| --------------------------------------------- | --------------------------------------------------------- |
+| `apps/api/src/middleware/tenant.ts`           | `tenantMiddleware` — still used when `AUTH_STRATEGY=none` |
+| `apps/api/src/middleware/validate-tenant.ts`  | `validateTenantMiddleware` — remains downstream of auth   |
+| `apps/api/src/middleware/deps.ts`             | `depsMiddleware` — unchanged, still injects deps          |
+| All existing route tests in `apps/api/tests/` | Must continue to pass with `AUTH_STRATEGY=none`           |
 
 ---
 
 ## Task 1: Auth Types & Error Classes
 
 **Files:**
+
 - Create: `packages/shared/src/auth/types.ts`
 - Create: `packages/shared/src/auth/index.ts`
 - Modify: `packages/shared/src/errors.ts`
@@ -183,6 +185,7 @@ git commit -m "feat(shared): add AuthProvider interface, AuthResult type, and au
 ## Task 2: API Keys Database Table
 
 **Files:**
+
 - Create: `packages/db/src/schema/api-keys.ts`
 - Modify: `packages/db/src/schema/index.ts`
 
@@ -194,20 +197,28 @@ import { pgTable, uuid, text, timestamp, index } from 'drizzle-orm/pg-core';
 import { sql } from 'drizzle-orm';
 import { tenants } from './tenants.js';
 
-export const apiKeys = pgTable('api_keys', {
-  id: uuid('id').defaultRandom().primaryKey(),
-  tenantId: uuid('tenant_id').notNull().references(() => tenants.id),
-  keyHash: text('key_hash').notNull(),
-  keyPrefix: text('key_prefix').notNull(),       // First 12 chars for display (sk_live_ + 4 random)
-  name: text('name').notNull(),
-  scopes: text('scopes').array().notNull().default([]),
-  expiresAt: timestamp('expires_at', { withTimezone: true }),
-  lastUsedAt: timestamp('last_used_at', { withTimezone: true }),
-  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
-  revokedAt: timestamp('revoked_at', { withTimezone: true }),
-}, (table) => [
-  index('idx_api_keys_hash').on(table.keyHash).where(sql`revoked_at IS NULL`),
-]);
+export const apiKeys = pgTable(
+  'api_keys',
+  {
+    id: uuid('id').defaultRandom().primaryKey(),
+    tenantId: uuid('tenant_id')
+      .notNull()
+      .references(() => tenants.id),
+    keyHash: text('key_hash').notNull(),
+    keyPrefix: text('key_prefix').notNull(), // First 12 chars for display (sk_live_ + 4 random)
+    name: text('name').notNull(),
+    scopes: text('scopes').array().notNull().default([]),
+    expiresAt: timestamp('expires_at', { withTimezone: true }),
+    lastUsedAt: timestamp('last_used_at', { withTimezone: true }),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+    revokedAt: timestamp('revoked_at', { withTimezone: true }),
+  },
+  (table) => [
+    index('idx_api_keys_hash')
+      .on(table.keyHash)
+      .where(sql`revoked_at IS NULL`),
+  ],
+);
 ```
 
 **Note:** Uses Drizzle's partial index with `.where()`. If the generated migration doesn't include the WHERE clause, fall back to a full index on `key_hash` — the query planner will still use it efficiently since the repository query includes `revoked_at IS NULL`.
@@ -223,6 +234,7 @@ export * from './api-keys.js';
 - [ ] **Step 3: Generate Postgres migration**
 
 Run:
+
 ```bash
 cd /Users/salar/Projects/spatula && pnpm --filter @spatula/db db:generate
 ```
@@ -245,6 +257,7 @@ git commit -m "feat(db): add api_keys table for API key authentication"
 ## Task 3: API Key Repository
 
 **Files:**
+
 - Create: `packages/db/src/repositories/api-key-repository.ts`
 - Create: `packages/db/tests/unit/repositories/api-key-repository.test.ts`
 - Modify: `packages/db/src/repositories/index.ts`
@@ -437,9 +450,7 @@ export class ApiKeyRepository {
           revokedAt: apiKeys.revokedAt,
         })
         .from(apiKeys)
-        .where(
-          and(eq(apiKeys.tenantId, tenantId), isNull(apiKeys.revokedAt)),
-        );
+        .where(and(eq(apiKeys.tenantId, tenantId), isNull(apiKeys.revokedAt)));
     } catch (error) {
       throw new StorageError(`Failed to list API keys: ${(error as Error).message}`, {
         cause: error as Error,
@@ -502,6 +513,7 @@ git commit -m "feat(db): add ApiKeyRepository for API key CRUD operations"
 ## Task 4: NoAuthProvider
 
 **Files:**
+
 - Create: `apps/api/src/auth/no-auth-provider.ts`
 - Create: `apps/api/tests/unit/auth/no-auth-provider.test.ts`
 - Create: `apps/api/src/auth/index.ts`
@@ -564,8 +576,7 @@ import type { AuthProvider, AuthResult } from '@spatula/shared';
 import { AuthError } from '@spatula/shared';
 import type { HonoRequest } from 'hono';
 
-const UUID_REGEX =
-  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 /**
  * Pass-through auth provider for AUTH_STRATEGY=none.
@@ -616,6 +627,7 @@ git commit -m "feat(api): add NoAuthProvider for AUTH_STRATEGY=none pass-through
 ## Task 5: ApiKeyAuthProvider
 
 **Files:**
+
 - Create: `apps/api/src/auth/api-key-provider.ts`
 - Create: `apps/api/tests/unit/auth/api-key-provider.test.ts`
 - Modify: `apps/api/src/auth/index.ts`
@@ -672,16 +684,12 @@ describe('ApiKeyAuthProvider', () => {
 
   it('throws AuthError when Authorization header is missing', async () => {
     const req = await createMockRequest({});
-    await expect(provider.authenticate(req)).rejects.toThrow(
-      'Authorization header is required',
-    );
+    await expect(provider.authenticate(req)).rejects.toThrow('Authorization header is required');
   });
 
   it('throws AuthError when Authorization header has wrong scheme', async () => {
     const req = await createMockRequest({ authorization: 'Basic abc123' });
-    await expect(provider.authenticate(req)).rejects.toThrow(
-      'Bearer token required',
-    );
+    await expect(provider.authenticate(req)).rejects.toThrow('Bearer token required');
   });
 
   it('throws AuthError when API key is not found or revoked', async () => {
@@ -689,9 +697,7 @@ describe('ApiKeyAuthProvider', () => {
     const req = await createMockRequest({
       authorization: 'Bearer sk_live_abcdef1234567890abcdef1234567890',
     });
-    await expect(provider.authenticate(req)).rejects.toThrow(
-      'Invalid or expired API key',
-    );
+    await expect(provider.authenticate(req)).rejects.toThrow('Invalid or expired API key');
   });
 });
 ```
@@ -768,6 +774,7 @@ git commit -m "feat(api): add ApiKeyAuthProvider with SHA-256 hash lookup"
 ## Task 6: Auth Provider Factory
 
 **Files:**
+
 - Create: `apps/api/src/auth/factory.ts`
 - Create: `apps/api/tests/unit/auth/factory.test.ts`
 - Modify: `apps/api/src/auth/index.ts`
@@ -797,15 +804,15 @@ describe('createAuthProvider', () => {
   });
 
   it('throws for unsupported strategy', () => {
-    expect(() =>
-      createAuthProvider('jwt', { apiKeyRepo: mockApiKeyRepo }),
-    ).toThrow('Auth strategy "jwt" is not yet supported');
+    expect(() => createAuthProvider('jwt', { apiKeyRepo: mockApiKeyRepo })).toThrow(
+      'Auth strategy "jwt" is not yet supported',
+    );
   });
 
   it('throws for unknown strategy', () => {
-    expect(() =>
-      createAuthProvider('invalid' as any, { apiKeyRepo: mockApiKeyRepo }),
-    ).toThrow('Unknown auth strategy: invalid');
+    expect(() => createAuthProvider('invalid' as any, { apiKeyRepo: mockApiKeyRepo })).toThrow(
+      'Unknown auth strategy: invalid',
+    );
   });
 });
 ```
@@ -832,10 +839,7 @@ export interface AuthProviderDeps {
   apiKeyRepo: ApiKeyRepository;
 }
 
-export function createAuthProvider(
-  strategy: string,
-  deps: AuthProviderDeps,
-): AuthProvider {
+export function createAuthProvider(strategy: string, deps: AuthProviderDeps): AuthProvider {
   switch (strategy) {
     case 'none':
       return new NoAuthProvider();
@@ -877,6 +881,7 @@ git commit -m "feat(api): add createAuthProvider factory for strategy selection"
 ## Task 7: Auth Middleware
 
 **Files:**
+
 - Create: `apps/api/src/middleware/auth.ts`
 - Create: `apps/api/tests/unit/middleware/auth.test.ts`
 
@@ -1065,6 +1070,7 @@ git commit -m "feat(api): add auth middleware with skip-auth paths"
 ## Task 8: Require Scope Middleware
 
 **Files:**
+
 - Create: `apps/api/src/middleware/require-scope.ts`
 - Create: `apps/api/tests/unit/middleware/require-scope.test.ts`
 
@@ -1081,9 +1087,12 @@ function createTestApp(requiredScope: string) {
   const app = new Hono();
   // Simulate auth already having set the auth context
   app.use('*', async (c, next) => {
-    c.set('auth', c.req.header('x-test-scopes')
-      ? { tenantId: 't', userId: 'u', scopes: JSON.parse(c.req.header('x-test-scopes')!) }
-      : undefined);
+    c.set(
+      'auth',
+      c.req.header('x-test-scopes')
+        ? { tenantId: 't', userId: 'u', scopes: JSON.parse(c.req.header('x-test-scopes')!) }
+        : undefined,
+    );
     return next();
   });
   app.use('*', requireScope(requiredScope));
@@ -1156,9 +1165,7 @@ export function requireScope(scope: string): MiddlewareHandler {
       return next();
     }
 
-    throw new ForbiddenError(
-      `Insufficient permissions: requires "${scope}"`,
-    );
+    throw new ForbiddenError(`Insufficient permissions: requires "${scope}"`);
   };
 }
 ```
@@ -1181,6 +1188,7 @@ git commit -m "feat(api): add requireScope middleware for scope-based authorizat
 ## Task 9: Security Headers & CORS
 
 **Files:**
+
 - Create: `apps/api/src/middleware/security-headers.ts`
 - Create: `apps/api/tests/unit/middleware/security-headers.test.ts`
 
@@ -1205,9 +1213,7 @@ describe('securityHeaders', () => {
       'max-age=31536000; includeSubDomains',
     );
     expect(res.headers.get('X-XSS-Protection')).toBe('0');
-    expect(res.headers.get('Referrer-Policy')).toBe(
-      'strict-origin-when-cross-origin',
-    );
+    expect(res.headers.get('Referrer-Policy')).toBe('strict-origin-when-cross-origin');
   });
 });
 ```
@@ -1252,6 +1258,7 @@ git commit -m "feat(api): add security headers middleware (OWASP recommended hea
 ## Task 10: API Key Routes
 
 **Files:**
+
 - Create: `apps/api/src/schemas/api-key.ts`
 - Create: `apps/api/src/routes/api-keys.ts`
 - Create: `apps/api/tests/unit/routes/api-keys.test.ts`
@@ -1274,28 +1281,32 @@ export const createApiKeySchema = z.object({
   }),
 });
 
-export const apiKeyResponseSchema = z.object({
-  id: z.string().uuid(),
-  keyPrefix: z.string(),
-  name: z.string(),
-  scopes: z.array(z.string()),
-  expiresAt: z.string().nullable(),
-  lastUsedAt: z.string().nullable(),
-  createdAt: z.string(),
-}).openapi('ApiKey');
+export const apiKeyResponseSchema = z
+  .object({
+    id: z.string().uuid(),
+    keyPrefix: z.string(),
+    name: z.string(),
+    scopes: z.array(z.string()),
+    expiresAt: z.string().nullable(),
+    lastUsedAt: z.string().nullable(),
+    createdAt: z.string(),
+  })
+  .openapi('ApiKey');
 
-export const apiKeyCreatedResponseSchema = z.object({
-  id: z.string().uuid(),
-  key: z.string().openapi({
-    description: 'The raw API key. This is the only time it will be shown.',
-    example: 'sk_live_abc123...',
-  }),
-  keyPrefix: z.string(),
-  name: z.string(),
-  scopes: z.array(z.string()),
-  expiresAt: z.string().nullable(),
-  createdAt: z.string(),
-}).openapi('ApiKeyCreated');
+export const apiKeyCreatedResponseSchema = z
+  .object({
+    id: z.string().uuid(),
+    key: z.string().openapi({
+      description: 'The raw API key. This is the only time it will be shown.',
+      example: 'sk_live_abc123...',
+    }),
+    keyPrefix: z.string(),
+    name: z.string(),
+    scopes: z.array(z.string()),
+    expiresAt: z.string().nullable(),
+    createdAt: z.string(),
+  })
+  .openapi('ApiKeyCreated');
 ```
 
 - [ ] **Step 2: Write failing route tests**
@@ -1453,7 +1464,10 @@ const createKeyRoute = createRoute({
     },
   },
   responses: {
-    201: jsonContent(dataResponse(apiKeyCreatedResponseSchema), 'API key created (raw key shown once)'),
+    201: jsonContent(
+      dataResponse(apiKeyCreatedResponseSchema),
+      'API key created (raw key shown once)',
+    ),
     400: jsonContent(errorResponseSchema, 'Validation error'),
   },
 });
@@ -1576,6 +1590,7 @@ git commit -m "feat(api): add API key CRUD routes (create, list, revoke)"
 ## Task 11: Wire Everything into App
 
 **Files:**
+
 - Modify: `apps/api/src/types.ts`
 - Modify: `apps/api/src/app.ts`
 
@@ -1602,7 +1617,7 @@ Add to `AppDeps`:
 Add to `AppEnv.Variables`:
 
 ```typescript
-    auth: AuthResult;
+auth: AuthResult;
 ```
 
 - [ ] **Step 2: Rewrite app.ts with auth-aware middleware chain**
@@ -1718,6 +1733,7 @@ export function createApp(deps: AppDeps) {
 ```
 
 **Critical design notes:**
+
 - When `AUTH_STRATEGY=none` (or not set in tests), `NoAuthProvider` extracts `x-tenant-id` header and grants admin scope — so all existing tests pass unchanged since `NoAuthProvider` grants `admin` which satisfies any `requireScope()` check.
 - The old `tenantMiddleware` is removed from the chain. `authMiddleware` is now the sole source of `tenantId`.
 - Tenant routes are in `SKIP_AUTH_PREFIXES` — they bypass auth entirely, matching current behavior where tenant management is a bootstrap operation.
@@ -1730,9 +1746,11 @@ Run: `pnpm --filter @spatula/api test`
 Expected: ALL 175+ existing tests PASS.
 
 **Known test updates required:**
+
 - `apps/api/tests/unit/app.test.ts` line ~66-69: The test "returns 400 when tenant header missing on API routes" must change from `expect(res.status).toBe(400)` to `expect(res.status).toBe(401)`. Under the new auth flow, a missing `x-tenant-id` in no-auth mode causes `NoAuthProvider` to throw `AuthError` (401), not `ValidationError` (400). This is an intentional semantic change — the auth layer now owns credential validation.
 
 **If other tests fail**, the most likely cause is:
+
 - Tests that construct `createMockDeps()` without `authProvider` or `apiKeyRepo` — these new fields are optional, so existing mocks should still work.
 - Tenant route tests should NOT break — tenant routes are excluded from auth via `SKIP_AUTH_PREFIXES`.
 
@@ -1764,6 +1782,7 @@ Expected: All tests pass. New test count should be ~175 existing + ~40 new = ~21
 - [ ] **Step 3: Verify new auth functionality with a quick manual check**
 
 Create a small integration test or verify via the test output:
+
 - `NoAuthProvider` allows requests with `x-tenant-id` header
 - `NoAuthProvider` rejects requests without `x-tenant-id`
 - `ApiKeyAuthProvider` rejects requests without `Authorization` header

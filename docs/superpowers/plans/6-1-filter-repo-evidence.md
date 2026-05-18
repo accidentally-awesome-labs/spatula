@@ -34,24 +34,24 @@ Source list: `/tmp/saas-paths.txt` (transient, regenerated from this file's embe
 
 ## Extraction metrics
 
-| Metric | Value |
-|---|---|
-| Commits carried over | **13** (all distinct billing/metering commits, including code review fix-ups and the test-gap closure commit) |
-| Filter-repo runtime | 0.58s (parsing 786 commits → rewriting → repack) |
-| Mirror HEAD SHA after filter-repo | `c02d3335aa9308600449378387d5611a19c5507d` |
-| Source OSS HEAD SHA at extraction time | `aca52e2f9665c44c608b73b04a74d962f7913a4c` (tip of `feat/wave-6-1-carveout`, pre-Task-3-deletion) |
-| Files in filtered tree | 19 (exact match — `diff /tmp/saas-paths.txt /tmp/saas-ls-files.txt` returns no diff) |
+| Metric                                 | Value                                                                                                         |
+| -------------------------------------- | ------------------------------------------------------------------------------------------------------------- |
+| Commits carried over                   | **13** (all distinct billing/metering commits, including code review fix-ups and the test-gap closure commit) |
+| Filter-repo runtime                    | 0.58s (parsing 786 commits → rewriting → repack)                                                              |
+| Mirror HEAD SHA after filter-repo      | `c02d3335aa9308600449378387d5611a19c5507d`                                                                    |
+| Source OSS HEAD SHA at extraction time | `aca52e2f9665c44c608b73b04a74d962f7913a4c` (tip of `feat/wave-6-1-carveout`, pre-Task-3-deletion)             |
+| Files in filtered tree                 | 19 (exact match — `diff /tmp/saas-paths.txt /tmp/saas-ls-files.txt` returns no diff)                          |
 
 ## Private repo state
 
-| Property | Value |
-|---|---|
-| URL | https://github.com/accidentally-awesome-labs/spatula-saas |
-| Push command | `git push --mirror saas` from `/tmp/spatula-mirror` |
-| Push outcome | `* [new branch] feat/wave-6-1-carveout -> feat/wave-6-1-carveout` + `* [new branch] main -> main` (both refs pushed, both at SHA `c02d333`) |
-| Pushed at | 2026-05-17T17:36:33Z |
-| `git ls-remote ... HEAD` | `c02d3335aa9308600449378387d5611a19c5507d HEAD` (exit 0) |
-| Sanity re-clone (`/tmp/saas-verify`) | 19 files, exact byte-for-byte match against `/tmp/saas-ls-files.txt` → **REMOTE MATCHES LOCAL FILTERED MIRROR** |
+| Property                             | Value                                                                                                                                       |
+| ------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------- |
+| URL                                  | https://github.com/accidentally-awesome-labs/spatula-saas                                                                                   |
+| Push command                         | `git push --mirror saas` from `/tmp/spatula-mirror`                                                                                         |
+| Push outcome                         | `* [new branch] feat/wave-6-1-carveout -> feat/wave-6-1-carveout` + `* [new branch] main -> main` (both refs pushed, both at SHA `c02d333`) |
+| Pushed at                            | 2026-05-17T17:36:33Z                                                                                                                        |
+| `git ls-remote ... HEAD`             | `c02d3335aa9308600449378387d5611a19c5507d HEAD` (exit 0)                                                                                    |
+| Sanity re-clone (`/tmp/saas-verify`) | 19 files, exact byte-for-byte match against `/tmp/saas-ls-files.txt` → **REMOTE MATCHES LOCAL FILTERED MIRROR**                             |
 
 ## Default branch caveat (benign)
 
@@ -66,14 +66,14 @@ GitHub auto-selected `feat/wave-6-1-carveout` as the default branch on `accident
 
 ## Plan acceptance criteria — verification
 
-| Criterion | Status | Evidence |
-|---|---|---|
-| `/tmp/spatula-mirror` exists and is a valid git repo | ✅ | `cd /tmp/spatula-mirror && git rev-parse --git-dir` returned `.` (exit 0) |
-| Filtered tree contains exactly the allowlist | ✅ | 19 files via `git ls-tree -r --name-only HEAD`; `diff` returns no output |
-| `git ls-remote ... HEAD` exits 0 with a SHA | ✅ | `c02d3335aa9308600449378387d5611a19c5507d HEAD` |
-| Remote HEAD SHA matches mirror HEAD SHA | ✅ | Both `c02d3335aa9308600449378387d5611a19c5507d` |
-| Sanity re-clone diff: REMOTE MATCHES LOCAL FILTERED MIRROR | ✅ | Diff returned no output; "REMOTE MATCHES LOCAL FILTERED MIRROR" printed |
-| Evidence file committed | ✅ | This file (commit in same task) |
+| Criterion                                                  | Status | Evidence                                                                  |
+| ---------------------------------------------------------- | ------ | ------------------------------------------------------------------------- |
+| `/tmp/spatula-mirror` exists and is a valid git repo       | ✅     | `cd /tmp/spatula-mirror && git rev-parse --git-dir` returned `.` (exit 0) |
+| Filtered tree contains exactly the allowlist               | ✅     | 19 files via `git ls-tree -r --name-only HEAD`; `diff` returns no output  |
+| `git ls-remote ... HEAD` exits 0 with a SHA                | ✅     | `c02d3335aa9308600449378387d5611a19c5507d HEAD`                           |
+| Remote HEAD SHA matches mirror HEAD SHA                    | ✅     | Both `c02d3335aa9308600449378387d5611a19c5507d`                           |
+| Sanity re-clone diff: REMOTE MATCHES LOCAL FILTERED MIRROR | ✅     | Diff returned no output; "REMOTE MATCHES LOCAL FILTERED MIRROR" printed   |
+| Evidence file committed                                    | ✅     | This file (commit in same task)                                           |
 
 ## Plan acceptance criterion — off-by-one note
 

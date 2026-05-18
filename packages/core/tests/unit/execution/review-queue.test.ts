@@ -119,7 +119,12 @@ describe('DefaultReviewQueue', () => {
 
       await queue.approve('a-1', 'tenant-1', 'user@example.com');
 
-      expect(actionRepo.updateStatus).toHaveBeenCalledWith('a-1', 'tenant-1', 'approved', 'user@example.com');
+      expect(actionRepo.updateStatus).toHaveBeenCalledWith(
+        'a-1',
+        'tenant-1',
+        'approved',
+        'user@example.com',
+      );
     });
   });
 
@@ -127,7 +132,12 @@ describe('DefaultReviewQueue', () => {
     it('updates status to rejected', async () => {
       await queue.reject('a-1', 'tenant-1', 'user@example.com', 'Not needed');
 
-      expect(actionRepo.updateStatus).toHaveBeenCalledWith('a-1', 'tenant-1', 'rejected', 'user@example.com');
+      expect(actionRepo.updateStatus).toHaveBeenCalledWith(
+        'a-1',
+        'tenant-1',
+        'rejected',
+        'user@example.com',
+      );
     });
   });
 

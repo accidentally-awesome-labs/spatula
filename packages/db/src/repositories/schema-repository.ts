@@ -56,11 +56,7 @@ export class SchemaRepository {
   async findLatest(jobId: string, tenantId: string) {
     const cacheKey = `schema:${jobId}:current`;
     if (this.cache) {
-      return this.cache.getOrFetch(
-        cacheKey,
-        () => this._findLatestFromDb(jobId, tenantId),
-        30,
-      );
+      return this.cache.getOrFetch(cacheKey, () => this._findLatestFromDb(jobId, tenantId), 30);
     }
     return this._findLatestFromDb(jobId, tenantId);
   }

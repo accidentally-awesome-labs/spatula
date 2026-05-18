@@ -61,7 +61,20 @@ describe('ActivityFeed', () => {
 
   it('limits display to most recent 8 actions', () => {
     // Use letter suffixes to avoid substring collisions (e.g. 'action_1' matching 'action_10')
-    const labels = ['alpha', 'bravo', 'charlie', 'delta', 'echo', 'foxtrot', 'golf', 'hotel', 'india', 'juliet', 'kilo', 'lima'];
+    const labels = [
+      'alpha',
+      'bravo',
+      'charlie',
+      'delta',
+      'echo',
+      'foxtrot',
+      'golf',
+      'hotel',
+      'india',
+      'juliet',
+      'kilo',
+      'lima',
+    ];
     const actions = labels.map((label, i) => ({
       type: `action_${label}`,
       status: 'applied',

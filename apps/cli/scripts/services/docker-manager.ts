@@ -28,15 +28,7 @@ const __dirname = fileURLToPath(new URL('.', import.meta.url));
  * Absolute path to the docker-compose.yml shared by both managers.
  * Resolved relative to *this* file's location at runtime.
  */
-const COMPOSE_PATH = join(
-  __dirname,
-  '..',
-  '..',
-  'tests',
-  'e2e',
-  'tier4',
-  'docker-compose.yml',
-);
+const COMPOSE_PATH = join(__dirname, '..', '..', 'tests', 'e2e', 'tier4', 'docker-compose.yml');
 
 /** Check that Docker (with compose v2) is reachable. */
 function isDockerAvailable(): boolean {
@@ -53,20 +45,12 @@ function isDockerAvailable(): boolean {
 }
 
 /** Run a docker compose command against the shared compose file. */
-function compose(
-  projectName: string,
-  args: string[],
-  opts?: { timeout?: number },
-): string {
-  return execFileSync(
-    'docker',
-    ['compose', '-p', projectName, '-f', COMPOSE_PATH, ...args],
-    {
-      stdio: 'pipe',
-      timeout: opts?.timeout ?? 30_000,
-      encoding: 'utf-8',
-    },
-  );
+function compose(projectName: string, args: string[], opts?: { timeout?: number }): string {
+  return execFileSync('docker', ['compose', '-p', projectName, '-f', COMPOSE_PATH, ...args], {
+    stdio: 'pipe',
+    timeout: opts?.timeout ?? 30_000,
+    encoding: 'utf-8',
+  });
 }
 
 /**
@@ -162,7 +146,9 @@ export class DockerPostgresManager implements ServiceManager {
         if (weStartedIt && projectName) {
           try {
             compose(projectName, ['down', '--volumes', '--remove-orphans'], { timeout: 30_000 });
-          } catch { /* Best-effort cleanup */ }
+          } catch {
+            /* Best-effort cleanup */
+          }
         }
         // If we didn't start it, don't stop it (user manages their own containers)
       },
@@ -180,9 +166,14 @@ export class DockerPostgresManager implements ServiceManager {
           resolve(true);
         });
         socket.on('error', () => resolve(false));
-        socket.setTimeout(2000, () => { socket.destroy(); resolve(false); });
+        socket.setTimeout(2000, () => {
+          socket.destroy();
+          resolve(false);
+        });
       });
-    } catch { return false; }
+    } catch {
+      return false;
+    }
   }
 
   async healthCheck(): Promise<boolean> {
@@ -279,9 +270,14 @@ export class DockerRedisManager implements ServiceManager {
           resolve(true);
         });
         socket.on('error', () => resolve(false));
-        socket.setTimeout(2000, () => { socket.destroy(); resolve(false); });
+        socket.setTimeout(2000, () => {
+          socket.destroy();
+          resolve(false);
+        });
       });
-    } catch { return false; }
+    } catch {
+      return false;
+    }
   }
 
   async healthCheck(): Promise<boolean> {

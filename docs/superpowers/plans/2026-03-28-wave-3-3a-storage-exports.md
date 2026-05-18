@@ -9,6 +9,7 @@
 **Tech Stack:** TypeScript, `@aws-sdk/client-s3`, `@aws-sdk/s3-request-presigner`, Drizzle ORM, Hono, Vitest
 
 **Spec references:**
+
 - Phase 12 spec: sections 6.1-6.2
 - File: `docs/superpowers/specs/2026-03-21-phase-12-production-readiness-design.md`
 - Decomposition: `docs/superpowers/specs/2026-03-25-wave-3-decomposition-design.md` section 4.4
@@ -21,36 +22,37 @@
 
 ### New Files
 
-| File | Responsibility |
-|------|---------------|
-| `packages/core/src/content-store/s3-content-store.ts` | `S3ContentStore` implementing `ContentStore` + `getDownloadUrl()` |
-| `packages/core/src/content-store/factory.ts` | `createContentStore()` factory |
-| `packages/core/src/content-store/index.ts` | Barrel export |
-| `packages/core/src/exporters/streaming-json-exporter.ts` | Streaming JSON exporter for `AsyncIterable<Entity[]>` |
-| `packages/core/src/exporters/streaming-csv-exporter.ts` | Streaming CSV exporter for `AsyncIterable<Entity[]>` |
-| `packages/core/src/pipeline/entity-cursor.ts` | `fetchEntitiesCursor()` async generator |
-| `packages/core/tests/unit/content-store/s3-content-store.test.ts` | S3 content store tests |
-| `packages/core/tests/unit/content-store/factory.test.ts` | Factory tests |
-| `packages/core/tests/unit/exporters/streaming-json-exporter.test.ts` | Streaming JSON tests |
-| `packages/core/tests/unit/exporters/streaming-csv-exporter.test.ts` | Streaming CSV tests |
-| `packages/core/tests/unit/pipeline/entity-cursor.test.ts` | Entity cursor tests |
+| File                                                                 | Responsibility                                                    |
+| -------------------------------------------------------------------- | ----------------------------------------------------------------- |
+| `packages/core/src/content-store/s3-content-store.ts`                | `S3ContentStore` implementing `ContentStore` + `getDownloadUrl()` |
+| `packages/core/src/content-store/factory.ts`                         | `createContentStore()` factory                                    |
+| `packages/core/src/content-store/index.ts`                           | Barrel export                                                     |
+| `packages/core/src/exporters/streaming-json-exporter.ts`             | Streaming JSON exporter for `AsyncIterable<Entity[]>`             |
+| `packages/core/src/exporters/streaming-csv-exporter.ts`              | Streaming CSV exporter for `AsyncIterable<Entity[]>`              |
+| `packages/core/src/pipeline/entity-cursor.ts`                        | `fetchEntitiesCursor()` async generator                           |
+| `packages/core/tests/unit/content-store/s3-content-store.test.ts`    | S3 content store tests                                            |
+| `packages/core/tests/unit/content-store/factory.test.ts`             | Factory tests                                                     |
+| `packages/core/tests/unit/exporters/streaming-json-exporter.test.ts` | Streaming JSON tests                                              |
+| `packages/core/tests/unit/exporters/streaming-csv-exporter.test.ts`  | Streaming CSV tests                                               |
+| `packages/core/tests/unit/pipeline/entity-cursor.test.ts`            | Entity cursor tests                                               |
 
 ### Modified Files
 
-| File | Change |
-|------|--------|
-| `packages/core/src/interfaces/content-store.ts` | Add optional `getDownloadUrl()` method |
-| `packages/core/src/index.ts` | Export new content store, streaming exporters, entity cursor |
-| `packages/db/src/repositories/entity-repository.ts` | Add `findByJobCursor()` method |
-| `packages/core/src/pipeline/types.ts` | Add `findByJobCursor` to `EntityRepo` interface |
-| `packages/core/src/pipeline/export-orchestrator.ts` | Use cursor-based fetching, branch on format |
-| `apps/api/src/routes/exports.ts` | Presigned URL redirect for S3 downloads |
+| File                                                | Change                                                       |
+| --------------------------------------------------- | ------------------------------------------------------------ |
+| `packages/core/src/interfaces/content-store.ts`     | Add optional `getDownloadUrl()` method                       |
+| `packages/core/src/index.ts`                        | Export new content store, streaming exporters, entity cursor |
+| `packages/db/src/repositories/entity-repository.ts` | Add `findByJobCursor()` method                               |
+| `packages/core/src/pipeline/types.ts`               | Add `findByJobCursor` to `EntityRepo` interface              |
+| `packages/core/src/pipeline/export-orchestrator.ts` | Use cursor-based fetching, branch on format                  |
+| `apps/api/src/routes/exports.ts`                    | Presigned URL redirect for S3 downloads                      |
 
 ---
 
 ## Task 1: ContentStore Interface Extension
 
 **Files:**
+
 - Modify: `packages/core/src/interfaces/content-store.ts`
 
 - [ ] **Step 1: Add optional getDownloadUrl method**
@@ -73,9 +75,9 @@ export interface ContentStore {
 Add below the interface:
 
 ```typescript
-export function supportsPresignedUrls(
-  store: ContentStore,
-): store is ContentStore & { getDownloadUrl: (ref: string, expiresIn?: number) => Promise<string> } {
+export function supportsPresignedUrls(store: ContentStore): store is ContentStore & {
+  getDownloadUrl: (ref: string, expiresIn?: number) => Promise<string>;
+} {
   return typeof (store as any).getDownloadUrl === 'function';
 }
 ```
@@ -106,6 +108,7 @@ git commit -m "feat(core): add optional getDownloadUrl to ContentStore interface
 ## Task 2: S3ContentStore Implementation
 
 **Files:**
+
 - Create: `packages/core/src/content-store/s3-content-store.ts`
 - Create: `packages/core/tests/unit/content-store/s3-content-store.test.ts`
 
@@ -256,7 +259,9 @@ describe('S3ContentStore', () => {
 
     it('retrieve throws StorageError on S3 failure', async () => {
       mockSend.mockRejectedValue(new Error('InternalError'));
-      await expect(store.retrieve('s3://test-bucket/text/key')).rejects.toThrow('Failed to retrieve from S3');
+      await expect(store.retrieve('s3://test-bucket/text/key')).rejects.toThrow(
+        'Failed to retrieve from S3',
+      );
     });
 
     it('parseRef throws on invalid ref format', async () => {
@@ -302,7 +307,10 @@ export class S3ContentStore implements ContentStore {
    * Same pattern as PgContentStore.setTenantContext().
    * Per decomposition spec: "3-3a wires the same tracking into S3ContentStore."
    */
-  setTenantContext(tenantId: string, tenantRepo: { incrementStorageBytes(tenantId: string, bytes: number): Promise<void> }): void {
+  setTenantContext(
+    tenantId: string,
+    tenantRepo: { incrementStorageBytes(tenantId: string, bytes: number): Promise<void> },
+  ): void {
     this.tenantId = tenantId;
     this.tenantRepo = tenantRepo;
   }
@@ -313,7 +321,12 @@ export class S3ContentStore implements ContentStore {
       region: config.region,
       ...(config.endpoint ? { endpoint: config.endpoint, forcePathStyle: true } : {}),
       ...(config.accessKeyId && config.secretAccessKey
-        ? { credentials: { accessKeyId: config.accessKeyId, secretAccessKey: config.secretAccessKey } }
+        ? {
+            credentials: {
+              accessKeyId: config.accessKeyId,
+              secretAccessKey: config.secretAccessKey,
+            },
+          }
         : {}),
     });
   }
@@ -321,19 +334,22 @@ export class S3ContentStore implements ContentStore {
   async store(key: string, content: string): Promise<string> {
     const s3Key = `text/${key}`;
     try {
-      await this.client.send(new PutObjectCommand({
-        Bucket: this.bucket,
-        Key: s3Key,
-        Body: content,
-        ContentType: 'text/plain; charset=utf-8',
-      }));
+      await this.client.send(
+        new PutObjectCommand({
+          Bucket: this.bucket,
+          Key: s3Key,
+          Body: content,
+          ContentType: 'text/plain; charset=utf-8',
+        }),
+      );
       const ref = `s3://${this.bucket}/${s3Key}`;
       logger.debug({ ref, key }, 'text content stored');
 
       // Track storage bytes (fire-and-forget, same pattern as PgContentStore)
       if (this.tenantId && this.tenantRepo) {
         const bytes = Buffer.byteLength(content, 'utf-8');
-        void this.tenantRepo.incrementStorageBytes(this.tenantId, bytes)
+        void this.tenantRepo
+          .incrementStorageBytes(this.tenantId, bytes)
           .catch((err: unknown) => logger.warn({ err }, 'Failed to track storage bytes'));
       }
 
@@ -349,18 +365,21 @@ export class S3ContentStore implements ContentStore {
   async storeBinary(key: string, data: Uint8Array): Promise<string> {
     const s3Key = `binary/${key}`;
     try {
-      await this.client.send(new PutObjectCommand({
-        Bucket: this.bucket,
-        Key: s3Key,
-        Body: data,
-        ContentType: 'application/octet-stream',
-      }));
+      await this.client.send(
+        new PutObjectCommand({
+          Bucket: this.bucket,
+          Key: s3Key,
+          Body: data,
+          ContentType: 'application/octet-stream',
+        }),
+      );
       const ref = `s3://${this.bucket}/${s3Key}`;
       logger.debug({ ref, key, size: data.byteLength }, 'binary content stored');
 
       // Track storage bytes (fire-and-forget)
       if (this.tenantId && this.tenantRepo) {
-        void this.tenantRepo.incrementStorageBytes(this.tenantId, data.byteLength)
+        void this.tenantRepo
+          .incrementStorageBytes(this.tenantId, data.byteLength)
           .catch((err: unknown) => logger.warn({ err }, 'Failed to track storage bytes'));
       }
 
@@ -416,11 +435,9 @@ export class S3ContentStore implements ContentStore {
   async getDownloadUrl(ref: string, expiresInSeconds = 3600): Promise<string> {
     const { bucket, key } = this.parseRef(ref);
     try {
-      return await getSignedUrl(
-        this.client,
-        new GetObjectCommand({ Bucket: bucket, Key: key }),
-        { expiresIn: expiresInSeconds },
-      );
+      return await getSignedUrl(this.client, new GetObjectCommand({ Bucket: bucket, Key: key }), {
+        expiresIn: expiresInSeconds,
+      });
     } catch (error) {
       throw new StorageError(`Failed to generate presigned URL: ${(error as Error).message}`, {
         cause: error as Error,
@@ -464,6 +481,7 @@ git commit -m "feat(core): add S3ContentStore with presigned URL support"
 ## Task 3: Content Store Factory
 
 **Files:**
+
 - Create: `packages/core/src/content-store/factory.ts`
 - Create: `packages/core/src/content-store/index.ts`
 - Create: `packages/core/tests/unit/content-store/factory.test.ts`
@@ -560,6 +578,7 @@ export type { ContentStoreConfig } from './factory.js';
 - [ ] **Step 4: Export from core barrel**
 
 Add to `packages/core/src/index.ts`:
+
 ```typescript
 export * from './content-store/index.js';
 ```
@@ -582,6 +601,7 @@ git commit -m "feat(core): add content store factory with S3 selection"
 ## Task 4: Entity Cursor
 
 **Files:**
+
 - Modify: `packages/db/src/repositories/entity-repository.ts`
 - Modify: `packages/core/src/pipeline/types.ts`
 - Create: `packages/core/src/pipeline/entity-cursor.ts`
@@ -644,7 +664,8 @@ import { fetchEntitiesCursor } from '../../../src/pipeline/entity-cursor.js';
 describe('fetchEntitiesCursor', () => {
   it('yields entity batches until no more results', async () => {
     const mockRepo = {
-      findByJobCursor: vi.fn()
+      findByJobCursor: vi
+        .fn()
         .mockResolvedValueOnce({ entities: [{ id: '1' }, { id: '2' }], nextCursor: '2' })
         .mockResolvedValueOnce({ entities: [{ id: '3' }], nextCursor: null }),
     };
@@ -709,6 +730,7 @@ export async function* fetchEntitiesCursor(
 - [ ] **Step 5: Export from pipeline barrel and core index**
 
 Add to appropriate barrel exports. Check if `packages/core/src/pipeline/index.ts` exists; if so, add:
+
 ```typescript
 export { fetchEntitiesCursor } from './entity-cursor.js';
 export type { CursorEntityRepo } from './entity-cursor.js';
@@ -733,6 +755,7 @@ git commit -m "feat: add entity cursor with keyset pagination for streaming expo
 ## Task 5: Streaming JSON Exporter
 
 **Files:**
+
 - Create: `packages/core/src/exporters/streaming-json-exporter.ts`
 - Create: `packages/core/tests/unit/exporters/streaming-json-exporter.test.ts`
 
@@ -766,7 +789,10 @@ describe('StreamingJsonExporter', () => {
 
   it('produces valid JSON array from multiple batches', async () => {
     const batches = [
-      [{ id: '1', mergedData: { name: 'A' } }, { id: '2', mergedData: { name: 'B' } }],
+      [
+        { id: '1', mergedData: { name: 'A' } },
+        { id: '2', mergedData: { name: 'B' } },
+      ],
       [{ id: '3', mergedData: { name: 'C' } }],
     ];
 
@@ -842,10 +868,12 @@ git commit -m "feat(core): add StreamingJsonExporter for cursor-based entity bat
 ```
 
 **Note:** Also add to `packages/core/src/exporters/index.ts`:
+
 ```typescript
 export { StreamingJsonExporter } from './streaming-json-exporter.js';
 ```
-```
+
+````
 
 ---
 
@@ -926,7 +954,7 @@ describe('StreamingCsvExporter', () => {
     expect(result).toContain('"said ""hello"""'); // quotes doubled
   });
 });
-```
+````
 
 - [ ] **Step 2: Implement StreamingCsvExporter**
 
@@ -992,10 +1020,12 @@ git commit -m "feat(core): add StreamingCsvExporter for cursor-based entity batc
 ```
 
 **Note:** Also add to `packages/core/src/exporters/index.ts`:
+
 ```typescript
 export { StreamingCsvExporter } from './streaming-csv-exporter.js';
 ```
-```
+
+````
 
 ---
 
@@ -1027,38 +1057,37 @@ Add imports:
 import { StreamingJsonExporter } from '../exporters/streaming-json-exporter.js';
 import { StreamingCsvExporter } from '../exporters/streaming-csv-exporter.js';
 import { fetchEntitiesCursor } from './entity-cursor.js';
-```
+````
 
 In the `processExport` function, replace the entity fetching and export logic (steps 3-5). The key change is that for JSON/CSV, we use the streaming pipeline. For binary formats, we still collect all entities but via cursor instead of offset.
 
 Read the file first to understand exact structure, then make the minimal changes needed. The entity fetching loop should change from offset-based to cursor-based regardless of format. The exporter dispatch should branch:
 
 ```typescript
-    // 3. Fetch entities via cursor
-    const streamingFormats = new Set(['json', 'csv']);
+// 3. Fetch entities via cursor
+const streamingFormats = new Set(['json', 'csv']);
 
-    if (streamingFormats.has(format) && deps.entityRepo.findByJobCursor) {
-      // Streaming export for JSON/CSV
-      const entityStream = fetchEntitiesCursor(deps.entityRepo as any, jobId, tenantId, 500);
-      const streamExporter = format === 'json'
-        ? new StreamingJsonExporter()
-        : new StreamingCsvExporter();
-      const outputStream = streamExporter.export(entityStream);
+if (streamingFormats.has(format) && deps.entityRepo.findByJobCursor) {
+  // Streaming export for JSON/CSV
+  const entityStream = fetchEntitiesCursor(deps.entityRepo as any, jobId, tenantId, 500);
+  const streamExporter =
+    format === 'json' ? new StreamingJsonExporter() : new StreamingCsvExporter();
+  const outputStream = streamExporter.export(entityStream);
 
-      // Collect stream to string
-      const reader = outputStream.getReader();
-      const chunks: Uint8Array[] = [];
-      while (true) {
-        const { done, value } = await reader.read();
-        if (done) break;
-        chunks.push(value);
-      }
-      const content = new TextDecoder().decode(Buffer.concat(chunks));
-      // ... store content, update export status
-    } else {
-      // Binary formats or fallback: collect all entities via cursor, then run exporter
-      // ... existing logic but with cursor-based fetching
-    }
+  // Collect stream to string
+  const reader = outputStream.getReader();
+  const chunks: Uint8Array[] = [];
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    chunks.push(value);
+  }
+  const content = new TextDecoder().decode(Buffer.concat(chunks));
+  // ... store content, update export status
+} else {
+  // Binary formats or fallback: collect all entities via cursor, then run exporter
+  // ... existing logic but with cursor-based fetching
+}
 ```
 
 **Critical design notes for the streaming path:**
@@ -1101,6 +1130,7 @@ git commit -m "feat(core): adapt export orchestrator to use cursor-based entity 
 ## Task 8: Export Download Presigned URL Redirect
 
 **Files:**
+
 - Modify: `apps/api/src/routes/exports.ts`
 
 - [ ] **Step 1: Read the current download handler**
@@ -1110,6 +1140,7 @@ Read `apps/api/src/routes/exports.ts`, specifically the `downloadExportRoute` ha
 - [ ] **Step 2: Add presigned URL redirect**
 
 Add the import at the top:
+
 ```typescript
 import { supportsPresignedUrls } from '@spatula/core';
 ```
@@ -1123,13 +1154,13 @@ First, update the `downloadExportRoute` OpenAPI definition to include a 302 resp
 Then in the download handler, before the existing content retrieval logic, add a presigned URL check:
 
 ```typescript
-    // If content store supports presigned URLs, redirect instead of streaming
-    if (supportsPresignedUrls(deps.contentStore)) {
-      const url = await deps.contentStore.getDownloadUrl(exportRecord.contentRef, 3600);
-      return c.redirect(url, 302);
-    }
+// If content store supports presigned URLs, redirect instead of streaming
+if (supportsPresignedUrls(deps.contentStore)) {
+  const url = await deps.contentStore.getDownloadUrl(exportRecord.contentRef, 3600);
+  return c.redirect(url, 302);
+}
 
-    // Otherwise, stream through the API (existing logic)
+// Otherwise, stream through the API (existing logic)
 ```
 
 This goes after the `exportRecord` validation and before the `CONTENT_TYPES` lookup.
@@ -1147,24 +1178,24 @@ Existing tests use `PgContentStore` (no `getDownloadUrl`), so `supportsPresigned
 In `apps/api/tests/unit/routes/exports.test.ts`, read the existing tests then add a test that provides a content store mock WITH `getDownloadUrl`:
 
 ```typescript
-  it('redirects to presigned URL when content store supports it', async () => {
-    // Create mock with getDownloadUrl
-    const mockContentStore = {
-      retrieve: vi.fn(),
-      retrieveBinary: vi.fn(),
-      getDownloadUrl: vi.fn().mockResolvedValue('https://s3.example.com/signed-url'),
-      store: vi.fn(),
-      storeBinary: vi.fn(),
-      delete: vi.fn(),
-    };
+it('redirects to presigned URL when content store supports it', async () => {
+  // Create mock with getDownloadUrl
+  const mockContentStore = {
+    retrieve: vi.fn(),
+    retrieveBinary: vi.fn(),
+    getDownloadUrl: vi.fn().mockResolvedValue('https://s3.example.com/signed-url'),
+    store: vi.fn(),
+    storeBinary: vi.fn(),
+    delete: vi.fn(),
+  };
 
-    // Create test app with the S3-like content store
-    // ... (follow the existing test pattern but replace contentStore in deps)
+  // Create test app with the S3-like content store
+  // ... (follow the existing test pattern but replace contentStore in deps)
 
-    const res = await app.request(`/api/v1/jobs/${jobId}/export/${exportId}/download`);
-    expect(res.status).toBe(302);
-    expect(res.headers.get('Location')).toContain('signed-url');
-  });
+  const res = await app.request(`/api/v1/jobs/${jobId}/export/${exportId}/download`);
+  expect(res.status).toBe(302);
+  expect(res.headers.get('Location')).toContain('signed-url');
+});
 ```
 
 Read the existing export test file to understand the mock structure and adapt accordingly.

@@ -13,6 +13,7 @@
 ## Task 1: Extend Store with Job Runtime State
 
 **Files:**
+
 - Modify: `apps/cli/src/store/index.ts`
 - Test: `apps/cli/tests/unit/store/index.test.ts`
 
@@ -160,6 +161,7 @@ git commit -m "feat(cli): extend store with job runtime state for dashboard and 
 ## Task 2: useJobPolling Hook
 
 **Files:**
+
 - Create: `apps/cli/src/hooks/useJobPolling.ts`
 - Test: `apps/cli/tests/unit/hooks/useJobPolling.test.ts`
 
@@ -410,6 +412,7 @@ git commit -m "feat(cli): add useJobPolling hook for periodic API state fetching
 ## Task 3: useKeyboard Hook
 
 **Files:**
+
 - Create: `apps/cli/src/hooks/useKeyboard.ts`
 - Test: `apps/cli/tests/unit/hooks/useKeyboard.test.ts`
 
@@ -584,6 +587,7 @@ git commit -m "feat(cli): add useKeyboard hook for key binding dispatch"
 ## Task 4: ProgressPanel Component
 
 **Files:**
+
 - Create: `apps/cli/src/components/dashboard/ProgressPanel.tsx`
 - Test: `apps/cli/tests/unit/components/dashboard/progress-panel.test.tsx`
 
@@ -799,6 +803,7 @@ git commit -m "feat(cli): add ProgressPanel component with ASCII progress bars"
 ## Task 5: SchemaPanel Component (Dashboard)
 
 **Files:**
+
 - Create: `apps/cli/src/components/dashboard/SchemaPanel.tsx`
 - Test: `apps/cli/tests/unit/components/dashboard/schema-panel.test.tsx`
 
@@ -986,6 +991,7 @@ git commit -m "feat(cli): add SchemaPanel component for dashboard schema display
 ## Task 6: ActivityFeed and EntityPreview Components
 
 **Files:**
+
 - Create: `apps/cli/src/components/dashboard/ActivityFeed.tsx`
 - Create: `apps/cli/src/components/dashboard/EntityPreview.tsx`
 - Test: `apps/cli/tests/unit/components/dashboard/activity-feed.test.tsx`
@@ -1258,6 +1264,7 @@ git commit -m "feat(cli): add ActivityFeed and EntityPreview dashboard component
 ## Task 7: DashboardView Composition + Barrel Export
 
 **Files:**
+
 - Create: `apps/cli/src/components/dashboard/DashboardView.tsx`
 - Create: `apps/cli/src/components/dashboard/index.ts`
 - Test: `apps/cli/tests/unit/components/dashboard/dashboard-view.test.tsx`
@@ -1480,6 +1487,7 @@ git commit -m "feat(cli): add DashboardView with 2x2 panel layout and job pollin
 ## Task 8: ActionCard and DiffPreview Components
 
 **Files:**
+
 - Create: `apps/cli/src/components/review/ActionCard.tsx`
 - Create: `apps/cli/src/components/review/DiffPreview.tsx`
 - Test: `apps/cli/tests/unit/components/review/action-card.test.tsx`
@@ -2002,6 +2010,7 @@ git commit -m "feat(cli): add ActionCard and DiffPreview review mode components"
 ## Task 9: ReviewView Composition + Barrel Export
 
 **Files:**
+
 - Create: `apps/cli/src/components/review/ReviewView.tsx`
 - Create: `apps/cli/src/components/review/index.ts`
 - Test: `apps/cli/tests/unit/components/review/review-view.test.tsx`
@@ -2306,6 +2315,7 @@ git commit -m "feat(cli): add ReviewView with keyboard navigation and approve/re
 ## Task 10: App.tsx Mode Routing + CLI Command Integration
 
 **Files:**
+
 - Modify: `apps/cli/src/components/App.tsx`
 - Modify: `apps/cli/src/commands/new.tsx`
 - Modify: `apps/cli/tests/unit/components/app.test.tsx`
@@ -2467,10 +2477,13 @@ export function App({
 In `apps/cli/src/commands/new.tsx`, update the `<App>` render call to include the `apiClient` prop:
 
 Change:
+
 ```typescript
     <App store={store} onStartJob={handleStartJob} onExit={handleExit} />,
 ```
+
 To:
+
 ```typescript
     <App store={store} apiClient={apiClient} onStartJob={handleStartJob} onExit={handleExit} />,
 ```
@@ -2497,6 +2510,7 @@ git commit -m "feat(cli): wire DashboardView and ReviewView into App mode routin
 ## Task 11: Build Verification + Full Test Suite
 
 **Files:**
+
 - No new files — this task verifies the entire Phase 9b build.
 
 **Step 1: Run TypeScript compilation**
@@ -2513,6 +2527,7 @@ Expected: All tests pass. Report total counts.
 
 Run: `cd /Users/salar/Projects/spatula && pnpm --filter @spatula/cli test -- --reporter=verbose`
 Expected: All Phase 9a and 9b tests pass. Verify the new test files are all included:
+
 - `tests/unit/store/index.test.ts` (original + new job runtime state tests)
 - `tests/unit/hooks/useJobPolling.test.ts`
 - `tests/unit/hooks/useKeyboard.test.ts`

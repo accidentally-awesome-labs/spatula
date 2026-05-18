@@ -1,6 +1,5 @@
 import { createRoute, z } from '@hono/zod-openapi';
 import { createOpenAPIRouter } from '../openapi-config.js';
-import type { AppEnv } from '../types.js';
 import { actionResponseSchema, listResponse, jsonContent } from '../schemas/responses.js';
 import { paginationSchema, paginationEnvelopeSchema } from '../schemas/pagination.js';
 import { decodeCursor, encodeCursor, StorageError } from '@spatula/shared';
@@ -16,10 +15,15 @@ const listActionsQuery = paginationSchema.extend({
 });
 
 const reviewBodySchema = z.object({ reviewedBy: z.string().optional() });
-const rejectBodySchema = z.object({ reviewedBy: z.string().optional(), reason: z.string().optional() });
+const rejectBodySchema = z.object({
+  reviewedBy: z.string().optional(),
+  reason: z.string().optional(),
+});
 
 const listRoute = createRoute({
-  method: 'get', path: '/', tags: ['Actions'],
+  method: 'get',
+  path: '/',
+  tags: ['Actions'],
   summary: 'List actions for a job',
   request: { params: jobIdParam, query: listActionsQuery },
   responses: {
@@ -31,7 +35,9 @@ const listRoute = createRoute({
 });
 
 const approveAllRoute = createRoute({
-  method: 'post', path: '/approve-all', tags: ['Actions'],
+  method: 'post',
+  path: '/approve-all',
+  tags: ['Actions'],
   summary: 'Batch approve all pending actions',
   request: {
     params: jobIdParam,
@@ -41,7 +47,9 @@ const approveAllRoute = createRoute({
 });
 
 const approveRoute = createRoute({
-  method: 'post', path: '/{actionId}/approve', tags: ['Actions'],
+  method: 'post',
+  path: '/{actionId}/approve',
+  tags: ['Actions'],
   summary: 'Approve a single action',
   request: {
     params: jobIdParam.extend({
@@ -53,7 +61,9 @@ const approveRoute = createRoute({
 });
 
 const rejectRoute = createRoute({
-  method: 'post', path: '/{actionId}/reject', tags: ['Actions'],
+  method: 'post',
+  path: '/{actionId}/reject',
+  tags: ['Actions'],
   summary: 'Reject an action',
   request: {
     params: jobIdParam.extend({
@@ -61,7 +71,12 @@ const rejectRoute = createRoute({
     }),
     body: { content: { 'application/json': { schema: rejectBodySchema } } },
   },
-  responses: { 200: jsonContent(z.object({ data: z.object({ id: z.string(), status: z.string() }) }), 'Rejected') },
+  responses: {
+    200: jsonContent(
+      z.object({ data: z.object({ id: z.string(), status: z.string() }) }),
+      'Rejected',
+    ),
+  },
 });
 
 export function actionRoutes() {
@@ -76,7 +91,13 @@ export function actionRoutes() {
     // Cursor or since path (keyset-based)
     if (query.cursor || query.since) {
       const cursorId = query.cursor ? decodeCursor(query.cursor).id : undefined;
-      const result = await deps.actionRepo.findByJobCursor(jobId, tenantId, query.limit, cursorId, query.since);
+      const result = await deps.actionRepo.findByJobCursor(
+        jobId,
+        tenantId,
+        query.limit,
+        cursorId,
+        query.since,
+      );
       // total is the unfiltered job-level count (not filtered by cursor/since)
       const total = await deps.actionRepo.countByJob(jobId, tenantId);
       return c.json({
@@ -93,7 +114,10 @@ export function actionRoutes() {
     // Offset fallback (no cursor, no since)
     const [actionList, total] = await Promise.all([
       deps.actionRepo.findByJob(jobId, tenantId, {
-        type: query.type, status: query.status, limit: query.limit, offset: query.offset,
+        type: query.type,
+        status: query.status,
+        limit: query.limit,
+        offset: query.offset,
       }),
       deps.actionRepo.countByJob(jobId, tenantId),
     ]);
@@ -142,7 +166,12 @@ export function actionRoutes() {
     }
 
     try {
-      const action = await deps.actionRepo.updateStatus(actionId, tenantId, 'approved', body?.reviewedBy);
+      const action = await deps.actionRepo.updateStatus(
+        actionId,
+        tenantId,
+        'approved',
+        body?.reviewedBy,
+      );
       return c.json({ data: action });
     } catch (error) {
       if (error instanceof StorageError && error.message.includes('not found')) {
@@ -164,7 +193,12 @@ export function actionRoutes() {
     }
 
     try {
-      const action = await deps.actionRepo.updateStatus(actionId, tenantId, 'rejected', body?.reviewedBy);
+      const action = await deps.actionRepo.updateStatus(
+        actionId,
+        tenantId,
+        'rejected',
+        body?.reviewedBy,
+      );
       return c.json({ data: action });
     } catch (error) {
       if (error instanceof StorageError && error.message.includes('not found')) {

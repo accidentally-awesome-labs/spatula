@@ -27,7 +27,12 @@ function createMockDeps(overrides: Partial<AppDeps> = {}): AppDeps {
     jobRepo: {
       findById: vi.fn(),
       findByTenant: vi.fn().mockResolvedValue([
-        { id: 'job-1', name: 'My Job', status: 'running', createdAt: new Date('2026-03-20T00:00:00Z') },
+        {
+          id: 'job-1',
+          name: 'My Job',
+          status: 'running',
+          createdAt: new Date('2026-03-20T00:00:00Z'),
+        },
       ]),
       countByTenant: vi.fn(),
       create: vi.fn(),
@@ -42,8 +47,12 @@ function createMockDeps(overrides: Partial<AppDeps> = {}): AppDeps {
     actionRepo: {} as any,
     taskRepo: {} as any,
     jobManager: {
-      createJob: vi.fn(), startJob: vi.fn(), pauseJob: vi.fn(),
-      resumeJob: vi.fn(), cancelJob: vi.fn(), triggerReconciliation: vi.fn(),
+      createJob: vi.fn(),
+      startJob: vi.fn(),
+      pauseJob: vi.fn(),
+      resumeJob: vi.fn(),
+      cancelJob: vi.fn(),
+      triggerReconciliation: vi.fn(),
     } as any,
     exportRepo: {} as any,
     contentStore: {} as any,
@@ -102,9 +111,7 @@ describe('GET /api/v1/admin/tenants', () => {
     const app = createApp(deps);
     await app.request('/api/v1/admin/tenants?limit=500', { headers: tenantHeader });
 
-    expect(deps.tenantRepo!.findAll).toHaveBeenCalledWith(
-      expect.objectContaining({ limit: 100 }),
-    );
+    expect(deps.tenantRepo!.findAll).toHaveBeenCalledWith(expect.objectContaining({ limit: 100 }));
   });
 
   it('returns 503 when tenantRepo is not configured', async () => {
@@ -175,7 +182,8 @@ describe('PATCH /api/v1/admin/tenants/:id', () => {
       ...SAMPLE_TENANT,
       config: { retention: { completedJobsDays: 14, failedJobsDays: 10 } },
     };
-    (deps.tenantRepo as any).findById = vi.fn()
+    (deps.tenantRepo as any).findById = vi
+      .fn()
       .mockResolvedValueOnce(SAMPLE_TENANT) // validate-tenant middleware
       .mockResolvedValueOnce(SAMPLE_TENANT) // existing check
       .mockResolvedValueOnce(updatedTenant); // return after update

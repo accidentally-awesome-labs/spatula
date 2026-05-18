@@ -41,7 +41,13 @@ export function adminJobRoutes() {
 
     // Drain BullMQ jobs for this job if queues are available
     if (deps.queues) {
-      for (const queue of [deps.queues.crawl, deps.queues.extract, deps.queues.schemaEvolution, deps.queues.reconciliation, deps.queues.export]) {
+      for (const queue of [
+        deps.queues.crawl,
+        deps.queues.extract,
+        deps.queues.schemaEvolution,
+        deps.queues.reconciliation,
+        deps.queues.export,
+      ]) {
         try {
           const waiting = await queue.getJobs(['waiting', 'delayed']);
           for (const queueJob of waiting) {

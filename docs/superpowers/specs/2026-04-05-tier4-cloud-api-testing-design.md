@@ -9,6 +9,7 @@
 ## 1. Overview
 
 Tiers 1-3 cover all local code paths. Tier 4 tests the remaining blind spots:
+
 - **API server routes** — Full job lifecycle through Hono routes with real Postgres + Redis (zero integration testing today)
 - **OpenRouter** — Real LLM completions validating prompt parsing and JSON mode compliance
 - **Firecrawl** — Real cloud crawling validating HTML quality and link extraction
@@ -63,7 +64,10 @@ export class ServiceRegistry {
   register(manager: ServiceManager): void;
   get(name: string): ServiceManager;
   resolveStartOrder(serviceNames: string[]): string[];
-  async startAll(names: string[], opts: ProvisionOpts): Promise<{
+  async startAll(
+    names: string[],
+    opts: ProvisionOpts,
+  ): Promise<{
     handles: Map<string, ServiceHandle>;
     envVars: Record<string, string>;
     stopAll(): Promise<void>;
@@ -75,13 +79,13 @@ export class ServiceRegistry {
 
 ### 2.3 Service Managers
 
-| Manager | `dependsOn` | What It Does | `envVars` Provided |
-|---------|-------------|-------------|-------------------|
-| `ollama` | — | Existing Ollama lifecycle (check/install/pull/serve). Constructor accepts `{ model: string }` for model-specific operations (check/pull). The generic `ServiceManager` interface is extended via constructor options, not method params: `new OllamaServiceManager({ model: 'llama3.2:1b' })`. | `OLLAMA_BASE_URL` |
-| `docker-postgres` | — | Docker Compose up Postgres on 5433, run Drizzle migrations | `DATABASE_URL`, `TEST_DATABASE_URL` |
-| `docker-redis` | — | Docker Compose up Redis on 6380, `SELECT 1` + `FLUSHDB` | `REDIS_URL` |
-| `openrouter` | — | Check API key from env/.env.test, validate via `GET /api/v1/models` | `OPENROUTER_API_KEY` |
-| `firecrawl` | — | Check API key from env/.env.test | `FIRECRAWL_API_KEY` |
+| Manager           | `dependsOn` | What It Does                                                                                                                                                                                                                                                                                   | `envVars` Provided                  |
+| ----------------- | ----------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------- |
+| `ollama`          | —           | Existing Ollama lifecycle (check/install/pull/serve). Constructor accepts `{ model: string }` for model-specific operations (check/pull). The generic `ServiceManager` interface is extended via constructor options, not method params: `new OllamaServiceManager({ model: 'llama3.2:1b' })`. | `OLLAMA_BASE_URL`                   |
+| `docker-postgres` | —           | Docker Compose up Postgres on 5433, run Drizzle migrations                                                                                                                                                                                                                                     | `DATABASE_URL`, `TEST_DATABASE_URL` |
+| `docker-redis`    | —           | Docker Compose up Redis on 6380, `SELECT 1` + `FLUSHDB`                                                                                                                                                                                                                                        | `REDIS_URL`                         |
+| `openrouter`      | —           | Check API key from env/.env.test, validate via `GET /api/v1/models`                                                                                                                                                                                                                            | `OPENROUTER_API_KEY`                |
+| `firecrawl`       | —           | Check API key from env/.env.test                                                                                                                                                                                                                                                               | `FIRECRAWL_API_KEY`                 |
 
 Note: No `api-server` service manager. The API app is imported directly in test files using Hono's `app.request()` test helper, which runs the full middleware chain without starting an HTTP server.
 
@@ -105,14 +109,25 @@ const TIERS: Record<string, TierDefinition> = {
     name: 'Local',
     description: 'Unit + integration + E2E (no external deps)',
     services: [],
-    globs: ['tests/unit', 'tests/integration', 'tests/e2e/contracts-*', 'tests/e2e/resource-*', 'tests/e2e/workflow*', 'tests/e2e/tui-*'],
+    globs: [
+      'tests/unit',
+      'tests/integration',
+      'tests/e2e/contracts-*',
+      'tests/e2e/resource-*',
+      'tests/e2e/workflow*',
+      'tests/e2e/tui-*',
+    ],
   },
   '2': {
     name: 'Mock LLM',
     description: 'Tier 1 + mock Ollama pipeline tests',
     extends: '1',
     services: [],
-    globs: ['tests/e2e/tier2/pipeline-mock-*', 'tests/e2e/tier2/pipeline-errors*', 'tests/e2e/tier2/conversation*'],
+    globs: [
+      'tests/e2e/tier2/pipeline-mock-*',
+      'tests/e2e/tier2/pipeline-errors*',
+      'tests/e2e/tier2/conversation*',
+    ],
   },
   '3': {
     name: 'Real LLM',
@@ -127,7 +142,7 @@ const TIERS: Record<string, TierDefinition> = {
     extends: '3',
     services: ['ollama', 'docker-postgres', 'docker-redis', 'openrouter', 'firecrawl'],
     globs: ['tests/e2e/tier4/'],
-    budgetCap: 0.50,
+    budgetCap: 0.5,
     skipIfMissing: true,
   },
   ci: {
@@ -135,7 +150,7 @@ const TIERS: Record<string, TierDefinition> = {
     description: 'Deterministic tests only (Tier 2)',
     extends: '2',
     services: [],
-    globs: [],  // Empty = add nothing new; inherits all globs from parent (Tier 2)
+    globs: [], // Empty = add nothing new; inherits all globs from parent (Tier 2)
   },
   binary: {
     name: 'CLI Binary',
@@ -173,12 +188,15 @@ function loadEnvFile(path: string): Record<string, string> {
   if (!existsSync(path)) return {};
   return readFileSync(path, 'utf-8')
     .split('\n')
-    .filter(line => line.trim() && !line.startsWith('#'))
-    .reduce((acc, line) => {
-      const [key, ...rest] = line.split('=');
-      acc[key.trim()] = rest.join('=').trim();
-      return acc;
-    }, {} as Record<string, string>);
+    .filter((line) => line.trim() && !line.startsWith('#'))
+    .reduce(
+      (acc, line) => {
+        const [key, ...rest] = line.split('=');
+        acc[key.trim()] = rest.join('=').trim();
+        return acc;
+      },
+      {} as Record<string, string>,
+    );
 }
 ```
 
@@ -195,13 +213,13 @@ services:
   postgres:
     image: postgres:16-alpine
     ports:
-      - "${TEST_POSTGRES_PORT:-5433}:5432"
+      - '${TEST_POSTGRES_PORT:-5433}:5432'
     environment:
       POSTGRES_DB: spatula_test
       POSTGRES_USER: spatula
       POSTGRES_PASSWORD: spatula_test
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U spatula -d spatula_test"]
+      test: ['CMD-SHELL', 'pg_isready -U spatula -d spatula_test']
       interval: 2s
       timeout: 5s
       retries: 10
@@ -211,9 +229,9 @@ services:
   redis:
     image: redis:7-alpine
     ports:
-      - "${TEST_REDIS_PORT:-6380}:6379"
+      - '${TEST_REDIS_PORT:-6380}:6379'
     healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
+      test: ['CMD', 'redis-cli', 'ping']
       interval: 2s
       timeout: 5s
       retries: 10
@@ -228,6 +246,7 @@ services:
 ### Docker Manager Implementation
 
 **`docker-postgres` manager:**
+
 1. Check: `docker compose ps` → is postgres healthy?
 2. Provision: `docker compose pull` if images missing
 3. Start:
@@ -238,6 +257,7 @@ services:
 4. Stop: `docker compose -p <id> down` (no `-v` by default; `--clean` flag for `-v`)
 
 **`docker-redis` manager:**
+
 1. Start:
    - `docker compose -p <id> -f <compose-path> up -d redis`
    - Poll healthcheck, timeout 15s
@@ -262,16 +282,19 @@ Use Hono's `app.request()` test helper — runs the full middleware chain (auth,
 The API app's `createApp(deps: AppDeps)` factory requires 12+ dependencies. For Tier 4 tests:
 
 **Real (from Postgres + Redis):**
+
 - `dbPool` — real Postgres pool via `createDatabase(DATABASE_URL)`
 - `jobRepo`, `schemaRepo`, `extractionRepo`, `entityRepo`, `entitySourceRepo`, `actionRepo`, `taskRepo`, `exportRepo` — real Drizzle repository instances from the pool
 - `tenantRepo` — real Drizzle tenant repository (needed for `POST /api/v1/tenants`)
 
 **Stubbed (no workers in Tier 4):**
+
 - `jobManager` — stub that records job dispatch calls but doesn't enqueue BullMQ jobs
 - `exportQueue` — stub that records export requests but doesn't process them
 - `contentStore` — in-memory stub or `LocalContentStore` pointed at a temp dir
 
 The test helper `createTestApp()`:
+
 1. Reads `DATABASE_URL` and `REDIS_URL` from env (set by orchestrator)
 2. Creates real Drizzle pool + ioredis instance
 3. Constructs real repository instances from the pool
@@ -302,6 +325,7 @@ Some tests need pre-existing data (entities, schema, actions) without running th
 ### Worker-Dependent Features
 
 BullMQ workers are NOT started in Tier 4. Features that require job processing (export generation, reconciliation) are tested at the API route level only:
+
 - `POST /export` → 201 (creates record with status 'pending')
 - `GET /export/{id}` → 200 (returns metadata)
 - Actual export processing is covered by Tier 1/2 tests of `processExport()`
@@ -309,6 +333,7 @@ BullMQ workers are NOT started in Tier 4. Features that require job processing (
 ### WebSocket Testing
 
 For the single WebSocket test, start the Hono app on a random port temporarily:
+
 ```typescript
 const server = serve({ fetch: app.fetch, port: 0 });
 const port = (server.address() as AddressInfo).port;
@@ -324,6 +349,7 @@ server.close();
 ### 5.1 `helpers.ts` — Shared utilities
 
 Exports:
+
 - `createTestApp()` — imports Hono app factory, creates real DB/Redis connections + stubbed jobManager/exportQueue/contentStore, returns `{ app, db, cleanup() }`
 - `createTenant(app)` — bootstraps tenant via `POST /api/v1/tenants`, returns `{ tenantId }`
 - `authHeaders(tenantId)` — builds `{ 'x-tenant-id': tenantId, 'Content-Type': 'application/json' }` (uses `AUTH_STRATEGY=none`)
@@ -337,86 +363,86 @@ Skip if `DATABASE_URL` not set (Docker not running).
 
 **Tenant & Auth (2):**
 
-| Test | Assertion |
-|------|-----------|
-| Bootstrap creates tenant | POST /api/v1/tenants → 201, response has tenantId |
+| Test                           | Assertion                                               |
+| ------------------------------ | ------------------------------------------------------- |
+| Bootstrap creates tenant       | POST /api/v1/tenants → 201, response has tenantId       |
 | Missing tenant header rejected | GET /api/v1/jobs without `x-tenant-id` header → 400/401 |
 
 **Job CRUD (5):**
 
-| Test | Assertion |
-|------|-----------|
-| Create job | POST /api/v1/jobs → 201, has id + status 'created' |
-| List jobs | GET /api/v1/jobs → 200, array contains created job |
-| Get job details | GET /api/v1/jobs/{id} → 200, matches config |
-| Start job | PATCH /api/v1/jobs/{id} { action: 'start' } → 200, status changes |
-| Delete job | DELETE /api/v1/jobs/{id} → 200/204, subsequent GET → 404 |
+| Test            | Assertion                                                         |
+| --------------- | ----------------------------------------------------------------- |
+| Create job      | POST /api/v1/jobs → 201, has id + status 'created'                |
+| List jobs       | GET /api/v1/jobs → 200, array contains created job                |
+| Get job details | GET /api/v1/jobs/{id} → 200, matches config                       |
+| Start job       | PATCH /api/v1/jobs/{id} { action: 'start' } → 200, status changes |
+| Delete job      | DELETE /api/v1/jobs/{id} → 200/204, subsequent GET → 404          |
 
 **Schema & Entities (3):**
 
 Seed data directly via DB before these tests.
 
-| Test | Assertion |
-|------|-----------|
-| Get schema | GET /api/v1/jobs/{id}/schema → 200, has definition with fields |
-| List entities (paginated) | GET /api/v1/jobs/{id}/entities?limit=2 → 200, has data + total |
-| Get entity detail | GET /api/v1/jobs/{id}/entities/{entityId} → 200, has mergedData |
+| Test                      | Assertion                                                       |
+| ------------------------- | --------------------------------------------------------------- |
+| Get schema                | GET /api/v1/jobs/{id}/schema → 200, has definition with fields  |
+| List entities (paginated) | GET /api/v1/jobs/{id}/entities?limit=2 → 200, has data + total  |
+| Get entity detail         | GET /api/v1/jobs/{id}/entities/{entityId} → 200, has mergedData |
 
 **Actions (3):**
 
-| Test | Assertion |
-|------|-----------|
-| List pending actions | GET /api/v1/jobs/{id}/actions?status=pending_review → 200, array |
-| Approve action | POST /api/v1/jobs/{id}/actions/{actionId}/approve → 200, status changes |
-| Batch actions | POST /api/v1/actions/batch { action: 'approve', ids: [...] } → 200, partial success |
+| Test                 | Assertion                                                                           |
+| -------------------- | ----------------------------------------------------------------------------------- |
+| List pending actions | GET /api/v1/jobs/{id}/actions?status=pending_review → 200, array                    |
+| Approve action       | POST /api/v1/jobs/{id}/actions/{actionId}/approve → 200, status changes             |
+| Batch actions        | POST /api/v1/actions/batch { action: 'approve', ids: [...] } → 200, partial success |
 
 **Export (2):**
 
-| Test | Assertion |
-|------|-----------|
-| Create export | POST /api/v1/jobs/{id}/export { format: 'json' } → 201, has exportId |
-| Get export status | GET /api/v1/jobs/{id}/export/{exportId} → 200, has status |
+| Test              | Assertion                                                            |
+| ----------------- | -------------------------------------------------------------------- |
+| Create export     | POST /api/v1/jobs/{id}/export { format: 'json' } → 201, has exportId |
+| Get export status | GET /api/v1/jobs/{id}/export/{exportId} → 200, has status            |
 
 **Webhook (2):**
 
-| Test | Assertion |
-|------|-----------|
+| Test                           | Assertion                                                              |
+| ------------------------------ | ---------------------------------------------------------------------- |
 | Webhook delivered on job event | Create job with webhook URL → trigger event via DB → receiver got POST |
-| Webhook includes signature | Receiver request has `X-Spatula-Signature` when secret configured |
+| Webhook includes signature     | Receiver request has `X-Spatula-Signature` when secret configured      |
 
 **Health & Admin (2):**
 
-| Test | Assertion |
-|------|-----------|
-| Health endpoint | GET /health → 200, `{ status: 'ok' }` |
-| Ready check | GET /health/ready → 200, shows db + redis + queue status |
+| Test            | Assertion                                                |
+| --------------- | -------------------------------------------------------- |
+| Health endpoint | GET /health → 200, `{ status: 'ok' }`                    |
+| Ready check     | GET /health/ready → 200, shows db + redis + queue status |
 
 **Extractions & Usage (3):**
 
-| Test | Assertion |
-|------|-----------|
-| List extractions | GET /api/v1/jobs/{id}/extractions → 200, paginated array |
-| Get usage stats | GET /api/v1/usage → 200, has token/cost aggregation |
+| Test               | Assertion                                                                  |
+| ------------------ | -------------------------------------------------------------------------- |
+| List extractions   | GET /api/v1/jobs/{id}/extractions → 200, paginated array                   |
+| Get usage stats    | GET /api/v1/usage → 200, has token/cost aggregation                        |
 | API key management | POST /api/v1/api-keys → 201, GET /api/v1/api-keys → list, DELETE → revoked |
 
 **Rate Limiting (1):**
 
-| Test | Assertion |
-|------|-----------|
+| Test                       | Assertion                                                                         |
+| -------------------------- | --------------------------------------------------------------------------------- |
 | Rate limit headers present | Authenticated request → response has `X-RateLimit-Limit`, `X-RateLimit-Remaining` |
 
 ### 5.3 `openrouter-integration.test.ts` — 6 tests
 
 Skip if `OPENROUTER_API_KEY` not set. Uses `google/gemini-2.5-flash` ($0.15/1M tokens).
 
-| Test | What | Assertion |
-|------|------|-----------|
-| API key is valid | GET /api/v1/models | 200, models array not empty |
-| Simple completion | complete("Say hello") | Has content, usage.totalTokens > 0 |
-| JSON mode | complete(jsonMode: true, "Return {greeting: string}") | Content parses as valid JSON |
-| Classification prompt | Actual PageClassifier system prompt + sample HTML | Parses into ClassificationResponse Zod schema |
-| Extraction prompt | Actual StaticExtractor system prompt + HTML + schema | Parses into LLMExtractionResponse Zod schema |
-| Token usage accuracy | Check usage fields from all calls | promptTokens > 0, completionTokens > 0, total = prompt + completion |
+| Test                  | What                                                  | Assertion                                                           |
+| --------------------- | ----------------------------------------------------- | ------------------------------------------------------------------- |
+| API key is valid      | GET /api/v1/models                                    | 200, models array not empty                                         |
+| Simple completion     | complete("Say hello")                                 | Has content, usage.totalTokens > 0                                  |
+| JSON mode             | complete(jsonMode: true, "Return {greeting: string}") | Content parses as valid JSON                                        |
+| Classification prompt | Actual PageClassifier system prompt + sample HTML     | Parses into ClassificationResponse Zod schema                       |
+| Extraction prompt     | Actual StaticExtractor system prompt + HTML + schema  | Parses into LLMExtractionResponse Zod schema                        |
+| Token usage accuracy  | Check usage fields from all calls                     | promptTokens > 0, completionTokens > 0, total = prompt + completion |
 
 Cost tracking: log total tokens + estimated cost after all tests.
 
@@ -424,13 +450,13 @@ Cost tracking: log total tokens + estimated cost after all tests.
 
 Skip if `FIRECRAWL_API_KEY` not set. Uses `https://books.toscrape.com` (stable scraping test site).
 
-| Test | What | Assertion |
-|------|------|-----------|
-| Crawl simple page | crawl('https://books.toscrape.com/') | HTML contains 'Books to Scrape', status 200 |
-| Extracts links | Same crawl result | links array contains book URLs |
-| Returns metadata | Same crawl result | responseTimeMs > 0, contentLength > 0, crawlerType = 'firecrawl' |
-| Handles 404 | crawl('/nonexistent') | Throws CrawlError or returns 404 status |
-| Compare with Playwright | Crawl same page with both | Both return HTML with same title. Skip if Playwright unavailable |
+| Test                    | What                                 | Assertion                                                        |
+| ----------------------- | ------------------------------------ | ---------------------------------------------------------------- |
+| Crawl simple page       | crawl('https://books.toscrape.com/') | HTML contains 'Books to Scrape', status 200                      |
+| Extracts links          | Same crawl result                    | links array contains book URLs                                   |
+| Returns metadata        | Same crawl result                    | responseTimeMs > 0, contentLength > 0, crawlerType = 'firecrawl' |
+| Handles 404             | crawl('/nonexistent')                | Throws CrawlError or returns 404 status                          |
+| Compare with Playwright | Crawl same page with both            | Both return HTML with same title. Skip if Playwright unavailable |
 
 ---
 
@@ -461,24 +487,24 @@ apps/cli/
 
 ## 7. Test Counts and Runtime
 
-| File | Tests | Requires | Est. Runtime |
-|------|-------|----------|-------------|
-| api-lifecycle.test.ts | 23 | Docker (Postgres + Redis) | ~10s |
-| openrouter-integration.test.ts | 6 | OPENROUTER_API_KEY | ~15s |
-| firecrawl-integration.test.ts | 5 | FIRECRAWL_API_KEY | ~20s |
-| **Total** | **34** | | ~45s |
+| File                           | Tests  | Requires                  | Est. Runtime |
+| ------------------------------ | ------ | ------------------------- | ------------ |
+| api-lifecycle.test.ts          | 23     | Docker (Postgres + Redis) | ~10s         |
+| openrouter-integration.test.ts | 6      | OPENROUTER_API_KEY        | ~15s         |
+| firecrawl-integration.test.ts  | 5      | FIRECRAWL_API_KEY         | ~20s         |
+| **Total**                      | **34** |                           | ~45s         |
 
 Each requirement is independent. Tests skip gracefully when prerequisites are missing.
 
 **Combined with previous tiers:**
 
-| Tier | Tests | Cumulative |
-|------|-------|-----------|
-| 1 | 514 | 514 |
-| 2 | 43 | 557 |
-| 3 | 6 | 563 |
-| 4 | 34 | 597 |
-| Binary | 18 | 615 |
+| Tier   | Tests | Cumulative |
+| ------ | ----- | ---------- |
+| 1      | 514   | 514        |
+| 2      | 43    | 557        |
+| 3      | 6     | 563        |
+| 4      | 34    | 597        |
+| Binary | 18    | 615        |
 
 ---
 
@@ -499,9 +525,11 @@ Use `SELECT 1` + `FLUSHDB` — only flush database 1, never the default database
 ### OpenRouter Budget Cap
 
 After test run, calculate cost from token counts:
+
 ```
 tokens * (price_per_1M / 1_000_000)
 ```
+
 Log: `"OpenRouter: 6 calls, ~3,200 tokens, ~$0.001 (google/gemini-2.5-flash)"`.
 If accumulated cost exceeds `budgetCap`, print warning (don't abort — tests already ran).
 
@@ -518,6 +546,7 @@ Tests run sequentially (not parallel crawls). Target: 3-5 pages on `https://book
 ### Modular Extension Pattern
 
 Adding a future tier (e.g., Tier 5 for S3):
+
 1. Create `scripts/services/s3-manager.ts` implementing `ServiceManager`
 2. Add entry to `tier-registry.ts`
 3. Create `tests/e2e/tier5/` with test files

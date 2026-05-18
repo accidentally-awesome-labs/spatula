@@ -75,11 +75,14 @@ describe('SpatulaApiClient pull methods', () => {
 
     it('HTTP 500 with empty body throws ApiError with generic message', async () => {
       const client = new SpatulaApiClient('https://api.test', 't1');
-      vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
-        ok: false,
-        status: 500,
-        json: () => Promise.reject(new SyntaxError('Unexpected end of JSON')),
-      }));
+      vi.stubGlobal(
+        'fetch',
+        vi.fn().mockResolvedValue({
+          ok: false,
+          status: 500,
+          json: () => Promise.reject(new SyntaxError('Unexpected end of JSON')),
+        }),
+      );
 
       await expect(client.getEntitiesStreamPaginated('job-1', {})).rejects.toSatisfy((err) => {
         expect(err).toBeInstanceOf(ApiError);
@@ -206,11 +209,14 @@ describe('SpatulaApiClient pull methods', () => {
 
     it('HTTP 500 with empty body throws ApiError with generic message', async () => {
       const client = new SpatulaApiClient('https://api.test', 't1');
-      vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
-        ok: false,
-        status: 500,
-        json: () => Promise.reject(new SyntaxError('Unexpected end of JSON')),
-      }));
+      vi.stubGlobal(
+        'fetch',
+        vi.fn().mockResolvedValue({
+          ok: false,
+          status: 500,
+          json: () => Promise.reject(new SyntaxError('Unexpected end of JSON')),
+        }),
+      );
 
       await expect(client.getEntitySourcesStreamPaginated('job1')).rejects.toSatisfy((err) => {
         expect(err).toBeInstanceOf(ApiError);
@@ -243,7 +249,16 @@ describe('SpatulaApiClient pull methods', () => {
 
     it('defaults to 30d period', async () => {
       const client = new SpatulaApiClient('https://api.test', 't1');
-      mockFetch({ data: { totalTokens: 0, totalCostUsd: 0, byModel: {}, byPurpose: {}, byJob: [], period: {} } });
+      mockFetch({
+        data: {
+          totalTokens: 0,
+          totalCostUsd: 0,
+          byModel: {},
+          byPurpose: {},
+          byJob: [],
+          period: {},
+        },
+      });
 
       await client.getUsage();
       const url = (fetch as ReturnType<typeof vi.fn>).mock.calls[0][0] as string;

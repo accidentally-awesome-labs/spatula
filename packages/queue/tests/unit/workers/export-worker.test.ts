@@ -62,11 +62,13 @@ describe('processExportJob', () => {
     await processExportJob(payload, deps);
 
     expect(deps.exportRepo.updateStatus).toHaveBeenCalledWith(
-      'exp-1', 'tenant-1',
+      'exp-1',
+      'tenant-1',
       expect.objectContaining({ status: 'processing' }),
     );
     expect(deps.exportRepo.updateStatus).toHaveBeenCalledWith(
-      'exp-1', 'tenant-1',
+      'exp-1',
+      'tenant-1',
       expect.objectContaining({ status: 'completed' }),
     );
   });
@@ -88,7 +90,8 @@ describe('processExportJob', () => {
 
     await processExportJob(payload, deps);
     expect(deps.exportRepo.updateStatus).toHaveBeenCalledWith(
-      'exp-1', 'tenant-1',
+      'exp-1',
+      'tenant-1',
       expect.objectContaining({ status: 'failed', error: expect.any(String) }),
     );
   });
@@ -100,7 +103,8 @@ describe('processExportJob', () => {
     await processExportJob(payload, deps);
 
     expect(deps.exportRepo.updateStatus).toHaveBeenCalledWith(
-      'exp-1', 'tenant-1',
+      'exp-1',
+      'tenant-1',
       expect.objectContaining({
         status: 'failed',
         error: expect.stringContaining('not completed'),
@@ -121,7 +125,8 @@ describe('processExportJob', () => {
     await processExportJob(payload, deps);
 
     expect(deps.exportRepo.updateStatus).toHaveBeenCalledWith(
-      'exp-1', 'tenant-1',
+      'exp-1',
+      'tenant-1',
       expect.objectContaining({
         status: 'failed',
         error: expect.stringContaining('S3 write timeout'),
@@ -136,7 +141,8 @@ describe('processExportJob', () => {
     await processExportJob(payload, deps);
 
     expect(deps.exportRepo.updateStatus).toHaveBeenCalledWith(
-      'exp-1', 'tenant-1',
+      'exp-1',
+      'tenant-1',
       expect.objectContaining({
         status: 'failed',
         error: expect.stringContaining('No schema found'),
@@ -163,7 +169,8 @@ describe('processExportJob', () => {
       expect.any(String),
     );
     expect(deps.exportRepo.updateStatus).toHaveBeenCalledWith(
-      'exp-1', 'tenant-1',
+      'exp-1',
+      'tenant-1',
       expect.objectContaining({ status: 'completed' }),
     );
   });
@@ -175,7 +182,8 @@ describe('processExportJob', () => {
     await processExportJob(sqlitePayload, deps);
     expect(deps.contentStore.storeBinary).toHaveBeenCalled();
     expect(deps.exportRepo.updateStatus).toHaveBeenCalledWith(
-      expect.anything(), expect.anything(),
+      expect.anything(),
+      expect.anything(),
       expect.objectContaining({ status: 'completed', contentRef: 'pg://binary-ref' }),
     );
   });

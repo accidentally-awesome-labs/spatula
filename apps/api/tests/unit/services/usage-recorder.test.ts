@@ -8,7 +8,7 @@ function createUsageRecord(overrides?: Partial<LLMUsageRecord>): LLMUsageRecord 
     promptTokens: 100,
     completionTokens: 50,
     totalTokens: 150,
-    costUsd: 0.000150,
+    costUsd: 0.00015,
     durationMs: 350,
     purpose: 'extraction',
     ...overrides,
@@ -45,7 +45,7 @@ describe('DefaultUsageRecorder', () => {
     const usage = createUsageRecord();
     recorder.record(usage);
 
-    expect(metrics.llmCostUsd.add).toHaveBeenCalledWith(0.000150, {
+    expect(metrics.llmCostUsd.add).toHaveBeenCalledWith(0.00015, {
       tenantId: 'tenant-1',
       jobId: 'job-1',
       model: 'anthropic/claude-3-haiku',

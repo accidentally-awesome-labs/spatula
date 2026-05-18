@@ -22,13 +22,12 @@ export class UserTenantRepository {
 
   async create(userId: string, tenantId: string, role: string): Promise<void> {
     try {
-      await this.db
-        .insert(userTenants)
-        .values({ userId, tenantId, role })
-        .onConflictDoNothing();
+      await this.db.insert(userTenants).values({ userId, tenantId, role }).onConflictDoNothing();
     } catch (error) {
       logger.error({ error, userId, tenantId }, 'Failed to create user-tenant relationship');
-      throw new StorageError('Failed to create user-tenant relationship', { cause: error as Error });
+      throw new StorageError('Failed to create user-tenant relationship', {
+        cause: error as Error,
+      });
     }
   }
 
@@ -83,7 +82,9 @@ export class UserTenantRepository {
         .where(and(eq(userTenants.userId, userId), eq(userTenants.tenantId, tenantId)));
     } catch (error) {
       logger.error({ error, userId, tenantId }, 'Failed to remove user-tenant relationship');
-      throw new StorageError('Failed to remove user-tenant relationship', { cause: error as Error });
+      throw new StorageError('Failed to remove user-tenant relationship', {
+        cause: error as Error,
+      });
     }
   }
 

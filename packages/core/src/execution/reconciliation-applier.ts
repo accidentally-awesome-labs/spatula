@@ -5,7 +5,10 @@ const logger = createLogger('reconciliation-applier');
 
 export interface ReconciliationDeps {
   entityRepo: {
-    findById(entityId: string, tenantId: string): Promise<{
+    findById(
+      entityId: string,
+      tenantId: string,
+    ): Promise<{
       id: string;
       mergedData: Record<string, unknown>;
       provenance: Record<string, unknown>;
@@ -60,7 +63,10 @@ export async function applyReconciliationAction(
     case 'set_source_trust':
       return applySetSourceTrust(action, tenantId, deps);
     default:
-      return { applied: false, reason: `Not a reconciliation action: ${(action as PipelineAction).type}` };
+      return {
+        applied: false,
+        reason: `Not a reconciliation action: ${(action as PipelineAction).type}`,
+      };
   }
 }
 
@@ -207,7 +213,10 @@ async function applyMatchEntities(
 function applySplitEntities(
   action: PipelineAction & { type: 'split_entities' },
 ): ReconciliationResult {
-  logger.warn({ entityId: action.payload.entityId }, 'split_entities called but not yet implemented');
+  logger.warn(
+    { entityId: action.payload.entityId },
+    'split_entities called but not yet implemented',
+  );
   return { applied: false, reason: 'split_entities not yet implemented' };
 }
 

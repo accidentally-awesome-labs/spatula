@@ -2,13 +2,13 @@ services:
   postgres:
     image: postgres:16-alpine
     ports:
-      - "${TEST_POSTGRES_PORT:-5433}:5432"
+      - '${TEST_POSTGRES_PORT:-5433}:5432'
     environment:
       POSTGRES_DB: spatula_test
       POSTGRES_USER: spatula
       POSTGRES_PASSWORD: spatula_test
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U spatula -d spatula_test"]
+      test: ['CMD-SHELL', 'pg_isready -U spatula -d spatula_test']
       interval: 2s
       timeout: 5s
       retries: 10
@@ -18,9 +18,9 @@ services:
   redis:
     image: redis:7-alpine
     ports:
-      - "${TEST_REDIS_PORT:-6380}:6379"
+      - '${TEST_REDIS_PORT:-6380}:6379'
     healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
+      test: ['CMD', 'redis-cli', 'ping']
       interval: 2s
       timeout: 5s
       retries: 10

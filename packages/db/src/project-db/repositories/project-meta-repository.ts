@@ -16,39 +16,38 @@ export class ProjectMetaRepository {
   constructor(private readonly db: ProjectDatabase) {}
 
   async get(key: string): Promise<string | null> {
-    const row = this.db
-      .select()
-      .from(projectMeta)
-      .where(eq(projectMeta.key, key))
-      .get();
+    const row = this.db.select().from(projectMeta).where(eq(projectMeta.key, key)).get();
 
     return row?.value ?? null;
   }
 
   async set(key: string, value: string): Promise<void> {
     wrapStorageError(
-      () => this.db.insert(projectMeta).values({ key, value }).onConflictDoUpdate({
-        target: projectMeta.key,
-        set: { value },
-      }).run(),
+      () =>
+        this.db
+          .insert(projectMeta)
+          .values({ key, value })
+          .onConflictDoUpdate({
+            target: projectMeta.key,
+            set: { value },
+          })
+          .run(),
       { operation: 'set', table: 'project_meta', key },
     );
   }
 
   async getAll(): Promise<Record<string, string>> {
-    const rows = this.db
-      .select()
-      .from(projectMeta)
-      .all();
+    const rows = this.db.select().from(projectMeta).all();
 
     return Object.fromEntries(rows.map((r) => [r.key, r.value]));
   }
 
   async delete(key: string): Promise<void> {
-    wrapStorageError(
-      () => this.db.delete(projectMeta).where(eq(projectMeta.key, key)).run(),
-      { operation: 'delete', table: 'project_meta', key },
-    );
+    wrapStorageError(() => this.db.delete(projectMeta).where(eq(projectMeta.key, key)).run(), {
+      operation: 'delete',
+      table: 'project_meta',
+      key,
+    });
   }
 
   async deleteByPrefix(prefix: string): Promise<void> {

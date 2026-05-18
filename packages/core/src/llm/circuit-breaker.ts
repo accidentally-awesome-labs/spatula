@@ -51,7 +51,7 @@ export class CircuitBreakerLLMClient implements LLMClient {
     if (inner instanceof OllamaClient && !config?.allowOllama) {
       throw new ConfigError(
         'CircuitBreakerLLMClient should not wrap OllamaClient — Ollama failures are terminal (local server), ' +
-        'not transient. Use CircuitBreakerLLMClient with cloud providers like OpenRouter.',
+          'not transient. Use CircuitBreakerLLMClient with cloud providers like OpenRouter.',
       );
     }
     this.config = { ...DEFAULT_CONFIG, ...config };

@@ -111,26 +111,27 @@ Turn "I want X data from these sites" into a production-quality dataset with pro
 
 <!-- Decisions that constrain future work. Add throughout project lifecycle. -->
 
-| Decision | Rationale | Outcome |
-|----------|-----------|---------|
-| Pure orchestrators in `@spatula/core` (no BullMQ/HTTP imports) | Lets the CLI run the same pipeline in-process via `LocalPipelineRunner`, and lets BullMQ be replaced later | ✓ Good |
-| Action-based execution (52 typed actions) over imperative state mutation | Auditable, reviewable, replayable, and gives the LLM a constrained surface to recommend changes | ✓ Good |
-| Three-tier LLM routing (fast / primary / smart) via `model-router.ts` | Cost control without sacrificing quality on hard tasks | ✓ Good |
-| Batched schema evolution under distributed lock | Eliminates race conditions and cuts LLM cost vs per-page evolution | ✓ Good |
-| `ContentStore` interface with Postgres/Local/S3 implementations | Lets dev/local stay simple while production swaps to S3/R2 without code changes | ✓ Good |
-| Single Hono API + tenant scoping baked into every middleware | Multi-tenancy retrofit later would have been worse than the up-front cost | ✓ Good |
-| Ink (React for terminals) for the CLI | Conversational + dashboard + review + explorer modes share components and state | ✓ Good |
-| Stripe usage-based billing instead of seat-based | Aligns price with actual crawl/LLM cost per tenant | ✓ Good |
-| `DataSource` interface (`LocalDataSource` SQLite, `ApiDataSource` HTTP) | One CLI codebase, two execution modes; pull-flow and explorer reuse the same adapter | ✓ Good |
-| Composite `(entity_id, extraction_id)` cursor for `EntitySourceRepository.findByJobCursor` | Single-column cursor dropped rows when an `entityId`'s sources split across a page boundary (Wave 5-6 post-review) | ✓ Good |
-| `release-please` for changelog automation | One-click public releases without hand-written CHANGELOG drift | — Pending (post-launch) |
-| Wave 6 (public launch) carve-out + migration squash planned but unexecuted | Squashing migrations before first public version cleans the on-disk schema; carve-out separates internal infra from public OSS surface | — Pending |
+| Decision                                                                                   | Rationale                                                                                                                              | Outcome                 |
+| ------------------------------------------------------------------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------- | ----------------------- |
+| Pure orchestrators in `@spatula/core` (no BullMQ/HTTP imports)                             | Lets the CLI run the same pipeline in-process via `LocalPipelineRunner`, and lets BullMQ be replaced later                             | ✓ Good                  |
+| Action-based execution (52 typed actions) over imperative state mutation                   | Auditable, reviewable, replayable, and gives the LLM a constrained surface to recommend changes                                        | ✓ Good                  |
+| Three-tier LLM routing (fast / primary / smart) via `model-router.ts`                      | Cost control without sacrificing quality on hard tasks                                                                                 | ✓ Good                  |
+| Batched schema evolution under distributed lock                                            | Eliminates race conditions and cuts LLM cost vs per-page evolution                                                                     | ✓ Good                  |
+| `ContentStore` interface with Postgres/Local/S3 implementations                            | Lets dev/local stay simple while production swaps to S3/R2 without code changes                                                        | ✓ Good                  |
+| Single Hono API + tenant scoping baked into every middleware                               | Multi-tenancy retrofit later would have been worse than the up-front cost                                                              | ✓ Good                  |
+| Ink (React for terminals) for the CLI                                                      | Conversational + dashboard + review + explorer modes share components and state                                                        | ✓ Good                  |
+| Stripe usage-based billing instead of seat-based                                           | Aligns price with actual crawl/LLM cost per tenant                                                                                     | ✓ Good                  |
+| `DataSource` interface (`LocalDataSource` SQLite, `ApiDataSource` HTTP)                    | One CLI codebase, two execution modes; pull-flow and explorer reuse the same adapter                                                   | ✓ Good                  |
+| Composite `(entity_id, extraction_id)` cursor for `EntitySourceRepository.findByJobCursor` | Single-column cursor dropped rows when an `entityId`'s sources split across a page boundary (Wave 5-6 post-review)                     | ✓ Good                  |
+| `release-please` for changelog automation                                                  | One-click public releases without hand-written CHANGELOG drift                                                                         | — Pending (post-launch) |
+| Wave 6 (public launch) carve-out + migration squash planned but unexecuted                 | Squashing migrations before first public version cleans the on-disk schema; carve-out separates internal infra from public OSS surface | — Pending               |
 
 ## Evolution
 
 This document evolves at phase transitions and milestone boundaries.
 
 **After each phase transition** (via `/gsd:transition`):
+
 1. Requirements invalidated? → Move to Out of Scope with reason
 2. Requirements validated? → Move to Validated with phase reference
 3. New requirements emerged? → Add to Active
@@ -138,10 +139,12 @@ This document evolves at phase transitions and milestone boundaries.
 5. "What This Is" still accurate? → Update if drifted
 
 **After each milestone** (via `/gsd:complete-milestone`):
+
 1. Full review of all sections
 2. Core Value check — still the right priority?
 3. Audit Out of Scope — reasons still valid?
 4. Update Context with current state
 
 ---
-*Last updated: 2026-05-18 after completing Phase 15 (Carve-out & Migration Squash) — PR #1 open at accidentally-awesome-labs/spatula; BLOCK-01 + BLOCK-05 cleared*
+
+_Last updated: 2026-05-18 after completing Phase 15 (Carve-out & Migration Squash) — PR #1 open at accidentally-awesome-labs/spatula; BLOCK-01 + BLOCK-05 cleared_

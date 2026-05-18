@@ -54,6 +54,7 @@ Modified:
 ## Task 1: Safety Policy Map & Approval Presets
 
 **Files:**
+
 - Create: `packages/core/src/execution/safety-policy.ts`
 - Create: `packages/core/tests/unit/execution/safety-policy.test.ts`
 
@@ -249,6 +250,7 @@ git commit -m "feat(core): add safety policy map and approval preset resolution"
 ## Task 2: Extend Schema Action Applier — split_field + group_fields
 
 **Files:**
+
 - Modify: `packages/core/src/evolution/schema-action-applier.ts`
 - Modify: `packages/core/tests/unit/evolution/schema-action-applier.test.ts`
 
@@ -354,11 +356,7 @@ it('group_fields: removes source fields and creates new object field', () => {
 });
 
 it('group_fields: handles partial matches (only some source fields exist)', () => {
-  const schema = makeSchema([
-    makeField('name'),
-    makeField('street'),
-    makeField('price'),
-  ]);
+  const schema = makeSchema([makeField('name'), makeField('street'), makeField('price')]);
 
   const action: PipelineAction = {
     ...baseAction(),
@@ -495,6 +493,7 @@ git commit -m "feat(core): add split_field and group_fields to schema action app
 ## Task 3: Category Applier
 
 **Files:**
+
 - Create: `packages/core/src/execution/category-applier.ts`
 - Create: `packages/core/tests/unit/execution/category-applier.test.ts`
 
@@ -511,7 +510,10 @@ import type { SchemaDefinition } from '../../../src/types/schema.js';
 import type { PipelineAction } from '../../../src/types/actions.js';
 import { generateId } from '@spatula/shared';
 
-function baseAction(): Pick<PipelineAction, 'id' | 'jobId' | 'source' | 'reasoning' | 'confidence'> {
+function baseAction(): Pick<
+  PipelineAction,
+  'id' | 'jobId' | 'source' | 'reasoning' | 'confidence'
+> {
   return {
     id: generateId(),
     jobId: generateId(),
@@ -545,7 +547,11 @@ describe('applyCategoryActions', () => {
         payload: {
           categoryField: 'product_type',
           categories: [
-            { name: 'electronics', description: 'Electronic devices', matchCriteria: 'tech products' },
+            {
+              name: 'electronics',
+              description: 'Electronic devices',
+              matchCriteria: 'tech products',
+            },
             { name: 'clothing', description: 'Apparel', matchCriteria: 'wearable items' },
           ],
         },
@@ -736,10 +742,7 @@ export function applyCategoryActions(
           requiredFields: [...action.payload.requiredFields],
           optionalFields: [...action.payload.optionalFields],
         };
-        logger.debug(
-          { category: action.payload.category },
-          'category fields assigned',
-        );
+        logger.debug({ category: action.payload.category }, 'category fields assigned');
         break;
       }
 
@@ -773,6 +776,7 @@ git commit -m "feat(core): add category applier for define_category and assign_c
 ## Task 4: Entity Repository — updateMergedData
 
 **Files:**
+
 - Modify: `packages/db/src/repositories/entity-repository.ts`
 - Modify: `packages/db/src/repositories/index.ts`
 - Modify: `packages/db/tests/unit/repositories/entity-repository.test.ts`
@@ -788,11 +792,13 @@ it('updateMergedData updates data and provenance', async () => {
   const updateChainable = {
     set: vi.fn().mockReturnThis(),
     where: vi.fn().mockReturnThis(),
-    returning: vi.fn().mockResolvedValue([{
-      id: 'entity-1',
-      mergedData: { name: 'Updated' },
-      provenance: { name: { provenanceType: 'merged' } },
-    }]),
+    returning: vi.fn().mockResolvedValue([
+      {
+        id: 'entity-1',
+        mergedData: { name: 'Updated' },
+        provenance: { name: { provenanceType: 'merged' } },
+      },
+    ]),
   };
   mockDb.update = vi.fn().mockReturnValue(updateChainable);
 
@@ -887,6 +893,7 @@ git commit -m "feat(db): add EntityRepository.updateMergedData() for reconciliat
 ## Task 5: Reconciliation Applier
 
 **Files:**
+
 - Create: `packages/core/src/execution/reconciliation-applier.ts`
 - Create: `packages/core/tests/unit/execution/reconciliation-applier.test.ts`
 
@@ -905,7 +912,10 @@ import {
 import type { PipelineAction } from '../../../src/types/actions.js';
 import { generateId } from '@spatula/shared';
 
-function baseAction(): Pick<PipelineAction, 'id' | 'jobId' | 'source' | 'reasoning' | 'confidence'> {
+function baseAction(): Pick<
+  PipelineAction,
+  'id' | 'jobId' | 'source' | 'reasoning' | 'confidence'
+> {
   return {
     id: generateId(),
     jobId: generateId(),
@@ -923,12 +933,19 @@ function createMockDeps(): ReconciliationDeps {
         tenantId: 'tenant-1',
         mergedData: { name: 'Widget', price: 10 },
         provenance: {
-          name: { finalValue: 'Widget', provenanceType: 'extracted', sources: [], hadConflict: false },
+          name: {
+            finalValue: 'Widget',
+            provenanceType: 'extracted',
+            sources: [],
+            hadConflict: false,
+          },
         },
       }),
-      updateMergedData: vi.fn().mockImplementation((_id, _tid, changes) =>
-        Promise.resolve({ id: 'entity-1', ...changes }),
-      ),
+      updateMergedData: vi
+        .fn()
+        .mockImplementation((_id, _tid, changes) =>
+          Promise.resolve({ id: 'entity-1', ...changes }),
+        ),
     } as any,
     entitySourceRepo: {
       link: vi.fn().mockResolvedValue({ entityId: 'entity-1', extractionId: 'ext-1' }),
@@ -1144,7 +1161,10 @@ const logger = createLogger('reconciliation-applier');
  */
 export interface ReconciliationDeps {
   entityRepo: {
-    findById(entityId: string, tenantId: string): Promise<{
+    findById(
+      entityId: string,
+      tenantId: string,
+    ): Promise<{
       id: string;
       mergedData: Record<string, unknown>;
       provenance: Record<string, unknown>;
@@ -1214,7 +1234,10 @@ async function applyResolveConflict(
   }
 
   const before = entity.mergedData[action.payload.fieldName];
-  const mergedData = { ...entity.mergedData, [action.payload.fieldName]: action.payload.resolvedValue };
+  const mergedData = {
+    ...entity.mergedData,
+    [action.payload.fieldName]: action.payload.resolvedValue,
+  };
   const provenance = {
     ...entity.provenance,
     [action.payload.fieldName]: {
@@ -1230,11 +1253,16 @@ async function applyResolveConflict(
     },
   };
 
-  await deps.entityRepo.updateMergedData(action.payload.entityId, tenantId, { mergedData, provenance });
+  await deps.entityRepo.updateMergedData(action.payload.entityId, tenantId, {
+    mergedData,
+    provenance,
+  });
 
   return {
     applied: true,
-    stateChanges: [{ path: `entity.${action.payload.fieldName}`, before, after: action.payload.resolvedValue }],
+    stateChanges: [
+      { path: `entity.${action.payload.fieldName}`, before, after: action.payload.resolvedValue },
+    ],
   };
 }
 
@@ -1249,7 +1277,10 @@ async function applyInferValue(
   }
 
   const before = entity.mergedData[action.payload.fieldName];
-  const mergedData = { ...entity.mergedData, [action.payload.fieldName]: action.payload.inferredValue };
+  const mergedData = {
+    ...entity.mergedData,
+    [action.payload.fieldName]: action.payload.inferredValue,
+  };
   const provenance = {
     ...entity.provenance,
     [action.payload.fieldName]: {
@@ -1260,11 +1291,16 @@ async function applyInferValue(
     },
   };
 
-  await deps.entityRepo.updateMergedData(action.payload.entityId, tenantId, { mergedData, provenance });
+  await deps.entityRepo.updateMergedData(action.payload.entityId, tenantId, {
+    mergedData,
+    provenance,
+  });
 
   return {
     applied: true,
-    stateChanges: [{ path: `entity.${action.payload.fieldName}`, before, after: action.payload.inferredValue }],
+    stateChanges: [
+      { path: `entity.${action.payload.fieldName}`, before, after: action.payload.inferredValue },
+    ],
   };
 }
 
@@ -1278,30 +1314,40 @@ async function applyCorrectValue(
     return { applied: false, reason: `Entity ${action.payload.entityId} not found` };
   }
 
-  const mergedData = { ...entity.mergedData, [action.payload.fieldName]: action.payload.correctedValue };
+  const mergedData = {
+    ...entity.mergedData,
+    [action.payload.fieldName]: action.payload.correctedValue,
+  };
   const provenance = {
     ...entity.provenance,
     [action.payload.fieldName]: {
       finalValue: action.payload.correctedValue,
       provenanceType: 'normalized',
-      sources: [{
-        sourceUrl: 'correction',
-        rawValue: action.payload.currentValue,
-        normalizedValue: action.payload.correctedValue,
-      }],
+      sources: [
+        {
+          sourceUrl: 'correction',
+          rawValue: action.payload.currentValue,
+          normalizedValue: action.payload.correctedValue,
+        },
+      ],
       hadConflict: false,
     },
   };
 
-  await deps.entityRepo.updateMergedData(action.payload.entityId, tenantId, { mergedData, provenance });
+  await deps.entityRepo.updateMergedData(action.payload.entityId, tenantId, {
+    mergedData,
+    provenance,
+  });
 
   return {
     applied: true,
-    stateChanges: [{
-      path: `entity.${action.payload.fieldName}`,
-      before: action.payload.currentValue,
-      after: action.payload.correctedValue,
-    }],
+    stateChanges: [
+      {
+        path: `entity.${action.payload.fieldName}`,
+        before: action.payload.currentValue,
+        after: action.payload.correctedValue,
+      },
+    ],
   };
 }
 
@@ -1376,6 +1422,7 @@ git commit -m "feat(core): add reconciliation applier for entity mutation action
 ## Task 6: Finalization Applier
 
 **Files:**
+
 - Create: `packages/core/src/execution/finalization-applier.ts`
 - Create: `packages/core/tests/unit/execution/finalization-applier.test.ts`
 
@@ -1394,7 +1441,10 @@ import {
 import type { PipelineAction } from '../../../src/types/actions.js';
 import { generateId } from '@spatula/shared';
 
-function baseAction(): Pick<PipelineAction, 'id' | 'jobId' | 'source' | 'reasoning' | 'confidence'> {
+function baseAction(): Pick<
+  PipelineAction,
+  'id' | 'jobId' | 'source' | 'reasoning' | 'confidence'
+> {
   return {
     id: generateId(),
     jobId: generateId(),
@@ -1412,8 +1462,19 @@ describe('applyFinalizationAction', () => {
       payload: {
         strategy: 'multi_table',
         tables: [
-          { name: 'products', description: 'Main products', fields: ['name', 'price'], relationship: 'primary' },
-          { name: 'reviews', description: 'Product reviews', fields: ['rating', 'text'], relationship: 'child', foreignKey: 'product_id' },
+          {
+            name: 'products',
+            description: 'Main products',
+            fields: ['name', 'price'],
+            relationship: 'primary',
+          },
+          {
+            name: 'reviews',
+            description: 'Product reviews',
+            fields: ['rating', 'text'],
+            relationship: 'child',
+            foreignKey: 'product_id',
+          },
         ],
       },
     };
@@ -1432,7 +1493,12 @@ describe('applyFinalizationAction', () => {
       type: 'derive_field',
       payload: {
         fieldName: 'price_per_unit',
-        fieldDefinition: { name: 'price_per_unit', description: 'Price per unit', type: 'number', required: false },
+        fieldDefinition: {
+          name: 'price_per_unit',
+          description: 'Price per unit',
+          type: 'number',
+          required: false,
+        },
         derivedFrom: ['price', 'quantity'],
         derivationLogic: 'price / quantity',
         examples: [{ inputs: { price: 10, quantity: 2 }, output: 5 }],
@@ -1480,9 +1546,7 @@ describe('applyFinalizationAction', () => {
             sources: ['site-a.com'],
           },
         ],
-        categoryBreakdown: [
-          { category: 'electronics', count: 50, specificFields: ['voltage'] },
-        ],
+        categoryBreakdown: [{ category: 'electronics', count: 50, specificFields: ['voltage'] }],
         qualitySummary: {
           totalEntities: 100,
           totalSources: 5,
@@ -1663,6 +1727,7 @@ git commit -m "feat(core): add finalization applier for metadata-producing actio
 ## Task 7: Review Queue
 
 **Files:**
+
 - Create: `packages/core/src/execution/review-queue.ts`
 - Create: `packages/core/tests/unit/execution/review-queue.test.ts`
 
@@ -1719,7 +1784,13 @@ function createMockActionRepo() {
 }
 
 function createMockSchemaApplier() {
-  return vi.fn().mockReturnValue({ version: 2, fields: [], fieldAliases: [], createdAt: new Date(), parentVersion: 1 });
+  return vi.fn().mockReturnValue({
+    version: 2,
+    fields: [],
+    fieldAliases: [],
+    createdAt: new Date(),
+    parentVersion: 1,
+  });
 }
 
 describe('DefaultReviewQueue', () => {
@@ -1798,7 +1869,12 @@ describe('DefaultReviewQueue', () => {
 
       await queue.approve('a-1', 'tenant-1', 'user@example.com');
 
-      expect(actionRepo.updateStatus).toHaveBeenCalledWith('a-1', 'tenant-1', 'approved', 'user@example.com');
+      expect(actionRepo.updateStatus).toHaveBeenCalledWith(
+        'a-1',
+        'tenant-1',
+        'approved',
+        'user@example.com',
+      );
     });
   });
 
@@ -1806,7 +1882,12 @@ describe('DefaultReviewQueue', () => {
     it('updates status to rejected', async () => {
       await queue.reject('a-1', 'tenant-1', 'user@example.com', 'Not needed');
 
-      expect(actionRepo.updateStatus).toHaveBeenCalledWith('a-1', 'tenant-1', 'rejected', 'user@example.com');
+      expect(actionRepo.updateStatus).toHaveBeenCalledWith(
+        'a-1',
+        'tenant-1',
+        'rejected',
+        'user@example.com',
+      );
     });
   });
 
@@ -1901,7 +1982,11 @@ export interface ReviewQueueActionRepo {
 
 export interface ReviewQueue {
   enqueue(action: PipelineAction, tenantId: string, preview: ActionPreview): Promise<void>;
-  getPending(jobId: string, tenantId: string, options?: { type?: string; limit?: number }): Promise<Array<{ id: string; [key: string]: unknown }>>;
+  getPending(
+    jobId: string,
+    tenantId: string,
+    options?: { type?: string; limit?: number },
+  ): Promise<Array<{ id: string; [key: string]: unknown }>>;
   approve(actionId: string, tenantId: string, reviewedBy: string): Promise<unknown>;
   reject(actionId: string, tenantId: string, reviewedBy: string, reason: string): Promise<void>;
   approveAll(jobId: string, tenantId: string, reviewedBy: string): Promise<unknown[]>;
@@ -1982,6 +2067,7 @@ git commit -m "feat(core): add DefaultReviewQueue backed by ActionRepository"
 ## Task 8: Action Executor Implementation
 
 **Files:**
+
 - Create: `packages/core/src/execution/action-executor-impl.ts`
 - Create: `packages/core/tests/unit/execution/action-executor-impl.test.ts`
 
@@ -2146,7 +2232,12 @@ describe('DefaultActionExecutor', () => {
         payload: {
           canonicalName: 'name',
           aliasNames: ['title'],
-          canonicalDefinition: { name: 'name', description: 'Name', type: 'string', required: true },
+          canonicalDefinition: {
+            name: 'name',
+            description: 'Name',
+            type: 'string',
+            required: true,
+          },
           valueMappings: {},
         },
       };
@@ -2300,7 +2391,12 @@ Create `packages/core/src/execution/action-executor-impl.ts`:
 ```typescript
 import { createLogger } from '@spatula/shared';
 import type { PipelineAction } from '../types/actions.js';
-import type { ActionExecutor, ActionResult, ActionPreview, StateChange } from '../interfaces/action-executor.js';
+import type {
+  ActionExecutor,
+  ActionResult,
+  ActionPreview,
+  StateChange,
+} from '../interfaces/action-executor.js';
 import { resolvePolicy, shouldAutoApply, type ApprovalPreset } from './safety-policy.js';
 import { applySchemaActions } from '../evolution/schema-action-applier.js';
 import { applyCategoryActions } from './category-applier.js';
@@ -2312,19 +2408,32 @@ const logger = createLogger('action-executor');
 
 // Action type categories for domain dispatch
 const SCHEMA_ACTION_TYPES = new Set([
-  'add_field', 'remove_field', 'modify_field', 'rename_field',
-  'merge_fields', 'split_field', 'group_fields',
-  'set_normalization_rule', 'update_enum_map',
+  'add_field',
+  'remove_field',
+  'modify_field',
+  'rename_field',
+  'merge_fields',
+  'split_field',
+  'group_fields',
+  'set_normalization_rule',
+  'update_enum_map',
 ]);
 const CATEGORY_ACTION_TYPES = new Set(['define_category', 'assign_category_fields']);
 const CRAWL_ACTION_TYPES = new Set(['classify_page', 'enqueue_links', 'hint_entity_match']);
 const RECONCILIATION_ACTION_TYPES = new Set([
-  'resolve_conflict', 'infer_value', 'correct_value',
-  'match_entities', 'split_entities', 'set_source_trust',
+  'resolve_conflict',
+  'infer_value',
+  'correct_value',
+  'match_entities',
+  'split_entities',
+  'set_source_trust',
 ]);
 const REPROCESSING_ACTION_TYPES = new Set(['reprocess_extraction']);
 const FINALIZATION_ACTION_TYPES = new Set([
-  'recommend_table_structure', 'derive_field', 'flag_anomaly', 'generate_documentation',
+  'recommend_table_structure',
+  'derive_field',
+  'flag_anomaly',
+  'generate_documentation',
 ]);
 
 export interface ActionExecutorConfig {
@@ -2340,7 +2449,10 @@ export interface ActionExecutorConfig {
       reasoning: string;
       stateChanges?: Record<string, unknown>;
     }): Promise<{ id: string }>;
-    findById(actionId: string, tenantId: string): Promise<{
+    findById(
+      actionId: string,
+      tenantId: string,
+    ): Promise<{
       id: string;
       type: string;
       status: string;
@@ -2350,7 +2462,10 @@ export interface ActionExecutorConfig {
     updateStatus(actionId: string, tenantId: string, status: string): Promise<unknown>;
   };
   schemaRepo: {
-    findLatest(jobId: string, tenantId: string): Promise<{
+    findLatest(
+      jobId: string,
+      tenantId: string,
+    ): Promise<{
       id: string;
       version: number;
       definition: import('../types/schema.js').SchemaDefinition;
@@ -2462,7 +2577,11 @@ export class DefaultActionExecutor implements ActionExecutor {
       } else if (FINALIZATION_ACTION_TYPES.has(action.type)) {
         const finResult = applyFinalizationAction(action);
         if (finResult.metadata) {
-          stateChanges.push({ path: 'finalization_metadata', before: null, after: finResult.metadata });
+          stateChanges.push({
+            path: 'finalization_metadata',
+            before: null,
+            after: finResult.metadata,
+          });
         }
       }
 
@@ -2526,11 +2645,13 @@ export class DefaultActionExecutor implements ActionExecutor {
       parentId: latestSchema.id,
     });
 
-    return [{
-      path: 'schema.version',
-      before: latestSchema.definition.version,
-      after: evolved.version,
-    }];
+    return [
+      {
+        path: 'schema.version',
+        before: latestSchema.definition.version,
+        after: evolved.version,
+      },
+    ];
   }
 
   private assessRiskLevel(action: PipelineAction): 'low' | 'medium' | 'high' {
@@ -2539,7 +2660,12 @@ export class DefaultActionExecutor implements ActionExecutor {
     if (CATEGORY_ACTION_TYPES.has(action.type)) return 'low';
 
     if (action.type === 'remove_field' || action.type === 'split_entities') return 'high';
-    if (action.type === 'merge_fields' || action.type === 'split_field' || action.type === 'group_fields') return 'medium';
+    if (
+      action.type === 'merge_fields' ||
+      action.type === 'split_field' ||
+      action.type === 'group_fields'
+    )
+      return 'medium';
     if (action.type === 'resolve_conflict' || action.type === 'correct_value') return 'medium';
 
     return 'low';
@@ -2564,6 +2690,7 @@ git commit -m "feat(core): add DefaultActionExecutor with policy-driven routing"
 ## Task 9: Execution Barrel Exports
 
 **Files:**
+
 - Create: `packages/core/src/execution/index.ts`
 - Modify: `packages/core/src/index.ts`
 
@@ -2606,10 +2733,7 @@ export {
   type ReviewQueueActionRepo,
 } from './review-queue.js';
 
-export {
-  DefaultActionExecutor,
-  type ActionExecutorConfig,
-} from './action-executor-impl.js';
+export { DefaultActionExecutor, type ActionExecutorConfig } from './action-executor-impl.js';
 ```
 
 - [ ] **Step 2: Add execution to core index**
@@ -2638,6 +2762,7 @@ git commit -m "feat(core): add execution module barrel exports"
 ## Task 10: API Route Integration — ReviewQueue
 
 **Files:**
+
 - Modify: `apps/api/src/types.ts`
 - Modify: `apps/api/src/routes/actions.ts`
 
@@ -2749,6 +2874,7 @@ git commit -m "feat(api): route action approve/reject through ReviewQueue when a
 ```bash
 cd /Users/salar/Projects/spatula && pnpm test
 ```
+
 Expected: All tests pass.
 
 - [ ] **Step 2: Run build**
@@ -2756,6 +2882,7 @@ Expected: All tests pass.
 ```bash
 cd /Users/salar/Projects/spatula && pnpm build
 ```
+
 Expected: Build succeeds with no type errors.
 
 - [ ] **Step 3: Run typecheck**
@@ -2763,6 +2890,7 @@ Expected: Build succeeds with no type errors.
 ```bash
 cd /Users/salar/Projects/spatula && pnpm typecheck
 ```
+
 Expected: No TypeScript errors.
 
 - [ ] **Step 4: Run lint**
@@ -2770,6 +2898,7 @@ Expected: No TypeScript errors.
 ```bash
 cd /Users/salar/Projects/spatula && pnpm lint
 ```
+
 Expected: No lint errors.
 
 - [ ] **Step 5: Final commit if any stragglers**

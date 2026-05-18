@@ -79,9 +79,7 @@ export function loadConfigSafe(): { config: AppConfig } | { errors: string[] } {
   const raw = buildRawConfig();
   const result = AppConfigSchema.safeParse(raw);
   if (!result.success) {
-    const errors = result.error.issues.map(
-      (issue) => `${issue.path.join('.')}: ${issue.message}`,
-    );
+    const errors = result.error.issues.map((issue) => `${issue.path.join('.')}: ${issue.message}`);
     return { errors };
   }
   return { config: result.data };

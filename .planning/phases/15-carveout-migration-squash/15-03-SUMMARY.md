@@ -2,7 +2,17 @@
 phase: 15-carveout-migration-squash
 plan: 03
 subsystem: api+core+db+queue+shared+cli
-tags: [carveout, billing-strip, quota-enforcer-removal, metering-removal, rate-limit-defaults, auth-me-endpoint, tdd, inventory-deltas]
+tags:
+  [
+    carveout,
+    billing-strip,
+    quota-enforcer-removal,
+    metering-removal,
+    rate-limit-defaults,
+    auth-me-endpoint,
+    tdd,
+    inventory-deltas,
+  ]
 
 # Dependency graph
 requires:
@@ -23,10 +33,10 @@ tech-stack:
   added: []
   patterns:
     - "Auth introspection endpoint pattern: GET /me returns {tenantId, scopes, subject, authenticated} from c.get('auth') without {data} envelope"
-    - "Single-default rate limit pattern: replace tier presets with config-driven DEFAULT_RATE_LIMIT constant; route-level overrides deferred to config/rate-limits.yaml (Phase 16)"
-    - "Inventory-delta absorption: 4 files identified in Plan 15-01 grep audit folded into the natural Section B edits (no separate task / no scope creep)"
-    - "TDD for new endpoint: RED commit (test before route), GREEN commit (route + mount); 3 behavior specs covering 200/401/empty-scopes paths"
-    - "Per-package isolated test verification: pnpm test (full turbo) has known cold-import 5s-timeout flake — per-package runs are the authoritative gate (Plan 15-01 deviation)"
+    - 'Single-default rate limit pattern: replace tier presets with config-driven DEFAULT_RATE_LIMIT constant; route-level overrides deferred to config/rate-limits.yaml (Phase 16)'
+    - 'Inventory-delta absorption: 4 files identified in Plan 15-01 grep audit folded into the natural Section B edits (no separate task / no scope creep)'
+    - 'TDD for new endpoint: RED commit (test before route), GREEN commit (route + mount); 3 behavior specs covering 200/401/empty-scopes paths'
+    - 'Per-package isolated test verification: pnpm test (full turbo) has known cold-import 5s-timeout flake — per-package runs are the authoritative gate (Plan 15-01 deviation)'
 
 key-files:
   created:
@@ -78,17 +88,17 @@ key-files:
 
 key-decisions:
   - "Auth subject sourced from c.get('auth').userId (existing AuthResult field); no new authSubject Variables typing needed; empty-string userId from NoAuthProvider normalized to null in response"
-  - "/api/v1/auth/me returns top-level body (no { data: ... } envelope) — CLI client uses a dedicated fetch path (not the generic get() helper which strips to json.data)"
-  - "Rate-limit middleware uses DEFAULT_RATE_LIMIT unconditionally; per-route overrides explicitly deferred to Phase 16 config/rate-limits.yaml"
-  - "Inventory delta #1 (auth.ts SKIP_AUTH_PREFIXES) absorbed into Task 11 commit; deltas #2/#3 absorbed into Tasks 11/12 respectively; delta #4 (db barrel) absorbed into Task 8 — no separate commits"
-  - "exports.ts: dropped the dead 403 response declaration from the trigger-export OpenAPI route after removing the quota-enforcer guard (was misleading since EXPORT_FORMAT_RESTRICTED can no longer be returned)"
-  - "Task 9 (SQLite parity) was a no-op: schema-sqlite/ never had a tenants mirror (project-meta replaces it for local mode) — empty commit recorded per plan template"
-  - "Task 10 (.env.example + OpenAPI fixtures + examples) was also a no-op — all clean by pre-cut baseline; no commit needed"
+  - '/api/v1/auth/me returns top-level body (no { data: ... } envelope) — CLI client uses a dedicated fetch path (not the generic get() helper which strips to json.data)'
+  - 'Rate-limit middleware uses DEFAULT_RATE_LIMIT unconditionally; per-route overrides explicitly deferred to Phase 16 config/rate-limits.yaml'
+  - 'Inventory delta #1 (auth.ts SKIP_AUTH_PREFIXES) absorbed into Task 11 commit; deltas #2/#3 absorbed into Tasks 11/12 respectively; delta #4 (db barrel) absorbed into Task 8 — no separate commits'
+  - 'exports.ts: dropped the dead 403 response declaration from the trigger-export OpenAPI route after removing the quota-enforcer guard (was misleading since EXPORT_FORMAT_RESTRICTED can no longer be returned)'
+  - 'Task 9 (SQLite parity) was a no-op: schema-sqlite/ never had a tenants mirror (project-meta replaces it for local mode) — empty commit recorded per plan template'
+  - 'Task 10 (.env.example + OpenAPI fixtures + examples) was also a no-op — all clean by pre-cut baseline; no commit needed'
 
 patterns-established:
-  - "When a behavior-removal also makes a response-status declaration dead, remove the declaration in the same commit to keep OpenAPI spec accurate (exports.ts 403 removal)"
-  - "When typecheck breaks across package boundaries (api depends on db depends on shared), commit changes in dependency order even if intermediate packages fail typecheck — Plan 15-02 established this pattern; Plan 15-03 followed it (e.g., Task 7 schema edits committed even though db barrel still pointed at deleted files; Task 8 cleared the barrel)"
-  - "Per-package test runs as authoritative green-gate when pnpm test (full turbo) has known parallel-I/O flakes — record the per-package counts in this summary as the carve-out completeness signal"
+  - 'When a behavior-removal also makes a response-status declaration dead, remove the declaration in the same commit to keep OpenAPI spec accurate (exports.ts 403 removal)'
+  - 'When typecheck breaks across package boundaries (api depends on db depends on shared), commit changes in dependency order even if intermediate packages fail typecheck — Plan 15-02 established this pattern; Plan 15-03 followed it (e.g., Task 7 schema edits committed even though db barrel still pointed at deleted files; Task 8 cleared the barrel)'
+  - 'Per-package test runs as authoritative green-gate when pnpm test (full turbo) has known parallel-I/O flakes — record the per-package counts in this summary as the carve-out completeness signal'
 
 requirements-completed: [CARVE-02, CARVE-04]
 
@@ -125,36 +135,36 @@ completed: 2026-05-17
 
 ## Task Commits
 
-| Task | Description | Commit |
-| ---- | ----------- | ------ |
-| 1 | Unmount billing routes + plan-loading middleware from app.ts | `6ac966c` |
-| 2 | Strip BILLING_TIERS + plan + usage aggregation from admin-tenants | `0d72430` |
-| 3 | Remove QuotaEnforcer coupling from queue + core + api layers | `c449fcd` |
-| 4 | Remove metering worker wiring + METERING queue name | `8b1dfb7` |
-| 5 | Remove billing module + tier presets + billing scopes + TenantQuotas.rateLimitTier | `d123093` |
-| 6 | Drop tier-based rate-limit lookup; use DEFAULT_RATE_LIMIT | `76e7577` |
-| 7 | Drop plan + stripeCustomerId columns from tenants schema + repo | `e88d322` |
-| 8 | Remove usage_records schema + repo exports | `e4e9bbc` |
-| 9 | Confirm SQLite schema has no billing coupling (empty commit) | `7d2e818` |
-| 10 | (no-op — .env.example + fixtures already clean; no commit) | — |
-| 11 RED | Add failing test for /api/v1/auth/me endpoint | `acace54` |
-| 11 GREEN | Add GET /api/v1/auth/me — auth introspection for API-key verification | `c10625a` |
-| 12 | CLI uses /api/v1/auth/me for remote auth verification (replaces /billing/subscription) | `5ca4451` |
-| 13 | Clean up residual billing coupling in admin-tenants + exports tests | `5d3b50e` |
+| Task     | Description                                                                            | Commit    |
+| -------- | -------------------------------------------------------------------------------------- | --------- |
+| 1        | Unmount billing routes + plan-loading middleware from app.ts                           | `6ac966c` |
+| 2        | Strip BILLING_TIERS + plan + usage aggregation from admin-tenants                      | `0d72430` |
+| 3        | Remove QuotaEnforcer coupling from queue + core + api layers                           | `c449fcd` |
+| 4        | Remove metering worker wiring + METERING queue name                                    | `8b1dfb7` |
+| 5        | Remove billing module + tier presets + billing scopes + TenantQuotas.rateLimitTier     | `d123093` |
+| 6        | Drop tier-based rate-limit lookup; use DEFAULT_RATE_LIMIT                              | `76e7577` |
+| 7        | Drop plan + stripeCustomerId columns from tenants schema + repo                        | `e88d322` |
+| 8        | Remove usage_records schema + repo exports                                             | `e4e9bbc` |
+| 9        | Confirm SQLite schema has no billing coupling (empty commit)                           | `7d2e818` |
+| 10       | (no-op — .env.example + fixtures already clean; no commit)                             | —         |
+| 11 RED   | Add failing test for /api/v1/auth/me endpoint                                          | `acace54` |
+| 11 GREEN | Add GET /api/v1/auth/me — auth introspection for API-key verification                  | `c10625a` |
+| 12       | CLI uses /api/v1/auth/me for remote auth verification (replaces /billing/subscription) | `5ca4451` |
+| 13       | Clean up residual billing coupling in admin-tenants + exports tests                    | `5d3b50e` |
 
 **Plan metadata commit:** will follow this summary as the final commit.
 
 ## Test Counts (per-package isolated, post-strip)
 
-| Package | Pre-cut (15-01) | Post-strip (15-03) | Delta | Notes |
-| ------- | --------------- | ------------------ | ----- | ----- |
-| `@spatula/core` | 92 files / 979 tests | 90 files / 965 tests | -2 files / -14 tests | billing/{quota-enforcer,billing-usage-recorder}.test.ts deleted in 15-02 |
-| `@spatula/db` | 29 files / 328 tests | 28 files / 313 tests | -1 file / -15 tests | usage-record-repository.test.ts deleted in 15-02 |
-| `@spatula/queue` | 18 files / 156 tests | 17 files / 141 tests | -1 file / -15 tests | metering-worker.test.ts deleted in 15-02 |
-| `@spatula/api` | 50 files / 375 tests | 48 files / 349 tests | -2 files / -26 tests | billing.test.ts + stripe-webhook.test.ts + billing/stripe-client.test.ts deleted in 15-02; admin-tenants billing tests + exports billing tests stripped in 15-03 |
-| `@spatula/shared` | 10 files / 75 tests | 10 files / 70 tests | 0 files / -5 tests | quotas.test.ts billing-tier assertions removed; tier-name tests collapsed to single DEFAULT_RATE_LIMIT test |
-| `@spatula/cli` | 96 files / 832 tests | 96 files / 832 tests (736 pass + 96 skip) | 0 files / 0 tests | client-auth.test.ts swapped subscription-mock for auth-me-mock; total count unchanged |
-| **TOTAL** | **295 files / 2,745 tests** | **289 files / 2,670 tests** (excluding skips: 2,574) | **-6 files / -75 tests** | All net-removed tests correspond to deleted billing surface — no regressions |
+| Package           | Pre-cut (15-01)             | Post-strip (15-03)                                   | Delta                    | Notes                                                                                                                                                            |
+| ----------------- | --------------------------- | ---------------------------------------------------- | ------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `@spatula/core`   | 92 files / 979 tests        | 90 files / 965 tests                                 | -2 files / -14 tests     | billing/{quota-enforcer,billing-usage-recorder}.test.ts deleted in 15-02                                                                                         |
+| `@spatula/db`     | 29 files / 328 tests        | 28 files / 313 tests                                 | -1 file / -15 tests      | usage-record-repository.test.ts deleted in 15-02                                                                                                                 |
+| `@spatula/queue`  | 18 files / 156 tests        | 17 files / 141 tests                                 | -1 file / -15 tests      | metering-worker.test.ts deleted in 15-02                                                                                                                         |
+| `@spatula/api`    | 50 files / 375 tests        | 48 files / 349 tests                                 | -2 files / -26 tests     | billing.test.ts + stripe-webhook.test.ts + billing/stripe-client.test.ts deleted in 15-02; admin-tenants billing tests + exports billing tests stripped in 15-03 |
+| `@spatula/shared` | 10 files / 75 tests         | 10 files / 70 tests                                  | 0 files / -5 tests       | quotas.test.ts billing-tier assertions removed; tier-name tests collapsed to single DEFAULT_RATE_LIMIT test                                                      |
+| `@spatula/cli`    | 96 files / 832 tests        | 96 files / 832 tests (736 pass + 96 skip)            | 0 files / 0 tests        | client-auth.test.ts swapped subscription-mock for auth-me-mock; total count unchanged                                                                            |
+| **TOTAL**         | **295 files / 2,745 tests** | **289 files / 2,670 tests** (excluding skips: 2,574) | **-6 files / -75 tests** | All net-removed tests correspond to deleted billing surface — no regressions                                                                                     |
 
 **Note on `pnpm test` (full turbo run):** Surfaces 1 known cold-import 5s-timeout flake in `packages/queue/tests/unit/exports.test.ts > exports crawl worker`. Pre-existing; documented in Plan 15-01 deviation #3 as a parallel-I/O race against vitest's default `testTimeout`. Per-package isolated runs (above) pass cleanly. Per the executor scope-boundary rule, the flake is out of scope for this plan — Plan 15-05 may revisit if it touches the queue test fixtures.
 
@@ -165,6 +175,7 @@ completed: 2026-05-17
 **Source:** `apps/api/src/routes/auth.ts`
 
 **Response shape (200):**
+
 ```typescript
 {
   tenantId: string;
@@ -175,6 +186,7 @@ completed: 2026-05-17
 ```
 
 **Response shape (401):**
+
 ```typescript
 {
   error: { code: 'UNAUTHENTICATED', message: 'No tenant context' }
@@ -188,6 +200,7 @@ completed: 2026-05-17
 ## Files Created/Modified
 
 **Created (2):**
+
 - `apps/api/src/routes/auth.ts` — Hono route exporting `authRoutes()` factory; single `GET /me` handler.
 - `apps/api/tests/unit/routes/auth.test.ts` — 3 behavior tests covering 200 / 401 / empty-scopes responses.
 
@@ -206,6 +219,7 @@ completed: 2026-05-17
 ### Auto-fixed Issues
 
 **1. [Rule 1 - Bug] Tests in admin-tenants.test.ts and exports.test.ts referenced removed billing behavior**
+
 - **Found during:** Task 13 (full @spatula/api test run)
 - **Issue:** 5 tests failed because production code had been edited per Tasks 2 + 3 + 7 (plan/usage/billing removed), but pre-existing tests still asserted the old contract: 1 test passing `plan` filter to repo, 1 test asserting `usage` field in response, 1 test expecting `updatePlan` audit log, 1 test expecting invalid-plan 400, 1 test expecting `EXPORT_FORMAT_RESTRICTED` 403.
 - **Fix:** Updated test mocks + assertions to match new contract (admin-tenants: drop `plan` from SAMPLE_TENANT, drop `usageRecordRepo` mock, refit `findAll`/`countAll` call expectations, drop `updatePlan`/invalid-plan/no-config-payload tests; exports: replace 3-test billing block with 2-test "format availability" block confirming all formats now succeed).
@@ -214,6 +228,7 @@ completed: 2026-05-17
 - **Committed in:** `5d3b50e` (Task 13 commit)
 
 **2. [Rule 1 - Bug] CLI unit test in remote.test.ts asserted result.plan (removed field)**
+
 - **Found during:** Task 12 (CLI test run after rewiring remote add)
 - **Issue:** `tests/unit/commands/remote.test.ts > saves remote config after verifying health and auth` asserted `result.plan === 'starter'`, but the new `RemoteAddResult` exposes `tenantId` + `scopes` instead.
 - **Fix:** Updated the test mock sequence to return the /auth/me shape (`{ tenantId, scopes, subject, authenticated }`) and asserted the new fields.
@@ -222,6 +237,7 @@ completed: 2026-05-17
 - **Committed in:** `5ca4451` (Task 12 commit, alongside the production rewire)
 
 **3. [Rule 2 - Missing Functionality] exports.ts trigger-export route declared a 403 response that could no longer be returned**
+
 - **Found during:** Task 3 (after removing the quota-enforcer guard from the trigger-export handler)
 - **Issue:** The OpenAPI route declaration still listed `403: jsonContent(errorResponseSchema, 'Export format not available on current plan')` even though the only code path that produced that status was deleted. Leaving the dead declaration would have misled SDK consumers and OpenAPI doc readers.
 - **Fix:** Removed the 403 entry from `triggerExportRoute.responses`. Kept the `errorResponseSchema` import (still used by other route declarations in the same file).
@@ -232,12 +248,14 @@ completed: 2026-05-17
 ### Documented (not auto-fixed; out of scope)
 
 **4. Cold-import 5s-timeout in `packages/queue/tests/unit/exports.test.ts > exports crawl worker` under full `pnpm test` parallel turbo run**
+
 - **Found during:** Task 13 (initial full `pnpm test` invocation)
 - **Issue:** Same flake documented in Plan 15-01 deviation #3. Under parallel turbo I/O pressure, the first dynamic `await import('../../src/index.js')` exceeds vitest's default 5-second `testTimeout`. Cached imports complete in <100ms.
 - **Decision:** Pre-existing flake unrelated to the carve-out — per-package isolated run completes in 1.13s (passes cleanly). Per scope boundary, not fixing here; Plan 15-05 may revisit if it touches the queue test fixtures. The 6-package isolated test totals above are the authoritative green-gate.
 - **Files modified:** None.
 
 **5. `ExportJobPayload` import in `apps/api/src/types.ts` line 18 is unused but harmless**
+
 - **Found during:** Task 3 (after stripping `quotaEnforcer` + `usageRecordRepo` + `stripeClient` from AppDeps)
 - **Issue:** The import line `import type { JobManager, ExportJobPayload, SpatulaQueues } from '@spatula/queue';` still imports `ExportJobPayload` even though no AppDeps field references it post-strip. TypeScript's `verbatimModuleSyntax` does not flag unused type imports as errors.
 - **Decision:** Out of scope for this plan — purely cosmetic, no behavioral or build impact. Flagged for whoever next touches the file (likely Plan 16 work on OpenAPI / SDK types). Not auto-fixed because it's not "essential for correctness, security, or basic operation" (Rule 2 trigger).
@@ -300,5 +318,6 @@ None — no UI-rendering placeholder values introduced. The new auth route retur
 - [x] `tenants` schema has 6 columns (id, name, config, quotas, storage_bytes_used, created_at) — no plan, no stripeCustomerId, no idx_tenants_stripe_customer
 
 ---
-*Phase: 15-carveout-migration-squash*
-*Completed: 2026-05-17*
+
+_Phase: 15-carveout-migration-squash_
+_Completed: 2026-05-17_

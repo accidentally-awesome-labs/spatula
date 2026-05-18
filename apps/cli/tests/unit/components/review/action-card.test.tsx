@@ -56,7 +56,12 @@ describe('ActionCard', () => {
       reasoning: 'Common field',
       source: 'schema_evolution',
       payload: {
-        field: { name: 'brand', type: 'string', description: 'Product brand name', required: false },
+        field: {
+          name: 'brand',
+          type: 'string',
+          description: 'Product brand name',
+          required: false,
+        },
       },
     };
     const { lastFrame } = render(<ActionCard action={action} index={0} total={1} />);
@@ -91,9 +96,7 @@ describe('ActionCard', () => {
       source: 'schema_evolution',
       payload: { field: { name: 'x', type: 'string', description: '' } },
     };
-    const { lastFrame: highFrame } = render(
-      <ActionCard action={highAction} index={0} total={1} />,
-    );
+    const { lastFrame: highFrame } = render(<ActionCard action={highAction} index={0} total={1} />);
     expect(highFrame()!).toContain('95%');
 
     // Medium confidence
@@ -105,9 +108,7 @@ describe('ActionCard', () => {
       source: 'schema_evolution',
       payload: { field: { name: 'y', type: 'string', description: '' } },
     };
-    const { lastFrame: medFrame } = render(
-      <ActionCard action={medAction} index={0} total={1} />,
-    );
+    const { lastFrame: medFrame } = render(<ActionCard action={medAction} index={0} total={1} />);
     expect(medFrame()!).toContain('70%');
 
     // Low confidence
@@ -119,9 +120,7 @@ describe('ActionCard', () => {
       source: 'schema_evolution',
       payload: { field: { name: 'z', type: 'string', description: '' } },
     };
-    const { lastFrame: lowFrame } = render(
-      <ActionCard action={lowAction} index={0} total={1} />,
-    );
+    const { lastFrame: lowFrame } = render(<ActionCard action={lowAction} index={0} total={1} />);
     expect(lowFrame()!).toContain('40%');
   });
 
@@ -134,9 +133,7 @@ describe('ActionCard', () => {
       source: 'schema_evolution',
       payload: { field: { name: 'a', type: 'string', description: '' } },
     };
-    const { lastFrame: lowFrame } = render(
-      <ActionCard action={lowRisk} index={0} total={1} />,
-    );
+    const { lastFrame: lowFrame } = render(<ActionCard action={lowRisk} index={0} total={1} />);
     expect(lowFrame()!).toContain('LOW');
 
     const medRisk = {
@@ -147,9 +144,7 @@ describe('ActionCard', () => {
       source: 'schema_evolution',
       payload: { field: { name: 'b', type: 'string', description: '' } },
     };
-    const { lastFrame: medFrame } = render(
-      <ActionCard action={medRisk} index={0} total={1} />,
-    );
+    const { lastFrame: medFrame } = render(<ActionCard action={medRisk} index={0} total={1} />);
     expect(medFrame()!).toContain('MEDIUM');
 
     const highRisk = {
@@ -160,9 +155,7 @@ describe('ActionCard', () => {
       source: 'schema_evolution',
       payload: { field: { name: 'c', type: 'string', description: '' } },
     };
-    const { lastFrame: highFrame } = render(
-      <ActionCard action={highRisk} index={0} total={1} />,
-    );
+    const { lastFrame: highFrame } = render(<ActionCard action={highRisk} index={0} total={1} />);
     expect(highFrame()!).toContain('HIGH');
   });
 });

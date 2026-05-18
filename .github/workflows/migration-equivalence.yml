@@ -61,12 +61,12 @@ jobs:
       - name: Checkout PR head
         uses: actions/checkout@v4
         with:
-          fetch-depth: 0   # need full history to retrieve deleted migrations from the PR base
+          fetch-depth: 0 # need full history to retrieve deleted migrations from the PR base
 
       - name: Setup pnpm
         uses: pnpm/action-setup@v4
-        with:
-          version: 9
+        # Version is auto-detected from package.json `packageManager` field
+        # (pnpm@9.15.4). Explicit `version: 9` here would conflict and fail.
 
       - name: Setup Node
         uses: actions/setup-node@v4

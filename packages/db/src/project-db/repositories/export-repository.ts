@@ -40,24 +40,22 @@ export class SqliteExportRepository implements ExportRepo {
     return { id };
   }
 
-  async findAll(): Promise<Array<{
-    id: string;
-    runId: string | null;
-    format: string;
-    filePath: string;
-    status: string;
-    error: string | null;
-    completedAt: string | null;
-    entityCount: number | null;
-    fileSize: number | null;
-    includeProvenance: boolean | null;
-    createdAt: string;
-  }>> {
-    return this.db
-      .select()
-      .from(exports)
-      .orderBy(desc(exports.createdAt))
-      .all();
+  async findAll(): Promise<
+    Array<{
+      id: string;
+      runId: string | null;
+      format: string;
+      filePath: string;
+      status: string;
+      error: string | null;
+      completedAt: string | null;
+      entityCount: number | null;
+      fileSize: number | null;
+      includeProvenance: boolean | null;
+      createdAt: string;
+    }>
+  > {
+    return this.db.select().from(exports).orderBy(desc(exports.createdAt)).all();
   }
 
   async findById(id: string): Promise<{
@@ -73,11 +71,7 @@ export class SqliteExportRepository implements ExportRepo {
     includeProvenance: boolean | null;
     createdAt: string;
   } | null> {
-    const row = this.db
-      .select()
-      .from(exports)
-      .where(eq(exports.id, id))
-      .get();
+    const row = this.db.select().from(exports).where(eq(exports.id, id)).get();
 
     return row ?? null;
   }
@@ -103,18 +97,16 @@ export class SqliteExportRepository implements ExportRepo {
     if (data.fileSize !== undefined) updateData.fileSize = data.fileSize;
     if (data.error !== undefined) updateData.error = data.error;
     if (data.completedAt !== undefined) {
-      updateData.completedAt = data.completedAt instanceof Date
-        ? data.completedAt.toISOString()
-        : data.completedAt;
+      updateData.completedAt =
+        data.completedAt instanceof Date ? data.completedAt.toISOString() : data.completedAt;
     }
 
-    wrapStorageError(() => {
-      this.db
-        .update(exports)
-        .set(updateData)
-        .where(eq(exports.id, exportId))
-        .run();
-    }, { method: 'updateStatus', table: 'exports', exportId });
+    wrapStorageError(
+      () => {
+        this.db.update(exports).set(updateData).where(eq(exports.id, exportId)).run();
+      },
+      { method: 'updateStatus', table: 'exports', exportId },
+    );
 
     return {};
   }

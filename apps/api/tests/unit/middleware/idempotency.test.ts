@@ -22,7 +22,9 @@ function createTestApp(redis: any) {
 describe('idempotencyMiddleware', () => {
   let redis: ReturnType<typeof createMockRedis>;
 
-  beforeEach(() => { redis = createMockRedis(); });
+  beforeEach(() => {
+    redis = createMockRedis();
+  });
 
   it('passes through GET requests without checking Redis', async () => {
     const app = createTestApp(redis);
@@ -90,7 +92,11 @@ describe('idempotencyMiddleware', () => {
     redis.get.mockResolvedValue(null);
     redis.set.mockResolvedValue('OK');
     const app = new Hono();
-    app.use('*', async (c, next) => { c.set('tenantId', 'tenant-1'); c.set('deps', { redis }); return next(); });
+    app.use('*', async (c, next) => {
+      c.set('tenantId', 'tenant-1');
+      c.set('deps', { redis });
+      return next();
+    });
     app.use('*', idempotencyMiddleware());
     app.patch('/test', (c) => c.json({ updated: true }, 200));
     const res = await app.request('/test', {
@@ -126,7 +132,11 @@ describe('idempotencyMiddleware', () => {
   it('skips caching for non-JSON responses', async () => {
     redis.get.mockResolvedValue(null);
     const app = new Hono();
-    app.use('*', async (c, next) => { c.set('tenantId', 'tenant-1'); c.set('deps', { redis }); return next(); });
+    app.use('*', async (c, next) => {
+      c.set('tenantId', 'tenant-1');
+      c.set('deps', { redis });
+      return next();
+    });
     app.use('*', idempotencyMiddleware());
     app.post('/test', (c) => c.text('plain text response'));
     const res = await app.request('/test', {

@@ -32,7 +32,8 @@ export function EntityDetail({ entity, scrollOffset = 0 }: EntityDetailProps) {
         {fields.map((field) => {
           const value = entity.mergedData[field];
           const prov = provenance[field] as any;
-          const displayValue = typeof value === 'object' ? JSON.stringify(value) : String(value ?? '');
+          const displayValue =
+            typeof value === 'object' ? JSON.stringify(value) : String(value ?? '');
 
           return (
             <Box key={field} flexDirection="column" marginBottom={1}>
@@ -44,7 +45,9 @@ export function EntityDetail({ entity, scrollOffset = 0 }: EntityDetailProps) {
                 <Box flexDirection="column" paddingLeft={2}>
                   <Text dimColor>
                     {'\u251c\u2500'} provenance: {prov.provenanceType}
-                    {prov.sources ? ` (${prov.sources.length} source${prov.sources.length !== 1 ? 's' : ''})` : ''}
+                    {prov.sources
+                      ? ` (${prov.sources.length} source${prov.sources.length !== 1 ? 's' : ''})`
+                      : ''}
                   </Text>
 
                   {prov.sources && prov.sources.length > 0 && (
@@ -52,7 +55,11 @@ export function EntityDetail({ entity, scrollOffset = 0 }: EntityDetailProps) {
                       <Text dimColor>{'\u251c\u2500'} sources:</Text>
                       {prov.sources.map((src: any, i: number) => {
                         const domain = (() => {
-                          try { return new URL(src.sourceUrl).hostname; } catch { return src.sourceUrl; }
+                          try {
+                            return new URL(src.sourceUrl).hostname;
+                          } catch {
+                            return src.sourceUrl;
+                          }
                         })();
                         const isLast = i === prov.sources.length - 1;
                         const prefix = isLast ? '\u2502   \u2514\u2500' : '\u2502   \u251c\u2500';
@@ -69,7 +76,9 @@ export function EntityDetail({ entity, scrollOffset = 0 }: EntityDetailProps) {
                   )}
 
                   {prov.resolution && (
-                    <Text dimColor>{'\u2514\u2500'} resolution: {prov.resolution}</Text>
+                    <Text dimColor>
+                      {'\u2514\u2500'} resolution: {prov.resolution}
+                    </Text>
                   )}
                 </Box>
               )}

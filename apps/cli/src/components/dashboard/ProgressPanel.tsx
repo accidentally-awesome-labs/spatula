@@ -31,7 +31,10 @@ function ProgressBar({
       </Box>
       <Text color={color}>{'█'.repeat(filled)}</Text>
       <Text dimColor>{'░'.repeat(empty)}</Text>
-      <Text>{' '}{current}/{total} ({percent}%)</Text>
+      <Text>
+        {' '}
+        {current}/{total} ({percent}%)
+      </Text>
     </Box>
   );
 }
@@ -47,10 +50,15 @@ export function ProgressPanel({ job }: ProgressPanelProps): React.ReactElement {
   const actionsApplied = stats.actionsApplied ?? 0;
 
   const statusColor =
-    status === 'running' ? 'green' :
-    status === 'paused' ? 'yellow' :
-    status === 'completed' ? 'cyan' :
-    status === 'failed' ? 'red' : 'white';
+    status === 'running'
+      ? 'green'
+      : status === 'paused'
+        ? 'yellow'
+        : status === 'completed'
+          ? 'cyan'
+          : status === 'failed'
+            ? 'red'
+            : 'white';
 
   return (
     <Panel title="Progress">
@@ -62,7 +70,12 @@ export function ProgressPanel({ job }: ProgressPanelProps): React.ReactElement {
         <Box marginTop={1} flexDirection="column">
           <ProgressBar label="Crawled" current={pagesCrawled} total={pagesFound} color="green" />
           <ProgressBar label="Extracted" current={pagesExtracted} total={pagesFound} color="cyan" />
-          <ProgressBar label="Reconciled" current={pagesReconciled} total={pagesFound} color="magenta" />
+          <ProgressBar
+            label="Reconciled"
+            current={pagesReconciled}
+            total={pagesFound}
+            color="magenta"
+          />
         </Box>
         <Box marginTop={1}>
           <Text>

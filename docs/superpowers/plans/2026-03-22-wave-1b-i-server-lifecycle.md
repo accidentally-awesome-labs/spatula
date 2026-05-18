@@ -9,6 +9,7 @@
 **Tech Stack:** TypeScript, `pg` (Pool), `@hono/node-server`, BullMQ Worker, Vitest
 
 **Spec references:**
+
 - Phase 12 spec sections 2.3 (Graceful Shutdown), 2.4 (Worker Entry Point), 2.6 (Connection Pooling)
 - File: `docs/superpowers/specs/2026-03-21-phase-12-production-readiness-design.md`
 
@@ -18,26 +19,27 @@
 
 ### New Files
 
-| File | Responsibility |
-|------|---------------|
-| `packages/queue/src/worker-entrypoint.ts` | Creates BullMQ Worker instances, wires dependencies, handles graceful shutdown |
-| `packages/db/tests/unit/connection.test.ts` | Tests for pool-based connection |
+| File                                        | Responsibility                                                                 |
+| ------------------------------------------- | ------------------------------------------------------------------------------ |
+| `packages/queue/src/worker-entrypoint.ts`   | Creates BullMQ Worker instances, wires dependencies, handles graceful shutdown |
+| `packages/db/tests/unit/connection.test.ts` | Tests for pool-based connection                                                |
 
 ### Modified Files
 
-| File | Change |
-|------|--------|
-| `packages/db/src/connection.ts` | Replace single client with `pg.Pool`, return `{ db, pool }` |
-| `packages/db/src/index.ts` | Export new `createDatabasePool` and `DatabasePool` type |
-| `apps/api/src/types.ts` | Add `dbPool: Pool` to `AppDeps` |
-| `apps/api/src/server.ts` | Add `setupGracefulShutdown()` function |
-| `packages/queue/src/worker-deps.ts` | Add `dbPool: Pool` to `WorkerDepsConfig` and `WorkerDeps` |
+| File                                | Change                                                      |
+| ----------------------------------- | ----------------------------------------------------------- |
+| `packages/db/src/connection.ts`     | Replace single client with `pg.Pool`, return `{ db, pool }` |
+| `packages/db/src/index.ts`          | Export new `createDatabasePool` and `DatabasePool` type     |
+| `apps/api/src/types.ts`             | Add `dbPool: Pool` to `AppDeps`                             |
+| `apps/api/src/server.ts`            | Add `setupGracefulShutdown()` function                      |
+| `packages/queue/src/worker-deps.ts` | Add `dbPool: Pool` to `WorkerDepsConfig` and `WorkerDeps`   |
 
 ---
 
 ## Task 1: Connection Pooling
 
 **Files:**
+
 - Modify: `packages/db/src/connection.ts`
 - Modify: `packages/db/src/index.ts`
 - Create: `packages/db/tests/unit/connection.test.ts`
@@ -236,6 +238,7 @@ git commit -m "feat(db): add pool-based database connection with configurable se
 ## Task 2: Update AppDeps and WorkerDeps with Pool
 
 **Files:**
+
 - Modify: `apps/api/src/types.ts`
 - Modify: `packages/queue/src/worker-deps.ts`
 
@@ -249,7 +252,7 @@ import type { Pool } from 'pg';
 
 export interface AppDeps {
   // ... existing fields ...
-  dbPool: Pool;  // Add this field
+  dbPool: Pool; // Add this field
 }
 ```
 
@@ -287,6 +290,7 @@ Note: API build may fail if there's an entry point that constructs AppDeps witho
 The following test files construct mock `AppDeps` or `WorkerDeps` objects and need `dbPool` added. Add `dbPool: { end: vi.fn() } as unknown as Pool` to each mock factory:
 
 **API test files (mock `AppDeps`):**
+
 - `apps/api/tests/unit/app.test.ts`
 - `apps/api/tests/unit/routes/jobs.test.ts`
 - `apps/api/tests/unit/routes/exports.test.ts`
@@ -299,6 +303,7 @@ The following test files construct mock `AppDeps` or `WorkerDeps` objects and ne
 - `apps/api/tests/unit/middleware/tenant-isolation.test.ts`
 
 **Queue test files (mock `WorkerDeps`):**
+
 - `packages/queue/tests/unit/workers/crawl-worker.test.ts`
 - `packages/queue/tests/unit/workers/schema-worker.test.ts`
 - `packages/queue/tests/unit/workers/reconciliation-worker.test.ts`
@@ -324,6 +329,7 @@ git commit -m "feat(api,queue): add dbPool to AppDeps and WorkerDeps for shutdow
 ## Task 3: API Server Graceful Shutdown
 
 **Files:**
+
 - Modify: `apps/api/src/server.ts`
 
 - [ ] **Step 1: Add graceful shutdown to server.ts**
@@ -426,6 +432,7 @@ export function startServer(deps: AppDeps, port?: number) {
 Check `apps/api/src/ws/job-progress.ts` for a `closeAll` method. If it doesn't exist, add it.
 
 **Important:** The internal `ClientEntry.ws` type only exposes `close(): void` (no parameters). Either:
+
 - Update the `ClientEntry` interface to accept `close(code?: number, reason?: string): void`, OR
 - Call `close()` without arguments (simpler, WebSocket code 1000 is the default)
 
@@ -473,6 +480,7 @@ git commit -m "feat(api): add graceful shutdown with SIGTERM/SIGINT handling"
 ## Task 4: Worker Entry Point
 
 **Files:**
+
 - Create: `packages/queue/src/worker-entrypoint.ts`
 
 - [ ] **Step 1: Create the worker entry point**
@@ -496,7 +504,12 @@ import { processExportJob } from './workers/export-worker.js';
 import { QUEUE_NAMES, DEFAULT_QUEUE_CONFIG, createQueues } from './queues.js';
 import { WorkerDeps } from './worker-deps.js';
 import { RedisEventPublisher } from './events.js';
-import type { CrawlJobData, SchemaEvolutionJobData, ReconciliationJobData, ExportJobPayload } from './queues.js';
+import type {
+  CrawlJobData,
+  SchemaEvolutionJobData,
+  ReconciliationJobData,
+  ExportJobPayload,
+} from './queues.js';
 
 const logger = createLogger('worker-entrypoint');
 
@@ -506,7 +519,7 @@ async function main() {
 
   // Create shared connections
   const connection = new Redis(redisUrl, { maxRetriesPerRequest: null });
-  const redisForLock = new Redis(redisUrl);  // Separate connection for schema evolution locks
+  const redisForLock = new Redis(redisUrl); // Separate connection for schema evolution locks
   const { db, pool } = createDatabasePool();
 
   // Create queues (for enqueuing child jobs from crawl worker)
@@ -558,7 +571,10 @@ async function main() {
       },
     );
     workers.push(worker);
-    logger.info({ queue: QUEUE_NAMES.CRAWL, concurrency: queueConfig.crawl.concurrency }, 'Crawl worker started');
+    logger.info(
+      { queue: QUEUE_NAMES.CRAWL, concurrency: queueConfig.crawl.concurrency },
+      'Crawl worker started',
+    );
   }
 
   if (isEnabled('schema-evolution')) {
@@ -697,6 +713,7 @@ git commit -m "feat(queue): add worker entry point with selective queue enabling
 ## Task 5: Integration Verification
 
 **Files:**
+
 - No new files — verification only
 
 - [ ] **Step 1: Run full db package tests**

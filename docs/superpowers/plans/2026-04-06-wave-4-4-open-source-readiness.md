@@ -14,46 +14,47 @@
 
 ## File Map
 
-| Action | Path | Responsibility |
-|--------|------|----------------|
-| Create | `LICENSE` | MIT license text |
-| Create | `SECURITY.md` | Vulnerability reporting policy |
-| Create | `README.md` | 12-section project README |
-| Create | `CONTRIBUTING.md` | Contributor guide |
-| Create | `docs/architecture.md` | Package diagram, data flow, interface map, action taxonomy, LLM map |
-| Create | `.github/ISSUE_TEMPLATE/bug_report.md` | Bug report template |
-| Create | `.github/ISSUE_TEMPLATE/feature_request.md` | Feature request template |
-| Create | `.github/PULL_REQUEST_TEMPLATE.md` | PR checklist template |
-| Create | `.github/workflows/release-please.yml` | Changelog automation workflow |
-| Create | `release-please-config.json` | Monorepo release-please config |
-| Create | `.release-please-manifest.json` | Version manifest for release-please |
-| Create | `examples/quickstart/spatula.yaml` | Minimal single-site crawl |
-| Create | `examples/quickstart/docker-compose.yml` | Dev stack for quickstart |
-| Create | `examples/quickstart/README.md` | Quickstart walkthrough |
-| Create | `examples/ecommerce/spatula.yaml` | Multi-site product catalog |
-| Create | `examples/ecommerce/README.md` | Ecommerce example guide |
-| Create | `examples/news/spatula.yaml` | News article aggregation |
-| Create | `examples/news/README.md` | News example guide |
-| Create | `examples/real-estate/spatula.yaml` | Property listing extraction |
-| Create | `examples/real-estate/README.md` | Real estate example guide |
-| Create | `packages/core/tests/unit/config/example-configs.test.ts` | Validates example YAMLs against SpatulaYamlSchema |
-| Modify | `.env.example` | Expand from 5 to 25 env vars with categories |
-| Modify | `package.json` | Add license, repository, description, homepage, bugs |
-| Modify | `packages/core/package.json` | Add OSS metadata fields |
-| Modify | `packages/db/package.json` | Add OSS metadata fields |
-| Modify | `packages/queue/package.json` | Add OSS metadata fields |
-| Modify | `packages/shared/package.json` | Add OSS metadata fields |
-| Modify | `apps/api/package.json` | Add OSS metadata fields |
-| Modify | `apps/cli/package.json` | Add OSS metadata fields |
-| Modify | `docs/superpowers/specs/wave-roadmap.md` | Mark Wave 4 complete, update test counts |
-| Modify | `apps/cli/src/hooks/useJobPolling.ts` | Remove stale DONE TODO comment |
-| Modify | `apps/cli/src/commands/run.ts` | Remove stale TODO (structured logging was implemented) |
+| Action | Path                                                      | Responsibility                                                      |
+| ------ | --------------------------------------------------------- | ------------------------------------------------------------------- |
+| Create | `LICENSE`                                                 | MIT license text                                                    |
+| Create | `SECURITY.md`                                             | Vulnerability reporting policy                                      |
+| Create | `README.md`                                               | 12-section project README                                           |
+| Create | `CONTRIBUTING.md`                                         | Contributor guide                                                   |
+| Create | `docs/architecture.md`                                    | Package diagram, data flow, interface map, action taxonomy, LLM map |
+| Create | `.github/ISSUE_TEMPLATE/bug_report.md`                    | Bug report template                                                 |
+| Create | `.github/ISSUE_TEMPLATE/feature_request.md`               | Feature request template                                            |
+| Create | `.github/PULL_REQUEST_TEMPLATE.md`                        | PR checklist template                                               |
+| Create | `.github/workflows/release-please.yml`                    | Changelog automation workflow                                       |
+| Create | `release-please-config.json`                              | Monorepo release-please config                                      |
+| Create | `.release-please-manifest.json`                           | Version manifest for release-please                                 |
+| Create | `examples/quickstart/spatula.yaml`                        | Minimal single-site crawl                                           |
+| Create | `examples/quickstart/docker-compose.yml`                  | Dev stack for quickstart                                            |
+| Create | `examples/quickstart/README.md`                           | Quickstart walkthrough                                              |
+| Create | `examples/ecommerce/spatula.yaml`                         | Multi-site product catalog                                          |
+| Create | `examples/ecommerce/README.md`                            | Ecommerce example guide                                             |
+| Create | `examples/news/spatula.yaml`                              | News article aggregation                                            |
+| Create | `examples/news/README.md`                                 | News example guide                                                  |
+| Create | `examples/real-estate/spatula.yaml`                       | Property listing extraction                                         |
+| Create | `examples/real-estate/README.md`                          | Real estate example guide                                           |
+| Create | `packages/core/tests/unit/config/example-configs.test.ts` | Validates example YAMLs against SpatulaYamlSchema                   |
+| Modify | `.env.example`                                            | Expand from 5 to 25 env vars with categories                        |
+| Modify | `package.json`                                            | Add license, repository, description, homepage, bugs                |
+| Modify | `packages/core/package.json`                              | Add OSS metadata fields                                             |
+| Modify | `packages/db/package.json`                                | Add OSS metadata fields                                             |
+| Modify | `packages/queue/package.json`                             | Add OSS metadata fields                                             |
+| Modify | `packages/shared/package.json`                            | Add OSS metadata fields                                             |
+| Modify | `apps/api/package.json`                                   | Add OSS metadata fields                                             |
+| Modify | `apps/cli/package.json`                                   | Add OSS metadata fields                                             |
+| Modify | `docs/superpowers/specs/wave-roadmap.md`                  | Mark Wave 4 complete, update test counts                            |
+| Modify | `apps/cli/src/hooks/useJobPolling.ts`                     | Remove stale DONE TODO comment                                      |
+| Modify | `apps/cli/src/commands/run.ts`                            | Remove stale TODO (structured logging was implemented)              |
 
 ---
 
 ### Task 1: LICENSE
 
 **Files:**
+
 - Create: `LICENSE`
 
 - [ ] **Step 1: Create MIT license file**
@@ -94,6 +95,7 @@ git commit -m "chore: add MIT license"
 ### Task 2: SECURITY.md
 
 **Files:**
+
 - Create: `SECURITY.md`
 
 - [ ] **Step 1: Create security policy**
@@ -104,7 +106,7 @@ git commit -m "chore: add MIT license"
 ## Supported Versions
 
 | Version | Supported          |
-|---------|--------------------|
+| ------- | ------------------ |
 | 0.x     | :white_check_mark: |
 
 ## Reporting a Vulnerability
@@ -153,6 +155,7 @@ git commit -m "chore: add security policy"
 ### Task 3: .env.example Update
 
 **Files:**
+
 - Modify: `.env.example`
 
 All 25 environment variables found via `grep -r 'process.env\.' packages/ apps/` organized by category.
@@ -262,6 +265,7 @@ git commit -m "docs: expand .env.example with all 25 environment variables"
 ### Task 4: Package.json Metadata
 
 **Files:**
+
 - Modify: `package.json` (root)
 - Modify: `packages/core/package.json`
 - Modify: `packages/db/package.json`
@@ -286,14 +290,7 @@ Add these fields to the root `package.json`:
   "bugs": {
     "url": "https://github.com/spatulaai/spatula/issues"
   },
-  "keywords": [
-    "web-scraping",
-    "ai",
-    "llm",
-    "data-extraction",
-    "crawling",
-    "structured-data"
-  ]
+  "keywords": ["web-scraping", "ai", "llm", "data-extraction", "crawling", "structured-data"]
 }
 ```
 
@@ -301,16 +298,17 @@ Add these fields to the root `package.json`:
 
 Each package gets `license`, `repository` (with `directory`), `homepage`, `bugs`, and a package-specific `description`:
 
-| Package | `description` |
-|---------|---------------|
-| `@spatula/core` | `Core types, interfaces, and pipeline logic for Spatula` |
-| `@spatula/db` | `PostgreSQL and SQLite database layer for Spatula` |
-| `@spatula/queue` | `BullMQ job queue, workers, and webhook delivery for Spatula` |
-| `@spatula/shared` | `Shared utilities — logging, auth, metrics, tracing, errors` |
-| `@spatula/api` | `Hono REST API server for Spatula` |
-| `@spatula/cli` | `Command-line interface and TUI for Spatula` |
+| Package           | `description`                                                 |
+| ----------------- | ------------------------------------------------------------- |
+| `@spatula/core`   | `Core types, interfaces, and pipeline logic for Spatula`      |
+| `@spatula/db`     | `PostgreSQL and SQLite database layer for Spatula`            |
+| `@spatula/queue`  | `BullMQ job queue, workers, and webhook delivery for Spatula` |
+| `@spatula/shared` | `Shared utilities — logging, auth, metrics, tracing, errors`  |
+| `@spatula/api`    | `Hono REST API server for Spatula`                            |
+| `@spatula/cli`    | `Command-line interface and TUI for Spatula`                  |
 
 Example for `@spatula/core` (repeat pattern for all 6):
+
 ```json
 {
   "license": "MIT",
@@ -341,6 +339,7 @@ git commit -m "chore: add OSS metadata to all package.json files"
 ### Task 5: GitHub Templates
 
 **Files:**
+
 - Create: `.github/ISSUE_TEMPLATE/bug_report.md`
 - Create: `.github/ISSUE_TEMPLATE/feature_request.md`
 - Create: `.github/PULL_REQUEST_TEMPLATE.md`
@@ -353,9 +352,9 @@ git commit -m "chore: add OSS metadata to all package.json files"
 ---
 name: Bug Report
 about: Report a bug to help us improve
-title: ""
+title: ''
 labels: bug
-assignees: ""
+assignees: ''
 ---
 
 ## Describe the Bug
@@ -397,9 +396,9 @@ Relevant `spatula.yaml` config (redact API keys), log output, or screenshots.
 ---
 name: Feature Request
 about: Suggest an idea for Spatula
-title: ""
+title: ''
 labels: enhancement
-assignees: ""
+assignees: ''
 ---
 
 ## Use Case
@@ -461,6 +460,7 @@ git commit -m "chore: add GitHub issue and PR templates"
 ### Task 6: Release-Please Changelog Automation
 
 **Files:**
+
 - Create: `.github/workflows/release-please.yml`
 - Create: `release-please-config.json`
 - Create: `.release-please-manifest.json`
@@ -562,6 +562,7 @@ git commit -m "ci: add release-please changelog automation for monorepo"
 ### Task 7: Architecture Documentation
 
 **Files:**
+
 - Create: `docs/architecture.md`
 
 This is the largest creative deliverable. It contains 5 sections with Mermaid diagrams.
@@ -666,19 +667,19 @@ flowchart LR
 
 Spatula is interface-driven — every major component is a contract with pluggable implementations.
 
-| Interface | File | Implementations |
-|-----------|------|-----------------|
-| `Crawler` | `packages/core/src/interfaces/crawler.ts` | `PlaywrightCrawler`, `FirecrawlCrawler` |
-| `Extractor` | `packages/core/src/interfaces/extractor.ts` | `LLMExtractor`, `CssExtractor` |
-| `LLMClient` | `packages/core/src/interfaces/llm-client.ts` | `OpenRouterClient`, `OllamaClient`, `CircuitBreakerLLMClient` |
-| `ContentStore` | `packages/core/src/interfaces/content-store.ts` | `FilesystemContentStore`, `S3ContentStore` |
-| `DataSource` | `packages/core/src/interfaces/data-source.ts` | `LocalDataSource` (SQLite), API client (planned) |
-| `SchemaEvolver` | `packages/core/src/interfaces/schema-evolver.ts` | `LLMSchemaEvolver` |
-| `Reconciler` | `packages/core/src/interfaces/reconciler.ts` | `LLMReconciler` |
-| `Exporter` | `packages/core/src/interfaces/exporter.ts` | `JsonExporter`, `CsvExporter`, `ParquetExporter`, `SqliteExporter`, `DuckDbExporter` |
-| `ActionExecutor` | `packages/core/src/interfaces/action-executor.ts` | Pipeline action executor |
-| `ConfigExecutor` | `packages/core/src/interfaces/config-executor.ts` | Config action executor |
-| `Orchestrator` | `packages/core/src/interfaces/orchestrator.ts` | `CrawlOrchestrator`, `SchemaOrchestrator`, `ReconcileOrchestrator`, `ExportOrchestrator` |
+| Interface        | File                                              | Implementations                                                                          |
+| ---------------- | ------------------------------------------------- | ---------------------------------------------------------------------------------------- |
+| `Crawler`        | `packages/core/src/interfaces/crawler.ts`         | `PlaywrightCrawler`, `FirecrawlCrawler`                                                  |
+| `Extractor`      | `packages/core/src/interfaces/extractor.ts`       | `LLMExtractor`, `CssExtractor`                                                           |
+| `LLMClient`      | `packages/core/src/interfaces/llm-client.ts`      | `OpenRouterClient`, `OllamaClient`, `CircuitBreakerLLMClient`                            |
+| `ContentStore`   | `packages/core/src/interfaces/content-store.ts`   | `FilesystemContentStore`, `S3ContentStore`                                               |
+| `DataSource`     | `packages/core/src/interfaces/data-source.ts`     | `LocalDataSource` (SQLite), API client (planned)                                         |
+| `SchemaEvolver`  | `packages/core/src/interfaces/schema-evolver.ts`  | `LLMSchemaEvolver`                                                                       |
+| `Reconciler`     | `packages/core/src/interfaces/reconciler.ts`      | `LLMReconciler`                                                                          |
+| `Exporter`       | `packages/core/src/interfaces/exporter.ts`        | `JsonExporter`, `CsvExporter`, `ParquetExporter`, `SqliteExporter`, `DuckDbExporter`     |
+| `ActionExecutor` | `packages/core/src/interfaces/action-executor.ts` | Pipeline action executor                                                                 |
+| `ConfigExecutor` | `packages/core/src/interfaces/config-executor.ts` | Config action executor                                                                   |
+| `Orchestrator`   | `packages/core/src/interfaces/orchestrator.ts`    | `CrawlOrchestrator`, `SchemaOrchestrator`, `ReconcileOrchestrator`, `ExportOrchestrator` |
 
 ### Dual Execution Model
 
@@ -695,17 +696,17 @@ All data mutations flow through typed **actions**. Actions are proposals that ma
 
 ### Action Categories
 
-| Category | Count | Examples |
-|----------|-------|---------|
-| **Schema** | 9 | `ADD_FIELD`, `MODIFY_FIELD`, `REMOVE_FIELD`, `RENAME_FIELD`, `SPLIT_FIELD`, `GROUP_FIELDS`, `MERGE_FIELDS`, `RECOMMEND_TABLE_STRUCTURE`, `DERIVE_FIELD` |
-| **Normalization** | 2 | `SET_NORMALIZATION_RULE`, `UPDATE_ENUM_MAP` |
-| **Category** | 3 | `DEFINE_CATEGORY`, `ASSIGN_CATEGORY_FIELDS`, `CLASSIFY_PAGE` |
-| **Crawl** | 1 | `ENQUEUE_LINKS` |
-| **Reconciliation** | 7 | `HINT_ENTITY_MATCH`, `MATCH_ENTITIES`, `SPLIT_ENTITIES`, `RESOLVE_CONFLICT`, `INFER_VALUE`, `CORRECT_VALUE`, `SET_SOURCE_TRUST` |
-| **Reprocessing** | 1 | `REPROCESS_EXTRACTION` |
-| **Quality** | 1 | `FLAG_ANOMALY` |
-| **Documentation** | 1 | `GENERATE_DOCUMENTATION` |
-| **Config** | 30 | Seed management, field configuration, crawl settings, LLM tuning, export preferences |
+| Category           | Count | Examples                                                                                                                                                |
+| ------------------ | ----- | ------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Schema**         | 9     | `ADD_FIELD`, `MODIFY_FIELD`, `REMOVE_FIELD`, `RENAME_FIELD`, `SPLIT_FIELD`, `GROUP_FIELDS`, `MERGE_FIELDS`, `RECOMMEND_TABLE_STRUCTURE`, `DERIVE_FIELD` |
+| **Normalization**  | 2     | `SET_NORMALIZATION_RULE`, `UPDATE_ENUM_MAP`                                                                                                             |
+| **Category**       | 3     | `DEFINE_CATEGORY`, `ASSIGN_CATEGORY_FIELDS`, `CLASSIFY_PAGE`                                                                                            |
+| **Crawl**          | 1     | `ENQUEUE_LINKS`                                                                                                                                         |
+| **Reconciliation** | 7     | `HINT_ENTITY_MATCH`, `MATCH_ENTITIES`, `SPLIT_ENTITIES`, `RESOLVE_CONFLICT`, `INFER_VALUE`, `CORRECT_VALUE`, `SET_SOURCE_TRUST`                         |
+| **Reprocessing**   | 1     | `REPROCESS_EXTRACTION`                                                                                                                                  |
+| **Quality**        | 1     | `FLAG_ANOMALY`                                                                                                                                          |
+| **Documentation**  | 1     | `GENERATE_DOCUMENTATION`                                                                                                                                |
+| **Config**         | 30    | Seed management, field configuration, crawl settings, LLM tuning, export preferences                                                                    |
 
 **Total: 55 action types** (25 pipeline + 30 config).
 
@@ -713,27 +714,27 @@ All data mutations flow through typed **actions**. Actions are proposals that ma
 
 Each project defines a `safety` level controlling how actions are handled:
 
-| Level | Behavior |
-|-------|----------|
-| `trust_ai` | All actions auto-approved |
+| Level      | Behavior                                            |
+| ---------- | --------------------------------------------------- |
+| `trust_ai` | All actions auto-approved                           |
 | `balanced` | Low-risk auto-approved, high-risk queued for review |
-| `cautious` | Most actions queued for review |
-| `manual` | All actions queued for review |
+| `cautious` | Most actions queued for review                      |
+| `manual`   | All actions queued for review                       |
 
 ## LLM Usage Map
 
 LLM inference is used at 8 decision points, each routable to a different model tier:
 
-| Task | Purpose | Default Tier | Why |
-|------|---------|-------------|-----|
-| `pageRelevance` | Is this page about our target data? | Fast (Haiku) | High volume, simple yes/no |
-| `linkEvaluation` | Should we follow this link? | Fast (Haiku) | High volume, scoring task |
-| `extraction` | Extract structured fields from page | Primary (Sonnet) | Core accuracy requirement |
-| `schemaEvolution` | Propose new fields from unmapped data | Primary (Sonnet) | Complex reasoning |
-| `entityMatching` | Are these the same real-world entity? | Primary (Sonnet) | Fuzzy matching |
-| `conflictResolution` | Which value is correct when sources disagree? | Primary (Sonnet) | Judgment call |
-| `qualityAudit` | Verify extraction quality | Primary (Sonnet) | Accuracy check |
-| `documentation` | Generate field descriptions | Fast (Haiku) | Simple text generation |
+| Task                 | Purpose                                       | Default Tier     | Why                        |
+| -------------------- | --------------------------------------------- | ---------------- | -------------------------- |
+| `pageRelevance`      | Is this page about our target data?           | Fast (Haiku)     | High volume, simple yes/no |
+| `linkEvaluation`     | Should we follow this link?                   | Fast (Haiku)     | High volume, scoring task  |
+| `extraction`         | Extract structured fields from page           | Primary (Sonnet) | Core accuracy requirement  |
+| `schemaEvolution`    | Propose new fields from unmapped data         | Primary (Sonnet) | Complex reasoning          |
+| `entityMatching`     | Are these the same real-world entity?         | Primary (Sonnet) | Fuzzy matching             |
+| `conflictResolution` | Which value is correct when sources disagree? | Primary (Sonnet) | Judgment call              |
+| `qualityAudit`       | Verify extraction quality                     | Primary (Sonnet) | Accuracy check             |
+| `documentation`      | Generate field descriptions                   | Fast (Haiku)     | Simple text generation     |
 
 Model routing is configured per-project in `spatula.yaml` under `llm.overrides`. The `model-router.ts` resolves the model for each task by checking: task-specific override > project default > global config default.
 ````
@@ -750,6 +751,7 @@ git commit -m "docs: add architecture documentation with diagrams"
 ### Task 8: Example Configurations
 
 **Files:**
+
 - Create: `examples/quickstart/spatula.yaml`
 - Create: `examples/quickstart/docker-compose.yml`
 - Create: `examples/quickstart/README.md`
@@ -790,7 +792,7 @@ services:
   postgres:
     image: postgres:16-alpine
     ports:
-      - "5432:5432"
+      - '5432:5432'
     environment:
       POSTGRES_USER: spatula
       POSTGRES_PASSWORD: spatula
@@ -801,7 +803,7 @@ services:
   redis:
     image: redis:7-alpine
     ports:
-      - "6379:6379"
+      - '6379:6379'
 
 volumes:
   pgdata:
@@ -809,7 +811,7 @@ volumes:
 
 `examples/quickstart/README.md`:
 
-```markdown
+````markdown
 # Quickstart Example
 
 Extract book data from [books.toscrape.com](https://books.toscrape.com) — a practice site for web scraping.
@@ -837,6 +839,7 @@ spatula explore
 # Export data
 spatula export --format json
 ```
+````
 
 ## Server Mode
 
@@ -856,13 +859,14 @@ pnpm --filter @spatula/api start
 
 ## What This Extracts
 
-| Field | Type | Example |
-|-------|------|---------|
-| `title` | string | "A Light in the Attic" |
-| `price` | currency | 51.77 |
-| `availability` | string | "In stock" |
-| `rating` | number | 3 |
-```
+| Field          | Type     | Example                |
+| -------------- | -------- | ---------------------- |
+| `title`        | string   | "A Light in the Attic" |
+| `price`        | currency | 51.77                  |
+| `availability` | string   | "In stock"             |
+| `rating`       | number   | 3                      |
+
+````
 
 - [ ] **Step 2: Create ecommerce example**
 
@@ -923,11 +927,11 @@ llm:
 export:
   format: json
   includeProvenance: true
-```
+````
 
 `examples/ecommerce/README.md`:
 
-```markdown
+````markdown
 # Ecommerce Product Catalog Example
 
 Extract and reconcile product listings across multiple online stores.
@@ -948,13 +952,15 @@ cd /path/to/my-project
 spatula init
 spatula run
 ```
+````
 
 ## Configuration Notes
 
 - `safety: balanced` auto-approves low-risk schema changes, queues high-risk ones for `spatula review`
 - `reconciliation.strategy: composite_key` uses product name + brand + category to match entities
 - `depth: 3` follows product pages 3 levels deep from seed URLs
-```
+
+````
 
 - [ ] **Step 3: Create news example**
 
@@ -996,11 +1002,11 @@ schema:
 reconciliation:
   strategy: exact_name
   conflictResolution: most_recent
-```
+````
 
 `examples/news/README.md`:
 
-```markdown
+````markdown
 # News Article Aggregation Example
 
 Extract structured article data from news websites.
@@ -1022,7 +1028,9 @@ spatula run
 spatula review   # Review discovered schema changes
 spatula export --format csv
 ```
-```
+````
+
+````
 
 - [ ] **Step 4: Create real estate example**
 
@@ -1078,11 +1086,11 @@ reconciliation:
 export:
   format: sqlite
   autoExport: true
-```
+````
 
 `examples/real-estate/README.md`:
 
-```markdown
+````markdown
 # Real Estate Listings Example
 
 Extract property listings with structured location, pricing, and feature data.
@@ -1104,26 +1112,29 @@ spatula init
 spatula run
 spatula export --format sqlite --output properties.db
 ```
+````
 
 ## Querying the Export
 
 ```bash
 sqlite3 properties.db "SELECT address, price, bedrooms FROM entities WHERE bedrooms >= 3 ORDER BY price"
 ```
-```
+
+````
 
 - [ ] **Step 5: Commit**
 
 ```bash
 git add examples/
 git commit -m "docs: add 4 example project configurations"
-```
+````
 
 ---
 
 ### Task 9: Example YAML Validation Test
 
 **Files:**
+
 - Create: `packages/core/tests/unit/config/example-configs.test.ts`
 
 This test validates that all example `spatula.yaml` files parse against the real `SpatulaYamlSchema`. Prevents documentation rot — if the schema changes in future waves, CI catches broken examples.
@@ -1176,11 +1187,12 @@ git commit -m "test: add validation test for example spatula.yaml configs"
 ### Task 10: CONTRIBUTING.md
 
 **Files:**
+
 - Create: `CONTRIBUTING.md`
 
 - [ ] **Step 1: Create contributing guide**
 
-```markdown
+````markdown
 # Contributing to Spatula
 
 Thank you for your interest in contributing! This guide covers how to set up your development environment and submit changes.
@@ -1218,6 +1230,7 @@ pnpm build
 # Run tests
 pnpm test
 ```
+````
 
 ## Development Workflow
 
@@ -1315,20 +1328,22 @@ Use [GitHub Issues](https://github.com/spatulaai/spatula/issues) with the provid
 - **Feature requests** — describe the use case and proposed solution
 
 For security vulnerabilities, see [SECURITY.md](SECURITY.md).
-```
+
+````
 
 - [ ] **Step 2: Commit**
 
 ```bash
 git add CONTRIBUTING.md
 git commit -m "docs: add contributing guide"
-```
+````
 
 ---
 
 ### Task 11: README.md
 
 **Files:**
+
 - Create: `README.md`
 
 This is the main project README with all 12 sections from the spec.
@@ -1486,40 +1501,40 @@ See [examples/](examples/) for complete configuration examples covering ecommerc
 
 ### Environment Variables
 
-| Variable | Required | Default | Description |
-|----------|----------|---------|-------------|
-| `OPENROUTER_API_KEY` | Yes* | — | OpenRouter API key for cloud LLM |
-| `OLLAMA_BASE_URL` | No | `http://localhost:11434` | Ollama endpoint for local LLM |
-| `DATABASE_URL` | Server | — | PostgreSQL connection string |
-| `REDIS_URL` | Server | — | Redis connection string |
-| `AUTH_STRATEGY` | No | `none` | Auth mode: `none`, `api-key`, `jwt` |
-| `FIRECRAWL_API_KEY` | No | — | Firecrawl API key (if using Firecrawl crawler) |
-| `CONTENT_STORE` | No | `filesystem` | Storage backend: `filesystem` or `s3` |
-| `SENTRY_DSN` | No | — | Sentry error tracking endpoint |
-| `LOG_LEVEL` | No | `info` | Log level: `debug`, `info`, `warn`, `error` |
+| Variable             | Required | Default                  | Description                                    |
+| -------------------- | -------- | ------------------------ | ---------------------------------------------- |
+| `OPENROUTER_API_KEY` | Yes\*    | —                        | OpenRouter API key for cloud LLM               |
+| `OLLAMA_BASE_URL`    | No       | `http://localhost:11434` | Ollama endpoint for local LLM                  |
+| `DATABASE_URL`       | Server   | —                        | PostgreSQL connection string                   |
+| `REDIS_URL`          | Server   | —                        | Redis connection string                        |
+| `AUTH_STRATEGY`      | No       | `none`                   | Auth mode: `none`, `api-key`, `jwt`            |
+| `FIRECRAWL_API_KEY`  | No       | —                        | Firecrawl API key (if using Firecrawl crawler) |
+| `CONTENT_STORE`      | No       | `filesystem`             | Storage backend: `filesystem` or `s3`          |
+| `SENTRY_DSN`         | No       | —                        | Sentry error tracking endpoint                 |
+| `LOG_LEVEL`          | No       | `info`                   | Log level: `debug`, `info`, `warn`, `error`    |
 
 \* Not required when using Ollama. See [.env.example](.env.example) for the full list.
 
 ## CLI Usage
 
-| Command | Description |
-|---------|-------------|
-| `spatula init` | Initialize a new project in the current directory |
-| `spatula new` | Interactive project creation wizard |
-| `spatula run` | Run the crawl pipeline (press `[d]` for dashboard) |
-| `spatula status` | Show project status and run history |
-| `spatula explore` | Browse extracted entities in a TUI |
-| `spatula review` | Review pending schema actions in a TUI |
-| `spatula export` | Export data (json, csv, sqlite, parquet, duckdb) |
-| `spatula schema` | View current schema and version history |
-| `spatula logs` | View run logs (`--tail` for live follow) |
-| `spatula add <url>` | Add seed URLs to the project |
-| `spatula estimate` | Estimate crawl cost before running |
-| `spatula doctor` | Diagnose environment and project health |
-| `spatula test <url>` | Test extraction on a single page |
-| `spatula config` | Open project config in your editor |
-| `spatula setup` | Reconfigure global settings (LLM, crawler) |
-| `spatula reset` | Reset project data for a fresh crawl |
+| Command              | Description                                        |
+| -------------------- | -------------------------------------------------- |
+| `spatula init`       | Initialize a new project in the current directory  |
+| `spatula new`        | Interactive project creation wizard                |
+| `spatula run`        | Run the crawl pipeline (press `[d]` for dashboard) |
+| `spatula status`     | Show project status and run history                |
+| `spatula explore`    | Browse extracted entities in a TUI                 |
+| `spatula review`     | Review pending schema actions in a TUI             |
+| `spatula export`     | Export data (json, csv, sqlite, parquet, duckdb)   |
+| `spatula schema`     | View current schema and version history            |
+| `spatula logs`       | View run logs (`--tail` for live follow)           |
+| `spatula add <url>`  | Add seed URLs to the project                       |
+| `spatula estimate`   | Estimate crawl cost before running                 |
+| `spatula doctor`     | Diagnose environment and project health            |
+| `spatula test <url>` | Test extraction on a single page                   |
+| `spatula config`     | Open project config in your editor                 |
+| `spatula setup`      | Reconfigure global settings (LLM, crawler)         |
+| `spatula reset`      | Reset project data for a fresh crawl               |
 
 ## API Reference
 
@@ -1529,32 +1544,32 @@ The API server exposes a RESTful JSON API with OpenAPI documentation.
 
 **Key endpoints:**
 
-| Method | Path | Description |
-|--------|------|-------------|
-| `POST` | `/api/v1/jobs` | Create a crawl job |
-| `GET` | `/api/v1/jobs/:jobId` | Get job status |
-| `GET` | `/api/v1/jobs/:jobId/entities` | List extracted entities |
-| `GET` | `/api/v1/jobs/:jobId/schema` | Get current schema |
-| `GET` | `/api/v1/jobs/:jobId/actions` | List pending actions |
-| `POST` | `/api/v1/jobs/:jobId/actions/:actionId/approve` | Approve a schema action |
-| `POST` | `/api/v1/jobs/:jobId/export` | Create an export |
-| `GET` | `/api/v1/jobs/:jobId/exports/:exportId/download` | Download export file |
-| `POST` | `/api/v1/actions/batch` | Bulk approve/reject actions |
-| `POST` | `/api/v1/jobs/batch` | Bulk cancel/delete jobs |
-| `GET` | `/api/v1/usage` | LLM usage and cost breakdown |
-| `GET` | `/health` | Health check |
+| Method | Path                                             | Description                  |
+| ------ | ------------------------------------------------ | ---------------------------- |
+| `POST` | `/api/v1/jobs`                                   | Create a crawl job           |
+| `GET`  | `/api/v1/jobs/:jobId`                            | Get job status               |
+| `GET`  | `/api/v1/jobs/:jobId/entities`                   | List extracted entities      |
+| `GET`  | `/api/v1/jobs/:jobId/schema`                     | Get current schema           |
+| `GET`  | `/api/v1/jobs/:jobId/actions`                    | List pending actions         |
+| `POST` | `/api/v1/jobs/:jobId/actions/:actionId/approve`  | Approve a schema action      |
+| `POST` | `/api/v1/jobs/:jobId/export`                     | Create an export             |
+| `GET`  | `/api/v1/jobs/:jobId/exports/:exportId/download` | Download export file         |
+| `POST` | `/api/v1/actions/batch`                          | Bulk approve/reject actions  |
+| `POST` | `/api/v1/jobs/batch`                             | Bulk cancel/delete jobs      |
+| `GET`  | `/api/v1/usage`                                  | LLM usage and cost breakdown |
+| `GET`  | `/health`                                        | Health check                 |
 
 All endpoints require authentication when `AUTH_STRATEGY` is set. See [.env.example](.env.example) for auth configuration.
 
 ## Export Formats
 
-| Format | Extension | Best For | Streaming | Provenance |
-|--------|-----------|----------|-----------|------------|
-| JSON | `.json` | APIs, nested data | Yes | Yes |
-| CSV | `.csv` | Spreadsheets, simple tabular data | Yes | No |
-| Parquet | `.parquet` | Big data analytics (Spark, DuckDB) | No | Yes |
-| SQLite | `.db` | Local querying, portable database | No | Yes |
-| DuckDB | `.duckdb` | Analytics, columnar queries | No | Yes |
+| Format  | Extension  | Best For                           | Streaming | Provenance |
+| ------- | ---------- | ---------------------------------- | --------- | ---------- |
+| JSON    | `.json`    | APIs, nested data                  | Yes       | Yes        |
+| CSV     | `.csv`     | Spreadsheets, simple tabular data  | Yes       | No         |
+| Parquet | `.parquet` | Big data analytics (Spark, DuckDB) | No        | Yes        |
+| SQLite  | `.db`      | Local querying, portable database  | No        | Yes        |
+| DuckDB  | `.duckdb`  | Analytics, columnar queries        | No        | Yes        |
 
 ```bash
 # Export with provenance metadata
@@ -1630,6 +1645,7 @@ git commit -m "docs: add comprehensive project README"
 ### Task 12: Stale Documentation Cleanup
 
 **Files:**
+
 - Modify: `docs/superpowers/specs/wave-roadmap.md`
 - Modify: `apps/cli/src/hooks/useJobPolling.ts` (line 1 — remove stale TODO)
 - Modify: `apps/cli/src/commands/run.ts` (lines 16-19 — remove stale TODO)
@@ -1639,6 +1655,7 @@ git commit -m "docs: add comprehensive project README"
 - [ ] **Step 1: Remove stale TODO from useJobPolling.ts**
 
 In `apps/cli/src/hooks/useJobPolling.ts`, line 1, delete:
+
 ```typescript
 // TODO(Wave 3-5): Accept DataSource instead of ApiClient for local mode — DONE
 ```
@@ -1648,6 +1665,7 @@ This work was completed in Wave 4-2 (hook adaptation to accept `DataSource | Spa
 - [ ] **Step 2: Remove stale TODO from run.ts**
 
 In `apps/cli/src/commands/run.ts`, lines 16-19, delete:
+
 ```typescript
  * TODO(Wave 3-5 Task 10): Structured file logging — add a Pino file transport
  * that writes newline-delimited JSON to `.spatula/logs/<run-id>.ndjson` so that
@@ -1672,12 +1690,12 @@ In `docs/superpowers/specs/wave-roadmap.md`:
 4. Add Wave 4 sub-plan completion table matching the pattern of Wave 3's table:
 
 ```markdown
-| Sub-plan | Scope | Status |
-|----------|-------|--------|
-| 4-1 | Server Completeness (webhooks, bulk ops, timeout, doctor) | **Complete** |
-| 4-2 | CLI Foundations (hook adaptation, utility commands, CSS extractor) | **Complete** |
-| 4-3 | CLI Data Commands (explore, export, review, schema, logs, dashboard) | **Complete** |
-| 4-4 | Open-Source Readiness (LICENSE, README, docs, examples, templates) | **Complete** |
+| Sub-plan | Scope                                                                | Status       |
+| -------- | -------------------------------------------------------------------- | ------------ |
+| 4-1      | Server Completeness (webhooks, bulk ops, timeout, doctor)            | **Complete** |
+| 4-2      | CLI Foundations (hook adaptation, utility commands, CSS extractor)   | **Complete** |
+| 4-3      | CLI Data Commands (explore, export, review, schema, logs, dashboard) | **Complete** |
+| 4-4      | Open-Source Readiness (LICENSE, README, docs, examples, templates)   | **Complete** |
 ```
 
 - [ ] **Step 4: Annotate Phase 12 spec sections 8.3 and 8.5**
@@ -1710,18 +1728,18 @@ git commit -m "docs: clean up stale TODOs, annotate specs, mark Wave 4 complete"
 
 ## Execution Summary
 
-| Task | Files | Description |
-|------|-------|-------------|
-| 1 | 1 | MIT license |
-| 2 | 1 | Security policy |
-| 3 | 1 | Expand .env.example |
-| 4 | 7 | Package.json OSS metadata |
-| 5 | 3 | GitHub issue/PR templates |
-| 6 | 3 | Release-please automation |
-| 7 | 1 | Architecture documentation |
-| 8 | 9 | Example configurations |
-| 9 | 1 | Example YAML validation test |
-| 10 | 1 | Contributing guide |
-| 11 | 1 | Project README |
-| 12 | 5 | Stale docs cleanup + spec annotations |
-| **Total** | **34** | **12 commits** |
+| Task      | Files  | Description                           |
+| --------- | ------ | ------------------------------------- |
+| 1         | 1      | MIT license                           |
+| 2         | 1      | Security policy                       |
+| 3         | 1      | Expand .env.example                   |
+| 4         | 7      | Package.json OSS metadata             |
+| 5         | 3      | GitHub issue/PR templates             |
+| 6         | 3      | Release-please automation             |
+| 7         | 1      | Architecture documentation            |
+| 8         | 9      | Example configurations                |
+| 9         | 1      | Example YAML validation test          |
+| 10        | 1      | Contributing guide                    |
+| 11        | 1      | Project README                        |
+| 12        | 5      | Stale docs cleanup + spec annotations |
+| **Total** | **34** | **12 commits**                        |

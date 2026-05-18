@@ -9,14 +9,7 @@
  * Also tests `spatula test-url --skip-llm` against a local HTTP fixture server.
  */
 
-import {
-  mkdtempSync,
-  writeFileSync,
-  mkdirSync,
-  rmSync,
-  existsSync,
-  readFileSync,
-} from 'node:fs';
+import { mkdtempSync, writeFileSync, mkdirSync, rmSync, existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { createServer } from 'node:http';
@@ -147,8 +140,20 @@ describe('data lifecycle workflow (sequential)', () => {
     mkdirSync(logsDir, { recursive: true });
     const logEntries = [
       { level: 'info', msg: 'Pipeline starting', event: 'run:start', ts: '2026-03-30T10:00:00Z' },
-      { level: 'info', msg: 'Progress', event: 'progress', pagesProcessed: 10, totalPages: 10, ts: '2026-03-30T10:05:00Z' },
-      { level: 'info', msg: 'Pipeline complete', event: 'run:complete', ts: '2026-03-30T10:06:00Z' },
+      {
+        level: 'info',
+        msg: 'Progress',
+        event: 'progress',
+        pagesProcessed: 10,
+        totalPages: 10,
+        ts: '2026-03-30T10:05:00Z',
+      },
+      {
+        level: 'info',
+        msg: 'Pipeline complete',
+        event: 'run:complete',
+        ts: '2026-03-30T10:06:00Z',
+      },
     ];
     writeFileSync(
       join(logsDir, '2026-03-30T10-00-00.log'),

@@ -127,10 +127,15 @@ export async function processSchemaEvolution(
       data: {
         version: evolvedSchema.version,
         fieldsAdded: actions
-          .filter((a): a is Extract<PipelineAction, { type: 'add_field' }> => a.type === 'add_field')
+          .filter(
+            (a): a is Extract<PipelineAction, { type: 'add_field' }> => a.type === 'add_field',
+          )
           .map((a) => a.payload.field.name),
         fieldsMerged: actions
-          .filter((a): a is Extract<PipelineAction, { type: 'merge_fields' }> => a.type === 'merge_fields')
+          .filter(
+            (a): a is Extract<PipelineAction, { type: 'merge_fields' }> =>
+              a.type === 'merge_fields',
+          )
           .map((a) => a.payload.canonicalName),
       },
     });

@@ -54,28 +54,19 @@ describe('normalizeUrl', () => {
 
 describe('diffSeeds', () => {
   it('detects added seeds', () => {
-    const result = diffSeeds(
-      ['https://example.com', 'https://new.com'],
-      ['https://example.com'],
-    );
+    const result = diffSeeds(['https://example.com', 'https://new.com'], ['https://example.com']);
     expect(result.added).toEqual(['https://new.com']);
     expect(result.removed).toEqual([]);
   });
 
   it('detects removed seeds', () => {
-    const result = diffSeeds(
-      ['https://example.com'],
-      ['https://example.com', 'https://old.com'],
-    );
+    const result = diffSeeds(['https://example.com'], ['https://example.com', 'https://old.com']);
     expect(result.added).toEqual([]);
     expect(result.removed).toEqual(['https://old.com']);
   });
 
   it('ignores normalization differences', () => {
-    const result = diffSeeds(
-      ['https://example.com/products'],
-      ['https://Example.COM/products/'],
-    );
+    const result = diffSeeds(['https://example.com/products'], ['https://Example.COM/products/']);
     expect(result.added).toEqual([]);
     expect(result.removed).toEqual([]);
   });

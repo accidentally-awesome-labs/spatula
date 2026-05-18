@@ -9,8 +9,7 @@ import {
 } from './fixtures/server.js';
 
 const DATABASE_URL =
-  process.env.TEST_DATABASE_URL ??
-  'postgresql://spatula:spatula@localhost:5432/spatula_test';
+  process.env.TEST_DATABASE_URL ?? 'postgresql://spatula:spatula@localhost:5432/spatula_test';
 
 let setupOk = false;
 let handle: ForwardTestHandle | undefined;

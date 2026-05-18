@@ -1,7 +1,7 @@
 import { eq, and, desc, inArray, sql } from 'drizzle-orm';
 import { createLogger, StorageError } from '@spatula/shared';
 import { actions } from '../schema/actions.js';
-import { actionStatusEnum } from '../schema/enums.js';
+import type { actionStatusEnum } from '../schema/enums.js';
 import type { Database } from '../connection.js';
 
 const logger = createLogger('action-repository');
@@ -192,7 +192,8 @@ export class ActionRepository {
       return { entities: rows, nextCursor };
     } catch (error) {
       throw new StorageError(`Failed to fetch actions by cursor: ${(error as Error).message}`, {
-        cause: error as Error, context: { jobId, tenantId },
+        cause: error as Error,
+        context: { jobId, tenantId },
       });
     }
   }
@@ -206,7 +207,8 @@ export class ActionRepository {
       return result?.count ?? 0;
     } catch (error) {
       throw new StorageError(`Failed to count actions: ${(error as Error).message}`, {
-        cause: error as Error, context: { jobId, tenantId },
+        cause: error as Error,
+        context: { jobId, tenantId },
       });
     }
   }
@@ -216,11 +218,18 @@ export class ActionRepository {
       const [row] = await this.db
         .select({ count: sql<number>`count(*)` })
         .from(actions)
-        .where(and(eq(actions.jobId, jobId), eq(actions.tenantId, tenantId), eq(actions.status, status as any)));
+        .where(
+          and(
+            eq(actions.jobId, jobId),
+            eq(actions.tenantId, tenantId),
+            eq(actions.status, status as any),
+          ),
+        );
       return Number(row?.count ?? 0);
     } catch (error) {
       throw new StorageError(`Failed to count actions: ${(error as Error).message}`, {
-        cause: error as Error, context: { jobId, tenantId },
+        cause: error as Error,
+        context: { jobId, tenantId },
       });
     }
   }

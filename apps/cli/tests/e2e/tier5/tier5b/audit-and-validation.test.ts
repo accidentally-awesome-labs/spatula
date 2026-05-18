@@ -1,10 +1,6 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { createTestApp } from '../../tier4/helpers.js';
-import {
-  setupAuthContext,
-  bearerHeaders,
-  type AuthTestContext,
-} from './helpers.js';
+import { setupAuthContext, bearerHeaders, type AuthTestContext } from './helpers.js';
 
 /** Small delay to let async audit writes complete (setImmediate-based). */
 const waitForAudit = () => new Promise((resolve) => setTimeout(resolve, 150));
@@ -51,7 +47,10 @@ describe('Tier 5B: Audit Logging, Tenant Validation & OpenAPI', () => {
 
     // Make a request with an invalid token
     await ctx.app.request('/api/v1/jobs', {
-      headers: { Authorization: 'Bearer invalid-key-for-audit', 'Content-Type': 'application/json' },
+      headers: {
+        Authorization: 'Bearer invalid-key-for-audit',
+        'Content-Type': 'application/json',
+      },
     });
     await waitForAudit();
 
@@ -63,10 +62,7 @@ describe('Tier 5B: Audit Logging, Tenant Validation & OpenAPI', () => {
     const failures = await ctx.db
       .select()
       .from(auditLog)
-      .where(and(
-        eq(auditLog.action, 'auth.login_failure'),
-        gte(auditLog.createdAt, before),
-      ))
+      .where(and(eq(auditLog.action, 'auth.login_failure'), gte(auditLog.createdAt, before)))
       .limit(10);
     expect(failures.length).toBeGreaterThan(0);
     expect(failures[0].action).toBe('auth.login_failure');

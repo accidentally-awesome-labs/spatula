@@ -97,7 +97,10 @@ export class CrawlTaskRepository implements TaskStatsRepo {
     }
   }
 
-  async getJobStats(jobId: string, tenantId: string): Promise<{
+  async getJobStats(
+    jobId: string,
+    tenantId: string,
+  ): Promise<{
     pending: number;
     inProgress: number;
     completed: number;

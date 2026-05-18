@@ -17,7 +17,10 @@ export function generateDocumentation(
 
   const aliasMap = new Map<string, string[]>();
   for (const alias of schema.fieldAliases) {
-    aliasMap.set(alias.canonicalName, alias.aliases.map((a) => a.name));
+    aliasMap.set(
+      alias.canonicalName,
+      alias.aliases.map((a) => a.name),
+    );
   }
 
   const fields: FieldDocumentation[] = schema.fields.map((field) => {
@@ -61,7 +64,8 @@ function computeFieldStats(
     nonNullCount++;
     const strVal = typeof val === 'object' ? JSON.stringify(val) : String(val);
     if (uniqueValues.size < MAX_UNIQUE_TRACK) uniqueValues.add(strVal);
-    if (sampleValues.length < MAX_SAMPLE_VALUES && !sampleValues.includes(val)) sampleValues.push(val);
+    if (sampleValues.length < MAX_SAMPLE_VALUES && !sampleValues.includes(val))
+      sampleValues.push(val);
     if (isNumeric && typeof val === 'number') {
       if (min === undefined || val < min) min = val;
       if (max === undefined || val > max) max = val;

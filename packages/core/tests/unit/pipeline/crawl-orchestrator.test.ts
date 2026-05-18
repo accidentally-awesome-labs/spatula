@@ -1,6 +1,10 @@
 // packages/core/tests/unit/pipeline/crawl-orchestrator.test.ts
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { processCrawlTask, isValidCrawlUrl, shouldTriggerSchemaEvolution } from '../../../src/pipeline/crawl-orchestrator.js';
+import {
+  processCrawlTask,
+  isValidCrawlUrl,
+  shouldTriggerSchemaEvolution,
+} from '../../../src/pipeline/crawl-orchestrator.js';
 import type { CrawlOrchestratorDeps, CrawlTaskInput } from '../../../src/pipeline/types.js';
 
 describe('isValidCrawlUrl', () => {
@@ -37,9 +41,7 @@ function createMockDeps(): CrawlOrchestratorDeps {
         title: 'Product 1',
         statusCode: 200,
         contentType: 'text/html',
-        links: [
-          { url: 'https://example.com/product/2', text: 'Product 2' },
-        ],
+        links: [{ url: 'https://example.com/product/2', text: 'Product 2' }],
         metadata: {
           crawledAt: new Date(),
           responseTimeMs: 250,
@@ -153,7 +155,10 @@ describe('processCrawlTask', () => {
 
   it('skips extraction for non-extractable classifications', async () => {
     const deps = createMockDeps();
-    (deps.classifier.classify as any).mockResolvedValue({ classification: 'navigation', confidence: 0.8 });
+    (deps.classifier.classify as any).mockResolvedValue({
+      classification: 'navigation',
+      confidence: 0.8,
+    });
 
     const result = await processCrawlTask(defaultInput, deps);
 
@@ -173,9 +178,17 @@ describe('processCrawlTask', () => {
         { url: 'http://localhost/admin', text: 'Invalid' },
         { url: 'javascript:alert(1)', text: 'XSS' },
       ],
-      metadata: { crawledAt: new Date(), responseTimeMs: 100, contentLength: 10, crawlerType: 'playwright' },
+      metadata: {
+        crawledAt: new Date(),
+        responseTimeMs: 100,
+        contentLength: 10,
+        crawlerType: 'playwright',
+      },
     });
-    (deps.classifier.classify as any).mockResolvedValue({ classification: 'navigation', confidence: 0.8 });
+    (deps.classifier.classify as any).mockResolvedValue({
+      classification: 'navigation',
+      confidence: 0.8,
+    });
 
     const result = await processCrawlTask(defaultInput, deps);
 
@@ -247,7 +260,9 @@ describe('shouldTriggerSchemaEvolution', () => {
   it('returns true when batch size is met', async () => {
     const deps = createMockDeps();
     (deps.extractionRepo.findByJob as any).mockResolvedValue([
-      { id: 'e1' }, { id: 'e2' }, { id: 'e3' },
+      { id: 'e1' },
+      { id: 'e2' },
+      { id: 'e3' },
     ]);
 
     const result = await shouldTriggerSchemaEvolution(

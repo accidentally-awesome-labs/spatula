@@ -76,9 +76,9 @@ For production self-hosters: this only affects you if you ran a pre-Wave-6 build
 
 Spatula uses two separate Drizzle migration tracking tables:
 
-| Repo | Migration journal table | Migration folder |
-|------|-------------------------|------------------|
-| OSS (this repo) | `__drizzle_migrations_oss` (in `drizzle` schema) | `packages/db/drizzle/` |
+| Repo                 | Migration journal table                           | Migration folder                                |
+| -------------------- | ------------------------------------------------- | ----------------------------------------------- |
+| OSS (this repo)      | `__drizzle_migrations_oss` (in `drizzle` schema)  | `packages/db/drizzle/`                          |
 | Private spatula-saas | `__drizzle_migrations_saas` (in `drizzle` schema) | (its own `drizzle/` folder, separate filenames) |
 
 Both can target the same Postgres instance — the journals don't collide because each has a distinct table name within the `drizzle` schema.
@@ -116,5 +116,5 @@ This is one-time scaffolding for the squash PR. After the carve-out PR merges, t
 
 ---
 
-*Phase: 15-carveout-migration-squash*
-*Authored: 2026-05-17 (Plan 15-06)*
+_Phase: 15-carveout-migration-squash_
+_Authored: 2026-05-17 (Plan 15-06)_

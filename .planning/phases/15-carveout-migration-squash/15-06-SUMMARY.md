@@ -2,7 +2,19 @@
 phase: 15-carveout-migration-squash
 plan: 06
 subsystem: docs+carveout-final-gate+pr-open
-tags: [carveout, architecture-refresh, private-contract, residual-risk-register, upgrade-runbook, no-migration-downgrade, expand-contract, carve-04-final-gate, completion-summary, pr-checkpoint]
+tags:
+  [
+    carveout,
+    architecture-refresh,
+    private-contract,
+    residual-risk-register,
+    upgrade-runbook,
+    no-migration-downgrade,
+    expand-contract,
+    carve-04-final-gate,
+    completion-summary,
+    pr-checkpoint,
+  ]
 
 # Dependency graph
 requires:
@@ -30,7 +42,7 @@ tech-stack:
   removed:
     - stripe (apps/api dep — dead since Plan 15-02 forward-delete; finally cleaned in 15-06 Task 4 grep gate)
   patterns:
-    - "Documentation as the third leg of a coupling boundary (CONTEXT.md D-03): when a test suite catches TS-symbol + SQL-schema drift but not runtime/RLS/trigger semantics, an authoritative doc with a residual-risk register fills the gap. The register names what the test does NOT catch + names the mitigation owner per risk."
+    - 'Documentation as the third leg of a coupling boundary (CONTEXT.md D-03): when a test suite catches TS-symbol + SQL-schema drift but not runtime/RLS/trigger semantics, an authoritative doc with a residual-risk register fills the gap. The register names what the test does NOT catch + names the mitigation owner per risk.'
     - "Negation-comment scrub for keyword-based grep gates: when a quality gate uses literal keyword matching, semantically-negating comments still match. Per plan's case-(b) instruction, rewrite the comment to avoid the keyword while preserving the semantic intent. Document each rewrite in the deviations section so future readers see the surface as intentionally keyword-free."
     - "PR-prep checkpoint pattern for irreversible external actions: even in auto-mode, opening a PR is a one-way action whose description is the long-term record of the phase. Pause at the PR-open step, return the drafted body + branch + push status + verification commands to the user, let the user click 'create' (or modify) when ready."
 
@@ -50,13 +62,13 @@ key-files:
     - pnpm-lock.yaml
 
 key-decisions:
-  - "Document-third-leg format for private-contract.md: hybrid (CONTEXT.md D-03 sanctioned) — surface enumeration tables per consumed package, SQL FK reference table, residual-risk register (8 risks × severity × why-not-caught × mitigation-owner), change-procedure section (5 steps incl. mirror PR + GitHub label + GA-tag block), two-journal model section"
+  - 'Document-third-leg format for private-contract.md: hybrid (CONTEXT.md D-03 sanctioned) — surface enumeration tables per consumed package, SQL FK reference table, residual-risk register (8 risks × severity × why-not-caught × mitigation-owner), change-procedure section (5 steps incl. mirror PR + GitHub label + GA-tag block), two-journal model section'
   - "Upgrade runbook layout: only upgrade.md authored; future-runbook list at the bottom enumerates Phase 19 + Phase 22 deliverables (backup-restore, reverse-proxy, hardware-sizing, support-matrix, secret-scan-audit, post-publish-smoke, user-journey-baseline, incident-response). Keeps the runbook dir from looking empty without scope-creeping into Phase 19's deliverables."
   - "Stripe dep drop (Rule 1 bug, not Rule 4 architectural): dropped apps/api/package.json's stripe: ^22.0.0 dependency in Task 4 — zero stripe imports remained in apps/api/src or tests after Plan 15-02, but the dep was missed by the substrate's forward-delete because package.json wasn't on Section A's allowlist. Drop is purely subtractive (build + tests still green; no behavior change), so qualifies as Rule-1 auto-fix not Rule-4 architectural change."
   - "PR checkpoint return (not autonomous PR open): plan was marked autonomous: false explicitly, and Task 6 is type=checkpoint:human-action. Even with auto-mode flags, human-action checkpoints don't auto-resolve per the checkpoint_protocol. PR description is the long-term record of the phase; user review before merge is the right tradeoff."
 
 patterns-established:
-  - "When a CARVE-04-style keyword grep gate has documented negation-exception cases (`a` and `b` in the plan text), executor must triage each hit: (a) real residue → fix per Rule 1; (b) negation comment → rewrite to avoid the keyword. Both produce zero literal hits at the gate."
+  - 'When a CARVE-04-style keyword grep gate has documented negation-exception cases (`a` and `b` in the plan text), executor must triage each hit: (a) real residue → fix per Rule 1; (b) negation comment → rewrite to avoid the keyword. Both produce zero literal hits at the gate.'
   - "Final-gate audit-evidence files at docs/superpowers/plans/6-1-final-grep-evidence.md make grep-gate green-state queryable forever — useful when reviewers ask 'how do you know it's clean?'"
 
 requirements-completed: [CARVE-04, CARVE-07, CARVE-08]
@@ -113,14 +125,14 @@ completed: 2026-05-17
 
 ## Task Commits
 
-| Task | Description | Commit |
-| ---- | ----------- | ------ |
-| 1 | docs(carveout): refresh architecture.md — drop billing mentions; republish dep diagram | `9a57809` |
-| 2 | docs(carveout): authoritative 5-package surface contract + residual-risk register | `86a37ea` |
-| 3 | docs(carveout): upgrade runbook — no-downgrade + expand-contract + two-journal + dev DB wipe | `feb781e` |
-| 4 | fix(carveout): drop dead stripe dep + scrub remaining billing-keyword comments (CARVE-04 final gate) | `3e7610b` |
-| 5 | docs(carveout): completion summary | `c87849e` |
-| 6 | (checkpoint:human-action — PR open) | PR #1 |
+| Task | Description                                                                                          | Commit    |
+| ---- | ---------------------------------------------------------------------------------------------------- | --------- |
+| 1    | docs(carveout): refresh architecture.md — drop billing mentions; republish dep diagram               | `9a57809` |
+| 2    | docs(carveout): authoritative 5-package surface contract + residual-risk register                    | `86a37ea` |
+| 3    | docs(carveout): upgrade runbook — no-downgrade + expand-contract + two-journal + dev DB wipe         | `feb781e` |
+| 4    | fix(carveout): drop dead stripe dep + scrub remaining billing-keyword comments (CARVE-04 final gate) | `3e7610b` |
+| 5    | docs(carveout): completion summary                                                                   | `c87849e` |
+| 6    | (checkpoint:human-action — PR open)                                                                  | PR #1     |
 
 **PR opened:** https://github.com/accidentally-awesome-labs/spatula/pull/1 (PR #1, base `main`, head `feat/wave-6-1-carveout`, state OPEN, mergeable: MERGEABLE).
 
@@ -129,6 +141,7 @@ completed: 2026-05-17
 ## Files Created/Modified
 
 **Created (5):**
+
 - `docs/private-contract.md` (153 lines) — authoritative consumed-surface doc + residual-risk register
 - `docs/runbooks/upgrade.md` (120 lines) — no-migration-downgrade + expand-contract + dev DB wipe + two-journal + schema-equivalence-gate
 - `docs/superpowers/plans/6-1-final-grep-evidence.md` — CARVE-04 final-gate permanent audit record
@@ -136,6 +149,7 @@ completed: 2026-05-17
 - `.planning/phases/15-carveout-migration-squash/15-06-SUMMARY.md` — this file
 
 **Modified (6):**
+
 - `docs/architecture.md` — added 4-paragraph carve-out section; verified zero billing keywords
 - `apps/api/package.json` — dropped `"stripe": "^22.0.0"` dep (dead since Plan 15-02 forward-delete)
 - `apps/api/src/app.ts` — rewrote auth-route mount comment to avoid `billing` keyword
@@ -160,6 +174,7 @@ completed: 2026-05-17
 ### Auto-fixed Issues
 
 **1. [Rule 1 - Bug] Dead `stripe` dependency in `apps/api/package.json`**
+
 - **Found during:** Task 4 (CARVE-04 final grep gate)
 - **Issue:** `apps/api/package.json` listed `"stripe": "^22.0.0"` as a runtime dep, but the Stripe client and all `from 'stripe'` imports were deleted in Plan 15-02 (Section A) + Plan 15-03 (in-place strip). The dep survived because `package.json` was not in Section A's filter-repo allowlist (which targets source files, not manifests). Real residue, not a comment.
 - **Fix:** Removed the line from `dependencies`. Re-ran `pnpm install` (regenerates `pnpm-lock.yaml`); `pnpm --filter @spatula/api build` exits 0; affected test files (exports.test.ts, auth.test.ts) re-run green.
@@ -168,6 +183,7 @@ completed: 2026-05-17
 - **Committed in:** `3e7610b` (Task 4 commit)
 
 **2. [Comment-only — case (b) per plan] 4 negation-comments rewritten to avoid `billing` keyword**
+
 - **Found during:** Task 4 (CARVE-04 final grep gate)
 - **Files:**
   - `apps/api/src/app.ts:129` — auth-route mount comment
@@ -181,6 +197,7 @@ completed: 2026-05-17
 ### Documented (intentional planner choice, not a deviation)
 
 **3. Full clean-install + e2e cycle (substrate Task 25 Step 1) deferred to CI**
+
 - **Detail:** Substrate Task 25 Step 1 reads `rm -rf node_modules **/node_modules **/dist .turbo; pnpm install; ...; pnpm test:e2e`. Plan 15-06 Task 5 mirrors this. Executor ran the per-package + carveout + private-contract subset (8 commands, all exit 0) and deferred the `rm -rf` clean-install + `docker compose up` + e2e cycle to the GitHub Actions CI run on the PR.
 - **Reason:** (a) CLI e2e suite has 2 pre-existing flakes documented in Plan 15-01 + Plan 15-03 (not regressions introduced by this phase); (b) the focused verification gives a stronger per-package signal than re-running pre-existing flaky fixtures; (c) the PR CI will run the canonical e2e + carveout + private-contract jobs on push, which is the official green signal anyway.
 - **Files affected:** None.
@@ -205,6 +222,7 @@ None for Tasks 1–5. Task 6 requires the user to run a single `gh pr create` co
 ## Known Stubs
 
 None — every document authored is substantive and complete:
+
 - `docs/architecture.md` carve-out section is a fully written 4-paragraph contextual addition (not a "TODO: write this" placeholder)
 - `docs/private-contract.md` enumerates every consumed symbol from each of the 5 packages with kind + use-case (not "TODO: list exports here")
 - `docs/runbooks/upgrade.md` includes runnable shell commands for the dev DB wipe + explicit policy text for both policies (not "TODO: document policy")
@@ -215,6 +233,7 @@ None — every document authored is substantive and complete:
 **Phase 15 complete after PR #1 merges.** Phase 16 (API Contract Hardening + SDK Packages) is the next executable phase per ROADMAP. Depends on the carve-out PR landing on `main`.
 
 Post-PR-open state of the branch:
+
 - Branch tip prior to SUMMARY-update commit: `877c790` (plan-metadata commit from prior run)
 - 38 commits total since `main@5d19c2b`
 - Working tree clean
@@ -252,5 +271,6 @@ Post-PR-open state of the branch:
 - [x] `pnpm --filter @spatula/core test` → 965/965
 
 ---
-*Phase: 15-carveout-migration-squash*
-*Completed: 2026-05-17*
+
+_Phase: 15-carveout-migration-squash_
+_Completed: 2026-05-17_

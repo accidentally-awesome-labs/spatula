@@ -6,12 +6,15 @@ vi.mock('@spatula/core', async () => {
   const actual = await vi.importActual<typeof import('@spatula/core')>('@spatula/core');
   return {
     ...actual,
-    loadGlobalConfig: vi.fn(() => ({
-      version: 1,
-      remotes: {
-        prod: { url: 'https://api.spatula.dev', apiKey: 'sk_live_abc' },
-      },
-    } as GlobalConfig)),
+    loadGlobalConfig: vi.fn(
+      () =>
+        ({
+          version: 1,
+          remotes: {
+            prod: { url: 'https://api.spatula.dev', apiKey: 'sk_live_abc' },
+          },
+        }) as GlobalConfig,
+    ),
     parseProjectYamlFile: vi.fn(() => ({
       name: 'test-crawl',
       seeds: ['https://example.com'],
@@ -104,13 +107,16 @@ describe('runPushCommand', () => {
       return null;
     });
 
-    const fetchMock = vi.fn()
+    const fetchMock = vi
+      .fn()
       .mockResolvedValueOnce({
-        ok: true, status: 200,
+        ok: true,
+        status: 200,
         json: () => Promise.resolve({ data: { id: 'old-job-done', status: 'completed' } }),
       })
       .mockResolvedValueOnce({
-        ok: true, status: 200,
+        ok: true,
+        status: 200,
         json: () => Promise.resolve({ data: { id: 'new-job-456', status: 'pending' } }),
       });
     vi.stubGlobal('fetch', fetchMock);
@@ -138,13 +144,16 @@ describe('runPushCommand — auto-start and edge cases', () => {
   it('starts the job after creation when autoStart is true', async () => {
     mockMetaGet.mockResolvedValue(null);
 
-    const fetchMock = vi.fn()
+    const fetchMock = vi
+      .fn()
       .mockResolvedValueOnce({
-        ok: true, status: 200,
+        ok: true,
+        status: 200,
         json: () => Promise.resolve({ data: { id: 'job-auto', status: 'pending' } }),
       })
       .mockResolvedValueOnce({
-        ok: true, status: 200,
+        ok: true,
+        status: 200,
         json: () => Promise.resolve({ data: { id: 'job-auto', status: 'running' } }),
       });
     vi.stubGlobal('fetch', fetchMock);

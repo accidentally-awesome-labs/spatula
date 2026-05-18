@@ -25,7 +25,11 @@ export { SourceTrustRepository } from './repositories/source-trust-repository.js
 export type { UpsertSourceTrustInput } from './repositories/source-trust-repository.js';
 export { EntitySourceRepository } from './repositories/entity-source-repository.js';
 export { ActionRepository } from './repositories/action-repository.js';
-export type { ActionStatus, FindActionsOptions, CreateActionInput } from './repositories/action-repository.js';
+export type {
+  ActionStatus,
+  FindActionsOptions,
+  CreateActionInput,
+} from './repositories/action-repository.js';
 export { ExportRepository } from './repositories/export-repository.js';
 export type { CreateExportInput } from './repositories/export-repository.js';
 export { TenantRepository } from './repositories/tenant-repository.js';
@@ -58,7 +62,10 @@ export { SqliteJobRepository } from './project-db/repositories/job-repository.js
 export { SqlitePageRepository } from './project-db/repositories/page-repository.js';
 export type { CreatePageInput as SqliteCreatePageInput } from './project-db/repositories/page-repository.js';
 export { SqliteExtractionRepository } from './project-db/repositories/extraction-repository.js';
-export { SqliteEntityRepository, SqliteEntitySourceRepository } from './project-db/repositories/entity-repository.js';
+export {
+  SqliteEntityRepository,
+  SqliteEntitySourceRepository,
+} from './project-db/repositories/entity-repository.js';
 export { SqliteSchemaRepository } from './project-db/repositories/schema-repository.js';
 export { SqliteCrawlTaskRepository } from './project-db/repositories/crawl-task-repository.js';
 export { SqliteActionRepository } from './project-db/repositories/action-repository.js';

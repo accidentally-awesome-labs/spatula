@@ -185,16 +185,18 @@ yargs(hideBin(process.argv))
     'add <urls..>',
     'Add seed URLs to the project',
     (y) =>
-      y.positional('urls', {
-        type: 'string',
-        array: true,
-        demandOption: true,
-        describe: 'URLs to add as seeds',
-      }).option('no-history', {
-        type: 'boolean',
-        default: false,
-        describe: 'Skip crawl history dedup (allow re-adding crawled URLs)',
-      }),
+      y
+        .positional('urls', {
+          type: 'string',
+          array: true,
+          demandOption: true,
+          describe: 'URLs to add as seeds',
+        })
+        .option('no-history', {
+          type: 'boolean',
+          default: false,
+          describe: 'Skip crawl history dedup (allow re-adding crawled URLs)',
+        }),
     async (argv) => {
       try {
         const result = await runAddCommand(argv.urls as string[], { noHistory: argv.noHistory });
@@ -287,7 +289,8 @@ yargs(hideBin(process.argv))
           describe: 'Maximum number of jobs to return',
         }),
     async (argv) => {
-      const { runListCommand, formatJobsTable, printListDeprecation } = await import('./commands/list.js');
+      const { runListCommand, formatJobsTable, printListDeprecation } =
+        await import('./commands/list.js');
       printListDeprecation();
       const tenantId = argv.tenantId || getEnvOrFail('SPATULA_TENANT_ID');
       const client = getApiClient({ apiUrl: argv.apiUrl, tenantId });
@@ -321,7 +324,9 @@ yargs(hideBin(process.argv))
         }
         return;
       }
-      console.warn('\n  ⚠ `spatula status <jobId>` (remote) is deprecated. Use `spatula remote status <name>` (coming in a future release).\n');
+      console.warn(
+        '\n  ⚠ `spatula status <jobId>` (remote) is deprecated. Use `spatula remote status <name>` (coming in a future release).\n',
+      );
       const tenantId = argv.tenantId || getEnvOrFail('SPATULA_TENANT_ID');
       const client = getApiClient({ apiUrl: argv.apiUrl, tenantId });
       const job = await runStatusCommand(client, argv.jobId);
@@ -458,13 +463,31 @@ yargs(hideBin(process.argv))
     (y) =>
       y
         .positional('url', { type: 'string', demandOption: true, describe: 'URL to test' })
-        .option('crawler', { type: 'string', choices: ['playwright', 'firecrawl'] as const, default: 'playwright', describe: 'Crawler backend to use' })
-        .option('format', { type: 'string', choices: ['json', 'table', 'raw'] as const, default: 'table', describe: 'Output format' })
+        .option('crawler', {
+          type: 'string',
+          choices: ['playwright', 'firecrawl'] as const,
+          default: 'playwright',
+          describe: 'Crawler backend to use',
+        })
+        .option('format', {
+          type: 'string',
+          choices: ['json', 'table', 'raw'] as const,
+          default: 'table',
+          describe: 'Output format',
+        })
         .option('schema', { type: 'string', describe: 'Path to schema JSON file' })
-        .option('show-html', { type: 'boolean', default: false, describe: 'Show preprocessed HTML instead of extraction' })
+        .option('show-html', {
+          type: 'boolean',
+          default: false,
+          describe: 'Show preprocessed HTML instead of extraction',
+        })
         .option('show-links', { type: 'boolean', default: false, describe: 'Show evaluated links' })
         .option('model', { type: 'string', describe: 'Override LLM model' })
-        .option('skip-llm', { type: 'boolean', default: false, describe: 'Skip LLM, CSS selectors only (requires --schema)' }),
+        .option('skip-llm', {
+          type: 'boolean',
+          default: false,
+          describe: 'Skip LLM, CSS selectors only (requires --schema)',
+        }),
     async (argv) => {
       const { testUrl } = await import('./commands/test-url.js');
       await testUrl({
@@ -490,7 +513,16 @@ yargs(hideBin(process.argv))
       y
         .positional('action', {
           type: 'string',
-          choices: ['add', 'list', 'remove', 'status', 'pause', 'resume', 'cancel', 'watch'] as const,
+          choices: [
+            'add',
+            'list',
+            'remove',
+            'status',
+            'pause',
+            'resume',
+            'cancel',
+            'watch',
+          ] as const,
           demandOption: true,
           describe: 'Remote action to perform',
         })

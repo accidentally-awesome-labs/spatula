@@ -2,7 +2,7 @@
 import type { FieldDefinitionOutput } from '../types/schema.js';
 
 export interface PropertyChange {
-  property: string;     // 'type', 'required', 'selector', 'description'
+  property: string; // 'type', 'required', 'selector', 'description'
   from: unknown;
   to: unknown;
   nestedChanges?: PropertyChange[];
@@ -38,10 +38,10 @@ export interface PotentialRename {
  */
 export interface DiffImpact {
   newTasksToEnqueue: number;
-  pagesNeedingReextraction: number | null;   // null = needs DB query
+  pagesNeedingReextraction: number | null; // null = needs DB query
   reextractionCostEstimate: number;
-  failedTasksToRetry: number | null;         // null = needs DB query
-  skippedTasksToReenqueue: number | null;    // null = needs DB query
+  failedTasksToRetry: number | null; // null = needs DB query
+  skippedTasksToReenqueue: number | null; // null = needs DB query
   forceFullReconciliation: boolean;
 }
 

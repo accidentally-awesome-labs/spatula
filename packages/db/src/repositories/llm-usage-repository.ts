@@ -27,15 +27,24 @@ export class LlmUsageRepository {
 
   async insert(input: LlmUsageInput) {
     try {
-      const [row] = await this.db.insert(llmUsage).values({
-        tenantId: input.tenantId, jobId: input.jobId, model: input.model,
-        promptTokens: input.promptTokens, completionTokens: input.completionTokens,
-        totalTokens: input.totalTokens, costUsd: input.costUsd, purpose: input.purpose,
-      }).returning();
+      const [row] = await this.db
+        .insert(llmUsage)
+        .values({
+          tenantId: input.tenantId,
+          jobId: input.jobId,
+          model: input.model,
+          promptTokens: input.promptTokens,
+          completionTokens: input.completionTokens,
+          totalTokens: input.totalTokens,
+          costUsd: input.costUsd,
+          purpose: input.purpose,
+        })
+        .returning();
       return row;
     } catch (error) {
       throw new StorageError(`Failed to insert LLM usage: ${(error as Error).message}`, {
-        cause: error as Error, context: { tenantId: input.tenantId, model: input.model },
+        cause: error as Error,
+        context: { tenantId: input.tenantId, model: input.model },
       });
     }
   }
@@ -45,31 +54,45 @@ export class LlmUsageRepository {
       const conditions = and(eq(llmUsage.tenantId, tenantId), gte(llmUsage.createdAt, since));
 
       // Totals via SQL aggregation
-      const [totals] = await this.db.select({
-        totalTokens: sql<number>`COALESCE(SUM(${llmUsage.totalTokens}), 0)::int`,
-        totalCostUsd: sql<number>`COALESCE(SUM(${llmUsage.costUsd}::numeric), 0)::float`,
-      }).from(llmUsage).where(conditions);
+      const [totals] = await this.db
+        .select({
+          totalTokens: sql<number>`COALESCE(SUM(${llmUsage.totalTokens}), 0)::int`,
+          totalCostUsd: sql<number>`COALESCE(SUM(${llmUsage.costUsd}::numeric), 0)::float`,
+        })
+        .from(llmUsage)
+        .where(conditions);
 
       // By model
-      const modelRows = await this.db.select({
-        model: llmUsage.model,
-        tokens: sql<number>`SUM(${llmUsage.totalTokens})::int`,
-        costUsd: sql<number>`SUM(${llmUsage.costUsd}::numeric)::float`,
-      }).from(llmUsage).where(conditions).groupBy(llmUsage.model);
+      const modelRows = await this.db
+        .select({
+          model: llmUsage.model,
+          tokens: sql<number>`SUM(${llmUsage.totalTokens})::int`,
+          costUsd: sql<number>`SUM(${llmUsage.costUsd}::numeric)::float`,
+        })
+        .from(llmUsage)
+        .where(conditions)
+        .groupBy(llmUsage.model);
 
       // By purpose
-      const purposeRows = await this.db.select({
-        purpose: llmUsage.purpose,
-        tokens: sql<number>`SUM(${llmUsage.totalTokens})::int`,
-        costUsd: sql<number>`SUM(${llmUsage.costUsd}::numeric)::float`,
-      }).from(llmUsage).where(conditions).groupBy(llmUsage.purpose);
+      const purposeRows = await this.db
+        .select({
+          purpose: llmUsage.purpose,
+          tokens: sql<number>`SUM(${llmUsage.totalTokens})::int`,
+          costUsd: sql<number>`SUM(${llmUsage.costUsd}::numeric)::float`,
+        })
+        .from(llmUsage)
+        .where(conditions)
+        .groupBy(llmUsage.purpose);
 
       // By job (top 50 by cost)
-      const jobRows = await this.db.select({
-        jobId: llmUsage.jobId,
-        tokens: sql<number>`SUM(${llmUsage.totalTokens})::int`,
-        costUsd: sql<number>`SUM(${llmUsage.costUsd}::numeric)::float`,
-      }).from(llmUsage).where(and(conditions, sql`${llmUsage.jobId} IS NOT NULL`))
+      const jobRows = await this.db
+        .select({
+          jobId: llmUsage.jobId,
+          tokens: sql<number>`SUM(${llmUsage.totalTokens})::int`,
+          costUsd: sql<number>`SUM(${llmUsage.costUsd}::numeric)::float`,
+        })
+        .from(llmUsage)
+        .where(and(conditions, sql`${llmUsage.jobId} IS NOT NULL`))
         .groupBy(llmUsage.jobId)
         .orderBy(desc(sql`SUM(${llmUsage.costUsd}::numeric)`))
         .limit(50);
@@ -82,12 +105,14 @@ export class LlmUsageRepository {
       return {
         totalTokens: totals?.totalTokens ?? 0,
         totalCostUsd: totals?.totalCostUsd ?? 0,
-        byModel, byPurpose,
+        byModel,
+        byPurpose,
         byJob: jobRows.map((r) => ({ jobId: r.jobId!, tokens: r.tokens, costUsd: r.costUsd })),
       };
     } catch (error) {
       throw new StorageError(`Failed to aggregate LLM usage: ${(error as Error).message}`, {
-        cause: error as Error, context: { tenantId },
+        cause: error as Error,
+        context: { tenantId },
       });
     }
   }

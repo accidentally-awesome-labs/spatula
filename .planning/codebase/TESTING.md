@@ -5,6 +5,7 @@
 ## Test Framework
 
 **Runner:**
+
 - Vitest v2.1.0
 - Node.js environment: `environment: 'node'`
 - Config files:
@@ -12,9 +13,11 @@
   - Packages: `packages/{core,shared,db,queue}/vitest.config.ts` (unit tests)
 
 **Assertion Library:**
+
 - Vitest built-in assertions via `expect()`
 
 **Run Commands:**
+
 ```bash
 pnpm test              # Run all tests (turbo runs across packages)
 pnpm test:watch       # Watch mode for all tests
@@ -24,6 +27,7 @@ pnpm typecheck        # Run tsc type checking
 ```
 
 **Per-Package:**
+
 ```bash
 pnpm --filter @spatula/core test
 pnpm --filter @spatula/db exec vitest run tests/integration/user-tenant-repository.integration.test.ts
@@ -32,17 +36,20 @@ pnpm --filter @spatula/db exec vitest run tests/integration/user-tenant-reposito
 ## Test File Organization
 
 **Location:**
+
 - Unit tests co-located with source: `src/billing/quota-enforcer.test.ts` (alongside `src/billing/quota-enforcer.ts`)
 - Package-level tests in `tests/unit/`: `packages/db/tests/unit/cache.test.ts`, `packages/queue/tests/unit/job-manager.test.ts`
 - Integration tests in `tests/integration/`: `packages/db/tests/integration/user-tenant-repository.integration.test.ts`
 - E2E tests in `tests/e2e/`: `tests/e2e/full-pipeline.test.ts`
 
 **Naming:**
+
 - Unit tests: `{module-name}.test.ts`
 - Integration tests: `{module-name}.integration.test.ts`
 - E2E tests: `{scenario}.test.ts` in `tests/e2e/`
 
 **Directory Structure:**
+
 ```
 packages/{package}/
 ├── src/
@@ -67,6 +74,7 @@ tests/
 ## Test Structure
 
 **Suite Organization:**
+
 ```typescript
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 
@@ -92,22 +100,25 @@ describe('ModuleName', () => {
 ```
 
 **Patterns:**
+
 - Use `describe()` for grouping related tests
 - Use nested `describe()` for organizing by method/feature
 - Use `it()` for individual test cases
 - Each test should be independent and idempotent
 
 **Setup/Teardown:**
+
 - `beforeEach()`: Runs before each test in suite (reset state)
 - `afterEach()`: Cleanup per test (e.g., `vi.unstubAllEnvs()`)
 - `beforeAll()`: One-time setup before all tests (expensive operations)
 - `afterAll()`: One-time cleanup after all tests (close connections)
 
 **Example from `packages/shared/tests/config.test.ts`:**
+
 ```typescript
 describe('getEnvOrThrow', () => {
   afterEach(() => {
-    vi.unstubAllEnvs();  // Clean up env stubs
+    vi.unstubAllEnvs(); // Clean up env stubs
   });
 
   it('returns the value if set', () => {
@@ -128,6 +139,7 @@ describe('getEnvOrThrow', () => {
 **Patterns:**
 
 **Mock Factory Pattern:**
+
 ```typescript
 function createMockJobRepo() {
   return {
@@ -150,15 +162,14 @@ describe('JobManager', () => {
 ```
 
 **Function Mocking:**
+
 ```typescript
 const mockFn = vi.fn();
 const mockFnWithReturnValue = vi.fn().mockResolvedValue({ id: 'job-001' });
 const mockFnWithError = vi.fn().mockRejectedValue(new Error('failed'));
 
 // Chaining multiple return values:
-mockFn
-  .mockResolvedValueOnce({ id: 'task-001' })
-  .mockResolvedValueOnce({ id: 'task-002' });
+mockFn.mockResolvedValueOnce({ id: 'task-001' }).mockResolvedValueOnce({ id: 'task-002' });
 
 // Assertion patterns:
 expect(mockFn).toHaveBeenCalledWith(expectedArg);
@@ -168,6 +179,7 @@ expect(mockFn).not.toHaveBeenCalled();
 ```
 
 **Environment Stubbing:**
+
 ```typescript
 vi.stubEnv('DATABASE_URL', 'postgresql://localhost:5432/spatula');
 vi.stubEnv('REDIS_URL', 'redis://localhost:6379');
@@ -175,7 +187,9 @@ vi.unstubAllEnvs(); // Clean up
 ```
 
 **Mock Casting:**
+
 - Use `as any` to cast mocks to real types when needed:
+
 ```typescript
 manager = new JobManager({
   jobRepo: jobRepo as any,
@@ -186,12 +200,14 @@ manager = new JobManager({
 ```
 
 **What to Mock:**
+
 - External services (databases, APIs, queues)
 - Repository implementations
 - Configuration and environment
 - Expensive operations (file I/O)
 
 **What NOT to Mock:**
+
 - Core domain logic (state machines, validation)
 - Error classes (test real error behavior)
 - Type system (use real interfaces/types)
@@ -199,6 +215,7 @@ manager = new JobManager({
 ## Fixtures and Factories
 
 **Test Data Factories:**
+
 ```typescript
 const TENANT_ID = '00000000-0000-0000-0000-000000000001';
 const JOB_ID = 'job-001';
@@ -225,16 +242,16 @@ const baseConfig = {
 ```
 
 **HTML Fixtures:**
+
 - Stored in `tests/fixtures/` directory
 - Loaded at test runtime:
+
 ```typescript
-const FIXTURE_HTML = readFileSync(
-  join(__dirname, 'fixtures', 'product-page.html'),
-  'utf-8',
-);
+const FIXTURE_HTML = readFileSync(join(__dirname, 'fixtures', 'product-page.html'), 'utf-8');
 ```
 
 **Location:**
+
 - Co-located unit test fixtures: alongside test file
 - E2E fixtures: `tests/e2e/fixtures/`
 - Shared test utilities: `packages/{package}/tests/` directory
@@ -244,6 +261,7 @@ const FIXTURE_HTML = readFileSync(
 **Requirements:** Not enforced (no coverage threshold)
 
 **View Coverage:**
+
 ```bash
 pnpm test -- --coverage    # Run with coverage report
 ```
@@ -253,12 +271,14 @@ pnpm test -- --coverage    # Run with coverage report
 ## Test Types
 
 **Unit Tests:**
+
 - Scope: Single module/class in isolation
 - Approach: Heavy use of mocks for dependencies
 - Location: Co-located with source (`src/module.test.ts`) or `tests/unit/`
 - Example: `packages/core/src/billing/quota-enforcer.test.ts` tests `QuotaEnforcer` class with mocked repos and enforcer
 
 **Integration Tests:**
+
 - Scope: Multiple components working together with real infrastructure
 - Approach: Real database (Postgres), real repositories
 - Location: `tests/integration/`
@@ -267,6 +287,7 @@ pnpm test -- --coverage    # Run with coverage report
 - Setup: Migrations applied via global setup hook wired in `vitest.config.ts`
 
 **E2E Tests:**
+
 - Scope: Full pipeline end-to-end
 - Approach: Real components, in-memory or containerized services
 - Location: `tests/e2e/`
@@ -274,6 +295,7 @@ pnpm test -- --coverage    # Run with coverage report
 - Configuration: `tests/vitest.config.ts` specifies E2E test inclusion pattern
 
 **Run Integration Tests:**
+
 ```bash
 # Requires TEST_DATABASE_URL set
 pnpm --filter @spatula/db exec vitest run tests/integration/user-tenant-repository.integration.test.ts
@@ -285,6 +307,7 @@ pnpm --filter @spatula/db test
 ## Common Patterns
 
 **Async Testing:**
+
 ```typescript
 // Using async/await:
 it('completes async operation', async () => {
@@ -304,6 +327,7 @@ it('returns job status', async () => {
 ```
 
 **Error Testing with Context:**
+
 ```typescript
 it('throws StateError for invalid transition', async () => {
   jobRepo.findById.mockResolvedValue({
@@ -322,17 +346,21 @@ it('throws StateError for invalid transition', async () => {
 ```
 
 **Custom Matcher Pattern:**
+
 ```typescript
-expect(auditLogger.log).toHaveBeenCalledWith(expect.objectContaining({
-  action: 'quota.exceeded',
-  actorId: 'system',
-  actorType: 'system',
-  tenantId: TENANT_ID,
-  metadata: expect.objectContaining({ dimension: 'jobs' }),
-}));
+expect(auditLogger.log).toHaveBeenCalledWith(
+  expect.objectContaining({
+    action: 'quota.exceeded',
+    actorId: 'system',
+    actorType: 'system',
+    tenantId: TENANT_ID,
+    metadata: expect.objectContaining({ dimension: 'jobs' }),
+  }),
+);
 ```
 
 **Cleanup Pattern for Resources:**
+
 ```typescript
 describe('UserTenantRepository (integration)', () => {
   const createdTenantIds: string[] = [];
@@ -351,18 +379,20 @@ describe('UserTenantRepository (integration)', () => {
 ## Test Configuration Details
 
 **Vitest Config (unit tests) — `packages/core/vitest.config.ts`:**
+
 ```typescript
 import { defineConfig } from 'vitest/config';
 
 export default defineConfig({
   test: {
-    globals: true,        // Enable globals (describe, it, expect)
-    environment: 'node',  // Node.js environment
+    globals: true, // Enable globals (describe, it, expect)
+    environment: 'node', // Node.js environment
   },
 });
 ```
 
 **Vitest Config (E2E) — `tests/vitest.config.ts`:**
+
 ```typescript
 import { defineConfig } from 'vitest/config';
 import { resolve } from 'node:path';
@@ -370,9 +400,9 @@ import { resolve } from 'node:path';
 export default defineConfig({
   test: {
     environment: 'node',
-    include: ['e2e/**/*.test.ts'],  // Only run files in e2e/
+    include: ['e2e/**/*.test.ts'], // Only run files in e2e/
     globals: false,
-    passWithNoTests: true,  // Don't fail if no tests found
+    passWithNoTests: true, // Don't fail if no tests found
   },
   resolve: {
     alias: {
@@ -386,6 +416,7 @@ export default defineConfig({
 ```
 
 **Key Settings:**
+
 - `globals: true` enables top-level `describe`, `it`, `expect` without imports
 - `globals: false` in E2E requires explicit imports for better test clarity
 - `environment: 'node'` (all tests use Node.js environment)
@@ -393,4 +424,4 @@ export default defineConfig({
 
 ---
 
-*Testing analysis: 2026-05-06*
+_Testing analysis: 2026-05-06_

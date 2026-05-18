@@ -1,6 +1,8 @@
-import { context, propagation, trace, SpanKind } from '@opentelemetry/api';
+import { context, propagation, trace, SpanKind, type Context } from '@opentelemetry/api';
 
-export function injectTraceContext<T extends Record<string, unknown>>(data: T): T & { _traceContext?: Record<string, string> } {
+export function injectTraceContext<T extends Record<string, unknown>>(
+  data: T,
+): T & { _traceContext?: Record<string, string> } {
   const carrier: Record<string, string> = {};
   propagation.inject(context.active(), carrier);
   if (Object.keys(carrier).length === 0) return data;
@@ -10,7 +12,7 @@ export function injectTraceContext<T extends Record<string, unknown>>(data: T): 
 export function extractTraceContext(
   jobData: Record<string, unknown>,
   spanName: string,
-): { ctx: import('@opentelemetry/api').Context; cleanup: () => void } {
+): { ctx: Context; cleanup: () => void } {
   const carrier = jobData._traceContext as Record<string, string> | undefined;
   if (!carrier) {
     return { ctx: context.active(), cleanup: () => {} };

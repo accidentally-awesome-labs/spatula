@@ -1,9 +1,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { SpatulaApiClient } from '../../../src/api/client.js';
-import {
-  runStatusCommand,
-  formatJobDetail,
-} from '../../../src/commands/status.js';
+import { runStatusCommand, formatJobDetail } from '../../../src/commands/status.js';
 
 // ---------------------------------------------------------------------------
 // Helpers

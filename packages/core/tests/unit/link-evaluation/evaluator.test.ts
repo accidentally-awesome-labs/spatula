@@ -117,9 +117,7 @@ describe('LLMLinkEvaluator', () => {
   });
 
   it('falls back to low-confidence scores on LLM failure', async () => {
-    const links: ExtractedLink[] = [
-      { url: 'https://example.com/page', text: 'Page' },
-    ];
+    const links: ExtractedLink[] = [{ url: 'https://example.com/page', text: 'Page' }];
 
     const llm = createMockLLM('invalid json');
     const evaluator = new LLMLinkEvaluator(llm, 'test-model');
@@ -132,17 +130,19 @@ describe('LLMLinkEvaluator', () => {
   });
 
   it('includes schema field names and job description in prompt', async () => {
-    const links: ExtractedLink[] = [
-      { url: 'https://example.com/page', text: 'Test' },
-    ];
+    const links: ExtractedLink[] = [{ url: 'https://example.com/page', text: 'Test' }];
 
-    const llm = createMockLLM(JSON.stringify([{
-      url: 'https://example.com/page',
-      relevanceScore: 0.5,
-      expectedContent: 'unknown',
-      priority: 'medium',
-      reasoning: 'test',
-    }]));
+    const llm = createMockLLM(
+      JSON.stringify([
+        {
+          url: 'https://example.com/page',
+          relevanceScore: 0.5,
+          expectedContent: 'unknown',
+          priority: 'medium',
+          reasoning: 'test',
+        },
+      ]),
+    );
 
     const evaluator = new LLMLinkEvaluator(llm, 'test-model');
     await evaluator.evaluate(links, MOCK_CONTEXT, MOCK_SCHEMA);

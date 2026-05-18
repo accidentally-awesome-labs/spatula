@@ -30,10 +30,23 @@ export function adminSystemRoutes() {
     // Queue health
     const queues: Record<string, unknown> = {};
     if (deps.queues) {
-      const queueNames = ['crawl', 'extract', 'schemaEvolution', 'reconciliation', 'export', 'webhook'] as const;
+      const queueNames = [
+        'crawl',
+        'extract',
+        'schemaEvolution',
+        'reconciliation',
+        'export',
+        'webhook',
+      ] as const;
       for (const name of queueNames) {
         try {
-          const counts = await deps.queues[name].getJobCounts('waiting', 'active', 'completed', 'failed', 'delayed');
+          const counts = await deps.queues[name].getJobCounts(
+            'waiting',
+            'active',
+            'completed',
+            'failed',
+            'delayed',
+          );
           queues[name] = counts;
         } catch {
           queues[name] = { error: 'unavailable' };
@@ -74,7 +87,14 @@ export function adminSystemRoutes() {
 
     const queues: Record<string, unknown> = {};
     if (deps.queues) {
-      const queueNames = ['crawl', 'extract', 'schemaEvolution', 'reconciliation', 'export', 'webhook'] as const;
+      const queueNames = [
+        'crawl',
+        'extract',
+        'schemaEvolution',
+        'reconciliation',
+        'export',
+        'webhook',
+      ] as const;
       for (const name of queueNames) {
         try {
           const counts = await deps.queues[name].getJobCounts('waiting', 'active', 'failed');

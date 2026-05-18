@@ -111,17 +111,16 @@ export async function runReviewCommand(): Promise<void> {
     const store = buildReviewStore(project.projectId);
     const validActions = actions.filter(
       (a): a is Record<string, unknown> & { id: string; type: string } =>
-        typeof a === 'object' && a !== null && typeof (a as any).id === 'string' && typeof (a as any).type === 'string',
+        typeof a === 'object' &&
+        a !== null &&
+        typeof (a as any).id === 'string' &&
+        typeof (a as any).type === 'string',
     );
     store.getState().setPendingActions(validActions);
 
     // Render the Ink app
     const { unmount, waitUntilExit } = render(
-      <ReviewApp
-        store={store}
-        backend={project.dataSource}
-        onExit={() => unmount()}
-      />,
+      <ReviewApp store={store} backend={project.dataSource} onExit={() => unmount()} />,
     );
 
     await waitUntilExit();

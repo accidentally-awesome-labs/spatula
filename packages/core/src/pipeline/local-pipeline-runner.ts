@@ -39,7 +39,6 @@ import type {
   ExportOrchestratorDeps,
   SchemaRepo,
   CrawlTaskInput,
-  CrawlTaskResult,
 } from './types.js';
 import type { ContentStore } from '../interfaces/content-store.js';
 
@@ -56,16 +55,30 @@ const DRAIN_TIMEOUT_MS = 10_000;
 interface TaskRepoLike {
   updateStatus(taskId: string, tenantId: string, status: string): Promise<unknown>;
   updateClassification(taskId: string, tenantId: string, classification: string): Promise<unknown>;
-  enqueue(data: { jobId: string; tenantId: string; url: string; depth: number; parentTaskId: string }): Promise<{ id: string }>;
-  findPending(jobId: string, options?: { limit?: number }): Promise<Array<{
-    id: string;
+  enqueue(data: {
+    jobId: string;
+    tenantId: string;
     url: string;
     depth: number;
-    priorityScore: number | null;
-    parentTaskId: string | null;
-    createdAt: string;
-  }>>;
-  getJobStats(jobId: string, tenantId: string): Promise<{
+    parentTaskId: string;
+  }): Promise<{ id: string }>;
+  findPending(
+    jobId: string,
+    options?: { limit?: number },
+  ): Promise<
+    Array<{
+      id: string;
+      url: string;
+      depth: number;
+      priorityScore: number | null;
+      parentTaskId: string | null;
+      createdAt: string;
+    }>
+  >;
+  getJobStats(
+    jobId: string,
+    tenantId: string,
+  ): Promise<{
     pending: number;
     inProgress: number;
     completed: number;
@@ -75,60 +88,114 @@ interface TaskRepoLike {
 }
 
 interface RunRepoLike {
-  create(data: { status: string; source: string; configSnapshot: Record<string, unknown>; startedAt: string }): Promise<{ id: string }>;
-  findLatestByStatus(statuses: string[]): Promise<{ id: string; configSnapshot: Record<string, unknown> } | null>;
+  create(data: {
+    status: string;
+    source: string;
+    configSnapshot: Record<string, unknown>;
+    startedAt: string;
+  }): Promise<{ id: string }>;
+  findLatestByStatus(
+    statuses: string[],
+  ): Promise<{ id: string; configSnapshot: Record<string, unknown> } | null>;
   updateStatus(id: string, status: string, completedAt?: string): Promise<void>;
   updateStats(id: string, stats: Record<string, unknown>): Promise<void>;
 }
 
 interface ExportRepoCreateLike {
-  create(data: { runId?: string; format: string; filePath: string; includeProvenance?: boolean }): Promise<{ id: string }>;
-  updateStatus(exportId: string, tenantId: string, data: {
-    status: 'processing' | 'completed' | 'failed';
-    entityCount?: number;
-    contentRef?: string;
-    fileSize?: number;
-    error?: string;
-    completedAt?: Date;
-  }): Promise<unknown>;
+  create(data: {
+    runId?: string;
+    format: string;
+    filePath: string;
+    includeProvenance?: boolean;
+  }): Promise<{ id: string }>;
+  updateStatus(
+    exportId: string,
+    tenantId: string,
+    data: {
+      status: 'processing' | 'completed' | 'failed';
+      entityCount?: number;
+      contentRef?: string;
+      fileSize?: number;
+      error?: string;
+      completedAt?: Date;
+    },
+  ): Promise<unknown>;
 }
 
 export interface ProjectAdapterForRunner {
   getProjectId(): string;
   jobRepo: {
-    findById(jobId: string, tenantId: string): Promise<{ id: string; config: unknown; status?: string } | null>;
+    findById(
+      jobId: string,
+      tenantId: string,
+    ): Promise<{ id: string; config: unknown; status?: string } | null>;
     updateStatus(jobId: string, tenantId: string, status: string): Promise<unknown>;
   };
   taskRepo: TaskRepoLike;
   pageRepo: {
     findByContentHash(hash: string, tenantId: string): Promise<{ id: string } | null>;
-    findByIds(ids: string[], tenantId: string): Promise<Array<{ id: string; metadata: Record<string, unknown> | null; createdAt: Date }>>;
-    create(data: { taskId: string; tenantId: string; contentRef: string; contentHash: string; metadata: Record<string, unknown> }): Promise<{ id: string }>;
+    findByIds(
+      ids: string[],
+      tenantId: string,
+    ): Promise<Array<{ id: string; metadata: Record<string, unknown> | null; createdAt: Date }>>;
+    create(data: {
+      taskId: string;
+      tenantId: string;
+      contentRef: string;
+      contentHash: string;
+      metadata: Record<string, unknown>;
+    }): Promise<{ id: string }>;
     /** Flag all pages for a job as needing re-extraction. Optional — re-extraction skipped if missing. */
     flagForReextraction?(jobId: string, reason: string): Promise<number>;
     /** Find pages flagged for re-extraction. Optional — re-extraction skipped if missing. */
-    findNeedingReextraction?(jobId: string): Promise<Array<{ id: string; url: string | null; contentRef: string }>>;
+    findNeedingReextraction?(
+      jobId: string,
+    ): Promise<Array<{ id: string; url: string | null; contentRef: string }>>;
     /** Clear re-extraction flags after processing. Optional. */
     clearReextractionFlag?(pageIds: string[]): Promise<void>;
   };
   extractionRepo: {
     store(data: unknown): Promise<unknown>;
-    findByJob(jobId: string, tenantId: string, options?: { schemaVersion?: number; limit?: number; offset?: number }): Promise<Array<{
-      id: string; jobId: string; pageId: string; schemaVersion: number; data: unknown; metadata: unknown;
-    }>>;
+    findByJob(
+      jobId: string,
+      tenantId: string,
+      options?: { schemaVersion?: number; limit?: number; offset?: number },
+    ): Promise<
+      Array<{
+        id: string;
+        jobId: string;
+        pageId: string;
+        schemaVersion: number;
+        data: unknown;
+        metadata: unknown;
+      }>
+    >;
   };
   schemaRepo: {
-    findLatest(jobId: string, tenantId: string): Promise<{ id: string; version: number; definition: unknown } | null>;
+    findLatest(
+      jobId: string,
+      tenantId: string,
+    ): Promise<{ id: string; version: number; definition: unknown } | null>;
     create(data: unknown): Promise<unknown>;
   };
   entityRepo: {
     create(data: unknown): Promise<{ id: string }>;
-    findByJob(jobId: string, tenantId: string, options?: { limit: number; offset: number }): Promise<unknown[]>;
-    findByJobWithProvenance(jobId: string, tenantId: string, options?: { limit: number; offset: number }): Promise<unknown[]>;
+    findByJob(
+      jobId: string,
+      tenantId: string,
+      options?: { limit: number; offset: number },
+    ): Promise<unknown[]>;
+    findByJobWithProvenance(
+      jobId: string,
+      tenantId: string,
+      options?: { limit: number; offset: number },
+    ): Promise<unknown[]>;
     countByJob(jobId: string, tenantId: string): Promise<number>;
   };
   entitySourceRepo: {
-    bulkLink(links: Array<{ entityId: string; extractionId: string; matchConfidence: number }>): Promise<unknown>;
+    bulkLink(
+      links: Array<{ entityId: string; extractionId: string; matchConfidence: number }>,
+    ): Promise<unknown>;
   };
   sourceTrustRepo: {
     upsert(data: unknown): Promise<unknown>;
@@ -146,7 +213,7 @@ export interface ProjectAdapterForRunner {
 
 export interface LocalPipelineConfig {
   adapter: ProjectAdapterForRunner;
-  config: any;  // Resolved JobConfig
+  config: any; // Resolved JobConfig
   projectDir: string;
   crawler: any;
   extractor: any;
@@ -185,7 +252,8 @@ export class LocalPipelineRunner {
   private readonly emitter = new PipelineEventEmitter();
   private isPaused = false;
   private runId: string | null = null;
-  private lock: { acquire(force?: boolean): boolean; release(): void; isAcquired: boolean } | null = null;
+  private lock: { acquire(force?: boolean): boolean; release(): void; isAcquired: boolean } | null =
+    null;
   private inflightCount = 0;
   /** Track task IDs currently in-flight to prevent re-enqueue from loadPendingIntoQueue. */
   private readonly inflightTaskIds = new Set<string>();
@@ -246,7 +314,8 @@ export class LocalPipelineRunner {
 
       // Step 5b: Seed URL enqueue — first run or new seeds from config diff
       const stats = await adapter.taskRepo.getJobStats(projectId, projectId);
-      const totalExistingTasks = stats.pending + stats.inProgress + stats.completed + stats.failed + stats.skipped;
+      const totalExistingTasks =
+        stats.pending + stats.inProgress + stats.completed + stats.failed + stats.skipped;
 
       if (totalExistingTasks === 0) {
         // First run — enqueue all seeds
@@ -271,7 +340,10 @@ export class LocalPipelineRunner {
             parentTaskId: '',
           });
         }
-        logger.info({ seedCount: configDiff.seedsAdded.length }, 'new seed URLs enqueued from config diff');
+        logger.info(
+          { seedCount: configDiff.seedsAdded.length },
+          'new seed URLs enqueued from config diff',
+        );
       }
 
       // Step 7: Initialize page budget
@@ -346,7 +418,10 @@ export class LocalPipelineRunner {
     if (typeof repo.resetInProgressToPending === 'function') {
       await repo.resetInProgressToPending(projectId);
     } else if (typeof repo.findByStatus === 'function') {
-      const inProgressTasks: Array<{ id: string }> = await repo.findByStatus(projectId, 'in_progress');
+      const inProgressTasks: Array<{ id: string }> = await repo.findByStatus(
+        projectId,
+        'in_progress',
+      );
       for (const task of inProgressTasks) {
         await this.cfg.adapter.taskRepo.updateStatus(task.id, projectId, 'pending');
       }
@@ -401,8 +476,11 @@ export class LocalPipelineRunner {
           diff.fieldsAdded.length > 0 && `${diff.fieldsAdded.length} fields added`,
           diff.fieldsRemoved.length > 0 && `${diff.fieldsRemoved.length} fields removed`,
           diff.fieldsModified.length > 0 && `${diff.fieldsModified.length} fields modified`,
-          diff.schemaModeChanged && `schema mode changed: ${diff.schemaModeChanged.from} → ${diff.schemaModeChanged.to}`,
-        ].filter(Boolean).join(', ');
+          diff.schemaModeChanged &&
+            `schema mode changed: ${diff.schemaModeChanged.from} → ${diff.schemaModeChanged.to}`,
+        ]
+          .filter(Boolean)
+          .join(', ');
 
         const flagged = await this.cfg.adapter.pageRepo.flagForReextraction(projectId, reason);
         logger.info({ flagged, reason }, 'pages flagged for re-extraction');
@@ -410,7 +488,10 @@ export class LocalPipelineRunner {
 
       return diff;
     } catch (err) {
-      logger.warn({ error: (err as Error).message }, 'config diff failed — continuing without diff');
+      logger.warn(
+        { error: (err as Error).message },
+        'config diff failed — continuing without diff',
+      );
       return null;
     }
   }
@@ -530,12 +611,11 @@ export class LocalPipelineRunner {
       this.inflightTaskIds.add(item.taskId);
 
       // Fire-and-forget (bounded by semaphore)
-      this.processTaskWithRetry(item, projectId, jobConfig, queue, budget)
-        .finally(() => {
-          sem.release();
-          this.inflightCount--;
-          this.inflightTaskIds.delete(item.taskId);
-        });
+      this.processTaskWithRetry(item, projectId, jobConfig, queue, budget).finally(() => {
+        sem.release();
+        this.inflightCount--;
+        this.inflightTaskIds.delete(item.taskId);
+      });
     }
 
     // Wait for in-flight tasks to drain
@@ -545,7 +625,7 @@ export class LocalPipelineRunner {
   private async processTaskWithRetry(
     item: CrawlQueueItem,
     projectId: string,
-    jobConfig: any,
+    _jobConfig: any,
     queue: PriorityQueue<CrawlQueueItem>,
     budget: InMemoryPageBudget,
   ): Promise<void> {
@@ -673,7 +753,6 @@ export class LocalPipelineRunner {
         }
 
         return; // Done with this task
-
       } catch (err) {
         if (attempt < MAX_RETRIES) {
           const retryBase = this.cfg.retryBaseMs ?? RETRY_BASE_MS;
@@ -715,7 +794,10 @@ export class LocalPipelineRunner {
       deps,
     );
     if (result.evolved) {
-      logger.info({ newVersion: result.newVersion, actions: result.actionsApplied }, 'schema evolved');
+      logger.info(
+        { newVersion: result.newVersion, actions: result.actionsApplied },
+        'schema evolved',
+      );
       this.emitter.emit('schema:evolved', {
         version: result.newVersion ?? 0,
         fields: [],
@@ -735,10 +817,7 @@ export class LocalPipelineRunner {
       entitySourceRepo: this.cfg.adapter.entitySourceRepo,
       sourceTrustRepo: this.cfg.adapter.sourceTrustRepo,
     };
-    const result = await processReconciliation(
-      { jobId: projectId, tenantId: projectId },
-      deps,
-    );
+    const result = await processReconciliation({ jobId: projectId, tenantId: projectId }, deps);
     logger.info(
       { entitiesCreated: result.entitiesCreated, actions: result.actionsGenerated },
       'reconciliation complete',
@@ -825,11 +904,7 @@ export class LocalPipelineRunner {
     errorMessage?: string,
   ): Promise<void> {
     if (this.runId) {
-      await this.cfg.adapter.runRepo.updateStatus(
-        this.runId,
-        status,
-        new Date().toISOString(),
-      );
+      await this.cfg.adapter.runRepo.updateStatus(this.runId, status, new Date().toISOString());
       await this.cfg.adapter.runRepo.updateStats(this.runId, {
         pagesCrawled: this.pagesProcessed,
         errorMessage: errorMessage ?? null,

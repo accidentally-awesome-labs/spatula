@@ -72,7 +72,9 @@ export function ReviewView({ store, backend }: ReviewViewProps): React.ReactElem
         store.getState().setReviewIndex(0);
       })
       .catch((err) => {
-        store.getState().setError(err instanceof Error ? err.message : 'Failed to approve all actions');
+        store
+          .getState()
+          .setError(err instanceof Error ? err.message : 'Failed to approve all actions');
       });
   }, [activeJobId, backend, store, pendingActions]);
 
@@ -99,7 +101,9 @@ export function ReviewView({ store, backend }: ReviewViewProps): React.ReactElem
   if (pendingActions.length === 0) {
     return (
       <Box flexDirection="column" flexGrow={1}>
-        <Text color="green" bold>No pending actions to review.</Text>
+        <Text color="green" bold>
+          No pending actions to review.
+        </Text>
         <Text dimColor>New actions will appear here as the crawl progresses.</Text>
       </Box>
     );

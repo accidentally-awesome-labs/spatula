@@ -86,9 +86,7 @@ export class ApiKeyRepository {
           revokedAt: apiKeys.revokedAt,
         })
         .from(apiKeys)
-        .where(
-          and(eq(apiKeys.tenantId, tenantId), isNull(apiKeys.revokedAt)),
-        );
+        .where(and(eq(apiKeys.tenantId, tenantId), isNull(apiKeys.revokedAt)));
     } catch (error) {
       throw new StorageError(`Failed to list API keys: ${(error as Error).message}`, {
         cause: error as Error,

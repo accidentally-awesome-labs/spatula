@@ -21,7 +21,9 @@ let totalTokens = 0;
 let totalCalls = 0;
 
 /** Track tokens from each response. */
-function trackUsage(response: { usage: { promptTokens: number; completionTokens: number; totalTokens: number } }) {
+function trackUsage(response: {
+  usage: { promptTokens: number; completionTokens: number; totalTokens: number };
+}) {
   totalTokens += response.usage.totalTokens;
   totalCalls += 1;
 }

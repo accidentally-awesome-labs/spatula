@@ -14,8 +14,7 @@ const BASELINE_PATH = join(__dirname, 'baseline.schema.sql');
 const NORMALIZER = join(REPO_ROOT, 'scripts/normalize-schema-dump.sh');
 
 const DATABASE_URL =
-  process.env.TEST_DATABASE_URL ??
-  'postgresql://spatula:spatula@localhost:5432/spatula_test';
+  process.env.TEST_DATABASE_URL ?? 'postgresql://spatula:spatula@localhost:5432/spatula_test';
 
 /**
  * Run `pg_dump --schema-only` against DATABASE_URL and pipe through the Wave 4
@@ -83,14 +82,21 @@ describe('private-contract SQL schema lint', () => {
       // Apply the v1 baseline migration to the test DB. Idempotent enough:
       // run-migrate.ts skips already-applied migrations via the namespaced
       // __drizzle_migrations_oss journal.
-      await execFileAsync('pnpm', ['--filter', '@spatula/db', 'exec', 'tsx', 'src/run-migrate.ts'], {
-        env: { ...process.env, DATABASE_URL },
-        cwd: REPO_ROOT,
-      });
+      await execFileAsync(
+        'pnpm',
+        ['--filter', '@spatula/db', 'exec', 'tsx', 'src/run-migrate.ts'],
+        {
+          env: { ...process.env, DATABASE_URL },
+          cwd: REPO_ROOT,
+        },
+      );
       setupOk = true;
     } catch (err) {
       // eslint-disable-next-line no-console
-      console.warn('[schema-lint.test.ts] Skipping — migration apply failed:', (err as Error).message);
+      console.warn(
+        '[schema-lint.test.ts] Skipping — migration apply failed:',
+        (err as Error).message,
+      );
     }
   }, 60_000);
 

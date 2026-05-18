@@ -14,44 +14,44 @@
 
 ### New Files
 
-| File | Responsibility |
-|------|---------------|
-| `packages/shared/src/webhook-types.ts` | Webhook event types, payload shape, event type enum |
-| `packages/queue/src/webhook-sender.ts` | WebhookSender class — sign, serialize, POST |
-| `packages/queue/src/webhook-worker.ts` | BullMQ worker consuming `spatula.webhooks` queue |
-| `apps/api/src/routes/batch-actions.ts` | `POST /api/v1/actions/batch` (approve/reject) |
-| `apps/api/src/routes/batch-jobs.ts` | `POST /api/v1/jobs/batch` (cancel/delete) |
-| `apps/api/src/middleware/timeout.ts` | Request timeout middleware (30s default, 5min exports) |
-| `packages/core/src/diagnostics/health-check.ts` | HealthCheck interface + registry |
-| `packages/core/src/diagnostics/system-checks.ts` | 5 system-level health checks |
-| `packages/core/src/diagnostics/server-checks.ts` | 4 server-level health checks |
-| `apps/cli/src/commands/doctor.ts` | `spatula doctor` command |
+| File                                             | Responsibility                                         |
+| ------------------------------------------------ | ------------------------------------------------------ |
+| `packages/shared/src/webhook-types.ts`           | Webhook event types, payload shape, event type enum    |
+| `packages/queue/src/webhook-sender.ts`           | WebhookSender class — sign, serialize, POST            |
+| `packages/queue/src/webhook-worker.ts`           | BullMQ worker consuming `spatula.webhooks` queue       |
+| `apps/api/src/routes/batch-actions.ts`           | `POST /api/v1/actions/batch` (approve/reject)          |
+| `apps/api/src/routes/batch-jobs.ts`              | `POST /api/v1/jobs/batch` (cancel/delete)              |
+| `apps/api/src/middleware/timeout.ts`             | Request timeout middleware (30s default, 5min exports) |
+| `packages/core/src/diagnostics/health-check.ts`  | HealthCheck interface + registry                       |
+| `packages/core/src/diagnostics/system-checks.ts` | 5 system-level health checks                           |
+| `packages/core/src/diagnostics/server-checks.ts` | 4 server-level health checks                           |
+| `apps/cli/src/commands/doctor.ts`                | `spatula doctor` command                               |
 
 ### Modified Files
 
-| File | Change |
-|------|--------|
-| `packages/queue/src/queues.ts` | Add `WEBHOOK` to `QUEUE_NAMES`, update `SpatulaQueues` + `createQueues()` |
-| `packages/queue/src/worker-entrypoint.ts` | Register webhook worker |
-| `apps/api/src/routes/admin-queues.ts` | Add 6th queue adapter for Bull Board |
-| `apps/api/src/schemas/job.ts` | Add optional `webhooks` field to `createJobSchema` |
-| `apps/api/src/app.ts` | Add timeout middleware to chain, register batch routes |
-| `apps/cli/src/index.tsx` | Register `doctor` command |
-| `packages/core/src/index.ts` | Export diagnostics barrel |
-| `packages/shared/src/index.ts` | Export webhook types |
+| File                                      | Change                                                                    |
+| ----------------------------------------- | ------------------------------------------------------------------------- |
+| `packages/queue/src/queues.ts`            | Add `WEBHOOK` to `QUEUE_NAMES`, update `SpatulaQueues` + `createQueues()` |
+| `packages/queue/src/worker-entrypoint.ts` | Register webhook worker                                                   |
+| `apps/api/src/routes/admin-queues.ts`     | Add 6th queue adapter for Bull Board                                      |
+| `apps/api/src/schemas/job.ts`             | Add optional `webhooks` field to `createJobSchema`                        |
+| `apps/api/src/app.ts`                     | Add timeout middleware to chain, register batch routes                    |
+| `apps/cli/src/index.tsx`                  | Register `doctor` command                                                 |
+| `packages/core/src/index.ts`              | Export diagnostics barrel                                                 |
+| `packages/shared/src/index.ts`            | Export webhook types                                                      |
 
 ### Test Files
 
-| File | Tests |
-|------|-------|
-| `packages/queue/tests/unit/webhook-sender.test.ts` | WebhookSender sign, send, error handling |
-| `packages/queue/tests/unit/webhook-worker.test.ts` | Worker backoff strategy, sender invocation |
-| `apps/api/tests/unit/routes/batch-actions.test.ts` | Batch approve/reject, partial failure, max 100 |
-| `apps/api/tests/unit/routes/batch-jobs.test.ts` | Batch cancel/delete, partial failure, max 100 |
-| `apps/api/tests/unit/middleware/timeout.test.ts` | Timeout triggers 504, normal request passes |
-| `packages/core/tests/unit/diagnostics/health-check.test.ts` | Registry, run by category, pass/fail/warn |
-| `packages/core/tests/unit/diagnostics/system-checks.test.ts` | Each system check |
-| `apps/cli/tests/unit/commands/doctor.test.ts` | Doctor command output formatting |
+| File                                                         | Tests                                          |
+| ------------------------------------------------------------ | ---------------------------------------------- |
+| `packages/queue/tests/unit/webhook-sender.test.ts`           | WebhookSender sign, send, error handling       |
+| `packages/queue/tests/unit/webhook-worker.test.ts`           | Worker backoff strategy, sender invocation     |
+| `apps/api/tests/unit/routes/batch-actions.test.ts`           | Batch approve/reject, partial failure, max 100 |
+| `apps/api/tests/unit/routes/batch-jobs.test.ts`              | Batch cancel/delete, partial failure, max 100  |
+| `apps/api/tests/unit/middleware/timeout.test.ts`             | Timeout triggers 504, normal request passes    |
+| `packages/core/tests/unit/diagnostics/health-check.test.ts`  | Registry, run by category, pass/fail/warn      |
+| `packages/core/tests/unit/diagnostics/system-checks.test.ts` | Each system check                              |
+| `apps/cli/tests/unit/commands/doctor.test.ts`                | Doctor command output formatting               |
 
 ---
 
@@ -60,6 +60,7 @@
 ### Task 1: Webhook Types
 
 **Files:**
+
 - Create: `packages/shared/src/webhook-types.ts`
 - Modify: `packages/shared/src/index.ts`
 
@@ -123,6 +124,7 @@ git commit -m "feat(shared): add webhook event types and config"
 ### Task 2: WebhookSender
 
 **Files:**
+
 - Create: `packages/queue/src/webhook-sender.ts`
 - Create: `packages/queue/tests/unit/webhook-sender.test.ts`
 
@@ -191,7 +193,9 @@ describe('WebhookSender', () => {
       data: { jobId: 'job-1', tenantId: 'tenant-1' },
     };
 
-    await expect(sender.send('https://example.com/webhook', event)).rejects.toThrow('Webhook delivery failed: 500');
+    await expect(sender.send('https://example.com/webhook', event)).rejects.toThrow(
+      'Webhook delivery failed: 500',
+    );
   });
 
   it('throws on fetch error (network failure)', async () => {
@@ -287,6 +291,7 @@ git commit -m "feat(queue): add WebhookSender with HMAC-SHA256 signing"
 ### Task 3: Webhook Queue Infrastructure + Worker
 
 **Files:**
+
 - Modify: `packages/queue/src/queues.ts`
 - Create: `packages/queue/src/webhook-worker.ts`
 - Modify: `packages/queue/src/worker-entrypoint.ts`
@@ -357,7 +362,10 @@ export function createWebhookWorker(connection: ConnectionOptions): Worker<Webho
     QUEUE_NAMES.WEBHOOK,
     async (job: Job<WebhookJobData>) => {
       const { url, event, secret } = job.data;
-      logger.info({ eventId: event.id, eventType: event.type, url, attempt: job.attemptsMade + 1 }, 'delivering webhook');
+      logger.info(
+        { eventId: event.id, eventType: event.type, url, attempt: job.attemptsMade + 1 },
+        'delivering webhook',
+      );
       await sender.send(url, event, secret);
     },
     {
@@ -372,7 +380,15 @@ export function createWebhookWorker(connection: ConnectionOptions): Worker<Webho
   );
 
   worker.on('failed', (job, err) => {
-    logger.warn({ jobId: job?.id, eventId: job?.data.event.id, error: err.message, attempt: job?.attemptsMade }, 'webhook delivery failed');
+    logger.warn(
+      {
+        jobId: job?.id,
+        eventId: job?.data.event.id,
+        error: err.message,
+        attempt: job?.attemptsMade,
+      },
+      'webhook delivery failed',
+    );
   });
 
   return worker;
@@ -429,6 +445,7 @@ git commit -m "feat(queue): add webhook queue, worker, and Bull Board registrati
 ### Task 4: Webhook Config Schema + Event Enqueue Helper
 
 **Files:**
+
 - Modify: `apps/api/src/schemas/job.ts`
 - Modify: `packages/queue/src/webhook-sender.ts` (add enqueue helper)
 
@@ -476,13 +493,15 @@ export function enqueueWebhookIfConfigured(
     data,
   };
 
-  webhookQueue.add('webhook', {
-    url: webhookConfig.url,
-    event,
-    secret: webhookConfig.secret,
-  }).catch((err) => {
-    logger.warn({ err, eventType }, 'failed to enqueue webhook event');
-  });
+  webhookQueue
+    .add('webhook', {
+      url: webhookConfig.url,
+      event,
+      secret: webhookConfig.secret,
+    })
+    .catch((err) => {
+      logger.warn({ err, eventType }, 'failed to enqueue webhook event');
+    });
 }
 ```
 
@@ -496,6 +515,7 @@ The 5 integration points where `enqueueWebhookIfConfigured` should be called (af
 - **action.pending**: In the schema evolution orchestrator after creating new actions.
 
 Pattern at each integration point:
+
 ```typescript
 import { enqueueWebhookIfConfigured } from '@spatula/queue';
 // ...
@@ -530,6 +550,7 @@ git commit -m "feat: add webhook config schema and wire event integration points
 ### Task 5: Batch Actions Endpoint
 
 **Files:**
+
 - Create: `apps/api/src/routes/batch-actions.ts`
 - Create: `apps/api/tests/unit/routes/batch-actions.test.ts`
 - Modify: `apps/api/src/app.ts`
@@ -630,7 +651,11 @@ describe('POST /api/v1/actions/batch', () => {
   });
 
   it('handles reject action', async () => {
-    deps.actionRepo.findById.mockResolvedValue({ id: 'act-1', status: 'pending_review', tenantId: 'tenant-1' });
+    deps.actionRepo.findById.mockResolvedValue({
+      id: 'act-1',
+      status: 'pending_review',
+      tenantId: 'tenant-1',
+    });
     deps.actionRepo.updateStatus.mockResolvedValue({});
 
     const res = await app.request('/api/v1/actions/batch', {
@@ -640,7 +665,12 @@ describe('POST /api/v1/actions/batch', () => {
     });
 
     expect(res.status).toBe(200);
-    expect(deps.actionRepo.updateStatus).toHaveBeenCalledWith('act-1', 'tenant-1', 'rejected', 'user-1');
+    expect(deps.actionRepo.updateStatus).toHaveBeenCalledWith(
+      'act-1',
+      'tenant-1',
+      'rejected',
+      'user-1',
+    );
   });
 });
 ```
@@ -711,7 +741,10 @@ export function batchActionRoutes() {
       });
     }
 
-    logger.info({ action, total: ids.length, succeeded: succeeded.length, failed: failed.length }, 'batch action complete');
+    logger.info(
+      { action, total: ids.length, succeeded: succeeded.length, failed: failed.length },
+      'batch action complete',
+    );
     return c.json({ data: { succeeded, failed } });
   });
 
@@ -748,6 +781,7 @@ git commit -m "feat(api): add POST /api/v1/actions/batch for bulk approve/reject
 ### Task 6: Batch Jobs Endpoint
 
 **Files:**
+
 - Create: `apps/api/src/routes/batch-jobs.ts`
 - Create: `apps/api/tests/unit/routes/batch-jobs.test.ts`
 - Modify: `apps/api/src/app.ts`
@@ -841,7 +875,11 @@ describe('POST /api/v1/jobs/batch', () => {
   });
 
   it('rejects cancel on already-completed job', async () => {
-    deps.jobRepo.findById.mockResolvedValue({ id: 'job-1', status: 'completed', tenantId: 'tenant-1' });
+    deps.jobRepo.findById.mockResolvedValue({
+      id: 'job-1',
+      status: 'completed',
+      tenantId: 'tenant-1',
+    });
 
     const res = await app.request('/api/v1/jobs/batch', {
       method: 'POST',
@@ -940,7 +978,10 @@ export function batchJobRoutes() {
       });
     }
 
-    logger.info({ action, total: ids.length, succeeded: succeeded.length, failed: failed.length }, 'batch job operation complete');
+    logger.info(
+      { action, total: ids.length, succeeded: succeeded.length, failed: failed.length },
+      'batch job operation complete',
+    );
     return c.json({ data: { succeeded, failed } });
   });
 
@@ -981,6 +1022,7 @@ git commit -m "feat(api): add POST /api/v1/jobs/batch for bulk cancel/delete"
 ### Task 7: Request Timeout Middleware
 
 **Files:**
+
 - Create: `apps/api/src/middleware/timeout.ts`
 - Create: `apps/api/tests/unit/middleware/timeout.test.ts`
 - Modify: `apps/api/src/app.ts`
@@ -1019,10 +1061,13 @@ describe('timeoutMiddleware', () => {
 
   it('uses route-specific timeout when configured', async () => {
     const app = new Hono();
-    app.use('*', timeoutMiddleware({
-      defaultMs: 50,
-      overrides: { '/api/v1/exports/:exportId/download': 5000 },
-    }));
+    app.use(
+      '*',
+      timeoutMiddleware({
+        defaultMs: 50,
+        overrides: { '/api/v1/exports/:exportId/download': 5000 },
+      }),
+    );
     app.get('/api/v1/exports/:exportId/download', async (c) => {
       await new Promise((r) => setTimeout(r, 100));
       return c.json({ ok: true });
@@ -1072,7 +1117,13 @@ export function timeoutMiddleware(config: TimeoutConfig): MiddlewareHandler {
       if ((err as Error).message === 'TIMEOUT') {
         logger.warn({ path: c.req.path, timeoutMs }, 'request timed out');
         return c.json(
-          { error: { code: 'TIMEOUT', message: `Request timed out after ${timeoutMs}ms`, requestId: '' } },
+          {
+            error: {
+              code: 'TIMEOUT',
+              message: `Request timed out after ${timeoutMs}ms`,
+              requestId: '',
+            },
+          },
           504,
         );
       }
@@ -1099,12 +1150,15 @@ In `apps/api/src/app.ts`, add after `securityHeaders()` and before CORS:
 ```typescript
 import { timeoutMiddleware } from './middleware/timeout.js';
 
-app.use('*', timeoutMiddleware({
-  defaultMs: 30_000,
-  overrides: {
-    '/api/v1/exports/:exportId/download': 300_000, // 5 minutes
-  },
-}));
+app.use(
+  '*',
+  timeoutMiddleware({
+    defaultMs: 30_000,
+    overrides: {
+      '/api/v1/exports/:exportId/download': 300_000, // 5 minutes
+    },
+  }),
+);
 ```
 
 - [ ] **Step 5: Run tests**
@@ -1129,6 +1183,7 @@ git commit -m "feat(api): add request timeout middleware (30s default, 5min expo
 ### Task 8: HealthCheck Interface + Registry
 
 **Files:**
+
 - Create: `packages/core/src/diagnostics/health-check.ts`
 - Create: `packages/core/tests/unit/diagnostics/health-check.test.ts`
 - Modify: `packages/core/src/index.ts`
@@ -1191,7 +1246,9 @@ describe('HealthCheckRegistry', () => {
     registry.register({
       name: 'broken',
       category: 'system',
-      run: async () => { throw new Error('Unexpected'); },
+      run: async () => {
+        throw new Error('Unexpected');
+      },
     });
 
     const results = await registry.runChecks(['system']);
@@ -1296,6 +1353,7 @@ git commit -m "feat(core): add HealthCheck interface and pluggable registry"
 ### Task 9: System + Server Health Checks
 
 **Files:**
+
 - Create: `packages/core/src/diagnostics/system-checks.ts`
 - Create: `packages/core/src/diagnostics/server-checks.ts`
 - Create: `packages/core/tests/unit/diagnostics/system-checks.test.ts`
@@ -1427,7 +1485,9 @@ export function createSystemChecks(): HealthCheck[] {
             signal: AbortSignal.timeout(3000),
           });
           if (res.ok) return { status: 'pass', message: 'Ollama is reachable' };
-        } catch { /* ignore */ }
+        } catch {
+          /* ignore */
+        }
 
         // Check OpenRouter
         if (process.env.OPENROUTER_API_KEY) {
@@ -1445,7 +1505,10 @@ export function createSystemChecks(): HealthCheck[] {
           execFileSync('npx', ['playwright', '--version'], { stdio: 'pipe', timeout: 10000 });
           return { status: 'pass', message: 'Playwright browsers installed' };
         } catch {
-          return { status: 'warn', message: 'Playwright not installed (run: npx playwright install)' };
+          return {
+            status: 'warn',
+            message: 'Playwright not installed (run: npx playwright install)',
+          };
         }
       },
     },
@@ -1572,7 +1635,7 @@ const serverConfig: ServerCheckConfig = {
       const { default: pg } = await import('pg');
       const client = new pg.Client({ connectionString: url, connectionTimeoutMillis: 5000 });
       await client.connect();
-      const result = await client.query("SELECT COUNT(*) FROM drizzle.__drizzle_migrations");
+      const result = await client.query('SELECT COUNT(*) FROM drizzle.__drizzle_migrations');
       await client.end();
       return { status: 'pass', message: `${result.rows[0].count} migrations applied` };
     } catch (err) {
@@ -1610,6 +1673,7 @@ git commit -m "feat(core): add 5 system + 4 server health checks"
 ### Task 10: Doctor Command + CLI Registration
 
 **Files:**
+
 - Create: `apps/cli/src/commands/doctor.ts`
 - Create: `apps/cli/tests/unit/commands/doctor.test.ts`
 - Modify: `apps/cli/src/index.tsx`
@@ -1715,10 +1779,7 @@ export function formatCheckResults(results: CheckResult[]): string {
       lines.push('  ' + '-'.repeat(40));
     }
 
-    const icon =
-      result.status === 'pass' ? ' PASS' :
-      result.status === 'warn' ? ' WARN' :
-      ' FAIL';
+    const icon = result.status === 'pass' ? ' PASS' : result.status === 'warn' ? ' WARN' : ' FAIL';
     lines.push(`  ${icon}  ${result.name} — ${result.message}`);
   }
 
@@ -1741,7 +1802,9 @@ export async function runDoctorCommand(): Promise<void> {
   const categories = determineCategoriesFromContext({ hasEnv, hasProject });
 
   console.log('\nSpatula Doctor\n');
-  console.log(`  Context: ${hasProject ? 'inside project' : 'no project'}, ${hasEnv ? '.env found' : 'no .env'}`);
+  console.log(
+    `  Context: ${hasProject ? 'inside project' : 'no project'}, ${hasEnv ? '.env found' : 'no .env'}`,
+  );
 
   // Build registry
   const registry = new HealthCheckRegistry();

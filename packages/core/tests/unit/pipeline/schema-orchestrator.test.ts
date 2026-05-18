@@ -1,10 +1,7 @@
 // packages/core/tests/unit/pipeline/schema-orchestrator.test.ts
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { processSchemaEvolution } from '../../../src/pipeline/schema-orchestrator.js';
-import type {
-  SchemaOrchestratorDeps,
-  SchemaEvolutionInput,
-} from '../../../src/pipeline/types.js';
+import type { SchemaOrchestratorDeps, SchemaEvolutionInput } from '../../../src/pipeline/types.js';
 
 function createMockSchema() {
   return {

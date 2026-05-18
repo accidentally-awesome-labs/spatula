@@ -184,7 +184,9 @@ describe('OpenRouterClient', () => {
     it('calls recorder.record() with token counts after successful complete()', async () => {
       const recorder = { record: vi.fn() };
       client.setUsageRecorder(recorder);
-      mockFetch.mockResolvedValue(mockResponse(successBody('Hello', 'anthropic/claude-sonnet-4-20250514')));
+      mockFetch.mockResolvedValue(
+        mockResponse(successBody('Hello', 'anthropic/claude-sonnet-4-20250514')),
+      );
 
       await client.complete(basicRequest);
 
@@ -221,9 +223,7 @@ describe('OpenRouterClient', () => {
 
       await client.complete(basicRequest);
 
-      expect(recorder.record).toHaveBeenCalledWith(
-        expect.objectContaining({ costUsd: 0.00042 }),
-      );
+      expect(recorder.record).toHaveBeenCalledWith(expect.objectContaining({ costUsd: 0.00042 }));
     });
 
     it('defaults costUsd to 0 when x-openrouter-cost header is absent', async () => {
@@ -233,9 +233,7 @@ describe('OpenRouterClient', () => {
 
       await client.complete(basicRequest);
 
-      expect(recorder.record).toHaveBeenCalledWith(
-        expect.objectContaining({ costUsd: 0 }),
-      );
+      expect(recorder.record).toHaveBeenCalledWith(expect.objectContaining({ costUsd: 0 }));
     });
   });
 });

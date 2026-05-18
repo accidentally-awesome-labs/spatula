@@ -141,7 +141,11 @@ export async function processReconciliation(
         tenantId,
         data: {
           entityId: dbEntity.id,
-          name: String(entity.mergedData.name ?? entity.mergedData.title ?? `Entity ${dbEntity.id.slice(0, 8)}`),
+          name: String(
+            entity.mergedData.name ??
+              entity.mergedData.title ??
+              `Entity ${dbEntity.id.slice(0, 8)}`,
+          ),
         },
       });
     }

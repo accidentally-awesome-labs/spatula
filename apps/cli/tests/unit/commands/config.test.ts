@@ -2,7 +2,9 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { getEditorCommand } from '../../../src/commands/config.js';
 
 describe('getEditorCommand', () => {
-  beforeEach(() => { vi.unstubAllEnvs(); });
+  beforeEach(() => {
+    vi.unstubAllEnvs();
+  });
 
   it('uses $EDITOR when set', () => {
     vi.stubEnv('EDITOR', 'code --wait');

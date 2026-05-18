@@ -16,8 +16,18 @@ const schema: SchemaDefinition = {
 };
 
 const entities = [
-  { mergedData: { name: 'Widget', price: 9.99, tags: ['sale', 'new'] }, qualityScore: 0.9, categories: [], sourceCount: 1 },
-  { mergedData: { name: 'Gadget', price: null, tags: null }, qualityScore: 0.8, categories: [], sourceCount: 1 },
+  {
+    mergedData: { name: 'Widget', price: 9.99, tags: ['sale', 'new'] },
+    qualityScore: 0.9,
+    categories: [],
+    sourceCount: 1,
+  },
+  {
+    mergedData: { name: 'Gadget', price: null, tags: null },
+    qualityScore: 0.8,
+    categories: [],
+    sourceCount: 1,
+  },
 ];
 
 describe('SqliteExporter', () => {

@@ -40,10 +40,7 @@ export class CrawlCompletionChecker {
     const complete = stats.pending === 0 && stats.inProgress <= 1;
 
     if (complete) {
-      logger.info(
-        { jobId, ...stats },
-        'Crawl naturally complete — all tasks processed',
-      );
+      logger.info({ jobId, ...stats }, 'Crawl naturally complete — all tasks processed');
     }
 
     return {

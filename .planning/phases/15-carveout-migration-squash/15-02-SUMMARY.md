@@ -2,7 +2,17 @@
 phase: 15-carveout-migration-squash
 plan: 02
 subsystem: infra
-tags: [carveout, git-filter-repo, billing, stripe, metering, history-extraction, spatula-saas, mirror-clone]
+tags:
+  [
+    carveout,
+    git-filter-repo,
+    billing,
+    stripe,
+    metering,
+    history-extraction,
+    spatula-saas,
+    mirror-clone,
+  ]
 
 # Dependency graph
 requires:
@@ -19,10 +29,10 @@ affects: [15-03, 15-04, 15-05, 15-06]
 tech-stack:
   added: []
   patterns:
-    - "Mirror-clone filter-repo pattern: operate on /tmp/spatula-mirror, never the working repo (spec §3.1.4)"
-    - "Forward-deletion (not history rewrite) on OSS — Section A leaves OSS via a single deletion commit, full history lives on in private repo"
-    - "Allowlist-driven extraction with byte-exact sanity re-clone diff against /tmp/saas-ls-files.txt as the verification gate"
-    - "Bounded broken-state pattern: Task 3 intentionally leaves the OSS TypeScript build broken (5 stale-import files) — Plan 15-03 fixes; branch tip will be consistent at PR D-07 cut"
+    - 'Mirror-clone filter-repo pattern: operate on /tmp/spatula-mirror, never the working repo (spec §3.1.4)'
+    - 'Forward-deletion (not history rewrite) on OSS — Section A leaves OSS via a single deletion commit, full history lives on in private repo'
+    - 'Allowlist-driven extraction with byte-exact sanity re-clone diff against /tmp/saas-ls-files.txt as the verification gate'
+    - 'Bounded broken-state pattern: Task 3 intentionally leaves the OSS TypeScript build broken (5 stale-import files) — Plan 15-03 fixes; branch tip will be consistent at PR D-07 cut'
 
 key-files:
   created:
@@ -49,14 +59,14 @@ key-files:
     - packages/db/tests/unit/repositories/usage-record-repository.test.ts
 
 key-decisions:
-  - "GitHub default branch on spatula-saas is feat/wave-6-1-carveout (alphabetically first push), not main — benign because both refs point to the same 19-file SHA c02d333; owner can flip later in GitHub Settings"
-  - "Off-by-one in Plan 15-02 Task 1 acceptance criterion (says 20, allowlist is 19) reconciled in favor of substrate authority — 19 files is correct"
-  - "Bare/mirror repo verification uses git ls-tree -r --name-only HEAD instead of git ls-files (which returns empty without a working tree)"
-  - "Forward-deletion commit landed without intermediate typecheck/test (substrate Task 4 Step 3 calls for it, but Plan 15-02 explicitly defers stale-import fix-up to Plan 15-03 — running typecheck here would intentionally fail and add no signal)"
+  - 'GitHub default branch on spatula-saas is feat/wave-6-1-carveout (alphabetically first push), not main — benign because both refs point to the same 19-file SHA c02d333; owner can flip later in GitHub Settings'
+  - 'Off-by-one in Plan 15-02 Task 1 acceptance criterion (says 20, allowlist is 19) reconciled in favor of substrate authority — 19 files is correct'
+  - 'Bare/mirror repo verification uses git ls-tree -r --name-only HEAD instead of git ls-files (which returns empty without a working tree)'
+  - 'Forward-deletion commit landed without intermediate typecheck/test (substrate Task 4 Step 3 calls for it, but Plan 15-02 explicitly defers stale-import fix-up to Plan 15-03 — running typecheck here would intentionally fail and add no signal)'
 
 patterns-established:
-  - "Mirror-clone filter-repo: 4 lines (cd /tmp; rm -rf X; git clone --mirror SOURCE X; cd X; git filter-repo ...) keeps the destructive operation off the working repo by construction"
-  - "Empty-target precondition gate: ls-remote returns zero lines before push, guarantees git push --mirror is clean-slate (no force-merge ambiguity)"
+  - 'Mirror-clone filter-repo: 4 lines (cd /tmp; rm -rf X; git clone --mirror SOURCE X; cd X; git filter-repo ...) keeps the destructive operation off the working repo by construction'
+  - 'Empty-target precondition gate: ls-remote returns zero lines before push, guarantees git push --mirror is clean-slate (no force-merge ambiguity)'
   - "Byte-match verification: clone the pushed remote into a scratch dir, diff its sorted ls-files against the filtered mirror's sorted tree — REMOTE MATCHES LOCAL FILTERED MIRROR is the gate"
 
 requirements-completed: [CARVE-01]
@@ -106,21 +116,21 @@ completed: 2026-05-17
 
 In reverse chronological order on the filtered mirror's HEAD:
 
-| # | SHA | Subject |
-|---|---|---|
-| 1 | `c02d333` | test: fix 10 suspect tests across platform |
-| 2 | `2860622` | test: close critical test gaps for billing quota wiring |
-| 3 | `0bc8e67` | feat(billing): wire QuotaEnforcer into job-manager + crawl worker + LLM recorder + export orchestrator |
-| 4 | `d3ccff2` | fix: address code review findings — validate plan from Stripe, add stripe_customer_id index, fix idempotency key, safe metering deps construction |
-| 5 | `1ec640b` | feat(queue): add hourly metering worker for Stripe usage reporting |
-| 6 | `a0a0448` | feat(api): add Stripe webhook handler with signature verification, register billing routes |
-| 7 | `5992774` | feat(api): add billing routes (subscription, invoices, portal) and wire AppDeps |
-| 8 | `a6b057b` | feat(api): add SpatulaStripeClient wrapper using Billing Meter Events API |
-| 9 | `79bba80` | feat(core): add QuotaEnforcer service for billing dimension checks |
-| 10 | `b6be599` | feat(db): add usage_records schema and UsageRecordRepository |
-| 11 | `3f9ea29` | fix(docs): address code review findings for Wave 5-2 plan |
-| 12 | `53d9389` | feat(shared): add billing tier constants and types |
-| 13 | `7f3f67d` | docs: add Wave 5-2 billing & metering implementation plan |
+| #   | SHA       | Subject                                                                                                                                           |
+| --- | --------- | ------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 1   | `c02d333` | test: fix 10 suspect tests across platform                                                                                                        |
+| 2   | `2860622` | test: close critical test gaps for billing quota wiring                                                                                           |
+| 3   | `0bc8e67` | feat(billing): wire QuotaEnforcer into job-manager + crawl worker + LLM recorder + export orchestrator                                            |
+| 4   | `d3ccff2` | fix: address code review findings — validate plan from Stripe, add stripe_customer_id index, fix idempotency key, safe metering deps construction |
+| 5   | `1ec640b` | feat(queue): add hourly metering worker for Stripe usage reporting                                                                                |
+| 6   | `a0a0448` | feat(api): add Stripe webhook handler with signature verification, register billing routes                                                        |
+| 7   | `5992774` | feat(api): add billing routes (subscription, invoices, portal) and wire AppDeps                                                                   |
+| 8   | `a6b057b` | feat(api): add SpatulaStripeClient wrapper using Billing Meter Events API                                                                         |
+| 9   | `79bba80` | feat(core): add QuotaEnforcer service for billing dimension checks                                                                                |
+| 10  | `b6be599` | feat(db): add usage_records schema and UsageRecordRepository                                                                                      |
+| 11  | `3f9ea29` | fix(docs): address code review findings for Wave 5-2 plan                                                                                         |
+| 12  | `53d9389` | feat(shared): add billing tier constants and types                                                                                                |
+| 13  | `7f3f67d` | docs: add Wave 5-2 billing & metering implementation plan                                                                                         |
 
 All 13 commits retained their original authorship and timestamps (filter-repo's default behavior). These are the **authoritative private-repo history** for billing/metering; the same SHAs no longer appear on OSS feature-branch reachability (because the files they touch are gone, those commits are pruned from any OSS ancestry walk).
 
@@ -136,6 +146,7 @@ All 13 commits retained their original authorship and timestamps (filter-repo's 
 ### Reconciled (substrate vs. plan)
 
 **1. [Plan-text correction] Task 1 acceptance criterion off-by-one (`wc -l returns 20`)**
+
 - **Found during:** Task 1 (post-filter-repo verification)
 - **Issue:** Plan 15-02 Task 1 expects `git ls-files | wc -l` to return 20. Substrate allowlist is 19 lines (18 source + 1 plan doc), and filter-repo produced exactly 19 files in the filtered tree.
 - **Resolution:** Used the stronger acceptance criterion — `diff <(sort allowlist) <(sort ls-files)` must return no output. Diff returned EXACT MATCH (19 ↔ 19). Documented in evidence file under "Plan acceptance criterion — off-by-one note."
@@ -143,6 +154,7 @@ All 13 commits retained their original authorship and timestamps (filter-repo's 
 - **Verification:** Both criteria from the plan text ("every line in allowlist appears in ls-files" + "no file in ls-files is missing from allowlist") satisfied.
 
 **2. [Plan-text adaptation] `git ls-files` swapped for `git ls-tree -r HEAD` on bare/mirror repo**
+
 - **Found during:** Task 1 (initial verification command from plan text returned empty)
 - **Issue:** Plan called `cd /tmp/spatula-mirror && git ls-files | sort > /tmp/saas-ls-files.txt` — but `/tmp/spatula-mirror` is a bare/mirror repo with no working tree, so `git ls-files` returns nothing.
 - **Resolution:** Switched to `git ls-tree -r --name-only HEAD | sort > /tmp/saas-ls-files.txt`, which enumerates tree contents directly from the commit object. Produced the expected 19 files.
@@ -152,6 +164,7 @@ All 13 commits retained their original authorship and timestamps (filter-repo's 
 ### Deferred (out of scope for this plan)
 
 **3. Stale imports in 5 OSS source files (Plan 15-03 territory)**
+
 - **Found during:** Task 3 (post-deletion sanity grep)
 - **Files with stale imports:**
   - `apps/api/src/app.ts` — `billingRoutes`, `stripeWebhookRoutes` mounts (+ plan-loading middleware referencing deleted tiers)
@@ -204,5 +217,6 @@ None — no UI-rendering placeholder values introduced. This is a pure git-opera
 - [x] OSS history NOT rewritten: only 4 forward commits between `main` (`5d19c2b`) and `feat/wave-6-1-carveout` (`20318a6`), all linear additions
 
 ---
-*Phase: 15-carveout-migration-squash*
-*Completed: 2026-05-17*
+
+_Phase: 15-carveout-migration-squash_
+_Completed: 2026-05-17_

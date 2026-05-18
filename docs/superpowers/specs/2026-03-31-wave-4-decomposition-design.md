@@ -24,12 +24,12 @@ Wave 4 covers 3 workstreams across Phase 12 (server) and Phase 13 (local):
 
 ## 2. Sub-plan Summary
 
-| Sub-plan | Scope | Spec Sections | Est. New Files | Order |
-|----------|-------|---------------|----------------|-------|
-| **4-1** | Server Completeness | 12: 8.1–8.2, 8.4, 8.6 | ~12 | 1 |
-| **4-2** | CLI Foundations | 13: 7.2–7.3, 7.5, 7.7 | ~15 | 2 |
-| **4-3** | CLI Data Commands | 13: 7.2, 4.5 | ~12 | 3 |
-| **4-4** | Open-Source Readiness | 12: 9.1–9.7 | ~15 | 4 |
+| Sub-plan | Scope                 | Spec Sections         | Est. New Files | Order |
+| -------- | --------------------- | --------------------- | -------------- | ----- |
+| **4-1**  | Server Completeness   | 12: 8.1–8.2, 8.4, 8.6 | ~12            | 1     |
+| **4-2**  | CLI Foundations       | 13: 7.2–7.3, 7.5, 7.7 | ~15            | 2     |
+| **4-3**  | CLI Data Commands     | 13: 7.2, 4.5          | ~12            | 3     |
+| **4-4**  | Open-Source Readiness | 12: 9.1–9.7           | ~15            | 4     |
 
 **Execution order:**
 
@@ -79,11 +79,12 @@ Wave 4 covers 3 workstreams across Phase 12 (server) and Phase 13 (local):
 3. **Bull Board update** — add 6th queue adapter for `spatula.webhooks` in `apps/api/src/routes/admin-queues.ts`.
 
 4. **Webhook event payload type** (`packages/shared/src/webhook-types.ts`):
+
    ```typescript
    interface WebhookEvent {
-     id: string;              // evt_<nanoid>
-     type: WebhookEventType;  // job.completed | job.failed | job.cancelled | export.completed | action.pending
-     timestamp: string;       // ISO 8601
+     id: string; // evt_<nanoid>
+     type: WebhookEventType; // job.completed | job.failed | job.cancelled | export.completed | action.pending
+     timestamp: string; // ISO 8601
      data: {
        jobId: string;
        tenantId: string;
@@ -110,6 +111,7 @@ Wave 4 covers 3 workstreams across Phase 12 (server) and Phase 13 (local):
 8. **Request timeout middleware** (`apps/api/src/middleware/timeout.ts`) — Hono middleware, 30s default, 5min for export download endpoint, returns 504 on timeout. Slots into middleware chain early (after security headers, before auth).
 
 9. **HealthCheck interface + pluggable registry** (`packages/core/src/diagnostics/health-check.ts`):
+
    ```typescript
    interface HealthCheck {
      name: string;
@@ -117,6 +119,7 @@ Wave 4 covers 3 workstreams across Phase 12 (server) and Phase 13 (local):
      run(): Promise<{ status: 'pass' | 'fail' | 'warn'; message: string }>;
    }
    ```
+
    Registry with `registerCheck(check)` and `runChecks(categories)`.
 
 10. **System checks** (`packages/core/src/diagnostics/system-checks.ts`) — 5 checks:
@@ -253,7 +256,7 @@ Wave 4 covers 3 workstreams across Phase 12 (server) and Phase 13 (local):
 
 1. **License** — `LICENSE` at project root, MIT.
 
-2. **Security policy** — `SECURITY.md` at project root. How to report vulnerabilities (email, not public issues), expected response time, scope of supported versions. *(Added beyond Phase 12 spec — standard for open-source projects.)*
+2. **Security policy** — `SECURITY.md` at project root. How to report vulnerabilities (email, not public issues), expected response time, scope of supported versions. _(Added beyond Phase 12 spec — standard for open-source projects.)_
 
 3. **README.md** — 12 sections:
    - Hero: one-line description + badge row (CI status, license, npm version)
@@ -302,7 +305,7 @@ Wave 4 covers 3 workstreams across Phase 12 (server) and Phase 13 (local):
    - Server: `CORS_ALLOWED_ORIGINS`, `PORT`
    - Workers: `SPATULA_WORKERS`
 
-10. **Package.json metadata** — update all 6 package.json files (`core`, `db`, `queue`, `shared`, `api`, `cli`) with: `license: "MIT"`, `repository`, `description`, `keywords`, `homepage`, `bugs` fields. *(Added beyond Phase 12 spec — standard for npm packages.)*
+10. **Package.json metadata** — update all 6 package.json files (`core`, `db`, `queue`, `shared`, `api`, `cli`) with: `license: "MIT"`, `repository`, `description`, `keywords`, `homepage`, `bugs` fields. _(Added beyond Phase 12 spec — standard for npm packages.)_
 
 11. **Stale documentation cleanup**:
     - `docs/superpowers/specs/wave-roadmap.md` — mark Wave 4 complete, update final test counts, update Wave 5 scope to explicitly include remote operations deferred from Wave 4
@@ -355,17 +358,17 @@ The following items from Phase 13 are explicitly deferred to Wave 5 (Phase 13 St
 
 Wave 4 builds on these Wave 3 deliverables:
 
-| Wave 3 Output | Used By |
-|----------------|---------|
-| Auth middleware + scopes | 4-1 (bulk ops require scopes) |
-| BullMQ queue infrastructure | 4-1 (webhook queue) |
-| Bull Board (5 queues) | 4-1 (add 6th queue) |
-| Redis shared client | 4-1 (server health check) |
-| DataSource interface + LocalDataSource | 4-2 (hook adaptation) |
-| ProjectAdapter + SQLite repos | 4-2 (openLocalProject) |
-| Export orchestrator (5 formats) | 4-3 (spatula export) |
-| `estimateCost()` | 4-2 (spatula estimate) |
-| `diffConfigs()` | Already wired in Wave 3 |
-| Pipeline events + progress display | 4-3 (dashboard mode) |
-| Config system (YAML parse, global config) | 4-2 (setup, config, add) |
-| Structured logging (ndjson) | 4-3 (spatula logs) |
+| Wave 3 Output                             | Used By                       |
+| ----------------------------------------- | ----------------------------- |
+| Auth middleware + scopes                  | 4-1 (bulk ops require scopes) |
+| BullMQ queue infrastructure               | 4-1 (webhook queue)           |
+| Bull Board (5 queues)                     | 4-1 (add 6th queue)           |
+| Redis shared client                       | 4-1 (server health check)     |
+| DataSource interface + LocalDataSource    | 4-2 (hook adaptation)         |
+| ProjectAdapter + SQLite repos             | 4-2 (openLocalProject)        |
+| Export orchestrator (5 formats)           | 4-3 (spatula export)          |
+| `estimateCost()`                          | 4-2 (spatula estimate)        |
+| `diffConfigs()`                           | Already wired in Wave 3       |
+| Pipeline events + progress display        | 4-3 (dashboard mode)          |
+| Config system (YAML parse, global config) | 4-2 (setup, config, add)      |
+| Structured logging (ndjson)               | 4-3 (spatula logs)            |

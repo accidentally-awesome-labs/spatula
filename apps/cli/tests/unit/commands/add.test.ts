@@ -9,7 +9,10 @@ describe('validateAndDedup', () => {
   });
 
   it('deduplicates against existing seeds', () => {
-    const result = validateAndDedup(['https://example.com', 'https://new.com'], ['https://example.com']);
+    const result = validateAndDedup(
+      ['https://example.com', 'https://new.com'],
+      ['https://example.com'],
+    );
     expect(result.valid).toEqual(['https://new.com']);
     expect(result.duplicates).toContain('https://example.com');
   });

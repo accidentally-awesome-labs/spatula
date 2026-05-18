@@ -5,6 +5,7 @@
 ## LLM Providers
 
 **OpenRouter (Primary):**
+
 - Purpose: Multi-model LLM inference with smart model routing (fast/primary/smart tiers)
 - SDK: `@openrouter-compatible-client` (native fetch via `OpenRouterClient` in `packages/core/src/llm/openrouter-client.ts`)
 - Auth: `OPENROUTER_API_KEY` environment variable
@@ -16,6 +17,7 @@
   - Timeout: 60 seconds, retries: 3
 
 **Ollama (Local/Offline Alternative):**
+
 - Purpose: Local LLM inference for development and self-hosted deployments
 - SDK: Custom client in `packages/core/src/llm/ollama-client.ts`
 - Base URL: `http://localhost:11434` (configurable via `OLLAMA_BASE_URL`)
@@ -29,6 +31,7 @@
   - Default model: `LLM_PRIMARY_MODEL` (required)
 
 **LLM Provider Selection:**
+
 - Environment variable: `LLM_PROVIDER` (default: `openrouter`)
 - Default model: `LLM_PRIMARY_MODEL` (default: `anthropic/claude-sonnet-4-20250514`)
 - Implementation: `packages/core/src/llm/llm-factory.ts` - Factory pattern with support for future providers
@@ -37,6 +40,7 @@
 ## Web Crawlers
 
 **Playwright (Primary Local Crawler):**
+
 - Purpose: Headless browser automation for JavaScript-heavy sites
 - SDK: `playwright` 1.58.2
 - Features:
@@ -47,6 +51,7 @@
 - Implementation: `packages/core/src/crawlers/playwright-crawler.ts`
 
 **Firecrawl (Third-Party Cloud Crawler):**
+
 - Purpose: IP-rotation and JavaScript-heavy site crawling via managed service (optional)
 - SDK: `@mendable/firecrawl-js` 4.15.4
 - Auth: `FIRECRAWL_API_KEY` environment variable (optional—only required if `crawler=firecrawl`)
@@ -58,6 +63,7 @@
 - Implementation: `packages/core/src/crawlers/firecrawl-crawler.ts`
 
 **Crawler Factory & Selection:**
+
 - Factory: `packages/core/src/crawlers/crawler-factory.ts`
 - Selection: Environment-driven or constructor-based (not runtime-configurable per job)
 - Comparison logic: `packages/core/src/crawlers/crawler-comparison.test.ts` - benchmarking utilities
@@ -66,6 +72,7 @@
 ## Data Storage
 
 **PostgreSQL (Production Database):**
+
 - Type: Relational database for system data (jobs, tenants, schema definitions, webhooks)
 - Connection: `DATABASE_URL` environment variable
   - Format: `postgresql://user:password@host:port/database`
@@ -79,6 +86,7 @@
 - Test database: `TEST_DATABASE_URL` (default: `postgresql://spatula:spatula@localhost:5432/spatula_test`)
 
 **SQLite (Local Project Database):**
+
 - Type: Embedded database for per-project data (entities, pages, schema versions, LLM usage)
 - Format: File-based (`~/.spatula/{projectId}/data.db`)
 - Client: `better-sqlite3` 12.8.0 (synchronous, no async)
@@ -86,12 +94,14 @@
 - Purpose: Offline-first project isolation and performance
 
 **DuckDB (Analytics):**
+
 - Type: Column-oriented database for analytical queries
 - SDK: `@duckdb/node-api` 1.5.0-r.1
 - Purpose: Data aggregation and complex analytical operations in export pipeline
 - Integration: `packages/core/src/export/` - Used for data transformation before output
 
 **Redis (Caching & Job Queue):**
+
 - Type: In-memory data store for queue state and distributed locks
 - Connection: `REDIS_URL` environment variable
   - Format: `redis://[user:password@]host:port[/database]`
@@ -106,6 +116,7 @@
 ## Object Storage
 
 **S3-Compatible Storage (Optional):**
+
 - Purpose: Store crawled page content as binary blobs or text
 - SDK: `@aws-sdk/client-s3` 3.1019.0, `@aws-sdk/s3-request-presigner` 3.1019.0
 - Configuration:
@@ -121,12 +132,14 @@
   - Tenant-aware storage tracking via `setTenantContext()`
 
 **Local Filesystem Storage (Default):**
+
 - Purpose: Development and small deployments
 - Location: Configured via `SPATULA_HOME` (default: `~/.spatula`)
 - Implementation: `packages/core/src/content-store/local-content-store.ts`
 - Also used for project-local SQLite databases
 
 **PostgreSQL Content Store:**
+
 - Purpose: Alternative to S3 for storing page content
 - Implementation: `packages/db/src/content-store/pg-content-store.ts`
 - Advantage: No external dependency, unified database backup
@@ -135,6 +148,7 @@
 ## Payment & Metering
 
 **Stripe (Optional SaaS Billing):**
+
 - Purpose: Usage-based billing, subscription management, meter event reporting
 - SDK: `stripe` 22.0.0 (full SDK in `apps/api/src/billing/`)
 - Auth: `STRIPE_API_KEY` environment variable
@@ -158,6 +172,7 @@
 ## Error Tracking & Observability
 
 **Sentry (Optional Error Tracking):**
+
 - Purpose: Centralized error tracking, performance monitoring, issue alerts
 - SDK: `@sentry/node` 10.46.0 (initialized in `packages/shared/src/sentry.ts`)
 - Auth: `SENTRY_DSN` environment variable (optional)
@@ -167,6 +182,7 @@
 - Integration: Called in API and worker entry points via `initSentry()`
 
 **OpenTelemetry (Distributed Tracing & Metrics):**
+
 - Purpose: Distributed tracing, metrics export to observability backends
 - SDKs:
   - `@opentelemetry/sdk-trace-node` 2.6.1 - Tracing
@@ -183,6 +199,7 @@
   - Metrics: job counters, queue depth, etc.
 
 **Structured Logging (Pino):**
+
 - Framework: `pino` 9.6.0
 - Configuration: `packages/shared/src/logger.ts`
 - Features:
@@ -194,6 +211,7 @@
 ## Authentication & Authorization
 
 **Auth Strategy (Optional):**
+
 - Configuration: `AUTH_STRATEGY` environment variable
 - Supported modes:
   - `none` (default) - No authentication required
@@ -201,6 +219,7 @@
   - `jwt` - JWT token validation
 
 **JWT Authentication (When AUTH_STRATEGY=jwt):**
+
 - SDK: `jose` 6.2.2 (JWT signing and verification)
 - Configuration:
   - `JWT_ISSUER` - Token issuer (required)
@@ -212,6 +231,7 @@
 ## Webhooks & Callbacks
 
 **Outgoing Webhooks:**
+
 - Purpose: Notify external systems when jobs complete or fail
 - Configuration: Per-job webhook endpoint and events
 - Transport: HTTP POST with signed requests (HMAC-SHA256)
@@ -222,16 +242,19 @@
 - Retry Policy: Exponential backoff, max 5 attempts (configurable in `DEFAULT_QUEUE_CONFIG`)
 
 **Incoming Webhooks:**
+
 - Not yet implemented (reserved for future Stripe webhook handling)
 
 ## Server Configuration
 
 **API Server:**
+
 - Port: `PORT` environment variable (default: 3000)
 - Base URL: `API_URL` for health checks and internal references (default: `http://localhost:3000`)
 - CORS: `CORS_ALLOWED_ORIGINS` (comma-separated, default: `http://localhost:3000`)
 
 **Worker Selection:**
+
 - Environment: `SPATULA_WORKERS` (comma-separated list)
 - Supported workers: `crawl`, `schema`, `reconciliation`, `export`, `webhook`, `metering`, `cleanup`
 - Default: All workers enabled
@@ -240,6 +263,7 @@
 ## CLI Configuration
 
 **Spatula Home Directory:**
+
 - Location: `SPATULA_HOME` environment variable (default: `~/.spatula`)
 - Contents:
   - Project directories (`{projectId}/`)
@@ -249,4 +273,4 @@
 
 ---
 
-*Integration audit: 2025-05-06*
+_Integration audit: 2025-05-06_

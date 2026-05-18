@@ -10,7 +10,10 @@ import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { createProjectDb, initializeProjectDb } from '../../../src/project-db/connection.js';
 import { SqliteExtractionRepository } from '../../../src/project-db/repositories/extraction-repository.js';
 import { SqliteActionRepository } from '../../../src/project-db/repositories/action-repository.js';
-import { SqliteEntityRepository, SqliteEntitySourceRepository } from '../../../src/project-db/repositories/entity-repository.js';
+import {
+  SqliteEntityRepository,
+  SqliteEntitySourceRepository,
+} from '../../../src/project-db/repositories/entity-repository.js';
 import type { ProjectDbResult } from '../../../src/project-db/connection.js';
 
 const PROJECT_ID = 'aaaaaaaa-0000-0000-0000-000000000001';
@@ -94,10 +97,7 @@ describe('SQLite Batch Methods (in-memory)', () => {
       });
 
       it('handles a batch where all records already exist', async () => {
-        const batch = [
-          makeExtraction('ext-001', runId1),
-          makeExtraction('ext-002', runId1),
-        ];
+        const batch = [makeExtraction('ext-001', runId1), makeExtraction('ext-002', runId1)];
         const result = await extractionRepo.upsertBatch(batch);
         expect(result).toEqual({ inserted: 0, updated: 2 });
       });
@@ -108,10 +108,7 @@ describe('SQLite Batch Methods (in-memory)', () => {
         // row inserted moments ago. Wrong impl would count both as inserts.
         // Use isolated runId so it doesn't pollute downstream findIdsByRunId tests.
         const dupRun = 'run-ext-dup';
-        const batch = [
-          makeExtraction('ext-dup-1', dupRun),
-          makeExtraction('ext-dup-1', dupRun),
-        ];
+        const batch = [makeExtraction('ext-dup-1', dupRun), makeExtraction('ext-dup-1', dupRun)];
         const result = await extractionRepo.upsertBatch(batch);
         expect(result).toEqual({ inserted: 1, updated: 1 });
       });
@@ -236,19 +233,13 @@ describe('SQLite Batch Methods (in-memory)', () => {
       });
 
       it('handles a batch where all records already exist', async () => {
-        const batch = [
-          makeAction('act-001', runId1),
-          makeAction('act-002', runId1),
-        ];
+        const batch = [makeAction('act-001', runId1), makeAction('act-002', runId1)];
         const result = await actionRepo.upsertBatch(batch);
         expect(result).toEqual({ inserted: 0, updated: 2 });
       });
 
       it('counts within-batch duplicate ids as 1 insert + 1 update', async () => {
-        const batch = [
-          makeAction('act-dup-1', runId1),
-          makeAction('act-dup-1', runId1),
-        ];
+        const batch = [makeAction('act-dup-1', runId1), makeAction('act-dup-1', runId1)];
         const result = await actionRepo.upsertBatch(batch);
         expect(result).toEqual({ inserted: 1, updated: 1 });
       });
@@ -316,32 +307,53 @@ describe('SQLite Batch Methods (in-memory)', () => {
       const tenantId = 'ignored';
 
       const e1 = await entityRepo.create({
-        jobId: PROJECT_ID, tenantId,
-        mergedData: { name: 'Entity 1' }, provenance: {}, qualityScore: 0.9,
+        jobId: PROJECT_ID,
+        tenantId,
+        mergedData: { name: 'Entity 1' },
+        provenance: {},
+        qualityScore: 0.9,
       });
       entityId1 = e1.id;
 
       const e2 = await entityRepo.create({
-        jobId: PROJECT_ID, tenantId,
-        mergedData: { name: 'Entity 2' }, provenance: {}, qualityScore: 0.8,
+        jobId: PROJECT_ID,
+        tenantId,
+        mergedData: { name: 'Entity 2' },
+        provenance: {},
+        qualityScore: 0.8,
       });
       entityId2 = e2.id;
 
       const ex1 = await extractionRepo.store({
-        jobId: PROJECT_ID, tenantId, pageId: 'p1',
-        schemaVersion: 1, data: { name: 'Extraction 1' }, unmappedFields: [], metadata: {},
+        jobId: PROJECT_ID,
+        tenantId,
+        pageId: 'p1',
+        schemaVersion: 1,
+        data: { name: 'Extraction 1' },
+        unmappedFields: [],
+        metadata: {},
       });
       extractionId1 = ex1.id;
 
       const ex2 = await extractionRepo.store({
-        jobId: PROJECT_ID, tenantId, pageId: 'p2',
-        schemaVersion: 1, data: { name: 'Extraction 2' }, unmappedFields: [], metadata: {},
+        jobId: PROJECT_ID,
+        tenantId,
+        pageId: 'p2',
+        schemaVersion: 1,
+        data: { name: 'Extraction 2' },
+        unmappedFields: [],
+        metadata: {},
       });
       extractionId2 = ex2.id;
 
       const ex3 = await extractionRepo.store({
-        jobId: PROJECT_ID, tenantId, pageId: 'p3',
-        schemaVersion: 1, data: { name: 'Extraction 3' }, unmappedFields: [], metadata: {},
+        jobId: PROJECT_ID,
+        tenantId,
+        pageId: 'p3',
+        schemaVersion: 1,
+        data: { name: 'Extraction 3' },
+        unmappedFields: [],
+        metadata: {},
       });
       extractionId3 = ex3.id;
     });
@@ -363,9 +375,7 @@ describe('SQLite Batch Methods (in-memory)', () => {
       });
 
       it('updates matchConfidence on conflict (same entityId + extractionId)', async () => {
-        const batch = [
-          { entityId: entityId1, extractionId: extractionId1, matchConfidence: 0.99 },
-        ];
+        const batch = [{ entityId: entityId1, extractionId: extractionId1, matchConfidence: 0.99 }];
         const count = await entitySourceRepo.upsertBatchSources(batch);
         expect(count).toBe(1); // processed 1 item
       });

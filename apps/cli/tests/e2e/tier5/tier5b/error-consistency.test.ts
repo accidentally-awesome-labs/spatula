@@ -1,5 +1,10 @@
 import { describe, it, expect, beforeAll, afterAll, vi } from 'vitest';
-import { setupAuthContext, bearerHeaders, minimalJobBody, type AuthTestContext } from './helpers.js';
+import {
+  setupAuthContext,
+  bearerHeaders,
+  minimalJobBody,
+  type AuthTestContext,
+} from './helpers.js';
 
 describe('Tier 5B: Error Response Consistency', () => {
   let ctx: AuthTestContext;
@@ -89,9 +94,9 @@ describe('Tier 5B: Error Response Consistency', () => {
 
     // Now spy on findById to throw — set up AFTER job creation to avoid
     // accidental consumption by unrelated middleware calls
-    const spy = vi.spyOn(ctx.repos.jobRepo, 'findById').mockRejectedValueOnce(
-      new Error('database exploded'),
-    );
+    const spy = vi
+      .spyOn(ctx.repos.jobRepo, 'findById')
+      .mockRejectedValueOnce(new Error('database exploded'));
 
     const res = await ctx.app.request(`/api/v1/jobs/${job.id}`, {
       headers: bearerHeaders(ctx.adminKey),

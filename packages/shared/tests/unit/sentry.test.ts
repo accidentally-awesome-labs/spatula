@@ -22,7 +22,9 @@ describe('sentry', () => {
 
   it('initializes when DSN is provided', () => {
     initSentry({ dsn: 'https://test@sentry.io/123' });
-    expect(Sentry.init).toHaveBeenCalledWith(expect.objectContaining({ dsn: 'https://test@sentry.io/123' }));
+    expect(Sentry.init).toHaveBeenCalledWith(
+      expect.objectContaining({ dsn: 'https://test@sentry.io/123' }),
+    );
   });
 
   it('captureException calls Sentry.captureException', () => {

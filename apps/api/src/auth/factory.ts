@@ -13,10 +13,7 @@ export interface AuthProviderDeps {
   jwtConfig?: JwtProviderConfig;
 }
 
-export function createAuthProvider(
-  strategy: string,
-  deps: AuthProviderDeps,
-): AuthProvider {
+export function createAuthProvider(strategy: string, deps: AuthProviderDeps): AuthProvider {
   switch (strategy) {
     case 'none':
       return new NoAuthProvider();
@@ -24,7 +21,9 @@ export function createAuthProvider(
       return new ApiKeyAuthProvider(deps.apiKeyRepo);
     case 'jwt':
       if (!deps.jwtConfig) {
-        throw new ConfigError('JWT_ISSUER, JWT_AUDIENCE, and JWT_JWKS_URL are required for jwt strategy');
+        throw new ConfigError(
+          'JWT_ISSUER, JWT_AUDIENCE, and JWT_JWKS_URL are required for jwt strategy',
+        );
       }
       return new JwtAuthProvider(deps.jwtConfig);
     default:

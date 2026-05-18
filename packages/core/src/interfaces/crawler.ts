@@ -8,20 +8,26 @@ export const CrawlOptions = z.object({
   // robots.txt compliance
   respectRobotsTxt: z.boolean().default(true),
   // Proxy configuration
-  proxy: z.object({
-    url: z.string().min(1, 'Proxy URL is required'),
-    username: z.string().optional(),
-    password: z.string().optional(),
-  }).optional(),
+  proxy: z
+    .object({
+      url: z.string().min(1, 'Proxy URL is required'),
+      username: z.string().optional(),
+      password: z.string().optional(),
+    })
+    .optional(),
   // Cookie injection
-  cookies: z.array(z.object({
-    name: z.string(),
-    value: z.string(),
-    domain: z.string(),
-    path: z.string().default('/'),
-    httpOnly: z.boolean().default(false),
-    secure: z.boolean().default(false),
-  })).optional(),
+  cookies: z
+    .array(
+      z.object({
+        name: z.string(),
+        value: z.string(),
+        domain: z.string(),
+        path: z.string().default('/'),
+        httpOnly: z.boolean().default(false),
+        secure: z.boolean().default(false),
+      }),
+    )
+    .optional(),
 });
 
 export type CrawlOptions = z.infer<typeof CrawlOptions>;

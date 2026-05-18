@@ -47,7 +47,7 @@ gate is the merge gate.
   fails the `typeof` assertion.
 - **Accidentally re-introduced billing/stripe symbols.** If a future PR adds
   `BILLING_TIERS` back to `@spatula/shared` (or a `usageRecord*` to `@spatula/
-  db`), the negative-filter describe at the bottom of `oss-surface.test.ts`
+db`), the negative-filter describe at the bottom of `oss-surface.test.ts`
   flags it.
 - **Adding a new export with a forbidden name.** Same filter — anything
   matching `/stripe|billing|quotaEnforcer|usageRecord|metering/i` is flagged.
@@ -111,8 +111,9 @@ type changes, FK changes, index additions / removals, constraint changes
 sequence changes.
 
 **This does NOT catch:**
+
 - RLS (Row-Level Security) policy changes — pg_dump emits them as `ALTER TABLE
-  ... ENABLE ROW LEVEL SECURITY` + `CREATE POLICY` statements, but the OSS
+... ENABLE ROW LEVEL SECURITY` + `CREATE POLICY` statements, but the OSS
   schema doesn't use RLS today; if added later, the normalizer + baseline
   pick them up automatically.
 - Trigger-function semantics — pg_dump emits the trigger declaration and the

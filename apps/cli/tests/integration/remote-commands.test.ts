@@ -13,12 +13,7 @@
  *   5. runRemoteJobAction — pause/resume/cancel call correct endpoints
  */
 
-import {
-  mkdtempSync,
-  writeFileSync,
-  mkdirSync,
-  rmSync,
-} from 'node:fs';
+import { mkdtempSync, writeFileSync, mkdirSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { describe, it, expect, beforeAll, afterAll, beforeEach, afterEach, vi } from 'vitest';
@@ -82,9 +77,7 @@ function mockFetchSequence(
       ok: r.ok,
       status: r.status ?? (r.ok ? 200 : 500),
       json: () =>
-        Promise.resolve(
-          r.ok ? (r.data ?? { status: 'ok' }) : { error: { message: 'fail' } },
-        ),
+        Promise.resolve(r.ok ? (r.data ?? { status: 'ok' }) : { error: { message: 'fail' } }),
     });
   }
   vi.stubGlobal('fetch', mockFn);
@@ -139,7 +132,15 @@ describe('remote add (integration)', () => {
       // health check
       { ok: true, data: { status: 'ok' } },
       // auth check — /api/v1/auth/me returns top-level fields (no { data } envelope)
-      { ok: true, data: { tenantId: 'tenant-prod', scopes: ['jobs:read', 'jobs:write'], subject: 'user-1', authenticated: true } },
+      {
+        ok: true,
+        data: {
+          tenantId: 'tenant-prod',
+          scopes: ['jobs:read', 'jobs:write'],
+          subject: 'user-1',
+          authenticated: true,
+        },
+      },
     ]);
 
     const result = await runRemoteAdd({
@@ -161,9 +162,7 @@ describe('remote add (integration)', () => {
   });
 
   it('fails when health check fails (server unreachable)', async () => {
-    mockFetchSequence([
-      { ok: false, status: 503 },
-    ]);
+    mockFetchSequence([{ ok: false, status: 503 }]);
 
     const result = await runRemoteAdd({
       name: 'down',
@@ -237,9 +236,7 @@ describe('remote list (integration)', () => {
     // Seed a job link in the real SQLite meta store
     await adapter.metaRepo.set('remote:prod:job_id', 'job-abc-123');
 
-    mockFetchSequence([
-      { ok: true, data: { data: { id: 'job-abc-123', status: 'running' } } },
-    ]);
+    mockFetchSequence([{ ok: true, data: { data: { id: 'job-abc-123', status: 'running' } } }]);
 
     const metaGet = (key: string) => adapter.metaRepo.get(key);
     const result = await runRemoteList(metaGet);
@@ -385,9 +382,7 @@ describe('remote job actions (integration)', () => {
   });
 
   it('pause calls the correct API endpoint and succeeds', async () => {
-    mockFetchSequence([
-      { ok: true, data: { data: { id: 'job-action-test', status: 'paused' } } },
-    ]);
+    mockFetchSequence([{ ok: true, data: { data: { id: 'job-action-test', status: 'paused' } } }]);
 
     const metaGet = (key: string) => adapter.metaRepo.get(key);
     const result = await runRemoteJobAction('prod', 'pause', metaGet);
@@ -403,9 +398,7 @@ describe('remote job actions (integration)', () => {
   });
 
   it('resume calls the correct API endpoint and succeeds', async () => {
-    mockFetchSequence([
-      { ok: true, data: { data: { id: 'job-action-test', status: 'running' } } },
-    ]);
+    mockFetchSequence([{ ok: true, data: { data: { id: 'job-action-test', status: 'running' } } }]);
 
     const metaGet = (key: string) => adapter.metaRepo.get(key);
     const result = await runRemoteJobAction('prod', 'resume', metaGet);

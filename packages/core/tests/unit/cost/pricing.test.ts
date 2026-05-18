@@ -11,14 +11,14 @@ describe('pricing', () => {
   describe('getModelPricing', () => {
     it('returns known model pricing for Anthropic models', () => {
       const pricing = getModelPricing('anthropic/claude-sonnet-4-20250514');
-      expect(pricing.promptPer1M).toBe(3.00);
-      expect(pricing.completionPer1M).toBe(15.00);
+      expect(pricing.promptPer1M).toBe(3.0);
+      expect(pricing.completionPer1M).toBe(15.0);
     });
 
     it('returns known model pricing for Google models', () => {
       const pricing = getModelPricing('google/gemini-2.5-flash');
       expect(pricing.promptPer1M).toBe(0.15);
-      expect(pricing.completionPer1M).toBe(0.60);
+      expect(pricing.completionPer1M).toBe(0.6);
     });
 
     it('returns OLLAMA_PRICING for models without provider prefix', () => {
@@ -36,8 +36,8 @@ describe('pricing', () => {
     it('returns DEFAULT_PRICING for unknown provider/model combos', () => {
       const pricing = getModelPricing('unknown-provider/some-model');
       expect(pricing).toBe(DEFAULT_PRICING);
-      expect(pricing.promptPer1M).toBe(1.00);
-      expect(pricing.completionPer1M).toBe(5.00);
+      expect(pricing.promptPer1M).toBe(1.0);
+      expect(pricing.completionPer1M).toBe(5.0);
     });
   });
 
@@ -59,8 +59,14 @@ describe('pricing', () => {
   describe('AVG_TOKENS_PER_CALL', () => {
     it('covers all expected LLM task types', () => {
       const expectedTasks = [
-        'pageRelevance', 'extraction', 'linkEvaluation', 'schemaEvolution',
-        'entityMatching', 'conflictResolution', 'qualityAudit', 'documentation',
+        'pageRelevance',
+        'extraction',
+        'linkEvaluation',
+        'schemaEvolution',
+        'entityMatching',
+        'conflictResolution',
+        'qualityAudit',
+        'documentation',
       ];
       for (const task of expectedTasks) {
         expect(AVG_TOKENS_PER_CALL[task as keyof typeof AVG_TOKENS_PER_CALL], task).toBeDefined();

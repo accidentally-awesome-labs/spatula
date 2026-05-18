@@ -3,7 +3,9 @@ import { DefaultConfigExecutor } from '../../../src/config/config-executor.js';
 import type { JobConfig } from '../../../src/types/job.js';
 import type { ConfigAction } from '../../../src/types/config-actions.js';
 
-function makeAction(overrides: Partial<ConfigAction> & Pick<ConfigAction, 'type' | 'payload'>): ConfigAction {
+function makeAction(
+  overrides: Partial<ConfigAction> & Pick<ConfigAction, 'type' | 'payload'>,
+): ConfigAction {
   return {
     id: '550e8400-e29b-41d4-a716-446655440000',
     reasoning: 'test',
@@ -67,7 +69,10 @@ describe('DefaultConfigExecutor', () => {
       const config = makeConfig();
       const result = executor.apply(
         config,
-        makeAction({ type: 'set_job_description', payload: { description: 'Crawl audiophile forums' } }),
+        makeAction({
+          type: 'set_job_description',
+          payload: { description: 'Crawl audiophile forums' },
+        }),
       );
       expect(result.description).toBe('Crawl audiophile forums');
     });
@@ -100,10 +105,7 @@ describe('DefaultConfigExecutor', () => {
         makeAction({
           type: 'add_seed_urls',
           payload: {
-            urls: [
-              { url: 'https://head-fi.org' },
-              { url: 'https://audiosciencereview.com' },
-            ],
+            urls: [{ url: 'https://head-fi.org' }, { url: 'https://audiosciencereview.com' }],
           },
         }),
       );
@@ -199,9 +201,7 @@ describe('DefaultConfigExecutor', () => {
       const config = makeConfig({
         schema: {
           mode: 'discovery',
-          userFields: [
-            { name: 'brand', description: 'Brand', type: 'string', required: true },
-          ],
+          userFields: [{ name: 'brand', description: 'Brand', type: 'string', required: true }],
         },
       });
       const result = executor.apply(
@@ -222,9 +222,7 @@ describe('DefaultConfigExecutor', () => {
       const config = makeConfig({
         schema: {
           mode: 'discovery',
-          userFields: [
-            { name: 'brand', description: 'Brand', type: 'string', required: true },
-          ],
+          userFields: [{ name: 'brand', description: 'Brand', type: 'string', required: true }],
         },
       });
       const result = executor.apply(
@@ -331,9 +329,7 @@ describe('DefaultConfigExecutor', () => {
       const config = makeConfig({
         schema: {
           mode: 'discovery',
-          userFields: [
-            { name: 'brand', description: 'Brand', type: 'string', required: false },
-          ],
+          userFields: [{ name: 'brand', description: 'Brand', type: 'string', required: false }],
         },
       });
       const result = executor.apply(
@@ -380,9 +376,7 @@ describe('DefaultConfigExecutor', () => {
       const config = makeConfig({
         schema: {
           mode: 'discovery',
-          userFields: [
-            { name: 'old', description: 'Old field', type: 'string', required: false },
-          ],
+          userFields: [{ name: 'old', description: 'Old field', type: 'string', required: false }],
         },
       });
       const result = executor.apply(
@@ -673,10 +667,7 @@ describe('DefaultConfigExecutor', () => {
 
     it('confirm_and_start is a no-op', () => {
       const config = makeConfig({ name: 'test' });
-      const result = executor.apply(
-        config,
-        makeAction({ type: 'confirm_and_start', payload: {} }),
-      );
+      const result = executor.apply(config, makeAction({ type: 'confirm_and_start', payload: {} }));
       expect(result).toEqual(config);
     });
   });
@@ -691,15 +682,10 @@ describe('DefaultConfigExecutor', () => {
         seedUrls: ['https://head-fi.org'],
         schema: {
           mode: 'fixed',
-          userFields: [
-            { name: 'brand', description: 'Brand', type: 'string', required: true },
-          ],
+          userFields: [{ name: 'brand', description: 'Brand', type: 'string', required: true }],
         },
       });
-      const result = executor.apply(
-        config,
-        makeAction({ type: 'reset_config', payload: {} }),
-      );
+      const result = executor.apply(config, makeAction({ type: 'reset_config', payload: {} }));
       expect(result.name).toBe('');
       expect(result.description).toBe('');
       expect(result.seedUrls).toEqual([]);
@@ -715,9 +701,7 @@ describe('DefaultConfigExecutor', () => {
         seedUrls: ['https://head-fi.org'],
         schema: {
           mode: 'fixed',
-          userFields: [
-            { name: 'brand', description: 'Brand', type: 'string', required: true },
-          ],
+          userFields: [{ name: 'brand', description: 'Brand', type: 'string', required: true }],
         },
       });
       const result = executor.apply(
@@ -788,9 +772,7 @@ describe('DefaultConfigExecutor', () => {
         seedUrls: ['https://head-fi.org'],
         schema: {
           mode: 'discovery',
-          userFields: [
-            { name: 'brand', description: 'Brand', type: 'string', required: true },
-          ],
+          userFields: [{ name: 'brand', description: 'Brand', type: 'string', required: true }],
         },
       });
       const result = executor.validate(config);

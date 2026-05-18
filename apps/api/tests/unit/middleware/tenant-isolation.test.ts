@@ -79,8 +79,9 @@ function createMockDeps(): AppDeps {
     actionRepo: {
       findByJob: vi.fn().mockResolvedValue([]),
       findById: vi.fn().mockResolvedValue(null),
-      updateStatus: vi.fn().mockImplementation(
-        (actionId: string, tenantId: string, _status: string) => {
+      updateStatus: vi
+        .fn()
+        .mockImplementation((actionId: string, tenantId: string, _status: string) => {
           if (tenantId === TENANT_A && actionId === 'action-1') {
             return Promise.resolve({
               id: 'action-1',
@@ -91,8 +92,7 @@ function createMockDeps(): AppDeps {
           throw new StorageError(`Action ${actionId} not found`, {
             context: { actionId, tenantId },
           });
-        },
-      ),
+        }),
       batchUpdateStatus: vi.fn().mockResolvedValue([]),
       countByJobAndStatus: vi.fn().mockResolvedValue(0),
     },
@@ -210,11 +210,7 @@ describe('Cross-tenant isolation', () => {
       const json = await res.json();
       expect(json.data).toHaveLength(2);
       expect(json.data[0].id).toBe('entity-1');
-      expect(deps.entityRepo.findByJob).toHaveBeenCalledWith(
-        'job-1',
-        TENANT_A,
-        expect.any(Object),
-      );
+      expect(deps.entityRepo.findByJob).toHaveBeenCalledWith('job-1', TENANT_A, expect.any(Object));
     });
 
     it('tenant-B sees empty entities for tenant-A job', async () => {
@@ -225,11 +221,7 @@ describe('Cross-tenant isolation', () => {
       expect(res.status).toBe(200);
       const json = await res.json();
       expect(json.data).toHaveLength(0);
-      expect(deps.entityRepo.findByJob).toHaveBeenCalledWith(
-        'job-1',
-        TENANT_B,
-        expect.any(Object),
-      );
+      expect(deps.entityRepo.findByJob).toHaveBeenCalledWith('job-1', TENANT_B, expect.any(Object));
     });
   });
 

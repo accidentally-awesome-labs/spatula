@@ -6,7 +6,10 @@ import {
 import type { PipelineAction } from '../../../src/types/actions.js';
 import { generateId } from '@spatula/shared';
 
-function baseAction(): Pick<PipelineAction, 'id' | 'jobId' | 'source' | 'reasoning' | 'confidence'> {
+function baseAction(): Pick<
+  PipelineAction,
+  'id' | 'jobId' | 'source' | 'reasoning' | 'confidence'
+> {
   return {
     id: generateId(),
     jobId: generateId(),
@@ -24,12 +27,19 @@ function createMockDeps(): ReconciliationDeps {
         tenantId: 'tenant-1',
         mergedData: { name: 'Widget', price: 10 },
         provenance: {
-          name: { finalValue: 'Widget', provenanceType: 'extracted', sources: [], hadConflict: false },
+          name: {
+            finalValue: 'Widget',
+            provenanceType: 'extracted',
+            sources: [],
+            hadConflict: false,
+          },
         },
       }),
-      updateMergedData: vi.fn().mockImplementation((_id, _tid, changes) =>
-        Promise.resolve({ id: 'entity-1', ...changes }),
-      ),
+      updateMergedData: vi
+        .fn()
+        .mockImplementation((_id, _tid, changes) =>
+          Promise.resolve({ id: 'entity-1', ...changes }),
+        ),
     } as any,
     entitySourceRepo: {
       link: vi.fn().mockResolvedValue({ entityId: 'entity-1', extractionId: 'ext-1' }),

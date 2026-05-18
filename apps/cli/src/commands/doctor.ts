@@ -28,10 +28,7 @@ export function formatCheckResults(results: CheckResult[]): string {
       lines.push('  ' + '-'.repeat(40));
     }
 
-    const icon =
-      result.status === 'pass' ? ' PASS' :
-      result.status === 'warn' ? ' WARN' :
-      ' FAIL';
+    const icon = result.status === 'pass' ? ' PASS' : result.status === 'warn' ? ' WARN' : ' FAIL';
     lines.push(`  ${icon}  ${result.name} — ${result.message}`);
   }
 
@@ -52,7 +49,9 @@ export async function runDoctorCommand(): Promise<void> {
   const categories = determineCategoriesFromContext({ hasEnv, hasProject });
 
   console.log('\nSpatula Doctor\n');
-  console.log(`  Context: ${hasProject ? 'inside project' : 'no project'}, ${hasEnv ? '.env found' : 'no .env'}`);
+  console.log(
+    `  Context: ${hasProject ? 'inside project' : 'no project'}, ${hasEnv ? '.env found' : 'no .env'}`,
+  );
 
   const registry = new HealthCheckRegistry();
   for (const check of createSystemChecks()) registry.register(check);
@@ -62,7 +61,8 @@ export async function runDoctorCommand(): Promise<void> {
   }
 
   if (categories.includes('project')) {
-    const { createProjectChecks, findProjectRoot, parseProjectYamlFile } = await import('@spatula/core');
+    const { createProjectChecks, findProjectRoot, parseProjectYamlFile } =
+      await import('@spatula/core');
     const { join } = await import('node:path');
     const projectRoot = findProjectRoot(process.cwd());
     if (projectRoot) {

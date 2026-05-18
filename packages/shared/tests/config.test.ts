@@ -33,7 +33,9 @@ describe('getEnvOrDefault', () => {
 });
 
 describe('loadConfig', () => {
-  afterEach(() => { vi.unstubAllEnvs(); });
+  afterEach(() => {
+    vi.unstubAllEnvs();
+  });
 
   it('returns validated config when all required env vars set', () => {
     vi.stubEnv('DATABASE_URL', 'postgresql://localhost:5432/spatula');
@@ -51,7 +53,9 @@ describe('loadConfig', () => {
     vi.stubEnv('DATABASE_URL', '');
     vi.stubEnv('OPENROUTER_API_KEY', '');
     expect(() => loadConfig()).toThrow(ConfigError);
-    try { loadConfig(); } catch (e) {
+    try {
+      loadConfig();
+    } catch (e) {
       expect((e as ConfigError).message).toContain('database');
       expect((e as ConfigError).message).toContain('openrouter');
     }
@@ -84,7 +88,9 @@ describe('loadConfig', () => {
 });
 
 describe('loadConfigSafe', () => {
-  afterEach(() => { vi.unstubAllEnvs(); });
+  afterEach(() => {
+    vi.unstubAllEnvs();
+  });
   it('returns config on success', () => {
     vi.stubEnv('DATABASE_URL', 'postgresql://localhost:5432/spatula');
     vi.stubEnv('OPENROUTER_API_KEY', 'sk-test');

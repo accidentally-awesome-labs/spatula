@@ -9,6 +9,7 @@
 **Tech Stack:** TypeScript, Drizzle ORM (Postgres), ioredis, Hono, `@hono/zod-openapi`, Vitest
 
 **Spec references:**
+
 - Phase 12 spec: sections 6.3-6.5
 - File: `docs/superpowers/specs/2026-03-21-phase-12-production-readiness-design.md`
 - Decomposition: `docs/superpowers/specs/2026-03-25-wave-3-decomposition-design.md` section 4.5
@@ -21,42 +22,43 @@
 
 ### New Files
 
-| File | Responsibility |
-|------|---------------|
-| `packages/shared/src/cursor.ts` | `encodeCursor()` / `decodeCursor()` base64 helpers |
-| `packages/db/src/cache.ts` | `RedisCache` class with `getOrFetch<T>()` and `invalidate()` |
-| `packages/shared/tests/unit/cursor.test.ts` | Cursor encoding tests |
-| `packages/db/tests/unit/cache.test.ts` | RedisCache tests |
+| File                                        | Responsibility                                               |
+| ------------------------------------------- | ------------------------------------------------------------ |
+| `packages/shared/src/cursor.ts`             | `encodeCursor()` / `decodeCursor()` base64 helpers           |
+| `packages/db/src/cache.ts`                  | `RedisCache` class with `getOrFetch<T>()` and `invalidate()` |
+| `packages/shared/tests/unit/cursor.test.ts` | Cursor encoding tests                                        |
+| `packages/db/tests/unit/cache.test.ts`      | RedisCache tests                                             |
 
 ### Modified Files
 
-| File | Change |
-|------|--------|
-| `packages/db/src/schema/entities.ts` | Add `updatedAt` column, extend `entities_job_quality_idx` |
-| `packages/db/src/schema/extractions.ts` | Add `updatedAt` column, add new indexes |
-| `packages/db/src/schema/actions.ts` | Add `updatedAt` column |
-| `packages/db/src/schema/exports.ts` | Add `updatedAt` column, add new indexes |
-| `packages/db/src/schema/content.ts` | Add `idx_content_store_key` index |
-| `packages/db/src/repositories/entity-repository.ts` | Add `updated_at` writes, cursor with `since` filter |
-| `packages/db/src/repositories/extraction-repository.ts` | Add `findByCursor()`, `updated_at` writes |
-| `packages/db/src/repositories/action-repository.ts` | Add `findByCursor()`, `updated_at` writes |
-| `packages/db/src/repositories/export-repository.ts` | Add `findByCursor()`, `updated_at` writes |
-| `packages/db/src/repositories/schema-repository.ts` | Cache invalidation on write |
-| `packages/db/src/repositories/tenant-repository.ts` | Cache invalidation on update |
-| `packages/db/src/index.ts` | Export `RedisCache` |
-| `packages/shared/src/index.ts` | Export cursor utils |
-| `apps/api/src/schemas/pagination.ts` | Add `cursor` and `since` params |
-| `apps/api/src/routes/entities.ts` | Cursor pagination + `since` |
-| `apps/api/src/routes/extractions.ts` | Cursor pagination + `since` |
-| `apps/api/src/routes/actions.ts` | Cursor pagination + `since` |
-| `apps/api/src/routes/exports.ts` | Cursor pagination + `since` |
-| `apps/api/src/types.ts` | Add `cache` to `AppDeps` |
+| File                                                    | Change                                                    |
+| ------------------------------------------------------- | --------------------------------------------------------- |
+| `packages/db/src/schema/entities.ts`                    | Add `updatedAt` column, extend `entities_job_quality_idx` |
+| `packages/db/src/schema/extractions.ts`                 | Add `updatedAt` column, add new indexes                   |
+| `packages/db/src/schema/actions.ts`                     | Add `updatedAt` column                                    |
+| `packages/db/src/schema/exports.ts`                     | Add `updatedAt` column, add new indexes                   |
+| `packages/db/src/schema/content.ts`                     | Add `idx_content_store_key` index                         |
+| `packages/db/src/repositories/entity-repository.ts`     | Add `updated_at` writes, cursor with `since` filter       |
+| `packages/db/src/repositories/extraction-repository.ts` | Add `findByCursor()`, `updated_at` writes                 |
+| `packages/db/src/repositories/action-repository.ts`     | Add `findByCursor()`, `updated_at` writes                 |
+| `packages/db/src/repositories/export-repository.ts`     | Add `findByCursor()`, `updated_at` writes                 |
+| `packages/db/src/repositories/schema-repository.ts`     | Cache invalidation on write                               |
+| `packages/db/src/repositories/tenant-repository.ts`     | Cache invalidation on update                              |
+| `packages/db/src/index.ts`                              | Export `RedisCache`                                       |
+| `packages/shared/src/index.ts`                          | Export cursor utils                                       |
+| `apps/api/src/schemas/pagination.ts`                    | Add `cursor` and `since` params                           |
+| `apps/api/src/routes/entities.ts`                       | Cursor pagination + `since`                               |
+| `apps/api/src/routes/extractions.ts`                    | Cursor pagination + `since`                               |
+| `apps/api/src/routes/actions.ts`                        | Cursor pagination + `since`                               |
+| `apps/api/src/routes/exports.ts`                        | Cursor pagination + `since`                               |
+| `apps/api/src/types.ts`                                 | Add `cache` to `AppDeps`                                  |
 
 ---
 
 ## Task 1: Database Indexes + updated_at Migration
 
 **Files:**
+
 - Modify: `packages/db/src/schema/entities.ts`
 - Modify: `packages/db/src/schema/extractions.ts`
 - Modify: `packages/db/src/schema/actions.ts`
@@ -72,16 +74,20 @@ Read `packages/db/src/schema/entities.ts`. Add the `updatedAt` column and new in
 ```
 
 Add to the indexes array:
+
 ```typescript
     index('idx_entities_job_tenant').on(table.jobId, table.tenantId),
     index('idx_entities_updated').on(table.updatedAt),
 ```
 
 Also extend the existing quality index for keyset pagination. Replace:
+
 ```typescript
     index('entities_job_quality_idx').on(table.jobId, table.qualityScore),
 ```
+
 with:
+
 ```typescript
     index('entities_job_quality_idx').on(table.jobId, table.qualityScore, table.id),
     // Note: Drizzle's .on() generates ASC-only indexes. The spec wants (job_id, quality_score DESC, id ASC).
@@ -93,11 +99,13 @@ with:
 - [ ] **Step 2: Add updated_at to extractions schema and new indexes**
 
 Read `packages/db/src/schema/extractions.ts`. Add:
+
 ```typescript
     updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
 ```
 
 Add to indexes:
+
 ```typescript
     index('idx_extractions_job').on(table.jobId, table.tenantId),
     index('idx_extractions_updated').on(table.updatedAt),
@@ -108,11 +116,13 @@ Note: `extractions_page_idx` already exists on `pageId` — no need to add `idx_
 - [ ] **Step 3: Add updated_at to actions schema**
 
 Read `packages/db/src/schema/actions.ts`. Add:
+
 ```typescript
     updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
 ```
 
 Add index:
+
 ```typescript
     index('idx_actions_updated').on(table.updatedAt),
 ```
@@ -120,11 +130,13 @@ Add index:
 - [ ] **Step 4: Add updated_at to exports schema and new index**
 
 Read `packages/db/src/schema/exports.ts`. Add:
+
 ```typescript
     updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
 ```
 
 Add to indexes:
+
 ```typescript
     index('idx_exports_job_tenant').on(table.jobId, table.tenantId),
     index('idx_exports_updated').on(table.updatedAt),
@@ -160,6 +172,7 @@ git commit -m "feat(db): add updated_at columns, performance indexes, and qualit
 ## Task 2: Cursor Encoding/Decoding Utility
 
 **Files:**
+
 - Create: `packages/shared/src/cursor.ts`
 - Create: `packages/shared/tests/unit/cursor.test.ts`
 - Modify: `packages/shared/src/index.ts`
@@ -241,6 +254,7 @@ export function decodeCursor(cursor: string): CursorPayload {
 - [ ] **Step 3: Export from barrel**
 
 Add to `packages/shared/src/index.ts`:
+
 ```typescript
 export { encodeCursor, decodeCursor } from './cursor.js';
 export type { CursorPayload } from './cursor.js';
@@ -264,6 +278,7 @@ git commit -m "feat(shared): add cursor encoding/decoding utility for opaque pag
 ## Task 3: RedisCache Class
 
 **Files:**
+
 - Create: `packages/db/src/cache.ts`
 - Create: `packages/db/tests/unit/cache.test.ts`
 - Modify: `packages/db/src/index.ts`
@@ -298,9 +313,13 @@ describe('RedisCache', () => {
     it('returns cached value on hit', async () => {
       (redis as any).get.mockResolvedValue(JSON.stringify({ version: 1 }));
 
-      const result = await cache.getOrFetch('schema:job-1:current', async () => {
-        throw new Error('fetcher should not be called');
-      }, 30);
+      const result = await cache.getOrFetch(
+        'schema:job-1:current',
+        async () => {
+          throw new Error('fetcher should not be called');
+        },
+        30,
+      );
 
       expect(result).toEqual({ version: 1 });
       expect((redis as any).set).not.toHaveBeenCalled();
@@ -340,7 +359,10 @@ describe('RedisCache', () => {
       (redis as any).del.mockResolvedValue(2);
 
       await cache.invalidate('schema:job-1:*');
-      expect((redis as any).del).toHaveBeenCalledWith('cache:schema:job-1:current', 'cache:schema:job-1:v2');
+      expect((redis as any).del).toHaveBeenCalledWith(
+        'cache:schema:job-1:current',
+        'cache:schema:job-1:v2',
+      );
     });
 
     it('handles no matching keys gracefully', async () => {
@@ -392,7 +414,13 @@ export class RedisCache {
     try {
       let cursor = '0';
       do {
-        const [nextCursor, keys] = await this.redis.scan(cursor, 'MATCH', cachePattern, 'COUNT', 100);
+        const [nextCursor, keys] = await this.redis.scan(
+          cursor,
+          'MATCH',
+          cachePattern,
+          'COUNT',
+          100,
+        );
         cursor = nextCursor;
         if (keys.length > 0) {
           await this.redis.del(...keys);
@@ -408,6 +436,7 @@ export class RedisCache {
 - [ ] **Step 3: Export from barrel**
 
 Add to `packages/db/src/index.ts`:
+
 ```typescript
 export { RedisCache } from './cache.js';
 ```
@@ -430,6 +459,7 @@ git commit -m "feat(db): add RedisCache with read-through getOrFetch and pattern
 ## Task 4: Pagination Schema Extension
 
 **Files:**
+
 - Modify: `apps/api/src/schemas/pagination.ts`
 
 - [ ] **Step 1: Extend pagination schema with cursor and since**
@@ -452,7 +482,8 @@ export const paginationSchema = z.object({
     example: 'eyJpZCI6Ijk4NzYifQ',
   }),
   since: z.string().datetime().optional().openapi({
-    description: 'ISO 8601 timestamp for incremental fetch. Returns records updated after this time.',
+    description:
+      'ISO 8601 timestamp for incremental fetch. Returns records updated after this time.',
     example: '2026-03-21T14:32:00Z',
   }),
 });
@@ -478,6 +509,7 @@ git commit -m "feat(api): extend pagination schema with cursor and since paramet
 ## Task 5: Repository Cursor Methods + updated_at Writes
 
 **Files:**
+
 - Modify: `packages/db/src/repositories/extraction-repository.ts`
 - Modify: `packages/db/src/repositories/action-repository.ts`
 - Modify: `packages/db/src/repositories/export-repository.ts`
@@ -523,6 +555,7 @@ Read the file. Add a method similar to `EntityRepository.findByJobCursor`:
 ```
 
 Also update `store()` to set `updatedAt`:
+
 ```typescript
     // In the values object, add:
     updatedAt: new Date(),
@@ -563,10 +596,11 @@ Read `packages/db/src/repositories/entity-repository.ts`. Update the existing `f
 ```
 
 Add the `since` filter:
+
 ```typescript
-      if (since) {
-        conditions.push(sql`${entities.updatedAt} > ${since}`);
-      }
+if (since) {
+  conditions.push(sql`${entities.updatedAt} > ${since}`);
+}
 ```
 
 Update ALL mutation methods to set `updatedAt: new Date()`: `create()`, `updateMergedData()` (if exists), `updateQualityScore()` (if exists). Read the file to identify all mutation methods — every write must update `updatedAt` for `?since=` to work correctly.
@@ -600,6 +634,7 @@ git commit -m "feat(db): add cursor methods with since filter to all list reposi
 ## Task 6: Apply Cursor Pagination to API Endpoints
 
 **Files:**
+
 - Modify: `apps/api/src/routes/entities.ts`
 - Modify: `apps/api/src/routes/extractions.ts`
 - Modify: `apps/api/src/routes/actions.ts`
@@ -616,24 +651,28 @@ import { decodeCursor, encodeCursor } from '@spatula/shared';
 In the list handler, check if `cursor` is provided. If so, use `findByJobCursor` instead of `findByJob`:
 
 ```typescript
-    if (query.cursor) {
-      const { id: cursorId } = decodeCursor(query.cursor);
-      const result = await deps.entityRepo.findByJobCursor(
-        jobId, tenantId, query.limit, cursorId, query.since,
-      );
-      const total = await deps.entityRepo.countByJob(jobId, tenantId);
-      return c.json({
-        data: result.entities,
-        pagination: {
-          total,
-          limit: query.limit,
-          hasMore: !!result.nextCursor,
-          nextCursor: result.nextCursor ? encodeCursor({ id: result.nextCursor }) : undefined,
-        },
-      });
-    }
+if (query.cursor) {
+  const { id: cursorId } = decodeCursor(query.cursor);
+  const result = await deps.entityRepo.findByJobCursor(
+    jobId,
+    tenantId,
+    query.limit,
+    cursorId,
+    query.since,
+  );
+  const total = await deps.entityRepo.countByJob(jobId, tenantId);
+  return c.json({
+    data: result.entities,
+    pagination: {
+      total,
+      limit: query.limit,
+      hasMore: !!result.nextCursor,
+      nextCursor: result.nextCursor ? encodeCursor({ id: result.nextCursor }) : undefined,
+    },
+  });
+}
 
-    // Fallback: existing offset pagination (also returns pagination envelope for consistency)
+// Fallback: existing offset pagination (also returns pagination envelope for consistency)
 ```
 
 Update the `listEntitiesRoute` OpenAPI response to include the pagination envelope with `nextCursor` and `hasMore`.
@@ -667,20 +706,27 @@ There is NO existing `GET /exports` list endpoint in `apps/api/src/routes/export
 
 ```typescript
 const listExportsRoute = createRoute({
-  method: 'get', path: '/exports', tags: ['Exports'],
+  method: 'get',
+  path: '/exports',
+  tags: ['Exports'],
   summary: 'List exports for a job',
   request: {
     params: jobIdParam,
     query: paginationSchema,
   },
   responses: {
-    200: jsonContent(z.object({
-      data: z.array(exportResponseSchema),
-      pagination: z.object({
-        total: z.number(), limit: z.number(),
-        hasMore: z.boolean(), nextCursor: z.string().optional(),
+    200: jsonContent(
+      z.object({
+        data: z.array(exportResponseSchema),
+        pagination: z.object({
+          total: z.number(),
+          limit: z.number(),
+          hasMore: z.boolean(),
+          nextCursor: z.string().optional(),
+        }),
       }),
-    }), 'Export list'),
+      'Export list',
+    ),
   },
 });
 ```
@@ -707,6 +753,7 @@ git commit -m "feat(api): add cursor pagination and incremental fetch to all lis
 ## Task 7: Cache Wiring
 
 **Files:**
+
 - Modify: `apps/api/src/types.ts`
 - Modify: `packages/db/src/repositories/schema-repository.ts`
 - Modify: `packages/db/src/repositories/job-repository.ts`
@@ -716,11 +763,13 @@ git commit -m "feat(api): add cursor pagination and incremental fetch to all lis
 - [ ] **Step 1: Add cache to AppDeps**
 
 In `apps/api/src/types.ts`, add:
+
 ```typescript
 import type { RedisCache } from '@spatula/db';
 ```
 
 Add to `AppDeps`:
+
 ```typescript
   cache?: RedisCache;
 ```
@@ -755,10 +804,11 @@ Add a `setCache(cache)` method or accept cache in constructor. On `findLatest`, 
 ```
 
 On schema writes (`create`), invalidate:
+
 ```typescript
-    if (this.cache) {
-      void this.cache.invalidate(`schema:${jobId}:*`).catch(() => {});
-    }
+if (this.cache) {
+  void this.cache.invalidate(`schema:${jobId}:*`).catch(() => {});
+}
 ```
 
 - [ ] **Step 3: Wire cache into job config lookups**
@@ -779,10 +829,11 @@ Read `packages/db/src/repositories/job-repository.ts`. The `findById` method ret
 ```
 
 On job status updates (`updateStatus`, `updateStats`), invalidate:
+
 ```typescript
-    if (this.cache) {
-      void this.cache.invalidate(`job:${jobId}:*`).catch(() => {});
-    }
+if (this.cache) {
+  void this.cache.invalidate(`job:${jobId}:*`).catch(() => {});
+}
 ```
 
 - [ ] **Step 4: Wire cache into tenant quota lookups**
@@ -803,10 +854,11 @@ In `packages/db/src/repositories/tenant-repository.ts`, wrap `getQuotas` with ca
 ```
 
 On `update`, invalidate:
+
 ```typescript
-    if (this.cache) {
-      void this.cache.invalidate(`tenant:${id}:*`).catch(() => {});
-    }
+if (this.cache) {
+  void this.cache.invalidate(`tenant:${id}:*`).catch(() => {});
+}
 ```
 
 - [ ] **Step 5: Wire cache into entity count**
@@ -828,10 +880,11 @@ In `packages/db/src/repositories/entity-repository.ts`, wrap `countByJob` with c
 ```
 
 On `create`, invalidate:
+
 ```typescript
-    if (this.cache) {
-      void this.cache.invalidate(`entity-count:${input.jobId}`).catch(() => {});
-    }
+if (this.cache) {
+  void this.cache.invalidate(`entity-count:${input.jobId}`).catch(() => {});
+}
 ```
 
 - [ ] **Step 6: Build and test**
@@ -862,6 +915,7 @@ pnpm --filter @spatula/api test && pnpm --filter @spatula/db test && pnpm --filt
 - [ ] **Step 2: Verify new test counts**
 
 Expected new tests:
+
 - Cursor encoding: 5 tests
 - RedisCache: 5 tests
 - Plus any new tests for cursor endpoints

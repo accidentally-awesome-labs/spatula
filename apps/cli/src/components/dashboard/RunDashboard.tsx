@@ -89,7 +89,10 @@ export function RunDashboard({
               Errors: {String(jobData.errors ?? jobData.errorCount ?? 0)}
             </Text>
             {jobData.lastError ? (
-              <Text color="red" dimColor> — {String(jobData.lastError)}</Text>
+              <Text color="red" dimColor>
+                {' '}
+                — {String(jobData.lastError)}
+              </Text>
             ) : null}
           </Box>
         )}

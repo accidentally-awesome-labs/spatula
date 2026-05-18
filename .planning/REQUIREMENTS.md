@@ -195,46 +195,48 @@ Acknowledged but explicitly deferred per spec §2.2 — surface in a later miles
 
 Hard exclusions for v1.1; reasons recorded.
 
-| Feature | Reason |
-|---------|--------|
-| Reference web UI in OSS repo | Spec §2.2 — belongs in sibling repo / private SaaS. Web-UI **enablement** (SDK, OpenAPI, SSE, browser OIDC) ships; UI itself does not. |
-| Stripe billing / usage metering / tier presets in OSS | Carved out to private `spatula-saas` repo per spec §3.1 — commercial-revenue machinery is not OSS. |
-| Email/password auth | OIDC-only at v1; self-hosters bring their own IDP. Avoids password-storage burden. |
-| Per-file copyright headers | LICENSE at root is sufficient (spec §2.2). |
-| Reference Slack/Discord chat integration | Out of OSS scope; community can build via webhooks. |
-| Telemetry / phone-home | Privacy promise; zero-telemetry declared in `docs/privacy.md`. |
-| `cmd` / PowerShell native support | WSL only; not a v1 priority. |
-| CLI a11y showcase beyond `NO_COLOR` + terminal-size | Resource constraint; docs site IS held to WCAG 2.1 AA. |
+| Feature                                               | Reason                                                                                                                                 |
+| ----------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------- |
+| Reference web UI in OSS repo                          | Spec §2.2 — belongs in sibling repo / private SaaS. Web-UI **enablement** (SDK, OpenAPI, SSE, browser OIDC) ships; UI itself does not. |
+| Stripe billing / usage metering / tier presets in OSS | Carved out to private `spatula-saas` repo per spec §3.1 — commercial-revenue machinery is not OSS.                                     |
+| Email/password auth                                   | OIDC-only at v1; self-hosters bring their own IDP. Avoids password-storage burden.                                                     |
+| Per-file copyright headers                            | LICENSE at root is sufficient (spec §2.2).                                                                                             |
+| Reference Slack/Discord chat integration              | Out of OSS scope; community can build via webhooks.                                                                                    |
+| Telemetry / phone-home                                | Privacy promise; zero-telemetry declared in `docs/privacy.md`.                                                                         |
+| `cmd` / PowerShell native support                     | WSL only; not a v1 priority.                                                                                                           |
+| CLI a11y showcase beyond `NO_COLOR` + terminal-size   | Resource constraint; docs site IS held to WCAG 2.1 AA.                                                                                 |
 
 ## Traceability
 
-| Requirement | Phase | Status |
-|-------------|-------|--------|
-| BLOCK-01 | Phase 15 (gate) | Pending |
-| BLOCK-02 | Phase 18 / Phase 22 | Pending |
-| BLOCK-03 | Phase 20 (gate) | Pending |
-| BLOCK-04 | Phase 16 (gate) | Pending |
-| BLOCK-05 | Phase 22 (gate) | Pending |
-| BLOCK-06 | Phase 18 / Phase 22 | Pending |
-| BLOCK-07 | Phase 22 (gate) | Pending |
-| BLOCK-08 | Phase 20 (gate) | Pending |
-| BLOCK-09 | Phase 18 / Phase 22 | Pending |
-| CARVE-01..08 | Phase 15 | Pending |
-| API-01..14 | Phase 16 | Pending |
-| SDK-01..08 | Phase 16 | Pending |
-| AUTH-01..08 | Phase 17 | Pending |
-| SEC-01..12 | Phase 18 | Pending |
-| LEGAL-01..08 | Phase 18 | Pending |
-| DEPLOY-01..11 | Phase 19 | Pending |
-| DOCS-01..10 | Phase 20 | Pending |
-| CONTRIB-01..12 | Phase 21 | Pending |
-| LAUNCH-01..20 | Phase 22 | Pending |
+| Requirement    | Phase               | Status  |
+| -------------- | ------------------- | ------- |
+| BLOCK-01       | Phase 15 (gate)     | Pending |
+| BLOCK-02       | Phase 18 / Phase 22 | Pending |
+| BLOCK-03       | Phase 20 (gate)     | Pending |
+| BLOCK-04       | Phase 16 (gate)     | Pending |
+| BLOCK-05       | Phase 22 (gate)     | Pending |
+| BLOCK-06       | Phase 18 / Phase 22 | Pending |
+| BLOCK-07       | Phase 22 (gate)     | Pending |
+| BLOCK-08       | Phase 20 (gate)     | Pending |
+| BLOCK-09       | Phase 18 / Phase 22 | Pending |
+| CARVE-01..08   | Phase 15            | Pending |
+| API-01..14     | Phase 16            | Pending |
+| SDK-01..08     | Phase 16            | Pending |
+| AUTH-01..08    | Phase 17            | Pending |
+| SEC-01..12     | Phase 18            | Pending |
+| LEGAL-01..08   | Phase 18            | Pending |
+| DEPLOY-01..11  | Phase 19            | Pending |
+| DOCS-01..10    | Phase 20            | Pending |
+| CONTRIB-01..12 | Phase 21            | Pending |
+| LAUNCH-01..20  | Phase 22            | Pending |
 
 **Coverage:**
+
 - v1 requirements: 120 total (9 BLOCK + 8 CARVE + 14 API + 8 SDK + 8 AUTH + 12 SEC + 8 LEGAL + 11 DEPLOY + 10 DOCS + 12 CONTRIB + 20 LAUNCH)
 - Mapped to phases: 120
 - Unmapped: 0 ✓
 
 ---
-*Requirements defined: 2026-05-11*
-*Last updated: 2026-05-11 after initial definition (derived from Wave 6 spec)*
+
+_Requirements defined: 2026-05-11_
+_Last updated: 2026-05-11 after initial definition (derived from Wave 6 spec)_

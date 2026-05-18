@@ -22,7 +22,9 @@ function createTestApp(redis: Redis) {
 describe('rateLimitMiddleware', () => {
   let redis: Redis;
 
-  beforeEach(() => { redis = createMockRedis(); });
+  beforeEach(() => {
+    redis = createMockRedis();
+  });
 
   it('allows request when under limit', async () => {
     (redis as any).eval.mockResolvedValue([1, 5]);

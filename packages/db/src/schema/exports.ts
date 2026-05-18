@@ -6,8 +6,12 @@ export const exports = pgTable(
   'exports',
   {
     id: uuid('id').primaryKey().defaultRandom(),
-    jobId: uuid('job_id').notNull().references(() => jobs.id),
-    tenantId: uuid('tenant_id').notNull().references(() => tenants.id),
+    jobId: uuid('job_id')
+      .notNull()
+      .references(() => jobs.id),
+    tenantId: uuid('tenant_id')
+      .notNull()
+      .references(() => tenants.id),
     format: text('format').notNull(),
     status: text('status').notNull().default('pending'),
     includeProvenance: boolean('include_provenance').notNull().default(false),

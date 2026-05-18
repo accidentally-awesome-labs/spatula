@@ -11,19 +11,20 @@
 
 ## Metrics
 
-| Metric | Value |
-|--------|-------|
-| Total commits on branch (vs main) | **36** |
-| Diff stat (vs main) | **+5,353 / −25,799** across 115 files |
-| Test baseline (pre-cut, Plan 15-01) | 293 files / 2,643 tests (per-package isolated runs) |
-| Test count (post-strip, Plan 15-03) | 289 files / 2,670 tests (−6 files / +27 tests; isolated runs) |
-| New test suites (Plan 15-05) | `tests/carveout/` 3 files / **7 tests** + `tests/private-contract/` 2 files / **22 tests** = **29 net-new tests** |
-| Migration squash | 12 sequential migrations (`0000_previous_nova` → `0011_young_boomer`) → 1 baseline (`0000_v1_baseline.sql`, 281 lines) |
-| Migration journal rename | `__drizzle_migrations` → `__drizzle_migrations_oss` (Plan 15-04) |
-| CI gates added | 3 — `migration-equivalence.yml` + `test-carveout` job + `test-private-contract` job |
-| Packages affected | **6** — api, core, db, queue, shared, cli |
+| Metric                              | Value                                                                                                                  |
+| ----------------------------------- | ---------------------------------------------------------------------------------------------------------------------- |
+| Total commits on branch (vs main)   | **36**                                                                                                                 |
+| Diff stat (vs main)                 | **+5,353 / −25,799** across 115 files                                                                                  |
+| Test baseline (pre-cut, Plan 15-01) | 293 files / 2,643 tests (per-package isolated runs)                                                                    |
+| Test count (post-strip, Plan 15-03) | 289 files / 2,670 tests (−6 files / +27 tests; isolated runs)                                                          |
+| New test suites (Plan 15-05)        | `tests/carveout/` 3 files / **7 tests** + `tests/private-contract/` 2 files / **22 tests** = **29 net-new tests**      |
+| Migration squash                    | 12 sequential migrations (`0000_previous_nova` → `0011_young_boomer`) → 1 baseline (`0000_v1_baseline.sql`, 281 lines) |
+| Migration journal rename            | `__drizzle_migrations` → `__drizzle_migrations_oss` (Plan 15-04)                                                       |
+| CI gates added                      | 3 — `migration-equivalence.yml` + `test-carveout` job + `test-private-contract` job                                    |
+| Packages affected                   | **6** — api, core, db, queue, shared, cli                                                                              |
 
 ## Packages affected
+
 - `apps/api` — billing routes unmounted, Stripe dep dropped, GET /api/v1/auth/me added
 - `apps/cli` — `getSubscription()` → `getAuthMe()`, `remote add` rewired
 - `packages/core` — `QuotaEnforcer` coupling removed; pipeline orchestrators clean
@@ -35,17 +36,17 @@
 
 Per-package isolated runs (re-verified Task 5):
 
-| Package | Files | Tests | Status |
-|---------|-------|-------|--------|
-| `@spatula/core` | 90 | 965 | ✅ |
-| `@spatula/db` | 28 | 313 | ✅ |
-| `@spatula/queue` | 17 | 141 | ✅ |
-| `@spatula/api` | 48 | 349 | ✅ |
-| `@spatula/shared` | 10 | 70 | ✅ |
-| `@spatula/cli` | 96 | 736 pass / 96 skip (per Plan 15-03) | ✅ (not re-run in 15-06) |
-| **`tests/carveout/`** (new) | 3 | **7** | ✅ |
-| **`tests/private-contract/`** (new) | 2 | **22** | ✅ |
-| **TOTAL** | **294** | **2,603** | ✅ |
+| Package                             | Files   | Tests                               | Status                   |
+| ----------------------------------- | ------- | ----------------------------------- | ------------------------ |
+| `@spatula/core`                     | 90      | 965                                 | ✅                       |
+| `@spatula/db`                       | 28      | 313                                 | ✅                       |
+| `@spatula/queue`                    | 17      | 141                                 | ✅                       |
+| `@spatula/api`                      | 48      | 349                                 | ✅                       |
+| `@spatula/shared`                   | 10      | 70                                  | ✅                       |
+| `@spatula/cli`                      | 96      | 736 pass / 96 skip (per Plan 15-03) | ✅ (not re-run in 15-06) |
+| **`tests/carveout/`** (new)         | 3       | **7**                               | ✅                       |
+| **`tests/private-contract/`** (new) | 2       | **22**                              | ✅                       |
+| **TOTAL**                           | **294** | **2,603**                           | ✅                       |
 
 `pnpm build` exits 0 across all 6 packages.
 
@@ -74,26 +75,26 @@ Per-package isolated runs (re-verified Task 5):
 
 ## Phase 15 requirements satisfied
 
-| Requirement | Status | Evidence |
-|-------------|--------|----------|
-| **CARVE-01** | ✅ | Plan 15-02 — 18 Section A files extracted via `git filter-repo` to `spatula-saas`, 13 commits of history preserved (see `docs/superpowers/plans/6-1-filter-repo-evidence.md`) |
-| **CARVE-02** | ✅ | Plan 15-03 — 5 packages stripped of coupling; tenants schema → 6 columns; `DEFAULT_RATE_LIMIT` replaces `RATE_LIMIT_TIERS`; admin metrics has no `usage_records` reference |
-| **CARVE-03** | ✅ | Plan 15-04 — 12 migrations → `0000_v1_baseline.sql`; zero billing tables in squashed schema |
-| **CARVE-04** | ✅ | Plan 15-04 + 15-06 — `__drizzle_migrations_oss` namespace pinned in 3 files; documented in `docs/runbooks/upgrade.md`; final grep gate green |
-| **CARVE-05** | ✅ | Plan 15-05 — `tests/carveout/` (7 tests across 3 files) passes; wired into CI as `test-carveout` job |
-| **CARVE-06** | ✅ | Plan 15-05 — `tests/private-contract/` (22 tests across 2 files) passes; SQL schema lint via `pg_dump`; wired into CI as `test-private-contract` job; `docs/private-contract.md` (Plan 15-06) records residual risks |
-| **CARVE-07** | ✅ | Plan 15-06 — `docs/architecture.md` refreshed with carve-out section; zero billing mentions remain (grep clean) |
-| **CARVE-08** | ✅ | Plan 15-06 — no-migration-downgrade policy + expand-contract-only schema-change rule committed to `docs/runbooks/upgrade.md` |
+| Requirement  | Status | Evidence                                                                                                                                                                                                             |
+| ------------ | ------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **CARVE-01** | ✅     | Plan 15-02 — 18 Section A files extracted via `git filter-repo` to `spatula-saas`, 13 commits of history preserved (see `docs/superpowers/plans/6-1-filter-repo-evidence.md`)                                        |
+| **CARVE-02** | ✅     | Plan 15-03 — 5 packages stripped of coupling; tenants schema → 6 columns; `DEFAULT_RATE_LIMIT` replaces `RATE_LIMIT_TIERS`; admin metrics has no `usage_records` reference                                           |
+| **CARVE-03** | ✅     | Plan 15-04 — 12 migrations → `0000_v1_baseline.sql`; zero billing tables in squashed schema                                                                                                                          |
+| **CARVE-04** | ✅     | Plan 15-04 + 15-06 — `__drizzle_migrations_oss` namespace pinned in 3 files; documented in `docs/runbooks/upgrade.md`; final grep gate green                                                                         |
+| **CARVE-05** | ✅     | Plan 15-05 — `tests/carveout/` (7 tests across 3 files) passes; wired into CI as `test-carveout` job                                                                                                                 |
+| **CARVE-06** | ✅     | Plan 15-05 — `tests/private-contract/` (22 tests across 2 files) passes; SQL schema lint via `pg_dump`; wired into CI as `test-private-contract` job; `docs/private-contract.md` (Plan 15-06) records residual risks |
+| **CARVE-07** | ✅     | Plan 15-06 — `docs/architecture.md` refreshed with carve-out section; zero billing mentions remain (grep clean)                                                                                                      |
+| **CARVE-08** | ✅     | Plan 15-06 — no-migration-downgrade policy + expand-contract-only schema-change rule committed to `docs/runbooks/upgrade.md`                                                                                         |
 
 ## Final gate evidence (Plan 15-06 Task 4)
 
 All three CARVE-04 grep scopes return zero hits as of branch tip `3e7610b`:
 
-| Scope | Result | Note |
-|-------|--------|------|
+| Scope                                                                                                   | Result     | Note                                  |
+| ------------------------------------------------------------------------------------------------------- | ---------- | ------------------------------------- |
 | Primary: `apps/api/**` `packages/db/**` `packages/queue/**` `.env.example` (with documented exclusions) | **0 hits** | 5 initial hits fixed in Task 4 commit |
-| OpenAPI fixtures: `apps/api/src/schemas/**` `tests/e2e/fixtures/**` | **0 hits** | Clean since Plan 15-03 |
-| Architecture: `docs/architecture.md` | **0 hits** | Clean since Plan 15-06 Task 1 |
+| OpenAPI fixtures: `apps/api/src/schemas/**` `tests/e2e/fixtures/**`                                     | **0 hits** | Clean since Plan 15-03                |
+| Architecture: `docs/architecture.md`                                                                    | **0 hits** | Clean since Plan 15-06 Task 1         |
 
 Permanent audit record: `docs/superpowers/plans/6-1-final-grep-evidence.md`.
 

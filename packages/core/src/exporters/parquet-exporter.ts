@@ -31,7 +31,8 @@ export class ParquetExporter implements Exporter {
       type: toParquetType(col.nativeType),
       nullable: col.nullable,
       data: entities.map((entity: unknown) => {
-        const val = ((entity as Record<string, unknown>).mergedData as Record<string, unknown> ?? {})[col.name];
+        const val = (((entity as Record<string, unknown>).mergedData as Record<string, unknown>) ??
+          {})[col.name];
         if (val === undefined || val === null) return null;
         if (typeof val === 'object') return JSON.stringify(val);
         return val;

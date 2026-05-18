@@ -14,10 +14,18 @@ function makeEntity(id: string, data: Record<string, unknown> = {}): Entity {
 function mockDataSource(overrides: Partial<DataSource> = {}): DataSource {
   return {
     getEntities: vi.fn().mockResolvedValue({ data: [], total: 0 }),
-    getEntity: vi.fn(), searchEntities: vi.fn(), getSchema: vi.fn(),
-    getSchemaVersions: vi.fn(), getActions: vi.fn(), approveAction: vi.fn(),
-    rejectAction: vi.fn(), getStatus: vi.fn(), createExport: vi.fn(),
-    getExport: vi.fn(), downloadExport: vi.fn(), getDocumentation: vi.fn(),
+    getEntity: vi.fn(),
+    searchEntities: vi.fn(),
+    getSchema: vi.fn(),
+    getSchemaVersions: vi.fn(),
+    getActions: vi.fn(),
+    approveAction: vi.fn(),
+    rejectAction: vi.fn(),
+    getStatus: vi.fn(),
+    createExport: vi.fn(),
+    getExport: vi.fn(),
+    downloadExport: vi.fn(),
+    getDocumentation: vi.fn(),
     ...overrides,
   } as DataSource;
 }
@@ -33,7 +41,9 @@ describe('exportFromDataSource', () => {
     const ds = mockDataSource({
       getEntities: vi.fn().mockResolvedValue({ data: entities, total: 2 }),
     });
-    const filepath = await exportFromDataSource(ds, 'job-12345678', 'json', { schemaFields: ['name'] });
+    const filepath = await exportFromDataSource(ds, 'job-12345678', 'json', {
+      schemaFields: ['name'],
+    });
     expect(ds.getEntities).toHaveBeenCalledTimes(1);
     expect(ds.getEntities).toHaveBeenCalledWith({ limit: 200, offset: 0 });
     expect(writeFile).toHaveBeenCalledTimes(1);
@@ -45,7 +55,8 @@ describe('exportFromDataSource', () => {
     const batch1 = Array.from({ length: 200 }, (_, i) => makeEntity(`e${i}`));
     const batch2 = [makeEntity('e200'), makeEntity('e201')];
     const ds = mockDataSource({
-      getEntities: vi.fn()
+      getEntities: vi
+        .fn()
         .mockResolvedValueOnce({ data: batch1, total: 202 })
         .mockResolvedValueOnce({ data: batch2, total: 202 }),
     });
@@ -70,7 +81,9 @@ describe('exportFromDataSource', () => {
   it('writes CSV with correct fields', async () => {
     const { exportFromDataSource } = await import('../../../src/hooks/useExport.js');
     const ds = mockDataSource({
-      getEntities: vi.fn().mockResolvedValue({ data: [makeEntity('e1', { name: 'Alice', age: 30 })], total: 1 }),
+      getEntities: vi
+        .fn()
+        .mockResolvedValue({ data: [makeEntity('e1', { name: 'Alice', age: 30 })], total: 1 }),
     });
     await exportFromDataSource(ds, 'job-csv', 'csv', { schemaFields: ['name', 'age'] });
     const writtenContent = (writeFile as any).mock.calls[0][1] as string;

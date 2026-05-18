@@ -52,7 +52,9 @@ describe('HealthCheckRegistry', () => {
     registry.register({
       name: 'broken',
       category: 'system',
-      run: async () => { throw new Error('Unexpected'); },
+      run: async () => {
+        throw new Error('Unexpected');
+      },
     });
 
     const results = await registry.runChecks(['system']);

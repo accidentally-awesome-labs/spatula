@@ -43,19 +43,22 @@ export class SqliteSchemaRepository implements SchemaRepo {
     parentId?: string;
   }): Promise<unknown> {
     const id = crypto.randomUUID();
-    wrapStorageError(() => {
-      this.db
-        .insert(schemasTable)
-        .values({
-          id,
-          jobId: this.projectId,
-          version: data.version,
-          definition: data.definition,
-          parentId: data.parentId ?? null,
-          createdAt: new Date().toISOString(),
-        })
-        .run();
-    }, { method: 'create', table: 'schemas' });
+    wrapStorageError(
+      () => {
+        this.db
+          .insert(schemasTable)
+          .values({
+            id,
+            jobId: this.projectId,
+            version: data.version,
+            definition: data.definition,
+            parentId: data.parentId ?? null,
+            createdAt: new Date().toISOString(),
+          })
+          .run();
+      },
+      { method: 'create', table: 'schemas' },
+    );
     return { id };
   }
 
@@ -63,13 +66,15 @@ export class SqliteSchemaRepository implements SchemaRepo {
    * List all schema versions ordered by version descending.
    * Not part of the pipeline interface — used by CLI for schema history.
    */
-  async findAllVersions(_jobId: string): Promise<Array<{
-    id: string;
-    version: number;
-    definition: SchemaDefinition;
-    parentId: string | null;
-    createdAt: string;
-  }>> {
+  async findAllVersions(_jobId: string): Promise<
+    Array<{
+      id: string;
+      version: number;
+      definition: SchemaDefinition;
+      parentId: string | null;
+      createdAt: string;
+    }>
+  > {
     return this.db
       .select()
       .from(schemasTable)

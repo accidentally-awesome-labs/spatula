@@ -1,7 +1,7 @@
 import { eq, and } from 'drizzle-orm';
 import { createLogger, StorageError } from '@spatula/shared';
 import { sourceTrust } from '../schema/source-trust.js';
-import { trustLevelEnum } from '../schema/enums.js';
+import type { trustLevelEnum } from '../schema/enums.js';
 import type { Database } from '../connection.js';
 
 const logger = createLogger('source-trust-repository');

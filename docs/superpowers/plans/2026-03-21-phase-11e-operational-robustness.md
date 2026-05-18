@@ -86,6 +86,7 @@ Modified:
 ## Task 1: Error Hierarchy — Base Class + New Types
 
 **Files:**
+
 - Modify: `packages/shared/src/errors.ts`
 - Test: `packages/shared/tests/errors.test.ts`
 
@@ -202,6 +203,7 @@ git commit -m "feat(shared): add retryable flag to SpatulaError and 5 new error 
 ## Task 2: StateError Migration
 
 **Files:**
+
 - Modify: `packages/queue/src/state-machine.ts`
 - Modify: `packages/queue/src/index.ts`
 - Modify: `packages/queue/tests/unit/state-machine.test.ts`
@@ -217,6 +219,7 @@ Remove the `InvalidTransitionError` class definition (lines 3-11). Add import: `
 - [ ] **Step 2: Update index.ts re-export**
 
 In `packages/queue/src/index.ts` line 2, change:
+
 ```typescript
 // Before
 export { JobStateMachine, InvalidTransitionError } from './state-machine.js';
@@ -232,6 +235,7 @@ In `packages/queue/tests/unit/state-machine.test.ts`: replace `InvalidTransition
 In `packages/queue/tests/unit/job-manager.test.ts`: same replacement.
 
 In `packages/queue/tests/unit/exports.test.ts`:
+
 - Line 7: Change to verify `InvalidTransitionError` is no longer exported: remove the `expect(mod.InvalidTransitionError).toBeDefined()` assertion (or replace with `expect(mod.JobStateMachine).toBeDefined()` which is already tested).
 - Line 39: `expect(root.InvalidTransitionError).toBeDefined()` becomes `expect(root.StateError).toBeDefined()` (StateError is re-exported from `@spatula/shared` via the root index).
 
@@ -252,6 +256,7 @@ git commit -m "refactor(queue): migrate InvalidTransitionError to StateError fro
 ## Task 3: Worker Error Cleanup + API Error Handler
 
 **Files:**
+
 - Modify: `packages/queue/src/workers/export-worker.ts:16-43`
 - Modify: `packages/queue/src/workers/crawl-worker.ts:197-202`
 - Modify: `apps/api/src/middleware/error-handler.ts:24-33`
@@ -263,6 +268,7 @@ git commit -m "refactor(queue): migrate InvalidTransitionError to StateError fro
 - [ ] **Step 1: Update export-worker.ts with typed errors**
 
 Add imports: `QueueError, ValidationError` from `@spatula/shared`. Replace 4 generic `throw new Error(...)`:
+
 - Line 20 `'Job not found'` becomes `new QueueError('Job not found', { context: { exportId, jobId } })`
 - Line 24 `'Job is not completed...'` becomes `new QueueError(..., { context: { exportId, jobId, status: jobStatus } })`
 - Line 33 `'No schema found'` becomes `new QueueError(..., { context: { exportId, jobId } })`
@@ -305,13 +311,29 @@ In `apps/api/src/routes/exports.ts` line 80, change `{ attempts: 1, removeOnComp
 In `apps/api/tests/unit/middleware/error-handler.test.ts`, add tests for the 5 new mappings:
 
 ```typescript
-import { QueueError, TimeoutError, RateLimitError, NetworkError, StateError } from '@spatula/shared';
+import {
+  QueueError,
+  TimeoutError,
+  RateLimitError,
+  NetworkError,
+  StateError,
+} from '@spatula/shared';
 
-it('maps QueueError to 503', () => { /* throw new QueueError('test'), verify status 503 */ });
-it('maps TimeoutError to 504', () => { /* throw new TimeoutError('test'), verify status 504 */ });
-it('maps RateLimitError to 429', () => { /* throw new RateLimitError('test'), verify status 429 */ });
-it('maps NetworkError to 502', () => { /* throw new NetworkError('test'), verify status 502 */ });
-it('maps StateError to 409', () => { /* throw new StateError('test'), verify status 409 */ });
+it('maps QueueError to 503', () => {
+  /* throw new QueueError('test'), verify status 503 */
+});
+it('maps TimeoutError to 504', () => {
+  /* throw new TimeoutError('test'), verify status 504 */
+});
+it('maps RateLimitError to 429', () => {
+  /* throw new RateLimitError('test'), verify status 429 */
+});
+it('maps NetworkError to 502', () => {
+  /* throw new NetworkError('test'), verify status 502 */
+});
+it('maps StateError to 409', () => {
+  /* throw new StateError('test'), verify status 409 */
+});
 ```
 
 Follow the existing test pattern in the file for throwing errors through Hono and asserting response status.
@@ -334,6 +356,7 @@ git commit -m "feat(errors): replace generic throws with typed errors, add API e
 ## Task 4: Centralized Config Validation
 
 **Files:**
+
 - Modify: `packages/shared/src/config.ts`
 - Test: `packages/shared/tests/config.test.ts`
 
@@ -348,7 +371,9 @@ import { loadConfig, loadConfigSafe } from '../src/config.js';
 import { ConfigError } from '../src/errors.js';
 
 describe('loadConfig', () => {
-  afterEach(() => { vi.unstubAllEnvs(); });
+  afterEach(() => {
+    vi.unstubAllEnvs();
+  });
 
   it('returns validated config when all required env vars set', () => {
     vi.stubEnv('DATABASE_URL', 'postgresql://localhost:5432/spatula');
@@ -366,7 +391,9 @@ describe('loadConfig', () => {
     vi.stubEnv('DATABASE_URL', '');
     vi.stubEnv('OPENROUTER_API_KEY', '');
     expect(() => loadConfig()).toThrow(ConfigError);
-    try { loadConfig(); } catch (e) {
+    try {
+      loadConfig();
+    } catch (e) {
       expect((e as ConfigError).message).toContain('DATABASE_URL');
       expect((e as ConfigError).message).toContain('OPENROUTER_API_KEY');
     }
@@ -391,7 +418,9 @@ describe('loadConfig', () => {
 });
 
 describe('loadConfigSafe', () => {
-  afterEach(() => { vi.unstubAllEnvs(); });
+  afterEach(() => {
+    vi.unstubAllEnvs();
+  });
 
   it('returns config on success', () => {
     vi.stubEnv('DATABASE_URL', 'postgresql://localhost:5432/spatula');
@@ -434,6 +463,7 @@ git commit -m "feat(shared): add Zod-based centralized config validation"
 ## Task 5: Logger Context Propagation
 
 **Files:**
+
 - Modify: `packages/shared/src/logger.ts`
 - Test: `packages/shared/tests/logger.test.ts`
 
@@ -467,7 +497,9 @@ describe('createLoggerWithContext', () => {
 });
 
 describe('LOG_LEVEL validation', () => {
-  afterEach(() => { vi.unstubAllEnvs(); });
+  afterEach(() => {
+    vi.unstubAllEnvs();
+  });
 
   it('throws ConfigError for invalid LOG_LEVEL', () => {
     vi.stubEnv('LOG_LEVEL', 'verbose');
@@ -490,6 +522,7 @@ Expected: FAIL — `createLoggerWithContext` not exported, LOG_LEVEL validation 
 - [ ] **Step 3: Implement**
 
 Update `packages/shared/src/logger.ts`:
+
 - Add `import { ConfigError } from './errors.js'`
 - Define `VALID_LEVELS` array
 - In `createLogger()`, validate `LOG_LEVEL` against `VALID_LEVELS` before using it; throw `ConfigError` if invalid
@@ -512,6 +545,7 @@ git commit -m "feat(shared): add createLoggerWithContext and LOG_LEVEL validatio
 ## Task 6: Request Context Middleware + Worker Logger Migration
 
 **Files:**
+
 - Create: `apps/api/src/middleware/request-context.ts`
 - Modify: `apps/api/src/app.ts`
 - Modify: `apps/api/src/types.ts`
@@ -557,12 +591,14 @@ export const requestContextMiddleware: MiddlewareHandler<AppEnv> = async (c, nex
 - [ ] **Step 3: Wire middleware into app.ts**
 
 In `apps/api/src/app.ts`:
+
 - Add import: `import { requestContextMiddleware } from './middleware/request-context.js';`
 - Insert `app.use('*', requestContextMiddleware);` as the first middleware, before `honoLogger()`
 
 - [ ] **Step 4: Update error-handler.ts to read requestId from context**
 
 In `apps/api/src/middleware/error-handler.ts` line 40, change:
+
 ```typescript
 // Before
 const requestId = c.req.header('x-request-id') ?? crypto.randomUUID();
@@ -575,6 +611,7 @@ The fallback chain handles edge cases where error handler runs before the middle
 - [ ] **Step 5: Update openapi-config.ts to read requestId from context**
 
 In `apps/api/src/openapi-config.ts` line 8, same change:
+
 ```typescript
 const requestId = c.get('requestId') ?? c.req.header('x-request-id') ?? crypto.randomUUID();
 ```
@@ -642,6 +679,7 @@ git commit -m "feat: add request-context middleware, migrate worker loggers to p
 ## Task 7: Content Store Binary Support
 
 **Files:**
+
 - Modify: `packages/core/src/interfaces/content-store.ts`
 - Modify: `packages/db/src/schema/content.ts`
 - Modify: `packages/db/src/content-store/pg-content-store.ts`
@@ -665,6 +703,7 @@ export interface ContentStore {
 - [ ] **Step 2: Update content store DB schema**
 
 In `packages/db/src/schema/content.ts`:
+
 - Add imports: `customType`, `check` from `drizzle-orm/pg-core`, `sql` from `drizzle-orm`
 - Define a `bytea` custom type
 - Make `content` nullable (remove `.notNull()`)
@@ -703,6 +742,7 @@ git commit -m "feat(db): add binary content store support with CHECK constraints
 ## Task 8: Column Mapper
 
 **Files:**
+
 - Create: `packages/core/src/exporters/column-mapper.ts`
 - Create: `packages/core/tests/unit/exporters/column-mapper.test.ts`
 
@@ -713,6 +753,7 @@ git commit -m "feat(db): add binary content store support with CHECK constraints
 Create `packages/core/tests/unit/exporters/column-mapper.test.ts` with tests covering all 8 field types for all 3 targets (sqlite, duckdb, parquet). Verify correct native types and nullable flags.
 
 Key assertions:
+
 - `string` maps to `TEXT`/`VARCHAR`/`UTF8`
 - `currency` maps to `REAL`/`DECIMAL(19,4)`/`DOUBLE`
 - `boolean` maps to `INTEGER` (sqlite), `BOOLEAN` (duckdb/parquet)
@@ -727,6 +768,7 @@ Expected: FAIL — file not found
 - [ ] **Step 3: Implement column mapper**
 
 Create `packages/core/src/exporters/column-mapper.ts` with:
+
 - `ExportTarget` type: `'parquet' | 'duckdb' | 'sqlite'`
 - `ColumnDef` interface: `{ name, nativeType, nullable }`
 - `TYPE_MAP` constant: maps each of 8 field types to native types per target
@@ -758,6 +800,7 @@ git commit -m "feat(core): add column-mapper and binaryData on ExportResult"
 ## Task 9: SQLite Exporter
 
 **Files:**
+
 - Create: `packages/core/src/exporters/sqlite-exporter.ts`
 - Create: `packages/core/tests/unit/exporters/sqlite-exporter.test.ts`
 
@@ -770,6 +813,7 @@ Run: `cd packages/core && pnpm add better-sqlite3 && pnpm add -D @types/better-s
 - [ ] **Step 2: Write failing test**
 
 Create `packages/core/tests/unit/exporters/sqlite-exporter.test.ts`. Test:
+
 - Exports entities to valid SQLite binary (`result.binaryData` is `Uint8Array`)
 - Read back with `better-sqlite3` from buffer: `new Database(Buffer.from(result.binaryData!))`
 - Verify row count, column values, null handling, JSON serialization for array/object fields
@@ -783,6 +827,7 @@ Expected: FAIL — module not found
 - [ ] **Step 4: Implement SQLite exporter**
 
 Create `packages/core/src/exporters/sqlite-exporter.ts`:
+
 - Import `Database` from `better-sqlite3`, `mapSchema` from column-mapper
 - Create in-memory DB, create table with mapped columns, insert entities in a transaction
 - Serialize with `db.serialize()`, convert `Buffer` to `Uint8Array`
@@ -808,6 +853,7 @@ git commit -m "feat(core): add SQLite exporter with binary output"
 ## Task 10: Parquet Exporter
 
 **Files:**
+
 - Create: `packages/core/src/exporters/parquet-exporter.ts`
 - Create: `packages/core/tests/unit/exporters/parquet-exporter.test.ts`
 
@@ -820,6 +866,7 @@ Run: `cd packages/core && pnpm add hyparquet-writer hyparquet`
 - [ ] **Step 2: Write failing test**
 
 Create `packages/core/tests/unit/exporters/parquet-exporter.test.ts`. Test:
+
 - Export small entity set to Parquet
 - Verify `result.binaryData` is `Uint8Array` with non-zero length
 - Read back with `hyparquet`'s `parquetRead` to verify valid Parquet file
@@ -835,6 +882,7 @@ Expected: FAIL — module not found
 - [ ] **Step 4: Implement Parquet exporter**
 
 Create `packages/core/src/exporters/parquet-exporter.ts`:
+
 - Import `parquetWriteBuffer` from `hyparquet-writer`, `mapSchema` from column-mapper
 - Build column-oriented data: for each column, extract values from all entities
 - Serialize nested types (array/object) as JSON strings
@@ -858,6 +906,7 @@ git commit -m "feat(core): add Parquet exporter with hyparquet-writer"
 ## Task 11: DuckDB Exporter
 
 **Files:**
+
 - Create: `packages/core/src/exporters/duckdb-exporter.ts`
 - Create: `packages/core/tests/unit/exporters/duckdb-exporter.test.ts`
 
@@ -870,6 +919,7 @@ Run: `cd packages/core && pnpm add @duckdb/node-api`
 - [ ] **Step 2: Write failing test**
 
 Create `packages/core/tests/unit/exporters/duckdb-exporter.test.ts`. Test:
+
 - Export entities, verify `binaryData` is `Uint8Array`
 - Write binary to temp file, open with `DuckDBInstance.create(path)`, query `SELECT count(*) FROM entities`, verify row count
 - Clean up temp file in `finally`
@@ -884,6 +934,7 @@ Expected: FAIL — module not found
 - [ ] **Step 4: Implement DuckDB exporter**
 
 Create `packages/core/src/exporters/duckdb-exporter.ts`:
+
 - Create temp file path with `os.tmpdir()` + `crypto.randomUUID()` + `.duckdb`
 - Open file-backed DuckDB instance
 - Create table, insert in batches of 500 with parameterized statements
@@ -909,6 +960,7 @@ git commit -m "feat(core): add DuckDB exporter with @duckdb/node-api"
 ## Task 12: Export Worker Integration + API Changes
 
 **Files:**
+
 - Modify: `packages/core/src/exporters/index.ts`
 - Modify: `packages/queue/src/queues.ts:44`
 - Modify: `packages/queue/src/workers/export-worker.ts`
@@ -951,7 +1003,8 @@ it('uses storeBinary for sqlite format', async () => {
   await processExportJob(payload, deps);
   expect(deps.contentStore.storeBinary).toHaveBeenCalled();
   expect(deps.exportRepo.updateStatus).toHaveBeenCalledWith(
-    expect.anything(), expect.anything(),
+    expect.anything(),
+    expect.anything(),
     expect.objectContaining({ status: 'completed', contentRef: 'pg://binary-ref' }),
   );
 });
@@ -967,12 +1020,14 @@ Expected: FAIL — sqlite format not handled
 Update imports to include all 5 exporter classes. Add `getExporter(format)` factory function. Replace the hardcoded `format === 'csv' ? new CsvExporter() : new JsonExporter()` with `getExporter(format)`.
 
 After exporter returns result, branch on `result.binaryData`:
+
 - If present: call `deps.contentStore.storeBinary(key, result.binaryData)`, use `result.binaryData.byteLength` for fileSize
 - Otherwise: existing text path (stringify for JSON envelope, store as text)
 
 - [ ] **Step 7: Update export download route for binary formats**
 
 In `apps/api/src/routes/exports.ts`, update the download handler:
+
 - Add `CONTENT_TYPES` map for all 5 formats
 - Add `binaryFormats` set for parquet/duckdb/sqlite
 - For binary: call `deps.contentStore.retrieveBinary(ref)`, return raw bytes

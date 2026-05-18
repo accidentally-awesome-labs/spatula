@@ -9,6 +9,7 @@
 **Tech Stack:** TypeScript, Vitest, yargs (CLI), `@spatula/core` (crawlers, extraction, LLM)
 
 **Spec references:**
+
 - Phase 12 spec: Workstream J sections 11.3 (Single-Page Test), 11.5 (Cost Estimation)
 - Phase 13 spec: section 11.5 (Cost Estimation details)
 - File: `docs/superpowers/specs/2026-03-21-phase-12-production-readiness-design.md`
@@ -19,27 +20,28 @@
 
 ### New Files
 
-| File | Responsibility |
-|------|---------------|
-| `packages/core/src/cost/estimator.ts` | Pure cost estimation function |
-| `packages/core/src/cost/pricing.ts` | Model pricing data |
-| `packages/core/src/cost/index.ts` | Barrel export |
-| `packages/core/tests/unit/cost/estimator.test.ts` | Cost estimation tests |
-| `apps/cli/src/commands/test-url.ts` | Single-page test command (not .tsx — no React needed) |
-| `apps/cli/tests/unit/commands/test-url.test.ts` | Test command tests |
+| File                                              | Responsibility                                        |
+| ------------------------------------------------- | ----------------------------------------------------- |
+| `packages/core/src/cost/estimator.ts`             | Pure cost estimation function                         |
+| `packages/core/src/cost/pricing.ts`               | Model pricing data                                    |
+| `packages/core/src/cost/index.ts`                 | Barrel export                                         |
+| `packages/core/tests/unit/cost/estimator.test.ts` | Cost estimation tests                                 |
+| `apps/cli/src/commands/test-url.ts`               | Single-page test command (not .tsx — no React needed) |
+| `apps/cli/tests/unit/commands/test-url.test.ts`   | Test command tests                                    |
 
 ### Modified Files
 
-| File | Change |
-|------|--------|
-| `packages/core/src/index.ts` | Add cost barrel export |
-| `apps/cli/src/index.tsx` | Register `test` command |
+| File                         | Change                  |
+| ---------------------------- | ----------------------- |
+| `packages/core/src/index.ts` | Add cost barrel export  |
+| `apps/cli/src/index.tsx`     | Register `test` command |
 
 ---
 
 ## Task 1: Model Pricing Data
 
 **Files:**
+
 - Create: `packages/core/src/cost/pricing.ts`
 
 - [ ] **Step 1: Create pricing data file**
@@ -59,18 +61,18 @@ export interface ModelPricing {
 
 export const MODEL_PRICING: Record<string, ModelPricing> = {
   // Anthropic models
-  'anthropic/claude-sonnet-4-20250514': { promptPer1M: 3.00, completionPer1M: 15.00 },
+  'anthropic/claude-sonnet-4-20250514': { promptPer1M: 3.0, completionPer1M: 15.0 },
   'anthropic/claude-3-haiku-20240307': { promptPer1M: 0.25, completionPer1M: 1.25 },
-  'anthropic/claude-opus-4-20250514': { promptPer1M: 15.00, completionPer1M: 75.00 },
+  'anthropic/claude-opus-4-20250514': { promptPer1M: 15.0, completionPer1M: 75.0 },
   // Google models
-  'google/gemini-2.5-flash': { promptPer1M: 0.15, completionPer1M: 0.60 },
-  'google/gemini-2.5-pro': { promptPer1M: 1.25, completionPer1M: 10.00 },
+  'google/gemini-2.5-flash': { promptPer1M: 0.15, completionPer1M: 0.6 },
+  'google/gemini-2.5-pro': { promptPer1M: 1.25, completionPer1M: 10.0 },
   // Meta models (via OpenRouter)
-  'meta-llama/llama-3.3-70b-instruct': { promptPer1M: 0.40, completionPer1M: 0.40 },
+  'meta-llama/llama-3.3-70b-instruct': { promptPer1M: 0.4, completionPer1M: 0.4 },
 };
 
 /** Default pricing for unknown models */
-export const DEFAULT_PRICING: ModelPricing = { promptPer1M: 1.00, completionPer1M: 5.00 };
+export const DEFAULT_PRICING: ModelPricing = { promptPer1M: 1.0, completionPer1M: 5.0 };
 
 /** Ollama models are always free */
 export const OLLAMA_PRICING: ModelPricing = { promptPer1M: 0, completionPer1M: 0 };
@@ -128,6 +130,7 @@ git commit -m "feat(core): add LLM model pricing data for cost estimation"
 ## Task 2: Cost Estimation Function
 
 **Files:**
+
 - Create: `packages/core/src/cost/estimator.ts`
 - Create: `packages/core/tests/unit/cost/estimator.test.ts`
 - Modify: `packages/core/src/index.ts`
@@ -169,14 +172,18 @@ describe('estimateCost', () => {
   });
 
   it('estimates page count from maxDepth heuristic', () => {
-    const depth0 = estimateCost(createMinimalConfig({
-      crawl: { maxDepth: 0, maxPages: 1000, concurrency: 5, crawlerType: 'playwright' as const },
-    } as any));
+    const depth0 = estimateCost(
+      createMinimalConfig({
+        crawl: { maxDepth: 0, maxPages: 1000, concurrency: 5, crawlerType: 'playwright' as const },
+      } as any),
+    );
     expect(depth0.estimatedPages).toBe(1); // depth 0 = seed pages only
 
-    const depth1 = estimateCost(createMinimalConfig({
-      crawl: { maxDepth: 1, maxPages: 1000, concurrency: 5, crawlerType: 'playwright' as const },
-    } as any));
+    const depth1 = estimateCost(
+      createMinimalConfig({
+        crawl: { maxDepth: 1, maxPages: 1000, concurrency: 5, crawlerType: 'playwright' as const },
+      } as any),
+    );
     expect(depth1.estimatedPages).toBeLessThanOrEqual(1000);
     expect(depth1.estimatedPages).toBeGreaterThan(1);
   });
@@ -199,20 +206,26 @@ describe('estimateCost', () => {
   });
 
   it('sets confidence based on depth and maxPages', () => {
-    const shallow = estimateCost(createMinimalConfig({
-      crawl: { maxDepth: 1, maxPages: 100, concurrency: 5, crawlerType: 'playwright' as const },
-    } as any));
+    const shallow = estimateCost(
+      createMinimalConfig({
+        crawl: { maxDepth: 1, maxPages: 100, concurrency: 5, crawlerType: 'playwright' as const },
+      } as any),
+    );
     expect(shallow.confidence).toBe('high');
 
-    const deep = estimateCost(createMinimalConfig({
-      crawl: { maxDepth: 3, maxPages: 5000, concurrency: 5, crawlerType: 'playwright' as const },
-    } as any));
+    const deep = estimateCost(
+      createMinimalConfig({
+        crawl: { maxDepth: 3, maxPages: 5000, concurrency: 5, crawlerType: 'playwright' as const },
+      } as any),
+    );
     expect(deep.confidence).toBe('low');
 
     // maxPages > 1000 at shallow depth should still be low
-    const shallowButWide = estimateCost(createMinimalConfig({
-      crawl: { maxDepth: 1, maxPages: 5000, concurrency: 5, crawlerType: 'playwright' as const },
-    } as any));
+    const shallowButWide = estimateCost(
+      createMinimalConfig({
+        crawl: { maxDepth: 1, maxPages: 5000, concurrency: 5, crawlerType: 'playwright' as const },
+      } as any),
+    );
     expect(shallowButWide.confidence).toBe('low');
   });
 
@@ -285,7 +298,7 @@ export interface CostEstimate {
   totalTokens: number;
   totalCostUsd: number;
   confidence: 'low' | 'medium' | 'high';
-  llmCallBreakdown: CostBreakdownEntry[];  // Array (not Record) — includes model per entry
+  llmCallBreakdown: CostBreakdownEntry[]; // Array (not Record) — includes model per entry
   warnings: string[];
 }
 
@@ -304,8 +317,8 @@ export function estimateCost(config: JobConfig): CostEstimate {
   // Per-page LLM calls
   const perPageCalls: Array<{ purpose: LLMTask; callsPerPage: number }> = [
     { purpose: 'pageRelevance', callsPerPage: 1 },
-    { purpose: 'extraction', callsPerPage: 0.7 },       // ~70% of pages are extractable
-    { purpose: 'linkEvaluation', callsPerPage: 0.05 },   // 1 batch call per ~20 links
+    { purpose: 'extraction', callsPerPage: 0.7 }, // ~70% of pages are extractable
+    { purpose: 'linkEvaluation', callsPerPage: 0.05 }, // 1 batch call per ~20 links
   ];
 
   // Per-job LLM calls (not per-page)
@@ -418,6 +431,7 @@ git commit -m "feat(core): add LLM cost estimation with per-purpose breakdown"
 ## Task 3: Single-Page Test Command
 
 **Files:**
+
 - Create: `apps/cli/src/commands/test-url.ts`
 - Modify: `apps/cli/src/index.tsx`
 
@@ -452,11 +466,11 @@ export interface TestUrlArgs {
   url: string;
   crawler?: 'playwright' | 'firecrawl';
   format?: 'json' | 'table' | 'raw';
-  schema?: string;       // Path to schema YAML/JSON file
+  schema?: string; // Path to schema YAML/JSON file
   showHtml?: boolean;
   showLinks?: boolean;
   model?: string;
-  skipLlm?: boolean;     // Named --skip-llm (not --no-llm to avoid yargs negation collision)
+  skipLlm?: boolean; // Named --skip-llm (not --no-llm to avoid yargs negation collision)
 }
 
 // Note: --crawler 'http' is deferred — requires a lightweight fetch+cheerio
@@ -488,7 +502,7 @@ export async function testUrl(args: TestUrlArgs): Promise<void> {
       const content = readFileSync(args.schema, 'utf-8');
       const parsed = args.schema.endsWith('.json')
         ? JSON.parse(content)
-        : (await import('yaml')).parse(content);  // yaml is a future dependency — use JSON for now
+        : (await import('yaml')).parse(content); // yaml is a future dependency — use JSON for now
       userSchema = parsed as SchemaDefinition;
     } catch (err) {
       console.error(`Failed to load schema from ${args.schema}: ${(err as Error).message}`);
@@ -498,20 +512,24 @@ export async function testUrl(args: TestUrlArgs): Promise<void> {
 
   // 1. Create LLM client (unless --skip-llm)
   let llmClient: LLMClient | null = null;
-  const primaryModel = model ?? process.env.LLM_PRIMARY_MODEL ?? 'anthropic/claude-sonnet-4-20250514';
+  const primaryModel =
+    model ?? process.env.LLM_PRIMARY_MODEL ?? 'anthropic/claude-sonnet-4-20250514';
 
   if (!skipLlm) {
     const provider = process.env.LLM_PROVIDER ?? 'openrouter';
     try {
       const factoryConfig: LLMFactoryConfig = {
         provider: provider as 'openrouter' | 'ollama',
-        openrouter: provider === 'openrouter' ? { apiKey: process.env.OPENROUTER_API_KEY ?? '' } : undefined,
+        openrouter:
+          provider === 'openrouter' ? { apiKey: process.env.OPENROUTER_API_KEY ?? '' } : undefined,
         ollama: provider === 'ollama' ? { baseUrl: process.env.OLLAMA_BASE_URL } : undefined,
       };
       llmClient = createLLMClient(factoryConfig);
     } catch (err) {
       console.error(`Failed to create LLM client: ${(err as Error).message}`);
-      console.error('Run with --no-llm for CSS-selector-only extraction, or set LLM_PROVIDER=ollama');
+      console.error(
+        'Run with --no-llm for CSS-selector-only extraction, or set LLM_PROVIDER=ollama',
+      );
       process.exit(1);
     }
   }
@@ -542,7 +560,9 @@ export async function testUrl(args: TestUrlArgs): Promise<void> {
     const startTime = Date.now();
     const result = await crawler.crawl(url);
     const crawlTime = ((Date.now() - startTime) / 1000).toFixed(1);
-    console.log(`  Crawled in ${crawlTime}s (${(result.metadata.contentLength / 1024).toFixed(0)}KB, ${result.contentType ?? 'text/html'})`);
+    console.log(
+      `  Crawled in ${crawlTime}s (${(result.metadata.contentLength / 1024).toFixed(0)}KB, ${result.contentType ?? 'text/html'})`,
+    );
 
     // 4. Show raw HTML if requested
     if (showHtml) {
@@ -557,9 +577,15 @@ export async function testUrl(args: TestUrlArgs): Promise<void> {
     let classification: string | undefined;
     if (llmClient) {
       const classifier = new PageClassifier(llmClient, { primaryModel });
-      const classResult = await classifier.classify(result.html, url, 'Extract data from this page');
+      const classResult = await classifier.classify(
+        result.html,
+        url,
+        'Extract data from this page',
+      );
       classification = classResult.classification;
-      console.log(`  Classification: ${classification} (${(classResult.confidence * 100).toFixed(0)}%)`);
+      console.log(
+        `  Classification: ${classification} (${(classResult.confidence * 100).toFixed(0)}%)`,
+      );
     }
 
     // 6. Show evaluated links if requested
@@ -587,33 +613,47 @@ export async function testUrl(args: TestUrlArgs): Promise<void> {
       };
 
       const extractor = new StaticExtractor(llmClient, { primaryModel }, 'test');
-      const extraction = await extractor.extract(result.html, url, schema, 'Extract all relevant data from this page');
+      const extraction = await extractor.extract(
+        result.html,
+        url,
+        schema,
+        'Extract all relevant data from this page',
+      );
 
       // 8. Output results
       if (format === 'json') {
-        console.log(JSON.stringify({
-          url,
-          crawl: {
-            statusCode: result.statusCode,
-            responseTimeMs: result.metadata.responseTimeMs,
-            contentLength: result.metadata.contentLength,
-          },
-          classification,
-          extraction: {
-            fields: extraction.data,
-            unmapped: extraction.metadata.unmappedFields,
-          },
-          model: { provider: process.env.LLM_PROVIDER ?? 'openrouter', model: primaryModel },
-        }, null, 2));
+        console.log(
+          JSON.stringify(
+            {
+              url,
+              crawl: {
+                statusCode: result.statusCode,
+                responseTimeMs: result.metadata.responseTimeMs,
+                contentLength: result.metadata.contentLength,
+              },
+              classification,
+              extraction: {
+                fields: extraction.data,
+                unmapped: extraction.metadata.unmappedFields,
+              },
+              model: { provider: process.env.LLM_PROVIDER ?? 'openrouter', model: primaryModel },
+            },
+            null,
+            2,
+          ),
+        );
       } else {
         // Table format
         console.log('\n  Extracted Fields');
         console.log('  ' + '-'.repeat(60));
         const data = extraction.data as Record<string, unknown>;
         for (const [key, value] of Object.entries(data)) {
-          const valueStr = typeof value === 'string'
-            ? (value.length > 50 ? value.slice(0, 47) + '...' : value)
-            : JSON.stringify(value);
+          const valueStr =
+            typeof value === 'string'
+              ? value.length > 50
+                ? value.slice(0, 47) + '...'
+                : value
+              : JSON.stringify(value);
           console.log(`  ${key.padEnd(20)} ${valueStr}`);
         }
 
@@ -633,7 +673,9 @@ export async function testUrl(args: TestUrlArgs): Promise<void> {
         // `selector` properties defined. If no selectors, extraction will be empty.
         console.log('\n  Running CSS-selector-only extraction (--skip-llm mode)');
         // TODO: Implement CSS-only extraction path when StaticExtractor supports it
-        console.log('  CSS-only extraction not yet implemented. Provide an LLM provider for full extraction.');
+        console.log(
+          '  CSS-only extraction not yet implemented. Provide an LLM provider for full extraction.',
+        );
       } else {
         console.log('\n  No LLM configured. Run with an LLM provider for AI extraction.');
         console.log('  Set LLM_PROVIDER=ollama or OPENROUTER_API_KEY=...');
@@ -706,6 +748,7 @@ git commit -m "feat(cli): add spatula test command for single-page extraction"
 ## Task 4: Test Command Unit Tests
 
 **Files:**
+
 - Create: `apps/cli/tests/unit/commands/test-url.test.ts`
 
 - [ ] **Step 1: Write tests for the test command**
@@ -809,6 +852,7 @@ git commit -m "test(cli): add unit tests for spatula test command"
 ## Task 5: Integration Verification
 
 **Files:**
+
 - No new files — verification only
 
 - [ ] **Step 1: Run full core test suite**

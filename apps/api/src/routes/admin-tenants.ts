@@ -3,7 +3,12 @@ import { ValidationError } from '@spatula/shared';
 import type { AppEnv } from '../types.js';
 
 const MIN_RETENTION_DAYS = 7;
-const RETENTION_FIELDS = ['completedJobsDays', 'failedJobsDays', 'rawPagesDays', 'exportsDays'] as const;
+const RETENTION_FIELDS = [
+  'completedJobsDays',
+  'failedJobsDays',
+  'rawPagesDays',
+  'exportsDays',
+] as const;
 
 export function adminTenantRoutes() {
   const app = new Hono<AppEnv>();
@@ -11,7 +16,11 @@ export function adminTenantRoutes() {
   // GET / — list all tenants with pagination and user count
   app.get('/', async (c) => {
     const deps = c.get('deps');
-    if (!deps.tenantRepo) return c.json({ error: { code: 'NOT_CONFIGURED', message: 'Tenant repo not configured' } }, 503);
+    if (!deps.tenantRepo)
+      return c.json(
+        { error: { code: 'NOT_CONFIGURED', message: 'Tenant repo not configured' } },
+        503,
+      );
 
     const limit = Math.max(1, Math.min(parseInt(c.req.query('limit') ?? '50', 10) || 50, 100));
     const offset = Math.max(0, parseInt(c.req.query('offset') ?? '0', 10) || 0);
@@ -47,7 +56,11 @@ export function adminTenantRoutes() {
   app.get('/:id', async (c) => {
     const deps = c.get('deps');
     const id = c.req.param('id');
-    if (!deps.tenantRepo) return c.json({ error: { code: 'NOT_CONFIGURED', message: 'Tenant repo not configured' } }, 503);
+    if (!deps.tenantRepo)
+      return c.json(
+        { error: { code: 'NOT_CONFIGURED', message: 'Tenant repo not configured' } },
+        503,
+      );
 
     const tenant = await deps.tenantRepo.findById(id);
     if (!tenant) return c.json({ error: { code: 'NOT_FOUND', message: 'Tenant not found' } }, 404);
@@ -62,7 +75,10 @@ export function adminTenantRoutes() {
         ...(tenant as any),
         users: users.map((u: any) => ({ userId: u.userId, role: u.role })),
         recentJobs: recentJobs.map((j: any) => ({
-          id: j.id, name: j.name, status: j.status, createdAt: j.createdAt,
+          id: j.id,
+          name: j.name,
+          status: j.status,
+          createdAt: j.createdAt,
         })),
       },
     });
@@ -72,7 +88,11 @@ export function adminTenantRoutes() {
   app.patch('/:id', async (c) => {
     const deps = c.get('deps');
     const id = c.req.param('id');
-    if (!deps.tenantRepo) return c.json({ error: { code: 'NOT_CONFIGURED', message: 'Tenant repo not configured' } }, 503);
+    if (!deps.tenantRepo)
+      return c.json(
+        { error: { code: 'NOT_CONFIGURED', message: 'Tenant repo not configured' } },
+        503,
+      );
 
     const body = await c.req.json();
     const auth = c.get('auth');
@@ -91,21 +111,26 @@ export function adminTenantRoutes() {
     }
 
     const existing = await deps.tenantRepo.findById(id);
-    if (!existing) return c.json({ error: { code: 'NOT_FOUND', message: 'Tenant not found' } }, 404);
+    if (!existing)
+      return c.json({ error: { code: 'NOT_FOUND', message: 'Tenant not found' } }, 404);
 
     if (body.config !== undefined) {
       const existingConfig = ((existing as any).config ?? {}) as Record<string, unknown>;
       const mergedConfig = { ...existingConfig, ...body.config };
       if (body.config.retention) {
         mergedConfig.retention = {
-          ...(existingConfig.retention as Record<string, unknown> ?? {}),
+          ...((existingConfig.retention as Record<string, unknown>) ?? {}),
           ...body.config.retention,
         };
       }
       await deps.tenantRepo.update(id, { config: mergedConfig });
       deps.auditLogger?.log({
-        tenantId: id, actorId, actorType: 'user',
-        action: 'admin.tenant.config_update', resourceType: 'tenant', resourceId: id,
+        tenantId: id,
+        actorId,
+        actorType: 'user',
+        action: 'admin.tenant.config_update',
+        resourceType: 'tenant',
+        resourceId: id,
         metadata: { changes: body.config },
       });
     }

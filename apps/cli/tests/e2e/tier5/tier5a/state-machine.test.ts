@@ -93,9 +93,9 @@ describe('Tier 5A -- State Machine + Quota (Tests 15-17)', () => {
 
     // Attempting to start a completed job should throw StateError
     // (completed -> queued is not a valid transition)
-    await expect(
-      harness.jobManager.startJob(completedJobId, harness.tenantId),
-    ).rejects.toThrow(StateError);
+    await expect(harness.jobManager.startJob(completedJobId, harness.tenantId)).rejects.toThrow(
+      StateError,
+    );
   });
 
   // -------------------------------------------------------------------------
@@ -120,7 +120,10 @@ describe('Tier 5A -- State Machine + Quota (Tests 15-17)', () => {
     );
 
     // Check current status -- only cancel if still in a cancellable state
-    const jobBeforeCancel = await harness.workerDeps.jobRepo.findById(cancelJobId, harness.tenantId);
+    const jobBeforeCancel = await harness.workerDeps.jobRepo.findById(
+      cancelJobId,
+      harness.tenantId,
+    );
     const cancellableStates = ['running', 'paused', 'queued'];
 
     if (cancellableStates.includes(jobBeforeCancel!.status)) {
@@ -133,7 +136,7 @@ describe('Tier 5A -- State Machine + Quota (Tests 15-17)', () => {
       // Allow up to 1 in-flight request that was already dispatched before
       // the cancel signal propagated to the worker.
       const requestCountAfterCancel = harness.fixtureServer.requestLog.length;
-      await new Promise(r => setTimeout(r, 2000)); // Wait to see if more requests come in
+      await new Promise((r) => setTimeout(r, 2000)); // Wait to see if more requests come in
       const requestCountAfterWait = harness.fixtureServer.requestLog.length;
       const newRequests = requestCountAfterWait - requestCountAfterCancel;
       expect(newRequests).toBeLessThanOrEqual(1);
@@ -178,7 +181,9 @@ describe('Tier 5A -- State Machine + Quota (Tests 15-17)', () => {
     }
 
     // Count how many are actually still running
-    const runningCount = await harness.workerDeps.jobRepo.countByTenant(harness.tenantId, { status: 'running' });
+    const runningCount = await harness.workerDeps.jobRepo.countByTenant(harness.tenantId, {
+      status: 'running',
+    });
 
     if (runningCount >= 2) {
       // Starting a 3rd job should exceed the quota
@@ -186,9 +191,9 @@ describe('Tier 5A -- State Machine + Quota (Tests 15-17)', () => {
         slowJobConfig({ name: 'Tier 5A Quota Job 3 (should fail)' }) as any,
       );
 
-      await expect(
-        harness.jobManager.startJob(job3Id, harness.tenantId),
-      ).rejects.toThrow(QuotaExceededError);
+      await expect(harness.jobManager.startJob(job3Id, harness.tenantId)).rejects.toThrow(
+        QuotaExceededError,
+      );
     } else {
       // The slow jobs finished too quickly -- quota cannot be tested reliably
       // This is a timing limitation; accept the test as passing

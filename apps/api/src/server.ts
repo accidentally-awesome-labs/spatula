@@ -11,7 +11,14 @@ import type { AppDeps } from './types.js';
 
 const logger = createLogger('api:server');
 
-const QUEUE_NAMES = ['crawl', 'extract', 'schemaEvolution', 'reconciliation', 'export', 'webhook'] as const;
+const QUEUE_NAMES = [
+  'crawl',
+  'extract',
+  'schemaEvolution',
+  'reconciliation',
+  'export',
+  'webhook',
+] as const;
 
 /**
  * Sum waiting + active + delayed job counts across every BullMQ queue.
@@ -33,8 +40,7 @@ export async function getTotalQueueDepth(queues: SpatulaQueues | undefined): Pro
   return counts.reduce((a, b) => a + b, 0);
 }
 
-const UUID_REGEX =
-  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 function setupGracefulShutdown(
   server: ServerType,
@@ -75,7 +81,10 @@ export function startServer(deps: AppDeps, port?: number) {
   // Register observable gauges now that repos are available
   if (deps.jobRepo && deps.tenantRepo) {
     registerGauges({
-      jobRepo: { countByStatus: (status: string) => deps.jobRepo.countByTenant('*', { status: status as JobStatus }) },
+      jobRepo: {
+        countByStatus: (status: string) =>
+          deps.jobRepo.countByTenant('*', { status: status as JobStatus }),
+      },
       tenantRepo: { countAll: () => deps.tenantRepo!.countAll() },
       queueProvider: { getQueueDepth: () => getTotalQueueDepth(deps.queues) },
     });
@@ -107,7 +116,10 @@ export function startServer(deps: AppDeps, port?: number) {
                 new URL(c.req.url).searchParams.get('tenantId') ??
                 '';
               if (!tenantId || !UUID_REGEX.test(tenantId)) {
-                ws.close(4001, 'tenantId required (via x-tenant-id header or ?tenantId= query param)');
+                ws.close(
+                  4001,
+                  'tenantId required (via x-tenant-id header or ?tenantId= query param)',
+                );
                 return;
               }
             } else {

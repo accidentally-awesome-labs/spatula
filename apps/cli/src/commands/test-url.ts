@@ -7,18 +7,13 @@ import {
   PlaywrightCrawler,
   FirecrawlCrawler,
 } from '@spatula/core';
-import type {
-  LLMClient,
-  LLMFactoryConfig,
-  Crawler,
-  SchemaDefinition,
-} from '@spatula/core';
+import type { LLMClient, LLMFactoryConfig, Crawler, SchemaDefinition } from '@spatula/core';
 
 export interface TestUrlArgs {
   url: string;
   crawler?: 'playwright' | 'firecrawl';
   format?: 'json' | 'table' | 'raw';
-  schema?: string;       // Path to schema JSON file
+  schema?: string; // Path to schema JSON file
   showHtml?: boolean;
   showLinks?: boolean;
   model?: string;
@@ -57,20 +52,24 @@ export async function testUrl(args: TestUrlArgs): Promise<void> {
 
   // 1. Create LLM client (unless --skip-llm)
   let llmClient: LLMClient | null = null;
-  const primaryModel = model ?? process.env.LLM_PRIMARY_MODEL ?? 'anthropic/claude-sonnet-4-20250514';
+  const primaryModel =
+    model ?? process.env.LLM_PRIMARY_MODEL ?? 'anthropic/claude-sonnet-4-20250514';
 
   if (!skipLlm) {
     const provider = process.env.LLM_PROVIDER ?? 'openrouter';
     try {
       const factoryConfig: LLMFactoryConfig = {
         provider: provider as 'openrouter' | 'ollama',
-        openrouter: provider === 'openrouter' ? { apiKey: process.env.OPENROUTER_API_KEY ?? '' } : undefined,
+        openrouter:
+          provider === 'openrouter' ? { apiKey: process.env.OPENROUTER_API_KEY ?? '' } : undefined,
         ollama: provider === 'ollama' ? { baseUrl: process.env.OLLAMA_BASE_URL } : undefined,
       };
       llmClient = createLLMClient(factoryConfig);
     } catch (err) {
       console.error(`Failed to create LLM client: ${(err as Error).message}`);
-      console.error('Run with --skip-llm for CSS-selector-only extraction, or set LLM_PROVIDER=ollama');
+      console.error(
+        'Run with --skip-llm for CSS-selector-only extraction, or set LLM_PROVIDER=ollama',
+      );
       process.exit(1);
     }
   }
@@ -101,7 +100,9 @@ export async function testUrl(args: TestUrlArgs): Promise<void> {
     const startTime = Date.now();
     const result = await crawler.crawl(url);
     const crawlTime = ((Date.now() - startTime) / 1000).toFixed(1);
-    console.log(`  Crawled in ${crawlTime}s (${(result.metadata.contentLength / 1024).toFixed(0)}KB, ${result.contentType ?? 'text/html'})`);
+    console.log(
+      `  Crawled in ${crawlTime}s (${(result.metadata.contentLength / 1024).toFixed(0)}KB, ${result.contentType ?? 'text/html'})`,
+    );
 
     // 4. Show raw HTML if requested
     if (showHtml) {
@@ -116,9 +117,15 @@ export async function testUrl(args: TestUrlArgs): Promise<void> {
     let classification: string | undefined;
     if (llmClient) {
       const classifier = new PageClassifier(llmClient, { primaryModel });
-      const classResult = await classifier.classify(result.html, url, 'Extract data from this page');
+      const classResult = await classifier.classify(
+        result.html,
+        url,
+        'Extract data from this page',
+      );
       classification = classResult.classification;
-      console.log(`  Classification: ${classification} (${(classResult.confidence * 100).toFixed(0)}%)`);
+      console.log(
+        `  Classification: ${classification} (${(classResult.confidence * 100).toFixed(0)}%)`,
+      );
     }
 
     // 6. Show evaluated links if requested
@@ -146,33 +153,47 @@ export async function testUrl(args: TestUrlArgs): Promise<void> {
       };
 
       const extractor = new StaticExtractor(llmClient, { primaryModel }, 'test');
-      const extraction = await extractor.extract(result.html, url, schema, 'Extract all relevant data from this page');
+      const extraction = await extractor.extract(
+        result.html,
+        url,
+        schema,
+        'Extract all relevant data from this page',
+      );
 
       // 8. Output results
       if (format === 'json') {
-        console.log(JSON.stringify({
-          url,
-          crawl: {
-            statusCode: result.statusCode,
-            responseTimeMs: result.metadata.responseTimeMs,
-            contentLength: result.metadata.contentLength,
-          },
-          classification,
-          extraction: {
-            fields: extraction.data,
-            unmapped: extraction.metadata.unmappedFields,
-          },
-          model: { provider: process.env.LLM_PROVIDER ?? 'openrouter', model: primaryModel },
-        }, null, 2));
+        console.log(
+          JSON.stringify(
+            {
+              url,
+              crawl: {
+                statusCode: result.statusCode,
+                responseTimeMs: result.metadata.responseTimeMs,
+                contentLength: result.metadata.contentLength,
+              },
+              classification,
+              extraction: {
+                fields: extraction.data,
+                unmapped: extraction.metadata.unmappedFields,
+              },
+              model: { provider: process.env.LLM_PROVIDER ?? 'openrouter', model: primaryModel },
+            },
+            null,
+            2,
+          ),
+        );
       } else {
         // Table format
         console.log('\n  Extracted Fields');
         console.log('  ' + '-'.repeat(60));
         const data = extraction.data as Record<string, unknown>;
         for (const [key, value] of Object.entries(data)) {
-          const valueStr = typeof value === 'string'
-            ? (value.length > 50 ? value.slice(0, 47) + '...' : value)
-            : JSON.stringify(value);
+          const valueStr =
+            typeof value === 'string'
+              ? value.length > 50
+                ? value.slice(0, 47) + '...'
+                : value
+              : JSON.stringify(value);
           console.log(`  ${key.padEnd(20)} ${valueStr}`);
         }
 
@@ -205,27 +226,36 @@ export async function testUrl(args: TestUrlArgs): Promise<void> {
       const extraction = await cssExtractor.extract(result.html, url, schema, 'Extract data');
 
       if (format === 'json') {
-        console.log(JSON.stringify({
-          url,
-          crawl: {
-            statusCode: result.statusCode,
-            responseTimeMs: result.metadata.responseTimeMs,
-            contentLength: result.metadata.contentLength,
-          },
-          extractor: 'css-only',
-          extraction: {
-            fields: extraction.data,
-            unmapped: extraction.metadata.unmappedFields,
-          },
-        }, null, 2));
+        console.log(
+          JSON.stringify(
+            {
+              url,
+              crawl: {
+                statusCode: result.statusCode,
+                responseTimeMs: result.metadata.responseTimeMs,
+                contentLength: result.metadata.contentLength,
+              },
+              extractor: 'css-only',
+              extraction: {
+                fields: extraction.data,
+                unmapped: extraction.metadata.unmappedFields,
+              },
+            },
+            null,
+            2,
+          ),
+        );
       } else {
         console.log('\n  Extracted Fields (CSS-only)');
         console.log('  ' + '-'.repeat(60));
         const data = extraction.data as Record<string, unknown>;
         for (const [key, value] of Object.entries(data)) {
-          const valueStr = typeof value === 'string'
-            ? (value.length > 50 ? value.slice(0, 47) + '...' : value)
-            : JSON.stringify(value);
+          const valueStr =
+            typeof value === 'string'
+              ? value.length > 50
+                ? value.slice(0, 47) + '...'
+                : value
+              : JSON.stringify(value);
           console.log(`  ${key.padEnd(20)} ${valueStr}`);
         }
         if (Object.keys(data).length === 0) {

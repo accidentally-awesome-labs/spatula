@@ -1,7 +1,11 @@
 // packages/core/tests/unit/pipeline/export-orchestrator.test.ts
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { StorageError, ValidationError } from '@spatula/shared';
-import type { ExportOrchestratorDeps, ExportInput, PipelineExportResult } from '../../../src/pipeline/types.js';
+import type {
+  ExportOrchestratorDeps,
+  ExportInput,
+  PipelineExportResult,
+} from '../../../src/pipeline/types.js';
 
 // Mock generateDocumentation at module level
 vi.mock('../../../src/exporters/documentation-generator.js', () => ({
@@ -139,7 +143,8 @@ describe('processExport', () => {
     await processExport(defaultInput, deps);
 
     expect(deps.exportRepo.updateStatus).toHaveBeenCalledWith(
-      'exp-1', 'tenant-1',
+      'exp-1',
+      'tenant-1',
       expect.objectContaining({
         status: 'failed',
         error: expect.stringContaining('not found'),
@@ -154,7 +159,8 @@ describe('processExport', () => {
     await processExport(defaultInput, deps);
 
     expect(deps.exportRepo.updateStatus).toHaveBeenCalledWith(
-      'exp-1', 'tenant-1',
+      'exp-1',
+      'tenant-1',
       expect.objectContaining({
         status: 'failed',
         error: expect.stringContaining('not completed'),
@@ -171,7 +177,8 @@ describe('processExport', () => {
     await processExport(defaultInput, deps);
 
     expect(deps.exportRepo.updateStatus).toHaveBeenCalledWith(
-      'exp-1', 'tenant-1',
+      'exp-1',
+      'tenant-1',
       expect.objectContaining({
         status: 'failed',
         error: expect.stringContaining('50,000'),
@@ -185,11 +192,13 @@ describe('processExport', () => {
 
     const calls = (deps.exportRepo.updateStatus as any).mock.calls;
     expect(calls[0]).toEqual([
-      'exp-1', 'tenant-1',
+      'exp-1',
+      'tenant-1',
       expect.objectContaining({ status: 'processing' }),
     ]);
     expect(calls[calls.length - 1]).toEqual([
-      'exp-1', 'tenant-1',
+      'exp-1',
+      'tenant-1',
       expect.objectContaining({ status: 'completed' }),
     ]);
   });
@@ -230,7 +239,8 @@ describe('processExport', () => {
       expect.any(String),
     );
     expect(deps.exportRepo.updateStatus).toHaveBeenCalledWith(
-      'exp-1', 'tenant-1',
+      'exp-1',
+      'tenant-1',
       expect.objectContaining({ status: 'completed' }),
     );
   });
@@ -243,7 +253,8 @@ describe('processExport', () => {
 
     expect(deps.contentStore.storeBinary).toHaveBeenCalled();
     expect(deps.exportRepo.updateStatus).toHaveBeenCalledWith(
-      expect.anything(), expect.anything(),
+      expect.anything(),
+      expect.anything(),
       expect.objectContaining({ status: 'completed', contentRef: 'pg://binary-ref-1' }),
     );
   });
@@ -273,7 +284,8 @@ describe('processExport', () => {
     await processExport(defaultInput, deps);
 
     expect(deps.exportRepo.updateStatus).toHaveBeenCalledWith(
-      'exp-1', 'tenant-1',
+      'exp-1',
+      'tenant-1',
       expect.objectContaining({ status: 'failed', error: expect.stringContaining('db error') }),
     );
   });
@@ -285,7 +297,8 @@ describe('processExport', () => {
     await processExport(defaultInput, deps);
 
     expect(deps.exportRepo.updateStatus).toHaveBeenCalledWith(
-      'exp-1', 'tenant-1',
+      'exp-1',
+      'tenant-1',
       expect.objectContaining({
         status: 'failed',
         error: expect.stringContaining('No schema found'),
@@ -300,11 +313,14 @@ describe('processExport', () => {
 
     const result = await processExport(defaultInput, deps);
 
-    expect(result).toEqual(expect.objectContaining({
-      entityCount: 0,
-    }));
+    expect(result).toEqual(
+      expect.objectContaining({
+        entityCount: 0,
+      }),
+    );
     expect(deps.exportRepo.updateStatus).toHaveBeenCalledWith(
-      'exp-1', 'tenant-1',
+      'exp-1',
+      'tenant-1',
       expect.objectContaining({ status: 'completed', entityCount: 0 }),
     );
   });
@@ -348,7 +364,8 @@ describe('processExport', () => {
     await processExport(defaultInput, deps);
 
     expect(deps.exportRepo.updateStatus).toHaveBeenCalledWith(
-      'exp-1', 'tenant-1',
+      'exp-1',
+      'tenant-1',
       expect.objectContaining({
         status: 'failed',
         error: expect.stringContaining('S3 write timeout'),
@@ -382,7 +399,8 @@ describe('processExport', () => {
 
     // Should fail because 15 > 10 (the custom limit)
     expect(deps.exportRepo.updateStatus).toHaveBeenCalledWith(
-      'exp-1', 'tenant-1',
+      'exp-1',
+      'tenant-1',
       expect.objectContaining({
         status: 'failed',
         error: expect.stringContaining('10'),
@@ -393,18 +411,32 @@ describe('processExport', () => {
   it('uses streaming CSV path when findByJobCursor is available', async () => {
     const deps = createMockDeps();
     const entities = [
-      { id: 'e1', mergedData: { name: 'Alice' }, qualityScore: 0.9, categories: [], sourceCount: 1 },
+      {
+        id: 'e1',
+        mergedData: { name: 'Alice' },
+        qualityScore: 0.9,
+        categories: [],
+        sourceCount: 1,
+      },
       { id: 'e2', mergedData: { name: 'Bob' }, qualityScore: 0.8, categories: [], sourceCount: 1 },
     ];
     // Add findByJobCursor to trigger streaming path
-    (deps.entityRepo as any).findByJobCursor = vi.fn()
+    (deps.entityRepo as any).findByJobCursor = vi
+      .fn()
       .mockResolvedValueOnce({ entities, nextCursor: null });
 
     const csvInput = { ...defaultInput, format: 'csv' as const };
     const result = await processExport(csvInput, deps);
 
     // Streaming path should use findByJobCursor, not findByJob
-    expect((deps.entityRepo as any).findByJobCursor).toHaveBeenCalledWith('job-1', 'tenant-1', 500, undefined, undefined, undefined);
+    expect((deps.entityRepo as any).findByJobCursor).toHaveBeenCalledWith(
+      'job-1',
+      'tenant-1',
+      500,
+      undefined,
+      undefined,
+      undefined,
+    );
     expect(deps.entityRepo.findByJob).not.toHaveBeenCalled();
     // countByJob is now called for ALL paths (maxEntities guard)
     expect(deps.entityRepo.countByJob).toHaveBeenCalled();
@@ -420,18 +452,32 @@ describe('processExport', () => {
   it('uses streaming JSON path when findByJobCursor is available and no provenance', async () => {
     const deps = createMockDeps();
     const entities = [
-      { id: 'e1', mergedData: { name: 'Alice' }, qualityScore: 0.9, categories: [], sourceCount: 1 },
+      {
+        id: 'e1',
+        mergedData: { name: 'Alice' },
+        qualityScore: 0.9,
+        categories: [],
+        sourceCount: 1,
+      },
       { id: 'e2', mergedData: { name: 'Bob' }, qualityScore: 0.8, categories: [], sourceCount: 1 },
     ];
     // Add findByJobCursor to trigger streaming path
-    (deps.entityRepo as any).findByJobCursor = vi.fn()
+    (deps.entityRepo as any).findByJobCursor = vi
+      .fn()
       .mockResolvedValueOnce({ entities, nextCursor: null });
 
     const jsonInput = { ...defaultInput, format: 'json' as const, includeProvenance: false };
     const result = await processExport(jsonInput, deps);
 
     // Streaming path should use findByJobCursor, not findByJob
-    expect((deps.entityRepo as any).findByJobCursor).toHaveBeenCalledWith('job-1', 'tenant-1', 500, undefined, undefined, undefined);
+    expect((deps.entityRepo as any).findByJobCursor).toHaveBeenCalledWith(
+      'job-1',
+      'tenant-1',
+      500,
+      undefined,
+      undefined,
+      undefined,
+    );
     expect(deps.entityRepo.findByJob).not.toHaveBeenCalled();
     // countByJob is called for ALL paths (maxEntities guard)
     expect(deps.entityRepo.countByJob).toHaveBeenCalled();
@@ -472,7 +518,8 @@ describe('processExport', () => {
       { id: 'e1', mergedData: { name: 'Test' }, qualityScore: 0.9, categories: [], sourceCount: 1 },
     ];
     // Add findByJobCursor — binary format should collect via cursor then pass to exporter
-    (deps.entityRepo as any).findByJobCursor = vi.fn()
+    (deps.entityRepo as any).findByJobCursor = vi
+      .fn()
       .mockResolvedValueOnce({ entities, nextCursor: null });
     (deps.entityRepo.countByJob as any).mockResolvedValue(1);
 
@@ -484,7 +531,8 @@ describe('processExport', () => {
     expect(deps.entityRepo.findByJob).not.toHaveBeenCalled();
     expect(deps.contentStore.storeBinary).toHaveBeenCalled();
     expect(deps.exportRepo.updateStatus).toHaveBeenCalledWith(
-      'exp-1', 'tenant-1',
+      'exp-1',
+      'tenant-1',
       expect.objectContaining({ status: 'completed', contentRef: 'pg://binary-ref-1' }),
     );
   });
@@ -506,24 +554,45 @@ describe('processExport', () => {
   it('passes minQuality to findByJobCursor when streaming', async () => {
     const deps = createMockDeps();
     const entities = [
-      { id: 'e1', mergedData: { name: 'Alice' }, qualityScore: 0.95, categories: [], sourceCount: 1 },
+      {
+        id: 'e1',
+        mergedData: { name: 'Alice' },
+        qualityScore: 0.95,
+        categories: [],
+        sourceCount: 1,
+      },
     ];
-    (deps.entityRepo as any).findByJobCursor = vi.fn()
+    (deps.entityRepo as any).findByJobCursor = vi
+      .fn()
       .mockResolvedValueOnce({ entities, nextCursor: null });
 
     const qualityInput = { ...defaultInput, format: 'json' as const, minQuality: 0.8 };
     await processExport(qualityInput, deps);
 
     // minQuality should be passed as the 6th positional argument (after since=undefined)
-    expect((deps.entityRepo as any).findByJobCursor).toHaveBeenCalledWith('job-1', 'tenant-1', 500, undefined, undefined, 0.8);
+    expect((deps.entityRepo as any).findByJobCursor).toHaveBeenCalledWith(
+      'job-1',
+      'tenant-1',
+      500,
+      undefined,
+      undefined,
+      0.8,
+    );
   });
 
   it('applies field projection when fields option is provided', async () => {
     const deps = createMockDeps();
     const entities = [
-      { id: 'e1', mergedData: { name: 'Alice', email: 'alice@test.com', age: 30 }, qualityScore: 0.9, categories: [], sourceCount: 1 },
+      {
+        id: 'e1',
+        mergedData: { name: 'Alice', email: 'alice@test.com', age: 30 },
+        qualityScore: 0.9,
+        categories: [],
+        sourceCount: 1,
+      },
     ];
-    (deps.entityRepo as any).findByJobCursor = vi.fn()
+    (deps.entityRepo as any).findByJobCursor = vi
+      .fn()
       .mockResolvedValueOnce({ entities, nextCursor: null });
     (deps.entityRepo.countByJob as any).mockResolvedValue(1);
 
@@ -542,9 +611,16 @@ describe('processExport', () => {
   it('does not crash when projected fields are missing from entity', async () => {
     const deps = createMockDeps();
     const entities = [
-      { id: 'e1', mergedData: { name: 'Alice' }, qualityScore: 0.9, categories: [], sourceCount: 1 },
+      {
+        id: 'e1',
+        mergedData: { name: 'Alice' },
+        qualityScore: 0.9,
+        categories: [],
+        sourceCount: 1,
+      },
     ];
-    (deps.entityRepo as any).findByJobCursor = vi.fn()
+    (deps.entityRepo as any).findByJobCursor = vi
+      .fn()
       .mockResolvedValueOnce({ entities, nextCursor: null });
     (deps.entityRepo.countByJob as any).mockResolvedValue(1);
 
@@ -565,18 +641,31 @@ describe('processExport', () => {
     // 250 entities = 3 batches (100+100+50)
     (deps.entityRepo.countByJob as any).mockResolvedValue(250);
     const entities = Array.from({ length: 100 }, (_, i) => ({
-      id: `e${i}`, mergedData: { name: `Test ${i}` }, qualityScore: 0.9, categories: [], sourceCount: 1,
+      id: `e${i}`,
+      mergedData: { name: `Test ${i}` },
+      qualityScore: 0.9,
+      categories: [],
+      sourceCount: 1,
     }));
     (deps.entityRepo.findByJob as any)
-      .mockResolvedValueOnce(entities)       // batch 1: 100
-      .mockResolvedValueOnce(entities)       // batch 2: 100
+      .mockResolvedValueOnce(entities) // batch 1: 100
+      .mockResolvedValueOnce(entities) // batch 2: 100
       .mockResolvedValueOnce(entities.slice(0, 50)); // batch 3: 50
 
     await processExport(defaultInput, deps);
 
     expect(deps.entityRepo.findByJob).toHaveBeenCalledTimes(3);
-    expect(deps.entityRepo.findByJob).toHaveBeenCalledWith('job-1', 'tenant-1', { limit: 100, offset: 0 });
-    expect(deps.entityRepo.findByJob).toHaveBeenCalledWith('job-1', 'tenant-1', { limit: 100, offset: 100 });
-    expect(deps.entityRepo.findByJob).toHaveBeenCalledWith('job-1', 'tenant-1', { limit: 100, offset: 200 });
+    expect(deps.entityRepo.findByJob).toHaveBeenCalledWith('job-1', 'tenant-1', {
+      limit: 100,
+      offset: 0,
+    });
+    expect(deps.entityRepo.findByJob).toHaveBeenCalledWith('job-1', 'tenant-1', {
+      limit: 100,
+      offset: 100,
+    });
+    expect(deps.entityRepo.findByJob).toHaveBeenCalledWith('job-1', 'tenant-1', {
+      limit: 100,
+      offset: 200,
+    });
   });
 });

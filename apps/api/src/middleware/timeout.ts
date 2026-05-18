@@ -4,7 +4,9 @@ import { createLogger } from '@spatula/shared';
 const logger = createLogger('timeout');
 
 class RequestTimeoutError extends Error {
-  constructor(ms: number) { super(`Request timed out after ${ms}ms`); }
+  constructor(ms: number) {
+    super(`Request timed out after ${ms}ms`);
+  }
 }
 
 export interface TimeoutConfig {
@@ -37,10 +39,7 @@ export function timeoutMiddleware(config: TimeoutConfig): MiddlewareHandler {
       if (err instanceof RequestTimeoutError) {
         logger.warn({ path, timeoutMs }, 'request timed out');
         const requestId = c.get('requestId') ?? '';
-        return c.json(
-          { error: { code: 'TIMEOUT', message: err.message, requestId } },
-          504,
-        );
+        return c.json({ error: { code: 'TIMEOUT', message: err.message, requestId } }, 504);
       }
       throw err;
     } finally {

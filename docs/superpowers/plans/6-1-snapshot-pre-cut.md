@@ -12,28 +12,29 @@ This snapshot captures the test/typecheck baseline and full billing-coupling inv
 
 Note: `pnpm test` (full turbo run) intermittently fails 1–2 `tests/unit/exports.test.ts` cases under parallel I/O pressure — the first dynamic `await import('../../src/index.js')` exceeds vitest's default 5s `testTimeout`. Re-running each package's `pnpm --filter <pkg> test` in isolation passes cleanly. Treated as a pre-existing flaky-timeout pattern unrelated to the carve-out scope. Captured here so post-carve isolated runs can diff against the same per-package totals.
 
-| Package | Test Files | Tests | Status | Notes |
-|---|---|---|---|---|
-| `@spatula/core` | 92 | 979 pass | ✅ all pass | clean (rebuilt `better-sqlite3` for Node v26 ABI v147 — see Deviations) |
-| `@spatula/db` | 29 | 328 pass | ✅ all pass (isolated) | `exports.test.ts > exports connection factory` flaky-timeout under parallel turbo I/O; passes in 2.8s isolated |
-| `@spatula/queue` | 18 | 156 pass | ✅ all pass (isolated) | `exports.test.ts > exports crawl worker` flaky-timeout under parallel turbo I/O; passes in 940ms isolated |
-| `@spatula/api` | 50 | 375 pass | ✅ all pass | clean |
-| `@spatula/shared` | 10 | 75 pass | ✅ all pass | clean |
-| `@spatula/cli` | 94 / 96 | 730 pass / 1 fail / 101 skipped | ⚠️ 2 pre-existing e2e flakes | `tests/e2e/workflow.test.ts > extracts data from local fixture page with --skip-llm` (5s timeout); `tests/e2e/tier2/pipeline-errors.test.ts` (file-level load failure) — both pre-date the carve-out (commits `fd59aba`, `ba53386`) |
-| **Total (isolated)** | **293** | **2,643 pass / 1 pre-existing fail / 101 skipped** | | |
+| Package              | Test Files | Tests                                              | Status                       | Notes                                                                                                                                                                                                                               |
+| -------------------- | ---------- | -------------------------------------------------- | ---------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `@spatula/core`      | 92         | 979 pass                                           | ✅ all pass                  | clean (rebuilt `better-sqlite3` for Node v26 ABI v147 — see Deviations)                                                                                                                                                             |
+| `@spatula/db`        | 29         | 328 pass                                           | ✅ all pass (isolated)       | `exports.test.ts > exports connection factory` flaky-timeout under parallel turbo I/O; passes in 2.8s isolated                                                                                                                      |
+| `@spatula/queue`     | 18         | 156 pass                                           | ✅ all pass (isolated)       | `exports.test.ts > exports crawl worker` flaky-timeout under parallel turbo I/O; passes in 940ms isolated                                                                                                                           |
+| `@spatula/api`       | 50         | 375 pass                                           | ✅ all pass                  | clean                                                                                                                                                                                                                               |
+| `@spatula/shared`    | 10         | 75 pass                                            | ✅ all pass                  | clean                                                                                                                                                                                                                               |
+| `@spatula/cli`       | 94 / 96    | 730 pass / 1 fail / 101 skipped                    | ⚠️ 2 pre-existing e2e flakes | `tests/e2e/workflow.test.ts > extracts data from local fixture page with --skip-llm` (5s timeout); `tests/e2e/tier2/pipeline-errors.test.ts` (file-level load failure) — both pre-date the carve-out (commits `fd59aba`, `ba53386`) |
+| **Total (isolated)** | **293**    | **2,643 pass / 1 pre-existing fail / 101 skipped** |                              |                                                                                                                                                                                                                                     |
 
 **Action items captured for the carve-out PR:**
+
 - Pre-existing CLI e2e flakes are tracked in `deferred-items.md` (created in Phase 15 directory if not already present) and acknowledged as out-of-scope for the carve-out; they remain in scope for the Plan 15-05 forward-test work where the e2e fixtures get touched.
 
 ## Typecheck baseline
 
 Project packages do not expose a `typecheck` script; `tsc` runs as part of `build`. The plan's `pnpm --filter <pkg> typecheck` commands resolved to "None of the selected packages has a 'typecheck' script". Proxied via `build` (which is `tsc` for all three packages):
 
-| Package | Build (typecheck via tsc) |
-|---|---|
-| `@spatula/api` | ✅ PASS (exit 0) |
-| `@spatula/queue` | ✅ PASS (exit 0) |
-| `@spatula/db` | ✅ PASS (exit 0) |
+| Package          | Build (typecheck via tsc) |
+| ---------------- | ------------------------- |
+| `@spatula/api`   | ✅ PASS (exit 0)          |
+| `@spatula/queue` | ✅ PASS (exit 0)          |
+| `@spatula/db`    | ✅ PASS (exit 0)          |
 
 ## Pre-cut branch tip
 
@@ -115,12 +116,12 @@ Substrate Section A (move to spatula-saas, delete from OSS) and Section B (edit 
 
 All four deltas absorb into **Plan 15-03 (in-place strip)** Section B — none require Plan 15-02 file moves.
 
-| # | File | Match context | Disposition | Absorbs into |
-|---|---|---|---|---|
-| 1 | `apps/api/src/middleware/auth.ts` | line 15: `'/api/v1/webhooks/stripe'` listed in unauthenticated-route allowlist | When substrate edits `apps/api/src/app.ts` to unmount `stripe-webhook` mount, the auth-middleware allowlist entry must also be removed in the same commit. Trivial single-line deletion. | **Plan 15-03 Section B** — add to the same commit that touches `app.ts` |
-| 2 | `apps/api/tests/unit/routes/api-keys.test.ts` | line 9: test fixture sets `scopes: [..., 'billing:read']` on a mock auth context | When substrate drops `'billing:read'` / `'billing:write'` from `AUTH_SCOPES` (`packages/shared/src/auth/types.ts`), this test fixture's scope array must be updated. Trivial array edit. | **Plan 15-03 Section B** — add to the same commit that touches `packages/shared/src/auth/types.ts` |
-| 3 | `apps/cli/tests/integration/remote-commands.test.ts` | line 141: comment `// subscription/auth check` (CLI `remote add` probe context) | The substrate already lists `apps/cli/src/commands/remote.ts` for editing (swap `getSubscription()` → `getAuthMe()`). This integration test will naturally be touched when the probe rewire lands; the comment can be updated to `// auth check` then. | **Plan 15-03 Section B** — add to the CLI rewire commit |
-| 4 | `packages/db/src/index.ts` | lines 43–44: re-exports `UsageRecordRepository` + `UsageRecord` / `DimensionUsage` types | The substrate lists `packages/db/src/repositories/index.ts` for editing (drop `UsageRecordRepository` export), but `packages/db/src/index.ts` is the package barrel that re-exports from `repositories/index`. When the repo is deleted, both index files need editing. | **Plan 15-03 Section B** — add to the same commit that edits `packages/db/src/repositories/index.ts` |
+| #   | File                                                 | Match context                                                                            | Disposition                                                                                                                                                                                                                                                             | Absorbs into                                                                                         |
+| --- | ---------------------------------------------------- | ---------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------- |
+| 1   | `apps/api/src/middleware/auth.ts`                    | line 15: `'/api/v1/webhooks/stripe'` listed in unauthenticated-route allowlist           | When substrate edits `apps/api/src/app.ts` to unmount `stripe-webhook` mount, the auth-middleware allowlist entry must also be removed in the same commit. Trivial single-line deletion.                                                                                | **Plan 15-03 Section B** — add to the same commit that touches `app.ts`                              |
+| 2   | `apps/api/tests/unit/routes/api-keys.test.ts`        | line 9: test fixture sets `scopes: [..., 'billing:read']` on a mock auth context         | When substrate drops `'billing:read'` / `'billing:write'` from `AUTH_SCOPES` (`packages/shared/src/auth/types.ts`), this test fixture's scope array must be updated. Trivial array edit.                                                                                | **Plan 15-03 Section B** — add to the same commit that touches `packages/shared/src/auth/types.ts`   |
+| 3   | `apps/cli/tests/integration/remote-commands.test.ts` | line 141: comment `// subscription/auth check` (CLI `remote add` probe context)          | The substrate already lists `apps/cli/src/commands/remote.ts` for editing (swap `getSubscription()` → `getAuthMe()`). This integration test will naturally be touched when the probe rewire lands; the comment can be updated to `// auth check` then.                  | **Plan 15-03 Section B** — add to the CLI rewire commit                                              |
+| 4   | `packages/db/src/index.ts`                           | lines 43–44: re-exports `UsageRecordRepository` + `UsageRecord` / `DimensionUsage` types | The substrate lists `packages/db/src/repositories/index.ts` for editing (drop `UsageRecordRepository` export), but `packages/db/src/index.ts` is the package barrel that re-exports from `repositories/index`. When the repo is deleted, both index files need editing. | **Plan 15-03 Section B** — add to the same commit that edits `packages/db/src/repositories/index.ts` |
 
 **Planner note for downstream:** these four deltas should be folded into Plan 15-03's task list (or noted explicitly when 15-03 is being executed). They are all trivial edits that follow naturally from the substrate-listed edits; the substrate just missed them when the inventory was originally drafted on 2026-04-20. No new file moves, no new architectural decisions, no scope expansion — pure inventory completeness.
 
@@ -136,11 +137,13 @@ All four deltas absorb into **Plan 15-03 (in-place strip)** Section B — none r
 ## Acceptance criteria recap
 
 **Task 2 (test baseline):**
+
 - [x] File `docs/superpowers/plans/6-1-snapshot-pre-cut.md` exists with non-empty "Total tests" and "Pre-cut branch tip" entries.
 - [x] `pnpm test` (per-package isolated): every package passes except 2 pre-existing CLI e2e flakes that pre-date the carve-out (acknowledged + tracked).
 - [x] All three `build` (typecheck-via-tsc) commands exited 0.
 
 **Task 3 (coupling grep):**
+
 - [x] `/tmp/billing-coupling.txt` exists and is non-empty (41 files).
 - [x] Every file path in `/tmp/billing-coupling.txt` is either listed in substrate Section A/B inventory (37 files) or flagged as "Inventory delta" with a downstream-plan absorption note (4 files, all into Plan 15-03 Section B).
 - [x] `grep -c 'apps/api/src/routes/usage.ts' /tmp/billing-coupling.txt` returns 0.

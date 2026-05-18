@@ -23,14 +23,29 @@ const SAMPLE_DLQ_ENTRY = {
 function createMockDeps(overrides: Partial<AppDeps> = {}): AppDeps {
   return {
     dbPool: { end: vi.fn() } as unknown as Pool,
-    jobRepo: { findById: vi.fn(), findByTenant: vi.fn(), countByTenant: vi.fn(), create: vi.fn(), updateStatus: vi.fn(), updateStats: vi.fn(), deleteWithData: vi.fn() } as any,
+    jobRepo: {
+      findById: vi.fn(),
+      findByTenant: vi.fn(),
+      countByTenant: vi.fn(),
+      create: vi.fn(),
+      updateStatus: vi.fn(),
+      updateStats: vi.fn(),
+      deleteWithData: vi.fn(),
+    } as any,
     schemaRepo: {} as any,
     extractionRepo: {} as any,
     entityRepo: {} as any,
     entitySourceRepo: {} as any,
     actionRepo: {} as any,
     taskRepo: {} as any,
-    jobManager: { createJob: vi.fn(), startJob: vi.fn(), pauseJob: vi.fn(), resumeJob: vi.fn(), cancelJob: vi.fn(), triggerReconciliation: vi.fn() } as any,
+    jobManager: {
+      createJob: vi.fn(),
+      startJob: vi.fn(),
+      pauseJob: vi.fn(),
+      resumeJob: vi.fn(),
+      cancelJob: vi.fn(),
+      triggerReconciliation: vi.fn(),
+    } as any,
     exportRepo: {} as any,
     contentStore: {} as any,
     exportQueue: {} as any,
@@ -38,7 +53,9 @@ function createMockDeps(overrides: Partial<AppDeps> = {}): AppDeps {
       findUnresolved: vi.fn().mockResolvedValue([SAMPLE_DLQ_ENTRY]),
       countUnresolved: vi.fn().mockResolvedValue(1),
       findById: vi.fn().mockResolvedValue(SAMPLE_DLQ_ENTRY),
-      resolve: vi.fn().mockResolvedValue({ ...SAMPLE_DLQ_ENTRY, resolvedAt: new Date(), resolution: 'retried' }),
+      resolve: vi
+        .fn()
+        .mockResolvedValue({ ...SAMPLE_DLQ_ENTRY, resolvedAt: new Date(), resolution: 'retried' }),
       insert: vi.fn(),
     } as any,
     ...overrides,
@@ -242,7 +259,9 @@ describe('POST /api/v1/admin/dlq/:id/discard', () => {
 
   it('resolves entry as discarded', async () => {
     (deps as any).dlqRepo.resolve = vi.fn().mockResolvedValue({
-      ...SAMPLE_DLQ_ENTRY, resolvedAt: new Date(), resolution: 'discarded',
+      ...SAMPLE_DLQ_ENTRY,
+      resolvedAt: new Date(),
+      resolution: 'discarded',
     });
     const app = createApp(deps);
     const res = await app.request('/api/v1/admin/dlq/dlq-1/discard', {
@@ -295,7 +314,11 @@ describe('admin cross-tenant DLQ access', () => {
   });
 
   it('returns entries from all tenants', async () => {
-    const otherTenantEntry = { ...SAMPLE_DLQ_ENTRY, id: 'dlq-2', tenantId: '00000000-0000-0000-0000-000000000099' };
+    const otherTenantEntry = {
+      ...SAMPLE_DLQ_ENTRY,
+      id: 'dlq-2',
+      tenantId: '00000000-0000-0000-0000-000000000099',
+    };
     const deps = createMockDeps({
       dlqRepo: {
         findUnresolved: vi.fn().mockResolvedValue([SAMPLE_DLQ_ENTRY, otherTenantEntry]),

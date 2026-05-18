@@ -5,27 +5,32 @@
 ## Naming Patterns
 
 **Files:**
+
 - Kebab-case for file names: `job-manager.ts`, `action-executor.ts`, `worker-entrypoint.ts`
 - Exception: test files use `.test.ts` suffix: `errors.test.ts`, `job-manager.test.ts`
 - Integration tests suffix with `.integration.test.ts`: `user-tenant-repository.integration.test.ts`
 
 **Functions and Methods:**
+
 - camelCase for all functions: `createJob`, `startJob`, `getEnvOrThrow`, `loadConfig`
 - Private methods use `private` modifier (TypeScript enforced): `private getJob`
 - Constants use UPPER_SNAKE_CASE: `DEFAULT_QUEUE_CONFIG`, `QUEUE_NAMES`
 
 **Variables:**
+
 - camelCase for all variable declarations: `tenantId`, `jobId`, `createdTenantIds`
 - Const and let follow camelCase: `const logger = createLogger(...)`, `let dbPool: DatabasePool`
 - Mock factories in tests use camelCase: `createMockJobRepo()`, `createMockCrawler()`
 
 **Types and Interfaces:**
+
 - PascalCase for interfaces: `JobManager`, `Crawler`, `ActionExecutor`, `JobManagerConfig`
 - PascalCase for types: `JobConfig`, `CrawlResult`, `ActionResult`, `AppConfig`
 - Zod validators use PascalCase: `CrawlOptions`, `CrawlResult`, `ActionResult`
 - Discriminant enum values use camelCase: `status: z.enum(['applied', 'rejected', 'deferred'])`
 
 **Classes:**
+
 - PascalCase for class names: `QuotaEnforcer`, `JobManager`, `SpatulaError`
 - Error classes follow pattern: `{Name}Error`: `ValidationError`, `CrawlError`, `LLMError`, `StateError`
 - Repository classes use pattern: `{Entity}Repository`: `JobRepository`, `UserTenantRepository`, `TenantRepository`
@@ -33,6 +38,7 @@
 ## Code Style
 
 **Formatting:**
+
 - Prettier enforces style: `.prettierrc` settings:
   - `semi: true` — semicolons required
   - `singleQuote: true` — single quotes for strings
@@ -41,6 +47,7 @@
   - `tabWidth: 2` — 2-space indentation
 
 **Linting:**
+
 - ESLint v9.16.0 with TypeScript support
 - Config: `eslint.config.mjs` (flat config format)
 - Key rules enforced:
@@ -50,6 +57,7 @@
   - `no-console` — warn (discourage direct console usage, use logger instead)
 
 **TypeScript Configuration:**
+
 - `tsconfig.base.json` at monorepo root; each package has `tsconfig.json` extending it
 - Compiler target: `ES2022`
 - Module: `ESNext`
@@ -62,6 +70,7 @@
 ## Import Organization
 
 **Order:**
+
 1. Node.js built-ins: `import { createServer } from 'node:http'`
 2. External packages: `import { describe, it, expect } from 'vitest'`
 3. Workspace packages (path aliases): `import { createLogger } from '@spatula/shared'`
@@ -69,6 +78,7 @@
 5. Type-only imports (separate): `import type { JobConfig } from '@spatula/core'`
 
 **Path Aliases:**
+
 - Monorepo uses path aliases defined in `tsconfig.base.json`:
   - `@spatula/core` → `packages/core/src/index.ts`
   - `@spatula/db` → `packages/db/src/index.ts`
@@ -77,6 +87,7 @@
 - Always use aliases for cross-package imports, never relative paths across packages
 
 **Example pattern from `packages/queue/src/job-manager.ts`:**
+
 ```typescript
 // Built-in — none in this file
 // External packages
@@ -100,6 +111,7 @@ Note: Import paths always use `.js` extension for ES modules (including local fi
 ## Error Handling
 
 **Pattern:**
+
 - Domain errors inherit from `SpatulaError` base class (in `packages/shared/src/errors.ts`)
 - Each error type has a specific name and code:
   - `ValidationError` with code `'VALIDATION_ERROR'`
@@ -113,6 +125,7 @@ Note: Import paths always use `.js` extension for ES modules (including local fi
   - `RateLimitError` with code `'RATE_LIMIT_ERROR'` (retryable, with optional `retryAfterMs`)
 
 **Constructor Pattern:**
+
 ```typescript
 export class StateError extends SpatulaError {
   constructor(message: string, options?: SpatulaErrorOptions) {
@@ -123,6 +136,7 @@ export class StateError extends SpatulaError {
 ```
 
 **Usage with Context:**
+
 ```typescript
 throw new StateError('Cannot pause from completed state', {
   context: { from: 'completed', to: 'paused' },
@@ -130,22 +144,25 @@ throw new StateError('Cannot pause from completed state', {
 ```
 
 **Options Interface:**
+
 ```typescript
 export interface SpatulaErrorOptions {
-  cause?: Error;           // Original error for chaining
-  context?: Record<string, unknown>;  // Structured context
-  retryable?: boolean;     // Whether operation can be retried
+  cause?: Error; // Original error for chaining
+  context?: Record<string, unknown>; // Structured context
+  retryable?: boolean; // Whether operation can be retried
 }
 ```
 
 ## TypeScript Patterns
 
 **Interface-Driven Architecture:**
+
 - Core library defines interfaces for pluggable components: `Crawler`, `Extractor`, `SchemaEvolver`, `ContentStore`, `ActionExecutor`
 - Interfaces located in `packages/core/src/interfaces/`
 - Multiple implementations can satisfy same interface (e.g., Playwright vs Firecrawl for `Crawler`)
 
 **Zod Validation with Type Inference:**
+
 ```typescript
 // Define schema and infer type simultaneously
 export const CrawlOptions = z.object({
@@ -156,7 +173,9 @@ export type CrawlOptions = z.infer<typeof CrawlOptions>;
 ```
 
 **Readonly Properties:**
+
 - Interface properties use `readonly` for immutability intent:
+
 ```typescript
 export interface Crawler {
   readonly type: 'playwright' | 'firecrawl';
@@ -165,7 +184,9 @@ export interface Crawler {
 ```
 
 **Private Constructor Injection:**
+
 - Repositories and managers use constructor injection for dependencies:
+
 ```typescript
 export class JobManager {
   private readonly jobRepo: JobRepository;
@@ -183,6 +204,7 @@ export class JobManager {
 **Framework:** Pino (via `createLogger` in `@spatula/shared`)
 
 **Usage Pattern:**
+
 ```typescript
 const logger = createLogger('module-name');
 
@@ -192,6 +214,7 @@ logger.error({ err }, 'Critical failure');
 ```
 
 **Conventions:**
+
 - Logger created at module level with clear module name
 - Context passed as first argument (object with relevant IDs/state)
 - Human-readable message as second argument
@@ -200,12 +223,15 @@ logger.error({ err }, 'Critical failure');
 ## Comments
 
 **When to Comment:**
+
 - Complex algorithms or non-obvious logic
 - Important state machine transitions
 - Workarounds or known limitations
 
 **JSDoc/TSDoc:**
+
 - Integration test files include descriptive JSDoc headers:
+
 ```typescript
 /**
  * Integration tests for UserTenantRepository against real Postgres.
@@ -214,17 +240,21 @@ logger.error({ err }, 'Critical failure');
  * Migrations are applied once for the whole package via tests/setup/global-migrate.ts.
  */
 ```
+
 - Function-level JSDoc is minimal; focus on integration test setup comments
 
 ## Function Design
 
 **Size Guidelines:**
+
 - Most functions stay under 50 lines
 - Complex orchestration functions (e.g., `startJob`) may reach 100+ lines but decompose into private helpers
 - State machine transitions often extracted to dedicated classes (`JobStateMachine`)
 
 **Parameters:**
+
 - Single config object parameter preferred over multiple params:
+
 ```typescript
 // Preferred:
 export class JobManager {
@@ -238,22 +268,27 @@ export class JobManager {
 ```
 
 **Return Values:**
+
 - Async functions return `Promise<T>` or `Promise<void>` (never bare promises)
 - Void operations still use `Promise<void>` for consistency:
+
 ```typescript
 async startJob(jobId: string, tenantId: string): Promise<void>
 async createJob(config: JobConfig): Promise<string>
 ```
 
 **Async-Await Style:**
+
 - Prefer `async/await` over `.then()` chains
 - Error handling uses try/catch or `.catch()` for specific error types
 
 ## Module Design
 
 **Exports:**
+
 - Use named exports exclusively (no default exports)
 - Each package has barrel export at `src/index.ts`:
+
 ```typescript
 // packages/core/src/index.ts
 export * from './types/index.js';
@@ -263,15 +298,17 @@ export * from './llm/index.js';
 ```
 
 **Barrel Files:**
+
 - Subdirectories use `index.ts` to re-export all public APIs
 - Enables clean imports: `import { Crawler } from '@spatula/core'`
 - Allows packages to control public surface area
 
 **File Organization:**
+
 - Interfaces/types in separate `interfaces/` and `types/` directories
 - Implementation organized by feature: `crawlers/`, `extraction/`, `billing/`
 - Test files co-located with implementation: `src/billing/quota-enforcer.test.ts` alongside `src/billing/quota-enforcer.ts`
 
 ---
 
-*Convention analysis: 2026-05-06*
+_Convention analysis: 2026-05-06_

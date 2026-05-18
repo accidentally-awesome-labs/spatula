@@ -2,7 +2,16 @@
 phase: 15-carveout-migration-squash
 plan: 04
 subsystem: db+ci
-tags: [carveout, migration-squash, drizzle, pg-dump, ci-gate, namespaced-journal, content-store-check-constraints]
+tags:
+  [
+    carveout,
+    migration-squash,
+    drizzle,
+    pg-dump,
+    ci-gate,
+    namespaced-journal,
+    content-store-check-constraints,
+  ]
 
 # Dependency graph
 requires:
@@ -66,9 +75,9 @@ key-files:
 key-decisions:
   - "Rule-4 reformulation of D-05 'diff must be empty' to 'diff matches frozen billing-removal fixture'. Original spec (written 2026-05-12) predates Plan 15-03's billing strip. As-written gate could never pass because DB-A (pre-strip 0000-0011) by definition contains billing tables that DB-B (post-strip squash) does not. Resolution: freeze the expected change-only delta as scripts/migration-equivalence-expected-diff.txt and compare against it exactly. Preserves D-05's actual intent (detect accidental drift) while accommodating the intentional carve-out delta."
   - "Rule-1 bug fix: re-add content_store CHECK constraints (content_at_least_one, content_not_both) to 0000_v1_baseline.sql AND meta/0000_snapshot.json. drizzle-kit generate omitted them because they live only in raw-SQL in 0001_good_shotgun.sql — the TypeScript schema (src/schema/content.ts) only documents them in a // comment. Without this fix, fresh OSS installs would silently lose the 'exactly one of content or binary_content must be set' integrity invariant."
-  - "Drizzle puts the migration journal in a separate `drizzle` schema (not `public`). Tracking table fully qualified is `drizzle.__drizzle_migrations_oss`. Tests/inspection queries must filter by tablename, not schema."
+  - 'Drizzle puts the migration journal in a separate `drizzle` schema (not `public`). Tracking table fully qualified is `drizzle.__drizzle_migrations_oss`. Tests/inspection queries must filter by tablename, not schema.'
   - "Normalizer strips Postgres 14+ \\restrict / \\unrestrict random-token psql metacommands. Without this, every dump would diff against every other dump trivially (the token changes per dump even on identical schemas)."
-  - "Workflow gate uses `git merge-base main HEAD` (or origin/main in CI) to retrieve the 12 deleted migrations from the PR base SHA. This works only while the PR base still contains them; after merge, the gate may be removed or kept as belt-and-suspenders (D-05 leaves retention to maintainer)."
+  - 'Workflow gate uses `git merge-base main HEAD` (or origin/main in CI) to retrieve the 12 deleted migrations from the PR base SHA. This works only while the PR base still contains them; after merge, the gate may be removed or kept as belt-and-suspenders (D-05 leaves retention to maintainer).'
 
 patterns-established:
   - "When a squash drops a non-TS-modeled invariant, fix both the generated SQL and the snapshot.json under the appropriate constraint bucket (checkConstraints / uniqueConstraints / etc.). Snapshot update is essential — otherwise next drizzle-kit generate detects 'drift' and tries to emit either a DROP CONSTRAINT (worst case) or an unnecessary follow-up migration (best case)."
@@ -81,7 +90,7 @@ duration: ~11min
 completed: 2026-05-17
 ---
 
-# Phase 15 Plan 04: Migration Squash + __drizzle_migrations_oss + pg_dump Equivalence Gate
+# Phase 15 Plan 04: Migration Squash + \_\_drizzle_migrations_oss + pg_dump Equivalence Gate
 
 **12 pre-Wave-6 migrations collapsed into a single `0000_v1_baseline.sql` (281 lines, 17 tables, 2 CHECK constraints, 8 enum types) with namespaced journal `drizzle.__drizzle_migrations_oss`; PR CI equivalence gate wired with a frozen expected-billing-removal fixture; locally proved squashed baseline produces same schema as sequential 0000-0011 + intentional billing removal, exact match to fixture.**
 
@@ -90,12 +99,12 @@ completed: 2026-05-17
 - **Duration:** ~11 min (started 2026-05-17T18:27:07Z, completed ~18:38:00Z)
 - **Tasks:** 3 (all auto, no checkpoints)
 - **Commits:** 4 on `feat/wave-6-1-carveout`:
-  - `6ea4fb7` — Task 1: namespace OSS migrations via __drizzle_migrations_oss
+  - `6ea4fb7` — Task 1: namespace OSS migrations via \_\_drizzle_migrations_oss
   - `4427c80` — Task 2: squash 12 migrations into 0000_v1_baseline
   - `8d5db6c` — Rule-1 fix: preserve content_store CHECK constraints (Task 3 discovery)
   - `a44587c` — Task 3: pg_dump --schema-only equivalence gate
 - **Files created:** 4 (`0000_v1_baseline.sql`, workflow, normalizer, fixture)
-- **Files modified:** 6 (drizzle.config.ts, migrate.ts, run-migrate.ts, migrate.test.ts, _journal.json, 0000_snapshot.json)
+- **Files modified:** 6 (drizzle.config.ts, migrate.ts, run-migrate.ts, migrate.test.ts, \_journal.json, 0000_snapshot.json)
 - **Files deleted:** 23 (12 old migrations + 11 old snapshots)
 
 ## Accomplishments
@@ -109,12 +118,12 @@ completed: 2026-05-17
 
 ## Task Commits
 
-| Task | Description | Commit |
-| ---- | ----------- | ------ |
-| 1 | Namespace OSS migrations via __drizzle_migrations_oss (config + 2 runtime call sites + test) | `6ea4fb7` |
-| 2 | Squash 12 migrations into 0000_v1_baseline for v1.0 | `4427c80` |
-| 2-fix | Preserve content_store CHECK constraints in baseline + snapshot | `8d5db6c` |
-| 3 | pg_dump --schema-only equivalence gate (sequential vs squashed) | `a44587c` |
+| Task  | Description                                                                                    | Commit    |
+| ----- | ---------------------------------------------------------------------------------------------- | --------- |
+| 1     | Namespace OSS migrations via \_\_drizzle_migrations_oss (config + 2 runtime call sites + test) | `6ea4fb7` |
+| 2     | Squash 12 migrations into 0000_v1_baseline for v1.0                                            | `4427c80` |
+| 2-fix | Preserve content_store CHECK constraints in baseline + snapshot                                | `8d5db6c` |
+| 3     | pg_dump --schema-only equivalence gate (sequential vs squashed)                                | `a44587c` |
 
 **Plan metadata commit:** will follow this summary.
 
@@ -126,16 +135,16 @@ Plan 15-04 doesn't touch the auth contract from Plan 15-03. The new `tenants` sc
 
 The 24-line fixture at `scripts/migration-equivalence-expected-diff.txt` captures these intentional removals from the v1.0 baseline:
 
-| Surface | Removed in carve-out |
-| ------- | -------------------- |
-| `usage_records` table | CREATE TABLE + all columns (id, tenant_id, dimension, quantity, period_start, period_end, reported_to_stripe, created_at) + ALTER OWNER |
-| `usage_records_pkey` constraint | PRIMARY KEY (id) |
-| `usage_records_tenant_id_tenants_id_fk` constraint | FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE |
-| `idx_usage_tenant_period` index | btree on (tenant_id, period_start, dimension) |
-| `tenants.plan` column | character varying(20) DEFAULT 'free' NOT NULL |
-| `tenants.stripe_customer_id` column | text |
-| `idx_tenants_stripe_customer` index | UNIQUE btree on (stripe_customer_id) |
-| `tenants.quotas` JSONB default | removed `rateLimitTier: 'free'` key |
+| Surface                                            | Removed in carve-out                                                                                                                    |
+| -------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------- |
+| `usage_records` table                              | CREATE TABLE + all columns (id, tenant_id, dimension, quantity, period_start, period_end, reported_to_stripe, created_at) + ALTER OWNER |
+| `usage_records_pkey` constraint                    | PRIMARY KEY (id)                                                                                                                        |
+| `usage_records_tenant_id_tenants_id_fk` constraint | FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE                                                                        |
+| `idx_usage_tenant_period` index                    | btree on (tenant_id, period_start, dimension)                                                                                           |
+| `tenants.plan` column                              | character varying(20) DEFAULT 'free' NOT NULL                                                                                           |
+| `tenants.stripe_customer_id` column                | text                                                                                                                                    |
+| `idx_tenants_stripe_customer` index                | UNIQUE btree on (stripe_customer_id)                                                                                                    |
+| `tenants.quotas` JSONB default                     | removed `rateLimitTier: 'free'` key                                                                                                     |
 
 Additionally, two cosmetic column-reordering diffs (`content_store.created_at` and `tenants.created_at` placement) are captured in the fixture as well — they're an artifact of Drizzle's column emission order vs the historical migration order, no semantic difference.
 
@@ -144,10 +153,11 @@ Additionally, two cosmetic column-reordering diffs (`content_store.created_at` a
 ### Rule-4 Architectural Reformulation
 
 **1. [Rule 4 - Architectural] Reformulated D-05 'diff must be empty' to 'diff matches frozen fixture'**
+
 - **Found during:** Task 3, first dry-run of pg_dump diff
 - **Issue:** D-05 (CONTEXT.md, written 2026-05-12) specified the gate's pass condition as "diff must be empty". But Plan 15-03 (2026-05-17) intentionally stripped billing surface from the OSS schema. DB-A (sequential 0000-0011) applies the pre-strip schema with `usage_records` + `tenants.plan` + `tenants.stripe_customer_id` + billing indices. DB-B (squashed) applies the post-strip schema. The literal diff can never be empty by design.
 - **Spec intent:** "Detect accidental schema drift in the squashed baseline." This is unchanged; only the pass condition needs adapting.
-- **Reformulation:** Compare the change-only lines (sorted, deduped) against a frozen fixture at `scripts/migration-equivalence-expected-diff.txt`. The fixture freezes the *exact* expected billing-removal delta (24 lines). Any drift outside the fixture (a silently dropped column, a missed index, a type change, an unintended renaming) still fails the gate. Maintainer can re-freeze the fixture if a later schema change is intentional.
+- **Reformulation:** Compare the change-only lines (sorted, deduped) against a frozen fixture at `scripts/migration-equivalence-expected-diff.txt`. The fixture freezes the _exact_ expected billing-removal delta (24 lines). Any drift outside the fixture (a silently dropped column, a missed index, a type change, an unintended renaming) still fails the gate. Maintainer can re-freeze the fixture if a later schema change is intentional.
 - **Why not stop and ask:** User instruction was "make the reasonable call and continue". The reformulation preserves D-05's documented INTENT while making the gate actually runnable in the post-strip world. Documented thoroughly here for visibility.
 - **Files modified:** `.github/workflows/migration-equivalence.yml` (diff step), `scripts/migration-equivalence-expected-diff.txt` (new fixture)
 - **Commit:** `a44587c`
@@ -155,6 +165,7 @@ Additionally, two cosmetic column-reordering diffs (`content_store.created_at` a
 ### Rule-1 Auto-fixed Bugs
 
 **2. [Rule 1 - Bug] content_store CHECK constraints silently dropped by drizzle-kit generate**
+
 - **Found during:** Task 3 (pg_dump local dry-run revealed CHECK constraints in sequential DB-A but absent in squashed DB-B)
 - **Issue:** `content_at_least_one` and `content_not_both` CHECK constraints live only in `0001_good_shotgun.sql` (raw SQL applied via `ALTER TABLE ... ADD CONSTRAINT`). The TypeScript schema in `packages/db/src/schema/content.ts` documents them in a `//` comment but doesn't use Drizzle's `check()` API. When `drizzle-kit generate --name v1_baseline` ran, it omitted them because there's no TS source. Without fix, fresh OSS installs would silently lose the "exactly one of `content` or `binary_content` must be set" data-integrity invariant — a real correctness regression.
 - **Fix:** Append both `ALTER TABLE "content_store" ADD CONSTRAINT ...` statements to `0000_v1_baseline.sql`; add both constraints to `meta/0000_snapshot.json` under `checkConstraints` so future `drizzle-kit generate` runs don't detect them as drift. Both DBs now produce the constraints in the squashed-vs-sequential diff (entries cancel out, no longer in the fixture's diff).
@@ -164,6 +175,7 @@ Additionally, two cosmetic column-reordering diffs (`content_store.created_at` a
 ### Rule-3 Blocking Fixes
 
 **3. [Rule 3 - Blocker] Normalizer needed to strip Postgres 14+ \restrict/\unrestrict tokens**
+
 - **Found during:** Task 3 (first normalizer smoke test)
 - **Issue:** Postgres 14.22's `pg_dump` (and presumably 16's) emits `\restrict <16-byte-random-token>` at the start and `\unrestrict <same-token>` at the end of each schema-only dump. The token regenerates per dump, so any two dumps — even from the same DB — would diff trivially. Plan's normalizer spec didn't include these patterns.
 - **Fix:** Added `-e '/^\\(un)?restrict /d'` to the sed pipeline. Also tightened the `-- PostgreSQL database dump` regex (the original `... dump /d` required a trailing space + slash; actual line is `-- PostgreSQL database dump` followed by `-- PostgreSQL database dump complete` for the footer). New regex: `^-- PostgreSQL database dump( complete)?$`.
@@ -173,6 +185,7 @@ Additionally, two cosmetic column-reordering diffs (`content_store.created_at` a
 ### Documented (not auto-fixed; out of scope)
 
 **4. Plan's expected-table list contained `content` but the actual table name is `content_store`**
+
 - **Found during:** Task 2 (squashed baseline inspection)
 - **Issue:** Plan 15-04's `must_haves.truths` and `<interfaces>` blocks both list 17 expected tables including `content`. The actual table (from `packages/db/src/schema/content.ts`) is `pgTable('content_store', ...)`. The post-squash `\dt` shows `content_store`, matching the schema.
 - **Decision:** Doc-only discrepancy in the plan, not a bug in the code. The 17-table count matches the schema (17 schema files → 17 tables); the name in the plan was shorthand. No fix needed.
@@ -181,6 +194,7 @@ Additionally, two cosmetic column-reordering diffs (`content_store.created_at` a
 ### Documented (potential follow-up)
 
 **5. Workflow uses local `main` ref; CI uses `origin/main`**
+
 - **Found during:** Task 3 local dry-run
 - **Issue:** Local execution of the gate logic required `git merge-base main HEAD` because there's no `origin/main` ref in this dev clone. The committed workflow uses `origin/main` which is correct for GitHub Actions (which always fetches with origin set). No workflow change needed.
 - **Files modified:** None.
@@ -241,5 +255,6 @@ None — all artifacts are functional. The CHECK constraint addendum + snapshot 
 - [x] `python3 -c "import yaml; yaml.safe_load(open('.github/workflows/migration-equivalence.yml'))"` exits 0
 
 ---
-*Phase: 15-carveout-migration-squash*
-*Completed: 2026-05-17*
+
+_Phase: 15-carveout-migration-squash_
+_Completed: 2026-05-17_

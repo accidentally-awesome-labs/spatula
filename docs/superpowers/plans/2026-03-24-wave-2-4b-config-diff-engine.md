@@ -9,6 +9,7 @@
 **Tech Stack:** TypeScript, Vitest, Zod (for type reference), `node:url` (URL parsing)
 
 **Spec references:**
+
 - Phase 13 spec: section 6 (Config Diff Engine, sections 6.1-6.7)
 - File: `docs/superpowers/specs/2026-03-21-phase-13-project-folder-model-design.md`
 
@@ -18,18 +19,18 @@
 
 ### New Files
 
-| File | Responsibility |
-|------|---------------|
-| `packages/core/src/config/url-normalizer.ts` | Normalize URLs for consistent seed comparison |
-| `packages/core/src/config/config-differ.ts` | Compare two JobConfigs, produce ConfigDiff |
-| `packages/core/src/config/diff-types.ts` | ConfigDiff, FieldChange, DiffImpact types |
-| `packages/core/tests/unit/config/url-normalizer.test.ts` | URL normalization tests |
-| `packages/core/tests/unit/config/config-differ.test.ts` | Config diff tests |
+| File                                                     | Responsibility                                |
+| -------------------------------------------------------- | --------------------------------------------- |
+| `packages/core/src/config/url-normalizer.ts`             | Normalize URLs for consistent seed comparison |
+| `packages/core/src/config/config-differ.ts`              | Compare two JobConfigs, produce ConfigDiff    |
+| `packages/core/src/config/diff-types.ts`                 | ConfigDiff, FieldChange, DiffImpact types     |
+| `packages/core/tests/unit/config/url-normalizer.test.ts` | URL normalization tests                       |
+| `packages/core/tests/unit/config/config-differ.test.ts`  | Config diff tests                             |
 
 ### Modified Files
 
-| File | Change |
-|------|--------|
+| File                                | Change          |
+| ----------------------------------- | --------------- |
 | `packages/core/src/config/index.ts` | Add new exports |
 
 ---
@@ -37,6 +38,7 @@
 ## Task 1: Diff Types
 
 **Files:**
+
 - Create: `packages/core/src/config/diff-types.ts`
 
 - [ ] **Step 1: Create the diff types file**
@@ -51,7 +53,7 @@ import type { FieldDefinitionOutput } from '../types/schema.js';
 export interface FieldChange {
   name: string;
   changes: Array<{
-    property: string;     // 'type', 'required', 'selector', 'description'
+    property: string; // 'type', 'required', 'selector', 'description'
     from: unknown;
     to: unknown;
   }>;
@@ -77,10 +79,10 @@ export interface PotentialRename {
  */
 export interface DiffImpact {
   newTasksToEnqueue: number;
-  pagesNeedingReextraction: number | null;   // null = needs DB query
+  pagesNeedingReextraction: number | null; // null = needs DB query
   reextractionCostEstimate: number;
-  failedTasksToRetry: number | null;         // null = needs DB query
-  skippedTasksToReenqueue: number | null;    // null = needs DB query
+  failedTasksToRetry: number | null; // null = needs DB query
+  skippedTasksToReenqueue: number | null; // null = needs DB query
   forceFullReconciliation: boolean;
 }
 
@@ -137,6 +139,7 @@ git commit -m "feat(core): add config diff types for change detection"
 ## Task 2: URL Normalizer
 
 **Files:**
+
 - Create: `packages/core/src/config/url-normalizer.ts`
 - Create: `packages/core/tests/unit/config/url-normalizer.test.ts`
 
@@ -290,28 +293,19 @@ import { normalizeUrl, diffSeeds } from '../../../src/config/url-normalizer.js';
 
 describe('diffSeeds', () => {
   it('detects added seeds', () => {
-    const result = diffSeeds(
-      ['https://example.com', 'https://new.com'],
-      ['https://example.com'],
-    );
+    const result = diffSeeds(['https://example.com', 'https://new.com'], ['https://example.com']);
     expect(result.added).toEqual(['https://new.com']);
     expect(result.removed).toEqual([]);
   });
 
   it('detects removed seeds', () => {
-    const result = diffSeeds(
-      ['https://example.com'],
-      ['https://example.com', 'https://old.com'],
-    );
+    const result = diffSeeds(['https://example.com'], ['https://example.com', 'https://old.com']);
     expect(result.added).toEqual([]);
     expect(result.removed).toEqual(['https://old.com']);
   });
 
   it('ignores normalization differences', () => {
-    const result = diffSeeds(
-      ['https://example.com/products'],
-      ['https://Example.COM/products/'],
-    );
+    const result = diffSeeds(['https://example.com/products'], ['https://Example.COM/products/']);
     expect(result.added).toEqual([]);
     expect(result.removed).toEqual([]);
   });
@@ -343,6 +337,7 @@ git commit -m "feat(core): add URL normalizer for consistent seed comparison"
 ## Task 3: Config Differ
 
 **Files:**
+
 - Create: `packages/core/src/config/config-differ.ts`
 - Create: `packages/core/tests/unit/config/config-differ.test.ts`
 
@@ -477,7 +472,12 @@ describe('diffConfigs', () => {
       schema: {
         mode: 'hybrid' as const,
         userFields: [
-          { name: 'product_name', type: 'string' as const, description: 'Product Name', required: false },
+          {
+            name: 'product_name',
+            type: 'string' as const,
+            description: 'Product Name',
+            required: false,
+          },
         ],
       },
     } as any);
@@ -511,7 +511,10 @@ describe('diffConfigs', () => {
   it('detects proxy changes', () => {
     const current = createBaseConfig({
       crawl: {
-        maxDepth: 2, maxPages: 1000, concurrency: 5, crawlerType: 'playwright' as const,
+        maxDepth: 2,
+        maxPages: 1000,
+        concurrency: 5,
+        crawlerType: 'playwright' as const,
         proxy: { url: 'socks5://localhost:1080' },
       },
     } as any);
@@ -531,7 +534,11 @@ describe('diffConfigs', () => {
 
   it('detects reconciliation strategy change', () => {
     const current = createBaseConfig({
-      reconciliation: { matchStrategy: 'fuzzy_name' as const, conflictResolution: 'most_complete' as const, fuzzyMatchThreshold: 0.85 },
+      reconciliation: {
+        matchStrategy: 'fuzzy_name' as const,
+        conflictResolution: 'most_complete' as const,
+        fuzzyMatchThreshold: 0.85,
+      },
     } as any);
     const previous = createBaseConfig();
     const diff = diffConfigs(current, previous);
@@ -547,7 +554,11 @@ describe('diffConfigs', () => {
 
   it('computes impact: force full reconciliation on strategy change', () => {
     const current = createBaseConfig({
-      reconciliation: { matchStrategy: 'fuzzy_name' as const, conflictResolution: 'most_complete' as const, fuzzyMatchThreshold: 0.85 },
+      reconciliation: {
+        matchStrategy: 'fuzzy_name' as const,
+        conflictResolution: 'most_complete' as const,
+        fuzzyMatchThreshold: 0.85,
+      },
     } as any);
     const previous = createBaseConfig();
     const diff = diffConfigs(current, previous);
@@ -596,8 +607,12 @@ export function diffConfigs(current: JobConfig, previous: JobConfig): ConfigDiff
   // Schema fields
   const currentFields = current.schema.userFields ?? [];
   const previousFields = previous.schema.userFields ?? [];
-  const { added: fieldsAdded, removed: fieldsRemoved, modified: fieldsModified, renames: potentialRenames } =
-    diffFields(currentFields, previousFields);
+  const {
+    added: fieldsAdded,
+    removed: fieldsRemoved,
+    modified: fieldsModified,
+    renames: potentialRenames,
+  } = diffFields(currentFields, previousFields);
 
   // Schema mode
   const schemaModeChanged =
@@ -755,10 +770,7 @@ function diffFieldProperties(
   return changes;
 }
 
-function diffCrawlSettings(
-  current: JobConfig,
-  previous: JobConfig,
-): ConfigDiff['crawlChanged'] {
+function diffCrawlSettings(current: JobConfig, previous: JobConfig): ConfigDiff['crawlChanged'] {
   return {
     maxDepth:
       current.crawl.maxDepth !== previous.crawl.maxDepth
@@ -776,8 +788,7 @@ function diffCrawlSettings(
       current.crawl.crawlerType !== previous.crawl.crawlerType
         ? { from: previous.crawl.crawlerType, to: current.crawl.crawlerType }
         : undefined,
-    proxyChanged:
-      JSON.stringify(current.crawl.proxy) !== JSON.stringify(previous.crawl.proxy),
+    proxyChanged: JSON.stringify(current.crawl.proxy) !== JSON.stringify(previous.crawl.proxy),
     cookiesChanged:
       JSON.stringify(current.crawl.cookies) !== JSON.stringify(previous.crawl.cookies),
   };
@@ -792,8 +803,8 @@ function computeImpact(context: {
 }): DiffImpact {
   const needsReextraction =
     context.fieldsAdded.length > 0 ||
-    context.fieldsModified.some((f) =>
-      f.changes.some((c) => c.property === 'type'),
+    context.fieldsModified.some(
+      (f) => f.changes.some((c) => c.property === 'type'),
       // Note: 'selector' changes are not detectable here because selectors
       // are not carried through to FieldDefinitionOutput/JobConfig.
       // See design note above about selector change detection.
@@ -805,7 +816,8 @@ function computeImpact(context: {
     // 0 = definitively no work needed
     pagesNeedingReextraction: needsReextraction ? null : 0,
     reextractionCostEstimate: 0, // Computed by caller using estimateCost()
-    failedTasksToRetry: context.crawlChanged.proxyChanged || context.crawlChanged.cookiesChanged ? null : 0,
+    failedTasksToRetry:
+      context.crawlChanged.proxyChanged || context.crawlChanged.cookiesChanged ? null : 0,
     skippedTasksToReenqueue: null, // Always needs DB query (robots.txt toggle detected externally)
     forceFullReconciliation: context.reconciliationChanged,
   };
@@ -833,6 +845,7 @@ git commit -m "feat(core): add config diff engine with field rename detection"
 ## Task 4: Wire Up Exports & Integration Verification
 
 **Files:**
+
 - Modify: `packages/core/src/config/index.ts`
 
 - [ ] **Step 1: Update config barrel exports**

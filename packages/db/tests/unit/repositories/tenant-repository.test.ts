@@ -55,7 +55,10 @@ describe('TenantRepository', () => {
       ]);
 
       const repo = new TenantRepository(db as any);
-      const result = await repo.update('tenant-1', { name: 'Updated Corp', config: { key: 'val' } });
+      const result = await repo.update('tenant-1', {
+        name: 'Updated Corp',
+        config: { key: 'val' },
+      });
 
       expect(result.name).toBe('Updated Corp');
     });
@@ -106,9 +109,7 @@ describe('TenantRepository', () => {
 
   describe('findAll', () => {
     it('returns paginated tenants', async () => {
-      const rows = [
-        { id: 't1', name: 'Tenant 1', config: {}, createdAt: new Date() },
-      ];
+      const rows = [{ id: 't1', name: 'Tenant 1', config: {}, createdAt: new Date() }];
       const mockOffset = vi.fn().mockResolvedValue(rows);
       const mockLimit = vi.fn().mockReturnValue({ offset: mockOffset });
       const mockOrderBy = vi.fn().mockReturnValue({ limit: mockLimit });

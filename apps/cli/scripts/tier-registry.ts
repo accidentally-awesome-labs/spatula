@@ -53,7 +53,7 @@ export const TIERS: Record<string, TierDefinition> = {
     extends: '3',
     services: ['ollama', 'docker-postgres', 'docker-redis', 'openrouter', 'firecrawl'],
     globs: ['tests/e2e/tier4/'],
-    budgetCap: 0.50,
+    budgetCap: 0.5,
     skipIfMissing: true,
   },
   '5a': {

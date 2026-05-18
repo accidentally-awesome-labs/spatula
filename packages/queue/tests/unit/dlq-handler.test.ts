@@ -9,7 +9,13 @@ describe('createDlqHandler', () => {
     const mockJob = {
       id: 'bullmq-123',
       name: 'crawl:https://example.com',
-      data: { taskId: 'task-1', jobId: 'job-1', tenantId: 'tenant-1', url: 'https://example.com', depth: 0 },
+      data: {
+        taskId: 'task-1',
+        jobId: 'job-1',
+        tenantId: 'tenant-1',
+        url: 'https://example.com',
+        depth: 0,
+      },
       attemptsMade: 3,
       opts: { attempts: 3 },
       queueName: 'spatula.crawl',
@@ -18,14 +24,16 @@ describe('createDlqHandler', () => {
 
     await handler(mockJob as any, error);
 
-    expect(dlqRepo.insert).toHaveBeenCalledWith(expect.objectContaining({
-      queueName: 'spatula.crawl',
-      jobId: 'bullmq-123',
-      tenantId: 'tenant-1',
-      spatulaJobId: 'job-1',
-      errorMessage: 'Network timeout after 3 retries',
-      attempts: 3,
-    }));
+    expect(dlqRepo.insert).toHaveBeenCalledWith(
+      expect.objectContaining({
+        queueName: 'spatula.crawl',
+        jobId: 'bullmq-123',
+        tenantId: 'tenant-1',
+        spatulaJobId: 'job-1',
+        errorMessage: 'Network timeout after 3 retries',
+        attempts: 3,
+      }),
+    );
   });
 
   it('does NOT insert when job has remaining attempts', async () => {
@@ -59,10 +67,12 @@ describe('createDlqHandler', () => {
 
     await handler(mockJob as any, new Error('failed'));
 
-    expect(dlqRepo.insert).toHaveBeenCalledWith(expect.objectContaining({
-      tenantId: undefined,
-      spatulaJobId: undefined,
-    }));
+    expect(dlqRepo.insert).toHaveBeenCalledWith(
+      expect.objectContaining({
+        tenantId: undefined,
+        spatulaJobId: undefined,
+      }),
+    );
   });
 
   it('handles undefined job gracefully', async () => {

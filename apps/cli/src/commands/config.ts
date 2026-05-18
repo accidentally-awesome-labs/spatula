@@ -8,7 +8,10 @@ export function getEditorCommand(): string {
 
 export async function runConfigCommand(): Promise<void> {
   const projectRoot = findProjectRoot(process.cwd());
-  if (!projectRoot) { console.error('No spatula.yaml found. Run `spatula init` to create a project first.'); process.exit(1); }
+  if (!projectRoot) {
+    console.error('No spatula.yaml found. Run `spatula init` to create a project first.');
+    process.exit(1);
+  }
 
   const yamlPath = join(projectRoot, 'spatula.yaml');
   const editor = getEditorCommand();
@@ -19,6 +22,12 @@ export async function runConfigCommand(): Promise<void> {
   console.log(`Opening ${yamlPath} in ${cmd}...`);
   const result = spawnSync(cmd, args, { stdio: 'inherit' });
 
-  if (result.error) { console.error(`Failed to open editor: ${result.error.message}`); process.exit(1); }
-  if (result.status !== 0) { console.error(`Editor exited with code ${result.status}`); process.exit(1); }
+  if (result.error) {
+    console.error(`Failed to open editor: ${result.error.message}`);
+    process.exit(1);
+  }
+  if (result.status !== 0) {
+    console.error(`Editor exited with code ${result.status}`);
+    process.exit(1);
+  }
 }

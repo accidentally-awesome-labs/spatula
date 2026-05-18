@@ -9,6 +9,7 @@
 **Tech Stack:** GitHub Actions, Docker (multi-stage builds, node:22-alpine), pnpm 9.15.4, Turborepo
 
 **Spec references:**
+
 - Phase 12 spec sections 2.1 (CI/CD Pipeline), 2.2 (Application Dockerfiles), 2.7 (Production Docker Compose)
 - File: `docs/superpowers/specs/2026-03-21-phase-12-production-readiness-design.md`
 
@@ -18,21 +19,21 @@
 
 ### New Files
 
-| File | Responsibility |
-|------|---------------|
-| `.github/workflows/ci.yml` | CI pipeline: lint, typecheck, format-check, test-unit, test-e2e, build |
-| `.github/workflows/release.yml` | Build Docker images on tag, push to GHCR |
-| `.github/workflows/audit.yml` | Weekly + lockfile-change dependency audit |
-| `Dockerfile.api` | Multi-stage build for API server |
-| `Dockerfile.worker` | Multi-stage build for worker processes |
-| `Dockerfile.cli` | Multi-stage build for CLI (CI/scripting) |
-| `docker-compose.prod.yml` | Production compose extending dev with app services |
-| `.dockerignore` | Exclude unnecessary files from Docker builds |
+| File                            | Responsibility                                                         |
+| ------------------------------- | ---------------------------------------------------------------------- |
+| `.github/workflows/ci.yml`      | CI pipeline: lint, typecheck, format-check, test-unit, test-e2e, build |
+| `.github/workflows/release.yml` | Build Docker images on tag, push to GHCR                               |
+| `.github/workflows/audit.yml`   | Weekly + lockfile-change dependency audit                              |
+| `Dockerfile.api`                | Multi-stage build for API server                                       |
+| `Dockerfile.worker`             | Multi-stage build for worker processes                                 |
+| `Dockerfile.cli`                | Multi-stage build for CLI (CI/scripting)                               |
+| `docker-compose.prod.yml`       | Production compose extending dev with app services                     |
+| `.dockerignore`                 | Exclude unnecessary files from Docker builds                           |
 
 ### Modified Files
 
-| File | Change |
-|------|--------|
+| File         | Change                                            |
+| ------------ | ------------------------------------------------- |
 | `.gitignore` | Add `.spatula/` pattern (Phase 13 forward-compat) |
 
 ---
@@ -40,6 +41,7 @@
 ## Task 1: Docker Ignore File
 
 **Files:**
+
 - Create: `.dockerignore`
 
 - [ ] **Step 1: Create .dockerignore**
@@ -82,6 +84,7 @@ git commit -m "chore: add .dockerignore for Docker builds"
 ## Task 2: API Dockerfile
 
 **Files:**
+
 - Create: `Dockerfile.api`
 
 - [ ] **Step 1: Create Dockerfile.api**
@@ -187,6 +190,7 @@ git commit -m "feat: add multi-stage Dockerfile for API server"
 ## Task 3: Worker Dockerfile
 
 **Files:**
+
 - Create: `Dockerfile.worker`
 
 - [ ] **Step 1: Create Dockerfile.worker**
@@ -269,6 +273,7 @@ CMD ["node", "packages/queue/dist/worker-entrypoint.js"]
 ```
 
 Key differences from API Dockerfile:
+
 - Does NOT copy `apps/api/` (workers don't need the API code)
 - Uses `--filter=@spatula/queue...` for targeted builds
 - No `EXPOSE` (workers don't serve HTTP)
@@ -291,6 +296,7 @@ git commit -m "feat: add multi-stage Dockerfile for worker processes"
 ## Task 4: CLI Dockerfile
 
 **Files:**
+
 - Create: `Dockerfile.cli`
 
 - [ ] **Step 1: Create Dockerfile.cli**
@@ -381,6 +387,7 @@ git commit -m "feat: add multi-stage Dockerfile for CLI"
 ## Task 5: Production Docker Compose
 
 **Files:**
+
 - Create: `docker-compose.prod.yml`
 
 - [ ] **Step 1: Create docker-compose.prod.yml**
@@ -402,12 +409,12 @@ services:
     build:
       context: .
       dockerfile: Dockerfile.api
-    command: ["node", "packages/db/dist/run-migrate.js"]
+    command: ['node', 'packages/db/dist/run-migrate.js']
     env_file: .env
     depends_on:
       postgres:
         condition: service_healthy
-    restart: "no"
+    restart: 'no'
 
   # API server
   # Note: deploy.replicas is a Docker Swarm feature. In standalone compose,
@@ -418,7 +425,7 @@ services:
       context: .
       dockerfile: Dockerfile.api
     ports:
-      - "3000:3000"
+      - '3000:3000'
     env_file: .env
     depends_on:
       postgres:
@@ -429,7 +436,7 @@ services:
         condition: service_completed_successfully
     restart: on-failure
     healthcheck:
-      test: ["CMD", "wget", "-qO-", "http://localhost:3000/health"]
+      test: ['CMD', 'wget', '-qO-', 'http://localhost:3000/health']
       interval: 30s
       timeout: 5s
       retries: 3
@@ -452,6 +459,7 @@ services:
 ```
 
 Design decisions:
+
 - `migrate` runs as a one-shot init container (`restart: "no"`)
 - `api` and `worker` depend on `migrate` completing successfully before starting
 - Both `api` and `worker` depend on healthy postgres + redis
@@ -471,6 +479,7 @@ git commit -m "feat: add production Docker Compose with API, worker, and migrati
 ## Task 6: CI Workflow
 
 **Files:**
+
 - Create: `.github/workflows/ci.yml`
 
 - [ ] **Step 1: Create .github/workflows/ci.yml**
@@ -483,7 +492,7 @@ on:
     branches: [main]
   pull_request:
     branches: [main]
-  workflow_call:  # Allow release.yml to call this workflow
+  workflow_call: # Allow release.yml to call this workflow
 
 concurrency:
   group: ci-${{ github.ref }}
@@ -625,6 +634,7 @@ jobs:
 ```
 
 Key design choices:
+
 - All 6 jobs run in parallel (no dependencies between them)
 - `pnpm/action-setup@v4` auto-detects pnpm version from `packageManager` field
 - `actions/setup-node@v4` with `cache: pnpm` caches the pnpm store
@@ -646,11 +656,12 @@ git commit -m "ci: add CI workflow with lint, typecheck, format, test, build job
 ## Task 7: Release Workflow
 
 **Files:**
+
 - Create: `.github/workflows/release.yml`
 
 - [ ] **Step 1: Create .github/workflows/release.yml**
 
-```yaml
+````yaml
 name: Release
 
 on:
@@ -735,9 +746,10 @@ jobs:
             docker pull ghcr.io/${{ github.repository }}/worker:${{ steps.version.outputs.version }}
             docker pull ghcr.io/${{ github.repository }}/cli:${{ steps.version.outputs.version }}
             ```
-```
+````
 
 Key design choices:
+
 - Triggers on `v*` tags (e.g., `v1.0.0`)
 - Runs full CI first (reuses ci.yml as a called workflow)
 - Matrix strategy builds API and worker images in parallel
@@ -759,6 +771,7 @@ git commit -m "ci: add release workflow for Docker image builds and GitHub relea
 ## Task 8: Dependency Audit Workflow
 
 **Files:**
+
 - Create: `.github/workflows/audit.yml`
 
 - [ ] **Step 1: Create .github/workflows/audit.yml**
@@ -768,12 +781,12 @@ name: Dependency Audit
 
 on:
   schedule:
-    - cron: '0 9 * * 1'  # Weekly on Monday at 9am UTC
+    - cron: '0 9 * * 1' # Weekly on Monday at 9am UTC
   push:
     paths:
       - 'pnpm-lock.yaml'
     branches: [main]
-  workflow_dispatch:  # Allow manual trigger
+  workflow_dispatch: # Allow manual trigger
 
 jobs:
   audit:
@@ -792,6 +805,7 @@ jobs:
 ```
 
 Simple and focused:
+
 - Runs weekly (Monday 9am UTC)
 - Also runs when `pnpm-lock.yaml` changes on main
 - Fails on high/critical vulnerabilities
@@ -809,6 +823,7 @@ git commit -m "ci: add weekly dependency audit workflow"
 ## Task 9: Update .gitignore
 
 **Files:**
+
 - Modify: `.gitignore`
 
 - [ ] **Step 1: Add .spatula/ to .gitignore**
@@ -833,19 +848,23 @@ git commit -m "chore: add .spatula/ to .gitignore for Phase 13 forward-compat"
 ## Task 10: Verification
 
 **Files:**
+
 - No new files — verification only
 
 - [ ] **Step 1: Verify all new files exist**
 
 Run:
+
 ```bash
 ls -la .dockerignore Dockerfile.api Dockerfile.worker Dockerfile.cli docker-compose.prod.yml .github/workflows/ci.yml .github/workflows/release.yml .github/workflows/audit.yml
 ```
+
 Expected: All 8 files listed
 
 - [ ] **Step 2: Validate YAML syntax**
 
 Run:
+
 ```bash
 # Validate docker-compose files
 docker compose -f docker-compose.yml -f docker-compose.prod.yml config --quiet 2>&1 || echo "docker compose not available, skipping validation"
@@ -854,6 +873,7 @@ docker compose -f docker-compose.yml -f docker-compose.prod.yml config --quiet 2
 - [ ] **Step 3: Validate GitHub Actions syntax (if act is available)**
 
 Run:
+
 ```bash
 which act && act --list || echo "act not installed, skipping workflow validation"
 ```
@@ -863,9 +883,11 @@ If `act` is not available, the workflows will be validated by GitHub on first pu
 - [ ] **Step 4: Verify existing tests still pass**
 
 Run:
+
 ```bash
 pnpm run test 2>&1 | tail -20
 ```
+
 Expected: All tests pass (these are config files only — no code changes that could break tests)
 
 - [ ] **Step 5: Commit verification**

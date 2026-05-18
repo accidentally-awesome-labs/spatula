@@ -44,7 +44,7 @@ export async function runListCommand(
 export function printListDeprecation(): void {
   console.warn(
     '\n  ⚠ `spatula list` is deprecated. Use `spatula remote jobs <name>` (coming in a future release).\n' +
-    '  For local project status, use `spatula status`.\n',
+      '  For local project status, use `spatula status`.\n',
   );
 }
 
@@ -78,7 +78,8 @@ export function formatJobsTable(jobs: Record<string, unknown>[]): string {
   const line = (id: string, name: string, status: string) =>
     `${pad(id, idWidth)}  ${pad(name, nameWidth)}  ${pad(status, statusWidth)}`.trimEnd();
 
-  const separator = `${'-'.repeat(idWidth)}  ${'-'.repeat(nameWidth)}  ${'-'.repeat(statusWidth)}`.trimEnd();
+  const separator =
+    `${'-'.repeat(idWidth)}  ${'-'.repeat(nameWidth)}  ${'-'.repeat(statusWidth)}`.trimEnd();
 
   const lines = [
     line(header.id, header.name, header.status),

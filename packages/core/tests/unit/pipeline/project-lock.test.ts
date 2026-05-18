@@ -6,8 +6,12 @@ import { ProjectLock } from '../../../src/pipeline/project-lock.js';
 
 describe('ProjectLock', () => {
   let tempDir: string;
-  beforeEach(() => { tempDir = mkdtempSync(join(tmpdir(), 'spatula-lock-')); });
-  afterEach(() => { rmSync(tempDir, { recursive: true, force: true }); });
+  beforeEach(() => {
+    tempDir = mkdtempSync(join(tmpdir(), 'spatula-lock-'));
+  });
+  afterEach(() => {
+    rmSync(tempDir, { recursive: true, force: true });
+  });
 
   it('acquires lock when no existing lock', () => {
     const lock = new ProjectLock(tempDir);

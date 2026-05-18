@@ -17,18 +17,18 @@ Wave 5-6 addresses deferred items from Waves 2–5 that are now unblocked. The i
 
 ### Item Inventory
 
-| # | Item | Group | Server | CLI/Core | Migration |
-|---|------|-------|--------|----------|-----------|
-| 1a | Tenant creation auth protection | 1 | Route guard + env var | — | — |
-| 1b | Quota audit logging | 1 | AuditLogger wiring | — | — |
-| 1c | OpenRouter cost header extraction | 1 | — | Core pkg | — |
-| 1d | Observable gauge registration | 1 | Startup wiring | — | — |
-| 1e | ApiDataSource status stubs | 1 | Job stats enrichment | Wire client fields | — |
-| 1f | `spatula reset --keep-remote` | 1 | — | Reset command | — |
-| 1g | Pull `--include-extractions` / `--include-actions` | 1 | pageUrl join, entity-sources endpoint | Pull loop, progress, flags | Yes |
-| 2a | CSS extractor table extraction | 2 | — | Core pkg | — |
-| 2b | `spatula add` crawl history dedup | 2 | — | Add command | — |
-| 3a | Config diff recursive comparison | 3 | — | Core pkg | — |
+| #   | Item                                               | Group | Server                                | CLI/Core                   | Migration |
+| --- | -------------------------------------------------- | ----- | ------------------------------------- | -------------------------- | --------- |
+| 1a  | Tenant creation auth protection                    | 1     | Route guard + env var                 | —                          | —         |
+| 1b  | Quota audit logging                                | 1     | AuditLogger wiring                    | —                          | —         |
+| 1c  | OpenRouter cost header extraction                  | 1     | —                                     | Core pkg                   | —         |
+| 1d  | Observable gauge registration                      | 1     | Startup wiring                        | —                          | —         |
+| 1e  | ApiDataSource status stubs                         | 1     | Job stats enrichment                  | Wire client fields         | —         |
+| 1f  | `spatula reset --keep-remote`                      | 1     | —                                     | Reset command              | —         |
+| 1g  | Pull `--include-extractions` / `--include-actions` | 1     | pageUrl join, entity-sources endpoint | Pull loop, progress, flags | Yes       |
+| 2a  | CSS extractor table extraction                     | 2     | —                                     | Core pkg                   | —         |
+| 2b  | `spatula add` crawl history dedup                  | 2     | —                                     | Add command                | —         |
+| 3a  | Config diff recursive comparison                   | 3     | —                                     | Core pkg                   | —         |
 
 ---
 
@@ -41,6 +41,7 @@ Wave 5-6 addresses deferred items from Waves 2–5 that are now unblocked. The i
 **Problem:** `POST /api/v1/tenants` is unauthenticated — any caller can create tenants. Acceptable for dev/self-hosted bootstrap, but a security gap on hosted deployments.
 
 **Design:**
+
 - Add a shared-secret gate via `TENANT_CREATION_SECRET` env var
 - When set: requests to `POST /api/v1/tenants` must include `X-Creation-Secret` header matching the value. Return 403 on mismatch.
 - When unset: endpoint remains open (current behavior — dev/self-hosted compatible)
@@ -55,6 +56,7 @@ Wave 5-6 addresses deferred items from Waves 2–5 that are now unblocked. The i
 **Problem:** `JobManager` throws `QuotaExceededError` on job creation quota violations but doesn't log an audit event.
 
 **Design:**
+
 - Add `auditLogger?: AuditLogger` to `JobManagerConfig`
 - On `QuotaExceededError` from `quotaEnforcer.checkAndRecord()`, emit audit event before re-throwing:
   ```
@@ -70,6 +72,7 @@ Wave 5-6 addresses deferred items from Waves 2–5 that are now unblocked. The i
 **Problem:** `costUsd` is hardcoded to 0. OpenRouter returns actual cost in `x-openrouter-cost` response header.
 
 **Design:**
+
 - After `const response = await this.doFetch(body)` (line 74), extract: `const costUsd = parseFloat(response.headers.get('x-openrouter-cost') ?? '') || 0;`
 - Pass `costUsd` to `usageRecorder.record()` instead of the hardcoded 0
 - No interface changes — `UsageRecord.costUsd` already accepts `number`
@@ -82,6 +85,7 @@ Wave 5-6 addresses deferred items from Waves 2–5 that are now unblocked. The i
 **Problem:** Three observable gauges (`queue_depth`, `active_jobs`, `tenant_count`) are TODO stubs. They need access to repositories that aren't available at metrics creation time.
 
 **Design:**
+
 - Add `registerGauges(deps: { jobRepo, tenantRepo, queueProvider })` function exported from the metrics module
 - Creates three `ObservableGauge` callbacks that lazily read current values on Prometheus scrape:
   - `queue_depth` — sum of waiting + active across all queues
@@ -100,6 +104,7 @@ Wave 5-6 addresses deferred items from Waves 2–5 that are now unblocked. The i
 **Design:**
 
 **Server-side:** Enrich the job detail query to compute and include in the `stats` object:
+
 - `pendingActionsCount` — `SELECT COUNT(*) FROM actions WHERE job_id = ? AND tenant_id = ? AND status = 'pending_review'`
 - `schemaFieldCount` — count fields in the latest schema version's definition
 - `storageBytesUsed` — already available on tenant model (`storageBytesUsed` field); for per-job, use `SELECT COALESCE(SUM(LENGTH(content)), 0) FROM raw_pages WHERE job_id = ? AND tenant_id = ?`
@@ -107,6 +112,7 @@ Wave 5-6 addresses deferred items from Waves 2–5 that are now unblocked. The i
 These are added to the `stats` JSON field on the job response (which is `z.record(z.number()).nullable()`), not as new top-level fields.
 
 **Client-side:** In `ApiDataSource.getStatus()`, read from `job.stats`:
+
 ```typescript
 pendingActions: (job.stats as any)?.pendingActionsCount ?? 0,
 schemaFields: (job.stats as any)?.schemaFieldCount ?? 0,
@@ -120,6 +126,7 @@ storageBytes: { pages: (job.stats as any)?.storageBytesUsed ?? 0, database: 0, e
 **Problem:** `spatula reset` clears all `.spatula/` contents. No way to reset local crawl data while preserving remote job links and pulled data.
 
 **Design:**
+
 - Add `keepRemote?: boolean` to `ResetOptions`
 - `--keep-remote` implies `--keep-entities` (the SQLite DB must survive to preserve remote state)
 - After the filesystem reset (remove/recreate dirs), if `keepRemote` is true, open the DB and selectively clean:
@@ -142,6 +149,7 @@ storageBytes: { pages: (job.stats as any)?.storageBytesUsed ?? 0, database: 0, e
 #### 2.7.1 SQLite Migration (single migration file)
 
 All schema changes in one Drizzle migration:
+
 - `extractions`: add nullable `runId` text column, add nullable `pageUrl` text column, make `pageId` nullable (for remote records without local page data). Add index on `runId`.
 - `actions`: add nullable `runId` text column. Add index on `runId`.
 
@@ -150,11 +158,13 @@ All schema changes in one Drizzle migration:
 #### 2.7.2 Server-Side Changes
 
 **Extraction API response:** Update `extractionResponseSchema` in `apps/api/src/schemas/responses.ts`:
+
 - Change `pageId: z.string().uuid()` → `pageId: z.string().uuid().nullable()`
 - Add `pageUrl: z.string().nullable()`
-In the extraction repository's `findByJob` and `findByJobCursor` methods, LEFT JOIN with `raw_pages` to include the page URL. Note: making `pageId` nullable on the API response is a backward-compatible addition (existing non-null values remain valid), but consumers parsing with strict Zod schemas will need to accept nulls.
+  In the extraction repository's `findByJob` and `findByJobCursor` methods, LEFT JOIN with `raw_pages` to include the page URL. Note: making `pageId` nullable on the API response is a backward-compatible addition (existing non-null values remain valid), but consumers parsing with strict Zod schemas will need to accept nulls.
 
 **Entity-sources endpoint:** New route `GET /api/v1/jobs/:jobId/entity-sources` with cursor pagination.
+
 - Register in `app.ts` under the existing jobs route group (tenant-scoped, same middleware chain)
 - Response schema: `{ data: Array<{ entityId: z.string().uuid(), extractionId: z.string().uuid(), matchConfidence: z.number() }>, pagination: PaginationEnvelope }`
 - Query params: `cursor`, `since`, `limit` (same pattern as extractions/actions endpoints)
@@ -165,6 +175,7 @@ In the extraction repository's `findByJob` and `findByJobCursor` methods, LEFT J
 #### 2.7.3 API Client Methods
 
 Add to `SpatulaApiClient`:
+
 - `getExtractionsStreamPaginated(jobId, { since?, limit? })` — returns `{ data, pagination }` envelope
 - `getActionsStreamPaginated(jobId, { since?, limit? })` — returns `{ data, pagination }` envelope
 - `getEntitySourcesStreamPaginated(jobId, { since?, limit? })` — returns `{ data, pagination }` envelope
@@ -180,6 +191,7 @@ Add to `SpatulaApiClient`:
 After the existing entity pull loop (step 5), when flags are enabled:
 
 **Step 6 — Extractions** (if `--include-extractions`):
+
 1. Resume from `remote:{name}:pull_cursor_extractions` (independent cursor)
 2. Fetch batch via `client.getExtractionsStreamPaginated(jobId, { since, limit: 100 })`
 3. For each extraction: store `pageUrl` directly on the record, set `pageId` to null, set `runId` to the current pull-run record ID (same run used for entities — all pulled data types share one run ID for cleanup tracking)
@@ -187,12 +199,14 @@ After the existing entity pull loop (step 5), when flags are enabled:
 5. Checkpoint cursor to `project_meta`
 
 **Step 7 — Entity Sources** (if `--include-extractions`, pulled automatically):
+
 1. Resume from `remote:{name}:pull_cursor_entity_sources`
 2. Fetch batch via `client.getEntitySourcesStreamPaginated(jobId, { since, limit: 500 })`
 3. Upsert batch into SQLite `entity_sources` table
 4. Checkpoint cursor
 
 **Step 8 — Actions** (if `--include-actions`):
+
 1. Resume from `remote:{name}:pull_cursor_actions`
 2. Fetch batch via `client.getActionsStreamPaginated(jobId, { since, limit: 100 })`
 3. For each action: set `runId` to current run ID
@@ -204,12 +218,14 @@ After the existing entity pull loop (step 5), when flags are enabled:
 #### 2.7.6 `--full` Flag Behavior
 
 When `--full` is combined with:
+
 - `--include-extractions`: first collect extraction IDs for the remote run IDs, delete matching `entity_sources` rows, then delete extractions by `runId` (via `deleteByRunIds`). Order matters: entity_sources FK references must be cleared before extractions.
 - `--include-actions`: clear previously-pulled actions by `runId` (via `deleteByRunIds`)
 
 #### 2.7.7 PullResult Extension
 
 Add to `PullResult`:
+
 ```typescript
 extractionsInserted?: number;
 extractionsUpdated?: number;
@@ -221,6 +237,7 @@ actionsUpdated?: number;
 #### 2.7.8 Pull Progress Display
 
 The existing pull command uses inline `process.stderr.write` for progress (no Ink component exists yet). Create a `PullProgress` Ink component or extend the inline progress to support multi-phase display:
+
 - Show current phase label: "Pulling entities...", "Pulling extractions...", "Pulling entity sources...", "Pulling actions..."
 - Show per-phase batch count / total
 - Overall progress across all active phases
@@ -228,6 +245,7 @@ The existing pull command uses inline `process.stderr.write` for progress (no In
 #### 2.7.9 CLI Flag Registration
 
 In `index.tsx`, add to the `pull` command:
+
 ```typescript
 .option('include-extractions', {
   type: 'boolean',
@@ -287,6 +305,7 @@ New `findTable($, fieldName)` function:
 #### 3.1.2 Auto-Discovery Enhancement
 
 In `autoDiscover()`, after existing detections, add:
+
 - Find `<table>` elements in content areas (`article table`, `main table`, `.content table`) with 3+ data rows
 - Include first matching table as `tables` key in the discovered data object
 - Limit to first table to avoid noise from navigation/layout tables
@@ -300,6 +319,7 @@ In `autoDiscover()`, after existing detections, add:
 #### 3.2.1 Repository Method
 
 Add to `SqliteCrawlTaskRepository`:
+
 ```typescript
 async findCompletedUrls(): Promise<string[]> {
   const rows = this.db
@@ -321,6 +341,7 @@ The existing `sl_crawl_tasks_url_idx` index covers URL lookups. A compound `(sta
 #### 3.2.2 Command Changes
 
 In `runAddCommand()`:
+
 1. After reading `spatula.yaml`, attempt to open the local project DB via `openLocalProject()` inside a try/catch
 2. If DB exists, call `taskRepo.findCompletedUrls()` and normalize the results with the same `normaliseUrl()` function
 3. Pass crawled URL set as additional dedup source to `validateAndDedup()`
@@ -330,17 +351,19 @@ In `runAddCommand()`:
 #### 3.2.3 Interface Extensions
 
 Extend `DeduplicationResult` and `AddResult` with:
+
 ```typescript
 alreadyCrawled: string[];  // URLs skipped because they were already crawled
 ```
 
 Extend `validateAndDedup()` signature:
+
 ```typescript
 export function validateAndDedup(
   urls: string[],
   existingSeeds: string[],
   crawledUrls?: string[],
-): DeduplicationResult
+): DeduplicationResult;
 ```
 
 When a URL matches `crawledUrls`, add to `alreadyCrawled` instead of `duplicates`.
@@ -350,6 +373,7 @@ When a URL matches `crawledUrls`, add to `alreadyCrawled` instead of `duplicates
 Add `noHistory?: boolean` to skip the DB lookup entirely. Useful when the user intentionally wants to re-crawl a URL.
 
 **CLI registration:** In `index.tsx`, add to the `add` command:
+
 ```typescript
 .option('no-history', {
   type: 'boolean',
@@ -390,9 +414,9 @@ export interface PropertyChange {
   property: string;
   from: unknown;
   to: unknown;
-  nestedChanges?: PropertyChange[];  // for recursive arrayItemType/objectFields
-  addedFields?: string[];            // for objectFields: names of added sub-fields
-  removedFields?: string[];          // for objectFields: names of removed sub-fields
+  nestedChanges?: PropertyChange[]; // for recursive arrayItemType/objectFields
+  addedFields?: string[]; // for objectFields: names of added sub-fields
+  removedFields?: string[]; // for objectFields: names of removed sub-fields
 }
 
 export interface FieldChange {
@@ -404,29 +428,40 @@ export interface FieldChange {
 After existing property comparisons in `diffFieldProperties()` (line 195), add:
 
 **arrayItemType:**
+
 ```typescript
 if (current.arrayItemType && previous.arrayItemType) {
   const nestedChanges = diffFieldProperties(current.arrayItemType, previous.arrayItemType);
   if (nestedChanges.length > 0) {
-    changes.push({ property: 'arrayItemType', from: previous.arrayItemType, to: current.arrayItemType, nestedChanges });
+    changes.push({
+      property: 'arrayItemType',
+      from: previous.arrayItemType,
+      to: current.arrayItemType,
+      nestedChanges,
+    });
   }
 } else if (current.arrayItemType !== previous.arrayItemType) {
-  changes.push({ property: 'arrayItemType', from: previous.arrayItemType, to: current.arrayItemType });
+  changes.push({
+    property: 'arrayItemType',
+    from: previous.arrayItemType,
+    to: current.arrayItemType,
+  });
 }
 ```
 
 **objectFields:**
+
 ```typescript
 if (current.objectFields || previous.objectFields) {
-  const currentFields = new Map((current.objectFields ?? []).map(f => [f.name, f]));
-  const previousFields = new Map((previous.objectFields ?? []).map(f => [f.name, f]));
-  
-  const addedFields = [...currentFields.keys()].filter(k => !previousFields.has(k));
-  const removedFields = [...previousFields.keys()].filter(k => !currentFields.has(k));
+  const currentFields = new Map((current.objectFields ?? []).map((f) => [f.name, f]));
+  const previousFields = new Map((previous.objectFields ?? []).map((f) => [f.name, f]));
+
+  const addedFields = [...currentFields.keys()].filter((k) => !previousFields.has(k));
+  const removedFields = [...previousFields.keys()].filter((k) => !currentFields.has(k));
   const nestedChanges = [...currentFields.keys()]
-    .filter(k => previousFields.has(k))
-    .flatMap(k => diffFieldProperties(currentFields.get(k)!, previousFields.get(k)!));
-  
+    .filter((k) => previousFields.has(k))
+    .flatMap((k) => diffFieldProperties(currentFields.get(k)!, previousFields.get(k)!));
+
   if (addedFields.length || removedFields.length || nestedChanges.length) {
     changes.push({
       property: 'objectFields',
@@ -447,38 +482,41 @@ if (current.objectFields || previous.objectFields) {
 ### 5.1 SQLite Migration
 
 One migration file covering all schema changes:
+
 - `extractions`: add nullable `run_id`, add nullable `page_url`, make `page_id` nullable. Add index on `run_id`.
 - `actions`: add nullable `run_id`. Add index on `run_id`.
 
 ### 5.2 CLI Entrypoint Updates
 
 Three commands need new flags registered in `apps/cli/src/index.tsx`:
+
 - `pull`: `--include-extractions`, `--include-actions`
 - `reset`: `--keep-remote`
 - `add`: `--no-history`
 
 ### 5.3 Environment Variables
 
-| Variable | Required | Default | Item |
-|----------|----------|---------|------|
-| `TENANT_CREATION_SECRET` | No | (unset = open) | 1a |
+| Variable                 | Required | Default        | Item |
+| ------------------------ | -------- | -------------- | ---- |
+| `TENANT_CREATION_SECRET` | No       | (unset = open) | 1a   |
 
 Add to `.env.example`.
 
 ### 5.4 Server-Side Deliverables Summary
 
-| Change | File(s) | Item |
-|--------|---------|------|
-| Tenant creation route guard | `apps/api/src/app.ts` | 1a |
-| AuditLogger wiring in JobManager | `packages/queue/src/job-manager.ts` | 1b |
-| Observable gauge registration | `packages/shared/src/metrics.ts`, server startup | 1d |
-| Job stats enrichment (pendingActionsCount, schemaFieldCount) | `apps/api/src/routes/jobs.ts`, job repository | 1e |
-| Extraction response `pageUrl` join | `apps/api/src/routes/extractions.ts`, extraction repository | 1g |
-| New `entity-sources` endpoint | `apps/api/src/routes/entity-sources.ts` (new) | 1g |
+| Change                                                       | File(s)                                                     | Item |
+| ------------------------------------------------------------ | ----------------------------------------------------------- | ---- |
+| Tenant creation route guard                                  | `apps/api/src/app.ts`                                       | 1a   |
+| AuditLogger wiring in JobManager                             | `packages/queue/src/job-manager.ts`                         | 1b   |
+| Observable gauge registration                                | `packages/shared/src/metrics.ts`, server startup            | 1d   |
+| Job stats enrichment (pendingActionsCount, schemaFieldCount) | `apps/api/src/routes/jobs.ts`, job repository               | 1e   |
+| Extraction response `pageUrl` join                           | `apps/api/src/routes/extractions.ts`, extraction repository | 1g   |
+| New `entity-sources` endpoint                                | `apps/api/src/routes/entity-sources.ts` (new)               | 1g   |
 
 ### 5.5 Testing Strategy
 
 Each item requires unit tests. The SQLite migration (section 5.1) requires a dedicated migration test that exercises the upgrade path from a populated local project DB — verifying that existing extraction records with non-null `pageId` survive the table recreation. Integration tests for:
+
 - Pull with `--include-extractions` / `--include-actions` (end-to-end with mocked API)
 - Reset with `--keep-remote` (verify remote data preserved, local cleared)
 - Add with crawl history (verify dedup against DB)

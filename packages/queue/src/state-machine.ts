@@ -16,7 +16,9 @@ export const JobStateMachine = {
   transition(from: JobStatus, to: JobStatus): JobStatus {
     const allowed = TRANSITIONS[from];
     if (!allowed || !allowed.includes(to)) {
-      throw new StateError(`Invalid job state transition: ${from} → ${to}`, { context: { from, to } });
+      throw new StateError(`Invalid job state transition: ${from} → ${to}`, {
+        context: { from, to },
+      });
     }
     return to;
   },

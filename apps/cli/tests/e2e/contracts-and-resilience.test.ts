@@ -12,14 +12,7 @@
  * Uses REAL SQLite databases with seeded data — no mocks for storage.
  */
 
-import {
-  mkdtempSync,
-  writeFileSync,
-  mkdirSync,
-  rmSync,
-  readFileSync,
-  existsSync,
-} from 'node:fs';
+import { mkdtempSync, writeFileSync, mkdirSync, rmSync, readFileSync, existsSync } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { describe, it, expect, beforeAll, afterAll, vi } from 'vitest';
@@ -263,7 +256,10 @@ describe('malformed input resilience', () => {
   it('export handles project with no entities gracefully', async () => {
     const emptyDir = mkdtempSync(join(tmpdir(), 'spatula-empty-'));
     try {
-      writeFileSync(join(emptyDir, 'spatula.yaml'), 'name: empty\nseeds:\n  - https://example.com\n');
+      writeFileSync(
+        join(emptyDir, 'spatula.yaml'),
+        'name: empty\nseeds:\n  - https://example.com\n',
+      );
       const dbDir = join(emptyDir, '.spatula');
       mkdirSync(dbDir, { recursive: true });
 
@@ -279,9 +275,7 @@ describe('malformed input resilience', () => {
         version: 1,
         definition: {
           version: 1,
-          fields: [
-            { name: 'title', type: 'string', required: true, description: 'T' },
-          ],
+          fields: [{ name: 'title', type: 'string', required: true, description: 'T' }],
           fieldAliases: [],
           createdAt: new Date(),
           parentVersion: null,
@@ -420,9 +414,7 @@ describe('malformed input resilience', () => {
         version: 1,
         definition: {
           version: 1,
-          fields: [
-            { name: 'title', type: 'string', required: true, description: 'Title' },
-          ],
+          fields: [{ name: 'title', type: 'string', required: true, description: 'Title' }],
           fieldAliases: [],
           createdAt: new Date(),
           parentVersion: null,

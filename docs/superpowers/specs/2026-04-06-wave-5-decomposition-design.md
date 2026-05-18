@@ -23,14 +23,14 @@ Wave 5 covers 2 workstreams:
 
 ## 2. Sub-plan Summary
 
-| Sub-plan | Scope | Spec Sections | Est. New Files | Order |
-|----------|-------|---------------|----------------|-------|
-| **5-1** | User & Auth Foundation | 12: 10.1 | ~8 | 1 |
-| **5-2** | Billing & Metering | 12: 10.2 | ~15 | 2 |
-| **5-3** | Admin & Retention | 12: 10.3–10.4 | ~12 | 2 (parallel with 5-2) |
-| **5-4** | Remote Config & Push | 13: 8.1–8.4, 9.4 | ~15 | 3 |
-| **5-5** | Pull Flow | 13: 9.1–9.7 | ~10 | 4 |
-| **5-6** | Deferred Items | Mixed | ~6 | 5 |
+| Sub-plan | Scope                  | Spec Sections    | Est. New Files | Order                 |
+| -------- | ---------------------- | ---------------- | -------------- | --------------------- |
+| **5-1**  | User & Auth Foundation | 12: 10.1         | ~8             | 1                     |
+| **5-2**  | Billing & Metering     | 12: 10.2         | ~15            | 2                     |
+| **5-3**  | Admin & Retention      | 12: 10.3–10.4    | ~12            | 2 (parallel with 5-2) |
+| **5-4**  | Remote Config & Push   | 13: 8.1–8.4, 9.4 | ~15            | 3                     |
+| **5-5**  | Pull Flow              | 13: 9.1–9.7      | ~10            | 4                     |
+| **5-6**  | Deferred Items         | Mixed            | ~6             | 5                     |
 
 **Execution order:**
 
@@ -95,6 +95,7 @@ Wave 5 covers 2 workstreams:
 **Deliverables:**
 
 1. **`user_tenants` Drizzle schema** (`packages/db/src/schema/user-tenants.ts`):
+
    ```sql
    CREATE TABLE user_tenants (
      user_id TEXT NOT NULL,
@@ -105,6 +106,7 @@ Wave 5 covers 2 workstreams:
    );
    CREATE INDEX idx_user_tenants_user ON user_tenants(user_id);
    ```
+
    Roles: `owner`, `admin`, `member`. One user can belong to multiple tenants. One tenant can have multiple users.
 
 2. **`UserTenantRepository`** (`packages/db/src/repositories/user-tenant-repository.ts`):
@@ -149,21 +151,23 @@ Wave 5 covers 2 workstreams:
 **Deliverables:**
 
 1. **Billing tier constants** (`packages/shared/src/billing/tiers.ts`):
+
    ```typescript
    interface BillingTier {
      name: 'free' | 'starter' | 'pro' | 'enterprise';
      limits: {
-       jobsPerMonth: number;       // 5 / 50 / 500 / Infinity
-       pagesPerMonth: number;      // 1000 / 10000 / 100000 / Infinity
-       llmTokensPerMonth: number;  // 100000 / 1000000 / 10000000 / Infinity
-       storageMb: number;          // 100 / 1000 / 10000 / Infinity
-       exportFormats: string[];    // ['json','csv'] / all / all / all
-       rateLimitPerMin: number;    // 60 / 300 / 1500 / Infinity
+       jobsPerMonth: number; // 5 / 50 / 500 / Infinity
+       pagesPerMonth: number; // 1000 / 10000 / 100000 / Infinity
+       llmTokensPerMonth: number; // 100000 / 1000000 / 10000000 / Infinity
+       storageMb: number; // 100 / 1000 / 10000 / Infinity
+       exportFormats: string[]; // ['json','csv'] / all / all / all
+       rateLimitPerMin: number; // 60 / 300 / 1500 / Infinity
      };
    }
    ```
 
 2. **`usage_records` Drizzle schema** (`packages/db/src/schema/usage-records.ts`):
+
    ```sql
    CREATE TABLE usage_records (
      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -177,6 +181,7 @@ Wave 5 covers 2 workstreams:
    );
    CREATE INDEX idx_usage_tenant_period ON usage_records(tenant_id, period_start, dimension);
    ```
+
    Dimensions: `pages`, `llm_tokens`, `storage_bytes`, `jobs`.
 
 3. **`UsageRecordRepository`** (`packages/db/src/repositories/usage-record-repository.ts`):
@@ -288,6 +293,7 @@ Wave 5 covers 2 workstreams:
 **Deliverables:**
 
 1. **Global config extension for remotes** — Extend `~/.spatula/config.yaml` schema with `remotes` section:
+
    ```yaml
    remotes:
      prod:
@@ -297,6 +303,7 @@ Wave 5 covers 2 workstreams:
        url: https://staging.spatula.dev
        apiKey: sk_staging_****
    ```
+
    Update `GlobalConfigSchema` in `packages/core/src/config/types.ts`.
 
 2. **`spatula remote add`** (`apps/cli/src/commands/remote.ts`):
@@ -344,7 +351,7 @@ Wave 5 covers 2 workstreams:
    - `getSubscription()` — for remote add verification
    - `getWsToken(jobId)` — obtain WebSocket auth token for `remote watch`
 
-9. **Command registration** — Register `remote` (with subcommands) and `push` in `apps/cli/src/index.tsx`.
+10. **Command registration** — Register `remote` (with subcommands) and `push` in `apps/cli/src/index.tsx`.
 
 **New env vars:** None (remote config is per-project in `~/.spatula/config.yaml`).
 
@@ -466,10 +473,10 @@ The Stripe webhook endpoint (`/api/v1/webhooks/stripe`) must bypass auth middlew
 
 Two new queues added in Wave 5:
 
-| Queue | Added In | Schedule | Purpose |
-|-------|----------|----------|---------|
-| `spatula.metering` | 5-2 | Hourly | Report usage to Stripe |
-| `spatula.cleanup` | 5-3 | Daily 03:00 UTC | Data retention enforcement |
+| Queue              | Added In | Schedule        | Purpose                    |
+| ------------------ | -------- | --------------- | -------------------------- |
+| `spatula.metering` | 5-2      | Hourly          | Report usage to Stripe     |
+| `spatula.cleanup`  | 5-3      | Daily 03:00 UTC | Data retention enforcement |
 
 Bull Board (`admin-queues.ts`) must be updated to include both new queues. Total queue count: 6 (existing) + 2 = 8.
 
@@ -477,29 +484,29 @@ Bull Board (`admin-queues.ts`) must be updated to include both new queues. Total
 
 New dependencies added to `AppDeps` across Wave 5:
 
-| Field | Type | Added In |
-|-------|------|----------|
-| `userTenantRepo` | `UserTenantRepository` | 5-1 |
-| `usageRecordRepo` | `UsageRecordRepository` | 5-2 |
-| `stripeClient` | `StripeClient` | 5-2 |
-| `quotaEnforcer` | `QuotaEnforcer` | 5-2 |
+| Field             | Type                    | Added In |
+| ----------------- | ----------------------- | -------- |
+| `userTenantRepo`  | `UserTenantRepository`  | 5-1      |
+| `usageRecordRepo` | `UsageRecordRepository` | 5-2      |
+| `stripeClient`    | `StripeClient`          | 5-2      |
+| `quotaEnforcer`   | `QuotaEnforcer`         | 5-2      |
 
 ### 5.4 New Environment Variables
 
-| Variable | Required | Default | Added In |
-|----------|----------|---------|----------|
-| `STRIPE_SECRET_KEY` | Yes (hosted) | — | 5-2 |
-| `STRIPE_WEBHOOK_SECRET` | Yes (hosted) | — | 5-2 |
+| Variable                | Required     | Default | Added In |
+| ----------------------- | ------------ | ------- | -------- |
+| `STRIPE_SECRET_KEY`     | Yes (hosted) | —       | 5-2      |
+| `STRIPE_WEBHOOK_SECRET` | Yes (hosted) | —       | 5-2      |
 
 Self-hosted deployments can skip Stripe config — billing features are disabled when `STRIPE_SECRET_KEY` is not set.
 
 ### 5.5 Database Migrations
 
-| Migration | Table | Type | Added In |
-|-----------|-------|------|----------|
-| Create `user_tenants` | `user_tenants` | New table | 5-1 |
-| Add `plan`, `stripe_customer_id` to `tenants` | `tenants` | Alter table | 5-2 |
-| Create `usage_records` | `usage_records` | New table | 5-2 |
+| Migration                                     | Table           | Type        | Added In |
+| --------------------------------------------- | --------------- | ----------- | -------- |
+| Create `user_tenants`                         | `user_tenants`  | New table   | 5-1      |
+| Add `plan`, `stripe_customer_id` to `tenants` | `tenants`       | Alter table | 5-2      |
+| Create `usage_records`                        | `usage_records` | New table   | 5-2      |
 
 ### 5.6 Self-Hosted vs Hosted
 
@@ -520,22 +527,22 @@ Wave 5 features should degrade gracefully for self-hosted deployments:
 
 ## 6. Dependency on Wave 4 Outputs
 
-| Wave 4 Output | Used By |
-|----------------|---------|
-| Auth middleware + scopes + JWT provider | 5-1 (extend JWT resolution) |
-| Tenant model with quotas | 5-1 (add user_tenants), 5-2 (billing plan) |
-| Rate limit middleware with tiers | 5-2 (wire to billing plan) |
-| BullMQ infrastructure + worker entrypoint | 5-2 (metering), 5-3 (cleanup) |
-| Bull Board (6 queues) | 5-2/5-3 (add 2 more queues) |
-| Export orchestrator with format check | 5-2 (format restrictions per tier) |
-| AuditLogger | 5-3 (admin audit), 5-6 (quota audit) |
-| DataSource interface + LocalDataSource | 5-4 (ApiDataSource implementation) |
-| SpatulaApiClient | 5-4 (extend for push/pull) |
-| Global config system (~/.spatula/config.yaml) | 5-4 (add remotes section) |
-| openLocalProject() utility | 5-5 (pull writes to local DB), 5-6 (add dedup) |
-| Cursor pagination utilities (@spatula/shared) | 5-1 (streaming endpoint) |
-| useWebSocket hook | 5-4 (remote watch) |
-| ExplorerView component | 5-5 (source filtering) |
-| project_meta SQLite table | 5-4 (remote link tracking), 5-5 (pull cursor) |
-| Existing admin routes (DLQ, queues, workers) | 5-3 (add scope guard) |
-| LLM usage table + Usage API | 5-2 (extend with dimension metering) |
+| Wave 4 Output                                 | Used By                                        |
+| --------------------------------------------- | ---------------------------------------------- |
+| Auth middleware + scopes + JWT provider       | 5-1 (extend JWT resolution)                    |
+| Tenant model with quotas                      | 5-1 (add user_tenants), 5-2 (billing plan)     |
+| Rate limit middleware with tiers              | 5-2 (wire to billing plan)                     |
+| BullMQ infrastructure + worker entrypoint     | 5-2 (metering), 5-3 (cleanup)                  |
+| Bull Board (6 queues)                         | 5-2/5-3 (add 2 more queues)                    |
+| Export orchestrator with format check         | 5-2 (format restrictions per tier)             |
+| AuditLogger                                   | 5-3 (admin audit), 5-6 (quota audit)           |
+| DataSource interface + LocalDataSource        | 5-4 (ApiDataSource implementation)             |
+| SpatulaApiClient                              | 5-4 (extend for push/pull)                     |
+| Global config system (~/.spatula/config.yaml) | 5-4 (add remotes section)                      |
+| openLocalProject() utility                    | 5-5 (pull writes to local DB), 5-6 (add dedup) |
+| Cursor pagination utilities (@spatula/shared) | 5-1 (streaming endpoint)                       |
+| useWebSocket hook                             | 5-4 (remote watch)                             |
+| ExplorerView component                        | 5-5 (source filtering)                         |
+| project_meta SQLite table                     | 5-4 (remote link tracking), 5-5 (pull cursor)  |
+| Existing admin routes (DLQ, queues, workers)  | 5-3 (add scope guard)                          |
+| LLM usage table + Usage API                   | 5-2 (extend with dimension metering)           |

@@ -1,9 +1,14 @@
 import { createRoute, z } from '@hono/zod-openapi';
 import { createOpenAPIRouter } from '../openapi-config.js';
-import type { AppEnv } from '../types.js';
 import { entityQuerySchema } from '../schemas/entity-query.js';
 import { paginationEnvelopeSchema } from '../schemas/pagination.js';
-import { entityResponseSchema, entityListItemSchema, errorResponseSchema, dataResponse, jsonContent } from '../schemas/responses.js';
+import {
+  entityResponseSchema,
+  entityListItemSchema,
+  errorResponseSchema,
+  dataResponse,
+  jsonContent,
+} from '../schemas/responses.js';
 import { NotFoundError } from '../middleware/error-handler.js';
 import { decodeCursor, encodeCursor } from '@spatula/shared';
 
@@ -12,7 +17,9 @@ const jobIdParam = z.object({
 });
 
 const listEntitiesRoute = createRoute({
-  method: 'get', path: '/', tags: ['Entities'],
+  method: 'get',
+  path: '/',
+  tags: ['Entities'],
   summary: 'List entities for a job',
   request: { params: jobIdParam, query: entityQuerySchema },
   responses: {
@@ -24,7 +31,9 @@ const listEntitiesRoute = createRoute({
 });
 
 const getEntityRoute = createRoute({
-  method: 'get', path: '/{entityId}', tags: ['Entities'],
+  method: 'get',
+  path: '/{entityId}',
+  tags: ['Entities'],
   summary: 'Get entity with source details',
   request: {
     params: jobIdParam.extend({
@@ -32,7 +41,10 @@ const getEntityRoute = createRoute({
     }),
   },
   responses: {
-    200: jsonContent(dataResponse(entityResponseSchema.extend({ sources: z.array(z.record(z.unknown())) })), 'Entity with sources'),
+    200: jsonContent(
+      dataResponse(entityResponseSchema.extend({ sources: z.array(z.record(z.unknown())) })),
+      'Entity with sources',
+    ),
     404: jsonContent(errorResponseSchema, 'Entity not found'),
   },
 });
@@ -50,7 +62,13 @@ export function entityRoutes() {
     // Cursor or since path (keyset-based)
     if (query.cursor || query.since) {
       const cursorId = query.cursor ? decodeCursor(query.cursor).id : undefined;
-      const result = await deps.entityRepo.findByJobCursor(jobId, tenantId, query.limit, cursorId, query.since);
+      const result = await deps.entityRepo.findByJobCursor(
+        jobId,
+        tenantId,
+        query.limit,
+        cursorId,
+        query.since,
+      );
       // total is the unfiltered job-level count (not filtered by cursor/since)
       const total = await deps.entityRepo.countByJob(jobId, tenantId);
       return c.json({

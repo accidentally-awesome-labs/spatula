@@ -143,8 +143,22 @@ describe('PlaywrightCrawler cookie support', () => {
     const options: CrawlOptions = {
       timeout: 30000,
       cookies: [
-        { name: 'session_id', value: 'abc123', domain: '.example.com', path: '/', httpOnly: false, secure: false },
-        { name: 'csrf', value: 'xyz789', domain: '.example.com', path: '/', httpOnly: true, secure: true },
+        {
+          name: 'session_id',
+          value: 'abc123',
+          domain: '.example.com',
+          path: '/',
+          httpOnly: false,
+          secure: false,
+        },
+        {
+          name: 'csrf',
+          value: 'xyz789',
+          domain: '.example.com',
+          path: '/',
+          httpOnly: true,
+          secure: true,
+        },
       ],
     };
 
@@ -171,7 +185,8 @@ describe('PlaywrightCrawler cookie support', () => {
     ]);
 
     // Cookies should be set BEFORE page navigation
-    const addCookiesOrder = (mockContext.addCookies as ReturnType<typeof vi.fn>).mock.invocationCallOrder[0];
+    const addCookiesOrder = (mockContext.addCookies as ReturnType<typeof vi.fn>).mock
+      .invocationCallOrder[0];
     const gotoOrder = (mockPage.goto as ReturnType<typeof vi.fn>).mock.invocationCallOrder[0];
     expect(addCookiesOrder).toBeLessThan(gotoOrder);
   });
@@ -219,8 +234,22 @@ describe('FirecrawlCrawler cookie support', () => {
     await crawler.crawl('https://example.com', {
       timeout: 30000,
       cookies: [
-        { name: 'session_id', value: 'abc123', domain: '.example.com', path: '/', httpOnly: false, secure: false },
-        { name: 'csrf', value: 'xyz789', domain: '.example.com', path: '/', httpOnly: false, secure: false },
+        {
+          name: 'session_id',
+          value: 'abc123',
+          domain: '.example.com',
+          path: '/',
+          httpOnly: false,
+          secure: false,
+        },
+        {
+          name: 'csrf',
+          value: 'xyz789',
+          domain: '.example.com',
+          path: '/',
+          httpOnly: false,
+          secure: false,
+        },
       ],
     });
 

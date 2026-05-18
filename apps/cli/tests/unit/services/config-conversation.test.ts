@@ -1,5 +1,11 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import type { LLMClient, LLMCompletionRequest, LLMCompletionResponse, JobConfig, ConfigAction } from '@spatula/core';
+import type {
+  LLMClient,
+  LLMCompletionRequest,
+  LLMCompletionResponse,
+  JobConfig,
+  ConfigAction,
+} from '@spatula/core';
 import { ConfigConversationService } from '../../../src/services/config-conversation.js';
 import type { ChatMessage } from '../../../src/store/index.js';
 
@@ -75,7 +81,8 @@ describe('ConfigConversationService', () => {
 
     await service.processMessage('hello', config, []);
 
-    const call = (mockLLM.complete as ReturnType<typeof vi.fn>).mock.calls[0][0] as LLMCompletionRequest;
+    const call = (mockLLM.complete as ReturnType<typeof vi.fn>).mock
+      .calls[0][0] as LLMCompletionRequest;
     const systemMessage = call.messages.find((m) => m.role === 'system');
     expect(systemMessage).toBeDefined();
     expect(systemMessage!.content).toContain('My Job');
@@ -88,9 +95,14 @@ describe('ConfigConversationService', () => {
       { role: 'assistant', content: 'Sure, what URL?', timestamp: Date.now() - 1000 },
     ];
 
-    await service.processMessage('https://shop.example.com', createMinimalConfig() as JobConfig, history);
+    await service.processMessage(
+      'https://shop.example.com',
+      createMinimalConfig() as JobConfig,
+      history,
+    );
 
-    const call = (mockLLM.complete as ReturnType<typeof vi.fn>).mock.calls[0][0] as LLMCompletionRequest;
+    const call = (mockLLM.complete as ReturnType<typeof vi.fn>).mock
+      .calls[0][0] as LLMCompletionRequest;
     // System prompt + 2 history messages + current user message = 4
     expect(call.messages).toHaveLength(4);
     expect(call.messages[1]).toEqual({ role: 'user', content: 'I want to scrape products' });
@@ -101,14 +113,16 @@ describe('ConfigConversationService', () => {
   it('uses jsonMode: true', async () => {
     await service.processMessage('hello', createMinimalConfig() as JobConfig, []);
 
-    const call = (mockLLM.complete as ReturnType<typeof vi.fn>).mock.calls[0][0] as LLMCompletionRequest;
+    const call = (mockLLM.complete as ReturnType<typeof vi.fn>).mock
+      .calls[0][0] as LLMCompletionRequest;
     expect(call.jsonMode).toBe(true);
   });
 
   it('uses temperature: 0.3', async () => {
     await service.processMessage('hello', createMinimalConfig() as JobConfig, []);
 
-    const call = (mockLLM.complete as ReturnType<typeof vi.fn>).mock.calls[0][0] as LLMCompletionRequest;
+    const call = (mockLLM.complete as ReturnType<typeof vi.fn>).mock
+      .calls[0][0] as LLMCompletionRequest;
     expect(call.temperature).toBe(0.3);
   });
 
@@ -117,7 +131,8 @@ describe('ConfigConversationService', () => {
 
     await service.processMessage('hello', createMinimalConfig() as JobConfig, []);
 
-    const call = (mockLLM.complete as ReturnType<typeof vi.fn>).mock.calls[0][0] as LLMCompletionRequest;
+    const call = (mockLLM.complete as ReturnType<typeof vi.fn>).mock
+      .calls[0][0] as LLMCompletionRequest;
     expect(call.model).toBe('anthropic/claude-sonnet-4-20250514');
   });
 
@@ -146,11 +161,7 @@ describe('ConfigConversationService', () => {
     });
     service = new ConfigConversationService(mockLLM, 'test-model');
 
-    const result = await service.processMessage(
-      'hello',
-      createMinimalConfig() as JobConfig,
-      [],
-    );
+    const result = await service.processMessage('hello', createMinimalConfig() as JobConfig, []);
 
     expect(result.responseText).toBeTruthy();
     expect(typeof result.responseText).toBe('string');
@@ -163,11 +174,7 @@ describe('ConfigConversationService', () => {
     };
     service = new ConfigConversationService(mockLLM, 'test-model');
 
-    const result = await service.processMessage(
-      'hello',
-      createMinimalConfig() as JobConfig,
-      [],
-    );
+    const result = await service.processMessage('hello', createMinimalConfig() as JobConfig, []);
 
     expect(result.responseText).toBeTruthy();
     expect(typeof result.responseText).toBe('string');
@@ -191,7 +198,7 @@ describe('ConfigConversationService', () => {
     service = new ConfigConversationService(mockLLM, 'test-model');
 
     const result = await service.processMessage(
-      'Looks good, let\'s start!',
+      "Looks good, let's start!",
       createMinimalConfig() as JobConfig,
       [],
     );
@@ -254,7 +261,8 @@ describe('ConfigConversationService', () => {
   it('includes ConfigAction type documentation in system prompt', async () => {
     await service.processMessage('hello', createMinimalConfig() as JobConfig, []);
 
-    const call = (mockLLM.complete as ReturnType<typeof vi.fn>).mock.calls[0][0] as LLMCompletionRequest;
+    const call = (mockLLM.complete as ReturnType<typeof vi.fn>).mock
+      .calls[0][0] as LLMCompletionRequest;
     const systemMessage = call.messages.find((m) => m.role === 'system');
     expect(systemMessage).toBeDefined();
     // Should document action types
@@ -267,7 +275,8 @@ describe('ConfigConversationService', () => {
   it('specifies the required response format in system prompt', async () => {
     await service.processMessage('hello', createMinimalConfig() as JobConfig, []);
 
-    const call = (mockLLM.complete as ReturnType<typeof vi.fn>).mock.calls[0][0] as LLMCompletionRequest;
+    const call = (mockLLM.complete as ReturnType<typeof vi.fn>).mock
+      .calls[0][0] as LLMCompletionRequest;
     const systemMessage = call.messages.find((m) => m.role === 'system');
     expect(systemMessage).toBeDefined();
     expect(systemMessage!.content).toContain('"response"');
@@ -282,11 +291,7 @@ describe('ConfigConversationService', () => {
     });
     service = new ConfigConversationService(mockLLM, 'test-model');
 
-    const result = await service.processMessage(
-      'hello',
-      createMinimalConfig() as JobConfig,
-      [],
-    );
+    const result = await service.processMessage('hello', createMinimalConfig() as JobConfig, []);
 
     expect(result.responseText).toBe('Just a text response without actions field.');
     expect(result.actions).toEqual([]);
@@ -295,7 +300,7 @@ describe('ConfigConversationService', () => {
   it('handles multiple actions in a single response', async () => {
     mockLLM = createMockLLMClient({
       content: JSON.stringify({
-        response: 'I\'ve configured the job with all your settings.',
+        response: "I've configured the job with all your settings.",
         actions: [
           {
             type: 'set_job_name',

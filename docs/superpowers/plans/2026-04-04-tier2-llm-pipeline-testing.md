@@ -16,22 +16,23 @@
 
 ### New files
 
-| File | Responsibility |
-|------|---------------|
-| `apps/cli/tests/e2e/tier2/fixtures/pages.ts` | HTML strings for 11 fixture pages + robots.txt |
-| `apps/cli/tests/e2e/tier2/fixture-server.ts` | HTTP server serving fixtures with request logging |
-| `apps/cli/tests/e2e/tier2/mock-ollama.ts` | Mock Ollama `/api/chat` endpoint with prompt-based routing, canned responses, error modes, request logging |
-| `apps/cli/tests/e2e/tier2/helpers.ts` | `createFixtureProject()`, `buildPipelineRunner()`, `isPlaywrightAvailable()`, `isOllamaAvailable()` |
-| `apps/cli/tests/e2e/tier2/pipeline-mock-llm.test.ts` | 36 tests: happy path (29) + prompt snapshots (6) + singleton matching (1) |
-| `apps/cli/tests/e2e/tier2/pipeline-errors.test.ts` | 5 tests: LLM failure modes |
-| `apps/cli/tests/e2e/tier2/conversation.test.ts` | 2 tests: multi-turn `spatula new` conversation |
-| `apps/cli/tests/e2e/tier2/pipeline-real-llm.test.ts` | 6 tests: real Ollama structural smoke tests (conditional) |
+| File                                                 | Responsibility                                                                                             |
+| ---------------------------------------------------- | ---------------------------------------------------------------------------------------------------------- |
+| `apps/cli/tests/e2e/tier2/fixtures/pages.ts`         | HTML strings for 11 fixture pages + robots.txt                                                             |
+| `apps/cli/tests/e2e/tier2/fixture-server.ts`         | HTTP server serving fixtures with request logging                                                          |
+| `apps/cli/tests/e2e/tier2/mock-ollama.ts`            | Mock Ollama `/api/chat` endpoint with prompt-based routing, canned responses, error modes, request logging |
+| `apps/cli/tests/e2e/tier2/helpers.ts`                | `createFixtureProject()`, `buildPipelineRunner()`, `isPlaywrightAvailable()`, `isOllamaAvailable()`        |
+| `apps/cli/tests/e2e/tier2/pipeline-mock-llm.test.ts` | 36 tests: happy path (29) + prompt snapshots (6) + singleton matching (1)                                  |
+| `apps/cli/tests/e2e/tier2/pipeline-errors.test.ts`   | 5 tests: LLM failure modes                                                                                 |
+| `apps/cli/tests/e2e/tier2/conversation.test.ts`      | 2 tests: multi-turn `spatula new` conversation                                                             |
+| `apps/cli/tests/e2e/tier2/pipeline-real-llm.test.ts` | 6 tests: real Ollama structural smoke tests (conditional)                                                  |
 
 ---
 
 ## Task 1: HTML Fixture Pages
 
 **Files:**
+
 - Create: `apps/cli/tests/e2e/tier2/fixtures/pages.ts`
 
 All pages include realistic boilerplate (nav, footer, scripts) so HTML preprocessing is exercised. Each page is exported as a named string constant.
@@ -53,18 +54,24 @@ Create `apps/cli/tests/e2e/tier2/fixtures/pages.ts` with these exports:
 - `ROBOTS_TXT` — `User-agent: *\nDisallow: /admin\n`
 
 Every content page wraps its main content in this boilerplate:
+
 ```html
 <!DOCTYPE html>
 <html>
-<head><title>${title}</title><script>var analytics = true;</script></head>
-<body>
-<nav><a href="/">Home</a> | <a href="/about">About</a> | <a href="/products/comparison">Compare</a></nav>
-<main>
-  ${content}
-</main>
-<footer>Copyright 2026 Acme Corp. <a href="https://twitter.com/spatula">Twitter</a></footer>
-<script src="/analytics.js"></script>
-</body>
+  <head>
+    <title>${title}</title>
+    <script>
+      var analytics = true;
+    </script>
+  </head>
+  <body>
+    <nav>
+      <a href="/">Home</a> | <a href="/about">About</a> | <a href="/products/comparison">Compare</a>
+    </nav>
+    <main>${content}</main>
+    <footer>Copyright 2026 Acme Corp. <a href="https://twitter.com/spatula">Twitter</a></footer>
+    <script src="/analytics.js"></script>
+  </body>
 </html>
 ```
 
@@ -86,6 +93,7 @@ git commit -m "test: add HTML fixture pages for Tier 2 LLM pipeline tests"
 ## Task 2: Fixture HTTP Server
 
 **Files:**
+
 - Create: `apps/cli/tests/e2e/tier2/fixture-server.ts`
 
 HTTP server on a random port. Serves fixture pages by path. Logs every request. Handles redirects, 404s, and slow responses.
@@ -97,9 +105,17 @@ Create `apps/cli/tests/e2e/tier2/fixture-server.ts`:
 ```typescript
 import { createServer, type Server, type IncomingMessage, type ServerResponse } from 'node:http';
 import {
-  LISTING_HTML, WIDGET_PRO_HTML, WIDGET_PRO_DELUXE_HTML, COMPARISON_HTML,
-  PASTA_CARBONARA_HTML, ABOUT_HTML, BLOG_REVIEW_HTML, PAGE_2_HTML,
-  SLOW_PAGE_HTML, ADMIN_HTML, ROBOTS_TXT,
+  LISTING_HTML,
+  WIDGET_PRO_HTML,
+  WIDGET_PRO_DELUXE_HTML,
+  COMPARISON_HTML,
+  PASTA_CARBONARA_HTML,
+  ABOUT_HTML,
+  BLOG_REVIEW_HTML,
+  PAGE_2_HTML,
+  SLOW_PAGE_HTML,
+  ADMIN_HTML,
+  ROBOTS_TXT,
 } from './fixtures/pages.js';
 
 export interface FixtureRequest {
@@ -115,20 +131,21 @@ export interface FixtureServer {
   resetLog(): void;
 }
 
-const ROUTES: Record<string, { html: string; status?: number; delay?: number; redirect?: string }> = {
-  '/': { html: LISTING_HTML },
-  '/products/widget-pro': { html: WIDGET_PRO_HTML },
-  '/products/widget-pro-deluxe': { html: WIDGET_PRO_DELUXE_HTML },
-  '/products/widget-pro/': { redirect: '/products/widget-pro', status: 301 },
-  '/products/comparison': { html: COMPARISON_HTML },
-  '/recipes/pasta-carbonara': { html: PASTA_CARBONARA_HTML },
-  '/about': { html: ABOUT_HTML },
-  '/blog/review': { html: BLOG_REVIEW_HTML },
-  '/page/2': { html: PAGE_2_HTML },
-  '/slow': { html: SLOW_PAGE_HTML, delay: 3000 },
-  '/robots.txt': { html: ROBOTS_TXT },
-  '/admin': { html: ADMIN_HTML },
-};
+const ROUTES: Record<string, { html: string; status?: number; delay?: number; redirect?: string }> =
+  {
+    '/': { html: LISTING_HTML },
+    '/products/widget-pro': { html: WIDGET_PRO_HTML },
+    '/products/widget-pro-deluxe': { html: WIDGET_PRO_DELUXE_HTML },
+    '/products/widget-pro/': { redirect: '/products/widget-pro', status: 301 },
+    '/products/comparison': { html: COMPARISON_HTML },
+    '/recipes/pasta-carbonara': { html: PASTA_CARBONARA_HTML },
+    '/about': { html: ABOUT_HTML },
+    '/blog/review': { html: BLOG_REVIEW_HTML },
+    '/page/2': { html: PAGE_2_HTML },
+    '/slow': { html: SLOW_PAGE_HTML, delay: 3000 },
+    '/robots.txt': { html: ROBOTS_TXT },
+    '/admin': { html: ADMIN_HTML },
+  };
 
 export async function startFixtureServer(): Promise<FixtureServer> {
   const requestLog: FixtureRequest[] = [];
@@ -174,7 +191,9 @@ export async function startFixtureServer(): Promise<FixtureServer> {
     port,
     requestLog,
     close: () => new Promise<void>((resolve) => server.close(() => resolve())),
-    resetLog: () => { requestLog.length = 0; },
+    resetLog: () => {
+      requestLog.length = 0;
+    },
   };
 }
 ```
@@ -182,6 +201,7 @@ export async function startFixtureServer(): Promise<FixtureServer> {
 - [ ] **Step 2: Write a quick smoke test**
 
 Add a temporary test to verify the server works:
+
 ```bash
 cd /Users/salar/Projects/spatula/apps/cli
 node -e "
@@ -206,6 +226,7 @@ git commit -m "test: add fixture HTTP server for Tier 2 pipeline tests"
 ## Task 3: Mock Ollama Server
 
 **Files:**
+
 - Create: `apps/cli/tests/e2e/tier2/mock-ollama.ts`
 
 This is the most complex piece — a mock HTTP server impersonating Ollama's `/api/chat` endpoint. Routes by system prompt substring, returns canned JSON. Supports error injection.
@@ -243,12 +264,15 @@ export interface MockOllamaServer {
   getCallCount(): number;
 }
 
-export async function startMockOllama(config?: Partial<MockOllamaConfig>): Promise<MockOllamaServer>;
+export async function startMockOllama(
+  config?: Partial<MockOllamaConfig>,
+): Promise<MockOllamaServer>;
 ```
 
 **Routing implementation:**
 
 The server's request handler:
+
 1. Parses the JSON body from the POST request
 2. Extracts `messages[0].content` (system prompt) and the last user message content
 3. Matches system prompt against patterns (in order, first match wins):
@@ -278,7 +302,10 @@ The server's request handler:
     const jsonMatch = userPrompt.match(/\[[\s\S]*\]/);
     if (!jsonMatch) return { groups: [] };
     try {
-      const extractions = JSON.parse(jsonMatch[0]) as Array<{ id: string; data: Record<string, unknown> }>;
+      const extractions = JSON.parse(jsonMatch[0]) as Array<{
+        id: string;
+        data: Record<string, unknown>;
+      }>;
       // Group by title field
       const byTitle = new Map<string, string[]>();
       for (const ext of extractions) {
@@ -293,7 +320,9 @@ The server's request handler:
           confidence: ids.length > 1 ? 0.88 : 1.0,
         })),
       };
-    } catch { return { groups: [] }; }
+    } catch {
+      return { groups: [] };
+    }
   }
   ```
 - `handleConversation`: Counts user messages in history, returns turn-appropriate config actions
@@ -305,6 +334,7 @@ The server's request handler:
 - [ ] **Step 2: Write unit tests for the mock server routing**
 
 Create a small inline test or use the conversation test (Task 7) to verify routing works. At minimum, verify:
+
 - A classifier-style request returns a classification response
 - An extractor-style request returns an extraction response
 - The request log records calls correctly
@@ -321,6 +351,7 @@ git commit -m "test: add mock Ollama server with prompt-based routing and canned
 ## Task 4: Shared Test Helpers
 
 **Files:**
+
 - Create: `apps/cli/tests/e2e/tier2/helpers.ts`
 
 - [ ] **Step 1: Create the helpers module**
@@ -444,7 +475,10 @@ export async function buildPipelineRunner(
   opts: { ollamaBaseUrl: string; fixturePort: number },
 ): Promise<PipelineTestHarness> {
   const projectId = slugifyPath(projectDir);
-  const yamlContent = (await import('node:fs')).readFileSync(join(projectDir, 'spatula.yaml'), 'utf-8');
+  const yamlContent = (await import('node:fs')).readFileSync(
+    join(projectDir, 'spatula.yaml'),
+    'utf-8',
+  );
   const projectYaml = parseProjectYaml(yamlContent);
 
   const jobConfig = yamlToJobConfig(projectYaml, {
@@ -529,6 +563,7 @@ git commit -m "test: add shared test helpers for Tier 2 pipeline tests"
 ## Task 5: Pipeline Happy Path Tests
 
 **Files:**
+
 - Create: `apps/cli/tests/e2e/tier2/pipeline-mock-llm.test.ts`
 
 This is the main test file — 36 tests sharing a single pipeline run. The pipeline runs once in `beforeAll`, then each `it` asserts on the resulting state.
@@ -536,6 +571,7 @@ This is the main test file — 36 tests sharing a single pipeline run. The pipel
 - [ ] **Step 1: Create the test file structure**
 
 The file structure:
+
 ```typescript
 import { describe, it, expect, beforeAll, afterAll, vi } from 'vitest';
 import { existsSync, readdirSync, readFileSync, writeFileSync } from 'node:fs';
@@ -543,8 +579,11 @@ import { join } from 'node:path';
 import { startFixtureServer, type FixtureServer } from './fixture-server.js';
 import { startMockOllama, type MockOllamaServer } from './mock-ollama.js';
 import {
-  createFixtureProject, buildPipelineRunner, isPlaywrightAvailable,
-  type FixtureProject, type PipelineTestHarness,
+  createFixtureProject,
+  buildPipelineRunner,
+  isPlaywrightAvailable,
+  type FixtureProject,
+  type PipelineTestHarness,
 } from './helpers.js';
 
 let playwrightOk: boolean;
@@ -592,7 +631,7 @@ describe('crawl verification', () => {
   });
 
   it.skipIf(!playwrightOk)('crawled expected pages', () => {
-    const paths = fixtureServer.requestLog.map(r => r.path);
+    const paths = fixtureServer.requestLog.map((r) => r.path);
     expect(paths).toContain('/');
     expect(paths).toContain('/products/widget-pro');
     expect(paths).toContain('/recipes/pasta-carbonara');
@@ -601,33 +640,33 @@ describe('crawl verification', () => {
   });
 
   it.skipIf(!playwrightOk)('never fetched /admin (robots.txt)', () => {
-    const paths = fixtureServer.requestLog.map(r => r.path);
+    const paths = fixtureServer.requestLog.map((r) => r.path);
     expect(paths).not.toContain('/admin');
   });
 
   it.skipIf(!playwrightOk)('followed redirect and deduplicated URL', () => {
     const extractorCalls = mockOllama.getLogByComponent('extractor');
-    const widgetProExtractions = extractorCalls.filter(c =>
-      c.userPromptPreview.includes('Widget Pro') && !c.userPromptPreview.includes('Deluxe')
+    const widgetProExtractions = extractorCalls.filter(
+      (c) => c.userPromptPreview.includes('Widget Pro') && !c.userPromptPreview.includes('Deluxe'),
     );
     // Should have at most 1 extraction for widget-pro (not 2 from redirect)
     // Re-extraction may add another, but the URL dedup should prevent double-crawl
   });
 
   it.skipIf(!playwrightOk)('followed pagination to page 2', () => {
-    const paths = fixtureServer.requestLog.map(r => r.path);
+    const paths = fixtureServer.requestLog.map((r) => r.path);
     expect(paths).toContain('/page/2');
   });
 
   it.skipIf(!playwrightOk)('did not follow external domain links', () => {
-    const paths = fixtureServer.requestLog.map(r => r.path);
-    const external = paths.filter(p => p.includes('twitter.com'));
+    const paths = fixtureServer.requestLog.map((r) => r.path);
+    const external = paths.filter((p) => p.includes('twitter.com'));
     expect(external).toHaveLength(0);
   });
 
   it.skipIf(!playwrightOk)('handled 404 gracefully', () => {
     // Pipeline completed (didn't crash) — and broken-link was attempted
-    const paths = fixtureServer.requestLog.map(r => r.path);
+    const paths = fixtureServer.requestLog.map((r) => r.path);
     // The pipeline may or may not request /broken-link depending on link evaluation
     // Key assertion: pipeline completed without throw
     expect(harness.runner).toBeDefined();
@@ -646,8 +685,9 @@ describe('classification verification', () => {
 
   it.skipIf(!playwrightOk)('skipped irrelevant about page extraction', () => {
     const extractorCalls = mockOllama.getLogByComponent('extractor');
-    const aboutExtractions = extractorCalls.filter(c =>
-      c.userPromptPreview.includes('About') || c.userPromptPreview.includes('company history')
+    const aboutExtractions = extractorCalls.filter(
+      (c) =>
+        c.userPromptPreview.includes('About') || c.userPromptPreview.includes('company history'),
     );
     expect(aboutExtractions).toHaveLength(0);
   });
@@ -660,22 +700,20 @@ describe('classification verification', () => {
 describe('extraction verification', () => {
   it.skipIf(!playwrightOk)('extracted product entity with correct fields', async () => {
     const entities = await harness.dataSource.getEntities({ limit: 50, offset: 0 });
-    const widgetPro = entities.data.find(e => (e.mergedData as any).title === 'Widget Pro');
+    const widgetPro = entities.data.find((e) => (e.mergedData as any).title === 'Widget Pro');
     expect(widgetPro).toBeDefined();
     expect((widgetPro!.mergedData as any).price).toBeDefined();
   });
 
   it.skipIf(!playwrightOk)('extracted recipe entity with category-specific fields', async () => {
     const entities = await harness.dataSource.getEntities({ limit: 50, offset: 0 });
-    const carbonara = entities.data.find(e =>
-      (e.mergedData as any).title === 'Pasta Carbonara'
-    );
+    const carbonara = entities.data.find((e) => (e.mergedData as any).title === 'Pasta Carbonara');
     expect(carbonara).toBeDefined();
   });
 
   it.skipIf(!playwrightOk)('extracted multiple entities from comparison table', async () => {
     const entities = await harness.dataSource.getEntities({ limit: 50, offset: 0 });
-    const titles = entities.data.map(e => (e.mergedData as any).title);
+    const titles = entities.data.map((e) => (e.mergedData as any).title);
     expect(titles).toContain('Widget A');
     expect(titles).toContain('Widget B');
     expect(titles).toContain('Widget C');
@@ -683,13 +721,9 @@ describe('extraction verification', () => {
 
   it.skipIf(!playwrightOk)('partial page produced low-confidence entity', async () => {
     const entities = await harness.dataSource.getEntities({ limit: 50, offset: 0 });
-    const review = entities.data.find(e =>
-      (e.mergedData as any).title?.includes('Review')
-    );
+    const review = entities.data.find((e) => (e.mergedData as any).title?.includes('Review'));
     if (review) {
-      const products = entities.data.filter(e =>
-        (e.mergedData as any).title === 'Widget Pro'
-      );
+      const products = entities.data.filter((e) => (e.mergedData as any).title === 'Widget Pro');
       if (products.length > 0) {
         expect(review.qualityScore).toBeLessThanOrEqual(products[0].qualityScore);
       }
@@ -698,7 +732,7 @@ describe('extraction verification', () => {
 
   it.skipIf(!playwrightOk)('handled slow page without blocking pipeline', () => {
     // Pipeline completed within timeout — slow page didn't block everything
-    const paths = fixtureServer.requestLog.map(r => r.path);
+    const paths = fixtureServer.requestLog.map((r) => r.path);
     // Other pages were crawled (not just /slow)
     expect(paths.length).toBeGreaterThan(3);
   });
@@ -711,9 +745,7 @@ describe('extraction verification', () => {
 describe('reconciliation verification', () => {
   it.skipIf(!playwrightOk)('merged duplicate Widget Pro entities', async () => {
     const entities = await harness.dataSource.getEntities({ limit: 50, offset: 0 });
-    const widgetPros = entities.data.filter(e =>
-      (e.mergedData as any).title === 'Widget Pro'
-    );
+    const widgetPros = entities.data.filter((e) => (e.mergedData as any).title === 'Widget Pro');
     // Reconciler should merge the two Widget Pro extractions into one entity
     expect(widgetPros).toHaveLength(1);
     // NOTE: sourceCount column in SQLite is not updated by the reconciler.
@@ -723,7 +755,7 @@ describe('reconciliation verification', () => {
 
   it.skipIf(!playwrightOk)('non-duplicate entities remain separate', async () => {
     const entities = await harness.dataSource.getEntities({ limit: 50, offset: 0 });
-    const titles = entities.data.map(e => (e.mergedData as any).title);
+    const titles = entities.data.map((e) => (e.mergedData as any).title);
     // Each unique product/recipe should exist independently
     const uniqueTitles = new Set(titles);
     expect(uniqueTitles.size).toBe(titles.length); // No unintended merges
@@ -731,9 +763,7 @@ describe('reconciliation verification', () => {
 
   it.skipIf(!playwrightOk)('singleton extractions form individual entities', async () => {
     const entities = await harness.dataSource.getEntities({ limit: 50, offset: 0 });
-    const carbonara = entities.data.find(e =>
-      (e.mergedData as any).title === 'Pasta Carbonara'
-    );
+    const carbonara = entities.data.find((e) => (e.mergedData as any).title === 'Pasta Carbonara');
     expect(carbonara).toBeDefined();
     // Verify it exists as a separate entity (not merged with anything)
     // sourceCount column is not reliably updated in SQLite; just verify entity exists
@@ -746,7 +776,7 @@ describe('reconciliation verification', () => {
 ```typescript
 describe('schema evolution verification', () => {
   it.skipIf(!playwrightOk)('schema evolved beyond user-defined fields', async () => {
-    const schema = await harness.dataSource.getSchema() as any;
+    const schema = (await harness.dataSource.getSchema()) as any;
     expect(schema).toBeDefined();
     const fields = schema.definition?.fields ?? schema.fields ?? [];
     expect(fields.length).toBeGreaterThan(2); // More than title + price
@@ -758,7 +788,7 @@ describe('schema evolution verification', () => {
   });
 
   it.skipIf(!playwrightOk)('pending review actions created with metadata', async () => {
-    const actions = await harness.dataSource.getActions('pending_review') as any[];
+    const actions = (await harness.dataSource.getActions('pending_review')) as any[];
     expect(actions.length).toBeGreaterThan(0);
     const first = actions[0];
     expect(first.type).toBeDefined();
@@ -795,7 +825,7 @@ describe('pipeline state verification', () => {
     const extractorCalls = mockOllama.getLogByComponent('extractor');
     if (classifierCalls.length > 0 && extractorCalls.length > 0) {
       // All calls for same component should use same model
-      const classifierModels = new Set(classifierCalls.map(c => c.model));
+      const classifierModels = new Set(classifierCalls.map((c) => c.model));
       expect(classifierModels.size).toBe(1);
     }
   });
@@ -819,7 +849,7 @@ describe('cross-command verification', () => {
     const consoleSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
     const { runSchemaCommand } = await import('../../../src/commands/schema.js');
     await runSchemaCommand({});
-    const output = consoleSpy.mock.calls.map(c => String(c[0])).join('\n');
+    const output = consoleSpy.mock.calls.map((c) => String(c[0])).join('\n');
     expect(output).toContain('title');
     expect(output).toContain('price');
     consoleSpy.mockRestore();
@@ -840,11 +870,11 @@ describe('cross-command verification', () => {
   });
 
   it.skipIf(!playwrightOk)('approve action via DataSource changes status', async () => {
-    const actions = await harness.dataSource.getActions('pending_review') as any[];
+    const actions = (await harness.dataSource.getActions('pending_review')) as any[];
     if (actions.length > 0) {
       const actionId = actions[0].id;
       await harness.dataSource.approveAction(actionId);
-      const remaining = await harness.dataSource.getActions('pending_review') as any[];
+      const remaining = (await harness.dataSource.getActions('pending_review')) as any[];
       expect(remaining.length).toBe(actions.length - 1);
     }
   });
@@ -855,49 +885,60 @@ describe('cross-command verification', () => {
 
 ```typescript
 describe('re-run and lifecycle', () => {
-  it.skipIf(!playwrightOk)('re-run with config change only crawls new pages', async () => {
-    // This test builds its own pipeline
-    // Add a new seed URL to the YAML
-    const yamlPath = join(project.projectDir, 'spatula.yaml');
-    const yaml = readFileSync(yamlPath, 'utf-8');
-    writeFileSync(yamlPath, yaml + '\n  - http://localhost:' + fixtureServer.port + '/blog/review\n');
+  it.skipIf(!playwrightOk)(
+    're-run with config change only crawls new pages',
+    async () => {
+      // This test builds its own pipeline
+      // Add a new seed URL to the YAML
+      const yamlPath = join(project.projectDir, 'spatula.yaml');
+      const yaml = readFileSync(yamlPath, 'utf-8');
+      writeFileSync(
+        yamlPath,
+        yaml + '\n  - http://localhost:' + fixtureServer.port + '/blog/review\n',
+      );
 
-    mockOllama.resetLog();
-    const harness2 = await buildPipelineRunner(project.projectDir, {
-      ollamaBaseUrl: `http://localhost:${mockOllama.port}`,
-      fixturePort: fixtureServer.port,
-    });
-    await harness2.runner.run();
-    await harness2.closeAll();
+      mockOllama.resetLog();
+      const harness2 = await buildPipelineRunner(project.projectDir, {
+        ollamaBaseUrl: `http://localhost:${mockOllama.port}`,
+        fixturePort: fixtureServer.port,
+      });
+      await harness2.runner.run();
+      await harness2.closeAll();
 
-    // Should have made some LLM calls (at least for new content)
-    expect(mockOllama.getCallCount()).toBeGreaterThan(0);
-  }, 120_000);
+      // Should have made some LLM calls (at least for new content)
+      expect(mockOllama.getCallCount()).toBeGreaterThan(0);
+    },
+    120_000,
+  );
 
-  it.skipIf(!playwrightOk)('graceful stop completes without orphaned tasks', async () => {
-    // Build a fresh pipeline
-    const stopProject = createFixtureProject(fixtureServer.port);
-    const stopHarness = await buildPipelineRunner(stopProject.projectDir, {
-      ollamaBaseUrl: `http://localhost:${mockOllama.port}`,
-      fixturePort: fixtureServer.port,
-    });
+  it.skipIf(!playwrightOk)(
+    'graceful stop completes without orphaned tasks',
+    async () => {
+      // Build a fresh pipeline
+      const stopProject = createFixtureProject(fixtureServer.port);
+      const stopHarness = await buildPipelineRunner(stopProject.projectDir, {
+        ollamaBaseUrl: `http://localhost:${mockOllama.port}`,
+        fixturePort: fixtureServer.port,
+      });
 
-    // Start and stop quickly
-    const runPromise = stopHarness.runner.run();
-    // Give it a moment to start, then stop
-    await new Promise(r => setTimeout(r, 2000));
-    stopHarness.runner.stop();
-    await runPromise;
+      // Start and stop quickly
+      const runPromise = stopHarness.runner.run();
+      // Give it a moment to start, then stop
+      await new Promise((r) => setTimeout(r, 2000));
+      stopHarness.runner.stop();
+      await runPromise;
 
-    // Verify run completed (not failed)
-    const status = await stopHarness.dataSource.getStatus();
-    if (status.lastRun) {
-      expect(status.lastRun.status).toBe('completed');
-    }
+      // Verify run completed (not failed)
+      const status = await stopHarness.dataSource.getStatus();
+      if (status.lastRun) {
+        expect(status.lastRun.status).toBe('completed');
+      }
 
-    await stopHarness.closeAll();
-    stopProject.cleanup();
-  }, 120_000);
+      await stopHarness.closeAll();
+      stopProject.cleanup();
+    },
+    120_000,
+  );
 });
 ```
 
@@ -966,6 +1007,7 @@ git commit -m "test: add 36 pipeline happy path tests with mock Ollama"
 ## Task 6: Pipeline Error Tests
 
 **Files:**
+
 - Create: `apps/cli/tests/e2e/tier2/pipeline-errors.test.ts`
 
 Each test runs its own pipeline with a specific error mode configured in the mock Ollama.
@@ -1002,6 +1044,7 @@ git commit -m "test: add 5 pipeline error mode tests with mock Ollama failure in
 ## Task 7: Conversation Tests
 
 **Files:**
+
 - Create: `apps/cli/tests/e2e/tier2/conversation.test.ts`
 
 Tests the `ConfigConversationService` with the mock Ollama. No Playwright needed.
@@ -1030,9 +1073,8 @@ describe('spatula new conversation with mock Ollama', () => {
       ollama: { baseUrl: `http://localhost:${mockOllama.port}` },
     });
 
-    const { ConfigConversationService } = await import(
-      '../../../src/services/config-conversation.js'
-    );
+    const { ConfigConversationService } =
+      await import('../../../src/services/config-conversation.js');
     const service = new ConfigConversationService(llmClient, 'llama3.2:1b');
 
     // Build initial config
@@ -1058,23 +1100,19 @@ describe('spatula new conversation with mock Ollama', () => {
     config = executor.applyBatch(config, r1.actions);
 
     // Turn 2
-    const r2 = await service.processMessage(
-      'also track the brand',
-      config,
-      [{ role: 'user', content: 'I want to scrape products from example.com' },
-       { role: 'assistant', content: r1.responseText }],
-    );
+    const r2 = await service.processMessage('also track the brand', config, [
+      { role: 'user', content: 'I want to scrape products from example.com' },
+      { role: 'assistant', content: r1.responseText },
+    ]);
     config = executor.applyBatch(config, r2.actions);
 
     // Turn 3
-    const r3 = await service.processMessage(
-      'looks good, start',
-      config,
-      [{ role: 'user', content: 'I want to scrape products from example.com' },
-       { role: 'assistant', content: r1.responseText },
-       { role: 'user', content: 'also track the brand' },
-       { role: 'assistant', content: r2.responseText }],
-    );
+    const r3 = await service.processMessage('looks good, start', config, [
+      { role: 'user', content: 'I want to scrape products from example.com' },
+      { role: 'assistant', content: r1.responseText },
+      { role: 'user', content: 'also track the brand' },
+      { role: 'assistant', content: r2.responseText },
+    ]);
 
     // Verify config has expected values
     expect(config.name).toBeTruthy();
@@ -1095,13 +1133,15 @@ describe('spatula new conversation with mock Ollama', () => {
         ollama: { baseUrl: `http://localhost:${errorOllama.port}` },
       });
 
-      const { ConfigConversationService } = await import(
-        '../../../src/services/config-conversation.js'
-      );
+      const { ConfigConversationService } =
+        await import('../../../src/services/config-conversation.js');
       const service = new ConfigConversationService(llmClient, 'llama3.2:1b');
 
       const config = {
-        tenantId: 'test', name: '', description: '', seedUrls: [],
+        tenantId: 'test',
+        name: '',
+        description: '',
+        seedUrls: [],
         crawl: { maxDepth: 2, maxPages: 1000, concurrency: 5, crawlerType: 'playwright' as const },
         schema: { mode: 'discovery' as const },
         llm: { primaryModel: 'llama3.2:1b' },
@@ -1134,6 +1174,7 @@ git commit -m "test: add conversation service tests with mock Ollama"
 ## Task 8: Real Ollama Tests (Conditional)
 
 **Files:**
+
 - Create: `apps/cli/tests/e2e/tier2/pipeline-real-llm.test.ts`
 
 - [ ] **Step 1: Create the conditional test file**
@@ -1142,8 +1183,12 @@ git commit -m "test: add conversation service tests with mock Ollama"
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { startFixtureServer, type FixtureServer } from './fixture-server.js';
 import {
-  createFixtureProject, buildPipelineRunner, isPlaywrightAvailable, isOllamaAvailable,
-  type FixtureProject, type PipelineTestHarness,
+  createFixtureProject,
+  buildPipelineRunner,
+  isPlaywrightAvailable,
+  isOllamaAvailable,
+  type FixtureProject,
+  type PipelineTestHarness,
 } from './helpers.js';
 
 let canRun: boolean;
@@ -1183,7 +1228,7 @@ describe('full pipeline with real Ollama (structural assertions)', () => {
   });
 
   it.skipIf(!canRun)('schema has fields', async () => {
-    const schema = await harness.dataSource.getSchema() as any;
+    const schema = (await harness.dataSource.getSchema()) as any;
     expect(schema).toBeDefined();
     const fields = schema.definition?.fields ?? schema.fields ?? [];
     expect(fields.length).toBeGreaterThan(0);
@@ -1196,10 +1241,10 @@ describe('full pipeline with real Ollama (structural assertions)', () => {
 
   it.skipIf(!canRun)('about page likely skipped', async () => {
     const entities = await harness.dataSource.getEntities({ limit: 50, offset: 0 });
-    const aboutEntities = entities.data.filter(e => {
+    const aboutEntities = entities.data.filter((e) => {
       const data = e.mergedData as Record<string, unknown>;
-      return Object.values(data).some(v =>
-        typeof v === 'string' && v.toLowerCase().includes('company history')
+      return Object.values(data).some(
+        (v) => typeof v === 'string' && v.toLowerCase().includes('company history'),
       );
     });
     // Real LLM should classify about page as irrelevant — no entity from it
@@ -1208,10 +1253,10 @@ describe('full pipeline with real Ollama (structural assertions)', () => {
 
   it.skipIf(!canRun)('at least one entity has price-like data', async () => {
     const entities = await harness.dataSource.getEntities({ limit: 50, offset: 0 });
-    const hasPrice = entities.data.some(e => {
+    const hasPrice = entities.data.some((e) => {
       const data = e.mergedData as Record<string, unknown>;
-      return Object.values(data).some(v =>
-        typeof v === 'string' ? v.includes('$') || v.includes('29') : typeof v === 'number'
+      return Object.values(data).some((v) =>
+        typeof v === 'string' ? v.includes('$') || v.includes('29') : typeof v === 'number',
       );
     });
     expect(hasPrice).toBe(true);

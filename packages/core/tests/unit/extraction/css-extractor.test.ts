@@ -21,7 +21,12 @@ describe('CssExtractor', () => {
   it('extracts text from headings', async () => {
     const html = '<html><body><h1>Product Name</h1><p>Description here</p></body></html>';
     const schema = makeSchema([{ name: 'title', type: 'string' }]);
-    const result = await extractor.extract(html, 'https://example.com', schema, 'Extract product data');
+    const result = await extractor.extract(
+      html,
+      'https://example.com',
+      schema,
+      'Extract product data',
+    );
     expect(result.data).toBeDefined();
     expect(result.metadata.confidence).toBeGreaterThan(0);
     expect(result.metadata.modelUsed).toBe('css-extractor');
@@ -35,7 +40,8 @@ describe('CssExtractor', () => {
   });
 
   it('extracts image URLs', async () => {
-    const html = '<html><body><img src="https://example.com/photo.jpg" alt="Product"></body></html>';
+    const html =
+      '<html><body><img src="https://example.com/photo.jpg" alt="Product"></body></html>';
     const schema = makeSchema([{ name: 'image', type: 'url' }]);
     const result = await extractor.extract(html, 'https://example.com', schema, 'Extract images');
     expect(result.data.image).toBe('https://example.com/photo.jpg');
@@ -71,7 +77,12 @@ describe('CssExtractor', () => {
   it('resolves relative image URLs against base URL', async () => {
     const html = '<html><body><img src="/images/photo.jpg" alt="Photo"></body></html>';
     const schema = makeSchema([{ name: 'image', type: 'url' }]);
-    const result = await extractor.extract(html, 'https://example.com/products/1', schema, 'Extract images');
+    const result = await extractor.extract(
+      html,
+      'https://example.com/products/1',
+      schema,
+      'Extract images',
+    );
     expect(result.data.image).toBe('https://example.com/images/photo.jpg');
   });
 
@@ -131,12 +142,23 @@ describe('table extraction', () => {
   it('extracts table as array of objects when field is array+object', async () => {
     const schema = {
       version: 1,
-      fields: [{
-        name: 'specs', description: 'Specs table', type: 'array' as const,
-        required: false,
-        arrayItemType: { name: 'row', description: 'Row', type: 'object' as const, required: false },
-      }],
-      fieldAliases: [], createdAt: new Date(), parentVersion: null,
+      fields: [
+        {
+          name: 'specs',
+          description: 'Specs table',
+          type: 'array' as const,
+          required: false,
+          arrayItemType: {
+            name: 'row',
+            description: 'Row',
+            type: 'object' as const,
+            required: false,
+          },
+        },
+      ],
+      fieldAliases: [],
+      createdAt: new Date(),
+      parentVersion: null,
     };
     const result = await extractor.extract(tableHtml, 'https://example.com', schema, '');
     expect(result.data.specs).toEqual([
@@ -148,13 +170,30 @@ describe('table extraction', () => {
   it('returns null when no table found', async () => {
     const schema = {
       version: 1,
-      fields: [{
-        name: 'specs', description: 'Specs', type: 'array' as const, required: false,
-        arrayItemType: { name: 'row', description: 'Row', type: 'object' as const, required: false },
-      }],
-      fieldAliases: [], createdAt: new Date(), parentVersion: null,
+      fields: [
+        {
+          name: 'specs',
+          description: 'Specs',
+          type: 'array' as const,
+          required: false,
+          arrayItemType: {
+            name: 'row',
+            description: 'Row',
+            type: 'object' as const,
+            required: false,
+          },
+        },
+      ],
+      fieldAliases: [],
+      createdAt: new Date(),
+      parentVersion: null,
     };
-    const result = await extractor.extract('<html><body><p>No tables</p></body></html>', 'https://example.com', schema, '');
+    const result = await extractor.extract(
+      '<html><body><p>No tables</p></body></html>',
+      'https://example.com',
+      schema,
+      '',
+    );
     expect(result.data.specs).toBeUndefined();
   });
 
@@ -165,9 +204,23 @@ describe('table extraction', () => {
     </table></body></html>`;
     const schema = {
       version: 1,
-      fields: [{ name: 'data', description: 'Data', type: 'array' as const, required: false,
-        arrayItemType: { name: 'row', description: 'Row', type: 'object' as const, required: false } }],
-      fieldAliases: [], createdAt: new Date(), parentVersion: null,
+      fields: [
+        {
+          name: 'data',
+          description: 'Data',
+          type: 'array' as const,
+          required: false,
+          arrayItemType: {
+            name: 'row',
+            description: 'Row',
+            type: 'object' as const,
+            required: false,
+          },
+        },
+      ],
+      fieldAliases: [],
+      createdAt: new Date(),
+      parentVersion: null,
     };
     const result = await extractor.extract(html, 'https://example.com', schema, '');
     expect(result.data.data).toEqual([{ A: 'C', B: 'D' }]);
@@ -180,9 +233,23 @@ describe('table extraction', () => {
     </table></body></html>`;
     const schema = {
       version: 1,
-      fields: [{ name: 'data', description: 'Data', type: 'array' as const, required: false,
-        arrayItemType: { name: 'row', description: 'Row', type: 'object' as const, required: false } }],
-      fieldAliases: [], createdAt: new Date(), parentVersion: null,
+      fields: [
+        {
+          name: 'data',
+          description: 'Data',
+          type: 'array' as const,
+          required: false,
+          arrayItemType: {
+            name: 'row',
+            description: 'Row',
+            type: 'object' as const,
+            required: false,
+          },
+        },
+      ],
+      fieldAliases: [],
+      createdAt: new Date(),
+      parentVersion: null,
     };
     const result = await extractor.extract(html, 'https://example.com', schema, '');
     expect(result.data.data).toEqual([{ A: 'Wide', B: 'Wide', C: 'Narrow' }]);
@@ -199,14 +266,26 @@ describe('table extraction', () => {
         </tbody>
       </table>
     </article></body></html>`;
-    const schema = { version: 1, fields: [], fieldAliases: [], createdAt: new Date(), parentVersion: null };
+    const schema = {
+      version: 1,
+      fields: [],
+      fieldAliases: [],
+      createdAt: new Date(),
+      parentVersion: null,
+    };
     const result = await extractor.extract(bigTableHtml, 'https://example.com', schema, '');
     expect(result.data.tables).toBeDefined();
     expect(result.data.tables).toHaveLength(3);
   });
 
   it('skips tables in autoDiscover when fewer than 3 data rows', async () => {
-    const schema = { version: 1, fields: [], fieldAliases: [], createdAt: new Date(), parentVersion: null };
+    const schema = {
+      version: 1,
+      fields: [],
+      fieldAliases: [],
+      createdAt: new Date(),
+      parentVersion: null,
+    };
     const result = await extractor.extract(tableHtml, 'https://example.com', schema, '');
     expect(result.data.tables).toBeUndefined();
   });

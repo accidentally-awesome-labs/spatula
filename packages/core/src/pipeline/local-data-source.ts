@@ -14,7 +14,13 @@
  */
 import { StorageError } from '@spatula/shared';
 import type { Entity } from '@spatula/shared';
-import type { DataSource, PaginationQuery, PaginatedResult, ProjectStatus, DataEvent } from '../interfaces/data-source.js';
+import type {
+  DataSource,
+  PaginationQuery,
+  PaginatedResult,
+  ProjectStatus,
+  DataEvent,
+} from '../interfaces/data-source.js';
 import type { PipelineEventEmitter } from './pipeline-events.js';
 
 // ---------------------------------------------------------------------------
@@ -22,32 +28,69 @@ import type { PipelineEventEmitter } from './pipeline-events.js';
 // ---------------------------------------------------------------------------
 
 interface EntityRepoLike {
-  findByJob(jobId: string, tenantId: string, options?: { limit: number; offset: number }): Promise<unknown[]>;
-  findByJobWithProvenance(jobId: string, tenantId: string, options?: { limit: number; offset: number }): Promise<unknown[]>;
+  findByJob(
+    jobId: string,
+    tenantId: string,
+    options?: { limit: number; offset: number },
+  ): Promise<unknown[]>;
+  findByJobWithProvenance(
+    jobId: string,
+    tenantId: string,
+    options?: { limit: number; offset: number },
+  ): Promise<unknown[]>;
   countByJob(jobId: string, tenantId: string): Promise<number>;
 }
 
 interface SchemaRepoLike {
-  findLatest(jobId: string, tenantId: string): Promise<{ id: string; version: number; definition: unknown } | null>;
+  findLatest(
+    jobId: string,
+    tenantId: string,
+  ): Promise<{ id: string; version: number; definition: unknown } | null>;
   findAllVersions(jobId: string): Promise<unknown[]>;
 }
 
 interface ActionRepoLike {
-  findByJob(jobId: string, options?: { status?: string; limit?: number; offset?: number }): Promise<unknown[]>;
-  updateStatus(actionId: string, tenantId: string, status: string, reviewedBy?: string): Promise<unknown>;
+  findByJob(
+    jobId: string,
+    options?: { status?: string; limit?: number; offset?: number },
+  ): Promise<unknown[]>;
+  updateStatus(
+    actionId: string,
+    tenantId: string,
+    status: string,
+    reviewedBy?: string,
+  ): Promise<unknown>;
 }
 
 interface TaskRepoLike {
-  getJobStats(jobId: string, tenantId: string): Promise<{ pending: number; inProgress: number; completed: number; failed: number; skipped: number }>;
+  getJobStats(
+    jobId: string,
+    tenantId: string,
+  ): Promise<{
+    pending: number;
+    inProgress: number;
+    completed: number;
+    failed: number;
+    skipped: number;
+  }>;
 }
 
 interface RunRepoLike {
-  findLatestByStatus(statuses: string[]): Promise<{ id: string; status: string; startedAt: string } | null>;
+  findLatestByStatus(
+    statuses: string[],
+  ): Promise<{ id: string; status: string; startedAt: string } | null>;
 }
 
 interface ExportRepoLike {
-  create(data: { runId?: string; format: string; filePath: string; includeProvenance?: boolean }): Promise<{ id: string }>;
-  findById(id: string): Promise<{ id: string; filePath: string; format: string; status: string } | null>;
+  create(data: {
+    runId?: string;
+    format: string;
+    filePath: string;
+    includeProvenance?: boolean;
+  }): Promise<{ id: string }>;
+  findById(
+    id: string,
+  ): Promise<{ id: string; filePath: string; format: string; status: string } | null>;
 }
 
 interface MetaRepoLike {
@@ -143,12 +186,12 @@ export class LocalDataSource implements DataSource {
       this.adapter.runRepo.findLatestByStatus(['completed', 'failed', 'running']),
     ]);
 
-    const totalPages = (taskStats.completed ?? 0) + (taskStats.failed ?? 0) + (taskStats.skipped ?? 0);
+    const totalPages =
+      (taskStats.completed ?? 0) + (taskStats.failed ?? 0) + (taskStats.skipped ?? 0);
 
     const schemaFields = latestSchema
-      ? Object.keys(
-          (latestSchema.definition as { fields?: Record<string, unknown> })?.fields ?? {},
-        ).length
+      ? Object.keys((latestSchema.definition as { fields?: Record<string, unknown> })?.fields ?? {})
+          .length
       : 0;
 
     const status: ProjectStatus = {

@@ -14,38 +14,39 @@
 
 ### New files
 
-| File | Responsibility |
-|------|---------------|
-| `apps/cli/src/commands/schema.ts` | Non-interactive schema viewer (`spatula schema`) |
-| `apps/cli/src/commands/logs.ts` | Non-interactive log viewer (`spatula logs`) |
-| `apps/cli/src/commands/export.ts` | Non-interactive multi-format export (`spatula export`) |
-| `apps/cli/src/commands/explore.tsx` | Standalone Ink TUI for entity browsing (`spatula explore`) |
-| `apps/cli/src/commands/review.tsx` | Standalone Ink TUI for action review (`spatula review`) |
-| `apps/cli/src/components/dashboard/RunDashboard.tsx` | Minimal Ink dashboard overlay for `spatula run` |
-| `apps/cli/tests/unit/commands/schema.test.ts` | Tests for schema command |
-| `apps/cli/tests/unit/commands/logs.test.ts` | Tests for logs command |
-| `apps/cli/tests/unit/commands/export.test.ts` | Tests for export command |
-| `apps/cli/tests/unit/commands/explore.test.ts` | Tests for explore command |
-| `apps/cli/tests/unit/commands/review-cmd.test.ts` | Tests for review command |
-| `apps/cli/tests/unit/commands/run-dashboard.test.ts` | Tests for dashboard toggle |
+| File                                                 | Responsibility                                             |
+| ---------------------------------------------------- | ---------------------------------------------------------- |
+| `apps/cli/src/commands/schema.ts`                    | Non-interactive schema viewer (`spatula schema`)           |
+| `apps/cli/src/commands/logs.ts`                      | Non-interactive log viewer (`spatula logs`)                |
+| `apps/cli/src/commands/export.ts`                    | Non-interactive multi-format export (`spatula export`)     |
+| `apps/cli/src/commands/explore.tsx`                  | Standalone Ink TUI for entity browsing (`spatula explore`) |
+| `apps/cli/src/commands/review.tsx`                   | Standalone Ink TUI for action review (`spatula review`)    |
+| `apps/cli/src/components/dashboard/RunDashboard.tsx` | Minimal Ink dashboard overlay for `spatula run`            |
+| `apps/cli/tests/unit/commands/schema.test.ts`        | Tests for schema command                                   |
+| `apps/cli/tests/unit/commands/logs.test.ts`          | Tests for logs command                                     |
+| `apps/cli/tests/unit/commands/export.test.ts`        | Tests for export command                                   |
+| `apps/cli/tests/unit/commands/explore.test.ts`       | Tests for explore command                                  |
+| `apps/cli/tests/unit/commands/review-cmd.test.ts`    | Tests for review command                                   |
+| `apps/cli/tests/unit/commands/run-dashboard.test.ts` | Tests for dashboard toggle                                 |
 
 ### Modified files
 
-| File | Change |
-|------|--------|
-| `apps/cli/src/components/explorer/ExplorerView.tsx` | Accept `backend: DataSource \| SpatulaApiClient` instead of `apiClient: SpatulaApiClient` |
-| `apps/cli/src/components/explorer/ExportDialog.tsx` | Accept `backend: DataSource \| SpatulaApiClient` instead of `apiClient: SpatulaApiClient` |
-| `apps/cli/src/components/review/ReviewView.tsx` | Accept `backend: DataSource \| SpatulaApiClient`, use DataSource methods for approve/reject |
-| `apps/cli/src/components/dashboard/DashboardView.tsx` | Accept `backend: DataSource \| SpatulaApiClient`, skip WebSocket in local mode |
-| `apps/cli/src/components/App.tsx` | Thread `backend` prop instead of raw `apiClient` |
-| `apps/cli/src/commands/run.ts` | Enhanced logging, stdin raw mode, dashboard `[d]` toggle |
-| `apps/cli/src/index.tsx` | Register explore, export, review, schema, logs commands |
+| File                                                  | Change                                                                                      |
+| ----------------------------------------------------- | ------------------------------------------------------------------------------------------- |
+| `apps/cli/src/components/explorer/ExplorerView.tsx`   | Accept `backend: DataSource \| SpatulaApiClient` instead of `apiClient: SpatulaApiClient`   |
+| `apps/cli/src/components/explorer/ExportDialog.tsx`   | Accept `backend: DataSource \| SpatulaApiClient` instead of `apiClient: SpatulaApiClient`   |
+| `apps/cli/src/components/review/ReviewView.tsx`       | Accept `backend: DataSource \| SpatulaApiClient`, use DataSource methods for approve/reject |
+| `apps/cli/src/components/dashboard/DashboardView.tsx` | Accept `backend: DataSource \| SpatulaApiClient`, skip WebSocket in local mode              |
+| `apps/cli/src/components/App.tsx`                     | Thread `backend` prop instead of raw `apiClient`                                            |
+| `apps/cli/src/commands/run.ts`                        | Enhanced logging, stdin raw mode, dashboard `[d]` toggle                                    |
+| `apps/cli/src/index.tsx`                              | Register explore, export, review, schema, logs commands                                     |
 
 ---
 
 ## Task 1: Adapt component props for DataSource backend
 
 **Files:**
+
 - Modify: `apps/cli/src/components/explorer/ExplorerView.tsx`
 - Modify: `apps/cli/src/components/explorer/ExportDialog.tsx`
 - Modify: `apps/cli/src/components/review/ReviewView.tsx`
@@ -79,6 +80,7 @@ export interface ExplorerViewProps {
 ```
 
 Update the function signature and all references inside the component. There are 3 places where `apiClient` is used:
+
 1. `useEntityData(store, apiClient, ...)` → `useEntityData(store, backend, ...)`
 2. `useEntityFilter(store, apiClient, ...)` → `useEntityFilter(store, backend, ...)`
 3. `<ExportDialog store={store} apiClient={apiClient} .../>` → `<ExportDialog store={store} backend={backend} .../>`
@@ -181,7 +183,8 @@ const approveAll = useCallback(() => {
         store.getState().setError(err instanceof Error ? err.message : 'Failed to approve all');
       });
   } else {
-    void backend.approveAllActions(activeJobId!)
+    void backend
+      .approveAllActions(activeJobId!)
       .then(() => {
         store.getState().setPendingActions([]);
         store.getState().setReviewIndex(0);
@@ -210,6 +213,7 @@ export interface DashboardViewProps {
 ```
 
 Changes:
+
 1. `useJobPolling(store, apiClient, ...)` → `useJobPolling(store, backend, ...)`
 2. Fix `useWebSocket` to guard against empty `baseUrl` — add an early return in `apps/cli/src/hooks/useWebSocket.ts` at line 112, right after the existing `if (!jobId) return;`:
    ```tsx
@@ -225,10 +229,18 @@ Changes:
    The `useWebSocket` hook will now no-op cleanly when baseUrl is empty.
 3. Guard pause/resume/cancel buttons — only show when `!isDataSource(backend)`:
    ```tsx
-   useKeyboard(isDataSource(backend) ? {} : {
-     ' ': () => { /* pause/resume */ },
-     c: () => { /* cancel */ },
-   });
+   useKeyboard(
+     isDataSource(backend)
+       ? {}
+       : {
+           ' ': () => {
+             /* pause/resume */
+           },
+           c: () => {
+             /* cancel */
+           },
+         },
+   );
    ```
 
 - [ ] **Step 5: Update App.tsx to thread `backend` prop**
@@ -248,6 +260,7 @@ export interface AppProps {
 ```
 
 In the render section, compute the effective backend:
+
 ```tsx
 const effectiveBackend = backend ?? apiClient;
 ```
@@ -255,31 +268,40 @@ const effectiveBackend = backend ?? apiClient;
 Then pass `backend={effectiveBackend}` to DashboardView, ReviewView, ExplorerView, and remove the `apiClient &&` guards (replace with `effectiveBackend &&`):
 
 ```tsx
-{mode === 'dashboard' && effectiveBackend && (
-  <DashboardView store={store} backend={effectiveBackend} />
-)}
-{mode === 'review' && effectiveBackend && (
-  <ReviewView store={store} backend={effectiveBackend} />
-)}
-{mode === 'explorer' && effectiveBackend && (
-  <ExplorerView store={store} backend={effectiveBackend} />
-)}
-{(mode === 'dashboard' || mode === 'review' || mode === 'explorer') && !effectiveBackend && (
-  <Box paddingX={2} paddingY={1}>
-    <Text color="yellow">
-      {mode.charAt(0).toUpperCase() + mode.slice(1)} mode requires a remote connection or local project. Use `spatula run` for local crawling, or set SPATULA_TENANT_ID for remote mode.
-    </Text>
-  </Box>
-)}
+{
+  mode === 'dashboard' && effectiveBackend && (
+    <DashboardView store={store} backend={effectiveBackend} />
+  );
+}
+{
+  mode === 'review' && effectiveBackend && <ReviewView store={store} backend={effectiveBackend} />;
+}
+{
+  mode === 'explorer' && effectiveBackend && (
+    <ExplorerView store={store} backend={effectiveBackend} />
+  );
+}
+{
+  (mode === 'dashboard' || mode === 'review' || mode === 'explorer') && !effectiveBackend && (
+    <Box paddingX={2} paddingY={1}>
+      <Text color="yellow">
+        {mode.charAt(0).toUpperCase() + mode.slice(1)} mode requires a remote connection or local
+        project. Use `spatula run` for local crawling, or set SPATULA_TENANT_ID for remote mode.
+      </Text>
+    </Box>
+  );
+}
 ```
 
 - [ ] **Step 6: Update existing component tests for prop rename**
 
 The existing test files pass `apiClient` as a prop. Update them to use `backend`:
+
 - `apps/cli/tests/unit/components/explorer/explorer-view.test.tsx`: Change all `apiClient={apiClient}` to `backend={apiClient}` in JSX, and rename the mock variable from `apiClient` to keep consistency (or just pass it as `backend`).
 - Search for any other test files that render ExplorerView, ExportDialog, ReviewView, or DashboardView with an `apiClient` prop and update them.
 
 In `explorer-view.test.tsx`, the key change:
+
 ```tsx
 // Old
 <ExplorerView store={store} apiClient={apiClient} />
@@ -314,6 +336,7 @@ enabling local mode for explorer, review, and dashboard views."
 ## Task 2: `spatula schema` command
 
 **Files:**
+
 - Create: `apps/cli/src/commands/schema.ts`
 - Test: `apps/cli/tests/unit/commands/schema.test.ts`
 
@@ -489,11 +512,7 @@ export function formatSchemaTable(schema: SchemaRow | null): string {
   const descW = 40;
 
   lines.push(
-    '  ' +
-    'Name'.padEnd(nameW) +
-    'Type'.padEnd(typeW) +
-    'Required'.padEnd(reqW) +
-    'Description',
+    '  ' + 'Name'.padEnd(nameW) + 'Type'.padEnd(typeW) + 'Required'.padEnd(reqW) + 'Description',
   );
   lines.push('  ' + '─'.repeat(nameW + typeW + reqW + descW));
 
@@ -502,10 +521,10 @@ export function formatSchemaTable(schema: SchemaRow | null): string {
     const desc = field.description ?? '';
     lines.push(
       '  ' +
-      field.name.padEnd(nameW) +
-      field.type.padEnd(typeW) +
-      req.padEnd(reqW) +
-      desc.slice(0, descW),
+        field.name.padEnd(nameW) +
+        field.type.padEnd(typeW) +
+        req.padEnd(reqW) +
+        desc.slice(0, descW),
     );
   }
 
@@ -581,6 +600,7 @@ Non-interactive schema viewer showing fields table, version history
 ## Task 3: `spatula logs` command
 
 **Files:**
+
 - Create: `apps/cli/src/commands/logs.ts`
 - Test: `apps/cli/tests/unit/commands/logs.test.ts`
 - Modify: `apps/cli/src/commands/run.ts` (enhance log format)
@@ -593,11 +613,17 @@ Create `apps/cli/tests/unit/commands/logs.test.ts`:
 
 ```typescript
 import { describe, it, expect } from 'vitest';
-import { parseLogEntry, formatLogEntry, filterByLevel, listLogFiles } from '../../../src/commands/logs.js';
+import {
+  parseLogEntry,
+  formatLogEntry,
+  filterByLevel,
+  listLogFiles,
+} from '../../../src/commands/logs.js';
 
 describe('parseLogEntry', () => {
   it('parses a valid ndjson log line', () => {
-    const line = '{"level":"info","msg":"Pipeline started","ts":"2026-03-31T12:00:00.000Z","event":"run:start","runId":"abc-123"}';
+    const line =
+      '{"level":"info","msg":"Pipeline started","ts":"2026-03-31T12:00:00.000Z","event":"run:start","runId":"abc-123"}';
     const entry = parseLogEntry(line);
     expect(entry).toEqual({
       level: 'info',
@@ -616,7 +642,13 @@ describe('parseLogEntry', () => {
 
 describe('formatLogEntry', () => {
   it('formats entry with timestamp, level, and message', () => {
-    const entry = { level: 'info', msg: 'Page crawled', ts: '2026-03-31T12:00:05.000Z', event: 'task:completed', url: 'https://example.com' };
+    const entry = {
+      level: 'info',
+      msg: 'Page crawled',
+      ts: '2026-03-31T12:00:05.000Z',
+      event: 'task:completed',
+      url: 'https://example.com',
+    };
     const output = formatLogEntry(entry);
     expect(output).toContain('12:00:05');
     expect(output).toContain('INFO');
@@ -624,7 +656,14 @@ describe('formatLogEntry', () => {
   });
 
   it('includes extra fields after message', () => {
-    const entry = { level: 'info', msg: 'Progress', ts: '2026-03-31T12:00:05.000Z', event: 'progress', pagesProcessed: 5, entitiesCreated: 3 };
+    const entry = {
+      level: 'info',
+      msg: 'Progress',
+      ts: '2026-03-31T12:00:05.000Z',
+      event: 'progress',
+      pagesProcessed: 5,
+      entitiesCreated: 3,
+    };
     const output = formatLogEntry(entry);
     expect(output).toContain('pages=5');
     expect(output).toContain('entities=3');
@@ -660,63 +699,96 @@ Expected: FAIL — module not found.
 In `apps/cli/src/commands/run.ts`, update the log format to include `level`, `msg`, and `runId` fields. Change the `logToFile` helper and add more log points:
 
 Find the existing logToFile definition (around line 102):
+
 ```typescript
-  const logToFile = (entry: Record<string, unknown>) => {
-    try { appendFileSync(logFile, JSON.stringify({ ...entry, ts: new Date().toISOString() }) + '\n'); } catch { /* non-fatal */ }
-  };
+const logToFile = (entry: Record<string, unknown>) => {
+  try {
+    appendFileSync(logFile, JSON.stringify({ ...entry, ts: new Date().toISOString() }) + '\n');
+  } catch {
+    /* non-fatal */
+  }
+};
 ```
 
 Replace with:
+
 ```typescript
-  let currentRunId = '';
-  const logToFile = (level: string, msg: string, extra: Record<string, unknown> = {}) => {
-    try {
-      appendFileSync(logFile, JSON.stringify({
-        level, msg, ...extra, runId: currentRunId, ts: new Date().toISOString(),
-      }) + '\n');
-    } catch { /* non-fatal */ }
-  };
+let currentRunId = '';
+const logToFile = (level: string, msg: string, extra: Record<string, unknown> = {}) => {
+  try {
+    appendFileSync(
+      logFile,
+      JSON.stringify({
+        level,
+        msg,
+        ...extra,
+        runId: currentRunId,
+        ts: new Date().toISOString(),
+      }) + '\n',
+    );
+  } catch {
+    /* non-fatal */
+  }
+};
 ```
 
 Update the progress event listener (around line 229):
+
 ```typescript
-  runner.events.on('progress', (stats: any) => {
-    const elapsed = Math.round((Date.now() - startTime) / 1000);
-    const pct =
-      stats.totalPages > 0
-        ? Math.round((stats.pagesProcessed / stats.totalPages) * 100)
-        : 0;
-    process.stdout.write(
-      `\r  Pages: ${stats.pagesProcessed}/${stats.totalPages} (${pct}%)` +
+runner.events.on('progress', (stats: any) => {
+  const elapsed = Math.round((Date.now() - startTime) / 1000);
+  const pct =
+    stats.totalPages > 0 ? Math.round((stats.pagesProcessed / stats.totalPages) * 100) : 0;
+  process.stdout.write(
+    `\r  Pages: ${stats.pagesProcessed}/${stats.totalPages} (${pct}%)` +
       `  Entities: ${stats.entitiesCreated}` +
       `  Errors: ${stats.errors}` +
       `  Elapsed: ${elapsed}s  `,
-    );
-    logToFile('info', 'Progress', { event: 'progress', pagesProcessed: stats.pagesProcessed, totalPages: stats.totalPages, entitiesCreated: stats.entitiesCreated, errors: stats.errors, elapsed });
+  );
+  logToFile('info', 'Progress', {
+    event: 'progress',
+    pagesProcessed: stats.pagesProcessed,
+    totalPages: stats.totalPages,
+    entitiesCreated: stats.entitiesCreated,
+    errors: stats.errors,
+    elapsed,
   });
+});
 ```
 
 Update the schema evolution listener (around line 245):
+
 ```typescript
-  runner.events.on('schema:evolved', (schema: any) => {
-    process.stdout.write('\n');
-    console.log(`  Schema evolved → version ${schema.version}`);
-    logToFile('info', `Schema evolved to version ${schema.version}`, { event: 'schema:evolved', version: schema.version });
+runner.events.on('schema:evolved', (schema: any) => {
+  process.stdout.write('\n');
+  console.log(`  Schema evolved → version ${schema.version}`);
+  logToFile('info', `Schema evolved to version ${schema.version}`, {
+    event: 'schema:evolved',
+    version: schema.version,
   });
+});
 ```
 
 Add a run start log after currentRunId is available. After the runner is created but before `runner.run()`, the run creates a run record internally. We'll log the start just before running:
+
 ```typescript
-  logToFile('info', `Pipeline starting for ${projectName}`, { event: 'run:start', projectName, projectRoot, crawler: crawlerType, llm: llmClient ? 'available' : 'unavailable' });
+logToFile('info', `Pipeline starting for ${projectName}`, {
+  event: 'run:start',
+  projectName,
+  projectRoot,
+  crawler: crawlerType,
+  llm: llmClient ? 'available' : 'unavailable',
+});
 ```
 
 Add completion/failure logs in the try/catch (around lines 261 and 277):
-```typescript
-  // In the success block:
-  logToFile('info', 'Pipeline complete', { event: 'run:complete' });
 
-  // In the catch block:
-  logToFile('error', `Pipeline failed: ${errMsg}`, { event: 'run:failed', error: errMsg });
+```typescript
+// In the success block:
+logToFile('info', 'Pipeline complete', { event: 'run:complete' });
+
+// In the catch block:
+logToFile('error', `Pipeline failed: ${errMsg}`, { event: 'run:failed', error: errMsg });
 ```
 
 - [ ] **Step 4: Implement logs command**
@@ -761,10 +833,10 @@ export function parseLogEntry(line: string): LogEntry | null {
 }
 
 const LEVEL_COLORS: Record<string, string> = {
-  error: '\x1b[31m',  // red
-  warn: '\x1b[33m',   // yellow
-  info: '\x1b[36m',   // cyan
-  debug: '\x1b[90m',  // gray
+  error: '\x1b[31m', // red
+  warn: '\x1b[33m', // yellow
+  info: '\x1b[36m', // cyan
+  debug: '\x1b[90m', // gray
 };
 const RESET = '\x1b[0m';
 
@@ -842,13 +914,18 @@ function tailLogFile(filePath: string, errorsOnly: boolean): void {
       const newContent = content.slice(position);
       position = content.length;
       if (newContent) {
-        const entries = newContent.split('\n').map(parseLogEntry).filter((e): e is LogEntry => e !== null);
+        const entries = newContent
+          .split('\n')
+          .map(parseLogEntry)
+          .filter((e): e is LogEntry => e !== null);
         const filtered = errorsOnly ? filterByLevel(entries, 'error') : entries;
         for (const entry of filtered) {
           console.log(formatLogEntry(entry));
         }
       }
-    } catch { /* file may be temporarily unavailable */ }
+    } catch {
+      /* file may be temporarily unavailable */
+    }
   };
 
   const watcher = watch(filePath, () => checkNewContent());
@@ -903,7 +980,9 @@ export async function runLogsCommand(options: LogsOptions = {}): Promise<void> {
       }
       if (!found) {
         console.error(`  No log file found for run "${options.run}".`);
-        console.error(`  Available logs: ${files.slice(0, 5).join(', ')}${files.length > 5 ? '...' : ''}`);
+        console.error(
+          `  Available logs: ${files.slice(0, 5).join(', ')}${files.length > 5 ? '...' : ''}`,
+        );
         process.exit(1);
       }
       targetFile = found;
@@ -966,6 +1045,7 @@ command supports --errors, --tail (follow mode), and --run filters."
 ## Task 4: `spatula export` command (non-interactive)
 
 **Files:**
+
 - Create: `apps/cli/src/commands/export.ts`
 - Test: `apps/cli/tests/unit/commands/export.test.ts`
 
@@ -1050,7 +1130,9 @@ const VALID_FORMATS = new Set(['json', 'csv', 'sqlite', 'parquet', 'duckdb']);
 
 export function validateFormat(format: string): ExportFormat {
   if (!VALID_FORMATS.has(format)) {
-    throw new Error(`Unsupported export format: "${format}". Valid formats: ${[...VALID_FORMATS].join(', ')}`);
+    throw new Error(
+      `Unsupported export format: "${format}". Valid formats: ${[...VALID_FORMATS].join(', ')}`,
+    );
   }
   return format as ExportFormat;
 }
@@ -1069,11 +1151,16 @@ export function resolveOutputPath(
 
 function getExporter(format: ExportFormat) {
   switch (format) {
-    case 'json': return new JsonExporter();
-    case 'csv': return new CsvExporter();
-    case 'sqlite': return new SqliteExporter();
-    case 'parquet': return new ParquetExporter();
-    case 'duckdb': return new DuckDBExporter();
+    case 'json':
+      return new JsonExporter();
+    case 'csv':
+      return new CsvExporter();
+    case 'sqlite':
+      return new SqliteExporter();
+    case 'parquet':
+      return new ParquetExporter();
+    case 'duckdb':
+      return new DuckDBExporter();
   }
 }
 
@@ -1122,9 +1209,11 @@ export async function runExportCommand(options: ExportCommandOptions = {}): Prom
     }
 
     if (entities.length === 0) {
-      console.log('  No entities to export' +
-        (options.minQuality !== undefined ? ` (min quality: ${options.minQuality})` : '') +
-        '.\n');
+      console.log(
+        '  No entities to export' +
+          (options.minQuality !== undefined ? ` (min quality: ${options.minQuality})` : '') +
+          '.\n',
+      );
       return;
     }
 
@@ -1151,9 +1240,10 @@ export async function runExportCommand(options: ExportCommandOptions = {}): Prom
 
     const { statSync } = await import('node:fs');
     const fileSize = statSync(outputPath).size;
-    const sizeStr = fileSize > 1024 * 1024
-      ? `${(fileSize / 1024 / 1024).toFixed(1)} MB`
-      : `${(fileSize / 1024).toFixed(1)} KB`;
+    const sizeStr =
+      fileSize > 1024 * 1024
+        ? `${(fileSize / 1024 / 1024).toFixed(1)} MB`
+        : `${(fileSize / 1024).toFixed(1)} KB`;
 
     console.log(`  Exported ${entities.length} entities → ${outputPath}`);
     console.log(`  Format: ${format}  |  Size: ${sizeStr}`);
@@ -1185,6 +1275,7 @@ formats with --output, --include-provenance, and --min-quality flags."
 ## Task 5: `spatula explore` command
 
 **Files:**
+
 - Create: `apps/cli/src/commands/explore.tsx`
 - Test: `apps/cli/tests/unit/commands/explore.test.ts`
 
@@ -1311,11 +1402,7 @@ export async function runExploreCommand(): Promise<void> {
   }
 
   const { unmount, waitUntilExit } = render(
-    <ExploreApp
-      store={store}
-      backend={project.dataSource}
-      onExit={() => unmount()}
-    />,
+    <ExploreApp store={store} backend={project.dataSource} onExit={() => unmount()} />,
   );
 
   await waitUntilExit();
@@ -1343,6 +1430,7 @@ ExplorerView with DataSource backend for browsing/filtering/exporting."
 ## Task 6: `spatula review` command
 
 **Files:**
+
 - Create: `apps/cli/src/commands/review.tsx`
 - Test: `apps/cli/tests/unit/commands/review-cmd.test.ts`
 
@@ -1537,6 +1625,7 @@ individual actions or approve all. Prints summary on exit."
 ## Task 7: Dashboard mode `[d]` during `spatula run`
 
 **Files:**
+
 - Create: `apps/cli/src/components/dashboard/RunDashboard.tsx`
 - Modify: `apps/cli/src/commands/run.ts`
 - Test: `apps/cli/tests/unit/commands/run-dashboard.test.ts`
@@ -1641,7 +1730,9 @@ export function RunDashboard({
   return (
     <Box flexDirection="column" flexGrow={1}>
       <Box gap={1} marginBottom={1}>
-        <Text bold color="cyan">Dashboard</Text>
+        <Text bold color="cyan">
+          Dashboard
+        </Text>
         <Text dimColor>— {projectName}</Text>
       </Box>
 
@@ -1666,6 +1757,7 @@ export function RunDashboard({
 In `apps/cli/src/commands/run.ts`, add stdin raw mode and `[d]` keybinding. Add these changes after the runner is created (after the `// Step 11: Build LocalPipelineRunner` block) and before `runner.run()`:
 
 First, add the imports at the top of the file:
+
 ```typescript
 import type { DataSource } from '@spatula/core';
 import { LocalDataSource } from '@spatula/core';
@@ -1674,113 +1766,119 @@ import { LocalDataSource } from '@spatula/core';
 Then before `runner.run()`, add the dashboard toggle setup:
 
 ```typescript
-  // Step 11b: Create DataSource for dashboard mode
-  const dataSource: DataSource = new LocalDataSource(adapter);
+// Step 11b: Create DataSource for dashboard mode
+const dataSource: DataSource = new LocalDataSource(adapter);
 
-  // Step 11c: Set up stdin raw mode for keyboard shortcuts during run
-  let dashboardActive = false;
-  let dashboardUnmount: (() => void) | null = null;
-  let suppressProgress = false;
+// Step 11c: Set up stdin raw mode for keyboard shortcuts during run
+let dashboardActive = false;
+let dashboardUnmount: (() => void) | null = null;
+let suppressProgress = false;
 
-  const setupStdinRawMode = () => {
-    if (!process.stdin.isTTY) return;
+const setupStdinRawMode = () => {
+  if (!process.stdin.isTTY) return;
+  process.stdin.setRawMode(true);
+  process.stdin.resume();
+  process.stdin.setEncoding('utf-8');
+  process.stdin.on('data', handleKeypress);
+};
+
+const teardownStdinRawMode = () => {
+  process.stdin.removeListener('data', handleKeypress);
+  if (process.stdin.isTTY) {
+    process.stdin.setRawMode(false);
+  }
+  process.stdin.pause();
+};
+
+const handleKeypress = async (key: string) => {
+  if (key === '\x03') {
+    // Ctrl+C
+    handleSigint();
+    return;
+  }
+  if (key === 'd' || key === 'D') {
+    if (dashboardActive) {
+      dismissDashboard();
+    } else {
+      await showDashboard();
+    }
+  }
+};
+
+const showDashboard = async () => {
+  dashboardActive = true;
+  suppressProgress = true;
+  // Remove our raw mode listener — Ink will manage stdin
+  process.stdin.removeListener('data', handleKeypress);
+
+  const React = (await import('react')).default;
+  const { render: inkRender } = await import('ink');
+  const { RunDashboard, buildRunDashboardStore } =
+    await import('../components/dashboard/RunDashboard.js');
+
+  const dashStore = buildRunDashboardStore(projectId);
+
+  const { unmount } = inkRender(
+    React.createElement(RunDashboard, {
+      store: dashStore,
+      dataSource,
+      projectName,
+      onDismiss: () => dismissDashboard(),
+    }),
+    { exitOnCtrlC: false }, // Prevent Ink from handling Ctrl+C — our SIGINT handler manages it
+  );
+
+  dashboardUnmount = unmount;
+};
+
+const dismissDashboard = () => {
+  if (dashboardUnmount) {
+    dashboardUnmount();
+    dashboardUnmount = null;
+  }
+  dashboardActive = false;
+  suppressProgress = false;
+  // Re-setup our raw mode listener
+  if (process.stdin.isTTY) {
     process.stdin.setRawMode(true);
     process.stdin.resume();
-    process.stdin.setEncoding('utf-8');
     process.stdin.on('data', handleKeypress);
-  };
+  }
+  console.log(''); // Clean line after dashboard
+};
 
-  const teardownStdinRawMode = () => {
-    process.stdin.removeListener('data', handleKeypress);
-    if (process.stdin.isTTY) {
-      process.stdin.setRawMode(false);
-    }
-    process.stdin.pause();
-  };
-
-  const handleKeypress = async (key: string) => {
-    if (key === '\x03') { // Ctrl+C
-      handleSigint();
-      return;
-    }
-    if (key === 'd' || key === 'D') {
-      if (dashboardActive) {
-        dismissDashboard();
-      } else {
-        await showDashboard();
-      }
-    }
-  };
-
-  const showDashboard = async () => {
-    dashboardActive = true;
-    suppressProgress = true;
-    // Remove our raw mode listener — Ink will manage stdin
-    process.stdin.removeListener('data', handleKeypress);
-
-    const React = (await import('react')).default;
-    const { render: inkRender } = await import('ink');
-    const { RunDashboard, buildRunDashboardStore } = await import(
-      '../components/dashboard/RunDashboard.js'
-    );
-
-    const dashStore = buildRunDashboardStore(projectId);
-
-    const { unmount } = inkRender(
-      React.createElement(RunDashboard, {
-        store: dashStore,
-        dataSource,
-        projectName,
-        onDismiss: () => dismissDashboard(),
-      }),
-      { exitOnCtrlC: false }, // Prevent Ink from handling Ctrl+C — our SIGINT handler manages it
-    );
-
-    dashboardUnmount = unmount;
-  };
-
-  const dismissDashboard = () => {
-    if (dashboardUnmount) {
-      dashboardUnmount();
-      dashboardUnmount = null;
-    }
-    dashboardActive = false;
-    suppressProgress = false;
-    // Re-setup our raw mode listener
-    if (process.stdin.isTTY) {
-      process.stdin.setRawMode(true);
-      process.stdin.resume();
-      process.stdin.on('data', handleKeypress);
-    }
-    console.log(''); // Clean line after dashboard
-  };
-
-  setupStdinRawMode();
-  console.log('  Press [d] for dashboard view\n');
+setupStdinRawMode();
+console.log('  Press [d] for dashboard view\n');
 ```
 
 Update the progress listener to respect `suppressProgress`:
 
 ```typescript
-  runner.events.on('progress', (stats: any) => {
-    const elapsed = Math.round((Date.now() - startTime) / 1000);
-    const pct =
-      stats.totalPages > 0
-        ? Math.round((stats.pagesProcessed / stats.totalPages) * 100)
-        : 0;
-    if (!suppressProgress) {
-      process.stdout.write(
-        `\r  Pages: ${stats.pagesProcessed}/${stats.totalPages} (${pct}%)` +
+runner.events.on('progress', (stats: any) => {
+  const elapsed = Math.round((Date.now() - startTime) / 1000);
+  const pct =
+    stats.totalPages > 0 ? Math.round((stats.pagesProcessed / stats.totalPages) * 100) : 0;
+  if (!suppressProgress) {
+    process.stdout.write(
+      `\r  Pages: ${stats.pagesProcessed}/${stats.totalPages} (${pct}%)` +
         `  Entities: ${stats.entitiesCreated}` +
         `  Errors: ${stats.errors}` +
         `  Elapsed: ${elapsed}s  `,
-      );
-    }
-    logToFile('info', 'Progress', { event: 'progress', pagesProcessed: stats.pagesProcessed, totalPages: stats.totalPages, entitiesCreated: stats.entitiesCreated, errors: stats.errors, elapsed });
+    );
+  }
+  logToFile('info', 'Progress', {
+    event: 'progress',
+    pagesProcessed: stats.pagesProcessed,
+    totalPages: stats.totalPages,
+    entitiesCreated: stats.entitiesCreated,
+    errors: stats.errors,
+    elapsed,
   });
+});
 ```
 
 In the `finally` block, add cleanup:
+
 ```typescript
   } finally {
     process.off('SIGINT', handleSigint);
@@ -1817,6 +1915,7 @@ or Escape to return to compact progress line."
 ## Task 8: Register all new commands in index.tsx
 
 **Files:**
+
 - Modify: `apps/cli/src/index.tsx`
 
 Register the 5 new commands: `explore`, `export`, `review`, `schema`, `logs`.
@@ -2017,6 +2116,7 @@ Expected: No lint errors.
 - [ ] **Step 5: Final commit with any fixes**
 
 If any fixes were needed, commit them:
+
 ```bash
 git add -A
 git commit -m "fix: address Wave 4-3 integration issues"

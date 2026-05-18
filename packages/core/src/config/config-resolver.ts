@@ -6,7 +6,7 @@ import type { FieldDefinitionOutput } from '../types/schema.js';
 
 export interface YamlToJobConfigOptions {
   tenantId: string;
-  projectId?: string;  // Reserved for Phase 13 — synthetic project ID for local SQLite
+  projectId?: string; // Reserved for Phase 13 — synthetic project ID for local SQLite
   projectRoot: string;
   globalConfig?: GlobalConfig | null;
   cliFlags?: CliFlags;
@@ -25,18 +25,11 @@ export interface YamlToJobConfigOptions {
 // - notify: consumed by LocalPipelineRunner notifications (Phase 13 Step 4)
 // They are parsed and validated by SpatulaYamlSchema but not included in JobConfig.
 // The caller should preserve the full SpatulaYaml object for these fields.
-export function yamlToJobConfig(
-  yaml: SpatulaYaml,
-  options: YamlToJobConfigOptions,
-): JobConfig {
+export function yamlToJobConfig(yaml: SpatulaYaml, options: YamlToJobConfigOptions): JobConfig {
   const { tenantId, projectRoot, globalConfig, cliFlags } = options;
 
   // Resolve crawler type: CLI > project > global > default
-  const crawlerType =
-    cliFlags?.crawler ??
-    yaml.crawler ??
-    globalConfig?.crawler ??
-    'playwright';
+  const crawlerType = cliFlags?.crawler ?? yaml.crawler ?? globalConfig?.crawler ?? 'playwright';
 
   // Resolve LLM model: CLI > project > global > default
   const primaryModel =

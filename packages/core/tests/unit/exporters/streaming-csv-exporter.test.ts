@@ -48,7 +48,9 @@ describe('StreamingCsvExporter', () => {
   });
 
   it('escapes values with commas, quotes, and newlines', async () => {
-    const batches = [[{ mergedData: { name: "O'Brien, Jr.", desc: 'said "hello"', note: 'line1\nline2' } }]];
+    const batches = [
+      [{ mergedData: { name: "O'Brien, Jr.", desc: 'said "hello"', note: 'line1\nline2' } }],
+    ];
     const stream = exporter.export(makeEntityBatches(batches));
     const result = await collectStream(stream);
     expect(result).toContain('"O\'Brien, Jr."');

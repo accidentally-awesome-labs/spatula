@@ -67,6 +67,7 @@ Modified:
 ## Task 1: PATCH Job Control Endpoint
 
 **Files:**
+
 - Modify: `apps/api/src/schemas/job.ts`
 - Modify: `apps/api/src/routes/jobs.ts`
 - Create: `apps/api/tests/unit/routes/jobs.test.ts`
@@ -86,7 +87,13 @@ const TENANT_ID = '00000000-0000-0000-0000-000000000001';
 
 function createMockDeps(): AppDeps {
   return {
-    jobRepo: { findById: vi.fn(), findByTenant: vi.fn(), create: vi.fn(), updateStatus: vi.fn(), updateStats: vi.fn() } as any,
+    jobRepo: {
+      findById: vi.fn(),
+      findByTenant: vi.fn(),
+      create: vi.fn(),
+      updateStatus: vi.fn(),
+      updateStats: vi.fn(),
+    } as any,
     schemaRepo: {} as any,
     extractionRepo: {} as any,
     entityRepo: {} as any,
@@ -228,6 +235,7 @@ git commit -m "feat(api): add PATCH /jobs/:id unified job control endpoint"
 ## Task 2: Cascading Job DELETE
 
 **Files:**
+
 - Modify: `packages/db/src/repositories/job-repository.ts`
 - Modify: `apps/api/src/routes/jobs.ts`
 - Modify: `apps/api/tests/unit/routes/jobs.test.ts`
@@ -235,6 +243,7 @@ git commit -m "feat(api): add PATCH /jobs/:id unified job control endpoint"
 The DELETE endpoint cascades through all FK-dependent tables in a single transaction. The circular FK between `jobs.schemaId → schemas.id` and `schemas.jobId → jobs.id` requires NULLing `jobs.schemaId` first. Content store entries (referenced by text `contentRef` fields, not FKs) are cleaned up as best-effort.
 
 **FK dependency chain (delete order):**
+
 ```
 1. NULL jobs.schemaId                (break circular ref)
 2. entity_sources                    (FK → entities + extractions)
@@ -273,9 +282,9 @@ describe('DELETE /api/v1/jobs/:id', () => {
   it('propagates not-found errors', async () => {
     const deps = createMockDeps();
     const { StorageError } = await import('@spatula/shared');
-    (deps.jobRepo as any).deleteWithData = vi.fn().mockRejectedValue(
-      new StorageError('Job not found', { context: {} })
-    );
+    (deps.jobRepo as any).deleteWithData = vi
+      .fn()
+      .mockRejectedValue(new StorageError('Job not found', { context: {} }));
     const app = createApp(deps);
 
     const res = await app.request('/api/v1/jobs/job-1', {
@@ -427,15 +436,15 @@ import type { Database } from '../connection.js';
 In `apps/api/src/routes/jobs.ts`, add before `return router`:
 
 ```typescript
-  // DELETE /:id — Delete job with all related data
-  router.delete('/:id', async (c) => {
-    const tenantId = c.get('tenantId');
-    const deps = c.get('deps');
-    const jobId = c.req.param('id');
+// DELETE /:id — Delete job with all related data
+router.delete('/:id', async (c) => {
+  const tenantId = c.get('tenantId');
+  const deps = c.get('deps');
+  const jobId = c.req.param('id');
 
-    await deps.jobRepo.deleteWithData(jobId, tenantId);
-    return c.body(null, 204);
-  });
+  await deps.jobRepo.deleteWithData(jobId, tenantId);
+  return c.body(null, 204);
+});
 ```
 
 - [ ] **Step 5: Update AppDeps type to include deleteWithData**
@@ -459,6 +468,7 @@ git commit -m "feat(api,db): add DELETE /jobs/:id with cascading delete through 
 ## Task 3: Pagination Consistency
 
 **Files:**
+
 - Modify: `apps/api/src/schemas/job.ts`
 - Modify: `apps/api/src/routes/jobs.ts`
 - Modify: `apps/api/src/routes/extractions.ts`
@@ -472,9 +482,23 @@ In `apps/api/src/schemas/job.ts`, replace `listJobsQuerySchema`:
 ```typescript
 export const listJobsQuerySchema = z.object({
   status: z
-    .enum(['pending', 'queued', 'running', 'paused', 'reconciling', 'completed', 'failed', 'cancelled'])
+    .enum([
+      'pending',
+      'queued',
+      'running',
+      'paused',
+      'reconciling',
+      'completed',
+      'failed',
+      'cancelled',
+    ])
     .optional(),
-  limit: z.coerce.number().int().min(1).default(50).transform((v) => Math.min(v, 100)),
+  limit: z.coerce
+    .number()
+    .int()
+    .min(1)
+    .default(50)
+    .transform((v) => Math.min(v, 100)),
   offset: z.coerce.number().int().min(0).default(0),
 });
 ```
@@ -484,11 +508,11 @@ export const listJobsQuerySchema = z.object({
 In `apps/api/src/routes/jobs.ts`, update the GET / handler:
 
 ```typescript
-    const jobs = await deps.jobRepo.findByTenant(tenantId, {
-      status: query.status,
-      limit: query.limit,
-      offset: query.offset,
-    });
+const jobs = await deps.jobRepo.findByTenant(tenantId, {
+  status: query.status,
+  limit: query.limit,
+  offset: query.offset,
+});
 ```
 
 - [ ] **Step 3: Add offset support to JobRepository.findByTenant**
@@ -621,6 +645,7 @@ git commit -m "fix(api): add offset to jobs list query, refactor extractions to 
 ## Task 4: Tenant Repository
 
 **Files:**
+
 - Create: `packages/db/src/repositories/tenant-repository.ts`
 - Create: `packages/db/tests/unit/repositories/tenant-repository.test.ts`
 - Modify: `packages/db/src/repositories/index.ts`
@@ -691,7 +716,10 @@ describe('TenantRepository', () => {
       ]);
 
       const repo = new TenantRepository(db as any);
-      const result = await repo.update('tenant-1', { name: 'Updated Corp', config: { key: 'val' } });
+      const result = await repo.update('tenant-1', {
+        name: 'Updated Corp',
+        config: { key: 'val' },
+      });
 
       expect(result.name).toBe('Updated Corp');
     });
@@ -751,10 +779,7 @@ export class TenantRepository {
 
   async findById(id: string) {
     try {
-      const [row] = await this.db
-        .select()
-        .from(tenants)
-        .where(eq(tenants.id, id));
+      const [row] = await this.db.select().from(tenants).where(eq(tenants.id, id));
 
       return row ?? null;
     } catch (error) {
@@ -822,6 +847,7 @@ git commit -m "feat(db): add TenantRepository with create, findById, update meth
 ## Task 5: Tenant API Routes & Middleware
 
 **Files:**
+
 - Create: `apps/api/src/schemas/tenant.ts`
 - Create: `apps/api/src/routes/tenants.ts`
 - Create: `apps/api/src/middleware/validate-tenant.ts`
@@ -1056,14 +1082,14 @@ import { tenantRoutes } from './routes/tenants.js';
 
 // ... inside createApp() ...
 
-  // Tenant management routes (no x-tenant-id required)
-  app.use('/api/v1/tenants', depsMiddleware(deps));
-  app.use('/api/v1/tenants/*', depsMiddleware(deps));
-  app.route('/api/v1/tenants', tenantRoutes());
+// Tenant management routes (no x-tenant-id required)
+app.use('/api/v1/tenants', depsMiddleware(deps));
+app.use('/api/v1/tenants/*', depsMiddleware(deps));
+app.route('/api/v1/tenants', tenantRoutes());
 
-  // Tenant + deps injection for all other API routes
-  app.use('/api/*', tenantMiddleware);
-  app.use('/api/*', depsMiddleware(deps));
+// Tenant + deps injection for all other API routes
+app.use('/api/*', tenantMiddleware);
+app.use('/api/*', depsMiddleware(deps));
 ```
 
 **Important:** The tenant routes must be registered BEFORE the general `/api/*` tenant middleware so they don't require `x-tenant-id`. Move the health check and tenant route mounts above the general middleware:
@@ -1126,12 +1152,12 @@ export const validateTenantMiddleware: MiddlewareHandler = async (c, next) => {
 Register after deps middleware in `app.ts`:
 
 ```typescript
-  import { validateTenantMiddleware } from './middleware/validate-tenant.js';
+import { validateTenantMiddleware } from './middleware/validate-tenant.js';
 
-  // ... after tenant + deps middleware ...
-  app.use('/api/*', tenantMiddleware);
-  app.use('/api/*', depsMiddleware(deps));
-  app.use('/api/*', validateTenantMiddleware);
+// ... after tenant + deps middleware ...
+app.use('/api/*', tenantMiddleware);
+app.use('/api/*', depsMiddleware(deps));
+app.use('/api/*', validateTenantMiddleware);
 ```
 
 - [ ] **Step 8: Write validate-tenant middleware test**
@@ -1206,6 +1232,7 @@ git commit -m "feat(api): add tenant CRUD routes and DB-backed tenant validation
 ## Task 6: OpenAPI Infrastructure
 
 **Files:**
+
 - Modify: `apps/api/package.json`
 - Modify: `apps/api/src/app.ts`
 - Modify: `apps/api/src/middleware/tenant.ts`
@@ -1318,100 +1345,125 @@ import { z } from '@hono/zod-openapi';
 
 // --- Entity schemas (describe JSON shapes returned by endpoints) ---
 
-export const jobResponseSchema = z.object({
-  id: z.string().uuid(),
-  tenantId: z.string().uuid(),
-  name: z.string(),
-  description: z.string(),
-  config: z.record(z.unknown()),
-  status: z.enum(['pending', 'queued', 'running', 'paused', 'reconciling', 'completed', 'failed', 'cancelled']),
-  schemaId: z.string().uuid().nullable(),
-  stats: z.record(z.number()).nullable(),
-  createdAt: z.string(),
-  startedAt: z.string().nullable(),
-  completedAt: z.string().nullable(),
-}).openapi('Job');
+export const jobResponseSchema = z
+  .object({
+    id: z.string().uuid(),
+    tenantId: z.string().uuid(),
+    name: z.string(),
+    description: z.string(),
+    config: z.record(z.unknown()),
+    status: z.enum([
+      'pending',
+      'queued',
+      'running',
+      'paused',
+      'reconciling',
+      'completed',
+      'failed',
+      'cancelled',
+    ]),
+    schemaId: z.string().uuid().nullable(),
+    stats: z.record(z.number()).nullable(),
+    createdAt: z.string(),
+    startedAt: z.string().nullable(),
+    completedAt: z.string().nullable(),
+  })
+  .openapi('Job');
 
-export const tenantResponseSchema = z.object({
-  id: z.string().uuid(),
-  name: z.string(),
-  config: z.record(z.unknown()).nullable(),
-  createdAt: z.string(),
-}).openapi('Tenant');
+export const tenantResponseSchema = z
+  .object({
+    id: z.string().uuid(),
+    name: z.string(),
+    config: z.record(z.unknown()).nullable(),
+    createdAt: z.string(),
+  })
+  .openapi('Tenant');
 
-export const schemaVersionResponseSchema = z.object({
-  id: z.string().uuid(),
-  jobId: z.string().uuid(),
-  tenantId: z.string().uuid(),
-  version: z.number().int(),
-  definition: z.record(z.unknown()),
-  parentId: z.string().uuid().nullable(),
-  createdAt: z.string(),
-}).openapi('SchemaVersion');
+export const schemaVersionResponseSchema = z
+  .object({
+    id: z.string().uuid(),
+    jobId: z.string().uuid(),
+    tenantId: z.string().uuid(),
+    version: z.number().int(),
+    definition: z.record(z.unknown()),
+    parentId: z.string().uuid().nullable(),
+    createdAt: z.string(),
+  })
+  .openapi('SchemaVersion');
 
-export const extractionResponseSchema = z.object({
-  id: z.string().uuid(),
-  jobId: z.string().uuid(),
-  tenantId: z.string().uuid(),
-  pageId: z.string().uuid(),
-  schemaVersion: z.number().int(),
-  data: z.record(z.unknown()),
-  unmappedFields: z.array(z.unknown()).nullable(),
-  metadata: z.record(z.unknown()),
-  createdAt: z.string(),
-}).openapi('Extraction');
+export const extractionResponseSchema = z
+  .object({
+    id: z.string().uuid(),
+    jobId: z.string().uuid(),
+    tenantId: z.string().uuid(),
+    pageId: z.string().uuid(),
+    schemaVersion: z.number().int(),
+    data: z.record(z.unknown()),
+    unmappedFields: z.array(z.unknown()).nullable(),
+    metadata: z.record(z.unknown()),
+    createdAt: z.string(),
+  })
+  .openapi('Extraction');
 
-export const entityResponseSchema = z.object({
-  id: z.string().uuid(),
-  jobId: z.string().uuid(),
-  tenantId: z.string().uuid(),
-  mergedData: z.record(z.unknown()),
-  provenance: z.record(z.unknown()),
-  categories: z.array(z.string()),
-  qualityScore: z.number(),
-  createdAt: z.string(),
-}).openapi('Entity');
+export const entityResponseSchema = z
+  .object({
+    id: z.string().uuid(),
+    jobId: z.string().uuid(),
+    tenantId: z.string().uuid(),
+    mergedData: z.record(z.unknown()),
+    provenance: z.record(z.unknown()),
+    categories: z.array(z.string()),
+    qualityScore: z.number(),
+    createdAt: z.string(),
+  })
+  .openapi('Entity');
 
-export const actionResponseSchema = z.object({
-  id: z.string().uuid(),
-  jobId: z.string().uuid(),
-  tenantId: z.string().uuid(),
-  type: z.string(),
-  payload: z.record(z.unknown()),
-  source: z.enum(['extraction', 'schema_evolution', 'reconciliation', 'quality_audit']),
-  status: z.enum(['pending_review', 'approved', 'applied', 'rejected', 'rolled_back']),
-  confidence: z.number(),
-  reasoning: z.string(),
-  stateChanges: z.record(z.unknown()).nullable(),
-  reviewedBy: z.string().nullable(),
-  createdAt: z.string(),
-  appliedAt: z.string().nullable(),
-}).openapi('Action');
+export const actionResponseSchema = z
+  .object({
+    id: z.string().uuid(),
+    jobId: z.string().uuid(),
+    tenantId: z.string().uuid(),
+    type: z.string(),
+    payload: z.record(z.unknown()),
+    source: z.enum(['extraction', 'schema_evolution', 'reconciliation', 'quality_audit']),
+    status: z.enum(['pending_review', 'approved', 'applied', 'rejected', 'rolled_back']),
+    confidence: z.number(),
+    reasoning: z.string(),
+    stateChanges: z.record(z.unknown()).nullable(),
+    reviewedBy: z.string().nullable(),
+    createdAt: z.string(),
+    appliedAt: z.string().nullable(),
+  })
+  .openapi('Action');
 
-export const exportResponseSchema = z.object({
-  id: z.string().uuid(),
-  jobId: z.string().uuid(),
-  tenantId: z.string().uuid(),
-  format: z.string(),
-  status: z.string(),
-  includeProvenance: z.boolean(),
-  entityCount: z.number().nullable(),
-  contentRef: z.string().nullable(),
-  fileSize: z.number().nullable(),
-  error: z.string().nullable(),
-  createdAt: z.string(),
-  completedAt: z.string().nullable(),
-}).openapi('Export');
+export const exportResponseSchema = z
+  .object({
+    id: z.string().uuid(),
+    jobId: z.string().uuid(),
+    tenantId: z.string().uuid(),
+    format: z.string(),
+    status: z.string(),
+    includeProvenance: z.boolean(),
+    entityCount: z.number().nullable(),
+    contentRef: z.string().nullable(),
+    fileSize: z.number().nullable(),
+    error: z.string().nullable(),
+    createdAt: z.string(),
+    completedAt: z.string().nullable(),
+  })
+  .openapi('Export');
 
 // --- Common wrappers ---
 
-export const errorResponseSchema = z.object({
-  error: z.object({
-    code: z.string(),
-    message: z.string(),
-    requestId: z.string(),
-  }),
-}).openapi('Error');
+export const errorResponseSchema = z
+  .object({
+    error: z.object({
+      code: z.string(),
+      message: z.string(),
+      requestId: z.string(),
+    }),
+  })
+  .openapi('Error');
 
 export function dataResponse<T extends z.ZodType>(schema: T) {
   return z.object({ data: schema });
@@ -1453,6 +1505,7 @@ git commit -m "feat(api): add OpenAPI infrastructure with OpenAPIHono, Swagger U
 ## Task 7: OpenAPI Route Conversion
 
 **Files:**
+
 - Modify: all route files in `apps/api/src/routes/`
 - Modify: all schema files in `apps/api/src/schemas/`
 
@@ -1490,6 +1543,7 @@ router.openapi(getByIdRoute, async (c) => {
 ```
 
 **Key changes in converted routes:**
+
 - `c.req.param('id')` → `c.req.valid('param').id` (typed from schema)
 - `c.get('validatedBody')` → `c.req.valid('json')` (typed from schema)
 - `c.get('validatedQuery')` → `c.req.valid('query')` (typed from schema)
@@ -1501,6 +1555,7 @@ This task is the largest but entirely mechanical. Convert one file at a time, ve
 - [ ] **Step 1: Update schema files to use @hono/zod-openapi z**
 
 In all schema files under `apps/api/src/schemas/`, change:
+
 ```typescript
 // BEFORE:
 import { z } from 'zod';
@@ -1509,6 +1564,7 @@ import { z } from '@hono/zod-openapi';
 ```
 
 Files to update:
+
 - `apps/api/src/schemas/job.ts`
 - `apps/api/src/schemas/pagination.ts`
 - `apps/api/src/schemas/entity-query.ts`
@@ -1524,7 +1580,13 @@ import { OpenAPIHono, createRoute, z } from '@hono/zod-openapi';
 import { JobConfig } from '@spatula/core';
 import type { AppEnv } from '../types.js';
 import { createJobSchema, listJobsQuerySchema, patchJobSchema } from '../schemas/job.js';
-import { jobResponseSchema, errorResponseSchema, dataResponse, listResponse, jsonContent } from '../schemas/responses.js';
+import {
+  jobResponseSchema,
+  errorResponseSchema,
+  dataResponse,
+  listResponse,
+  jsonContent,
+} from '../schemas/responses.js';
 import { NotFoundError } from '../middleware/error-handler.js';
 
 // --- Route definitions ---
@@ -1563,7 +1625,10 @@ const getJobRoute = createRoute({
   summary: 'Get job details',
   request: {
     params: z.object({
-      id: z.string().openapi({ param: { name: 'id', in: 'path' }, example: '550e8400-e29b-41d4-a716-446655440000' }),
+      id: z.string().openapi({
+        param: { name: 'id', in: 'path' },
+        example: '550e8400-e29b-41d4-a716-446655440000',
+      }),
     }),
   },
   responses: {
@@ -1609,25 +1674,70 @@ const deleteJobRoute = createRoute({
 });
 
 // Legacy POST action routes (backwards compatibility aliases)
-const startJobRoute = createRoute({ method: 'post', path: '/{id}/start', tags: ['Jobs'], summary: 'Start job (alias for PATCH)',
+const startJobRoute = createRoute({
+  method: 'post',
+  path: '/{id}/start',
+  tags: ['Jobs'],
+  summary: 'Start job (alias for PATCH)',
   request: { params: z.object({ id: z.string().openapi({ param: { name: 'id', in: 'path' } }) }) },
-  responses: { 200: jsonContent(z.object({ data: z.object({ id: z.string(), message: z.string() }) }), 'Job started') },
+  responses: {
+    200: jsonContent(
+      z.object({ data: z.object({ id: z.string(), message: z.string() }) }),
+      'Job started',
+    ),
+  },
 });
-const pauseJobRoute = createRoute({ method: 'post', path: '/{id}/pause', tags: ['Jobs'], summary: 'Pause job (alias for PATCH)',
+const pauseJobRoute = createRoute({
+  method: 'post',
+  path: '/{id}/pause',
+  tags: ['Jobs'],
+  summary: 'Pause job (alias for PATCH)',
   request: { params: z.object({ id: z.string().openapi({ param: { name: 'id', in: 'path' } }) }) },
-  responses: { 200: jsonContent(z.object({ data: z.object({ id: z.string(), message: z.string() }) }), 'Job paused') },
+  responses: {
+    200: jsonContent(
+      z.object({ data: z.object({ id: z.string(), message: z.string() }) }),
+      'Job paused',
+    ),
+  },
 });
-const resumeJobRoute = createRoute({ method: 'post', path: '/{id}/resume', tags: ['Jobs'], summary: 'Resume job (alias for PATCH)',
+const resumeJobRoute = createRoute({
+  method: 'post',
+  path: '/{id}/resume',
+  tags: ['Jobs'],
+  summary: 'Resume job (alias for PATCH)',
   request: { params: z.object({ id: z.string().openapi({ param: { name: 'id', in: 'path' } }) }) },
-  responses: { 200: jsonContent(z.object({ data: z.object({ id: z.string(), message: z.string() }) }), 'Job resumed') },
+  responses: {
+    200: jsonContent(
+      z.object({ data: z.object({ id: z.string(), message: z.string() }) }),
+      'Job resumed',
+    ),
+  },
 });
-const cancelJobRoute = createRoute({ method: 'post', path: '/{id}/cancel', tags: ['Jobs'], summary: 'Cancel job (alias for PATCH)',
+const cancelJobRoute = createRoute({
+  method: 'post',
+  path: '/{id}/cancel',
+  tags: ['Jobs'],
+  summary: 'Cancel job (alias for PATCH)',
   request: { params: z.object({ id: z.string().openapi({ param: { name: 'id', in: 'path' } }) }) },
-  responses: { 200: jsonContent(z.object({ data: z.object({ id: z.string(), message: z.string() }) }), 'Job cancelled') },
+  responses: {
+    200: jsonContent(
+      z.object({ data: z.object({ id: z.string(), message: z.string() }) }),
+      'Job cancelled',
+    ),
+  },
 });
-const reconcileJobRoute = createRoute({ method: 'post', path: '/{id}/reconcile', tags: ['Jobs'], summary: 'Trigger reconciliation (alias for PATCH)',
+const reconcileJobRoute = createRoute({
+  method: 'post',
+  path: '/{id}/reconcile',
+  tags: ['Jobs'],
+  summary: 'Trigger reconciliation (alias for PATCH)',
   request: { params: z.object({ id: z.string().openapi({ param: { name: 'id', in: 'path' } }) }) },
-  responses: { 200: jsonContent(z.object({ data: z.object({ id: z.string(), message: z.string() }) }), 'Reconciliation triggered') },
+  responses: {
+    200: jsonContent(
+      z.object({ data: z.object({ id: z.string(), message: z.string() }) }),
+      'Reconciliation triggered',
+    ),
+  },
 });
 
 // --- Handlers ---
@@ -1701,27 +1811,37 @@ export function jobRoutes(): OpenAPIHono<AppEnv> {
 
   // Legacy POST aliases
   router.openapi(startJobRoute, async (c) => {
-    const { id } = c.req.valid('param'); const tenantId = c.get('tenantId'); const deps = c.get('deps');
+    const { id } = c.req.valid('param');
+    const tenantId = c.get('tenantId');
+    const deps = c.get('deps');
     await deps.jobManager.startJob(id, tenantId);
     return c.json({ data: { id, message: 'Job started' } });
   });
   router.openapi(pauseJobRoute, async (c) => {
-    const { id } = c.req.valid('param'); const tenantId = c.get('tenantId'); const deps = c.get('deps');
+    const { id } = c.req.valid('param');
+    const tenantId = c.get('tenantId');
+    const deps = c.get('deps');
     await deps.jobManager.pauseJob(id, tenantId);
     return c.json({ data: { id, message: 'Job paused' } });
   });
   router.openapi(resumeJobRoute, async (c) => {
-    const { id } = c.req.valid('param'); const tenantId = c.get('tenantId'); const deps = c.get('deps');
+    const { id } = c.req.valid('param');
+    const tenantId = c.get('tenantId');
+    const deps = c.get('deps');
     await deps.jobManager.resumeJob(id, tenantId);
     return c.json({ data: { id, message: 'Job resumed' } });
   });
   router.openapi(cancelJobRoute, async (c) => {
-    const { id } = c.req.valid('param'); const tenantId = c.get('tenantId'); const deps = c.get('deps');
+    const { id } = c.req.valid('param');
+    const tenantId = c.get('tenantId');
+    const deps = c.get('deps');
     await deps.jobManager.cancelJob(id, tenantId);
     return c.json({ data: { id, message: 'Job cancelled' } });
   });
   router.openapi(reconcileJobRoute, async (c) => {
-    const { id } = c.req.valid('param'); const tenantId = c.get('tenantId'); const deps = c.get('deps');
+    const { id } = c.req.valid('param');
+    const tenantId = c.get('tenantId');
+    const deps = c.get('deps');
     await deps.jobManager.triggerReconciliation(id, tenantId);
     return c.json({ data: { id, message: 'Reconciliation triggered' } });
   });
@@ -1742,7 +1862,13 @@ Replace `apps/api/src/routes/schemas.ts` — key differences from jobs.ts: sub-r
 ```typescript
 import { OpenAPIHono, createRoute, z } from '@hono/zod-openapi';
 import type { AppEnv } from '../types.js';
-import { schemaVersionResponseSchema, errorResponseSchema, dataResponse, listResponse, jsonContent } from '../schemas/responses.js';
+import {
+  schemaVersionResponseSchema,
+  errorResponseSchema,
+  dataResponse,
+  listResponse,
+  jsonContent,
+} from '../schemas/responses.js';
 import { NotFoundError } from '../middleware/error-handler.js';
 import { ValidationError } from '@spatula/shared';
 
@@ -1751,7 +1877,9 @@ const jobIdParam = z.object({
 });
 
 const getLatestRoute = createRoute({
-  method: 'get', path: '/', tags: ['Schemas'],
+  method: 'get',
+  path: '/',
+  tags: ['Schemas'],
   summary: 'Get latest schema version for a job',
   request: { params: jobIdParam },
   responses: {
@@ -1761,14 +1889,18 @@ const getLatestRoute = createRoute({
 });
 
 const listVersionsRoute = createRoute({
-  method: 'get', path: '/versions', tags: ['Schemas'],
+  method: 'get',
+  path: '/versions',
+  tags: ['Schemas'],
   summary: 'List all schema versions',
   request: { params: jobIdParam },
   responses: { 200: jsonContent(listResponse(schemaVersionResponseSchema), 'All schema versions') },
 });
 
 const getVersionRoute = createRoute({
-  method: 'get', path: '/versions/{version}', tags: ['Schemas'],
+  method: 'get',
+  path: '/versions/{version}',
+  tags: ['Schemas'],
   summary: 'Get a specific schema version',
   request: {
     params: jobIdParam.extend({
@@ -1841,7 +1973,9 @@ const listExtractionsQuery = paginationSchema.extend({
 });
 
 const listRoute = createRoute({
-  method: 'get', path: '/', tags: ['Extractions'],
+  method: 'get',
+  path: '/',
+  tags: ['Extractions'],
   summary: 'List extractions for a job',
   request: { params: jobIdParam, query: listExtractionsQuery },
   responses: { 200: jsonContent(listResponse(extractionResponseSchema), 'List of extractions') },
@@ -1875,7 +2009,13 @@ export function extractionRoutes(): OpenAPIHono<AppEnv> {
 import { OpenAPIHono, createRoute, z } from '@hono/zod-openapi';
 import type { AppEnv } from '../types.js';
 import { entityQuerySchema } from '../schemas/entity-query.js';
-import { entityResponseSchema, errorResponseSchema, dataResponse, listResponse, jsonContent } from '../schemas/responses.js';
+import {
+  entityResponseSchema,
+  errorResponseSchema,
+  dataResponse,
+  listResponse,
+  jsonContent,
+} from '../schemas/responses.js';
 import { NotFoundError } from '../middleware/error-handler.js';
 
 const jobIdParam = z.object({
@@ -1883,16 +2023,23 @@ const jobIdParam = z.object({
 });
 
 const listEntitiesRoute = createRoute({
-  method: 'get', path: '/', tags: ['Entities'],
+  method: 'get',
+  path: '/',
+  tags: ['Entities'],
   summary: 'List entities for a job',
   request: { params: jobIdParam, query: entityQuerySchema },
   responses: {
-    200: jsonContent(z.object({ data: z.array(entityResponseSchema), total: z.number() }), 'Entities with count'),
+    200: jsonContent(
+      z.object({ data: z.array(entityResponseSchema), total: z.number() }),
+      'Entities with count',
+    ),
   },
 });
 
 const getEntityRoute = createRoute({
-  method: 'get', path: '/{entityId}', tags: ['Entities'],
+  method: 'get',
+  path: '/{entityId}',
+  tags: ['Entities'],
   summary: 'Get entity with source details',
   request: {
     params: jobIdParam.extend({
@@ -1900,7 +2047,10 @@ const getEntityRoute = createRoute({
     }),
   },
   responses: {
-    200: jsonContent(dataResponse(entityResponseSchema.extend({ sources: z.array(z.record(z.unknown())) })), 'Entity with sources'),
+    200: jsonContent(
+      dataResponse(entityResponseSchema.extend({ sources: z.array(z.record(z.unknown())) })),
+      'Entity with sources',
+    ),
     404: jsonContent(errorResponseSchema, 'Entity not found'),
   },
 });
@@ -1947,7 +2097,12 @@ export function entityRoutes(): OpenAPIHono<AppEnv> {
 ```typescript
 import { OpenAPIHono, createRoute, z } from '@hono/zod-openapi';
 import type { AppEnv } from '../types.js';
-import { actionResponseSchema, errorResponseSchema, listResponse, jsonContent } from '../schemas/responses.js';
+import {
+  actionResponseSchema,
+  errorResponseSchema,
+  listResponse,
+  jsonContent,
+} from '../schemas/responses.js';
 
 const jobIdParam = z.object({
   jobId: z.string().openapi({ param: { name: 'jobId', in: 'path' } }),
@@ -1956,49 +2111,77 @@ const jobIdParam = z.object({
 const listActionsQuery = z.object({
   type: z.string().optional(),
   status: z.enum(['pending_review', 'approved', 'applied', 'rejected', 'rolled_back']).optional(),
-  limit: z.coerce.number().int().min(1).default(50).transform((v) => Math.min(v, 100)),
+  limit: z.coerce
+    .number()
+    .int()
+    .min(1)
+    .default(50)
+    .transform((v) => Math.min(v, 100)),
   offset: z.coerce.number().int().min(0).default(0),
 });
 
 const listRoute = createRoute({
-  method: 'get', path: '/', tags: ['Actions'],
+  method: 'get',
+  path: '/',
+  tags: ['Actions'],
   summary: 'List actions for a job',
   request: { params: jobIdParam, query: listActionsQuery },
   responses: { 200: jsonContent(listResponse(actionResponseSchema), 'List of actions') },
 });
 
 const approveAllRoute = createRoute({
-  method: 'post', path: '/approve-all', tags: ['Actions'],
+  method: 'post',
+  path: '/approve-all',
+  tags: ['Actions'],
   summary: 'Batch approve all pending actions',
   request: {
     params: jobIdParam,
-    body: { content: { 'application/json': { schema: z.object({ reviewedBy: z.string().optional() }) } } },
+    body: {
+      content: { 'application/json': { schema: z.object({ reviewedBy: z.string().optional() }) } },
+    },
   },
   responses: { 200: jsonContent(listResponse(actionResponseSchema), 'Approved actions') },
 });
 
 const approveRoute = createRoute({
-  method: 'post', path: '/{actionId}/approve', tags: ['Actions'],
+  method: 'post',
+  path: '/{actionId}/approve',
+  tags: ['Actions'],
   summary: 'Approve a single action',
   request: {
     params: jobIdParam.extend({
       actionId: z.string().openapi({ param: { name: 'actionId', in: 'path' } }),
     }),
-    body: { content: { 'application/json': { schema: z.object({ reviewedBy: z.string().optional() }) } } },
+    body: {
+      content: { 'application/json': { schema: z.object({ reviewedBy: z.string().optional() }) } },
+    },
   },
   responses: { 200: jsonContent(z.object({ data: actionResponseSchema }), 'Approved action') },
 });
 
 const rejectRoute = createRoute({
-  method: 'post', path: '/{actionId}/reject', tags: ['Actions'],
+  method: 'post',
+  path: '/{actionId}/reject',
+  tags: ['Actions'],
   summary: 'Reject an action',
   request: {
     params: jobIdParam.extend({
       actionId: z.string().openapi({ param: { name: 'actionId', in: 'path' } }),
     }),
-    body: { content: { 'application/json': { schema: z.object({ reviewedBy: z.string().optional(), reason: z.string().optional() }) } } },
+    body: {
+      content: {
+        'application/json': {
+          schema: z.object({ reviewedBy: z.string().optional(), reason: z.string().optional() }),
+        },
+      },
+    },
   },
-  responses: { 200: jsonContent(z.object({ data: z.object({ id: z.string(), status: z.string() }) }), 'Rejected') },
+  responses: {
+    200: jsonContent(
+      z.object({ data: z.object({ id: z.string(), status: z.string() }) }),
+      'Rejected',
+    ),
+  },
 });
 
 export function actionRoutes(): OpenAPIHono<AppEnv> {
@@ -2011,7 +2194,10 @@ export function actionRoutes(): OpenAPIHono<AppEnv> {
     const deps = c.get('deps');
 
     const actions = await deps.actionRepo.findByJob(jobId, tenantId, {
-      type: query.type, status: query.status, limit: query.limit, offset: query.offset,
+      type: query.type,
+      status: query.status,
+      limit: query.limit,
+      offset: query.offset,
     });
     return c.json({ data: actions });
   });
@@ -2047,7 +2233,12 @@ export function actionRoutes(): OpenAPIHono<AppEnv> {
       return c.json({ data: action });
     }
 
-    const action = await deps.actionRepo.updateStatus(actionId, tenantId, 'approved', body?.reviewedBy);
+    const action = await deps.actionRepo.updateStatus(
+      actionId,
+      tenantId,
+      'approved',
+      body?.reviewedBy,
+    );
     return c.json({ data: action });
   });
 
@@ -2062,7 +2253,12 @@ export function actionRoutes(): OpenAPIHono<AppEnv> {
       return c.json({ data: { id: actionId, status: 'rejected' } });
     }
 
-    const action = await deps.actionRepo.updateStatus(actionId, tenantId, 'rejected', body?.reviewedBy);
+    const action = await deps.actionRepo.updateStatus(
+      actionId,
+      tenantId,
+      'rejected',
+      body?.reviewedBy,
+    );
     return c.json({ data: action });
   });
 
@@ -2076,7 +2272,12 @@ export function actionRoutes(): OpenAPIHono<AppEnv> {
 import { OpenAPIHono, createRoute, z } from '@hono/zod-openapi';
 import type { AppEnv } from '../types.js';
 import { exportRequestSchema } from '../schemas/export-request.js';
-import { exportResponseSchema, errorResponseSchema, dataResponse, jsonContent } from '../schemas/responses.js';
+import {
+  exportResponseSchema,
+  errorResponseSchema,
+  dataResponse,
+  jsonContent,
+} from '../schemas/responses.js';
 import { NotFoundError, ConflictError } from '../middleware/error-handler.js';
 import { generateDocumentation } from '@spatula/core';
 import type { SchemaDefinition } from '@spatula/core';
@@ -2087,7 +2288,9 @@ const jobIdParam = z.object({
 });
 
 const triggerExportRoute = createRoute({
-  method: 'post', path: '/export', tags: ['Exports'],
+  method: 'post',
+  path: '/export',
+  tags: ['Exports'],
   summary: 'Trigger data export',
   request: {
     params: jobIdParam,
@@ -2097,7 +2300,9 @@ const triggerExportRoute = createRoute({
 });
 
 const getExportRoute = createRoute({
-  method: 'get', path: '/export/{exportId}', tags: ['Exports'],
+  method: 'get',
+  path: '/export/{exportId}',
+  tags: ['Exports'],
   summary: 'Check export status',
   request: {
     params: jobIdParam.extend({
@@ -2111,7 +2316,9 @@ const getExportRoute = createRoute({
 });
 
 const downloadExportRoute = createRoute({
-  method: 'get', path: '/export/{exportId}/download', tags: ['Exports'],
+  method: 'get',
+  path: '/export/{exportId}/download',
+  tags: ['Exports'],
   summary: 'Download export file',
   request: {
     params: jobIdParam.extend({
@@ -2119,14 +2326,19 @@ const downloadExportRoute = createRoute({
     }),
   },
   responses: {
-    200: { description: 'File download', content: { 'application/octet-stream': { schema: z.string() } } },
+    200: {
+      description: 'File download',
+      content: { 'application/octet-stream': { schema: z.string() } },
+    },
     404: jsonContent(errorResponseSchema, 'Export not found'),
     409: jsonContent(errorResponseSchema, 'Export not ready'),
   },
 });
 
 const getDocumentationRoute = createRoute({
-  method: 'get', path: '/documentation', tags: ['Exports'],
+  method: 'get',
+  path: '/documentation',
+  tags: ['Exports'],
   summary: 'Get data dictionary / documentation',
   request: { params: jobIdParam },
   responses: {
@@ -2145,13 +2357,23 @@ export function exportRoutes(): OpenAPIHono<AppEnv> {
     const deps = c.get('deps');
 
     const exportRecord = await deps.exportRepo.create({
-      jobId, tenantId, format: body.format, includeProvenance: body.includeProvenance,
+      jobId,
+      tenantId,
+      format: body.format,
+      includeProvenance: body.includeProvenance,
     });
 
-    await deps.exportQueue.add('export', {
-      exportId: exportRecord.id, jobId, tenantId,
-      format: body.format, includeProvenance: body.includeProvenance,
-    }, { attempts: 1, removeOnComplete: true, removeOnFail: true });
+    await deps.exportQueue.add(
+      'export',
+      {
+        exportId: exportRecord.id,
+        jobId,
+        tenantId,
+        format: body.format,
+        includeProvenance: body.includeProvenance,
+      },
+      { attempts: 1, removeOnComplete: true, removeOnFail: true },
+    );
 
     return c.json({ data: exportRecord }, 202);
   });
@@ -2222,11 +2444,18 @@ export function exportRoutes(): OpenAPIHono<AppEnv> {
 import { OpenAPIHono, createRoute, z } from '@hono/zod-openapi';
 import type { AppEnv } from '../types.js';
 import { createTenantSchema, updateTenantSchema } from '../schemas/tenant.js';
-import { tenantResponseSchema, errorResponseSchema, dataResponse, jsonContent } from '../schemas/responses.js';
+import {
+  tenantResponseSchema,
+  errorResponseSchema,
+  dataResponse,
+  jsonContent,
+} from '../schemas/responses.js';
 import { NotFoundError } from '../middleware/error-handler.js';
 
 const createTenantRoute = createRoute({
-  method: 'post', path: '/', tags: ['Tenants'],
+  method: 'post',
+  path: '/',
+  tags: ['Tenants'],
   summary: 'Create a new tenant',
   request: {
     body: { content: { 'application/json': { schema: createTenantSchema } }, required: true },
@@ -2238,7 +2467,9 @@ const createTenantRoute = createRoute({
 });
 
 const getTenantRoute = createRoute({
-  method: 'get', path: '/{id}', tags: ['Tenants'],
+  method: 'get',
+  path: '/{id}',
+  tags: ['Tenants'],
   summary: 'Get tenant by ID',
   request: {
     params: z.object({
@@ -2252,7 +2483,9 @@ const getTenantRoute = createRoute({
 });
 
 const updateTenantRoute = createRoute({
-  method: 'patch', path: '/{id}', tags: ['Tenants'],
+  method: 'patch',
+  path: '/{id}',
+  tags: ['Tenants'],
   summary: 'Update tenant name or config',
   request: {
     params: z.object({

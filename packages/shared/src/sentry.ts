@@ -19,7 +19,8 @@ export function initSentry(config?: SentryConfig): void {
   Sentry.init({
     dsn,
     environment: config?.environment ?? process.env.NODE_ENV ?? 'development',
-    tracesSampleRate: config?.tracesSampleRate ?? parseFloat(process.env.SENTRY_TRACES_SAMPLE_RATE ?? '0.1'),
+    tracesSampleRate:
+      config?.tracesSampleRate ?? parseFloat(process.env.SENTRY_TRACES_SAMPLE_RATE ?? '0.1'),
   });
   logger.info('Sentry initialized');
 }

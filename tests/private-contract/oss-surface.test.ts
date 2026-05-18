@@ -26,12 +26,7 @@ import * as api from '../../apps/api/src/app.js';
 
 // Per CONTEXT.md "Specifics" — destructure under realistic names that mimic
 // what saas-side code would actually do.
-const {
-  processCrawlTask,
-  processSchemaEvolution,
-  processReconciliation,
-  processExport,
-} = core;
+const { processCrawlTask, processSchemaEvolution, processReconciliation, processExport } = core;
 
 const {
   createDatabase,
@@ -141,7 +136,9 @@ describe('does not export any billing/stripe symbol from any package', () => {
   const FORBIDDEN = /stripe|billing|quotaEnforcer|usageRecord|metering/i;
 
   function findForbidden(label: string, mod: Record<string, unknown>): string[] {
-    return Object.keys(mod).filter((k) => FORBIDDEN.test(k)).map((k) => `${label}.${k}`);
+    return Object.keys(mod)
+      .filter((k) => FORBIDDEN.test(k))
+      .map((k) => `${label}.${k}`);
   }
 
   it('@spatula/core has no billing/stripe exports', () => {

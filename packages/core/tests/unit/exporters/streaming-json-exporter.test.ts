@@ -21,7 +21,10 @@ describe('StreamingJsonExporter', () => {
 
   it('produces valid JSON array from multiple batches', async () => {
     const batches = [
-      [{ id: '1', mergedData: { name: 'A' } }, { id: '2', mergedData: { name: 'B' } }],
+      [
+        { id: '1', mergedData: { name: 'A' } },
+        { id: '2', mergedData: { name: 'B' } },
+      ],
       [{ id: '3', mergedData: { name: 'C' } }],
     ];
     const stream = exporter.export(makeEntityBatches(batches));
@@ -38,7 +41,9 @@ describe('StreamingJsonExporter', () => {
   });
 
   it('produces valid JSON for single entity', async () => {
-    const stream = exporter.export(makeEntityBatches([[{ id: '1', mergedData: { name: 'Solo' } }]]));
+    const stream = exporter.export(
+      makeEntityBatches([[{ id: '1', mergedData: { name: 'Solo' } }]]),
+    );
     const result = await collectStream(stream);
     expect(JSON.parse(result)).toHaveLength(1);
   });

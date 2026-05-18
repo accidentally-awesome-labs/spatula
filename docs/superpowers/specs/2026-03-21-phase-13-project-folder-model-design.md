@@ -46,14 +46,14 @@ Introduce a project-folder model inspired by git and npm:
 
 The `@spatula/core` engine is shared between local and server modes. The same crawlers, extractors, classifiers, schema evolvers, reconcilers, and exporters run in both environments. Only the orchestration layer differs:
 
-| | Local Mode | Server Mode |
-|---|---|---|
-| Database | SQLite (single file) | PostgreSQL |
-| Orchestration | In-process pipeline | BullMQ + Redis |
-| Concurrency | Semaphore (in-memory) | Worker processes |
-| State location | `.spatula/project.db` | Postgres tables |
-| Auth | None | API keys / JWT |
-| Multi-tenancy | No (single project) | Yes |
+|                | Local Mode            | Server Mode      |
+| -------------- | --------------------- | ---------------- |
+| Database       | SQLite (single file)  | PostgreSQL       |
+| Orchestration  | In-process pipeline   | BullMQ + Redis   |
+| Concurrency    | Semaphore (in-memory) | Worker processes |
+| State location | `.spatula/project.db` | Postgres tables  |
+| Auth           | None                  | API keys / JWT   |
+| Multi-tenancy  | No (single project)   | Yes              |
 
 ### 1.4 Design Principles
 
@@ -74,18 +74,18 @@ Created once via `spatula init --global` or automatically during first `spatula 
 The global config includes a `version` field for forward compatibility. When a new Spatula version requires new config keys, `spatula setup` detects the version mismatch and prompts the user to update. Unknown keys are preserved (not stripped) to support downgrade scenarios.
 
 ```yaml
-version: 1                              # config schema version
+version: 1 # config schema version
 
 # Credentials
 openrouterApiKey: sk_or_abc123...
-firecrawlApiKey: fc_...                  # optional
+firecrawlApiKey: fc_... # optional
 
 # Preferences (defaults for all projects)
 llm:
-  provider: ollama                       # or openrouter
+  provider: ollama # or openrouter
   model: llama3.2:8b
 
-crawler: playwright                      # or firecrawl
+crawler: playwright # or firecrawl
 politeness:
   respectRobotsTxt: true
   delayMs: 1000
@@ -136,11 +136,11 @@ The field shorthand `product_name: string` expands to `{ field: product_name, ty
 
 ```yaml
 fields:
-  - product_name: string                 # shorthand: field_name: type
-  - field: price                         # expanded form
+  - product_name: string # shorthand: field_name: type
+  - field: price # expanded form
     type: currency
     required: true
-    selector: ".price-current"
+    selector: '.price-current'
 ```
 
 The expanded form uses `field` (not `name`) as the key to avoid confusion: `field` is the field name being defined, `type` is its data type. The shorthand `price: currency` is syntactic sugar for `{ field: price, type: currency }`.
@@ -160,7 +160,7 @@ fields:
   - field: price
     type: currency
     required: true
-    selector: ".price-current"
+    selector: '.price-current'
   - description: string
   - availability: string
 
@@ -208,24 +208,24 @@ notify:
 
 User-friendly YAML names map to internal `JobConfig` fields at parse time:
 
-| YAML (user-facing) | JobConfig (internal) |
-|--------------------|----------------------|
-| `seeds` | `seedUrls` |
-| `depth` | `crawl.maxDepth` |
-| `limit` | `crawl.maxPages` |
-| `crawler` | `crawl.crawlerType` |
-| `fields` | `schema.userFields` |
-| `safety` | `safetyPreset` |
-| `crawl.concurrency` | `crawl.concurrency` |
-| `crawl.proxy` | `crawl.proxy` |
-| `crawl.cookies` | `crawl.cookies` |
-| `schema.mode` | `schema.mode` |
-| `schema.evolution.*` | `schema.evolutionConfig.*` |
-| `llm.model` | `llm.primaryModel` |
-| `llm.overrides` | `llm.modelOverrides` |
-| `reconciliation.strategy` | `reconciliation.matchStrategy` |
-| `reconciliation.conflictResolution` | `reconciliation.conflictResolution` |
-| `reconciliation.fuzzyThreshold` | `reconciliation.fuzzyMatchThreshold` |
+| YAML (user-facing)                  | JobConfig (internal)                 |
+| ----------------------------------- | ------------------------------------ |
+| `seeds`                             | `seedUrls`                           |
+| `depth`                             | `crawl.maxDepth`                     |
+| `limit`                             | `crawl.maxPages`                     |
+| `crawler`                           | `crawl.crawlerType`                  |
+| `fields`                            | `schema.userFields`                  |
+| `safety`                            | `safetyPreset`                       |
+| `crawl.concurrency`                 | `crawl.concurrency`                  |
+| `crawl.proxy`                       | `crawl.proxy`                        |
+| `crawl.cookies`                     | `crawl.cookies`                      |
+| `schema.mode`                       | `schema.mode`                        |
+| `schema.evolution.*`                | `schema.evolutionConfig.*`           |
+| `llm.model`                         | `llm.primaryModel`                   |
+| `llm.overrides`                     | `llm.modelOverrides`                 |
+| `reconciliation.strategy`           | `reconciliation.matchStrategy`       |
+| `reconciliation.conflictResolution` | `reconciliation.conflictResolution`  |
+| `reconciliation.fuzzyThreshold`     | `reconciliation.fuzzyMatchThreshold` |
 
 ### 2.4 Secrets Strategy
 
@@ -394,6 +394,7 @@ $ spatula init
 Requires a configured LLM provider. If no LLM is configured, falls back to `spatula init` wizard with a message: `Conversational mode requires an LLM. Starting setup wizard instead.`
 
 **When to use which:**
+
 - `spatula init` -- recommended default. Works without AI, step-by-step guided, always available. The setup wizard completion screen suggests this as the primary path.
 - `spatula new` -- for users who prefer natural language. Best when the user isn't sure what fields they need and wants the LLM to explore the target site with them.
 
@@ -485,7 +486,7 @@ export async function processCrawlTask(
     pageRepo: PageRepository;
     extractionRepo: ExtractionRepository;
     taskRepo: CrawlTaskRepository;
-    contentStore: ContentStore;  // PgContentStore or local file store
+    contentStore: ContentStore; // PgContentStore or local file store
   },
   config: CrawlConfig,
 ): Promise<CrawlTaskResult> {
@@ -495,6 +496,7 @@ export async function processCrawlTask(
 ```
 
 After refactoring:
+
 - **BullMQ workers** become thin wrappers: parse job data, call orchestrator, update job status
 - **LocalPipelineRunner** calls the same orchestrators directly in its crawl loop
 - **Zero business logic duplication**
@@ -537,7 +539,7 @@ interface DataSource {
   // Exports
   createExport(options: ExportOptions): Promise<ExportRecord>;
   getExport(id: string): Promise<ExportRecord>;
-  downloadExport(id: string): Promise<string>;  // file path or content
+  downloadExport(id: string): Promise<string>; // file path or content
 
   // Documentation
   getDocumentation(): Promise<Documentation>;
@@ -573,7 +575,7 @@ interface PipelineEvents {
   'entity:created': (entity: Entity) => void;
   'schema:evolved': (schema: SchemaDefinition) => void;
   'action:pending': (action: Action) => void;
-  'progress': (stats: RunStats) => void;
+  progress: (stats: RunStats) => void;
 }
 ```
 
@@ -791,15 +793,15 @@ The local SQLite schema mirrors the 9 core Postgres tables (minus `tenant_id`) a
 
 ### 5.2 Type Adaptations
 
-| Postgres Type | SQLite Adaptation |
-|---------------|-------------------|
+| Postgres Type                    | SQLite Adaptation                                              |
+| -------------------------------- | -------------------------------------------------------------- |
 | `UUID DEFAULT gen_random_uuid()` | `TEXT PRIMARY KEY` (generated via `crypto.randomUUID()` in JS) |
-| `JSONB` | `TEXT` (JSON serialized, parsed in application layer) |
-| Custom ENUMs (8 types) | `TEXT` with `CHECK` constraints |
-| `text[]` (array) | `TEXT` (JSON-encoded array) |
-| `bytea` | `BLOB` |
-| `TIMESTAMP WITH TIME ZONE` | `TEXT` (ISO 8601 format) |
-| GIN index | Standard B-tree index |
+| `JSONB`                          | `TEXT` (JSON serialized, parsed in application layer)          |
+| Custom ENUMs (8 types)           | `TEXT` with `CHECK` constraints                                |
+| `text[]` (array)                 | `TEXT` (JSON-encoded array)                                    |
+| `bytea`                          | `BLOB`                                                         |
+| `TIMESTAMP WITH TIME ZONE`       | `TEXT` (ISO 8601 format)                                       |
+| GIN index                        | Standard B-tree index                                          |
 
 ### 5.3 Tables Kept (Adapted from Postgres)
 
@@ -808,10 +810,12 @@ All tables drop `tenant_id`. The `job_id` column is retained and always set to a
 **Important:** The SQLite DDL below is illustrative. The authoritative schemas are generated by the codegen script (section 5.10) from the Postgres Drizzle definitions. The codegen ensures exact column parity (minus `tenant_id`). The examples show the shape and local-only extensions.
 
 **Local-only extensions** added by codegen to specific tables (not in Postgres):
+
 - `pages`: `content_path TEXT` (path to HTML file on disk), `needs_reextraction INTEGER DEFAULT 0`, `reextraction_reason TEXT`
 - `crawl_tasks`: `priority_score REAL DEFAULT 0.5` (numeric relevance score for priority queue ordering), `attempts INTEGER DEFAULT 0`, `error_message TEXT`
 
 **Enum value mapping:** SQLite CHECK constraints use the exact same values as the Postgres enums defined in `packages/db/src/schema/enums.ts`:
+
 - `crawl_task_status`: `pending`, `in_progress`, `completed`, `failed`, `skipped`
 - `task_priority`: `critical`, `high`, `medium`, `low`
 - `page_classification`: `product`, `category`, `listing`, `article`, `navigation`, `other`
@@ -977,16 +981,16 @@ CREATE TABLE source_trust (
 
 ### 5.4 Tables Dropped (Not Needed Locally)
 
-| Table | Reason |
-|-------|--------|
-| `tenants` | Single user, single project |
-| `jobs` | Replaced by `runs` table |
-| `content_store` | Page content stored as files on disk |
-| `api_keys` | No auth locally |
-| `audit_log` | No audit locally |
-| `dead_letter_queue` | No queue system locally |
-| `usage_records` | Billing only |
-| `user_tenants` | Hosted only |
+| Table               | Reason                               |
+| ------------------- | ------------------------------------ |
+| `tenants`           | Single user, single project          |
+| `jobs`              | Replaced by `runs` table             |
+| `content_store`     | Page content stored as files on disk |
+| `api_keys`          | No auth locally                      |
+| `audit_log`         | No audit locally                     |
+| `dead_letter_queue` | No queue system locally              |
+| `usage_records`     | Billing only                         |
+| `user_tenants`      | Hosted only                          |
 
 ### 5.5 Tables Added (Local-Specific)
 
@@ -1060,6 +1064,7 @@ Used for: `project_id` (synthetic UUID), `schema_version` (DB schema version for
 ### 5.6 Synthetic Project ID and Tenant ID
 
 On `spatula init`, two stable UUIDs are generated and stored in `project_meta`:
+
 - `project_id` -- used as the `job_id` value in all local tables
 - `synthetic_tenant_id` -- used to satisfy `JobConfig.tenantId` (required by Zod validation)
 
@@ -1106,11 +1111,13 @@ Each SQLite repository implements the same interface as its Postgres counterpart
 
 ```typescript
 class SqliteEntityRepository implements EntityRepository {
-  constructor(private db: SqliteDatabase, private projectId: string) {}
+  constructor(
+    private db: SqliteDatabase,
+    private projectId: string,
+  ) {}
 
   async findByJob(jobId: string, tenantId?: string): Promise<Entity[]> {
-    return this.db.select().from(entities)
-      .where(eq(entities.jobId, this.projectId));
+    return this.db.select().from(entities).where(eq(entities.jobId, this.projectId));
   }
 }
 ```
@@ -1277,29 +1284,29 @@ interface ConfigDiff {
 
 ### 6.4 Actions Derived from Changes
 
-| Change | Action |
-|--------|--------|
-| Seeds added | Enqueue as new crawl tasks at depth 0 |
-| Seeds removed | No action (already-crawled data stays) |
-| Fields added | Flag all completed pages for re-extraction |
-| Fields removed | No action (drop from future extractions, keep historical data) |
-| Field type changed | Flag pages for re-extraction |
-| Field selector changed | Flag pages for re-extraction |
-| maxDepth increased | Re-evaluate links from pages at old max depth, enqueue at new depths |
-| maxDepth decreased | No action on existing data. Entities from deeper pages remain in DB and appear in exports. The diff summary notes this: "Depth reduced to 2. 143 entities from depth 3-4 will remain in results. Use `spatula reset --keep-exports` for a clean re-crawl." |
-| maxPages changed | Applied to the budget counter going forward |
-| concurrency changed | Applied immediately to semaphore |
-| crawlerType changed | Applied to new tasks only |
-| Proxy/cookies added or changed | Retry all `failed` crawl tasks |
-| Proxy/cookies removed | No action |
-| robots.txt toggled OFF | Re-enqueue all tasks skipped for robots.txt |
-| robots.txt toggled ON | No action (future crawls check robots.txt) |
-| Schema mode fixed -> hybrid/discovery | Enable evolution going forward |
-| Schema mode hybrid/discovery -> fixed | Freeze current schema, disable evolution |
-| Reconciliation strategy changed | Force full re-reconciliation regardless of entity count |
-| LLM model changed | Applied to new LLM calls only (no re-extraction) |
-| Safety preset changed | Applied immediately |
-| Config section removed | Revert to built-in defaults |
+| Change                                | Action                                                                                                                                                                                                                                                     |
+| ------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Seeds added                           | Enqueue as new crawl tasks at depth 0                                                                                                                                                                                                                      |
+| Seeds removed                         | No action (already-crawled data stays)                                                                                                                                                                                                                     |
+| Fields added                          | Flag all completed pages for re-extraction                                                                                                                                                                                                                 |
+| Fields removed                        | No action (drop from future extractions, keep historical data)                                                                                                                                                                                             |
+| Field type changed                    | Flag pages for re-extraction                                                                                                                                                                                                                               |
+| Field selector changed                | Flag pages for re-extraction                                                                                                                                                                                                                               |
+| maxDepth increased                    | Re-evaluate links from pages at old max depth, enqueue at new depths                                                                                                                                                                                       |
+| maxDepth decreased                    | No action on existing data. Entities from deeper pages remain in DB and appear in exports. The diff summary notes this: "Depth reduced to 2. 143 entities from depth 3-4 will remain in results. Use `spatula reset --keep-exports` for a clean re-crawl." |
+| maxPages changed                      | Applied to the budget counter going forward                                                                                                                                                                                                                |
+| concurrency changed                   | Applied immediately to semaphore                                                                                                                                                                                                                           |
+| crawlerType changed                   | Applied to new tasks only                                                                                                                                                                                                                                  |
+| Proxy/cookies added or changed        | Retry all `failed` crawl tasks                                                                                                                                                                                                                             |
+| Proxy/cookies removed                 | No action                                                                                                                                                                                                                                                  |
+| robots.txt toggled OFF                | Re-enqueue all tasks skipped for robots.txt                                                                                                                                                                                                                |
+| robots.txt toggled ON                 | No action (future crawls check robots.txt)                                                                                                                                                                                                                 |
+| Schema mode fixed -> hybrid/discovery | Enable evolution going forward                                                                                                                                                                                                                             |
+| Schema mode hybrid/discovery -> fixed | Freeze current schema, disable evolution                                                                                                                                                                                                                   |
+| Reconciliation strategy changed       | Force full re-reconciliation regardless of entity count                                                                                                                                                                                                    |
+| LLM model changed                     | Applied to new LLM calls only (no re-extraction)                                                                                                                                                                                                           |
+| Safety preset changed                 | Applied immediately                                                                                                                                                                                                                                        |
+| Config section removed                | Revert to built-in defaults                                                                                                                                                                                                                                |
 
 ### 6.5 Field Rename Detection
 
@@ -1318,6 +1325,7 @@ When a field is removed and a field is added in the same diff with the same type
 ### 6.6 URL Normalization
 
 Before comparing seeds, normalize by:
+
 - Removing trailing slashes
 - Lowercasing the hostname
 - Sorting query parameters
@@ -1360,64 +1368,65 @@ On first run, no diff is shown. On resume with no config changes, no diff is sho
 
 ### 7.1 Project Lifecycle
 
-| Command | Description | Requires project? |
-|---------|-------------|-------------------|
-| `spatula init [url]` | Setup wizard (global + project) | No -- creates one |
-| `spatula new` | Conversational mode (LLM-guided) | No -- creates one |
-| `spatula run` | Start/resume crawling | Yes |
-| `spatula status` | Show project state, run history, pending work | Yes |
-| `spatula reset` | Clear `.spatula/` with confirmation. Flags: `--keep-exports` (preserve export files), `--keep-entities` (preserve entities + extractions + entity_sources but clear crawl tasks + pages), `--keep-remote` (preserve pulled remote data, clear local crawl data). Flags can be combined. | Yes |
+| Command              | Description                                                                                                                                                                                                                                                                             | Requires project? |
+| -------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------- |
+| `spatula init [url]` | Setup wizard (global + project)                                                                                                                                                                                                                                                         | No -- creates one |
+| `spatula new`        | Conversational mode (LLM-guided)                                                                                                                                                                                                                                                        | No -- creates one |
+| `spatula run`        | Start/resume crawling                                                                                                                                                                                                                                                                   | Yes               |
+| `spatula status`     | Show project state, run history, pending work                                                                                                                                                                                                                                           | Yes               |
+| `spatula reset`      | Clear `.spatula/` with confirmation. Flags: `--keep-exports` (preserve export files), `--keep-entities` (preserve entities + extractions + entity_sources but clear crawl tasks + pages), `--keep-remote` (preserve pulled remote data, clear local crawl data). Flags can be combined. | Yes               |
 
 ### 7.2 Data Interaction
 
-| Command | Description | Requires project? |
-|---------|-------------|-------------------|
-| `spatula explore` | Browse/filter/sort entities (TUI) | Yes |
-| `spatula export [--format]` | Export results to file | Yes |
-| `spatula review` | Approve/reject pending schema actions | Yes |
-| `spatula schema` | View current schema (fields, versions, evolution history) | Yes |
-| `spatula logs [--run id]` | View run logs, defaults to latest | Yes |
-| `spatula test <url>` | Single-page test extraction (no DB needed). Outside a project with no LLM configured: falls back to static extraction with auto-detected CSS selectors and prints a hint to configure an LLM for better results. | No (uses project schema if inside one) |
-| `spatula estimate` | Cost estimation | Yes (reads config) |
+| Command                     | Description                                                                                                                                                                                                      | Requires project?                      |
+| --------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------- |
+| `spatula explore`           | Browse/filter/sort entities (TUI)                                                                                                                                                                                | Yes                                    |
+| `spatula export [--format]` | Export results to file                                                                                                                                                                                           | Yes                                    |
+| `spatula review`            | Approve/reject pending schema actions                                                                                                                                                                            | Yes                                    |
+| `spatula schema`            | View current schema (fields, versions, evolution history)                                                                                                                                                        | Yes                                    |
+| `spatula logs [--run id]`   | View run logs, defaults to latest                                                                                                                                                                                | Yes                                    |
+| `spatula test <url>`        | Single-page test extraction (no DB needed). Outside a project with no LLM configured: falls back to static extraction with auto-detected CSS selectors and prints a hint to configure an LLM for better results. | No (uses project schema if inside one) |
+| `spatula estimate`          | Cost estimation                                                                                                                                                                                                  | Yes (reads config)                     |
 
 ### 7.3 Project Modification
 
-| Command | Description |
-|---------|-------------|
+| Command                      | Description                                                                                 |
+| ---------------------------- | ------------------------------------------------------------------------------------------- |
 | `spatula add <url> [url...]` | Add seed URLs (deduplicated against existing seeds and crawl history), enqueued on next run |
-| `spatula config` | Open `spatula.yaml` in `$EDITOR` |
+| `spatula config`             | Open `spatula.yaml` in `$EDITOR`                                                            |
 
 ### 7.4 Remote Operations
 
 > **Status: Deferred to Wave 5** — Remote operations will be implemented in Phase 13 Step 6.
 
-| Command | Description |
-|---------|-------------|
-| `spatula remote add <name> [url]` | Configure a remote (interactive if url omitted) |
-| `spatula remote list` | List configured remotes with linked job status |
-| `spatula remote remove <name>` | Remove a remote configuration |
-| `spatula remote status <name>` | Show linked job status on that remote |
-| `spatula remote jobs <name>` | List all jobs on a remote |
-| `spatula remote start <name>` | Start the linked job |
-| `spatula remote pause <name>` | Pause the linked job |
-| `spatula remote resume <name>` | Resume the linked job |
-| `spatula remote cancel <name>` | Cancel the linked job |
-| `spatula remote watch <name>` | Live dashboard of remote job (WebSocket) |
-| `spatula remote link <name> <jobId>` | Manually link to an existing remote job |
-| `spatula remote unlink <name>` | Remove the link (keeps remote job running) |
-| `spatula push [remote]` | Push config to hosted, create + optionally start job |
-| `spatula pull [remote]` | Pull results from hosted into local project |
+| Command                              | Description                                          |
+| ------------------------------------ | ---------------------------------------------------- |
+| `spatula remote add <name> [url]`    | Configure a remote (interactive if url omitted)      |
+| `spatula remote list`                | List configured remotes with linked job status       |
+| `spatula remote remove <name>`       | Remove a remote configuration                        |
+| `spatula remote status <name>`       | Show linked job status on that remote                |
+| `spatula remote jobs <name>`         | List all jobs on a remote                            |
+| `spatula remote start <name>`        | Start the linked job                                 |
+| `spatula remote pause <name>`        | Pause the linked job                                 |
+| `spatula remote resume <name>`       | Resume the linked job                                |
+| `spatula remote cancel <name>`       | Cancel the linked job                                |
+| `spatula remote watch <name>`        | Live dashboard of remote job (WebSocket)             |
+| `spatula remote link <name> <jobId>` | Manually link to an existing remote job              |
+| `spatula remote unlink <name>`       | Remove the link (keeps remote job running)           |
+| `spatula push [remote]`              | Push config to hosted, create + optionally start job |
+| `spatula pull [remote]`              | Pull results from hosted into local project          |
 
 ### 7.5 System
 
-| Command | Description | Requires project? |
-|---------|-------------|-------------------|
-| `spatula setup` | Reconfigure global settings (interactive) | No |
+| Command          | Description                                     | Requires project?                   |
+| ---------------- | ----------------------------------------------- | ----------------------------------- |
+| `spatula setup`  | Reconfigure global settings (interactive)       | No                                  |
 | `spatula doctor` | System health checks (context-aware, see below) | No (extra checks if inside project) |
 
 **`spatula doctor` checks:**
 
 Global (always):
+
 - `~/.spatula/config.yaml` exists and is valid (schema version check)
 - LLM provider reachable (Ollama: `GET /api/tags`, OpenRouter: key validation)
 - Playwright browsers installed (if crawler=playwright)
@@ -1425,6 +1434,7 @@ Global (always):
 - Docker available (optional, for self-hosted server mode)
 
 Project-level (when inside a project):
+
 - `spatula.yaml` is valid (parses against config schema)
 - `.spatula/project.db` integrity (`PRAGMA integrity_check`)
 - SQLite WAL mode active
@@ -1446,10 +1456,10 @@ Commands detect the project root by walking up directories looking for `spatula.
 
 Existing server-centric commands are subsumed:
 
-| Old Command | New Equivalent |
-|-------------|---------------|
-| `spatula list` | `spatula remote jobs <name>` |
-| `spatula status <jobId>` | `spatula remote status <name>` |
+| Old Command                      | New Equivalent                                |
+| -------------------------------- | --------------------------------------------- |
+| `spatula list`                   | `spatula remote jobs <name>`                  |
+| `spatula status <jobId>`         | `spatula remote status <name>`                |
 | `spatula new` (API job creation) | `spatula new` (writes `spatula.yaml` instead) |
 
 ---
@@ -1555,15 +1565,15 @@ $ spatula remote list
 
 ### 9.1 What Gets Pulled
 
-| Data | Pulled? | Notes |
-|------|---------|-------|
-| Entities (data, provenance, quality) | Yes | Core output |
-| Schema (current + history) | Yes | Needed for explore/export |
-| LLM usage | Yes | Cost visibility |
-| Extractions | Optional | `--include-extractions` flag |
-| Actions history | Optional | `--include-actions` flag |
-| Pages / raw HTML | No | Too large, not needed locally |
-| Crawl tasks | No | Execution state only |
+| Data                                 | Pulled?  | Notes                         |
+| ------------------------------------ | -------- | ----------------------------- |
+| Entities (data, provenance, quality) | Yes      | Core output                   |
+| Schema (current + history)           | Yes      | Needed for explore/export     |
+| LLM usage                            | Yes      | Cost visibility               |
+| Extractions                          | Optional | `--include-extractions` flag  |
+| Actions history                      | Optional | `--include-actions` flag      |
+| Pages / raw HTML                     | No       | Too large, not needed locally |
+| Crawl tasks                          | No       | Execution state only          |
 
 ### 9.2 Pull Flow
 
@@ -1767,6 +1777,7 @@ This spec is designed to be implemented in 6 discrete steps, each independently 
 **Goal:** Extract business logic from BullMQ workers into pure, reusable orchestrator functions in `@spatula/core`. This is a refactoring of existing code with zero behavior change.
 
 **Scope:**
+
 - Create `packages/core/src/pipeline/crawl-orchestrator.ts` (from `crawl-worker.ts`)
 - Create `packages/core/src/pipeline/schema-orchestrator.ts` (from `schema-worker.ts`)
 - Create `packages/core/src/pipeline/reconcile-orchestrator.ts` (from `reconciliation-worker.ts`)
@@ -1787,6 +1798,7 @@ This spec is designed to be implemented in 6 discrete steps, each independently 
 **Goal:** Build the local database layer -- SQLite schema, codegen script, repository implementations, and the `ProjectAdapter`.
 
 **Scope:**
+
 - Schema codegen script (`generate-sqlite-schema.ts`)
 - Generated SQLite schemas from Postgres definitions
 - Hand-written local-only tables (`runs`, `llm_usage`, `exports`, `project_meta`)
@@ -1807,6 +1819,7 @@ This spec is designed to be implemented in 6 discrete steps, each independently 
 **Goal:** Build the configuration layer -- `spatula.yaml` parsing, `~/.spatula/config.yaml` loading, config resolution stack, and the config diff engine.
 
 **Scope:**
+
 - YAML parser with field shorthand expansion (`price: currency` -> `{ field: price, type: currency }`)
 - `spatula.yaml` -> `JobConfig` transformation (section 2.3 mapping)
 - Global config loader (`~/.spatula/config.yaml`)
@@ -1828,6 +1841,7 @@ This spec is designed to be implemented in 6 discrete steps, each independently 
 **Goal:** Wire together the orchestrators (Step 1), SQLite layer (Step 2), and config system (Step 3) into the `LocalPipelineRunner`, plus the minimum CLI commands to create and run a project.
 
 **Scope:**
+
 - `LocalPipelineRunner` with full execution flow (section 4.2)
 - In-memory priority queue, semaphore, checkpoint/resume logic
 - Crash recovery, project lockfile
@@ -1852,6 +1866,7 @@ This spec is designed to be implemented in 6 discrete steps, each independently 
 **Goal:** Add the commands for exploring, exporting, reviewing, and modifying project data.
 
 **Scope:**
+
 - `spatula explore` -- Entity explorer TUI backed by `LocalDataSource`
 - `spatula export` -- Local export using export orchestrator (all 5 formats)
 - `spatula review` -- Action review TUI backed by `LocalDataSource`
@@ -1877,6 +1892,7 @@ This spec is designed to be implemented in 6 discrete steps, each independently 
 **Goal:** Add the push/pull bridge between local projects and the hosted offering.
 
 **Scope:**
+
 - `spatula remote add/list/remove` -- Remote configuration
 - `spatula push` -- Config upload, job creation, old job cancellation prompt
 - `spatula pull` -- Results download with cursor pagination, incremental pull, schema conflict resolution, `spatula.yaml` field update
@@ -1920,13 +1936,13 @@ Steps 2 and 3 can be developed in parallel after Step 1 completes. Steps 4-6 are
 
 Phase 13 steps should be executed **in parallel with Phase 12 workstreams**, not sequentially after Phase 12 completes. The two phases touch different layers (Phase 12: server code, Phase 13: local/CLI code) with minimal file overlap.
 
-| Wave | Phase 12 (server layer) | Phase 13 (local layer) |
-|------|------------------------|----------------------|
+| Wave  | Phase 12 (server layer)                                 | Phase 13 (local layer)                      |
+| ----- | ------------------------------------------------------- | ------------------------------------------- |
 | **1** | A: CI/CD, Dockerfiles, shutdown, pooling, orchestrators | Step 1: Extract orchestrators (shared task) |
-| **2** | D + F + J: circuit breaker, robots.txt, Ollama, proxy | Steps 2 + 3: SQLite schema + config system |
-| **3** | B + C + E: auth, observability, performance | Step 4: Pipeline runner + core CLI |
-| **4** | G + H: webhooks, bulk ops, LICENSE, README | Step 5: Data commands |
-| **5** | I: billing, admin, data retention | Step 6: Remote ops (push/pull) |
+| **2** | D + F + J: circuit breaker, robots.txt, Ollama, proxy   | Steps 2 + 3: SQLite schema + config system  |
+| **3** | B + C + E: auth, observability, performance             | Step 4: Pipeline runner + core CLI          |
+| **4** | G + H: webhooks, bulk ops, LICENSE, README              | Step 5: Data commands                       |
+| **5** | I: billing, admin, data retention                       | Step 6: Remote ops (push/pull)              |
 
 **Open-source release targets end of Wave 4** — includes both server mode (Phase 12) and local project-folder mode (Phase 13 Steps 1-5). Wave 5 (hosted platform features + remote ops) follows.
 
@@ -1934,14 +1950,14 @@ Step 1 (orchestrator extraction) may be done as part of Phase 12 Workstream A (s
 
 ### Estimated Scope Per Step
 
-| Step | New Files | Modified Files | Approximate Effort |
-|------|-----------|----------------|-------------------|
-| 1. Extract Orchestrators | 4 | 4 workers | Medium (refactor, high test coverage needed) |
-| 2. SQLite + Repos | ~15 | 0 | Medium-high (12 repos + codegen) |
-| 3. Config System | ~5 | 1 | Medium (parser, resolver, differ) |
-| 4. Pipeline + Core CLI | ~10 | ~8 hooks/components | High (pipeline runner, wizard, progress UI) |
-| 5. Data Commands | ~12 | 0 | Medium (mostly wiring existing components) |
-| 6. Remote Ops | ~15 | 2 | Medium (push/pull/remote subcommands) |
+| Step                     | New Files | Modified Files      | Approximate Effort                           |
+| ------------------------ | --------- | ------------------- | -------------------------------------------- |
+| 1. Extract Orchestrators | 4         | 4 workers           | Medium (refactor, high test coverage needed) |
+| 2. SQLite + Repos        | ~15       | 0                   | Medium-high (12 repos + codegen)             |
+| 3. Config System         | ~5        | 1                   | Medium (parser, resolver, differ)            |
+| 4. Pipeline + Core CLI   | ~10       | ~8 hooks/components | High (pipeline runner, wizard, progress UI)  |
+| 5. Data Commands         | ~12       | 0                   | Medium (mostly wiring existing components)   |
+| 6. Remote Ops            | ~15       | 2                   | Medium (push/pull/remote subcommands)        |
 
 ---
 
@@ -1949,16 +1965,16 @@ Step 1 (orchestrator extraction) may be done as part of Phase 12 Workstream A (s
 
 ### 12.1 New Test Categories
 
-| Category | What's Tested | Tool |
-|----------|---------------|------|
-| **SQLite repos** | All SQLite repository implementations against real SQLite | Vitest (in-memory SQLite) |
-| **Schema codegen** | Generated SQLite schemas match Postgres source | Vitest + snapshot tests |
-| **Config parser** | YAML parsing, shorthand expansion, config resolution | Vitest |
-| **Config diff** | Change detection, URL normalization, rename detection | Vitest |
-| **Pipeline runner** | Local execution flow, checkpoint, resume, crash recovery | Vitest + mock crawlers/LLM |
-| **Wizard** | Setup flow, prompt handling, file generation | Vitest + mock inquirer |
-| **Remote ops** | Push/pull/link, cursor resume, schema merge | Vitest + mock API |
-| **CLI commands** | All new commands (init, run, status, etc.) | Vitest + Ink testing |
+| Category            | What's Tested                                             | Tool                       |
+| ------------------- | --------------------------------------------------------- | -------------------------- |
+| **SQLite repos**    | All SQLite repository implementations against real SQLite | Vitest (in-memory SQLite)  |
+| **Schema codegen**  | Generated SQLite schemas match Postgres source            | Vitest + snapshot tests    |
+| **Config parser**   | YAML parsing, shorthand expansion, config resolution      | Vitest                     |
+| **Config diff**     | Change detection, URL normalization, rename detection     | Vitest                     |
+| **Pipeline runner** | Local execution flow, checkpoint, resume, crash recovery  | Vitest + mock crawlers/LLM |
+| **Wizard**          | Setup flow, prompt handling, file generation              | Vitest + mock inquirer     |
+| **Remote ops**      | Push/pull/link, cursor resume, schema merge               | Vitest + mock API          |
+| **CLI commands**    | All new commands (init, run, status, etc.)                | Vitest + Ink testing       |
 
 ### 12.2 Repository Parity Tests
 
@@ -2001,91 +2017,91 @@ CI runs the schema codegen script and fails if generated files differ from commi
 
 ### 13.1 New Package Dependencies
 
-| Package | Version | Purpose |
-|---------|---------|---------|
-| `better-sqlite3` | ^12.x | Already a dependency (SQLite exporter) |
-| `node-notifier` | ^10.x | Desktop notifications |
-| `yaml` | ^2.x | YAML parsing for spatula.yaml |
-| `inquirer` | ^12.x | Interactive wizard prompts |
-| `ora` | ^8.x | Spinner/progress display |
+| Package          | Version | Purpose                                |
+| ---------------- | ------- | -------------------------------------- |
+| `better-sqlite3` | ^12.x   | Already a dependency (SQLite exporter) |
+| `node-notifier`  | ^10.x   | Desktop notifications                  |
+| `yaml`           | ^2.x    | YAML parsing for spatula.yaml          |
+| `inquirer`       | ^12.x   | Interactive wizard prompts             |
+| `ora`            | ^8.x    | Spinner/progress display               |
 
 ### 13.2 Environment Variable Additions
 
-| Variable | Default | Purpose |
-|----------|---------|---------|
-| `SPATULA_PROXY_PASSWORD` | -- | Proxy authentication |
-| `SPATULA_COOKIE_<NAME>` | -- | Cookie values (e.g., `SPATULA_COOKIE_SESSION_ID`) |
-| `SPATULA_REMOTE_<NAME>_API_KEY` | -- | Remote API keys (override global config) |
-| `SPATULA_HOME` | `~/.spatula` | Override global config directory |
+| Variable                        | Default      | Purpose                                           |
+| ------------------------------- | ------------ | ------------------------------------------------- |
+| `SPATULA_PROXY_PASSWORD`        | --           | Proxy authentication                              |
+| `SPATULA_COOKIE_<NAME>`         | --           | Cookie values (e.g., `SPATULA_COOKIE_SESSION_ID`) |
+| `SPATULA_REMOTE_<NAME>_API_KEY` | --           | Remote API keys (override global config)          |
+| `SPATULA_HOME`                  | `~/.spatula` | Override global config directory                  |
 
 ### 13.3 New Files Summary
 
-| Path | Purpose |
-|------|---------|
-| `packages/db/src/schema-sqlite/` | Generated + hand-written SQLite schemas |
-| `packages/db/src/project-db/connection.ts` | SQLite connection with pragmas |
-| `packages/db/src/project-db/adapter.ts` | ProjectAdapter (repo factory) |
-| `packages/db/src/project-db/repositories/` | SQLite repo implementations |
-| `packages/db/scripts/generate-sqlite-schema.ts` | Schema codegen script |
-| `packages/core/src/pipeline/crawl-orchestrator.ts` | Shared crawl logic (dedup, classify, extract, link eval) |
-| `packages/core/src/pipeline/schema-orchestrator.ts` | Shared schema evolution logic |
-| `packages/core/src/pipeline/reconcile-orchestrator.ts` | Shared reconciliation logic |
-| `packages/core/src/pipeline/export-orchestrator.ts` | Shared export logic |
-| `packages/core/src/pipeline/local-pipeline-runner.ts` | In-process execution pipeline |
-| `packages/core/src/pipeline/priority-queue.ts` | In-memory priority queue |
-| `packages/core/src/pipeline/semaphore.ts` | Concurrency limiter |
-| `packages/core/src/pipeline/checkpoint.ts` | Checkpoint/resume logic |
-| `packages/core/src/pipeline/types.ts` | PipelineEvents, DataSource interface |
-| `packages/core/src/config/yaml-parser.ts` | spatula.yaml parser + shorthand expansion |
-| `packages/core/src/config/config-resolver.ts` | Global + project + CLI + env resolution |
-| `packages/core/src/config/config-differ.ts` | Config diff engine |
-| `packages/core/src/config/url-normalizer.ts` | URL normalization for seed comparison |
-| `apps/cli/src/commands/init.ts` | Setup wizard (replaces Phase 12 version) |
-| `apps/cli/src/commands/run.ts` | Local crawl runner |
-| `apps/cli/src/commands/status.ts` | Project status (replaces existing) |
-| `apps/cli/src/commands/explore.ts` | Entity explorer (replaces existing) |
-| `apps/cli/src/commands/review.ts` | Action review |
-| `apps/cli/src/commands/export.ts` | Export command |
-| `apps/cli/src/commands/test.ts` | Single-page test (from Phase 12) |
-| `apps/cli/src/commands/estimate.ts` | Cost estimation (from Phase 12) |
-| `apps/cli/src/commands/add.ts` | Add seed URLs |
-| `apps/cli/src/commands/schema.ts` | View schema |
-| `apps/cli/src/commands/logs.ts` | View run logs |
-| `apps/cli/src/commands/reset.ts` | Clear project state |
-| `apps/cli/src/commands/config.ts` | Open config in editor |
-| `apps/cli/src/commands/setup.ts` | Global reconfiguration |
-| `apps/cli/src/commands/doctor.ts` | System health (replaces Phase 12 version) |
-| `apps/cli/src/commands/push.ts` | Push config to remote |
-| `apps/cli/src/commands/pull.ts` | Pull results from remote |
-| `apps/cli/src/commands/remote/` | Remote subcommands (add, list, remove, status, etc.) |
-| `apps/cli/src/data-source/api-data-source.ts` | DataSource wrapping API client (remote mode) |
-| `apps/cli/src/data-source/local-data-source.ts` | DataSource wrapping SQLite repos (local mode) |
-| `apps/cli/src/progress/compact.tsx` | Compact progress display |
-| `apps/cli/src/progress/dashboard-bridge.tsx` | Bridge local crawl to dashboard TUI |
+| Path                                                   | Purpose                                                  |
+| ------------------------------------------------------ | -------------------------------------------------------- |
+| `packages/db/src/schema-sqlite/`                       | Generated + hand-written SQLite schemas                  |
+| `packages/db/src/project-db/connection.ts`             | SQLite connection with pragmas                           |
+| `packages/db/src/project-db/adapter.ts`                | ProjectAdapter (repo factory)                            |
+| `packages/db/src/project-db/repositories/`             | SQLite repo implementations                              |
+| `packages/db/scripts/generate-sqlite-schema.ts`        | Schema codegen script                                    |
+| `packages/core/src/pipeline/crawl-orchestrator.ts`     | Shared crawl logic (dedup, classify, extract, link eval) |
+| `packages/core/src/pipeline/schema-orchestrator.ts`    | Shared schema evolution logic                            |
+| `packages/core/src/pipeline/reconcile-orchestrator.ts` | Shared reconciliation logic                              |
+| `packages/core/src/pipeline/export-orchestrator.ts`    | Shared export logic                                      |
+| `packages/core/src/pipeline/local-pipeline-runner.ts`  | In-process execution pipeline                            |
+| `packages/core/src/pipeline/priority-queue.ts`         | In-memory priority queue                                 |
+| `packages/core/src/pipeline/semaphore.ts`              | Concurrency limiter                                      |
+| `packages/core/src/pipeline/checkpoint.ts`             | Checkpoint/resume logic                                  |
+| `packages/core/src/pipeline/types.ts`                  | PipelineEvents, DataSource interface                     |
+| `packages/core/src/config/yaml-parser.ts`              | spatula.yaml parser + shorthand expansion                |
+| `packages/core/src/config/config-resolver.ts`          | Global + project + CLI + env resolution                  |
+| `packages/core/src/config/config-differ.ts`            | Config diff engine                                       |
+| `packages/core/src/config/url-normalizer.ts`           | URL normalization for seed comparison                    |
+| `apps/cli/src/commands/init.ts`                        | Setup wizard (replaces Phase 12 version)                 |
+| `apps/cli/src/commands/run.ts`                         | Local crawl runner                                       |
+| `apps/cli/src/commands/status.ts`                      | Project status (replaces existing)                       |
+| `apps/cli/src/commands/explore.ts`                     | Entity explorer (replaces existing)                      |
+| `apps/cli/src/commands/review.ts`                      | Action review                                            |
+| `apps/cli/src/commands/export.ts`                      | Export command                                           |
+| `apps/cli/src/commands/test.ts`                        | Single-page test (from Phase 12)                         |
+| `apps/cli/src/commands/estimate.ts`                    | Cost estimation (from Phase 12)                          |
+| `apps/cli/src/commands/add.ts`                         | Add seed URLs                                            |
+| `apps/cli/src/commands/schema.ts`                      | View schema                                              |
+| `apps/cli/src/commands/logs.ts`                        | View run logs                                            |
+| `apps/cli/src/commands/reset.ts`                       | Clear project state                                      |
+| `apps/cli/src/commands/config.ts`                      | Open config in editor                                    |
+| `apps/cli/src/commands/setup.ts`                       | Global reconfiguration                                   |
+| `apps/cli/src/commands/doctor.ts`                      | System health (replaces Phase 12 version)                |
+| `apps/cli/src/commands/push.ts`                        | Push config to remote                                    |
+| `apps/cli/src/commands/pull.ts`                        | Pull results from remote                                 |
+| `apps/cli/src/commands/remote/`                        | Remote subcommands (add, list, remove, status, etc.)     |
+| `apps/cli/src/data-source/api-data-source.ts`          | DataSource wrapping API client (remote mode)             |
+| `apps/cli/src/data-source/local-data-source.ts`        | DataSource wrapping SQLite repos (local mode)            |
+| `apps/cli/src/progress/compact.tsx`                    | Compact progress display                                 |
+| `apps/cli/src/progress/dashboard-bridge.tsx`           | Bridge local crawl to dashboard TUI                      |
 
 ### 13.4 Modified Files Summary
 
-| Path | Change |
-|------|--------|
-| `apps/cli/src/index.tsx` | New command registration, project detection |
-| `apps/cli/src/App.tsx` | Mode routing for local vs remote dashboard |
-| `apps/cli/src/store/index.ts` | Project-aware store (SQLite-backed vs API-backed) |
-| `apps/cli/src/api/client.ts` | Add push/pull methods |
-| `packages/core/src/interfaces/crawler.ts` | Add proxy + cookies to CrawlOptions |
-| `packages/core/src/crawlers/playwright-crawler.ts` | Proxy and cookie support |
-| `packages/core/src/crawlers/firecrawl-crawler.ts` | Cookie-to-header conversion |
-| `packages/core/src/types/job.ts` | Add proxy + cookies to CrawlConfig |
-| `packages/shared/src/config.ts` | Global config loading from ~/.spatula/ |
-| `packages/queue/src/workers/crawl-worker.ts` | Refactor: extract logic to crawl-orchestrator, become thin wrapper |
-| `packages/queue/src/workers/schema-worker.ts` | Refactor: extract logic to schema-orchestrator |
-| `packages/queue/src/workers/reconciliation-worker.ts` | Refactor: extract logic to reconcile-orchestrator |
-| `packages/queue/src/workers/export-worker.ts` | Refactor: extract logic to export-orchestrator |
-| `apps/cli/src/hooks/useJobPolling.ts` | Accept DataSource instead of ApiClient |
-| `apps/cli/src/hooks/useEntityData.ts` | Accept DataSource instead of ApiClient |
-| `apps/cli/src/hooks/useEntityFilter.ts` | Accept DataSource instead of ApiClient |
-| `apps/cli/src/hooks/useExport.ts` | Accept DataSource instead of ApiClient |
-| `apps/cli/src/hooks/useWebSocket.ts` | Accept DataSource (subscribe method replaces WS) |
-| `.gitignore` | Add `.spatula/` pattern |
+| Path                                                  | Change                                                             |
+| ----------------------------------------------------- | ------------------------------------------------------------------ |
+| `apps/cli/src/index.tsx`                              | New command registration, project detection                        |
+| `apps/cli/src/App.tsx`                                | Mode routing for local vs remote dashboard                         |
+| `apps/cli/src/store/index.ts`                         | Project-aware store (SQLite-backed vs API-backed)                  |
+| `apps/cli/src/api/client.ts`                          | Add push/pull methods                                              |
+| `packages/core/src/interfaces/crawler.ts`             | Add proxy + cookies to CrawlOptions                                |
+| `packages/core/src/crawlers/playwright-crawler.ts`    | Proxy and cookie support                                           |
+| `packages/core/src/crawlers/firecrawl-crawler.ts`     | Cookie-to-header conversion                                        |
+| `packages/core/src/types/job.ts`                      | Add proxy + cookies to CrawlConfig                                 |
+| `packages/shared/src/config.ts`                       | Global config loading from ~/.spatula/                             |
+| `packages/queue/src/workers/crawl-worker.ts`          | Refactor: extract logic to crawl-orchestrator, become thin wrapper |
+| `packages/queue/src/workers/schema-worker.ts`         | Refactor: extract logic to schema-orchestrator                     |
+| `packages/queue/src/workers/reconciliation-worker.ts` | Refactor: extract logic to reconcile-orchestrator                  |
+| `packages/queue/src/workers/export-worker.ts`         | Refactor: extract logic to export-orchestrator                     |
+| `apps/cli/src/hooks/useJobPolling.ts`                 | Accept DataSource instead of ApiClient                             |
+| `apps/cli/src/hooks/useEntityData.ts`                 | Accept DataSource instead of ApiClient                             |
+| `apps/cli/src/hooks/useEntityFilter.ts`               | Accept DataSource instead of ApiClient                             |
+| `apps/cli/src/hooks/useExport.ts`                     | Accept DataSource instead of ApiClient                             |
+| `apps/cli/src/hooks/useWebSocket.ts`                  | Accept DataSource (subscribe method replaces WS)                   |
+| `.gitignore`                                          | Add `.spatula/` pattern                                            |
 
 ### 13.5 Backward Compatibility
 

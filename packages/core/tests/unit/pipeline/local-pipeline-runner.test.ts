@@ -2,10 +2,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { LocalPipelineRunner } from '../../../src/pipeline/local-pipeline-runner.js';
 import type { LocalPipelineConfig } from '../../../src/pipeline/local-pipeline-runner.js';
-import type {
-  CrawlOrchestratorDeps,
-  CrawlTaskResult,
-} from '../../../src/pipeline/types.js';
+import type { CrawlOrchestratorDeps, CrawlTaskResult } from '../../../src/pipeline/types.js';
 
 // ---------------------------------------------------------------------------
 // Mock factory — builds the full LocalPipelineConfig with all repos mocked
@@ -192,7 +189,6 @@ function createMockConfig(overrides?: Partial<LocalPipelineConfig>): LocalPipeli
   };
 }
 
-
 // ---------------------------------------------------------------------------
 // Stub processCrawlTask at the module level
 // ---------------------------------------------------------------------------
@@ -200,7 +196,9 @@ function createMockConfig(overrides?: Partial<LocalPipelineConfig>): LocalPipeli
 // We mock the orchestrator modules to avoid pulling in real dependencies
 vi.mock('../../../src/pipeline/crawl-orchestrator.js', () => ({
   processCrawlTask: vi.fn(),
-  shouldTriggerSchemaEvolution: vi.fn().mockResolvedValue({ trigger: false, extractionIds: [], schemaVersion: 1 }),
+  shouldTriggerSchemaEvolution: vi
+    .fn()
+    .mockResolvedValue({ trigger: false, extractionIds: [], schemaVersion: 1 }),
   isValidCrawlUrl: (url: string) => url.startsWith('http'),
 }));
 
@@ -213,7 +211,9 @@ vi.mock('../../../src/pipeline/reconcile-orchestrator.js', () => ({
 }));
 
 vi.mock('../../../src/pipeline/export-orchestrator.js', () => ({
-  processExport: vi.fn().mockResolvedValue({ entityCount: 5, fileSize: 1024, contentRef: 'export-ref' }),
+  processExport: vi
+    .fn()
+    .mockResolvedValue({ entityCount: 5, fileSize: 1024, contentRef: 'export-ref' }),
 }));
 
 vi.mock('../../../src/config/config-differ.js', () => ({
@@ -259,7 +259,11 @@ describe('LocalPipelineRunner', () => {
     // Re-set mocks cleared by vi.clearAllMocks()
     mockProcessSchemaEvolution.mockResolvedValue({ evolved: false, actionsApplied: 0 });
     mockProcessReconciliation.mockResolvedValue({ entitiesCreated: 5, actionsGenerated: 2 });
-    mockProcessExport.mockResolvedValue({ entityCount: 5, fileSize: 1024, contentRef: 'export-ref' });
+    mockProcessExport.mockResolvedValue({
+      entityCount: 5,
+      fileSize: 1024,
+      contentRef: 'export-ref',
+    });
   });
 
   afterEach(() => {
@@ -278,7 +282,11 @@ describe('LocalPipelineRunner', () => {
     // Set up seed URL task so the runner has something to do
     const taskRepo = cfg.adapter.taskRepo as any;
     taskRepo.getJobStats.mockResolvedValue({
-      pending: 0, inProgress: 0, completed: 0, failed: 0, skipped: 0,
+      pending: 0,
+      inProgress: 0,
+      completed: 0,
+      failed: 0,
+      skipped: 0,
     });
 
     const runner = new LocalPipelineRunner(cfg);
@@ -297,7 +305,11 @@ describe('LocalPipelineRunner', () => {
   it('enqueues seed URLs when no pending tasks exist', async () => {
     const taskRepo = cfg.adapter.taskRepo as any;
     taskRepo.getJobStats.mockResolvedValue({
-      pending: 0, inProgress: 0, completed: 0, failed: 0, skipped: 0,
+      pending: 0,
+      inProgress: 0,
+      completed: 0,
+      failed: 0,
+      skipped: 0,
     });
 
     // After seeding, findPending returns the seed task, then empty
@@ -305,7 +317,16 @@ describe('LocalPipelineRunner', () => {
     taskRepo.findPending.mockImplementation(async () => {
       findPendingCallCount++;
       if (findPendingCallCount === 1) {
-        return [{ id: 'task-seed', url: 'https://example.com', depth: 0, priorityScore: 100, parentTaskId: null, createdAt: new Date().toISOString() }];
+        return [
+          {
+            id: 'task-seed',
+            url: 'https://example.com',
+            depth: 0,
+            priorityScore: 100,
+            parentTaskId: null,
+            createdAt: new Date().toISOString(),
+          },
+        ];
       }
       return [];
     });
@@ -327,14 +348,15 @@ describe('LocalPipelineRunner', () => {
 
     // Has in-progress tasks from a previous crashed run
     taskRepo.getJobStats.mockResolvedValue({
-      pending: 0, inProgress: 2, completed: 5, failed: 0, skipped: 0,
+      pending: 0,
+      inProgress: 2,
+      completed: 5,
+      failed: 0,
+      skipped: 0,
     });
 
     // findByStatus returns the in_progress tasks for recovery
-    taskRepo.findByStatus.mockResolvedValue([
-      { id: 'task-crashed-1' },
-      { id: 'task-crashed-2' },
-    ]);
+    taskRepo.findByStatus.mockResolvedValue([{ id: 'task-crashed-1' }, { id: 'task-crashed-2' }]);
 
     // After recovery, no more pending tasks to process
     taskRepo.findPending.mockResolvedValue([]);
@@ -357,11 +379,24 @@ describe('LocalPipelineRunner', () => {
 
     const taskRepo = cfg.adapter.taskRepo as any;
     taskRepo.getJobStats.mockResolvedValue({
-      pending: 1, inProgress: 0, completed: 0, failed: 0, skipped: 0,
+      pending: 1,
+      inProgress: 0,
+      completed: 0,
+      failed: 0,
+      skipped: 0,
     });
-    taskRepo.findPending.mockResolvedValueOnce([
-      { id: 'task-1', url: 'https://example.com', depth: 0, priorityScore: 100, parentTaskId: null, createdAt: new Date().toISOString() },
-    ]).mockResolvedValue([]);
+    taskRepo.findPending
+      .mockResolvedValueOnce([
+        {
+          id: 'task-1',
+          url: 'https://example.com',
+          depth: 0,
+          priorityScore: 100,
+          parentTaskId: null,
+          createdAt: new Date().toISOString(),
+        },
+      ])
+      .mockResolvedValue([]);
 
     const runner = new LocalPipelineRunner(cfg);
     await runner.run();
@@ -374,7 +409,11 @@ describe('LocalPipelineRunner', () => {
   it('retries failed tasks up to 3 times', async () => {
     const taskRepo = cfg.adapter.taskRepo as any;
     taskRepo.getJobStats.mockResolvedValue({
-      pending: 0, inProgress: 0, completed: 0, failed: 0, skipped: 0,
+      pending: 0,
+      inProgress: 0,
+      completed: 0,
+      failed: 0,
+      skipped: 0,
     });
 
     // Seed task
@@ -382,7 +421,16 @@ describe('LocalPipelineRunner', () => {
     taskRepo.findPending.mockImplementation(async () => {
       findPendingCallCount++;
       if (findPendingCallCount === 1) {
-        return [{ id: 'task-retry', url: 'https://example.com', depth: 0, priorityScore: 100, parentTaskId: null, createdAt: new Date().toISOString() }];
+        return [
+          {
+            id: 'task-retry',
+            url: 'https://example.com',
+            depth: 0,
+            priorityScore: 100,
+            parentTaskId: null,
+            createdAt: new Date().toISOString(),
+          },
+        ];
       }
       return [];
     });
@@ -427,14 +475,27 @@ describe('LocalPipelineRunner', () => {
   it('marks task as permanently failed after max retries', async () => {
     const taskRepo = cfg.adapter.taskRepo as any;
     taskRepo.getJobStats.mockResolvedValue({
-      pending: 0, inProgress: 0, completed: 0, failed: 0, skipped: 0,
+      pending: 0,
+      inProgress: 0,
+      completed: 0,
+      failed: 0,
+      skipped: 0,
     });
 
     let findPendingCallCount = 0;
     taskRepo.findPending.mockImplementation(async () => {
       findPendingCallCount++;
       if (findPendingCallCount === 1) {
-        return [{ id: 'task-doomed', url: 'https://example.com', depth: 0, priorityScore: 100, parentTaskId: null, createdAt: new Date().toISOString() }];
+        return [
+          {
+            id: 'task-doomed',
+            url: 'https://example.com',
+            depth: 0,
+            priorityScore: 100,
+            parentTaskId: null,
+            createdAt: new Date().toISOString(),
+          },
+        ];
       }
       return [];
     });
@@ -473,7 +534,11 @@ describe('LocalPipelineRunner', () => {
 
     const taskRepo = cfg.adapter.taskRepo as any;
     taskRepo.getJobStats.mockResolvedValue({
-      pending: 0, inProgress: 0, completed: 1, failed: 0, skipped: 0,
+      pending: 0,
+      inProgress: 0,
+      completed: 1,
+      failed: 0,
+      skipped: 0,
     });
     // Already completed crawl in a previous run — no pending tasks
     taskRepo.findPending.mockResolvedValue([]);
@@ -501,7 +566,11 @@ describe('LocalPipelineRunner', () => {
 
     const taskRepo = cfg.adapter.taskRepo as any;
     taskRepo.getJobStats.mockResolvedValue({
-      pending: 0, inProgress: 0, completed: 1, failed: 0, skipped: 0,
+      pending: 0,
+      inProgress: 0,
+      completed: 1,
+      failed: 0,
+      skipped: 0,
     });
     taskRepo.findPending.mockResolvedValue([]);
 
@@ -528,7 +597,11 @@ describe('LocalPipelineRunner', () => {
   it('stops gracefully and releases lock', async () => {
     const taskRepo = cfg.adapter.taskRepo as any;
     taskRepo.getJobStats.mockResolvedValue({
-      pending: 0, inProgress: 0, completed: 0, failed: 0, skipped: 0,
+      pending: 0,
+      inProgress: 0,
+      completed: 0,
+      failed: 0,
+      skipped: 0,
     });
 
     // Provide tasks that keep coming so we can test stop
@@ -536,7 +609,16 @@ describe('LocalPipelineRunner', () => {
     taskRepo.findPending.mockImplementation(async () => {
       findPendingCallCount++;
       if (findPendingCallCount <= 5) {
-        return [{ id: `task-${findPendingCallCount}`, url: `https://example.com/p${findPendingCallCount}`, depth: 0, priorityScore: 100, parentTaskId: null, createdAt: new Date().toISOString() }];
+        return [
+          {
+            id: `task-${findPendingCallCount}`,
+            url: `https://example.com/p${findPendingCallCount}`,
+            depth: 0,
+            priorityScore: 100,
+            parentTaskId: null,
+            createdAt: new Date().toISOString(),
+          },
+        ];
       }
       return [];
     });
@@ -575,14 +657,27 @@ describe('LocalPipelineRunner', () => {
   it('enqueues discovered links from crawl results', async () => {
     const taskRepo = cfg.adapter.taskRepo as any;
     taskRepo.getJobStats.mockResolvedValue({
-      pending: 0, inProgress: 0, completed: 0, failed: 0, skipped: 0,
+      pending: 0,
+      inProgress: 0,
+      completed: 0,
+      failed: 0,
+      skipped: 0,
     });
 
     let findPendingCallCount = 0;
     taskRepo.findPending.mockImplementation(async () => {
       findPendingCallCount++;
       if (findPendingCallCount === 1) {
-        return [{ id: 'task-seed', url: 'https://example.com', depth: 0, priorityScore: 100, parentTaskId: null, createdAt: new Date().toISOString() }];
+        return [
+          {
+            id: 'task-seed',
+            url: 'https://example.com',
+            depth: 0,
+            priorityScore: 100,
+            parentTaskId: null,
+            createdAt: new Date().toISOString(),
+          },
+        ];
       }
       return [];
     });
@@ -644,7 +739,11 @@ describe('LocalPipelineRunner', () => {
 
     // Simulate existing tasks (not first run)
     (taskRepo.getJobStats as ReturnType<typeof vi.fn>).mockResolvedValue({
-      pending: 0, inProgress: 0, completed: 5, failed: 0, skipped: 0,
+      pending: 0,
+      inProgress: 0,
+      completed: 5,
+      failed: 0,
+      skipped: 0,
     });
 
     // Previous run exists with a config snapshot
@@ -666,7 +765,14 @@ describe('LocalPipelineRunner', () => {
       llmChanged: false,
       reconciliationChanged: false,
       safetyChanged: false,
-      impact: { newTasksToEnqueue: 1, pagesNeedingReextraction: null, reextractionCostEstimate: 0, failedTasksToRetry: null, skippedTasksToReenqueue: null, forceFullReconciliation: false },
+      impact: {
+        newTasksToEnqueue: 1,
+        pagesNeedingReextraction: null,
+        reextractionCostEstimate: 0,
+        failedTasksToRetry: null,
+        skippedTasksToReenqueue: null,
+        forceFullReconciliation: false,
+      },
     });
 
     const runner = new LocalPipelineRunner(cfg);
@@ -686,13 +792,20 @@ describe('LocalPipelineRunner', () => {
 
     // Not first run
     (taskRepo.getJobStats as ReturnType<typeof vi.fn>).mockResolvedValue({
-      pending: 0, inProgress: 0, completed: 3, failed: 0, skipped: 0,
+      pending: 0,
+      inProgress: 0,
+      completed: 3,
+      failed: 0,
+      skipped: 0,
     });
 
     // Previous run
     (runRepo.findLatestByStatus as ReturnType<typeof vi.fn>).mockResolvedValue({
       id: 'prev-run',
-      configSnapshot: { seedUrls: ['https://example.com'], schema: { mode: 'fixed', userFields: [{ name: 'title' }] } },
+      configSnapshot: {
+        seedUrls: ['https://example.com'],
+        schema: { mode: 'fixed', userFields: [{ name: 'title' }] },
+      },
     });
 
     // Config diff: field added
@@ -708,18 +821,29 @@ describe('LocalPipelineRunner', () => {
       llmChanged: false,
       reconciliationChanged: false,
       safetyChanged: false,
-      impact: { newTasksToEnqueue: 0, pagesNeedingReextraction: null, reextractionCostEstimate: 0.5, failedTasksToRetry: null, skippedTasksToReenqueue: null, forceFullReconciliation: false },
+      impact: {
+        newTasksToEnqueue: 0,
+        pagesNeedingReextraction: null,
+        reextractionCostEstimate: 0.5,
+        failedTasksToRetry: null,
+        skippedTasksToReenqueue: null,
+        forceFullReconciliation: false,
+      },
     });
 
     // Add flagForReextraction to the mock page repo
     (pageRepo as any).flagForReextraction = vi.fn().mockResolvedValue(3);
-    (pageRepo as any).findNeedingReextraction = vi.fn().mockResolvedValue([
-      { id: 'page-1', url: 'https://example.com', contentRef: 'file:///pages/abc.html' },
-    ]);
+    (pageRepo as any).findNeedingReextraction = vi
+      .fn()
+      .mockResolvedValue([
+        { id: 'page-1', url: 'https://example.com', contentRef: 'file:///pages/abc.html' },
+      ]);
     (pageRepo as any).clearReextractionFlag = vi.fn().mockResolvedValue(undefined);
 
     // Mock content store retrieve for re-extraction
-    (cfg.contentStore as any).retrieve = vi.fn().mockResolvedValue('<html><body>Cached HTML</body></html>');
+    (cfg.contentStore as any).retrieve = vi
+      .fn()
+      .mockResolvedValue('<html><body>Cached HTML</body></html>');
 
     const runner = new LocalPipelineRunner(cfg);
     await runner.run();

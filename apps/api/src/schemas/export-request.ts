@@ -7,10 +7,13 @@ export const exportRequestSchema = z.object({
     description: 'Minimum quality score filter (0-1)',
     example: 0.7,
   }),
-  fields: z.array(z.string()).optional().openapi({
-    description: 'Subset of fields to include in export',
-    example: ['name', 'price', 'description'],
-  }),
+  fields: z
+    .array(z.string())
+    .optional()
+    .openapi({
+      description: 'Subset of fields to include in export',
+      example: ['name', 'price', 'description'],
+    }),
 });
 
 export type ExportRequestParams = z.infer<typeof exportRequestSchema>;

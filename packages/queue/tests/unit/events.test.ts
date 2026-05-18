@@ -31,10 +31,7 @@ describe('RedisEventPublisher', () => {
       data: { pagesFound: 10, pagesCrawled: 5, pagesExtracted: 3 },
     });
 
-    expect(mockRedis.publish).toHaveBeenCalledWith(
-      'spatula:events:job-123',
-      expect.any(String),
-    );
+    expect(mockRedis.publish).toHaveBeenCalledWith('spatula:events:job-123', expect.any(String));
   });
 
   it('serializes event as JSON with timestamp', async () => {
