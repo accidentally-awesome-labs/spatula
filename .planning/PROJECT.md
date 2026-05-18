@@ -34,6 +34,7 @@ Turn "I want X data from these sites" into a production-quality dataset with pro
 - ✓ **Hosted platform layer** — JWT/OIDC users, `user_tenants`, Stripe usage-based billing (Free/Starter/Pro/Enterprise), hourly metering, 11 admin routes, retention policies, daily cleanup worker — Wave 5-1/5-2/5-3
 - ✓ **Remote operations** — `spatula remote/push/pull` with config upload, cursor-paginated incremental pull, schema conflict resolution TUI, crash recovery, run-record cleanup — Wave 5-4/5-5
 - ✓ **Wave-5 deferred items** — `spatula add` history dedup, CSS table extraction, `reset --keep-remote`, `ApiDataSource`, audit logging for quota events, OpenRouter cost extraction, observable gauges — Wave 5-6
+- ✓ **OSS carve-out & migration squash** — Section A billing/Stripe/metering extracted to private `accidentally-awesome-labs/spatula-saas` with preserved history (`git filter-repo`); Section B coupling stripped across 5 packages; new `GET /api/v1/auth/me` replaces CLI's `/billing/subscription` probe; pre-Wave-6 migrations squashed to `0000_v1_baseline.sql` under `__drizzle_migrations_oss`; forward + reverse-contract test suites (`tests/carveout/`, `tests/private-contract/`) wired into PR CI; pg_dump equivalence gate; no-migration-downgrade + expand-contract policies committed to `docs/runbooks/upgrade.md` — Phase 15 (PR #1)
 
 ### Active
 
@@ -56,13 +57,13 @@ Turn "I want X data from these sites" into a production-quality dataset with pro
 - Contributor infra: CODE_OF_CONDUCT (Contributor Covenant 2.1), GOVERNANCE, ROADMAP, CODEOWNERS, dependabot/renovate, GH Discussions, devcontainer, CI topology (preflight/unit+int/contract/e2e/audit/release/release-dry-run), mock-vs-live LLM test split
 - Launch mechanics: brand assets, pre-flip secret-scan + manual category audit gate, RC.1 cut, 2-week beta with public `preview-bug` issue label, zero-Critical gate, GA cut, coordinated announcement (blog/HN/PH/X/LinkedIn), 72h launch-day monitoring with status page
 
-**Pre-launch blockers (all open as of 2026-05-11; see spec §7):**
+**Pre-launch blockers (status as of 2026-05-18; see spec §7):**
 
-- [ ] `accidentally-awesome-labs/spatula-saas` private repo created
+- [x] `accidentally-awesome-labs/spatula-saas` private repo created — cleared 2026-05-17 (Phase 15 Wave 1, BLOCK-01)
 - [ ] Legal entity formed (or interim-name fallback explicitly accepted)
 - [ ] `spatula.dev` + `docs.spatula.dev` domains owned
 - [ ] npm `@spatula` org owned (or fallback chosen)
-- [ ] GitHub `accidentally-awesome-labs/spatula` namespace claimed
+- [x] GitHub `accidentally-awesome-labs/spatula` namespace claimed — cleared 2026-05-18 (Phase 15 Wave 6, BLOCK-05 pulled forward from Phase 22 to unblock PR #1)
 - [ ] Trademark "Spatula" USPTO search done; conflict-free
 - [ ] Beta invitees lined up (5–10 names, ≥1 non-developer)
 - [ ] Cloudflare Pages account + DNS for docs site
@@ -143,4 +144,4 @@ This document evolves at phase transitions and milestone boundaries.
 4. Update Context with current state
 
 ---
-*Last updated: 2026-05-11 after starting milestone v1.1 (Public Launch / Wave 6)*
+*Last updated: 2026-05-18 after completing Phase 15 (Carve-out & Migration Squash) — PR #1 open at accidentally-awesome-labs/spatula; BLOCK-01 + BLOCK-05 cleared*
