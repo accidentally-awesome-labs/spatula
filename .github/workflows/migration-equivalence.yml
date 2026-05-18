@@ -75,7 +75,10 @@ jobs:
           cache: pnpm
 
       - run: pnpm install --frozen-lockfile
-      - run: pnpm --filter @spatula/db build
+      # The trailing `...` syntax pulls in @spatula/db's workspace dependencies
+      # (@spatula/shared, @spatula/core). Without it tsc fails to resolve the
+      # type-only imports those packages provide.
+      - run: pnpm --filter @spatula/db... build
 
       - name: DB-A — apply sequential 0000-0011 (retrieved from PR base)
         env:
