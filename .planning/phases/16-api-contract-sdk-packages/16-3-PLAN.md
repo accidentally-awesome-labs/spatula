@@ -240,12 +240,17 @@ Spec §3.2.5 compat matrix (relevant excerpt):
     }
     ```
 
-    Step 4: Update apps/api/src/app.ts. Read the existing file. AFTER the LAST app.route('/api/v1/...', ...) call, add:
+    Step 4: Update apps/api/src/app.ts. Read the existing file. AFTER the LAST app.route('/api/v1/...', ...) call, add the following block. The comment line `// PHASE-16-MOUNT-POINT-WELLKNOWN — Task 2 inserts wellKnownRoute() here` is REQUIRED — it is the unambiguous insertion point that Task 2 of this plan replaces with the well-known route mount. Do not omit it.
     ```
     import { openapiRoute } from './routes/openapi.js';
     import { getCachedOpenAPISpec, validateExamplesAtBoot } from './openapi-config.js';
     // ... existing mounts ...
+
+    // === route mounts (additional routes inserted by later Phase-16 tasks) ===
     app.route('/api/v1', openapiRoute(app));
+    // PHASE-16-MOUNT-POINT-WELLKNOWN — Task 2 inserts wellKnownRoute() here
+
+    // === dev-only example validation (D-16) ===
     if (process.env.NODE_ENV !== 'production') {
       const { errors } = validateExamplesAtBoot(getCachedOpenAPISpec(app));
       if (errors.length) {
@@ -342,13 +347,16 @@ Spec §3.2.5 compat matrix (relevant excerpt):
     }
     ```
 
-    Step 2: Update apps/api/src/app.ts. AFTER `app.route('/api/v1', openapiRoute(app));` from Task 1, add:
+    Step 2: Update apps/api/src/app.ts. Locate the placeholder comment `// PHASE-16-MOUNT-POINT-WELLKNOWN — Task 2 inserts wellKnownRoute() here` that Task 1 inserted (this is the unambiguous insertion point — there is no ambiguity about ordering relative to the validateExamplesAtBoot block, which comes AFTER this marker). Replace the placeholder line in-place with the wellKnownRoute mount; also add the import at the top of the file:
     ```
+    // Top of file:
     import { wellKnownRoute } from './routes/well-known.js';
-    // ... existing ...
+
+    // In the route-mounts block, replace the PHASE-16-MOUNT-POINT-WELLKNOWN comment line with:
     app.route('/', wellKnownRoute());   // /.well-known/spatula-version is a sibling of /api/v1
     ```
-    NOTE: ordering matters — well-known MUST be mounted BEFORE the dev-only validateExamplesAtBoot block, so its schema is in the cached spec.
+    Concrete edit instruction: `sed -i '' "s|// PHASE-16-MOUNT-POINT-WELLKNOWN.*|app.route('/', wellKnownRoute());|" apps/api/src/app.ts` (or equivalent text edit). After this edit, the file MUST contain `app.route('/', wellKnownRoute());` ABOVE the `if (process.env.NODE_ENV !== 'production')` block; the dev-only validateExamplesAtBoot block remains unchanged in position and behavior, and now sees the well-known route's schema + examples in the cached spec.
+    NOTE: ordering matters — well-known MUST be mounted BEFORE the dev-only validateExamplesAtBoot block, so its schema is in the cached spec. The placeholder pattern enforces this ordering by construction; downstream automation cannot accidentally reverse it.
 
     Step 3: Write apps/api/src/routes/well-known.test.ts. Same Node-builtin http.Server harness; GET /.well-known/spatula-version asserts:
     - status 200
@@ -366,7 +374,9 @@ Spec §3.2.5 compat matrix (relevant excerpt):
     - The response schema contains EXACTLY four top-level keys: version, gitSha, buildAt, supportMatrix — verified by reading source
     - supportMatrix has TWO keys: minClientMajor, deprecatedClientMajors — verified by source read
     - apps/api/src/app.ts mounts wellKnownRoute() at root path `/` (NOT under /api/v1) — grep -A 1 "wellKnownRoute" apps/api/src/app.ts shows `app.route('/'`
-    - The well-known mount is BEFORE the validateExamplesAtBoot block in app.ts so the well-known route's example is included in validation — verified by reading file ordering
+    - The PHASE-16-MOUNT-POINT-WELLKNOWN placeholder comment from Task 1 has been REPLACED (not duplicated): `! grep -q "PHASE-16-MOUNT-POINT-WELLKNOWN" apps/api/src/app.ts`
+    - `apps/api/src/app.ts` contains `app.route('/', wellKnownRoute());` ABOVE the `if (process.env.NODE_ENV !== 'production')` block. Verified by `awk '/wellKnownRoute/{w=NR}/NODE_ENV.*production/{p=NR}END{exit w<p?0:1}' apps/api/src/app.ts` (awk exits 0 only when the well-known line number precedes the env-check line number)
+    - The well-known mount is BEFORE the validateExamplesAtBoot block in app.ts so the well-known route's example is included in validation — verified by the awk gate above + file read
     - well-known.test.ts asserts status 200 + 4 top-level keys + minClientMajor === 1
     - `pnpm --filter @spatula/api test -- well-known` passes
     - Implements API-06.
@@ -392,38 +402,51 @@ Spec §3.2.5 compat matrix (relevant excerpt):
     - docs/superpowers/specs/2026-04-20-wave-6-phase-14-public-launch-design.md § 3.2.5 (compat matrix)
   </read_first>
   <behavior>
+    Lazy one-shot probe per client. On first request, fires `GET /.well-known/spatula-version`; caches the resolved promise for the client lifetime. Two distinct failure modes get DIFFERENT cache semantics (per CONTEXT.md D-12: "caches result for client lifetime" — the verdict is cached, but a transient network failure is NOT a verdict):
+
+    - **On `SpatulaVersionMismatchError`** (major-version drift): cache the rejected promise. Every subsequent call to `.ensure()` re-throws the same `SpatulaVersionMismatchError` (no retry — server major doesn't change in seconds; we have a verdict).
+    - **On network/transport error** (fetch reject, 5xx, timeout): reset `probePromise = null` so the next call retries — the server may come back; transient failures shouldn't permanently disable the client.
+
     - packages/client/src/version-probe.ts exports a VersionProbe class:
       ```
       export class VersionProbe {
         private probePromise: Promise<void> | null = null;
         constructor(private opts: { baseUrl: string; fetcher: typeof fetch; sdkMajor: number }) {}
-        ensure(): Promise<void> {
-          if (this.probePromise) return this.probePromise;
-          this.probePromise = (async () => {
-            const res = await this.opts.fetcher(`${this.opts.baseUrl}/.well-known/spatula-version`);
-            if (!res.ok) {
-              // Treat a missing /.well-known endpoint as a permissive "unknown server" — log but don't block.
-              // The major-mismatch gate fires ONLY on a successful response that disagrees.
-              return;
+        async ensure(): Promise<void> {
+          if (this.probePromise !== null) return this.probePromise;
+          this.probePromise = this.run().catch((err) => {
+            if (err instanceof SpatulaVersionMismatchError) {
+              // Cache the verdict — re-throw on every subsequent call. Major version doesn't change in seconds.
+              throw err;
             }
-            const body = await res.json() as { version: string };
-            const serverMajor = parseInt(body.version.split('.')[0], 10);
-            if (Number.isNaN(serverMajor)) return;
-            if (serverMajor !== this.opts.sdkMajor) {
-              throw new SpatulaVersionMismatchError({
-                code: 'VERSION.MISMATCH',
-                message: `SDK major v${this.opts.sdkMajor} cannot speak to server major v${serverMajor}. See docs/compat-policy.md.`,
-                status: 426,
-                requestId: 'sdk-version-probe',
-                details: { sdkMajor: this.opts.sdkMajor, serverMajor, serverVersion: body.version },
-              });
-            }
-          })().catch((err) => {
-            // On error, RESET so the next request can retry. Re-throw for the caller.
+            // Transient network/transport error (fetch reject, 5xx, timeout) — reset for retry.
             this.probePromise = null;
             throw err;
           });
           return this.probePromise;
+        }
+        private async run(): Promise<void> {
+          const res = await this.opts.fetcher(`${this.opts.baseUrl}/.well-known/spatula-version`);
+          if (!res.ok) {
+            // Treat a missing /.well-known endpoint as a permissive "unknown server" — log but don't block.
+            // The major-mismatch gate fires ONLY on a successful response that disagrees.
+            // NOTE: a 5xx (res.ok === false but status >= 500) is a transport-class error, not a verdict —
+            // however, the simplest preserving behavior here is to also treat it as "unknown server" for v1.
+            // If the consumer wants fail-fast on 5xx, they can pass skipVersionProbe: true.
+            return;
+          }
+          const body = await res.json() as { version: string };
+          const serverMajor = parseInt(body.version.split('.')[0], 10);
+          if (Number.isNaN(serverMajor)) return;
+          if (serverMajor !== this.opts.sdkMajor) {
+            throw new SpatulaVersionMismatchError({
+              code: 'VERSION.MISMATCH',
+              message: `SDK major v${this.opts.sdkMajor} cannot speak to server major v${serverMajor}. See docs/compat-policy.md.`,
+              status: 426,
+              requestId: 'sdk-version-probe',
+              details: { sdkMajor: this.opts.sdkMajor, serverMajor, serverVersion: body.version },
+            });
+          }
         }
       }
       ```
@@ -503,8 +526,9 @@ Spec §3.2.5 compat matrix (relevant excerpt):
   </verify>
   <acceptance_criteria>
     - packages/client/src/version-probe.ts exports `class VersionProbe` — `grep -q "class VersionProbe" packages/client/src/version-probe.ts`
-    - VersionProbe.ensure() caches the probePromise — verified by unit test asserting fetcher called exactly once across 2 ensure() calls
-    - On probe error, probePromise is reset (next call retries) — verified by unit test
+    - VersionProbe.ensure() caches the probePromise on success — verified by unit test asserting fetcher called exactly once across 2 ensure() calls (success case)
+    - On `SpatulaVersionMismatchError` (major-version drift verdict), the probePromise is CACHED as rejected — calling `.ensure()` twice when server returns 200 with mismatched major causes BOTH calls to throw `SpatulaVersionMismatchError`, with only ONE actual fetch (probePromise cached as rejected). Verified by unit test asserting `fetcher.mock.calls.length === 1` after two `.ensure()` awaits both rejecting.
+    - On transient network/transport error (fetch reject like `TypeError`, or unhandled non-200/non-mismatch), the probePromise is RESET — calling `.ensure()` twice when the first call's fetcher rejects with `TypeError` issues TWO actual fetches (probePromise reset between calls). Verified by unit test asserting `fetcher.mock.calls.length === 2` after two `.ensure()` awaits with the first fetcher call rejecting.
     - On server returning a different major version (sdkMajor=0, serverMajor=1), VersionProbe throws SpatulaVersionMismatchError instance — `grep -q "SpatulaVersionMismatchError" packages/client/src/version-probe.ts`
     - On 404 from /.well-known (server doesn't support it), VersionProbe does NOT throw — graceful degradation
     - SpatulaClient constructor does NO I/O — unit test asserts via fetcher spy: spy.calls.length === 0 immediately after `new SpatulaClient(...)`

@@ -498,7 +498,7 @@ export { DEFAULT_RATE_LIMIT } from './...';   // Phase 15 collapsed tier presets
     Step 6: Run `pnpm --filter @spatula/api test -- error-handler` and full `pnpm --filter @spatula/api typecheck` to catch missed import updates.
   </action>
   <verify>
-    <automated>pnpm --filter @spatula/api test -- error-handler && pnpm --filter @spatula/api typecheck && grep -rE "code:\\s*['\"][A-Z_]+['\"]" apps/api/src/routes/ apps/api/src/middleware/ apps/api/src/openapi-config.ts | grep -v "DOMAIN.CODE" | grep -v "\\." | (! grep -q "code: '")</automated>
+    <automated>pnpm --filter @spatula/api test -- error-handler && pnpm --filter @spatula/api typecheck && grep -rhoE "code:\\s*'[A-Z_]+'" apps/api/src/routes/ apps/api/src/middleware/ apps/api/src/openapi-config.ts | grep -v "\\." | wc -l | awk '$1 == 0 { exit 0 } { exit 1 }'</automated>
   </verify>
   <acceptance_criteria>
     - `apps/api/src/middleware/error-handler.ts` imports `ErrorCode` and `STATUS_MAP` from `@spatula/shared`

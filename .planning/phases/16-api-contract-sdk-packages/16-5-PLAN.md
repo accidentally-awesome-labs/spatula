@@ -37,6 +37,7 @@ files_modified:
   - packages/client/package.json
   - docs/architecture.md
   - .planning/phases/16-api-contract-sdk-packages/16-5-BLOCK04.md
+  - .planning/phases/16-api-contract-sdk-packages/16-5-MIDPLAN-CHECKPOINT.md
 autonomous: false
 requirements:
   - SDK-04
@@ -60,6 +61,9 @@ must_haves:
     - path: ".planning/phases/16-api-contract-sdk-packages/16-5-BLOCK04.md"
       provides: "BLOCK-04 verification evidence — npm org ls output OR fallback scope decision"
       contains: "BLOCK-04"
+    - path: ".planning/phases/16-api-contract-sdk-packages/16-5-MIDPLAN-CHECKPOINT.md"
+      provides: "Mid-plan checkpoint evidence — release-please dry-run output + release.yml permissions block + BLOCK-04 status snapshot (Task 5 of 16-5)"
+      contains: "release-please"
     - path: "release-please-config.json"
       provides: "Monorepo manifest mode + linked-versions plugin + node-workspace merge:false"
       contains: "linked-versions"
@@ -115,7 +119,7 @@ Output:
 - 5 internal-package READMEs with no-compat notice
 - SQLite benchmark + decision in docs/architecture.md
 - packages/client/tests/integration/ suite green (mocked) + opt-in live
-- Plan is NOT autonomous — first task is a BLOCK-04 checkpoint requiring user verification
+- Plan is NOT autonomous — two checkpoints: (a) Task 1 BLOCK-04 verification, (b) Task 5 mid-plan release-infra checkpoint (after Tasks 1-4 complete, before Tasks 6-9 execute)
 </objective>
 
 <execution_context>
@@ -372,8 +376,57 @@ From 16-RESEARCH Open Questions #3: @spatula/cli dual build via tsup (recommende
   </done>
 </task>
 
+<task type="checkpoint:human-verify" gate="blocking">
+  <name>Task 5: Mid-plan checkpoint — release infra (release-please + workflow + internal READMEs) wired; verify before CLI/SDK/SQLite push</name>
+  <files>.planning/phases/16-api-contract-sdk-packages/16-5-MIDPLAN-CHECKPOINT.md</files>
+  <read_first>
+    - release-please-config.json (Task 2 output)
+    - .release-please-manifest.json (Task 2 output)
+    - .github/workflows/release.yml (Task 3 output)
+    - .github/workflows/release-dry-run.yml (Task 3 output)
+    - packages/{core,db,queue,api,shared}/README.md (Task 4 output)
+    - .planning/phases/16-api-contract-sdk-packages/16-5-BLOCK04.md (Task 1 output)
+  </read_first>
+  <what-built>
+    Halfway through 16-5. The release infra is wired:
+    - Task 1: BLOCK-04 resolved (npm @spatula org owned OR fallback scope chosen + documented in 16-5-BLOCK04.md).
+    - Task 2: release-please-config.json + .release-please-manifest.json extended to 9 entries (root + 8 packages); linked-versions plugin couples @spatula/core-types + @spatula/client; node-workspace plugin has merge:false (Pitfall #3 protection).
+    - Task 3: .github/workflows/release.yml switched to trusted publishing (id-token: write at JOB level; NO NPM_TOKEN / NODE_AUTH_TOKEN reference; --provenance --access public per publish step). .github/workflows/release-dry-run.yml ships and runs on PR + main push.
+    - Task 4: 5 internal-package READMEs (core, db, queue, api, shared) carry the canonical "NO COMPAT GUARANTEE AT TS-API LEVEL" header.
+
+    The plan PAUSES here so the human can verify the release machinery before Tasks 6-9 (CLI tsup conversion + SDK integration test suite + SQLite benchmark + final dry-run smoke test) execute. The remainder of the plan depends on the release infra being correct.
+  </what-built>
+  <action>
+    Automation BEFORE the human checkpoint:
+    Step 1: Run `pnpm dlx release-please@17.6.0 release-pr --dry-run --config-file=release-please-config.json --manifest-file=.release-please-manifest.json --token="$(gh auth token)" --repo-url="https://github.com/accidentally-awesome-labs/spatula.git" 2>&1 | tee /tmp/midplan-dryrun.txt` from the publishing identity.
+    Step 2: Capture key outputs (proposed release branch, per-package bumps if any, linked-versions group state) into `.planning/phases/16-api-contract-sdk-packages/16-5-MIDPLAN-CHECKPOINT.md` along with:
+       - BLOCK-04 status (from 16-5-BLOCK04.md)
+       - release.yml permissions block verbatim (proof of id-token: write at JOB level + absence of NPM_TOKEN)
+       - 5 internal READMEs' "no compat guarantee" header presence (grep result)
+    Step 3: Surface the checkpoint file path + summary to the human via the resume-signal pathway below.
+  </action>
+  <how-to-verify>
+    1. Confirm `pnpm dlx release-please release-pr --dry-run --config-file=release-please-config.json --manifest-file=.release-please-manifest.json` produces a clean release manifest for all 8 packages (no fatal errors; sensible per-package bumps; linked-versions group active for core-types + client). Read /tmp/midplan-dryrun.txt or `.planning/phases/16-api-contract-sdk-packages/16-5-MIDPLAN-CHECKPOINT.md`.
+    2. Confirm `.github/workflows/release.yml` references `id-token: write` AT JOB LEVEL (not workflow level — Pitfall #4) AND contains NEITHER `NPM_TOKEN` NOR `NODE_AUTH_TOKEN`. Run: `grep -A 5 "permissions:" .github/workflows/release.yml | grep -q "id-token: write" && ! grep -qE "NPM_TOKEN|NODE_AUTH_TOKEN" .github/workflows/release.yml`.
+    3. Confirm BLOCK-04 is resolved (either npm `@spatula` org owned per `npm org ls @spatula` exit 0, OR a fallback scope is documented in `.planning/phases/16-api-contract-sdk-packages/16-5-BLOCK04.md` AND every package.json `name` field uses that fallback scope).
+    4. Reply with one of the signals listed below.
+  </how-to-verify>
+  <verify>
+    <automated>test -f .planning/phases/16-api-contract-sdk-packages/16-5-MIDPLAN-CHECKPOINT.md && grep -A 5 "permissions:" .github/workflows/release.yml | grep -q "id-token: write" && ! grep -qE "NPM_TOKEN|NODE_AUTH_TOKEN" .github/workflows/release.yml && for f in packages/core/README.md packages/db/README.md packages/queue/README.md packages/api/README.md packages/shared/README.md; do grep -qi "no compat guarantee" "$f" || exit 1; done && test -f .planning/phases/16-api-contract-sdk-packages/16-5-BLOCK04.md</automated>
+  </verify>
+  <resume-signal>
+    Reply: `approved`, `fix release infra and pause`, or `defer`.
+    On `approved`: Tasks 6-9 (CLI tsup conversion + SDK integration suite + SQLite benchmark + publish dry-run smoke) proceed.
+    On `fix release infra and pause`: planner / executor returns to Tasks 2-4 to fix the flagged issue; this checkpoint re-runs after the fix.
+    On `defer`: 16-5 pauses; user resumes by re-running this checkpoint.
+  </resume-signal>
+  <done>
+    Human verified that (1) release-please dry-run is clean for all 8 packages, (2) release.yml has id-token: write at JOB level + zero NPM_TOKEN references, (3) BLOCK-04 is resolved. Tasks 6-9 proceed.
+  </done>
+</task>
+
 <task type="auto">
-  <name>Task 5: @spatula/cli publish prep — tsup dual ESM+CJS build + files allowlist + engines + no postinstall</name>
+  <name>Task 6: @spatula/cli publish prep — tsup dual ESM+CJS build + files allowlist + engines + no postinstall</name>
   <files>
     apps/cli/package.json,
     apps/cli/tsup.config.ts,
@@ -429,7 +482,7 @@ From 16-RESEARCH Open Questions #3: @spatula/cli dual build via tsup (recommende
 </task>
 
 <task type="auto" tdd="true">
-  <name>Task 6: SDK integration test suite (SDK-08) — 5 endpoints, mocked by default, opt-in live via SPATULA_LIVE_LLM=1</name>
+  <name>Task 7: SDK integration test suite (SDK-08) — 5 endpoints, mocked by default, opt-in live via SPATULA_LIVE_LLM=1</name>
   <files>
     packages/client/vitest.integration.config.ts,
     packages/client/tests/integration/create-job.test.ts,
@@ -470,7 +523,7 @@ From 16-RESEARCH Open Questions #3: @spatula/cli dual build via tsup (recommende
     Step 6: Confirm packages/client default test script does NOT run integration tests. Live tests run via separate workflow_dispatch or scheduled job — defer the CI wiring to Phase 21.
   </action>
   <verify>
-    <automated>pnpm --filter @spatula/client test:integration && test -f packages/client/vitest.integration.config.ts && grep -q "SPATULA_LIVE_LLM" packages/client/tests/integration/create-job.test.ts && grep -q "test:integration" packages/client/package.json && ls packages/client/tests/integration/*.test.ts | wc -l | awk '$1 >= 5 { exit 0 } { exit 1 }'</automated>
+    <automated>pnpm --filter @spatula/client test:integration && test -f packages/client/vitest.integration.config.ts && grep -q "SPATULA_LIVE_LLM" packages/client/tests/integration/create-job.test.ts && grep -q "test:integration" packages/client/package.json && ls packages/client/tests/integration/*.test.ts | wc -l | awk '$1 == 5 { exit 0 } { exit 1 }'</automated>
   </verify>
   <acceptance_criteria>
     - packages/client/vitest.integration.config.ts exists with passWithNoTests true
@@ -487,7 +540,7 @@ From 16-RESEARCH Open Questions #3: @spatula/cli dual build via tsup (recommende
 </task>
 
 <task type="auto">
-  <name>Task 7: SQLite benchmark + decision committed to docs/architecture.md (better-sqlite3 stays; FTS5 gap is decisive)</name>
+  <name>Task 8: SQLite benchmark + decision committed to docs/architecture.md (better-sqlite3 stays; FTS5 gap is decisive)</name>
   <files>
     packages/db/bench/sqlite-comparison.ts,
     packages/db/bench/sqlite-comparison.results.md,
@@ -536,7 +589,7 @@ From 16-RESEARCH Open Questions #3: @spatula/cli dual build via tsup (recommende
 </task>
 
 <task type="auto">
-  <name>Task 8: Smoke-test release-please dry-run end-to-end against the new config</name>
+  <name>Task 9: Smoke-test release-please dry-run end-to-end against the new config</name>
   <files>
     .planning/phases/16-api-contract-sdk-packages/16-5-dryrun.log
   </files>

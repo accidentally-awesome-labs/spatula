@@ -59,7 +59,7 @@ must_haves:
     - "Frozen `ErrorCode` enum lives in `@spatula/core-types/src/errors/codes.ts` (MOVED from plan 16-1's staging location in `@spatula/shared`)"
     - "Class-per-code typed errors (`JobNotFoundError`, `RateLimitExceededError`, etc.) are generated into `packages/client/src/errors/generated.ts` and COMMITTED"
     - "ESLint rule blocks non-type imports from `@spatula/core-types` across the entire monorepo"
-    - "`size-limit` reports `< 50 KB` gzipped for `{ SpatulaClient, createJob, listJobs, getEntities }` built via esbuild ESM browser"
+    - "`size-limit` reports `< 50 kB` gzipped for `{ SpatulaClient, createJob, listJobs, getEntities }` built via esbuild ESM browser (SI lowercase kB matches research Pattern 4 + size-limit.json limit string)"
     - "`@spatula/core-types` has zero runtime dependencies (only `zod` as peer)"
     - "`tests/private-contract/oss-surface.test.ts` remains green — `@spatula/core` re-export shim preserves the surface that `spatula-saas` consumes"
   artifacts:
@@ -82,8 +82,8 @@ must_haves:
       provides: "Codegen script reading ErrorCode enum from @spatula/core-types and emitting generated.ts; CI verifies via `git diff --exit-code`"
       contains: "ErrorCode"
     - path: "packages/client/size-limit.json"
-      provides: "50 KB gzipped budget with `@size-limit/esbuild` adapter targeting the measured surface"
-      contains: "50 KB"
+      provides: "50 kB gzipped budget with explicit `esbuild` config (ESM + browser + es2022 + minify + treeShaking) per research Pattern 4"
+      contains: "50 kB"
     - path: "eslint.config.mjs"
       provides: "`no-restricted-imports` rule with `allowTypeImports: true` blocking value imports from `@spatula/core-types`"
       contains: "@spatula/core-types"
@@ -282,13 +282,16 @@ Spec §3.2.1 (verbatim) — `@spatula/client` properties:
       export type { ExtractionResult } from './schemas/extraction.js';
       ```
     - `src/errors/codes.test.ts`: identical to plan 16-1's test (regex `^[A-Z_]+\.[A-Z_]+$` + STATUS_MAP completeness check).
-    - `packages/shared/src/error-codes.ts`: replaced with a one-line re-export shim:
+    - `packages/shared/src/error-codes.ts`: replaced with a re-export shim that exposes BOTH the runtime value AND the type from `@spatula/core-types`. This is the canonical consumer-side route for value imports — the ESLint rule (Task 2) blocks consumers from importing values directly from `@spatula/core-types`, so every value-consumer (including the codegen script in Task 3) imports via `@spatula/shared`:
       ```typescript
-      // Backward-compat shim. The frozen ErrorCode enum lives in @spatula/core-types.
+      // Backward-compat shim. The frozen ErrorCode enum lives in @spatula/core-types,
+      // but consumers MUST import the runtime value via @spatula/shared because the
+      // monorepo ESLint rule (no-restricted-imports + allowTypeImports) blocks value
+      // imports from @spatula/core-types directly. Type imports may still go either way.
       export { ErrorCode, STATUS_MAP } from '@spatula/core-types';
-      export type { ErrorCode } from '@spatula/core-types';
+      export type { ErrorCode as ErrorCodeType } from '@spatula/core-types';
       ```
-    - `packages/shared/src/index.ts`: keeps the existing `export * from './error-codes.js'` (transitive re-export from core-types is fine).
+    - `packages/shared/src/index.ts`: keeps the existing `export * from './error-codes.js'` AND additionally MUST re-export `ErrorCode` (as a value) and `ErrorCodeType` (as a type) at the top level so consumers can write `import { ErrorCode } from '@spatula/shared'` directly. Concretely, ensure the barrel file contains a line of the form `export { ErrorCode, STATUS_MAP } from './error-codes.js';` and `export type { ErrorCodeType } from './error-codes.js';`.
     - `packages/shared/package.json` MUST be updated by Task 1 to add `"@spatula/core-types": "workspace:*"` to dependencies, so the runtime can resolve the import.
   </behavior>
   <action>
@@ -366,6 +369,7 @@ Spec §3.2.1 (verbatim) — `@spatula/client` properties:
     - `packages/core-types/package.json` contains `"sideEffects": false` and `"publishConfig": { "access": "public", "provenance": true }`
     - `packages/core-types/src/errors/codes.ts` contains the full `ErrorCode` const-object from plan 16-1
     - `packages/shared/src/error-codes.ts` contains the string `from '@spatula/core-types'` (re-export shim) — `grep -q "from '@spatula/core-types'" packages/shared/src/error-codes.ts`
+    - `packages/shared/src/index.ts` re-exports `ErrorCode` (value) and `type ErrorCodeType` from `@spatula/core-types` (transitively via `./error-codes.js`). Verified by `grep -q "export { ErrorCode" packages/shared/src/index.ts` AND `grep -q "ErrorCodeType" packages/shared/src/index.ts`. This shim is the canonical value-import route for the codegen script in Task 3 (which would otherwise self-violate the ESLint rule added in Task 2).
     - `packages/core-types/src/index.ts` exports `JobConfig` type, `JobConfigSchema`, `ErrorCode`, `STATUS_MAP`, `ActionType` — `for sym in JobConfig JobConfigSchema ErrorCode STATUS_MAP ActionType; do grep -q "$sym" packages/core-types/src/index.ts || exit 1; done`
     - `pnpm --filter @spatula/core-types build` succeeds; `dist/index.js` and `dist/index.d.ts` exist
     - `pnpm --filter @spatula/core-types test` passes (the codes-shape unit test)
@@ -541,19 +545,27 @@ Spec §3.2.1 (verbatim) — `@spatula/client` properties:
         "size-limit": "./size-limit.json"
       }
       ```
-    - `size-limit.json` (per 16-RESEARCH Pattern 4):
+    - `size-limit.json` (per 16-RESEARCH Pattern 4 — uses SI lowercase `kB` to match the research snippet's budget baseline; size-limit accepts both `KB` and `kB`, but locking to `kB` keeps the gate aligned with the research's 50 kB measurement):
       ```json
       [
         {
-          "name": "SpatulaClient + 3 methods (ESM browser)",
+          "name": "core client surface",
           "path": "dist/index.js",
           "import": "{ SpatulaClient, createJob, listJobs, getEntities }",
-          "limit": "50 KB",
-          "gzip": true
+          "limit": "50 kB",
+          "gzip": true,
+          "esbuild": {
+            "format": "esm",
+            "platform": "browser",
+            "target": "es2022",
+            "bundle": true,
+            "minify": true,
+            "treeShaking": true
+          }
         }
       ]
       ```
-      (`@size-limit/preset-small-lib` provides esbuild adapter defaults; explicit `esbuild` config block can be added if defaults misbehave.)
+      (`@size-limit/preset-small-lib` provides esbuild adapter defaults; the explicit `esbuild` block locks the measurement to ESM + browser platform + es2022 + minify + tree-shake, mirroring spec §3.2.1's "esbuild --bundle --minify --format=esm --platform=browser" wording exactly. Do NOT omit the `esbuild` block — preset defaults vary across size-limit versions and the explicit form makes the measurement reproducible.)
     - `src/errors/base.ts`:
       ```typescript
       export class SpatulaApiError extends Error {
@@ -648,7 +660,10 @@ Spec §3.2.1 (verbatim) — `@spatula/client` properties:
     #!/usr/bin/env -S pnpm tsx
     import { writeFileSync } from 'node:fs';
     import { resolve } from 'node:path';
-    import { ErrorCode } from '@spatula/core-types';
+    // Import ErrorCode VALUE via @spatula/shared (which re-exports it from @spatula/core-types).
+    // The monorepo ESLint rule added in Task 2 blocks value-imports from @spatula/core-types
+    // directly; this codegen script complies by going through the @spatula/shared shim.
+    import { ErrorCode } from '@spatula/shared';
 
     const HEADER = `// GENERATED by scripts/gen-error-classes.ts on ${new Date().toISOString().slice(0, 10)}. Edit @spatula/core-types/src/errors/codes.ts instead. CI verifies via git diff --exit-code.\nimport { SpatulaApiError } from './base.js';\n\n`;
 
@@ -728,8 +743,10 @@ Spec §3.2.1 (verbatim) — `@spatula/client` properties:
     - `packages/client/package.json` contains `"sideEffects": false`, `"type": "module"`, `"engines": { "node": ">=22" }`, explicit `"exports"` mapping, `"publishConfig": { "access": "public", "provenance": true }` — verified by grep
     - `packages/client/src/client.ts` defines a `class SpatulaClient` — `grep -q "class SpatulaClient" packages/client/src/client.ts`
     - `packages/client/src/errors/generated.ts` exists AND is committed AND `pnpm gen:errors && git diff --exit-code packages/client/src/errors/generated.ts` returns clean (codegen is idempotent — Pitfall #6 protection)
+    - `packages/client/scripts/gen-error-classes.ts` imports `ErrorCode` from `@spatula/shared` (NOT `@spatula/core-types`) — `grep -q "from '@spatula/shared'" packages/client/scripts/gen-error-classes.ts` succeeds AND `! grep -q "from '@spatula/core-types'" packages/client/scripts/gen-error-classes.ts` (the script must NOT directly value-import from core-types; the Task 2 ESLint rule would fail it otherwise — the shim form is the contract)
     - `packages/client/src/errors/generated.ts` contains AT LEAST 10 class declarations + `decodeError` + `ERROR_CLASS_BY_CODE` — `grep -c "^export class.*Error extends SpatulaApiError" packages/client/src/errors/generated.ts` ≥ 10
-    - `packages/client/size-limit.json` exists with `"limit": "50 KB"` AND `"gzip": true` AND `"import": "{ SpatulaClient, createJob, listJobs, getEntities }"` — verified by grep
+    - `packages/client/size-limit.json` exists with `"limit": "50 kB"` (SI lowercase per research Pattern 4 snippet) AND `"gzip": true` AND `"import": "{ SpatulaClient, createJob, listJobs, getEntities }"` — verified by `grep -q '"limit": "50 kB"' packages/client/size-limit.json`
+    - `packages/client/size-limit.json` contains an `"esbuild"` block with `"platform": "browser"` (locking the measurement to the spec §3.2.1 build target). Verified by `jq -e '.[0].esbuild.platform == "browser"' packages/client/size-limit.json`
     - `pnpm --filter @spatula/client size` reports `< 50 KB` (under budget) AND exits 0
     - `packages/client/src/experimental/index.ts` contains `'zero experimental surfaces'` string AND a `Proxy` — `grep -q "Proxy" packages/client/src/experimental/index.ts`
     - Constructor I/O test passes: `SpatulaClient` constructor doesn't trigger fetch (Anti-Pattern protection per D-12)
