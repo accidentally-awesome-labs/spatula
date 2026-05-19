@@ -1,0 +1,65 @@
+name: Release Please (Dry-Run)
+
+on:
+  pull_request:
+    branches:
+      - main
+  push:
+    branches:
+      - main
+
+permissions:
+  contents: read
+  pull-requests: write
+
+jobs:
+  release-please-dry-run:
+    name: release-please release-pr (dry-run)
+    runs-on: ubuntu-latest
+    # Non-blocking. The signal is the dry-run output + artifact below.
+    continue-on-error: true
+    env:
+      # Capture sensitive/template-only inputs to env vars to avoid shell
+      # interpolation (workflow-security hook guidance). GITHUB_REPOSITORY
+      # is auto-set by the runner; GH_TOKEN is a workflow secret.
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      REPO_URL: https://github.com/${{ github.repository }}.git
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 9
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Install workspace dependencies
+        run: pnpm install --frozen-lockfile
+
+      # release-please release-pr --dry-run reports what release-please-action
+      # would do without opening any PRs or tags. --dry-run skips writes;
+      # GITHUB_TOKEN only needs read access for label/tag lookups.
+      - name: release-please release-pr --dry-run
+        run: |
+          set -o pipefail
+          pnpm dlx release-please@17.6.0 release-pr \
+            --dry-run \
+            --config-file=release-please-config.json \
+            --manifest-file=.release-please-manifest.json \
+            --token="$GH_TOKEN" \
+            --repo-url="$REPO_URL" \
+            2>&1 | tee /tmp/release-please-dryrun.txt
+
+      - name: Upload dry-run output as artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-please-dry-run-output
+          path: /tmp/release-please-dryrun.txt
+          retention-days: 14
