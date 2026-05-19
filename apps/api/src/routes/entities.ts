@@ -10,6 +10,7 @@ import {
   jsonContent,
 } from '../schemas/responses.js';
 import { decodeCursor, encodeCursor, EntityNotFoundError } from '@spatula/shared';
+import { applyDeprecationHeaders } from '../lib/deprecation-headers.js';
 
 const jobIdParam = z.object({
   jobId: z.string().openapi({ param: { name: 'jobId', in: 'path' } }),
@@ -81,7 +82,8 @@ export function entityRoutes() {
       });
     }
 
-    // Offset fallback (no cursor, no since)
+    // Offset fallback (no cursor, no since) — DEPRECATED at v1, removal target v2.0.
+    // Phase 16 plan 16-1: emit Deprecation / Sunset / Link headers (RFC 8594).
     const [entityList, total] = await Promise.all([
       deps.entityRepo.findByJob(jobId, tenantId, {
         limit: query.limit,
@@ -90,6 +92,8 @@ export function entityRoutes() {
       }),
       deps.entityRepo.countByJob(jobId, tenantId, { search: query.search }),
     ]);
+
+    applyDeprecationHeaders(c);
 
     return c.json({
       data: entityList,

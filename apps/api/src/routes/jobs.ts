@@ -9,6 +9,7 @@ import {
   jsonContent,
 } from '../schemas/responses.js';
 import { JobNotFoundError } from '@spatula/shared';
+import { applyDeprecationHeaders } from '../lib/deprecation-headers.js';
 
 // --- Route definitions ---
 
@@ -175,6 +176,10 @@ export function jobRoutes() {
       }),
       deps.jobRepo.countByTenant(tenantId, { status: query.status }),
     ]);
+
+    // Phase 16 plan 16-1: list endpoints with offset-only pagination are
+    // DEPRECATED at v1 (removal target v2.0); emit RFC 8594 headers.
+    applyDeprecationHeaders(c);
 
     return c.json({ data: jobs, total });
   });

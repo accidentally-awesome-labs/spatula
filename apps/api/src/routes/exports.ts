@@ -18,6 +18,7 @@ import {
 } from '@spatula/shared';
 import type { Entity } from '@spatula/shared';
 import { paginationSchema, paginationEnvelopeSchema } from '../schemas/pagination.js';
+import { applyDeprecationHeaders } from '../lib/deprecation-headers.js';
 
 const jobIdParam = z.object({
   jobId: z.string().openapi({ param: { name: 'jobId', in: 'path' } }),
@@ -132,11 +133,14 @@ export function exportRoutes() {
       });
     }
 
-    // Offset fallback (no cursor, no since)
+    // Offset fallback (no cursor, no since) — DEPRECATED at v1, removal target v2.0.
+    // Phase 16 plan 16-1: emit Deprecation / Sunset / Link headers (RFC 8594).
     const [exportList, total] = await Promise.all([
       deps.exportRepo.findByJob(jobId, tenantId, { limit: query.limit, offset: query.offset }),
       deps.exportRepo.countByJob(jobId, tenantId),
     ]);
+
+    applyDeprecationHeaders(c);
 
     return c.json({
       data: exportList,

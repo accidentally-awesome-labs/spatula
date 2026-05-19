@@ -1,4 +1,5 @@
 import { z } from '@hono/zod-openapi';
+import { cursorEnvelopeSchema, offsetEnvelopeSchema } from './pagination.js';
 
 // --- Entity schemas (describe JSON shapes returned by endpoints) ---
 
@@ -155,6 +156,23 @@ export function dataResponse<T extends z.ZodType>(schema: T) {
 
 export function listResponse<T extends z.ZodType>(schema: T) {
   return z.object({ data: z.array(schema) });
+}
+
+/**
+ * Phase 16 plan 16-1: canonical cursor-paginated response helper.
+ * Shape `{ data, nextCursor?, hasMore }`. No `total` count.
+ */
+export function cursorListResponse<T extends z.ZodTypeAny>(itemSchema: T) {
+  return cursorEnvelopeSchema(itemSchema);
+}
+
+/**
+ * @deprecated Phase 16 plan 16-1: offset-paginated response helper.
+ * Shape `{ data, total, page, limit, hasMore }`. Removal target v2.0; routes
+ * that emit this MUST also call `applyDeprecationHeaders(c)`.
+ */
+export function offsetListResponse<T extends z.ZodTypeAny>(itemSchema: T) {
+  return offsetEnvelopeSchema(itemSchema);
 }
 
 export function jsonContent<T extends z.ZodType>(schema: T, description: string) {
