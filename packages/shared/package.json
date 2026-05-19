@@ -1,18 +1,20 @@
 {
   "name": "@spatula/shared",
   "version": "0.0.1",
-  "description": "Shared utilities — logging, auth, metrics, tracing, errors",
+  "description": "Internal Spatula utilities — logging, auth, metrics, tracing, errors. NO TS-API compat guarantee. Public SDK is @spatula/client. See docs/compat-policy.md.",
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "https://github.com/spatulaai/spatula.git",
+    "url": "https://github.com/accidentally-awesome-labs/spatula.git",
     "directory": "packages/shared"
   },
-  "homepage": "https://github.com/spatulaai/spatula#readme",
+  "homepage": "https://github.com/accidentally-awesome-labs/spatula#readme",
   "bugs": {
-    "url": "https://github.com/spatulaai/spatula/issues"
+    "url": "https://github.com/accidentally-awesome-labs/spatula/issues"
   },
-  "private": true,
+  "publishConfig": {
+    "access": "public"
+  },
   "type": "module",
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",

@@ -12,6 +12,14 @@
       "release-type": "node",
       "component": "core"
     },
+    "packages/core-types": {
+      "release-type": "node",
+      "component": "core-types"
+    },
+    "packages/client": {
+      "release-type": "node",
+      "component": "client"
+    },
     "packages/db": {
       "release-type": "node",
       "component": "db"
@@ -32,5 +40,17 @@
       "release-type": "node",
       "component": "cli"
     }
-  }
+  },
+  "plugins": [
+    {
+      "type": "node-workspace",
+      "updatePeerDependencies": true,
+      "merge": false
+    },
+    {
+      "type": "linked-versions",
+      "groupName": "sdk-public",
+      "components": ["core-types", "client"]
+    }
+  ]
 }

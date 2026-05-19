@@ -1,6 +1,8 @@
 {
   ".": "0.0.1",
   "packages/core": "0.0.1",
+  "packages/core-types": "0.0.1",
+  "packages/client": "0.0.1",
   "packages/db": "0.0.1",
   "packages/queue": "0.0.1",
   "packages/shared": "0.0.1",

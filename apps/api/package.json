@@ -1,18 +1,20 @@
 {
   "name": "@spatula/api",
   "version": "0.0.1",
-  "description": "Hono REST API server for Spatula",
+  "description": "Internal Spatula Hono REST API server — NO TS-API compat guarantee. Public SDK is @spatula/client. See docs/compat-policy.md.",
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "https://github.com/spatulaai/spatula.git",
+    "url": "https://github.com/accidentally-awesome-labs/spatula.git",
     "directory": "apps/api"
   },
-  "homepage": "https://github.com/spatulaai/spatula#readme",
+  "homepage": "https://github.com/accidentally-awesome-labs/spatula#readme",
   "bugs": {
-    "url": "https://github.com/spatulaai/spatula/issues"
+    "url": "https://github.com/accidentally-awesome-labs/spatula/issues"
   },
-  "private": true,
+  "publishConfig": {
+    "access": "public"
+  },
   "type": "module",
   "main": "./dist/index.js",
   "scripts": {
