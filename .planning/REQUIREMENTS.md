@@ -39,8 +39,8 @@ Requirements for the v1.0.0 public launch. Each maps to one of phases 15–22. R
 - [x] **API-02**: Every auth'd route sets `X-RateLimit-Limit`, `X-RateLimit-Remaining`, `X-RateLimit-Reset` on success; `Retry-After` on 429.
 - [x] **API-03**: Per-route rate-limit config lives in `config/rate-limits.yaml`, replaces tier presets, and is overridable by self-hosters.
 - [x] **API-04**: Cursor-first pagination is canonical (`{ data, nextCursor, hasMore }`); offset (`?page=`, `?limit=`) is marked `deprecated: true` in OpenAPI with `Deprecation` + `Sunset` headers; removal target v2.0.
-- [ ] **API-05**: `GET /api/v1/openapi.json` serves the OpenAPI spec at runtime from the single source-of-truth used by the build (no drift).
-- [ ] **API-06**: `GET /.well-known/spatula-version` returns version + git-sha + support-matrix snapshot.
+- [x] **API-05**: `GET /api/v1/openapi.json` serves the OpenAPI spec at runtime from the single source-of-truth used by the build (no drift).
+- [x] **API-06**: `GET /.well-known/spatula-version` returns version + git-sha + support-matrix snapshot.
 - [ ] **API-07**: All API timestamps are ISO 8601 UTC; no unix-epoch values remain in any response.
 - [ ] **API-08**: Idempotency on POST/PATCH/DELETE creating state is documented in `docs/api-idempotency.md` with worked examples (functionality already shipped in Wave 3-4).
 - [ ] **API-09**: Webhook retry schedule (1m, 5m, 30m, 2h, 8h → DLQ) is documented in `docs/cookbook/webhooks.md` alongside HMAC-SHA256 verification example and dedup pattern.
@@ -48,7 +48,7 @@ Requirements for the v1.0.0 public launch. Each maps to one of phases 15–22. R
 - [ ] **API-11**: Export format stability is declared — JSON/CSV/Parquet/SQLite/DuckDB shapes including provenance metadata are frozen at v1; documented.
 - [ ] **API-12**: OpenAPI contract tests in `tests/contract/` cover every route, every error status code, every OpenAPI example (examples must validate against their schemas); CI runs them on every PR.
 - [ ] **API-13**: `experimental:` tag policy is documented in `docs/deprecation-policy.md` (6-month max lifetime, graduate-or-remove, `client.experimental.*` namespace, `Deprecation`+`Sunset` headers on removal).
-- [ ] **API-14**: `docs/compat-policy.md` defines the SDK↔server↔core-types compat matrix per spec §3.2.5 (major-compat-within-major, mismatch error classes, 12-month support window).
+- [x] **API-14**: `docs/compat-policy.md` defines the SDK↔server↔core-types compat matrix per spec §3.2.5 (major-compat-within-major, mismatch error classes, 12-month support window).
 
 ### SDK Packages (Phase 16, shipped together with API contract work)
 

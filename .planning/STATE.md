@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v1.1
 milestone_name: Public Launch (Wave 6 / Phase 14)
 status: executing
-stopped_at: Completed 16-2 plan (core-types + client SDK packages)
-last_updated: "2026-05-19T15:04:57.748Z"
+stopped_at: Completed 16-3 plan (openapi runtime endpoint + version probe + compat-policy)
+last_updated: "2026-05-19T15:25:46.175Z"
 last_activity: 2026-05-19
 progress:
   total_phases: 8
   completed_phases: 1
   total_plans: 11
-  completed_plans: 8
+  completed_plans: 9
   percent: 13
 ---
 
@@ -26,7 +26,7 @@ See: `.planning/PROJECT.md` (updated 2026-05-11)
 ## Current Position
 
 Phase: 16 (api-contract-sdk-packages) — EXECUTING
-Plan: 3 of 5
+Plan: 4 of 5
 Status: Ready to execute
 Last activity: 2026-05-19
 
@@ -54,6 +54,7 @@ _v1.1 metrics will populate as plans execute._
 | Phase 15-carveout-migration-squash P06 | 25min | 6 tasks | 11 files |
 | Phase 16 P1 | 75min | 4 tasks | 53 files |
 | Phase 16 P2 | 19min | 3 tasks | 40 files |
+| Phase 16-api-contract-sdk-packages P3 | 13min | 4 tasks | 15 files |
 
 ## Accumulated Context
 
@@ -93,6 +94,11 @@ Full decision log lives in PROJECT.md Key Decisions table. Recent decisions rele
 - [Phase 16]: Plan 16-2: @spatula/client codegen output (25 class-per-code error subclasses) COMMITTED to git; CI drift gate via 'pnpm gen:errors && git diff --exit-code' rather than build-time generation
 - [Phase 16]: Plan 16-2: size-limit v12 requires sidecar esbuild config file (size-limit.esbuild.config.js) instead of inline 'esbuild:{...}' block — locks ESM+browser+es2022+minify+tree-shake measurement
 - [Phase 16]: Plan 16-2: client.experimental Proxy returns undefined for JS-runtime well-known props (then/toJSON/constructor/symbols) so introspection doesn't explode; throws only on attempted use
+- [Phase 16-api-contract-sdk-packages]: Plan 16-3: Validator pre-registers components.schemas with Ajv before per-response compile — fixes $ref resolution; without this, 38 of 38 response-schema compiles fail
+- [Phase 16-api-contract-sdk-packages]: Plan 16-3: VersionProbe caches REJECTED promise on SpatulaVersionMismatchError (verdict sticky) but RESETS probePromise on transient transport error — two-tier cache semantics for D-12
+- [Phase 16-api-contract-sdk-packages]: Plan 16-3: 404 from /.well-known/spatula-version treated as 'unknown server' — probe degrades gracefully so SDK works against non-Spatula servers in tests
+- [Phase 16-api-contract-sdk-packages]: Plan 16-3: SDK_MAJOR_VERSION compiled as module-level const (currently 0); manual bump procedure documented in client.ts JSDoc, triggered alongside release-please major
+- [Phase 16-api-contract-sdk-packages]: Plan 16-3: vitest config broadened to include src/**/*.test.ts so route tests can colocate with their sources (plan files specified colocated paths)
 
 ### Pending Todos
 
@@ -120,6 +126,6 @@ All 9 pre-launch blockers are open as of 2026-05-12 (see PROJECT.md "Pre-launch 
 
 ## Session Continuity
 
-Last session: 2026-05-19T15:04:57.744Z
-Stopped at: Completed 16-2 plan (core-types + client SDK packages)
+Last session: 2026-05-19T15:25:46.171Z
+Stopped at: Completed 16-3 plan (openapi runtime endpoint + version probe + compat-policy)
 Resume file: None
