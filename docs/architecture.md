@@ -124,6 +124,35 @@ Spatula runs in two modes:
 
 Both modes use the same orchestrator functions from `@spatula/core`. The server wraps them in BullMQ workers; the CLI calls them directly via `LocalPipelineRunner`.
 
+## SQLite Backend Decision
+
+**Decision (v1.0): stay on `better-sqlite3@12.10.0` as the local-mode SQLite backend.** Re-evaluate at v2.0.
+
+### Method
+
+Benchmark + feature-parity script at `packages/db/bench/sqlite-comparison.ts`. Reproducible via `pnpm --filter @spatula/db exec tsx ../../packages/db/bench/sqlite-comparison.ts`; results captured in `packages/db/bench/sqlite-comparison.results.md` (timestamped, regenerated each run).
+
+The script applies the three gates from spec §3.2.3 — feature parity (FTS5 / WAL / JSON1 / foreign keys / CHECK constraints), perf parity (10k inserts / selects / single-tx inserts), and non-experimental status — against both backends.
+
+### Findings
+
+1. **FTS5 (decisive — Pitfall #7):** On the v1.0 supported runtime (Node 22 LTS), `node:sqlite` is built against an older SQLite version that lacks FTS5. On developer machines running Node 26+, `node:sqlite` may report FTS5 as AVAILABLE (newer upstream SQLite), but the deployment platform we ship against is Node 22 LTS — so FTS5 parity is NOT guaranteed across the support matrix. Spatula's design contemplates FTS5 for entity-name search post-v1; dropping FTS5 capability now would force a dependency re-introduction later. `better-sqlite3` ships its own SQLite build with FTS5 enabled across every supported Node line.
+2. **JSON1 / WAL:** Both backends support these on all tested Node lines.
+3. **Perf:** `node:sqlite` and `better-sqlite3` are within the same order of magnitude for every workload tested. Neither is a discriminator at v1.0 local-mode scale.
+4. **Experimental status:** `node:sqlite` is marked Experimental (stability index 1) through Node 22 LTS. Production self-hosters cannot rely on Experimental API stability across patch releases.
+
+### Decision
+
+**Stay on `better-sqlite3@12.10.0`.** The local-mode SQLite backend is part of Spatula's `support-matrix.md` — switching to an Experimental API on the LTS runtime trades a known-good audited dep for a stability-uncertain bundled one with feature-parity gaps. Re-evaluate at v2.0.
+
+### Re-evaluation criteria
+
+- The next Node LTS line lists `node:sqlite` as Stable.
+- Node-bundled SQLite includes FTS5 on every supported Node LTS line.
+- Spatula's codebase has been refactored to use only the intersection of `better-sqlite3` + `node:sqlite` APIs (no `db.transaction(fn)` ergonomic; manual `BEGIN`/`COMMIT` instead; no `Statement.iterate()`).
+
+All three must hold to consider the swap.
+
 ## Export format stability
 
 Spatula exports data in **5 formats frozen at v1**: JSON, CSV, Parquet, SQLite, DuckDB. The wire shape of each format is FROZEN — additive-only across 1.x; removing or restructuring exported columns is a MAJOR break (see `docs/compat-policy.md`). Every record includes per-field provenance metadata (one of: `extracted`, `normalized`, `merged`, `resolved`, `inferred`).
