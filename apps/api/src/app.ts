@@ -8,7 +8,8 @@ import { authMiddleware } from './middleware/auth.js';
 import { depsMiddleware } from './middleware/deps.js';
 import { validateTenantMiddleware } from './middleware/validate-tenant.js';
 import { requireScope } from './middleware/require-scope.js';
-import { createOpenAPIRouter } from './openapi-config.js';
+import { createOpenAPIRouter, getCachedOpenAPISpec, validateExamplesAtBoot } from './openapi-config.js';
+import { openapiRoute } from './routes/openapi.js';
 import { jobRoutes } from './routes/jobs.js';
 import { schemaRoutes } from './routes/schemas.js';
 import { extractionRoutes } from './routes/extractions.js';
@@ -206,6 +207,22 @@ export function createApp(deps: AppDeps) {
       app.route('', createQueueDashboard(deps.queues));
     } catch {
       // Bull Board requires real BullMQ Queue instances; skip in test/mock environments
+    }
+  }
+
+  // === Phase 16 plan 16-3 route mounts (additional routes inserted AFTER all
+  // other routes register; ordering is load-bearing — the cached OpenAPI spec
+  // must include every registered route). ===
+  app.route('/api/v1', openapiRoute(app));
+  // PHASE-16-MOUNT-POINT-WELLKNOWN — Task 2 inserts wellKnownRoute() here
+
+  // === dev-only example validation (D-16). Skip in NODE_ENV=production so
+  // production cold-starts are not blocked on schema compile. ===
+  if (process.env.NODE_ENV !== 'production') {
+    const { errors } = validateExamplesAtBoot(getCachedOpenAPISpec(app));
+    if (errors.length) {
+      console.error('OpenAPI example validation failed at boot:\n' + errors.join('\n'));
+      throw new Error('OpenAPI example validation failed (dev/test only); see logs.');
     }
   }
 
