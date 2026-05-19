@@ -1,24 +1,41 @@
 {
   "name": "@spatula/cli",
   "version": "0.0.1",
-  "description": "Command-line interface and TUI for Spatula",
+  "description": "Command-line interface and TUI for Spatula — AI-powered intelligent web crawling.",
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "https://github.com/spatulaai/spatula.git",
+    "url": "https://github.com/accidentally-awesome-labs/spatula.git",
     "directory": "apps/cli"
   },
-  "homepage": "https://github.com/spatulaai/spatula#readme",
+  "homepage": "https://github.com/accidentally-awesome-labs/spatula#readme",
   "bugs": {
-    "url": "https://github.com/spatulaai/spatula/issues"
+    "url": "https://github.com/accidentally-awesome-labs/spatula/issues"
   },
-  "private": true,
   "type": "module",
+  "main": "./dist/index.cjs",
+  "module": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js",
+      "require": "./dist/index.cjs"
+    }
+  },
+  "files": ["dist", "README.md"],
+  "engines": {
+    "node": ">=22"
+  },
+  "publishConfig": {
+    "access": "public",
+    "provenance": true
+  },
   "bin": {
     "spatula": "./dist/index.js"
   },
   "scripts": {
-    "build": "tsc",
+    "build": "tsup --config tsup.config.ts",
     "dev": "tsx watch src/index.tsx",
     "lint": "eslint src/",
     "lint:fix": "eslint src/ --fix",
@@ -61,6 +78,7 @@
     "@spatula/queue": "workspace:*",
     "bullmq": "^5.70.4",
     "ioredis": "^5.10.0",
+    "tsup": "^8.3.0",
     "tsx": "^4.19.0",
     "typescript": "^5.7.0",
     "vitest": "^2.1.0"
