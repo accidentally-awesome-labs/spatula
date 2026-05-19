@@ -147,4 +147,4 @@ This document evolves at phase transitions and milestone boundaries.
 
 ---
 
-_Last updated: 2026-05-18 after completing Phase 15 (Carve-out & Migration Squash) — PR #1 open at accidentally-awesome-labs/spatula; BLOCK-01 + BLOCK-05 cleared_
+_Last updated: 2026-05-19 after completing Phase 16 (API Contract + SDK Packages) — v1 error envelope locked, `@spatula/core-types` + `@spatula/client` shipped (< 50 KB gzipped), runtime OpenAPI + version probe live, contract test suite + 5 docs in place, release-please/trusted-publishing wired for 8 packages; BLOCK-04 status FALLBACK PROPOSED (pending live npm-auth verification by user)_
