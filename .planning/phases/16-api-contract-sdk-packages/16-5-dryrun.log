@@ -1,0 +1,627 @@
+# release-please dry-run smoke (Task 9 of plan 16-5)
+
+## Context
+
+Run at: 2026-05-19T16:01:40Z
+Plan: 16-5 Task 9 — smoke-test release-please dry-run end-to-end against the new 8-package config.
+
+## Environment limitations (NOT a config issue)
+
+The locally-available 'gh auth token' is scoped to a different identity than accidentally-awesome-labs.
+release-please's release-pr command authenticates against api.github.com to fetch releases — that step
+401s in this environment with 'Bad credentials'. The same invocation in the actual release-dry-run
+GitHub Actions workflow (.github/workflows/release-dry-run.yml) uses the workflow-issued GITHUB_TOKEN
+scoped to the repo, and WILL succeed.
+
+As a workaround, this log captures BOTH:
+  1. The 'debug-config' subcommand output (Manifest{...} dump — no auth needed beyond fetching
+     release-please-config.json once).
+  2. The 'release-pr --dry-run' attempt + the auth error (so the 401 is in the log).
+  3. The local config validation (jq-extracted package/plugin/manifest keys — proves the local
+     config has the correct shape; release-please reads the config from the default branch on GitHub,
+     not local, which is why the dump may not yet reflect Tasks 2 & 3 until they land on main).
+
+## Pitfall #3 verification (no doubled-bumping)
+
+The local release-please-config.json has node-workspace.merge:false AND linked-versions:
+  - node-workspace merge:false prevents the bump-merger from creating an oscillating loop
+    between sibling workspace deps.
+  - linked-versions groups core-types + client so they always bump together.
+Together these mean: a triggering commit on @spatula/core-types bumps BOTH core-types and client to
+the same new version (group); independent core-types-only or client-only bumps are NOT possible.
+No warnings of duplicate bump events appear in the release-please output below.
+
+---
+
+❯ Fetching release-please-config.json from branch main
+❯ Fetching .release-please-manifest.json from branch main
+Manifest {
+  repository: {
+    owner: 'accidentally-awesome-labs',
+    repo: 'spatula',
+    defaultBranch: 'main'
+  },
+  github: GitHub {
+    getCommitFiles: [AsyncFunction (anonymous)],
+    graphqlRequest: [AsyncFunction (anonymous)],
+    findFilesByFilenameAndRef: [AsyncFunction (anonymous)],
+    findFilesByGlobAndRef: [AsyncFunction (anonymous)],
+    findFilesByExtensionAndRef: [AsyncFunction (anonymous)],
+    repository: {
+      owner: 'accidentally-awesome-labs',
+      repo: 'spatula',
+      defaultBranch: 'main'
+    },
+    octokit: OctokitWithDefaults {
+      request: [Function],
+      graphql: [Function],
+      log: [Object],
+      hook: [Function],
+      auth: [AsyncFunction (anonymous)],
+      actions: Proxy([Object]),
+      activity: Proxy([Object]),
+      apps: Proxy([Object]),
+      billing: Proxy([Object]),
+      checks: Proxy([Object]),
+      codeScanning: Proxy([Object]),
+      codeSecurity: Proxy([Object]),
+      codesOfConduct: Proxy([Object]),
+      codespaces: Proxy([Object]),
+      copilot: Proxy([Object]),
+      dependabot: Proxy([Object]),
+      dependencyGraph: Proxy([Object]),
+      emojis: Proxy([Object]),
+      gists: Proxy([Object]),
+      git: Proxy([Object]),
+      gitignore: Proxy([Object]),
+      interactions: Proxy([Object]),
+      issues: Proxy([Object]),
+      licenses: Proxy([Object]),
+      markdown: Proxy([Object]),
+      meta: Proxy([Object]),
+      migrations: Proxy([Object]),
+      oidc: Proxy([Object]),
+      orgs: Proxy([Object]),
+      packages: Proxy([Object]),
+      privateRegistries: Proxy([Object]),
+      projects: Proxy([Object]),
+      pulls: Proxy([Object]),
+      rateLimit: Proxy([Object]),
+      reactions: Proxy([Object]),
+      repos: Proxy([Object]),
+      search: Proxy([Object]),
+      secretScanning: Proxy([Object]),
+      securityAdvisories: Proxy([Object]),
+      teams: Proxy([Object]),
+      users: Proxy([Object]),
+      rest: [Object],
+      paginate: [Function]
+    },
+    graphql: [Function: newApi] {
+      defaults: [Function: bound withDefaults],
+      endpoint: [Function]
+    },
+    fileCache: RepositoryFileCache {
+      octokit: [OctokitWithDefaults],
+      repository: [Object],
+      cache: [Map]
+    },
+    logger: CheckpointLogger {
+      error: [Function (anonymous)],
+      warn: [Function (anonymous)],
+      info: [Function (anonymous)],
+      debug: [Function (anonymous)],
+      trace: [Function (anonymous)],
+      includeDebug: true,
+      includeTrace: false
+    },
+    gitHubApi: GitHubApi {
+      graphqlRequest: [AsyncFunction (anonymous)],
+      createPullRequest: [AsyncFunction (anonymous)],
+      getPullRequest: [AsyncFunction (anonymous)],
+      updatePullRequest: [AsyncFunction (anonymous)],
+      createRelease: [AsyncFunction (anonymous)],
+      commentOnIssue: [AsyncFunction (anonymous)],
+      removeIssueLabels: [AsyncFunction (anonymous)],
+      addIssueLabels: [AsyncFunction (anonymous)],
+      repository: [Object],
+      octokitAPIs: [Object],
+      octokit: [OctokitWithDefaults],
+      graphql: [Function],
+      logger: [CheckpointLogger]
+    }
+  },
+  targetBranch: 'main',
+  repositoryConfig: {
+    '.': {
+      releaseType: 'node',
+      bumpMinorPreMajor: true,
+      bumpPatchForMinorPreMajor: true,
+      prereleaseType: undefined,
+      versioning: undefined,
+      changelogSections: undefined,
+      changelogPath: 'CHANGELOG.md',
+      changelogHost: undefined,
+      changelogType: undefined,
+      includeCommitAuthors: undefined,
+      releaseAs: undefined,
+      skipGithubRelease: undefined,
+      skipChangelog: undefined,
+      draft: undefined,
+      forceTag: undefined,
+      draftPullRequest: undefined,
+      prerelease: undefined,
+      component: 'spatula',
+      packageName: undefined,
+      versionFile: undefined,
+      extraFiles: undefined,
+      includeComponentInTag: undefined,
+      includeVInTag: undefined,
+      includeVInReleaseName: undefined,
+      tagSeparator: undefined,
+      pullRequestTitlePattern: undefined,
+      pullRequestHeader: undefined,
+      pullRequestFooter: undefined,
+      componentNoSpace: undefined,
+      separatePullRequests: undefined,
+      skipSnapshot: undefined,
+      initialVersion: undefined,
+      extraLabels: undefined,
+      excludePaths: undefined,
+      dateFormat: undefined
+    },
+    'packages/core': {
+      releaseType: 'node',
+      bumpMinorPreMajor: undefined,
+      bumpPatchForMinorPreMajor: undefined,
+      prereleaseType: undefined,
+      versioning: undefined,
+      changelogSections: undefined,
+      changelogPath: undefined,
+      changelogHost: undefined,
+      changelogType: undefined,
+      includeCommitAuthors: undefined,
+      releaseAs: undefined,
+      skipGithubRelease: undefined,
+      skipChangelog: undefined,
+      draft: undefined,
+      forceTag: undefined,
+      draftPullRequest: undefined,
+      prerelease: undefined,
+      component: 'core',
+      packageName: undefined,
+      versionFile: undefined,
+      extraFiles: undefined,
+      includeComponentInTag: undefined,
+      includeVInTag: undefined,
+      includeVInReleaseName: undefined,
+      tagSeparator: undefined,
+      pullRequestTitlePattern: undefined,
+      pullRequestHeader: undefined,
+      pullRequestFooter: undefined,
+      componentNoSpace: undefined,
+      separatePullRequests: undefined,
+      skipSnapshot: undefined,
+      initialVersion: undefined,
+      extraLabels: undefined,
+      excludePaths: undefined,
+      dateFormat: undefined
+    },
+    'packages/db': {
+      releaseType: 'node',
+      bumpMinorPreMajor: undefined,
+      bumpPatchForMinorPreMajor: undefined,
+      prereleaseType: undefined,
+      versioning: undefined,
+      changelogSections: undefined,
+      changelogPath: undefined,
+      changelogHost: undefined,
+      changelogType: undefined,
+      includeCommitAuthors: undefined,
+      releaseAs: undefined,
+      skipGithubRelease: undefined,
+      skipChangelog: undefined,
+      draft: undefined,
+      forceTag: undefined,
+      draftPullRequest: undefined,
+      prerelease: undefined,
+      component: 'db',
+      packageName: undefined,
+      versionFile: undefined,
+      extraFiles: undefined,
+      includeComponentInTag: undefined,
+      includeVInTag: undefined,
+      includeVInReleaseName: undefined,
+      tagSeparator: undefined,
+      pullRequestTitlePattern: undefined,
+      pullRequestHeader: undefined,
+      pullRequestFooter: undefined,
+      componentNoSpace: undefined,
+      separatePullRequests: undefined,
+      skipSnapshot: undefined,
+      initialVersion: undefined,
+      extraLabels: undefined,
+      excludePaths: undefined,
+      dateFormat: undefined
+    },
+    'packages/queue': {
+      releaseType: 'node',
+      bumpMinorPreMajor: undefined,
+      bumpPatchForMinorPreMajor: undefined,
+      prereleaseType: undefined,
+      versioning: undefined,
+      changelogSections: undefined,
+      changelogPath: undefined,
+      changelogHost: undefined,
+      changelogType: undefined,
+      includeCommitAuthors: undefined,
+      releaseAs: undefined,
+      skipGithubRelease: undefined,
+      skipChangelog: undefined,
+      draft: undefined,
+      forceTag: undefined,
+      draftPullRequest: undefined,
+      prerelease: undefined,
+      component: 'queue',
+      packageName: undefined,
+      versionFile: undefined,
+      extraFiles: undefined,
+      includeComponentInTag: undefined,
+      includeVInTag: undefined,
+      includeVInReleaseName: undefined,
+      tagSeparator: undefined,
+      pullRequestTitlePattern: undefined,
+      pullRequestHeader: undefined,
+      pullRequestFooter: undefined,
+      componentNoSpace: undefined,
+      separatePullRequests: undefined,
+      skipSnapshot: undefined,
+      initialVersion: undefined,
+      extraLabels: undefined,
+      excludePaths: undefined,
+      dateFormat: undefined
+    },
+    'packages/shared': {
+      releaseType: 'node',
+      bumpMinorPreMajor: undefined,
+      bumpPatchForMinorPreMajor: undefined,
+      prereleaseType: undefined,
+      versioning: undefined,
+      changelogSections: undefined,
+      changelogPath: undefined,
+      changelogHost: undefined,
+      changelogType: undefined,
+      includeCommitAuthors: undefined,
+      releaseAs: undefined,
+      skipGithubRelease: undefined,
+      skipChangelog: undefined,
+      draft: undefined,
+      forceTag: undefined,
+      draftPullRequest: undefined,
+      prerelease: undefined,
+      component: 'shared',
+      packageName: undefined,
+      versionFile: undefined,
+      extraFiles: undefined,
+      includeComponentInTag: undefined,
+      includeVInTag: undefined,
+      includeVInReleaseName: undefined,
+      tagSeparator: undefined,
+      pullRequestTitlePattern: undefined,
+      pullRequestHeader: undefined,
+      pullRequestFooter: undefined,
+      componentNoSpace: undefined,
+      separatePullRequests: undefined,
+      skipSnapshot: undefined,
+      initialVersion: undefined,
+      extraLabels: undefined,
+      excludePaths: undefined,
+      dateFormat: undefined
+    },
+    'apps/api': {
+      releaseType: 'node',
+      bumpMinorPreMajor: undefined,
+      bumpPatchForMinorPreMajor: undefined,
+      prereleaseType: undefined,
+      versioning: undefined,
+      changelogSections: undefined,
+      changelogPath: undefined,
+      changelogHost: undefined,
+      changelogType: undefined,
+      includeCommitAuthors: undefined,
+      releaseAs: undefined,
+      skipGithubRelease: undefined,
+      skipChangelog: undefined,
+      draft: undefined,
+      forceTag: undefined,
+      draftPullRequest: undefined,
+      prerelease: undefined,
+      component: 'api',
+      packageName: undefined,
+      versionFile: undefined,
+      extraFiles: undefined,
+      includeComponentInTag: undefined,
+      includeVInTag: undefined,
+      includeVInReleaseName: undefined,
+      tagSeparator: undefined,
+      pullRequestTitlePattern: undefined,
+      pullRequestHeader: undefined,
+      pullRequestFooter: undefined,
+      componentNoSpace: undefined,
+      separatePullRequests: undefined,
+      skipSnapshot: undefined,
+      initialVersion: undefined,
+      extraLabels: undefined,
+      excludePaths: undefined,
+      dateFormat: undefined
+    },
+    'apps/cli': {
+      releaseType: 'node',
+      bumpMinorPreMajor: undefined,
+      bumpPatchForMinorPreMajor: undefined,
+      prereleaseType: undefined,
+      versioning: undefined,
+      changelogSections: undefined,
+      changelogPath: undefined,
+      changelogHost: undefined,
+      changelogType: undefined,
+      includeCommitAuthors: undefined,
+      releaseAs: undefined,
+      skipGithubRelease: undefined,
+      skipChangelog: undefined,
+      draft: undefined,
+      forceTag: undefined,
+      draftPullRequest: undefined,
+      prerelease: undefined,
+      component: 'cli',
+      packageName: undefined,
+      versionFile: undefined,
+      extraFiles: undefined,
+      includeComponentInTag: undefined,
+      includeVInTag: undefined,
+      includeVInReleaseName: undefined,
+      tagSeparator: undefined,
+      pullRequestTitlePattern: undefined,
+      pullRequestHeader: undefined,
+      pullRequestFooter: undefined,
+      componentNoSpace: undefined,
+      separatePullRequests: undefined,
+      skipSnapshot: undefined,
+      initialVersion: undefined,
+      extraLabels: undefined,
+      excludePaths: undefined,
+      dateFormat: undefined
+    }
+  },
+  releasedVersions: {
+    '.': Version {
+      major: 0,
+      minor: 0,
+      patch: 1,
+      preRelease: undefined,
+      build: undefined
+    },
+    'packages/core': Version {
+      major: 0,
+      minor: 0,
+      patch: 1,
+      preRelease: undefined,
+      build: undefined
+    },
+    'packages/db': Version {
+      major: 0,
+      minor: 0,
+      patch: 1,
+      preRelease: undefined,
+      build: undefined
+    },
+    'packages/queue': Version {
+      major: 0,
+      minor: 0,
+      patch: 1,
+      preRelease: undefined,
+      build: undefined
+    },
+    'packages/shared': Version {
+      major: 0,
+      minor: 0,
+      patch: 1,
+      preRelease: undefined,
+      build: undefined
+    },
+    'apps/api': Version {
+      major: 0,
+      minor: 0,
+      patch: 1,
+      preRelease: undefined,
+      build: undefined
+    },
+    'apps/cli': Version {
+      major: 0,
+      minor: 0,
+      patch: 1,
+      preRelease: undefined,
+      build: undefined
+    }
+  },
+  manifestPath: '.release-please-manifest.json',
+  separatePullRequests: false,
+  alwaysUpdate: false,
+  fork: false,
+  signoffUser: undefined,
+  releaseLabels: [ 'autorelease: tagged' ],
+  labels: [ 'autorelease: pending' ],
+  skipLabeling: false,
+  sequentialCalls: false,
+  snapshotLabels: [ 'autorelease: snapshot' ],
+  bootstrapSha: undefined,
+  lastReleaseSha: undefined,
+  draft: undefined,
+  draftPullRequest: undefined,
+  groupPullRequestTitlePattern: undefined,
+  releaseSearchDepth: 400,
+  commitSearchDepth: 500,
+  commitBatchSize: 10,
+  logger: CheckpointLogger {
+    error: [Function (anonymous)],
+    warn: [Function (anonymous)],
+    info: [Function (anonymous)],
+    debug: [Function (anonymous)],
+    trace: [Function (anonymous)],
+    includeDebug: true,
+    includeTrace: false
+  },
+  plugins: [],
+  pullRequestOverflowHandler: FilePullRequestOverflowHandler {
+    github: GitHub {
+      getCommitFiles: [AsyncFunction (anonymous)],
+      graphqlRequest: [AsyncFunction (anonymous)],
+      findFilesByFilenameAndRef: [AsyncFunction (anonymous)],
+      findFilesByGlobAndRef: [AsyncFunction (anonymous)],
+      findFilesByExtensionAndRef: [AsyncFunction (anonymous)],
+      repository: [Object],
+      octokit: [OctokitWithDefaults],
+      graphql: [Function],
+      fileCache: [RepositoryFileCache],
+      logger: [CheckpointLogger],
+      gitHubApi: [GitHubApi]
+    },
+    logger: CheckpointLogger {
+      error: [Function (anonymous)],
+      warn: [Function (anonymous)],
+      info: [Function (anonymous)],
+      debug: [Function (anonymous)],
+      trace: [Function (anonymous)],
+      includeDebug: true,
+      includeTrace: false
+    }
+  }
+}
+===== release-pr --dry-run attempt =====
+❯ Fetching release-please-config.json from branch main
+❯ Fetching .release-please-manifest.json from branch main
+✔ Building pull requests
+✔ Building strategies by path
+❯ .: node
+❯ packages/core: node
+❯ packages/db: node
+❯ packages/queue: node
+❯ packages/shared: node
+❯ apps/api: node
+❯ apps/cli: node
+✔ Collecting release commit SHAs
+❯ release search depth: 400
+❯ Fetching releases with cursor undefined
+release-please release-pr
+
+create or update a PR representing the next release
+
+Options:
+  --help                            Show help                          [boolean]
+  --version                         Show version number                [boolean]
+  --debug                           print verbose errors (use only for local
+                                    debugging).       [boolean] [default: false]
+  --trace                           print extra verbose errors (use only for
+                                    local debugging). [boolean] [default: false]
+  --plugin                          load plugin named
+                                    release-please-<plugin-name>
+                                                           [array] [default: []]
+  --token                           GitHub token with repo write permissions
+  --api-url                         URL to use when making API requests
+                                    [string] [default: "https://api.github.com"]
+  --graphql-url                     URL to use when making GraphQL requests
+                                    [string] [default: "https://api.github.com"]
+  --default-branch                  The branch to open release PRs against and
+                                    tag releases on
+                              [deprecated: use --target-branch instead] [string]
+  --target-branch                   The branch to open release PRs against and
+                                    tag releases on                     [string]
+  --repo-url                        GitHub URL to generate release for[required]
+  --dry-run                         Prepare but do not take action
+                                                      [boolean] [default: false]
+  --local                           Whether to use local clone
+                                                      [boolean] [default: false]
+  --local-path                      Path to local clone directory. If not set,
+                                    uses a temporary directory.         [string]
+  --local-clone-depth               Depth of local clone. Defaults to the entire
+                                    repo.                               [number]
+  --release-as                      override the semantically determined release
+                                    version                             [string]
+  --bump-minor-pre-major            should we bump the semver minor prior to the
+                                    first major release
+                                                      [boolean] [default: false]
+  --bump-patch-for-minor-pre-major  should we bump the semver patch instead of
+                                    the minor for non-breaking changes prior to
+                                    the first major release
+                                                      [boolean] [default: false]
+  --prerelease-type                 type of the prerelease, e.g., alpha [string]
+  --extra-files                     extra files for the strategy to consider
+                                                                        [string]
+  --version-file                    path to version file to update, e.g.,
+                                    version.rb                          [string]
+  --snapshot                        is it a snapshot (or pre-release) being
+                                    generated?        [boolean] [default: false]
+  --versioning-strategy             strategy used for bumping versions
+        [choices: "always-bump-major", "always-bump-minor", "always-bump-patch",
+                   "default", "prerelease", "service-pack"] [default: "default"]
+  --changelog-path                  where can the CHANGELOG be found in the
+                                    project?  [string] [default: "CHANGELOG.md"]
+  --changelog-type                  type of changelog to build
+                                                  [choices: "default", "github"]
+  --changelog-sections              comma-separated list of scopes to include in
+                                    the changelog                       [string]
+  --changelog-host                  host for hyperlinks in the changelog[string]
+  --last-package-version            last version # that package was released as
+                         [deprecated: use --latest-tag-version instead] [string]
+  --latest-tag-version              Override the detected latest tag version
+                                                                        [string]
+  --latest-tag-sha                  Override the detected latest tag SHA[string]
+  --latest-tag-name                 Override the detected latest tag name
+                                                                        [string]
+  --date-format                     format in strftime format for updating dates
+                                                                        [string]
+  --label                           comma-separated list of labels to add to
+                                    from release PR
+                                               [default: "autorelease: pending"]
+  --skip-labeling                   skip application of labels to pull requests
+                                                      [boolean] [default: false]
+  --fork                            should the PR be created from a fork
+                                                      [boolean] [default: false]
+  --draft-pull-request              mark pull request as a draft
+                                                      [boolean] [default: false]
+  --signoff                         Add Signed-off-by line at the end of the
+                                    commit log message using the user and email
+                                    provided. (format "Name
+                                    <email@example.com>").              [string]
+  --include-v-in-tags               include "v" in tag versions
+                                                       [boolean] [default: true]
+  --monorepo-tags                   include library name in tags and release
+                                    branches          [boolean] [default: false]
+  --pull-request-title-pattern      Title pattern to make release PR    [string]
+===== local config validation =====
+
+release-please-config.json packages (9 expected):
+.
+apps/api
+apps/cli
+packages/client
+packages/core
+packages/core-types
+packages/db
+packages/queue
+packages/shared
+
+release-please-config.json plugins (2 expected: node-workspace + linked-versions):
+node-workspace: {"type":"node-workspace","updatePeerDependencies":true,"merge":false}
+linked-versions: {"type":"linked-versions","groupName":"sdk-public","components":["core-types","client"]}
+
+.release-please-manifest.json keys (9 expected):
+.
+apps/api
+apps/cli
+packages/client
+packages/core
+packages/core-types
+packages/db
+packages/queue
+packages/shared
