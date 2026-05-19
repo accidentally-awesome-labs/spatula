@@ -14,10 +14,11 @@ describe('quotas', () => {
   });
 
   describe('QuotaExceededError', () => {
-    it('extends SpatulaError with QUOTA_EXCEEDED code', () => {
+    it('extends SpatulaError with QUOTA.EXCEEDED code', () => {
       const error = new QuotaExceededError('Max concurrent jobs exceeded');
       expect(error).toBeInstanceOf(SpatulaError);
-      expect(error.code).toBe('QUOTA_EXCEEDED');
+      // Phase 16 plan 16-1: legacy 'QUOTA_EXCEEDED' → frozen `ErrorCode.QUOTA_EXCEEDED` ('QUOTA.EXCEEDED').
+      expect(error.code).toBe('QUOTA.EXCEEDED');
       expect(error.name).toBe('QuotaExceededError');
       expect(error.message).toBe('Max concurrent jobs exceeded');
     });
@@ -26,7 +27,7 @@ describe('quotas', () => {
       const error = new QuotaExceededError('limit reached', {
         context: { current: 2, max: 2 },
       });
-      expect(error.code).toBe('QUOTA_EXCEEDED');
+      expect(error.code).toBe('QUOTA.EXCEEDED');
       expect(error.context).toEqual({ current: 2, max: 2 });
     });
   });

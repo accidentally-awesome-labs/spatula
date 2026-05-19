@@ -266,7 +266,7 @@ describe('JobManager', () => {
       (jobRepo as any).countByTenant = vi.fn().mockResolvedValue(2);
 
       await expect(managerWithTenant.startJob(JOB_ID, TENANT_ID)).rejects.toMatchObject({
-        code: 'QUOTA_EXCEEDED',
+        code: 'QUOTA.EXCEEDED',
       });
     });
 
@@ -381,7 +381,7 @@ describe('JobManager', () => {
       (jobRepo as any).countByTenant = vi.fn().mockResolvedValue(2);
 
       await expect(managerWithAudit.startJob(JOB_ID, TENANT_ID)).rejects.toMatchObject({
-        code: 'QUOTA_EXCEEDED',
+        code: 'QUOTA.EXCEEDED',
       });
 
       expect(auditLogger.log).toHaveBeenCalledOnce();

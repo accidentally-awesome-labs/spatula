@@ -72,7 +72,10 @@ export class JobManager {
           );
         }
       } catch (error) {
-        if ((error as any).code === 'QUOTA_EXCEEDED') throw error;
+        // QUOTA.EXCEEDED is the Phase-16 frozen code; QUOTA_EXCEEDED retained
+        // for defense-in-depth in case any in-flight stack still throws legacy.
+        if ((error as any).code === 'QUOTA.EXCEEDED' || (error as any).code === 'QUOTA_EXCEEDED')
+          throw error;
         logger.warn({ err: error, tenantId }, 'Failed to check job quota');
       }
     }
