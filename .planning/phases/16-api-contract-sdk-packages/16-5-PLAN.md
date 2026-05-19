@@ -354,7 +354,7 @@ From 16-RESEARCH Open Questions #3: @spatula/cli dual build via tsup (recommende
 
     Step 2: Verify public-package READMEs (core-types, client) reference docs/compat-policy.md from plan 16-3.
 
-    Step 3: Update apps/cli/README.md with Publishing section pointing to Task 5's tsup build, install command, basic usage, link to docs/compat-policy.md.
+    Step 3: Update apps/cli/README.md with Publishing section pointing to Task 6's tsup build, install command, basic usage, link to docs/compat-policy.md.
 
     Step 4: Run grep gate from 16-VALIDATION.md row SDK-06: for f in packages/{core,db,queue,api,shared}/README.md; do grep -q 'no compat guarantee' "$f" || exit 1; done.
   </action>
@@ -636,7 +636,7 @@ From 16-RESEARCH Open Questions #3: @spatula/cli dual build via tsup (recommende
 1. pnpm install --frozen-lockfile=false + pnpm build + pnpm test + pnpm test:contract + pnpm test:carveout + pnpm test:private-contract — full stack green.
 2. pnpm --filter @spatula/cli pack — installable tarball verification.
 3. pnpm --filter @spatula/client test:integration — 5 integration tests green (mocked default).
-4. release-please dry-run log (Task 8) clean.
+4. release-please dry-run log (Task 9) clean.
 5. Grep gates per 16-VALIDATION.md (SDK-04 pack succeeds; SDK-05 architecture.md SQLite section; SDK-06 5 internal READMEs; SDK-07 dry-run clean; SDK-08 integration tests pass).
 6. CI gate: release-dry-run.yml runs on synthetic PR; non-blocking; reports output.
 7. BLOCK-04 evidence at 16-5-BLOCK04.md exists and records resolution.
