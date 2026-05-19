@@ -2,12 +2,12 @@
 gsd_state_version: 1.0
 milestone: v1.1
 milestone_name: Public Launch (Wave 6 / Phase 14)
-status: ready
-stopped_at: 'Phase 15 (carve-out + migration squash) shipped — PRs #1, #2, #3 merged to main; main CI fully green; ready to start Phase 16 (API Contract Hardening + SDK Packages)'
-last_updated: '2026-05-19T01:00:00.000Z'
+status: Phase 15 shipped — main CI green, release-please healthy; ready to start Phase 16
+stopped_at: Phase 16 context gathered
+last_updated: "2026-05-19T03:01:29.264Z"
 last_activity: 2026-05-19
 progress:
-  total_phases: 8
+  total_phases: 2
   completed_phases: 1
   total_plans: 6
   completed_plans: 6
@@ -109,6 +109,6 @@ All 9 pre-launch blockers are open as of 2026-05-12 (see PROJECT.md "Pre-launch 
 
 ## Session Continuity
 
-Last session: 2026-05-17T19:15:04.703Z
-Stopped at: Completed 15-06-PLAN.md Tasks 1-5; Task 6 PR-open paused at checkpoint:human-action awaiting user approval to fire gh pr create
-Resume file: None
+Last session: 2026-05-19T03:01:29.259Z
+Stopped at: Phase 16 context gathered
+Resume file: .planning/phases/16-api-contract-sdk-packages/16-CONTEXT.md
