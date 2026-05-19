@@ -36,7 +36,7 @@ See `.planning/MILESTONES.md` for the full v1.0 wave breakdown and per-phase del
 ### v1.1 Public Launch (in progress)
 
 - [x] **Phase 15: Carve-out & Migration Squash** — Extract billing/Stripe/metering to private `spatula-saas`; squash OSS migrations to `000_v1_baseline.sql`; ship reverse-contract test. (completed 2026-05-17)
-- [ ] **Phase 16: API Contract Hardening + SDK Packages** — Freeze error envelope, rate-limit headers, cursor-first pagination, runtime OpenAPI; ship `@spatula/client` + `@spatula/core-types` with npm provenance.
+- [x] **Phase 16: API Contract Hardening + SDK Packages** — Freeze error envelope, rate-limit headers, cursor-first pagination, runtime OpenAPI; ship `@spatula/client` + `@spatula/core-types` with npm provenance. (completed 2026-05-19)
 - [ ] **Phase 17: Browser Auth, SSE, CORS** — Ship `GET /api/v1/jobs/:id/events` SSE with `Last-Event-ID` resume, wildcard-subdomain CORS, Dex-OIDC local recipe, key rotation, cross-tenant isolation audit.
 - [ ] **Phase 18: Security Hardening & Legal** — Prompt-injection defense (≥10 adversarial fixtures vs pinned models), redaction sweep, full DSR surface; CLA, TRADEMARK, brand license, audit-CI hardening.
 - [ ] **Phase 19: Deployment & Self-Host Excellence** — k8s kustomize + Render blueprint + multi-arch cosign-signed images + SBOM + backup/upgrade/reverse-proxy/hardware-sizing runbooks.
@@ -120,13 +120,13 @@ Phase 16 (API Contract + SDK)        ← biggest; unblocks most downstream
 5. `GET /api/v1/openapi.json` and `GET /.well-known/spatula-version` are live and the SDK runs a version probe on instantiation that emits a `SpatulaVersionMismatchError` on major mismatch (verified by integration test); `docs/compat-policy.md` is committed.
 6. SQLite backend decision is committed to `docs/architecture.md` with `node:sqlite` vs `better-sqlite3` benchmark numbers; default remains `better-sqlite3` unless WAL+FTS parity, zero-regression, and non-experimental gates all pass.
 
-**Plans:** 4/5 plans executed
+**Plans:** 5/5 plans complete
 Plans:
 - [x] 16-1-PLAN.md — Error envelope sweep + rate-limit headers + cursor-first pagination + offset deprecation (API-01..API-04)
 - [x] 16-2-PLAN.md — @spatula/core-types extract + @spatula/client build + class-per-code typed errors via codegen + size-limit + ESLint type-only-import rule (SDK-01..SDK-03)
 - [x] 16-3-PLAN.md — GET /api/v1/openapi.json boot-cached + GET /.well-known/spatula-version + lazy version probe + docs/compat-policy.md (API-05, API-06, API-14)
 - [x] 16-4-PLAN.md — tests/contract/ suite generated from served /openapi.json via Ajv2020 + idempotency/webhook/experimental-tag/versioning/timestamps/export-format docs (API-07..API-13)
-- [ ] 16-5-PLAN.md — Release infrastructure: BLOCK-04 verify + release-please monorepo manifest + linked-versions + trusted publishing OIDC + provenance + internal-package no-compat READMEs + @spatula/cli publish prep + SQLite benchmark + SDK integration smoke suite (SDK-04..SDK-08)
+- [x] 16-5-PLAN.md — Release infrastructure: BLOCK-04 verify + release-please monorepo manifest + linked-versions + trusted publishing OIDC + provenance + internal-package no-compat READMEs + @spatula/cli publish prep + SQLite benchmark + SDK integration smoke suite (SDK-04..SDK-08)
 **Estimated effort**: 8–10 active sessions
 **UI hint**: yes
 
@@ -260,7 +260,7 @@ Authoritative requirement → phase mapping lives in `.planning/REQUIREMENTS.md`
 | ----------------------------------------- | --------- | -------------- | ----------- | ---------- |
 | 1–13                                      | v1.0      | (collapsed)    | Complete    | 2026-04-20 |
 | 15. Carve-out & Migration Squash          | v1.1      | 6/6            | Complete    | 2026-05-18 |
-| 16. API Contract Hardening + SDK Packages | v1.1      | 4/5 | In Progress|  |
+| 16. API Contract Hardening + SDK Packages | v1.1      | 5/5 | Complete   | 2026-05-19 |
 | 17. Browser Auth, SSE, CORS               | v1.1      | 0/TBD          | Not started | -          |
 | 18. Security Hardening & Legal            | v1.1      | 0/TBD          | Not started | -          |
 | 19. Deployment & Self-Host Excellence     | v1.1      | 0/TBD          | Not started | -          |

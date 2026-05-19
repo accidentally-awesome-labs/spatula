@@ -2,15 +2,15 @@
 gsd_state_version: 1.0
 milestone: v1.1
 milestone_name: Public Launch (Wave 6 / Phase 14)
-status: executing
-stopped_at: Completed 16-4 plan (contract test suite + Phase 16 docs)
-last_updated: "2026-05-19T15:34:46.804Z"
+status: verifying
+stopped_at: Completed 16-5 plan (release infra + SDK integration + SQLite decision)
+last_updated: "2026-05-19T16:08:19.511Z"
 last_activity: 2026-05-19
 progress:
   total_phases: 8
-  completed_phases: 1
+  completed_phases: 2
   total_plans: 11
-  completed_plans: 10
+  completed_plans: 11
   percent: 13
 ---
 
@@ -27,7 +27,7 @@ See: `.planning/PROJECT.md` (updated 2026-05-11)
 
 Phase: 16 (api-contract-sdk-packages) — EXECUTING
 Plan: 5 of 5
-Status: Ready to execute
+Status: Phase complete — ready for verification
 Last activity: 2026-05-19
 
 Progress: [█░░░░░░░░░] 13% (1/8 v1.1 phases complete)
@@ -56,6 +56,7 @@ _v1.1 metrics will populate as plans execute._
 | Phase 16 P2 | 19min | 3 tasks | 40 files |
 | Phase 16-api-contract-sdk-packages P3 | 13min | 4 tasks | 15 files |
 | Phase 16-api-contract-sdk-packages P4 | 21min | 3 tasks | 24 files |
+| Phase 16-api-contract-sdk-packages P5 | 22min | 9 tasks | 27 files |
 
 ## Accumulated Context
 
@@ -105,6 +106,12 @@ Full decision log lives in PROJECT.md Key Decisions table. Recent decisions rele
 - [Phase 16-api-contract-sdk-packages]: Plan 16-4: Ajv2020 import via 'ajv/dist/2020.js' enforced in helpers/ajv-setup.ts (Pitfall #1 — default 'ajv' import silently uses draft-07 and mis-validates OpenAPI 3.1 nullable/prefixItems)
 - [Phase 16-api-contract-sdk-packages]: Plan 16-4: ioredis added to root devDependencies (test-only) rather than re-exporting Redis from @spatula/db — keeps public-surface clean for a test-only concern
 - [Phase 16-api-contract-sdk-packages]: Plan 16-4: Webhooks cookbook documents the v1 design target (1m, 5m, 30m, 2h, 8h → DLQ) with explicit 'current impl note' that webhook-worker.ts only ships first 3 delays at v1.0 — retry-schedule expansion is additive and does not change API contract
+- [Phase 16-api-contract-sdk-packages]: Plan 16-5: BLOCK-04 effective scope is @spatula (existing); fallback @spatulaai documented as 1-commit atomic rename procedure; final user clearance deferred to a logged-in npm session before publish
+- [Phase 16-api-contract-sdk-packages]: Plan 16-5: release-please uses node-workspace merge:false + linked-versions sdk-public:[core-types,client] — Pitfall #3 protection (no oscillating bumps); SDK packages bump together
+- [Phase 16-api-contract-sdk-packages]: Plan 16-5: release.yml uses GitHub OIDC trusted publishing (id-token:write at JOB level — Pitfall #4); no long-lived publish token; --provenance --access public per package; workflow upgrades npm to latest before publish (>= 11.5.1 required)
+- [Phase 16-api-contract-sdk-packages]: Plan 16-5: @spatula/cli uses tsup for dual ESM+CJS build with externalized playwright + workspace deps; preserves source shebang (no banner callback to avoid doubling)
+- [Phase 16-api-contract-sdk-packages]: Plan 16-5: SQLite v1.0 stays on better-sqlite3@12.10.0; Node 22 LTS bundled SQLite lacks FTS5 and node:sqlite is Experimental — feature parity gate fails per spec §3.2.3 across support matrix
+- [Phase 16-api-contract-sdk-packages]: Plan 16-5: SDK integration tests branch on SPATULA_LIVE_LLM via it.skipIf(LIVE); default pnpm test excludes tests/integration/ so contributor-fork CI passes without OPENROUTER_API_KEY
 
 ### Pending Todos
 
@@ -132,6 +139,6 @@ All 9 pre-launch blockers are open as of 2026-05-12 (see PROJECT.md "Pre-launch 
 
 ## Session Continuity
 
-Last session: 2026-05-19T15:34:46.800Z
-Stopped at: Completed 16-4 plan (contract test suite + Phase 16 docs)
+Last session: 2026-05-19T16:08:00.645Z
+Stopped at: Completed 16-5 plan (release infra + SDK integration + SQLite decision)
 Resume file: None

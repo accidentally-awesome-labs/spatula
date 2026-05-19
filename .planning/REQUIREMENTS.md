@@ -55,11 +55,11 @@ Requirements for the v1.0.0 public launch. Each maps to one of phases 15–22. R
 - [x] **SDK-01**: `@spatula/core-types` package exists with type-only exports, zod schemas, `JobConfig`, `FieldDef`, action types, error-code enum, zero runtime deps (zod peer), ESLint rule preventing non-type imports.
 - [x] **SDK-02**: `@spatula/client` package exists — `SpatulaClient` class + typed errors keyed to error-code enum, fetch-based, browser+Node compatible, ESM-only, `sideEffects: false`, explicit `exports` field.
 - [x] **SDK-03**: `@spatula/client` measured bundle (`import { SpatulaClient, createJob, listJobs, getEntities }`, esbuild `--bundle --minify --format=esm --platform=browser`) is <50 KB gzipped; enforced by `size-limit` in CI.
-- [ ] **SDK-04**: `@spatula/cli` is publish-ready — `bin`, `publishConfig.access=public`, dual ESM+CJS build, `files` allowlist (not `.npmignore`), `engines: { node: ">=22" }`, Playwright browsers installed via `spatula setup` (no postinstall).
-- [ ] **SDK-05**: SQLite-backend decision is benchmarked first task of Phase 16 (`node:sqlite` vs `better-sqlite3`); decision + numbers committed to `docs/architecture.md`; default stays `better-sqlite3` unless all three gates (feature parity for WAL+FTS, zero perf regression, non-experimental status) pass.
-- [ ] **SDK-06**: Internal packages (`@spatula/core`, `@spatula/db`, `@spatula/queue`, `@spatula/api`, `@spatula/shared`) are publish-ready with explicit "no compat guarantee at TS API level" notice in each package README per spec §3.2.4.
-- [ ] **SDK-07**: Release workflow publishes all eight packages with `--provenance` and `--access public` for the public ones; published packages dry-run cleanly.
-- [ ] **SDK-08**: SDK integration test suite hits every major endpoint (`createJob`, `listJobs`, `getEntities`, `getJobEvents`, etc.) and is gated by `SPATULA_LIVE_LLM` env var; mocked by default for contributor forks.
+- [x] **SDK-04**: `@spatula/cli` is publish-ready — `bin`, `publishConfig.access=public`, dual ESM+CJS build, `files` allowlist (not `.npmignore`), `engines: { node: ">=22" }`, Playwright browsers installed via `spatula setup` (no postinstall).
+- [x] **SDK-05**: SQLite-backend decision is benchmarked first task of Phase 16 (`node:sqlite` vs `better-sqlite3`); decision + numbers committed to `docs/architecture.md`; default stays `better-sqlite3` unless all three gates (feature parity for WAL+FTS, zero perf regression, non-experimental status) pass.
+- [x] **SDK-06**: Internal packages (`@spatula/core`, `@spatula/db`, `@spatula/queue`, `@spatula/api`, `@spatula/shared`) are publish-ready with explicit "no compat guarantee at TS API level" notice in each package README per spec §3.2.4.
+- [x] **SDK-07**: Release workflow publishes all eight packages with `--provenance` and `--access public` for the public ones; published packages dry-run cleanly.
+- [x] **SDK-08**: SDK integration test suite hits every major endpoint (`createJob`, `listJobs`, `getEntities`, `getJobEvents`, etc.) and is gated by `SPATULA_LIVE_LLM` env var; mocked by default for contributor forks.
 
 ### Browser Auth, SSE, CORS (Phase 17)
 
