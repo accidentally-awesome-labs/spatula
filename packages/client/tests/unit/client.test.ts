@@ -61,6 +61,7 @@ describe('SpatulaClient', () => {
         baseUrl: 'https://api.example.com',
         apiKey: 'k',
         fetch: fetchMock as unknown as typeof fetch,
+        skipVersionProbe: true,
       });
 
       try {
@@ -76,18 +77,20 @@ describe('SpatulaClient', () => {
     });
 
     it('falls back to SpatulaApiError for unknown codes', async () => {
-      fetchMock.mockResolvedValue(
-        new Response(
-          JSON.stringify({
-            error: { code: 'UNKNOWN.MYSTERY', message: 'huh', requestId: 'req-2' },
-          }),
-          { status: 500, headers: { 'content-type': 'application/json' } },
-        ),
+      fetchMock.mockImplementation(
+        () =>
+          new Response(
+            JSON.stringify({
+              error: { code: 'UNKNOWN.MYSTERY', message: 'huh', requestId: 'req-2' },
+            }),
+            { status: 500, headers: { 'content-type': 'application/json' } },
+          ),
       );
       const client = new SpatulaClient({
         baseUrl: 'https://api.example.com',
         apiKey: 'k',
         fetch: fetchMock as unknown as typeof fetch,
+        skipVersionProbe: true,
       });
       try {
         await client.request('GET', '/api/v1/anything');
@@ -99,27 +102,31 @@ describe('SpatulaClient', () => {
     });
 
     it('returns parsed JSON on 2xx', async () => {
-      fetchMock.mockResolvedValue(
-        new Response(JSON.stringify({ id: 'job-1', name: 'demo' }), {
-          status: 200,
-          headers: { 'content-type': 'application/json' },
-        }),
+      fetchMock.mockImplementation(
+        () =>
+          new Response(JSON.stringify({ id: 'job-1', name: 'demo' }), {
+            status: 200,
+            headers: { 'content-type': 'application/json' },
+          }),
       );
+      // skipVersionProbe so the test exercises only the request path.
       const client = new SpatulaClient({
         baseUrl: 'https://api.example.com',
         apiKey: 'k',
         fetch: fetchMock as unknown as typeof fetch,
+        skipVersionProbe: true,
       });
       const result = await client.request<{ id: string; name: string }>('GET', '/api/v1/jobs/job-1');
       expect(result).toEqual({ id: 'job-1', name: 'demo' });
     });
 
     it('sets the Authorization header on every request', async () => {
-      fetchMock.mockResolvedValue(new Response('{}', { status: 200 }));
+      fetchMock.mockImplementation(() => new Response('{}', { status: 200 }));
       const client = new SpatulaClient({
         baseUrl: 'https://api.example.com',
         apiKey: 'secret-key',
         fetch: fetchMock as unknown as typeof fetch,
+        skipVersionProbe: true,
       });
       await client.request('GET', '/api/v1/jobs');
       const callArgs = fetchMock.mock.calls[0];

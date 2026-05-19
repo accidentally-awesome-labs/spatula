@@ -38,4 +38,11 @@ export {
 } from './errors/base.js';
 export type { SpatulaApiErrorOpts } from './errors/base.js';
 
+// Phase 16 plan 16-3 (D-12): lazy version probe. Exported for advanced
+// consumers who want to drive `ensure()` manually (e.g., a `doctor`-style
+// command that wants to surface major-mismatch ahead of any user-visible
+// request). Most callers use `SpatulaClient` directly.
+export { VersionProbe } from './version-probe.js';
+export type { VersionProbeOptions } from './version-probe.js';
+
 export * from './errors/generated.js';
