@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v1.1
 milestone_name: Public Launch (Wave 6 / Phase 14)
 status: executing
-stopped_at: Completed 16-3 plan (openapi runtime endpoint + version probe + compat-policy)
-last_updated: "2026-05-19T15:25:46.175Z"
+stopped_at: Completed 16-4 plan (contract test suite + Phase 16 docs)
+last_updated: "2026-05-19T15:34:46.804Z"
 last_activity: 2026-05-19
 progress:
   total_phases: 8
   completed_phases: 1
   total_plans: 11
-  completed_plans: 9
+  completed_plans: 10
   percent: 13
 ---
 
@@ -26,7 +26,7 @@ See: `.planning/PROJECT.md` (updated 2026-05-11)
 ## Current Position
 
 Phase: 16 (api-contract-sdk-packages) — EXECUTING
-Plan: 4 of 5
+Plan: 5 of 5
 Status: Ready to execute
 Last activity: 2026-05-19
 
@@ -55,6 +55,7 @@ _v1.1 metrics will populate as plans execute._
 | Phase 16 P1 | 75min | 4 tasks | 53 files |
 | Phase 16 P2 | 19min | 3 tasks | 40 files |
 | Phase 16-api-contract-sdk-packages P3 | 13min | 4 tasks | 15 files |
+| Phase 16-api-contract-sdk-packages P4 | 21min | 3 tasks | 24 files |
 
 ## Accumulated Context
 
@@ -99,6 +100,11 @@ Full decision log lives in PROJECT.md Key Decisions table. Recent decisions rele
 - [Phase 16-api-contract-sdk-packages]: Plan 16-3: 404 from /.well-known/spatula-version treated as 'unknown server' — probe degrades gracefully so SDK works against non-Spatula servers in tests
 - [Phase 16-api-contract-sdk-packages]: Plan 16-3: SDK_MAJOR_VERSION compiled as module-level const (currently 0); manual bump procedure documented in client.ts JSDoc, triggered alongside release-please major
 - [Phase 16-api-contract-sdk-packages]: Plan 16-3: vitest config broadened to include src/**/*.test.ts so route tests can colocate with their sources (plan files specified colocated paths)
+- [Phase 16-api-contract-sdk-packages]: Plan 16-4: Two-pass matrix driver — Pass 1 (spec-only example validation, deterministic) + Pass 2 (live 2xx best-effort) — catches both spec-side and runtime-side drift
+- [Phase 16-api-contract-sdk-packages]: Plan 16-4: Contract harness uses Node-builtin http.Server adapter (carry-forward from Phase 15 tests/carveout/fixtures/server.ts) — avoids adding @hono/node-server to workspace root for a test-only concern
+- [Phase 16-api-contract-sdk-packages]: Plan 16-4: Ajv2020 import via 'ajv/dist/2020.js' enforced in helpers/ajv-setup.ts (Pitfall #1 — default 'ajv' import silently uses draft-07 and mis-validates OpenAPI 3.1 nullable/prefixItems)
+- [Phase 16-api-contract-sdk-packages]: Plan 16-4: ioredis added to root devDependencies (test-only) rather than re-exporting Redis from @spatula/db — keeps public-surface clean for a test-only concern
+- [Phase 16-api-contract-sdk-packages]: Plan 16-4: Webhooks cookbook documents the v1 design target (1m, 5m, 30m, 2h, 8h → DLQ) with explicit 'current impl note' that webhook-worker.ts only ships first 3 delays at v1.0 — retry-schedule expansion is additive and does not change API contract
 
 ### Pending Todos
 
@@ -126,6 +132,6 @@ All 9 pre-launch blockers are open as of 2026-05-12 (see PROJECT.md "Pre-launch 
 
 ## Session Continuity
 
-Last session: 2026-05-19T15:25:46.171Z
-Stopped at: Completed 16-3 plan (openapi runtime endpoint + version probe + compat-policy)
+Last session: 2026-05-19T15:34:46.800Z
+Stopped at: Completed 16-4 plan (contract test suite + Phase 16 docs)
 Resume file: None
