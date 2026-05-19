@@ -114,9 +114,11 @@ describe('JWT tenant resolution', () => {
 
     expect(res.status).toBe(400);
     const body = await res.json();
-    expect(body.error.code).toBe('TENANT_REQUIRED');
-    expect(body.error.tenants).toHaveLength(2);
-    expect(body.error.tenants).toEqual(
+    expect(body.error.code).toBe('VALIDATION.PARAMS');
+    // Phase 16 plan 16-1: tenants list moved into structured `details` payload
+    // (was top-level `error.tenants` pre-envelope-freeze).
+    expect(body.error.details.tenants).toHaveLength(2);
+    expect(body.error.details.tenants).toEqual(
       expect.arrayContaining([
         expect.objectContaining({ tenantId: 'tenant-1', role: 'owner' }),
         expect.objectContaining({ tenantId: 'tenant-2', role: 'member' }),
@@ -142,7 +144,7 @@ describe('JWT tenant resolution', () => {
 
     expect(res.status).toBe(403);
     const body = await res.json();
-    expect(body.error.code).toBe('TENANT_FORBIDDEN');
+    expect(body.error.code).toBe('AUTH.INSUFFICIENT_SCOPE');
   });
 
   it('auto-creates tenant when JWT user has 0 tenants', async () => {
@@ -228,7 +230,7 @@ describe('JWT tenant resolution', () => {
 
     expect(res.status).toBe(500);
     const body = await res.json();
-    expect(body.error.code).toBe('SERVER_ERROR');
+    expect(body.error.code).toBe('INTERNAL.ERROR');
   });
 
   it('passes through tenantId unchanged for none strategy', async () => {

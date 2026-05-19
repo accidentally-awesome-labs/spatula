@@ -23,7 +23,7 @@ describe('timeoutMiddleware', () => {
     const res = await app.request('/slow');
     expect(res.status).toBe(504);
     const body = await res.json();
-    expect(body.error.code).toBe('TIMEOUT');
+    expect(body.error.code).toBe('INTERNAL.TIMEOUT');
   });
 
   it('uses route-specific timeout when configured', async () => {

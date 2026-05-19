@@ -1,4 +1,5 @@
 import type { MiddlewareHandler } from 'hono';
+import { ErrorCode } from '@spatula/shared';
 import type { AuthProvider, AuditLogger } from '@spatula/shared';
 import type { UserTenantRepository, TenantRepository } from '@spatula/db';
 
@@ -64,7 +65,10 @@ export function authMiddleware(
         const refreshed = await userTenantRepo.findByUserId(result.userId);
         if (refreshed.length === 0) {
           return c.json(
-            { error: { code: 'SERVER_ERROR', message: 'Failed to provision tenant' } },
+            {
+              // Phase 16 plan 16-1: frozen DOMAIN.CODE enum value (was 'SERVER_ERROR').
+              error: { code: ErrorCode.INTERNAL_ERROR, message: 'Failed to provision tenant' },
+            },
             500,
           );
         }
@@ -78,10 +82,14 @@ export function authMiddleware(
         if (!requestedTenantId) {
           return c.json(
             {
+              // Phase 16 plan 16-1: frozen DOMAIN.CODE enum value (was 'TENANT_REQUIRED').
               error: {
-                code: 'TENANT_REQUIRED',
+                code: ErrorCode.VALIDATION_PARAMS,
                 message: 'Multiple tenants found. Specify X-Tenant-Id header.',
-                tenants: entries.map((e) => ({ tenantId: e.tenantId, role: e.role })),
+                details: {
+                  reason: 'tenant_selection_required',
+                  tenants: entries.map((e) => ({ tenantId: e.tenantId, role: e.role })),
+                },
               },
             },
             400,
@@ -92,9 +100,11 @@ export function authMiddleware(
         if (!match) {
           return c.json(
             {
+              // Phase 16 plan 16-1: frozen DOMAIN.CODE enum value (was 'TENANT_FORBIDDEN').
               error: {
-                code: 'TENANT_FORBIDDEN',
+                code: ErrorCode.AUTH_INSUFFICIENT_SCOPE,
                 message: 'User does not belong to the specified tenant.',
+                details: { requestedTenantId },
               },
             },
             403,

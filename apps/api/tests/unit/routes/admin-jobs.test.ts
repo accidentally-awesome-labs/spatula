@@ -164,7 +164,7 @@ describe('POST /api/v1/admin/jobs/:id/force-cancel', () => {
 
     expect(res.status).toBe(404);
     const body = await res.json();
-    expect(body.error.code).toBe('NOT_FOUND');
+    expect(body.error.code).toBe('JOB.NOT_FOUND');
   });
 
   it('drains matching BullMQ jobs from queues when available', async () => {

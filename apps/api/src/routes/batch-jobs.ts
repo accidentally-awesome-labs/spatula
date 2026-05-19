@@ -1,6 +1,6 @@
 import { Hono } from 'hono';
 import { z } from '@hono/zod-openapi';
-import { createLogger } from '@spatula/shared';
+import { createLogger, ErrorCode } from '@spatula/shared';
 import type { AppEnv } from '../types.js';
 
 const logger = createLogger('batch-jobs');
@@ -19,12 +19,15 @@ export function batchJobRoutes() {
     const raw = await c.req.json();
     const parsed = batchJobSchema.safeParse(raw);
     if (!parsed.success) {
+      const requestId = c.get('requestId') ?? '';
       return c.json(
         {
+          // Phase 16 plan 16-1: frozen DOMAIN.CODE enum value (was 'VALIDATION_ERROR').
           error: {
-            code: 'VALIDATION_ERROR',
+            code: ErrorCode.VALIDATION_SCHEMA,
             message: parsed.error.issues[0]?.message ?? 'Invalid request',
-            requestId: '',
+            requestId,
+            details: { issues: parsed.error.issues },
           },
         },
         400,

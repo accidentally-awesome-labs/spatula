@@ -9,8 +9,7 @@ import {
   dataResponse,
   jsonContent,
 } from '../schemas/responses.js';
-import { NotFoundError } from '../middleware/error-handler.js';
-import { decodeCursor, encodeCursor } from '@spatula/shared';
+import { decodeCursor, encodeCursor, EntityNotFoundError } from '@spatula/shared';
 
 const jobIdParam = z.object({
   jobId: z.string().openapi({ param: { name: 'jobId', in: 'path' } }),
@@ -109,7 +108,7 @@ export function entityRoutes() {
     const deps = c.get('deps');
 
     const entity = await deps.entityRepo.findById(entityId, tenantId);
-    if (!entity) throw new NotFoundError('Entity', entityId);
+    if (!entity) throw new EntityNotFoundError(entityId);
 
     const sources = await deps.entitySourceRepo.findByEntityWithUrls(entityId);
     return c.json({ data: { ...entity, sources } });

@@ -27,7 +27,7 @@ describe('tenantMiddleware', () => {
     const res = await app.request('/test');
     expect(res.status).toBe(400);
     const body = await res.json();
-    expect(body.error.code).toBe('VALIDATION_ERROR');
+    expect(body.error.code).toBe('VALIDATION.PARAMS');
   });
 
   it('returns 400 when x-tenant-id is not a valid UUID', async () => {

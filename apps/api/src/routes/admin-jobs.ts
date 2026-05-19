@@ -1,4 +1,5 @@
 import { Hono } from 'hono';
+import { JobNotFoundError } from '@spatula/shared';
 import type { AppEnv } from '../types.js';
 
 export function adminJobRoutes() {
@@ -37,7 +38,7 @@ export function adminJobRoutes() {
     const jobId = c.req.param('id');
 
     const job = await deps.jobRepo.forceCancel(jobId);
-    if (!job) return c.json({ error: { code: 'NOT_FOUND', message: 'Job not found' } }, 404);
+    if (!job) throw new JobNotFoundError(jobId);
 
     // Drain BullMQ jobs for this job if queues are available
     if (deps.queues) {

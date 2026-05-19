@@ -1,5 +1,6 @@
 import { randomBytes } from 'node:crypto';
 import { createRoute, z } from '@hono/zod-openapi';
+import { InternalError } from '@spatula/shared';
 import { createOpenAPIRouter } from '../openapi-config.js';
 import { jsonContent, errorResponseSchema } from '../schemas/responses.js';
 
@@ -28,7 +29,7 @@ export function wsTokenRoutes() {
     const tenantId = c.get('tenantId');
 
     if (!deps.redis) {
-      throw new Error('Redis not configured');
+      throw new InternalError('Redis not configured');
     }
 
     const token = randomBytes(32).toString('base64url');

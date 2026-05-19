@@ -131,9 +131,20 @@ export const exportResponseSchema = z
 export const errorResponseSchema = z
   .object({
     error: z.object({
-      code: z.string(),
+      code: z.string().openapi({
+        description:
+          'Frozen v1 error code in DOMAIN.CODE form (e.g., JOB.NOT_FOUND). Additive-only in 1.x.',
+        example: 'JOB.NOT_FOUND',
+      }),
       message: z.string(),
       requestId: z.string(),
+      details: z
+        .record(z.unknown())
+        .optional()
+        .openapi({
+          description:
+            'Optional free-form structured context (e.g., { field, issues } for validation; { limit, resetAt } for rate-limit). Shape is per-code; envelope itself is frozen at v1.',
+        }),
     }),
   })
   .openapi('Error');

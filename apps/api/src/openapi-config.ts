@@ -1,4 +1,5 @@
 import { OpenAPIHono } from '@hono/zod-openapi';
+import { ErrorCode } from '@spatula/shared';
 import type { AppEnv } from './types.js';
 
 export function createOpenAPIRouter(): OpenAPIHono<AppEnv> {
@@ -9,11 +10,13 @@ export function createOpenAPIRouter(): OpenAPIHono<AppEnv> {
         return c.json(
           {
             error: {
-              code: 'VALIDATION_ERROR',
+              // Phase 16 plan 16-1: frozen DOMAIN.CODE enum value (was 'VALIDATION_ERROR').
+              code: ErrorCode.VALIDATION_SCHEMA,
               message: result.error.issues
                 .map((i) => `${i.path.join('.')}: ${i.message}`)
                 .join(', '),
               requestId,
+              details: { issues: result.error.issues },
             },
           },
           400,

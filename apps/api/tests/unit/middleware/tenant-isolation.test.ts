@@ -195,7 +195,7 @@ describe('Cross-tenant isolation', () => {
 
       expect(res.status).toBe(404);
       const json = await res.json();
-      expect(json.error.code).toBe('NOT_FOUND');
+      expect(json.error.code).toBe('JOB.NOT_FOUND');
       expect(deps.jobRepo.findById).toHaveBeenCalledWith('job-1', TENANT_B);
     });
   });
@@ -275,7 +275,7 @@ describe('Cross-tenant isolation', () => {
 
       expect(res.status).toBe(400);
       const json = await res.json();
-      expect(json.error.code).toBe('VALIDATION_ERROR');
+      expect(json.error.code).toBe('VALIDATION.PARAMS');
       expect(json.error.message).toContain('x-tenant-id');
     });
 
@@ -284,7 +284,7 @@ describe('Cross-tenant isolation', () => {
 
       expect(res.status).toBe(400);
       const json = await res.json();
-      expect(json.error.code).toBe('VALIDATION_ERROR');
+      expect(json.error.code).toBe('VALIDATION.PARAMS');
     });
 
     it('POST /api/v1/jobs/:id/actions/:aid/approve without header returns 400', async () => {
@@ -296,7 +296,7 @@ describe('Cross-tenant isolation', () => {
 
       expect(res.status).toBe(400);
       const json = await res.json();
-      expect(json.error.code).toBe('VALIDATION_ERROR');
+      expect(json.error.code).toBe('VALIDATION.PARAMS');
     });
 
     it('invalid UUID in x-tenant-id returns 400', async () => {
@@ -306,7 +306,7 @@ describe('Cross-tenant isolation', () => {
 
       expect(res.status).toBe(400);
       const json = await res.json();
-      expect(json.error.code).toBe('VALIDATION_ERROR');
+      expect(json.error.code).toBe('VALIDATION.PARAMS');
       expect(json.error.message).toContain('UUID');
     });
   });

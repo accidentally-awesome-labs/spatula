@@ -1,5 +1,5 @@
 import type { MiddlewareHandler } from 'hono';
-import { ValidationError } from '@spatula/shared';
+import { ValidationParamsError } from '@spatula/shared';
 
 const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const SKIP_PATHS = new Set(['/health', '/api/docs', '/api/openapi.json']);
@@ -11,11 +11,15 @@ export const tenantMiddleware: MiddlewareHandler = async (c, next) => {
 
   const tenantId = c.req.header('x-tenant-id');
   if (!tenantId) {
-    throw new ValidationError('x-tenant-id header is required');
+    throw new ValidationParamsError('x-tenant-id header is required', {
+      context: { header: 'x-tenant-id' },
+    });
   }
 
   if (!UUID_REGEX.test(tenantId)) {
-    throw new ValidationError('x-tenant-id must be a valid UUID');
+    throw new ValidationParamsError('x-tenant-id must be a valid UUID', {
+      context: { header: 'x-tenant-id', value: tenantId },
+    });
   }
 
   c.set('tenantId', tenantId);

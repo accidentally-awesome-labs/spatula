@@ -88,7 +88,7 @@ describe('Extraction routes', () => {
       const res = await app.request('/api/v1/jobs/job-1/extractions?schemaVersion=abc');
       expect(res.status).toBe(400);
       const body = await res.json();
-      expect(body.error.code).toBe('VALIDATION_ERROR');
+      expect(body.error.code).toBe('VALIDATION.SCHEMA');
     });
 
     it('caps limit at 500', async () => {

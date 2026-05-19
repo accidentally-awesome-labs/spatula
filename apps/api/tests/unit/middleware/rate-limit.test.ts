@@ -43,7 +43,7 @@ describe('rateLimitMiddleware', () => {
     expect(res.status).toBe(429);
     expect(res.headers.get('Retry-After')).toBe('60');
     const body = await res.json();
-    expect(body.error.code).toBe('RATE_LIMIT_ERROR');
+    expect(body.error.code).toBe('RATE_LIMIT.EXCEEDED');
   });
 
   it('skips rate limiting when tenantId is not set', async () => {

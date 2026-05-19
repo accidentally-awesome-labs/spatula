@@ -1,6 +1,5 @@
 import type { MiddlewareHandler } from 'hono';
-import { ForbiddenError } from '@spatula/shared';
-import { NotFoundError } from './error-handler.js';
+import { AuthInsufficientScopeError, TenantNotFoundError } from '@spatula/shared';
 
 export const validateTenantMiddleware: MiddlewareHandler = async (c, next) => {
   const tenantId = c.get('tenantId');
@@ -9,11 +8,13 @@ export const validateTenantMiddleware: MiddlewareHandler = async (c, next) => {
   if (deps.tenantRepo && tenantId) {
     const tenant = await deps.tenantRepo.findById(tenantId);
     if (!tenant) {
-      throw new NotFoundError('Tenant', tenantId);
+      throw new TenantNotFoundError(tenantId);
     }
     const config = (tenant.config ?? {}) as Record<string, unknown>;
     if (config.status === 'suspended') {
-      throw new ForbiddenError('Account suspended. Contact support.');
+      throw new AuthInsufficientScopeError('Account suspended. Contact support.', {
+        context: { tenantId, reason: 'suspended' },
+      });
     }
   }
 

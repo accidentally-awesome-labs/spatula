@@ -94,7 +94,7 @@ describe('Entity routes', () => {
       const res = await app.request('/api/v1/jobs/job-1/entities?offset=-1');
       expect(res.status).toBe(400);
       const body = await res.json();
-      expect(body.error.code).toBe('VALIDATION_ERROR');
+      expect(body.error.code).toBe('VALIDATION.SCHEMA');
     });
 
     it('returns total count alongside data in pagination envelope', async () => {
@@ -216,7 +216,7 @@ describe('Entity routes', () => {
       const res = await app.request('/api/v1/jobs/job-1/entities/missing');
       expect(res.status).toBe(404);
       const body = await res.json();
-      expect(body.error.code).toBe('NOT_FOUND');
+      expect(body.error.code).toBe('ENTITY.NOT_FOUND');
     });
   });
 });

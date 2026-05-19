@@ -62,7 +62,7 @@ describe('tenant creation auth protection', () => {
 
     expect(res.status).toBe(403);
     const body = await res.json();
-    expect(body.error.code).toBe('FORBIDDEN');
+    expect(body.error.code).toBe('AUTH.INSUFFICIENT_SCOPE');
   });
 
   it('returns 403 when secret is set and header is wrong', async () => {
@@ -79,7 +79,7 @@ describe('tenant creation auth protection', () => {
 
     expect(res.status).toBe(403);
     const body = await res.json();
-    expect(body.error.code).toBe('FORBIDDEN');
+    expect(body.error.code).toBe('AUTH.INSUFFICIENT_SCOPE');
   });
 
   it('allows creation when secret matches', async () => {

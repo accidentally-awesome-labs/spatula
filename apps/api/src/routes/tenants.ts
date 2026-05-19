@@ -7,7 +7,7 @@ import {
   dataResponse,
   jsonContent,
 } from '../schemas/responses.js';
-import { NotFoundError } from '../middleware/error-handler.js';
+import { InternalError, TenantNotFoundError } from '@spatula/shared';
 
 const createTenantRoute = createRoute({
   method: 'post',
@@ -61,7 +61,7 @@ export function tenantRoutes() {
 
   router.openapi(createTenantRoute, async (c) => {
     const deps = c.get('deps');
-    if (!deps.tenantRepo) throw new Error('Tenant management not configured');
+    if (!deps.tenantRepo) throw new InternalError('Tenant management not configured');
 
     const body = c.req.valid('json');
     const tenant = await deps.tenantRepo.create(body);
@@ -71,11 +71,11 @@ export function tenantRoutes() {
   // @ts-expect-error — OpenAPI handler return type narrowing
   router.openapi(getTenantRoute, async (c) => {
     const deps = c.get('deps');
-    if (!deps.tenantRepo) throw new Error('Tenant management not configured');
+    if (!deps.tenantRepo) throw new InternalError('Tenant management not configured');
 
     const { id } = c.req.valid('param');
     const tenant = await deps.tenantRepo.findById(id);
-    if (!tenant) throw new NotFoundError('Tenant', id);
+    if (!tenant) throw new TenantNotFoundError(id);
 
     return c.json({ data: tenant });
   });
@@ -83,7 +83,7 @@ export function tenantRoutes() {
   // @ts-expect-error — OpenAPI handler return type narrowing
   router.openapi(updateTenantRoute, async (c) => {
     const deps = c.get('deps');
-    if (!deps.tenantRepo) throw new Error('Tenant management not configured');
+    if (!deps.tenantRepo) throw new InternalError('Tenant management not configured');
 
     const { id } = c.req.valid('param');
     const body = c.req.valid('json');

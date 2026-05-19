@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { Hono } from 'hono';
 import { requireScope } from '../../../src/middleware/require-scope.js';
-import { ForbiddenError } from '@spatula/shared';
+import { AuthInsufficientScopeError, ErrorCode } from '@spatula/shared';
 
 function createTestApp(requiredScope: string) {
   const app = new Hono();
@@ -17,10 +17,13 @@ function createTestApp(requiredScope: string) {
   app.use('*', requireScope(requiredScope));
   app.get('/test', (c) => c.json({ ok: true }));
   app.onError((err, c) => {
-    if (err instanceof ForbiddenError) {
-      return c.json({ error: { code: 'FORBIDDEN', message: err.message } }, 403);
+    if (err instanceof AuthInsufficientScopeError) {
+      return c.json(
+        { error: { code: ErrorCode.AUTH_INSUFFICIENT_SCOPE, message: err.message } },
+        403,
+      );
     }
-    return c.json({ error: { code: 'INTERNAL', message: err.message } }, 500);
+    return c.json({ error: { code: ErrorCode.INTERNAL_ERROR, message: err.message } }, 500);
   });
   return app;
 }

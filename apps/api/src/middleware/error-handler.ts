@@ -1,26 +1,69 @@
 import type { ErrorHandler } from 'hono';
-import { SpatulaError, createLogger, captureException } from '@spatula/shared';
+import {
+  SpatulaError,
+  ErrorCode,
+  STATUS_MAP,
+  createLogger,
+  captureException,
+  JobNotFoundError,
+  JobConflictError,
+} from '@spatula/shared';
 
 const logger = createLogger('api:error-handler');
 
+/**
+ * Legacy `NotFoundError` re-export. Many in-flight routes still import this
+ * directly via `from './middleware/error-handler.js'`. Internally it now
+ * extends `JobNotFoundError` for generic "Job"-resource cases and falls back
+ * to a SpatulaError(ErrorCode.JOB_NOT_FOUND) for arbitrary `resource` strings.
+ *
+ * @deprecated Use the domain-specific subclass from `@spatula/shared`
+ * (`JobNotFoundError`, `EntityNotFoundError`, etc.). Removed in v2.
+ */
 export class NotFoundError extends SpatulaError {
   constructor(resource: string, id: string) {
-    super(`${resource} ${id} not found`, 'NOT_FOUND', {
+    // Pick the domain code by resource where possible; fall back to JOB.NOT_FOUND
+    // for arbitrary resources so the envelope still emits a valid frozen-enum
+    // code rather than a legacy flat string.
+    const code = ((): ErrorCode => {
+      const normalized = resource.toLowerCase();
+      if (normalized === 'job') return ErrorCode.JOB_NOT_FOUND;
+      if (normalized === 'entity') return ErrorCode.ENTITY_NOT_FOUND;
+      if (normalized === 'export' || normalized === 'export content')
+        return ErrorCode.EXPORT_NOT_FOUND;
+      if (normalized.startsWith('schema')) return ErrorCode.SCHEMA_NOT_FOUND;
+      if (normalized === 'tenant') return ErrorCode.TENANT_NOT_FOUND;
+      // Fall through: still emits a 404 via STATUS_MAP[JOB.NOT_FOUND].
+      return ErrorCode.JOB_NOT_FOUND;
+    })();
+    super(`${resource} ${id} not found`, code, {
       context: { resource, id },
     });
     this.name = 'NotFoundError';
   }
 }
 
-export class ConflictError extends SpatulaError {
+/**
+ * @deprecated Use `JobConflictError` (or another domain-specific `*ConflictError`)
+ * from `@spatula/shared`. Kept as a re-export for in-flight routes during the
+ * Phase 16 sweep. Removed in v2.
+ */
+export class ConflictError extends JobConflictError {
   constructor(message: string) {
-    super(message, 'CONFLICT');
+    super(message);
     this.name = 'ConflictError';
   }
 }
 
 function mapErrorToStatus(error: unknown): number {
   if (error instanceof SpatulaError) {
+    // Primary path: the new frozen STATUS_MAP keyed by ErrorCode values.
+    const mapped = STATUS_MAP[error.code as keyof typeof STATUS_MAP];
+    if (mapped !== undefined) return mapped;
+
+    // Legacy fallthrough: support any SpatulaError subclass that still emits a
+    // pre-Phase-16 flat code (CRAWL_ERROR, EXTRACTION_ERROR, LLM_ERROR, etc.)
+    // until those callers migrate to a domain-specific subclass.
     switch (error.code) {
       case 'VALIDATION_ERROR':
         return 400;
@@ -32,6 +75,8 @@ function mapErrorToStatus(error: unknown): number {
         return 404;
       case 'CONFLICT':
         return 409;
+      case 'STATE_ERROR':
+        return 409;
       case 'QUEUE_ERROR':
         return 503;
       case 'TIMEOUT_ERROR':
@@ -42,8 +87,6 @@ function mapErrorToStatus(error: unknown): number {
         return 429;
       case 'NETWORK_ERROR':
         return 502;
-      case 'STATE_ERROR':
-        return 409;
       default:
         return 500;
     }
@@ -69,8 +112,19 @@ export const errorHandler: ErrorHandler = (error, c) => {
     );
   }
 
-  const code = error instanceof SpatulaError ? error.code : 'INTERNAL_ERROR';
+  const code = error instanceof SpatulaError ? error.code : ErrorCode.INTERNAL_ERROR;
   const message = status >= 500 ? 'Internal server error' : error.message;
+
+  // `details` flows from `SpatulaError.context` when present, exposing extra
+  // structured information (jobId, limit, resetAt, issues, …) on 4xx errors.
+  // 5xx errors omit `details` to avoid leaking internal state.
+  const details =
+    status < 500 &&
+    error instanceof SpatulaError &&
+    error.context &&
+    Object.keys(error.context).length > 0
+      ? error.context
+      : undefined;
 
   return c.json(
     {
@@ -78,6 +132,7 @@ export const errorHandler: ErrorHandler = (error, c) => {
         code,
         message,
         requestId,
+        ...(details ? { details } : {}),
       },
     },
     status as any,

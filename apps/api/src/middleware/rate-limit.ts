@@ -1,6 +1,6 @@
 import type { MiddlewareHandler } from 'hono';
 import type Redis from 'ioredis';
-import { DEFAULT_RATE_LIMIT } from '@spatula/shared';
+import { DEFAULT_RATE_LIMIT, ErrorCode } from '@spatula/shared';
 
 const WINDOW_MS = 60_000;
 
@@ -54,8 +54,9 @@ export function rateLimitMiddleware(redis: Redis): MiddlewareHandler {
       c.header('Retry-After', '60');
       return c.json(
         {
+          // Phase 16 plan 16-1: frozen DOMAIN.CODE enum value (was 'RATE_LIMIT_ERROR').
           error: {
-            code: 'RATE_LIMIT_ERROR',
+            code: ErrorCode.RATE_LIMIT_EXCEEDED,
             message: 'Rate limit exceeded',
             requestId: c.get('requestId') ?? '',
           },

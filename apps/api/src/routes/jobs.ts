@@ -8,7 +8,7 @@ import {
   dataResponse,
   jsonContent,
 } from '../schemas/responses.js';
-import { NotFoundError } from '../middleware/error-handler.js';
+import { JobNotFoundError } from '@spatula/shared';
 
 // --- Route definitions ---
 
@@ -186,7 +186,7 @@ export function jobRoutes() {
     const deps = c.get('deps');
 
     const job = await deps.jobRepo.findById(id, tenantId);
-    if (!job) throw new NotFoundError('Job', id);
+    if (!job) throw new JobNotFoundError(id);
 
     // Enrich stats with pending actions count and schema field count
     const pendingActionsCount = await deps.actionRepo.countByJobAndStatus(
@@ -215,7 +215,7 @@ export function jobRoutes() {
     const deps = c.get('deps');
 
     const job = await deps.jobRepo.findById(id, tenantId);
-    if (!job) throw new NotFoundError('Job', id);
+    if (!job) throw new JobNotFoundError(id);
 
     const handlers: Record<string, () => Promise<void>> = {
       start: () => deps.jobManager.startJob(id, tenantId),
@@ -248,7 +248,7 @@ export function jobRoutes() {
     const deps = c.get('deps');
 
     const job = await deps.jobRepo.findById(id, tenantId);
-    if (!job) throw new NotFoundError('Job', id);
+    if (!job) throw new JobNotFoundError(id);
 
     await deps.jobRepo.deleteWithData(id, tenantId);
 

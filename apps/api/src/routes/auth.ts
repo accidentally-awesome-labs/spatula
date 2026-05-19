@@ -1,4 +1,5 @@
 import { Hono } from 'hono';
+import { AuthMissingTokenError } from '@spatula/shared';
 import type { AppEnv } from '../types.js';
 
 export function authRoutes() {
@@ -11,7 +12,7 @@ export function authRoutes() {
   app.get('/me', (c) => {
     const tenantId = c.get('tenantId');
     if (!tenantId) {
-      return c.json({ error: { code: 'UNAUTHENTICATED', message: 'No tenant context' } }, 401);
+      throw new AuthMissingTokenError('No tenant context');
     }
 
     // Pull scopes + subject from the AuthResult set by authMiddleware.

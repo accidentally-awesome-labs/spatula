@@ -1,13 +1,19 @@
 import { createRoute, z } from '@hono/zod-openapi';
-import { ValidationError } from '@spatula/shared';
+import { InternalError, ValidationParamsError } from '@spatula/shared';
 import { createOpenAPIRouter } from '../openapi-config.js';
 import { jsonContent, errorResponseSchema } from '../schemas/responses.js';
 
 function parsePeriod(period: string): Date {
   const match = period.match(/^(\d+)d$/);
-  if (!match) throw new ValidationError('Invalid period format. Use Nd (e.g., 30d).');
+  if (!match)
+    throw new ValidationParamsError('Invalid period format. Use Nd (e.g., 30d).', {
+      context: { field: 'period', value: period },
+    });
   const days = parseInt(match[1], 10);
-  if (days < 1 || days > 365) throw new ValidationError('Period must be between 1d and 365d.');
+  if (days < 1 || days > 365)
+    throw new ValidationParamsError('Period must be between 1d and 365d.', {
+      context: { field: 'period', value: period, min: 1, max: 365 },
+    });
   const since = new Date();
   since.setDate(since.getDate() - days);
   return since;
@@ -46,7 +52,7 @@ export function usageRoutes() {
     const deps = c.get('deps');
     const tenantId = c.get('tenantId');
     const { period } = c.req.valid('query');
-    if (!deps.llmUsageRepo) throw new Error('LLM usage tracking not configured');
+    if (!deps.llmUsageRepo) throw new InternalError('LLM usage tracking not configured');
     const since = parsePeriod(period);
     const aggregation = await deps.llmUsageRepo.aggregateByTenant(tenantId, since);
     return c.json({

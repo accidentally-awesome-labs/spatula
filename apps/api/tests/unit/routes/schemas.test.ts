@@ -72,7 +72,7 @@ describe('Schema routes', () => {
       const res = await app.request('/api/v1/jobs/job-1/schema');
       expect(res.status).toBe(404);
       const body = await res.json();
-      expect(body.error.code).toBe('NOT_FOUND');
+      expect(body.error.code).toBe('SCHEMA.NOT_FOUND');
     });
   });
 
@@ -108,28 +108,28 @@ describe('Schema routes', () => {
       const res = await app.request('/api/v1/jobs/job-1/schema/versions/99');
       expect(res.status).toBe(404);
       const body = await res.json();
-      expect(body.error.code).toBe('NOT_FOUND');
+      expect(body.error.code).toBe('SCHEMA.NOT_FOUND');
     });
 
     it('returns 400 for non-numeric version', async () => {
       const res = await app.request('/api/v1/jobs/job-1/schema/versions/abc');
       expect(res.status).toBe(400);
       const body = await res.json();
-      expect(body.error.code).toBe('VALIDATION_ERROR');
+      expect(body.error.code).toBe('VALIDATION.PARAMS');
     });
 
     it('returns 400 for zero version', async () => {
       const res = await app.request('/api/v1/jobs/job-1/schema/versions/0');
       expect(res.status).toBe(400);
       const body = await res.json();
-      expect(body.error.code).toBe('VALIDATION_ERROR');
+      expect(body.error.code).toBe('VALIDATION.PARAMS');
     });
 
     it('returns 400 for negative version', async () => {
       const res = await app.request('/api/v1/jobs/job-1/schema/versions/-1');
       expect(res.status).toBe(400);
       const body = await res.json();
-      expect(body.error.code).toBe('VALIDATION_ERROR');
+      expect(body.error.code).toBe('VALIDATION.PARAMS');
     });
   });
 });

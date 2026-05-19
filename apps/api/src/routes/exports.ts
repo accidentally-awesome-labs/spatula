@@ -7,12 +7,17 @@ import {
   dataResponse,
   jsonContent,
 } from '../schemas/responses.js';
-import { NotFoundError, ConflictError } from '../middleware/error-handler.js';
 import { generateDocumentation, supportsPresignedUrls } from '@spatula/core';
 import type { SchemaDefinition } from '@spatula/core';
+import {
+  decodeCursor,
+  encodeCursor,
+  ExportNotFoundError,
+  JobInvalidStateError,
+  SchemaNotFoundError,
+} from '@spatula/shared';
 import type { Entity } from '@spatula/shared';
 import { paginationSchema, paginationEnvelopeSchema } from '../schemas/pagination.js';
-import { decodeCursor, encodeCursor } from '@spatula/shared';
 
 const jobIdParam = z.object({
   jobId: z.string().openapi({ param: { name: 'jobId', in: 'path' } }),
@@ -193,7 +198,7 @@ export function exportRoutes() {
     const deps = c.get('deps');
 
     const exportRecord = await deps.exportRepo.findById(exportId, tenantId);
-    if (!exportRecord) throw new NotFoundError('Export', exportId);
+    if (!exportRecord) throw new ExportNotFoundError(exportId);
 
     return c.json({ data: exportRecord });
   });
@@ -204,9 +209,9 @@ export function exportRoutes() {
     const deps = c.get('deps');
 
     const exportRecord = await deps.exportRepo.findById(exportId, tenantId);
-    if (!exportRecord) throw new NotFoundError('Export', exportId);
+    if (!exportRecord) throw new ExportNotFoundError(exportId);
     if (exportRecord.status !== 'completed' || !exportRecord.contentRef) {
-      throw new ConflictError('Export is not yet completed');
+      throw new JobInvalidStateError('Export is not yet completed', { context: { exportId } });
     }
 
     // If content store supports presigned URLs, redirect instead of streaming
@@ -234,7 +239,7 @@ export function exportRoutes() {
     let body: string | Uint8Array;
     if (isBinary) {
       const data = await deps.contentStore.retrieveBinary(exportRecord.contentRef);
-      if (!data) throw new NotFoundError('Export content', exportId);
+      if (!data) throw new ExportNotFoundError(exportId, { context: { resource: 'export_content' } });
       body = data;
     } else {
       body = await deps.contentStore.retrieve(exportRecord.contentRef);
@@ -270,7 +275,7 @@ export function exportRoutes() {
     const deps = c.get('deps');
 
     const schemaRow = await deps.schemaRepo.findLatest(jobId, tenantId);
-    if (!schemaRow) throw new NotFoundError('Schema', jobId);
+    if (!schemaRow) throw new SchemaNotFoundError(jobId);
     const schema = schemaRow.definition as SchemaDefinition;
 
     const [entities, totalCount] = await Promise.all([

@@ -12,8 +12,14 @@ import {
   listResponse,
   jsonContent,
 } from '../schemas/responses.js';
-import { DEFAULT_API_KEY_SCOPES, StorageError, ForbiddenError } from '@spatula/shared';
-import { NotFoundError } from '../middleware/error-handler.js';
+import {
+  AuthInsufficientScopeError,
+  DEFAULT_API_KEY_SCOPES,
+  ErrorCode,
+  InternalError,
+  SpatulaError,
+  StorageError,
+} from '@spatula/shared';
 
 function generateApiKey(): { raw: string; hash: string; prefix: string } {
   const random = randomBytes(24).toString('base64url');
@@ -77,7 +83,7 @@ export function apiKeyRoutes() {
 
   router.openapi(createKeyRoute, async (c) => {
     const deps = c.get('deps');
-    if (!deps.apiKeyRepo) throw new Error('API key management not configured');
+    if (!deps.apiKeyRepo) throw new InternalError('API key management not configured');
     const tenantId = c.get('tenantId');
     const body = c.req.valid('json');
 
@@ -89,7 +95,7 @@ export function apiKeyRoutes() {
     if (!callerScopes.includes('admin')) {
       const invalidScopes = scopes.filter((s: string) => !callerScopes.includes(s));
       if (invalidScopes.length > 0) {
-        throw new ForbiddenError(`Cannot grant scopes you don't have: ${invalidScopes.join(', ')}`);
+        throw new AuthInsufficientScopeError(`Cannot grant scopes you don't have: ${invalidScopes.join(', ')}`, { context: { invalidScopes } });
       }
     }
 
@@ -134,7 +140,7 @@ export function apiKeyRoutes() {
 
   router.openapi(listKeysRoute, async (c) => {
     const deps = c.get('deps');
-    if (!deps.apiKeyRepo) throw new Error('API key management not configured');
+    if (!deps.apiKeyRepo) throw new InternalError('API key management not configured');
     const tenantId = c.get('tenantId');
 
     const keys = await deps.apiKeyRepo.listByTenant(tenantId);
@@ -154,7 +160,7 @@ export function apiKeyRoutes() {
   // @ts-expect-error — OpenAPI handler return type narrowing
   router.openapi(revokeKeyRoute, async (c) => {
     const deps = c.get('deps');
-    if (!deps.apiKeyRepo) throw new Error('API key management not configured');
+    if (!deps.apiKeyRepo) throw new InternalError('API key management not configured');
     const tenantId = c.get('tenantId');
     const { id } = c.req.valid('param');
 
@@ -162,7 +168,7 @@ export function apiKeyRoutes() {
       await deps.apiKeyRepo.revoke(id, tenantId);
     } catch (error) {
       if (error instanceof StorageError && error.message.includes('not found')) {
-        throw new NotFoundError('API key', id);
+        throw new SpatulaError(`API key ${id} not found`, ErrorCode.JOB_NOT_FOUND, { context: { resource: 'api_key', apiKeyId: id } });
       }
       throw error;
     }

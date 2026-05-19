@@ -1,10 +1,14 @@
 import { describe, it, expect } from 'vitest';
 import { Hono } from 'hono';
 import { authRoutes } from '../../../src/routes/auth.js';
+import { errorHandler } from '../../../src/middleware/error-handler.js';
 import type { AppEnv } from '../../../src/types.js';
 
 function createTestApp(opts: { tenantId?: string; scopes?: string[]; authUserId?: string | null }) {
   const app = new Hono<AppEnv>();
+  // Phase 16 plan 16-1: /me throws AuthMissingTokenError when tenantId is unset;
+  // wire the real errorHandler so the test sees the envelope shape.
+  app.onError(errorHandler);
   app.use('*', async (c, next) => {
     if (opts.tenantId !== undefined) c.set('tenantId', opts.tenantId);
     if (opts.scopes !== undefined) {
@@ -49,7 +53,7 @@ describe('GET /api/v1/auth/me', () => {
 
     expect(res.status).toBe(401);
     const body = await res.json();
-    expect(body.error.code).toBe('UNAUTHENTICATED');
+    expect(body.error.code).toBe('AUTH.MISSING_TOKEN');
     expect(body.error.message).toBe('No tenant context');
   });
 

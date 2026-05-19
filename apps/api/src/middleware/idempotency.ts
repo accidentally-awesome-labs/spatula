@@ -1,5 +1,5 @@
 import type { MiddlewareHandler } from 'hono';
-import { createLogger } from '@spatula/shared';
+import { createLogger, ErrorCode } from '@spatula/shared';
 
 const logger = createLogger('idempotency');
 const IDEMPOTENCY_TTL = 86400; // 24 hours
@@ -13,12 +13,15 @@ export function idempotencyMiddleware(): MiddlewareHandler {
 
     // Validate key format and length
     if (idempotencyKey.length > 255) {
+      const requestId = c.get('requestId') ?? '';
       return c.json(
         {
+          // Phase 16 plan 16-1: frozen DOMAIN.CODE enum value (was 'VALIDATION_ERROR').
           error: {
-            code: 'VALIDATION_ERROR',
+            code: ErrorCode.VALIDATION_PARAMS,
             message: 'Idempotency-Key must be 255 characters or less',
-            requestId: '',
+            requestId,
+            details: { field: 'idempotency-key', maxLength: 255 },
           },
         },
         400,

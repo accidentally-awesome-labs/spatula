@@ -114,7 +114,7 @@ describe('GET /api/v1/admin/dlq', () => {
 
     expect(res.status).toBe(503);
     const body = await res.json();
-    expect(body.error.code).toBe('NOT_CONFIGURED');
+    expect(body.error.code).toBe('INTERNAL.QUEUE');
   });
 });
 
@@ -142,7 +142,7 @@ describe('GET /api/v1/admin/dlq/:id', () => {
 
     expect(res.status).toBe(404);
     const body = await res.json();
-    expect(body.error.code).toBe('NOT_FOUND');
+    expect(body.error.code).toBe('JOB.NOT_FOUND');
   });
 });
 
@@ -246,7 +246,7 @@ describe('POST /api/v1/admin/dlq/:id/retry', () => {
 
     expect(res.status).toBe(409);
     const body = await res.json();
-    expect(body.error.code).toBe('ALREADY_RESOLVED');
+    expect(body.error.code).toBe('JOB.INVALID_STATE');
   });
 });
 

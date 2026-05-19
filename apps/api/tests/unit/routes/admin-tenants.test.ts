@@ -121,7 +121,7 @@ describe('GET /api/v1/admin/tenants', () => {
 
     expect(res.status).toBe(503);
     const body = await res.json();
-    expect(body.error.code).toBe('NOT_CONFIGURED');
+    expect(body.error.code).toBe('INTERNAL.QUEUE');
   });
 });
 
@@ -157,7 +157,7 @@ describe('GET /api/v1/admin/tenants/:id', () => {
 
     expect(res.status).toBe(404);
     const body = await res.json();
-    expect(body.error.code).toBe('NOT_FOUND');
+    expect(body.error.code).toBe('TENANT.NOT_FOUND');
   });
 
   it('returns 503 when tenantRepo is not configured', async () => {
@@ -234,7 +234,7 @@ describe('PATCH /api/v1/admin/tenants/:id', () => {
 
     expect(res.status).toBe(404);
     const body = await res.json();
-    expect(body.error.code).toBe('NOT_FOUND');
+    expect(body.error.code).toBe('TENANT.NOT_FOUND');
   });
 
   it('returns 503 when tenantRepo is not configured', async () => {

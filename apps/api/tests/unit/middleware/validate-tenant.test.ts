@@ -9,7 +9,12 @@ describe('validateTenantMiddleware', () => {
     // Map SpatulaError codes to HTTP statuses (mirrors real error handler)
     app.onError((err, c) => {
       if (err instanceof SpatulaError) {
+        // Phase 16 plan 16-1: SpatulaError.code is now `DOMAIN.CODE` form
+        // (e.g., TENANT.NOT_FOUND, AUTH.INSUFFICIENT_SCOPE). Mirrors STATUS_MAP.
         const statusMap: Record<string, number> = {
+          'TENANT.NOT_FOUND': 404,
+          'AUTH.INSUFFICIENT_SCOPE': 403,
+          // legacy fallthrough for any caller still on flat codes
           NOT_FOUND: 404,
           FORBIDDEN: 403,
         };

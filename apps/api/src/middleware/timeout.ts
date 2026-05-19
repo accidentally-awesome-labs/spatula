@@ -1,5 +1,5 @@
 import type { MiddlewareHandler } from 'hono';
-import { createLogger } from '@spatula/shared';
+import { createLogger, ErrorCode } from '@spatula/shared';
 
 const logger = createLogger('timeout');
 
@@ -39,7 +39,18 @@ export function timeoutMiddleware(config: TimeoutConfig): MiddlewareHandler {
       if (err instanceof RequestTimeoutError) {
         logger.warn({ path, timeoutMs }, 'request timed out');
         const requestId = c.get('requestId') ?? '';
-        return c.json({ error: { code: 'TIMEOUT', message: err.message, requestId } }, 504);
+        return c.json(
+          {
+            // Phase 16 plan 16-1: frozen DOMAIN.CODE enum value (was 'TIMEOUT').
+            error: {
+              code: ErrorCode.INTERNAL_TIMEOUT,
+              message: err.message,
+              requestId,
+              details: { timeoutMs, path },
+            },
+          },
+          504,
+        );
       }
       throw err;
     } finally {

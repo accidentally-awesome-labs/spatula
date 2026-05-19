@@ -131,7 +131,16 @@ export function createApp(deps: AppDeps) {
   if (creationSecret) {
     app.post('/api/v1/tenants', async (c, next) => {
       if (c.req.header('X-Creation-Secret') !== creationSecret) {
-        return c.json({ error: { code: 'FORBIDDEN', message: 'Invalid creation secret' } }, 403);
+        // Phase 16 plan 16-1: legacy 'FORBIDDEN' → AUTH.INSUFFICIENT_SCOPE
+        return c.json(
+          {
+            error: {
+              code: 'AUTH.INSUFFICIENT_SCOPE',
+              message: 'Invalid creation secret',
+            },
+          },
+          403,
+        );
       }
       return next();
     });

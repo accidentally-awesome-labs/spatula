@@ -38,7 +38,7 @@ describe('validateBody', () => {
     });
     expect(res.status).toBe(400);
     const body = await res.json();
-    expect(body.error.code).toBe('VALIDATION_ERROR');
+    expect(body.error.code).toBe('VALIDATION.SCHEMA');
   });
 
   it('returns 400 for non-JSON body', async () => {

@@ -1,6 +1,6 @@
 import type { MiddlewareHandler } from 'hono';
 import type { z } from 'zod';
-import { ValidationError } from '@spatula/shared';
+import { ValidationSchemaError, ValidationParamsError } from '@spatula/shared';
 
 export function validateBody<T extends z.ZodType>(schema: T): MiddlewareHandler {
   return async (c, next) => {
@@ -8,8 +8,9 @@ export function validateBody<T extends z.ZodType>(schema: T): MiddlewareHandler 
     const result = schema.safeParse(body);
 
     if (!result.success) {
-      throw new ValidationError(
+      throw new ValidationSchemaError(
         `Invalid request body: ${result.error.issues.map((i) => `${i.path.join('.')}: ${i.message}`).join(', ')}`,
+        { context: { issues: result.error.issues } },
       );
     }
 
@@ -24,8 +25,9 @@ export function validateQuery<T extends z.ZodType>(schema: T): MiddlewareHandler
     const result = schema.safeParse(query);
 
     if (!result.success) {
-      throw new ValidationError(
+      throw new ValidationParamsError(
         `Invalid query parameters: ${result.error.issues.map((i) => `${i.path.join('.')}: ${i.message}`).join(', ')}`,
+        { context: { issues: result.error.issues } },
       );
     }
 

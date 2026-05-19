@@ -7,8 +7,7 @@ import {
   listResponse,
   jsonContent,
 } from '../schemas/responses.js';
-import { NotFoundError } from '../middleware/error-handler.js';
-import { ValidationError } from '@spatula/shared';
+import { SchemaNotFoundError, ValidationParamsError } from '@spatula/shared';
 
 const jobIdParam = z.object({
   jobId: z.string().openapi({ param: { name: 'jobId', in: 'path' } }),
@@ -61,7 +60,7 @@ export function schemaRoutes() {
     const deps = c.get('deps');
 
     const schema = await deps.schemaRepo.findLatest(jobId, tenantId);
-    if (!schema) throw new NotFoundError('Schema', jobId);
+    if (!schema) throw new SchemaNotFoundError(jobId);
 
     return c.json({ data: schema });
   });
@@ -83,11 +82,16 @@ export function schemaRoutes() {
     const version = parseInt(versionStr, 10);
 
     if (isNaN(version) || version < 1) {
-      throw new ValidationError('Version must be a positive integer');
+      throw new ValidationParamsError('Version must be a positive integer', {
+        context: { field: 'version', value: versionStr },
+      });
     }
 
     const schema = await deps.schemaRepo.findByVersion(jobId, tenantId, version);
-    if (!schema) throw new NotFoundError('Schema version', String(version));
+    if (!schema)
+      throw new SchemaNotFoundError(`${jobId}@v${version}`, {
+        context: { jobId, version },
+      });
 
     return c.json({ data: schema });
   });
