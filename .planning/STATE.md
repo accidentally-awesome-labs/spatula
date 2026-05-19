@@ -2,15 +2,15 @@
 gsd_state_version: 1.0
 milestone: v1.1
 milestone_name: Public Launch (Wave 6 / Phase 14)
-status: Phase 15 shipped — main CI green, release-please healthy; ready to start Phase 16
-stopped_at: Phase 16 context gathered
-last_updated: "2026-05-19T03:01:29.264Z"
+status: executing
+stopped_at: Completed 16-1 plan (envelope + rate-limit + pagination)
+last_updated: "2026-05-19T05:03:34.542Z"
 last_activity: 2026-05-19
 progress:
-  total_phases: 2
+  total_phases: 8
   completed_phases: 1
-  total_plans: 6
-  completed_plans: 6
+  total_plans: 11
+  completed_plans: 7
   percent: 13
 ---
 
@@ -21,13 +21,13 @@ progress:
 See: `.planning/PROJECT.md` (updated 2026-05-11)
 
 **Core value:** Turn "I want X data from these sites" into a production-quality dataset with provenance.
-**Current focus:** Phase 16 — API Contract Hardening + SDK Packages (next)
+**Current focus:** Phase 16 — api-contract-sdk-packages
 
 ## Current Position
 
-Phase: 16
-Plan: Not started
-Status: Phase 15 shipped — main CI green, release-please healthy; ready to start Phase 16
+Phase: 16 (api-contract-sdk-packages) — EXECUTING
+Plan: 2 of 5
+Status: Ready to execute
 Last activity: 2026-05-19
 
 Progress: [█░░░░░░░░░] 13% (1/8 v1.1 phases complete)
@@ -52,6 +52,7 @@ _v1.1 metrics will populate as plans execute._
 | Phase 15 P04 | 11min | 3 tasks | 10 files |
 | Phase 15-carveout-migration-squash P05 | 13min | 4 tasks | 13 files |
 | Phase 15-carveout-migration-squash P06 | 25min | 6 tasks | 11 files |
+| Phase 16 P1 | 75min | 4 tasks | 53 files |
 
 ## Accumulated Context
 
@@ -82,6 +83,10 @@ Full decision log lives in PROJECT.md Key Decisions table. Recent decisions rele
 - [Phase 15-carveout-migration-squash]: Plan 15-06: Dropped dead 'stripe' dep from apps/api/package.json — Rule-1 fix; survived prior 5 plans because package.json wasn't in Section A filter-repo allowlist. Build + tests still green post-drop (purely subtractive). Final CARVE-04 grep gate now 0 hits across all 3 scopes.
 - [Phase 15-carveout-migration-squash]: Plan 15-06: docs/private-contract.md authored in hybrid format per CONTEXT.md D-03 — surface enumeration per package + SQL FK reference + 8-row Residual Risk Register (runtime/RLS/trigger/column-default/ORM-major-drift/TS-type-shape/grants/journal-divergence) + change-procedure section + two-journal model. 153 lines.
 - [Phase 15-carveout-migration-squash]: Plan 15-06: docs/runbooks/upgrade.md commits no-migration-downgrade (forward-only + pre-flight pg_dump) + expand-contract-only (with rename/type-change/split examples and additive-only exemptions) per ROADMAP success #5 + CARVE-08; PR description (Task 6) references both policies.
+- [Phase 16]: Plan 16-1: ErrorCode enum staged in @spatula/shared (25 codes, 14 domains) for plan 16-2 to MOVE to @spatula/core-types per D-04 sequencing
+- [Phase 16]: Plan 16-1: DLQ/API-key/Action 'not found' use ErrorCode.JOB_NOT_FOUND with details.resource discriminator — avoided enum growth mid-sweep for admin-only resources
+- [Phase 16]: Plan 16-1: Hono c.req.routePath inside app.use('*', ...) returns middleware path (/*), not handler — rate-limit middleware walks matchedRoutes for per-route lookup
+- [Phase 16]: Plan 16-1: rate-limit-config loader walks up parent dirs for config/rate-limits.yaml — robust to monorepo sub-package vitest cwd
 
 ### Pending Todos
 
@@ -109,6 +114,6 @@ All 9 pre-launch blockers are open as of 2026-05-12 (see PROJECT.md "Pre-launch 
 
 ## Session Continuity
 
-Last session: 2026-05-19T03:01:29.259Z
-Stopped at: Phase 16 context gathered
-Resume file: .planning/phases/16-api-contract-sdk-packages/16-CONTEXT.md
+Last session: 2026-05-19T05:03:34.537Z
+Stopped at: Completed 16-1 plan (envelope + rate-limit + pagination)
+Resume file: None

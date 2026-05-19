@@ -35,10 +35,10 @@ Requirements for the v1.0.0 public launch. Each maps to one of phases 15–22. R
 
 ### API Contract Hardening (Phase 16)
 
-- [ ] **API-01**: All 4xx/5xx responses conform to `{ error: { code, message, requestId, details? } }`; the error-code enum is exported from `@spatula/core-types`, frozen at v1, additive-only in 1.x.
-- [ ] **API-02**: Every auth'd route sets `X-RateLimit-Limit`, `X-RateLimit-Remaining`, `X-RateLimit-Reset` on success; `Retry-After` on 429.
-- [ ] **API-03**: Per-route rate-limit config lives in `config/rate-limits.yaml`, replaces tier presets, and is overridable by self-hosters.
-- [ ] **API-04**: Cursor-first pagination is canonical (`{ data, nextCursor, hasMore }`); offset (`?page=`, `?limit=`) is marked `deprecated: true` in OpenAPI with `Deprecation` + `Sunset` headers; removal target v2.0.
+- [x] **API-01**: All 4xx/5xx responses conform to `{ error: { code, message, requestId, details? } }`; the error-code enum is exported from `@spatula/core-types`, frozen at v1, additive-only in 1.x.
+- [x] **API-02**: Every auth'd route sets `X-RateLimit-Limit`, `X-RateLimit-Remaining`, `X-RateLimit-Reset` on success; `Retry-After` on 429.
+- [x] **API-03**: Per-route rate-limit config lives in `config/rate-limits.yaml`, replaces tier presets, and is overridable by self-hosters.
+- [x] **API-04**: Cursor-first pagination is canonical (`{ data, nextCursor, hasMore }`); offset (`?page=`, `?limit=`) is marked `deprecated: true` in OpenAPI with `Deprecation` + `Sunset` headers; removal target v2.0.
 - [ ] **API-05**: `GET /api/v1/openapi.json` serves the OpenAPI spec at runtime from the single source-of-truth used by the build (no drift).
 - [ ] **API-06**: `GET /.well-known/spatula-version` returns version + git-sha + support-matrix snapshot.
 - [ ] **API-07**: All API timestamps are ISO 8601 UTC; no unix-epoch values remain in any response.
