@@ -2,16 +2,16 @@
 gsd_state_version: 1.0
 milestone: v1.1
 milestone_name: Public Launch (Wave 6 / Phase 14)
-status: verifying
-stopped_at: 'Completed 15-06-PLAN.md Tasks 1-5; Task 6 PR-open paused at checkpoint:human-action awaiting user approval to fire gh pr create'
-last_updated: '2026-05-18T00:47:05.483Z'
-last_activity: 2026-05-18
+status: ready
+stopped_at: 'Phase 15 (carve-out + migration squash) shipped — PRs #1, #2, #3 merged to main; main CI fully green; ready to start Phase 16 (API Contract Hardening + SDK Packages)'
+last_updated: '2026-05-19T01:00:00.000Z'
+last_activity: 2026-05-19
 progress:
-  total_phases: 1
+  total_phases: 8
   completed_phases: 1
   total_plans: 6
   completed_plans: 6
-  percent: 0
+  percent: 13
 ---
 
 # Project State
@@ -21,16 +21,16 @@ progress:
 See: `.planning/PROJECT.md` (updated 2026-05-11)
 
 **Core value:** Turn "I want X data from these sites" into a production-quality dataset with provenance.
-**Current focus:** Phase 15 — carveout-migration-squash
+**Current focus:** Phase 16 — API Contract Hardening + SDK Packages (next)
 
 ## Current Position
 
-Phase: 15
+Phase: 16
 Plan: Not started
-Status: Phase complete — ready for verification
-Last activity: 2026-05-18
+Status: Phase 15 shipped — main CI green, release-please healthy; ready to start Phase 16
+Last activity: 2026-05-19
 
-Progress: [░░░░░░░░░░] 0% (0/8 v1.1 phases complete)
+Progress: [█░░░░░░░░░] 13% (1/8 v1.1 phases complete)
 
 ## Performance Metrics
 

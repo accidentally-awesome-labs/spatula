@@ -15,3 +15,7 @@ coverage/
 
 # GSD transient runtime config
 .planning/config.json
+
+# Claude Code transient files
+.claude/scheduled_tasks.lock
+.claude/settings.local.json
