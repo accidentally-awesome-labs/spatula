@@ -46,7 +46,7 @@ See `.planning/MILESTONES.md` for the full v1.0 wave breakdown and per-phase del
 
 ---
 
-## Dependency Graph (v1.1)
+## Dependency Graph
 
 ```
 Phase 15 (Carve-out)
@@ -119,9 +119,10 @@ Phase 16 (API Contract + SDK)        ← biggest; unblocks most downstream
 4. SDK integration smoke (`packages/client/tests/integration/`) hits every major endpoint (`createJob`, `listJobs`, `getEntities`, `getJobEvents`, etc.) and passes; the suite is mocked by default and opts in via `SPATULA_LIVE_LLM=1`.
 5. `GET /api/v1/openapi.json` and `GET /.well-known/spatula-version` are live and the SDK runs a version probe on instantiation that emits a `SpatulaVersionMismatchError` on major mismatch (verified by integration test); `docs/compat-policy.md` is committed.
 6. SQLite backend decision is committed to `docs/architecture.md` with `node:sqlite` vs `better-sqlite3` benchmark numbers; default remains `better-sqlite3` unless WAL+FTS parity, zero-regression, and non-experimental gates all pass.
-   **Plans**: TBD
-   **Estimated effort**: 8–10 active sessions
-   **UI hint**: yes
+
+**Plans**: TBD
+**Estimated effort**: 8–10 active sessions
+**UI hint**: yes
 
 ### Phase 17: Browser Auth, SSE, CORS
 
