@@ -120,7 +120,13 @@ Phase 16 (API Contract + SDK)        ← biggest; unblocks most downstream
 5. `GET /api/v1/openapi.json` and `GET /.well-known/spatula-version` are live and the SDK runs a version probe on instantiation that emits a `SpatulaVersionMismatchError` on major mismatch (verified by integration test); `docs/compat-policy.md` is committed.
 6. SQLite backend decision is committed to `docs/architecture.md` with `node:sqlite` vs `better-sqlite3` benchmark numbers; default remains `better-sqlite3` unless WAL+FTS parity, zero-regression, and non-experimental gates all pass.
 
-**Plans**: TBD
+**Plans:** 5 plans (Wave 1: 16-1; Wave 2: 16-2; Wave 3: 16-3 + 16-4; Wave 4: 16-5)
+Plans:
+- [ ] 16-1-PLAN.md — Error envelope sweep + rate-limit headers + cursor-first pagination + offset deprecation (API-01..API-04)
+- [ ] 16-2-PLAN.md — @spatula/core-types extract + @spatula/client build + class-per-code typed errors via codegen + size-limit + ESLint type-only-import rule (SDK-01..SDK-03)
+- [ ] 16-3-PLAN.md — GET /api/v1/openapi.json boot-cached + GET /.well-known/spatula-version + lazy version probe + docs/compat-policy.md (API-05, API-06, API-14)
+- [ ] 16-4-PLAN.md — tests/contract/ suite generated from served /openapi.json via Ajv2020 + idempotency/webhook/experimental-tag/versioning/timestamps/export-format docs (API-07..API-13)
+- [ ] 16-5-PLAN.md — Release infrastructure: BLOCK-04 verify + release-please monorepo manifest + linked-versions + trusted publishing OIDC + provenance + internal-package no-compat READMEs + @spatula/cli publish prep + SQLite benchmark + SDK integration smoke suite (SDK-04..SDK-08)
 **Estimated effort**: 8–10 active sessions
 **UI hint**: yes
 
