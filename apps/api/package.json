@@ -39,6 +39,7 @@
     "hono": "^4.12.7",
     "ioredis": "^5.10.0",
     "jose": "^6.2.2",
+    "yaml": "2.8.3",
     "zod": "^3.24.0"
   },
   "devDependencies": {
