@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v1.1
 milestone_name: Public Launch (Wave 6 / Phase 14)
 status: executing
-stopped_at: Completed 16-1 plan (envelope + rate-limit + pagination)
-last_updated: "2026-05-19T05:03:34.542Z"
+stopped_at: Completed 16-2 plan (core-types + client SDK packages)
+last_updated: "2026-05-19T15:04:57.748Z"
 last_activity: 2026-05-19
 progress:
   total_phases: 8
   completed_phases: 1
   total_plans: 11
-  completed_plans: 7
+  completed_plans: 8
   percent: 13
 ---
 
@@ -26,7 +26,7 @@ See: `.planning/PROJECT.md` (updated 2026-05-11)
 ## Current Position
 
 Phase: 16 (api-contract-sdk-packages) — EXECUTING
-Plan: 2 of 5
+Plan: 3 of 5
 Status: Ready to execute
 Last activity: 2026-05-19
 
@@ -53,6 +53,7 @@ _v1.1 metrics will populate as plans execute._
 | Phase 15-carveout-migration-squash P05 | 13min | 4 tasks | 13 files |
 | Phase 15-carveout-migration-squash P06 | 25min | 6 tasks | 11 files |
 | Phase 16 P1 | 75min | 4 tasks | 53 files |
+| Phase 16 P2 | 19min | 3 tasks | 40 files |
 
 ## Accumulated Context
 
@@ -87,6 +88,11 @@ Full decision log lives in PROJECT.md Key Decisions table. Recent decisions rele
 - [Phase 16]: Plan 16-1: DLQ/API-key/Action 'not found' use ErrorCode.JOB_NOT_FOUND with details.resource discriminator — avoided enum growth mid-sweep for admin-only resources
 - [Phase 16]: Plan 16-1: Hono c.req.routePath inside app.use('*', ...) returns middleware path (/*), not handler — rate-limit middleware walks matchedRoutes for per-route lookup
 - [Phase 16]: Plan 16-1: rate-limit-config loader walks up parent dirs for config/rate-limits.yaml — robust to monorepo sub-package vitest cwd
+- [Phase 16]: Plan 16-2: ErrorCode + JobConfig/FieldDef/Action/ExtractionResult schemas MOVED from @spatula/shared + @spatula/core to canonical home in @spatula/core-types; old paths preserved as re-export shims
+- [Phase 16]: Plan 16-2: ESLint no-restricted-imports rule blocks value imports from @spatula/core-types monorepo-wide (allowTypeImports:true); per-file exemptions for canonical shim modules (shared/error-codes.ts + core/types/*.ts)
+- [Phase 16]: Plan 16-2: @spatula/client codegen output (25 class-per-code error subclasses) COMMITTED to git; CI drift gate via 'pnpm gen:errors && git diff --exit-code' rather than build-time generation
+- [Phase 16]: Plan 16-2: size-limit v12 requires sidecar esbuild config file (size-limit.esbuild.config.js) instead of inline 'esbuild:{...}' block — locks ESM+browser+es2022+minify+tree-shake measurement
+- [Phase 16]: Plan 16-2: client.experimental Proxy returns undefined for JS-runtime well-known props (then/toJSON/constructor/symbols) so introspection doesn't explode; throws only on attempted use
 
 ### Pending Todos
 
@@ -114,6 +120,6 @@ All 9 pre-launch blockers are open as of 2026-05-12 (see PROJECT.md "Pre-launch 
 
 ## Session Continuity
 
-Last session: 2026-05-19T05:03:34.537Z
-Stopped at: Completed 16-1 plan (envelope + rate-limit + pagination)
+Last session: 2026-05-19T15:04:57.744Z
+Stopped at: Completed 16-2 plan (core-types + client SDK packages)
 Resume file: None
