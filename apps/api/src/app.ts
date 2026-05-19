@@ -10,6 +10,7 @@ import { validateTenantMiddleware } from './middleware/validate-tenant.js';
 import { requireScope } from './middleware/require-scope.js';
 import { createOpenAPIRouter, getCachedOpenAPISpec, validateExamplesAtBoot } from './openapi-config.js';
 import { openapiRoute } from './routes/openapi.js';
+import { wellKnownRoute } from './routes/well-known.js';
 import { jobRoutes } from './routes/jobs.js';
 import { schemaRoutes } from './routes/schemas.js';
 import { extractionRoutes } from './routes/extractions.js';
@@ -214,7 +215,7 @@ export function createApp(deps: AppDeps) {
   // other routes register; ordering is load-bearing — the cached OpenAPI spec
   // must include every registered route). ===
   app.route('/api/v1', openapiRoute(app));
-  // PHASE-16-MOUNT-POINT-WELLKNOWN — Task 2 inserts wellKnownRoute() here
+  app.route('/', wellKnownRoute()); // /.well-known/spatula-version is a sibling of /api/v1
 
   // === dev-only example validation (D-16). Skip in NODE_ENV=production so
   // production cold-starts are not blocked on schema compile. ===
