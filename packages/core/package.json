@@ -44,6 +44,7 @@
     "@aws-sdk/s3-request-presigner": "^3.1019.0",
     "@duckdb/node-api": "1.5.0-r.1",
     "@mendable/firecrawl-js": "^4.15.4",
+    "@spatula/core-types": "workspace:*",
     "@spatula/shared": "workspace:*",
     "better-sqlite3": "^12.8.0",
     "cheerio": "^1.2.0",

@@ -1,0 +1,48 @@
+{
+  "name": "@spatula/core-types",
+  "version": "0.0.1",
+  "description": "Spatula type-only exports, zod schemas, and enums. Zero runtime dependencies; zod as peer. Frozen at v1; additive-only in 1.x.",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/accidentally-awesome-labs/spatula.git",
+    "directory": "packages/core-types"
+  },
+  "homepage": "https://github.com/accidentally-awesome-labs/spatula#readme",
+  "bugs": {
+    "url": "https://github.com/accidentally-awesome-labs/spatula/issues"
+  },
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "files": ["dist", "README.md"],
+  "engines": {
+    "node": ">=22"
+  },
+  "sideEffects": false,
+  "publishConfig": {
+    "access": "public",
+    "provenance": true
+  },
+  "peerDependencies": {
+    "zod": ">=3.22.0 <5.0.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "typescript": "^5.7.0",
+    "vitest": "^2.1.0",
+    "zod": "^3.24.0"
+  },
+  "scripts": {
+    "build": "tsc",
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit",
+    "clean": "rm -rf dist .turbo"
+  }
+}
