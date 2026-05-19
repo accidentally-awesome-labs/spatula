@@ -1,0 +1,41 @@
+/**
+ * @spatula/client — Spatula API client (TypeScript SDK).
+ *
+ * ESM-only. Browser + Node 22+ compatible. fetch-based. `sideEffects: false`.
+ *
+ * Measured surface (≤ 50 KB gzipped, per spec §3.2.1):
+ *   { SpatulaClient, createJob, listJobs, getEntities }
+ *
+ * Importing the full module pulls in additional methods + the ~25 generated
+ * error subclasses; rely on your bundler's tree-shaking to drop unused ones.
+ */
+export { SpatulaClient, SpatulaApiError } from './client.js';
+export type {
+  SpatulaClientOptions,
+  HttpMethod,
+  ApiErrorEnvelope,
+} from './client.js';
+
+export { createJob } from './methods/create-job.js';
+export type { CreateJobInput, CreateJobResult } from './methods/create-job.js';
+
+export { listJobs } from './methods/list-jobs.js';
+export type { ListJobsParams, ListJobsResult, JobListItem } from './methods/list-jobs.js';
+
+export { getEntities } from './methods/get-entities.js';
+export type {
+  GetEntitiesParams,
+  GetEntitiesResult,
+  EntityListItem,
+} from './methods/get-entities.js';
+
+export { getJobEvents } from './methods/get-job-events.js';
+export type { JobEvent } from './methods/get-job-events.js';
+
+export {
+  SpatulaVersionMismatchError,
+  FeatureUnavailableError,
+} from './errors/base.js';
+export type { SpatulaApiErrorOpts } from './errors/base.js';
+
+export * from './errors/generated.js';

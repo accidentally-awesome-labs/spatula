@@ -1,0 +1,10 @@
+[
+  {
+    "name": "core client surface",
+    "path": "dist/index.js",
+    "import": "{ SpatulaClient, createJob, listJobs, getEntities }",
+    "limit": "50 kB",
+    "gzip": true,
+    "config": "./size-limit.esbuild.config.js"
+  }
+]

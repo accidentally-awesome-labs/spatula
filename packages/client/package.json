@@ -1,12 +1,12 @@
 {
-  "name": "@spatula/core-types",
+  "name": "@spatula/client",
   "version": "0.0.1",
-  "description": "Spatula type-only exports, zod schemas, and enums. Zero runtime dependencies; zod as peer. Frozen at v1; additive-only in 1.x.",
+  "description": "Spatula API client — TypeScript SDK for the Spatula REST API. ESM-only, browser+Node compatible, fetch-based.",
   "license": "MIT",
   "repository": {
     "type": "git",
     "url": "https://github.com/accidentally-awesome-labs/spatula.git",
-    "directory": "packages/core-types"
+    "directory": "packages/client"
   },
   "homepage": "https://github.com/accidentally-awesome-labs/spatula#readme",
   "bugs": {
@@ -31,10 +31,16 @@
     "provenance": true
   },
   "peerDependencies": {
-    "zod": ">=3.22.0 <5.0.0"
+    "@spatula/core-types": "0.x"
   },
   "devDependencies": {
+    "@size-limit/esbuild": "^12.1.0",
+    "@size-limit/preset-small-lib": "^12.1.0",
+    "@spatula/core-types": "workspace:*",
+    "@spatula/shared": "workspace:*",
     "@types/node": "^22.0.0",
+    "size-limit": "^12.1.0",
+    "tsx": "^4.19.0",
     "typescript": "^5.7.0",
     "vitest": "^2.1.0",
     "zod": "^3.24.0"
@@ -45,6 +51,18 @@
     "lint": "eslint src/",
     "lint:fix": "eslint src/ --fix",
     "typecheck": "tsc --noEmit",
+    "size": "size-limit",
+    "gen:errors": "tsx scripts/gen-error-classes.ts",
     "clean": "rm -rf dist .turbo"
-  }
+  },
+  "size-limit": [
+    {
+      "name": "core client surface",
+      "path": "dist/index.js",
+      "import": "{ SpatulaClient, createJob, listJobs, getEntities }",
+      "limit": "50 kB",
+      "gzip": true,
+      "config": "./size-limit.esbuild.config.js"
+    }
+  ]
 }
