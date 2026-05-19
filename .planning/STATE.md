@@ -4,7 +4,7 @@ milestone: v1.1
 milestone_name: Public Launch (Wave 6 / Phase 14)
 status: verifying
 stopped_at: Completed 16-5 plan (release infra + SDK integration + SQLite decision)
-last_updated: "2026-05-19T16:08:19.511Z"
+last_updated: "2026-05-19T16:22:16.162Z"
 last_activity: 2026-05-19
 progress:
   total_phases: 8
@@ -25,8 +25,8 @@ See: `.planning/PROJECT.md` (updated 2026-05-11)
 
 ## Current Position
 
-Phase: 16 (api-contract-sdk-packages) — EXECUTING
-Plan: 5 of 5
+Phase: 17
+Plan: Not started
 Status: Phase complete — ready for verification
 Last activity: 2026-05-19
 
