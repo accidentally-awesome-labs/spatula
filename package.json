@@ -41,6 +41,7 @@
     "ajv": "^8.20.0",
     "ajv-formats": "^3.0.1",
     "drizzle-orm": "^0.45.1",
+    "ioredis": "^5.10.0",
     "eslint": "^9.16.0",
     "prettier": "^3.4.0",
     "turbo": "^2.4.0",

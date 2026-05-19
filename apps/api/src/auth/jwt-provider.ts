@@ -1,7 +1,7 @@
 import { createRemoteJWKSet, jwtVerify } from 'jose';
 import type { JWTPayload } from 'jose';
 import type { AuthProvider, AuthResult } from '@spatula/shared';
-import { AuthError } from '@spatula/shared';
+import { AuthMissingTokenError, AuthInvalidTokenError } from '@spatula/shared';
 import type { HonoRequest } from 'hono';
 
 export interface JwtProviderConfig {
@@ -23,10 +23,14 @@ export class JwtAuthProvider implements AuthProvider {
 
   async authenticate(request: HonoRequest): Promise<AuthResult> {
     const authHeader = request.header('authorization');
-    if (!authHeader) throw new AuthError('Authorization header is required');
-    if (!authHeader.startsWith('Bearer ')) throw new AuthError('Bearer token required');
+    // Phase 16 plan 16-4 [Rule 1]: typed DOMAIN.CODE subclasses (MISSING for
+    // absent headers, INVALID for failed verification). Same fix as
+    // api-key-provider.ts — slipped through plan 16-1's grep sweep because
+    // apps/api/src/auth/ was outside the scanned path tree.
+    if (!authHeader) throw new AuthMissingTokenError('Authorization header is required');
+    if (!authHeader.startsWith('Bearer ')) throw new AuthMissingTokenError('Bearer token required');
     const token = authHeader.slice(7);
-    if (!token) throw new AuthError('Bearer token is empty');
+    if (!token) throw new AuthMissingTokenError('Bearer token is empty');
 
     let payload: JWTPayload;
     try {
@@ -36,7 +40,7 @@ export class JwtAuthProvider implements AuthProvider {
       });
       payload = result.payload;
     } catch {
-      throw new AuthError('Invalid or expired token');
+      throw new AuthInvalidTokenError('Invalid or expired token');
     }
 
     return {

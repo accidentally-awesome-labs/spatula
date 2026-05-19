@@ -41,6 +41,7 @@ import {
   JobRepository,
 } from '@spatula/db';
 import type { Pool } from 'pg';
+import Redis from 'ioredis';
 
 export interface ContractServer {
   /** Base URL including the auto-assigned port, e.g. `http://127.0.0.1:54321`. */
@@ -50,6 +51,12 @@ export interface ContractServer {
   /** Repos handed back so suites can seed without rebuilding the connection. */
   tenantRepo: TenantRepository;
   apiKeyRepo: ApiKeyRepository;
+  /**
+   * Underlying Redis client (if `enableRedis: true` was passed). Suites that
+   * need to verify rate-limit headers MUST construct the server with redis;
+   * the rate-limit middleware no-ops when `deps.redis` is absent.
+   */
+  redis: Redis | null;
   /** Shut both the listening socket and the pg pool down. */
   close(): Promise<void>;
 }
@@ -61,6 +68,18 @@ export interface ContractServerOptions {
    * per-test plumbing.
    */
   databaseUrl?: string;
+  /**
+   * If `true`, wire an ioredis client into AppDeps so the rate-limit
+   * middleware activates and emits its 4 response headers. Defaults to
+   * `false` so contract suites that don't need rate-limit headers can boot
+   * without a live Redis instance.
+   */
+  enableRedis?: boolean;
+  /**
+   * Redis URL. Used only when `enableRedis: true`. Defaults to
+   * `process.env.REDIS_URL` then `redis://localhost:6379`.
+   */
+  redisUrl?: string;
 }
 
 /**
@@ -84,6 +103,16 @@ export async function startServer(
   const tenantRepo = new TenantRepository(db);
   const apiKeyRepo = new ApiKeyRepository(db);
   const jobRepo = new JobRepository(db);
+
+  // Optional Redis wiring for suites that need the rate-limit middleware
+  // active (its headers + 429 behavior). Default-off keeps the boot fast and
+  // doesn't fail when Redis isn't available.
+  let redis: Redis | null = null;
+  if (options.enableRedis) {
+    const redisUrl =
+      options.redisUrl ?? process.env.REDIS_URL ?? 'redis://localhost:6379';
+    redis = new Redis(redisUrl, { lazyConnect: false, maxRetriesPerRequest: 1 });
+  }
 
   // Minimal AppDeps — only the bits the contract suite traverses:
   //   - /api/v1/openapi.json is unauthenticated (mounted in app.ts at root)
@@ -118,6 +147,7 @@ export async function startServer(
     tenantRepo,
     apiKeyRepo,
     authProvider: new ApiKeyAuthProvider(apiKeyRepo),
+    redis: redis ?? undefined,
   } as unknown as AppDeps;
 
   const app = createApp(deps);
@@ -190,9 +220,17 @@ export async function startServer(
     pool,
     tenantRepo,
     apiKeyRepo,
+    redis,
     async close(): Promise<void> {
       await new Promise<void>((resolve) => server.close(() => resolve()));
       await pool.end();
+      if (redis) {
+        try {
+          await redis.quit();
+        } catch {
+          // ignore — redis may already be disconnected
+        }
+      }
     },
   };
 }

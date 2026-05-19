@@ -9,6 +9,13 @@ const SKIP_AUTH_PATHS = new Set([
   '/health/ready',
   '/api/docs',
   '/api/openapi.json',
+  // Phase 16 plan 16-3 added these as anonymous endpoints (live OpenAPI
+  // doc + SDK version probe). Plan 16-4 contract suite [Rule 3 blocker]
+  // surfaced the missing skip entries; without them every contract test
+  // ran into 401 on its first fetch. The endpoints are public-by-design
+  // (no PII, no tenant scope; safe to serve unauthenticated).
+  '/api/v1/openapi.json',
+  '/.well-known/spatula-version',
 ]);
 
 const SKIP_AUTH_PREFIXES = ['/api/v1/tenants'];
