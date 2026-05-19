@@ -11,6 +11,7 @@
  * order-of-registration races that would freeze a partial spec.
  */
 import { OpenAPIHono, createRoute, z } from '@hono/zod-openapi';
+import type { Context } from 'hono';
 import { getCachedOpenAPISpec } from '../openapi-config.js';
 import type { AppEnv } from '../types.js';
 
@@ -31,12 +32,13 @@ export function openapiRoute(rootApp: OpenAPIHono<AppEnv>) {
         },
       },
     }),
-    (c) => {
-      // Cast: the cached spec is a plain serializable JS object; Hono's
-      // typed c.json wants a record matching the declared response schema.
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      return c.json(getCachedOpenAPISpec(rootApp) as any, 200);
-    },
+    // Hono's @hono/zod-openapi infers the handler response type as
+    // `TypedResponse<never, 200, 'json'>` when the response schema is
+    // `z.record(z.unknown())` — so the returned `c.json` value cannot
+    // satisfy the strict handler signature. The runtime is safe; the cast
+    // is the documented escape hatch for this corner of the typing.
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    ((c: Context<AppEnv>) => c.json(getCachedOpenAPISpec(rootApp), 200)) as any,
   );
   return app;
 }
