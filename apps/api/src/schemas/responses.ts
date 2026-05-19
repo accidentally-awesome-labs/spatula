@@ -1,5 +1,16 @@
 import { z } from '@hono/zod-openapi';
+// Plan 16-2: value-import ErrorCode via @spatula/shared (the back-compat shim).
+// The monorepo ESLint rule blocks value-imports from @spatula/core-types
+// directly; this consumer is allowed because it routes through the shim.
+import { ErrorCode } from '@spatula/shared';
 import { cursorEnvelopeSchema, offsetEnvelopeSchema } from './pagination.js';
+
+// Closed-set enum surfaced into the OpenAPI document so SDK consumers see the
+// frozen v1 ErrorCode list (DOMAIN.CODE form) in generated types. The zod
+// schema stays `z.string()` — switching to `z.nativeEnum(ErrorCode)` would
+// couple the runtime validator to the const-object enum, which is unnecessary
+// (the server is the only producer; clients consume strings).
+const ERROR_CODE_ENUM = Object.values(ErrorCode) as [string, ...string[]];
 
 // --- Entity schemas (describe JSON shapes returned by endpoints) ---
 
@@ -136,6 +147,7 @@ export const errorResponseSchema = z
         description:
           'Frozen v1 error code in DOMAIN.CODE form (e.g., JOB.NOT_FOUND). Additive-only in 1.x.',
         example: 'JOB.NOT_FOUND',
+        enum: ERROR_CODE_ENUM,
       }),
       message: z.string(),
       requestId: z.string(),

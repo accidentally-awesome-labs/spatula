@@ -5,7 +5,6 @@ import {
   STATUS_MAP,
   createLogger,
   captureException,
-  JobNotFoundError,
   JobConflictError,
 } from '@spatula/shared';
 

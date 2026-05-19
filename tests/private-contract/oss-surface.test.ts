@@ -129,6 +129,33 @@ describe('@spatula/api createApp factory (consumed via direct path import)', () 
   });
 });
 
+describe('@spatula/core-types extract preserves @spatula/core type surface', () => {
+  // Plan 16-2 / 16-RESEARCH Open Question #2: the type-extraction to
+  // @spatula/core-types MUST keep the @spatula/core re-export shim green so
+  // spatula-saas's `import { JobConfig } from '@spatula/core'` continues to
+  // resolve. These tests are a thin compile-and-runtime gate on that shim.
+  it('re-exports JobConfig type via @spatula/core', () => {
+    // Compilation gate — if this file compiles, the type is visible via the
+    // shim path. We assign to an underscore-prefixed alias to avoid unused-var
+    // noise.
+    type _JobConfig = import('@spatula/core').JobConfig;
+    const _proof: _JobConfig | undefined = undefined;
+    expect(_proof).toBeUndefined();
+  });
+  it('re-exports JobStatus type via @spatula/core', () => {
+    type _JobStatus = import('@spatula/core').JobStatus;
+    const _proof: _JobStatus | undefined = undefined;
+    expect(_proof).toBeUndefined();
+  });
+  it('re-exports ErrorCode (const object) via @spatula/shared', async () => {
+    // ErrorCode is a const-object (runtime value). Verify the shim resolves
+    // the same shape through the @spatula/shared re-export.
+    const sharedMod = await import('@spatula/shared');
+    expect(typeof sharedMod.ErrorCode).toBe('object');
+    expect(sharedMod.ErrorCode.JOB_NOT_FOUND).toBe('JOB.NOT_FOUND');
+  });
+});
+
 describe('does not export any billing/stripe symbol from any package', () => {
   // Filter pattern: catch every billing-coupled name the carve-out removed.
   // If saas accidentally re-introduces one into the OSS barrel, this test
