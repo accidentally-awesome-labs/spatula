@@ -66,7 +66,7 @@ Requirements for the v1.0.0 public launch. Each maps to one of phases 15–22. R
 - [ ] **AUTH-01**: `GET /api/v1/jobs/:id/events` SSE endpoint streams job status, progress, schema actions, entity counts with monotonic `id`s, `Last-Event-ID` resume, 5-minute per-job ring buffer, 15s keep-alive, `X-Accel-Buffering: no` + `Cache-Control: no-cache` + `Content-Type: text/event-stream`.
 - [ ] **AUTH-02**: Single-use stream-token flow (`?token=`) extends to SSE, matching the existing WS pattern; `POST /api/v1/ws-token` returns tokens usable for either; tokens are 60-second TTL.
 - [ ] **AUTH-03**: CORS supports both explicit-list and wildcard-subdomain origins (e.g., `https://*.spatula.dev`); preflight cache configured; `CORS_ALLOWED_ORIGINS` format documented.
-- [ ] **AUTH-04**: `examples/auth-dex/` ships a zero-config local OIDC recipe — `docker compose up` produces a working Dex IDP that a browser smoke client can use to log in.
+- [x] **AUTH-04**: `examples/auth-dex/` ships a zero-config local OIDC recipe — `docker compose up` produces a working Dex IDP that a browser smoke client can use to log in.
 - [x] **AUTH-05**: `POST /api/v1/api-keys/:id/rotate` enables zero-downtime key rotation.
 - [ ] **AUTH-06**: `docs/api-auth.md` is the authoritative scope list; explicitly documents "refresh-tokens-are-IDP-job" and "CSRF-N/A for Bearer auth".
 - [x] **AUTH-07**: Cross-tenant isolation audit suite (`tests/isolation/`) verifies tenant A cannot read tenant B via any route — jobs, entities, extractions, actions, exports, admin where applicable.

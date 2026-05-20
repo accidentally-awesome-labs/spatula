@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v1.1
 milestone_name: Public Launch (Wave 6 / Phase 14)
 status: executing
-stopped_at: Completed 17-01-PLAN.md — foundation scaffolding done
-last_updated: "2026-05-20T03:20:33.039Z"
+stopped_at: Completed 17-05-PLAN.md — auth-dex OIDC IDP kit done
+last_updated: "2026-05-20T03:39:30.014Z"
 last_activity: 2026-05-20
 progress:
   total_phases: 8
   completed_phases: 2
   total_plans: 18
-  completed_plans: 12
+  completed_plans: 13
   percent: 13
 ---
 
@@ -26,7 +26,7 @@ See: `.planning/PROJECT.md` (updated 2026-05-11)
 ## Current Position
 
 Phase: 17 (browser-auth-sse-cors) — EXECUTING
-Plan: 2 of 7
+Plan: 3 of 7
 Status: Ready to execute
 Last activity: 2026-05-20
 
@@ -58,6 +58,7 @@ _v1.1 metrics will populate as plans execute._
 | Phase 16-api-contract-sdk-packages P4 | 21min | 3 tasks | 24 files |
 | Phase 16-api-contract-sdk-packages P5 | 22min | 9 tasks | 27 files |
 | Phase 17 P01 | 3min | 3 tasks | 14 files |
+| Phase 17 P05 | 13 | 3 tasks | 7 files |
 
 ## Accumulated Context
 
@@ -115,6 +116,8 @@ Full decision log lives in PROJECT.md Key Decisions table. Recent decisions rele
 - [Phase 16-api-contract-sdk-packages]: Plan 16-5: SDK integration tests branch on SPATULA_LIVE_LLM via it.skipIf(LIVE); default pnpm test excludes tests/integration/ so contributor-fork CI passes without OPENROUTER_API_KEY
 - [Phase 17]: supersedes column declared as plain uuid() without .references() in TS; self-FK added via raw SQL in migration (Drizzle cannot cleanly self-reference inside pgTable definition)
 - [Phase 17]: RESOURCE_NOT_FOUND placed in RESOURCE.* domain; no TENANT_MISMATCH or CORS_CONFIG_INVALID added per RESEARCH.md D-18 prefer-404 policy
+- [Phase 17]: Used ghcr.io/dexidp/dex:latest (v2.46.0+) for auth-dex example: client_credentials grant was not implemented in v2.45.x; requires both oauth2.grantTypes config AND DEX_CLIENT_CREDENTIAL_GRANT_ENABLED_BY_DEFAULT=true env var in v2.46.0
+- [Phase 17]: Dex client_credentials sub claim is protobuf-encoded (not literal client_id): m2m-flow.ts decodes base64url bytes to verify client_id is embedded in the sub payload
 
 ### Pending Todos
 
@@ -142,6 +145,6 @@ All 9 pre-launch blockers are open as of 2026-05-12 (see PROJECT.md "Pre-launch 
 
 ## Session Continuity
 
-Last session: 2026-05-20T03:20:33.034Z
-Stopped at: Completed 17-01-PLAN.md — foundation scaffolding done
+Last session: 2026-05-20T03:39:30.010Z
+Stopped at: Completed 17-05-PLAN.md — auth-dex OIDC IDP kit done
 Resume file: None

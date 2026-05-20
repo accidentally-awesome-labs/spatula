@@ -143,13 +143,13 @@ Plans:
 4. `examples/auth-dex/` boots with `docker compose up` and produces a working IDP that the browser smoke client targets without environment surgery; `CORS_ALLOWED_ORIGINS` accepts both explicit-list and `https://*.spatula.dev` wildcard forms (verified by request matrix).
 5. `POST /api/v1/api-keys/:id/rotate` rotates a key without dropping in-flight requests; `docs/api-auth.md` is the authoritative scope list with explicit "refresh tokens are IDP's job" and "CSRF N/A for Bearer auth" sections.
 
-**Plans:** 1/7 plans executed
+**Plans:** 2/7 plans executed
 Plans:
 - [x] 17-01-PLAN.md — Wave 0 foundations: api_keys rotation migration + RESOURCE.NOT_FOUND ErrorCode + rate-limits.yaml entries + test scaffolds
 - [ ] 17-02-PLAN.md — SSE: Redis-stream dual-publish + sse/ handler (replay, tail, keepalive) + route mount + ws-token doc (AUTH-01, AUTH-02)
 - [ ] 17-03-PLAN.md — CORS wildcard-subdomain origin matcher + docs/api-auth.md authoritative auth doc + scope-sync gate (AUTH-03, AUTH-06)
 - [ ] 17-04-PLAN.md — API key rotation: ApiKeyRepository.rotate() + POST /api-keys/:id/rotate route with two-key grace window (AUTH-05)
-- [ ] 17-05-PLAN.md — examples/auth-dex/ zero-config local Dex OIDC kit + boot checkpoint (AUTH-04)
+- [x] 17-05-PLAN.md — examples/auth-dex/ zero-config local Dex OIDC kit + boot checkpoint (AUTH-04)
 - [ ] 17-06-PLAN.md — @spatula/client SSE getJobEvents method + Playwright browser OIDC+SSE reconnect e2e (AUTH-01, AUTH-02, AUTH-04)
 - [ ] 17-07-PLAN.md — tests/isolation/ OpenAPI-driven cross-tenant audit suite + M2M client_credentials e2e (AUTH-07, AUTH-08)
 **Estimated effort**: 4 active sessions
@@ -270,7 +270,7 @@ Authoritative requirement → phase mapping lives in `.planning/REQUIREMENTS.md`
 | 1–13                                      | v1.0      | (collapsed)    | Complete    | 2026-04-20 |
 | 15. Carve-out & Migration Squash          | v1.1      | 6/6            | Complete    | 2026-05-18 |
 | 16. API Contract Hardening + SDK Packages | v1.1      | 5/5 | Complete    | 2026-05-19 |
-| 17. Browser Auth, SSE, CORS               | v1.1      | 1/7 | In Progress|  |
+| 17. Browser Auth, SSE, CORS               | v1.1      | 2/7 | In Progress|  |
 | 18. Security Hardening & Legal            | v1.1      | 0/TBD          | Not started | -          |
 | 19. Deployment & Self-Host Excellence     | v1.1      | 0/TBD          | Not started | -          |
 | 20. Docs Site Infrastructure + Content    | v1.1      | 0/TBD          | Not started | -          |
