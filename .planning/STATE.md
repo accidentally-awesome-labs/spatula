@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v1.1
 milestone_name: Public Launch (Wave 6 / Phase 14)
 status: executing
-stopped_at: "Completed 18-05-PLAN.md (forensic provenance: archiver, admin endpoint, SDK experimental surface)"
-last_updated: "2026-05-20T20:32:02.929Z"
+stopped_at: "Completed 18-06-PLAN.md (DSR deletion: TenantDataRepository, tenant-delete worker, DELETE + import admin routes)"
+last_updated: "2026-05-20T20:54:09.493Z"
 last_activity: 2026-05-20
 progress:
   total_phases: 8
   completed_phases: 3
   total_plans: 25
-  completed_plans: 23
+  completed_plans: 24
   percent: 13
 ---
 
@@ -26,7 +26,7 @@ See: `.planning/PROJECT.md` (updated 2026-05-11)
 ## Current Position
 
 Phase: 18 (security-hardening-legal) — EXECUTING
-Plan: 6 of 7
+Plan: 7 of 7
 Status: Ready to execute
 Last activity: 2026-05-20
 
@@ -69,6 +69,7 @@ _v1.1 metrics will populate as plans execute._
 | Phase 18 P03 | 4 | 3 tasks | 6 files |
 | Phase 18-security-hardening-legal P04 | 115 | 7 tasks | 13 files |
 | Phase 18 P05 | 16 | 3 tasks | 16 files |
+| Phase 18 P06 | 13 | 3 tasks | 11 files |
 
 ## Accumulated Context
 
@@ -156,6 +157,9 @@ Full decision log lives in PROJECT.md Key Decisions table. Recent decisions rele
 - [Phase 18]: forensic-archiver uses injected dlqWriter structural interface to avoid @spatula/core importing @spatula/db (no circular dep)
 - [Phase 18]: [Phase 18-05]: Forensic endpoint reads suspicious_extraction DLQ records for forensic listing — ContentStore has no listKeys API; DLQ payload stores forensicRef making it the natural metadata index
 - [Phase 18]: [Phase 18-05]: createExperimentalNamespace now accepts transport; forensic surface lazily initialized; non-forensic props still throw fail-loud mentioning Phase 18
+- [Phase 18]: onConflictDoNothing().returning() returns [] in drizzle 0.45 node-postgres — importTenantData uses try/catch(23505) for insert counting
+- [Phase 18]: TenantDeleteJobDeps injected into processTenantDeleteJob function (not WorkerDeps) to keep function testable without full WorkerDeps construction
+- [Phase 18]: ContentStore.listKeys is optional on base interface; tenant-delete worker skips forensic prefix scan gracefully when listKeys not available
 
 ### Pending Todos
 
@@ -183,6 +187,6 @@ All 9 pre-launch blockers are open as of 2026-05-12 (see PROJECT.md "Pre-launch 
 
 ## Session Continuity
 
-Last session: 2026-05-20T20:32:02.924Z
-Stopped at: Completed 18-05-PLAN.md (forensic provenance: archiver, admin endpoint, SDK experimental surface)
+Last session: 2026-05-20T20:54:09.487Z
+Stopped at: Completed 18-06-PLAN.md (DSR deletion: TenantDataRepository, tenant-delete worker, DELETE + import admin routes)
 Resume file: None
