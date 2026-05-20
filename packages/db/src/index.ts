@@ -42,6 +42,8 @@ export { ApiKeyRepository } from './repositories/api-key-repository.js';
 export type { CreateApiKeyInput } from './repositories/api-key-repository.js';
 export { AuditLogRepository } from './repositories/audit-log-repository.js';
 export type { AuditLogEntry } from './repositories/audit-log-repository.js';
+export { TenantDataRepository } from './repositories/tenant-data-repository.js';
+export type { TenantDump } from './repositories/tenant-data-repository.js';
 export { LlmUsageRepository } from './repositories/llm-usage-repository.js';
 export type { LlmUsageInput, UsageAggregation } from './repositories/llm-usage-repository.js';
 
