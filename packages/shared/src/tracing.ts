@@ -5,6 +5,7 @@ import { resourceFromAttributes } from '@opentelemetry/resources';
 import { ATTR_SERVICE_NAME } from '@opentelemetry/semantic-conventions';
 import { registerInstrumentations } from '@opentelemetry/instrumentation';
 import { createLogger } from './logger.js';
+import { RedactionSpanProcessor } from './redactor.js';
 
 const logger = createLogger('tracing');
 
@@ -27,7 +28,9 @@ export function initTracing(config?: TracingConfig): void {
 
   tracerProvider = new NodeTracerProvider({
     resource: resourceFromAttributes({ [ATTR_SERVICE_NAME]: serviceName }),
-    spanProcessors: [new BatchSpanProcessor(exporter)],
+    // RedactionSpanProcessor runs FIRST (before BatchSpanProcessor) so spans are
+    // scrubbed before they reach the exporter (Pitfall 2: use onEnd, not onStart)
+    spanProcessors: [new RedactionSpanProcessor(), new BatchSpanProcessor(exporter)],
   });
 
   tracerProvider.register();

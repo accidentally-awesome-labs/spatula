@@ -1,5 +1,4 @@
-import type { SpanProcessor } from '@opentelemetry/sdk-trace-base';
-import type { Span, ReadableSpan } from '@opentelemetry/sdk-trace-base';
+import type { SpanProcessor, Span, ReadableSpan } from '@opentelemetry/sdk-trace-node';
 import type { Context } from '@opentelemetry/api';
 
 export const REDACTED_PLACEHOLDER = '[REDACTED]';

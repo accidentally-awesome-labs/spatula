@@ -1,5 +1,6 @@
 import pino from 'pino';
 import { ConfigError } from './errors.js';
+import { REDACT_PATHS, REDACTED_PLACEHOLDER, redactValue, redactObject } from './redactor.js';
 
 export type Logger = pino.Logger;
 
@@ -13,6 +14,20 @@ export function createLogger(name: string): Logger {
   return pino({
     name,
     level,
+    redact: { paths: REDACT_PATHS, censor: REDACTED_PLACEHOLDER },
+    serializers: {
+      // Scan err.message for secret-shaped strings after standard serialization
+      err: (err: Error) => {
+        const s = pino.stdSerializers.err(err);
+        if (s.message) s.message = redactValue(s.message);
+        return s;
+      },
+    },
+    formatters: {
+      // Value-scan backstop: walk all logged object fields for secrets at unknown nesting depths
+      // (Pitfall 1: fast-redact paths do NOT cover arbitrary depth recursion)
+      log: (obj) => redactObject(obj),
+    },
     transport:
       process.env.NODE_ENV !== 'production'
         ? { target: 'pino-pretty', options: { colorize: true } }
