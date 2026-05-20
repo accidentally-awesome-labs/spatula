@@ -132,3 +132,44 @@ Use [GitHub Issues](https://github.com/spatulaai/spatula/issues) with the provid
 - **Feature requests** — describe the use case and proposed solution
 
 For security vulnerabilities, see [SECURITY.md](SECURITY.md).
+
+## Contributor License Agreement (CLA)
+
+All contributors must sign the Spatula Individual Contributor License Agreement before
+their first pull request can be merged.
+
+**How it works:**
+
+1. Open a pull request against the Spatula repository.
+2. The **cla-assistant.io** bot will automatically comment on your PR with a link to
+   sign the CLA.
+3. Sign once using your GitHub account. Your signature is recorded by cla-assistant.io
+   and linked to your GitHub identity.
+4. Future pull requests from the same GitHub account will be automatically recognized
+   as signed — you do not need to sign again (unless the CLA text changes; see below).
+
+The full CLA text is in [.github/CLA.md](.github/CLA.md).
+
+**Re-sign policy:**
+
+The CLA is versioned. When the `version` field in the frontmatter of `.github/CLA.md` is
+incremented (indicating a material change to the CLA text), past signatories must
+**re-sign** on their next pull request. The cla-assistant.io bot detects the text change
+automatically and will prompt you to re-sign. This re-sign-on-version-bump policy ensures
+all contributors have agreed to the current CLA terms.
+
+**AI-generated contributions:**
+
+Contributions generated substantially by AI tools (e.g., GitHub Copilot, ChatGPT,
+Claude) are permitted, but you as the submitter are responsible for ensuring: (a) the
+contribution meets the quality bar, (b) you have reviewed and understood the code, and
+(c) no third-party copyrighted material is included without proper attribution. You still
+sign the CLA as the submitting contributor.
+
+**License allowlist:**
+
+All third-party dependencies introduced in a pull request must use a license from the
+following allowlist: MIT, BSD-2-Clause, BSD-3-Clause, ISC, Apache-2.0, 0BSD, CC0-1.0,
+Unlicense. GPL, AGPL, LGPL, BUSL, and other copyleft or source-available licenses are
+NOT permitted without explicit prior written approval from Accidentally Awesome Labs.
+The CI `audit.yml` workflow enforces this check automatically.
