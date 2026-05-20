@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v1.1
 milestone_name: Public Launch (Wave 6 / Phase 14)
 status: executing
-stopped_at: Completed 17-02-PLAN.md — SSE infrastructure + stream token done
-last_updated: "2026-05-20T04:06:29.325Z"
+stopped_at: Completed 17-03-PLAN.md — CORS wildcard + auth docs done
+last_updated: "2026-05-20T04:15:20.710Z"
 last_activity: 2026-05-20
 progress:
   total_phases: 8
   completed_phases: 2
   total_plans: 18
-  completed_plans: 14
+  completed_plans: 15
   percent: 13
 ---
 
@@ -26,7 +26,7 @@ See: `.planning/PROJECT.md` (updated 2026-05-11)
 ## Current Position
 
 Phase: 17 (browser-auth-sse-cors) — EXECUTING
-Plan: 4 of 7
+Plan: 5 of 7
 Status: Ready to execute
 Last activity: 2026-05-20
 
@@ -60,6 +60,7 @@ _v1.1 metrics will populate as plans execute._
 | Phase 17 P01 | 3min | 3 tasks | 14 files |
 | Phase 17 P05 | 13 | 3 tasks | 7 files |
 | Phase 17-browser-auth-sse-cors P02 | 21 | 3 tasks | 12 files |
+| Phase 17-browser-auth-sse-cors P03 | 15 | 3 tasks | 6 files |
 
 ## Accumulated Context
 
@@ -122,6 +123,9 @@ Full decision log lives in PROJECT.md Key Decisions table. Recent decisions rele
 - [Phase 17-02]: SSE route registered on main app (not sub-router) with full path — required for correct Hono routing and OpenAPI spec generation
 - [Phase 17-02]: Scope guard bypass via SSE_PATH_RE wrapper in app.ts — cleanest fix without restructuring existing jobs/* guard chain
 - [Phase 17-02]: Dedicated ioredis connection per SSE client — XREAD BLOCK monopolizes connection; per-request connection is simplest at v1 scale
+- [Phase 17-browser-auth-sse-cors]: CORS wildcard regex: escape * in metachar set before replacing with [^./]+ — omitting * from escape causes wildcard to act as a regex quantifier instead of a label placeholder
+- [Phase 17-browser-auth-sse-cors]: buildOriginMatcher returns null (not throws) on bad config; createApp throws Error with CORS_CONFIG_INVALID — pure helper, boundary-level validation
+- [Phase 17-browser-auth-sse-cors]: docs/api-auth.md scope CI gate uses SCOPE_TABLE_START/END HTML comment markers + first backtick-quoted column parsing; readFileSync for filesystem independence
 
 ### Pending Todos
 
@@ -149,6 +153,6 @@ All 9 pre-launch blockers are open as of 2026-05-12 (see PROJECT.md "Pre-launch 
 
 ## Session Continuity
 
-Last session: 2026-05-20T04:06:29.320Z
-Stopped at: Completed 17-02-PLAN.md — SSE infrastructure + stream token done
+Last session: 2026-05-20T04:15:20.705Z
+Stopped at: Completed 17-03-PLAN.md — CORS wildcard + auth docs done
 Resume file: None
