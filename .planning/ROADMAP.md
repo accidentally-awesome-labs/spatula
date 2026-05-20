@@ -37,7 +37,7 @@ See `.planning/MILESTONES.md` for the full v1.0 wave breakdown and per-phase del
 
 - [x] **Phase 15: Carve-out & Migration Squash** — Extract billing/Stripe/metering to private `spatula-saas`; squash OSS migrations to `000_v1_baseline.sql`; ship reverse-contract test. (completed 2026-05-17)
 - [x] **Phase 16: API Contract Hardening + SDK Packages** — Freeze error envelope, rate-limit headers, cursor-first pagination, runtime OpenAPI; ship `@spatula/client` + `@spatula/core-types` with npm provenance. (completed 2026-05-19)
-- [ ] **Phase 17: Browser Auth, SSE, CORS** — Ship `GET /api/v1/jobs/:id/events` SSE with `Last-Event-ID` resume, wildcard-subdomain CORS, Dex-OIDC local recipe, key rotation, cross-tenant isolation audit.
+- [x] **Phase 17: Browser Auth, SSE, CORS** — Ship `GET /api/v1/jobs/:id/events` SSE with `Last-Event-ID` resume, wildcard-subdomain CORS, Dex-OIDC local recipe, key rotation, cross-tenant isolation audit. (completed 2026-05-20)
 - [ ] **Phase 18: Security Hardening & Legal** — Prompt-injection defense (≥10 adversarial fixtures vs pinned models), redaction sweep, full DSR surface; CLA, TRADEMARK, brand license, audit-CI hardening.
 - [ ] **Phase 19: Deployment & Self-Host Excellence** — k8s kustomize + Render blueprint + multi-arch cosign-signed images + SBOM + backup/upgrade/reverse-proxy/hardware-sizing runbooks.
 - [ ] **Phase 20: Docs Site Infrastructure + Content** — VitePress on Cloudflare Pages at `docs.spatula.dev`; auto-gen API/CLI references; WCAG 2.1 AA; OIDC cookbooks for Auth0/Keycloak/Google Workspace.
@@ -143,7 +143,7 @@ Plans:
 4. `examples/auth-dex/` boots with `docker compose up` and produces a working IDP that the browser smoke client targets without environment surgery; `CORS_ALLOWED_ORIGINS` accepts both explicit-list and `https://*.spatula.dev` wildcard forms (verified by request matrix).
 5. `POST /api/v1/api-keys/:id/rotate` rotates a key without dropping in-flight requests; `docs/api-auth.md` is the authoritative scope list with explicit "refresh tokens are IDP's job" and "CSRF N/A for Bearer auth" sections.
 
-**Plans:** 6/7 plans executed
+**Plans:** 7/7 plans complete
 Plans:
 - [x] 17-01-PLAN.md — Wave 0 foundations: api_keys rotation migration + RESOURCE.NOT_FOUND ErrorCode + rate-limits.yaml entries + test scaffolds
 - [x] 17-02-PLAN.md — SSE: Redis-stream dual-publish + sse/ handler (replay, tail, keepalive) + route mount + ws-token doc (AUTH-01, AUTH-02)
@@ -151,7 +151,7 @@ Plans:
 - [x] 17-04-PLAN.md — API key rotation: ApiKeyRepository.rotate() + POST /api-keys/:id/rotate route with two-key grace window (AUTH-05)
 - [x] 17-05-PLAN.md — examples/auth-dex/ zero-config local Dex OIDC kit + boot checkpoint (AUTH-04)
 - [x] 17-06-PLAN.md — @spatula/client SSE getJobEvents method + Playwright browser OIDC+SSE reconnect e2e (AUTH-01, AUTH-02, AUTH-04)
-- [ ] 17-07-PLAN.md — tests/isolation/ OpenAPI-driven cross-tenant audit suite + M2M client_credentials e2e (AUTH-07, AUTH-08)
+- [x] 17-07-PLAN.md — tests/isolation/ OpenAPI-driven cross-tenant audit suite + M2M client_credentials e2e (AUTH-07, AUTH-08)
 **Estimated effort**: 4 active sessions
 **UI hint**: yes
 
@@ -270,7 +270,7 @@ Authoritative requirement → phase mapping lives in `.planning/REQUIREMENTS.md`
 | 1–13                                      | v1.0      | (collapsed)    | Complete    | 2026-04-20 |
 | 15. Carve-out & Migration Squash          | v1.1      | 6/6            | Complete    | 2026-05-18 |
 | 16. API Contract Hardening + SDK Packages | v1.1      | 5/5 | Complete    | 2026-05-19 |
-| 17. Browser Auth, SSE, CORS               | v1.1      | 6/7 | In Progress|  |
+| 17. Browser Auth, SSE, CORS               | v1.1      | 7/7 | Complete   | 2026-05-20 |
 | 18. Security Hardening & Legal            | v1.1      | 0/TBD          | Not started | -          |
 | 19. Deployment & Self-Host Excellence     | v1.1      | 0/TBD          | Not started | -          |
 | 20. Docs Site Infrastructure + Content    | v1.1      | 0/TBD          | Not started | -          |

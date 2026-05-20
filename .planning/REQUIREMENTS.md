@@ -70,7 +70,7 @@ Requirements for the v1.0.0 public launch. Each maps to one of phases 15–22. R
 - [x] **AUTH-05**: `POST /api/v1/api-keys/:id/rotate` enables zero-downtime key rotation.
 - [x] **AUTH-06**: `docs/api-auth.md` is the authoritative scope list; explicitly documents "refresh-tokens-are-IDP-job" and "CSRF-N/A for Bearer auth".
 - [x] **AUTH-07**: Cross-tenant isolation audit suite (`tests/isolation/`) verifies tenant A cannot read tenant B via any route — jobs, entities, extractions, actions, exports, admin where applicable.
-- [ ] **AUTH-08**: M2M OIDC (client_credentials) is validated in an e2e test against Dex.
+- [x] **AUTH-08**: M2M OIDC (client_credentials) is validated in an e2e test against Dex.
 
 ### Security Hardening (Phase 18)
 

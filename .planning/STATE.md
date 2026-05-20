@@ -2,15 +2,15 @@
 gsd_state_version: 1.0
 milestone: v1.1
 milestone_name: Public Launch (Wave 6 / Phase 14)
-status: executing
-stopped_at: Completed 17-06-PLAN.md — SDK SSE + browser e2e done
-last_updated: "2026-05-20T04:40:15.596Z"
+status: verifying
+stopped_at: Completed 17-browser-auth-sse-cors-07-PLAN.md
+last_updated: "2026-05-20T05:07:58.754Z"
 last_activity: 2026-05-20
 progress:
   total_phases: 8
-  completed_phases: 2
+  completed_phases: 3
   total_plans: 18
-  completed_plans: 17
+  completed_plans: 18
   percent: 13
 ---
 
@@ -27,7 +27,7 @@ See: `.planning/PROJECT.md` (updated 2026-05-11)
 
 Phase: 17 (browser-auth-sse-cors) — EXECUTING
 Plan: 7 of 7
-Status: Ready to execute
+Status: Phase complete — ready for verification
 Last activity: 2026-05-20
 
 Progress: [█░░░░░░░░░] 13% (1/8 v1.1 phases complete)
@@ -63,6 +63,7 @@ _v1.1 metrics will populate as plans execute._
 | Phase 17-browser-auth-sse-cors P03 | 15 | 3 tasks | 6 files |
 | Phase 17-browser-auth-sse-cors P04 | 7 | 2 tasks | 5 files |
 | Phase 17 P06 | 10 | 2 tasks | 9 files |
+| Phase 17-browser-auth-sse-cors P07 | 180 | 3 tasks | 8 files |
 
 ## Accumulated Context
 
@@ -133,6 +134,9 @@ Full decision log lives in PROJECT.md Key Decisions table. Recent decisions rele
 - [Phase 17]: typeof window guard implemented via declare const window — satisfies TS strict mode without DOM lib
 - [Phase 17]: getJobEvents non-streaming stub kept as @deprecated shim — Phase 16 integration test imports it
 - [Phase 17-06]: subscribeJobEvents returns synchronous UnsubscribeFn; Node polyfill loads async but closed flag prevents use-after-unsubscribe
+- [Phase 17-browser-auth-sse-cors]: Accept any .NOT_FOUND code in isolation assertions — domain-specific codes like JOB.NOT_FOUND are correct; requiring RESOURCE.NOT_FOUND exclusively would be brittle
+- [Phase 17-browser-auth-sse-cors]: DEFAULT_API_KEY_SCOPES fallback in JwtAuthProvider — Dex client_credentials JWTs carry no scopes claim; M2M callers get standard API key access surface
+- [Phase 17-browser-auth-sse-cors]: Isolation server-harness with real repos — contract harness stubs caused 500s on positive controls; real repos produce proper 404 on cross-tenant lookups
 
 ### Pending Todos
 
@@ -160,6 +164,6 @@ All 9 pre-launch blockers are open as of 2026-05-12 (see PROJECT.md "Pre-launch 
 
 ## Session Continuity
 
-Last session: 2026-05-20T04:40:15.592Z
-Stopped at: Completed 17-06-PLAN.md — SDK SSE + browser e2e done
+Last session: 2026-05-20T05:07:58.749Z
+Stopped at: Completed 17-browser-auth-sse-cors-07-PLAN.md
 Resume file: None
