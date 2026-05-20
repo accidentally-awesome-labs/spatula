@@ -1,17 +1,21 @@
-name: Dependency Audit
+name: Security Audit
 
 on:
   schedule:
-    - cron: '0 9 * * 1' # Weekly on Monday at 9am UTC
+    - cron: '0 9 * * *' # Daily at 9am UTC
   push:
-    paths:
-      - 'pnpm-lock.yaml'
     branches: [main]
-  workflow_dispatch: # Allow manual trigger
+  workflow_dispatch:
 
 jobs:
-  audit:
-    name: Security Audit
+  osv-scan:
+    name: OSV Vulnerability Scan
+    uses: google/osv-scanner-action/.github/workflows/osv-scanner-reusable.yml@v1
+    with:
+      scan-args: '--lockfile pnpm-lock.yaml'
+
+  license-check:
+    name: License Allowlist Check
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -21,5 +25,26 @@ jobs:
           node-version: 22
           cache: pnpm
       - run: pnpm install --frozen-lockfile
-      - name: Run audit
-        run: pnpm audit --audit-level=high
+      - name: Check license allowlist
+        run: |
+          pnpm exec license-checker-rseidelsohn \
+            --excludePrivatePackages \
+            --failOn "GPL;AGPL;LGPL;CC-BY-SA;OSL" \
+            --onlyAllow "MIT;Apache-2.0;BSD-2-Clause;BSD-3-Clause;ISC;0BSD;BlueOak-1.0.0;CC0-1.0;Python-2.0;Unlicense;MPL-2.0"
+
+  secret-scan:
+    name: Secret Scan (gitleaks + trufflehog)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # Full history required for trufflehog
+      - uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - uses: trufflesecurity/trufflehog@main
+        with:
+          path: ./
+          base: ''
+          head: HEAD
+          extra_args: --only-verified
