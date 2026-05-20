@@ -29,8 +29,13 @@ export type {
   EntityListItem,
 } from './methods/get-entities.js';
 
-export { getJobEvents } from './methods/get-job-events.js';
-export type { JobEvent } from './methods/get-job-events.js';
+export { getJobEvents, subscribeJobEvents } from './methods/get-job-events.js';
+export type {
+  JobEvent,
+  SubscribeJobEventsOptions,
+  ReplayTruncatedPayload,
+  UnsubscribeFn,
+} from './methods/get-job-events.js';
 
 export {
   SpatulaVersionMismatchError,

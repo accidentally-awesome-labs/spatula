@@ -30,6 +30,9 @@
     "access": "public",
     "provenance": true
   },
+  "dependencies": {
+    "eventsource": "4.1.0"
+  },
   "peerDependencies": {
     "@spatula/core-types": "0.x"
   },

@@ -106,6 +106,14 @@ export class AuthInsufficientScopeError extends SpatulaApiError {
   }
 }
 
+export class ResourceNotFoundError extends SpatulaApiError {
+  static readonly code = 'RESOURCE.NOT_FOUND';
+  constructor(opts: Omit<ConstructorParameters<typeof SpatulaApiError>[0], 'code'>) {
+    super({ ...opts, code: 'RESOURCE.NOT_FOUND' });
+    this.name = 'ResourceNotFoundError';
+  }
+}
+
 export class TenantNotFoundError extends SpatulaApiError {
   static readonly code = 'TENANT.NOT_FOUND';
   constructor(opts: Omit<ConstructorParameters<typeof SpatulaApiError>[0], 'code'>) {
@@ -216,6 +224,7 @@ export const ERROR_CLASS_BY_CODE: Record<string, typeof SpatulaApiError> = {
   'AUTH.INVALID_TOKEN': AuthInvalidTokenError,
   'AUTH.MISSING_TOKEN': AuthMissingTokenError,
   'AUTH.INSUFFICIENT_SCOPE': AuthInsufficientScopeError,
+  'RESOURCE.NOT_FOUND': ResourceNotFoundError,
   'TENANT.NOT_FOUND': TenantNotFoundError,
   'RATE_LIMIT.EXCEEDED': RateLimitExceededError,
   'QUOTA.EXCEEDED': QuotaExceededError,
