@@ -285,13 +285,13 @@ export function enumerateAuthedRoutes(
       const authMode: AuthMode = isSSE ? 'stream-token' : 'bearer';
 
       // Resolve path params to tenant-A resource ids
-      const { resolvedPath, hasUnresolvable } = resolvePath(path, tenantA);
+      const { hasUnresolvable } = resolvePath(path, tenantA);
 
       cases.push({
         method,
         path,
         authMode,
-        hasUnresolvable,
+        hasUnresolvableParams: hasUnresolvable,
         // Routes with unresolvable params are not committed to _assertedRoutes yet;
         // the test loop decides whether to assert or skip them.
       });

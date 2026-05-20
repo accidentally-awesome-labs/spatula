@@ -42,7 +42,7 @@ import {
   UserTenantRepository,
   CrawlTaskRepository,
 } from '@spatula/db';
-import { JobManager } from '../../../packages/queue/src/job-manager.js';
+import { JobManager } from '@spatula/queue';
 import Redis from 'ioredis';
 import { SpatulaClient, createJob, listJobs, getEntities } from '@spatula/client';
 
