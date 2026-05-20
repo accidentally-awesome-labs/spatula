@@ -23,6 +23,9 @@ export const AUTH_SCOPES = [
   'tenants:admin',
   'keys:manage',
   'admin',
+  // Plan 18-05 (SEC-05): forensic-extractions admin endpoint.
+  // NOT in DEFAULT_API_KEY_SCOPES — admin-only, least-privilege.
+  'admin:forensic:read',
 ] as const;
 
 export type AuthScope = (typeof AUTH_SCOPES)[number];

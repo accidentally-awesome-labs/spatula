@@ -21,6 +21,7 @@ import { tenantRoutes } from './routes/tenants.js';
 import { adminDlqRoutes } from './routes/admin-dlq.js';
 import { adminWorkerRoutes } from './routes/admin-workers.js';
 import { adminTenantRoutes } from './routes/admin-tenants.js';
+import { adminForensicRoutes } from './routes/admin-forensic.js';
 import { adminJobRoutes } from './routes/admin-jobs.js';
 import { adminSystemRoutes } from './routes/admin-system.js';
 import { apiKeyRoutes } from './routes/api-keys.js';
@@ -242,6 +243,14 @@ export function createApp(deps: AppDeps) {
   app.route('/api/v1/admin/tenants', adminTenantRoutes());
   app.route('/api/v1/admin/jobs', adminJobRoutes());
   app.route('/api/v1/admin/system', adminSystemRoutes());
+
+  // Forensic extractions endpoint (SEC-05 — x-spatula-experimental: true)
+  // Mounted AFTER the /api/v1/admin/* requireScope('admin') guard so that:
+  //   - Callers with `admin` scope pass the outer guard AND the inner requireScope('admin:forensic:read')
+  //     (the inner guard allows `admin` superset via requireScope's existing logic).
+  //   - Callers with only `admin:forensic:read` are rejected by the outer `admin` guard — this is
+  //     intentional: the forensic surface is strictly admin-tier. See Plan 18-05 Open Question 3.
+  app.route('/api/v1/admin/forensic', adminForensicRoutes());
 
   // Queue dashboard (admin scope enforced by /api/v1/admin/* middleware)
   if (deps.queues) {

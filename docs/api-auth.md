@@ -65,6 +65,7 @@ no implicit permissions.
 | `tenants:admin` | Manage tenant settings and quotas | No |
 | `keys:manage` | Create, list, revoke, and rotate API keys | No |
 | `admin` | Full access including admin-only routes | No |
+| `admin:forensic:read` | Read access to the forensic-extractions admin endpoint. | No |
 
 <!-- SCOPE_TABLE_END -->
 
