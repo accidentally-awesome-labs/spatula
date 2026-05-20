@@ -179,7 +179,6 @@ async function startApiServer(): Promise<ApiHandle> {
     issuer: DEX_ISSUER,
     audience: DEX_CLIENT_ID,
     jwksUrl: `${DEX_ISSUER}/keys`,
-    tenantRepo,
   });
 
   /* eslint-disable @typescript-eslint/no-explicit-any */
@@ -227,10 +226,9 @@ async function startApiServer(): Promise<ApiHandle> {
       const request = new Request(reqUrl.toString(), {
         method: req.method,
         headers,
-        body: body ?? null,
-        // @ts-expect-error — duplex required for streaming request bodies in Node 18+
+        body: (body as BodyInit | undefined) ?? null,
         duplex: hasBody ? 'half' : undefined,
-      });
+      } as RequestInit);
       const response = await app.fetch(request);
       res.writeHead(response.status, Object.fromEntries(response.headers.entries()));
       if (response.body) {
@@ -306,7 +304,7 @@ async function collectSseEvents(
     const unsubscribe = subscribeJobEvents(clientLike, jobId, {
       token,
       lastEventId: opts.lastEventId,
-      onEvent: (evt) => {
+      onEvent: (evt: import('@spatula/client').JobEvent) => {
         const collected = evt as CollectedEvent;
         events.push(collected);
         lastId = collected.id;
@@ -319,7 +317,7 @@ async function collectSseEvents(
       onReplayTruncated: () => {
         truncated = true;
       },
-      onError: (err) => {
+      onError: (err: Event) => {
         clearTimeout(timeout);
         reject(new Error(`SSE error: ${String(err)}`));
       },
@@ -505,7 +503,7 @@ describe('Browser OIDC + SSE reconnect chain (AUTH-01, AUTH-02, AUTH-04)', () =>
       }),
     });
 
-    expect(res.status, `POST /api/v1/jobs should return 200 or 201, got ${res.status}`).toBeOneOf([200, 201]);
+    expect([200, 201], `POST /api/v1/jobs should return 200 or 201, got ${res.status}`).toContain(res.status);
     const body = (await res.json()) as { data?: { id?: string }; id?: string };
     jobId = (body.data?.id ?? body.id) as string;
     expect(jobId, 'job response must include an id').toBeTruthy();
