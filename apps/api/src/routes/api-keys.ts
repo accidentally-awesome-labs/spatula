@@ -5,6 +5,8 @@ import {
   createApiKeySchema,
   apiKeyResponseSchema,
   apiKeyCreatedResponseSchema,
+  rotateApiKeyRequestSchema,
+  apiKeyRotatedResponseSchema,
 } from '../schemas/api-key.js';
 import {
   errorResponseSchema,
@@ -75,6 +77,33 @@ const revokeKeyRoute = createRoute({
       'API key revoked',
     ),
     404: jsonContent(errorResponseSchema, 'API key not found'),
+  },
+});
+
+const rotateKeyRoute = createRoute({
+  method: 'post',
+  path: '/{id}/rotate',
+  tags: ['API Keys'],
+  summary: 'Rotate an API key (zero-downtime, two-key grace window)',
+  description:
+    'Creates a new key inheriting the original scopes verbatim. The old key keeps ' +
+    'validating until its grace window expires. Default grace = 86400 s (24h); max 604800 s (7d).',
+  request: {
+    params: z.object({
+      id: z.string().openapi({ param: { name: 'id', in: 'path' } }),
+    }),
+    body: {
+      content: { 'application/json': { schema: rotateApiKeyRequestSchema } },
+      required: false,
+    },
+  },
+  responses: {
+    200: jsonContent(
+      dataResponse(apiKeyRotatedResponseSchema),
+      'API key rotated; new raw key shown once',
+    ),
+    404: jsonContent(errorResponseSchema, 'API key not found'),
+    409: jsonContent(errorResponseSchema, 'API key already revoked'),
   },
 });
 
@@ -186,6 +215,81 @@ export function apiKeyRoutes() {
     }
 
     return c.json({ data: { id, revoked: true } });
+  });
+
+  router.openapi(rotateKeyRoute, async (c) => {
+    const deps = c.get('deps');
+    if (!deps.apiKeyRepo) throw new InternalError('API key management not configured');
+
+    const tenantId = c.get('tenantId');
+    const { id } = c.req.valid('param');
+
+    // Body is optional — default graceSeconds to 86400 (24h); clamp to 0..604800 (7d cap, D-14).
+    const body = c.req.valid('json');
+    const graceSeconds = Math.min(Math.max(body?.graceSeconds ?? 86400, 0), 604800);
+
+    // Generate the new key material — raw key never enters the repository layer.
+    const { raw, hash, prefix } = generateApiKey();
+
+    let oldKey: Awaited<ReturnType<typeof deps.apiKeyRepo.rotate>>['oldKey'];
+    let newKey: Awaited<ReturnType<typeof deps.apiKeyRepo.rotate>>['newKey'];
+
+    try {
+      ({ oldKey, newKey } = await deps.apiKeyRepo.rotate(
+        id,
+        tenantId,
+        { keyHash: hash, keyPrefix: prefix },
+        graceSeconds,
+      ));
+    } catch (error) {
+      if (error instanceof StorageError) {
+        if (error.message.includes('not found')) {
+          throw new SpatulaError(
+            `API key ${id} not found`,
+            ErrorCode.RESOURCE_NOT_FOUND,
+            { context: { resource: 'api_key', apiKeyId: id } },
+          );
+        }
+        if (error.message.includes('revoked')) {
+          throw new SpatulaError(
+            `API key ${id} is already revoked`,
+            ErrorCode.JOB_INVALID_STATE,
+            { context: { resource: 'api_key', apiKeyId: id } },
+          );
+        }
+      }
+      throw error;
+    }
+
+    // Emit audit event (D-16): action = 'api_key.rotated', both ids present.
+    if (deps.auditLogger) {
+      deps.auditLogger.log({
+        tenantId,
+        actorId: c.get('auth').userId,
+        actorType: 'user',
+        action: 'api_key.rotated',
+        resourceType: 'api_key',
+        resourceId: newKey.id,
+        metadata: { supersedes: oldKey.id },
+      });
+    }
+
+    // D-16 response shape: supersededExpiresAt = oldKey.expiresAt (set by rotate() to graceUntil).
+    return c.json(
+      {
+        data: {
+          id: newKey.id,
+          key: raw,
+          keyPrefix: newKey.keyPrefix,
+          scopes: newKey.scopes,
+          expiresAt: newKey.expiresAt?.toISOString() ?? null,
+          createdAt: newKey.createdAt.toISOString(),
+          supersedes: oldKey.id,
+          supersededExpiresAt: oldKey.expiresAt!.toISOString(),
+        },
+      },
+      200,
+    );
   });
 
   return router;
