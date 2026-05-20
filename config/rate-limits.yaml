@@ -39,3 +39,11 @@ routeGroups:
     requestsPerMinute: 60
   "DELETE /api/v1/admin/tenants/{id}":
     requestsPerMinute: 30
+
+  # SSE job-event stream — long-lived connections; connection rate, not message rate
+  "GET /api/v1/jobs/{id}/events":
+    requestsPerMinute: 60
+
+  # API key rotation — privileged write path, throttle hard
+  "POST /api/v1/api-keys/{id}/rotate":
+    requestsPerMinute: 30
