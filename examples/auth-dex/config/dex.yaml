@@ -46,6 +46,9 @@ staticClients:
     name: Spatula Browser
     redirectURIs:
       - http://localhost:3000/callback
+      # Explicit IPv4 form used by the e2e test suite to avoid macOS resolving
+      # 'localhost' to ::1 when another server occupies port 3000 on IPv6.
+      - http://127.0.0.1:4000/callback
     public: true # No client secret required for PKCE flows.
 
   # M2M client: confidential client_credentials grant.

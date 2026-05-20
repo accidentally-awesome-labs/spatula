@@ -150,7 +150,14 @@ function wireHandlers(
 ): void {
   es.onmessage = (e: MessageEvent) => {
     try {
-      options.onEvent(JSON.parse(e.data as string) as JobEvent);
+      const evt = JSON.parse(e.data as string) as JobEvent;
+      // The SSE protocol delivers the frame's `id:` line as `e.lastEventId`.
+      // The server sets this to the Redis stream id. Inject it into the event
+      // object so callers can record the last-seen id for Last-Event-ID resume.
+      // (The JSON payload itself has no `id` field — it is a @spatula/queue
+      // JobEvent whose identity is carried only in the SSE frame header.)
+      if (e.lastEventId) evt.id = e.lastEventId;
+      options.onEvent(evt);
     } catch {
       // Malformed frame — silently ignore; callers can detect gaps via event ids.
     }

@@ -44,7 +44,10 @@ import { resolve } from 'node:path';
 
 const DEX_ISSUER = 'http://localhost:5556/dex';
 const DEX_CLIENT_ID = 'spatula-browser';
-const DEX_REDIRECT_URI = 'http://localhost:3000/callback';
+// Use 127.0.0.1 (explicit IPv4) to avoid macOS resolving 'localhost' to ::1
+// which would route to any IPv6 wildcard server already occupying port 3000.
+// Port 4000 avoids the common port-3000 conflict with Next.js dev servers.
+const DEX_REDIRECT_URI = 'http://127.0.0.1:4000/callback';
 const DEX_SCOPES = 'openid email profile';
 const DEV_EMAIL = 'dev@example.com';
 const DEV_PASSWORD = 'password';
@@ -128,7 +131,7 @@ function captureOAuthCallback(
         reject(new Error(`Unexpected callback path: ${req.url}`));
       }
     });
-    server.listen(3000, '127.0.0.1');
+    server.listen(4000, '127.0.0.1');
     server.on('error', (e) => reject(e));
     setTimeout(() => {
       server.close();
@@ -152,9 +155,19 @@ async function startApiServer(): Promise<ApiHandle> {
     TenantRepository,
     ApiKeyRepository,
     JobRepository,
+    UserTenantRepository,
+    SchemaRepository,
+    ExtractionRepository,
+    EntityRepository,
+    EntitySourceRepository,
+    ActionRepository,
+    ExportRepository,
+    CrawlTaskRepository,
   } = await import('@spatula/db');
   const { createApp } = await import('../../../apps/api/src/app.js');
   const { JwtAuthProvider } = await import('../../../apps/api/src/auth/jwt-provider.js');
+  const { JobManager } = await import('@spatula/queue');
+  const { DEFAULT_API_KEY_SCOPES } = await import('@spatula/shared');
   const Redis = (await import('ioredis')).default;
 
   const databaseUrl =
@@ -167,7 +180,25 @@ async function startApiServer(): Promise<ApiHandle> {
   const tenantRepo = new TenantRepository(db);
   const apiKeyRepo = new ApiKeyRepository(db);
   const jobRepo = new JobRepository(db);
+  const userTenantRepo = new UserTenantRepository(db);
+  const schemaRepo = new SchemaRepository(db);
+  const extractionRepo = new ExtractionRepository(db);
+  const entityRepo = new EntityRepository(db);
+  const entitySourceRepo = new EntitySourceRepository(db);
+  const actionRepo = new ActionRepository(db);
+  const exportRepo = new ExportRepository(db);
+  const taskRepo = new CrawlTaskRepository(db);
   const redis = new Redis(redisUrl, { lazyConnect: false, maxRetriesPerRequest: 3 });
+
+  // Wire a real JobManager so POST /api/v1/jobs can persist to the DB.
+  /* eslint-disable @typescript-eslint/no-explicit-any */
+  const jobManager = new JobManager({
+    jobRepo,
+    taskRepo,
+    schemaRepo,
+    queues: {} as any, // not needed for createJob
+    tenantRepo,
+  });
 
   // Set JWT env vars before creating the app — createApp reads them at construction.
   process.env.AUTH_STRATEGY = 'jwt';
@@ -175,28 +206,35 @@ async function startApiServer(): Promise<ApiHandle> {
   process.env.JWT_AUDIENCE = DEX_CLIENT_ID;
   process.env.JWT_JWKS_URL = `${DEX_ISSUER}/keys`;
 
+  // Grant browser OIDC users (human users via authorization-code + PKCE) the
+  // standard API key scopes. Dex browser JWTs carry no application-level scopes
+  // claim (Dex rejects custom scopes). The `defaultBrowserUserScopes` option
+  // in JwtAuthProvider grants this explicit scope set to any scope-less JWT that
+  // is NOT a registered M2M client — safe for this test server.
+  // Production servers MUST NOT set this option.
   const authProvider = new JwtAuthProvider({
     issuer: DEX_ISSUER,
     audience: DEX_CLIENT_ID,
     jwksUrl: `${DEX_ISSUER}/keys`,
+    defaultBrowserUserScopes: [...DEFAULT_API_KEY_SCOPES],
   });
 
-  /* eslint-disable @typescript-eslint/no-explicit-any */
   const deps = {
     dbPool: pool,
     jobRepo,
-    schemaRepo: {} as any,
-    extractionRepo: {} as any,
-    entityRepo: {} as any,
-    entitySourceRepo: {} as any,
-    actionRepo: {} as any,
-    taskRepo: {} as any,
-    jobManager: {} as any,
-    exportRepo: {} as any,
+    schemaRepo,
+    extractionRepo,
+    entityRepo,
+    entitySourceRepo,
+    actionRepo,
+    taskRepo,
+    jobManager,
+    exportRepo,
     contentStore: {} as any,
     exportQueue: {} as any,
     tenantRepo,
     apiKeyRepo,
+    userTenantRepo,
     authProvider,
     redis,
   } as any;
@@ -336,6 +374,9 @@ describe('Browser OIDC + SSE reconnect chain (AUTH-01, AUTH-02, AUTH-04)', () =>
   let apiServer: ApiHandle;
   let accessToken: string;
   let jobId: string;
+  // tenantId is extracted from the job creation response and used when publishing
+  // test events so the SSE handler's tenant filter accepts them.
+  let tenantId: string;
 
   // Track if Dex was started by us (so we know whether to tear it down).
   let dexStartedByUs = false;
@@ -445,8 +486,8 @@ describe('Browser OIDC + SSE reconnect chain (AUTH-01, AUTH-02, AUTH-04)', () =>
       await page.fill('input[name="password"]', DEV_PASSWORD);
       await page.click('button[type="submit"]');
 
-      // Wait for the redirect to our callback server on localhost:3000/callback.
-      await page.waitForURL(/localhost:3000\/callback/, { timeout: 15_000 });
+      // Wait for the redirect to our callback server on 127.0.0.1:4000/callback.
+      await page.waitForURL(/127\.0\.0\.1:4000\/callback/, { timeout: 15_000 });
     } finally {
       await page.close();
     }
@@ -498,15 +539,27 @@ describe('Browser OIDC + SSE reconnect chain (AUTH-01, AUTH-02, AUTH-04)', () =>
         name: 'e2e-oidc-sse-reconnect-test',
         description: 'Created by oidc-sse-flow.spec.ts e2e suite',
         seedUrls: ['https://example.com'],
-        objective: 'Extract e2e test data',
-        outputFields: [{ name: 'title', type: 'string', required: true }],
+        crawl: {
+          maxDepth: 1,
+          maxPages: 1,
+          concurrency: 1,
+          crawlerType: 'playwright',
+        },
+        schema: {
+          mode: 'discovery',
+        },
+        llm: {
+          primaryModel: 'anthropic/claude-sonnet-4-20250514',
+        },
       }),
     });
 
     expect([200, 201], `POST /api/v1/jobs should return 200 or 201, got ${res.status}`).toContain(res.status);
-    const body = (await res.json()) as { data?: { id?: string }; id?: string };
+    const body = (await res.json()) as { data?: { id?: string; tenantId?: string }; id?: string; tenantId?: string };
     jobId = (body.data?.id ?? body.id) as string;
+    tenantId = (body.data?.tenantId ?? body.tenantId) as string;
     expect(jobId, 'job response must include an id').toBeTruthy();
+    expect(tenantId, 'job response must include a tenantId').toBeTruthy();
   });
 
   it('Step 3: POST /api/v1/ws-token returns a single-use stream token', async () => {
@@ -548,15 +601,25 @@ describe('Browser OIDC + SSE reconnect chain (AUTH-01, AUTH-02, AUTH-04)', () =>
       const publisher = new RedisEventPublisher(publisherRedis);
 
       // Publish 3 events before the first connection opens.
-      const now = Date.now();
+      // Must use valid JobEventType values and include tenantId so the SSE
+      // handler's tenant filter accepts them (event.tenantId !== tenantId check).
       await publisher.publish(jobId, {
-        id: `src-1-${now}`, type: 'job.status', data: { status: 'running', src: 'batch-1' },
+        type: 'job_status_changed',
+        jobId,
+        tenantId,
+        data: { status: 'running', src: 'batch-1' },
       });
       await publisher.publish(jobId, {
-        id: `src-2-${now}`, type: 'job.progress', data: { pagesProcessed: 1, src: 'batch-1' },
+        type: 'crawl_progress',
+        jobId,
+        tenantId,
+        data: { pagesProcessed: 1, src: 'batch-1' },
       });
       await publisher.publish(jobId, {
-        id: `src-3-${now}`, type: 'job.progress', data: { pagesProcessed: 2, src: 'batch-1' },
+        type: 'crawl_progress',
+        jobId,
+        tenantId,
+        data: { pagesProcessed: 2, src: 'batch-1' },
       });
 
       // ── Step 4: SSE subscribe — collect up to 3 events ───────────────────
@@ -587,12 +650,17 @@ describe('Browser OIDC + SSE reconnect chain (AUTH-01, AUTH-02, AUTH-04)', () =>
       expect(capturedLastId, 'capturedLastId must be set').toBeTruthy();
 
       // Publish 2 more events during the "disconnect window".
-      const gapNow = Date.now();
       await publisher.publish(jobId, {
-        id: `gap-1-${gapNow}`, type: 'job.progress', data: { pagesProcessed: 10, src: 'gap' },
+        type: 'crawl_progress',
+        jobId,
+        tenantId,
+        data: { pagesProcessed: 10, src: 'gap' },
       });
       await publisher.publish(jobId, {
-        id: `gap-2-${gapNow}`, type: 'job.progress', data: { pagesProcessed: 11, src: 'gap' },
+        type: 'crawl_progress',
+        jobId,
+        tenantId,
+        data: { pagesProcessed: 11, src: 'gap' },
       });
 
       // Brief pause to let events settle in Redis.

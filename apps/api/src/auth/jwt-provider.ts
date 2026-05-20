@@ -40,6 +40,32 @@ export interface JwtProviderConfig {
    *   m2mClientScopes: { 'spatula-m2m': ['jobs:read', 'jobs:write', ...] }
    */
   m2mClientScopes?: Record<string, string[]>;
+
+  /**
+   * Default scope set granted to browser OIDC users (human users authenticated
+   * via the authorization-code + PKCE flow) whose JWT carries no `scopes` claim
+   * and who do NOT match any entry in `m2mClientScopes`.
+   *
+   * WHEN TO USE:
+   * Dex browser OIDC tokens contain no application-level scopes claim (same
+   * limitation as M2M tokens — Dex rejects custom scopes). Without this option,
+   * ALL scope-less JWTs that are not positively identified M2M clients resolve
+   * to `[]` (fail-closed). That is correct for production (a real SaaS would
+   * derive scopes from a subscription/role tier at the application layer), but
+   * it makes the browser e2e test inoperable because the test user can never
+   * reach scope-gated endpoints.
+   *
+   * This option lets a test server explicitly grant browser OIDC users a known
+   * scope set. Production servers MUST NOT set this — leave it undefined.
+   *
+   * Applied ONLY when:
+   *   1. The JWT has no `scopes` claim (or an empty one).
+   *   2. The JWT `sub` does NOT match any `m2mClientScopes` entry.
+   *
+   * Example (browser e2e test only):
+   *   defaultBrowserUserScopes: [...DEFAULT_API_KEY_SCOPES]
+   */
+  defaultBrowserUserScopes?: string[];
 }
 
 /**
@@ -62,12 +88,14 @@ export class JwtAuthProvider implements AuthProvider {
   private readonly issuer: string;
   private readonly audience: string;
   private readonly m2mClientScopes: Record<string, string[]>;
+  private readonly defaultBrowserUserScopes: string[];
 
   constructor(config: JwtProviderConfig) {
     this.issuer = config.issuer;
     this.audience = config.audience;
     this.jwks = createRemoteJWKSet(new URL(config.jwksUrl));
     this.m2mClientScopes = config.m2mClientScopes ?? {};
+    this.defaultBrowserUserScopes = config.defaultBrowserUserScopes ?? [];
   }
 
   async authenticate(request: HonoRequest): Promise<AuthResult> {
@@ -106,11 +134,19 @@ export class JwtAuthProvider implements AuthProvider {
 
     if (scopes.length === 0) {
       const sub = payload.sub ?? '';
+      let matchedM2m = false;
       for (const [clientId, clientScopes] of Object.entries(this.m2mClientScopes)) {
         if (subEncodesClientId(sub, clientId)) {
           scopes = clientScopes;
+          matchedM2m = true;
           break;
         }
+      }
+      // Fall back to defaultBrowserUserScopes for human (browser OIDC) users
+      // that are not M2M clients — only when explicitly configured (test servers).
+      // Production servers leave defaultBrowserUserScopes === [] (fail-closed).
+      if (!matchedM2m && this.defaultBrowserUserScopes.length > 0) {
+        scopes = this.defaultBrowserUserScopes;
       }
     }
 
