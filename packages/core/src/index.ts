@@ -10,7 +10,7 @@ export * from './crawlers/index.js';
 // LLM
 export * from './llm/index.js';
 
-// Extraction
+// Extraction (includes scanOutput + OutputScanResult from output-scanner.ts)
 export * from './extraction/index.js';
 
 // Evolution
