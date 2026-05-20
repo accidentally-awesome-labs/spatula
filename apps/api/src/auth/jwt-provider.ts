@@ -1,7 +1,7 @@
 import { createRemoteJWKSet, jwtVerify } from 'jose';
 import type { JWTPayload } from 'jose';
 import type { AuthProvider, AuthResult } from '@spatula/shared';
-import { AuthMissingTokenError, AuthInvalidTokenError } from '@spatula/shared';
+import { AuthMissingTokenError, AuthInvalidTokenError, DEFAULT_API_KEY_SCOPES } from '@spatula/shared';
 import type { HonoRequest } from 'hono';
 
 export interface JwtProviderConfig {
@@ -43,10 +43,17 @@ export class JwtAuthProvider implements AuthProvider {
       throw new AuthInvalidTokenError('Invalid or expired token');
     }
 
+    // Resolve scopes from JWT claims. Dex client_credentials tokens do not carry
+    // a custom `scopes` claim by default, so we fall back to DEFAULT_API_KEY_SCOPES
+    // (the standard set granted to API keys). M2M clients should have the same
+    // access surface as API keys unless the JWT explicitly restricts it.
+    const jwtScopes = payload.scopes as string[] | undefined;
+    const scopes = jwtScopes && jwtScopes.length > 0 ? jwtScopes : DEFAULT_API_KEY_SCOPES;
+
     return {
       tenantId: '', // Resolved by auth middleware via user_tenants lookup
       userId: payload.sub ?? 'unknown',
-      scopes: (payload.scopes as string[] | undefined) ?? [],
+      scopes,
       strategy: 'jwt',
       displayName: (payload.name as string | undefined) ?? (payload.email as string | undefined),
     };

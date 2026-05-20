@@ -107,3 +107,10 @@ None — all smoke scripts run to completion and produce real token assertions. 
 | 1 | `bf45b8b` | Author Dex docker-compose + config + gitignore |
 | 2 | `0001950` | Add README, discovery-doc probe, and D-11 browser + M2M smoke scripts |
 | 3 (fix) | `27b50be` | Enable client_credentials grant in Dex config (image upgrade + sub assertion fix) |
+
+## Self-Check: PASSED
+
+All created files confirmed present. All task commits confirmed in git log:
+- `bf45b8b` (Task 1) — FOUND
+- `0001950` (Task 2) — FOUND
+- `27b50be` (Task 3 fix) — FOUND
