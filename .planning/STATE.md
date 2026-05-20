@@ -3,8 +3,8 @@ gsd_state_version: 1.0
 milestone: v1.1
 milestone_name: Public Launch (Wave 6 / Phase 14)
 status: verifying
-stopped_at: Completed 16-5 plan (release infra + SDK integration + SQLite decision)
-last_updated: "2026-05-19T16:22:16.162Z"
+stopped_at: Phase 17 context gathered
+last_updated: "2026-05-20T01:27:31.497Z"
 last_activity: 2026-05-19
 progress:
   total_phases: 8
@@ -139,6 +139,6 @@ All 9 pre-launch blockers are open as of 2026-05-12 (see PROJECT.md "Pre-launch 
 
 ## Session Continuity
 
-Last session: 2026-05-19T16:08:00.645Z
-Stopped at: Completed 16-5 plan (release infra + SDK integration + SQLite decision)
-Resume file: None
+Last session: 2026-05-20T01:27:31.492Z
+Stopped at: Phase 17 context gathered
+Resume file: .planning/phases/17-browser-auth-sse-cors/17-CONTEXT.md
