@@ -13,6 +13,7 @@ import type {
   LlmUsageRepository,
   RedisCache,
   UserTenantRepository,
+  TenantDataRepository,
 } from '@spatula/db';
 import type { ContentStore, ReviewQueue } from '@spatula/core';
 import type { JobManager, SpatulaQueues } from '@spatula/queue';
@@ -54,6 +55,7 @@ export interface AppDeps {
   llmUsageRepo?: LlmUsageRepository;
   userTenantRepo?: UserTenantRepository;
   metrics?: SpatulaMetrics;
+  tenantDataRepo?: TenantDataRepository;
 }
 
 export interface AppEnv {

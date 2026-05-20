@@ -249,3 +249,105 @@ describe('PATCH /api/v1/admin/tenants/:id', () => {
     expect(res.status).toBe(503);
   });
 });
+
+describe('DELETE /api/v1/admin/tenants/:id', () => {
+  let deps: AppDeps;
+
+  beforeEach(() => {
+    const tenantDeleteQueueAdd = vi.fn().mockResolvedValue({ id: 'job-del-1' });
+    deps = createMockDeps({
+      queues: {
+        tenantDelete: { add: tenantDeleteQueueAdd },
+      } as any,
+    });
+  });
+
+  it('returns 202 with data.jobId when tenant exists', async () => {
+    const app = createApp(deps);
+    const res = await app.request(`/api/v1/admin/tenants/${TENANT_ID}`, {
+      method: 'DELETE',
+      headers: tenantHeader,
+    });
+
+    expect(res.status).toBe(202);
+    const body = await res.json();
+    expect(body.data.status).toBe('pending');
+    expect(body.data.jobId).toBe('job-del-1');
+  });
+
+  it('enqueues a tenantDelete job with the correct tenantId', async () => {
+    const app = createApp(deps);
+    await app.request(`/api/v1/admin/tenants/${TENANT_ID}`, {
+      method: 'DELETE',
+      headers: tenantHeader,
+    });
+
+    expect((deps.queues as any).tenantDelete.add).toHaveBeenCalledWith(
+      'delete',
+      expect.objectContaining({ tenantId: TENANT_ID }),
+    );
+  });
+
+  it('returns 404 standard envelope when tenant does not exist', async () => {
+    (deps.tenantRepo as any).findById = vi.fn().mockResolvedValue(null);
+    const app = createApp(deps);
+    const res = await app.request(`/api/v1/admin/tenants/${TENANT_ID}`, {
+      method: 'DELETE',
+      headers: tenantHeader,
+    });
+
+    expect(res.status).toBe(404);
+    const body = await res.json();
+    expect(body.error.code).toBe('TENANT.NOT_FOUND');
+  });
+
+  it('returns 503 when tenantRepo is not configured', async () => {
+    deps = createMockDeps({ tenantRepo: undefined });
+    const app = createApp(deps);
+    const res = await app.request(`/api/v1/admin/tenants/${TENANT_ID}`, {
+      method: 'DELETE',
+      headers: tenantHeader,
+    });
+    expect(res.status).toBe(503);
+  });
+});
+
+describe('POST /api/v1/admin/tenants/:id/import', () => {
+  let deps: AppDeps;
+
+  beforeEach(() => {
+    deps = createMockDeps({
+      tenantDataRepo: {
+        importTenantData: vi.fn().mockResolvedValue({ imported: { api_keys: 2 } }),
+      } as any,
+    });
+  });
+
+  it('returns 200 with data.imported on success', async () => {
+    const app = createApp(deps);
+    const res = await app.request(`/api/v1/admin/tenants/${TENANT_ID}/import`, {
+      method: 'POST',
+      headers: { ...tenantHeader, 'content-type': 'application/json' },
+      body: JSON.stringify({ api_keys: [{ id: 'k1', keyHash: 'h1', keyPrefix: 'sk-', name: 'k' }] }),
+    });
+
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body.data.imported).toBeDefined();
+    expect(body.data.imported['api_keys']).toBe(2);
+  });
+
+  it('returns 404 when tenant does not exist', async () => {
+    (deps.tenantRepo as any).findById = vi.fn().mockResolvedValue(null);
+    const app = createApp(deps);
+    const res = await app.request(`/api/v1/admin/tenants/${TENANT_ID}/import`, {
+      method: 'POST',
+      headers: { ...tenantHeader, 'content-type': 'application/json' },
+      body: JSON.stringify({}),
+    });
+
+    expect(res.status).toBe(404);
+    const body = await res.json();
+    expect(body.error.code).toBe('TENANT.NOT_FOUND');
+  });
+});

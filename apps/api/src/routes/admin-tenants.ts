@@ -76,6 +76,58 @@ export function adminTenantRoutes() {
     });
   });
 
+  // DELETE /:id — enqueue async tenant deletion (DSR / SEC-09); returns 202 + jobId
+  app.delete('/:id', async (c) => {
+    const deps = c.get('deps');
+    const id = c.req.param('id');
+    if (!deps.tenantRepo) throw new InternalQueueError('Tenant repo not configured');
+
+    const tenant = await deps.tenantRepo.findById(id);
+    if (!tenant) throw new TenantNotFoundError(id);
+
+    if (!deps.queues?.tenantDelete) {
+      throw new InternalQueueError('Tenant-delete queue not configured');
+    }
+
+    const auth = c.get('auth');
+    const requestedBy = auth?.userId ?? 'system';
+
+    let job: { id?: string | null };
+    try {
+      job = await deps.queues.tenantDelete.add('delete', {
+        tenantId: id,
+        requestedBy,
+        requestedAt: new Date().toISOString(),
+      });
+    } catch (err) {
+      throw new InternalQueueError(
+        `Failed to enqueue tenant deletion: ${(err as Error).message}`,
+      );
+    }
+
+    return c.json({ data: { status: 'pending', jobId: job.id } }, 202);
+  });
+
+  // POST /:id/import — re-import a tenant data dump (symmetric with export)
+  app.post('/:id/import', async (c) => {
+    const deps = c.get('deps');
+    const id = c.req.param('id');
+    if (!deps.tenantRepo) throw new InternalQueueError('Tenant repo not configured');
+
+    const tenant = await deps.tenantRepo.findById(id);
+    if (!tenant) throw new TenantNotFoundError(id);
+
+    const body = await c.req.json();
+
+    if (!deps.tenantDataRepo) {
+      throw new InternalQueueError('TenantDataRepository not configured');
+    }
+
+    const { imported } = await deps.tenantDataRepo.importTenantData(id, body);
+
+    return c.json({ data: { imported } }, 200);
+  });
+
   // PATCH /:id — update config (status, retention, quotas)
   app.patch('/:id', async (c) => {
     const deps = c.get('deps');
