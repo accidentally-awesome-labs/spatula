@@ -1,0 +1,47 @@
+# DO NOT USE IN PRODUCTION — static dev-only credentials committed for local examples only.
+# This is a zero-config Dex OIDC IDP for developing and testing Spatula's browser-OIDC and
+# M2M (client_credentials) auth flows. The spatula-m2m client secret is intentionally committed
+# as "dev-only-secret-m2m" — never reuse this in a real environment.
+
+issuer: http://localhost:5556/dex
+
+storage:
+  type: sqlite3
+  config:
+    file: /data/dex.db
+
+web:
+  http: 0.0.0.0:5556
+
+oauth2:
+  skipApprovalScreen: true
+  responseTypes:
+    - code
+
+# Local password connector — allows login with staticPasswords below without an upstream IDP.
+connectors: []
+
+enablePasswordDB: true
+staticPasswords:
+  - email: dev@example.com
+    # bcrypt hash of "password" (cost 10) — generated with htpasswd -bnBC 10 "" password
+    hash: "$2y$10$iDAsoQl/qQdOIbXWYQU1tuazOiY7v9eEsQOCs.SXbKUkGe3S17ImO"
+    username: devuser
+    userID: "00000000-0000-0000-0000-000000000001"
+
+staticClients:
+  # Browser client: public PKCE authorization_code flow.
+  # Used by smoke/browser-flow.ts and plan 17-06 e2e tests.
+  - id: spatula-browser
+    name: Spatula Browser
+    redirectURIs:
+      - http://localhost:3000/callback
+    public: true # No client secret required for PKCE flows.
+
+  # M2M client: confidential client_credentials grant.
+  # Used by smoke/m2m-flow.ts and plan 17-07 e2e tests.
+  # Secret is intentionally committed as a dev-only value — DO NOT reuse in production.
+  - id: spatula-m2m
+    name: Spatula M2M
+    secret: dev-only-secret-m2m
+    redirectURIs: []

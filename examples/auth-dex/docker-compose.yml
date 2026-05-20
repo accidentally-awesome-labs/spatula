@@ -1,0 +1,31 @@
+# Local Dex OIDC IDP for developing and testing Spatula's browser-OIDC and M2M auth flows.
+# DO NOT USE IN PRODUCTION — this compose file uses static dev-only credentials.
+#
+# Usage:
+#   docker compose up -d
+#   docker compose ps   # wait for dex to report "healthy" (< 10s after image is present)
+#   docker compose down
+services:
+  dex:
+    image: ghcr.io/dexidp/dex:v2.45.1
+    command: ["dex", "serve", "/etc/dex/config.docker.yaml"]
+    ports:
+      - "5556:5556"
+    volumes:
+      - ./config/dex.yaml:/etc/dex/config.docker.yaml:ro
+      - ./data:/data
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "wget",
+          "--quiet",
+          "--tries=1",
+          "--spider",
+          "http://localhost:5556/dex/.well-known/openid-configuration",
+        ]
+      interval: 2s
+      timeout: 5s
+      retries: 10
+      start_period: 5s
+    restart: unless-stopped
