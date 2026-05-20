@@ -2,15 +2,15 @@
 gsd_state_version: 1.0
 milestone: v1.1
 milestone_name: Public Launch (Wave 6 / Phase 14)
-status: verifying
-stopped_at: Phase 18 context gathered
-last_updated: "2026-05-20T14:56:28.933Z"
+status: executing
+stopped_at: Completed 18-01-PLAN.md (prompt-injection defense + adversarial suite)
+last_updated: "2026-05-20T15:47:31.825Z"
 last_activity: 2026-05-20
 progress:
   total_phases: 8
   completed_phases: 3
-  total_plans: 18
-  completed_plans: 18
+  total_plans: 25
+  completed_plans: 19
   percent: 13
 ---
 
@@ -21,13 +21,13 @@ progress:
 See: `.planning/PROJECT.md` (updated 2026-05-11)
 
 **Core value:** Turn "I want X data from these sites" into a production-quality dataset with provenance.
-**Current focus:** Phase 17 — browser-auth-sse-cors
+**Current focus:** Phase 18 — security-hardening-legal
 
 ## Current Position
 
-Phase: 18
-Plan: Not started
-Status: Phase complete — ready for verification
+Phase: 18 (security-hardening-legal) — EXECUTING
+Plan: 2 of 7
+Status: Ready to execute
 Last activity: 2026-05-20
 
 Progress: [█░░░░░░░░░] 13% (1/8 v1.1 phases complete)
@@ -64,6 +64,7 @@ _v1.1 metrics will populate as plans execute._
 | Phase 17-browser-auth-sse-cors P04 | 7 | 2 tasks | 5 files |
 | Phase 17 P06 | 10 | 2 tasks | 9 files |
 | Phase 17-browser-auth-sse-cors P07 | 180 | 3 tasks | 8 files |
+| Phase 18-security-hardening-legal P01 | 15 | 3 tasks | 29 files |
 
 ## Accumulated Context
 
@@ -137,6 +138,9 @@ Full decision log lives in PROJECT.md Key Decisions table. Recent decisions rele
 - [Phase 17-browser-auth-sse-cors]: Accept any .NOT_FOUND code in isolation assertions — domain-specific codes like JOB.NOT_FOUND are correct; requiring RESOURCE.NOT_FOUND exclusively would be brittle
 - [Phase 17-browser-auth-sse-cors]: DEFAULT_API_KEY_SCOPES fallback in JwtAuthProvider — Dex client_credentials JWTs carry no scopes claim; M2M callers get standard API key access surface
 - [Phase 17-browser-auth-sse-cors]: Isolation server-harness with real repos — contract harness stubs caused 500s on positive controls; real repos produce proper 404 on cross-tenant lookups
+- [Phase 18-01]: ScanSchema uses structural subset of SchemaDefinition to keep output-scanner dependency-free of full SchemaDefinition shape (fieldAliases/createdAt/parentVersion irrelevant to scanner)
+- [Phase 18-01]: ExtractionMetadata extended with optional suspicious + scanFlags (additive Zod schema change); FieldDefinitionOutput/Input extended with optional maxLength for SEC-01 mitigation 6
+- [Phase 18-01]: Prompt-echo threshold set at 40 chars (n-gram sliding window); forensic archival side-effect deferred to Plan 18-06 per plan spec
 
 ### Pending Todos
 
@@ -164,6 +168,6 @@ All 9 pre-launch blockers are open as of 2026-05-12 (see PROJECT.md "Pre-launch 
 
 ## Session Continuity
 
-Last session: 2026-05-20T14:56:28.927Z
-Stopped at: Phase 18 context gathered
-Resume file: .planning/phases/18-security-hardening-legal/18-CONTEXT.md
+Last session: 2026-05-20T15:47:31.818Z
+Stopped at: Completed 18-01-PLAN.md (prompt-injection defense + adversarial suite)
+Resume file: None
