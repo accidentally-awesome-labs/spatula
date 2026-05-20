@@ -1,5 +1,15 @@
 import { z } from 'zod';
 
+/**
+ * Scan flag shape — matches ScanFlag in packages/core/src/extraction/output-scanner.ts.
+ * Duplicated here (rather than importing from core) to keep core-types dependency-free.
+ */
+const ScanFlagSchema = z.object({
+  kind: z.enum(['prompt_echo', 'field_name_leak', 'cap_hit']),
+  field: z.string().optional(),
+  detail: z.string(),
+});
+
 export const UnmappedField = z.object({
   name: z.string(),
   value: z.unknown(),
@@ -14,6 +24,10 @@ export const ExtractionMetadata = z.object({
   tokensUsed: z.number(),
   extractionTimeMs: z.number(),
   unmappedFields: z.array(UnmappedField),
+  /** Prompt-injection scan result (SEC-01 mitigation 7). Present when StaticExtractor ran scanOutput. */
+  suspicious: z.boolean().optional(),
+  /** Individual scan flags explaining why suspicious=true. */
+  scanFlags: z.array(ScanFlagSchema).optional(),
 });
 
 export type ExtractionMetadata = z.infer<typeof ExtractionMetadata>;

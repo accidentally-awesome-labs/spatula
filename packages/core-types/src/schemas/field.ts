@@ -8,6 +8,8 @@ export type FieldDefinitionOutput = {
   description: string;
   type: 'string' | 'number' | 'boolean' | 'url' | 'currency' | 'enum' | 'array' | 'object';
   required: boolean;
+  /** Maximum byte length for string field values. When set, StaticExtractor caps values here (SEC-01 mitigation 6). Default: 2000 chars. */
+  maxLength?: number;
   normalization?: z.infer<typeof NormalizationRule>;
   enumValues?: string[];
   arrayItemType?: FieldDefinitionOutput;
@@ -19,6 +21,8 @@ export type FieldDefinitionInput = {
   description: string;
   type: 'string' | 'number' | 'boolean' | 'url' | 'currency' | 'enum' | 'array' | 'object';
   required?: boolean;
+  /** Maximum byte length for string field values. When set, StaticExtractor caps values here (SEC-01 mitigation 6). Default: 2000 chars. */
+  maxLength?: number;
   normalization?: z.input<typeof NormalizationRule>;
   enumValues?: string[];
   arrayItemType?: FieldDefinitionInput;
@@ -32,6 +36,7 @@ export const FieldDefinition: z.ZodType<FieldDefinitionOutput, z.ZodTypeDef, Fie
       description: z.string(),
       type: z.enum(['string', 'number', 'boolean', 'url', 'currency', 'enum', 'array', 'object']),
       required: z.boolean().default(false),
+      maxLength: z.number().int().positive().optional(),
       normalization: NormalizationRule.optional(),
       enumValues: z.array(z.string()).optional(),
       arrayItemType: FieldDefinition.optional(),
