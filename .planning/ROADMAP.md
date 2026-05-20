@@ -38,7 +38,7 @@ See `.planning/MILESTONES.md` for the full v1.0 wave breakdown and per-phase del
 - [x] **Phase 15: Carve-out & Migration Squash** — Extract billing/Stripe/metering to private `spatula-saas`; squash OSS migrations to `000_v1_baseline.sql`; ship reverse-contract test. (completed 2026-05-17)
 - [x] **Phase 16: API Contract Hardening + SDK Packages** — Freeze error envelope, rate-limit headers, cursor-first pagination, runtime OpenAPI; ship `@spatula/client` + `@spatula/core-types` with npm provenance. (completed 2026-05-19)
 - [x] **Phase 17: Browser Auth, SSE, CORS** — Ship `GET /api/v1/jobs/:id/events` SSE with `Last-Event-ID` resume, wildcard-subdomain CORS, Dex-OIDC local recipe, key rotation, cross-tenant isolation audit. (completed 2026-05-20)
-- [ ] **Phase 18: Security Hardening & Legal** — Prompt-injection defense (≥10 adversarial fixtures vs pinned models), redaction sweep, full DSR surface; CLA, TRADEMARK, brand license, audit-CI hardening.
+- [x] **Phase 18: Security Hardening & Legal** — Prompt-injection defense (≥10 adversarial fixtures vs pinned models), redaction sweep, full DSR surface; CLA, TRADEMARK, brand license, audit-CI hardening. (completed 2026-05-20)
 - [ ] **Phase 19: Deployment & Self-Host Excellence** — k8s kustomize + Render blueprint + multi-arch cosign-signed images + SBOM + backup/upgrade/reverse-proxy/hardware-sizing runbooks.
 - [ ] **Phase 20: Docs Site Infrastructure + Content** — VitePress on Cloudflare Pages at `docs.spatula.dev`; auto-gen API/CLI references; WCAG 2.1 AA; OIDC cookbooks for Auth0/Keycloak/Google Workspace.
 - [ ] **Phase 21: Contributor Infra + CI Topology** — CODE_OF_CONDUCT 2.1, GOVERNANCE, ROADMAP, CODEOWNERS, devcontainer, Dependabot/Renovate, preflight/unit+int/contract/e2e/audit/release/release-dry-run CI split, mock-vs-live LLM test split.
@@ -169,7 +169,7 @@ Plans:
 4. `GET /api/v1/admin/forensic/extractions` returns metadata with 15-min-TTL signed URLs (no inline HTML), is marked `x-spatula-experimental: true` in OpenAPI, and is reachable from the SDK only via `client.experimental.forensic.*`; an integration test exercises a tagged forensic blob round-trip.
 5. `audit.yml` runs OSV scan + license allowlist (no GPL/AGPL) + gitleaks + trufflehog full-history scan on every push and on a daily cron; a deliberate test-credential PR is blocked by the secret-scan gate.
 6. The legal docset is committed and links cleanly — `LICENSE` with correct copyright line (or interim-name fallback + `NOTICE.md`), `TRADEMARK.md`, `brand/LICENSE-BRAND.md` ("All rights reserved. Use per TRADEMARK.md."), `THIRD_PARTY_NOTICES.md` (auto-generated via pinned `license-checker-rseidelsohn`), `SECURITY.md`, `.github/CLA.md` (versioned), README legal disclaimer banner, and a default User-Agent of `Spatula/<version> (+https://spatula.dev/abuse)`.
-**Plans:** 6/7 plans executed
+**Plans:** 7/7 plans complete
 Plans:
 - [x] 18-01-PLAN.md — Prompt-injection defense (7 mitigations) + output scanner + 10 adversarial fixtures + adversarial-llm.yml CI lane
 - [x] 18-02-PLAN.md — Shared redactor module + pino/Sentry/OTel sink wiring + per-sink redaction test suite
@@ -177,7 +177,7 @@ Plans:
 - [x] 18-04-PLAN.md — Legal docset: USPTO TESS search + LICENSE + TRADEMARK + brand license + SECURITY audit + CLA + README banner + User-Agent
 - [x] 18-05-PLAN.md — Forensic provenance: forensic/ content-store tagging + suspicious_extraction DLQ + admin forensic endpoint + SDK experimental surface
 - [x] 18-06-PLAN.md — DSR server surface: tenant-delete cascade worker + DELETE/import admin routes (async 202)
-- [ ] 18-07-PLAN.md — DSR CLI commands + DSR deletion/portability e2e round-trips + security-model.md + privacy.md
+- [x] 18-07-PLAN.md — DSR CLI commands + DSR deletion/portability e2e round-trips + security-model.md + privacy.md
    **Estimated effort**: 5 active sessions
 
 ### Phase 19: Deployment & Self-Host Excellence
@@ -279,7 +279,7 @@ Authoritative requirement → phase mapping lives in `.planning/REQUIREMENTS.md`
 | 15. Carve-out & Migration Squash          | v1.1      | 6/6            | Complete    | 2026-05-18 |
 | 16. API Contract Hardening + SDK Packages | v1.1      | 5/5 | Complete    | 2026-05-19 |
 | 17. Browser Auth, SSE, CORS               | v1.1      | 7/7 | Complete    | 2026-05-20 |
-| 18. Security Hardening & Legal            | v1.1      | 6/7 | In Progress|  |
+| 18. Security Hardening & Legal            | v1.1      | 7/7 | Complete   | 2026-05-20 |
 | 19. Deployment & Self-Host Excellence     | v1.1      | 0/TBD          | Not started | -          |
 | 20. Docs Site Infrastructure + Content    | v1.1      | 0/TBD          | Not started | -          |
 | 21. Contributor Infra + CI Topology       | v1.1      | 0/TBD          | Not started | -          |

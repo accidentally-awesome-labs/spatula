@@ -2,15 +2,15 @@
 gsd_state_version: 1.0
 milestone: v1.1
 milestone_name: Public Launch (Wave 6 / Phase 14)
-status: executing
-stopped_at: "Completed 18-06-PLAN.md (DSR deletion: TenantDataRepository, tenant-delete worker, DELETE + import admin routes)"
-last_updated: "2026-05-20T20:54:09.493Z"
+status: verifying
+stopped_at: Completed 18-07-PLAN.md (DSR CLI commands, e2e round-trip tests, security docs)
+last_updated: "2026-05-20T21:22:39.951Z"
 last_activity: 2026-05-20
 progress:
   total_phases: 8
-  completed_phases: 3
+  completed_phases: 4
   total_plans: 25
-  completed_plans: 24
+  completed_plans: 25
   percent: 13
 ---
 
@@ -27,7 +27,7 @@ See: `.planning/PROJECT.md` (updated 2026-05-11)
 
 Phase: 18 (security-hardening-legal) — EXECUTING
 Plan: 7 of 7
-Status: Ready to execute
+Status: Phase complete — ready for verification
 Last activity: 2026-05-20
 
 Progress: [█░░░░░░░░░] 13% (1/8 v1.1 phases complete)
@@ -70,6 +70,7 @@ _v1.1 metrics will populate as plans execute._
 | Phase 18-security-hardening-legal P04 | 115 | 7 tasks | 13 files |
 | Phase 18 P05 | 16 | 3 tasks | 16 files |
 | Phase 18 P06 | 13 | 3 tasks | 11 files |
+| Phase 18 P7 | 27 | 3 tasks | 10 files |
 
 ## Accumulated Context
 
@@ -160,6 +161,9 @@ Full decision log lives in PROJECT.md Key Decisions table. Recent decisions rele
 - [Phase 18]: onConflictDoNothing().returning() returns [] in drizzle 0.45 node-postgres — importTenantData uses try/catch(23505) for insert counting
 - [Phase 18]: TenantDeleteJobDeps injected into processTenantDeleteJob function (not WorkerDeps) to keep function testable without full WorkerDeps construction
 - [Phase 18]: ContentStore.listKeys is optional on base interface; tenant-delete worker skips forensic prefix scan gracefully when listKeys not available
+- [Phase 18]: CLI uses HTTP polling for delete job status to avoid Redis dependency in CLI
+- [Phase 18]: exportTenantDump uses camelCase SQL aliases so dump rows are directly insertable via Drizzle ORM
+- [Phase 18]: importTenantData checks err.cause?.code for 23505 — Drizzle wraps pg errors
 
 ### Pending Todos
 
@@ -187,6 +191,6 @@ All 9 pre-launch blockers are open as of 2026-05-12 (see PROJECT.md "Pre-launch 
 
 ## Session Continuity
 
-Last session: 2026-05-20T20:54:09.487Z
-Stopped at: Completed 18-06-PLAN.md (DSR deletion: TenantDataRepository, tenant-delete worker, DELETE + import admin routes)
+Last session: 2026-05-20T21:22:39.946Z
+Stopped at: Completed 18-07-PLAN.md (DSR CLI commands, e2e round-trip tests, security docs)
 Resume file: None
