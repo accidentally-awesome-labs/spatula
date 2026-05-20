@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v1.1
 milestone_name: Public Launch (Wave 6 / Phase 14)
 status: executing
-stopped_at: Completed 18-02-PLAN.md (shared redactor + per-sink test suite)
-last_updated: "2026-05-20T16:00:06.106Z"
+stopped_at: Completed 18-03-PLAN.md (supply-chain security CI + third-party notices)
+last_updated: "2026-05-20T16:07:48.212Z"
 last_activity: 2026-05-20
 progress:
   total_phases: 8
   completed_phases: 3
   total_plans: 25
-  completed_plans: 20
+  completed_plans: 21
   percent: 13
 ---
 
@@ -26,7 +26,7 @@ See: `.planning/PROJECT.md` (updated 2026-05-11)
 ## Current Position
 
 Phase: 18 (security-hardening-legal) — EXECUTING
-Plan: 3 of 7
+Plan: 4 of 7
 Status: Ready to execute
 Last activity: 2026-05-20
 
@@ -66,6 +66,7 @@ _v1.1 metrics will populate as plans execute._
 | Phase 17-browser-auth-sse-cors P07 | 180 | 3 tasks | 8 files |
 | Phase 18-security-hardening-legal P01 | 15 | 3 tasks | 29 files |
 | Phase 18 P02 | 15 | 3 tasks | 10 files |
+| Phase 18 P03 | 4 | 3 tasks | 6 files |
 
 ## Accumulated Context
 
@@ -145,6 +146,8 @@ Full decision log lives in PROJECT.md Key Decisions table. Recent decisions rele
 - [Phase 18]: Import SpanProcessor/Span/ReadableSpan from @opentelemetry/sdk-trace-node (re-exports from sdk-trace-base) — sdk-trace-base is not a direct dep of @spatula/shared
 - [Phase 18]: tests/vitest.config.ts converted to absolute includes (tests/e2e/** and tests/shared/**) + pino alias pointing to shared package node_modules — matches repo pattern for root-level test configs
 - [Phase 18]: redactObject uses recursive deep-clone (not mutation) — formatters.log receives live pino log object; mutation would corrupt pino internal state
+- [Phase 18]: Dependabot + Renovate intentionally coexist: Dependabot as always-on GitHub-native baseline, Renovate for richer grouping/scheduling — operators can disable either
+- [Phase 18]: generate:notices uses --start apps/api because pnpm hoists production deps into apps/api/node_modules; workspace root node_modules only contains devDependencies
 
 ### Pending Todos
 
@@ -172,6 +175,6 @@ All 9 pre-launch blockers are open as of 2026-05-12 (see PROJECT.md "Pre-launch 
 
 ## Session Continuity
 
-Last session: 2026-05-20T16:00:06.101Z
-Stopped at: Completed 18-02-PLAN.md (shared redactor + per-sink test suite)
+Last session: 2026-05-20T16:07:48.198Z
+Stopped at: Completed 18-03-PLAN.md (supply-chain security CI + third-party notices)
 Resume file: None

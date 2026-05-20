@@ -169,11 +169,11 @@ Plans:
 4. `GET /api/v1/admin/forensic/extractions` returns metadata with 15-min-TTL signed URLs (no inline HTML), is marked `x-spatula-experimental: true` in OpenAPI, and is reachable from the SDK only via `client.experimental.forensic.*`; an integration test exercises a tagged forensic blob round-trip.
 5. `audit.yml` runs OSV scan + license allowlist (no GPL/AGPL) + gitleaks + trufflehog full-history scan on every push and on a daily cron; a deliberate test-credential PR is blocked by the secret-scan gate.
 6. The legal docset is committed and links cleanly — `LICENSE` with correct copyright line (or interim-name fallback + `NOTICE.md`), `TRADEMARK.md`, `brand/LICENSE-BRAND.md` ("All rights reserved. Use per TRADEMARK.md."), `THIRD_PARTY_NOTICES.md` (auto-generated via pinned `license-checker-rseidelsohn`), `SECURITY.md`, `.github/CLA.md` (versioned), README legal disclaimer banner, and a default User-Agent of `Spatula/<version> (+https://spatula.dev/abuse)`.
-**Plans:** 2/7 plans executed
+**Plans:** 3/7 plans executed
 Plans:
 - [x] 18-01-PLAN.md — Prompt-injection defense (7 mitigations) + output scanner + 10 adversarial fixtures + adversarial-llm.yml CI lane
 - [x] 18-02-PLAN.md — Shared redactor module + pino/Sentry/OTel sink wiring + per-sink redaction test suite
-- [ ] 18-03-PLAN.md — audit.yml hardening (OSV + license allowlist + gitleaks/trufflehog) + Dependabot/Renovate + THIRD_PARTY_NOTICES
+- [x] 18-03-PLAN.md — audit.yml hardening (OSV + license allowlist + gitleaks/trufflehog) + Dependabot/Renovate + THIRD_PARTY_NOTICES
 - [ ] 18-04-PLAN.md — Legal docset: USPTO TESS search + LICENSE + TRADEMARK + brand license + SECURITY audit + CLA + README banner + User-Agent
 - [ ] 18-05-PLAN.md — Forensic provenance: forensic/ content-store tagging + suspicious_extraction DLQ + admin forensic endpoint + SDK experimental surface
 - [ ] 18-06-PLAN.md — DSR server surface: tenant-delete cascade worker + DELETE/import admin routes (async 202)
@@ -279,7 +279,7 @@ Authoritative requirement → phase mapping lives in `.planning/REQUIREMENTS.md`
 | 15. Carve-out & Migration Squash          | v1.1      | 6/6            | Complete    | 2026-05-18 |
 | 16. API Contract Hardening + SDK Packages | v1.1      | 5/5 | Complete    | 2026-05-19 |
 | 17. Browser Auth, SSE, CORS               | v1.1      | 7/7 | Complete    | 2026-05-20 |
-| 18. Security Hardening & Legal            | v1.1      | 2/7 | In Progress|  |
+| 18. Security Hardening & Legal            | v1.1      | 3/7 | In Progress|  |
 | 19. Deployment & Self-Host Excellence     | v1.1      | 0/TBD          | Not started | -          |
 | 20. Docs Site Infrastructure + Content    | v1.1      | 0/TBD          | Not started | -          |
 | 21. Contributor Infra + CI Topology       | v1.1      | 0/TBD          | Not started | -          |

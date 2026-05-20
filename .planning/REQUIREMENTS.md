@@ -84,15 +84,15 @@ Requirements for the v1.0.0 public launch. Each maps to one of phases 15–22. R
 - [ ] **SEC-08**: `docs/privacy.md` declares zero phone-home + zero-telemetry boundary (operator-configured Sentry/OTel are operator's endpoints), and spells out self-hoster controller obligations (DPAs, DSR SLA, breach notification) per spec §3.8 / §7-19.
 - [ ] **SEC-09**: Full DSR surface ships — `spatula admin tenant delete --tenant <id>` + `DELETE /api/v1/admin/tenants/:id` cascade to entities, raw_pages, content-store blobs, audit-log redaction, forensic blobs; `spatula admin tenant export --tenant <id> --format jsonl` produces a re-importable dump; rectification SQL + admin paths documented.
 - [ ] **SEC-10**: `tests/e2e/dsr/deletion/` round-trip (create tenant → seed data → delete → assert empty) and `tests/e2e/dsr/portability/` (tenant dump → re-import → parity) pass.
-- [ ] **SEC-11**: `audit.yml` CI hardened — OSV scan, license allowlist (no GPL/AGPL), gitleaks + trufflehog full-history secret scan.
-- [ ] **SEC-12**: Dependabot and Renovate configs exist and are wired to monitor production deps.
+- [x] **SEC-11**: `audit.yml` CI hardened — OSV scan, license allowlist (no GPL/AGPL), gitleaks + trufflehog full-history secret scan.
+- [x] **SEC-12**: Dependabot and Renovate configs exist and are wired to monitor production deps.
 
 ### Legal & Brand (Phase 18, shipped with security)
 
 - [ ] **LEGAL-01**: `LICENSE` copyright line reads `Copyright (c) 2026 Accidentally Awesome Labs` OR interim-name fallback (`Copyright (c) 2026 <Individual Name>`) is in place with `NOTICE.md` recording the assignment-on-entity-formation plan.
 - [ ] **LEGAL-02**: `TRADEMARK.md` defines the trademark policy per spec §3.9 (forks may not use Spatula name/logo in project name/domain/marketing; "based on Spatula" attribution allowed; unmodified official release may use the name).
 - [ ] **LEGAL-03**: `brand/LICENSE-BRAND.md` explicitly states brand assets are NOT under MIT — "All rights reserved. Use per TRADEMARK.md."
-- [ ] **LEGAL-04**: `THIRD_PARTY_NOTICES.md` is auto-generated via pinned `license-checker-rseidelsohn` (invoked by `pnpm run generate:notices`); regenerated on every release cut.
+- [x] **LEGAL-04**: `THIRD_PARTY_NOTICES.md` is auto-generated via pinned `license-checker-rseidelsohn` (invoked by `pnpm run generate:notices`); regenerated on every release cut.
 - [ ] **LEGAL-05**: `SECURITY.md` audited — vulnerability disclosure process, GPG key, response SLA documented.
 - [ ] **LEGAL-06**: CLA wired via `cla-assistant.io`; CLA text versioned in `.github/CLA.md` with `version` in frontmatter; re-sign-on-text-change policy documented in `CONTRIBUTING.md`.
 - [ ] **LEGAL-07**: README displays a prominent legal disclaimer banner — MIT, target-site ToS responsibility, robots.txt honored by default with override at user risk.
