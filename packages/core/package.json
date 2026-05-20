@@ -36,6 +36,7 @@
     "build": "tsc",
     "test": "vitest run",
     "test:watch": "vitest watch",
+    "test:adversarial": "vitest run src/extraction/__tests__/adversarial.test.ts",
     "lint": "eslint src/",
     "lint:fix": "eslint src/ --fix",
     "typecheck": "tsc --noEmit",

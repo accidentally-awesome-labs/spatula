@@ -1,0 +1,81 @@
+# Adversarial LLM test suite — SEC-02
+#
+# Design decisions (D-04/D-05/D-06 from 18-CONTEXT.md):
+#   D-04: Runs on PRs touching packages/core/src/extraction/** (path trigger)
+#         and on a daily cron at 06:00 UTC. Not on every push.
+#   D-05: OpenRouter pin (anthropic/claude-3-5-sonnet-20240620) runs on
+#         GitHub-hosted runners automatically.
+#         Ollama pin (llama3.1:8b-instruct-q4_0) runs ONLY via workflow_dispatch
+#         on self-hosted runners - not pulled on hosted runners.
+#   D-06: A failed cron run goes CI-red only. No auto-opened issue,
+#         no Slack/email notification.
+#
+# Pitfall 4 (fork PR secret safety): The path trigger fires on fork PRs but
+# secrets.OPENROUTER_API_KEY is empty for fork workflows. The step guard
+#   if: env.OPENROUTER_API_KEY != ''
+# ensures the live test step is skipped cleanly on fork PRs - tests use
+# it.skipIf(!LIVE) so the suite exits 0 with all tests marked as skipped.
+
+name: Adversarial LLM Tests
+
+on:
+  schedule:
+    - cron: '0 6 * * *'
+  pull_request:
+    branches: [main]
+    paths:
+      - 'packages/core/src/extraction/**'
+      - 'packages/core/src/extraction/__tests__/pinned-models.ts'
+  workflow_dispatch:
+
+jobs:
+  adversarial-openrouter:
+    name: Adversarial (OpenRouter pin)
+    runs-on: ubuntu-latest
+    env:
+      SPATULA_LIVE_LLM: '1'
+      OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          run_install: false
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Run adversarial suite (OpenRouter pin)
+        if: ${{ env.OPENROUTER_API_KEY != '' }}
+        run: pnpm --filter @spatula/core run test:adversarial
+
+  adversarial-ollama:
+    name: Adversarial (Ollama pin)
+    if: github.event_name == 'workflow_dispatch'
+    runs-on: self-hosted
+    env:
+      SPATULA_LIVE_LLM: '1'
+      OLLAMA_BASE_URL: http://localhost:11434
+      SPATULA_ADVERSARIAL_MODEL: ollama
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          run_install: false
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Run adversarial suite (Ollama pin)
+        run: pnpm --filter @spatula/core run test:adversarial
