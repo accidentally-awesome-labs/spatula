@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v1.1
 milestone_name: Public Launch (Wave 6 / Phase 14)
 status: executing
-stopped_at: Completed 17-03-PLAN.md — CORS wildcard + auth docs done
-last_updated: "2026-05-20T04:15:20.710Z"
+stopped_at: Completed 17-04-PLAN.md — API key rotation done
+last_updated: "2026-05-20T04:25:21.277Z"
 last_activity: 2026-05-20
 progress:
   total_phases: 8
   completed_phases: 2
   total_plans: 18
-  completed_plans: 15
+  completed_plans: 16
   percent: 13
 ---
 
@@ -26,7 +26,7 @@ See: `.planning/PROJECT.md` (updated 2026-05-11)
 ## Current Position
 
 Phase: 17 (browser-auth-sse-cors) — EXECUTING
-Plan: 5 of 7
+Plan: 6 of 7
 Status: Ready to execute
 Last activity: 2026-05-20
 
@@ -61,6 +61,7 @@ _v1.1 metrics will populate as plans execute._
 | Phase 17 P05 | 13 | 3 tasks | 7 files |
 | Phase 17-browser-auth-sse-cors P02 | 21 | 3 tasks | 12 files |
 | Phase 17-browser-auth-sse-cors P03 | 15 | 3 tasks | 6 files |
+| Phase 17-browser-auth-sse-cors P04 | 7 | 2 tasks | 5 files |
 
 ## Accumulated Context
 
@@ -126,6 +127,8 @@ Full decision log lives in PROJECT.md Key Decisions table. Recent decisions rele
 - [Phase 17-browser-auth-sse-cors]: CORS wildcard regex: escape * in metachar set before replacing with [^./]+ — omitting * from escape causes wildcard to act as a regex quantifier instead of a label placeholder
 - [Phase 17-browser-auth-sse-cors]: buildOriginMatcher returns null (not throws) on bad config; createApp throws Error with CORS_CONFIG_INVALID — pure helper, boundary-level validation
 - [Phase 17-browser-auth-sse-cors]: docs/api-auth.md scope CI gate uses SCOPE_TABLE_START/END HTML comment markers + first backtick-quoted column parsing; readFileSync for filesystem independence
+- [Phase 17]: rotateApiKeyRequestSchema graceSeconds has no .max(604800) — handler clamps silently so 700000 returns 200 not 400 (D-14 server-clamped UX)
+- [Phase 17]: repo.rotate() stores supersededExpiresAt on NEW row so D-16 response needs no second query; raw key stays in route handler layer
 
 ### Pending Todos
 
@@ -153,6 +156,6 @@ All 9 pre-launch blockers are open as of 2026-05-12 (see PROJECT.md "Pre-launch 
 
 ## Session Continuity
 
-Last session: 2026-05-20T04:15:20.705Z
-Stopped at: Completed 17-03-PLAN.md — CORS wildcard + auth docs done
+Last session: 2026-05-20T04:25:21.272Z
+Stopped at: Completed 17-04-PLAN.md — API key rotation done
 Resume file: None
