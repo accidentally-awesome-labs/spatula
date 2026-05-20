@@ -1,0 +1,20 @@
+{
+  "$schema": "https://docs.renovatebot.com/renovate-schema.json",
+  "extends": ["config:recommended"],
+  "schedule": ["before 6am on monday"],
+  "prConcurrentLimit": 10,
+  "packageRules": [
+    {
+      "description": "Group all dev dependency updates together",
+      "matchDepTypes": ["devDependencies"],
+      "groupName": "dev-dependencies",
+      "automerge": false
+    },
+    {
+      "description": "Monitor production dependencies explicitly — reviewed individually before merge",
+      "matchDepTypes": ["dependencies"],
+      "labels": ["production-deps"],
+      "automerge": false
+    }
+  ]
+}
