@@ -42,6 +42,7 @@ import { timeoutMiddleware } from './middleware/timeout.js';
 import { createAuthProvider } from './auth/factory.js';
 import type { AppDeps } from './types.js';
 import { getEnvOrDefault } from '@spatula/shared';
+import { buildOriginMatcher } from './lib/cors-origin.js';
 
 export function createApp(deps: AppDeps) {
   const app = createOpenAPIRouter();
@@ -79,14 +80,20 @@ export function createApp(deps: AppDeps) {
   );
   app.onError(errorHandler);
 
-  // CORS
-  const allowedOrigins = getEnvOrDefault('CORS_ALLOWED_ORIGINS', 'http://localhost:3000')
-    .split(',')
-    .map((s) => s.trim());
+  // CORS — function-form origin with single-label wildcard support (AUTH-03, D-08 through D-10).
+  // buildOriginMatcher returns null if CORS_ALLOWED_ORIGINS is empty or contains a bare `*`.
+  // A null result is a misconfiguration: fail fast at boot with CORS_CONFIG_INVALID.
+  const corsRaw = getEnvOrDefault('CORS_ALLOWED_ORIGINS', 'http://localhost:3000');
+  const originMatcher = buildOriginMatcher(corsRaw);
+  if (!originMatcher) {
+    throw new Error(
+      'CORS_CONFIG_INVALID: CORS_ALLOWED_ORIGINS is empty or malformed (a bare "*" is not allowed)',
+    );
+  }
   app.use(
     '*',
     cors({
-      origin: allowedOrigins,
+      origin: (origin) => (origin && originMatcher.match(origin) ? origin : null),
       allowMethods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
       allowHeaders: [
         'Authorization',
@@ -95,7 +102,14 @@ export function createApp(deps: AppDeps) {
         'X-Tenant-Id',
         'Idempotency-Key',
       ],
-      exposeHeaders: ['X-RateLimit-Limit', 'X-RateLimit-Remaining', 'X-Request-Id'],
+      // D-09: extends exposeHeaders to include X-RateLimit-Reset + Retry-After
+      exposeHeaders: [
+        'X-RateLimit-Limit',
+        'X-RateLimit-Remaining',
+        'X-RateLimit-Reset',
+        'X-Request-Id',
+        'Retry-After',
+      ],
       maxAge: 86400,
       credentials: true,
     }),
