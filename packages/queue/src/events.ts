@@ -39,11 +39,27 @@ export class RedisEventPublisher implements EventPublisher {
 
   async publish(jobId: string, event: Omit<JobEvent, 'timestamp'>): Promise<void> {
     const full: JobEvent = { ...event, timestamp: Date.now() };
+    const payload = JSON.stringify(full);
+
+    // ── pub/sub (WS path) — unchanged ──────────────────────────────────────
     try {
-      await this.redis.publish(channelForJob(jobId), JSON.stringify(full));
+      await this.redis.publish(channelForJob(jobId), payload);
     } catch (err) {
       // Fire-and-forget: event publishing should never crash a worker
-      logger.warn({ jobId, type: event.type, err }, 'failed to publish event');
+      logger.warn({ jobId, type: event.type, err }, 'failed to publish event to pub/sub');
+    }
+
+    // ── Redis Stream (SSE path) — independent try/catch ─────────────────────
+    // Stream key `jobs:{jobId}:events` is DISTINCT from `spatula:events:{jobId}`
+    // (pub/sub channel) — they must not collide (RESEARCH Pitfall 4 + CONTEXT D-01).
+    // MAXLEN ~ 500 (approx-trim), * = auto-id, field = payload.
+    // EXPIRE is NOT auto-refreshed by XADD — refresh on every write (RESEARCH Pitfall 3).
+    const streamKey = `jobs:${jobId}:events`;
+    try {
+      await this.redis.xadd(streamKey, 'MAXLEN', '~', '500', '*', 'payload', payload);
+      await this.redis.expire(streamKey, 300);
+    } catch (err) {
+      logger.warn({ jobId, type: event.type, err }, 'failed to publish event to stream');
     }
   }
 }
