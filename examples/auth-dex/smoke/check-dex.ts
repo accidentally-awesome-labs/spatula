@@ -11,6 +11,8 @@
  *   node smoke/check-dex.ts   # Node 18+ with --experimental-fetch (default on 21+)
  */
 
+export {}; // Treat as an ES module so top-level names don't collide with sibling scripts.
+
 const ISSUER = "http://localhost:5556/dex";
 const DISCOVERY_URL = `${ISSUER}/.well-known/openid-configuration`;
 

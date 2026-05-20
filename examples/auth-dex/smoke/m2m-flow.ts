@@ -12,6 +12,8 @@
 //   npx tsx smoke/m2m-flow.ts
 //   node smoke/m2m-flow.ts   # Node 18+ (fetch available by default on Node 21+)
 
+export {}; // Treat as an ES module so top-level names don't collide with sibling scripts.
+
 const ISSUER = "http://localhost:5556/dex";
 const TOKEN_ENDPOINT = `${ISSUER}/token`;
 const CLIENT_ID = "spatula-m2m";
