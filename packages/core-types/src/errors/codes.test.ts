@@ -92,3 +92,18 @@ describe('STATUS_MAP (HTTP status mapping)', () => {
     expect(STATUS_MAP[ErrorCode.INTERNAL_TIMEOUT]).toBe(504);
   });
 });
+
+describe('RESOURCE_NOT_FOUND (additive Phase 17 code)', () => {
+  it('ErrorCode.RESOURCE_NOT_FOUND equals RESOURCE.NOT_FOUND', () => {
+    expect(ErrorCode.RESOURCE_NOT_FOUND).toBe('RESOURCE.NOT_FOUND');
+  });
+
+  it('STATUS_MAP[ErrorCode.RESOURCE_NOT_FOUND] equals 404', () => {
+    expect(STATUS_MAP[ErrorCode.RESOURCE_NOT_FOUND]).toBe(404);
+  });
+
+  it('the value RESOURCE.NOT_FOUND matches the frozen DOMAIN.CODE regex', () => {
+    const pattern = /^[A-Z_]+\.[A-Z_]+$/;
+    expect(ErrorCode.RESOURCE_NOT_FOUND).toMatch(pattern);
+  });
+});

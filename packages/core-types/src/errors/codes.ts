@@ -53,6 +53,9 @@ export const ErrorCode = {
   AUTH_MISSING_TOKEN: 'AUTH.MISSING_TOKEN',
   AUTH_INSUFFICIENT_SCOPE: 'AUTH.INSUFFICIENT_SCOPE',
 
+  // RESOURCE.* — generic cross-resource lookup failures (additive 1.x — Phase 17)
+  RESOURCE_NOT_FOUND: 'RESOURCE.NOT_FOUND',
+
   // TENANT.* — tenant errors
   TENANT_NOT_FOUND: 'TENANT.NOT_FOUND',
 
@@ -121,6 +124,8 @@ export const STATUS_MAP: Record<ErrorCode, number> = {
   [ErrorCode.AUTH_INVALID_TOKEN]: 401,
   [ErrorCode.AUTH_MISSING_TOKEN]: 401,
   [ErrorCode.AUTH_INSUFFICIENT_SCOPE]: 403,
+
+  [ErrorCode.RESOURCE_NOT_FOUND]: 404,
 
   [ErrorCode.TENANT_NOT_FOUND]: 404,
 
