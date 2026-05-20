@@ -10,7 +10,14 @@ const createWsTokenRoute = createRoute({
   method: 'post',
   path: '/',
   tags: ['WebSocket'],
-  summary: 'Create a single-use WebSocket auth token',
+  // Phase 17 plan 17-02 (D-07): updated to reflect dual WS+SSE purpose.
+  // operationId, path, request/response schema, and 60s TTL are UNCHANGED.
+  summary: 'Create a single-use stream token (WebSocket or SSE)',
+  description:
+    'Issues a short-lived (60 s) single-use token that authenticates either ' +
+    'the WebSocket upgrade at GET /ws/jobs/:id/progress or the SSE stream at ' +
+    'GET /api/v1/jobs/:id/events?token=. The token is consumed atomically via ' +
+    'GETDEL on first use.',
   responses: {
     200: jsonContent(
       z.object({ data: z.object({ token: z.string(), expiresIn: z.number() }) }),

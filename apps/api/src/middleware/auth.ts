@@ -18,6 +18,13 @@ const SKIP_AUTH_PATHS = new Set([
   '/.well-known/spatula-version',
 ]);
 
+// Phase 17 plan 17-02: SSE paths use ?token= (single-use stream token consumed
+// via GETDEL in-handler). EventSource cannot send Authorization headers, so the
+// auth middleware must not intercept these paths. The handler performs its own
+// token-based ownership check (mirrors the WS upgrade in server.ts).
+// Pattern: /api/v1/jobs/<anything>/events
+const SKIP_AUTH_PREFIXES_SSE = /^\/api\/v1\/jobs\/[^/]+\/events$/;
+
 const SKIP_AUTH_PREFIXES = ['/api/v1/tenants'];
 
 export function authMiddleware(
@@ -31,6 +38,10 @@ export function authMiddleware(
       return next();
     }
     if (SKIP_AUTH_PREFIXES.some((p) => c.req.path.startsWith(p))) {
+      return next();
+    }
+    // SSE paths do their own in-handler ?token= auth (RESEARCH Pitfall 2)
+    if (SKIP_AUTH_PREFIXES_SSE.test(c.req.path)) {
       return next();
     }
 

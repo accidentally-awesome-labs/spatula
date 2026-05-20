@@ -30,6 +30,8 @@ import { qualityRoutes } from './routes/quality.js';
 import { entitySourceRoutes } from './routes/entity-sources.js';
 import { timingMiddleware } from './middleware/timing.js';
 import { wsTokenRoutes } from './routes/ws-token.js';
+import { jobEventsRoute } from './routes/job-events.js';
+import { createSseHandler } from './sse/handler.js';
 import { usageRoutes } from './routes/usage.js';
 import { healthRoutes } from './routes/health.js';
 import { authRoutes } from './routes/auth.js';
@@ -67,7 +69,12 @@ export function createApp(deps: AppDeps) {
     '*',
     timeoutMiddleware({
       defaultMs: 30_000,
-      overrides: { '/api/v1/exports/:exportId/download': 300_000 },
+      overrides: {
+        '/api/v1/exports/:exportId/download': 300_000,
+        // SSE connections are long-lived — 0 means no timeout (see timeout.ts).
+        // Without this override the 30s default would terminate SSE streams.
+        '/api/v1/jobs/:id/events': 0,
+      },
     }),
   );
   app.onError(errorHandler);
@@ -162,15 +169,35 @@ export function createApp(deps: AppDeps) {
     app.route('/api/v1/ws-token', wsTokenRoutes());
   }
 
+  // SSE events endpoint — MUST be registered BEFORE the requireScope('jobs:read') guard
+  // on app.get('/api/v1/jobs/*', ...) (line ~187). EventSource cannot send Authorization
+  // headers; the handler does its own in-handler GETDEL token auth (RESEARCH Pitfall 2 +
+  // Open Question 3). The path is also on the auth-middleware skip-list (see auth.ts).
+  //
+  // Registered directly on `app` (not a sub-router) because Hono evaluates GET handlers
+  // in registration order — a specific route registered BEFORE the wildcard scope guard
+  // takes precedence, preventing requireScope from intercepting SSE connections.
+  if (deps.redis) {
+    app.openapi(jobEventsRoute, createSseHandler(deps) as any);
+  }
+
   // Batch operations (registered before parameterized routes so /batch matches first)
   app.post('/api/v1/actions/batch', requireScope('actions:write'));
   app.route('/api/v1/actions', batchActionRoutes());
   app.post('/api/v1/jobs/batch', requireScope('jobs:write'));
   app.route('/api/v1/jobs', batchJobRoutes());
 
-  // API v1 routes with per-method scope enforcement
-  app.get('/api/v1/jobs', requireScope('jobs:read'));
-  app.get('/api/v1/jobs/*', requireScope('jobs:read'));
+  // API v1 routes with per-method scope enforcement.
+  // SSE path (/api/v1/jobs/:id/events) is intentionally excluded from the
+  // wildcard scope guard — it does its own in-handler ?token= auth (RESEARCH Pitfall 2).
+  // The SSE route was registered above via app.openapi(jobEventsRoute, ...) before this guard.
+  const SSE_PATH_RE = /^\/api\/v1\/jobs\/[^/]+\/events$/;
+  const jobsReadScope = requireScope('jobs:read');
+  app.get('/api/v1/jobs', jobsReadScope);
+  app.get('/api/v1/jobs/*', async (c, next) => {
+    if (SSE_PATH_RE.test(c.req.path)) return next(); // SSE: skip scope guard
+    return jobsReadScope(c, next);
+  });
   app.post('/api/v1/jobs', requireScope('jobs:write'));
   app.post('/api/v1/jobs/*', requireScope('jobs:write'));
   app.patch('/api/v1/jobs/*', requireScope('jobs:write'));

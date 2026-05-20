@@ -27,6 +27,12 @@ export function timeoutMiddleware(config: TimeoutConfig): MiddlewareHandler {
     const path = c.req.path;
     const timeoutMs = compiledOverrides.find((o) => o.regex.test(path))?.ms ?? defaultMs;
 
+    // 0 = no timeout (used for long-lived connections like SSE streams).
+    // Without this guard, setTimeout(fn, 0) fires immediately and kills the connection.
+    if (timeoutMs === 0) {
+      return next();
+    }
+
     let timer: ReturnType<typeof setTimeout> | undefined;
 
     const timeoutPromise = new Promise<never>((_, reject) => {
