@@ -19,6 +19,7 @@
 import { SpatulaApiError } from './errors/base.js';
 import { decodeError } from './errors/generated.js';
 import { createExperimentalNamespace } from './experimental/index.js';
+import type { ExperimentalNamespace } from './experimental/index.js';
 import { VersionProbe } from './version-probe.js';
 
 /**
@@ -60,11 +61,11 @@ export class SpatulaClient {
   private readonly skipVersionProbe: boolean;
   private readonly probe: VersionProbe;
   /**
-   * Reserved namespace for future experimental surfaces. v1.0 ships zero
-   * experimental endpoints; any property access throws (see
-   * `./experimental/index.ts`).
+   * Experimental surfaces namespace. v1.0 ships ONE experimental surface:
+   * `client.experimental.forensic.*` for the forensic-extractions admin endpoint.
+   * All other property accesses throw fail-loud (see `./experimental/index.ts`).
    */
-  readonly experimental: Record<string, never>;
+  readonly experimental: ExperimentalNamespace;
 
   constructor(opts: SpatulaClientOptions) {
     // Strict: NO I/O in the constructor (D-12). Store config + wire probe.
@@ -77,7 +78,9 @@ export class SpatulaClient {
       fetcher: this.fetchImpl,
       sdkMajor: SDK_MAJOR_VERSION,
     });
-    this.experimental = createExperimentalNamespace();
+    // Pass `this` as the transport so forensic surface reuses the same
+    // request() helper (version probe + auth + error-envelope decoding).
+    this.experimental = createExperimentalNamespace(this);
   }
 
   /**
