@@ -11,6 +11,8 @@ A self-contained local [Dex](https://dexidp.io/) OIDC identity provider for deve
 - [Docker](https://docs.docker.com/get-docker/) with [Docker Compose](https://docs.docker.com/compose/) (Compose v2 / `docker compose` command)
 - No other dependencies, env vars, or accounts required
 
+> **Note on image version:** This kit uses `ghcr.io/dexidp/dex:latest` (v2.46.0+). The `client_credentials` grant was not implemented in the v2.45.x release series; it shipped in v2.46.0. The `DEX_CLIENT_CREDENTIAL_GRANT_ENABLED_BY_DEFAULT=true` env var (set in `docker-compose.yml`) is required to enable it alongside the `grantTypes` config key in `config/dex.yaml`.
+
 ---
 
 ## Boot it

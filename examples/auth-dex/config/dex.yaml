@@ -2,6 +2,10 @@
 # This is a zero-config Dex OIDC IDP for developing and testing Spatula's browser-OIDC and
 # M2M (client_credentials) auth flows. The spatula-m2m client secret is intentionally committed
 # as "dev-only-secret-m2m" — never reuse this in a real environment.
+#
+# IMPORTANT: Requires ghcr.io/dexidp/dex:latest (v2.46.0+). The client_credentials grant was
+# added in v2.46.0 and requires BOTH the oauth2.grantTypes list below AND the environment
+# variable DEX_CLIENT_CREDENTIAL_GRANT_ENABLED_BY_DEFAULT=true (set in docker-compose.yml).
 
 issuer: http://localhost:5556/dex
 
@@ -17,6 +21,12 @@ oauth2:
   skipApprovalScreen: true
   responseTypes:
     - code
+  grantTypes:
+    - authorization_code
+    - refresh_token
+    - client_credentials
+    - urn:ietf:params:oauth:grant-type:device_code
+    - urn:ietf:params:oauth:grant-type:token-exchange
 
 # Local password connector — allows login with staticPasswords below without an upstream IDP.
 connectors: []

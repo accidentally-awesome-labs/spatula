@@ -7,10 +7,16 @@
 #   docker compose down
 services:
   dex:
-    image: ghcr.io/dexidp/dex:v2.45.1
+    # v2.45.1 does NOT support the client_credentials grant (it was added post-v2.45).
+    # Use :latest (v2.46.0+) which implements client_credentials with the feature flag below.
+    image: ghcr.io/dexidp/dex:latest
     command: ["dex", "serve", "/etc/dex/config.docker.yaml"]
     ports:
       - "5556:5556"
+    environment:
+      # Belt-and-suspenders: some Dex builds gate client_credentials behind this flag
+      # in addition to the oauth2.grantTypes config key.
+      DEX_CLIENT_CREDENTIAL_GRANT_ENABLED_BY_DEFAULT: "true"
     volumes:
       - ./config/dex.yaml:/etc/dex/config.docker.yaml:ro
       - ./data:/data

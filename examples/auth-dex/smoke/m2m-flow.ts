@@ -88,10 +88,27 @@ async function main(): Promise<void> {
     process.exit(1);
   }
 
-  // 4. Assert sub = spatula-m2m (Dex sets sub = client_id for client_credentials grants).
-  if (claims["sub"] !== CLIENT_ID) {
+  // 4. Assert sub encodes spatula-m2m.
+  // Dex encodes the subject for client_credentials grants as a base64url-encoded protobuf
+  // message (field 1 = the client_id string). The raw sub may look like "CgtzcGF0dWxhLW0ybQ"
+  // rather than the literal "spatula-m2m". Decode it and verify the client_id is present.
+  const rawSub = String(claims["sub"] ?? "");
+  const subContainsClientId = ((): boolean => {
+    if (rawSub === CLIENT_ID) return true; // literal match (future Dex versions may simplify this)
+    // base64url → Buffer → UTF-8 bytes; client_id is embedded as a UTF-8 string payload.
+    try {
+      const base64 = rawSub.replace(/-/g, "+").replace(/_/g, "/");
+      const padded = base64.padEnd(base64.length + ((4 - (base64.length % 4)) % 4), "=");
+      const bytes = Buffer.from(padded, "base64");
+      return bytes.toString("utf8").includes(CLIENT_ID);
+    } catch {
+      return false;
+    }
+  })();
+
+  if (!subContainsClientId) {
     console.error(
-      `m2m-flow: expected sub="${CLIENT_ID}", got sub="${String(claims["sub"])}"`
+      `m2m-flow: expected sub to encode "${CLIENT_ID}", got sub="${rawSub}"`
     );
     process.exit(1);
   }
