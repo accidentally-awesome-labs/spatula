@@ -1,4 +1,12 @@
 export * from './logger.js';
+export {
+  redactValue,
+  redactObject,
+  REDACT_PATHS,
+  REDACTED_PLACEHOLDER,
+  redactSentryEvent,
+  RedactionSpanProcessor,
+} from './redactor.js';
 export * from './errors.js';
 export { ErrorCode, STATUS_MAP } from './error-codes.js';
 export type { ErrorCodeType } from './error-codes.js';
