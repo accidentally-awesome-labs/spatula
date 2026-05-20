@@ -10,6 +10,9 @@ import { resolveModel } from '../llm/model-router.js';
 import { preprocessHTML } from './html-preprocessor.js';
 import { schemaToPrompt } from './schema-to-prompt.js';
 import { scanOutput } from './output-scanner.js';
+import { archiveForensicExtraction } from './forensic-archiver.js';
+import type { ForensicDlqWriter } from './forensic-archiver.js';
+import type { ContentStore } from '../interfaces/content-store.js';
 
 const logger = createLogger('static-extractor');
 
@@ -51,6 +54,10 @@ export class StaticExtractor implements Extractor {
     private readonly llmClient: LLMClient,
     private readonly config: LLMConfig,
     private readonly jobId: string,
+    private readonly forensicDeps?: {
+      contentStore: ContentStore;
+      dlqWriter: ForensicDlqWriter;
+    },
   ) {}
 
   async extract(
@@ -106,6 +113,19 @@ export class StaticExtractor implements Extractor {
           });
 
           parsed = LLMExtractionResponse.parse(JSON.parse(retryResponse.content));
+
+          // Off-schema retry succeeded — archive the raw HTML for forensic review (Plan 18-05)
+          if (this.forensicDeps) {
+            archiveForensicExtraction(this.forensicDeps, {
+              tenantId: 'unknown',
+              extractionId: generateId(),
+              rawHtml: html,
+              reason: 'off_schema_retry',
+              scanFlags: [],
+            }).catch((err) => {
+              logger.debug({ url, err }, 'forensic archival (off_schema_retry) failed (non-fatal)');
+            });
+          }
         } catch (retryError) {
           logger.warn(
             { url, retryError },
@@ -134,8 +154,8 @@ export class StaticExtractor implements Extractor {
 
       // ---- Mitigation 7: Output-content scanner ----
       // Detects prompt-echo, field-name-leakage, and cap-hits in the output.
-      // Suspicious results surface flags in metadata for downstream forensic handling
-      // (actual archival to content-store/DLQ is handled in Plan 18-06).
+      // Suspicious results archive the raw (pre-preprocessed) HTML to the content
+      // store via forensic-archiver and write a suspicious_extraction DLQ entry.
       const scan = scanOutput(parsed.data, SYSTEM_PROMPT, schema);
 
       if (scan.suspicious) {
@@ -143,6 +163,22 @@ export class StaticExtractor implements Extractor {
           { url, scanFlags: scan.flags },
           'suspicious extraction output detected — see metadata.scanFlags',
         );
+        if (this.forensicDeps) {
+          archiveForensicExtraction(this.forensicDeps, {
+            tenantId: 'unknown', // tenantId not available in extractor context; callers with tenantId should inject deps
+            extractionId: generateId(),
+            rawHtml: html,
+            reason: 'suspicious_extraction',
+            scanFlags: scan.flags,
+          }).catch((err) => {
+            logger.debug({ url, err }, 'forensic archival failed (non-fatal)');
+          });
+        } else {
+          logger.debug(
+            { url },
+            'forensic archival skipped — no contentStore/dlqWriter injected',
+          );
+        }
       }
 
       logger.debug(
