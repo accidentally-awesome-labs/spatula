@@ -20,7 +20,8 @@
 10. [Secret management](#secret-management)
 11. [Rate limiting and abuse prevention](#rate-limiting-and-abuse-prevention)
 12. [Dependency and supply chain](#dependency-and-supply-chain)
-13. [Security contacts](#security-contacts)
+13. [Prompt injection defense (SEC-07)](#prompt-injection-defense-sec-07)
+14. [Security contacts](#security-contacts)
 
 ---
 
@@ -239,6 +240,56 @@ API-level rate limiting is enforced at the ingress/gateway layer (not documented
 - All dependencies are pinned in `pnpm-lock.yaml`.
 - `pnpm audit` runs in CI on every PR targeting `main`.
 - No external HTTP calls are made at import time (LLM, crawler, JWKS are all runtime-only, behind interfaces).
+
+---
+
+## Prompt injection defense (SEC-07)
+
+Crawled HTML is untrusted input fed to the LLM extractor. Adversarial content can hijack extraction or exfiltrate data through free-text output fields. Defense is never absolute; this section documents what is implemented, what operators must do, the current limits, and how to report new patterns.
+
+Cross-reference spec §3.7.
+
+### Mitigations matrix
+
+Seven defense-in-depth mitigations are implemented in
+`packages/core/src/extraction/static-extractor.ts` (cross-reference spec §3.7.2):
+
+| # | Mitigation | Implementation |
+|---|-----------|----------------|
+| 1 | **Role separation** | Crawled HTML is always placed in the `user` role, never `system`. The system prompt and the untrusted content are never concatenated into the same role message. |
+| 2 | **Hardened system prompt** | `SYSTEM_PROMPT` constant contains four `CRITICAL SECURITY RULES` explicitly prohibiting following instructions found in the content, schema-coercion attempts, system-prompt disclosure, and output format overrides. |
+| 3 | **`<UNTRUSTED_CONTENT>` sentinel wrapping** | The `buildExtractionPrompt` function wraps page content in `<UNTRUSTED_CONTENT>…</UNTRUSTED_CONTENT>`. The URL, job description, and schema are placed outside the sentinel so the model clearly distinguishes trusted instructions from untrusted data. |
+| 4 | **Zod-validated output + one stricter retry** | LLM response is parsed via `LLMExtractionResponse.parse`. On failure a single retry fires with an amplified system prompt addendum; a second failure returns an empty result and logs the event. |
+| 5 | **Field allowlist** | After Zod validation, output keys are filtered against the set of known schema field names. Unknown keys introduced by injection are dropped silently. |
+| 6 | **Free-text length caps** | String values are truncated to `fieldDef.maxLength` (default `DEFAULT_MAX_FIELD_LENGTH = 2000` chars). Exfiltration via long free-text output is limited; a value truncated to exactly the cap triggers a `cap_hit` scan flag. |
+| 7 | **Output-content scanner** | `scanOutput()` inspects extracted values for: prompt echoes (output contains a substring of the system prompt), field-name leakage (one field's value contains another field's name), and cap-hit anomalies. Suspicious outputs set `metadata.suspicious = true`, populate `metadata.scanFlags`, and archive the raw HTML to the content store as a forensic blob for operator review. |
+
+### User responsibilities
+
+Operators deploying Spatula are responsible for the following:
+
+1. **Review suspicious-flagged extractions.** When `metadata.suspicious = true` appears on extraction results, review the associated forensic blob (via `GET /api/v1/admin/forensic/extractions`) and determine whether the page is genuinely adversarial or a false positive.
+2. **Keep pinned models current.** The adversarial test suite pins specific model revisions. When OpenRouter deprecates a pinned revision, re-validate the adversarial suite against the new pin before bumping. Refer to `docs/contributing/adversarial-corpus-refresh.md` for the rotation procedure.
+3. **Treat all crawled content as untrusted.** Do not relay crawled data directly into other LLM prompts without re-applying sanitization. The mitigations above apply to the extraction stage; downstream uses of extracted data are the operator's responsibility.
+4. **Limit `admin:forensic:read` scope.** The forensic endpoint exposes raw HTML from adversarial pages. Grant this scope only to trusted administrators.
+
+### Known limits (v1)
+
+The following are out of scope for the current v1 prompt-injection defenses (spec §3.7.4):
+
+- **Sophisticated multi-turn injections** — if an operator manually relays crawled content through multiple LLM calls outside the extraction pipeline, the mitigations above do not apply to those external calls.
+- **Model-specific unsafe behaviors** — defenses are validated against the two pinned models (`anthropic/claude-3-5-sonnet-20240620`, `ollama/llama3.1:8b-instruct-q4_0`). Behaviors on other models or un-pinned "latest" aliases are not guaranteed.
+- **Misleading-but-accurate content** — Spatula extracts faithfully from the page as written. If crawled content contains factually false information that looks legitimate, Spatula will extract it. Truth-validation is out of scope.
+- **No guarantee against novel attacks** — the adversarial fixture suite covers 10 known attack classes. A sufficiently novel technique not yet captured by a fixture may bypass current defenses. Quarterly corpus refreshes reduce but do not eliminate this window.
+
+### Adversarial pattern reporting process
+
+Found a new attack pattern? Two paths:
+
+1. **GitHub issue template** — open an issue using the **Adversarial Fixture Submission** template at `.github/ISSUE_TEMPLATE/adversarial-fixture.md`. Include: attack class, HTML payload, expected safe extraction behavior, which pinned model(s) were tested, and whether the injection succeeded or failed.
+2. **Security vulnerability** — if the pattern constitutes a live exploitable vulnerability, report it privately via GitHub private advisory or email security@spatula.dev rather than opening a public issue.
+
+For the quarterly corpus refresh process (checklist, fixture naming convention, pin rotation procedure), see `docs/contributing/adversarial-corpus-refresh.md`.
 
 ---
 

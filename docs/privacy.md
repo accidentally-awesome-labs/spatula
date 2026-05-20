@@ -16,9 +16,11 @@
 5. [Lawful basis for processing](#lawful-basis-for-processing)
 6. [Sub-processors](#sub-processors)
 7. [Data residency](#data-residency)
-8. [Breach notification](#breach-notification)
-9. [Children's data](#childrens-data)
-10. [Contact](#contact)
+8. [Telemetry and observability](#telemetry-and-observability)
+9. [Self-hoster DSR obligations](#self-hoster-dsr-obligations)
+10. [Breach notification](#breach-notification)
+11. [Children's data](#childrens-data)
+12. [Contact](#contact)
 
 ---
 
@@ -155,6 +157,33 @@ Operators who are GDPR data controllers must ensure their chosen infrastructure 
 ## Data residency
 
 Spatula is infrastructure-agnostic. Data resides in the PostgreSQL and Redis instances configured by the operator. Operators are responsible for choosing infrastructure that meets their data residency requirements.
+
+---
+
+## Telemetry and observability
+
+**Spatula sends no telemetry to Accidentally Awesome Labs or any third party.** There is no phone-home mechanism, no usage reporting, and no analytics beaconing built into the Spatula runtime. This is an unconditional guarantee, not a configuration option.
+
+Spatula ships optional integrations for Sentry (error tracking) and OpenTelemetry (distributed tracing). These integrations are **operator-configured observability endpoints** — not Spatula telemetry. Specifically:
+
+- If you configure `SENTRY_DSN`, error events flow to **your** Sentry project (a DSN you control), not to Accidentally Awesome Labs.
+- If you configure `OTEL_EXPORTER_ENDPOINT`, trace and metric data flows to **your** collector (Grafana, Honeycomb, Jaeger, or any OTel-compatible backend you choose), not to Accidentally Awesome Labs.
+
+Operators who choose not to configure these environment variables receive no observability data at all — which is the correct default for privacy-sensitive deployments.
+
+---
+
+## Self-hoster DSR obligations
+
+When you self-host Spatula, you are the **data controller** for any personal data processed by your instance. Accidentally Awesome Labs has no access to your data and cannot fulfill data-subject requests on your behalf.
+
+As a self-hosting data controller you must:
+
+1. **Meet the 30-day GDPR erasure window.** When a data subject submits a right-to-erasure (right-to-be-forgotten) request, you must complete the deletion within 30 days as required by GDPR Article 17. Spatula's DSR deletion pipeline (`spatula admin tenant delete --tenant <id>`) provides the tooling; triggering it within the deadline is your responsibility.
+2. **Fulfill access and portability requests.** Use `spatula admin tenant export` (or `GET /api/v1/admin/tenants/:id/export`) to produce a machine-readable JSONL dump in response to Article 15 (access) or Article 20 (portability) requests.
+3. **Maintain a record of processing activities.** GDPR Article 30 requires controllers to maintain records of data processing activities. Your Spatula deployment processes crawled web content on behalf of (and directed by) operators; document this in your Article 30 register.
+
+For step-by-step DSR procedures, see [`docs/runbooks/dsr-rectification.md`](runbooks/dsr-rectification.md).
 
 ---
 
