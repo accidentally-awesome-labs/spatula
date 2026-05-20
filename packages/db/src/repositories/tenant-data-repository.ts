@@ -148,8 +148,9 @@ export class TenantDataRepository {
   /**
    * Redact PII from all audit_log rows belonging to this tenant.
    *
-   * Sets: metadata = {}, ip_address = NULL, actor_id = '[deleted]'
+   * Sets: tenant_id = NULL, metadata = {}, ip_address = NULL, actor_id = '[deleted]'
    * Does NOT delete audit rows (D-08 — audit history must be preserved).
+   * tenant_id is nulled so the FK constraint is cleared before the tenant row is deleted.
    * Safe to run multiple times (already-redacted rows get the same values written again).
    *
    * @returns The number of rows redacted.
@@ -158,6 +159,7 @@ export class TenantDataRepository {
     const result = await this.db
       .update(auditLog)
       .set({
+        tenantId: null, // Clear FK so tenant row can be deleted (D-08 / FK constraint)
         metadata: {},
         ipAddress: null,
         actorId: '[deleted]',
@@ -229,8 +231,10 @@ export class TenantDataRepository {
           await this.db.insert(apiKeys).values(row);
           count += 1;
         } catch (err: unknown) {
-          // Postgres unique violation (23505) — row already exists, skip
-          if ((err as any)?.code === '23505') continue;
+          // Postgres unique violation (23505) — row already exists, skip.
+          // Drizzle may wrap the pg error: check both top-level code and cause.code.
+          const pgCode = (err as any)?.code ?? (err as any)?.cause?.code;
+          if (pgCode === '23505') continue;
           throw err;
         }
       }
