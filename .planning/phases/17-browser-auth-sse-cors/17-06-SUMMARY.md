@@ -128,6 +128,28 @@ The spec will run green in CI's `test-e2e-browser` job where all four prerequisi
 
 None.
 
+### Post-commit Type Corrections (fix agent — 2026-05-20)
+
+The spec `tests/e2e/browser/oidc-sse-flow.spec.ts` was committed without a type-check run (no Playwright binaries / live infra available in the dev env at plan execution time). A focused fix agent identified and corrected four real defects:
+
+**1. [Runtime Bug] `toBeOneOf` not in vitest 2.1.9** (line 508)
+- `expect(x).toBeOneOf([200, 201])` throws `toBeOneOf is not a function` at runtime — the matcher was added in vitest v3.2 but the installed version is 2.1.9.
+- Fix: replaced with `expect([200, 201]).toContain(res.status)`, preserving the identical assertion intent.
+
+**2. [Type Error] `tenantRepo` in `JwtProviderConfig`** (line 183)
+- `JwtProviderConfig` only accepts `{ issuer, audience, jwksUrl }`. Passing `tenantRepo` is a type error. The `JwtAuthProvider` returns `tenantId: ''` and tenant resolution is handled upstream by auth middleware — `tenantRepo` in this call was incorrect.
+- Fix: removed `tenantRepo` from the `JwtAuthProvider` constructor call. The `tenantRepo` remains correctly wired into `deps` (line 199) for the API server's own use.
+
+**3. [Type Error] `Uint8Array` not assignable to `BodyInit` + unused `@ts-expect-error`** (lines 230-231)
+- The request body was typed as `Uint8Array | undefined` but `RequestInit.body` expects `BodyInit | null`. The `@ts-expect-error` comment was on the wrong line (it was placed above `duplex` but the actual error was on `body`).
+- Fix: cast `body` as `BodyInit | undefined` and wrapped the entire options object as `RequestInit`, covering the non-standard `duplex` property cleanly without a suppression comment.
+
+**4. [Type Error] Implicit `any` on `evt` and `err` parameters** (lines 309, 322)
+- The `onEvent` and `onError` callbacks in `collectSseEvents` lacked parameter types, triggering `noImplicitAny`.
+- Fix: annotated `evt` as `import('@spatula/client').JobEvent` (matching `SubscribeJobEventsOptions.onEvent`) and `err` as `Event` (matching `SubscribeJobEventsOptions.onError`).
+
+Commit: `2c8e43d`
+
 ## Known Stubs
 
 None — `subscribeJobEvents` is fully implemented with real EventSource plus polyfill. The old `getJobEvents` is kept as a `@deprecated` shim for backward compatibility (used by `tests/integration/get-job-events.test.ts` from Phase 16). The Playwright e2e spec is complete but requires live infrastructure to produce a green run; this is expected behavior for a heavy e2e suite.
