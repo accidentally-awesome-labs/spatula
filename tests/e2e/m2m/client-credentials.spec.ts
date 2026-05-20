@@ -45,6 +45,7 @@ import {
 import { JobManager } from '@spatula/queue';
 import Redis from 'ioredis';
 import { SpatulaClient, createJob, listJobs, getEntities } from '@spatula/client';
+import { DEFAULT_API_KEY_SCOPES } from '@spatula/shared';
 
 // ─── Dex M2M constants (committed dev-only values) ───────────────────────────
 
@@ -162,10 +163,16 @@ async function startJwtServer(): Promise<M2MTestServer> {
     tenantRepo,
   });
 
+  // Grant the spatula-m2m client explicit scopes. Dex client_credentials JWTs
+  // carry no application-level scopes claim (Dex rejects custom scopes with
+  // invalid_scope). Instead, we register the M2M client identity server-side:
+  // when JwtAuthProvider sees a scope-less JWT whose sub encodes 'spatula-m2m',
+  // it grants DEFAULT_API_KEY_SCOPES. All other scope-less JWTs remain [] (fail-closed).
   const jwtProvider = new JwtAuthProvider({
     issuer: DEX_ISSUER,
     audience: M2M_CLIENT_ID,
     jwksUrl: DEX_JWKS_URL,
+    m2mClientScopes: { [M2M_CLIENT_ID]: [...DEFAULT_API_KEY_SCOPES] },
   });
 
   const deps: Partial<AppDeps> = {
