@@ -35,6 +35,7 @@ import { runDoctorCommand } from './commands/doctor.js';
 import { runAddCommand, formatAddResult } from './commands/add.js';
 import { runConfigCommand } from './commands/config.js';
 import { handleRemoteCommand } from './commands/remote.js';
+import { runAdminTenantDelete, runAdminTenantExport, runAdminTenantImport } from './commands/admin-tenant.js';
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -624,6 +625,90 @@ yargs(hideBin(process.argv))
         includeActions: argv.includeActions,
       });
     },
+  )
+
+  // -------------------------------------------------------------------------
+  // admin tenant — DSR data management (delete, export, import)
+  // -------------------------------------------------------------------------
+  .command(
+    'admin',
+    'Admin commands for server data management',
+    (y) =>
+      y.command(
+        'tenant <action>',
+        'Manage tenant data (delete, export, import)',
+        (yy) =>
+          yy
+            .positional('action', {
+              type: 'string',
+              choices: ['delete', 'export', 'import'] as const,
+              demandOption: true,
+              describe: 'Action to perform on tenant data',
+            })
+            .option('tenant', {
+              type: 'string',
+              demandOption: true,
+              describe: 'Tenant ID',
+            })
+            .option('yes', {
+              type: 'boolean',
+              alias: ['y', 'force'],
+              default: false,
+              describe: 'Skip confirmation prompt (delete)',
+            })
+            .option('format', {
+              type: 'string',
+              choices: ['jsonl'] as const,
+              default: 'jsonl',
+              describe: 'Dump format (export)',
+            })
+            .option('out', {
+              type: 'string',
+              describe: 'Output file path (export; default: auto-generated)',
+            })
+            .option('in', {
+              type: 'string',
+              describe: 'Input dump file path (import)',
+            })
+            .option('remote', {
+              type: 'string',
+              default: 'default',
+              describe: 'Named remote to use (from `spatula remote add`)',
+            }),
+        async (argv) => {
+          const action = argv.action as string;
+          try {
+            if (action === 'delete') {
+              await runAdminTenantDelete({
+                tenant: argv.tenant as string,
+                yes: argv.yes,
+                remote: argv.remote,
+              });
+            } else if (action === 'export') {
+              await runAdminTenantExport({
+                tenant: argv.tenant as string,
+                format: argv.format ?? 'jsonl',
+                out: argv.out,
+                remote: argv.remote,
+              });
+            } else if (action === 'import') {
+              if (!argv.in) {
+                console.error('Error: --in <path> is required for `admin tenant import`.');
+                process.exit(1);
+              }
+              await runAdminTenantImport({
+                tenant: argv.tenant as string,
+                in: argv.in as string,
+                remote: argv.remote,
+              });
+            }
+          } catch (err: unknown) {
+            console.error((err instanceof Error ? err.message : String(err)));
+            process.exit(1);
+          }
+        },
+      ),
+    () => {},
   )
 
   .demandCommand(1, 'Please specify a command. Run with --help to see available commands.')
