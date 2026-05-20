@@ -5,7 +5,7 @@
 import { Worker, type Queue as BullQueueType } from 'bullmq';
 import Redis from 'ioredis';
 import { createLogger, loadConfig } from '@spatula/shared';
-import { createDatabasePool, DlqRepository } from '@spatula/db';
+import { createDatabasePool, DlqRepository, TenantDataRepository } from '@spatula/db';
 import { createDlqHandler } from './dlq-handler.js';
 import { processCrawlJob } from './workers/crawl-worker.js';
 import { processSchemaEvolutionJob } from './workers/schema-worker.js';
@@ -17,12 +17,14 @@ import { WorkerHeartbeat } from './worker-heartbeat.js';
 import { createWebhookWorker } from './webhook-worker.js';
 import { processCleanupJob } from './cleanup-worker.js';
 import type { CleanupDeps } from './cleanup-worker.js';
+import { processTenantDeleteJob } from './workers/tenant-delete-worker.js';
 import type { WorkerDeps } from './worker-deps.js';
 import type {
   CrawlJobData,
   SchemaEvolutionJobData,
   ReconciliationJobData,
   ExportJobPayload,
+  TenantDeleteJobData,
 } from './queues.js';
 
 const logger = createLogger('worker-entrypoint');
@@ -204,6 +206,30 @@ async function main() {
     logger.info({ queue: QUEUE_NAMES.CLEANUP }, 'Cleanup worker started (daily 03:00 UTC)');
   }
 
+  if (isEnabled('tenant-delete')) {
+    const worker = new Worker<TenantDeleteJobData>(
+      QUEUE_NAMES.TENANT_DELETE,
+      async (job) => {
+        if (!deps) throw new Error('WorkerDeps not initialized');
+        // Build TenantDeleteJobDeps from WorkerDeps + shared db pool
+        const tenantDataRepo =
+          (deps as any).tenantDataRepo ?? new TenantDataRepository(db);
+        await processTenantDeleteJob(job.data, {
+          tenantDataRepo,
+          contentStore: deps.contentStore,
+          db: db as any,
+        });
+      },
+      {
+        connection: workerConnection,
+        concurrency: 1, // One deletion at a time to avoid contention
+      },
+    );
+    worker.on('failed', (job, err) => void dlqHandler(job, err));
+    workers.push(worker);
+    logger.info({ queue: QUEUE_NAMES.TENANT_DELETE }, 'Tenant-delete worker started');
+  }
+
   // NOTE: No worker for QUEUE_NAMES.EXTRACT — extraction is performed
   // inline by the crawl worker. The extract queue exists for future use.
 
@@ -217,6 +243,7 @@ async function main() {
     export: QUEUE_NAMES.EXPORT,
     webhook: QUEUE_NAMES.WEBHOOK,
     cleanup: QUEUE_NAMES.CLEANUP,
+    'tenant-delete': QUEUE_NAMES.TENANT_DELETE,
   })
     .filter(([name]) => isEnabled(name))
     .map(([, queueName]) => queueName);

@@ -11,6 +11,7 @@ export type {
   ReconciliationJobData,
   ExportJobPayload,
   WebhookJobData,
+  TenantDeleteJobData,
   SpatulaQueues,
   QueueConfig,
 } from './queues.js';
@@ -52,6 +53,8 @@ export { processCrawlJob } from './workers/crawl-worker.js';
 export { processSchemaEvolutionJob } from './workers/schema-worker.js';
 export { processReconciliationJob } from './workers/reconciliation-worker.js';
 export { processExportJob } from './workers/export-worker.js';
+export { processTenantDeleteJob } from './workers/tenant-delete-worker.js';
+export type { TenantDeleteJobDeps } from './workers/tenant-delete-worker.js';
 
 // Cleanup Worker
 export { processCleanupJob } from './cleanup-worker.js';

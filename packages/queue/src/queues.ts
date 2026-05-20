@@ -10,6 +10,7 @@ export const QUEUE_NAMES = {
   EXPORT: 'spatula.export',
   WEBHOOK: 'spatula.webhooks',
   CLEANUP: 'spatula.cleanup',
+  TENANT_DELETE: 'spatula.tenant-delete',
 } as const;
 
 export interface CrawlJobData {
@@ -54,6 +55,12 @@ export interface WebhookJobData {
   url: string;
   event: WebhookEvent;
   secret?: string;
+}
+
+export interface TenantDeleteJobData {
+  tenantId: string;
+  requestedBy: string;
+  requestedAt: string;
 }
 
 export interface QueueConfig {
@@ -109,6 +116,12 @@ export const QUEUE_JOB_OPTIONS = {
     removeOnComplete: { count: 1000 },
     removeOnFail: { count: 5000 },
   },
+  [QUEUE_NAMES.TENANT_DELETE]: {
+    attempts: 5,
+    backoff: { type: 'exponential' as const, delay: 10_000 }, // 10s, 20s, 40s, 80s, 160s
+    removeOnComplete: { count: 100 },
+    removeOnFail: { count: 500 },
+  },
 } as const;
 
 export interface SpatulaQueues {
@@ -118,6 +131,7 @@ export interface SpatulaQueues {
   reconciliation: Queue<ReconciliationJobData>;
   export: Queue<ExportJobPayload>;
   webhook: Queue<WebhookJobData>;
+  tenantDelete: Queue<TenantDeleteJobData>;
   config: QueueConfig;
   closeAll(): Promise<void>;
 }
@@ -158,6 +172,11 @@ export function createQueues(
     },
   });
 
+  const tenantDelete = new Queue<TenantDeleteJobData>(QUEUE_NAMES.TENANT_DELETE, {
+    connection,
+    defaultJobOptions: QUEUE_JOB_OPTIONS[QUEUE_NAMES.TENANT_DELETE],
+  });
+
   return {
     crawl,
     extract,
@@ -165,6 +184,7 @@ export function createQueues(
     reconciliation,
     export: exportQueue,
     webhook,
+    tenantDelete,
     config,
     async closeAll() {
       await Promise.all([
@@ -174,6 +194,7 @@ export function createQueues(
         reconciliation.close(),
         exportQueue.close(),
         webhook.close(),
+        tenantDelete.close(),
       ]);
     },
   };
