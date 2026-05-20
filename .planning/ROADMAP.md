@@ -142,9 +142,18 @@ Plans:
 3. M2M OIDC `client_credentials` flow against Dex passes an e2e test that creates a job and lists entities via the SDK with a service-token JWT.
 4. `examples/auth-dex/` boots with `docker compose up` and produces a working IDP that the browser smoke client targets without environment surgery; `CORS_ALLOWED_ORIGINS` accepts both explicit-list and `https://*.spatula.dev` wildcard forms (verified by request matrix).
 5. `POST /api/v1/api-keys/:id/rotate` rotates a key without dropping in-flight requests; `docs/api-auth.md` is the authoritative scope list with explicit "refresh tokens are IDP's job" and "CSRF N/A for Bearer auth" sections.
-   **Plans**: TBD
-   **Estimated effort**: 4 active sessions
-   **UI hint**: yes
+
+**Plans:** 7 plans
+Plans:
+- [ ] 17-01-PLAN.md — Wave 0 foundations: api_keys rotation migration + RESOURCE.NOT_FOUND ErrorCode + rate-limits.yaml entries + test scaffolds
+- [ ] 17-02-PLAN.md — SSE: Redis-stream dual-publish + sse/ handler (replay, tail, keepalive) + route mount + ws-token doc (AUTH-01, AUTH-02)
+- [ ] 17-03-PLAN.md — CORS wildcard-subdomain origin matcher + docs/api-auth.md authoritative auth doc + scope-sync gate (AUTH-03, AUTH-06)
+- [ ] 17-04-PLAN.md — API key rotation: ApiKeyRepository.rotate() + POST /api-keys/:id/rotate route with two-key grace window (AUTH-05)
+- [ ] 17-05-PLAN.md — examples/auth-dex/ zero-config local Dex OIDC kit + boot checkpoint (AUTH-04)
+- [ ] 17-06-PLAN.md — @spatula/client SSE getJobEvents method + Playwright browser OIDC+SSE reconnect e2e (AUTH-01, AUTH-02, AUTH-04)
+- [ ] 17-07-PLAN.md — tests/isolation/ OpenAPI-driven cross-tenant audit suite + M2M client_credentials e2e (AUTH-07, AUTH-08)
+**Estimated effort**: 4 active sessions
+**UI hint**: yes
 
 ### Phase 18: Security Hardening & Legal
 
