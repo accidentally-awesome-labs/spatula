@@ -1,3 +1,4 @@
+export { buildUserAgent, DEFAULT_USER_AGENT } from './crawler-defaults.js';
 export { extractLinks, resolveUrl } from './link-extractor.js';
 export type { ExtractedLink } from './link-extractor.js';
 export { PlaywrightCrawler } from './playwright-crawler.js';

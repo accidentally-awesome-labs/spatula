@@ -3,6 +3,7 @@ import { CrawlError } from '@spatula/shared';
 import { createLogger } from '@spatula/shared';
 import type { Crawler, CrawlOptions, CrawlResult } from '../interfaces/crawler.js';
 import { extractLinks } from './link-extractor.js';
+import { DEFAULT_USER_AGENT } from './crawler-defaults.js';
 
 const logger = createLogger('playwright-crawler');
 
@@ -21,9 +22,9 @@ export class PlaywrightCrawler implements Crawler {
 
     try {
       const contextOptions: Record<string, unknown> = {};
-      if (options?.userAgent) {
-        contextOptions.userAgent = options.userAgent;
-      }
+      // LEGAL-08: always set a User-Agent; fall back to the default abuse-contact UA
+      // when the caller does not supply one explicitly.
+      contextOptions.userAgent = options?.userAgent ?? DEFAULT_USER_AGENT;
       if (options?.headers) {
         contextOptions.extraHTTPHeaders = options.headers;
       }

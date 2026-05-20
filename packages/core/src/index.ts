@@ -4,7 +4,7 @@ export * from './types/index.js';
 // Interfaces
 export * from './interfaces/index.js';
 
-// Crawlers
+// Crawlers (includes buildUserAgent + DEFAULT_USER_AGENT from crawler-defaults)
 export * from './crawlers/index.js';
 
 // LLM

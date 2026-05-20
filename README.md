@@ -5,6 +5,13 @@
 [![CI](https://github.com/spatulaai/spatula/actions/workflows/ci.yml/badge.svg)](https://github.com/spatulaai/spatula/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
+> **Legal Notice:** Spatula is provided as-is under the [MIT License](LICENSE). You are
+> responsible for complying with the Terms of Service of any website you crawl, as well as
+> all applicable laws (including but not limited to GDPR, DMCA, and CFAA). Spatula honors
+> `robots.txt` by default; disabling `robots.txt` enforcement is at your own risk and
+> legal responsibility. The Spatula project and Accidentally Awesome Labs accept no
+> liability for misuse.
+
 ## What is Spatula?
 
 Spatula is an AI-powered web crawling platform that turns unstructured websites into clean, structured datasets. You describe the data you want in plain language, provide seed URLs, and Spatula handles the rest — crawling pages, extracting structured data with LLMs, evolving the schema as it discovers new fields, reconciling entities across sources, and exporting production-ready datasets. It works locally as a CLI tool or as a multi-tenant API server.
