@@ -2,15 +2,15 @@
 gsd_state_version: 1.0
 milestone: v1.1
 milestone_name: Public Launch (Wave 6 / Phase 14)
-status: verifying
-stopped_at: Phase 17 context gathered
-last_updated: "2026-05-20T01:27:31.497Z"
-last_activity: 2026-05-19
+status: executing
+stopped_at: Completed 17-01-PLAN.md — foundation scaffolding done
+last_updated: "2026-05-20T03:20:33.039Z"
+last_activity: 2026-05-20
 progress:
   total_phases: 8
   completed_phases: 2
-  total_plans: 11
-  completed_plans: 11
+  total_plans: 18
+  completed_plans: 12
   percent: 13
 ---
 
@@ -21,14 +21,14 @@ progress:
 See: `.planning/PROJECT.md` (updated 2026-05-11)
 
 **Core value:** Turn "I want X data from these sites" into a production-quality dataset with provenance.
-**Current focus:** Phase 16 — api-contract-sdk-packages
+**Current focus:** Phase 17 — browser-auth-sse-cors
 
 ## Current Position
 
-Phase: 17
-Plan: Not started
-Status: Phase complete — ready for verification
-Last activity: 2026-05-19
+Phase: 17 (browser-auth-sse-cors) — EXECUTING
+Plan: 2 of 7
+Status: Ready to execute
+Last activity: 2026-05-20
 
 Progress: [█░░░░░░░░░] 13% (1/8 v1.1 phases complete)
 
@@ -57,6 +57,7 @@ _v1.1 metrics will populate as plans execute._
 | Phase 16-api-contract-sdk-packages P3 | 13min | 4 tasks | 15 files |
 | Phase 16-api-contract-sdk-packages P4 | 21min | 3 tasks | 24 files |
 | Phase 16-api-contract-sdk-packages P5 | 22min | 9 tasks | 27 files |
+| Phase 17 P01 | 3min | 3 tasks | 14 files |
 
 ## Accumulated Context
 
@@ -112,6 +113,8 @@ Full decision log lives in PROJECT.md Key Decisions table. Recent decisions rele
 - [Phase 16-api-contract-sdk-packages]: Plan 16-5: @spatula/cli uses tsup for dual ESM+CJS build with externalized playwright + workspace deps; preserves source shebang (no banner callback to avoid doubling)
 - [Phase 16-api-contract-sdk-packages]: Plan 16-5: SQLite v1.0 stays on better-sqlite3@12.10.0; Node 22 LTS bundled SQLite lacks FTS5 and node:sqlite is Experimental — feature parity gate fails per spec §3.2.3 across support matrix
 - [Phase 16-api-contract-sdk-packages]: Plan 16-5: SDK integration tests branch on SPATULA_LIVE_LLM via it.skipIf(LIVE); default pnpm test excludes tests/integration/ so contributor-fork CI passes without OPENROUTER_API_KEY
+- [Phase 17]: supersedes column declared as plain uuid() without .references() in TS; self-FK added via raw SQL in migration (Drizzle cannot cleanly self-reference inside pgTable definition)
+- [Phase 17]: RESOURCE_NOT_FOUND placed in RESOURCE.* domain; no TENANT_MISMATCH or CORS_CONFIG_INVALID added per RESEARCH.md D-18 prefer-404 policy
 
 ### Pending Todos
 
@@ -139,6 +142,6 @@ All 9 pre-launch blockers are open as of 2026-05-12 (see PROJECT.md "Pre-launch 
 
 ## Session Continuity
 
-Last session: 2026-05-20T01:27:31.492Z
-Stopped at: Phase 17 context gathered
-Resume file: .planning/phases/17-browser-auth-sse-cors/17-CONTEXT.md
+Last session: 2026-05-20T03:20:33.034Z
+Stopped at: Completed 17-01-PLAN.md — foundation scaffolding done
+Resume file: None

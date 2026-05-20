@@ -67,9 +67,9 @@ Requirements for the v1.0.0 public launch. Each maps to one of phases 15–22. R
 - [ ] **AUTH-02**: Single-use stream-token flow (`?token=`) extends to SSE, matching the existing WS pattern; `POST /api/v1/ws-token` returns tokens usable for either; tokens are 60-second TTL.
 - [ ] **AUTH-03**: CORS supports both explicit-list and wildcard-subdomain origins (e.g., `https://*.spatula.dev`); preflight cache configured; `CORS_ALLOWED_ORIGINS` format documented.
 - [ ] **AUTH-04**: `examples/auth-dex/` ships a zero-config local OIDC recipe — `docker compose up` produces a working Dex IDP that a browser smoke client can use to log in.
-- [ ] **AUTH-05**: `POST /api/v1/api-keys/:id/rotate` enables zero-downtime key rotation.
+- [x] **AUTH-05**: `POST /api/v1/api-keys/:id/rotate` enables zero-downtime key rotation.
 - [ ] **AUTH-06**: `docs/api-auth.md` is the authoritative scope list; explicitly documents "refresh-tokens-are-IDP-job" and "CSRF-N/A for Bearer auth".
-- [ ] **AUTH-07**: Cross-tenant isolation audit suite (`tests/isolation/`) verifies tenant A cannot read tenant B via any route — jobs, entities, extractions, actions, exports, admin where applicable.
+- [x] **AUTH-07**: Cross-tenant isolation audit suite (`tests/isolation/`) verifies tenant A cannot read tenant B via any route — jobs, entities, extractions, actions, exports, admin where applicable.
 - [ ] **AUTH-08**: M2M OIDC (client_credentials) is validated in an e2e test against Dex.
 
 ### Security Hardening (Phase 18)
