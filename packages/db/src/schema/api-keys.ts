@@ -17,6 +17,8 @@ export const apiKeys = pgTable(
     lastUsedAt: timestamp('last_used_at', { withTimezone: true }),
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
     revokedAt: timestamp('revoked_at', { withTimezone: true }),
+    supersedes: uuid('supersedes'),
+    supersededExpiresAt: timestamp('superseded_expires_at', { withTimezone: true }),
   },
   (table) => [
     uniqueIndex('idx_api_keys_hash')
