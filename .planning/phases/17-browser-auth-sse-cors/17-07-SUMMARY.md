@@ -149,3 +149,77 @@ All created files confirmed present. All task commits confirmed in git log:
 - `36c1ad5` (Task 1) — FOUND
 - `8886953` (Task 2) — FOUND
 - `81416b5` (Task 3) — FOUND
+
+---
+
+## Post-Merge Regression Fix (2026-05-20)
+
+**Commit:** `fa9565d` — `fix(17-07): restore fail-closed JWT scopes, grant M2M scopes explicitly`
+
+### Regression Introduced by Commit 81416b5
+
+Deviation 1 above (DEFAULT_API_KEY_SCOPES fallback) was **a security regression**,
+not a valid fix. The workspace regression-gate test suite caught it:
+
+```
+FAIL apps/api/tests/unit/auth/jwt-provider.test.ts
+  > JwtAuthProvider > defaults scopes to empty array when missing
+  AssertionError: expected [ 'jobs:read', 'jobs:write', …(4) ] to deeply equal []
+```
+
+**Why it was wrong:** Making the JWT provider fall back to `DEFAULT_API_KEY_SCOPES`
+for any scope-less JWT causes it to FAIL OPEN. A browser OIDC user whose token has
+no `scopes` claim (which is the normal case for OIDC code-flow tokens — scopes live
+in the IDP, not the JWT payload by default) would silently receive the full API key
+scope set (`jobs:read`, `jobs:write`, `exports:read`, `exports:write`, `actions:read`,
+`actions:write`). This is a privilege-escalation-by-default vulnerability in a phase
+whose entire theme is browser auth.
+
+### Empirical Investigation of Dex client_credentials
+
+Docker + `pnpm dlx tsx` test confirmed:
+
+- `scope=openid` → Dex issues a JWT with no `scope` or `scopes` claim in the payload.
+  The token response has no `scope` field either.
+- `scope=openid jobs:read jobs:write ...` → Dex returns HTTP 400 `invalid_scope` —
+  Dex only accepts OIDC-standard scopes and rejects custom application scopes entirely.
+- `scope=jobs:read jobs:write` → HTTP 400 `invalid_scope` — same.
+
+**Conclusion:** There is no token-level mechanism to carry Spatula application scopes
+through a Dex `client_credentials` grant. The token-request approach is not viable.
+
+### Correct Fix Applied
+
+**Auth MUST fail closed.** Scope-less JWT → `[]`. The `DEFAULT_API_KEY_SCOPES` fallback
+was removed entirely from `jwt-provider.ts`.
+
+M2M clients obtain their scopes via a deliberate, identity-scoped server-side grant:
+
+1. `JwtProviderConfig` gains an optional `m2mClientScopes?: Record<string, string[]>` field.
+2. When a JWT carries no `scopes` claim (resolves to `[]`), `JwtAuthProvider` checks
+   whether the JWT `sub` positively identifies a registered M2M client — either a literal
+   string match or by base64url-decoding the Dex protobuf blob and checking it contains
+   the `clientId` string. Only a matching identity receives that client's configured scopes.
+3. The M2M e2e `JwtAuthProvider` is constructed with
+   `m2mClientScopes: { 'spatula-m2m': [...DEFAULT_API_KEY_SCOPES] }`.
+   This grants `spatula-m2m` exactly the same scope set as before — but only for JWTs
+   whose `sub` encodes that specific client identity.
+
+Browser OIDC user tokens whose `sub` is a user UUID never match any M2M client entry
+and remain `[]` (fail-closed). The unit test invariant is restored and passes unchanged.
+
+### Files Changed
+
+- `apps/api/src/auth/jwt-provider.ts` — removed `DEFAULT_API_KEY_SCOPES` import + fallback;
+  added `m2mClientScopes` config field + `subEncodesClientId()` helper; restored `?? []` fail-closed.
+- `tests/e2e/m2m/client-credentials.spec.ts` — import `DEFAULT_API_KEY_SCOPES`; pass
+  `m2mClientScopes: { [M2M_CLIENT_ID]: [...DEFAULT_API_KEY_SCOPES] }` to `JwtAuthProvider`.
+
+### Verification (post-fix)
+
+| Suite | Command | Result |
+|-------|---------|--------|
+| API unit tests | `pnpm --filter @spatula/api test` | 448/448 PASS (jwt-provider unit test green) |
+| M2M e2e | `pnpm exec vitest run --config tests/e2e/m2m/vitest.config.ts` | 6/6 PASS |
+
+`grep DEFAULT_API_KEY_SCOPES apps/api/src/auth/jwt-provider.ts` → no output (removed).
