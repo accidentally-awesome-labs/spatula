@@ -19,6 +19,7 @@
   "main": "./dist/index.js",
   "scripts": {
     "build": "tsc",
+    "start": "node dist/main.js",
     "dev": "tsx watch src/index.ts",
     "lint": "eslint src/",
     "lint:fix": "eslint src/ --fix",
