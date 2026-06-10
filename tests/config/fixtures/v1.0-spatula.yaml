@@ -1,0 +1,47 @@
+# v1.0 spatula.yaml fixture — representative minimal project config.
+# Used by the config-compat test to verify that a v1.0 project YAML
+# can be parsed by the v1.1 runtime without throwing.
+#
+# Shape: per SpatulaYamlSchema (packages/core/src/config/types.ts)
+# Required: seeds (at least one URL)
+# All other fields optional.
+
+name: E-Commerce Product Catalog
+description: Scrape product names, prices, and SKUs from example.com
+
+seeds:
+  - https://example.com/products
+  - https://example.com/catalog
+
+depth: 3
+limit: 500
+crawler: playwright
+safety: balanced
+
+fields:
+  - product_name: string
+  - price: currency
+  - { field: sku, type: string, required: true }
+  - { field: in_stock, type: boolean, required: false }
+
+crawl:
+  concurrency: 5
+
+schema:
+  mode: hybrid
+  evolution:
+    batchSize: 10
+    maxFields: 50
+
+llm:
+  model: openai/gpt-4o-mini
+
+reconciliation:
+  strategy: fuzzy_name
+  conflictResolution: most_complete
+  fuzzyThreshold: 0.85
+
+export:
+  format: json
+  autoExport: true
+  includeProvenance: true
