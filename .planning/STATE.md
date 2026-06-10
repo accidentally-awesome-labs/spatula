@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v1.1
 milestone_name: Public Launch (Wave 6 / Phase 14)
 status: executing
-stopped_at: Completed 19-01-PLAN.md — startWorker() export + API main.ts bootstrap
-last_updated: "2026-06-10T17:37:06.364Z"
+stopped_at: Completed 19-06-PLAN.md — backup/upgrade/config-compat test harnesses (DEPLOY-05/10/11)
+last_updated: "2026-06-10T17:45:15.703Z"
 last_activity: 2026-06-10
 progress:
   total_phases: 8
   completed_phases: 4
   total_plans: 34
-  completed_plans: 26
+  completed_plans: 27
   percent: 13
 ---
 
@@ -26,7 +26,7 @@ See: `.planning/PROJECT.md` (updated 2026-05-11)
 ## Current Position
 
 Phase: 19 (deployment-self-host-excellence) — EXECUTING
-Plan: 2 of 9
+Plan: 3 of 9
 Status: Ready to execute
 Last activity: 2026-06-10
 
@@ -72,6 +72,7 @@ _v1.1 metrics will populate as plans execute._
 | Phase 18 P06 | 13 | 3 tasks | 11 files |
 | Phase 18 P7 | 27 | 3 tasks | 10 files |
 | Phase 19-deployment-self-host-excellence P01 | 7 | 2 tasks | 7 files |
+| Phase 19 P06 | 3 | 2 tasks | 7 files |
 
 ## Accumulated Context
 
@@ -169,6 +170,9 @@ Full decision log lives in PROJECT.md Key Decisions table. Recent decisions rele
 - [Phase 19-01]: pathToFileURL guard on top-level main() call prevents embedded import from spawning standalone worker as side-effect
 - [Phase 19-01]: Injectable factory in startEmbeddedWorker() keeps unit tests isolated from BullMQ; real import lazy under SPATULA_EMBEDDED_WORKER=1
 - [Phase 19-01]: dist/main.js is the deployment CMD target; dist/index.js remains the library barrel — plan 02 distroless and plan 05 Render both target main.js
+- [Phase 19]: Upgrade test applies 0000_v1_baseline.sql via psql (not migrator) to simulate v1.0 DB, then runMigrations() populates journal; both entries asserted in __drizzle_migrations_oss
+- [Phase 19]: Content-store enumerated via Drizzle SELECT (no listKeys — not on ContentStore interface) for backup test parity; SHA-256 via node:crypto
+- [Phase 19]: Config compat test is pure in-process (no DB) and can run on PR; backup + upgrade tests are DB-gated and run on-release + nightly (Plan 07 wires CI lanes)
 
 ### Pending Todos
 
@@ -196,6 +200,6 @@ All 9 pre-launch blockers are open as of 2026-05-12 (see PROJECT.md "Pre-launch 
 
 ## Session Continuity
 
-Last session: 2026-06-10T17:37:06.359Z
-Stopped at: Completed 19-01-PLAN.md — startWorker() export + API main.ts bootstrap
+Last session: 2026-06-10T17:45:15.698Z
+Stopped at: Completed 19-06-PLAN.md — backup/upgrade/config-compat test harnesses (DEPLOY-05/10/11)
 Resume file: None
