@@ -37,6 +37,7 @@
     "test:backup": "vitest run --config tests/vitest.config.ts tests/e2e/backup/round-trip.test.ts",
     "test:upgrade": "vitest run --config tests/upgrade/vitest.config.ts",
     "test:config": "vitest run --config tests/config/vitest.config.ts",
+    "sizing:baseline": "SPATULA_LIVE_LLM=1 tsx scripts/sizing-baseline.ts",
     "generate:notices": "license-checker-rseidelsohn --excludePrivatePackages --production --markdown --start apps/api --out THIRD_PARTY_NOTICES.md --customPath scripts/notices-template.json && node -e \"const fs=require('fs');const h='<!-- AUTO-GENERATED: Do not edit manually. Regenerate with \\`pnpm run generate:notices\\`. Must be regenerated on every release cut (LEGAL-04). -->\\n\\n# Third-Party Notices\\n\\nAuto-generated list of third-party production dependencies and their licenses.\\nRegenerate with \\`pnpm run generate:notices\\` before each release (LEGAL-04).\\n\\n---\\n\\n';const body=fs.readFileSync('THIRD_PARTY_NOTICES.md','utf8');if(!body.startsWith('<!--')){fs.writeFileSync('THIRD_PARTY_NOTICES.md',h+body)}\""
   },
   "devDependencies": {
