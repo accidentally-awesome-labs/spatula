@@ -182,6 +182,8 @@ Plans:
 
 ### Phase 19: Deployment & Self-Host Excellence
 
+> **v1.1 Helm note:** Helm chart — community-contributed welcome in v1.x; first-party targeted for v1.1. kustomize is the supported k8s path at v1. (See `19-CONTEXT.md` deferred section.)
+
 **Goal**: Self-hoster gets a first-class experience across docker-compose, k8s, and PaaS — supply-chain-signed images, working runbooks, and a measured hardware-sizing baseline.
 **Depends on**: Phase 16 (release workflow outputs: rate-limits.yaml path, OpenAPI artifact, version manifest). Can run partially parallel with Phase 18.
 **Requirements**: DEPLOY-01, DEPLOY-02, DEPLOY-03, DEPLOY-04, DEPLOY-05, DEPLOY-06, DEPLOY-07, DEPLOY-08, DEPLOY-09, DEPLOY-10, DEPLOY-11
