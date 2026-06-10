@@ -2,15 +2,15 @@
 gsd_state_version: 1.0
 milestone: v1.1
 milestone_name: Public Launch (Wave 6 / Phase 14)
-status: verifying
-stopped_at: Phase 19 planned — 9 plans, 3 waves, verification passed
-last_updated: "2026-06-10T17:21:15.263Z"
-last_activity: 2026-05-20
+status: executing
+stopped_at: Completed 19-01-PLAN.md — startWorker() export + API main.ts bootstrap
+last_updated: "2026-06-10T17:37:06.364Z"
+last_activity: 2026-06-10
 progress:
   total_phases: 8
   completed_phases: 4
   total_plans: 34
-  completed_plans: 25
+  completed_plans: 26
   percent: 13
 ---
 
@@ -21,14 +21,14 @@ progress:
 See: `.planning/PROJECT.md` (updated 2026-05-11)
 
 **Core value:** Turn "I want X data from these sites" into a production-quality dataset with provenance.
-**Current focus:** Phase 18 — security-hardening-legal
+**Current focus:** Phase 19 — deployment-self-host-excellence
 
 ## Current Position
 
-Phase: 19
-Plan: Not started
-Status: Phase complete — ready for verification
-Last activity: 2026-05-20
+Phase: 19 (deployment-self-host-excellence) — EXECUTING
+Plan: 2 of 9
+Status: Ready to execute
+Last activity: 2026-06-10
 
 Progress: [█░░░░░░░░░] 13% (1/8 v1.1 phases complete)
 
@@ -71,6 +71,7 @@ _v1.1 metrics will populate as plans execute._
 | Phase 18 P05 | 16 | 3 tasks | 16 files |
 | Phase 18 P06 | 13 | 3 tasks | 11 files |
 | Phase 18 P7 | 27 | 3 tasks | 10 files |
+| Phase 19-deployment-self-host-excellence P01 | 7 | 2 tasks | 7 files |
 
 ## Accumulated Context
 
@@ -164,6 +165,10 @@ Full decision log lives in PROJECT.md Key Decisions table. Recent decisions rele
 - [Phase 18]: CLI uses HTTP polling for delete job status to avoid Redis dependency in CLI
 - [Phase 18]: exportTenantDump uses camelCase SQL aliases so dump rows are directly insertable via Drizzle ORM
 - [Phase 18]: importTenantData checks err.cause?.code for 23505 — Drizzle wraps pg errors
+- [Phase 19-01]: startWorker() body captures shutdown closure without process.exit; main() wrapper calls process.exit — clean lifecycle vs. process-management separation
+- [Phase 19-01]: pathToFileURL guard on top-level main() call prevents embedded import from spawning standalone worker as side-effect
+- [Phase 19-01]: Injectable factory in startEmbeddedWorker() keeps unit tests isolated from BullMQ; real import lazy under SPATULA_EMBEDDED_WORKER=1
+- [Phase 19-01]: dist/main.js is the deployment CMD target; dist/index.js remains the library barrel — plan 02 distroless and plan 05 Render both target main.js
 
 ### Pending Todos
 
@@ -191,6 +196,6 @@ All 9 pre-launch blockers are open as of 2026-05-12 (see PROJECT.md "Pre-launch 
 
 ## Session Continuity
 
-Last session: 2026-06-10T17:21:15.258Z
-Stopped at: Phase 19 planned — 9 plans, 3 waves, verification passed
-Resume file: .planning/phases/19-deployment-self-host-excellence/19-01-PLAN.md
+Last session: 2026-06-10T17:37:06.359Z
+Stopped at: Completed 19-01-PLAN.md — startWorker() export + API main.ts bootstrap
+Resume file: None
