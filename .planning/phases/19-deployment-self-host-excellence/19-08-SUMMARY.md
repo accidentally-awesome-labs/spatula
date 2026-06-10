@@ -90,7 +90,9 @@ All existing upgrade.md sections (no-migration-downgrade policy, expand-contract
 
 **nginx -t validation:** nginx is not installed in the executor environment. Per the plan's acceptance criteria fallback: "if nginx is not installed in the executor env, the acceptance is `grep -q "log_format" docs/runbooks/nginx.conf` AND the masking note present." Both pass. The nginx.conf has been authored to nginx 1.25+ syntax and the documentation explicitly states that `nginx -t -c /path/to/nginx.conf` must be run on a host with nginx before production deployment.
 
-**SC#5 end-to-end token-masking verification:** Cannot run live (no nginx). Documented the exact verification steps in reverse-proxy.md under "End-to-end verification (SC#5)" so an operator can confirm masking on their host. The masking mechanism ($uri in log_format) is a well-established nginx pattern that eliminates the query string from logs by design — not a regex that could fail on edge cases.
+**SC#5 end-to-end token-masking verification:** Documented the exact verification steps in reverse-proxy.md under "End-to-end verification (SC#5)" so an operator can confirm masking on their host. The masking mechanism ($uri in log_format) is a well-established nginx pattern that eliminates the query string from logs by design — not a regex that could fail on edge cases.
+
+**SC#5 RESOLVED by orchestrator (post-execution, 2026-06-10):** nginx 1.31.1 was installed and the masking was verified end-to-end. Using the EXACT `log_format spatula_masked` directive from `docs/runbooks/nginx.conf`, requests `GET /api/v1/jobs/abc123/events?token=SUPERSECRETTOKEN123` and `GET /ws/stream?token=ANOTHERSECRET456&foo=bar` were fired through nginx. `nginx -t` passed; the resulting access log contained the request paths (`/api/v1/jobs/abc123/events`, `/ws/stream`) but contained NEITHER the token values NOR the literal `token=`. Assertions: PASS (no secret in log) + PASS (paths still visible). SC#5 token-in-URL access-log masking is verified, not just documented.
 
 ## Known Stubs
 
