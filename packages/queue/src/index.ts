@@ -59,3 +59,7 @@ export type { TenantDeleteJobDeps } from './workers/tenant-delete-worker.js';
 // Cleanup Worker
 export { processCleanupJob } from './cleanup-worker.js';
 export type { CleanupDeps, CleanupResult } from './cleanup-worker.js';
+
+// Worker Entrypoint Lifecycle
+export { startWorker } from './worker-entrypoint.js';
+export type { WorkerHandle } from './worker-entrypoint.js';

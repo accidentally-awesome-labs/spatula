@@ -1,7 +1,8 @@
 // packages/queue/src/worker-entrypoint.ts
-// Standalone executable — NOT exported from the barrel (index.ts).
-// Run via: node dist/worker-entrypoint.js
+// Exports startWorker() for embedded/programmatic use.
+// Also runnable as a standalone process: node dist/worker-entrypoint.js
 
+import { pathToFileURL } from 'node:url';
 import { Worker, type Queue as BullQueueType } from 'bullmq';
 import Redis from 'ioredis';
 import { createLogger, loadConfig } from '@spatula/shared';
@@ -29,13 +30,25 @@ import type {
 
 const logger = createLogger('worker-entrypoint');
 
-async function main() {
+/**
+ * Handle returned by startWorker(). Call shutdown() to drain in-flight jobs
+ * and release all resources. Does NOT call process.exit — the caller is
+ * responsible for that (the standalone main() wrapper does it).
+ */
+export interface WorkerHandle {
+  shutdown: () => Promise<void>;
+}
+
+/**
+ * Start the BullMQ workers, heartbeat, and supporting infrastructure.
+ * Returns a handle with a shutdown() method. Safe to import and call
+ * from the API bootstrap (no process.exit called, no signal handlers registered).
+ */
+export async function startWorker(_opts?: { deps?: WorkerDeps }): Promise<WorkerHandle> {
   const config = loadConfig();
   const redisUrl = config.redis.url;
 
   // Parse Redis URL into host/port for BullMQ ConnectionOptions.
-  // We use parsed options rather than an ioredis instance to avoid
-  // version-mismatch issues between our ioredis and BullMQ's bundled one.
   const redisUrlObj = new URL(redisUrl);
   const redisOpts = {
     host: redisUrlObj.hostname,
@@ -48,8 +61,6 @@ async function main() {
   const workerConnection = { ...redisOpts, maxRetriesPerRequest: null as null };
 
   // Separate Redis connection for schema evolution distributed locks.
-  // This uses normal settings (not maxRetriesPerRequest: null) because
-  // lock semantics need proper retry behavior.
   const redisForLock = new Redis(redisUrl);
 
   const { db, pool } = createDatabasePool();
@@ -59,16 +70,6 @@ async function main() {
   // Create queues (for enqueuing child jobs from crawl worker)
   const queues = createQueues(redisOpts);
 
-  // NOTE: The actual repository and service construction depends on
-  // which implementations are available. This is a minimal scaffold
-  // that creates the infrastructure. Full DI wiring (crawler, extractor,
-  // classifier, schemaEvolver, reconciler, linkEvaluator) requires
-  // the core service factories which will be formalized in Wave 2.
-  //
-  // For now, the entry point demonstrates the lifecycle pattern.
-  // Workers that require uninitialized services will log an error
-  // and skip processing until services are wired.
-
   // Determine which workers to run (default: all)
   const enabledWorkers = parseEnabledWorkers(process.env.SPATULA_WORKERS);
   const isEnabled = (name: string) => isWorkerEnabled(enabledWorkers, name);
@@ -76,9 +77,6 @@ async function main() {
   const queueConfig = DEFAULT_QUEUE_CONFIG;
   const workers: Worker[] = [];
 
-  // The WorkerDeps object will be constructed here once full DI is wired.
-  // For the lifecycle scaffold, processors call the real functions with
-  // deps passed via closure. The deps object is built by the deployer.
   let deps: WorkerDeps | undefined;
 
   if (isEnabled('crawl')) {
@@ -168,7 +166,6 @@ async function main() {
     const { Queue: BullQueue } = await import('bullmq');
     cleanupQueue = new BullQueue(QUEUE_NAMES.CLEANUP, { connection: redisOpts });
 
-    // Add repeatable job (daily at 03:00 UTC)
     await cleanupQueue.add(
       'cleanup',
       {},
@@ -186,7 +183,6 @@ async function main() {
           logger.warn('Cleanup skipped — WorkerDeps not initialized');
           return;
         }
-        // CleanupDeps.db needs execute() — the Drizzle db instance has this
         const dbInstance = (deps as any).db ?? (deps as any).jobRepo?.db;
         const cleanupDeps: CleanupDeps = {
           db: dbInstance,
@@ -211,7 +207,6 @@ async function main() {
       QUEUE_NAMES.TENANT_DELETE,
       async (job) => {
         if (!deps) throw new Error('WorkerDeps not initialized');
-        // Build TenantDeleteJobDeps from WorkerDeps + shared db pool
         const tenantDataRepo =
           (deps as any).tenantDataRepo ?? new TenantDataRepository(db);
         await processTenantDeleteJob(job.data, {
@@ -222,7 +217,7 @@ async function main() {
       },
       {
         connection: workerConnection,
-        concurrency: 1, // One deletion at a time to avoid contention
+        concurrency: 1,
       },
     );
     worker.on('failed', (job, err) => void dlqHandler(job, err));
@@ -230,12 +225,9 @@ async function main() {
     logger.info({ queue: QUEUE_NAMES.TENANT_DELETE }, 'Tenant-delete worker started');
   }
 
-  // NOTE: No worker for QUEUE_NAMES.EXTRACT — extraction is performed
-  // inline by the crawl worker. The extract queue exists for future use.
-
   logger.info({ workers: workers.length, enabled: enabledWorkers }, 'Worker entrypoint started');
 
-  // Start heartbeat so the admin /workers endpoint can detect this process
+  // Start heartbeat
   const enabledQueueNames = Object.entries({
     crawl: QUEUE_NAMES.CRAWL,
     'schema-evolution': QUEUE_NAMES.SCHEMA_EVOLUTION,
@@ -251,20 +243,12 @@ async function main() {
   const heartbeat = new WorkerHeartbeat({ redis: redisForLock, queues: enabledQueueNames });
   heartbeat.start();
 
-  // Graceful shutdown
-  let isShuttingDown = false;
-
-  const shutdown = async (signal: string) => {
-    if (isShuttingDown) return;
-    isShuttingDown = true;
-    logger.info({ signal }, 'Worker shutdown initiated');
-
-    try {
-      // 1. Stop heartbeat so the worker is removed from the active list
+  return {
+    shutdown: async () => {
+      // 1. Stop heartbeat
       heartbeat.stop();
 
-      // 2. BullMQ Worker.close() waits for current job to finish,
-      //    then releases lock and stops picking up new jobs
+      // 2. BullMQ Worker.close() waits for current job to finish
       await Promise.allSettled(workers.map((w) => w.close()));
       logger.info('All workers closed');
 
@@ -273,19 +257,36 @@ async function main() {
         await deps.crawler.close();
       }
 
-      // 4. Close queues (stops enqueuing)
+      // 4. Close queues
       await queues.closeAll();
       if (cleanupQueue) await cleanupQueue.close();
 
       // 5. Close Redis connections
-      // Worker connections are closed by Worker.close() above.
-      // Only the separate lock connection needs explicit cleanup.
       await redisForLock.quit();
 
       // 6. Close database pool
       await pool.end();
 
       logger.info('Worker shutdown complete');
+      // NOTE: No process.exit here — caller is responsible.
+    },
+  };
+}
+
+/**
+ * Standalone entry point. Calls startWorker(), registers OS signal handlers,
+ * and exits when done. Only executed when this file is the process entry point.
+ */
+async function main() {
+  const handle = await startWorker();
+  let shuttingDown = false;
+
+  const stop = async (signal: string) => {
+    if (shuttingDown) return;
+    shuttingDown = true;
+    logger.info({ signal }, 'Worker shutdown initiated');
+    try {
+      await handle.shutdown();
       process.exit(0);
     } catch (err) {
       logger.error({ err }, 'Error during worker shutdown');
@@ -293,11 +294,15 @@ async function main() {
     }
   };
 
-  process.on('SIGTERM', () => void shutdown('SIGTERM'));
-  process.on('SIGINT', () => void shutdown('SIGINT'));
+  process.on('SIGTERM', () => void stop('SIGTERM'));
+  process.on('SIGINT', () => void stop('SIGINT'));
 }
 
-main().catch((err) => {
-  logger.error({ err }, 'Worker entrypoint failed to start');
-  process.exit(1);
-});
+// Guard: only run main() when this file is the process entry point, not when
+// imported by the API bootstrap for embedded use.
+if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
+  main().catch((err) => {
+    logger.error({ err }, 'Worker entrypoint failed to start');
+    process.exit(1);
+  });
+}
