@@ -103,10 +103,86 @@ This is one-time scaffolding for the squash PR. After the carve-out PR merges, t
 
 ---
 
+## Version-to-Version Migration Template
+
+Use this template when upgrading Spatula from one release to the next. This section does **not** repeat the policies above — read the no-migration-downgrade and expand-contract sections before running any upgrade.
+
+### Pre-flight
+
+1. **Back up Postgres.** Run the full `pg_dump` backup per `docs/runbooks/backup-restore.md` **before** any migration command. Keep the dump file accessible until you have confirmed the upgrade is stable.
+
+   ```bash
+   pg_dump \
+     -h "$DB_HOST" -U "$DB_USER" \
+     --no-owner --no-acl \
+     -f "spatula_preflight_$(date +%Y%m%d_%H%M%S).dump" \
+     "$DB_NAME"
+   ```
+
+2. **Check the release notes** for the target version. Look for:
+   - Any expand-phase migrations (additive columns or tables) that must land before a contract phase.
+   - Any manual data-backfill steps called out in the release notes.
+   - Any breaking changes that require a major-version bump (v2.x.x) — if present, plan a maintenance window.
+
+### Apply Migrations
+
+Run the Drizzle migration runner against your target database. The canonical migration entrypoint is `packages/db/dist/run-migrate.js` (built via `pnpm build`), exposed as the `migrate` container image:
+
+```bash
+# Via the migrate image (k8s Job or docker-compose one-shot):
+docker run --rm \
+  -e DATABASE_URL="postgresql://$DB_USER:$DB_PASS@$DB_HOST/$DB_NAME" \
+  ghcr.io/accidentally-awesome-labs/spatula/migrate:<version>
+
+# Or locally (if running the monorepo directly):
+DATABASE_URL="postgresql://$DB_USER:$DB_PASS@$DB_HOST/$DB_NAME" \
+  pnpm --filter @spatula/db exec tsx src/run-migrate.ts
+```
+
+The migrator applies any migrations under `packages/db/drizzle/` that are not yet recorded in `drizzle.__drizzle_migrations_oss`. It is idempotent — running it twice is safe.
+
+### Verify
+
+1. Run `spatula doctor` and confirm all 9 checks are green, including the `migrations` check.
+
+   ```bash
+   DATABASE_URL="..." REDIS_URL="..." API_URL="http://localhost:3000" \
+     spatula doctor
+   ```
+
+2. Run a smoke test against the upgraded API:
+
+   ```bash
+   curl -sf http://localhost:3000/health/ready   # → 200
+   curl -sf http://localhost:3000/api/v1/openapi.json | jq '.info.version'  # → new version
+   ```
+
+3. Confirm no unexpected rows in error logs or the DLQ (`bull_board` or `GET /admin/dlq`).
+
+### Rollback Path
+
+**Migrations are forward-only** (no-migration-downgrade policy — see above). If the upgrade fails:
+
+1. **Do NOT attempt to reverse a migration in place.**
+2. Restore from the pre-flight dump:
+
+   ```bash
+   # Drop and recreate the database
+   psql -U "$DB_SUPERUSER" -c "DROP DATABASE $DB_NAME;"
+   psql -U "$DB_SUPERUSER" -c "CREATE DATABASE $DB_NAME;"
+   # Restore
+   psql -h "$DB_HOST" -U "$DB_USER" -d "$DB_NAME" -f spatula_preflight_<timestamp>.dump
+   ```
+
+3. Re-deploy the previous version's container images.
+4. File a bug report + open a patch release with a corrective migration if data was partially written.
+
+See `docs/runbooks/backup-restore.md` for the full restore procedure and verification checklist.
+
+---
+
 ## Future runbooks
 
-- `backup-restore.md` — Phase 19
-- `reverse-proxy.md` — Phase 19
 - `hardware-sizing.md` — Phase 19
 - `support-matrix.md` — Phase 19
 - `secret-scan-audit.md` — Phase 22
@@ -116,5 +192,5 @@ This is one-time scaffolding for the squash PR. After the carve-out PR merges, t
 
 ---
 
-_Phase: 15-carveout-migration-squash_
-_Authored: 2026-05-17 (Plan 15-06)_
+_Phase: 15-carveout-migration-squash (original), extended in Phase 19 (Plan 19-08)_
+_Authored: 2026-05-17 (Plan 15-06); Version-to-Version Migration Template added: 2026-06-10_
