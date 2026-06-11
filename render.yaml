@@ -18,11 +18,21 @@ services:
     type: web # NOT 'worker' — Background Worker requires a paid plan
     runtime: node
     plan: free
-    buildCommand: corepack enable && pnpm install --frozen-lockfile && pnpm build
+    # Render auto-provides pnpm from pnpm-lock.yaml — do NOT `corepack enable`
+    # (its shim dir /usr/bin is read-only on Render's build image → EROFS).
+    # --prod=false: NODE_ENV=production (below) makes pnpm skip devDeps, but the
+    # build needs them (turbo, tsup, typescript). Force-install dev deps for the
+    # build; runtime still runs with NODE_ENV=production.
+    buildCommand: pnpm install --frozen-lockfile --prod=false && pnpm build
     startCommand: node apps/api/dist/main.js # Plan 01 bootstrap — NOT index.js (barrel)
     healthCheckPath: /health
 
     envVars:
+      # Pin to our tested LTS (Render defaults to Node 24); support matrix is Node 22+.
+      # Backed by a repo-level .node-version file too (read on build clone).
+      - key: NODE_VERSION
+        value: '22'
+
       # ── Managed connections (wired from Render-provisioned services) ────────
       - key: DATABASE_URL
         fromDatabase:
