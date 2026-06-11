@@ -195,10 +195,10 @@ Plans:
 4. `tests/e2e/backup/` performs a `pg_dump` + content-store snapshot, restores into a fresh environment, and asserts row-count + content-hash parity; `tests/upgrade/` seeds a v1.0 DB and applies v1.x migrations with the runtime verifying cleanly; `tests/config/` parses a v1.0 `spatula.yaml` on the v1.1 runtime.
 5. The runbook set is committed and exercised — `backup-restore.md`, `upgrade.md`, `reverse-proxy.md` (nginx tested end-to-end with token-in-URL log masking verified in access logs; traefik + caddy carry "not first-party tested" disclaimer), `hardware-sizing.md` (with measured 1k-page baselines), and `support-matrix.md` (Node 22+, Postgres 14+, Redis 7+, macOS/Linux/WSL — min-version CI matrix green).
 
-**Plans:** 3/9 plans executed
+**Plans:** 4/9 plans executed
 Plans:
 - [x] 19-01-PLAN.md — Embedded-worker mode: startWorker() lifecycle export + API standalone bootstrap (main.ts) gated on SPATULA_EMBEDDED_WORKER (prereq for Render)
-- [ ] 19-02-PLAN.md — Container images: distroless api/worker/migrate + Debian-slim cli + new Dockerfile.migrate (DEPLOY-03)
+- [x] 19-02-PLAN.md — Container images: distroless api/worker/migrate + Debian-slim cli + new Dockerfile.migrate (DEPLOY-03)
 - [ ] 19-03-PLAN.md — Supply chain: release.yml multi-arch buildx + keyless cosign sign + cyclonedx SBOM attest + release-asset + verify-images runbook (DEPLOY-04)
 - [ ] 19-04-PLAN.md — k8s kustomize base + dev/prod overlays + kind-smoke CI (DEPLOY-01)
 - [ ] 19-05-PLAN.md — render.yaml free-tier blueprint (embedded worker + managed PG/Redis) + render-deploy runbook (DEPLOY-02)
@@ -293,7 +293,7 @@ Authoritative requirement → phase mapping lives in `.planning/REQUIREMENTS.md`
 | 16. API Contract Hardening + SDK Packages | v1.1      | 5/5 | Complete    | 2026-05-19 |
 | 17. Browser Auth, SSE, CORS               | v1.1      | 7/7 | Complete    | 2026-05-20 |
 | 18. Security Hardening & Legal            | v1.1      | 7/7 | Complete    | 2026-05-20 |
-| 19. Deployment & Self-Host Excellence     | v1.1      | 3/9 | In Progress|  |
+| 19. Deployment & Self-Host Excellence     | v1.1      | 4/9 | In Progress|  |
 | 20. Docs Site Infrastructure + Content    | v1.1      | 0/TBD          | Not started | -          |
 | 21. Contributor Infra + CI Topology       | v1.1      | 0/TBD          | Not started | -          |
 | 22. Launch Mechanics (RC → GA)            | v1.1      | 0/TBD          | Not started | -          |

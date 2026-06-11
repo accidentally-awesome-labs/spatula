@@ -102,7 +102,7 @@ Requirements for the v1.0.0 public launch. Each maps to one of phases 15–22. R
 
 - [ ] **DEPLOY-01**: `deploy/k8s/` kustomize base + dev/prod overlays exist for api, worker, migrate job; postgres + redis referenced as external in prod overlay; applies cleanly to a `kind` cluster.
 - [x] **DEPLOY-02**: `render.yaml` at repo root deploys the stack on a Render free-tier account.
-- [ ] **DEPLOY-03**: Container images for api/worker/migrate/cli are multi-arch (`linux/amd64` + `linux/arm64`) via buildx; distroless base for api/worker/migrate; Debian-slim for cli.
+- [x] **DEPLOY-03**: Container images for api/worker/migrate/cli are multi-arch (`linux/amd64` + `linux/arm64`) via buildx; distroless base for api/worker/migrate; Debian-slim for cli.
 - [ ] **DEPLOY-04**: All container images are `cosign`-signed; SBOM (cyclonedx-json) is attached to each GitHub release; signatures verify on `cosign verify` in a fresh-machine smoke test.
 - [x] **DEPLOY-05**: `docs/runbooks/backup-restore.md` covers pg_dump + content-store + Redis reconciliation; backup→restore round-trip in `tests/e2e/backup/` passes; time-to-restore estimates documented.
 - [x] **DEPLOY-06**: `docs/runbooks/upgrade.md` defines the version-to-version migration template and the no-downgrade policy.
