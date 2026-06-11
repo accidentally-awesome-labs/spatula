@@ -1,0 +1,32 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: spatula-worker
+  namespace: spatula
+  labels:
+    app: spatula-worker
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: spatula-worker
+  template:
+    metadata:
+      labels:
+        app: spatula-worker
+    spec:
+      # Matches distroless "nonroot" uid 65532 (Plan 19-02 decision).
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 65532
+      terminationGracePeriodSeconds: 30  # matches worker shutdown grace period
+      containers:
+        - name: worker
+          # Image tag is overridden by overlays.
+          image: ghcr.io/accidentally-awesome-labs/spatula/worker:latest
+          envFrom:
+            - secretRef:
+                name: spatula-secrets
+          # Worker serves no HTTP; no ports or HTTP probes.
+          # It registers a BullMQ heartbeat to Postgres/Redis and handles SIGTERM
+          # via the graceful-shutdown flow in packages/queue/src/worker-entrypoint.ts.

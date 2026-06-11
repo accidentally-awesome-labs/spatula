@@ -1,0 +1,36 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: spatula-migrate
+  namespace: spatula
+  annotations:
+    # To re-run migrations on upgrade:
+    #   kubectl delete job spatula-migrate -n spatula
+    #   kubectl apply -k deploy/k8s/overlays/<env>
+spec:
+  backoffLimit: 3
+  template:
+    spec:
+      restartPolicy: OnFailure
+      initContainers:
+        # Wait for Postgres to be ready before running migrations.
+        # Uses pg_isready from the postgres:16-alpine image.
+        - name: wait-for-postgres
+          image: postgres:16-alpine
+          command:
+            - sh
+            - -c
+            - |
+              until pg_isready -h postgres -p 5432; do
+                echo "Waiting for postgres..."; sleep 2;
+              done
+              echo "Postgres is ready."
+      containers:
+        - name: migrate
+          # Image tag is overridden by overlays.
+          image: ghcr.io/accidentally-awesome-labs/spatula/migrate:latest
+          envFrom:
+            - secretRef:
+                name: spatula-secrets
+          # One-shot: exits 0 after migrations complete (see Dockerfile.migrate CMD).
+          # backoffLimit: 3 retries on transient failures.

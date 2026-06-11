@@ -1,0 +1,59 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: spatula-api
+  namespace: spatula
+  labels:
+    app: spatula-api
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: spatula-api
+  template:
+    metadata:
+      labels:
+        app: spatula-api
+    spec:
+      # Matches distroless "nonroot" uid 65532 (Plan 19-02 decision).
+      # api/worker images were built with USER nonroot in their Dockerfiles.
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 65532
+      terminationGracePeriodSeconds: 30  # matches SHUTDOWN_TIMEOUT_MS 25s + buffer
+      containers:
+        - name: api
+          # Image tag is overridden by overlays.
+          image: ghcr.io/accidentally-awesome-labs/spatula/api:latest
+          ports:
+            - name: http
+              containerPort: 3000
+              protocol: TCP
+          envFrom:
+            - secretRef:
+                name: spatula-secrets
+          # startupProbe: gives the migrate Job a head start before the api
+          # begins accepting traffic (RESEARCH Pattern 5, Pitfall #6).
+          # failureThreshold * periodSeconds = 300s max wait for migrations.
+          startupProbe:
+            httpGet:
+              path: /health/ready
+              port: 3000
+            initialDelaySeconds: 20
+            periodSeconds: 10
+            failureThreshold: 30
+            timeoutSeconds: 5
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 3000
+            periodSeconds: 15
+            timeoutSeconds: 5
+            failureThreshold: 3
+          readinessProbe:
+            httpGet:
+              path: /health/ready
+              port: 3000
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 3
