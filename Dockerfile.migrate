@@ -1,15 +1,26 @@
 # -----------------------------------------------------------
-# Stage 1: Install ALL dependencies and build
+# Dockerfile.migrate — one-shot distroless DB migration runner
+#
+# Dedicated, independently buildable + signable image (SC#3, 4th image).
+# Runs packages/db/dist/run-migrate.js, which applies drizzle migrations
+# from packages/db/drizzle/ into __drizzle_migrations_oss, then exits 0.
+# -----------------------------------------------------------
+
+# -----------------------------------------------------------
+# Stage 1: Install ALL dependencies and build the db package tree
 # -----------------------------------------------------------
 FROM node:22-alpine AS build
 WORKDIR /app
 RUN corepack enable
 
+# Copy workspace config + ALL package.json files (pnpm requires all workspace
+# members present for frozen-lockfile resolution, even if not all are used here)
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml .npmrc turbo.json ./
 COPY packages/shared/package.json packages/shared/
 COPY packages/db/package.json packages/db/
 COPY packages/core/package.json packages/core/
 COPY packages/queue/package.json packages/queue/
+COPY packages/core-types/package.json packages/core-types/
 COPY apps/api/package.json apps/api/
 COPY apps/cli/package.json apps/cli/
 
@@ -17,12 +28,9 @@ RUN pnpm install --frozen-lockfile
 
 COPY tsconfig.base.json ./
 COPY packages/ packages/
-COPY apps/ apps/
 
-# Build cli + its dependency closure only. The closure includes @spatula/api
-# (hence COPY apps/ above) but NOT @spatula/client — filtering keeps the public
-# SDK (which needs DOM libs for a clean browser-targeted build) out of this image.
-RUN pnpm run build --filter=@spatula/cli...
+# Build only the db dependency tree (migrate needs nothing from apps/)
+RUN pnpm run build --filter=@spatula/db...
 
 # -----------------------------------------------------------
 # Stage 2: Production dependencies only
@@ -36,44 +44,39 @@ COPY packages/shared/package.json packages/shared/
 COPY packages/db/package.json packages/db/
 COPY packages/core/package.json packages/core/
 COPY packages/queue/package.json packages/queue/
+COPY packages/core-types/package.json packages/core-types/
 COPY apps/api/package.json apps/api/
 COPY apps/cli/package.json apps/cli/
 
 RUN pnpm install --frozen-lockfile --prod --shamefully-hoist
 
 # -----------------------------------------------------------
-# Stage 3: Debian-slim runtime (NOT distroless)
-# The cli needs a shell + glibc for Playwright; distroless would break it.
-# Playwright browsers NOT installed — run 'spatula setup' on the host for local
-# crawling. See docs/support-matrix.md. (In-cluster usage is `spatula doctor`,
-# whose playwright check warns — not fails — when browsers are absent.)
+# Stage 3: Distroless runtime image
+# Distroless has no shell; ENTRYPOINT is already "node" — CMD must be path-only.
+# USER nonroot (uid 65532) is the distroless built-in non-root user.
 # -----------------------------------------------------------
-FROM node:22-bookworm-slim AS runtime
+FROM gcr.io/distroless/nodejs22-debian12 AS runtime
 WORKDIR /app
 
-RUN groupadd -g 1001 spatula && useradd -u 1001 -g spatula -s /usr/sbin/nologin -M spatula
-
+# Production node_modules (db package tree only)
 COPY --from=prod-deps /app/node_modules ./node_modules
 COPY --from=prod-deps /app/packages/shared/node_modules ./packages/shared/node_modules
-COPY --from=prod-deps /app/packages/core/node_modules ./packages/core/node_modules
 COPY --from=prod-deps /app/packages/db/node_modules ./packages/db/node_modules
-COPY --from=prod-deps /app/apps/cli/node_modules ./apps/cli/node_modules
 
+# Built output + the drizzle migration SQL the runner applies
 COPY --from=build /app/packages/shared/dist ./packages/shared/dist
 COPY --from=build /app/packages/shared/package.json ./packages/shared/
+# shared/dist imports @spatula/core-types (error-codes) — must be present at runtime
 COPY --from=build /app/packages/core-types/dist ./packages/core-types/dist
 COPY --from=build /app/packages/core-types/package.json ./packages/core-types/
-COPY --from=build /app/packages/core/dist ./packages/core/dist
-COPY --from=build /app/packages/core/package.json ./packages/core/
-# cli imports @spatula/db (4 sites) — db dist + package.json required at runtime
 COPY --from=build /app/packages/db/dist ./packages/db/dist
+COPY --from=build /app/packages/db/drizzle ./packages/db/drizzle
 COPY --from=build /app/packages/db/package.json ./packages/db/
-COPY --from=build /app/apps/cli/dist ./apps/cli/dist
-COPY --from=build /app/apps/cli/package.json ./apps/cli/
 COPY --from=build /app/package.json ./
 
 # Default to production so the shared logger skips the dev-only pino-pretty
 # transport (absent in --prod deps); operators can override via env.
 ENV NODE_ENV=production
-USER spatula
-ENTRYPOINT ["node", "apps/cli/dist/index.js"]
+USER nonroot
+# Path-only CMD: distroless ENTRYPOINT is already "node"; prepending "node" causes double-invocation.
+CMD ["packages/db/dist/run-migrate.js"]

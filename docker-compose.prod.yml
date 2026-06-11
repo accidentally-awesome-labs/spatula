@@ -11,8 +11,7 @@ services:
   migrate:
     build:
       context: .
-      dockerfile: Dockerfile.api
-    command: ['node', 'packages/db/dist/run-migrate.js']
+      dockerfile: Dockerfile.migrate
     env_file: .env
     depends_on:
       postgres:
@@ -39,7 +38,14 @@ services:
         condition: service_completed_successfully
     restart: on-failure
     healthcheck:
-      test: ['CMD', 'wget', '-qO-', 'http://localhost:3000/health']
+      # Distroless runtime has no wget/shell — use the bundled node + global fetch (Node 22).
+      test:
+        [
+          'CMD',
+          '/nodejs/bin/node',
+          '-e',
+          "fetch('http://localhost:3000/health').then((r)=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))",
+        ]
       interval: 30s
       timeout: 5s
       retries: 3
