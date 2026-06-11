@@ -1,6 +1,6 @@
 {
   "name": "@spatula/cli",
-  "version": "0.0.1",
+  "version": "0.1.0",
   "description": "Command-line interface and TUI for Spatula — AI-powered intelligent web crawling.",
   "license": "MIT",
   "repository": {
