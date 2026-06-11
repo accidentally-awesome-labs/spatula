@@ -3,8 +3,8 @@ gsd_state_version: 1.0
 milestone: v1.1
 milestone_name: Public Launch (Wave 6 / Phase 14)
 status: executing
-stopped_at: Completed 19-07-PLAN.md — support-matrix.md + support-matrix.yml min-version CI (DEPLOY-08)
-last_updated: "2026-06-11T05:43:24.449Z"
+stopped_at: "Phase 19: 7/9 plans complete (19-01/02/03/04/06/07/08). 19-05 (Render, DEPLOY-02) + 19-09 (hardware-sizing, DEPLOY-09) deferred at human checkpoints per user choice — phase NOT marked complete. Full workspace build green; no regressions."
+last_updated: "2026-06-11T05:45:49.237Z"
 last_activity: 2026-06-11
 progress:
   total_phases: 8
@@ -217,6 +217,6 @@ All 9 pre-launch blockers are open as of 2026-05-12 (see PROJECT.md "Pre-launch 
 
 ## Session Continuity
 
-Last session: 2026-06-11T05:43:24.445Z
-Stopped at: Completed 19-07-PLAN.md — support-matrix.md + support-matrix.yml min-version CI (DEPLOY-08)
+Last session: 2026-06-11T05:45:49.232Z
+Stopped at: Phase 19: 7/9 plans complete (19-01/02/03/04/06/07/08). 19-05 (Render, DEPLOY-02) + 19-09 (hardware-sizing, DEPLOY-09) deferred at human checkpoints per user choice — phase NOT marked complete. Full workspace build green; no regressions.
 Resume file: None
