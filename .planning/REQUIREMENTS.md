@@ -107,7 +107,7 @@ Requirements for the v1.0.0 public launch. Each maps to one of phases 15–22. R
 - [x] **DEPLOY-05**: `docs/runbooks/backup-restore.md` covers pg_dump + content-store + Redis reconciliation; backup→restore round-trip in `tests/e2e/backup/` passes; time-to-restore estimates documented.
 - [x] **DEPLOY-06**: `docs/runbooks/upgrade.md` defines the version-to-version migration template and the no-downgrade policy.
 - [x] **DEPLOY-07**: `docs/runbooks/reverse-proxy.md` ships nginx recipe (tested end-to-end with token-in-URL log masking); traefik + caddy stubs labeled "not first-party tested."
-- [ ] **DEPLOY-08**: `docs/support-matrix.md` documents min versions (Node 22+, Postgres 14+, Redis 7+, macOS/Linux/WSL); min-version CI matrix passes.
+- [x] **DEPLOY-08**: `docs/support-matrix.md` documents min versions (Node 22+, Postgres 14+, Redis 7+, macOS/Linux/WSL); min-version CI matrix passes.
 - [ ] **DEPLOY-09**: `docs/runbooks/hardware-sizing.md` includes a measured baseline table (1k-page crawl timings on defined hardware, LLM cost per page per model).
 - [x] **DEPLOY-10**: `tests/upgrade/` seeds a v1.0 DB, applies v1.x migrations, and verifies the runtime — governs the expand-contract policy.
 - [x] **DEPLOY-11**: `tests/config/` verifies a v1.0 `spatula.yaml` parses on the v1.1 runtime (config-migration test).

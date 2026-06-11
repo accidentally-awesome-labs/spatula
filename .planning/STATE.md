@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v1.1
 milestone_name: Public Launch (Wave 6 / Phase 14)
 status: executing
-stopped_at: Completed 19-04-PLAN.md — k8s kustomize base + dev/prod overlays + kind-smoke CI (DEPLOY-01)
-last_updated: "2026-06-11T05:37:36.494Z"
+stopped_at: Completed 19-07-PLAN.md — support-matrix.md + support-matrix.yml min-version CI (DEPLOY-08)
+last_updated: "2026-06-11T05:43:24.449Z"
 last_activity: 2026-06-11
 progress:
   total_phases: 8
   completed_phases: 4
   total_plans: 34
-  completed_plans: 31
+  completed_plans: 32
   percent: 13
 ---
 
@@ -26,7 +26,7 @@ See: `.planning/PROJECT.md` (updated 2026-05-11)
 ## Current Position
 
 Phase: 19 (deployment-self-host-excellence) — EXECUTING
-Plan: 7 of 9
+Plan: 8 of 9
 Status: Ready to execute
 Last activity: 2026-06-11
 
@@ -77,6 +77,7 @@ _v1.1 metrics will populate as plans execute._
 | Phase 19 P02 | 95 | 2 tasks | 7 files |
 | Phase 19 P03 | 35 | 2 tasks | 2 files |
 | Phase 19 P04 | 8 | 2 tasks | 15 files |
+| Phase 19 P07 | 8 | 2 tasks | 2 files |
 
 ## Accumulated Context
 
@@ -186,6 +187,7 @@ Full decision log lives in PROJECT.md Key Decisions table. Recent decisions rele
 - [Phase 19]: wait-for-postgres initContainer removed from migrate-job.yaml base: added postgres:16-alpine to prod render (failing no-stub acceptance check); backoffLimit:3 + startupProbe on api handles migrate-ordering without initContainer
 - [Phase 19]: Dev overlay Secret requires no patch: base/secrets.yaml dev-default DATABASE_URL/REDIS_URL already match stub postgres/redis Service names and credentials
 - [Phase 19]: k8s-smoke CI uses helm/kind-action + builds images from source (loaded into kind) — avoids GHCR auth in smoke CI; on-release + nightly cadence, not every PR
+- [Phase 19]: Heavy DB lanes (test:backup, test:upgrade) run on-release + nightly only — not on PR; config-compat (test:config) safe on PR but wired in Phase 21
 
 ### Pending Todos
 
@@ -215,6 +217,6 @@ All 9 pre-launch blockers are open as of 2026-05-12 (see PROJECT.md "Pre-launch 
 
 ## Session Continuity
 
-Last session: 2026-06-11T05:37:36.489Z
-Stopped at: Completed 19-04-PLAN.md — k8s kustomize base + dev/prod overlays + kind-smoke CI (DEPLOY-01)
+Last session: 2026-06-11T05:43:24.445Z
+Stopped at: Completed 19-07-PLAN.md — support-matrix.md + support-matrix.yml min-version CI (DEPLOY-08)
 Resume file: None
