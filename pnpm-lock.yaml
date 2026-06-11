@@ -54,8 +54,8 @@ importers:
   apps/api:
     dependencies:
       '@bull-board/api':
-        specifier: ^6.20.6
-        version: 6.20.6(@bull-board/ui@6.20.6)
+        specifier: ^8.0.0
+        version: 8.0.0(@bull-board/ui@6.20.6)
       '@bull-board/hono':
         specifier: ^6.20.6
         version: 6.20.6(hono@4.12.7)
@@ -627,6 +627,11 @@ packages:
     resolution: {integrity: sha512-B/9OlKWJ/He421Lyuc7htMpKN4R8hcNu5uoIRiyh9y9J0kMOfxfs82GKXdfR9R0595LvAcCOSvjn8EtWHXesTA==}
     peerDependencies:
       '@bull-board/ui': 6.20.6
+
+  '@bull-board/api@8.0.0':
+    resolution: {integrity: sha512-GYXJNJclgm9H5Tt/tmuNWfjyF2BuygMwl8xrRIfxxOTgcK4SB8zNUPveTcHGAOoKKtPDVotHNZCBRrFCcOAXMA==}
+    peerDependencies:
+      '@bull-board/ui': 8.0.0
 
   '@bull-board/hono@6.20.6':
     resolution: {integrity: sha512-l2yGfL6gT2Z5sVP12YRw4kmyNISA2NqR+5h5QaSHQfHAv62hnARPPrvzOCjPBXpzIWwBQwjhnYQXv89QoyoQiw==}
@@ -1482,6 +1487,7 @@ packages:
   '@hono/node-ws@1.3.0':
     resolution: {integrity: sha512-ju25YbbvLuXdqBCmLZLqnNYu1nbHIQjoyUqA8ApZOeL1k4skuiTcw5SW77/5SUYo2Xi2NVBJoVlfQurnKEp03Q==}
     engines: {node: '>=18.14.1'}
+    deprecated: Package no longer supported. Contact Support at https://www.npmjs.com/support for more info.
     peerDependencies:
       '@hono/node-server': ^1.19.2
       hono: ^4.6.0
@@ -3806,8 +3812,8 @@ packages:
   lodash.merge@4.6.2:
     resolution: {integrity: sha512-0KpjqXRVvrYyCsX1swR/XTK0va6VQkQM6MNo7PqW77ByjAhoARA8EfrP1N4+KlKj8YS0ZUCtRT/YUuhyYDujIQ==}
 
-  lodash@4.17.23:
-    resolution: {integrity: sha512-LgVTMpQtIopCi79SJeDiP0TfWi5CNEc/L/aRdTh3yIvmZXTnheWpKjSZhnvMl8iXbC1tFg9gdHHDMLoV7CnG+w==}
+  lodash@4.18.1:
+    resolution: {integrity: sha512-dMInicTPVE8d1e5otfwmmjlxkZoUpiVLwyeTdUsi/Caj/gfzzblBcCE5sRHV/AsjuCmxWrte2TNGSYuCeCq+0Q==}
 
   long@5.3.2:
     resolution: {integrity: sha512-mNAgZ1GmyNhD7AuqnTG3/VQ26o760+ZYBPKjPvugO8+nLbYfX6TVpJPseBvopbdY+qpZ/lKUnmEc1LeZYS3QAA==}
@@ -4607,6 +4613,7 @@ packages:
 
   uuid@8.3.2:
     resolution: {integrity: sha512-+NYs2QeMWy+GWFOEm9xnn6HCDp0l7QBD7ml8zLUmJ+93Q5NF0NocErnwkTkXVFNiX3/fpC6afS8Dhb/gz7R7eg==}
+    deprecated: uuid@10 and below is no longer supported.  For ESM codebases, update to uuid@latest.  For CommonJS codebases, use uuid@11 (but be aware this version will likely be deprecated in 2028).
     hasBin: true
 
   validate-npm-package-license@3.0.4:
@@ -5260,6 +5267,11 @@ snapshots:
   '@aws/lambda-invoke-store@0.2.4': {}
 
   '@bull-board/api@6.20.6(@bull-board/ui@6.20.6)':
+    dependencies:
+      '@bull-board/ui': 6.20.6
+      redis-info: 3.1.0
+
+  '@bull-board/api@8.0.0(@bull-board/ui@6.20.6)':
     dependencies:
       '@bull-board/ui': 6.20.6
       redis-info: 3.1.0
@@ -8551,7 +8563,7 @@ snapshots:
 
   lodash.merge@4.6.2: {}
 
-  lodash@4.17.23: {}
+  lodash@4.18.1: {}
 
   long@5.3.2: {}
 
@@ -8986,7 +8998,7 @@ snapshots:
 
   redis-info@3.1.0:
     dependencies:
-      lodash: 4.17.23
+      lodash: 4.18.1
 
   redis-parser@3.0.0:
     dependencies:
