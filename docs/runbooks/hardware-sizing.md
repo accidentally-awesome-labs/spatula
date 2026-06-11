@@ -57,11 +57,11 @@ speed, network bandwidth to target sites, and model API latency from your region
 
 ### Model-per-tier
 
-| Tier    | Model                                | Character                     |
-| ------- | ------------------------------------ | ----------------------------- |
-| fast    | `google/gemini-2.5-flash`            | Cheapest, highest throughput  |
-| primary | `anthropic/claude-sonnet-4-20250514` | Balanced — production default |
-| smart   | `anthropic/claude-opus-4-20250514`   | Highest quality, highest cost |
+| Tier    | Model                        | Character                     |
+| ------- | ---------------------------- | ----------------------------- |
+| fast    | `deepseek/deepseek-v4-flash` | Cheapest, highest throughput  |
+| primary | `deepseek/deepseek-v4-pro`   | Balanced — production default |
+| smart   | `google/gemini-3.5-flash`    | Highest quality               |
 
 Pricing is sourced from OpenRouter and may change. Re-run the harness after significant
 model price changes.

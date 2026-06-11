@@ -16,9 +16,9 @@
  * it in hardware-sizing.md; results vary by hardware, network, and target site.
  *
  * == Routing tiers (D-02) ==
- * fast    — google/gemini-2.5-flash   (cheapest, high-throughput)
- * primary — anthropic/claude-sonnet-4-20250514  (balanced — production default)
- * smart   — anthropic/claude-opus-4-20250514    (highest quality, highest cost)
+ * fast    — deepseek/deepseek-v4-flash  (cheapest, high-throughput)
+ * primary — deepseek/deepseek-v4-pro    (balanced — production default)
+ * smart   — google/gemini-3.5-flash     (highest quality)
  *
  * Each tier pins all LLM calls to one model via LLMConfig.primaryModel (no
  * per-task overrides). This produces a clean per-tier cost/page number.
@@ -66,18 +66,18 @@ interface TierConfig {
 const TIERS: TierConfig[] = [
   {
     name: 'fast',
-    model: 'google/gemini-2.5-flash',
+    model: 'deepseek/deepseek-v4-flash',
     description: 'Cheap, high-throughput model — lowest latency and cost',
   },
   {
     name: 'primary',
-    model: 'anthropic/claude-sonnet-4-20250514',
+    model: 'deepseek/deepseek-v4-pro',
     description: 'Balanced model — production default',
   },
   {
     name: 'smart',
-    model: 'anthropic/claude-opus-4-20250514',
-    description: 'Highest quality model — best extraction, highest cost',
+    model: 'google/gemini-3.5-flash',
+    description: 'Highest quality model — best extraction',
   },
 ];
 
