@@ -1,0 +1,86 @@
+# render.yaml — Spatula free-tier blueprint
+#
+# Deploy the full Spatula stack on a Render free-tier account in one click.
+# This is a TRY-IT / DEMO path. For production, split api and worker into
+# separate services (see docs/runbooks/render-deploy.md).
+#
+# Provisions:
+#   • One free Web Service running the API + embedded BullMQ worker in-process
+#     (SPATULA_EMBEDDED_WORKER=1) — D-06: Render free tier has no Background
+#     Worker type (paid-only); the worker runs alongside the API instead.
+#   • One free Key Value (Redis) — BullMQ job queue + caching.
+#   • One free PostgreSQL database — persistent application data.
+#
+# Render docs: https://render.com/docs/blueprint-spec
+
+services:
+  - name: spatula-api
+    type: web          # NOT 'worker' — Background Worker requires a paid plan
+    runtime: node
+    plan: free
+    buildCommand: corepack enable && pnpm install --frozen-lockfile && pnpm build
+    startCommand: node apps/api/dist/main.js   # Plan 01 bootstrap — NOT index.js (barrel)
+    healthCheckPath: /health
+
+    envVars:
+      # ── Managed connections (wired from Render-provisioned services) ────────
+      - key: DATABASE_URL
+        fromDatabase:
+          name: spatula-db
+          property: connectionString
+
+      - key: REDIS_URL
+        fromService:
+          name: spatula-cache
+          type: keyvalue
+          property: connectionString
+
+      # ── Embedded worker (D-06) ──────────────────────────────────────────────
+      # Runs the BullMQ worker in-process on the single free Web Service.
+      # Remove this when upgrading to a paid plan with a separate Worker service.
+      - key: SPATULA_EMBEDDED_WORKER
+        value: "1"
+
+      # ── Runtime environment ─────────────────────────────────────────────────
+      - key: NODE_ENV
+        value: production
+
+      # Marker read by runbook docs / caveats tooling
+      - key: SPATULA_RENDER_FREE_TIER
+        value: "1"
+
+      # ── Secrets — set these in the Render dashboard (not committed here) ────
+      # Required: LLM inference key
+      - key: OPENROUTER_API_KEY
+        sync: false
+
+      # Optional — auth strategy (default: none; set to "api-key" or "jwt")
+      - key: AUTH_STRATEGY
+        sync: false
+
+      # Optional — JWT settings (required when AUTH_STRATEGY=jwt)
+      - key: JWT_ISSUER
+        sync: false
+      - key: JWT_AUDIENCE
+        sync: false
+      - key: JWT_JWKS_URL
+        sync: false
+
+      # Optional — tenant creation protection
+      - key: TENANT_CREATION_SECRET
+        sync: false
+
+      # Optional — Sentry error tracking
+      - key: SENTRY_DSN
+        sync: false
+
+  - name: spatula-cache
+    type: keyvalue     # canonical form; 'redis' is a deprecated alias
+    plan: free
+    ipAllowList:
+      - source: 0.0.0.0/0
+        description: Allow all (Render routes traffic through its internal network)
+
+databases:
+  - name: spatula-db
+    plan: free
