@@ -19,6 +19,10 @@ export const MODEL_PRICING: Record<string, ModelPricing> = {
   // Google models
   'google/gemini-2.5-flash': { promptPer1M: 0.15, completionPer1M: 0.6 },
   'google/gemini-2.5-pro': { promptPer1M: 1.25, completionPer1M: 10.0 },
+  'google/gemini-3.5-flash': { promptPer1M: 1.5, completionPer1M: 9.0 },
+  // DeepSeek models (via OpenRouter) — current production default is deepseek-v4-pro
+  'deepseek/deepseek-v4-pro': { promptPer1M: 0.435, completionPer1M: 0.87 },
+  'deepseek/deepseek-v4-flash': { promptPer1M: 0.0983, completionPer1M: 0.1966 },
   // Meta models (via OpenRouter)
   'meta-llama/llama-3.3-70b-instruct': { promptPer1M: 0.4, completionPer1M: 0.4 },
 };

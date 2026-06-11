@@ -53,7 +53,7 @@ describe('CliStore', () => {
         crawlerType: 'playwright',
       });
       expect(config.schema).toEqual({ mode: 'discovery' });
-      expect(config.llm).toEqual({ primaryModel: 'anthropic/claude-sonnet-4-20250514' });
+      expect(config.llm).toEqual({ primaryModel: 'deepseek/deepseek-v4-pro' });
     });
 
     it('has empty messages', () => {

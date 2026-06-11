@@ -119,7 +119,7 @@ function createEmptyConfig(tenantId: string): JobConfig {
     seedUrls: [],
     crawl: { maxDepth: 2, maxPages: 1000, concurrency: 5, crawlerType: 'playwright' },
     schema: { mode: 'discovery' },
-    llm: { primaryModel: 'anthropic/claude-sonnet-4-20250514' },
+    llm: { primaryModel: 'deepseek/deepseek-v4-pro' },
   };
 }
 

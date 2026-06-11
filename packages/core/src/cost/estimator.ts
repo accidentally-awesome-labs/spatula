@@ -29,7 +29,7 @@ export interface CostEstimate {
  */
 export function estimateCost(config: JobConfig): CostEstimate {
   const pages = estimatePageCount(config);
-  const llmConfig: LLMConfig = config.llm ?? { primaryModel: 'anthropic/claude-sonnet-4-20250514' };
+  const llmConfig: LLMConfig = config.llm ?? { primaryModel: 'deepseek/deepseek-v4-pro' };
   const warnings: string[] = [];
 
   // Per-page LLM calls

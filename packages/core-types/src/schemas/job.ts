@@ -65,7 +65,7 @@ export const LLMModelOverrides = z.object({
 export type LLMModelOverrides = z.infer<typeof LLMModelOverrides>;
 
 export const LLMConfig = z.object({
-  primaryModel: z.string().default('anthropic/claude-sonnet-4-20250514'),
+  primaryModel: z.string().default('deepseek/deepseek-v4-pro'),
   modelOverrides: LLMModelOverrides.optional(),
 });
 export type LLMConfig = z.infer<typeof LLMConfig>;

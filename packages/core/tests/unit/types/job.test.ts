@@ -66,7 +66,7 @@ describe('JobConfig', () => {
       ...validConfig,
       llm: {},
     });
-    expect(result.llm.primaryModel).toBe('anthropic/claude-sonnet-4-20250514');
+    expect(result.llm.primaryModel).toBe('deepseek/deepseek-v4-pro');
   });
 
   it('rejects invalid seed URLs', () => {

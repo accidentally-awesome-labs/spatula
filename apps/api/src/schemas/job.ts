@@ -40,7 +40,7 @@ export const createJobSchema = z.object({
       .optional(),
   }),
   llm: z.object({
-    primaryModel: z.string().min(1).default('anthropic/claude-sonnet-4-20250514'),
+    primaryModel: z.string().min(1).default('deepseek/deepseek-v4-pro'),
     modelOverrides: z.record(z.string()).optional(),
   }),
   webhooks: z

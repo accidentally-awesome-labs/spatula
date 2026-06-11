@@ -395,7 +395,7 @@ export class DefaultConfigExecutor implements ConfigExecutor {
           : { maxDepth: 2, maxPages: 1000, concurrency: 5, crawlerType: 'playwright' as const };
         const resetLlm = keepSet.has('llmConfig')
           ? config.llm
-          : { primaryModel: 'anthropic/claude-sonnet-4-20250514' };
+          : { primaryModel: 'deepseek/deepseek-v4-pro' };
 
         config.tenantId = tenantId;
         config.name = resetName;

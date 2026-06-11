@@ -33,10 +33,7 @@ export function yamlToJobConfig(yaml: SpatulaYaml, options: YamlToJobConfigOptio
 
   // Resolve LLM model: CLI > project > global > default
   const primaryModel =
-    cliFlags?.model ??
-    yaml.llm?.model ??
-    globalConfig?.llm?.model ??
-    'anthropic/claude-sonnet-4-20250514';
+    cliFlags?.model ?? yaml.llm?.model ?? globalConfig?.llm?.model ?? 'deepseek/deepseek-v4-pro';
 
   // Resolve depth/limit: CLI > project > default
   const maxDepth = cliFlags?.depth ?? yaml.depth ?? 2;
