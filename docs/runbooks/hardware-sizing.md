@@ -48,12 +48,18 @@ speed, network bandwidth to target sites, and model API latency from your region
 - **Tiers measured:** fast / primary / smart — one crawl per tier, in sequence
 - **LLM routing:** each tier pins all LLM calls to one model (via `LLMConfig.primaryModel`),
   producing a clean per-model cost/page number
-- **Cost measurement:** LLM usage recorded per-call to Postgres (`llm_usage` table);
-  harness reads `aggregateByTenant()` after each crawl and divides by pages completed
-- **Wall-clock:** measured from crawl start to last page completion (includes LLM API
-  roundtrips, crawler I/O, Postgres writes)
-- **Runner:** `LocalPipelineRunner` (in-process, no Redis required for standalone
-  measurement; substitute BullMQ worker topology for queue-based production runs)
+- **Cost measurement:** LLM usage recorded per-call to Postgres (`llm_usage` table)
+  by the worker; the harness reads `LlmUsageRepository.aggregateByTenant()` and takes
+  the per-job entry (`byJob[jobId]`), dividing total cost by pages completed
+- **Page count:** read from Postgres as completed crawl tasks
+  (`CrawlTaskRepository.getJobStats(jobId).completed`) — this path does not surface a
+  page count over HTTP, so the harness needs `DATABASE_URL`
+- **Wall-clock:** measured from job submit to terminal status (includes LLM API
+  roundtrips, crawler I/O, queue + Postgres writes)
+- **Runner:** the REAL production path — the harness submits a job per tier via the
+  HTTP API; the BullMQ **CrawlWorker** processes it and records LLM usage. Requires a
+  running stack (API + worker + Redis + Postgres), e.g. `docker compose -f
+  docker-compose.prod.yml up`. The API/worker must have `OPENROUTER_API_KEY` set.
 
 ### Model-per-tier
 
@@ -111,31 +117,49 @@ Self-hosters can reproduce the baseline on their own hardware.
 ```bash
 # 1. Provision a cloud VM (CX32 or equivalent)
 # 2. Install Docker + pnpm (or clone the repo and pnpm install)
-# 3. Start Postgres + Redis (docker compose up -d postgres redis)
 pnpm install
 pnpm build
+
+# 3. Bring up the FULL stack (API + worker + Redis + Postgres) with your LLM key.
+#    The worker makes the LLM calls — OPENROUTER_API_KEY goes on the stack, not the harness.
+OPENROUTER_API_KEY=sk-or-... docker compose -f docker-compose.prod.yml up -d
+
+# 4. Run migrations once (see docs/runbooks/render-deploy.md or the migrate image)
 ```
 
-### Environment variables
+### Environment variables (for the harness process)
 
-| Variable             | Required | Description                                                       |
-| -------------------- | -------- | ----------------------------------------------------------------- |
-| `SPATULA_LIVE_LLM`   | yes      | Set to `1` to confirm real LLM spend (set by npm script)          |
-| `OPENROUTER_API_KEY` | yes      | Your OpenRouter API key                                           |
-| `DATABASE_URL`       | yes      | Postgres connection string (e.g., `postgresql://...`)             |
-| `SIZING_PAGES`       | no       | Pages per tier (default: `1000`)                                  |
-| `SIZING_SEED_URL`    | no       | Seed URL (default: `https://quotes.toscrape.com/`)                |
-| `SIZING_TENANT_ID`   | no       | Tenant ID for usage recording (default: `sizing-baseline-tenant`) |
+| Variable                 | Required | Description                                                              |
+| ------------------------ | -------- | ------------------------------------------------------------------------ |
+| `SPATULA_LIVE_LLM`       | yes      | Set to `1` to confirm real LLM spend (set by the npm script)             |
+| `DATABASE_URL`           | yes      | Postgres connection string — harness reads pages + cost                  |
+| `SPATULA_API_URL`        | no       | Base URL of the running API (default: `http://localhost:3000`)           |
+| `SIZING_PAGES`           | no       | Target pages per tier (default: `1000`)                                  |
+| `SIZING_SEED_URL`        | no       | Seed URL (default: `https://quotes.toscrape.com/`)                       |
+| `SIZING_MAX_DEPTH`       | no       | Max crawl depth (default: `20` — enough to reach the page target)        |
+| `SIZING_CONCURRENCY`     | no       | Crawl concurrency (default: `5`)                                         |
+| `SIZING_CRAWLER`         | no       | `playwright` (default) or `firecrawl`                                    |
+| `SIZING_MAX_WAIT_MS`     | no       | Per-tier completion timeout (default: 2h)                                |
+| `TENANT_CREATION_SECRET` | no       | Sent as `X-Creation-Secret` if your stack guards tenant creation         |
+
+> `OPENROUTER_API_KEY` is **not** a harness variable — it belongs on the API/worker
+> stack (the worker makes the LLM calls). `AUTH_STRATEGY=none` is assumed (the harness
+> creates a tenant and sends `X-Tenant-Id`).
 
 ### Run
 
 ```bash
-export OPENROUTER_API_KEY=sk-or-...
 export DATABASE_URL=postgresql://spatula:pass@localhost:5432/spatula
+export SPATULA_API_URL=http://localhost:3000
 
-# Runs fast → primary → smart tiers (1000 pages each, ~real LLM cost)
+# Runs fast → primary → smart tiers (TARGET_PAGES each, ~real LLM cost on the stack)
 pnpm sizing:baseline
 ```
+
+> **Seed corpus size:** `quotes.toscrape.com` has only ~250 crawlable pages, so a
+> 1000-page target will exhaust it short of 1000. For a true 1k-page-per-tier run,
+> point `SIZING_SEED_URL` at a site with ≥1000 reachable pages. `cost/page` and
+> `wall-clock/page` remain valid regardless of how many pages actually complete.
 
 The script prints a Markdown table to stdout and writes
 `scripts/.sizing-results.json` with the per-tier measurements.
@@ -180,8 +204,9 @@ Crawl duration  = pages × (wall-clock/page for your tier) / concurrency_factor
    far from OpenRouter's US-West endpoints.
 3. **Model pricing changes.** OpenRouter model pricing is updated regularly. Re-run
    the harness after significant price changes or model deprecations.
-4. **No Redis in baseline.** The harness uses `LocalPipelineRunner` (in-process queue).
-   A production BullMQ topology adds ~5–10% overhead but enables horizontal scaling.
+4. **Production topology.** The harness drives the real BullMQ CrawlWorker path
+   (API + worker + Redis + Postgres) — so wall-clock includes queue overhead and is
+   representative of a real deployment, not an in-process shortcut.
 5. **Cold start excluded.** The first page includes Playwright browser launch (~2–5s).
    This is amortized across 1000 pages and has negligible impact on per-page averages.
 
