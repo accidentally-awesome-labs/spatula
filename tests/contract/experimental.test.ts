@@ -1,11 +1,11 @@
 /**
  * API-13: experimental-namespace contract.
  *
- * The @spatula/client SDK reserves `client.experimental.*` for future
- * experimental surfaces. v1.0 ships ZERO of these — every property access
- * MUST throw an Error whose message references "zero experimental surfaces"
- * (so call sites that accidentally depend on an unimplemented surface fail
- * loudly at use site, not silently with undefined).
+ * The @spatula/client SDK reserves `client.experimental.*` for experimental
+ * surfaces. v1.0 ships exactly ONE — `forensic` (Plan 18-05, SEC-05). Every
+ * OTHER property access MUST throw a fail-loud Error referencing the
+ * experimental-surface policy, so call sites that depend on an unimplemented
+ * surface fail at the use site, not silently with undefined.
  *
  * The Proxy MUST tolerate well-known JS-runtime property accesses (`then`,
  * `toJSON`, `constructor`, symbols) — these are touched by Promise/await
@@ -33,17 +33,18 @@ describe('API-13 client.experimental namespace', () => {
     if (server) await server.close();
   });
 
-  it('throws on arbitrary property access with "zero experimental surfaces" message', () => {
+  it('exposes the forensic surface and fails loud on any other property access', () => {
     const client = new SpatulaClient({ baseUrl: server.url });
-    expect(() => (client as unknown as { experimental: Record<string, unknown> }).experimental.forensic).toThrow(
-      /zero experimental surfaces/i,
-    );
-    expect(() => (client as unknown as { experimental: Record<string, unknown> }).experimental.anyOtherThing).toThrow(
-      /zero experimental surfaces/i,
-    );
-    expect(() => (client as unknown as { experimental: Record<string, unknown> }).experimental['snake_case_thing']).toThrow(
-      /zero experimental surfaces/i,
-    );
+    const experimental = (client as unknown as { experimental: Record<string, unknown> }).experimental;
+
+    // v1.0 ships exactly ONE experimental surface: forensic (Plan 18-05, SEC-05).
+    // It MUST resolve to a real surface, not throw.
+    expect(() => experimental.forensic).not.toThrow();
+    expect(experimental.forensic).toBeDefined();
+
+    // Every OTHER surface is unimplemented and must fail loud at the use site.
+    expect(() => experimental.anyOtherThing).toThrow(/experimental surface/i);
+    expect(() => experimental['snake_case_thing']).toThrow(/is not available/i);
   });
 
   it('does NOT throw on JS-runtime well-known property accesses (debug introspection)', () => {

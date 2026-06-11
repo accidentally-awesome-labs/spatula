@@ -182,7 +182,9 @@ CREATE TABLE public.api_keys (
     expires_at timestamp with time zone,
     last_used_at timestamp with time zone,
     created_at timestamp with time zone DEFAULT now() NOT NULL,
-    revoked_at timestamp with time zone
+    revoked_at timestamp with time zone,
+    supersedes uuid,
+    superseded_expires_at timestamp with time zone
 );
 
 
@@ -853,6 +855,14 @@ ALTER TABLE ONLY public.actions
 
 ALTER TABLE ONLY public.actions
     ADD CONSTRAINT actions_tenant_id_tenants_id_fk FOREIGN KEY (tenant_id) REFERENCES public.tenants(id);
+
+
+--
+-- Name: api_keys api_keys_supersedes_api_keys_id_fk; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.api_keys
+    ADD CONSTRAINT api_keys_supersedes_api_keys_id_fk FOREIGN KEY (supersedes) REFERENCES public.api_keys(id);
 
 
 --
