@@ -35,3 +35,10 @@ never compiles the client, so the cli image build is unaffected.
 hoisted dev deps) and decide the correct fix (explicit `lib`/`types` in the client tsconfig,
 declare `eventsource` + its types as real deps, or split browser/node type surfaces). If the
 release CI already passes, document WHY (hoisting) so it is not a latent release-time break.
+
+**Update (2026-06-11, Plan 19-05 live deploy):** STILL OPEN. The Render build ran a full
+`turbo run build` (the whole monorepo, client included) and PASSED — but only because the
+build used `pnpm install --prod=false`, which hoists `@types/node` and installs `eventsource`.
+That is exactly the hoisting condition this item predicted would mask the failure; it is NOT a
+clean isolated build, so it neither reproduces nor resolves DEFER-19-A. The correct fix
+(explicit `lib`/`types` + real `eventsource` types in the client tsconfig) is still owed.

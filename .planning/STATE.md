@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v1.1
 milestone_name: Public Launch (Wave 6 / Phase 14)
 status: executing
-stopped_at: 'Phase 19: 7/9 plans complete (19-01/02/03/04/06/07/08). 19-05 (Render, DEPLOY-02) + 19-09 (hardware-sizing, DEPLOY-09) deferred at human checkpoints per user choice — phase NOT marked complete. Full workspace build green; no regressions.'
-last_updated: '2026-06-11T05:45:49.237Z'
+stopped_at: 'Phase 19: 8/9 plans complete (19-01/02/03/04/05/06/07/08). 19-05 (Render, DEPLOY-02) CLOSED 2026-06-11 — live deploy verified end-to-end (build/boot/DB/embedded-worker/health/migrations) on a paid mirror branch; two template defects found + fixed and ported to public main (b25fc9e). Only 19-09 (hardware-sizing, DEPLOY-09) remains deferred — phase NOT yet complete. Full workspace build green; no regressions.'
+last_updated: '2026-06-11T21:13:14.000Z'
 last_activity: 2026-06-11
 progress:
   total_phases: 8
   completed_phases: 4
   total_plans: 34
-  completed_plans: 32
+  completed_plans: 33
   percent: 13
 ---
 
@@ -26,8 +26,8 @@ See: `.planning/PROJECT.md` (updated 2026-05-11)
 ## Current Position
 
 Phase: 19 (deployment-self-host-excellence) — EXECUTING
-Plan: 8 of 9
-Status: Ready to execute
+Plan: 8 of 9 complete (19-05 closed); 19-09 deferred
+Status: Only 19-09 (hardware-sizing live run) remains before phase verification
 Last activity: 2026-06-11
 
 Progress: [█░░░░░░░░░] 13% (1/8 v1.1 phases complete)
@@ -188,6 +188,9 @@ Full decision log lives in PROJECT.md Key Decisions table. Recent decisions rele
 - [Phase 19]: Dev overlay Secret requires no patch: base/secrets.yaml dev-default DATABASE_URL/REDIS_URL already match stub postgres/redis Service names and credentials
 - [Phase 19]: k8s-smoke CI uses helm/kind-action + builds images from source (loaded into kind) — avoids GHCR auth in smoke CI; on-release + nightly cadence, not every PR
 - [Phase 19]: Heavy DB lanes (test:backup, test:upgrade) run on-release + nightly only — not on PR; config-compat (test:config) safe on PR but wired in Phase 21
+- [Phase 19-05]: Render build recipe — NEVER `corepack enable` (read-only /usr/bin → EROFS; Render auto-provides pnpm from lockfile); under NODE_ENV=production MUST `pnpm install --prod=false` or devDeps (turbo/tsup/tsc) are pruned → `turbo: not found`; pin Node via NODE_VERSION env + .node-version (Render defaults to 24). These are deployment-only defects no local build/CI exercises.
+- [Phase 19-05]: SC#2 verified on a paid mirror (render-paid-demo) not literal free tier — workspace's one free PG + one free KV slots were occupied (the documented caveat). Public main template stays all-free with the repaired build recipe.
+- [Phase 19-05]: Render blueprint SYNC ≠ deploy — `render deploys create` reuses the service's STORED config; render.yaml edits require a dashboard Blueprint Sync (CLI `blueprints` only validates). No repo webhook on the OSS repo, so pushes do not auto-sync.
 
 ### Pending Todos
 
@@ -207,7 +210,7 @@ All 9 pre-launch blockers are open as of 2026-05-12 (see PROJECT.md "Pre-launch 
 - BLOCK-08 → Phase 20 entry gate (Cloudflare Pages + DNS)
 - BLOCK-09 → Phase 18 / Phase 22 (historical-contributor enumeration + outreach)
 - DEPLOY-09 deferred (user choice 2026-06-10): 19-09 hardware-sizing harness + runbook skeleton committed, but the MEASURED 1k-page-per-tier table in docs/runbooks/hardware-sizing.md is unfilled. Needs a real paid live run on a Hetzner CX32 (pnpm sizing:baseline). 19-09 left without SUMMARY so phase 19 stays incomplete until done.
-- DEPLOY-02 deferred (consistent with user's 'continue Waves 2-3' choice 2026-06-10): 19-05 render.yaml + render-deploy.md built and committed (2a6ee02, 892822c), but Task 3 (live Render free-tier deploy, SC#2) is a human-verify checkpoint needing a real Render account + fresh clone. 19-05 left without SUMMARY so phase 19 stays incomplete until the live deploy is verified (hit /health on the assigned \*.onrender.com URL + confirm embedded worker).
+- ✅ DEPLOY-02 → 19-05 **RESOLVED 2026-06-11**. Live deploy verified end-to-end: build green, /health 200, /health/ready {db,redis,queue: ok}, embedded worker (7 queues) up, migrations complete, live at https://spatula-api.onrender.com. Verified on a paid mirror branch (render-paid-demo) because the workspace's single free PG + single free KV slots were occupied (the documented caveat) — render.yaml structure identical, only plan names differ. Two deployment-only template defects (corepack EROFS; NODE_ENV=production skips devDeps) found + fixed and ported to public main (b25fc9e). SUMMARY: 19-05-SUMMARY.md.
 
 ### Pending Decisions
 
@@ -217,6 +220,6 @@ All 9 pre-launch blockers are open as of 2026-05-12 (see PROJECT.md "Pre-launch 
 
 ## Session Continuity
 
-Last session: 2026-06-11T05:45:49.232Z
-Stopped at: Phase 19: 7/9 plans complete (19-01/02/03/04/06/07/08). 19-05 (Render, DEPLOY-02) + 19-09 (hardware-sizing, DEPLOY-09) deferred at human checkpoints per user choice — phase NOT marked complete. Full workspace build green; no regressions.
+Last session: 2026-06-11T21:13:14.000Z
+Stopped at: Phase 19: 8/9 plans complete (19-01/02/03/04/05/06/07/08). 19-05 (Render, DEPLOY-02) CLOSED — live deploy verified end-to-end on a paid mirror; template build defects fixed + ported to public main (b25fc9e). Only 19-09 (hardware-sizing, DEPLOY-09) remains deferred (needs a real Hetzner CX32 1k-page-per-tier run). Phase NOT yet complete; full workspace build green.
 Resume file: None
