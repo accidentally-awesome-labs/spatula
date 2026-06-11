@@ -1,0 +1,762 @@
+:robot: I have created a release *beep* *boop*
+---
+
+
+<details><summary>api: 0.1.0</summary>
+
+## [0.1.0](https://github.com/accidentally-awesome-labs/spatula/compare/api-v0.0.1...api-v0.1.0) (2026-06-11)
+
+
+### Features
+
+* **16-1:** add X-RateLimit-Reset header + config/rate-limits.yaml loader ([c46795e](https://github.com/accidentally-awesome-labs/spatula/commit/c46795ea23fb57b0b3c3037a2d332813cc71cd38))
+* **16-1:** split pagination envelope (cursor canonical, offset deprecated) + RFC 8594 headers ([7b75687](https://github.com/accidentally-awesome-labs/spatula/commit/7b75687e13034bb383001eace346d8bab473fca5))
+* **16-1:** sweep API error envelope to frozen DOMAIN.CODE enum + details ([e3c3ae9](https://github.com/accidentally-awesome-labs/spatula/commit/e3c3ae901773d411a1ea4d03b901ff98e9cac82f))
+* **16-2:** add ESLint rule blocking non-type imports from @spatula/core-types ([5da3ddd](https://github.com/accidentally-awesome-labs/spatula/commit/5da3ddd90f1257e1bece5d1a5871f082c3b901fa))
+* **16-3:** add GET /.well-known/spatula-version + support matrix ([1912241](https://github.com/accidentally-awesome-labs/spatula/commit/191224165f71d44801b428e3517c9576d9710f89))
+* **16-3:** boot-cache OpenAPI 3.1 spec + dev-mode example validator ([79271f3](https://github.com/accidentally-awesome-labs/spatula/commit/79271f343113a7ce6d039505f504848c2d118cdc))
+* **16-4:** ship contract test suite (matrix driver + 6 per-REQ suites) + CI gate ([1d5ba4a](https://github.com/accidentally-awesome-labs/spatula/commit/1d5ba4a2515b9d9c9b4c9859e4688897275390e3))
+* **16-5:** extend release-please to 8 packages + linked-versions + node-workspace plugins ([76a030a](https://github.com/accidentally-awesome-labs/spatula/commit/76a030af9b4558594f39d6513e07c79053c0ee54))
+* **17-02:** build SSE module  types, RedisStreamBuffer, and route handler ([f54d62a](https://github.com/accidentally-awesome-labs/spatula/commit/f54d62af55ace8c1d19307175fc1642a9d1f2c91))
+* **17-02:** register SSE createRoute, mount in app, fix auth+timeout+scope guards ([5dfb16c](https://github.com/accidentally-awesome-labs/spatula/commit/5dfb16ce2ac319d712314173f04285bcc2c11fcb))
+* **17-03:** CORS function-form origin matcher with single-label wildcard ([404c364](https://github.com/accidentally-awesome-labs/spatula/commit/404c364ffcbcb45694c0bb9d80748accfe3d5831))
+* **17-03:** docs/api-auth.md authoritative auth doc + scope sync CI gate ([5b6791c](https://github.com/accidentally-awesome-labs/spatula/commit/5b6791c358ab4099cd6be35301c903bf6bacebfd))
+* **17-04:** add POST /api/v1/api-keys/:id/rotate route with grace window + audit ([70e5d2c](https://github.com/accidentally-awesome-labs/spatula/commit/70e5d2c96f6b3f816084685243ccaa1178579eba))
+* **17-07:** M2M OIDC client_credentials e2e suite (AUTH-08) ([81416b5](https://github.com/accidentally-awesome-labs/spatula/commit/81416b5919c73792555af73147de10988a955ef4))
+* **18-05:** admin:forensic:read scope + forensic endpoint + OpenAPI experimental (SEC-05) ([adb17dc](https://github.com/accidentally-awesome-labs/spatula/commit/adb17dc433e6bea264f2b7a450d69c847721aaa1))
+* **18-06:** DELETE + import admin routes (async 202) ([4ad8a9f](https://github.com/accidentally-awesome-labs/spatula/commit/4ad8a9fa3fac877ff463a481660b358102291bc5))
+* **19-01:** API standalone bootstrap (main.ts) + embedded-worker shim ([4d365fd](https://github.com/accidentally-awesome-labs/spatula/commit/4d365fd8fdf83024f97a0a5cff611af2d93bbbb5))
+* **19-02:** distroless api + worker runtime images (DEPLOY-03) ([92dd2dd](https://github.com/accidentally-awesome-labs/spatula/commit/92dd2ddd985d772e25abb8df49aacbb8a0a4347b))
+* add webhook config schema and enqueue helper ([d5764f1](https://github.com/accidentally-awesome-labs/spatula/commit/d5764f1bd54aaa5ad7fb5fa60bab29e45d54d4a5))
+* **admin:** add cross-tenant job listing and force-cancel endpoints ([b0b40e2](https://github.com/accidentally-awesome-labs/spatula/commit/b0b40e2e2ff0d4ded65dc98ef8e7d340a4679950))
+* **admin:** add system health and metrics endpoints ([2af30bb](https://github.com/accidentally-awesome-labs/spatula/commit/2af30bb19326dabf35db6fcb63217764b3439f2b))
+* **admin:** add tenant management routes (list, detail, update plan/config/retention) ([b07028d](https://github.com/accidentally-awesome-labs/spatula/commit/b07028d5d683770e1459d7566c1b3cdb3e4dbccc))
+* **admin:** enable cross-tenant DLQ access for admin-scoped callers ([aae3f05](https://github.com/accidentally-awesome-labs/spatula/commit/aae3f05cbdb9e1e9e819b3565d75f7109449920c))
+* **api:** add batch operations, timeout middleware, and wire into app ([90a70ce](https://github.com/accidentally-awesome-labs/spatula/commit/90a70ce6f3e8169769eea407a6bfdcad9547e6d9))
+* **api:** add billing routes (subscription, invoices, portal) and wire AppDeps ([053dbc4](https://github.com/accidentally-awesome-labs/spatula/commit/053dbc44854fe8f54e985fc4c277675eeb893227))
+* **api:** add pageUrl to extractions, entity-sources endpoint, job stats enrichment ([da98cba](https://github.com/accidentally-awesome-labs/spatula/commit/da98cbad19e4d00642fa997a417b9d205995cb89))
+* **api:** add SpatulaStripeClient wrapper using Billing Meter Events API ([4f053ee](https://github.com/accidentally-awesome-labs/spatula/commit/4f053eeb3f7487a9bf15e7307ab9e898e9f6084f))
+* **api:** add Stripe webhook handler with signature verification, register billing routes ([a0846a1](https://github.com/accidentally-awesome-labs/spatula/commit/a0846a13556338efe2283f38fce5acb81e3c5c38))
+* **api:** align rate limiting with billing plan, wire billing routes ([1ab1621](https://github.com/accidentally-awesome-labs/spatula/commit/1ab162167bc962359b1c39b0a896860c2d98d352))
+* **api:** raise entity pagination limit from 100 to 500 for bulk pull support ([cac57c2](https://github.com/accidentally-awesome-labs/spatula/commit/cac57c29f5c4ac1fd50bdb843a5a33cb38eed69a))
+* **api:** restrict export formats based on billing tier ([bddc9ae](https://github.com/accidentally-awesome-labs/spatula/commit/bddc9aef1aed600eae7515c738253eab280ac9ef))
+* **api:** wire queue_depth gauge to BullMQ getJobCounts ([0d80b47](https://github.com/accidentally-awesome-labs/spatula/commit/0d80b47ee84727f6d84863080c662e13c80c6b9c))
+* **auth:** add strategy field to AuthResult, stop requiring tenant_id in JWT ([736cf59](https://github.com/accidentally-awesome-labs/spatula/commit/736cf5952c10f03d5d5c75dd0684104ede9afb2b))
+* **auth:** enforce 403 for suspended tenants in validate-tenant middleware ([65801a2](https://github.com/accidentally-awesome-labs/spatula/commit/65801a2e70c974a78b4e6d5afdc05d6c4d306d94))
+* **auth:** JWT user’tenant resolution via user_tenants table ([87dff97](https://github.com/accidentally-awesome-labs/spatula/commit/87dff979fea4766d24e3ddc10afff2e55c2e21c6))
+* **carveout:** add GET /api/v1/auth/me  auth introspection for API-key verification ([c10625a](https://github.com/accidentally-awesome-labs/spatula/commit/c10625a60d0478a6fcbd6a8a84849a2de88d0f75))
+* **carveout:** clean up residual billing coupling in admin-tenants + exports tests ([5d3b50e](https://github.com/accidentally-awesome-labs/spatula/commit/5d3b50efee981f52c64f70bb5b17e0fc382bdb84))
+* **carveout:** confirm SQLite schema has no billing coupling ([7d2e818](https://github.com/accidentally-awesome-labs/spatula/commit/7d2e8186239b2facc21aa4563bf4d8c83e157530))
+* **carveout:** delete Section A billing files from OSS (history preserved in spatula-saas) ([20318a6](https://github.com/accidentally-awesome-labs/spatula/commit/20318a66f7da62cd5e484cdeb32a2dd20b953243))
+* **carveout:** drop tier-based rate-limit lookup; use DEFAULT_RATE_LIMIT ([76e7577](https://github.com/accidentally-awesome-labs/spatula/commit/76e7577522ab56ac0b22b2facb80215b6d27855e))
+* **carveout:** remove QuotaEnforcer coupling from queue + core + api layers ([c449fcd](https://github.com/accidentally-awesome-labs/spatula/commit/c449fcdb2ebb8265bd3462f7e2a83e114c236fda))
+* **carveout:** strip BILLING_TIERS + plan + usage aggregation from admin-tenants ([0d72430](https://github.com/accidentally-awesome-labs/spatula/commit/0d724300fb8cd63c03541ab255c5e7a821885544))
+* **carveout:** unmount billing + stripe-webhook routes + plan-loading middleware from app.ts ([6ac966c](https://github.com/accidentally-awesome-labs/spatula/commit/6ac966c7a58fcdffd3b2b0c94bd6dd402040b90c))
+* **cli:** add Tier 4 test helpers for API lifecycle testing ([4ccb70f](https://github.com/accidentally-awesome-labs/spatula/commit/4ccb70f8cc7cba9acea8695a2dd306a03a74113b))
+* flip default LLM model to deepseek/deepseek-v4-pro + add pricing ([342729e](https://github.com/accidentally-awesome-labs/spatula/commit/342729eff64d59c62236e6e81750336111b45495))
+* **queue:** add hourly metering worker for Stripe usage reporting ([a4d8d97](https://github.com/accidentally-awesome-labs/spatula/commit/a4d8d9796dabe5ed3478a155f7c966c9082b4815))
+* **queue:** add webhook queue, worker, and Bull Board registration ([8e1cc24](https://github.com/accidentally-awesome-labs/spatula/commit/8e1cc24e2ccc43726293e554c8c6916ce2990806))
+* Wave 5-6  deferred items (10 items, 16 commits) ([413ac19](https://github.com/accidentally-awesome-labs/spatula/commit/413ac1992a1b33feea8081e60ccdd08c2cf13146))
+
+
+### Bug Fixes
+
+* **15-03:** clean up post-carveout lint residue ([9785066](https://github.com/accidentally-awesome-labs/spatula/commit/9785066b6078cfd6f005824cb24fca3aa23e7f08))
+* **15-ci:** get PR CI green  format pass, lint cleanup, workflow fixes ([918f364](https://github.com/accidentally-awesome-labs/spatula/commit/918f3649e216204971fe9c12b00e8a39d70c980a))
+* **15-followup:** retire post-merge pg_dump gate + bump CI-flaky test timeouts ([95f0127](https://github.com/accidentally-awesome-labs/spatula/commit/95f0127a6715cbb8ee8fb5d0550cff04fab4dfe9))
+* **16-3:** widen openapi route handler to satisfy strict response type ([3f3e16c](https://github.com/accidentally-awesome-labs/spatula/commit/3f3e16c79736fd6abe4930a38e79f87b3d07e0f4))
+* **17-06:** repair browser e2e OIDC flow  localhost IPv6 collision, scope grant, repo wiring, event publishing, SSE id injection ([69280ec](https://github.com/accidentally-awesome-labs/spatula/commit/69280ec7b4b526b94a341d5d3f07152b21a4f63f))
+* **17-07:** restore fail-closed JWT scopes, grant M2M scopes explicitly ([fa9565d](https://github.com/accidentally-awesome-labs/spatula/commit/fa9565d76fe104217381bb71e970c29a3402e0b9))
+* add error boundaries to extraction/action pull loops + defer storageBytesUsed ([733f298](https://github.com/accidentally-awesome-labs/spatula/commit/733f2986d4cd13947e58e488180dfe9a0cf1fe57))
+* address code review findings  validate plan from Stripe, add stripe_customer_id index, fix idempotency key, safe metering deps construction ([bf6ee6c](https://github.com/accidentally-awesome-labs/spatula/commit/bf6ee6c107d979f92b8975f51cda1dcf28327ca6))
+* address spec compliance review findings ([1c0e869](https://github.com/accidentally-awesome-labs/spatula/commit/1c0e8699069fa788409254065a4e483d2f55830e))
+* address Wave 4-1 code quality review findings ([f97c5f7](https://github.com/accidentally-awesome-labs/spatula/commit/f97c5f7813ff20e73eefc9e98b0b63c5db5f3639))
+* **api:** add shared-secret protection for tenant creation endpoint ([4f0d033](https://github.com/accidentally-awesome-labs/spatula/commit/4f0d03375140c1407b21b3bd7f0779d342c8eb61))
+* **api:** clear pre-existing TypeScript errors ([46cf144](https://github.com/accidentally-awesome-labs/spatula/commit/46cf144e51d4aa8d421d6c3a7e4fddaf8e809506))
+* **auth:** extract JWT name/email for tenant naming, document owner constraint, add StorageError tests ([9837cc1](https://github.com/accidentally-awesome-labs/spatula/commit/9837cc177126140a62a7bc49309c81ee55fbad5f))
+* **auth:** make auto-tenant creation idempotent with try/catch + re-query ([c0fa513](https://github.com/accidentally-awesome-labs/spatula/commit/c0fa5137712ad902100340a3031430f885efae03))
+* **carveout:** drop dead stripe dep + scrub remaining billing-keyword comments (CARVE-04 final gate) ([3e7610b](https://github.com/accidentally-awesome-labs/spatula/commit/3e7610be4fffd29344d7fe685abe3642f31c587f))
+* **ci:** clear lint errors exposed on main (no-unused-vars + import-type) ([07ec58c](https://github.com/accidentally-awesome-labs/spatula/commit/07ec58c04ac411b0da146dfa2d827813ecd0d30e))
+* **db:** composite cursor for EntitySourceRepository.findByJobCursor ([9a19bc2](https://github.com/accidentally-awesome-labs/spatula/commit/9a19bc2917058667892ab6eec907503a4e7127c5))
+* resolve pre-existing TypeScript build errors across API and CLI ([74ba6a3](https://github.com/accidentally-awesome-labs/spatula/commit/74ba6a328e95593fc87b602f5383debe84be51f2))
+* return 404 (not 500) for cross-tenant action approve/reject ([bb7da95](https://github.com/accidentally-awesome-labs/spatula/commit/bb7da954bbbead30f9010c79b67eb06854166d29))
+* update api-key test mock to include billing:read scope ([b37620f](https://github.com/accidentally-awesome-labs/spatula/commit/b37620f4bc2f9e97a170326a7086c359bd9fca46))
+
+
+### Dependencies
+
+* The following workspace dependencies were updated
+  * dependencies
+    * @spatula/core bumped to 0.1.0
+    * @spatula/db bumped to 0.1.0
+    * @spatula/queue bumped to 0.1.0
+    * @spatula/shared bumped to 0.1.0
+</details>
+
+<details><summary>cli: 0.1.0</summary>
+
+## [0.1.0](https://github.com/accidentally-awesome-labs/spatula/compare/cli-v0.0.1...cli-v0.1.0) (2026-06-11)
+
+
+### Features
+
+* **16-5:** @spatula/cli publish prep  tsup dual ESM+CJS + files allowlist + engines + no postinstall ([e9f368d](https://github.com/accidentally-awesome-labs/spatula/commit/e9f368d3a500400d83d8ddaa46f758c843eb203c))
+* **18-07:** spatula admin tenant delete/export/import CLI commands ([872218c](https://github.com/accidentally-awesome-labs/spatula/commit/872218cb1d1f3b03f532ad7a0d9d062233213a3a))
+* add @spatula/queue devDep, export createWebhookWorker, add tier 5a ([e7af7c1](https://github.com/accidentally-awesome-labs/spatula/commit/e7af7c1a2fb12d802b85a1efd8aeb4a7b8283ca7))
+* add Docker service managers for Postgres and Redis ([e5e5754](https://github.com/accidentally-awesome-labs/spatula/commit/e5e575448d6d520e1c99ee1c3f31b3af904fabee))
+* add health check framework, system/server checks, and spatula doctor ([e16b4b4](https://github.com/accidentally-awesome-labs/spatula/commit/e16b4b40ea8ab3773974900fdfc73b8178bd86ce))
+* add OpenRouter and Firecrawl service managers ([290137c](https://github.com/accidentally-awesome-labs/spatula/commit/290137cf475ff2aed534278cdd5446e2fdaf0776))
+* add ServiceManager interface and ServiceRegistry ([9a73928](https://github.com/accidentally-awesome-labs/spatula/commit/9a739286f989483daf8800d75c96307876286322))
+* add test:tier4 script and complete Tier 4 infrastructure ([b453c8e](https://github.com/accidentally-awesome-labs/spatula/commit/b453c8e05db943b1327329711733715a79f9272b))
+* add Tier 5A test helpers with startTestWorkers and completion polling ([e05027e](https://github.com/accidentally-awesome-labs/spatula/commit/e05027e1f975ee317b1f9779695b24543e347aa8))
+* add Tier 5B test helpers for API key auth ([75b98d2](https://github.com/accidentally-awesome-labs/spatula/commit/75b98d2d40c841e2b95d0feee15fa686118d8571))
+* **api:** add pageUrl to extractions, entity-sources endpoint, job stats enrichment ([da98cba](https://github.com/accidentally-awesome-labs/spatula/commit/da98cbad19e4d00642fa997a417b9d205995cb89))
+* **carveout:** CLI uses /api/v1/auth/me for remote auth verification (replaces /billing/subscription) ([5ca4451](https://github.com/accidentally-awesome-labs/spatula/commit/5ca44513c45530ee6a0ae86bf9ee274cda2c135f))
+* **carveout:** confirm SQLite schema has no billing coupling ([7d2e818](https://github.com/accidentally-awesome-labs/spatula/commit/7d2e8186239b2facc21aa4563bf4d8c83e157530))
+* **cli:** adapt component props to accept DataSource | SpatulaApiClient backend ([7c10d7a](https://github.com/accidentally-awesome-labs/spatula/commit/7c10d7a0d71a619a9e782ae4b9adce8149a7c9b9))
+* **cli:** adapt spatula new for local mode  writes spatula.yaml instead of API call ([42ec711](https://github.com/accidentally-awesome-labs/spatula/commit/42ec7114d825ced5ec6c4beba71369d264fd2877))
+* **cli:** adapt useEntityData hook to accept DataSource | SpatulaApiClient ([a785288](https://github.com/accidentally-awesome-labs/spatula/commit/a785288a8f0404527af249052da1170e459ab7c0))
+* **cli:** adapt useEntityFilter hook to accept DataSource | SpatulaApiClient ([47afbd7](https://github.com/accidentally-awesome-labs/spatula/commit/47afbd73110e436023a3fda31b1e5c0a070cd3e8))
+* **cli:** adapt useExport hook to accept DataSource | SpatulaApiClient ([0adb1ad](https://github.com/accidentally-awesome-labs/spatula/commit/0adb1add4d949851adbe2217ede3686dc1a45447))
+* **cli:** adapt useJobPolling hook to accept DataSource | SpatulaApiClient ([72113b4](https://github.com/accidentally-awesome-labs/spatula/commit/72113b4c5185e776dc1214c872714fb82010cd27))
+* **cli:** add --include-extractions and --include-actions flags to spatula pull ([526c045](https://github.com/accidentally-awesome-labs/spatula/commit/526c04589d781f619e6af43454aba8f237a979bc))
+* **cli:** add --keep-remote flag to spatula reset ([cafc701](https://github.com/accidentally-awesome-labs/spatula/commit/cafc7019f9e52973d5c9fb0618a4991be250511e))
+* **cli:** add API key auth support to SpatulaApiClient ([c8f9a64](https://github.com/accidentally-awesome-labs/spatula/commit/c8f9a648e71be91f5ae560613ec125b351c5f2a4))
+* **cli:** add ApiDataSource implementing DataSource for remote access ([a72afa8](https://github.com/accidentally-awesome-labs/spatula/commit/a72afa8fc0eb09a4e02a7f62c8e46c992e34ad87))
+* **cli:** add crawl history dedup to spatula add with --no-history bypass ([6c695c8](https://github.com/accidentally-awesome-labs/spatula/commit/6c695c8808bf9e661824a6d5f9583dd8069380f7))
+* **cli:** add dashboard mode [d] toggle during spatula run ([89acd92](https://github.com/accidentally-awesome-labs/spatula/commit/89acd9264dc3ed61521a92b3b12ce9f4a1682f6d))
+* **cli:** add deprecation warnings for list and remote status commands ([5b4154e](https://github.com/accidentally-awesome-labs/spatula/commit/5b4154ec2b829e386cdec71431752efc4ab3b68c))
+* **cli:** add getEntitiesStreamPaginated and getUsage to SpatulaApiClient ([1eeed64](https://github.com/accidentally-awesome-labs/spatula/commit/1eeed645d6e6d23c24bf5f9253bd7fb9abdffdc1))
+* **cli:** add getSubscription, getEntitiesStream, getWsToken, getHealth to API client ([049f2e6](https://github.com/accidentally-awesome-labs/spatula/commit/049f2e649a5c36ad0e2054cb0d0974517e9cc246))
+* **cli:** add handlePullCommand interactive wrapper ([cc6d738](https://github.com/accidentally-awesome-labs/spatula/commit/cc6d738627f79f7e93ae376c124671f0eb89c580))
+* **cli:** add Ollama lifecycle manager and tier-based test runner ([a0d924e](https://github.com/accidentally-awesome-labs/spatula/commit/a0d924e4a22b5ce575b92a8fb0f2b0a9c3da59a5))
+* **cli:** add openLocalProject utility and consolidate slugifyPath ([5d1fe4a](https://github.com/accidentally-awesome-labs/spatula/commit/5d1fe4aa4d6a9df6477113591a648a1b8dd847c9))
+* **cli:** add paginated API client methods for extractions, actions, entity-sources ([0dc2cc3](https://github.com/accidentally-awesome-labs/spatula/commit/0dc2cc3d539d3aab8e3ac869715002f1b413fdd4))
+* **cli:** add PullProgress ink component ([936371e](https://github.com/accidentally-awesome-labs/spatula/commit/936371ec9a2a4888e27ea59ab77ef821da21fbd9))
+* **cli:** add push command  creates remote jobs from local config ([455eac9](https://github.com/accidentally-awesome-labs/spatula/commit/455eac99933145c41cc15f532ea7dc19fef64daa))
+* **cli:** add remote add/list/remove commands with auth verification ([c668f46](https://github.com/accidentally-awesome-labs/spatula/commit/c668f462d185a0e33cd4107480193647238a1ae5))
+* **cli:** add remote watch command with WS token auth and dashboard TUI ([8d57733](https://github.com/accidentally-awesome-labs/spatula/commit/8d577337ca17a5c8d5f3b9b13d31df1329a98385))
+* **cli:** add schema diff utility for pull flow ([ef11861](https://github.com/accidentally-awesome-labs/spatula/commit/ef11861507ed3cc1c48c48f6a70188e1cd3932de))
+* **cli:** add SchemaConflict TUI component for pull flow ([8024c6f](https://github.com/accidentally-awesome-labs/spatula/commit/8024c6fd383fdda0776902341e2749cc6b912829))
+* **cli:** add source filter toggle to explorer view ([1303c8d](https://github.com/accidentally-awesome-labs/spatula/commit/1303c8d2f1d59ca0b213309601892fb93eff62f3))
+* **cli:** add spatula add command for adding seed URLs ([33883b4](https://github.com/accidentally-awesome-labs/spatula/commit/33883b41fcdf36592e95b0d2287a608f4d0111f2))
+* **cli:** add spatula config command to open spatula.yaml in editor ([d7da451](https://github.com/accidentally-awesome-labs/spatula/commit/d7da451689cc090af06ab7533723b855aef8958f))
+* **cli:** add spatula estimate command for cost estimation ([5460ba3](https://github.com/accidentally-awesome-labs/spatula/commit/5460ba379932fae963e7fdd618b8459781a15691))
+* **cli:** add spatula explore command for standalone entity browsing ([00b9f0e](https://github.com/accidentally-awesome-labs/spatula/commit/00b9f0ed6863a40b72563b937f753c659f75da06))
+* **cli:** add spatula export command for local project entity export ([7724f55](https://github.com/accidentally-awesome-labs/spatula/commit/7724f55ce680f9338c6375794eeb359484b36a24))
+* **cli:** add spatula logs command and enhance run.ts structured logging ([791baa9](https://github.com/accidentally-awesome-labs/spatula/commit/791baa9d7e877863b34d97800acf71771e02b770))
+* **cli:** add spatula review command for standalone action review TUI ([c1df76c](https://github.com/accidentally-awesome-labs/spatula/commit/c1df76c22e0915093e584de7d4b26d4198340716))
+* **cli:** add spatula schema command for displaying project schema ([1f2e71a](https://github.com/accidentally-awesome-labs/spatula/commit/1f2e71ae6ce3077371109b20437076370085c5f6))
+* **cli:** add spatula setup command for global config editor ([e04384e](https://github.com/accidentally-awesome-labs/spatula/commit/e04384e3cb6b8c638477f9ce966d3529d34679bb))
+* **cli:** add Tier 4 test helpers for API lifecycle testing ([4ccb70f](https://github.com/accidentally-awesome-labs/spatula/commit/4ccb70f8cc7cba9acea8695a2dd306a03a74113b))
+* **cli:** add token-based WS auth for remote watch connections ([cd6a04d](https://github.com/accidentally-awesome-labs/spatula/commit/cd6a04dce7c34158c6af34e26ad6e891534e4457))
+* **cli:** add YAML field appender for pull schema merge ([ee0cc05](https://github.com/accidentally-awesome-labs/spatula/commit/ee0cc058b401c67290bd4accfe72d6de14102fa8))
+* **cli:** expose ProjectAdapter on LocalProject interface ([6d9d969](https://github.com/accidentally-awesome-labs/spatula/commit/6d9d96949b6a6e4bf05a7af4cecf9abb2ed6b196))
+* **cli:** implement core pull command with 9-step flow ([ef58391](https://github.com/accidentally-awesome-labs/spatula/commit/ef5839179a3f91e00fb6fb6493f7bf863cd50c49))
+* **cli:** register add, config, setup, estimate commands in CLI ([1e9fd28](https://github.com/accidentally-awesome-labs/spatula/commit/1e9fd2869f8afc1f818ffedf357e805b8c2e4e2e))
+* **cli:** register pull command in CLI entrypoint ([8d7b811](https://github.com/accidentally-awesome-labs/spatula/commit/8d7b811c299d591fe03808502ccbbf247b2a0128))
+* **cli:** register remote and push commands in CLI entrypoint ([c83cec2](https://github.com/accidentally-awesome-labs/spatula/commit/c83cec2ded8f1f49efe953cfea9f3f1a0b9a4273))
+* **cli:** register schema, export, explore, review commands ([3b78c75](https://github.com/accidentally-awesome-labs/spatula/commit/3b78c75ed399456670e928305e1fa0104b62842d))
+* **cli:** wire desktop + webhook notifications into spatula run ([b00787c](https://github.com/accidentally-awesome-labs/spatula/commit/b00787c2b3dde81a0825176954b4114c49ac02ac))
+* **cli:** wire source filter into explorer data fetching ([77bd938](https://github.com/accidentally-awesome-labs/spatula/commit/77bd93826927573b18b006f1f071f328492249dc))
+* **core:** add 8 project-level health checks for spatula doctor ([9ebf143](https://github.com/accidentally-awesome-labs/spatula/commit/9ebf1431011571981776af146b74a295e92134d8))
+* **core:** add CssExtractor for offline CSS-only extraction + wire into test-url ([e714fde](https://github.com/accidentally-awesome-labs/spatula/commit/e714fde0a1b13b49946f97585b839255e7f8ee1a))
+* **db:** add pull-flow methods to SQLite entity and run repos ([2810342](https://github.com/accidentally-awesome-labs/spatula/commit/28103429a13676ab1a88a39bd82f4bf159fa1982))
+* extend createTestApp with authStrategy param, repos, auditLogger ([e7741e4](https://github.com/accidentally-awesome-labs/spatula/commit/e7741e4008da3acae57715415831909a77f4c3c7))
+* flip default LLM model to deepseek/deepseek-v4-pro + add pricing ([342729e](https://github.com/accidentally-awesome-labs/spatula/commit/342729eff64d59c62236e6e81750336111b45495))
+* register Tier 5B and Tier 5 in tier registry ([d08d2b1](https://github.com/accidentally-awesome-labs/spatula/commit/d08d2b19a59c3c62cb0af7c0696988f35dc26700))
+* Wave 5-6  deferred items (10 items, 16 commits) ([413ac19](https://github.com/accidentally-awesome-labs/spatula/commit/413ac1992a1b33feea8081e60ccdd08c2cf13146))
+* wrap Ollama manager into ServiceManager interface ([2938d4d](https://github.com/accidentally-awesome-labs/spatula/commit/2938d4dfff38066a6a7e6c2bfe40ba1e330c08c5))
+
+
+### Bug Fixes
+
+* **15-03:** clean up post-carveout lint residue ([9785066](https://github.com/accidentally-awesome-labs/spatula/commit/9785066b6078cfd6f005824cb24fca3aa23e7f08))
+* **15-ci:** get PR CI green  format pass, lint cleanup, workflow fixes ([918f364](https://github.com/accidentally-awesome-labs/spatula/commit/918f3649e216204971fe9c12b00e8a39d70c980a))
+* **15-ci:** skip testUrl CSS-only test that needs Chromium binary ([0e6c1d5](https://github.com/accidentally-awesome-labs/spatula/commit/0e6c1d57c7bbfe8162d54e76ac25fce3abaec594))
+* **15-followup:** properly address E2E + testUrl, remove continue-on-error ([8e387a7](https://github.com/accidentally-awesome-labs/spatula/commit/8e387a71ea57c94087f3ea6be64d403f1a63eb9f))
+* **15-followup:** retire post-merge pg_dump gate + bump CI-flaky test timeouts ([95f0127](https://github.com/accidentally-awesome-labs/spatula/commit/95f0127a6715cbb8ee8fb5d0550cff04fab4dfe9))
+* add error boundaries to extraction/action pull loops + defer storageBytesUsed ([733f298](https://github.com/accidentally-awesome-labs/spatula/commit/733f2986d4cd13947e58e488180dfe9a0cf1fe57))
+* add required timeout/respectRobotsTxt to Firecrawl crawl() calls ([498c802](https://github.com/accidentally-awesome-labs/spatula/commit/498c802813c032a13854d9348f0d2bcd6f69a2ec))
+* address code quality review findings for Tier 5B ([71e7829](https://github.com/accidentally-awesome-labs/spatula/commit/71e7829441d04c11f3cef934ad7abcd81c03e590))
+* address deferred review findings ([2398ce7](https://github.com/accidentally-awesome-labs/spatula/commit/2398ce7e75e182ae2a58e3de5f2408975fbc8be0))
+* address Tier 5A code quality review findings ([e73c35b](https://github.com/accidentally-awesome-labs/spatula/commit/e73c35bfac8a7238fba64d38b6b505afae564d1e))
+* address Tier 5A spec compliance review findings ([317cfd6](https://github.com/accidentally-awesome-labs/spatula/commit/317cfd6793456938b93520e3388703ddcbf712a4))
+* address type error in conversation test and minor cleanup ([4320942](https://github.com/accidentally-awesome-labs/spatula/commit/43209428e4bf2541c1e78c21aa90e86ce6fea6d5))
+* address Wave 4-2 code quality review findings ([a0c9ded](https://github.com/accidentally-awesome-labs/spatula/commit/a0c9ded02c9cdae499d2e99004f814fc5b89d430))
+* address Wave 4-3 code quality review findings ([baf3082](https://github.com/accidentally-awesome-labs/spatula/commit/baf30820c823e7c35697467022bb43b4bd1de29a))
+* address Wave 4-3 spec compliance review findings ([c9d180a](https://github.com/accidentally-awesome-labs/spatula/commit/c9d180a07624c9d564b5932f5e4c29c4f3f77239))
+* **ci:** bump exportFromDataSource timeout to 30s for CI cold-load ([67de7a1](https://github.com/accidentally-awesome-labs/spatula/commit/67de7a1fb219315e6d4a086def4164111b933c91))
+* **cli:** add error boundary to entity-sources pull loop ([d775ef6](https://github.com/accidentally-awesome-labs/spatula/commit/d775ef6227920718ffe0203fbe127ac0b3b8aefe))
+* **cli:** address code quality review findings ([adf0148](https://github.com/accidentally-awesome-labs/spatula/commit/adf0148e6986a15bd5e06a45d292d87fefff5880))
+* **cli:** address spec compliance gaps in pull command ([f0e8241](https://github.com/accidentally-awesome-labs/spatula/commit/f0e8241117ab5b0d6d384a4c3ba369a3d3d5536e))
+* **cli:** cast adapter type in handlePullCommand for schemaRepo compat ([8db9074](https://github.com/accidentally-awesome-labs/spatula/commit/8db90742c0f744ed780b31a5e41cbbb93dd0200c))
+* **cli:** fix Tier 4 e2e test failures for API lifecycle, webhooks, and Firecrawl ([9b31272](https://github.com/accidentally-awesome-labs/spatula/commit/9b31272fdabd7726c7f758ef58c1b7db40f653d7))
+* **cli:** remove unused Text import from review command ([7804b5b](https://github.com/accidentally-awesome-labs/spatula/commit/7804b5b0ed05f7bdf72feff3f74f4fd9b8abdf76))
+* **cli:** reset --keep-remote cleans orphan entity_sources rows ([51d088d](https://github.com/accidentally-awesome-labs/spatula/commit/51d088d19a6da6ec75d4f7453fb4055cd5f60597))
+* **cli:** wire ApiDataSource status fields to job stats instead of stub zeros ([a5b205a](https://github.com/accidentally-awesome-labs/spatula/commit/a5b205ac1b8c50ce8ce81fa5d7003f9f0d913264))
+* Docker managers reuse existing containers, add ioredis devDep ([c71440f](https://github.com/accidentally-awesome-labs/spatula/commit/c71440f54a1f00cb1f72945548d45a9c889f4f5e))
+* fix Tier 3 Ollama lifecycle and relax real LLM assertions ([fdd14cb](https://github.com/accidentally-awesome-labs/spatula/commit/fdd14cb6a73c8e3fe0d8f2aa520589792d2987fd))
+* initialize mockConfig to null in remote-watch test ([2f27fab](https://github.com/accidentally-awesome-labs/spatula/commit/2f27faba60c8e8275a3ed2bb146965885e60b773))
+* remove unused DataEvent import from ApiDataSource ([cc95461](https://github.com/accidentally-awesome-labs/spatula/commit/cc954615dd5e0a0b0f966295b48c6253245557cd))
+* resolve 6 Tier 5A test failures against real Docker Postgres + Redis ([367728d](https://github.com/accidentally-awesome-labs/spatula/commit/367728dd10fbe2a36deca7a7716e3ba009c6c61d))
+* resolve pre-existing TypeScript build errors across API and CLI ([74ba6a3](https://github.com/accidentally-awesome-labs/spatula/commit/74ba6a328e95593fc87b602f5383debe84be51f2))
+* resolve Tier 5B test failures against real Docker Postgres + Redis ([e3c94e7](https://github.com/accidentally-awesome-labs/spatula/commit/e3c94e7e42d45501dd6c8350872f98293fc3d0c0))
+* return 404 (not 500) for cross-tenant action approve/reject ([bb7da95](https://github.com/accidentally-awesome-labs/spatula/commit/bb7da954bbbead30f9010c79b67eb06854166d29))
+
+
+### Dependencies
+
+* The following workspace dependencies were updated
+  * dependencies
+    * @spatula/core bumped to 0.1.0
+    * @spatula/db bumped to 0.1.0
+    * @spatula/shared bumped to 0.1.0
+  * devDependencies
+    * @spatula/api bumped to 0.1.0
+    * @spatula/queue bumped to 0.1.0
+</details>
+
+<details><summary>core: 0.1.0</summary>
+
+## [0.1.0](https://github.com/accidentally-awesome-labs/spatula/compare/core-v0.0.1...core-v0.1.0) (2026-06-11)
+
+
+### Features
+
+* **16-2:** create @spatula/core-types package with frozen ErrorCode + schemas + enums ([cd07820](https://github.com/accidentally-awesome-labs/spatula/commit/cd0782052c7e6d73faa98baadb30b7746043de0f))
+* **16-5:** extend release-please to 8 packages + linked-versions + node-workspace plugins ([76a030a](https://github.com/accidentally-awesome-labs/spatula/commit/76a030af9b4558594f39d6513e07c79053c0ee54))
+* **18-01:** adversarial suite + CI lane + issue template + corpus-refresh doc (SEC-02, SEC-03) ([d49fceb](https://github.com/accidentally-awesome-labs/spatula/commit/d49fcebbf18ea61575bb17974404162bb52b565c))
+* **18-01:** apply 7 prompt-injection mitigations to StaticExtractor (SEC-01) ([d2e83e3](https://github.com/accidentally-awesome-labs/spatula/commit/d2e83e31aa74e7738862ae9b54fe06c941671928))
+* **18-01:** output-content scanner + pinned-models + adversarial fixtures ([6fb1edf](https://github.com/accidentally-awesome-labs/spatula/commit/6fb1edf6ec8dbd61170bb050c5679601ea627068))
+* **18-04:** README legal banner + default User-Agent crawler-defaults (LEGAL-07/08) ([a7088da](https://github.com/accidentally-awesome-labs/spatula/commit/a7088da84fe6ccfb348cc9cd5cd8d7188d0a0cba))
+* **18-05:** forensic archiver + StaticExtractor wiring (SEC-04) ([1a42073](https://github.com/accidentally-awesome-labs/spatula/commit/1a420733a55c49bda086521f763e6aed609e0353))
+* add health check framework, system/server checks, and spatula doctor ([e16b4b4](https://github.com/accidentally-awesome-labs/spatula/commit/e16b4b40ea8ab3773974900fdfc73b8178bd86ce))
+* **api:** add billing routes (subscription, invoices, portal) and wire AppDeps ([053dbc4](https://github.com/accidentally-awesome-labs/spatula/commit/053dbc44854fe8f54e985fc4c277675eeb893227))
+* **billing:** wire QuotaEnforcer into job-manager (jobs), crawl worker (pages), LLM recorder (tokens), export orchestrator (storage) ([4da065f](https://github.com/accidentally-awesome-labs/spatula/commit/4da065faec12fa2d724a2ec5b6b52e832d01ccb1))
+* **carveout:** confirm SQLite schema has no billing coupling ([7d2e818](https://github.com/accidentally-awesome-labs/spatula/commit/7d2e8186239b2facc21aa4563bf4d8c83e157530))
+* **carveout:** delete Section A billing files from OSS (history preserved in spatula-saas) ([20318a6](https://github.com/accidentally-awesome-labs/spatula/commit/20318a66f7da62cd5e484cdeb32a2dd20b953243))
+* **carveout:** remove QuotaEnforcer coupling from queue + core + api layers ([c449fcd](https://github.com/accidentally-awesome-labs/spatula/commit/c449fcdb2ebb8265bd3462f7e2a83e114c236fda))
+* **core:** add 8 project-level health checks for spatula doctor ([9ebf143](https://github.com/accidentally-awesome-labs/spatula/commit/9ebf1431011571981776af146b74a295e92134d8))
+* **core:** add CssExtractor for offline CSS-only extraction + wire into test-url ([e714fde](https://github.com/accidentally-awesome-labs/spatula/commit/e714fde0a1b13b49946f97585b839255e7f8ee1a))
+* **core:** add QuotaEnforcer service for billing dimension checks ([2c04cfe](https://github.com/accidentally-awesome-labs/spatula/commit/2c04cfed577f1a59fbf4bb97a8bc29e4574eab76))
+* **core:** add recursive objectFields/arrayItemType comparison to config diff ([d969f09](https://github.com/accidentally-awesome-labs/spatula/commit/d969f09129309cf7d7f8b15fa0118b28472dcfe0))
+* **core:** add saveGlobalConfig utility with merge support ([6d08bbc](https://github.com/accidentally-awesome-labs/spatula/commit/6d08bbc97b81a57c9c8497e2e76bdafe01969564))
+* **core:** add table extraction to css-extractor ([1c7b362](https://github.com/accidentally-awesome-labs/spatula/commit/1c7b362dcc9de5875ff48ea431b3ec1d03dcabe5))
+* **core:** extract cost from OpenRouter x-openrouter-cost response header ([22c2e69](https://github.com/accidentally-awesome-labs/spatula/commit/22c2e695ea61dc23c211aafb4f67af597e7410fe))
+* flip default LLM model to deepseek/deepseek-v4-pro + add pricing ([342729e](https://github.com/accidentally-awesome-labs/spatula/commit/342729eff64d59c62236e6e81750336111b45495))
+* Wave 5-6  deferred items (10 items, 16 commits) ([413ac19](https://github.com/accidentally-awesome-labs/spatula/commit/413ac1992a1b33feea8081e60ccdd08c2cf13146))
+* wire config diff and re-extraction into LocalPipelineRunner ([b3e51d9](https://github.com/accidentally-awesome-labs/spatula/commit/b3e51d9be342a880e31b78d794be8a24fdc546a4))
+
+
+### Bug Fixes
+
+* **15-03:** clean up post-carveout lint residue ([9785066](https://github.com/accidentally-awesome-labs/spatula/commit/9785066b6078cfd6f005824cb24fca3aa23e7f08))
+* **15-ci:** get PR CI green  format pass, lint cleanup, workflow fixes ([918f364](https://github.com/accidentally-awesome-labs/spatula/commit/918f3649e216204971fe9c12b00e8a39d70c980a))
+* address spec compliance review findings ([1c0e869](https://github.com/accidentally-awesome-labs/spatula/commit/1c0e8699069fa788409254065a4e483d2f55830e))
+* address Wave 4-1 code quality review findings ([f97c5f7](https://github.com/accidentally-awesome-labs/spatula/commit/f97c5f7813ff20e73eefc9e98b0b63c5db5f3639))
+* address Wave 4-2 code quality review findings ([a0c9ded](https://github.com/accidentally-awesome-labs/spatula/commit/a0c9ded02c9cdae499d2e99004f814fc5b89d430))
+* **ci:** clear lint errors exposed on main (no-unused-vars + import-type) ([07ec58c](https://github.com/accidentally-awesome-labs/spatula/commit/07ec58c04ac411b0da146dfa2d827813ecd0d30e))
+* remove unused expect import in example-configs test ([159070a](https://github.com/accidentally-awesome-labs/spatula/commit/159070a704a311cad7d9a0118fde8c8565c2dafc))
+
+
+### Dependencies
+
+* The following workspace dependencies were updated
+  * dependencies
+    * @spatula/core-types bumped to 0.1.0
+    * @spatula/shared bumped to 0.1.0
+</details>
+
+<details><summary>db: 0.1.0</summary>
+
+## [0.1.0](https://github.com/accidentally-awesome-labs/spatula/compare/db-v0.0.1...db-v0.1.0) (2026-06-11)
+
+
+### Features
+
+* **16-5:** extend release-please to 8 packages + linked-versions + node-workspace plugins ([76a030a](https://github.com/accidentally-awesome-labs/spatula/commit/76a030af9b4558594f39d6513e07c79053c0ee54))
+* **16-5:** SQLite benchmark + docs/architecture.md decision (SDK-05) ([8aab113](https://github.com/accidentally-awesome-labs/spatula/commit/8aab11345ad0fa0526ce04a116b43802fd0e6757))
+* **17-01:** add supersedes columns to api_keys via Drizzle migration ([048330c](https://github.com/accidentally-awesome-labs/spatula/commit/048330c04e3d1f71c59d276d1cfa9f22e709183c))
+* **17-04:** add ApiKeyRepository.rotate()  transactional new-key + grace-expire ([151eded](https://github.com/accidentally-awesome-labs/spatula/commit/151eded71266c06bb607e3a436b0c11e1fd3ec38))
+* **18-06:** TenantDataRepository  cascade delete + audit redaction + tombstone ([34840dc](https://github.com/accidentally-awesome-labs/spatula/commit/34840dc028a11d571c5f687a360b67dd8e679e3e))
+* **api:** add pageUrl to extractions, entity-sources endpoint, job stats enrichment ([da98cba](https://github.com/accidentally-awesome-labs/spatula/commit/da98cbad19e4d00642fa997a417b9d205995cb89))
+* **carveout:** confirm SQLite schema has no billing coupling ([7d2e818](https://github.com/accidentally-awesome-labs/spatula/commit/7d2e8186239b2facc21aa4563bf4d8c83e157530))
+* **carveout:** delete Section A billing files from OSS (history preserved in spatula-saas) ([20318a6](https://github.com/accidentally-awesome-labs/spatula/commit/20318a66f7da62cd5e484cdeb32a2dd20b953243))
+* **carveout:** drop plan + stripeCustomerId columns from tenants schema + repo ([e88d322](https://github.com/accidentally-awesome-labs/spatula/commit/e88d322db96d2c893abc862cf759d62b5d6994c3))
+* **carveout:** namespace OSS migrations via __drizzle_migrations_oss tracking table ([6ea4fb7](https://github.com/accidentally-awesome-labs/spatula/commit/6ea4fb7a7669c4736b77e8b9cb6cd14539843a2a))
+* **carveout:** remove usage_records schema + repo exports ([e4e9bbc](https://github.com/accidentally-awesome-labs/spatula/commit/e4e9bbc5b084d54ee1de65701f677835e4c9da6b))
+* **carveout:** squash 12 migrations into 0000_v1_baseline for v1.0 ([4427c80](https://github.com/accidentally-awesome-labs/spatula/commit/4427c80e39ba5fbc7baed8713b3e4713d94b0a13))
+* **cli:** add crawl history dedup to spatula add with --no-history bypass ([6c695c8](https://github.com/accidentally-awesome-labs/spatula/commit/6c695c8808bf9e661824a6d5f9583dd8069380f7))
+* **db:** add cross-tenant findAll, countAll, and forceCancel to JobRepository ([b9bad11](https://github.com/accidentally-awesome-labs/spatula/commit/b9bad11d6155645ca1c0affbed507a9ccc95bfd3))
+* **db:** add delete and deleteByPrefix to ProjectMetaRepository ([72e91ff](https://github.com/accidentally-awesome-labs/spatula/commit/72e91ff40a321c3649d0f7bf6dcac10313bced58))
+* **db:** add findAll, countAll, and getTotalStorage to TenantRepository ([af35a71](https://github.com/accidentally-awesome-labs/spatula/commit/af35a713a62cb6939d795fcb0aacd158acb3aee4))
+* **db:** add nullable runId column to SQLite entities table with migration ([6041d2a](https://github.com/accidentally-awesome-labs/spatula/commit/6041d2ae840368782192e7dcb3db741d34dbac14))
+* **db:** add plan and stripe_customer_id columns to tenants table ([6f3fd29](https://github.com/accidentally-awesome-labs/spatula/commit/6f3fd29d9db429d853ac1cd595f4eba41c8096a8))
+* **db:** add pull-flow methods to SQLite entity and run repos ([2810342](https://github.com/accidentally-awesome-labs/spatula/commit/28103429a13676ab1a88a39bd82f4bf159fa1982))
+* **db:** add runId/pageUrl columns to SQLite extractions and actions for pull flow ([dd61157](https://github.com/accidentally-awesome-labs/spatula/commit/dd6115726b75f45922a5d4e94ec71dea354d78b5))
+* **db:** add upsertBatch/deleteByRunIds for extractions, actions, entity sources ([a476429](https://github.com/accidentally-awesome-labs/spatula/commit/a476429ad2b168848bd15cde5489950008db069b))
+* **db:** add usage_records schema and UsageRecordRepository ([b2dd047](https://github.com/accidentally-awesome-labs/spatula/commit/b2dd047c915dd4ac02745a1c1a20260dc77bdbcc))
+* **db:** add user_tenants schema and migration ([1fbe38b](https://github.com/accidentally-awesome-labs/spatula/commit/1fbe38bd205afd51c20718c54fcd24d60ecba65a))
+* **db:** add UserTenantRepository with CRUD operations ([6701018](https://github.com/accidentally-awesome-labs/spatula/commit/670101843c9c019c9e0cb1971145fa8351b8ac7b))
+* Wave 5-6  deferred items (10 items, 16 commits) ([413ac19](https://github.com/accidentally-awesome-labs/spatula/commit/413ac1992a1b33feea8081e60ccdd08c2cf13146))
+* wire config diff and re-extraction into LocalPipelineRunner ([b3e51d9](https://github.com/accidentally-awesome-labs/spatula/commit/b3e51d9be342a880e31b78d794be8a24fdc546a4))
+
+
+### Bug Fixes
+
+* **15-04:** use nested drizzle-kit migrations.table key ([4a2c8a3](https://github.com/accidentally-awesome-labs/spatula/commit/4a2c8a302d94ce5ec29e8a82b5087867b5752340))
+* **15-ci:** get PR CI green  format pass, lint cleanup, workflow fixes ([918f364](https://github.com/accidentally-awesome-labs/spatula/commit/918f3649e216204971fe9c12b00e8a39d70c980a))
+* **15-ci:** normalize pg_dump OWNER + access-method noise, bump db exports timeout ([bc8292f](https://github.com/accidentally-awesome-labs/spatula/commit/bc8292fa77792fec409164b668b128c236b30d64))
+* **15-followup:** retire post-merge pg_dump gate + bump CI-flaky test timeouts ([95f0127](https://github.com/accidentally-awesome-labs/spatula/commit/95f0127a6715cbb8ee8fb5d0550cff04fab4dfe9))
+* address code review findings  validate plan from Stripe, add stripe_customer_id index, fix idempotency key, safe metering deps construction ([bf6ee6c](https://github.com/accidentally-awesome-labs/spatula/commit/bf6ee6c107d979f92b8975f51cda1dcf28327ca6))
+* address deferred review findings ([2398ce7](https://github.com/accidentally-awesome-labs/spatula/commit/2398ce7e75e182ae2a58e3de5f2408975fbc8be0))
+* **auth:** extract JWT name/email for tenant naming, document owner constraint, add StorageError tests ([9837cc1](https://github.com/accidentally-awesome-labs/spatula/commit/9837cc177126140a62a7bc49309c81ee55fbad5f))
+* **carveout:** preserve content_store CHECK constraints in v1 baseline ([8d5db6c](https://github.com/accidentally-awesome-labs/spatula/commit/8d5db6c8e4828b6325c547218a362a0c7b144082))
+* **db:** auto-apply migrations in integration test beforeAll ([f101936](https://github.com/accidentally-awesome-labs/spatula/commit/f1019369f93f0dd757221698eca46b0605776bf2))
+* **db:** cast findByJob return to satisfy ExtractionRepo interface after pageId nullable change ([adfe5f6](https://github.com/accidentally-awesome-labs/spatula/commit/adfe5f607473cfbcb17b1c1ea0d565f49ca4e541))
+* **db:** centralize test migrations via vitest globalSetup ([a492c7f](https://github.com/accidentally-awesome-labs/spatula/commit/a492c7f9c9db62ecf2ac7cd22f73a54ce7afba79))
+* **db:** composite cursor for EntitySourceRepository.findByJobCursor ([9a19bc2](https://github.com/accidentally-awesome-labs/spatula/commit/9a19bc2917058667892ab6eec907503a4e7127c5))
+* **db:** correctly count within-batch duplicate IDs as updates in upsertBatch ([c1d7b1c](https://github.com/accidentally-awesome-labs/spatula/commit/c1d7b1c9e649c39510425d8e94356b71223b471f))
+* **db:** replace count-based upsertBatch/deleteByRunIds with precise tracking ([339c748](https://github.com/accidentally-awesome-labs/spatula/commit/339c748dcf04810d7a86290a472b4a3c79fe454a))
+* **db:** within-batch dup count in extraction + action upsertBatch ([a39dc2d](https://github.com/accidentally-awesome-labs/spatula/commit/a39dc2d708af31578713d617b2f8e09dbfe7a930))
+* resolve 6 Tier 5A test failures against real Docker Postgres + Redis ([367728d](https://github.com/accidentally-awesome-labs/spatula/commit/367728dd10fbe2a36deca7a7716e3ba009c6c61d))
+
+
+### Performance Improvements
+
+* **db:** add index on entities.runId for pull-flow queries ([03504b3](https://github.com/accidentally-awesome-labs/spatula/commit/03504b3e1a644707ca05f56a1f036b93a85d9164))
+
+
+### Dependencies
+
+* The following workspace dependencies were updated
+  * dependencies
+    * @spatula/core bumped to 0.1.0
+    * @spatula/shared bumped to 0.1.0
+</details>
+
+<details><summary>queue: 0.1.0</summary>
+
+## [0.1.0](https://github.com/accidentally-awesome-labs/spatula/compare/queue-v0.0.1...queue-v0.1.0) (2026-06-11)
+
+
+### Features
+
+* **16-1:** add frozen ErrorCode enum + DOMAIN.CODE subclasses in @spatula/shared ([9a7f86e](https://github.com/accidentally-awesome-labs/spatula/commit/9a7f86e873b20f758b190c2ccd706b5ceeadbe2d))
+* **16-5:** extend release-please to 8 packages + linked-versions + node-workspace plugins ([76a030a](https://github.com/accidentally-awesome-labs/spatula/commit/76a030af9b4558594f39d6513e07c79053c0ee54))
+* **17-02:** dual-publish events to Redis Stream in RedisEventPublisher ([c2f3b59](https://github.com/accidentally-awesome-labs/spatula/commit/c2f3b591b3cefd754823d01490729fc478686ab9))
+* **18-06:** tenant-delete BullMQ queue + cascade worker (idempotent + fail-loud) ([0a77bec](https://github.com/accidentally-awesome-labs/spatula/commit/0a77becba35801c4dc7486a27d82f889ca6da00b))
+* **19-01:** export startWorker() lifecycle handle from queue package ([280db73](https://github.com/accidentally-awesome-labs/spatula/commit/280db738b046c3dcf775921240d79f7d0d637647))
+* **19-02:** distroless api + worker runtime images (DEPLOY-03) ([92dd2dd](https://github.com/accidentally-awesome-labs/spatula/commit/92dd2ddd985d772e25abb8df49aacbb8a0a4347b))
+* add @spatula/queue devDep, export createWebhookWorker, add tier 5a ([e7af7c1](https://github.com/accidentally-awesome-labs/spatula/commit/e7af7c1a2fb12d802b85a1efd8aeb4a7b8283ca7))
+* add webhook config schema and enqueue helper ([d5764f1](https://github.com/accidentally-awesome-labs/spatula/commit/d5764f1bd54aaa5ad7fb5fa60bab29e45d54d4a5))
+* **billing:** wire QuotaEnforcer into job-manager (jobs), crawl worker (pages), LLM recorder (tokens), export orchestrator (storage) ([4da065f](https://github.com/accidentally-awesome-labs/spatula/commit/4da065faec12fa2d724a2ec5b6b52e832d01ccb1))
+* **carveout:** confirm SQLite schema has no billing coupling ([7d2e818](https://github.com/accidentally-awesome-labs/spatula/commit/7d2e8186239b2facc21aa4563bf4d8c83e157530))
+* **carveout:** delete Section A billing files from OSS (history preserved in spatula-saas) ([20318a6](https://github.com/accidentally-awesome-labs/spatula/commit/20318a66f7da62cd5e484cdeb32a2dd20b953243))
+* **carveout:** remove metering worker wiring + METERING queue name ([8b1dfb7](https://github.com/accidentally-awesome-labs/spatula/commit/8b1dfb792d050ba8b8eb70a81bc0c8485aef9b87))
+* **carveout:** remove QuotaEnforcer coupling from queue + core + api layers ([c449fcd](https://github.com/accidentally-awesome-labs/spatula/commit/c449fcdb2ebb8265bd3462f7e2a83e114c236fda))
+* **queue:** add audit logging for quota exceeded events in JobManager ([4ec94af](https://github.com/accidentally-awesome-labs/spatula/commit/4ec94af33fa9b1f7d9e7e53aed6070b37b529d0d))
+* **queue:** add CLEANUP queue name constant ([b013098](https://github.com/accidentally-awesome-labs/spatula/commit/b01309885bf6f428637485368e01570ebd2aa17b))
+* **queue:** add daily cleanup worker with three-phase FK-safe retention ([d59de51](https://github.com/accidentally-awesome-labs/spatula/commit/d59de51c4bf32364753b0686515270b6c0e2510a))
+* **queue:** add hourly metering worker for Stripe usage reporting ([a4d8d97](https://github.com/accidentally-awesome-labs/spatula/commit/a4d8d9796dabe5ed3478a155f7c966c9082b4815))
+* **queue:** add webhook queue, worker, and Bull Board registration ([8e1cc24](https://github.com/accidentally-awesome-labs/spatula/commit/8e1cc24e2ccc43726293e554c8c6916ce2990806))
+* **queue:** add WebhookSender with HMAC-SHA256 signing ([b551493](https://github.com/accidentally-awesome-labs/spatula/commit/b551493281381ccb40e28f8180b8d926e70eeb90))
+* **queue:** register cleanup worker in entrypoint (daily at 03:00 UTC) ([89c29ac](https://github.com/accidentally-awesome-labs/spatula/commit/89c29ac7c69bff519a1f1e6b606926d359bff302))
+* Wave 5-6  deferred items (10 items, 16 commits) ([413ac19](https://github.com/accidentally-awesome-labs/spatula/commit/413ac1992a1b33feea8081e60ccdd08c2cf13146))
+* wire webhook events into 5 integration points + add worker tests ([4131483](https://github.com/accidentally-awesome-labs/spatula/commit/4131483648337dcbbb56e354164d58f818284b62))
+
+
+### Bug Fixes
+
+* **15-03:** clean up post-carveout lint residue ([9785066](https://github.com/accidentally-awesome-labs/spatula/commit/9785066b6078cfd6f005824cb24fca3aa23e7f08))
+* **15-ci:** get PR CI green  format pass, lint cleanup, workflow fixes ([918f364](https://github.com/accidentally-awesome-labs/spatula/commit/918f3649e216204971fe9c12b00e8a39d70c980a))
+* address code review findings  validate plan from Stripe, add stripe_customer_id index, fix idempotency key, safe metering deps construction ([bf6ee6c](https://github.com/accidentally-awesome-labs/spatula/commit/bf6ee6c107d979f92b8975f51cda1dcf28327ca6))
+* address spec compliance review findings ([1c0e869](https://github.com/accidentally-awesome-labs/spatula/commit/1c0e8699069fa788409254065a4e483d2f55830e))
+* **api:** clear pre-existing TypeScript errors ([46cf144](https://github.com/accidentally-awesome-labs/spatula/commit/46cf144e51d4aa8d421d6c3a7e4fddaf8e809506))
+
+
+### Dependencies
+
+* The following workspace dependencies were updated
+  * dependencies
+    * @spatula/core bumped to 0.1.0
+    * @spatula/db bumped to 0.1.0
+    * @spatula/shared bumped to 0.1.0
+</details>
+
+<details><summary>shared: 0.1.0</summary>
+
+## [0.1.0](https://github.com/accidentally-awesome-labs/spatula/compare/shared-v0.0.1...shared-v0.1.0) (2026-06-11)
+
+
+### Features
+
+* **16-1:** add frozen ErrorCode enum + DOMAIN.CODE subclasses in @spatula/shared ([9a7f86e](https://github.com/accidentally-awesome-labs/spatula/commit/9a7f86e873b20f758b190c2ccd706b5ceeadbe2d))
+* **16-2:** create @spatula/core-types package with frozen ErrorCode + schemas + enums ([cd07820](https://github.com/accidentally-awesome-labs/spatula/commit/cd0782052c7e6d73faa98baadb30b7746043de0f))
+* **16-5:** extend release-please to 8 packages + linked-versions + node-workspace plugins ([76a030a](https://github.com/accidentally-awesome-labs/spatula/commit/76a030af9b4558594f39d6513e07c79053c0ee54))
+* **18-02:** shared redactor module + unit tests ([28d29e0](https://github.com/accidentally-awesome-labs/spatula/commit/28d29e0e90b5abf60143234b1519e7e23f85e4c4))
+* **18-02:** wire redactor into pino logger + OTel span processor ([a23aaab](https://github.com/accidentally-awesome-labs/spatula/commit/a23aaabfd313b72d016e6e11d016a9e5972d30e5))
+* **18-02:** wire redactor into Sentry + per-sink redaction test suite ([b1bf3c0](https://github.com/accidentally-awesome-labs/spatula/commit/b1bf3c0e2be790c96ca5484105a4e8f5f7fb0db5))
+* **18-05:** admin:forensic:read scope + forensic endpoint + OpenAPI experimental (SEC-05) ([adb17dc](https://github.com/accidentally-awesome-labs/spatula/commit/adb17dc433e6bea264f2b7a450d69c847721aaa1))
+* **auth:** add strategy field to AuthResult, stop requiring tenant_id in JWT ([736cf59](https://github.com/accidentally-awesome-labs/spatula/commit/736cf5952c10f03d5d5c75dd0684104ede9afb2b))
+* **carveout:** confirm SQLite schema has no billing coupling ([7d2e818](https://github.com/accidentally-awesome-labs/spatula/commit/7d2e8186239b2facc21aa4563bf4d8c83e157530))
+* **carveout:** delete Section A billing files from OSS (history preserved in spatula-saas) ([20318a6](https://github.com/accidentally-awesome-labs/spatula/commit/20318a66f7da62cd5e484cdeb32a2dd20b953243))
+* **carveout:** remove billing module + tier presets + billing scopes + TenantQuotas.rateLimitTier ([d123093](https://github.com/accidentally-awesome-labs/spatula/commit/d123093782d66c479b7af21cdf3352b6971c14f7))
+* **shared:** add billing tier constants and types ([220ae2c](https://github.com/accidentally-awesome-labs/spatula/commit/220ae2c290bd09da0b57f7a99e76b171294a5aa8))
+* **shared:** add webhook event types and config ([7bc277a](https://github.com/accidentally-awesome-labs/spatula/commit/7bc277abc53fdeb16e61e976ec9f4af3c7b417eb))
+* **shared:** register observable gauges for active_jobs, tenant_count, queue_depth ([852f9e1](https://github.com/accidentally-awesome-labs/spatula/commit/852f9e124a9692981bff86695d6b3ce1e1adba8e))
+* Wave 5-6  deferred items (10 items, 16 commits) ([413ac19](https://github.com/accidentally-awesome-labs/spatula/commit/413ac1992a1b33feea8081e60ccdd08c2cf13146))
+
+
+### Bug Fixes
+
+* **15-ci:** get PR CI green  format pass, lint cleanup, workflow fixes ([918f364](https://github.com/accidentally-awesome-labs/spatula/commit/918f3649e216204971fe9c12b00e8a39d70c980a))
+* address deferred review findings ([2398ce7](https://github.com/accidentally-awesome-labs/spatula/commit/2398ce7e75e182ae2a58e3de5f2408975fbc8be0))
+* address spec compliance review findings ([1c0e869](https://github.com/accidentally-awesome-labs/spatula/commit/1c0e8699069fa788409254065a4e483d2f55830e))
+* **auth:** extract JWT name/email for tenant naming, document owner constraint, add StorageError tests ([9837cc1](https://github.com/accidentally-awesome-labs/spatula/commit/9837cc177126140a62a7bc49309c81ee55fbad5f))
+* **docs:** address code review findings for Wave 5-2 plan  add billing scopes, fix cross-package import, document race condition, add missing exports ([a4c3510](https://github.com/accidentally-awesome-labs/spatula/commit/a4c35103f0ab1e1ade1e9737499b37af3c5130f4))
+
+
+### Dependencies
+
+* The following workspace dependencies were updated
+  * dependencies
+    * @spatula/core-types bumped to 0.1.0
+</details>
+
+<details><summary>spatula: 0.0.2</summary>
+
+## [0.0.2](https://github.com/accidentally-awesome-labs/spatula/compare/spatula-v0.0.1...spatula-v0.0.2) (2026-06-11)
+
+
+### Features
+
+* **16-1:** add frozen ErrorCode enum + DOMAIN.CODE subclasses in @spatula/shared ([9a7f86e](https://github.com/accidentally-awesome-labs/spatula/commit/9a7f86e873b20f758b190c2ccd706b5ceeadbe2d))
+* **16-1:** add X-RateLimit-Reset header + config/rate-limits.yaml loader ([c46795e](https://github.com/accidentally-awesome-labs/spatula/commit/c46795ea23fb57b0b3c3037a2d332813cc71cd38))
+* **16-1:** split pagination envelope (cursor canonical, offset deprecated) + RFC 8594 headers ([7b75687](https://github.com/accidentally-awesome-labs/spatula/commit/7b75687e13034bb383001eace346d8bab473fca5))
+* **16-1:** sweep API error envelope to frozen DOMAIN.CODE enum + details ([e3c3ae9](https://github.com/accidentally-awesome-labs/spatula/commit/e3c3ae901773d411a1ea4d03b901ff98e9cac82f))
+* **16-2:** add ESLint rule blocking non-type imports from @spatula/core-types ([5da3ddd](https://github.com/accidentally-awesome-labs/spatula/commit/5da3ddd90f1257e1bece5d1a5871f082c3b901fa))
+* **16-2:** create @spatula/client SDK package with codegen + size-limit gate ([c65ad81](https://github.com/accidentally-awesome-labs/spatula/commit/c65ad81b853032fff8fc1c8bcf53455a8f77db59))
+* **16-2:** create @spatula/core-types package with frozen ErrorCode + schemas + enums ([cd07820](https://github.com/accidentally-awesome-labs/spatula/commit/cd0782052c7e6d73faa98baadb30b7746043de0f))
+* **16-3:** add GET /.well-known/spatula-version + support matrix ([1912241](https://github.com/accidentally-awesome-labs/spatula/commit/191224165f71d44801b428e3517c9576d9710f89))
+* **16-3:** add lazy version probe in @spatula/client (D-12) ([fdc74ae](https://github.com/accidentally-awesome-labs/spatula/commit/fdc74aecd4041adc1d1790c80756462844f2353a))
+* **16-3:** boot-cache OpenAPI 3.1 spec + dev-mode example validator ([79271f3](https://github.com/accidentally-awesome-labs/spatula/commit/79271f343113a7ce6d039505f504848c2d118cdc))
+* **16-4:** scaffold tests/contract suite (vitest config + Ajv2020 + http harness + fixtures) ([9546336](https://github.com/accidentally-awesome-labs/spatula/commit/9546336e8fc40e8eb7bae58c70f6c09b47fb67c1))
+* **16-4:** ship contract test suite (matrix driver + 6 per-REQ suites) + CI gate ([1d5ba4a](https://github.com/accidentally-awesome-labs/spatula/commit/1d5ba4a2515b9d9c9b4c9859e4688897275390e3))
+* **16-5:** @spatula/cli publish prep  tsup dual ESM+CJS + files allowlist + engines + no postinstall ([e9f368d](https://github.com/accidentally-awesome-labs/spatula/commit/e9f368d3a500400d83d8ddaa46f758c843eb203c))
+* **16-5:** extend release-please to 8 packages + linked-versions + node-workspace plugins ([76a030a](https://github.com/accidentally-awesome-labs/spatula/commit/76a030af9b4558594f39d6513e07c79053c0ee54))
+* **16-5:** SDK integration test suite  5 endpoints, mocked default, SPATULA_LIVE_LLM=1 opt-in ([f958c43](https://github.com/accidentally-awesome-labs/spatula/commit/f958c43d63fa8e54c8194e8f0afd97c76875fa3e))
+* **16-5:** SQLite benchmark + docs/architecture.md decision (SDK-05) ([8aab113](https://github.com/accidentally-awesome-labs/spatula/commit/8aab11345ad0fa0526ce04a116b43802fd0e6757))
+* **16-5:** switch release.yml to npm trusted publishing + add release-dry-run.yml ([90b720d](https://github.com/accidentally-awesome-labs/spatula/commit/90b720db8e1f8c06707a8182706e35339ea151ee))
+* **17-01:** add RESOURCE_NOT_FOUND error code to frozen ErrorCode enum ([b17af90](https://github.com/accidentally-awesome-labs/spatula/commit/b17af9039a4310f11d8732ef44b0df1da0d2c9c6))
+* **17-01:** add supersedes columns to api_keys via Drizzle migration ([048330c](https://github.com/accidentally-awesome-labs/spatula/commit/048330c04e3d1f71c59d276d1cfa9f22e709183c))
+* **17-02:** build SSE module  types, RedisStreamBuffer, and route handler ([f54d62a](https://github.com/accidentally-awesome-labs/spatula/commit/f54d62af55ace8c1d19307175fc1642a9d1f2c91))
+* **17-02:** dual-publish events to Redis Stream in RedisEventPublisher ([c2f3b59](https://github.com/accidentally-awesome-labs/spatula/commit/c2f3b591b3cefd754823d01490729fc478686ab9))
+* **17-02:** register SSE createRoute, mount in app, fix auth+timeout+scope guards ([5dfb16c](https://github.com/accidentally-awesome-labs/spatula/commit/5dfb16ce2ac319d712314173f04285bcc2c11fcb))
+* **17-03:** CORS function-form origin matcher with single-label wildcard ([404c364](https://github.com/accidentally-awesome-labs/spatula/commit/404c364ffcbcb45694c0bb9d80748accfe3d5831))
+* **17-03:** docs/api-auth.md authoritative auth doc + scope sync CI gate ([5b6791c](https://github.com/accidentally-awesome-labs/spatula/commit/5b6791c358ab4099cd6be35301c903bf6bacebfd))
+* **17-04:** add ApiKeyRepository.rotate()  transactional new-key + grace-expire ([151eded](https://github.com/accidentally-awesome-labs/spatula/commit/151eded71266c06bb607e3a436b0c11e1fd3ec38))
+* **17-04:** add POST /api/v1/api-keys/:id/rotate route with grace window + audit ([70e5d2c](https://github.com/accidentally-awesome-labs/spatula/commit/70e5d2c96f6b3f816084685243ccaa1178579eba))
+* **17-05:** add README, discovery-doc probe, and D-11 browser + M2M smoke scripts ([0001950](https://github.com/accidentally-awesome-labs/spatula/commit/000195022d6911556261e8e2a1d3a8e73ad10a82))
+* **17-05:** author Dex docker-compose + config + gitignore ([bf45b8b](https://github.com/accidentally-awesome-labs/spatula/commit/bf45b8b5602041457878695f146103086b4c0f0f))
+* **17-06:** add Playwright browser e2e suite  full OIDC + SSE reconnect chain ([abb8b29](https://github.com/accidentally-awesome-labs/spatula/commit/abb8b2940357a3a9e68d9fc9f9840ab9fb36856a))
+* **17-06:** replace getJobEvents stub with real SSE subscribeJobEvents method ([1688500](https://github.com/accidentally-awesome-labs/spatula/commit/1688500d4b90116567c62dbafee61dd8017b3c50))
+* **17-07:** isolation fixtures + OpenAPI-driven cross-tenant generator ([36c1ad5](https://github.com/accidentally-awesome-labs/spatula/commit/36c1ad57e6721be9e8225e1d31e083c26feda664))
+* **17-07:** M2M OIDC client_credentials e2e suite (AUTH-08) ([81416b5](https://github.com/accidentally-awesome-labs/spatula/commit/81416b5919c73792555af73147de10988a955ef4))
+* **17-07:** wire cross-tenant isolation test suite (AUTH-07) ([8886953](https://github.com/accidentally-awesome-labs/spatula/commit/88869538a1eb3224827bef71819c7cff59bb636a))
+* **18-01:** adversarial suite + CI lane + issue template + corpus-refresh doc (SEC-02, SEC-03) ([d49fceb](https://github.com/accidentally-awesome-labs/spatula/commit/d49fcebbf18ea61575bb17974404162bb52b565c))
+* **18-01:** apply 7 prompt-injection mitigations to StaticExtractor (SEC-01) ([d2e83e3](https://github.com/accidentally-awesome-labs/spatula/commit/d2e83e31aa74e7738862ae9b54fe06c941671928))
+* **18-01:** output-content scanner + pinned-models + adversarial fixtures ([6fb1edf](https://github.com/accidentally-awesome-labs/spatula/commit/6fb1edf6ec8dbd61170bb050c5679601ea627068))
+* **18-02:** shared redactor module + unit tests ([28d29e0](https://github.com/accidentally-awesome-labs/spatula/commit/28d29e0e90b5abf60143234b1519e7e23f85e4c4))
+* **18-02:** wire redactor into pino logger + OTel span processor ([a23aaab](https://github.com/accidentally-awesome-labs/spatula/commit/a23aaabfd313b72d016e6e11d016a9e5972d30e5))
+* **18-02:** wire redactor into Sentry + per-sink redaction test suite ([b1bf3c0](https://github.com/accidentally-awesome-labs/spatula/commit/b1bf3c0e2be790c96ca5484105a4e8f5f7fb0db5))
+* **18-03:** add Dependabot + Renovate dependency monitoring configs ([a60500e](https://github.com/accidentally-awesome-labs/spatula/commit/a60500eb53d80547c820fb25ef8cf5d87435bae8))
+* **18-03:** add generate:notices script + THIRD_PARTY_NOTICES.md (LEGAL-04) ([d82da9e](https://github.com/accidentally-awesome-labs/spatula/commit/d82da9e6c8395fe8d56f56cd55b7bfea0d36441a))
+* **18-03:** harden audit.yml with OSV + license allowlist + gitleaks + trufflehog ([5a9a246](https://github.com/accidentally-awesome-labs/spatula/commit/5a9a24699a4def0138832bbca54153c2866101fb))
+* **18-04:** audit SECURITY.md  add GPG key section, response SLA, supported versions ([a2f0149](https://github.com/accidentally-awesome-labs/spatula/commit/a2f014982f165d229892a8527747aaa1b13c53e4))
+* **18-04:** README legal banner + default User-Agent crawler-defaults (LEGAL-07/08) ([a7088da](https://github.com/accidentally-awesome-labs/spatula/commit/a7088da84fe6ccfb348cc9cd5cd8d7188d0a0cba))
+* **18-04:** versioned CLA + CONTRIBUTING.md re-sign policy (LEGAL-06) ([3ccaed2](https://github.com/accidentally-awesome-labs/spatula/commit/3ccaed2feb1ff93fec9a1b1c536152fa699b0556))
+* **18-04:** write TRADEMARK.md + brand/LICENSE-BRAND.md (Task 2 post-checkpoint) ([741f773](https://github.com/accidentally-awesome-labs/spatula/commit/741f773a274ea8bf90ba4c122b9e4105656510c6))
+* **18-05:** admin:forensic:read scope + forensic endpoint + OpenAPI experimental (SEC-05) ([adb17dc](https://github.com/accidentally-awesome-labs/spatula/commit/adb17dc433e6bea264f2b7a450d69c847721aaa1))
+* **18-05:** forensic archiver + StaticExtractor wiring (SEC-04) ([1a42073](https://github.com/accidentally-awesome-labs/spatula/commit/1a420733a55c49bda086521f763e6aed609e0353))
+* **18-05:** SDK client.experimental.forensic.listExtractions surface (SEC-05) ([df76455](https://github.com/accidentally-awesome-labs/spatula/commit/df76455bea8f87c973bfaae620b172c06f6e7afe))
+* **18-06:** DELETE + import admin routes (async 202) ([4ad8a9f](https://github.com/accidentally-awesome-labs/spatula/commit/4ad8a9fa3fac877ff463a481660b358102291bc5))
+* **18-06:** tenant-delete BullMQ queue + cascade worker (idempotent + fail-loud) ([0a77bec](https://github.com/accidentally-awesome-labs/spatula/commit/0a77becba35801c4dc7486a27d82f889ca6da00b))
+* **18-06:** TenantDataRepository  cascade delete + audit redaction + tombstone ([34840dc](https://github.com/accidentally-awesome-labs/spatula/commit/34840dc028a11d571c5f687a360b67dd8e679e3e))
+* **18-07:** spatula admin tenant delete/export/import CLI commands ([872218c](https://github.com/accidentally-awesome-labs/spatula/commit/872218cb1d1f3b03f532ad7a0d9d062233213a3a))
+* **19-01:** API standalone bootstrap (main.ts) + embedded-worker shim ([4d365fd](https://github.com/accidentally-awesome-labs/spatula/commit/4d365fd8fdf83024f97a0a5cff611af2d93bbbb5))
+* **19-01:** export startWorker() lifecycle handle from queue package ([280db73](https://github.com/accidentally-awesome-labs/spatula/commit/280db738b046c3dcf775921240d79f7d0d637647))
+* **19-02:** distroless api + worker runtime images (DEPLOY-03) ([92dd2dd](https://github.com/accidentally-awesome-labs/spatula/commit/92dd2ddd985d772e25abb8df49aacbb8a0a4347b))
+* **19-02:** Dockerfile.migrate + Debian-slim cli + compose wiring (DEPLOY-03) ([0f6b4d4](https://github.com/accidentally-awesome-labs/spatula/commit/0f6b4d4f64d1b0b1a1486068855d0f64ecb425cb))
+* **19-03:** multi-arch buildx + migrate image + job-level id-token in docker job ([f805076](https://github.com/accidentally-awesome-labs/spatula/commit/f805076d6efae66ae7bba2c6a2c1b083fc41a0e7))
+* **19-04:** dev + prod overlays, README, kind-smoke CI ([94c2d4f](https://github.com/accidentally-awesome-labs/spatula/commit/94c2d4f347c633fdb8a2afc277965c1e6c7464fa))
+* **19-04:** kustomize base  namespace, secrets, migrate Job, api+worker Deployments, api Service ([ad9f86c](https://github.com/accidentally-awesome-labs/spatula/commit/ad9f86c155811cf6b06c3440ccc516417e7e0955))
+* **19-05:** add docs/runbooks/render-deploy.md with verified free-tier caveats ([892822c](https://github.com/accidentally-awesome-labs/spatula/commit/892822c66fb915728b2af3d276f9369c2f96db77))
+* **19-05:** add render.yaml free-tier blueprint (web + keyvalue + database) ([2a6ee02](https://github.com/accidentally-awesome-labs/spatula/commit/2a6ee02f31925bc37348bd408185457f62f905c6))
+* **19-06:** add upgrade + config-compat tests + root scripts (DEPLOY-10/11) ([502eb08](https://github.com/accidentally-awesome-labs/spatula/commit/502eb0833c9b1c0ccd2013129b1eab60ef998d8f))
+* **19-07:** add support-matrix.yml min-version CI matrix (DEPLOY-08) ([c04c2b6](https://github.com/accidentally-awesome-labs/spatula/commit/c04c2b690398dd208207373327f4fcd9bbff67d3))
+* **19-09:** add live-gated sizing-baseline harness + hardware-sizing.md skeleton ([c9a9ddb](https://github.com/accidentally-awesome-labs/spatula/commit/c9a9ddbcdbfd73f6f599a8728b43d95dd331f719))
+* add @spatula/queue devDep, export createWebhookWorker, add tier 5a ([e7af7c1](https://github.com/accidentally-awesome-labs/spatula/commit/e7af7c1a2fb12d802b85a1efd8aeb4a7b8283ca7))
+* add Docker service managers for Postgres and Redis ([e5e5754](https://github.com/accidentally-awesome-labs/spatula/commit/e5e575448d6d520e1c99ee1c3f31b3af904fabee))
+* add health check framework, system/server checks, and spatula doctor ([e16b4b4](https://github.com/accidentally-awesome-labs/spatula/commit/e16b4b40ea8ab3773974900fdfc73b8178bd86ce))
+* add OpenRouter and Firecrawl service managers ([290137c](https://github.com/accidentally-awesome-labs/spatula/commit/290137cf475ff2aed534278cdd5446e2fdaf0776))
+* add ServiceManager interface and ServiceRegistry ([9a73928](https://github.com/accidentally-awesome-labs/spatula/commit/9a739286f989483daf8800d75c96307876286322))
+* add test:tier4 script and complete Tier 4 infrastructure ([b453c8e](https://github.com/accidentally-awesome-labs/spatula/commit/b453c8e05db943b1327329711733715a79f9272b))
+* add Tier 5A test helpers with startTestWorkers and completion polling ([e05027e](https://github.com/accidentally-awesome-labs/spatula/commit/e05027e1f975ee317b1f9779695b24543e347aa8))
+* add Tier 5B test helpers for API key auth ([75b98d2](https://github.com/accidentally-awesome-labs/spatula/commit/75b98d2d40c841e2b95d0feee15fa686118d8571))
+* add webhook config schema and enqueue helper ([d5764f1](https://github.com/accidentally-awesome-labs/spatula/commit/d5764f1bd54aaa5ad7fb5fa60bab29e45d54d4a5))
+* **admin:** add cross-tenant job listing and force-cancel endpoints ([b0b40e2](https://github.com/accidentally-awesome-labs/spatula/commit/b0b40e2e2ff0d4ded65dc98ef8e7d340a4679950))
+* **admin:** add system health and metrics endpoints ([2af30bb](https://github.com/accidentally-awesome-labs/spatula/commit/2af30bb19326dabf35db6fcb63217764b3439f2b))
+* **admin:** add tenant management routes (list, detail, update plan/config/retention) ([b07028d](https://github.com/accidentally-awesome-labs/spatula/commit/b07028d5d683770e1459d7566c1b3cdb3e4dbccc))
+* **admin:** enable cross-tenant DLQ access for admin-scoped callers ([aae3f05](https://github.com/accidentally-awesome-labs/spatula/commit/aae3f05cbdb9e1e9e819b3565d75f7109449920c))
+* **api:** add batch operations, timeout middleware, and wire into app ([90a70ce](https://github.com/accidentally-awesome-labs/spatula/commit/90a70ce6f3e8169769eea407a6bfdcad9547e6d9))
+* **api:** add billing routes (subscription, invoices, portal) and wire AppDeps ([053dbc4](https://github.com/accidentally-awesome-labs/spatula/commit/053dbc44854fe8f54e985fc4c277675eeb893227))
+* **api:** add pageUrl to extractions, entity-sources endpoint, job stats enrichment ([da98cba](https://github.com/accidentally-awesome-labs/spatula/commit/da98cbad19e4d00642fa997a417b9d205995cb89))
+* **api:** add SpatulaStripeClient wrapper using Billing Meter Events API ([4f053ee](https://github.com/accidentally-awesome-labs/spatula/commit/4f053eeb3f7487a9bf15e7307ab9e898e9f6084f))
+* **api:** add Stripe webhook handler with signature verification, register billing routes ([a0846a1](https://github.com/accidentally-awesome-labs/spatula/commit/a0846a13556338efe2283f38fce5acb81e3c5c38))
+* **api:** align rate limiting with billing plan, wire billing routes ([1ab1621](https://github.com/accidentally-awesome-labs/spatula/commit/1ab162167bc962359b1c39b0a896860c2d98d352))
+* **api:** raise entity pagination limit from 100 to 500 for bulk pull support ([cac57c2](https://github.com/accidentally-awesome-labs/spatula/commit/cac57c29f5c4ac1fd50bdb843a5a33cb38eed69a))
+* **api:** restrict export formats based on billing tier ([bddc9ae](https://github.com/accidentally-awesome-labs/spatula/commit/bddc9aef1aed600eae7515c738253eab280ac9ef))
+* **api:** wire queue_depth gauge to BullMQ getJobCounts ([0d80b47](https://github.com/accidentally-awesome-labs/spatula/commit/0d80b47ee84727f6d84863080c662e13c80c6b9c))
+* **auth:** add strategy field to AuthResult, stop requiring tenant_id in JWT ([736cf59](https://github.com/accidentally-awesome-labs/spatula/commit/736cf5952c10f03d5d5c75dd0684104ede9afb2b))
+* **auth:** enforce 403 for suspended tenants in validate-tenant middleware ([65801a2](https://github.com/accidentally-awesome-labs/spatula/commit/65801a2e70c974a78b4e6d5afdc05d6c4d306d94))
+* **auth:** JWT user’tenant resolution via user_tenants table ([87dff97](https://github.com/accidentally-awesome-labs/spatula/commit/87dff979fea4766d24e3ddc10afff2e55c2e21c6))
+* **billing:** wire QuotaEnforcer into job-manager (jobs), crawl worker (pages), LLM recorder (tokens), export orchestrator (storage) ([4da065f](https://github.com/accidentally-awesome-labs/spatula/commit/4da065faec12fa2d724a2ec5b6b52e832d01ccb1))
+* **carveout:** add GET /api/v1/auth/me  auth introspection for API-key verification ([c10625a](https://github.com/accidentally-awesome-labs/spatula/commit/c10625a60d0478a6fcbd6a8a84849a2de88d0f75))
+* **carveout:** clean up residual billing coupling in admin-tenants + exports tests ([5d3b50e](https://github.com/accidentally-awesome-labs/spatula/commit/5d3b50efee981f52c64f70bb5b17e0fc382bdb84))
+* **carveout:** CLI uses /api/v1/auth/me for remote auth verification (replaces /billing/subscription) ([5ca4451](https://github.com/accidentally-awesome-labs/spatula/commit/5ca44513c45530ee6a0ae86bf9ee274cda2c135f))
+* **carveout:** confirm SQLite schema has no billing coupling ([7d2e818](https://github.com/accidentally-awesome-labs/spatula/commit/7d2e8186239b2facc21aa4563bf4d8c83e157530))
+* **carveout:** delete Section A billing files from OSS (history preserved in spatula-saas) ([20318a6](https://github.com/accidentally-awesome-labs/spatula/commit/20318a66f7da62cd5e484cdeb32a2dd20b953243))
+* **carveout:** drop plan + stripeCustomerId columns from tenants schema + repo ([e88d322](https://github.com/accidentally-awesome-labs/spatula/commit/e88d322db96d2c893abc862cf759d62b5d6994c3))
+* **carveout:** drop tier-based rate-limit lookup; use DEFAULT_RATE_LIMIT ([76e7577](https://github.com/accidentally-awesome-labs/spatula/commit/76e7577522ab56ac0b22b2facb80215b6d27855e))
+* **carveout:** filter-repo extraction evidence for spatula-saas ([f066ae1](https://github.com/accidentally-awesome-labs/spatula/commit/f066ae115876b023bf22da679bdca011ef968b66))
+* **carveout:** forward test suite  OpenAPI shape + admin-metrics smoke + forward.test.ts + fixtures ([6f893eb](https://github.com/accidentally-awesome-labs/spatula/commit/6f893ebccdc1f6b67302575f0ad136560c417315))
+* **carveout:** namespace OSS migrations via __drizzle_migrations_oss tracking table ([6ea4fb7](https://github.com/accidentally-awesome-labs/spatula/commit/6ea4fb7a7669c4736b77e8b9cb6cd14539843a2a))
+* **carveout:** pg_dump --schema-only equivalence gate (sequential vs squashed) ([a44587c](https://github.com/accidentally-awesome-labs/spatula/commit/a44587cc35ce471f6ffc7bae1dd6a611827fb590))
+* **carveout:** private-contract SQL schema lint + committed baseline.schema.sql ([b791fa9](https://github.com/accidentally-awesome-labs/spatula/commit/b791fa99ae3e6545154cc94c6fafd4eff629d2ee))
+* **carveout:** private-contract TS-surface test + README ([4e30630](https://github.com/accidentally-awesome-labs/spatula/commit/4e30630c22ddd7c6cd15427ddec2878e9d71ff7d))
+* **carveout:** remove billing module + tier presets + billing scopes + TenantQuotas.rateLimitTier ([d123093](https://github.com/accidentally-awesome-labs/spatula/commit/d123093782d66c479b7af21cdf3352b6971c14f7))
+* **carveout:** remove metering worker wiring + METERING queue name ([8b1dfb7](https://github.com/accidentally-awesome-labs/spatula/commit/8b1dfb792d050ba8b8eb70a81bc0c8485aef9b87))
+* **carveout:** remove QuotaEnforcer coupling from queue + core + api layers ([c449fcd](https://github.com/accidentally-awesome-labs/spatula/commit/c449fcdb2ebb8265bd3462f7e2a83e114c236fda))
+* **carveout:** remove usage_records schema + repo exports ([e4e9bbc](https://github.com/accidentally-awesome-labs/spatula/commit/e4e9bbc5b084d54ee1de65701f677835e4c9da6b))
+* **carveout:** squash 12 migrations into 0000_v1_baseline for v1.0 ([4427c80](https://github.com/accidentally-awesome-labs/spatula/commit/4427c80e39ba5fbc7baed8713b3e4713d94b0a13))
+* **carveout:** strip BILLING_TIERS + plan + usage aggregation from admin-tenants ([0d72430](https://github.com/accidentally-awesome-labs/spatula/commit/0d724300fb8cd63c03541ab255c5e7a821885544))
+* **carveout:** take pre-cut snapshot + re-verify inventory ([33b92bb](https://github.com/accidentally-awesome-labs/spatula/commit/33b92bb16962e716335112485c32cb7e2a8b71e3))
+* **carveout:** unmount billing + stripe-webhook routes + plan-loading middleware from app.ts ([6ac966c](https://github.com/accidentally-awesome-labs/spatula/commit/6ac966c7a58fcdffd3b2b0c94bd6dd402040b90c))
+* **carveout:** wire carveout + private-contract suites into PR CI (every PR cadence per D-04) ([650f124](https://github.com/accidentally-awesome-labs/spatula/commit/650f1247bb5f56d307576340436421c4a0de1de4))
+* **cli:** adapt component props to accept DataSource | SpatulaApiClient backend ([7c10d7a](https://github.com/accidentally-awesome-labs/spatula/commit/7c10d7a0d71a619a9e782ae4b9adce8149a7c9b9))
+* **cli:** adapt spatula new for local mode  writes spatula.yaml instead of API call ([42ec711](https://github.com/accidentally-awesome-labs/spatula/commit/42ec7114d825ced5ec6c4beba71369d264fd2877))
+* **cli:** adapt useEntityData hook to accept DataSource | SpatulaApiClient ([a785288](https://github.com/accidentally-awesome-labs/spatula/commit/a785288a8f0404527af249052da1170e459ab7c0))
+* **cli:** adapt useEntityFilter hook to accept DataSource | SpatulaApiClient ([47afbd7](https://github.com/accidentally-awesome-labs/spatula/commit/47afbd73110e436023a3fda31b1e5c0a070cd3e8))
+* **cli:** adapt useExport hook to accept DataSource | SpatulaApiClient ([0adb1ad](https://github.com/accidentally-awesome-labs/spatula/commit/0adb1add4d949851adbe2217ede3686dc1a45447))
+* **cli:** adapt useJobPolling hook to accept DataSource | SpatulaApiClient ([72113b4](https://github.com/accidentally-awesome-labs/spatula/commit/72113b4c5185e776dc1214c872714fb82010cd27))
+* **cli:** add --include-extractions and --include-actions flags to spatula pull ([526c045](https://github.com/accidentally-awesome-labs/spatula/commit/526c04589d781f619e6af43454aba8f237a979bc))
+* **cli:** add --keep-remote flag to spatula reset ([cafc701](https://github.com/accidentally-awesome-labs/spatula/commit/cafc7019f9e52973d5c9fb0618a4991be250511e))
+* **cli:** add API key auth support to SpatulaApiClient ([c8f9a64](https://github.com/accidentally-awesome-labs/spatula/commit/c8f9a648e71be91f5ae560613ec125b351c5f2a4))
+* **cli:** add ApiDataSource implementing DataSource for remote access ([a72afa8](https://github.com/accidentally-awesome-labs/spatula/commit/a72afa8fc0eb09a4e02a7f62c8e46c992e34ad87))
+* **cli:** add crawl history dedup to spatula add with --no-history bypass ([6c695c8](https://github.com/accidentally-awesome-labs/spatula/commit/6c695c8808bf9e661824a6d5f9583dd8069380f7))
+* **cli:** add dashboard mode [d] toggle during spatula run ([89acd92](https://github.com/accidentally-awesome-labs/spatula/commit/89acd9264dc3ed61521a92b3b12ce9f4a1682f6d))
+* **cli:** add deprecation warnings for list and remote status commands ([5b4154e](https://github.com/accidentally-awesome-labs/spatula/commit/5b4154ec2b829e386cdec71431752efc4ab3b68c))
+* **cli:** add getEntitiesStreamPaginated and getUsage to SpatulaApiClient ([1eeed64](https://github.com/accidentally-awesome-labs/spatula/commit/1eeed645d6e6d23c24bf5f9253bd7fb9abdffdc1))
+* **cli:** add getSubscription, getEntitiesStream, getWsToken, getHealth to API client ([049f2e6](https://github.com/accidentally-awesome-labs/spatula/commit/049f2e649a5c36ad0e2054cb0d0974517e9cc246))
+* **cli:** add handlePullCommand interactive wrapper ([cc6d738](https://github.com/accidentally-awesome-labs/spatula/commit/cc6d738627f79f7e93ae376c124671f0eb89c580))
+* **cli:** add Ollama lifecycle manager and tier-based test runner ([a0d924e](https://github.com/accidentally-awesome-labs/spatula/commit/a0d924e4a22b5ce575b92a8fb0f2b0a9c3da59a5))
+* **cli:** add openLocalProject utility and consolidate slugifyPath ([5d1fe4a](https://github.com/accidentally-awesome-labs/spatula/commit/5d1fe4aa4d6a9df6477113591a648a1b8dd847c9))
+* **cli:** add paginated API client methods for extractions, actions, entity-sources ([0dc2cc3](https://github.com/accidentally-awesome-labs/spatula/commit/0dc2cc3d539d3aab8e3ac869715002f1b413fdd4))
+* **cli:** add PullProgress ink component ([936371e](https://github.com/accidentally-awesome-labs/spatula/commit/936371ec9a2a4888e27ea59ab77ef821da21fbd9))
+* **cli:** add push command  creates remote jobs from local config ([455eac9](https://github.com/accidentally-awesome-labs/spatula/commit/455eac99933145c41cc15f532ea7dc19fef64daa))
+* **cli:** add remote add/list/remove commands with auth verification ([c668f46](https://github.com/accidentally-awesome-labs/spatula/commit/c668f462d185a0e33cd4107480193647238a1ae5))
+* **cli:** add remote watch command with WS token auth and dashboard TUI ([8d57733](https://github.com/accidentally-awesome-labs/spatula/commit/8d577337ca17a5c8d5f3b9b13d31df1329a98385))
+* **cli:** add schema diff utility for pull flow ([ef11861](https://github.com/accidentally-awesome-labs/spatula/commit/ef11861507ed3cc1c48c48f6a70188e1cd3932de))
+* **cli:** add SchemaConflict TUI component for pull flow ([8024c6f](https://github.com/accidentally-awesome-labs/spatula/commit/8024c6fd383fdda0776902341e2749cc6b912829))
+* **cli:** add source filter toggle to explorer view ([1303c8d](https://github.com/accidentally-awesome-labs/spatula/commit/1303c8d2f1d59ca0b213309601892fb93eff62f3))
+* **cli:** add spatula add command for adding seed URLs ([33883b4](https://github.com/accidentally-awesome-labs/spatula/commit/33883b41fcdf36592e95b0d2287a608f4d0111f2))
+* **cli:** add spatula config command to open spatula.yaml in editor ([d7da451](https://github.com/accidentally-awesome-labs/spatula/commit/d7da451689cc090af06ab7533723b855aef8958f))
+* **cli:** add spatula estimate command for cost estimation ([5460ba3](https://github.com/accidentally-awesome-labs/spatula/commit/5460ba379932fae963e7fdd618b8459781a15691))
+* **cli:** add spatula explore command for standalone entity browsing ([00b9f0e](https://github.com/accidentally-awesome-labs/spatula/commit/00b9f0ed6863a40b72563b937f753c659f75da06))
+* **cli:** add spatula export command for local project entity export ([7724f55](https://github.com/accidentally-awesome-labs/spatula/commit/7724f55ce680f9338c6375794eeb359484b36a24))
+* **cli:** add spatula logs command and enhance run.ts structured logging ([791baa9](https://github.com/accidentally-awesome-labs/spatula/commit/791baa9d7e877863b34d97800acf71771e02b770))
+* **cli:** add spatula review command for standalone action review TUI ([c1df76c](https://github.com/accidentally-awesome-labs/spatula/commit/c1df76c22e0915093e584de7d4b26d4198340716))
+* **cli:** add spatula schema command for displaying project schema ([1f2e71a](https://github.com/accidentally-awesome-labs/spatula/commit/1f2e71ae6ce3077371109b20437076370085c5f6))
+* **cli:** add spatula setup command for global config editor ([e04384e](https://github.com/accidentally-awesome-labs/spatula/commit/e04384e3cb6b8c638477f9ce966d3529d34679bb))
+* **cli:** add Tier 4 test helpers for API lifecycle testing ([4ccb70f](https://github.com/accidentally-awesome-labs/spatula/commit/4ccb70f8cc7cba9acea8695a2dd306a03a74113b))
+* **cli:** add token-based WS auth for remote watch connections ([cd6a04d](https://github.com/accidentally-awesome-labs/spatula/commit/cd6a04dce7c34158c6af34e26ad6e891534e4457))
+* **cli:** add YAML field appender for pull schema merge ([ee0cc05](https://github.com/accidentally-awesome-labs/spatula/commit/ee0cc058b401c67290bd4accfe72d6de14102fa8))
+* **cli:** expose ProjectAdapter on LocalProject interface ([6d9d969](https://github.com/accidentally-awesome-labs/spatula/commit/6d9d96949b6a6e4bf05a7af4cecf9abb2ed6b196))
+* **cli:** implement core pull command with 9-step flow ([ef58391](https://github.com/accidentally-awesome-labs/spatula/commit/ef5839179a3f91e00fb6fb6493f7bf863cd50c49))
+* **cli:** register add, config, setup, estimate commands in CLI ([1e9fd28](https://github.com/accidentally-awesome-labs/spatula/commit/1e9fd2869f8afc1f818ffedf357e805b8c2e4e2e))
+* **cli:** register pull command in CLI entrypoint ([8d7b811](https://github.com/accidentally-awesome-labs/spatula/commit/8d7b811c299d591fe03808502ccbbf247b2a0128))
+* **cli:** register remote and push commands in CLI entrypoint ([c83cec2](https://github.com/accidentally-awesome-labs/spatula/commit/c83cec2ded8f1f49efe953cfea9f3f1a0b9a4273))
+* **cli:** register schema, export, explore, review commands ([3b78c75](https://github.com/accidentally-awesome-labs/spatula/commit/3b78c75ed399456670e928305e1fa0104b62842d))
+* **cli:** wire desktop + webhook notifications into spatula run ([b00787c](https://github.com/accidentally-awesome-labs/spatula/commit/b00787c2b3dde81a0825176954b4114c49ac02ac))
+* **cli:** wire source filter into explorer data fetching ([77bd938](https://github.com/accidentally-awesome-labs/spatula/commit/77bd93826927573b18b006f1f071f328492249dc))
+* **core:** add 8 project-level health checks for spatula doctor ([9ebf143](https://github.com/accidentally-awesome-labs/spatula/commit/9ebf1431011571981776af146b74a295e92134d8))
+* **core:** add CssExtractor for offline CSS-only extraction + wire into test-url ([e714fde](https://github.com/accidentally-awesome-labs/spatula/commit/e714fde0a1b13b49946f97585b839255e7f8ee1a))
+* **core:** add QuotaEnforcer service for billing dimension checks ([2c04cfe](https://github.com/accidentally-awesome-labs/spatula/commit/2c04cfed577f1a59fbf4bb97a8bc29e4574eab76))
+* **core:** add recursive objectFields/arrayItemType comparison to config diff ([d969f09](https://github.com/accidentally-awesome-labs/spatula/commit/d969f09129309cf7d7f8b15fa0118b28472dcfe0))
+* **core:** add saveGlobalConfig utility with merge support ([6d08bbc](https://github.com/accidentally-awesome-labs/spatula/commit/6d08bbc97b81a57c9c8497e2e76bdafe01969564))
+* **core:** add table extraction to css-extractor ([1c7b362](https://github.com/accidentally-awesome-labs/spatula/commit/1c7b362dcc9de5875ff48ea431b3ec1d03dcabe5))
+* **core:** extract cost from OpenRouter x-openrouter-cost response header ([22c2e69](https://github.com/accidentally-awesome-labs/spatula/commit/22c2e695ea61dc23c211aafb4f67af597e7410fe))
+* **db:** add cross-tenant findAll, countAll, and forceCancel to JobRepository ([b9bad11](https://github.com/accidentally-awesome-labs/spatula/commit/b9bad11d6155645ca1c0affbed507a9ccc95bfd3))
+* **db:** add delete and deleteByPrefix to ProjectMetaRepository ([72e91ff](https://github.com/accidentally-awesome-labs/spatula/commit/72e91ff40a321c3649d0f7bf6dcac10313bced58))
+* **db:** add findAll, countAll, and getTotalStorage to TenantRepository ([af35a71](https://github.com/accidentally-awesome-labs/spatula/commit/af35a713a62cb6939d795fcb0aacd158acb3aee4))
+* **db:** add nullable runId column to SQLite entities table with migration ([6041d2a](https://github.com/accidentally-awesome-labs/spatula/commit/6041d2ae840368782192e7dcb3db741d34dbac14))
+* **db:** add plan and stripe_customer_id columns to tenants table ([6f3fd29](https://github.com/accidentally-awesome-labs/spatula/commit/6f3fd29d9db429d853ac1cd595f4eba41c8096a8))
+* **db:** add pull-flow methods to SQLite entity and run repos ([2810342](https://github.com/accidentally-awesome-labs/spatula/commit/28103429a13676ab1a88a39bd82f4bf159fa1982))
+* **db:** add runId/pageUrl columns to SQLite extractions and actions for pull flow ([dd61157](https://github.com/accidentally-awesome-labs/spatula/commit/dd6115726b75f45922a5d4e94ec71dea354d78b5))
+* **db:** add upsertBatch/deleteByRunIds for extractions, actions, entity sources ([a476429](https://github.com/accidentally-awesome-labs/spatula/commit/a476429ad2b168848bd15cde5489950008db069b))
+* **db:** add usage_records schema and UsageRecordRepository ([b2dd047](https://github.com/accidentally-awesome-labs/spatula/commit/b2dd047c915dd4ac02745a1c1a20260dc77bdbcc))
+* **db:** add user_tenants schema and migration ([1fbe38b](https://github.com/accidentally-awesome-labs/spatula/commit/1fbe38bd205afd51c20718c54fcd24d60ecba65a))
+* **db:** add UserTenantRepository with CRUD operations ([6701018](https://github.com/accidentally-awesome-labs/spatula/commit/670101843c9c019c9e0cb1971145fa8351b8ac7b))
+* extend createTestApp with authStrategy param, repos, auditLogger ([e7741e4](https://github.com/accidentally-awesome-labs/spatula/commit/e7741e4008da3acae57715415831909a77f4c3c7))
+* flip default LLM model to deepseek/deepseek-v4-pro + add pricing ([342729e](https://github.com/accidentally-awesome-labs/spatula/commit/342729eff64d59c62236e6e81750336111b45495))
+* **queue:** add audit logging for quota exceeded events in JobManager ([4ec94af](https://github.com/accidentally-awesome-labs/spatula/commit/4ec94af33fa9b1f7d9e7e53aed6070b37b529d0d))
+* **queue:** add CLEANUP queue name constant ([b013098](https://github.com/accidentally-awesome-labs/spatula/commit/b01309885bf6f428637485368e01570ebd2aa17b))
+* **queue:** add daily cleanup worker with three-phase FK-safe retention ([d59de51](https://github.com/accidentally-awesome-labs/spatula/commit/d59de51c4bf32364753b0686515270b6c0e2510a))
+* **queue:** add hourly metering worker for Stripe usage reporting ([a4d8d97](https://github.com/accidentally-awesome-labs/spatula/commit/a4d8d9796dabe5ed3478a155f7c966c9082b4815))
+* **queue:** add webhook queue, worker, and Bull Board registration ([8e1cc24](https://github.com/accidentally-awesome-labs/spatula/commit/8e1cc24e2ccc43726293e554c8c6916ce2990806))
+* **queue:** add WebhookSender with HMAC-SHA256 signing ([b551493](https://github.com/accidentally-awesome-labs/spatula/commit/b551493281381ccb40e28f8180b8d926e70eeb90))
+* **queue:** register cleanup worker in entrypoint (daily at 03:00 UTC) ([89c29ac](https://github.com/accidentally-awesome-labs/spatula/commit/89c29ac7c69bff519a1f1e6b606926d359bff302))
+* register Tier 5B and Tier 5 in tier registry ([d08d2b1](https://github.com/accidentally-awesome-labs/spatula/commit/d08d2b19a59c3c62cb0af7c0696988f35dc26700))
+* **shared:** add billing tier constants and types ([220ae2c](https://github.com/accidentally-awesome-labs/spatula/commit/220ae2c290bd09da0b57f7a99e76b171294a5aa8))
+* **shared:** add webhook event types and config ([7bc277a](https://github.com/accidentally-awesome-labs/spatula/commit/7bc277abc53fdeb16e61e976ec9f4af3c7b417eb))
+* **shared:** register observable gauges for active_jobs, tenant_count, queue_depth ([852f9e1](https://github.com/accidentally-awesome-labs/spatula/commit/852f9e124a9692981bff86695d6b3ce1e1adba8e))
+* Wave 5-6  deferred items (10 items, 16 commits) ([413ac19](https://github.com/accidentally-awesome-labs/spatula/commit/413ac1992a1b33feea8081e60ccdd08c2cf13146))
+* wire config diff and re-extraction into LocalPipelineRunner ([b3e51d9](https://github.com/accidentally-awesome-labs/spatula/commit/b3e51d9be342a880e31b78d794be8a24fdc546a4))
+* wire webhook events into 5 integration points + add worker tests ([4131483](https://github.com/accidentally-awesome-labs/spatula/commit/4131483648337dcbbb56e354164d58f818284b62))
+* wrap Ollama manager into ServiceManager interface ([2938d4d](https://github.com/accidentally-awesome-labs/spatula/commit/2938d4dfff38066a6a7e6c2bfe40ba1e330c08c5))
+
+
+### Bug Fixes
+
+* **15-03:** clean up post-carveout lint residue ([9785066](https://github.com/accidentally-awesome-labs/spatula/commit/9785066b6078cfd6f005824cb24fca3aa23e7f08))
+* **15-04:** use nested drizzle-kit migrations.table key ([4a2c8a3](https://github.com/accidentally-awesome-labs/spatula/commit/4a2c8a302d94ce5ec29e8a82b5087867b5752340))
+* **15-05:** tighten body+duplex types in carveout fixture server ([853df16](https://github.com/accidentally-awesome-labs/spatula/commit/853df162b94c2180edf2af016bccf301463c5acd))
+* **15-ci:** drop fixture's two phantom + lines after normalize update ([05e205f](https://github.com/accidentally-awesome-labs/spatula/commit/05e205ff7cc7b643cba210cd746835acb1665303))
+* **15-ci:** get PR CI green  format pass, lint cleanup, workflow fixes ([918f364](https://github.com/accidentally-awesome-labs/spatula/commit/918f3649e216204971fe9c12b00e8a39d70c980a))
+* **15-ci:** normalize pg_dump OWNER + access-method noise, bump db exports timeout ([bc8292f](https://github.com/accidentally-awesome-labs/spatula/commit/bc8292fa77792fec409164b668b128c236b30d64))
+* **15-ci:** order pg_dump fixture so `+` lines come before `-` lines ([c0224af](https://github.com/accidentally-awesome-labs/spatula/commit/c0224af74040200735281589e302b7d1ffb4af1f))
+* **15-ci:** pull dep build into db filter, add Postgres to Unit Tests, mark E2E non-blocking ([e840efb](https://github.com/accidentally-awesome-labs/spatula/commit/e840efb7bac50cbb68ab5591ca9c0eed4308132f))
+* **15-ci:** skip testUrl CSS-only test that needs Chromium binary ([0e6c1d5](https://github.com/accidentally-awesome-labs/spatula/commit/0e6c1d57c7bbfe8162d54e76ac25fce3abaec594))
+* **15-followup:** properly address E2E + testUrl, remove continue-on-error ([8e387a7](https://github.com/accidentally-awesome-labs/spatula/commit/8e387a71ea57c94087f3ea6be64d403f1a63eb9f))
+* **15-followup:** retire post-merge pg_dump gate + bump CI-flaky test timeouts ([95f0127](https://github.com/accidentally-awesome-labs/spatula/commit/95f0127a6715cbb8ee8fb5d0550cff04fab4dfe9))
+* **16-3:** widen openapi route handler to satisfy strict response type ([3f3e16c](https://github.com/accidentally-awesome-labs/spatula/commit/3f3e16c79736fd6abe4930a38e79f87b3d07e0f4))
+* **16-5:** correct stale task numbers post-M1 renumber (Task 6 tsup, Task 9 dry-run log) ([8d1291c](https://github.com/accidentally-awesome-labs/spatula/commit/8d1291cd83d012514af60d5a979527d5a52e8634))
+* **16:** revise plans based on checker feedback ([1294070](https://github.com/accidentally-awesome-labs/spatula/commit/12940700a3b3de413795d60f87963f7c1f28b6bf))
+* **17-05:** enable client_credentials grant in Dex config ([27b50be](https://github.com/accidentally-awesome-labs/spatula/commit/27b50bef3bc9e2afab1185c08c9405588a64c2c6))
+* **17-05:** make standalone Dex smoke scripts ES modules ([a67c7c4](https://github.com/accidentally-awesome-labs/spatula/commit/a67c7c442ab21c064cf8b6c4507c0ff608b079d0))
+* **17-06:** correct type and matcher defects in browser e2e spec ([2c8e43d](https://github.com/accidentally-awesome-labs/spatula/commit/2c8e43da70b4b9e5e76653936110940b03b34dc8))
+* **17-06:** repair browser e2e OIDC flow  localhost IPv6 collision, scope grant, repo wiring, event publishing, SSE id injection ([69280ec](https://github.com/accidentally-awesome-labs/spatula/commit/69280ec7b4b526b94a341d5d3f07152b21a4f63f))
+* **17-07:** correct RouteCase field name and JobManager import ([3991df8](https://github.com/accidentally-awesome-labs/spatula/commit/3991df83aea9e0cb74b5cca4ef89aa6cf7c86937))
+* **17-07:** restore fail-closed JWT scopes, grant M2M scopes explicitly ([fa9565d](https://github.com/accidentally-awesome-labs/spatula/commit/fa9565d76fe104217381bb71e970c29a3402e0b9))
+* **19-06:** pass -d to psql in backup round-trip test (CI e2e regression) ([592f3d0](https://github.com/accidentally-awesome-labs/spatula/commit/592f3d0207bdd04751e1fab99af22e182896564a))
+* **19-09:** add root tsx dep so 'pnpm sizing:baseline' runs ([2ffb1ae](https://github.com/accidentally-awesome-labs/spatula/commit/2ffb1aea09ca315a188634b03335e4c1f453664f))
+* **19-09:** rebuild sizing harness against the real API+worker path ([d203d0b](https://github.com/accidentally-awesome-labs/spatula/commit/d203d0b906e2ab92b1756ba241b5826e50c1e6f5))
+* **19:** revise plans per checker  wave/depends_on ordering + cosign-attest grep ([83190da](https://github.com/accidentally-awesome-labs/spatula/commit/83190da8ba9d6f586c1c3cebafbf57f6b3e22b47))
+* add error boundaries to extraction/action pull loops + defer storageBytesUsed ([733f298](https://github.com/accidentally-awesome-labs/spatula/commit/733f2986d4cd13947e58e488180dfe9a0cf1fe57))
+* add required timeout/respectRobotsTxt to Firecrawl crawl() calls ([498c802](https://github.com/accidentally-awesome-labs/spatula/commit/498c802813c032a13854d9348f0d2bcd6f69a2ec))
+* address code quality review findings for Tier 5B ([71e7829](https://github.com/accidentally-awesome-labs/spatula/commit/71e7829441d04c11f3cef934ad7abcd81c03e590))
+* address code review findings  validate plan from Stripe, add stripe_customer_id index, fix idempotency key, safe metering deps construction ([bf6ee6c](https://github.com/accidentally-awesome-labs/spatula/commit/bf6ee6c107d979f92b8975f51cda1dcf28327ca6))
+* address deferred review findings ([2398ce7](https://github.com/accidentally-awesome-labs/spatula/commit/2398ce7e75e182ae2a58e3de5f2408975fbc8be0))
+* address spec compliance review findings ([1c0e869](https://github.com/accidentally-awesome-labs/spatula/commit/1c0e8699069fa788409254065a4e483d2f55830e))
+* address Tier 5A code quality review findings ([e73c35b](https://github.com/accidentally-awesome-labs/spatula/commit/e73c35bfac8a7238fba64d38b6b505afae564d1e))
+* address Tier 5A spec compliance review findings ([317cfd6](https://github.com/accidentally-awesome-labs/spatula/commit/317cfd6793456938b93520e3388703ddcbf712a4))
+* address type error in conversation test and minor cleanup ([4320942](https://github.com/accidentally-awesome-labs/spatula/commit/43209428e4bf2541c1e78c21aa90e86ce6fea6d5))
+* address Wave 4-1 code quality review findings ([f97c5f7](https://github.com/accidentally-awesome-labs/spatula/commit/f97c5f7813ff20e73eefc9e98b0b63c5db5f3639))
+* address Wave 4-2 code quality review findings ([a0c9ded](https://github.com/accidentally-awesome-labs/spatula/commit/a0c9ded02c9cdae499d2e99004f814fc5b89d430))
+* address Wave 4-2 plan review findings ([6d8f093](https://github.com/accidentally-awesome-labs/spatula/commit/6d8f0931869d4ee11d00f6b9d9819c09a6b03f23))
+* address Wave 4-3 code quality review findings ([baf3082](https://github.com/accidentally-awesome-labs/spatula/commit/baf30820c823e7c35697467022bb43b4bd1de29a))
+* address Wave 4-3 spec compliance review findings ([c9d180a](https://github.com/accidentally-awesome-labs/spatula/commit/c9d180a07624c9d564b5932f5e4c29c4f3f77239))
+* **api:** add shared-secret protection for tenant creation endpoint ([4f0d033](https://github.com/accidentally-awesome-labs/spatula/commit/4f0d03375140c1407b21b3bd7f0779d342c8eb61))
+* **api:** clear pre-existing TypeScript errors ([46cf144](https://github.com/accidentally-awesome-labs/spatula/commit/46cf144e51d4aa8d421d6c3a7e4fddaf8e809506))
+* **auth:** extract JWT name/email for tenant naming, document owner constraint, add StorageError tests ([9837cc1](https://github.com/accidentally-awesome-labs/spatula/commit/9837cc177126140a62a7bc49309c81ee55fbad5f))
+* **auth:** make auto-tenant creation idempotent with try/catch + re-query ([c0fa513](https://github.com/accidentally-awesome-labs/spatula/commit/c0fa5137712ad902100340a3031430f885efae03))
+* **carveout:** drop dead stripe dep + scrub remaining billing-keyword comments (CARVE-04 final gate) ([3e7610b](https://github.com/accidentally-awesome-labs/spatula/commit/3e7610be4fffd29344d7fe685abe3642f31c587f))
+* **carveout:** preserve content_store CHECK constraints in v1 baseline ([8d5db6c](https://github.com/accidentally-awesome-labs/spatula/commit/8d5db6c8e4828b6325c547218a362a0c7b144082))
+* **ci:** bump exportFromDataSource timeout to 30s for CI cold-load ([67de7a1](https://github.com/accidentally-awesome-labs/spatula/commit/67de7a1fb219315e6d4a086def4164111b933c91))
+* **ci:** clear lint errors exposed on main (no-unused-vars + import-type) ([07ec58c](https://github.com/accidentally-awesome-labs/spatula/commit/07ec58c04ac411b0da146dfa2d827813ecd0d30e))
+* **cli:** add error boundary to entity-sources pull loop ([d775ef6](https://github.com/accidentally-awesome-labs/spatula/commit/d775ef6227920718ffe0203fbe127ac0b3b8aefe))
+* **cli:** address code quality review findings ([adf0148](https://github.com/accidentally-awesome-labs/spatula/commit/adf0148e6986a15bd5e06a45d292d87fefff5880))
+* **cli:** address spec compliance gaps in pull command ([f0e8241](https://github.com/accidentally-awesome-labs/spatula/commit/f0e8241117ab5b0d6d384a4c3ba369a3d3d5536e))
+* **cli:** cast adapter type in handlePullCommand for schemaRepo compat ([8db9074](https://github.com/accidentally-awesome-labs/spatula/commit/8db90742c0f744ed780b31a5e41cbbb93dd0200c))
+* **cli:** fix Tier 4 e2e test failures for API lifecycle, webhooks, and Firecrawl ([9b31272](https://github.com/accidentally-awesome-labs/spatula/commit/9b31272fdabd7726c7f758ef58c1b7db40f653d7))
+* **cli:** remove unused Text import from review command ([7804b5b](https://github.com/accidentally-awesome-labs/spatula/commit/7804b5b0ed05f7bdf72feff3f74f4fd9b8abdf76))
+* **cli:** reset --keep-remote cleans orphan entity_sources rows ([51d088d](https://github.com/accidentally-awesome-labs/spatula/commit/51d088d19a6da6ec75d4f7453fb4055cd5f60597))
+* **cli:** wire ApiDataSource status fields to job stats instead of stub zeros ([a5b205a](https://github.com/accidentally-awesome-labs/spatula/commit/a5b205ac1b8c50ce8ce81fa5d7003f9f0d913264))
+* **db:** auto-apply migrations in integration test beforeAll ([f101936](https://github.com/accidentally-awesome-labs/spatula/commit/f1019369f93f0dd757221698eca46b0605776bf2))
+* **db:** cast findByJob return to satisfy ExtractionRepo interface after pageId nullable change ([adfe5f6](https://github.com/accidentally-awesome-labs/spatula/commit/adfe5f607473cfbcb17b1c1ea0d565f49ca4e541))
+* **db:** centralize test migrations via vitest globalSetup ([a492c7f](https://github.com/accidentally-awesome-labs/spatula/commit/a492c7f9c9db62ecf2ac7cd22f73a54ce7afba79))
+* **db:** composite cursor for EntitySourceRepository.findByJobCursor ([9a19bc2](https://github.com/accidentally-awesome-labs/spatula/commit/9a19bc2917058667892ab6eec907503a4e7127c5))
+* **db:** correctly count within-batch duplicate IDs as updates in upsertBatch ([c1d7b1c](https://github.com/accidentally-awesome-labs/spatula/commit/c1d7b1c9e649c39510425d8e94356b71223b471f))
+* **db:** replace count-based upsertBatch/deleteByRunIds with precise tracking ([339c748](https://github.com/accidentally-awesome-labs/spatula/commit/339c748dcf04810d7a86290a472b4a3c79fe454a))
+* **db:** within-batch dup count in extraction + action upsertBatch ([a39dc2d](https://github.com/accidentally-awesome-labs/spatula/commit/a39dc2d708af31578713d617b2f8e09dbfe7a930))
+* Docker managers reuse existing containers, add ioredis devDep ([c71440f](https://github.com/accidentally-awesome-labs/spatula/commit/c71440f54a1f00cb1f72945548d45a9c889f4f5e))
+* **docs:** address code review findings for Wave 5-2 plan  add billing scopes, fix cross-package import, document race condition, add missing exports ([a4c3510](https://github.com/accidentally-awesome-labs/spatula/commit/a4c35103f0ab1e1ade1e9737499b37af3c5130f4))
+* fix Tier 3 Ollama lifecycle and relax real LLM assertions ([fdd14cb](https://github.com/accidentally-awesome-labs/spatula/commit/fdd14cb6a73c8e3fe0d8f2aa520589792d2987fd))
+* initialize mockConfig to null in remote-watch test ([2f27fab](https://github.com/accidentally-awesome-labs/spatula/commit/2f27faba60c8e8275a3ed2bb146965885e60b773))
+* remove unpublished npm badge, fix roadmap section header and test counts ([a5b0913](https://github.com/accidentally-awesome-labs/spatula/commit/a5b0913d9f8cb8db4d96c1ff9661befaf3ddfe19))
+* remove unused DataEvent import from ApiDataSource ([cc95461](https://github.com/accidentally-awesome-labs/spatula/commit/cc954615dd5e0a0b0f966295b48c6253245557cd))
+* remove unused expect import in example-configs test ([159070a](https://github.com/accidentally-awesome-labs/spatula/commit/159070a704a311cad7d9a0118fde8c8565c2dafc))
+* **render:** repair free-tier blueprint build (corepack + devDeps skip) ([b25fc9e](https://github.com/accidentally-awesome-labs/spatula/commit/b25fc9e37b7d7984edce03fa8c24379582c1fab1))
+* resolve 6 Tier 5A test failures against real Docker Postgres + Redis ([367728d](https://github.com/accidentally-awesome-labs/spatula/commit/367728dd10fbe2a36deca7a7716e3ba009c6c61d))
+* resolve pre-existing TypeScript build errors across API and CLI ([74ba6a3](https://github.com/accidentally-awesome-labs/spatula/commit/74ba6a328e95593fc87b602f5383debe84be51f2))
+* resolve Tier 5B test failures against real Docker Postgres + Redis ([e3c94e7](https://github.com/accidentally-awesome-labs/spatula/commit/e3c94e7e42d45501dd6c8350872f98293fc3d0c0))
+* return 404 (not 500) for cross-tenant action approve/reject ([bb7da95](https://github.com/accidentally-awesome-labs/spatula/commit/bb7da954bbbead30f9010c79b67eb06854166d29))
+* strengthen Wave 4-2 test coverage across all tasks ([fe97018](https://github.com/accidentally-awesome-labs/spatula/commit/fe97018e2878640520bb48fe5180040489bdad78))
+* update api-key test mock to include billing:read scope ([b37620f](https://github.com/accidentally-awesome-labs/spatula/commit/b37620f4bc2f9e97a170326a7086c359bd9fca46))
+
+
+### Performance Improvements
+
+* **db:** add index on entities.runId for pull-flow queries ([03504b3](https://github.com/accidentally-awesome-labs/spatula/commit/03504b3e1a644707ca05f56a1f036b93a85d9164))
+</details>
+
+<details><summary>client: 0.1.0</summary>
+
+## [0.1.0](https://github.com/accidentally-awesome-labs/spatula/compare/client-v0.0.1...client-v0.1.0) (2026-06-11)
+
+
+### Features
+
+* **16-2:** create @spatula/client SDK package with codegen + size-limit gate ([c65ad81](https://github.com/accidentally-awesome-labs/spatula/commit/c65ad81b853032fff8fc1c8bcf53455a8f77db59))
+* **16-3:** add lazy version probe in @spatula/client (D-12) ([fdc74ae](https://github.com/accidentally-awesome-labs/spatula/commit/fdc74aecd4041adc1d1790c80756462844f2353a))
+* **16-5:** SDK integration test suite  5 endpoints, mocked default, SPATULA_LIVE_LLM=1 opt-in ([f958c43](https://github.com/accidentally-awesome-labs/spatula/commit/f958c43d63fa8e54c8194e8f0afd97c76875fa3e))
+* **17-06:** replace getJobEvents stub with real SSE subscribeJobEvents method ([1688500](https://github.com/accidentally-awesome-labs/spatula/commit/1688500d4b90116567c62dbafee61dd8017b3c50))
+* **18-05:** SDK client.experimental.forensic.listExtractions surface (SEC-05) ([df76455](https://github.com/accidentally-awesome-labs/spatula/commit/df76455bea8f87c973bfaae620b172c06f6e7afe))
+* **carveout:** confirm SQLite schema has no billing coupling ([7d2e818](https://github.com/accidentally-awesome-labs/spatula/commit/7d2e8186239b2facc21aa4563bf4d8c83e157530))
+
+
+### Bug Fixes
+
+* **17-06:** repair browser e2e OIDC flow  localhost IPv6 collision, scope grant, repo wiring, event publishing, SSE id injection ([69280ec](https://github.com/accidentally-awesome-labs/spatula/commit/69280ec7b4b526b94a341d5d3f07152b21a4f63f))
+* **ci:** clear lint errors exposed on main (no-unused-vars + import-type) ([07ec58c](https://github.com/accidentally-awesome-labs/spatula/commit/07ec58c04ac411b0da146dfa2d827813ecd0d30e))
+
+
+### Dependencies
+
+* The following workspace dependencies were updated
+  * devDependencies
+    * @spatula/core-types bumped to 0.1.0
+    * @spatula/shared bumped to 0.1.0
+  * peerDependencies
+    * @spatula/core-types bumped from 0.x to 0.1.0
+</details>
+
+<details><summary>core-types: 0.1.0</summary>
+
+## [0.1.0](https://github.com/accidentally-awesome-labs/spatula/compare/core-types-v0.0.1...core-types-v0.1.0) (2026-06-11)
+
+
+### Features
+
+* **16-2:** create @spatula/client SDK package with codegen + size-limit gate ([c65ad81](https://github.com/accidentally-awesome-labs/spatula/commit/c65ad81b853032fff8fc1c8bcf53455a8f77db59))
+* **16-2:** create @spatula/core-types package with frozen ErrorCode + schemas + enums ([cd07820](https://github.com/accidentally-awesome-labs/spatula/commit/cd0782052c7e6d73faa98baadb30b7746043de0f))
+* **17-01:** add RESOURCE_NOT_FOUND error code to frozen ErrorCode enum ([b17af90](https://github.com/accidentally-awesome-labs/spatula/commit/b17af9039a4310f11d8732ef44b0df1da0d2c9c6))
+* **18-01:** apply 7 prompt-injection mitigations to StaticExtractor (SEC-01) ([d2e83e3](https://github.com/accidentally-awesome-labs/spatula/commit/d2e83e31aa74e7738862ae9b54fe06c941671928))
+* **carveout:** confirm SQLite schema has no billing coupling ([7d2e818](https://github.com/accidentally-awesome-labs/spatula/commit/7d2e8186239b2facc21aa4563bf4d8c83e157530))
+* flip default LLM model to deepseek/deepseek-v4-pro + add pricing ([342729e](https://github.com/accidentally-awesome-labs/spatula/commit/342729eff64d59c62236e6e81750336111b45495))
+</details>
+
+---
+This PR was generated with [Release Please](https://github.com/googleapis/release-please). See [documentation](https://github.com/googleapis/release-please#release-please).
