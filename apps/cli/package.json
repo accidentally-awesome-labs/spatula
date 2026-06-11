@@ -57,7 +57,7 @@
     "@spatula/core": "workspace:*",
     "@spatula/db": "workspace:*",
     "@spatula/shared": "workspace:*",
-    "ink": "^5.1.0",
+    "ink": "^7.0.5",
     "ink-spinner": "^5.0.0",
     "ink-text-input": "^6.0.0",
     "node-notifier": "^10.0.1",
