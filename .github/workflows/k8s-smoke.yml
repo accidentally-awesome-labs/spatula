@@ -1,0 +1,93 @@
+# k8s smoke test — DEPLOY-01
+#
+# Validates that the dev overlay applies cleanly on a fresh kind cluster,
+# the migrate Job completes, and the api Deployment becomes Available.
+#
+# Design decisions:
+#   - Runs on-release (push: tags: v*) + nightly (02:00 UTC). NOT on every PR.
+#     Matches the heavy-lane cadence of adversarial-llm.yml.
+#   - Uses the kindest/kind GH Action to create the cluster.
+#   - Builds images from source and loads them into kind (no registry auth needed).
+#   - The live kind apply + kubectl wait is the SC#1 smoke test.
+#
+# Manual run: workflow_dispatch (for debugging without a tag push)
+#
+# NOTE: `spatula doctor` 9/9-green is a manual verification step described in
+# deploy/k8s/README.md. Automating it here would require running the CLI inside
+# the cluster, which adds significant CI complexity for a v1.0 scope.
+
+name: k8s Smoke Test
+
+on:
+  push:
+    tags:
+      - 'v*'
+  schedule:
+    - cron: '0 2 * * *'  # nightly 02:00 UTC
+  workflow_dispatch:
+
+jobs:
+  k8s-smoke:
+    name: kind cluster smoke
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          run_install: false
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: Create kind cluster
+        uses: helm/kind-action@v1.12.0
+        with:
+          cluster_name: spatula-smoke
+
+      - name: Build images
+        run: |
+          docker build -f Dockerfile.api    -t ghcr.io/accidentally-awesome-labs/spatula/api:latest    .
+          docker build -f Dockerfile.worker -t ghcr.io/accidentally-awesome-labs/spatula/worker:latest  .
+          docker build -f Dockerfile.migrate -t ghcr.io/accidentally-awesome-labs/spatula/migrate:latest .
+
+      - name: Load images into kind
+        run: |
+          kind load docker-image ghcr.io/accidentally-awesome-labs/spatula/api:latest    --name spatula-smoke
+          kind load docker-image ghcr.io/accidentally-awesome-labs/spatula/worker:latest --name spatula-smoke
+          kind load docker-image ghcr.io/accidentally-awesome-labs/spatula/migrate:latest --name spatula-smoke
+
+      - name: Apply dev overlay
+        run: kubectl apply -k deploy/k8s/overlays/dev
+
+      - name: Wait — migrate Job completes
+        run: |
+          kubectl wait --for=condition=complete job/spatula-migrate \
+            -n spatula --timeout=180s
+
+      - name: Wait — api Deployment becomes Available
+        run: |
+          kubectl wait --for=condition=Available deployment/spatula-api \
+            -n spatula --timeout=180s
+
+      - name: Smoke — GET /health
+        run: |
+          kubectl port-forward svc/spatula-api 3000:3000 -n spatula &
+          PF_PID=$!
+          sleep 5
+          curl --retry 5 --retry-delay 3 --retry-connrefused \
+            -f http://localhost:3000/health
+          HEALTH_STATUS=$?
+          kill $PF_PID 2>/dev/null || true
+          exit $HEALTH_STATUS
+
+      - name: Debug — pod status on failure
+        if: failure()
+        run: |
+          kubectl get pods -n spatula
+          kubectl describe pods -n spatula
+          kubectl logs -l app=spatula-api -n spatula --tail=50 || true
+          kubectl logs -l job-name=spatula-migrate -n spatula --tail=50 || true

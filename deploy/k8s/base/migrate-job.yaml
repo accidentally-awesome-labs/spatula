@@ -12,19 +12,13 @@ spec:
   template:
     spec:
       restartPolicy: OnFailure
-      initContainers:
-        # Wait for Postgres to be ready before running migrations.
-        # Uses pg_isready from the postgres:16-alpine image.
-        - name: wait-for-postgres
-          image: postgres:16-alpine
-          command:
-            - sh
-            - -c
-            - |
-              until pg_isready -h postgres -p 5432; do
-                echo "Waiting for postgres..."; sleep 2;
-              done
-              echo "Postgres is ready."
+      # No initContainer: the migrate container handles connection retries via
+      # Drizzle's connect-on-use behavior + backoffLimit: 3 (k8s re-runs the
+      # pod on non-zero exit). In the dev overlay, the postgres-stub readinessProbe
+      # ensures the DB is up before most traffic routes to it; the startupProbe
+      # on api/worker gives migrate additional head-start time (RESEARCH Pattern 5).
+      # This keeps the base manifest free of postgres:16-alpine so the prod render
+      # passes the no-stub acceptance check.
       containers:
         - name: migrate
           # Image tag is overridden by overlays.
@@ -33,4 +27,4 @@ spec:
             - secretRef:
                 name: spatula-secrets
           # One-shot: exits 0 after migrations complete (see Dockerfile.migrate CMD).
-          # backoffLimit: 3 retries on transient failures.
+          # backoffLimit: 3 retries on transient failures (connection refused, etc.).

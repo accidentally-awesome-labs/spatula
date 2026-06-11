@@ -1,0 +1,28 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+# Prod overlay (D-09): references external operator-supplied managed Postgres + Redis.
+# NO stub pods — this overlay does not include postgres-stub.yaml or redis-stub.yaml.
+#
+# Before applying:
+#   1. Override the spatula-secrets Secret with real DATABASE_URL, REDIS_URL, OPENROUTER_API_KEY
+#      (see deploy/k8s/README.md for external-secrets / sealed-secrets upgrade paths)
+#   2. Set image tags below to the exact release version (e.g. 1.0.0).
+
+namespace: spatula
+
+resources:
+  - ../../base
+
+# Pin image tags to a specific release. Update these on each deploy.
+# ⚠️  Replace "1.0.0" with the actual release tag (e.g. from GITHUB_REF_NAME in CI).
+images:
+  - name: ghcr.io/accidentally-awesome-labs/spatula/api
+    newTag: "1.0.0"   # REPLACE with actual release tag
+  - name: ghcr.io/accidentally-awesome-labs/spatula/worker
+    newTag: "1.0.0"   # REPLACE with actual release tag
+  - name: ghcr.io/accidentally-awesome-labs/spatula/migrate
+    newTag: "1.0.0"   # REPLACE with actual release tag
+
+patches:
+  - path: patch-resources.yaml

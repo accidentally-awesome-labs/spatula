@@ -1,0 +1,51 @@
+# Prod overlay — resource requests/limits + replica counts.
+#
+# ⚠️  Prod overlay assumes operator-supplied managed Postgres + Redis.
+# The dev-default DATABASE_URL / REDIS_URL in base/secrets.yaml MUST be
+# overridden before applying this overlay. See deploy/k8s/README.md for
+# the external-secrets / sealed-secrets upgrade path.
+#
+# Typical approach:
+#   kubectl create secret generic spatula-secrets -n spatula \
+#     --from-literal=DATABASE_URL="postgresql://..." \
+#     --from-literal=REDIS_URL="redis://..." \
+#     --from-literal=OPENROUTER_API_KEY="sk-or-..." \
+#     --save-config --dry-run=client -o yaml | kubectl apply -f -
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: spatula-api
+  namespace: spatula
+spec:
+  replicas: 2
+  template:
+    spec:
+      containers:
+        - name: api
+          resources:
+            requests:
+              cpu: "250m"
+              memory: "256Mi"
+            limits:
+              cpu: "1000m"
+              memory: "512Mi"
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: spatula-worker
+  namespace: spatula
+spec:
+  replicas: 2
+  template:
+    spec:
+      containers:
+        - name: worker
+          resources:
+            requests:
+              cpu: "250m"
+              memory: "256Mi"
+            limits:
+              cpu: "1000m"
+              memory: "512Mi"
