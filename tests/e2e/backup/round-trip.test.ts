@@ -87,9 +87,12 @@ function parseConnectionString(url: string): {
 /** Execute a SQL string against a given database URL using psql */
 function psqlExec(connectionUrl: string, sqlStr: string): void {
   const conn = parseConnectionString(connectionUrl);
+  // -d conn.database is REQUIRED: without it psql connects to a DB named after
+  // the user (e.g. "spatula"), which need not exist. The caller routes CREATE/DROP
+  // DATABASE through the "postgres" maintenance DB via adminUrl.
   execFileSync(
     'psql',
-    ['-h', conn.host, '-p', conn.port, '-U', conn.user, '-c', sqlStr],
+    ['-h', conn.host, '-p', conn.port, '-U', conn.user, '-d', conn.database, '-c', sqlStr],
     {
       env: { ...process.env, PGPASSWORD: conn.password },
       stdio: 'pipe',
@@ -100,9 +103,10 @@ function psqlExec(connectionUrl: string, sqlStr: string): void {
 /** Run psql with an SQL file (< file) against the scratch DB */
 function psqlFile(connectionUrl: string, filePath: string): void {
   const conn = parseConnectionString(connectionUrl);
+  // -d conn.database targets the scratch DB encoded in scratchUrl (see psqlExec note).
   execFileSync(
     'psql',
-    ['-h', conn.host, '-p', conn.port, '-U', conn.user, '-f', filePath],
+    ['-h', conn.host, '-p', conn.port, '-U', conn.user, '-d', conn.database, '-f', filePath],
     {
       env: { ...process.env, PGPASSWORD: conn.password },
       stdio: 'pipe',
