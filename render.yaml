@@ -17,7 +17,7 @@ services:
   - name: spatula-api
     type: web # NOT 'worker' — Background Worker requires a paid plan
     runtime: node
-    plan: free
+    plan: starter # paid: avoids 15-min free-tier spin-down (embedded worker stays warm)
     buildCommand: corepack enable && pnpm install --frozen-lockfile && pnpm build
     startCommand: node apps/api/dist/main.js # Plan 01 bootstrap — NOT index.js (barrel)
     healthCheckPath: /health
@@ -76,11 +76,11 @@ services:
 
   - name: spatula-cache
     type: keyvalue # canonical form; 'redis' is a deprecated alias
-    plan: free
+    plan: starter # next tier above free (free KV slot already in use); persists to disk
     ipAllowList:
       - source: 0.0.0.0/0
         description: Allow all (Render routes traffic through its internal network)
 
 databases:
   - name: spatula-db
-    plan: free
+    plan: basic-256mb # next tier above free (free Postgres slot already in use); no 30-day expiry
