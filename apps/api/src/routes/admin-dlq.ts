@@ -1,11 +1,6 @@
 import { Hono } from 'hono';
 import type { AppEnv } from '../types.js';
-import {
-  InternalQueueError,
-  JobInvalidStateError,
-  SpatulaError,
-  ErrorCode,
-} from '@spatula/shared';
+import { InternalQueueError, JobInvalidStateError, SpatulaError, ErrorCode } from '@spatula/shared';
 import type { AuthResult } from '@spatula/shared';
 
 /**

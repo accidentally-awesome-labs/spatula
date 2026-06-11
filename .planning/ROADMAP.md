@@ -122,13 +122,14 @@ Phase 16 (API Contract + SDK)        ← biggest; unblocks most downstream
 
 **Plans:** 5/5 plans complete
 Plans:
+
 - [x] 16-1-PLAN.md — Error envelope sweep + rate-limit headers + cursor-first pagination + offset deprecation (API-01..API-04)
 - [x] 16-2-PLAN.md — @spatula/core-types extract + @spatula/client build + class-per-code typed errors via codegen + size-limit + ESLint type-only-import rule (SDK-01..SDK-03)
 - [x] 16-3-PLAN.md — GET /api/v1/openapi.json boot-cached + GET /.well-known/spatula-version + lazy version probe + docs/compat-policy.md (API-05, API-06, API-14)
 - [x] 16-4-PLAN.md — tests/contract/ suite generated from served /openapi.json via Ajv2020 + idempotency/webhook/experimental-tag/versioning/timestamps/export-format docs (API-07..API-13)
 - [x] 16-5-PLAN.md — Release infrastructure: BLOCK-04 verify + release-please monorepo manifest + linked-versions + trusted publishing OIDC + provenance + internal-package no-compat READMEs + @spatula/cli publish prep + SQLite benchmark + SDK integration smoke suite (SDK-04..SDK-08)
-**Estimated effort**: 8–10 active sessions
-**UI hint**: yes
+      **Estimated effort**: 8–10 active sessions
+      **UI hint**: yes
 
 ### Phase 17: Browser Auth, SSE, CORS
 
@@ -145,6 +146,7 @@ Plans:
 
 **Plans:** 7/7 plans complete
 Plans:
+
 - [x] 17-01-PLAN.md — Wave 0 foundations: api_keys rotation migration + RESOURCE.NOT_FOUND ErrorCode + rate-limits.yaml entries + test scaffolds
 - [x] 17-02-PLAN.md — SSE: Redis-stream dual-publish + sse/ handler (replay, tail, keepalive) + route mount + ws-token doc (AUTH-01, AUTH-02)
 - [x] 17-03-PLAN.md — CORS wildcard-subdomain origin matcher + docs/api-auth.md authoritative auth doc + scope-sync gate (AUTH-03, AUTH-06)
@@ -152,8 +154,8 @@ Plans:
 - [x] 17-05-PLAN.md — examples/auth-dex/ zero-config local Dex OIDC kit + boot checkpoint (AUTH-04)
 - [x] 17-06-PLAN.md — @spatula/client SSE getJobEvents method + Playwright browser OIDC+SSE reconnect e2e (AUTH-01, AUTH-02, AUTH-04)
 - [x] 17-07-PLAN.md — tests/isolation/ OpenAPI-driven cross-tenant audit suite + M2M client_credentials e2e (AUTH-07, AUTH-08)
-**Estimated effort**: 4 active sessions
-**UI hint**: yes
+      **Estimated effort**: 4 active sessions
+      **UI hint**: yes
 
 ### Phase 18: Security Hardening & Legal
 
@@ -169,8 +171,9 @@ Plans:
 4. `GET /api/v1/admin/forensic/extractions` returns metadata with 15-min-TTL signed URLs (no inline HTML), is marked `x-spatula-experimental: true` in OpenAPI, and is reachable from the SDK only via `client.experimental.forensic.*`; an integration test exercises a tagged forensic blob round-trip.
 5. `audit.yml` runs OSV scan + license allowlist (no GPL/AGPL) + gitleaks + trufflehog full-history scan on every push and on a daily cron; a deliberate test-credential PR is blocked by the secret-scan gate.
 6. The legal docset is committed and links cleanly — `LICENSE` with correct copyright line (or interim-name fallback + `NOTICE.md`), `TRADEMARK.md`, `brand/LICENSE-BRAND.md` ("All rights reserved. Use per TRADEMARK.md."), `THIRD_PARTY_NOTICES.md` (auto-generated via pinned `license-checker-rseidelsohn`), `SECURITY.md`, `.github/CLA.md` (versioned), README legal disclaimer banner, and a default User-Agent of `Spatula/<version> (+https://spatula.dev/abuse)`.
-**Plans:** 7/7 plans complete
-Plans:
+   **Plans:** 7/7 plans complete
+   Plans:
+
 - [x] 18-01-PLAN.md — Prompt-injection defense (7 mitigations) + output scanner + 10 adversarial fixtures + adversarial-llm.yml CI lane
 - [x] 18-02-PLAN.md — Shared redactor module + pino/Sentry/OTel sink wiring + per-sink redaction test suite
 - [x] 18-03-PLAN.md — audit.yml hardening (OSV + license allowlist + gitleaks/trufflehog) + Dependabot/Renovate + THIRD_PARTY_NOTICES
@@ -178,7 +181,7 @@ Plans:
 - [x] 18-05-PLAN.md — Forensic provenance: forensic/ content-store tagging + suspicious_extraction DLQ + admin forensic endpoint + SDK experimental surface
 - [x] 18-06-PLAN.md — DSR server surface: tenant-delete cascade worker + DELETE/import admin routes (async 202)
 - [x] 18-07-PLAN.md — DSR CLI commands + DSR deletion/portability e2e round-trips + security-model.md + privacy.md
-   **Estimated effort**: 5 active sessions
+      **Estimated effort**: 5 active sessions
 
 ### Phase 19: Deployment & Self-Host Excellence
 
@@ -197,6 +200,7 @@ Plans:
 
 **Plans:** 7/9 plans executed
 Plans:
+
 - [x] 19-01-PLAN.md — Embedded-worker mode: startWorker() lifecycle export + API standalone bootstrap (main.ts) gated on SPATULA_EMBEDDED_WORKER (prereq for Render)
 - [x] 19-02-PLAN.md — Container images: distroless api/worker/migrate + Debian-slim cli + new Dockerfile.migrate (DEPLOY-03)
 - [x] 19-03-PLAN.md — Supply chain: release.yml multi-arch buildx + keyless cosign sign + cyclonedx SBOM attest + release-asset + verify-images runbook (DEPLOY-04)
@@ -206,7 +210,7 @@ Plans:
 - [x] 19-07-PLAN.md — support-matrix.md + min-version CI matrix (PG 14/15/16) + heavy-test cadence (DEPLOY-08)
 - [x] 19-08-PLAN.md — Runbooks: backup-restore + reverse-proxy (nginx tested + traefik/caddy stubs) + upgrade version-template + ROADMAP Helm note (DEPLOY-05/06/07)
 - [ ] 19-09-PLAN.md — Measured hardware-sizing baseline: live-gated 1k-page-per-tier harness + hardware-sizing.md (DEPLOY-09)
-   **Estimated effort**: 5 active sessions
+      **Estimated effort**: 5 active sessions
 
 ### Phase 20: Docs Site Infrastructure + Content
 
@@ -290,10 +294,10 @@ Authoritative requirement → phase mapping lives in `.planning/REQUIREMENTS.md`
 | ----------------------------------------- | --------- | -------------- | ----------- | ---------- |
 | 1–13                                      | v1.0      | (collapsed)    | Complete    | 2026-04-20 |
 | 15. Carve-out & Migration Squash          | v1.1      | 6/6            | Complete    | 2026-05-18 |
-| 16. API Contract Hardening + SDK Packages | v1.1      | 5/5 | Complete    | 2026-05-19 |
-| 17. Browser Auth, SSE, CORS               | v1.1      | 7/7 | Complete    | 2026-05-20 |
-| 18. Security Hardening & Legal            | v1.1      | 7/7 | Complete    | 2026-05-20 |
-| 19. Deployment & Self-Host Excellence     | v1.1      | 7/9 | In Progress|  |
+| 16. API Contract Hardening + SDK Packages | v1.1      | 5/5            | Complete    | 2026-05-19 |
+| 17. Browser Auth, SSE, CORS               | v1.1      | 7/7            | Complete    | 2026-05-20 |
+| 18. Security Hardening & Legal            | v1.1      | 7/7            | Complete    | 2026-05-20 |
+| 19. Deployment & Self-Host Excellence     | v1.1      | 7/9            | In Progress |            |
 | 20. Docs Site Infrastructure + Content    | v1.1      | 0/TBD          | Not started | -          |
 | 21. Contributor Infra + CI Topology       | v1.1      | 0/TBD          | Not started | -          |
 | 22. Launch Mechanics (RC → GA)            | v1.1      | 0/TBD          | Not started | -          |

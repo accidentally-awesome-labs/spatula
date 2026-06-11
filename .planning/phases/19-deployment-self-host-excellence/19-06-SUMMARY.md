@@ -1,6 +1,6 @@
 ---
 phase: 19-deployment-self-host-excellence
-plan: "06"
+plan: '06'
 subsystem: test-harnesses
 tags: [backup, upgrade, config-compat, e2e, pg_dump, drizzle, deploy]
 dependency_graph:
@@ -42,13 +42,13 @@ key_files:
   modified:
     - package.json (3 new scripts)
 decisions:
-  - "Upgrade test applies baseline SQL directly via psql (not via migrator) to simulate v1.0 DB, then calls runMigrations() to prove incremental apply; both migration entries asserted in __drizzle_migrations_oss journal"
-  - "Content-store enumerated via Drizzle SELECT (not listKeys — interface has no listKeys) for backup test parity"
-  - "Config test is pure in-process (5 assertions) — can run on PR; backup + upgrade suites are DB-gated and run on-release + nightly per RESEARCH Heavy Test CI Cadence guidance"
-  - "Scratch DBs named spatula_backup_restore_test and spatula_upgrade_test — created, used, and dropped within each test run"
+  - 'Upgrade test applies baseline SQL directly via psql (not via migrator) to simulate v1.0 DB, then calls runMigrations() to prove incremental apply; both migration entries asserted in __drizzle_migrations_oss journal'
+  - 'Content-store enumerated via Drizzle SELECT (not listKeys — interface has no listKeys) for backup test parity'
+  - 'Config test is pure in-process (5 assertions) — can run on PR; backup + upgrade suites are DB-gated and run on-release + nightly per RESEARCH Heavy Test CI Cadence guidance'
+  - 'Scratch DBs named spatula_backup_restore_test and spatula_upgrade_test — created, used, and dropped within each test run'
 metrics:
-  duration: "3 minutes"
-  completed_date: "2026-06-10"
+  duration: '3 minutes'
+  completed_date: '2026-06-10'
   tasks_completed: 2
   files_created: 6
   files_modified: 1
@@ -132,10 +132,10 @@ None — no stub data sources or placeholder values flow to any rendering surfac
 
 ## Commits
 
-| Task | Commit | Description |
-|------|--------|-------------|
-| 1 | af40f31 | test(19-06): add backup→restore round-trip test (DEPLOY-05) |
-| 2 | 502eb08 | feat(19-06): add upgrade + config-compat tests + root scripts (DEPLOY-10/11) |
+| Task | Commit  | Description                                                                  |
+| ---- | ------- | ---------------------------------------------------------------------------- |
+| 1    | af40f31 | test(19-06): add backup→restore round-trip test (DEPLOY-05)                  |
+| 2    | 502eb08 | feat(19-06): add upgrade + config-compat tests + root scripts (DEPLOY-10/11) |
 
 ## Self-Check: PASSED
 

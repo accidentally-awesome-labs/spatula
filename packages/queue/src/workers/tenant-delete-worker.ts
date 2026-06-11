@@ -35,7 +35,9 @@ const FORENSIC_KEY_PREFIX = 'forensic/';
  * the tenant row. Avoids importing @spatula/db directly in queue worker.
  */
 export interface TenantDeleteDb {
-  execute(query: ReturnType<typeof sql>): Promise<{ rows: Record<string, unknown>[]; rowCount?: number }>;
+  execute(
+    query: ReturnType<typeof sql>,
+  ): Promise<{ rows: Record<string, unknown>[]; rowCount?: number }>;
 }
 
 /**
@@ -148,7 +150,11 @@ export async function processTenantDeleteJob(
   logger.debug({ tenantId, redactedRows }, 'tenant-delete: audit log redacted');
 
   // ─── Step 4: Insert deletion tombstone ───────────────────────────────────────
-  await tenantDataRepo.insertDeletionTombstone({ deletedTenantId: tenantId, requestedBy, requestedAt });
+  await tenantDataRepo.insertDeletionTombstone({
+    deletedTenantId: tenantId,
+    requestedBy,
+    requestedAt,
+  });
   logger.debug({ tenantId }, 'tenant-delete: tombstone inserted');
 
   // ─── Step 5: Delete the tenant row LAST ──────────────────────────────────────

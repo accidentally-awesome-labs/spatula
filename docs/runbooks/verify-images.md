@@ -40,6 +40,7 @@ cosign verify \
 ```
 
 Successful output lists one or more verification entries in JSON. Each entry confirms:
+
 - The signature was made by the Spatula release workflow (identity regexp match)
 - The OIDC issuer is GitHub Actions (not a private key)
 - The certificate chain traces to Sigstore's Fulcio CA
@@ -95,11 +96,11 @@ cosign verify \
 
 ## Quick Reference
 
-| Command | Purpose |
-|---------|---------|
-| `cosign verify <image> --certificate-identity-regexp=... --certificate-oidc-issuer=...` | Verify keyless signature |
-| `cosign verify-attestation <image> --type cyclonedx ...` | Verify + extract SBOM attestation |
-| `docker pull --platform linux/arm64 <image>` | Pull arm64 variant explicitly |
+| Command                                                                                 | Purpose                           |
+| --------------------------------------------------------------------------------------- | --------------------------------- |
+| `cosign verify <image> --certificate-identity-regexp=... --certificate-oidc-issuer=...` | Verify keyless signature          |
+| `cosign verify-attestation <image> --type cyclonedx ...`                                | Verify + extract SBOM attestation |
+| `docker pull --platform linux/arm64 <image>`                                            | Pull arm64 variant explicitly     |
 
 ---
 

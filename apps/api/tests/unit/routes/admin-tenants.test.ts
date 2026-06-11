@@ -328,7 +328,9 @@ describe('POST /api/v1/admin/tenants/:id/import', () => {
     const res = await app.request(`/api/v1/admin/tenants/${TENANT_ID}/import`, {
       method: 'POST',
       headers: { ...tenantHeader, 'content-type': 'application/json' },
-      body: JSON.stringify({ api_keys: [{ id: 'k1', keyHash: 'h1', keyPrefix: 'sk-', name: 'k' }] }),
+      body: JSON.stringify({
+        api_keys: [{ id: 'k1', keyHash: 'h1', keyPrefix: 'sk-', name: 'k' }],
+      }),
     });
 
     expect(res.status).toBe(200);

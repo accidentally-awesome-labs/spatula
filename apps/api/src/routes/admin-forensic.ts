@@ -37,18 +37,19 @@ const forensicExtractionSchema = z
     /** Tenant that owns the extraction. */
     tenantId: z.string().uuid().openapi({ example: 'f1f2f3f4-0000-0000-0000-000000000003' }),
     /** Why archival was triggered. */
-    reason: z
-      .string()
-      .openapi({ example: 'suspicious_extraction', enum: ['suspicious_extraction', 'off_schema_retry'] }),
+    reason: z.string().openapi({
+      example: 'suspicious_extraction',
+      enum: ['suspicious_extraction', 'off_schema_retry'],
+    }),
     /** ISO-8601 timestamp when the forensic record was created. */
     createdAt: z.string().openapi({ example: '2026-05-20T20:00:00.000Z' }),
     /**
      * Signed URL to the raw HTML blob in the content store (15-min TTL).
      * NEVER inline HTML — callers must fetch via this URL.
      */
-    contentRef: z
-      .string()
-      .openapi({ example: 'https://storage.example.com/forensic/tenant-id/ext-id/ts.html?Expires=900' }),
+    contentRef: z.string().openapi({
+      example: 'https://storage.example.com/forensic/tenant-id/ext-id/ts.html?Expires=900',
+    }),
   })
   .openapi('ForensicExtraction');
 
@@ -69,7 +70,13 @@ const getForensicExtractionsRoute = createRoute({
   security: [{ bearerAuth: [] }],
   request: {
     query: z.object({
-      limit: z.coerce.number().int().min(1).max(MAX_PAGE_LIMIT).default(DEFAULT_PAGE_LIMIT).optional(),
+      limit: z.coerce
+        .number()
+        .int()
+        .min(1)
+        .max(MAX_PAGE_LIMIT)
+        .default(DEFAULT_PAGE_LIMIT)
+        .optional(),
       cursor: z.string().optional().openapi({
         description: 'Opaque pagination cursor (base64url). Treat as opaque — do not parse.',
       }),
@@ -125,10 +132,7 @@ export function adminForensicRoutes() {
     }
 
     const query = c.req.valid('query');
-    const limit = Math.max(
-      1,
-      Math.min(query.limit ?? DEFAULT_PAGE_LIMIT, MAX_PAGE_LIMIT),
-    );
+    const limit = Math.max(1, Math.min(query.limit ?? DEFAULT_PAGE_LIMIT, MAX_PAGE_LIMIT));
 
     // Decode cursor (simple offset-based — cursor stores numeric offset)
     let offset = 0;

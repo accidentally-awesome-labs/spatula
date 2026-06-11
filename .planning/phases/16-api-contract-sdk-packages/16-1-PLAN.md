@@ -52,55 +52,55 @@ requirements:
 
 must_haves:
   truths:
-    - "Every 4xx/5xx response from the API matches the envelope `{ error: { code, message, requestId, details? } }`"
-    - "Every error `code` is a value from the new `DOMAIN.CODE` frozen enum (e.g., `JOB.NOT_FOUND`, `RATE_LIMIT.EXCEEDED`)"
+    - 'Every 4xx/5xx response from the API matches the envelope `{ error: { code, message, requestId, details? } }`'
+    - 'Every error `code` is a value from the new `DOMAIN.CODE` frozen enum (e.g., `JOB.NOT_FOUND`, `RATE_LIMIT.EXCEEDED`)'
     - "Every successful (non-429) auth'd response carries `X-RateLimit-Limit`, `X-RateLimit-Remaining`, and `X-RateLimit-Reset` headers"
-    - "429 responses additionally carry `Retry-After`"
-    - "Per-route rate limits load from `config/rate-limits.yaml` with `SPATULA_RATE_LIMITS_PATH` overlay; boot-only reload"
-    - "Cursor-paginated list responses use the canonical envelope `{ data, nextCursor, hasMore }`"
-    - "Offset-paginated list responses include `Deprecation` + `Sunset` HTTP headers (RFC 8594) and `Link: rel=\"successor-version\"`"
+    - '429 responses additionally carry `Retry-After`'
+    - 'Per-route rate limits load from `config/rate-limits.yaml` with `SPATULA_RATE_LIMITS_PATH` overlay; boot-only reload'
+    - 'Cursor-paginated list responses use the canonical envelope `{ data, nextCursor, hasMore }`'
+    - 'Offset-paginated list responses include `Deprecation` + `Sunset` HTTP headers (RFC 8594) and `Link: rel="successor-version"`'
   artifacts:
-    - path: "packages/shared/src/error-codes.ts"
-      provides: "Staged frozen `ErrorCode` enum + per-domain subclass map (`DOMAIN.CODE` convention); moves to `@spatula/core-types` in plan 16-2"
-      contains: "export const ErrorCode"
-    - path: "apps/api/src/middleware/error-handler.ts"
-      provides: "Rewritten error handler emitting `{ code, message, requestId, details? }` keyed off `ErrorCode` enum"
-      contains: "details"
-    - path: "apps/api/src/middleware/rate-limit.ts"
-      provides: "Per-route rate limit middleware emitting four headers including `X-RateLimit-Reset` (epoch seconds)"
-      contains: "X-RateLimit-Reset"
-    - path: "apps/api/src/middleware/rate-limit-config.ts"
-      provides: "Boot-time YAML loader for `config/rate-limits.yaml` with `SPATULA_RATE_LIMITS_PATH` overlay"
-      contains: "SPATULA_RATE_LIMITS_PATH"
-    - path: "config/rate-limits.yaml"
-      provides: "Per-route-group rate-limit configuration (default fallback + named route groups)"
-      contains: "default:"
-    - path: "apps/api/src/schemas/pagination.ts"
-      provides: "Split `cursorEnvelopeSchema<T>` (canonical) + `offsetEnvelopeSchema<T>` (deprecated) zod helpers"
-      contains: "cursorEnvelopeSchema"
-    - path: "apps/api/src/lib/deprecation-headers.ts"
-      provides: "`applyDeprecationHeaders()` helper writing `Deprecation`, `Sunset`, `Link` headers per RFC 8594"
-      contains: "Sunset"
-    - path: "scripts/derive-error-codes.ts"
-      provides: "One-shot walker over `@hono/zod-openapi` registry that enumerates every (route, status) tuple as input to the clean-slate enum design"
-      contains: "OpenAPIHono"
+    - path: 'packages/shared/src/error-codes.ts'
+      provides: 'Staged frozen `ErrorCode` enum + per-domain subclass map (`DOMAIN.CODE` convention); moves to `@spatula/core-types` in plan 16-2'
+      contains: 'export const ErrorCode'
+    - path: 'apps/api/src/middleware/error-handler.ts'
+      provides: 'Rewritten error handler emitting `{ code, message, requestId, details? }` keyed off `ErrorCode` enum'
+      contains: 'details'
+    - path: 'apps/api/src/middleware/rate-limit.ts'
+      provides: 'Per-route rate limit middleware emitting four headers including `X-RateLimit-Reset` (epoch seconds)'
+      contains: 'X-RateLimit-Reset'
+    - path: 'apps/api/src/middleware/rate-limit-config.ts'
+      provides: 'Boot-time YAML loader for `config/rate-limits.yaml` with `SPATULA_RATE_LIMITS_PATH` overlay'
+      contains: 'SPATULA_RATE_LIMITS_PATH'
+    - path: 'config/rate-limits.yaml'
+      provides: 'Per-route-group rate-limit configuration (default fallback + named route groups)'
+      contains: 'default:'
+    - path: 'apps/api/src/schemas/pagination.ts'
+      provides: 'Split `cursorEnvelopeSchema<T>` (canonical) + `offsetEnvelopeSchema<T>` (deprecated) zod helpers'
+      contains: 'cursorEnvelopeSchema'
+    - path: 'apps/api/src/lib/deprecation-headers.ts'
+      provides: '`applyDeprecationHeaders()` helper writing `Deprecation`, `Sunset`, `Link` headers per RFC 8594'
+      contains: 'Sunset'
+    - path: 'scripts/derive-error-codes.ts'
+      provides: 'One-shot walker over `@hono/zod-openapi` registry that enumerates every (route, status) tuple as input to the clean-slate enum design'
+      contains: 'OpenAPIHono'
   key_links:
-    - from: "apps/api/src/middleware/error-handler.ts"
-      to: "packages/shared/src/error-codes.ts"
+    - from: 'apps/api/src/middleware/error-handler.ts'
+      to: 'packages/shared/src/error-codes.ts'
       via: "import { ErrorCode, STATUS_MAP } from '@spatula/shared'"
       pattern: "STATUS_MAP\\[error\\.code\\]"
-    - from: "apps/api/src/openapi-config.ts"
-      to: "packages/shared/src/error-codes.ts"
+    - from: 'apps/api/src/openapi-config.ts'
+      to: 'packages/shared/src/error-codes.ts'
       via: "defaultHook returns `ErrorCode.VALIDATION_SCHEMA` (the new code, not the legacy 'VALIDATION_ERROR' string)"
       pattern: "VALIDATION\\.SCHEMA"
-    - from: "apps/api/src/middleware/rate-limit.ts"
-      to: "apps/api/src/middleware/rate-limit-config.ts"
-      via: "lookup per `${method} ${routePath}` against loaded YAML config"
-      pattern: "lookupRateLimit"
-    - from: "apps/api/src/schemas/pagination.ts"
-      to: "apps/api/src/lib/deprecation-headers.ts"
-      via: "offset routes call applyDeprecationHeaders(c) inside handler"
-      pattern: "applyDeprecationHeaders"
+    - from: 'apps/api/src/middleware/rate-limit.ts'
+      to: 'apps/api/src/middleware/rate-limit-config.ts'
+      via: 'lookup per `${method} ${routePath}` against loaded YAML config'
+      pattern: 'lookupRateLimit'
+    - from: 'apps/api/src/schemas/pagination.ts'
+      to: 'apps/api/src/lib/deprecation-headers.ts'
+      via: 'offset routes call applyDeprecationHeaders(c) inside handler'
+      pattern: 'applyDeprecationHeaders'
 ---
 
 <objective>
@@ -109,12 +109,13 @@ Sweep the entire API surface to lock in the v1 error envelope (`{ error: { code,
 Purpose: Phase 16 is the freeze point for the v1 REST contract. Everything in this plan is **additive-only after this lands** — getting the enum, the envelope, the header set, and the pagination shape right NOW determines what the contract looks like for the entire v1 lifetime.
 
 Output:
+
 - New `packages/shared/src/error-codes.ts` (staging location; plan 16-2 moves it to `@spatula/core-types`)
 - Sweep of every `c.json({error:...})` + `SpatulaError` throw site to the new envelope + enum
 - New `config/rate-limits.yaml` + loader + `X-RateLimit-Reset` header
 - Split `cursorEnvelopeSchema` / `offsetEnvelopeSchema` + `applyDeprecationHeaders` helper
 - Tests covering enum coverage, rate-limit header set, config loader, deprecation headers
-</objective>
+  </objective>
 
 <execution_context>
 @$HOME/.claude/get-shit-done/workflows/execute-plan.md
@@ -137,10 +138,11 @@ Output:
 <!-- Source code already loaded inline below for the files this plan modifies. -->
 
 From `packages/shared/src/errors.ts` (current state):
+
 ```typescript
 export class SpatulaError extends Error {
-  readonly code: string;                          // Currently free-form string
-  readonly context?: Record<string, unknown>;     // Repurposed below as the `details` payload
+  readonly code: string; // Currently free-form string
+  readonly context?: Record<string, unknown>; // Repurposed below as the `details` payload
   readonly retryable: boolean;
   constructor(message: string, code: string, options?: SpatulaErrorOptions);
 }
@@ -150,6 +152,7 @@ export class SpatulaError extends Error {
 ```
 
 From `apps/api/src/middleware/error-handler.ts` (current state):
+
 ```typescript
 function mapErrorToStatus(error: unknown): number {
   // switch on error.code: 'VALIDATION_ERROR'->400, 'AUTH_ERROR'->401, 'FORBIDDEN'->403,
@@ -158,10 +161,11 @@ function mapErrorToStatus(error: unknown): number {
 }
 export const errorHandler: ErrorHandler = (error, c) => {
   // Returns: { error: { code, message, requestId } } — MISSING `details` field
-}
+};
 ```
 
 From `apps/api/src/openapi-config.ts` (current state):
+
 ```typescript
 export function createOpenAPIRouter(): OpenAPIHono<AppEnv> {
   return new OpenAPIHono<AppEnv>({
@@ -174,6 +178,7 @@ export function createOpenAPIRouter(): OpenAPIHono<AppEnv> {
 ```
 
 From `apps/api/src/middleware/rate-limit.ts` (current state):
+
 ```typescript
 // Sets X-RateLimit-Limit, X-RateLimit-Remaining, Retry-After (on 429)
 // MISSING: X-RateLimit-Reset (epoch seconds = Math.floor((now + WINDOW_MS) / 1000))
@@ -182,9 +187,15 @@ From `apps/api/src/middleware/rate-limit.ts` (current state):
 ```
 
 From `apps/api/src/schemas/pagination.ts` (current state):
+
 ```typescript
 export const paginationSchema = z.object({
-  limit: z.coerce.number().int().min(1).default(50).transform(v => Math.min(v, 500)),
+  limit: z.coerce
+    .number()
+    .int()
+    .min(1)
+    .default(50)
+    .transform((v) => Math.min(v, 500)),
   offset: z.coerce.number().int().min(0).default(0),
   cursor: z.string().optional(),
   since: z.string().datetime().optional(),
@@ -193,11 +204,12 @@ export const paginationEnvelopeSchema = z.object({
   total: z.number(),
   limit: z.number(),
   hasMore: z.boolean(),
-  nextCursor: z.string().optional(),    // MIXED offset + cursor — split in this plan
+  nextCursor: z.string().optional(), // MIXED offset + cursor — split in this plan
 });
 ```
 
 From `packages/shared/src/cursor.ts` (REUSE; do not modify):
+
 ```typescript
 export function encodeCursor(payload: CursorPayload): string;
 export function decodeCursor(token: string): CursorPayload;
@@ -205,9 +217,11 @@ export function decodeCursor(token: string): CursorPayload;
 ```
 
 From `packages/shared/src/index.ts` (current):
+
 ```typescript
-export { DEFAULT_RATE_LIMIT } from './...';   // Phase 15 collapsed tier presets to this
+export { DEFAULT_RATE_LIMIT } from './...'; // Phase 15 collapsed tier presets to this
 ```
+
 </interfaces>
 
 </context>
@@ -357,6 +371,7 @@ export { DEFAULT_RATE_LIMIT } from './...';   // Phase 15 collapsed tier presets
     ```
 
     Step 6: Write `packages/shared/src/error-codes.test.ts` asserting the three behaviors above. Run `pnpm --filter @spatula/shared test -- error-codes` and confirm green.
+
   </action>
   <verify>
     <automated>pnpm --filter @spatula/shared test -- error-codes && grep -E "^  [A-Z_]+: '[A-Z_]+\\.[A-Z_]+'," packages/shared/src/error-codes.ts | wc -l | awk '$1 >= 20 { exit 0 } { exit 1 }' && pnpm --filter @spatula/shared build</automated>
@@ -496,6 +511,7 @@ export { DEFAULT_RATE_LIMIT } from './...';   // Phase 15 collapsed tier presets
     Step 5: Write `apps/api/src/middleware/error-handler.test.ts`. Use Hono's app harness; assert envelope shape for the three cases in <behavior>.
 
     Step 6: Run `pnpm --filter @spatula/api test -- error-handler` and full `pnpm --filter @spatula/api typecheck` to catch missed import updates.
+
   </action>
   <verify>
     <automated>pnpm --filter @spatula/api test -- error-handler && pnpm --filter @spatula/api typecheck && grep -rhoE "code:\\s*'[A-Z_]+'" apps/api/src/routes/ apps/api/src/middleware/ apps/api/src/openapi-config.ts | grep -v "\\." | wc -l | awk '$1 == 0 { exit 0 } { exit 1 }'</automated>
@@ -653,6 +669,7 @@ export { DEFAULT_RATE_LIMIT } from './...';   // Phase 15 collapsed tier presets
     Step 4: Write `apps/api/src/middleware/rate-limit-config.test.ts` and `apps/api/src/middleware/rate-limit.test.ts`. Use `mkdtempSync` + write a fixture YAML to exercise the env-var overlay. Use vitest `beforeEach` to call `_resetRateLimitsCacheForTests()`.
 
     Step 5: Run `pnpm --filter @spatula/api test -- rate-limit` and confirm green.
+
   </action>
   <verify>
     <automated>pnpm --filter @spatula/api test -- rate-limit && grep -q "X-RateLimit-Reset" apps/api/src/middleware/rate-limit.ts && grep -q "SPATULA_RATE_LIMITS_PATH" apps/api/src/middleware/rate-limit-config.ts && test -f config/rate-limits.yaml && grep -q "^default:" config/rate-limits.yaml</automated>
@@ -790,6 +807,7 @@ export { DEFAULT_RATE_LIMIT } from './...';   // Phase 15 collapsed tier presets
     - Update the route's OpenAPI `responses` declaration to reference `cursorListResponse(itemSchema)` or `offsetListResponse(itemSchema)` as appropriate. If a route supports BOTH (handler branches on params), use `z.union([cursorEnvelopeSchema(itemSchema), offsetEnvelopeSchema(itemSchema)])`.
 
     Step 6: Run `pnpm --filter @spatula/api test` to catch regressions; review any failing list-endpoint tests and update fixtures to match the new envelope shape.
+
   </action>
   <verify>
     <automated>pnpm --filter @spatula/api test -- pagination deprecation-headers && grep -q "cursorEnvelopeSchema" apps/api/src/schemas/pagination.ts && grep -q "applyDeprecationHeaders" apps/api/src/lib/deprecation-headers.ts && grep -q "Sunset" apps/api/src/lib/deprecation-headers.ts && pnpm --filter @spatula/api typecheck</automated>
@@ -824,13 +842,14 @@ export { DEFAULT_RATE_LIMIT } from './...';   // Phase 15 collapsed tier presets
 </verification>
 
 <success_criteria>
+
 - API-01: Every 4xx/5xx response from the OSS API matches `{ error: { code, message, requestId, details? } }` AND `code` is a value from the new `ErrorCode` const-object. Verified by unit tests + grep gate.
 - API-02: `X-RateLimit-Limit`, `X-RateLimit-Remaining`, `X-RateLimit-Reset` set on every authed success; `Retry-After` set on 429. Verified by `rate-limit.test.ts`.
 - API-03: `config/rate-limits.yaml` exists and is the source of per-route limits; `SPATULA_RATE_LIMITS_PATH` overlay works; boot-only reload. Verified by `rate-limit-config.test.ts`.
 - API-04: Cursor envelope is `{ data, nextCursor, hasMore }` (no `total`); offset envelope is deprecated AND emits `Deprecation`+`Sunset`+`Link` headers. Verified by `deprecation-headers.test.ts` + route grep.
 - Frozen enum + STATUS_MAP staged in `@spatula/shared/error-codes.ts` ready for plan 16-2 to move into `@spatula/core-types`.
 - `tests/private-contract/oss-surface.test.ts` remains green (no removed symbols).
-</success_criteria>
+  </success_criteria>
 
 <output>
 After completion, create `.planning/phases/16-api-contract-sdk-packages/16-1-SUMMARY.md` recording:

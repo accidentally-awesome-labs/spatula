@@ -1,32 +1,32 @@
 ---
 phase: 17-browser-auth-sse-cors
-plan: "04"
+plan: '04'
 subsystem: auth
 tags: [api-keys, rotation, drizzle, hono, zod-openapi, audit, grace-window]
 
 # Dependency graph
 requires:
   - phase: 17-browser-auth-sse-cors
-    provides: "api_keys.supersedes + superseded_expires_at columns (plan 17-01 migration)"
+    provides: 'api_keys.supersedes + superseded_expires_at columns (plan 17-01 migration)'
 
 provides:
-  - "ApiKeyRepository.rotate() — single Drizzle transaction: new key insert + old key grace-expire"
-  - "POST /api/v1/api-keys/:id/rotate route with graceSeconds clamping, scope inheritance, audit"
-  - "rotateApiKeyRequestSchema + apiKeyRotatedResponseSchema (D-16 shape)"
-  - "14 tests: 6 repo TDD unit tests + 8 route integration tests"
+  - 'ApiKeyRepository.rotate() — single Drizzle transaction: new key insert + old key grace-expire'
+  - 'POST /api/v1/api-keys/:id/rotate route with graceSeconds clamping, scope inheritance, audit'
+  - 'rotateApiKeyRequestSchema + apiKeyRotatedResponseSchema (D-16 shape)'
+  - '14 tests: 6 repo TDD unit tests + 8 route integration tests'
 
 affects:
-  - "17-browser-auth-sse-cors plan 07 (isolation suite — new route in OpenAPI spec)"
-  - "docs/api-auth.md — rotate endpoint should be referenced"
+  - '17-browser-auth-sse-cors plan 07 (isolation suite — new route in OpenAPI spec)'
+  - 'docs/api-auth.md — rotate endpoint should be referenced'
 
 # Tech tracking
 tech-stack:
   added: []
   patterns:
-    - "Zero-downtime key rotation via two-key grace window (AWS IAM rotation UX)"
-    - "Repository receives only key material (hash+prefix), never the raw key"
-    - "StorageError message text used for error-type discrimination in route handler"
-    - "Auth middleware audit events coexist with route-level audit — filter by action field in tests"
+    - 'Zero-downtime key rotation via two-key grace window (AWS IAM rotation UX)'
+    - 'Repository receives only key material (hash+prefix), never the raw key'
+    - 'StorageError message text used for error-type discrimination in route handler'
+    - 'Auth middleware audit events coexist with route-level audit — filter by action field in tests'
 
 key-files:
   created:
@@ -39,19 +39,19 @@ key-files:
 
 key-decisions:
   - "Schema graceSeconds has no .max(604800) — handler clamps silently so callers receive 200 not 400 for out-of-range values (D-14 'server-clamped')"
-  - "RotateApiKeyInput interface exported from api-key-repository.ts for route-layer typing"
-  - "rotateKeyRoute handler does not use @ts-expect-error — Hono infers return type cleanly"
-  - "Audit test filters mock calls by action field because auth middleware also emits audit events on same spy"
+  - 'RotateApiKeyInput interface exported from api-key-repository.ts for route-layer typing'
+  - 'rotateKeyRoute handler does not use @ts-expect-error — Hono infers return type cleanly'
+  - 'Audit test filters mock calls by action field because auth middleware also emits audit events on same spy'
 
 patterns-established:
-  - "Pattern: rotate() puts raw-key generation in the route handler, passes only hash+prefix to repo (raw key never enters DB layer)"
-  - "Pattern: repo.rotate() stores supersededExpiresAt on the NEW row (not the old row) so D-16 response can be constructed without a second query"
+  - 'Pattern: rotate() puts raw-key generation in the route handler, passes only hash+prefix to repo (raw key never enters DB layer)'
+  - 'Pattern: repo.rotate() stores supersededExpiresAt on the NEW row (not the old row) so D-16 response can be constructed without a second query'
 
 requirements-completed: [AUTH-05]
 
 # Metrics
 duration: 7min
-completed: "2026-05-20"
+completed: '2026-05-20'
 ---
 
 # Phase 17 Plan 04: API Key Rotation Summary
@@ -98,6 +98,7 @@ completed: "2026-05-20"
 ### Auto-fixed Issues
 
 **1. [Rule 1 - Bug] Removed `.max(604800)` from `rotateApiKeyRequestSchema`**
+
 - **Found during:** Task 2 (route integration tests — clamping test returned 400 not 200)
 - **Issue:** Schema with `.max(604800)` rejected `graceSeconds: 700000` at Zod validation, returning 400 before the handler could clamp it — contradicting the plan's "server-clamped" behavior specification
 - **Fix:** Removed `.max(604800)` from the Zod schema; added comment noting values above cap are server-clamped in the handler (D-14)
@@ -125,5 +126,6 @@ None — no external service configuration required.
 - `docs/api-auth.md` may want a section on rotation UX (grace window, two-key overlap) — deferred to plan 17-06 (docs)
 
 ---
-*Phase: 17-browser-auth-sse-cors*
-*Completed: 2026-05-20*
+
+_Phase: 17-browser-auth-sse-cors_
+_Completed: 2026-05-20_

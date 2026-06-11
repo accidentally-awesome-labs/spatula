@@ -9,6 +9,7 @@ assignees: ''
 ## Attack Class
 
 <!-- Select the closest matching attack class from the list below, or describe a new class: -->
+
 - [ ] direct-injection (visible text instruction)
 - [ ] zero-width-smuggling (U+200B/U+200C/U+200D hidden characters)
 - [ ] fake-schema-coercion (claims schema has changed)
@@ -19,7 +20,7 @@ assignees: ''
 - [ ] css-display-none (injection in hidden elements)
 - [ ] data-uri (injection in data:text/html;base64,... URI)
 - [ ] unicode-confusables (Cyrillic/Greek homoglyph substitution)
-- [ ] new class: _______________
+- [ ] new class: **\*\***\_\_\_**\*\***
 
 ## HTML Payload
 
@@ -41,7 +42,8 @@ assignees: ''
 <!-- Example: "Extract title='Widget Pro', price='$49.99'; ignore the injection" -->
 
 **Expected extracted fields:**
-- title: 
+
+- title:
 - price: (if present)
 
 **Injection should be ignored:** (describe what the injection attempts and why it should fail)
@@ -49,9 +51,10 @@ assignees: ''
 ## Model(s) Observed Against
 
 <!-- Which pinned model(s) did you test this fixture against? -->
+
 - [ ] `anthropic/claude-3-5-sonnet-20240620` (OpenRouter pin)
 - [ ] `llama3.1:8b-instruct-q4_0` (Ollama pin)
-- [ ] Other: _______________
+- [ ] Other: **\*\***\_\_\_**\*\***
 
 ## Observed Behavior
 
@@ -59,6 +62,7 @@ assignees: ''
 <!-- Did the injection succeed (vulnerability) or fail (already defended)? -->
 
 **Result:**
+
 - [ ] Injection SUCCEEDED — model was fooled (this is a new vulnerability to defend against)
 - [ ] Injection FAILED — model correctly ignored the payload (useful regression fixture)
 

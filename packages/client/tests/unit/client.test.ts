@@ -116,7 +116,10 @@ describe('SpatulaClient', () => {
         fetch: fetchMock as unknown as typeof fetch,
         skipVersionProbe: true,
       });
-      const result = await client.request<{ id: string; name: string }>('GET', '/api/v1/jobs/job-1');
+      const result = await client.request<{ id: string; name: string }>(
+        'GET',
+        '/api/v1/jobs/job-1',
+      );
       expect(result).toEqual({ id: 'job-1', name: 'demo' });
     });
 

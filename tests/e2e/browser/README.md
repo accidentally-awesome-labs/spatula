@@ -28,10 +28,10 @@ docker compose ps   # wait until status shows "healthy"
 
 **Client IDs configured in Dex:**
 
-| Client | ID | Type | Redirect URI |
-|--------|----|------|-------------|
+| Client  | ID                | Type          | Redirect URI                     |
+| ------- | ----------------- | ------------- | -------------------------------- |
 | Browser | `spatula-browser` | Public (PKCE) | `http://localhost:3000/callback` |
-| M2M | `spatula-m2m` | Confidential | — |
+| M2M     | `spatula-m2m`     | Confidential  | —                                |
 
 **Dev login credentials:** `dev@example.com` / `password`
 
@@ -57,20 +57,20 @@ pnpm exec vitest run --config tests/e2e/browser/vitest.config.ts
 
 ## Environment Variables
 
-| Variable | Default | Purpose |
-|----------|---------|---------|
-| `TEST_DATABASE_URL` | `postgresql://spatula:spatula@localhost:5432/spatula_test` | Postgres for the API server |
-| `DATABASE_URL` | same fallback | Alternative Postgres env var |
-| `REDIS_URL` | `redis://localhost:6379` | Redis for SSE stream tokens + event buffer |
+| Variable            | Default                                                    | Purpose                                    |
+| ------------------- | ---------------------------------------------------------- | ------------------------------------------ |
+| `TEST_DATABASE_URL` | `postgresql://spatula:spatula@localhost:5432/spatula_test` | Postgres for the API server                |
+| `DATABASE_URL`      | same fallback                                              | Alternative Postgres env var               |
+| `REDIS_URL`         | `redis://localhost:6379`                                   | Redis for SSE stream tokens + event buffer |
 
 The suite sets these JWT env vars automatically at test start:
 
-| Variable | Value |
-|----------|-------|
-| `AUTH_STRATEGY` | `jwt` |
-| `JWT_ISSUER` | `http://localhost:5556/dex` |
-| `JWT_AUDIENCE` | `spatula-browser` |
-| `JWT_JWKS_URL` | `http://localhost:5556/dex/keys` |
+| Variable        | Value                            |
+| --------------- | -------------------------------- |
+| `AUTH_STRATEGY` | `jwt`                            |
+| `JWT_ISSUER`    | `http://localhost:5556/dex`      |
+| `JWT_AUDIENCE`  | `spatula-browser`                |
+| `JWT_JWKS_URL`  | `http://localhost:5556/dex/keys` |
 
 ## What the Suite Proves
 

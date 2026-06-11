@@ -1,23 +1,54 @@
 ---
 phase: 19-deployment-self-host-excellence
-plan: "02"
+plan: '02'
 subsystem: container-images
 tags: [docker, distroless, hardening, supply-chain, deploy-03]
 dependency_graph:
   requires: [19-01-PLAN.md]
-  provides: [Dockerfile.api-distroless, Dockerfile.worker-distroless, Dockerfile.migrate, Dockerfile.cli-debian-slim, docker-compose.prod-migrate]
-  affects: [Dockerfile.api, Dockerfile.worker, Dockerfile.cli, Dockerfile.migrate, docker-compose.prod.yml, apps/api/package.json, packages/queue/package.json]
+  provides:
+    [
+      Dockerfile.api-distroless,
+      Dockerfile.worker-distroless,
+      Dockerfile.migrate,
+      Dockerfile.cli-debian-slim,
+      docker-compose.prod-migrate,
+    ]
+  affects:
+    [
+      Dockerfile.api,
+      Dockerfile.worker,
+      Dockerfile.cli,
+      Dockerfile.migrate,
+      docker-compose.prod.yml,
+      apps/api/package.json,
+      packages/queue/package.json,
+    ]
 tech_stack:
   added: [gcr.io/distroless/nodejs22-debian12, node:22-bookworm-slim]
-  patterns: [distroless-exec-form-cmd, USER-nonroot, shamefully-hoist-prod-deps, NODE_ENV-production-default]
+  patterns:
+    [
+      distroless-exec-form-cmd,
+      USER-nonroot,
+      shamefully-hoist-prod-deps,
+      NODE_ENV-production-default,
+    ]
 key_files:
   created: [Dockerfile.migrate]
-  modified: [Dockerfile.api, Dockerfile.worker, Dockerfile.cli, docker-compose.prod.yml, apps/api/package.json, packages/queue/package.json, pnpm-lock.yaml]
+  modified:
+    [
+      Dockerfile.api,
+      Dockerfile.worker,
+      Dockerfile.cli,
+      docker-compose.prod.yml,
+      apps/api/package.json,
+      packages/queue/package.json,
+      pnpm-lock.yaml,
+    ]
 decisions:
-  - "ENV NODE_ENV=production baked into all images so the shared logger skips dev-only pino-pretty (boot crash otherwise)"
-  - "--shamefully-hoist in worker + cli prod-deps so transitive runtime deps (zod) resolve at root node_modules"
-  - "cli built with --filter=@spatula/cli... to exclude @spatula/client (clean isolated client build needs DOM libs — deferred)"
-  - "api distroless healthcheck switched wget -> bundled node+fetch (distroless has no wget/shell)"
+  - 'ENV NODE_ENV=production baked into all images so the shared logger skips dev-only pino-pretty (boot crash otherwise)'
+  - '--shamefully-hoist in worker + cli prod-deps so transitive runtime deps (zod) resolve at root node_modules'
+  - 'cli built with --filter=@spatula/cli... to exclude @spatula/client (clean isolated client build needs DOM libs — deferred)'
+  - 'api distroless healthcheck switched wget -> bundled node+fetch (distroless has no wget/shell)'
 metrics:
   duration_min: 95
   completed: 2026-06-10
@@ -48,12 +79,12 @@ to their expected missing-config errors).
 
 ## Validation (local, single-arch — Docker 29.3.0)
 
-| Image | build | runtime smoke |
-|-------|-------|---------------|
-| api | ✅ exit 0 (370 MB) | ✅ JSON log → `ConfigError: database.url/openrouter.apiKey Required` (expected) |
-| worker | ✅ exit 0 | ✅ JSON log → `ConfigError CONFIG_ERROR` (expected) |
-| migrate | ✅ exit 0 | ✅ `StorageError: DATABASE_URL is required` (expected) |
-| cli | ✅ exit 0 | ✅ prints `spatula <command> [options]` usage |
+| Image   | build              | runtime smoke                                                                   |
+| ------- | ------------------ | ------------------------------------------------------------------------------- |
+| api     | ✅ exit 0 (370 MB) | ✅ JSON log → `ConfigError: database.url/openrouter.apiKey Required` (expected) |
+| worker  | ✅ exit 0          | ✅ JSON log → `ConfigError CONFIG_ERROR` (expected)                             |
+| migrate | ✅ exit 0          | ✅ `StorageError: DATABASE_URL is required` (expected)                          |
+| cli     | ✅ exit 0          | ✅ prints `spatula <command> [options]` usage                                   |
 
 All 14 grep acceptance checks pass. `docker compose config` valid. Multi-arch buildx + cosign/SBOM
 is Plan 19-03 (this plan is image runtime stages only, validated single-arch as the plan scopes).
@@ -90,6 +121,7 @@ be present). cli runtime also now copies `@spatula/db` (cli imports it at 4 site
 compose healthcheck could never pass → switched to `node -e "fetch(...)"` via `/nodejs/bin/node`.
 
 ### Salvage note
+
 A prior executor run was interrupted (terminal API connection error) mid-plan, leaving good
 Dockerfile.api/worker distroless conversions + the ajv/drizzle-orm dep fixes uncommitted, alongside
 unrelated band-aid edits to `@spatula/client` (reverted) and a cosmetic em-dash regression (fixed).

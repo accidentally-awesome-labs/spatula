@@ -19,7 +19,7 @@ spec:
       securityContext:
         runAsNonRoot: true
         runAsUser: 65532
-      terminationGracePeriodSeconds: 30  # matches worker shutdown grace period
+      terminationGracePeriodSeconds: 30 # matches worker shutdown grace period
       containers:
         - name: worker
           # Image tag is overridden by overlays.

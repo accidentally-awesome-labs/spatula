@@ -1,13 +1,13 @@
 ---
 phase: 17-browser-auth-sse-cors
-plan: "06"
+plan: '06'
 subsystem: sdk-sse-browser-e2e
 tags: [sse, eventsource, playwright, oidc, reconnect, browser-e2e, sdk]
 dependency_graph:
   requires: [17-02, 17-05]
   provides:
-    - "@spatula/client subscribeJobEvents — real SSE streaming method with eventsource polyfill"
-    - "tests/e2e/browser/oidc-sse-flow.spec.ts — full OIDC + SSE reconnect Playwright e2e"
+    - '@spatula/client subscribeJobEvents — real SSE streaming method with eventsource polyfill'
+    - 'tests/e2e/browser/oidc-sse-flow.spec.ts — full OIDC + SSE reconnect Playwright e2e'
   affects:
     - packages/client (new subscribeJobEvents export, eventsource dep)
     - tests/e2e/browser (new suite dir)
@@ -35,14 +35,14 @@ key_files:
     - packages/client/src/errors/generated.ts (regenerated — added RESOURCE.NOT_FOUND class)
     - pnpm-lock.yaml (new eventsource dep)
 decisions:
-  - "typeof window guard implemented via declare const window — satisfies TS strict mode without adding lib:[DOM]; keeps the literal guard text the plan required"
-  - "MinimalEventSource interface defined inline — avoids DOM lib dependency while providing full type safety for onmessage, onerror, addEventListener, close"
-  - "getJobEvents non-streaming stub kept as @deprecated shim — grep found it used in tests/integration/get-job-events.test.ts (Phase 16 integration test); removing it would break that test"
-  - "collectSseEvents helper runs in Node test process (not browser page context) — simpler than injecting into Playwright page, same correctness"
-  - "execFileSync with array args for docker compose — avoids shell injection; all args hardcoded"
+  - 'typeof window guard implemented via declare const window — satisfies TS strict mode without adding lib:[DOM]; keeps the literal guard text the plan required'
+  - 'MinimalEventSource interface defined inline — avoids DOM lib dependency while providing full type safety for onmessage, onerror, addEventListener, close'
+  - 'getJobEvents non-streaming stub kept as @deprecated shim — grep found it used in tests/integration/get-job-events.test.ts (Phase 16 integration test); removing it would break that test'
+  - 'collectSseEvents helper runs in Node test process (not browser page context) — simpler than injecting into Playwright page, same correctness'
+  - 'execFileSync with array args for docker compose — avoids shell injection; all args hardcoded'
 metrics:
   duration_minutes: 10
-  completed_date: "2026-05-20"
+  completed_date: '2026-05-20'
   tasks_completed: 2
   files_created_or_modified: 9
 ---
@@ -53,10 +53,10 @@ metrics:
 
 ## Tasks Completed
 
-| Task | Name | Commit | Key Files |
-|------|------|--------|-----------|
-| 1 | Replace get-job-events stub with real SSE streaming method | `1688500` | packages/client/src/methods/get-job-events.ts, get-job-events.test.ts, package.json, index.ts, errors/generated.ts |
-| 2 | Playwright browser e2e — full OIDC + SSE reconnect chain | `abb8b29` | tests/e2e/browser/oidc-sse-flow.spec.ts, vitest.config.ts, README.md |
+| Task | Name                                                       | Commit    | Key Files                                                                                                          |
+| ---- | ---------------------------------------------------------- | --------- | ------------------------------------------------------------------------------------------------------------------ |
+| 1    | Replace get-job-events stub with real SSE streaming method | `1688500` | packages/client/src/methods/get-job-events.ts, get-job-events.test.ts, package.json, index.ts, errors/generated.ts |
+| 2    | Playwright browser e2e — full OIDC + SSE reconnect chain   | `abb8b29` | tests/e2e/browser/oidc-sse-flow.spec.ts, vitest.config.ts, README.md                                               |
 
 ## Verification Evidence
 
@@ -84,6 +84,7 @@ grep -qi "ws-token" oidc-sse-flow.spec.ts → MATCH
 ```
 
 Additional checks:
+
 - `localhost:5556` (Dex) reference in spec: OK
 - `examples/auth-dex` kit reference: OK
 - `capturedLastId` strict-after assertion: OK
@@ -93,6 +94,7 @@ Additional checks:
 ### Why the full e2e could not be executed in this environment
 
 The `oidc-sse-flow.spec.ts` suite requires:
+
 1. **Playwright Chromium binaries** — `playwright install` must have been run (not confirmed for this env)
 2. **A running Dex instance** — requires `docker compose up -d` in `examples/auth-dex/`
 3. **A live PostgreSQL database** at `TEST_DATABASE_URL` with schema migrated
@@ -105,6 +107,7 @@ The spec will run green in CI's `test-e2e-browser` job where all four prerequisi
 ### Auto-fixed Issues
 
 **1. [Rule 1 - Bug] Pre-existing: RESOURCE.NOT_FOUND missing from generated error classes**
+
 - **Found during:** Task 1 — full suite run before changes showed `errors-generated.test.ts` failing
 - **Issue:** `@spatula/core-types` had `RESOURCE_NOT_FOUND` added in Phase 17-01 but `packages/client/src/errors/generated.ts` was never regenerated.
 - **Fix:** Ran `pnpm --filter @spatula/client run gen:errors` — produced 26 classes (added `ResourceNotFoundError`). All 35 tests now pass (was 7 failing before).
@@ -112,6 +115,7 @@ The spec will run green in CI's `test-e2e-browser` job where all four prerequisi
 - **Commit:** 1688500
 
 **2. [Rule 3 - Blocker] TypeScript typeof window errors without DOM lib**
+
 - **Found during:** Task 1 — `tsc` failed: `error TS2304: Cannot find name 'window'`
 - **Issue:** Base `tsconfig.json` has `lib: ["ES2022"]` only — no DOM lib. TypeScript 5.9 strict mode disallows `typeof window` without DOM types.
 - **Fix:** Added `declare const window: Record<string, unknown> | undefined;` at module top-level. Also defined `MinimalEventSource` interface to replace `InstanceType<typeof EventSource>` (also unavailable without DOM lib). Preserves the exact `typeof window === 'undefined'` guard text required by acceptance criteria.
@@ -119,6 +123,7 @@ The spec will run green in CI's `test-e2e-browser` job where all four prerequisi
 - **Commit:** 1688500
 
 **3. [Rule 2 - Security] subprocess call replaced with array-arg variant**
+
 - **Found during:** Task 2 — security hook flagged shell-string subprocess call as injection risk
 - **Fix:** Used `execFileSync('docker', ['compose', 'up', '-d'], ...)` with array arguments. All args are hardcoded strings — no user input reaches the subprocess.
 - **Files modified:** tests/e2e/browser/oidc-sse-flow.spec.ts
@@ -133,18 +138,22 @@ None.
 The spec `tests/e2e/browser/oidc-sse-flow.spec.ts` was committed without a type-check run (no Playwright binaries / live infra available in the dev env at plan execution time). A focused fix agent identified and corrected four real defects:
 
 **1. [Runtime Bug] `toBeOneOf` not in vitest 2.1.9** (line 508)
+
 - `expect(x).toBeOneOf([200, 201])` throws `toBeOneOf is not a function` at runtime — the matcher was added in vitest v3.2 but the installed version is 2.1.9.
 - Fix: replaced with `expect([200, 201]).toContain(res.status)`, preserving the identical assertion intent.
 
 **2. [Type Error] `tenantRepo` in `JwtProviderConfig`** (line 183)
+
 - `JwtProviderConfig` only accepts `{ issuer, audience, jwksUrl }`. Passing `tenantRepo` is a type error. The `JwtAuthProvider` returns `tenantId: ''` and tenant resolution is handled upstream by auth middleware — `tenantRepo` in this call was incorrect.
 - Fix: removed `tenantRepo` from the `JwtAuthProvider` constructor call. The `tenantRepo` remains correctly wired into `deps` (line 199) for the API server's own use.
 
 **3. [Type Error] `Uint8Array` not assignable to `BodyInit` + unused `@ts-expect-error`** (lines 230-231)
+
 - The request body was typed as `Uint8Array | undefined` but `RequestInit.body` expects `BodyInit | null`. The `@ts-expect-error` comment was on the wrong line (it was placed above `duplex` but the actual error was on `body`).
 - Fix: cast `body` as `BodyInit | undefined` and wrapped the entire options object as `RequestInit`, covering the non-standard `duplex` property cleanly without a suppression comment.
 
 **4. [Type Error] Implicit `any` on `evt` and `err` parameters** (lines 309, 322)
+
 - The `onEvent` and `onError` callbacks in `collectSseEvents` lacked parameter types, triggering `noImplicitAny`.
 - Fix: annotated `evt` as `import('@spatula/client').JobEvent` (matching `SubscribeJobEventsOptions.onEvent`) and `err` as `Event` (matching `SubscribeJobEventsOptions.onError`).
 

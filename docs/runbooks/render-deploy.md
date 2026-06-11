@@ -16,11 +16,11 @@ The `render.yaml` blueprint provisions everything needed to run the full Spatula
 
 ## What is provisioned
 
-| Resource | Render type | Plan |
-| -------- | ----------- | ---- |
-| `spatula-api` | Web Service (node runtime) | free |
-| `spatula-cache` | Key Value (Redis) | free |
-| `spatula-db` | PostgreSQL | free |
+| Resource        | Render type                | Plan |
+| --------------- | -------------------------- | ---- |
+| `spatula-api`   | Web Service (node runtime) | free |
+| `spatula-cache` | Key Value (Redis)          | free |
+| `spatula-db`    | PostgreSQL                 | free |
 
 The blueprint wires `DATABASE_URL` and `REDIS_URL` automatically from the managed services — no manual URL copying needed.
 
@@ -47,15 +47,15 @@ Or fork to your own GitHub account and proceed from there.
 
 Before clicking **Apply**, set any `sync: false` environment variables (these are NOT stored in the YAML for security):
 
-| Variable | Required | Description |
-| -------- | -------- | ----------- |
-| `OPENROUTER_API_KEY` | Yes | LLM inference key from [openrouter.ai](https://openrouter.ai) |
-| `AUTH_STRATEGY` | No | Auth mode: `none` (default), `api-key`, or `jwt` |
-| `JWT_ISSUER` | If `AUTH_STRATEGY=jwt` | OIDC issuer URL |
-| `JWT_AUDIENCE` | If `AUTH_STRATEGY=jwt` | JWT audience claim |
-| `JWT_JWKS_URL` | If `AUTH_STRATEGY=jwt` | JWKS endpoint |
-| `TENANT_CREATION_SECRET` | No | Protect `/api/v1/tenants` bootstrap route in production |
-| `SENTRY_DSN` | No | Sentry error tracking DSN |
+| Variable                 | Required               | Description                                                   |
+| ------------------------ | ---------------------- | ------------------------------------------------------------- |
+| `OPENROUTER_API_KEY`     | Yes                    | LLM inference key from [openrouter.ai](https://openrouter.ai) |
+| `AUTH_STRATEGY`          | No                     | Auth mode: `none` (default), `api-key`, or `jwt`              |
+| `JWT_ISSUER`             | If `AUTH_STRATEGY=jwt` | OIDC issuer URL                                               |
+| `JWT_AUDIENCE`           | If `AUTH_STRATEGY=jwt` | JWT audience claim                                            |
+| `JWT_JWKS_URL`           | If `AUTH_STRATEGY=jwt` | JWKS endpoint                                                 |
+| `TENANT_CREATION_SECRET` | No                     | Protect `/api/v1/tenants` bootstrap route in production       |
+| `SENTRY_DSN`             | No                     | Sentry error tracking DSN                                     |
 
 ### 4. Apply and wait for the deploy
 
@@ -133,11 +133,11 @@ Render enforces a limit of **one free PostgreSQL database** and **one free Key V
 
 When ready to move beyond the free demo tier:
 
-| Path | Guide |
-| ---- | ----- |
-| Kubernetes (kustomize) | `deploy/k8s/README.md` — dev overlay on kind; prod overlay for managed Postgres/Redis |
-| Docker Compose | `docker-compose.prod.yml` — separate api, worker, migrate services with healthcheck gating |
-| Render paid plan | Upgrade `spatula-api` to a paid web service; add a dedicated Background Worker service; remove `SPATULA_EMBEDDED_WORKER=1`; upgrade Postgres + Key Value to paid plans |
+| Path                   | Guide                                                                                                                                                                  |
+| ---------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Kubernetes (kustomize) | `deploy/k8s/README.md` — dev overlay on kind; prod overlay for managed Postgres/Redis                                                                                  |
+| Docker Compose         | `docker-compose.prod.yml` — separate api, worker, migrate services with healthcheck gating                                                                             |
+| Render paid plan       | Upgrade `spatula-api` to a paid web service; add a dedicated Background Worker service; remove `SPATULA_EMBEDDED_WORKER=1`; upgrade Postgres + Key Value to paid plans |
 
 For backup and restore procedures see `docs/runbooks/backup-restore.md`.
 For reverse proxy configuration (nginx) see `docs/runbooks/reverse-proxy.md`.

@@ -10,11 +10,13 @@ import { ApiKeyRepository } from '../../../src/repositories/api-key-repository.j
 import { StorageError } from '@spatula/shared';
 
 // Helper to build a mock Drizzle tx / db that supports the rotate() transaction pattern
-function createRotateMockDb(opts: {
-  origRow?: Record<string, unknown> | null;
-  insertedRow?: Record<string, unknown>;
-  updatedOldRow?: Record<string, unknown>;
-} = {}) {
+function createRotateMockDb(
+  opts: {
+    origRow?: Record<string, unknown> | null;
+    insertedRow?: Record<string, unknown>;
+    updatedOldRow?: Record<string, unknown>;
+  } = {},
+) {
   const {
     origRow = {
       id: 'old-key-id',

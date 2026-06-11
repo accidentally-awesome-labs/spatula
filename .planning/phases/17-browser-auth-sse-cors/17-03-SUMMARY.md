@@ -8,14 +8,14 @@ tags: [cors, hono, wildcard-origin, api-key, jwt, sse, documentation, ci-gate]
 requires:
   - phase: 17-browser-auth-sse-cors
     plan: 01
-    provides: "Test scaffolding (tests/cors/.gitkeep, tests/docs/.gitkeep)"
+    provides: 'Test scaffolding (tests/cors/.gitkeep, tests/docs/.gitkeep)'
 
 provides:
-  - "apps/api/src/lib/cors-origin.ts: buildOriginMatcher() — parses CORS_ALLOWED_ORIGINS into exact set + single-label wildcard regexes using [^./]+ for suffix-attack prevention"
-  - "apps/api/src/app.ts: function-form CORS origin using buildOriginMatcher; CORS_CONFIG_INVALID boot-fail; extended exposeHeaders (X-RateLimit-Reset + Retry-After)"
-  - "apps/api/tests/cors/origin-matrix.test.ts: 8-case request matrix integration test (exact, wildcard, two-label reject, suffix-attack reject, unlisted, exposeHeaders, max-age, boot-fail)"
-  - "docs/api-auth.md: authoritative auth+scope+CORS documentation (8 sections, D-21)"
-  - "apps/api/tests/docs/api-auth-scope-sync.test.ts: CI gate — doc scope table vs AUTH_SCOPES source of truth"
+  - 'apps/api/src/lib/cors-origin.ts: buildOriginMatcher() — parses CORS_ALLOWED_ORIGINS into exact set + single-label wildcard regexes using [^./]+ for suffix-attack prevention'
+  - 'apps/api/src/app.ts: function-form CORS origin using buildOriginMatcher; CORS_CONFIG_INVALID boot-fail; extended exposeHeaders (X-RateLimit-Reset + Retry-After)'
+  - 'apps/api/tests/cors/origin-matrix.test.ts: 8-case request matrix integration test (exact, wildcard, two-label reject, suffix-attack reject, unlisted, exposeHeaders, max-age, boot-fail)'
+  - 'docs/api-auth.md: authoritative auth+scope+CORS documentation (8 sections, D-21)'
+  - 'apps/api/tests/docs/api-auth-scope-sync.test.ts: CI gate — doc scope table vs AUTH_SCOPES source of truth'
 
 affects: [17-05, 17-07, 20-docs, any-phase-referencing-CORS-config]
 
@@ -23,10 +23,10 @@ affects: [17-05, 17-07, 20-docs, any-phase-referencing-CORS-config]
 tech-stack:
   added: []
   patterns:
-    - "CORS function-form origin: parse CORS_ALLOWED_ORIGINS once at boot into exact Set + RegExp[] rather than passing string array to cors()"
-    - "Single-label wildcard regex: [^./]+ substitution for * — prevents both multi-label (foo.bar.domain.com) and suffix attacks (evil.domain.com.attacker.com)"
-    - "Boot-time panic for misconfiguration: throw plain Error (not SpatulaError) before any HTTP handling begins"
-    - "SCOPE_TABLE_START/END HTML comment markers for CI gate parsing"
+    - 'CORS function-form origin: parse CORS_ALLOWED_ORIGINS once at boot into exact Set + RegExp[] rather than passing string array to cors()'
+    - 'Single-label wildcard regex: [^./]+ substitution for * — prevents both multi-label (foo.bar.domain.com) and suffix attacks (evil.domain.com.attacker.com)'
+    - 'Boot-time panic for misconfiguration: throw plain Error (not SpatulaError) before any HTTP handling begins'
+    - 'SCOPE_TABLE_START/END HTML comment markers for CI gate parsing'
 
 key-files:
   created:
@@ -39,14 +39,14 @@ key-files:
     - apps/api/src/app.ts
 
 key-decisions:
-  - "buildOriginMatcher returns null (not throws) on bad config; caller throws Error — keeps the helper pure and testable"
+  - 'buildOriginMatcher returns null (not throws) on bad config; caller throws Error — keeps the helper pure and testable'
   - "Single-label wildcard: escape * first (include in metachar set), then replace \\* with [^./]+ — both steps are required; omitting * from the escape set was the root cause of the initial failing test"
-  - "Scope-table CI gate reads doc via filesystem (readFileSync) not HTTP — decouples from server boot; test is plain Vitest unit test"
-  - "import.meta.dirname used for monorepo root resolution in CI gate — avoids __dirname issues in ESM"
+  - 'Scope-table CI gate reads doc via filesystem (readFileSync) not HTTP — decouples from server boot; test is plain Vitest unit test'
+  - 'import.meta.dirname used for monorepo root resolution in CI gate — avoids __dirname issues in ESM'
 
 patterns-established:
-  - "CORS origin matcher: function-form origin in Hono cors() is the correct pattern for dynamic matching"
-  - "CI doc-sync gate: HTML comment markers delimit table region; first backtick-quoted column cell is the scope name"
+  - 'CORS origin matcher: function-form origin in Hono cors() is the correct pattern for dynamic matching'
+  - 'CI doc-sync gate: HTML comment markers delimit table region; first backtick-quoted column cell is the scope name'
 
 requirements-completed: [AUTH-03, AUTH-06]
 
@@ -100,6 +100,7 @@ completed: 2026-05-20
 ### Auto-fixed Issues
 
 **1. [Rule 1 - Bug] Regex metachar set missing `*` — wildcard tests failing**
+
 - **Found during:** Task 1 (TDD GREEN phase)
 - **Issue:** The escape regex `/[.+?^${}()|[\]\\]/g` did not include `*`. When `https://*.spatula.dev` was processed, the `*` character was left raw in the string. The subsequent `replace('\\*', '[^./]+')` found no `\*` to replace — so the pattern remained `https://*.spatula.dev` (with a raw `*`), which in a regex means "zero or more `/`", causing `https://app.spatula.dev` to not match.
 - **Fix:** Added `*` to the escape character class: `/[*+.?^${}()|[\]\\]/g`. After this, `*` is escaped to `\*` and then correctly replaced with `[^./]+`.
@@ -128,8 +129,9 @@ None — no external service configuration required.
 - Plans 17-04 (API key rotation) and 17-07 (isolation audit) can proceed independently
 
 ---
-*Phase: 17-browser-auth-sse-cors*
-*Completed: 2026-05-20*
+
+_Phase: 17-browser-auth-sse-cors_
+_Completed: 2026-05-20_
 
 ## Self-Check: PASSED
 

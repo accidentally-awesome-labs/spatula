@@ -53,11 +53,11 @@ Forensic provenance wired end-to-end: suspicious extractions and off-schema retr
 
 ## Tasks Completed
 
-| Task | Description | Commit | Files |
-|------|-------------|--------|-------|
-| 1 | Forensic archiver + StaticExtractor wiring | 1a42073 | forensic-archiver.ts, forensic-archiver.test.ts, static-extractor.ts, extraction/index.ts, core/index.ts |
-| 2 | admin:forensic:read scope + forensic endpoint + OpenAPI experimental | adb17dc | admin-forensic.ts, admin-forensic.test.ts, auth/types.ts, auth/types.test.ts, app.ts, api-auth.md |
-| 3 | SDK client.experimental.forensic.* surface | df76455 | forensic.ts, forensic.test.ts, experimental/index.ts, client.ts, experimental-namespace.test.ts |
+| Task | Description                                                          | Commit  | Files                                                                                                    |
+| ---- | -------------------------------------------------------------------- | ------- | -------------------------------------------------------------------------------------------------------- |
+| 1    | Forensic archiver + StaticExtractor wiring                           | 1a42073 | forensic-archiver.ts, forensic-archiver.test.ts, static-extractor.ts, extraction/index.ts, core/index.ts |
+| 2    | admin:forensic:read scope + forensic endpoint + OpenAPI experimental | adb17dc | admin-forensic.ts, admin-forensic.test.ts, auth/types.ts, auth/types.test.ts, app.ts, api-auth.md        |
+| 3    | SDK client.experimental.forensic.\* surface                          | df76455 | forensic.ts, forensic.test.ts, experimental/index.ts, client.ts, experimental-namespace.test.ts          |
 
 ## Verification Results
 
@@ -73,6 +73,7 @@ Forensic provenance wired end-to-end: suspicious extractions and off-schema retr
 ### Auto-fixed Issues
 
 **1. [Rule 1 - Bug] Updated stale experimental-namespace test**
+
 - **Found during:** Task 3 (GREEN phase)
 - **Issue:** `tests/unit/experimental-namespace.test.ts` checked for error message `/zero experimental surfaces/` — a literal string from the old v1.0 "empty namespace" implementation. Plan 18-05 explicitly ships one experimental surface (forensic), changing the error message.
 - **Fix:** Updated test to assert `toThrow(/not available/)` and added test case confirming `forensic` prop does NOT throw.
@@ -94,8 +95,9 @@ None — all forensic functionality is wired end-to-end.
 ## Self-Check: PASSED
 
 All key files confirmed present on disk. All three task commits confirmed in git log.
+
 - forensic-archiver.ts: FOUND
-- admin-forensic.ts: FOUND  
+- admin-forensic.ts: FOUND
 - forensic.ts (client): FOUND
 - auth/types.test.ts: FOUND
 - commit 1a42073: FOUND

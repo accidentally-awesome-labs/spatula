@@ -20,7 +20,7 @@ spec:
       securityContext:
         runAsNonRoot: true
         runAsUser: 65532
-      terminationGracePeriodSeconds: 30  # matches SHUTDOWN_TIMEOUT_MS 25s + buffer
+      terminationGracePeriodSeconds: 30 # matches SHUTDOWN_TIMEOUT_MS 25s + buffer
       containers:
         - name: api
           # Image tag is overridden by overlays.

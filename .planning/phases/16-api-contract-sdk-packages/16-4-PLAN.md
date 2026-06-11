@@ -37,73 +37,73 @@ requirements:
 
 must_haves:
   truths:
-    - "tests/contract/ runs in CI on every PR; every (route, status, example) tuple from the served /openapi.json validates against its schema using Ajv2020"
-    - "Every 4xx/5xx response across the API conforms to the error envelope (gate via tests/contract/errors.test.ts)"
+    - 'tests/contract/ runs in CI on every PR; every (route, status, example) tuple from the served /openapi.json validates against its schema using Ajv2020'
+    - 'Every 4xx/5xx response across the API conforms to the error envelope (gate via tests/contract/errors.test.ts)'
     - "Every successful auth'd response carries the four rate-limit headers (gate via tests/contract/headers.test.ts)"
     - "Offset-paginated routes carry Deprecation + Sunset + Link headers; cursor routes don't (gate via tests/contract/deprecation.test.ts)"
-    - "All timestamps in API responses parse as ISO 8601 UTC (gate via tests/contract/timestamps.test.ts)"
-    - "Every public route path begins with /api/v1/ (gate via tests/contract/versioning.test.ts)"
-    - "docs/api-errors.md, docs/api-idempotency.md, docs/cookbook/webhooks.md, docs/deprecation-policy.md exist and grep-validate against their per-REQ assertions"
+    - 'All timestamps in API responses parse as ISO 8601 UTC (gate via tests/contract/timestamps.test.ts)'
+    - 'Every public route path begins with /api/v1/ (gate via tests/contract/versioning.test.ts)'
+    - 'docs/api-errors.md, docs/api-idempotency.md, docs/cookbook/webhooks.md, docs/deprecation-policy.md exist and grep-validate against their per-REQ assertions'
     - "docs/architecture.md § 'Export format stability' lists 5 frozen formats"
   artifacts:
-    - path: "tests/contract/vitest.config.ts"
-      provides: "Vitest config for tests/contract/ — copies tests/private-contract/vitest.config.ts shape"
-      contains: "contract"
-    - path: "tests/contract/helpers/ajv-setup.ts"
+    - path: 'tests/contract/vitest.config.ts'
+      provides: 'Vitest config for tests/contract/ — copies tests/private-contract/vitest.config.ts shape'
+      contains: 'contract'
+    - path: 'tests/contract/helpers/ajv-setup.ts'
       provides: "Single Ajv2020 instance shared across the suite (Pitfall #1 — uses 'ajv/dist/2020' import)"
       contains: "from 'ajv/dist/2020"
-    - path: "tests/contract/helpers/server-harness.ts"
-      provides: "Boots API + captures port; copies tests/carveout/fixtures/server.ts pattern (Node-builtin http.Server adapter)"
-      contains: "http.Server"
-    - path: "tests/contract/generated.test.ts"
-      provides: "Matrix driver iterating served /openapi.json via describe.each + it.each"
-      contains: "describe.each"
-    - path: "tests/contract/errors.test.ts"
-      provides: "Error envelope conformance gate — asserts every 4xx/5xx response matches { code, message, requestId, details? }"
-      contains: "DOMAIN.CODE"
-    - path: "tests/contract/headers.test.ts"
-      provides: "Rate-limit header set gate"
-      contains: "X-RateLimit-Reset"
-    - path: "tests/contract/deprecation.test.ts"
-      provides: "Sunset/Deprecation headers on offset routes ONLY"
-      contains: "Sunset"
-    - path: "tests/contract/timestamps.test.ts"
-      provides: "ISO 8601 UTC parser sweep across response bodies"
-      contains: "Z"
-    - path: "tests/contract/versioning.test.ts"
-      provides: "Every OpenAPI path begins with /api/v1/"
-      contains: "/api/v1/"
-    - path: "docs/api-errors.md"
-      provides: "Frozen error-code enum reference; all DOMAIN.CODE values with HTTP status + typical conditions"
-      contains: "DOMAIN.CODE"
-    - path: "docs/api-idempotency.md"
-      provides: "Worked Idempotency-Key examples; references Wave 3-4 existing implementation"
-      contains: "Idempotency-Key"
-    - path: "docs/cookbook/webhooks.md"
-      provides: "HMAC-SHA256 verification example + retry schedule (1m, 5m, 30m, 2h, 8h → DLQ) + dedup pattern"
-      contains: "HMAC-SHA256"
-    - path: "docs/deprecation-policy.md"
-      provides: "Experimental-tag policy (6-month max lifetime, graduate-or-remove, client.experimental.* namespace contract)"
-      contains: "experimental"
-    - path: "docs/architecture.md"
+    - path: 'tests/contract/helpers/server-harness.ts'
+      provides: 'Boots API + captures port; copies tests/carveout/fixtures/server.ts pattern (Node-builtin http.Server adapter)'
+      contains: 'http.Server'
+    - path: 'tests/contract/generated.test.ts'
+      provides: 'Matrix driver iterating served /openapi.json via describe.each + it.each'
+      contains: 'describe.each'
+    - path: 'tests/contract/errors.test.ts'
+      provides: 'Error envelope conformance gate — asserts every 4xx/5xx response matches { code, message, requestId, details? }'
+      contains: 'DOMAIN.CODE'
+    - path: 'tests/contract/headers.test.ts'
+      provides: 'Rate-limit header set gate'
+      contains: 'X-RateLimit-Reset'
+    - path: 'tests/contract/deprecation.test.ts'
+      provides: 'Sunset/Deprecation headers on offset routes ONLY'
+      contains: 'Sunset'
+    - path: 'tests/contract/timestamps.test.ts'
+      provides: 'ISO 8601 UTC parser sweep across response bodies'
+      contains: 'Z'
+    - path: 'tests/contract/versioning.test.ts'
+      provides: 'Every OpenAPI path begins with /api/v1/'
+      contains: '/api/v1/'
+    - path: 'docs/api-errors.md'
+      provides: 'Frozen error-code enum reference; all DOMAIN.CODE values with HTTP status + typical conditions'
+      contains: 'DOMAIN.CODE'
+    - path: 'docs/api-idempotency.md'
+      provides: 'Worked Idempotency-Key examples; references Wave 3-4 existing implementation'
+      contains: 'Idempotency-Key'
+    - path: 'docs/cookbook/webhooks.md'
+      provides: 'HMAC-SHA256 verification example + retry schedule (1m, 5m, 30m, 2h, 8h → DLQ) + dedup pattern'
+      contains: 'HMAC-SHA256'
+    - path: 'docs/deprecation-policy.md'
+      provides: 'Experimental-tag policy (6-month max lifetime, graduate-or-remove, client.experimental.* namespace contract)'
+      contains: 'experimental'
+    - path: 'docs/architecture.md'
       provides: "New § 'Export format stability' lists the 5 frozen v1 export formats"
-      contains: "5 formats frozen"
-    - path: ".github/workflows/ci.yml"
-      provides: "Adds `pnpm test:contract` to PR CI alongside existing test:carveout + test:private-contract jobs"
-      contains: "test:contract"
+      contains: '5 formats frozen'
+    - path: '.github/workflows/ci.yml'
+      provides: 'Adds `pnpm test:contract` to PR CI alongside existing test:carveout + test:private-contract jobs'
+      contains: 'test:contract'
   key_links:
-    - from: "tests/contract/generated.test.ts"
-      to: "tests/contract/helpers/server-harness.ts"
-      via: "Boots the API server in suite-setup, captures port, fetches /api/v1/openapi.json from that port"
-      pattern: "harness.start"
-    - from: "tests/contract/generated.test.ts"
-      to: "tests/contract/helpers/ajv-setup.ts"
-      via: "Uses the shared Ajv2020 instance to compile and validate every (status, example) tuple"
-      pattern: "createAjv"
-    - from: ".github/workflows/ci.yml"
-      to: "tests/contract/vitest.config.ts"
-      via: "CI step `pnpm test:contract` invokes vitest with the contract config"
-      pattern: "test:contract"
+    - from: 'tests/contract/generated.test.ts'
+      to: 'tests/contract/helpers/server-harness.ts'
+      via: 'Boots the API server in suite-setup, captures port, fetches /api/v1/openapi.json from that port'
+      pattern: 'harness.start'
+    - from: 'tests/contract/generated.test.ts'
+      to: 'tests/contract/helpers/ajv-setup.ts'
+      via: 'Uses the shared Ajv2020 instance to compile and validate every (status, example) tuple'
+      pattern: 'createAjv'
+    - from: '.github/workflows/ci.yml'
+      to: 'tests/contract/vitest.config.ts'
+      via: 'CI step `pnpm test:contract` invokes vitest with the contract config'
+      pattern: 'test:contract'
 ---
 
 <objective>
@@ -112,12 +112,13 @@ Ship the contract test suite (tests/contract/) that consumes the live GET /api/v
 Purpose: Phase 16's hard gate. After this lands, every PR that breaks the v1 contract fails CI before merging. The doc deliverables batch here because they're zero-code and need to ship before plan 16-5's release infra can declare Phase 16 done.
 
 Output:
+
 - tests/contract/ full suite + vitest config + helpers (ajv-setup, server-harness, fixtures)
 - 6 contract test files (generated matrix driver + 5 explicit per-REQ suites)
 - 5 docs: api-errors.md, api-idempotency.md, cookbook/webhooks.md, deprecation-policy.md + architecture.md edit
 - CI wiring: pnpm test:contract added to .github/workflows/ci.yml
 - experimental-namespace.test.ts assertion that client.experimental Proxy throws on access (consumes plan 16-2 scaffolding)
-</objective>
+  </objective>
 
 <execution_context>
 @$HOME/.claude/get-shit-done/workflows/execute-plan.md
@@ -149,6 +150,7 @@ From tests/carveout/fixtures/server.ts (Phase 15 — REUSE this Node-builtin htt
 ```
 
 From plan 16-3 output (apps/api/src/routes/openapi.ts):
+
 ```
 // GET /api/v1/openapi.json returns the boot-cached OpenAPI 3.1 document.
 // tests/contract/ consumes this AT TEST-SUITE BOOT, then iterates the response.paths
@@ -156,24 +158,28 @@ From plan 16-3 output (apps/api/src/routes/openapi.ts):
 ```
 
 From packages/shared/src/error-codes.ts (plan 16-1, MOVED to @spatula/core-types by plan 16-2):
+
 ```
 export const ErrorCode = { JOB_NOT_FOUND: 'JOB.NOT_FOUND', ... } as const;
 // docs/api-errors.md generates a table from this.
 ```
 
 From packages/queue/src/webhook-sender.ts (existing — pre-Phase-16 implementation):
+
 - Already implements HMAC-SHA256 signing + retry schedule. docs/cookbook/webhooks.md DOCUMENTS this; no code changes.
 
 From packages/core/src/exporters/ (existing — pre-Phase-16 implementation):
+
 - 5 formats: JSON, CSV, Parquet, SQLite, DuckDB. docs/architecture.md § "Export format stability" enumerates these.
 
 Spec §3.3.11 (verbatim relevant excerpt — experimental-tag policy):
+
 - v1.0 ships ZERO experimental surfaces.
 - Lifetime: 6 months max per surface; graduate (promote to stable) or remove.
 - Removal emits Deprecation + Sunset headers (machinery deferred until first surface lands in Phase 18).
 - Namespace: `client.experimental.*` (Phase 16 scaffolding from plan 16-2).
-</interfaces>
-</context>
+  </interfaces>
+  </context>
 
 <tasks>
 
@@ -295,6 +301,7 @@ Spec §3.3.11 (verbatim relevant excerpt — experimental-tag policy):
     });
     ```
     Run `pnpm test:contract` to confirm scaffolding works, then delete the smoke file.
+
   </action>
   <verify>
     <automated>test -f tests/contract/vitest.config.ts && test -f tests/contract/helpers/ajv-setup.ts && test -f tests/contract/helpers/server-harness.ts && test -f tests/contract/helpers/fixtures.ts && grep -q "from 'ajv/dist/2020" tests/contract/helpers/ajv-setup.ts && grep -q "http.Server\|node:http" tests/contract/helpers/server-harness.ts && grep -q "test:contract" package.json</automated>
@@ -483,6 +490,7 @@ Spec §3.3.11 (verbatim relevant excerpt — experimental-tag policy):
     Mirror the existing test:carveout / test:private-contract job's env vars + setup steps. Add as a required check on main protection (gh CLI not needed; this is verifying the file change).
 
     Step 9: Run pnpm test:contract locally to confirm all six suites pass. Iterate on flaky 429 burst timing or fixture seeding as needed.
+
   </action>
   <verify>
     <automated>pnpm test:contract && grep -q "X-RateLimit-Reset" tests/contract/headers.test.ts && grep -q "Sunset" tests/contract/deprecation.test.ts && grep -q "DOMAIN.CODE\|[A-Z_]+\\\\.[A-Z_]+" tests/contract/errors.test.ts && grep -q "zero experimental surfaces" tests/contract/experimental.test.ts && grep -q "test:contract" .github/workflows/ci.yml && grep -q "/.well-known/spatula-version\|/api/v1/" tests/contract/versioning.test.ts</automated>
@@ -752,6 +760,7 @@ Spec §3.3.11 (verbatim relevant excerpt — experimental-tag policy):
     NOTE: The literal phrase "5 formats frozen" is what 16-VALIDATION.md greps for.
 
     Step 6: Verify each file via the grep gates in <verify>.
+
   </action>
   <verify>
     <automated>test -f docs/api-errors.md && grep -q "JOB\\.NOT_FOUND\|DOMAIN.CODE" docs/api-errors.md && test -f docs/api-idempotency.md && grep -q "Idempotency-Key" docs/api-idempotency.md && test -f docs/cookbook/webhooks.md && grep -q "HMAC-SHA256" docs/cookbook/webhooks.md && test -f docs/deprecation-policy.md && grep -q "experimental" docs/deprecation-policy.md && grep -q "5 formats frozen" docs/architecture.md</automated>
@@ -786,13 +795,14 @@ Spec §3.3.11 (verbatim relevant excerpt — experimental-tag policy):
 </verification>
 
 <success_criteria>
+
 - API-12: `tests/contract/` runs in CI on every PR; matrix driver covers every route × every status × every example. Verified by CI workflow + 6 test files passing.
 - API-07 (timestamp test gate), API-10 (versioning test gate), API-13 (experimental scaffolding test) — all explicit tests green.
 - API-08, API-09, API-11, API-13 (doc side): 5 docs committed and grep-validated.
 - Ajv2020 imported via `from 'ajv/dist/2020'` everywhere — Pitfall #1 protection.
 - tests/contract/ uses Node-builtin http.Server (no @hono/node-server at workspace root) — Phase 15 carry-forward.
 - Existing test:carveout + test:private-contract jobs still green (no regression).
-</success_criteria>
+  </success_criteria>
 
 <output>
 After completion, create `.planning/phases/16-api-contract-sdk-packages/16-4-SUMMARY.md` recording:

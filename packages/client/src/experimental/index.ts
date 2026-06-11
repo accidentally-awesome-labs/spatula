@@ -35,9 +35,7 @@ export interface ExperimentalNamespace {
  *
  * @param transport - The `SpatulaClient` transport (structural: must implement request + baseUrl).
  */
-export function createExperimentalNamespace(
-  transport: ForensicTransport,
-): ExperimentalNamespace {
+export function createExperimentalNamespace(transport: ForensicTransport): ExperimentalNamespace {
   // Lazily initialize the forensic surface so it's created once on first access.
   let forensicSurface: ReturnType<typeof createForensicSurface> | undefined;
 

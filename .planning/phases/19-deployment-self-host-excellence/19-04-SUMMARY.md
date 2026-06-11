@@ -1,6 +1,6 @@
 ---
 phase: 19-deployment-self-host-excellence
-plan: "04"
+plan: '04'
 subsystem: infra
 tags: [kubernetes, kustomize, kind, k8s, deploy, overlays, distroless, github-actions]
 
@@ -48,11 +48,11 @@ key-files:
     - (none — all new files)
 
 key-decisions:
-  - "wait-for-postgres initContainer removed from migrate-job.yaml base: it added postgres:16-alpine to the prod render, causing the no-stub acceptance check to fail; backoffLimit:3 + startupProbe on api handles ordering without the initContainer"
-  - "Dev overlay Secret requires no patch: base/secrets.yaml dev-default DATABASE_URL/REDIS_URL already point at the stub postgres/redis Services — no overlay secret patch needed"
-  - "emptyDir for postgres stub storage: throwaway dev data, no PVC lifecycle complexity"
-  - "k8s-smoke CI runs on-release + nightly (not PR): matches adversarial-llm.yml heavy-lane cadence per RESEARCH Open Question #2 and user decision"
-  - "helm/kind-action@v1.12.0 used in CI: official kind GH Action; builds images from source and loads into kind rather than pulling from GHCR (avoids registry auth in smoke CI)"
+  - 'wait-for-postgres initContainer removed from migrate-job.yaml base: it added postgres:16-alpine to the prod render, causing the no-stub acceptance check to fail; backoffLimit:3 + startupProbe on api handles ordering without the initContainer'
+  - 'Dev overlay Secret requires no patch: base/secrets.yaml dev-default DATABASE_URL/REDIS_URL already point at the stub postgres/redis Services — no overlay secret patch needed'
+  - 'emptyDir for postgres stub storage: throwaway dev data, no PVC lifecycle complexity'
+  - 'k8s-smoke CI runs on-release + nightly (not PR): matches adversarial-llm.yml heavy-lane cadence per RESEARCH Open Question #2 and user decision'
+  - 'helm/kind-action@v1.12.0 used in CI: official kind GH Action; builds images from source and loads into kind rather than pulling from GHCR (avoids registry auth in smoke CI)'
 
 requirements-completed: [DEPLOY-01]
 
@@ -101,7 +101,7 @@ completed: 2026-06-11
 - `deploy/k8s/overlays/prod/kustomization.yaml` — resources: base only; images pinned to 1.0.0; patches: patch-resources.yaml
 - `deploy/k8s/overlays/prod/patch-resources.yaml` — api+worker replicas:2; cpu:250m-1000m; memory:256Mi-512Mi
 - `deploy/k8s/README.md` — kind quickstart, migrate ordering explanation, spatula doctor procedure, prod external-services contract, D-08 secret upgrade paths
-- `.github/workflows/k8s-smoke.yml` — on push:tags:v* + schedule cron 02:00 UTC + workflow_dispatch; helm/kind-action, build+load images, apply dev overlay, wait Job+Deployment, smoke curl
+- `.github/workflows/k8s-smoke.yml` — on push:tags:v\* + schedule cron 02:00 UTC + workflow_dispatch; helm/kind-action, build+load images, apply dev overlay, wait Job+Deployment, smoke curl
 
 ## Decisions Made
 
@@ -115,6 +115,7 @@ completed: 2026-06-11
 ### Auto-fixed Issues
 
 **1. [Rule 1 - Bug] Removed wait-for-postgres initContainer from migrate-job.yaml**
+
 - **Found during:** Task 2 validation (overlay acceptance check)
 - **Issue:** The `wait-for-postgres` initContainer (`image: postgres:16-alpine`) in the base manifest caused `postgres:16-alpine` to appear in the prod overlay render. The plan's acceptance criterion `! grep -q "postgres:16-alpine" /tmp/prod.yaml` was failing.
 - **Fix:** Removed the initContainer entirely from `base/migrate-job.yaml`. Added explanatory comment documenting that `backoffLimit:3` + `restartPolicy:OnFailure` + the api's `startupProbe` handle ordering without RBAC or job-watch logic.
@@ -142,5 +143,6 @@ None beyond the deviation above.
 - Ready for Phase 19 Wave 3 completion; depends_on [19-02] satisfied
 
 ---
-*Phase: 19-deployment-self-host-excellence*
-*Completed: 2026-06-11*
+
+_Phase: 19-deployment-self-host-excellence_
+_Completed: 2026-06-11_

@@ -124,7 +124,10 @@ export function apiKeyRoutes() {
     if (!callerScopes.includes('admin')) {
       const invalidScopes = scopes.filter((s: string) => !callerScopes.includes(s));
       if (invalidScopes.length > 0) {
-        throw new AuthInsufficientScopeError(`Cannot grant scopes you don't have: ${invalidScopes.join(', ')}`, { context: { invalidScopes } });
+        throw new AuthInsufficientScopeError(
+          `Cannot grant scopes you don't have: ${invalidScopes.join(', ')}`,
+          { context: { invalidScopes } },
+        );
       }
     }
 
@@ -197,7 +200,9 @@ export function apiKeyRoutes() {
       await deps.apiKeyRepo.revoke(id, tenantId);
     } catch (error) {
       if (error instanceof StorageError && error.message.includes('not found')) {
-        throw new SpatulaError(`API key ${id} not found`, ErrorCode.JOB_NOT_FOUND, { context: { resource: 'api_key', apiKeyId: id } });
+        throw new SpatulaError(`API key ${id} not found`, ErrorCode.JOB_NOT_FOUND, {
+          context: { resource: 'api_key', apiKeyId: id },
+        });
       }
       throw error;
     }
@@ -244,18 +249,14 @@ export function apiKeyRoutes() {
     } catch (error) {
       if (error instanceof StorageError) {
         if (error.message.includes('not found')) {
-          throw new SpatulaError(
-            `API key ${id} not found`,
-            ErrorCode.RESOURCE_NOT_FOUND,
-            { context: { resource: 'api_key', apiKeyId: id } },
-          );
+          throw new SpatulaError(`API key ${id} not found`, ErrorCode.RESOURCE_NOT_FOUND, {
+            context: { resource: 'api_key', apiKeyId: id },
+          });
         }
         if (error.message.includes('revoked')) {
-          throw new SpatulaError(
-            `API key ${id} is already revoked`,
-            ErrorCode.JOB_INVALID_STATE,
-            { context: { resource: 'api_key', apiKeyId: id } },
-          );
+          throw new SpatulaError(`API key ${id} is already revoked`, ErrorCode.JOB_INVALID_STATE, {
+            context: { resource: 'api_key', apiKeyId: id },
+          });
         }
       }
       throw error;

@@ -10,10 +10,7 @@
  * - Each invocation produces a distinct key (no idempotency)
  */
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import {
-  archiveForensicExtraction,
-  FORENSIC_KEY_PREFIX,
-} from './forensic-archiver.js';
+import { archiveForensicExtraction, FORENSIC_KEY_PREFIX } from './forensic-archiver.js';
 import type { ForensicArchiveInput } from './forensic-archiver.js';
 
 // Minimal mock for ContentStore

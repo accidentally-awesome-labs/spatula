@@ -9,12 +9,12 @@
 
 ## What was built (Tasks 1-4)
 
-| Task | Deliverable                                                                                                          | Commit  |
-| ---- | -------------------------------------------------------------------------------------------------------------------- | ------- |
-| 1    | `.planning/phases/16-api-contract-sdk-packages/16-5-BLOCK04.md` — npm @spatula org check + fallback proposed         | 75f3452 |
-| 2    | `release-please-config.json` (9 entries + 2 plugins); `.release-please-manifest.json` (9 keys); 5 internal pkgs flipped to publishable; repo URLs updated | 76a030a |
+| Task | Deliverable                                                                                                                                                                  | Commit  |
+| ---- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------- |
+| 1    | `.planning/phases/16-api-contract-sdk-packages/16-5-BLOCK04.md` — npm @spatula org check + fallback proposed                                                                 | 75f3452 |
+| 2    | `release-please-config.json` (9 entries + 2 plugins); `.release-please-manifest.json` (9 keys); 5 internal pkgs flipped to publishable; repo URLs updated                    | 76a030a |
 | 3    | `.github/workflows/release.yml` (publish-npm job, id-token:write at JOB level, 8 pnpm publish steps); `.github/workflows/release-dry-run.yml` (PR + main push, non-blocking) | 90b720d |
-| 4    | 5 internal-package READMEs with canonical no-compat header; finalized `apps/cli/README.md` with publish-prep notes; finalized `apps/api/README.md` | c61b23e |
+| 4    | 5 internal-package READMEs with canonical no-compat header; finalized `apps/cli/README.md` with publish-prep notes; finalized `apps/api/README.md`                           | c61b23e |
 
 ---
 

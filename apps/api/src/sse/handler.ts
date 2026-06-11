@@ -15,7 +15,13 @@
  */
 import { streamSSE } from 'hono/streaming';
 import { Redis } from 'ioredis';
-import { createLogger, AuthInvalidTokenError, AuthMissingTokenError, SpatulaError, ErrorCode } from '@spatula/shared';
+import {
+  createLogger,
+  AuthInvalidTokenError,
+  AuthMissingTokenError,
+  SpatulaError,
+  ErrorCode,
+} from '@spatula/shared';
 import { RedisStreamBuffer } from './buffer.js';
 import { REPLAY_TRUNCATED_EVENT } from './types.js';
 import type { AppDeps } from '../types.js';
@@ -29,8 +35,7 @@ export function createSseHandler(deps: AppDeps) {
   return async (c: Context) => {
     const jobId = c.req.param('id');
     const token = c.req.query('token');
-    const lastEventId =
-      c.req.header('last-event-id') ?? c.req.query('lastEventId');
+    const lastEventId = c.req.header('last-event-id') ?? c.req.query('lastEventId');
 
     // ── Auth: consume single-use token via GETDEL ──────────────────────────
     if (!token) {

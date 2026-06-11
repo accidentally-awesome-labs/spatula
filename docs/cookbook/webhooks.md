@@ -23,13 +23,13 @@ Every event has this shape:
 
 ## Headers
 
-| Header                  | Description                                                     |
-| ----------------------- | --------------------------------------------------------------- |
-| `Content-Type`          | `application/json`                                              |
-| `User-Agent`            | `Spatula-Webhook/1.0`                                           |
-| `X-Spatula-Signature`   | `sha256=<hex>` — HMAC-SHA256 of the raw request body            |
-| `X-Spatula-Event-Id`    | Mirrors `event.id` for header-level inspection                  |
-| `X-Spatula-Event-Type`  | Mirrors `event.type` for routing without parsing the body       |
+| Header                 | Description                                               |
+| ---------------------- | --------------------------------------------------------- |
+| `Content-Type`         | `application/json`                                        |
+| `User-Agent`           | `Spatula-Webhook/1.0`                                     |
+| `X-Spatula-Signature`  | `sha256=<hex>` — HMAC-SHA256 of the raw request body      |
+| `X-Spatula-Event-Id`   | Mirrors `event.id` for header-level inspection            |
+| `X-Spatula-Event-Type` | Mirrors `event.type` for routing without parsing the body |
 
 The signature header is ONLY sent when you configured a `secret` on the webhook. Unsigned webhooks are supported for development but discouraged in production.
 
@@ -49,8 +49,7 @@ import crypto from 'node:crypto';
  * @param secret  The shared secret you configured on the webhook.
  */
 export function verifyWebhook(rawBody: string, signature: string, secret: string): boolean {
-  const expected =
-    'sha256=' + crypto.createHmac('sha256', secret).update(rawBody).digest('hex');
+  const expected = 'sha256=' + crypto.createHmac('sha256', secret).update(rawBody).digest('hex');
   // Constant-time comparison to prevent timing attacks.
   const a = Buffer.from(signature);
   const b = Buffer.from(expected);
@@ -110,7 +109,7 @@ async function handleWebhook(rawBody: string, signature: string) {
   const wasNew = await redis.set(`webhook:seen:${event.id}`, '1', 'EX', 86400, 'NX');
   if (!wasNew) return new Response('duplicate', { status: 200 });
 
-  await processEvent(event);    // Your business logic. MUST be idempotent.
+  await processEvent(event); // Your business logic. MUST be idempotent.
   return new Response('ok', { status: 200 });
 }
 ```
@@ -121,15 +120,15 @@ The 24-hour `seen` window is conservative — Spatula retries finish within ~10.
 
 The v1 surface emits these event types:
 
-| Type                  | When emitted                                       | `data` payload                       |
-| --------------------- | -------------------------------------------------- | ------------------------------------ |
-| `job.queued`          | Job accepted into BullMQ                           | `{ jobId, tenantId }`                |
-| `job.running`         | Worker picked up the job                           | `{ jobId, workerId }`                |
-| `job.completed`       | All pipeline stages finished                       | `{ jobId, stats }`                   |
-| `job.failed`          | Pipeline stage exhausted retries                   | `{ jobId, error }`                   |
-| `extraction.completed`| Extraction finished for a page                     | `{ jobId, extractionId, fieldCount }` |
-| `export.ready`        | Export materialization complete                    | `{ jobId, exportId, format, sizeBytes }` |
-| `schema.evolved`      | Schema-evolution action applied to a job's schema  | `{ jobId, schemaVersion, action }`   |
+| Type                   | When emitted                                      | `data` payload                           |
+| ---------------------- | ------------------------------------------------- | ---------------------------------------- |
+| `job.queued`           | Job accepted into BullMQ                          | `{ jobId, tenantId }`                    |
+| `job.running`          | Worker picked up the job                          | `{ jobId, workerId }`                    |
+| `job.completed`        | All pipeline stages finished                      | `{ jobId, stats }`                       |
+| `job.failed`           | Pipeline stage exhausted retries                  | `{ jobId, error }`                       |
+| `extraction.completed` | Extraction finished for a page                    | `{ jobId, extractionId, fieldCount }`    |
+| `export.ready`         | Export materialization complete                   | `{ jobId, exportId, format, sizeBytes }` |
+| `schema.evolved`       | Schema-evolution action applied to a job's schema | `{ jobId, schemaVersion, action }`       |
 
 Subscribe to a subset by setting `webhookConfig.events: ['job.completed', 'export.ready']` on the job; un-subscribed types are filtered server-side BEFORE enqueue (you'll never see them).
 

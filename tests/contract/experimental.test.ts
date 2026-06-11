@@ -35,7 +35,8 @@ describe('API-13 client.experimental namespace', () => {
 
   it('exposes the forensic surface and fails loud on any other property access', () => {
     const client = new SpatulaClient({ baseUrl: server.url });
-    const experimental = (client as unknown as { experimental: Record<string, unknown> }).experimental;
+    const experimental = (client as unknown as { experimental: Record<string, unknown> })
+      .experimental;
 
     // v1.0 ships exactly ONE experimental surface: forensic (Plan 18-05, SEC-05).
     // It MUST resolve to a real surface, not throw.
@@ -49,7 +50,8 @@ describe('API-13 client.experimental namespace', () => {
 
   it('does NOT throw on JS-runtime well-known property accesses (debug introspection)', () => {
     const client = new SpatulaClient({ baseUrl: server.url });
-    const experimental = (client as unknown as { experimental: Record<string, unknown> }).experimental;
+    const experimental = (client as unknown as { experimental: Record<string, unknown> })
+      .experimental;
 
     // Promise/await mechanism touches `.then`
     expect(() => experimental.then).not.toThrow();
@@ -63,7 +65,8 @@ describe('API-13 client.experimental namespace', () => {
 
   it('JSON.stringify on the namespace does not throw', () => {
     const client = new SpatulaClient({ baseUrl: server.url });
-    const experimental = (client as unknown as { experimental: Record<string, unknown> }).experimental;
+    const experimental = (client as unknown as { experimental: Record<string, unknown> })
+      .experimental;
     expect(() => JSON.stringify(experimental)).not.toThrow();
   });
 });

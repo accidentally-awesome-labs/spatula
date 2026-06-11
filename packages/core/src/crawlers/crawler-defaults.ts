@@ -32,10 +32,7 @@ export function buildUserAgent(version: string): string {
 function resolvePackageVersion(): string {
   try {
     const require = createRequire(import.meta.url);
-    const pkgPath = resolve(
-      dirname(fileURLToPath(import.meta.url)),
-      '../../package.json',
-    );
+    const pkgPath = resolve(dirname(fileURLToPath(import.meta.url)), '../../package.json');
     // eslint-disable-next-line @typescript-eslint/no-var-requires
     const pkg = require(pkgPath) as { version?: string };
     return pkg.version ?? '0.0.0';

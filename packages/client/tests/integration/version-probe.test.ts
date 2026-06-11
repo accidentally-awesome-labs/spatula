@@ -39,10 +39,10 @@ describe('integration: version-probe', () => {
       }
 
       if (url.includes('/api/v1/jobs')) {
-        return new Response(
-          JSON.stringify({ data: [], hasMore: false }),
-          { status: 200, headers: { 'content-type': 'application/json' } },
-        );
+        return new Response(JSON.stringify({ data: [], hasMore: false }), {
+          status: 200,
+          headers: { 'content-type': 'application/json' },
+        });
       }
 
       return new Response('Not Found', { status: 404 });
@@ -71,10 +71,10 @@ describe('integration: version-probe', () => {
     const fetchMock = vi.fn(async (input: string | URL | Request) => {
       const url = typeof input === 'string' ? input : input.toString();
       calls.push(url);
-      return new Response(
-        JSON.stringify({ data: [], hasMore: false }),
-        { status: 200, headers: { 'content-type': 'application/json' } },
-      );
+      return new Response(JSON.stringify({ data: [], hasMore: false }), {
+        status: 200,
+        headers: { 'content-type': 'application/json' },
+      });
     });
 
     const client = new SpatulaClient({
@@ -97,10 +97,10 @@ describe('integration: version-probe', () => {
       if (url.endsWith('/.well-known/spatula-version')) {
         return new Response('Not Found', { status: 404 });
       }
-      return new Response(
-        JSON.stringify({ data: [], hasMore: false }),
-        { status: 200, headers: { 'content-type': 'application/json' } },
-      );
+      return new Response(JSON.stringify({ data: [], hasMore: false }), {
+        status: 200,
+        headers: { 'content-type': 'application/json' },
+      });
     });
 
     const probe = new VersionProbe({
@@ -114,14 +114,17 @@ describe('integration: version-probe', () => {
     await expect(probe.ensure()).resolves.toBeUndefined();
   });
 
-  it.skipIf(!LIVE)('live (SPATULA_LIVE_LLM=1): probe completes against a real /.well-known endpoint', async () => {
-    const baseUrl = process.env.SPATULA_BASE_URL ?? 'http://localhost:3000';
-    const probe = new VersionProbe({
-      baseUrl,
-      fetcher: globalThis.fetch,
-      sdkMajor: 0,
-    });
-    // Doesn't throw against a live server with /.well-known/spatula-version
-    await expect(probe.ensure()).resolves.toBeUndefined();
-  });
+  it.skipIf(!LIVE)(
+    'live (SPATULA_LIVE_LLM=1): probe completes against a real /.well-known endpoint',
+    async () => {
+      const baseUrl = process.env.SPATULA_BASE_URL ?? 'http://localhost:3000';
+      const probe = new VersionProbe({
+        baseUrl,
+        fetcher: globalThis.fetch,
+        sdkMajor: 0,
+      });
+      // Doesn't throw against a live server with /.well-known/spatula-version
+      await expect(probe.ensure()).resolves.toBeUndefined();
+    },
+  );
 });

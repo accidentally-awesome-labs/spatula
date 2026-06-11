@@ -45,6 +45,7 @@ NN-attack-class.html
 ```
 
 Examples:
+
 ```
 01-direct-injection.html
 02-zero-width-smuggling.html
@@ -53,6 +54,7 @@ Examples:
 ```
 
 Rules:
+
 - Two-digit zero-padded number (`01`, `02`, ..., `11`, `12`).
 - Lowercase kebab-case attack class name.
 - `.html` extension.
@@ -98,8 +100,8 @@ describe('adversarial: NN — attack-class-name', () => {
 
       assertSafeExtraction(result, {
         mustHaveTitle: true,
-        forbiddenKeys: ['injected_field'],     // field names the injection tries to add
-        forbiddenValues: ['injection_value'],   // values the injection tries to exfiltrate
+        forbiddenKeys: ['injected_field'], // field names the injection tries to add
+        forbiddenValues: ['injection_value'], // values the injection tries to exfiltrate
       });
     },
     30_000,
@@ -120,6 +122,7 @@ packages/core/src/extraction/__tests__/pinned-models.ts
 ```
 
 Current pins:
+
 - `openrouter`: `anthropic/claude-3-5-sonnet-20240620`
 - `ollama`: `llama3.1:8b-instruct-q4_0`
 

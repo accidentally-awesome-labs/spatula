@@ -10,11 +10,7 @@
  * error subclasses; rely on your bundler's tree-shaking to drop unused ones.
  */
 export { SpatulaClient, SpatulaApiError } from './client.js';
-export type {
-  SpatulaClientOptions,
-  HttpMethod,
-  ApiErrorEnvelope,
-} from './client.js';
+export type { SpatulaClientOptions, HttpMethod, ApiErrorEnvelope } from './client.js';
 
 export { createJob } from './methods/create-job.js';
 export type { CreateJobInput, CreateJobResult } from './methods/create-job.js';
@@ -37,10 +33,7 @@ export type {
   UnsubscribeFn,
 } from './methods/get-job-events.js';
 
-export {
-  SpatulaVersionMismatchError,
-  FeatureUnavailableError,
-} from './errors/base.js';
+export { SpatulaVersionMismatchError, FeatureUnavailableError } from './errors/base.js';
 export type { SpatulaApiErrorOpts } from './errors/base.js';
 
 // Phase 16 plan 16-3 (D-12): lazy version probe. Exported for advanced

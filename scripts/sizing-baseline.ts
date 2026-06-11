@@ -125,8 +125,12 @@ function printMarkdownTable(results: TierResult[]): void {
   log(`Target VM: Hetzner CX32 (4 vCPU / 8 GB RAM / 80 GB SSD NVMe)`);
   log(`Seed URL:  ${SEED_URL}`);
   log(`Pages/tier: ${TARGET_PAGES}\n`);
-  log('| Tier    | Model                                  | Pages | Wall-clock | Total LLM cost | LLM cost/page |');
-  log('| ------- | -------------------------------------- | ----- | ---------- | -------------- | ------------- |');
+  log(
+    '| Tier    | Model                                  | Pages | Wall-clock | Total LLM cost | LLM cost/page |',
+  );
+  log(
+    '| ------- | -------------------------------------- | ----- | ---------- | -------------- | ------------- |',
+  );
   for (const r of results) {
     log(
       `| ${r.tier.padEnd(7)} | ${r.model.padEnd(38)} | ${String(r.pages).padEnd(5)} | ${r.wallClockFormatted.padEnd(10)} | ${formatCost(r.totalCostUsd).padEnd(14)} | ${formatCost(r.costPerPageUsd).padEnd(13)} |`,
@@ -160,9 +164,8 @@ async function runTier(tier: TierConfig): Promise<TierResult> {
     // eslint-disable-next-line @typescript-eslint/no-require-imports
     const dbMod = await import('@spatula/db');
     createDb = (dbMod as { createDb?: (url: string) => unknown }).createDb as typeof createDb;
-    LlmUsageRepository = (
-      dbMod as { LlmUsageRepository?: typeof LlmUsageRepository }
-    ).LlmUsageRepository as typeof LlmUsageRepository;
+    LlmUsageRepository = (dbMod as { LlmUsageRepository?: typeof LlmUsageRepository })
+      .LlmUsageRepository as typeof LlmUsageRepository;
   } catch {
     throw new Error(
       'Could not import @spatula/db — run `pnpm install` and ensure packages are built.',
@@ -190,10 +193,7 @@ async function runTier(tier: TierConfig): Promise<TierResult> {
   //
   // Import is dynamic/lazy to avoid requiring Redis when gate is unset.
   // ------------------------------------------------------------------
-  let LocalPipelineRunner: new (opts: {
-    tenantId: string;
-    usageRecorder?: unknown;
-  }) => {
+  let LocalPipelineRunner: new (opts: { tenantId: string; usageRecorder?: unknown }) => {
     run: (config: unknown) => Promise<{ pagesCompleted: number; status: string }>;
   };
 

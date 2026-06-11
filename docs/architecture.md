@@ -157,13 +157,13 @@ All three must hold to consider the swap.
 
 Spatula exports data in **5 formats frozen at v1**: JSON, CSV, Parquet, SQLite, DuckDB. The wire shape of each format is FROZEN — additive-only across 1.x; removing or restructuring exported columns is a MAJOR break (see `docs/compat-policy.md`). Every record includes per-field provenance metadata (one of: `extracted`, `normalized`, `merged`, `resolved`, `inferred`).
 
-| Format    | Provenance shape                                                  | Use case                                          |
-| --------- | ----------------------------------------------------------------- | ------------------------------------------------- |
-| JSON      | Per-record nested `_provenance` object                            | Programmatic consumption; SDK round-trips         |
-| CSV       | Per-field `<field>__source` sibling columns                       | Spreadsheet / quick inspection                    |
-| Parquet   | Provenance struct column                                          | Analytical queries; columnar warehouse            |
-| SQLite    | Sidecar `_provenance` table joined by `(record_id, field_name)`   | Embeddable; offline analysis                      |
-| DuckDB    | Same as SQLite + materialized `provenance` view                   | Analytical queries; SQL-native                    |
+| Format  | Provenance shape                                                | Use case                                  |
+| ------- | --------------------------------------------------------------- | ----------------------------------------- |
+| JSON    | Per-record nested `_provenance` object                          | Programmatic consumption; SDK round-trips |
+| CSV     | Per-field `<field>__source` sibling columns                     | Spreadsheet / quick inspection            |
+| Parquet | Provenance struct column                                        | Analytical queries; columnar warehouse    |
+| SQLite  | Sidecar `_provenance` table joined by `(record_id, field_name)` | Embeddable; offline analysis              |
+| DuckDB  | Same as SQLite + materialized `provenance` view                 | Analytical queries; SQL-native            |
 
 **Why frozen at v1:** downstream consumers (BI pipelines, embedded apps shipping `.sqlite` files, analytical jobs over `.parquet`) cannot tolerate per-minor shape changes. Treating the export wire shape as part of the API contract — same freeze rules as the OpenAPI surface — is a deliberate v1 promise.
 

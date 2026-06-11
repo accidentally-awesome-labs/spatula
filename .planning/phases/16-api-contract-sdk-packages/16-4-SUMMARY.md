@@ -104,14 +104,14 @@ Each task was committed atomically:
 
 ## Matrix Driver Counters (initial run)
 
-| Counter | Value |
-| ------- | ----- |
+| Counter                                                                           | Value  |
+| --------------------------------------------------------------------------------- | ------ |
 | Total `(path, method, status)` tuples discovered in served `/api/v1/openapi.json` | **56** |
-| Tuples carrying a declared `example` or `examples` | **0** |
-| Examples that passed Ajv2020 validation (Pass 1) | **0** |
-| Examples that FAILED Ajv2020 validation (Pass 1) | **0** |
-| Live 2xx fetches whose body validated against schema (Pass 2) | **4** |
-| Live fetches skipped (non-2xx / fixture unresolvable / non-JSON) | **16** |
+| Tuples carrying a declared `example` or `examples`                                | **0**  |
+| Examples that passed Ajv2020 validation (Pass 1)                                  | **0**  |
+| Examples that FAILED Ajv2020 validation (Pass 1)                                  | **0**  |
+| Live 2xx fetches whose body validated against schema (Pass 2)                     | **4**  |
+| Live fetches skipped (non-2xx / fixture unresolvable / non-JSON)                  | **16** |
 
 **Observation:** zero `(status, example)` tuples have declared examples in the current served spec — meaning Pass 1 has no work today. This is NOT a contract suite bug; it's an observation about the spec's current state. Plan 16-5 + future plans should add response examples to the route schemas as those routes graduate to stable. The suite is ready to enforce the moment any example lands.
 
@@ -124,6 +124,7 @@ Each task was committed atomically:
 - **Collect time:** ~37s (vitest's transform overhead reading the entire workspace via aliases)
 
 CI runtime will be longer due to:
+
 - Cold pnpm install (~30s)
 - `pnpm run build` warm-up (~60s)
 - `db:migrate` apply (~5s)
@@ -140,6 +141,7 @@ The matrix driver discovered 56 `(path, method, status)` tuples. The path tree (
 ### Auto-fixed Issues
 
 **1. [Rule 1 - Bug] Three auth providers emit legacy `AUTH_ERROR` flat code**
+
 - **Found during:** Task 2 (errors.test.ts AUTH.INVALID_TOKEN assertion)
 - **Issue:** `apps/api/src/auth/{api-key,jwt,no-auth}-provider.ts` all threw `new AuthError(...)` which carries the legacy `code: 'AUTH_ERROR'` (pre-Phase-16). Plan 16-1's grep sweep for legacy flat codes covered `apps/api/src/routes/`, `apps/api/src/middleware/`, `apps/api/src/openapi-config.ts`, and `apps/api/src/app.ts` — but NOT `apps/api/src/auth/`. The legacy throws slipped through. The error-handler middleware mapped them to status 401 but left the `code` field as `AUTH_ERROR` in the envelope.
 - **Fix:** Replace `AuthError` with the typed DOMAIN.CODE subclasses introduced by plan 16-1:
@@ -151,6 +153,7 @@ The matrix driver discovered 56 `(path, method, status)` tuples. The path tree (
 - **Committed in:** `1d5ba4a` (Task 2)
 
 **2. [Rule 3 - Blocker] Plan 16-3 omitted new public endpoints from SKIP_AUTH_PATHS**
+
 - **Found during:** Task 2 smoke verification (every contract test 401'd on the first /api/v1/openapi.json fetch)
 - **Issue:** Plan 16-3 added two new public endpoints (`GET /api/v1/openapi.json` and `GET /.well-known/spatula-version`) but didn't add them to the `SKIP_AUTH_PATHS` set in `apps/api/src/middleware/auth.ts`. With the auth middleware enforcing Bearer-token presence on all `/api/*` paths, every contract test that fetched the spec got 401 and the suite couldn't iterate ANY tuple. The well-known path slipped through because it's NOT under `/api/*` — but the openapi-json path explicitly is.
 - **Fix:** Add both paths to `SKIP_AUTH_PATHS` (the well-known path is added even though it's currently outside the auth middleware's path filter — defensive, in case the filter ever broadens).
@@ -159,6 +162,7 @@ The matrix driver discovered 56 `(path, method, status)` tuples. The path tree (
 - **Committed in:** `1d5ba4a` (Task 2)
 
 **3. [Rule 3 - Blocker] ioredis not hoisted to workspace root**
+
 - **Found during:** Task 2 (headers.test.ts imports the optional-Redis wiring from the harness)
 - **Issue:** `tests/contract/helpers/server-harness.ts` needed to construct an `ioredis` client to make the rate-limit middleware activate. ioredis lives in `packages/db` + `packages/queue` + `apps/api` + `apps/cli` package.json files but NOT at the workspace root, so vitest's import resolution failed: `Failed to load url ioredis (resolved id: ioredis)`.
 - **Fix:** Add `ioredis@^5.10.0` to root `devDependencies` (test-only). The alternative — re-exporting `Redis` from `@spatula/db` — was rejected as a public-surface change for a test-only concern.
@@ -169,11 +173,13 @@ The matrix driver discovered 56 `(path, method, status)` tuples. The path tree (
 ### Deferred Items
 
 **1. Pre-existing TS strict-mode error in plan 16-3's `apps/api/src/routes/openapi.ts:34`**
+
 - Plan 16-3 emits `{ schema: z.record(z.unknown()) }` for the openapi.json response. Hono's typed context narrows the response to `TypedResponse<never, 200, "json">`, which conflicts with `c.json(spec as any, 200)` (the cast goes from `any` to `never`).
 - **Behavior:** `tsc` build fails; **vitest still works** (esbuild transpilation is more permissive).
 - **Out of scope** — introduced by plan 16-3; logged to `deferred-items.md` under `.planning/phases/16-api-contract-sdk-packages/`. Plan 16-5 or a 16-3 follow-up should clean it up.
 
 **2. Limited example coverage in the served spec (Pass 1: 0 tuples with examples)**
+
 - The Phase-16 spec currently declares schemas but few/no response examples. Pass 1 of the matrix driver has no work today as a result. NOT a suite bug — the suite is ready to enforce the moment examples land. Add to Plan 16-5 / Phase 17 follow-up: progressively populate response `examples` on each route schema, especially for the JOB / EXTRACTION / EXPORT domains.
 
 ---
@@ -223,6 +229,7 @@ None — no new environment variables, no new infrastructure beyond the existing
 ## Self-Check: PASSED
 
 All 23 created/modified files exist on disk; all 3 task commits present in `git log`. Verification gates green:
+
 - contract suite: 24/24 tests pass (7 files: scaffolding ✓ + 6 per-REQ + 1 matrix driver)
 - apps/api unit: 391/391 tests pass (no regression from Rule 1 fix or auth.ts SKIP_AUTH_PATHS additions)
 - carveout: 7/7 tests pass

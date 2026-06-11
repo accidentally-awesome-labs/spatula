@@ -1,6 +1,6 @@
 ---
 phase: 17-browser-auth-sse-cors
-plan: "05"
+plan: '05'
 subsystem: auth-dex
 tags: [oidc, dex, docker, m2m, client_credentials, local-idp]
 dependency_graph:
@@ -36,11 +36,11 @@ key_files:
     - examples/auth-dex/smoke/m2m-flow.ts (updated sub assertion to handle Dex protobuf encoding)
     - examples/auth-dex/README.md (added note on v2.46.0+ image requirement)
 decisions:
-  - "Used ghcr.io/dexidp/dex:latest (v2.46.0+) instead of pinned v2.45.1: the client_credentials grant handler was not implemented in v2.45.x — the go switch statement had no case for it. v2.46.0 adds the handler and requires both oauth2.grantTypes list + DEX_CLIENT_CREDENTIAL_GRANT_ENABLED_BY_DEFAULT env var."
-  - "Dex client_credentials sub claim is a base64url-encoded protobuf message (field 1 = client_id string), not the literal client_id. m2m-flow.ts assertion updated to decode and verify the client_id is embedded in the sub bytes."
+  - 'Used ghcr.io/dexidp/dex:latest (v2.46.0+) instead of pinned v2.45.1: the client_credentials grant handler was not implemented in v2.45.x — the go switch statement had no case for it. v2.46.0 adds the handler and requires both oauth2.grantTypes list + DEX_CLIENT_CREDENTIAL_GRANT_ENABLED_BY_DEFAULT env var.'
+  - 'Dex client_credentials sub claim is a base64url-encoded protobuf message (field 1 = client_id string), not the literal client_id. m2m-flow.ts assertion updated to decode and verify the client_id is embedded in the sub bytes.'
 metrics:
-  duration: "~13 minutes (tasks 1-2 by prior executor; task 3 fix by continuation)"
-  completed_date: "2026-05-20"
+  duration: '~13 minutes (tasks 1-2 by prior executor; task 3 fix by continuation)'
+  completed_date: '2026-05-20'
   tasks_completed: 3
   files_modified: 7
 ---
@@ -55,17 +55,18 @@ The `examples/auth-dex/` kit — a zero-config local OIDC identity provider for 
 
 **Artifacts:**
 
-| File | Purpose |
-|------|---------|
-| `examples/auth-dex/docker-compose.yml` | Dex container with SQLite bind-mount, port 5556, healthcheck |
-| `examples/auth-dex/config/dex.yaml` | Issuer, storage, two static clients, dev password, grantTypes list |
-| `examples/auth-dex/.gitignore` | Ignores `data/` (SQLite DB) |
-| `examples/auth-dex/README.md` | Zero-config walkthrough with client table, dev login, smoke script docs |
-| `examples/auth-dex/smoke/check-dex.ts` | Discovery-doc health probe — prints `dex-ok`, exits 0 |
-| `examples/auth-dex/smoke/browser-flow.ts` | Playwright PKCE authorization_code reference flow |
-| `examples/auth-dex/smoke/m2m-flow.ts` | client_credentials reference flow — prints `m2m-flow-ok`, exits 0 |
+| File                                      | Purpose                                                                 |
+| ----------------------------------------- | ----------------------------------------------------------------------- |
+| `examples/auth-dex/docker-compose.yml`    | Dex container with SQLite bind-mount, port 5556, healthcheck            |
+| `examples/auth-dex/config/dex.yaml`       | Issuer, storage, two static clients, dev password, grantTypes list      |
+| `examples/auth-dex/.gitignore`            | Ignores `data/` (SQLite DB)                                             |
+| `examples/auth-dex/README.md`             | Zero-config walkthrough with client table, dev login, smoke script docs |
+| `examples/auth-dex/smoke/check-dex.ts`    | Discovery-doc health probe — prints `dex-ok`, exits 0                   |
+| `examples/auth-dex/smoke/browser-flow.ts` | Playwright PKCE authorization_code reference flow                       |
+| `examples/auth-dex/smoke/m2m-flow.ts`     | client_credentials reference flow — prints `m2m-flow-ok`, exits 0       |
 
 **Empirically verified (real Docker 29.3.0, Compose v5.1.0):**
+
 - `docker compose up -d` → healthy in **2 seconds** (AUTH-04: <10s criterion)
 - Discovery doc at `http://localhost:5556/dex/.well-known/openid-configuration` includes `client_credentials` in `grant_types_supported`
 - `smoke/check-dex.ts` → `dex-ok`, exits 0
@@ -102,15 +103,16 @@ None — all smoke scripts run to completion and produce real token assertions. 
 
 ## Task Commits
 
-| Task | Commit | Description |
-|------|--------|-------------|
-| 1 | `bf45b8b` | Author Dex docker-compose + config + gitignore |
-| 2 | `0001950` | Add README, discovery-doc probe, and D-11 browser + M2M smoke scripts |
+| Task    | Commit    | Description                                                                       |
+| ------- | --------- | --------------------------------------------------------------------------------- |
+| 1       | `bf45b8b` | Author Dex docker-compose + config + gitignore                                    |
+| 2       | `0001950` | Add README, discovery-doc probe, and D-11 browser + M2M smoke scripts             |
 | 3 (fix) | `27b50be` | Enable client_credentials grant in Dex config (image upgrade + sub assertion fix) |
 
 ## Self-Check: PASSED
 
 All created files confirmed present. All task commits confirmed in git log:
+
 - `bf45b8b` (Task 1) — FOUND
 - `0001950` (Task 2) — FOUND
 - `27b50be` (Task 3 fix) — FOUND

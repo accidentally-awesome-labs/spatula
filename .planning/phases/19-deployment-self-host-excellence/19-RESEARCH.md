@@ -7,6 +7,7 @@
 ---
 
 <user_constraints>
+
 ## User Constraints (from CONTEXT.md)
 
 ### Locked Decisions
@@ -31,26 +32,28 @@
 - traefik / caddy reverse-proxy recipes (community-contributed stubs with "not first-party tested" disclaimer only; nginx is the only tested recipe).
 - Full CI topology + devcontainer (Phase 21).
 - Release-workflow launch polish + post-publish smoke + cosign-in-launch-runbook (Phase 22).
-</user_constraints>
+  </user_constraints>
 
 ---
 
 <phase_requirements>
+
 ## Phase Requirements
 
-| ID | Description | Research Support |
-|----|-------------|------------------|
-| DEPLOY-01 | `deploy/k8s/` kustomize base + dev/prod overlays; api, worker, migrate job; applies cleanly to kind | Kustomize directory pattern + Job/initContainer ordering + dev stub pods confirmed |
-| DEPLOY-02 | `render.yaml` at repo root deploys on Render free-tier | render.yaml schema verified; free Web Service + Postgres + Key Value confirmed; embedded-worker gap identified |
-| DEPLOY-03 | Multi-arch images (amd64+arm64) via buildx; distroless api/worker/migrate; Debian-slim cli | distroless nodejs22-debian12 confirmed; pnpm deploy pattern confirmed; better-sqlite3 cross-compile risk flagged |
-| DEPLOY-04 | cosign-signed images + SBOM (cyclonedx-json) on release; cosign verify on fresh machine | keyless cosign workflow pattern confirmed; anchore/sbom-action + cosign attest pattern confirmed |
-| DEPLOY-05 | `docs/runbooks/backup-restore.md` + `tests/e2e/backup/` round-trip | ContentStore interface confirmed (no `listKeys`); pg_dump + ContentStore iterate pattern defined |
-| DEPLOY-06 | `docs/runbooks/upgrade.md` version-to-version migration template | Existing upgrade.md confirmed; template section to add |
-| DEPLOY-07 | `docs/runbooks/reverse-proxy.md` nginx tested; traefik/caddy stubs | nginx config pattern confirmed; token-in-URL log masking pattern confirmed |
-| DEPLOY-08 | `docs/support-matrix.md` + min-version CI matrix | GH Actions service container matrix pattern confirmed from existing ci.yml |
-| DEPLOY-09 | `docs/runbooks/hardware-sizing.md` measured 1k-page baseline | SPATULA_LIVE_LLM gate pattern confirmed; existing usage/cost API reusable |
-| DEPLOY-10 | `tests/upgrade/` seeds v1.0 DB, applies v1.x migrations, verifies runtime | 0000_v1_baseline.sql exists; upgrade test approach confirmed |
-| DEPLOY-11 | `tests/config/` verifies v1.0 `spatula.yaml` parses on v1.1 runtime | parseProjectYamlFile in @spatula/core confirmed as validation surface |
+| ID        | Description                                                                                         | Research Support                                                                                                 |
+| --------- | --------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------- |
+| DEPLOY-01 | `deploy/k8s/` kustomize base + dev/prod overlays; api, worker, migrate job; applies cleanly to kind | Kustomize directory pattern + Job/initContainer ordering + dev stub pods confirmed                               |
+| DEPLOY-02 | `render.yaml` at repo root deploys on Render free-tier                                              | render.yaml schema verified; free Web Service + Postgres + Key Value confirmed; embedded-worker gap identified   |
+| DEPLOY-03 | Multi-arch images (amd64+arm64) via buildx; distroless api/worker/migrate; Debian-slim cli          | distroless nodejs22-debian12 confirmed; pnpm deploy pattern confirmed; better-sqlite3 cross-compile risk flagged |
+| DEPLOY-04 | cosign-signed images + SBOM (cyclonedx-json) on release; cosign verify on fresh machine             | keyless cosign workflow pattern confirmed; anchore/sbom-action + cosign attest pattern confirmed                 |
+| DEPLOY-05 | `docs/runbooks/backup-restore.md` + `tests/e2e/backup/` round-trip                                  | ContentStore interface confirmed (no `listKeys`); pg_dump + ContentStore iterate pattern defined                 |
+| DEPLOY-06 | `docs/runbooks/upgrade.md` version-to-version migration template                                    | Existing upgrade.md confirmed; template section to add                                                           |
+| DEPLOY-07 | `docs/runbooks/reverse-proxy.md` nginx tested; traefik/caddy stubs                                  | nginx config pattern confirmed; token-in-URL log masking pattern confirmed                                       |
+| DEPLOY-08 | `docs/support-matrix.md` + min-version CI matrix                                                    | GH Actions service container matrix pattern confirmed from existing ci.yml                                       |
+| DEPLOY-09 | `docs/runbooks/hardware-sizing.md` measured 1k-page baseline                                        | SPATULA_LIVE_LLM gate pattern confirmed; existing usage/cost API reusable                                        |
+| DEPLOY-10 | `tests/upgrade/` seeds v1.0 DB, applies v1.x migrations, verifies runtime                           | 0000_v1_baseline.sql exists; upgrade test approach confirmed                                                     |
+| DEPLOY-11 | `tests/config/` verifies v1.0 `spatula.yaml` parses on v1.1 runtime                                 | parseProjectYamlFile in @spatula/core confirmed as validation surface                                            |
+
 </phase_requirements>
 
 ---
@@ -70,34 +73,38 @@ The second critical finding is that **distroless nodejs22 images use `node` as t
 ## Standard Stack
 
 ### Core
-| Library / Tool | Version | Purpose | Why Standard |
-|----------------|---------|---------|--------------|
-| `gcr.io/distroless/nodejs22-debian12` | latest (debian12 tag) | Runtime base for api/worker/migrate images | No shell, no package manager — minimal attack surface; supports linux/amd64 + linux/arm64 |
-| `node:22-bookworm-slim` | 22-bookworm-slim | Debian-slim base for cli image | CLI needs shell for `npx playwright install`; lighter than alpine; arm64 native |
-| `node:22-alpine` | 22-alpine | Build stage (unchanged) | Existing build/prod-deps stages are alpine and work correctly |
-| `docker/setup-qemu-action` | v3 | QEMU for arm64 emulation in GH Actions | Required for cross-arch buildx on ubuntu-latest |
-| `docker/setup-buildx-action` | v3 | Multi-arch buildx builder | Required prerequisite |
-| `docker/build-push-action` | v6 | Build + push with `platforms: linux/amd64,linux/arm64` | Existing workflow already uses v6 |
-| `sigstore/cosign-installer` | v3 | Install cosign in GH Actions | Official action; pins cosign binary |
-| `anchore/sbom-action` | v0 (latest stable) | Install syft + generate cyclonedx-json SBOM | Official Anchore GH Action; handles syft download + caching |
-| kustomize | v5.7.1 (bundled in kubectl) | k8s overlay management | kubectl v1.34.1 on dev machine includes kustomize v5.7.1 |
-| kind | v0.23+ | Local k8s cluster for dev overlay smoke test | Standard tooling for local k8s; install in CI |
+
+| Library / Tool                        | Version                     | Purpose                                                | Why Standard                                                                              |
+| ------------------------------------- | --------------------------- | ------------------------------------------------------ | ----------------------------------------------------------------------------------------- |
+| `gcr.io/distroless/nodejs22-debian12` | latest (debian12 tag)       | Runtime base for api/worker/migrate images             | No shell, no package manager — minimal attack surface; supports linux/amd64 + linux/arm64 |
+| `node:22-bookworm-slim`               | 22-bookworm-slim            | Debian-slim base for cli image                         | CLI needs shell for `npx playwright install`; lighter than alpine; arm64 native           |
+| `node:22-alpine`                      | 22-alpine                   | Build stage (unchanged)                                | Existing build/prod-deps stages are alpine and work correctly                             |
+| `docker/setup-qemu-action`            | v3                          | QEMU for arm64 emulation in GH Actions                 | Required for cross-arch buildx on ubuntu-latest                                           |
+| `docker/setup-buildx-action`          | v3                          | Multi-arch buildx builder                              | Required prerequisite                                                                     |
+| `docker/build-push-action`            | v6                          | Build + push with `platforms: linux/amd64,linux/arm64` | Existing workflow already uses v6                                                         |
+| `sigstore/cosign-installer`           | v3                          | Install cosign in GH Actions                           | Official action; pins cosign binary                                                       |
+| `anchore/sbom-action`                 | v0 (latest stable)          | Install syft + generate cyclonedx-json SBOM            | Official Anchore GH Action; handles syft download + caching                               |
+| kustomize                             | v5.7.1 (bundled in kubectl) | k8s overlay management                                 | kubectl v1.34.1 on dev machine includes kustomize v5.7.1                                  |
+| kind                                  | v0.23+                      | Local k8s cluster for dev overlay smoke test           | Standard tooling for local k8s; install in CI                                             |
 
 ### Supporting
-| Library / Tool | Version | Purpose | When to Use |
-|----------------|---------|---------|-------------|
-| `node:22-alpine AS build` | (existing) | Build stage — all Dockerfiles | Keep as-is; only runtime stage changes |
-| `pnpm deploy --filter @spatula/X --prod` | pnpm 9 | Extract per-package production deps | Consider for Dockerfile.migrate (only needs @spatula/db deps) |
-| nginx | 1.25+ | Reverse proxy recipe (tested) | Validated recipe for reverse-proxy.md |
+
+| Library / Tool                           | Version    | Purpose                             | When to Use                                                   |
+| ---------------------------------------- | ---------- | ----------------------------------- | ------------------------------------------------------------- |
+| `node:22-alpine AS build`                | (existing) | Build stage — all Dockerfiles       | Keep as-is; only runtime stage changes                        |
+| `pnpm deploy --filter @spatula/X --prod` | pnpm 9     | Extract per-package production deps | Consider for Dockerfile.migrate (only needs @spatula/db deps) |
+| nginx                                    | 1.25+      | Reverse proxy recipe (tested)       | Validated recipe for reverse-proxy.md                         |
 
 ### Alternatives Considered
-| Instead of | Could Use | Tradeoff |
-|------------|-----------|----------|
-| `gcr.io/distroless/nodejs22-debian12` | `cgr.dev/chainguard/node:22` | Chainguard images are more aggressively hardened but require a Chainguard account for some tags; distroless is simpler for OSS |
-| QEMU emulation for arm64 | Native arm64 runner (paid) | Native eliminates slow better-sqlite3 rebuild under QEMU but costs more; QEMU is fine with proper Dockerfile cross-compile flags |
-| `anchore/sbom-action` | `syft` CLI directly | sbom-action wraps syft with caching and standard output; equivalent result, action is simpler |
+
+| Instead of                            | Could Use                    | Tradeoff                                                                                                                         |
+| ------------------------------------- | ---------------------------- | -------------------------------------------------------------------------------------------------------------------------------- |
+| `gcr.io/distroless/nodejs22-debian12` | `cgr.dev/chainguard/node:22` | Chainguard images are more aggressively hardened but require a Chainguard account for some tags; distroless is simpler for OSS   |
+| QEMU emulation for arm64              | Native arm64 runner (paid)   | Native eliminates slow better-sqlite3 rebuild under QEMU but costs more; QEMU is fine with proper Dockerfile cross-compile flags |
+| `anchore/sbom-action`                 | `syft` CLI directly          | sbom-action wraps syft with caching and standard output; equivalent result, action is simpler                                    |
 
 **Installation (dev/CI):**
+
 ```bash
 # cosign (dev machine verification)
 brew install cosign   # macOS
@@ -109,6 +116,7 @@ go install sigs.k8s.io/kind@v0.23.0
 ```
 
 **Version verification (confirmed 2026-06-10):**
+
 - distroless nodejs22-debian12: `gcr.io/distroless/nodejs22-debian12` (supports linux/amd64, linux/arm64, arm, s390x, ppc64le)
 - kustomize: v5.7.1 (bundled in kubectl v1.34.1 on this machine — CI uses kubectl install or `kustomize` standalone)
 
@@ -117,6 +125,7 @@ go install sigs.k8s.io/kind@v0.23.0
 ## Architecture Patterns
 
 ### Recommended Project Structure (new files)
+
 ```
 deploy/k8s/
 ├── base/
@@ -212,6 +221,7 @@ CMD ["apps/api/dist/index.js"]
 ```
 
 For the CLI (needs a shell for tools like `npx playwright`), use `node:22-bookworm-slim`:
+
 ```dockerfile
 FROM node:22-bookworm-slim AS runtime
 # ... same COPY structure
@@ -239,7 +249,7 @@ docker:
   permissions:
     contents: read
     packages: write
-    id-token: write       # required for keyless cosign signing
+    id-token: write # required for keyless cosign signing
   strategy:
     matrix:
       include:
@@ -250,12 +260,12 @@ docker:
         - image: cli
           dockerfile: Dockerfile.cli
         - image: migrate
-          dockerfile: Dockerfile.migrate   # new
+          dockerfile: Dockerfile.migrate # new
   steps:
     - uses: actions/checkout@v4
 
     - name: Set up QEMU
-      uses: docker/setup-qemu-action@v3   # required for arm64
+      uses: docker/setup-qemu-action@v3 # required for arm64
 
     - name: Set up Docker Buildx
       uses: docker/setup-buildx-action@v3
@@ -369,7 +379,7 @@ spec:
               valueFrom: { secretKeyRef: { name: spatula-secrets, key: PGHOST } }
       containers:
         - name: migrate
-          image: ghcr.io/accidentally-awesome-labs/spatula/migrate:latest   # overridden by overlay
+          image: ghcr.io/accidentally-awesome-labs/spatula/migrate:latest # overridden by overlay
           envFrom:
             - secretRef: { name: spatula-secrets }
 ```
@@ -382,7 +392,12 @@ spec:
       initContainers:
         - name: wait-for-migrate
           image: busybox:1.37
-          command: ['sh', '-c', 'until kubectl get job spatula-migrate -o jsonpath="{.status.succeeded}" | grep 1; do sleep 3; done']
+          command:
+            [
+              'sh',
+              '-c',
+              'until kubectl get job spatula-migrate -o jsonpath="{.status.succeeded}" | grep 1; do sleep 3; done',
+            ]
           # NOTE: requires RBAC to read Jobs; simpler alternative: healthcheck polling loop
 ```
 
@@ -410,11 +425,11 @@ apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
 resources:
   - ../../base
-  - postgres-stub.yaml   # Deployment + Service: postgres:16-alpine
-  - redis-stub.yaml      # Deployment + Service: redis:7-alpine
+  - postgres-stub.yaml # Deployment + Service: postgres:16-alpine
+  - redis-stub.yaml # Deployment + Service: redis:7-alpine
 patches:
-  - patch-secrets-dev.yaml   # replace placeholder secrets with dev values
-  - patch-images-dev.yaml    # image tags: :latest
+  - patch-secrets-dev.yaml # replace placeholder secrets with dev values
+  - patch-images-dev.yaml # image tags: :latest
 ```
 
 The stub Deployments use the same images as docker-compose.yml (`postgres:16-alpine`, `redis:7-alpine`) and expose them as Services with ClusterIP so the api/worker/migrate pods can reach them via `DATABASE_URL=postgresql://spatula:spatula@postgres:5432/spatula`.
@@ -443,11 +458,11 @@ services:
           type: keyvalue
           property: connectionString
       - key: SPATULA_EMBEDDED_WORKER
-        value: "1"    # D-06: runs worker in-process on free tier
+        value: '1' # D-06: runs worker in-process on free tier
       - key: NODE_ENV
         value: production
       - key: SPATULA_RENDER_FREE_TIER
-        value: "1"    # for runbook caveat documentation
+        value: '1' # for runbook caveat documentation
 
   - name: spatula-cache
     type: keyvalue
@@ -462,6 +477,7 @@ databases:
 ```
 
 **Render free tier caveats to document in runbook:**
+
 - Free Postgres: 30-day expiry (Render forum shows 30 days, not 90 — verify before publishing runbook. Earlier search result said "90 days" but Render forum is authoritative. Flag as MEDIUM confidence: verify at render.com/docs/free before writing runbook prose).
 - Free web service: spins down after 15 min of inactivity; cold start ~30s.
 - Free Key Value: does NOT persist to disk on restart — all Redis data lost on each restart.
@@ -499,6 +515,7 @@ export async function startEmbeddedWorker(): Promise<void> {
 ### Pattern 9: Test Suite Structure
 
 **backup round-trip test (`tests/e2e/backup/round-trip.test.ts`):**
+
 ```
 Pattern: Same as DSR deletion test (no HTTP fixture; direct DB/ContentStore calls)
 1. Seed: INSERT rows across all tables + ContentStore.store() calls
@@ -512,6 +529,7 @@ Pattern: Same as DSR deletion test (no HTTP fixture; direct DB/ContentStore call
 **ContentStore backup note:** The `ContentStore` interface has no `listKeys()` method. The backup test must enumerate content by querying the `content_store` table directly (via Drizzle) and calling `retrieve()` for each row. This is correct for the Postgres-backed store. For S3/Local stores, the backup test is explicitly out of scope for v1 (runbook documents the pg_dump + DB-enumeration approach; S3 uses native bucket replication tooling).
 
 **upgrade test (`tests/upgrade/migrate-and-verify.test.ts`):**
+
 ```
 1. Create a fresh test DB
 2. Apply 0000_v1_baseline.sql directly (psql or raw SQL execution)
@@ -523,6 +541,7 @@ Pattern: Same as DSR deletion test (no HTTP fixture; direct DB/ContentStore call
 ```
 
 **config-compat test (`tests/config/config-compat.test.ts`):**
+
 ```
 1. Write a v1.0 spatula.yaml fixture to a temp dir
 2. Call parseProjectYamlFile (from @spatula/core) on it
@@ -548,55 +567,62 @@ Source: tests/e2e/dsr/deletion/round-trip.test.ts pattern; packages/core/src/dia
 
 ## Don't Hand-Roll
 
-| Problem | Don't Build | Use Instead | Why |
-|---------|-------------|-------------|-----|
-| Container supply chain signing | Custom GPG key infrastructure | cosign keyless (OIDC → Fulcio → Rekor) | No key management, transparent log, follows Sigstore standard |
-| SBOM generation | Manual dependency enumeration | anchore/sbom-action (syft) | Handles node_modules tree, produces spec-valid cyclonedx-json |
-| Multi-arch builds | Separate per-arch CI jobs with manual manifest merge | docker/build-push-action with platforms: linux/amd64,linux/arm64 | Handles manifest list creation automatically |
-| k8s environment management | Manual YAML duplication | kustomize overlays | Shipped with kubectl; zero extra deps |
-| Render Postgres connection | Manual URL construction | `fromDatabase: { property: connectionString }` | Render handles URL rotation on plan changes |
+| Problem                        | Don't Build                                          | Use Instead                                                      | Why                                                           |
+| ------------------------------ | ---------------------------------------------------- | ---------------------------------------------------------------- | ------------------------------------------------------------- |
+| Container supply chain signing | Custom GPG key infrastructure                        | cosign keyless (OIDC → Fulcio → Rekor)                           | No key management, transparent log, follows Sigstore standard |
+| SBOM generation                | Manual dependency enumeration                        | anchore/sbom-action (syft)                                       | Handles node_modules tree, produces spec-valid cyclonedx-json |
+| Multi-arch builds              | Separate per-arch CI jobs with manual manifest merge | docker/build-push-action with platforms: linux/amd64,linux/arm64 | Handles manifest list creation automatically                  |
+| k8s environment management     | Manual YAML duplication                              | kustomize overlays                                               | Shipped with kubectl; zero extra deps                         |
+| Render Postgres connection     | Manual URL construction                              | `fromDatabase: { property: connectionString }`                   | Render handles URL rotation on plan changes                   |
 
 ---
 
 ## Common Pitfalls
 
 ### Pitfall 1: distroless CMD Double-Node Invocation
+
 **What goes wrong:** `node apps/api/dist/index.js` works on alpine (no preset ENTRYPOINT) but fails on distroless with "Error: Cannot find module 'apps/api/dist/index.js'" because the effective command becomes `node node apps/api/dist/index.js`.
 **Why it happens:** distroless Node images have `ENTRYPOINT ["node"]` baked in; adding `node` to CMD duplicates it.
 **How to avoid:** Use `CMD ["apps/api/dist/index.js"]` (single-element array, path only).
 **Warning signs:** Container exits immediately with a node module resolution error referencing the first argument as a file path.
 
 ### Pitfall 2: Worker Lifecycle Conflict in Embedded Mode
+
 **What goes wrong:** `worker-entrypoint.ts`'s `main()` registers its own `process.on('SIGTERM', ...)` handlers and calls `process.exit(0)`. In embedded mode, these conflict with the API server's own shutdown handlers.
 **Why it happens:** worker-entrypoint.ts was designed as a standalone process.
 **How to avoid:** Refactor worker-entrypoint.ts to expose `startWorker()` that returns a `{ shutdown() }` handle. Wire it into `apps/api/src/shutdown.ts`'s `executeShutdown()`.
 **Warning signs:** API container exits silently on SIGTERM before HTTP connections drain; worker shutdown races with API shutdown.
 
 ### Pitfall 3: cosign Signing Before Push Digest is Available
+
 **What goes wrong:** Attempting to sign `image:tag` (by tag) instead of `image@digest` can sign a different layer if the tag is updated concurrently.
 **Why it happens:** Tag-based signing is a TOCTOU vulnerability.
 **How to avoid:** Always use `${{ steps.build.outputs.digest }}` (the immutable digest output from build-push-action) as the signing target.
 **Warning signs:** cosign warns "signing by tag is not recommended".
 
 ### Pitfall 4: id-token:write Missing on docker Job
+
 **What goes wrong:** cosign fails with "error getting identity token: 'no ID token received'" — no useful error message about permissions.
 **Why it happens:** The docker job currently has `permissions: { contents: write, packages: write }` at the workflow level; job-level override is needed for OIDC.
 **How to avoid:** Add `id-token: write` to the `docker` job's `permissions` block specifically (not workflow-level, per Phase 16 Pitfall #4 precedent).
 **Warning signs:** cosign step fails on the OIDC token fetch step.
 
 ### Pitfall 5: Render Free Postgres vs. Key Value Persistence
+
 **What goes wrong:** Redis Key Value data (BullMQ job queues, ws-token state) is wiped on every Render free instance restart. Jobs submitted to BullMQ are lost on restart.
 **Why it happens:** Free Render Key Value instances do NOT persist to disk between restarts (unlike paid instances).
 **How to avoid:** Document clearly in runbook; frame blueprint as "demo/try-it" only. The API gracefully handles empty queues on startup.
 **Warning signs:** Users report jobs disappearing after a Render sleep/restart cycle.
 
 ### Pitfall 6: kind Cluster Timing — Migrate Job vs. API Startup
+
 **What goes wrong:** `kubectl apply -k deploy/k8s/overlays/dev` succeeds but the api pod is in CrashLoopBackOff because the migrate job hasn't finished yet.
 **Why it happens:** k8s Deployments and Jobs start concurrently unless ordering is enforced.
 **How to avoid:** Use a `startupProbe` on the api/worker Deployments that polls `/health/ready` (which checks DB). If DB isn't migrated, the ready probe fails and the pod restarts. Set `initialDelaySeconds: 20` to give the migrate Job a head start.
 **Warning signs:** api pod logs show Drizzle migration table not found or schema mismatch errors on first start.
 
 ### Pitfall 7: better-sqlite3 ARM64 Cross-Compile in QEMU
+
 **What goes wrong:** The arm64 build of `better-sqlite3` takes 15–25 minutes under QEMU emulation on a GitHub Actions ubuntu-latest runner.
 **Why it happens:** QEMU emulates the full CPU, making native C++ compilation extremely slow.
 **How to avoid:** Use Docker's `--build-arg BUILDPLATFORM` and native-target cross-compile flags, OR accept the slow build for now (it will be correct if slow). Do NOT use `--platform=$BUILDPLATFORM` for the prod-deps stage if you want native arm64 binaries.
@@ -607,6 +633,7 @@ Source: tests/e2e/dsr/deletion/round-trip.test.ts pattern; packages/core/src/dia
 ## Code Examples
 
 ### Dockerfile.migrate (new file, distroless)
+
 ```dockerfile
 # Dockerfile.migrate — one-shot migration runner
 # Uses distroless nodejs22-debian12 with db-package deps only.
@@ -655,6 +682,7 @@ CMD ["packages/db/dist/run-migrate.js"]
 ```
 
 ### Vitest Config for New Test Suites
+
 The root `tests/vitest.config.ts` already includes `tests/e2e/**/*.test.ts`. New test files placed under `tests/e2e/backup/` will be picked up automatically. For `tests/upgrade/` and `tests/config/`, either extend the root config's `include` array or add sibling vitest configs:
 
 ```typescript
@@ -682,6 +710,7 @@ export default defineConfig({
 Add `"test:upgrade"` and `"test:config"` scripts to root `package.json`.
 
 ### spatula doctor — 9 Checks Confirmed
+
 doctor command runs: 5 system checks (node-version, docker, llm-provider, playwright, env-file) + 4 server checks (postgres, redis, api-server, migrations) = 9 total. SC#1 asserts 9/9 green from inside the cluster. In k8s, the cli image must be run as a Job or ephemeral container with access to `DATABASE_URL`, `REDIS_URL`, and `API_URL` env vars. `spatula doctor` will pass when: (a) api pod is running and healthy, (b) postgres reachable, (c) redis reachable, (d) migrations applied. The doctor `node-version` check always passes (Node 22 in image). `playwright` is warn not fail (not installed in api/worker pods — that is expected). Net: 9/9 green is achievable.
 
 ---
@@ -694,21 +723,23 @@ Phase 19 is not a rename/refactor — no runtime state inventory required.
 
 ## Environment Availability
 
-| Dependency | Required By | Available | Version | Fallback |
-|------------|------------|-----------|---------|----------|
-| Docker / buildx | Multi-arch image builds | ✓ | Docker 29.3.0, buildx v0.32.1 | — |
-| kubectl + kustomize | k8s overlay testing | ✓ | kubectl v1.34.1, kustomize v5.7.1 | — |
-| kind | Dev overlay smoke test (local) | ✗ | — | Install via `brew install kind` or CI step |
-| cosign | Image signing verification | ✗ | — | Install via `brew install cosign` or CI action |
-| pg_dump | Backup test + runbook | ✓ | pg_dump (PostgreSQL) 14.23 | — |
-| redis-cli | Backup runbook | ✓ | redis-cli 8.8.0 | — |
-| Node 26 | Build/test | ✓ | v26.0.0 | — |
+| Dependency          | Required By                    | Available | Version                           | Fallback                                       |
+| ------------------- | ------------------------------ | --------- | --------------------------------- | ---------------------------------------------- |
+| Docker / buildx     | Multi-arch image builds        | ✓         | Docker 29.3.0, buildx v0.32.1     | —                                              |
+| kubectl + kustomize | k8s overlay testing            | ✓         | kubectl v1.34.1, kustomize v5.7.1 | —                                              |
+| kind                | Dev overlay smoke test (local) | ✗         | —                                 | Install via `brew install kind` or CI step     |
+| cosign              | Image signing verification     | ✗         | —                                 | Install via `brew install cosign` or CI action |
+| pg_dump             | Backup test + runbook          | ✓         | pg_dump (PostgreSQL) 14.23        | —                                              |
+| redis-cli           | Backup runbook                 | ✓         | redis-cli 8.8.0                   | —                                              |
+| Node 26             | Build/test                     | ✓         | v26.0.0                           | —                                              |
 
 **Missing dependencies with no fallback (must install):**
+
 - `kind` — required to run `kubectl apply -k deploy/k8s/overlays/dev` locally (CI will install via `go install` or the kindest/kind GH Action).
 - `cosign` — required for local verification smoke tests; install on dev machine before SC#3 verification.
 
 **Missing dependencies with fallback:**
+
 - None blocking for CI; GitHub Actions installs all required tools via dedicated steps.
 
 ---
@@ -716,36 +747,40 @@ Phase 19 is not a rename/refactor — no runtime state inventory required.
 ## Validation Architecture
 
 ### Test Framework
-| Property | Value |
-|----------|-------|
-| Framework | vitest 2.1.0 |
-| Config file | `tests/vitest.config.ts` (root) — backup tests added to include; upgrade+config tests get sibling configs |
-| Quick run command | `pnpm test:e2e` (covers backup) / `vitest run --config tests/upgrade/vitest.config.ts` |
+
+| Property           | Value                                                                                                                      |
+| ------------------ | -------------------------------------------------------------------------------------------------------------------------- |
+| Framework          | vitest 2.1.0                                                                                                               |
+| Config file        | `tests/vitest.config.ts` (root) — backup tests added to include; upgrade+config tests get sibling configs                  |
+| Quick run command  | `pnpm test:e2e` (covers backup) / `vitest run --config tests/upgrade/vitest.config.ts`                                     |
 | Full suite command | `pnpm test:e2e && vitest run --config tests/upgrade/vitest.config.ts && vitest run --config tests/config/vitest.config.ts` |
 
 ### Phase Requirements → Test Map
 
-| Req ID | Behavior | Test Type | Automated Command | File Exists? |
-|--------|----------|-----------|-------------------|-------------|
-| DEPLOY-01 | kustomize base + overlays apply cleanly on kind | smoke | `kubectl apply -k deploy/k8s/overlays/dev && kubectl wait --for=condition=Available deployment/spatula-api --timeout=120s` | ❌ Wave 0 (CI job: `.github/workflows/k8s-smoke.yml`) |
-| DEPLOY-02 | render.yaml is valid blueprint YAML | lint | `python3 -c "import yaml; yaml.safe_load(open('render.yaml'))"` | ❌ Wave 0 |
-| DEPLOY-03 | Images build multi-arch + run | build | CI: `docker buildx build --platform linux/amd64,linux/arm64 --no-push -f Dockerfile.api .` | ❌ Wave 0 (CI job) |
-| DEPLOY-04 | cosign verify succeeds on all 4 images | smoke | `cosign verify ghcr.io/.../api@<digest> --certificate-identity-regexp=... --certificate-oidc-issuer=...` | ❌ Wave 0 (post-release manual) |
-| DEPLOY-05 | backup→restore round-trip: row-count + content-hash parity | e2e | `vitest run --config tests/vitest.config.ts tests/e2e/backup/round-trip.test.ts` | ❌ Wave 0 |
-| DEPLOY-06 | upgrade.md version template exists | grep | `grep -q "## Version-to-Version Migration Template" docs/runbooks/upgrade.md` | ❌ Wave 0 (doc edit) |
-| DEPLOY-07 | nginx config reverse-proxies to spatula api | e2e | `nginx -t -c docs/runbooks/nginx.conf && curl -f http://localhost/health/live` (manual or CI with nginx service) | ❌ Wave 0 |
-| DEPLOY-08 | min-version matrix CI passes | CI | `.github/workflows/support-matrix.yml` with node 22 × pg 14/15/16 × redis 7 | ❌ Wave 0 (CI job) |
-| DEPLOY-09 | hardware-sizing.md has measured table | manual | `grep -q "1000 pages" docs/runbooks/hardware-sizing.md` + human review | ❌ Wave 0 (live measurement) |
-| DEPLOY-10 | v1.0 DB → v1.x migration → runtime verified | integration | `vitest run --config tests/upgrade/vitest.config.ts` | ❌ Wave 0 |
-| DEPLOY-11 | v1.0 spatula.yaml parses on v1.1 runtime | unit | `vitest run --config tests/config/vitest.config.ts` | ❌ Wave 0 |
+| Req ID    | Behavior                                                   | Test Type   | Automated Command                                                                                                          | File Exists?                                          |
+| --------- | ---------------------------------------------------------- | ----------- | -------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------- |
+| DEPLOY-01 | kustomize base + overlays apply cleanly on kind            | smoke       | `kubectl apply -k deploy/k8s/overlays/dev && kubectl wait --for=condition=Available deployment/spatula-api --timeout=120s` | ❌ Wave 0 (CI job: `.github/workflows/k8s-smoke.yml`) |
+| DEPLOY-02 | render.yaml is valid blueprint YAML                        | lint        | `python3 -c "import yaml; yaml.safe_load(open('render.yaml'))"`                                                            | ❌ Wave 0                                             |
+| DEPLOY-03 | Images build multi-arch + run                              | build       | CI: `docker buildx build --platform linux/amd64,linux/arm64 --no-push -f Dockerfile.api .`                                 | ❌ Wave 0 (CI job)                                    |
+| DEPLOY-04 | cosign verify succeeds on all 4 images                     | smoke       | `cosign verify ghcr.io/.../api@<digest> --certificate-identity-regexp=... --certificate-oidc-issuer=...`                   | ❌ Wave 0 (post-release manual)                       |
+| DEPLOY-05 | backup→restore round-trip: row-count + content-hash parity | e2e         | `vitest run --config tests/vitest.config.ts tests/e2e/backup/round-trip.test.ts`                                           | ❌ Wave 0                                             |
+| DEPLOY-06 | upgrade.md version template exists                         | grep        | `grep -q "## Version-to-Version Migration Template" docs/runbooks/upgrade.md`                                              | ❌ Wave 0 (doc edit)                                  |
+| DEPLOY-07 | nginx config reverse-proxies to spatula api                | e2e         | `nginx -t -c docs/runbooks/nginx.conf && curl -f http://localhost/health/live` (manual or CI with nginx service)           | ❌ Wave 0                                             |
+| DEPLOY-08 | min-version matrix CI passes                               | CI          | `.github/workflows/support-matrix.yml` with node 22 × pg 14/15/16 × redis 7                                                | ❌ Wave 0 (CI job)                                    |
+| DEPLOY-09 | hardware-sizing.md has measured table                      | manual      | `grep -q "1000 pages" docs/runbooks/hardware-sizing.md` + human review                                                     | ❌ Wave 0 (live measurement)                          |
+| DEPLOY-10 | v1.0 DB → v1.x migration → runtime verified                | integration | `vitest run --config tests/upgrade/vitest.config.ts`                                                                       | ❌ Wave 0                                             |
+| DEPLOY-11 | v1.0 spatula.yaml parses on v1.1 runtime                   | unit        | `vitest run --config tests/config/vitest.config.ts`                                                                        | ❌ Wave 0                                             |
 
 ### Sampling Rate
+
 - **Per task commit:** `pnpm build && pnpm typecheck` (no new tests until test files exist)
 - **Per wave merge:** full test suite + `kubectl apply -k deploy/k8s/overlays/dev` smoke
 - **Phase gate:** All 11 DEPLOY-xx validated (automated where possible; manual note for DEPLOY-09 + DEPLOY-04)
 
 ### Heavy Test CI Cadence (Claude's Discretion)
+
 Follow the `adversarial-llm.yml` precedent: the new `tests/e2e/backup/`, `tests/upgrade/`, `tests/config/` lanes + the min-version matrix should run:
+
 - **on-release** (trigger: `on: push: tags: ['v*']`)
 - **nightly** (trigger: `on: schedule: [{cron: '0 2 * * *'}]`)
 - NOT on every PR (to avoid adding DB-heavy jobs to the standard PR gate)
@@ -753,6 +788,7 @@ Follow the `adversarial-llm.yml` precedent: the new `tests/e2e/backup/`, `tests/
 A lightweight smoke subset (config-compat only — pure in-process, no DB) may run on PR.
 
 ### Wave 0 Gaps
+
 - [ ] `tests/e2e/backup/round-trip.test.ts` — covers DEPLOY-05
 - [ ] `tests/upgrade/migrate-and-verify.test.ts` — covers DEPLOY-10
 - [ ] `tests/config/config-compat.test.ts` — covers DEPLOY-11
@@ -770,14 +806,15 @@ A lightweight smoke subset (config-compat only — pure in-process, no DB) may r
 
 ## State of the Art
 
-| Old Approach | Current Approach | When Changed | Impact |
-|--------------|------------------|--------------|--------|
-| GPG key-based container signing | Keyless cosign (OIDC → Fulcio → Rekor) | ~2022, now standard | No key management; verification requires `cosign verify` with identity regexp |
-| distroless/nodejs16 or /nodejs18 | `gcr.io/distroless/nodejs22-debian12` | 2024 | Node 22 LTS support; debian12 base |
-| `node:X-alpine` for runtime | distroless for server images | Industry trend 2023-2025 | ~60% smaller image; no shell attack surface |
-| `type: redis` in render.yaml | `type: keyvalue` | 2024 | `redis` alias still works but `keyvalue` is current |
+| Old Approach                     | Current Approach                       | When Changed             | Impact                                                                        |
+| -------------------------------- | -------------------------------------- | ------------------------ | ----------------------------------------------------------------------------- |
+| GPG key-based container signing  | Keyless cosign (OIDC → Fulcio → Rekor) | ~2022, now standard      | No key management; verification requires `cosign verify` with identity regexp |
+| distroless/nodejs16 or /nodejs18 | `gcr.io/distroless/nodejs22-debian12`  | 2024                     | Node 22 LTS support; debian12 base                                            |
+| `node:X-alpine` for runtime      | distroless for server images           | Industry trend 2023-2025 | ~60% smaller image; no shell attack surface                                   |
+| `type: redis` in render.yaml     | `type: keyvalue`                       | 2024                     | `redis` alias still works but `keyvalue` is current                           |
 
 **Deprecated/outdated:**
+
 - `type: redis` in render.yaml: still accepted as alias but `type: keyvalue` is the canonical form.
 - Background worker free plan on Render: was briefly available; removed. Use `type: web` with embedded worker for free tier.
 
@@ -810,6 +847,7 @@ A lightweight smoke subset (config-compat only — pure in-process, no DB) may r
 ## Sources
 
 ### Primary (HIGH confidence)
+
 - GoogleContainerTools/distroless README — distroless nodejs22-debian12 tag, ENTRYPOINT behavior, platform support
 - kubernetes-sigs/kustomize Context7 docs — base/overlay directory structure, overlay patterns
 - docker/build-push-action docs (docs.docker.com) — multi-platform, QEMU, cache strategy
@@ -817,12 +855,14 @@ A lightweight smoke subset (config-compat only — pure in-process, no DB) may r
 - Existing project source (`Dockerfile.api/worker/cli`, `release.yml`, `worker-entrypoint.ts`, `server.ts`, `doctor.ts`, `system-checks.ts`, `server-checks.ts`) — all read directly
 
 ### Secondary (MEDIUM confidence)
+
 - Render Blueprint Spec (render.com/docs/blueprint-spec, fetched) — render.yaml schema, free tier
 - Render forum (render.discourse.group) — background worker not available on free plan (confirmed 2024)
 - nineliveszerotrust.com SBOM guide — exact GitHub Actions YAML for cosign sign + attest + sbom-action
 - anchore/sbom-action (github.com/anchore/syft/wiki/attestation) — cyclonedx attestation syntax
 
 ### Tertiary (LOW confidence — verify before use)
+
 - Render free Postgres expiry duration (90 days vs 30 days) — contradictory sources; check render.com/docs/free at implementation time
 
 ---
@@ -830,6 +870,7 @@ A lightweight smoke subset (config-compat only — pure in-process, no DB) may r
 ## Metadata
 
 **Confidence breakdown:**
+
 - Distroless CMD form + USER nonroot: HIGH — verified from distroless README
 - Multi-arch buildx workflow: HIGH — verified from official Docker docs + existing release.yml pattern
 - cosign keyless signing steps: HIGH — verified from multiple real-world examples + cosign Context7 docs

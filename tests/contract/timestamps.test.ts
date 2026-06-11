@@ -85,7 +85,10 @@ describe('API-07 ISO 8601 UTC timestamps', () => {
     expect(res.status).toBe(200);
     const body = (await res.json()) as { buildAt: string };
     expect(typeof body.buildAt).toBe('string');
-    expect(isIsoUtc(body.buildAt), `buildAt should end with Z or +00:00, got: ${body.buildAt}`).toBe(true);
+    expect(
+      isIsoUtc(body.buildAt),
+      `buildAt should end with Z or +00:00, got: ${body.buildAt}`,
+    ).toBe(true);
   });
 
   it('no purely-numeric timestamp values in response bodies (sanity sweep)', async () => {
@@ -101,11 +104,7 @@ describe('API-07 ISO 8601 UTC timestamps', () => {
       const body = await res.json();
       for (const { path: keyPath, value } of walk(body)) {
         const leafKey = keyPath[keyPath.length - 1];
-        if (
-          leafKey &&
-          numericTimestampKeyPattern.test(leafKey) &&
-          typeof value === 'number'
-        ) {
+        if (leafKey && numericTimestampKeyPattern.test(leafKey) && typeof value === 'number') {
           throw new Error(
             `Numeric timestamp found at ${path} → ${keyPath.join('/')}: ${value}. Timestamps must be ISO 8601 UTC strings (API-07).`,
           );

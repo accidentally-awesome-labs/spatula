@@ -86,6 +86,7 @@ kubectl run spatula-doctor \
 Expected result: **9/9 green**.
 
 Notes:
+
 - The `playwright` system check will warn (browsers are not installed in the CLI image for k8s use; that is expected and does not fail the check).
 - The `docker` system check will warn (no Docker socket in-cluster). Both warnings still yield 9/9 green per RESEARCH.
 
@@ -122,6 +123,7 @@ kubectl wait --for=condition=complete job/spatula-migrate -n spatula --timeout=3
 ## Production Overlay
 
 The `overlays/prod/` overlay:
+
 - References `../../base` only (no stub pods)
 - Pins image tags to a specific release (default placeholder `1.0.0` — update before deploy)
 - Sets api + worker replicas to 2

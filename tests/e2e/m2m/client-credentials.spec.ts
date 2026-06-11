@@ -18,12 +18,7 @@
  */
 
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
-import {
-  createServer,
-  type Server,
-  type IncomingMessage,
-  type ServerResponse,
-} from 'node:http';
+import { createServer, type Server, type IncomingMessage, type ServerResponse } from 'node:http';
 import type { AddressInfo } from 'node:net';
 import { createApp } from '../../../apps/api/src/app.js';
 import { JwtAuthProvider } from '../../../apps/api/src/auth/jwt-provider.js';
@@ -119,9 +114,7 @@ async function getMachineToken(): Promise<string> {
   const tokenResponse = (await res.json()) as Record<string, unknown>;
   const accessToken = tokenResponse['access_token'] as string | undefined;
   if (!accessToken) {
-    throw new Error(
-      `Token response missing access_token: ${JSON.stringify(tokenResponse)}`,
-    );
+    throw new Error(`Token response missing access_token: ${JSON.stringify(tokenResponse)}`);
   }
   return accessToken;
 }
@@ -199,56 +192,54 @@ async function startJwtServer(): Promise<M2MTestServer> {
 
   const app = createApp(deps as AppDeps);
 
-  const server: Server = createServer(
-    async (req: IncomingMessage, res: ServerResponse) => {
-      try {
-        const addr = server.address();
-        const port = typeof addr === 'object' && addr ? addr.port : 0;
-        const url = new URL(req.url ?? '/', `http://127.0.0.1:${port}`);
+  const server: Server = createServer(async (req: IncomingMessage, res: ServerResponse) => {
+    try {
+      const addr = server.address();
+      const port = typeof addr === 'object' && addr ? addr.port : 0;
+      const url = new URL(req.url ?? '/', `http://127.0.0.1:${port}`);
 
-        const hasBody = !(req.method === 'GET' || req.method === 'HEAD');
-        let body: Uint8Array | undefined;
-        if (hasBody) {
-          const chunks: Buffer[] = [];
-          for await (const chunk of req) chunks.push(chunk as Buffer);
-          if (chunks.length > 0) body = Buffer.concat(chunks);
-        }
-
-        const headers = new Headers();
-        for (const [k, v] of Object.entries(req.headers)) {
-          if (v === undefined) continue;
-          if (Array.isArray(v)) headers.set(k, v.join(','));
-          else headers.set(k, v);
-        }
-
-        const request = new Request(url.toString(), {
-          method: req.method ?? 'GET',
-          headers,
-          body: body as BodyInit | undefined,
-          duplex: body ? 'half' : undefined,
-        } as RequestInit & { duplex?: 'half' });
-
-        const response = await app.fetch(request);
-        res.statusCode = response.status;
-        response.headers.forEach((value, key) => {
-          res.setHeader(key, value);
-        });
-        const buf = Buffer.from(await response.arrayBuffer());
-        res.end(buf);
-      } catch (err) {
-        res.statusCode = 500;
-        res.setHeader('content-type', 'application/json');
-        res.end(
-          JSON.stringify({
-            error: {
-              code: 'INTERNAL.ERROR',
-              message: (err as Error).message,
-            },
-          }),
-        );
+      const hasBody = !(req.method === 'GET' || req.method === 'HEAD');
+      let body: Uint8Array | undefined;
+      if (hasBody) {
+        const chunks: Buffer[] = [];
+        for await (const chunk of req) chunks.push(chunk as Buffer);
+        if (chunks.length > 0) body = Buffer.concat(chunks);
       }
-    },
-  );
+
+      const headers = new Headers();
+      for (const [k, v] of Object.entries(req.headers)) {
+        if (v === undefined) continue;
+        if (Array.isArray(v)) headers.set(k, v.join(','));
+        else headers.set(k, v);
+      }
+
+      const request = new Request(url.toString(), {
+        method: req.method ?? 'GET',
+        headers,
+        body: body as BodyInit | undefined,
+        duplex: body ? 'half' : undefined,
+      } as RequestInit & { duplex?: 'half' });
+
+      const response = await app.fetch(request);
+      res.statusCode = response.status;
+      response.headers.forEach((value, key) => {
+        res.setHeader(key, value);
+      });
+      const buf = Buffer.from(await response.arrayBuffer());
+      res.end(buf);
+    } catch (err) {
+      res.statusCode = 500;
+      res.setHeader('content-type', 'application/json');
+      res.end(
+        JSON.stringify({
+          error: {
+            code: 'INTERNAL.ERROR',
+            message: (err as Error).message,
+          },
+        }),
+      );
+    }
+  });
 
   const port: number = await new Promise((resolve, reject) => {
     server.once('listening', () => {
@@ -265,7 +256,11 @@ async function startJwtServer(): Promise<M2MTestServer> {
     async close() {
       await new Promise<void>((r) => server.close(() => r()));
       await pool.end();
-      try { await redis.quit(); } catch { /* ignore */ }
+      try {
+        await redis.quit();
+      } catch {
+        /* ignore */
+      }
     },
   };
 }
@@ -296,24 +291,20 @@ afterAll(async () => {
 const dexAvailable = () => dexError === null;
 
 describe('M2M OIDC client_credentials chain (AUTH-08)', () => {
-  it(
-    'gate: Dex is reachable at http://localhost:5556/dex',
-    { skip: false },
-    async () => {
-      if (dexError !== null) {
-        // Soft-skip: this is an e2e suite that requires Dex running in Docker.
-        // Use console.warn to surface the skip reason without failing the suite.
-        console.warn(
-          `[m2m-e2e] SKIP: Dex not available — ${dexError}. ` +
-            `Run: cd examples/auth-dex && docker compose up -d`,
-        );
-        return;
-      }
-      // Assert explicitly that Dex is healthy
-      const res = await fetch(`${DEX_ISSUER}/.well-known/openid-configuration`);
-      expect(res.status).toBe(200);
-    },
-  );
+  it('gate: Dex is reachable at http://localhost:5556/dex', { skip: false }, async () => {
+    if (dexError !== null) {
+      // Soft-skip: this is an e2e suite that requires Dex running in Docker.
+      // Use console.warn to surface the skip reason without failing the suite.
+      console.warn(
+        `[m2m-e2e] SKIP: Dex not available — ${dexError}. ` +
+          `Run: cd examples/auth-dex && docker compose up -d`,
+      );
+      return;
+    }
+    // Assert explicitly that Dex is healthy
+    const res = await fetch(`${DEX_ISSUER}/.well-known/openid-configuration`);
+    expect(res.status).toBe(200);
+  });
 
   it('Step 1: POST client_credentials to Dex token endpoint returns a JWT', async () => {
     if (dexError !== null) {
@@ -342,8 +333,8 @@ describe('M2M OIDC client_credentials chain (AUTH-08)', () => {
     const audList: string[] = Array.isArray(aud)
       ? (aud as string[])
       : typeof aud === 'string'
-      ? [aud]
-      : [];
+        ? [aud]
+        : [];
     expect(audList).toContain(M2M_CLIENT_ID);
 
     // Verify sub encodes spatula-m2m.
@@ -366,55 +357,52 @@ describe('M2M OIDC client_credentials chain (AUTH-08)', () => {
     expect(subContainsClientId, `Expected sub '${rawSub}' to encode '${M2M_CLIENT_ID}'`).toBe(true);
   });
 
-  it(
-    'Step 3: SpatulaClient.createJob with service JWT succeeds (auto-provisions tenant on first use)',
-    async () => {
-      if (dexError !== null || !serviceToken) {
-        console.warn('[m2m-e2e] SKIP Step 3: Dex unavailable or token not obtained');
-        return;
-      }
+  it('Step 3: SpatulaClient.createJob with service JWT succeeds (auto-provisions tenant on first use)', async () => {
+    if (dexError !== null || !serviceToken) {
+      console.warn('[m2m-e2e] SKIP Step 3: Dex unavailable or token not obtained');
+      return;
+    }
 
-      const client = new SpatulaClient({
-        baseUrl: server.url,
-        apiKey: serviceToken,
-        skipVersionProbe: true,
-      });
+    const client = new SpatulaClient({
+      baseUrl: server.url,
+      apiKey: serviceToken,
+      skipVersionProbe: true,
+    });
 
-      // First call exercises the JwtAuthProvider user_tenants auto-provision path:
-      // new M2M sub → no tenant row → create Free tenant → proceed.
-      //
-      // NOTE: The API wraps the job in a { data: job } envelope; the client SDK's
-      // createJob() returns the raw body, so we need to extract .data.
-      const rawResponse = await createJob(client, {
-        name: 'm2m-e2e-job',
-        description: 'M2M e2e smoke test job',
-        seedUrls: ['https://example.com'],
-        crawl: {
-          maxDepth: 1,
-          maxPages: 1,
-          concurrency: 1,
-          crawlerType: 'playwright',
-        },
-        schema: {
-          mode: 'discovery',
-        },
-        llm: {
-          primaryModel: 'anthropic/claude-sonnet-4-20250514',
-        },
-      });
+    // First call exercises the JwtAuthProvider user_tenants auto-provision path:
+    // new M2M sub → no tenant row → create Free tenant → proceed.
+    //
+    // NOTE: The API wraps the job in a { data: job } envelope; the client SDK's
+    // createJob() returns the raw body, so we need to extract .data.
+    const rawResponse = await createJob(client, {
+      name: 'm2m-e2e-job',
+      description: 'M2M e2e smoke test job',
+      seedUrls: ['https://example.com'],
+      crawl: {
+        maxDepth: 1,
+        maxPages: 1,
+        concurrency: 1,
+        crawlerType: 'playwright',
+      },
+      schema: {
+        mode: 'discovery',
+      },
+      llm: {
+        primaryModel: 'anthropic/claude-sonnet-4-20250514',
+      },
+    });
 
-      // API returns { data: { id, status, ... } }; unwrap the data envelope.
-      const job = ((rawResponse as any).data ?? rawResponse) as { id: string; status: string };
+    // API returns { data: { id, status, ... } }; unwrap the data envelope.
+    const job = ((rawResponse as any).data ?? rawResponse) as { id: string; status: string };
 
-      expect(job.id).toBeTruthy();
-      expect(job.status).toBeTruthy();
+    expect(job.id).toBeTruthy();
+    expect(job.status).toBeTruthy();
 
-      // Store job id for subsequent steps (module-level variable trick — vitest runs
-      // tests in file order so this is safe).
-      (globalThis as any).__m2m_jobId = job.id;
-      (globalThis as any).__m2m_client = client;
-    },
-  );
+    // Store job id for subsequent steps (module-level variable trick — vitest runs
+    // tests in file order so this is safe).
+    (globalThis as any).__m2m_jobId = job.id;
+    (globalThis as any).__m2m_client = client;
+  });
 
   it('Step 4: listJobs returns the newly created M2M job', async () => {
     if (dexError !== null || !serviceToken) {

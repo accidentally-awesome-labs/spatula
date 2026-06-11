@@ -11,11 +11,11 @@
 Spatula's API uses a pluggable `AuthProvider` interface. The active strategy is
 selected via the `AUTH_STRATEGY` environment variable.
 
-| Strategy | `AUTH_STRATEGY` value | How to authenticate | When to use |
-|----------|----------------------|---------------------|-------------|
-| **NoAuth** | `none` (default) | `X-Tenant-Id: <uuid>` header — no token required | Local development only. **Never use in production.** |
-| **API key** | `api-key` | `Authorization: Bearer sk_live_<...>` | Machine-to-machine, CI, CLI |
-| **JWT-OIDC** | `jwt` | `Authorization: Bearer <jwt>` | Browser apps, OIDC SSO, M2M client_credentials |
+| Strategy     | `AUTH_STRATEGY` value | How to authenticate                              | When to use                                          |
+| ------------ | --------------------- | ------------------------------------------------ | ---------------------------------------------------- |
+| **NoAuth**   | `none` (default)      | `X-Tenant-Id: <uuid>` header — no token required | Local development only. **Never use in production.** |
+| **API key**  | `api-key`             | `Authorization: Bearer sk_live_<...>`            | Machine-to-machine, CI, CLI                          |
+| **JWT-OIDC** | `jwt`                 | `Authorization: Bearer <jwt>`                    | Browser apps, OIDC SSO, M2M client_credentials       |
 
 ### NoAuth (`AUTH_STRATEGY=none`)
 
@@ -37,6 +37,7 @@ Default scopes for a newly created key are the six listed in
 
 `JwtAuthProvider` verifies JWTs using [jose](https://github.com/panva/jose)
 with JWKS key material fetched from `JWT_JWKS_URL`. It validates:
+
 - `iss` claim against `JWT_ISSUER`
 - `aud` claim against `JWT_AUDIENCE`
 - Standard `exp` / `nbf` / `iat` fields
@@ -54,18 +55,18 @@ no implicit permissions.
 
 <!-- SCOPE_TABLE_START -->
 
-| Scope | Description | In default API-key scopes? |
-|-------|-------------|---------------------------|
-| `jobs:read` | List and retrieve crawl jobs | Yes |
-| `jobs:write` | Create, start, pause, resume, cancel crawl jobs | Yes |
-| `exports:read` | List and retrieve exports | Yes |
-| `exports:write` | Create and trigger exports | Yes |
-| `actions:read` | List and retrieve pending review actions | Yes |
-| `actions:write` | Approve, reject, and batch-update actions | Yes |
-| `tenants:admin` | Manage tenant settings and quotas | No |
-| `keys:manage` | Create, list, revoke, and rotate API keys | No |
-| `admin` | Full access including admin-only routes | No |
-| `admin:forensic:read` | Read access to the forensic-extractions admin endpoint. | No |
+| Scope                 | Description                                             | In default API-key scopes? |
+| --------------------- | ------------------------------------------------------- | -------------------------- |
+| `jobs:read`           | List and retrieve crawl jobs                            | Yes                        |
+| `jobs:write`          | Create, start, pause, resume, cancel crawl jobs         | Yes                        |
+| `exports:read`        | List and retrieve exports                               | Yes                        |
+| `exports:write`       | Create and trigger exports                              | Yes                        |
+| `actions:read`        | List and retrieve pending review actions                | Yes                        |
+| `actions:write`       | Approve, reject, and batch-update actions               | Yes                        |
+| `tenants:admin`       | Manage tenant settings and quotas                       | No                         |
+| `keys:manage`         | Create, list, revoke, and rotate API keys               | No                         |
+| `admin`               | Full access including admin-only routes                 | No                         |
+| `admin:forensic:read` | Read access to the forensic-extractions admin endpoint. | No                         |
 
 <!-- SCOPE_TABLE_END -->
 
@@ -188,10 +189,10 @@ It is consumed atomically via `GETDEL` on first use — it cannot be replayed.
 
 ### Using the stream token
 
-| Endpoint | How to pass token |
-|----------|------------------|
+| Endpoint                                | How to pass token                |
+| --------------------------------------- | -------------------------------- |
 | `GET /ws/jobs/:id/progress` (WebSocket) | `?token=<token>` query parameter |
-| `GET /api/v1/jobs/:id/events` (SSE) | `?token=<token>` query parameter |
+| `GET /api/v1/jobs/:id/events` (SSE)     | `?token=<token>` query parameter |
 
 ### Security note — token in URL
 
@@ -242,10 +243,12 @@ CORS_ALLOWED_ORIGINS=https://*.spatula.dev
 ```
 
 The wildcard substitutes exactly **one subdomain label**. It matches:
+
 - `https://app.spatula.dev` (one label)
 - `https://docs.spatula.dev` (one label)
 
 And **does NOT match**:
+
 - `https://foo.bar.spatula.dev` (two labels — rejected)
 - `https://spatula.dev` (no subdomain label — rejected)
 - `https://evil.spatula.dev.attacker.com` (suffix attack — rejected)
@@ -294,6 +297,7 @@ further restricted by issuing the M2M client an API key.
 
 See `examples/auth-dex/` for a self-contained `docker compose up` recipe that
 spins up a [Dex](https://dexidp.io) identity provider with:
+
 - A `spatula-browser` client (PKCE `authorization_code` flow)
 - A `spatula-m2m` client (`client_credentials` flow)
 

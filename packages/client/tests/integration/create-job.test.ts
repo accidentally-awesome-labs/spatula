@@ -95,18 +95,21 @@ describe('integration: createJob', () => {
     expect((seenRequests[1]?.body as { name: string }).name).toBe('integration-test');
   });
 
-  it.skipIf(!LIVE)('live (SPATULA_LIVE_LLM=1): POST /api/v1/jobs against a real server', async () => {
-    const baseUrl = process.env.SPATULA_BASE_URL ?? 'http://localhost:3000';
-    const apiKey = process.env.SPATULA_API_KEY;
-    if (!apiKey) {
-      throw new Error('SPATULA_LIVE_LLM=1 requires SPATULA_API_KEY in the env');
-    }
-    const client = new SpatulaClient({ baseUrl, apiKey });
-    const result = await createJob(client, {
-      name: `live-integration-${Date.now()}`,
-      seedUrls: ['https://example.com'],
-    });
-    expect(typeof result.id).toBe('string');
-    expect(result.id.length).toBeGreaterThan(0);
-  });
+  it.skipIf(!LIVE)(
+    'live (SPATULA_LIVE_LLM=1): POST /api/v1/jobs against a real server',
+    async () => {
+      const baseUrl = process.env.SPATULA_BASE_URL ?? 'http://localhost:3000';
+      const apiKey = process.env.SPATULA_API_KEY;
+      if (!apiKey) {
+        throw new Error('SPATULA_LIVE_LLM=1 requires SPATULA_API_KEY in the env');
+      }
+      const client = new SpatulaClient({ baseUrl, apiKey });
+      const result = await createJob(client, {
+        name: `live-integration-${Date.now()}`,
+        seedUrls: ['https://example.com'],
+      });
+      expect(typeof result.id).toBe('string');
+      expect(result.id.length).toBeGreaterThan(0);
+    },
+  );
 });

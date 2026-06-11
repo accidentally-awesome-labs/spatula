@@ -127,10 +127,7 @@ export class StaticExtractor implements Extractor {
             });
           }
         } catch (retryError) {
-          logger.warn(
-            { url, retryError },
-            'retry also failed — returning empty result',
-          );
+          logger.warn({ url, retryError }, 'retry also failed — returning empty result');
           return this.emptyResult(schema.version, extractionTimeMs, response.model, 0);
         }
       }
@@ -145,9 +142,10 @@ export class StaticExtractor implements Extractor {
       for (const [key, value] of Object.entries(parsed.data)) {
         if (typeof value === 'string') {
           const fieldDef = schema.fields.find((f) => f.name === key);
-          const cap = (fieldDef && 'maxLength' in fieldDef && typeof fieldDef.maxLength === 'number')
-            ? fieldDef.maxLength
-            : DEFAULT_MAX_FIELD_LENGTH;
+          const cap =
+            fieldDef && 'maxLength' in fieldDef && typeof fieldDef.maxLength === 'number'
+              ? fieldDef.maxLength
+              : DEFAULT_MAX_FIELD_LENGTH;
           parsed.data[key] = value.slice(0, cap);
         }
       }
@@ -174,10 +172,7 @@ export class StaticExtractor implements Extractor {
             logger.debug({ url, err }, 'forensic archival failed (non-fatal)');
           });
         } else {
-          logger.debug(
-            { url },
-            'forensic archival skipped — no contentStore/dlqWriter injected',
-          );
+          logger.debug({ url }, 'forensic archival skipped — no contentStore/dlqWriter injected');
         }
       }
 

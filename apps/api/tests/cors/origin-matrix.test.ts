@@ -49,9 +49,19 @@ function createMockDeps(): AppDeps {
       findAllVersions: vi.fn().mockResolvedValue([]),
       findByVersion: vi.fn().mockResolvedValue(null),
     },
-    extractionRepo: { findByJob: vi.fn().mockResolvedValue([]), countByJob: vi.fn().mockResolvedValue(0) },
-    entityRepo: { findByJob: vi.fn().mockResolvedValue([]), findById: vi.fn().mockResolvedValue(null), countByJob: vi.fn().mockResolvedValue(0) },
-    entitySourceRepo: { findByEntity: vi.fn().mockResolvedValue([]), findByEntityWithUrls: vi.fn().mockResolvedValue([]) },
+    extractionRepo: {
+      findByJob: vi.fn().mockResolvedValue([]),
+      countByJob: vi.fn().mockResolvedValue(0),
+    },
+    entityRepo: {
+      findByJob: vi.fn().mockResolvedValue([]),
+      findById: vi.fn().mockResolvedValue(null),
+      countByJob: vi.fn().mockResolvedValue(0),
+    },
+    entitySourceRepo: {
+      findByEntity: vi.fn().mockResolvedValue([]),
+      findByEntityWithUrls: vi.fn().mockResolvedValue([]),
+    },
     actionRepo: {
       findByJob: vi.fn().mockResolvedValue([]),
       findById: vi.fn().mockResolvedValue(null),
@@ -62,7 +72,12 @@ function createMockDeps(): AppDeps {
       findByJobCursor: vi.fn().mockResolvedValue({ entities: [], nextCursor: null }),
     },
     taskRepo: {} as any,
-    exportRepo: { create: vi.fn(), findById: vi.fn().mockResolvedValue(null), findByJob: vi.fn().mockResolvedValue([]), updateStatus: vi.fn() },
+    exportRepo: {
+      create: vi.fn(),
+      findById: vi.fn().mockResolvedValue(null),
+      findByJob: vi.fn().mockResolvedValue([]),
+      updateStatus: vi.fn(),
+    },
     contentStore: { store: vi.fn(), retrieve: vi.fn(), delete: vi.fn() },
     exportQueue: { add: vi.fn() },
     jobManager: {

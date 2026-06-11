@@ -14,24 +14,14 @@ export const paginationSchema = z.object({
     .min(1)
     .default(50)
     .transform((v) => Math.min(v, 500)),
-  offset: z.coerce
-    .number()
-    .int()
-    .min(0)
-    .default(0)
-    .openapi({
-      deprecated: true,
-      description: 'DEPRECATED: use cursor pagination. Removal target v2.0.',
-    }),
-  page: z.coerce
-    .number()
-    .int()
-    .min(1)
-    .optional()
-    .openapi({
-      deprecated: true,
-      description: 'DEPRECATED: use cursor pagination. Removal target v2.0.',
-    }),
+  offset: z.coerce.number().int().min(0).default(0).openapi({
+    deprecated: true,
+    description: 'DEPRECATED: use cursor pagination. Removal target v2.0.',
+  }),
+  page: z.coerce.number().int().min(1).optional().openapi({
+    deprecated: true,
+    description: 'DEPRECATED: use cursor pagination. Removal target v2.0.',
+  }),
   cursor: z.string().optional().openapi({
     description: 'Opaque cursor for keyset pagination. CANONICAL — treat as opaque, do not parse.',
     example: 'eyJpZCI6Ijk4NzYifQ',

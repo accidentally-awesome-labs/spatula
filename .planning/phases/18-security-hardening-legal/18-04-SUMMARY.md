@@ -7,60 +7,60 @@ tags: [license, trademark, cla, security-policy, user-agent, copyright]
 # Dependency graph
 requires:
   - phase: 15-public-repo-carveout
-    provides: "public OSS repo at accidentally-awesome-labs/spatula"
+    provides: 'public OSS repo at accidentally-awesome-labs/spatula'
   - phase: 18-01
-    provides: "prompt-injection defense foundation"
+    provides: 'prompt-injection defense foundation'
 provides:
-  - "MIT LICENSE with correct Accidentally Awesome Labs copyright (LEGAL-01)"
-  - "HISTORICAL_CONTRIBUTORS.md enumerating sole author with git-log evidence (BLOCK-09)"
-  - "USPTO TESS search documented + human-verified conflict-free for IC 009 / IC 042 (BLOCK-06)"
-  - "TRADEMARK.md defining trademark policy with fork-naming rules (LEGAL-02)"
-  - "brand/LICENSE-BRAND.md brand-asset carve-out from MIT (LEGAL-03)"
-  - "SECURITY.md with GPG placeholder, response SLA, supported-versions table (LEGAL-05)"
-  - "Versioned .github/CLA.md (version:1) + CONTRIBUTING.md re-sign policy (LEGAL-06)"
-  - "README legal disclaimer banner — MIT, ToS responsibility, robots.txt (LEGAL-07)"
-  - "Default User-Agent Spatula/<version> (+https://spatula.dev/abuse) in crawler-defaults.ts (LEGAL-08)"
-  - "cla-assistant.io GitHub App installed and configured"
+  - 'MIT LICENSE with correct Accidentally Awesome Labs copyright (LEGAL-01)'
+  - 'HISTORICAL_CONTRIBUTORS.md enumerating sole author with git-log evidence (BLOCK-09)'
+  - 'USPTO TESS search documented + human-verified conflict-free for IC 009 / IC 042 (BLOCK-06)'
+  - 'TRADEMARK.md defining trademark policy with fork-naming rules (LEGAL-02)'
+  - 'brand/LICENSE-BRAND.md brand-asset carve-out from MIT (LEGAL-03)'
+  - 'SECURITY.md with GPG placeholder, response SLA, supported-versions table (LEGAL-05)'
+  - 'Versioned .github/CLA.md (version:1) + CONTRIBUTING.md re-sign policy (LEGAL-06)'
+  - 'README legal disclaimer banner — MIT, ToS responsibility, robots.txt (LEGAL-07)'
+  - 'Default User-Agent Spatula/<version> (+https://spatula.dev/abuse) in crawler-defaults.ts (LEGAL-08)'
+  - 'cla-assistant.io GitHub App installed and configured'
 affects: [phase-22-launch-gate, phase-20-docs-site]
 
 # Tech tracking
 tech-stack:
   added: []
   patterns:
-    - "buildUserAgent(version) factory + DEFAULT_USER_AGENT constant in crawler-defaults.ts"
-    - "CLA version frontmatter for re-sign-on-text-change via cla-assistant.io auto-detection"
-    - "Apache-style trademark policy language (TRADEMARK.md)"
+    - 'buildUserAgent(version) factory + DEFAULT_USER_AGENT constant in crawler-defaults.ts'
+    - 'CLA version frontmatter for re-sign-on-text-change via cla-assistant.io auto-detection'
+    - 'Apache-style trademark policy language (TRADEMARK.md)'
 
 key-files:
   created:
-    - ".github/HISTORICAL_CONTRIBUTORS.md"
-    - "docs/legal/uspto-tess-search.md"
-    - "TRADEMARK.md"
-    - "brand/LICENSE-BRAND.md"
-    - ".github/CLA.md"
-    - "packages/core/src/crawlers/crawler-defaults.ts"
-    - "packages/core/src/crawlers/crawler-defaults.test.ts"
+    - '.github/HISTORICAL_CONTRIBUTORS.md'
+    - 'docs/legal/uspto-tess-search.md'
+    - 'TRADEMARK.md'
+    - 'brand/LICENSE-BRAND.md'
+    - '.github/CLA.md'
+    - 'packages/core/src/crawlers/crawler-defaults.ts'
+    - 'packages/core/src/crawlers/crawler-defaults.test.ts'
   modified:
-    - "LICENSE"
-    - "SECURITY.md"
-    - "CONTRIBUTING.md"
-    - "README.md"
-    - "packages/core/src/crawlers/playwright-crawler.ts"
-    - "packages/core/src/crawlers/index.ts"
-    - "packages/core/src/index.ts"
+    - 'LICENSE'
+    - 'SECURITY.md'
+    - 'CONTRIBUTING.md'
+    - 'README.md'
+    - 'packages/core/src/crawlers/playwright-crawler.ts'
+    - 'packages/core/src/crawlers/index.ts'
+    - 'packages/core/src/index.ts'
 
 key-decisions:
   - "cla-assistant.io points at a public GitHub Gist (https://gist.github.com/salarsayyad/959a7399d3d010d422c105de8c56522f) as CLA text source — Gist URL is cla-assistant's native wiring mechanism; .github/CLA.md remains the versioned source-of-truth in the repo"
   - "USPTO TESS search was human-verified conflict-free for 'Spatula' in IC 009 / IC 042 before TRADEMARK.md was finalized (D-02 ordering gate cleared)"
-  - "SECURITY.md GPG key section contains a clearly-marked placeholder — operator must paste the real key block before public launch"
-  - "BLOCK-02 (entity) cleared: Accidentally Awesome Labs confirmed formed; LICENSE copyright updated directly with no interim-name fallback"
-  - "BLOCK-06 (trademark) cleared: TESS search confirmed no conflicting live marks for software/SaaS use"
-  - "BLOCK-09 (historical contributors) cleared: sole author salar.sayyad@gmail.com confirmed via git log"
+  - 'SECURITY.md GPG key section contains a clearly-marked placeholder — operator must paste the real key block before public launch'
+  - 'BLOCK-02 (entity) cleared: Accidentally Awesome Labs confirmed formed; LICENSE copyright updated directly with no interim-name fallback'
+  - 'BLOCK-06 (trademark) cleared: TESS search confirmed no conflicting live marks for software/SaaS use'
+  - 'BLOCK-09 (historical contributors) cleared: sole author salar.sayyad@gmail.com confirmed via git log'
 
 patterns-established:
-  - "Trademark policy: Apache-style TRADEMARK.md naming Accidentally Awesome Labs as holder with fork-naming restrictions, based-on attribution allowance, and unmodified-release exemption"
-  - "Brand carve-out: brand/LICENSE-BRAND.md explicitly excludes brand/ directory from MIT LICENSE scope"
-  - "CLA versioning: version: N frontmatter in .github/CLA.md; bump N to trigger cla-assistant re-sign flow for past contributors"
+  - 'Trademark policy: Apache-style TRADEMARK.md naming Accidentally Awesome Labs as holder with fork-naming restrictions, based-on attribution allowance, and unmodified-release exemption'
+  - 'Brand carve-out: brand/LICENSE-BRAND.md explicitly excludes brand/ directory from MIT LICENSE scope'
+  - 'CLA versioning: version: N frontmatter in .github/CLA.md; bump N to trigger cla-assistant re-sign flow for past contributors'
 
 requirements-completed: [LEGAL-01, LEGAL-02, LEGAL-03, LEGAL-05, LEGAL-06, LEGAL-07, LEGAL-08]
 
@@ -147,5 +147,6 @@ None — plan executed exactly as written. The two checkpoints (human-verify for
 - SECURITY.md GPG key section must be filled by operator before Phase 22 public flip
 
 ---
-*Phase: 18-security-hardening-legal*
-*Completed: 2026-05-20*
+
+_Phase: 18-security-hardening-legal_
+_Completed: 2026-05-20_

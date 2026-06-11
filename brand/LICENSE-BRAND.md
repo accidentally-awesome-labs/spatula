@@ -34,4 +34,4 @@ trademark license requests.
 
 ---
 
-*Copyright (c) 2026 Accidentally Awesome Labs. All rights reserved.*
+_Copyright (c) 2026 Accidentally Awesome Labs. All rights reserved._

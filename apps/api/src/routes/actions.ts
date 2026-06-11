@@ -2,13 +2,7 @@ import { createRoute, z } from '@hono/zod-openapi';
 import { createOpenAPIRouter } from '../openapi-config.js';
 import { actionResponseSchema, listResponse, jsonContent } from '../schemas/responses.js';
 import { paginationSchema, paginationEnvelopeSchema } from '../schemas/pagination.js';
-import {
-  decodeCursor,
-  encodeCursor,
-  ErrorCode,
-  SpatulaError,
-  StorageError,
-} from '@spatula/shared';
+import { decodeCursor, encodeCursor, ErrorCode, SpatulaError, StorageError } from '@spatula/shared';
 
 const jobIdParam = z.object({
   jobId: z.string().openapi({ param: { name: 'jobId', in: 'path' } }),
@@ -180,7 +174,9 @@ export function actionRoutes() {
       return c.json({ data: action });
     } catch (error) {
       if (error instanceof StorageError && error.message.includes('not found')) {
-        throw new SpatulaError(`Action ${actionId} not found`, ErrorCode.JOB_NOT_FOUND, { context: { resource: 'action', actionId } });
+        throw new SpatulaError(`Action ${actionId} not found`, ErrorCode.JOB_NOT_FOUND, {
+          context: { resource: 'action', actionId },
+        });
       }
       throw error;
     }
@@ -207,7 +203,9 @@ export function actionRoutes() {
       return c.json({ data: action });
     } catch (error) {
       if (error instanceof StorageError && error.message.includes('not found')) {
-        throw new SpatulaError(`Action ${actionId} not found`, ErrorCode.JOB_NOT_FOUND, { context: { resource: 'action', actionId } });
+        throw new SpatulaError(`Action ${actionId} not found`, ErrorCode.JOB_NOT_FOUND, {
+          context: { resource: 'action', actionId },
+        });
       }
       throw error;
     }

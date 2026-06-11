@@ -100,9 +100,7 @@ export function adminTenantRoutes() {
         requestedAt: new Date().toISOString(),
       });
     } catch (err) {
-      throw new InternalQueueError(
-        `Failed to enqueue tenant deletion: ${(err as Error).message}`,
-      );
+      throw new InternalQueueError(`Failed to enqueue tenant deletion: ${(err as Error).message}`);
     }
 
     return c.json({ data: { status: 'pending', jobId: job.id } }, 202);

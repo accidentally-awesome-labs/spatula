@@ -8,7 +8,11 @@ import { authMiddleware } from './middleware/auth.js';
 import { depsMiddleware } from './middleware/deps.js';
 import { validateTenantMiddleware } from './middleware/validate-tenant.js';
 import { requireScope } from './middleware/require-scope.js';
-import { createOpenAPIRouter, getCachedOpenAPISpec, validateExamplesAtBoot } from './openapi-config.js';
+import {
+  createOpenAPIRouter,
+  getCachedOpenAPISpec,
+  validateExamplesAtBoot,
+} from './openapi-config.js';
 import { openapiRoute } from './routes/openapi.js';
 import { wellKnownRoute } from './routes/well-known.js';
 import { jobRoutes } from './routes/jobs.js';

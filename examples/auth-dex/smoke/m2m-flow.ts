@@ -14,28 +14,23 @@
 
 export {}; // Treat as an ES module so top-level names don't collide with sibling scripts.
 
-const ISSUER = "http://localhost:5556/dex";
+const ISSUER = 'http://localhost:5556/dex';
 const TOKEN_ENDPOINT = `${ISSUER}/token`;
-const CLIENT_ID = "spatula-m2m";
+const CLIENT_ID = 'spatula-m2m';
 // The M2M client secret is intentionally committed as a dev-only value — DO NOT use in production.
-const CLIENT_SECRET = "dev-only-secret-m2m";
+const CLIENT_SECRET = 'dev-only-secret-m2m';
 
 /** Decode a JWT payload segment (base64url → JSON). No library needed. */
 function decodeJwtPayload(jwt: string): Record<string, unknown> {
-  const segments = jwt.split(".");
+  const segments = jwt.split('.');
   if (segments.length !== 3) {
     throw new Error(`Invalid JWT: expected 3 segments, got ${segments.length}`);
   }
   const payload = segments[1];
   // base64url → base64 → Buffer → JSON
-  const base64 = payload.replace(/-/g, "+").replace(/_/g, "/");
-  const padded = base64.padEnd(
-    base64.length + ((4 - (base64.length % 4)) % 4),
-    "="
-  );
-  return JSON.parse(
-    Buffer.from(padded, "base64").toString("utf8")
-  ) as Record<string, unknown>;
+  const base64 = payload.replace(/-/g, '+').replace(/_/g, '/');
+  const padded = base64.padEnd(base64.length + ((4 - (base64.length % 4)) % 4), '=');
+  return JSON.parse(Buffer.from(padded, 'base64').toString('utf8')) as Record<string, unknown>;
 }
 
 async function main(): Promise<void> {
@@ -43,15 +38,15 @@ async function main(): Promise<void> {
   let tokenResponse: Record<string, unknown>;
   try {
     const body = new URLSearchParams({
-      grant_type: "client_credentials",
+      grant_type: 'client_credentials',
       client_id: CLIENT_ID,
       client_secret: CLIENT_SECRET,
-      scope: "openid",
+      scope: 'openid',
     });
 
     const res = await fetch(TOKEN_ENDPOINT, {
-      method: "POST",
-      headers: { "Content-Type": "application/x-www-form-urlencoded" },
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
       body: body.toString(),
     });
 
@@ -62,20 +57,17 @@ async function main(): Promise<void> {
 
     tokenResponse = (await res.json()) as Record<string, unknown>;
   } catch (err) {
-    console.error(
-      "m2m-flow: failed to obtain token — is Dex running at",
-      ISSUER + "?"
-    );
+    console.error('m2m-flow: failed to obtain token — is Dex running at', ISSUER + '?');
     console.error(err instanceof Error ? err.message : String(err));
     process.exit(1);
   }
 
   // 2. Assert the response contains an access_token.
-  const accessToken = tokenResponse["access_token"] as string | undefined;
+  const accessToken = tokenResponse['access_token'] as string | undefined;
   if (!accessToken) {
     console.error(
-      "m2m-flow: token response missing access_token:",
-      JSON.stringify(tokenResponse, null, 2)
+      'm2m-flow: token response missing access_token:',
+      JSON.stringify(tokenResponse, null, 2),
     );
     process.exit(1);
   }
@@ -85,7 +77,7 @@ async function main(): Promise<void> {
   try {
     claims = decodeJwtPayload(accessToken);
   } catch (err) {
-    console.error("m2m-flow: failed to decode access_token JWT:");
+    console.error('m2m-flow: failed to decode access_token JWT:');
     console.error(err instanceof Error ? err.message : String(err));
     process.exit(1);
   }
@@ -94,51 +86,49 @@ async function main(): Promise<void> {
   // Dex encodes the subject for client_credentials grants as a base64url-encoded protobuf
   // message (field 1 = the client_id string). The raw sub may look like "CgtzcGF0dWxhLW0ybQ"
   // rather than the literal "spatula-m2m". Decode it and verify the client_id is present.
-  const rawSub = String(claims["sub"] ?? "");
+  const rawSub = String(claims['sub'] ?? '');
   const subContainsClientId = ((): boolean => {
     if (rawSub === CLIENT_ID) return true; // literal match (future Dex versions may simplify this)
     // base64url → Buffer → UTF-8 bytes; client_id is embedded as a UTF-8 string payload.
     try {
-      const base64 = rawSub.replace(/-/g, "+").replace(/_/g, "/");
-      const padded = base64.padEnd(base64.length + ((4 - (base64.length % 4)) % 4), "=");
-      const bytes = Buffer.from(padded, "base64");
-      return bytes.toString("utf8").includes(CLIENT_ID);
+      const base64 = rawSub.replace(/-/g, '+').replace(/_/g, '/');
+      const padded = base64.padEnd(base64.length + ((4 - (base64.length % 4)) % 4), '=');
+      const bytes = Buffer.from(padded, 'base64');
+      return bytes.toString('utf8').includes(CLIENT_ID);
     } catch {
       return false;
     }
   })();
 
   if (!subContainsClientId) {
-    console.error(
-      `m2m-flow: expected sub to encode "${CLIENT_ID}", got sub="${rawSub}"`
-    );
+    console.error(`m2m-flow: expected sub to encode "${CLIENT_ID}", got sub="${rawSub}"`);
     process.exit(1);
   }
 
   // 5. Assert aud includes spatula-m2m.
-  const aud = claims["aud"];
+  const aud = claims['aud'];
   const audList: string[] = Array.isArray(aud)
     ? (aud as string[])
-    : typeof aud === "string"
-    ? [aud]
-    : [];
+    : typeof aud === 'string'
+      ? [aud]
+      : [];
 
   if (!audList.includes(CLIENT_ID)) {
     console.error(
-      `m2m-flow: expected aud to include "${CLIENT_ID}", got aud=${JSON.stringify(aud)}`
+      `m2m-flow: expected aud to include "${CLIENT_ID}", got aud=${JSON.stringify(aud)}`,
     );
     process.exit(1);
   }
 
   // 6. Success — print result.
-  console.log("m2m-flow-ok");
-  console.log("\nDecoded JWT claims:");
+  console.log('m2m-flow-ok');
+  console.log('\nDecoded JWT claims:');
   console.log(JSON.stringify(claims, null, 2));
 
   process.exit(0);
 }
 
 main().catch((err) => {
-  console.error("m2m-flow: unexpected error:", err);
+  console.error('m2m-flow: unexpected error:', err);
   process.exit(1);
 });

@@ -175,7 +175,12 @@ export async function runAdminTenantDelete(opts: AdminTenantDeleteOptions): Prom
   console.log(`\n  Enqueuing deletion for tenant ${opts.tenant}...`);
 
   // DELETE /api/v1/admin/tenants/:id
-  const deleteResp = await adminFetch(baseUrl, apiKey, 'DELETE', `/api/v1/admin/tenants/${opts.tenant}`);
+  const deleteResp = await adminFetch(
+    baseUrl,
+    apiKey,
+    'DELETE',
+    `/api/v1/admin/tenants/${opts.tenant}`,
+  );
   const deleteBody = (await deleteResp.json()) as { data: { status: string; jobId: string } };
   const { jobId } = deleteBody.data;
 

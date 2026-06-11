@@ -32,7 +32,8 @@ const LIVE = process.env.SPATULA_LIVE_LLM === '1';
 // ---- Model selection ----
 // CI always tests the OpenRouter pin. Self-hosted Ollama lane uses workflow_dispatch.
 // Set SPATULA_ADVERSARIAL_MODEL=ollama to exercise the Ollama pin locally.
-const MODEL_KEY = (process.env.SPATULA_ADVERSARIAL_MODEL as keyof typeof PINNED_MODELS) ?? 'openrouter';
+const MODEL_KEY =
+  (process.env.SPATULA_ADVERSARIAL_MODEL as keyof typeof PINNED_MODELS) ?? 'openrouter';
 const PINNED_MODEL = PINNED_MODELS[MODEL_KEY] ?? PINNED_MODELS.openrouter;
 
 // ---- Helpers ----
@@ -63,8 +64,18 @@ async function buildLiveClient() {
 const PRODUCT_SCHEMA = {
   version: 1,
   fields: [
-    { name: 'title', type: 'string' as const, description: 'Product or article title', required: true },
-    { name: 'price', type: 'string' as const, description: 'Product price if present', required: false },
+    {
+      name: 'title',
+      type: 'string' as const,
+      description: 'Product or article title',
+      required: true,
+    },
+    {
+      name: 'price',
+      type: 'string' as const,
+      description: 'Product price if present',
+      required: false,
+    },
   ],
   fieldAliases: [],
   createdAt: new Date(),

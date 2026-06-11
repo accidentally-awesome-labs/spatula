@@ -14,19 +14,19 @@
 
 ## Feature-parity gate (Pitfall #7 — decisive)
 
-| Feature | better-sqlite3 | node:sqlite | Notes |
-| ------- | -------------- | ----------- | ----- |
-| FTS5 (full-text search virtual table) | AVAILABLE | AVAILABLE | Both backends queried with identical CREATE VIRTUAL TABLE USING fts5(...). |
-| JSON1 (json_extract, json_set, etc.) | AVAILABLE | AVAILABLE | Compiled into SQLite by default since 3.38 (April 2022). |
-| WAL (journal_mode = WAL) | AVAILABLE | AVAILABLE | Concurrent-read mode used by Spatula for long-running crawl + read. |
+| Feature                               | better-sqlite3 | node:sqlite | Notes                                                                      |
+| ------------------------------------- | -------------- | ----------- | -------------------------------------------------------------------------- |
+| FTS5 (full-text search virtual table) | AVAILABLE      | AVAILABLE   | Both backends queried with identical CREATE VIRTUAL TABLE USING fts5(...). |
+| JSON1 (json_extract, json_set, etc.)  | AVAILABLE      | AVAILABLE   | Compiled into SQLite by default since 3.38 (April 2022).                   |
+| WAL (journal_mode = WAL)              | AVAILABLE      | AVAILABLE   | Concurrent-read mode used by Spatula for long-running crawl + read.        |
 
 ## CRUD perf comparison (context only — feature parity decides)
 
-| Operation | better-sqlite3 (ms) | node:sqlite (ms) |
-| --------- | ------------------- | ---------------- |
-| 10k single inserts | 6096.41 | 10517.71 |
-| 10k point selects | 50.90 | 50.93 |
-| 10k inserts (single tx) | 6.70 | 4.94 |
+| Operation               | better-sqlite3 (ms) | node:sqlite (ms) |
+| ----------------------- | ------------------- | ---------------- |
+| 10k single inserts      | 6096.41             | 10517.71         |
+| 10k point selects       | 50.90               | 50.93            |
+| 10k inserts (single tx) | 6.70                | 4.94             |
 
 ## Decision
 

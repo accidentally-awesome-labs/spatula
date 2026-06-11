@@ -25,44 +25,44 @@ requirements:
 
 must_haves:
   truths:
-    - "GET /api/v1/openapi.json returns a valid OpenAPI 3.1 document built ONCE at boot and cached (boot-cache pattern per D-13)"
-    - "GET /.well-known/spatula-version returns { version, gitSha, buildAt, supportMatrix: { minClientMajor, deprecatedClientMajors[] } }"
+    - 'GET /api/v1/openapi.json returns a valid OpenAPI 3.1 document built ONCE at boot and cached (boot-cache pattern per D-13)'
+    - 'GET /.well-known/spatula-version returns { version, gitSha, buildAt, supportMatrix: { minClientMajor, deprecatedClientMajors[] } }'
     - "Boot-time example validation (per D-16) runs in NODE_ENV !== 'production' — fails fast on off-schema OpenAPI examples"
-    - "SpatulaClient lazily probes /.well-known/spatula-version on FIRST request (zero constructor I/O); caches result; throws SpatulaVersionMismatchError on major mismatch"
-    - "docs/compat-policy.md documents the SDK ↔ server ↔ core-types matrix per spec §3.2.5"
+    - 'SpatulaClient lazily probes /.well-known/spatula-version on FIRST request (zero constructor I/O); caches result; throws SpatulaVersionMismatchError on major mismatch'
+    - 'docs/compat-policy.md documents the SDK ↔ server ↔ core-types matrix per spec §3.2.5'
   artifacts:
-    - path: "apps/api/src/openapi-config.ts"
-      provides: "Adds module-level cachedSpec + getCachedOpenAPISpec() boot-cache helper + dev-mode boot example validator"
-      contains: "cachedSpec"
-    - path: "apps/api/src/routes/openapi.ts"
-      provides: "GET /api/v1/openapi.json handler serving the cached document"
-      contains: "openapi.json"
-    - path: "apps/api/src/routes/well-known.ts"
-      provides: "GET /.well-known/spatula-version handler returning the version + git-sha + support-matrix payload"
-      contains: "spatula-version"
-    - path: "packages/client/src/version-probe.ts"
-      provides: "Lazy one-shot version probe class with probePromise caching + reset on error"
-      contains: "SpatulaVersionMismatchError"
-    - path: "docs/compat-policy.md"
-      provides: "SDK ↔ server ↔ core-types compat matrix; major-compat-within-major rule; mismatch error classes; 12-month support window"
-      contains: "compat matrix"
+    - path: 'apps/api/src/openapi-config.ts'
+      provides: 'Adds module-level cachedSpec + getCachedOpenAPISpec() boot-cache helper + dev-mode boot example validator'
+      contains: 'cachedSpec'
+    - path: 'apps/api/src/routes/openapi.ts'
+      provides: 'GET /api/v1/openapi.json handler serving the cached document'
+      contains: 'openapi.json'
+    - path: 'apps/api/src/routes/well-known.ts'
+      provides: 'GET /.well-known/spatula-version handler returning the version + git-sha + support-matrix payload'
+      contains: 'spatula-version'
+    - path: 'packages/client/src/version-probe.ts'
+      provides: 'Lazy one-shot version probe class with probePromise caching + reset on error'
+      contains: 'SpatulaVersionMismatchError'
+    - path: 'docs/compat-policy.md'
+      provides: 'SDK ↔ server ↔ core-types compat matrix; major-compat-within-major rule; mismatch error classes; 12-month support window'
+      contains: 'compat matrix'
   key_links:
-    - from: "apps/api/src/routes/openapi.ts"
-      to: "apps/api/src/openapi-config.ts"
-      via: "Imports getCachedOpenAPISpec and serves its return value as application/json"
-      pattern: "getCachedOpenAPISpec"
-    - from: "apps/api/src/app.ts"
-      to: "apps/api/src/routes/openapi.ts"
-      via: "Mounts the openapi route + well-known route AFTER all other routes register"
-      pattern: "app.route"
-    - from: "packages/client/src/client.ts"
-      to: "packages/client/src/version-probe.ts"
-      via: "SpatulaClient.request() awaits probe.ensure() before fetching the actual request"
-      pattern: "probe.ensure"
-    - from: "packages/client/src/version-probe.ts"
-      to: "/.well-known/spatula-version"
-      via: "fetch from configured baseUrl + path"
-      pattern: "/.well-known/spatula-version"
+    - from: 'apps/api/src/routes/openapi.ts'
+      to: 'apps/api/src/openapi-config.ts'
+      via: 'Imports getCachedOpenAPISpec and serves its return value as application/json'
+      pattern: 'getCachedOpenAPISpec'
+    - from: 'apps/api/src/app.ts'
+      to: 'apps/api/src/routes/openapi.ts'
+      via: 'Mounts the openapi route + well-known route AFTER all other routes register'
+      pattern: 'app.route'
+    - from: 'packages/client/src/client.ts'
+      to: 'packages/client/src/version-probe.ts'
+      via: 'SpatulaClient.request() awaits probe.ensure() before fetching the actual request'
+      pattern: 'probe.ensure'
+    - from: 'packages/client/src/version-probe.ts'
+      to: '/.well-known/spatula-version'
+      via: 'fetch from configured baseUrl + path'
+      pattern: '/.well-known/spatula-version'
 ---
 
 <objective>
@@ -71,11 +71,12 @@ Land the runtime-served OpenAPI document (GET /api/v1/openapi.json boot-cached v
 Purpose: These are the wire-format anchors that let a downstream consumer (browser web UI, third-party tool) verify the contract version at runtime BEFORE making real requests. The boot-cache pattern (D-13) ensures the OpenAPI document is byte-identical across requests, enabling downstream CDN caching. The lazy probe (D-12) keeps SpatulaClient SSR-safe (no constructor I/O).
 
 Output:
+
 - apps/api/src/routes/openapi.ts + well-known.ts + their tests
 - apps/api/src/openapi-config.ts extended with getCachedOpenAPISpec() + dev-mode example validator
 - packages/client/src/version-probe.ts + wired into SpatulaClient.request()
 - docs/compat-policy.md committed
-</objective>
+  </objective>
 
 <execution_context>
 @$HOME/.claude/get-shit-done/workflows/execute-plan.md
@@ -102,6 +103,7 @@ export function createOpenAPIRouter(): OpenAPIHono<AppEnv> { /* unchanged */ }
 ```
 
 From @hono/zod-openapi README (verified in research):
+
 ```
 const doc = app.getOpenAPI31Document(
   { openapi: '3.1.0', info: { title: 'Spatula API', version: '1.0.0' }, servers: [{ url: '/api/v1' }] },
@@ -111,21 +113,24 @@ const doc = app.getOpenAPI31Document(
 ```
 
 From apps/api/src/app.ts (current — mounts every existing route subrouter via app.route(...)):
+
 - This plan APPENDS two more mounts AFTER all existing routes register:
-  - app.route('/api/v1', openapiRoute(app))  → serves /api/v1/openapi.json
-  - app.route('/', wellKnownRoute())          → serves /.well-known/spatula-version (NOTE: NOT under /api/v1)
+  - app.route('/api/v1', openapiRoute(app)) → serves /api/v1/openapi.json
+  - app.route('/', wellKnownRoute()) → serves /.well-known/spatula-version (NOTE: NOT under /api/v1)
 
 From packages/client/src/client.ts (plan 16-2 output — modified here):
+
 - Constructor stores { baseUrl, apiKey, fetch? } — no I/O (D-12).
 - request<T>(method, path, body?) already implemented (plan 16-2).
 - THIS plan adds: private probe field + await this.probe.ensure() at the top of request().
 
 Spec §3.2.5 compat matrix (relevant excerpt):
+
 - SDK and server MUST share major version. Cross-major calls throw SpatulaVersionMismatchError.
 - @spatula/core-types and @spatula/client MUST share major version (exact-peer-dep, enforced via release-please linked-versions).
 - Server supports the previous SDK major for 12 months post-major-cut.
-</interfaces>
-</context>
+  </interfaces>
+  </context>
 
 <tasks>
 
@@ -263,6 +268,7 @@ Spec §3.2.5 compat matrix (relevant excerpt):
     Step 5: Write apps/api/src/routes/openapi.test.ts using the tests/carveout/fixtures/server.ts adapter pattern. Assertions per <behavior>.
 
     Step 6: Run pnpm --filter @spatula/api test -- openapi.test.ts and confirm green.
+
   </action>
   <verify>
     <automated>pnpm --filter @spatula/api test -- openapi.test.ts && grep -q "getCachedOpenAPISpec" apps/api/src/openapi-config.ts && grep -q "validateExamplesAtBoot" apps/api/src/openapi-config.ts && grep -q "ajv/dist/2020" apps/api/src/openapi-config.ts && grep -q "openapiRoute" apps/api/src/app.ts</automated>
@@ -365,6 +371,7 @@ Spec §3.2.5 compat matrix (relevant excerpt):
     - supportMatrix.deprecatedClientMajors is an array (length 0 for v1.0)
 
     Step 4: Run pnpm --filter @spatula/api test -- well-known and confirm green.
+
   </action>
   <verify>
     <automated>pnpm --filter @spatula/api test -- well-known && grep -q "/.well-known/spatula-version" apps/api/src/routes/well-known.ts && grep -q "supportMatrix" apps/api/src/routes/well-known.ts && grep -q "wellKnownRoute" apps/api/src/app.ts</automated>
@@ -468,6 +475,7 @@ Spec §3.2.5 compat matrix (relevant excerpt):
       - On probe error, next request retries (probePromise reset)
       - 404 from /.well-known is treated as "unknown server" — does NOT throw
       - Constructor with skipVersionProbe: true does NOT call fetcher at all on request()
+
   </behavior>
   <action>
     Step 1: Create packages/client/src/version-probe.ts per <behavior>.
@@ -520,6 +528,7 @@ Spec §3.2.5 compat matrix (relevant excerpt):
     ```
 
     Step 5: Run pnpm --filter @spatula/client test -- version-probe and confirm green.
+
   </action>
   <verify>
     <automated>pnpm --filter @spatula/client test -- version-probe && grep -q "class VersionProbe" packages/client/src/version-probe.ts && grep -q "probe.ensure" packages/client/src/client.ts && grep -q "SpatulaVersionMismatchError" packages/client/src/version-probe.ts && grep -q "skipVersionProbe" packages/client/src/client.ts</automated>
@@ -629,6 +638,7 @@ Spec §3.2.5 compat matrix (relevant excerpt):
     ```
 
     Step 2: Commit the file. No tests needed (manual-only per 16-VALIDATION.md).
+
   </action>
   <verify>
     <automated>test -f docs/compat-policy.md && grep -q "compat matrix" docs/compat-policy.md && grep -q "SpatulaVersionMismatchError" docs/compat-policy.md && grep -q "12 months" docs/compat-policy.md && grep -q "skipVersionProbe" docs/compat-policy.md</automated>
@@ -659,13 +669,14 @@ Spec §3.2.5 compat matrix (relevant excerpt):
 </verification>
 
 <success_criteria>
+
 - API-05: `GET /api/v1/openapi.json` serves the boot-cached OpenAPI 3.1 document from the live `OpenAPIHono` registry; byte-identical across requests. Verified by openapi.test.ts.
 - API-06: `GET /.well-known/spatula-version` returns the four-key payload with supportMatrix. Verified by well-known.test.ts.
 - API-14: `docs/compat-policy.md` exists with the full compat matrix per spec §3.2.5. Verified by grep + manual read.
 - Lazy version probe (D-12) wired into `SpatulaClient.request()`; constructor stays I/O-free; on major mismatch throws `SpatulaVersionMismatchError`. Verified by version-probe.test.ts.
 - Dev-mode boot example validator (D-16) runs in `NODE_ENV !== 'production'` and fails fast on off-schema examples. Verified by openapi.test.ts.
 - Ajv2020 import (Pitfall #1) — used everywhere ajv is used in this plan. Verified by grep gate.
-</success_criteria>
+  </success_criteria>
 
 <output>
 After completion, create `.planning/phases/16-api-contract-sdk-packages/16-3-SUMMARY.md` recording:

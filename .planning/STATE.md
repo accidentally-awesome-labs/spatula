@@ -3,8 +3,8 @@ gsd_state_version: 1.0
 milestone: v1.1
 milestone_name: Public Launch (Wave 6 / Phase 14)
 status: executing
-stopped_at: "Phase 19: 7/9 plans complete (19-01/02/03/04/06/07/08). 19-05 (Render, DEPLOY-02) + 19-09 (hardware-sizing, DEPLOY-09) deferred at human checkpoints per user choice — phase NOT marked complete. Full workspace build green; no regressions."
-last_updated: "2026-06-11T05:45:49.237Z"
+stopped_at: 'Phase 19: 7/9 plans complete (19-01/02/03/04/06/07/08). 19-05 (Render, DEPLOY-02) + 19-09 (hardware-sizing, DEPLOY-09) deferred at human checkpoints per user choice — phase NOT marked complete. Full workspace build green; no regressions.'
+last_updated: '2026-06-11T05:45:49.237Z'
 last_activity: 2026-06-11
 progress:
   total_phases: 8
@@ -110,10 +110,10 @@ Full decision log lives in PROJECT.md Key Decisions table. Recent decisions rele
 - [Phase 15-carveout-migration-squash]: Plan 15-06: docs/runbooks/upgrade.md commits no-migration-downgrade (forward-only + pre-flight pg_dump) + expand-contract-only (with rename/type-change/split examples and additive-only exemptions) per ROADMAP success #5 + CARVE-08; PR description (Task 6) references both policies.
 - [Phase 16]: Plan 16-1: ErrorCode enum staged in @spatula/shared (25 codes, 14 domains) for plan 16-2 to MOVE to @spatula/core-types per D-04 sequencing
 - [Phase 16]: Plan 16-1: DLQ/API-key/Action 'not found' use ErrorCode.JOB_NOT_FOUND with details.resource discriminator — avoided enum growth mid-sweep for admin-only resources
-- [Phase 16]: Plan 16-1: Hono c.req.routePath inside app.use('*', ...) returns middleware path (/*), not handler — rate-limit middleware walks matchedRoutes for per-route lookup
+- [Phase 16]: Plan 16-1: Hono c.req.routePath inside app.use('_', ...) returns middleware path (/_), not handler — rate-limit middleware walks matchedRoutes for per-route lookup
 - [Phase 16]: Plan 16-1: rate-limit-config loader walks up parent dirs for config/rate-limits.yaml — robust to monorepo sub-package vitest cwd
 - [Phase 16]: Plan 16-2: ErrorCode + JobConfig/FieldDef/Action/ExtractionResult schemas MOVED from @spatula/shared + @spatula/core to canonical home in @spatula/core-types; old paths preserved as re-export shims
-- [Phase 16]: Plan 16-2: ESLint no-restricted-imports rule blocks value imports from @spatula/core-types monorepo-wide (allowTypeImports:true); per-file exemptions for canonical shim modules (shared/error-codes.ts + core/types/*.ts)
+- [Phase 16]: Plan 16-2: ESLint no-restricted-imports rule blocks value imports from @spatula/core-types monorepo-wide (allowTypeImports:true); per-file exemptions for canonical shim modules (shared/error-codes.ts + core/types/\*.ts)
 - [Phase 16]: Plan 16-2: @spatula/client codegen output (25 class-per-code error subclasses) COMMITTED to git; CI drift gate via 'pnpm gen:errors && git diff --exit-code' rather than build-time generation
 - [Phase 16]: Plan 16-2: size-limit v12 requires sidecar esbuild config file (size-limit.esbuild.config.js) instead of inline 'esbuild:{...}' block — locks ESM+browser+es2022+minify+tree-shake measurement
 - [Phase 16]: Plan 16-2: client.experimental Proxy returns undefined for JS-runtime well-known props (then/toJSON/constructor/symbols) so introspection doesn't explode; throws only on attempted use
@@ -121,7 +121,7 @@ Full decision log lives in PROJECT.md Key Decisions table. Recent decisions rele
 - [Phase 16-api-contract-sdk-packages]: Plan 16-3: VersionProbe caches REJECTED promise on SpatulaVersionMismatchError (verdict sticky) but RESETS probePromise on transient transport error — two-tier cache semantics for D-12
 - [Phase 16-api-contract-sdk-packages]: Plan 16-3: 404 from /.well-known/spatula-version treated as 'unknown server' — probe degrades gracefully so SDK works against non-Spatula servers in tests
 - [Phase 16-api-contract-sdk-packages]: Plan 16-3: SDK_MAJOR_VERSION compiled as module-level const (currently 0); manual bump procedure documented in client.ts JSDoc, triggered alongside release-please major
-- [Phase 16-api-contract-sdk-packages]: Plan 16-3: vitest config broadened to include src/**/*.test.ts so route tests can colocate with their sources (plan files specified colocated paths)
+- [Phase 16-api-contract-sdk-packages]: Plan 16-3: vitest config broadened to include src/\*_/_.test.ts so route tests can colocate with their sources (plan files specified colocated paths)
 - [Phase 16-api-contract-sdk-packages]: Plan 16-4: Two-pass matrix driver — Pass 1 (spec-only example validation, deterministic) + Pass 2 (live 2xx best-effort) — catches both spec-side and runtime-side drift
 - [Phase 16-api-contract-sdk-packages]: Plan 16-4: Contract harness uses Node-builtin http.Server adapter (carry-forward from Phase 15 tests/carveout/fixtures/server.ts) — avoids adding @hono/node-server to workspace root for a test-only concern
 - [Phase 16-api-contract-sdk-packages]: Plan 16-4: Ajv2020 import via 'ajv/dist/2020.js' enforced in helpers/ajv-setup.ts (Pitfall #1 — default 'ajv' import silently uses draft-07 and mis-validates OpenAPI 3.1 nullable/prefixItems)
@@ -134,13 +134,13 @@ Full decision log lives in PROJECT.md Key Decisions table. Recent decisions rele
 - [Phase 16-api-contract-sdk-packages]: Plan 16-5: SQLite v1.0 stays on better-sqlite3@12.10.0; Node 22 LTS bundled SQLite lacks FTS5 and node:sqlite is Experimental — feature parity gate fails per spec §3.2.3 across support matrix
 - [Phase 16-api-contract-sdk-packages]: Plan 16-5: SDK integration tests branch on SPATULA_LIVE_LLM via it.skipIf(LIVE); default pnpm test excludes tests/integration/ so contributor-fork CI passes without OPENROUTER_API_KEY
 - [Phase 17]: supersedes column declared as plain uuid() without .references() in TS; self-FK added via raw SQL in migration (Drizzle cannot cleanly self-reference inside pgTable definition)
-- [Phase 17]: RESOURCE_NOT_FOUND placed in RESOURCE.* domain; no TENANT_MISMATCH or CORS_CONFIG_INVALID added per RESEARCH.md D-18 prefer-404 policy
+- [Phase 17]: RESOURCE_NOT_FOUND placed in RESOURCE.\* domain; no TENANT_MISMATCH or CORS_CONFIG_INVALID added per RESEARCH.md D-18 prefer-404 policy
 - [Phase 17]: Used ghcr.io/dexidp/dex:latest (v2.46.0+) for auth-dex example: client_credentials grant was not implemented in v2.45.x; requires both oauth2.grantTypes config AND DEX_CLIENT_CREDENTIAL_GRANT_ENABLED_BY_DEFAULT=true env var in v2.46.0
 - [Phase 17]: Dex client_credentials sub claim is protobuf-encoded (not literal client_id): m2m-flow.ts decodes base64url bytes to verify client_id is embedded in the sub payload
 - [Phase 17-02]: SSE route registered on main app (not sub-router) with full path — required for correct Hono routing and OpenAPI spec generation
-- [Phase 17-02]: Scope guard bypass via SSE_PATH_RE wrapper in app.ts — cleanest fix without restructuring existing jobs/* guard chain
+- [Phase 17-02]: Scope guard bypass via SSE_PATH_RE wrapper in app.ts — cleanest fix without restructuring existing jobs/\* guard chain
 - [Phase 17-02]: Dedicated ioredis connection per SSE client — XREAD BLOCK monopolizes connection; per-request connection is simplest at v1 scale
-- [Phase 17-browser-auth-sse-cors]: CORS wildcard regex: escape * in metachar set before replacing with [^./]+ — omitting * from escape causes wildcard to act as a regex quantifier instead of a label placeholder
+- [Phase 17-browser-auth-sse-cors]: CORS wildcard regex: escape _ in metachar set before replacing with [^./]+ — omitting _ from escape causes wildcard to act as a regex quantifier instead of a label placeholder
 - [Phase 17-browser-auth-sse-cors]: buildOriginMatcher returns null (not throws) on bad config; createApp throws Error with CORS_CONFIG_INVALID — pure helper, boundary-level validation
 - [Phase 17-browser-auth-sse-cors]: docs/api-auth.md scope CI gate uses SCOPE_TABLE_START/END HTML comment markers + first backtick-quoted column parsing; readFileSync for filesystem independence
 - [Phase 17]: rotateApiKeyRequestSchema graceSeconds has no .max(604800) — handler clamps silently so 700000 returns 200 not 400 (D-14 server-clamped UX)
@@ -175,7 +175,7 @@ Full decision log lives in PROJECT.md Key Decisions table. Recent decisions rele
 - [Phase 19-01]: pathToFileURL guard on top-level main() call prevents embedded import from spawning standalone worker as side-effect
 - [Phase 19-01]: Injectable factory in startEmbeddedWorker() keeps unit tests isolated from BullMQ; real import lazy under SPATULA_EMBEDDED_WORKER=1
 - [Phase 19-01]: dist/main.js is the deployment CMD target; dist/index.js remains the library barrel — plan 02 distroless and plan 05 Render both target main.js
-- [Phase 19]: Upgrade test applies 0000_v1_baseline.sql via psql (not migrator) to simulate v1.0 DB, then runMigrations() populates journal; both entries asserted in __drizzle_migrations_oss
+- [Phase 19]: Upgrade test applies 0000_v1_baseline.sql via psql (not migrator) to simulate v1.0 DB, then runMigrations() populates journal; both entries asserted in \_\_drizzle_migrations_oss
 - [Phase 19]: Content-store enumerated via Drizzle SELECT (no listKeys — not on ContentStore interface) for backup test parity; SHA-256 via node:crypto
 - [Phase 19]: Config compat test is pure in-process (no DB) and can run on PR; backup + upgrade tests are DB-gated and run on-release + nightly (Plan 07 wires CI lanes)
 - [Phase 19]: Token-in-URL log masking: use $uri (path only) in nginx log_format instead of $request — eliminates ?token= from access logs without regex complexity
@@ -207,7 +207,7 @@ All 9 pre-launch blockers are open as of 2026-05-12 (see PROJECT.md "Pre-launch 
 - BLOCK-08 → Phase 20 entry gate (Cloudflare Pages + DNS)
 - BLOCK-09 → Phase 18 / Phase 22 (historical-contributor enumeration + outreach)
 - DEPLOY-09 deferred (user choice 2026-06-10): 19-09 hardware-sizing harness + runbook skeleton committed, but the MEASURED 1k-page-per-tier table in docs/runbooks/hardware-sizing.md is unfilled. Needs a real paid live run on a Hetzner CX32 (pnpm sizing:baseline). 19-09 left without SUMMARY so phase 19 stays incomplete until done.
-- DEPLOY-02 deferred (consistent with user's 'continue Waves 2-3' choice 2026-06-10): 19-05 render.yaml + render-deploy.md built and committed (2a6ee02, 892822c), but Task 3 (live Render free-tier deploy, SC#2) is a human-verify checkpoint needing a real Render account + fresh clone. 19-05 left without SUMMARY so phase 19 stays incomplete until the live deploy is verified (hit /health on the assigned *.onrender.com URL + confirm embedded worker).
+- DEPLOY-02 deferred (consistent with user's 'continue Waves 2-3' choice 2026-06-10): 19-05 render.yaml + render-deploy.md built and committed (2a6ee02, 892822c), but Task 3 (live Render free-tier deploy, SC#2) is a human-verify checkpoint needing a real Render account + fresh clone. 19-05 left without SUMMARY so phase 19 stays incomplete until the live deploy is verified (hit /health on the assigned \*.onrender.com URL + confirm embedded worker).
 
 ### Pending Decisions
 

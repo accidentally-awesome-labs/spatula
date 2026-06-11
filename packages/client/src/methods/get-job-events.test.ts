@@ -42,7 +42,10 @@ class FakeEventSource {
 
   removeEventListener(type: string, fn: GenericListener): void {
     const arr = this.listeners.get(type) ?? [];
-    this.listeners.set(type, arr.filter((f) => f !== fn));
+    this.listeners.set(
+      type,
+      arr.filter((f) => f !== fn),
+    );
   }
 
   dispatchMessage(data: string): void {
@@ -146,7 +149,12 @@ describe('subscribeJobEvents', () => {
     });
 
     const instance = FakeEventSource.lastInstance!;
-    const payload = { id: 'evt_1', type: 'job.status', data: { status: 'running' }, timestamp: '2026-05-20T00:00:00Z' };
+    const payload = {
+      id: 'evt_1',
+      type: 'job.status',
+      data: { status: 'running' },
+      timestamp: '2026-05-20T00:00:00Z',
+    };
     instance.dispatchMessage(JSON.stringify(payload));
     instance.dispatchMessage(JSON.stringify({ ...payload, id: 'evt_2' }));
 
@@ -167,10 +175,13 @@ describe('subscribeJobEvents', () => {
     });
 
     const instance = FakeEventSource.lastInstance!;
-    instance.dispatchNamed('replay_truncated', JSON.stringify({
-      requestedId: '1748000000000-0',
-      oldestAvailableId: '1748100000000-0',
-    }));
+    instance.dispatchNamed(
+      'replay_truncated',
+      JSON.stringify({
+        requestedId: '1748000000000-0',
+        oldestAvailableId: '1748100000000-0',
+      }),
+    );
 
     expect(truncations).toHaveLength(1);
     const t = truncations[0] as { requestedId: string };
@@ -202,7 +213,9 @@ describe('subscribeJobEvents', () => {
     // pattern is present.
     const source = await import('node:fs').then((fs) =>
       fs.readFileSync(
-        new URL('./get-job-events.ts', import.meta.url).pathname.replace(/\.js\?.*$/, '.ts').replace(/\.js$/, '.ts'),
+        new URL('./get-job-events.ts', import.meta.url).pathname
+          .replace(/\.js\?.*$/, '.ts')
+          .replace(/\.js$/, '.ts'),
         'utf8',
       ),
     );

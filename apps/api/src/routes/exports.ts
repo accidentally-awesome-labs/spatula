@@ -243,7 +243,8 @@ export function exportRoutes() {
     let body: string | Uint8Array;
     if (isBinary) {
       const data = await deps.contentStore.retrieveBinary(exportRecord.contentRef);
-      if (!data) throw new ExportNotFoundError(exportId, { context: { resource: 'export_content' } });
+      if (!data)
+        throw new ExportNotFoundError(exportId, { context: { resource: 'export_content' } });
       body = data;
     } else {
       body = await deps.contentStore.retrieve(exportRecord.contentRef);

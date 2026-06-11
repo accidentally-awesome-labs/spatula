@@ -89,9 +89,7 @@ export const REDACT_PATHS: string[] = [
  */
 export function redactSentryEvent(event: Record<string, unknown>): Record<string, unknown> {
   // Scrub exception values
-  const exception = event.exception as
-    | { values?: Array<{ value?: string }> }
-    | undefined;
+  const exception = event.exception as { values?: Array<{ value?: string }> } | undefined;
   if (exception?.values) {
     for (const ex of exception.values) {
       if (typeof ex.value === 'string') {

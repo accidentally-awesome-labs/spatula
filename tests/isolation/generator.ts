@@ -134,35 +134,107 @@ const SKIP_LIST: Array<{ method: string; path: string; reason: string }> = [
   },
   // Collection list / write endpoints — no per-resource cross-tenant path param.
   // These return the calling tenant's own items (always tenant-scoped by bearer).
-  { method: 'POST', path: '/api/v1/api-keys', reason: 'collection write — no cross-tenant path param' },
-  { method: 'GET',  path: '/api/v1/api-keys', reason: 'collection list — tenant-scoped by bearer' },
-  { method: 'POST', path: '/api/v1/jobs',     reason: 'collection write — no cross-tenant path param' },
-  { method: 'GET',  path: '/api/v1/jobs',     reason: 'collection list — tenant-scoped by bearer' },
+  {
+    method: 'POST',
+    path: '/api/v1/api-keys',
+    reason: 'collection write — no cross-tenant path param',
+  },
+  { method: 'GET', path: '/api/v1/api-keys', reason: 'collection list — tenant-scoped by bearer' },
+  { method: 'POST', path: '/api/v1/jobs', reason: 'collection write — no cross-tenant path param' },
+  { method: 'GET', path: '/api/v1/jobs', reason: 'collection list — tenant-scoped by bearer' },
   // Batch collection endpoints — no per-resource path param
-  { method: 'POST', path: '/api/v1/jobs/batch',    reason: 'batch collection write — no cross-tenant path param' },
-  { method: 'POST', path: '/api/v1/actions/batch', reason: 'batch collection write — no cross-tenant path param' },
+  {
+    method: 'POST',
+    path: '/api/v1/jobs/batch',
+    reason: 'batch collection write — no cross-tenant path param',
+  },
+  {
+    method: 'POST',
+    path: '/api/v1/actions/batch',
+    reason: 'batch collection write — no cross-tenant path param',
+  },
   // Job lifecycle action endpoints — need jobManager which is not wired in the
   // contract harness (stubbed as {}).  Cross-tenant ownership is enforced at the
   // job-repo lookup layer which is tested via GET/DELETE /api/v1/jobs/{id}.
-  { method: 'POST', path: '/api/v1/jobs/{id}/start',    reason: 'needs jobManager — isolation covered by GET /jobs/{id} ownership check' },
-  { method: 'POST', path: '/api/v1/jobs/{id}/pause',    reason: 'needs jobManager — isolation covered by GET /jobs/{id} ownership check' },
-  { method: 'POST', path: '/api/v1/jobs/{id}/resume',   reason: 'needs jobManager — isolation covered by GET /jobs/{id} ownership check' },
-  { method: 'POST', path: '/api/v1/jobs/{id}/cancel',   reason: 'needs jobManager — isolation covered by GET /jobs/{id} ownership check' },
-  { method: 'POST', path: '/api/v1/jobs/{id}/reconcile',reason: 'needs jobManager — isolation covered by GET /jobs/{id} ownership check' },
+  {
+    method: 'POST',
+    path: '/api/v1/jobs/{id}/start',
+    reason: 'needs jobManager — isolation covered by GET /jobs/{id} ownership check',
+  },
+  {
+    method: 'POST',
+    path: '/api/v1/jobs/{id}/pause',
+    reason: 'needs jobManager — isolation covered by GET /jobs/{id} ownership check',
+  },
+  {
+    method: 'POST',
+    path: '/api/v1/jobs/{id}/resume',
+    reason: 'needs jobManager — isolation covered by GET /jobs/{id} ownership check',
+  },
+  {
+    method: 'POST',
+    path: '/api/v1/jobs/{id}/cancel',
+    reason: 'needs jobManager — isolation covered by GET /jobs/{id} ownership check',
+  },
+  {
+    method: 'POST',
+    path: '/api/v1/jobs/{id}/reconcile',
+    reason: 'needs jobManager — isolation covered by GET /jobs/{id} ownership check',
+  },
   // Admin collection endpoints — no per-resource path param
-  { method: 'GET', path: '/api/v1/admin/workers', reason: 'admin global status — no cross-tenant path param' },
-  { method: 'GET', path: '/api/v1/admin/dlq',     reason: 'admin collection list — no cross-tenant path param' },
-  { method: 'GET', path: '/api/v1/admin/jobs',    reason: 'admin collection list — no cross-tenant path param' },
-  { method: 'GET', path: '/api/v1/admin/system',  reason: 'admin global status — no cross-tenant path param' },
+  {
+    method: 'GET',
+    path: '/api/v1/admin/workers',
+    reason: 'admin global status — no cross-tenant path param',
+  },
+  {
+    method: 'GET',
+    path: '/api/v1/admin/dlq',
+    reason: 'admin collection list — no cross-tenant path param',
+  },
+  {
+    method: 'GET',
+    path: '/api/v1/admin/jobs',
+    reason: 'admin collection list — no cross-tenant path param',
+  },
+  {
+    method: 'GET',
+    path: '/api/v1/admin/system',
+    reason: 'admin global status — no cross-tenant path param',
+  },
   // Admin parameterised routes — access is blocked by admin scope guard before any
   // repo lookup, so cross-tenant isolation is enforced at the auth layer.
-  { method: 'GET',    path: '/api/v1/admin/tenants/{id}',    reason: 'admin scope gate blocks cross-tenant access before repo lookup' },
-  { method: 'PATCH',  path: '/api/v1/admin/tenants/{id}',    reason: 'admin scope gate blocks cross-tenant access before repo lookup' },
-  { method: 'GET',    path: '/api/v1/admin/jobs/{id}',       reason: 'admin scope gate blocks cross-tenant access before repo lookup' },
-  { method: 'DELETE', path: '/api/v1/admin/dlq/{id}',        reason: 'admin scope gate blocks cross-tenant access before repo lookup' },
-  { method: 'POST',   path: '/api/v1/admin/dlq/{id}/retry',  reason: 'admin scope gate blocks cross-tenant access before repo lookup' },
+  {
+    method: 'GET',
+    path: '/api/v1/admin/tenants/{id}',
+    reason: 'admin scope gate blocks cross-tenant access before repo lookup',
+  },
+  {
+    method: 'PATCH',
+    path: '/api/v1/admin/tenants/{id}',
+    reason: 'admin scope gate blocks cross-tenant access before repo lookup',
+  },
+  {
+    method: 'GET',
+    path: '/api/v1/admin/jobs/{id}',
+    reason: 'admin scope gate blocks cross-tenant access before repo lookup',
+  },
+  {
+    method: 'DELETE',
+    path: '/api/v1/admin/dlq/{id}',
+    reason: 'admin scope gate blocks cross-tenant access before repo lookup',
+  },
+  {
+    method: 'POST',
+    path: '/api/v1/admin/dlq/{id}/retry',
+    reason: 'admin scope gate blocks cross-tenant access before repo lookup',
+  },
   // PATCH /api/v1/tenants/{id} — tenant self-update; route verifies tenantId == auth tenantId.
-  { method: 'PATCH', path: '/api/v1/tenants/{id}', reason: 'tenant self-update — route verifies id == authenticated tenantId' },
+  {
+    method: 'PATCH',
+    path: '/api/v1/tenants/{id}',
+    reason: 'tenant self-update — route verifies id == authenticated tenantId',
+  },
 
   // Sub-resource list routes that return 200 with an empty list instead of 404 when
   // the job id belongs to a different tenant. These routes filter by (jobId + tenantId)
@@ -170,28 +242,77 @@ const SKIP_LIST: Array<{ method: string; path: string; reason: string }> = [
   // This is not a data leak, but it's also not 403/404 (pre-existing route behavior).
   // Fixing these to return 404 would require adding a job-ownership pre-flight to each
   // route (architectural change, out of scope for plan 17-07).
-  { method: 'GET',  path: '/api/v1/jobs/{jobId}/schema/versions',      reason: '200 empty list when job belongs to other tenant — no data leak; pre-existing route behavior' },
-  { method: 'GET',  path: '/api/v1/jobs/{jobId}/extractions',          reason: '200 empty list when job belongs to other tenant — no data leak; pre-existing route behavior' },
-  { method: 'GET',  path: '/api/v1/jobs/{jobId}/entity-sources',       reason: '200 empty list when job belongs to other tenant — no data leak; pre-existing route behavior' },
-  { method: 'GET',  path: '/api/v1/jobs/{jobId}/entities',             reason: '200 empty list when job belongs to other tenant — no data leak; pre-existing route behavior' },
-  { method: 'GET',  path: '/api/v1/jobs/{jobId}/actions',              reason: '200 empty list when job belongs to other tenant — no data leak; pre-existing route behavior' },
-  { method: 'GET',  path: '/api/v1/jobs/{jobId}/exports',              reason: '200 empty list when job belongs to other tenant — no data leak; pre-existing route behavior' },
-  { method: 'GET',  path: '/api/v1/jobs/{jobId}/quality',             reason: '200 aggregate quality metrics (empty/zero) for unrecognised job — no data leak; pre-existing route behavior' },
-  { method: 'POST', path: '/api/v1/jobs/{jobId}/actions/approve-all',  reason: '200 no-op when no actions for this tenant — no data leak; pre-existing route behavior' },
+  {
+    method: 'GET',
+    path: '/api/v1/jobs/{jobId}/schema/versions',
+    reason:
+      '200 empty list when job belongs to other tenant — no data leak; pre-existing route behavior',
+  },
+  {
+    method: 'GET',
+    path: '/api/v1/jobs/{jobId}/extractions',
+    reason:
+      '200 empty list when job belongs to other tenant — no data leak; pre-existing route behavior',
+  },
+  {
+    method: 'GET',
+    path: '/api/v1/jobs/{jobId}/entity-sources',
+    reason:
+      '200 empty list when job belongs to other tenant — no data leak; pre-existing route behavior',
+  },
+  {
+    method: 'GET',
+    path: '/api/v1/jobs/{jobId}/entities',
+    reason:
+      '200 empty list when job belongs to other tenant — no data leak; pre-existing route behavior',
+  },
+  {
+    method: 'GET',
+    path: '/api/v1/jobs/{jobId}/actions',
+    reason:
+      '200 empty list when job belongs to other tenant — no data leak; pre-existing route behavior',
+  },
+  {
+    method: 'GET',
+    path: '/api/v1/jobs/{jobId}/exports',
+    reason:
+      '200 empty list when job belongs to other tenant — no data leak; pre-existing route behavior',
+  },
+  {
+    method: 'GET',
+    path: '/api/v1/jobs/{jobId}/quality',
+    reason:
+      '200 aggregate quality metrics (empty/zero) for unrecognised job — no data leak; pre-existing route behavior',
+  },
+  {
+    method: 'POST',
+    path: '/api/v1/jobs/{jobId}/actions/approve-all',
+    reason: '200 no-op when no actions for this tenant — no data leak; pre-existing route behavior',
+  },
 
   // Write routes where body-validation 400 fires before ownership check.
   // A missing/invalid body triggers Zod validation before the handler checks tenant ownership.
   // The 400 response does not reveal tenant-A data.
-  { method: 'PATCH', path: '/api/v1/jobs/{id}',            reason: '400 from Zod body validation fires before ownership check — no data leak' },
-  { method: 'POST',  path: '/api/v1/jobs/{jobId}/export',  reason: '400 from Zod body validation fires before ownership check — no data leak' },
+  {
+    method: 'PATCH',
+    path: '/api/v1/jobs/{id}',
+    reason: '400 from Zod body validation fires before ownership check — no data leak',
+  },
+  {
+    method: 'POST',
+    path: '/api/v1/jobs/{jobId}/export',
+    reason: '400 from Zod body validation fires before ownership check — no data leak',
+  },
   // Schema version lookup uses an integer version param (not UUID); bogus value fails Zod validation.
-  { method: 'GET', path: '/api/v1/jobs/{jobId}/schema/versions/{version}', reason: '400 from integer version param validation (expects int, not UUID) — no data leak' },
+  {
+    method: 'GET',
+    path: '/api/v1/jobs/{jobId}/schema/versions/{version}',
+    reason: '400 from integer version param validation (expects int, not UUID) — no data leak',
+  },
 ];
 
 function skipReason(method: string, path: string): string | undefined {
-  const entry = SKIP_LIST.find(
-    (s) => s.method === method.toUpperCase() && s.path === path,
-  );
+  const entry = SKIP_LIST.find((s) => s.method === method.toUpperCase() && s.path === path);
   return entry?.reason;
 }
 
@@ -208,7 +329,7 @@ const PARAM_RESOURCE_MAP: Array<{
   paramPattern: RegExp;
   resource: keyof import('./fixtures.js').SeededResources;
 }> = [
-  { paramPattern: /^id$/i, resource: 'jobId' },          // context-dependent; default = job
+  { paramPattern: /^id$/i, resource: 'jobId' }, // context-dependent; default = job
   { paramPattern: /job/i, resource: 'jobId' },
   { paramPattern: /entity/i, resource: 'entityId' },
   { paramPattern: /apikey|key/i, resource: 'apiKeyId' },
@@ -262,10 +383,7 @@ const SSE_PATH_RE = /^\/api\/v1\/jobs\/\{[^}]+\}\/events$/;
  * The SSE route is NOT skipped — it is flagged `authMode: 'stream-token'`
  * and the test runner issues `?token=<tenant-B-stream-token>` instead.
  */
-export function enumerateAuthedRoutes(
-  spec: OpenApiSpec,
-  tenantA: SeededTenant,
-): RouteCase[] {
+export function enumerateAuthedRoutes(spec: OpenApiSpec, tenantA: SeededTenant): RouteCase[] {
   const cases: RouteCase[] = [];
 
   for (const [path, methods] of Object.entries(spec.paths)) {
@@ -385,9 +503,7 @@ export async function assertIsolated(
   };
 
   if (!envelope.error || typeof envelope.error !== 'object') {
-    throw new Error(
-      `[${testName}] Response missing 'error' envelope: ${JSON.stringify(body)}`,
-    );
+    throw new Error(`[${testName}] Response missing 'error' envelope: ${JSON.stringify(body)}`);
   }
 
   if (typeof envelope.error.code !== 'string') {
@@ -419,9 +535,7 @@ export async function assertIsolated(
   //     The generic RESOURCE.NOT_FOUND is the preferred code for new routes (D-18), but
   //     existing routes use domain-specific codes — both are valid isolation signals.
   const code = envelope.error.code as string;
-  const isAcceptableCode =
-    code === 'AUTH.INSUFFICIENT_SCOPE' ||
-    code.endsWith('.NOT_FOUND');
+  const isAcceptableCode = code === 'AUTH.INSUFFICIENT_SCOPE' || code.endsWith('.NOT_FOUND');
 
   if (!isAcceptableCode) {
     throw new Error(
@@ -439,14 +553,10 @@ export async function assertIsolated(
   //     may legitimately echo back the requested resource id from the URL
   //     (e.g. "API key {id} not found") — that reflects the caller's own request,
   //     not a data leak from tenant-A's stored data.
-  const leakCandidates = [
-    tenantA.tenantId,
-    tenantA.label,
-  ].filter(Boolean);
+  const leakCandidates = [tenantA.tenantId, tenantA.label].filter(Boolean);
 
   const searchableBody =
-    (envelope.error.message as string) +
-    JSON.stringify(envelope.error.details ?? {});
+    (envelope.error.message as string) + JSON.stringify(envelope.error.details ?? {});
 
   for (const candidate of leakCandidates) {
     if (searchableBody.includes(candidate)) {
@@ -492,12 +602,8 @@ export interface CoverageReport {
  * route was discovered but neither asserted nor documented in the skip-list.
  */
 export function coverageReport(): CoverageReport {
-  const assertedSet = new Set(
-    _assertedRoutes.map((r) => `${r.method}:${r.path}`),
-  );
-  const skippedSet = new Set(
-    _skippedRoutes.map((r) => `${r.method}:${r.path}`),
-  );
+  const assertedSet = new Set(_assertedRoutes.map((r) => `${r.method}:${r.path}`));
+  const skippedSet = new Set(_skippedRoutes.map((r) => `${r.method}:${r.path}`));
 
   const gaps = _discoveredRoutes.filter((r) => {
     const key = `${r.method.toUpperCase()}:${r.path}`;

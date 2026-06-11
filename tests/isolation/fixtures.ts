@@ -65,10 +65,7 @@ function generateApiKey(): { raw: string; hash: string; prefix: string } {
  * @param pool  Live pg Pool (from startServer() in the contract harness)
  * @param label Short label used in resource names (e.g. 'tenant-a')
  */
-export async function seedTenantWithResources(
-  pool: Pool,
-  label: string,
-): Promise<SeededTenant> {
+export async function seedTenantWithResources(pool: Pool, label: string): Promise<SeededTenant> {
   // Build a Drizzle db handle on top of the existing pg.Pool (no new connection).
   // createDatabasePool without an argument reads DATABASE_URL from env, but here
   // we need to wrap an existing Pool. We do this by using the internal drizzle

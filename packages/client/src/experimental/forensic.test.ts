@@ -142,9 +142,7 @@ describe('client.experimental.forensic.listExtractions', () => {
       skipVersionProbe: true,
     });
 
-    await expect(
-      (client.experimental as any).forensic.listExtractions(),
-    ).rejects.toThrow();
+    await expect((client.experimental as any).forensic.listExtractions()).rejects.toThrow();
   });
 });
 

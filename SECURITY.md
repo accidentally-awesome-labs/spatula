@@ -4,9 +4,9 @@
 
 The following version lines receive security fixes:
 
-| Version | Supported          |
-| ------- | ------------------ |
-| 1.x     | :white_check_mark: |
+| Version | Supported                                    |
+| ------- | -------------------------------------------- |
+| 1.x     | :white_check_mark:                           |
 | 0.x     | :white_check_mark: (until 1.0 GA + 6 months) |
 
 Security fixes for 0.x will be backported only for Critical and High severity issues.
@@ -57,14 +57,14 @@ Algorithm:   RSA 4096
 
 We aim to meet the following response targets:
 
-| Severity | Acknowledgement | Triage | Fix Target |
-| -------- | --------------- | ------ | ---------- |
-| Critical | 24 hours        | 48 hours | 7 days |
-| High     | 48 hours        | 5 business days | 30 days |
-| Medium   | 5 business days | 10 business days | 90 days |
+| Severity            | Acknowledgement  | Triage                   | Fix Target   |
+| ------------------- | ---------------- | ------------------------ | ------------ |
+| Critical            | 24 hours         | 48 hours                 | 7 days       |
+| High                | 48 hours         | 5 business days          | 30 days      |
+| Medium              | 5 business days  | 10 business days         | 90 days      |
 | Low / Informational | 10 business days | At maintainer discretion | Next release |
 
-**Critical issues** (e.g., remote code execution, authentication bypass, data exfiltration) 
+**Critical issues** (e.g., remote code execution, authentication bypass, data exfiltration)
 receive a 24-hour acknowledgement target and an emergency patch release on a best-effort basis.
 
 If you have not received an acknowledgement within the stated SLA, follow up at

@@ -151,13 +151,10 @@ export const errorResponseSchema = z
       }),
       message: z.string(),
       requestId: z.string(),
-      details: z
-        .record(z.unknown())
-        .optional()
-        .openapi({
-          description:
-            'Optional free-form structured context (e.g., { field, issues } for validation; { limit, resetAt } for rate-limit). Shape is per-code; envelope itself is frozen at v1.',
-        }),
+      details: z.record(z.unknown()).optional().openapi({
+        description:
+          'Optional free-form structured context (e.g., { field, issues } for validation; { limit, resetAt } for rate-limit). Shape is per-code; envelope itself is frozen at v1.',
+      }),
     }),
   })
   .openapi('Error');

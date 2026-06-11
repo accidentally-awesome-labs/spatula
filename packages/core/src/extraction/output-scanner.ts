@@ -93,9 +93,10 @@ export function scanOutput(
 
     // ---- 3. Cap-hit detection ----
     const fieldDef = schema.fields.find((f) => f.name === key);
-    const cap = fieldDef && 'maxLength' in fieldDef && typeof fieldDef.maxLength === 'number'
-      ? fieldDef.maxLength
-      : DEFAULT_MAX_FIELD_LENGTH;
+    const cap =
+      fieldDef && 'maxLength' in fieldDef && typeof fieldDef.maxLength === 'number'
+        ? fieldDef.maxLength
+        : DEFAULT_MAX_FIELD_LENGTH;
     if (value.length === cap) {
       flags.push({
         kind: 'cap_hit',
@@ -119,11 +120,7 @@ export function scanOutput(
  * extract a window of PROMPT_ECHO_MIN_LENGTH chars and check membership.
  * Pre-build a Set of all PROMPT_ECHO_MIN_LENGTH-grams from systemPrompt for O(1) lookup.
  */
-function detectPromptEcho(
-  value: string,
-  systemPrompt: string,
-  fieldKey: string,
-): ScanFlag | null {
+function detectPromptEcho(value: string, systemPrompt: string, fieldKey: string): ScanFlag | null {
   if (value.length < PROMPT_ECHO_MIN_LENGTH) return null;
 
   // Build the set of n-grams from the system prompt once

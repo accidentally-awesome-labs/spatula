@@ -75,7 +75,10 @@ describe('Sentry sink — redactSentryEvent scrubs all canaries', () => {
     const event = makeEvent();
     const result = redactSentryEvent(event);
     const contexts = result.contexts as Record<string, unknown>;
-    const headers = (contexts.request as Record<string, unknown>).headers as Record<string, unknown>;
+    const headers = (contexts.request as Record<string, unknown>).headers as Record<
+      string,
+      unknown
+    >;
     expect(headers.authorization).not.toContain('abcdefghij1234567890XYZ');
   });
 

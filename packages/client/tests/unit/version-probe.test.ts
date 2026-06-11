@@ -47,9 +47,7 @@ describe('Phase 16 plan 16-3 Task 3: VersionProbe (D-12 — lazy version probe)'
     });
     await expect(probe.ensure()).resolves.toBeUndefined();
     expect(fetchMock).toHaveBeenCalledTimes(1);
-    expect(fetchMock.mock.calls[0][0]).toBe(
-      'https://api.example.com/.well-known/spatula-version',
-    );
+    expect(fetchMock.mock.calls[0][0]).toBe('https://api.example.com/.well-known/spatula-version');
   });
 
   it('throws SpatulaVersionMismatchError when server major !== SDK major', async () => {
@@ -99,9 +97,7 @@ describe('Phase 16 plan 16-3 Task 3: VersionProbe (D-12 — lazy version probe)'
   });
 
   it('treats 404 from /.well-known as "unknown server" — does NOT throw', async () => {
-    fetchMock.mockImplementation(
-      () => new Response('not found', { status: 404 }),
-    );
+    fetchMock.mockImplementation(() => new Response('not found', { status: 404 }));
     const probe = new VersionProbe({
       baseUrl: 'https://api.example.com',
       fetcher: fetchMock as unknown as typeof fetch,
@@ -112,8 +108,7 @@ describe('Phase 16 plan 16-3 Task 3: VersionProbe (D-12 — lazy version probe)'
 
   it('treats unparseable body as "unknown server" — does NOT throw', async () => {
     fetchMock.mockImplementation(
-      () =>
-        new Response('not json', { status: 200, headers: { 'content-type': 'text/plain' } }),
+      () => new Response('not json', { status: 200, headers: { 'content-type': 'text/plain' } }),
     );
     const probe = new VersionProbe({
       baseUrl: 'https://api.example.com',
@@ -177,9 +172,7 @@ describe('Phase 16 plan 16-3 Task 3: SpatulaClient wired to VersionProbe', () =>
     const result = await client.request<{ id: string }>('GET', '/api/v1/jobs/job-1');
 
     expect(result).toEqual({ id: 'job-1' });
-    expect(fetchMock.mock.calls[0][0]).toBe(
-      'https://api.example.com/.well-known/spatula-version',
-    );
+    expect(fetchMock.mock.calls[0][0]).toBe('https://api.example.com/.well-known/spatula-version');
     expect(fetchMock.mock.calls[1][0]).toBe('https://api.example.com/api/v1/jobs/job-1');
   });
 

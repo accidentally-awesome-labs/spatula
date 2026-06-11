@@ -13,7 +13,7 @@
 
 export {}; // Treat as an ES module so top-level names don't collide with sibling scripts.
 
-const ISSUER = "http://localhost:5556/dex";
+const ISSUER = 'http://localhost:5556/dex';
 const DISCOVERY_URL = `${ISSUER}/.well-known/openid-configuration`;
 
 async function main(): Promise<void> {
@@ -21,17 +21,13 @@ async function main(): Promise<void> {
   try {
     res = await fetch(DISCOVERY_URL);
   } catch (err) {
-    console.error(
-      `check-dex: failed to connect to ${DISCOVERY_URL} — is Dex running?`
-    );
+    console.error(`check-dex: failed to connect to ${DISCOVERY_URL} — is Dex running?`);
     console.error(err instanceof Error ? err.message : String(err));
     process.exit(1);
   }
 
   if (res.status !== 200) {
-    console.error(
-      `check-dex: unexpected HTTP ${res.status} from ${DISCOVERY_URL}`
-    );
+    console.error(`check-dex: unexpected HTTP ${res.status} from ${DISCOVERY_URL}`);
     process.exit(1);
   }
 
@@ -39,31 +35,29 @@ async function main(): Promise<void> {
   try {
     body = (await res.json()) as Record<string, unknown>;
   } catch (err) {
-    console.error(
-      `check-dex: discovery doc did not return valid JSON from ${DISCOVERY_URL}`
-    );
+    console.error(`check-dex: discovery doc did not return valid JSON from ${DISCOVERY_URL}`);
     process.exit(1);
   }
 
   if (body.issuer !== ISSUER) {
     console.error(
-      `check-dex: issuer mismatch — expected "${ISSUER}", got "${String(body.issuer)}"`
+      `check-dex: issuer mismatch — expected "${ISSUER}", got "${String(body.issuer)}"`,
     );
     process.exit(1);
   }
 
   if (!body.authorization_endpoint || !body.token_endpoint) {
     console.error(
-      `check-dex: discovery doc missing required fields (authorization_endpoint, token_endpoint)`
+      `check-dex: discovery doc missing required fields (authorization_endpoint, token_endpoint)`,
     );
     process.exit(1);
   }
 
-  console.log("dex-ok");
+  console.log('dex-ok');
   process.exit(0);
 }
 
 main().catch((err) => {
-  console.error("check-dex: unexpected error:", err);
+  console.error('check-dex: unexpected error:', err);
   process.exit(1);
 });

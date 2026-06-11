@@ -165,7 +165,9 @@ describe('runAdminTenantDelete', () => {
   it('aborts if the user declines confirmation', async () => {
     // Override readline mock to return 'no'
     const readline = await import('node:readline');
-    (readline.createInterface as MockedFunction<typeof readline.createInterface>).mockReturnValueOnce({
+    (
+      readline.createInterface as MockedFunction<typeof readline.createInterface>
+    ).mockReturnValueOnce({
       question: vi.fn((_prompt: string, cb: (answer: string) => void) => cb('no')),
       close: vi.fn(),
     } as unknown as ReturnType<typeof readline.createInterface>);

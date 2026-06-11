@@ -25,11 +25,11 @@ affects:
 tech-stack:
   added: []
   patterns:
-    - "Two-layer redaction: pino fast-redact paths (structural) + redactObject serializer (value scan backstop)"
-    - "Single shared redactor module (D-12): one source of truth, all sinks import from redactor.ts"
-    - "Canary-based per-sink testing: fixed set of 4 canary secrets (JWT/sk-/Bearer/Stripe) verified absent in each sink independently"
-    - "OTel attribute mutation via onEnd cast-to-any: established community pattern for redaction processors"
-    - "Sentry beforeSend + beforeSendSpan both wired; beforeSend covers events, beforeSendSpan covers spans"
+    - 'Two-layer redaction: pino fast-redact paths (structural) + redactObject serializer (value scan backstop)'
+    - 'Single shared redactor module (D-12): one source of truth, all sinks import from redactor.ts'
+    - 'Canary-based per-sink testing: fixed set of 4 canary secrets (JWT/sk-/Bearer/Stripe) verified absent in each sink independently'
+    - 'OTel attribute mutation via onEnd cast-to-any: established community pattern for redaction processors'
+    - 'Sentry beforeSend + beforeSendSpan both wired; beforeSend covers events, beforeSendSpan covers spans'
 
 key-files:
   created:
@@ -47,14 +47,14 @@ key-files:
     - tests/vitest.config.ts
 
 key-decisions:
-  - "Import SpanProcessor/Span/ReadableSpan from @opentelemetry/sdk-trace-node (re-exports from sdk-trace-base) rather than sdk-trace-base directly — sdk-trace-base is not a direct dependency of @spatula/shared"
+  - 'Import SpanProcessor/Span/ReadableSpan from @opentelemetry/sdk-trace-node (re-exports from sdk-trace-base) rather than sdk-trace-base directly — sdk-trace-base is not a direct dependency of @spatula/shared'
   - "tests/vitest.config.ts converted from relative to absolute includes (tests/e2e/** → tests/shared/**) to match pattern of other test configs; pino alias added pointing to shared package's pino copy"
   - "redactObject uses recursive deep-clone (not mutation) — required since formatters.log receives the live log object; mutation would corrupt pino's internal state"
-  - "RedactionSpanProcessor casts span.attributes to Record<string,unknown> for mutation — TypeScript-only ReadableSpan is typed read-only but underlying Span object IS mutable at runtime"
+  - 'RedactionSpanProcessor casts span.attributes to Record<string,unknown> for mutation — TypeScript-only ReadableSpan is typed read-only but underlying Span object IS mutable at runtime'
 
 patterns-established:
-  - "Per-sink canary testing: tests/shared/redaction/*.test.ts — each file verifies ONE sink in isolation with fixed canary secrets"
-  - "Barrel export pattern: all redactor.ts exports surfaced through packages/shared/src/index.ts"
+  - 'Per-sink canary testing: tests/shared/redaction/*.test.ts — each file verifies ONE sink in isolation with fixed canary secrets'
+  - 'Barrel export pattern: all redactor.ts exports surfaced through packages/shared/src/index.ts'
 
 requirements-completed: [SEC-06]
 
@@ -77,7 +77,7 @@ completed: 2026-05-20
 
 ## Accomplishments
 
-- Built `packages/shared/src/redactor.ts` as the single redaction source of truth (D-12): 6 secret patterns (sk- keys, Bearer tokens, 3-segment JWTs, sk_live_, sk_test_, or- prefix), `redactValue`, `redactObject`, `REDACT_PATHS`, `REDACTED_PLACEHOLDER`, `redactSentryEvent`, `RedactionSpanProcessor` — all exported from the shared barrel
+- Built `packages/shared/src/redactor.ts` as the single redaction source of truth (D-12): 6 secret patterns (sk- keys, Bearer tokens, 3-segment JWTs, sk*live*, sk*test*, or- prefix), `redactValue`, `redactObject`, `REDACT_PATHS`, `REDACTED_PLACEHOLDER`, `redactSentryEvent`, `RedactionSpanProcessor` — all exported from the shared barrel
 - Wired `createLogger` (pino) with both `redact.paths` for structural fast-redact AND `formatters.log = redactObject` backstop for unknown nesting depths (D-11 two-layer pattern), plus `err.message` serializer scanning
 - Wired Sentry `initSentry` with `beforeSend → redactSentryEvent` (scrubs exception values, message, extra, contexts) and `beforeSendSpan` (scrubs per-span data string values)
 - Wired OTel `initTracing` with `RedactionSpanProcessor` registered before `BatchSpanProcessor` so spans are scrubbed pre-export
@@ -121,6 +121,7 @@ _Note: Task 1 was TDD — tests written first (RED), then implementation (GREEN)
 ### Auto-fixed Issues
 
 **1. [Rule 3 - Blocking] Import @opentelemetry/sdk-trace-node instead of sdk-trace-base**
+
 - **Found during:** Task 2 (build step)
 - **Issue:** `tsc` error TS2307 — `@opentelemetry/sdk-trace-base` cannot be found; it's an indirect dep (via sdk-trace-node) but not a direct dep of @spatula/shared
 - **Fix:** Changed import in `redactor.ts` to use `@opentelemetry/sdk-trace-node` which re-exports all the required types (`SpanProcessor`, `Span`, `ReadableSpan`)
@@ -129,6 +130,7 @@ _Note: Task 1 was TDD — tests written first (RED), then implementation (GREEN)
 - **Committed in:** `a23aaab` (Task 2 commit)
 
 **2. [Rule 3 - Blocking] Fixed Sentry type cast for redactSentryEvent**
+
 - **Found during:** Task 3 (build step)
 - **Issue:** `tsc` error TS2352 — Sentry's `ErrorEvent` type doesn't overlap sufficiently with `Record<string, unknown>` for a single cast
 - **Fix:** Used double cast (`as unknown as typeof event`) to bridge the type gap safely
@@ -137,6 +139,7 @@ _Note: Task 1 was TDD — tests written first (RED), then implementation (GREEN)
 - **Committed in:** `b1bf3c0` (Task 3 commit)
 
 **3. [Rule 3 - Blocking] Fixed tests/vitest.config.ts for root-relative execution**
+
 - **Found during:** Task 3 (test execution step)
 - **Issue:** Original `include: ['e2e/**/*.test.ts']` and relative `__dirname` alias resolved incorrectly when running `pnpm exec vitest run --config tests/vitest.config.ts` from project root; tests weren't found
 - **Fix:** Converted to absolute-from-project-root includes (`tests/e2e/**/*.test.ts`, `tests/shared/**/*.test.ts`) and added `const root = resolve(__dirname, '..')` to properly resolve aliases from any CWD
@@ -169,5 +172,6 @@ None — no external service configuration required. All secrets are redacted at
 None — all exports are fully implemented and verified.
 
 ---
-*Phase: 18-security-hardening-legal*
-*Completed: 2026-05-20*
+
+_Phase: 18-security-hardening-legal_
+_Completed: 2026-05-20_

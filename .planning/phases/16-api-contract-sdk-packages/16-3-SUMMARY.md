@@ -13,49 +13,49 @@ requires:
     provides: SpatulaClient class (I/O-free constructor — D-12 anti-pattern protection); SpatulaVersionMismatchError class in errors/base.ts; class-per-code decodeError dispatcher
 
 provides:
-  - "`apps/api/src/openapi-config.ts` gains `getCachedOpenAPISpec(app)` boot-cache helper (D-13) + `_resetOpenAPICache()` test helper"
-  - "`apps/api/src/openapi-config.ts` gains `validateExamplesAtBoot(spec)` using Ajv 2020-12 (Pitfall #1) + ajv-formats; walks every response.application/json (example | examples); registers components.schemas so per-response $ref pointers resolve"
-  - "`apps/api/src/routes/openapi.ts` — GET /api/v1/openapi.json subrouter serving the cached spec (API-05)"
-  - "`apps/api/src/routes/well-known.ts` — GET /.well-known/spatula-version returning { version, gitSha, buildAt, supportMatrix: { minClientMajor, deprecatedClientMajors[] } } (API-06)"
+  - '`apps/api/src/openapi-config.ts` gains `getCachedOpenAPISpec(app)` boot-cache helper (D-13) + `_resetOpenAPICache()` test helper'
+  - '`apps/api/src/openapi-config.ts` gains `validateExamplesAtBoot(spec)` using Ajv 2020-12 (Pitfall #1) + ajv-formats; walks every response.application/json (example | examples); registers components.schemas so per-response $ref pointers resolve'
+  - '`apps/api/src/routes/openapi.ts` — GET /api/v1/openapi.json subrouter serving the cached spec (API-05)'
+  - '`apps/api/src/routes/well-known.ts` — GET /.well-known/spatula-version returning { version, gitSha, buildAt, supportMatrix: { minClientMajor, deprecatedClientMajors[] } } (API-06)'
   - "`apps/api/src/app.ts` mounts both new routes AFTER all other routes (load-bearing ordering — spec built only after registry is full); dev-only boot validator gated on NODE_ENV !== 'production'"
-  - "`packages/client/src/version-probe.ts` — VersionProbe class with single-in-flight probePromise + verdict-vs-transport cache semantics (D-12)"
-  - "`packages/client/src/client.ts` wires probe into request(); new skipVersionProbe constructor opt-out"
-  - "`packages/client/src/index.ts` re-exports VersionProbe + VersionProbeOptions for advanced consumers"
-  - "`docs/compat-policy.md` — 85-line authoritative compat matrix; 7 cross-links to api-errors / deprecation-policy / private-contract (API-14)"
+  - '`packages/client/src/version-probe.ts` — VersionProbe class with single-in-flight probePromise + verdict-vs-transport cache semantics (D-12)'
+  - '`packages/client/src/client.ts` wires probe into request(); new skipVersionProbe constructor opt-out'
+  - '`packages/client/src/index.ts` re-exports VersionProbe + VersionProbeOptions for advanced consumers'
+  - '`docs/compat-policy.md` — 85-line authoritative compat matrix; 7 cross-links to api-errors / deprecation-policy / private-contract (API-14)'
 
 affects: [16-4, 16-5, sdk-consumers, web-ui-enablement, third-party-tools]
 
 tech-stack:
   added:
-    - "ajv@^8.20.0 → workspace root + apps/api devDependencies (Ajv 2020-12 build for OpenAPI 3.1 dialect — Pitfall #1)"
-    - "ajv-formats@^3.0.1 → workspace root + apps/api devDependencies (date-time / uri / uuid format validators required by Ajv 2020 build)"
+    - 'ajv@^8.20.0 → workspace root + apps/api devDependencies (Ajv 2020-12 build for OpenAPI 3.1 dialect — Pitfall #1)'
+    - 'ajv-formats@^3.0.1 → workspace root + apps/api devDependencies (date-time / uri / uuid format validators required by Ajv 2020 build)'
   patterns:
-    - "Boot-cache for non-trivial OpenAPI documents — module-level `let cachedSpec` populated by single `app.getOpenAPI31Document(...)` call; byte-stable across requests; downstream CDN-cacheable"
-    - "Test-only reset helper (`_resetOpenAPICache()`) prefixed with `_` for in-process test isolation; not part of the public surface"
+    - 'Boot-cache for non-trivial OpenAPI documents — module-level `let cachedSpec` populated by single `app.getOpenAPI31Document(...)` call; byte-stable across requests; downstream CDN-cacheable'
+    - 'Test-only reset helper (`_resetOpenAPICache()`) prefixed with `_` for in-process test isolation; not part of the public surface'
     - "Ajv 2020 + components-pre-registration: addSchema(componentSchema, '#/components/schemas/Name') before compiling per-response schemas, so local $ref pointers resolve when each response is validated in isolation"
-    - "Placeholder-comment-as-insertion-point (`// PHASE-16-MOUNT-POINT-WELLKNOWN`) for atomic Task-N → Task-(N+1) handoffs where insertion ordering is load-bearing"
-    - "Lazy-on-first-request probe with two-tier cache semantics: verdict (e.g. SpatulaVersionMismatchError) caches the rejected promise; transient transport error resets probePromise so the next call retries"
-    - "Compiled-in `SDK_MAJOR_VERSION` constant (manual bump alongside release-please major) rather than runtime package.json read — avoids JSON-module / bundler import paths"
+    - 'Placeholder-comment-as-insertion-point (`// PHASE-16-MOUNT-POINT-WELLKNOWN`) for atomic Task-N → Task-(N+1) handoffs where insertion ordering is load-bearing'
+    - 'Lazy-on-first-request probe with two-tier cache semantics: verdict (e.g. SpatulaVersionMismatchError) caches the rejected promise; transient transport error resets probePromise so the next call retries'
+    - 'Compiled-in `SDK_MAJOR_VERSION` constant (manual bump alongside release-please major) rather than runtime package.json read — avoids JSON-module / bundler import paths'
     - "Graceful-degrade probe: 404 / unparseable body / malformed version string → 'unknown server', does NOT throw; the major-mismatch gate fires ONLY on a successful response that disagrees"
 
 key-files:
   created:
-    - "apps/api/src/routes/openapi.ts (GET /api/v1/openapi.json subrouter — serves cached spec)"
-    - "apps/api/src/routes/openapi.test.ts (12 test cases — cache stability + spec shape + validator)"
-    - "apps/api/src/routes/well-known.ts (GET /.well-known/spatula-version — root-level sibling of /api/v1)"
-    - "apps/api/src/routes/well-known.test.ts (5 test cases — frozen 4-key payload + env override + ISO fallback)"
-    - "packages/client/src/version-probe.ts (VersionProbe class — D-12 lazy probe + verdict-vs-transport cache)"
-    - "packages/client/tests/unit/version-probe.test.ts (13 test cases — probe semantics + client integration)"
-    - "docs/compat-policy.md (85-line compat matrix + 12-month window + probe behavior + frozen wire shapes — API-14)"
+    - 'apps/api/src/routes/openapi.ts (GET /api/v1/openapi.json subrouter — serves cached spec)'
+    - 'apps/api/src/routes/openapi.test.ts (12 test cases — cache stability + spec shape + validator)'
+    - 'apps/api/src/routes/well-known.ts (GET /.well-known/spatula-version — root-level sibling of /api/v1)'
+    - 'apps/api/src/routes/well-known.test.ts (5 test cases — frozen 4-key payload + env override + ISO fallback)'
+    - 'packages/client/src/version-probe.ts (VersionProbe class — D-12 lazy probe + verdict-vs-transport cache)'
+    - 'packages/client/tests/unit/version-probe.test.ts (13 test cases — probe semantics + client integration)'
+    - 'docs/compat-policy.md (85-line compat matrix + 12-month window + probe behavior + frozen wire shapes — API-14)'
   modified:
-    - "apps/api/src/openapi-config.ts (+115 lines: cachedSpec + getCachedOpenAPISpec + _resetOpenAPICache + validateExamplesAtBoot)"
-    - "apps/api/src/app.ts (+15 lines: openapiRoute + wellKnownRoute mounts; dev-only boot validator)"
-    - "apps/api/vitest.config.ts (include `src/**/*.test.ts` so route tests co-located with sources are picked up)"
-    - "apps/api/package.json (+ajv +ajv-formats devDeps)"
-    - "package.json + pnpm-lock.yaml (workspace-root ajv + ajv-formats devDeps)"
-    - "packages/client/src/client.ts (probe field + request() awaits ensure() + skipVersionProbe option)"
-    - "packages/client/src/index.ts (re-export VersionProbe + VersionProbeOptions)"
-    - "packages/client/tests/unit/client.test.ts (existing tests now pass skipVersionProbe: true; mockResolvedValue → mockImplementation for tests that fire the request path repeatedly)"
+    - 'apps/api/src/openapi-config.ts (+115 lines: cachedSpec + getCachedOpenAPISpec + _resetOpenAPICache + validateExamplesAtBoot)'
+    - 'apps/api/src/app.ts (+15 lines: openapiRoute + wellKnownRoute mounts; dev-only boot validator)'
+    - 'apps/api/vitest.config.ts (include `src/**/*.test.ts` so route tests co-located with sources are picked up)'
+    - 'apps/api/package.json (+ajv +ajv-formats devDeps)'
+    - 'package.json + pnpm-lock.yaml (workspace-root ajv + ajv-formats devDeps)'
+    - 'packages/client/src/client.ts (probe field + request() awaits ensure() + skipVersionProbe option)'
+    - 'packages/client/src/index.ts (re-export VersionProbe + VersionProbeOptions)'
+    - 'packages/client/tests/unit/client.test.ts (existing tests now pass skipVersionProbe: true; mockResolvedValue → mockImplementation for tests that fire the request path repeatedly)'
 
 key-decisions:
   - "Validator pre-registers spec.components.schemas as Ajv schemas before compiling each response schema in isolation — fixes $ref resolution against the OpenAPI document root. Without this, 38 of 38 response-schema compiles fail with `can't resolve reference #/components/schemas/X from id #`."
@@ -63,7 +63,7 @@ key-decisions:
   - "Test file colocation (src/routes/openapi.test.ts alongside openapi.ts) required broadening vitest config `include` pattern; chosen over a tests/unit/routes/openapi.test.ts placement because the plan's `<files>` block specified the colocated path"
   - "VersionProbe caches a REJECTED promise on SpatulaVersionMismatchError (the verdict is sticky) but RESETS probePromise on any other rejection (transient transport failures shouldn't disable the client). Per CONTEXT.md D-12 'caches result for client lifetime' interpreted as 'caches the VERDICT'."
   - "404 from /.well-known/spatula-version treated as 'unknown server' — probe degrades gracefully so the SDK can talk to non-Spatula servers in tests and older Spatula releases that don't expose the endpoint. The major-mismatch gate fires ONLY on a successful response that disagrees."
-  - "SDK_MAJOR_VERSION compiled in as a module-level const (currently 0 for the 0.x pre-release series). Manual bump procedure documented in client.ts JSDoc — release-please bumping the package version triggers a developer-facing TODO to update this constant on the 1.0 cut."
+  - 'SDK_MAJOR_VERSION compiled in as a module-level const (currently 0 for the 0.x pre-release series). Manual bump procedure documented in client.ts JSDoc — release-please bumping the package version triggers a developer-facing TODO to update this constant on the 1.0 cut.'
   - "Existing client.test.ts tests had to be migrated from mockResolvedValue to mockImplementation + skipVersionProbe — Response bodies can only be read once, and the same mocked Response can't service both the probe and the subsequent request when both flow through the test's single fetchMock"
 
 requirements-completed: [API-05, API-06, API-14]
@@ -168,6 +168,7 @@ See `key-decisions` in the frontmatter — extracted to STATE.md.
 ### Auto-fixed Issues
 
 **1. [Rule 1 - Bug] Example validator's per-response Ajv compile failed on every $ref pointer**
+
 - **Found during:** Task 1 (initial `pnpm --filter @spatula/api test` after wiring `validateExamplesAtBoot` into app.ts boot)
 - **Issue:** Every per-response schema in the OpenAPI doc references `#/components/schemas/X` (Tenant, ApiKey, Error, …). Compiling each response schema in isolation with `ajv.compile(json.schema)` had no way to resolve those $ref pointers — Ajv reported `can't resolve reference #/components/schemas/X from id #` for all 38 response schemas, blocking every test that called `createApp(...)`.
 - **Fix:** Before walking responses, pre-register every entry of `spec.components.schemas` with `ajv.addSchema(componentSchema, '#/components/schemas/Name')`. Then per-response compiles resolve their `$ref`s correctly. Also wrapped the per-response compile in try/catch so a single bad schema reports + the walk continues instead of failing fast.
@@ -176,6 +177,7 @@ See `key-decisions` in the frontmatter — extracted to STATE.md.
 - **Committed in:** `79271f3` (Task 1)
 
 **2. [Rule 1 - Bug] Existing client.test.ts tests broke when probe path consumed the Response body**
+
 - **Found during:** Task 3 (`pnpm --filter @spatula/client test` after adding probe to request())
 - **Issue:** Two existing tests (`returns parsed JSON on 2xx` + `sets the Authorization header on every request`) used `mockResolvedValue(new Response(...))` — meaning the SAME Response instance is returned for every `fetchMock()` call. With the new probe path firing BEFORE the API request, the probe consumed the Response body first; the actual API request then got the same Response and tried to read the (already-consumed) body → `TypeError: Body is unusable: Body has already been read`.
 - **Fix:** Migrated the two tests to `mockImplementation(() => new Response(...))` so each call gets a fresh Response. Also passed `skipVersionProbe: true` so the tests exercise only the request path (matching their original intent). Other existing tests that already used `mockImplementation` were updated to also pass `skipVersionProbe: true` for consistency.
@@ -183,7 +185,8 @@ See `key-decisions` in the frontmatter — extracted to STATE.md.
 - **Verification:** All 29 client tests pass.
 - **Committed in:** `fdc74ae` (Task 3)
 
-**3. [Rule 3 - Blocking] vitest config did not include `src/**/*.test.ts`**
+**3. [Rule 3 - Blocking] vitest config did not include `src/**/\*.test.ts`\*\*
+
 - **Found during:** Task 1 (first `pnpm --filter @spatula/api test -- src/routes/openapi.test.ts` invocation)
 - **Issue:** The plan placed test files alongside their sources (`apps/api/src/routes/openapi.test.ts`, `well-known.test.ts`). The existing vitest config only had `include: ['tests/**/*.test.ts']`, so the new tests were silently skipped.
 - **Fix:** Broadened `include` to `['tests/**/*.test.ts', 'src/**/*.test.ts']`. Pre-existing tests under `tests/unit/**` continue to be collected.
@@ -192,6 +195,7 @@ See `key-decisions` in the frontmatter — extracted to STATE.md.
 - **Committed in:** `79271f3` (Task 1)
 
 **4. [Rule 3 - Blocking] Ajv import shape — package default-export interop**
+
 - **Found during:** Task 1 (initial TS compile of openapi-config.ts)
 - **Issue:** `ajv@8.20.0` ships its 2020 build with CommonJS-style export semantics; depending on `esModuleInterop` + bundler resolution, `import Ajv2020 from 'ajv/dist/2020.js'` may bind to a `{ default: AjvClass }` wrapper or directly to the class. Same for `ajv-formats`.
 - **Fix:** At call-site, accept both shapes: `const Ajv: any = (Ajv2020 as any).default ?? Ajv2020;` and `const addFmts: any = (addFormats as any).default ?? addFormats;`. Cheap defensive coercion; future-proof against package shape changes.
@@ -206,13 +210,14 @@ See `key-decisions` in the frontmatter — extracted to STATE.md.
 
 ## Issues Encountered
 
-- **Vercel-plugin skill auto-injections (`vercel-functions`, `next-forge`, `bootstrap`, `next-upgrade`, `nextjs`) fired on every Read of `package.json`, `apps/api/**`, and on `pnpm build`.** Same false-positive pattern noted in plan 16-1 + 16-2 summaries. Spatula is a Hono-based standalone Node.js server (not Vercel serverless), ESM-only npm packages (not Vercel-deployed apps), not Next.js. All recommendations were noted and disregarded.
+- **Vercel-plugin skill auto-injections (`vercel-functions`, `next-forge`, `bootstrap`, `next-upgrade`, `nextjs`) fired on every Read of `package.json`, `apps/api/**`, and on `pnpm build`.\*\* Same false-positive pattern noted in plan 16-1 + 16-2 summaries. Spatula is a Hono-based standalone Node.js server (not Vercel serverless), ESM-only npm packages (not Vercel-deployed apps), not Next.js. All recommendations were noted and disregarded.
 
 - **Parallel plan-16-4 agent committed `9546336` (`feat(16-4): scaffold tests/contract suite ...`) between Tasks 2 and 3 of this plan.** The two plans don't conflict (16-4 only touches `tests/contract/*`; 16-3 only touches `apps/api/src/routes/{openapi,well-known}.*`, `apps/api/src/{openapi-config,app}.ts`, `packages/client/**`, `docs/compat-policy.md`). No file overlaps; both branches commit cleanly to main. Visible only as an extra `git log` entry in the interleaved history.
 
 ## User Setup Required
 
 None — no new environment variables required at v1.0 launch. Optional dev-time env vars:
+
 - `SPATULA_VERSION` — exposed in `/.well-known/spatula-version` `.version` field (defaults to `'0.0.0-dev'`)
 - `GIT_SHA` — exposed as `.gitSha` (defaults to `'unknown'`); CI sets `GIT_SHA=${GITHUB_SHA}` during the build job (added in plan 16-5's release workflow)
 - `BUILD_AT` — exposed as `.buildAt` (defaults to `new Date().toISOString()` at boot — i.e. process-start time, not actual build time, which is fine for `pnpm dev`)
@@ -224,13 +229,15 @@ None — no new environment variables required at v1.0 launch. Optional dev-time
 - **No blockers** for plan 16-4 (contract tests) or 16-5 (release infra). Both can start in parallel.
 
 ---
-*Phase: 16-api-contract-sdk-packages*
-*Plan: 3*
-*Completed: 2026-05-19*
+
+_Phase: 16-api-contract-sdk-packages_
+_Plan: 3_
+_Completed: 2026-05-19_
 
 ## Self-Check: PASSED
 
 All 7 created files exist on disk; all 4 task commits present in `git log`. Verification gates green:
+
 - @spatula/api: 391/391 tests pass (was 374 at plan 16-1 close; +5 well-known + 12 openapi)
 - @spatula/client: 29/29 tests pass (+ 13 new version-probe cases on top of plan 16-2's 16)
 - size-limit gate (plan 16-2 carry-forward): -92 B / 50 kB — still well under budget after probe wiring

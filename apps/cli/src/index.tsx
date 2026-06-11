@@ -35,7 +35,11 @@ import { runDoctorCommand } from './commands/doctor.js';
 import { runAddCommand, formatAddResult } from './commands/add.js';
 import { runConfigCommand } from './commands/config.js';
 import { handleRemoteCommand } from './commands/remote.js';
-import { runAdminTenantDelete, runAdminTenantExport, runAdminTenantImport } from './commands/admin-tenant.js';
+import {
+  runAdminTenantDelete,
+  runAdminTenantExport,
+  runAdminTenantImport,
+} from './commands/admin-tenant.js';
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -703,7 +707,7 @@ yargs(hideBin(process.argv))
               });
             }
           } catch (err: unknown) {
-            console.error((err instanceof Error ? err.message : String(err)));
+            console.error(err instanceof Error ? err.message : String(err));
             process.exit(1);
           }
         },

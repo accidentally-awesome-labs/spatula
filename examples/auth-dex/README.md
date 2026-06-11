@@ -46,10 +46,10 @@ docker compose down
 
 ## Clients
 
-| Client ID        | Type        | Grant                     | Redirect URI                     | Secret                  |
-| ---------------- | ----------- | ------------------------- | -------------------------------- | ----------------------- |
-| `spatula-browser` | Public      | `authorization_code` + PKCE | `http://localhost:3000/callback` | _(none — PKCE client)_  |
-| `spatula-m2m`    | Confidential | `client_credentials`     | _(none)_                         | `dev-only-secret-m2m`   |
+| Client ID         | Type         | Grant                       | Redirect URI                     | Secret                 |
+| ----------------- | ------------ | --------------------------- | -------------------------------- | ---------------------- |
+| `spatula-browser` | Public       | `authorization_code` + PKCE | `http://localhost:3000/callback` | _(none — PKCE client)_ |
+| `spatula-m2m`     | Confidential | `client_credentials`        | _(none)_                         | `dev-only-secret-m2m`  |
 
 ---
 

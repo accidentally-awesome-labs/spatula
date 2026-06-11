@@ -32,24 +32,24 @@ Spatula collects data in two distinct contexts:
 
 Data provided by operators (companies/developers) who use the Spatula API:
 
-| Data | Purpose | Stored where |
-|------|---------|--------------|
-| Tenant name | Account identification | `tenants.name` |
-| API keys (hash only) | Authentication | `api_keys.key_hash` (raw key never stored) |
-| Job configuration (seed URLs, schema) | Crawl execution | `jobs.config` (jsonb) |
-| LLM usage statistics | Billing, quota enforcement | `llm_usage` |
-| Audit events (actor IP, actor ID) | Security, compliance | `audit_log` |
+| Data                                  | Purpose                    | Stored where                               |
+| ------------------------------------- | -------------------------- | ------------------------------------------ |
+| Tenant name                           | Account identification     | `tenants.name`                             |
+| API keys (hash only)                  | Authentication             | `api_keys.key_hash` (raw key never stored) |
+| Job configuration (seed URLs, schema) | Crawl execution            | `jobs.config` (jsonb)                      |
+| LLM usage statistics                  | Billing, quota enforcement | `llm_usage`                                |
+| Audit events (actor IP, actor ID)     | Security, compliance       | `audit_log`                                |
 
 ### 2. Crawled web content
 
 Data extracted from URLs provided by the operator:
 
-| Data | Purpose | Stored where |
-|------|---------|--------------|
-| Raw HTML / page content | Extraction source | `content_store` (via `raw_pages.content_ref`) |
-| Extracted structured data | Operator's requested dataset | `extractions.data`, `entities.merged_data` |
-| Forensic extraction snapshots | Debugging, audit trail | `content_store` (forensic/ prefix) |
-| Export files | Operator download | `content_store` (exports/ prefix) |
+| Data                          | Purpose                      | Stored where                                  |
+| ----------------------------- | ---------------------------- | --------------------------------------------- |
+| Raw HTML / page content       | Extraction source            | `content_store` (via `raw_pages.content_ref`) |
+| Extracted structured data     | Operator's requested dataset | `extractions.data`, `entities.merged_data`    |
+| Forensic extraction snapshots | Debugging, audit trail       | `content_store` (forensic/ prefix)            |
+| Export files                  | Operator download            | `content_store` (exports/ prefix)             |
 
 Crawled content belongs to the operator who configured the job. Spatula acts as a data processor (not controller) for crawled content.
 
@@ -65,14 +65,14 @@ Crawled content belongs to the operator who configured the job. Spatula acts as 
 
 ## Retention periods
 
-| Data category | Retention | Basis |
-|---------------|-----------|-------|
-| `jobs`, `crawl_tasks`, `raw_pages`, `extractions`, `entities` | Until tenant deletion request | Contractual necessity |
-| `exports` (blobs) | Until tenant deletion request | Contractual necessity |
-| `api_keys` | Until revoked or tenant deleted | Security |
-| `audit_log` rows | Indefinite (PII redacted on tenant deletion) | Legal compliance (D-08) |
-| Content-store blobs (`raw-pages/`, `exports/`, `forensic/`) | Until tenant deletion request | Contractual necessity |
-| Tombstone audit row (`tenant.deleted`) | Indefinite | Legal proof of erasure |
+| Data category                                                 | Retention                                    | Basis                   |
+| ------------------------------------------------------------- | -------------------------------------------- | ----------------------- |
+| `jobs`, `crawl_tasks`, `raw_pages`, `extractions`, `entities` | Until tenant deletion request                | Contractual necessity   |
+| `exports` (blobs)                                             | Until tenant deletion request                | Contractual necessity   |
+| `api_keys`                                                    | Until revoked or tenant deleted              | Security                |
+| `audit_log` rows                                              | Indefinite (PII redacted on tenant deletion) | Legal compliance (D-08) |
+| Content-store blobs (`raw-pages/`, `exports/`, `forensic/`)   | Until tenant deletion request                | Contractual necessity   |
+| Tombstone audit row (`tenant.deleted`)                        | Indefinite                                   | Legal proof of erasure  |
 
 Operators may request earlier deletion at any time (see [DSR: erasure](#dsr-erasure-right-to-be-forgotten)).
 
@@ -105,6 +105,7 @@ DELETE /api/v1/admin/tenants/:id
 ```
 
 The deletion pipeline (SEC-09):
+
 1. Cascades deletion across all 14 tenant-scoped tables in FK-safe order.
 2. Deletes all content-store blobs keyed under `raw-pages/<tenantId>/`, `exports/<tenantId>/`, `forensic/<tenantId>/`.
 3. Redacts PII from `audit_log` rows (`ip_address = NULL`, `metadata = {}`, `actor_id = '[deleted]'`, `tenant_id = NULL`).
@@ -133,22 +134,22 @@ Operators can update tenant configuration and API key metadata via the standard 
 
 ## Lawful basis for processing
 
-| Processing activity | Lawful basis |
-|--------------------|--------------|
-| Running crawl jobs on operator-provided URLs | Contract (API Terms of Service) |
-| Storing audit log events | Legitimate interest (security), Legal obligation |
-| LLM API calls to process crawled content | Contract |
+| Processing activity                          | Lawful basis                                          |
+| -------------------------------------------- | ----------------------------------------------------- |
+| Running crawl jobs on operator-provided URLs | Contract (API Terms of Service)                       |
+| Storing audit log events                     | Legitimate interest (security), Legal obligation      |
+| LLM API calls to process crawled content     | Contract                                              |
 | Retention of tombstone after tenant deletion | Legal obligation (GDPR Art. 5(1)(e) — accountability) |
 
 ---
 
 ## Sub-processors
 
-| Sub-processor | Purpose | Data transferred |
-|---------------|---------|-----------------|
-| PostgreSQL (operator-chosen host) | Primary data storage | All tenant data |
-| Redis (operator-chosen host) | Job queue | Job payloads (may include URLs) |
-| OpenRouter / LLM providers | Content extraction and schema inference | Crawled page excerpts |
+| Sub-processor                     | Purpose                                 | Data transferred                |
+| --------------------------------- | --------------------------------------- | ------------------------------- |
+| PostgreSQL (operator-chosen host) | Primary data storage                    | All tenant data                 |
+| Redis (operator-chosen host)      | Job queue                               | Job payloads (may include URLs) |
+| OpenRouter / LLM providers        | Content extraction and schema inference | Crawled page excerpts           |
 
 Operators who are GDPR data controllers must ensure their chosen infrastructure providers have appropriate DPAs in place.
 

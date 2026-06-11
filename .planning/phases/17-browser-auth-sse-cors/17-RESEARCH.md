@@ -7,11 +7,13 @@
 ---
 
 <user_constraints>
+
 ## User Constraints (from CONTEXT.md)
 
 ### Locked Decisions
 
 **Event Buffer & Replay (AUTH-01)**
+
 - D-01: Buffer = Redis Streams (`jobs:{jobId}:events`), `XADD MAXLEN ~ 500 * payload=<json>`, `EXPIRE 300` per-key on first add. Replay via `XRANGE jobs:{jobId}:events {LastEventId}+1 +`. Live tail via `XREAD BLOCK <keepalive_ms> STREAMS ... $`.
 - D-02: Dual-publish. `packages/queue/src/events.ts::RedisEventPublisher.publish` writes to both existing pub/sub channel AND new stream (`XADD jobs:{id}:events`). WS path unchanged; SSE consumes stream only.
 - D-03: SSE `id:` field = Redis stream id verbatim (`{ms}-{seq}`). Client `Last-Event-ID` passed straight into `XRANGE` as exclusive lower bound.
@@ -19,41 +21,50 @@
 - D-05: 15 s keep-alive via SSE comment line (`:\n\n`) — keep-alive timer separate from event loop; survives `XREAD BLOCK` returning empty.
 
 **Stream Token Reuse (AUTH-02)**
+
 - D-06: Single shared token endpoint, dual-purpose token. Existing `POST /api/v1/ws-token` is canonical issuer. Token stored at `ws-token:{token}` (Redis) with 60 s TTL, value `{ tenantId, createdAt }`. Both WS upgrade and new SSE handler call `GETDEL` to consume it.
 - D-07: OpenAPI doc update on `POST /api/v1/ws-token`: rename `summary` to "Create a single-use stream token (WebSocket or SSE)". Existing operationId preserved.
 
 **CORS Wildcard (AUTH-03)**
+
 - D-08: `origin` becomes a function in `apps/api/src/app.ts` cors config. Parse `CORS_ALLOWED_ORIGINS` once at boot. Wildcard entries compile to `/^https:\/\/[^./]+\.foo\.com$/` — exactly one subdomain label. Returns matching origin or `null`.
 - D-09: Preflight cache stays at 86400 s. `expose-headers` extended to include `X-RateLimit-Reset` + `Retry-After`.
 - D-10: Format documentation ships in `docs/api-auth.md` (new CORS section). Boot fails fast with `CORS_CONFIG_INVALID` on misconfiguration.
 
 **Dex Local Recipe (AUTH-04, AUTH-08)**
+
 - D-11: `examples/auth-dex/` ships as self-contained kit: `docker-compose.yml`, `config/dex.yaml`, `README.md`, `smoke/browser-flow.ts`, `smoke/m2m-flow.ts`.
 - D-12: Dex storage = SQLite in the example (mounted volume).
 - D-13: Static-client credentials committed to repo as `dev-only-secret-xxx` with `# DO NOT USE IN PRODUCTION` banner.
 
 **API Key Rotation (AUTH-05)**
+
 - D-14: Two-key grace window. `POST /api/v1/api-keys/:id/rotate` returns new raw key AND marks old key with `expiresAt = now + graceSeconds` (default 86400 s, max 604800 s). Both keys validate during grace window.
 - D-15: Scope inheritance — rotated key keeps original's scopes verbatim.
 - D-16: Audit + response shape: `audit.action = 'api_key.rotated'` with both ids. Response: `{ data: { id, key, keyPrefix, scopes, expiresAt, createdAt, supersedes, supersededExpiresAt } }`.
 
 **Cross-Tenant Isolation Audit (AUTH-07)**
+
 - D-17: Table-driven generator seeds tenants A + B with one resource per resource-type, iterates every authed route in OpenAPI spec, asserts tenant-B-token requests against A's resource path → `403` OR `404` with standard error envelope.
 - D-18: Status code policy: prefer `404` over `403`. `403` reserved for scope-gated global resources.
 - D-19: Reuse Phase 16 ErrorCode envelope: every assertion checks `error.code` is one of `RESOURCE_NOT_FOUND | INSUFFICIENT_SCOPE | TENANT_MISMATCH`.
 
 **M2M OIDC (AUTH-08)**
+
 - D-20: e2e covers full chain: Dex `client_credentials` → `createJob` via `@spatula/client` → `listJobs` → `getEntities`. Test in `tests/e2e/m2m/`.
 
 **Docs (AUTH-06)**
+
 - D-21: `docs/api-auth.md` is new and authoritative. Sections: auth strategies, scope catalog (CI gate vs code), token lifecycle, refresh tokens, CSRF N/A, stream tokens, CORS, M2M.
 
 ### Claude's Discretion
+
 - Internal helper modules under `apps/api/src/sse/` mirror `apps/api/src/ws/` layout (handler.ts + buffer.ts + types.ts). Naming/internal API freely chosen.
 - Test fixtures for `tests/isolation/` use existing Postgres harness shared with Phase 16 contract tests.
 - SSE handler uses Hono `streamSSE` with `ReadableStream`. No server-side EventSource polyfill needed.
 
 ### Deferred Ideas (OUT OF SCOPE)
+
 - WS deprecation (coexist at v1)
 - SSE bidirectional fallback / long-poll
 - Stream-token via header (EventSource shim)
@@ -62,21 +73,23 @@
 - OIDC cookbooks for Auth0/Keycloak/Google Workspace (Phase 20)
 - Reverse-proxy access-log token masking runbook (Phase 19)
 - Native email/password auth
-</user_constraints>
+  </user_constraints>
 
 <phase_requirements>
+
 ## Phase Requirements
 
-| ID | Description | Research Support |
-|----|-------------|------------------|
-| AUTH-01 | `GET /api/v1/jobs/:id/events` SSE endpoint with monotonic `id`, `Last-Event-ID` resume, 5-min ring buffer, 15 s keep-alive, required response headers | Redis Streams XADD/XRANGE/XREAD verified; Hono `streamSSE` signature confirmed; header auto-set vs manual confirmed |
-| AUTH-02 | Single-use stream-token via `?token=`, `POST /api/v1/ws-token` dual-purpose, 60 s TTL | Existing `GETDEL` pattern confirmed in `server.ts:137`; ws-token route confirmed reusable |
-| AUTH-03 | CORS: explicit-list + wildcard-subdomain origins; preflight cache; `CORS_ALLOWED_ORIGINS` documented | Hono `cors()` function-form origin signature confirmed from installed source; return type confirmed |
-| AUTH-04 | `examples/auth-dex/` zero-config recipe, `docker compose up` produces working Dex IDP | Docker + Compose confirmed available; Dex v2.45.1 confirmed; minimal config patterns verified |
-| AUTH-05 | `POST /api/v1/api-keys/:id/rotate` zero-downtime rotation with grace window | DB schema confirmed; `supersedes` column MISSING (migration required); grace = update `expiresAt` on old key |
-| AUTH-06 | `docs/api-auth.md` authoritative scope list, refresh-token IDP clause, CSRF N/A clause | `DEFAULT_API_KEY_SCOPES` source confirmed; `AUTH_SCOPES` enum confirmed; no CI gate yet |
-| AUTH-07 | `tests/isolation/` cross-tenant audit suite over every authed route | Phase 16 Ajv+http.Server harness confirmed reusable; OpenAPI enumeration pattern confirmed; error code gaps found (see findings) |
-| AUTH-08 | M2M OIDC `client_credentials` validated e2e against Dex | `JwtAuthProvider` verified; `user_tenants` claims-mapping path confirmed; Playwright v1.58.2 available in pnpm store |
+| ID      | Description                                                                                                                                           | Research Support                                                                                                                 |
+| ------- | ----------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------- |
+| AUTH-01 | `GET /api/v1/jobs/:id/events` SSE endpoint with monotonic `id`, `Last-Event-ID` resume, 5-min ring buffer, 15 s keep-alive, required response headers | Redis Streams XADD/XRANGE/XREAD verified; Hono `streamSSE` signature confirmed; header auto-set vs manual confirmed              |
+| AUTH-02 | Single-use stream-token via `?token=`, `POST /api/v1/ws-token` dual-purpose, 60 s TTL                                                                 | Existing `GETDEL` pattern confirmed in `server.ts:137`; ws-token route confirmed reusable                                        |
+| AUTH-03 | CORS: explicit-list + wildcard-subdomain origins; preflight cache; `CORS_ALLOWED_ORIGINS` documented                                                  | Hono `cors()` function-form origin signature confirmed from installed source; return type confirmed                              |
+| AUTH-04 | `examples/auth-dex/` zero-config recipe, `docker compose up` produces working Dex IDP                                                                 | Docker + Compose confirmed available; Dex v2.45.1 confirmed; minimal config patterns verified                                    |
+| AUTH-05 | `POST /api/v1/api-keys/:id/rotate` zero-downtime rotation with grace window                                                                           | DB schema confirmed; `supersedes` column MISSING (migration required); grace = update `expiresAt` on old key                     |
+| AUTH-06 | `docs/api-auth.md` authoritative scope list, refresh-token IDP clause, CSRF N/A clause                                                                | `DEFAULT_API_KEY_SCOPES` source confirmed; `AUTH_SCOPES` enum confirmed; no CI gate yet                                          |
+| AUTH-07 | `tests/isolation/` cross-tenant audit suite over every authed route                                                                                   | Phase 16 Ajv+http.Server harness confirmed reusable; OpenAPI enumeration pattern confirmed; error code gaps found (see findings) |
+| AUTH-08 | M2M OIDC `client_credentials` validated e2e against Dex                                                                                               | `JwtAuthProvider` verified; `user_tenants` claims-mapping path confirmed; Playwright v1.58.2 available in pnpm store             |
+
 </phase_requirements>
 
 ---
@@ -97,30 +110,30 @@ Three gaps require attention before planning: (a) the `api_keys` table has no `s
 
 ### Core (already installed, verified from pnpm store)
 
-| Library | Version | Purpose | Why Standard |
-|---------|---------|---------|--------------|
-| hono | 4.12.7 | HTTP framework + SSE streaming | Already in project; `streamSSE` helper ships with it |
-| ioredis | 5.10.0 | Redis client incl. Streams API | Already in project; XADD/XRANGE/XREAD typed |
-| jose | 6.2.2 | JWT/JWKS verify (already in JwtAuthProvider) | Already in project |
-| @hono/zod-openapi | 0.19.10 | Route registration + OpenAPI spec generation | Already in project; new routes drop in cleanly |
-| drizzle-orm | (workspace) | DB schema + migrations | Already in project; column additions via new migration file |
-| playwright | 1.58.2 | Browser OIDC smoke + M2M flow test | Already in pnpm store (apps/cli dep); needs `playwright install` for browser binaries |
+| Library           | Version     | Purpose                                      | Why Standard                                                                          |
+| ----------------- | ----------- | -------------------------------------------- | ------------------------------------------------------------------------------------- |
+| hono              | 4.12.7      | HTTP framework + SSE streaming               | Already in project; `streamSSE` helper ships with it                                  |
+| ioredis           | 5.10.0      | Redis client incl. Streams API               | Already in project; XADD/XRANGE/XREAD typed                                           |
+| jose              | 6.2.2       | JWT/JWKS verify (already in JwtAuthProvider) | Already in project                                                                    |
+| @hono/zod-openapi | 0.19.10     | Route registration + OpenAPI spec generation | Already in project; new routes drop in cleanly                                        |
+| drizzle-orm       | (workspace) | DB schema + migrations                       | Already in project; column additions via new migration file                           |
+| playwright        | 1.58.2      | Browser OIDC smoke + M2M flow test           | Already in pnpm store (apps/cli dep); needs `playwright install` for browser binaries |
 
 ### Supporting (new additions)
 
-| Library | Version | Purpose | When to Use |
-|---------|---------|---------|-------------|
-| eventsource | 4.1.0 | EventSource polyfill for `@spatula/client` in Node | SDK `getJobEvents` SSE streaming method (Phase 17 converts from non-streaming stub to real SSE) |
+| Library     | Version | Purpose                                            | When to Use                                                                                     |
+| ----------- | ------- | -------------------------------------------------- | ----------------------------------------------------------------------------------------------- |
+| eventsource | 4.1.0   | EventSource polyfill for `@spatula/client` in Node | SDK `getJobEvents` SSE streaming method (Phase 17 converts from non-streaming stub to real SSE) |
 
 **Note:** `eventsource@4.1.0` (MIT, 1 dep) is available on npm. Its gzipped size is approximately 3 KB — well within the `@spatula/client` 50 KB gzipped budget. The browser `EventSource` API is native, so this dep is Node-only conditional import (dynamic `import()` guarded by `typeof window === 'undefined'`).
 
 ### Alternatives Considered
 
-| Instead of | Could Use | Tradeoff |
-|------------|-----------|----------|
-| Redis Streams (XADD/XRANGE) | In-memory ring buffer | In-memory fails across replicas; Redis Streams already available |
-| `streamSSE` from hono | `c.body(new ReadableStream(...))` raw | `streamSSE` handles abort, header setup, and SSE frame format; raw body gives more control but requires more boilerplate |
-| Dex SQLite storage | Dex Postgres storage | Postgres is more realistic but requires sidecar; SQLite boots in <10 s on a clean Mac (AUTH-04 criterion) |
+| Instead of                  | Could Use                             | Tradeoff                                                                                                                 |
+| --------------------------- | ------------------------------------- | ------------------------------------------------------------------------------------------------------------------------ |
+| Redis Streams (XADD/XRANGE) | In-memory ring buffer                 | In-memory fails across replicas; Redis Streams already available                                                         |
+| `streamSSE` from hono       | `c.body(new ReadableStream(...))` raw | `streamSSE` handles abort, header setup, and SSE frame format; raw body gives more control but requires more boilerplate |
+| Dex SQLite storage          | Dex Postgres storage                  | Postgres is more realistic but requires sidecar; SQLite boots in <10 s on a clean Mac (AUTH-04 criterion)                |
 
 ---
 
@@ -198,7 +211,7 @@ router.openapi(sseHandler, async (c) => {
     // 1. Replay from buffer
     const startId = lastEventId ? `(${lastEventId}` : '-';
     const replayed = await deps.redis.xrange(`jobs:${jobId}:events`, startId, '+');
-    
+
     if (lastEventId && replayed.length === 0) {
       // Check if stream exists at all; if so, send replay_truncated
       const oldest = await deps.redis.xrange(`jobs:${jobId}:events`, '-', '+', 'COUNT', 1);
@@ -210,7 +223,7 @@ router.openapi(sseHandler, async (c) => {
         });
       }
     }
-    
+
     for (const [id, fields] of replayed) {
       if (stream.aborted) break;
       await stream.writeSSE({ data: parseFields(fields), id });
@@ -219,19 +232,19 @@ router.openapi(sseHandler, async (c) => {
     // 2. Keepalive + live tail
     let cursor = replayed.length > 0 ? replayed[replayed.length - 1][0] : '$';
     const keepaliveMs = 15_000;
-    
+
     while (!stream.aborted) {
       const result = await deps.redis.xread(
         'BLOCK', keepaliveMs,
         'STREAMS', `jobs:${jobId}:events`, cursor,
       );
-      
+
       if (result === null) {
         // Timeout = keepalive comment
         if (!stream.aborted) await stream.write(':\n\n');
         continue;
       }
-      
+
       const [[, entries]] = result;
       for (const [id, fields] of entries) {
         if (stream.aborted) break;
@@ -264,14 +277,14 @@ async publish(jobId: string, event: Omit<JobEvent, 'timestamp'>): Promise<void> 
   const full: JobEvent = { ...event, timestamp: Date.now() };
   const payload = JSON.stringify(full);
   const streamKey = `jobs:${jobId}:events`;
-  
+
   try {
     // Existing pub/sub (WS path)
     await this.redis.publish(channelForJob(jobId), payload);
   } catch (err) {
     logger.warn({ jobId, type: event.type, err }, 'failed to publish event to pub/sub');
   }
-  
+
   try {
     // New: Redis Stream (SSE path) — XADD MAXLEN ~ 500 * payload <json>
     await this.redis.xadd(streamKey, 'MAXLEN', '~', 500, '*', 'payload', payload);
@@ -292,10 +305,13 @@ async publish(jobId: string, event: Omit<JobEvent, 'timestamp'>): Promise<void> 
 // Signature: origin: (origin: string, c: Context) => Promise<string | undefined | null> | string | undefined | null
 
 function buildOriginMatcher(raw: string): { exact: Set<string>; patterns: RegExp[] } | null {
-  const parts = raw.split(',').map((s) => s.trim()).filter(Boolean);
+  const parts = raw
+    .split(',')
+    .map((s) => s.trim())
+    .filter(Boolean);
   const exact = new Set<string>();
   const patterns: RegExp[] = [];
-  
+
   for (const part of parts) {
     if (part.includes('*')) {
       // Single-label wildcard only: https://*.foo.com
@@ -316,17 +332,26 @@ if (!matcher) {
   throw new Error('CORS_CONFIG_INVALID: CORS_ALLOWED_ORIGINS is empty or malformed');
 }
 
-app.use('*', cors({
-  origin: (origin) => {
-    if (matcher.exact.has(origin)) return origin;
-    for (const pattern of matcher.patterns) {
-      if (pattern.test(origin)) return origin;
-    }
-    return null;
-  },
-  // ... existing options + add X-RateLimit-Reset and Retry-After to exposeHeaders
-  exposeHeaders: ['X-RateLimit-Limit', 'X-RateLimit-Remaining', 'X-RateLimit-Reset', 'X-Request-Id', 'Retry-After'],
-}));
+app.use(
+  '*',
+  cors({
+    origin: (origin) => {
+      if (matcher.exact.has(origin)) return origin;
+      for (const pattern of matcher.patterns) {
+        if (pattern.test(origin)) return origin;
+      }
+      return null;
+    },
+    // ... existing options + add X-RateLimit-Reset and Retry-After to exposeHeaders
+    exposeHeaders: [
+      'X-RateLimit-Limit',
+      'X-RateLimit-Remaining',
+      'X-RateLimit-Reset',
+      'X-Request-Id',
+      'Retry-After',
+    ],
+  }),
+);
 ```
 
 **Confirmed behavior from Hono cors source:** The function is called with `(origin, c)` where `c` is the Hono Context. If the function returns `null` or `undefined`, no `Access-Control-Allow-Origin` header is set (preflight returns 204 without that header = browser blocks the request). This is the correct cross-origin block behavior.
@@ -339,27 +364,38 @@ app.use('*', cors({
 // Transaction pattern (mirrors existing create pattern in api-key-repository.ts)
 const [oldKey, newKey] = await db.transaction(async (tx) => {
   // Read original
-  const [orig] = await tx.select().from(apiKeys)
+  const [orig] = await tx
+    .select()
+    .from(apiKeys)
     .where(and(eq(apiKeys.id, keyId), eq(apiKeys.tenantId, tenantId)));
-  if (!orig) throw new SpatulaError('Not found', ErrorCode.JOB_NOT_FOUND, { context: { resource: 'api_key' } });
+  if (!orig)
+    throw new SpatulaError('Not found', ErrorCode.JOB_NOT_FOUND, {
+      context: { resource: 'api_key' },
+    });
   if (orig.revokedAt) throw new SpatulaError('Key already revoked', ErrorCode.JOB_INVALID_STATE);
-  
+
   // Create new key inheriting scopes
   const { raw, hash, prefix } = generateApiKey();
-  const [newK] = await tx.insert(apiKeys).values({
-    tenantId, keyHash: hash, keyPrefix: prefix,
-    name: orig.name + ' (rotated)',
-    scopes: orig.scopes,
-    supersedes: orig.id,   // <-- new column (requires migration)
-  }).returning();
-  
+  const [newK] = await tx
+    .insert(apiKeys)
+    .values({
+      tenantId,
+      keyHash: hash,
+      keyPrefix: prefix,
+      name: orig.name + ' (rotated)',
+      scopes: orig.scopes,
+      supersedes: orig.id, // <-- new column (requires migration)
+    })
+    .returning();
+
   // Grace-expire old key
   const graceUntil = new Date(Date.now() + graceSeconds * 1000);
-  const [oldK] = await tx.update(apiKeys)
+  const [oldK] = await tx
+    .update(apiKeys)
     .set({ expiresAt: graceUntil })
     .where(eq(apiKeys.id, keyId))
     .returning();
-  
+
   return [oldK, newK];
 });
 ```
@@ -377,13 +413,13 @@ const [oldKey, newKey] = await db.transaction(async (tx) => {
 
 ## Don't Hand-Roll
 
-| Problem | Don't Build | Use Instead | Why |
-|---------|-------------|-------------|-----|
-| SSE frame formatting | Custom `data:`, `id:`, `event:` string builder | `stream.writeSSE({ data, id, event })` from `hono/streaming` | Handles multiline data, CRLF, field ordering |
-| JWT/JWKS verify | Custom JWKS fetch + RS256/ES256 decode | `createRemoteJWKSet` + `jwtVerify` from `jose` | Already in `JwtAuthProvider`; handles key rotation, cache TTL |
-| EventSource polyfill | Custom fetch-based SSE parser | `eventsource@4.1.0` npm package | WhatWG/W3C compliant; handles reconnect + Last-Event-ID automatically |
-| Cross-tenant route enumeration | Maintain a manual route list | Iterate `openapi.json` paths at test boot | OpenAPI-driven = zero drift as routes are added |
-| PKCE code verifier/challenge | Custom S256 SHA256 base64url | Playwright browser context handles it natively | Browser does PKCE; Playwright drives the browser |
+| Problem                        | Don't Build                                    | Use Instead                                                  | Why                                                                   |
+| ------------------------------ | ---------------------------------------------- | ------------------------------------------------------------ | --------------------------------------------------------------------- |
+| SSE frame formatting           | Custom `data:`, `id:`, `event:` string builder | `stream.writeSSE({ data, id, event })` from `hono/streaming` | Handles multiline data, CRLF, field ordering                          |
+| JWT/JWKS verify                | Custom JWKS fetch + RS256/ES256 decode         | `createRemoteJWKSet` + `jwtVerify` from `jose`               | Already in `JwtAuthProvider`; handles key rotation, cache TTL         |
+| EventSource polyfill           | Custom fetch-based SSE parser                  | `eventsource@4.1.0` npm package                              | WhatWG/W3C compliant; handles reconnect + Last-Event-ID automatically |
+| Cross-tenant route enumeration | Maintain a manual route list                   | Iterate `openapi.json` paths at test boot                    | OpenAPI-driven = zero drift as routes are added                       |
+| PKCE code verifier/challenge   | Custom S256 SHA256 base64url                   | Playwright browser context handles it natively               | Browser does PKCE; Playwright drives the browser                      |
 
 ---
 
@@ -395,18 +431,19 @@ This is NOT a rename/refactor phase. Runtime state inventory section is SKIPPED 
 
 ## Environment Availability
 
-| Dependency | Required By | Available | Version | Fallback |
-|------------|------------|-----------|---------|----------|
-| Redis | SSE buffer, stream token | ✓ | 8.6.3 (local) | — |
-| Docker | `examples/auth-dex/` | ✓ | 29.3.0 | — |
-| Docker Compose | `examples/auth-dex/` | ✓ | v5.1.0 | — |
-| Node.js | All | ✓ | v26.0.0 | — |
-| Playwright | Browser smoke + M2M e2e | ✓ (in pnpm store, 1.58.2) | 1.58.2 | Must run `playwright install` for browser binaries |
-| PostgreSQL | API tests, isolation suite | ✓ (via TEST_DATABASE_URL) | — | — |
+| Dependency     | Required By                | Available                 | Version       | Fallback                                           |
+| -------------- | -------------------------- | ------------------------- | ------------- | -------------------------------------------------- |
+| Redis          | SSE buffer, stream token   | ✓                         | 8.6.3 (local) | —                                                  |
+| Docker         | `examples/auth-dex/`       | ✓                         | 29.3.0        | —                                                  |
+| Docker Compose | `examples/auth-dex/`       | ✓                         | v5.1.0        | —                                                  |
+| Node.js        | All                        | ✓                         | v26.0.0       | —                                                  |
+| Playwright     | Browser smoke + M2M e2e    | ✓ (in pnpm store, 1.58.2) | 1.58.2        | Must run `playwright install` for browser binaries |
+| PostgreSQL     | API tests, isolation suite | ✓ (via TEST_DATABASE_URL) | —             | —                                                  |
 
 **Missing dependencies with no fallback:** None.
 
 **Missing dependencies with fallback:**
+
 - Playwright browser binaries: present in pnpm store but `playwright install` must be run before browser tests execute. Wave 0 of the browser smoke plan must include this step. CI must also run `playwright install`.
 
 ---
@@ -430,6 +467,7 @@ This is NOT a rename/refactor phase. Runtime state inventory section is SKIPPED 
 **Why it happens:** `requireScope('jobs:read')` on `GET /api/v1/jobs/*` runs before the route handler body.
 
 **How to avoid:** Two options:
+
 1. Register the SSE route BEFORE the `requireScope` middleware, and perform token auth inside the handler (mirrors the WS pattern in `server.ts` which runs outside `authMiddleware`).
 2. Extend `authMiddleware` to accept `?token=` on SSE-flagged paths and validate it against Redis there.
 
@@ -462,6 +500,7 @@ Option 1 is simpler and consistent with the WS pattern. The SSE route should be 
 **Why it happens:** The CONTEXT.md was written using descriptive labels, not the actual `DOMAIN.CODE` values.
 
 **How to avoid:** Map to actual enum values:
+
 - `RESOURCE_NOT_FOUND` → use the resource-specific code: `JOB.NOT_FOUND`, `ENTITY.NOT_FOUND`, `EXPORT.NOT_FOUND`, `SCHEMA.NOT_FOUND` — OR — add a new `RESOURCE.NOT_FOUND` code (additive-only policy allows it)
 - `INSUFFICIENT_SCOPE` → `AUTH.INSUFFICIENT_SCOPE` (exists)
 - `TENANT_MISMATCH` → no current code; routes return 404 with `JOB.NOT_FOUND` for cross-tenant access (D-18 says prefer 404). No new code needed if D-18 is correctly implemented.
@@ -477,13 +516,16 @@ Option 1 is simpler and consistent with the WS pattern. The SSE route should be 
 **How to avoid:** Add SSE path to the `overrides` map in the timeout middleware call:
 
 ```typescript
-app.use('*', timeoutMiddleware({
-  defaultMs: 30_000,
-  overrides: {
-    '/api/v1/exports/:exportId/download': 300_000,
-    '/api/v1/jobs/:id/events': 0,  // 0 = no timeout for SSE (or a very large value)
-  },
-}));
+app.use(
+  '*',
+  timeoutMiddleware({
+    defaultMs: 30_000,
+    overrides: {
+      '/api/v1/exports/:exportId/download': 300_000,
+      '/api/v1/jobs/:id/events': 0, // 0 = no timeout for SSE (or a very large value)
+    },
+  }),
+);
 ```
 
 Verify that `timeoutMiddleware` respects a `0` value as "no timeout". If not, use a very large value (e.g., `3_600_000` = 1 hour) or a special sentinel.
@@ -503,6 +545,7 @@ Verify that `timeoutMiddleware` respects a `0` value as "no timeout". If not, us
 **Why it happens:** The schema was designed before the rotate feature was specced.
 
 **How to avoid:** Wave 0 of the rotate plan must include a Drizzle migration file adding:
+
 - `supersedes uuid REFERENCES api_keys(id)` (nullable, self-referential FK)
 - Update `ApiKeyRepository.create` to accept optional `supersedes` field
 - Update Drizzle schema file `packages/db/src/schema/api-keys.ts`
@@ -517,11 +560,13 @@ Verify that `timeoutMiddleware` respects a `0` value as "no timeout". If not, us
 // Source: ioredis 5.10.0 RedisCommander.d.ts (variadic args pattern)
 // XADD key MAXLEN ~ 500 * field value
 await redis.xadd(
-  'jobs:abc123:events',   // key
-  'MAXLEN', '~', '500',   // trim to ~500 entries (approx, cheaper than exact)
-  '*',                    // auto-generate id (returns '{ms}-{seq}' string)
-  'payload',              // field name
-  JSON.stringify(event),  // field value
+  'jobs:abc123:events', // key
+  'MAXLEN',
+  '~',
+  '500', // trim to ~500 entries (approx, cheaper than exact)
+  '*', // auto-generate id (returns '{ms}-{seq}' string)
+  'payload', // field name
+  JSON.stringify(event), // field value
 );
 // Returns: '1748123456789-0' (the generated stream id)
 
@@ -552,11 +597,12 @@ const events = await redis.xrange('jobs:abc123:events', '(1748123456789-0', '+')
 // Returns null on timeout (no new events); returns array on new events
 
 const result = await redis.xread(
-  'BLOCK', 15_000,               // block up to 15 seconds
+  'BLOCK',
+  15_000, // block up to 15 seconds
   'STREAMS',
   'jobs:abc123:events',
-  '$',                           // '$' = only new events from this moment on
-                                 // After replay: use last-replayed-id as cursor
+  '$', // '$' = only new events from this moment on
+  // After replay: use last-replayed-id as cursor
 );
 // result === null → timeout → emit keepalive comment
 // result === [[key, [[id, [fieldName, fieldValue, ...]], ...]]] → new events
@@ -572,30 +618,34 @@ import { streamSSE } from 'hono/streaming';
 // Must set manually: X-Accel-Buffering: no
 
 c.header('X-Accel-Buffering', 'no');
-return streamSSE(c, async (stream) => {
-  // Wire abort signal for Node.js (Bun gets this automatically, Node does not)
-  c.req.raw.signal.addEventListener('abort', () => {
-    if (!stream.closed) stream.abort();
-  });
+return streamSSE(
+  c,
+  async (stream) => {
+    // Wire abort signal for Node.js (Bun gets this automatically, Node does not)
+    c.req.raw.signal.addEventListener('abort', () => {
+      if (!stream.closed) stream.abort();
+    });
 
-  stream.onAbort(() => {
-    // Cleanup: close dedicated redis connection, clear keepalive timer
-    dedicatedRedis.quit().catch(() => {});
-    clearInterval(keepaliveTimer);
-  });
+    stream.onAbort(() => {
+      // Cleanup: close dedicated redis connection, clear keepalive timer
+      dedicatedRedis.quit().catch(() => {});
+      clearInterval(keepaliveTimer);
+    });
 
-  // SSE comment = keepalive (no `id:` or `data:`, invisible to clients)
-  // stream.write(':\n\n') sends a raw comment line
-  const keepaliveTimer = setInterval(async () => {
-    if (!stream.aborted) await stream.write(':\n\n');
-  }, 15_000);
+    // SSE comment = keepalive (no `id:` or `data:`, invisible to clients)
+    // stream.write(':\n\n') sends a raw comment line
+    const keepaliveTimer = setInterval(async () => {
+      if (!stream.aborted) await stream.write(':\n\n');
+    }, 15_000);
 
-  // ... replay + tail loop ...
-}, async (err, stream) => {
-  // onError: log + emit error event
-  logger.error({ err }, 'SSE stream error');
-  await stream.writeSSE({ event: 'error', data: JSON.stringify({ message: err.message }) });
-});
+    // ... replay + tail loop ...
+  },
+  async (err, stream) => {
+    // onError: log + emit error event
+    logger.error({ err }, 'SSE stream error');
+    await stream.writeSSE({ event: 'error', data: JSON.stringify({ message: err.message }) });
+  },
+);
 ```
 
 ### Hono cors() function-form (Hono 4.12.7)
@@ -610,15 +660,18 @@ cors({
     for (const re of patterns) {
       if (re.test(origin)) return origin;
     }
-    return null;  // blocks cross-origin request
+    return null; // blocks cross-origin request
   },
   exposeHeaders: [
-    'X-RateLimit-Limit', 'X-RateLimit-Remaining', 'X-RateLimit-Reset',
-    'X-Request-Id', 'Retry-After',  // D-09 additions
+    'X-RateLimit-Limit',
+    'X-RateLimit-Remaining',
+    'X-RateLimit-Reset',
+    'X-Request-Id',
+    'Retry-After', // D-09 additions
   ],
   maxAge: 86400,
   credentials: true,
-})
+});
 ```
 
 ### Dex minimal config.yaml (SQLite, static clients)
@@ -642,7 +695,7 @@ oauth2:
     - code
 
 connectors:
-  - type: mockCallback  # or: type: local with staticPasswords
+  - type: mockCallback # or: type: local with staticPasswords
     id: mock
     name: Mock
 
@@ -652,27 +705,28 @@ staticClients:
     name: Spatula Browser
     redirectURIs:
       - http://localhost:3000/callback
-    public: true       # No client secret for PKCE flows
+    public: true # No client secret for PKCE flows
 
   # M2M client: client_credentials
   - id: spatula-m2m
     name: Spatula M2M
-    secret: dev-only-secret-m2m   # DO NOT USE IN PRODUCTION
+    secret: dev-only-secret-m2m # DO NOT USE IN PRODUCTION
     redirectURIs: []
 
 enablePasswordDB: true
 staticPasswords:
   - email: dev@example.com
-    hash: "$2a$10$..."  # bcrypt of "password"
+    hash: '$2a$10$...' # bcrypt of "password"
     username: devuser
-    userID: "00000000-0000-0000-0000-000000000001"
+    userID: '00000000-0000-0000-0000-000000000001'
 ```
 
 **Dex JWT claims shape (verified from Dex v2.x docs):**
+
 ```json
 {
   "iss": "http://localhost:5556/dex",
-  "sub": "Cg0xMjM0NTY3ODkwEgRtb2Nr",  // opaque subject (not the static userID directly)
+  "sub": "Cg0xMjM0NTY3ODkwEgRtb2Nr", // opaque subject (not the static userID directly)
   "aud": ["spatula-browser"],
   "exp": 1748200000,
   "iat": 1748196400,
@@ -699,7 +753,7 @@ export function subscribeJobEvents(
     onEvent: (event: JobEvent) => void;
     onError?: (err: Event) => void;
     lastEventId?: string;
-    token: string;   // single-use stream token from POST /api/v1/ws-token
+    token: string; // single-use stream token from POST /api/v1/ws-token
   },
 ): () => void /* unsubscribe */ {
   const url = new URL(`${client.baseUrl}/api/v1/jobs/${jobId}/events`);
@@ -709,7 +763,7 @@ export function subscribeJobEvents(
   const es = new EventSource(url.toString());
   es.onmessage = (e) => options.onEvent(JSON.parse(e.data));
   if (options.onError) es.onerror = options.onError;
-  
+
   return () => es.close();
 }
 ```
@@ -718,14 +772,15 @@ export function subscribeJobEvents(
 
 ## State of the Art
 
-| Old Approach | Current Approach | When Changed | Impact |
-|--------------|------------------|--------------|--------|
-| Redis XRANGE `{id}+1` exclusive bound (manual `ms+1` arithmetic) | Redis 6.2+: `(id` prefix for native exclusive bound | Redis 6.2 (2021) | No more integer arithmetic on stream ids; cleaner syntax |
-| Hono CORS string array `origin: []` | Hono 4.x: `origin: (origin, c) => string \| null` function form | Hono 3.x+ | Dynamic per-request origin matching; enables wildcard patterns |
-| Separate SSE polling endpoint | `streamSSE` with persistent connection + Last-Event-ID | Standard since Hono 3.x | Native reconnect; browser handles retry automatically |
-| EventSource v3 (`node-eventsource`) | `eventsource@4.x` (WhatWG/W3C compliant) | 2024 | Standard API; auto-manages `Last-Event-ID` on reconnect |
+| Old Approach                                                     | Current Approach                                                | When Changed            | Impact                                                         |
+| ---------------------------------------------------------------- | --------------------------------------------------------------- | ----------------------- | -------------------------------------------------------------- |
+| Redis XRANGE `{id}+1` exclusive bound (manual `ms+1` arithmetic) | Redis 6.2+: `(id` prefix for native exclusive bound             | Redis 6.2 (2021)        | No more integer arithmetic on stream ids; cleaner syntax       |
+| Hono CORS string array `origin: []`                              | Hono 4.x: `origin: (origin, c) => string \| null` function form | Hono 3.x+               | Dynamic per-request origin matching; enables wildcard patterns |
+| Separate SSE polling endpoint                                    | `streamSSE` with persistent connection + Last-Event-ID          | Standard since Hono 3.x | Native reconnect; browser handles retry automatically          |
+| EventSource v3 (`node-eventsource`)                              | `eventsource@4.x` (WhatWG/W3C compliant)                        | 2024                    | Standard API; auto-manages `Last-Event-ID` on reconnect        |
 
 **Deprecated/outdated:**
+
 - `EventSource` from `node-eventsource` or `eventsource@2.x/3.x`: use `eventsource@4.1.0`
 - Hono CORS with `origin: string[]` for dynamic matching: use function form instead
 
@@ -756,32 +811,33 @@ export function subscribeJobEvents(
 
 ### Test Framework
 
-| Property | Value |
-|----------|-------|
-| Framework | Vitest v2.1.0 |
-| Config file | `tests/contract/vitest.config.ts` (reused); `tests/isolation/vitest.config.ts` (new); `tests/e2e/vitest.config.ts` (extended for m2m) |
-| Quick run command | `pnpm --filter @spatula/api test` (unit) or `vitest run --config tests/contract/vitest.config.ts` |
-| Full suite command | `vitest run --config tests/isolation/vitest.config.ts && vitest run --config tests/e2e/vitest.config.ts` |
+| Property           | Value                                                                                                                                 |
+| ------------------ | ------------------------------------------------------------------------------------------------------------------------------------- |
+| Framework          | Vitest v2.1.0                                                                                                                         |
+| Config file        | `tests/contract/vitest.config.ts` (reused); `tests/isolation/vitest.config.ts` (new); `tests/e2e/vitest.config.ts` (extended for m2m) |
+| Quick run command  | `pnpm --filter @spatula/api test` (unit) or `vitest run --config tests/contract/vitest.config.ts`                                     |
+| Full suite command | `vitest run --config tests/isolation/vitest.config.ts && vitest run --config tests/e2e/vitest.config.ts`                              |
 
 ### Phase Requirements → Test Map
 
-| Req ID | Behavior | Test Type | Automated Command | File Exists? |
-|--------|----------|-----------|-------------------|-------------|
-| AUTH-01 | SSE replay from Last-Event-ID; keepalive comment; correct headers | integration | `vitest run tests/isolation/vitest.config.ts` | ❌ Wave 0 |
-| AUTH-01 | `replay_truncated` synthetic event when Last-Event-ID too old | unit | `vitest run apps/api/src/sse/handler.test.ts` | ❌ Wave 0 |
-| AUTH-02 | Single-use token consumed by GETDEL; 60 s TTL; dual WS+SSE use | integration | `vitest run tests/contract/vitest.config.ts` | ❌ Wave 0 |
-| AUTH-03 | CORS wildcard origin function matches `https://app.spatula.dev` not `https://foo.bar.spatula.dev` | unit | `vitest run apps/api/src/app.test.ts` (or co-located) | ❌ Wave 0 |
-| AUTH-03 | CORS preflight returns 204 with correct expose-headers | integration | `vitest run tests/contract/vitest.config.ts` | ❌ Wave 0 |
-| AUTH-04 | `docker compose up` in `examples/auth-dex/` produces working IDP | e2e/manual | `pnpm smoke:dex` (manual) | ❌ Wave 0 |
-| AUTH-04 | Playwright browser-flow: OIDC login → SSE subscribe → disconnect → reconnect | e2e | `vitest run tests/e2e/browser/vitest.config.ts` | ❌ Wave 0 |
-| AUTH-05 | Rotate creates new key; old key still validates during grace window | integration | `vitest run tests/contract/vitest.config.ts` | ❌ Wave 0 |
-| AUTH-05 | Old key 401s after grace window expires | integration | Time-sensitive; use DB-direct expiresAt manipulation in test | ❌ Wave 0 |
-| AUTH-06 | `docs/api-auth.md` scope table matches `DEFAULT_API_KEY_SCOPES` | CI gate (script) | `pnpm check:docs` (new script) | ❌ Wave 0 |
-| AUTH-07 | Tenant B token → Tenant A resource → 404 with RESOURCE.NOT_FOUND | integration | `vitest run tests/isolation/vitest.config.ts` | ❌ Wave 0 |
-| AUTH-07 | Every authed route in OpenAPI spec is covered by isolation matrix | integration | Same isolation suite (generator validates coverage) | ❌ Wave 0 |
-| AUTH-08 | Dex client_credentials → JWT → createJob → listJobs → getEntities | e2e | `vitest run tests/e2e/m2m/vitest.config.ts` | ❌ Wave 0 |
+| Req ID  | Behavior                                                                                          | Test Type        | Automated Command                                            | File Exists? |
+| ------- | ------------------------------------------------------------------------------------------------- | ---------------- | ------------------------------------------------------------ | ------------ |
+| AUTH-01 | SSE replay from Last-Event-ID; keepalive comment; correct headers                                 | integration      | `vitest run tests/isolation/vitest.config.ts`                | ❌ Wave 0    |
+| AUTH-01 | `replay_truncated` synthetic event when Last-Event-ID too old                                     | unit             | `vitest run apps/api/src/sse/handler.test.ts`                | ❌ Wave 0    |
+| AUTH-02 | Single-use token consumed by GETDEL; 60 s TTL; dual WS+SSE use                                    | integration      | `vitest run tests/contract/vitest.config.ts`                 | ❌ Wave 0    |
+| AUTH-03 | CORS wildcard origin function matches `https://app.spatula.dev` not `https://foo.bar.spatula.dev` | unit             | `vitest run apps/api/src/app.test.ts` (or co-located)        | ❌ Wave 0    |
+| AUTH-03 | CORS preflight returns 204 with correct expose-headers                                            | integration      | `vitest run tests/contract/vitest.config.ts`                 | ❌ Wave 0    |
+| AUTH-04 | `docker compose up` in `examples/auth-dex/` produces working IDP                                  | e2e/manual       | `pnpm smoke:dex` (manual)                                    | ❌ Wave 0    |
+| AUTH-04 | Playwright browser-flow: OIDC login → SSE subscribe → disconnect → reconnect                      | e2e              | `vitest run tests/e2e/browser/vitest.config.ts`              | ❌ Wave 0    |
+| AUTH-05 | Rotate creates new key; old key still validates during grace window                               | integration      | `vitest run tests/contract/vitest.config.ts`                 | ❌ Wave 0    |
+| AUTH-05 | Old key 401s after grace window expires                                                           | integration      | Time-sensitive; use DB-direct expiresAt manipulation in test | ❌ Wave 0    |
+| AUTH-06 | `docs/api-auth.md` scope table matches `DEFAULT_API_KEY_SCOPES`                                   | CI gate (script) | `pnpm check:docs` (new script)                               | ❌ Wave 0    |
+| AUTH-07 | Tenant B token → Tenant A resource → 404 with RESOURCE.NOT_FOUND                                  | integration      | `vitest run tests/isolation/vitest.config.ts`                | ❌ Wave 0    |
+| AUTH-07 | Every authed route in OpenAPI spec is covered by isolation matrix                                 | integration      | Same isolation suite (generator validates coverage)          | ❌ Wave 0    |
+| AUTH-08 | Dex client_credentials → JWT → createJob → listJobs → getEntities                                 | e2e              | `vitest run tests/e2e/m2m/vitest.config.ts`                  | ❌ Wave 0    |
 
 ### Sampling Rate
+
 - **Per task commit:** `pnpm --filter @spatula/api test` (unit tests, no infra required)
 - **Per wave merge:** `vitest run --config tests/contract/vitest.config.ts` + `vitest run --config tests/isolation/vitest.config.ts` (requires Postgres + Redis)
 - **Phase gate:** Full suite green + browser e2e + M2M e2e before `/gsd:verify-work`
@@ -804,6 +860,7 @@ All test files are new. Required before implementation:
 ## Sources
 
 ### Primary (HIGH confidence)
+
 - Hono 4.12.7 installed source (`node_modules/.pnpm/hono@4.12.7/`) — SSE helper, cors middleware, StreamingApi, abort behavior
 - ioredis 5.10.0 installed types (`RedisCommander.d.ts`) — XADD/XRANGE/XREAD/EXPIRE signatures
 - `apps/api/src/` codebase — direct inspection of server.ts, app.ts, ws-token.ts, api-keys.ts, jwt-provider.ts, api-key-provider.ts
@@ -814,6 +871,7 @@ All test files are new. Required before implementation:
 - `tests/contract/helpers/server-harness.ts` + `ajv-setup.ts` — isolation test harness reuse confirmed
 
 ### Secondary (MEDIUM confidence)
+
 - Redis official docs (https://redis.io/docs/latest/commands/xrange/) — exclusive `(` lower bound syntax confirmed (Redis 6.2+)
 - Redis official docs (https://redis.io/docs/latest/commands/expire/) — EXPIRE does NOT auto-refresh on XADD confirmed
 - Dex GitHub releases (https://github.com/dexidp/dex/releases) — v2.45.1 confirmed latest
@@ -821,6 +879,7 @@ All test files are new. Required before implementation:
 - npm `eventsource@4.1.0` — WhatWG/W3C compliant; MIT; 1 dependency
 
 ### Tertiary (LOW confidence)
+
 - WebSearch for Dex docker-compose minimal config — basic structure corroborated against GitHub and community guides; actual YAML validated against Dex spec in canonical refs
 
 ---
@@ -834,6 +893,7 @@ No `CLAUDE.md` found in the project root. No additional project-level directives
 ## Metadata
 
 **Confidence breakdown:**
+
 - Standard stack: HIGH — versions read directly from installed pnpm store and package.json
 - Architecture: HIGH — code inspected directly; patterns mirror existing WS implementation exactly
 - Pitfalls: HIGH — abort behavior verified from Hono source; EXPIRE behavior verified from Redis docs; schema gaps confirmed from migration SQL

@@ -74,23 +74,26 @@ describe('integration: getJobEvents (Phase 16 stub — SSE in Phase 17)', () => 
     expect(events[1]?.data).toEqual({ pagesProcessed: 42 });
   });
 
-  it.skipIf(!LIVE)('live (SPATULA_LIVE_LLM=1): GET /api/v1/jobs/:jobId/events returns array', async () => {
-    const baseUrl = process.env.SPATULA_BASE_URL ?? 'http://localhost:3000';
-    const apiKey = process.env.SPATULA_API_KEY;
-    const jobId = process.env.SPATULA_LIVE_JOB_ID;
-    if (!apiKey || !jobId) {
-      throw new Error('SPATULA_LIVE_LLM=1 requires SPATULA_API_KEY + SPATULA_LIVE_JOB_ID');
-    }
-    const client = new SpatulaClient({ baseUrl, apiKey });
-    // Note: live server may return 404 if /events endpoint is SSE-only;
-    // assertion is permissive — Phase 17 will tighten this once SSE lands.
-    try {
-      const events = await getJobEvents(client, jobId);
-      expect(Array.isArray(events)).toBe(true);
-    } catch (e) {
-      // SSE-only endpoint may return non-JSON or 4xx in live mode — Phase 17
-      // wires the proper SSE SDK. For Phase 16 stub, tolerate either path.
-      expect(e).toBeDefined();
-    }
-  });
+  it.skipIf(!LIVE)(
+    'live (SPATULA_LIVE_LLM=1): GET /api/v1/jobs/:jobId/events returns array',
+    async () => {
+      const baseUrl = process.env.SPATULA_BASE_URL ?? 'http://localhost:3000';
+      const apiKey = process.env.SPATULA_API_KEY;
+      const jobId = process.env.SPATULA_LIVE_JOB_ID;
+      if (!apiKey || !jobId) {
+        throw new Error('SPATULA_LIVE_LLM=1 requires SPATULA_API_KEY + SPATULA_LIVE_JOB_ID');
+      }
+      const client = new SpatulaClient({ baseUrl, apiKey });
+      // Note: live server may return 404 if /events endpoint is SSE-only;
+      // assertion is permissive — Phase 17 will tighten this once SSE lands.
+      try {
+        const events = await getJobEvents(client, jobId);
+        expect(Array.isArray(events)).toBe(true);
+      } catch (e) {
+        // SSE-only endpoint may return non-JSON or 4xx in live mode — Phase 17
+        // wires the proper SSE SDK. For Phase 16 stub, tolerate either path.
+        expect(e).toBeDefined();
+      }
+    },
+  );
 });

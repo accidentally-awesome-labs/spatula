@@ -1,11 +1,12 @@
 ---
 phase: 19-deployment-self-host-excellence
-plan: "08"
+plan: '08'
 subsystem: deployment-runbooks
 tags: [runbooks, nginx, backup, restore, reverse-proxy, upgrade, self-host]
 dependency_graph:
   requires: [19-06-PLAN.md]
-  provides: [backup-restore.md, reverse-proxy.md, nginx.conf, upgrade-version-template, ROADMAP-helm-note]
+  provides:
+    [backup-restore.md, reverse-proxy.md, nginx.conf, upgrade-version-template, ROADMAP-helm-note]
   affects: [docs/runbooks/, .planning/ROADMAP.md]
 tech_stack:
   added: []
@@ -22,13 +23,13 @@ key_files:
     - docs/runbooks/upgrade.md
     - .planning/ROADMAP.md
 decisions:
-  - "Token-in-URL log masking: use $uri (path only, no query string) in log_format instead of $request — simpler than regex map, no risk of regex matching edge cases, eliminates query string entirely from logs"
-  - "nginx -t validation is manual-only: nginx not installed in executor env; config is authored to nginx 1.25+ syntax and documented as requiring nginx -t on a host with nginx before production deploy"
-  - "Restore verification mirrors round-trip.test.ts exactly: row-count parity per table + ContentStore SHA-256 spot check — runbook and test are consistent"
+  - 'Token-in-URL log masking: use $uri (path only, no query string) in log_format instead of $request — simpler than regex map, no risk of regex matching edge cases, eliminates query string entirely from logs'
+  - 'nginx -t validation is manual-only: nginx not installed in executor env; config is authored to nginx 1.25+ syntax and documented as requiring nginx -t on a host with nginx before production deploy'
+  - 'Restore verification mirrors round-trip.test.ts exactly: row-count parity per table + ContentStore SHA-256 spot check — runbook and test are consistent'
   - "Time-to-restore estimates use order-of-magnitude ranges with a 'measure on your hardware' note — honest methodology, avoids false SLA guarantees"
 metrics:
   duration_minutes: 4
-  completed_date: "2026-06-10"
+  completed_date: '2026-06-10'
   tasks_completed: 2
   files_created: 3
   files_modified: 2
@@ -40,16 +41,17 @@ metrics:
 
 ## Tasks Completed
 
-| Task | Name | Commit | Files |
-|------|------|--------|-------|
-| 1 | backup-restore.md + upgrade.md version-to-version template | daa6453 | docs/runbooks/backup-restore.md (created), docs/runbooks/upgrade.md (extended) |
-| 2 | reverse-proxy.md + nginx.conf + ROADMAP Helm note | 1eb470e | docs/runbooks/nginx.conf (created), docs/runbooks/reverse-proxy.md (created), .planning/ROADMAP.md (extended) |
+| Task | Name                                                       | Commit  | Files                                                                                                         |
+| ---- | ---------------------------------------------------------- | ------- | ------------------------------------------------------------------------------------------------------------- |
+| 1    | backup-restore.md + upgrade.md version-to-version template | daa6453 | docs/runbooks/backup-restore.md (created), docs/runbooks/upgrade.md (extended)                                |
+| 2    | reverse-proxy.md + nginx.conf + ROADMAP Helm note          | 1eb470e | docs/runbooks/nginx.conf (created), docs/runbooks/reverse-proxy.md (created), .planning/ROADMAP.md (extended) |
 
 ## What Was Built
 
 ### Task 1: Backup & Restore Runbook + Upgrade Template
 
 **`docs/runbooks/backup-restore.md`** covers:
+
 1. What to back up — Postgres (source of truth via pg_dump), content store (Postgres-backed: included in pg_dump; S3-backed: native bucket tooling), Redis (reconcilable, not source of truth — jobs are replayed on restart, Redis need not be backed up for durable data)
 2. Exact `pg_dump --no-owner --no-acl` command with a pg_dump 14+ `\restrict`/`\unrestrict` token note
 3. Restore procedure: create fresh DB → `psql < dump` → verify row counts + content-hash spot check, mirroring `tests/e2e/backup/round-trip.test.ts`
@@ -57,6 +59,7 @@ metrics:
 5. Verification checklist: spatula doctor (9 checks green), row count parity, content-hash spot check, migration journal intact, API health
 
 **`docs/runbooks/upgrade.md`** gains a new `## Version-to-Version Migration Template` section (DEPLOY-06):
+
 - Pre-flight pg_dump (references backup-restore.md)
 - Release notes check (expand-contract phases, breaking changes)
 - Migration via `migrate` container image or `pnpm --filter @spatula/db exec tsx src/run-migrate.ts`
@@ -68,6 +71,7 @@ All existing upgrade.md sections (no-migration-downgrade policy, expand-contract
 ### Task 2: Reverse-Proxy Runbook + nginx.conf + ROADMAP Helm Note
 
 **`docs/runbooks/nginx.conf`** — nginx 1.25+ valid reverse-proxy config:
+
 - `upstream spatula_api { server 127.0.0.1:3000; keepalive 32; }`
 - Standard proxy headers (Host, X-Real-IP, X-Forwarded-For, X-Forwarded-Proto)
 - SSE route (`/api/v1/jobs/*/events`): `proxy_buffering off`, `proxy_cache off`, `proxy_read_timeout 3600s`, `proxy_set_header Connection ''`
@@ -76,6 +80,7 @@ All existing upgrade.md sections (no-migration-downgrade policy, expand-contract
 - TLS block commented out with Certbot instructions
 
 **`docs/runbooks/reverse-proxy.md`**:
+
 - **nginx (Tested)** section: links nginx.conf, explains SSE/WS settings, documents token masking rationale and end-to-end verification steps, `nginx -t` validation command, curl smoke test
 - States explicitly: "nginx recipe tested end-to-end with token masking verified in access logs (SC#5)"
 - `nginx -t` validation note: nginx not installed in executor env; must be run on a host with nginx 1.25+ before production deploy
@@ -101,6 +106,7 @@ None. All content is production-quality documentation. The traefik and caddy sec
 ## Self-Check: PASSED
 
 Files created/modified:
+
 - [x] `docs/runbooks/backup-restore.md` — exists, contains pg_dump, content_store, redis, time-to-restore
 - [x] `docs/runbooks/nginx.conf` — exists, contains proxy_pass, Upgrade header, log_format, token masking
 - [x] `docs/runbooks/reverse-proxy.md` — exists, contains "not first-party tested", nginx/traefik/caddy, nginx.conf reference
@@ -108,5 +114,6 @@ Files created/modified:
 - [x] `.planning/ROADMAP.md` — contains "helm" note in Phase 19 section
 
 Commits verified:
+
 - [x] daa6453 — `docs(19-08): add backup-restore.md + upgrade version-to-version template`
 - [x] 1eb470e — `docs(19-08): reverse-proxy runbook + nginx.conf + ROADMAP Helm note`

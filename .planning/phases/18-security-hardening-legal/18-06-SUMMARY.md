@@ -29,17 +29,17 @@ key_files:
     - apps/api/src/types.ts
     - apps/api/tests/unit/routes/admin-tenants.test.ts
 decisions:
-  - "onConflictDoNothing().returning() returns empty array in drizzle 0.45 + node-postgres — importTenantData uses try/catch(23505) pattern instead to count real inserts"
-  - "ContentStore.listKeys is optional; worker skips forensic prefix scan when not supported (no listKeys on base interface) rather than failing the job"
-  - "DELETE route records requestedBy from auth.userId (no keyId field on AuthResult v1 — userId is the universal identity field across all auth strategies)"
-  - "TenantDeleteJobDeps injected into processTenantDeleteJob (not WorkerDeps) to keep function testable without full WorkerDeps construction"
+  - 'onConflictDoNothing().returning() returns empty array in drizzle 0.45 + node-postgres — importTenantData uses try/catch(23505) pattern instead to count real inserts'
+  - 'ContentStore.listKeys is optional; worker skips forensic prefix scan when not supported (no listKeys on base interface) rather than failing the job'
+  - 'DELETE route records requestedBy from auth.userId (no keyId field on AuthResult v1 — userId is the universal identity field across all auth strategies)'
+  - 'TenantDeleteJobDeps injected into processTenantDeleteJob (not WorkerDeps) to keep function testable without full WorkerDeps construction'
 metrics:
   duration_minutes: 13
   tasks_completed: 3
   files_created: 4
   files_modified: 7
   tests_added: 20
-  completed_date: "2026-05-20"
+  completed_date: '2026-05-20'
 ---
 
 # Phase 18 Plan 06: DSR Deletion + Tenant Import Server Surface Summary
@@ -85,24 +85,28 @@ Integration tests cover: cascade deletes rows, idempotency (second run doesn't t
 ### Auto-fixed Issues
 
 **1. [Rule 1 - Bug] drizzle onConflictDoNothing().returning() returns empty array**
+
 - **Found during:** Task 1 importTenantData implementation
 - **Issue:** In drizzle-orm 0.45 + node-postgres, `onConflictDoNothing().returning()` always returns `[]` even when rows are inserted successfully, making it impossible to count inserted rows.
 - **Fix:** Changed to per-row insert with try/catch on Postgres error code 23505 (unique_violation) — skips duplicates, counts actual new inserts. This is idempotent and correct.
 - **Files modified:** `packages/db/src/repositories/tenant-data-repository.ts`
 
 **2. [Rule 1 - Bug] trust_level enum in test seed used invalid value "trusted"**
+
 - **Found during:** Task 1 integration test (RED run)
 - **Issue:** The `trust_level` Postgres enum only accepts: authoritative, high, medium, low. Test was passing "trusted".
 - **Fix:** Changed test seed to use "high".
 - **Files modified:** `packages/db/tests/integration/tenant-data-repository.integration.test.ts`
 
 **3. [Rule 1 - Bug] db.execute() returns QueryResult not array**
+
 - **Found during:** Task 1 integration test
 - **Issue:** Destructuring `const [job] = await db.execute(sql\`...\`)` fails because node-postgres QueryResult is not iterable.
 - **Fix:** Access `.rows[0]` on the result object directly.
 - **Files modified:** `packages/db/tests/integration/tenant-data-repository.integration.test.ts`
 
 **4. [Rule 1 - Bug] AuthResult has no keyId field**
+
 - **Found during:** Task 3 build check
 - **Issue:** Route code referenced `auth?.keyId` which doesn't exist on `AuthResult`.
 - **Fix:** Changed to `auth?.userId ?? 'system'` — userId is the universal identity field.
@@ -115,11 +119,13 @@ None — all data flows are wired. The import route's `importTenantData` method 
 ## Self-Check: PASSED
 
 Files exist:
+
 - packages/db/src/repositories/tenant-data-repository.ts ✓
 - packages/queue/src/workers/tenant-delete-worker.ts ✓
 - apps/api/src/routes/admin-tenants.ts (modified) ✓
 
 Commits:
+
 - 34840dc feat(18-06): TenantDataRepository ✓
 - 0a77bec feat(18-06): tenant-delete BullMQ queue + cascade worker ✓
 - 4ad8a9f feat(18-06): DELETE + import admin routes ✓

@@ -15,12 +15,7 @@
  *   - ONE server per suite (beforeAll/afterAll)
  */
 
-import {
-  createServer,
-  type Server,
-  type IncomingMessage,
-  type ServerResponse,
-} from 'node:http';
+import { createServer, type Server, type IncomingMessage, type ServerResponse } from 'node:http';
 import type { AddressInfo } from 'node:net';
 import { createApp } from '../../apps/api/src/app.js';
 import { ApiKeyAuthProvider } from '../../apps/api/src/auth/api-key-provider.js';
@@ -68,8 +63,7 @@ export async function startIsolationServer(
     process.env.DATABASE_URL ??
     'postgresql://spatula:spatula@localhost:5432/spatula_test';
 
-  const redisUrl =
-    options.redisUrl ?? process.env.REDIS_URL ?? 'redis://localhost:6379';
+  const redisUrl = options.redisUrl ?? process.env.REDIS_URL ?? 'redis://localhost:6379';
 
   const { pool, db } = createDatabasePool(databaseUrl);
 
@@ -117,56 +111,54 @@ export async function startIsolationServer(
   const app = createApp(deps as AppDeps);
 
   // Node http.Server adapter (same as contract harness)
-  const server: Server = createServer(
-    async (req: IncomingMessage, res: ServerResponse) => {
-      try {
-        const addr = server.address();
-        const port = typeof addr === 'object' && addr ? addr.port : 0;
-        const url = new URL(req.url ?? '/', `http://127.0.0.1:${port}`);
+  const server: Server = createServer(async (req: IncomingMessage, res: ServerResponse) => {
+    try {
+      const addr = server.address();
+      const port = typeof addr === 'object' && addr ? addr.port : 0;
+      const url = new URL(req.url ?? '/', `http://127.0.0.1:${port}`);
 
-        const hasBody = !(req.method === 'GET' || req.method === 'HEAD');
-        let body: Uint8Array | undefined;
-        if (hasBody) {
-          const chunks: Buffer[] = [];
-          for await (const chunk of req) chunks.push(chunk as Buffer);
-          if (chunks.length > 0) body = Buffer.concat(chunks);
-        }
-
-        const headers = new Headers();
-        for (const [k, v] of Object.entries(req.headers)) {
-          if (v === undefined) continue;
-          if (Array.isArray(v)) headers.set(k, v.join(','));
-          else headers.set(k, v);
-        }
-
-        const request = new Request(url.toString(), {
-          method: req.method ?? 'GET',
-          headers,
-          body: body as BodyInit | undefined,
-          duplex: body ? 'half' : undefined,
-        } as RequestInit & { duplex?: 'half' });
-
-        const response = await app.fetch(request);
-        res.statusCode = response.status;
-        response.headers.forEach((value, key) => {
-          res.setHeader(key, value);
-        });
-        const buf = Buffer.from(await response.arrayBuffer());
-        res.end(buf);
-      } catch (err) {
-        res.statusCode = 500;
-        res.setHeader('content-type', 'application/json');
-        res.end(
-          JSON.stringify({
-            error: {
-              code: 'INTERNAL.ERROR',
-              message: (err as Error).message,
-            },
-          }),
-        );
+      const hasBody = !(req.method === 'GET' || req.method === 'HEAD');
+      let body: Uint8Array | undefined;
+      if (hasBody) {
+        const chunks: Buffer[] = [];
+        for await (const chunk of req) chunks.push(chunk as Buffer);
+        if (chunks.length > 0) body = Buffer.concat(chunks);
       }
-    },
-  );
+
+      const headers = new Headers();
+      for (const [k, v] of Object.entries(req.headers)) {
+        if (v === undefined) continue;
+        if (Array.isArray(v)) headers.set(k, v.join(','));
+        else headers.set(k, v);
+      }
+
+      const request = new Request(url.toString(), {
+        method: req.method ?? 'GET',
+        headers,
+        body: body as BodyInit | undefined,
+        duplex: body ? 'half' : undefined,
+      } as RequestInit & { duplex?: 'half' });
+
+      const response = await app.fetch(request);
+      res.statusCode = response.status;
+      response.headers.forEach((value, key) => {
+        res.setHeader(key, value);
+      });
+      const buf = Buffer.from(await response.arrayBuffer());
+      res.end(buf);
+    } catch (err) {
+      res.statusCode = 500;
+      res.setHeader('content-type', 'application/json');
+      res.end(
+        JSON.stringify({
+          error: {
+            code: 'INTERNAL.ERROR',
+            message: (err as Error).message,
+          },
+        }),
+      );
+    }
+  });
 
   const port: number = await new Promise((resolve, reject) => {
     server.once('listening', () => {

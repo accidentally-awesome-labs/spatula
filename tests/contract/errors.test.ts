@@ -25,11 +25,7 @@
  * (headers.test.ts hits 429 RATE_LIMIT.EXCEEDED).
  */
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
-import {
-  startServer,
-  seedTenantAndKey,
-  type ContractServer,
-} from './helpers/server-harness.js';
+import { startServer, seedTenantAndKey, type ContractServer } from './helpers/server-harness.js';
 
 const DOMAIN_CODE_PATTERN = /^[A-Z_]+\.[A-Z_]+$/;
 
@@ -143,6 +139,16 @@ describe('API-01 error envelope conformance', () => {
     //   VALIDATION.{SCHEMA|PARAMS} (it #4)
     //   AUTH.INSUFFICIENT_SCOPE (it #5)
     // Plus headers.test.ts adds RATE_LIMIT.EXCEEDED — phase-wide we hit ≥5.
-    expect(['AUTH.MISSING_TOKEN', 'AUTH.INVALID_TOKEN', 'AUTH.INSUFFICIENT_SCOPE', 'VALIDATION.SCHEMA', 'VALIDATION.PARAMS', 'JOB.NOT_FOUND', 'RATE_LIMIT.EXCEEDED'].length).toBeGreaterThanOrEqual(5);
+    expect(
+      [
+        'AUTH.MISSING_TOKEN',
+        'AUTH.INVALID_TOKEN',
+        'AUTH.INSUFFICIENT_SCOPE',
+        'VALIDATION.SCHEMA',
+        'VALIDATION.PARAMS',
+        'JOB.NOT_FOUND',
+        'RATE_LIMIT.EXCEEDED',
+      ].length,
+    ).toBeGreaterThanOrEqual(5);
   });
 });

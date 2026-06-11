@@ -41,7 +41,10 @@ export const apiKeyRotatedResponseSchema = z
     scopes: z.array(z.string()),
     expiresAt: z.string().nullable().openapi({ description: 'New key expiry (null = no expiry)' }),
     createdAt: z.string(),
-    supersedes: z.string().uuid().openapi({ description: 'Id of the old key this rotation replaced' }),
+    supersedes: z
+      .string()
+      .uuid()
+      .openapi({ description: 'Id of the old key this rotation replaced' }),
     supersededExpiresAt: z.string().openapi({
       description: 'When the old key stops validating (grace window end)',
     }),

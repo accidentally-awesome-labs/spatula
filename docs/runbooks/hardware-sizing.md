@@ -18,17 +18,17 @@ Self-hosters can re-run the harness on their own hardware and compare results.
 
 All baseline measurements were taken on:
 
-| Property       | Value                                                    |
-| -------------- | -------------------------------------------------------- |
-| **Provider**   | Hetzner Cloud                                            |
-| **Instance**   | CX32                                                     |
-| **vCPU**       | 4 vCPU (AMD EPYC, shared)                               |
-| **RAM**        | 8 GB DDR4                                                |
-| **Disk**       | 80 GB SSD NVMe                                           |
-| **Network**    | 20 Gbit/s (ingress unlimited, egress metered)            |
-| **OS**         | Ubuntu 24.04 LTS                                         |
-| **Cost**       | ~EUR 0.057/h on-demand (EUR ~41/month)                   |
-| **Region**     | Hetzner FSN1 (Falkenstein, Germany)                      |
+| Property     | Value                                         |
+| ------------ | --------------------------------------------- |
+| **Provider** | Hetzner Cloud                                 |
+| **Instance** | CX32                                          |
+| **vCPU**     | 4 vCPU (AMD EPYC, shared)                     |
+| **RAM**      | 8 GB DDR4                                     |
+| **Disk**     | 80 GB SSD NVMe                                |
+| **Network**  | 20 Gbit/s (ingress unlimited, egress metered) |
+| **OS**       | Ubuntu 24.04 LTS                              |
+| **Cost**     | ~EUR 0.057/h on-demand (EUR ~41/month)        |
+| **Region**   | Hetzner FSN1 (Falkenstein, Germany)           |
 
 **Why this VM?** The CX32 is a widely available, reproducible, budget cloud VM
 accessible to self-hosters globally. It represents a sensible minimum for a production
@@ -57,11 +57,11 @@ speed, network bandwidth to target sites, and model API latency from your region
 
 ### Model-per-tier
 
-| Tier    | Model                                   | Character                                |
-| ------- | --------------------------------------- | ---------------------------------------- |
-| fast    | `google/gemini-2.5-flash`               | Cheapest, highest throughput             |
-| primary | `anthropic/claude-sonnet-4-20250514`    | Balanced — production default            |
-| smart   | `anthropic/claude-opus-4-20250514`      | Highest quality, highest cost            |
+| Tier    | Model                                | Character                     |
+| ------- | ------------------------------------ | ----------------------------- |
+| fast    | `google/gemini-2.5-flash`            | Cheapest, highest throughput  |
+| primary | `anthropic/claude-sonnet-4-20250514` | Balanced — production default |
+| smart   | `anthropic/claude-opus-4-20250514`   | Highest quality, highest cost |
 
 Pricing is sourced from OpenRouter and may change. Re-run the harness after significant
 model price changes.
@@ -73,8 +73,8 @@ model price changes.
 > Fill this table by running `pnpm sizing:baseline` on the CX32 VM above and pasting
 > the per-tier rows from `scripts/.sizing-results.json`.
 
-| Tier    | Pages | Wall-clock          | Total LLM cost       | LLM cost/page        |
-| ------- | ----- | ------------------- | -------------------- | -------------------- |
+| Tier    | Pages | Wall-clock             | Total LLM cost         | LLM cost/page          |
+| ------- | ----- | ---------------------- | ---------------------- | ---------------------- |
 | fast    | 1000  | `<filled by live run>` | `<filled by live run>` | `<filled by live run>` |
 | primary | 1000  | `<filled by live run>` | `<filled by live run>` | `<filled by live run>` |
 | smart   | 1000  | `<filled by live run>` | `<filled by live run>` | `<filled by live run>` |
@@ -118,14 +118,14 @@ pnpm build
 
 ### Environment variables
 
-| Variable            | Required | Description                                              |
-| ------------------- | -------- | -------------------------------------------------------- |
-| `SPATULA_LIVE_LLM`  | yes      | Set to `1` to confirm real LLM spend (set by npm script) |
-| `OPENROUTER_API_KEY`| yes      | Your OpenRouter API key                                  |
-| `DATABASE_URL`      | yes      | Postgres connection string (e.g., `postgresql://...`)    |
-| `SIZING_PAGES`      | no       | Pages per tier (default: `1000`)                         |
-| `SIZING_SEED_URL`   | no       | Seed URL (default: `https://quotes.toscrape.com/`)       |
-| `SIZING_TENANT_ID`  | no       | Tenant ID for usage recording (default: `sizing-baseline-tenant`) |
+| Variable             | Required | Description                                                       |
+| -------------------- | -------- | ----------------------------------------------------------------- |
+| `SPATULA_LIVE_LLM`   | yes      | Set to `1` to confirm real LLM spend (set by npm script)          |
+| `OPENROUTER_API_KEY` | yes      | Your OpenRouter API key                                           |
+| `DATABASE_URL`       | yes      | Postgres connection string (e.g., `postgresql://...`)             |
+| `SIZING_PAGES`       | no       | Pages per tier (default: `1000`)                                  |
+| `SIZING_SEED_URL`    | no       | Seed URL (default: `https://quotes.toscrape.com/`)                |
+| `SIZING_TENANT_ID`   | no       | Tenant ID for usage recording (default: `sizing-baseline-tenant`) |
 
 ### Run
 
@@ -163,11 +163,11 @@ Crawl duration  = pages × (wall-clock/page for your tier) / concurrency_factor
 
 **Recommended minimum specs for production:**
 
-| Deployment scale | Recommended VM          | Notes                                      |
-| ---------------- | ----------------------- | ------------------------------------------ |
-| < 10k pages/day  | CX32 (4 vCPU / 8 GB)   | Single node, measured baseline above       |
-| 10k–100k/day     | CX42 (8 vCPU / 16 GB)  | Increase `concurrency` + add Redis replica |
-| > 100k/day       | Kubernetes + autoscale  | See `deploy/k8s/` — horizontal worker scale|
+| Deployment scale | Recommended VM         | Notes                                       |
+| ---------------- | ---------------------- | ------------------------------------------- |
+| < 10k pages/day  | CX32 (4 vCPU / 8 GB)   | Single node, measured baseline above        |
+| 10k–100k/day     | CX42 (8 vCPU / 16 GB)  | Increase `concurrency` + add Redis replica  |
+| > 100k/day       | Kubernetes + autoscale | See `deploy/k8s/` — horizontal worker scale |
 
 ---
 
@@ -187,5 +187,5 @@ Crawl duration  = pages × (wall-clock/page for your tier) / concurrency_factor
 
 ---
 
-*Runbook version: 1.0 — created Phase 19, Plan 09 (DEPLOY-09)*
-*Re-run harness: `pnpm sizing:baseline` — see `scripts/sizing-baseline.ts`*
+_Runbook version: 1.0 — created Phase 19, Plan 09 (DEPLOY-09)_
+_Re-run harness: `pnpm sizing:baseline` — see `scripts/sizing-baseline.ts`_

@@ -45,10 +45,24 @@ function createMockDeps(overrides: Partial<AppDeps> = {}): AppDeps {
       updateStatus: vi.fn(),
       updateStats: vi.fn(),
     },
-    schemaRepo: { findLatest: vi.fn().mockResolvedValue(null), findAllVersions: vi.fn().mockResolvedValue([]), findByVersion: vi.fn().mockResolvedValue(null) },
-    extractionRepo: { findByJob: vi.fn().mockResolvedValue([]), countByJob: vi.fn().mockResolvedValue(0) },
-    entityRepo: { findByJob: vi.fn().mockResolvedValue([]), findById: vi.fn().mockResolvedValue(null), countByJob: vi.fn().mockResolvedValue(0) },
-    entitySourceRepo: { findByEntity: vi.fn().mockResolvedValue([]), findByEntityWithUrls: vi.fn().mockResolvedValue([]) },
+    schemaRepo: {
+      findLatest: vi.fn().mockResolvedValue(null),
+      findAllVersions: vi.fn().mockResolvedValue([]),
+      findByVersion: vi.fn().mockResolvedValue(null),
+    },
+    extractionRepo: {
+      findByJob: vi.fn().mockResolvedValue([]),
+      countByJob: vi.fn().mockResolvedValue(0),
+    },
+    entityRepo: {
+      findByJob: vi.fn().mockResolvedValue([]),
+      findById: vi.fn().mockResolvedValue(null),
+      countByJob: vi.fn().mockResolvedValue(0),
+    },
+    entitySourceRepo: {
+      findByEntity: vi.fn().mockResolvedValue([]),
+      findByEntityWithUrls: vi.fn().mockResolvedValue([]),
+    },
     actionRepo: {
       findByJob: vi.fn().mockResolvedValue([]),
       findById: vi.fn().mockResolvedValue(null),
@@ -59,7 +73,12 @@ function createMockDeps(overrides: Partial<AppDeps> = {}): AppDeps {
       findByJobCursor: vi.fn().mockResolvedValue({ entities: [], nextCursor: null }),
     },
     taskRepo: {} as any,
-    exportRepo: { create: vi.fn(), findById: vi.fn().mockResolvedValue(null), findByJob: vi.fn().mockResolvedValue([]), updateStatus: vi.fn() },
+    exportRepo: {
+      create: vi.fn(),
+      findById: vi.fn().mockResolvedValue(null),
+      findByJob: vi.fn().mockResolvedValue([]),
+      updateStatus: vi.fn(),
+    },
     contentStore: { store: vi.fn(), retrieve: vi.fn(), delete: vi.fn() },
     exportQueue: { add: vi.fn() },
     jobManager: {
@@ -90,7 +109,7 @@ describe('GET /api/v1/jobs/:id/events', { timeout: 15_000 }, () => {
     const app = createApp(deps);
     const res = await app.request('/api/v1/openapi.json');
     expect(res.status).toBe(200);
-    const spec = await res.json() as any;
+    const spec = (await res.json()) as any;
     expect(spec.paths).toBeDefined();
     // The route is registered via createRoute with path '/jobs/{id}/events'
     // (relative to the /api/v1 server base). 17-07's isolation suite reads
@@ -108,7 +127,7 @@ describe('GET /api/v1/jobs/:id/events', { timeout: 15_000 }, () => {
   it('openapi spec declares text/event-stream content for 200 response', async () => {
     const app = createApp(deps);
     const res = await app.request('/api/v1/openapi.json');
-    const spec = await res.json() as any;
+    const spec = (await res.json()) as any;
     const responses = spec.paths['/api/v1/jobs/{id}/events'].get.responses;
     expect(responses['200'].content['text/event-stream']).toBeDefined();
   });
@@ -116,7 +135,7 @@ describe('GET /api/v1/jobs/:id/events', { timeout: 15_000 }, () => {
   it('openapi spec declares 401 and 404 error responses', async () => {
     const app = createApp(deps);
     const res = await app.request('/api/v1/openapi.json');
-    const spec = await res.json() as any;
+    const spec = (await res.json()) as any;
     const responses = spec.paths['/api/v1/jobs/{id}/events'].get.responses;
     expect(responses['401']).toBeDefined();
     expect(responses['404']).toBeDefined();
@@ -196,7 +215,7 @@ describe('GET /api/v1/jobs/:id/events', { timeout: 15_000 }, () => {
     const app = createApp(depsNotFound);
     const res = await app.request(`/api/v1/jobs/${JOB_ID}/events?token=${TOKEN}`);
     expect(res.status).toBe(404);
-    const body = await res.json() as any;
+    const body = (await res.json()) as any;
     expect(body.error).toBeDefined();
   });
 

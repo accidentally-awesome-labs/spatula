@@ -9,6 +9,7 @@
 Freeze the v1 REST contract rigorously enough that a web UI can be built against it blind, and ship the three semver-stable npm packages (`@spatula/cli`, `@spatula/client`, `@spatula/core-types`) plus five no-compat-guarantee internal packages (`@spatula/core`, `@spatula/db`, `@spatula/queue`, `@spatula/api`, `@spatula/shared`) with npm `--provenance` publishing wired end-to-end.
 
 **In scope:**
+
 - Error envelope sweep + frozen error-code enum (API-01)
 - Rate-limit response headers + `config/rate-limits.yaml` (API-02, API-03)
 - Cursor-first pagination canonicalization + `Deprecation`/`Sunset` headers on offset (API-04)
@@ -30,6 +31,7 @@ Freeze the v1 REST contract rigorously enough that a web UI can be built against
 **Pre-phase gate:** BLOCK-04 (npm `@spatula` org owned OR fallback scope chosen + documented). Gates only the release sub-plan (16-5).
 
 **Out of scope:**
+
 - SSE / browser auth / CORS (Phase 17)
 - Security hardening + legal (Phase 18)
 - Deployment runbooks (Phase 19)
@@ -94,6 +96,7 @@ None — `gsd-tools todo match-phase 16` returned zero matches.
 </decisions>
 
 <canonical_refs>
+
 ## Canonical References
 
 **Downstream agents MUST read these before planning or implementing.**
@@ -180,6 +183,7 @@ None — `gsd-tools todo match-phase 16` returned zero matches.
 </canonical_refs>
 
 <code_context>
+
 ## Existing Code Insights
 
 ### Reusable Assets
@@ -260,7 +264,7 @@ None — `gsd-tools todo match-phase 16` returned no matches; nothing to defer.
 
 ---
 
-*Phase: 16-api-contract-sdk-packages*
-*Context gathered: 2026-05-19*
+_Phase: 16-api-contract-sdk-packages_
+_Context gathered: 2026-05-19_
 </content>
 </invoke>

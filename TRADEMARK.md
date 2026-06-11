@@ -92,5 +92,5 @@ version is the one committed to the Spatula GitHub repository at
 
 ---
 
-*This policy is based on the Apache Software Foundation Trademark Policy model.*
-*Spatula is a trademark of Accidentally Awesome Labs.*
+_This policy is based on the Apache Software Foundation Trademark Policy model._
+_Spatula is a trademark of Accidentally Awesome Labs._

@@ -110,7 +110,9 @@ export function validateExamplesAtBoot(spec: any): { errors: string[] } {
       for (const [status, response] of Object.entries(responses)) {
         const json = (response as { content?: Record<string, unknown> }).content?.[
           'application/json'
-        ] as { schema?: unknown; examples?: Record<string, unknown>; example?: unknown } | undefined;
+        ] as
+          | { schema?: unknown; examples?: Record<string, unknown>; example?: unknown }
+          | undefined;
         if (!json?.schema) continue;
 
         let validate: (data: unknown) => boolean;

@@ -101,16 +101,16 @@ SELECT id FROM tenants WHERE id = '<tenantId>'::uuid;
 
 ### What gets deleted
 
-| Resource | What happens |
-|----------|-------------|
-| `jobs`, `crawl_tasks`, `raw_pages`, `extractions`, `entities`, `entity_sources` | Deleted |
-| `actions`, `source_trust`, `exports`, `schemas` | Deleted |
-| `api_keys`, `llm_usage`, `user_tenants` | Deleted |
-| `dead_letter_queue` rows for this tenant | Deleted |
-| Content-store blobs (`raw-pages/`, `exports/`, `forensic/`) | Deleted |
-| `audit_log` rows | PII redacted in place (`ip_address=NULL`, `metadata={}`, `actor_id='[deleted]'`, `tenant_id=NULL`) — rows NOT deleted (D-08) |
-| `audit_log` tombstone | Created: `tenant.deleted` row with `tenant_id=NULL`, `resource_id=<tenantId>` |
-| `tenants` row | Deleted (final step) |
+| Resource                                                                        | What happens                                                                                                                 |
+| ------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------- |
+| `jobs`, `crawl_tasks`, `raw_pages`, `extractions`, `entities`, `entity_sources` | Deleted                                                                                                                      |
+| `actions`, `source_trust`, `exports`, `schemas`                                 | Deleted                                                                                                                      |
+| `api_keys`, `llm_usage`, `user_tenants`                                         | Deleted                                                                                                                      |
+| `dead_letter_queue` rows for this tenant                                        | Deleted                                                                                                                      |
+| Content-store blobs (`raw-pages/`, `exports/`, `forensic/`)                     | Deleted                                                                                                                      |
+| `audit_log` rows                                                                | PII redacted in place (`ip_address=NULL`, `metadata={}`, `actor_id='[deleted]'`, `tenant_id=NULL`) — rows NOT deleted (D-08) |
+| `audit_log` tombstone                                                           | Created: `tenant.deleted` row with `tenant_id=NULL`, `resource_id=<tenantId>`                                                |
+| `tenants` row                                                                   | Deleted (final step)                                                                                                         |
 
 ### Timing
 
@@ -151,8 +151,21 @@ curl -H "Authorization: Bearer $SPATULA_API_KEY" \
 ### JSONL format
 
 Each line is a JSON object:
+
 ```json
-{"table": "api_keys", "rows": [{"id": "...", "tenantId": "...", "keyHash": "...", "keyPrefix": "...", "name": "...", "scopes": ["read"]}]}
+{
+  "table": "api_keys",
+  "rows": [
+    {
+      "id": "...",
+      "tenantId": "...",
+      "keyHash": "...",
+      "keyPrefix": "...",
+      "name": "...",
+      "scopes": ["read"]
+    }
+  ]
+}
 ```
 
 The file can be re-imported to a new Spatula tenant (see [3. Data import](#3-data-import-portability)).
@@ -162,6 +175,7 @@ The file can be re-imported to a new Spatula tenant (see [3. Data import](#3-dat
 Currently exported: `api_keys` (credential resources — the primary portable resource).
 
 Full extraction/entity data is available via the standard API:
+
 - `GET /api/v1/jobs` → list all jobs
 - `GET /api/v1/jobs/:id/extractions` → extraction results
 - `GET /api/v1/jobs/:id/export` → download a full data export
@@ -200,7 +214,7 @@ All imported rows have `tenantId` overridden to `$TARGET_TENANT_ID` — the dump
 Import is idempotent. Running the same dump twice produces the same result (duplicate keys are skipped). The response includes per-table insert counts:
 
 ```json
-{"imported": {"api_keys": 3}}
+{ "imported": { "api_keys": 3 } }
 ```
 
 A second import of the same dump returns `{"imported": {"api_keys": 0}}`.
@@ -254,14 +268,14 @@ Audit log entries cannot be modified (append-only by design). This is intentiona
 
 Under GDPR, DSR requests must be responded to within 30 days (extendable to 90 days for complex requests).
 
-| Day | Action |
-|-----|--------|
-| 0 | Receive DSR request. Log request ID, tenant ID, request type, timestamp. |
-| 1 | Verify requester identity (confirm they are the tenant data controller). |
-| 3 | Export backup if needed. Begin deletion/export/rectification procedure. |
-| 5 | Verify completion (run database verification queries). |
-| 7 | Respond to requester with confirmation + tombstone ID (for erasure requests). |
-| 30 | Hard deadline for response (GDPR Art. 12(3)). |
+| Day | Action                                                                        |
+| --- | ----------------------------------------------------------------------------- |
+| 0   | Receive DSR request. Log request ID, tenant ID, request type, timestamp.      |
+| 1   | Verify requester identity (confirm they are the tenant data controller).      |
+| 3   | Export backup if needed. Begin deletion/export/rectification procedure.       |
+| 5   | Verify completion (run database verification queries).                        |
+| 7   | Respond to requester with confirmation + tombstone ID (for erasure requests). |
+| 30  | Hard deadline for response (GDPR Art. 12(3)).                                 |
 
 ---
 

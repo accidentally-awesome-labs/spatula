@@ -115,31 +115,31 @@ Each task was committed atomically (per-task envelope-shape regression is detect
 
 ## Final ErrorCode Enum (25 codes, 14 domains)
 
-| Domain         | Codes                                                            |
-| -------------- | ---------------------------------------------------------------- |
-| JOB            | NOT_FOUND, CONFLICT, INVALID_STATE                               |
-| EXTRACTION     | QUOTA_EXCEEDED, FAILED                                           |
-| SCHEMA         | NOT_FOUND, VERSION_CONFLICT                                      |
-| ENTITY         | NOT_FOUND                                                        |
-| EXPORT         | NOT_FOUND, FAILED                                                |
-| AUTH           | INVALID_TOKEN, MISSING_TOKEN, INSUFFICIENT_SCOPE                 |
-| TENANT         | NOT_FOUND                                                        |
-| RATE_LIMIT     | EXCEEDED                                                         |
-| QUOTA          | EXCEEDED                                                         |
-| VERSION        | MISMATCH (→ 426 Upgrade Required)                                |
-| VALIDATION     | SCHEMA, PARAMS                                                   |
-| IDEMPOTENCY    | KEY_CONFLICT                                                     |
-| WEBHOOK        | SIGNATURE_INVALID                                                |
-| INTERNAL       | ERROR, TIMEOUT, QUEUE, NETWORK                                   |
+| Domain      | Codes                                            |
+| ----------- | ------------------------------------------------ |
+| JOB         | NOT_FOUND, CONFLICT, INVALID_STATE               |
+| EXTRACTION  | QUOTA_EXCEEDED, FAILED                           |
+| SCHEMA      | NOT_FOUND, VERSION_CONFLICT                      |
+| ENTITY      | NOT_FOUND                                        |
+| EXPORT      | NOT_FOUND, FAILED                                |
+| AUTH        | INVALID_TOKEN, MISSING_TOKEN, INSUFFICIENT_SCOPE |
+| TENANT      | NOT_FOUND                                        |
+| RATE_LIMIT  | EXCEEDED                                         |
+| QUOTA       | EXCEEDED                                         |
+| VERSION     | MISMATCH (→ 426 Upgrade Required)                |
+| VALIDATION  | SCHEMA, PARAMS                                   |
+| IDEMPOTENCY | KEY_CONFLICT                                     |
+| WEBHOOK     | SIGNATURE_INVALID                                |
+| INTERNAL    | ERROR, TIMEOUT, QUEUE, NETWORK                   |
 
 **Excluded codes (deliberately deferred):** No `DLQ.NOT_FOUND` (admin-only resource, mapped to JOB.NOT_FOUND with `resource` discriminator). No `CRAWL.*` (worker-side error, never crosses the API envelope). No `LLM.*` (internal failure modes — `INTERNAL.NETWORK` covers user-visible cases). All deferrals leave room for `additive-only in 1.x` expansion without breaking the frozen enum.
 
 ## Routes Emitting `Deprecation` Headers (offset-mode paths)
 
-- `GET /api/v1/jobs/:jobId/entities?offset=…`           (entities.ts)
-- `GET /api/v1/jobs/:jobId/extractions?offset=…`        (extractions.ts)
-- `GET /api/v1/jobs/:jobId/exports?offset=…`            (exports.ts)
-- `GET /api/v1/jobs?offset=…`                           (jobs.ts — offset-only listing, always emits)
+- `GET /api/v1/jobs/:jobId/entities?offset=…` (entities.ts)
+- `GET /api/v1/jobs/:jobId/extractions?offset=…` (extractions.ts)
+- `GET /api/v1/jobs/:jobId/exports?offset=…` (exports.ts)
+- `GET /api/v1/jobs?offset=…` (jobs.ts — offset-only listing, always emits)
 
 Cursor-mode requests (with `?cursor=…` or `?since=…`) do NOT receive deprecation headers — they hit the canonical envelope path.
 
@@ -161,18 +161,18 @@ This avoids expanding the frozen enum mid-sweep (`DLQ.NOT_FOUND`, `API_KEY.NOT_F
 
 The following legacy subclasses are now `@deprecated` and have direct DOMAIN.CODE replacements:
 
-| Legacy                | Replacement                              | Notes                                              |
-| --------------------- | ---------------------------------------- | -------------------------------------------------- |
-| `ValidationError`     | `ValidationSchemaError` / `ValidationParamsError` | Body vs. query/param distinction now explicit       |
-| `NotFoundError`       | `JobNotFoundError` / `EntityNotFoundError` / etc. | Plus auto-route by resource in error-handler shim   |
-| `ConflictError`       | `JobConflictError`                       | Extends new class, message preserved                |
-| `ForbiddenError`      | `AuthInsufficientScopeError`             | Adds `requiredScope` context                        |
-| `AuthError`           | `AuthInvalidTokenError` / `AuthMissingTokenError` | Token-presence distinction now explicit             |
-| `QueueError`          | `InternalQueueError`                     | 503 mapping preserved                               |
-| `TimeoutError`        | `InternalTimeoutError`                   | 504 mapping preserved                               |
-| `RateLimitError`      | `RateLimitExceededError`                 | Plus `limit` + `resetAt` context support            |
-| `NetworkError`        | `InternalNetworkError`                   | 502 mapping preserved                               |
-| `StateError`          | `JobInvalidStateError`                   | 409 mapping preserved                               |
+| Legacy            | Replacement                                       | Notes                                             |
+| ----------------- | ------------------------------------------------- | ------------------------------------------------- |
+| `ValidationError` | `ValidationSchemaError` / `ValidationParamsError` | Body vs. query/param distinction now explicit     |
+| `NotFoundError`   | `JobNotFoundError` / `EntityNotFoundError` / etc. | Plus auto-route by resource in error-handler shim |
+| `ConflictError`   | `JobConflictError`                                | Extends new class, message preserved              |
+| `ForbiddenError`  | `AuthInsufficientScopeError`                      | Adds `requiredScope` context                      |
+| `AuthError`       | `AuthInvalidTokenError` / `AuthMissingTokenError` | Token-presence distinction now explicit           |
+| `QueueError`      | `InternalQueueError`                              | 503 mapping preserved                             |
+| `TimeoutError`    | `InternalTimeoutError`                            | 504 mapping preserved                             |
+| `RateLimitError`  | `RateLimitExceededError`                          | Plus `limit` + `resetAt` context support          |
+| `NetworkError`    | `InternalNetworkError`                            | 502 mapping preserved                             |
+| `StateError`      | `JobInvalidStateError`                            | 409 mapping preserved                             |
 
 `CrawlError`, `ExtractionError`, `LLMError`, `ConfigError`, `StorageError` were NOT marked deprecated — they remain in active use by `@spatula/core` and `@spatula/queue` workers (server-internal, never crosses the API envelope).
 
@@ -197,6 +197,7 @@ See `key-decisions` in the frontmatter — extracted to STATE.md.
 ### Auto-fixed Issues
 
 **1. [Rule 1 - Bug] Pre-existing `QuotaExceededError` collided with new export**
+
 - **Found during:** Task 1 (writing new typed subclasses)
 - **Issue:** `packages/shared/src/auth/quotas.ts` already exported `QuotaExceededError` extending `SpatulaError` with the legacy `'QUOTA_EXCEEDED'` flat code. My new `errors.ts` `QuotaExceededError` collided.
 - **Fix:** Updated the existing class in `auth/quotas.ts` to use `ErrorCode.QUOTA_EXCEEDED` ('QUOTA.EXCEEDED'); removed the duplicate from `errors.ts`. Updated `packages/queue/src/job-manager.ts` runtime guard to accept both new ('QUOTA.EXCEEDED') and legacy ('QUOTA_EXCEEDED') values for defensive backward-compat during the sweep.
@@ -205,6 +206,7 @@ See `key-decisions` in the frontmatter — extracted to STATE.md.
 - **Committed in:** `9a7f86e` (Task 1)
 
 **2. [Rule 3 - Blocking] `NOT_CONFIGURED` 503 semantic preserved via `InternalQueueError` (not `InternalError`)**
+
 - **Found during:** Task 2 (admin-tenants test regression)
 - **Issue:** Original `admin-tenants.ts` returned `503 { code: 'NOT_CONFIGURED' }`. Migrating to `InternalError` (which is 500 per STATUS_MAP) regressed the status to 500. Tests caught this.
 - **Fix:** Used `InternalQueueError` (503) for "not configured" capability errors instead, preserving the 503 service-unavailable semantic. Updated admin-tenants tests to assert `'INTERNAL.QUEUE'`.
@@ -213,6 +215,7 @@ See `key-decisions` in the frontmatter — extracted to STATE.md.
 - **Committed in:** `e3c3ae9` (Task 2)
 
 **3. [Rule 3 - Blocking] Hono `c.req.routePath` returns middleware's own path, not matched handler**
+
 - **Found during:** Task 3 (rate-limit per-route lookup test)
 - **Issue:** Plan suggested `c.req.routePath ?? c.req.path`, but inside an `app.use('*', ...)` middleware, `c.req.routePath` returns `'/*'` (the middleware's own registration path), not the eventual handler's path. Per-route rate-limit key would always be `GET /*` → always falls back to default.
 - **Fix:** Added `resolveMatchedRoutePath(c)` helper that walks `c.req.matchedRoutes` and returns the last non-wildcard entry (the matched handler's path).
@@ -221,6 +224,7 @@ See `key-decisions` in the frontmatter — extracted to STATE.md.
 - **Committed in:** `c46795e` (Task 3)
 
 **4. [Rule 3 - Blocking] Rate-limit YAML loader needs parent-walk for monorepo sub-package tests**
+
 - **Found during:** Task 3 (admin-system tests failing post-rate-limit-config wiring)
 - **Issue:** Default path `./config/rate-limits.yaml` resolves to `apps/api/config/rate-limits.yaml` when vitest runs from `apps/api/` cwd — but the config lives at repo-root `config/rate-limits.yaml`. 9 tests failed because the app couldn't boot.
 - **Fix:** Added `resolveConfigPath()` that (1) honors `SPATULA_RATE_LIMITS_PATH`, then (2) checks `./config/rate-limits.yaml` from cwd, then (3) walks up parents until it finds `config/rate-limits.yaml`. Production deploys can still use the explicit env-var override.
@@ -229,6 +233,7 @@ See `key-decisions` in the frontmatter — extracted to STATE.md.
 - **Committed in:** `c46795e` (Task 3)
 
 **5. [Rule 3 - Blocking] `app.ts` had an inline `FORBIDDEN` literal not in plan's file list**
+
 - **Found during:** Task 2 (grep-gate evidence collection)
 - **Issue:** `apps/api/src/app.ts:134` had `code: 'FORBIDDEN'` for the tenant-creation-secret check — not in the plan's `files_modified` list. Grep gate would fail without migrating it.
 - **Fix:** Updated to emit `AUTH.INSUFFICIENT_SCOPE` directly (kept inline because the response is constructed before any middleware that surfaces DI-injected error subclasses).
@@ -257,13 +262,15 @@ None — no new environment variables required at v1.0 launch. `SPATULA_RATE_LIM
 - **No blockers** for plan 16-2 to start in parallel.
 
 ---
-*Phase: 16-api-contract-sdk-packages*
-*Plan: 1*
-*Completed: 2026-05-19*
+
+_Phase: 16-api-contract-sdk-packages_
+_Plan: 1_
+_Completed: 2026-05-19_
 
 ## Self-Check: PASSED
 
 All 8 created files exist on disk; all 4 task commits present in `git log`. Verification gate green:
+
 - shared: 81/81 tests pass
 - api: 374/374 tests pass (build green)
 - queue: 141/141 tests pass

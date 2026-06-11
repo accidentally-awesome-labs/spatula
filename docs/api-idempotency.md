@@ -8,14 +8,14 @@ Networks lose responses. Without idempotency keys, a retry of a successful `POST
 
 ## Scope
 
-| Method     | Idempotency-Key honored? |
-| ---------- | ------------------------ |
-| `GET`      | n/a — inherently idempotent |
-| `HEAD`     | n/a — inherently idempotent |
-| `POST`     | yes                      |
-| `PATCH`    | yes                      |
-| `DELETE`   | not honored at v1.0 (DELETE is inherently idempotent per HTTP semantics) |
-| `PUT`      | not used in v1 surface   |
+| Method   | Idempotency-Key honored?                                                 |
+| -------- | ------------------------------------------------------------------------ |
+| `GET`    | n/a — inherently idempotent                                              |
+| `HEAD`   | n/a — inherently idempotent                                              |
+| `POST`   | yes                                                                      |
+| `PATCH`  | yes                                                                      |
+| `DELETE` | not honored at v1.0 (DELETE is inherently idempotent per HTTP semantics) |
+| `PUT`    | not used in v1 surface                                                   |
 
 ## How it works
 
@@ -97,7 +97,10 @@ The `@spatula/client` SDK accepts `idempotencyKey` as an option on every mutatin
 ```typescript
 import { SpatulaClient } from '@spatula/client';
 
-const client = new SpatulaClient({ baseUrl: 'https://api.spatula.dev', apiKey: process.env.SPATULA_API_KEY });
+const client = new SpatulaClient({
+  baseUrl: 'https://api.spatula.dev',
+  apiKey: process.env.SPATULA_API_KEY,
+});
 
 const job = await client.createJob(
   { name: 'crawl-1', seedUrls: ['https://example.com'] },
@@ -124,12 +127,12 @@ const idempotencyKey = randomUUID();
 
 ## Failure modes
 
-| Server behavior              | Client should…                                                |
-| ---------------------------- | ------------------------------------------------------------- |
-| Key length > 255 bytes       | `400 VALIDATION.PARAMS` — fix the key                         |
-| Redis unavailable            | Request is processed normally (idempotency is best-effort)    |
+| Server behavior                | Client should…                                               |
+| ------------------------------ | ------------------------------------------------------------ |
+| Key length > 255 bytes         | `400 VALIDATION.PARAMS` — fix the key                        |
+| Redis unavailable              | Request is processed normally (idempotency is best-effort)   |
 | `409 IDEMPOTENCY.KEY_CONFLICT` | Stop retrying; the prior request and the current one diverge |
-| `2xx` cached replay          | Treat as the original response — same id, same side effects   |
+| `2xx` cached replay            | Treat as the original response — same id, same side effects  |
 
 ## Cross-references
 

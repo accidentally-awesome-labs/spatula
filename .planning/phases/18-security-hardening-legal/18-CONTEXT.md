@@ -43,8 +43,7 @@ hardening (HSTS/CSP) is NOT in scope — see Deferred Ideas.
 ### Adversarial Fixture Suite CI
 
 - **D-04:** Cadence — the live-LLM adversarial suite runs on **PRs touching
-  `packages/core/src/extraction/**` or `pinned-models.ts`** (or carrying a `live-llm`
-  label), **plus a daily cron**. Not on every push. Reuses Phase 16's `SPATULA_LIVE_LLM`
+  `packages/core/src/extraction/**`or`pinned-models.ts`** (or carrying a `live-llm`label), **plus a daily cron**. Not on every push. Reuses Phase 16's`SPATULA_LIVE_LLM`
   env split so contributor-fork CI passes without an OpenRouter key.
 - **D-05:** Ollama lane — CI auto-runs only the **OpenRouter pin**
   (`anthropic/claude-3-5-sonnet-20240620`). The Ollama pin
@@ -58,7 +57,7 @@ hardening (HSTS/CSP) is NOT in scope — see Deferred Ideas.
 
 - **D-07:** Deletion is **async**. `DELETE /api/v1/admin/tenants/:id` enqueues a
   deletion job and returns `202` + a status reference. `spatula admin tenant delete
-  --tenant <id>` polls to completion.
+--tenant <id>` polls to completion.
 - **D-08:** Audit log after deletion — the tenant's prior audit rows are **redacted in
   place** (PII scrubbed); **one un-redacted deletion record (tombstone)** is kept
   proving when and by whom the deletion ran. Audit rows are NOT deleted.
@@ -95,11 +94,13 @@ hardening (HSTS/CSP) is NOT in scope — see Deferred Ideas.
 </decisions>
 
 <canonical_refs>
+
 ## Canonical References
 
 **Downstream agents MUST read these before planning or implementing.**
 
 ### Security spec
+
 - `docs/superpowers/specs/2026-04-20-wave-6-phase-14-public-launch-design.md` §3.7 —
   Prompt-injection defense: threat model (§3.7.1), 10 defense-in-depth mitigations
   (§3.7.2), forensic provenance (§3.7.3), v1 limits (§3.7.4), docs (§3.7.5).
@@ -113,17 +114,20 @@ hardening (HSTS/CSP) is NOT in scope — see Deferred Ideas.
 - ↑ same spec §3.3.11 — experimental-tag policy (governs the forensic endpoint surface).
 
 ### Legal spec
+
 - ↑ same spec §3.9 — LICENSE line + interim fallback, TRADEMARK.md policy,
   `brand/LICENSE-BRAND.md`, THIRD_PARTY_NOTICES tool pin, CLA, README disclaimer,
   User-Agent.
 
 ### Requirements & roadmap
+
 - `.planning/REQUIREMENTS.md` SEC-01..SEC-12 — security acceptance criteria.
 - `.planning/REQUIREMENTS.md` LEGAL-01..LEGAL-08 — legal acceptance criteria.
 - `.planning/REQUIREMENTS.md` BLOCK-02 / BLOCK-06 / BLOCK-09 — pre-phase gates.
 - `.planning/ROADMAP.md` "### Phase 18" — goal, 6 success criteria, pre-phase gates.
 
 ### Prior phase context
+
 - `.planning/phases/16-api-contract-sdk-packages/16-CONTEXT.md` — frozen error envelope
   (security/DSR errors use it), experimental-tag policy + `client.experimental.*` Proxy
   (forensic endpoint's home).
@@ -131,6 +135,7 @@ hardening (HSTS/CSP) is NOT in scope — see Deferred Ideas.
   `admin:forensic:read` joins the CI-gated scope table in `docs/api-auth.md`.
 
 ### Docs authored/edited this phase
+
 - `docs/security-model.md` — full threat model + mitigations matrix (SEC-07) — **new**.
 - `docs/privacy.md` — zero-telemetry boundary + self-host controller obligations
   (SEC-08) — **new**.
@@ -140,9 +145,11 @@ hardening (HSTS/CSP) is NOT in scope — see Deferred Ideas.
 </canonical_refs>
 
 <code_context>
+
 ## Existing Code Insights
 
 ### Reusable Assets
+
 - `packages/shared/src/logger.ts` — pino logger factory; **currently zero redaction**.
   The D-11/D-12 shared redactor plugs in here as pino `redact` config + serializer.
 - `packages/shared/src/auth/audit-logger.ts` — existing audit-log writer; the D-08 DSR
@@ -162,16 +169,18 @@ hardening (HSTS/CSP) is NOT in scope — see Deferred Ideas.
   `.github/HISTORICAL_CONTRIBUTORS.md`.
 
 ### Established Patterns
+
 - Phase 16 `SPATULA_LIVE_LLM` env gate + `it.skipIf(LIVE)` — the adversarial suite
   reuses this so contributor-fork CI passes without an OpenRouter key.
 - Phase 16 experimental surface — `client.experimental` Proxy + `x-spatula-experimental:
-  true` OpenAPI tag — the forensic endpoint is the sole v1 experimental and slots in.
+true` OpenAPI tag — the forensic endpoint is the sole v1 experimental and slots in.
 - Tenant-scoped everything — every table/query carries `tenant_id`; the DSR cascade
   walks these scopes.
 - Frozen error envelope `{ error: { code, message, requestId, details? } }` (Phase 16)
   — security/DSR errors use it; error codes from `@spatula/core-types`.
 
 ### Integration Points
+
 - New routes: `DELETE /api/v1/admin/tenants/:id`,
   `GET /api/v1/admin/forensic/extractions`, tenant import route — admin router in
   `apps/api/src`.
@@ -219,5 +228,5 @@ already-scoped requirements.
 
 ---
 
-*Phase: 18-security-hardening-legal*
-*Context gathered: 2026-05-20*
+_Phase: 18-security-hardening-legal_
+_Context gathered: 2026-05-20_

@@ -207,8 +207,7 @@ export async function startWorker(_opts?: { deps?: WorkerDeps }): Promise<Worker
       QUEUE_NAMES.TENANT_DELETE,
       async (job) => {
         if (!deps) throw new Error('WorkerDeps not initialized');
-        const tenantDataRepo =
-          (deps as any).tenantDataRepo ?? new TenantDataRepository(db);
+        const tenantDataRepo = (deps as any).tenantDataRepo ?? new TenantDataRepository(db);
         await processTenantDeleteJob(job.data, {
           tenantDataRepo,
           contentStore: deps.contentStore,

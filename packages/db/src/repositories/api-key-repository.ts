@@ -163,10 +163,9 @@ export class ApiKeyRepository {
 
         // 3. Guard: already revoked
         if (orig.revokedAt) {
-          throw new StorageError(
-            `API key ${keyId} is already revoked and cannot be rotated`,
-            { context: { keyId } },
-          );
+          throw new StorageError(`API key ${keyId} is already revoked and cannot be rotated`, {
+            context: { keyId },
+          });
         }
 
         // 4. Compute grace window expiry

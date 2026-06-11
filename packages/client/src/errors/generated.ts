@@ -239,7 +239,10 @@ export const ERROR_CLASS_BY_CODE: Record<string, typeof SpatulaApiError> = {
   'INTERNAL.NETWORK': InternalNetworkError,
 };
 
-export function decodeError(envelope: { code: string; message: string; requestId: string; details?: Record<string, unknown> }, status: number): SpatulaApiError {
+export function decodeError(
+  envelope: { code: string; message: string; requestId: string; details?: Record<string, unknown> },
+  status: number,
+): SpatulaApiError {
   const Ctor = ERROR_CLASS_BY_CODE[envelope.code] ?? SpatulaApiError;
   return new Ctor({ ...envelope, status });
 }

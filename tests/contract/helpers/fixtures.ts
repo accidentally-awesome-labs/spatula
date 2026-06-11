@@ -10,11 +10,7 @@
  * Sole consumer: tests/contract/**.test.ts. Not exported beyond the suite.
  */
 
-import {
-  seedTenantAndKey,
-  type ContractServer,
-  type SeededIdentity,
-} from './server-harness.js';
+import { seedTenantAndKey, type ContractServer, type SeededIdentity } from './server-harness.js';
 
 export interface ContractFixtures extends SeededIdentity {
   /** Sentinel UUIDv4 for synthetic NOT_FOUND assertions. */
@@ -34,9 +30,7 @@ export interface ContractFixtures extends SeededIdentity {
  *
  * @param server The handle returned by `startServer()`.
  */
-export async function seedFixtures(
-  server: ContractServer,
-): Promise<ContractFixtures> {
+export async function seedFixtures(server: ContractServer): Promise<ContractFixtures> {
   const identity = await seedTenantAndKey(server, 'contract-suite-tenant');
 
   const bogusUuid = '00000000-0000-0000-0000-000000000000';
@@ -80,11 +74,7 @@ export async function seedFixtures(
  * sentinel so the URL is at least well-formed (the matrix driver treats the
  * resulting 404 as a clean miss, not a shape violation).
  */
-export function resolvePath(
-  baseUrl: string,
-  path: string,
-  fx: ContractFixtures,
-): string {
+export function resolvePath(baseUrl: string, path: string, fx: ContractFixtures): string {
   // Support both {param} (OpenAPI) and :param (Hono) styles.
   const resolved = path
     .replace('{jobId}', fx.jobId || fx.bogusUuid)

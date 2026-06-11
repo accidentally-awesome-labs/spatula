@@ -11,12 +11,12 @@ A small, frozen-at-v1 wire contract is the single most valuable thing the Spatul
 
 ## Compat matrix
 
-| Component | Compat rule |
-| --- | --- |
-| `@spatula/core-types` | **Frozen at v1**; additive-only in 1.x. Removing or renaming an export is a major break. |
-| `@spatula/client` | **Exact-peer-dep on `@spatula/core-types` major** (lockstep via release-please `linked-versions`). The two packages publish together at the same major. |
-| `@spatula/api` (server) | **REST contract frozen at v1.** Server supports the previous SDK major for **12 months** post-major-cut. Path versioning (`/api/v1/*`) is the URL contract. |
-| `@spatula/cli` | Independent semver. Bundles `@spatula/client` at the matching major. May ship breaking flag changes between majors with a deprecation cycle. |
+| Component                                   | Compat rule                                                                                                                                                                                                                                                                                                     |
+| ------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `@spatula/core-types`                       | **Frozen at v1**; additive-only in 1.x. Removing or renaming an export is a major break.                                                                                                                                                                                                                        |
+| `@spatula/client`                           | **Exact-peer-dep on `@spatula/core-types` major** (lockstep via release-please `linked-versions`). The two packages publish together at the same major.                                                                                                                                                         |
+| `@spatula/api` (server)                     | **REST contract frozen at v1.** Server supports the previous SDK major for **12 months** post-major-cut. Path versioning (`/api/v1/*`) is the URL contract.                                                                                                                                                     |
+| `@spatula/cli`                              | Independent semver. Bundles `@spatula/client` at the matching major. May ship breaking flag changes between majors with a deprecation cycle.                                                                                                                                                                    |
 | `@spatula/core` / `db` / `queue` / `shared` | **No TS-API compat guarantee** (per `docs/private-contract.md`). Subject to silent breaking changes between minor versions. Imports from these are the consumer's risk; the SaaS-style downstream `spatula-saas` repo is the only sanctioned consumer and pins exact minor versions via its own contract tests. |
 
 ## Major-compat-within-major
@@ -82,4 +82,4 @@ See `docs/deprecation-policy.md`. v1.0 ships ZERO experimental surfaces. First e
 
 ---
 
-*Last reviewed: 2026-05-19 (Phase 16, plan 16-3).*
+_Last reviewed: 2026-05-19 (Phase 16, plan 16-3)._

@@ -35,8 +35,7 @@ export function adminWorkerRoutes() {
   // @ts-expect-error — OpenAPI handler return type narrowing
   router.openapi(listWorkersRoute, async (c) => {
     const deps = c.get('deps');
-    if (!deps.redis)
-      throw new InternalError('Redis not configured for worker health monitoring');
+    if (!deps.redis) throw new InternalError('Redis not configured for worker health monitoring');
 
     const workers: Array<Record<string, unknown>> = [];
     let cursor = '0';

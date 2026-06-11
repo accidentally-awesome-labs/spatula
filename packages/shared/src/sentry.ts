@@ -24,7 +24,9 @@ export function initSentry(config?: SentryConfig): void {
       config?.tracesSampleRate ?? parseFloat(process.env.SENTRY_TRACES_SAMPLE_RATE ?? '0.1'),
     beforeSend(event) {
       // Route through shared redactor — scrubs exception values, message, extra, contexts
-      return redactSentryEvent(event as unknown as Record<string, unknown>) as unknown as typeof event;
+      return redactSentryEvent(
+        event as unknown as Record<string, unknown>,
+      ) as unknown as typeof event;
     },
     beforeSendSpan(span) {
       // Scrub span.data string values before sending

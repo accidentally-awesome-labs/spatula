@@ -62,7 +62,6 @@ function makeMockClient(responses: LLMCompletionResponse[]): LLMClient {
 // ---- Tests ----
 
 describe('StaticExtractor — security mitigations', () => {
-
   describe('Mitigation 2: hardened system prompt', () => {
     it('sends a message with role=system containing CRITICAL SECURITY RULES', async () => {
       const validResp = makeLLMResponse(makeValidResponse({ title: 'Widget', price: '$10' }));
@@ -132,7 +131,12 @@ describe('StaticExtractor — security mitigations', () => {
       const client = makeMockClient([invalidResp, validResp]);
       const extractor = new StaticExtractor(client, DEFAULT_CONFIG, 'job-5');
 
-      const result = await extractor.extract(SIMPLE_HTML, SIMPLE_URL, DEFAULT_SCHEMA, JOB_DESCRIPTION);
+      const result = await extractor.extract(
+        SIMPLE_HTML,
+        SIMPLE_URL,
+        DEFAULT_SCHEMA,
+        JOB_DESCRIPTION,
+      );
 
       const calls = (client.complete as ReturnType<typeof vi.fn>).mock.calls;
       expect(calls).toHaveLength(2);
@@ -158,7 +162,12 @@ describe('StaticExtractor — security mitigations', () => {
       const client = makeMockClient([invalidResp, invalidResp]);
       const extractor = new StaticExtractor(client, DEFAULT_CONFIG, 'job-7');
 
-      const result = await extractor.extract(SIMPLE_HTML, SIMPLE_URL, DEFAULT_SCHEMA, JOB_DESCRIPTION);
+      const result = await extractor.extract(
+        SIMPLE_HTML,
+        SIMPLE_URL,
+        DEFAULT_SCHEMA,
+        JOB_DESCRIPTION,
+      );
 
       const calls = (client.complete as ReturnType<typeof vi.fn>).mock.calls;
       expect(calls).toHaveLength(2); // never 3
@@ -173,13 +182,18 @@ describe('StaticExtractor — security mitigations', () => {
         title: 'Widget',
         price: '$10',
         admin_secret: 'hacked', // not in schema
-        injection_field: 'evil',  // not in schema
+        injection_field: 'evil', // not in schema
       };
       const validResp = makeLLMResponse(makeValidResponse(dataWithExtra));
       const client = makeMockClient([validResp]);
       const extractor = new StaticExtractor(client, DEFAULT_CONFIG, 'job-8');
 
-      const result = await extractor.extract(SIMPLE_HTML, SIMPLE_URL, DEFAULT_SCHEMA, JOB_DESCRIPTION);
+      const result = await extractor.extract(
+        SIMPLE_HTML,
+        SIMPLE_URL,
+        DEFAULT_SCHEMA,
+        JOB_DESCRIPTION,
+      );
 
       expect(result.data).toEqual({ title: 'Widget', price: '$10' });
       expect(result.data).not.toHaveProperty('admin_secret');
@@ -192,7 +206,12 @@ describe('StaticExtractor — security mitigations', () => {
       const client = makeMockClient([validResp]);
       const extractor = new StaticExtractor(client, DEFAULT_CONFIG, 'job-9');
 
-      const result = await extractor.extract(SIMPLE_HTML, SIMPLE_URL, DEFAULT_SCHEMA, JOB_DESCRIPTION);
+      const result = await extractor.extract(
+        SIMPLE_HTML,
+        SIMPLE_URL,
+        DEFAULT_SCHEMA,
+        JOB_DESCRIPTION,
+      );
 
       expect(result.data).toHaveProperty('title', 'Widget');
     });
@@ -205,7 +224,12 @@ describe('StaticExtractor — security mitigations', () => {
       const client = makeMockClient([validResp]);
       const extractor = new StaticExtractor(client, DEFAULT_CONFIG, 'job-10');
 
-      const result = await extractor.extract(SIMPLE_HTML, SIMPLE_URL, DEFAULT_SCHEMA, JOB_DESCRIPTION);
+      const result = await extractor.extract(
+        SIMPLE_HTML,
+        SIMPLE_URL,
+        DEFAULT_SCHEMA,
+        JOB_DESCRIPTION,
+      );
 
       expect(typeof result.data.title).toBe('string');
       expect((result.data.title as string).length).toBe(2000);
@@ -214,10 +238,18 @@ describe('StaticExtractor — security mitigations', () => {
     it('caps string values to field.maxLength when specified', async () => {
       const schema = makeSchema([
         { name: 'title', type: 'string', description: 'title', required: true },
-        { name: 'description', type: 'string', description: 'desc', required: false, maxLength: 500 },
+        {
+          name: 'description',
+          type: 'string',
+          description: 'desc',
+          required: false,
+          maxLength: 500,
+        },
       ]);
       const longValue = 'B'.repeat(1000);
-      const validResp = makeLLMResponse(makeValidResponse({ title: 'Widget', description: longValue }));
+      const validResp = makeLLMResponse(
+        makeValidResponse({ title: 'Widget', description: longValue }),
+      );
       const client = makeMockClient([validResp]);
       const extractor = new StaticExtractor(client, DEFAULT_CONFIG, 'job-11');
 
@@ -232,7 +264,12 @@ describe('StaticExtractor — security mitigations', () => {
       const client = makeMockClient([validResp]);
       const extractor = new StaticExtractor(client, DEFAULT_CONFIG, 'job-12');
 
-      const result = await extractor.extract(SIMPLE_HTML, SIMPLE_URL, DEFAULT_SCHEMA, JOB_DESCRIPTION);
+      const result = await extractor.extract(
+        SIMPLE_HTML,
+        SIMPLE_URL,
+        DEFAULT_SCHEMA,
+        JOB_DESCRIPTION,
+      );
 
       expect(result.data.title).toBe('Widget Pro');
     });
@@ -244,7 +281,12 @@ describe('StaticExtractor — security mitigations', () => {
       const client = makeMockClient([validResp]);
       const extractor = new StaticExtractor(client, DEFAULT_CONFIG, 'job-13');
 
-      const result = await extractor.extract(SIMPLE_HTML, SIMPLE_URL, DEFAULT_SCHEMA, JOB_DESCRIPTION);
+      const result = await extractor.extract(
+        SIMPLE_HTML,
+        SIMPLE_URL,
+        DEFAULT_SCHEMA,
+        JOB_DESCRIPTION,
+      );
 
       expect((result.metadata as Record<string, unknown>).suspicious).toBe(false);
     });
@@ -262,10 +304,17 @@ describe('StaticExtractor — security mitigations', () => {
       const client = makeMockClient([validResp]);
       const extractor = new StaticExtractor(client, DEFAULT_CONFIG, 'job-14');
 
-      const result = await extractor.extract(SIMPLE_HTML, SIMPLE_URL, DEFAULT_SCHEMA, JOB_DESCRIPTION);
+      const result = await extractor.extract(
+        SIMPLE_HTML,
+        SIMPLE_URL,
+        DEFAULT_SCHEMA,
+        JOB_DESCRIPTION,
+      );
 
       expect((result.metadata as Record<string, unknown>).suspicious).toBe(true);
-      const scanFlags = (result.metadata as Record<string, unknown>).scanFlags as Array<{ kind: string }>;
+      const scanFlags = (result.metadata as Record<string, unknown>).scanFlags as Array<{
+        kind: string;
+      }>;
       expect(Array.isArray(scanFlags)).toBe(true);
       const echoFlag = scanFlags.find((f) => f.kind === 'prompt_echo');
       expect(echoFlag).toBeDefined();
@@ -274,11 +323,18 @@ describe('StaticExtractor — security mitigations', () => {
 
   describe('Normal extraction — existing behavior preserved', () => {
     it('extracts clean data correctly', async () => {
-      const validResp = makeLLMResponse(makeValidResponse({ title: 'Widget Pro', price: '$49.99' }));
+      const validResp = makeLLMResponse(
+        makeValidResponse({ title: 'Widget Pro', price: '$49.99' }),
+      );
       const client = makeMockClient([validResp]);
       const extractor = new StaticExtractor(client, DEFAULT_CONFIG, 'job-15');
 
-      const result = await extractor.extract(SIMPLE_HTML, SIMPLE_URL, DEFAULT_SCHEMA, JOB_DESCRIPTION);
+      const result = await extractor.extract(
+        SIMPLE_HTML,
+        SIMPLE_URL,
+        DEFAULT_SCHEMA,
+        JOB_DESCRIPTION,
+      );
 
       expect(result.data).toEqual({ title: 'Widget Pro', price: '$49.99' });
       expect(result.metadata.confidence).toBe(0.9);
@@ -290,7 +346,12 @@ describe('StaticExtractor — security mitigations', () => {
       const client = makeMockClient([validResp]);
       const extractor = new StaticExtractor(client, DEFAULT_CONFIG, 'job-16');
 
-      const result = await extractor.extract(SIMPLE_HTML, SIMPLE_URL, DEFAULT_SCHEMA, JOB_DESCRIPTION);
+      const result = await extractor.extract(
+        SIMPLE_HTML,
+        SIMPLE_URL,
+        DEFAULT_SCHEMA,
+        JOB_DESCRIPTION,
+      );
 
       expect(result.metadata.modelUsed).toBe('my-model');
     });

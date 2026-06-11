@@ -17,6 +17,7 @@ src/version-probe.ts: error TS2304: Cannot find name 'fetch'.
 ```
 
 **Notes:**
+
 - `pnpm --filter @spatula/client build` passes LOCALLY (dev node_modules has `@types/node`
   hoisted, which supplies `fetch`/`URL`/`URLSearchParams`, and `eventsource` present). The
   failure appears only in the isolated multi-package Docker build context.

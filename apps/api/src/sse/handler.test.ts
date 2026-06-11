@@ -118,11 +118,7 @@ describe('RedisStreamBuffer', () => {
     expect(result[1][0]).toBe('3000-0');
 
     // Verify the exclusive lower-bound '(' prefix was used
-    expect(redis.xrange).toHaveBeenCalledWith(
-      `jobs:${JOB_ID}:events`,
-      '(1000-0',
-      '+',
-    );
+    expect(redis.xrange).toHaveBeenCalledWith(`jobs:${JOB_ID}:events`, '(1000-0', '+');
   });
 
   it('Test 3 — replay_truncated: when lastEventId predates oldest entry, oldestId returns the earliest available id', async () => {
@@ -220,7 +216,9 @@ describe('SSE keepalive timer', () => {
 
   it('Test 5 — keepalive emits a colon comment every 15s', () => {
     const writes: string[] = [];
-    const mockWrite = vi.fn((data: string) => { writes.push(data); });
+    const mockWrite = vi.fn((data: string) => {
+      writes.push(data);
+    });
     let aborted = false;
 
     const keepaliveTimer = setInterval(() => {

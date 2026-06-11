@@ -42,10 +42,7 @@ describe('Generated error classes (codegen output)', () => {
   });
 
   it('decodeError falls back to SpatulaApiError for unknown codes', () => {
-    const err = decodeError(
-      { code: 'UNKNOWN.UNKNOWN', message: 'huh', requestId: 'r2' },
-      500,
-    );
+    const err = decodeError({ code: 'UNKNOWN.UNKNOWN', message: 'huh', requestId: 'r2' }, 500);
     expect(err).toBeInstanceOf(SpatulaApiError);
     expect(err.constructor.name).toBe('SpatulaApiError');
     expect(err.code).toBe('UNKNOWN.UNKNOWN');

@@ -29,16 +29,16 @@
 
 Spatula is a multi-tenant SaaS API. The primary attack surface:
 
-| Vector | Risk | Mitigation |
-|--------|------|------------|
-| API key theft | Full tenant data access | Key shown once, hash-only stored, scoped |
-| Cross-tenant data leak | Tenant A reads Tenant B data | `tenant_id` FK on every row, enforced in middleware |
-| Privilege escalation | Tenant user gains admin access | Scope list on each key, admin endpoints gated to `admin` scope |
-| JWT forgery | Unauthenticated access | JWKS-backed RS256 validation, `iss`/`aud`/`exp` checked |
-| DLQ replay poisoning | Dead-letter jobs re-enqueued for wrong tenant | `tenant_id` FK on DLQ rows, verified before re-enqueue |
-| Forensic data exfiltration | Content-store blobs accessible without auth | Blobs keyed by `<prefix>/<tenantId>/…`, API auth required for all access |
-| Audit log tampering | Deleting evidence of breach | Audit log is append-only; no delete endpoint exists |
-| GDPR deletion bypass | Data persists after erasure request | Cascade deletion + tombstone + content-store blob sweep |
+| Vector                     | Risk                                          | Mitigation                                                               |
+| -------------------------- | --------------------------------------------- | ------------------------------------------------------------------------ |
+| API key theft              | Full tenant data access                       | Key shown once, hash-only stored, scoped                                 |
+| Cross-tenant data leak     | Tenant A reads Tenant B data                  | `tenant_id` FK on every row, enforced in middleware                      |
+| Privilege escalation       | Tenant user gains admin access                | Scope list on each key, admin endpoints gated to `admin` scope           |
+| JWT forgery                | Unauthenticated access                        | JWKS-backed RS256 validation, `iss`/`aud`/`exp` checked                  |
+| DLQ replay poisoning       | Dead-letter jobs re-enqueued for wrong tenant | `tenant_id` FK on DLQ rows, verified before re-enqueue                   |
+| Forensic data exfiltration | Content-store blobs accessible without auth   | Blobs keyed by `<prefix>/<tenantId>/…`, API auth required for all access |
+| Audit log tampering        | Deleting evidence of breach                   | Audit log is append-only; no delete endpoint exists                      |
+| GDPR deletion bypass       | Data persists after erasure request           | Cascade deletion + tombstone + content-store blob sweep                  |
 
 Out of scope for this document: network-layer security (TLS termination, WAF rules, DDoS mitigation) — those are handled at the infrastructure layer.
 
@@ -49,28 +49,29 @@ Out of scope for this document: network-layer security (TLS termination, WAF rul
 Every tenant-scoped table carries a `tenant_id uuid NOT NULL` foreign key referencing `tenants.id`. The FK is set in the Drizzle schema definitions and enforced by PostgreSQL.
 
 **Middleware enforcement** (`packages/api/src/middleware/auth.ts`):
+
 - After authentication, the resolved `tenantId` is stored on the Hono context.
 - Every repository method receives `tenantId` from the context, never from the request body/path (with the exception of admin-scoped endpoints, which are gated to `scope: admin`).
 - There is no code path that reads another tenant's rows without an explicit privilege check.
 
 **Tables with `tenant_id`:**
 
-| Table | Notes |
-|-------|-------|
-| `jobs` | Primary work unit per tenant |
-| `crawl_tasks` | FK to `jobs`, transitively scoped |
-| `raw_pages` | Content hash + blob ref |
-| `extractions` | LLM output per page |
-| `entities` | Deduplicated objects |
-| `entity_sources` | Junction: `entity_id` + `extraction_id` (no direct `tenant_id` — FK chain via `entities`) |
-| `actions` | Schema evolution proposals |
-| `source_trust` | Per-domain trust scores |
-| `exports` | Export jobs + blob ref |
-| `schemas` | Versioned schema definitions |
-| `api_keys` | Per-tenant access credentials |
-| `llm_usage` | Token/cost metering |
-| `dead_letter_queue` | Failed BullMQ jobs (`tenant_id` nullable — set null on tenant delete) |
-| `audit_log` | Append-only event ledger (`tenant_id` nullable — nulled on tenant delete per D-08) |
+| Table               | Notes                                                                                     |
+| ------------------- | ----------------------------------------------------------------------------------------- |
+| `jobs`              | Primary work unit per tenant                                                              |
+| `crawl_tasks`       | FK to `jobs`, transitively scoped                                                         |
+| `raw_pages`         | Content hash + blob ref                                                                   |
+| `extractions`       | LLM output per page                                                                       |
+| `entities`          | Deduplicated objects                                                                      |
+| `entity_sources`    | Junction: `entity_id` + `extraction_id` (no direct `tenant_id` — FK chain via `entities`) |
+| `actions`           | Schema evolution proposals                                                                |
+| `source_trust`      | Per-domain trust scores                                                                   |
+| `exports`           | Export jobs + blob ref                                                                    |
+| `schemas`           | Versioned schema definitions                                                              |
+| `api_keys`          | Per-tenant access credentials                                                             |
+| `llm_usage`         | Token/cost metering                                                                       |
+| `dead_letter_queue` | Failed BullMQ jobs (`tenant_id` nullable — set null on tenant delete)                     |
+| `audit_log`         | Append-only event ledger (`tenant_id` nullable — nulled on tenant delete per D-08)        |
 
 ---
 
@@ -78,11 +79,11 @@ Every tenant-scoped table carries a `tenant_id uuid NOT NULL` foreign key refere
 
 See [`docs/api-auth.md`](api-auth.md) for the full reference. Summary:
 
-| Strategy | `AUTH_STRATEGY` value | Use case |
-|----------|----------------------|----------|
-| `NoAuth` | `none` | Local dev only — **never production** |
-| API key | `api-key` | CLI, CI, machine-to-machine |
-| JWT-OIDC | `jwt` | Browser apps, SSO |
+| Strategy | `AUTH_STRATEGY` value | Use case                              |
+| -------- | --------------------- | ------------------------------------- |
+| `NoAuth` | `none`                | Local dev only — **never production** |
+| API key  | `api-key`             | CLI, CI, machine-to-machine           |
+| JWT-OIDC | `jwt`                 | Browser apps, SSO                     |
 
 All three strategies resolve to a `{ tenantId, scopes }` tuple stored on the Hono context. Downstream code only sees `tenantId` — it never knows which strategy was used.
 
@@ -94,15 +95,15 @@ API keys carry an explicit `scopes: text[]` list. Scopes are checked by the `req
 
 **Scope catalog:**
 
-| Scope | Grants |
-|-------|--------|
-| `jobs:read` | List/get jobs, tasks, raw pages |
-| `jobs:write` | Create/update/cancel jobs |
-| `extractions:read` | Read extraction results |
-| `extractions:write` | Trigger re-extraction |
-| `exports:read` | Download export files |
-| `exports:write` | Create export jobs |
-| `admin` | All of the above + tenant management endpoints |
+| Scope               | Grants                                         |
+| ------------------- | ---------------------------------------------- |
+| `jobs:read`         | List/get jobs, tasks, raw pages                |
+| `jobs:write`        | Create/update/cancel jobs                      |
+| `extractions:read`  | Read extraction results                        |
+| `extractions:write` | Trigger re-extraction                          |
+| `exports:read`      | Download export files                          |
+| `exports:write`     | Create export jobs                             |
+| `admin`             | All of the above + tenant management endpoints |
 
 Default scopes for a new key: `jobs:read jobs:write extractions:read exports:read exports:write`.
 
@@ -128,6 +129,7 @@ The `audit_log` table is the tamper-evident ledger for security-relevant events.
 - **actor_id = '[deleted]'** after redaction: signals that the audit record was sanitized and the real actor identity has been removed.
 
 **Querying tombstones:**
+
 ```sql
 SELECT * FROM audit_log
 WHERE tenant_id IS NULL
@@ -142,6 +144,7 @@ WHERE tenant_id IS NULL
 Blobs are stored in the `content_store` table via `PgContentStore`. Each blob has a `key` (human-readable path) and an `id` (UUID, referenced as `pg://<uuid>`).
 
 Key naming convention enforces tenant isolation:
+
 ```
 raw-pages/<tenantId>/<pageId>.html
 forensic/<tenantId>/extraction-<extractionId>.json
@@ -198,7 +201,7 @@ Currently exported tables: `api_keys` (the primary credential resource).
 
 `POST /api/v1/admin/tenants/:id/import` accepts the same JSONL format. Server-side: `TenantDataRepository.importTenantData(targetTenantId, dump)`.
 
-**Security invariant:** All imported rows have `tenantId` overridden to the *target* tenant — the dump's embedded tenant values are ignored. This prevents a dump from one tenant being replayed into another.
+**Security invariant:** All imported rows have `tenantId` overridden to the _target_ tenant — the dump's embedded tenant values are ignored. This prevents a dump from one tenant being replayed into another.
 
 **Idempotency:** Duplicate primary keys (23505) are silently skipped. Running import twice produces the same result as running it once.
 
@@ -214,13 +217,13 @@ spatula admin tenant delete --tenant <id> [--yes]
 
 ## Secret management
 
-| Secret | Where stored | Rotation |
-|--------|-------------|----------|
-| `DATABASE_URL` | Environment variable / secret store | Manual, per-deploy |
-| `REDIS_URL` | Environment variable / secret store | Manual, per-deploy |
-| `JWT_JWKS_URL` / `JWT_ISSUER` | Environment variable | OIDC provider rotation |
-| `OPENROUTER_API_KEY` | Environment variable | Manual, per-billing cycle |
-| API keys (raw) | Shown to user once, never stored | User-driven rotation |
+| Secret                        | Where stored                        | Rotation                  |
+| ----------------------------- | ----------------------------------- | ------------------------- |
+| `DATABASE_URL`                | Environment variable / secret store | Manual, per-deploy        |
+| `REDIS_URL`                   | Environment variable / secret store | Manual, per-deploy        |
+| `JWT_JWKS_URL` / `JWT_ISSUER` | Environment variable                | OIDC provider rotation    |
+| `OPENROUTER_API_KEY`          | Environment variable                | Manual, per-billing cycle |
+| API keys (raw)                | Shown to user once, never stored    | User-driven rotation      |
 
 No secrets are committed to the repository. `.env` files are gitignored.
 
@@ -254,15 +257,15 @@ Cross-reference spec §3.7.
 Seven defense-in-depth mitigations are implemented in
 `packages/core/src/extraction/static-extractor.ts` (cross-reference spec §3.7.2):
 
-| # | Mitigation | Implementation |
-|---|-----------|----------------|
-| 1 | **Role separation** | Crawled HTML is always placed in the `user` role, never `system`. The system prompt and the untrusted content are never concatenated into the same role message. |
-| 2 | **Hardened system prompt** | `SYSTEM_PROMPT` constant contains four `CRITICAL SECURITY RULES` explicitly prohibiting following instructions found in the content, schema-coercion attempts, system-prompt disclosure, and output format overrides. |
-| 3 | **`<UNTRUSTED_CONTENT>` sentinel wrapping** | The `buildExtractionPrompt` function wraps page content in `<UNTRUSTED_CONTENT>…</UNTRUSTED_CONTENT>`. The URL, job description, and schema are placed outside the sentinel so the model clearly distinguishes trusted instructions from untrusted data. |
-| 4 | **Zod-validated output + one stricter retry** | LLM response is parsed via `LLMExtractionResponse.parse`. On failure a single retry fires with an amplified system prompt addendum; a second failure returns an empty result and logs the event. |
-| 5 | **Field allowlist** | After Zod validation, output keys are filtered against the set of known schema field names. Unknown keys introduced by injection are dropped silently. |
-| 6 | **Free-text length caps** | String values are truncated to `fieldDef.maxLength` (default `DEFAULT_MAX_FIELD_LENGTH = 2000` chars). Exfiltration via long free-text output is limited; a value truncated to exactly the cap triggers a `cap_hit` scan flag. |
-| 7 | **Output-content scanner** | `scanOutput()` inspects extracted values for: prompt echoes (output contains a substring of the system prompt), field-name leakage (one field's value contains another field's name), and cap-hit anomalies. Suspicious outputs set `metadata.suspicious = true`, populate `metadata.scanFlags`, and archive the raw HTML to the content store as a forensic blob for operator review. |
+| #   | Mitigation                                    | Implementation                                                                                                                                                                                                                                                                                                                                                                         |
+| --- | --------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 1   | **Role separation**                           | Crawled HTML is always placed in the `user` role, never `system`. The system prompt and the untrusted content are never concatenated into the same role message.                                                                                                                                                                                                                       |
+| 2   | **Hardened system prompt**                    | `SYSTEM_PROMPT` constant contains four `CRITICAL SECURITY RULES` explicitly prohibiting following instructions found in the content, schema-coercion attempts, system-prompt disclosure, and output format overrides.                                                                                                                                                                  |
+| 3   | **`<UNTRUSTED_CONTENT>` sentinel wrapping**   | The `buildExtractionPrompt` function wraps page content in `<UNTRUSTED_CONTENT>…</UNTRUSTED_CONTENT>`. The URL, job description, and schema are placed outside the sentinel so the model clearly distinguishes trusted instructions from untrusted data.                                                                                                                               |
+| 4   | **Zod-validated output + one stricter retry** | LLM response is parsed via `LLMExtractionResponse.parse`. On failure a single retry fires with an amplified system prompt addendum; a second failure returns an empty result and logs the event.                                                                                                                                                                                       |
+| 5   | **Field allowlist**                           | After Zod validation, output keys are filtered against the set of known schema field names. Unknown keys introduced by injection are dropped silently.                                                                                                                                                                                                                                 |
+| 6   | **Free-text length caps**                     | String values are truncated to `fieldDef.maxLength` (default `DEFAULT_MAX_FIELD_LENGTH = 2000` chars). Exfiltration via long free-text output is limited; a value truncated to exactly the cap triggers a `cap_hit` scan flag.                                                                                                                                                         |
+| 7   | **Output-content scanner**                    | `scanOutput()` inspects extracted values for: prompt echoes (output contains a substring of the system prompt), field-name leakage (one field's value contains another field's name), and cap-hit anomalies. Suspicious outputs set `metadata.suspicious = true`, populate `metadata.scanFlags`, and archive the raw HTML to the content store as a forensic blob for operator review. |
 
 ### User responsibilities
 

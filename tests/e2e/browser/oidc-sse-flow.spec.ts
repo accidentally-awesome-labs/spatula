@@ -24,13 +24,7 @@
  * Chromium, Postgres, and Redis available. Per spec §6 CI topology.
  */
 
-import {
-  afterAll,
-  beforeAll,
-  describe,
-  expect,
-  it,
-} from 'vitest';
+import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { chromium, type Browser, type BrowserContext } from 'playwright';
 import * as http from 'node:http';
 import * as url from 'node:url';
@@ -62,8 +56,7 @@ const ROOT = resolve(__dirname, '../../..');
 // ─────────────────────────────────────────────────────────────────────────────
 
 function generateCodeVerifier(): string {
-  const chars =
-    'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-._~';
+  const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-._~';
   const bytes = randomBytes(64);
   let result = '';
   for (const byte of bytes) {
@@ -110,9 +103,7 @@ async function waitForDex(timeoutMs = 30_000): Promise<void> {
 // OAuth callback capture — temporary HTTP server on localhost:3000
 // ─────────────────────────────────────────────────────────────────────────────
 
-function captureOAuthCallback(
-  timeoutMs = 30_000,
-): Promise<{ code: string; state: string }> {
+function captureOAuthCallback(timeoutMs = 30_000): Promise<{ code: string; state: string }> {
   return new Promise((resolve, reject) => {
     const server = http.createServer((req, res) => {
       const parsed = url.parse(req.url ?? '', true);
@@ -407,7 +398,7 @@ describe('Browser OIDC + SSE reconnect chain (AUTH-01, AUTH-02, AUTH-04)', () =>
       } catch (e) {
         throw new Error(
           `Failed to start Dex IDP: ${String(e)}\n\n` +
-          'Fix: cd examples/auth-dex && docker compose up -d',
+            'Fix: cd examples/auth-dex && docker compose up -d',
         );
       }
     }
@@ -554,8 +545,14 @@ describe('Browser OIDC + SSE reconnect chain (AUTH-01, AUTH-02, AUTH-04)', () =>
       }),
     });
 
-    expect([200, 201], `POST /api/v1/jobs should return 200 or 201, got ${res.status}`).toContain(res.status);
-    const body = (await res.json()) as { data?: { id?: string; tenantId?: string }; id?: string; tenantId?: string };
+    expect([200, 201], `POST /api/v1/jobs should return 200 or 201, got ${res.status}`).toContain(
+      res.status,
+    );
+    const body = (await res.json()) as {
+      data?: { id?: string; tenantId?: string };
+      id?: string;
+      tenantId?: string;
+    };
     jobId = (body.data?.id ?? body.id) as string;
     tenantId = (body.data?.tenantId ?? body.tenantId) as string;
     expect(jobId, 'job response must include an id').toBeTruthy();
@@ -576,137 +573,132 @@ describe('Browser OIDC + SSE reconnect chain (AUTH-01, AUTH-02, AUTH-04)', () =>
     expect(token, 'ws-token response must include a token').toBeTruthy();
   });
 
-  it(
-    'Steps 4-6: SSE subscribe → events arrive → disconnect → reconnect with Last-Event-ID → resume strictly after captured id',
-    async () => {
-      expect(accessToken, 'accessToken must be set').toBeTruthy();
-      expect(jobId, 'jobId must be set from Step 2').toBeTruthy();
+  it('Steps 4-6: SSE subscribe → events arrive → disconnect → reconnect with Last-Event-ID → resume strictly after captured id', async () => {
+    expect(accessToken, 'accessToken must be set').toBeTruthy();
+    expect(jobId, 'jobId must be set from Step 2').toBeTruthy();
 
-      // ── Get a fresh stream token ─────────────────────────────────────────
-      const tokenRes = await fetch(`${API_BASE_URL}/api/v1/ws-token`, {
-        method: 'POST',
-        headers: { Authorization: `Bearer ${accessToken}` },
-      });
-      expect(tokenRes.ok, 'ws-token call must succeed').toBe(true);
-      const tokenBody = (await tokenRes.json()) as { data?: { token?: string }; token?: string };
-      const streamToken = tokenBody.data?.token ?? tokenBody.token;
-      expect(streamToken, 'stream token must be present').toBeTruthy();
+    // ── Get a fresh stream token ─────────────────────────────────────────
+    const tokenRes = await fetch(`${API_BASE_URL}/api/v1/ws-token`, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${accessToken}` },
+    });
+    expect(tokenRes.ok, 'ws-token call must succeed').toBe(true);
+    const tokenBody = (await tokenRes.json()) as { data?: { token?: string }; token?: string };
+    const streamToken = tokenBody.data?.token ?? tokenBody.token;
+    expect(streamToken, 'stream token must be present').toBeTruthy();
 
-      // ── Publish events into the Redis stream before connecting ───────────
-      // The SSE handler replays buffered events from Redis Streams on connect.
-      const { RedisEventPublisher } = await import('@spatula/queue');
-      const Redis = (await import('ioredis')).default;
-      const redisUrl = process.env.REDIS_URL ?? 'redis://localhost:6379';
-      const publisherRedis = new Redis(redisUrl, { lazyConnect: false, maxRetriesPerRequest: 1 });
-      const publisher = new RedisEventPublisher(publisherRedis);
+    // ── Publish events into the Redis stream before connecting ───────────
+    // The SSE handler replays buffered events from Redis Streams on connect.
+    const { RedisEventPublisher } = await import('@spatula/queue');
+    const Redis = (await import('ioredis')).default;
+    const redisUrl = process.env.REDIS_URL ?? 'redis://localhost:6379';
+    const publisherRedis = new Redis(redisUrl, { lazyConnect: false, maxRetriesPerRequest: 1 });
+    const publisher = new RedisEventPublisher(publisherRedis);
 
-      // Publish 3 events before the first connection opens.
-      // Must use valid JobEventType values and include tenantId so the SSE
-      // handler's tenant filter accepts them (event.tenantId !== tenantId check).
-      await publisher.publish(jobId, {
-        type: 'job_status_changed',
-        jobId,
-        tenantId,
-        data: { status: 'running', src: 'batch-1' },
-      });
-      await publisher.publish(jobId, {
-        type: 'crawl_progress',
-        jobId,
-        tenantId,
-        data: { pagesProcessed: 1, src: 'batch-1' },
-      });
-      await publisher.publish(jobId, {
-        type: 'crawl_progress',
-        jobId,
-        tenantId,
-        data: { pagesProcessed: 2, src: 'batch-1' },
-      });
+    // Publish 3 events before the first connection opens.
+    // Must use valid JobEventType values and include tenantId so the SSE
+    // handler's tenant filter accepts them (event.tenantId !== tenantId check).
+    await publisher.publish(jobId, {
+      type: 'job_status_changed',
+      jobId,
+      tenantId,
+      data: { status: 'running', src: 'batch-1' },
+    });
+    await publisher.publish(jobId, {
+      type: 'crawl_progress',
+      jobId,
+      tenantId,
+      data: { pagesProcessed: 1, src: 'batch-1' },
+    });
+    await publisher.publish(jobId, {
+      type: 'crawl_progress',
+      jobId,
+      tenantId,
+      data: { pagesProcessed: 2, src: 'batch-1' },
+    });
 
-      // ── Step 4: SSE subscribe — collect up to 3 events ───────────────────
-      const firstBatch = await collectSseEvents(
-        API_BASE_URL,
-        jobId,
-        streamToken!,
-        { count: 3, timeoutMs: 15_000 },
-      );
+    // ── Step 4: SSE subscribe — collect up to 3 events ───────────────────
+    const firstBatch = await collectSseEvents(API_BASE_URL, jobId, streamToken!, {
+      count: 3,
+      timeoutMs: 15_000,
+    });
 
-      expect(
-        firstBatch.events.length,
-        `Expected ≥1 events in first batch (got ${firstBatch.events.length}). ` +
+    expect(
+      firstBatch.events.length,
+      `Expected ≥1 events in first batch (got ${firstBatch.events.length}). ` +
         'Requires live Redis + API server with SSE handler and RedisEventPublisher.',
-      ).toBeGreaterThan(0);
+    ).toBeGreaterThan(0);
 
-      // Verify monotonic SSE id ordering (Redis stream ids: `{ms}-{seq}`).
-      const ids = firstBatch.events.map((e) => e.id).filter(Boolean);
-      for (let i = 1; i < ids.length; i++) {
-        expect(
-          ids[i]! > ids[i - 1]!,
-          `Event ids must be monotonically increasing: ${ids[i - 1]} → ${ids[i]}`,
-        ).toBe(true);
-      }
-
-      // ── Step 5: Disconnect (collectSseEvents already closed the connection)
-      const capturedLastId = firstBatch.lastId;
-      expect(capturedLastId, 'capturedLastId must be set').toBeTruthy();
-
-      // Publish 2 more events during the "disconnect window".
-      await publisher.publish(jobId, {
-        type: 'crawl_progress',
-        jobId,
-        tenantId,
-        data: { pagesProcessed: 10, src: 'gap' },
-      });
-      await publisher.publish(jobId, {
-        type: 'crawl_progress',
-        jobId,
-        tenantId,
-        data: { pagesProcessed: 11, src: 'gap' },
-      });
-
-      // Brief pause to let events settle in Redis.
-      await new Promise((r) => setTimeout(r, 250));
-
-      // ── Step 6: Get a NEW stream token and reconnect with Last-Event-ID ──
-      const reconnectTokenRes = await fetch(`${API_BASE_URL}/api/v1/ws-token`, {
-        method: 'POST',
-        headers: { Authorization: `Bearer ${accessToken}` },
-      });
-      expect(reconnectTokenRes.ok, 'reconnect ws-token call must succeed').toBe(true);
-      const reconnectBody = (await reconnectTokenRes.json()) as { data?: { token?: string }; token?: string };
-      const reconnectToken = reconnectBody.data?.token ?? reconnectBody.token;
-      expect(reconnectToken, 'reconnect stream token must be present').toBeTruthy();
-
-      const resumeBatch = await collectSseEvents(
-        API_BASE_URL,
-        jobId,
-        reconnectToken!,
-        { count: 2, lastEventId: capturedLastId, timeoutMs: 15_000 },
-      );
-
-      // Resume events must be strictly AFTER the captured id (no duplicates, no gaps).
+    // Verify monotonic SSE id ordering (Redis stream ids: `{ms}-{seq}`).
+    const ids = firstBatch.events.map((e) => e.id).filter(Boolean);
+    for (let i = 1; i < ids.length; i++) {
       expect(
-        resumeBatch.events.length,
-        `Expected ≥1 resumed events after reconnect with lastEventId=${capturedLastId}`,
-      ).toBeGreaterThan(0);
-
-      for (const evt of resumeBatch.events) {
-        expect(
-          evt.id > capturedLastId!,
-          `Resumed event id "${evt.id}" must be strictly AFTER captured id "${capturedLastId}"`,
-        ).toBe(true);
-      }
-
-      // The gap events (published during disconnect window) must appear in the resume batch.
-      const hasGapData = resumeBatch.events.some(
-        (e) => e.data['src'] === 'gap',
-      );
-      expect(
-        hasGapData,
-        'Reconnected stream must replay events published during the disconnect window',
+        ids[i]! > ids[i - 1]!,
+        `Event ids must be monotonically increasing: ${ids[i - 1]} → ${ids[i]}`,
       ).toBe(true);
+    }
 
-      // Cleanup publisher redis connection.
-      await publisherRedis.quit().catch(() => {});
-    },
-  );
+    // ── Step 5: Disconnect (collectSseEvents already closed the connection)
+    const capturedLastId = firstBatch.lastId;
+    expect(capturedLastId, 'capturedLastId must be set').toBeTruthy();
+
+    // Publish 2 more events during the "disconnect window".
+    await publisher.publish(jobId, {
+      type: 'crawl_progress',
+      jobId,
+      tenantId,
+      data: { pagesProcessed: 10, src: 'gap' },
+    });
+    await publisher.publish(jobId, {
+      type: 'crawl_progress',
+      jobId,
+      tenantId,
+      data: { pagesProcessed: 11, src: 'gap' },
+    });
+
+    // Brief pause to let events settle in Redis.
+    await new Promise((r) => setTimeout(r, 250));
+
+    // ── Step 6: Get a NEW stream token and reconnect with Last-Event-ID ──
+    const reconnectTokenRes = await fetch(`${API_BASE_URL}/api/v1/ws-token`, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${accessToken}` },
+    });
+    expect(reconnectTokenRes.ok, 'reconnect ws-token call must succeed').toBe(true);
+    const reconnectBody = (await reconnectTokenRes.json()) as {
+      data?: { token?: string };
+      token?: string;
+    };
+    const reconnectToken = reconnectBody.data?.token ?? reconnectBody.token;
+    expect(reconnectToken, 'reconnect stream token must be present').toBeTruthy();
+
+    const resumeBatch = await collectSseEvents(API_BASE_URL, jobId, reconnectToken!, {
+      count: 2,
+      lastEventId: capturedLastId,
+      timeoutMs: 15_000,
+    });
+
+    // Resume events must be strictly AFTER the captured id (no duplicates, no gaps).
+    expect(
+      resumeBatch.events.length,
+      `Expected ≥1 resumed events after reconnect with lastEventId=${capturedLastId}`,
+    ).toBeGreaterThan(0);
+
+    for (const evt of resumeBatch.events) {
+      expect(
+        evt.id > capturedLastId!,
+        `Resumed event id "${evt.id}" must be strictly AFTER captured id "${capturedLastId}"`,
+      ).toBe(true);
+    }
+
+    // The gap events (published during disconnect window) must appear in the resume batch.
+    const hasGapData = resumeBatch.events.some((e) => e.data['src'] === 'gap');
+    expect(
+      hasGapData,
+      'Reconnected stream must replay events published during the disconnect window',
+    ).toBe(true);
+
+    // Cleanup publisher redis connection.
+    await publisherRedis.quit().catch(() => {});
+  });
 });

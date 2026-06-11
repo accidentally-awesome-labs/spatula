@@ -54,62 +54,62 @@ requirements:
 
 must_haves:
   truths:
-    - "`@spatula/core-types` package is buildable and publishable (`pnpm --filter @spatula/core-types build` succeeds)"
+    - '`@spatula/core-types` package is buildable and publishable (`pnpm --filter @spatula/core-types build` succeeds)'
     - "`@spatula/client` package is buildable; `import { SpatulaClient, createJob, listJobs, getEntities } from '@spatula/client'` resolves"
     - "Frozen `ErrorCode` enum lives in `@spatula/core-types/src/errors/codes.ts` (MOVED from plan 16-1's staging location in `@spatula/shared`)"
-    - "Class-per-code typed errors (`JobNotFoundError`, `RateLimitExceededError`, etc.) are generated into `packages/client/src/errors/generated.ts` and COMMITTED"
-    - "ESLint rule blocks non-type imports from `@spatula/core-types` across the entire monorepo"
-    - "`size-limit` reports `< 50 kB` gzipped for `{ SpatulaClient, createJob, listJobs, getEntities }` built via esbuild ESM browser (SI lowercase kB matches research Pattern 4 + size-limit.json limit string)"
-    - "`@spatula/core-types` has zero runtime dependencies (only `zod` as peer)"
-    - "`tests/private-contract/oss-surface.test.ts` remains green — `@spatula/core` re-export shim preserves the surface that `spatula-saas` consumes"
+    - 'Class-per-code typed errors (`JobNotFoundError`, `RateLimitExceededError`, etc.) are generated into `packages/client/src/errors/generated.ts` and COMMITTED'
+    - 'ESLint rule blocks non-type imports from `@spatula/core-types` across the entire monorepo'
+    - '`size-limit` reports `< 50 kB` gzipped for `{ SpatulaClient, createJob, listJobs, getEntities }` built via esbuild ESM browser (SI lowercase kB matches research Pattern 4 + size-limit.json limit string)'
+    - '`@spatula/core-types` has zero runtime dependencies (only `zod` as peer)'
+    - '`tests/private-contract/oss-surface.test.ts` remains green — `@spatula/core` re-export shim preserves the surface that `spatula-saas` consumes'
   artifacts:
-    - path: "packages/core-types/package.json"
-      provides: "Publishable npm scoped package with `peerDependencies.zod` only and `sideEffects:false`"
-      contains: "@spatula/core-types"
-    - path: "packages/core-types/src/errors/codes.ts"
-      provides: "Frozen ErrorCode enum + STATUS_MAP (MOVED from packages/shared in plan 16-1)"
-      contains: "ErrorCode"
-    - path: "packages/client/package.json"
-      provides: "Publishable npm scoped package; ESM-only; explicit `exports`; `sideEffects:false`; `engines.node>=22`"
-      contains: "@spatula/client"
-    - path: "packages/client/src/client.ts"
-      provides: "`SpatulaClient` class with fetch-based request method + error decoding"
-      contains: "class SpatulaClient"
-    - path: "packages/client/src/errors/generated.ts"
-      provides: "Class-per-code typed error subclasses generated from `@spatula/core-types/src/errors/codes.ts`. COMMITTED OUTPUT (per D-11)."
-      contains: "class JobNotFoundError"
-    - path: "packages/client/scripts/gen-error-classes.ts"
-      provides: "Codegen script reading ErrorCode enum from @spatula/core-types and emitting generated.ts; CI verifies via `git diff --exit-code`"
-      contains: "ErrorCode"
-    - path: "packages/client/size-limit.json"
-      provides: "50 kB gzipped budget with explicit `esbuild` config (ESM + browser + es2022 + minify + treeShaking) per research Pattern 4"
-      contains: "50 kB"
-    - path: "eslint.config.mjs"
-      provides: "`no-restricted-imports` rule with `allowTypeImports: true` blocking value imports from `@spatula/core-types`"
-      contains: "@spatula/core-types"
-    - path: "packages/client/src/experimental/index.ts"
+    - path: 'packages/core-types/package.json'
+      provides: 'Publishable npm scoped package with `peerDependencies.zod` only and `sideEffects:false`'
+      contains: '@spatula/core-types'
+    - path: 'packages/core-types/src/errors/codes.ts'
+      provides: 'Frozen ErrorCode enum + STATUS_MAP (MOVED from packages/shared in plan 16-1)'
+      contains: 'ErrorCode'
+    - path: 'packages/client/package.json'
+      provides: 'Publishable npm scoped package; ESM-only; explicit `exports`; `sideEffects:false`; `engines.node>=22`'
+      contains: '@spatula/client'
+    - path: 'packages/client/src/client.ts'
+      provides: '`SpatulaClient` class with fetch-based request method + error decoding'
+      contains: 'class SpatulaClient'
+    - path: 'packages/client/src/errors/generated.ts'
+      provides: 'Class-per-code typed error subclasses generated from `@spatula/core-types/src/errors/codes.ts`. COMMITTED OUTPUT (per D-11).'
+      contains: 'class JobNotFoundError'
+    - path: 'packages/client/scripts/gen-error-classes.ts'
+      provides: 'Codegen script reading ErrorCode enum from @spatula/core-types and emitting generated.ts; CI verifies via `git diff --exit-code`'
+      contains: 'ErrorCode'
+    - path: 'packages/client/size-limit.json'
+      provides: '50 kB gzipped budget with explicit `esbuild` config (ESM + browser + es2022 + minify + treeShaking) per research Pattern 4'
+      contains: '50 kB'
+    - path: 'eslint.config.mjs'
+      provides: '`no-restricted-imports` rule with `allowTypeImports: true` blocking value imports from `@spatula/core-types`'
+      contains: '@spatula/core-types'
+    - path: 'packages/client/src/experimental/index.ts'
       provides: "Empty Proxy scaffolding for `client.experimental.*` namespace (Phase 18 first surface; throws 'no experimental surfaces in v1.0' on any access)"
-      contains: "Proxy"
+      contains: 'Proxy'
   key_links:
-    - from: "packages/core/src/index.ts"
-      to: "packages/core-types/src/index.ts"
+    - from: 'packages/core/src/index.ts'
+      to: 'packages/core-types/src/index.ts'
       via: "Re-export shim — `export type { JobConfig, FieldDef, ActionType, ErrorCode } from '@spatula/core-types'`"
       pattern: "from '@spatula/core-types'"
-    - from: "packages/client/scripts/gen-error-classes.ts"
-      to: "packages/core-types/src/errors/codes.ts"
-      via: "Reads ErrorCode at codegen time, writes one class per value to packages/client/src/errors/generated.ts"
-      pattern: "ErrorCode"
-    - from: "packages/client/src/client.ts"
-      to: "packages/client/src/errors/generated.ts"
-      via: "Decodes API error envelope `{error:{code,...}}` to the matching subclass instance"
-      pattern: "decodeError"
-    - from: "apps/api/src/schemas/responses.ts"
-      to: "packages/core-types/src/errors/codes.ts"
+    - from: 'packages/client/scripts/gen-error-classes.ts'
+      to: 'packages/core-types/src/errors/codes.ts'
+      via: 'Reads ErrorCode at codegen time, writes one class per value to packages/client/src/errors/generated.ts'
+      pattern: 'ErrorCode'
+    - from: 'packages/client/src/client.ts'
+      to: 'packages/client/src/errors/generated.ts'
+      via: 'Decodes API error envelope `{error:{code,...}}` to the matching subclass instance'
+      pattern: 'decodeError'
+    - from: 'apps/api/src/schemas/responses.ts'
+      to: 'packages/core-types/src/errors/codes.ts'
       via: "errorResponseSchema's `code` field references ErrorCode union (typing)"
-      pattern: "@spatula/core-types"
-    - from: "packages/shared/src/error-codes.ts"
-      to: "packages/core-types/src/errors/codes.ts"
-      via: "Re-export shim — `@spatula/shared` continues to expose ErrorCode for legacy consumers, but the source of truth is core-types"
+      pattern: '@spatula/core-types'
+    - from: 'packages/shared/src/error-codes.ts'
+      to: 'packages/core-types/src/errors/codes.ts'
+      via: 'Re-export shim — `@spatula/shared` continues to expose ErrorCode for legacy consumers, but the source of truth is core-types'
       pattern: "from '@spatula/core-types'"
 ---
 
@@ -119,12 +119,13 @@ Create `@spatula/core-types` (type-only + zod + enums, zero runtime deps) and `@
 Purpose: This is the package extraction that makes Phase 16's deliverables _shippable_. The error-code enum, action enum, JobConfig shape, FieldDef shape, and status enums all need a tiny zero-runtime-deps home. The `@spatula/client` SDK is what every downstream consumer (browser web UI, Phase 17 SSE client, Phase 18 experimental surfaces) will import.
 
 Output:
+
 - New `packages/core-types/` directory + package
 - New `packages/client/` directory + package + codegen + size-limit config
 - Frozen ErrorCode + class-per-code generated errors
 - ESLint rule + re-export shim in `@spatula/core` so `tests/private-contract/` stays green
 - `client.experimental.*` namespace scaffolding (empty Proxy) for Phase 18 first surface
-</objective>
+  </objective>
 
 <execution_context>
 @$HOME/.claude/get-shit-done/workflows/execute-plan.md
@@ -149,6 +150,7 @@ Output:
 <!-- Key contracts the executor needs. Extracted from codebase. -->
 
 From `packages/shared/src/error-codes.ts` (plan 16-1 output — MOVED in Task 1 of this plan):
+
 ```typescript
 export const ErrorCode = {
   JOB_NOT_FOUND: 'JOB.NOT_FOUND',
@@ -156,10 +158,13 @@ export const ErrorCode = {
   // ... ~24 codes per plan 16-1's curated list
 } as const;
 export type ErrorCode = (typeof ErrorCode)[keyof typeof ErrorCode];
-export const STATUS_MAP: Record<ErrorCode, number> = { /* ... */ };
+export const STATUS_MAP: Record<ErrorCode, number> = {
+  /* ... */
+};
 ```
 
 From `packages/shared/package.json` (template for the two new packages):
+
 ```json
 {
   "name": "@spatula/shared",
@@ -174,6 +179,7 @@ From `packages/shared/package.json` (template for the two new packages):
 ```
 
 From `packages/core/src/index.ts` (CURRENT — re-exports drive what `tests/private-contract/oss-surface.test.ts` pins):
+
 ```typescript
 // Current state — pins many type exports that move to @spatula/core-types in Task 4.
 // Task 4 adds a re-export shim: `export type { JobConfig, FieldDef, ActionType } from '@spatula/core-types';`
@@ -181,6 +187,7 @@ From `packages/core/src/index.ts` (CURRENT — re-exports drive what `tests/priv
 ```
 
 From `tests/private-contract/oss-surface.test.ts` (PRECEDENT — what must stay green):
+
 ```typescript
 // Imports * as core from '@spatula/core' and pins runtime fns (processCrawlTask, etc.)
 // + a small set of types (JobConfig, ActionType, ErrorCode).
@@ -189,11 +196,13 @@ From `tests/private-contract/oss-surface.test.ts` (PRECEDENT — what must stay 
 ```
 
 Spec §3.2.2 (verbatim) — `@spatula/core-types` boundary:
+
 > "type-only exports + zod schemas + enums; zero runtime deps (zod as peer)"
 
 Spec §3.2.1 (verbatim) — `@spatula/client` properties:
+
 > "ESM-only; `sideEffects: false`; explicit `exports` field; engines: node>=22; bundle size measured by `size-limit` ≤ 50KB gzipped for `{SpatulaClient, createJob, listJobs, getEntities}` built with `esbuild --bundle --minify --format=esm --platform=browser`"
-</interfaces>
+> </interfaces>
 
 </context>
 
@@ -360,6 +369,7 @@ Spec §3.2.1 (verbatim) — `@spatula/client` properties:
     Step 11: Run `pnpm install` to wire workspace dependencies. Then `pnpm --filter @spatula/core-types build && pnpm --filter @spatula/core-types test` — both must succeed.
 
     Step 12: Run `pnpm --filter @spatula/core build` to confirm the re-export shim works (no broken imports).
+
   </action>
   <verify>
     <automated>pnpm install --frozen-lockfile=false && pnpm --filter @spatula/core-types build && pnpm --filter @spatula/core-types test && pnpm --filter @spatula/core build && pnpm --filter @spatula/shared build && grep -q "ErrorCode" packages/core-types/src/errors/codes.ts && grep -q "from '@spatula/core-types'" packages/shared/src/error-codes.ts && test -f packages/core-types/README.md</automated>
@@ -454,6 +464,7 @@ Spec §3.2.1 (verbatim) — `@spatula/client` properties:
     Step 5: Extend `tests/private-contract/oss-surface.test.ts` with the new describe block per <behavior>.
 
     Step 6: Run `pnpm lint && pnpm test:private-contract && pnpm --filter @spatula/api typecheck` — all three must be green.
+
   </action>
   <verify>
     <automated>pnpm lint && pnpm test:private-contract && pnpm --filter @spatula/api typecheck && grep -q "@spatula/core-types" eslint.config.mjs && grep -q "allowTypeImports" eslint.config.mjs && grep -q "core-types extract preserves" tests/private-contract/oss-surface.test.ts</automated>
@@ -735,6 +746,7 @@ Spec §3.2.1 (verbatim) — `@spatula/client` properties:
     Step 10: Build, test, size: `pnpm --filter @spatula/client build && pnpm --filter @spatula/client test && pnpm --filter @spatula/client size`. The size check must pass at < 50KB.
 
     Step 11: Update `apps/api/src/schemas/responses.ts` to import `ErrorCode` from `@spatula/core-types` AS A TYPE (no value import — ESLint blocks). For the `enum: Object.values(ErrorCode)` annotation needed in Task 2, value-import from `@spatula/shared` (the shim). This is consistent with Task 2.
+
   </action>
   <verify>
     <automated>pnpm --filter @spatula/client build && pnpm --filter @spatula/client test && pnpm --filter @spatula/client size && pnpm --filter @spatula/client gen:errors && git diff --exit-code packages/client/src/errors/generated.ts && grep -q "class SpatulaClient" packages/client/src/client.ts && grep -q "decodeError" packages/client/src/errors/generated.ts && grep -q "zero experimental surfaces" packages/client/src/experimental/index.ts && test -f packages/client/size-limit.json</automated>
@@ -770,13 +782,14 @@ Spec §3.2.1 (verbatim) — `@spatula/client` properties:
 </verification>
 
 <success_criteria>
+
 - SDK-01: `@spatula/core-types` has zero runtime deps (only zod as peer); ESLint rule blocks non-type imports. Verified by package.json grep + `pnpm lint`.
 - SDK-02: `SpatulaClient` class exists, exposes `{createJob, listJobs, getEntities, getJobEvents}` as helper methods, throws class-per-code subclasses on 4xx/5xx. Verified by unit tests.
 - SDK-03: `pnpm --filter @spatula/client size` reports < 50KB gzipped for the measured surface. Verified by CI gate config + manual run.
 - ErrorCode enum + STATUS_MAP MOVED from `@spatula/shared` to `@spatula/core-types`; re-export shim keeps `@spatula/shared.ErrorCode` working.
 - `tests/private-contract/oss-surface.test.ts` extended with `@spatula/core-types` re-export assertions; remains green.
 - `client.experimental.*` namespace scaffolding (empty Proxy) is in place for Phase 18 first surface (forensic-extractions).
-</success_criteria>
+  </success_criteria>
 
 <output>
 After completion, create `.planning/phases/16-api-contract-sdk-packages/16-2-SUMMARY.md` recording:

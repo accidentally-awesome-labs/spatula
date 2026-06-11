@@ -198,7 +198,11 @@ describe('Phase 16 plan 16-3: validateExamplesAtBoot (D-16)', () => {
               '201': {
                 content: {
                   'application/json': {
-                    schema: { type: 'object', properties: { id: { type: 'string' } }, required: ['id'] },
+                    schema: {
+                      type: 'object',
+                      properties: { id: { type: 'string' } },
+                      required: ['id'],
+                    },
                     examples: {
                       basic: { value: { id: 'abc-123' } },
                       bad: { value: { id: 999 } },

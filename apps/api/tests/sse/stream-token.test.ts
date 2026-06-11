@@ -54,10 +54,24 @@ function createMockDeps(overrides: Partial<AppDeps> = {}): AppDeps {
       updateStatus: vi.fn(),
       updateStats: vi.fn(),
     },
-    schemaRepo: { findLatest: vi.fn().mockResolvedValue(null), findAllVersions: vi.fn().mockResolvedValue([]), findByVersion: vi.fn().mockResolvedValue(null) },
-    extractionRepo: { findByJob: vi.fn().mockResolvedValue([]), countByJob: vi.fn().mockResolvedValue(0) },
-    entityRepo: { findByJob: vi.fn().mockResolvedValue([]), findById: vi.fn().mockResolvedValue(null), countByJob: vi.fn().mockResolvedValue(0) },
-    entitySourceRepo: { findByEntity: vi.fn().mockResolvedValue([]), findByEntityWithUrls: vi.fn().mockResolvedValue([]) },
+    schemaRepo: {
+      findLatest: vi.fn().mockResolvedValue(null),
+      findAllVersions: vi.fn().mockResolvedValue([]),
+      findByVersion: vi.fn().mockResolvedValue(null),
+    },
+    extractionRepo: {
+      findByJob: vi.fn().mockResolvedValue([]),
+      countByJob: vi.fn().mockResolvedValue(0),
+    },
+    entityRepo: {
+      findByJob: vi.fn().mockResolvedValue([]),
+      findById: vi.fn().mockResolvedValue(null),
+      countByJob: vi.fn().mockResolvedValue(0),
+    },
+    entitySourceRepo: {
+      findByEntity: vi.fn().mockResolvedValue([]),
+      findByEntityWithUrls: vi.fn().mockResolvedValue([]),
+    },
     actionRepo: {
       findByJob: vi.fn().mockResolvedValue([]),
       findById: vi.fn().mockResolvedValue(null),
@@ -68,7 +82,12 @@ function createMockDeps(overrides: Partial<AppDeps> = {}): AppDeps {
       findByJobCursor: vi.fn().mockResolvedValue({ entities: [], nextCursor: null }),
     },
     taskRepo: {} as any,
-    exportRepo: { create: vi.fn(), findById: vi.fn().mockResolvedValue(null), findByJob: vi.fn().mockResolvedValue([]), updateStatus: vi.fn() },
+    exportRepo: {
+      create: vi.fn(),
+      findById: vi.fn().mockResolvedValue(null),
+      findByJob: vi.fn().mockResolvedValue([]),
+      updateStatus: vi.fn(),
+    },
     contentStore: { store: vi.fn(), retrieve: vi.fn(), delete: vi.fn() },
     exportQueue: { add: vi.fn() },
     jobManager: {
@@ -101,7 +120,7 @@ describe('Stream token (AUTH-02)', { timeout: 15_000 }, () => {
       headers: { 'x-tenant-id': TENANT_ID },
     });
     expect(res.status).toBe(200);
-    const body = await res.json() as any;
+    const body = (await res.json()) as any;
     expect(body.data.token).toBeDefined();
     expect(typeof body.data.token).toBe('string');
     expect(body.data.token.length).toBeGreaterThan(10);
@@ -119,7 +138,9 @@ describe('Stream token (AUTH-02)', { timeout: 15_000 }, () => {
       headers: { 'x-tenant-id': TENANT_ID },
     });
     expect(tokenRes.status).toBe(200);
-    const { data: { token } } = await tokenRes.json() as any;
+    const {
+      data: { token },
+    } = (await tokenRes.json()) as any;
 
     // Step 2: first SSE connect — consumes the token
     const firstRes = await app.request(`/api/v1/jobs/${JOB_ID}/events?token=${token}`);
@@ -144,12 +165,12 @@ describe('Stream token (AUTH-02)', { timeout: 15_000 }, () => {
   it('POST /api/v1/ws-token openapi summary mentions SSE', async () => {
     const app = createApp(deps);
     const res = await app.request('/api/v1/openapi.json');
-    const spec = await res.json() as any;
+    const spec = (await res.json()) as any;
     // ws-token route: sub-router mounted at /api/v1/ws-token with createRoute path '/'.
     // The OpenAPIHono registers this as /api/v1/ws-token in the paths map.
     const wsTokenPath =
-      spec.paths['/api/v1/ws-token'] ??  // when registered on main app
-      spec.paths['/ws-token'];            // when server base strips /api/v1
+      spec.paths['/api/v1/ws-token'] ?? // when registered on main app
+      spec.paths['/ws-token']; // when server base strips /api/v1
     expect(wsTokenPath).toBeDefined();
     const summary: string = wsTokenPath.post?.summary ?? '';
     expect(summary.toLowerCase()).toContain('sse');
@@ -165,7 +186,9 @@ describe('Stream token (AUTH-02)', { timeout: 15_000 }, () => {
       method: 'POST',
       headers: { 'x-tenant-id': TENANT_ID },
     });
-    const { data: { token } } = await tokenRes.json() as any;
+    const {
+      data: { token },
+    } = (await tokenRes.json()) as any;
 
     // The mock redis.set should have been called with ws-token:{token}
     const mockRedis = deps.redis as any;

@@ -32,7 +32,10 @@ afterEach(() => {
 });
 
 function buildFileLogger(): { logger: pino.Logger; filePath: string; flush: () => Promise<void> } {
-  const filePath = join(tmpdir(), `spatula-redact-test-${Date.now()}-${Math.random().toString(36).slice(2)}.log`);
+  const filePath = join(
+    tmpdir(),
+    `spatula-redact-test-${Date.now()}-${Math.random().toString(36).slice(2)}.log`,
+  );
   tempFiles.push(filePath);
 
   const dest = pino.destination({ dest: filePath, sync: true });

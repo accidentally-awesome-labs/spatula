@@ -22,11 +22,7 @@ import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { randomUUID } from 'node:crypto';
 import { sql } from 'drizzle-orm';
 
-import {
-  createDatabase,
-  PgContentStore,
-  TenantDataRepository,
-} from '@spatula/db';
+import { createDatabase, PgContentStore, TenantDataRepository } from '@spatula/db';
 import type { Database } from '@spatula/db';
 
 import { processTenantDeleteJob } from '@spatula/queue';
@@ -86,113 +82,108 @@ async function countContentStoreRows(keyPrefix: string): Promise<number> {
 // ---------------------------------------------------------------------------
 
 describe('DSR deletion round-trip (SEC-09/SEC-10)', () => {
-  it(
-    'proves zero rows + zero blobs + redacted audit + tombstone after real cascade worker',
-    async (ctx) => {
-      if (!setupOk) return ctx.skip();
+  it('proves zero rows + zero blobs + redacted audit + tombstone after real cascade worker', async (ctx) => {
+    if (!setupOk) return ctx.skip();
 
-      // ── 1. Seed a tenant with rows and blobs ────────────────────────────────
-      const seed = await seedTenant(db);
-      const { tenantId } = seed;
+    // ── 1. Seed a tenant with rows and blobs ────────────────────────────────
+    const seed = await seedTenant(db);
+    const { tenantId } = seed;
 
-      // Verify rows exist before deletion
-      const jobCountBefore = await countRows('jobs', tenantId);
-      expect(jobCountBefore).toBeGreaterThan(0);
+    // Verify rows exist before deletion
+    const jobCountBefore = await countRows('jobs', tenantId);
+    expect(jobCountBefore).toBeGreaterThan(0);
 
-      // Verify content-store blobs exist before deletion (query by key prefix)
-      const rawBlobBefore = await countContentStoreRows(`raw-pages/${tenantId}/`);
-      expect(rawBlobBefore).toBeGreaterThan(0);
+    // Verify content-store blobs exist before deletion (query by key prefix)
+    const rawBlobBefore = await countContentStoreRows(`raw-pages/${tenantId}/`);
+    expect(rawBlobBefore).toBeGreaterThan(0);
 
-      const forensicBlobBefore = await countContentStoreRows(`forensic/${tenantId}/`);
-      expect(forensicBlobBefore).toBeGreaterThan(0);
+    const forensicBlobBefore = await countContentStoreRows(`forensic/${tenantId}/`);
+    expect(forensicBlobBefore).toBeGreaterThan(0);
 
-      // ── 2. Build deps and run the REAL cascade worker ───────────────────────
-      const contentStore = new PgContentStore(db);
+    // ── 2. Build deps and run the REAL cascade worker ───────────────────────
+    const contentStore = new PgContentStore(db);
 
-      // Extend PgContentStore with a listKeys implementation.
-      // listKeys must return pg://<uuid> refs (not raw keys) because
-      // deleteBlobSafe passes them to contentStore.delete() which calls parseRef().
-      const listableContentStore = Object.assign(contentStore, {
-        async listKeys(prefix: string): Promise<string[]> {
-          const result = await db.execute(
-            sql`SELECT id FROM content_store WHERE key LIKE ${prefix + '%'}`,
-          );
-          return result.rows.map((r) => `pg://${(r as { id: string }).id}`);
-        },
-      });
+    // Extend PgContentStore with a listKeys implementation.
+    // listKeys must return pg://<uuid> refs (not raw keys) because
+    // deleteBlobSafe passes them to contentStore.delete() which calls parseRef().
+    const listableContentStore = Object.assign(contentStore, {
+      async listKeys(prefix: string): Promise<string[]> {
+        const result = await db.execute(
+          sql`SELECT id FROM content_store WHERE key LIKE ${prefix + '%'}`,
+        );
+        return result.rows.map((r) => `pg://${(r as { id: string }).id}`);
+      },
+    });
 
-      const tenantDataRepo = new TenantDataRepository(db);
+    const tenantDataRepo = new TenantDataRepository(db);
 
-      const deps: TenantDeleteJobDeps = {
-        tenantDataRepo,
-        contentStore: listableContentStore,
-        db: {
-          execute: (query) => db.execute(query) as Promise<{ rows: Record<string, unknown>[]; rowCount?: number }>,
-        },
-      };
+    const deps: TenantDeleteJobDeps = {
+      tenantDataRepo,
+      contentStore: listableContentStore,
+      db: {
+        execute: (query) =>
+          db.execute(query) as Promise<{ rows: Record<string, unknown>[]; rowCount?: number }>,
+      },
+    };
 
-      await processTenantDeleteJob(
-        {
-          tenantId,
-          requestedBy: 'e2e-test',
-          requestedAt: new Date().toISOString(),
-        },
-        deps,
-      );
+    await processTenantDeleteJob(
+      {
+        tenantId,
+        requestedBy: 'e2e-test',
+        requestedAt: new Date().toISOString(),
+      },
+      deps,
+    );
 
-      // ── 3. Assert: zero rows in every tenant-scoped table ───────────────────
-      for (const { table } of TENANT_SCOPED_TABLES) {
-        const count = await countRows(table, tenantId);
-        expect(count, `Expected 0 rows in ${table} for deleted tenant`).toBe(0);
-      }
+    // ── 3. Assert: zero rows in every tenant-scoped table ───────────────────
+    for (const { table } of TENANT_SCOPED_TABLES) {
+      const count = await countRows(table, tenantId);
+      expect(count, `Expected 0 rows in ${table} for deleted tenant`).toBe(0);
+    }
 
-      // entity_sources has no direct tenant_id column — verify via entities (already 0)
-      const entitySourcesCount = await db.execute(
-        sql.raw(
-          `SELECT COUNT(*) AS n FROM entity_sources WHERE entity_id IN
+    // entity_sources has no direct tenant_id column — verify via entities (already 0)
+    const entitySourcesCount = await db.execute(
+      sql.raw(
+        `SELECT COUNT(*) AS n FROM entity_sources WHERE entity_id IN
           (SELECT id FROM entities WHERE tenant_id = '${tenantId}'::uuid)`,
-        ),
-      );
-      expect(
-        Number((entitySourcesCount.rows[0] as { n: string }).n),
-        'entity_sources should be 0',
-      ).toBe(0);
+      ),
+    );
+    expect(
+      Number((entitySourcesCount.rows[0] as { n: string }).n),
+      'entity_sources should be 0',
+    ).toBe(0);
 
-      // ── 4. Assert: zero content-store blobs remain ──────────────────────────
-      const rawBlobAfter = await countContentStoreRows(`raw-pages/${tenantId}/`);
-      expect(rawBlobAfter, 'Raw page blobs should be deleted').toBe(0);
+    // ── 4. Assert: zero content-store blobs remain ──────────────────────────
+    const rawBlobAfter = await countContentStoreRows(`raw-pages/${tenantId}/`);
+    expect(rawBlobAfter, 'Raw page blobs should be deleted').toBe(0);
 
-      const forensicBlobAfter = await countContentStoreRows(`forensic/${tenantId}/`);
-      expect(forensicBlobAfter, 'Forensic blobs should be deleted').toBe(0);
+    const forensicBlobAfter = await countContentStoreRows(`forensic/${tenantId}/`);
+    expect(forensicBlobAfter, 'Forensic blobs should be deleted').toBe(0);
 
-      // ── 5. Assert: audit_log rows are redacted ──────────────────────────────
-      // After deletion, the tenant's prior audit rows should have:
-      //   metadata = {}, ip_address = NULL, actor_id = '[deleted]'
-      // BUT the tombstone row (tenantId = NULL) should still be un-redacted.
-      const redactedRows = await db.execute(
-        sql`SELECT id, metadata, ip_address, actor_id
+    // ── 5. Assert: audit_log rows are redacted ──────────────────────────────
+    // After deletion, the tenant's prior audit rows should have:
+    //   metadata = {}, ip_address = NULL, actor_id = '[deleted]'
+    // BUT the tombstone row (tenantId = NULL) should still be un-redacted.
+    const redactedRows = await db.execute(
+      sql`SELECT id, metadata, ip_address, actor_id
             FROM audit_log
             WHERE tenant_id IS NULL
               AND resource_id = ${tenantId}
               AND action = 'tenant.deleted'`,
-      );
+    );
 
-      // Tombstone should exist and be un-redacted
-      expect(redactedRows.rows.length, 'Tombstone row should exist').toBe(1);
-      const tombstone = redactedRows.rows[0] as {
-        metadata: Record<string, unknown>;
-        ip_address: string | null;
-        actor_id: string;
-      };
-      // Tombstone actor_id = the requestedBy value (not '[deleted]')
-      expect(tombstone.actor_id).toBe('e2e-test');
+    // Tombstone should exist and be un-redacted
+    expect(redactedRows.rows.length, 'Tombstone row should exist').toBe(1);
+    const tombstone = redactedRows.rows[0] as {
+      metadata: Record<string, unknown>;
+      ip_address: string | null;
+      actor_id: string;
+    };
+    // Tombstone actor_id = the requestedBy value (not '[deleted]')
+    expect(tombstone.actor_id).toBe('e2e-test');
 
-      // ── 6. Assert: the tenants row itself is gone ───────────────────────────
-      const tenantRow = await db.execute(
-        sql`SELECT id FROM tenants WHERE id = ${tenantId}::uuid`,
-      );
-      expect(tenantRow.rows.length, 'Tenant row should be deleted').toBe(0);
-    },
-    30_000, // 30s timeout for DB operations
-  );
+    // ── 6. Assert: the tenants row itself is gone ───────────────────────────
+    const tenantRow = await db.execute(sql`SELECT id FROM tenants WHERE id = ${tenantId}::uuid`);
+    expect(tenantRow.rows.length, 'Tenant row should be deleted').toBe(0);
+  }, 30_000); // 30s timeout for DB operations
 });

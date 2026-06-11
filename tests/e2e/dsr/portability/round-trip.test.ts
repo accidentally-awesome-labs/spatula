@@ -21,10 +21,7 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { sql } from 'drizzle-orm';
 
-import {
-  createDatabase,
-  TenantDataRepository,
-} from '@spatula/db';
+import { createDatabase, TenantDataRepository } from '@spatula/db';
 import type { Database } from '@spatula/db';
 
 import { seedTenant } from '../fixtures/seed-tenant.js';
@@ -134,105 +131,96 @@ async function clearApiKeys(tenantId: string): Promise<void> {
 // ---------------------------------------------------------------------------
 
 describe('DSR portability round-trip (SEC-10)', () => {
-  it(
-    'proves field-level parity after export → real-import round-trip via TenantDataRepository',
-    async (ctx) => {
-      if (!setupOk) return ctx.skip();
+  it('proves field-level parity after export → real-import round-trip via TenantDataRepository', async (ctx) => {
+    if (!setupOk) return ctx.skip();
 
-      // ── 1. Seed a tenant ────────────────────────────────────────────────────
-      const seed = await seedTenant(db);
-      const { tenantId, apiKeyId } = seed;
+    // ── 1. Seed a tenant ────────────────────────────────────────────────────
+    const seed = await seedTenant(db);
+    const { tenantId, apiKeyId } = seed;
 
-      // Capture original api_keys (the primary importable resource)
-      const originalApiKeys = await getApiKeys(tenantId);
-      expect(originalApiKeys.length, 'Should have seeded at least 1 api_key').toBeGreaterThan(0);
-      expect(originalApiKeys.some((k) => k.id === apiKeyId)).toBe(true);
+    // Capture original api_keys (the primary importable resource)
+    const originalApiKeys = await getApiKeys(tenantId);
+    expect(originalApiKeys.length, 'Should have seeded at least 1 api_key').toBeGreaterThan(0);
+    expect(originalApiKeys.some((k) => k.id === apiKeyId)).toBe(true);
 
-      // ── 2. Export: build the tenant dump ───────────────────────────────────
-      const dump = await exportTenantDump(tenantId);
-      expect(dump['api_keys']).toBeDefined();
-      expect(dump['api_keys'].length).toBe(originalApiKeys.length);
+    // ── 2. Export: build the tenant dump ───────────────────────────────────
+    const dump = await exportTenantDump(tenantId);
+    expect(dump['api_keys']).toBeDefined();
+    expect(dump['api_keys'].length).toBe(originalApiKeys.length);
 
-      // ── 3. Clear the tenant's api_keys (simulate post-delete or fresh start) ─
-      await clearApiKeys(tenantId);
-      const afterClear = await getApiKeys(tenantId);
-      expect(afterClear.length, 'api_keys should be empty after clear').toBe(0);
+    // ── 3. Clear the tenant's api_keys (simulate post-delete or fresh start) ─
+    await clearApiKeys(tenantId);
+    const afterClear = await getApiKeys(tenantId);
+    expect(afterClear.length, 'api_keys should be empty after clear').toBe(0);
 
-      // ── 4. Import: use the REAL import path (D-10) ─────────────────────────
-      const tenantDataRepo = new TenantDataRepository(db);
-      const { imported } = await tenantDataRepo.importTenantData(tenantId, dump);
+    // ── 4. Import: use the REAL import path (D-10) ─────────────────────────
+    const tenantDataRepo = new TenantDataRepository(db);
+    const { imported } = await tenantDataRepo.importTenantData(tenantId, dump);
 
-      expect(imported['api_keys'], 'Should have imported api_keys').toBeGreaterThan(0);
+    expect(imported['api_keys'], 'Should have imported api_keys').toBeGreaterThan(0);
 
-      // ── 5. Assert field-level parity ────────────────────────────────────────
-      const reimportedApiKeys = await getApiKeys(tenantId);
+    // ── 5. Assert field-level parity ────────────────────────────────────────
+    const reimportedApiKeys = await getApiKeys(tenantId);
 
-      // Same count
-      expect(reimportedApiKeys.length, 'Re-imported count should match original').toBe(
-        originalApiKeys.length,
+    // Same count
+    expect(reimportedApiKeys.length, 'Re-imported count should match original').toBe(
+      originalApiKeys.length,
+    );
+
+    // Field-level parity for each key
+    for (const original of originalApiKeys) {
+      const reimported = reimportedApiKeys.find((k) => k.id === original.id);
+      expect(reimported, `api_key ${original.id as string} should be re-imported`).toBeDefined();
+
+      if (!reimported) continue;
+
+      // Key fields must match (camelCase from our aliased SELECT)
+      expect(reimported.keyHash, 'keyHash must match').toBe(original.keyHash);
+      expect(reimported.keyPrefix, 'keyPrefix must match').toBe(original.keyPrefix);
+      expect(reimported.name, 'name must match').toBe(original.name);
+
+      // Tenant is always overridden to the target tenant (security invariant)
+      expect(String(reimported.tenantId), 'tenantId must be the target tenant').toBe(
+        String(tenantId),
       );
+    }
 
-      // Field-level parity for each key
-      for (const original of originalApiKeys) {
-        const reimported = reimportedApiKeys.find((k) => k.id === original.id);
-        expect(reimported, `api_key ${original.id as string} should be re-imported`).toBeDefined();
+    // ── 6. Idempotency check: running import twice should not double-count ──
+    const { imported: secondImport } = await tenantDataRepo.importTenantData(tenantId, dump);
+    // Duplicate rows should be skipped (ON CONFLICT / 23505 handling)
+    expect(secondImport['api_keys'] ?? 0, 'Second import should skip duplicates').toBe(0);
 
-        if (!reimported) continue;
+    const afterSecondImport = await getApiKeys(tenantId);
+    expect(afterSecondImport.length, 'Count should not grow after idempotent re-import').toBe(
+      originalApiKeys.length,
+    );
 
-        // Key fields must match (camelCase from our aliased SELECT)
-        expect(reimported.keyHash, 'keyHash must match').toBe(original.keyHash);
-        expect(reimported.keyPrefix, 'keyPrefix must match').toBe(original.keyPrefix);
-        expect(reimported.name, 'name must match').toBe(original.name);
-
-        // Tenant is always overridden to the target tenant (security invariant)
-        expect(
-          String(reimported.tenantId),
-          'tenantId must be the target tenant',
-        ).toBe(String(tenantId));
-      }
-
-      // ── 6. Idempotency check: running import twice should not double-count ──
-      const { imported: secondImport } = await tenantDataRepo.importTenantData(tenantId, dump);
-      // Duplicate rows should be skipped (ON CONFLICT / 23505 handling)
-      expect(secondImport['api_keys'] ?? 0, 'Second import should skip duplicates').toBe(0);
-
-      const afterSecondImport = await getApiKeys(tenantId);
-      expect(afterSecondImport.length, 'Count should not grow after idempotent re-import').toBe(
-        originalApiKeys.length,
-      );
-
-      // ── 7. Cleanup ───────────────────────────────────────────────────────────
-      // Clean up the seeded tenant to leave the test DB pristine
-      await db.execute(sql`DELETE FROM api_keys WHERE tenant_id = ${tenantId}::uuid`);
-      await db.execute(sql`DELETE FROM audit_log WHERE tenant_id = ${tenantId}::uuid`);
-      await db.execute(
-        sql`DELETE FROM dead_letter_queue WHERE tenant_id = ${tenantId}::uuid`,
-      );
-      await db.execute(sql`DELETE FROM llm_usage WHERE tenant_id = ${tenantId}::uuid`);
-      await db.execute(sql`DELETE FROM exports WHERE tenant_id = ${tenantId}::uuid`);
-      await db.execute(sql`DELETE FROM source_trust WHERE tenant_id = ${tenantId}::uuid`);
-      await db.execute(sql`DELETE FROM actions WHERE tenant_id = ${tenantId}::uuid`);
-      await db.execute(
-        sql`DELETE FROM entity_sources WHERE entity_id IN
+    // ── 7. Cleanup ───────────────────────────────────────────────────────────
+    // Clean up the seeded tenant to leave the test DB pristine
+    await db.execute(sql`DELETE FROM api_keys WHERE tenant_id = ${tenantId}::uuid`);
+    await db.execute(sql`DELETE FROM audit_log WHERE tenant_id = ${tenantId}::uuid`);
+    await db.execute(sql`DELETE FROM dead_letter_queue WHERE tenant_id = ${tenantId}::uuid`);
+    await db.execute(sql`DELETE FROM llm_usage WHERE tenant_id = ${tenantId}::uuid`);
+    await db.execute(sql`DELETE FROM exports WHERE tenant_id = ${tenantId}::uuid`);
+    await db.execute(sql`DELETE FROM source_trust WHERE tenant_id = ${tenantId}::uuid`);
+    await db.execute(sql`DELETE FROM actions WHERE tenant_id = ${tenantId}::uuid`);
+    await db.execute(
+      sql`DELETE FROM entity_sources WHERE entity_id IN
             (SELECT id FROM entities WHERE tenant_id = ${tenantId}::uuid)`,
-      );
-      await db.execute(sql`DELETE FROM entities WHERE tenant_id = ${tenantId}::uuid`);
-      await db.execute(sql`DELETE FROM extractions WHERE tenant_id = ${tenantId}::uuid`);
-      await db.execute(sql`DELETE FROM raw_pages WHERE tenant_id = ${tenantId}::uuid`);
-      await db.execute(sql`DELETE FROM schemas WHERE tenant_id = ${tenantId}::uuid`);
-      await db.execute(sql`DELETE FROM crawl_tasks WHERE tenant_id = ${tenantId}::uuid`);
-      await db.execute(sql`DELETE FROM jobs WHERE tenant_id = ${tenantId}::uuid`);
-      await db.execute(
-        sql`DELETE FROM content_store WHERE key LIKE ${`raw-pages/${tenantId}/` + '%'}`,
-      );
-      await db.execute(
-        sql`DELETE FROM content_store WHERE key LIKE ${`forensic/${tenantId}/` + '%'}`,
-      );
-      await db.execute(
-        sql`DELETE FROM content_store WHERE key LIKE ${`exports/${tenantId}/` + '%'}`,
-      );
-      await db.execute(sql`DELETE FROM tenants WHERE id = ${tenantId}::uuid`);
-    },
-    30_000,
-  );
+    );
+    await db.execute(sql`DELETE FROM entities WHERE tenant_id = ${tenantId}::uuid`);
+    await db.execute(sql`DELETE FROM extractions WHERE tenant_id = ${tenantId}::uuid`);
+    await db.execute(sql`DELETE FROM raw_pages WHERE tenant_id = ${tenantId}::uuid`);
+    await db.execute(sql`DELETE FROM schemas WHERE tenant_id = ${tenantId}::uuid`);
+    await db.execute(sql`DELETE FROM crawl_tasks WHERE tenant_id = ${tenantId}::uuid`);
+    await db.execute(sql`DELETE FROM jobs WHERE tenant_id = ${tenantId}::uuid`);
+    await db.execute(
+      sql`DELETE FROM content_store WHERE key LIKE ${`raw-pages/${tenantId}/` + '%'}`,
+    );
+    await db.execute(
+      sql`DELETE FROM content_store WHERE key LIKE ${`forensic/${tenantId}/` + '%'}`,
+    );
+    await db.execute(sql`DELETE FROM content_store WHERE key LIKE ${`exports/${tenantId}/` + '%'}`);
+    await db.execute(sql`DELETE FROM tenants WHERE id = ${tenantId}::uuid`);
+  }, 30_000);
 });

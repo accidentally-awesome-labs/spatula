@@ -20,11 +20,7 @@
  * on the absence of the three headers regardless of the body status.
  */
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
-import {
-  startServer,
-  seedTenantAndKey,
-  type ContractServer,
-} from './helpers/server-harness.js';
+import { startServer, seedTenantAndKey, type ContractServer } from './helpers/server-harness.js';
 
 let server: ContractServer;
 let apiKey: string;

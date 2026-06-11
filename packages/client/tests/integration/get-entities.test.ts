@@ -74,15 +74,18 @@ describe('integration: getEntities', () => {
     expect(result.hasMore).toBe(false);
   });
 
-  it.skipIf(!LIVE)('live (SPATULA_LIVE_LLM=1): GET /api/v1/jobs/:jobId/entities returns cursor envelope', async () => {
-    const baseUrl = process.env.SPATULA_BASE_URL ?? 'http://localhost:3000';
-    const apiKey = process.env.SPATULA_API_KEY;
-    const jobId = process.env.SPATULA_LIVE_JOB_ID;
-    if (!apiKey || !jobId) {
-      throw new Error('SPATULA_LIVE_LLM=1 requires SPATULA_API_KEY + SPATULA_LIVE_JOB_ID');
-    }
-    const client = new SpatulaClient({ baseUrl, apiKey });
-    const result = await getEntities(client, jobId, { limit: 10 });
-    expect(Array.isArray(result.data)).toBe(true);
-  });
+  it.skipIf(!LIVE)(
+    'live (SPATULA_LIVE_LLM=1): GET /api/v1/jobs/:jobId/entities returns cursor envelope',
+    async () => {
+      const baseUrl = process.env.SPATULA_BASE_URL ?? 'http://localhost:3000';
+      const apiKey = process.env.SPATULA_API_KEY;
+      const jobId = process.env.SPATULA_LIVE_JOB_ID;
+      if (!apiKey || !jobId) {
+        throw new Error('SPATULA_LIVE_LLM=1 requires SPATULA_API_KEY + SPATULA_LIVE_JOB_ID');
+      }
+      const client = new SpatulaClient({ baseUrl, apiKey });
+      const result = await getEntities(client, jobId, { limit: 10 });
+      expect(Array.isArray(result.data)).toBe(true);
+    },
+  );
 });

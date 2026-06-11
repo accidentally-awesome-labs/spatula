@@ -50,7 +50,7 @@ Class-per-code error subclasses live in `src/errors/generated.ts` and are checke
 import { SpatulaClient, JobNotFoundError, RateLimitExceededError } from '@spatula/client';
 
 try {
-  await createJob(client, /* ... */);
+  await createJob(client /* ... */);
 } catch (err) {
   if (err instanceof JobNotFoundError) {
     /* ... */

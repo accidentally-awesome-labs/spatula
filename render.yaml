@@ -15,11 +15,11 @@
 
 services:
   - name: spatula-api
-    type: web          # NOT 'worker' — Background Worker requires a paid plan
+    type: web # NOT 'worker' — Background Worker requires a paid plan
     runtime: node
     plan: free
     buildCommand: corepack enable && pnpm install --frozen-lockfile && pnpm build
-    startCommand: node apps/api/dist/main.js   # Plan 01 bootstrap — NOT index.js (barrel)
+    startCommand: node apps/api/dist/main.js # Plan 01 bootstrap — NOT index.js (barrel)
     healthCheckPath: /health
 
     envVars:
@@ -39,7 +39,7 @@ services:
       # Runs the BullMQ worker in-process on the single free Web Service.
       # Remove this when upgrading to a paid plan with a separate Worker service.
       - key: SPATULA_EMBEDDED_WORKER
-        value: "1"
+        value: '1'
 
       # ── Runtime environment ─────────────────────────────────────────────────
       - key: NODE_ENV
@@ -47,7 +47,7 @@ services:
 
       # Marker read by runbook docs / caveats tooling
       - key: SPATULA_RENDER_FREE_TIER
-        value: "1"
+        value: '1'
 
       # ── Secrets — set these in the Render dashboard (not committed here) ────
       # Required: LLM inference key
@@ -75,7 +75,7 @@ services:
         sync: false
 
   - name: spatula-cache
-    type: keyvalue     # canonical form; 'redis' is a deprecated alias
+    type: keyvalue # canonical form; 'redis' is a deprecated alias
     plan: free
     ipAllowList:
       - source: 0.0.0.0/0

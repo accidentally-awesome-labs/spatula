@@ -40,10 +40,7 @@ export interface DeprecationHeaderOptions {
  *
  * Callers should invoke BEFORE `return c.json(...)`.
  */
-export function applyDeprecationHeaders(
-  c: Context,
-  options?: DeprecationHeaderOptions,
-): void {
+export function applyDeprecationHeaders(c: Context, options?: DeprecationHeaderOptions): void {
   c.header('Deprecation', DEPRECATION_HTTP_DATE);
   c.header('Sunset', SUNSET_HTTP_DATE);
   c.header('Link', options?.successorLink ?? DEFAULT_SUCCESSOR_LINK);

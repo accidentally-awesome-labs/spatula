@@ -49,40 +49,42 @@ export class TenantDataRepository {
    * The `tenants` row itself is NOT deleted here — the BullMQ worker handles that last.
    * Running this twice is safe (re-running on already-empty tables is a no-op).
    */
-  async cascadeDeleteTenantData(tenantId: string): Promise<{ deletedCounts: Record<string, number> }> {
+  async cascadeDeleteTenantData(
+    tenantId: string,
+  ): Promise<{ deletedCounts: Record<string, number> }> {
     logger.debug({ tenantId }, 'cascadeDeleteTenantData: starting');
 
     const deletedCounts: Record<string, number> = {};
 
-    const del = async (tableName: string, deleteExpr: () => Promise<{ rowCount?: number | null }>) => {
+    const del = async (
+      tableName: string,
+      deleteExpr: () => Promise<{ rowCount?: number | null }>,
+    ) => {
       const result = await deleteExpr();
       const count = result.rowCount ?? 0;
       deletedCounts[tableName] = count;
       if (count > 0) {
-        logger.debug({ tenantId, table: tableName, count }, 'cascadeDeleteTenantData: deleted rows');
+        logger.debug(
+          { tenantId, table: tableName, count },
+          'cascadeDeleteTenantData: deleted rows',
+        );
       }
     };
 
     // entity_sources (FK → entities + extractions) — must come before both
     await del('entity_sources', () =>
-      this.db
-        .delete(entitySources)
-        .where(
-          sql`${entitySources.entityId} IN (
+      this.db.delete(entitySources).where(
+        sql`${entitySources.entityId} IN (
             SELECT id FROM entities WHERE tenant_id = ${tenantId}::uuid
           )`,
-        ),
+      ),
     );
 
     // entities
-    await del('entities', () =>
-      this.db.delete(entities).where(eq(entities.tenantId, tenantId)),
-    );
+    await del('entities', () => this.db.delete(entities).where(eq(entities.tenantId, tenantId)));
 
     // actions
-    await del('actions', () =>
-      this.db.delete(actions).where(eq(actions.tenantId, tenantId)),
-    );
+    await del('actions', () => this.db.delete(actions).where(eq(actions.tenantId, tenantId)));
 
     // extractions
     await del('extractions', () =>
@@ -95,9 +97,7 @@ export class TenantDataRepository {
     );
 
     // raw_pages
-    await del('raw_pages', () =>
-      this.db.delete(rawPages).where(eq(rawPages.tenantId, tenantId)),
-    );
+    await del('raw_pages', () => this.db.delete(rawPages).where(eq(rawPages.tenantId, tenantId)));
 
     // exports
     await del('exports', () =>
@@ -115,20 +115,14 @@ export class TenantDataRepository {
     );
 
     // jobs
-    await del('jobs', () =>
-      this.db.delete(jobs).where(eq(jobs.tenantId, tenantId)),
-    );
+    await del('jobs', () => this.db.delete(jobs).where(eq(jobs.tenantId, tenantId)));
 
     // llm_usage (has onDelete: cascade in schema, but we delete explicitly for
     // idempotency — if llm_usage rows survived for any reason, explicit delete cleans them)
-    await del('llm_usage', () =>
-      this.db.delete(llmUsage).where(eq(llmUsage.tenantId, tenantId)),
-    );
+    await del('llm_usage', () => this.db.delete(llmUsage).where(eq(llmUsage.tenantId, tenantId)));
 
     // api_keys
-    await del('api_keys', () =>
-      this.db.delete(apiKeys).where(eq(apiKeys.tenantId, tenantId)),
-    );
+    await del('api_keys', () => this.db.delete(apiKeys).where(eq(apiKeys.tenantId, tenantId)));
 
     // user_tenants (has onDelete: cascade, but explicit for idempotency)
     await del('user_tenants', () =>

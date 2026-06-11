@@ -179,12 +179,12 @@ All 9 checks should be green after a successful restore (assuming Redis and API 
 
 These estimates assume a **single-server restore** (psql piped from a local dump file on the same network as Postgres). Actual times depend on disk I/O speed, network latency, Postgres server capacity, and dump format (plain-text vs custom). **Measure on your hardware before committing to an RTO.**
 
-| Database Size | Estimated Restore Time | Notes |
-|---------------|----------------------|-------|
-| < 1 GB | 1–5 minutes | Plain-text `psql` restore; single-threaded |
-| 1–10 GB | 5–30 minutes | Plain-text; I/O bound; consider custom format + `pg_restore -j 4` |
-| 10–100 GB | 30–120 minutes | Custom format + parallel restore strongly recommended |
-| > 100 GB | > 2 hours | Parallel restore + tablespace layout + WAL tuning needed |
+| Database Size | Estimated Restore Time | Notes                                                             |
+| ------------- | ---------------------- | ----------------------------------------------------------------- |
+| < 1 GB        | 1–5 minutes            | Plain-text `psql` restore; single-threaded                        |
+| 1–10 GB       | 5–30 minutes           | Plain-text; I/O bound; consider custom format + `pg_restore -j 4` |
+| 10–100 GB     | 30–120 minutes         | Custom format + parallel restore strongly recommended             |
+| > 100 GB      | > 2 hours              | Parallel restore + tablespace layout + WAL tuning needed          |
 
 **Methodology note:** These are order-of-magnitude estimates based on typical cloud VM I/O (IOPS ~3000, sequential write ~250 MB/s). To measure your own baseline:
 

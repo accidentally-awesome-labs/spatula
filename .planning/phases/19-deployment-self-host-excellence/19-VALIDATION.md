@@ -16,14 +16,14 @@ created: 2026-06-10
 
 ## Test Infrastructure
 
-| Property | Value |
-|----------|-------|
-| **Framework** | vitest (TS monorepo); plus shell/CI smoke gates for infra (kind, render, cosign) |
-| **Config file** | `tests/vitest.config.ts` (root e2e); per-package `vitest.config.ts` |
-| **Quick run command** | `pnpm --filter <pkg> test` |
-| **Full suite command** | `pnpm test` |
+| Property                 | Value                                                                                                                    |
+| ------------------------ | ------------------------------------------------------------------------------------------------------------------------ |
+| **Framework**            | vitest (TS monorepo); plus shell/CI smoke gates for infra (kind, render, cosign)                                         |
+| **Config file**          | `tests/vitest.config.ts` (root e2e); per-package `vitest.config.ts`                                                      |
+| **Quick run command**    | `pnpm --filter <pkg> test`                                                                                               |
+| **Full suite command**   | `pnpm test`                                                                                                              |
 | **Infra smoke commands** | `kubectl apply -k deploy/k8s/overlays/dev` · `cosign verify ...` · `tests/e2e/backup` · `tests/upgrade` · `tests/config` |
-| **Estimated runtime** | unit ~quick; infra/e2e lanes minutes (default on-release+nightly per CONTEXT Claude's-discretion) |
+| **Estimated runtime**    | unit ~quick; infra/e2e lanes minutes (default on-release+nightly per CONTEXT Claude's-discretion)                        |
 
 ---
 
@@ -40,11 +40,11 @@ created: 2026-06-10
 
 > Populated by the planner from `19-RESEARCH.md` § Validation Architecture. Every DEPLOY-01..11 requirement maps to at least one automatable signal (CI job, smoke test, grep, or command exit code).
 
-| Task ID | Plan | Wave | Requirement | Test Type | Automated Command | File Exists | Status |
-|---------|------|------|-------------|-----------|-------------------|-------------|--------|
-| 19-XX-XX | XX | X | DEPLOY-XX | infra/e2e/unit | `{command}` | ❌ W0 | ⬜ pending |
+| Task ID  | Plan | Wave | Requirement | Test Type      | Automated Command | File Exists | Status     |
+| -------- | ---- | ---- | ----------- | -------------- | ----------------- | ----------- | ---------- |
+| 19-XX-XX | XX   | X    | DEPLOY-XX   | infra/e2e/unit | `{command}`       | ❌ W0       | ⬜ pending |
 
-*Status: ⬜ pending · ✅ green · ❌ red · ⚠️ flaky*
+_Status: ⬜ pending · ✅ green · ❌ red · ⚠️ flaky_
 
 ---
 
@@ -55,17 +55,17 @@ created: 2026-06-10
 - [ ] `tests/config/` — v1.0 `spatula.yaml` parses on v1.1 runtime (DEPLOY-11)
 - [ ] CI lanes: min-version matrix + cosign-verify smoke + kind/render smoke (DEPLOY-03/04/08)
 
-*Planner refines this list against existing `tests/` conventions.*
+_Planner refines this list against existing `tests/` conventions._
 
 ---
 
 ## Manual-Only Verifications
 
-| Behavior | Requirement | Why Manual | Test Instructions |
-|----------|-------------|------------|-------------------|
-| Render free-tier full-stack deploy reachable on assigned URL | DEPLOY-02 | Requires a real Render free-tier account + fresh clone | Deploy `render.yaml` from a fresh clone; hit assigned URL; confirm api+embedded-worker healthy |
-| `cosign verify` on a fresh machine (amd64 + arm64) | DEPLOY-04 | Cross-arch + fresh-machine trust-root needed | Pull each of 4 images per arch; run documented keyless `cosign verify`; confirm SBOM attestation |
-| Measured 1k-page sizing baseline (live LLM spend) | DEPLOY-09 | Real LLM cost + wall-clock on defined cloud VM | Run harness once per tier on the named VM; record timings + cost-per-page |
+| Behavior                                                     | Requirement | Why Manual                                             | Test Instructions                                                                                |
+| ------------------------------------------------------------ | ----------- | ------------------------------------------------------ | ------------------------------------------------------------------------------------------------ |
+| Render free-tier full-stack deploy reachable on assigned URL | DEPLOY-02   | Requires a real Render free-tier account + fresh clone | Deploy `render.yaml` from a fresh clone; hit assigned URL; confirm api+embedded-worker healthy   |
+| `cosign verify` on a fresh machine (amd64 + arm64)           | DEPLOY-04   | Cross-arch + fresh-machine trust-root needed           | Pull each of 4 images per arch; run documented keyless `cosign verify`; confirm SBOM attestation |
+| Measured 1k-page sizing baseline (live LLM spend)            | DEPLOY-09   | Real LLM cost + wall-clock on defined cloud VM         | Run harness once per tier on the named VM; record timings + cost-per-page                        |
 
 ---
 

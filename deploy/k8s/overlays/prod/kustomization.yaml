@@ -18,11 +18,11 @@ resources:
 # ⚠️  Replace "1.0.0" with the actual release tag (e.g. from GITHUB_REF_NAME in CI).
 images:
   - name: ghcr.io/accidentally-awesome-labs/spatula/api
-    newTag: "1.0.0"   # REPLACE with actual release tag
+    newTag: '1.0.0' # REPLACE with actual release tag
   - name: ghcr.io/accidentally-awesome-labs/spatula/worker
-    newTag: "1.0.0"   # REPLACE with actual release tag
+    newTag: '1.0.0' # REPLACE with actual release tag
   - name: ghcr.io/accidentally-awesome-labs/spatula/migrate
-    newTag: "1.0.0"   # REPLACE with actual release tag
+    newTag: '1.0.0' # REPLACE with actual release tag
 
 patches:
   - path: patch-resources.yaml

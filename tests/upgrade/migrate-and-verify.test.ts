@@ -130,26 +130,18 @@ function parseConnectionString(url: string): {
 
 function psqlExec(connectionUrl: string, sqlStr: string): void {
   const conn = parseConnectionString(connectionUrl);
-  execFileSync(
-    'psql',
-    ['-h', conn.host, '-p', conn.port, '-U', conn.user, '-c', sqlStr],
-    {
-      env: { ...process.env, PGPASSWORD: conn.password },
-      stdio: 'pipe',
-    },
-  );
+  execFileSync('psql', ['-h', conn.host, '-p', conn.port, '-U', conn.user, '-c', sqlStr], {
+    env: { ...process.env, PGPASSWORD: conn.password },
+    stdio: 'pipe',
+  });
 }
 
 function psqlFile(connectionUrl: string, filePath: string): void {
   const conn = parseConnectionString(connectionUrl);
-  execFileSync(
-    'psql',
-    ['-h', conn.host, '-p', conn.port, '-U', conn.user, '-f', filePath],
-    {
-      env: { ...process.env, PGPASSWORD: conn.password },
-      stdio: 'pipe',
-    },
-  );
+  execFileSync('psql', ['-h', conn.host, '-p', conn.port, '-U', conn.user, '-f', filePath], {
+    env: { ...process.env, PGPASSWORD: conn.password },
+    stdio: 'pipe',
+  });
 }
 
 // ---------------------------------------------------------------------------
@@ -157,85 +149,79 @@ function psqlFile(connectionUrl: string, filePath: string): void {
 // ---------------------------------------------------------------------------
 
 describe('v1.0 → v1.x upgrade migration (DEPLOY-10)', () => {
-  it(
-    'applies baseline SQL, runs migrator, and verifies __drizzle_migrations_oss + schema',
-    async (ctx) => {
-      if (!setupOk) return ctx.skip();
+  it('applies baseline SQL, runs migrator, and verifies __drizzle_migrations_oss + schema', async (ctx) => {
+    if (!setupOk) return ctx.skip();
 
-      const conn = parseConnectionString(DATABASE_URL);
-      const adminUrl = DATABASE_URL.replace(`/${conn.database}`, '/postgres');
-      const scratchUrl = DATABASE_URL.replace(`/${conn.database}`, `/${SCRATCH_DB}`);
+    const conn = parseConnectionString(DATABASE_URL);
+    const adminUrl = DATABASE_URL.replace(`/${conn.database}`, '/postgres');
+    const scratchUrl = DATABASE_URL.replace(`/${conn.database}`, `/${SCRATCH_DB}`);
 
-      // ── 1. Create a fresh scratch DB ─────────────────────────────────────────
-      psqlExec(adminUrl, `DROP DATABASE IF EXISTS ${SCRATCH_DB}`);
-      psqlExec(adminUrl, `CREATE DATABASE ${SCRATCH_DB}`);
+    // ── 1. Create a fresh scratch DB ─────────────────────────────────────────
+    psqlExec(adminUrl, `DROP DATABASE IF EXISTS ${SCRATCH_DB}`);
+    psqlExec(adminUrl, `CREATE DATABASE ${SCRATCH_DB}`);
 
-      // ── 2. Apply 0000_v1_baseline.sql directly (simulates a v1.0 database) ──
-      // This applies the schema WITHOUT the __drizzle_migrations_oss journal,
-      // simulating a v1.0 database that was set up before Drizzle tracking existed.
-      // The baseline SQL uses `CREATE TABLE` statements (not IF NOT EXISTS), so
-      // applying it to a fresh DB creates all v1.0 tables cleanly.
-      psqlFile(scratchUrl, BASELINE_SQL);
+    // ── 2. Apply 0000_v1_baseline.sql directly (simulates a v1.0 database) ──
+    // This applies the schema WITHOUT the __drizzle_migrations_oss journal,
+    // simulating a v1.0 database that was set up before Drizzle tracking existed.
+    // The baseline SQL uses `CREATE TABLE` statements (not IF NOT EXISTS), so
+    // applying it to a fresh DB creates all v1.0 tables cleanly.
+    psqlFile(scratchUrl, BASELINE_SQL);
 
-      // Verify baseline tables exist before running migrator
-      const scratchDbCheck = createDatabase(scratchUrl);
-      await scratchDbCheck.execute(sql`SELECT 1 FROM jobs LIMIT 0`);
-      await (scratchDbCheck as unknown as { $client?: { end?: () => Promise<void> } }).$client?.end?.();
+    // Verify baseline tables exist before running migrator
+    const scratchDbCheck = createDatabase(scratchUrl);
+    await scratchDbCheck.execute(sql`SELECT 1 FROM jobs LIMIT 0`);
+    await (
+      scratchDbCheck as unknown as { $client?: { end?: () => Promise<void> } }
+    ).$client?.end?.();
 
-      // ── 3. Run the migrator against the scratch DB ────────────────────────────
-      // runMigrations() applies all drizzle migrations in packages/db/drizzle/
-      // tracking in __drizzle_migrations_oss.
-      // With baseline tables already present (from step 2) and no journal,
-      // Drizzle will try to apply the baseline again — the baseline CREATE TABLE
-      // statements will fail with "already exists" on a fresh application.
-      // To handle this realistically, we run the migrator with the scratch URL
-      // and expect it to successfully apply at least the 0001 increment.
-      //
-      // Implementation: runMigrations() in @spatula/db wraps migrate() which
-      // handles each migration in a transaction. If the baseline fails (table exists),
-      // it rolls back that migration but records it as applied. The increment then
-      // proceeds. We assert the final journal state.
-      await runMigrations(scratchUrl);
+    // ── 3. Run the migrator against the scratch DB ────────────────────────────
+    // runMigrations() applies all drizzle migrations in packages/db/drizzle/
+    // tracking in __drizzle_migrations_oss.
+    // With baseline tables already present (from step 2) and no journal,
+    // Drizzle will try to apply the baseline again — the baseline CREATE TABLE
+    // statements will fail with "already exists" on a fresh application.
+    // To handle this realistically, we run the migrator with the scratch URL
+    // and expect it to successfully apply at least the 0001 increment.
+    //
+    // Implementation: runMigrations() in @spatula/db wraps migrate() which
+    // handles each migration in a transaction. If the baseline fails (table exists),
+    // it rolls back that migration but records it as applied. The increment then
+    // proceeds. We assert the final journal state.
+    await runMigrations(scratchUrl);
 
-      // ── 4. Connect to scratch DB and verify ──────────────────────────────────
-      const { db: scratchDb, pool: scratchPool } = createDatabasePool(scratchUrl);
+    // ── 4. Connect to scratch DB and verify ──────────────────────────────────
+    const { db: scratchDb, pool: scratchPool } = createDatabasePool(scratchUrl);
 
-      try {
-        // Assert __drizzle_migrations_oss contains both expected migration entries
-        const migrationsResult = await scratchDb.execute(
-          sql`SELECT hash, created_at FROM __drizzle_migrations_oss ORDER BY created_at ASC`,
-        );
-        const appliedHashes = (migrationsResult.rows as Array<{ hash: string }>).map(
-          (r) => r.hash,
-        );
+    try {
+      // Assert __drizzle_migrations_oss contains both expected migration entries
+      const migrationsResult = await scratchDb.execute(
+        sql`SELECT hash, created_at FROM __drizzle_migrations_oss ORDER BY created_at ASC`,
+      );
+      const appliedHashes = (migrationsResult.rows as Array<{ hash: string }>).map((r) => r.hash);
 
-        // Both the baseline and the increment must appear in the journal
-        expect(
-          appliedHashes.length,
-          'Expected at least 2 applied migrations in __drizzle_migrations_oss',
-        ).toBeGreaterThanOrEqual(2);
+      // Both the baseline and the increment must appear in the journal
+      expect(
+        appliedHashes.length,
+        'Expected at least 2 applied migrations in __drizzle_migrations_oss',
+      ).toBeGreaterThanOrEqual(2);
 
-        // Assert schema-level smoke: SELECT 1 from each expected table
-        for (const table of EXPECTED_TABLES) {
-          await expect(
-            scratchDb.execute(sql.raw(`SELECT 1 FROM ${table} LIMIT 0`)),
-          ).resolves.toBeDefined();
-        }
-
-        // Assert the v1.x-specific column from 0001_api_key_rotation.sql is present
-        // (the `supersedes` column on api_keys)
+      // Assert schema-level smoke: SELECT 1 from each expected table
+      for (const table of EXPECTED_TABLES) {
         await expect(
-          scratchDb.execute(
-            sql`SELECT supersedes, superseded_expires_at FROM api_keys LIMIT 0`,
-          ),
+          scratchDb.execute(sql.raw(`SELECT 1 FROM ${table} LIMIT 0`)),
         ).resolves.toBeDefined();
-      } finally {
-        await scratchPool.end();
       }
 
-      // ── 5. Cleanup: drop scratch DB ───────────────────────────────────────────
-      psqlExec(adminUrl, `DROP DATABASE IF EXISTS ${SCRATCH_DB}`);
-    },
-    60_000, // 60s timeout for DB operations
-  );
+      // Assert the v1.x-specific column from 0001_api_key_rotation.sql is present
+      // (the `supersedes` column on api_keys)
+      await expect(
+        scratchDb.execute(sql`SELECT supersedes, superseded_expires_at FROM api_keys LIMIT 0`),
+      ).resolves.toBeDefined();
+    } finally {
+      await scratchPool.end();
+    }
+
+    // ── 5. Cleanup: drop scratch DB ───────────────────────────────────────────
+    psqlExec(adminUrl, `DROP DATABASE IF EXISTS ${SCRATCH_DB}`);
+  }, 60_000); // 60s timeout for DB operations
 });

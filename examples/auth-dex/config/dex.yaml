@@ -35,9 +35,9 @@ enablePasswordDB: true
 staticPasswords:
   - email: dev@example.com
     # bcrypt hash of "password" (cost 10) — generated with htpasswd -bnBC 10 "" password
-    hash: "$2y$10$iDAsoQl/qQdOIbXWYQU1tuazOiY7v9eEsQOCs.SXbKUkGe3S17ImO"
+    hash: '$2y$10$iDAsoQl/qQdOIbXWYQU1tuazOiY7v9eEsQOCs.SXbKUkGe3S17ImO'
     username: devuser
-    userID: "00000000-0000-0000-0000-000000000001"
+    userID: '00000000-0000-0000-0000-000000000001'
 
 staticClients:
   # Browser client: public PKCE authorization_code flow.

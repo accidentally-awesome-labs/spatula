@@ -53,10 +53,7 @@ export default [
     // Exempt the back-compat shim files that intentionally re-export the
     // @spatula/core-types runtime values for legacy consumers (plan 16-2
     // D-10 — these shims ARE the canonical value-import surface).
-    files: [
-      'packages/shared/src/error-codes.ts',
-      'packages/core/src/types/*.ts',
-    ],
+    files: ['packages/shared/src/error-codes.ts', 'packages/core/src/types/*.ts'],
     rules: {
       '@typescript-eslint/no-restricted-imports': 'off',
     },

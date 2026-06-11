@@ -14,7 +14,7 @@ on:
     tags:
       - 'v*'
   schedule:
-    - cron: '0 2 * * *'     # nightly at 02:00 UTC
+    - cron: '0 2 * * *' # nightly at 02:00 UTC
   workflow_dispatch: {}
 
 permissions:

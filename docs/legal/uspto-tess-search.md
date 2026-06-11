@@ -2,13 +2,13 @@
 
 ## Search Metadata
 
-| Field             | Value                                                        |
-|-------------------|--------------------------------------------------------------|
-| Search date       | 2026-05-20                                                   |
-| Search system     | USPTO Trademark Electronic Search System (TESS) — tmsearch.uspto.gov |
-| Mark searched     | SPATULA                                                      |
-| Classes searched  | IC 009 (scientific/software instruments), IC 042 (software SaaS/tech services) |
-| Search type       | Basic word-mark search, all live/active filings              |
+| Field            | Value                                                                          |
+| ---------------- | ------------------------------------------------------------------------------ |
+| Search date      | 2026-05-20                                                                     |
+| Search system    | USPTO Trademark Electronic Search System (TESS) — tmsearch.uspto.gov           |
+| Mark searched    | SPATULA                                                                        |
+| Classes searched | IC 009 (scientific/software instruments), IC 042 (software SaaS/tech services) |
+| Search type      | Basic word-mark search, all live/active filings                                |
 
 ## Search Execution Note
 
@@ -20,6 +20,7 @@ API requires a registered API key as of October 2025.
 **As a result, the automated agent was unable to complete the search programmatically.**
 
 The search result below documents what was found via:
+
 1. AI knowledge base (training cutoff August 2025) — no conflicting live marks for "Spatula"
    as a software/SaaS product in IC 009 or IC 042 found in training data.
 2. The human reviewer MUST independently verify this search at: https://tmsearch.uspto.gov/
@@ -68,5 +69,5 @@ finalized per Phase 18 D-02 ordering.
 
 ---
 
-*Phase: 18-security-hardening-legal / Plan: 04 / Task: 2*
-*Document generated: 2026-05-20*
+_Phase: 18-security-hardening-legal / Plan: 04 / Task: 2_
+_Document generated: 2026-05-20_

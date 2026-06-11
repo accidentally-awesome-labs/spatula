@@ -102,9 +102,7 @@ export function subscribeJobEvents(
   options: SubscribeJobEventsOptions,
 ): UnsubscribeFn {
   // Build the SSE URL.
-  const url = new URL(
-    `${client.baseUrl}/api/v1/jobs/${encodeURIComponent(jobId)}/events`,
-  );
+  const url = new URL(`${client.baseUrl}/api/v1/jobs/${encodeURIComponent(jobId)}/events`);
   url.searchParams.set('token', options.token);
   if (options.lastEventId) {
     url.searchParams.set('lastEventId', options.lastEventId);
@@ -116,13 +114,13 @@ export function subscribeJobEvents(
   // dynamically imported to keep it OUT of the browser bundle. The function
   // is synchronous but the Node polyfill path wraps construction in a resolved
   // Promise so the EventSource is created asynchronously on the next tick.
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+
   let es: MinimalEventSource | undefined;
   let closed = false;
 
   if (typeof window === 'undefined') {
     // Node path: dynamic import — polyfill stays outside the browser bundle.
-    // eslint-disable-next-line @typescript-eslint/no-floating-promises
+
     import('eventsource').then(({ EventSource: NodeEventSource }) => {
       if (closed) return; // unsubscribed before polyfill loaded
       // eventsource@4.1.0 is W3C-compliant; cast through unknown to our minimal interface.
@@ -132,8 +130,10 @@ export function subscribeJobEvents(
     });
   } else {
     // Browser path: native EventSource (accessed via globalThis to avoid requiring DOM lib).
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const NativeES = (globalThis as Record<string, unknown>)['EventSource'] as new (url: string) => MinimalEventSource;
+
+    const NativeES = (globalThis as Record<string, unknown>)['EventSource'] as new (
+      url: string,
+    ) => MinimalEventSource;
     es = new NativeES(url.toString());
     wireHandlers(es, options);
   }
@@ -144,10 +144,7 @@ export function subscribeJobEvents(
   };
 }
 
-function wireHandlers(
-  es: MinimalEventSource,
-  options: SubscribeJobEventsOptions,
-): void {
+function wireHandlers(es: MinimalEventSource, options: SubscribeJobEventsOptions): void {
   es.onmessage = (e: MessageEvent) => {
     try {
       const evt = JSON.parse(e.data as string) as JobEvent;

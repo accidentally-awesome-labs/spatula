@@ -22,28 +22,28 @@ default:
 
 routeGroups:
   # Health probe — high frequency, low cost
-  "GET /api/v1/health":
+  'GET /api/v1/health':
     requestsPerMinute: 6000
 
   # Job creation — write-heavy, throttle to protect downstream queues
-  "POST /api/v1/jobs":
+  'POST /api/v1/jobs':
     requestsPerMinute: 30
     maxConcurrentJobs: 5
 
   # Entity listing — read path; relax versus default
-  "GET /api/v1/entities":
+  'GET /api/v1/entities':
     requestsPerMinute: 600
 
   # Admin tenant management — privileged write paths, throttle harder
-  "POST /api/v1/admin/tenants":
+  'POST /api/v1/admin/tenants':
     requestsPerMinute: 60
-  "DELETE /api/v1/admin/tenants/{id}":
+  'DELETE /api/v1/admin/tenants/{id}':
     requestsPerMinute: 30
 
   # SSE job-event stream — long-lived connections; connection rate, not message rate
-  "GET /api/v1/jobs/{id}/events":
+  'GET /api/v1/jobs/{id}/events':
     requestsPerMinute: 60
 
   # API key rotation — privileged write path, throttle hard
-  "POST /api/v1/api-keys/{id}/rotate":
+  'POST /api/v1/api-keys/{id}/rotate':
     requestsPerMinute: 30

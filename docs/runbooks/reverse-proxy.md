@@ -4,11 +4,11 @@ How to put a reverse proxy in front of the Spatula API for TLS termination, load
 
 Three proxy options are covered:
 
-| Option | Status |
-|--------|--------|
-| nginx | **Tested** — nginx 1.25+; config validated; token log-masking verified |
-| Traefik | Not first-party tested — community contributions welcome |
-| Caddy | Not first-party tested — community contributions welcome |
+| Option  | Status                                                                 |
+| ------- | ---------------------------------------------------------------------- |
+| nginx   | **Tested** — nginx 1.25+; config validated; token log-masking verified |
+| Traefik | Not first-party tested — community contributions welcome               |
+| Caddy   | Not first-party tested — community contributions welcome               |
 
 ---
 
@@ -152,17 +152,18 @@ certbot --nginx -d api.spatula.example.com
 services:
   spatula-api:
     labels:
-      - "traefik.enable=true"
-      - "traefik.http.routers.spatula.rule=Host(`api.spatula.example.com`)"
-      - "traefik.http.routers.spatula.entrypoints=websecure"
-      - "traefik.http.routers.spatula.tls.certresolver=letsencrypt"
-      - "traefik.http.services.spatula.loadbalancer.server.port=3000"
+      - 'traefik.enable=true'
+      - 'traefik.http.routers.spatula.rule=Host(`api.spatula.example.com`)'
+      - 'traefik.http.routers.spatula.entrypoints=websecure'
+      - 'traefik.http.routers.spatula.tls.certresolver=letsencrypt'
+      - 'traefik.http.services.spatula.loadbalancer.server.port=3000'
       # SSE / WebSocket support
-      - "traefik.http.middlewares.spatula-sse.headers.customresponseheaders.X-Accel-Buffering=no"
-      - "traefik.http.routers.spatula.middlewares=spatula-sse"
+      - 'traefik.http.middlewares.spatula-sse.headers.customresponseheaders.X-Accel-Buffering=no'
+      - 'traefik.http.routers.spatula.middlewares=spatula-sse'
 ```
 
 **Known gaps (community help needed):**
+
 - Token-in-URL access-log masking for Traefik requires a custom access-log format. Traefik's `accessLog.filters.statusCodes` can filter, but redacting query-string fields requires a custom `format` with `fields.headers.defaultMode=drop` and `fields.names.RequestPath=keep`. The exact config for masking `?token=` from Traefik logs is not first-party tested.
 - SSE buffering in Traefik: the `X-Accel-Buffering: no` response header is the nginx-style hint; Traefik may require explicit `responseForwarding.flushInterval` config instead.
 
@@ -206,6 +207,7 @@ api.spatula.example.com {
 ```
 
 **Known gaps (community help needed):**
+
 - Caddy's `{uri}` template variable includes the query string in some versions; verify with your Caddy version that `{uri}` does NOT include `?token=` in logs, or use `{path}` instead.
 - WebSocket support in Caddy's `reverse_proxy` directive works automatically (Caddy upgrades connections) but has not been tested with Spatula's SSE reconnect / `Last-Event-ID` flow.
 

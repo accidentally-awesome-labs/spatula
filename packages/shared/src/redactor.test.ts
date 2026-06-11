@@ -1,10 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import {
-  redactValue,
-  redactObject,
-  REDACT_PATHS,
-  REDACTED_PLACEHOLDER,
-} from './redactor.js';
+import { redactValue, redactObject, REDACT_PATHS, REDACTED_PLACEHOLDER } from './redactor.js';
 
 const PLACEHOLDER = '[REDACTED]';
 
@@ -38,8 +33,7 @@ describe('redactValue — Bearer tokens', () => {
 
 describe('redactValue — JWTs (3-segment base64url)', () => {
   it('replaces a well-formed JWT', () => {
-    const jwt =
-      'eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIxMjM0NTY3ODkwIn0.dummysignatureXXXXXXXX';
+    const jwt = 'eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIxMjM0NTY3ODkwIn0.dummysignatureXXXXXXXX';
     expect(redactValue(jwt)).toContain(PLACEHOLDER);
     expect(redactValue(jwt)).not.toContain('eyJhbGciOiJIUzI1NiJ9');
   });

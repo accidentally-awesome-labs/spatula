@@ -39,8 +39,20 @@ describe('integration: listJobs', () => {
         return new Response(
           JSON.stringify({
             data: [
-              { id: 'job_1', tenantId: 'tnt_a', name: 'a', status: 'completed', createdAt: '2026-05-19T15:50:00.000Z' },
-              { id: 'job_2', tenantId: 'tnt_a', name: 'b', status: 'running', createdAt: '2026-05-19T15:51:00.000Z' },
+              {
+                id: 'job_1',
+                tenantId: 'tnt_a',
+                name: 'a',
+                status: 'completed',
+                createdAt: '2026-05-19T15:50:00.000Z',
+              },
+              {
+                id: 'job_2',
+                tenantId: 'tnt_a',
+                name: 'b',
+                status: 'running',
+                createdAt: '2026-05-19T15:51:00.000Z',
+              },
             ],
             nextCursor: 'cur_next',
             hasMore: true,

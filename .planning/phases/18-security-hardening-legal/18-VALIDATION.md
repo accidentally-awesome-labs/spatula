@@ -15,13 +15,13 @@ created: 2026-05-20
 
 ## Test Infrastructure
 
-| Property | Value |
-|----------|-------|
-| **Framework** | vitest |
-| **Config file** | {path or "none — Wave 0 installs"} |
-| **Quick run command** | `{quick command}` |
-| **Full suite command** | `{full command}` |
-| **Estimated runtime** | ~{N} seconds |
+| Property               | Value                              |
+| ---------------------- | ---------------------------------- |
+| **Framework**          | vitest                             |
+| **Config file**        | {path or "none — Wave 0 installs"} |
+| **Quick run command**  | `{quick command}`                  |
+| **Full suite command** | `{full command}`                   |
+| **Estimated runtime**  | ~{N} seconds                       |
 
 ---
 
@@ -36,11 +36,11 @@ created: 2026-05-20
 
 ## Per-Task Verification Map
 
-| Task ID | Plan | Wave | Requirement | Test Type | Automated Command | File Exists | Status |
-|---------|------|------|-------------|-----------|-------------------|-------------|--------|
-| {N}-01-01 | 01 | 1 | REQ-{XX} | unit | `{command}` | ✅ / ❌ W0 | ⬜ pending |
+| Task ID   | Plan | Wave | Requirement | Test Type | Automated Command | File Exists | Status     |
+| --------- | ---- | ---- | ----------- | --------- | ----------------- | ----------- | ---------- |
+| {N}-01-01 | 01   | 1    | REQ-{XX}    | unit      | `{command}`       | ✅ / ❌ W0  | ⬜ pending |
 
-*Status: ⬜ pending · ✅ green · ❌ red · ⚠️ flaky*
+_Status: ⬜ pending · ✅ green · ❌ red · ⚠️ flaky_
 
 ---
 
@@ -50,17 +50,17 @@ created: 2026-05-20
 - [ ] `{tests/conftest.py}` — shared fixtures
 - [ ] `{framework install}` — if no framework detected
 
-*If none: "Existing infrastructure covers all phase requirements."*
+_If none: "Existing infrastructure covers all phase requirements."_
 
 ---
 
 ## Manual-Only Verifications
 
-| Behavior | Requirement | Why Manual | Test Instructions |
-|----------|-------------|------------|-------------------|
-| {behavior} | REQ-{XX} | {reason} | {steps} |
+| Behavior   | Requirement | Why Manual | Test Instructions |
+| ---------- | ----------- | ---------- | ----------------- |
+| {behavior} | REQ-{XX}    | {reason}   | {steps}           |
 
-*If none: "All phase behaviors have automated verification."*
+_If none: "All phase behaviors have automated verification."_
 
 ---
 

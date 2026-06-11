@@ -35,13 +35,10 @@ export const jobEventsRoute = createRoute({
       token: z
         .string()
         .openapi({ description: 'Single-use stream token from POST /api/v1/ws-token' }),
-      lastEventId: z
-        .string()
-        .optional()
-        .openapi({
-          description:
-            'Resume from this stream id (alternative to Last-Event-ID header for environments that cannot set request headers)',
-        }),
+      lastEventId: z.string().optional().openapi({
+        description:
+          'Resume from this stream id (alternative to Last-Event-ID header for environments that cannot set request headers)',
+      }),
     }),
   },
   responses: {

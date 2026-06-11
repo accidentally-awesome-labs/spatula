@@ -184,12 +184,8 @@
           "name": "actions_job_id_jobs_id_fk",
           "tableFrom": "actions",
           "tableTo": "jobs",
-          "columnsFrom": [
-            "job_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["job_id"],
+          "columnsTo": ["id"],
           "onDelete": "no action",
           "onUpdate": "no action"
         },
@@ -197,12 +193,8 @@
           "name": "actions_tenant_id_tenants_id_fk",
           "tableFrom": "actions",
           "tableTo": "tenants",
-          "columnsFrom": [
-            "tenant_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["tenant_id"],
+          "columnsTo": ["id"],
           "onDelete": "no action",
           "onUpdate": "no action"
         }
@@ -316,12 +308,8 @@
           "name": "api_keys_tenant_id_tenants_id_fk",
           "tableFrom": "api_keys",
           "tableTo": "tenants",
-          "columnsFrom": [
-            "tenant_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["tenant_id"],
+          "columnsTo": ["id"],
           "onDelete": "no action",
           "onUpdate": "no action"
         },
@@ -329,12 +317,8 @@
           "name": "api_keys_supersedes_api_keys_id_fk",
           "tableFrom": "api_keys",
           "tableTo": "api_keys",
-          "columnsFrom": [
-            "supersedes"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["supersedes"],
+          "columnsTo": ["id"],
           "onDelete": "no action",
           "onUpdate": "no action"
         }
@@ -462,12 +446,8 @@
           "name": "audit_log_tenant_id_tenants_id_fk",
           "tableFrom": "audit_log",
           "tableTo": "tenants",
-          "columnsFrom": [
-            "tenant_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["tenant_id"],
+          "columnsTo": ["id"],
           "onDelete": "no action",
           "onUpdate": "no action"
         }
@@ -522,9 +502,7 @@
         "content_store_key_unique": {
           "name": "content_store_key_unique",
           "nullsNotDistinct": false,
-          "columns": [
-            "key"
-          ]
+          "columns": ["key"]
         }
       },
       "policies": {},
@@ -703,12 +681,8 @@
           "name": "crawl_tasks_job_id_jobs_id_fk",
           "tableFrom": "crawl_tasks",
           "tableTo": "jobs",
-          "columnsFrom": [
-            "job_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["job_id"],
+          "columnsTo": ["id"],
           "onDelete": "no action",
           "onUpdate": "no action"
         },
@@ -716,12 +690,8 @@
           "name": "crawl_tasks_tenant_id_tenants_id_fk",
           "tableFrom": "crawl_tasks",
           "tableTo": "tenants",
-          "columnsFrom": [
-            "tenant_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["tenant_id"],
+          "columnsTo": ["id"],
           "onDelete": "no action",
           "onUpdate": "no action"
         },
@@ -729,12 +699,8 @@
           "name": "crawl_tasks_parent_task_id_crawl_tasks_id_fk",
           "tableFrom": "crawl_tasks",
           "tableTo": "crawl_tasks",
-          "columnsFrom": [
-            "parent_task_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["parent_task_id"],
+          "columnsTo": ["id"],
           "onDelete": "no action",
           "onUpdate": "no action"
         }
@@ -867,12 +833,8 @@
           "name": "dead_letter_queue_tenant_id_tenants_id_fk",
           "tableFrom": "dead_letter_queue",
           "tableTo": "tenants",
-          "columnsFrom": [
-            "tenant_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["tenant_id"],
+          "columnsTo": ["id"],
           "onDelete": "set null",
           "onUpdate": "no action"
         },
@@ -880,12 +842,8 @@
           "name": "dead_letter_queue_spatula_job_id_jobs_id_fk",
           "tableFrom": "dead_letter_queue",
           "tableTo": "jobs",
-          "columnsFrom": [
-            "spatula_job_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["spatula_job_id"],
+          "columnsTo": ["id"],
           "onDelete": "set null",
           "onUpdate": "no action"
         }
@@ -1045,12 +1003,8 @@
           "name": "entities_job_id_jobs_id_fk",
           "tableFrom": "entities",
           "tableTo": "jobs",
-          "columnsFrom": [
-            "job_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["job_id"],
+          "columnsTo": ["id"],
           "onDelete": "no action",
           "onUpdate": "no action"
         },
@@ -1058,12 +1012,8 @@
           "name": "entities_tenant_id_tenants_id_fk",
           "tableFrom": "entities",
           "tableTo": "tenants",
-          "columnsFrom": [
-            "tenant_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["tenant_id"],
+          "columnsTo": ["id"],
           "onDelete": "no action",
           "onUpdate": "no action"
         }
@@ -1103,12 +1053,8 @@
           "name": "entity_sources_entity_id_entities_id_fk",
           "tableFrom": "entity_sources",
           "tableTo": "entities",
-          "columnsFrom": [
-            "entity_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["entity_id"],
+          "columnsTo": ["id"],
           "onDelete": "no action",
           "onUpdate": "no action"
         },
@@ -1116,12 +1062,8 @@
           "name": "entity_sources_extraction_id_extractions_id_fk",
           "tableFrom": "entity_sources",
           "tableTo": "extractions",
-          "columnsFrom": [
-            "extraction_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["extraction_id"],
+          "columnsTo": ["id"],
           "onDelete": "no action",
           "onUpdate": "no action"
         }
@@ -1129,10 +1071,7 @@
       "compositePrimaryKeys": {
         "entity_sources_entity_id_extraction_id_pk": {
           "name": "entity_sources_entity_id_extraction_id_pk",
-          "columns": [
-            "entity_id",
-            "extraction_id"
-          ]
+          "columns": ["entity_id", "extraction_id"]
         }
       },
       "uniqueConstraints": {},
@@ -1301,12 +1240,8 @@
           "name": "exports_job_id_jobs_id_fk",
           "tableFrom": "exports",
           "tableTo": "jobs",
-          "columnsFrom": [
-            "job_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["job_id"],
+          "columnsTo": ["id"],
           "onDelete": "no action",
           "onUpdate": "no action"
         },
@@ -1314,12 +1249,8 @@
           "name": "exports_tenant_id_tenants_id_fk",
           "tableFrom": "exports",
           "tableTo": "tenants",
-          "columnsFrom": [
-            "tenant_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["tenant_id"],
+          "columnsTo": ["id"],
           "onDelete": "no action",
           "onUpdate": "no action"
         }
@@ -1478,12 +1409,8 @@
           "name": "extractions_job_id_jobs_id_fk",
           "tableFrom": "extractions",
           "tableTo": "jobs",
-          "columnsFrom": [
-            "job_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["job_id"],
+          "columnsTo": ["id"],
           "onDelete": "no action",
           "onUpdate": "no action"
         },
@@ -1491,12 +1418,8 @@
           "name": "extractions_tenant_id_tenants_id_fk",
           "tableFrom": "extractions",
           "tableTo": "tenants",
-          "columnsFrom": [
-            "tenant_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["tenant_id"],
+          "columnsTo": ["id"],
           "onDelete": "no action",
           "onUpdate": "no action"
         },
@@ -1504,12 +1427,8 @@
           "name": "extractions_page_id_raw_pages_id_fk",
           "tableFrom": "extractions",
           "tableTo": "raw_pages",
-          "columnsFrom": [
-            "page_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["page_id"],
+          "columnsTo": ["id"],
           "onDelete": "no action",
           "onUpdate": "no action"
         }
@@ -1699,12 +1618,8 @@
           "name": "jobs_tenant_id_tenants_id_fk",
           "tableFrom": "jobs",
           "tableTo": "tenants",
-          "columnsFrom": [
-            "tenant_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["tenant_id"],
+          "columnsTo": ["id"],
           "onDelete": "no action",
           "onUpdate": "no action"
         },
@@ -1712,12 +1627,8 @@
           "name": "jobs_schema_id_schemas_id_fk",
           "tableFrom": "jobs",
           "tableTo": "schemas",
-          "columnsFrom": [
-            "schema_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["schema_id"],
+          "columnsTo": ["id"],
           "onDelete": "no action",
           "onUpdate": "no action"
         }
@@ -1805,12 +1716,8 @@
           "name": "schemas_job_id_jobs_id_fk",
           "tableFrom": "schemas",
           "tableTo": "jobs",
-          "columnsFrom": [
-            "job_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["job_id"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         },
@@ -1818,12 +1725,8 @@
           "name": "schemas_tenant_id_tenants_id_fk",
           "tableFrom": "schemas",
           "tableTo": "tenants",
-          "columnsFrom": [
-            "tenant_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["tenant_id"],
+          "columnsTo": ["id"],
           "onDelete": "no action",
           "onUpdate": "no action"
         },
@@ -1831,12 +1734,8 @@
           "name": "schemas_parent_id_schemas_id_fk",
           "tableFrom": "schemas",
           "tableTo": "schemas",
-          "columnsFrom": [
-            "parent_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["parent_id"],
+          "columnsTo": ["id"],
           "onDelete": "no action",
           "onUpdate": "no action"
         }
@@ -1934,12 +1833,8 @@
           "name": "raw_pages_task_id_crawl_tasks_id_fk",
           "tableFrom": "raw_pages",
           "tableTo": "crawl_tasks",
-          "columnsFrom": [
-            "task_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["task_id"],
+          "columnsTo": ["id"],
           "onDelete": "no action",
           "onUpdate": "no action"
         },
@@ -1947,12 +1842,8 @@
           "name": "raw_pages_tenant_id_tenants_id_fk",
           "tableFrom": "raw_pages",
           "tableTo": "tenants",
-          "columnsFrom": [
-            "tenant_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["tenant_id"],
+          "columnsTo": ["id"],
           "onDelete": "no action",
           "onUpdate": "no action"
         }
@@ -2049,12 +1940,8 @@
           "name": "source_trust_job_id_jobs_id_fk",
           "tableFrom": "source_trust",
           "tableTo": "jobs",
-          "columnsFrom": [
-            "job_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["job_id"],
+          "columnsTo": ["id"],
           "onDelete": "no action",
           "onUpdate": "no action"
         },
@@ -2062,12 +1949,8 @@
           "name": "source_trust_tenant_id_tenants_id_fk",
           "tableFrom": "source_trust",
           "tableTo": "tenants",
-          "columnsFrom": [
-            "tenant_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["tenant_id"],
+          "columnsTo": ["id"],
           "onDelete": "no action",
           "onUpdate": "no action"
         }
@@ -2189,12 +2072,8 @@
           "name": "llm_usage_tenant_id_tenants_id_fk",
           "tableFrom": "llm_usage",
           "tableTo": "tenants",
-          "columnsFrom": [
-            "tenant_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["tenant_id"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         },
@@ -2202,12 +2081,8 @@
           "name": "llm_usage_job_id_jobs_id_fk",
           "tableFrom": "llm_usage",
           "tableTo": "jobs",
-          "columnsFrom": [
-            "job_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["job_id"],
+          "columnsTo": ["id"],
           "onDelete": "set null",
           "onUpdate": "no action"
         }
@@ -2287,12 +2162,8 @@
           "name": "user_tenants_tenant_id_tenants_id_fk",
           "tableFrom": "user_tenants",
           "tableTo": "tenants",
-          "columnsFrom": [
-            "tenant_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["tenant_id"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         }
@@ -2300,10 +2171,7 @@
       "compositePrimaryKeys": {
         "user_tenants_user_id_tenant_id_pk": {
           "name": "user_tenants_user_id_tenant_id_pk",
-          "columns": [
-            "user_id",
-            "tenant_id"
-          ]
+          "columns": ["user_id", "tenant_id"]
         }
       },
       "uniqueConstraints": {},
@@ -2316,42 +2184,22 @@
     "public.action_source": {
       "name": "action_source",
       "schema": "public",
-      "values": [
-        "extraction",
-        "schema_evolution",
-        "reconciliation",
-        "quality_audit"
-      ]
+      "values": ["extraction", "schema_evolution", "reconciliation", "quality_audit"]
     },
     "public.action_status": {
       "name": "action_status",
       "schema": "public",
-      "values": [
-        "pending_review",
-        "approved",
-        "applied",
-        "rejected",
-        "rolled_back"
-      ]
+      "values": ["pending_review", "approved", "applied", "rejected", "rolled_back"]
     },
     "public.crawl_task_status": {
       "name": "crawl_task_status",
       "schema": "public",
-      "values": [
-        "pending",
-        "in_progress",
-        "completed",
-        "failed",
-        "skipped"
-      ]
+      "values": ["pending", "in_progress", "completed", "failed", "skipped"]
     },
     "public.crawler_type": {
       "name": "crawler_type",
       "schema": "public",
-      "values": [
-        "playwright",
-        "firecrawl"
-      ]
+      "values": ["playwright", "firecrawl"]
     },
     "public.job_status": {
       "name": "job_status",
@@ -2370,32 +2218,17 @@
     "public.page_classification": {
       "name": "page_classification",
       "schema": "public",
-      "values": [
-        "single_entry",
-        "multiple_entries",
-        "navigation",
-        "irrelevant",
-        "partial"
-      ]
+      "values": ["single_entry", "multiple_entries", "navigation", "irrelevant", "partial"]
     },
     "public.task_priority": {
       "name": "task_priority",
       "schema": "public",
-      "values": [
-        "high",
-        "medium",
-        "low"
-      ]
+      "values": ["high", "medium", "low"]
     },
     "public.trust_level": {
       "name": "trust_level",
       "schema": "public",
-      "values": [
-        "authoritative",
-        "high",
-        "medium",
-        "low"
-      ]
+      "values": ["authoritative", "high", "medium", "low"]
     }
   },
   "schemas": {},

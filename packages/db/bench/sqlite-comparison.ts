@@ -271,70 +271,82 @@ const codebaseFeatures = [
 // ============================================================================
 
 async function main(): Promise<void> {
-console.log('Running SQLite feature-parity gate...');
-await checkFts5();
-await checkJson1();
-await checkWal();
+  console.log('Running SQLite feature-parity gate...');
+  await checkFts5();
+  await checkJson1();
+  await checkWal();
 
-console.log('Running CRUD perf comparison...');
-perfCrudBetterSqlite();
-await perfCrudNodeSqlite();
+  console.log('Running CRUD perf comparison...');
+  perfCrudBetterSqlite();
+  await perfCrudNodeSqlite();
 
-const lines: string[] = [];
-lines.push('# SQLite Backend Comparison — better-sqlite3 vs node:sqlite');
-lines.push('');
-lines.push(`**Run at:** ${new Date().toISOString()}`);
-lines.push(`**Node version:** ${process.version}`);
-lines.push('**Plan:** 16-5 Task 8 (SDK-05)');
-lines.push('');
-lines.push('## Spatula codebase SQLite-feature inventory');
-lines.push('');
-for (const f of codebaseFeatures) lines.push(`- ${f}`);
-lines.push('');
-lines.push('## Feature-parity gate (Pitfall #7 — decisive)');
-lines.push('');
-lines.push('| Feature | better-sqlite3 | node:sqlite | Notes |');
-lines.push('| ------- | -------------- | ----------- | ----- |');
-for (const r of results) {
-  lines.push(`| ${r.feature} | ${r.betterSqlite} | ${r.nodeSqlite} | ${r.notes} |`);
-}
-lines.push('');
-lines.push('## CRUD perf comparison (context only — feature parity decides)');
-lines.push('');
-lines.push('| Operation | better-sqlite3 (ms) | node:sqlite (ms) |');
-lines.push('| --------- | ------------------- | ---------------- |');
-for (const p of perf) {
-  const bs = p.betterSqliteMs.toFixed(2);
-  const ns = typeof p.nodeSqliteMs === 'number' ? p.nodeSqliteMs.toFixed(2) : p.nodeSqliteMs;
-  lines.push(`| ${p.operation} | ${bs} | ${ns} |`);
-}
-lines.push('');
-lines.push('## Decision');
-lines.push('');
-lines.push('**Stay on better-sqlite3@12.10.0 for v1.0.**');
-lines.push('');
-lines.push('Reasoning per spec §3.2.3 gates (3-gate test: feature parity + zero perf regression + non-experimental):');
-lines.push('');
-lines.push('1. **Feature parity on Node 22 LTS — FAILS.** Spatula\'s `support-matrix.md` targets Node ≥22. On the Node 22 LTS line, `node:sqlite` is built against an older SQLite version that does NOT include FTS5 (verified in 16-RESEARCH Pitfall #7). The bench above was run on this developer\'s local Node version, which may reflect a newer upstream SQLite — but the v1.0 deployment platform is Node 22 LTS, where FTS5 absence is decisive.');
-lines.push('2. **Perf parity (informational).** Both backends are in the same order of magnitude for the workloads Spatula uses. Either would meet local-mode performance budgets. Neither is a discriminator.');
-lines.push('3. **Non-experimental status — FAILS.** `node:sqlite` is marked Experimental (stability index 1) through Node 22 LTS. Production self-hosters cannot rely on Experimental API stability across patch releases. better-sqlite3@12 is a stable, audited dependency at v12.x.');
-lines.push('');
-lines.push('Additionally, better-sqlite3 ships `db.transaction(fn)` and `Statement.iterate()` ergonomics that the Spatula codebase uses extensively; porting away would require non-trivial refactor work that yields no functional gain at v1.0.');
-lines.push('');
-lines.push('Re-evaluation criteria (revisit at v2.0):');
-lines.push('');
-lines.push('- Node LTS line targets `node:sqlite` Stable (graduated from Experimental).');
-lines.push('- Node-bundled SQLite includes FTS5 on all supported Node LTS lines.');
-lines.push('- Spatula\'s codebase has been refactored to use only the intersection of better-sqlite3 + node:sqlite APIs (no `db.transaction(fn)` ergonomic; manual BEGIN/COMMIT instead).');
+  const lines: string[] = [];
+  lines.push('# SQLite Backend Comparison — better-sqlite3 vs node:sqlite');
+  lines.push('');
+  lines.push(`**Run at:** ${new Date().toISOString()}`);
+  lines.push(`**Node version:** ${process.version}`);
+  lines.push('**Plan:** 16-5 Task 8 (SDK-05)');
+  lines.push('');
+  lines.push('## Spatula codebase SQLite-feature inventory');
+  lines.push('');
+  for (const f of codebaseFeatures) lines.push(`- ${f}`);
+  lines.push('');
+  lines.push('## Feature-parity gate (Pitfall #7 — decisive)');
+  lines.push('');
+  lines.push('| Feature | better-sqlite3 | node:sqlite | Notes |');
+  lines.push('| ------- | -------------- | ----------- | ----- |');
+  for (const r of results) {
+    lines.push(`| ${r.feature} | ${r.betterSqlite} | ${r.nodeSqlite} | ${r.notes} |`);
+  }
+  lines.push('');
+  lines.push('## CRUD perf comparison (context only — feature parity decides)');
+  lines.push('');
+  lines.push('| Operation | better-sqlite3 (ms) | node:sqlite (ms) |');
+  lines.push('| --------- | ------------------- | ---------------- |');
+  for (const p of perf) {
+    const bs = p.betterSqliteMs.toFixed(2);
+    const ns = typeof p.nodeSqliteMs === 'number' ? p.nodeSqliteMs.toFixed(2) : p.nodeSqliteMs;
+    lines.push(`| ${p.operation} | ${bs} | ${ns} |`);
+  }
+  lines.push('');
+  lines.push('## Decision');
+  lines.push('');
+  lines.push('**Stay on better-sqlite3@12.10.0 for v1.0.**');
+  lines.push('');
+  lines.push(
+    'Reasoning per spec §3.2.3 gates (3-gate test: feature parity + zero perf regression + non-experimental):',
+  );
+  lines.push('');
+  lines.push(
+    "1. **Feature parity on Node 22 LTS — FAILS.** Spatula's `support-matrix.md` targets Node ≥22. On the Node 22 LTS line, `node:sqlite` is built against an older SQLite version that does NOT include FTS5 (verified in 16-RESEARCH Pitfall #7). The bench above was run on this developer's local Node version, which may reflect a newer upstream SQLite — but the v1.0 deployment platform is Node 22 LTS, where FTS5 absence is decisive.",
+  );
+  lines.push(
+    '2. **Perf parity (informational).** Both backends are in the same order of magnitude for the workloads Spatula uses. Either would meet local-mode performance budgets. Neither is a discriminator.',
+  );
+  lines.push(
+    '3. **Non-experimental status — FAILS.** `node:sqlite` is marked Experimental (stability index 1) through Node 22 LTS. Production self-hosters cannot rely on Experimental API stability across patch releases. better-sqlite3@12 is a stable, audited dependency at v12.x.',
+  );
+  lines.push('');
+  lines.push(
+    'Additionally, better-sqlite3 ships `db.transaction(fn)` and `Statement.iterate()` ergonomics that the Spatula codebase uses extensively; porting away would require non-trivial refactor work that yields no functional gain at v1.0.',
+  );
+  lines.push('');
+  lines.push('Re-evaluation criteria (revisit at v2.0):');
+  lines.push('');
+  lines.push('- Node LTS line targets `node:sqlite` Stable (graduated from Experimental).');
+  lines.push('- Node-bundled SQLite includes FTS5 on all supported Node LTS lines.');
+  lines.push(
+    "- Spatula's codebase has been refactored to use only the intersection of better-sqlite3 + node:sqlite APIs (no `db.transaction(fn)` ergonomic; manual BEGIN/COMMIT instead).",
+  );
 
-const outPath = join(__dirname, 'sqlite-comparison.results.md');
-writeFileSync(outPath, lines.join('\n') + '\n');
+  const outPath = join(__dirname, 'sqlite-comparison.results.md');
+  writeFileSync(outPath, lines.join('\n') + '\n');
 
-console.log(`\nReport written to ${outPath}`);
-console.log('\nFeature gate summary:');
-for (const r of results) {
-  console.log(`  ${r.feature}: better=${r.betterSqlite}, node:sqlite=${r.nodeSqlite}`);
-}
+  console.log(`\nReport written to ${outPath}`);
+  console.log('\nFeature gate summary:');
+  for (const r of results) {
+    console.log(`  ${r.feature}: better=${r.betterSqlite}, node:sqlite=${r.nodeSqlite}`);
+  }
 }
 
 main().catch((e) => {

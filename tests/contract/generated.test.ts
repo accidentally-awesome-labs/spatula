@@ -33,7 +33,12 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { startServer, type ContractServer } from './helpers/server-harness.js';
 import { createAjv } from './helpers/ajv-setup.js';
-import { seedFixtures, resolvePath, authHeaders, type ContractFixtures } from './helpers/fixtures.js';
+import {
+  seedFixtures,
+  resolvePath,
+  authHeaders,
+  type ContractFixtures,
+} from './helpers/fixtures.js';
 
 let server: ContractServer;
 let spec: any;
@@ -42,12 +47,12 @@ const ajv = createAjv();
 
 // Tuple counters for the SUMMARY.md write-up.
 const counters = {
-  totalTuples: 0,          // every (path, method, status) considered
+  totalTuples: 0, // every (path, method, status) considered
   tuplesWithExamples: 0,
-  pass1Validated: 0,       // examples that ran through ajv.validate
-  pass1Failures: 0,        // examples that FAILED ajv.validate
-  pass2LiveHits: 0,        // live 2xx fetched + validated
-  pass2LiveSkipped: 0,     // skipped (non-2xx, path unresolved, dep missing)
+  pass1Validated: 0, // examples that ran through ajv.validate
+  pass1Failures: 0, // examples that FAILED ajv.validate
+  pass2LiveHits: 0, // live 2xx fetched + validated
+  pass2LiveSkipped: 0, // skipped (non-2xx, path unresolved, dep missing)
 };
 
 describe('OpenAPI matrix conformance', () => {
@@ -77,7 +82,18 @@ describe('OpenAPI matrix conformance', () => {
         if (!operation || typeof operation !== 'object' || !operation.responses) continue;
         for (const [status, response] of Object.entries(operation.responses)) {
           counters.totalTuples += 1;
-          const json = (response as { content?: Record<string, { schema?: unknown; example?: unknown; examples?: Record<string, { value?: unknown }> }> }).content?.['application/json'];
+          const json = (
+            response as {
+              content?: Record<
+                string,
+                {
+                  schema?: unknown;
+                  example?: unknown;
+                  examples?: Record<string, { value?: unknown }>;
+                }
+              >;
+            }
+          ).content?.['application/json'];
           if (!json?.schema) continue;
           const examples: unknown[] = [];
           if (json.examples) {
@@ -121,7 +137,9 @@ describe('OpenAPI matrix conformance', () => {
         const operation = op as { responses?: Record<string, unknown> };
         if (method.toLowerCase() !== 'get') continue; // Only GETs are safe to fire on a hot suite.
         if (!operation.responses?.['200']) continue;
-        const json = (operation.responses['200'] as { content?: Record<string, { schema?: unknown }> }).content?.['application/json'];
+        const json = (
+          operation.responses['200'] as { content?: Record<string, { schema?: unknown }> }
+        ).content?.['application/json'];
         if (!json?.schema) continue;
 
         const url = resolvePath(server.url, path, fixtures);

@@ -24,22 +24,12 @@
  */
 
 import { createHash, randomBytes } from 'node:crypto';
-import {
-  createServer,
-  type Server,
-  type IncomingMessage,
-  type ServerResponse,
-} from 'node:http';
+import { createServer, type Server, type IncomingMessage, type ServerResponse } from 'node:http';
 import type { AddressInfo } from 'node:net';
 import { createApp } from '../../../apps/api/src/app.js';
 import { ApiKeyAuthProvider } from '../../../apps/api/src/auth/api-key-provider.js';
 import type { AppDeps } from '../../../apps/api/src/types.js';
-import {
-  createDatabasePool,
-  TenantRepository,
-  ApiKeyRepository,
-  JobRepository,
-} from '@spatula/db';
+import { createDatabasePool, TenantRepository, ApiKeyRepository, JobRepository } from '@spatula/db';
 import type { Pool } from 'pg';
 import Redis from 'ioredis';
 
@@ -89,9 +79,7 @@ export interface ContractServerOptions {
  * /api/v1/openapi.json. Routes that need workers/exporters/etc. are not
  * exercised by the contract matrix (it validates SHAPES, not throughput).
  */
-export async function startServer(
-  options: ContractServerOptions = {},
-): Promise<ContractServer> {
+export async function startServer(options: ContractServerOptions = {}): Promise<ContractServer> {
   const databaseUrl =
     options.databaseUrl ??
     process.env.TEST_DATABASE_URL ??
@@ -109,8 +97,7 @@ export async function startServer(
   // doesn't fail when Redis isn't available.
   let redis: Redis | null = null;
   if (options.enableRedis) {
-    const redisUrl =
-      options.redisUrl ?? process.env.REDIS_URL ?? 'redis://localhost:6379';
+    const redisUrl = options.redisUrl ?? process.env.REDIS_URL ?? 'redis://localhost:6379';
     redis = new Redis(redisUrl, { lazyConnect: false, maxRetriesPerRequest: 1 });
   }
 
@@ -154,56 +141,54 @@ export async function startServer(
 
   // Adapter: Node http.IncomingMessage → standard fetch Request → Hono → Response.
   // Carry-forward from tests/carveout/fixtures/server.ts.
-  const server: Server = createServer(
-    async (req: IncomingMessage, res: ServerResponse) => {
-      try {
-        const addr = server.address();
-        const port = typeof addr === 'object' && addr ? addr.port : 0;
-        const url = new URL(req.url ?? '/', `http://127.0.0.1:${port}`);
+  const server: Server = createServer(async (req: IncomingMessage, res: ServerResponse) => {
+    try {
+      const addr = server.address();
+      const port = typeof addr === 'object' && addr ? addr.port : 0;
+      const url = new URL(req.url ?? '/', `http://127.0.0.1:${port}`);
 
-        const hasBody = !(req.method === 'GET' || req.method === 'HEAD');
-        let body: Uint8Array | undefined;
-        if (hasBody) {
-          const chunks: Buffer[] = [];
-          for await (const chunk of req) chunks.push(chunk as Buffer);
-          if (chunks.length > 0) body = Buffer.concat(chunks);
-        }
-
-        const headers = new Headers();
-        for (const [k, v] of Object.entries(req.headers)) {
-          if (v === undefined) continue;
-          if (Array.isArray(v)) headers.set(k, v.join(','));
-          else headers.set(k, v);
-        }
-
-        const request = new Request(url.toString(), {
-          method: req.method ?? 'GET',
-          headers,
-          body: body as BodyInit | undefined,
-          duplex: body ? 'half' : undefined,
-        } as RequestInit & { duplex?: 'half' });
-
-        const response = await app.fetch(request);
-        res.statusCode = response.status;
-        response.headers.forEach((value, key) => {
-          res.setHeader(key, value);
-        });
-        const buf = Buffer.from(await response.arrayBuffer());
-        res.end(buf);
-      } catch (err) {
-        res.statusCode = 500;
-        res.setHeader('content-type', 'application/json');
-        res.end(
-          JSON.stringify({
-            error: {
-              code: 'INTERNAL.ERROR',
-              message: (err as Error).message,
-            },
-          }),
-        );
+      const hasBody = !(req.method === 'GET' || req.method === 'HEAD');
+      let body: Uint8Array | undefined;
+      if (hasBody) {
+        const chunks: Buffer[] = [];
+        for await (const chunk of req) chunks.push(chunk as Buffer);
+        if (chunks.length > 0) body = Buffer.concat(chunks);
       }
-    },
-  );
+
+      const headers = new Headers();
+      for (const [k, v] of Object.entries(req.headers)) {
+        if (v === undefined) continue;
+        if (Array.isArray(v)) headers.set(k, v.join(','));
+        else headers.set(k, v);
+      }
+
+      const request = new Request(url.toString(), {
+        method: req.method ?? 'GET',
+        headers,
+        body: body as BodyInit | undefined,
+        duplex: body ? 'half' : undefined,
+      } as RequestInit & { duplex?: 'half' });
+
+      const response = await app.fetch(request);
+      res.statusCode = response.status;
+      response.headers.forEach((value, key) => {
+        res.setHeader(key, value);
+      });
+      const buf = Buffer.from(await response.arrayBuffer());
+      res.end(buf);
+    } catch (err) {
+      res.statusCode = 500;
+      res.setHeader('content-type', 'application/json');
+      res.end(
+        JSON.stringify({
+          error: {
+            code: 'INTERNAL.ERROR',
+            message: (err as Error).message,
+          },
+        }),
+      );
+    }
+  });
 
   const port: number = await new Promise((resolve, reject) => {
     server.once('listening', () => {

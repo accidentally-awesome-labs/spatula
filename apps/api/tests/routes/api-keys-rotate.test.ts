@@ -41,7 +41,16 @@ function createKeyStore() {
 
   return {
     keys,
-    addKey(row: Partial<KeyRow> & { id: string; tenantId: string; keyHash: string; keyPrefix: string; name: string; scopes: string[] }): KeyRow {
+    addKey(
+      row: Partial<KeyRow> & {
+        id: string;
+        tenantId: string;
+        keyHash: string;
+        keyPrefix: string;
+        name: string;
+        scopes: string[];
+      },
+    ): KeyRow {
       const full: KeyRow = {
         expiresAt: null,
         revokedAt: null,
@@ -92,9 +101,7 @@ function buildMockApiKeyRepo(store: ReturnType<typeof createKeyStore>) {
     },
 
     async listByTenant(tenantId: string) {
-      return Array.from(store.keys.values()).filter(
-        (k) => k.tenantId === tenantId && !k.revokedAt,
-      );
+      return Array.from(store.keys.values()).filter((k) => k.tenantId === tenantId && !k.revokedAt);
     },
 
     async revoke(keyId: string, tenantId: string) {
@@ -206,9 +213,19 @@ function createMockDeps(
       findAllVersions: vi.fn().mockResolvedValue([]),
       findByVersion: vi.fn().mockResolvedValue(null),
     },
-    extractionRepo: { findByJob: vi.fn().mockResolvedValue([]), countByJob: vi.fn().mockResolvedValue(0) },
-    entityRepo: { findByJob: vi.fn().mockResolvedValue([]), findById: vi.fn().mockResolvedValue(null), countByJob: vi.fn().mockResolvedValue(0) },
-    entitySourceRepo: { findByEntity: vi.fn().mockResolvedValue([]), findByEntityWithUrls: vi.fn().mockResolvedValue([]) },
+    extractionRepo: {
+      findByJob: vi.fn().mockResolvedValue([]),
+      countByJob: vi.fn().mockResolvedValue(0),
+    },
+    entityRepo: {
+      findByJob: vi.fn().mockResolvedValue([]),
+      findById: vi.fn().mockResolvedValue(null),
+      countByJob: vi.fn().mockResolvedValue(0),
+    },
+    entitySourceRepo: {
+      findByEntity: vi.fn().mockResolvedValue([]),
+      findByEntityWithUrls: vi.fn().mockResolvedValue([]),
+    },
     actionRepo: {
       findByJob: vi.fn().mockResolvedValue([]),
       findById: vi.fn().mockResolvedValue(null),
@@ -219,7 +236,12 @@ function createMockDeps(
       findByJobCursor: vi.fn().mockResolvedValue({ entities: [], nextCursor: null }),
     },
     taskRepo: {} as any,
-    exportRepo: { create: vi.fn(), findById: vi.fn().mockResolvedValue(null), findByJob: vi.fn().mockResolvedValue([]), updateStatus: vi.fn() },
+    exportRepo: {
+      create: vi.fn(),
+      findById: vi.fn().mockResolvedValue(null),
+      findByJob: vi.fn().mockResolvedValue([]),
+      updateStatus: vi.fn(),
+    },
     contentStore: { store: vi.fn(), retrieve: vi.fn(), delete: vi.fn() },
     exportQueue: { add: vi.fn() },
     jobManager: {
@@ -234,7 +256,10 @@ function createMockDeps(
     keyStore,
     auditSpy,
     ...overrides,
-  } as unknown as AppDeps & { keyStore: ReturnType<typeof createKeyStore>; auditSpy: ReturnType<typeof vi.fn> };
+  } as unknown as AppDeps & {
+    keyStore: ReturnType<typeof createKeyStore>;
+    auditSpy: ReturnType<typeof vi.fn>;
+  };
 }
 
 // ── Tests ─────────────────────────────────────────────────────────────────────
@@ -260,7 +285,7 @@ describe('POST /api/v1/api-keys/:id/rotate (AUTH-05)', () => {
     });
 
     expect(res.status).toBe(200);
-    const body = await res.json() as any;
+    const body = (await res.json()) as any;
     const data = body.data;
 
     // New raw key starts with sk_live_
@@ -274,7 +299,7 @@ describe('POST /api/v1/api-keys/:id/rotate (AUTH-05)', () => {
     const graceExpiry = new Date(data.supersededExpiresAt).getTime();
     const now = Date.now();
     expect(graceExpiry).toBeGreaterThan(now + 23 * 3600 * 1000); // > 23h from now
-    expect(graceExpiry).toBeLessThan(now + 25 * 3600 * 1000);    // < 25h from now
+    expect(graceExpiry).toBeLessThan(now + 25 * 3600 * 1000); // < 25h from now
   });
 
   // ── Grace window: old key still authenticates ──────────────────────────────
@@ -329,7 +354,7 @@ describe('POST /api/v1/api-keys/:id/rotate (AUTH-05)', () => {
     });
 
     expect(res.status).toBe(200);
-    const body = await res.json() as any;
+    const body = (await res.json()) as any;
     const graceExpiry = new Date(body.data.supersededExpiresAt).getTime();
     const afterCall = Date.now();
 
@@ -357,7 +382,7 @@ describe('POST /api/v1/api-keys/:id/rotate (AUTH-05)', () => {
     });
 
     expect(res.status).toBe(200);
-    const body = await res.json() as any;
+    const body = (await res.json()) as any;
     const graceExpiry = new Date(body.data.supersededExpiresAt).getTime();
     const afterCall = Date.now();
 
@@ -376,7 +401,7 @@ describe('POST /api/v1/api-keys/:id/rotate (AUTH-05)', () => {
     });
 
     expect(res.status).toBe(404);
-    const body = await res.json() as any;
+    const body = (await res.json()) as any;
     expect(body.error.code).toBe('RESOURCE.NOT_FOUND');
   });
 
@@ -395,7 +420,7 @@ describe('POST /api/v1/api-keys/:id/rotate (AUTH-05)', () => {
     });
 
     expect(res.status).toBe(409);
-    const body = await res.json() as any;
+    const body = (await res.json()) as any;
     expect(body.error.code).toBe('JOB.INVALID_STATE');
   });
 
@@ -410,7 +435,7 @@ describe('POST /api/v1/api-keys/:id/rotate (AUTH-05)', () => {
     });
 
     expect(res.status).toBe(200);
-    const body = await res.json() as any;
+    const body = (await res.json()) as any;
     const newKeyId = body.data.id;
 
     // Find the api_key.rotated audit call (auth middleware also emits its own audit events)

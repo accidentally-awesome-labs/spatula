@@ -26,7 +26,9 @@ function makePresignedContentStore() {
     storeBinary: vi.fn(),
     retrieveBinary: vi.fn(),
     // supportsPresignedUrls guard checks for this method
-    getDownloadUrl: vi.fn().mockResolvedValue('https://s3.example.com/signed-url?X-Amz-Expires=900'),
+    getDownloadUrl: vi
+      .fn()
+      .mockResolvedValue('https://s3.example.com/signed-url?X-Amz-Expires=900'),
   };
 }
 
@@ -181,9 +183,7 @@ describe('GET /api/v1/admin/forensic/extractions', () => {
     expect(body.data.length).toBeGreaterThan(0);
     // getDownloadUrl was called with 900 seconds (15-minute TTL)
     expect(contentStore.getDownloadUrl).toHaveBeenCalledWith(expect.any(String), 900);
-    expect(body.data[0].contentRef).toBe(
-      'https://s3.example.com/signed-url?X-Amz-Expires=900',
-    );
+    expect(body.data[0].contentRef).toBe('https://s3.example.com/signed-url?X-Amz-Expires=900');
   });
 
   it('no response field contains raw HTML markup', async () => {

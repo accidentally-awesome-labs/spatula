@@ -104,5 +104,5 @@ frontmatter is incremented, you will be asked to re-sign on your next pull reque
 
 ---
 
-*This Agreement is modeled on the Apache Individual Contributor License Agreement v2.0.*
-*Spatula is maintained by Accidentally Awesome Labs.*
+_This Agreement is modeled on the Apache Individual Contributor License Agreement v2.0._
+_Spatula is maintained by Accidentally Awesome Labs._

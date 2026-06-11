@@ -17,8 +17,8 @@ affects: [phase-20, phase-21, phase-22, contributors, self-hosters]
 tech-stack:
   added: []
   patterns:
-    - "on-release + nightly cadence (not PR) for DB-heavy CI lanes — mirrors adversarial-llm.yml precedent"
-    - "GitHub Actions matrix over postgres versions with service containers (postgres:N-alpine + redis:7-alpine)"
+    - 'on-release + nightly cadence (not PR) for DB-heavy CI lanes — mirrors adversarial-llm.yml precedent'
+    - 'GitHub Actions matrix over postgres versions with service containers (postgres:N-alpine + redis:7-alpine)'
     - "YAML on: key parses as Python True (not string 'on') — use d.get(True) not d.get('on') in PyYAML assertions"
 
 key-files:
@@ -28,13 +28,13 @@ key-files:
   modified: []
 
 key-decisions:
-  - "Heavy DB lanes (test:backup, test:upgrade) run on-release + nightly only — not on every PR (keeps PR gate fast; Phase 21 owns full topology)"
-  - "Config-compat lane (test:config) is pure in-process (no DB) and can be added to ci.yml on PR in a later phase"
+  - 'Heavy DB lanes (test:backup, test:upgrade) run on-release + nightly only — not on every PR (keeps PR gate fast; Phase 21 owns full topology)'
+  - 'Config-compat lane (test:config) is pure in-process (no DB) and can be added to ci.yml on PR in a later phase'
   - "support-matrix.md uses 'Postgres 14' phrasing (not 'PostgreSQL') to match grep acceptance criteria"
 
 patterns-established:
-  - "CI service containers use postgres:N-alpine + redis:7-alpine health-checked pattern from ci.yml"
-  - "Support matrix doc cross-references the CI workflow that enforces it"
+  - 'CI service containers use postgres:N-alpine + redis:7-alpine health-checked pattern from ci.yml'
+  - 'Support matrix doc cross-references the CI workflow that enforces it'
 
 requirements-completed: [DEPLOY-08, DEPLOY-05, DEPLOY-10, DEPLOY-11]
 
@@ -96,8 +96,9 @@ None — no external service configuration required. The workflow will run autom
 - Phase 20 (docs site) can reference `docs/support-matrix.md` directly
 
 ---
-*Phase: 19-deployment-self-host-excellence*
-*Completed: 2026-06-11*
+
+_Phase: 19-deployment-self-host-excellence_
+_Completed: 2026-06-11_
 
 ## Self-Check: PASSED
 

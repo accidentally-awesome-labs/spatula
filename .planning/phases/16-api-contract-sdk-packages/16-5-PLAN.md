@@ -48,63 +48,63 @@ requirements:
 
 must_haves:
   truths:
-    - "BLOCK-04 is cleared before publish: npm @spatula org owned (verified) OR fallback scope chosen + documented"
-    - "release-please-config.json includes all 8 packages with linked-versions plugin coupling @spatula/core-types and @spatula/client"
-    - "node-workspace plugin has merge:false (Pitfall #3 protection)"
-    - ".github/workflows/release.yml uses npm trusted publishing (id-token write at JOB level, NO NPM_TOKEN reference, provenance + access public)"
-    - "release-please dry-run runs cleanly on a PR"
-    - "@spatula/cli builds dual ESM+CJS via tsup; pnpm pack produces an installable tarball"
-    - "5 internal packages (core, db, queue, api, shared) have a no-compat-guarantee notice in README.md"
-    - "docs/architecture.md SQLite Backend Decision section contains FTS5 absence finding + decision (stay on better-sqlite3@12.10.0)"
-    - "packages/client/tests/integration/ suite exercises 5 major endpoints; mocked by default; opt-in live via SPATULA_LIVE_LLM=1"
+    - 'BLOCK-04 is cleared before publish: npm @spatula org owned (verified) OR fallback scope chosen + documented'
+    - 'release-please-config.json includes all 8 packages with linked-versions plugin coupling @spatula/core-types and @spatula/client'
+    - 'node-workspace plugin has merge:false (Pitfall #3 protection)'
+    - '.github/workflows/release.yml uses npm trusted publishing (id-token write at JOB level, NO NPM_TOKEN reference, provenance + access public)'
+    - 'release-please dry-run runs cleanly on a PR'
+    - '@spatula/cli builds dual ESM+CJS via tsup; pnpm pack produces an installable tarball'
+    - '5 internal packages (core, db, queue, api, shared) have a no-compat-guarantee notice in README.md'
+    - 'docs/architecture.md SQLite Backend Decision section contains FTS5 absence finding + decision (stay on better-sqlite3@12.10.0)'
+    - 'packages/client/tests/integration/ suite exercises 5 major endpoints; mocked by default; opt-in live via SPATULA_LIVE_LLM=1'
   artifacts:
-    - path: ".planning/phases/16-api-contract-sdk-packages/16-5-BLOCK04.md"
-      provides: "BLOCK-04 verification evidence — npm org ls output OR fallback scope decision"
-      contains: "BLOCK-04"
-    - path: ".planning/phases/16-api-contract-sdk-packages/16-5-MIDPLAN-CHECKPOINT.md"
-      provides: "Mid-plan checkpoint evidence — release-please dry-run output + release.yml permissions block + BLOCK-04 status snapshot (Task 5 of 16-5)"
-      contains: "release-please"
-    - path: "release-please-config.json"
-      provides: "Monorepo manifest mode + linked-versions plugin + node-workspace merge:false"
-      contains: "linked-versions"
-    - path: ".github/workflows/release.yml"
-      provides: "Trusted-publishing-OIDC publish job; per-package provenance + access public"
-      contains: "id-token: write"
-    - path: ".github/workflows/release-dry-run.yml"
-      provides: "PR-time release-please dry-run; non-blocking"
-      contains: "release-please"
-    - path: "apps/cli/tsup.config.ts"
-      provides: "Dual ESM+CJS bundler config for @spatula/cli publish prep"
-      contains: "tsup"
-    - path: "packages/db/bench/sqlite-comparison.ts"
-      provides: "One-shot benchmark + FTS5 feature-gate check"
-      contains: "better-sqlite3"
-    - path: "docs/architecture.md"
-      provides: "New SQLite Backend Decision section with benchmark numbers, FTS5 finding, decision to stay on better-sqlite3@12.10.0"
-      contains: "SQLite Backend Decision"
-    - path: "packages/client/tests/integration/version-probe.test.ts"
-      provides: "Live integration of version-probe against running server"
-      contains: "SPATULA_LIVE_LLM"
-    - path: "packages/client/vitest.integration.config.ts"
-      provides: "Integration test config; default mocked; live mode gated by SPATULA_LIVE_LLM=1"
-      contains: "SPATULA_LIVE_LLM"
+    - path: '.planning/phases/16-api-contract-sdk-packages/16-5-BLOCK04.md'
+      provides: 'BLOCK-04 verification evidence — npm org ls output OR fallback scope decision'
+      contains: 'BLOCK-04'
+    - path: '.planning/phases/16-api-contract-sdk-packages/16-5-MIDPLAN-CHECKPOINT.md'
+      provides: 'Mid-plan checkpoint evidence — release-please dry-run output + release.yml permissions block + BLOCK-04 status snapshot (Task 5 of 16-5)'
+      contains: 'release-please'
+    - path: 'release-please-config.json'
+      provides: 'Monorepo manifest mode + linked-versions plugin + node-workspace merge:false'
+      contains: 'linked-versions'
+    - path: '.github/workflows/release.yml'
+      provides: 'Trusted-publishing-OIDC publish job; per-package provenance + access public'
+      contains: 'id-token: write'
+    - path: '.github/workflows/release-dry-run.yml'
+      provides: 'PR-time release-please dry-run; non-blocking'
+      contains: 'release-please'
+    - path: 'apps/cli/tsup.config.ts'
+      provides: 'Dual ESM+CJS bundler config for @spatula/cli publish prep'
+      contains: 'tsup'
+    - path: 'packages/db/bench/sqlite-comparison.ts'
+      provides: 'One-shot benchmark + FTS5 feature-gate check'
+      contains: 'better-sqlite3'
+    - path: 'docs/architecture.md'
+      provides: 'New SQLite Backend Decision section with benchmark numbers, FTS5 finding, decision to stay on better-sqlite3@12.10.0'
+      contains: 'SQLite Backend Decision'
+    - path: 'packages/client/tests/integration/version-probe.test.ts'
+      provides: 'Live integration of version-probe against running server'
+      contains: 'SPATULA_LIVE_LLM'
+    - path: 'packages/client/vitest.integration.config.ts'
+      provides: 'Integration test config; default mocked; live mode gated by SPATULA_LIVE_LLM=1'
+      contains: 'SPATULA_LIVE_LLM'
   key_links:
-    - from: "release-please-config.json"
-      to: "packages/core-types + packages/client"
-      via: "linked-versions plugin groupName sdk-public components core-types, client"
-      pattern: "linked-versions"
-    - from: ".github/workflows/release.yml"
-      to: "npm trusted publisher (per-package settings)"
-      via: "id-token write + npm publish provenance access public"
-      pattern: "id-token: write"
-    - from: "apps/cli/package.json"
-      to: "apps/cli/tsup.config.ts"
-      via: "build script runs tsup producing dist/ with ESM + CJS + .d.ts outputs"
-      pattern: "tsup"
-    - from: "packages/db/bench/sqlite-comparison.ts"
-      to: "docs/architecture.md SQLite Backend Decision"
-      via: "Script output captured into doc; FTS5 gate documented"
-      pattern: "FTS5"
+    - from: 'release-please-config.json'
+      to: 'packages/core-types + packages/client'
+      via: 'linked-versions plugin groupName sdk-public components core-types, client'
+      pattern: 'linked-versions'
+    - from: '.github/workflows/release.yml'
+      to: 'npm trusted publisher (per-package settings)'
+      via: 'id-token write + npm publish provenance access public'
+      pattern: 'id-token: write'
+    - from: 'apps/cli/package.json'
+      to: 'apps/cli/tsup.config.ts'
+      via: 'build script runs tsup producing dist/ with ESM + CJS + .d.ts outputs'
+      pattern: 'tsup'
+    - from: 'packages/db/bench/sqlite-comparison.ts'
+      to: 'docs/architecture.md SQLite Backend Decision'
+      via: 'Script output captured into doc; FTS5 gate documented'
+      pattern: 'FTS5'
 ---
 
 <objective>
@@ -113,6 +113,7 @@ Land Phase 16's release infrastructure: clear BLOCK-04 (npm @spatula org or fall
 Purpose: This is the wire-up plan. Code from plans 16-1..16-4 exists; this plan makes it publishable. After this plan lands, Phase 16's success criteria #3 (release-please dry-run publishes all 8 packages cleanly), #4 (SDK integration suite), and #6 (SQLite decision committed) are all met.
 
 Output:
+
 - Cleared BLOCK-04 (or documented fallback)
 - release-please-config + release.yml + release-dry-run.yml fully wired
 - @spatula/cli publish prep
@@ -120,7 +121,7 @@ Output:
 - SQLite benchmark + decision in docs/architecture.md
 - packages/client/tests/integration/ suite green (mocked) + opt-in live
 - Plan is NOT autonomous — two checkpoints: (a) Task 1 BLOCK-04 verification, (b) Task 5 mid-plan release-infra checkpoint (after Tasks 1-4 complete, before Tasks 6-9 execute)
-</objective>
+  </objective>
 
 <execution_context>
 @$HOME/.claude/get-shit-done/workflows/execute-plan.md
@@ -128,16 +129,15 @@ Output:
 </execution_context>
 
 <user_setup>
+
 - service: npm
-  why: "Publish all 8 @spatula/* scoped packages with provenance"
+  why: "Publish all 8 @spatula/\* scoped packages with provenance"
   env_vars: []
-  account_setup:
-    - "Own the npm @spatula org (BLOCK-04) OR commit to a fallback scope (@spatulaai, @aalabs/spatula)"
-  dashboard_config:
-    - task: "For each of the 8 packages, in npm web UI add GitHub Actions trusted publisher"
-      location: "https://www.npmjs.com/package/{name}/access"
-      values: "Organization accidentally-awesome-labs; Repository spatula; Workflow filename release.yml"
-</user_setup>
+  account_setup: - "Own the npm @spatula org (BLOCK-04) OR commit to a fallback scope (@spatulaai, @aalabs/spatula)"
+  dashboard_config: - task: "For each of the 8 packages, in npm web UI add GitHub Actions trusted publisher"
+  location: "https://www.npmjs.com/package/{name}/access"
+  values: "Organization accidentally-awesome-labs; Repository spatula; Workflow filename release.yml"
+  </user_setup>
 
 <context>
 @.planning/PROJECT.md
@@ -166,6 +166,7 @@ Current .github/workflows/release.yml triggers on tag push, runs docker build + 
 From spec §3.6: Each package publishes with provenance + access public; trusted publishing via GitHub OIDC (id-token write at JOB level — Pitfall #4); npm 11.5.1+ required (Node 22 LTS bundles npm 10.x — workflow MUST upgrade).
 
 From 16-RESEARCH Pitfalls:
+
 - #3: release-please node-workspace + linked-versions can double-bump; set merge:false on node-workspace.
 - #4: id-token write MUST be at JOB level, not workflow level.
 - #7: SQLite gate FTS5 — already research-decidable; stay on better-sqlite3.
@@ -191,6 +192,7 @@ From 16-RESEARCH Open Questions #3: @spatula/cli dual build via tsup (recommende
     Before this checkpoint, the plan executor has run `npm org ls @spatula 2>&1 | tee /tmp/npm-org-check.txt` to confirm ownership status AND created `.planning/phases/16-api-contract-sdk-packages/16-5-BLOCK04.md` documenting one of:
     (a) @spatula org owned — evidence: command output + npm web UI screenshot timestamp
     (b) @spatula org NOT owned — fallback scope decision (e.g., @spatulaai) + plan to rename all 8 packages
+
   </what-built>
   <action>
     Automation BEFORE the human checkpoint:
@@ -258,6 +260,7 @@ From 16-RESEARCH Open Questions #3: @spatula/cli dual build via tsup (recommende
     Step 5: If Task 1 chose fallback scope, perform the rename across all 8 packages + cross-references. Single search-and-replace pass; refresh pnpm-lock.yaml via pnpm install; confirm tests still pass.
 
     Step 6: Run pnpm install --frozen-lockfile=false to refresh the lockfile. Confirm pnpm typecheck + pnpm test:contract still green.
+
   </action>
   <verify>
     <automated>jq -e '.packages."packages/core-types"' release-please-config.json && jq -e '.packages."packages/client"' release-please-config.json && jq -e '.plugins[] | select(.type=="linked-versions")' release-please-config.json && jq -e '.plugins[] | select(.type=="node-workspace" and .merge==false)' release-please-config.json && jq -e '."packages/core-types"' .release-please-manifest.json && jq -e '."packages/client"' .release-please-manifest.json && pnpm install --frozen-lockfile=false && pnpm typecheck</automated>
@@ -306,6 +309,7 @@ From 16-RESEARCH Open Questions #3: @spatula/cli dual build via tsup (recommende
     Step 3: Write .github/workflows/release-dry-run.yml. Triggers on pull_request + push:main. Steps: checkout with fetch-depth 0, pnpm setup, node setup, pnpm install frozen-lockfile, then `pnpm dlx release-please@17.6.0 release-pr --dry-run --config-file=release-please-config.json --manifest-file=.release-please-manifest.json --token="${{ secrets.GITHUB_TOKEN }}" --repo-url="https://github.com/${{ github.repository }}.git" 2>&1 | tee /tmp/release-please-dryrun.txt`. Upload output as artifact + comment on PR if PR event.
 
     Step 4: Smoke-test by pushing a scratch branch and confirming the dry-run job exits 0 with sensible bump proposals.
+
   </action>
   <verify>
     <automated>grep -q "id-token: write" .github/workflows/release.yml && ! grep -qE "NPM_TOKEN|NODE_AUTH_TOKEN" .github/workflows/release.yml && grep -q "publish --provenance --access public" .github/workflows/release.yml && test -f .github/workflows/release-dry-run.yml && grep -q "release-please" .github/workflows/release-dry-run.yml && grep -q "release-pr" .github/workflows/release-dry-run.yml</automated>
@@ -357,6 +361,7 @@ From 16-RESEARCH Open Questions #3: @spatula/cli dual build via tsup (recommende
     Step 3: Update apps/cli/README.md with Publishing section pointing to Task 6's tsup build, install command, basic usage, link to docs/compat-policy.md.
 
     Step 4: Run grep gate from 16-VALIDATION.md row SDK-06: for f in packages/{core,db,queue,api,shared}/README.md; do grep -q 'no compat guarantee' "$f" || exit 1; done.
+
   </action>
   <verify>
     <automated>for f in packages/core/README.md packages/db/README.md packages/queue/README.md packages/api/README.md packages/shared/README.md; do test -f "$f" && grep -qi 'no compat guarantee' "$f" || exit 1; done && test -f packages/core-types/README.md && test -f packages/client/README.md && test -f apps/cli/README.md</automated>
@@ -395,6 +400,7 @@ From 16-RESEARCH Open Questions #3: @spatula/cli dual build via tsup (recommende
     - Task 4: 5 internal-package READMEs (core, db, queue, api, shared) carry the canonical "NO COMPAT GUARANTEE AT TS-API LEVEL" header.
 
     The plan PAUSES here so the human can verify the release machinery before Tasks 6-9 (CLI tsup conversion + SDK integration test suite + SQLite benchmark + final dry-run smoke test) execute. The remainder of the plan depends on the release infra being correct.
+
   </what-built>
   <action>
     Automation BEFORE the human checkpoint:
@@ -460,6 +466,7 @@ From 16-RESEARCH Open Questions #3: @spatula/cli dual build via tsup (recommende
     Step 6: Update apps/cli/README.md with the Publishing section.
 
     Step 7: Verify existing CLI test suite still passes: pnpm --filter @spatula/cli test:ci.
+
   </action>
   <verify>
     <automated>pnpm --filter @spatula/cli build && test -f apps/cli/dist/index.js && test -f apps/cli/dist/index.cjs && test -f apps/cli/dist/index.d.ts && jq -e '.publishConfig.access=="public"' apps/cli/package.json && jq -e '.files | contains(["dist"])' apps/cli/package.json && jq -e '.engines.node | contains(">=22")' apps/cli/package.json && (! jq -e '.scripts.postinstall' apps/cli/package.json) && pnpm --filter @spatula/cli pack</automated>
@@ -521,6 +528,7 @@ From 16-RESEARCH Open Questions #3: @spatula/cli dual build via tsup (recommende
     Step 5: Optional: run with SPATULA_LIVE_LLM=1 + OPENROUTER_API_KEY=... to verify live mode works. Not required to land this plan.
 
     Step 6: Confirm packages/client default test script does NOT run integration tests. Live tests run via separate workflow_dispatch or scheduled job — defer the CI wiring to Phase 21.
+
   </action>
   <verify>
     <automated>pnpm --filter @spatula/client test:integration && test -f packages/client/vitest.integration.config.ts && grep -q "SPATULA_LIVE_LLM" packages/client/tests/integration/create-job.test.ts && grep -q "test:integration" packages/client/package.json && ls packages/client/tests/integration/*.test.ts | wc -l | awk '$1 == 5 { exit 0 } { exit 1 }'</automated>
@@ -570,6 +578,7 @@ From 16-RESEARCH Open Questions #3: @spatula/cli dual build via tsup (recommende
     Step 4: Commit packages/db/bench/sqlite-comparison.ts AND .results.md.
 
     Step 5: Edit docs/architecture.md to add "SQLite Backend Decision" section. Insertion point: after existing "Storage / Persistence" section. Include Method, Findings, Decision (stay on better-sqlite3@12.10.0), Re-evaluation criteria. Ensure the literal phrase "SQLite Backend Decision" appears (16-VALIDATION.md gate). Preserve the "5 formats frozen" string from plan 16-4.
+
   </action>
   <verify>
     <automated>test -f packages/db/bench/sqlite-comparison.ts && test -f packages/db/bench/sqlite-comparison.results.md && grep -q "SQLite Backend Decision" docs/architecture.md && grep -qE "better-sqlite3|FTS5" docs/architecture.md && grep -q "5 formats frozen" docs/architecture.md</automated>
@@ -614,6 +623,7 @@ From 16-RESEARCH Open Questions #3: @spatula/cli dual build via tsup (recommende
     Step 4: If issues surface (config schema errors etc.), fix in Task 2 files and re-run.
 
     Step 5: Commit 16-5-dryrun.log as evidence.
+
   </action>
   <verify>
     <automated>test -f .planning/phases/16-api-contract-sdk-packages/16-5-dryrun.log && grep -qi "core-types\|client" .planning/phases/16-api-contract-sdk-packages/16-5-dryrun.log && ! grep -qiE "double.bump|fatal" .planning/phases/16-api-contract-sdk-packages/16-5-dryrun.log</automated>
@@ -643,6 +653,7 @@ From 16-RESEARCH Open Questions #3: @spatula/cli dual build via tsup (recommende
 </verification>
 
 <success_criteria>
+
 - SDK-04: @spatula/cli builds dual ESM+CJS via tsup; publish-ready package.json; pnpm pack produces installable tarball.
 - SDK-05: SQLite decision committed; FTS5 finding documented; stay on better-sqlite3@12.10.0.
 - SDK-06: All 5 internal packages have the no-compat README header.
@@ -650,7 +661,7 @@ From 16-RESEARCH Open Questions #3: @spatula/cli dual build via tsup (recommende
 - SDK-08: 5 SDK integration tests green by default (mocked); opt-in live via SPATULA_LIVE_LLM=1.
 - BLOCK-04 cleared (either @spatula owned or fallback scope applied).
 - Pitfall protections verified: #3 (no double-bump), #4 (id-token job level), #7 (FTS5 gate over perf).
-</success_criteria>
+  </success_criteria>
 
 <output>
 After completion, create .planning/phases/16-api-contract-sdk-packages/16-5-SUMMARY.md recording:

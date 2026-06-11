@@ -9,7 +9,11 @@ vi.mock('@spatula/shared', async () => {
   return { ...actual, captureException: mockCaptureException };
 });
 
-import { errorHandler, NotFoundError, ConflictError } from '../../../src/middleware/error-handler.js';
+import {
+  errorHandler,
+  NotFoundError,
+  ConflictError,
+} from '../../../src/middleware/error-handler.js';
 import {
   ErrorCode,
   JobNotFoundError,

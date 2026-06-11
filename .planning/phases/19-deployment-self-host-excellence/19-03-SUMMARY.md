@@ -1,6 +1,6 @@
 ---
 phase: 19-deployment-self-host-excellence
-plan: "03"
+plan: '03'
 subsystem: supply-chain
 tags: [release, cosign, sbom, sigstore, multi-arch, buildx, deploy-04]
 dependency_graph:
@@ -9,15 +9,22 @@ dependency_graph:
   affects: [.github/workflows/release.yml, docs/runbooks/verify-images.md]
 tech_stack:
   added: [sigstore/cosign-installer, anchore/sbom-action, docker/setup-qemu-action]
-  patterns: [keyless-cosign-oidc, sign-by-digest, cyclonedx-sbom-attest, job-level-id-token, per-image-cache-scope]
+  patterns:
+    [
+      keyless-cosign-oidc,
+      sign-by-digest,
+      cyclonedx-sbom-attest,
+      job-level-id-token,
+      per-image-cache-scope,
+    ]
 key_files:
   created: [docs/runbooks/verify-images.md]
   modified: [.github/workflows/release.yml]
 decisions:
-  - "Sign by immutable @digest (steps.build.outputs.digest), never by tag (TOCTOU — Pitfall #3)"
-  - "id-token:write at the docker JOB level (not workflow level) for keyless cosign OIDC (Pitfall #4)"
-  - "SBOM (cyclonedx-json) both attested to the image AND uploaded as a GitHub release asset (D-05 both-ways)"
-  - "Per-image gha cache scope (scope=matrix.image) to avoid cache-eviction races across the 4 parallel matrix builds"
+  - 'Sign by immutable @digest (steps.build.outputs.digest), never by tag (TOCTOU — Pitfall #3)'
+  - 'id-token:write at the docker JOB level (not workflow level) for keyless cosign OIDC (Pitfall #4)'
+  - 'SBOM (cyclonedx-json) both attested to the image AND uploaded as a GitHub release asset (D-05 both-ways)'
+  - 'Per-image gha cache scope (scope=matrix.image) to avoid cache-eviction races across the 4 parallel matrix builds'
 metrics:
   duration_min: 35
   completed: 2026-06-11

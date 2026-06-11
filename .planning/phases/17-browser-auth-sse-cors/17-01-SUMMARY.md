@@ -1,6 +1,6 @@
 ---
 phase: 17-browser-auth-sse-cors
-plan: "01"
+plan: '01'
 subsystem: db-schema, core-types, config, test-scaffolding
 tags: [migration, error-codes, rate-limits, scaffolding, tdd]
 dependency_graph:
@@ -45,8 +45,8 @@ decisions:
   - RESOURCE_NOT_FOUND placed in RESOURCE.* domain near TENANT_NOT_FOUND; no TENANT_MISMATCH or CORS_CONFIG_INVALID added per RESEARCH.md guidance
   - tests/isolation/vitest.config.ts mirrors tests/contract/vitest.config.ts exactly, adding @spatula/queue alias for SSE isolation assertions
 metrics:
-  duration: "~3 minutes"
-  completed: "2026-05-20"
+  duration: '~3 minutes'
+  completed: '2026-05-20'
   tasks_completed: 3
   files_created: 9
   files_modified: 5
@@ -58,11 +58,11 @@ metrics:
 
 ## Tasks Completed
 
-| Task | Name | Commit | Key Files |
-|------|------|--------|-----------|
-| 1 | Add supersedes columns to api_keys via Drizzle migration | 048330c | 0001_api_key_rotation.sql, api-keys.ts, _journal.json, 0001_snapshot.json |
-| 2 | Add RESOURCE_NOT_FOUND error code to frozen ErrorCode enum | b17af90 | codes.ts, codes.test.ts |
-| 3 | Add rate-limit entries and scaffold Phase 17 test directories | 295e275 | rate-limits.yaml, tests/isolation/vitest.config.ts, 7x .gitkeep |
+| Task | Name                                                          | Commit  | Key Files                                                                  |
+| ---- | ------------------------------------------------------------- | ------- | -------------------------------------------------------------------------- |
+| 1    | Add supersedes columns to api_keys via Drizzle migration      | 048330c | 0001_api_key_rotation.sql, api-keys.ts, \_journal.json, 0001_snapshot.json |
+| 2    | Add RESOURCE_NOT_FOUND error code to frozen ErrorCode enum    | b17af90 | codes.ts, codes.test.ts                                                    |
+| 3    | Add rate-limit entries and scaffold Phase 17 test directories | 295e275 | rate-limits.yaml, tests/isolation/vitest.config.ts, 7x .gitkeep            |
 
 ## Verification Evidence
 
@@ -78,7 +78,7 @@ metrics:
 
 1. **Self-FK via raw SQL**: Drizzle's `pgTable` cannot reference a table within its own definition cleanly without circular-reference issues. The `supersedes` column is declared as `uuid('supersedes')` in TS (no `.references()`) and the FK constraint is applied directly in the migration SQL. The Drizzle snapshot JSON reflects this correctly.
 
-2. **RESOURCE.* domain placement**: `RESOURCE_NOT_FOUND: 'RESOURCE.NOT_FOUND'` placed after existing domain sections, before `TENANT.*`. This follows RESEARCH.md Open Question 2's recommendation — cross-tenant access returns 404 with this code (D-18 "prefer 404" policy). No `TENANT_MISMATCH` or `CORS_CONFIG_INVALID` added.
+2. **RESOURCE.\* domain placement**: `RESOURCE_NOT_FOUND: 'RESOURCE.NOT_FOUND'` placed after existing domain sections, before `TENANT.*`. This follows RESEARCH.md Open Question 2's recommendation — cross-tenant access returns 404 with this code (D-18 "prefer 404" policy). No `TENANT_MISMATCH` or `CORS_CONFIG_INVALID` added.
 
 3. **Isolation vitest config mirrors contract config**: `tests/isolation/vitest.config.ts` is a direct mirror of `tests/contract/vitest.config.ts` with the `include` glob changed to `tests/isolation/**/*.test.ts` and `@spatula/queue` already present in both aliases (contracts config already had it).
 

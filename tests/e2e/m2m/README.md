@@ -52,18 +52,18 @@ pnpm exec vitest run --config tests/e2e/m2m/vitest.config.ts
 
 ## Environment Variables
 
-| Variable | Default | Description |
-|----------|---------|-------------|
-| `TEST_DATABASE_URL` | — | Postgres connection string (required; falls back to `DATABASE_URL`) |
-| `DATABASE_URL` | — | Postgres fallback |
-| `REDIS_URL` | `redis://localhost:6379` | Redis connection string |
+| Variable            | Default                  | Description                                                         |
+| ------------------- | ------------------------ | ------------------------------------------------------------------- |
+| `TEST_DATABASE_URL` | —                        | Postgres connection string (required; falls back to `DATABASE_URL`) |
+| `DATABASE_URL`      | —                        | Postgres fallback                                                   |
+| `REDIS_URL`         | `redis://localhost:6379` | Redis connection string                                             |
 
 Dex constants are hardcoded to the dev-only values from `examples/auth-dex/config/dex.yaml`:
 
-| Constant | Value |
-|----------|-------|
-| `DEX_ISSUER` | `http://localhost:5556/dex` |
-| `M2M_CLIENT_ID` | `spatula-m2m` |
+| Constant            | Value                                                                 |
+| ------------------- | --------------------------------------------------------------------- |
+| `DEX_ISSUER`        | `http://localhost:5556/dex`                                           |
+| `M2M_CLIENT_ID`     | `spatula-m2m`                                                         |
 | `M2M_CLIENT_SECRET` | `dev-only-secret-m2m` (committed dev-only — DO NOT use in production) |
 
 ## CI Lane
