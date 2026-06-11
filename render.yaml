@@ -20,7 +20,10 @@ services:
     plan: starter # paid: avoids 15-min free-tier spin-down (embedded worker stays warm)
     # Render auto-provides pnpm from pnpm-lock.yaml — do NOT `corepack enable`
     # (its shim dir /usr/bin is read-only on Render's build image → EROFS).
-    buildCommand: pnpm install --frozen-lockfile && pnpm build
+    # --prod=false: NODE_ENV=production (below) makes pnpm skip devDeps, but the
+    # build needs them (turbo, tsup, typescript). Force-install dev deps for the
+    # build; runtime still runs with NODE_ENV=production.
+    buildCommand: pnpm install --frozen-lockfile --prod=false && pnpm build
     startCommand: node apps/api/dist/main.js # Plan 01 bootstrap — NOT index.js (barrel)
     healthCheckPath: /health
 
