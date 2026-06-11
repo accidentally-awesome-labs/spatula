@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v1.1
 milestone_name: Public Launch (Wave 6 / Phase 14)
 status: executing
-stopped_at: Completed 19-02-PLAN.md — distroless images (api/worker/migrate) + Debian-slim cli, all 4 build+run validated
-last_updated: "2026-06-11T02:54:38.757Z"
+stopped_at: Completed 19-03-PLAN.md — multi-arch cosign-signed + SBOM-attested release pipeline + verify-images runbook
+last_updated: "2026-06-11T05:24:14.107Z"
 last_activity: 2026-06-11
 progress:
   total_phases: 8
   completed_phases: 4
   total_plans: 34
-  completed_plans: 29
+  completed_plans: 30
   percent: 13
 ---
 
@@ -26,7 +26,7 @@ See: `.planning/PROJECT.md` (updated 2026-05-11)
 ## Current Position
 
 Phase: 19 (deployment-self-host-excellence) — EXECUTING
-Plan: 5 of 9
+Plan: 6 of 9
 Status: Ready to execute
 Last activity: 2026-06-11
 
@@ -75,6 +75,7 @@ _v1.1 metrics will populate as plans execute._
 | Phase 19 P06 | 3 | 2 tasks | 7 files |
 | Phase 19 P08 | 4 | 2 tasks | 5 files |
 | Phase 19 P02 | 95 | 2 tasks | 7 files |
+| Phase 19 P03 | 35 | 2 tasks | 2 files |
 
 ## Accumulated Context
 
@@ -180,6 +181,7 @@ Full decision log lives in PROJECT.md Key Decisions table. Recent decisions rele
 - [Phase 19]: 19-02: Distroless prod images require ENV NODE_ENV=production (else shared logger picks dev-only pino-pretty transport, absent in --prod, → boot crash) + --shamefully-hoist in prod-deps (so zod/transitive deps resolve at root node_modules in the runtime copy)
 - [Phase 19]: 19-02: cli image builds with --filter=@spatula/cli... to exclude @spatula/client from the closure (client fails a clean isolated TS build — DOM libs/eventsource; tracked DEFER-19-A); cli stays Debian-slim (Playwright needs shell), Playwright browsers not baked in
 - [Phase 19]: 19-02: api distroless healthcheck switched from wget to bundled node+fetch (distroless has no wget/shell); migrate runtime must copy core-types (shared imports it)
+- [Phase 19]: 19-03: release.yml docker job signs all 4 images keyless by immutable @digest (not tag, Pitfall #3), id-token:write at JOB level (Pitfall #4), cyclonedx SBOM both attested AND uploaded as release asset (D-05); per-image gha cache scope avoids matrix cache races. Live cosign verify is CI-only.
 
 ### Pending Todos
 
@@ -199,6 +201,7 @@ All 9 pre-launch blockers are open as of 2026-05-12 (see PROJECT.md "Pre-launch 
 - BLOCK-08 → Phase 20 entry gate (Cloudflare Pages + DNS)
 - BLOCK-09 → Phase 18 / Phase 22 (historical-contributor enumeration + outreach)
 - DEPLOY-09 deferred (user choice 2026-06-10): 19-09 hardware-sizing harness + runbook skeleton committed, but the MEASURED 1k-page-per-tier table in docs/runbooks/hardware-sizing.md is unfilled. Needs a real paid live run on a Hetzner CX32 (pnpm sizing:baseline). 19-09 left without SUMMARY so phase 19 stays incomplete until done.
+- DEPLOY-02 deferred (consistent with user's 'continue Waves 2-3' choice 2026-06-10): 19-05 render.yaml + render-deploy.md built and committed (2a6ee02, 892822c), but Task 3 (live Render free-tier deploy, SC#2) is a human-verify checkpoint needing a real Render account + fresh clone. 19-05 left without SUMMARY so phase 19 stays incomplete until the live deploy is verified (hit /health on the assigned *.onrender.com URL + confirm embedded worker).
 
 ### Pending Decisions
 
@@ -208,6 +211,6 @@ All 9 pre-launch blockers are open as of 2026-05-12 (see PROJECT.md "Pre-launch 
 
 ## Session Continuity
 
-Last session: 2026-06-11T02:54:38.751Z
-Stopped at: Completed 19-02-PLAN.md — distroless images (api/worker/migrate) + Debian-slim cli, all 4 build+run validated
+Last session: 2026-06-11T05:24:14.102Z
+Stopped at: Completed 19-03-PLAN.md — multi-arch cosign-signed + SBOM-attested release pipeline + verify-images runbook
 Resume file: None
