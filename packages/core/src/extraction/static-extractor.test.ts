@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 import { StaticExtractor } from './static-extractor.js';
 import type { LLMClient, LLMCompletionResponse } from '../interfaces/llm-client.js';
 import type { SchemaDefinition } from '../types/schema.js';

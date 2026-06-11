@@ -18,7 +18,7 @@ import { RedisStreamBuffer } from './buffer.js';
  * Build a minimal fake Redis that simulates in-memory stream behaviour.
  * Field format: ['payload', jsonString]
  */
-function makeFakeRedis(entries: Array<[string, string[]]> = []) {
+function makeFakeRedis(_entries: Array<[string, string[]]> = []) {
   const store = new Map<string, Array<[string, string[]]>>();
 
   return {

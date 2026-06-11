@@ -13,6 +13,8 @@
  */
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import type { subscribeJobEvents as subscribeJobEventsRef } from './get-job-events.js';
+import type { ClientLike } from './get-job-events.js';
 
 // ------------------------------------------------------------------ fake ES --
 type SSEListener = (event: MessageEvent) => void;
@@ -63,7 +65,7 @@ class FakeEventSource {
 
 // ---------------------------------------------------------------- helpers ---
 function makeClient(baseUrl = 'http://localhost:3000') {
-  return { baseUrl } as import('./get-job-events.js').ClientLike;
+  return { baseUrl } as ClientLike;
 }
 
 // We need to import after setting up globalThis.EventSource so the module
@@ -96,7 +98,7 @@ describe('subscribeJobEvents', () => {
   async function importSubscribe() {
     // Force fresh module load in each test to avoid stale cache.
     const mod = await import('./get-job-events.js?t=' + Date.now());
-    return mod.subscribeJobEvents as typeof import('./get-job-events.js').subscribeJobEvents;
+    return mod.subscribeJobEvents as typeof subscribeJobEventsRef;
   }
 
   it('Test 1: builds URL with token query param', async () => {

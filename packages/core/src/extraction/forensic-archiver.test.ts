@@ -157,10 +157,12 @@ describe('archiveForensicExtraction', () => {
 
   it('produces distinct timestamped keys when called twice for the same extraction', async () => {
     // Stagger calls slightly to ensure distinct timestamps
-    const ref1 = await archiveForensicExtraction({ contentStore, dlqWriter }, baseInput);
+    // Return refs are intentionally not captured — the assertions below inspect
+    // the content-store mock's call args (key1/key2), not the returned refs.
+    await archiveForensicExtraction({ contentStore, dlqWriter }, baseInput);
     // Tiny sleep to avoid same millisecond collision in test environments
     await new Promise((r) => setTimeout(r, 2));
-    const ref2 = await archiveForensicExtraction({ contentStore, dlqWriter }, baseInput);
+    await archiveForensicExtraction({ contentStore, dlqWriter }, baseInput);
 
     // The refs will be different because the keys encode Date.now() timestamps
     // (if they happen to be the same ms, the content store mock returns same ref — acceptable

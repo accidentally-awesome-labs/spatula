@@ -7,7 +7,7 @@
  * memory cached spec — no real DB or Redis is needed for these assertions.
  */
 import { describe, it, expect, beforeEach, vi } from 'vitest';
-import { createRoute, OpenAPIHono, z } from '@hono/zod-openapi';
+import { createRoute, z } from '@hono/zod-openapi';
 import {
   _resetOpenAPICache,
   getCachedOpenAPISpec,
