@@ -18,11 +18,16 @@ services:
     type: web # NOT 'worker' — Background Worker requires a paid plan
     runtime: node
     plan: starter # paid: avoids 15-min free-tier spin-down (embedded worker stays warm)
-    buildCommand: corepack enable && pnpm install --frozen-lockfile && pnpm build
+    # Render auto-provides pnpm from pnpm-lock.yaml — do NOT `corepack enable`
+    # (its shim dir /usr/bin is read-only on Render's build image → EROFS).
+    buildCommand: pnpm install --frozen-lockfile && pnpm build
     startCommand: node apps/api/dist/main.js # Plan 01 bootstrap — NOT index.js (barrel)
     healthCheckPath: /health
 
     envVars:
+      # Pin to our tested LTS (Render defaults to Node 24); support matrix is Node 22+
+      - key: NODE_VERSION
+        value: '22'
       # ── Managed connections (wired from Render-provisioned services) ────────
       - key: DATABASE_URL
         fromDatabase:
