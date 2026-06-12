@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v1.1
 milestone_name: Public Launch (Wave 6 / Phase 14)
 status: executing
-stopped_at: Phase 19.1 Plan 02 complete — ALS usage recorder wired; 165 queue tests green; ready for Plan 03 (per-job LLM config)
-last_updated: "2026-06-12T02:56:38.877Z"
+stopped_at: Phase 19.1 Plan 03 complete — per-job LLM config wired; 171 queue tests green; ready for Plan 04 (smoke test + live verification)
+last_updated: "2026-06-12T03:03:39.703Z"
 last_activity: 2026-06-12
 progress:
   total_phases: 9
   completed_phases: 4
   total_plans: 38
-  completed_plans: 35
+  completed_plans: 36
   percent: 13
 ---
 
@@ -26,7 +26,7 @@ See: `.planning/PROJECT.md` (updated 2026-05-11)
 ## Current Position
 
 Phase: 19.1 (hosted-execution-path) — EXECUTING
-Plan: 3 of 4
+Plan: 4 of 4
 Status: Ready to execute
 Last activity: 2026-06-12
 
@@ -80,6 +80,7 @@ _v1.1 metrics will populate as plans execute._
 | Phase 19 P07 | 8 | 2 tasks | 2 files |
 | Phase 19.1-hosted-execution-path P01 | 6 | 2 tasks | 4 files |
 | Phase 19.1 P02 | 4 | 2 tasks | 5 files |
+| Phase 19.1-hosted-execution-path P03 | 4 | 2 tasks | 7 files |
 
 ## Accumulated Context
 
@@ -199,6 +200,9 @@ Full decision log lives in PROJECT.md Key Decisions table. Recent decisions rele
 - [Phase 19.1-01]: Test mock for @spatula/core uses full synthetic factory (not importOriginal) to avoid real Playwright launch causing 5s timeout in vitest worker pool
 - [Phase 19.1]: AlsUsageRecorder reads tenantId/jobId from ALS not constructor — race-safe across concurrent BullMQ jobs
 - [Phase 19.1]: setUsageRecorder called on built.rawClient (not llmClient) because CircuitBreakerLLMClient does not expose that method
+- [Phase 19.1-hosted-execution-path]: deriveJobDeps constructs the 5 LLM-config-dependent components from jobLlmConfig over the SHARED llmClient — Plan 02's ALS recorder stays attached and attribution continues working
+- [Phase 19.1-hosted-execution-path]: resolveJobDeps falls back to base deps when sharedClient is undefined — test-injection path passes no llmClient so all 171 existing tests pass without mocking
+- [Phase 19.1-hosted-execution-path]: Worker-entrypoint attaches built.llmClient + built.llmConfig as plain properties on deps — avoids WorkerDeps type change, no constructor params needed
 
 ### Roadmap Evolution
 
@@ -239,6 +243,6 @@ All 9 pre-launch blockers are open as of 2026-05-12 (see PROJECT.md "Pre-launch 
 
 ## Session Continuity
 
-Last session: 2026-06-12T02:56:38.871Z
-Stopped at: Phase 19.1 Plan 02 complete — ALS usage recorder wired; 165 queue tests green; ready for Plan 03 (per-job LLM config)
+Last session: 2026-06-12T03:03:39.698Z
+Stopped at: Phase 19.1 Plan 03 complete — per-job LLM config wired; 171 queue tests green; ready for Plan 04 (smoke test + live verification)
 Resume file: None

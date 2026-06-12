@@ -238,12 +238,12 @@ Plans:
 5. **DEPLOY-09 (19-09) unblocked**: `pnpm sizing:baseline` against the running stack produces a per-tier table with non-zero `cost/page` (distinct per tier).
 6. No regressions: full build + lint + unit suites green; the CLI local crawl path (`run.ts` → `LocalPipelineRunner`) still works.
 
-**Plans:** 2/4 plans executed
+**Plans:** 3/4 plans executed
 
 Plans:
 - [x] 19.1-01-PLAN.md — Worker DI: buildWorkerDeps() + assign deps in startWorker() (fail-loud OPENROUTER_API_KEY, SPATULA_CRAWLER switch) (EXEC-01) [wave 1]
 - [x] 19.1-02-PLAN.md — LLM usage recording: AsyncLocalStorage usage-context + AlsUsageRecorder set on raw client + handlers wrapped (EXEC-03) [wave 2]
-- [ ] 19.1-03-PLAN.md — Per-job LLM config: deriveJobDeps() rebuilds the 5 config-dependent components per job from job.config.llm (EXEC-02) [wave 3]
+- [x] 19.1-03-PLAN.md — Per-job LLM config: deriveJobDeps() rebuilds the 5 config-dependent components per job from job.config.llm (EXEC-02) [wave 3]
 - [ ] 19.1-04-PLAN.md — Verification: unit tests + LOCAL docker+embedded smoke (non-zero tier-distinct cost/page) + LIVE Render re-verify checkpoint (EXEC-04/05/06) [wave 4]
 
 ### Phase 20: Docs Site Infrastructure + Content
