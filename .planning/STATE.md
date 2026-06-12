@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v1.1
 milestone_name: Public Launch (Wave 6 / Phase 14)
 status: executing
-stopped_at: Phase 19.1 Plan 01 complete — buildWorkerDeps() created + assigned in startWorker(); 4 tests green; ready for Plan 02 (usage recorder)
-last_updated: "2026-06-12T02:47:29.365Z"
+stopped_at: Phase 19.1 Plan 02 complete — ALS usage recorder wired; 165 queue tests green; ready for Plan 03 (per-job LLM config)
+last_updated: "2026-06-12T02:56:38.877Z"
 last_activity: 2026-06-12
 progress:
   total_phases: 9
   completed_phases: 4
   total_plans: 38
-  completed_plans: 34
+  completed_plans: 35
   percent: 13
 ---
 
@@ -26,7 +26,7 @@ See: `.planning/PROJECT.md` (updated 2026-05-11)
 ## Current Position
 
 Phase: 19.1 (hosted-execution-path) — EXECUTING
-Plan: 2 of 4
+Plan: 3 of 4
 Status: Ready to execute
 Last activity: 2026-06-12
 
@@ -79,6 +79,7 @@ _v1.1 metrics will populate as plans execute._
 | Phase 19 P04 | 8 | 2 tasks | 15 files |
 | Phase 19 P07 | 8 | 2 tasks | 2 files |
 | Phase 19.1-hosted-execution-path P01 | 6 | 2 tasks | 4 files |
+| Phase 19.1 P02 | 4 | 2 tasks | 5 files |
 
 ## Accumulated Context
 
@@ -196,6 +197,8 @@ Full decision log lives in PROJECT.md Key Decisions table. Recent decisions rele
 - [Phase 19.1-01]: buildWorkerDeps returns {deps, rawClient, llmClient, llmConfig} — raw+wrapped clients kept separate so Plan 02 can setUsageRecorder on rawClient before wrapping
 - [Phase 19.1-01]: built variable kept in startWorker() scope (BuildWorkerDepsResult | undefined) so Plans 02/03 can access rawClient/llmClient/llmConfig without reopening the file
 - [Phase 19.1-01]: Test mock for @spatula/core uses full synthetic factory (not importOriginal) to avoid real Playwright launch causing 5s timeout in vitest worker pool
+- [Phase 19.1]: AlsUsageRecorder reads tenantId/jobId from ALS not constructor — race-safe across concurrent BullMQ jobs
+- [Phase 19.1]: setUsageRecorder called on built.rawClient (not llmClient) because CircuitBreakerLLMClient does not expose that method
 
 ### Roadmap Evolution
 
@@ -236,6 +239,6 @@ All 9 pre-launch blockers are open as of 2026-05-12 (see PROJECT.md "Pre-launch 
 
 ## Session Continuity
 
-Last session: 2026-06-12T02:47:29.347Z
-Stopped at: Phase 19.1 Plan 01 complete — buildWorkerDeps() created + assigned in startWorker(); 4 tests green; ready for Plan 02 (usage recorder)
+Last session: 2026-06-12T02:56:38.871Z
+Stopped at: Phase 19.1 Plan 02 complete — ALS usage recorder wired; 165 queue tests green; ready for Plan 03 (per-job LLM config)
 Resume file: None
