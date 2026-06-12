@@ -20,6 +20,8 @@ import { processCleanupJob } from './cleanup-worker.js';
 import type { CleanupDeps } from './cleanup-worker.js';
 import { processTenantDeleteJob } from './workers/tenant-delete-worker.js';
 import type { WorkerDeps } from './worker-deps.js';
+import { buildWorkerDeps } from './build-worker-deps.js';
+import type { BuildWorkerDepsResult } from './build-worker-deps.js';
 import type {
   CrawlJobData,
   SchemaEvolutionJobData,
@@ -77,7 +79,17 @@ export async function startWorker(_opts?: { deps?: WorkerDeps }): Promise<Worker
   const queueConfig = DEFAULT_QUEUE_CONFIG;
   const workers: Worker[] = [];
 
-  let deps: WorkerDeps | undefined;
+  // Build (or inject for tests) the full WorkerDeps. Without this the handlers
+  // below throw 'WorkerDeps not initialized' (the Gap-1 bug this fixes).
+  // Keep `built` in scope so Plans 02/03 can read built.rawClient / built.llmClient / built.llmConfig.
+  let built: BuildWorkerDepsResult | undefined;
+  let deps: WorkerDeps;
+  if (_opts?.deps) {
+    deps = _opts.deps;
+  } else {
+    built = await buildWorkerDeps({ db, pool, queues });
+    deps = built.deps;
+  }
 
   if (isEnabled('crawl')) {
     const worker = new Worker<CrawlJobData>(

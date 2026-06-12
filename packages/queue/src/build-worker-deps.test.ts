@@ -1,37 +1,29 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 
 // ---------------------------------------------------------------------------
-// Mocks — must be hoisted before any imports that touch the mocked modules
+// Mocks — vi.mock is hoisted; factory runs before any imports
 // ---------------------------------------------------------------------------
 
-vi.mock('@spatula/core', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('@spatula/core')>();
-  return {
-    ...actual,
-    // Override the async factory to avoid launching a real browser
-    CrawlerFactory: {
-      create: vi.fn().mockResolvedValue({
-        crawl: vi.fn(),
-        close: vi.fn(),
-      }),
-    },
-    createLLMClient: vi.fn().mockReturnValue({
-      complete: vi.fn(),
-      setUsageRecorder: vi.fn(),
-    }),
-    CircuitBreakerLLMClient: vi.fn().mockImplementation((inner: unknown) => inner),
-    PageClassifier: vi.fn().mockImplementation(() => ({})),
-    StaticExtractor: vi.fn().mockImplementation(() => ({})),
-    SchemaEvolverImpl: vi.fn().mockImplementation(() => ({})),
-    DataReconcilerImpl: vi.fn().mockImplementation(() => ({})),
-    LLMLinkEvaluator: vi.fn().mockImplementation(() => ({})),
-    RobotsTxtChecker: vi.fn().mockImplementation(() => ({})),
-    InMemoryDomainRateLimiter: vi.fn().mockImplementation(() => ({})),
-    CrawlCompletionChecker: vi.fn().mockImplementation(() => ({})),
-    resolveModel: vi.fn().mockReturnValue('deepseek/deepseek-v4-pro'),
-    createContentStore: vi.fn().mockReturnValue({ type: 's3' }),
-  };
-});
+// Mock only the exports used by build-worker-deps.ts — do NOT use importOriginal
+// here to avoid loading the real @spatula/core (which would try to launch Playwright
+// when CrawlerFactory.create is called and cause a 5s timeout in the test worker).
+vi.mock('@spatula/core', () => ({
+  CrawlerFactory: {
+    create: vi.fn().mockResolvedValue({ crawl: vi.fn(), close: vi.fn() }),
+  },
+  createLLMClient: vi.fn().mockReturnValue({ complete: vi.fn(), setUsageRecorder: vi.fn() }),
+  CircuitBreakerLLMClient: vi.fn().mockImplementation((inner: unknown) => inner),
+  PageClassifier: vi.fn().mockImplementation(() => ({})),
+  StaticExtractor: vi.fn().mockImplementation(() => ({})),
+  SchemaEvolverImpl: vi.fn().mockImplementation(() => ({})),
+  DataReconcilerImpl: vi.fn().mockImplementation(() => ({})),
+  LLMLinkEvaluator: vi.fn().mockImplementation(() => ({})),
+  RobotsTxtChecker: vi.fn().mockImplementation(() => ({})),
+  InMemoryDomainRateLimiter: vi.fn().mockImplementation(() => ({})),
+  CrawlCompletionChecker: vi.fn().mockImplementation(() => ({})),
+  resolveModel: vi.fn().mockReturnValue('deepseek/deepseek-v4-pro'),
+  createContentStore: vi.fn().mockReturnValue({ type: 's3' }),
+}));
 
 vi.mock('@spatula/db', () => ({
   JobRepository: vi.fn().mockImplementation(() => ({})),
@@ -49,11 +41,7 @@ vi.mock('@spatula/db', () => ({
 }));
 
 vi.mock('@spatula/shared', () => ({
-  createLogger: vi.fn().mockReturnValue({
-    info: vi.fn(),
-    warn: vi.fn(),
-    error: vi.fn(),
-  }),
+  createLogger: vi.fn().mockReturnValue({ info: vi.fn(), warn: vi.fn(), error: vi.fn() }),
   getEnvOrDefault: vi.fn().mockImplementation((key: string, defaultValue: string) => {
     return process.env[key] ?? defaultValue;
   }),
@@ -69,16 +57,16 @@ const FAKE_INPUT = {
   queues: {} as any,
 };
 
-describe('buildWorkerDeps()', () => {
+describe('buildWorkerDeps()', { timeout: 15_000 }, () => {
   const originalEnv = process.env;
 
   beforeEach(() => {
     process.env = { ...originalEnv };
+    vi.clearAllMocks();
   });
 
   afterEach(() => {
     process.env = originalEnv;
-    vi.clearAllMocks();
   });
 
   it('Test 1: throws a clear error when OPENROUTER_API_KEY is missing', async () => {
