@@ -1,29 +1,28 @@
 /**
  * scripts/sizing-baseline.ts
  *
- * DEPLOY-09: Hardware-sizing baseline harness (API + worker / Postgres path).
+ * DEPLOY-09: Hardware-sizing baseline harness (pure-HTTP against a running stack).
  *
  * Runs a TARGET_PAGES crawl ONCE PER routing tier (fast / primary / smart) against
  * a RUNNING Spatula stack and records wall-clock + LLM cost-per-page. Results are
  * emitted as a Markdown table to stdout and written to scripts/.sizing-results.json
  * so the docs/runbooks/hardware-sizing.md table can be filled from them.
  *
- * == Why the API/worker path ==
- * This harness drives the REAL production crawl path: it submits a job per tier via
- * the HTTP API, the BullMQ CrawlWorker processes it, and LLM usage is recorded to
- * Postgres by the worker's usage-recorder. The harness then reads the per-job cost
- * (LlmUsageRepository.aggregateByTenant → byJob) and the page count
- * (CrawlTaskRepository.getJobStats → completed) directly from Postgres.
- *
- * NOTE: the page count is NOT exposed over HTTP for this path (the API/worker path
- * never writes task counts into jobs.stats — only the local SQLite runner does), so
- * the harness needs DATABASE_URL to read pages + cost. It runs on the same VM as the
- * stack (docker-compose.prod.yml) where Postgres is reachable.
+ * == How it works (pure HTTP — no @spatula/* imports, no DB access) ==
+ * Drives the REAL production crawl path entirely over HTTP: it submits a job per tier,
+ * the BullMQ CrawlWorker processes it (and records LLM usage), then the harness reads:
+ *   - pages  ← GET /api/v1/jobs/:id   → data.stats.pagesCompleted
+ *   - cost   ← GET /api/v1/usage      → data.byJob[jobId].costUsd
+ * Because it only needs an HTTP base URL, it runs anywhere — local, the VM, or a
+ * remote deploy — without DATABASE_URL or workspace module resolution.
  *
  * == Required running stack ==
- *   API + worker + Redis + Postgres (e.g. `docker compose -f docker-compose.prod.yml up`).
- *   The API/worker MUST have OPENROUTER_API_KEY set (the worker makes the LLM calls,
- *   not this harness). AUTH_STRATEGY=none is assumed (harness sends X-Tenant-Id).
+ *   API + worker + Redis + Postgres (e.g. `docker compose -f docker-compose.prod.yml up`
+ *   for the API-side, plus a crawler the worker can use). The API/worker MUST have
+ *   OPENROUTER_API_KEY set (the worker makes the LLM calls, not this harness).
+ *   The worker also needs a working crawler: Firecrawl (FIRECRAWL_API_KEY) for the
+ *   distroless worker image, OR a Playwright-capable worker (e.g. the embedded worker
+ *   on a host/VM with Playwright installed). AUTH_STRATEGY=none assumed (sends X-Tenant-Id).
  *
  * == Target hardware (D-01) ==
  * Hetzner CX32  —  4 vCPU / 8 GB RAM / 80 GB SSD NVMe / AMD EPYC (amd64)
@@ -38,11 +37,8 @@
  * producing a clean per-tier cost/page number.
  *
  * == Re-run instructions ==
- * See docs/runbooks/hardware-sizing.md. Typical invocation on the VM:
- *   SPATULA_LIVE_LLM=1 \
- *   SPATULA_API_URL=http://localhost:3000 \
- *   DATABASE_URL=postgresql://spatula:pass@localhost:5432/spatula \
- *   pnpm sizing:baseline
+ * See docs/runbooks/hardware-sizing.md. Typical invocation:
+ *   SPATULA_LIVE_LLM=1 SPATULA_API_URL=http://localhost:3000 pnpm sizing:baseline
  *
  * Results vary by: target site structure, network latency, VM I/O, model pricing.
  */
@@ -65,32 +61,15 @@ import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { setTimeout as sleep } from 'node:timers/promises';
 
-// @spatula/db is imported DYNAMICALLY inside main() (after the gate) so the live
-// gate above is the first thing that runs — a static ESM import is hoisted and
-// would resolve/execute the workspace graph before the gate. A non-literal
-// specifier keeps TS from static-resolving it (the module is present at runtime
-// after `pnpm build`). Minimal structural types below describe what we use.
-interface TaskStats {
-  pending: number;
-  inProgress: number;
-  completed: number;
-  failed: number;
-  skipped: number;
+// Pure-HTTP harness — NO @spatula/* imports, no direct DB access. Pages come from
+// GET /jobs/:id (stats.pagesCompleted) and cost from GET /api/v1/usage (byJob).
+// This keeps the harness portable (runs against any reachable Spatula stack,
+// local or remote) and free of workspace ESM-resolution concerns.
+interface JobDetail {
+  data: { status: string; stats: Record<string, number> };
 }
-interface UsageAggregation {
-  totalCostUsd: number;
-  byJob: Array<{ jobId: string; tokens: number; costUsd: number }>;
-}
-interface CrawlTaskRepoLike {
-  getJobStats(jobId: string, tenantId: string): Promise<TaskStats>;
-}
-interface LlmUsageRepoLike {
-  aggregateByTenant(tenantId: string, since: Date): Promise<UsageAggregation>;
-}
-interface DbModule {
-  createDatabase: (url: string) => unknown;
-  CrawlTaskRepository: new (db: unknown) => CrawlTaskRepoLike;
-  LlmUsageRepository: new (db: unknown) => LlmUsageRepoLike;
+interface UsageResponse {
+  data: { byJob: Array<{ jobId: string; tokens: number; costUsd: number }> };
 }
 
 // ============================================================
@@ -112,7 +91,6 @@ const TIERS: TierConfig[] = [
 // Configuration (overridable via env)
 // ============================================================
 const API_URL = (process.env.SPATULA_API_URL ?? 'http://localhost:3000').replace(/\/$/, '');
-const DATABASE_URL = process.env.DATABASE_URL;
 const TARGET_PAGES = parseInt(process.env.SIZING_PAGES ?? '1000', 10);
 const SEED_URL = process.env.SIZING_SEED_URL ?? 'https://quotes.toscrape.com/';
 const MAX_DEPTH = parseInt(process.env.SIZING_MAX_DEPTH ?? '20', 10);
@@ -195,13 +173,12 @@ function printMarkdownTable(results: TierResult[]): void {
 // ============================================================
 async function runTier(
   tier: TierConfig,
-  ctx: { tenantId: string; taskRepo: CrawlTaskRepoLike; usageRepo: LlmUsageRepoLike },
+  ctx: { tenantId: string },
 ): Promise<TierResult> {
   const tlog = (...a: unknown[]) => log(`[${tier.name}]`, ...a);
   tlog(`Submitting ${TARGET_PAGES}-page crawl pinned to ${tier.model} (seed: ${SEED_URL})`);
 
   const startMs = Date.now();
-  const since = new Date(startMs - 1000); // 1s buffer before submit
 
   // 1. Submit the job (tier pinned via llm.primaryModel, no overrides → all calls use it)
   const created = await api<{ data: { id: string } }>('/api/v1/jobs', {
@@ -227,8 +204,9 @@ async function runTier(
   // 2. Start the crawl
   await api(`/api/v1/jobs/${jobId}/start`, { method: 'POST', tenantId: ctx.tenantId });
 
-  // 3. Poll until terminal
+  // 3. Poll until terminal (keep the last job detail — its stats carry pagesCompleted)
   let status = 'pending';
+  let job: JobDetail | undefined;
   const deadline = startMs + MAX_WAIT_MS;
   while (!TERMINAL.has(status)) {
     if (Date.now() > deadline) {
@@ -236,9 +214,7 @@ async function runTier(
       break;
     }
     await sleep(POLL_MS);
-    const job = await api<{ data: { status: string } }>(`/api/v1/jobs/${jobId}`, {
-      tenantId: ctx.tenantId,
-    });
+    job = await api<JobDetail>(`/api/v1/jobs/${jobId}`, { tenantId: ctx.tenantId });
     if (job.data.status !== status) {
       status = job.data.status;
       tlog(`status → ${status}`);
@@ -247,11 +223,10 @@ async function runTier(
 
   const wallClockMs = Date.now() - startMs;
 
-  // 4. Read pages (completed crawl tasks) + cost (per-job LLM usage) from Postgres
-  const taskStats = await ctx.taskRepo.getJobStats(jobId, ctx.tenantId);
-  const pages = taskStats.completed;
-  const agg = await ctx.usageRepo.aggregateByTenant(ctx.tenantId, since);
-  const totalCostUsd = agg.byJob.find((j) => j.jobId === jobId)?.costUsd ?? 0;
+  // 4. Read pages (GET /jobs/:id → stats.pagesCompleted) + cost (GET /usage → byJob)
+  const pages = job?.data.stats?.pagesCompleted ?? 0;
+  const usage = await api<UsageResponse>('/api/v1/usage?period=1d', { tenantId: ctx.tenantId });
+  const totalCostUsd = usage.data.byJob.find((j) => j.jobId === jobId)?.costUsd ?? 0;
   const costPerPageUsd = totalCostUsd / Math.max(pages, 1);
 
   tlog(
@@ -279,11 +254,6 @@ async function main(): Promise<void> {
   log(`API: ${API_URL} | Tiers: fast/primary/smart | Pages/tier: ${TARGET_PAGES} | Seed: ${SEED_URL}`);
   log('WARNING: the running stack will incur real LLM cost via OpenRouter.\n');
 
-  if (!DATABASE_URL) {
-    console.error('DATABASE_URL is required (harness reads pages + cost from Postgres).');
-    process.exit(2);
-  }
-
   // Preflight: API reachable?
   try {
     await api('/health');
@@ -291,22 +261,6 @@ async function main(): Promise<void> {
     console.error(`API not reachable at ${API_URL}/health — is the stack up? ${String(err)}`);
     process.exit(1);
   }
-
-  // Dynamic import (after the gate) — non-literal specifier keeps TS from
-  // static-resolving the workspace module; present at runtime after `pnpm build`.
-  const dbSpecifier = '@spatula/db';
-  let dbMod: DbModule;
-  try {
-    dbMod = (await import(dbSpecifier)) as unknown as DbModule;
-  } catch (err) {
-    console.error(
-      `Could not import @spatula/db — run \`pnpm install && pnpm build\` first. ${String(err)}`,
-    );
-    process.exit(1);
-  }
-  const db = dbMod.createDatabase(DATABASE_URL);
-  const taskRepo = new dbMod.CrawlTaskRepository(db);
-  const usageRepo = new dbMod.LlmUsageRepository(db);
 
   // One tenant for the whole run; per-tier jobs isolate cost via byJob[jobId].
   const tenantResp = await api<{ data: { id: string } }>('/api/v1/tenants', {
@@ -320,7 +274,7 @@ async function main(): Promise<void> {
   const errors: Array<{ tier: string; error: string }> = [];
   for (const tier of TIERS) {
     try {
-      results.push(await runTier(tier, { tenantId, taskRepo, usageRepo }));
+      results.push(await runTier(tier, { tenantId }));
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
       console.error(`[${tier.name}] FAILED: ${msg}`);

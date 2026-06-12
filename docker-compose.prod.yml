@@ -13,6 +13,11 @@ services:
       context: .
       dockerfile: Dockerfile.migrate
     env_file: .env
+    # Override the .env localhost URLs: inside a container, the DB/Redis live at the
+    # compose service names, not localhost. (env_file's .env keeps localhost so the
+    # host-run tooling — e.g. the sizing harness — works unchanged.)
+    environment:
+      DATABASE_URL: postgresql://spatula:spatula@postgres:5432/spatula
     depends_on:
       postgres:
         condition: service_healthy
@@ -27,8 +32,13 @@ services:
       context: .
       dockerfile: Dockerfile.api
     ports:
-      - '3000:3000'
+      # Host port overridable for local conflicts: SPATULA_API_PORT=3100 docker compose ... up
+      - '${SPATULA_API_PORT:-3000}:3000'
     env_file: .env
+    # See migrate: container-internal DB/Redis hosts (not localhost from .env).
+    environment:
+      DATABASE_URL: postgresql://spatula:spatula@postgres:5432/spatula
+      REDIS_URL: redis://redis:6379
     depends_on:
       postgres:
         condition: service_healthy
@@ -57,6 +67,10 @@ services:
       context: .
       dockerfile: Dockerfile.worker
     env_file: .env
+    # See migrate: container-internal DB/Redis hosts (not localhost from .env).
+    environment:
+      DATABASE_URL: postgresql://spatula:spatula@postgres:5432/spatula
+      REDIS_URL: redis://redis:6379
     depends_on:
       postgres:
         condition: service_healthy
