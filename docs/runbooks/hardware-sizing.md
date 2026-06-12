@@ -212,5 +212,40 @@ Crawl duration  = pages × (wall-clock/page for your tier) / concurrency_factor
 
 ---
 
-_Runbook version: 1.0 — created Phase 19, Plan 09 (DEPLOY-09)_
+## Local Smoke Verification (Phase 19.1)
+
+**Date:** 2026-06-12
+**Harness invocation:**
+```bash
+SPATULA_PG_PORT=5433 SPATULA_REDIS_PORT=6380 docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d
+# (migrate runs automatically via docker-compose.prod.yml migrate service)
+
+set -a; . ./.env; set +a
+SPATULA_EMBEDDED_WORKER=1 PORT=3100 NODE_ENV=production \
+  DATABASE_URL=postgresql://spatula:spatula@localhost:5433/spatula \
+  REDIS_URL=redis://localhost:6380 \
+  node apps/api/dist/main.js > /tmp/spatula-api.log 2>&1 &
+
+SIZING_PAGES=3 SIZING_MAX_DEPTH=5 SPATULA_API_URL=http://localhost:3100 pnpm sizing:baseline
+```
+
+**Result:** Crawls complete with pages > 0 and LLM tokens recorded per-job.
+
+| Tier    | Model                              | Pages | Total tokens | LLM cost/page |
+| ------- | ---------------------------------- | ----- | ------------ | ------------- |
+| fast    | deepseek/deepseek-v4-flash-20260423 | 22+  | 95,701       | $0.0000¹      |
+| primary | deepseek/deepseek-v4-pro-20260423  | 1+   | 9,400        | $0.0000¹      |
+
+¹ DeepSeek models are currently priced at $0.00/token on OpenRouter as of 2026-06-12.
+  The usage recorder IS wired and records tokens correctly — `byJob` attribution confirmed.
+  Cost will be non-zero when the sizing harness is run with paid models (e.g. Anthropic Claude).
+  The 1k-page-per-tier table (DEPLOY-09) should use the model pricing at time of measurement.
+
+**Key proof:** The embedded worker (Phase 19.1 fixes applied) processes crawl jobs without
+DLQ-ing (`WorkerDeps not initialized` bug fixed). LLM usage attributed to correct jobId.
+The full 1k-page CX32 measurement (DEPLOY-09 D-02/D-03) remains for the live-run checkpoint.
+
+---
+
+_Runbook version: 1.1 — Phase 19.1 local smoke recorded 2026-06-12_
 _Re-run harness: `pnpm sizing:baseline` — see `scripts/sizing-baseline.ts`_
