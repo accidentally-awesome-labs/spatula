@@ -51,6 +51,8 @@ completed: "2026-06-11"
 
 **Shipped `render.yaml` (one-click full-stack Render deploy via a single free Web Service running the API + embedded BullMQ worker, with managed free Postgres + Key Value) and an honest try-it runbook — then verified the whole stack live end-to-end, fixing two deployment-only template defects the live test exposed.**
 
+> ⚠️ **CAVEAT (2026-06-12, added after the fact):** SC#2 was verified as build green + `/health`/`/health/ready` 200 + embedded worker **starting** (7 queues + heartbeat) + migrations complete. It was **NOT** verified that the embedded worker can **process a crawl** — and it cannot. A later 19-09 sizing smoke proved the BullMQ worker throws `WorkerDeps not initialized` on every job (deps are constructed nowhere in production; the queued/hosted crawl path is unwired). So this Render deploy serves health and boots the worker, but **a real crawl will not run** until **Phase 19.1 (Hosted Execution Path Completion)** lands. 19.1/EXEC-05 re-verifies this deploy with an actual crawl to clear this caveat. See `.planning/phases/19.1-hosted-execution-path/` and STATE.md Blockers.
+
 ## Performance
 
 - **Duration:** Tasks 1–2 authored earlier in the phase; Task 3 (human-verify live deploy) completed as a checkpoint session

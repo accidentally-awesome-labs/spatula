@@ -193,6 +193,10 @@ Full decision log lives in PROJECT.md Key Decisions table. Recent decisions rele
 - [Phase 19-05]: Render blueprint SYNC ≠ deploy — `render deploys create` reuses the service's STORED config; render.yaml edits require a dashboard Blueprint Sync (CLI `blueprints` only validates). No repo webhook on the OSS repo, so pushes do not auto-sync.
 - [Phase 19-09]: Sizing harness must drive the API+worker (Postgres) path, NOT LocalPipelineRunner — only the API/worker path records LLM usage to Postgres (via the worker's usage-recorder); the local SQLite runner records to the project DB and writes no page count to jobs.stats. Page count for the API path = completed crawl tasks (CrawlTaskRepository.getJobStats), not exposed over HTTP → harness needs DATABASE_URL. Live gate must use a dynamic import (static ESM import is hoisted and runs before the gate).
 
+### Roadmap Evolution
+
+- Phase 19.1 (Hosted Execution Path Completion) inserted after Phase 19 on 2026-06-12 (URGENT) — completes the unwired hosted/queued crawl path (worker DI + per-job LLM config + usage recording) discovered during the 19-05 live deploy + 19-09 sizing smoke. Re-verifies DEPLOY-02 live and unblocks DEPLOY-09. Requirements EXEC-01..06. Dir: `.planning/phases/19.1-hosted-execution-path/`.
+
 ### Pending Todos
 
 None captured yet.
@@ -211,7 +215,13 @@ All 9 pre-launch blockers are open as of 2026-05-12 (see PROJECT.md "Pre-launch 
 - BLOCK-08 → Phase 20 entry gate (Cloudflare Pages + DNS)
 - BLOCK-09 → Phase 18 / Phase 22 (historical-contributor enumeration + outreach)
 - DEPLOY-09 deferred (user choice 2026-06-10): 19-09 hardware-sizing. **Harness REBUILT 2026-06-11 (d203d0b)** — walkthrough found the committed harness was non-functional (written against a fictional API: createDb vs createDatabase; wrong LocalPipelineRunner ctor/run signature; cost would read $0 because the local runner records usage only to SQLite). Rebuilt against the real API+worker (Postgres) path: submit job per tier via HTTP → BullMQ CrawlWorker → read pages (CrawlTaskRepository.getJobStats.completed) + per-job cost (LlmUsageRepository.aggregateByTenant.byJob) from Postgres. Gate/lint/typecheck verified. STILL PENDING: Task 2 live run — needs the full stack up (docker-compose.prod.yml + OPENROUTER_API_KEY on the worker) + `pnpm sizing:baseline` (DATABASE_URL + SPATULA_API_URL) to fill the MEASURED table in docs/runbooks/hardware-sizing.md. 19-09 left without SUMMARY so phase 19 stays incomplete (8/9) until the live run is done.
-- ✅ DEPLOY-02 → 19-05 **RESOLVED 2026-06-11**. Live deploy verified end-to-end: build green, /health 200, /health/ready {db,redis,queue: ok}, embedded worker (7 queues) up, migrations complete, live at https://spatula-api.onrender.com. Verified on a paid mirror branch (render-paid-demo) because the workspace's single free PG + single free KV slots were occupied (the documented caveat) — render.yaml structure identical, only plan names differ. Two deployment-only template defects (corepack EROFS; NODE_ENV=production skips devDeps) found + fixed and ported to public main (b25fc9e). SUMMARY: 19-05-SUMMARY.md.
+- ⚠️ DEPLOY-02 → 19-05 **CLOSED-WITH-CAVEAT 2026-06-11/12**. Live deploy verified: build green, /health + /health/ready 200, embedded worker (7 queues) STARTS, migrations complete, live at https://spatula-api.onrender.com (paid mirror branch render-paid-demo; free PG/KV slots occupied — documented caveat). Template defects (corepack EROFS; NODE_ENV skips devDeps) fixed + ported to main (b25fc9e). **CAVEAT: the embedded worker cannot PROCESS a crawl** — `WorkerDeps not initialized` (see EXEC gaps below). Phase 19.1/EXEC-05 re-verifies a real crawl to clear this. SUMMARY: 19-05-SUMMARY.md (caveat added).
+- 🔴 **Hosted execution path UNWIRED (discovered 2026-06-12 via 19-05 deploy + 19-09 smoke) → Phase 19.1 inserted.** The BullMQ worker (standalone docker/k8s AND Render embedded) starts queue consumers but throws `WorkerDeps not initialized` on every job. THREE coupled gaps, all confirmed by code-read + a live 3-page smoke (job DLQ'd):
+  1. **Worker DI** — `startWorker()` (packages/queue/src/worker-entrypoint.ts) declares `let deps` but never assigns it; `new WorkerDeps(` exists only in a CLI test helper. → no deployment can process a job.
+  2. **Per-job LLM config** — `StaticExtractor` resolves model from construction-time `this.config` (resolveModel(this.config,'extraction')); worker would build it once → per-job `llm.primaryModel` (sizing tiers) ignored.
+  3. **Usage recording** — `setUsageRecorder`/`DefaultUsageRecorder` defined+tested but called NOWHERE in prod → `llm_usage` always empty, `/api/v1/usage` cost feature dead, sizing cost = $0.
+  Only the CLI local path (run.ts → LocalPipelineRunner) is complete (builds per-job deps for the single project crawl). Fix tracked as Phase 19.1 (EXEC-01..06); unblocks DEPLOY-02 re-verify + DEPLOY-09 sizing.
+- 🟡 DEPLOY-09 → 19-09 **BLOCKED on Phase 19.1** — harness rebuilt + verified (pure-HTTP), but cannot measure cost until the worker can crawl + record usage.
 
 ### Pending Decisions
 
