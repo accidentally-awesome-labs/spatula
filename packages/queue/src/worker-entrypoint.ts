@@ -103,6 +103,16 @@ export async function startWorker(_opts?: { deps?: WorkerDeps }): Promise<Worker
     logger.info('LLM usage recorder wired (ALS per-job attribution)');
   }
 
+  // Per-job-derivation seams (Plan 03): attach the shared CircuitBreaker-wrapped
+  // llmClient and the default config onto deps so each handler can call
+  // resolveJobDeps(deps, (deps as any).llmClient, jobId, tenantId) without
+  // changing the public WorkerDeps type or adding constructor parameters.
+  // These are NOT enumerated on WorkerDeps — they're attached as plain properties.
+  if (built?.llmClient) {
+    (deps as any).llmClient = built.llmClient;
+    (deps as any).defaultLlmConfig = built.llmConfig;
+  }
+
   if (isEnabled('crawl')) {
     const worker = new Worker<CrawlJobData>(
       QUEUE_NAMES.CRAWL,
