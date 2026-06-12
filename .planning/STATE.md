@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v1.1
 milestone_name: Public Launch (Wave 6 / Phase 14)
 status: executing
-stopped_at: 'Phase 19: 8/9 plans complete (19-01/02/03/04/05/06/07/08). 19-05 (Render, DEPLOY-02) CLOSED 2026-06-11 — live deploy verified end-to-end (build/boot/DB/embedded-worker/health/migrations) on a paid mirror branch; two template defects found + fixed and ported to public main (b25fc9e). Only 19-09 (hardware-sizing, DEPLOY-09) remains deferred — phase NOT yet complete. Full workspace build green; no regressions.'
-last_updated: '2026-06-11T21:13:14.000Z'
-last_activity: 2026-06-11
+stopped_at: Phase 19.1 Plan 01 complete — buildWorkerDeps() created + assigned in startWorker(); 4 tests green; ready for Plan 02 (usage recorder)
+last_updated: "2026-06-12T02:47:29.365Z"
+last_activity: 2026-06-12
 progress:
-  total_phases: 8
+  total_phases: 9
   completed_phases: 4
-  total_plans: 34
-  completed_plans: 33
+  total_plans: 38
+  completed_plans: 34
   percent: 13
 ---
 
@@ -21,14 +21,14 @@ progress:
 See: `.planning/PROJECT.md` (updated 2026-05-11)
 
 **Core value:** Turn "I want X data from these sites" into a production-quality dataset with provenance.
-**Current focus:** Phase 19 — deployment-self-host-excellence
+**Current focus:** Phase 19.1 — hosted-execution-path
 
 ## Current Position
 
-Phase: 19 (deployment-self-host-excellence) — EXECUTING
-Plan: 8 of 9 complete (19-05 closed); 19-09 deferred
-Status: Only 19-09 (hardware-sizing live run) remains before phase verification
-Last activity: 2026-06-11
+Phase: 19.1 (hosted-execution-path) — EXECUTING
+Plan: 2 of 4
+Status: Ready to execute
+Last activity: 2026-06-12
 
 Progress: [█░░░░░░░░░] 13% (1/8 v1.1 phases complete)
 
@@ -78,6 +78,7 @@ _v1.1 metrics will populate as plans execute._
 | Phase 19 P03 | 35 | 2 tasks | 2 files |
 | Phase 19 P04 | 8 | 2 tasks | 15 files |
 | Phase 19 P07 | 8 | 2 tasks | 2 files |
+| Phase 19.1-hosted-execution-path P01 | 6 | 2 tasks | 4 files |
 
 ## Accumulated Context
 
@@ -192,6 +193,9 @@ Full decision log lives in PROJECT.md Key Decisions table. Recent decisions rele
 - [Phase 19-05]: SC#2 verified on a paid mirror (render-paid-demo) not literal free tier — workspace's one free PG + one free KV slots were occupied (the documented caveat). Public main template stays all-free with the repaired build recipe.
 - [Phase 19-05]: Render blueprint SYNC ≠ deploy — `render deploys create` reuses the service's STORED config; render.yaml edits require a dashboard Blueprint Sync (CLI `blueprints` only validates). No repo webhook on the OSS repo, so pushes do not auto-sync.
 - [Phase 19-09]: Sizing harness must drive the API+worker (Postgres) path, NOT LocalPipelineRunner — only the API/worker path records LLM usage to Postgres (via the worker's usage-recorder); the local SQLite runner records to the project DB and writes no page count to jobs.stats. Page count for the API path = completed crawl tasks (CrawlTaskRepository.getJobStats), not exposed over HTTP → harness needs DATABASE_URL. Live gate must use a dynamic import (static ESM import is hoisted and runs before the gate).
+- [Phase 19.1-01]: buildWorkerDeps returns {deps, rawClient, llmClient, llmConfig} — raw+wrapped clients kept separate so Plan 02 can setUsageRecorder on rawClient before wrapping
+- [Phase 19.1-01]: built variable kept in startWorker() scope (BuildWorkerDepsResult | undefined) so Plans 02/03 can access rawClient/llmClient/llmConfig without reopening the file
+- [Phase 19.1-01]: Test mock for @spatula/core uses full synthetic factory (not importOriginal) to avoid real Playwright launch causing 5s timeout in vitest worker pool
 
 ### Roadmap Evolution
 
@@ -221,6 +225,7 @@ All 9 pre-launch blockers are open as of 2026-05-12 (see PROJECT.md "Pre-launch 
   2. **Per-job LLM config** — `StaticExtractor` resolves model from construction-time `this.config` (resolveModel(this.config,'extraction')); worker would build it once → per-job `llm.primaryModel` (sizing tiers) ignored.
   3. **Usage recording** — `setUsageRecorder`/`DefaultUsageRecorder` defined+tested but called NOWHERE in prod → `llm_usage` always empty, `/api/v1/usage` cost feature dead, sizing cost = $0.
   Only the CLI local path (run.ts → LocalPipelineRunner) is complete (builds per-job deps for the single project crawl). Fix tracked as Phase 19.1 (EXEC-01..06); unblocks DEPLOY-02 re-verify + DEPLOY-09 sizing.
+
 - 🟡 DEPLOY-09 → 19-09 **BLOCKED on Phase 19.1** — harness rebuilt + verified (pure-HTTP), but cannot measure cost until the worker can crawl + record usage.
 
 ### Pending Decisions
@@ -231,6 +236,6 @@ All 9 pre-launch blockers are open as of 2026-05-12 (see PROJECT.md "Pre-launch 
 
 ## Session Continuity
 
-Last session: 2026-06-11T21:13:14.000Z
-Stopped at: Phase 19: 8/9 plans complete (19-01/02/03/04/05/06/07/08). 19-05 (Render, DEPLOY-02) CLOSED — live deploy verified end-to-end on a paid mirror; template build defects fixed + ported to public main (b25fc9e). Only 19-09 (hardware-sizing, DEPLOY-09) remains deferred (needs a real Hetzner CX32 1k-page-per-tier run). Phase NOT yet complete; full workspace build green.
+Last session: 2026-06-12T02:47:29.347Z
+Stopped at: Phase 19.1 Plan 01 complete — buildWorkerDeps() created + assigned in startWorker(); 4 tests green; ready for Plan 02 (usage recorder)
 Resume file: None
