@@ -2,15 +2,15 @@
 gsd_state_version: 1.0
 milestone: v1.1
 milestone_name: Public Launch (Wave 6 / Phase 14)
-status: executing
-stopped_at: Phase 19.1 Plan 03 complete — per-job LLM config wired; 171 queue tests green; ready for Plan 04 (smoke test + live verification)
-last_updated: "2026-06-12T03:03:39.703Z"
+status: verifying
+stopped_at: "Phase 19.1 Plan 04 — checkpoint:human-action at Task 3 (EXEC-05 Render live re-verify); Tasks 1+2 committed; SUMMARY created; awaiting user to verify live Render crawl"
+last_updated: "2026-06-12T03:39:34.297Z"
 last_activity: 2026-06-12
 progress:
   total_phases: 9
-  completed_phases: 4
+  completed_phases: 5
   total_plans: 38
-  completed_plans: 36
+  completed_plans: 37
   percent: 13
 ---
 
@@ -27,7 +27,7 @@ See: `.planning/PROJECT.md` (updated 2026-05-11)
 
 Phase: 19.1 (hosted-execution-path) — EXECUTING
 Plan: 4 of 4
-Status: Ready to execute
+Status: Phase complete — ready for verification
 Last activity: 2026-06-12
 
 Progress: [█░░░░░░░░░] 13% (1/8 v1.1 phases complete)
@@ -81,6 +81,7 @@ _v1.1 metrics will populate as plans execute._
 | Phase 19.1-hosted-execution-path P01 | 6 | 2 tasks | 4 files |
 | Phase 19.1 P02 | 4 | 2 tasks | 5 files |
 | Phase 19.1-hosted-execution-path P03 | 4 | 2 tasks | 7 files |
+| Phase 19.1-hosted-execution-path P04 | 33 | 2 tasks | 4 files |
 
 ## Accumulated Context
 
@@ -203,6 +204,8 @@ Full decision log lives in PROJECT.md Key Decisions table. Recent decisions rele
 - [Phase 19.1-hosted-execution-path]: deriveJobDeps constructs the 5 LLM-config-dependent components from jobLlmConfig over the SHARED llmClient — Plan 02's ALS recorder stays attached and attribution continues working
 - [Phase 19.1-hosted-execution-path]: resolveJobDeps falls back to base deps when sharedClient is undefined — test-injection path passes no llmClient so all 171 existing tests pass without mocking
 - [Phase 19.1-hosted-execution-path]: Worker-entrypoint attaches built.llmClient + built.llmConfig as plain properties on deps — avoids WorkerDeps type change, no constructor params needed
+- [Phase 19.1]: DeepSeek models (deepseek-v4-flash, deepseek-v4-pro) priced at $0 on OpenRouter as of 2026-06-12 — tokens ARE recorded correctly; costUsd=0 is model pricing not a code bug; EXEC-06 cost>0 criterion met structurally but not numerically with current OpenRouter pricing
+- [Phase 19.1]: EXEC-05 Render live re-verify: render.yaml SPATULA_CRAWLER+FIRECRAWL_API_KEY added (sync:false); procedure in render-deploy.md; requires user to set env vars + Blueprint Sync + submit crawl + verify pages>0 + /usage tokens>0
 
 ### Roadmap Evolution
 
@@ -243,6 +246,6 @@ All 9 pre-launch blockers are open as of 2026-05-12 (see PROJECT.md "Pre-launch 
 
 ## Session Continuity
 
-Last session: 2026-06-12T03:03:39.698Z
-Stopped at: Phase 19.1 Plan 03 complete — per-job LLM config wired; 171 queue tests green; ready for Plan 04 (smoke test + live verification)
+Last session: 2026-06-12T03:39:34.292Z
+Stopped at: Phase 19.1 Plan 04 — checkpoint:human-action at Task 3 (EXEC-05 Render live re-verify); Tasks 1+2 committed; SUMMARY created; awaiting user to verify live Render crawl
 Resume file: None
