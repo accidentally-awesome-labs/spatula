@@ -2,15 +2,15 @@
 gsd_state_version: 1.0
 milestone: v1.1
 milestone_name: Public Launch (Wave 6 / Phase 14)
-status: executing
-stopped_at: 'Phase 19: 7/9 plans complete (19-01/02/03/04/06/07/08). 19-05 (Render, DEPLOY-02) + 19-09 (hardware-sizing, DEPLOY-09) deferred at human checkpoints per user choice — phase NOT marked complete. Full workspace build green; no regressions.'
-last_updated: '2026-06-11T05:45:49.237Z'
-last_activity: 2026-06-11
+status: verifying
+stopped_at: "Phase 19.1 Plan 04 — checkpoint:human-action at Task 3 (EXEC-05 Render live re-verify); Tasks 1+2 committed; SUMMARY created; awaiting user to verify live Render crawl"
+last_updated: "2026-06-12T03:39:34.297Z"
+last_activity: 2026-06-12
 progress:
-  total_phases: 8
-  completed_phases: 4
-  total_plans: 34
-  completed_plans: 32
+  total_phases: 9
+  completed_phases: 5
+  total_plans: 38
+  completed_plans: 37
   percent: 13
 ---
 
@@ -21,14 +21,14 @@ progress:
 See: `.planning/PROJECT.md` (updated 2026-05-11)
 
 **Core value:** Turn "I want X data from these sites" into a production-quality dataset with provenance.
-**Current focus:** Phase 19 — deployment-self-host-excellence
+**Current focus:** Phase 19.1 — hosted-execution-path
 
 ## Current Position
 
-Phase: 19 (deployment-self-host-excellence) — EXECUTING
-Plan: 8 of 9
-Status: Ready to execute
-Last activity: 2026-06-11
+Phase: 19.1 (hosted-execution-path) — EXECUTING
+Plan: 4 of 4
+Status: Phase complete — ready for verification
+Last activity: 2026-06-12
 
 Progress: [█░░░░░░░░░] 13% (1/8 v1.1 phases complete)
 
@@ -78,6 +78,10 @@ _v1.1 metrics will populate as plans execute._
 | Phase 19 P03 | 35 | 2 tasks | 2 files |
 | Phase 19 P04 | 8 | 2 tasks | 15 files |
 | Phase 19 P07 | 8 | 2 tasks | 2 files |
+| Phase 19.1-hosted-execution-path P01 | 6 | 2 tasks | 4 files |
+| Phase 19.1 P02 | 4 | 2 tasks | 5 files |
+| Phase 19.1-hosted-execution-path P03 | 4 | 2 tasks | 7 files |
+| Phase 19.1-hosted-execution-path P04 | 33 | 2 tasks | 4 files |
 
 ## Accumulated Context
 
@@ -188,6 +192,24 @@ Full decision log lives in PROJECT.md Key Decisions table. Recent decisions rele
 - [Phase 19]: Dev overlay Secret requires no patch: base/secrets.yaml dev-default DATABASE_URL/REDIS_URL already match stub postgres/redis Service names and credentials
 - [Phase 19]: k8s-smoke CI uses helm/kind-action + builds images from source (loaded into kind) — avoids GHCR auth in smoke CI; on-release + nightly cadence, not every PR
 - [Phase 19]: Heavy DB lanes (test:backup, test:upgrade) run on-release + nightly only — not on PR; config-compat (test:config) safe on PR but wired in Phase 21
+- [Phase 19-05]: Render build recipe — NEVER `corepack enable` (read-only /usr/bin → EROFS; Render auto-provides pnpm from lockfile); under NODE_ENV=production MUST `pnpm install --prod=false` or devDeps (turbo/tsup/tsc) are pruned → `turbo: not found`; pin Node via NODE_VERSION env + .node-version (Render defaults to 24). These are deployment-only defects no local build/CI exercises.
+- [Phase 19-05]: SC#2 verified on a paid mirror (render-paid-demo) not literal free tier — workspace's one free PG + one free KV slots were occupied (the documented caveat). Public main template stays all-free with the repaired build recipe.
+- [Phase 19-05]: Render blueprint SYNC ≠ deploy — `render deploys create` reuses the service's STORED config; render.yaml edits require a dashboard Blueprint Sync (CLI `blueprints` only validates). No repo webhook on the OSS repo, so pushes do not auto-sync.
+- [Phase 19-09]: Sizing harness must drive the API+worker (Postgres) path, NOT LocalPipelineRunner — only the API/worker path records LLM usage to Postgres (via the worker's usage-recorder); the local SQLite runner records to the project DB and writes no page count to jobs.stats. Page count for the API path = completed crawl tasks (CrawlTaskRepository.getJobStats), not exposed over HTTP → harness needs DATABASE_URL. Live gate must use a dynamic import (static ESM import is hoisted and runs before the gate).
+- [Phase 19.1-01]: buildWorkerDeps returns {deps, rawClient, llmClient, llmConfig} — raw+wrapped clients kept separate so Plan 02 can setUsageRecorder on rawClient before wrapping
+- [Phase 19.1-01]: built variable kept in startWorker() scope (BuildWorkerDepsResult | undefined) so Plans 02/03 can access rawClient/llmClient/llmConfig without reopening the file
+- [Phase 19.1-01]: Test mock for @spatula/core uses full synthetic factory (not importOriginal) to avoid real Playwright launch causing 5s timeout in vitest worker pool
+- [Phase 19.1]: AlsUsageRecorder reads tenantId/jobId from ALS not constructor — race-safe across concurrent BullMQ jobs
+- [Phase 19.1]: setUsageRecorder called on built.rawClient (not llmClient) because CircuitBreakerLLMClient does not expose that method
+- [Phase 19.1-hosted-execution-path]: deriveJobDeps constructs the 5 LLM-config-dependent components from jobLlmConfig over the SHARED llmClient — Plan 02's ALS recorder stays attached and attribution continues working
+- [Phase 19.1-hosted-execution-path]: resolveJobDeps falls back to base deps when sharedClient is undefined — test-injection path passes no llmClient so all 171 existing tests pass without mocking
+- [Phase 19.1-hosted-execution-path]: Worker-entrypoint attaches built.llmClient + built.llmConfig as plain properties on deps — avoids WorkerDeps type change, no constructor params needed
+- [Phase 19.1]: DeepSeek models (deepseek-v4-flash, deepseek-v4-pro) priced at $0 on OpenRouter as of 2026-06-12 — tokens ARE recorded correctly; costUsd=0 is model pricing not a code bug; EXEC-06 cost>0 criterion met structurally but not numerically with current OpenRouter pricing
+- [Phase 19.1]: EXEC-05 Render live re-verify: render.yaml SPATULA_CRAWLER+FIRECRAWL_API_KEY added (sync:false); procedure in render-deploy.md; requires user to set env vars + Blueprint Sync + submit crawl + verify pages>0 + /usage tokens>0
+
+### Roadmap Evolution
+
+- Phase 19.1 (Hosted Execution Path Completion) inserted after Phase 19 on 2026-06-12 (URGENT) — completes the unwired hosted/queued crawl path (worker DI + per-job LLM config + usage recording) discovered during the 19-05 live deploy + 19-09 sizing smoke. Re-verifies DEPLOY-02 live and unblocks DEPLOY-09. Requirements EXEC-01..06. Dir: `.planning/phases/19.1-hosted-execution-path/`.
 
 ### Pending Todos
 
@@ -206,8 +228,15 @@ All 9 pre-launch blockers are open as of 2026-05-12 (see PROJECT.md "Pre-launch 
 - BLOCK-07 → Phase 22 entry gate (beta invitee list)
 - BLOCK-08 → Phase 20 entry gate (Cloudflare Pages + DNS)
 - BLOCK-09 → Phase 18 / Phase 22 (historical-contributor enumeration + outreach)
-- DEPLOY-09 deferred (user choice 2026-06-10): 19-09 hardware-sizing harness + runbook skeleton committed, but the MEASURED 1k-page-per-tier table in docs/runbooks/hardware-sizing.md is unfilled. Needs a real paid live run on a Hetzner CX32 (pnpm sizing:baseline). 19-09 left without SUMMARY so phase 19 stays incomplete until done.
-- DEPLOY-02 deferred (consistent with user's 'continue Waves 2-3' choice 2026-06-10): 19-05 render.yaml + render-deploy.md built and committed (2a6ee02, 892822c), but Task 3 (live Render free-tier deploy, SC#2) is a human-verify checkpoint needing a real Render account + fresh clone. 19-05 left without SUMMARY so phase 19 stays incomplete until the live deploy is verified (hit /health on the assigned \*.onrender.com URL + confirm embedded worker).
+- DEPLOY-09 deferred (user choice 2026-06-10): 19-09 hardware-sizing. **Harness REBUILT 2026-06-11 (d203d0b)** — walkthrough found the committed harness was non-functional (written against a fictional API: createDb vs createDatabase; wrong LocalPipelineRunner ctor/run signature; cost would read $0 because the local runner records usage only to SQLite). Rebuilt against the real API+worker (Postgres) path: submit job per tier via HTTP → BullMQ CrawlWorker → read pages (CrawlTaskRepository.getJobStats.completed) + per-job cost (LlmUsageRepository.aggregateByTenant.byJob) from Postgres. Gate/lint/typecheck verified. STILL PENDING: Task 2 live run — needs the full stack up (docker-compose.prod.yml + OPENROUTER_API_KEY on the worker) + `pnpm sizing:baseline` (DATABASE_URL + SPATULA_API_URL) to fill the MEASURED table in docs/runbooks/hardware-sizing.md. 19-09 left without SUMMARY so phase 19 stays incomplete (8/9) until the live run is done.
+- ⚠️ DEPLOY-02 → 19-05 **CLOSED-WITH-CAVEAT 2026-06-11/12**. Live deploy verified: build green, /health + /health/ready 200, embedded worker (7 queues) STARTS, migrations complete, live at https://spatula-api.onrender.com (paid mirror branch render-paid-demo; free PG/KV slots occupied — documented caveat). Template defects (corepack EROFS; NODE_ENV skips devDeps) fixed + ported to main (b25fc9e). **CAVEAT: the embedded worker cannot PROCESS a crawl** — `WorkerDeps not initialized` (see EXEC gaps below). Phase 19.1/EXEC-05 re-verifies a real crawl to clear this. SUMMARY: 19-05-SUMMARY.md (caveat added).
+- 🔴 **Hosted execution path UNWIRED (discovered 2026-06-12 via 19-05 deploy + 19-09 smoke) → Phase 19.1 inserted.** The BullMQ worker (standalone docker/k8s AND Render embedded) starts queue consumers but throws `WorkerDeps not initialized` on every job. THREE coupled gaps, all confirmed by code-read + a live 3-page smoke (job DLQ'd):
+  1. **Worker DI** — `startWorker()` (packages/queue/src/worker-entrypoint.ts) declares `let deps` but never assigns it; `new WorkerDeps(` exists only in a CLI test helper. → no deployment can process a job.
+  2. **Per-job LLM config** — `StaticExtractor` resolves model from construction-time `this.config` (resolveModel(this.config,'extraction')); worker would build it once → per-job `llm.primaryModel` (sizing tiers) ignored.
+  3. **Usage recording** — `setUsageRecorder`/`DefaultUsageRecorder` defined+tested but called NOWHERE in prod → `llm_usage` always empty, `/api/v1/usage` cost feature dead, sizing cost = $0.
+  Only the CLI local path (run.ts → LocalPipelineRunner) is complete (builds per-job deps for the single project crawl). Fix tracked as Phase 19.1 (EXEC-01..06); unblocks DEPLOY-02 re-verify + DEPLOY-09 sizing.
+
+- 🟡 DEPLOY-09 → 19-09 **BLOCKED on Phase 19.1** — harness rebuilt + verified (pure-HTTP), but cannot measure cost until the worker can crawl + record usage.
 
 ### Pending Decisions
 
@@ -217,6 +246,6 @@ All 9 pre-launch blockers are open as of 2026-05-12 (see PROJECT.md "Pre-launch 
 
 ## Session Continuity
 
-Last session: 2026-06-11T05:45:49.232Z
-Stopped at: Phase 19: 7/9 plans complete (19-01/02/03/04/06/07/08). 19-05 (Render, DEPLOY-02) + 19-09 (hardware-sizing, DEPLOY-09) deferred at human checkpoints per user choice — phase NOT marked complete. Full workspace build green; no regressions.
+Last session: 2026-06-12T03:39:34.292Z
+Stopped at: Phase 19.1 Plan 04 — checkpoint:human-action at Task 3 (EXEC-05 Render live re-verify); Tasks 1+2 committed; SUMMARY created; awaiting user to verify live Render crawl
 Resume file: None

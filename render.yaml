@@ -82,6 +82,16 @@ services:
       - key: SENTRY_DSN
         sync: false
 
+      # ── Crawler selection (distroless worker) ──────────────────────────────
+      # The distroless runtime has NO Playwright browser binaries. Set these
+      # to use Firecrawl instead (required for the Render embedded worker).
+      # Leave unset to use Playwright (only works on VM/host deployments where
+      # Playwright is installed). See docs/runbooks/render-deploy.md EXEC-05.
+      - key: SPATULA_CRAWLER
+        sync: false   # set to "firecrawl" in the dashboard for Render deploys
+      - key: FIRECRAWL_API_KEY
+        sync: false
+
   - name: spatula-cache
     type: keyvalue # canonical form; 'redis' is a deprecated alias
     plan: starter # next tier above free (free KV slot already in use); persists to disk

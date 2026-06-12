@@ -193,7 +193,7 @@ export function jobRoutes() {
     const job = await deps.jobRepo.findById(id, tenantId);
     if (!job) throw new JobNotFoundError(id);
 
-    // Enrich stats with pending actions count and schema field count
+    // Enrich stats with pending actions count, schema field count, and crawl progress
     const pendingActionsCount = await deps.actionRepo.countByJobAndStatus(
       id,
       tenantId,
@@ -202,10 +202,19 @@ export function jobRoutes() {
     const latestSchema = await deps.schemaRepo.findLatest(id, tenantId);
     const schemaFieldCount = (latestSchema?.definition as any)?.fields?.length ?? 0;
 
+    // Crawl-task progress (completed = pages crawled). Surfaced so clients can read
+    // page counts over HTTP (the API/worker path does not persist these into job.stats).
+    const taskStats = await deps.taskRepo.getJobStats(id, tenantId);
+
     const enrichedStats = {
       ...((job.stats as Record<string, number>) ?? {}),
       pendingActionsCount,
       schemaFieldCount,
+      pagesCompleted: taskStats.completed,
+      pagesPending: taskStats.pending,
+      pagesInProgress: taskStats.inProgress,
+      pagesFailed: taskStats.failed,
+      pagesSkipped: taskStats.skipped,
       // storageBytesUsed: deferred — requires raw_pages SUM query not available in current deps
     };
 

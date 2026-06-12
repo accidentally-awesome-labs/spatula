@@ -1,15 +1,24 @@
 // packages/queue/src/workers/crawl-worker.ts
 import { createLoggerWithContext } from '@spatula/shared';
 import { processCrawlTask, shouldTriggerSchemaEvolution } from '@spatula/core';
+import type { LLMClient } from '@spatula/core';
 import type { CrawlJobData } from '../queues.js';
 import type { WorkerDeps } from '../worker-deps.js';
+import { resolveJobDeps } from '../derive-job-deps.js';
 
 export async function processCrawlJob(data: CrawlJobData, deps: WorkerDeps): Promise<void> {
   const { taskId, jobId, tenantId, url, depth } = data;
   const logger = createLoggerWithContext('crawl-worker', { jobId, tenantId });
 
+  // Derive per-job deps from the job's LLMConfig over the shared llmClient.
+  // When no llmClient is threaded (test-injection path), resolveJobDeps returns
+  // base deps unchanged so all existing unit tests continue to pass.
+  const sharedClient = (deps as any).llmClient as LLMClient | undefined;
+  const jobDeps = await resolveJobDeps(deps, sharedClient, jobId, tenantId);
+
   try {
     // Pre-crawl checks (tenant quota → budget → robots → rate limit)
+    // These checks do NOT use LLM components, so we keep them on base `deps`.
 
     // 1. Check tenant maxPagesPerJob quota
     if (deps.tenantRepo) {
@@ -60,21 +69,21 @@ export async function processCrawlJob(data: CrawlJobData, deps: WorkerDeps): Pro
       await deps.rateLimiter.waitForSlot(url, crawlDelay);
     }
 
-    // 5. Delegate to pure orchestrator
+    // 5. Delegate to pure orchestrator using per-job deps (honors job's LLM model tier)
     const result = await processCrawlTask(
       { taskId, jobId, tenantId, url, depth },
       {
-        crawler: deps.crawler,
-        classifier: deps.classifier,
-        extractor: deps.extractor,
-        contentStore: deps.contentStore,
-        linkEvaluator: deps.linkEvaluator,
-        taskRepo: deps.taskRepo,
-        pageRepo: deps.pageRepo,
-        jobRepo: deps.jobRepo,
-        extractionRepo: deps.extractionRepo,
-        schemaRepo: deps.schemaRepo,
-        eventPublisher: deps.eventPublisher,
+        crawler: jobDeps.crawler,
+        classifier: jobDeps.classifier,
+        extractor: jobDeps.extractor,
+        contentStore: jobDeps.contentStore,
+        linkEvaluator: jobDeps.linkEvaluator,
+        taskRepo: jobDeps.taskRepo,
+        pageRepo: jobDeps.pageRepo,
+        jobRepo: jobDeps.jobRepo,
+        extractionRepo: jobDeps.extractionRepo,
+        schemaRepo: jobDeps.schemaRepo,
+        eventPublisher: jobDeps.eventPublisher,
       },
     );
 
@@ -90,11 +99,11 @@ export async function processCrawlJob(data: CrawlJobData, deps: WorkerDeps): Pro
         jobId,
         tenantId,
         { schemaVersion: result.schemaVersion, evolutionConfig: result.evolutionConfig },
-        { extractionRepo: deps.extractionRepo },
+        { extractionRepo: jobDeps.extractionRepo },
       );
 
       if (evolution.trigger) {
-        await deps.queues.schemaEvolution.add(
+        await jobDeps.queues.schemaEvolution.add(
           `schema-evolution:${jobId}:v${evolution.schemaVersion}`,
           { jobId, tenantId, extractionIds: evolution.extractionIds },
         );
@@ -112,7 +121,7 @@ export async function processCrawlJob(data: CrawlJobData, deps: WorkerDeps): Pro
     // 3. Enqueue child crawl tasks (queue-specific)
     let enqueued = 0;
     for (const link of result.linksFound) {
-      const childTask = await deps.taskRepo.enqueue({
+      const childTask = await jobDeps.taskRepo.enqueue({
         jobId,
         tenantId,
         url: link.url,
@@ -133,16 +142,16 @@ export async function processCrawlJob(data: CrawlJobData, deps: WorkerDeps): Pro
       };
 
       if (bullmqPriority !== undefined) {
-        await deps.queues.crawl.add(`crawl:${link.url}`, jobData, { priority: bullmqPriority });
+        await jobDeps.queues.crawl.add(`crawl:${link.url}`, jobData, { priority: bullmqPriority });
       } else {
-        await deps.queues.crawl.add(`crawl:${link.url}`, jobData);
+        await jobDeps.queues.crawl.add(`crawl:${link.url}`, jobData);
       }
       enqueued++;
     }
 
     if (enqueued > 0) {
       logger.debug({ taskId, linksEnqueued: enqueued }, 'links enqueued');
-      await deps.eventPublisher?.publish(jobId, {
+      await jobDeps.eventPublisher?.publish(jobId, {
         type: 'crawl_progress',
         jobId,
         tenantId,
@@ -151,14 +160,14 @@ export async function processCrawlJob(data: CrawlJobData, deps: WorkerDeps): Pro
     }
 
     // 5. Check crawl completion
-    if (deps.completionChecker && !result.error) {
-      const completion = await deps.completionChecker.isComplete(jobId, tenantId, deps.taskRepo);
+    if (jobDeps.completionChecker && !result.error) {
+      const completion = await jobDeps.completionChecker.isComplete(jobId, tenantId, jobDeps.taskRepo);
       if (completion.complete) {
         logger.info(
           { jobId, ...completion.stats },
           'Crawl naturally complete, triggering reconciliation',
         );
-        await deps.queues.reconciliation.add(`reconciliation:${jobId}`, { jobId, tenantId });
+        await jobDeps.queues.reconciliation.add(`reconciliation:${jobId}`, { jobId, tenantId });
       }
     }
   } catch (error) {

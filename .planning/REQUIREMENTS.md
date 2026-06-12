@@ -101,16 +101,25 @@ Requirements for the v1.0.0 public launch. Each maps to one of phases 15–22. R
 ### Deployment & Self-Host Excellence (Phase 19)
 
 - [x] **DEPLOY-01**: `deploy/k8s/` kustomize base + dev/prod overlays exist for api, worker, migrate job; postgres + redis referenced as external in prod overlay; applies cleanly to a `kind` cluster.
-- [ ] **DEPLOY-02**: `render.yaml` at repo root deploys the stack on a Render free-tier account. _(artifact built in 19-05; live-deploy verification SC#2 deferred — see STATE.md blocker)_
+- [x] **DEPLOY-02**: `render.yaml` at repo root deploys the stack on a Render free-tier account. _(live-deploy verified 2026-06-11 end-to-end — build/health/embedded-worker/migrations — on a paid mirror branch; workspace's free PG/KV slots were occupied, the documented caveat. Template defects found+fixed and ported to public main. See 19-05-SUMMARY.md.)_
 - [x] **DEPLOY-03**: Container images for api/worker/migrate/cli are multi-arch (`linux/amd64` + `linux/arm64`) via buildx; distroless base for api/worker/migrate; Debian-slim for cli.
 - [x] **DEPLOY-04**: All container images are `cosign`-signed; SBOM (cyclonedx-json) is attached to each GitHub release; signatures verify on `cosign verify` in a fresh-machine smoke test.
 - [x] **DEPLOY-05**: `docs/runbooks/backup-restore.md` covers pg_dump + content-store + Redis reconciliation; backup→restore round-trip in `tests/e2e/backup/` passes; time-to-restore estimates documented.
 - [x] **DEPLOY-06**: `docs/runbooks/upgrade.md` defines the version-to-version migration template and the no-downgrade policy.
 - [x] **DEPLOY-07**: `docs/runbooks/reverse-proxy.md` ships nginx recipe (tested end-to-end with token-in-URL log masking); traefik + caddy stubs labeled "not first-party tested."
 - [x] **DEPLOY-08**: `docs/support-matrix.md` documents min versions (Node 22+, Postgres 14+, Redis 7+, macOS/Linux/WSL); min-version CI matrix passes.
-- [ ] **DEPLOY-09**: `docs/runbooks/hardware-sizing.md` includes a measured baseline table (1k-page crawl timings on defined hardware, LLM cost per page per model).
+- [ ] **DEPLOY-09**: `docs/runbooks/hardware-sizing.md` includes a measured baseline table (1k-page crawl timings on defined hardware, LLM cost per page per model). _(BLOCKED on Phase 19.1 — the hosted worker cannot process a crawl yet, so per-tier cost cannot be measured.)_
 - [x] **DEPLOY-10**: `tests/upgrade/` seeds a v1.0 DB, applies v1.x migrations, and verifies the runtime — governs the expand-contract policy.
 - [x] **DEPLOY-11**: `tests/config/` verifies a v1.0 `spatula.yaml` parses on the v1.1 runtime (config-migration test).
+
+### Hosted Execution Path Completion (Phase 19.1 — INSERTED, discovered during 19-05/19-09)
+
+- [x] **EXEC-01**: `startWorker()` constructs a full `WorkerDeps` (crawler via `CrawlerFactory`, extractor, classifier, schemaEvolver, reconciler, linkEvaluator, all repos, contentStore, robots/rate-limit, completionChecker, queues, optional eventPublisher) from env config; requires `OPENROUTER_API_KEY` (fail-loud if absent); the standalone worker image AND the embedded worker both process jobs (no `WorkerDeps not initialized`).
+- [x] **EXEC-02**: The worker applies each job's `llm.primaryModel` + `modelOverrides` to that job's extraction/classification/schema-evolution/reconciliation/link-eval LLM calls (per-job model tiers honored), race-safe under worker concurrency.
+- [x] **EXEC-03**: Every worker LLM call records to `llm_usage` with the correct `tenant_id` + `job_id` (race-safe per-job attribution across concurrent jobs, e.g. AsyncLocalStorage); `GET /api/v1/usage` `byJob`/`byModel` reflects real spend.
+- [x] **EXEC-04**: A crawl submitted via the API is processed to `completed` with pages crawled > 0 and extractions produced; job progress (pages) is observable over HTTP (`GET /api/v1/jobs/:id` → `stats.pagesCompleted`); the CLI local crawl path (`run.ts` → `LocalPipelineRunner`) still works (no regression).
+- [ ] **EXEC-05**: **DEPLOY-02 re-verified LIVE** on the Render embedded-worker deploy — a real crawl completes (pages + non-zero `/usage` cost), not just `/health` — clearing the 19-05 caveat.
+- [x] **EXEC-06**: **DEPLOY-09 unblocked** — `pnpm sizing:baseline` against the running stack yields a per-tier table with non-zero, tier-distinct `cost/page` (this requirement covers the harness running green; filling the measured CX32 table remains DEPLOY-09's live-run checkpoint).
 
 ### Docs Site (Phase 20)
 

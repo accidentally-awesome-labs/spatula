@@ -129,6 +129,82 @@ Render enforces a limit of **one free PostgreSQL database** and **one free Key V
 
 ---
 
+## EXEC-05 Live Re-verify Procedure (Phase 19.1 — clearing the 19-05 caveat)
+
+The Phase 19-05 live deploy confirmed the worker starts and `/health` returns 200, but a real
+crawl DLQ'd with `WorkerDeps not initialized`. Phase 19.1 fixed the three gaps
+(worker DI, per-job LLM config, usage recording). This section documents how to re-verify
+a live crawl on the Render embedded-worker deploy.
+
+### Distroless → Firecrawl requirement
+
+The distroless Render worker image (`apps/api/Dockerfile.api`) ships **NO Playwright browser
+binaries**. Any crawl submitted to the Render deploy MUST use Firecrawl:
+
+```
+SPATULA_CRAWLER=firecrawl
+FIRECRAWL_API_KEY=<your-key>
+```
+
+Without these, crawl tasks will fail immediately (Playwright not found in the container).
+
+### Service reference
+
+| Property     | Value                                                        |
+| ------------ | ------------------------------------------------------------ |
+| Service ID   | `srv-d8lh2q6rnols73dedvog`                                   |
+| URL          | `https://spatula-api.onrender.com`                           |
+| Branch       | `render-paid-demo` (paid mirror — free PG/KV slots occupied) |
+
+### SPATULA_CRAWLER in render.yaml
+
+`render.yaml` does NOT commit `SPATULA_CRAWLER` to git (it's a runtime setting, not blueprint).
+Set it via the Render dashboard on the `spatula-api` Web Service **before** syncing:
+
+1. Render dashboard → `spatula-api` → **Environment** tab
+2. Add: `SPATULA_CRAWLER=firecrawl` (unencrypted, safe to expose)
+3. Add: `FIRECRAWL_API_KEY=<your key>` (mark as **Secret**)
+4. Add/update: `OPENROUTER_API_KEY=<your key>` (mark as **Secret**)
+
+> **Blueprint Sync ≠ deploy.** `render deploys create` reuses the service's stored config.
+> Only a Dashboard Blueprint Sync picks up `render.yaml` changes. The OSS repo has no
+> auto-sync webhook, so pushes do NOT auto-deploy.
+
+### Re-verify steps (EXEC-05)
+
+```bash
+# 1. Push 19.1 fixes to the deploy branch
+git push origin main:render-paid-demo
+
+# 2. In the Render dashboard:
+#    a. Set OPENROUTER_API_KEY, SPATULA_CRAWLER=firecrawl, FIRECRAWL_API_KEY as above
+#    b. Navigate to the Blueprint → click "Sync" (NOT just redeploy)
+#    c. Wait for the deploy to complete and /health to return 200
+
+# 3. Verify health
+curl https://spatula-api.onrender.com/health
+curl https://spatula-api.onrender.com/health/ready
+
+# 4. Run the sizing smoke (Firecrawl crawler, small page count to limit cost):
+SPATULA_LIVE_LLM=1 \
+  SIZING_PAGES=3 SIZING_MAX_DEPTH=5 \
+  SIZING_CRAWLER=firecrawl \
+  SPATULA_API_URL=https://spatula-api.onrender.com \
+  pnpm sizing:baseline
+
+# 5. Confirm results:
+#    - At least one tier job reaches 'completed' with stats.pagesCompleted > 0
+#    - GET https://spatula-api.onrender.com/api/v1/usage?period=1d shows:
+#        totalCostUsd > 0 (or tokens > 0 if model is free-tier)
+#        byJob contains the job's entry
+```
+
+**Success criteria (EXEC-05):** A job submitted to the Render deploy reaches `completed` with
+`pagesCompleted > 0` and the `/usage` endpoint records tokens (and cost if model is paid).
+This clears the 19-05/DEPLOY-02 caveat (worker was starting but couldn't process crawls).
+
+---
+
 ## Upgrading to production
 
 When ready to move beyond the free demo tier:

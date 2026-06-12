@@ -98,6 +98,17 @@ vi.mock('../../src/workers/export-worker.js', () => ({
 vi.mock('../../src/workers/tenant-delete-worker.js', () => ({
   processTenantDeleteJob: vi.fn(),
 }));
+vi.mock('../../src/build-worker-deps.js', () => ({
+  buildWorkerDeps: vi.fn().mockResolvedValue({
+    deps: {
+      crawler: { close: vi.fn().mockResolvedValue(undefined) },
+      contentStore: {},
+    },
+    rawClient: {},
+    llmClient: {},
+    llmConfig: { primaryModel: 'deepseek/deepseek-v4-pro' },
+  }),
+}));
 
 describe('startWorker() lifecycle export', () => {
   let exitSpy: ReturnType<typeof vi.spyOn>;

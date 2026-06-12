@@ -205,12 +205,46 @@ Plans:
 - [x] 19-02-PLAN.md — Container images: distroless api/worker/migrate + Debian-slim cli + new Dockerfile.migrate (DEPLOY-03)
 - [x] 19-03-PLAN.md — Supply chain: release.yml multi-arch buildx + keyless cosign sign + cyclonedx SBOM attest + release-asset + verify-images runbook (DEPLOY-04)
 - [x] 19-04-PLAN.md — k8s kustomize base + dev/prod overlays + kind-smoke CI (DEPLOY-01)
-- [ ] 19-05-PLAN.md — render.yaml free-tier blueprint (embedded worker + managed PG/Redis) + render-deploy runbook (DEPLOY-02)
+- [x] 19-05-PLAN.md — render.yaml free-tier blueprint (embedded worker + managed PG/Redis) + render-deploy runbook (DEPLOY-02) — live-deploy verified 2026-06-11
 - [x] 19-06-PLAN.md — Test harnesses: tests/e2e/backup + tests/upgrade + tests/config (DEPLOY-05/10/11)
 - [x] 19-07-PLAN.md — support-matrix.md + min-version CI matrix (PG 14/15/16) + heavy-test cadence (DEPLOY-08)
 - [x] 19-08-PLAN.md — Runbooks: backup-restore + reverse-proxy (nginx tested + traefik/caddy stubs) + upgrade version-template + ROADMAP Helm note (DEPLOY-05/06/07)
 - [ ] 19-09-PLAN.md — Measured hardware-sizing baseline: live-gated 1k-page-per-tier harness + hardware-sizing.md (DEPLOY-09)
       **Estimated effort**: 5 active sessions
+
+### Phase 19.1: Hosted Execution Path Completion (INSERTED)
+
+**Goal**: The hosted/queued execution path actually processes crawls end-to-end. Today the BullMQ worker (standalone docker/k8s **and** the Render embedded worker) starts its queue consumers but throws `WorkerDeps not initialized` on every job — `new WorkerDeps(...)` is constructed nowhere in production. Three coupled gaps, all discovered during the 19-05 live deploy + 19-09 sizing smoke test, must be closed so a real crawl runs and cost tracking works.
+
+**Why (discovery)**: During the 19-05 Render deploy + a 3-page sizing smoke, the worker was confirmed to start (7 queues + heartbeat) but be unable to process any job. This retroactively qualifies 19-05/DEPLOY-02 (verified `/health` + worker-start + migrations, NOT crawl processing) and blocks 19-09/DEPLOY-09 (sizing needs real per-tier cost).
+
+**The three gaps**:
+
+1. **Worker DI** — `startWorker()` declares `let deps: WorkerDeps | undefined` and checks it everywhere but never assigns it (the `_opts.deps` param is ignored; comments say "built by the deployer"). No deployment builds deps → every job fails.
+2. **Per-job LLM config** — `StaticExtractor`/classifier/etc. resolve the model from construction-time `this.config`; the worker would build them once → each job's `llm.primaryModel` (the sizing tiers) is ignored. Needs race-safe per-job config (the model tier must apply to that job's LLM calls).
+3. **Usage recording** — `setUsageRecorder`/`DefaultUsageRecorder` are defined + tested but called **nowhere** in production → `llm_usage` is always empty, the `/api/v1/usage` cost feature is dead, and sizing cost reads $0. Needs race-safe per-job (tenantId + jobId) attribution across concurrent jobs (e.g. AsyncLocalStorage).
+
+**Groundwork already done** (uncommitted at insertion; fold into this phase): `docker-compose.prod.yml` DB/Redis host overrides (compose was unusable with the shipped `.env`); configurable `${SPATULA_PG_PORT}`/`${SPATULA_REDIS_PORT}`/`${SPATULA_API_PORT}` for local collisions; `GET /api/v1/jobs/:id` now surfaces `pagesCompleted` (API/worker path never wrote pages to `jobs.stats`); the 19-09 sizing harness rebuilt as pure-HTTP.
+
+**Depends on**: Phase 19 (deployment artifacts: render.yaml, docker images, embedded-worker shim from 19-01).
+**Requirements**: EXEC-01, EXEC-02, EXEC-03, EXEC-04, EXEC-05, EXEC-06
+
+**Success Criteria** (what must be TRUE):
+
+1. A crawl submitted via the API and processed by the BullMQ worker reaches `completed` with **pages crawled > 0** and extractions produced — no `WorkerDeps not initialized` — verified against the local docker stack AND the Render embedded-worker deploy.
+2. Per-job model pinning works: two jobs with different `llm.primaryModel` record their LLM usage under their respective models — verified via `GET /api/v1/usage` `byModel`/`byJob` — with no cross-job attribution leak under concurrency.
+3. `GET /api/v1/usage` returns non-zero `totalCostUsd` and correct per-job `byJob` entries after a real crawl (usage recording wired end-to-end).
+4. **DEPLOY-02 (19-05) re-verified LIVE**: the Render embedded worker completes a real crawl (not just `/health`) — submit a job, confirm pages + a non-zero `/usage` cost — clearing the 19-05 caveat.
+5. **DEPLOY-09 (19-09) unblocked**: `pnpm sizing:baseline` against the running stack produces a per-tier table with non-zero `cost/page` (distinct per tier).
+6. No regressions: full build + lint + unit suites green; the CLI local crawl path (`run.ts` → `LocalPipelineRunner`) still works.
+
+**Plans:** 4/4 plans complete
+
+Plans:
+- [x] 19.1-01-PLAN.md — Worker DI: buildWorkerDeps() + assign deps in startWorker() (fail-loud OPENROUTER_API_KEY, SPATULA_CRAWLER switch) (EXEC-01) [wave 1]
+- [x] 19.1-02-PLAN.md — LLM usage recording: AsyncLocalStorage usage-context + AlsUsageRecorder set on raw client + handlers wrapped (EXEC-03) [wave 2]
+- [x] 19.1-03-PLAN.md — Per-job LLM config: deriveJobDeps() rebuilds the 5 config-dependent components per job from job.config.llm (EXEC-02) [wave 3]
+- [x] 19.1-04-PLAN.md — Verification: unit tests + LOCAL docker+embedded smoke (non-zero tier-distinct cost/page) + LIVE Render re-verify checkpoint (EXEC-04/05/06) [wave 4]
 
 ### Phase 20: Docs Site Infrastructure + Content
 
