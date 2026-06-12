@@ -63,3 +63,8 @@ export type { CleanupDeps, CleanupResult } from './cleanup-worker.js';
 // Worker Entrypoint Lifecycle
 export { startWorker } from './worker-entrypoint.js';
 export type { WorkerHandle } from './worker-entrypoint.js';
+
+// ALS Usage Context + Recorder (for Plan 04 tests and consumers)
+export { usageContext, currentUsageContext } from './usage-context.js';
+export type { UsageContext } from './usage-context.js';
+export { AlsUsageRecorder } from './als-usage-recorder.js';

@@ -6,7 +6,7 @@ import { pathToFileURL } from 'node:url';
 import { Worker, type Queue as BullQueueType } from 'bullmq';
 import Redis from 'ioredis';
 import { createLogger, loadConfig } from '@spatula/shared';
-import { createDatabasePool, DlqRepository, TenantDataRepository } from '@spatula/db';
+import { createDatabasePool, DlqRepository, TenantDataRepository, LlmUsageRepository } from '@spatula/db';
 import { createDlqHandler } from './dlq-handler.js';
 import { processCrawlJob } from './workers/crawl-worker.js';
 import { processSchemaEvolutionJob } from './workers/schema-worker.js';
@@ -22,6 +22,8 @@ import { processTenantDeleteJob } from './workers/tenant-delete-worker.js';
 import type { WorkerDeps } from './worker-deps.js';
 import { buildWorkerDeps } from './build-worker-deps.js';
 import type { BuildWorkerDepsResult } from './build-worker-deps.js';
+import { usageContext } from './usage-context.js';
+import { AlsUsageRecorder } from './als-usage-recorder.js';
 import type {
   CrawlJobData,
   SchemaEvolutionJobData,
@@ -91,12 +93,22 @@ export async function startWorker(_opts?: { deps?: WorkerDeps }): Promise<Worker
     deps = built.deps;
   }
 
+  // Wire LLM usage recording onto the RAW client (CircuitBreaker wrapper does
+  // not expose setUsageRecorder). ALS gives race-safe per-job attribution.
+  if (built?.rawClient && 'setUsageRecorder' in built.rawClient) {
+    const llmUsageRepo = new LlmUsageRepository(db);
+    (built.rawClient as { setUsageRecorder: (r: AlsUsageRecorder) => void }).setUsageRecorder(
+      new AlsUsageRecorder(llmUsageRepo),
+    );
+    logger.info('LLM usage recorder wired (ALS per-job attribution)');
+  }
+
   if (isEnabled('crawl')) {
     const worker = new Worker<CrawlJobData>(
       QUEUE_NAMES.CRAWL,
       async (job) => {
         if (!deps) throw new Error('WorkerDeps not initialized');
-        await processCrawlJob(job.data, deps);
+        await usageContext.run({ tenantId: job.data.tenantId, jobId: job.data.jobId }, () => processCrawlJob(job.data, deps));
       },
       {
         connection: workerConnection,
@@ -120,7 +132,7 @@ export async function startWorker(_opts?: { deps?: WorkerDeps }): Promise<Worker
       QUEUE_NAMES.SCHEMA_EVOLUTION,
       async (job) => {
         if (!deps) throw new Error('WorkerDeps not initialized');
-        await processSchemaEvolutionJob(job.data, deps, redisForLock);
+        await usageContext.run({ tenantId: job.data.tenantId, jobId: job.data.jobId }, () => processSchemaEvolutionJob(job.data, deps, redisForLock));
       },
       {
         connection: workerConnection,
@@ -137,7 +149,7 @@ export async function startWorker(_opts?: { deps?: WorkerDeps }): Promise<Worker
       QUEUE_NAMES.RECONCILIATION,
       async (job) => {
         if (!deps) throw new Error('WorkerDeps not initialized');
-        await processReconciliationJob(job.data, deps);
+        await usageContext.run({ tenantId: job.data.tenantId, jobId: job.data.jobId }, () => processReconciliationJob(job.data, deps));
       },
       {
         connection: workerConnection,
