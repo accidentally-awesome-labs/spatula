@@ -208,25 +208,20 @@ describe('OpenRouterClient', () => {
       expect(result.content).toBe('Hello');
     });
 
-    it('extracts cost from x-openrouter-cost header', async () => {
+    it('extracts cost from the response body usage.cost (OpenRouter credits = USD)', async () => {
       const recorder = { record: vi.fn() };
       client.setUsageRecorder(recorder);
 
-      const headers = new Headers({ 'x-openrouter-cost': '0.00042' });
-      mockFetch.mockResolvedValue({
-        ok: true,
-        status: 200,
-        json: () => Promise.resolve(successBody('Hello', 'anthropic/claude-sonnet-4-20250514')),
-        text: () => Promise.resolve(''),
-        headers,
-      } as unknown as Response);
+      const body = successBody('Hello', 'anthropic/claude-sonnet-4-20250514');
+      (body.usage as { cost?: number }).cost = 0.00042;
+      mockFetch.mockResolvedValue(mockResponse(body));
 
       await client.complete(basicRequest);
 
       expect(recorder.record).toHaveBeenCalledWith(expect.objectContaining({ costUsd: 0.00042 }));
     });
 
-    it('defaults costUsd to 0 when x-openrouter-cost header is absent', async () => {
+    it('defaults costUsd to 0 when usage.cost is absent from the body', async () => {
       const recorder = { record: vi.fn() };
       client.setUsageRecorder(recorder);
       mockFetch.mockResolvedValue(mockResponse(successBody('Hello')));
