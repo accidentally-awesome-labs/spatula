@@ -65,7 +65,7 @@ export const LLMModelOverrides = z.object({
 export type LLMModelOverrides = z.infer<typeof LLMModelOverrides>;
 
 export const LLMConfig = z.object({
-  primaryModel: z.string().default('deepseek/deepseek-v4-pro'),
+  primaryModel: z.string().default('deepseek/deepseek-v4-flash'),
   modelOverrides: LLMModelOverrides.optional(),
 });
 export type LLMConfig = z.infer<typeof LLMConfig>;

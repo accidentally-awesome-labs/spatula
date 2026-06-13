@@ -30,9 +30,9 @@
  * hardware, network, and target site.
  *
  * == Routing tiers (D-02) ==
- * fast    — deepseek/deepseek-v4-flash  (cheapest, high-throughput)
- * primary — deepseek/deepseek-v4-pro    (balanced — production default)
- * smart   — google/gemini-3.5-flash     (highest quality)
+ * fast    — xiaomi/mimo-v2-flash        (cheapest, high-throughput)
+ * primary — deepseek/deepseek-v4-flash  (balanced — production default)
+ * smart   — deepseek/deepseek-v4-pro    (highest quality)
  * Each tier pins ALL llm calls to one model via llm.primaryModel with no overrides,
  * producing a clean per-tier cost/page number.
  *
@@ -82,9 +82,9 @@ interface TierConfig {
 }
 
 const TIERS: TierConfig[] = [
-  { name: 'fast', model: 'deepseek/deepseek-v4-flash', description: 'Cheap, high-throughput' },
-  { name: 'primary', model: 'deepseek/deepseek-v4-pro', description: 'Balanced — production default' },
-  { name: 'smart', model: 'google/gemini-3.5-flash', description: 'Highest quality' },
+  { name: 'fast', model: 'xiaomi/mimo-v2-flash', description: 'Cheap, high-throughput' },
+  { name: 'primary', model: 'deepseek/deepseek-v4-flash', description: 'Balanced — production default' },
+  { name: 'smart', model: 'deepseek/deepseek-v4-pro', description: 'Highest quality' },
 ];
 
 // ============================================================

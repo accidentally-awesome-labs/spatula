@@ -99,7 +99,7 @@ export function ensureGlobalConfig(configPath?: string): boolean {
     '# LLM provider (openrouter or ollama)',
     '# llm:',
     '#   provider: openrouter',
-    '#   model: deepseek/deepseek-v4-pro',
+    '#   model: deepseek/deepseek-v4-flash',
     '',
     '# API keys (can also be set via env vars)',
     '# openrouterApiKey: sk-or-...',

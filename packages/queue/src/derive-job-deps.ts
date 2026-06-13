@@ -93,7 +93,7 @@ export async function resolveJobDeps(
   const jobLlmConfig: LLMConfig =
     (job?.config as any)?.llm ??
     (deps as any).defaultLlmConfig ??
-    { primaryModel: 'deepseek/deepseek-v4-pro' };
+    { primaryModel: 'deepseek/deepseek-v4-flash' };
 
   return deriveJobDeps(deps, sharedClient, jobLlmConfig, jobId);
 }
