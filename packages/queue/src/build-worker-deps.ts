@@ -96,7 +96,7 @@ export async function buildWorkerDeps(
 
   // Step 4 — Base llmConfig (per-job override is Plan 03; this is the worker default)
   const llmConfig: LLMConfig = {
-    primaryModel: process.env.SPATULA_DEFAULT_MODEL ?? 'deepseek/deepseek-v4-pro',
+    primaryModel: process.env.SPATULA_DEFAULT_MODEL ?? 'deepseek/deepseek-v4-flash',
   };
 
   // Step 5 — LLM client: create raw first so Plan 02 can call setUsageRecorder on it,

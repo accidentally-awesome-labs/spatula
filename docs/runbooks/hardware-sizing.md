@@ -65,9 +65,9 @@ speed, network bandwidth to target sites, and model API latency from your region
 
 | Tier    | Model                        | Character                     |
 | ------- | ---------------------------- | ----------------------------- |
-| fast    | `deepseek/deepseek-v4-flash` | Cheapest, highest throughput  |
-| primary | `deepseek/deepseek-v4-pro`   | Balanced — production default |
-| smart   | `google/gemini-3.5-flash`    | Highest quality               |
+| fast    | `xiaomi/mimo-v2-flash`       | Cheapest, highest throughput  |
+| primary | `deepseek/deepseek-v4-flash` | Balanced — production default |
+| smart   | `deepseek/deepseek-v4-pro`   | Highest quality               |
 
 Pricing is sourced from OpenRouter and may change. Re-run the harness after significant
 model price changes.

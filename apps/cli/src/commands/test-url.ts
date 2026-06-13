@@ -52,7 +52,7 @@ export async function testUrl(args: TestUrlArgs): Promise<void> {
 
   // 1. Create LLM client (unless --skip-llm)
   let llmClient: LLMClient | null = null;
-  const primaryModel = model ?? process.env.LLM_PRIMARY_MODEL ?? 'deepseek/deepseek-v4-pro';
+  const primaryModel = model ?? process.env.LLM_PRIMARY_MODEL ?? 'deepseek/deepseek-v4-flash';
 
   if (!skipLlm) {
     const provider = process.env.LLM_PROVIDER ?? 'openrouter';

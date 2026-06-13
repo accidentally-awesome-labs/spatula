@@ -53,7 +53,7 @@ describe('CliStore', () => {
         crawlerType: 'playwright',
       });
       expect(config.schema).toEqual({ mode: 'discovery' });
-      expect(config.llm).toEqual({ primaryModel: 'deepseek/deepseek-v4-pro' });
+      expect(config.llm).toEqual({ primaryModel: 'deepseek/deepseek-v4-flash' });
     });
 
     it('has empty messages', () => {
