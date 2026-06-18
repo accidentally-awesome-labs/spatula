@@ -36,7 +36,7 @@ jobs:
       SPATULA_LIVE_LLM: '1'
       OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
       - uses: pnpm/action-setup@v4
         with:
@@ -63,7 +63,7 @@ jobs:
       OLLAMA_BASE_URL: http://localhost:11434
       SPATULA_ADVERSARIAL_MODEL: ollama
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
       - uses: pnpm/action-setup@v4
         with:
