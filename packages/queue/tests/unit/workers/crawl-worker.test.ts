@@ -142,6 +142,13 @@ function createMockDeps(): WorkerDeps {
     taskRepo: {
       updateStatus: vi.fn().mockResolvedValue(null),
       updateClassification: vi.fn().mockResolvedValue(null),
+      getJobStats: vi.fn().mockResolvedValue({
+        pending: 0,
+        inProgress: 0,
+        completed: 0,
+        failed: 0,
+        skipped: 0,
+      }),
       enqueue: vi
         .fn()
         .mockImplementation((input) =>
@@ -849,6 +856,65 @@ describe('processCrawlJob', () => {
 
       // Crawl proceeds despite quota check failure
       expect(deps.crawler.crawl).toHaveBeenCalledWith('https://example.com/product/1');
+    });
+  });
+
+  describe('job page budget enforcement', () => {
+    it('does not enqueue child links when job maxPages is already reached', async () => {
+      const data = createJobData({ depth: 1 });
+      (deps.taskRepo as any).getJobStats.mockResolvedValue({
+        pending: 0,
+        inProgress: 0,
+        completed: 1,
+        failed: 0,
+        skipped: 0,
+      });
+      (deps.jobRepo.findById as ReturnType<typeof vi.fn>).mockResolvedValue({
+        id: 'job-1',
+        tenantId: 'tenant-1',
+        description: 'Scrape product data',
+        config: {
+          description: 'Scrape product data',
+          seedUrls: ['https://example.com'],
+          crawl: { maxDepth: 3, maxPages: 1, concurrency: 5, crawlerType: 'playwright' },
+          schema: { mode: 'discovery' },
+        },
+      });
+
+      await processCrawlJob(data, deps);
+
+      expect(deps.taskRepo.enqueue).not.toHaveBeenCalled();
+      expect(deps.queues.crawl.add).not.toHaveBeenCalled();
+    });
+
+    it('enqueues only the remaining number of child links under job maxPages', async () => {
+      const data = createJobData({ depth: 1 });
+      (deps.taskRepo as any).getJobStats.mockResolvedValue({
+        pending: 0,
+        inProgress: 0,
+        completed: 1,
+        failed: 0,
+        skipped: 0,
+      });
+      (deps.jobRepo.findById as ReturnType<typeof vi.fn>).mockResolvedValue({
+        id: 'job-1',
+        tenantId: 'tenant-1',
+        description: 'Scrape product data',
+        config: {
+          description: 'Scrape product data',
+          seedUrls: ['https://example.com'],
+          crawl: { maxDepth: 3, maxPages: 2, concurrency: 5, crawlerType: 'playwright' },
+          schema: { mode: 'discovery' },
+        },
+      });
+
+      await processCrawlJob(data, deps);
+
+      expect(deps.taskRepo.enqueue).toHaveBeenCalledTimes(1);
+      expect(deps.queues.crawl.add).toHaveBeenCalledTimes(1);
+      expect(deps.taskRepo.enqueue).toHaveBeenCalledWith(
+        expect.objectContaining({ url: 'https://example.com/product/2' }),
+      );
     });
   });
 

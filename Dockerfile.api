@@ -76,6 +76,7 @@ COPY --from=build /app/packages/core-types/package.json ./packages/core-types/
 COPY --from=build /app/apps/api/dist ./apps/api/dist
 COPY --from=build /app/apps/api/package.json ./apps/api/
 COPY --from=build /app/package.json ./
+COPY config/ ./config/
 
 # Default to production so the shared logger skips the dev-only pino-pretty
 # transport (absent in --prod deps); operators can override via env.

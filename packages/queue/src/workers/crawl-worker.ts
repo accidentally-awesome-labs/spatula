@@ -119,8 +119,9 @@ export async function processCrawlJob(data: CrawlJobData, deps: WorkerDeps): Pro
     }
 
     // 3. Enqueue child crawl tasks (queue-specific)
+    const linksToEnqueue = await capLinksByJobPageBudget(result.linksFound, jobId, tenantId, jobDeps);
     let enqueued = 0;
-    for (const link of result.linksFound) {
+    for (const link of linksToEnqueue) {
       const childTask = await jobDeps.taskRepo.enqueue({
         jobId,
         tenantId,
@@ -175,4 +176,22 @@ export async function processCrawlJob(data: CrawlJobData, deps: WorkerDeps): Pro
     // Orchestrator-level errors are returned via result.error and handled above.
     logger.error({ taskId, url, error }, 'crawl job failed');
   }
+}
+
+async function capLinksByJobPageBudget<T extends { url: string }>(
+  links: T[],
+  jobId: string,
+  tenantId: string,
+  deps: WorkerDeps,
+): Promise<T[]> {
+  const job = await deps.jobRepo.findById(jobId, tenantId);
+  const maxPages = (job?.config as any)?.crawl?.maxPages;
+  if (typeof maxPages !== 'number' || !Number.isFinite(maxPages)) {
+    return links;
+  }
+
+  const stats = await deps.taskRepo.getJobStats(jobId, tenantId);
+  const accountedPages = stats.completed + stats.inProgress + stats.pending;
+  const remaining = Math.max(0, Math.floor(maxPages) - accountedPages);
+  return links.slice(0, remaining);
 }
