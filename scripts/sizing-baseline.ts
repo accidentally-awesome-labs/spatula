@@ -56,11 +56,6 @@ if (process.env.SPATULA_LIVE_LLM !== '1') {
   process.exit(2);
 }
 
-import { writeFileSync } from 'node:fs';
-import { dirname, resolve } from 'node:path';
-import { fileURLToPath } from 'node:url';
-import { setTimeout as sleep } from 'node:timers/promises';
-
 // Pure-HTTP harness — NO @spatula/* imports, no direct DB access. Pages come from
 // GET /jobs/:id (stats.pagesCompleted) and cost from GET /api/v1/usage (byJob).
 // This keeps the harness portable (runs against any reachable Spatula stack,
@@ -83,7 +78,11 @@ interface TierConfig {
 
 const TIERS: TierConfig[] = [
   { name: 'fast', model: 'xiaomi/mimo-v2-flash', description: 'Cheap, high-throughput' },
-  { name: 'primary', model: 'deepseek/deepseek-v4-flash', description: 'Balanced — production default' },
+  {
+    name: 'primary',
+    model: 'deepseek/deepseek-v4-flash',
+    description: 'Balanced — production default',
+  },
   { name: 'smart', model: 'deepseek/deepseek-v4-pro', description: 'Highest quality' },
 ];
 
@@ -134,6 +133,10 @@ function formatDuration(ms: number): string {
 
 const formatCost = (usd: number): string => `$${usd.toFixed(4)}`;
 
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolveSleep) => setTimeout(resolveSleep, ms));
+}
+
 async function api<T>(
   path: string,
   opts: { method?: string; body?: unknown; tenantId?: string } = {},
@@ -158,8 +161,12 @@ function printMarkdownTable(results: TierResult[]): void {
   log('Target VM: Hetzner CX32 (4 vCPU / 8 GB RAM / 80 GB SSD NVMe)');
   log(`Seed URL:  ${SEED_URL}`);
   log(`Pages/tier (target ${TARGET_PAGES}, actual = crawl tasks completed)\n`);
-  log('| Tier    | Model                        | Pages | Wall-clock | Total LLM cost | LLM cost/page |');
-  log('| ------- | ---------------------------- | ----- | ---------- | -------------- | ------------- |');
+  log(
+    '| Tier    | Model                        | Pages | Wall-clock | Total LLM cost | LLM cost/page |',
+  );
+  log(
+    '| ------- | ---------------------------- | ----- | ---------- | -------------- | ------------- |',
+  );
   for (const r of results) {
     log(
       `| ${r.tier.padEnd(7)} | ${r.model.padEnd(28)} | ${String(r.pages).padEnd(5)} | ${r.wallClockFormatted.padEnd(10)} | ${formatCost(r.totalCostUsd).padEnd(14)} | ${formatCost(r.costPerPageUsd).padEnd(13)} |`,
@@ -171,10 +178,7 @@ function printMarkdownTable(results: TierResult[]): void {
 // ============================================================
 // Per-tier run
 // ============================================================
-async function runTier(
-  tier: TierConfig,
-  ctx: { tenantId: string },
-): Promise<TierResult> {
+async function runTier(tier: TierConfig, ctx: { tenantId: string }): Promise<TierResult> {
   const tlog = (...a: unknown[]) => log(`[${tier.name}]`, ...a);
   tlog(`Submitting ${TARGET_PAGES}-page crawl pinned to ${tier.model} (seed: ${SEED_URL})`);
 
@@ -251,7 +255,9 @@ async function runTier(
 // ============================================================
 async function main(): Promise<void> {
   log('=== Spatula Hardware-Sizing Baseline (API + worker path) ===');
-  log(`API: ${API_URL} | Tiers: fast/primary/smart | Pages/tier: ${TARGET_PAGES} | Seed: ${SEED_URL}`);
+  log(
+    `API: ${API_URL} | Tiers: fast/primary/smart | Pages/tier: ${TARGET_PAGES} | Seed: ${SEED_URL}`,
+  );
   log('WARNING: the running stack will incur real LLM cost via OpenRouter.\n');
 
   // Preflight: API reachable?
@@ -284,6 +290,9 @@ async function main(): Promise<void> {
 
   if (results.length > 0) printMarkdownTable(results);
 
+  const { writeFileSync } = await import('node:fs');
+  const { dirname, resolve } = await import('node:path');
+  const { fileURLToPath } = await import('node:url');
   const __dirname = dirname(fileURLToPath(import.meta.url));
   const outPath = resolve(__dirname, '.sizing-results.json');
   writeFileSync(
