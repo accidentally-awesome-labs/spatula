@@ -2,10 +2,10 @@
 gsd_state_version: 1.0
 milestone: v1.1
 milestone_name: Public Launch (Wave 6 / Phase 14)
-status: verifying
-stopped_at: "Phase 19.1 Plan 04 — checkpoint:human-action at Task 3 (EXEC-05 Render live re-verify); Tasks 1+2 committed; SUMMARY created; awaiting user to verify live Render crawl"
-last_updated: "2026-06-12T03:39:34.297Z"
-last_activity: 2026-06-12
+status: checkpoint
+stopped_at: "Phase 19 Plan 09 — checkpoint:human-action at Task 2 (DEPLOY-09 live 1k-page-per-tier sizing run); Task 1 committed in cf0e7c6; awaiting measured rows + VM confirmation"
+last_updated: "2026-07-09T12:58:38-0400"
+last_activity: 2026-07-09 -- Phase 19 Plan 09 checkpoint reached
 progress:
   total_phases: 9
   completed_phases: 5
@@ -21,14 +21,14 @@ progress:
 See: `.planning/PROJECT.md` (updated 2026-05-11)
 
 **Core value:** Turn "I want X data from these sites" into a production-quality dataset with provenance.
-**Current focus:** Phase 19.1 — hosted-execution-path
+**Current focus:** Phase 19 Plan 09 — hardware-sizing baseline checkpoint
 
 ## Current Position
 
-Phase: 19.1 (hosted-execution-path) — EXECUTING
-Plan: 4 of 4
-Status: Phase complete — ready for verification
-Last activity: 2026-06-12
+Phase: 19 (deployment-self-host-excellence) — CHECKPOINT
+Plan: 9 of 9
+Status: Awaiting human-action checkpoint — run live DEPLOY-09 sizing measurement and fill `docs/runbooks/hardware-sizing.md`
+Last activity: 2026-07-09 -- Phase 19 Plan 09 checkpoint reached
 
 Progress: [█░░░░░░░░░] 13% (1/8 v1.1 phases complete)
 
