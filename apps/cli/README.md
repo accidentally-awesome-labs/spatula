@@ -42,7 +42,6 @@ The published tarball contents are governed by the `files` allowlist in `package
 
 ```bash
 spatula setup          # downloads ~300 MB of Playwright browsers under ~/.cache/ms-playwright
-spatula setup --skip   # symbolic — emits a hint if browsers are missing later
 ```
 
 ## Engines

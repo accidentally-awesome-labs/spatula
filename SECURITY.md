@@ -64,7 +64,6 @@ The following are **in scope** for security reports:
 - `apps/api` (`@spatula/api`) — the REST API server
 - `apps/cli` (`@spatula/cli`) — the CLI/TUI application
 - Docker images published to `ghcr.io/accidentally-awesome-labs/spatula`
-- The official deployment infrastructure at `spatula.dev`
 
 The following are **out of scope**:
 

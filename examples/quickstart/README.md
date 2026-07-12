@@ -36,7 +36,7 @@ docker compose up -d
 cp ../../.env.example .env
 
 # Run migrations
-pnpm --filter @spatula/db migrate
+pnpm --filter @spatula/db db:migrate
 
 # Start the API server
 pnpm --filter @spatula/api start

@@ -16,7 +16,7 @@ Spatula API client — TypeScript SDK for the Spatula REST API.
 import { SpatulaClient, createJob, listJobs, getEntities } from '@spatula/client';
 
 const client = new SpatulaClient({
-  baseUrl: 'https://api.spatula.dev',
+  baseUrl: 'http://localhost:3000',
   apiKey: process.env.SPATULA_API_KEY!,
 });
 

@@ -11,6 +11,9 @@ Extract structured article data from news websites.
 
 ## Usage
 
+This is a template configuration. Replace the placeholder seed URL with a site
+you own or have permission to crawl before running it.
+
 ```bash
 cp spatula.yaml /path/to/my-project/
 cd /path/to/my-project

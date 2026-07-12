@@ -4,11 +4,11 @@
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "https://github.com/spatulaai/spatula.git"
+    "url": "https://github.com/accidentally-awesome-labs/spatula.git"
   },
-  "homepage": "https://github.com/spatulaai/spatula#readme",
+  "homepage": "https://github.com/accidentally-awesome-labs/spatula#readme",
   "bugs": {
-    "url": "https://github.com/spatulaai/spatula/issues"
+    "url": "https://github.com/accidentally-awesome-labs/spatula/issues"
   },
   "keywords": [
     "web-scraping",

@@ -95,7 +95,7 @@ flowchart LR
 3. **Extract** — LLM extracts structured fields from relevant pages. Falls back to CSS-selector extraction when no LLM is configured.
 4. **Schema Evolution** — Batched analysis of unmapped fields across pages. Proposes schema changes as actions requiring human review.
 5. **Reconcile** — Match entities across pages (same product from different URLs), resolve conflicting field values, normalize data types.
-6. **Export** — Output clean datasets in 5 formats. Every field carries provenance metadata (extracted, normalized, merged, resolved, inferred).
+6. **Export** — Output clean datasets in 5 formats. JSON exports can include field provenance metadata (extracted, normalized, merged, resolved, inferred) when requested.
 
 ## Core Interfaces
 
@@ -155,15 +155,15 @@ All three must hold to consider the swap.
 
 ## Export format stability
 
-Spatula exports data in **5 formats frozen at v1**: JSON, CSV, Parquet, SQLite, DuckDB. The wire shape of each format is FROZEN — additive-only across 1.x; removing or restructuring exported columns is a MAJOR break (see `docs/compat-policy.md`). Every record includes per-field provenance metadata (one of: `extracted`, `normalized`, `merged`, `resolved`, `inferred`).
+Spatula exports data in **5 formats frozen at v1**: JSON, CSV, Parquet, SQLite, DuckDB. The wire shape of each format is FROZEN — additive-only across 1.x; removing or restructuring exported columns is a MAJOR break (see `docs/compat-policy.md`). JSON can include per-field provenance metadata (one of: `extracted`, `normalized`, `merged`, `resolved`, `inferred`) when `includeProvenance` is true. The other v1 exporters write the flattened entity data only.
 
-| Format  | Provenance shape                                                | Use case                                  |
-| ------- | --------------------------------------------------------------- | ----------------------------------------- |
-| JSON    | Per-record nested `_provenance` object                          | Programmatic consumption; SDK round-trips |
-| CSV     | Per-field `<field>__source` sibling columns                     | Spreadsheet / quick inspection            |
-| Parquet | Provenance struct column                                        | Analytical queries; columnar warehouse    |
-| SQLite  | Sidecar `_provenance` table joined by `(record_id, field_name)` | Embeddable; offline analysis              |
-| DuckDB  | Same as SQLite + materialized `provenance` view                 | Analytical queries; SQL-native            |
+| Format  | Provenance support                      | Use case                                  |
+| ------- | --------------------------------------- | ----------------------------------------- |
+| JSON    | Optional per-record `provenance` object | Programmatic consumption; SDK round-trips |
+| CSV     | No provenance columns in v1             | Spreadsheet / quick inspection            |
+| Parquet | No provenance column in v1              | Analytical queries; columnar warehouse    |
+| SQLite  | No provenance sidecar table in v1       | Embeddable; offline analysis              |
+| DuckDB  | No provenance table or view in v1       | Analytical queries; SQL-native            |
 
 **Why frozen at v1:** downstream consumers (BI pipelines, embedded apps shipping `.sqlite` files, analytical jobs over `.parquet`) cannot tolerate per-minor shape changes. Treating the export wire shape as part of the API contract — same freeze rules as the OpenAPI surface — is a deliberate v1 promise.
 

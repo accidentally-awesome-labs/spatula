@@ -1,8 +1,8 @@
 # Spatula
 
-**AI-powered intelligent web crawling. Describe the data you want, get clean production-ready datasets.**
+**AI-powered intelligent web crawling. Describe the data you want, get clean structured datasets.**
 
-[![CI](https://github.com/spatulaai/spatula/actions/workflows/ci.yml/badge.svg)](https://github.com/spatulaai/spatula/actions/workflows/ci.yml)
+[![CI](https://github.com/accidentally-awesome-labs/spatula/actions/workflows/ci.yml/badge.svg)](https://github.com/accidentally-awesome-labs/spatula/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
 > **Legal Notice:** Spatula is provided as-is under the [MIT License](LICENSE). You are
@@ -14,7 +14,9 @@
 
 ## What is Spatula?
 
-Spatula is an AI-powered web crawling platform that turns unstructured websites into clean, structured datasets. You describe the data you want in plain language, provide seed URLs, and Spatula handles the rest — crawling pages, extracting structured data with LLMs, evolving the schema as it discovers new fields, reconciling entities across sources, and exporting production-ready datasets. It works locally as a CLI tool or as a multi-tenant API server.
+Spatula is an AI-powered web crawling platform that turns unstructured websites into clean, structured datasets. You describe the data you want in plain language, provide seed URLs, and Spatula handles the rest: crawling pages, extracting structured data with LLMs, evolving the schema as it discovers new fields, reconciling entities across sources, and exporting analysis-ready datasets.
+
+This repository is the open-source distribution. It works locally as a CLI tool, or as a self-hosted multi-tenant API server backed by PostgreSQL and Redis. There is no official hosted Spatula API assumed by these docs.
 
 ## Features
 
@@ -22,7 +24,7 @@ Spatula is an AI-powered web crawling platform that turns unstructured websites 
 - **LLM-powered extraction** — uses AI at every decision point with smart model routing for cost control
 - **Automatic schema evolution** — discovers new fields as it crawls, with human-in-the-loop review
 - **Entity reconciliation** — matches and merges the same entity found across different pages and sites
-- **5 export formats** — JSON, CSV, Parquet, SQLite, DuckDB — all with field-level provenance
+- **5 export formats** — JSON, CSV, Parquet, SQLite, DuckDB; JSON supports optional field-level provenance
 - **Dual execution mode** — run locally with SQLite or as a multi-tenant server with PostgreSQL + Redis
 - **Pluggable crawlers** — Playwright (built-in) or Firecrawl (API-based)
 - **Pluggable LLM providers** — OpenRouter (cloud) or Ollama (local, fully offline)
@@ -61,7 +63,7 @@ spatula export --format json
 
 ```bash
 # Clone the repository
-git clone https://github.com/spatulaai/spatula.git
+git clone https://github.com/accidentally-awesome-labs/spatula.git
 cd spatula
 
 # Install dependencies
@@ -75,7 +77,7 @@ cp .env.example .env
 # Edit .env — set at minimum: OPENROUTER_API_KEY
 
 # Run database migrations
-pnpm --filter @spatula/db migrate
+pnpm --filter @spatula/db db:migrate
 
 # Start the API server
 pnpm --filter @spatula/api start
@@ -130,6 +132,8 @@ graph TD
 
 See [docs/architecture.md](docs/architecture.md) for the full architecture guide with data flow diagrams, interface maps, and the action taxonomy.
 
+For a map from public feature claims to test coverage, see [docs/feature-verification.md](docs/feature-verification.md).
+
 ## Configuration
 
 ### Project Configuration (`spatula.yaml`)
@@ -150,7 +154,7 @@ crawler: playwright
 safety: balanced
 ```
 
-See [examples/](examples/) for complete configuration examples covering ecommerce, news, and real estate use cases.
+See [examples/](examples/) for a runnable quickstart and template configurations covering ecommerce, news, and real estate use cases. Template examples use placeholder domains; replace their seeds with sites you are allowed to crawl.
 
 ### Environment Variables
 
@@ -221,9 +225,9 @@ All endpoints require authentication when `AUTH_STRATEGY` is set to `api-key` or
 | ------- | ---------- | ---------------------------------- | --------- | ---------- |
 | JSON    | `.json`    | APIs, nested data                  | Yes       | Yes        |
 | CSV     | `.csv`     | Spreadsheets, simple tabular data  | Yes       | No         |
-| Parquet | `.parquet` | Big data analytics (Spark, DuckDB) | No        | Yes        |
-| SQLite  | `.db`      | Local querying, portable database  | No        | Yes        |
-| DuckDB  | `.duckdb`  | Analytics, columnar queries        | No        | Yes        |
+| Parquet | `.parquet` | Big data analytics (Spark, DuckDB) | No        | No         |
+| SQLite  | `.db`      | Local querying, portable database  | No        | No         |
+| DuckDB  | `.duckdb`  | Analytics, columnar queries        | No        | No         |
 
 ```bash
 # Export with provenance metadata

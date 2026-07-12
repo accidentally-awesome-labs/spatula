@@ -33,7 +33,7 @@ Keys are scoped per-tenant. Cross-tenant key collisions are impossible.
 ### 1. Same key + same body → cached response
 
 ```bash
-curl -X POST https://api.spatula.dev/api/v1/jobs \
+curl -X POST http://localhost:3000/api/v1/jobs \
   -H "Authorization: Bearer $KEY" \
   -H "Idempotency-Key: 7f3a-1234-5678-90ab" \
   -H "Content-Type: application/json" \
@@ -43,7 +43,7 @@ curl -X POST https://api.spatula.dev/api/v1/jobs \
 # { "id": "job_abc...", "name": "crawl-1", "status": "pending", ... }
 
 # Replay the EXACT same request (network hiccup, client retry, etc.):
-curl -X POST https://api.spatula.dev/api/v1/jobs \
+curl -X POST http://localhost:3000/api/v1/jobs \
   -H "Authorization: Bearer $KEY" \
   -H "Idempotency-Key: 7f3a-1234-5678-90ab" \
   -H "Content-Type: application/json" \
@@ -57,7 +57,7 @@ curl -X POST https://api.spatula.dev/api/v1/jobs \
 
 ```bash
 # Reuse the key from example 1 with a DIFFERENT payload:
-curl -X POST https://api.spatula.dev/api/v1/jobs \
+curl -X POST http://localhost:3000/api/v1/jobs \
   -H "Authorization: Bearer $KEY" \
   -H "Idempotency-Key: 7f3a-1234-5678-90ab" \
   -H "Content-Type: application/json" \
@@ -80,7 +80,7 @@ The conflict response surfaces `originalRequestId` so you can correlate with the
 
 ```bash
 # A genuinely new request — different key:
-curl -X POST https://api.spatula.dev/api/v1/jobs \
+curl -X POST http://localhost:3000/api/v1/jobs \
   -H "Authorization: Bearer $KEY" \
   -H "Idempotency-Key: 9b8c-2222-3333-4444" \
   -H "Content-Type: application/json" \
@@ -98,7 +98,7 @@ The `@spatula/client` SDK accepts `idempotencyKey` as an option on every mutatin
 import { SpatulaClient } from '@spatula/client';
 
 const client = new SpatulaClient({
-  baseUrl: 'https://api.spatula.dev',
+  baseUrl: 'http://localhost:3000',
   apiKey: process.env.SPATULA_API_KEY,
 });
 
