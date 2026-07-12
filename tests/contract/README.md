@@ -1,7 +1,6 @@
 # tests/contract/
 
-Public REST contract test suite — Phase 16 plan 16-4. Gates the v1 API surface
-on every PR.
+Public REST contract test suite. Gates the v1 API surface on every PR.
 
 ## What this proves
 
@@ -18,8 +17,8 @@ on every PR.
 - All timestamps parse as ISO 8601 UTC (trailing `Z` or `+00:00`) — API-07.
 - Every public route lives under `/api/v1/` (or the `/.well-known/`
   sibling-root) — API-10.
-- `client.experimental.*` throws on every property access until the first
-  experimental surface lands in Phase 18 — API-13.
+- `client.experimental.*` throws on every property access while v1.0 has zero
+  experimental surfaces — API-13.
 
 ## How it works
 

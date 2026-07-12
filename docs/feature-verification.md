@@ -37,7 +37,6 @@ pnpm build
 pnpm test
 pnpm test:e2e
 pnpm test:contract
-pnpm test:private-contract
 ```
 
 Run the public docs guard when changing README, package docs, examples, or

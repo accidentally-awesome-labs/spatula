@@ -1,9 +1,9 @@
 # Spatula compatibility policy
 
 > **Authoritative source for SDK ↔ server ↔ core-types version compatibility.**
-> Cross-reference: `docs/api-errors.md` (error code enum), `docs/deprecation-policy.md` (experimental tag rules), `docs/private-contract.md` (internal-package compat carve-out for `spatula-saas`).
+> Cross-reference: `docs/api-errors.md` (error code enum), `docs/deprecation-policy.md` (experimental tag rules), and `docs/architecture.md` (package boundaries).
 
-This document anchors the Spatula compat matrix at v1. It is the public counterpart to `docs/private-contract.md` (which covers the OSS surface consumed by the private `accidentally-awesome-labs/spatula-saas` repo). Linked from every published package README.
+This document anchors the Spatula compat matrix at v1. Linked from every published package README.
 
 ## Purpose
 
@@ -11,13 +11,13 @@ A small, frozen-at-v1 wire contract is the single most valuable thing the Spatul
 
 ## Compat matrix
 
-| Component                                   | Compat rule                                                                                                                                                                                                                                                                                                     |
-| ------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `@spatula/core-types`                       | **Frozen at v1**; additive-only in 1.x. Removing or renaming an export is a major break.                                                                                                                                                                                                                        |
-| `@spatula/client`                           | **Exact-peer-dep on `@spatula/core-types` major** (lockstep via release-please `linked-versions`). The two packages publish together at the same major.                                                                                                                                                         |
-| `@spatula/api` (server)                     | **REST contract frozen at v1.** Server supports the previous SDK major for **12 months** post-major-cut. Path versioning (`/api/v1/*`) is the URL contract.                                                                                                                                                     |
-| `@spatula/cli`                              | Independent semver. Bundles `@spatula/client` at the matching major. May ship breaking flag changes between majors with a deprecation cycle.                                                                                                                                                                    |
-| `@spatula/core` / `db` / `queue` / `shared` | **No TS-API compat guarantee** (per `docs/private-contract.md`). Subject to silent breaking changes between minor versions. Imports from these are the consumer's risk; the SaaS-style downstream `spatula-saas` repo is the only sanctioned consumer and pins exact minor versions via its own contract tests. |
+| Component                                           | Compat rule                                                                                                                                                                          |
+| --------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `@spatula/core-types`                               | **Frozen at v1**; additive-only in 1.x. Removing or renaming an export is a major break.                                                                                             |
+| `@spatula/client`                                   | **Exact-peer-dep on `@spatula/core-types` major** (lockstep via release-please `linked-versions`). The two packages publish together at the same major.                              |
+| `@spatula/api` (server)                             | **REST contract frozen at v1.** Server supports the previous SDK major for **12 months** post-major-cut. Path versioning (`/api/v1/*`) is the URL contract.                          |
+| `@spatula/cli`                                      | Independent semver. Bundles `@spatula/client` at the matching major. May ship breaking flag changes between majors with a deprecation cycle.                                         |
+| `@spatula/core` / `db` / `queue` / `shared` / `api` | **No TS-API compat guarantee.** These are internal implementation packages. External consumers should use the REST API, `@spatula/client`, `@spatula/core-types`, or `@spatula/cli`. |
 
 ## Major-compat-within-major
 
@@ -63,7 +63,7 @@ The following are FROZEN — changes are MAJOR breaks:
 
 ## Experimental surfaces
 
-See `docs/deprecation-policy.md`. v1.0 ships ZERO experimental surfaces. First experimental surface (admin forensic-extractions endpoint) lands in Phase 18 and is accessed via `client.experimental.forensic.*`. The `client.experimental.*` Proxy is already published as scaffolding at v1.0 — any property access throws with a message containing `'zero experimental surfaces'` and a pointer to Phase 18.
+See `docs/deprecation-policy.md`. v1.0 ships zero experimental surfaces. Future experimental surfaces are accessed through `client.experimental.*`. The `client.experimental.*` Proxy is already published as scaffolding at v1.0; until a surface is released, property access throws with a message containing `'zero experimental surfaces'`.
 
 ## What a consumer MAY rely on
 
@@ -76,10 +76,10 @@ See `docs/deprecation-policy.md`. v1.0 ships ZERO experimental surfaces. First e
 
 ## What a consumer MAY NOT rely on
 
-- Internal TypeScript shapes from `@spatula/core`, `@spatula/db`, `@spatula/queue`, `@spatula/api`, `@spatula/shared`. These packages publish for SaaS-style downstream consumers (per `docs/private-contract.md`) but carry **no compat guarantee** for arbitrary external imports.
+- Internal TypeScript shapes from `@spatula/core`, `@spatula/db`, `@spatula/queue`, `@spatula/api`, `@spatula/shared`. These implementation packages carry **no compat guarantee** for external imports.
 - The `details` payload of any specific error code — the envelope is frozen but the `details` content evolves freely per error site as new context is added. Pattern-match on `code` (the frozen DOMAIN.CODE string), not on `details` shape.
 - Pre-1.0 surfaces (`0.x` series) — these are tracking releases and may break between minors.
 
 ---
 
-_Last reviewed: 2026-05-19 (Phase 16, plan 16-3)._
+_Last reviewed: 2026-07-12._

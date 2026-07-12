@@ -50,10 +50,10 @@ export interface JwtProviderConfig {
    * Dex browser OIDC tokens contain no application-level scopes claim (same
    * limitation as M2M tokens — Dex rejects custom scopes). Without this option,
    * ALL scope-less JWTs that are not positively identified M2M clients resolve
-   * to `[]` (fail-closed). That is correct for production (a real SaaS would
-   * derive scopes from a subscription/role tier at the application layer), but
-   * it makes the browser e2e test inoperable because the test user can never
-   * reach scope-gated endpoints.
+   * to `[]` (fail-closed). Production deployments should derive scopes from
+   * their own role or policy mapping at the application layer, but that makes
+   * the browser e2e test inoperable because the test user can never reach
+   * scope-gated endpoints.
    *
    * This option lets a test server explicitly grant browser OIDC users a known
    * scope set. Production servers MUST NOT set this — leave it undefined.

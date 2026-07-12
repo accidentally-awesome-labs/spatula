@@ -129,12 +129,10 @@ Render enforces a limit of **one free PostgreSQL database** and **one free Key V
 
 ---
 
-## EXEC-05 Live Re-verify Procedure (Phase 19.1 — clearing the 19-05 caveat)
+## Live Re-verify Procedure
 
-The Phase 19-05 live deploy confirmed the worker starts and `/health` returns 200, but a real
-crawl DLQ'd with `WorkerDeps not initialized`. Phase 19.1 fixed the three gaps
-(worker DI, per-job LLM config, usage recording). This section documents how to re-verify
-a live crawl on the Render embedded-worker deploy.
+This procedure verifies that the worker starts, `/health` returns 200, and a real
+crawl completes on the Render embedded-worker deploy.
 
 ### Distroless → Firecrawl requirement
 

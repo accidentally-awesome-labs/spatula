@@ -175,4 +175,3 @@ SPATULA_LIVE_LLM=1 SPATULA_ADVERSARIAL_MODEL=ollama OLLAMA_BASE_URL=http://local
 - Spec §3.7.2 — Prompt-injection defense: 7 mitigations and 10 attack classes
 - `packages/core/src/extraction/output-scanner.ts` — Output-content scanner (prompt-echo / field-leak / cap-hit)
 - `packages/core/src/extraction/static-extractor.ts` — Hardened extractor (all 7 mitigations)
-- `.planning/phases/18-security-hardening-legal/18-CONTEXT.md` — Phase 18 design decisions

@@ -2,13 +2,15 @@
 
 This document describes the internal architecture of Spatula — the package structure, data flow, core interfaces, action system, and LLM integration points.
 
-## OSS / Private-SaaS Carve-out (v1.1, Phase 15)
+## OSS Package Boundary
 
-As of v1.1, all commercial-tier infrastructure (payment integration, tenant-tier presets, usage aggregation, hourly meter worker, payment-webhook handlers) lives in the private `accidentally-awesome-labs/spatula-saas` repo. The OSS server (this repo) deploys with **zero commercial-tier surface area**. Self-hosters use the config-driven `DEFAULT_RATE_LIMIT` constant and per-tenant `TenantQuotas` (no tier presets).
+The public repository contains the local CLI, the self-hosted API server, queue workers, migrations, SDK, and implementation packages needed to run Spatula. Commercial billing, subscription, and payment-provider infrastructure is not part of this OSS repo.
 
-The 5-package OSS surface that the private `spatula-saas` repo consumes (`@spatula/{core,db,queue,shared,api}`) is frozen by the reverse-contract test suite in `tests/private-contract/` (TS-symbol freeze + SQL schema lint via `pg_dump`). The authoritative surface enumeration plus a residual-risk register lives in [`docs/private-contract.md`](./private-contract.md). The forward-contract suite in `tests/carveout/` proves the OSS-only server boots and serves its post-carve API contract end-to-end.
+The supported public surfaces are the REST API, `@spatula/client`, `@spatula/core-types`, and `@spatula/cli`. The `@spatula/core`, `@spatula/db`, `@spatula/queue`, `@spatula/shared`, and `@spatula/api` packages are implementation packages with no TypeScript API compatibility guarantee for external imports.
 
-Migration history is namespaced: the OSS migrations track via `drizzle.__drizzle_migrations_oss`, and the private repo reserves `drizzle.__drizzle_migrations_saas`. A single Postgres instance can host both. See [`docs/runbooks/upgrade.md`](./runbooks/upgrade.md) for the no-migration-downgrade + expand-contract-only policies that govern post-v1 schema evolution.
+The forward carve-out suite in `tests/carveout/` proves the OSS server boots without billing or payment-provider endpoints. Self-hosters use the config-driven `DEFAULT_RATE_LIMIT` constant and per-tenant `TenantQuotas`.
+
+Migration history is tracked in `drizzle.__drizzle_migrations_oss`. See [`docs/runbooks/upgrade.md`](./runbooks/upgrade.md) for the no-migration-downgrade and expand-contract-only policies that govern post-v1 schema evolution.
 
 ## Package Dependency Graph
 

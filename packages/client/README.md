@@ -35,7 +35,7 @@ The 50 kB limit measures ONLY the named surface above (`SpatulaClient` + 3 metho
 
 ## Experimental namespace
 
-`client.experimental` is reserved. v1.0 ships zero experimental surfaces. The first surface (admin forensic-extractions endpoint) lands in Phase 18 per `docs/deprecation-policy.md`. Until then, any access throws.
+`client.experimental` is reserved. v1.0 ships zero experimental surfaces. Future experimental surfaces will be documented in `docs/deprecation-policy.md`. Until then, any access throws.
 
 ```typescript
 // v1.0 — throws:

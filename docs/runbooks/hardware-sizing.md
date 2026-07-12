@@ -214,7 +214,7 @@ Crawl duration  = pages × (wall-clock/page for your tier) / concurrency_factor
 
 ---
 
-## Local Smoke Verification (Phase 19.1)
+## Local Smoke Verification
 
 **Date:** 2026-06-12
 **Harness invocation:**
@@ -244,11 +244,11 @@ The usage recorder IS wired and records tokens correctly — `byJob` attribution
 Cost will be non-zero when the sizing harness is run with paid models (e.g. Anthropic Claude).
 The 1k-page-per-tier table (DEPLOY-09) should use the model pricing at time of measurement.
 
-**Key proof:** The embedded worker (Phase 19.1 fixes applied) processes crawl jobs without
+**Key proof:** The embedded worker processes crawl jobs without
 DLQ-ing (`WorkerDeps not initialized` bug fixed). LLM usage attributed to correct jobId.
 The full 1k-page CX32 measurement (DEPLOY-09 D-02/D-03) remains for the live-run checkpoint.
 
 ---
 
-_Runbook version: 1.1 — Phase 19.1 local smoke recorded 2026-06-12_
+_Runbook version: 1.1 — local smoke recorded 2026-06-12_
 _Re-run harness: `pnpm sizing:baseline` — see `scripts/sizing-baseline.ts`_

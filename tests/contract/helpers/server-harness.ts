@@ -1,11 +1,11 @@
 /**
- * Contract test server harness — Phase 16 plan 16-4.
+ * Contract test server harness.
  *
  * Boots the apps/api Hono app behind a Node-builtin `http.Server`, captures the
  * randomly-assigned port, and exposes a `{ url, close }` handle to the suite.
  *
  * REUSES the Node-builtin http.Server adapter pattern from
- * `tests/carveout/fixtures/server.ts` (Phase 15) so we don't introduce
+ * `tests/carveout/fixtures/server.ts` so we don't introduce
  * `@hono/node-server` at the workspace root. The trade-off is ~30 lines of
  * Node-→-Fetch adapter glue, but the gain is zero workspace-dependency-
  * resolution gotchas (the adapter compiles against `node:http` + the standard
@@ -16,11 +16,10 @@
  * `/api/v1/openapi.json`, and iterates the served spec across many describe
  * blocks. Per-test boots would push suite runtime past the 30s hookTimeout.
  *
- * Plan dependency note: this harness exercises the GET /api/v1/openapi.json
- * endpoint from plan 16-3 (apps/api/src/routes/openapi.ts). If 16-3's
- * mount-points are not yet committed at the time this suite runs, the matrix
- * driver in generated.test.ts will skip its dynamic discovery and rely on the
- * explicit per-REQ suites (errors / headers / deprecation / etc) instead.
+ * This harness exercises the GET /api/v1/openapi.json endpoint. If the endpoint
+ * is unavailable, the matrix driver in generated.test.ts skips dynamic discovery
+ * and relies on the explicit per-REQ suites (errors / headers / deprecation /
+ * etc) instead.
  */
 
 import { createHash, randomBytes } from 'node:crypto';

@@ -23,8 +23,8 @@ salar.sayyad@gmail.com
 
 ## Conclusion
 
-There is only one contributor. No third-party pre-sign outreach is required (per Phase 18
-CONTEXT.md D-03 — solo contributor). All copyright in this repository is held by the
-sole author. The `LICENSE` copyright line has been updated to reflect the legal entity
+There is only one contributor. No third-party pre-sign outreach is required.
+All copyright in this repository is held by the sole author. The `LICENSE`
+copyright line has been updated to reflect the legal entity
 **Accidentally Awesome Labs**, which is the registered business entity under which
 Salar Sayyad operates.

@@ -199,7 +199,7 @@ It is consumed atomically via `GETDEL` on first use — it cannot be replayed.
 Single-use tokens passed via `?token=` may appear in access logs. The 60-second
 TTL and single-use guarantee mean that a token recorded in a log cannot be
 replayed. Reverse-proxy access-log masking is **recommended** and is documented
-in `docs/runbooks/reverse-proxy.md` (Phase 19 deliverable).
+in `docs/runbooks/reverse-proxy.md`.
 
 ### Browser HTTP/1.1 EventSource connection limit
 
@@ -209,8 +209,8 @@ limit, causing new connections to queue or fail silently.
 
 **Mitigation:** Enable HTTP/2 on your reverse proxy (nginx, Caddy, etc.).
 HTTP/2 multiplexes SSE streams over a single TCP connection, removing the 6-connection
-browser limit. The local development server uses HTTP/1.1; the limit applies
-only in that context and is a Phase 19 reverse-proxy concern.
+browser limit. The local development server uses HTTP/1.1, so this limit applies
+only in local development or reverse proxies that force HTTP/1.1.
 
 ---
 
@@ -306,4 +306,4 @@ working local OIDC stack for development and M2M testing.
 
 ---
 
-_Last updated: Phase 17 (browser-auth-sse-cors). Maintained alongside `packages/shared/src/auth/types.ts`._
+_Last reviewed: 2026-07-12. Maintained alongside `packages/shared/src/auth/types.ts`._

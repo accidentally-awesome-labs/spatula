@@ -2,13 +2,11 @@
 # scripts/normalize-schema-dump.sh
 #
 # Normalizes pg_dump --schema-only output so that two dumps produced by
-# different application paths (sequential 0000-0011 vs squashed
-# 0000_v1_baseline.sql) are byte-comparable.
+# different application paths or environments are byte-comparable.
 #
 # Usage:   pg_dump --schema-only ... | ./scripts/normalize-schema-dump.sh > dump.sql
 #
-# Normalization steps (per .planning/phases/15-carveout-migration-squash/15-CONTEXT.md
-# §"Migration Squash Equivalence" / "Specifics"):
+# Normalization steps:
 #   - Strip pg_dump preamble/timestamp/comment lines
 #     ("Dumped from database version", "Dumped by pg_dump", "PostgreSQL database
 #      dump" header + "complete" footer, "Started on", "Completed on")
@@ -18,9 +16,7 @@
 #     fresh random token on every dump, so these would create false-positive
 #     diffs between any two dump runs.
 #   - Skip COPY blocks targeting any __drizzle_migrations* table — migration
-#     journal data is not part of the schema equivalence proof and varies
-#     trivially between the two application paths (one row per migration vs
-#     a single row for the squash).
+#     journal data is not part of schema comparison and varies between runs.
 #   - Strip `ALTER TABLE ... OWNER TO ...` and `ALTER ... OWNER TO ...`. Object
 #     ownership is a deployment-time concern (depends on which DB role psql
 #     connected as), not part of the schema definition. Local macOS Homebrew

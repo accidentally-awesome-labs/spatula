@@ -23,7 +23,7 @@ const PUBLIC_DOC_INPUTS = [
   'packages/shared/README.md',
 ];
 
-const SKIP_DIRS = new Set(['.git', 'node_modules', 'docs/plans', 'docs/superpowers']);
+const SKIP_DIRS = new Set(['.git', 'node_modules']);
 
 const TEXT_EXTENSIONS = new Set(['.md', '.json']);
 
@@ -60,6 +60,46 @@ const STALE_PATTERNS: Array<{ pattern: RegExp; message: string }> = [
     pattern: /all with field-level provenance/i,
     message: 'only JSON exports currently include optional provenance',
   },
+  {
+    pattern: /spatula-saas/i,
+    message: 'do not reference private downstream repositories in public docs',
+  },
+  {
+    pattern: /docs\/private-contract\.md/i,
+    message: 'private-contract documentation is not part of the public OSS surface',
+  },
+  {
+    pattern: /tests\/private-contract/i,
+    message: 'private-contract tests are not part of the public OSS surface',
+  },
+  {
+    pattern: /docs\/superpowers/i,
+    message: 'internal planning archives are not part of the public OSS docs',
+  },
+  {
+    pattern: /docs\/plans/i,
+    message: 'internal planning archives are not part of the public OSS docs',
+  },
+  {
+    pattern: /\.planning/i,
+    message: 'local agent planning files are not part of the public OSS docs',
+  },
+  {
+    pattern: /\bPhase\s+\d+/i,
+    message: 'public docs should use durable release/product language, not internal phase labels',
+  },
+  {
+    pattern: /\bWave\s+\d+/i,
+    message: 'public docs should use durable release/product language, not internal wave labels',
+  },
+];
+
+const FORBIDDEN_PUBLIC_PATHS = [
+  'docs/private-contract.md',
+  'docs/legal/uspto-tess-search.md',
+  'docs/plans',
+  'docs/superpowers',
+  'tests/private-contract',
 ];
 
 function isSkipped(path: string): boolean {
@@ -100,6 +140,12 @@ function registeredCliCommands(): Set<string> {
 }
 
 describe('public documentation guard', () => {
+  it('does not include internal planning, private-contract, or legal research artifacts', () => {
+    const present = FORBIDDEN_PUBLIC_PATHS.filter((path) => existsSync(join(root, path)));
+
+    expect(present).toEqual([]);
+  });
+
   it('does not contain stale hosted-service, repo, or unsupported CLI references', () => {
     const failures: string[] = [];
 

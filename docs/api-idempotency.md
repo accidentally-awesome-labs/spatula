@@ -1,6 +1,6 @@
 # Idempotency keys
 
-> Documented in Phase 16 plan 16-4; functionality already implemented in Wave 3-4. See `apps/api/src/middleware/idempotency.ts`.
+> See `apps/api/src/middleware/idempotency.ts` for the server implementation.
 
 ## What it solves
 

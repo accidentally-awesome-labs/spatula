@@ -217,13 +217,13 @@ spatula admin tenant delete --tenant <id> [--yes]
 
 ## Secret management
 
-| Secret                        | Where stored                        | Rotation                  |
-| ----------------------------- | ----------------------------------- | ------------------------- |
-| `DATABASE_URL`                | Environment variable / secret store | Manual, per-deploy        |
-| `REDIS_URL`                   | Environment variable / secret store | Manual, per-deploy        |
-| `JWT_JWKS_URL` / `JWT_ISSUER` | Environment variable                | OIDC provider rotation    |
-| `OPENROUTER_API_KEY`          | Environment variable                | Manual, per-billing cycle |
-| API keys (raw)                | Shown to user once, never stored    | User-driven rotation      |
+| Secret                        | Where stored                        | Rotation                    |
+| ----------------------------- | ----------------------------------- | --------------------------- |
+| `DATABASE_URL`                | Environment variable / secret store | Manual, per-deploy          |
+| `REDIS_URL`                   | Environment variable / secret store | Manual, per-deploy          |
+| `JWT_JWKS_URL` / `JWT_ISSUER` | Environment variable                | OIDC provider rotation      |
+| `OPENROUTER_API_KEY`          | Environment variable                | Manual, per provider policy |
+| API keys (raw)                | Shown to user once, never stored    | User-driven rotation        |
 
 No secrets are committed to the repository. `.env` files are gitignored.
 

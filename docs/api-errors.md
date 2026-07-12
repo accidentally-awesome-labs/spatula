@@ -1,6 +1,6 @@
 # Spatula API errors
 
-> Frozen v1 error-code enum + envelope reference. The authoritative source is `packages/core-types/src/errors/codes.ts` (canonical home as of Phase 16 plan 16-2; re-exported via `@spatula/shared` for back-compat).
+> Frozen v1 error-code enum + envelope reference. The authoritative source is `packages/core-types/src/errors/codes.ts`; `@spatula/shared` re-exports it for backward compatibility.
 
 ## Envelope
 
@@ -93,7 +93,7 @@ Unknown codes fall back to the base `SpatulaApiError` (forward-compatible — cl
 
 ## Cross-references
 
-- `docs/compat-policy.md` — SDK ↔ server ↔ core-types compat matrix (per Phase 16 plan 16-3).
+- `docs/compat-policy.md` — SDK ↔ server ↔ core-types compat matrix.
 - `docs/api-idempotency.md` — `Idempotency-Key` worked examples.
 - `docs/deprecation-policy.md` — experimental-tag + Deprecation/Sunset policy.
 - `packages/core-types/src/errors/codes.ts` — canonical source.

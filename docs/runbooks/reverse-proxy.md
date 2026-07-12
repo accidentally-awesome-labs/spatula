@@ -218,11 +218,10 @@ api.spatula.example.com {
 - `docs/runbooks/nginx.conf` — the full nginx config with inline comments
 - `docs/runbooks/upgrade.md` — upgrade policy and migration runbook
 - `docs/runbooks/backup-restore.md` — backup and restore procedures
-- Phase 17 deliverable: SSE job events with `?token=` stream tokens; see `apps/api/src/sse/` and `apps/api/src/server.ts`
+- SSE job events with `?token=` stream tokens; see `apps/api/src/sse/` and `apps/api/src/server.ts`
 
 ---
 
-_Phase: 19-deployment-self-host-excellence_
-_Authored: 2026-06-10 (Plan 19-08)_
+_Last reviewed: 2026-07-12._
 _nginx recipe: tested (nginx 1.25+, token log-masking verified in access logs per SC#5)_
 _traefik / caddy: not first-party tested — community contributions welcome_
