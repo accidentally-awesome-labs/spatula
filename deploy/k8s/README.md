@@ -2,7 +2,7 @@
 
 Kustomize-based k8s manifests for self-hosting Spatula.
 
-- **`base/`** — namespace, secrets, migrate Job, api + worker Deployments, api Service
+- **`base/`** — namespace, migrate Job, api + worker Deployments, api Service
 - **`overlays/dev/`** — kind-self-contained (throwaway in-cluster Postgres + Redis)
 - **`overlays/prod/`** — external managed Postgres + Redis, pinned image tags, 2 replicas
 
@@ -125,19 +125,23 @@ kubectl wait --for=condition=complete job/spatula-migrate -n spatula --timeout=3
 The `overlays/prod/` overlay:
 
 - References `../../base` only (no stub pods)
+- Does not create a Secret; operators must supply `spatula-secrets`
 - Pins image tags to a specific release (default placeholder `1.0.0` — update before deploy)
 - Sets api + worker replicas to 2
 - Adds resource requests/limits
 
 ### External Services Contract
 
-Prod assumes operator-supplied managed Postgres 16+ and Redis 7+. The `spatula-secrets` Secret **must** be overridden before applying:
+Prod assumes operator-supplied managed Postgres 16+ and Redis 7+. Create the
+`spatula-secrets` Secret **before** applying the prod overlay:
 
 ```bash
 kubectl create secret generic spatula-secrets -n spatula \
   --from-literal=DATABASE_URL="postgresql://user:pass@managed-host:5432/spatula" \
   --from-literal=REDIS_URL="redis://managed-redis:6379" \
   --from-literal=OPENROUTER_API_KEY="sk-or-..." \
+  --from-literal=AUTH_STRATEGY="api-key" \
+  --from-literal=TENANT_CREATION_SECRET="<random-secret>" \
   --save-config --dry-run=client -o yaml | kubectl apply -f -
 ```
 
@@ -155,7 +159,10 @@ kubectl rollout status deployment/spatula-worker -n spatula
 
 ## Secrets Management Upgrade Paths (D-08)
 
-The `base/secrets.yaml` ships with clearly-marked `REPLACE_ME` placeholder values. For production:
+The base overlay intentionally does not ship a Secret resource. The dev overlay
+generates local-only credentials with Kustomize `secretGenerator`; production
+must use one of the paths below. `base/secrets.example.yaml` is a reference
+template only and is not applied by any overlay.
 
 ### Option A — kubectl (manual, simplest)
 
@@ -164,6 +171,8 @@ kubectl create secret generic spatula-secrets -n spatula \
   --from-literal=DATABASE_URL="..." \
   --from-literal=REDIS_URL="..." \
   --from-literal=OPENROUTER_API_KEY="..." \
+  --from-literal=AUTH_STRATEGY="api-key" \
+  --from-literal=TENANT_CREATION_SECRET="<random-secret>" \
   --save-config --dry-run=client -o yaml | kubectl apply -f -
 ```
 
@@ -171,7 +180,9 @@ kubectl create secret generic spatula-secrets -n spatula \
 
 [External Secrets Operator](https://external-secrets.io) syncs secrets from AWS Secrets Manager, GCP Secret Manager, HashiCorp Vault, Azure Key Vault, and more.
 
-Replace `base/secrets.yaml` with an `ExternalSecret` + `SecretStore` manifest pair pointing at your secrets provider. The Secret name (`spatula-secrets`) must remain the same.
+Add an `ExternalSecret` + `SecretStore` manifest pair to your production overlay
+pointing at your secrets provider. The generated Secret name
+(`spatula-secrets`) must remain the same.
 
 ### Option C — Sealed Secrets (GitOps-friendly)
 
@@ -185,7 +196,7 @@ kubectl create secret generic spatula-secrets -n spatula \
   kubeseal --controller-name=sealed-secrets -o yaml > overlays/prod/sealed-secrets.yaml
 ```
 
-Add `sealed-secrets.yaml` to `overlays/prod/kustomization.yaml` resources and remove the base `secrets.yaml` reference.
+Add `sealed-secrets.yaml` to `overlays/prod/kustomization.yaml` resources.
 
 ---
 
@@ -196,7 +207,7 @@ deploy/k8s/
 ├── base/
 │   ├── kustomization.yaml         # lists all base resources
 │   ├── namespace.yaml             # spatula namespace
-│   ├── secrets.yaml               # placeholder Secret (D-08)
+│   ├── secrets.example.yaml       # reference only; not applied
 │   ├── migrate-job.yaml           # one-shot Job; backoffLimit 3
 │   ├── api-deployment.yaml        # startupProbe ordering; nonroot uid 65532
 │   ├── api-service.yaml           # ClusterIP port 3000

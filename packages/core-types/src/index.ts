@@ -31,6 +31,8 @@ export {
   LLMConfig,
   LLMModelOverrides,
   ReconciliationConfig,
+  WebhookConfig,
+  WebhookEventType,
   EntityMatchStrategy,
   ConflictResolution,
 } from './schemas/job.js';

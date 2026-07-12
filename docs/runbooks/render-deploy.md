@@ -47,15 +47,15 @@ Or fork to your own GitHub account and proceed from there.
 
 Before clicking **Apply**, set any `sync: false` environment variables (these are NOT stored in the YAML for security):
 
-| Variable                 | Required               | Description                                                   |
-| ------------------------ | ---------------------- | ------------------------------------------------------------- |
-| `OPENROUTER_API_KEY`     | Yes                    | LLM inference key from [openrouter.ai](https://openrouter.ai) |
-| `AUTH_STRATEGY`          | No                     | Auth mode: `none` (default), `api-key`, or `jwt`              |
-| `JWT_ISSUER`             | If `AUTH_STRATEGY=jwt` | OIDC issuer URL                                               |
-| `JWT_AUDIENCE`           | If `AUTH_STRATEGY=jwt` | JWT audience claim                                            |
-| `JWT_JWKS_URL`           | If `AUTH_STRATEGY=jwt` | JWKS endpoint                                                 |
-| `TENANT_CREATION_SECRET` | No                     | Protect `/api/v1/tenants` bootstrap route in production       |
-| `SENTRY_DSN`             | No                     | Sentry error tracking DSN                                     |
+| Variable                 | Required               | Description                                                    |
+| ------------------------ | ---------------------- | -------------------------------------------------------------- |
+| `OPENROUTER_API_KEY`     | Yes                    | LLM inference key from [openrouter.ai](https://openrouter.ai)  |
+| `AUTH_STRATEGY`          | Public deploys         | Auth mode: set `api-key` or `jwt`; `none` is private-demo only |
+| `JWT_ISSUER`             | If `AUTH_STRATEGY=jwt` | OIDC issuer URL                                                |
+| `JWT_AUDIENCE`           | If `AUTH_STRATEGY=jwt` | JWT audience claim                                             |
+| `JWT_JWKS_URL`           | If `AUTH_STRATEGY=jwt` | JWKS endpoint                                                  |
+| `TENANT_CREATION_SECRET` | Public deploys         | Protect `/api/v1/tenants` bootstrap route in production        |
+| `SENTRY_DSN`             | No                     | Sentry error tracking DSN                                      |
 
 ### 4. Apply and wait for the deploy
 
@@ -126,6 +126,80 @@ Upgrade to a paid Postgres plan in the Render dashboard to remove this limit.
 ### One free Postgres + one free Key Value per workspace
 
 Render enforces a limit of **one free PostgreSQL database** and **one free Key Value** per workspace. If you already have other free-tier resources, you may need to remove them or upgrade before deploying this blueprint.
+
+---
+
+## Live Re-verify Procedure
+
+This procedure verifies that the worker starts, `/health` returns 200, and a real
+crawl completes on the Render embedded-worker deploy.
+
+### Distroless → Firecrawl requirement
+
+The distroless Render worker image (`apps/api/Dockerfile.api`) ships **NO Playwright browser
+binaries**. Any crawl submitted to the Render deploy MUST use Firecrawl:
+
+```
+SPATULA_CRAWLER=firecrawl
+FIRECRAWL_API_KEY=<your-key>
+```
+
+Without these, crawl tasks will fail immediately (Playwright not found in the container).
+
+### Service reference
+
+| Property   | Value                                                        |
+| ---------- | ------------------------------------------------------------ |
+| Service ID | `srv-d8lh2q6rnols73dedvog`                                   |
+| URL        | `https://spatula-api.onrender.com`                           |
+| Branch     | `render-paid-demo` (paid mirror — free PG/KV slots occupied) |
+
+### SPATULA_CRAWLER in render.yaml
+
+`render.yaml` does NOT commit `SPATULA_CRAWLER` to git (it's a runtime setting, not blueprint).
+Set it via the Render dashboard on the `spatula-api` Web Service **before** syncing:
+
+1. Render dashboard → `spatula-api` → **Environment** tab
+2. Add: `SPATULA_CRAWLER=firecrawl` (unencrypted, safe to expose)
+3. Add: `FIRECRAWL_API_KEY=<your key>` (mark as **Secret**)
+4. Add/update: `OPENROUTER_API_KEY=<your key>` (mark as **Secret**)
+
+> **Blueprint Sync ≠ deploy.** `render deploys create` reuses the service's stored config.
+> Only a Dashboard Blueprint Sync picks up `render.yaml` changes. The OSS repo has no
+> auto-sync webhook, so pushes do NOT auto-deploy.
+
+### Re-verify steps (EXEC-05)
+
+```bash
+# 1. Push 19.1 fixes to the deploy branch
+git push origin main:render-paid-demo
+
+# 2. In the Render dashboard:
+#    a. Set OPENROUTER_API_KEY, SPATULA_CRAWLER=firecrawl, FIRECRAWL_API_KEY as above
+#    b. Navigate to the Blueprint → click "Sync" (NOT just redeploy)
+#    c. Wait for the deploy to complete and /health to return 200
+
+# 3. Verify health
+curl https://spatula-api.onrender.com/health
+curl https://spatula-api.onrender.com/health/ready
+
+# 4. Run the sizing smoke (Firecrawl crawler, small page count to limit cost):
+SPATULA_LIVE_LLM=1 \
+  SIZING_PAGES=3 SIZING_MAX_DEPTH=5 \
+  SIZING_CRAWLER=firecrawl \
+  SPATULA_API_URL=https://spatula-api.onrender.com \
+  pnpm sizing:baseline
+
+# 5. Confirm results:
+#    - At least one tier job reaches 'completed' with stats.pagesCompleted > 0
+#    - GET https://spatula-api.onrender.com/api/v1/usage?period=1d shows:
+#        totalCostUsd > 0 (or tokens > 0 if model is free-tier)
+#        byJob contains the job's entry
+```
+
+**Success criteria (EXEC-05):** A job submitted to the Render deploy reaches `completed` with
+`pagesCompleted > 0` and the `/usage` endpoint records tokens (and cost if model is paid).
+This clears the 19-05/DEPLOY-02 caveat (worker was starting but couldn't process crawls).
 
 ---
 

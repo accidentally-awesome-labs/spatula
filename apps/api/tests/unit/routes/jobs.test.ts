@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { createApp } from '../../../src/app.js';
 import type { AppDeps } from '../../../src/types.js';
 import type { Pool } from 'pg';
@@ -26,7 +26,15 @@ function createMockDeps(): AppDeps {
     actionRepo: {
       countByJobAndStatus: vi.fn().mockResolvedValue(0),
     } as any,
-    taskRepo: {} as any,
+    taskRepo: {
+      getJobStats: vi.fn().mockResolvedValue({
+        pending: 0,
+        inProgress: 0,
+        completed: 0,
+        failed: 0,
+        skipped: 0,
+      }),
+    } as any,
     jobManager: {
       createJob: vi.fn().mockResolvedValue('job-1'),
       startJob: vi.fn(),
@@ -43,12 +51,28 @@ function createMockDeps(): AppDeps {
 
 const headers = { 'x-tenant-id': TENANT_ID, 'Content-Type': 'application/json' };
 const tenantHeader = { 'x-tenant-id': TENANT_ID };
+const ORIGINAL_PRIVATE_CRAWL_FLAG = process.env.SPATULA_ALLOW_PRIVATE_CRAWL_URLS;
+const ORIGINAL_NODE_ENV = process.env.NODE_ENV;
 
 describe('POST /api/v1/jobs', () => {
   let deps: AppDeps;
 
   beforeEach(() => {
     deps = createMockDeps();
+  });
+
+  afterEach(() => {
+    vi.unstubAllEnvs();
+    if (ORIGINAL_PRIVATE_CRAWL_FLAG === undefined) {
+      delete process.env.SPATULA_ALLOW_PRIVATE_CRAWL_URLS;
+    } else {
+      process.env.SPATULA_ALLOW_PRIVATE_CRAWL_URLS = ORIGINAL_PRIVATE_CRAWL_FLAG;
+    }
+    if (ORIGINAL_NODE_ENV === undefined) {
+      delete process.env.NODE_ENV;
+    } else {
+      process.env.NODE_ENV = ORIGINAL_NODE_ENV;
+    }
   });
 
   it('creates a job and returns 201', async () => {
@@ -98,6 +122,50 @@ describe('POST /api/v1/jobs', () => {
     });
 
     expect(res.status).toBe(400);
+  });
+
+  it('rejects private seed URLs in production', async () => {
+    process.env.NODE_ENV = 'production';
+    process.env.SPATULA_ALLOW_PRIVATE_CRAWL_URLS = '0';
+
+    const app = createApp(deps);
+    const res = await app.request('/api/v1/jobs', {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({
+        name: 'Test',
+        description: 'Test',
+        seedUrls: ['http://169.254.169.254/latest/meta-data'],
+        crawl: {},
+        schema: { mode: 'discovery' },
+        llm: {},
+      }),
+    });
+
+    expect(res.status).toBe(400);
+    expect(deps.jobManager.createJob).not.toHaveBeenCalled();
+  });
+
+  it('allows private seed URLs outside production for local harnesses', async () => {
+    process.env.NODE_ENV = 'test';
+    delete process.env.SPATULA_ALLOW_PRIVATE_CRAWL_URLS;
+
+    const app = createApp(deps);
+    const res = await app.request('/api/v1/jobs', {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({
+        name: 'Test',
+        description: 'Test',
+        seedUrls: ['http://localhost:3100/fixture'],
+        crawl: {},
+        schema: { mode: 'discovery' },
+        llm: {},
+      }),
+    });
+
+    expect(res.status).toBe(201);
+    expect(deps.jobManager.createJob).toHaveBeenCalled();
   });
 });
 
@@ -171,6 +239,22 @@ describe('GET /api/v1/jobs/:id', () => {
     expect(res.status).toBe(200);
     const body = await res.json();
     expect(body.data.id).toBe('job-1');
+  });
+
+  it('defaults crawl progress stats when task stats repo is unavailable', async () => {
+    (deps as any).taskRepo = {};
+    const app = createApp(deps);
+    const res = await app.request('/api/v1/jobs/job-1', { headers: tenantHeader });
+
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body.data.stats).toMatchObject({
+      pagesCompleted: 0,
+      pagesPending: 0,
+      pagesInProgress: 0,
+      pagesFailed: 0,
+      pagesSkipped: 0,
+    });
   });
 
   it('returns 404 when job not found', async () => {

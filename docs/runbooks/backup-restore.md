@@ -68,7 +68,7 @@ pg_dump \
 - `--no-acl`: omits GRANT/REVOKE statements; re-apply access grants after restore if needed.
 - The dump file is plain-text SQL (default format). Use `-Fc` for the custom format if you want parallel restore with `pg_restore -j`.
 
-**pg_dump 14+ `\restrict` / `\unrestrict` tokens:** pg_dump 14+ may emit psql metacommands (`\restrict`, `\unrestrict`) as random tokens in the output. These are harmless for `psql` restore but can confuse schema-diff tooling. The Spatula migration-equivalence CI normalizer (Phase 15) already strips these. No action needed for a standard restore.
+**pg_dump 14+ `\restrict` / `\unrestrict` tokens:** pg_dump 14+ may emit psql metacommands (`\restrict`, `\unrestrict`) as random tokens in the output. These are harmless for `psql` restore but can confuse schema-diff tooling. `scripts/normalize-schema-dump.sh` strips these when maintainers need deterministic schema comparisons. No action is needed for a standard restore.
 
 **For Postgres-backed content store:** The `content_store` table travels with the pg_dump. No separate step required.
 

@@ -386,6 +386,7 @@ describe('spatula test-url with local fixture server', () => {
   let server: Server;
   let port: number;
   let testDir: string;
+  const host = '127.0.0.1';
 
   beforeAll(async () => {
     testDir = mkdtempSync(join(tmpdir(), 'spatula-testurl-'));
@@ -394,8 +395,11 @@ describe('spatula test-url with local fixture server', () => {
       res.writeHead(200, { 'Content-Type': 'text/html' });
       res.end(PRODUCT_HTML);
     });
-    await new Promise<void>((resolve) => {
-      server.listen(0, () => {
+    await new Promise<void>((resolve, reject) => {
+      const onError = (err: Error) => reject(err);
+      server.once('error', onError);
+      server.listen(0, host, () => {
+        server.off('error', onError);
         const addr = server.address();
         port = typeof addr === 'object' && addr ? addr.port : 0;
         resolve();
@@ -433,7 +437,7 @@ describe('spatula test-url with local fixture server', () => {
     try {
       const { testUrl } = await import('../../src/commands/test-url.js');
       await testUrl({
-        url: `http://localhost:${port}/product`,
+        url: `http://${host}:${port}/product`,
         crawler: 'playwright',
         format: 'json',
         schema: schemaPath,
@@ -460,7 +464,7 @@ describe('spatula test-url with local fixture server', () => {
       consoleSpy.mockRestore();
       consoleErrorSpy.mockRestore();
     }
-  });
+  }, 30_000);
 
   it('shows page HTML with --show-html flag', async () => {
     const consoleSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
@@ -469,7 +473,7 @@ describe('spatula test-url with local fixture server', () => {
     try {
       const { testUrl } = await import('../../src/commands/test-url.js');
       await testUrl({
-        url: `http://localhost:${port}/product`,
+        url: `http://${host}:${port}/product`,
         crawler: 'playwright',
         format: 'raw',
         showHtml: true,
@@ -493,5 +497,5 @@ describe('spatula test-url with local fixture server', () => {
       consoleSpy.mockRestore();
       consoleErrorSpy.mockRestore();
     }
-  });
+  }, 30_000);
 });

@@ -1,4 +1,5 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
+import { ErrorCode } from '@spatula/shared';
 import {
   setupAuthContext,
   bearerHeaders,
@@ -80,7 +81,7 @@ describe('Tier 5B: API Key Authentication & Scope Enforcement', () => {
     });
     expect(res.status).toBe(401);
     const body = await res.json();
-    expect(body.error.code).toBe('AUTH_ERROR');
+    expect(body.error.code).toBe(ErrorCode.AUTH_INVALID_TOKEN);
   });
 
   // ── Test 5: Key with jobs:read → GET jobs succeeds ─────────────────
@@ -109,7 +110,7 @@ describe('Tier 5B: API Key Authentication & Scope Enforcement', () => {
     });
     expect(res.status).toBe(403);
     const body = await res.json();
-    expect(body.error.code).toBe('FORBIDDEN');
+    expect(body.error.code).toBe(ErrorCode.AUTH_INSUFFICIENT_SCOPE);
   });
 
   // ── Test 7: Admin scope → all endpoints succeed ────────────────────

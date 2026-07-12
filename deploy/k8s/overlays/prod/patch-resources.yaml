@@ -1,9 +1,8 @@
 # Prod overlay — resource requests/limits + replica counts.
 #
-# ⚠️  Prod overlay assumes operator-supplied managed Postgres + Redis.
-# The dev-default DATABASE_URL / REDIS_URL in base/secrets.yaml MUST be
-# overridden before applying this overlay. See deploy/k8s/README.md for
-# the external-secrets / sealed-secrets upgrade path.
+# Prod overlay assumes operator-supplied managed Postgres + Redis and a real
+# spatula-secrets Secret. The base overlay intentionally does not create a
+# placeholder Secret, so production cannot accidentally roll out dev defaults.
 #
 # Typical approach:
 #   kubectl create secret generic spatula-secrets -n spatula \

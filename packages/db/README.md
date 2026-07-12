@@ -1,6 +1,6 @@
 # @spatula/db
 
-> **NO COMPAT GUARANTEE AT TS-API LEVEL.** This is an **INTERNAL** Spatula package published to npm so the private `spatula-saas` repo can install it. Breaking changes to its TypeScript surface may land in any **MINOR** release. Outside consumers should not rely on it. The PUBLIC packages with semver-stable TypeScript surfaces are: `@spatula/client`, `@spatula/core-types`, `@spatula/cli`. See [`docs/compat-policy.md`](https://github.com/accidentally-awesome-labs/spatula/blob/main/docs/compat-policy.md) for the full matrix.
+> **NO COMPAT GUARANTEE AT TS-API LEVEL.** This is an internal Spatula implementation package. Breaking changes to its TypeScript surface may land in any **MINOR** release. External consumers should not import it directly. The public packages with semver-stable TypeScript surfaces are: `@spatula/client`, `@spatula/core-types`, and `@spatula/cli`. See [`docs/compat-policy.md`](https://github.com/accidentally-awesome-labs/spatula/blob/main/docs/compat-policy.md) for the full matrix.
 
 ## Purpose
 
@@ -12,4 +12,4 @@ Drizzle ORM schemas, repositories, and migrations for Spatula. Backs both Postgr
 
 ## Compatibility
 
-This package is published to satisfy the private `spatula-saas` `import { ... } from '@spatula/db'` contract documented in [`docs/private-contract.md`](https://github.com/accidentally-awesome-labs/spatula/blob/main/docs/private-contract.md). Forward-contract enforcement lives in `tests/private-contract/`.
+The TypeScript API is internal and may change between minor versions. Public database upgrade guarantees live in `docs/runbooks/upgrade.md`.

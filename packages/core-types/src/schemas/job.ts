@@ -65,7 +65,7 @@ export const LLMModelOverrides = z.object({
 export type LLMModelOverrides = z.infer<typeof LLMModelOverrides>;
 
 export const LLMConfig = z.object({
-  primaryModel: z.string().default('deepseek/deepseek-v4-pro'),
+  primaryModel: z.string().default('deepseek/deepseek-v4-flash'),
   modelOverrides: LLMModelOverrides.optional(),
 });
 export type LLMConfig = z.infer<typeof LLMConfig>;
@@ -96,6 +96,22 @@ export const ReconciliationConfig = z.object({
 });
 export type ReconciliationConfig = z.infer<typeof ReconciliationConfig>;
 
+export const WebhookEventType = z.enum([
+  'job.completed',
+  'job.failed',
+  'job.cancelled',
+  'export.completed',
+  'action.pending',
+]);
+export type WebhookEventType = z.infer<typeof WebhookEventType>;
+
+export const WebhookConfig = z.object({
+  url: z.string().url(),
+  secret: z.string().min(16).optional(),
+  events: z.array(WebhookEventType).default(['job.completed', 'job.failed']),
+});
+export type WebhookConfig = z.infer<typeof WebhookConfig>;
+
 export const JobConfig = z.object({
   tenantId: z.string().uuid(),
   name: z.string(),
@@ -104,6 +120,7 @@ export const JobConfig = z.object({
   crawl: CrawlConfig.default({}),
   schema: SchemaConfig,
   llm: LLMConfig.default({}),
+  webhooks: WebhookConfig.optional(),
   reconciliation: ReconciliationConfig.optional(),
 });
 export type JobConfig = z.infer<typeof JobConfig>;

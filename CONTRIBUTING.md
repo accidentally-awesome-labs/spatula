@@ -15,7 +15,7 @@ Thank you for your interest in contributing! This guide covers how to set up you
 
 ```bash
 # Clone and install
-git clone https://github.com/spatulaai/spatula.git
+git clone https://github.com/accidentally-awesome-labs/spatula.git
 cd spatula
 pnpm install
 
@@ -27,7 +27,7 @@ cp .env.example .env
 # Edit .env with your settings (at minimum: OPENROUTER_API_KEY)
 
 # Run database migrations
-pnpm --filter @spatula/db migrate
+pnpm --filter @spatula/db db:migrate
 
 # Build all packages
 pnpm build
@@ -126,7 +126,7 @@ See [docs/architecture.md](docs/architecture.md) for a detailed architecture gui
 
 ## Reporting Issues
 
-Use [GitHub Issues](https://github.com/spatulaai/spatula/issues) with the provided templates:
+Use [GitHub Issues](https://github.com/accidentally-awesome-labs/spatula/issues) with the provided templates:
 
 - **Bug reports** — include steps to reproduce, expected vs actual behavior, and your environment
 - **Feature requests** — describe the use case and proposed solution

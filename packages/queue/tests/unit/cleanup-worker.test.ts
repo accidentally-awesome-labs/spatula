@@ -95,7 +95,7 @@ describe('processCleanupJob', () => {
           const queryStr =
             query?.queryChunks?.map((c: any) => c.value ?? c).join('') ?? String(query);
           if (queryStr.includes('content_store') && queryStr.includes('NOT IN')) {
-            return { rows: [{ id: 'orphan-1', key: 'pg://orphan-1' }], rowCount: 1 };
+            return { rows: [{ id: 'orphan-1', key: 'jobs/hash-key' }], rowCount: 1 };
           }
           return { rows: [], rowCount: 0 };
         }),

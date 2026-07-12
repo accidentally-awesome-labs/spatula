@@ -20,6 +20,7 @@ import {
   type FieldConflictValue,
 } from './conflict-resolver.js';
 import { GapFiller } from './gap-filler.js';
+import { isMeaningfulRecord } from '../pipeline/record-utils.js';
 
 const logger = createLogger('data-reconciler');
 
@@ -50,7 +51,9 @@ export class DataReconcilerImpl implements DataReconciler {
     entities: EntityMatch[];
     actions: PipelineAction[];
   }> {
-    if (extractions.length === 0) {
+    const usableExtractions = extractions.filter((ext) => isMeaningfulRecord(ext.data));
+
+    if (usableExtractions.length === 0) {
       return { entities: [], actions: [] };
     }
 
@@ -64,7 +67,7 @@ export class DataReconcilerImpl implements DataReconciler {
     const originalDataMap = new Map<string, Record<string, unknown>>();
     const changeMap = new Map<string, NormalizationChange[]>();
 
-    const normalizedExtractions: ExtractionWithSource[] = extractions.map((ext) => {
+    const normalizedExtractions: ExtractionWithSource[] = usableExtractions.map((ext) => {
       originalDataMap.set(ext.id, { ...ext.data });
       const { normalizedData, changes } = normalizeExtractionData(ext.data, schema);
       changeMap.set(ext.id, changes);
@@ -73,7 +76,7 @@ export class DataReconcilerImpl implements DataReconciler {
 
     logger.debug(
       {
-        extractionCount: extractions.length,
+        extractionCount: usableExtractions.length,
         normalizedCount: normalizedExtractions.filter(
           (ext) => (changeMap.get(ext.id)?.length ?? 0) > 0,
         ).length,
@@ -342,7 +345,7 @@ export class DataReconcilerImpl implements DataReconciler {
       {
         entityCount: entities.length,
         actionCount: allActions.length,
-        extractionCount: extractions.length,
+        extractionCount: usableExtractions.length,
       },
       'data reconciliation pipeline complete',
     );

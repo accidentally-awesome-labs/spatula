@@ -68,6 +68,26 @@ describe('preprocessHTML', () => {
     expect(result.content).toContain('Price');
     expect(result.content).toContain('Widget');
     expect(result.content).toContain('$10');
+    expect(result.content).toContain('Name | Price');
+    expect(result.content).toContain('Widget | $10');
+  });
+
+  it('preserves links and row boundaries inside table cells', () => {
+    const html = `<body><table>
+      <tr class="athing">
+        <td><span class="rank">1.</span></td>
+        <td><a href="https://example.com/story">Story title</a></td>
+      </tr>
+      <tr>
+        <td colspan="2"></td>
+        <td><span class="score">12 points</span> by <a href="user?id=alice">alice</a> | <a href="item?id=1">3 comments</a></td>
+      </tr>
+    </table></body>`;
+    const result = preprocessHTML(html);
+
+    expect(result.content).toContain('1. | Story title [href: https://example.com/story]');
+    expect(result.content).toContain('12 points [class: score] by alice [href: user?id=alice]');
+    expect(result.content).toContain('3 comments [href: item?id=1]');
   });
 
   it('collapses excessive whitespace', () => {
@@ -112,5 +132,27 @@ describe('preprocessHTML', () => {
     const result = preprocessHTML(html);
     expect(result.content).toContain('Visible');
     expect(result.content).not.toContain('Secret');
+  });
+
+  it('preserves semantic rating classes as page evidence', () => {
+    const html = '<body><p class="star-rating Three"><i></i><i></i></p></body>';
+    const result = preprocessHTML(html);
+    expect(result.content).toContain('[class: star-rating Three]');
+  });
+
+  it('preserves item-specific link and title attributes', () => {
+    const html = '<body><a href="/products/1" title="Full Product Name">Short name</a></body>';
+    const result = preprocessHTML(html);
+    expect(result.content).toContain('Short name');
+    expect(result.content).toContain('title: Full Product Name');
+    expect(result.content).toContain('href: /products/1');
+  });
+
+  it('preserves semantic data and aria attributes', () => {
+    const html =
+      '<body><span aria-label="Rated 4.5 out of 5" data-rating="4.5">Stars</span></body>';
+    const result = preprocessHTML(html);
+    expect(result.content).toContain('aria-label: Rated 4.5 out of 5');
+    expect(result.content).toContain('data-rating: 4.5');
   });
 });

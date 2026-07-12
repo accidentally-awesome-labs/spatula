@@ -138,10 +138,18 @@ function createMockDeps(): WorkerDeps {
     },
     jobRepo: {
       findById: vi.fn().mockResolvedValue(mockJob),
+      updateStatus: vi.fn().mockResolvedValue(null),
     } as any,
     taskRepo: {
       updateStatus: vi.fn().mockResolvedValue(null),
       updateClassification: vi.fn().mockResolvedValue(null),
+      getJobStats: vi.fn().mockResolvedValue({
+        pending: 0,
+        inProgress: 0,
+        completed: 0,
+        failed: 0,
+        skipped: 0,
+      }),
       enqueue: vi
         .fn()
         .mockImplementation((input) =>
@@ -852,6 +860,65 @@ describe('processCrawlJob', () => {
     });
   });
 
+  describe('job page budget enforcement', () => {
+    it('does not enqueue child links when job maxPages is already reached', async () => {
+      const data = createJobData({ depth: 1 });
+      (deps.taskRepo as any).getJobStats.mockResolvedValue({
+        pending: 0,
+        inProgress: 0,
+        completed: 1,
+        failed: 0,
+        skipped: 0,
+      });
+      (deps.jobRepo.findById as ReturnType<typeof vi.fn>).mockResolvedValue({
+        id: 'job-1',
+        tenantId: 'tenant-1',
+        description: 'Scrape product data',
+        config: {
+          description: 'Scrape product data',
+          seedUrls: ['https://example.com'],
+          crawl: { maxDepth: 3, maxPages: 1, concurrency: 5, crawlerType: 'playwright' },
+          schema: { mode: 'discovery' },
+        },
+      });
+
+      await processCrawlJob(data, deps);
+
+      expect(deps.taskRepo.enqueue).not.toHaveBeenCalled();
+      expect(deps.queues.crawl.add).not.toHaveBeenCalled();
+    });
+
+    it('enqueues only the remaining number of child links under job maxPages', async () => {
+      const data = createJobData({ depth: 1 });
+      (deps.taskRepo as any).getJobStats.mockResolvedValue({
+        pending: 0,
+        inProgress: 0,
+        completed: 1,
+        failed: 0,
+        skipped: 0,
+      });
+      (deps.jobRepo.findById as ReturnType<typeof vi.fn>).mockResolvedValue({
+        id: 'job-1',
+        tenantId: 'tenant-1',
+        description: 'Scrape product data',
+        config: {
+          description: 'Scrape product data',
+          seedUrls: ['https://example.com'],
+          crawl: { maxDepth: 3, maxPages: 2, concurrency: 5, crawlerType: 'playwright' },
+          schema: { mode: 'discovery' },
+        },
+      });
+
+      await processCrawlJob(data, deps);
+
+      expect(deps.taskRepo.enqueue).toHaveBeenCalledTimes(1);
+      expect(deps.queues.crawl.add).toHaveBeenCalledTimes(1);
+      expect(deps.taskRepo.enqueue).toHaveBeenCalledWith(
+        expect.objectContaining({ url: 'https://example.com/product/2' }),
+      );
+    });
+  });
+
   describe('pipeline hardening integration', () => {
     it('skips task when page budget is exhausted', async () => {
       const data = createJobData();
@@ -899,12 +966,79 @@ describe('processCrawlJob', () => {
         isComplete: vi.fn().mockResolvedValue({
           complete: true,
           reason: 'all_tasks_done',
-          stats: { pending: 0, inProgress: 1, completed: 50, failed: 0, skipped: 0 },
+          stats: { pending: 0, inProgress: 0, completed: 50, failed: 0, skipped: 0 },
         }),
       };
 
       await processCrawlJob(data, deps);
 
+      expect(deps.queues.reconciliation.add).toHaveBeenCalledWith(
+        expect.stringContaining('reconciliation:'),
+        expect.objectContaining({ jobId: data.jobId, tenantId: data.tenantId }),
+      );
+    });
+
+    it('marks job failed when crawl completes with only failed tasks', async () => {
+      const data = createJobData();
+      (deps.crawler.crawl as ReturnType<typeof vi.fn>).mockRejectedValue(
+        new Error('Connection timeout'),
+      );
+      (deps as any).completionChecker = {
+        isComplete: vi.fn().mockResolvedValue({
+          complete: true,
+          reason: 'all_tasks_done',
+          stats: { pending: 0, inProgress: 0, completed: 0, failed: 1, skipped: 0 },
+        }),
+      };
+
+      await processCrawlJob(data, deps);
+
+      expect(deps.jobRepo.updateStatus).toHaveBeenCalledWith('job-1', 'tenant-1', 'failed');
+      expect(deps.queues.reconciliation.add).not.toHaveBeenCalled();
+    });
+
+    it('enqueues reconciliation after a failed task when other pages completed', async () => {
+      const data = createJobData();
+      (deps.crawler.crawl as ReturnType<typeof vi.fn>).mockRejectedValue(
+        new Error('Connection timeout'),
+      );
+      (deps as any).completionChecker = {
+        isComplete: vi.fn().mockResolvedValue({
+          complete: true,
+          reason: 'all_tasks_done',
+          stats: { pending: 0, inProgress: 0, completed: 2, failed: 1, skipped: 0 },
+        }),
+      };
+
+      await processCrawlJob(data, deps);
+
+      expect(deps.jobRepo.updateStatus).not.toHaveBeenCalledWith('job-1', 'tenant-1', 'failed');
+      expect(deps.queues.reconciliation.add).toHaveBeenCalledWith(
+        expect.stringContaining('reconciliation:'),
+        expect.objectContaining({ jobId: data.jobId, tenantId: data.tenantId }),
+      );
+    });
+
+    it('enqueues reconciliation when the final task is skipped', async () => {
+      const data = createJobData();
+      (deps as any).pageBudget = {
+        tryIncrement: () => false,
+        count: 100,
+        remaining: 0,
+        isExhausted: true,
+        maxPages: 100,
+      };
+      (deps as any).completionChecker = {
+        isComplete: vi.fn().mockResolvedValue({
+          complete: true,
+          reason: 'all_tasks_done',
+          stats: { pending: 0, inProgress: 0, completed: 0, failed: 0, skipped: 1 },
+        }),
+      };
+
+      await processCrawlJob(data, deps);
+
+      expect(deps.taskRepo.updateStatus).toHaveBeenCalledWith('task-1', 'tenant-1', 'skipped');
       expect(deps.queues.reconciliation.add).toHaveBeenCalledWith(
         expect.stringContaining('reconciliation:'),
         expect.objectContaining({ jobId: data.jobId, tenantId: data.tenantId }),

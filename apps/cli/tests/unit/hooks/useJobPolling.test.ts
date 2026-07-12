@@ -44,6 +44,30 @@ function TestComponent({
   );
 }
 
+type MockFn = ReturnType<typeof vi.fn>;
+
+function callCount(mock: unknown): number {
+  return (mock as MockFn).mock.calls.length;
+}
+
+async function advanceUntil(
+  predicate: () => boolean,
+  label: string,
+  opts: { stepMs?: number; attempts?: number } = {},
+): Promise<void> {
+  const stepMs = opts.stepMs ?? 50;
+  const attempts = opts.attempts ?? 20;
+
+  for (let i = 0; i < attempts; i++) {
+    if (predicate()) return;
+    await vi.advanceTimersByTimeAsync(stepMs);
+  }
+
+  if (!predicate()) {
+    throw new Error(`Timed out waiting for ${label}`);
+  }
+}
+
 // ---------------------------------------------------------------------------
 // isDataSource type guard
 // ---------------------------------------------------------------------------
@@ -168,7 +192,7 @@ describe('useJobPolling (ApiClient mode)', () => {
 
     render(React.createElement(TestComponent, { store, backend: apiClient, jobId: 'job-1' }));
 
-    await vi.advanceTimersByTimeAsync(100);
+    await advanceUntil(() => store.getState().jobData !== null, 'job data');
 
     expect(apiClient.getJob).toHaveBeenCalledWith('job-1');
     expect(store.getState().jobData).toEqual({ id: 'job-1', name: 'Test Job', status: 'running' });
@@ -180,7 +204,7 @@ describe('useJobPolling (ApiClient mode)', () => {
 
     render(React.createElement(TestComponent, { store, backend: apiClient, jobId: 'job-1' }));
 
-    await vi.advanceTimersByTimeAsync(100);
+    await advanceUntil(() => store.getState().pendingActions.length > 0, 'pending actions');
 
     expect(apiClient.listActions).toHaveBeenCalledWith('job-1', { status: 'pending_review' });
     expect(store.getState().pendingActions).toHaveLength(1);
@@ -192,7 +216,7 @@ describe('useJobPolling (ApiClient mode)', () => {
 
     render(React.createElement(TestComponent, { store, backend: apiClient, jobId: 'job-1' }));
 
-    await vi.advanceTimersByTimeAsync(100);
+    await advanceUntil(() => store.getState().schemaData !== null, 'schema data');
 
     expect(apiClient.getSchema).toHaveBeenCalledWith('job-1');
     expect(store.getState().schemaData).toEqual({ mode: 'hybrid', version: 2 });
@@ -204,7 +228,7 @@ describe('useJobPolling (ApiClient mode)', () => {
 
     render(React.createElement(TestComponent, { store, backend: apiClient, jobId: 'job-1' }));
 
-    await vi.advanceTimersByTimeAsync(100);
+    await advanceUntil(() => store.getState().entityPreviews.length > 0, 'entity previews');
 
     expect(apiClient.listEntities).toHaveBeenCalledWith('job-1', { limit: 5 });
     expect(store.getState().entityPreviews).toEqual([{ id: 'e1', mergedData: { name: 'Test' } }]);
@@ -223,16 +247,7 @@ describe('useJobPolling (ApiClient mode)', () => {
       }),
     );
 
-    // Flush React's render + effect cycle. On loaded CI runners a single
-    // 100ms advance occasionally beats the initial useEffect; pump a few
-    // microtask + timer cycles before asserting.
-    for (
-      let i = 0;
-      i < 5 && (apiClient.getJob as ReturnType<typeof vi.fn>).mock.calls.length < 1;
-      i++
-    ) {
-      await vi.advanceTimersByTimeAsync(100);
-    }
+    await advanceUntil(() => store.getState().jobData !== null, 'initial poll');
     expect(apiClient.getJob).toHaveBeenCalledTimes(1);
 
     await vi.advanceTimersByTimeAsync(3000);
@@ -249,7 +264,7 @@ describe('useJobPolling (ApiClient mode)', () => {
       React.createElement(TestComponent, { store, backend: apiClient, jobId: 'job-1' }),
     );
 
-    await vi.advanceTimersByTimeAsync(100);
+    await advanceUntil(() => lastFrame()!.includes('Network failure'), 'API error render');
 
     expect(lastFrame()!).toContain('Network failure');
     expect(store.getState().jobData).toBeNull();
@@ -263,7 +278,7 @@ describe('useJobPolling (ApiClient mode)', () => {
 
     render(React.createElement(TestComponent, { store, backend: apiClient, jobId: 'job-1' }));
 
-    await vi.advanceTimersByTimeAsync(100);
+    await advanceUntil(() => store.getState().jobData !== null, 'job data after schema failure');
 
     expect(store.getState().jobData).toEqual({ id: 'job-1', name: 'Test Job', status: 'running' });
     expect(store.getState().schemaData).toBeNull();
@@ -282,7 +297,7 @@ describe('useJobPolling (ApiClient mode)', () => {
       }),
     );
 
-    await vi.advanceTimersByTimeAsync(100);
+    await advanceUntil(() => store.getState().jobData !== null, 'initial poll before unmount');
     expect(apiClient.getJob).toHaveBeenCalledTimes(1);
 
     unmount();
@@ -353,7 +368,7 @@ describe('useJobPolling (DataSource mode)', () => {
 
     render(React.createElement(TestComponent, { store, backend: ds, jobId: 'local' }));
 
-    await vi.advanceTimersByTimeAsync(100);
+    await advanceUntil(() => store.getState().jobData !== null, 'DataSource status');
 
     expect(ds.getStatus).toHaveBeenCalled();
     expect(store.getState().jobData).toMatchObject({ totalPages: 42, totalEntities: 7 });
@@ -365,7 +380,7 @@ describe('useJobPolling (DataSource mode)', () => {
 
     render(React.createElement(TestComponent, { store, backend: ds, jobId: 'local' }));
 
-    await vi.advanceTimersByTimeAsync(100);
+    await advanceUntil(() => store.getState().pendingActions.length > 0, 'DataSource actions');
 
     expect(ds.getActions).toHaveBeenCalledWith('pending_review');
     expect(store.getState().pendingActions).toHaveLength(1);
@@ -377,7 +392,7 @@ describe('useJobPolling (DataSource mode)', () => {
 
     render(React.createElement(TestComponent, { store, backend: ds, jobId: 'local' }));
 
-    await vi.advanceTimersByTimeAsync(100);
+    await advanceUntil(() => store.getState().schemaData !== null, 'DataSource schema');
 
     expect(ds.getSchema).toHaveBeenCalled();
     expect(store.getState().schemaData).toEqual({ version: 2, fields: [] });
@@ -389,7 +404,7 @@ describe('useJobPolling (DataSource mode)', () => {
 
     render(React.createElement(TestComponent, { store, backend: ds, jobId: 'local' }));
 
-    await vi.advanceTimersByTimeAsync(100);
+    await advanceUntil(() => store.getState().entityPreviews.length > 0, 'DataSource entities');
 
     expect(ds.getEntities).toHaveBeenCalledWith({ limit: 5 });
     expect(store.getState().entityPreviews).toEqual([
@@ -403,7 +418,7 @@ describe('useJobPolling (DataSource mode)', () => {
 
     render(React.createElement(TestComponent, { store, backend: ds, jobId: 'local' }));
 
-    await vi.advanceTimersByTimeAsync(100);
+    await advanceUntil(() => callCount(ds.getStatus) > 0, 'DataSource poll');
 
     expect(store.getState().recentActions).toEqual([]);
   });

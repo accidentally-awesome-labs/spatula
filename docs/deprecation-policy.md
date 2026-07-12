@@ -4,9 +4,9 @@
 
 ## v1.0 state
 
-Spatula v1.0 ships with **zero experimental surfaces**. The policy described here is in force from v1.0 onward; the first experimental surface (the admin forensic-extractions endpoint) lands in Phase 18.
+Spatula v1.0 ships with **zero experimental surfaces**. The policy described here is in force from v1.0 onward.
 
-The `@spatula/client` package already exposes a reserved `client.experimental.*` namespace at v1.0 — accessing any property on it throws an `Error` whose message contains `'zero experimental surfaces'`. This scaffolding exists so that adding the first real surface in Phase 18 is a non-breaking package change (the consumer-facing import path is already published).
+The `@spatula/client` package already exposes a reserved `client.experimental.*` namespace at v1.0 — accessing any property on it throws an `Error` whose message contains `'zero experimental surfaces'`. This scaffolding exists so that adding the first real surface is a non-breaking package change (the consumer-facing import path is already published).
 
 ```typescript
 import { SpatulaClient } from '@spatula/client';
@@ -14,8 +14,7 @@ const client = new SpatulaClient({ baseUrl: '...' });
 
 // v1.0: throws
 client.experimental.forensicExtractions;
-// Error: @spatula/client v1.0 ships zero experimental surfaces. The first
-//        experimental surface lands in Phase 18 (Spatula v1.1).
+// Error: @spatula/client v1.0 ships zero experimental surfaces.
 ```
 
 ## Experimental tag
@@ -31,7 +30,7 @@ An "experimental" surface is an endpoint, SDK method, or response field tagged `
 
 ## Deprecation headers
 
-When a stable surface is being removed across a major bump, OR an experimental surface graduates with shape changes, OR an offset-paginated surface is being phased out (already the case at v1.0 for `?offset=N` pagination — see plan 16-1), the server emits RFC 8594 headers on every response:
+When a stable surface is being removed across a major bump, OR an experimental surface graduates with shape changes, OR an offset-paginated surface is being phased out, the server emits RFC 8594 headers on every response:
 
 ```http
 Deprecation: Sun, 11 Nov 2026 23:59:59 GMT
@@ -67,6 +66,5 @@ The 6-month overlap is the **minimum** support window from `docs/compat-policy.m
 
 - `docs/compat-policy.md` — full SDK ↔ server ↔ core-types compat matrix; the 6-month support window is defined there.
 - `docs/api-errors.md` — frozen error-code enum; `410 Gone` post-Sunset envelope shape.
-- `apps/api/src/lib/deprecation-headers.ts` — header helper (plan 16-1).
-- `packages/client/src/experimental/index.ts` — Proxy scaffolding (plan 16-2).
-- `docs/superpowers/specs/2026-04-20-wave-6-phase-14-public-launch-design.md` §3.3.11 — original policy text and rationale.
+- `apps/api/src/lib/deprecation-headers.ts` — header helper.
+- `packages/client/src/experimental/index.ts` — Proxy scaffolding.

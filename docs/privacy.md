@@ -57,7 +57,7 @@ Crawled content belongs to the operator who configured the job. Spatula acts as 
 
 ## Data we do NOT collect
 
-- End-user credentials or payment information (handled by the billing provider).
+- End-user credentials or payment information. This OSS project does not collect payment data.
 - Browser cookies or fingerprinting identifiers from end-users of operator applications.
 - Any data beyond what is explicitly needed for the crawl + extraction pipeline.
 
@@ -210,4 +210,4 @@ Spatula's platform is not directed at children under 13 (COPPA) or under 16 (GDP
 
 Data protection inquiries: privacy@spatula.dev
 
-For operator-level DSR requests (deletion, export, rectification): use the CLI or API endpoints described above, or contact support@spatula.dev with your tenant ID.
+For operator-level DSR requests (deletion, export, rectification): use the CLI or API endpoints described above. Self-hosted operators are responsible for their own tenant support process.

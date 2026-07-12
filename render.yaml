@@ -17,7 +17,7 @@ services:
   - name: spatula-api
     type: web # NOT 'worker' — Background Worker requires a paid plan
     runtime: node
-    plan: free
+    plan: starter # paid: avoids 15-min free-tier spin-down (embedded worker stays warm)
     # Render auto-provides pnpm from pnpm-lock.yaml — do NOT `corepack enable`
     # (its shim dir /usr/bin is read-only on Render's build image → EROFS).
     # --prod=false: NODE_ENV=production (below) makes pnpm skip devDeps, but the
@@ -28,11 +28,9 @@ services:
     healthCheckPath: /health
 
     envVars:
-      # Pin to our tested LTS (Render defaults to Node 24); support matrix is Node 22+.
-      # Backed by a repo-level .node-version file too (read on build clone).
+      # Pin to our tested LTS (Render defaults to Node 24); support matrix is Node 22+
       - key: NODE_VERSION
         value: '22'
-
       # ── Managed connections (wired from Render-provisioned services) ────────
       - key: DATABASE_URL
         fromDatabase:
@@ -64,7 +62,8 @@ services:
       - key: OPENROUTER_API_KEY
         sync: false
 
-      # Optional — auth strategy (default: none; set to "api-key" or "jwt")
+      # Required for anything beyond a private demo: set to "api-key" or "jwt"
+      # (the application default "none" is local-development only).
       - key: AUTH_STRATEGY
         sync: false
 
@@ -76,7 +75,7 @@ services:
       - key: JWT_JWKS_URL
         sync: false
 
-      # Optional — tenant creation protection
+      # Required for public deployments: protects tenant bootstrap.
       - key: TENANT_CREATION_SECRET
         sync: false
 
@@ -84,13 +83,23 @@ services:
       - key: SENTRY_DSN
         sync: false
 
+      # ── Crawler selection (distroless worker) ──────────────────────────────
+      # The distroless runtime has NO Playwright browser binaries. Set these
+      # to use Firecrawl instead (required for the Render embedded worker).
+      # Leave unset to use Playwright (only works on VM/host deployments where
+      # Playwright is installed). See docs/runbooks/render-deploy.md EXEC-05.
+      - key: SPATULA_CRAWLER
+        sync: false # set to "firecrawl" in the dashboard for Render deploys
+      - key: FIRECRAWL_API_KEY
+        sync: false
+
   - name: spatula-cache
     type: keyvalue # canonical form; 'redis' is a deprecated alias
-    plan: free
+    plan: starter # next tier above free (free KV slot already in use); persists to disk
     ipAllowList:
       - source: 0.0.0.0/0
         description: Allow all (Render routes traffic through its internal network)
 
 databases:
   - name: spatula-db
-    plan: free
+    plan: basic-256mb # next tier above free (free Postgres slot already in use); no 30-day expiry

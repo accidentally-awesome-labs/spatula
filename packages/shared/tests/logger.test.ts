@@ -18,6 +18,16 @@ describe('createLogger', () => {
     expect(child).toBeDefined();
     expect(typeof child.info).toBe('function');
   });
+
+  it('reuses the pino transport across module loggers', () => {
+    const before = process.listenerCount('exit');
+    for (let i = 0; i < 25; i++) {
+      createLogger(`module-${i}`);
+    }
+    const after = process.listenerCount('exit');
+
+    expect(after - before).toBeLessThanOrEqual(1);
+  });
 });
 
 describe('createLoggerWithContext', () => {

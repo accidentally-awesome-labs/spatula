@@ -55,8 +55,7 @@ describe('CrawlCompletionChecker', () => {
     expect(result.complete).toBe(false);
   });
 
-  it('accounts for the current task (inProgress <= 1 with pending 0)', async () => {
-    // The current task is still "in_progress" when this check runs
+  it('returns incomplete when one task is still in progress', async () => {
     const repo = createMockTaskRepo({
       pending: 0,
       inProgress: 1,
@@ -66,8 +65,8 @@ describe('CrawlCompletionChecker', () => {
     });
     const checker = new CrawlCompletionChecker();
     const result = await checker.isComplete('job-1', 'tenant-1', repo);
-    expect(result.complete).toBe(true);
-    expect(result.reason).toBe('all_tasks_done');
+    expect(result.complete).toBe(false);
+    expect(result.reason).toBeUndefined();
   });
 
   it('reports complete when all tasks have failed', async () => {

@@ -1,6 +1,7 @@
 // packages/core/src/pipeline/crawl-orchestrator.ts
 import { createLoggerWithContext, CrawlError, NetworkError } from '@spatula/shared';
 import { createHash } from 'node:crypto';
+import { isIP } from 'node:net';
 import type { JobConfig, LinkEvaluationContext } from '../index.js';
 import type {
   CrawlOrchestratorDeps,
@@ -8,16 +9,63 @@ import type {
   CrawlTaskResult,
   LinkToEnqueue,
 } from './types.js';
+import { isMeaningfulRecord } from './record-utils.js';
 
 const EXTRACTABLE_CLASSIFICATIONS = new Set(['single_entry', 'multiple_entries', 'partial']);
+
+function normalizeHostname(hostname: string): string {
+  return hostname.toLowerCase().replace(/^\[/, '').replace(/\]$/, '').replace(/\.$/, '');
+}
+
+function ipv4ToParts(hostname: string): number[] | null {
+  if (isIP(hostname) !== 4) return null;
+  const parts = hostname.split('.').map((part) => Number(part));
+  return parts.length === 4 &&
+    parts.every((part) => Number.isInteger(part) && part >= 0 && part <= 255)
+    ? parts
+    : null;
+}
+
+function isBlockedPrivateHostname(hostname: string): boolean {
+  const normalized = normalizeHostname(hostname);
+
+  if (normalized === 'localhost' || normalized.endsWith('.localhost')) return true;
+
+  const ipv4 = ipv4ToParts(normalized);
+  if (ipv4) {
+    const [a, b] = ipv4;
+    return (
+      a === 0 ||
+      a === 10 ||
+      a === 127 ||
+      (a === 100 && b >= 64 && b <= 127) ||
+      (a === 169 && b === 254) ||
+      (a === 172 && b >= 16 && b <= 31) ||
+      (a === 192 && b === 168) ||
+      (a === 198 && (b === 18 || b === 19)) ||
+      a >= 224
+    );
+  }
+
+  if (isIP(normalized) === 6) {
+    return (
+      normalized === '::' ||
+      normalized === '::1' ||
+      normalized.startsWith('::ffff:') ||
+      normalized.startsWith('fc') ||
+      normalized.startsWith('fd') ||
+      /^fe[89ab][0-9a-f]?:/i.test(normalized)
+    );
+  }
+
+  return false;
+}
 
 export function isValidCrawlUrl(url: string): boolean {
   try {
     const parsed = new URL(url);
     if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') return false;
-    const hostname = parsed.hostname.toLowerCase();
-    if (hostname === 'localhost' || hostname === '127.0.0.1' || hostname === '::1') return false;
-    if (/^(10\.|172\.(1[6-9]|2\d|3[01])\.|192\.168\.)/.test(hostname)) return false;
+    if (isBlockedPrivateHostname(parsed.hostname)) return false;
     return true;
   } catch {
     return false;
@@ -118,23 +166,43 @@ export async function processCrawlTask(
     let extracted = false;
     if (EXTRACTABLE_CLASSIFICATIONS.has(classification.classification)) {
       if (schema) {
-        const extraction = await deps.extractor.extract(
-          crawlResult.html,
-          url,
-          schema.definition,
-          config.description,
-        );
-        await deps.extractionRepo.store({
-          jobId,
-          tenantId,
-          pageId: page.id,
-          schemaVersion: schema.version,
-          data: extraction.data,
-          unmappedFields: extraction.metadata.unmappedFields,
-          metadata: extraction.metadata,
-        });
-        extracted = true;
-        logger.debug({ taskId, pageId: page.id }, 'extraction stored');
+        const extractionResults =
+          classification.classification === 'multiple_entries' && deps.extractor.extractMany
+            ? await deps.extractor.extractMany(
+                crawlResult.html,
+                url,
+                schema.definition,
+                config.description,
+              )
+            : [
+                await deps.extractor.extract(
+                  crawlResult.html,
+                  url,
+                  schema.definition,
+                  config.description,
+                ),
+              ];
+
+        let storedCount = 0;
+        for (const extraction of extractionResults) {
+          if (!isMeaningfulRecord(extraction.data)) {
+            logger.debug({ taskId, pageId: page.id }, 'empty extraction skipped');
+            continue;
+          }
+
+          await deps.extractionRepo.store({
+            jobId,
+            tenantId,
+            pageId: page.id,
+            schemaVersion: schema.version,
+            data: extraction.data,
+            unmappedFields: extraction.metadata.unmappedFields,
+            metadata: extraction.metadata,
+          });
+          storedCount++;
+        }
+        extracted = storedCount > 0;
+        logger.debug({ taskId, pageId: page.id, storedCount }, 'extraction pass complete');
       }
     }
 

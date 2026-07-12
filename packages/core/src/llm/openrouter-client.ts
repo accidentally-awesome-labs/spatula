@@ -20,6 +20,9 @@ interface OpenRouterAPIResponse {
     prompt_tokens?: number;
     completion_tokens?: number;
     total_tokens?: number;
+    // Actual cost in OpenRouter credits (1 credit = 1 USD). Always included for
+    // non-streaming responses; no request opt-in needed.
+    cost?: number;
   };
 }
 
@@ -72,9 +75,13 @@ export class OpenRouterClient implements LLMClient {
       try {
         const start = performance.now();
         const response = await this.doFetch(body);
-        const costUsd = parseFloat(response.headers.get('x-openrouter-cost') ?? '') || 0;
         const data = (await response.json()) as OpenRouterAPIResponse;
         const duration = performance.now() - start;
+        // OpenRouter reports the real USD cost in the response body (usage.cost,
+        // in credits = USD) — always present for non-streaming requests. The old
+        // header read ('x-openrouter-cost') was a non-existent header, so every
+        // recorded cost was $0 regardless of model (llm_usage cost / sizing dead).
+        const costUsd = data.usage?.cost ?? 0;
 
         const choice = data.choices?.[0];
         if (!choice?.message?.content) {

@@ -8,4 +8,11 @@ export interface Extractor {
     schema: SchemaDefinition,
     jobDescription: string,
   ): Promise<ExtractionResult>;
+
+  extractMany?(
+    html: string,
+    url: string,
+    schema: SchemaDefinition,
+    jobDescription: string,
+  ): Promise<ExtractionResult[]>;
 }

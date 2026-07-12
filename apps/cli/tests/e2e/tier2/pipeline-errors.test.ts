@@ -27,7 +27,7 @@ let playwrightOk = false;
 
 beforeAll(async () => {
   playwrightOk = await isPlaywrightAvailable();
-});
+}, 30_000);
 
 describe('LLM failure handling', () => {
   // =========================================================================

@@ -3,7 +3,7 @@ import { resolve } from 'node:path';
 
 const root = resolve(__dirname, '../..');
 
-// Public REST contract test suite — Phase 16 plan 16-4.
+// Public REST contract test suite.
 //
 // What this suite proves:
 //   - Every (route, status, example) tuple in the served /api/v1/openapi.json

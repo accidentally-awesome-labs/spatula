@@ -3,13 +3,10 @@ import { createLogger } from '@spatula/shared';
 const logger = createLogger('cli:notifications');
 
 export async function sendDesktopNotification(title: string, message: string): Promise<void> {
+  void title;
+  void message;
   if (process.env.CI || process.env.DOCKER) return;
-  try {
-    const notifier = await import('node-notifier');
-    notifier.default.notify({ title, message, sound: true });
-  } catch (err) {
-    logger.debug({ err }, 'Desktop notification not available');
-  }
+  logger.debug('Desktop notifications are not bundled in the CLI package');
 }
 
 export async function sendWebhookNotification(

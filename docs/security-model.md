@@ -27,7 +27,7 @@
 
 ## Threat model
 
-Spatula is a multi-tenant SaaS API. The primary attack surface:
+Spatula is a self-hostable multi-tenant API and local CLI. The primary attack surface:
 
 | Vector                     | Risk                                          | Mitigation                                                               |
 | -------------------------- | --------------------------------------------- | ------------------------------------------------------------------------ |
@@ -79,11 +79,11 @@ Every tenant-scoped table carries a `tenant_id uuid NOT NULL` foreign key refere
 
 See [`docs/api-auth.md`](api-auth.md) for the full reference. Summary:
 
-| Strategy | `AUTH_STRATEGY` value | Use case                              |
-| -------- | --------------------- | ------------------------------------- |
-| `NoAuth` | `none`                | Local dev only — **never production** |
-| API key  | `api-key`             | CLI, CI, machine-to-machine           |
-| JWT-OIDC | `jwt`                 | Browser apps, SSO                     |
+| Strategy | `AUTH_STRATEGY` value | Use case                                            |
+| -------- | --------------------- | --------------------------------------------------- |
+| `NoAuth` | `none`                | Local dev only — **never use on an exposed server** |
+| API key  | `api-key`             | CLI, CI, machine-to-machine                         |
+| JWT-OIDC | `jwt`                 | Browser apps, SSO                                   |
 
 All three strategies resolve to a `{ tenantId, scopes }` tuple stored on the Hono context. Downstream code only sees `tenantId` — it never knows which strategy was used.
 
@@ -105,7 +105,7 @@ API keys carry an explicit `scopes: text[]` list. Scopes are checked by the `req
 | `exports:write`     | Create export jobs                             |
 | `admin`             | All of the above + tenant management endpoints |
 
-Default scopes for a new key: `jobs:read jobs:write extractions:read exports:read exports:write`.
+Default scopes for a new key: `jobs:read jobs:write exports:read exports:write actions:read actions:write`.
 
 ---
 
@@ -217,13 +217,13 @@ spatula admin tenant delete --tenant <id> [--yes]
 
 ## Secret management
 
-| Secret                        | Where stored                        | Rotation                  |
-| ----------------------------- | ----------------------------------- | ------------------------- |
-| `DATABASE_URL`                | Environment variable / secret store | Manual, per-deploy        |
-| `REDIS_URL`                   | Environment variable / secret store | Manual, per-deploy        |
-| `JWT_JWKS_URL` / `JWT_ISSUER` | Environment variable                | OIDC provider rotation    |
-| `OPENROUTER_API_KEY`          | Environment variable                | Manual, per-billing cycle |
-| API keys (raw)                | Shown to user once, never stored    | User-driven rotation      |
+| Secret                        | Where stored                        | Rotation                    |
+| ----------------------------- | ----------------------------------- | --------------------------- |
+| `DATABASE_URL`                | Environment variable / secret store | Manual, per-deploy          |
+| `REDIS_URL`                   | Environment variable / secret store | Manual, per-deploy          |
+| `JWT_JWKS_URL` / `JWT_ISSUER` | Environment variable                | OIDC provider rotation      |
+| `OPENROUTER_API_KEY`          | Environment variable                | Manual, per provider policy |
+| API keys (raw)                | Shown to user once, never stored    | User-driven rotation        |
 
 No secrets are committed to the repository. `.env` files are gitignored.
 

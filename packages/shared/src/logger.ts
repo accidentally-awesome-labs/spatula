@@ -6,13 +6,30 @@ export type Logger = pino.Logger;
 
 const VALID_LEVELS = ['fatal', 'error', 'warn', 'info', 'debug', 'trace'] as const;
 
-export function createLogger(name: string): Logger {
+let baseLogger: Logger | null = null;
+let baseLoggerMode: 'production' | 'pretty' | null = null;
+
+function getLoggerMode(): 'production' | 'pretty' {
+  return process.env.NODE_ENV === 'production' ? 'production' : 'pretty';
+}
+
+function resolveLevel(): string {
   const level = process.env.LOG_LEVEL ?? 'info';
   if (!VALID_LEVELS.includes(level as any)) {
     throw new ConfigError(`Invalid LOG_LEVEL "${level}". Valid levels: ${VALID_LEVELS.join(', ')}`);
   }
-  return pino({
-    name,
+  return level;
+}
+
+function getBaseLogger(level: string): Logger {
+  const mode = getLoggerMode();
+  if (baseLogger && baseLoggerMode === mode) {
+    baseLogger.level = level;
+    return baseLogger;
+  }
+
+  baseLoggerMode = mode;
+  baseLogger = pino({
     level,
     redact: { paths: REDACT_PATHS, censor: REDACTED_PLACEHOLDER },
     serializers: {
@@ -29,10 +46,15 @@ export function createLogger(name: string): Logger {
       log: (obj) => redactObject(obj),
     },
     transport:
-      process.env.NODE_ENV !== 'production'
-        ? { target: 'pino-pretty', options: { colorize: true } }
-        : undefined,
+      mode !== 'production' ? { target: 'pino-pretty', options: { colorize: true } } : undefined,
   });
+
+  return baseLogger;
+}
+
+export function createLogger(name: string): Logger {
+  const level = resolveLevel();
+  return getBaseLogger(level).child({ name });
 }
 
 export function createLoggerWithContext(

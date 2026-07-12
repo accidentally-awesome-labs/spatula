@@ -66,7 +66,7 @@ describe('JobConfig', () => {
       ...validConfig,
       llm: {},
     });
-    expect(result.llm.primaryModel).toBe('deepseek/deepseek-v4-pro');
+    expect(result.llm.primaryModel).toBe('deepseek/deepseek-v4-flash');
   });
 
   it('rejects invalid seed URLs', () => {

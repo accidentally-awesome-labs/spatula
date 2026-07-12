@@ -216,6 +216,7 @@ function createMockDeps(): ReconcileOrchestratorDeps {
     } as any,
     entityRepo: {
       create: vi.fn().mockResolvedValue({ id: 'db-entity-1' }),
+      deleteByJob: vi.fn().mockResolvedValue(0),
     } as any,
     entitySourceRepo: {
       bulkLink: vi.fn().mockResolvedValue([]),
@@ -307,6 +308,92 @@ describe('processReconciliation', () => {
     );
 
     // Verify correct return
+    expect(result).toEqual({ entitiesCreated: 1, actionsGenerated: 2 });
+  });
+
+  it('deletes existing job entities before persisting reconciled entities', async () => {
+    await processReconciliation(createInput(), deps);
+
+    expect(deps.entityRepo.deleteByJob).toHaveBeenCalledWith(JOB_ID, TENANT_ID);
+    const deleteOrder = (deps.entityRepo.deleteByJob as ReturnType<typeof vi.fn>).mock
+      .invocationCallOrder[0];
+    const createOrder = (deps.entityRepo.create as ReturnType<typeof vi.fn>).mock
+      .invocationCallOrder[0];
+    expect(deleteOrder).toBeLessThan(createOrder);
+  });
+
+  it('filters empty extraction payloads before reconciliation', async () => {
+    (deps.extractionRepo.findByJob as ReturnType<typeof vi.fn>).mockResolvedValue([
+      {
+        id: 'empty-ext',
+        jobId: JOB_ID,
+        pageId: 'page-1',
+        schemaVersion: 1,
+        data: {},
+        metadata: {
+          confidence: 0,
+          modelUsed: 'test-model',
+          tokensUsed: 0,
+          extractionTimeMs: 1,
+          unmappedFields: [],
+        },
+      },
+      ...createMockExtractions(),
+    ]);
+
+    await processReconciliation(createInput(), deps);
+
+    const reconcileCall = (deps.reconciler.reconcile as ReturnType<typeof vi.fn>).mock.calls[0];
+    expect(reconcileCall[0].map((ext: { id: string }) => ext.id)).not.toContain('empty-ext');
+  });
+
+  it('completes without entities when all extraction payloads are empty', async () => {
+    (deps.extractionRepo.findByJob as ReturnType<typeof vi.fn>).mockResolvedValue([
+      {
+        id: 'empty-ext',
+        jobId: JOB_ID,
+        pageId: 'page-1',
+        schemaVersion: 1,
+        data: { name: '', price: null },
+        metadata: {
+          confidence: 0,
+          modelUsed: 'test-model',
+          tokensUsed: 0,
+          extractionTimeMs: 1,
+          unmappedFields: [],
+        },
+      },
+    ]);
+
+    const result = await processReconciliation(createInput(), deps);
+
+    expect(result).toEqual({ entitiesCreated: 0, actionsGenerated: 0 });
+    expect(deps.entityRepo.deleteByJob).toHaveBeenCalledWith(JOB_ID, TENANT_ID);
+    expect(deps.reconciler.reconcile).not.toHaveBeenCalled();
+    expect(deps.entityRepo.create).not.toHaveBeenCalled();
+    expect(deps.jobRepo.updateStatus).toHaveBeenCalledWith(JOB_ID, TENANT_ID, 'completed');
+  });
+
+  it('does not persist empty entities returned by the reconciler', async () => {
+    (deps.reconciler.reconcile as ReturnType<typeof vi.fn>).mockResolvedValue({
+      entities: [
+        {
+          entityId: 'empty-entity',
+          sourceExtractions: [],
+          mergedData: {},
+          fieldProvenance: {},
+        },
+        ...createMockReconciliationResult().entities,
+      ],
+      actions: createMockReconciliationResult().actions,
+    });
+
+    const result = await processReconciliation(createInput(), deps);
+
+    expect(deps.entityRepo.create).toHaveBeenCalledTimes(1);
+    expect(deps.entityRepo.create).toHaveBeenCalledWith(
+      expect.objectContaining({ mergedData: { name: 'Test Product', price: '$29.99' } }),
+    );
     expect(result).toEqual({ entitiesCreated: 1, actionsGenerated: 2 });
   });
 

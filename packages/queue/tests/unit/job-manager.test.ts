@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { JobManager } from '../../src/job-manager.js';
 import { StateError } from '@spatula/shared';
 
@@ -42,6 +42,8 @@ function createMockQueues() {
 
 const TENANT_ID = '00000000-0000-0000-0000-000000000001';
 const JOB_ID = 'job-001';
+const ORIGINAL_PRIVATE_CRAWL_FLAG = process.env.SPATULA_ALLOW_PRIVATE_CRAWL_URLS;
+const ORIGINAL_NODE_ENV = process.env.NODE_ENV;
 
 const baseConfig = {
   tenantId: TENANT_ID,
@@ -82,6 +84,20 @@ describe('JobManager', () => {
       schemaRepo: schemaRepo as any,
       queues: queues as any,
     });
+  });
+
+  afterEach(() => {
+    vi.unstubAllEnvs();
+    if (ORIGINAL_PRIVATE_CRAWL_FLAG === undefined) {
+      delete process.env.SPATULA_ALLOW_PRIVATE_CRAWL_URLS;
+    } else {
+      process.env.SPATULA_ALLOW_PRIVATE_CRAWL_URLS = ORIGINAL_PRIVATE_CRAWL_FLAG;
+    }
+    if (ORIGINAL_NODE_ENV === undefined) {
+      delete process.env.NODE_ENV;
+    } else {
+      process.env.NODE_ENV = ORIGINAL_NODE_ENV;
+    }
   });
 
   it('createJob persists job and returns ID', async () => {
@@ -172,6 +188,29 @@ describe('JobManager', () => {
       url: 'https://b.com',
       depth: 0,
     });
+  });
+
+  it('rejects private seed URLs when starting jobs in production', async () => {
+    process.env.NODE_ENV = 'production';
+    process.env.SPATULA_ALLOW_PRIVATE_CRAWL_URLS = '0';
+    jobRepo.findById.mockResolvedValue({
+      id: JOB_ID,
+      tenantId: TENANT_ID,
+      status: 'pending',
+      config: {
+        ...baseConfig,
+        seedUrls: ['http://169.254.169.254/latest/meta-data'],
+      },
+    });
+    jobRepo.updateStatus.mockResolvedValue({ id: JOB_ID });
+
+    await expect(manager.startJob(JOB_ID, TENANT_ID)).rejects.toMatchObject({
+      code: 'VALIDATION.SCHEMA',
+    });
+    expect(jobRepo.updateStatus).not.toHaveBeenCalled();
+    expect(schemaRepo.create).not.toHaveBeenCalled();
+    expect(taskRepo.enqueue).not.toHaveBeenCalled();
+    expect(queues.crawl.add).not.toHaveBeenCalled();
   });
 
   it('pauseJob transitions running→paused', async () => {

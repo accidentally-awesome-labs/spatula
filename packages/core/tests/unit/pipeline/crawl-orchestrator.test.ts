@@ -20,9 +20,16 @@ describe('isValidCrawlUrl', () => {
 
   it('rejects localhost and private IPs', () => {
     expect(isValidCrawlUrl('http://localhost/admin')).toBe(false);
+    expect(isValidCrawlUrl('http://localhost./admin')).toBe(false);
     expect(isValidCrawlUrl('http://127.0.0.1/admin')).toBe(false);
+    expect(isValidCrawlUrl('http://0.0.0.0/admin')).toBe(false);
+    expect(isValidCrawlUrl('http://169.254.169.254/latest/meta-data')).toBe(false);
     expect(isValidCrawlUrl('http://192.168.1.1/admin')).toBe(false);
     expect(isValidCrawlUrl('http://10.0.0.1/admin')).toBe(false);
+    expect(isValidCrawlUrl('http://172.16.0.1/admin')).toBe(false);
+    expect(isValidCrawlUrl('http://[::1]/admin')).toBe(false);
+    expect(isValidCrawlUrl('http://[fd00::1]/admin')).toBe(false);
+    expect(isValidCrawlUrl('http://[fe80::1]/admin')).toBe(false);
   });
 
   it('rejects invalid URLs', () => {
@@ -139,6 +146,80 @@ describe('processCrawlTask', () => {
     expect(deps.extractionRepo.store).toHaveBeenCalledTimes(1);
     expect(result.extracted).toBe(true);
     expect(result.classification).toBe('single_entry');
+  });
+
+  it('uses extractMany for multi-entry pages and stores each meaningful record', async () => {
+    const deps = createMockDeps();
+    (deps.classifier.classify as any).mockResolvedValue({
+      classification: 'multiple_entries',
+      strategy: 'list_extraction',
+      confidence: 0.9,
+    });
+    const extractMany = vi.fn().mockResolvedValue([
+      {
+        data: { title: 'Product A' },
+        metadata: {
+          confidence: 0.9,
+          modelUsed: 'test-model',
+          tokensUsed: 100,
+          extractionTimeMs: 500,
+          unmappedFields: [],
+        },
+      },
+      {
+        data: {},
+        metadata: {
+          confidence: 0,
+          modelUsed: 'test-model',
+          tokensUsed: 0,
+          extractionTimeMs: 100,
+          unmappedFields: [],
+        },
+      },
+      {
+        data: { title: 'Product B' },
+        metadata: {
+          confidence: 0.9,
+          modelUsed: 'test-model',
+          tokensUsed: 100,
+          extractionTimeMs: 500,
+          unmappedFields: [],
+        },
+      },
+    ]);
+    (deps.extractor as any).extractMany = extractMany;
+
+    const result = await processCrawlTask(defaultInput, deps);
+
+    expect(extractMany).toHaveBeenCalledTimes(1);
+    expect(deps.extractor.extract).not.toHaveBeenCalled();
+    expect(deps.extractionRepo.store).toHaveBeenCalledTimes(2);
+    expect(deps.extractionRepo.store).toHaveBeenCalledWith(
+      expect.objectContaining({ data: { title: 'Product A' } }),
+    );
+    expect(deps.extractionRepo.store).toHaveBeenCalledWith(
+      expect.objectContaining({ data: { title: 'Product B' } }),
+    );
+    expect(result.extracted).toBe(true);
+  });
+
+  it('does not store empty extraction payloads', async () => {
+    const deps = createMockDeps();
+    (deps.extractor.extract as any).mockResolvedValue({
+      data: { title: null, price: '' },
+      metadata: {
+        confidence: 0,
+        modelUsed: 'test-model',
+        tokensUsed: 0,
+        extractionTimeMs: 500,
+        unmappedFields: [],
+      },
+    });
+
+    const result = await processCrawlTask(defaultInput, deps);
+
+    expect(deps.extractionRepo.store).not.toHaveBeenCalled();
+    expect(result.extracted).toBe(false);
   });
 
   it('deduplicates content by hash', async () => {

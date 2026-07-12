@@ -12,6 +12,7 @@ import { generateDocumentation } from '../exporters/documentation-generator.js';
 import { fetchEntitiesCursor } from './entity-cursor.js';
 import type { Exporter, ExportFormat, ExportOptions, SchemaDefinition } from '../index.js';
 import type { ExportOrchestratorDeps, ExportInput, PipelineExportResult } from './types.js';
+import { isMeaningfulEntity } from './record-utils.js';
 
 const MAX_EXPORT_ENTITIES = 50_000;
 
@@ -105,8 +106,11 @@ export async function processExport(
           500,
           { minQuality: input.minQuality },
         )) {
-          streamEntityCount += batch.length;
-          yield batch;
+          const meaningfulBatch = batch.filter(isMeaningfulEntity);
+          streamEntityCount += meaningfulBatch.length;
+          if (meaningfulBatch.length > 0) {
+            yield meaningfulBatch;
+          }
         }
       }
 
@@ -191,6 +195,7 @@ export async function processExport(
           allEntities = allEntities.filter((e: any) => (e.qualityScore ?? 0) >= input.minQuality!);
         }
       }
+      allEntities = allEntities.filter(isMeaningfulEntity);
       // Apply field projection if requested
       if (input.fields) {
         allEntities = allEntities.map((entity: any) => ({

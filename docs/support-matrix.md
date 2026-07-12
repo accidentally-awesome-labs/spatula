@@ -38,7 +38,7 @@ Production images shipped by Spatula OSS:
 
 **No shell in api/worker/migrate images.** The distroless base has no shell, package manager, or runtime utilities. The non-root user is `nonroot` (uid 65532).
 
-**CLI image: no browsers baked in.** The `cli` image uses Debian-slim (has a shell) but Playwright browsers are **not** pre-installed. Install them on the host with `spatula setup` before running local crawl jobs. This keeps the CLI image small and avoids baking browser binaries into the release artifact (see Plan 19-02 decision).
+**CLI image: no browsers baked in.** The `cli` image uses Debian-slim (has a shell) but Playwright browsers are **not** pre-installed. Install them on the host with `spatula setup` before running local crawl jobs. This keeps the CLI image small and avoids baking browser binaries into the release artifact.
 
 All four images are:
 
@@ -63,7 +63,7 @@ See `docs/runbooks/verify-images.md` for full verification instructions.
 
 ### Minimum-version CI matrix
 
-`.github/workflows/support-matrix.yml` runs the Phase 19 heavy test lanes against the supported minimum versions:
+`.github/workflows/support-matrix.yml` runs the heavier support test lanes against the supported minimum versions:
 
 - **Matrix:** Node 22 × PostgreSQL 14 / 15 / 16 × Redis 7
 - **Cadence:** on-release (push to `v*` tag) + nightly (`0 2 * * *` UTC) + `workflow_dispatch`
@@ -83,7 +83,7 @@ The matrix runs three test suites:
 
 ### PostgreSQL version caveat
 
-The `pg_dump 14+` normalizer (introduced in Phase 15 Plan 04) strips `\restrict`/`\unrestrict` random tokens from schema dumps — these tokens appear only in pg 14+ output and would otherwise make schema-equivalence diffs non-deterministic. PostgreSQL 13 and below are not tested and may produce different normalizer output.
+The `pg_dump 14+` normalizer strips `\restrict`/`\unrestrict` random tokens from schema dumps — these tokens appear only in pg 14+ output and would otherwise make schema diffs non-deterministic. PostgreSQL 13 and below are not tested and may produce different normalizer output.
 
 ---
 
@@ -96,5 +96,4 @@ The `pg_dump 14+` normalizer (introduced in Phase 15 Plan 04) strips `\restrict`
 
 ---
 
-_Phase: 19-deployment-self-host-excellence (Plan 19-07)_
-_Authored: 2026-06-11_
+_Last reviewed: 2026-07-12._

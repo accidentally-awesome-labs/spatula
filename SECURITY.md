@@ -36,22 +36,8 @@ We will credit reporters in the GitHub Security Advisory unless they prefer anon
 
 ## GPG Key
 
-Sensitive reports may be encrypted to the Spatula security team's GPG key:
-
-```
-<!-- GPG public key block — operator fills before launch -->
-Fingerprint: XXXX XXXX XXXX XXXX XXXX  XXXX XXXX XXXX XXXX XXXX
-Key ID:      0xXXXXXXXXXXXXXXXX
-Algorithm:   RSA 4096
-
------BEGIN PGP PUBLIC KEY BLOCK-----
-<operator must paste real GPG public key here before public launch>
------END PGP PUBLIC KEY BLOCK-----
-```
-
-> **Note for operators:** Replace the placeholder above with the actual GPG public key
-> for the `security@spatula.dev` address before flipping the repository public. See the
-> Phase 22 launch checklist for this gate.
+PGP-encrypted reports are not yet accepted. Use `security@spatula.dev` for
+private disclosure until this section publishes a real public key fingerprint.
 
 ## Response SLA
 
@@ -78,7 +64,6 @@ The following are **in scope** for security reports:
 - `apps/api` (`@spatula/api`) — the REST API server
 - `apps/cli` (`@spatula/cli`) — the CLI/TUI application
 - Docker images published to `ghcr.io/accidentally-awesome-labs/spatula`
-- The official deployment infrastructure at `spatula.dev`
 
 The following are **out of scope**:
 

@@ -261,7 +261,7 @@ export class SpatulaApiClient {
    * Returns the authenticated tenant + scopes. A non-200 response is normalized
    * to an ApiError so callers can branch on .status / .code.
    *
-   * Replaces the pre-carve billing-subscription probe.
+   * Used by remote commands before performing scoped operations.
    */
   async getAuthMe(): Promise<{
     tenantId: string;

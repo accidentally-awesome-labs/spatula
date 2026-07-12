@@ -2,13 +2,15 @@
 
 This document describes the internal architecture of Spatula — the package structure, data flow, core interfaces, action system, and LLM integration points.
 
-## OSS / Private-SaaS Carve-out (v1.1, Phase 15)
+## OSS Package Boundary
 
-As of v1.1, all commercial-tier infrastructure (payment integration, tenant-tier presets, usage aggregation, hourly meter worker, payment-webhook handlers) lives in the private `accidentally-awesome-labs/spatula-saas` repo. The OSS server (this repo) deploys with **zero commercial-tier surface area**. Self-hosters use the config-driven `DEFAULT_RATE_LIMIT` constant and per-tenant `TenantQuotas` (no tier presets).
+The public repository contains the local CLI, the self-hosted API server, queue workers, migrations, SDK, and implementation packages needed to run Spatula. Commercial billing, subscription, and payment-provider infrastructure is not part of this OSS repo.
 
-The 5-package OSS surface that the private `spatula-saas` repo consumes (`@spatula/{core,db,queue,shared,api}`) is frozen by the reverse-contract test suite in `tests/private-contract/` (TS-symbol freeze + SQL schema lint via `pg_dump`). The authoritative surface enumeration plus a residual-risk register lives in [`docs/private-contract.md`](./private-contract.md). The forward-contract suite in `tests/carveout/` proves the OSS-only server boots and serves its post-carve API contract end-to-end.
+The supported public surfaces are the REST API, `@spatula/client`, `@spatula/core-types`, and `@spatula/cli`. The `@spatula/core`, `@spatula/db`, `@spatula/queue`, `@spatula/shared`, and `@spatula/api` packages are implementation packages with no TypeScript API compatibility guarantee for external imports.
 
-Migration history is namespaced: the OSS migrations track via `drizzle.__drizzle_migrations_oss`, and the private repo reserves `drizzle.__drizzle_migrations_saas`. A single Postgres instance can host both. See [`docs/runbooks/upgrade.md`](./runbooks/upgrade.md) for the no-migration-downgrade + expand-contract-only policies that govern post-v1 schema evolution.
+The forward carve-out suite in `tests/carveout/` proves the OSS server boots without billing or payment-provider endpoints. Self-hosters use the config-driven `DEFAULT_RATE_LIMIT` constant and per-tenant `TenantQuotas`.
+
+Migration history is tracked in `drizzle.__drizzle_migrations_oss`. See [`docs/runbooks/upgrade.md`](./runbooks/upgrade.md) for the no-migration-downgrade and expand-contract-only policies that govern post-v1 schema evolution.
 
 ## Package Dependency Graph
 
@@ -95,7 +97,7 @@ flowchart LR
 3. **Extract** — LLM extracts structured fields from relevant pages. Falls back to CSS-selector extraction when no LLM is configured.
 4. **Schema Evolution** — Batched analysis of unmapped fields across pages. Proposes schema changes as actions requiring human review.
 5. **Reconcile** — Match entities across pages (same product from different URLs), resolve conflicting field values, normalize data types.
-6. **Export** — Output clean datasets in 5 formats. Every field carries provenance metadata (extracted, normalized, merged, resolved, inferred).
+6. **Export** — Output clean datasets in 5 formats. JSON exports can include field provenance metadata (extracted, normalized, merged, resolved, inferred) when requested.
 
 ## Core Interfaces
 
@@ -155,15 +157,15 @@ All three must hold to consider the swap.
 
 ## Export format stability
 
-Spatula exports data in **5 formats frozen at v1**: JSON, CSV, Parquet, SQLite, DuckDB. The wire shape of each format is FROZEN — additive-only across 1.x; removing or restructuring exported columns is a MAJOR break (see `docs/compat-policy.md`). Every record includes per-field provenance metadata (one of: `extracted`, `normalized`, `merged`, `resolved`, `inferred`).
+Spatula exports data in **5 formats frozen at v1**: JSON, CSV, Parquet, SQLite, DuckDB. The wire shape of each format is FROZEN — additive-only across 1.x; removing or restructuring exported columns is a MAJOR break (see `docs/compat-policy.md`). JSON can include per-field provenance metadata (one of: `extracted`, `normalized`, `merged`, `resolved`, `inferred`) when `includeProvenance` is true. The other v1 exporters write the flattened entity data only.
 
-| Format  | Provenance shape                                                | Use case                                  |
-| ------- | --------------------------------------------------------------- | ----------------------------------------- |
-| JSON    | Per-record nested `_provenance` object                          | Programmatic consumption; SDK round-trips |
-| CSV     | Per-field `<field>__source` sibling columns                     | Spreadsheet / quick inspection            |
-| Parquet | Provenance struct column                                        | Analytical queries; columnar warehouse    |
-| SQLite  | Sidecar `_provenance` table joined by `(record_id, field_name)` | Embeddable; offline analysis              |
-| DuckDB  | Same as SQLite + materialized `provenance` view                 | Analytical queries; SQL-native            |
+| Format  | Provenance support                      | Use case                                  |
+| ------- | --------------------------------------- | ----------------------------------------- |
+| JSON    | Optional per-record `provenance` object | Programmatic consumption; SDK round-trips |
+| CSV     | No provenance columns in v1             | Spreadsheet / quick inspection            |
+| Parquet | No provenance column in v1              | Analytical queries; columnar warehouse    |
+| SQLite  | No provenance sidecar table in v1       | Embeddable; offline analysis              |
+| DuckDB  | No provenance table or view in v1       | Analytical queries; SQL-native            |
 
 **Why frozen at v1:** downstream consumers (BI pipelines, embedded apps shipping `.sqlite` files, analytical jobs over `.parquet`) cannot tolerate per-minor shape changes. Treating the export wire shape as part of the API contract — same freeze rules as the OpenAPI surface — is a deliberate v1 promise.
 

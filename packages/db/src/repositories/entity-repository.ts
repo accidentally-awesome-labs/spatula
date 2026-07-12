@@ -1,6 +1,6 @@
-import { eq, and, desc, sql } from 'drizzle-orm';
+import { eq, and, desc, sql, inArray } from 'drizzle-orm';
 import { createLogger, StorageError } from '@spatula/shared';
-import { entities } from '../schema/entities.js';
+import { entities, entitySources } from '../schema/entities.js';
 import type { Database } from '../connection.js';
 import type { RedisCache } from '../cache.js';
 
@@ -51,6 +51,38 @@ export class EntityRepository {
       throw new StorageError(`Failed to create entity: ${(error as Error).message}`, {
         cause: error as Error,
         context: { jobId: input.jobId },
+      });
+    }
+  }
+
+  async deleteByJob(jobId: string, tenantId: string): Promise<number> {
+    try {
+      const rows = await this.db
+        .select({ id: entities.id })
+        .from(entities)
+        .where(and(eq(entities.jobId, jobId), eq(entities.tenantId, tenantId)));
+
+      if (rows.length === 0) {
+        return 0;
+      }
+
+      const entityIds = rows.map((row) => row.id);
+      await this.db.delete(entitySources).where(inArray(entitySources.entityId, entityIds));
+      const deleted = await this.db
+        .delete(entities)
+        .where(and(eq(entities.jobId, jobId), eq(entities.tenantId, tenantId)))
+        .returning({ id: entities.id });
+
+      if (this.cache) {
+        await this.cache.delete(`entity-count:${jobId}`);
+      }
+
+      logger.debug({ jobId, tenantId, count: deleted.length }, 'entities deleted for job');
+      return deleted.length;
+    } catch (error) {
+      throw new StorageError(`Failed to delete entities for job: ${(error as Error).message}`, {
+        cause: error as Error,
+        context: { jobId, tenantId },
       });
     }
   }

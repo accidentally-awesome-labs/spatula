@@ -25,7 +25,7 @@ export interface TaskStatsRepo {
  *
  * A job is complete when:
  * - No pending crawl tasks remain
- * - At most 1 in-progress task (the current one calling this check)
+ * - No in-progress crawl tasks remain
  * - All tasks are completed, failed, or skipped
  */
 export class CrawlCompletionChecker {
@@ -36,8 +36,7 @@ export class CrawlCompletionChecker {
   ): Promise<CompletionResult> {
     const stats = await taskRepo.getJobStats(jobId, tenantId);
 
-    // No pending tasks, and at most 1 in-progress (the current task)
-    const complete = stats.pending === 0 && stats.inProgress <= 1;
+    const complete = stats.pending === 0 && stats.inProgress === 0;
 
     if (complete) {
       logger.info({ jobId, ...stats }, 'Crawl naturally complete — all tasks processed');

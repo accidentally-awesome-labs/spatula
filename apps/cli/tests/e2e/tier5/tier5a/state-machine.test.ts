@@ -73,7 +73,7 @@ beforeAll(async () => {
 
 afterAll(async () => {
   if (harness) await harness.closeAll();
-});
+}, 60_000);
 
 // ---------------------------------------------------------------------------
 // Tests

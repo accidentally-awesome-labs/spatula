@@ -128,8 +128,8 @@ export class DockerPostgresManager implements ServiceManager {
     // its own __dirname, which breaks when called via tsx from a different package.
     const { resolve: pathResolve } = await import('node:path');
     const { migrate } = await import('drizzle-orm/node-postgres/migrator');
-    const { createDatabase } = await import('@spatula/db');
-    const migrationsDb = createDatabase(connectionString);
+    const { createDatabasePool } = await import('@spatula/db');
+    const migrationsDb = createDatabasePool(connectionString);
     // Find monorepo root by walking up from this file
     const { dirname: pathDirname } = await import('node:path');
     const { fileURLToPath: toPath } = await import('node:url');
@@ -137,7 +137,14 @@ export class DockerPostgresManager implements ServiceManager {
     // thisDir = apps/cli/scripts/services → root = ../../../../
     const monorepoRoot = pathResolve(thisDir, '..', '..', '..', '..');
     const migrationsFolder = pathResolve(monorepoRoot, 'packages', 'db', 'drizzle');
-    await migrate(migrationsDb, { migrationsFolder });
+    try {
+      await migrate(migrationsDb.db, {
+        migrationsFolder,
+        migrationsTable: '__drizzle_migrations_oss',
+      });
+    } finally {
+      await migrationsDb.pool.end();
+    }
 
     const projectName = this.projectName;
 

@@ -28,7 +28,7 @@ import {
   RedisCache,
   TenantDataRepository,
 } from '@spatula/db';
-import { createQueues, JobManager } from '@spatula/queue';
+import { createQueues, JobManager, redisConnectionOptionsFromUrl } from '@spatula/queue';
 import { createContentStore } from '@spatula/core';
 import { AuditLogger, createLogger, getEnvOrDefault, loadConfig } from '@spatula/shared';
 import { createAuthProvider } from './auth/factory.js';
@@ -66,13 +66,7 @@ export async function buildAppDeps(): Promise<AppDeps> {
 
   // --- Redis ---
   const redisUrl = config.redis.url;
-  const redisUrlObj = new URL(redisUrl);
-  const redisOpts = {
-    host: redisUrlObj.hostname,
-    port: parseInt(redisUrlObj.port, 10) || 6379,
-    ...(redisUrlObj.password ? { password: decodeURIComponent(redisUrlObj.password) } : {}),
-    ...(redisUrlObj.username ? { username: decodeURIComponent(redisUrlObj.username) } : {}),
-  };
+  const redisOpts = redisConnectionOptionsFromUrl(redisUrl);
 
   const redis = new Redis(redisUrl);
   const redisSubscriber = new Redis(redisUrl);

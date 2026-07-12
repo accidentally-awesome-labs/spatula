@@ -1,4 +1,4 @@
-import { execSync, spawn, type ChildProcess } from 'node:child_process';
+import { execFileSync, spawn, spawnSync, type ChildProcess } from 'node:child_process';
 import { platform } from 'node:os';
 import { createInterface } from 'node:readline';
 
@@ -52,14 +52,13 @@ async function confirm(message: string): Promise<boolean> {
 /**
  * Check whether a command exists on the system PATH.
  *
- * NOTE: We intentionally use execSync with hardcoded command names here
- * (not user-supplied input) for OS-level tool detection. This is a build/test
- * script, not application code, and the commands are string literals.
+ * NOTE: command names are hardcoded by callers. Use execFileSync to avoid shell
+ * interpolation even in local build/test tooling.
  */
 function commandExists(cmd: string): boolean {
   try {
     const whichCmd = platform() === 'win32' ? 'where' : 'which';
-    execSync(`${whichCmd} ${cmd}`, { stdio: 'ignore' });
+    execFileSync(whichCmd, [cmd], { stdio: 'ignore' });
     return true;
   } catch {
     return false;
@@ -106,13 +105,10 @@ async function isServing(): Promise<boolean> {
 
 /**
  * Check if a model is present in `ollama list` output.
- *
- * NOTE: execSync is used intentionally here — the command is a hardcoded
- * literal (`ollama list`) with no user-supplied interpolation.
  */
 function isModelInList(model: string): boolean {
   try {
-    const output = execSync('ollama list', { encoding: 'utf-8', timeout: 10_000 });
+    const output = execFileSync('ollama', ['list'], { encoding: 'utf-8', timeout: 10_000 });
     const lines = output.trim().split('\n');
     // First line is the header — skip it
     const dataLines = lines.slice(1);
@@ -130,6 +126,24 @@ function isModelInList(model: string): boolean {
   }
 }
 
+function runInstaller(os: NodeJS.Platform): void {
+  if (os === 'darwin') {
+    execFileSync('brew', ['install', 'ollama'], { stdio: 'inherit' });
+    return;
+  }
+
+  const installer = execFileSync('curl', ['-fsSL', 'https://ollama.com/install.sh'], {
+    encoding: 'utf-8',
+    maxBuffer: 10 * 1024 * 1024,
+  });
+  const result = spawnSync('sh', [], {
+    input: installer,
+    stdio: ['pipe', 'inherit', 'inherit'],
+  });
+  if (result.error) throw result.error;
+  if (result.status !== 0) throw new Error(`Installer exited with code ${result.status}`);
+}
+
 // ---------------------------------------------------------------------------
 // Factory
 // ---------------------------------------------------------------------------
@@ -143,7 +157,7 @@ export function createOllamaManager(): OllamaManager {
       let version: string | undefined;
       if (installed) {
         try {
-          const raw = execSync('ollama --version', { encoding: 'utf-8', timeout: 5_000 });
+          const raw = execFileSync('ollama', ['--version'], { encoding: 'utf-8', timeout: 5_000 });
           version = parseVersion(raw);
           if (version && compareSemver(version, MIN_VERSION) < 0) {
             console.log(
@@ -195,7 +209,7 @@ export function createOllamaManager(): OllamaManager {
 
       try {
         console.log(`Running: ${installCmd}`);
-        execSync(installCmd, { stdio: 'inherit' });
+        runInstaller(os);
       } catch {
         console.error('Ollama installation failed.');
         return false;
@@ -217,7 +231,7 @@ export function createOllamaManager(): OllamaManager {
 
       try {
         console.log(`Pulling model ${model}...`);
-        execSync(`ollama pull ${model}`, { stdio: 'inherit', timeout: 600_000 });
+        execFileSync('ollama', ['pull', model], { stdio: 'inherit', timeout: 600_000 });
       } catch {
         console.error(`Failed to pull model ${model}.`);
         return false;

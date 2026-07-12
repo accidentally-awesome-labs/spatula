@@ -5,7 +5,6 @@ namespace: spatula
 
 resources:
   - namespace.yaml
-  - secrets.yaml
   - migrate-job.yaml
   - api-deployment.yaml
   - api-service.yaml

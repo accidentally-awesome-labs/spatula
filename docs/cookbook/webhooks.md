@@ -84,14 +84,9 @@ Delivery uses HMAC-SHA256-signed `POST`. Non-2xx responses (4xx OR 5xx OR networ
 | 1       | — (immediate)             | 0                  |
 | 2       | 1m                        | 1m                 |
 | 3       | 5m                        | 6m                 |
-| 4       | 30m                       | 36m                |
-| 5       | 2h                        | 2h 36m             |
-| 6       | 8h                        | 10h 36m            |
 | —       | DLQ → `events.failed`     | —                  |
 
-After the final attempt fails, the event lands in the dead-letter queue and the per-tenant `events.failed` BullMQ stream surfaces the failure to operators.
-
-> **Current implementation note (v1.0):** the live worker (`packages/queue/src/webhook-worker.ts`) ships with the first three delays (1m, 5m, 30m) wired and `attempts: 3`. The full 5-delay schedule above is the v1 design target; the additional 2h + 8h tiers ship in a follow-up plan (additive — no API contract change because the schedule is opaque to receivers). Plan your retry expectations around the published table.
+After the final attempt fails, the event lands in the dead-letter queue and the per-tenant `events.failed` BullMQ stream surfaces the failure to operators. The worker backoff strategy is capped at 30 minutes for future additional attempts, but v1 configures three attempts.
 
 ## Dedup pattern
 
@@ -134,7 +129,7 @@ Subscribe to a subset by setting `webhookConfig.events: ['job.completed', 'expor
 
 ## Local testing
 
-Use a tunnel (e.g., `ngrok http 3000`) to expose your local handler; configure that URL on a test-job's `webhookConfig`. The CLI surfaces delivery attempt counts under `spatula jobs:show <jobId> --events`.
+Use a tunnel (e.g., `ngrok http 3000`) to expose your local handler; configure that URL on a test job's `webhookConfig`. Inspect delivery failures through the admin DLQ endpoints or queue dashboard on the self-hosted API server.
 
 ## Cross-references
 

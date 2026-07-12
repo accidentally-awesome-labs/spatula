@@ -234,10 +234,22 @@ function WsTestComponent({
   );
 }
 
+async function waitForWebSocketInstance(index = 0): Promise<MockWebSocket> {
+  for (let i = 0; i < 20; i++) {
+    const ws = mockWsInstances[index];
+    if (ws) return ws as MockWebSocket;
+    await vi.advanceTimersByTimeAsync(0);
+    await Promise.resolve();
+  }
+
+  throw new Error(`Timed out waiting for WebSocket instance ${index}`);
+}
+
 describe('useWebSocket hook', () => {
   let store: ReturnType<typeof createMockStore>;
 
   beforeEach(() => {
+    mockWsInstances.length = 0;
     store = createMockStore();
     vi.useFakeTimers();
   });
@@ -257,13 +269,10 @@ describe('useWebSocket hook', () => {
       }),
     );
 
-    // Flush React useEffect
-    await vi.advanceTimersByTimeAsync(0);
+    const ws = await waitForWebSocketInstance();
 
     expect(mockWsInstances).toHaveLength(1);
-    expect(mockWsInstances[0].url).toBe(
-      'ws://localhost:3000/ws/jobs/job-1/progress?tenantId=tenant-1',
-    );
+    expect(ws.url).toBe('ws://localhost:3000/ws/jobs/job-1/progress?tenantId=tenant-1');
   });
 
   it('connects with token URL when token is provided', async () => {
@@ -277,12 +286,10 @@ describe('useWebSocket hook', () => {
       }),
     );
 
-    await vi.advanceTimersByTimeAsync(0);
+    const ws = await waitForWebSocketInstance();
 
     expect(mockWsInstances).toHaveLength(1);
-    expect(mockWsInstances[0].url).toBe(
-      'wss://api.example.com/ws/jobs/job-1/progress?token=tok_abc',
-    );
+    expect(ws.url).toBe('wss://api.example.com/ws/jobs/job-1/progress?token=tok_abc');
   });
 
   it('does not connect when jobId is empty', async () => {
@@ -325,9 +332,7 @@ describe('useWebSocket hook', () => {
       }),
     );
 
-    await vi.advanceTimersByTimeAsync(0);
-
-    const ws = mockWsInstances[0];
+    const ws = await waitForWebSocketInstance();
     ws._open();
     ws._message({
       type: 'job_status_changed',
@@ -350,24 +355,25 @@ describe('useWebSocket hook', () => {
       }),
     );
 
-    await vi.advanceTimersByTimeAsync(0);
+    const ws1 = await waitForWebSocketInstance();
 
     expect(mockWsInstances).toHaveLength(1);
-    const ws1 = mockWsInstances[0];
     ws1._open();
     ws1._close(); // Trigger reconnect — delay is 1s, then bumps to 2s
 
     // After 1s delay, should reconnect
     await vi.advanceTimersByTimeAsync(1000);
+    await waitForWebSocketInstance(1);
     expect(mockWsInstances).toHaveLength(2);
 
     // Close again without opening — backoff should be 2s since _open() resets it
-    const ws2 = mockWsInstances[1];
+    const ws2 = await waitForWebSocketInstance(1);
     ws2._close();
 
     await vi.advanceTimersByTimeAsync(1000);
     expect(mockWsInstances).toHaveLength(2); // Not yet — need 2s total
     await vi.advanceTimersByTimeAsync(1000);
+    await waitForWebSocketInstance(2);
     expect(mockWsInstances).toHaveLength(3); // Now reconnected after 2s
   });
 
@@ -381,10 +387,9 @@ describe('useWebSocket hook', () => {
       }),
     );
 
-    await vi.advanceTimersByTimeAsync(0);
+    const ws = await waitForWebSocketInstance();
 
     expect(mockWsInstances).toHaveLength(1);
-    const ws = mockWsInstances[0];
     ws._open();
     await vi.advanceTimersByTimeAsync(0);
 
@@ -405,9 +410,8 @@ describe('useWebSocket hook', () => {
       }),
     );
 
-    await vi.advanceTimersByTimeAsync(0);
+    const ws = await waitForWebSocketInstance();
 
-    const ws = mockWsInstances[0];
     ws._open();
     await vi.advanceTimersByTimeAsync(0);
 

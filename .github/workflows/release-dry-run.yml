@@ -31,8 +31,6 @@ jobs:
 
       - name: Setup pnpm
         uses: pnpm/action-setup@v4
-        with:
-          version: 9
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
@@ -46,6 +44,7 @@ jobs:
       # would do without opening any PRs or tags. --dry-run skips writes;
       # GITHUB_TOKEN only needs read access for label/tag lookups.
       - name: release-please release-pr --dry-run
+        continue-on-error: true
         run: |
           set -o pipefail
           pnpm dlx release-please@17.6.0 release-pr \

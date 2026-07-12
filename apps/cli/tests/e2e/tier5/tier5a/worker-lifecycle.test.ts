@@ -13,7 +13,12 @@
  */
 
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
-import { startTestWorkers, waitForJobStatus, type TestWorkerHarness } from './helpers.js';
+import {
+  startTestWorkers,
+  waitForJobStatus,
+  TEST_WORKER_LOCK_DURATION_MS,
+  type TestWorkerHarness,
+} from './helpers.js';
 import { WorkerHeartbeat, QUEUE_NAMES } from '@spatula/queue';
 import { AuditLogRepository } from '@spatula/db';
 
@@ -54,7 +59,7 @@ beforeAll(async () => {
 
 afterAll(async () => {
   if (harness) await harness.closeAll();
-});
+}, 60_000);
 
 // ---------------------------------------------------------------------------
 // Tests
@@ -98,12 +103,25 @@ describe('Tier 5A -- Worker Lifecycle + Infrastructure (Tests 18-22)', () => {
       QUEUE_NAMES.CRAWL,
       async (job: any) => processCrawlJob(job.data, harness!.workerDeps),
       {
-        connection: { host: 'localhost', port: 6380, db: 1, maxRetriesPerRequest: null as null },
+        connection: { ...harness.redisConnection, maxRetriesPerRequest: null as null },
         concurrency: 1,
+        lockDuration: TEST_WORKER_LOCK_DURATION_MS,
       },
     );
     harness!.workers[0] = newCrawlWorker;
-  }, 60_000);
+    await newCrawlWorker.waitUntilReady();
+
+    // Keep this lifecycle test isolated. Closing the worker can leave follow-on
+    // crawl tasks queued for the same job; the recreated worker must drain them
+    // before the next test starts a new job on the shared queues.
+    await waitForJobStatus(
+      harness.workerDeps.jobRepo,
+      jobId,
+      harness.tenantId,
+      ['completed', 'failed'],
+      90_000,
+    );
+  }, 120_000);
 
   // -------------------------------------------------------------------------
   // Test 19: Config diff re-run only crawls new URLs
@@ -174,7 +192,7 @@ describe('Tier 5A -- Worker Lifecycle + Infrastructure (Tests 18-22)', () => {
     const redisModule = 'ioredis';
     const mod: any = await import(/* @vite-ignore */ redisModule);
     const IoRedis = mod.default;
-    const redis = new IoRedis('localhost', { port: 6380, db: 1 });
+    const redis = new IoRedis(harness.redisConnection);
 
     try {
       const key = `ws-token:${body.data.token}`;
@@ -201,7 +219,7 @@ describe('Tier 5A -- Worker Lifecycle + Infrastructure (Tests 18-22)', () => {
       const redisModule = 'ioredis';
       const mod: any = await import(/* @vite-ignore */ redisModule);
       const IoRedis = mod.default;
-      const redis = new IoRedis('localhost', { port: 6380, db: 1 });
+      const redis = new IoRedis(harness.redisConnection);
 
       heartbeat = new WorkerHeartbeat({
         redis,
@@ -257,6 +275,7 @@ describe('Tier 5A -- Worker Lifecycle + Infrastructure (Tests 18-22)', () => {
     if (!harness) return ctx.skip();
 
     const auditLogRepo = new AuditLogRepository(harness.db);
+    await clearTenantRateLimits();
 
     // Create a job via the API (which triggers audit logging)
     const createRes = await harness.app.request('/api/v1/jobs', {
@@ -332,3 +351,17 @@ describe('Tier 5A -- Worker Lifecycle + Infrastructure (Tests 18-22)', () => {
     }
   }, 60_000);
 });
+
+async function clearTenantRateLimits(): Promise<void> {
+  if (!harness) return;
+  const redisModule = 'ioredis';
+  const mod: any = await import(/* @vite-ignore */ redisModule);
+  const IoRedis = mod.default;
+  const redis = new IoRedis(harness.redisConnection);
+  try {
+    const keys = await redis.keys(`ratelimit:${harness.tenantId}:*`);
+    if (keys.length > 0) await redis.del(...keys);
+  } finally {
+    await redis.quit();
+  }
+}

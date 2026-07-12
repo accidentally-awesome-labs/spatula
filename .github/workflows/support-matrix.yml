@@ -1,11 +1,10 @@
 # Support Matrix — Min-Version CI
 #
-# Heavy DB lanes (backup/upgrade) run on-release + nightly (Phase 19 CONTEXT
-# Claude's-discretion cadence). The light config-compat lane (pnpm test:config)
-# is pure in-process (no DB) and is safe to add to ci.yml on PR if desired —
-# that wiring is left to Phase 21 (full CI topology).
+# Heavy DB lanes (backup/upgrade) run on release tags, nightly, and manually.
+# The light config-compat lane (pnpm test:config) is pure in-process and can be
+# moved into the PR gate if we decide the extra runtime is worth it.
 #
-# NOT triggered on pull_request: DB-heavy lanes would burden the PR gate.
+# Not triggered on pull_request: DB-heavy lanes would burden the PR gate.
 
 name: Support Matrix
 
@@ -67,8 +66,6 @@ jobs:
 
       - name: Setup pnpm
         uses: pnpm/action-setup@v4
-        with:
-          version: 9
 
       - name: Setup Node.js ${{ matrix.node }}
         uses: actions/setup-node@v4
