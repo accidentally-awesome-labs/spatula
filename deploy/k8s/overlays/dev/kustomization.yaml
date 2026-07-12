@@ -4,9 +4,8 @@ kind: Kustomization
 # Dev overlay (D-09): self-contained on a fresh kind cluster.
 # Adds throwaway in-cluster Postgres + Redis stub pods — no external services needed.
 #
-# Secret note: The base Secret's DATABASE_URL / REDIS_URL already point at the
-# in-cluster postgres / redis Services (postgres:5432, redis:6379). No Secret
-# patch is needed for dev — the stubs match the base dev-default credentials.
+# Secret note: dev generates a local-only spatula-secrets Secret that points at
+# the in-cluster postgres / redis Services (postgres:5432, redis:6379).
 
 namespace: spatula
 
@@ -14,6 +13,17 @@ resources:
   - ../../base
   - postgres-stub.yaml
   - redis-stub.yaml
+
+generatorOptions:
+  disableNameSuffixHash: true
+
+secretGenerator:
+  - name: spatula-secrets
+    literals:
+      - DATABASE_URL=postgresql://spatula:spatula@postgres:5432/spatula
+      - REDIS_URL=redis://redis:6379
+      - OPENROUTER_API_KEY=REPLACE_ME
+      - AUTH_STRATEGY=none
 
 # Override image tags to :latest for dev (CI will pull the most recent build).
 # For a specific dev build, change the newTag below.

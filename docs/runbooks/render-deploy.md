@@ -47,15 +47,15 @@ Or fork to your own GitHub account and proceed from there.
 
 Before clicking **Apply**, set any `sync: false` environment variables (these are NOT stored in the YAML for security):
 
-| Variable                 | Required               | Description                                                   |
-| ------------------------ | ---------------------- | ------------------------------------------------------------- |
-| `OPENROUTER_API_KEY`     | Yes                    | LLM inference key from [openrouter.ai](https://openrouter.ai) |
-| `AUTH_STRATEGY`          | No                     | Auth mode: `none` (default), `api-key`, or `jwt`              |
-| `JWT_ISSUER`             | If `AUTH_STRATEGY=jwt` | OIDC issuer URL                                               |
-| `JWT_AUDIENCE`           | If `AUTH_STRATEGY=jwt` | JWT audience claim                                            |
-| `JWT_JWKS_URL`           | If `AUTH_STRATEGY=jwt` | JWKS endpoint                                                 |
-| `TENANT_CREATION_SECRET` | No                     | Protect `/api/v1/tenants` bootstrap route in production       |
-| `SENTRY_DSN`             | No                     | Sentry error tracking DSN                                     |
+| Variable                 | Required               | Description                                                    |
+| ------------------------ | ---------------------- | -------------------------------------------------------------- |
+| `OPENROUTER_API_KEY`     | Yes                    | LLM inference key from [openrouter.ai](https://openrouter.ai)  |
+| `AUTH_STRATEGY`          | Public deploys         | Auth mode: set `api-key` or `jwt`; `none` is private-demo only |
+| `JWT_ISSUER`             | If `AUTH_STRATEGY=jwt` | OIDC issuer URL                                                |
+| `JWT_AUDIENCE`           | If `AUTH_STRATEGY=jwt` | JWT audience claim                                             |
+| `JWT_JWKS_URL`           | If `AUTH_STRATEGY=jwt` | JWKS endpoint                                                  |
+| `TENANT_CREATION_SECRET` | Public deploys         | Protect `/api/v1/tenants` bootstrap route in production        |
+| `SENTRY_DSN`             | No                     | Sentry error tracking DSN                                      |
 
 ### 4. Apply and wait for the deploy
 
@@ -150,11 +150,11 @@ Without these, crawl tasks will fail immediately (Playwright not found in the co
 
 ### Service reference
 
-| Property     | Value                                                        |
-| ------------ | ------------------------------------------------------------ |
-| Service ID   | `srv-d8lh2q6rnols73dedvog`                                   |
-| URL          | `https://spatula-api.onrender.com`                           |
-| Branch       | `render-paid-demo` (paid mirror — free PG/KV slots occupied) |
+| Property   | Value                                                        |
+| ---------- | ------------------------------------------------------------ |
+| Service ID | `srv-d8lh2q6rnols73dedvog`                                   |
+| URL        | `https://spatula-api.onrender.com`                           |
+| Branch     | `render-paid-demo` (paid mirror — free PG/KV slots occupied) |
 
 ### SPATULA_CRAWLER in render.yaml
 

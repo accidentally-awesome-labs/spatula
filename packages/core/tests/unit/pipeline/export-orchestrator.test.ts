@@ -224,6 +224,28 @@ describe('processExport', () => {
     expect(generateDocumentation).toHaveBeenCalled();
   });
 
+  it('filters empty entities out of offset exports', async () => {
+    const deps = createMockDeps();
+    (deps.entityRepo.findByJob as any).mockResolvedValue([
+      { id: 'empty', mergedData: {}, qualityScore: 0.9, categories: [], sourceCount: 1 },
+      {
+        id: 'e1',
+        mergedData: { name: 'Test' },
+        qualityScore: 0.9,
+        categories: [],
+        sourceCount: 1,
+      },
+    ]);
+    (deps.entityRepo.countByJob as any).mockResolvedValue(2);
+
+    const result = await processExport(defaultInput, deps);
+
+    expect(result.entityCount).toBe(1);
+    const storedContent = (deps.contentStore.store as any).mock.calls[0][1];
+    const envelope = JSON.parse(storedContent);
+    expect(envelope.metadata.entityCount).toBe(1);
+  });
+
   it('stores text content for CSV export', async () => {
     const deps = createMockDeps();
     (deps.entityRepo.findByJob as any).mockResolvedValue([

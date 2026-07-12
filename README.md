@@ -154,17 +154,18 @@ See [examples/](examples/) for complete configuration examples covering ecommerc
 
 ### Environment Variables
 
-| Variable             | Required | Default                  | Description                                    |
-| -------------------- | -------- | ------------------------ | ---------------------------------------------- |
-| `OPENROUTER_API_KEY` | Yes\*    | —                        | OpenRouter API key for cloud LLM               |
-| `OLLAMA_BASE_URL`    | No       | `http://localhost:11434` | Ollama endpoint for local LLM                  |
-| `DATABASE_URL`       | Server   | —                        | PostgreSQL connection string                   |
-| `REDIS_URL`          | Server   | —                        | Redis connection string                        |
-| `AUTH_STRATEGY`      | No       | `none`                   | Auth mode: `none`, `api-key`, `jwt`            |
-| `FIRECRAWL_API_KEY`  | No       | —                        | Firecrawl API key (if using Firecrawl crawler) |
-| `CONTENT_STORE`      | No       | `filesystem`             | Storage backend: `filesystem` or `s3`          |
-| `SENTRY_DSN`         | No       | —                        | Sentry error tracking endpoint                 |
-| `LOG_LEVEL`          | No       | `info`                   | Log level: `debug`, `info`, `warn`, `error`    |
+| Variable                           | Required | Default                  | Description                                           |
+| ---------------------------------- | -------- | ------------------------ | ----------------------------------------------------- |
+| `OPENROUTER_API_KEY`               | Yes\*    | —                        | OpenRouter API key for cloud LLM                      |
+| `OLLAMA_BASE_URL`                  | No       | `http://localhost:11434` | Ollama endpoint for local LLM                         |
+| `DATABASE_URL`                     | Server   | —                        | PostgreSQL connection string                          |
+| `REDIS_URL`                        | Server   | —                        | Redis connection string                               |
+| `AUTH_STRATEGY`                    | No       | `none`                   | Auth mode. Use `api-key` or `jwt` in production       |
+| `FIRECRAWL_API_KEY`                | No       | —                        | Firecrawl API key (if using Firecrawl crawler)        |
+| `CONTENT_STORE`                    | No       | `postgres`               | Storage backend: `postgres` or `s3`                   |
+| `SPATULA_ALLOW_PRIVATE_CRAWL_URLS` | No       | `0` in production        | Allows private/link-local crawl seeds when set to `1` |
+| `SENTRY_DSN`                       | No       | —                        | Sentry error tracking endpoint                        |
+| `LOG_LEVEL`                        | No       | `info`                   | Log level: `debug`, `info`, `warn`, `error`           |
 
 \* Not required when using Ollama. See [.env.example](.env.example) for the full list.
 
@@ -212,7 +213,7 @@ The API server exposes a RESTful JSON API with OpenAPI documentation.
 | `GET`  | `/api/v1/usage`                                  | LLM usage and cost breakdown |
 | `GET`  | `/health`                                        | Health check                 |
 
-All endpoints require authentication when `AUTH_STRATEGY` is set. See [.env.example](.env.example) for auth configuration.
+All endpoints require authentication when `AUTH_STRATEGY` is set to `api-key` or `jwt`. `AUTH_STRATEGY=none` is for local development only. See [.env.example](.env.example) for auth configuration.
 
 ## Export Formats
 

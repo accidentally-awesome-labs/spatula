@@ -7,6 +7,7 @@ import type {
   ReconciliationInput,
   PipelineReconciliationResult,
 } from './types.js';
+import { isMeaningfulRecord } from './record-utils.js';
 
 export const DEFAULT_RECONCILIATION_CONFIG: ReconciliationConfig = {
   matchStrategy: 'composite_key',
@@ -46,12 +47,19 @@ export async function processReconciliation(
     }
 
     // 3. Load all extractions
-    const extractions = await deps.extractionRepo.findByJob(jobId, tenantId);
+    const loadedExtractions = await deps.extractionRepo.findByJob(jobId, tenantId);
+    const extractions = loadedExtractions.filter((ext: { data: unknown }) =>
+      isMeaningfulRecord(ext.data),
+    );
+
     if (extractions.length === 0) {
       logger.warn({ jobId }, 'no extractions found, skipping reconciliation');
+      await deps.entityRepo.deleteByJob?.(jobId, tenantId);
       await deps.jobRepo.updateStatus(jobId, tenantId, 'completed');
       return { entitiesCreated: 0, actionsGenerated: 0 };
     }
+
+    await deps.entityRepo.deleteByJob?.(jobId, tenantId);
 
     // 4. Load pages for enrichment
     const uniquePageIds = [...new Set(extractions.map((e: { pageId: string }) => e.pageId))];
@@ -117,7 +125,11 @@ export async function processReconciliation(
     }
 
     // 8. Persist entities and link extractions
-    for (const entity of result.entities) {
+    const meaningfulEntities = result.entities.filter((entity) =>
+      isMeaningfulRecord(entity.mergedData),
+    );
+
+    for (const entity of meaningfulEntities) {
       const dbEntity = await deps.entityRepo.create({
         jobId,
         tenantId,
@@ -186,14 +198,14 @@ export async function processReconciliation(
     logger.info(
       {
         jobId,
-        entitiesCreated: result.entities.length,
+        entitiesCreated: meaningfulEntities.length,
         actionsGenerated: result.actions.length,
       },
       'reconciliation completed',
     );
 
     return {
-      entitiesCreated: result.entities.length,
+      entitiesCreated: meaningfulEntities.length,
       actionsGenerated: result.actions.length,
     };
   } catch (error) {

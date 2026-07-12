@@ -105,6 +105,7 @@ export interface EntityRepo {
     provenance: Record<string, unknown>;
     qualityScore: number;
   }): Promise<{ id: string }>;
+  deleteByJob?(jobId: string, tenantId: string): Promise<number>;
   findByJob(
     jobId: string,
     tenantId: string,

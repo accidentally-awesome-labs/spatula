@@ -76,7 +76,9 @@ describe('AlsUsageRecorder', () => {
 
     expect(mockInsert).toHaveBeenCalledTimes(2);
 
-    const calls = mockInsert.mock.calls.map((c) => c[0] as { tenantId: string; jobId: string; model: string });
+    const calls = mockInsert.mock.calls.map(
+      (c) => c[0] as { tenantId: string; jobId: string; model: string },
+    );
     const t1Call = calls.find((c) => c.model === 'model-a');
     const t2Call = calls.find((c) => c.model === 'model-b');
 

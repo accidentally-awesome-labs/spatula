@@ -1,6 +1,6 @@
-import { createLogger, StorageError } from '@spatula/shared';
+import { createLogger, StorageError, ValidationSchemaError } from '@spatula/shared';
 import type { AuditLogger } from '@spatula/shared';
-import type { JobConfig, JobStatus } from '@spatula/core';
+import { isValidCrawlUrl, type JobConfig, type JobStatus } from '@spatula/core';
 import type { JobRepository, CrawlTaskRepository, SchemaRepository } from '@spatula/db';
 import type { TenantRepository } from '@spatula/db';
 import { QuotaExceededError } from '@spatula/shared';
@@ -9,6 +9,12 @@ import { JobStateMachine } from './state-machine.js';
 import { enqueueWebhookIfConfigured } from './webhook-sender.js';
 
 const logger = createLogger('job-manager');
+
+function shouldRejectPrivateSeedUrls(): boolean {
+  if (process.env.SPATULA_ALLOW_PRIVATE_CRAWL_URLS === '1') return false;
+  if (process.env.SPATULA_ALLOW_PRIVATE_CRAWL_URLS === '0') return true;
+  return process.env.NODE_ENV === 'production';
+}
 
 export interface JobManagerConfig {
   jobRepo: JobRepository;
@@ -80,12 +86,22 @@ export class JobManager {
       }
     }
 
+    const config = job.config as JobConfig;
+    if (shouldRejectPrivateSeedUrls()) {
+      const blockedUrl = config.seedUrls.find((url) => !isValidCrawlUrl(url));
+      if (blockedUrl) {
+        throw new ValidationSchemaError(
+          'Private, loopback, link-local, and reserved seed URLs are disabled in production',
+          { context: { url: blockedUrl } },
+        );
+      }
+    }
+
     // Validate the full transition chain, then write the final state atomically
     JobStateMachine.transition(job.status as JobStatus, 'queued');
     JobStateMachine.transition('queued', 'running');
     await this.jobRepo.updateStatus(jobId, tenantId, 'running');
 
-    const config = job.config as JobConfig;
     const initialFields = config.schema.userFields ?? [];
     await this.schemaRepo.create({
       jobId,

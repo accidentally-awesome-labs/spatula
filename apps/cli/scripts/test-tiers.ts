@@ -1,4 +1,4 @@
-import { execSync } from 'node:child_process';
+import { execFileSync } from 'node:child_process';
 import { existsSync, readFileSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -133,11 +133,10 @@ async function main(): Promise<void> {
   const startTime = Date.now();
 
   // Run vitest
-  // NOTE: execSync is used here with a hardcoded vitest binary path and
-  // controlled glob arguments — no user-supplied shell interpolation.
+  // Use execFileSync so controlled globs are passed as argv, not shell text.
   try {
     const vitestBin = join(CLI_ROOT, 'node_modules', '.bin', 'vitest');
-    execSync(`${vitestBin} run ${globs.join(' ')}`, {
+    execFileSync(vitestBin, ['run', ...globs], {
       stdio: 'inherit',
       cwd: CLI_ROOT,
       timeout: args.timeout,

@@ -63,6 +63,7 @@ vi.mock('../../src/queues.js', () => ({
     tenantDelete: {},
     closeAll: vi.fn().mockResolvedValue(undefined),
   }),
+  redisConnectionOptionsFromUrl: vi.fn().mockReturnValue({ host: 'localhost', port: 6379 }),
 }));
 vi.mock('../../src/worker-selection.js', () => ({
   parseEnabledWorkers: vi.fn().mockReturnValue('all'),

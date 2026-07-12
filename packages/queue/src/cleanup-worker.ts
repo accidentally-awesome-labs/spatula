@@ -273,7 +273,7 @@ async function cleanupSystemData(deps: CleanupDeps): Promise<Record<string, numb
   if (deps.contentStore) {
     const orphans = await deps.db.execute(sql`
       SELECT id, key FROM content_store
-      WHERE key NOT IN (
+      WHERE ('pg://' || id::text) NOT IN (
         SELECT content_ref FROM exports WHERE content_ref IS NOT NULL
         UNION ALL
         SELECT content_ref FROM raw_pages WHERE content_ref IS NOT NULL
@@ -284,12 +284,13 @@ async function cleanupSystemData(deps: CleanupDeps): Promise<Record<string, numb
     `);
     let orphanCount = 0;
     for (const row of orphans.rows ?? []) {
+      const ref = `pg://${(row as any).id}`;
       try {
-        await deps.contentStore.delete((row as any).key);
+        await deps.contentStore.delete(ref);
         orphanCount++;
       } catch (err) {
         logger.warn(
-          { key: (row as any).key, error: (err as Error).message },
+          { ref, key: (row as any).key, error: (err as Error).message },
           'Failed to delete orphan content',
         );
       }

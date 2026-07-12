@@ -1,4 +1,5 @@
 import { describe, it, expect, beforeAll, afterAll, vi } from 'vitest';
+import { ErrorCode } from '@spatula/shared';
 import {
   setupAuthContext,
   bearerHeaders,
@@ -22,7 +23,7 @@ describe('Tier 5B: Error Response Consistency', () => {
   });
 
   // ── Test 21: 400 validation error format ──────────────────────────
-  it('returns 400 VALIDATION_ERROR for invalid body', async (t) => {
+  it('returns 400 VALIDATION.SCHEMA for invalid body', async (t) => {
     if (!dbAvailable) return t.skip();
     // POST a job with missing required fields
     const res = await ctx.app.request('/api/v1/jobs', {
@@ -32,12 +33,12 @@ describe('Tier 5B: Error Response Consistency', () => {
     });
     expect(res.status).toBe(400);
     const body = await res.json();
-    expect(body.error.code).toBe('VALIDATION_ERROR');
+    expect(body.error.code).toBe(ErrorCode.VALIDATION_SCHEMA);
     expect(body.error.message).toBeDefined();
   });
 
   // ── Test 22: 404 not found format ─────────────────────────────────
-  it('returns 404 NOT_FOUND for nonexistent job', async (t) => {
+  it('returns 404 JOB.NOT_FOUND for nonexistent job', async (t) => {
     if (!dbAvailable) return t.skip();
     const fakeId = '00000000-0000-0000-0000-000000000099';
     const res = await ctx.app.request(`/api/v1/jobs/${fakeId}`, {
@@ -45,7 +46,7 @@ describe('Tier 5B: Error Response Consistency', () => {
     });
     expect(res.status).toBe(404);
     const body = await res.json();
-    expect(body.error.code).toBe('NOT_FOUND');
+    expect(body.error.code).toBe(ErrorCode.JOB_NOT_FOUND);
     expect(body.error.message).toBeDefined();
     expect(body.error.requestId).toBeDefined();
   });
@@ -77,12 +78,12 @@ describe('Tier 5B: Error Response Consistency', () => {
     });
     expect(res2.status).toBe(409);
     const body = await res2.json();
-    expect(body.error.code).toBe('ALREADY_RESOLVED');
+    expect(body.error.code).toBe(ErrorCode.JOB_INVALID_STATE);
     expect(body.error.message).toBeDefined();
   });
 
   // ── Test 24: 500 unhandled exception format ───────────────────────
-  it('returns 500 INTERNAL_ERROR for unhandled exceptions', async (t) => {
+  it('returns 500 INTERNAL.ERROR for unhandled exceptions', async (t) => {
     if (!dbAvailable) return t.skip();
     // Create a job first (before the spy) so we have a valid ID
     const createRes = await ctx.app.request('/api/v1/jobs', {
@@ -103,7 +104,7 @@ describe('Tier 5B: Error Response Consistency', () => {
     });
     expect(res.status).toBe(500);
     const body = await res.json();
-    expect(body.error.code).toBe('INTERNAL_ERROR');
+    expect(body.error.code).toBe(ErrorCode.INTERNAL_ERROR);
     expect(body.error.message).toBe('Internal server error'); // Generic for 5xx
     expect(body.error.requestId).toBeDefined();
 

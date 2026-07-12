@@ -1,15 +1,51 @@
 import { createRoute, z } from '@hono/zod-openapi';
 import { createOpenAPIRouter } from '../openapi-config.js';
 import { JobConfig } from '@spatula/core';
-import { createJobSchema, listJobsQuerySchema, patchJobSchema } from '../schemas/job.js';
+import {
+  createJobSchema,
+  isAllowedCreateJobSeedUrl,
+  listJobsQuerySchema,
+  patchJobSchema,
+  PRIVATE_CRAWL_URL_REJECTION_MESSAGE,
+} from '../schemas/job.js';
 import {
   jobResponseSchema,
   errorResponseSchema,
   dataResponse,
   jsonContent,
 } from '../schemas/responses.js';
-import { JobNotFoundError } from '@spatula/shared';
+import { JobNotFoundError, ValidationSchemaError } from '@spatula/shared';
 import { applyDeprecationHeaders } from '../lib/deprecation-headers.js';
+import type { AppDeps } from '../types.js';
+
+type CrawlTaskStats = {
+  pending: number;
+  inProgress: number;
+  completed: number;
+  failed: number;
+  skipped: number;
+};
+
+const EMPTY_CRAWL_TASK_STATS: CrawlTaskStats = {
+  pending: 0,
+  inProgress: 0,
+  completed: 0,
+  failed: 0,
+  skipped: 0,
+};
+
+async function getCrawlTaskStats(
+  deps: Pick<AppDeps, 'taskRepo'>,
+  jobId: string,
+  tenantId: string,
+): Promise<CrawlTaskStats> {
+  const getJobStats = deps.taskRepo?.getJobStats;
+  if (typeof getJobStats !== 'function') {
+    return { ...EMPTY_CRAWL_TASK_STATS };
+  }
+
+  return getJobStats.call(deps.taskRepo, jobId, tenantId);
+}
 
 // --- Route definitions ---
 
@@ -143,6 +179,12 @@ export function jobRoutes() {
     const body = c.req.valid('json');
     const tenantId = c.get('tenantId');
     const deps = c.get('deps');
+    const blockedSeedUrl = body.seedUrls.find((url) => !isAllowedCreateJobSeedUrl(url));
+    if (blockedSeedUrl) {
+      throw new ValidationSchemaError(PRIVATE_CRAWL_URL_REJECTION_MESSAGE, {
+        context: { field: 'seedUrls', url: blockedSeedUrl },
+      });
+    }
 
     const config = JobConfig.parse({ tenantId, ...body });
     const jobId = await deps.jobManager.createJob(config);
@@ -204,7 +246,7 @@ export function jobRoutes() {
 
     // Crawl-task progress (completed = pages crawled). Surfaced so clients can read
     // page counts over HTTP (the API/worker path does not persist these into job.stats).
-    const taskStats = await deps.taskRepo.getJobStats(id, tenantId);
+    const taskStats = await getCrawlTaskStats(deps, id, tenantId);
 
     const enrichedStats = {
       ...((job.stats as Record<string, number>) ?? {}),

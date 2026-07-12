@@ -86,6 +86,7 @@ vi.mock('./queues.js', () => ({
     tenantDelete: {},
     closeAll: vi.fn().mockResolvedValue(undefined),
   }),
+  redisConnectionOptionsFromUrl: vi.fn().mockReturnValue({ host: 'localhost', port: 6379 }),
 }));
 
 vi.mock('./worker-selection.js', () => ({
@@ -185,6 +186,21 @@ describe('startWorker({ deps: stubDeps }) — Gap-1 injection seam', () => {
     expect(shutdownResult).toBeInstanceOf(Promise);
     await shutdownResult;
   });
+
+  it('wires a Redis event publisher into production WorkerDeps', async () => {
+    const { buildWorkerDeps } = await import('./build-worker-deps.js');
+    const { startWorker } = await import('./worker-entrypoint.js');
+
+    const handle = await startWorker();
+
+    expect(buildWorkerDeps).toHaveBeenCalledWith(
+      expect.objectContaining({
+        eventPublisher: expect.objectContaining({ publish: expect.any(Function) }),
+      }),
+    );
+
+    await handle.shutdown();
+  });
 });
 
 // ─── Test 2: ALS attribution (Gap-3) ─────────────────────────────────────────
@@ -233,19 +249,35 @@ vi.mock('@spatula/core', () => {
   ): string => config.modelOverrides?.[task] ?? config.primaryModel;
 
   class PageClassifier {
-    constructor(public llmClient: unknown, public config: unknown) {}
+    constructor(
+      public llmClient: unknown,
+      public config: unknown,
+    ) {}
   }
   class StaticExtractor {
-    constructor(public llmClient: unknown, public config: unknown, public jobId: string) {}
+    constructor(
+      public llmClient: unknown,
+      public config: unknown,
+      public jobId: string,
+    ) {}
   }
   class SchemaEvolverImpl {
-    constructor(public llmClient: unknown, public config: unknown) {}
+    constructor(
+      public llmClient: unknown,
+      public config: unknown,
+    ) {}
   }
   class DataReconcilerImpl {
-    constructor(public llmClient: unknown, public config: unknown) {}
+    constructor(
+      public llmClient: unknown,
+      public config: unknown,
+    ) {}
   }
   class LLMLinkEvaluator {
-    constructor(public llmClient: unknown, public model: string) {}
+    constructor(
+      public llmClient: unknown,
+      public model: string,
+    ) {}
   }
 
   return {
@@ -317,18 +349,42 @@ describe('deriveJobDeps — Gap-2 per-job model derivation', () => {
     const { deriveJobDeps } = await import('./derive-job-deps.js');
 
     const stubBase = {
-      dbPool: {}, crawler: {}, contentStore: {}, jobRepo: {}, taskRepo: {},
-      pageRepo: {}, extractionRepo: {}, schemaRepo: {}, entityRepo: {},
-      sourceTrustRepo: {}, entitySourceRepo: {}, exportRepo: {}, actionRepo: {},
-      queues: {}, eventPublisher: {}, robotsChecker: {}, rateLimiter: {},
-      pageBudget: {}, completionChecker: {}, tenantRepo: {},
-      classifier: {}, extractor: {}, schemaEvolver: {}, reconciler: {}, linkEvaluator: {},
+      dbPool: {},
+      crawler: {},
+      contentStore: {},
+      jobRepo: {},
+      taskRepo: {},
+      pageRepo: {},
+      extractionRepo: {},
+      schemaRepo: {},
+      entityRepo: {},
+      sourceTrustRepo: {},
+      entitySourceRepo: {},
+      exportRepo: {},
+      actionRepo: {},
+      queues: {},
+      eventPublisher: {},
+      robotsChecker: {},
+      rateLimiter: {},
+      pageBudget: {},
+      completionChecker: {},
+      tenantRepo: {},
+      classifier: {},
+      extractor: {},
+      schemaEvolver: {},
+      reconciler: {},
+      linkEvaluator: {},
     } as any;
 
     const stubClient = { complete: vi.fn() } as any;
 
     const depsFast = deriveJobDeps(stubBase, stubClient, { primaryModel: 'tier-fast' }, 'job-fast');
-    const depsSmart = deriveJobDeps(stubBase, stubClient, { primaryModel: 'tier-smart' }, 'job-smart');
+    const depsSmart = deriveJobDeps(
+      stubBase,
+      stubClient,
+      { primaryModel: 'tier-smart' },
+      'job-smart',
+    );
 
     // linkEvaluator.model must reflect the config it was built with
     expect((depsFast.linkEvaluator as any).model).toBe('tier-fast');

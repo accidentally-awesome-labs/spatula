@@ -79,6 +79,8 @@ import type { WebhookReceiver } from '../../tier4/helpers.js';
 
 // pg and ioredis types — structural to avoid extra devDependencies
 type Pool = { end(): Promise<void>; [k: string]: unknown };
+type RedisConnection = { host: string; port: number; db: number };
+export const TEST_WORKER_LOCK_DURATION_MS = 15 * 60 * 1000;
 
 // ---------------------------------------------------------------------------
 // Public interfaces
@@ -94,6 +96,7 @@ export interface TestWorkerHarness {
   webhookReceiver: WebhookReceiver;
   app: any; // Hono app for route testing
   tenantId: string;
+  redisConnection: RedisConnection;
   pool: Pool;
   db: Database;
   closeAll(): Promise<void>;
@@ -141,18 +144,14 @@ export async function startTestWorkers(opts: {
   const mod: any = await import(/* @vite-ignore */ redisModule);
   const IoRedis = mod.default;
 
+  const redisConnection = parseRedisUrl(opts.redisUrl);
   const bullmqRedisConnection = {
-    host: 'localhost',
-    port: 6380,
-    db: 1,
+    ...redisConnection,
     maxRetriesPerRequest: null as null,
   };
 
   // 6. Create separate ioredis client for general Redis operations
-  const redis = new IoRedis('localhost', {
-    port: 6380,
-    db: 1,
-  });
+  const redis = new IoRedis(redisConnection);
 
   // Flush Redis db 1 to clear stale BullMQ jobs
   await redis.flushdb();
@@ -214,30 +213,48 @@ export async function startTestWorkers(opts: {
     tenantRepo,
     queues,
   });
+  (workerDeps as any).llmClient = llmClient;
+  (workerDeps as any).defaultLlmConfig = llmConfig;
 
   // 15. Create 5 BullMQ Workers with concurrency 1
   const crawlWorker = new Worker(
     QUEUE_NAMES.CRAWL,
     async (job) => processCrawlJob(job.data, workerDeps),
-    { connection: bullmqRedisConnection, concurrency: 1 },
+    {
+      connection: bullmqRedisConnection,
+      concurrency: 1,
+      lockDuration: TEST_WORKER_LOCK_DURATION_MS,
+    },
   );
 
   const schemaWorker = new Worker(
     QUEUE_NAMES.SCHEMA_EVOLUTION,
     async (job) => processSchemaEvolutionJob(job.data, workerDeps),
-    { connection: bullmqRedisConnection, concurrency: 1 },
+    {
+      connection: bullmqRedisConnection,
+      concurrency: 1,
+      lockDuration: TEST_WORKER_LOCK_DURATION_MS,
+    },
   );
 
   const reconciliationWorker = new Worker(
     QUEUE_NAMES.RECONCILIATION,
     async (job) => processReconciliationJob(job.data, workerDeps),
-    { connection: bullmqRedisConnection, concurrency: 1 },
+    {
+      connection: bullmqRedisConnection,
+      concurrency: 1,
+      lockDuration: TEST_WORKER_LOCK_DURATION_MS,
+    },
   );
 
   const exportWorker = new Worker(
     QUEUE_NAMES.EXPORT,
     async (job) => processExportJob(job.data, workerDeps),
-    { connection: bullmqRedisConnection, concurrency: 1 },
+    {
+      connection: bullmqRedisConnection,
+      concurrency: 1,
+      lockDuration: TEST_WORKER_LOCK_DURATION_MS,
+    },
   );
 
   // Webhook worker: created directly (not via createWebhookWorker which hardcodes backoff)
@@ -247,7 +264,11 @@ export async function startTestWorkers(opts: {
       const sender = new WebhookSender();
       await sender.send(job.data.url, job.data.event, job.data.secret);
     },
-    { connection: bullmqRedisConnection, concurrency: 1 },
+    {
+      connection: bullmqRedisConnection,
+      concurrency: 1,
+      lockDuration: TEST_WORKER_LOCK_DURATION_MS,
+    },
   );
 
   const workers = [crawlWorker, schemaWorker, reconciliationWorker, exportWorker, webhookWorker];
@@ -325,6 +346,7 @@ export async function startTestWorkers(opts: {
     webhookReceiver,
     app,
     tenantId,
+    redisConnection,
     pool: pool as unknown as Pool,
     db,
     closeAll: async () => {
@@ -348,6 +370,17 @@ export async function startTestWorkers(opts: {
       await mockOllama.close().catch(() => {});
       await webhookReceiver.close().catch(() => {});
     },
+  };
+}
+
+function parseRedisUrl(redisUrl: string): { host: string; port: number; db: number } {
+  const fallback = 'redis://localhost:6380/1';
+  const parsed = new URL(redisUrl || fallback);
+  const db = Number(parsed.pathname.replace('/', '') || '0');
+  return {
+    host: parsed.hostname || 'localhost',
+    port: Number(parsed.port || '6379'),
+    db: Number.isFinite(db) ? db : 0,
   };
 }
 

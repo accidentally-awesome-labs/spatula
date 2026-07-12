@@ -9,7 +9,12 @@ vi.mock('bullmq', () => ({
   })),
 }));
 
-import { createQueues, QUEUE_NAMES, DEFAULT_QUEUE_CONFIG } from '../../src/queues.js';
+import {
+  createQueues,
+  QUEUE_NAMES,
+  DEFAULT_QUEUE_CONFIG,
+  redisConnectionOptionsFromUrl,
+} from '../../src/queues.js';
 
 describe('Queue Factory', () => {
   it('exports queue name constants', () => {
@@ -59,5 +64,28 @@ describe('Queue Factory', () => {
     expect(result.config).toBeDefined();
     expect(result.config.crawl.concurrency).toBe(5);
     expect(result.config.schemaEvolution.concurrency).toBe(1);
+  });
+
+  it('parses Redis URL connection options without a DB path', () => {
+    expect(redisConnectionOptionsFromUrl('redis://localhost:6379')).toEqual({
+      host: 'localhost',
+      port: 6379,
+    });
+  });
+
+  it('preserves Redis DB selection for BullMQ connections', () => {
+    expect(redisConnectionOptionsFromUrl('redis://user:p%40ss@localhost:6380/15')).toEqual({
+      host: 'localhost',
+      port: 6380,
+      username: 'user',
+      password: 'p@ss',
+      db: 15,
+    });
+  });
+
+  it('rejects invalid Redis DB paths', () => {
+    expect(() => redisConnectionOptionsFromUrl('redis://localhost:6379/not-a-db')).toThrow(
+      'Invalid Redis database',
+    );
   });
 });

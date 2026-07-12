@@ -1,27 +1,27 @@
 ---
 phase: 19-deployment-self-host-excellence
-plan: "05"
+plan: '05'
 subsystem: infra
 tags: [render, blueprint, deploy, embedded-worker, postgres, keyvalue, distroless, pnpm, node]
 
 requires:
   - phase: 19-deployment-self-host-excellence
-    provides: "Plan 01 — apps/api/dist/main.js bootstrap + SPATULA_EMBEDDED_WORKER=1 embedded-worker shim"
+    provides: 'Plan 01 — apps/api/dist/main.js bootstrap + SPATULA_EMBEDDED_WORKER=1 embedded-worker shim'
 
 provides:
-  - "render.yaml at repo root — one-click Render blueprint: free Web Service (API + embedded worker), free Key Value (Redis), free Postgres"
-  - "docs/runbooks/render-deploy.md — try-it/demo framing, deploy steps, manual migration step, honest free-tier caveats"
-  - "Verified-live deploy: build → boot → DB → embedded worker → /health → migrations, proven end-to-end on a paid mirror branch"
-  - "Repaired build recipe (corepack-free, --prod=false, Node 22 pin) ported to the public template"
+  - 'render.yaml at repo root — one-click Render blueprint: free Web Service (API + embedded worker), free Key Value (Redis), free Postgres'
+  - 'docs/runbooks/render-deploy.md — try-it/demo framing, deploy steps, manual migration step, honest free-tier caveats'
+  - 'Verified-live deploy: build → boot → DB → embedded worker → /health → migrations, proven end-to-end on a paid mirror branch'
+  - 'Repaired build recipe (corepack-free, --prod=false, Node 22 pin) ported to the public template'
 
 affects: [deployment-render, deployment-distroless, 19-09]
 
 tech-stack:
   added: []
   patterns:
-    - "Render build: NEVER `corepack enable` (its shim dir /usr/bin is read-only → EROFS); Render auto-provides pnpm from pnpm-lock.yaml"
-    - "Render build under NODE_ENV=production MUST use `pnpm install --prod=false` or devDeps (turbo/tsup/tsc) are skipped → `turbo: not found`"
-    - "Node version pinned two ways: NODE_VERSION env (render.yaml) + repo-level .node-version (read on build clone, survives an unsynced blueprint)"
+    - 'Render build: NEVER `corepack enable` (its shim dir /usr/bin is read-only → EROFS); Render auto-provides pnpm from pnpm-lock.yaml'
+    - 'Render build under NODE_ENV=production MUST use `pnpm install --prod=false` or devDeps (turbo/tsup/tsc) are skipped → `turbo: not found`'
+    - 'Node version pinned two ways: NODE_VERSION env (render.yaml) + repo-level .node-version (read on build clone, survives an unsynced blueprint)'
     - "Blueprint sync ≠ deploy: `render deploys create` rebuilds with the service's STORED config; render.yaml changes need a dashboard Blueprint Sync (CLI only validates, cannot sync)"
 
 key-files:
@@ -36,15 +36,15 @@ key-decisions:
   - "SC#2 verified on a PAID mirror branch (render-paid-demo), not literal free tier — the workspace's single free Postgres + single free Key Value slots were already in use (the exact constraint documented in the runbook). render.yaml structure is identical; only plan names differ (starter/basic-256mb vs free)."
   - "Two real template defects were found ONLY via the live deploy and fixed: (1) `corepack enable` EROFS, (2) NODE_ENV=production skipping devDeps. Both would have blocked a free-tier deploy too — fixes ported to main's public template (b25fc9e)."
   - "DEFER-19-A (@spatula/client clean isolated build) did NOT bite on Render because --prod=false installs hoisted @types/node — consistent with the deferred note's prediction. The Render build is NOT a clean isolated build, so DEFER-19-A remains open."
-  - "Render Key Value defaults to allkeys-lru eviction; BullMQ wants noeviction. Logged as an operational caveat (jobs could be evicted under memory pressure); not configurable on starter."
+  - 'Render Key Value defaults to allkeys-lru eviction; BullMQ wants noeviction. Logged as an operational caveat (jobs could be evicted under memory pressure); not configurable on starter.'
 
 patterns-established:
-  - "Live-deploy checkpoints catch deployment-only defects (read-only FS, prod-install dep pruning, Node default drift) that no local build or CI exercises."
+  - 'Live-deploy checkpoints catch deployment-only defects (read-only FS, prod-install dep pruning, Node default drift) that no local build or CI exercises.'
 
 requirements-completed: [DEPLOY-02]
 
 duration: live-deploy checkpoint (multi-session)
-completed: "2026-06-11"
+completed: '2026-06-11'
 ---
 
 # Phase 19 Plan 05: Render Free-Tier Blueprint + Live Deploy Verification
@@ -67,14 +67,14 @@ completed: "2026-06-11"
 
 ### Live verification evidence
 
-| Check | Result |
-| --- | --- |
-| Build | ✅ green — `turbo run build` 8/8 tasks, Node 22.22.3, pnpm from lockfile |
-| `GET /health` | ✅ 200 `{"status":"ok"}` |
-| `GET /health/ready` | ✅ `{"redis":"ok","queue":"ok","database":"ok"}` (real pool query) |
-| Embedded worker | ✅ `Embedded worker started (SPATULA_EMBEDDED_WORKER=1)` — 7 queues + heartbeat |
-| Migrations | ✅ one-off job → `Migrations complete` (drizzle, `__drizzle_migrations_oss`) |
-| Service | ✅ live at https://spatula-api.onrender.com |
+| Check               | Result                                                                          |
+| ------------------- | ------------------------------------------------------------------------------- |
+| Build               | ✅ green — `turbo run build` 8/8 tasks, Node 22.22.3, pnpm from lockfile        |
+| `GET /health`       | ✅ 200 `{"status":"ok"}`                                                        |
+| `GET /health/ready` | ✅ `{"redis":"ok","queue":"ok","database":"ok"}` (real pool query)              |
+| Embedded worker     | ✅ `Embedded worker started (SPATULA_EMBEDDED_WORKER=1)` — 7 queues + heartbeat |
+| Migrations          | ✅ one-off job → `Migrations complete` (drizzle, `__drizzle_migrations_oss`)    |
+| Service             | ✅ live at https://spatula-api.onrender.com                                     |
 
 - Service `srv-d8lh2q6rnols73dedvog` · deploy `dep-d8lhvm28qa3s73d0bp30` · DB `dpg-d8lgrscvikkc739aqo80-a` · KV `red-d8lh23ernols73dedgd0` · migrate job `job-d8li1vjeo5us73f9rsvg`.
 

@@ -3,7 +3,13 @@ export { JobStateMachine } from './state-machine.js';
 export { StateError } from '@spatula/shared';
 
 // Queues
-export { createQueues, QUEUE_NAMES, DEFAULT_QUEUE_CONFIG, QUEUE_JOB_OPTIONS } from './queues.js';
+export {
+  createQueues,
+  redisConnectionOptionsFromUrl,
+  QUEUE_NAMES,
+  DEFAULT_QUEUE_CONFIG,
+  QUEUE_JOB_OPTIONS,
+} from './queues.js';
 export type {
   CrawlJobData,
   ExtractJobData,

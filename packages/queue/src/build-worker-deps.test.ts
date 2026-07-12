@@ -79,9 +79,10 @@ describe('buildWorkerDeps()', { timeout: 15_000 }, () => {
 
   it('Test 2: resolves to an object with non-null deps + clients when OPENROUTER_API_KEY is set', async () => {
     process.env.OPENROUTER_API_KEY = 'test-key-abc';
+    const eventPublisher = { publish: vi.fn() };
 
     const { buildWorkerDeps } = await import('./build-worker-deps.js');
-    const result = await buildWorkerDeps(FAKE_INPUT);
+    const result = await buildWorkerDeps({ ...FAKE_INPUT, eventPublisher });
 
     expect(result.deps).toBeDefined();
     expect(result.deps.extractor).toBeDefined();
@@ -90,6 +91,7 @@ describe('buildWorkerDeps()', { timeout: 15_000 }, () => {
     expect(result.deps.reconciler).toBeDefined();
     expect(result.deps.crawler).toBeDefined();
     expect(result.deps.contentStore).toBeDefined();
+    expect(result.deps.eventPublisher).toBe(eventPublisher);
     expect(result.deps.jobRepo).toBeDefined();
     expect(result.deps.taskRepo).toBeDefined();
     expect(result.deps.pageRepo).toBeDefined();

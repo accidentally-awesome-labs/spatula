@@ -37,7 +37,6 @@ export default defineConfig({
     'ink-spinner',
     'ink-text-input',
     'ink-testing-library',
-    'node-notifier',
     'yargs',
     'zod',
     'zustand',

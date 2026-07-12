@@ -186,6 +186,25 @@ describe('DataReconcilerImpl', () => {
     expect(result.actions).toEqual([]);
   });
 
+  it('ignores extractions with no meaningful field values', async () => {
+    const client = createMockClient();
+    const reconciler = new DataReconcilerImpl(client, defaultLLMConfig);
+
+    const schema = makeSchema([
+      { name: 'name', description: 'Name', type: 'string', required: true },
+    ]);
+
+    const result = await reconciler.reconcile(
+      [makeExtraction({}), makeExtraction({ name: '', price: null })],
+      schema,
+      defaultConfig,
+      'Some job',
+    );
+
+    expect(result.entities).toEqual([]);
+    expect(result.actions).toEqual([]);
+  });
+
   it('generates match_entities and resolve_conflict actions', async () => {
     const client = createMockClient();
     const reconciler = new DataReconcilerImpl(client, defaultLLMConfig);

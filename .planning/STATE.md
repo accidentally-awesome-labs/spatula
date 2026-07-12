@@ -3,8 +3,8 @@ gsd_state_version: 1.0
 milestone: v1.1
 milestone_name: Public Launch (Wave 6 / Phase 14)
 status: checkpoint
-stopped_at: "Phase 19 Plan 09 — checkpoint:human-action at Task 2 (DEPLOY-09 live 1k-page-per-tier sizing run); Task 1 committed in cf0e7c6; awaiting measured rows + VM confirmation"
-last_updated: "2026-07-09T12:58:38-0400"
+stopped_at: 'Phase 19 Plan 09 — checkpoint:human-action at Task 2 (DEPLOY-09 live 1k-page-per-tier sizing run); Task 1 committed in cf0e7c6; awaiting measured rows + VM confirmation'
+last_updated: '2026-07-09T12:58:38-0400'
 last_activity: 2026-07-09 -- Phase 19 Plan 09 checkpoint reached
 progress:
   total_phases: 9
@@ -234,7 +234,7 @@ All 9 pre-launch blockers are open as of 2026-05-12 (see PROJECT.md "Pre-launch 
   1. **Worker DI** — `startWorker()` (packages/queue/src/worker-entrypoint.ts) declares `let deps` but never assigns it; `new WorkerDeps(` exists only in a CLI test helper. → no deployment can process a job.
   2. **Per-job LLM config** — `StaticExtractor` resolves model from construction-time `this.config` (resolveModel(this.config,'extraction')); worker would build it once → per-job `llm.primaryModel` (sizing tiers) ignored.
   3. **Usage recording** — `setUsageRecorder`/`DefaultUsageRecorder` defined+tested but called NOWHERE in prod → `llm_usage` always empty, `/api/v1/usage` cost feature dead, sizing cost = $0.
-  Only the CLI local path (run.ts → LocalPipelineRunner) is complete (builds per-job deps for the single project crawl). Fix tracked as Phase 19.1 (EXEC-01..06); unblocks DEPLOY-02 re-verify + DEPLOY-09 sizing.
+     Only the CLI local path (run.ts → LocalPipelineRunner) is complete (builds per-job deps for the single project crawl). Fix tracked as Phase 19.1 (EXEC-01..06); unblocks DEPLOY-02 re-verify + DEPLOY-09 sizing.
 
 - 🟡 DEPLOY-09 → 19-09 **BLOCKED on Phase 19.1** — harness rebuilt + verified (pure-HTTP), but cannot measure cost until the worker can crawl + record usage.
 
@@ -246,6 +246,6 @@ All 9 pre-launch blockers are open as of 2026-05-12 (see PROJECT.md "Pre-launch 
 
 ## Session Continuity
 
-Last session: 2026-06-12T03:39:34.292Z
-Stopped at: Phase 19.1 Plan 04 — checkpoint:human-action at Task 3 (EXEC-05 Render live re-verify); Tasks 1+2 committed; SUMMARY created; awaiting user to verify live Render crawl
+Last session: 2026-07-11T17:33:16-0400
+Stopped at: Local live verification passed after extraction robustness fixes; representative matrix 4/4 (books, quotes, countries, hockey table)
 Resume file: None

@@ -90,10 +90,8 @@ export async function resolveJobDeps(
 
   // Load the job to read its per-job LLM config.
   const job = await deps.jobRepo.findById(jobId, tenantId);
-  const jobLlmConfig: LLMConfig =
-    (job?.config as any)?.llm ??
-    (deps as any).defaultLlmConfig ??
-    { primaryModel: 'deepseek/deepseek-v4-flash' };
+  const jobLlmConfig: LLMConfig = (job?.config as any)?.llm ??
+    (deps as any).defaultLlmConfig ?? { primaryModel: 'deepseek/deepseek-v4-flash' };
 
   return deriveJobDeps(deps, sharedClient, jobLlmConfig, jobId);
 }

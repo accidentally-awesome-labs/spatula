@@ -5,7 +5,8 @@ kind: Kustomization
 # NO stub pods — this overlay does not include postgres-stub.yaml or redis-stub.yaml.
 #
 # Before applying:
-#   1. Override the spatula-secrets Secret with real DATABASE_URL, REDIS_URL, OPENROUTER_API_KEY
+#   1. Create a real spatula-secrets Secret with DATABASE_URL, REDIS_URL, OPENROUTER_API_KEY,
+#      AUTH_STRATEGY, and TENANT_CREATION_SECRET before rollout.
 #      (see deploy/k8s/README.md for external-secrets / sealed-secrets upgrade paths)
 #   2. Set image tags below to the exact release version (e.g. 1.0.0).
 

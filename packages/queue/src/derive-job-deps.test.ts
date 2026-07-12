@@ -7,24 +7,43 @@ import { describe, it, expect, vi } from 'vitest';
 // We mock @spatula/core entirely (no importOriginal) to avoid triggering
 // a real Playwright launch in the vitest worker pool.
 vi.mock('@spatula/core', () => {
-  const resolveModel = (config: { primaryModel: string; modelOverrides?: Record<string, string> }, task: string): string => {
+  const resolveModel = (
+    config: { primaryModel: string; modelOverrides?: Record<string, string> },
+    task: string,
+  ): string => {
     return config.modelOverrides?.[task] ?? config.primaryModel;
   };
 
   class PageClassifier {
-    constructor(public llmClient: unknown, public config: unknown) {}
+    constructor(
+      public llmClient: unknown,
+      public config: unknown,
+    ) {}
   }
   class StaticExtractor {
-    constructor(public llmClient: unknown, public config: unknown, public jobId: string) {}
+    constructor(
+      public llmClient: unknown,
+      public config: unknown,
+      public jobId: string,
+    ) {}
   }
   class SchemaEvolverImpl {
-    constructor(public llmClient: unknown, public config: unknown) {}
+    constructor(
+      public llmClient: unknown,
+      public config: unknown,
+    ) {}
   }
   class DataReconcilerImpl {
-    constructor(public llmClient: unknown, public config: unknown) {}
+    constructor(
+      public llmClient: unknown,
+      public config: unknown,
+    ) {}
   }
   class LLMLinkEvaluator {
-    constructor(public llmClient: unknown, public model: string) {}
+    constructor(
+      public llmClient: unknown,
+      public model: string,
+    ) {}
   }
 
   return {

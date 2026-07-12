@@ -1,5 +1,6 @@
 import { Queue } from 'bullmq';
 import type { ConnectionOptions } from 'bullmq';
+import type { RedisOptions } from 'ioredis';
 import type { WebhookEvent } from '@spatula/shared';
 
 export const QUEUE_NAMES = {
@@ -134,6 +135,24 @@ export interface SpatulaQueues {
   tenantDelete: Queue<TenantDeleteJobData>;
   config: QueueConfig;
   closeAll(): Promise<void>;
+}
+
+export function redisConnectionOptionsFromUrl(redisUrl: string): RedisOptions {
+  const parsed = new URL(redisUrl);
+  const dbPath = parsed.pathname.replace(/^\//, '');
+  const db = dbPath === '' ? undefined : Number(dbPath);
+
+  if (db !== undefined && (!Number.isInteger(db) || db < 0)) {
+    throw new Error(`Invalid Redis database in REDIS_URL: ${parsed.pathname}`);
+  }
+
+  return {
+    host: parsed.hostname,
+    port: parseInt(parsed.port, 10) || 6379,
+    ...(parsed.password ? { password: decodeURIComponent(parsed.password) } : {}),
+    ...(parsed.username ? { username: decodeURIComponent(parsed.username) } : {}),
+    ...(db !== undefined ? { db } : {}),
+  };
 }
 
 export function createQueues(

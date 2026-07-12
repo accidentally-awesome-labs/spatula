@@ -1,5 +1,5 @@
 // packages/queue/src/workers/crawl-worker.ts
-import { createLoggerWithContext } from '@spatula/shared';
+import { createLoggerWithContext, type Logger } from '@spatula/shared';
 import { processCrawlTask, shouldTriggerSchemaEvolution } from '@spatula/core';
 import type { LLMClient } from '@spatula/core';
 import type { CrawlJobData } from '../queues.js';
@@ -34,6 +34,7 @@ export async function processCrawlJob(data: CrawlJobData, deps: WorkerDeps): Pro
               'Tenant page quota exceeded, skipping',
             );
             await deps.taskRepo.updateStatus(taskId, tenantId, 'skipped');
+            await finalizeCrawlIfComplete(jobId, tenantId, jobDeps, logger);
             return;
           }
         }
@@ -49,6 +50,7 @@ export async function processCrawlJob(data: CrawlJobData, deps: WorkerDeps): Pro
       if (!allowed) {
         logger.info({ taskId, url }, 'Page budget exhausted, skipping');
         await deps.taskRepo.updateStatus(taskId, tenantId, 'skipped');
+        await finalizeCrawlIfComplete(jobId, tenantId, jobDeps, logger);
         return;
       }
     }
@@ -59,6 +61,7 @@ export async function processCrawlJob(data: CrawlJobData, deps: WorkerDeps): Pro
       if (!robotsAllowed) {
         logger.info({ taskId, url }, 'Blocked by robots.txt, skipping');
         await deps.taskRepo.updateStatus(taskId, tenantId, 'skipped');
+        await finalizeCrawlIfComplete(jobId, tenantId, jobDeps, logger);
         return;
       }
     }
@@ -90,6 +93,7 @@ export async function processCrawlJob(data: CrawlJobData, deps: WorkerDeps): Pro
     // Orchestrator returns error field on failure instead of throwing
     if (result.error) {
       logger.error({ taskId, url, error: result.error }, 'crawl job failed');
+      await finalizeCrawlIfComplete(jobId, tenantId, jobDeps, logger);
       return;
     }
 
@@ -119,7 +123,12 @@ export async function processCrawlJob(data: CrawlJobData, deps: WorkerDeps): Pro
     }
 
     // 3. Enqueue child crawl tasks (queue-specific)
-    const linksToEnqueue = await capLinksByJobPageBudget(result.linksFound, jobId, tenantId, jobDeps);
+    const linksToEnqueue = await capLinksByJobPageBudget(
+      result.linksFound,
+      jobId,
+      tenantId,
+      jobDeps,
+    );
     let enqueued = 0;
     for (const link of linksToEnqueue) {
       const childTask = await jobDeps.taskRepo.enqueue({
@@ -161,21 +170,40 @@ export async function processCrawlJob(data: CrawlJobData, deps: WorkerDeps): Pro
     }
 
     // 5. Check crawl completion
-    if (jobDeps.completionChecker && !result.error) {
-      const completion = await jobDeps.completionChecker.isComplete(jobId, tenantId, jobDeps.taskRepo);
-      if (completion.complete) {
-        logger.info(
-          { jobId, ...completion.stats },
-          'Crawl naturally complete, triggering reconciliation',
-        );
-        await jobDeps.queues.reconciliation.add(`reconciliation:${jobId}`, { jobId, tenantId });
-      }
-    }
+    await finalizeCrawlIfComplete(jobId, tenantId, jobDeps, logger);
   } catch (error) {
     // Safety net for unexpected errors in the worker's own logic (queue operations, etc.).
     // Orchestrator-level errors are returned via result.error and handled above.
     logger.error({ taskId, url, error }, 'crawl job failed');
   }
+}
+
+async function finalizeCrawlIfComplete(
+  jobId: string,
+  tenantId: string,
+  deps: WorkerDeps,
+  logger: Logger,
+): Promise<void> {
+  if (!deps.completionChecker) return;
+
+  const completion = await deps.completionChecker.isComplete(jobId, tenantId, deps.taskRepo);
+  if (!completion.complete) return;
+
+  const { stats } = completion;
+  if (stats.completed === 0 && stats.failed > 0) {
+    logger.info({ jobId, ...stats }, 'Crawl complete with no successful pages, marking job failed');
+    await deps.jobRepo.updateStatus(jobId, tenantId, 'failed');
+    await deps.eventPublisher?.publish(jobId, {
+      type: 'job_status_changed',
+      jobId,
+      tenantId,
+      data: { from: 'running', to: 'failed' },
+    });
+    return;
+  }
+
+  logger.info({ jobId, ...stats }, 'Crawl naturally complete, triggering reconciliation');
+  await deps.queues.reconciliation.add(`reconciliation:${jobId}`, { jobId, tenantId });
 }
 
 async function capLinksByJobPageBudget<T extends { url: string }>(

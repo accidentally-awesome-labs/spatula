@@ -37,6 +37,7 @@ import type { Pool } from 'pg';
 import type { Database } from '@spatula/db';
 import type { SpatulaQueues } from './queues.js';
 import { WorkerDeps } from './worker-deps.js';
+import type { EventPublisher } from './events.js';
 
 const logger = createLogger('build-worker-deps');
 
@@ -44,6 +45,7 @@ export interface BuildWorkerDepsInput {
   db: Database | any; // the drizzle db from createDatabasePool()
   pool: Pool; // the pg Pool from createDatabasePool()
   queues: SpatulaQueues; // already created in startWorker
+  eventPublisher?: EventPublisher;
 }
 
 export interface BuildWorkerDepsResult {
@@ -53,10 +55,8 @@ export interface BuildWorkerDepsResult {
   llmConfig: LLMConfig;
 }
 
-export async function buildWorkerDeps(
-  input: BuildWorkerDepsInput,
-): Promise<BuildWorkerDepsResult> {
-  const { db, pool, queues } = input;
+export async function buildWorkerDeps(input: BuildWorkerDepsInput): Promise<BuildWorkerDepsResult> {
+  const { db, pool, queues, eventPublisher } = input;
 
   // Step 1 — FAIL-LOUD: OPENROUTER_API_KEY is required; the worker cannot
   // extract/classify/reconcile without it. Do this FIRST before any async ops.
@@ -151,6 +151,7 @@ export async function buildWorkerDeps(
     entitySourceRepo,
     exportRepo,
     actionRepo,
+    eventPublisher,
     linkEvaluator,
     robotsChecker,
     rateLimiter,

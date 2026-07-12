@@ -241,6 +241,7 @@ Plans:
 **Plans:** 4/4 plans complete
 
 Plans:
+
 - [x] 19.1-01-PLAN.md — Worker DI: buildWorkerDeps() + assign deps in startWorker() (fail-loud OPENROUTER_API_KEY, SPATULA_CRAWLER switch) (EXEC-01) [wave 1]
 - [x] 19.1-02-PLAN.md — LLM usage recording: AsyncLocalStorage usage-context + AlsUsageRecorder set on raw client + handlers wrapped (EXEC-03) [wave 2]
 - [x] 19.1-03-PLAN.md — Per-job LLM config: deriveJobDeps() rebuilds the 5 config-dependent components per job from job.config.llm (EXEC-02) [wave 3]

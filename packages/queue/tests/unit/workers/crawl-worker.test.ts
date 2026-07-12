@@ -138,6 +138,7 @@ function createMockDeps(): WorkerDeps {
     },
     jobRepo: {
       findById: vi.fn().mockResolvedValue(mockJob),
+      updateStatus: vi.fn().mockResolvedValue(null),
     } as any,
     taskRepo: {
       updateStatus: vi.fn().mockResolvedValue(null),
@@ -965,12 +966,79 @@ describe('processCrawlJob', () => {
         isComplete: vi.fn().mockResolvedValue({
           complete: true,
           reason: 'all_tasks_done',
-          stats: { pending: 0, inProgress: 1, completed: 50, failed: 0, skipped: 0 },
+          stats: { pending: 0, inProgress: 0, completed: 50, failed: 0, skipped: 0 },
         }),
       };
 
       await processCrawlJob(data, deps);
 
+      expect(deps.queues.reconciliation.add).toHaveBeenCalledWith(
+        expect.stringContaining('reconciliation:'),
+        expect.objectContaining({ jobId: data.jobId, tenantId: data.tenantId }),
+      );
+    });
+
+    it('marks job failed when crawl completes with only failed tasks', async () => {
+      const data = createJobData();
+      (deps.crawler.crawl as ReturnType<typeof vi.fn>).mockRejectedValue(
+        new Error('Connection timeout'),
+      );
+      (deps as any).completionChecker = {
+        isComplete: vi.fn().mockResolvedValue({
+          complete: true,
+          reason: 'all_tasks_done',
+          stats: { pending: 0, inProgress: 0, completed: 0, failed: 1, skipped: 0 },
+        }),
+      };
+
+      await processCrawlJob(data, deps);
+
+      expect(deps.jobRepo.updateStatus).toHaveBeenCalledWith('job-1', 'tenant-1', 'failed');
+      expect(deps.queues.reconciliation.add).not.toHaveBeenCalled();
+    });
+
+    it('enqueues reconciliation after a failed task when other pages completed', async () => {
+      const data = createJobData();
+      (deps.crawler.crawl as ReturnType<typeof vi.fn>).mockRejectedValue(
+        new Error('Connection timeout'),
+      );
+      (deps as any).completionChecker = {
+        isComplete: vi.fn().mockResolvedValue({
+          complete: true,
+          reason: 'all_tasks_done',
+          stats: { pending: 0, inProgress: 0, completed: 2, failed: 1, skipped: 0 },
+        }),
+      };
+
+      await processCrawlJob(data, deps);
+
+      expect(deps.jobRepo.updateStatus).not.toHaveBeenCalledWith('job-1', 'tenant-1', 'failed');
+      expect(deps.queues.reconciliation.add).toHaveBeenCalledWith(
+        expect.stringContaining('reconciliation:'),
+        expect.objectContaining({ jobId: data.jobId, tenantId: data.tenantId }),
+      );
+    });
+
+    it('enqueues reconciliation when the final task is skipped', async () => {
+      const data = createJobData();
+      (deps as any).pageBudget = {
+        tryIncrement: () => false,
+        count: 100,
+        remaining: 0,
+        isExhausted: true,
+        maxPages: 100,
+      };
+      (deps as any).completionChecker = {
+        isComplete: vi.fn().mockResolvedValue({
+          complete: true,
+          reason: 'all_tasks_done',
+          stats: { pending: 0, inProgress: 0, completed: 0, failed: 0, skipped: 1 },
+        }),
+      };
+
+      await processCrawlJob(data, deps);
+
+      expect(deps.taskRepo.updateStatus).toHaveBeenCalledWith('task-1', 'tenant-1', 'skipped');
       expect(deps.queues.reconciliation.add).toHaveBeenCalledWith(
         expect.stringContaining('reconciliation:'),
         expect.objectContaining({ jobId: data.jobId, tenantId: data.tenantId }),

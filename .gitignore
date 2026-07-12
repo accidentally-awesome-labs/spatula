@@ -9,6 +9,7 @@ dist/
 coverage/
 .worktrees/
 .spatula/
+.pi/
 
 # macOS metadata
 .DS_Store

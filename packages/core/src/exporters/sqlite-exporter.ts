@@ -44,8 +44,8 @@ export class SqliteExporter implements Exporter {
 
       // Serialize to binary
       const buffer = db.serialize();
-      // Copy into a plain ArrayBuffer to satisfy Uint8Array<ArrayBuffer> constraint
-      const binaryData = new Uint8Array(Buffer.from(buffer).buffer as ArrayBuffer);
+      const binaryData = new Uint8Array(buffer.byteLength);
+      binaryData.set(buffer);
 
       return {
         format: 'sqlite',

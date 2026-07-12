@@ -10,16 +10,33 @@ function TestComponent({ keyMap, isActive }: { keyMap: KeyMap; isActive?: boolea
   return React.createElement(Text, null, 'listening');
 }
 
-/** Wait for React effects (useEffect in useInput) to settle. */
-const waitForEffects = () => new Promise((resolve) => setTimeout(resolve, 50));
+type TestStdin = ReturnType<typeof render>['stdin'];
+
+const flushInput = () => new Promise((resolve) => setTimeout(resolve, 0));
+
+async function pressKeyUntil(
+  stdin: TestStdin,
+  input: string,
+  didHandleInput: () => boolean,
+): Promise<void> {
+  for (let attempt = 0; attempt < 100; attempt++) {
+    stdin.write(input);
+    await flushInput();
+
+    if (didHandleInput()) {
+      return;
+    }
+  }
+
+  throw new Error(`Timed out waiting for input ${JSON.stringify(input)} to be handled`);
+}
 
 describe('useKeyboard', () => {
   it('calls handler when matching key is pressed', async () => {
     const handler = vi.fn();
     const keyMap: KeyMap = { d: handler };
     const { stdin } = render(React.createElement(TestComponent, { keyMap }));
-    await waitForEffects();
-    stdin.write('d');
+    await pressKeyUntil(stdin, 'd', () => handler.mock.calls.length === 1);
     expect(handler).toHaveBeenCalledTimes(1);
   });
 
@@ -27,8 +44,9 @@ describe('useKeyboard', () => {
     const handler = vi.fn();
     const keyMap: KeyMap = { d: handler };
     const { stdin } = render(React.createElement(TestComponent, { keyMap }));
-    await waitForEffects();
+    await flushInput();
     stdin.write('x');
+    await flushInput();
     expect(handler).not.toHaveBeenCalled();
   });
 
@@ -37,9 +55,8 @@ describe('useKeyboard', () => {
     const rHandler = vi.fn();
     const keyMap: KeyMap = { d: dHandler, r: rHandler };
     const { stdin } = render(React.createElement(TestComponent, { keyMap }));
-    await waitForEffects();
-    stdin.write('d');
-    stdin.write('r');
+    await pressKeyUntil(stdin, 'd', () => dHandler.mock.calls.length === 1);
+    await pressKeyUntil(stdin, 'r', () => rHandler.mock.calls.length === 1);
     expect(dHandler).toHaveBeenCalledTimes(1);
     expect(rHandler).toHaveBeenCalledTimes(1);
   });
@@ -49,9 +66,8 @@ describe('useKeyboard', () => {
     const downHandler = vi.fn();
     const keyMap: KeyMap = { upArrow: upHandler, downArrow: downHandler };
     const { stdin } = render(React.createElement(TestComponent, { keyMap }));
-    await waitForEffects();
-    stdin.write('\u001B[A'); // up arrow
-    stdin.write('\u001B[B'); // down arrow
+    await pressKeyUntil(stdin, '\u001B[A', () => upHandler.mock.calls.length === 1);
+    await pressKeyUntil(stdin, '\u001B[B', () => downHandler.mock.calls.length === 1);
     expect(upHandler).toHaveBeenCalledTimes(1);
     expect(downHandler).toHaveBeenCalledTimes(1);
   });
@@ -60,8 +76,7 @@ describe('useKeyboard', () => {
     const handler = vi.fn();
     const keyMap: KeyMap = { return: handler };
     const { stdin } = render(React.createElement(TestComponent, { keyMap }));
-    await waitForEffects();
-    stdin.write('\r');
+    await pressKeyUntil(stdin, '\r', () => handler.mock.calls.length === 1);
     expect(handler).toHaveBeenCalledTimes(1);
   });
 
@@ -69,8 +84,7 @@ describe('useKeyboard', () => {
     const handler = vi.fn();
     const keyMap: KeyMap = { escape: handler };
     const { stdin } = render(React.createElement(TestComponent, { keyMap }));
-    await waitForEffects();
-    stdin.write('\u001B');
+    await pressKeyUntil(stdin, '\u001B', () => handler.mock.calls.length === 1);
     expect(handler).toHaveBeenCalledTimes(1);
   });
 
@@ -78,9 +92,10 @@ describe('useKeyboard', () => {
     const handler = vi.fn();
     const keyMap: KeyMap = { d: handler, upArrow: handler };
     const { stdin } = render(React.createElement(TestComponent, { keyMap, isActive: false }));
-    await waitForEffects();
+    await flushInput();
     stdin.write('d');
     stdin.write('\u001B[A'); // up arrow
+    await flushInput();
     expect(handler).not.toHaveBeenCalled();
   });
 });

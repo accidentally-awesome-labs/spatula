@@ -32,7 +32,7 @@
     "@spatula/core": "workspace:*",
     "@spatula/shared": "workspace:*",
     "better-sqlite3": "^12.8.0",
-    "drizzle-orm": "^0.45.1",
+    "drizzle-orm": "^0.45.2",
     "ioredis": "^5.10.0",
     "pg": "^8.20.0"
   },

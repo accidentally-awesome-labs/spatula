@@ -62,7 +62,8 @@ services:
       - key: OPENROUTER_API_KEY
         sync: false
 
-      # Optional — auth strategy (default: none; set to "api-key" or "jwt")
+      # Required for anything beyond a private demo: set to "api-key" or "jwt"
+      # (the application default "none" is local-development only).
       - key: AUTH_STRATEGY
         sync: false
 
@@ -74,7 +75,7 @@ services:
       - key: JWT_JWKS_URL
         sync: false
 
-      # Optional — tenant creation protection
+      # Required for public deployments: protects tenant bootstrap.
       - key: TENANT_CREATION_SECRET
         sync: false
 
@@ -88,7 +89,7 @@ services:
       # Leave unset to use Playwright (only works on VM/host deployments where
       # Playwright is installed). See docs/runbooks/render-deploy.md EXEC-05.
       - key: SPATULA_CRAWLER
-        sync: false   # set to "firecrawl" in the dashboard for Render deploys
+        sync: false # set to "firecrawl" in the dashboard for Render deploys
       - key: FIRECRAWL_API_KEY
         sync: false
 

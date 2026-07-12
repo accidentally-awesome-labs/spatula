@@ -118,6 +118,27 @@ export class SqliteEntityRepository implements EntityRepo {
     return Number(result?.count ?? 0);
   }
 
+  async deleteByJob(_jobId: string, _tenantId: string): Promise<number> {
+    const rows = this.db
+      .select({ id: entities.id })
+      .from(entities)
+      .where(eq(entities.jobId, this.projectId))
+      .all();
+
+    if (rows.length === 0) return 0;
+
+    const ids = rows.map((row) => row.id);
+    wrapStorageError(
+      () => {
+        this.db.delete(entitySources).where(inArray(entitySources.entityId, ids)).run();
+        this.db.delete(entities).where(eq(entities.jobId, this.projectId)).run();
+      },
+      { method: 'deleteByJob', table: 'entities' },
+    );
+
+    return rows.length;
+  }
+
   async upsertBatch(
     batch: Array<{
       id: string;

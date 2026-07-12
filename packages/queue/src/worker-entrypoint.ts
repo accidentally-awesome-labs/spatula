@@ -6,16 +6,27 @@ import { pathToFileURL } from 'node:url';
 import { Worker, type Queue as BullQueueType } from 'bullmq';
 import Redis from 'ioredis';
 import { createLogger, loadConfig } from '@spatula/shared';
-import { createDatabasePool, DlqRepository, TenantDataRepository, LlmUsageRepository } from '@spatula/db';
+import {
+  createDatabasePool,
+  DlqRepository,
+  TenantDataRepository,
+  LlmUsageRepository,
+} from '@spatula/db';
 import { createDlqHandler } from './dlq-handler.js';
 import { processCrawlJob } from './workers/crawl-worker.js';
 import { processSchemaEvolutionJob } from './workers/schema-worker.js';
 import { processReconciliationJob } from './workers/reconciliation-worker.js';
 import { processExportJob } from './workers/export-worker.js';
-import { QUEUE_NAMES, DEFAULT_QUEUE_CONFIG, createQueues } from './queues.js';
+import {
+  QUEUE_NAMES,
+  DEFAULT_QUEUE_CONFIG,
+  createQueues,
+  redisConnectionOptionsFromUrl,
+} from './queues.js';
 import { parseEnabledWorkers, isWorkerEnabled } from './worker-selection.js';
 import { WorkerHeartbeat } from './worker-heartbeat.js';
 import { createWebhookWorker } from './webhook-worker.js';
+import { RedisEventPublisher } from './events.js';
 import { processCleanupJob } from './cleanup-worker.js';
 import type { CleanupDeps } from './cleanup-worker.js';
 import { processTenantDeleteJob } from './workers/tenant-delete-worker.js';
@@ -33,6 +44,7 @@ import type {
 } from './queues.js';
 
 const logger = createLogger('worker-entrypoint');
+const WORKER_LOCK_DURATION_MS = 15 * 60 * 1000;
 
 /**
  * Handle returned by startWorker(). Call shutdown() to drain in-flight jobs
@@ -52,20 +64,14 @@ export async function startWorker(_opts?: { deps?: WorkerDeps }): Promise<Worker
   const config = loadConfig();
   const redisUrl = config.redis.url;
 
-  // Parse Redis URL into host/port for BullMQ ConnectionOptions.
-  const redisUrlObj = new URL(redisUrl);
-  const redisOpts = {
-    host: redisUrlObj.hostname,
-    port: parseInt(redisUrlObj.port, 10) || 6379,
-    ...(redisUrlObj.password ? { password: decodeURIComponent(redisUrlObj.password) } : {}),
-    ...(redisUrlObj.username ? { username: decodeURIComponent(redisUrlObj.username) } : {}),
-  };
+  const redisOpts = redisConnectionOptionsFromUrl(redisUrl);
 
   // BullMQ Workers require maxRetriesPerRequest: null
   const workerConnection = { ...redisOpts, maxRetriesPerRequest: null as null };
 
   // Separate Redis connection for schema evolution distributed locks.
   const redisForLock = new Redis(redisUrl);
+  let redisForEvents: Redis | undefined;
 
   const { db, pool } = createDatabasePool();
   const dlqRepo = new DlqRepository(db);
@@ -89,7 +95,13 @@ export async function startWorker(_opts?: { deps?: WorkerDeps }): Promise<Worker
   if (_opts?.deps) {
     deps = _opts.deps;
   } else {
-    built = await buildWorkerDeps({ db, pool, queues });
+    redisForEvents = new Redis(redisUrl);
+    built = await buildWorkerDeps({
+      db,
+      pool,
+      queues,
+      eventPublisher: new RedisEventPublisher(redisForEvents),
+    });
     deps = built.deps;
   }
 
@@ -118,11 +130,14 @@ export async function startWorker(_opts?: { deps?: WorkerDeps }): Promise<Worker
       QUEUE_NAMES.CRAWL,
       async (job) => {
         if (!deps) throw new Error('WorkerDeps not initialized');
-        await usageContext.run({ tenantId: job.data.tenantId, jobId: job.data.jobId }, () => processCrawlJob(job.data, deps));
+        await usageContext.run({ tenantId: job.data.tenantId, jobId: job.data.jobId }, () =>
+          processCrawlJob(job.data, deps),
+        );
       },
       {
         connection: workerConnection,
         concurrency: queueConfig.crawl.concurrency,
+        lockDuration: WORKER_LOCK_DURATION_MS,
         limiter: {
           max: queueConfig.crawl.rateLimitMax,
           duration: queueConfig.crawl.rateLimitDuration,
@@ -142,11 +157,14 @@ export async function startWorker(_opts?: { deps?: WorkerDeps }): Promise<Worker
       QUEUE_NAMES.SCHEMA_EVOLUTION,
       async (job) => {
         if (!deps) throw new Error('WorkerDeps not initialized');
-        await usageContext.run({ tenantId: job.data.tenantId, jobId: job.data.jobId }, () => processSchemaEvolutionJob(job.data, deps, redisForLock));
+        await usageContext.run({ tenantId: job.data.tenantId, jobId: job.data.jobId }, () =>
+          processSchemaEvolutionJob(job.data, deps, redisForLock),
+        );
       },
       {
         connection: workerConnection,
         concurrency: queueConfig.schemaEvolution.concurrency,
+        lockDuration: WORKER_LOCK_DURATION_MS,
       },
     );
     worker.on('failed', (job, err) => void dlqHandler(job, err));
@@ -159,11 +177,14 @@ export async function startWorker(_opts?: { deps?: WorkerDeps }): Promise<Worker
       QUEUE_NAMES.RECONCILIATION,
       async (job) => {
         if (!deps) throw new Error('WorkerDeps not initialized');
-        await usageContext.run({ tenantId: job.data.tenantId, jobId: job.data.jobId }, () => processReconciliationJob(job.data, deps));
+        await usageContext.run({ tenantId: job.data.tenantId, jobId: job.data.jobId }, () =>
+          processReconciliationJob(job.data, deps),
+        );
       },
       {
         connection: workerConnection,
         concurrency: queueConfig.reconciliation.concurrency,
+        lockDuration: WORKER_LOCK_DURATION_MS,
       },
     );
     worker.on('failed', (job, err) => void dlqHandler(job, err));
@@ -181,6 +202,7 @@ export async function startWorker(_opts?: { deps?: WorkerDeps }): Promise<Worker
       {
         connection: workerConnection,
         concurrency: queueConfig.export.concurrency,
+        lockDuration: WORKER_LOCK_DURATION_MS,
       },
     );
     worker.on('failed', (job, err) => void dlqHandler(job, err));
@@ -229,7 +251,7 @@ export async function startWorker(_opts?: { deps?: WorkerDeps }): Promise<Worker
         }
         await processCleanupJob(cleanupDeps);
       },
-      { connection: workerConnection, concurrency: 1 },
+      { connection: workerConnection, concurrency: 1, lockDuration: WORKER_LOCK_DURATION_MS },
     );
     worker.on('failed', (job, err) => void dlqHandler(job, err));
     workers.push(worker);
@@ -251,6 +273,7 @@ export async function startWorker(_opts?: { deps?: WorkerDeps }): Promise<Worker
       {
         connection: workerConnection,
         concurrency: 1,
+        lockDuration: WORKER_LOCK_DURATION_MS,
       },
     );
     worker.on('failed', (job, err) => void dlqHandler(job, err));
@@ -295,6 +318,7 @@ export async function startWorker(_opts?: { deps?: WorkerDeps }): Promise<Worker
       if (cleanupQueue) await cleanupQueue.close();
 
       // 5. Close Redis connections
+      if (redisForEvents) await redisForEvents.quit();
       await redisForLock.quit();
 
       // 6. Close database pool

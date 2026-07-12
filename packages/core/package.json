@@ -43,10 +43,10 @@
     "clean": "rm -rf dist .turbo"
   },
   "dependencies": {
-    "@aws-sdk/client-s3": "^3.1019.0",
-    "@aws-sdk/s3-request-presigner": "^3.1019.0",
+    "@aws-sdk/client-s3": "^3.1085.0",
+    "@aws-sdk/s3-request-presigner": "^3.1085.0",
     "@duckdb/node-api": "1.5.0-r.1",
-    "@mendable/firecrawl-js": "^4.15.4",
+    "@mendable/firecrawl-js": "^4.30.0",
     "@spatula/core-types": "workspace:*",
     "@spatula/shared": "workspace:*",
     "better-sqlite3": "^12.8.0",
