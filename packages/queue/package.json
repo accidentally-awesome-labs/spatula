@@ -1,6 +1,6 @@
 {
   "name": "@spatula/queue",
-  "version": "0.0.1",
+  "version": "0.1.0",
   "description": "Internal Spatula BullMQ queue + workers + webhook delivery — NO TS-API compat guarantee. Public SDK is @spatula/client. See docs/compat-policy.md.",
   "license": "MIT",
   "repository": {
