@@ -19,17 +19,7 @@
     "structured-data"
   ],
   "private": true,
-  "packageManager": "pnpm@9.15.4",
-  "pnpm": {
-    "overrides": {
-      "esbuild": "0.28.1",
-      "flatted": "3.4.2",
-      "js-yaml": "4.3.0",
-      "picomatch": "4.0.4",
-      "postcss": "8.5.18",
-      "vite": "6.4.3"
-    }
-  },
+  "packageManager": "pnpm@11.13.0",
   "scripts": {
     "build": "node scripts/run-turbo.mjs run build",
     "test": "node scripts/run-turbo.mjs run test",

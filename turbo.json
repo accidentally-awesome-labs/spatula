@@ -1,5 +1,6 @@
 {
   "$schema": "https://turbo.build/schema.json",
+  "globalPassThroughEnv": ["npm_config_manage_package_manager_versions"],
   "tasks": {
     "build": {
       "dependsOn": ["^build"],

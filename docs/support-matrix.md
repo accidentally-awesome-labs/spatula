@@ -11,7 +11,7 @@ Authoritative minimum-version support matrix for Spatula OSS. All components bel
 | Node.js               | 22 (LTS) | 22            | All package manifests declare `"engines": { "node": ">=22" }`. Node 22 LTS is the only tested runtime.           |
 | PostgreSQL (Postgres) | 14       | 14, 15, 16    | Postgres 14+ is required; `pg_dump 14+` emits `\restrict`/`\unrestrict` metacommands stripped by the normalizer. |
 | Redis                 | 7        | 7             | BullMQ and the WebSocket token store require Redis 7+ (XREAD, LMPOP). Earlier versions are unsupported.          |
-| pnpm                  | 9        | 9.15.x        | Package manager. Install via `corepack enable`. Earlier major versions are incompatible with the lockfile.       |
+| pnpm                  | 11       | 11.13.x       | Package manager. Install via `corepack enable`. Earlier major versions are incompatible with the lockfile.       |
 | Docker / buildx       | 24+      | 29.x / 0.32.x | Required only for building container images locally. Not needed to run the platform via docker-compose.          |
 
 ## Operating Systems
@@ -96,4 +96,4 @@ The `pg_dump 14+` normalizer strips `\restrict`/`\unrestrict` random tokens from
 
 ---
 
-_Last reviewed: 2026-07-12._
+_Last reviewed: 2026-07-13._
