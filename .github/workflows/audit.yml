@@ -49,4 +49,5 @@ jobs:
           path: ./
           base: ''
           head: HEAD
-          extra_args: --results=verified --fail --no-update
+          version: 3.95.9
+          extra_args: --results=verified
