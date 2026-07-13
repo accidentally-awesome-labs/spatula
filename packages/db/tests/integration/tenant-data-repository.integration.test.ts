@@ -17,6 +17,7 @@ import { AuditLogRepository } from '../../src/repositories/audit-log-repository.
 
 const TEST_DB_URL =
   process.env.TEST_DATABASE_URL ?? 'postgresql://spatula:spatula@localhost:5432/spatula_test';
+const INTEGRATION_TEST_TIMEOUT = 30_000;
 
 let dbPool: DatabasePool;
 let tenantRepo: TenantRepository;
@@ -138,45 +139,53 @@ async function countRows(table: string, tenantId: string): Promise<number> {
 
 describe('TenantDataRepository (integration)', () => {
   describe('cascadeDeleteTenantData', () => {
-    it('deletes all tenant-scoped rows and returns per-table counts', async () => {
-      const tenantId = await createTestTenant('cascade-test');
-      // Keep this tenant for outer cleanup only if cascade fails
-      survivingTenantIds.push(tenantId);
+    it(
+      'deletes all tenant-scoped rows and returns per-table counts',
+      async () => {
+        const tenantId = await createTestTenant('cascade-test');
+        // Keep this tenant for outer cleanup only if cascade fails
+        survivingTenantIds.push(tenantId);
 
-      await seedTenantData(tenantId);
+        await seedTenantData(tenantId);
 
-      // Verify rows exist
-      expect(await countRows('jobs', tenantId)).toBeGreaterThan(0);
-      expect(await countRows('crawl_tasks', tenantId)).toBeGreaterThan(0);
-      expect(await countRows('raw_pages', tenantId)).toBeGreaterThan(0);
-      expect(await countRows('extractions', tenantId)).toBeGreaterThan(0);
+        // Verify rows exist
+        expect(await countRows('jobs', tenantId)).toBeGreaterThan(0);
+        expect(await countRows('crawl_tasks', tenantId)).toBeGreaterThan(0);
+        expect(await countRows('raw_pages', tenantId)).toBeGreaterThan(0);
+        expect(await countRows('extractions', tenantId)).toBeGreaterThan(0);
 
-      const result = await tenantDataRepo.cascadeDeleteTenantData(tenantId);
+        const result = await tenantDataRepo.cascadeDeleteTenantData(tenantId);
 
-      // All counts should now be 0
-      expect(await countRows('jobs', tenantId)).toBe(0);
-      expect(await countRows('crawl_tasks', tenantId)).toBe(0);
-      expect(await countRows('raw_pages', tenantId)).toBe(0);
-      expect(await countRows('extractions', tenantId)).toBe(0);
-      expect(await countRows('entities', tenantId)).toBe(0);
+        // All counts should now be 0
+        expect(await countRows('jobs', tenantId)).toBe(0);
+        expect(await countRows('crawl_tasks', tenantId)).toBe(0);
+        expect(await countRows('raw_pages', tenantId)).toBe(0);
+        expect(await countRows('extractions', tenantId)).toBe(0);
+        expect(await countRows('entities', tenantId)).toBe(0);
 
-      // deletedCounts is a map of table names to row counts
-      expect(result.deletedCounts).toBeDefined();
-      expect(typeof result.deletedCounts).toBe('object');
-    });
+        // deletedCounts is a map of table names to row counts
+        expect(result.deletedCounts).toBeDefined();
+        expect(typeof result.deletedCounts).toBe('object');
+      },
+      INTEGRATION_TEST_TIMEOUT,
+    );
 
-    it('is idempotent — running cascade twice does not throw', async () => {
-      const tenantId = await createTestTenant('cascade-idempotent');
-      survivingTenantIds.push(tenantId);
+    it(
+      'is idempotent — running cascade twice does not throw',
+      async () => {
+        const tenantId = await createTestTenant('cascade-idempotent');
+        survivingTenantIds.push(tenantId);
 
-      await seedTenantData(tenantId);
+        await seedTenantData(tenantId);
 
-      // First run
-      await tenantDataRepo.cascadeDeleteTenantData(tenantId);
+        // First run
+        await tenantDataRepo.cascadeDeleteTenantData(tenantId);
 
-      // Second run — must NOT throw
-      await expect(tenantDataRepo.cascadeDeleteTenantData(tenantId)).resolves.not.toThrow();
-    });
+        // Second run — must NOT throw
+        await expect(tenantDataRepo.cascadeDeleteTenantData(tenantId)).resolves.not.toThrow();
+      },
+      INTEGRATION_TEST_TIMEOUT,
+    );
 
     it('does NOT delete the tenants row itself', async () => {
       const tenantId = await createTestTenant('cascade-no-tenant-row');

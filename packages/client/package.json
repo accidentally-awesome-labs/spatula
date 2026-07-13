@@ -23,7 +23,10 @@
   },
   "files": [
     "dist",
-    "README.md"
+    "README.md",
+    "!dist/.tsbuildinfo",
+    "!dist/**/*.test.*",
+    "!dist/**/__tests__/**"
   ],
   "engines": {
     "node": ">=22"
@@ -60,7 +63,7 @@
     "typecheck": "tsc --noEmit",
     "size": "size-limit",
     "gen:errors": "tsx scripts/gen-error-classes.ts",
-    "clean": "rm -rf dist .turbo"
+    "clean": "rm -rf dist .turbo *.tsbuildinfo"
   },
   "size-limit": [
     {

@@ -18,12 +18,25 @@
   "type": "module",
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "!dist/.tsbuildinfo",
+    "!dist/**/*.test.*",
+    "!dist/**/__tests__/**"
+  ],
   "scripts": {
     "build": "tsc",
     "test": "vitest run --passWithNoTests",
     "lint": "eslint src/",
     "lint:fix": "eslint src/ --fix",
-    "clean": "rm -rf dist .turbo",
+    "clean": "rm -rf dist .turbo *.tsbuildinfo",
     "start:workers": "node --env-file-if-exists=../../.env dist/worker-entrypoint.js"
   },
   "dependencies": {

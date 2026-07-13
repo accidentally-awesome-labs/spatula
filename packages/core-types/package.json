@@ -23,7 +23,10 @@
   },
   "files": [
     "dist",
-    "README.md"
+    "README.md",
+    "!dist/.tsbuildinfo",
+    "!dist/**/*.test.*",
+    "!dist/**/__tests__/**"
   ],
   "engines": {
     "node": ">=22"
@@ -48,6 +51,6 @@
     "lint": "eslint src/",
     "lint:fix": "eslint src/ --fix",
     "typecheck": "tsc --noEmit",
-    "clean": "rm -rf dist .turbo"
+    "clean": "rm -rf dist .turbo *.tsbuildinfo"
   }
 }

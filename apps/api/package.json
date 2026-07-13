@@ -17,6 +17,20 @@
   },
   "type": "module",
   "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "!dist/.tsbuildinfo",
+    "!dist/**/*.test.*",
+    "!dist/**/__tests__/**"
+  ],
   "scripts": {
     "build": "tsc",
     "start": "node --env-file-if-exists=../../.env dist/main.js",
@@ -25,7 +39,7 @@
     "lint:fix": "eslint src/ --fix",
     "test": "vitest run",
     "test:watch": "vitest",
-    "clean": "rm -rf dist .turbo"
+    "clean": "rm -rf dist .turbo *.tsbuildinfo"
   },
   "dependencies": {
     "@bull-board/api": "^6.20.6",

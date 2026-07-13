@@ -1,6 +1,6 @@
 import { createHash, randomBytes } from 'node:crypto';
 import { createTestApp, createTenant, type TestRepos } from '../../tier4/helpers.js';
-import type { Database } from '@spatula/db';
+import { apiKeys, type Database } from '@spatula/db';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -37,7 +37,6 @@ export async function createApiKeyDirectly(
   const hash = createHash('sha256').update(raw).digest('hex');
   const prefix = raw.slice(0, 12);
 
-  const { apiKeys } = await import('@spatula/db/dist/schema/index.js');
   const [row] = await db
     .insert(apiKeys)
     .values({

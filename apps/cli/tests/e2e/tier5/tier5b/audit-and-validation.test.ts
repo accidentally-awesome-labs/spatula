@@ -1,4 +1,5 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
+import { auditLog } from '@spatula/db';
 import { createTestApp } from '../../tier4/helpers.js';
 import { setupAuthContext, bearerHeaders, type AuthTestContext } from './helpers.js';
 
@@ -57,7 +58,6 @@ describe('Tier 5B: Audit Logging, Tenant Validation & OpenAPI', () => {
     // Failure events may not have a tenantId (auth failed before resolving tenant).
     // Query the audit_log table directly for failure events with a timestamp filter
     // to avoid matching stale entries from prior test runs.
-    const { auditLog } = await import('@spatula/db/dist/schema/index.js');
     const { eq, gte, and } = await import('drizzle-orm');
     const failures = await ctx.db
       .select()

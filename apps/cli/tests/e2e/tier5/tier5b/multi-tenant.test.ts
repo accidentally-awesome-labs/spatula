@@ -1,4 +1,5 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
+import { actions } from '@spatula/db';
 import { setupTenantPair, bearerHeaders, minimalJobBody, type AuthTestContext } from './helpers.js';
 
 describe('Tier 5B: Multi-Tenant Isolation', () => {
@@ -54,7 +55,6 @@ describe('Tier 5B: Multi-Tenant Isolation', () => {
 
     // Insert an action for tenant A's job directly via DB
     // Note: actions table requires source, confidence, reasoning (NOT NULL columns)
-    const { actions } = await import('@spatula/db/dist/schema/index.js');
     const [action] = await ctx.db
       .insert(actions)
       .values({

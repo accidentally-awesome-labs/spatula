@@ -260,8 +260,7 @@ export function authHeaders(tenantId: string): Record<string, string> {
 export async function seedJobWithData(db: Database, tenantId: string): Promise<SeedResult> {
   // Lazy-import the schema tables so this file can be loaded even when
   // @spatula/db isn't built yet (type-checking only).
-  const { jobs, schemasTable, entities, actions } =
-    await import('@spatula/db/dist/schema/index.js');
+  const { jobs, schemasTable, entities, actions } = await import('@spatula/db');
 
   // -- Job ------------------------------------------------------------------
   const jobConfig = {

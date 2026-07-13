@@ -1,6 +1,9 @@
 import { describe, it, expect } from 'vitest';
 
-describe('package exports', () => {
+// Dynamic `import()` of the root barrel pulls in crawlers, exporters, DuckDB,
+// Playwright, Firecrawl, and other heavy transitive modules. Cold full-suite
+// runs can exceed Vitest's 5s default, matching db/queue export smoke tests.
+describe('package exports', { timeout: 30_000 }, () => {
   it('exports LLM modules', async () => {
     const llm = await import('../../src/llm/index.js');
     expect(llm.OpenRouterClient).toBeDefined();

@@ -34,6 +34,7 @@ pnpm format:check
 pnpm lint
 pnpm typecheck
 pnpm build
+pnpm audit:packages
 pnpm test
 pnpm test:e2e
 pnpm test:contract

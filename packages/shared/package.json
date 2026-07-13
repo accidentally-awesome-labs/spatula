@@ -24,6 +24,13 @@
       "import": "./dist/index.js"
     }
   },
+  "files": [
+    "dist",
+    "README.md",
+    "!dist/.tsbuildinfo",
+    "!dist/**/*.test.*",
+    "!dist/**/__tests__/**"
+  ],
   "scripts": {
     "build": "tsc",
     "test": "vitest run",
@@ -31,7 +38,7 @@
     "lint": "eslint src/",
     "lint:fix": "eslint src/ --fix",
     "typecheck": "tsc --noEmit",
-    "clean": "rm -rf dist .turbo"
+    "clean": "rm -rf dist .turbo *.tsbuildinfo"
   },
   "dependencies": {
     "@spatula/core-types": "workspace:*",
