@@ -1,5 +1,5 @@
 /**
- * API-01: error envelope conformance.
+ * Error envelope conformance.
  *
  * Every 4xx/5xx response from /api/v1/* MUST match:
  *   {
@@ -21,7 +21,7 @@
  *   - 401 AUTH.INVALID_TOKEN     — malformed Bearer token
  *
  * The remaining frozen codes (RATE_LIMIT.EXCEEDED, IDEMPOTENCY.KEY_CONFLICT,
- * VERSION.MISMATCH, etc.) are covered by their per-REQ gate files
+ * VERSION.MISMATCH, etc.) are covered by their focused contract files
  * (headers.test.ts hits 429 RATE_LIMIT.EXCEEDED).
  */
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
@@ -55,7 +55,7 @@ let server: ContractServer;
 let adminKey: string;
 let bogusUuid: string;
 
-describe('API-01 error envelope conformance', () => {
+describe('error envelope conformance', () => {
   beforeAll(async () => {
     server = await startServer();
     const identity = await seedTenantAndKey(server, 'errors-test-tenant');
@@ -137,7 +137,8 @@ describe('API-01 error envelope conformance', () => {
     //   any DOMAIN.CODE 404 (it #3)
     //   VALIDATION.{SCHEMA|PARAMS} (it #4)
     //   AUTH.INSUFFICIENT_SCOPE (it #5)
-    // Plus headers.test.ts adds RATE_LIMIT.EXCEEDED — phase-wide we hit ≥5.
+    // Plus headers.test.ts adds RATE_LIMIT.EXCEEDED, so the contract suite hits at
+    // least 5 distinct DOMAIN.CODE values.
     expect(
       [
         'AUTH.MISSING_TOKEN',

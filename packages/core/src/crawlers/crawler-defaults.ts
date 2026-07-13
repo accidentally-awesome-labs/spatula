@@ -1,10 +1,10 @@
 /**
  * Default crawler configuration values.
  *
- * LEGAL-08: The default User-Agent identifies Spatula and includes an abuse-contact URL
- * so that site operators can reach Accidentally Awesome Labs if they observe unwanted
- * crawl traffic. This string is applied automatically when no `userAgent` option is
- * provided to a crawler.
+ * The default User-Agent identifies Spatula and includes an abuse-contact URL
+ * so that site operators can reach Accidentally Awesome Labs if they observe
+ * unwanted crawl traffic. This string is applied automatically when no
+ * `userAgent` option is provided to a crawler.
  */
 
 import { createRequire } from 'module';

@@ -125,7 +125,7 @@ export const JobConfig = z.object({
 });
 export type JobConfig = z.infer<typeof JobConfig>;
 
-// Plan-16-2 alias (public SDK surface name).
+// Public SDK surface alias.
 export { JobConfig as JobConfigSchema };
 
 export const JobStatus = z.enum([

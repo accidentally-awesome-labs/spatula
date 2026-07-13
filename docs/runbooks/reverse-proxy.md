@@ -24,7 +24,7 @@ The nginx configuration in `docs/runbooks/nginx.conf` is the reference, first-pa
 - **WebSocket upgrade**: `proxy_set_header Upgrade $http_upgrade; proxy_set_header Connection $connection_upgrade;` with the `$connection_upgrade` map for the `/ws/` path
 - **Token-in-URL access-log masking**: see below
 
-### Token-in-URL access-log masking (SC#5)
+### Token-in-URL access-log masking
 
 The Spatula API issues short-lived stream tokens delivered as `?token=<secret>` query parameters on SSE and WebSocket URLs (e.g. `GET /api/v1/jobs/:id/events?token=abc123`). Without masking, nginx's default `$request` variable writes the full URL — including the token — to the access log, creating a persistent secret-in-logs vulnerability.
 
@@ -44,7 +44,7 @@ log_format spatula_masked
 
 The format is applied via `access_log /var/log/nginx/spatula_access.log spatula_masked;` in the server block.
 
-**End-to-end verification (SC#5):** To confirm token masking is working on a host with nginx running:
+**End-to-end verification:** To confirm token masking is working on a host with nginx running:
 
 1. Start nginx with `docs/runbooks/nginx.conf`.
 2. Make a request to the events endpoint with a token: `curl "http://localhost/api/v1/jobs/test-id/events?token=TESTSECRET"`.
@@ -223,5 +223,5 @@ api.spatula.example.com {
 ---
 
 _Last reviewed: 2026-07-12._
-_nginx recipe: tested (nginx 1.25+, token log-masking verified in access logs per SC#5)_
+_nginx recipe: tested (nginx 1.25+, token log-masking verified in access logs)_
 _traefik / caddy: not first-party tested — community contributions welcome_

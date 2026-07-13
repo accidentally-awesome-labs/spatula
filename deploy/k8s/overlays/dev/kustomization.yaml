@@ -1,7 +1,7 @@
 apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
 
-# Dev overlay (D-09): self-contained on a fresh kind cluster.
+# Dev overlay: self-contained on a fresh kind cluster.
 # Adds throwaway in-cluster Postgres + Redis stub pods — no external services needed.
 #
 # Secret note: dev generates a local-only spatula-secrets Secret that points at

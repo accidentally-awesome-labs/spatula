@@ -1,4 +1,4 @@
-# Throwaway in-cluster Postgres for dev/kind environments (D-09).
+# Throwaway in-cluster Postgres for dev/kind environments.
 # No PVC — data is ephemeral (emptyDir). Wipe the cluster to reset.
 # Do NOT use in production — use a managed Postgres service instead.
 ---

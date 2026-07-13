@@ -16,9 +16,8 @@ spec:
       # Drizzle's connect-on-use behavior + backoffLimit: 3 (k8s re-runs the
       # pod on non-zero exit). In the dev overlay, the postgres-stub readinessProbe
       # ensures the DB is up before most traffic routes to it; the startupProbe
-      # on api/worker gives migrate additional head-start time (RESEARCH Pattern 5).
-      # This keeps the base manifest free of postgres:16-alpine so the prod render
-      # passes the no-stub acceptance check.
+      # on api/worker gives migrate additional head-start time before readiness traffic.
+      # This keeps the base manifest free of dev database stubs for production use.
       containers:
         - name: migrate
           # Image tag is overridden by overlays.

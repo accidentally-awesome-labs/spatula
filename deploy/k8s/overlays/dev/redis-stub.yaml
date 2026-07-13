@@ -1,4 +1,4 @@
-# Throwaway in-cluster Redis for dev/kind environments (D-09).
+# Throwaway in-cluster Redis for dev/kind environments.
 # No persistence — data is ephemeral. Wipe the cluster to reset.
 # Do NOT use in production — use a managed Redis service instead.
 ---

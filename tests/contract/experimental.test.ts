@@ -1,5 +1,5 @@
 /**
- * API-13: experimental-namespace contract.
+ * Experimental-namespace contract.
  *
  * The @spatula/client SDK reserves `client.experimental.*` for experimental
  * surfaces. v1.0 ships exactly ONE: `forensic`. Every
@@ -23,7 +23,7 @@ import { startServer, type ContractServer } from './helpers/server-harness.js';
 
 let server: ContractServer;
 
-describe('API-13 client.experimental namespace', () => {
+describe('client.experimental namespace', () => {
   beforeAll(async () => {
     server = await startServer();
   });

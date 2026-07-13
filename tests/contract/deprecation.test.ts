@@ -1,5 +1,5 @@
 /**
- * API-04: RFC 8594 Deprecation / Sunset / Link headers on offset-only routes.
+ * RFC 8594 Deprecation / Sunset / Link headers on offset-only routes.
  *
  * Cursor-paginated endpoints are the canonical shape at v1. Offset-paginated
  * fallbacks emit three RFC 8594 headers on every response:
@@ -25,7 +25,7 @@ import { startServer, seedTenantAndKey, type ContractServer } from './helpers/se
 let server: ContractServer;
 let apiKey: string;
 
-describe('API-04 deprecation headers on offset-only routes', () => {
+describe('deprecation headers on offset-only routes', () => {
   beforeAll(async () => {
     server = await startServer();
     const identity = await seedTenantAndKey(server, 'deprecation-test-tenant');

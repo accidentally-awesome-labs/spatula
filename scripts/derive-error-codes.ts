@@ -4,8 +4,8 @@
  * One-shot walker over the `@hono/zod-openapi` route registry. Boots a minimal
  * `OpenAPIHono` instance against the live `createApp` factory, calls
  * `getOpenAPI31Document(...)`, and prints every (route, method, 4xx/5xx)
- * tuple as a deduped JSON list. Used as INPUT to the human-curated
- * `packages/shared/src/error-codes.ts` enum (per D-05 / D-06).
+ * tuple as a deduped JSON list. Used as input to the human-curated
+ * `packages/shared/src/error-codes.ts` enum.
  *
  * Run:
  *   pnpm tsx scripts/derive-error-codes.ts > /tmp/error-codes-survey.txt

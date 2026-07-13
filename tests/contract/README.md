@@ -5,20 +5,20 @@ Public REST contract test suite. Gates the v1 API surface on every PR.
 ## What this proves
 
 - Every 4xx/5xx response from the OSS API matches the v1 error envelope
-  (`{ error: { code, message, requestId, details? } }`) — API-01.
+  (`{ error: { code, message, requestId, details? } }`).
 - Every OpenAPI example in the served `/api/v1/openapi.json` validates against
   its own schema via Ajv2020, which catches response/example drift before it
   reaches users.
 - Every auth'd success carries the four rate-limit headers
   (`X-RateLimit-Limit`, `X-RateLimit-Remaining`, `X-RateLimit-Reset`,
-  `Retry-After`) — API-02.
+  `Retry-After`).
 - Offset-paginated routes emit `Deprecation` + `Sunset` + `Link` headers;
-  cursor-mode requests do NOT — API-04.
-- All timestamps parse as ISO 8601 UTC (trailing `Z` or `+00:00`) — API-07.
+  cursor-mode requests do NOT.
+- All timestamps parse as ISO 8601 UTC (trailing `Z` or `+00:00`).
 - Every public route lives under `/api/v1/` (or the `/.well-known/`
-  sibling-root) — API-10.
+  sibling-root).
 - `client.experimental.forensic` resolves to the one v1 experimental surface,
-  while every other `client.experimental.*` property throws — API-13.
+  while every other `client.experimental.*` property throws.
 
 ## How it works
 
@@ -32,7 +32,7 @@ root). Once-per-suite:
 2. The matrix driver (`generated.test.ts`) iterates every
    `(path, method, status, example)` tuple from the cached spec and validates
    shapes via Ajv2020.
-3. Per-REQ suites (`errors.test.ts`, `headers.test.ts`,
+3. Focused contract suites (`errors.test.ts`, `headers.test.ts`,
    `deprecation.test.ts`, `timestamps.test.ts`, `versioning.test.ts`,
    `experimental.test.ts`) hit explicit fixed paths to assert non-spec
    invariants (e.g., that the four rate-limit headers appear on a non-spec'd

@@ -1,7 +1,7 @@
 /**
  * scripts/sizing-baseline.ts
  *
- * DEPLOY-09: Hardware-sizing baseline harness (pure-HTTP against a running stack).
+ * Hardware-sizing baseline harness (pure HTTP against a running stack).
  *
  * Runs a TARGET_PAGES crawl ONCE PER routing tier (fast / primary / smart) against
  * a RUNNING Spatula stack and records wall-clock + LLM cost-per-page. Results are
@@ -24,12 +24,12 @@
  *   distroless worker image, OR a Playwright-capable worker (e.g. the embedded worker
  *   on a host/VM with Playwright installed). AUTH_STRATEGY=none assumed (sends X-Tenant-Id).
  *
- * == Target hardware (D-01) ==
+ * == Recommended baseline hardware ==
  * Hetzner CX32  —  4 vCPU / 8 GB RAM / 80 GB SSD NVMe / AMD EPYC (amd64)
  * Substitute your own VM class and note it in hardware-sizing.md; results vary by
  * hardware, network, and target site.
  *
- * == Routing tiers (D-02) ==
+ * == Routing tiers ==
  * fast    — xiaomi/mimo-v2-flash        (cheapest, high-throughput)
  * primary — deepseek/deepseek-v4-flash  (balanced — production default)
  * smart   — deepseek/deepseek-v4-pro    (highest quality)
@@ -68,7 +68,7 @@ interface UsageResponse {
 }
 
 // ============================================================
-// Tier definitions (D-02)
+// Tier definitions
 // ============================================================
 interface TierConfig {
   name: 'fast' | 'primary' | 'smart';

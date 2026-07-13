@@ -130,7 +130,7 @@ async function clearApiKeys(tenantId: string): Promise<void> {
 // Test
 // ---------------------------------------------------------------------------
 
-describe('DSR portability round-trip (SEC-10)', () => {
+describe('DSR portability round-trip', () => {
   it('proves field-level parity after export → real-import round-trip via TenantDataRepository', async (ctx) => {
     if (!setupOk) return ctx.skip();
 

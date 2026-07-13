@@ -88,7 +88,7 @@ Expected result: **9/9 green**.
 Notes:
 
 - The `playwright` system check will warn (browsers are not installed in the CLI image for k8s use; that is expected and does not fail the check).
-- The `docker` system check will warn (no Docker socket in-cluster). Both warnings still yield 9/9 green per RESEARCH.
+- The `docker` system check will warn (no Docker socket in-cluster). Both warnings are expected and still yield a passing doctor result.
 
 ### 7. Tear down
 
@@ -105,7 +105,7 @@ The migrate Job and api/worker Deployments start concurrently. Ordering is enfor
 1. **`backoffLimit: 3` on the Job** — retries transient connection failures.
 2. **`startupProbe` on api/worker** — polls `GET /health/ready` (which checks DB). If the DB isn't migrated yet, the probe fails and the pod waits/restarts. With `initialDelaySeconds: 20`, `periodSeconds: 10`, `failureThreshold: 30`, the api waits up to ~320s for the DB to be ready before marking itself failed.
 
-This is the "simpler alternative" from RESEARCH Pattern 5 — no RBAC or job-watch initContainer needed.
+This avoids RBAC or a job-watch initContainer while still letting the API wait for migrations.
 
 ---
 
@@ -157,7 +157,7 @@ kubectl rollout status deployment/spatula-worker -n spatula
 
 ---
 
-## Secrets Management Upgrade Paths (D-08)
+## Secrets Management Upgrade Paths
 
 The base overlay intentionally does not ship a Secret resource. The dev overlay
 generates local-only credentials with Kustomize `secretGenerator`; production

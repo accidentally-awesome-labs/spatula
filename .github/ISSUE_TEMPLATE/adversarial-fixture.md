@@ -1,6 +1,6 @@
 ---
 name: Adversarial Fixture Submission
-about: Submit a new prompt-injection HTML fixture for the adversarial test suite (SEC-02)
+about: Submit a new prompt-injection HTML fixture for the adversarial test suite
 title: '[adversarial] <attack-class>: brief description'
 labels: adversarial-fixture
 assignees: ''

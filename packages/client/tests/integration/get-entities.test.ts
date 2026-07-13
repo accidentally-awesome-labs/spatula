@@ -1,8 +1,8 @@
 /**
  * SDK integration test: getEntities.
  *
- * Exercises cursor-paginated entity listing per API-04 + provenance shape.
- * Mocked by default; live-mode via SPATULA_LIVE_LLM=1.
+ * Exercises cursor-paginated entity listing and provenance shape. Mocked by
+ * default; live-mode via SPATULA_LIVE_LLM=1.
  */
 import { afterEach, describe, expect, it, vi } from 'vitest';
 

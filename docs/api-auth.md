@@ -144,10 +144,10 @@ Response shape:
 
 **Spatula does not issue or rotate refresh tokens.**
 
-This is an explicit design decision (DEFER-07). Refresh-token issuance and
-rotation are the OIDC provider's responsibility. Clients that hold an OIDC
-access token should re-acquire it from their IDP when it expires — using the
-IDP's standard `refresh_token` grant or `client_credentials` flow for M2M.
+This is an explicit design boundary. Refresh-token issuance and rotation are
+the OIDC provider's responsibility. Clients that hold an OIDC access token
+should re-acquire it from their IDP when it expires — using the IDP's standard
+`refresh_token` grant or `client_credentials` flow for M2M.
 
 Spatula's API consumes JWTs and verifies them against the IDP's JWKS endpoint.
 It does not participate in the OIDC session lifecycle.

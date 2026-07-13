@@ -1,16 +1,16 @@
-# Adversarial LLM test suite — SEC-02
+# Adversarial LLM test suite
 #
-# Design decisions (D-04/D-05/D-06 from 18-CONTEXT.md):
-#   D-04: Runs on PRs touching packages/core/src/extraction/** (path trigger)
-#         and on a daily cron at 06:00 UTC. Not on every push.
-#   D-05: OpenRouter pin (anthropic/claude-3-5-sonnet-20240620) runs on
-#         GitHub-hosted runners automatically.
-#         Ollama pin (llama3.1:8b-instruct-q4_0) runs ONLY via workflow_dispatch
-#         on self-hosted runners - not pulled on hosted runners.
-#   D-06: A failed cron run goes CI-red only. No auto-opened issue,
-#         no Slack/email notification.
+# Coverage policy:
+#   - Runs on PRs touching packages/core/src/extraction/** and on a daily
+#     cron at 06:00 UTC. It does not run on every push.
+#   - The OpenRouter-pinned suite runs on GitHub-hosted runners when the
+#     OPENROUTER_API_KEY repository secret is available.
+#   - The Ollama-pinned suite runs only via workflow_dispatch on self-hosted
+#     runners so hosted CI never attempts to pull or serve the local model.
+#   - A failed cron run marks the workflow red only; this workflow does not
+#     auto-open issues or send notifications.
 #
-# Pitfall 4 (fork PR secret safety): The path trigger fires on fork PRs but
+# Fork PR secret safety: the path trigger fires on fork PRs but
 # secrets.OPENROUTER_API_KEY is empty for fork workflows. The step guard
 #   if: env.OPENROUTER_API_KEY != ''
 # ensures the live test step is skipped cleanly on fork PRs - tests use

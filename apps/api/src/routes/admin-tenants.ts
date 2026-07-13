@@ -76,7 +76,7 @@ export function adminTenantRoutes() {
     });
   });
 
-  // DELETE /:id — enqueue async tenant deletion (DSR / SEC-09); returns 202 + jobId
+  // DELETE /:id enqueues async tenant deletion and returns 202 + jobId.
   app.delete('/:id', async (c) => {
     const deps = c.get('deps');
     const id = c.req.param('id');

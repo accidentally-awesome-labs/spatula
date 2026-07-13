@@ -1,5 +1,5 @@
 /**
- * API-07: ISO 8601 UTC timestamp contract.
+ * ISO 8601 UTC timestamp contract.
  *
  * Every timestamp value in an API response MUST be:
  *   - a string (NOT a number / Unix epoch)
@@ -15,7 +15,7 @@
  *      that returns `buildAt` as ISO 8601) and assert the value parses.
  *
  * Reading the entire path tree at runtime is overkill — the matrix driver
- * does that. This file's job is the focused per-REQ gate.
+ * does that. This file's job is the focused timestamp contract gate.
  */
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { startServer, type ContractServer } from './helpers/server-harness.js';
@@ -49,7 +49,7 @@ function* walk(node: unknown, path: string[] = []): Generator<{ path: string[]; 
   yield { path, value: node };
 }
 
-describe('API-07 ISO 8601 UTC timestamps', () => {
+describe('ISO 8601 UTC timestamps', () => {
   beforeAll(async () => {
     server = await startServer();
     const res = await fetch(`${server.url}/api/v1/openapi.json`);
@@ -106,7 +106,7 @@ describe('API-07 ISO 8601 UTC timestamps', () => {
         const leafKey = keyPath[keyPath.length - 1];
         if (leafKey && numericTimestampKeyPattern.test(leafKey) && typeof value === 'number') {
           throw new Error(
-            `Numeric timestamp found at ${path} → ${keyPath.join('/')}: ${value}. Timestamps must be ISO 8601 UTC strings (API-07).`,
+            `Numeric timestamp found at ${path} → ${keyPath.join('/')}: ${value}. Timestamps must be ISO 8601 UTC strings.`,
           );
         }
       }

@@ -8,7 +8,7 @@ export type FieldDefinitionOutput = {
   description: string;
   type: 'string' | 'number' | 'boolean' | 'url' | 'currency' | 'enum' | 'array' | 'object';
   required: boolean;
-  /** Maximum byte length for string field values. When set, StaticExtractor caps values here (SEC-01 mitigation 6). Default: 2000 chars. */
+  /** Maximum byte length for string field values. When set, StaticExtractor caps values here. Default: 2000 chars. */
   maxLength?: number;
   normalization?: z.infer<typeof NormalizationRule>;
   enumValues?: string[];
@@ -21,7 +21,7 @@ export type FieldDefinitionInput = {
   description: string;
   type: 'string' | 'number' | 'boolean' | 'url' | 'currency' | 'enum' | 'array' | 'object';
   required?: boolean;
-  /** Maximum byte length for string field values. When set, StaticExtractor caps values here (SEC-01 mitigation 6). Default: 2000 chars. */
+  /** Maximum byte length for string field values. When set, StaticExtractor caps values here. Default: 2000 chars. */
   maxLength?: number;
   normalization?: z.input<typeof NormalizationRule>;
   enumValues?: string[];
@@ -46,8 +46,8 @@ export const FieldDefinition: z.ZodType<FieldDefinitionOutput, z.ZodTypeDef, Fie
 
 export type FieldDefinition = z.infer<typeof FieldDefinition>;
 
-// Plan-16-2 alias: `FieldDef` / `FieldDefSchema` are the public surface names
-// per the @spatula/client SDK spec (§3.2.2). Keep both for backward compat:
+// `FieldDef` / `FieldDefSchema` are the public surface names. Keep both for
+// backward compatibility.
 // `FieldDefinition` is the legacy in-tree name (used across @spatula/core).
 export { FieldDefinition as FieldDefSchema };
 export type FieldDef = FieldDefinition;

@@ -15,7 +15,7 @@ spec:
       labels:
         app: spatula-api
     spec:
-      # Matches distroless "nonroot" uid 65532 (Plan 19-02 decision).
+      # Matches the distroless "nonroot" uid 65532 used by the Docker image.
       # api/worker images were built with USER nonroot in their Dockerfiles.
       securityContext:
         runAsNonRoot: true
@@ -33,7 +33,7 @@ spec:
             - secretRef:
                 name: spatula-secrets
           # startupProbe: gives the migrate Job a head start before the api
-          # begins accepting traffic (RESEARCH Pattern 5, Pitfall #6).
+          # begins accepting traffic.
           # failureThreshold * periodSeconds = 300s max wait for migrations.
           startupProbe:
             httpGet:

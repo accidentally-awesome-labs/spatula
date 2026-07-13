@@ -1,4 +1,4 @@
-# k8s smoke test — DEPLOY-01
+# k8s smoke test
 #
 # Validates that the dev overlay applies cleanly on a fresh kind cluster,
 # the migrate Job completes, and the api Deployment becomes Available.
@@ -8,7 +8,7 @@
 #     Matches the heavy-lane cadence of adversarial-llm.yml.
 #   - Uses the kindest/kind GH Action to create the cluster.
 #   - Builds images from source and loads them into kind (no registry auth needed).
-#   - The live kind apply + kubectl wait is the SC#1 smoke test.
+#   - The live kind apply + kubectl wait exercises the full dev overlay path.
 #
 # Manual run: workflow_dispatch (for debugging without a tag push)
 #

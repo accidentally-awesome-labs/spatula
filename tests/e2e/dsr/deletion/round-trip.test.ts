@@ -1,5 +1,5 @@
 /**
- * DSR deletion round-trip e2e test (SEC-09, SEC-10)
+ * DSR deletion round-trip e2e test.
  *
  * Seeds a tenant with rows across all tenant-scoped tables + content-store blobs
  * (including a forensic/ prefix blob), then runs the REAL cascade worker
@@ -81,7 +81,7 @@ async function countContentStoreRows(keyPrefix: string): Promise<number> {
 // Test
 // ---------------------------------------------------------------------------
 
-describe('DSR deletion round-trip (SEC-09/SEC-10)', () => {
+describe('DSR deletion round-trip', () => {
   it('proves zero rows + zero blobs + redacted audit + tombstone after real cascade worker', async (ctx) => {
     if (!setupOk) return ctx.skip();
 

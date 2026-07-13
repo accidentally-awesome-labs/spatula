@@ -400,6 +400,6 @@ export const PipelineAction = z.discriminatedUnion('type', [
 
 export type PipelineAction = z.infer<typeof PipelineAction>;
 
-// Plan-16-2 aliases (public SDK surface name).
+// Public SDK surface aliases.
 export { PipelineAction as Action };
 export { PipelineAction as ActionSchema };

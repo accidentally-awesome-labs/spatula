@@ -60,7 +60,7 @@ describe('rateLimitMiddleware', () => {
     _resetRateLimitsCacheForTests();
   });
 
-  describe('header emission (API-02)', () => {
+  describe('header emission', () => {
     it('emits ALL FOUR headers on success: Limit, Remaining, Reset', async () => {
       (redis as any).eval.mockResolvedValue([1, 5]);
       const app = createTestApp(redis);
@@ -93,7 +93,7 @@ describe('rateLimitMiddleware', () => {
     });
   });
 
-  describe('per-route lookup (API-03)', () => {
+  describe('per-route lookup', () => {
     it('uses per-route config when route key matches', async () => {
       const fixturePath = join(tmpDir, 'rl.yaml');
       writeFileSync(

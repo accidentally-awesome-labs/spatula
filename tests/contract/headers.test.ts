@@ -1,5 +1,5 @@
 /**
- * API-02: rate-limit headers contract.
+ * Rate-limit headers contract.
  *
  * Every successful authed response MUST carry the three success headers:
  *   - X-RateLimit-Limit     — configured cap for the matched route
@@ -19,7 +19,7 @@ import { startServer, seedTenantAndKey, type ContractServer } from './helpers/se
 let server: ContractServer;
 let apiKey: string;
 
-describe('API-02 rate-limit headers', () => {
+describe('rate-limit headers', () => {
   beforeAll(async () => {
     server = await startServer({ enableRedis: true });
     const identity = await seedTenantAndKey(server, 'headers-test-tenant');
@@ -85,8 +85,8 @@ describe('API-02 rate-limit headers', () => {
     if (!last || last.status !== 429) {
       // Some test environments configure DEFAULT_RATE_LIMIT high enough that
       // 600 requests don't trigger the limit. In that case skip the deeper
-      // assertions rather than fail the suite — the prior two tests already
-      // gate the success-header path which is the actual API-02 surface.
+      // assertions rather than fail the suite; the prior two tests already
+      // gate the success-header path, which is the primary contract surface.
       console.warn(
         `[headers.test] Could not trigger 429 within ${burst} requests; configured limit=${limit}. Skipping 429-specific assertions.`,
       );

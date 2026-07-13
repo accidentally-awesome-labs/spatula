@@ -1,8 +1,8 @@
 /**
  * SDK integration test: listJobs.
  *
- * Exercises cursor-paginated listing per API-04. Mocked by default; live-mode
- * via SPATULA_LIVE_LLM=1.
+ * Exercises cursor-paginated listing. Mocked by default; live-mode via
+ * SPATULA_LIVE_LLM=1.
  */
 import { afterEach, describe, expect, it, vi } from 'vitest';
 

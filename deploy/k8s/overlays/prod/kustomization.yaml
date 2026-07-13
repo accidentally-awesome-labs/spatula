@@ -1,7 +1,7 @@
 apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
 
-# Prod overlay (D-09): references external operator-supplied managed Postgres + Redis.
+# Prod overlay: references external operator-supplied managed Postgres + Redis.
 # NO stub pods — this overlay does not include postgres-stub.yaml or redis-stub.yaml.
 #
 # Before applying:

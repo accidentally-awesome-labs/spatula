@@ -22,8 +22,8 @@ export class PlaywrightCrawler implements Crawler {
 
     try {
       const contextOptions: Record<string, unknown> = {};
-      // LEGAL-08: always set a User-Agent; fall back to the default abuse-contact UA
-      // when the caller does not supply one explicitly.
+      // Always set a User-Agent; fall back to the default abuse-contact UA when
+      // the caller does not supply one explicitly.
       contextOptions.userAgent = options?.userAgent ?? DEFAULT_USER_AGENT;
       if (options?.headers) {
         contextOptions.extraHTTPHeaders = options.headers;

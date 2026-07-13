@@ -75,9 +75,8 @@ jobs:
       - name: Install cosign
         uses: sigstore/cosign-installer@v3
 
-      # Sign by immutable digest (NOT by tag) — Pitfall #3: tag-based signing is a
-      # TOCTOU vulnerability. steps.build.outputs.digest is set by build-push-action.
-      # Signing runs AFTER push so the digest exists in the registry (Pitfall #3).
+      # Sign by immutable digest, not by tag, to avoid tag-retargeting races.
+      # steps.build.outputs.digest is set by build-push-action after push.
       - name: Sign image (keyless cosign)
         run: |
           cosign sign --yes \

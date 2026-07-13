@@ -1,6 +1,5 @@
 # Adversarial Corpus Refresh Process
 
-**Requirement:** SEC-03  
 **Cadence:** Quarterly (every 3 months)  
 **CI Lane:** `.github/workflows/adversarial-llm.yml`  
 **Fixture Directory:** `packages/core/src/extraction/__tests__/fixtures/adversarial/`

@@ -1,5 +1,5 @@
 /**
- * API-10: URL-versioning contract.
+ * URL-versioning contract.
  *
  * Every path in the served OpenAPI spec MUST live under `/api/v1/` OR be the
  * single well-known sibling-root path `/.well-known/spatula-version` (RFC 8615).
@@ -15,7 +15,7 @@ import { startServer, type ContractServer } from './helpers/server-harness.js';
 let server: ContractServer;
 let spec: { paths: Record<string, unknown> };
 
-describe('API-10 URL versioning', () => {
+describe('URL versioning', () => {
   beforeAll(async () => {
     server = await startServer();
     const res = await fetch(`${server.url}/api/v1/openapi.json`);

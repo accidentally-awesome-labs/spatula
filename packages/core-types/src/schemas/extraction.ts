@@ -24,7 +24,7 @@ export const ExtractionMetadata = z.object({
   tokensUsed: z.number(),
   extractionTimeMs: z.number(),
   unmappedFields: z.array(UnmappedField),
-  /** Prompt-injection scan result (SEC-01 mitigation 7). Present when StaticExtractor ran scanOutput. */
+  /** Prompt-injection scan result. Present when StaticExtractor ran scanOutput. */
   suspicious: z.boolean().optional(),
   /** Individual scan flags explaining why suspicious=true. */
   scanFlags: z.array(ScanFlagSchema).optional(),
@@ -43,7 +43,7 @@ export const ExtractionResult = z.object({
 
 export type ExtractionResult = z.infer<typeof ExtractionResult>;
 
-// Plan-16-2 alias (public SDK surface name).
+// Public SDK surface alias.
 export { ExtractionResult as ExtractionResultSchema };
 
 export const ValueProvenance = z.enum([
