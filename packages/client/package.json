@@ -48,7 +48,7 @@
     "size-limit": "^12.1.0",
     "tsx": "^4.19.0",
     "typescript": "^5.7.0",
-    "vitest": "^2.1.0",
+    "vitest": "^3.2.6",
     "zod": "^3.24.0"
   },
   "scripts": {

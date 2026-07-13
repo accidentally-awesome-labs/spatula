@@ -20,6 +20,16 @@
   ],
   "private": true,
   "packageManager": "pnpm@9.15.4",
+  "pnpm": {
+    "overrides": {
+      "esbuild": "0.28.1",
+      "flatted": "3.4.2",
+      "js-yaml": "4.3.0",
+      "picomatch": "4.0.4",
+      "postcss": "8.5.18",
+      "vite": "6.4.3"
+    }
+  },
   "scripts": {
     "build": "node scripts/run-turbo.mjs run build",
     "test": "node scripts/run-turbo.mjs run test",
@@ -52,8 +62,8 @@
     "playwright": "^1.58.2",
     "prettier": "^3.4.0",
     "tsx": "^4.19.0",
-    "turbo": "^2.4.0",
+    "turbo": "^2.9.14",
     "typescript": "^5.7.0",
-    "vitest": "^2.1.0"
+    "vitest": "^3.2.6"
   }
 }

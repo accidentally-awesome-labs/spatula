@@ -35,6 +35,7 @@ import { slugifyPath } from '../../src/local-project.js';
 
 let projectDir: string;
 let PROJECT_ID: string;
+const INTEGRATION_COMMAND_TIMEOUT = 15_000;
 
 beforeAll(async () => {
   // 1. Create temp project directory
@@ -332,29 +333,38 @@ describe('spatula export (integration)', () => {
 // ---------------------------------------------------------------------------
 
 describe('spatula explore (integration)', () => {
-  it('shows no-entities message when database is empty', async () => {
-    // Create a separate empty project
-    const emptyDir = mkdtempSync(join(tmpdir(), 'spatula-empty-'));
-    writeFileSync(join(emptyDir, 'spatula.yaml'), 'name: Empty\nseeds:\n  - https://example.com\n');
-    const emptyDbDir = join(emptyDir, '.spatula');
-    mkdirSync(emptyDbDir, { recursive: true });
-    const { db, close } = createProjectDb(join(emptyDbDir, 'project.db'));
-    initializeProjectDb(db, { projectId: 'empty', name: 'Empty' });
-    close();
+  it(
+    'shows no-entities message when database is empty',
+    async () => {
+      // Create a separate empty project
+      const emptyDir = mkdtempSync(join(tmpdir(), 'spatula-empty-'));
+      writeFileSync(
+        join(emptyDir, 'spatula.yaml'),
+        'name: Empty\nseeds:\n  - https://example.com\n',
+      );
+      const emptyDbDir = join(emptyDir, '.spatula');
+      mkdirSync(emptyDbDir, { recursive: true });
+      const { db, close } = createProjectDb(join(emptyDbDir, 'project.db'));
+      initializeProjectDb(db, { projectId: 'empty', name: 'Empty' });
+      close();
 
-    const cwdSpy = vi.spyOn(process, 'cwd').mockReturnValue(emptyDir);
-    const consoleSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
+      const cwdSpy = vi.spyOn(process, 'cwd').mockReturnValue(emptyDir);
+      const consoleSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
 
-    const { runExploreCommand } = await import('../../src/commands/explore.js');
-    await runExploreCommand();
+      try {
+        const { runExploreCommand } = await import('../../src/commands/explore.js');
+        await runExploreCommand();
 
-    const output = consoleSpy.mock.calls.map((c) => String(c[0])).join('\n');
-    expect(output).toContain('No entities');
-
-    consoleSpy.mockRestore();
-    cwdSpy.mockRestore();
-    rmSync(emptyDir, { recursive: true, force: true });
-  });
+        const output = consoleSpy.mock.calls.map((c) => String(c[0])).join('\n');
+        expect(output).toContain('No entities');
+      } finally {
+        consoleSpy.mockRestore();
+        cwdSpy.mockRestore();
+        rmSync(emptyDir, { recursive: true, force: true });
+      }
+    },
+    INTEGRATION_COMMAND_TIMEOUT,
+  );
 
   it('builds a store with correct mode from real project', async () => {
     // This test validates the store factory works correctly

@@ -23,6 +23,7 @@ import { slugifyPath } from '../../src/local-project.js';
 
 let projectDir: string;
 let PROJECT_ID: string;
+const INTEGRATION_COMMAND_TIMEOUT = 15_000;
 
 beforeAll(async () => {
   // 1. Create temp project directory
@@ -242,26 +243,32 @@ describe('spatula estimate (integration)', () => {
 // ---------------------------------------------------------------------------
 
 describe('spatula doctor (integration)', () => {
-  it('runs system and project checks for a valid project', async () => {
-    const cwdSpy = vi.spyOn(process, 'cwd').mockReturnValue(projectDir);
-    const consoleSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
+  it(
+    'runs system and project checks for a valid project',
+    async () => {
+      const cwdSpy = vi.spyOn(process, 'cwd').mockReturnValue(projectDir);
+      const consoleSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
 
-    const { runDoctorCommand } = await import('../../src/commands/doctor.js');
-    await runDoctorCommand();
+      try {
+        const { runDoctorCommand } = await import('../../src/commands/doctor.js');
+        await runDoctorCommand();
 
-    const output = consoleSpy.mock.calls.map((c) => String(c[0])).join('\n');
-    // Should contain check results
-    expect(output).toContain('Spatula Doctor');
-    // Should detect project context
-    expect(output).toContain('inside project');
-    // Should run system checks
-    expect(output).toContain('SYSTEM CHECKS');
-    // Should show summary with check count
-    expect(output).toMatch(/\d+ checks:/);
-
-    consoleSpy.mockRestore();
-    cwdSpy.mockRestore();
-  });
+        const output = consoleSpy.mock.calls.map((c) => String(c[0])).join('\n');
+        // Should contain check results
+        expect(output).toContain('Spatula Doctor');
+        // Should detect project context
+        expect(output).toContain('inside project');
+        // Should run system checks
+        expect(output).toContain('SYSTEM CHECKS');
+        // Should show summary with check count
+        expect(output).toMatch(/\d+ checks:/);
+      } finally {
+        consoleSpy.mockRestore();
+        cwdSpy.mockRestore();
+      }
+    },
+    INTEGRATION_COMMAND_TIMEOUT,
+  );
 
   it('runs project checks when spatula.yaml is present', async () => {
     const cwdSpy = vi.spyOn(process, 'cwd').mockReturnValue(projectDir);

@@ -1,0 +1,13 @@
+title = "Spatula Gitleaks configuration"
+
+[allowlist]
+description = "Known fake canaries used by redaction tests and documentation examples"
+regexes = [
+  '''eyJhbGciOiJIUzI1NiJ9\.eyJzdWIiOiIxMjM0NTY3ODkwIn0\.dummysignatureXXXXXXXX''',
+  '''sk_live_abcdefghij1234567890''',
+  '''sk_live_abcdef1234567890abcdef1234567890''',
+  '''sk-test1234567890abcdef1234''',
+  '''sk-abcdefghij1234567890''',
+  '''abcdefghij1234567890XYZ''',
+  '''7f3a-1234-5678-90ab''',
+]
