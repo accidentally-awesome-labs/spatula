@@ -67,6 +67,7 @@ git clone https://github.com/accidentally-awesome-labs/spatula.git
 cd spatula
 
 # Install dependencies
+corepack enable
 pnpm install
 
 # Start PostgreSQL and Redis
@@ -75,6 +76,9 @@ docker compose up -d
 # Configure environment
 cp .env.example .env
 # Edit .env — set at minimum: OPENROUTER_API_KEY
+
+# Build all packages
+pnpm build
 
 # Run database migrations
 pnpm --filter @spatula/db db:migrate

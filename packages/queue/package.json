@@ -24,7 +24,7 @@
     "lint": "eslint src/",
     "lint:fix": "eslint src/ --fix",
     "clean": "rm -rf dist .turbo",
-    "start:workers": "node dist/worker-entrypoint.js"
+    "start:workers": "node --env-file-if-exists=../../.env dist/worker-entrypoint.js"
   },
   "dependencies": {
     "@opentelemetry/api": "^1.9.1",

@@ -26,7 +26,7 @@
     "clean": "rm -rf dist .turbo",
     "db:generate": "drizzle-kit generate",
     "db:generate:sqlite": "drizzle-kit generate --config drizzle.config.sqlite.ts",
-    "db:migrate": "tsx src/run-migrate.ts"
+    "db:migrate": "node --env-file-if-exists=../../.env --import tsx src/run-migrate.ts"
   },
   "dependencies": {
     "@spatula/core": "workspace:*",

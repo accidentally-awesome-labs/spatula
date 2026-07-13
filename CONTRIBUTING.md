@@ -17,6 +17,7 @@ Thank you for your interest in contributing! This guide covers how to set up you
 # Clone and install
 git clone https://github.com/accidentally-awesome-labs/spatula.git
 cd spatula
+corepack enable
 pnpm install
 
 # Start database services
@@ -26,11 +27,11 @@ docker compose up -d
 cp .env.example .env
 # Edit .env with your settings (at minimum: OPENROUTER_API_KEY)
 
-# Run database migrations
-pnpm --filter @spatula/db db:migrate
-
 # Build all packages
 pnpm build
+
+# Run database migrations
+pnpm --filter @spatula/db db:migrate
 
 # Run tests
 pnpm test
