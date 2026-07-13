@@ -497,17 +497,14 @@ export class SpatulaApiClient {
     return url;
   }
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   private async get<T = any>(path: string, query?: Record<string, unknown>): Promise<T> {
     return this.request('GET', path, undefined, query);
   }
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   private async post<T = any>(path: string, body?: Record<string, unknown>): Promise<T> {
     return this.request('POST', path, body);
   }
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   private async request<T = any>(
     method: string,
     path: string,

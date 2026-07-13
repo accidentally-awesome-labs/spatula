@@ -55,7 +55,6 @@ function walkNode($: cheerio.CheerioAPI, node: unknown): string {
   if (n.type !== 'tag') return '';
 
   const tag = (n.tagName ?? n.name ?? '').toLowerCase();
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const $el = $(node as any);
   const metadata = describeElementMetadata($el, tag);
   const children = $el
@@ -115,11 +114,7 @@ function withMetadata(content: string, metadata: string[]): string {
   return cleanContent ? `${cleanContent} ${annotation}` : annotation;
 }
 
-function describeElementMetadata(
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  $el: cheerio.Cheerio<any>,
-  tag: string,
-): string[] {
+function describeElementMetadata($el: cheerio.Cheerio<any>, tag: string): string[] {
   const attrs = ($el.attr() ?? {}) as Record<string, string>;
   const metadata: string[] = [];
 

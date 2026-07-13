@@ -76,10 +76,8 @@ export function _resetOpenAPICache(): void {
  * fast on off-schema OpenAPI examples.
  */
 export function validateExamplesAtBoot(spec: any): { errors: string[] } {
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const Ajv: any = (Ajv2020 as any).default ?? Ajv2020;
   const ajv = new Ajv({ strict: false, allErrors: true });
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const addFmts: any = (addFormats as any).default ?? addFormats;
   addFmts(ajv);
 

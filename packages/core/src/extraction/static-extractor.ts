@@ -498,11 +498,7 @@ function extractHeaderedTableRecords(
   return [];
 }
 
-function extractTableHeaders(
-  $: cheerio.CheerioAPI,
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  table: cheerio.Cheerio<any>,
-): string[] {
+function extractTableHeaders($: cheerio.CheerioAPI, table: cheerio.Cheerio<any>): string[] {
   const theadCells = table.find('thead tr').first().children('th, td');
   const source = theadCells.length > 0 ? theadCells : table.find('tr').first().children('th, td');
   return source
@@ -513,7 +509,6 @@ function extractTableHeaders(
 
 function extractTableRows(
   $: cheerio.CheerioAPI,
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   table: cheerio.Cheerio<any>,
   columnCount: number,
   baseUrl: string,

@@ -10,6 +10,7 @@
  */
 import { describe, it, expect, vi } from 'vitest';
 import { SpatulaClient } from '../client.js';
+import type { ExperimentalNamespace } from './index.js';
 
 const BASE_URL = 'https://api.example.com';
 const API_KEY = 'sk_live_test123';
@@ -28,6 +29,18 @@ const SAMPLE_FORENSIC_RESPONSE = {
   nextCursor: null,
   hasMore: false,
 };
+
+type ExperimentalNamespaceWithUnknownProps = ExperimentalNamespace & Record<string, unknown>;
+
+function experimental(client: SpatulaClient): ExperimentalNamespace {
+  return client.experimental;
+}
+
+function experimentalWithUnknownProps(
+  client: SpatulaClient,
+): ExperimentalNamespaceWithUnknownProps {
+  return client.experimental as ExperimentalNamespaceWithUnknownProps;
+}
 
 function makeOkFetch(body: unknown) {
   return vi.fn().mockResolvedValue(
@@ -59,7 +72,7 @@ describe('client.experimental.forensic.listExtractions', () => {
       skipVersionProbe: true,
     });
 
-    await (client.experimental as any).forensic.listExtractions();
+    await experimental(client).forensic.listExtractions();
 
     expect(fetchMock).toHaveBeenCalledOnce();
     const [url] = fetchMock.mock.calls[0];
@@ -77,7 +90,7 @@ describe('client.experimental.forensic.listExtractions', () => {
       skipVersionProbe: true,
     });
 
-    const result = await (client.experimental as any).forensic.listExtractions();
+    const result = await experimental(client).forensic.listExtractions();
 
     expect(result).toHaveProperty('data');
     expect(Array.isArray(result.data)).toBe(true);
@@ -95,7 +108,7 @@ describe('client.experimental.forensic.listExtractions', () => {
       skipVersionProbe: true,
     });
 
-    await (client.experimental as any).forensic.listExtractions({ cursor: 'abc123cursor' });
+    await experimental(client).forensic.listExtractions({ cursor: 'abc123cursor' });
 
     const [url] = fetchMock.mock.calls[0];
     expect(url).toContain('cursor=abc123cursor');
@@ -110,7 +123,7 @@ describe('client.experimental.forensic.listExtractions', () => {
       skipVersionProbe: true,
     });
 
-    await (client.experimental as any).forensic.listExtractions({ limit: 25 });
+    await experimental(client).forensic.listExtractions({ limit: 25 });
 
     const [url] = fetchMock.mock.calls[0];
     expect(url).toContain('limit=25');
@@ -125,7 +138,7 @@ describe('client.experimental.forensic.listExtractions', () => {
       skipVersionProbe: true,
     });
 
-    await (client.experimental as any).forensic.listExtractions();
+    await experimental(client).forensic.listExtractions();
 
     const [, init] = fetchMock.mock.calls[0];
     expect(init?.headers?.['Authorization']).toBe(`Bearer ${API_KEY}`);
@@ -140,7 +153,7 @@ describe('client.experimental.forensic.listExtractions', () => {
       skipVersionProbe: true,
     });
 
-    await expect((client.experimental as any).forensic.listExtractions()).rejects.toThrow();
+    await expect(experimental(client).forensic.listExtractions()).rejects.toThrow();
   });
 });
 
@@ -154,7 +167,7 @@ describe('client.experimental Proxy — non-forensic props still throw', () => {
     });
 
     expect(() => {
-      (client.experimental as any).somethingElse;
+      experimentalWithUnknownProps(client).somethingElse;
     }).toThrow();
   });
 
@@ -167,7 +180,7 @@ describe('client.experimental Proxy — non-forensic props still throw', () => {
     });
 
     expect(() => {
-      (client.experimental as any).dlqAdmin;
+      experimentalWithUnknownProps(client).dlqAdmin;
     }).toThrow();
   });
 
@@ -181,7 +194,7 @@ describe('client.experimental Proxy — non-forensic props still throw', () => {
 
     // Accessing .forensic must NOT throw — it returns the forensic surface object
     expect(() => {
-      (client.experimental as any).forensic;
+      experimental(client).forensic;
     }).not.toThrow();
   });
 
@@ -193,7 +206,7 @@ describe('client.experimental Proxy — non-forensic props still throw', () => {
       skipVersionProbe: true,
     });
 
-    const ns = client.experimental as any;
+    const ns = experimentalWithUnknownProps(client);
     expect(() => void ns.then).not.toThrow();
     expect(() => void ns.toJSON).not.toThrow();
     expect(() => void ns.constructor).not.toThrow();

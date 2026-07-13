@@ -5,6 +5,7 @@ import { REDACT_PATHS, REDACTED_PLACEHOLDER, redactValue, redactObject } from '.
 export type Logger = pino.Logger;
 
 const VALID_LEVELS = ['fatal', 'error', 'warn', 'info', 'debug', 'trace'] as const;
+type LogLevel = (typeof VALID_LEVELS)[number];
 
 let baseLogger: Logger | null = null;
 let baseLoggerMode: 'production' | 'pretty' | null = null;
@@ -13,9 +14,13 @@ function getLoggerMode(): 'production' | 'pretty' {
   return process.env.NODE_ENV === 'production' ? 'production' : 'pretty';
 }
 
-function resolveLevel(): string {
+function isValidLevel(level: string): level is LogLevel {
+  return (VALID_LEVELS as readonly string[]).includes(level);
+}
+
+function resolveLevel(): LogLevel {
   const level = process.env.LOG_LEVEL ?? 'info';
-  if (!VALID_LEVELS.includes(level as any)) {
+  if (!isValidLevel(level)) {
     throw new ConfigError(`Invalid LOG_LEVEL "${level}". Valid levels: ${VALID_LEVELS.join(', ')}`);
   }
   return level;

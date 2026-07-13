@@ -119,7 +119,6 @@ export async function runExportCommand(opts: ExportCommandOptions = {}): Promise
     const allEntities: Entity[] = [];
     let offset = 0;
 
-    // eslint-disable-next-line no-constant-condition
     while (true) {
       const page = await project.dataSource.getEntities({
         limit: BATCH_SIZE,

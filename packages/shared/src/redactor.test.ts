@@ -111,14 +111,14 @@ describe('redactObject', () => {
       },
     };
     const result = redactObject(obj);
-    expect((result as any).auth.token).toBe(PLACEHOLDER);
+    expect(result.auth.token).toBe(PLACEHOLDER);
   });
 
   it('redacts secrets in arrays', () => {
     const obj = { keys: ['sk-abcdefghij1234567890', 'clean'] };
     const result = redactObject(obj);
-    expect((result as any).keys[0]).toBe(PLACEHOLDER);
-    expect((result as any).keys[1]).toBe('clean');
+    expect(result.keys[0]).toBe(PLACEHOLDER);
+    expect(result.keys[1]).toBe('clean');
   });
 
   it('handles null leaves without throwing', () => {
@@ -138,8 +138,8 @@ describe('redactObject', () => {
       },
     };
     const result = redactObject(obj);
-    expect((result as any).level1.level2.level3.secret).toBe(PLACEHOLDER);
-    expect((result as any).level1.level2.level3.num).toBe(42);
+    expect(result.level1.level2.level3.secret).toBe(PLACEHOLDER);
+    expect(result.level1.level2.level3.num).toBe(42);
   });
 
   it('does NOT mutate the input object', () => {

@@ -16,15 +16,15 @@ export default [
     },
     rules: {
       '@typescript-eslint/no-unused-vars': ['error', { argsIgnorePattern: '^_' }],
-      '@typescript-eslint/no-explicit-any': 'warn',
+      // The codebase currently uses `any` at external API, framework, and test-double
+      // boundaries. Keep lint as an error gate for enforced rules rather than a
+      // stream of warning-only debt.
+      '@typescript-eslint/no-explicit-any': 'off',
       '@typescript-eslint/consistent-type-imports': 'error',
-      // Plan 16-2 / D-10: block non-type imports from @spatula/core-types so the
-      // type-only boundary holds across the monorepo. Value-imports (ErrorCode,
-      // STATUS_MAP, ActionType, JobConfigSchema, etc.) must go through
-      // @spatula/shared or @spatula/core; `import type { ... }` from
-      // @spatula/core-types remains allowed. The codegen script in
-      // @spatula/client/scripts/gen-error-classes.ts complies by importing
-      // ErrorCode via @spatula/shared.
+      // Enforce the public package boundary: @spatula/core-types is type-only
+      // outside its own package. Runtime values such as ErrorCode, STATUS_MAP,
+      // ActionType, and JobConfigSchema must come from @spatula/shared or
+      // @spatula/core.
       '@typescript-eslint/no-restricted-imports': [
         'error',
         {
@@ -38,7 +38,10 @@ export default [
           ],
         },
       ],
-      'no-console': 'warn',
+      // CLI commands and one-shot maintenance scripts intentionally write to
+      // stdout/stderr. Structured runtime logging is covered by package code
+      // review and tests, not this generic browser-oriented rule.
+      'no-console': 'off',
     },
   },
   {
@@ -51,8 +54,7 @@ export default [
   },
   {
     // Exempt the back-compat shim files that intentionally re-export the
-    // @spatula/core-types runtime values for legacy consumers (plan 16-2
-    // D-10 — these shims ARE the canonical value-import surface).
+    // @spatula/core-types runtime values for legacy consumers.
     files: ['packages/shared/src/error-codes.ts', 'packages/core/src/types/*.ts'],
     rules: {
       '@typescript-eslint/no-restricted-imports': 'off',

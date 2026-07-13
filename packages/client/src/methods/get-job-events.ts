@@ -124,8 +124,8 @@ export function subscribeJobEvents(
     import('eventsource').then(({ EventSource: NodeEventSource }) => {
       if (closed) return; // unsubscribed before polyfill loaded
       // eventsource@4.1.0 is W3C-compliant; cast through unknown to our minimal interface.
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      es = new (NodeEventSource as any)(url.toString()) as MinimalEventSource;
+      const EventSourceCtor = NodeEventSource as unknown as new (url: string) => MinimalEventSource;
+      es = new EventSourceCtor(url.toString());
       wireHandlers(es, options);
     });
   } else {
