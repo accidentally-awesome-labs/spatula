@@ -2,6 +2,12 @@ packages:
   - 'packages/*'
   - 'apps/*'
 
+allowBuilds:
+  better-sqlite3: true
+  esbuild: true
+  msgpackr-extract: true
+  protobufjs: true
+
 overrides:
   '@grpc/grpc-js': 1.14.4
   '@opentelemetry/core': 2.9.0
