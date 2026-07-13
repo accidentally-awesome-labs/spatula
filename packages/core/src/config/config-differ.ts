@@ -57,7 +57,7 @@ export function diffConfigs(current: JobConfig, previous: JobConfig): JobConfigD
 
   // Check if anything changed
   // safetyChanged is always false today but is included here so that when
-  // safety detection is implemented (Phase 13 Step 4), hasChanges automatically
+  // safety detection is implemented, hasChanges automatically
   // reflects it without a latent bug lurking.
   const hasChanges =
     seedsAdded.length > 0 ||

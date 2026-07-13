@@ -17,7 +17,7 @@ describe('quotas', () => {
     it('extends SpatulaError with QUOTA.EXCEEDED code', () => {
       const error = new QuotaExceededError('Max concurrent jobs exceeded');
       expect(error).toBeInstanceOf(SpatulaError);
-      // Phase 16 plan 16-1: legacy 'QUOTA_EXCEEDED' → frozen `ErrorCode.QUOTA_EXCEEDED` ('QUOTA.EXCEEDED').
+      // Legacy 'QUOTA_EXCEEDED' maps to `ErrorCode.QUOTA_EXCEEDED` ('QUOTA.EXCEEDED').
       expect(error.code).toBe('QUOTA.EXCEEDED');
       expect(error.name).toBe('QuotaExceededError');
       expect(error.message).toBe('Max concurrent jobs exceeded');

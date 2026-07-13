@@ -270,37 +270,49 @@ describe('spatula doctor (integration)', () => {
     INTEGRATION_COMMAND_TIMEOUT,
   );
 
-  it('runs project checks when spatula.yaml is present', async () => {
-    const cwdSpy = vi.spyOn(process, 'cwd').mockReturnValue(projectDir);
-    const consoleSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
+  it(
+    'runs project checks when spatula.yaml is present',
+    async () => {
+      const cwdSpy = vi.spyOn(process, 'cwd').mockReturnValue(projectDir);
+      const consoleSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
 
-    const { runDoctorCommand } = await import('../../src/commands/doctor.js');
-    await runDoctorCommand();
+      try {
+        const { runDoctorCommand } = await import('../../src/commands/doctor.js');
+        await runDoctorCommand();
 
-    const output = consoleSpy.mock.calls.map((c) => String(c[0])).join('\n');
-    // Should run project checks since spatula.yaml exists
-    expect(output).toContain('PROJECT CHECKS');
-    // The spatula.yaml check should pass since we wrote a valid one
-    expect(output).toContain('spatula.yaml');
+        const output = consoleSpy.mock.calls.map((c) => String(c[0])).join('\n');
+        // Should run project checks since spatula.yaml exists
+        expect(output).toContain('PROJECT CHECKS');
+        // The spatula.yaml check should pass since we wrote a valid one
+        expect(output).toContain('spatula.yaml');
+      } finally {
+        consoleSpy.mockRestore();
+        cwdSpy.mockRestore();
+      }
+    },
+    INTEGRATION_COMMAND_TIMEOUT,
+  );
 
-    consoleSpy.mockRestore();
-    cwdSpy.mockRestore();
-  });
+  it(
+    'shows node version check result',
+    async () => {
+      const cwdSpy = vi.spyOn(process, 'cwd').mockReturnValue(projectDir);
+      const consoleSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
 
-  it('shows node version check result', async () => {
-    const cwdSpy = vi.spyOn(process, 'cwd').mockReturnValue(projectDir);
-    const consoleSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
+      try {
+        const { runDoctorCommand } = await import('../../src/commands/doctor.js');
+        await runDoctorCommand();
 
-    const { runDoctorCommand } = await import('../../src/commands/doctor.js');
-    await runDoctorCommand();
-
-    const output = consoleSpy.mock.calls.map((c) => String(c[0])).join('\n');
-    // Node version check should show the version
-    expect(output).toContain('Node.js');
-
-    consoleSpy.mockRestore();
-    cwdSpy.mockRestore();
-  });
+        const output = consoleSpy.mock.calls.map((c) => String(c[0])).join('\n');
+        // Node version check should show the version
+        expect(output).toContain('Node.js');
+      } finally {
+        consoleSpy.mockRestore();
+        cwdSpy.mockRestore();
+      }
+    },
+    INTEGRATION_COMMAND_TIMEOUT,
+  );
 
   it('determineCategoriesFromContext returns correct categories', async () => {
     const { determineCategoriesFromContext } = await import('../../src/commands/doctor.js');

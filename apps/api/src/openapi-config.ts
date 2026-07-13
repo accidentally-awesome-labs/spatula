@@ -12,7 +12,6 @@ export function createOpenAPIRouter(): OpenAPIHono<AppEnv> {
         return c.json(
           {
             error: {
-              // Phase 16 plan 16-1: frozen DOMAIN.CODE enum value (was 'VALIDATION_ERROR').
               code: ErrorCode.VALIDATION_SCHEMA,
               message: result.error.issues
                 .map((i) => `${i.path.join('.')}: ${i.message}`)
@@ -29,11 +28,10 @@ export function createOpenAPIRouter(): OpenAPIHono<AppEnv> {
 }
 
 // ===========================================================================
-// Phase 16 plan 16-3: boot-cached OpenAPI document (D-13) + dev-mode example
-// validator (D-16). The document is built ONCE at server startup and served
-// byte-identically across every /api/v1/openapi.json request. Per-request
-// generation would burn CPU walking the Zod registry and would defeat any
-// downstream CDN caching.
+// Boot-cached OpenAPI document + dev-mode example validator. The document is
+// built once at server startup and served byte-identically across every
+// /api/v1/openapi.json request. Per-request generation would burn CPU walking
+// the Zod registry and would defeat downstream CDN caching.
 // ===========================================================================
 
 let cachedSpec: object | null = null;
@@ -71,7 +69,7 @@ export function _resetOpenAPICache(): void {
 /**
  * Walk every (path, method, response.status, content.application/json.examples)
  * tuple in the OpenAPI tree and compile-validate each example body against its
- * schema using Ajv's draft-2020-12 build (OpenAPI 3.1 dialect — Pitfall #1).
+ * schema using Ajv's draft-2020-12 build (OpenAPI 3.1 dialect).
  *
  * Returns the list of human-readable error strings. Empty list = all examples
  * conform. Used by app.ts during boot in `NODE_ENV !== 'production'` to fail

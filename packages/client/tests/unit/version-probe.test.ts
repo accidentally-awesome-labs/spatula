@@ -1,5 +1,5 @@
 /**
- * Phase 16 plan 16-3 Task 3 — tests for the lazy version probe (D-12).
+ * Tests for the lazy version probe.
  *
  * Test cases cover (per <behavior>):
  *   1. probe.ensure() does NOT throw when server version's major matches the SDK major.
@@ -31,7 +31,7 @@ function mkProbeResponse(version: string) {
   );
 }
 
-describe('Phase 16 plan 16-3 Task 3: VersionProbe (D-12 — lazy version probe)', () => {
+describe('VersionProbe lazy version probe', () => {
   let fetchMock: ReturnType<typeof vi.fn>;
 
   beforeEach(() => {
@@ -135,14 +135,14 @@ describe('Phase 16 plan 16-3 Task 3: VersionProbe (D-12 — lazy version probe)'
   });
 });
 
-describe('Phase 16 plan 16-3 Task 3: SpatulaClient wired to VersionProbe', () => {
+describe('SpatulaClient wired to VersionProbe', () => {
   let fetchMock: ReturnType<typeof vi.fn>;
 
   beforeEach(() => {
     fetchMock = vi.fn();
   });
 
-  it('constructor performs ZERO I/O (Anti-Pattern Constructor I/O protection — D-12)', () => {
+  it('constructor performs no I/O', () => {
     const _client = new SpatulaClient({
       baseUrl: 'https://api.example.com',
       apiKey: 'k',

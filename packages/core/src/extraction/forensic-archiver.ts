@@ -1,5 +1,5 @@
 /**
- * Forensic archiver — Plan 18-05 Task 1 (SEC-04)
+ * Forensic archiver.
  *
  * When a suspicious extraction or off-schema retry fires, the raw HTML is
  * archived to the content store under the `forensic/` key prefix and a

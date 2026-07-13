@@ -7,8 +7,8 @@ Public REST contract test suite. Gates the v1 API surface on every PR.
 - Every 4xx/5xx response from the OSS API matches the v1 error envelope
   (`{ error: { code, message, requestId, details? } }`) — API-01.
 - Every OpenAPI example in the served `/api/v1/openapi.json` validates against
-  its own schema via Ajv2020 — design decisions D-14 (drift detection) + D-16
-  (boot-time example validation belt-and-suspenders).
+  its own schema via Ajv2020, which catches response/example drift before it
+  reaches users.
 - Every auth'd success carries the four rate-limit headers
   (`X-RateLimit-Limit`, `X-RateLimit-Remaining`, `X-RateLimit-Reset`,
   `Retry-After`) — API-02.
@@ -17,8 +17,8 @@ Public REST contract test suite. Gates the v1 API surface on every PR.
 - All timestamps parse as ISO 8601 UTC (trailing `Z` or `+00:00`) — API-07.
 - Every public route lives under `/api/v1/` (or the `/.well-known/`
   sibling-root) — API-10.
-- `client.experimental.*` throws on every property access while v1.0 has zero
-  experimental surfaces — API-13.
+- `client.experimental.forensic` resolves to the one v1 experimental surface,
+  while every other `client.experimental.*` property throws — API-13.
 
 ## How it works
 
@@ -39,7 +39,7 @@ root). Once-per-suite:
    path like `/api/v1/health`).
 4. `afterAll`: close the server + pg pool.
 
-## Pitfall #1 — Ajv import path
+## Ajv import path
 
 The default `import Ajv from 'ajv'` uses the draft-07 validator and silently
 mis-validates `nullable: true` + tuple-form `prefixItems` keywords used by the
@@ -65,7 +65,7 @@ as `tests/carveout/`). The harness reads `TEST_DATABASE_URL` (preferred) or
 ## Files
 
 - `vitest.config.ts` — test runner config (30s timeout, workspace aliases).
-- `helpers/ajv-setup.ts` — shared Ajv2020 instance factory (Pitfall #1).
+- `helpers/ajv-setup.ts` — shared Ajv2020 instance factory.
 - `helpers/server-harness.ts` — `startServer()` + Node http adapter.
 - `helpers/fixtures.ts` — `seedFixtures()`, `resolvePath()`, `authHeaders()`.
 - `generated.test.ts` — matrix driver over the served OpenAPI spec.
@@ -74,4 +74,4 @@ as `tests/carveout/`). The harness reads `TEST_DATABASE_URL` (preferred) or
 - `deprecation.test.ts` — RFC 8594 headers on offset routes only.
 - `timestamps.test.ts` — ISO 8601 UTC sweep across response bodies.
 - `versioning.test.ts` — every spec path under `/api/v1/` or `/.well-known/`.
-- `experimental.test.ts` — `client.experimental.*` Proxy throws on access.
+- `experimental.test.ts` — `client.experimental.forensic` exists; all other experimental properties throw.

@@ -1,5 +1,5 @@
 /**
- * Config compatibility test (DEPLOY-11)
+ * Config compatibility test.
  *
  * Verifies that a v1.0 spatula.yaml fixture can be parsed by the v1.1 runtime
  * (parseProjectYamlFile from @spatula/core) without throwing.
@@ -15,7 +15,7 @@ import { parseProjectYamlFile } from '@spatula/core';
 
 const FIXTURE_PATH = resolve(__dirname, 'fixtures/v1.0-spatula.yaml');
 
-describe('v1.0 spatula.yaml config compatibility (DEPLOY-11)', () => {
+describe('v1.0 spatula.yaml config compatibility', () => {
   it('parses a v1.0 spatula.yaml fixture on the v1.1 runtime without throwing', () => {
     // Should not throw — if the schema is forward-compatible, this succeeds
     let parsed: ReturnType<typeof parseProjectYamlFile>;

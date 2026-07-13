@@ -2,7 +2,7 @@
  * @spatula/shared: error-codes.ts (re-export shim)
  *
  * The frozen `ErrorCode` enum + `STATUS_MAP` live in `@spatula/core-types`
- * (moved in plan 16-2 from this file's original staging location). This shim
+ * This shim
  * preserves the legacy import path `@spatula/shared` for both the runtime
  * value AND the type.
  *

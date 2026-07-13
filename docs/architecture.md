@@ -109,7 +109,7 @@ Spatula is interface-driven — every major component is a contract with pluggab
 | `Extractor`      | `packages/core/src/interfaces/extractor.ts`       | `LLMExtractor`, `CssExtractor`                                                           |
 | `LLMClient`      | `packages/core/src/interfaces/llm-client.ts`      | `OpenRouterClient`, `OllamaClient`, `CircuitBreakerLLMClient`                            |
 | `ContentStore`   | `packages/core/src/interfaces/content-store.ts`   | `FilesystemContentStore`, `S3ContentStore`                                               |
-| `DataSource`     | `packages/core/src/interfaces/data-source.ts`     | `LocalDataSource` (SQLite), API client (planned)                                         |
+| `DataSource`     | `packages/core/src/interfaces/data-source.ts`     | `LocalDataSource` (SQLite), CLI remote API adapter                                       |
 | `SchemaEvolver`  | `packages/core/src/interfaces/schema-evolver.ts`  | `LLMSchemaEvolver`                                                                       |
 | `Reconciler`     | `packages/core/src/interfaces/reconciler.ts`      | `LLMReconciler`                                                                          |
 | `Exporter`       | `packages/core/src/interfaces/exporter.ts`        | `JsonExporter`, `CsvExporter`, `ParquetExporter`, `SqliteExporter`, `DuckDbExporter`     |
@@ -134,11 +134,11 @@ Both modes use the same orchestrator functions from `@spatula/core`. The server 
 
 Benchmark + feature-parity script at `packages/db/bench/sqlite-comparison.ts`. Reproducible via `pnpm --filter @spatula/db exec tsx ../../packages/db/bench/sqlite-comparison.ts`; results captured in `packages/db/bench/sqlite-comparison.results.md` (timestamped, regenerated each run).
 
-The script applies the three gates from spec §3.2.3 — feature parity (FTS5 / WAL / JSON1 / foreign keys / CHECK constraints), perf parity (10k inserts / selects / single-tx inserts), and non-experimental status — against both backends.
+The script applies three gates: feature parity (FTS5 / WAL / JSON1 / foreign keys / CHECK constraints), perf parity (10k inserts / selects / single-tx inserts), and non-experimental status.
 
 ### Findings
 
-1. **FTS5 (decisive — Pitfall #7):** On the v1.0 supported runtime (Node 22 LTS), `node:sqlite` is built against an older SQLite version that lacks FTS5. On developer machines running Node 26+, `node:sqlite` may report FTS5 as AVAILABLE (newer upstream SQLite), but the deployment platform we ship against is Node 22 LTS — so FTS5 parity is NOT guaranteed across the support matrix. Spatula's design contemplates FTS5 for entity-name search post-v1; dropping FTS5 capability now would force a dependency re-introduction later. `better-sqlite3` ships its own SQLite build with FTS5 enabled across every supported Node line.
+1. **FTS5:** On the v1.0 supported runtime (Node 22 LTS), `node:sqlite` is built against an older SQLite version that lacks FTS5. On developer machines running Node 26+, `node:sqlite` may report FTS5 as AVAILABLE (newer upstream SQLite), but the deployment platform we ship against is Node 22 LTS — so FTS5 parity is NOT guaranteed across the support matrix. Spatula's design contemplates FTS5 for entity-name search post-v1; dropping FTS5 capability now would force a dependency re-introduction later. `better-sqlite3` ships its own SQLite build with FTS5 enabled across every supported Node line.
 2. **JSON1 / WAL:** Both backends support these on all tested Node lines.
 3. **Perf:** `node:sqlite` and `better-sqlite3` are within the same order of magnitude for every workload tested. Neither is a discriminator at v1.0 local-mode scale.
 4. **Experimental status:** `node:sqlite` is marked Experimental (stability index 1) through Node 22 LTS. Production self-hosters cannot rely on Experimental API stability across patch releases.
@@ -204,17 +204,17 @@ Each project defines a `safety` level controlling how actions are handled:
 
 ## LLM Usage Map
 
-LLM inference is used at 8 decision points, each routable to a different model tier:
+LLM inference is used at 8 decision points. Each point resolves its model as `llm.modelOverrides[task] ?? llm.primaryModel`, so projects can pin one primary model or override individual tasks.
 
-| Task                 | Purpose                                       | Default Tier     | Why                        |
-| -------------------- | --------------------------------------------- | ---------------- | -------------------------- |
-| `pageRelevance`      | Is this page about our target data?           | Fast (Haiku)     | High volume, simple yes/no |
-| `linkEvaluation`     | Should we follow this link?                   | Fast (Haiku)     | High volume, scoring task  |
-| `extraction`         | Extract structured fields from page           | Primary (Sonnet) | Core accuracy requirement  |
-| `schemaEvolution`    | Propose new fields from unmapped data         | Primary (Sonnet) | Complex reasoning          |
-| `entityMatching`     | Are these the same real-world entity?         | Primary (Sonnet) | Fuzzy matching             |
-| `conflictResolution` | Which value is correct when sources disagree? | Primary (Sonnet) | Judgment call              |
-| `qualityAudit`       | Verify extraction quality                     | Primary (Sonnet) | Accuracy check             |
-| `documentation`      | Generate field descriptions                   | Fast (Haiku)     | Simple text generation     |
+| Task                 | Purpose                                       | Typical routing choice           |
+| -------------------- | --------------------------------------------- | -------------------------------- |
+| `pageRelevance`      | Is this page about our target data?           | Lower-cost/high-throughput model |
+| `linkEvaluation`     | Should we follow this link?                   | Lower-cost/high-throughput model |
+| `extraction`         | Extract structured fields from page           | Primary accuracy model           |
+| `schemaEvolution`    | Propose new fields from unmapped data         | Primary accuracy model           |
+| `entityMatching`     | Are these the same real-world entity?         | Primary accuracy model           |
+| `conflictResolution` | Which value is correct when sources disagree? | Primary accuracy model           |
+| `qualityAudit`       | Verify extraction quality                     | Primary accuracy model           |
+| `documentation`      | Generate field descriptions                   | Lower-cost/high-throughput model |
 
-Model routing is configured per-project in `spatula.yaml` under `llm.overrides`. The `model-router.ts` resolves the model for each task by checking: task-specific override > project default > global config default.
+Model routing is configured per project in `spatula.yaml` under `llm.overrides`. The default primary model is `deepseek/deepseek-v4-flash` unless overridden by CLI flags, project config, or global config.

@@ -124,7 +124,7 @@ export class StaticExtractor implements Extractor {
           parsed = parseSingleResponse(retryResponse.content);
           response = retryResponse;
 
-          // Off-schema retry succeeded — archive the raw HTML for forensic review (Plan 18-05)
+          // Off-schema retry succeeded; archive the raw HTML for forensic review.
           if (this.forensicDeps) {
             archiveForensicExtraction(this.forensicDeps, {
               tenantId: 'unknown',

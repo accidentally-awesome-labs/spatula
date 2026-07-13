@@ -22,7 +22,6 @@ export function batchJobRoutes() {
       const requestId = c.get('requestId') ?? '';
       return c.json(
         {
-          // Phase 16 plan 16-1: frozen DOMAIN.CODE enum value (was 'VALIDATION_ERROR').
           error: {
             code: ErrorCode.VALIDATION_SCHEMA,
             message: parsed.error.issues[0]?.message ?? 'Invalid request',

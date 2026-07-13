@@ -17,7 +17,7 @@ export const DEFAULT_TENANT_QUOTAS: TenantQuotas = {
 };
 
 /**
- * Quota-exceeded error. As of Phase 16 plan 16-1, this class uses the new
+ * Quota-exceeded error. This class uses the
  * `ErrorCode.QUOTA_EXCEEDED` ("QUOTA.EXCEEDED") value rather than the legacy
  * flat string. Constructor signature accepts the same options as the v1
  * domain subclasses so call sites can attach `{ limit, remaining, resetAt }`

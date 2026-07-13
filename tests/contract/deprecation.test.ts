@@ -13,7 +13,7 @@
  * onto cursor-mode responses.
  *
  * Tested routes:
- *   - GET /api/v1/jobs (offset-only listing — always emits)
+ *   - GET /api/v1/jobs?offset=0 (deprecated offset listing — emits)
  *   - GET /api/v1/jobs/:jobId/entities?cursor=... (cursor mode — must NOT emit)
  *
  * The cursor-mode test uses a synthetic cursor that may return 404; we assert
@@ -36,8 +36,8 @@ describe('API-04 deprecation headers on offset-only routes', () => {
     if (server) await server.close();
   });
 
-  it('GET /api/v1/jobs (offset-only) emits Deprecation + Sunset + Link', async () => {
-    const res = await fetch(`${server.url}/api/v1/jobs?limit=10`, {
+  it('GET /api/v1/jobs?offset=0 emits Deprecation + Sunset + Link', async () => {
+    const res = await fetch(`${server.url}/api/v1/jobs?limit=10&offset=0`, {
       headers: { Authorization: `Bearer ${apiKey}` },
     });
     // The route uses the real jobRepo wired in the harness, so we expect 200.
@@ -50,7 +50,7 @@ describe('API-04 deprecation headers on offset-only routes', () => {
   });
 
   it('Sunset is a parseable HTTP-date in the future', async () => {
-    const res = await fetch(`${server.url}/api/v1/jobs?limit=1`, {
+    const res = await fetch(`${server.url}/api/v1/jobs?limit=1&offset=0`, {
       headers: { Authorization: `Bearer ${apiKey}` },
     });
     const sunset = res.headers.get('Sunset');

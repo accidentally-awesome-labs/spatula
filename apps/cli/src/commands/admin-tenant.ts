@@ -2,9 +2,9 @@
  * `spatula admin tenant` — DSR admin commands for tenant data management.
  *
  * Subcommands:
- *   delete  Enqueue an async tenant deletion and poll to completion (D-07, SEC-09)
+ *   delete  Enqueue an async tenant deletion and poll to completion
  *   export  Fetch a re-importable tenant data dump and write it to disk
- *   import  Re-import a tenant data dump via the admin import route (D-10, SEC-09)
+ *   import  Re-import a tenant data dump via the admin import route
  *
  * All three commands talk to the remote admin API the same way `remote.ts` does —
  * they read the base URL + API key from the global config for the named remote.
@@ -151,7 +151,7 @@ export interface AdminTenantImportOptions {
 // ---------------------------------------------------------------------------
 
 /**
- * Enqueue an async tenant deletion and poll to completion (D-07).
+ * Enqueue an async tenant deletion and poll to completion.
  *
  * Calls DELETE /api/v1/admin/tenants/:id → receives 202 + jobId.
  * Then polls GET /api/v1/jobs/:jobId until the job is completed or failed.
@@ -268,7 +268,7 @@ export async function runAdminTenantExport(opts: AdminTenantExportOptions): Prom
 // ---------------------------------------------------------------------------
 
 /**
- * Re-import a tenant data dump from a file via the admin import route (D-10).
+ * Re-import a tenant data dump from a file via the admin import route.
  *
  * Reads the dump file (jsonl format as produced by `admin tenant export`),
  * parses each line as a table record, and POSTs the assembled object to

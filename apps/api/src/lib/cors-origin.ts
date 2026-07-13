@@ -5,9 +5,9 @@
  * wildcard regexes. Used by app.ts to provide the function-form `origin`
  * option to Hono's cors() middleware.
  *
- * Rules (from CONTEXT.md D-08, D-10):
+ * Rules:
  * - Comma-separated list of origins, whitespace trimmed.
- * - Bare `*` is NOT allowed (D-10).
+ * - Bare `*` is NOT allowed.
  * - Wildcard entries (containing `*`) compile to a single-label regex:
  *   `https://*.spatula.dev` → `/^https:\/\/[^./]+\.spatula\.dev$/`
  *   This matches exactly one subdomain label (no dots, no slashes).
@@ -46,7 +46,7 @@ export function buildOriginMatcher(raw: string): OriginMatcher | null {
 
   for (const part of parts) {
     if (part.includes('*')) {
-      // Reject bare wildcard (D-10)
+      // Reject bare wildcard.
       if (part === '*') {
         return null;
       }

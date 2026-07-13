@@ -7,9 +7,8 @@ const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12
 export class NoAuthProvider implements AuthProvider {
   async authenticate(request: HonoRequest): Promise<AuthResult> {
     const tenantId = request.header('x-tenant-id');
-    // Phase 16 plan 16-4 [Rule 1]: typed DOMAIN.CODE subclasses. x-tenant-id
-    // functions as identity in dev/no-auth mode, so MISSING covers absence
-    // and INVALID covers a malformed value.
+    // x-tenant-id functions as identity in dev/no-auth mode, so MISSING covers
+    // absence and INVALID covers a malformed value.
     if (!tenantId) {
       throw new AuthMissingTokenError('x-tenant-id header is required');
     }

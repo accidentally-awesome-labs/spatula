@@ -44,7 +44,7 @@ return {1, count + 1}
 `;
 
 /**
- * Per-tenant sliding-window rate-limit middleware (Phase 16 plan 16-1).
+ * Per-tenant sliding-window rate-limit middleware.
  *
  * Emits the full v1 header set on every request:
  *   - `X-RateLimit-Limit`     — configured cap for this route

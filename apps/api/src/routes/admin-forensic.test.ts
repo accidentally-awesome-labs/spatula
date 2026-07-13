@@ -1,7 +1,5 @@
 /**
- * Tests for admin-forensic.ts route — Plan 18-05 Task 2 (SEC-05)
- *
- * TDD RED → GREEN cycle.
+ * Tests for the admin-forensic.ts route.
  *
  * Verifies:
  * - GET /api/v1/admin/forensic/extractions returns 403 without admin:forensic:read scope

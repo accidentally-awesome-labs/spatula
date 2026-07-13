@@ -11,7 +11,7 @@
  *     }
  *   }
  *
- * `code` MUST match the regex `^[A-Z_]+\.[A-Z_]+$` (DOMAIN.CODE per plan 16-1).
+ * `code` MUST match the regex `^[A-Z_]+\.[A-Z_]+$`.
  *
  * This suite exercises 5 distinct error codes through 5 explicit triggers:
  *   - 401 AUTH.MISSING_TOKEN     — protected route with no Authorization header
@@ -45,8 +45,7 @@ function assertEnvelope(body: unknown): asserts body is ErrorBody {
       message: expect.any(String),
       // requestId may be empty string if requestContextMiddleware didn't populate it
       // (the matcher accepts both string AND undefined to tolerate that — but
-      // production paths always set it). Plan 16-1 STATUS_MAP envelope tests
-      // already gate the populated case at unit-level.
+      // production paths always set it). Unit tests already gate the populated case.
       requestId: expect.any(String),
     },
   });

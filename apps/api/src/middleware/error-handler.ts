@@ -44,8 +44,8 @@ export class NotFoundError extends SpatulaError {
 
 /**
  * @deprecated Use `JobConflictError` (or another domain-specific `*ConflictError`)
- * from `@spatula/shared`. Kept as a re-export for in-flight routes during the
- * Phase 16 sweep. Removed in v2.
+ * from `@spatula/shared`. Kept as a temporary re-export for compatibility.
+ * Removed in v2.
  */
 export class ConflictError extends JobConflictError {
   constructor(message: string) {

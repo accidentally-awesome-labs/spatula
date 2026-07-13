@@ -4,17 +4,21 @@
 
 ## v1.0 state
 
-Spatula v1.0 ships with **zero experimental surfaces**. The policy described here is in force from v1.0 onward.
+Spatula v1.0 ships with **one experimental surface**:
 
-The `@spatula/client` package already exposes a reserved `client.experimental.*` namespace at v1.0 — accessing any property on it throws an `Error` whose message contains `'zero experimental surfaces'`. This scaffolding exists so that adding the first real surface is a non-breaking package change (the consumer-facing import path is already published).
+- `client.experimental.forensic.listExtractions()` → `GET /api/v1/admin/forensic/extractions`
+
+The endpoint is tagged `x-spatula-experimental: true` in the OpenAPI document and requires `admin:forensic:read` or `admin` scope. The `client.experimental.*` namespace is fail-loud: accessing any property other than `forensic` throws an explanatory `Error`.
 
 ```typescript
 import { SpatulaClient } from '@spatula/client';
 const client = new SpatulaClient({ baseUrl: '...' });
 
+await client.experimental.forensic.listExtractions({ limit: 25 });
+
 // v1.0: throws
-client.experimental.forensicExtractions;
-// Error: @spatula/client v1.0 ships zero experimental surfaces.
+client.experimental.dlqAdmin;
+// Error: client.experimental.dlqAdmin is not available.
 ```
 
 ## Experimental tag
@@ -47,7 +51,7 @@ The helper that emits these is `apps/api/src/lib/deprecation-headers.ts`. v1.0 a
 ## Why this matters for consumers
 
 - **A `Deprecation` header is not an error.** Your code should keep working. Treat it as a build-time signal to schedule migration before the `Sunset` date.
-- **After `Sunset`, expect `410 Gone`.** Plan for at least one client release between the Sunset header appearance and the Sunset date.
+- **After `Sunset`, expect `410 Gone`.** Allow for at least one client release between the Sunset header appearance and the Sunset date.
 - **The `Link` rel="successor-version" target is canonical.** Follow it (or its doc-anchor) — don't reverse-engineer migration paths from the deprecated surface's shape.
 
 ## Major-version policy

@@ -1,5 +1,5 @@
 /**
- * Integration tests for POST /api/v1/api-keys/:id/rotate (AUTH-05).
+ * Integration tests for POST /api/v1/api-keys/:id/rotate.
  *
  * Uses createApp() with a stateful mock ApiKeyRepository that mirrors real
  * DB behavior — same pattern as other apps/api integration tests.
@@ -264,7 +264,7 @@ function createMockDeps(
 
 // ── Tests ─────────────────────────────────────────────────────────────────────
 
-describe('POST /api/v1/api-keys/:id/rotate (AUTH-05)', () => {
+describe('POST /api/v1/api-keys/:id/rotate', () => {
   let deps: ReturnType<typeof createMockDeps>;
 
   beforeEach(() => {

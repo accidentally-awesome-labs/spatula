@@ -10,6 +10,7 @@ function createMockDeps(): AppDeps {
       create: vi.fn().mockResolvedValue({ id: 'job-1' }),
       findById: vi.fn().mockResolvedValue({ id: 'job-1', name: 'Test', tenantId: 'tenant-1' }),
       findByTenant: vi.fn().mockResolvedValue([]),
+      findByTenantCursor: vi.fn().mockResolvedValue({ jobs: [], nextCursor: null }),
       countByTenant: vi.fn().mockResolvedValue(0),
       updateStatus: vi.fn(),
       updateStats: vi.fn(),
@@ -142,15 +143,26 @@ describe('Full app', () => {
     expect(html).toContain('swagger');
   });
 
-  it('GET /api/v1/jobs returns total count alongside data', async () => {
+  it('GET /api/v1/jobs returns cursor envelope by default', async () => {
     const app = createApp(createMockDeps());
     const res = await app.request('/api/v1/jobs', {
       headers: { 'x-tenant-id': '550e8400-e29b-41d4-a716-446655440000' },
     });
     expect(res.status).toBe(200);
     const body = await res.json();
-    expect(body).toHaveProperty('total');
     expect(body).toHaveProperty('data');
+    expect(body).toHaveProperty('hasMore');
+  });
+
+  it('GET /api/v1/jobs?offset=0 returns deprecated total count envelope', async () => {
+    const app = createApp(createMockDeps());
+    const res = await app.request('/api/v1/jobs?offset=0', {
+      headers: { 'x-tenant-id': '550e8400-e29b-41d4-a716-446655440000' },
+    });
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body).toHaveProperty('total');
+    expect(body).toHaveProperty('page');
   });
 
   it('GET /api/v1/jobs/:id/extractions returns pagination envelope', async () => {

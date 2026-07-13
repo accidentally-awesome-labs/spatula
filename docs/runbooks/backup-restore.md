@@ -215,8 +215,3 @@ After a restore, confirm all of the following before routing production traffic 
 - `docs/runbooks/upgrade.md` — no-migration-downgrade policy + expand-contract rule; the pre-flight pg_dump step is the same one described here
 - `docs/runbooks/upgrade.md#version-to-version-migration-template` — version migration pre-flight uses this backup procedure
 - `tests/e2e/backup/round-trip.test.ts` — automated round-trip test that exercises pg_dump + restore + row-count + content-hash parity
-
----
-
-_Phase: 19-deployment-self-host-excellence_
-_Authored: 2026-06-10 (Plan 19-08)_

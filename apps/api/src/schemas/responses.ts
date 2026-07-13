@@ -1,5 +1,5 @@
 import { z } from '@hono/zod-openapi';
-// Plan 16-2: value-import ErrorCode via @spatula/shared (the back-compat shim).
+// Value-import ErrorCode via @spatula/shared (the back-compat shim).
 // The monorepo ESLint rule blocks value-imports from @spatula/core-types
 // directly; this consumer is allowed because it routes through the shim.
 import { ErrorCode } from '@spatula/shared';
@@ -168,7 +168,7 @@ export function listResponse<T extends z.ZodType>(schema: T) {
 }
 
 /**
- * Phase 16 plan 16-1: canonical cursor-paginated response helper.
+ * Canonical cursor-paginated response helper.
  * Shape `{ data, nextCursor?, hasMore }`. No `total` count.
  */
 export function cursorListResponse<T extends z.ZodTypeAny>(itemSchema: T) {
@@ -176,7 +176,7 @@ export function cursorListResponse<T extends z.ZodTypeAny>(itemSchema: T) {
 }
 
 /**
- * @deprecated Phase 16 plan 16-1: offset-paginated response helper.
+ * @deprecated Offset-paginated response helper.
  * Shape `{ data, total, page, limit, hasMore }`. Removal target v2.0; routes
  * that emit this MUST also call `applyDeprecationHeaders(c)`.
  */

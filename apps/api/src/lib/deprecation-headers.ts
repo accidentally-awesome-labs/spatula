@@ -1,7 +1,7 @@
 import type { Context } from 'hono';
 
 /**
- * Phase 16 plan 16-1: HTTP Deprecation/Sunset headers per RFC 8594.
+ * HTTP Deprecation/Sunset headers per RFC 8594.
  *
  * Emitted from routes that still serve a deprecated request shape (e.g.,
  * offset-paginated list endpoints). v2.0 will remove these surfaces; clients

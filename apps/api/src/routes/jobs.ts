@@ -14,7 +14,12 @@ import {
   dataResponse,
   jsonContent,
 } from '../schemas/responses.js';
-import { JobNotFoundError, ValidationSchemaError } from '@spatula/shared';
+import {
+  decodeCursor,
+  encodeCursor,
+  JobNotFoundError,
+  ValidationSchemaError,
+} from '@spatula/shared';
 import { applyDeprecationHeaders } from '../lib/deprecation-headers.js';
 import type { AppDeps } from '../types.js';
 
@@ -83,8 +88,21 @@ const listJobsRoute = createRoute({
   request: { query: listJobsQuerySchema },
   responses: {
     200: jsonContent(
-      z.object({ data: z.array(jobResponseSchema), total: z.number() }),
-      'List of jobs with count',
+      z.union([
+        z.object({
+          data: z.array(jobResponseSchema),
+          nextCursor: z.string().optional(),
+          hasMore: z.boolean(),
+        }),
+        z.object({
+          data: z.array(jobResponseSchema),
+          total: z.number(),
+          page: z.number(),
+          limit: z.number(),
+          hasMore: z.boolean(),
+        }),
+      ]),
+      'Cursor-paginated job list; explicit offset/page queries return deprecated offset envelope',
     ),
   },
 });
@@ -210,20 +228,59 @@ export function jobRoutes() {
     const tenantId = c.get('tenantId');
     const deps = c.get('deps');
 
-    const [jobs, total] = await Promise.all([
-      deps.jobRepo.findByTenant(tenantId, {
+    if (query.offset !== undefined || query.page !== undefined) {
+      const page = query.page ?? Math.floor((query.offset ?? 0) / query.limit) + 1;
+      const offset = query.offset ?? (page - 1) * query.limit;
+      const [jobs, total] = await Promise.all([
+        deps.jobRepo.findByTenant(tenantId, {
+          status: query.status,
+          limit: query.limit,
+          offset,
+        }),
+        deps.jobRepo.countByTenant(tenantId, { status: query.status }),
+      ]);
+
+      applyDeprecationHeaders(c);
+
+      return c.json({
+        data: jobs,
+        total,
+        page,
+        limit: query.limit,
+        hasMore: offset + query.limit < total,
+      });
+    }
+
+    const cursorPayload = query.cursor ? decodeCursor(query.cursor) : undefined;
+    if (typeof deps.jobRepo.findByTenantCursor === 'function') {
+      const result = await deps.jobRepo.findByTenantCursor(tenantId, {
         status: query.status,
         limit: query.limit,
-        offset: query.offset,
-      }),
-      deps.jobRepo.countByTenant(tenantId, { status: query.status }),
-    ]);
+        cursor: cursorPayload,
+        since: query.since,
+      });
 
-    // Phase 16 plan 16-1: list endpoints with offset-only pagination are
-    // DEPRECATED at v1 (removal target v2.0); emit RFC 8594 headers.
-    applyDeprecationHeaders(c);
+      return c.json({
+        data: result.jobs,
+        ...(result.nextCursor ? { nextCursor: encodeCursor(result.nextCursor) } : {}),
+        hasMore: !!result.nextCursor,
+      });
+    }
 
-    return c.json({ data: jobs, total });
+    const jobs = await deps.jobRepo.findByTenant(tenantId, {
+      status: query.status,
+      limit: query.limit + 1,
+      offset: 0,
+    });
+    const page = jobs.slice(0, query.limit);
+    const last = page.at(-1);
+    return c.json({
+      data: page,
+      ...(jobs.length > query.limit && last
+        ? { nextCursor: encodeCursor({ id: last.id, sortValue: last.createdAt.toISOString() }) }
+        : {}),
+      hasMore: jobs.length > query.limit,
+    });
   });
 
   // @ts-expect-error — OpenAPI handler return type narrowing

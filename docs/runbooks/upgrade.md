@@ -2,13 +2,13 @@
 
 Authoritative upgrade procedures and schema-change policies for Spatula OSS.
 
-Related runbooks: `backup-restore.md`, `reverse-proxy.md`, `hardware-sizing.md`, `support-matrix.md`, `secret-scan-audit.md`, `post-publish-smoke.md`, `user-journey-baseline.md`, and `incident-response.md`.
+Related runbooks: `backup-restore.md`, `reverse-proxy.md`, `hardware-sizing.md`, and `verify-images.md`.
 
 ---
 
 ## No-migration-downgrade policy
 
-**Spatula migrations are forward-only.** There is no `down()` for any production migration. Once a release tag's migrations apply to a database, that database cannot roll back to a prior release without restoring from a backup. This is the `no-migration-downgrade` policy committed in v1.1.
+**Spatula migrations are forward-only.** There is no `down()` for any production migration. Once a release tag's migrations apply to a database, that database cannot roll back to a prior release without restoring from a backup.
 
 **Operational implications:**
 

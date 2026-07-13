@@ -1,5 +1,5 @@
 /**
- * Generated matrix driver — the heart of plan 16-4.
+ * Generated matrix driver for the public REST contract suite.
  *
  * Boots the API, fetches the live `GET /api/v1/openapi.json`, and iterates
  * every `(path, method, status, example)` tuple in the served spec to assert
@@ -25,8 +25,8 @@
  * Pass 1 is byte-deterministic (pure spec walk); Pass 2 is best-effort across
  * the routes whose deps are wired in the harness. Together they catch both
  * "spec lies about what handler returns" and "spec example is plain wrong"
- * drift modes (D-14 belt-and-suspenders with apps/api/src/openapi-config.ts
- * `validateExamplesAtBoot` from plan 16-3).
+ * drift modes alongside the dev/test boot validator in
+ * apps/api/src/openapi-config.ts.
  *
  * Tuple counters published into the SUMMARY via stderr at the end of the run.
  */

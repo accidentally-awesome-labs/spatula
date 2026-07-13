@@ -2,7 +2,7 @@
 
 > **Authoritative reference for auth strategies, scopes, token lifecycle, CORS,
 > and related security policies.** This document supersedes scattered scope
-> mentions in package READMEs. Requirements: AUTH-06, D-21.
+> mentions in package READMEs.
 
 ---
 
@@ -99,7 +99,7 @@ Keys can carry an `expiresAt` timestamp. After expiry the key is rejected with
 `401 AUTH.INVALID_TOKEN`. Explicit revocation via `DELETE /api/v1/api-keys/:id`
 sets `revokedAt` immediately.
 
-### API key rotation (zero-downtime, AUTH-05)
+### API key rotation (zero-downtime)
 
 ```
 POST /api/v1/api-keys/:id/rotate

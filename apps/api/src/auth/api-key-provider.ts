@@ -9,13 +9,8 @@ export class ApiKeyAuthProvider implements AuthProvider {
 
   async authenticate(request: HonoRequest): Promise<AuthResult> {
     const authHeader = request.header('authorization');
-    // Phase 16 plan 16-4 [Rule 1]: swap legacy `AuthError` (code: 'AUTH_ERROR')
-    // for the typed DOMAIN.CODE subclasses introduced by plan 16-1. The
-    // 16-1 grep-gate sweep covered routes/middleware/openapi-config.ts but
-    // not apps/api/src/auth/ — so these throw-sites slipped through and the
-    // contract-test errors suite (16-4 Task 2) surfaced them as `AUTH_ERROR`
-    // envelope leaks. Use MISSING for absent/malformed headers, INVALID for
-    // wrong-secret cases.
+    // Use MISSING for absent/malformed headers and INVALID for wrong-secret
+    // cases so error envelopes stay stable.
     if (!authHeader) {
       throw new AuthMissingTokenError('Authorization header is required');
     }

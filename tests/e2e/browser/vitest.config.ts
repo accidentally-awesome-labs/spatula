@@ -8,7 +8,7 @@
  *   - A live Redis instance (REDIS_URL or default localhost:6379)
  *
  * It is NOT run in normal CI (not included in the default tests/e2e/vitest.config.ts
- * glob). It runs in the dedicated `test-e2e-browser` CI job on main branch and tags.
+ * glob). Run it explicitly when validating the browser OIDC + SSE path.
  *
  * Run manually:
  *   pnpm exec vitest run --config tests/e2e/browser/vitest.config.ts

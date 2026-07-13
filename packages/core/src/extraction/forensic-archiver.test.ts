@@ -1,8 +1,6 @@
 /**
  * Tests for forensic-archiver.ts
  *
- * TDD RED → GREEN cycle per plan 18-05 Task 1.
- *
  * Verifies:
  * - Key shape: forensic/{tenantId}/{extractionId}/{timestamp}.html
  * - DLQ record fields: queueName, tenantId, payload contents

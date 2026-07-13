@@ -62,7 +62,7 @@ export function extractionRoutes() {
     }
 
     // Offset fallback (no cursor, no since) — DEPRECATED at v1, removal target v2.0.
-    // Phase 16 plan 16-1: emit Deprecation / Sunset / Link headers (RFC 8594).
+    // Emit Deprecation / Sunset / Link headers (RFC 8594).
     const [extractions, total] = await Promise.all([
       deps.extractionRepo.findByJob(jobId, tenantId, {
         schemaVersion: query.schemaVersion,

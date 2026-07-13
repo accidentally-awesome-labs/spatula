@@ -47,7 +47,6 @@ export function timeoutMiddleware(config: TimeoutConfig): MiddlewareHandler {
         const requestId = c.get('requestId') ?? '';
         return c.json(
           {
-            // Phase 16 plan 16-1: frozen DOMAIN.CODE enum value (was 'TIMEOUT').
             error: {
               code: ErrorCode.INTERNAL_TIMEOUT,
               message: err.message,

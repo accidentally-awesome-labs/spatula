@@ -75,7 +75,7 @@ export function deriveJobDeps(
  *   - If sharedClient is undefined → return base deps unchanged (no crash, existing
  *     unit tests continue to work — they pass no llmClient).
  *   - If job not found or job.config.llm is absent → fall back to the default
- *     config embedded on deps (set by Plan 01's buildWorkerDeps).
+ *     config embedded on deps by buildWorkerDeps.
  */
 export async function resolveJobDeps(
   deps: WorkerDeps,

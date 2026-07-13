@@ -41,7 +41,7 @@ staticPasswords:
 
 staticClients:
   # Browser client: public PKCE authorization_code flow.
-  # Used by smoke/browser-flow.ts and plan 17-06 e2e tests.
+  # Used by smoke/browser-flow.ts and browser e2e tests.
   - id: spatula-browser
     name: Spatula Browser
     redirectURIs:
@@ -52,7 +52,7 @@ staticClients:
     public: true # No client secret required for PKCE flows.
 
   # M2M client: confidential client_credentials grant.
-  # Used by smoke/m2m-flow.ts and plan 17-07 e2e tests.
+  # Used by smoke/m2m-flow.ts and M2M e2e tests.
   # Secret is intentionally committed as a dev-only value — DO NOT reuse in production.
   - id: spatula-m2m
     name: Spatula M2M

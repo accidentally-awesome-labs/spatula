@@ -4,8 +4,7 @@ export interface CreateJobInput {
   name: string;
   description?: string;
   seedUrls: string[];
-  // Schema/crawl/llm config — full validation server-side. Plan 16-5 will
-  // tighten the input type using `@spatula/core-types` JobConfigSchema.
+  // Schema/crawl/llm config is fully validated server-side.
   [k: string]: unknown;
 }
 

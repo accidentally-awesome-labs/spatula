@@ -93,7 +93,7 @@ describe('STATUS_MAP (HTTP status mapping)', () => {
   });
 });
 
-describe('RESOURCE_NOT_FOUND (additive Phase 17 code)', () => {
+describe('RESOURCE_NOT_FOUND', () => {
   it('ErrorCode.RESOURCE_NOT_FOUND equals RESOURCE.NOT_FOUND', () => {
     expect(ErrorCode.RESOURCE_NOT_FOUND).toBe('RESOURCE.NOT_FOUND');
   });

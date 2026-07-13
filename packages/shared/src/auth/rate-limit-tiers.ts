@@ -1,6 +1,6 @@
 // packages/shared/src/auth/rate-limit-tiers.ts
-// Per-route rate limits are configured via config/rate-limits.yaml in Phase 16.
-// Until then, a single default limit applies to all authenticated routes.
+// Per-route rate limits are configured via config/rate-limits.yaml.
+// A single default limit applies to unmatched authenticated routes.
 
 export interface RateLimitConfig {
   requestsPerMinute: number;

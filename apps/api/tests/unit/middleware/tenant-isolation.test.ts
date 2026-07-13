@@ -36,6 +36,12 @@ function createMockDeps(): AppDeps {
         }
         return Promise.resolve([]);
       }),
+      findByTenantCursor: vi.fn().mockImplementation((tenantId: string) => {
+        if (tenantId === TENANT_A) {
+          return Promise.resolve({ jobs: [jobForTenantA], nextCursor: null });
+        }
+        return Promise.resolve({ jobs: [], nextCursor: null });
+      }),
       countByTenant: vi.fn().mockImplementation((tenantId: string) => {
         return Promise.resolve(tenantId === TENANT_A ? 1 : 0);
       }),
@@ -140,10 +146,11 @@ describe('Cross-tenant isolation', () => {
       const json = await res.json();
       expect(json.data).toHaveLength(1);
       expect(json.data[0].id).toBe('job-1');
-      expect(deps.jobRepo.findByTenant).toHaveBeenCalledWith(TENANT_A, {
+      expect(deps.jobRepo.findByTenantCursor).toHaveBeenCalledWith(TENANT_A, {
         status: undefined,
         limit: 50,
-        offset: 0,
+        cursor: undefined,
+        since: undefined,
       });
     });
 
@@ -155,10 +162,11 @@ describe('Cross-tenant isolation', () => {
       expect(res.status).toBe(200);
       const json = await res.json();
       expect(json.data).toHaveLength(0);
-      expect(deps.jobRepo.findByTenant).toHaveBeenCalledWith(TENANT_B, {
+      expect(deps.jobRepo.findByTenantCursor).toHaveBeenCalledWith(TENANT_B, {
         status: undefined,
         limit: 50,
-        offset: 0,
+        cursor: undefined,
+        since: undefined,
       });
     });
 
@@ -170,9 +178,17 @@ describe('Cross-tenant isolation', () => {
         headers: { 'x-tenant-id': TENANT_B },
       });
 
-      expect(deps.jobRepo.findByTenant).toHaveBeenCalledTimes(2);
-      expect(deps.jobRepo.findByTenant).toHaveBeenNthCalledWith(1, TENANT_A, expect.any(Object));
-      expect(deps.jobRepo.findByTenant).toHaveBeenNthCalledWith(2, TENANT_B, expect.any(Object));
+      expect(deps.jobRepo.findByTenantCursor).toHaveBeenCalledTimes(2);
+      expect(deps.jobRepo.findByTenantCursor).toHaveBeenNthCalledWith(
+        1,
+        TENANT_A,
+        expect.any(Object),
+      );
+      expect(deps.jobRepo.findByTenantCursor).toHaveBeenNthCalledWith(
+        2,
+        TENANT_B,
+        expect.any(Object),
+      );
     });
   });
 

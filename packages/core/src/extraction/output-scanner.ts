@@ -7,7 +7,7 @@
  *    also appears verbatim in the system prompt. This suggests the LLM leaked the
  *    system prompt into its output (possibly triggered by an injection attempt).
  *    Threshold: 40 chars. Tuned to avoid false positives from common short phrases
- *    while catching meaningful prompt fragments. (Claude's Discretion per CONTEXT.md.)
+ *    while catching meaningful prompt fragments.
  *
  * 2. field_name_leak — An extracted string value contains the literal name of a
  *    DIFFERENT schema field as a substring. Heuristic: the model used field names as

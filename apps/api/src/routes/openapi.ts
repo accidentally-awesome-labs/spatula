@@ -1,8 +1,8 @@
 /**
- * Phase 16 plan 16-3 (API-05): live OpenAPI 3.1 spec endpoint.
+ * Live OpenAPI 3.1 spec endpoint.
  *
  * `GET /api/v1/openapi.json` serves the boot-cached OpenAPI document built
- * once from the live `OpenAPIHono` registry (D-13). Two consecutive requests
+ * once from the live `OpenAPIHono` registry. Two consecutive requests
  * return byte-identical bodies, enabling downstream CDN caching.
  *
  * The route is registered as a sub-router so that calling

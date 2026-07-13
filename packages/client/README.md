@@ -31,15 +31,17 @@ See `docs/compat-policy.md` for the full SDK ↔ server ↔ `@spatula/core-types
 
 ## Size budget
 
-The 50 kB limit measures ONLY the named surface above (`SpatulaClient` + 3 methods). Importing the full module (e.g., `import * as client from '@spatula/client'`) pulls in additional methods + class-per-code error subclasses (~25 classes) and will exceed 50 kB. This is by design — tree-shaking in your bundler eliminates unused subclasses.
+The 50 kB limit measures ONLY the named surface above (`SpatulaClient` + 3 methods). Importing the full module (e.g., `import * as client from '@spatula/client'`) pulls in additional methods + class-per-code error subclasses (26 classes) and will exceed 50 kB. This is by design — tree-shaking in your bundler eliminates unused subclasses.
 
 ## Experimental namespace
 
-`client.experimental` is reserved. v1.0 ships zero experimental surfaces. Future experimental surfaces will be documented in `docs/deprecation-policy.md`. Until then, any access throws.
+`client.experimental` contains explicitly unstable SDK surfaces. v1.0 ships one experimental surface: `client.experimental.forensic`, which calls the admin forensic-extractions endpoint. Any other property access throws.
 
 ```typescript
-// v1.0 — throws:
-client.experimental.anything; // → Error: client.experimental.anything is not available …
+await client.experimental.forensic.listExtractions({ limit: 25 });
+
+// Throws: no other experimental surface exists in v1.0.
+client.experimental.anything;
 ```
 
 ## Generated error classes

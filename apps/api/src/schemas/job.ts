@@ -125,7 +125,10 @@ export const listJobsQuerySchema = z.object({
     .min(1)
     .default(50)
     .transform((v) => Math.min(v, 100)),
-  offset: z.coerce.number().int().min(0).default(0),
+  cursor: z.string().optional(),
+  since: z.string().datetime().optional(),
+  offset: z.coerce.number().int().min(0).optional(),
+  page: z.coerce.number().int().min(1).optional(),
 });
 
 export type ListJobsQuery = z.infer<typeof listJobsQuerySchema>;

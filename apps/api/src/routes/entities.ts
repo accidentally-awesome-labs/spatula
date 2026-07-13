@@ -83,7 +83,7 @@ export function entityRoutes() {
     }
 
     // Offset fallback (no cursor, no since) — DEPRECATED at v1, removal target v2.0.
-    // Phase 16 plan 16-1: emit Deprecation / Sunset / Link headers (RFC 8594).
+    // Emit Deprecation / Sunset / Link headers (RFC 8594).
     const [entityList, total] = await Promise.all([
       deps.entityRepo.findByJob(jobId, tenantId, {
         limit: query.limit,

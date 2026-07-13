@@ -141,7 +141,7 @@ describe('processTenantDeleteJob', () => {
     await expect(processTenantDeleteJob(makeJobData(), deps)).resolves.not.toThrow();
   });
 
-  it('rethrows unexpected blob errors (fail-loud, D-09)', async () => {
+  it('rethrows unexpected blob errors', async () => {
     const unexpectedError = new Error('S3 service unavailable');
     (unexpectedError as any).statusCode = 503;
 

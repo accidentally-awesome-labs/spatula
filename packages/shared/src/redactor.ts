@@ -65,7 +65,7 @@ export function redactObject<T>(input: T): T {
  * Authorization/Cookie headers and common secret-bearing keys.
  *
  * NOTE: fast-redact paths do NOT recurse into arbitrary depths. Use the
- * redactObject serializer backstop for unknown nesting (D-11 / Pitfall 1).
+ * redactObject serializer backstop for unknown nesting.
  */
 export const REDACT_PATHS: string[] = [
   'req.headers.authorization',
@@ -123,10 +123,9 @@ export function redactSentryEvent(event: Record<string, unknown>): Record<string
 /**
  * OTel SpanProcessor that scrubs span attributes before they are exported.
  * Register BEFORE BatchSpanProcessor so spans are redacted prior to export.
- * Attribute mutation in onEnd is the established community pattern (Pitfall 2).
+ * Attribute mutation in onEnd is the established community pattern.
  */
 export class RedactionSpanProcessor implements SpanProcessor {
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   onStart(_span: Span, _parentContext: Context): void {
     // no-op — attributes may not be fully populated at start time
   }

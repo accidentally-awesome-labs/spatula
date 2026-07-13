@@ -1,15 +1,13 @@
 /**
  * OpenAPI-driven cross-tenant route enumeration + assertion logic.
- * Phase 17 plan 17-07 — AUTH-07.
  *
- * Design decisions (D-17, D-18, D-19 from CONTEXT.md + RESEARCH.md Pitfall 5):
+ * Design decisions:
  *
  *   - Route list comes from the SERVED /api/v1/openapi.json — zero drift as
  *     routes are added (Don't Hand-Roll).
- *   - Cross-tenant access returns 403 OR 404 (D-18 prefers 404; 403 for scope-
- *     gated global resources). The assertIsolated() fn accepts either.
+ *   - Cross-tenant access returns 403 OR 404. The assertIsolated() fn accepts either.
  *   - error.code is asserted to be RESOURCE.NOT_FOUND or AUTH.INSUFFICIENT_SCOPE
- *     (RESEARCH Pitfall 5 maps D-19's descriptive labels to actual frozen enum values).
+ *     as the two acceptable isolation signals.
  *   - The SSE route (GET /api/v1/jobs/{id}/events) uses ?token= auth (not a Bearer
  *     header) — the generator flags it as authMode: 'stream-token'.
  *   - A coverageReport() distinguishes discovered routes from actually-asserted ones.
@@ -241,7 +239,7 @@ const SKIP_LIST: Array<{ method: string; path: string; reason: string }> = [
   // implicitly via the ORM query, so they return empty data — not tenant-A's data.
   // This is not a data leak, but it's also not 403/404 (pre-existing route behavior).
   // Fixing these to return 404 would require adding a job-ownership pre-flight to each
-  // route (architectural change, out of scope for plan 17-07).
+  // route.
   {
     method: 'GET',
     path: '/api/v1/jobs/{jobId}/schema/versions',
@@ -457,8 +455,8 @@ export function buildCrossTenantCase(
  *   (a) Status is 403 or 404.
  *   (b) Body is the standard error envelope { error: { code, message, requestId } }.
  *   (c) error.code is one of the two acceptable codes:
- *         RESOURCE.NOT_FOUND  — cross-tenant lookup found no row for this tenant (D-18 prefer 404)
- *         AUTH.INSUFFICIENT_SCOPE — scope-gated global resource (D-18 prefer 403)
+ *         RESOURCE.NOT_FOUND  — cross-tenant lookup found no row for this tenant
+ *         AUTH.INSUFFICIENT_SCOPE — scope-gated global resource
  *   (d) Neither error.message nor JSON.stringify(error.details) contains
  *       tenant-A's tenantId, resource ids, or label (no data leakage).
  *
@@ -523,8 +521,8 @@ export async function assertIsolated(
 
   // (c) error.code must indicate a not-found or scope-denied condition.
   //
-  //     RESEARCH.md Pitfall 5 maps D-19's labels to actual frozen enum values:
-  //       - RESOURCE.NOT_FOUND      — generic cross-resource 404 (added Phase 17 plan 17-01)
+  //     Acceptable enum values:
+  //       - RESOURCE.NOT_FOUND      — generic cross-resource 404
   //       - AUTH.INSUFFICIENT_SCOPE — scope-gated 403
   //       - JOB.NOT_FOUND, ENTITY.NOT_FOUND, SCHEMA.NOT_FOUND, EXPORT.NOT_FOUND,
   //         TENANT.NOT_FOUND        — resource-specific 404 codes (pre-existing routes
@@ -532,7 +530,7 @@ export async function assertIsolated(
   //
   //     All resource-specific NOT_FOUND codes prove isolation: the route could not find
   //     a row belonging to tenant-A because the query is scoped to tenant-B (the caller).
-  //     The generic RESOURCE.NOT_FOUND is the preferred code for new routes (D-18), but
+  //     The generic RESOURCE.NOT_FOUND is the preferred code for new routes, but
   //     existing routes use domain-specific codes — both are valid isolation signals.
   const code = envelope.error.code as string;
   const isAcceptableCode = code === 'AUTH.INSUFFICIENT_SCOPE' || code.endsWith('.NOT_FOUND');
@@ -591,7 +589,7 @@ export interface CoverageReport {
   skipped: Array<{ method: string; path: string; reason: string }>;
   /**
    * Routes that were discovered but neither asserted nor in the skip-list —
-   * these represent a coverage gap (D-17 "no forgotten endpoint" guarantee).
+   * these represent a coverage gap.
    */
   gaps: Array<{ method: string; path: string }>;
 }

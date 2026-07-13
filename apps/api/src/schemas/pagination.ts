@@ -1,8 +1,6 @@
 import { z } from '@hono/zod-openapi';
 
 /**
- * Pagination params (Phase 16 plan 16-1).
- *
  * Cursor pagination is CANONICAL at v1. Offset (`offset`, `page`) is
  * DEPRECATED — both still accepted, but routes that receive offset emit
  * `Deprecation` + `Sunset` + `Link` headers (RFC 8594). Sunset target: v2.0.
@@ -78,7 +76,7 @@ export function offsetEnvelopeSchema<T extends z.ZodTypeAny>(itemSchema: T) {
  * @deprecated Legacy mixed-shape envelope (carries both `total` + `nextCursor`).
  * DO NOT use in new code. Use `cursorEnvelopeSchema` or `offsetEnvelopeSchema`.
  * Kept here as a re-export to preserve backward compatibility for callers that
- * still reference it during the Phase 16 sweep.
+ * still reference the mixed response shape.
  */
 export const paginationEnvelopeSchema = z.object({
   total: z.number(),

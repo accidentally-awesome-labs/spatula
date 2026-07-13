@@ -9,7 +9,7 @@ describe('SpatulaClient', () => {
     fetchMock = vi.fn();
   });
 
-  describe('constructor (no I/O — Anti-Pattern protection per D-12)', () => {
+  describe('constructor performs no I/O', () => {
     it('does NOT trigger any fetch on instantiation', () => {
       const _client = new SpatulaClient({
         baseUrl: 'https://api.example.com',

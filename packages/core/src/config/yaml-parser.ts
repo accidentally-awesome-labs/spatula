@@ -13,7 +13,7 @@ import type { FieldDefinitionInput } from '../types/schema.js';
  *
  * Note: `selector` from the expanded form is intentionally NOT mapped to
  * FieldDefinitionInput (no selector field on that type). It's a YAML-only
- * convenience for Phase 13's CSS-selector-based extraction hints.
+ * convenience for CSS-selector-based extraction hints.
  */
 export function expandFieldShorthand(entry: YamlFieldShorthand): FieldDefinitionInput {
   // Expanded form: has 'field' key

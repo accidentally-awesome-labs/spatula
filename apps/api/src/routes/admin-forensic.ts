@@ -1,5 +1,5 @@
 /**
- * Forensic extractions admin route — Plan 18-05 Task 2 (SEC-05)
+ * Forensic extractions admin route.
  *
  * GET /extractions (mounted at /api/v1/admin/forensic)
  * - Requires `admin:forensic:read` scope (or `admin` superset)
@@ -22,7 +22,7 @@ import { createOpenAPIRouter } from '../openapi-config.js';
 import { jsonContent, errorResponseSchema } from '../schemas/responses.js';
 
 const FORENSIC_QUEUE_NAME = 'suspicious_extraction';
-/** Signed URL TTL: 15 minutes (900 seconds) per SEC-05 spec. */
+/** Signed URL TTL: 15 minutes (900 seconds). */
 const SIGNED_URL_TTL_SECONDS = 900;
 const DEFAULT_PAGE_LIMIT = 50;
 const MAX_PAGE_LIMIT = 100;

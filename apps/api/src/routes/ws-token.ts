@@ -10,7 +10,7 @@ const createWsTokenRoute = createRoute({
   method: 'post',
   path: '/',
   tags: ['WebSocket'],
-  // Phase 17 plan 17-02 (D-07): updated to reflect dual WS+SSE purpose.
+  // Token can be used by WebSocket-style and SSE event consumers.
   // operationId, path, request/response schema, and 60s TTL are UNCHANGED.
   summary: 'Create a single-use stream token (WebSocket or SSE)',
   description:

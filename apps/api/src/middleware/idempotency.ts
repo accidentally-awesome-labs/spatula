@@ -16,7 +16,6 @@ export function idempotencyMiddleware(): MiddlewareHandler {
       const requestId = c.get('requestId') ?? '';
       return c.json(
         {
-          // Phase 16 plan 16-1: frozen DOMAIN.CODE enum value (was 'VALIDATION_ERROR').
           error: {
             code: ErrorCode.VALIDATION_PARAMS,
             message: 'Idempotency-Key must be 255 characters or less',

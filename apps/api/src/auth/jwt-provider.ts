@@ -100,10 +100,8 @@ export class JwtAuthProvider implements AuthProvider {
 
   async authenticate(request: HonoRequest): Promise<AuthResult> {
     const authHeader = request.header('authorization');
-    // Phase 16 plan 16-4 [Rule 1]: typed DOMAIN.CODE subclasses (MISSING for
-    // absent headers, INVALID for failed verification). Same fix as
-    // api-key-provider.ts — slipped through plan 16-1's grep sweep because
-    // apps/api/src/auth/ was outside the scanned path tree.
+    // Use MISSING for absent headers and INVALID for failed verification so
+    // error envelopes stay stable.
     if (!authHeader) throw new AuthMissingTokenError('Authorization header is required');
     if (!authHeader.startsWith('Bearer ')) throw new AuthMissingTokenError('Bearer token required');
     const token = authHeader.slice(7);

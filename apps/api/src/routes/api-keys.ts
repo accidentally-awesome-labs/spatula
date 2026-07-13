@@ -229,7 +229,7 @@ export function apiKeyRoutes() {
     const tenantId = c.get('tenantId');
     const { id } = c.req.valid('param');
 
-    // Body is optional — default graceSeconds to 86400 (24h); clamp to 0..604800 (7d cap, D-14).
+    // Body is optional; default graceSeconds to 86400 (24h) and clamp to 0..604800 (7d cap).
     const body = c.req.valid('json');
     const graceSeconds = Math.min(Math.max(body?.graceSeconds ?? 86400, 0), 604800);
 
@@ -262,7 +262,7 @@ export function apiKeyRoutes() {
       throw error;
     }
 
-    // Emit audit event (D-16): action = 'api_key.rotated', both ids present.
+    // Emit audit event with both old and new key ids present.
     if (deps.auditLogger) {
       deps.auditLogger.log({
         tenantId,
@@ -275,7 +275,7 @@ export function apiKeyRoutes() {
       });
     }
 
-    // D-16 response shape: supersededExpiresAt = oldKey.expiresAt (set by rotate() to graceUntil).
+    // supersededExpiresAt = oldKey.expiresAt (set by rotate() to graceUntil).
     return c.json(
       {
         data: {

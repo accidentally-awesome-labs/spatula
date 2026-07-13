@@ -1,5 +1,5 @@
 /**
- * Backup → restore round-trip e2e test (DEPLOY-05)
+ * Backup -> restore round-trip e2e test.
  *
  * Seeds rows across several tables + N content_store blobs, runs pg_dump,
  * restores into a fresh scratch DB, and asserts:
@@ -123,7 +123,7 @@ function sha256(content: string): string {
 // Test
 // ---------------------------------------------------------------------------
 
-describe('Backup → restore round-trip (DEPLOY-05)', () => {
+describe('Backup -> restore round-trip', () => {
   it('proves row-count + content-hash parity after pg_dump → restore', async (ctx) => {
     if (!setupOk) return ctx.skip();
 
@@ -184,7 +184,7 @@ describe('Backup → restore round-trip (DEPLOY-05)', () => {
       blobs.push({ ref, key, hash: sha256(content), content });
     }
 
-    // Enumerate content_store via Drizzle (NO listKeys — RESEARCH note)
+    // Enumerate content_store via Drizzle (no listKeys).
     // We use the key prefix to find only our blobs (avoid touching other test data)
     const contentStoreBefore = await db.execute(
       sql`SELECT key, content FROM content_store WHERE key LIKE ${'backup-test/' + tenantId + '/%'}`,

@@ -1,5 +1,5 @@
 /**
- * `client.experimental.forensic.*` SDK surface — Plan 18-05 Task 3 (SEC-05)
+ * `client.experimental.forensic.*` SDK surface.
  *
  * The forensic surface is the FIRST and ONLY experimental surface in Spatula v1.0.
  * It is accessible via `client.experimental.forensic.*` and calls

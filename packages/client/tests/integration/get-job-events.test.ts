@@ -1,12 +1,12 @@
 /**
- * SDK integration test: getJobEvents (Phase 16 stub variant).
+ * SDK integration test: getJobEvents.
  *
  * The non-streaming `getJobEvents` helper returns a snapshot list. The full
  * SSE-streaming flavor (`GET /api/v1/jobs/:id/events` with Last-Event-ID
- * resume, 5-minute ring buffer, 15s keep-alive) lands in Phase 17.
+ * resume, 5-minute ring buffer, 15s keep-alive) is handled by subscribeJobEvents.
  *
- * For Phase 16, the SDK's `getJobEvents` is a basic JSON GET fallback —
- * SSE wiring at the SDK level is deferred to Phase 17 per SDK-02 / AUTH-01.
+ * The SDK's `getJobEvents` is a basic JSON GET fallback; streaming consumers
+ * use `subscribeJobEvents`.
  *
  * Mocked by default; live-mode via SPATULA_LIVE_LLM=1.
  */
@@ -20,7 +20,7 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
-describe('integration: getJobEvents (Phase 16 stub — SSE in Phase 17)', () => {
+describe('integration: getJobEvents compatibility helper', () => {
   it.skipIf(LIVE)('mocked: GET /api/v1/jobs/:jobId/events returns a list of events', async () => {
     const fetchMock = vi.fn(async (input: string | URL | Request) => {
       const url = typeof input === 'string' ? input : input.toString();
@@ -85,13 +85,12 @@ describe('integration: getJobEvents (Phase 16 stub — SSE in Phase 17)', () => 
       }
       const client = new SpatulaClient({ baseUrl, apiKey });
       // Note: live server may return 404 if /events endpoint is SSE-only;
-      // assertion is permissive — Phase 17 will tighten this once SSE lands.
+      // assertion is permissive for compatibility-mode live tests.
       try {
         const events = await getJobEvents(client, jobId);
         expect(Array.isArray(events)).toBe(true);
       } catch (e) {
-        // SSE-only endpoint may return non-JSON or 4xx in live mode — Phase 17
-        // wires the proper SSE SDK. For Phase 16 stub, tolerate either path.
+        // SSE-only endpoint may return non-JSON or 4xx in live mode; tolerate either path.
         expect(e).toBeDefined();
       }
     },

@@ -65,14 +65,14 @@ Crawled content belongs to the operator who configured the job. Spatula acts as 
 
 ## Retention periods
 
-| Data category                                                 | Retention                                    | Basis                   |
-| ------------------------------------------------------------- | -------------------------------------------- | ----------------------- |
-| `jobs`, `crawl_tasks`, `raw_pages`, `extractions`, `entities` | Until tenant deletion request                | Contractual necessity   |
-| `exports` (blobs)                                             | Until tenant deletion request                | Contractual necessity   |
-| `api_keys`                                                    | Until revoked or tenant deleted              | Security                |
-| `audit_log` rows                                              | Indefinite (PII redacted on tenant deletion) | Legal compliance (D-08) |
-| Content-store blobs (`raw-pages/`, `exports/`, `forensic/`)   | Until tenant deletion request                | Contractual necessity   |
-| Tombstone audit row (`tenant.deleted`)                        | Indefinite                                   | Legal proof of erasure  |
+| Data category                                                 | Retention                                    | Basis                  |
+| ------------------------------------------------------------- | -------------------------------------------- | ---------------------- |
+| `jobs`, `crawl_tasks`, `raw_pages`, `extractions`, `entities` | Until tenant deletion request                | Contractual necessity  |
+| `exports` (blobs)                                             | Until tenant deletion request                | Contractual necessity  |
+| `api_keys`                                                    | Until revoked or tenant deleted              | Security               |
+| `audit_log` rows                                              | Indefinite (PII redacted on tenant deletion) | Legal compliance       |
+| Content-store blobs (`raw-pages/`, `exports/`, `forensic/`)   | Until tenant deletion request                | Contractual necessity  |
+| Tombstone audit row (`tenant.deleted`)                        | Indefinite                                   | Legal proof of erasure |
 
 Operators may request earlier deletion at any time (see [DSR: erasure](#dsr-erasure-right-to-be-forgotten)).
 
@@ -104,7 +104,7 @@ spatula admin tenant delete --tenant <id> --yes
 DELETE /api/v1/admin/tenants/:id
 ```
 
-The deletion pipeline (SEC-09):
+The deletion pipeline:
 
 1. Cascades deletion across all 14 tenant-scoped tables in FK-safe order.
 2. Deletes all content-store blobs keyed under `raw-pages/<tenantId>/`, `exports/<tenantId>/`, `forensic/<tenantId>/`.

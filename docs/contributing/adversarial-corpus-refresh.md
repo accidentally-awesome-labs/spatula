@@ -151,7 +151,7 @@ Current pins:
 The adversarial suite runs automatically via `.github/workflows/adversarial-llm.yml`:
 
 - **Path trigger:** PRs touching `packages/core/src/extraction/**` or `pinned-models.ts`.
-- **Daily cron:** 06:00 UTC (CI-red on failure; no auto-notifications per D-06).
+- **Daily cron:** 06:00 UTC (CI-red on failure; no auto-notifications).
 - **Manual dispatch:** Use `workflow_dispatch` to run the Ollama pin on a self-hosted runner.
 - **Fork PRs:** Tests skip cleanly when `OPENROUTER_API_KEY` secret is unavailable.
 

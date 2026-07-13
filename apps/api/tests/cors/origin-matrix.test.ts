@@ -1,5 +1,5 @@
 /**
- * CORS origin request-matrix integration test (AUTH-03).
+ * CORS origin request-matrix integration test.
  *
  * Boots the app with a known CORS_ALLOWED_ORIGINS value and exercises
  * the full request matrix: exact origins, single-label wildcard hits,
@@ -182,7 +182,7 @@ describe('CORS origin request matrix', () => {
     expect(res.headers.get('access-control-allow-origin')).toBeNull();
   });
 
-  // ── 6. exposeHeaders includes X-RateLimit-Reset and Retry-After (D-09) ──
+  // ── 6. exposeHeaders includes X-RateLimit-Reset and Retry-After ──────────
 
   it('allowed-origin response includes X-RateLimit-Reset + Retry-After in expose-headers', async () => {
     const app = createTestApp('https://app.example.com,https://*.spatula.dev');

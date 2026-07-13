@@ -48,7 +48,7 @@ export const SpatulaYamlSchema = z
     safety: z.enum(['trust_ai', 'balanced', 'cautious', 'manual']).optional(),
     // Note: `safety` is NOT mapped to JobConfig (no safetyPreset field exists there).
     // It's a runtime setting consumed by the LocalPipelineRunner and action executor
-    // when Phase 13 Step 4 is implemented. Stored on ResolvedConfig for later use.
+    // Stored on ResolvedConfig for later use.
 
     // Nested config sections
     crawl: z
@@ -132,7 +132,7 @@ export const SpatulaYamlSchema = z
 
     // Note: notify is parsed and validated here but NOT mapped to JobConfig
     // (JobConfig has no notify field). It's consumed by the LocalPipelineRunner
-    // in Phase 13 Step 4. Stored on SpatulaYaml for later use.
+    // Stored on SpatulaYaml for later use.
     notify: z
       .object({
         desktop: z.boolean().optional(),

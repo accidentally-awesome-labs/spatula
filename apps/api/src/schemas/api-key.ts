@@ -4,7 +4,7 @@ import { AUTH_SCOPES } from '@spatula/shared';
 // ── Rotate API Key ────────────────────────────────────────────────────────────
 
 /**
- * Request body for POST /api/v1/api-keys/:id/rotate (AUTH-05, D-14).
+ * Request body for POST /api/v1/api-keys/:id/rotate.
  * graceSeconds defaults to 86400 (24h) in the handler if absent.
  * Range 0..604800 enforced here; server further clamps in the handler.
  */
@@ -14,7 +14,7 @@ export const rotateApiKeyRequestSchema = z
       .number()
       .int()
       .min(0)
-      // Note: values above 604800 are server-clamped to 604800 in the handler (D-14).
+      // Note: values above 604800 are server-clamped to 604800 in the handler.
       // No schema-level max so callers receive 200 with clamped window rather than 400.
       .optional()
       .openapi({
@@ -27,7 +27,7 @@ export const rotateApiKeyRequestSchema = z
   .openapi('RotateApiKeyRequest');
 
 /**
- * Response data shape for POST /api/v1/api-keys/:id/rotate (D-16).
+ * Response data shape for POST /api/v1/api-keys/:id/rotate.
  * Raw key shown once; supersedes + supersededExpiresAt record lineage.
  */
 export const apiKeyRotatedResponseSchema = z

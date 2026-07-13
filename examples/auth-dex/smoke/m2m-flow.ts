@@ -1,5 +1,5 @@
-// Reference script for the OIDC client_credentials M2M grant (D-11, AUTH-08).
-// plan 17-07 (tests/e2e/m2m/) extends this into the full service-token -> createJob ->
+// Reference script for the OIDC client_credentials M2M grant.
+// tests/e2e/m2m/ extends this into the full service-token -> createJob ->
 // listJobs -> getEntities SDK chain.
 //
 // This script POSTs a client_credentials grant to the Dex token endpoint, decodes the

@@ -75,5 +75,5 @@ export type { WorkerHandle } from './worker-entrypoint.js';
 export { usageContext, currentUsageContext } from './usage-context.js';
 export type { UsageContext } from './usage-context.js';
 
-// Per-job LLM config derivation (Plan 03)
+// Per-job LLM config derivation
 export { deriveJobDeps, resolveJobDeps } from './derive-job-deps.js';

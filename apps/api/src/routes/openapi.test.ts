@@ -1,6 +1,6 @@
 /**
- * Phase 16 plan 16-3 (Task 1) tests for the live OpenAPI 3.1 spec endpoint and
- * the boot-cache + dev-mode example validator helpers.
+ * Tests for the live OpenAPI 3.1 spec endpoint and the boot-cache + dev-mode
+ * example validator helpers.
  *
  * Test strategy uses `Hono.request(path)` rather than a Node http.Server boot
  * (the carveout fixture pattern) because the route only depends on the in-
@@ -16,7 +16,7 @@ import {
 } from '../openapi-config.js';
 import { openapiRoute } from './openapi.js';
 
-describe('Phase 16 plan 16-3: getCachedOpenAPISpec (D-13 boot-cache)', () => {
+describe('getCachedOpenAPISpec boot cache', () => {
   beforeEach(() => {
     _resetOpenAPICache();
   });
@@ -75,7 +75,7 @@ describe('Phase 16 plan 16-3: getCachedOpenAPISpec (D-13 boot-cache)', () => {
   });
 });
 
-describe('Phase 16 plan 16-3: GET /api/v1/openapi.json route', () => {
+describe('GET /api/v1/openapi.json route', () => {
   beforeEach(() => {
     _resetOpenAPICache();
   });
@@ -132,7 +132,7 @@ describe('Phase 16 plan 16-3: GET /api/v1/openapi.json route', () => {
   });
 });
 
-describe('Phase 16 plan 16-3: validateExamplesAtBoot (D-16)', () => {
+describe('validateExamplesAtBoot', () => {
   it('returns no errors when every example matches its schema', () => {
     const spec = {
       paths: {
@@ -245,7 +245,7 @@ describe('Phase 16 plan 16-3: validateExamplesAtBoot (D-16)', () => {
   });
 });
 
-describe('Phase 16 plan 16-3: dev/test boot validator integration', () => {
+describe('dev/test boot validator integration', () => {
   it('logs but does not throw when there are zero examples in the spec', () => {
     const spec = getCachedOpenAPISpec(createOpenAPIRouter());
     const { errors } = validateExamplesAtBoot(spec);

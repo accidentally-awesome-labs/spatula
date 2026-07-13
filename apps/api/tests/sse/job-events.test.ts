@@ -1,9 +1,9 @@
 /**
- * Integration tests for GET /api/v1/jobs/:id/events (AUTH-01).
+ * Integration tests for GET /api/v1/jobs/:id/events.
  *
  * Tests use createApp() with mocked deps (same pattern as tests/unit/app.test.ts).
  * Real SSE streaming requires a live server; these tests cover:
- *   - Route appears in /api/v1/openapi.json (plan 17-07 depends on this)
+ *   - Route appears in /api/v1/openapi.json
  *   - Response headers: content-type, x-accel-buffering, cache-control
  *   - Auth: missing token → 401; invalid token → 401; correct token → streaming
  *   - Cross-tenant: job not found for tenant → 404
@@ -103,7 +103,7 @@ describe('GET /api/v1/jobs/:id/events', { timeout: 15_000 }, () => {
     vi.stubEnv('REDIS_URL', 'redis://localhost:6379');
   });
 
-  // ── OpenAPI spec registration (AUTH-01 + plan 17-07 requirement) ──────────
+  // ── OpenAPI spec registration ─────────────────────────────────────────────
 
   it('appears in GET /api/v1/openapi.json under paths', async () => {
     const app = createApp(deps);
@@ -117,7 +117,7 @@ describe('GET /api/v1/jobs/:id/events', { timeout: 15_000 }, () => {
     // The full endpoint is GET /api/v1/jobs/{id}/events.
     // The route is registered on the main app with full path /api/v1/jobs/{id}/events,
     // so it appears as-is in the spec (no server-prefix stripping for direct app.openapi calls).
-    // plan 17-07's isolation suite uses servers[0].url + path to construct full URLs.
+    // The isolation suite uses servers[0].url + path to construct full URLs.
     const specPath = spec.paths['/api/v1/jobs/{id}/events'];
     expect(specPath).toBeDefined();
     expect(specPath.get).toBeDefined();

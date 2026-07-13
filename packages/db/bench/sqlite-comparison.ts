@@ -1,15 +1,15 @@
 /**
  * SQLite backend comparison: `better-sqlite3` vs `node:sqlite`.
  *
- * Plan: 16-5 Task 8 (SDK-05 — SQLite-backend decision benchmarked first task
- * of Phase 16 per spec §3.2.3; FTS5 gate is decisive per Pitfall #7).
+ * SQLite-backend comparison benchmark. FTS5 support is the decisive feature
+ * gate for Spatula's current SQLite usage.
  *
  * This is a one-shot script: enumerates the SQLite features Spatula uses,
  * attempts to construct an FTS5 virtual table on each backend, then runs a
  * CRUD perf comparison for context. Output written to
  * packages/db/bench/sqlite-comparison.results.md (Markdown table).
  *
- * Decision rule (spec §3.2.3 gates):
+ * Decision rule:
  *   1. Feature parity — node:sqlite must support every SQLite feature this
  *      codebase uses (FTS5 absence is decisive: gate FAILS).
  *   2. Zero perf regression — measured here for context only.
@@ -59,7 +59,7 @@ function runSql(db: BetterDB | NodeSqliteDB, sql: string): void {
 }
 
 // ============================================================================
-// Feature-parity gate (Pitfall #7)
+// Feature-parity gate
 // ============================================================================
 
 async function checkFts5(): Promise<void> {
@@ -262,7 +262,7 @@ const codebaseFeatures = [
   'JSON1 (json_extract/json_set in entity merged_data queries)',
   'WAL (journal_mode=WAL for concurrent crawl-read)',
   'Foreign keys + cascade deletes (tenant-scoped delete cascades)',
-  'CHECK constraints (content_at_least_one, content_not_both — re-added in Phase 15-4)',
+  'CHECK constraints (content_at_least_one, content_not_both)',
   'Self-referential FK on actions.parentId (PRAGMA foreign_keys=ON)',
 ];
 
@@ -285,13 +285,11 @@ async function main(): Promise<void> {
   lines.push('');
   lines.push(`**Run at:** ${new Date().toISOString()}`);
   lines.push(`**Node version:** ${process.version}`);
-  lines.push('**Plan:** 16-5 Task 8 (SDK-05)');
-  lines.push('');
   lines.push('## Spatula codebase SQLite-feature inventory');
   lines.push('');
   for (const f of codebaseFeatures) lines.push(`- ${f}`);
   lines.push('');
-  lines.push('## Feature-parity gate (Pitfall #7 — decisive)');
+  lines.push('## Feature-parity gate');
   lines.push('');
   lines.push('| Feature | better-sqlite3 | node:sqlite | Notes |');
   lines.push('| ------- | -------------- | ----------- | ----- |');
@@ -313,12 +311,10 @@ async function main(): Promise<void> {
   lines.push('');
   lines.push('**Stay on better-sqlite3@12.10.0 for v1.0.**');
   lines.push('');
-  lines.push(
-    'Reasoning per spec §3.2.3 gates (3-gate test: feature parity + zero perf regression + non-experimental):',
-  );
+  lines.push('Reasoning:');
   lines.push('');
   lines.push(
-    "1. **Feature parity on Node 22 LTS — FAILS.** Spatula's `support-matrix.md` targets Node ≥22. On the Node 22 LTS line, `node:sqlite` is built against an older SQLite version that does NOT include FTS5 (verified in 16-RESEARCH Pitfall #7). The bench above was run on this developer's local Node version, which may reflect a newer upstream SQLite — but the v1.0 deployment platform is Node 22 LTS, where FTS5 absence is decisive.",
+    "1. **Feature parity on Node 22 LTS — FAILS.** Spatula's `support-matrix.md` targets Node >=22. On the Node 22 LTS line, `node:sqlite` is built against an older SQLite version that does not consistently include FTS5. The bench above was run on this developer's local Node version, which may reflect a newer upstream SQLite, but Node 22 LTS compatibility is the deciding constraint.",
   );
   lines.push(
     '2. **Perf parity (informational).** Both backends are in the same order of magnitude for the workloads Spatula uses. Either would meet local-mode performance budgets. Neither is a discriminator.',

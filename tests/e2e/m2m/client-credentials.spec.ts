@@ -1,12 +1,11 @@
 /**
- * M2M OIDC client_credentials e2e — Phase 17 plan 17-07, AUTH-08.
+ * M2M OIDC client_credentials e2e.
  *
- * Proves the full D-20 chain:
+ * Proves the full machine-to-machine chain:
  *   Dex client_credentials grant → JWT → createJob → listJobs → getEntities
  *
- * This extends examples/auth-dex/smoke/m2m-flow.ts (the D-11 reference script
- * from plan 17-05) — that script proves the token-grant half; this suite
- * proves the full SDK chain on top of it.
+ * This extends examples/auth-dex/smoke/m2m-flow.ts. That script proves the
+ * token-grant half; this suite proves the full SDK chain on top of it.
  *
  * Prerequisites — all must be running before this suite executes:
  *   1. Dex:     cd examples/auth-dex && docker compose up -d
@@ -86,7 +85,7 @@ async function checkDexAvailable(): Promise<string | null> {
   }
 }
 
-// ─── Reusable token-grant function (D-11 / D-20 reference logic) ─────────────
+// ─── Reusable token-grant function ──────────────────────────────────────────
 
 /**
  * POST client_credentials to the Dex token endpoint and return the access_token JWT.
@@ -290,7 +289,7 @@ afterAll(async () => {
 // Helper so each test can skip when Dex isn't available
 const dexAvailable = () => dexError === null;
 
-describe('M2M OIDC client_credentials chain (AUTH-08)', () => {
+describe('M2M OIDC client_credentials chain', () => {
   it('gate: Dex is reachable at http://localhost:5556/dex', { skip: false }, async () => {
     if (dexError !== null) {
       // Soft-skip: this is an e2e suite that requires Dex running in Docker.
@@ -340,7 +339,6 @@ describe('M2M OIDC client_credentials chain (AUTH-08)', () => {
     // Verify sub encodes spatula-m2m.
     // Dex encodes client_credentials sub as a base64url-encoded protobuf message
     // (field 1 = client_id string) — not the literal client_id string.
-    // See: plan 17-05 deviation #2 (Dex protobuf sub encoding).
     const rawSub = String(tokenClaims['sub'] ?? '');
     const subContainsClientId = (() => {
       if (rawSub === M2M_CLIENT_ID) return true; // literal match (future Dex may simplify)

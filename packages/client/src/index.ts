@@ -3,10 +3,10 @@
  *
  * ESM-only. Browser + Node 22+ compatible. fetch-based. `sideEffects: false`.
  *
- * Measured surface (≤ 50 KB gzipped, per spec §3.2.1):
+ * Measured surface (target: <= 50 KB gzipped):
  *   { SpatulaClient, createJob, listJobs, getEntities }
  *
- * Importing the full module pulls in additional methods + the ~25 generated
+ * Importing the full module pulls in additional methods + the 26 generated
  * error subclasses; rely on your bundler's tree-shaking to drop unused ones.
  */
 export { SpatulaClient, SpatulaApiError } from './client.js';
@@ -36,10 +36,10 @@ export type {
 export { SpatulaVersionMismatchError, FeatureUnavailableError } from './errors/base.js';
 export type { SpatulaApiErrorOpts } from './errors/base.js';
 
-// Phase 16 plan 16-3 (D-12): lazy version probe. Exported for advanced
-// consumers who want to drive `ensure()` manually (e.g., a `doctor`-style
-// command that wants to surface major-mismatch ahead of any user-visible
-// request). Most callers use `SpatulaClient` directly.
+// Lazy version probe. Exported for advanced consumers who want to drive
+// `ensure()` manually (e.g., a `doctor`-style command that wants to surface
+// major-mismatch ahead of any user-visible request). Most callers use
+// `SpatulaClient` directly.
 export { VersionProbe } from './version-probe.js';
 export type { VersionProbeOptions } from './version-probe.js';
 

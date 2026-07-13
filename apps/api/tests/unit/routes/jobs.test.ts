@@ -11,6 +11,7 @@ function createMockDeps(): AppDeps {
     jobRepo: {
       findById: vi.fn().mockResolvedValue({ id: 'job-1', status: 'pending' }),
       findByTenant: vi.fn().mockResolvedValue([]),
+      findByTenantCursor: vi.fn().mockResolvedValue({ jobs: [], nextCursor: null }),
       countByTenant: vi.fn().mockResolvedValue(0),
       create: vi.fn(),
       updateStatus: vi.fn(),
@@ -176,10 +177,15 @@ describe('GET /api/v1/jobs', () => {
     deps = createMockDeps();
   });
 
-  it('returns jobs list with total count', async () => {
-    const mockJobs = [{ id: 'job-1', name: 'Test' }];
-    (deps.jobRepo as any).findByTenant = vi.fn().mockResolvedValue(mockJobs);
-    (deps.jobRepo as any).countByTenant = vi.fn().mockResolvedValue(1);
+  it('returns cursor-paginated jobs by default', async () => {
+    const mockJobs = [{ id: '00000000-0000-0000-0000-000000000101', name: 'Test' }];
+    (deps.jobRepo as any).findByTenantCursor = vi.fn().mockResolvedValue({
+      jobs: mockJobs,
+      nextCursor: {
+        id: '00000000-0000-0000-0000-000000000101',
+        sortValue: '2026-07-13T00:00:00.000Z',
+      },
+    });
 
     const app = createApp(deps);
     const res = await app.request('/api/v1/jobs', { headers: tenantHeader });
@@ -187,40 +193,66 @@ describe('GET /api/v1/jobs', () => {
     expect(res.status).toBe(200);
     const body = await res.json();
     expect(body.data).toHaveLength(1);
-    expect(body.total).toBe(1);
+    expect(body.hasMore).toBe(true);
+    expect(typeof body.nextCursor).toBe('string');
   });
 
   it('passes status filter to repository', async () => {
     const app = createApp(deps);
     await app.request('/api/v1/jobs?status=running', { headers: tenantHeader });
 
-    expect(deps.jobRepo.findByTenant).toHaveBeenCalledWith(
-      TENANT_ID,
-      expect.objectContaining({ status: 'running' }),
-    );
-    expect(deps.jobRepo.countByTenant).toHaveBeenCalledWith(
+    expect(deps.jobRepo.findByTenantCursor).toHaveBeenCalledWith(
       TENANT_ID,
       expect.objectContaining({ status: 'running' }),
     );
   });
 
-  it('passes offset and limit to repository', async () => {
+  it('keeps explicit offset pagination as the deprecated legacy path', async () => {
     const app = createApp(deps);
-    await app.request('/api/v1/jobs?limit=10&offset=20', { headers: tenantHeader });
+    (deps.jobRepo as any).findByTenant = vi.fn().mockResolvedValue([{ id: 'job-1' }]);
+    (deps.jobRepo as any).countByTenant = vi.fn().mockResolvedValue(31);
+    const res = await app.request('/api/v1/jobs?limit=10&offset=20', { headers: tenantHeader });
 
     expect(deps.jobRepo.findByTenant).toHaveBeenCalledWith(
       TENANT_ID,
       expect.objectContaining({ limit: 10, offset: 20 }),
     );
+    expect(deps.jobRepo.countByTenant).toHaveBeenCalledWith(TENANT_ID, {
+      status: undefined,
+    });
+    const body = await res.json();
+    expect(body).toMatchObject({ total: 31, page: 3, limit: 10, hasMore: true });
   });
 
-  it('applies default limit of 50 and offset of 0', async () => {
+  it('passes default cursor pagination options to repository', async () => {
     const app = createApp(deps);
     await app.request('/api/v1/jobs', { headers: tenantHeader });
 
-    expect(deps.jobRepo.findByTenant).toHaveBeenCalledWith(
+    expect(deps.jobRepo.findByTenantCursor).toHaveBeenCalledWith(
       TENANT_ID,
-      expect.objectContaining({ limit: 50, offset: 0 }),
+      expect.objectContaining({ limit: 50, cursor: undefined }),
+    );
+  });
+
+  it('decodes cursor before passing it to repository', async () => {
+    const cursor = Buffer.from(
+      JSON.stringify({
+        id: '00000000-0000-0000-0000-000000000101',
+        sortValue: '2026-07-13T00:00:00.000Z',
+      }),
+    ).toString('base64url');
+
+    const app = createApp(deps);
+    await app.request(`/api/v1/jobs?cursor=${cursor}`, { headers: tenantHeader });
+
+    expect(deps.jobRepo.findByTenantCursor).toHaveBeenCalledWith(
+      TENANT_ID,
+      expect.objectContaining({
+        cursor: {
+          id: '00000000-0000-0000-0000-000000000101',
+          sortValue: '2026-07-13T00:00:00.000Z',
+        },
+      }),
     );
   });
 });

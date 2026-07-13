@@ -6,7 +6,6 @@ import { z } from 'zod';
 /**
  * Per-route rate-limit configuration loader.
  *
- * Spec: 16-CONTEXT.md "Claude's Discretion" / 16-RESEARCH.md § Code Examples.
  * Shape is frozen at v1; values are operator-tunable via `config/rate-limits.yaml`
  * with `SPATULA_RATE_LIMITS_PATH` overlay (file fully replaces — no merging).
  *

@@ -1,5 +1,5 @@
 /**
- * Phase 16 plan 16-3 (API-06): server version + compat support-matrix.
+ * Server version + compatibility support matrix endpoint.
  *
  * `GET /.well-known/spatula-version` is a sibling of `/api/v1/*` — it lives at
  * the root path per the RFC 8615 `.well-known/` convention. SDK clients probe

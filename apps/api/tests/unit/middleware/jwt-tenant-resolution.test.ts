@@ -115,7 +115,7 @@ describe('JWT tenant resolution', () => {
     expect(res.status).toBe(400);
     const body = await res.json();
     expect(body.error.code).toBe('VALIDATION.PARAMS');
-    // Phase 16 plan 16-1: tenants list moved into structured `details` payload
+    // Tenants list is exposed in the structured `details` payload.
     // (was top-level `error.tenants` pre-envelope-freeze).
     expect(body.error.details.tenants).toHaveLength(2);
     expect(body.error.details.tenants).toEqual(

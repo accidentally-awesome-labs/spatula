@@ -1,7 +1,7 @@
 /**
  * CI gate: docs/api-auth.md scope table must match AUTH_SCOPES in code.
  *
- * This test is the single source-of-truth enforcement for AUTH-06:
+ * This test is the single source-of-truth enforcement for auth scope docs:
  * "doc table matches code constant". It fails if:
  *   - A scope is added to AUTH_SCOPES but not to the doc table
  *   - A scope is in the doc table but removed from AUTH_SCOPES
@@ -74,7 +74,7 @@ function extractDocScopes(docContent: string): string[] {
   return scopeNames;
 }
 
-describe('docs/api-auth.md scope table sync gate (AUTH-06)', () => {
+describe('docs/api-auth.md scope table sync gate', () => {
   it('docs/api-auth.md exists', () => {
     expect(() => readFileSync(DOC_PATH, 'utf8')).not.toThrow();
   });

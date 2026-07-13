@@ -79,7 +79,7 @@ npx tsx smoke/check-dex.ts
 
 Use this as a readiness gate in e2e suites before driving flows.
 
-### `smoke/browser-flow.ts` — browser OIDC reference flow (D-11)
+### `smoke/browser-flow.ts` — browser OIDC reference flow
 
 A Playwright-based runnable reference script that drives the full `spatula-browser` PKCE authorization-code flow against Dex. Requires `playwright install chromium` first.
 
@@ -89,9 +89,9 @@ npx tsx smoke/browser-flow.ts
 # Prints: browser-flow-ok + decoded JWT claims
 ```
 
-Plan [17-06](../../tests/e2e/browser/) extends this into the full OIDC → ws-token → SSE subscribe → reconnect e2e suite.
+The [browser E2E suite](../../tests/e2e/browser/) extends this into the full OIDC -> ws-token -> SSE subscribe -> reconnect flow.
 
-### `smoke/m2m-flow.ts` — M2M client_credentials reference flow (D-11, AUTH-08)
+### `smoke/m2m-flow.ts` — M2M client_credentials reference flow
 
 A dependency-free Node script that POSTs a `client_credentials` grant to the Dex token endpoint and decodes the resulting JWT. No Playwright needed.
 
@@ -100,7 +100,7 @@ npx tsx smoke/m2m-flow.ts
 # Prints: m2m-flow-ok + decoded JWT claims
 ```
 
-Plan [17-07](../../tests/e2e/m2m/) extends this into the full service-token → createJob → listJobs → getEntities SDK chain.
+The [M2M E2E suite](../../tests/e2e/m2m/) extends this into the full service-token -> createJob -> listJobs -> getEntities SDK chain.
 
 ---
 
@@ -135,5 +135,5 @@ The `JwtAuthProvider` in `apps/api/src/auth/jwt-provider.ts` handles JWKS verifi
 
 ## Used by
 
-- `tests/e2e/browser/` (plan 17-06) — full browser OIDC + SSE e2e suite; extends `smoke/browser-flow.ts`
-- `tests/e2e/m2m/` (plan 17-07) — full M2M SDK chain e2e suite; extends `smoke/m2m-flow.ts`
+- `tests/e2e/browser/` — full browser OIDC + SSE e2e suite; extends `smoke/browser-flow.ts`
+- `tests/e2e/m2m/` — full M2M SDK chain e2e suite; extends `smoke/m2m-flow.ts`

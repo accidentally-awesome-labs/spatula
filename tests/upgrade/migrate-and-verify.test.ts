@@ -1,5 +1,5 @@
 /**
- * Upgrade migration test (DEPLOY-10)
+ * Upgrade migration test.
  *
  * Proves the v1.0 → v1.x upgrade path works correctly:
  *  1. Creates a fresh scratch DB
@@ -148,7 +148,7 @@ function psqlFile(connectionUrl: string, filePath: string): void {
 // Test
 // ---------------------------------------------------------------------------
 
-describe('v1.0 → v1.x upgrade migration (DEPLOY-10)', () => {
+describe('v1.0 -> v1.x upgrade migration', () => {
   it('applies baseline SQL, runs migrator, and verifies __drizzle_migrations_oss + schema', async (ctx) => {
     if (!setupOk) return ctx.skip();
 

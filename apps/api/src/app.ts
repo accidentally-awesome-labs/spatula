@@ -85,7 +85,7 @@ export function createApp(deps: AppDeps) {
   );
   app.onError(errorHandler);
 
-  // CORS — function-form origin with single-label wildcard support (AUTH-03, D-08 through D-10).
+  // CORS: function-form origin with single-label wildcard support.
   // buildOriginMatcher returns null if CORS_ALLOWED_ORIGINS is empty or contains a bare `*`.
   // A null result is a misconfiguration: fail fast at boot with CORS_CONFIG_INVALID.
   const corsRaw = getEnvOrDefault('CORS_ALLOWED_ORIGINS', 'http://localhost:3000');
@@ -107,7 +107,6 @@ export function createApp(deps: AppDeps) {
         'X-Tenant-Id',
         'Idempotency-Key',
       ],
-      // D-09: extends exposeHeaders to include X-RateLimit-Reset + Retry-After
       exposeHeaders: [
         'X-RateLimit-Limit',
         'X-RateLimit-Remaining',
@@ -159,7 +158,6 @@ export function createApp(deps: AppDeps) {
   if (creationSecret) {
     app.post('/api/v1/tenants', async (c, next) => {
       if (c.req.header('X-Creation-Secret') !== creationSecret) {
-        // Phase 16 plan 16-1: legacy 'FORBIDDEN' → AUTH.INSUFFICIENT_SCOPE
         return c.json(
           {
             error: {
@@ -190,8 +188,8 @@ export function createApp(deps: AppDeps) {
 
   // SSE events endpoint — MUST be registered BEFORE the requireScope('jobs:read') guard
   // on app.get('/api/v1/jobs/*', ...) (line ~187). EventSource cannot send Authorization
-  // headers; the handler does its own in-handler GETDEL token auth (RESEARCH Pitfall 2 +
-  // Open Question 3). The path is also on the auth-middleware skip-list (see auth.ts).
+  // headers; the handler does its own in-handler GETDEL token auth. The path is
+  // also on the auth-middleware skip-list (see auth.ts).
   //
   // Registered directly on `app` (not a sub-router) because Hono evaluates GET handlers
   // in registration order — a specific route registered BEFORE the wildcard scope guard
@@ -208,7 +206,7 @@ export function createApp(deps: AppDeps) {
 
   // API v1 routes with per-method scope enforcement.
   // SSE path (/api/v1/jobs/:id/events) is intentionally excluded from the
-  // wildcard scope guard — it does its own in-handler ?token= auth (RESEARCH Pitfall 2).
+  // wildcard scope guard — it does its own in-handler ?token= auth.
   // The SSE route was registered above via app.openapi(jobEventsRoute, ...) before this guard.
   const SSE_PATH_RE = /^\/api\/v1\/jobs\/[^/]+\/events$/;
   const jobsReadScope = requireScope('jobs:read');
@@ -248,12 +246,12 @@ export function createApp(deps: AppDeps) {
   app.route('/api/v1/admin/jobs', adminJobRoutes());
   app.route('/api/v1/admin/system', adminSystemRoutes());
 
-  // Forensic extractions endpoint (SEC-05 — x-spatula-experimental: true)
+  // Forensic extractions endpoint (x-spatula-experimental: true)
   // Mounted AFTER the /api/v1/admin/* requireScope('admin') guard so that:
   //   - Callers with `admin` scope pass the outer guard AND the inner requireScope('admin:forensic:read')
   //     (the inner guard allows `admin` superset via requireScope's existing logic).
-  //   - Callers with only `admin:forensic:read` are rejected by the outer `admin` guard — this is
-  //     intentional: the forensic surface is strictly admin-tier. See Plan 18-05 Open Question 3.
+  //   - Callers with only `admin:forensic:read` are rejected by the outer `admin` guard because
+  //     the forensic surface is strictly admin-tier.
   app.route('/api/v1/admin/forensic', adminForensicRoutes());
 
   // Queue dashboard (admin scope enforced by /api/v1/admin/* middleware)
@@ -265,14 +263,13 @@ export function createApp(deps: AppDeps) {
     }
   }
 
-  // === Phase 16 plan 16-3 route mounts (additional routes inserted AFTER all
-  // other routes register; ordering is load-bearing — the cached OpenAPI spec
-  // must include every registered route). ===
+  // Route mounts inserted after all other routes register; ordering is
+  // load-bearing because the cached OpenAPI spec must include every route.
   app.route('/api/v1', openapiRoute(app));
   app.route('/', wellKnownRoute()); // /.well-known/spatula-version is a sibling of /api/v1
 
-  // === dev-only example validation (D-16). Skip in NODE_ENV=production so
-  // production cold-starts are not blocked on schema compile. ===
+  // Dev-only example validation. Skip in NODE_ENV=production so production
+  // cold-starts are not blocked on schema compile.
   if (process.env.NODE_ENV !== 'production') {
     const { errors } = validateExamplesAtBoot(getCachedOpenAPISpec(app));
     if (errors.length) {

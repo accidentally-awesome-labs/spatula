@@ -51,9 +51,9 @@ export class RedisEventPublisher implements EventPublisher {
 
     // ── Redis Stream (SSE path) — independent try/catch ─────────────────────
     // Stream key `jobs:{jobId}:events` is DISTINCT from `spatula:events:{jobId}`
-    // (pub/sub channel) — they must not collide (RESEARCH Pitfall 4 + CONTEXT D-01).
+    // (pub/sub channel); they must not collide.
     // MAXLEN ~ 500 (approx-trim), * = auto-id, field = payload.
-    // EXPIRE is NOT auto-refreshed by XADD — refresh on every write (RESEARCH Pitfall 3).
+    // EXPIRE is NOT auto-refreshed by XADD; refresh on every write.
     const streamKey = `jobs:${jobId}:events`;
     try {
       await this.redis.xadd(streamKey, 'MAXLEN', '~', '500', '*', 'payload', payload);

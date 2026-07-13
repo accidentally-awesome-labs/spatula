@@ -3,10 +3,6 @@ import { defineConfig } from 'tsup';
 /**
  * Build config for @spatula/cli — produces a dual ESM + CJS publish artifact
  * with TypeScript declarations.
- *
- * Spec: docs/superpowers/specs/2026-04-20-wave-6-phase-14-public-launch-design.md §3.2.3
- * Plan: .planning/phases/16-api-contract-sdk-packages/16-5-PLAN.md Task 6
- *
  * Externalized: `playwright` (massive native dep — should resolve at install
  * time, not be bundled) + the workspace `@spatula/*` packages (consumer's
  * node_modules will host them via pnpm publish + dependency tree).

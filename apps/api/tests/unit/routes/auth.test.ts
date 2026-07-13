@@ -6,7 +6,7 @@ import type { AppEnv } from '../../../src/types.js';
 
 function createTestApp(opts: { tenantId?: string; scopes?: string[]; authUserId?: string | null }) {
   const app = new Hono<AppEnv>();
-  // Phase 16 plan 16-1: /me throws AuthMissingTokenError when tenantId is unset;
+  // /me throws AuthMissingTokenError when tenantId is unset;
   // wire the real errorHandler so the test sees the envelope shape.
   app.onError(errorHandler);
   app.use('*', async (c, next) => {

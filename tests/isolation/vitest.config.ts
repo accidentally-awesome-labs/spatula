@@ -3,7 +3,7 @@ import { resolve } from 'node:path';
 
 const root = resolve(__dirname, '../..');
 
-// Cross-tenant isolation test suite — Phase 17 plan 17-07.
+// Cross-tenant isolation test suite.
 //
 // What this suite proves:
 //   - Cross-tenant resource lookups return RESOURCE.NOT_FOUND (not data leakage).

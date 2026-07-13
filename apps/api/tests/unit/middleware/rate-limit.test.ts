@@ -23,7 +23,7 @@ function createTestApp(redis: Redis) {
   return app;
 }
 
-describe('rateLimitMiddleware (Phase 16 plan 16-1)', () => {
+describe('rateLimitMiddleware', () => {
   let redis: Redis;
   let tmpDir: string;
   let envBackup: string | undefined;
@@ -137,7 +137,7 @@ routeGroups:
     });
   });
 
-  describe('skip + error behavior (preserved from pre-Phase-16)', () => {
+  describe('skip + error behavior', () => {
     it('skips rate limiting when tenantId is not set', async () => {
       const app = new Hono();
       // No tenantId set in context

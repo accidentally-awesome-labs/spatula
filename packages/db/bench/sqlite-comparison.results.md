@@ -2,17 +2,16 @@
 
 **Run at:** 2026-05-19T15:59:54.610Z
 **Node version:** v26.0.0
-**Plan:** 16-5 Task 8 (SDK-05)
 
 ## Spatula codebase SQLite-feature inventory
 
 - JSON1 (json_extract/json_set in entity merged_data queries)
 - WAL (journal_mode=WAL for concurrent crawl-read)
 - Foreign keys + cascade deletes (tenant-scoped delete cascades)
-- CHECK constraints (content_at_least_one, content_not_both — re-added in Phase 15-4)
+- CHECK constraints (content_at_least_one, content_not_both)
 - Self-referential FK on actions.parentId (PRAGMA foreign_keys=ON)
 
-## Feature-parity gate (Pitfall #7 — decisive)
+## Feature-parity gate
 
 | Feature                               | better-sqlite3 | node:sqlite | Notes                                                                      |
 | ------------------------------------- | -------------- | ----------- | -------------------------------------------------------------------------- |
@@ -32,9 +31,9 @@
 
 **Stay on better-sqlite3@12.10.0 for v1.0.**
 
-Reasoning per spec §3.2.3 gates (3-gate test: feature parity + zero perf regression + non-experimental):
+Reasoning:
 
-1. **Feature parity on Node 22 LTS — FAILS.** Spatula's `support-matrix.md` targets Node ≥22. On the Node 22 LTS line, `node:sqlite` is built against an older SQLite version that does NOT include FTS5 (verified in 16-RESEARCH Pitfall #7). The bench above was run on this developer's local Node version, which may reflect a newer upstream SQLite — but the v1.0 deployment platform is Node 22 LTS, where FTS5 absence is decisive.
+1. **Feature parity on Node 22 LTS — FAILS.** Spatula's `support-matrix.md` targets Node >=22. On the Node 22 LTS line, `node:sqlite` is built against an older SQLite version that does not consistently include FTS5. The bench above was run on this developer's local Node version, which may reflect a newer upstream SQLite, but Node 22 LTS compatibility is the deciding constraint.
 2. **Perf parity (informational).** Both backends are in the same order of magnitude for the workloads Spatula uses. Either would meet local-mode performance budgets. Neither is a discriminator.
 3. **Non-experimental status — FAILS.** `node:sqlite` is marked Experimental (stability index 1) through Node 22 LTS. Production self-hosters cannot rely on Experimental API stability across patch releases. better-sqlite3@12 is a stable, audited dependency at v12.x.
 

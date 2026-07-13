@@ -1,5 +1,5 @@
 /**
- * Phase 16 plan 16-3 Task 3: lazy version probe (D-12).
+ * Lazy version probe.
  *
  * `VersionProbe.ensure()` is awaited at the top of every `SpatulaClient.request()`
  * call. It fires `GET /.well-known/spatula-version` AT MOST ONCE per client

@@ -7,14 +7,14 @@ const root = resolve(__dirname, '../..');
 //
 // What this suite proves:
 //   - Every (route, status, example) tuple in the served /api/v1/openapi.json
-//     validates against its own schema via Ajv2020 (D-14 drift detection).
+//     validates against its own schema via Ajv2020.
 //   - Every 4xx/5xx response from the OSS API matches the v1 error envelope.
 //   - Every auth'd success carries the 4 rate-limit headers; 429 carries
 //     Retry-After.
 //   - Offset routes emit Deprecation + Sunset + Link; cursor routes don't.
 //   - All timestamps parse as ISO 8601 UTC.
 //   - Every public route is under /api/v1/ (or the well-known sibling).
-//   - client.experimental.* throws on access (zero v1.0 experimental surfaces).
+//   - client.experimental.forensic exists; other experimental properties throw.
 //
 // Boots a real apps/api server (Node-builtin http.Server adapter — see
 // tests/carveout/fixtures/server.ts for the carry-forward pattern; same shape

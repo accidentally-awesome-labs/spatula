@@ -136,4 +136,4 @@ Use a tunnel (e.g., `ngrok http 3000`) to expose your local handler; configure t
 - `docs/api-errors.md` — `WEBHOOK.SIGNATURE_INVALID` envelope shape.
 - `packages/queue/src/webhook-sender.ts` — sender (HMAC-SHA256 + 10s timeout).
 - `packages/queue/src/webhook-worker.ts` — BullMQ worker + backoff strategy.
-- `packages/shared/src/types/webhook.ts` — `WebhookEvent` / `WebhookEventType` / `WebhookConfig` types.
+- `packages/shared/src/webhook-types.ts` — `WebhookEvent` / `WebhookEventType` / `WebhookConfig` types.

@@ -1,5 +1,5 @@
-// Reference script for the browser OIDC dance (D-11).
-// plan 17-06 (tests/e2e/browser/) extends this into the full OIDC -> ws-token -> SSE subscribe
+// Reference script for the browser OIDC dance.
+// tests/e2e/browser/ extends this into the full OIDC -> ws-token -> SSE subscribe
 // -> reconnect e2e suite.
 //
 // This script drives the Dex spatula-browser PKCE authorization-code flow end-to-end

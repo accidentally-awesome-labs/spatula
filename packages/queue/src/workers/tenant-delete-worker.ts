@@ -1,5 +1,5 @@
 /**
- * Tenant-delete BullMQ worker — Plan 18-06 Task 2 (SEC-09)
+ * Tenant-delete BullMQ worker.
  *
  * Performs a GDPR-complete, idempotent, fail-loud cascade deletion of all
  * tenant data when a `spatula.tenant-delete` job is processed.
@@ -7,11 +7,11 @@
  * Cascade order per job:
  *  1. Delete content-store blobs (raw_page blobs + export blobs + forensic/ prefix blobs)
  *  2. cascadeDeleteTenantData (FK-safe table deletes)
- *  3. redactTenantAuditLog (in-place PII scrub — D-08)
- *  4. insertDeletionTombstone (one un-redacted proof-of-deletion record — D-08)
+ *  3. redactTenantAuditLog (in-place PII scrub)
+ *  4. insertDeletionTombstone (one un-redacted proof-of-deletion record)
  *  5. DELETE tenants row LAST
  *
- * Blob-delete error handling (D-09 fail-loud):
+ * Blob-delete error handling:
  *  - ENOENT, NoSuchKey, or statusCode 404 → blob already gone → swallow and continue
  *  - Any other error → RETHROW → BullMQ retries (up to 5 attempts with exponential backoff)
  *
@@ -49,7 +49,7 @@ export interface ListableContentStore extends ContentStore {
 }
 
 export interface TenantDeleteJobDeps {
-  /** TenantDataRepository from @spatula/db (Task 1) */
+  /** TenantDataRepository from @spatula/db */
   tenantDataRepo: TenantDataRepository;
   /** ContentStore for blob deletion */
   contentStore: ListableContentStore;
@@ -73,7 +73,7 @@ function isBlobNotFoundError(err: unknown): boolean {
 
 /**
  * Delete a single blob from the content store.
- * Swallows "not found" errors (idempotency); rethrows everything else (fail-loud, D-09).
+ * Swallows "not found" errors (idempotency); rethrows everything else.
  */
 async function deleteBlobSafe(contentStore: ListableContentStore, ref: string): Promise<void> {
   try {
@@ -83,7 +83,7 @@ async function deleteBlobSafe(contentStore: ListableContentStore, ref: string): 
       logger.debug({ ref }, 'tenant-delete: blob already gone — skipping');
       return;
     }
-    // Unexpected error — rethrow so BullMQ retries the job (D-09)
+    // Unexpected error: rethrow so BullMQ retries the job.
     throw err;
   }
 }

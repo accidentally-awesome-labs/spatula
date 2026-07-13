@@ -1,8 +1,8 @@
 /**
  * Single Ajv2020 instance factory shared across the contract suite.
  *
- * Pitfall #1 (16-RESEARCH.md "Common Pitfalls"): Ajv's default export does NOT
- * support OpenAPI 3.1 / JSON Schema 2020-12. Importing via the bare specifier
+ * Ajv's default export does not support OpenAPI 3.1 / JSON Schema 2020-12.
+ * Importing via the bare specifier
  *
  *     import Ajv from 'ajv'
  *
@@ -16,8 +16,8 @@
  * (not just the first one).
  *
  * The same setup is mirrored on the server side by the dev-only
- * `validateExamplesAtBoot()` in apps/api/src/openapi-config.ts (plan 16-3) so
- * spec drift caught at boot is byte-identical to spec drift caught in CI.
+ * `validateExamplesAtBoot()` in apps/api/src/openapi-config.ts so spec drift
+ * caught at boot is byte-identical to spec drift caught in CI.
  */
 import Ajv2020 from 'ajv/dist/2020.js';
 import addFormats from 'ajv-formats';

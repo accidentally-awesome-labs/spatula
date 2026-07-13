@@ -5,11 +5,11 @@
  * Stream key: jobs:{jobId}:events
  * Field layout: ['payload', <json>]
  *
- * RESEARCH notes applied:
- *   - Pitfall 4: XADD MAXLEN ~ needs STRING args ('~', '500')
+ * Redis stream notes:
+ *   - XADD MAXLEN ~ needs string args ('~', '500')
  *   - Code Example: XRANGE exclusive lower bound '(' prefix (Redis 6.2+)
- *   - Pitfall 1: XREAD BLOCK is called on a DEDICATED connection passed in by
- *     the handler; this class never touches the shared deps.redis connection.
+ *   - XREAD BLOCK is called on a dedicated connection passed in by the handler;
+ *     this class never touches the shared deps.redis connection.
  */
 import type Redis from 'ioredis';
 import type { JobEvent } from '@spatula/queue';
@@ -60,7 +60,7 @@ export class RedisStreamBuffer {
    * Returns [id, fields][] entries or null when the blocking period expires
    * without new events (the caller interprets null as a keepalive tick).
    *
-   * CRITICAL: must be called on a dedicated Redis connection (RESEARCH Pitfall 1).
+   * CRITICAL: must be called on a dedicated Redis connection.
    *
    * @param cursor - stream id to start reading after (use '$' for live-only)
    * @param blockMs - how long to block (15 000 matches the keepalive interval)

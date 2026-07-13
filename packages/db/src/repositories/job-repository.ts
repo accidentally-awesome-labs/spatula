@@ -132,6 +132,73 @@ export class JobRepository {
     }
   }
 
+  async findByTenantCursor(
+    tenantId: string,
+    options?: {
+      status?: JobStatus;
+      limit?: number;
+      cursor?: { id: string; sortValue?: string | number };
+      since?: string;
+    },
+  ): Promise<{
+    jobs: Array<typeof jobs.$inferSelect>;
+    nextCursor: { id: string; sortValue: string } | null;
+  }> {
+    try {
+      const limit = Math.max(1, options?.limit ?? 50);
+      const conditions = [eq(jobs.tenantId, tenantId)];
+      if (options?.status) {
+        conditions.push(eq(jobs.status, options.status));
+      }
+
+      if (options?.cursor) {
+        let cursorSortValue = options.cursor.sortValue;
+        if (!cursorSortValue) {
+          const [cursorRow] = await this.db
+            .select({ createdAt: jobs.createdAt })
+            .from(jobs)
+            .where(and(eq(jobs.id, options.cursor.id), eq(jobs.tenantId, tenantId)));
+
+          cursorSortValue = cursorRow?.createdAt?.toISOString();
+        }
+
+        if (!cursorSortValue) {
+          conditions.push(sql`false`);
+        } else {
+          const cursorCreatedAt = new Date(String(cursorSortValue));
+          conditions.push(
+            sql`(${jobs.createdAt}, ${jobs.id}) < (${cursorCreatedAt}, ${options.cursor.id}::uuid)`,
+          );
+        }
+      }
+
+      if (options?.since) {
+        conditions.push(sql`${jobs.createdAt} > ${new Date(options.since)}`);
+      }
+
+      const rows = await this.db
+        .select()
+        .from(jobs)
+        .where(and(...conditions))
+        .orderBy(desc(jobs.createdAt), desc(jobs.id))
+        .limit(limit + 1);
+
+      const page = rows.slice(0, limit);
+      const last = page.at(-1);
+      const nextCursor =
+        rows.length > limit && last
+          ? { id: last.id, sortValue: last.createdAt.toISOString() }
+          : null;
+
+      return { jobs: page, nextCursor };
+    } catch (error) {
+      throw new StorageError(`Failed to list jobs by cursor: ${(error as Error).message}`, {
+        cause: error as Error,
+        context: { tenantId, cursor: options?.cursor?.id },
+      });
+    }
+  }
+
   async updateStatus(id: string, tenantId: string, status: JobStatus) {
     try {
       const timestamps: Record<string, Date> = {};

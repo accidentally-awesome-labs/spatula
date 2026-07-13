@@ -1,4 +1,5 @@
 import { existsSync } from 'node:fs';
+import { join } from 'node:path';
 import {
   HealthCheckRegistry,
   createSystemChecks,
@@ -44,7 +45,7 @@ export function formatCheckResults(results: CheckResult[]): string {
 export async function runDoctorCommand(): Promise<void> {
   const cwd = process.cwd();
 
-  const hasEnv = existsSync('.env') || existsSync('.env.local');
+  const hasEnv = existsSync(join(cwd, '.env')) || existsSync(join(cwd, '.env.local'));
   const hasProject = findProjectRoot(cwd) !== null;
   const categories = determineCategoriesFromContext({ hasEnv, hasProject });
 
@@ -63,7 +64,6 @@ export async function runDoctorCommand(): Promise<void> {
   if (categories.includes('project')) {
     const { createProjectChecks, findProjectRoot, parseProjectYamlFile } =
       await import('@spatula/core');
-    const { join } = await import('node:path');
     const projectRoot = findProjectRoot(process.cwd());
     if (projectRoot) {
       const projectChecks = createProjectChecks({

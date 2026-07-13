@@ -1,9 +1,9 @@
 /**
- * Browser e2e: full OIDC + SSE reconnect chain (AUTH-01, AUTH-02, AUTH-04).
+ * Browser e2e: full OIDC + SSE reconnect chain.
  *
- * ROADMAP success criterion 1: a browser smoke client performs the full chain —
- *   OIDC login via Dex → ws-token → SSE subscribe → disconnect →
- *   reconnect with Last-Event-ID → resume — without manual intervention.
+ * A browser smoke client performs the full chain:
+ *   OIDC login via Dex -> ws-token -> SSE subscribe -> disconnect ->
+ *   reconnect with Last-Event-ID -> resume, without manual intervention.
  *
  * Prerequisites (must be met before this suite can run):
  *   1. Playwright Chromium binaries:
@@ -19,9 +19,8 @@
  *
  * See tests/e2e/browser/README.md for full setup walkthrough.
  *
- * NOTE: This suite is NOT run in normal CI. It runs in the dedicated
- * `test-e2e-browser` CI job (on main branch and tags only) that has Docker,
- * Chromium, Postgres, and Redis available. Per spec §6 CI topology.
+ * NOTE: This suite is NOT run in normal CI. Run it explicitly in an environment
+ * with Docker, Chromium, Postgres, and Redis available.
  */
 
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
@@ -359,7 +358,7 @@ async function collectSseEvents(
 // Suite
 // ─────────────────────────────────────────────────────────────────────────────
 
-describe('Browser OIDC + SSE reconnect chain (AUTH-01, AUTH-02, AUTH-04)', () => {
+describe('Browser OIDC + SSE reconnect chain', () => {
   let browser: Browser;
   let context: BrowserContext;
   let apiServer: ApiHandle;

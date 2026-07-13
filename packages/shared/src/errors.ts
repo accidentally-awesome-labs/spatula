@@ -22,7 +22,7 @@ export class SpatulaError extends Error {
 
 // ---------------------------------------------------------------------------
 // Legacy subclasses (flat code strings). Kept for backward compatibility
-// during the Phase 16 sweep so internal callers continue compiling while
+// so internal callers continue compiling while
 // individual routes migrate to the new DOMAIN.CODE subclasses below.
 //
 // These are @deprecated as a class — they will be removed in v2. New code
@@ -305,7 +305,7 @@ export class RateLimitExceededError extends SpatulaError {
 }
 
 // `QuotaExceededError` lives in `./auth/quotas.ts` (pre-existing class, updated
-// in plan 16-1 to use `ErrorCode.QUOTA_EXCEEDED`). It is re-exported via the
+// to use `ErrorCode.QUOTA_EXCEEDED`). It is re-exported via the
 // barrel from `./auth/index.ts` so callers can `import { QuotaExceededError } from '@spatula/shared'`.
 
 // VERSION.*

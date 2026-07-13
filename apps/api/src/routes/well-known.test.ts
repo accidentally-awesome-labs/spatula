@@ -1,5 +1,5 @@
 /**
- * Phase 16 plan 16-3 Task 2 — tests for `GET /.well-known/spatula-version`.
+ * Tests for `GET /.well-known/spatula-version`.
  *
  * The response shape is FROZEN at v1:
  *   { version, gitSha, buildAt, supportMatrix: { minClientMajor, deprecatedClientMajors[] } }
@@ -17,7 +17,7 @@ function makeApp() {
   return app;
 }
 
-describe('Phase 16 plan 16-3 Task 2: GET /.well-known/spatula-version', () => {
+describe('GET /.well-known/spatula-version', () => {
   const originalEnv = { ...process.env };
 
   afterEach(() => {

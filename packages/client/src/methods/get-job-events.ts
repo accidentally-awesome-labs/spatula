@@ -14,9 +14,9 @@
  * `POST /api/v1/ws-token`. It is passed as a `?token=` query param because
  * EventSource does not support custom headers.
  *
- * Phase 17 replaces the Phase 16 non-streaming stub. The old `getJobEvents`
- * (returns `Promise<JobEvent[]>`) is kept as a thin compatibility shim for
- * any callers that were using it; prefer `subscribeJobEvents` for new code.
+ * The old `getJobEvents` helper (returns `Promise<JobEvent[]>`) is kept as a
+ * thin compatibility shim for any callers that were using it; prefer
+ * `subscribeJobEvents` for new code.
  */
 
 /** Minimal SpatulaClient shape needed by this module (avoids circular import). */
@@ -178,15 +178,15 @@ function wireHandlers(es: MinimalEventSource, options: SubscribeJobEventsOptions
 }
 
 // ---------------------------------------------------------------------------
-// Compatibility shim — Phase 16 non-streaming stub kept for backward compat.
+// Compatibility shim: non-streaming helper kept for backward compatibility.
 // ---------------------------------------------------------------------------
 
 import type { SpatulaClient } from '../client.js';
 
 /**
  * @deprecated Use `subscribeJobEvents` for real SSE streaming. This non-
- * streaming shim is kept for backward compatibility with Phase 16 code that
- * imported `getJobEvents`. It issues a plain JSON GET (not SSE).
+ * streaming shim is kept for backward compatibility with code that imported
+ * `getJobEvents`. It issues a plain JSON GET (not SSE).
  */
 export async function getJobEvents(
   client: SpatulaClient,

@@ -2,7 +2,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { JobRepository } from '../../../src/repositories/job-repository.js';
 
 // We test the repository against a mock db object to verify query construction
-// Integration tests against real Postgres come in Task 13
+// Integration tests against real Postgres cover database-specific behavior.
 
 function createMockDb() {
   const chainable = {

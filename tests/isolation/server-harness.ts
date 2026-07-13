@@ -1,5 +1,5 @@
 /**
- * Isolation suite server harness — Phase 17 plan 17-07.
+ * Isolation suite server harness.
  *
  * Extends the contract harness pattern with REAL repos for the isolation
  * matrix. The contract harness stubs most repos as `{} as any` to avoid

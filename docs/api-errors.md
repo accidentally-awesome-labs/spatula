@@ -73,7 +73,7 @@ This is deliberate (rejected expanding the enum mid-sweep — additive-only woul
 
 ## SDK integration
 
-The `@spatula/client` package ships **25 class-per-code typed error subclasses** (one per enum entry) generated from this enum. Consumers `instanceof` against `SpatulaApiError` (base) or a specific subclass (e.g., `JobNotFoundError`, `RateLimitExceededError`):
+The `@spatula/client` package ships **26 class-per-code typed error subclasses** (one per enum entry) generated from this enum. Consumers `instanceof` against `SpatulaApiError` (base) or a specific subclass (e.g., `JobNotFoundError`, `RateLimitExceededError`):
 
 ```typescript
 import { SpatulaClient, RateLimitExceededError } from '@spatula/client';

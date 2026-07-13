@@ -1,5 +1,5 @@
 /**
- * check-dex.ts — Dex discovery-doc health probe (D-11, AUTH-04).
+ * check-dex.ts — Dex discovery-doc health probe.
  *
  * Fetches the OIDC discovery doc from the local Dex instance and asserts it
  * returns a 200 with the expected issuer. Exits 0 on success, 1 on failure.

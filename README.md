@@ -28,7 +28,7 @@ This repository is the open-source distribution. It works locally as a CLI tool,
 - **Dual execution mode** — run locally with SQLite or as a multi-tenant server with PostgreSQL + Redis
 - **Pluggable crawlers** — Playwright (built-in) or Firecrawl (API-based)
 - **Pluggable LLM providers** — OpenRouter (cloud) or Ollama (local, fully offline)
-- **55 typed actions** — every mutation is a reviewable, auditable action
+- **55 typed action/config operations** — 25 pipeline actions plus 30 config operations, all reviewable and auditable
 - **Interactive TUI** — explore data, review schema changes, and monitor crawls from the terminal
 
 ## Quickstart
@@ -206,20 +206,20 @@ The API server exposes a RESTful JSON API with OpenAPI documentation.
 
 **Key endpoints:**
 
-| Method | Path                                             | Description                  |
-| ------ | ------------------------------------------------ | ---------------------------- |
-| `POST` | `/api/v1/jobs`                                   | Create a crawl job           |
-| `GET`  | `/api/v1/jobs/:jobId`                            | Get job status               |
-| `GET`  | `/api/v1/jobs/:jobId/entities`                   | List extracted entities      |
-| `GET`  | `/api/v1/jobs/:jobId/schema`                     | Get current schema           |
-| `GET`  | `/api/v1/jobs/:jobId/actions`                    | List pending actions         |
-| `POST` | `/api/v1/jobs/:jobId/actions/:actionId/approve`  | Approve a schema action      |
-| `POST` | `/api/v1/jobs/:jobId/export`                     | Create an export             |
-| `GET`  | `/api/v1/jobs/:jobId/exports/:exportId/download` | Download export file         |
-| `POST` | `/api/v1/actions/batch`                          | Bulk approve/reject actions  |
-| `POST` | `/api/v1/jobs/batch`                             | Bulk cancel/delete jobs      |
-| `GET`  | `/api/v1/usage`                                  | LLM usage and cost breakdown |
-| `GET`  | `/health`                                        | Health check                 |
+| Method | Path                                            | Description                  |
+| ------ | ----------------------------------------------- | ---------------------------- |
+| `POST` | `/api/v1/jobs`                                  | Create a crawl job           |
+| `GET`  | `/api/v1/jobs/:jobId`                           | Get job status               |
+| `GET`  | `/api/v1/jobs/:jobId/entities`                  | List extracted entities      |
+| `GET`  | `/api/v1/jobs/:jobId/schema`                    | Get current schema           |
+| `GET`  | `/api/v1/jobs/:jobId/actions`                   | List pending actions         |
+| `POST` | `/api/v1/jobs/:jobId/actions/:actionId/approve` | Approve a schema action      |
+| `POST` | `/api/v1/jobs/:jobId/export`                    | Create an export             |
+| `GET`  | `/api/v1/jobs/:jobId/export/:exportId/download` | Download export file         |
+| `POST` | `/api/v1/actions/batch`                         | Bulk approve/reject actions  |
+| `POST` | `/api/v1/jobs/batch`                            | Bulk cancel/delete jobs      |
+| `GET`  | `/api/v1/usage`                                 | LLM usage and cost breakdown |
+| `GET`  | `/health`                                       | Health check                 |
 
 All endpoints require authentication when `AUTH_STRATEGY` is set to `api-key` or `jwt`. `AUTH_STRATEGY=none` is for local development only. See [.env.example](.env.example) for auth configuration.
 

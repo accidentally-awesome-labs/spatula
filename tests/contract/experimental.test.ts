@@ -2,7 +2,7 @@
  * API-13: experimental-namespace contract.
  *
  * The @spatula/client SDK reserves `client.experimental.*` for experimental
- * surfaces. v1.0 ships exactly ONE — `forensic` (Plan 18-05, SEC-05). Every
+ * surfaces. v1.0 ships exactly ONE: `forensic`. Every
  * OTHER property access MUST throw a fail-loud Error referencing the
  * experimental-surface policy, so call sites that depend on an unimplemented
  * surface fail at the use site, not silently with undefined.
@@ -13,10 +13,9 @@
  * namespace un-debuggable.
  *
  * Mirrors the scenario in
- * `packages/client/tests/unit/experimental-namespace.test.ts` (plan 16-2) but
- * exercised through the full SpatulaClient constructor path that v1 callers
- * will hit. This is the public contract gate; the unit test is the
- * implementation gate.
+ * `packages/client/tests/unit/experimental-namespace.test.ts` but exercises it
+ * through the full SpatulaClient constructor path that v1 callers will hit.
+ * This is the public contract gate; the unit test is the implementation gate.
  */
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { SpatulaClient } from '@spatula/client';
@@ -38,7 +37,7 @@ describe('API-13 client.experimental namespace', () => {
     const experimental = (client as unknown as { experimental: Record<string, unknown> })
       .experimental;
 
-    // v1.0 ships exactly ONE experimental surface: forensic (Plan 18-05, SEC-05).
+    // v1.0 ships exactly ONE experimental surface: forensic.
     // It MUST resolve to a real surface, not throw.
     expect(() => experimental.forensic).not.toThrow();
     expect(experimental.forensic).toBeDefined();

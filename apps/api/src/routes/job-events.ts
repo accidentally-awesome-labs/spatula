@@ -1,6 +1,6 @@
 /**
  * SSE endpoint route definition — registered via @hono/zod-openapi createRoute
- * so it appears in /api/v1/openapi.json (required by plan 17-07's isolation suite
+ * so it appears in /api/v1/openapi.json (used by the isolation suite
  * which enumerates routes from the served OpenAPI spec).
  *
  * Auth note: EventSource cannot send Authorization headers. The handler does its

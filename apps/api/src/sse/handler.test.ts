@@ -2,8 +2,8 @@
  * Unit tests for SSE replay/tail logic.
  *
  * Strategy: unit-test RedisStreamBuffer directly with a real local Redis
- * (same pattern as tests/contract/ uses live infra), because RESEARCH Pitfall 4
- * warns that XADD arg types only fail at runtime with a real Redis.
+ * (same pattern as tests/contract/ uses live infra), because XADD argument
+ * type issues only fail at runtime with a real Redis.
  *
  * Keepalive-timer assertions are isolated with fake timers so they don't
  * require real 15s waits.

@@ -4,7 +4,7 @@ import { resolve } from 'node:path';
 const root = resolve(__dirname, '../../..');
 
 /**
- * M2M OIDC client_credentials e2e suite — Phase 17 plan 17-07, AUTH-08.
+ * M2M OIDC client_credentials e2e suite.
  *
  * What this suite proves:
  *   - Dex issues a JWT for the spatula-m2m client via client_credentials grant.

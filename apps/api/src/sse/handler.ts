@@ -5,7 +5,7 @@
  *   1. Consume single-use ?token= via GETDEL (mirrors server.ts WS token pattern)
  *   2. Validate tenant ownership via jobRepo.findById
  *   3. Set X-Accel-Buffering: no header (streamSSE auto-sets Content-Type + Cache-Control)
- *   4. Create DEDICATED ioredis connection for XREAD BLOCK (RESEARCH Pitfall 1)
+ *   4. Create a dedicated ioredis connection for XREAD BLOCK
  *   5. Replay buffered events via XRANGE, emit replay_truncated if stale
  *   6. Tail live events via XREAD BLOCK 15s on dedicated connection
  *   7. Emit :\n\n keepalive comments every 15s while idle
@@ -69,13 +69,13 @@ export function createSseHandler(deps: AppDeps) {
 
     // ── Response headers (before streamSSE call) ───────────────────────────
     // streamSSE auto-sets: Content-Type: text/event-stream, Cache-Control: no-cache
-    // X-Accel-Buffering must be set manually (RESEARCH — streamSSE does NOT set it)
+    // X-Accel-Buffering must be set manually; streamSSE does not set it.
     c.header('X-Accel-Buffering', 'no');
     c.header('Cache-Control', 'no-cache'); // belt-and-suspenders
 
     // ── Dedicated ioredis connection for XREAD BLOCK ───────────────────────
-    // RESEARCH Pitfall 1: XREAD BLOCK monopolizes a connection. Never use
-    // the shared deps.redis for blocking reads.
+    // XREAD BLOCK monopolizes a connection. Never use the shared deps.redis for
+    // blocking reads.
     const redisUrl = process.env['REDIS_URL'] ?? 'redis://localhost:6379';
     const streamRedis = new Redis(redisUrl, { lazyConnect: false });
 
@@ -94,7 +94,7 @@ export function createSseHandler(deps: AppDeps) {
           if (keepaliveTimer) clearInterval(keepaliveTimer);
         });
 
-        // Keepalive: SSE comment line `:\n\n` every 15s (D-05)
+        // Keepalive: SSE comment line `:\n\n` every 15s.
         keepaliveTimer = setInterval(async () => {
           if (!stream.aborted) {
             await stream.write(':\n\n');

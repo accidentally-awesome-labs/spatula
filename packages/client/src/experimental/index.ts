@@ -1,5 +1,5 @@
 /**
- * `client.experimental.*` namespace scaffolding — Plan 18-05 Task 3 (SEC-05)
+ * `client.experimental.*` namespace scaffolding.
  *
  * Spatula v1.0 ships ONE experimental surface: `forensic` (the forensic-
  * extractions admin endpoint). Future experimentals are governed by
@@ -26,7 +26,7 @@ const WELL_KNOWN_PROPS = new Set(['then', 'toJSON', 'constructor']);
  * Lists all live experimental surfaces so TS consumers get proper type checking.
  */
 export interface ExperimentalNamespace {
-  /** Forensic extraction admin surface (SEC-05, Plan 18-05). */
+  /** Forensic extraction admin surface. */
   forensic: ReturnType<typeof createForensicSurface>;
 }
 
@@ -58,7 +58,7 @@ export function createExperimentalNamespace(transport: ForensicTransport): Exper
       // All other props → fail-loud
       throw new Error(
         `client.experimental.${String(prop)} is not available — ` +
-          `Spatula v1.0 ships with exactly ONE experimental surface (forensic, Phase 18). ` +
+          `Spatula v1.0 ships with exactly one experimental surface: forensic. ` +
           `See docs/deprecation-policy.md for the experimental surface policy.`,
       );
     },

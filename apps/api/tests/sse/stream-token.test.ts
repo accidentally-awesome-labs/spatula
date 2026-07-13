@@ -1,5 +1,5 @@
 /**
- * Integration tests for the stream token lifecycle (AUTH-02).
+ * Integration tests for the stream token lifecycle.
  *
  * Covers:
  *   - POST /api/v1/ws-token returns { data: { token, expiresIn: 60 } }
@@ -103,7 +103,7 @@ function createMockDeps(overrides: Partial<AppDeps> = {}): AppDeps {
   } as unknown as AppDeps;
 }
 
-describe('Stream token (AUTH-02)', { timeout: 15_000 }, () => {
+describe('Stream token', { timeout: 15_000 }, () => {
   let deps: AppDeps;
 
   beforeEach(() => {

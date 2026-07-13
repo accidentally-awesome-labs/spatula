@@ -55,22 +55,22 @@ The following are FROZEN — changes are MAJOR breaks:
 
 - **Error envelope**: `{ error: { code, message, requestId, details? } }`
 - **Error code namespace**: `DOMAIN.CODE` (e.g., `JOB.NOT_FOUND`, `RATE_LIMIT.EXCEEDED`, `VERSION.MISMATCH`). Adding new codes is additive (1.x-compatible). Removing or renaming is a major break.
-- **Cursor pagination envelope**: `{ data, nextCursor, hasMore }`
-- **Offset pagination envelope** (deprecated): `{ data, total, page, limit, hasMore }` + RFC 8594 `Deprecation` + `Sunset` + `Link rel="successor-version"` headers. Sunset target: v2.0 GA.
+- **SDK cursor pagination envelope**: public `@spatula/client` list helpers expose `{ data, nextCursor?, hasMore }`.
+- **Raw REST pagination shapes**: each route's response shape is defined by the served `/api/v1/openapi.json`. Explicit offset pagination is deprecated and emits RFC 8594 `Deprecation` + `Sunset` + `Link rel="successor-version"` headers where implemented. Sunset target: v2.0 GA.
 - **Rate-limit header set**: `X-RateLimit-Limit`, `X-RateLimit-Remaining`, `X-RateLimit-Reset`, `Retry-After`
 - **URL versioning**: every public route under `/api/v1/`. The `/.well-known/spatula-version` and `/.well-known/*` family is a root-level sibling (not under `/api/v1/`) per RFC 8615.
 - **Export format shapes**: JSON, CSV, Parquet, SQLite, DuckDB (5 formats frozen — see `docs/architecture.md` § "Export format stability").
 
 ## Experimental surfaces
 
-See `docs/deprecation-policy.md`. v1.0 ships zero experimental surfaces. Future experimental surfaces are accessed through `client.experimental.*`. The `client.experimental.*` Proxy is already published as scaffolding at v1.0; until a surface is released, property access throws with a message containing `'zero experimental surfaces'`.
+See `docs/deprecation-policy.md`. v1.0 ships one experimental surface: `client.experimental.forensic`, backed by `GET /api/v1/admin/forensic/extractions` and tagged `x-spatula-experimental: true` in OpenAPI. Additional experimental surfaces must be added under `client.experimental.*`; unknown properties throw.
 
 ## What a consumer MAY rely on
 
 - The wire shapes in [Frozen wire shapes (v1)](#frozen-wire-shapes-v1).
 - The error-code enum in `docs/api-errors.md`.
 - The `@spatula/core-types` package — types and zod schemas only, zero runtime deps (zod as peer).
-- The `@spatula/client` package — `SpatulaClient` class, 4 helper methods (`createJob`, `listJobs`, `getEntities`, `getJobEvents`), 25 class-per-code typed error subclasses, ≤ 50 KB gzipped measured surface.
+- The `@spatula/client` package — `SpatulaClient` class, 4 helper methods (`createJob`, `listJobs`, `getEntities`, `getJobEvents`), 26 class-per-code typed error subclasses, ≤ 50 KB gzipped measured surface.
 - The `/api/v1/openapi.json` runtime endpoint — boot-cached, byte-identical across requests; downstream tooling can fetch + cache it.
 - The `/.well-known/spatula-version` endpoint shape.
 
@@ -82,4 +82,4 @@ See `docs/deprecation-policy.md`. v1.0 ships zero experimental surfaces. Future 
 
 ---
 
-_Last reviewed: 2026-07-12._
+_Last reviewed: 2026-07-13._

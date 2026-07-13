@@ -94,12 +94,12 @@ export async function buildWorkerDeps(input: BuildWorkerDepsInput): Promise<Buil
         })
       : new PgContentStore(db);
 
-  // Step 4 — Base llmConfig (per-job override is Plan 03; this is the worker default)
+  // Step 4 — Base llmConfig (per-job override is derived at runtime; this is the worker default)
   const llmConfig: LLMConfig = {
     primaryModel: process.env.SPATULA_DEFAULT_MODEL ?? 'deepseek/deepseek-v4-flash',
   };
 
-  // Step 5 — LLM client: create raw first so Plan 02 can call setUsageRecorder on it,
+  // Step 5 — LLM client: create raw first so usage recording can wrap it,
   // then wrap with circuit breaker.
   const rawClient = createLLMClient({
     provider: 'openrouter',
@@ -112,7 +112,7 @@ export async function buildWorkerDeps(input: BuildWorkerDepsInput): Promise<Buil
 
   // Step 6 — LLM-dependent components
   const classifier = new PageClassifier(llmClient, llmConfig);
-  const extractor = new StaticExtractor(llmClient, llmConfig, ''); // '' as base jobId; per-job override in Plan 03
+  const extractor = new StaticExtractor(llmClient, llmConfig, ''); // '' as base jobId; per-job override at runtime
   const schemaEvolver = new SchemaEvolverImpl(llmClient, llmConfig);
   const reconciler = new DataReconcilerImpl(llmClient, llmConfig);
   const linkEvaluator = new LLMLinkEvaluator(llmClient, resolveModel(llmConfig, 'linkEvaluation'));

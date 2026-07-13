@@ -2,7 +2,6 @@
 
 > Authoritative reference for Spatula's security architecture: multi-tenancy isolation,
 > authentication, authorization, audit trail, data retention, and GDPR-facing deletion/portability.
-> Requirements: SEC-01 through SEC-10.
 
 ---
 
@@ -15,12 +14,12 @@
 5. [API key lifecycle](#api-key-lifecycle)
 6. [Audit log](#audit-log)
 7. [Content-store blob security](#content-store-blob-security)
-8. [DSR: deletion (SEC-09)](#dsr-deletion-sec-09)
-9. [DSR: portability (SEC-10)](#dsr-portability-sec-10)
+8. [DSR: deletion](#dsr-deletion)
+9. [DSR: portability](#dsr-portability)
 10. [Secret management](#secret-management)
 11. [Rate limiting and abuse prevention](#rate-limiting-and-abuse-prevention)
 12. [Dependency and supply chain](#dependency-and-supply-chain)
-13. [Prompt injection defense (SEC-07)](#prompt-injection-defense-sec-07)
+13. [Prompt injection defense](#prompt-injection-defense)
 14. [Security contacts](#security-contacts)
 
 ---
@@ -48,7 +47,7 @@ Out of scope for this document: network-layer security (TLS termination, WAF rul
 
 Every tenant-scoped table carries a `tenant_id uuid NOT NULL` foreign key referencing `tenants.id`. The FK is set in the Drizzle schema definitions and enforced by PostgreSQL.
 
-**Middleware enforcement** (`packages/api/src/middleware/auth.ts`):
+**Middleware enforcement** (`apps/api/src/middleware/auth.ts`):
 
 - After authentication, the resolved `tenantId` is stored on the Hono context.
 - Every repository method receives `tenantId` from the context, never from the request body/path (with the exception of admin-scoped endpoints, which are gated to `scope: admin`).
@@ -71,7 +70,7 @@ Every tenant-scoped table carries a `tenant_id uuid NOT NULL` foreign key refere
 | `api_keys`          | Per-tenant access credentials                                                             |
 | `llm_usage`         | Token/cost metering                                                                       |
 | `dead_letter_queue` | Failed BullMQ jobs (`tenant_id` nullable — set null on tenant delete)                     |
-| `audit_log`         | Append-only event ledger (`tenant_id` nullable — nulled on tenant delete per D-08)        |
+| `audit_log`         | Append-only event ledger (`tenant_id` nullable — nulled on tenant delete)                 |
 
 ---
 
@@ -95,15 +94,18 @@ API keys carry an explicit `scopes: text[]` list. Scopes are checked by the `req
 
 **Scope catalog:**
 
-| Scope               | Grants                                         |
-| ------------------- | ---------------------------------------------- |
-| `jobs:read`         | List/get jobs, tasks, raw pages                |
-| `jobs:write`        | Create/update/cancel jobs                      |
-| `extractions:read`  | Read extraction results                        |
-| `extractions:write` | Trigger re-extraction                          |
-| `exports:read`      | Download export files                          |
-| `exports:write`     | Create export jobs                             |
-| `admin`             | All of the above + tenant management endpoints |
+| Scope                 | Grants                                  |
+| --------------------- | --------------------------------------- |
+| `jobs:read`           | List/get jobs, tasks, raw pages         |
+| `jobs:write`          | Create/update/cancel jobs               |
+| `exports:read`        | Download export files                   |
+| `exports:write`       | Create export jobs                      |
+| `actions:read`        | List pending review actions             |
+| `actions:write`       | Approve/reject review actions           |
+| `tenants:admin`       | Manage tenant settings and quotas       |
+| `keys:manage`         | Create, revoke, and rotate API keys     |
+| `admin`               | Full access including admin-only routes |
+| `admin:forensic:read` | Read forensic extraction records        |
 
 Default scopes for a new key: `jobs:read jobs:write exports:read exports:write actions:read actions:write`.
 
@@ -113,8 +115,8 @@ Default scopes for a new key: `jobs:read jobs:write exports:read exports:write a
 
 1. **Creation:** Raw key generated with `crypto.randomBytes(32)`, hex-encoded, prefixed `sk_live_`. SHA-256 hash stored in `api_keys.key_hash`. Raw key returned exactly once.
 2. **Verification:** On each request, server re-hashes the Bearer value and compares to stored hash.
-3. **Rotation:** Delete existing key, create new key, update callers. No grace period — old key is invalid immediately on deletion.
-4. **Deletion:** `DELETE /api/v1/api-keys/:id`. Row removed from `api_keys`; all subsequent requests using the old raw key return 401.
+3. **Rotation:** `POST /api/v1/api-keys/:id/rotate` creates a new key inheriting the original scopes. The old key remains valid during a grace window (24h default, 7d max, `0` for immediate expiry), then expires automatically.
+4. **Revocation:** `DELETE /api/v1/api-keys/:id` sets `revoked_at`. All subsequent requests using the revoked raw key return 401.
 
 ---
 
@@ -124,7 +126,7 @@ The `audit_log` table is the tamper-evident ledger for security-relevant events.
 
 - **Append-only:** No `UPDATE` or `DELETE` endpoint exists for `audit_log`.
 - **Tenant-linked:** `tenant_id` FK (nullable) links events to the owning tenant while the tenant exists.
-- **PII field:** `ip_address` and `metadata` may contain PII. These are redacted (set to `NULL` / `{}`) on DSR deletion (D-08).
+- **PII field:** `ip_address` and `metadata` may contain PII. These are redacted (set to `NULL` / `{}`) on DSR deletion.
 - **Tombstone on deletion:** When a tenant is deleted, one un-redacted `tenant.deleted` row is inserted with `tenant_id = NULL` and `resource_id = <deletedTenantId>` — proving deletion occurred even after the tenant row is gone.
 - **actor_id = '[deleted]'** after redaction: signals that the audit record was sanitized and the real actor identity has been removed.
 
@@ -157,7 +159,7 @@ On tenant deletion, blobs are swept by key prefix using `listKeys(prefix)` + `de
 
 ---
 
-## DSR: deletion (SEC-09)
+## DSR: deletion
 
 Full implementation: `packages/db/src/repositories/tenant-data-repository.ts` + `packages/queue/src/workers/tenant-delete-worker.ts`.
 
@@ -187,7 +189,7 @@ The tombstone row in `audit_log` (action = `tenant.deleted`, `tenant_id IS NULL`
 
 ---
 
-## DSR: portability (SEC-10)
+## DSR: portability
 
 Full implementation: `TenantDataRepository.importTenantData` + `GET /api/v1/admin/tenants/:id/export` + `spatula admin tenant export/import` CLI commands.
 
@@ -246,16 +248,14 @@ API-level rate limiting is enforced at the ingress/gateway layer (not documented
 
 ---
 
-## Prompt injection defense (SEC-07)
+## Prompt injection defense
 
 Crawled HTML is untrusted input fed to the LLM extractor. Adversarial content can hijack extraction or exfiltrate data through free-text output fields. Defense is never absolute; this section documents what is implemented, what operators must do, the current limits, and how to report new patterns.
-
-Cross-reference spec §3.7.
 
 ### Mitigations matrix
 
 Seven defense-in-depth mitigations are implemented in
-`packages/core/src/extraction/static-extractor.ts` (cross-reference spec §3.7.2):
+`packages/core/src/extraction/static-extractor.ts`:
 
 | #   | Mitigation                                    | Implementation                                                                                                                                                                                                                                                                                                                                                                         |
 | --- | --------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -278,7 +278,7 @@ Operators deploying Spatula are responsible for the following:
 
 ### Known limits (v1)
 
-The following are out of scope for the current v1 prompt-injection defenses (spec §3.7.4):
+The following are out of scope for the current v1 prompt-injection defenses:
 
 - **Sophisticated multi-turn injections** — if an operator manually relays crawled content through multiple LLM calls outside the extraction pipeline, the mitigations above do not apply to those external calls.
 - **Model-specific unsafe behaviors** — defenses are validated against the two pinned models (`anthropic/claude-3-5-sonnet-20240620`, `ollama/llama3.1:8b-instruct-q4_0`). Behaviors on other models or un-pinned "latest" aliases are not guaranteed.

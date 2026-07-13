@@ -1,10 +1,10 @@
 # Browser E2E Suite: OIDC + SSE Reconnect Chain
 
-Tests the full browser OIDC + SSE reconnect chain end-to-end (ROADMAP success criterion 1, AUTH-01/02/04):
+Tests the full browser OIDC + SSE reconnect chain end-to-end:
 
 > **OIDC login via Dex → ws-token → SSE subscribe → disconnect → reconnect with Last-Event-ID → resume**
 
-This is a **heavy** suite. It requires Docker, Playwright Chromium binaries, a live PostgreSQL database, and a live Redis instance. It is **not** run on every PR — only in the dedicated `test-e2e-browser` CI job on `main` branch and tags.
+This is a **heavy** suite. It requires Docker, Playwright Chromium binaries, a live PostgreSQL database, and a live Redis instance. It is not included in the default `pnpm test:e2e` glob or PR CI; run it explicitly with the command below.
 
 ## Prerequisites
 
@@ -74,7 +74,7 @@ The suite sets these JWT env vars automatically at test start:
 
 ## What the Suite Proves
 
-The spec `oidc-sse-flow.spec.ts` drives the full chain without manual intervention:
+The test `oidc-sse-flow.spec.ts` drives the full chain without manual intervention:
 
 1. **Step 1 — OIDC login**: Playwright launches Chromium, navigates to the Dex authorization endpoint, fills the dev login form, captures the authorization code at `localhost:3000/callback`, and exchanges it for a JWT access token. PKCE S256 is used throughout.
 
@@ -92,9 +92,9 @@ The spec `oidc-sse-flow.spec.ts` drives the full chain without manual interventi
 
 ## CI Topology
 
-This suite runs in the `test-e2e-browser` workflow job (`.github/workflows/ci.yml`), which runs **only on pushes to `main` and tags** — not on pull request commits. This avoids requiring Docker + Chromium + live infra on every PR.
+The default CI `test-e2e` job runs `pnpm test:e2e`, which matches `tests/e2e/**/*.test.ts` and does not include this browser suite. Use this suite as an explicit release or local validation step in an environment with Docker, Chromium, Postgres, and Redis available.
 
-The normal PR jobs (`test-unit`, `test-contract`) run without infrastructure and gate on every commit.
+The normal PR jobs run unit, contract, and infrastructure-light test suites on every commit.
 
 ## Troubleshooting
 
@@ -108,7 +108,7 @@ The normal PR jobs (`test-unit`, `test-contract`) run without infrastructure and
 → Start Redis locally (`brew services start redis` or `docker run -p 6379:6379 redis`)
 
 **SSE returns 0 events (timeout)**
-→ The `RedisEventPublisher.publish` must be writing to the Redis stream (via `XADD jobs:{jobId}:events`). Confirm plan 17-02 is deployed and the API server is using `AUTH_STRATEGY=jwt` (not `none` — the SSE route requires token auth).
+→ The `RedisEventPublisher.publish` must be writing to the Redis stream (via `XADD jobs:{jobId}:events`). Confirm the API server is configured with Redis event publishing and `AUTH_STRATEGY=jwt` (not `none` — the SSE route requires token auth).
 
 **`401 AUTH.INVALID_TOKEN` on SSE**
 → The stream token has already been consumed (single-use via `GETDEL`). The test already re-fetches a fresh token before each SSE connection.

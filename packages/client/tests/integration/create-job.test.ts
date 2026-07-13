@@ -1,8 +1,8 @@
 /**
  * SDK integration test: createJob.
  *
- * SDK-08 plan: hit every major endpoint via the SDK; mocked by default; live
- * mode opt-in via SPATULA_LIVE_LLM=1.
+ * Hits the createJob path via the SDK; mocked by default; live mode opt-in via
+ * SPATULA_LIVE_LLM=1.
  *
  * In MOCKED mode (default), the test installs a fetch mock that returns the
  * envelope-shaped success/error responses the server emits. This exercises:
@@ -13,7 +13,7 @@
  *
  * In LIVE mode (SPATULA_LIVE_LLM=1), the test points at SPATULA_BASE_URL +
  * SPATULA_API_KEY and exercises the real path. Skipped in CI by default;
- * runs only on workflow_dispatch / scheduled live-LLM jobs in Phase 21.
+ * runs only on explicit live-LLM jobs.
  */
 import { afterEach, describe, expect, it, vi } from 'vitest';
 

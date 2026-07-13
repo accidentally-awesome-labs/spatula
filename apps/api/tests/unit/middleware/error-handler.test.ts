@@ -43,7 +43,7 @@ function createTestApp() {
   return app;
 }
 
-describe('errorHandler middleware — Phase 16 envelope', () => {
+describe('errorHandler middleware envelope', () => {
   it('maps JobNotFoundError to 404 with JOB.NOT_FOUND code and details.jobId', async () => {
     const app = createTestApp();
     app.get('/test', () => {

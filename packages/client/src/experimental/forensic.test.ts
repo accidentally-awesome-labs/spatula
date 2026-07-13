@@ -1,8 +1,6 @@
 /**
  * Tests for experimental/forensic.ts + createExperimentalNamespace wiring
  *
- * TDD RED → GREEN cycle per plan 18-05 Task 3.
- *
  * Verifies:
  * - client.experimental.forensic.listExtractions calls GET /api/v1/admin/forensic/extractions
  * - Returns the cursor-first { data, nextCursor, hasMore } shape

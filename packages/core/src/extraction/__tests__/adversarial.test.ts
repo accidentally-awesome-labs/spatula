@@ -1,8 +1,8 @@
 /**
- * Adversarial fixture suite — SEC-02
+ * Adversarial fixture suite.
  *
  * Tests that StaticExtractor resists all 10 prompt-injection attack classes
- * defined in spec §3.7.2.8 when run against the pinned models.
+ * defined for the extraction hardening suite when run against the pinned models.
  *
  * ALL tests are gated by SPATULA_LIVE_LLM=1. Without that env var, tests
  * skip cleanly so contributor-fork CI passes without an API key.
@@ -26,7 +26,7 @@ import { PINNED_MODELS } from './pinned-models.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
-// ---- Live-LLM gate (reuse Phase 16 pattern) ----
+// ---- Live-LLM gate ----
 const LIVE = process.env.SPATULA_LIVE_LLM === '1';
 
 // ---- Model selection ----

@@ -1,9 +1,9 @@
 /**
- * TenantDataRepository — Plan 18-06 Task 1 (SEC-09)
+ * TenantDataRepository.
  *
  * Provides three operations required for GDPR-complete DSR deletion:
  *  1. cascadeDeleteTenantData  — DELETE from every tenant-scoped table (FK-safe order)
- *  2. redactTenantAuditLog     — in-place PII redaction of audit_log rows (D-08)
+ *  2. redactTenantAuditLog     — in-place PII redaction of audit_log rows
  *  3. insertDeletionTombstone  — one un-redacted audit_log record proving the deletion
  *
  * Does NOT delete the `tenants` row — that is the final step in the BullMQ worker.
@@ -143,7 +143,7 @@ export class TenantDataRepository {
    * Redact PII from all audit_log rows belonging to this tenant.
    *
    * Sets: tenant_id = NULL, metadata = {}, ip_address = NULL, actor_id = '[deleted]'
-   * Does NOT delete audit rows (D-08 — audit history must be preserved).
+   * Does NOT delete audit rows; audit history must be preserved.
    * tenant_id is nulled so the FK constraint is cleared before the tenant row is deleted.
    * Safe to run multiple times (already-redacted rows get the same values written again).
    *
@@ -153,7 +153,7 @@ export class TenantDataRepository {
     const result = await this.db
       .update(auditLog)
       .set({
-        tenantId: null, // Clear FK so tenant row can be deleted (D-08 / FK constraint)
+        tenantId: null, // Clear FK so tenant row can be deleted.
         metadata: {},
         ipAddress: null,
         actorId: '[deleted]',

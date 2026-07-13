@@ -1,9 +1,9 @@
 /**
  * `SpatulaClient` — the entry-point class for the Spatula JavaScript SDK.
  *
- * Properties (per spec §3.2.1 + plan 16-3):
+ * Properties:
  * - ESM-only; `sideEffects: false`; browser + Node 22+ compatible
- * - Constructor performs NO I/O (Anti-Pattern "Constructor I/O" — D-12).
+ * - Constructor performs no I/O.
  * - All HTTP calls go through `request()`, which:
  *     1. Awaits `probe.ensure()` (zero-I/O on second+ call; lazy single-shot
  *        on first call). Throws `SpatulaVersionMismatchError` BEFORE the
@@ -13,7 +13,7 @@
  *        `./errors/generated.ts`).
  *
  * The compiled-in `SDK_MAJOR_VERSION` constant is the source of truth for the
- * SDK side of the major-compat gate. Manually bump from 0 → 1 when release-
+ * SDK side of the major-compat gate. Manually bump from 0 -> 1 when release-
  * please promotes this package to v1.0.0.
  */
 import { SpatulaApiError } from './errors/base.js';
@@ -23,10 +23,10 @@ import type { ExperimentalNamespace } from './experimental/index.js';
 import { VersionProbe } from './version-probe.js';
 
 /**
- * Hard-coded SDK major version. The 0.x series corresponds to phase-16 pre-
- * release; release-please will bump this package to 1.0.0 at v1.0 launch — at
- * that point also update this constant to `1`. Keeping it manual (rather than
- * reading package.json at runtime) avoids JSON-module / bundler import paths.
+ * Hard-coded SDK major version. Release Please will bump this package to
+ * 1.0.0 at v1.0 launch; at that point also update this constant to `1`.
+ * Keeping it manual (rather than reading package.json at runtime) avoids
+ * JSON-module / bundler import paths.
  */
 const SDK_MAJOR_VERSION = 0;
 
@@ -68,7 +68,7 @@ export class SpatulaClient {
   readonly experimental: ExperimentalNamespace;
 
   constructor(opts: SpatulaClientOptions) {
-    // Strict: NO I/O in the constructor (D-12). Store config + wire probe.
+    // Strict: no I/O in the constructor. Store config + wire probe.
     this.baseUrl = opts.baseUrl.replace(/\/+$/, '');
     this.apiKey = opts.apiKey;
     this.fetchImpl = opts.fetch ?? globalThis.fetch;

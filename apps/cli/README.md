@@ -34,7 +34,7 @@ pnpm --filter @spatula/cli build   # tsup --config tsup.config.ts → dist/
 pnpm --filter @spatula/cli pack    # produces an installable .tgz
 ```
 
-The published tarball contents are governed by the `files` allowlist in `package.json` (not `.npmignore`), per spec §3.2.3. Provenance attestation (`--provenance`) and trusted publishing via GitHub OIDC are wired in `.github/workflows/release.yml`.
+The published tarball contents are governed by the `files` allowlist in `package.json` (not `.npmignore`). Provenance attestation (`--provenance`) and trusted publishing via GitHub OIDC are wired in `.github/workflows/release.yml`.
 
 ### No postinstall script
 

@@ -19,6 +19,6 @@ import { ErrorCode, JobConfigSchema } from '@spatula/core-types';
 
 ## Surface
 
-- **Errors** — `ErrorCode` (frozen 25-entry const-object enum), `STATUS_MAP` (HTTP status mapping)
+- **Errors** — `ErrorCode` (frozen 26-entry const-object enum), `STATUS_MAP` (HTTP status mapping)
 - **Enums** — `ActionType` (25 pipeline action types), `JobStatus` (lifecycle states), `Scope` (9 auth scopes)
 - **Schemas** — `JobConfig` / `JobConfigSchema`, `FieldDefinition` / `FieldDef` / `FieldDefSchema`, `PipelineAction` / `Action` / `ActionSchema`, `ExtractionResult` / `ExtractionResultSchema`, plus sub-configs (CrawlConfig, SchemaConfig, EvolutionConfig, LLMConfig, ReconciliationConfig) and supporting types (NormalizationRule, FieldRelevance, FieldAlias, SchemaDefinition, EntityMatch, etc.)

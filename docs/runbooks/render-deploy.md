@@ -16,7 +16,7 @@ The `render.yaml` blueprint provisions everything needed to run the full Spatula
 
 ## What is provisioned
 
-| Resource        | Render type                | Plan |
+| Resource        | Render type                | Tier |
 | --------------- | -------------------------- | ---- |
 | `spatula-api`   | Web Service (node runtime) | free |
 | `spatula-cache` | Key Value (Redis)          | free |
@@ -148,11 +148,13 @@ Without these, crawl tasks will fail immediately (Playwright not found in the co
 
 ### Service reference
 
-| Property   | Value                                                        |
-| ---------- | ------------------------------------------------------------ |
-| Service ID | `srv-d8lh2q6rnols73dedvog`                                   |
-| URL        | `https://spatula-api.onrender.com`                           |
-| Branch     | `render-paid-demo` (paid mirror — free PG/KV slots occupied) |
+Replace these placeholders with the values for your own Render account:
+
+| Property     | Example value                                 |
+| ------------ | --------------------------------------------- |
+| Service name | `spatula-api`                                 |
+| Base URL     | `https://your-render-service.onrender.com`    |
+| Branch       | `main` or another branch configured by Render |
 
 ### SPATULA_CRAWLER in render.yaml
 
@@ -168,11 +170,11 @@ Set it via the Render dashboard on the `spatula-api` Web Service **before** sync
 > Only a Dashboard Blueprint Sync picks up `render.yaml` changes. The OSS repo has no
 > auto-sync webhook, so pushes do NOT auto-deploy.
 
-### Re-verify steps (EXEC-05)
+### Re-verify steps
 
 ```bash
-# 1. Push 19.1 fixes to the deploy branch
-git push origin main:render-paid-demo
+# 1. Push changes to the branch configured by your Render Blueprint
+git push origin main
 
 # 2. In the Render dashboard:
 #    a. Set OPENROUTER_API_KEY, SPATULA_CRAWLER=firecrawl, FIRECRAWL_API_KEY as above
@@ -180,26 +182,27 @@ git push origin main:render-paid-demo
 #    c. Wait for the deploy to complete and /health to return 200
 
 # 3. Verify health
-curl https://spatula-api.onrender.com/health
-curl https://spatula-api.onrender.com/health/ready
+export SPATULA_API_URL=https://your-render-service.onrender.com
+curl "$SPATULA_API_URL/health"
+curl "$SPATULA_API_URL/health/ready"
 
 # 4. Run the sizing smoke (Firecrawl crawler, small page count to limit cost):
 SPATULA_LIVE_LLM=1 \
   SIZING_PAGES=3 SIZING_MAX_DEPTH=5 \
   SIZING_CRAWLER=firecrawl \
-  SPATULA_API_URL=https://spatula-api.onrender.com \
+  SPATULA_API_URL="$SPATULA_API_URL" \
   pnpm sizing:baseline
 
 # 5. Confirm results:
 #    - At least one tier job reaches 'completed' with stats.pagesCompleted > 0
-#    - GET https://spatula-api.onrender.com/api/v1/usage?period=1d shows:
+#    - GET "$SPATULA_API_URL/api/v1/usage?period=1d" shows:
 #        totalCostUsd > 0 (or tokens > 0 if model is free-tier)
 #        byJob contains the job's entry
 ```
 
-**Success criteria (EXEC-05):** A job submitted to the Render deploy reaches `completed` with
+**Success criteria:** A job submitted to the Render deploy reaches `completed` with
 `pagesCompleted > 0` and the `/usage` endpoint records tokens (and cost if model is paid).
-This clears the 19-05/DEPLOY-02 caveat (worker was starting but couldn't process crawls).
+This confirms the worker can process crawls end-to-end.
 
 ---
 

@@ -1,10 +1,10 @@
 /**
- * Cross-tenant isolation matrix — Phase 17 plan 17-07, AUTH-07.
+ * Cross-tenant isolation matrix.
  *
  * What this suite proves:
  *   - Tenant A can NEVER read Tenant B's resources via any authed route.
  *   - The enumerated routes come from the SERVED /api/v1/openapi.json so new
- *     routes (the SSE + rotate routes from Phase 17) are covered automatically.
+ *     routes are covered automatically.
  *   - Every cross-tenant response is 403/404 with the standard error envelope
  *     and no leaked tenant data.
  *
@@ -43,7 +43,7 @@ beforeAll(async () => {
   // Boot the API with real Postgres + Redis (rate-limit + ws-token need Redis)
   server = await startIsolationServer();
 
-  // Fetch the served OpenAPI spec — the canonical route list (D-17)
+  // Fetch the served OpenAPI spec, which is the canonical route list.
   const specRes = await fetch(`${server.url}/api/v1/openapi.json`);
   expect(specRes.status, 'OpenAPI spec endpoint must be reachable').toBe(200);
   spec = (await specRes.json()) as Record<string, unknown>;
@@ -59,7 +59,7 @@ afterAll(async () => {
 
 // ─── Spec presence assertions (gating check) ─────────────────────────────────
 
-describe('OpenAPI spec contains required Phase 17 routes', () => {
+describe('OpenAPI spec contains required routes', () => {
   it('SSE route /api/v1/jobs/{id}/events appears in /api/v1/openapi.json', () => {
     const paths = (spec as { paths?: Record<string, unknown> }).paths ?? {};
     // The spec is served with a server base url of /api/v1, so routes may appear
@@ -71,7 +71,7 @@ describe('OpenAPI spec contains required Phase 17 routes', () => {
     expect(
       sseKey,
       'SSE route must be registered via createRoute and appear in /api/v1/openapi.json ' +
-        `(depends on plan 17-02). Found paths: ${
+        `Found paths: ${
           Object.keys(paths)
             .filter((p) => p.includes('events'))
             .join(', ') || 'none'
@@ -90,7 +90,7 @@ describe('OpenAPI spec contains required Phase 17 routes', () => {
     expect(
       rotateKey,
       'Rotate route must be registered via createRoute and appear in /api/v1/openapi.json ' +
-        `(depends on plan 17-04). Found paths: ${
+        `Found paths: ${
           Object.keys(paths)
             .filter((p) => p.includes('rotate'))
             .join(', ') || 'none'

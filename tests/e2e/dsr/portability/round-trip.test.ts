@@ -1,5 +1,5 @@
 /**
- * DSR portability round-trip e2e test (SEC-10)
+ * DSR portability round-trip e2e test.
  *
  * Seeds a tenant with entities + extractions + api_keys → runs the REAL export
  * path (produces a jsonl dump) → clears the tenant's rows → runs the REAL import
@@ -7,7 +7,7 @@
  * → asserts field-level parity: the re-imported rows match the original seeded rows
  * for key tables (entities, extractions, api_keys).
  *
- * D-10: import is a real product command, not a test-only harness.
+ * Import is a real product command, not a test-only harness.
  * The real import path is TenantDataRepository.importTenantData (the same code that
  * POST /api/v1/admin/tenants/:id/import calls server-side).
  *
@@ -153,7 +153,7 @@ describe('DSR portability round-trip (SEC-10)', () => {
     const afterClear = await getApiKeys(tenantId);
     expect(afterClear.length, 'api_keys should be empty after clear').toBe(0);
 
-    // ── 4. Import: use the REAL import path (D-10) ─────────────────────────
+    // ── 4. Import: use the real import path ────────────────────────────────
     const tenantDataRepo = new TenantDataRepository(db);
     const { imported } = await tenantDataRepo.importTenantData(tenantId, dump);
 

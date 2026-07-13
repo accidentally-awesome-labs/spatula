@@ -42,7 +42,7 @@ function getBaseLogger(level: string): Logger {
     },
     formatters: {
       // Value-scan backstop: walk all logged object fields for secrets at unknown nesting depths
-      // (Pitfall 1: fast-redact paths do NOT cover arbitrary depth recursion)
+      // (fast-redact paths do NOT cover arbitrary depth recursion).
       log: (obj) => redactObject(obj),
     },
     transport:

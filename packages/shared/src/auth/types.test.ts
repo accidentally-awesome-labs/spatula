@@ -2,14 +2,14 @@
  * Tests for auth/types.ts — AUTH_SCOPES + DEFAULT_API_KEY_SCOPES
  *
  * Verifies:
- * - AUTH_SCOPES contains admin:forensic:read (Plan 18-05)
+ * - AUTH_SCOPES contains admin:forensic:read
  * - DEFAULT_API_KEY_SCOPES does NOT contain admin:forensic:read
  */
 import { describe, it, expect } from 'vitest';
 import { AUTH_SCOPES, DEFAULT_API_KEY_SCOPES } from './types.js';
 
 describe('AUTH_SCOPES', () => {
-  it('includes admin:forensic:read (Plan 18-05 SEC-05)', () => {
+  it('includes admin:forensic:read', () => {
     expect(AUTH_SCOPES).toContain('admin:forensic:read');
   });
 

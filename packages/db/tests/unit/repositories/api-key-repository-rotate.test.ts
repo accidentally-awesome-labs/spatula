@@ -1,5 +1,5 @@
 /**
- * TDD tests for ApiKeyRepository.rotate() — AUTH-05
+ * Tests for ApiKeyRepository.rotate().
  *
  * Tests use a mocked Drizzle DB transaction pattern.
  * rotate() signature:
@@ -113,7 +113,7 @@ describe('ApiKeyRepository.rotate()', () => {
 
     expect(result).toHaveProperty('oldKey');
     expect(result).toHaveProperty('newKey');
-    // Verbatim scope inheritance (D-15)
+    // Verbatim scope inheritance.
     expect(result.newKey.scopes).toEqual(['jobs:read', 'jobs:write']);
   });
 

@@ -124,15 +124,15 @@ export class ApiKeyRepository {
   }
 
   /**
-   * Rotate an API key with a zero-downtime two-key grace window (AUTH-05, D-14, D-15, D-16).
+   * Rotate an API key with a zero-downtime two-key grace window.
    *
    * In a single transaction:
    * 1. Reads the original key (throws StorageError if not found or already revoked).
-   * 2. Inserts a new key inheriting the original's scopes verbatim (D-15).
+   * 2. Inserts a new key inheriting the original's scopes verbatim.
    *    - `supersedes` = original key id
-   *    - `supersededExpiresAt` = now + graceSeconds (stored on new row for D-16 response)
+   *    - `supersededExpiresAt` = now + graceSeconds (stored on new row for the response)
    * 3. Updates the old key's `expiresAt` = now + graceSeconds so it keeps validating
-   *    through the grace window and then auto-expires (D-14; `findByHash` filters expiresAt > now).
+   *    through the grace window and then auto-expires (`findByHash` filters expiresAt > now).
    *
    * @param keyId        - The id of the key to rotate.
    * @param tenantId     - Must match the key's tenantId (tenant isolation).
@@ -171,8 +171,8 @@ export class ApiKeyRepository {
         // 4. Compute grace window expiry
         const graceUntil = new Date(Date.now() + graceSeconds * 1000);
 
-        // 5. Insert the new key — scopes copied verbatim (D-15)
-        //    supersededExpiresAt stored on NEW row so the D-16 response can return
+        // 5. Insert the new key; scopes copied verbatim.
+        //    supersededExpiresAt stored on NEW row so the response can return
         //    it without a second query.
         const [newKey] = await tx
           .insert(apiKeys)
@@ -188,7 +188,7 @@ export class ApiKeyRepository {
           .returning();
 
         // 6. Grace-expire the old key — findByHash filters expiresAt > now, so the
-        //    old key stops authenticating exactly when the grace window closes (D-14).
+        //    old key stops authenticating exactly when the grace window closes.
         const [oldKey] = await tx
           .update(apiKeys)
           .set({ expiresAt: graceUntil })

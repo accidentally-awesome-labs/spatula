@@ -101,16 +101,16 @@ SELECT id FROM tenants WHERE id = '<tenantId>'::uuid;
 
 ### What gets deleted
 
-| Resource                                                                        | What happens                                                                                                                 |
-| ------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------- |
-| `jobs`, `crawl_tasks`, `raw_pages`, `extractions`, `entities`, `entity_sources` | Deleted                                                                                                                      |
-| `actions`, `source_trust`, `exports`, `schemas`                                 | Deleted                                                                                                                      |
-| `api_keys`, `llm_usage`, `user_tenants`                                         | Deleted                                                                                                                      |
-| `dead_letter_queue` rows for this tenant                                        | Deleted                                                                                                                      |
-| Content-store blobs (`raw-pages/`, `exports/`, `forensic/`)                     | Deleted                                                                                                                      |
-| `audit_log` rows                                                                | PII redacted in place (`ip_address=NULL`, `metadata={}`, `actor_id='[deleted]'`, `tenant_id=NULL`) — rows NOT deleted (D-08) |
-| `audit_log` tombstone                                                           | Created: `tenant.deleted` row with `tenant_id=NULL`, `resource_id=<tenantId>`                                                |
-| `tenants` row                                                                   | Deleted (final step)                                                                                                         |
+| Resource                                                                        | What happens                                                                                                          |
+| ------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------- |
+| `jobs`, `crawl_tasks`, `raw_pages`, `extractions`, `entities`, `entity_sources` | Deleted                                                                                                               |
+| `actions`, `source_trust`, `exports`, `schemas`                                 | Deleted                                                                                                               |
+| `api_keys`, `llm_usage`, `user_tenants`                                         | Deleted                                                                                                               |
+| `dead_letter_queue` rows for this tenant                                        | Deleted                                                                                                               |
+| Content-store blobs (`raw-pages/`, `exports/`, `forensic/`)                     | Deleted                                                                                                               |
+| `audit_log` rows                                                                | PII redacted in place (`ip_address=NULL`, `metadata={}`, `actor_id='[deleted]'`, `tenant_id=NULL`) — rows NOT deleted |
+| `audit_log` tombstone                                                           | Created: `tenant.deleted` row with `tenant_id=NULL`, `resource_id=<tenantId>`                                         |
+| `tenants` row                                                                   | Deleted (final step)                                                                                                  |
 
 ### Timing
 

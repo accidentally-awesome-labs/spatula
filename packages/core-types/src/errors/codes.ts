@@ -2,8 +2,7 @@
  * @spatula/core-types: errors/codes.ts
  *
  * Frozen v1 error-code enum. Category-prefixed `DOMAIN.CODE` shape per
- * design decisions D-05 / D-06 / D-07 / D-08 (see
- * .planning/phases/16-api-contract-sdk-packages/16-CONTEXT.md).
+ * public API compatibility rules.
  *
  * v1 freeze rules:
  *   - Additive-only in 1.x — adding a new entry is OK; renaming, removing,
@@ -13,7 +12,7 @@
  *   - Every `code` value matches `^[A-Z_]+\.[A-Z_]+$` (`DOMAIN.CODE`).
  *
  * Canonical location: This module is the source of truth for the public
- * error-code surface (plan 16-2 moved it here from `@spatula/shared`).
+ * error-code surface.
  * `@spatula/shared` re-exports it for backward compatibility, and the
  * monorepo ESLint rule blocks value-imports from `@spatula/core-types`
  * directly — consumers go through `@spatula/shared` for runtime value
@@ -53,7 +52,7 @@ export const ErrorCode = {
   AUTH_MISSING_TOKEN: 'AUTH.MISSING_TOKEN',
   AUTH_INSUFFICIENT_SCOPE: 'AUTH.INSUFFICIENT_SCOPE',
 
-  // RESOURCE.* — generic cross-resource lookup failures (additive 1.x — Phase 17)
+  // RESOURCE.* — generic cross-resource lookup failures.
   RESOURCE_NOT_FOUND: 'RESOURCE.NOT_FOUND',
 
   // TENANT.* — tenant errors
@@ -66,7 +65,7 @@ export const ErrorCode = {
   // VERSION.* — client/server version mismatch
   VERSION_MISMATCH: 'VERSION.MISMATCH',
 
-  // VALIDATION.* — request validation errors (DOMAIN.CODE shape per D-05)
+  // VALIDATION.* — request validation errors.
   VALIDATION_SCHEMA: 'VALIDATION.SCHEMA',
   VALIDATION_PARAMS: 'VALIDATION.PARAMS',
 

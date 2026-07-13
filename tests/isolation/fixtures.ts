@@ -1,5 +1,5 @@
 /**
- * Isolation suite fixture seeder — Phase 17 plan 17-07.
+ * Isolation suite fixture seeder.
  *
  * `seedTenantWithResources` creates a tenant + admin-scoped API key + one
  * resource per resource type reachable via authed routes. Called twice to

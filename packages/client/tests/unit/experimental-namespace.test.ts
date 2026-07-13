@@ -1,7 +1,7 @@
 /**
  * Tests for client.experimental namespace behavior.
  *
- * Updated for Plan 18-05 Task 3: v1.0 now ships ONE experimental surface (forensic).
+ * v1.0 ships one experimental surface: forensic.
  * - client.experimental.forensic → real ForensicSurface (does NOT throw)
  * - client.experimental.<anything-else> → throws fail-loud
  * - Well-known JS props (then, toJSON, constructor, symbols) → undefined (no throw)
@@ -23,7 +23,7 @@ describe('client.experimental namespace (v1.0 = ONE surface: forensic)', () => {
     }).toThrow(/not available/);
   });
 
-  it('error message mentions Phase 18 (forensic surface landmark)', () => {
+  it('error message names the one live experimental surface', () => {
     const client = new SpatulaClient({
       baseUrl: 'https://api.example.com',
       apiKey: 'k',
@@ -35,7 +35,7 @@ describe('client.experimental namespace (v1.0 = ONE surface: forensic)', () => {
       (client.experimental as unknown as Record<string, unknown>).forensicExtractions;
       throw new Error('expected throw');
     } catch (err) {
-      expect((err as Error).message).toContain('Phase 18');
+      expect((err as Error).message).toContain('forensic');
     }
   });
 

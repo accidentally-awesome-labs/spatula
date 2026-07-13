@@ -9,19 +9,16 @@ const SKIP_AUTH_PATHS = new Set([
   '/health/ready',
   '/api/docs',
   '/api/openapi.json',
-  // Phase 16 plan 16-3 added these as anonymous endpoints (live OpenAPI
-  // doc + SDK version probe). Plan 16-4 contract suite [Rule 3 blocker]
-  // surfaced the missing skip entries; without them every contract test
-  // ran into 401 on its first fetch. The endpoints are public-by-design
-  // (no PII, no tenant scope; safe to serve unauthenticated).
+  // Public-by-design endpoints: no PII, no tenant scope, and safe to serve
+  // unauthenticated.
   '/api/v1/openapi.json',
   '/.well-known/spatula-version',
 ]);
 
-// Phase 17 plan 17-02: SSE paths use ?token= (single-use stream token consumed
-// via GETDEL in-handler). EventSource cannot send Authorization headers, so the
-// auth middleware must not intercept these paths. The handler performs its own
-// token-based ownership check (mirrors the WS upgrade in server.ts).
+// SSE paths use ?token= (single-use stream token consumed via GETDEL in the
+// handler). EventSource cannot send Authorization headers, so the auth middleware
+// must not intercept these paths. The handler performs its own token-based
+// ownership check (mirrors the WS upgrade in server.ts).
 // Pattern: /api/v1/jobs/<anything>/events
 const SKIP_AUTH_PREFIXES_SSE = /^\/api\/v1\/jobs\/[^/]+\/events$/;
 
@@ -40,7 +37,7 @@ export function authMiddleware(
     if (SKIP_AUTH_PREFIXES.some((p) => c.req.path.startsWith(p))) {
       return next();
     }
-    // SSE paths do their own in-handler ?token= auth (RESEARCH Pitfall 2)
+    // SSE paths do their own in-handler ?token= auth.
     if (SKIP_AUTH_PREFIXES_SSE.test(c.req.path)) {
       return next();
     }
@@ -84,7 +81,6 @@ export function authMiddleware(
         if (refreshed.length === 0) {
           return c.json(
             {
-              // Phase 16 plan 16-1: frozen DOMAIN.CODE enum value (was 'SERVER_ERROR').
               error: { code: ErrorCode.INTERNAL_ERROR, message: 'Failed to provision tenant' },
             },
             500,
@@ -100,7 +96,6 @@ export function authMiddleware(
         if (!requestedTenantId) {
           return c.json(
             {
-              // Phase 16 plan 16-1: frozen DOMAIN.CODE enum value (was 'TENANT_REQUIRED').
               error: {
                 code: ErrorCode.VALIDATION_PARAMS,
                 message: 'Multiple tenants found. Specify X-Tenant-Id header.',
@@ -118,7 +113,6 @@ export function authMiddleware(
         if (!match) {
           return c.json(
             {
-              // Phase 16 plan 16-1: frozen DOMAIN.CODE enum value (was 'TENANT_FORBIDDEN').
               error: {
                 code: ErrorCode.AUTH_INSUFFICIENT_SCOPE,
                 message: 'User does not belong to the specified tenant.',
