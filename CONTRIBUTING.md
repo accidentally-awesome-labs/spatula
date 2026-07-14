@@ -7,9 +7,9 @@ Thank you for your interest in contributing! This guide covers how to set up you
 ### Prerequisites
 
 - Node.js 22+
-- pnpm 9.15+
+- pnpm 11.13.x via `corepack enable`
 - Docker (for PostgreSQL and Redis)
-- Playwright browsers: `npx playwright install`
+- Playwright browsers: `pnpm --filter @spatula/cli exec playwright install chromium`
 
 ### Setup
 

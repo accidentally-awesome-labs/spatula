@@ -7,8 +7,7 @@
  *
  * Prerequisites (must be met before this suite can run):
  *   1. Playwright Chromium binaries:
- *        npx playwright install chromium
- *      (or: pnpm --filter @spatula/cli exec playwright install chromium)
+ *        pnpm --filter @spatula/cli exec playwright install chromium
  *   2. Docker for Dex IDP:
  *        docker compose -f examples/auth-dex/docker-compose.yml up -d
  *   3. Postgres: TEST_DATABASE_URL env (default: postgresql://spatula:spatula@localhost:5432/spatula_test)
@@ -30,6 +29,7 @@ import * as url from 'node:url';
 import { execFileSync } from 'node:child_process';
 import { createHash, randomBytes } from 'node:crypto';
 import { resolve } from 'node:path';
+import type { SpatulaQueues } from '@spatula/queue';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Constants
@@ -181,12 +181,11 @@ async function startApiServer(): Promise<ApiHandle> {
   const redis = new Redis(redisUrl, { lazyConnect: false, maxRetriesPerRequest: 3 });
 
   // Wire a real JobManager so POST /api/v1/jobs can persist to the DB.
-  /* eslint-disable @typescript-eslint/no-explicit-any */
   const jobManager = new JobManager({
     jobRepo,
     taskRepo,
     schemaRepo,
-    queues: {} as any, // not needed for createJob
+    queues: {} as SpatulaQueues, // not needed for createJob
     tenantRepo,
   });
 
@@ -228,7 +227,6 @@ async function startApiServer(): Promise<ApiHandle> {
     authProvider,
     redis,
   } as any;
-  /* eslint-enable @typescript-eslint/no-explicit-any */
 
   const app = createApp(deps);
 
@@ -315,8 +313,7 @@ async function collectSseEvents(
 ): Promise<{ events: CollectedEvent[]; lastId: string | undefined; truncated: boolean }> {
   const { subscribeJobEvents } = await import('@spatula/client');
   // Minimal ClientLike — subscribeJobEvents only needs baseUrl.
-  /* eslint-disable @typescript-eslint/no-explicit-any */
-  const clientLike = { baseUrl } as any;
+  const clientLike = { baseUrl };
 
   const events: CollectedEvent[] = [];
   let lastId: string | undefined;
@@ -332,7 +329,7 @@ async function collectSseEvents(
     const unsubscribe = subscribeJobEvents(clientLike, jobId, {
       token,
       lastEventId: opts.lastEventId,
-      onEvent: (evt: import('@spatula/client').JobEvent) => {
+      onEvent: (evt) => {
         const collected = evt as CollectedEvent;
         events.push(collected);
         lastId = collected.id;
@@ -351,7 +348,6 @@ async function collectSseEvents(
       },
     });
   });
-  /* eslint-enable @typescript-eslint/no-explicit-any */
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -409,7 +405,7 @@ describe('Browser OIDC + SSE reconnect chain', () => {
     apiServer = await startApiServer();
 
     // ── Step 2: Launch Chromium (for the OIDC login step) ───────────────────
-    // Requires: npx playwright install chromium (one-time setup).
+    // Requires: pnpm --filter @spatula/cli exec playwright install chromium (one-time setup).
     browser = await chromium.launch({ headless: true });
     context = await browser.newContext();
   }, 120_000);

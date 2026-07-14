@@ -7,7 +7,7 @@
  * Dependency-free: uses global fetch (Node 18+).
  *
  * Usage:
- *   npx tsx smoke/check-dex.ts
+ *   pnpm exec tsx smoke/check-dex.ts
  *   node smoke/check-dex.ts   # Node 18+ with --experimental-fetch (default on 21+)
  */
 
@@ -34,7 +34,7 @@ async function main(): Promise<void> {
   let body: Record<string, unknown>;
   try {
     body = (await res.json()) as Record<string, unknown>;
-  } catch (err) {
+  } catch {
     console.error(`check-dex: discovery doc did not return valid JSON from ${DISCOVERY_URL}`);
     process.exit(1);
   }

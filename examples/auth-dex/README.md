@@ -73,7 +73,7 @@ Three scripts in `smoke/` let you verify the IDP is working and exercise both au
 Fetches the OIDC discovery doc and exits 0 on success, 1 on failure. Dependency-free (global `fetch`).
 
 ```bash
-npx tsx smoke/check-dex.ts
+pnpm exec tsx smoke/check-dex.ts
 # Prints: dex-ok
 ```
 
@@ -84,8 +84,8 @@ Use this as a readiness gate in e2e suites before driving flows.
 A Playwright-based runnable reference script that drives the full `spatula-browser` PKCE authorization-code flow against Dex. Requires `playwright install chromium` first.
 
 ```bash
-npx playwright install chromium   # one-time setup
-npx tsx smoke/browser-flow.ts
+pnpm exec playwright install chromium   # one-time setup
+pnpm exec tsx smoke/browser-flow.ts
 # Prints: browser-flow-ok + decoded JWT claims
 ```
 
@@ -96,7 +96,7 @@ The [browser E2E suite](../../tests/e2e/browser/) extends this into the full OID
 A dependency-free Node script that POSTs a `client_credentials` grant to the Dex token endpoint and decodes the resulting JWT. No Playwright needed.
 
 ```bash
-npx tsx smoke/m2m-flow.ts
+pnpm exec tsx smoke/m2m-flow.ts
 # Prints: m2m-flow-ok + decoded JWT claims
 ```
 

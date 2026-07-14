@@ -1,6 +1,7 @@
 import { execFileSync } from 'node:child_process';
 import { existsSync } from 'node:fs';
 import { join } from 'node:path';
+import { chromium } from 'playwright';
 import type { HealthCheck } from './health-check.js';
 
 export function createSystemChecks(cwd = process.cwd()): HealthCheck[] {
@@ -61,14 +62,18 @@ export function createSystemChecks(cwd = process.cwd()): HealthCheck[] {
       category: 'system',
       async run() {
         try {
-          execFileSync('npx', ['playwright', '--version'], { stdio: 'pipe', timeout: 10000 });
-          return { status: 'pass', message: 'Playwright browsers installed' };
+          const executablePath = chromium.executablePath();
+          if (existsSync(executablePath)) {
+            return { status: 'pass', message: 'Playwright Chromium browser installed' };
+          }
         } catch {
-          return {
-            status: 'warn',
-            message: 'Playwright not installed (run: npx playwright install)',
-          };
+          /* fall through to warning */
         }
+
+        return {
+          status: 'warn',
+          message: 'Playwright Chromium browser not installed (run: spatula setup)',
+        };
       },
     },
     {

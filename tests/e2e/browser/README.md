@@ -11,8 +11,6 @@ This is a **heavy** suite. It requires Docker, Playwright Chromium binaries, a l
 ### 1. Playwright Chromium Binaries (one-time setup)
 
 ```bash
-npx playwright install chromium
-# or, if you are in the monorepo:
 pnpm --filter @spatula/cli exec playwright install chromium
 ```
 
@@ -42,7 +40,7 @@ Set `TEST_DATABASE_URL` or `DATABASE_URL` (defaults to `postgresql://spatula:spa
 The schema must be migrated:
 
 ```bash
-pnpm --filter @spatula/db run migrate
+pnpm --filter @spatula/db db:migrate
 ```
 
 ### 4. Redis
@@ -99,7 +97,7 @@ The normal PR jobs run unit, contract, and infrastructure-light test suites on e
 ## Troubleshooting
 
 **`chromium: launch failed` or `browser: executable not found`**
-→ Run `npx playwright install chromium`
+→ Run `pnpm --filter @spatula/cli exec playwright install chromium`
 
 **`Failed to start Dex IDP`**
 → Ensure Docker is running and `docker compose` v2 is available (`docker compose version`)

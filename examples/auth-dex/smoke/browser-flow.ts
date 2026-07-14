@@ -8,10 +8,10 @@
 //
 // Prerequisites:
 //   docker compose up -d          # boot Dex (see README.md)
-//   npx playwright install chromium  # install browser binaries (one-time)
+//   pnpm exec playwright install chromium  # install browser binaries (one-time)
 //
 // Usage:
-//   npx tsx smoke/browser-flow.ts
+//   pnpm exec tsx smoke/browser-flow.ts
 //
 // Note: Playwright handles PKCE (S256 code verifier + challenge) natively in the browser
 // context — do NOT hand-roll the code verifier. The browser generates and validates it.

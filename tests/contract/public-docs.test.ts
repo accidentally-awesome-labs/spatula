@@ -45,8 +45,16 @@ const STALE_PATTERNS: Array<{ pattern: RegExp; message: string }> = [
     message: '`spatula jobs:*` commands are not implemented',
   },
   {
-    pattern: /pnpm --filter @spatula\/db migrate\b/i,
+    pattern: /pnpm --filter @spatula\/db(?:\s+run)?\s+migrate\b/i,
     message: 'the db package migration script is `db:migrate`',
+  },
+  {
+    pattern: /\bnpx\s+(?:playwright|tsx)\b/i,
+    message: 'repo-local docs should use `pnpm exec`, not `npx`',
+  },
+  {
+    pattern: /\bpnpm\s+9(?:\.\d+)?\+?/i,
+    message: 'the repo requires pnpm 11.13.x',
   },
   {
     pattern: /multi-tenant SaaS API/i,

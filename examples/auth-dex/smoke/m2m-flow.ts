@@ -9,7 +9,7 @@
 // Dependency-free: uses global fetch (Node 18+). No test framework.
 //
 // Usage:
-//   npx tsx smoke/m2m-flow.ts
+//   pnpm exec tsx smoke/m2m-flow.ts
 //   node smoke/m2m-flow.ts   # Node 18+ (fetch available by default on Node 21+)
 
 export {}; // Treat as an ES module so top-level names don't collide with sibling scripts.
