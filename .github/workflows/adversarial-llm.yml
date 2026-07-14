@@ -28,6 +28,10 @@ on:
       - 'packages/core/src/extraction/__tests__/pinned-models.ts'
   workflow_dispatch:
 
+concurrency:
+  group: adversarial-llm-${{ github.event_name }}-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   adversarial-openrouter:
     name: Adversarial (OpenRouter pin)

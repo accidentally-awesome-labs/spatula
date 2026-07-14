@@ -7,6 +7,10 @@ on:
     branches: [main]
   workflow_dispatch:
 
+concurrency:
+  group: audit-${{ github.event_name }}-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   osv-scan:
     name: OSV Vulnerability Scan
