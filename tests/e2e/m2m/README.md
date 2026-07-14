@@ -44,7 +44,7 @@ pnpm exec vitest run --config tests/e2e/m2m/vitest.config.ts
 Or from the repo root:
 
 ```sh
-pnpm dlx tsx examples/auth-dex/smoke/check-dex.ts  # verify Dex is up first
+pnpm exec tsx examples/auth-dex/smoke/check-dex.ts # verify Dex is up first
 pnpm exec vitest run --config tests/e2e/m2m/vitest.config.ts
 ```
 

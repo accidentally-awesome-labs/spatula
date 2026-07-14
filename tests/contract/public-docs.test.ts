@@ -12,6 +12,7 @@ const PUBLIC_DOC_INPUTS = [
   'SECURITY.md',
   'package.json',
   'docs',
+  'deploy',
   'examples',
   'apps/api/README.md',
   'apps/cli/README.md',
@@ -21,6 +22,9 @@ const PUBLIC_DOC_INPUTS = [
   'packages/db/README.md',
   'packages/queue/README.md',
   'packages/shared/README.md',
+  'tests/contract/README.md',
+  'tests/e2e/browser/README.md',
+  'tests/e2e/m2m/README.md',
 ];
 
 const SKIP_DIRS = new Set(['.git', 'node_modules']);
@@ -51,6 +55,10 @@ const STALE_PATTERNS: Array<{ pattern: RegExp; message: string }> = [
   {
     pattern: /\bnpx\s+(?:playwright|tsx)\b/i,
     message: 'repo-local docs should use `pnpm exec`, not `npx`',
+  },
+  {
+    pattern: /\bpnpm\s+dlx\s+tsx\b/i,
+    message: 'repo-local docs should use `pnpm exec tsx`, not `pnpm dlx tsx`',
   },
   {
     pattern: /\bpnpm\s+9(?:\.\d+)?\+?/i,
@@ -141,10 +149,53 @@ function publicTextFiles(): string[] {
 function registeredCliCommands(): Set<string> {
   const source = readFileSync(join(root, 'apps/cli/src/index.tsx'), 'utf8');
   const commands = new Set<string>();
-  for (const match of source.matchAll(/\.command\(\s*['`]([^'`\s]+)/g)) {
+  for (const match of source.matchAll(/^  \.command\(\s*['`]([^'`\s]+)/gm)) {
     commands.add(match[1]);
   }
   return commands;
+}
+
+function registeredAdminTenantActions(): Set<string> {
+  const source = readFileSync(join(root, 'apps/cli/src/index.tsx'), 'utf8');
+  const commandStart = source.indexOf("'tenant <action>'");
+  const choicesStart = source.indexOf('choices:', commandStart);
+  const choicesEnd = source.indexOf('] as const', choicesStart);
+
+  if (commandStart === -1 || choicesStart === -1 || choicesEnd === -1) {
+    return new Set();
+  }
+
+  const choicesSource = source.slice(choicesStart, choicesEnd);
+  return new Set([...choicesSource.matchAll(/['`]([a-z-]+)['`]/g)].map((match) => match[1]));
+}
+
+function normalizedCliInvocation(raw: string): string | null {
+  const invocation = raw
+    .trim()
+    .replace(/\s+#.*$/, '')
+    .replace(/[.,;:]$/, '');
+  return invocation.startsWith('spatula ') ? invocation : null;
+}
+
+function documentedCliInvocations(): Array<{ rel: string; invocation: string }> {
+  const invocations: Array<{ rel: string; invocation: string }> = [];
+
+  for (const file of publicTextFiles()) {
+    const rel = relative(root, file);
+    const text = readFileSync(file, 'utf8');
+
+    for (const match of text.matchAll(/`(spatula\s+[^`\n]+)`/g)) {
+      const invocation = normalizedCliInvocation(match[1]);
+      if (invocation) invocations.push({ rel, invocation });
+    }
+
+    for (const line of text.split('\n')) {
+      const invocation = normalizedCliInvocation(line);
+      if (invocation) invocations.push({ rel, invocation });
+    }
+  }
+
+  return invocations;
 }
 
 describe('public documentation guard', () => {
@@ -182,12 +233,37 @@ describe('public documentation guard', () => {
     expect(pkg.bugs?.url).toBe('https://github.com/accidentally-awesome-labs/spatula/issues');
   });
 
-  it('only lists implemented top-level CLI commands in the README command table', () => {
-    const readme = readFileSync(join(root, 'README.md'), 'utf8');
+  it('only documents implemented top-level CLI commands in public docs', () => {
     const registered = registeredCliCommands();
-    const documented = [...readme.matchAll(/`spatula ([a-z][a-z-]*)(?:\s|`)/g)].map((m) => m[1]);
+    const documented = documentedCliInvocations();
 
-    const unknown = documented.filter((cmd) => !registered.has(cmd));
+    const unknown = documented
+      .map(({ rel, invocation }) => {
+        const [, command] = invocation.split(/\s+/);
+        return { rel, invocation, command };
+      })
+      .filter(({ command }) => command && !command.startsWith('-') && !registered.has(command))
+      .map(({ rel, invocation }) => `${rel}: ${invocation}`);
+
+    expect(unknown).toEqual([]);
+  });
+
+  it('only documents implemented admin tenant CLI actions in public docs', () => {
+    const registered = registeredAdminTenantActions();
+    const documented = documentedCliInvocations();
+
+    const unknown = documented
+      .flatMap(({ rel, invocation }) => {
+        const [, command, resource, action] = invocation.split(/\s+/);
+        if (command !== 'admin' || resource !== 'tenant' || !action || action.startsWith('<')) {
+          return [];
+        }
+
+        return action.split('/').map((candidate) => ({ rel, invocation, action: candidate }));
+      })
+      .filter(({ action }) => !registered.has(action))
+      .map(({ rel, invocation }) => `${rel}: ${invocation}`);
+
     expect(unknown).toEqual([]);
   });
 });
