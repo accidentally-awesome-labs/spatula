@@ -14,6 +14,11 @@ resources:
   - postgres-stub.yaml
   - redis-stub.yaml
 
+patches:
+  # The k8s smoke workflow preloads these images into kind. Explicitly avoid
+  # Kubernetes' default Always pull policy for :latest tags.
+  - path: patch-image-pull-policy.yaml
+
 generatorOptions:
   disableNameSuffixHash: true
 

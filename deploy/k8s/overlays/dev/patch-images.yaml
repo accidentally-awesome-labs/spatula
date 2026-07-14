@@ -1,4 +1,0 @@
-# Dev image tag overrides — applied via the kustomization.yaml `images:` block.
-# This file is a placeholder; actual overrides live in kustomization.yaml images: stanza.
-# It is listed here for documentation clarity; no strategic-merge content needed.
-# See kustomization.yaml images: for the canonical override.

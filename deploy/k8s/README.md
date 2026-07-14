@@ -217,7 +217,7 @@ deploy/k8s/
     │   ├── kustomization.yaml     # base + stubs; images: :latest
     │   ├── postgres-stub.yaml     # throwaway PG (postgres:16-alpine, emptyDir)
     │   ├── redis-stub.yaml        # throwaway Redis (redis:7-alpine)
-    │   └── patch-images.yaml      # (documentation; images block in kustomization.yaml)
+    │   └── patch-image-pull-policy.yaml # use preloaded kind images for :latest
     └── prod/
         ├── kustomization.yaml     # base only; images: pinned tags
         └── patch-resources.yaml   # 2 replicas; cpu/memory requests+limits
