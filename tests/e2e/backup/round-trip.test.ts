@@ -150,10 +150,11 @@ describe('Backup -> restore round-trip', () => {
     );
 
     // Seed an api_key
+    const apiKeyHash = `hash_backup_test_${tenantId}`;
     await db.execute(
       sql`INSERT INTO api_keys (id, tenant_id, key_hash, key_prefix, name, scopes, created_at)
             VALUES (${randomUUID()}::uuid, ${tenantId}::uuid,
-                    ${'hash_backup_test'}, ${'spat_bk'}, ${'backup-key'},
+                    ${apiKeyHash}, ${'spat_bk'}, ${'backup-key'},
                     ${'{read}'}::text[], NOW())`,
     );
 
