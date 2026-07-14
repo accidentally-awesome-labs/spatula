@@ -8,6 +8,7 @@ const root = resolve(dirname(fileURLToPath(import.meta.url)), '../..');
 
 const PUBLIC_DOC_INPUTS = [
   'README.md',
+  '.github',
   'CONTRIBUTING.md',
   'SECURITY.md',
   'package.json',
@@ -35,6 +36,10 @@ const STALE_PATTERNS: Array<{ pattern: RegExp; message: string }> = [
   {
     pattern: /github\.com\/spatulaai\/spatula/i,
     message: 'use the public accidentally-awesome-labs/spatula repo URL',
+  },
+  {
+    pattern: /salar\.sayyad@gmail\.com/i,
+    message: 'do not publish personal email addresses in public-facing repo docs',
   },
   {
     pattern: /https:\/\/api\.spatula\.dev/i,

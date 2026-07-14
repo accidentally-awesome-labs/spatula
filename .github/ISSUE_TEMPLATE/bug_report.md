@@ -12,7 +12,7 @@ A clear and concise description of the bug.
 
 ## Steps to Reproduce
 
-1. Run `spatula ...`
+1. Run `spatula run ...`
 2. Configure with ...
 3. See error
 

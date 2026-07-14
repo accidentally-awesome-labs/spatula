@@ -5,20 +5,21 @@ prior to the public repository flip on 2026-05-20.
 
 ## Sole Copyright Holder
 
-**Salar Sayyad** — salar.sayyad@gmail.com
+**Salar Sayyad**
 
 ## Verification
 
-The following command confirms a single author across all commits in this repository:
+The following command confirms a single author name across all commits in this
+repository:
 
 ```
-git log --format='%ae' | sort -u
+git log --format='%an' | sort -u
 ```
 
 Output (run 2026-05-20):
 
 ```
-salar.sayyad@gmail.com
+Salar Sayyad
 ```
 
 ## Conclusion
