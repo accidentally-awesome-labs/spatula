@@ -3,12 +3,12 @@ import { createProjectChecks } from '../../../src/diagnostics/project-checks.js'
 import type { HealthCheck } from '../../../src/diagnostics/health-check.js';
 
 describe('createProjectChecks', () => {
-  it('returns 8 project checks', () => {
+  it('returns 10 project checks', () => {
     const checks = createProjectChecks({
       projectRoot: '/tmp/test',
       validateYaml: vi.fn().mockReturnValue(true),
     });
-    expect(checks).toHaveLength(8);
+    expect(checks).toHaveLength(10);
     expect(checks.every((c: HealthCheck) => c.category === 'project')).toBe(true);
   });
 
@@ -73,6 +73,41 @@ describe('createProjectChecks', () => {
     expect(result.status).toBe('pass');
   });
 
+  it('schema-state warns when the project database has no extraction schema', async () => {
+    const checks = createProjectChecks({
+      projectRoot: '/tmp/test',
+      validateYaml: vi.fn(),
+      getSchemaFieldCount: vi.fn().mockResolvedValue(null),
+    });
+    const result = await checks.find((c) => c.name === 'schema-state')!.run();
+    expect(result.status).toBe('warn');
+    expect(result.message).toContain('No extraction schema');
+    expect(result.message).toContain('spatula run');
+  });
+
+  it('schema-state passes for an initialized empty discovery schema', async () => {
+    const checks = createProjectChecks({
+      projectRoot: '/tmp/test',
+      validateYaml: vi.fn(),
+      getSchemaFieldCount: vi.fn().mockResolvedValue(0),
+    });
+    const result = await checks.find((c) => c.name === 'schema-state')!.run();
+    expect(result.status).toBe('pass');
+    expect(result.message).toContain('0 configured fields');
+  });
+
+  it('failed-tasks warns with the persisted crawl failure count', async () => {
+    const checks = createProjectChecks({
+      projectRoot: '/tmp/test',
+      validateYaml: vi.fn(),
+      getFailedTaskCount: vi.fn().mockResolvedValue(2),
+    });
+    const result = await checks.find((c) => c.name === 'failed-tasks')!.run();
+    expect(result.status).toBe('warn');
+    expect(result.message).toContain('2 crawl task');
+    expect(result.message).toContain('logs --errors');
+  });
+
   it('pending-actions check returns warn with count', async () => {
     const checks = createProjectChecks({
       projectRoot: '/tmp/test',
@@ -111,9 +146,9 @@ describe('createProjectChecks', () => {
     expect(result.message).toContain('self-hosted API');
   });
 
-  it('all 8 check names are unique', () => {
+  it('all 10 check names are unique', () => {
     const checks = createProjectChecks({ projectRoot: '/tmp/test', validateYaml: vi.fn() });
     const names = checks.map((c) => c.name);
-    expect(new Set(names).size).toBe(8);
+    expect(new Set(names).size).toBe(10);
   });
 });

@@ -8,7 +8,7 @@
  * parameters on interface methods are accepted but ignored — the
  * pre-bound projectId is always used.
  */
-import { eq, and, desc, sql } from 'drizzle-orm';
+import { eq, and, desc, inArray, sql } from 'drizzle-orm';
 import { createLogger } from '@accidentally-awesome-labs/spatula-shared';
 import type { CrawlTaskRepo } from '@accidentally-awesome-labs/spatula-core/pipeline/types.js';
 import type {
@@ -58,11 +58,28 @@ export class SqliteCrawlTaskRepository implements CrawlTaskRepo, TaskStatsRepo {
   }
 
   async updateStatus(taskId: string, _tenantId: string, status: string): Promise<unknown> {
-    const timestamps: Record<string, string> = {};
+    const timestamps: {
+      processedAt?: string | null;
+      completedAt?: string | null;
+      errorMessage?: string | null;
+      attempts?: number;
+    } = {};
     if (status === 'completed' || status === 'failed' || status === 'skipped') {
       const now = new Date().toISOString();
       timestamps.processedAt = now;
       timestamps.completedAt = now;
+      if (status === 'completed') {
+        timestamps.errorMessage = null;
+        timestamps.attempts = 0;
+      }
+    } else if (status === 'pending' || status === 'in_progress') {
+      // A retry/requeue must not retain terminal timestamps or stale errors.
+      timestamps.processedAt = null;
+      timestamps.completedAt = null;
+      if (status === 'pending') {
+        timestamps.errorMessage = null;
+        timestamps.attempts = 0;
+      }
     }
 
     wrapStorageError(
@@ -119,6 +136,66 @@ export class SqliteCrawlTaskRepository implements CrawlTaskRepo, TaskStatsRepo {
       .where(and(eq(crawlTasks.jobId, this.projectId), eq(crawlTasks.status, 'completed')))
       .all();
     return rows.map((r) => r.url);
+  }
+
+  async recordFailure(taskId: string, errorMessage: string, attempts: number): Promise<void> {
+    wrapStorageError(
+      () => {
+        this.db
+          .update(crawlTasks)
+          .set({ errorMessage, attempts })
+          .where(eq(crawlTasks.id, taskId))
+          .run();
+      },
+      { method: 'recordFailure', table: 'crawl_tasks', taskId },
+    );
+  }
+
+  async findRecentFailures(
+    _jobId: string,
+    limit = 5,
+  ): Promise<
+    Array<{
+      id: string;
+      url: string;
+      errorMessage: string | null;
+      attempts: number | null;
+      completedAt: string | null;
+    }>
+  > {
+    return this.db
+      .select({
+        id: crawlTasks.id,
+        url: crawlTasks.url,
+        errorMessage: crawlTasks.errorMessage,
+        attempts: crawlTasks.attempts,
+        completedAt: crawlTasks.completedAt,
+      })
+      .from(crawlTasks)
+      .where(and(eq(crawlTasks.jobId, this.projectId), eq(crawlTasks.status, 'failed')))
+      .orderBy(desc(crawlTasks.completedAt))
+      .limit(limit)
+      .all();
+  }
+
+  async requeueByStatuses(_jobId: string, statuses: string[]): Promise<number> {
+    if (statuses.length === 0) return 0;
+
+    return wrapStorageError(
+      () =>
+        this.db
+          .update(crawlTasks)
+          .set({
+            status: 'pending',
+            processedAt: null,
+            completedAt: null,
+            errorMessage: null,
+            attempts: 0,
+          })
+          .where(and(eq(crawlTasks.jobId, this.projectId), inArray(crawlTasks.status, statuses)))
+          .run().changes,
+      { method: 'requeueByStatuses', table: 'crawl_tasks' },
+    );
   }
 
   /**

@@ -254,7 +254,9 @@ export class LocalDataSource implements DataSource {
     // Use the underlying EventEmitter addListener/removeListener to avoid
     // fighting the typed overloads on PipelineEventEmitter.on()
     const ee = this.emitter as unknown as NodeJS.EventEmitter;
+    const taskFailed = (data: unknown): void => callback({ type: 'task:failed', data });
     ee.on('task:completed', taskCompleted);
+    ee.on('task:failed', taskFailed);
     ee.on('entity:created', entityCreated);
     ee.on('schema:evolved', schemaEvolved);
     ee.on('action:pending', actionPending);
@@ -262,6 +264,7 @@ export class LocalDataSource implements DataSource {
 
     return () => {
       ee.off('task:completed', taskCompleted);
+      ee.off('task:failed', taskFailed);
       ee.off('entity:created', entityCreated);
       ee.off('schema:evolved', schemaEvolved);
       ee.off('action:pending', actionPending);

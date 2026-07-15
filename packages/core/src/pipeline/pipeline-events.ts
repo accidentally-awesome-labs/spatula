@@ -2,6 +2,14 @@ import { EventEmitter } from 'node:events';
 
 export interface PipelineEvents {
   'task:completed': (task: { id: string; url: string; status: string }) => void;
+  'task:failed': (task: {
+    id: string;
+    url: string;
+    error: string;
+    retryable: boolean;
+    attempts: number;
+    statusCode?: number;
+  }) => void;
   'entity:created': (entity: { id: string; jobId: string }) => void;
   'schema:evolved': (schema: { version: number; fields: unknown[] }) => void;
   'action:pending': (action: { id: string; type: string }) => void;

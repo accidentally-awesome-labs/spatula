@@ -17,6 +17,10 @@ import { isMeaningfulRecord } from './record-utils.js';
 
 const EXTRACTABLE_CLASSIFICATIONS = new Set(['single_entry', 'multiple_entries', 'partial']);
 
+function isRetryableHttpStatus(statusCode: number): boolean {
+  return statusCode === 408 || statusCode === 425 || statusCode === 429 || statusCode >= 500;
+}
+
 function normalizeHostname(hostname: string): string {
   return hostname.toLowerCase().replace(/^\[/, '').replace(/\]$/, '').replace(/\.$/, '');
 }
@@ -119,6 +123,9 @@ export async function processCrawlTask(
         tenantId,
         contentRef,
         contentHash,
+        url,
+        statusCode: crawlResult.statusCode,
+        title: crawlResult.title,
         metadata: {
           url,
           title: crawlResult.title,
@@ -126,6 +133,31 @@ export async function processCrawlTask(
           responseTimeMs: crawlResult.metadata.responseTimeMs,
         },
       });
+    }
+
+    // HTTP error pages are useful diagnostic artifacts, so archive them above,
+    // but never spend LLM calls classifying/extracting them or follow their links.
+    if (crawlResult.statusCode >= 400) {
+      const error = new CrawlError(`HTTP ${crawlResult.statusCode} while crawling ${url}`, {
+        context: { taskId, url, statusCode: crawlResult.statusCode },
+        retryable: isRetryableHttpStatus(crawlResult.statusCode),
+      });
+      logger.warn(
+        { taskId, url, statusCode: crawlResult.statusCode, retryable: error.retryable },
+        'HTTP error response archived; task failed before LLM processing',
+      );
+      await deps.taskRepo.updateStatus(taskId, tenantId, 'failed');
+      return {
+        pageId: page.id,
+        classification: 'unknown',
+        extracted: false,
+        linksFound: [],
+        contentHash,
+        deduplicated,
+        schemaVersion: null,
+        evolutionConfig: null,
+        error,
+      };
     }
 
     // 3. Load job config
@@ -263,7 +295,11 @@ export async function processCrawlTask(
     const wrappedError =
       error instanceof CrawlError || error instanceof NetworkError
         ? error
-        : new CrawlError('Crawl task failed', { cause: error as Error, context: { taskId, url } });
+        : new CrawlError('Crawl task failed', {
+            cause: error as Error,
+            context: { taskId, url },
+            retryable: true,
+          });
     logger.error({ taskId, url, error: wrappedError }, 'crawl task failed');
     await deps.taskRepo.updateStatus(taskId, tenantId, 'failed').catch((e) => {
       logger.error({ taskId, error: e }, 'failed to mark task as failed');

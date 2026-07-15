@@ -247,6 +247,67 @@ describe('processCrawlTask', () => {
     expect(result.extracted).toBe(false);
   });
 
+  it('stores but rejects HTTP 404 pages before classification or extraction', async () => {
+    const deps = createMockDeps();
+    (deps.crawler.crawl as any).mockResolvedValue({
+      url: 'https://example.com/missing',
+      html: '<html><title>Not found</title></html>',
+      title: 'Not found',
+      statusCode: 404,
+      contentType: 'text/html',
+      links: [{ url: 'https://example.com/untrusted-error-link', text: 'Home' }],
+      metadata: {
+        crawledAt: new Date(),
+        responseTimeMs: 20,
+        contentLength: 38,
+        crawlerType: 'playwright',
+      },
+    });
+
+    const result = await processCrawlTask(
+      { ...defaultInput, url: 'https://example.com/missing' },
+      deps,
+    );
+
+    expect(deps.pageRepo.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        url: 'https://example.com/missing',
+        statusCode: 404,
+        title: 'Not found',
+      }),
+    );
+    expect(deps.classifier.classify).not.toHaveBeenCalled();
+    expect(deps.extractor.extract).not.toHaveBeenCalled();
+    expect(deps.taskRepo.updateStatus).toHaveBeenLastCalledWith('task-1', 'tenant-1', 'failed');
+    expect(result.error?.message).toContain('HTTP 404');
+    expect((result.error as any).retryable).toBe(false);
+    expect(result.pageId).toBe('page-1');
+    expect(result.linksFound).toEqual([]);
+  });
+
+  it('marks transient HTTP failures as retryable without invoking the LLM', async () => {
+    const deps = createMockDeps();
+    (deps.crawler.crawl as any).mockResolvedValue({
+      url: 'https://example.com/temporarily-unavailable',
+      html: '<html><title>Unavailable</title></html>',
+      title: 'Unavailable',
+      statusCode: 503,
+      contentType: 'text/html',
+      links: [],
+      metadata: {
+        crawledAt: new Date(),
+        responseTimeMs: 20,
+        contentLength: 40,
+        crawlerType: 'playwright',
+      },
+    });
+
+    const result = await processCrawlTask(defaultInput, deps);
+
+    expect(deps.classifier.classify).not.toHaveBeenCalled();
+    expect((result.error as any).retryable).toBe(true);
+  });
+
   it('returns valid links filtered by URL validation', async () => {
     const deps = createMockDeps();
     (deps.crawler.crawl as any).mockResolvedValue({

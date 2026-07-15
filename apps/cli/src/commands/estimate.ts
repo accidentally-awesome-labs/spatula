@@ -25,7 +25,8 @@ export function formatCostEstimate(estimate: CostEstimate): string {
   );
   lines.push('  ' + '-'.repeat(60));
   for (const entry of estimate.llmCallBreakdown) {
-    const model = entry.model.length > 16 ? entry.model.slice(-16) : entry.model;
+    const modelName = entry.model.split('/').at(-1) ?? entry.model;
+    const model = modelName.length > 18 ? `${modelName.slice(0, 15)}...` : modelName;
     lines.push(
       `  ${entry.purpose.padEnd(22)} ${model.padEnd(18)} ${String(entry.calls).padEnd(8)} $${entry.costUsd.toFixed(3)}`,
     );

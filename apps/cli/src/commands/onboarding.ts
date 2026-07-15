@@ -22,6 +22,75 @@ export interface OnboardingField {
   required?: boolean;
 }
 
+export interface EmptyResultDiagnostics {
+  schemaFields: number | null;
+  taskStats: {
+    pending: number;
+    inProgress: number;
+    completed: number;
+    failed: number;
+    skipped: number;
+  };
+  failures: Array<{
+    url: string;
+    errorMessage: string | null;
+    attempts: number | null;
+  }>;
+}
+
+export function formatEmptyResultDiagnostics(details: EmptyResultDiagnostics): string[] {
+  const lines = ['  The crawl finished, but no structured entities were extracted.'];
+
+  if (details.schemaFields === null) {
+    lines.push(
+      '  No extraction schema exists for this local project.',
+      '  Run `spatula run` to initialize it from the fields in spatula.yaml.',
+    );
+    return lines;
+  }
+
+  if (details.failures.length > 0) {
+    lines.push('', '  Crawl failures:');
+    for (const failure of details.failures) {
+      const message = failure.errorMessage ?? 'Unknown crawl error';
+      lines.push(`  • ${failure.url} — ${message}`);
+    }
+    lines.push(
+      '',
+      '  Fix the failed seed URL or crawler configuration, then run `spatula run` again.',
+      '  Full details: `spatula logs --errors`',
+    );
+    return lines;
+  }
+
+  if (details.taskStats.pending > 0 || details.taskStats.inProgress > 0) {
+    lines.push(
+      `  Crawl work remains (${details.taskStats.pending} pending, ${details.taskStats.inProgress} in progress).`,
+      '  Run `spatula run` again to resume it.',
+    );
+    return lines;
+  }
+
+  if (details.taskStats.completed > 0) {
+    lines.push(
+      `  ${details.taskStats.completed} page(s) completed, but none were extractable for the requested fields.`,
+      '  Check that the seed points to a real listing or detail page and review `spatula.yaml`.',
+    );
+    return lines;
+  }
+
+  if (details.taskStats.skipped > 0) {
+    lines.push(
+      `  ${details.taskStats.skipped} page(s) were skipped by crawl policy.`,
+      '  Run `spatula doctor` to inspect project and crawler configuration.',
+    );
+    return lines;
+  }
+
+  lines.push('  No crawl tasks were processed. Check the seed URLs in spatula.yaml.');
+  return lines;
+}
+
 export function inferFields(description: string): OnboardingField[] {
   const pieces = description
     .split(/[,\n]/)
@@ -65,12 +134,28 @@ async function previewResults(io: PromptIO, cwd: string): Promise<boolean> {
   try {
     const result = await project.dataSource.getEntities({ limit: 3, offset: 0 });
     if (result.total === 0) {
+      const [schema, taskStats, failures] = await Promise.all([
+        project.adapter.schemaRepo.findLatest(project.projectId, project.projectId),
+        project.adapter.taskRepo.getJobStats(project.projectId, project.projectId),
+        project.adapter.taskRepo.findRecentFailures(project.projectId, 5),
+      ]);
+      const fields = schema ? (schema.definition as { fields?: unknown }).fields : undefined;
+      const schemaFields = schema
+        ? Array.isArray(fields)
+          ? fields.length
+          : fields && typeof fields === 'object'
+            ? Object.keys(fields as Record<string, unknown>).length
+            : 0
+        : null;
+
       line(io);
-      line(io, '  The crawl finished, but no structured entities were extracted.');
-      line(
-        io,
-        '  Run `spatula doctor`, then inspect the latest file with `spatula logs --errors`.',
-      );
+      for (const diagnosticLine of formatEmptyResultDiagnostics({
+        schemaFields,
+        taskStats,
+        failures,
+      })) {
+        line(io, diagnosticLine);
+      }
       return false;
     }
 

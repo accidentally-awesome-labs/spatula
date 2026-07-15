@@ -123,26 +123,9 @@ fields:
   const { db, close } = createProjectDb(dbPath);
   initializeProjectDb(db, { projectId, name: 'Tier 2 Pipeline Test' });
 
-  // Seed initial schema (version 1) from user-defined fields.
-  // In production, this is done by JobManager (server mode) or `spatula new`.
-  // Without a schema, the crawl-orchestrator skips extraction and link evaluation.
-  const adapter = new ProjectAdapter(db, projectId);
-  adapter.schemaRepo.create({
-    jobId: projectId,
-    tenantId: projectId,
-    version: 1,
-    definition: {
-      version: 1,
-      fields: [
-        { name: 'title', description: 'Title of the entity', type: 'string', required: true },
-        { name: 'price', description: 'Price of the product', type: 'currency', required: false },
-      ],
-      fieldAliases: [],
-      createdAt: new Date(),
-      parentVersion: null,
-    },
-  });
-
+  // LocalPipelineRunner must bootstrap schema version 1 from spatula.yaml.
+  // Keeping the fixture database schema-free makes this an end-to-end regression
+  // test for the same fresh-project path used by guided onboarding and `spatula run`.
   close();
 
   return {

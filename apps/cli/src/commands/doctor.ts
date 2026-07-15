@@ -7,6 +7,7 @@ import {
   findProjectRoot,
 } from '@accidentally-awesome-labs/spatula-core';
 import type { CheckCategory, CheckResult } from '@accidentally-awesome-labs/spatula-core';
+import { openLocalProject, type LocalProject } from '../local-project.js';
 
 export function determineCategoriesFromContext(context: {
   hasEnv: boolean;
@@ -55,6 +56,8 @@ export async function runDoctorCommand(): Promise<void> {
   );
 
   const registry = new HealthCheckRegistry();
+  let localProject: LocalProject | null = null;
+  let projectOpenError: Error | null = null;
   for (const check of createSystemChecks()) registry.register(check);
 
   if (hasEnv) {
@@ -66,12 +69,66 @@ export async function runDoctorCommand(): Promise<void> {
       await import('@accidentally-awesome-labs/spatula-core');
     const projectRoot = findProjectRoot(process.cwd());
     if (projectRoot) {
+      const dbPath = join(projectRoot, '.spatula', 'project.db');
+      if (existsSync(dbPath)) {
+        try {
+          localProject = await openLocalProject(projectRoot);
+        } catch (error) {
+          projectOpenError = error instanceof Error ? error : new Error(String(error));
+        }
+      }
+
       const projectChecks = createProjectChecks({
         projectRoot,
         validateYaml: () => {
           parseProjectYamlFile(join(projectRoot, 'spatula.yaml'));
           return true;
         },
+        ...(projectOpenError
+          ? {
+              checkDbIntegrity: async () => ({
+                ok: false,
+                message: projectOpenError!.message,
+              }),
+            }
+          : {}),
+        ...(localProject
+          ? {
+              getOrphanedTaskCount: async () => {
+                const stats = await localProject!.adapter.taskRepo.getJobStats(
+                  localProject!.projectId,
+                  localProject!.projectId,
+                );
+                return stats.inProgress;
+              },
+              getSchemaFieldCount: async () => {
+                const schema = await localProject!.adapter.schemaRepo.findLatest(
+                  localProject!.projectId,
+                  localProject!.projectId,
+                );
+                if (!schema) return null;
+                const fields = (schema.definition as { fields?: unknown }).fields;
+                if (Array.isArray(fields)) return fields.length;
+                return fields && typeof fields === 'object'
+                  ? Object.keys(fields as Record<string, unknown>).length
+                  : 0;
+              },
+              getFailedTaskCount: async () => {
+                const stats = await localProject!.adapter.taskRepo.getJobStats(
+                  localProject!.projectId,
+                  localProject!.projectId,
+                );
+                return stats.failed;
+              },
+              getPendingActionCount: async () => {
+                const actions = await localProject!.adapter.actionRepo.findByJob(
+                  localProject!.projectId,
+                  { status: 'pending_review', limit: 1_000 },
+                );
+                return actions.length;
+              },
+            }
+          : {}),
       });
       for (const check of projectChecks) {
         registry.register(check);
@@ -79,7 +136,12 @@ export async function runDoctorCommand(): Promise<void> {
     }
   }
 
-  const results = await registry.runChecks(categories);
+  let results: CheckResult[];
+  try {
+    results = await registry.runChecks(categories);
+  } finally {
+    localProject?.close();
+  }
   console.log(formatCheckResults(results));
 
   const hasFail = results.some((r) => r.status === 'fail');

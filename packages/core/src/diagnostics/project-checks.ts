@@ -7,6 +7,8 @@ export interface ProjectCheckConfig {
   validateYaml: () => boolean;
   checkDbIntegrity?: () => Promise<{ ok: boolean; message: string }>;
   getOrphanedTaskCount?: () => Promise<number>;
+  getSchemaFieldCount?: () => Promise<number | null>;
+  getFailedTaskCount?: () => Promise<number>;
   getPendingActionCount?: () => Promise<number>;
 }
 
@@ -70,6 +72,42 @@ export function createProjectChecks(config: ProjectCheckConfig): HealthCheck[] {
       },
     },
     {
+      name: 'schema-state',
+      category: 'project',
+      async run() {
+        if (!config.getSchemaFieldCount)
+          return { status: 'pass', message: 'No schema checker configured' };
+        const fieldCount = await config.getSchemaFieldCount();
+        if (fieldCount === null) {
+          return {
+            status: 'warn',
+            message:
+              'No extraction schema found — run `spatula run` to initialize it from spatula.yaml',
+          };
+        }
+        return {
+          status: 'pass',
+          message: `Extraction schema initialized (${fieldCount} configured fields)`,
+        };
+      },
+    },
+    {
+      name: 'failed-tasks',
+      category: 'project',
+      async run() {
+        if (!config.getFailedTaskCount)
+          return { status: 'pass', message: 'No failed task checker configured' };
+        const count = await config.getFailedTaskCount();
+        if (count > 0) {
+          return {
+            status: 'warn',
+            message: `${count} crawl task(s) failed — inspect \`spatula logs --errors\` and retry with \`spatula run\``,
+          };
+        }
+        return { status: 'pass', message: 'No failed crawl tasks' };
+      },
+    },
+    {
       name: 'page-files',
       category: 'project',
       async run() {
@@ -77,8 +115,7 @@ export function createProjectChecks(config: ProjectCheckConfig): HealthCheck[] {
         if (!existsSync(pagesDir))
           return { status: 'pass', message: 'No pages directory (no crawl data yet)' };
         try {
-          const entries = readdirSync(pagesDir);
-          return { status: 'pass', message: `${entries.length} page file(s) stored` };
+          return { status: 'pass', message: `${countFiles(pagesDir)} page file(s) stored` };
         } catch (err) {
           return {
             status: 'fail',
@@ -155,6 +192,18 @@ function dirSize(dirPath: string): number {
       const fp = join(dirPath, entry.name);
       if (entry.isFile()) total += statSync(fp).size;
       else if (entry.isDirectory()) total += dirSize(fp);
+    }
+  } catch {}
+  return total;
+}
+
+function countFiles(dirPath: string): number {
+  let total = 0;
+  try {
+    for (const entry of readdirSync(dirPath, { withFileTypes: true })) {
+      const fp = join(dirPath, entry.name);
+      if (entry.isFile()) total++;
+      else if (entry.isDirectory()) total += countFiles(fp);
     }
   } catch {}
   return total;

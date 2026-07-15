@@ -10,6 +10,24 @@ describe('PipelineEventEmitter', () => {
     expect(handler).toHaveBeenCalledWith({ id: '1', url: 'http://test', status: 'completed' });
   });
 
+  it('emits task failures with actionable details', () => {
+    const emitter = new PipelineEventEmitter();
+    const handler = vi.fn();
+    emitter.on('task:failed', handler);
+    emitter.emit('task:failed', {
+      id: 'task-404',
+      url: 'https://example.com/missing',
+      error: 'HTTP 404 while crawling URL',
+      retryable: false,
+      attempts: 1,
+      statusCode: 404,
+    });
+
+    expect(handler).toHaveBeenCalledWith(
+      expect.objectContaining({ id: 'task-404', statusCode: 404, retryable: false }),
+    );
+  });
+
   it('emits progress events with stats', () => {
     const emitter = new PipelineEventEmitter();
     const handler = vi.fn();

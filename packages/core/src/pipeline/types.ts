@@ -46,6 +46,10 @@ export interface PageRepo {
     contentRef: string;
     contentHash: string;
     metadata: Record<string, unknown>;
+    url?: string;
+    statusCode?: number;
+    title?: string;
+    classification?: string;
   }): Promise<{ id: string }>;
 }
 

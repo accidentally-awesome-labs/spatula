@@ -36,6 +36,22 @@ describe('formatCostEstimate', () => {
     expect(o).toContain('extraction');
     expect(o).toContain('pageRelevance');
   });
+  it('shows a provider-qualified model name without dropping its first character', () => {
+    const deepseekEstimate: CostEstimate = {
+      ...estimate,
+      llmCallBreakdown: [
+        {
+          purpose: 'extraction',
+          model: 'deepseek/deepseek-v4-flash',
+          calls: 1,
+          tokens: 100,
+          costUsd: 0.001,
+        },
+      ],
+    };
+
+    expect(formatCostEstimate(deepseekEstimate)).toContain(' deepseek-v4-flash ');
+  });
   it('shows warnings when present', () => {
     const w = { ...estimate, warnings: ['Wide crawl — cost may vary'] };
     expect(formatCostEstimate(w)).toContain('Wide crawl');

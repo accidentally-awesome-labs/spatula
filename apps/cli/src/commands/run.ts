@@ -305,6 +305,19 @@ export async function runRunCommand(options: RunOptions = {}): Promise<void> {
     });
   });
 
+  runner.events.on('task:failed', (failure) => {
+    process.stdout.write('\n');
+    console.error(`  Crawl failed: ${failure.url} — ${failure.error}`);
+    logToFile('error', `Crawl failed for ${failure.url}: ${failure.error}`, {
+      event: 'task:failed',
+      taskId: failure.id,
+      url: failure.url,
+      attempts: failure.attempts,
+      retryable: failure.retryable,
+      ...(failure.statusCode === undefined ? {} : { statusCode: failure.statusCode }),
+    });
+  });
+
   runner.events.on('schema:evolved', (schema: any) => {
     // Print on a new line so the evolution message isn't overwritten
     process.stdout.write('\n');

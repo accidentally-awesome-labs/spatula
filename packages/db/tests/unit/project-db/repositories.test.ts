@@ -418,6 +418,41 @@ describe('SQLite Repositories (in-memory)', () => {
       expect(pending.length).toBeGreaterThanOrEqual(1);
       expect(pending[0].url).toBe('https://example.com/page2');
     });
+
+    it('persists actionable failure details and can requeue failed tasks', async () => {
+      const failedTask = await adapter.taskRepo.enqueue({
+        jobId: projectId,
+        tenantId,
+        url: 'https://example.com/missing',
+        depth: 0,
+        parentTaskId: '',
+      });
+      await adapter.taskRepo.updateStatus(failedTask.id, tenantId, 'failed');
+      await adapter.taskRepo.recordFailure(
+        failedTask.id,
+        'HTTP 404 while crawling https://example.com/missing',
+        1,
+      );
+
+      const failures = await adapter.taskRepo.findRecentFailures(projectId, 5);
+      expect(failures).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            id: failedTask.id,
+            url: 'https://example.com/missing',
+            errorMessage: expect.stringContaining('HTTP 404'),
+            attempts: 1,
+          }),
+        ]),
+      );
+
+      const requeued = await adapter.taskRepo.requeueByStatuses(projectId, ['failed']);
+      expect(requeued).toBe(1);
+      expect(await adapter.taskRepo.findRecentFailures(projectId, 5)).toEqual([]);
+      expect((await adapter.taskRepo.findPending(projectId)).map((task) => task.id)).toContain(
+        failedTask.id,
+      );
+    });
   });
 
   // ---------------------------------------------------------------------------

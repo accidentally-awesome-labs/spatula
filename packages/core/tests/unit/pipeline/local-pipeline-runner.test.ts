@@ -26,6 +26,9 @@ function createMockConfig(overrides?: Partial<LocalPipelineConfig>): LocalPipeli
       failed: 0,
       skipped: 0,
     }),
+    requeueByStatuses: vi.fn().mockResolvedValue(0),
+    recordFailure: vi.fn().mockResolvedValue(undefined),
+    findRecentFailures: vi.fn().mockResolvedValue([]),
   };
 
   const pageRepo = {
@@ -277,6 +280,63 @@ describe('LocalPipelineRunner', () => {
     expect(runner).toBeInstanceOf(LocalPipelineRunner);
   });
 
+  it('bootstraps schema version 1 from configured fields before crawling', async () => {
+    cfg.config = {
+      ...cfg.config,
+      schema: {
+        mode: 'hybrid',
+        userFields: [
+          { name: 'name', type: 'string', description: 'Product name', required: true },
+          { name: 'price', type: 'currency', description: 'Purchase price', required: false },
+        ],
+      },
+    };
+
+    const schemaRepo = cfg.adapter.schemaRepo as any;
+    schemaRepo.findLatest.mockResolvedValue(null);
+
+    const runner = new LocalPipelineRunner(cfg);
+    await runner.run();
+
+    expect(schemaRepo.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        jobId: 'proj-1',
+        tenantId: 'proj-1',
+        version: 1,
+        definition: expect.objectContaining({
+          version: 1,
+          fields: cfg.config.schema.userFields,
+          fieldAliases: [],
+          parentVersion: null,
+        }),
+      }),
+    );
+  });
+
+  it('requeues terminal tasks when repairing a project that never had a schema', async () => {
+    const schemaRepo = cfg.adapter.schemaRepo as any;
+    schemaRepo.findLatest.mockResolvedValue(null);
+
+    const taskRepo = cfg.adapter.taskRepo as any;
+    taskRepo.getJobStats.mockResolvedValue({
+      pending: 0,
+      inProgress: 0,
+      completed: 1,
+      failed: 1,
+      skipped: 0,
+    });
+    taskRepo.requeueByStatuses.mockResolvedValue(2);
+
+    const runner = new LocalPipelineRunner(cfg);
+    await runner.run();
+
+    expect(taskRepo.requeueByStatuses).toHaveBeenCalledWith('proj-1', [
+      'completed',
+      'failed',
+      'skipped',
+    ]);
+  });
+
   // 2. Creates run record on start
   it('creates a run record on start', async () => {
     // Set up seed URL task so the runner has something to do
@@ -514,13 +574,70 @@ describe('LocalPipelineRunner', () => {
     } satisfies CrawlTaskResult);
 
     const runner = new LocalPipelineRunner(cfg);
-    await runner.run();
+    await expect(runner.run()).rejects.toThrow('All crawl tasks failed');
 
     // Called maxRetries (3) times
     expect(mockProcessCrawlTask).toHaveBeenCalledTimes(3);
 
     // Task should be marked as failed
     expect(taskRepo.updateStatus).toHaveBeenCalledWith('task-doomed', expect.any(String), 'failed');
+    expect(taskRepo.recordFailure).toHaveBeenCalledWith('task-doomed', 'permanent failure', 3);
+  });
+
+  it('does not retry non-retryable crawl failures', async () => {
+    const taskRepo = cfg.adapter.taskRepo as any;
+    taskRepo.getJobStats.mockResolvedValue({
+      pending: 0,
+      inProgress: 0,
+      completed: 0,
+      failed: 0,
+      skipped: 0,
+    });
+    taskRepo.findPending
+      .mockResolvedValueOnce([
+        {
+          id: 'task-404',
+          url: 'https://example.com/missing',
+          depth: 0,
+          priorityScore: 100,
+          parentTaskId: null,
+          createdAt: new Date().toISOString(),
+        },
+      ])
+      .mockResolvedValue([]);
+
+    const error = Object.assign(new Error('HTTP 404 while crawling URL'), { retryable: false });
+    mockProcessCrawlTask.mockResolvedValue({
+      pageId: 'page-404',
+      classification: 'unknown',
+      extracted: false,
+      linksFound: [],
+      contentHash: '404-hash',
+      deduplicated: false,
+      schemaVersion: 1,
+      evolutionConfig: null,
+      error,
+    } satisfies CrawlTaskResult);
+
+    const runner = new LocalPipelineRunner(cfg);
+    const failures: unknown[] = [];
+    runner.events.on('task:failed', (failure) => failures.push(failure));
+    await expect(runner.run()).rejects.toThrow('All crawl tasks failed');
+
+    expect(mockProcessCrawlTask).toHaveBeenCalledTimes(1);
+    expect(taskRepo.recordFailure).toHaveBeenCalledWith(
+      'task-404',
+      'HTTP 404 while crawling URL',
+      1,
+    );
+    expect(failures).toEqual([
+      expect.objectContaining({
+        id: 'task-404',
+        url: 'https://example.com/missing',
+        error: 'HTTP 404 while crawling URL',
+        retryable: false,
+      }),
+    ]);
   });
 
   // 8. Calls reconciliation after crawl loop (if reconciler provided)
@@ -783,6 +900,83 @@ describe('LocalPipelineRunner', () => {
     expect(taskRepo.enqueue).toHaveBeenCalledWith(
       expect.objectContaining({ url: 'https://example.com/new-page', depth: 0 }),
     );
+  });
+
+  it('requeues terminal tasks when the crawler implementation changes', async () => {
+    const { adapter } = cfg;
+    const { taskRepo, runRepo } = adapter;
+    const mockDiffConfigs = diffConfigs as ReturnType<typeof vi.fn>;
+
+    cfg.config = {
+      ...cfg.config,
+      crawl: { ...cfg.config.crawl, crawlerType: 'firecrawl' },
+    };
+    (taskRepo.getJobStats as ReturnType<typeof vi.fn>).mockResolvedValue({
+      pending: 0,
+      inProgress: 0,
+      completed: 4,
+      failed: 1,
+      skipped: 1,
+    });
+    (runRepo.findLatestByStatus as ReturnType<typeof vi.fn>).mockResolvedValue({
+      id: 'prev-run',
+      configSnapshot: {
+        ...cfg.config,
+        crawl: { ...cfg.config.crawl, crawlerType: 'playwright' },
+      },
+    });
+    mockDiffConfigs.mockReturnValue({
+      hasChanges: true,
+      seedsAdded: [],
+      seedsRemoved: [],
+      fieldsAdded: [],
+      fieldsRemoved: [],
+      fieldsModified: [],
+      potentialRenames: [],
+      crawlChanged: {
+        crawlerType: { from: 'playwright', to: 'firecrawl' },
+        proxyChanged: false,
+        cookiesChanged: false,
+      },
+      llmChanged: false,
+      reconciliationChanged: false,
+      safetyChanged: false,
+      impact: {
+        newTasksToEnqueue: 0,
+        pagesNeedingReextraction: 0,
+        reextractionCostEstimate: 0,
+        failedTasksToRetry: 0,
+        skippedTasksToReenqueue: null,
+        forceFullReconciliation: false,
+      },
+    });
+    (taskRepo as any).requeueByStatuses.mockResolvedValue(6);
+
+    const runner = new LocalPipelineRunner(cfg);
+    await runner.run();
+
+    expect((taskRepo as any).requeueByStatuses).toHaveBeenCalledWith('proj-1', [
+      'completed',
+      'failed',
+      'skipped',
+    ]);
+  });
+
+  it('retries failed tasks from previous runs when configuration is unchanged', async () => {
+    const taskRepo = cfg.adapter.taskRepo as any;
+    taskRepo.getJobStats.mockResolvedValue({
+      pending: 0,
+      inProgress: 0,
+      completed: 0,
+      failed: 1,
+      skipped: 0,
+    });
+    taskRepo.requeueByStatuses.mockResolvedValue(1);
+
+    const runner = new LocalPipelineRunner(cfg);
+    await runner.run();
+
+    expect(taskRepo.requeueByStatuses).toHaveBeenCalledWith('proj-1', ['failed']);
   });
 
   it('flags pages for re-extraction when schema fields change', async () => {

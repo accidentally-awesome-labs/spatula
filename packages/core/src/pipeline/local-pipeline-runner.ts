@@ -85,6 +85,10 @@ interface TaskRepoLike {
     failed: number;
     skipped: number;
   }>;
+  /** Requeue terminal tasks for an explicit rerun/repair. Local adapters should clear stale failure metadata. */
+  requeueByStatuses?(jobId: string, statuses: string[]): Promise<number>;
+  /** Persist the final error after retries are exhausted. */
+  recordFailure?(taskId: string, errorMessage: string, attempts: number): Promise<void>;
 }
 
 interface RunRepoLike {
@@ -309,11 +313,44 @@ export class LocalPipelineRunner {
       // Step 4: Crash recovery — reset in_progress tasks to pending
       await this.recoverCrashedTasks(projectId);
 
+      // Local mode has no JobManager, so it must create the initial extraction
+      // schema itself before any page can be extracted or any link evaluated.
+      const schemaBootstrapped = await this.ensureInitialSchema(projectId, jobConfig);
+
       // Step 5: Config diff against last run
       const configDiff = await this.diffConfigWithLastRun(projectId, jobConfig);
 
       // Step 5b: Seed URL enqueue — first run or new seeds from config diff
-      const stats = await adapter.taskRepo.getJobStats(projectId, projectId);
+      const preRequeueStats = await adapter.taskRepo.getJobStats(projectId, projectId);
+      const requiresFullRecrawl =
+        schemaBootstrapped ||
+        Boolean(configDiff?.crawlChanged.crawlerType) ||
+        Boolean(configDiff?.crawlChanged.proxyChanged) ||
+        Boolean(configDiff?.crawlChanged.cookiesChanged);
+      const terminalTaskCount =
+        preRequeueStats.completed + preRequeueStats.failed + preRequeueStats.skipped;
+
+      let requeued = 0;
+      if (requiresFullRecrawl && terminalTaskCount > 0) {
+        requeued = await this.requeueTasks(projectId, ['completed', 'failed', 'skipped']);
+        logger.info(
+          {
+            requeued,
+            reason: schemaBootstrapped
+              ? 'schema bootstrap repair'
+              : 'crawler configuration changed',
+          },
+          'terminal crawl tasks requeued',
+        );
+      } else if (preRequeueStats.failed > 0) {
+        // An explicit new run is also an explicit retry of failures from the
+        // prior run. Non-retryable means "not within the same run", not never.
+        requeued = await this.requeueTasks(projectId, ['failed']);
+        logger.info({ requeued }, 'failed crawl tasks requeued for new run');
+      }
+
+      const stats =
+        requeued > 0 ? await adapter.taskRepo.getJobStats(projectId, projectId) : preRequeueStats;
       const totalExistingTasks =
         stats.pending + stats.inProgress + stats.completed + stats.failed + stats.skipped;
 
@@ -356,6 +393,12 @@ export class LocalPipelineRunner {
 
       // Step 8: Crawl loop
       await this.crawlLoop(projectId, budget, concurrency, jobConfig);
+
+      if (this.pagesProcessed === 0 && this.errors > 0) {
+        throw new Error(
+          `All crawl tasks failed (${this.errors} ${this.errors === 1 ? 'failure' : 'failures'}). Check the reported URLs and run \`spatula logs --errors\`.`,
+        );
+      }
 
       // If stopped/paused, skip post-processing
       if (this.isPaused) {
@@ -404,6 +447,39 @@ export class LocalPipelineRunner {
   // -------------------------------------------------------------------------
   // Crash recovery
   // -------------------------------------------------------------------------
+
+  private async ensureInitialSchema(projectId: string, jobConfig: any): Promise<boolean> {
+    const existing = await this.cfg.adapter.schemaRepo.findLatest(projectId, projectId);
+    if (existing) return false;
+
+    const fields = [...(jobConfig.schema?.userFields ?? [])];
+    await this.cfg.adapter.schemaRepo.create({
+      jobId: projectId,
+      tenantId: projectId,
+      version: 1,
+      definition: {
+        version: 1,
+        fields,
+        fieldAliases: [],
+        createdAt: new Date(),
+        parentVersion: null,
+      },
+    });
+    logger.info({ fieldCount: fields.length }, 'initial schema created from project config');
+    return true;
+  }
+
+  private async requeueTasks(projectId: string, statuses: string[]): Promise<number> {
+    const repo = this.cfg.adapter.taskRepo;
+    if (!repo.requeueByStatuses) {
+      logger.warn(
+        { statuses },
+        'task repository cannot requeue terminal tasks; run `spatula reset` to rebuild crawl state',
+      );
+      return 0;
+    }
+    return repo.requeueByStatuses(projectId, statuses);
+  }
 
   private async recoverCrashedTasks(projectId: string): Promise<void> {
     const stats = await this.cfg.adapter.taskRepo.getJobStats(projectId, projectId);
@@ -458,7 +534,15 @@ export class LocalPipelineRunner {
           fieldsAdded: diff.fieldsAdded.length,
           fieldsRemoved: diff.fieldsRemoved.length,
           fieldsModified: diff.fieldsModified.length,
-          crawlChanged: diff.crawlChanged.proxyChanged || diff.crawlChanged.cookiesChanged,
+          crawlChanged: Boolean(
+            diff.crawlChanged.maxDepth ||
+            diff.crawlChanged.maxPages ||
+            diff.crawlChanged.concurrency ||
+            diff.crawlChanged.crawlerType ||
+            diff.crawlChanged.proxyChanged ||
+            diff.crawlChanged.cookiesChanged,
+          ),
+          crawlChanges: diff.crawlChanged,
           llmChanged: diff.llmChanged,
         },
         'config changes detected since last run',
@@ -676,7 +760,8 @@ export class LocalPipelineRunner {
 
         // Check if the orchestrator signalled an error
         if (result.error) {
-          if (attempt < MAX_RETRIES) {
+          const retryable = getErrorRetryability(result.error);
+          if (retryable && attempt < MAX_RETRIES) {
             const retryBase = this.cfg.retryBaseMs ?? RETRY_BASE_MS;
             const backoff = retryBase * Math.pow(2, attempt - 1);
             logger.warn(
@@ -690,11 +775,12 @@ export class LocalPipelineRunner {
           }
           // Max retries exhausted
           logger.error(
-            { taskId: item.taskId, attempts: attempt },
-            'crawl task permanently failed after max retries',
+            { taskId: item.taskId, attempts: attempt, retryable },
+            retryable
+              ? 'crawl task permanently failed after max retries'
+              : 'crawl task failed with a non-retryable error',
           );
-          await this.cfg.adapter.taskRepo.updateStatus(item.taskId, projectId, 'failed');
-          this.errors++;
+          await this.recordTaskFailure(item, projectId, result.error, attempt, budget);
           return;
         }
 
@@ -754,11 +840,13 @@ export class LocalPipelineRunner {
 
         return; // Done with this task
       } catch (err) {
-        if (attempt < MAX_RETRIES) {
+        const error = err instanceof Error ? err : new Error(String(err));
+        const retryable = getErrorRetryability(error);
+        if (retryable && attempt < MAX_RETRIES) {
           const retryBase = this.cfg.retryBaseMs ?? RETRY_BASE_MS;
           const backoff = retryBase * Math.pow(2, attempt - 1);
           logger.warn(
-            { taskId: item.taskId, attempt, backoffMs: backoff, error: (err as Error).message },
+            { taskId: item.taskId, attempt, backoffMs: backoff, error: error.message },
             'crawl task threw, retrying',
           );
           await this.cfg.adapter.taskRepo.updateStatus(item.taskId, projectId, 'pending');
@@ -766,14 +854,43 @@ export class LocalPipelineRunner {
           continue;
         }
         logger.error(
-          { taskId: item.taskId, attempts: attempt, error: err },
-          'crawl task permanently failed after max retries (thrown)',
+          { taskId: item.taskId, attempts: attempt, retryable, error },
+          retryable
+            ? 'crawl task permanently failed after max retries (thrown)'
+            : 'crawl task threw a non-retryable error',
         );
-        await this.cfg.adapter.taskRepo.updateStatus(item.taskId, projectId, 'failed');
-        this.errors++;
+        await this.recordTaskFailure(item, projectId, error, attempt, budget);
         return;
       }
     }
+  }
+
+  private async recordTaskFailure(
+    item: CrawlQueueItem,
+    projectId: string,
+    error: Error,
+    attempts: number,
+    budget: InMemoryPageBudget,
+  ): Promise<void> {
+    await this.cfg.adapter.taskRepo.updateStatus(item.taskId, projectId, 'failed');
+    await this.cfg.adapter.taskRepo.recordFailure?.(item.taskId, error.message, attempts);
+    this.errors++;
+
+    const statusCode = getErrorStatusCode(error);
+    this.emitter.emit('progress', {
+      pagesProcessed: this.pagesProcessed,
+      totalPages: budget.maxPages,
+      entitiesCreated: 0,
+      errors: this.errors,
+    });
+    this.emitter.emit('task:failed', {
+      id: item.taskId,
+      url: item.url,
+      error: error.message,
+      retryable: getErrorRetryability(error),
+      attempts,
+      ...(statusCode === undefined ? {} : { statusCode }),
+    });
   }
 
   // -------------------------------------------------------------------------
@@ -925,4 +1042,14 @@ export class LocalPipelineRunner {
 
 function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+function getErrorRetryability(error: Error): boolean {
+  const retryable = (error as Error & { retryable?: unknown }).retryable;
+  return typeof retryable === 'boolean' ? retryable : true;
+}
+
+function getErrorStatusCode(error: Error): number | undefined {
+  const context = (error as Error & { context?: Record<string, unknown> }).context;
+  return typeof context?.statusCode === 'number' ? context.statusCode : undefined;
 }
