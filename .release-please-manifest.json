@@ -1,11 +1,11 @@
 {
-  ".": "0.1.0",
-  "packages/core": "0.1.0",
-  "packages/core-types": "0.1.0",
-  "packages/client": "0.1.0",
-  "packages/db": "0.1.0",
-  "packages/queue": "0.1.0",
-  "packages/shared": "0.1.0",
-  "apps/api": "0.1.0",
-  "apps/cli": "0.1.0"
+  ".": "0.1.1",
+  "packages/core": "0.1.1",
+  "packages/core-types": "0.1.1",
+  "packages/client": "0.1.1",
+  "packages/db": "0.1.1",
+  "packages/queue": "0.1.1",
+  "packages/shared": "0.1.1",
+  "apps/api": "0.1.1",
+  "apps/cli": "0.1.1"
 }
