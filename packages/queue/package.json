@@ -13,7 +13,8 @@
     "url": "https://github.com/accidentally-awesome-labs/spatula/issues"
   },
   "publishConfig": {
-    "access": "public"
+    "access": "public",
+    "provenance": true
   },
   "type": "module",
   "main": "./dist/index.js",
@@ -27,6 +28,7 @@
   "files": [
     "dist",
     "README.md",
+    "LICENSE",
     "!dist/.tsbuildinfo",
     "!dist/**/*.test.*",
     "!dist/**/__tests__/**"

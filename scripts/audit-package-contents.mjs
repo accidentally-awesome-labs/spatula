@@ -2,10 +2,14 @@
 import { spawnSync } from 'node:child_process';
 import { existsSync, mkdirSync, readdirSync, readFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { dirname, resolve } from 'node:path';
+import { dirname, relative, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..');
+const repoUrl = 'https://github.com/accidentally-awesome-labs/spatula.git';
+const homepageUrl = 'https://github.com/accidentally-awesome-labs/spatula#readme';
+const issuesUrl = 'https://github.com/accidentally-awesome-labs/spatula/issues';
+const repoLicense = readFileSync(resolve(repoRoot, 'LICENSE'), 'utf8');
 const npmCache = resolve(tmpdir(), 'spatula-npm-cache');
 mkdirSync(npmCache, { recursive: true });
 
@@ -20,6 +24,7 @@ const disallowed = [
   ['coverage output', (path) => path === 'coverage' || path.startsWith('coverage/')],
   ['node_modules', (path) => path === 'node_modules' || path.startsWith('node_modules/')],
   ['environment file', (path) => path === '.env' || path.startsWith('.env.')],
+  ['source map', (path) => path.endsWith('.map')],
   ['TypeScript build info', (path) => path.endsWith('.tsbuildinfo')],
   ['test artifact', (path) => /\.(test|spec)\./.test(path)],
   ['dev config', (path) => /^(vitest|eslint|tsup|drizzle\.config)\..+/.test(path)],
@@ -103,6 +108,7 @@ let failures = 0;
 for (const dir of packageDirs()) {
   const pkgPath = resolve(dir, 'package.json');
   const pkg = readJson(pkgPath);
+  const packageDir = relative(repoRoot, dir).replaceAll('\\', '/');
 
   if (pkg.private || !pkg.name?.startsWith('@spatula/')) {
     continue;
@@ -112,6 +118,55 @@ for (const dir of packageDirs()) {
 
   if (!Array.isArray(pkg.files) || pkg.files.length === 0) {
     errors.push('package.json must define a non-empty files allowlist');
+  }
+
+  for (const allowlistEntry of ['dist', 'README.md', 'LICENSE']) {
+    if (!pkg.files?.includes(allowlistEntry)) {
+      errors.push(`package.json files allowlist must include ${allowlistEntry}`);
+    }
+  }
+
+  if (pkg.name === '@spatula/db') {
+    for (const migrationDir of ['drizzle', 'drizzle-sqlite']) {
+      if (!pkg.files?.includes(migrationDir)) {
+        errors.push(`package.json files allowlist must include ${migrationDir}`);
+      }
+    }
+  }
+
+  if (pkg.license !== 'MIT') {
+    errors.push('package.json must declare the MIT license');
+  }
+
+  const licensePath = resolve(dir, 'LICENSE');
+  if (!existsSync(licensePath)) {
+    errors.push('package LICENSE file is missing');
+  } else if (readFileSync(licensePath, 'utf8') !== repoLicense) {
+    errors.push('package LICENSE file must match the repository LICENSE');
+  }
+
+  if (
+    pkg.repository?.type !== 'git' ||
+    pkg.repository?.url !== repoUrl ||
+    pkg.repository?.directory !== packageDir
+  ) {
+    errors.push(`repository metadata must point to ${repoUrl} directory ${packageDir}`);
+  }
+
+  if (pkg.homepage !== homepageUrl) {
+    errors.push(`homepage must be ${homepageUrl}`);
+  }
+
+  if (pkg.bugs?.url !== issuesUrl) {
+    errors.push(`bugs.url must be ${issuesUrl}`);
+  }
+
+  if (pkg.publishConfig?.access !== 'public') {
+    errors.push('publishConfig.access must be "public"');
+  }
+
+  if (pkg.publishConfig?.provenance !== true) {
+    errors.push('publishConfig.provenance must be true');
   }
 
   let pack;
@@ -139,7 +194,7 @@ for (const dir of packageDirs()) {
     }
   }
 
-  for (const requiredFile of ['package.json', 'README.md']) {
+  for (const requiredFile of ['package.json', 'README.md', 'LICENSE']) {
     if (!paths.has(requiredFile)) {
       errors.push(`required package file missing from tarball: ${requiredFile}`);
     }
