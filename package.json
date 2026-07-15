@@ -20,6 +20,9 @@
   ],
   "private": true,
   "packageManager": "pnpm@11.13.0",
+  "engines": {
+    "node": ">=22"
+  },
   "scripts": {
     "build": "node scripts/run-turbo.mjs run build",
     "test": "node scripts/run-turbo.mjs run test",

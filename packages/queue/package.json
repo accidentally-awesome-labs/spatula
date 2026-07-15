@@ -31,6 +31,9 @@
     "!dist/**/*.test.*",
     "!dist/**/__tests__/**"
   ],
+  "engines": {
+    "node": ">=22"
+  },
   "scripts": {
     "build": "tsc",
     "test": "vitest run --passWithNoTests",

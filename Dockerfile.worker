@@ -7,7 +7,7 @@ RUN corepack enable
 
 # Copy workspace config + ALL package.json files (pnpm requires all workspace
 # members present for lockfile resolution)
-COPY package.json pnpm-lock.yaml pnpm-workspace.yaml .npmrc turbo.json ./
+COPY package.json pnpm-lock.yaml pnpm-workspace.yaml turbo.json ./
 COPY scripts/run-turbo.mjs scripts/run-turbo.mjs
 COPY packages/shared/package.json packages/shared/
 COPY packages/db/package.json packages/db/
@@ -34,7 +34,7 @@ FROM node:22-alpine AS prod-deps
 WORKDIR /app
 RUN corepack enable
 
-COPY package.json pnpm-lock.yaml pnpm-workspace.yaml .npmrc ./
+COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
 COPY packages/shared/package.json packages/shared/
 COPY packages/db/package.json packages/db/
 COPY packages/core/package.json packages/core/
