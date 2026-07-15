@@ -57,4 +57,21 @@ describe('package manager metadata guard', () => {
     expect(workflow).toContain('${GITHUB_REF_NAME#spatula-v}');
     expect(workflow).not.toMatch(/^\s*- 'v\*'\s*$/m);
   });
+
+  it('dispatches publication when Release Please creates the root tag', () => {
+    const releaseWorkflow = readFileSync(join(root, '.github/workflows/release.yml'), 'utf8');
+    const releasePleaseWorkflow = readFileSync(
+      join(root, '.github/workflows/release-please.yml'),
+      'utf8',
+    );
+
+    expect(releaseWorkflow).toMatch(/^\s{2}workflow_dispatch:\s*$/m);
+    expect(releasePleaseWorkflow).toMatch(/^\s{2}actions: write\s*$/m);
+    expect(releasePleaseWorkflow).toContain('id: release');
+    expect(releasePleaseWorkflow).toContain("steps.release.outputs.release_created == 'true'");
+    expect(releasePleaseWorkflow).toContain('RELEASE_TAG: ${{ steps.release.outputs.tag_name }}');
+    expect(releasePleaseWorkflow).toContain(
+      'gh workflow run release.yml --repo "$GITHUB_REPOSITORY" --ref "$RELEASE_TAG"',
+    );
+  });
 });

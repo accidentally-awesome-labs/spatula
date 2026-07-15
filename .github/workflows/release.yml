@@ -7,6 +7,10 @@ on:
       # the root tag should publish the lockstep npm package set; the sibling
       # component tags would otherwise start the same release repeatedly.
       - 'spatula-v*'
+  # Release Please uses GITHUB_TOKEN, whose tag events cannot start another
+  # workflow. The Release Please workflow dispatches this workflow explicitly
+  # at the root tag after creating a release.
+  workflow_dispatch:
 
 permissions:
   contents: write
