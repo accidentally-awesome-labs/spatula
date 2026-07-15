@@ -26,7 +26,7 @@ COPY packages/ packages/
 COPY apps/api/ apps/api/
 
 # Build only the API dependency tree (cli is not needed for this image)
-RUN pnpm run build --filter=@spatula/api...
+RUN pnpm run build --filter=@accidentally-awesome-labs/spatula-api...
 
 # -----------------------------------------------------------
 # Stage 2: Production dependencies only

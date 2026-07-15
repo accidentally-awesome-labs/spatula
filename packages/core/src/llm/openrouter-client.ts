@@ -1,5 +1,5 @@
-import { LLMError } from '@spatula/shared';
-import { createLogger, sleep } from '@spatula/shared';
+import { LLMError } from '@accidentally-awesome-labs/spatula-shared';
+import { createLogger, sleep } from '@accidentally-awesome-labs/spatula-shared';
 import type {
   LLMClient,
   LLMCompletionRequest,

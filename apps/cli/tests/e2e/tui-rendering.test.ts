@@ -15,9 +15,13 @@ import { mkdtempSync, writeFileSync, mkdirSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { describe, it, expect, beforeAll, afterAll, vi } from 'vitest';
-import { createProjectDb, initializeProjectDb, ProjectAdapter } from '@spatula/db';
-import { LocalDataSource } from '@spatula/core';
-import type { DataSource } from '@spatula/core';
+import {
+  createProjectDb,
+  initializeProjectDb,
+  ProjectAdapter,
+} from '@accidentally-awesome-labs/spatula-db';
+import { LocalDataSource } from '@accidentally-awesome-labs/spatula-core';
+import type { DataSource } from '@accidentally-awesome-labs/spatula-core';
 
 // ---------------------------------------------------------------------------
 // Mocks — must be declared before any dynamic imports of the components

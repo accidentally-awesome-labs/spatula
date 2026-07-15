@@ -1,7 +1,7 @@
 /**
  * SQLite export repository — local-only.
  *
- * Implements ExportRepo from @spatula/core/pipeline/types.ts.
+ * Implements ExportRepo from @accidentally-awesome-labs/spatula-core/pipeline/types.ts.
  * The local exports table has a different shape from Postgres (no contentRef,
  * has filePath/runId), but satisfies the updateStatus interface for the
  * export orchestrator.
@@ -10,7 +10,7 @@
  * no projectId.
  */
 import { eq, desc } from 'drizzle-orm';
-import type { ExportRepo } from '@spatula/core/pipeline/types.js';
+import type { ExportRepo } from '@accidentally-awesome-labs/spatula-core/pipeline/types.js';
 import type { ProjectDatabase } from '../connection.js';
 import { exports } from '../../schema-sqlite/exports.js';
 import { wrapStorageError } from './utils.js';

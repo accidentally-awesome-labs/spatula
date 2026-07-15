@@ -1,4 +1,4 @@
-import { createLogger, generateId } from '@spatula/shared';
+import { createLogger, generateId } from '@accidentally-awesome-labs/spatula-shared';
 import type { LLMClient } from '../interfaces/llm-client.js';
 import type { LLMConfig, ReconciliationConfig } from '../types/job.js';
 import type { SchemaDefinition } from '../types/schema.js';

@@ -1,4 +1,4 @@
-import { CrawlError } from '@spatula/shared';
+import { CrawlError } from '@accidentally-awesome-labs/spatula-shared';
 import type { Crawler } from '../interfaces/crawler.js';
 import { PlaywrightCrawler } from './playwright-crawler.js';
 import { FirecrawlCrawler } from './firecrawl-crawler.js';

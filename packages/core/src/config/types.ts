@@ -155,6 +155,7 @@ export const GlobalConfigSchema = z
     // Credentials
     openrouterApiKey: z.string().optional(),
     firecrawlApiKey: z.string().optional(),
+    ollamaBaseUrl: z.string().url().optional(),
 
     // LLM preferences
     llm: z

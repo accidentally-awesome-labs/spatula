@@ -1,7 +1,7 @@
 /**
  * SQLite page repository — local project mode.
  *
- * Implements PageRepo from @spatula/core/pipeline/types.ts.
+ * Implements PageRepo from @accidentally-awesome-labs/spatula-core/pipeline/types.ts.
  *
  * Key differences from Postgres PageRepository:
  * - No tenantId filtering (single-user local mode)
@@ -12,8 +12,8 @@
  * - UUIDs via crypto.randomUUID(), timestamps via new Date().toISOString()
  */
 import { eq, and, inArray } from 'drizzle-orm';
-import { createLogger } from '@spatula/shared';
-import type { PageRepo } from '@spatula/core/pipeline/types.js';
+import { createLogger } from '@accidentally-awesome-labs/spatula-shared';
+import type { PageRepo } from '@accidentally-awesome-labs/spatula-core/pipeline/types.js';
 import type { ProjectDatabase } from '../connection.js';
 import { pages } from '../../schema-sqlite/pages.js';
 import { wrapStorageError } from './utils.js';

@@ -1,9 +1,21 @@
-import { createLogger, StorageError, ValidationSchemaError } from '@spatula/shared';
-import type { AuditLogger } from '@spatula/shared';
-import { isValidCrawlUrl, type JobConfig, type JobStatus } from '@spatula/core';
-import type { JobRepository, CrawlTaskRepository, SchemaRepository } from '@spatula/db';
-import type { TenantRepository } from '@spatula/db';
-import { QuotaExceededError } from '@spatula/shared';
+import {
+  createLogger,
+  StorageError,
+  ValidationSchemaError,
+} from '@accidentally-awesome-labs/spatula-shared';
+import type { AuditLogger } from '@accidentally-awesome-labs/spatula-shared';
+import {
+  isValidCrawlUrl,
+  type JobConfig,
+  type JobStatus,
+} from '@accidentally-awesome-labs/spatula-core';
+import type {
+  JobRepository,
+  CrawlTaskRepository,
+  SchemaRepository,
+} from '@accidentally-awesome-labs/spatula-db';
+import type { TenantRepository } from '@accidentally-awesome-labs/spatula-db';
+import { QuotaExceededError } from '@accidentally-awesome-labs/spatula-shared';
 import type { SpatulaQueues } from './queues.js';
 import { JobStateMachine } from './state-machine.js';
 import { enqueueWebhookIfConfigured } from './webhook-sender.js';

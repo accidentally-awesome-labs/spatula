@@ -1,10 +1,10 @@
-# @spatula/client
+# @accidentally-awesome-labs/spatula-client
 
 Spatula API client — TypeScript SDK for the Spatula REST API.
 
 ## Properties
 
-- ESM-only (no CommonJS shim — use `@spatula/cli`'s dual build if you need CJS)
+- ESM-only (no CommonJS shim — use `@accidentally-awesome-labs/spatula`'s dual build if you need CJS)
 - Browser + Node 22+ compatible
 - Fetch-based — uses global `fetch` (override via constructor option)
 - `sideEffects: false` — fully tree-shakeable
@@ -13,7 +13,12 @@ Spatula API client — TypeScript SDK for the Spatula REST API.
 ## Quick start
 
 ```typescript
-import { SpatulaClient, createJob, listJobs, getEntities } from '@spatula/client';
+import {
+  SpatulaClient,
+  createJob,
+  listJobs,
+  getEntities,
+} from '@accidentally-awesome-labs/spatula-client';
 
 const client = new SpatulaClient({
   baseUrl: 'http://localhost:3000',
@@ -27,11 +32,11 @@ const { data: entities } = await getEntities(client, job.id);
 
 ## Stability
 
-See `docs/compat-policy.md` for the full SDK ↔ server ↔ `@spatula/core-types` compatibility matrix.
+See `docs/compat-policy.md` for the full SDK ↔ server ↔ `@accidentally-awesome-labs/spatula-core-types` compatibility matrix.
 
 ## Size budget
 
-The 50 kB limit measures ONLY the named surface above (`SpatulaClient` + 3 methods). Importing the full module (e.g., `import * as client from '@spatula/client'`) pulls in additional methods + class-per-code error subclasses (26 classes) and will exceed 50 kB. This is by design — tree-shaking in your bundler eliminates unused subclasses.
+The 50 kB limit measures ONLY the named surface above (`SpatulaClient` + 3 methods). Importing the full module (e.g., `import * as client from '@accidentally-awesome-labs/spatula-client'`) pulls in additional methods + class-per-code error subclasses (26 classes) and will exceed 50 kB. This is by design — tree-shaking in your bundler eliminates unused subclasses.
 
 ## Experimental namespace
 
@@ -49,7 +54,11 @@ client.experimental.anything;
 Class-per-code error subclasses live in `src/errors/generated.ts` and are checked into git. The generator script (`scripts/gen-error-classes.ts`) is the source of truth and runs in CI via `pnpm gen:errors && git diff --exit-code` to catch drift between the frozen `ErrorCode` enum and the committed subclasses.
 
 ```typescript
-import { SpatulaClient, JobNotFoundError, RateLimitExceededError } from '@spatula/client';
+import {
+  SpatulaClient,
+  JobNotFoundError,
+  RateLimitExceededError,
+} from '@accidentally-awesome-labs/spatula-client';
 
 try {
   await createJob(client /* ... */);

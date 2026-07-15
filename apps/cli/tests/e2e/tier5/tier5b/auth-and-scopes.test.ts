@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
-import { ErrorCode } from '@spatula/shared';
+import { ErrorCode } from '@accidentally-awesome-labs/spatula-shared';
 import {
   setupAuthContext,
   bearerHeaders,

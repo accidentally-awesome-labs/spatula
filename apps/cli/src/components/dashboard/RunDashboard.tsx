@@ -3,7 +3,7 @@ import { Box, Text } from 'ink';
 import { useStore } from 'zustand';
 import { createCliStore } from '../../store/index.js';
 import type { CliStore } from '../../store/index.js';
-import type { DataSource } from '@spatula/core';
+import type { DataSource } from '@accidentally-awesome-labs/spatula-core';
 import { useJobPolling } from '../../hooks/useJobPolling.js';
 import { useKeyboard } from '../../hooks/useKeyboard.js';
 import { ProgressPanel } from './ProgressPanel.js';

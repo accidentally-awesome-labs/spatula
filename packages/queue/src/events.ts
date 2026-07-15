@@ -1,4 +1,4 @@
-import { createLogger } from '@spatula/shared';
+import { createLogger } from '@accidentally-awesome-labs/spatula-shared';
 import type Redis from 'ioredis';
 
 const logger = createLogger('events');

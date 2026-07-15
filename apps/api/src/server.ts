@@ -1,9 +1,14 @@
 import { serve } from '@hono/node-server';
 import type { ServerType } from '@hono/node-server';
 import { createNodeWebSocket } from '@hono/node-ws';
-import { createLogger, loadConfig, getEnvOrDefault, registerGauges } from '@spatula/shared';
-import type { SpatulaQueues } from '@spatula/queue';
-import type { JobStatus } from '@spatula/core';
+import {
+  createLogger,
+  loadConfig,
+  getEnvOrDefault,
+  registerGauges,
+} from '@accidentally-awesome-labs/spatula-shared';
+import type { SpatulaQueues } from '@accidentally-awesome-labs/spatula-queue';
+import type { JobStatus } from '@accidentally-awesome-labs/spatula-core';
 import { createApp } from './app.js';
 import { JobProgressManager } from './ws/job-progress.js';
 import { executeShutdown, SHUTDOWN_TIMEOUT_MS } from './shutdown.js';

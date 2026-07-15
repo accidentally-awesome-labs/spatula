@@ -1,5 +1,5 @@
 import { eq, sql, desc } from 'drizzle-orm';
-import { createLogger, StorageError } from '@spatula/shared';
+import { createLogger, StorageError } from '@accidentally-awesome-labs/spatula-shared';
 import { tenants } from '../schema/tenants.js';
 import type { Database } from '../connection.js';
 import type { RedisCache } from '../cache.js';

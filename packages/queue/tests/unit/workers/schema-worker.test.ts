@@ -6,7 +6,7 @@ vi.mock('../../../src/redis-lock.js', () => ({
 }));
 
 const mockProcessSchemaEvolution = vi.fn().mockResolvedValue({ actionsApplied: 0 });
-vi.mock('@spatula/core', () => ({
+vi.mock('@accidentally-awesome-labs/spatula-core', () => ({
   processSchemaEvolution: (...args: unknown[]) => mockProcessSchemaEvolution(...args),
 }));
 

@@ -18,7 +18,7 @@
 import { describe, it, expect } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { AUTH_SCOPES } from '@spatula/shared';
+import { AUTH_SCOPES } from '@accidentally-awesome-labs/spatula-shared';
 
 // Resolve docs/api-auth.md relative to the monorepo root.
 // apps/api/ is two levels below the root.

@@ -25,6 +25,7 @@ describe('buildGlobalConfig', () => {
     });
     expect(config.openrouterApiKey).toBeUndefined();
     expect(config.llm?.provider).toBe('ollama');
+    expect(config.ollamaBaseUrl).toBe('http://localhost:11434');
   });
 
   it('omits empty optional fields', () => {

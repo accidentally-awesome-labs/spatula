@@ -1,5 +1,5 @@
-import { LLMError, ConfigError } from '@spatula/shared';
-import type { SpatulaMetrics } from '@spatula/shared';
+import { LLMError, ConfigError } from '@accidentally-awesome-labs/spatula-shared';
+import type { SpatulaMetrics } from '@accidentally-awesome-labs/spatula-shared';
 import type {
   LLMClient,
   LLMCompletionRequest,

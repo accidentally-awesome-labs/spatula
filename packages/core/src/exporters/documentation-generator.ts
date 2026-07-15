@@ -1,5 +1,5 @@
 import type { SchemaDefinition } from '../types/schema.js';
-import type { Entity } from '@spatula/shared';
+import type { Entity } from '@accidentally-awesome-labs/spatula-shared';
 import type { DataDictionary, FieldDocumentation, FieldStats } from './types.js';
 
 const MAX_SAMPLE_ENTITIES = 1000;

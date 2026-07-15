@@ -17,12 +17,16 @@ import { mkdtempSync, writeFileSync, mkdirSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { describe, it, expect, beforeAll, afterAll, beforeEach, afterEach, vi } from 'vitest';
-import { createProjectDb, initializeProjectDb, ProjectAdapter } from '@spatula/db';
+import {
+  createProjectDb,
+  initializeProjectDb,
+  ProjectAdapter,
+} from '@accidentally-awesome-labs/spatula-db';
 import { slugifyPath } from '../../src/local-project.js';
-import type { GlobalConfig } from '@spatula/core';
+import type { GlobalConfig } from '@accidentally-awesome-labs/spatula-core';
 
 // ---------------------------------------------------------------------------
-// Mock: @spatula/core — loadGlobalConfig / saveGlobalConfig
+// Mock: @accidentally-awesome-labs/spatula-core — loadGlobalConfig / saveGlobalConfig
 // ---------------------------------------------------------------------------
 
 const { mockLoadGlobalConfig, mockSaveGlobalConfig } = vi.hoisted(() => {
@@ -34,8 +38,10 @@ const { mockLoadGlobalConfig, mockSaveGlobalConfig } = vi.hoisted(() => {
 
 let mockConfig: GlobalConfig | null = null;
 
-vi.mock('@spatula/core', async () => {
-  const actual = await vi.importActual<typeof import('@spatula/core')>('@spatula/core');
+vi.mock('@accidentally-awesome-labs/spatula-core', async () => {
+  const actual = await vi.importActual<typeof import('@accidentally-awesome-labs/spatula-core')>(
+    '@accidentally-awesome-labs/spatula-core',
+  );
   return {
     ...actual,
     loadGlobalConfig: (...args: unknown[]) => {

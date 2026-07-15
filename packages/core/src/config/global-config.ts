@@ -1,9 +1,9 @@
 // packages/core/src/config/global-config.ts
-import { readFileSync, existsSync, writeFileSync, mkdirSync } from 'node:fs';
+import { chmodSync, readFileSync, existsSync, writeFileSync, mkdirSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { homedir } from 'node:os';
 import { parse as parseYaml, stringify as stringifyYaml } from 'yaml';
-import { ValidationError } from '@spatula/shared';
+import { ValidationError } from '@accidentally-awesome-labs/spatula-shared';
 import { GlobalConfigSchema } from './types.js';
 import type { GlobalConfig } from './types.js';
 
@@ -57,6 +57,28 @@ export interface SaveGlobalConfigOptions {
 }
 
 /**
+ * Restrict a global configuration file to its owner. The file can contain API
+ * keys, so a permissive umask must never make it group/world-readable.
+ */
+export function protectGlobalConfig(configPath?: string): void {
+  const path = configPath ?? getGlobalConfigPath();
+  const dir = dirname(path);
+
+  try {
+    chmodSync(dir, 0o700);
+  } catch {
+    // Native Windows is unsupported and some mounted filesystems do not expose
+    // POSIX modes. Writing the config is still more useful than failing here.
+  }
+
+  try {
+    chmodSync(path, 0o600);
+  } catch {
+    // See directory note above.
+  }
+}
+
+/**
  * Save global config to ~/.spatula/config.yaml (or the given path).
  * Creates the directory if it does not exist.
  * When merge is true, deep-merges with existing config.
@@ -70,7 +92,7 @@ export function saveGlobalConfig(
   const dir = dirname(path);
 
   if (!existsSync(dir)) {
-    mkdirSync(dir, { recursive: true });
+    mkdirSync(dir, { recursive: true, mode: 0o700 });
   }
 
   let toWrite = config;
@@ -85,5 +107,9 @@ export function saveGlobalConfig(
     }
   }
 
-  writeFileSync(path, stringifyYaml(toWrite, { lineWidth: 0 }), 'utf-8');
+  writeFileSync(path, stringifyYaml(toWrite, { lineWidth: 0 }), {
+    encoding: 'utf-8',
+    mode: 0o600,
+  });
+  protectGlobalConfig(path);
 }

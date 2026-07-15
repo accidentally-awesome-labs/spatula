@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest';
 import { render } from 'ink-testing-library';
 import React from 'react';
 import { ConfigPanel } from '../../../../src/components/conversational/ConfigPanel.js';
-import type { JobConfig } from '@spatula/core';
+import type { JobConfig } from '@accidentally-awesome-labs/spatula-core';
 
 function makeConfig(overrides: Partial<JobConfig> = {}): JobConfig {
   return {

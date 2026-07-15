@@ -13,7 +13,7 @@
  * Test 5 additionally skips when Playwright is not installed.
  */
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
-import type { Crawler, CrawlResult } from '@spatula/core';
+import type { Crawler, CrawlResult } from '@accidentally-awesome-labs/spatula-core';
 
 const TARGET_URL = 'https://books.toscrape.com/';
 const NONEXISTENT_URL = 'https://books.toscrape.com/catalogue/nonexistent-page-xyz-999';
@@ -27,7 +27,7 @@ beforeAll(async () => {
   hasKey = !!process.env.FIRECRAWL_API_KEY;
   if (!hasKey) return;
 
-  const { CrawlerFactory } = await import('@spatula/core');
+  const { CrawlerFactory } = await import('@accidentally-awesome-labs/spatula-core');
   crawler = await CrawlerFactory.create({
     type: 'firecrawl',
     firecrawlApiKey: process.env.FIRECRAWL_API_KEY!,
@@ -115,7 +115,7 @@ describe('Firecrawl integration', () => {
       expect(result.statusCode).toBe(404);
     } catch (error: unknown) {
       // If it throws, verify it is a CrawlError (or at minimum an Error)
-      const { CrawlError } = await import('@spatula/shared');
+      const { CrawlError } = await import('@accidentally-awesome-labs/spatula-shared');
       if (error instanceof CrawlError) {
         expect(error.name).toBe('CrawlError');
         expect(error.message).toContain(NONEXISTENT_URL);
@@ -146,7 +146,7 @@ describe('Firecrawl integration', () => {
 
     if (!playwrightAvailable) return ctx.skip();
 
-    const { CrawlerFactory } = await import('@spatula/core');
+    const { CrawlerFactory } = await import('@accidentally-awesome-labs/spatula-core');
     const playwrightCrawler = await CrawlerFactory.create({ type: 'playwright' });
 
     try {

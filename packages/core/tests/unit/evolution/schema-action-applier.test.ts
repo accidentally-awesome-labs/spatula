@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { generateId } from '@spatula/shared';
+import { generateId } from '@accidentally-awesome-labs/spatula-shared';
 import { applySchemaActions } from '../../../src/evolution/schema-action-applier.js';
 import type { SchemaDefinition, FieldDefinition } from '../../../src/types/schema.js';
 import type { PipelineAction } from '../../../src/types/actions.js';

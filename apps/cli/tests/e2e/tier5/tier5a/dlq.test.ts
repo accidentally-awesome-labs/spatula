@@ -19,11 +19,11 @@
  */
 
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
-import { createDatabasePool, DlqRepository } from '@spatula/db';
-import { createDlqHandler } from '@spatula/queue';
+import { createDatabasePool, DlqRepository } from '@accidentally-awesome-labs/spatula-db';
+import { createDlqHandler } from '@accidentally-awesome-labs/spatula-queue';
 
 // BullMQ is loaded dynamically to avoid Vite resolution issues
-// (bullmq is installed inside @spatula/queue, not hoisted to CLI)
+// (bullmq is installed inside @accidentally-awesome-labs/spatula-queue, not hoisted to CLI)
 type BullMQQueue = import('bullmq').Queue;
 type BullMQWorker = import('bullmq').Worker;
 

@@ -1,4 +1,4 @@
-import { createLogger } from '@spatula/shared';
+import { createLogger } from '@accidentally-awesome-labs/spatula-shared';
 import type { Crawler, CrawlResult, CrawlOptions } from '../interfaces/crawler.js';
 
 const logger = createLogger('crawler-comparison');

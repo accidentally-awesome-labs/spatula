@@ -1,10 +1,15 @@
 import { defineConfig } from 'tsup';
+import { readFileSync } from 'node:fs';
+
+const packageJson = JSON.parse(
+  readFileSync(new URL('./package.json', import.meta.url), 'utf-8'),
+) as { version: string };
 
 /**
- * Build config for @spatula/cli — produces a dual ESM + CJS publish artifact
+ * Build config for @accidentally-awesome-labs/spatula — produces a dual ESM + CJS publish artifact
  * with TypeScript declarations.
  * Externalized: `playwright` (massive native dep — should resolve at install
- * time, not be bundled) + the workspace `@spatula/*` packages (consumer's
+ * time, not be bundled) + the workspace `@accidentally-awesome-labs/spatula-*` packages (consumer's
  * node_modules will host them via pnpm publish + dependency tree).
  */
 export default defineConfig({
@@ -19,13 +24,16 @@ export default defineConfig({
   splitting: false,
   treeshake: true,
   shims: true,
+  define: {
+    __SPATULA_VERSION__: JSON.stringify(packageJson.version),
+  },
   // Externals: tsup will leave these as runtime `import`/`require()` calls.
   // Consumers install them via the published package's `dependencies` field.
   external: [
     'playwright',
-    '@spatula/core',
-    '@spatula/db',
-    '@spatula/shared',
+    '@accidentally-awesome-labs/spatula-core',
+    '@accidentally-awesome-labs/spatula-db',
+    '@accidentally-awesome-labs/spatula-shared',
     // Heavy React + Ink runtime — Ink + React are runtime deps; tree-shake
     // them out of the bundle, let the consumer's node_modules host them.
     'react',

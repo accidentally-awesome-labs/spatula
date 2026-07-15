@@ -5,7 +5,7 @@
  * Migrations are applied once for the whole package via
  * tests/setup/global-migrate.ts (wired through vitest.config.ts).
  *
- * Run: pnpm --filter @spatula/db exec vitest run tests/integration/tenant-data-repository.integration.test.ts
+ * Run: pnpm --filter @accidentally-awesome-labs/spatula-db exec vitest run tests/integration/tenant-data-repository.integration.test.ts
  */
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { sql } from 'drizzle-orm';

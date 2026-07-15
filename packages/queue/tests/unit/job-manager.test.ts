@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { JobManager } from '../../src/job-manager.js';
-import { StateError } from '@spatula/shared';
+import { StateError } from '@accidentally-awesome-labs/spatula-shared';
 
 function createMockJobRepo() {
   return {

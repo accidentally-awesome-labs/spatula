@@ -21,7 +21,7 @@ import {
   AuthMissingTokenError,
   SpatulaError,
   ErrorCode,
-} from '@spatula/shared';
+} from '@accidentally-awesome-labs/spatula-shared';
 import { RedisStreamBuffer } from './buffer.js';
 import { REPLAY_TRUNCATED_EVENT } from './types.js';
 import type { AppDeps } from '../types.js';

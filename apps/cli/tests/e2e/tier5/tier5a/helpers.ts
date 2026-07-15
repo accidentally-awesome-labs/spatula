@@ -35,8 +35,8 @@ import {
   LlmUsageRepository,
   PageRepository,
   SourceTrustRepository,
-} from '@spatula/db';
-import type { Database } from '@spatula/db';
+} from '@accidentally-awesome-labs/spatula-db';
+import type { Database } from '@accidentally-awesome-labs/spatula-db';
 
 import {
   CrawlerFactory,
@@ -49,10 +49,10 @@ import {
   CrawlCompletionChecker,
   createLLMClient,
   resolveModel,
-} from '@spatula/core';
-import type { Crawler } from '@spatula/core';
+} from '@accidentally-awesome-labs/spatula-core';
+import type { Crawler } from '@accidentally-awesome-labs/spatula-core';
 
-import { AuditLogger } from '@spatula/shared';
+import { AuditLogger } from '@accidentally-awesome-labs/spatula-shared';
 
 import {
   createQueues,
@@ -66,8 +66,8 @@ import {
   processSchemaEvolutionJob,
   processReconciliationJob,
   processExportJob,
-} from '@spatula/queue';
-import type { SpatulaQueues } from '@spatula/queue';
+} from '@accidentally-awesome-labs/spatula-queue';
+import type { SpatulaQueues } from '@accidentally-awesome-labs/spatula-queue';
 
 import { isPlaywrightAvailable } from '../../tier2/helpers.js';
 import { startFixtureServer } from '../../tier2/fixture-server.js';
@@ -293,7 +293,7 @@ export async function startTestWorkers(opts: {
   // 19. Create the Hono API app via createApp(deps) — NOT createTestApp()
   process.env.AUTH_STRATEGY = 'none';
 
-  const { createApp } = await import('@spatula/api');
+  const { createApp } = await import('@accidentally-awesome-labs/spatula-api');
 
   const appDeps = {
     dbPool: pool,

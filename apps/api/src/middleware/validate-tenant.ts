@@ -1,5 +1,8 @@
 import type { MiddlewareHandler } from 'hono';
-import { AuthInsufficientScopeError, TenantNotFoundError } from '@spatula/shared';
+import {
+  AuthInsufficientScopeError,
+  TenantNotFoundError,
+} from '@accidentally-awesome-labs/spatula-shared';
 
 export const validateTenantMiddleware: MiddlewareHandler = async (c, next) => {
   const tenantId = c.get('tenantId');

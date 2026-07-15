@@ -1,6 +1,6 @@
 import { Hono } from 'hono';
 import { z } from '@hono/zod-openapi';
-import { createLogger, ErrorCode } from '@spatula/shared';
+import { createLogger, ErrorCode } from '@accidentally-awesome-labs/spatula-shared';
 import type { AppEnv } from '../types.js';
 
 const logger = createLogger('batch-jobs');

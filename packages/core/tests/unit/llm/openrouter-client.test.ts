@@ -1,10 +1,10 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { LLMError } from '@spatula/shared';
+import { LLMError } from '@accidentally-awesome-labs/spatula-shared';
 import { OpenRouterClient } from '../../../src/llm/openrouter-client.js';
 import type { LLMCompletionRequest } from '../../../src/interfaces/llm-client.js';
 
-vi.mock('@spatula/shared', async () => {
-  const actual = await vi.importActual('@spatula/shared');
+vi.mock('@accidentally-awesome-labs/spatula-shared', async () => {
+  const actual = await vi.importActual('@accidentally-awesome-labs/spatula-shared');
   return { ...actual, sleep: vi.fn().mockResolvedValue(undefined) };
 });
 
@@ -156,7 +156,7 @@ describe('OpenRouterClient', () => {
   });
 
   it('uses exponential back-off between retries', async () => {
-    const { sleep } = await import('@spatula/shared');
+    const { sleep } = await import('@accidentally-awesome-labs/spatula-shared');
     (sleep as ReturnType<typeof vi.fn>).mockClear();
 
     mockFetch

@@ -157,6 +157,7 @@ describe('saveGlobalConfig', () => {
     expect(reloaded).not.toBeNull();
     expect(reloaded!.remotes?.prod?.url).toBe('https://api.spatula.dev');
     expect(reloaded!.remotes?.prod?.apiKey).toBe('sk_live_abc');
+    expect(realFs.statSync(configPath).mode & 0o077).toBe(0);
 
     realFs.rmSync(tmpDir, { recursive: true, force: true });
   });

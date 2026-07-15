@@ -24,7 +24,7 @@ vi.mock('node:readline', () => {
 });
 
 // ---------------------------------------------------------------------------
-// Mock: @spatula/core — loadGlobalConfig
+// Mock: @accidentally-awesome-labs/spatula-core — loadGlobalConfig
 // ---------------------------------------------------------------------------
 const mockGlobalConfig = {
   version: 1,
@@ -33,8 +33,10 @@ const mockGlobalConfig = {
   },
 };
 
-vi.mock('@spatula/core', async () => {
-  const actual = await vi.importActual<typeof import('@spatula/core')>('@spatula/core');
+vi.mock('@accidentally-awesome-labs/spatula-core', async () => {
+  const actual = await vi.importActual<typeof import('@accidentally-awesome-labs/spatula-core')>(
+    '@accidentally-awesome-labs/spatula-core',
+  );
   return {
     ...actual,
     loadGlobalConfig: () => mockGlobalConfig,

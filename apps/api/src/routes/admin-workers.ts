@@ -1,5 +1,5 @@
 import { createRoute, z } from '@hono/zod-openapi';
-import { InternalError } from '@spatula/shared';
+import { InternalError } from '@accidentally-awesome-labs/spatula-shared';
 import { createOpenAPIRouter } from '../openapi-config.js';
 import { jsonContent, errorResponseSchema } from '../schemas/responses.js';
 

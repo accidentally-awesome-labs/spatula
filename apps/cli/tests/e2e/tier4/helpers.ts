@@ -25,10 +25,10 @@ import {
   ApiKeyRepository,
   AuditLogRepository,
   LlmUsageRepository,
-} from '@spatula/db';
-import type { Database } from '@spatula/db';
+} from '@accidentally-awesome-labs/spatula-db';
+import type { Database } from '@accidentally-awesome-labs/spatula-db';
 
-// pg and ioredis types come transitively through @spatula/api — use
+// pg and ioredis types come transitively through @accidentally-awesome-labs/spatula-api — use
 // structural types here so the CLI package doesn't need its own @types/pg
 // or ioredis devDependency.
 type Pool = { end(): Promise<void>; [k: string]: unknown };
@@ -112,7 +112,7 @@ export async function createTestApp(opts?: {
   // 3. Optional Redis
   let redis: RedisClient | null = null;
   if (process.env.REDIS_URL) {
-    // Dynamic import — ioredis is a transitive dep via @spatula/api.
+    // Dynamic import — ioredis is a transitive dep via @accidentally-awesome-labs/spatula-api.
     // We use a variable to defeat tsc module resolution (runtime-only).
     const redisModule = 'ioredis';
     const mod: any = await import(/* @vite-ignore */ redisModule);
@@ -150,11 +150,11 @@ export async function createTestApp(opts?: {
   process.env.AUTH_STRATEGY = opts?.authStrategy ?? 'none';
 
   // 6. Create audit logger
-  const { AuditLogger } = await import('@spatula/shared');
+  const { AuditLogger } = await import('@accidentally-awesome-labs/spatula-shared');
   const auditLogger = new AuditLogger(auditLogRepo);
 
   // 7. Build the Hono app
-  const { createApp } = await import('@spatula/api');
+  const { createApp } = await import('@accidentally-awesome-labs/spatula-api');
 
   const deps = {
     dbPool: pool,
@@ -259,8 +259,9 @@ export function authHeaders(tenantId: string): Record<string, string> {
  */
 export async function seedJobWithData(db: Database, tenantId: string): Promise<SeedResult> {
   // Lazy-import the schema tables so this file can be loaded even when
-  // @spatula/db isn't built yet (type-checking only).
-  const { jobs, schemasTable, entities, actions } = await import('@spatula/db');
+  // @accidentally-awesome-labs/spatula-db isn't built yet (type-checking only).
+  const { jobs, schemasTable, entities, actions } =
+    await import('@accidentally-awesome-labs/spatula-db');
 
   // -- Job ------------------------------------------------------------------
   const jobConfig = {

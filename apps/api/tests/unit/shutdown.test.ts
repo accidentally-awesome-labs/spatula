@@ -4,8 +4,8 @@ import type { AppDeps } from '../../src/types.js';
 import type { JobProgressManager } from '../../src/ws/job-progress.js';
 import type { ServerType } from '@hono/node-server';
 
-vi.mock('@spatula/shared', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('@spatula/shared')>();
+vi.mock('@accidentally-awesome-labs/spatula-shared', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@accidentally-awesome-labs/spatula-shared')>();
   return {
     ...actual,
     shutdownTracing: vi.fn().mockResolvedValue(undefined),

@@ -1,6 +1,6 @@
 import { hostname } from 'node:os';
 import type Redis from 'ioredis';
-import { createLogger } from '@spatula/shared';
+import { createLogger } from '@accidentally-awesome-labs/spatula-shared';
 
 const logger = createLogger('worker-heartbeat');
 

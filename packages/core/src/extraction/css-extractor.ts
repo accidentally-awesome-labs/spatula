@@ -1,5 +1,5 @@
 import * as cheerio from 'cheerio';
-import { generateId } from '@spatula/shared';
+import { generateId } from '@accidentally-awesome-labs/spatula-shared';
 import type { Extractor } from '../interfaces/extractor.js';
 import type { SchemaDefinition, FieldDefinition } from '../types/schema.js';
 import type { ExtractionResult } from '../types/extraction.js';

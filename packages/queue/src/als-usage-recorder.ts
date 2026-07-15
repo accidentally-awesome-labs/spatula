@@ -4,9 +4,9 @@
 // This ensures each concurrent BullMQ job attributes its LLM spend to
 // the correct tenant/job pair regardless of interleaving.
 
-import type { LLMUsageRecorder, LLMUsageRecord } from '@spatula/core';
-import type { LlmUsageRepository } from '@spatula/db';
-import { createLogger } from '@spatula/shared';
+import type { LLMUsageRecorder, LLMUsageRecord } from '@accidentally-awesome-labs/spatula-core';
+import type { LlmUsageRepository } from '@accidentally-awesome-labs/spatula-db';
+import { createLogger } from '@accidentally-awesome-labs/spatula-shared';
 import { currentUsageContext } from './usage-context.js';
 
 const logger = createLogger('als-usage-recorder');

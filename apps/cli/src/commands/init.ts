@@ -8,7 +8,7 @@
  *  - .gitignore entry        (adds .spatula/ if a .gitignore exists)
  */
 
-import { existsSync, readFileSync, writeFileSync, mkdirSync } from 'node:fs';
+import { chmodSync, existsSync, readFileSync, writeFileSync, mkdirSync } from 'node:fs';
 import { mkdir } from 'node:fs/promises';
 import { join } from 'node:path';
 import { homedir } from 'node:os';
@@ -32,6 +32,13 @@ export interface InitOptions {
   url?: string;
   depth?: number;
   limit?: number;
+  name?: string;
+  description?: string;
+  fields?: Array<{
+    name: string;
+    type: 'string' | 'number' | 'boolean' | 'url' | 'currency';
+    required?: boolean;
+  }>;
   /** Directory to initialise (defaults to process.cwd()). */
   cwd?: string;
 }
@@ -39,6 +46,7 @@ export interface InitOptions {
 export interface InitResult {
   createdYaml: boolean;
   createdGlobalConfig: boolean;
+  globalConfigPath: string;
   spatulaDir: string;
   gitignoreUpdated: boolean;
 }
@@ -50,11 +58,12 @@ export interface InitResult {
 export async function runInitCommand(options: InitOptions): Promise<InitResult> {
   const cwd = options.cwd ?? process.cwd();
   const depth = options.depth ?? 2;
-  const limit = options.limit ?? 1000;
+  const limit = options.limit ?? 25;
 
   const result: InitResult = {
     createdYaml: false,
     createdGlobalConfig: false,
+    globalConfigPath: join(process.env.SPATULA_HOME ?? join(homedir(), '.spatula'), 'config.yaml'),
     spatulaDir: join(cwd, SPATULA_DIR),
     gitignoreUpdated: false,
   };
@@ -63,7 +72,14 @@ export async function runInitCommand(options: InitOptions): Promise<InitResult> 
   result.createdGlobalConfig = ensureGlobalConfig();
 
   // 2. Create spatula.yaml (only if missing)
-  result.createdYaml = createProjectYaml(cwd, { url: options.url, depth, limit });
+  result.createdYaml = createProjectYaml(cwd, {
+    url: options.url,
+    depth,
+    limit,
+    name: options.name,
+    description: options.description,
+    fields: options.fields,
+  });
 
   // 3. Create .spatula/ directory structure
   await createSpatulaDir(cwd);
@@ -89,7 +105,7 @@ export function ensureGlobalConfig(configPath?: string): boolean {
   if (existsSync(path)) return false;
 
   const dir = join(path, '..');
-  mkdirSync(dir, { recursive: true });
+  mkdirSync(dir, { recursive: true, mode: 0o700 });
 
   const content = [
     '# Spatula global configuration',
@@ -106,7 +122,13 @@ export function ensureGlobalConfig(configPath?: string): boolean {
     '',
   ].join('\n');
 
-  writeFileSync(path, content, 'utf-8');
+  writeFileSync(path, content, { encoding: 'utf-8', mode: 0o600 });
+  try {
+    chmodSync(dir, 0o700);
+    chmodSync(path, 0o600);
+  } catch {
+    // Some mounted filesystems do not expose POSIX permissions.
+  }
   return true;
 }
 
@@ -116,7 +138,14 @@ export function ensureGlobalConfig(configPath?: string): boolean {
  */
 export function createProjectYaml(
   cwd: string,
-  options: { url?: string; depth: number; limit: number },
+  options: {
+    url?: string;
+    depth: number;
+    limit: number;
+    name?: string;
+    description?: string;
+    fields?: InitOptions['fields'];
+  },
 ): boolean {
   const filePath = join(cwd, PROJECT_FILE);
   if (existsSync(filePath)) return false;
@@ -134,21 +163,37 @@ export function createProjectYaml(
     ? `  - ${validatedUrl}`
     : '  - https://example.com  # Replace with your seed URL';
 
+  const fieldLines = options.fields?.length
+    ? [
+        'fields:',
+        ...options.fields.flatMap((field) => [
+          `  - field: ${field.name}`,
+          `    type: ${field.type}`,
+          ...(field.required === undefined ? [] : [`    required: ${String(field.required)}`]),
+        ]),
+      ]
+    : [
+        '# Describe the data you want to extract',
+        '# fields:',
+        '#   - name: string',
+        '#   - price: currency',
+        '#   - description: string',
+      ];
+
   const content = [
     '# Spatula project configuration',
     '# Run `spatula run` to start crawling',
     '',
+    ...(options.name ? [`name: ${JSON.stringify(options.name)}`] : []),
+    ...(options.description ? [`description: ${JSON.stringify(options.description)}`] : []),
+    ...(options.name || options.description ? [''] : []),
     `depth: ${options.depth}`,
     `limit: ${options.limit}`,
     '',
     'seeds:',
     seedLine,
     '',
-    '# Describe the data you want to extract',
-    '# fields:',
-    '#   - name: string',
-    '#   - price: currency',
-    '#   - description: string',
+    ...fieldLines,
     '',
   ].join('\n');
 
@@ -208,7 +253,7 @@ export function formatInitResult(result: InitResult, cwd: string): string {
   lines.push(`  Created  ${result.spatulaDir}/`);
 
   if (result.createdGlobalConfig) {
-    lines.push(`  Created  global config at ~/.spatula/config.yaml`);
+    lines.push(`  Created  global config at ${result.globalConfigPath}`);
   }
 
   if (result.gitignoreUpdated) {

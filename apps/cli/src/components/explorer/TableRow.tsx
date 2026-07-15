@@ -1,7 +1,7 @@
 // apps/cli/src/components/explorer/TableRow.tsx
 import React from 'react';
 import { Box, Text } from 'ink';
-import type { Entity } from '@spatula/shared';
+import type { Entity } from '@accidentally-awesome-labs/spatula-shared';
 
 export interface TableRowProps {
   entity: Entity;

@@ -6,7 +6,7 @@ import {
 } from '@aws-sdk/client-s3';
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 import type { ContentStore } from '../interfaces/content-store.js';
-import { StorageError, createLogger } from '@spatula/shared';
+import { StorageError, createLogger } from '@accidentally-awesome-labs/spatula-shared';
 
 const logger = createLogger('s3-content-store');
 

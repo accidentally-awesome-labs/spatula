@@ -1,6 +1,6 @@
 import { describe, it, expect, vi } from 'vitest';
 import { DefaultUsageRecorder } from '../../../src/services/usage-recorder.js';
-import type { LLMUsageRecord } from '@spatula/core';
+import type { LLMUsageRecord } from '@accidentally-awesome-labs/spatula-core';
 
 function createUsageRecord(overrides?: Partial<LLMUsageRecord>): LLMUsageRecord {
   return {

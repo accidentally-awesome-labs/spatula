@@ -49,4 +49,12 @@ describe('package manager metadata guard', () => {
 
     expect(offenders).toEqual([]);
   });
+
+  it('starts lockstep publication from the root release-please tag', () => {
+    const workflow = readFileSync(join(root, '.github/workflows/release.yml'), 'utf8');
+
+    expect(workflow).toContain("- 'spatula-v*'");
+    expect(workflow).toContain('${GITHUB_REF_NAME#spatula-v}');
+    expect(workflow).not.toMatch(/^\s*- 'v\*'\s*$/m);
+  });
 });

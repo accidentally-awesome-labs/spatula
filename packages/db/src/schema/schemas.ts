@@ -1,6 +1,6 @@
 import { pgTable, uuid, integer, jsonb, timestamp, index } from 'drizzle-orm/pg-core';
 import type { AnyPgColumn } from 'drizzle-orm/pg-core';
-import type { SchemaDefinition } from '@spatula/core';
+import type { SchemaDefinition } from '@accidentally-awesome-labs/spatula-core';
 import { tenants } from './tenants.js';
 import { jobs } from './jobs.js';
 

@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { CrawlError } from '@spatula/shared';
+import { CrawlError } from '@accidentally-awesome-labs/spatula-shared';
 import { PlaywrightCrawler } from '../../../src/crawlers/playwright-crawler.js';
 import type { Browser, BrowserContext, Page, Response } from 'playwright';
 

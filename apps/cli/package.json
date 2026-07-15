@@ -1,6 +1,6 @@
 {
-  "name": "@spatula/cli",
-  "version": "0.0.1",
+  "name": "@accidentally-awesome-labs/spatula",
+  "version": "0.1.0",
   "description": "Command-line interface and TUI for Spatula — AI-powered intelligent web crawling.",
   "license": "MIT",
   "repository": {
@@ -61,9 +61,9 @@
     "clean": "rm -rf dist .turbo *.tsbuildinfo"
   },
   "dependencies": {
-    "@spatula/core": "workspace:*",
-    "@spatula/db": "workspace:*",
-    "@spatula/shared": "workspace:*",
+    "@accidentally-awesome-labs/spatula-core": "workspace:*",
+    "@accidentally-awesome-labs/spatula-db": "workspace:*",
+    "@accidentally-awesome-labs/spatula-shared": "workspace:*",
     "ink": "^5.1.0",
     "ink-spinner": "^5.0.0",
     "ink-text-input": "^6.0.0",
@@ -75,12 +75,12 @@
     "zustand": "^5.0.0"
   },
   "devDependencies": {
-    "@spatula/api": "workspace:*",
+    "@accidentally-awesome-labs/spatula-api": "workspace:*",
     "@types/node": "^25.3.5",
     "@types/react": "^18.3.18",
     "@types/yargs": "^17.0.35",
     "ink-testing-library": "^4.0.0",
-    "@spatula/queue": "workspace:*",
+    "@accidentally-awesome-labs/spatula-queue": "workspace:*",
     "bullmq": "^5.80.2",
     "ioredis": "^5.10.0",
     "tsup": "^8.3.0",

@@ -21,7 +21,7 @@ import {
   InternalError,
   SpatulaError,
   StorageError,
-} from '@spatula/shared';
+} from '@accidentally-awesome-labs/spatula-shared';
 
 function generateApiKey(): { raw: string; hash: string; prefix: string } {
   const random = randomBytes(24).toString('base64url');

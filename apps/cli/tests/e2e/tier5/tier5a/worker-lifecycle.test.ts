@@ -19,8 +19,8 @@ import {
   TEST_WORKER_LOCK_DURATION_MS,
   type TestWorkerHarness,
 } from './helpers.js';
-import { WorkerHeartbeat, QUEUE_NAMES } from '@spatula/queue';
-import { AuditLogRepository } from '@spatula/db';
+import { WorkerHeartbeat, QUEUE_NAMES } from '@accidentally-awesome-labs/spatula-queue';
+import { AuditLogRepository } from '@accidentally-awesome-labs/spatula-db';
 
 // ---------------------------------------------------------------------------
 // Shared state
@@ -98,7 +98,8 @@ describe('Tier 5A -- Worker Lifecycle + Infrastructure (Tests 18-22)', () => {
 
     // Recreate the crawl worker so subsequent tests can use it
     const { Worker } = await import('bullmq');
-    const { processCrawlJob, QUEUE_NAMES } = await import('@spatula/queue');
+    const { processCrawlJob, QUEUE_NAMES } =
+      await import('@accidentally-awesome-labs/spatula-queue');
     const newCrawlWorker = new Worker(
       QUEUE_NAMES.CRAWL,
       async (job: any) => processCrawlJob(job.data, harness!.workerDeps),

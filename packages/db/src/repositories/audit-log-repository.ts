@@ -1,5 +1,5 @@
 import { eq, desc } from 'drizzle-orm';
-import { StorageError } from '@spatula/shared';
+import { StorageError } from '@accidentally-awesome-labs/spatula-shared';
 import { auditLog } from '../schema/audit-log.js';
 import type { Database } from '../connection.js';
 

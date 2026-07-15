@@ -1,6 +1,6 @@
 import React from 'react';
 import { Box, Text } from 'ink';
-import type { JobConfig } from '@spatula/core';
+import type { JobConfig } from '@accidentally-awesome-labs/spatula-core';
 import { Panel } from '../shared/Panel.js';
 
 export interface ConfigPanelProps {

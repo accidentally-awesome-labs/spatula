@@ -1,5 +1,5 @@
 import { eq, and, isNull, or, gt } from 'drizzle-orm';
-import { createLogger, StorageError } from '@spatula/shared';
+import { createLogger, StorageError } from '@accidentally-awesome-labs/spatula-shared';
 import { apiKeys } from '../schema/api-keys.js';
 import type { Database } from '../connection.js';
 

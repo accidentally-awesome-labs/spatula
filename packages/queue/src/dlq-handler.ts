@@ -1,6 +1,6 @@
-import { createLogger } from '@spatula/shared';
+import { createLogger } from '@accidentally-awesome-labs/spatula-shared';
 import type { Job } from 'bullmq';
-import type { DlqRepository } from '@spatula/db';
+import type { DlqRepository } from '@accidentally-awesome-labs/spatula-db';
 
 const logger = createLogger('dlq-handler');
 

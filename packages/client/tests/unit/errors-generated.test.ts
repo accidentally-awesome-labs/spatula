@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { ErrorCode } from '@spatula/shared';
+import { ErrorCode } from '@accidentally-awesome-labs/spatula-shared';
 import {
   ERROR_CLASS_BY_CODE,
   decodeError,

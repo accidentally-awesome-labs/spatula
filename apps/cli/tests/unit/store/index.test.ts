@@ -1,5 +1,9 @@
 import { describe, it, expect, beforeEach } from 'vitest';
-import type { ConfigAction, JobConfig, ConfigValidationResult } from '@spatula/core';
+import type {
+  ConfigAction,
+  JobConfig,
+  ConfigValidationResult,
+} from '@accidentally-awesome-labs/spatula-core';
 import {
   createCliStore,
   type CliStore,

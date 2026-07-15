@@ -1,4 +1,4 @@
-import { StorageError } from '@spatula/shared';
+import { StorageError } from '@accidentally-awesome-labs/spatula-shared';
 
 export function wrapStorageError<T>(operation: () => T, context: Record<string, unknown>): T {
   try {

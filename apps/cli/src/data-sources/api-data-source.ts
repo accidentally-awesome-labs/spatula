@@ -1,5 +1,10 @@
-import type { DataSource, PaginationQuery, PaginatedResult, ProjectStatus } from '@spatula/core';
-import type { Entity } from '@spatula/shared';
+import type {
+  DataSource,
+  PaginationQuery,
+  PaginatedResult,
+  ProjectStatus,
+} from '@accidentally-awesome-labs/spatula-core';
+import type { Entity } from '@accidentally-awesome-labs/spatula-shared';
 import type { SpatulaApiClient } from '../api/client.js';
 
 export class ApiDataSource implements DataSource {

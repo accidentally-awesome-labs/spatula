@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { Hono } from 'hono';
 import { ApiKeyAuthProvider } from '../../../src/auth/api-key-provider.js';
-import type { ApiKeyRepository } from '@spatula/db';
+import type { ApiKeyRepository } from '@accidentally-awesome-labs/spatula-db';
 
 async function createMockRequest(headers: Record<string, string> = {}) {
   const app = new Hono();

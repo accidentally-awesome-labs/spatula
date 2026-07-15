@@ -1,9 +1,13 @@
 import { describe, it, expect, vi } from 'vitest';
 import { Hono } from 'hono';
 import { authMiddleware } from '../../../src/middleware/auth.js';
-import type { AuthProvider, AuditLogger, AuthResult } from '@spatula/shared';
-import type { UserTenantRepository, TenantRepository } from '@spatula/db';
-import type { UserTenantEntry } from '@spatula/db';
+import type {
+  AuthProvider,
+  AuditLogger,
+  AuthResult,
+} from '@accidentally-awesome-labs/spatula-shared';
+import type { UserTenantRepository, TenantRepository } from '@accidentally-awesome-labs/spatula-db';
+import type { UserTenantEntry } from '@accidentally-awesome-labs/spatula-db';
 
 function createJwtProvider(overrides: Partial<AuthResult> = {}): AuthProvider {
   return {

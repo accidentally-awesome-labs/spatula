@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { Hono } from 'hono';
 import { requireScope } from '../../../src/middleware/require-scope.js';
-import { AuthInsufficientScopeError, ErrorCode } from '@spatula/shared';
+import { AuthInsufficientScopeError, ErrorCode } from '@accidentally-awesome-labs/spatula-shared';
 
 function createTestApp(requiredScope: string) {
   const app = new Hono();

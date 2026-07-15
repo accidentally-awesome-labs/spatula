@@ -1,5 +1,5 @@
 import { z } from '@hono/zod-openapi';
-import { AUTH_SCOPES } from '@spatula/shared';
+import { AUTH_SCOPES } from '@accidentally-awesome-labs/spatula-shared';
 
 // ── Rotate API Key ────────────────────────────────────────────────────────────
 

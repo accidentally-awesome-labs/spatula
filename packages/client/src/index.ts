@@ -1,5 +1,5 @@
 /**
- * @spatula/client — Spatula API client (TypeScript SDK).
+ * @accidentally-awesome-labs/spatula-client — Spatula API client (TypeScript SDK).
  *
  * ESM-only. Browser + Node 22+ compatible. fetch-based. `sideEffects: false`.
  *

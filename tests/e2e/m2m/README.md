@@ -1,6 +1,6 @@
 # M2M OIDC `client_credentials` E2E Suite
 
-**What it proves:** The full OIDC machine-to-machine chain: Dex service token -> `createJob` -> `listJobs` -> `getEntities` via `@spatula/client`.
+**What it proves:** The full OIDC machine-to-machine chain: Dex service token -> `createJob` -> `listJobs` -> `getEntities` via `@accidentally-awesome-labs/spatula-client`.
 
 ## Prerequisites
 

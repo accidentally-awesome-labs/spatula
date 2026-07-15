@@ -1,4 +1,4 @@
-import { createLogger } from '@spatula/shared';
+import { createLogger } from '@accidentally-awesome-labs/spatula-shared';
 import type { ConflictResolution } from '../types/job.js';
 import type { SourceTrust } from '../types/reconciliation.js';
 

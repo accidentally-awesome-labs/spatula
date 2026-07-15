@@ -3,8 +3,8 @@ import { useStdout } from 'ink';
 import { useStore } from 'zustand';
 import type { CliStore } from '../store/index.js';
 import type { SpatulaApiClient } from '../api/client.js';
-import type { DataSource } from '@spatula/core';
-import type { EntityWithProvenance } from '@spatula/shared';
+import type { DataSource } from '@accidentally-awesome-labs/spatula-core';
+import type { EntityWithProvenance } from '@accidentally-awesome-labs/spatula-shared';
 import { isDataSource } from './useJobPolling.js';
 
 const HEADER_HEIGHT = 3;

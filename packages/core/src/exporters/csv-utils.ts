@@ -1,4 +1,4 @@
-import type { Entity } from '@spatula/shared';
+import type { Entity } from '@accidentally-awesome-labs/spatula-shared';
 
 export const FORMULA_PREFIXES = ['=', '+', '-', '@'];
 

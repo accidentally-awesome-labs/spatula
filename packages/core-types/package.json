@@ -1,6 +1,6 @@
 {
-  "name": "@spatula/core-types",
-  "version": "0.0.1",
+  "name": "@accidentally-awesome-labs/spatula-core-types",
+  "version": "0.1.0",
   "description": "Spatula type-only exports, zod schemas, and enums. Zero runtime dependencies; zod as peer. Frozen at v1; additive-only in 1.x.",
   "license": "MIT",
   "repository": {

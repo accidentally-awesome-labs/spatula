@@ -1,6 +1,6 @@
 import type { Exporter, ExportOptions, ExportResult } from '../interfaces/exporter.js';
 import type { SchemaDefinition } from '../types/schema.js';
-import type { Entity } from '@spatula/shared';
+import type { Entity } from '@accidentally-awesome-labs/spatula-shared';
 import { entitiesToCsv } from './csv-utils.js';
 
 export class CsvExporter implements Exporter {

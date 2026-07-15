@@ -1,10 +1,12 @@
 // apps/cli/tests/unit/commands/pull-integration.test.ts
 import { describe, it, expect, vi, afterEach } from 'vitest';
 import { runPullCommand } from '../../../src/commands/pull.js';
-import type { GlobalConfig } from '@spatula/core';
+import type { GlobalConfig } from '@accidentally-awesome-labs/spatula-core';
 
-vi.mock('@spatula/core', async () => {
-  const actual = await vi.importActual<typeof import('@spatula/core')>('@spatula/core');
+vi.mock('@accidentally-awesome-labs/spatula-core', async () => {
+  const actual = await vi.importActual<typeof import('@accidentally-awesome-labs/spatula-core')>(
+    '@accidentally-awesome-labs/spatula-core',
+  );
   return {
     ...actual,
     loadGlobalConfig: vi.fn(

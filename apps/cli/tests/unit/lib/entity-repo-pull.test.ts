@@ -5,8 +5,8 @@ import {
   sqliteSchema,
   createProjectDb,
   initializeProjectDb,
-} from '@spatula/db';
-import type { ProjectDbResult } from '@spatula/db';
+} from '@accidentally-awesome-labs/spatula-db';
+import type { ProjectDbResult } from '@accidentally-awesome-labs/spatula-db';
 
 const { runs } = sqliteSchema;
 

@@ -1,6 +1,6 @@
 import type { MiddlewareHandler } from 'hono';
 import type Redis from 'ioredis';
-import { ErrorCode } from '@spatula/shared';
+import { ErrorCode } from '@accidentally-awesome-labs/spatula-shared';
 import { lookupRateLimit } from './rate-limit-config.js';
 
 const WINDOW_MS = 60_000;

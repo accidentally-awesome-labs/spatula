@@ -1,15 +1,12 @@
-# render.yaml — Spatula free-tier blueprint
+# render.yaml — Spatula paid starter blueprint
 #
-# Deploy the full Spatula stack on a Render free-tier account in one click.
-# This is a TRY-IT / DEMO path. For production, split api and worker into
-# separate services (see docs/runbooks/render-deploy.md).
+# Deploy the full Spatula stack on Render's paid starter plans. For sustained
+# production load, split API and worker into separate services.
 #
 # Provisions:
-#   • One free Web Service running the API + embedded BullMQ worker in-process
-#     (SPATULA_EMBEDDED_WORKER=1) — D-06: Render free tier has no Background
-#     Worker type (paid-only); the worker runs alongside the API instead.
-#   • One free Key Value (Redis) — BullMQ job queue + caching.
-#   • One free PostgreSQL database — persistent application data.
+#   • One starter Web Service running API + embedded BullMQ worker in-process.
+#   • One starter Key Value service for BullMQ and caching.
+#   • One basic PostgreSQL database for persistent application data.
 #
 # Render docs: https://render.com/docs/blueprint-spec
 
@@ -17,7 +14,7 @@ services:
   - name: spatula-api
     type: web # NOT 'worker' — Background Worker requires a paid plan
     runtime: node
-    plan: starter # paid: avoids 15-min free-tier spin-down (embedded worker stays warm)
+    plan: starter
     # Render auto-provides pnpm from pnpm-lock.yaml — do NOT `corepack enable`
     # (its shim dir /usr/bin is read-only on Render's build image → EROFS).
     # --prod=false: NODE_ENV=production (below) makes pnpm skip devDeps, but the
@@ -44,7 +41,7 @@ services:
           property: connectionString
 
       # ── Embedded worker (D-06) ──────────────────────────────────────────────
-      # Runs the BullMQ worker in-process on the single free Web Service.
+      # Runs the BullMQ worker in-process on the starter Web Service.
       # Remove this when upgrading to a paid plan with a separate Worker service.
       - key: SPATULA_EMBEDDED_WORKER
         value: '1'
@@ -52,10 +49,6 @@ services:
       # ── Runtime environment ─────────────────────────────────────────────────
       - key: NODE_ENV
         value: production
-
-      # Marker read by runbook docs / caveats tooling
-      - key: SPATULA_RENDER_FREE_TIER
-        value: '1'
 
       # ── Secrets — set these in the Render dashboard (not committed here) ────
       # Required: LLM inference key
@@ -95,11 +88,11 @@ services:
 
   - name: spatula-cache
     type: keyvalue # canonical form; 'redis' is a deprecated alias
-    plan: starter # next tier above free (free KV slot already in use); persists to disk
+    plan: starter
     ipAllowList:
       - source: 0.0.0.0/0
         description: Allow all (Render routes traffic through its internal network)
 
 databases:
   - name: spatula-db
-    plan: basic-256mb # next tier above free (free Postgres slot already in use); no 30-day expiry
+    plan: basic-256mb

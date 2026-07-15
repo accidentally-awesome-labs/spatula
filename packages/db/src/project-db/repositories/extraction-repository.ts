@@ -1,7 +1,7 @@
 /**
  * SQLite extraction repository — local project mode.
  *
- * Implements ExtractionRepo from @spatula/core/pipeline/types.ts.
+ * Implements ExtractionRepo from @accidentally-awesome-labs/spatula-core/pipeline/types.ts.
  *
  * Key differences from Postgres ExtractionRepository:
  * - No tenantId filtering (single-user local mode)
@@ -10,7 +10,7 @@
  * - UUIDs via crypto.randomUUID(), timestamps via new Date().toISOString()
  */
 import { eq, and, desc, inArray } from 'drizzle-orm';
-import type { ExtractionRepo } from '@spatula/core/pipeline/types.js';
+import type { ExtractionRepo } from '@accidentally-awesome-labs/spatula-core/pipeline/types.js';
 import type { ProjectDatabase } from '../connection.js';
 import { extractions } from '../../schema-sqlite/extractions.js';
 import { wrapStorageError } from './utils.js';

@@ -48,7 +48,7 @@ export type FieldDefinition = z.infer<typeof FieldDefinition>;
 
 // `FieldDef` / `FieldDefSchema` are the public surface names. Keep both for
 // backward compatibility.
-// `FieldDefinition` is the legacy in-tree name (used across @spatula/core).
+// `FieldDefinition` is the legacy in-tree name (used across @accidentally-awesome-labs/spatula-core).
 export { FieldDefinition as FieldDefSchema };
 export type FieldDef = FieldDefinition;
 

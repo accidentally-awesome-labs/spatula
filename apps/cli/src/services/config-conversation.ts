@@ -1,4 +1,9 @@
-import type { LLMClient, LLMCompletionRequest, JobConfig, ConfigAction } from '@spatula/core';
+import type {
+  LLMClient,
+  LLMCompletionRequest,
+  JobConfig,
+  ConfigAction,
+} from '@accidentally-awesome-labs/spatula-core';
 import type { ChatMessage } from '../store/index.js';
 
 interface ConversationResult {

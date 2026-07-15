@@ -12,7 +12,7 @@
  *     this class never touches the shared deps.redis connection.
  */
 import type Redis from 'ioredis';
-import type { JobEvent } from '@spatula/queue';
+import type { JobEvent } from '@accidentally-awesome-labs/spatula-queue';
 
 export class RedisStreamBuffer {
   private readonly streamKey: string;

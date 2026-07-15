@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest';
 import { applyCategoryActions } from '../../../src/execution/category-applier.js';
 import type { SchemaDefinition } from '../../../src/types/schema.js';
 import type { PipelineAction } from '../../../src/types/actions.js';
-import { generateId } from '@spatula/shared';
+import { generateId } from '@accidentally-awesome-labs/spatula-shared';
 
 function baseAction(): Pick<
   PipelineAction,

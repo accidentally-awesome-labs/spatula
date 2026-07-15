@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { filterEntitiesLocally } from '../../../src/hooks/useEntityFilter.js';
-import type { Entity } from '@spatula/shared';
+import type { Entity } from '@accidentally-awesome-labs/spatula-shared';
 
 describe('filterEntitiesLocally', () => {
   const entities: Entity[] = [

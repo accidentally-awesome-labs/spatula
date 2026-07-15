@@ -1,5 +1,5 @@
 import { eq, and, sql } from 'drizzle-orm';
-import { createLogger, StorageError } from '@spatula/shared';
+import { createLogger, StorageError } from '@accidentally-awesome-labs/spatula-shared';
 import { entities, entitySources } from '../schema/entities.js';
 import { extractions } from '../schema/extractions.js';
 import { rawPages } from '../schema/raw-pages.js';

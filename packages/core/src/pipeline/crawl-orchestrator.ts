@@ -1,5 +1,9 @@
 // packages/core/src/pipeline/crawl-orchestrator.ts
-import { createLoggerWithContext, CrawlError, NetworkError } from '@spatula/shared';
+import {
+  createLoggerWithContext,
+  CrawlError,
+  NetworkError,
+} from '@accidentally-awesome-labs/spatula-shared';
 import { createHash } from 'node:crypto';
 import { isIP } from 'node:net';
 import type { JobConfig, LinkEvaluationContext } from '../index.js';

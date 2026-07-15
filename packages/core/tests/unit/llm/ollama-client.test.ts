@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { LLMError, TimeoutError } from '@spatula/shared';
+import { LLMError, TimeoutError } from '@accidentally-awesome-labs/spatula-shared';
 import { OllamaClient } from '../../../src/llm/ollama-client.js';
 import type { LLMCompletionRequest } from '../../../src/interfaces/llm-client.js';
 

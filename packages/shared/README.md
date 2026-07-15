@@ -1,6 +1,6 @@
-# @spatula/shared
+# @accidentally-awesome-labs/spatula-shared
 
-> **NO COMPAT GUARANTEE AT TS-API LEVEL.** This is an internal Spatula implementation package. Breaking changes to its TypeScript surface may land in any **MINOR** release. External consumers should not import it directly. The public packages with semver-stable TypeScript surfaces are: `@spatula/client`, `@spatula/core-types`, and `@spatula/cli`. See [`docs/compat-policy.md`](https://github.com/accidentally-awesome-labs/spatula/blob/main/docs/compat-policy.md) for the full matrix.
+> **NO COMPAT GUARANTEE AT TS-API LEVEL.** This is an internal Spatula implementation package. Breaking changes to its TypeScript surface may land in any **MINOR** release. External consumers should not import it directly. The public packages with semver-stable TypeScript surfaces are: `@accidentally-awesome-labs/spatula-client`, `@accidentally-awesome-labs/spatula-core-types`, and `@accidentally-awesome-labs/spatula`. See [`docs/compat-policy.md`](https://github.com/accidentally-awesome-labs/spatula/blob/main/docs/compat-policy.md) for the full matrix.
 
 ## Purpose
 
@@ -8,7 +8,7 @@ Cross-cutting utilities for Spatula: structured logging (pino), OpenTelemetry in
 
 ## Stability
 
-**No stable TS-API.** `ErrorCode` is canonical in `@spatula/core-types`; this package re-exports it via a back-compat shim. New consumers should import `ErrorCode` from `@spatula/core-types` directly.
+**No stable TS-API.** `ErrorCode` is canonical in `@accidentally-awesome-labs/spatula-core-types`; this package re-exports it via a back-compat shim. New consumers should import `ErrorCode` from `@accidentally-awesome-labs/spatula-core-types` directly.
 
 ## Compatibility
 

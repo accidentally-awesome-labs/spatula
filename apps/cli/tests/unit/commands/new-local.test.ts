@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { configToYaml } from '../../../src/commands/new.js';
-import type { JobConfig } from '@spatula/core';
+import type { JobConfig } from '@accidentally-awesome-labs/spatula-core';
 
 describe('configToYaml', () => {
   it('converts JobConfig to spatula.yaml format', () => {

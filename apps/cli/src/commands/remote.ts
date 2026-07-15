@@ -1,5 +1,5 @@
-import { loadGlobalConfig, saveGlobalConfig } from '@spatula/core';
-import type { GlobalConfig } from '@spatula/core';
+import { loadGlobalConfig, saveGlobalConfig } from '@accidentally-awesome-labs/spatula-core';
+import type { GlobalConfig } from '@accidentally-awesome-labs/spatula-core';
 import { SpatulaApiClient } from '../api/client.js';
 
 // ---------------------------------------------------------------------------

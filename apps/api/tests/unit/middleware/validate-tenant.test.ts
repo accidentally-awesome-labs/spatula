@@ -1,6 +1,6 @@
 import { describe, it, expect, vi } from 'vitest';
 import { Hono } from 'hono';
-import { SpatulaError } from '@spatula/shared';
+import { SpatulaError } from '@accidentally-awesome-labs/spatula-shared';
 import { validateTenantMiddleware } from '../../../src/middleware/validate-tenant.js';
 
 describe('validateTenantMiddleware', () => {

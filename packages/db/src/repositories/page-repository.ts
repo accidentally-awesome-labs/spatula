@@ -1,5 +1,5 @@
 import { eq, and, inArray } from 'drizzle-orm';
-import { createLogger, StorageError } from '@spatula/shared';
+import { createLogger, StorageError } from '@accidentally-awesome-labs/spatula-shared';
 import { rawPages } from '../schema/raw-pages.js';
 import type { Database } from '../connection.js';
 

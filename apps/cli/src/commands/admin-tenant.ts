@@ -14,7 +14,7 @@ import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { createInterface } from 'node:readline';
 import { dirname, join, resolve } from 'node:path';
 
-import { loadGlobalConfig } from '@spatula/core';
+import { loadGlobalConfig } from '@accidentally-awesome-labs/spatula-core';
 
 import { ApiError } from '../api/client.js';
 

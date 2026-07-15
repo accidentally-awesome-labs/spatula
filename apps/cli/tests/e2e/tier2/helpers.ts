@@ -27,9 +27,13 @@ import {
   LLMLinkEvaluator,
   resolveModel,
   LocalDataSource,
-} from '@spatula/core';
-import type { LLMClient, Crawler, DataSource } from '@spatula/core';
-import { createProjectDb, initializeProjectDb, ProjectAdapter } from '@spatula/db';
+} from '@accidentally-awesome-labs/spatula-core';
+import type { LLMClient, Crawler, DataSource } from '@accidentally-awesome-labs/spatula-core';
+import {
+  createProjectDb,
+  initializeProjectDb,
+  ProjectAdapter,
+} from '@accidentally-awesome-labs/spatula-db';
 import { slugifyPath } from '../../../src/local-project.js';
 
 // ---------------------------------------------------------------------------

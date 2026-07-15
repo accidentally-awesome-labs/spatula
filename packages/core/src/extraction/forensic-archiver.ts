@@ -8,13 +8,13 @@
  * Design constraints:
  * - Raw HTML goes ONLY to the content store, NEVER to the DLQ payload.
  * - DLQ payload carries only metadata: extractionId, forensicRef, reason, scanFlags.
- * - The `dlqWriter` is injected as a minimal structural interface so @spatula/core
- *   does not import @spatula/db (no circular dep).
+ * - The `dlqWriter` is injected as a minimal structural interface so @accidentally-awesome-labs/spatula-core
+ *   does not import @accidentally-awesome-labs/spatula-db (no circular dep).
  * - Each call produces a distinct timestamped key; archival is NOT idempotent
  *   (each suspicious event is its own forensic record).
  */
 import type { ContentStore } from '../interfaces/content-store.js';
-import { createLogger } from '@spatula/shared';
+import { createLogger } from '@accidentally-awesome-labs/spatula-shared';
 
 const logger = createLogger('forensic-archiver');
 
@@ -39,7 +39,7 @@ export interface ForensicArchiveInput {
 
 /**
  * Minimal structural interface for the DLQ writer.
- * Matches the insert signature of @spatula/db's DlqRepository without importing it.
+ * Matches the insert signature of @accidentally-awesome-labs/spatula-db's DlqRepository without importing it.
  */
 export interface ForensicDlqWriter {
   insert(record: ForensicDlqRecord): Promise<void>;

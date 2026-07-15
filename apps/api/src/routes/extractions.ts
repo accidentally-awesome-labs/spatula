@@ -2,7 +2,7 @@ import { createRoute, z } from '@hono/zod-openapi';
 import { createOpenAPIRouter } from '../openapi-config.js';
 import { paginationSchema, paginationEnvelopeSchema } from '../schemas/pagination.js';
 import { extractionResponseSchema, jsonContent } from '../schemas/responses.js';
-import { decodeCursor, encodeCursor } from '@spatula/shared';
+import { decodeCursor, encodeCursor } from '@accidentally-awesome-labs/spatula-shared';
 import { applyDeprecationHeaders } from '../lib/deprecation-headers.js';
 
 const jobIdParam = z.object({

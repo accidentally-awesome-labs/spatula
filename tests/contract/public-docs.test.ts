@@ -46,7 +46,7 @@ const STALE_PATTERNS: Array<{ pattern: RegExp; message: string }> = [
     message: 'do not imply an official hosted API exists; use localhost/self-hosted examples',
   },
   {
-    pattern: /spatula setup --skip/i,
+    pattern: /spatula setup --skip(?!-browser)\b/i,
     message: '`spatula setup --skip` is not implemented',
   },
   {
@@ -54,7 +54,7 @@ const STALE_PATTERNS: Array<{ pattern: RegExp; message: string }> = [
     message: '`spatula jobs:*` commands are not implemented',
   },
   {
-    pattern: /pnpm --filter @spatula\/db(?:\s+run)?\s+migrate\b/i,
+    pattern: /pnpm --filter @accidentally-awesome-labs\/spatula-db(?:\s+run)?\s+migrate\b/i,
     message: 'the db package migration script is `db:migrate`',
   },
   {

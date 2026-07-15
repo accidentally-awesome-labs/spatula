@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
-import { actions } from '@spatula/db';
+import { actions } from '@accidentally-awesome-labs/spatula-db';
 import { setupTenantPair, bearerHeaders, minimalJobBody, type AuthTestContext } from './helpers.js';
 
 describe('Tier 5B: Multi-Tenant Isolation', () => {

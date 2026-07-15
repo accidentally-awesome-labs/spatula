@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { JobStateMachine } from '../../src/state-machine.js';
-import { StateError } from '@spatula/shared';
+import { StateError } from '@accidentally-awesome-labs/spatula-shared';
 
 describe('JobStateMachine', () => {
   it('allows pending → queued', () => {

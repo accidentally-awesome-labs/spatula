@@ -1,6 +1,6 @@
 import { describe, it, expect, vi } from 'vitest';
-import type { DataSource, PaginatedResult } from '@spatula/core';
-import type { Entity } from '@spatula/shared';
+import type { DataSource, PaginatedResult } from '@accidentally-awesome-labs/spatula-core';
+import type { Entity } from '@accidentally-awesome-labs/spatula-shared';
 import { isDataSource } from '../../../src/hooks/useJobPolling.js';
 
 function mockDataSource(overrides: Partial<DataSource> = {}): DataSource {

@@ -7,7 +7,7 @@ import {
   dataResponse,
   jsonContent,
 } from '../schemas/responses.js';
-import { InternalError, TenantNotFoundError } from '@spatula/shared';
+import { InternalError, TenantNotFoundError } from '@accidentally-awesome-labs/spatula-shared';
 
 const createTenantRoute = createRoute({
   method: 'post',

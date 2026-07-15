@@ -11,13 +11,23 @@ import { render } from 'ink';
 import { writeFileSync, mkdirSync, existsSync } from 'node:fs';
 import { join } from 'node:path';
 import { stringify as stringifyYaml } from 'yaml';
-import { OpenRouterClient } from '@spatula/core';
-import type { ConfigAction, JobConfig } from '@spatula/core';
+import {
+  CircuitBreakerLLMClient,
+  createLLMClient,
+  loadGlobalConfig,
+} from '@accidentally-awesome-labs/spatula-core';
+import type { ConfigAction, JobConfig } from '@accidentally-awesome-labs/spatula-core';
 import { createCliStore } from '../store/index.js';
 import { SpatulaApiClient } from '../api/client.js';
 import { ConfigConversationService } from '../services/config-conversation.js';
 import { App } from '../components/App.js';
 import type { CliStore } from '../store/index.js';
+import {
+  checkProviderConnection,
+  collectPreflightIssues,
+  formatPreflightIssues,
+  resolveRuntimeConfig,
+} from '../runtime-preflight.js';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -26,6 +36,7 @@ import type { CliStore } from '../store/index.js';
 export interface NewCommandOptions {
   apiUrl: string;
   tenantId?: string;
+  /** @deprecated Saved configuration or OPENROUTER_API_KEY is preferred. */
   openrouterApiKey?: string;
   model?: string;
 }
@@ -63,8 +74,6 @@ export function configToYaml(config: JobConfig): string {
 // ---------------------------------------------------------------------------
 // Constants
 // ---------------------------------------------------------------------------
-
-const DEFAULT_MODEL = 'anthropic/claude-sonnet-4-20250514';
 
 // ---------------------------------------------------------------------------
 // Core logic
@@ -194,18 +203,59 @@ async function handleConfirmAndStart(
 export async function runNewCommand(options: NewCommandOptions): Promise<void> {
   const { apiUrl, model } = options;
 
-  const openrouterApiKey = options.openrouterApiKey ?? process.env.OPENROUTER_API_KEY;
-  if (!openrouterApiKey) {
-    console.error('OPENROUTER_API_KEY is required for conversational mode.');
-    console.error('To create a project without an LLM, use `spatula init <url>` instead.');
-    process.exit(1);
+  let saved: ReturnType<typeof loadGlobalConfig> = null;
+  try {
+    saved = loadGlobalConfig();
+  } catch (error) {
+    console.error(
+      `Saved Spatula configuration is invalid: ${
+        error instanceof Error ? error.message : String(error)
+      }`,
+    );
+    console.error('Fix: run `spatula setup` to repair it.');
+    process.exitCode = 1;
+    return;
+  }
+  const runtime = resolveRuntimeConfig(
+    options.openrouterApiKey
+      ? { ...saved, version: saved?.version ?? 1, openrouterApiKey: options.openrouterApiKey }
+      : saved,
+  );
+  if (model) runtime.model = model;
+  const issues = collectPreflightIssues(runtime, { requireLlm: true, requireCrawler: false });
+  if (issues.length > 0) {
+    console.error('Conversational setup is not ready:');
+    console.error(formatPreflightIssues(issues));
+    process.exitCode = 1;
+    return;
+  }
+  if (runtime.provider === 'ollama') {
+    const providerCheck = await checkProviderConnection(runtime);
+    if (providerCheck.status !== 'pass') {
+      console.error(providerCheck.message);
+      console.error(`Fix: start Ollama and run \`ollama pull ${runtime.model}\`.`);
+      process.exitCode = 1;
+      return;
+    }
   }
 
   const tenantId = options.tenantId ?? 'local';
   const store = createCliStore(tenantId);
   const apiClient = options.tenantId ? new SpatulaApiClient(apiUrl, options.tenantId) : null;
-  const llmClient = new OpenRouterClient({ apiKey: openrouterApiKey });
-  const conversationService = new ConfigConversationService(llmClient, model ?? DEFAULT_MODEL);
+  const rawLlmClient = createLLMClient({
+    provider: runtime.provider,
+    openrouter:
+      runtime.provider === 'openrouter'
+        ? {
+            apiKey: runtime.openrouterApiKey ?? '',
+            baseUrl: process.env.OPENROUTER_BASE_URL,
+          }
+        : undefined,
+    ollama: runtime.provider === 'ollama' ? { baseUrl: runtime.ollamaBaseUrl } : undefined,
+  });
+  const llmClient =
+    runtime.provider === 'openrouter' ? new CircuitBreakerLLMClient(rawLlmClient) : rawLlmClient;
+  const conversationService = new ConfigConversationService(llmClient, runtime.model);
 
   // Subscribe to store — process new user messages automatically
   const unsubscribe = store.subscribe((state, prevState) => {

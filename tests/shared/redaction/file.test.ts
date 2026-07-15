@@ -7,7 +7,12 @@ import { createWriteStream, readFileSync, unlinkSync, existsSync } from 'node:fs
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import pino from 'pino';
-import { REDACT_PATHS, REDACTED_PLACEHOLDER, redactValue, redactObject } from '@spatula/shared';
+import {
+  REDACT_PATHS,
+  REDACTED_PLACEHOLDER,
+  redactValue,
+  redactObject,
+} from '@accidentally-awesome-labs/spatula-shared';
 
 const CANARY_JWT = 'eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIxMjM0NTY3ODkwIn0.dummysignatureXXXXXXXX';
 const CANARY_SK = 'sk-test1234567890abcdef1234';

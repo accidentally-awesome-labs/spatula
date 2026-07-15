@@ -3,7 +3,7 @@ import { Box, Text } from 'ink';
 import { useStore } from 'zustand';
 import type { CliStore } from '../../store/index.js';
 import type { SpatulaApiClient } from '../../api/client.js';
-import type { DataSource } from '@spatula/core';
+import type { DataSource } from '@accidentally-awesome-labs/spatula-core';
 import { useJobPolling, isDataSource } from '../../hooks/useJobPolling.js';
 import { useWebSocket } from '../../hooks/useWebSocket.js';
 import { useKeyboard } from '../../hooks/useKeyboard.js';

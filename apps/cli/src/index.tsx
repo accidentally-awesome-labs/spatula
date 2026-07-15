@@ -41,6 +41,11 @@ import {
   runAdminTenantImport,
 } from './commands/admin-tenant.js';
 
+declare const __SPATULA_VERSION__: string;
+const cliArgs = hideBin(process.argv);
+const spatulaVersion =
+  typeof __SPATULA_VERSION__ === 'undefined' ? '0.1.0-dev' : __SPATULA_VERSION__;
+
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
@@ -68,9 +73,10 @@ export function getApiClient(argv: { apiUrl: string; tenantId: string }): Spatul
 // CLI definition
 // ---------------------------------------------------------------------------
 
-yargs(hideBin(process.argv))
+const parser = yargs(cliArgs)
   .scriptName('spatula')
   .usage('$0 <command> [options]')
+  .version(spatulaVersion)
 
   // Global options
   .option('api-url', {
@@ -104,7 +110,7 @@ yargs(hideBin(process.argv))
         .option('limit', {
           type: 'number',
           describe: 'Default page limit',
-          default: 1000,
+          default: 25,
         }),
     async (argv) => {
       const result = await runInitCommand({
@@ -123,13 +129,19 @@ yargs(hideBin(process.argv))
     'run',
     'Run the local crawl pipeline for the current project',
     (y) =>
-      y.option('force', {
-        type: 'boolean',
-        default: false,
-        describe: 'Bypass the single-instance project lock',
-      }),
+      y
+        .option('force', {
+          type: 'boolean',
+          default: false,
+          describe: 'Bypass the single-instance project lock',
+        })
+        .option('crawl-only', {
+          type: 'boolean',
+          default: false,
+          describe: 'Archive pages without LLM classification or structured extraction',
+        }),
     async (argv) => {
-      await runRunCommand({ force: argv.force });
+      await runRunCommand({ force: argv.force, crawlOnly: argv.crawlOnly });
     },
   )
 
@@ -231,10 +243,29 @@ yargs(hideBin(process.argv))
   .command(
     'setup',
     'Configure global Spatula settings (~/.spatula/config.yaml)',
-    () => {},
-    async () => {
+    (y) =>
+      y
+        .option('install-browser', {
+          type: 'boolean',
+          default: false,
+          describe: 'Install Playwright Chromium without asking for confirmation',
+        })
+        .option('skip-browser', {
+          type: 'boolean',
+          default: false,
+          describe: 'Do not install Playwright Chromium during setup',
+        })
+        .check((argv) => {
+          if (argv.installBrowser && argv.skipBrowser) {
+            throw new Error('--install-browser and --skip-browser cannot be used together.');
+          }
+          return true;
+        }),
+    async (argv) => {
       const { runSetupCommand } = await import('./commands/setup.js');
-      await runSetupCommand();
+      await runSetupCommand({
+        browser: argv.installBrowser ? 'install' : argv.skipBrowser ? 'skip' : 'prompt',
+      });
     },
   )
 
@@ -264,14 +295,12 @@ yargs(hideBin(process.argv))
       }),
     async (argv) => {
       const tenantId = argv.tenantId || process.env.SPATULA_TENANT_ID || '';
-      const openrouterApiKey = process.env.OPENROUTER_API_KEY ?? '';
 
       // Dynamic import to avoid loading React/Ink for non-interactive commands
       const { runNewCommand } = await import('./commands/new.js');
       await runNewCommand({
         apiUrl: argv.apiUrl,
         tenantId: tenantId || undefined,
-        openrouterApiKey: openrouterApiKey || undefined,
         model: argv.model,
       });
     },
@@ -717,9 +746,24 @@ yargs(hideBin(process.argv))
 
   .demandCommand(1, 'Please specify a command. Run with --help to see available commands.')
   .strict()
-  .help()
-  .parseAsync()
-  .catch((err: unknown) => {
-    console.error(err instanceof Error ? err.message : 'An unexpected error occurred');
-    process.exit(1);
-  });
+  .help();
+
+async function main(): Promise<void> {
+  if (cliArgs.length === 0) {
+    if (process.stdin.isTTY && process.stdout.isTTY) {
+      const { runGuidedOnboarding } = await import('./commands/onboarding.js');
+      await runGuidedOnboarding();
+      return;
+    }
+
+    console.log(await parser.getHelp());
+    return;
+  }
+
+  await parser.parseAsync();
+}
+
+main().catch((err: unknown) => {
+  console.error(err instanceof Error ? err.message : 'An unexpected error occurred');
+  process.exitCode = 1;
+});

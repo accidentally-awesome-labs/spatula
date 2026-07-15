@@ -6,7 +6,7 @@ import {
   formatFileSize,
   runExportCommand,
 } from '../../../src/commands/export.js';
-import type { Entity } from '@spatula/shared';
+import type { Entity } from '@accidentally-awesome-labs/spatula-shared';
 
 // ---------------------------------------------------------------------------
 // Mocks
@@ -36,8 +36,10 @@ const mockExportFn = vi.fn().mockResolvedValue({
   generatedAt: new Date(),
 });
 
-vi.mock('@spatula/core', async () => {
-  const actual = await vi.importActual<typeof import('@spatula/core')>('@spatula/core');
+vi.mock('@accidentally-awesome-labs/spatula-core', async () => {
+  const actual = await vi.importActual<typeof import('@accidentally-awesome-labs/spatula-core')>(
+    '@accidentally-awesome-labs/spatula-core',
+  );
   return {
     ...actual,
     JsonExporter: vi.fn().mockImplementation(() => ({

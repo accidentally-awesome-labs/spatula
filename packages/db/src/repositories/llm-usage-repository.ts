@@ -1,5 +1,5 @@
 import { eq, and, gte, sql, desc } from 'drizzle-orm';
-import { StorageError } from '@spatula/shared';
+import { StorageError } from '@accidentally-awesome-labs/spatula-shared';
 import { llmUsage } from '../schema/llm-usage.js';
 import type { Database } from '../connection.js';
 

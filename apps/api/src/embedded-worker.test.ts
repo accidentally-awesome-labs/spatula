@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, afterEach } from 'vitest';
-import type { WorkerHandle } from '@spatula/queue';
+import type { WorkerHandle } from '@accidentally-awesome-labs/spatula-queue';
 
 describe('startEmbeddedWorker()', () => {
   const originalEnv = process.env.SPATULA_EMBEDDED_WORKER;

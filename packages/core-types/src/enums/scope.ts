@@ -1,7 +1,7 @@
 /**
  * Frozen v1 auth-scope enum.
  *
- * Mirrors `AUTH_SCOPES` in `@spatula/shared/auth/types.ts`. Frozen at v1;
+ * Mirrors `AUTH_SCOPES` in `@accidentally-awesome-labs/spatula-shared/auth/types.ts`. Frozen at v1;
  * additive-only in 1.x. Adding a scope is non-breaking; renaming or removing
  * one is breaking and requires v2.
  */

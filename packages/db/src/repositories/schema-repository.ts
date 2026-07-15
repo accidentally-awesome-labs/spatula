@@ -1,6 +1,6 @@
 import { eq, and, desc } from 'drizzle-orm';
-import { createLogger, StorageError } from '@spatula/shared';
-import type { SchemaDefinition } from '@spatula/core';
+import { createLogger, StorageError } from '@accidentally-awesome-labs/spatula-shared';
+import type { SchemaDefinition } from '@accidentally-awesome-labs/spatula-core';
 import { schemasTable } from '../schema/schemas.js';
 import type { Database } from '../connection.js';
 import type { RedisCache } from '../cache.js';

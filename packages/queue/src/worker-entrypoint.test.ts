@@ -32,7 +32,7 @@ vi.mock('ioredis', () => {
   return { default: Redis };
 });
 
-vi.mock('@spatula/shared', () => ({
+vi.mock('@accidentally-awesome-labs/spatula-shared', () => ({
   createLogger: () => ({
     info: vi.fn(),
     warn: vi.fn(),
@@ -44,7 +44,7 @@ vi.mock('@spatula/shared', () => ({
   getEnvOrDefault: vi.fn((key: string, def: string) => def),
 }));
 
-vi.mock('@spatula/db', () => ({
+vi.mock('@accidentally-awesome-labs/spatula-db', () => ({
   createDatabasePool: vi.fn().mockReturnValue({
     db: {},
     pool: { end: vi.fn().mockResolvedValue(undefined) },
@@ -241,8 +241,8 @@ describe('AlsUsageRecorder + usageContext.run — Gap-3 ALS attribution', () => 
 
 // ─── Test 3: Per-job model derivation (Gap-2) ────────────────────────────────
 
-// Mock @spatula/core for the per-job tests (same pattern as derive-job-deps.test.ts)
-vi.mock('@spatula/core', () => {
+// Mock @accidentally-awesome-labs/spatula-core for the per-job tests (same pattern as derive-job-deps.test.ts)
+vi.mock('@accidentally-awesome-labs/spatula-core', () => {
   const resolveModel = (
     config: { primaryModel: string; modelOverrides?: Record<string, string> },
     task: string,

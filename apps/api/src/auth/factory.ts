@@ -1,6 +1,6 @@
-import type { AuthProvider } from '@spatula/shared';
-import { ConfigError } from '@spatula/shared';
-import type { ApiKeyRepository } from '@spatula/db';
+import type { AuthProvider } from '@accidentally-awesome-labs/spatula-shared';
+import { ConfigError } from '@accidentally-awesome-labs/spatula-shared';
+import type { ApiKeyRepository } from '@accidentally-awesome-labs/spatula-db';
 import { NoAuthProvider } from './no-auth-provider.js';
 import { ApiKeyAuthProvider } from './api-key-provider.js';
 import { JwtAuthProvider } from './jwt-provider.js';

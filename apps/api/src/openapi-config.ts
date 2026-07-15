@@ -1,5 +1,5 @@
 import { OpenAPIHono } from '@hono/zod-openapi';
-import { ErrorCode } from '@spatula/shared';
+import { ErrorCode } from '@accidentally-awesome-labs/spatula-shared';
 import Ajv2020 from 'ajv/dist/2020.js';
 import addFormats from 'ajv-formats';
 import type { AppEnv } from './types.js';

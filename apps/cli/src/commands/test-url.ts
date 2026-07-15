@@ -6,8 +6,13 @@ import {
   StaticExtractor,
   PlaywrightCrawler,
   FirecrawlCrawler,
-} from '@spatula/core';
-import type { LLMClient, LLMFactoryConfig, Crawler, SchemaDefinition } from '@spatula/core';
+} from '@accidentally-awesome-labs/spatula-core';
+import type {
+  LLMClient,
+  LLMFactoryConfig,
+  Crawler,
+  SchemaDefinition,
+} from '@accidentally-awesome-labs/spatula-core';
 
 export interface TestUrlArgs {
   url: string;
@@ -205,7 +210,7 @@ export async function testUrl(args: TestUrlArgs): Promise<void> {
       }
     } else {
       // No LLM — use CSS-only extractor
-      const { CssExtractor } = await import('@spatula/core');
+      const { CssExtractor } = await import('@accidentally-awesome-labs/spatula-core');
       const cssExtractor = new CssExtractor();
 
       const schema: SchemaDefinition = userSchema ?? {

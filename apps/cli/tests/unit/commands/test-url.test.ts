@@ -2,7 +2,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 
 // ---------------------------------------------------------------------------
 // Module-level mock for `playwright` — testUrl dynamically imports it and calls
-// `chromium.launch()` even when the @spatula/core PlaywrightCrawler wrapper
+// `chromium.launch()` even when the @accidentally-awesome-labs/spatula-core PlaywrightCrawler wrapper
 // below is mocked. Without this stub the test fails on CI runners that don't
 // have a Chromium binary installed.
 // ---------------------------------------------------------------------------
@@ -17,10 +17,10 @@ vi.mock('playwright', () => ({
 }));
 
 // ---------------------------------------------------------------------------
-// Module-level mock for @spatula/core — prevents real browser/LLM instantiation
+// Module-level mock for @accidentally-awesome-labs/spatula-core — prevents real browser/LLM instantiation
 // ---------------------------------------------------------------------------
 
-vi.mock('@spatula/core', () => {
+vi.mock('@accidentally-awesome-labs/spatula-core', () => {
   const mockLLMClient = {
     complete: vi.fn(),
     completeWithSchema: vi.fn(),
@@ -94,7 +94,8 @@ describe('testUrl error paths', () => {
   });
 
   it('runs CSS-only extraction when --skip-llm is used without --schema', async () => {
-    const { CssExtractor, PlaywrightCrawler } = await import('@spatula/core');
+    const { CssExtractor, PlaywrightCrawler } =
+      await import('@accidentally-awesome-labs/spatula-core');
     const mockCrawl = vi.fn().mockResolvedValue({
       html: '<html><body><h1>Test</h1></body></html>',
       statusCode: 200,

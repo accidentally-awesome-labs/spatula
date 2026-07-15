@@ -11,14 +11,14 @@ const root = resolve(__dirname, '../..');
 //     server with seeded tenant + API key
 //
 // Mirrors the alias shape of tests/e2e/vitest.config.ts so workspace imports
-// resolve identically (this suite reuses @spatula/* package barrels).
+// resolve identically (this suite reuses @accidentally-awesome-labs/spatula-* package barrels).
 export default defineConfig({
   resolve: {
     alias: {
-      '@spatula/shared': resolve(root, 'packages/shared/src/index.ts'),
-      '@spatula/core': resolve(root, 'packages/core/src/index.ts'),
-      '@spatula/db': resolve(root, 'packages/db/src/index.ts'),
-      '@spatula/queue': resolve(root, 'packages/queue/src/index.ts'),
+      '@accidentally-awesome-labs/spatula-shared': resolve(root, 'packages/shared/src/index.ts'),
+      '@accidentally-awesome-labs/spatula-core': resolve(root, 'packages/core/src/index.ts'),
+      '@accidentally-awesome-labs/spatula-db': resolve(root, 'packages/db/src/index.ts'),
+      '@accidentally-awesome-labs/spatula-queue': resolve(root, 'packages/queue/src/index.ts'),
     },
   },
   test: {

@@ -1,7 +1,7 @@
 import type { MiddlewareHandler } from 'hono';
-import { ErrorCode } from '@spatula/shared';
-import type { AuthProvider, AuditLogger } from '@spatula/shared';
-import type { UserTenantRepository, TenantRepository } from '@spatula/db';
+import { ErrorCode } from '@accidentally-awesome-labs/spatula-shared';
+import type { AuthProvider, AuditLogger } from '@accidentally-awesome-labs/spatula-shared';
+import type { UserTenantRepository, TenantRepository } from '@accidentally-awesome-labs/spatula-db';
 
 const SKIP_AUTH_PATHS = new Set([
   '/health',

@@ -1,5 +1,5 @@
 import { eq, and, desc, sql, inArray } from 'drizzle-orm';
-import { createLogger, StorageError } from '@spatula/shared';
+import { createLogger, StorageError } from '@accidentally-awesome-labs/spatula-shared';
 import { entities, entitySources } from '../schema/entities.js';
 import type { Database } from '../connection.js';
 import type { RedisCache } from '../cache.js';

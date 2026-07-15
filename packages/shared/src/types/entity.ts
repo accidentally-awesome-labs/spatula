@@ -1,5 +1,5 @@
 /**
- * Inline mirror of FieldProvenanceEntry from @spatula/core.
+ * Inline mirror of FieldProvenanceEntry from @accidentally-awesome-labs/spatula-core.
  * Defined here to avoid a circular dependency (core depends on shared).
  */
 export interface FieldProvenanceEntry {

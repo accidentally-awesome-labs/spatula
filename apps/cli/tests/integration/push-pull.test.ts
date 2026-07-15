@@ -10,17 +10,23 @@ import { mkdtempSync, writeFileSync, mkdirSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { describe, it, expect, beforeAll, beforeEach, afterAll, afterEach, vi } from 'vitest';
-import { createProjectDb, initializeProjectDb, ProjectAdapter } from '@spatula/db';
-import type { GlobalConfig } from '@spatula/core';
+import {
+  createProjectDb,
+  initializeProjectDb,
+  ProjectAdapter,
+} from '@accidentally-awesome-labs/spatula-db';
+import type { GlobalConfig } from '@accidentally-awesome-labs/spatula-core';
 import { slugifyPath } from '../../src/local-project.js';
 
 // ---------------------------------------------------------------------------
-// Mock @spatula/core — loadGlobalConfig returns a remote config;
+// Mock @accidentally-awesome-labs/spatula-core — loadGlobalConfig returns a remote config;
 // parseProjectYamlFile / yamlToJobConfig return deterministic stubs.
 // ---------------------------------------------------------------------------
 
-vi.mock('@spatula/core', async () => {
-  const actual = await vi.importActual<typeof import('@spatula/core')>('@spatula/core');
+vi.mock('@accidentally-awesome-labs/spatula-core', async () => {
+  const actual = await vi.importActual<typeof import('@accidentally-awesome-labs/spatula-core')>(
+    '@accidentally-awesome-labs/spatula-core',
+  );
   return {
     ...actual,
     loadGlobalConfig: vi.fn(

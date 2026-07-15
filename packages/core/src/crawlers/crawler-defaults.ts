@@ -42,7 +42,7 @@ function resolvePackageVersion(): string {
 
 /**
  * The default User-Agent string used by Spatula crawlers when no `userAgent` option
- * is explicitly provided. Sourced from the `@spatula/core` package version.
+ * is explicitly provided. Sourced from the `@accidentally-awesome-labs/spatula-core` package version.
  *
  * Format: `Spatula/<version> (+https://github.com/accidentally-awesome-labs/spatula)`
  */

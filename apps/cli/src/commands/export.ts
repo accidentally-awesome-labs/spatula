@@ -1,22 +1,27 @@
 /**
  * `spatula export` — export entities from the local project database to a file.
  *
- * Uses exporter classes from @spatula/core directly (not the server-side
+ * Uses exporter classes from @accidentally-awesome-labs/spatula-core directly (not the server-side
  * processExport orchestrator) so we avoid server-side dependencies.
  */
 
 import { existsSync, mkdirSync, statSync, writeFileSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 
-import type { Exporter, ExportFormat, ExportOptions, SchemaDefinition } from '@spatula/core';
+import type {
+  Exporter,
+  ExportFormat,
+  ExportOptions,
+  SchemaDefinition,
+} from '@accidentally-awesome-labs/spatula-core';
 import {
   JsonExporter,
   CsvExporter,
   SqliteExporter,
   ParquetExporter,
   DuckDBExporter,
-} from '@spatula/core';
-import type { Entity } from '@spatula/shared';
+} from '@accidentally-awesome-labs/spatula-core';
+import type { Entity } from '@accidentally-awesome-labs/spatula-shared';
 
 import { openLocalProject } from '../local-project.js';
 

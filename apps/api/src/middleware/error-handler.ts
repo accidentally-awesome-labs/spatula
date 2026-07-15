@@ -6,7 +6,7 @@ import {
   createLogger,
   captureException,
   JobConflictError,
-} from '@spatula/shared';
+} from '@accidentally-awesome-labs/spatula-shared';
 
 const logger = createLogger('api:error-handler');
 
@@ -16,7 +16,7 @@ const logger = createLogger('api:error-handler');
  * extends `JobNotFoundError` for generic "Job"-resource cases and falls back
  * to a SpatulaError(ErrorCode.JOB_NOT_FOUND) for arbitrary `resource` strings.
  *
- * @deprecated Use the domain-specific subclass from `@spatula/shared`
+ * @deprecated Use the domain-specific subclass from `@accidentally-awesome-labs/spatula-shared`
  * (`JobNotFoundError`, `EntityNotFoundError`, etc.). Removed in v2.
  */
 export class NotFoundError extends SpatulaError {
@@ -44,7 +44,7 @@ export class NotFoundError extends SpatulaError {
 
 /**
  * @deprecated Use `JobConflictError` (or another domain-specific `*ConflictError`)
- * from `@spatula/shared`. Kept as a temporary re-export for compatibility.
+ * from `@accidentally-awesome-labs/spatula-shared`. Kept as a temporary re-export for compatibility.
  * Removed in v2.
  */
 export class ConflictError extends JobConflictError {

@@ -28,7 +28,7 @@ Run this checklist every quarter (or when a significant new attack class is repo
 - [ ] Identify any new attack classes not covered by the existing 10 fixtures.
 - [ ] Create new fixture HTML files for each new attack class (see naming convention below).
 - [ ] Add corresponding `describe` blocks to `adversarial.test.ts` (see Adding a Fixture).
-- [ ] Run the suite against both pinned models: `SPATULA_LIVE_LLM=1 pnpm --filter @spatula/core run test:adversarial`.
+- [ ] Run the suite against both pinned models: `SPATULA_LIVE_LLM=1 pnpm --filter @accidentally-awesome-labs/spatula-core run test:adversarial`.
 - [ ] If either pinned model fails a new fixture, investigate whether it's a model regression or an undefended attack. Fix the extractor before merging.
 - [ ] Update `pinned-models.ts` if a model pin needs rotation (see Pin Rotation below).
 - [ ] Commit with message: `fix(sec): adversarial corpus refresh YYYY-QN`.
@@ -136,7 +136,7 @@ Current pins:
 1. Update the string in `pinned-models.ts`.
 2. Run the FULL adversarial suite against both old and new pin:
    ```bash
-   SPATULA_LIVE_LLM=1 pnpm --filter @spatula/core run test:adversarial
+   SPATULA_LIVE_LLM=1 pnpm --filter @accidentally-awesome-labs/spatula-core run test:adversarial
    ```
 3. All 10+ tests must pass against the new pin before merging.
 4. Commit: `chore(sec): rotate adversarial suite pin to <new-model>`.
@@ -157,14 +157,14 @@ The adversarial suite runs automatically via `.github/workflows/adversarial-llm.
 To run locally with a live API key:
 
 ```bash
-SPATULA_LIVE_LLM=1 OPENROUTER_API_KEY=<your-key> pnpm --filter @spatula/core run test:adversarial
+SPATULA_LIVE_LLM=1 OPENROUTER_API_KEY=<your-key> pnpm --filter @accidentally-awesome-labs/spatula-core run test:adversarial
 ```
 
 For the Ollama pin (requires a running Ollama instance):
 
 ```bash
 SPATULA_LIVE_LLM=1 SPATULA_ADVERSARIAL_MODEL=ollama OLLAMA_BASE_URL=http://localhost:11434 \
-  pnpm --filter @spatula/core run test:adversarial
+  pnpm --filter @accidentally-awesome-labs/spatula-core run test:adversarial
 ```
 
 ---

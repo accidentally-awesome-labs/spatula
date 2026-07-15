@@ -1,6 +1,9 @@
 import type { MiddlewareHandler } from 'hono';
 import type { z } from 'zod';
-import { ValidationSchemaError, ValidationParamsError } from '@spatula/shared';
+import {
+  ValidationSchemaError,
+  ValidationParamsError,
+} from '@accidentally-awesome-labs/spatula-shared';
 
 export function validateBody<T extends z.ZodType>(schema: T): MiddlewareHandler {
   return async (c, next) => {

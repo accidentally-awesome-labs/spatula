@@ -1,5 +1,5 @@
 import { Hono } from 'hono';
-import { AuthMissingTokenError } from '@spatula/shared';
+import { AuthMissingTokenError } from '@accidentally-awesome-labs/spatula-shared';
 import type { AppEnv } from '../types.js';
 
 export function authRoutes() {

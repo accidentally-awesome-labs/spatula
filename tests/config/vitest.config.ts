@@ -12,8 +12,8 @@ export default defineConfig({
   },
   resolve: {
     alias: {
-      '@spatula/core': resolve(root, 'packages/core/src/index.ts'),
-      '@spatula/shared': resolve(root, 'packages/shared/src/index.ts'),
+      '@accidentally-awesome-labs/spatula-core': resolve(root, 'packages/core/src/index.ts'),
+      '@accidentally-awesome-labs/spatula-shared': resolve(root, 'packages/shared/src/index.ts'),
     },
   },
 });

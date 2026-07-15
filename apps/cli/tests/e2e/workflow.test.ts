@@ -15,7 +15,11 @@ import { tmpdir } from 'node:os';
 import { createServer } from 'node:http';
 import type { Server } from 'node:http';
 import { describe, it, expect, beforeAll, afterAll, vi } from 'vitest';
-import { createProjectDb, initializeProjectDb, ProjectAdapter } from '@spatula/db';
+import {
+  createProjectDb,
+  initializeProjectDb,
+  ProjectAdapter,
+} from '@accidentally-awesome-labs/spatula-db';
 
 // ============================================================================
 // Part 1: Data Lifecycle Workflow (sequential)

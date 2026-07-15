@@ -10,7 +10,7 @@
  * All three operations are idempotent.
  */
 import { eq, sql } from 'drizzle-orm';
-import { createLogger } from '@spatula/shared';
+import { createLogger } from '@accidentally-awesome-labs/spatula-shared';
 import { auditLog } from '../schema/audit-log.js';
 import { entitySources } from '../schema/entities.js';
 import { entities } from '../schema/entities.js';

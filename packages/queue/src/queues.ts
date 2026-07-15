@@ -1,7 +1,7 @@
 import { Queue } from 'bullmq';
 import type { ConnectionOptions } from 'bullmq';
 import type { RedisOptions } from 'ioredis';
-import type { WebhookEvent } from '@spatula/shared';
+import type { WebhookEvent } from '@accidentally-awesome-labs/spatula-shared';
 
 export const QUEUE_NAMES = {
   CRAWL: 'spatula.crawl',

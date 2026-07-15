@@ -7,7 +7,10 @@ import {
   listResponse,
   jsonContent,
 } from '../schemas/responses.js';
-import { SchemaNotFoundError, ValidationParamsError } from '@spatula/shared';
+import {
+  SchemaNotFoundError,
+  ValidationParamsError,
+} from '@accidentally-awesome-labs/spatula-shared';
 
 const jobIdParam = z.object({
   jobId: z.string().openapi({ param: { name: 'jobId', in: 'path' } }),

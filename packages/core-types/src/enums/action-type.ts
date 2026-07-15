@@ -7,7 +7,7 @@
  *
  * Source-of-truth: the `PipelineAction` discriminated union in
  * `packages/core-types/src/schemas/action.ts` (pipeline) and the config-action
- * registry in `@spatula/core` (config). This enum is the lightweight
+ * registry in `@accidentally-awesome-labs/spatula-core` (config). This enum is the lightweight
  * value-import for callers that need the string list without pulling in zod.
  */
 export const ActionType = {

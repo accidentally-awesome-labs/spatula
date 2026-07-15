@@ -15,8 +15,8 @@
  * experimental endpoint (see docs/deprecation-policy.md).
  */
 import { createRoute, z } from '@hono/zod-openapi';
-import { supportsPresignedUrls } from '@spatula/core';
-import { InternalQueueError } from '@spatula/shared';
+import { supportsPresignedUrls } from '@accidentally-awesome-labs/spatula-core';
+import { InternalQueueError } from '@accidentally-awesome-labs/spatula-shared';
 import { requireScope } from '../middleware/require-scope.js';
 import { createOpenAPIRouter } from '../openapi-config.js';
 import { jsonContent, errorResponseSchema } from '../schemas/responses.js';

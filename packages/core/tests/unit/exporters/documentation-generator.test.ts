@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { generateDocumentation } from '../../../src/exporters/documentation-generator.js';
 import type { SchemaDefinition } from '../../../src/types/schema.js';
-import type { Entity } from '@spatula/shared';
+import type { Entity } from '@accidentally-awesome-labs/spatula-shared';
 
 const mockSchema: SchemaDefinition = {
   version: 1,

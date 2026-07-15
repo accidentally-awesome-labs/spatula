@@ -46,7 +46,8 @@ describe('openLocalProject — success path', () => {
     );
 
     // Initialize the SQLite database so tables exist when openLocalProject opens it
-    const { createProjectDb, initializeProjectDb } = await import('@spatula/db');
+    const { createProjectDb, initializeProjectDb } =
+      await import('@accidentally-awesome-labs/spatula-db');
     const dbPath = join(tmpDir, '.spatula', 'project.db');
     const { db, close } = createProjectDb(dbPath);
     initializeProjectDb(db, { projectId: slugifyPath(tmpDir), name: 'test-project' });

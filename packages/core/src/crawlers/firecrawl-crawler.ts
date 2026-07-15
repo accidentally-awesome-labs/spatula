@@ -1,6 +1,6 @@
 import Firecrawl from '@mendable/firecrawl-js';
-import { CrawlError } from '@spatula/shared';
-import { createLogger } from '@spatula/shared';
+import { CrawlError } from '@accidentally-awesome-labs/spatula-shared';
+import { createLogger } from '@accidentally-awesome-labs/spatula-shared';
 import type { Crawler, CrawlOptions, CrawlResult } from '../interfaces/crawler.js';
 import { extractLinks } from './link-extractor.js';
 

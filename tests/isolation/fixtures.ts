@@ -18,7 +18,7 @@ import {
   ApiKeyRepository,
   TenantRepository,
   createDatabasePool,
-} from '@spatula/db';
+} from '@accidentally-awesome-labs/spatula-db';
 import type { Pool } from 'pg';
 
 // ─── Types ──────────────────────────────────────────────────────────────────

@@ -1,5 +1,5 @@
 import { readFileSync, unlinkSync, existsSync, openSync, writeSync, closeSync } from 'node:fs';
-import { createLogger } from '@spatula/shared';
+import { createLogger } from '@accidentally-awesome-labs/spatula-shared';
 
 const logger = createLogger('project-lock');
 

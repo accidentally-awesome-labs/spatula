@@ -1,6 +1,6 @@
-// Re-export shim: canonical types live in @spatula/core-types.
+// Re-export shim: canonical types live in @accidentally-awesome-labs/spatula-core-types.
 // Internal callers import from this path; the canonical source lives in
-// `@spatula/core-types/src/schemas/extraction.ts`.
+// `@accidentally-awesome-labs/spatula-core-types/src/schemas/extraction.ts`.
 export {
   UnmappedField,
   ExtractionMetadata,
@@ -8,4 +8,4 @@ export {
   ValueProvenance,
   PageClassification,
   ExtractionStrategy,
-} from '@spatula/core-types';
+} from '@accidentally-awesome-labs/spatula-core-types';

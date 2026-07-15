@@ -1,6 +1,10 @@
 import { createHmac, randomUUID } from 'node:crypto';
-import { createLogger } from '@spatula/shared';
-import type { WebhookEvent, WebhookEventType, WebhookConfig } from '@spatula/shared';
+import { createLogger } from '@accidentally-awesome-labs/spatula-shared';
+import type {
+  WebhookEvent,
+  WebhookEventType,
+  WebhookConfig,
+} from '@accidentally-awesome-labs/spatula-shared';
 import type { Queue } from 'bullmq';
 import type { WebhookJobData } from './queues.js';
 

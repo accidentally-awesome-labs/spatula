@@ -1,7 +1,7 @@
-import type { LLMUsageRecorder, LLMUsageRecord } from '@spatula/core';
-import type { LlmUsageRepository } from '@spatula/db';
-import type { SpatulaMetrics } from '@spatula/shared';
-import { createLogger } from '@spatula/shared';
+import type { LLMUsageRecorder, LLMUsageRecord } from '@accidentally-awesome-labs/spatula-core';
+import type { LlmUsageRepository } from '@accidentally-awesome-labs/spatula-db';
+import type { SpatulaMetrics } from '@accidentally-awesome-labs/spatula-shared';
+import { createLogger } from '@accidentally-awesome-labs/spatula-shared';
 
 const logger = createLogger('usage-recorder');
 

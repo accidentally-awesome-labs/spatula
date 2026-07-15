@@ -1,295 +1,168 @@
 # Spatula
 
-**AI-powered intelligent web crawling. Describe the data you want, get clean structured datasets.**
+**Describe the web data you want and get a clean, structured dataset.**
 
 [![CI](https://github.com/accidentally-awesome-labs/spatula/actions/workflows/ci.yml/badge.svg)](https://github.com/accidentally-awesome-labs/spatula/actions/workflows/ci.yml)
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
-> **Legal Notice:** Spatula is provided as-is under the [MIT License](LICENSE). You are
-> responsible for complying with the Terms of Service of any website you crawl, as well as
-> all applicable laws (including but not limited to GDPR, DMCA, and CFAA). Spatula honors
-> `robots.txt` by default; disabling `robots.txt` enforcement is at your own risk and
-> legal responsibility. The Spatula project and Accidentally Awesome Labs accept no
-> liability for misuse.
+Spatula is an AI-assisted crawler that runs locally from your terminal or as a self-hosted API. It crawls permitted pages, extracts typed fields with an LLM, reconciles entities, and exports JSON, CSV, Parquet, SQLite, or DuckDB.
 
-## What is Spatula?
+> You are responsible for the terms and laws that apply to every site you crawl. Spatula respects `robots.txt` by default. See the full [legal notice](#legal-and-safety).
 
-Spatula is an AI-powered web crawling platform that turns unstructured websites into clean, structured datasets. You describe the data you want in plain language, provide seed URLs, and Spatula handles the rest: crawling pages, extracting structured data with LLMs, evolving the schema as it discovers new fields, reconciling entities across sources, and exporting analysis-ready datasets.
+## Install and run your first crawl
 
-This repository is the open-source distribution. It works locally as a CLI tool, or as a self-hosted multi-tenant API server backed by PostgreSQL and Redis. There is no official hosted Spatula API assumed by these docs.
-
-## Features
-
-- **Natural language data description** — define what you want to extract in `spatula.yaml`, not XPath
-- **LLM-powered extraction** — uses AI at every decision point with smart model routing for cost control
-- **Automatic schema evolution** — discovers new fields as it crawls, with human-in-the-loop review
-- **Entity reconciliation** — matches and merges the same entity found across different pages and sites
-- **5 export formats** — JSON, CSV, Parquet, SQLite, DuckDB; JSON supports optional field-level provenance
-- **Dual execution mode** — run locally with SQLite or as a multi-tenant server with PostgreSQL + Redis
-- **Pluggable crawlers** — Playwright (built-in) or Firecrawl (API-based)
-- **Pluggable LLM providers** — OpenRouter (cloud) or Ollama (local, fully offline)
-- **55 typed action/config operations** — 25 pipeline actions plus 30 config operations, all reviewable and auditable
-- **Interactive TUI** — explore data, review schema changes, and monitor crawls from the terminal
-
-## Quickstart
-
-### Local Mode
+You need Node.js 22 or newer on macOS, Linux, or Windows through WSL 2.
 
 ```bash
-# Install
-npm install -g @spatula/cli
+npm install --global @accidentally-awesome-labs/spatula --allow-scripts=better-sqlite3
+spatula
+```
 
-# Create a project
-mkdir my-project && cd my-project
-spatula init
+The guided flow:
 
-# Or start with the conversational wizard
-spatula new
+1. Configures OpenRouter (the default) or Ollama.
+2. Asks before downloading the Playwright Chromium browser.
+3. Offers a small crawl of `books.toscrape.com`, a practice site made for scraping.
+4. Shows the target, page limit, fields, model, and estimated cost before starting.
+5. Previews structured entities and gives you the next export command.
 
-# Configure your LLM provider
+API keys entered during setup are saved to `~/.spatula/config.yaml` with user-only permissions. Environment variables override saved values.
+
+### Manual workflow
+
+The individual commands remain available for automation and experienced users:
+
+```bash
+mkdir product-crawl && cd product-crawl
 spatula setup
-
-# Run the crawl
+spatula init https://example.com/products --limit 25
+# Edit spatula.yaml to describe the fields you want.
+spatula estimate
 spatula run
-
-# Explore results
 spatula explore
-
-# Export
 spatula export --format json
 ```
 
-### Server Mode
+Structured extraction requires a configured LLM. `spatula run` now stops with a repair command if one is missing. Use `spatula run --crawl-only` only when you intentionally want to archive pages without extracting entities.
 
-```bash
-# Clone the repository
-git clone https://github.com/accidentally-awesome-labs/spatula.git
-cd spatula
+## Project configuration
 
-# Install dependencies
-corepack enable
-pnpm install
-
-# Start PostgreSQL and Redis
-docker compose up -d
-
-# Configure environment
-cp .env.example .env
-# Edit .env — set at minimum: OPENROUTER_API_KEY
-
-# Build all packages
-pnpm build
-
-# Run database migrations
-pnpm --filter @spatula/db db:migrate
-
-# Start the API server
-pnpm --filter @spatula/api start
-
-# Start background workers
-pnpm --filter @spatula/queue start:workers
-```
-
-The API is available at `http://localhost:3000`. Swagger UI is at `http://localhost:3000/api/docs`.
-
-## Architecture Overview
-
-```mermaid
-graph TD
-    subgraph Clients
-        cli["CLI / TUI"]
-        api_client["API Clients"]
-    end
-
-    subgraph Server
-        api["Hono API<br/>@spatula/api"]
-        queue["BullMQ Workers<br/>@spatula/queue"]
-    end
-
-    subgraph Core
-        core["Pipeline Logic<br/>@spatula/core"]
-    end
-
-    subgraph Data
-        pg["PostgreSQL"]
-        redis["Redis"]
-        sqlite["SQLite<br/>(local mode)"]
-    end
-
-    subgraph External
-        llm["LLM<br/>(OpenRouter / Ollama)"]
-        crawler["Crawler<br/>(Playwright / Firecrawl)"]
-    end
-
-    cli --> core
-    cli --> sqlite
-    api_client --> api
-    api --> core
-    api --> pg
-    api --> redis
-    queue --> core
-    queue --> pg
-    queue --> redis
-    core --> llm
-    core --> crawler
-```
-
-See [docs/architecture.md](docs/architecture.md) for the full architecture guide with data flow diagrams, interface maps, and the action taxonomy.
-
-For a map from public feature claims to test coverage, see [docs/feature-verification.md](docs/feature-verification.md).
-
-## Configuration
-
-### Project Configuration (`spatula.yaml`)
+Each crawl is a folder containing `spatula.yaml`:
 
 ```yaml
-name: My Project
+name: Product catalogue
+description: Products and current prices
 seeds:
   - https://example.com/products
+
+depth: 2
+limit: 25
 
 fields:
   - product_name: string
   - price: currency
   - in_stock: boolean
-
-depth: 3
-limit: 1000
-crawler: playwright
-safety: balanced
 ```
 
-See [examples/](examples/) for a runnable quickstart and template configurations covering ecommerce, news, and real estate use cases. Template examples use placeholder domains; replace their seeds with sites you are allowed to crawl.
+Local state, downloaded pages, logs, and exports live under `.spatula/`. Add that directory to version control ignores; `spatula init` updates an existing `.gitignore` automatically.
 
-### Environment Variables
+## Providers and crawlers
 
-| Variable                           | Required | Default                  | Description                                           |
-| ---------------------------------- | -------- | ------------------------ | ----------------------------------------------------- |
-| `OPENROUTER_API_KEY`               | Yes\*    | —                        | OpenRouter API key for cloud LLM                      |
-| `OLLAMA_BASE_URL`                  | No       | `http://localhost:11434` | Ollama endpoint for local LLM                         |
-| `DATABASE_URL`                     | Server   | —                        | PostgreSQL connection string                          |
-| `REDIS_URL`                        | Server   | —                        | Redis connection string                               |
-| `AUTH_STRATEGY`                    | No       | `none`                   | Auth mode. Use `api-key` or `jwt` in production       |
-| `FIRECRAWL_API_KEY`                | No       | —                        | Firecrawl API key (if using Firecrawl crawler)        |
-| `CONTENT_STORE`                    | No       | `postgres`               | Storage backend: `postgres` or `s3`                   |
-| `SPATULA_ALLOW_PRIVATE_CRAWL_URLS` | No       | `0` in production        | Allows private/link-local crawl seeds when set to `1` |
-| `SENTRY_DSN`                       | No       | —                        | Sentry error tracking endpoint                        |
-| `LOG_LEVEL`                        | No       | `info`                   | Log level: `debug`, `info`, `warn`, `error`           |
+| Purpose | Default    | Alternative | Configuration                                            |
+| ------- | ---------- | ----------- | -------------------------------------------------------- |
+| LLM     | OpenRouter | Ollama      | `spatula setup`, `OPENROUTER_API_KEY`, `OLLAMA_BASE_URL` |
+| Crawler | Playwright | Firecrawl   | `spatula setup`, `FIRECRAWL_API_KEY`                     |
 
-\* Not required when using Ollama. See [.env.example](.env.example) for the full list.
+The npm package deliberately has no browser `postinstall` hook. Chromium is downloaded only after the setup prompt, or with `spatula setup --install-browser`. Firecrawl users can choose `--skip-browser`.
 
-## CLI Usage
+## Useful commands
 
-| Command              | Description                                        |
-| -------------------- | -------------------------------------------------- |
-| `spatula init`       | Initialize a new project in the current directory  |
-| `spatula new`        | Interactive project creation wizard                |
-| `spatula run`        | Run the crawl pipeline (press `[d]` for dashboard) |
-| `spatula status`     | Show project status and run history                |
-| `spatula explore`    | Browse extracted entities in a TUI                 |
-| `spatula review`     | Review pending schema actions in a TUI             |
-| `spatula export`     | Export data (json, csv, sqlite, parquet, duckdb)   |
-| `spatula schema`     | View current schema and version history            |
-| `spatula logs`       | View run logs (`--tail` for live follow)           |
-| `spatula add <url>`  | Add seed URLs to the project                       |
-| `spatula estimate`   | Estimate crawl cost before running                 |
-| `spatula doctor`     | Diagnose environment and project health            |
-| `spatula test <url>` | Test extraction on a single page                   |
-| `spatula config`     | Open project config in your editor                 |
-| `spatula setup`      | Reconfigure global settings (LLM, crawler)         |
-| `spatula reset`      | Reset project data for a fresh crawl               |
+| Command                 | Purpose                                                           |
+| ----------------------- | ----------------------------------------------------------------- |
+| `spatula`               | Guided first-run and project onboarding                           |
+| `spatula doctor`        | Diagnose Node, provider, browser, permissions, and project health |
+| `spatula new`           | Build a configuration conversationally                            |
+| `spatula run`           | Run structured crawling locally                                   |
+| `spatula status`        | Show pages, entities, schema, and last-run state                  |
+| `spatula explore`       | Browse entities in the terminal UI                                |
+| `spatula review`        | Approve or reject schema changes                                  |
+| `spatula export`        | Export JSON, CSV, Parquet, SQLite, or DuckDB                      |
+| `spatula logs --errors` | Inspect detailed failures                                         |
+| `spatula --version`     | Show the installed CLI version                                    |
 
-## API Reference
+Run `spatula --help`, or append `--help` to any command, for the complete command surface.
 
-The API server exposes a RESTful JSON API with OpenAPI documentation.
+## Troubleshooting
 
-**Interactive docs:** `http://localhost:3000/api/docs` (Swagger UI)
-
-**Key endpoints:**
-
-| Method | Path                                            | Description                  |
-| ------ | ----------------------------------------------- | ---------------------------- |
-| `POST` | `/api/v1/jobs`                                  | Create a crawl job           |
-| `GET`  | `/api/v1/jobs/:jobId`                           | Get job status               |
-| `GET`  | `/api/v1/jobs/:jobId/entities`                  | List extracted entities      |
-| `GET`  | `/api/v1/jobs/:jobId/schema`                    | Get current schema           |
-| `GET`  | `/api/v1/jobs/:jobId/actions`                   | List pending actions         |
-| `POST` | `/api/v1/jobs/:jobId/actions/:actionId/approve` | Approve a schema action      |
-| `POST` | `/api/v1/jobs/:jobId/export`                    | Create an export             |
-| `GET`  | `/api/v1/jobs/:jobId/export/:exportId/download` | Download export file         |
-| `POST` | `/api/v1/actions/batch`                         | Bulk approve/reject actions  |
-| `POST` | `/api/v1/jobs/batch`                            | Bulk cancel/delete jobs      |
-| `GET`  | `/api/v1/usage`                                 | LLM usage and cost breakdown |
-| `GET`  | `/health`                                       | Health check                 |
-
-All endpoints require authentication when `AUTH_STRATEGY` is set to `api-key` or `jwt`. `AUTH_STRATEGY=none` is for local development only. See [.env.example](.env.example) for auth configuration.
-
-## Export Formats
-
-| Format  | Extension  | Best For                           | Streaming | Provenance |
-| ------- | ---------- | ---------------------------------- | --------- | ---------- |
-| JSON    | `.json`    | APIs, nested data                  | Yes       | Yes        |
-| CSV     | `.csv`     | Spreadsheets, simple tabular data  | Yes       | No         |
-| Parquet | `.parquet` | Big data analytics (Spark, DuckDB) | No        | No         |
-| SQLite  | `.db`      | Local querying, portable database  | No        | No         |
-| DuckDB  | `.duckdb`  | Analytics, columnar queries        | No        | No         |
+Start with:
 
 ```bash
-# Export with provenance metadata
-spatula export --format json --include-provenance
-
-# Export only high-quality entities
-spatula export --format csv --min-quality 0.8
-
-# Export to a specific path
-spatula export --format sqlite --output ./data/products.db
+spatula doctor
 ```
 
-## Development
+Common repairs:
+
+- Missing or invalid provider: run `spatula setup`.
+- Missing Chromium: run `spatula setup --install-browser`.
+- Ollama model missing: start Ollama, then run the `ollama pull ...` command printed by Spatula.
+- Crawl failed after starting: run `spatula logs --errors`.
+- Start over but retain exports: run `spatula reset --keep-exports`.
+
+Uninstall the CLI with `npm uninstall --global @accidentally-awesome-labs/spatula`. Remove `~/.spatula` separately only if you also want to delete saved settings and keys.
+
+## Self-host the API
+
+The full server needs Docker, PostgreSQL, Redis, and either OpenRouter or Ollama. For a local evaluation:
 
 ```bash
-# Install dependencies
-pnpm install
+git clone https://github.com/accidentally-awesome-labs/spatula.git
+cd spatula
+cp .env.example .env
+# Set OPENROUTER_API_KEY in .env, or configure Ollama.
+docker compose -f docker-compose.yml -f docker-compose.prod.yml up --build
+```
 
-# Build all packages
+The API is at `http://localhost:3000`; interactive OpenAPI documentation is at `http://localhost:3000/api/docs`. `AUTH_STRATEGY=none` is for private local evaluation only. Use API-key or JWT authentication before exposing a deployment.
+
+Operational paths:
+
+- [Docker and reverse proxy](docs/runbooks/reverse-proxy.md)
+- [Kubernetes](deploy/k8s/README.md)
+- [Render paid starter blueprint](docs/runbooks/render-deploy.md)
+- [Backup and restore](docs/runbooks/backup-restore.md)
+- [Hardware sizing](docs/runbooks/hardware-sizing.md)
+
+## Develop Spatula
+
+```bash
+git clone https://github.com/accidentally-awesome-labs/spatula.git
+cd spatula
+corepack enable
+pnpm install --frozen-lockfile
 pnpm build
 
-# Run all tests
-pnpm test
+# Run the CLI directly from source
+pnpm --filter @accidentally-awesome-labs/spatula dev -- --help
 
-# Run E2E tests (requires Docker services)
-pnpm test:e2e
-
-# Lint
+# Before opening a pull request
 pnpm lint
-
-# Type check
 pnpm typecheck
-
-# Format check
-pnpm format:check
+pnpm test
+pnpm test:package-install
 ```
 
-### Project Structure
+Database-backed tests require `docker compose up -d`. See [CONTRIBUTING.md](CONTRIBUTING.md) for the full workflow and [docs/architecture.md](docs/architecture.md) for system design.
 
-```
-spatula/
-├── apps/
-│   ├── api/          # Hono REST API server
-│   └── cli/          # CLI + TUI application
-├── packages/
-│   ├── core/         # Types, interfaces, pipeline logic
-│   ├── db/           # PostgreSQL + SQLite, Drizzle ORM
-│   ├── queue/        # BullMQ workers, webhooks
-│   └── shared/       # Logging, auth, metrics, errors
-├── tests/e2e/        # End-to-end API tests
-├── examples/         # Example project configurations
-└── docs/             # Architecture and design docs
-```
+## SDK and API
 
-## Contributing
+- [`@accidentally-awesome-labs/spatula-client`](packages/client/README.md) — typed server client
+- [`@accidentally-awesome-labs/spatula-core-types`](packages/core-types/README.md) — public schemas and types
+- [API authentication](docs/api-auth.md)
+- [Error model](docs/api-errors.md)
+- [Compatibility policy](docs/compat-policy.md)
 
-See [CONTRIBUTING.md](CONTRIBUTING.md) for development setup, coding standards, and the pull request process.
+## Legal and safety
 
-## License
+Spatula is provided as-is under the [MIT License](LICENSE). You are responsible for complying with website terms and applicable law, including privacy, copyright, and computer-access law. Disabling `robots.txt` enforcement or other safety controls is at your own risk. The project and Accidentally Awesome Labs accept no liability for misuse.
 
-[MIT](LICENSE)
+Security issues should be reported through [SECURITY.md](SECURITY.md), not a public issue.

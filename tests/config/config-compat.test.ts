@@ -2,7 +2,7 @@
  * Config compatibility test.
  *
  * Verifies that a v1.0 spatula.yaml fixture can be parsed by the v1.1 runtime
- * (parseProjectYamlFile from @spatula/core) without throwing.
+ * (parseProjectYamlFile from @accidentally-awesome-labs/spatula-core) without throwing.
  *
  * This test is pure in-process — no DB, no HTTP required.
  * It should run on every PR in addition to the on-release/nightly cadence.
@@ -11,7 +11,7 @@
 import { describe, it, expect } from 'vitest';
 import { resolve } from 'node:path';
 
-import { parseProjectYamlFile } from '@spatula/core';
+import { parseProjectYamlFile } from '@accidentally-awesome-labs/spatula-core';
 
 const FIXTURE_PATH = resolve(__dirname, 'fixtures/v1.0-spatula.yaml');
 

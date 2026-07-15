@@ -107,7 +107,7 @@ function buildMockApiKeyRepo(store: ReturnType<typeof createKeyStore>) {
     async revoke(keyId: string, tenantId: string) {
       const key = store.keys.get(keyId);
       if (!key || key.tenantId !== tenantId) {
-        const { StorageError } = await import('@spatula/shared');
+        const { StorageError } = await import('@accidentally-awesome-labs/spatula-shared');
         throw new StorageError(`API key ${keyId} not found`, { context: { keyId, tenantId } });
       }
       key.revokedAt = new Date();
@@ -120,7 +120,7 @@ function buildMockApiKeyRepo(store: ReturnType<typeof createKeyStore>) {
       newKeyMaterial: { keyHash: string; keyPrefix: string },
       graceSeconds: number,
     ) {
-      const { StorageError } = await import('@spatula/shared');
+      const { StorageError } = await import('@accidentally-awesome-labs/spatula-shared');
       const orig = store.keys.get(keyId);
       if (!orig || orig.tenantId !== tenantId) {
         throw new StorageError(`API key ${keyId} not found`, { context: { keyId, tenantId } });

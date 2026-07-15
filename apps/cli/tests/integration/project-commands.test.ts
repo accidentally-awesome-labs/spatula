@@ -14,7 +14,11 @@ import { mkdtempSync, writeFileSync, mkdirSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { describe, it, expect, beforeAll, afterAll, vi } from 'vitest';
-import { createProjectDb, initializeProjectDb, ProjectAdapter } from '@spatula/db';
+import {
+  createProjectDb,
+  initializeProjectDb,
+  ProjectAdapter,
+} from '@accidentally-awesome-labs/spatula-db';
 import { slugifyPath } from '../../src/local-project.js';
 
 // ---------------------------------------------------------------------------

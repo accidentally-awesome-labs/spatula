@@ -22,9 +22,9 @@ describe('createContentStore', () => {
     expect(store).toBeInstanceOf(S3ContentStore);
   });
 
-  it('throws for "postgres" type (PgContentStore is in @spatula/db, not @spatula/core)', () => {
+  it('throws for "postgres" type (PgContentStore is in @accidentally-awesome-labs/spatula-db, not @accidentally-awesome-labs/spatula-core)', () => {
     expect(() => createContentStore({ type: 'postgres' })).toThrow(
-      'PgContentStore must be created via @spatula/db',
+      'PgContentStore must be created via @accidentally-awesome-labs/spatula-db',
     );
   });
 

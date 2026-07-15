@@ -13,11 +13,13 @@ import {
 import type { LogEntry } from '../../../src/commands/logs.js';
 
 // ---------------------------------------------------------------------------
-// Module-level mock for @spatula/core (needed by runLogsCommand)
+// Module-level mock for @accidentally-awesome-labs/spatula-core (needed by runLogsCommand)
 // ---------------------------------------------------------------------------
 
-vi.mock('@spatula/core', async () => {
-  const actual = await vi.importActual<typeof import('@spatula/core')>('@spatula/core');
+vi.mock('@accidentally-awesome-labs/spatula-core', async () => {
+  const actual = await vi.importActual<typeof import('@accidentally-awesome-labs/spatula-core')>(
+    '@accidentally-awesome-labs/spatula-core',
+  );
   return { ...actual, findProjectRoot: vi.fn() };
 });
 
@@ -364,7 +366,7 @@ describe('spatula logs', () => {
     });
 
     it('exits with error when no project root is found', async () => {
-      const { findProjectRoot } = await import('@spatula/core');
+      const { findProjectRoot } = await import('@accidentally-awesome-labs/spatula-core');
       (findProjectRoot as ReturnType<typeof vi.fn>).mockReturnValue(null);
       cwdSpy.mockReturnValue('/tmp/nowhere');
 
@@ -396,7 +398,7 @@ describe('spatula logs', () => {
       );
 
       try {
-        const { findProjectRoot } = await import('@spatula/core');
+        const { findProjectRoot } = await import('@accidentally-awesome-labs/spatula-core');
         (findProjectRoot as ReturnType<typeof vi.fn>).mockReturnValue(tmpDir);
         cwdSpy.mockReturnValue(tmpDir);
 
@@ -431,7 +433,7 @@ describe('spatula logs', () => {
       );
 
       try {
-        const { findProjectRoot } = await import('@spatula/core');
+        const { findProjectRoot } = await import('@accidentally-awesome-labs/spatula-core');
         (findProjectRoot as ReturnType<typeof vi.fn>).mockReturnValue(tmpDir);
         cwdSpy.mockReturnValue(tmpDir);
 
@@ -465,7 +467,7 @@ describe('spatula logs', () => {
       );
 
       try {
-        const { findProjectRoot } = await import('@spatula/core');
+        const { findProjectRoot } = await import('@accidentally-awesome-labs/spatula-core');
         (findProjectRoot as ReturnType<typeof vi.fn>).mockReturnValue(tmpDir);
         cwdSpy.mockReturnValue(tmpDir);
 
@@ -492,7 +494,7 @@ describe('spatula logs', () => {
       );
 
       try {
-        const { findProjectRoot } = await import('@spatula/core');
+        const { findProjectRoot } = await import('@accidentally-awesome-labs/spatula-core');
         (findProjectRoot as ReturnType<typeof vi.fn>).mockReturnValue(tmpDir);
         cwdSpy.mockReturnValue(tmpDir);
 
@@ -514,7 +516,7 @@ describe('spatula logs', () => {
       // Empty logs directory — no .log files
 
       try {
-        const { findProjectRoot } = await import('@spatula/core');
+        const { findProjectRoot } = await import('@accidentally-awesome-labs/spatula-core');
         (findProjectRoot as ReturnType<typeof vi.fn>).mockReturnValue(tmpDir);
         cwdSpy.mockReturnValue(tmpDir);
 

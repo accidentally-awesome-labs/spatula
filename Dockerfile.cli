@@ -20,10 +20,10 @@ COPY tsconfig.base.json ./
 COPY packages/ packages/
 COPY apps/ apps/
 
-# Build cli + its dependency closure only. The closure includes @spatula/api
-# (hence COPY apps/ above) but NOT @spatula/client — filtering keeps the public
+# Build cli + its dependency closure only. The closure includes @accidentally-awesome-labs/spatula-api
+# (hence COPY apps/ above) but NOT @accidentally-awesome-labs/spatula-client — filtering keeps the public
 # SDK (which needs DOM libs for a clean browser-targeted build) out of this image.
-RUN pnpm run build --filter=@spatula/cli...
+RUN pnpm run build --filter=@accidentally-awesome-labs/spatula...
 
 # -----------------------------------------------------------
 # Stage 2: Production dependencies only
@@ -66,7 +66,7 @@ COPY --from=build /app/packages/core-types/dist ./packages/core-types/dist
 COPY --from=build /app/packages/core-types/package.json ./packages/core-types/
 COPY --from=build /app/packages/core/dist ./packages/core/dist
 COPY --from=build /app/packages/core/package.json ./packages/core/
-# cli imports @spatula/db (4 sites) — db dist + package.json required at runtime
+# cli imports @accidentally-awesome-labs/spatula-db (4 sites) — db dist + package.json required at runtime
 COPY --from=build /app/packages/db/dist ./packages/db/dist
 COPY --from=build /app/packages/db/package.json ./packages/db/
 COPY --from=build /app/apps/cli/dist ./apps/cli/dist

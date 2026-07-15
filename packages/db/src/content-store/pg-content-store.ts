@@ -1,6 +1,6 @@
 import { eq } from 'drizzle-orm';
-import { StorageError, createLogger } from '@spatula/shared';
-import type { ContentStore } from '@spatula/core';
+import { StorageError, createLogger } from '@accidentally-awesome-labs/spatula-shared';
+import type { ContentStore } from '@accidentally-awesome-labs/spatula-core';
 import { contentStore } from '../schema/content.js';
 import type { Database } from '../connection.js';
 import type { TenantRepository } from '../repositories/tenant-repository.js';

@@ -1,6 +1,6 @@
 import type { MiddlewareHandler } from 'hono';
-import { AuthInsufficientScopeError } from '@spatula/shared';
-import type { AuthResult } from '@spatula/shared';
+import { AuthInsufficientScopeError } from '@accidentally-awesome-labs/spatula-shared';
+import type { AuthResult } from '@accidentally-awesome-labs/spatula-shared';
 
 export function requireScope(scope: string): MiddlewareHandler {
   return async (c, next) => {

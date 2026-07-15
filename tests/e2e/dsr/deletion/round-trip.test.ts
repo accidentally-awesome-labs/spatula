@@ -22,11 +22,15 @@ import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { randomUUID } from 'node:crypto';
 import { sql } from 'drizzle-orm';
 
-import { createDatabase, PgContentStore, TenantDataRepository } from '@spatula/db';
-import type { Database } from '@spatula/db';
+import {
+  createDatabase,
+  PgContentStore,
+  TenantDataRepository,
+} from '@accidentally-awesome-labs/spatula-db';
+import type { Database } from '@accidentally-awesome-labs/spatula-db';
 
-import { processTenantDeleteJob } from '@spatula/queue';
-import type { TenantDeleteJobDeps } from '@spatula/queue';
+import { processTenantDeleteJob } from '@accidentally-awesome-labs/spatula-queue';
+import type { TenantDeleteJobDeps } from '@accidentally-awesome-labs/spatula-queue';
 
 import { seedTenant, TENANT_SCOPED_TABLES } from '../fixtures/seed-tenant.js';
 

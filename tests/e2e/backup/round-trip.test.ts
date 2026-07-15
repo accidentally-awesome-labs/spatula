@@ -20,8 +20,8 @@ import { createHash } from 'node:crypto';
 import { execFileSync } from 'node:child_process';
 import { sql } from 'drizzle-orm';
 
-import { createDatabase, PgContentStore } from '@spatula/db';
-import type { Database } from '@spatula/db';
+import { createDatabase, PgContentStore } from '@accidentally-awesome-labs/spatula-db';
+import type { Database } from '@accidentally-awesome-labs/spatula-db';
 
 // ---------------------------------------------------------------------------
 // Constants

@@ -1,5 +1,5 @@
 // packages/core/src/pipeline/reconcile-orchestrator.ts
-import { createLoggerWithContext } from '@spatula/shared';
+import { createLoggerWithContext } from '@accidentally-awesome-labs/spatula-shared';
 import type { JobConfig, ReconciliationConfig } from '../index.js';
 import type { ExtractionWithSource } from '../index.js';
 import type {

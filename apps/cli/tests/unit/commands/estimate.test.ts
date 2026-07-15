@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { formatCostEstimate } from '../../../src/commands/estimate.js';
-import type { CostEstimate } from '@spatula/core';
+import type { CostEstimate } from '@accidentally-awesome-labs/spatula-core';
 
 describe('formatCostEstimate', () => {
   const estimate: CostEstimate = {

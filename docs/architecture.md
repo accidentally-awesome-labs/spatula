@@ -6,7 +6,7 @@ This document describes the internal architecture of Spatula — the package str
 
 The public repository contains the local CLI, the self-hosted API server, queue workers, migrations, SDK, and implementation packages needed to run Spatula. Commercial billing, subscription, and payment-provider infrastructure is not part of this OSS repo.
 
-The supported public surfaces are the REST API, `@spatula/client`, `@spatula/core-types`, and `@spatula/cli`. The `@spatula/core`, `@spatula/db`, `@spatula/queue`, `@spatula/shared`, and `@spatula/api` packages are implementation packages with no TypeScript API compatibility guarantee for external imports.
+The supported public surfaces are the REST API, `@accidentally-awesome-labs/spatula-client`, `@accidentally-awesome-labs/spatula-core-types`, and `@accidentally-awesome-labs/spatula`. The `@accidentally-awesome-labs/spatula-core`, `@accidentally-awesome-labs/spatula-db`, `@accidentally-awesome-labs/spatula-queue`, `@accidentally-awesome-labs/spatula-shared`, and `@accidentally-awesome-labs/spatula-api` packages are implementation packages with no TypeScript API compatibility guarantee for external imports.
 
 The forward carve-out suite in `tests/carveout/` proves the OSS server boots without billing or payment-provider endpoints. Self-hosters use the config-driven `DEFAULT_RATE_LIMIT` constant and per-tenant `TenantQuotas`.
 
@@ -16,12 +16,12 @@ Migration history is tracked in `drizzle.__drizzle_migrations_oss`. See [`docs/r
 
 ```mermaid
 graph TD
-    shared["@spatula/shared<br/>logging, auth, metrics, errors"]
-    core["@spatula/core<br/>types, interfaces, pipeline logic"]
-    db["@spatula/db<br/>PostgreSQL + SQLite, Drizzle ORM"]
-    queue["@spatula/queue<br/>BullMQ workers, webhooks"]
-    api["@spatula/api<br/>Hono REST API"]
-    cli["@spatula/cli<br/>CLI + TUI (yargs + Ink)"]
+    shared["@accidentally-awesome-labs/spatula-shared<br/>logging, auth, metrics, errors"]
+    core["@accidentally-awesome-labs/spatula-core<br/>types, interfaces, pipeline logic"]
+    db["@accidentally-awesome-labs/spatula-db<br/>PostgreSQL + SQLite, Drizzle ORM"]
+    queue["@accidentally-awesome-labs/spatula-queue<br/>BullMQ workers, webhooks"]
+    api["@accidentally-awesome-labs/spatula-api<br/>Hono REST API"]
+    cli["@accidentally-awesome-labs/spatula<br/>CLI + TUI (yargs + Ink)"]
 
     core --> shared
     db --> shared
@@ -38,7 +38,7 @@ graph TD
     cli --> db
 ```
 
-**Design principle:** `@spatula/core` is a pure library with zero HTTP, CLI, or queue knowledge. The API and CLI are thin clients that compose core interfaces with infrastructure.
+**Design principle:** `@accidentally-awesome-labs/spatula-core` is a pure library with zero HTTP, CLI, or queue knowledge. The API and CLI are thin clients that compose core interfaces with infrastructure.
 
 ## Data Flow
 
@@ -124,7 +124,7 @@ Spatula runs in two modes:
 - **Server mode** — PostgreSQL + Redis + BullMQ. API server handles HTTP requests, BullMQ workers process jobs asynchronously. Multi-tenant.
 - **Local mode** — SQLite + in-memory queues. `spatula run` executes the full pipeline in-process. Single-project.
 
-Both modes use the same orchestrator functions from `@spatula/core`. The server wraps them in BullMQ workers; the CLI calls them directly via `LocalPipelineRunner`.
+Both modes use the same orchestrator functions from `@accidentally-awesome-labs/spatula-core`. The server wraps them in BullMQ workers; the CLI calls them directly via `LocalPipelineRunner`.
 
 ## SQLite Backend Decision
 
@@ -132,7 +132,7 @@ Both modes use the same orchestrator functions from `@spatula/core`. The server 
 
 ### Method
 
-Benchmark + feature-parity script at `packages/db/bench/sqlite-comparison.ts`. Reproducible via `pnpm --filter @spatula/db exec tsx ../../packages/db/bench/sqlite-comparison.ts`; results captured in `packages/db/bench/sqlite-comparison.results.md` (timestamped, regenerated each run).
+Benchmark + feature-parity script at `packages/db/bench/sqlite-comparison.ts`. Reproducible via `pnpm --filter @accidentally-awesome-labs/spatula-db exec tsx ../../packages/db/bench/sqlite-comparison.ts`; results captured in `packages/db/bench/sqlite-comparison.results.md` (timestamped, regenerated each run).
 
 The script applies three gates: feature parity (FTS5 / WAL / JSON1 / foreign keys / CHECK constraints), perf parity (10k inserts / selects / single-tx inserts), and non-experimental status.
 

@@ -49,8 +49,18 @@
     },
     {
       "type": "linked-versions",
-      "groupName": "sdk-public",
-      "components": ["core-types", "client"]
+      "groupName": "platform-public",
+      "components": [
+        "spatula",
+        "core",
+        "core-types",
+        "client",
+        "db",
+        "queue",
+        "shared",
+        "api",
+        "cli"
+      ]
     }
   ]
 }

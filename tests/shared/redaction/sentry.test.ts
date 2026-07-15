@@ -3,7 +3,7 @@
  * Verifies that none of the canary secrets appear in the processed Sentry event.
  */
 import { describe, it, expect } from 'vitest';
-import { redactSentryEvent } from '@spatula/shared';
+import { redactSentryEvent } from '@accidentally-awesome-labs/spatula-shared';
 
 const CANARY_JWT = 'eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIxMjM0NTY3ODkwIn0.dummysignatureXXXXXXXX';
 const CANARY_SK = 'sk-test1234567890abcdef1234';

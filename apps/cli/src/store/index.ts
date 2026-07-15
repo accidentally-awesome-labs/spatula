@@ -5,8 +5,8 @@ import {
   type ConfigAction,
   type JobConfig,
   type ConfigValidationResult,
-} from '@spatula/core';
-import type { Entity, EntityWithProvenance } from '@spatula/shared';
+} from '@accidentally-awesome-labs/spatula-core';
+import type { Entity, EntityWithProvenance } from '@accidentally-awesome-labs/spatula-shared';
 
 // ---------------------------------------------------------------------------
 // Types

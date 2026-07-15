@@ -3,7 +3,7 @@
  *
  * There is NO jobs table in the SQLite schema. The "job" IS the project.
  * This repository composes a synthetic job row from `project_meta` + the
- * latest `run`, satisfying the JobRepo interface from @spatula/core so
+ * latest `run`, satisfying the JobRepo interface from @accidentally-awesome-labs/spatula-core so
  * that all four orchestrators work unchanged in local mode.
  *
  * Per spec 5.7: constructor takes (db, projectId). The jobId/tenantId
@@ -11,8 +11,8 @@
  * pre-bound projectId is always used.
  */
 import { eq, desc } from 'drizzle-orm';
-import { createLogger } from '@spatula/shared';
-import type { JobRepo } from '@spatula/core/pipeline/types.js';
+import { createLogger } from '@accidentally-awesome-labs/spatula-shared';
+import type { JobRepo } from '@accidentally-awesome-labs/spatula-core/pipeline/types.js';
 import type { ProjectDatabase } from '../connection.js';
 import { runs } from '../../schema-sqlite/runs.js';
 import { wrapStorageError } from './utils.js';

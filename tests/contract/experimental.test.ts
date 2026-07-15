@@ -1,7 +1,7 @@
 /**
  * Experimental-namespace contract.
  *
- * The @spatula/client SDK reserves `client.experimental.*` for experimental
+ * The @accidentally-awesome-labs/spatula-client SDK reserves `client.experimental.*` for experimental
  * surfaces. v1.0 ships exactly ONE: `forensic`. Every
  * OTHER property access MUST throw a fail-loud Error referencing the
  * experimental-surface policy, so call sites that depend on an unimplemented
@@ -18,7 +18,7 @@
  * This is the public contract gate; the unit test is the implementation gate.
  */
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
-import { SpatulaClient } from '@spatula/client';
+import { SpatulaClient } from '@accidentally-awesome-labs/spatula-client';
 import { startServer, type ContractServer } from './helpers/server-harness.js';
 
 let server: ContractServer;

@@ -3,7 +3,7 @@ import { describe, it, expect } from 'vitest';
 import { render } from 'ink-testing-library';
 import React from 'react';
 import { EntityDetail } from '../../../../src/components/explorer/EntityDetail.js';
-import type { EntityWithProvenance } from '@spatula/shared';
+import type { EntityWithProvenance } from '@accidentally-awesome-labs/spatula-shared';
 
 const mockEntity: EntityWithProvenance = {
   id: 'ent-1',

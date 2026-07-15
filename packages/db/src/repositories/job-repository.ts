@@ -1,6 +1,6 @@
 import { eq, and, desc, inArray, sql } from 'drizzle-orm';
-import { createLogger, StorageError } from '@spatula/shared';
-import type { JobConfig, JobStatus } from '@spatula/core';
+import { createLogger, StorageError } from '@accidentally-awesome-labs/spatula-shared';
+import type { JobConfig, JobStatus } from '@accidentally-awesome-labs/spatula-core';
 import { jobs } from '../schema/jobs.js';
 import { crawlTasks } from '../schema/crawl-tasks.js';
 import { rawPages } from '../schema/raw-pages.js';

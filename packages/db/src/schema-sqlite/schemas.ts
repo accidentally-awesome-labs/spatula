@@ -5,7 +5,7 @@
  * - parentId is text (self-referential, enforced by PRAGMA foreign_keys)
  */
 import { sqliteTable, text, integer, index } from 'drizzle-orm/sqlite-core';
-import type { SchemaDefinition } from '@spatula/core';
+import type { SchemaDefinition } from '@accidentally-awesome-labs/spatula-core';
 
 export const schemasTable = sqliteTable(
   'schemas',

@@ -1,6 +1,6 @@
 /**
  * Repository barrel — exports all 12 SQLite repository classes and
- * any relevant types for use via the @spatula/db package.
+ * any relevant types for use via the @accidentally-awesome-labs/spatula-db package.
  */
 
 // Mirrored repos (receive db + projectId — pre-bound synthetic project ID)

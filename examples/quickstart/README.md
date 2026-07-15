@@ -6,25 +6,18 @@ Extract book data from [books.toscrape.com](https://books.toscrape.com) — a pr
 
 ```bash
 # Install Spatula
-npm install -g @spatula/cli
+npm install -g @accidentally-awesome-labs/spatula --allow-scripts=better-sqlite3
 
-# Initialize from this example
-cp spatula.yaml /path/to/my-project/
-cd /path/to/my-project
-spatula init
-
-# Configure your LLM provider
-spatula setup
-
-# Run the crawl
-spatula run
-
-# Explore results
-spatula explore
-
-# Export data
-spatula export --format json
+# Guided setup + this same safe sample crawl
+mkdir my-first-crawl && cd my-first-crawl
+spatula
 ```
+
+Press Enter when offered `books.toscrape.com`. Spatula configures the LLM and
+browser, displays the 10-page plan and estimated cost, then previews results.
+
+To use the checked-in configuration manually, copy `spatula.yaml` into a new
+folder and run `spatula setup`, `spatula estimate`, and `spatula run`.
 
 ## Server Mode
 
@@ -36,10 +29,10 @@ docker compose up -d
 cp ../../.env.example .env
 
 # Run migrations
-pnpm --filter @spatula/db db:migrate
+pnpm --filter @accidentally-awesome-labs/spatula-db db:migrate
 
 # Start the API server
-pnpm --filter @spatula/api start
+pnpm --filter @accidentally-awesome-labs/spatula-api start
 ```
 
 ## What This Extracts

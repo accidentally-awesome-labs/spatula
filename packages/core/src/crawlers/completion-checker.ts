@@ -1,4 +1,4 @@
-import { createLogger } from '@spatula/shared';
+import { createLogger } from '@accidentally-awesome-labs/spatula-shared';
 
 const logger = createLogger('completion-checker');
 

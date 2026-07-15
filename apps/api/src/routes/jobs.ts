@@ -1,6 +1,6 @@
 import { createRoute, z } from '@hono/zod-openapi';
 import { createOpenAPIRouter } from '../openapi-config.js';
-import { JobConfig } from '@spatula/core';
+import { JobConfig } from '@accidentally-awesome-labs/spatula-core';
 import {
   createJobSchema,
   isAllowedCreateJobSeedUrl,
@@ -19,7 +19,7 @@ import {
   encodeCursor,
   JobNotFoundError,
   ValidationSchemaError,
-} from '@spatula/shared';
+} from '@accidentally-awesome-labs/spatula-shared';
 import { applyDeprecationHeaders } from '../lib/deprecation-headers.js';
 import type { AppDeps } from '../types.js';
 

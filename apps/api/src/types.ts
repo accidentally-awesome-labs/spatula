@@ -14,17 +14,17 @@ import type {
   RedisCache,
   UserTenantRepository,
   TenantDataRepository,
-} from '@spatula/db';
-import type { ContentStore, ReviewQueue } from '@spatula/core';
-import type { JobManager, SpatulaQueues } from '@spatula/queue';
+} from '@accidentally-awesome-labs/spatula-db';
+import type { ContentStore, ReviewQueue } from '@accidentally-awesome-labs/spatula-core';
+import type { JobManager, SpatulaQueues } from '@accidentally-awesome-labs/spatula-queue';
 import type {
   AuthProvider,
   AuthResult,
   AuditLogger,
   SpatulaMetrics,
   Logger,
-} from '@spatula/shared';
-import type { AuditLogRepository } from '@spatula/db';
+} from '@accidentally-awesome-labs/spatula-shared';
+import type { AuditLogRepository } from '@accidentally-awesome-labs/spatula-db';
 import type Redis from 'ioredis';
 import type { Pool } from 'pg';
 

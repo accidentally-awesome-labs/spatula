@@ -1,7 +1,7 @@
 /**
  * SQLite source-trust repository — local project mode.
  *
- * Implements SourceTrustRepo from @spatula/core/pipeline/types.ts.
+ * Implements SourceTrustRepo from @accidentally-awesome-labs/spatula-core/pipeline/types.ts.
  *
  * Per spec 5.7: constructor takes (db, projectId). The jobId/tenantId
  * parameters on interface methods are accepted but ignored — the
@@ -14,7 +14,7 @@
  * extension) defaults to 0.5 if not provided.
  */
 import { eq, and } from 'drizzle-orm';
-import type { SourceTrustRepo } from '@spatula/core/pipeline/types.js';
+import type { SourceTrustRepo } from '@accidentally-awesome-labs/spatula-core/pipeline/types.js';
 import type { ProjectDatabase } from '../connection.js';
 import { sourceTrust } from '../../schema-sqlite/source-trust.js';
 import { wrapStorageError } from './utils.js';

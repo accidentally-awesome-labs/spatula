@@ -6,7 +6,7 @@
 // llm.primaryModel + modelOverrides are honored without creating new DB connections
 // or crawlers on every task.
 
-import type { LLMClient, LLMConfig } from '@spatula/core';
+import type { LLMClient, LLMConfig } from '@accidentally-awesome-labs/spatula-core';
 import {
   PageClassifier,
   StaticExtractor,
@@ -14,7 +14,7 @@ import {
   DataReconcilerImpl,
   LLMLinkEvaluator,
   resolveModel,
-} from '@spatula/core';
+} from '@accidentally-awesome-labs/spatula-core';
 import { WorkerDeps } from './worker-deps.js';
 
 /**

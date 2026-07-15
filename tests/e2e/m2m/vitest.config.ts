@@ -11,7 +11,7 @@ const root = resolve(__dirname, '../../..');
  *   - The JWT carries the expected sub (encodes spatula-m2m) and aud claims.
  *   - A JwtAuthProvider-wired API server accepts the JWT and auto-provisions a
  *     tenant for the M2M sub on first use.
- *   - createJob → listJobs → getEntities via @spatula/client all succeed end-to-end.
+ *   - createJob → listJobs → getEntities via @accidentally-awesome-labs/spatula-client all succeed end-to-end.
  *
  * Prerequisites (must be running before this suite executes):
  *   - Dex: cd examples/auth-dex && docker compose up -d
@@ -26,12 +26,15 @@ const root = resolve(__dirname, '../../..');
 export default defineConfig({
   resolve: {
     alias: {
-      '@spatula/shared': resolve(root, 'packages/shared/src/index.ts'),
-      '@spatula/core': resolve(root, 'packages/core/src/index.ts'),
-      '@spatula/core-types': resolve(root, 'packages/core-types/src/index.ts'),
-      '@spatula/db': resolve(root, 'packages/db/src/index.ts'),
-      '@spatula/queue': resolve(root, 'packages/queue/src/index.ts'),
-      '@spatula/client': resolve(root, 'packages/client/src/index.ts'),
+      '@accidentally-awesome-labs/spatula-shared': resolve(root, 'packages/shared/src/index.ts'),
+      '@accidentally-awesome-labs/spatula-core': resolve(root, 'packages/core/src/index.ts'),
+      '@accidentally-awesome-labs/spatula-core-types': resolve(
+        root,
+        'packages/core-types/src/index.ts',
+      ),
+      '@accidentally-awesome-labs/spatula-db': resolve(root, 'packages/db/src/index.ts'),
+      '@accidentally-awesome-labs/spatula-queue': resolve(root, 'packages/queue/src/index.ts'),
+      '@accidentally-awesome-labs/spatula-client': resolve(root, 'packages/client/src/index.ts'),
     },
   },
   test: {

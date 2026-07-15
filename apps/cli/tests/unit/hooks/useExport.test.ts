@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { writeFile } from 'node:fs/promises';
-import type { DataSource, PaginatedResult } from '@spatula/core';
-import type { Entity } from '@spatula/shared';
+import type { DataSource, PaginatedResult } from '@accidentally-awesome-labs/spatula-core';
+import type { Entity } from '@accidentally-awesome-labs/spatula-shared';
 
 vi.mock('node:fs/promises', () => ({
   writeFile: vi.fn().mockResolvedValue(undefined),

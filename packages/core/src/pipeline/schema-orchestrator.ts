@@ -1,5 +1,5 @@
 // packages/core/src/pipeline/schema-orchestrator.ts
-import { createLoggerWithContext } from '@spatula/shared';
+import { createLoggerWithContext } from '@accidentally-awesome-labs/spatula-shared';
 import { applySchemaActions } from '../index.js';
 import type { JobConfig, PipelineAction } from '../index.js';
 import type {

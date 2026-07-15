@@ -82,12 +82,13 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - run: pnpm run build
       - run: pnpm run audit:packages
+      - run: pnpm run test:package-install
 
   test-unit:
     name: Unit Tests
     runs-on: ubuntu-latest
     # The `Unit Tests` umbrella covers a couple of integration-grade tests
-    # inside the @spatula/db package (user-tenant-repository.integration.test
+    # inside the @accidentally-awesome-labs/spatula-db package (user-tenant-repository.integration.test
     # and the connection-factory exports tests) that hit a real Postgres.
     # Wire Postgres + Redis services here so the umbrella stays green; a
     # follow-up phase can split unit vs integration into separate turbo
@@ -132,9 +133,9 @@ jobs:
           key: turbo-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml') }}
           restore-keys: turbo-${{ runner.os }}-
       - run: pnpm install --frozen-lockfile
-      - run: pnpm --filter @spatula/db... build
+      - run: pnpm --filter @accidentally-awesome-labs/spatula-db... build
       - name: Apply migrations to test DB
-        run: pnpm --filter @spatula/db run db:migrate
+        run: pnpm --filter @accidentally-awesome-labs/spatula-db run db:migrate
       - run: pnpm run test
 
   test-e2e:
@@ -183,7 +184,7 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - run: pnpm run build
       - name: Run migrations
-        run: pnpm --filter @spatula/db db:migrate
+        run: pnpm --filter @accidentally-awesome-labs/spatula-db db:migrate
       - run: pnpm run test:e2e
 
   test-carveout:
@@ -223,7 +224,7 @@ jobs:
       - name: Build workspace (forward tests import from apps/api source)
         run: pnpm run build
       - name: Apply v1 baseline migration to test DB
-        run: pnpm --filter @spatula/db exec tsx src/run-migrate.ts
+        run: pnpm --filter @accidentally-awesome-labs/spatula-db exec tsx src/run-migrate.ts
       - name: Forward carve-out tests
         run: pnpm run test:carveout
 
@@ -275,7 +276,7 @@ jobs:
       - name: Build workspace (contract suite boots the live apps/api app)
         run: pnpm run build
       - name: Apply v1 baseline migration to test DB
-        run: pnpm --filter @spatula/db exec tsx src/run-migrate.ts
+        run: pnpm --filter @accidentally-awesome-labs/spatula-db exec tsx src/run-migrate.ts
       - name: Public contract tests
         run: pnpm run test:contract
 

@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from 'vitest';
-import { CrawlError } from '@spatula/shared';
+import { CrawlError } from '@accidentally-awesome-labs/spatula-shared';
 import { CrawlerFactory } from '../../../src/crawlers/crawler-factory.js';
 import { PlaywrightCrawler } from '../../../src/crawlers/playwright-crawler.js';
 import { FirecrawlCrawler } from '../../../src/crawlers/firecrawl-crawler.js';

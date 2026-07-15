@@ -4,9 +4,9 @@
 
 import { describe, it, expect, vi } from 'vitest';
 
-// We mock @spatula/core entirely (no importOriginal) to avoid triggering
+// We mock @accidentally-awesome-labs/spatula-core entirely (no importOriginal) to avoid triggering
 // a real Playwright launch in the vitest worker pool.
-vi.mock('@spatula/core', () => {
+vi.mock('@accidentally-awesome-labs/spatula-core', () => {
   const resolveModel = (
     config: { primaryModel: string; modelOverrides?: Record<string, string> },
     task: string,

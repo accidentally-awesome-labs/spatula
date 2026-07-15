@@ -20,9 +20,9 @@
  * produce 0-row deletes; already-inserted tombstones produce a harmless duplicate.
  */
 import { sql } from 'drizzle-orm';
-import { createLogger } from '@spatula/shared';
-import type { ContentStore } from '@spatula/core';
-import type { TenantDataRepository } from '@spatula/db';
+import { createLogger } from '@accidentally-awesome-labs/spatula-shared';
+import type { ContentStore } from '@accidentally-awesome-labs/spatula-core';
+import type { TenantDataRepository } from '@accidentally-awesome-labs/spatula-db';
 import type { TenantDeleteJobData } from '../queues.js';
 
 const logger = createLogger('tenant-delete-worker');
@@ -32,7 +32,7 @@ const FORENSIC_KEY_PREFIX = 'forensic/';
 
 /**
  * Minimal DB interface needed by the worker to query blob refs and delete
- * the tenant row. Avoids importing @spatula/db directly in queue worker.
+ * the tenant row. Avoids importing @accidentally-awesome-labs/spatula-db directly in queue worker.
  */
 export interface TenantDeleteDb {
   execute(
@@ -49,7 +49,7 @@ export interface ListableContentStore extends ContentStore {
 }
 
 export interface TenantDeleteJobDeps {
-  /** TenantDataRepository from @spatula/db */
+  /** TenantDataRepository from @accidentally-awesome-labs/spatula-db */
   tenantDataRepo: TenantDataRepository;
   /** ContentStore for blob deletion */
   contentStore: ListableContentStore;

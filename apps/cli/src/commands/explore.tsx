@@ -12,7 +12,7 @@ import { render, Box, Text } from 'ink';
 import { openLocalProject } from '../local-project.js';
 import { createCliStore } from '../store/index.js';
 import type { CliStore } from '../store/index.js';
-import type { DataSource } from '@spatula/core';
+import type { DataSource } from '@accidentally-awesome-labs/spatula-core';
 import { ExplorerView } from '../components/explorer/ExplorerView.js';
 import type { FilteredFetch } from '../components/explorer/ExplorerView.js';
 import { useKeyboard } from '../hooks/useKeyboard.js';

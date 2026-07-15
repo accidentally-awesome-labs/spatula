@@ -1,7 +1,7 @@
 import { writeFile, readFile, unlink, mkdir } from 'node:fs/promises';
 import { dirname, resolve, sep } from 'node:path';
 import type { ContentStore } from '../interfaces/content-store.js';
-import { createLogger } from '@spatula/shared';
+import { createLogger } from '@accidentally-awesome-labs/spatula-shared';
 
 const logger = createLogger('local-content-store');
 

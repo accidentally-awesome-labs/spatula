@@ -35,11 +35,16 @@ import {
   ExportRepository,
   UserTenantRepository,
   CrawlTaskRepository,
-} from '@spatula/db';
-import { JobManager } from '@spatula/queue';
+} from '@accidentally-awesome-labs/spatula-db';
+import { JobManager } from '@accidentally-awesome-labs/spatula-queue';
 import Redis from 'ioredis';
-import { SpatulaClient, createJob, listJobs, getEntities } from '@spatula/client';
-import { DEFAULT_API_KEY_SCOPES } from '@spatula/shared';
+import {
+  SpatulaClient,
+  createJob,
+  listJobs,
+  getEntities,
+} from '@accidentally-awesome-labs/spatula-client';
+import { DEFAULT_API_KEY_SCOPES } from '@accidentally-awesome-labs/spatula-shared';
 
 // ─── Dex M2M constants (committed dev-only values) ───────────────────────────
 

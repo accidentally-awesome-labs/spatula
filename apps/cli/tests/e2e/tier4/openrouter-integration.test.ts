@@ -32,7 +32,7 @@ beforeAll(async () => {
   hasKey = !!process.env.OPENROUTER_API_KEY;
   if (!hasKey) return;
 
-  const { createLLMClient } = await import('@spatula/core');
+  const { createLLMClient } = await import('@accidentally-awesome-labs/spatula-core');
   llmClient = createLLMClient({
     provider: 'openrouter',
     openrouter: { apiKey: process.env.OPENROUTER_API_KEY! },

@@ -124,6 +124,25 @@ describe('createProjectYaml', () => {
     const content = readFileSync(join(tmpDir, 'spatula.yaml'), 'utf-8');
     expect(content).toContain('example.com');
   });
+
+  it('writes onboarding metadata and expanded fields', () => {
+    createProjectYaml(tmpDir, {
+      url: 'https://books.toscrape.com/',
+      depth: 2,
+      limit: 10,
+      name: 'Books quickstart',
+      description: 'Practice crawl',
+      fields: [
+        { name: 'title', type: 'string', required: true },
+        { name: 'price', type: 'currency' },
+      ],
+    });
+    const content = readFileSync(join(tmpDir, 'spatula.yaml'), 'utf-8');
+    expect(content).toContain('name: "Books quickstart"');
+    expect(content).toContain('limit: 10');
+    expect(content).toContain('field: title');
+    expect(content).toContain('type: currency');
+  });
 });
 
 describe('updateGitignore', () => {

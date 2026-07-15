@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import type { GlobalConfig } from '@spatula/core';
+import type { GlobalConfig } from '@accidentally-awesome-labs/spatula-core';
 
 const { mockLoadGlobalConfig, mockSaveGlobalConfig } = vi.hoisted(() => {
   return {
@@ -10,8 +10,10 @@ const { mockLoadGlobalConfig, mockSaveGlobalConfig } = vi.hoisted(() => {
 
 let mockConfig: GlobalConfig | null = null;
 
-vi.mock('@spatula/core', async () => {
-  const actual = await vi.importActual<typeof import('@spatula/core')>('@spatula/core');
+vi.mock('@accidentally-awesome-labs/spatula-core', async () => {
+  const actual = await vi.importActual<typeof import('@accidentally-awesome-labs/spatula-core')>(
+    '@accidentally-awesome-labs/spatula-core',
+  );
   return {
     ...actual,
     loadGlobalConfig: (...args: unknown[]) => {

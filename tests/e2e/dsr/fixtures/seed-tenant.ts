@@ -6,8 +6,8 @@
  */
 import { randomUUID } from 'node:crypto';
 import { sql } from 'drizzle-orm';
-import { PgContentStore } from '@spatula/db';
-import type { Database } from '@spatula/db';
+import { PgContentStore } from '@accidentally-awesome-labs/spatula-db';
+import type { Database } from '@accidentally-awesome-labs/spatula-db';
 
 export interface SeedResult {
   tenantId: string;

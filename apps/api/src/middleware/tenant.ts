@@ -1,5 +1,5 @@
 import type { MiddlewareHandler } from 'hono';
-import { ValidationParamsError } from '@spatula/shared';
+import { ValidationParamsError } from '@accidentally-awesome-labs/spatula-shared';
 
 const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const SKIP_PATHS = new Set(['/health', '/api/docs', '/api/openapi.json']);

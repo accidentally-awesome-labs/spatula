@@ -5,7 +5,7 @@ import type {
   LLMCompletionResponse,
   JobConfig,
   ConfigAction,
-} from '@spatula/core';
+} from '@accidentally-awesome-labs/spatula-core';
 import { ConfigConversationService } from '../../../src/services/config-conversation.js';
 import type { ChatMessage } from '../../../src/store/index.js';
 

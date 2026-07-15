@@ -1,5 +1,5 @@
 import type Redis from 'ioredis';
-import { createLogger } from '@spatula/shared';
+import { createLogger } from '@accidentally-awesome-labs/spatula-shared';
 
 const logger = createLogger('redis-cache');
 const KEY_PREFIX = 'cache:';

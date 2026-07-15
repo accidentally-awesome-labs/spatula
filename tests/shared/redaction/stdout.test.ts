@@ -5,7 +5,12 @@
 import { describe, it, expect } from 'vitest';
 import { Writable } from 'node:stream';
 import pino from 'pino';
-import { REDACT_PATHS, REDACTED_PLACEHOLDER, redactValue, redactObject } from '@spatula/shared';
+import {
+  REDACT_PATHS,
+  REDACTED_PLACEHOLDER,
+  redactValue,
+  redactObject,
+} from '@accidentally-awesome-labs/spatula-shared';
 
 // Fixed canary secrets used across all per-sink tests
 const CANARY_JWT = 'eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIxMjM0NTY3ODkwIn0.dummysignatureXXXXXXXX';

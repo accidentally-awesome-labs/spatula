@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { JobProgressManager } from '../../../src/ws/job-progress.js';
-import type { JobEvent } from '@spatula/queue';
+import type { JobEvent } from '@accidentally-awesome-labs/spatula-queue';
 
 function createMockRedis() {
   const handlers = new Map<string, (channel: string, message: string) => void>();

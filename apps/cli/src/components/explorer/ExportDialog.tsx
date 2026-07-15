@@ -3,11 +3,11 @@ import { Box, Text } from 'ink';
 import { useStore } from 'zustand';
 import type { CliStore } from '../../store/index.js';
 import type { SpatulaApiClient } from '../../api/client.js';
-import type { DataSource } from '@spatula/core';
+import type { DataSource } from '@accidentally-awesome-labs/spatula-core';
 import { useKeyboard } from '../../hooks/useKeyboard.js';
 import { useExport } from '../../hooks/useExport.js';
 import { Panel } from '../shared/index.js';
-import type { EntityWithProvenance } from '@spatula/shared';
+import type { EntityWithProvenance } from '@accidentally-awesome-labs/spatula-shared';
 
 export interface ExportDialogProps {
   store: CliStore;

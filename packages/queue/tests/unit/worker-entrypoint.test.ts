@@ -16,7 +16,7 @@ vi.mock('ioredis', () => {
   }));
   return { default: Redis };
 });
-vi.mock('@spatula/shared', () => ({
+vi.mock('@accidentally-awesome-labs/spatula-shared', () => ({
   createLogger: () => ({
     info: vi.fn(),
     warn: vi.fn(),
@@ -26,7 +26,7 @@ vi.mock('@spatula/shared', () => ({
     redis: { url: 'redis://localhost:6379' },
   }),
 }));
-vi.mock('@spatula/db', () => ({
+vi.mock('@accidentally-awesome-labs/spatula-db', () => ({
   createDatabasePool: vi.fn().mockReturnValue({
     db: {},
     pool: { end: vi.fn().mockResolvedValue(undefined) },

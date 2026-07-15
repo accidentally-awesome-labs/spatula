@@ -1,7 +1,7 @@
 // apps/cli/src/components/explorer/DataTable.tsx
 import React, { useMemo } from 'react';
 import { Box, Text, useStdout } from 'ink';
-import type { Entity } from '@spatula/shared';
+import type { Entity } from '@accidentally-awesome-labs/spatula-shared';
 import { TableRow } from './TableRow.js';
 
 export interface DataTableProps {

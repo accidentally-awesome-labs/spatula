@@ -1,7 +1,7 @@
 {
-  "name": "@spatula/core",
-  "version": "0.0.1",
-  "description": "Internal Spatula core orchestrators — NO TS-API compat guarantee. Public SDK is @spatula/client. See docs/compat-policy.md.",
+  "name": "@accidentally-awesome-labs/spatula-core",
+  "version": "0.1.0",
+  "description": "Internal Spatula core orchestrators — NO TS-API compat guarantee. Public SDK is @accidentally-awesome-labs/spatula-client. See docs/compat-policy.md.",
   "license": "MIT",
   "repository": {
     "type": "git",
@@ -59,8 +59,8 @@
     "@aws-sdk/s3-request-presigner": "^3.1085.0",
     "@duckdb/node-api": "1.5.0-r.1",
     "@mendable/firecrawl-js": "^4.30.0",
-    "@spatula/core-types": "workspace:*",
-    "@spatula/shared": "workspace:*",
+    "@accidentally-awesome-labs/spatula-core-types": "workspace:*",
+    "@accidentally-awesome-labs/spatula-shared": "workspace:*",
     "better-sqlite3": "^12.8.0",
     "cheerio": "^1.2.0",
     "hyparquet": "^1.25.1",

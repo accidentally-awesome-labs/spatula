@@ -110,7 +110,7 @@ for (const dir of packageDirs()) {
   const pkg = readJson(pkgPath);
   const packageDir = relative(repoRoot, dir).replaceAll('\\', '/');
 
-  if (pkg.private || !pkg.name?.startsWith('@spatula/')) {
+  if (pkg.private || !pkg.name?.startsWith('@accidentally-awesome-labs/spatula')) {
     continue;
   }
 
@@ -126,7 +126,7 @@ for (const dir of packageDirs()) {
     }
   }
 
-  if (pkg.name === '@spatula/db') {
+  if (pkg.name === '@accidentally-awesome-labs/spatula-db') {
     for (const migrationDir of ['drizzle', 'drizzle-sqlite']) {
       if (!pkg.files?.includes(migrationDir)) {
         errors.push(`package.json files allowlist must include ${migrationDir}`);
@@ -200,7 +200,7 @@ for (const dir of packageDirs()) {
     }
   }
 
-  if (pkg.name === '@spatula/db') {
+  if (pkg.name === '@accidentally-awesome-labs/spatula-db') {
     for (const migrationDir of ['drizzle/', 'drizzle-sqlite/']) {
       if (![...paths].some((path) => path.startsWith(migrationDir))) {
         errors.push(`database migration assets missing from tarball: ${migrationDir}`);

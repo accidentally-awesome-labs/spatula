@@ -1,5 +1,5 @@
 import type { MiddlewareHandler } from 'hono';
-import { createLoggerWithContext } from '@spatula/shared';
+import { createLoggerWithContext } from '@accidentally-awesome-labs/spatula-shared';
 import type { AppEnv } from '../types.js';
 
 export const requestContextMiddleware: MiddlewareHandler<AppEnv> = async (c, next) => {

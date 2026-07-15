@@ -5,8 +5,8 @@ import {
   createSystemChecks,
   createServerChecks,
   findProjectRoot,
-} from '@spatula/core';
-import type { CheckCategory, CheckResult } from '@spatula/core';
+} from '@accidentally-awesome-labs/spatula-core';
+import type { CheckCategory, CheckResult } from '@accidentally-awesome-labs/spatula-core';
 
 export function determineCategoriesFromContext(context: {
   hasEnv: boolean;
@@ -63,7 +63,7 @@ export async function runDoctorCommand(): Promise<void> {
 
   if (categories.includes('project')) {
     const { createProjectChecks, findProjectRoot, parseProjectYamlFile } =
-      await import('@spatula/core');
+      await import('@accidentally-awesome-labs/spatula-core');
     const projectRoot = findProjectRoot(process.cwd());
     if (projectRoot) {
       const projectChecks = createProjectChecks({

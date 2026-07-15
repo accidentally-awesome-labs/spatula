@@ -9,7 +9,7 @@
  * require real 15s waits.
  */
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import type { JobEvent } from '@spatula/queue';
+import type { JobEvent } from '@accidentally-awesome-labs/spatula-queue';
 import { RedisStreamBuffer } from './buffer.js';
 
 // ── Helpers ─────────────────────────────────────────────────────────────────

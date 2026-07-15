@@ -2,9 +2,9 @@ import { useState, useCallback, useRef } from 'react';
 import { writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import type { SpatulaApiClient } from '../api/client.js';
-import type { DataSource } from '@spatula/core';
-import type { Entity, EntityWithProvenance } from '@spatula/shared';
-import { entitiesToCsv, entityToCsvRow } from '@spatula/core';
+import type { DataSource } from '@accidentally-awesome-labs/spatula-core';
+import type { Entity, EntityWithProvenance } from '@accidentally-awesome-labs/spatula-shared';
+import { entitiesToCsv, entityToCsvRow } from '@accidentally-awesome-labs/spatula-core';
 import { isDataSource } from './useJobPolling.js';
 
 export { entityToCsvRow };

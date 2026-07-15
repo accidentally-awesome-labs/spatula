@@ -3,7 +3,7 @@ import { Hono } from 'hono';
 import { actionRoutes } from '../../../src/routes/actions.js';
 import type { AppDeps, AppEnv } from '../../../src/types.js';
 import { errorHandler } from '../../../src/middleware/error-handler.js';
-import { encodeCursor } from '@spatula/shared';
+import { encodeCursor } from '@accidentally-awesome-labs/spatula-shared';
 import type { Pool } from 'pg';
 
 function createMockDeps(): AppDeps {

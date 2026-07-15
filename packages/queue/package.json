@@ -1,7 +1,7 @@
 {
-  "name": "@spatula/queue",
-  "version": "0.0.1",
-  "description": "Internal Spatula BullMQ queue + workers + webhook delivery — NO TS-API compat guarantee. Public SDK is @spatula/client. See docs/compat-policy.md.",
+  "name": "@accidentally-awesome-labs/spatula-queue",
+  "version": "0.1.0",
+  "description": "Internal Spatula BullMQ queue + workers + webhook delivery — NO TS-API compat guarantee. Public SDK is @accidentally-awesome-labs/spatula-client. See docs/compat-policy.md.",
   "license": "MIT",
   "repository": {
     "type": "git",
@@ -46,9 +46,9 @@
   },
   "dependencies": {
     "@opentelemetry/api": "^1.9.1",
-    "@spatula/core": "workspace:*",
-    "@spatula/db": "workspace:*",
-    "@spatula/shared": "workspace:*",
+    "@accidentally-awesome-labs/spatula-core": "workspace:*",
+    "@accidentally-awesome-labs/spatula-db": "workspace:*",
+    "@accidentally-awesome-labs/spatula-shared": "workspace:*",
     "bullmq": "^5.80.2",
     "drizzle-orm": "^0.45.2",
     "ioredis": "^5.10.0"

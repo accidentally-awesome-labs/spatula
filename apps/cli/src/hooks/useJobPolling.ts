@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import type { CliStore, PendingAction } from '../store/index.js';
 import type { SpatulaApiClient } from '../api/client.js';
-import type { DataSource } from '@spatula/core';
+import type { DataSource } from '@accidentally-awesome-labs/spatula-core';
 
 const DEFAULT_INTERVAL = 3000;
 

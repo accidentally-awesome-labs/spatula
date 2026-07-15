@@ -11,7 +11,7 @@
  */
 
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
-import { StateError, QuotaExceededError } from '@spatula/shared';
+import { StateError, QuotaExceededError } from '@accidentally-awesome-labs/spatula-shared';
 import { startTestWorkers, waitForJobStatus, type TestWorkerHarness } from './helpers.js';
 
 // ---------------------------------------------------------------------------

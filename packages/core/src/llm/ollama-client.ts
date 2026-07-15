@@ -1,4 +1,4 @@
-import { LLMError, TimeoutError } from '@spatula/shared';
+import { LLMError, TimeoutError } from '@accidentally-awesome-labs/spatula-shared';
 import type {
   LLMClient,
   LLMCompletionRequest,

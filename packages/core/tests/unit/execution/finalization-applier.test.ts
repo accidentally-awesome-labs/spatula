@@ -4,7 +4,7 @@ import {
   type FinalizationResult,
 } from '../../../src/execution/finalization-applier.js';
 import type { PipelineAction } from '../../../src/types/actions.js';
-import { generateId } from '@spatula/shared';
+import { generateId } from '@accidentally-awesome-labs/spatula-shared';
 
 function baseAction(): Pick<
   PipelineAction,

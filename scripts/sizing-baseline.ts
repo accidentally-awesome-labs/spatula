@@ -8,7 +8,7 @@
  * emitted as a Markdown table to stdout and written to scripts/.sizing-results.json
  * so the docs/runbooks/hardware-sizing.md table can be filled from them.
  *
- * == How it works (pure HTTP — no @spatula/* imports, no DB access) ==
+ * == How it works (pure HTTP — no @accidentally-awesome-labs/spatula-* imports, no DB access) ==
  * Drives the REAL production crawl path entirely over HTTP: it submits a job per tier,
  * the BullMQ CrawlWorker processes it (and records LLM usage), then the harness reads:
  *   - pages  ← GET /api/v1/jobs/:id   → data.stats.pagesCompleted
@@ -56,7 +56,7 @@ if (process.env.SPATULA_LIVE_LLM !== '1') {
   process.exit(2);
 }
 
-// Pure-HTTP harness — NO @spatula/* imports, no direct DB access. Pages come from
+// Pure-HTTP harness — NO @accidentally-awesome-labs/spatula-* imports, no direct DB access. Pages come from
 // GET /jobs/:id (stats.pagesCompleted) and cost from GET /api/v1/usage (byJob).
 // This keeps the harness portable (runs against any reachable Spatula stack,
 // local or remote) and free of workspace ESM-resolution concerns.

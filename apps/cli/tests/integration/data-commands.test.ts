@@ -25,8 +25,12 @@ import {
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { describe, it, expect, beforeAll, afterAll, vi } from 'vitest';
-import { createProjectDb, initializeProjectDb, ProjectAdapter } from '@spatula/db';
-import { LocalDataSource } from '@spatula/core';
+import {
+  createProjectDb,
+  initializeProjectDb,
+  ProjectAdapter,
+} from '@accidentally-awesome-labs/spatula-db';
+import { LocalDataSource } from '@accidentally-awesome-labs/spatula-core';
 import { slugifyPath } from '../../src/local-project.js';
 
 // ---------------------------------------------------------------------------

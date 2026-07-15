@@ -1,12 +1,12 @@
 /**
- * @spatula/core-types — type-only exports, zod schemas, and enums.
+ * @accidentally-awesome-labs/spatula-core-types — type-only exports, zod schemas, and enums.
  *
  * Zero runtime dependencies (zod as peer). Frozen at v1; additive-only in 1.x.
  *
  * The Spatula monorepo ESLint rule blocks value-imports from this package via
  * `no-restricted-imports` with `allowTypeImports: true`. Consumers route
- * runtime value imports through `@spatula/shared` (legacy re-export shim) or
- * `@spatula/core` (zod schemas).
+ * runtime value imports through `@accidentally-awesome-labs/spatula-shared` (legacy re-export shim) or
+ * `@accidentally-awesome-labs/spatula-core` (zod schemas).
  */
 
 // --- Errors ---

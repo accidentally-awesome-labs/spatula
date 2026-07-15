@@ -1,7 +1,7 @@
 import { describe, it, expect, vi } from 'vitest';
 import { Hono } from 'hono';
 import { authMiddleware } from '../../../src/middleware/auth.js';
-import type { AuthProvider, AuditLogger } from '@spatula/shared';
+import type { AuthProvider, AuditLogger } from '@accidentally-awesome-labs/spatula-shared';
 
 function createTestApp(provider: AuthProvider, auditLogger?: AuditLogger) {
   const app = new Hono();
@@ -94,7 +94,7 @@ describe('authMiddleware', { timeout: 30_000 }, () => {
   });
 
   it('propagates AuthError from provider as-is', async () => {
-    const { AuthError } = await import('@spatula/shared');
+    const { AuthError } = await import('@accidentally-awesome-labs/spatula-shared');
     const provider: AuthProvider = {
       authenticate: vi.fn().mockRejectedValue(new AuthError('bad token')),
     };
@@ -135,7 +135,7 @@ describe('authMiddleware', { timeout: 30_000 }, () => {
     });
 
     it('calls auditLogger.log with auth.login_failure on auth error', async () => {
-      const { AuthError } = await import('@spatula/shared');
+      const { AuthError } = await import('@accidentally-awesome-labs/spatula-shared');
       const provider: AuthProvider = {
         authenticate: vi.fn().mockRejectedValue(new AuthError('invalid key')),
       };

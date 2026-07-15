@@ -1,6 +1,6 @@
 import React from 'react';
 import { Box, Text } from 'ink';
-import type { EntityWithProvenance } from '@spatula/shared';
+import type { EntityWithProvenance } from '@accidentally-awesome-labs/spatula-shared';
 import { Panel } from '../shared/index.js';
 
 export interface EntityDetailProps {

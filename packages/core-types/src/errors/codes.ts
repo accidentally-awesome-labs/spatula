@@ -1,5 +1,5 @@
 /**
- * @spatula/core-types: errors/codes.ts
+ * @accidentally-awesome-labs/spatula-core-types: errors/codes.ts
  *
  * Frozen v1 error-code enum. Category-prefixed `DOMAIN.CODE` shape per
  * public API compatibility rules.
@@ -13,9 +13,9 @@
  *
  * Canonical location: This module is the source of truth for the public
  * error-code surface.
- * `@spatula/shared` re-exports it for backward compatibility, and the
- * monorepo ESLint rule blocks value-imports from `@spatula/core-types`
- * directly — consumers go through `@spatula/shared` for runtime value
+ * `@accidentally-awesome-labs/spatula-shared` re-exports it for backward compatibility, and the
+ * monorepo ESLint rule blocks value-imports from `@accidentally-awesome-labs/spatula-core-types`
+ * directly — consumers go through `@accidentally-awesome-labs/spatula-shared` for runtime value
  * imports, or use `import type` for type-only.
  */
 

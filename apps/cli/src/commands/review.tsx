@@ -12,7 +12,7 @@ import { useStore } from 'zustand';
 import { openLocalProject } from '../local-project.js';
 import { createCliStore } from '../store/index.js';
 import type { CliStore } from '../store/index.js';
-import type { DataSource } from '@spatula/core';
+import type { DataSource } from '@accidentally-awesome-labs/spatula-core';
 import { ReviewView } from '../components/review/ReviewView.js';
 import { useKeyboard } from '../hooks/useKeyboard.js';
 import { Header, KeyboardHints } from '../components/shared/index.js';

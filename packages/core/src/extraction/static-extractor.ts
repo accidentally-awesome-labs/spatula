@@ -1,6 +1,10 @@
 import { z } from 'zod';
 import * as cheerio from 'cheerio';
-import { ExtractionError, createLogger, generateId } from '@spatula/shared';
+import {
+  ExtractionError,
+  createLogger,
+  generateId,
+} from '@accidentally-awesome-labs/spatula-shared';
 import type { LLMClient, LLMCompletionResponse } from '../interfaces/llm-client.js';
 import type { Extractor } from '../interfaces/extractor.js';
 import type { LLMConfig } from '../types/job.js';

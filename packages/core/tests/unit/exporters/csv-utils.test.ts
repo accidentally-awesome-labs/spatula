@@ -5,7 +5,7 @@ import {
   entityToCsvRow,
   entitiesToCsv,
 } from '../../../src/exporters/csv-utils.js';
-import type { Entity } from '@spatula/shared';
+import type { Entity } from '@accidentally-awesome-labs/spatula-shared';
 
 // Minimal Entity fixture
 function makeEntity(mergedData: Record<string, unknown>): Entity {

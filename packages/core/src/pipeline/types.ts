@@ -10,7 +10,7 @@ import type {
   SchemaDefinition,
 } from '../index.js';
 
-// Re-export EventPublisher interface so orchestrators don't import from @spatula/queue
+// Re-export EventPublisher interface so orchestrators don't import from @accidentally-awesome-labs/spatula-queue
 export interface EventPublisher {
   publish(
     jobId: string,
@@ -19,8 +19,8 @@ export interface EventPublisher {
 }
 
 // --- Repository interfaces (narrowed from full repo types) ---
-// These match the existing @spatula/db repository method signatures
-// but are declared here so @spatula/core has no dependency on @spatula/db
+// These match the existing @accidentally-awesome-labs/spatula-db repository method signatures
+// but are declared here so @accidentally-awesome-labs/spatula-core has no dependency on @accidentally-awesome-labs/spatula-db
 
 export interface CrawlTaskRepo {
   updateStatus(taskId: string, tenantId: string, status: string): Promise<unknown>;

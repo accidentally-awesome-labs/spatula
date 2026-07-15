@@ -1,5 +1,5 @@
 import { eq, and, desc, inArray, sql } from 'drizzle-orm';
-import { createLogger, StorageError } from '@spatula/shared';
+import { createLogger, StorageError } from '@accidentally-awesome-labs/spatula-shared';
 import { actions } from '../schema/actions.js';
 import type { actionStatusEnum } from '../schema/enums.js';
 import type { Database } from '../connection.js';

@@ -1,5 +1,9 @@
 import { Hono } from 'hono';
-import { InternalQueueError, TenantNotFoundError, ValidationParamsError } from '@spatula/shared';
+import {
+  InternalQueueError,
+  TenantNotFoundError,
+  ValidationParamsError,
+} from '@accidentally-awesome-labs/spatula-shared';
 import type { AppEnv } from '../types.js';
 
 const MIN_RETENTION_DAYS = 7;

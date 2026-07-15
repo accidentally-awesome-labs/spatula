@@ -12,7 +12,7 @@
 
 import { readdirSync, readFileSync, watch } from 'node:fs';
 import { join } from 'node:path';
-import { findProjectRoot } from '@spatula/core';
+import { findProjectRoot } from '@accidentally-awesome-labs/spatula-core';
 
 // ---------------------------------------------------------------------------
 // Types

@@ -1,8 +1,11 @@
 import { createHash } from 'node:crypto';
-import type { AuthProvider, AuthResult } from '@spatula/shared';
-import { AuthMissingTokenError, AuthInvalidTokenError } from '@spatula/shared';
+import type { AuthProvider, AuthResult } from '@accidentally-awesome-labs/spatula-shared';
+import {
+  AuthMissingTokenError,
+  AuthInvalidTokenError,
+} from '@accidentally-awesome-labs/spatula-shared';
 import type { HonoRequest } from 'hono';
-import type { ApiKeyRepository } from '@spatula/db';
+import type { ApiKeyRepository } from '@accidentally-awesome-labs/spatula-db';
 
 export class ApiKeyAuthProvider implements AuthProvider {
   constructor(private readonly apiKeyRepo: ApiKeyRepository) {}

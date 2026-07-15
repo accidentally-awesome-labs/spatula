@@ -1,5 +1,5 @@
 import robotsParser from 'robots-parser';
-import { createLogger } from '@spatula/shared';
+import { createLogger } from '@accidentally-awesome-labs/spatula-shared';
 
 const logger = createLogger('robots-txt');
 

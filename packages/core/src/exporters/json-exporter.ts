@@ -1,6 +1,6 @@
 import type { Exporter, ExportOptions, ExportResult } from '../interfaces/exporter.js';
 import type { SchemaDefinition } from '../types/schema.js';
-import type { Entity, EntityWithProvenance } from '@spatula/shared';
+import type { Entity, EntityWithProvenance } from '@accidentally-awesome-labs/spatula-shared';
 
 export class JsonExporter implements Exporter {
   readonly format = 'json' as const;

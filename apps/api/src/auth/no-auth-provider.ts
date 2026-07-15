@@ -1,5 +1,8 @@
-import type { AuthProvider, AuthResult } from '@spatula/shared';
-import { AuthMissingTokenError, AuthInvalidTokenError } from '@spatula/shared';
+import type { AuthProvider, AuthResult } from '@accidentally-awesome-labs/spatula-shared';
+import {
+  AuthMissingTokenError,
+  AuthInvalidTokenError,
+} from '@accidentally-awesome-labs/spatula-shared';
 import type { HonoRequest } from 'hono';
 
 const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;

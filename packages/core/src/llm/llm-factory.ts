@@ -1,4 +1,4 @@
-import { ConfigError } from '@spatula/shared';
+import { ConfigError } from '@accidentally-awesome-labs/spatula-shared';
 import type { LLMClient } from '../interfaces/llm-client.js';
 import type { LLMFactoryConfig } from './types.js';
 import { OpenRouterClient } from './openrouter-client.js';

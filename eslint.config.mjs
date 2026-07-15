@@ -21,19 +21,19 @@ export default [
       // stream of warning-only debt.
       '@typescript-eslint/no-explicit-any': 'off',
       '@typescript-eslint/consistent-type-imports': 'error',
-      // Enforce the public package boundary: @spatula/core-types is type-only
+      // Enforce the public package boundary: @accidentally-awesome-labs/spatula-core-types is type-only
       // outside its own package. Runtime values such as ErrorCode, STATUS_MAP,
-      // ActionType, and JobConfigSchema must come from @spatula/shared or
-      // @spatula/core.
+      // ActionType, and JobConfigSchema must come from @accidentally-awesome-labs/spatula-shared or
+      // @accidentally-awesome-labs/spatula-core.
       '@typescript-eslint/no-restricted-imports': [
         'error',
         {
           paths: [
             {
-              name: '@spatula/core-types',
+              name: '@accidentally-awesome-labs/spatula-core-types',
               allowTypeImports: true,
               message:
-                '@spatula/core-types is type-only. Use `import type { X }` or import the runtime value via @spatula/shared (ErrorCode/STATUS_MAP) or @spatula/core (zod schemas).',
+                '@accidentally-awesome-labs/spatula-core-types is type-only. Use `import type { X }` or import the runtime value via @accidentally-awesome-labs/spatula-shared (ErrorCode/STATUS_MAP) or @accidentally-awesome-labs/spatula-core (zod schemas).',
             },
           ],
         },
@@ -45,7 +45,7 @@ export default [
     },
   },
   {
-    // Exempt @spatula/core-types' own files from the rule — the package
+    // Exempt @accidentally-awesome-labs/spatula-core-types' own files from the rule — the package
     // legitimately exports values from its own internal modules.
     files: ['packages/core-types/**/*.ts'],
     rules: {
@@ -54,7 +54,7 @@ export default [
   },
   {
     // Exempt the back-compat shim files that intentionally re-export the
-    // @spatula/core-types runtime values for legacy consumers.
+    // @accidentally-awesome-labs/spatula-core-types runtime values for legacy consumers.
     files: ['packages/shared/src/error-codes.ts', 'packages/core/src/types/*.ts'],
     rules: {
       '@typescript-eslint/no-restricted-imports': 'off',

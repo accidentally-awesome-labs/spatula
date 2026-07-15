@@ -32,7 +32,7 @@ import {
   ActionRepository,
   ExportRepository,
   UserTenantRepository,
-} from '@spatula/db';
+} from '@accidentally-awesome-labs/spatula-db';
 import type { Pool } from 'pg';
 import Redis from 'ioredis';
 

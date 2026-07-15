@@ -347,7 +347,7 @@ describe('Webhook', () => {
       },
     };
 
-    // Deliver webhook via plain HTTP POST (avoids @spatula/queue dependency)
+    // Deliver webhook via plain HTTP POST (avoids @accidentally-awesome-labs/spatula-queue dependency)
     const res = await fetch(`http://127.0.0.1:${receiver.port}/webhook`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },

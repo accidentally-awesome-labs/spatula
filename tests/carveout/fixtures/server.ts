@@ -3,7 +3,12 @@ import { createServer, type Server, type IncomingMessage, type ServerResponse } 
 import { createApp } from '../../../apps/api/src/app.js';
 import { ApiKeyAuthProvider } from '../../../apps/api/src/auth/api-key-provider.js';
 import type { AppDeps } from '../../../apps/api/src/types.js';
-import { createDatabasePool, TenantRepository, ApiKeyRepository, JobRepository } from '@spatula/db';
+import {
+  createDatabasePool,
+  TenantRepository,
+  ApiKeyRepository,
+  JobRepository,
+} from '@accidentally-awesome-labs/spatula-db';
 import type { Pool } from 'pg';
 
 export interface ForwardTestHandle {

@@ -1,12 +1,12 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { WebhookSender } from '../../src/webhook-sender.js';
-import type { WebhookEvent } from '@spatula/shared';
+import type { WebhookEvent } from '@accidentally-awesome-labs/spatula-shared';
 
 const mockFetch = vi.fn();
 vi.stubGlobal('fetch', mockFetch);
 
-vi.mock('@spatula/shared', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('@spatula/shared')>();
+vi.mock('@accidentally-awesome-labs/spatula-shared', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@accidentally-awesome-labs/spatula-shared')>();
   return {
     ...actual,
     createLogger: () => ({ debug: vi.fn(), info: vi.fn(), warn: vi.fn(), error: vi.fn() }),

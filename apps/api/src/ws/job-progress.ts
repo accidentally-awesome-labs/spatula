@@ -1,6 +1,6 @@
-import { createLogger } from '@spatula/shared';
-import { channelForJob } from '@spatula/queue';
-import type { JobEvent } from '@spatula/queue';
+import { createLogger } from '@accidentally-awesome-labs/spatula-shared';
+import { channelForJob } from '@accidentally-awesome-labs/spatula-queue';
+import type { JobEvent } from '@accidentally-awesome-labs/spatula-queue';
 import type Redis from 'ioredis';
 import type { WSMessage } from './types.js';
 

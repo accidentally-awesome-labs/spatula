@@ -1,6 +1,6 @@
 import { join } from 'node:path';
 import { spawnSync } from 'node:child_process';
-import { findProjectRoot } from '@spatula/core';
+import { findProjectRoot } from '@accidentally-awesome-labs/spatula-core';
 
 export function getEditorCommand(): string {
   return process.env.EDITOR || process.env.VISUAL || 'vi';

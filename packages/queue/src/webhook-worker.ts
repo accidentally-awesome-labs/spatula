@@ -1,6 +1,6 @@
 import { Worker } from 'bullmq';
 import type { ConnectionOptions, Job } from 'bullmq';
-import { createLogger } from '@spatula/shared';
+import { createLogger } from '@accidentally-awesome-labs/spatula-shared';
 import { WebhookSender } from './webhook-sender.js';
 import { QUEUE_NAMES } from './queues.js';
 import type { WebhookJobData } from './queues.js';

@@ -1,8 +1,8 @@
 import { z } from '@hono/zod-openapi';
-// Value-import ErrorCode via @spatula/shared (the back-compat shim).
-// The monorepo ESLint rule blocks value-imports from @spatula/core-types
+// Value-import ErrorCode via @accidentally-awesome-labs/spatula-shared (the back-compat shim).
+// The monorepo ESLint rule blocks value-imports from @accidentally-awesome-labs/spatula-core-types
 // directly; this consumer is allowed because it routes through the shim.
-import { ErrorCode } from '@spatula/shared';
+import { ErrorCode } from '@accidentally-awesome-labs/spatula-shared';
 import { cursorEnvelopeSchema, offsetEnvelopeSchema } from './pagination.js';
 
 // Closed-set enum surfaced into the OpenAPI document so SDK consumers see the

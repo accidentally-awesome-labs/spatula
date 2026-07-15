@@ -1,4 +1,4 @@
-import { createLogger } from '@spatula/shared';
+import { createLogger } from '@accidentally-awesome-labs/spatula-shared';
 import type { PipelineAction } from '../types/actions.js';
 import type { SchemaDefinition, FieldDefinition, FieldAlias } from '../types/schema.js';
 

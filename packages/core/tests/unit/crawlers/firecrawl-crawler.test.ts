@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { CrawlError } from '@spatula/shared';
+import { CrawlError } from '@accidentally-awesome-labs/spatula-shared';
 import { FirecrawlCrawler } from '../../../src/crawlers/firecrawl-crawler.js';
 
 const mockScrape = vi.fn();

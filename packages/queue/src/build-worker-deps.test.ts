@@ -5,9 +5,9 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 // ---------------------------------------------------------------------------
 
 // Mock only the exports used by build-worker-deps.ts — do NOT use importOriginal
-// here to avoid loading the real @spatula/core (which would try to launch Playwright
+// here to avoid loading the real @accidentally-awesome-labs/spatula-core (which would try to launch Playwright
 // when CrawlerFactory.create is called and cause a 5s timeout in the test worker).
-vi.mock('@spatula/core', () => ({
+vi.mock('@accidentally-awesome-labs/spatula-core', () => ({
   CrawlerFactory: {
     create: vi.fn().mockResolvedValue({ crawl: vi.fn(), close: vi.fn() }),
   },
@@ -25,7 +25,7 @@ vi.mock('@spatula/core', () => ({
   createContentStore: vi.fn().mockReturnValue({ type: 's3' }),
 }));
 
-vi.mock('@spatula/db', () => ({
+vi.mock('@accidentally-awesome-labs/spatula-db', () => ({
   JobRepository: vi.fn().mockImplementation(() => ({})),
   CrawlTaskRepository: vi.fn().mockImplementation(() => ({})),
   PageRepository: vi.fn().mockImplementation(() => ({})),
@@ -40,7 +40,7 @@ vi.mock('@spatula/db', () => ({
   PgContentStore: vi.fn().mockImplementation(() => ({ type: 'pg' })),
 }));
 
-vi.mock('@spatula/shared', () => ({
+vi.mock('@accidentally-awesome-labs/spatula-shared', () => ({
   createLogger: vi.fn().mockReturnValue({ info: vi.fn(), warn: vi.fn(), error: vi.fn() }),
   getEnvOrDefault: vi.fn().mockImplementation((key: string, defaultValue: string) => {
     return process.env[key] ?? defaultValue;
@@ -107,7 +107,7 @@ describe('buildWorkerDeps()', { timeout: 15_000 }, () => {
     process.env.SPATULA_CRAWLER = 'firecrawl';
     process.env.FIRECRAWL_API_KEY = 'fc-test-key';
 
-    const { CrawlerFactory } = await import('@spatula/core');
+    const { CrawlerFactory } = await import('@accidentally-awesome-labs/spatula-core');
     const { buildWorkerDeps } = await import('./build-worker-deps.js');
 
     await buildWorkerDeps(FAKE_INPUT);
@@ -121,7 +121,7 @@ describe('buildWorkerDeps()', { timeout: 15_000 }, () => {
     process.env.OPENROUTER_API_KEY = 'test-key-abc';
     delete process.env.SPATULA_CRAWLER;
 
-    const { CrawlerFactory } = await import('@spatula/core');
+    const { CrawlerFactory } = await import('@accidentally-awesome-labs/spatula-core');
     const { buildWorkerDeps } = await import('./build-worker-deps.js');
 
     await buildWorkerDeps(FAKE_INPUT);

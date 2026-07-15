@@ -1,17 +1,20 @@
 /**
  * SQLite crawl-task repository — local project mode.
  *
- * Implements BOTH CrawlTaskRepo from @spatula/core/pipeline/types.ts
- * AND TaskStatsRepo from @spatula/core/crawlers/completion-checker.ts.
+ * Implements BOTH CrawlTaskRepo from @accidentally-awesome-labs/spatula-core/pipeline/types.ts
+ * AND TaskStatsRepo from @accidentally-awesome-labs/spatula-core/crawlers/completion-checker.ts.
  *
  * Per spec 5.7: constructor takes (db, projectId). The jobId/tenantId
  * parameters on interface methods are accepted but ignored — the
  * pre-bound projectId is always used.
  */
 import { eq, and, desc, sql } from 'drizzle-orm';
-import { createLogger } from '@spatula/shared';
-import type { CrawlTaskRepo } from '@spatula/core/pipeline/types.js';
-import type { TaskStatsRepo, TaskStats } from '@spatula/core/crawlers/completion-checker.js';
+import { createLogger } from '@accidentally-awesome-labs/spatula-shared';
+import type { CrawlTaskRepo } from '@accidentally-awesome-labs/spatula-core/pipeline/types.js';
+import type {
+  TaskStatsRepo,
+  TaskStats,
+} from '@accidentally-awesome-labs/spatula-core/crawlers/completion-checker.js';
 import type { ProjectDatabase } from '../connection.js';
 import { crawlTasks } from '../../schema-sqlite/crawl-tasks.js';
 import { wrapStorageError } from './utils.js';

@@ -5,13 +5,13 @@
 import { pathToFileURL } from 'node:url';
 import { Worker, type Queue as BullQueueType } from 'bullmq';
 import Redis from 'ioredis';
-import { createLogger, loadConfig } from '@spatula/shared';
+import { createLogger, loadConfig } from '@accidentally-awesome-labs/spatula-shared';
 import {
   createDatabasePool,
   DlqRepository,
   TenantDataRepository,
   LlmUsageRepository,
-} from '@spatula/db';
+} from '@accidentally-awesome-labs/spatula-db';
 import { createDlqHandler } from './dlq-handler.js';
 import { processCrawlJob } from './workers/crawl-worker.js';
 import { processSchemaEvolutionJob } from './workers/schema-worker.js';

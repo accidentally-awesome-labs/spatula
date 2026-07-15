@@ -9,7 +9,7 @@ Thank you for your interest in contributing! This guide covers how to set up you
 - Node.js 22+
 - pnpm 11.13.x via `corepack enable`
 - Docker (for PostgreSQL and Redis)
-- Playwright browsers: `pnpm --filter @spatula/cli exec playwright install chromium`
+- Playwright browsers: `pnpm --filter @accidentally-awesome-labs/spatula exec playwright install chromium`
 
 ### Setup
 
@@ -30,8 +30,11 @@ cp .env.example .env
 # Build all packages
 pnpm build
 
+# Exercise the CLI from source
+pnpm --filter @accidentally-awesome-labs/spatula dev -- --help
+
 # Run database migrations
-pnpm --filter @spatula/db db:migrate
+pnpm --filter @accidentally-awesome-labs/spatula-db db:migrate
 
 # Run tests
 pnpm test
@@ -67,7 +70,7 @@ fix(api): return 404 for cross-tenant action approve
 
 ## Code Style
 
-- **ESLint** — `pnpm lint` (auto-fixable: `pnpm lint --fix`)
+- **ESLint** — `pnpm lint` (auto-fixable: `pnpm lint:fix`)
 - **Prettier** — `pnpm format:check` (auto-fix: `pnpm format`)
 - **TypeScript** — strict mode, `pnpm typecheck`
 
@@ -83,10 +86,13 @@ pnpm test
 pnpm test:e2e
 
 # Run tests for a specific package
-pnpm --filter @spatula/core test
+pnpm --filter @accidentally-awesome-labs/spatula-core test
 
 # Run a specific test file
-pnpm --filter @spatula/core test -- src/tests/unit/extraction/llm-extractor.test.ts
+pnpm --filter @accidentally-awesome-labs/spatula-core test -- src/tests/unit/extraction/llm-extractor.test.ts
+
+# Pack the CLI dependency closure, install it cleanly, and run the binary
+pnpm test:package-install
 ```
 
 ### Test Guidelines
@@ -124,6 +130,10 @@ See [docs/architecture.md](docs/architecture.md) for a detailed architecture gui
 4. Push and open a pull request
 5. Fill out the PR template
 6. Address review feedback
+
+Maintainers cutting a release should follow the
+[npm release runbook](docs/runbooks/npm-release.md), including the one-time
+trusted-publishing bootstrap for the first public version.
 
 ## Reporting Issues
 

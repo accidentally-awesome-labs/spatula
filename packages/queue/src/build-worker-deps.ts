@@ -2,7 +2,7 @@
 // Composition helper that builds a full WorkerDeps from env config.
 // Called by startWorker() (production) and injectable for tests via _opts.deps.
 
-import { createLogger, getEnvOrDefault } from '@spatula/shared';
+import { createLogger, getEnvOrDefault } from '@accidentally-awesome-labs/spatula-shared';
 import {
   createLLMClient,
   CircuitBreakerLLMClient,
@@ -17,8 +17,8 @@ import {
   CrawlerFactory,
   createContentStore,
   resolveModel,
-} from '@spatula/core';
-import type { LLMClient, LLMConfig } from '@spatula/core';
+} from '@accidentally-awesome-labs/spatula-core';
+import type { LLMClient, LLMConfig } from '@accidentally-awesome-labs/spatula-core';
 import {
   JobRepository,
   CrawlTaskRepository,
@@ -32,9 +32,9 @@ import {
   ActionRepository,
   TenantRepository,
   PgContentStore,
-} from '@spatula/db';
+} from '@accidentally-awesome-labs/spatula-db';
 import type { Pool } from 'pg';
-import type { Database } from '@spatula/db';
+import type { Database } from '@accidentally-awesome-labs/spatula-db';
 import type { SpatulaQueues } from './queues.js';
 import { WorkerDeps } from './worker-deps.js';
 import type { EventPublisher } from './events.js';

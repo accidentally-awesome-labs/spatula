@@ -84,7 +84,7 @@ jobs:
         run: pnpm build
 
       - name: Apply migrations to test DB
-        run: pnpm --filter @spatula/db run db:migrate
+        run: pnpm --filter @accidentally-awesome-labs/spatula-db run db:migrate
 
       - name: Run heavy test lanes (config-compat + upgrade + backup)
         run: |

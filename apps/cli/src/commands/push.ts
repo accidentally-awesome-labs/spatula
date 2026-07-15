@@ -1,6 +1,10 @@
 import { createHash } from 'node:crypto';
 import { join } from 'node:path';
-import { loadGlobalConfig, parseProjectYamlFile, yamlToJobConfig } from '@spatula/core';
+import {
+  loadGlobalConfig,
+  parseProjectYamlFile,
+  yamlToJobConfig,
+} from '@accidentally-awesome-labs/spatula-core';
 import { SpatulaApiClient } from '../api/client.js';
 
 export interface PushInput {

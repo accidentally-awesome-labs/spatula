@@ -1,6 +1,6 @@
 // State Machine
 export { JobStateMachine } from './state-machine.js';
-export { StateError } from '@spatula/shared';
+export { StateError } from '@accidentally-awesome-labs/spatula-shared';
 
 // Queues
 export {

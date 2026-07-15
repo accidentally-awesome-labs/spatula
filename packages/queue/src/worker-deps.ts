@@ -1,11 +1,17 @@
-import type { Crawler, Extractor, ContentStore, SchemaEvolver, LinkEvaluator } from '@spatula/core';
-import type { PageClassifier, DataReconciler } from '@spatula/core';
+import type {
+  Crawler,
+  Extractor,
+  ContentStore,
+  SchemaEvolver,
+  LinkEvaluator,
+} from '@accidentally-awesome-labs/spatula-core';
+import type { PageClassifier, DataReconciler } from '@accidentally-awesome-labs/spatula-core';
 import type {
   RobotsTxtChecker,
   DomainRateLimiter,
   PageBudget,
   CrawlCompletionChecker,
-} from '@spatula/core';
+} from '@accidentally-awesome-labs/spatula-core';
 import type {
   JobRepository,
   CrawlTaskRepository,
@@ -18,7 +24,7 @@ import type {
   ExportRepository,
   ActionRepository,
   TenantRepository,
-} from '@spatula/db';
+} from '@accidentally-awesome-labs/spatula-db';
 import type { Pool } from 'pg';
 import type { SpatulaQueues } from './queues.js';
 import type { EventPublisher } from './events.js';

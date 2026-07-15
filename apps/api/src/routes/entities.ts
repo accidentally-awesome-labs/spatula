@@ -9,7 +9,11 @@ import {
   dataResponse,
   jsonContent,
 } from '../schemas/responses.js';
-import { decodeCursor, encodeCursor, EntityNotFoundError } from '@spatula/shared';
+import {
+  decodeCursor,
+  encodeCursor,
+  EntityNotFoundError,
+} from '@accidentally-awesome-labs/spatula-shared';
 import { applyDeprecationHeaders } from '../lib/deprecation-headers.js';
 
 const jobIdParam = z.object({

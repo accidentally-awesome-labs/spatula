@@ -119,11 +119,21 @@ describe('CLI help and discovery', () => {
   );
 
   it(
-    'shows error when no command given',
+    'shows help when no command is given in a non-interactive shell',
     async () => {
-      const { stderr, exitCode } = await runCli([]);
-      expect(exitCode).not.toBe(0);
-      expect(stderr).toContain('Please specify a command');
+      const { stdout, exitCode } = await runCli([]);
+      expect(exitCode).toBe(0);
+      expect(stdout).toContain('spatula <command>');
+    },
+    TEST_TIMEOUT,
+  );
+
+  it(
+    '--version prints a semver version',
+    async () => {
+      const { stdout, exitCode } = await runCli(['--version']);
+      expect(exitCode).toBe(0);
+      expect(stdout.trim()).toMatch(/^0\.1\.0(?:-dev)?$/);
     },
     TEST_TIMEOUT,
   );

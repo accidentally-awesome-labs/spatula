@@ -1,5 +1,5 @@
 import { z } from '@hono/zod-openapi';
-import { isValidCrawlUrl } from '@spatula/core';
+import { isValidCrawlUrl } from '@accidentally-awesome-labs/spatula-core';
 
 export const PRIVATE_CRAWL_URL_REJECTION_MESSAGE =
   'Private, loopback, link-local, and reserved seed URLs are disabled in production';

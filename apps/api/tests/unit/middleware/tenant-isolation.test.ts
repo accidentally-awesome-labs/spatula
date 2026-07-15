@@ -6,7 +6,7 @@ import { actionRoutes } from '../../../src/routes/actions.js';
 import { tenantMiddleware } from '../../../src/middleware/tenant.js';
 import { errorHandler } from '../../../src/middleware/error-handler.js';
 import type { AppDeps, AppEnv } from '../../../src/types.js';
-import { StorageError } from '@spatula/shared';
+import { StorageError } from '@accidentally-awesome-labs/spatula-shared';
 import type { Pool } from 'pg';
 
 const TENANT_A = '00000000-0000-0000-0000-00000000000a';

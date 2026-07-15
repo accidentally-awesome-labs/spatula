@@ -1,7 +1,10 @@
 // packages/queue/src/workers/crawl-worker.ts
-import { createLoggerWithContext, type Logger } from '@spatula/shared';
-import { processCrawlTask, shouldTriggerSchemaEvolution } from '@spatula/core';
-import type { LLMClient } from '@spatula/core';
+import { createLoggerWithContext, type Logger } from '@accidentally-awesome-labs/spatula-shared';
+import {
+  processCrawlTask,
+  shouldTriggerSchemaEvolution,
+} from '@accidentally-awesome-labs/spatula-core';
+import type { LLMClient } from '@accidentally-awesome-labs/spatula-core';
 import type { CrawlJobData } from '../queues.js';
 import type { WorkerDeps } from '../worker-deps.js';
 import { resolveJobDeps } from '../derive-job-deps.js';

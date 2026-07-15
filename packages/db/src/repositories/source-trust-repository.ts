@@ -1,5 +1,5 @@
 import { eq, and } from 'drizzle-orm';
-import { createLogger, StorageError } from '@spatula/shared';
+import { createLogger, StorageError } from '@accidentally-awesome-labs/spatula-shared';
 import { sourceTrust } from '../schema/source-trust.js';
 import type { trustLevelEnum } from '../schema/enums.js';
 import type { Database } from '../connection.js';

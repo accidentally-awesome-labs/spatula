@@ -1,7 +1,7 @@
 import { join } from 'node:path';
-import { findProjectRoot } from '@spatula/core';
-import type { DataSource } from '@spatula/core';
-import type { ProjectAdapter as ProjectAdapterType } from '@spatula/db';
+import { findProjectRoot } from '@accidentally-awesome-labs/spatula-core';
+import type { DataSource } from '@accidentally-awesome-labs/spatula-core';
+import type { ProjectAdapter as ProjectAdapterType } from '@accidentally-awesome-labs/spatula-db';
 
 export interface LocalProject {
   dataSource: DataSource;
@@ -35,8 +35,8 @@ export async function openLocalProject(cwd: string): Promise<LocalProject> {
   }
 
   const dbPath = join(projectRoot, '.spatula', 'project.db');
-  const { createProjectDb, ProjectAdapter } = await import('@spatula/db');
-  const { LocalDataSource } = await import('@spatula/core');
+  const { createProjectDb, ProjectAdapter } = await import('@accidentally-awesome-labs/spatula-db');
+  const { LocalDataSource } = await import('@accidentally-awesome-labs/spatula-core');
 
   const projectId = slugifyPath(projectRoot);
 

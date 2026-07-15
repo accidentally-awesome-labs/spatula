@@ -4,8 +4,10 @@ import { Hono } from 'hono';
 const { mockCaptureException } = vi.hoisted(() => ({
   mockCaptureException: vi.fn(),
 }));
-vi.mock('@spatula/shared', async () => {
-  const actual = await vi.importActual<typeof import('@spatula/shared')>('@spatula/shared');
+vi.mock('@accidentally-awesome-labs/spatula-shared', async () => {
+  const actual = await vi.importActual<typeof import('@accidentally-awesome-labs/spatula-shared')>(
+    '@accidentally-awesome-labs/spatula-shared',
+  );
   return { ...actual, captureException: mockCaptureException };
 });
 
@@ -35,7 +37,7 @@ import {
   RateLimitError,
   NetworkError,
   StateError,
-} from '@spatula/shared';
+} from '@accidentally-awesome-labs/spatula-shared';
 
 function createTestApp() {
   const app = new Hono();

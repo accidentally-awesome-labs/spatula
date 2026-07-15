@@ -1,5 +1,5 @@
-import type { JobStatus } from '@spatula/core';
-import { StateError } from '@spatula/shared';
+import type { JobStatus } from '@accidentally-awesome-labs/spatula-core';
+import { StateError } from '@accidentally-awesome-labs/spatula-shared';
 
 const TRANSITIONS: Record<JobStatus, JobStatus[]> = {
   pending: ['queued'],

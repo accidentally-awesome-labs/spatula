@@ -60,9 +60,9 @@ security@spatula.dev.
 
 The following are **in scope** for security reports:
 
-- `@spatula/core`, `@spatula/db`, `@spatula/queue`, `@spatula/shared`
-- `apps/api` (`@spatula/api`) — the REST API server
-- `apps/cli` (`@spatula/cli`) — the CLI/TUI application
+- `@accidentally-awesome-labs/spatula-core`, `@accidentally-awesome-labs/spatula-db`, `@accidentally-awesome-labs/spatula-queue`, `@accidentally-awesome-labs/spatula-shared`
+- `apps/api` (`@accidentally-awesome-labs/spatula-api`) — the REST API server
+- `apps/cli` (`@accidentally-awesome-labs/spatula`) — the CLI/TUI application
 - Docker images published to `ghcr.io/accidentally-awesome-labs/spatula`
 
 The following are **out of scope**:

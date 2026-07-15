@@ -2,7 +2,13 @@ import { createRoute, z } from '@hono/zod-openapi';
 import { createOpenAPIRouter } from '../openapi-config.js';
 import { actionResponseSchema, listResponse, jsonContent } from '../schemas/responses.js';
 import { paginationSchema, paginationEnvelopeSchema } from '../schemas/pagination.js';
-import { decodeCursor, encodeCursor, ErrorCode, SpatulaError, StorageError } from '@spatula/shared';
+import {
+  decodeCursor,
+  encodeCursor,
+  ErrorCode,
+  SpatulaError,
+  StorageError,
+} from '@accidentally-awesome-labs/spatula-shared';
 
 const jobIdParam = z.object({
   jobId: z.string().openapi({ param: { name: 'jobId', in: 'path' } }),

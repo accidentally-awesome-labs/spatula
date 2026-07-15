@@ -1,6 +1,6 @@
 import React from 'react';
 import { render } from 'ink';
-import { loadGlobalConfig } from '@spatula/core';
+import { loadGlobalConfig } from '@accidentally-awesome-labs/spatula-core';
 import { SpatulaApiClient } from '../api/client.js';
 
 export interface RemoteWatchConfig {

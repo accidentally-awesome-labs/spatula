@@ -31,7 +31,7 @@ COPY tsconfig.base.json ./
 COPY packages/ packages/
 
 # Build only the db dependency tree (migrate needs nothing from apps/)
-RUN pnpm run build --filter=@spatula/db...
+RUN pnpm run build --filter=@accidentally-awesome-labs/spatula-db...
 
 # -----------------------------------------------------------
 # Stage 2: Production dependencies only
@@ -67,7 +67,7 @@ COPY --from=prod-deps /app/packages/db/node_modules ./packages/db/node_modules
 # Built output + the drizzle migration SQL the runner applies
 COPY --from=build /app/packages/shared/dist ./packages/shared/dist
 COPY --from=build /app/packages/shared/package.json ./packages/shared/
-# shared/dist imports @spatula/core-types (error-codes) — must be present at runtime
+# shared/dist imports @accidentally-awesome-labs/spatula-core-types (error-codes) — must be present at runtime
 COPY --from=build /app/packages/core-types/dist ./packages/core-types/dist
 COPY --from=build /app/packages/core-types/package.json ./packages/core-types/
 COPY --from=build /app/packages/db/dist ./packages/db/dist

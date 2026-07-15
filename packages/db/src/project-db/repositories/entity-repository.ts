@@ -1,7 +1,7 @@
 /**
  * SQLite entity + entity-source repositories — local project mode.
  *
- * Implements EntityRepo and EntitySourceRepo from @spatula/core/pipeline/types.ts.
+ * Implements EntityRepo and EntitySourceRepo from @accidentally-awesome-labs/spatula-core/pipeline/types.ts.
  * Both repos live in one file since entity_sources is a junction table tightly
  * coupled to entities.
  *
@@ -13,8 +13,11 @@
  * - UUIDs via crypto.randomUUID(), timestamps via new Date().toISOString()
  */
 import { eq, desc, sql, inArray } from 'drizzle-orm';
-import { createLogger } from '@spatula/shared';
-import type { EntityRepo, EntitySourceRepo } from '@spatula/core/pipeline/types.js';
+import { createLogger } from '@accidentally-awesome-labs/spatula-shared';
+import type {
+  EntityRepo,
+  EntitySourceRepo,
+} from '@accidentally-awesome-labs/spatula-core/pipeline/types.js';
 import type { ProjectDatabase } from '../connection.js';
 import { entities, entitySources } from '../../schema-sqlite/entities.js';
 import { runs } from '../../schema-sqlite/runs.js';

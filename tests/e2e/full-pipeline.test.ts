@@ -18,8 +18,8 @@ import {
   ExportRepository,
   ActionRepository,
   PgContentStore,
-} from '@spatula/db';
-import type { Database } from '@spatula/db';
+} from '@accidentally-awesome-labs/spatula-db';
+import type { Database } from '@accidentally-awesome-labs/spatula-db';
 
 import {
   createQueues,
@@ -31,7 +31,7 @@ import {
   JobManager,
   type SpatulaQueues,
   type WorkerDepsConfig,
-} from '@spatula/queue';
+} from '@accidentally-awesome-labs/spatula-queue';
 
 import type {
   Crawler,
@@ -48,8 +48,8 @@ import type {
   JobConfig,
   EntityMatch,
   PageClassification,
-} from '@spatula/core';
-import type { PageClassificationResult } from '@spatula/core';
+} from '@accidentally-awesome-labs/spatula-core';
+import type { PageClassificationResult } from '@accidentally-awesome-labs/spatula-core';
 
 // ---------------------------------------------------------------------------
 // Fixture HTML

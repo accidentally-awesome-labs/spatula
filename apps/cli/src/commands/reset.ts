@@ -131,7 +131,7 @@ export async function runResetCommand(options: ResetOptions = {}): Promise<Reset
     const dbPath = join(spatulaDir, DB_FILE);
     if (existsSync(dbPath)) {
       // Use createProjectDb which returns { sqlite } — the raw better-sqlite3 handle
-      const { createProjectDb } = await import('@spatula/db');
+      const { createProjectDb } = await import('@accidentally-awesome-labs/spatula-db');
       const { sqlite, close } = createProjectDb(dbPath);
       try {
         // Delete entity_sources rows that reference local entities or extractions

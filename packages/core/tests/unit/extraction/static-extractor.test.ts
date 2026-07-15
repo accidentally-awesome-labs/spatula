@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from 'vitest';
-import { ExtractionError } from '@spatula/shared';
+import { ExtractionError } from '@accidentally-awesome-labs/spatula-shared';
 import { StaticExtractor } from '../../../src/extraction/static-extractor.js';
 import type { LLMClient, LLMCompletionResponse } from '../../../src/interfaces/llm-client.js';
 import type { LLMConfig } from '../../../src/types/job.js';

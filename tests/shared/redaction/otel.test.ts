@@ -3,7 +3,7 @@
  * Verifies that canary secrets in span attributes are redacted before export.
  */
 import { describe, it, expect } from 'vitest';
-import { RedactionSpanProcessor } from '@spatula/shared';
+import { RedactionSpanProcessor } from '@accidentally-awesome-labs/spatula-shared';
 import type { ReadableSpan } from '@opentelemetry/sdk-trace-node';
 import type { HrTime, SpanContext, SpanStatus } from '@opentelemetry/api';
 

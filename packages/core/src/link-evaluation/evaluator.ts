@@ -1,4 +1,4 @@
-import { createLogger } from '@spatula/shared';
+import { createLogger } from '@accidentally-awesome-labs/spatula-shared';
 import type { LLMClient } from '../interfaces/llm-client.js';
 import type { ExtractedLink } from '../crawlers/link-extractor.js';
 import type { SchemaDefinition } from '../types/schema.js';

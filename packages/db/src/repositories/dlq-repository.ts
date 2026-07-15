@@ -1,6 +1,6 @@
 import { eq, isNull, desc, and, sql } from 'drizzle-orm';
-import { createLogger } from '@spatula/shared';
-import { StorageError } from '@spatula/shared';
+import { createLogger } from '@accidentally-awesome-labs/spatula-shared';
+import { StorageError } from '@accidentally-awesome-labs/spatula-shared';
 import { deadLetterQueue } from '../schema/dead-letter-queue.js';
 import type { Database } from '../connection.js';
 

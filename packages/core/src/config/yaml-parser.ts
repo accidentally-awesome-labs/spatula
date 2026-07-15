@@ -1,6 +1,6 @@
 import { readFileSync } from 'node:fs';
 import { parse as parseYaml } from 'yaml';
-import { ValidationError } from '@spatula/shared';
+import { ValidationError } from '@accidentally-awesome-labs/spatula-shared';
 import { SpatulaYamlSchema } from './types.js';
 import type { SpatulaYaml, YamlFieldShorthand } from './types.js';
 import type { FieldDefinitionInput } from '../types/schema.js';

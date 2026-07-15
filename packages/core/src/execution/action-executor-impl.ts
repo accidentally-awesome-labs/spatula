@@ -1,4 +1,4 @@
-import { createLogger, generateId } from '@spatula/shared';
+import { createLogger, generateId } from '@accidentally-awesome-labs/spatula-shared';
 import type { PipelineAction } from '../types/actions.js';
 import type {
   ActionExecutor,

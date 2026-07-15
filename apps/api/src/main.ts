@@ -27,10 +27,19 @@ import {
   PgContentStore,
   RedisCache,
   TenantDataRepository,
-} from '@spatula/db';
-import { createQueues, JobManager, redisConnectionOptionsFromUrl } from '@spatula/queue';
-import { createContentStore } from '@spatula/core';
-import { AuditLogger, createLogger, getEnvOrDefault, loadConfig } from '@spatula/shared';
+} from '@accidentally-awesome-labs/spatula-db';
+import {
+  createQueues,
+  JobManager,
+  redisConnectionOptionsFromUrl,
+} from '@accidentally-awesome-labs/spatula-queue';
+import { createContentStore } from '@accidentally-awesome-labs/spatula-core';
+import {
+  AuditLogger,
+  createLogger,
+  getEnvOrDefault,
+  loadConfig,
+} from '@accidentally-awesome-labs/spatula-shared';
 import { createAuthProvider } from './auth/factory.js';
 import { startServer } from './server.js';
 import { startEmbeddedWorker } from './embedded-worker.js';

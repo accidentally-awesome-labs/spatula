@@ -1,7 +1,10 @@
 import { createRemoteJWKSet, jwtVerify } from 'jose';
 import type { JWTPayload } from 'jose';
-import type { AuthProvider, AuthResult } from '@spatula/shared';
-import { AuthMissingTokenError, AuthInvalidTokenError } from '@spatula/shared';
+import type { AuthProvider, AuthResult } from '@accidentally-awesome-labs/spatula-shared';
+import {
+  AuthMissingTokenError,
+  AuthInvalidTokenError,
+} from '@accidentally-awesome-labs/spatula-shared';
 import type { HonoRequest } from 'hono';
 
 export interface JwtProviderConfig {

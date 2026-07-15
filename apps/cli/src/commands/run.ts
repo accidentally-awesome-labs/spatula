@@ -10,8 +10,8 @@
  *   - Crawler created via CrawlerFactory (default: Playwright)
  *   - Extractor, Classifier, SchemaEvolver, Reconciler, LinkEvaluator built
  *     from the LLM client + resolved job config
- *   - If LLM is unavailable (no API key, no Ollama), crawl-only mode: pages
- *     are fetched but LLM-dependent steps are skipped.
+ *   - Missing extraction prerequisites fail before state is created.
+ *   - Explicit --crawl-only mode archives pages without LLM-dependent steps.
  */
 
 import { join, basename } from 'node:path';
@@ -35,11 +35,21 @@ import {
   SchemaEvolverImpl,
   DataReconcilerImpl,
   LLMLinkEvaluator,
-} from '@spatula/core';
-import type { LLMClient, Crawler, LLMProvider, DataSource } from '@spatula/core';
-import { LocalDataSource } from '@spatula/core';
-import { createProjectDb, initializeProjectDb, ProjectAdapter } from '@spatula/db';
+} from '@accidentally-awesome-labs/spatula-core';
+import type { LLMClient, Crawler, DataSource } from '@accidentally-awesome-labs/spatula-core';
+import { LocalDataSource } from '@accidentally-awesome-labs/spatula-core';
+import {
+  createProjectDb,
+  initializeProjectDb,
+  ProjectAdapter,
+} from '@accidentally-awesome-labs/spatula-db';
 import { sendDesktopNotification, sendWebhookNotification } from '../notifications.js';
+import {
+  checkProviderConnection,
+  collectPreflightIssues,
+  formatPreflightIssues,
+  resolveRuntimeConfig,
+} from '../runtime-preflight.js';
 
 // ---------------------------------------------------------------------------
 // Public run function
@@ -48,6 +58,8 @@ import { sendDesktopNotification, sendWebhookNotification } from '../notificatio
 export interface RunOptions {
   /** Skip the single-instance lock check (useful for debugging). */
   force?: boolean;
+  /** Crawl and archive pages without running structured LLM extraction. */
+  crawlOnly?: boolean;
 }
 
 export async function runRunCommand(options: RunOptions = {}): Promise<void> {
@@ -74,8 +86,15 @@ export async function runRunCommand(options: RunOptions = {}): Promise<void> {
   let globalConfig: ReturnType<typeof loadGlobalConfig> = null;
   try {
     globalConfig = loadGlobalConfig();
-  } catch {
-    // Non-fatal: global config is optional
+  } catch (error) {
+    console.error(
+      `Error: saved Spatula configuration is invalid: ${
+        error instanceof Error ? error.message : String(error)
+      }`,
+    );
+    console.error('Fix: run `spatula setup` to repair it.');
+    process.exitCode = 1;
+    return;
   }
 
   const jobConfig = yamlToJobConfig(projectYaml, {
@@ -85,7 +104,66 @@ export async function runRunCommand(options: RunOptions = {}): Promise<void> {
     globalConfig,
   });
 
-  // Step 3b: Set up structured logging to .spatula/logs/
+  // Step 3b: Resolve one runtime view shared with setup/doctor and fail before
+  // creating databases or launching browsers when prerequisites are missing.
+  const runtime = resolveRuntimeConfig(globalConfig);
+  runtime.crawler = jobConfig.crawl?.crawlerType ?? runtime.crawler;
+  runtime.model = jobConfig.llm?.primaryModel ?? runtime.model;
+  const preflightIssues = collectPreflightIssues(runtime, {
+    requireLlm: !options.crawlOnly,
+    requireCrawler: true,
+  });
+  if (preflightIssues.length > 0) {
+    console.error('\nSpatula cannot start this crawl:');
+    console.error(formatPreflightIssues(preflightIssues));
+    if (!options.crawlOnly && preflightIssues.some((issue) => issue.code === 'openrouter-key')) {
+      console.error(
+        '\nTo intentionally archive pages without extraction, use `spatula run --crawl-only`.',
+      );
+    }
+    process.exitCode = 1;
+    return;
+  }
+
+  if (!options.crawlOnly && runtime.provider === 'ollama') {
+    const providerCheck = await checkProviderConnection(runtime);
+    if (providerCheck.status !== 'pass') {
+      console.error(`\nSpatula cannot start this crawl: ${providerCheck.message}`);
+      console.error(`Fix: start Ollama and run \`ollama pull ${runtime.model}\`.`);
+      process.exitCode = 1;
+      return;
+    }
+  }
+
+  let llmClient: LLMClient | null = null;
+  if (!options.crawlOnly) {
+    try {
+      const rawClient = createLLMClient({
+        provider: runtime.provider,
+        openrouter:
+          runtime.provider === 'openrouter'
+            ? {
+                apiKey: runtime.openrouterApiKey ?? '',
+                baseUrl: process.env.OPENROUTER_BASE_URL,
+              }
+            : undefined,
+        ollama: runtime.provider === 'ollama' ? { baseUrl: runtime.ollamaBaseUrl } : undefined,
+      });
+      llmClient =
+        runtime.provider === 'openrouter' ? new CircuitBreakerLLMClient(rawClient) : rawClient;
+    } catch (error) {
+      console.error(
+        `\nSpatula cannot configure ${runtime.provider}: ${
+          error instanceof Error ? error.message : String(error)
+        }`,
+      );
+      console.error('Fix: run `spatula setup` and try again.');
+      process.exitCode = 1;
+      return;
+    }
+  }
+
+  // Step 3c: Set up structured logging to .spatula/logs/
   const logsDir = join(projectRoot, '.spatula', 'logs');
   const { mkdirSync } = await import('node:fs');
   mkdirSync(logsDir, { recursive: true });
@@ -124,43 +202,16 @@ export async function runRunCommand(options: RunOptions = {}): Promise<void> {
   const pagesDir = join(projectRoot, '.spatula', 'pages');
   const contentStore = new LocalContentStore(pagesDir);
 
-  // Step 7: Create LLM client (graceful degradation if unavailable)
-  // If the LLM provider is unreachable or misconfigured, the pipeline
-  // operates in crawl-only mode (pages fetched, no extraction).
-  let llmClient: LLMClient | null = null;
-  const llmConfig = jobConfig.llm;
-
-  try {
-    const provider: LLMProvider = globalConfig?.llm?.provider ?? 'ollama';
-
-    const rawClient = createLLMClient({
-      provider,
-      openrouter:
-        provider === 'openrouter'
-          ? {
-              apiKey: globalConfig?.openrouterApiKey ?? process.env.OPENROUTER_API_KEY ?? '',
-              baseUrl: process.env.OPENROUTER_BASE_URL,
-            }
-          : undefined,
-      ollama: provider === 'ollama' ? { baseUrl: process.env.OLLAMA_BASE_URL } : undefined,
-    });
-
-    // Wrap cloud providers with circuit breaker; skip for Ollama (local, terminal failures)
-    llmClient = provider === 'openrouter' ? new CircuitBreakerLLMClient(rawClient) : rawClient;
-  } catch (err) {
-    console.warn(
-      `  Warning: LLM unavailable (${err instanceof Error ? err.message : String(err)}).` +
-        '\n  Pipeline will crawl pages but skip classification, extraction, and reconciliation.\n',
-    );
-  }
+  // Step 7: Use the preflight-resolved model for all LLM-dependent components.
+  const llmConfig = { ...jobConfig.llm, primaryModel: runtime.model };
 
   // Step 8: Create crawler (async — Playwright launches a browser)
-  const crawlerType = jobConfig.crawl?.crawlerType ?? 'playwright';
+  const crawlerType = runtime.crawler;
   let crawler: Crawler | null = null;
   try {
     crawler = await CrawlerFactory.create({
       type: crawlerType as 'playwright' | 'firecrawl',
-      firecrawlApiKey: globalConfig?.firecrawlApiKey ?? process.env.FIRECRAWL_API_KEY,
+      firecrawlApiKey: runtime.firecrawlApiKey,
     });
   } catch (err) {
     console.error(
@@ -340,7 +391,9 @@ export async function runRunCommand(options: RunOptions = {}): Promise<void> {
   console.log(`  Project root : ${projectRoot}`);
   console.log(`  Database     : ${dbPath}`);
   console.log(`  Crawler      : ${crawlerType}`);
-  console.log(`  LLM          : ${llmClient ? 'available' : 'unavailable (crawl-only mode)'}`);
+  console.log(
+    `  LLM          : ${llmClient ? `${runtime.provider} (${runtime.model})` : 'disabled (--crawl-only)'}`,
+  );
   console.log(`  Seed URLs    : ${(jobConfig.seedUrls ?? []).join(', ')}`);
   console.log('');
 

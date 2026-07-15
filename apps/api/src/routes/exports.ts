@@ -7,16 +7,19 @@ import {
   dataResponse,
   jsonContent,
 } from '../schemas/responses.js';
-import { generateDocumentation, supportsPresignedUrls } from '@spatula/core';
-import type { SchemaDefinition } from '@spatula/core';
+import {
+  generateDocumentation,
+  supportsPresignedUrls,
+} from '@accidentally-awesome-labs/spatula-core';
+import type { SchemaDefinition } from '@accidentally-awesome-labs/spatula-core';
 import {
   decodeCursor,
   encodeCursor,
   ExportNotFoundError,
   JobInvalidStateError,
   SchemaNotFoundError,
-} from '@spatula/shared';
-import type { Entity } from '@spatula/shared';
+} from '@accidentally-awesome-labs/spatula-shared';
+import type { Entity } from '@accidentally-awesome-labs/spatula-shared';
 import { paginationSchema, paginationEnvelopeSchema } from '../schemas/pagination.js';
 import { applyDeprecationHeaders } from '../lib/deprecation-headers.js';
 

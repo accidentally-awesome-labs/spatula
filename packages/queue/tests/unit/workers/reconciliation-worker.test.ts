@@ -2,9 +2,9 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { processReconciliationJob } from '../../../src/workers/reconciliation-worker.js';
 import type { ReconciliationJobData } from '../../../src/queues.js';
 
-// Mock @spatula/core's processReconciliation
+// Mock @accidentally-awesome-labs/spatula-core's processReconciliation
 const mockProcessReconciliation = vi.fn().mockResolvedValue({ entitiesCreated: 10 });
-vi.mock('@spatula/core', () => ({
+vi.mock('@accidentally-awesome-labs/spatula-core', () => ({
   processReconciliation: (...args: unknown[]) => mockProcessReconciliation(...args),
 }));
 

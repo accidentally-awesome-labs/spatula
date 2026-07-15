@@ -15,7 +15,7 @@ describe('ConfigConversationService with mock Ollama', () => {
     try {
       mockOllama = await startMockOllama({ mode: 'happy' });
 
-      const { createLLMClient } = await import('@spatula/core');
+      const { createLLMClient } = await import('@accidentally-awesome-labs/spatula-core');
       const llmClient = createLLMClient({
         provider: 'ollama',
         ollama: { baseUrl: `http://localhost:${mockOllama.port}` },
@@ -25,7 +25,7 @@ describe('ConfigConversationService with mock Ollama', () => {
         await import('../../../src/services/config-conversation.js');
       const service = new ConfigConversationService(llmClient, 'llama3.2:1b');
 
-      const { DefaultConfigExecutor } = await import('@spatula/core');
+      const { DefaultConfigExecutor } = await import('@accidentally-awesome-labs/spatula-core');
       const executor = new DefaultConfigExecutor();
 
       // Start with empty config
@@ -94,7 +94,7 @@ describe('ConfigConversationService with mock Ollama', () => {
         failOnNthCall: 1,
       });
 
-      const { createLLMClient } = await import('@spatula/core');
+      const { createLLMClient } = await import('@accidentally-awesome-labs/spatula-core');
       const llmClient = createLLMClient({
         provider: 'ollama',
         ollama: { baseUrl: `http://localhost:${mockOllama.port}` },

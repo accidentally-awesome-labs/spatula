@@ -25,7 +25,7 @@ COPY tsconfig.base.json ./
 COPY packages/ packages/
 
 # Build packages
-RUN pnpm run build --filter=@spatula/queue...
+RUN pnpm run build --filter=@accidentally-awesome-labs/spatula-queue...
 
 # -----------------------------------------------------------
 # Stage 2: Production dependencies only

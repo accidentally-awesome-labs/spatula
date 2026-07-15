@@ -1,15 +1,15 @@
 /**
  * SQLite schema repository — local project mode.
  *
- * Implements SchemaRepo from @spatula/core/pipeline/types.ts.
+ * Implements SchemaRepo from @accidentally-awesome-labs/spatula-core/pipeline/types.ts.
  *
  * Per spec 5.7: constructor takes (db, projectId). The jobId/tenantId
  * parameters on interface methods are accepted but ignored — the
  * pre-bound projectId is always used.
  */
 import { eq, desc } from 'drizzle-orm';
-import type { SchemaDefinition } from '@spatula/core';
-import type { SchemaRepo } from '@spatula/core/pipeline/types.js';
+import type { SchemaDefinition } from '@accidentally-awesome-labs/spatula-core';
+import type { SchemaRepo } from '@accidentally-awesome-labs/spatula-core/pipeline/types.js';
 import type { ProjectDatabase } from '../connection.js';
 import { schemasTable } from '../../schema-sqlite/schemas.js';
 import { wrapStorageError } from './utils.js';

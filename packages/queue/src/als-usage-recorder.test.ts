@@ -2,7 +2,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { AlsUsageRecorder } from './als-usage-recorder.js';
 import { usageContext } from './usage-context.js';
-import type { LLMUsageRecord } from '@spatula/core';
+import type { LLMUsageRecord } from '@accidentally-awesome-labs/spatula-core';
 
 // ---------------------------------------------------------------------------
 // Helpers

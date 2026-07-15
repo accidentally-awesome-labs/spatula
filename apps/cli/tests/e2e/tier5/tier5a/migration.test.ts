@@ -15,7 +15,7 @@
  */
 
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
-import { createDatabasePool, runMigrations } from '@spatula/db';
+import { createDatabasePool, runMigrations } from '@accidentally-awesome-labs/spatula-db';
 import { sql } from 'drizzle-orm';
 
 // ---------------------------------------------------------------------------

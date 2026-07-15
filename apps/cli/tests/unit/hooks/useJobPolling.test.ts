@@ -9,7 +9,7 @@ import {
   fetchFromDataSource,
 } from '../../../src/hooks/useJobPolling.js';
 import type { SpatulaApiClient } from '../../../src/api/client.js';
-import type { DataSource } from '@spatula/core';
+import type { DataSource } from '@accidentally-awesome-labs/spatula-core';
 
 function createMockApiClient(overrides: Partial<SpatulaApiClient> = {}): SpatulaApiClient {
   return {

@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { ConfigError } from '@spatula/shared';
+import { ConfigError } from '@accidentally-awesome-labs/spatula-shared';
 import { createLLMClient } from '../../../src/llm/llm-factory.js';
 import { OpenRouterClient } from '../../../src/llm/openrouter-client.js';
 import { OllamaClient } from '../../../src/llm/ollama-client.js';

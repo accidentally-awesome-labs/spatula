@@ -46,7 +46,7 @@ import { batchJobRoutes } from './routes/batch-jobs.js';
 import { timeoutMiddleware } from './middleware/timeout.js';
 import { createAuthProvider } from './auth/factory.js';
 import type { AppDeps } from './types.js';
-import { getEnvOrDefault } from '@spatula/shared';
+import { getEnvOrDefault } from '@accidentally-awesome-labs/spatula-shared';
 import { buildOriginMatcher } from './lib/cors-origin.js';
 
 export function createApp(deps: AppDeps) {

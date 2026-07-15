@@ -1,4 +1,8 @@
-import { createLogger, shutdownMetrics, shutdownTracing } from '@spatula/shared';
+import {
+  createLogger,
+  shutdownMetrics,
+  shutdownTracing,
+} from '@accidentally-awesome-labs/spatula-shared';
 import type { ServerType } from '@hono/node-server';
 import type { AppDeps } from './types.js';
 import type { JobProgressManager } from './ws/job-progress.js';

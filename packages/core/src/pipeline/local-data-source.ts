@@ -6,14 +6,14 @@
  * parameters in all mirrored repo calls (local mode, projectId serves as both).
  *
  * The adapter parameter is typed as a structural interface so that
- * @spatula/core does not take a hard dependency on @spatula/db — the
- * actual ProjectAdapter class from @spatula/db satisfies this interface.
+ * @accidentally-awesome-labs/spatula-core does not take a hard dependency on @accidentally-awesome-labs/spatula-db — the
+ * actual ProjectAdapter class from @accidentally-awesome-labs/spatula-db satisfies this interface.
  *
  * The optional subscribe() method bridges the PipelineEventEmitter to the
  * DataSource callback pattern.
  */
-import { StorageError } from '@spatula/shared';
-import type { Entity } from '@spatula/shared';
+import { StorageError } from '@accidentally-awesome-labs/spatula-shared';
+import type { Entity } from '@accidentally-awesome-labs/spatula-shared';
 import type {
   DataSource,
   PaginationQuery,

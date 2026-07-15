@@ -1,6 +1,6 @@
 import { createHash, randomBytes } from 'node:crypto';
 import { createTestApp, createTenant, type TestRepos } from '../../tier4/helpers.js';
-import { apiKeys, type Database } from '@spatula/db';
+import { apiKeys, type Database } from '@accidentally-awesome-labs/spatula-db';
 
 // ---------------------------------------------------------------------------
 // Types

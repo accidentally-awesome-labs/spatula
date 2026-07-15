@@ -1,4 +1,4 @@
-import { processExport } from '@spatula/core';
+import { processExport } from '@accidentally-awesome-labs/spatula-core';
 import { enqueueWebhookIfConfigured } from '../webhook-sender.js';
 import type { ExportJobPayload } from '../queues.js';
 import type { WorkerDeps } from '../worker-deps.js';

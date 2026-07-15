@@ -1,14 +1,14 @@
 /**
  * SQLite action repository — local project mode.
  *
- * Implements ActionRepo from @spatula/core/pipeline/types.ts.
+ * Implements ActionRepo from @accidentally-awesome-labs/spatula-core/pipeline/types.ts.
  *
  * Per spec 5.7: constructor takes (db, projectId). The jobId/tenantId
  * parameters on interface methods are accepted but ignored — the
  * pre-bound projectId is always used.
  */
 import { eq, and, desc, inArray } from 'drizzle-orm';
-import type { ActionRepo } from '@spatula/core/pipeline/types.js';
+import type { ActionRepo } from '@accidentally-awesome-labs/spatula-core/pipeline/types.js';
 import type { ProjectDatabase } from '../connection.js';
 import { actions } from '../../schema-sqlite/actions.js';
 import { wrapStorageError } from './utils.js';

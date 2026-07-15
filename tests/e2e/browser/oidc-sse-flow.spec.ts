@@ -7,7 +7,7 @@
  *
  * Prerequisites (must be met before this suite can run):
  *   1. Playwright Chromium binaries:
- *        pnpm --filter @spatula/cli exec playwright install chromium
+ *        pnpm --filter @accidentally-awesome-labs/spatula exec playwright install chromium
  *   2. Docker for Dex IDP:
  *        docker compose -f examples/auth-dex/docker-compose.yml up -d
  *   3. Postgres: TEST_DATABASE_URL env (default: postgresql://spatula:spatula@localhost:5432/spatula_test)
@@ -29,7 +29,7 @@ import * as url from 'node:url';
 import { execFileSync } from 'node:child_process';
 import { createHash, randomBytes } from 'node:crypto';
 import { resolve } from 'node:path';
-import type { SpatulaQueues } from '@spatula/queue';
+import type { SpatulaQueues } from '@accidentally-awesome-labs/spatula-queue';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Constants
@@ -153,11 +153,11 @@ async function startApiServer(): Promise<ApiHandle> {
     ActionRepository,
     ExportRepository,
     CrawlTaskRepository,
-  } = await import('@spatula/db');
+  } = await import('@accidentally-awesome-labs/spatula-db');
   const { createApp } = await import('../../../apps/api/src/app.js');
   const { JwtAuthProvider } = await import('../../../apps/api/src/auth/jwt-provider.js');
-  const { JobManager } = await import('@spatula/queue');
-  const { DEFAULT_API_KEY_SCOPES } = await import('@spatula/shared');
+  const { JobManager } = await import('@accidentally-awesome-labs/spatula-queue');
+  const { DEFAULT_API_KEY_SCOPES } = await import('@accidentally-awesome-labs/spatula-shared');
   const Redis = (await import('ioredis')).default;
 
   const databaseUrl =
@@ -311,7 +311,7 @@ async function collectSseEvents(
     timeoutMs?: number;
   },
 ): Promise<{ events: CollectedEvent[]; lastId: string | undefined; truncated: boolean }> {
-  const { subscribeJobEvents } = await import('@spatula/client');
+  const { subscribeJobEvents } = await import('@accidentally-awesome-labs/spatula-client');
   // Minimal ClientLike — subscribeJobEvents only needs baseUrl.
   const clientLike = { baseUrl };
 
@@ -405,7 +405,7 @@ describe('Browser OIDC + SSE reconnect chain', () => {
     apiServer = await startApiServer();
 
     // ── Step 2: Launch Chromium (for the OIDC login step) ───────────────────
-    // Requires: pnpm --filter @spatula/cli exec playwright install chromium (one-time setup).
+    // Requires: pnpm --filter @accidentally-awesome-labs/spatula exec playwright install chromium (one-time setup).
     browser = await chromium.launch({ headless: true });
     context = await browser.newContext();
   }, 120_000);
@@ -584,7 +584,7 @@ describe('Browser OIDC + SSE reconnect chain', () => {
 
     // ── Publish events into the Redis stream before connecting ───────────
     // The SSE handler replays buffered events from Redis Streams on connect.
-    const { RedisEventPublisher } = await import('@spatula/queue');
+    const { RedisEventPublisher } = await import('@accidentally-awesome-labs/spatula-queue');
     const Redis = (await import('ioredis')).default;
     const redisUrl = process.env.REDIS_URL ?? 'redis://localhost:6379';
     const publisherRedis = new Redis(redisUrl, { lazyConnect: false, maxRetriesPerRequest: 1 });

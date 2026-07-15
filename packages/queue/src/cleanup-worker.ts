@@ -1,6 +1,6 @@
 import { sql } from 'drizzle-orm';
-import { createLogger } from '@spatula/shared';
-import type { ContentStore } from '@spatula/core';
+import { createLogger } from '@accidentally-awesome-labs/spatula-shared';
+import type { ContentStore } from '@accidentally-awesome-labs/spatula-core';
 
 const logger = createLogger('cleanup-worker');
 

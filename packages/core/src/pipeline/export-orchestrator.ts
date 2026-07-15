@@ -1,6 +1,10 @@
 // packages/core/src/pipeline/export-orchestrator.ts
-import { createLoggerWithContext, StorageError, ValidationError } from '@spatula/shared';
-import type { Entity } from '@spatula/shared';
+import {
+  createLoggerWithContext,
+  StorageError,
+  ValidationError,
+} from '@accidentally-awesome-labs/spatula-shared';
+import type { Entity } from '@accidentally-awesome-labs/spatula-shared';
 import { CsvExporter } from '../exporters/csv-exporter.js';
 import { JsonExporter } from '../exporters/json-exporter.js';
 import { SqliteExporter } from '../exporters/sqlite-exporter.js';

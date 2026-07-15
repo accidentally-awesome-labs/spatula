@@ -1,7 +1,7 @@
 {
-  "name": "@spatula/db",
-  "version": "0.0.1",
-  "description": "Internal Spatula PostgreSQL + SQLite database layer — NO TS-API compat guarantee. Public SDK is @spatula/client. See docs/compat-policy.md.",
+  "name": "@accidentally-awesome-labs/spatula-db",
+  "version": "0.1.0",
+  "description": "Internal Spatula PostgreSQL + SQLite database layer — NO TS-API compat guarantee. Public SDK is @accidentally-awesome-labs/spatula-client. See docs/compat-policy.md.",
   "license": "MIT",
   "repository": {
     "type": "git",
@@ -49,8 +49,8 @@
     "db:migrate": "node --env-file-if-exists=../../.env --import tsx src/run-migrate.ts"
   },
   "dependencies": {
-    "@spatula/core": "workspace:*",
-    "@spatula/shared": "workspace:*",
+    "@accidentally-awesome-labs/spatula-core": "workspace:*",
+    "@accidentally-awesome-labs/spatula-shared": "workspace:*",
     "better-sqlite3": "^12.8.0",
     "drizzle-orm": "^0.45.2",
     "ioredis": "^5.10.0",

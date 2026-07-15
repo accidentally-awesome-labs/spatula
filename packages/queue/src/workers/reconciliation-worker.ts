@@ -1,5 +1,5 @@
-import { processReconciliation } from '@spatula/core';
-import type { LLMClient } from '@spatula/core';
+import { processReconciliation } from '@accidentally-awesome-labs/spatula-core';
+import type { LLMClient } from '@accidentally-awesome-labs/spatula-core';
 import { enqueueWebhookIfConfigured } from '../webhook-sender.js';
 import type { ReconciliationJobData } from '../queues.js';
 import type { WorkerDeps } from '../worker-deps.js';

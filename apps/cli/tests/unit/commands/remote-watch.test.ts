@@ -1,11 +1,13 @@
 import { describe, it, expect, vi, afterEach, beforeEach } from 'vitest';
 import { buildWsUrl } from '../../../src/hooks/useWebSocket.js';
 import { getRemoteWatchConfig } from '../../../src/commands/remote-watch.js';
-import type { GlobalConfig } from '@spatula/core';
+import type { GlobalConfig } from '@accidentally-awesome-labs/spatula-core';
 
 let mockConfig: GlobalConfig | null = null;
-vi.mock('@spatula/core', async () => {
-  const actual = await vi.importActual<typeof import('@spatula/core')>('@spatula/core');
+vi.mock('@accidentally-awesome-labs/spatula-core', async () => {
+  const actual = await vi.importActual<typeof import('@accidentally-awesome-labs/spatula-core')>(
+    '@accidentally-awesome-labs/spatula-core',
+  );
   return {
     ...actual,
     loadGlobalConfig: vi.fn(() => mockConfig),

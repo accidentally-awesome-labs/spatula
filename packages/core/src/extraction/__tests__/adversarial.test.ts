@@ -11,7 +11,7 @@
  *   - openrouter: anthropic/claude-3-5-sonnet-20240620  (CI: adversarial-llm.yml)
  *   - ollama: llama3.1:8b-instruct-q4_0               (manual: workflow_dispatch only)
  *
- * Run live: SPATULA_LIVE_LLM=1 pnpm --filter @spatula/core run test:adversarial
+ * Run live: SPATULA_LIVE_LLM=1 pnpm --filter @accidentally-awesome-labs/spatula-core run test:adversarial
  *
  * Corpus refresh: docs/contributing/adversarial-corpus-refresh.md
  * CI lane: .github/workflows/adversarial-llm.yml

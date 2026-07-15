@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
-import { auditLog } from '@spatula/db';
+import { auditLog } from '@accidentally-awesome-labs/spatula-db';
 import { createTestApp } from '../../tier4/helpers.js';
 import { setupAuthContext, bearerHeaders, type AuthTestContext } from './helpers.js';
 

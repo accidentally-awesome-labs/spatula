@@ -123,12 +123,12 @@ export class DockerPostgresManager implements ServiceManager {
     }
 
     // Run database migrations
-    // NOTE: We call drizzle-orm migrate directly instead of @spatula/db's
+    // NOTE: We call drizzle-orm migrate directly instead of @accidentally-awesome-labs/spatula-db's
     // runMigrations because the latter resolves migration paths relative to
     // its own __dirname, which breaks when called via tsx from a different package.
     const { resolve: pathResolve } = await import('node:path');
     const { migrate } = await import('drizzle-orm/node-postgres/migrator');
-    const { createDatabasePool } = await import('@spatula/db');
+    const { createDatabasePool } = await import('@accidentally-awesome-labs/spatula-db');
     const migrationsDb = createDatabasePool(connectionString);
     // Find monorepo root by walking up from this file
     const { dirname: pathDirname } = await import('node:path');

@@ -20,7 +20,7 @@
  * 12. Finalize run record
  * 13. Release lock
  */
-import { createLogger } from '@spatula/shared';
+import { createLogger } from '@accidentally-awesome-labs/spatula-shared';
 import { InMemoryPageBudget } from '../crawlers/page-budget.js';
 import { PriorityQueue } from './priority-queue.js';
 import { Semaphore } from './concurrency.js';
@@ -49,7 +49,7 @@ const RETRY_BASE_MS = 2000; // 2s, 4s, 8s exponential backoff
 const DRAIN_TIMEOUT_MS = 10_000;
 
 // ---------------------------------------------------------------------------
-// Structural type for ProjectAdapter (avoids circular dep on @spatula/db)
+// Structural type for ProjectAdapter (avoids circular dep on @accidentally-awesome-labs/spatula-db)
 // ---------------------------------------------------------------------------
 
 interface TaskRepoLike {

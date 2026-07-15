@@ -2,9 +2,9 @@
 import { readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { createInterface } from 'node:readline';
-import { loadGlobalConfig } from '@spatula/core';
+import { loadGlobalConfig } from '@accidentally-awesome-labs/spatula-core';
 import { SpatulaApiClient } from '../api/client.js';
-import { createLogger } from '@spatula/shared';
+import { createLogger } from '@accidentally-awesome-labs/spatula-shared';
 import { openLocalProject } from '../local-project.js';
 import { appendFieldsToYaml } from '../lib/yaml-fields.js';
 import type { SchemaDiff } from '../lib/schema-diff.js';

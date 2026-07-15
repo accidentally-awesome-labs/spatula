@@ -4,10 +4,10 @@ import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { runResetCommand } from '../../../src/commands/reset.js';
 
-// Mock @spatula/db so unit tests don't need a real SQLite native module.
+// Mock @accidentally-awesome-labs/spatula-db so unit tests don't need a real SQLite native module.
 // The DB-level selective cleanup is covered by integration tests.
 const preparedSql: string[] = [];
-vi.mock('@spatula/db', () => {
+vi.mock('@accidentally-awesome-labs/spatula-db', () => {
   return {
     createProjectDb: vi.fn(() => ({
       sqlite: {

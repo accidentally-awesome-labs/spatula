@@ -1,6 +1,6 @@
 import { Pool } from 'pg';
 import { drizzle } from 'drizzle-orm/node-postgres';
-import { StorageError } from '@spatula/shared';
+import { StorageError } from '@accidentally-awesome-labs/spatula-shared';
 import * as schema from './schema/index.js';
 
 export type Database = ReturnType<typeof drizzle>;

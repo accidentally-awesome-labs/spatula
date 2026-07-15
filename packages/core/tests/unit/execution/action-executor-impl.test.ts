@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { DefaultActionExecutor } from '../../../src/execution/action-executor-impl.js';
 import type { PipelineAction } from '../../../src/types/actions.js';
-import { generateId } from '@spatula/shared';
+import { generateId } from '@accidentally-awesome-labs/spatula-shared';
 
 function baseAction(
   overrides: Partial<PipelineAction> = {},

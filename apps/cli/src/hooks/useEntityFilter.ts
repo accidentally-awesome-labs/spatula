@@ -1,8 +1,8 @@
 import { useEffect, useCallback, useRef } from 'react';
 import type { CliStore } from '../store/index.js';
 import type { SpatulaApiClient } from '../api/client.js';
-import type { DataSource } from '@spatula/core';
-import type { Entity } from '@spatula/shared';
+import type { DataSource } from '@accidentally-awesome-labs/spatula-core';
+import type { Entity } from '@accidentally-awesome-labs/spatula-shared';
 import { isDataSource } from './useJobPolling.js';
 
 export function filterEntitiesLocally(entities: Entity[], query: string): Entity[] {

@@ -1,7 +1,7 @@
 import { readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { parse as parseYaml, stringify as stringifyYaml } from 'yaml';
-import { findProjectRoot } from '@spatula/core';
+import { findProjectRoot } from '@accidentally-awesome-labs/spatula-core';
 
 export interface AddResult {
   added: string[];

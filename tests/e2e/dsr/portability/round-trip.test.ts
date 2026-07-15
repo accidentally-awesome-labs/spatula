@@ -21,8 +21,8 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { sql } from 'drizzle-orm';
 
-import { createDatabase, TenantDataRepository } from '@spatula/db';
-import type { Database } from '@spatula/db';
+import { createDatabase, TenantDataRepository } from '@accidentally-awesome-labs/spatula-db';
+import type { Database } from '@accidentally-awesome-labs/spatula-db';
 
 import { seedTenant } from '../fixtures/seed-tenant.js';
 

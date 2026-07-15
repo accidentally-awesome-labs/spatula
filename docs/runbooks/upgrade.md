@@ -95,7 +95,7 @@ docker run --rm \
 
 # Or locally (if running the monorepo directly):
 DATABASE_URL="postgresql://$DB_USER:$DB_PASS@$DB_HOST/$DB_NAME" \
-  pnpm --filter @spatula/db exec tsx src/run-migrate.ts
+  pnpm --filter @accidentally-awesome-labs/spatula-db exec tsx src/run-migrate.ts
 ```
 
 The migrator applies any migrations under `packages/db/drizzle/` that are not yet recorded in `drizzle.__drizzle_migrations_oss`. It is idempotent — running it twice is safe.

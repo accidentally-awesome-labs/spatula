@@ -1,5 +1,5 @@
 import type { MiddlewareHandler } from 'hono';
-import { createLogger, ErrorCode } from '@spatula/shared';
+import { createLogger, ErrorCode } from '@accidentally-awesome-labs/spatula-shared';
 
 const logger = createLogger('idempotency');
 const IDEMPOTENCY_TTL = 86400; // 24 hours

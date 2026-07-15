@@ -306,7 +306,7 @@ export class RateLimitExceededError extends SpatulaError {
 
 // `QuotaExceededError` lives in `./auth/quotas.ts` (pre-existing class, updated
 // to use `ErrorCode.QUOTA_EXCEEDED`). It is re-exported via the
-// barrel from `./auth/index.ts` so callers can `import { QuotaExceededError } from '@spatula/shared'`.
+// barrel from `./auth/index.ts` so callers can `import { QuotaExceededError } from '@accidentally-awesome-labs/spatula-shared'`.
 
 // VERSION.*
 

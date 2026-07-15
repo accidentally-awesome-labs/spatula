@@ -1,5 +1,5 @@
 import { Hono } from 'hono';
-import { JobNotFoundError } from '@spatula/shared';
+import { JobNotFoundError } from '@accidentally-awesome-labs/spatula-shared';
 import type { AppEnv } from '../types.js';
 
 export function adminJobRoutes() {

@@ -92,10 +92,10 @@ curl -X POST http://localhost:3000/api/v1/jobs \
 
 ## SDK usage
 
-The `@spatula/client` SDK accepts `idempotencyKey` as an option on every mutating method:
+The `@accidentally-awesome-labs/spatula-client` SDK accepts `idempotencyKey` as an option on every mutating method:
 
 ```typescript
-import { SpatulaClient } from '@spatula/client';
+import { SpatulaClient } from '@accidentally-awesome-labs/spatula-client';
 
 const client = new SpatulaClient({
   baseUrl: 'http://localhost:3000',

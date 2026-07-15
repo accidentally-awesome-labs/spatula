@@ -1,5 +1,5 @@
 import type { MiddlewareHandler } from 'hono';
-import type { SpatulaMetrics } from '@spatula/shared';
+import type { SpatulaMetrics } from '@accidentally-awesome-labs/spatula-shared';
 
 export function timingMiddleware(metrics: SpatulaMetrics | null): MiddlewareHandler {
   return async (c, next) => {

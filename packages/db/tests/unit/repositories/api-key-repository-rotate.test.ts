@@ -7,7 +7,7 @@
  */
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { ApiKeyRepository } from '../../../src/repositories/api-key-repository.js';
-import { StorageError } from '@spatula/shared';
+import { StorageError } from '@accidentally-awesome-labs/spatula-shared';
 
 // Helper to build a mock Drizzle tx / db that supports the rotate() transaction pattern
 function createRotateMockDb(

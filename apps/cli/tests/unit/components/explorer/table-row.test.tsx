@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest';
 import { render } from 'ink-testing-library';
 import React from 'react';
 import { TableRow } from '../../../../src/components/explorer/TableRow.js';
-import type { Entity } from '@spatula/shared';
+import type { Entity } from '@accidentally-awesome-labs/spatula-shared';
 
 function makeEntity(overrides: Partial<Entity> = {}): Entity {
   return {

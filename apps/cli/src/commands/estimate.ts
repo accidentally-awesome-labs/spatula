@@ -6,8 +6,8 @@ import {
   yamlToJobConfig,
   loadGlobalConfig,
   estimateCost,
-} from '@spatula/core';
-import type { CostEstimate } from '@spatula/core';
+} from '@accidentally-awesome-labs/spatula-core';
+import type { CostEstimate } from '@accidentally-awesome-labs/spatula-core';
 import { slugifyPath } from '../local-project.js';
 
 export function formatCostEstimate(estimate: CostEstimate): string {

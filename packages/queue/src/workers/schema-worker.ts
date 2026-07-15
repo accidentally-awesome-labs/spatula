@@ -1,6 +1,6 @@
-import { createLoggerWithContext } from '@spatula/shared';
-import { processSchemaEvolution } from '@spatula/core';
-import type { LLMClient } from '@spatula/core';
+import { createLoggerWithContext } from '@accidentally-awesome-labs/spatula-shared';
+import { processSchemaEvolution } from '@accidentally-awesome-labs/spatula-core';
+import type { LLMClient } from '@accidentally-awesome-labs/spatula-core';
 import type Redis from 'ioredis';
 import type { SchemaEvolutionJobData } from '../queues.js';
 import type { WorkerDeps } from '../worker-deps.js';

@@ -26,8 +26,12 @@ import { resolve, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { sql } from 'drizzle-orm';
 
-import { createDatabase, createDatabasePool, runMigrations } from '@spatula/db';
-import type { Database } from '@spatula/db';
+import {
+  createDatabase,
+  createDatabasePool,
+  runMigrations,
+} from '@accidentally-awesome-labs/spatula-db';
+import type { Database } from '@accidentally-awesome-labs/spatula-db';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 

@@ -3,16 +3,16 @@
 // alongside the API server when SPATULA_EMBEDDED_WORKER=1 is set.
 //
 // The injectable factory parameter makes this unit-testable without booting
-// real BullMQ connections. The production default lazily imports @spatula/queue
+// real BullMQ connections. The production default lazily imports @accidentally-awesome-labs/spatula-queue
 // so the module is only loaded when the flag is actually set.
 
-import type { WorkerHandle } from '@spatula/queue';
+import type { WorkerHandle } from '@accidentally-awesome-labs/spatula-queue';
 
 /**
  * Start the BullMQ worker in-process if SPATULA_EMBEDDED_WORKER=1.
  *
  * @param startWorkerFn Optional factory — defaults to `startWorker` from
- *   @spatula/queue. Pass a mock factory in tests.
+ *   @accidentally-awesome-labs/spatula-queue. Pass a mock factory in tests.
  * @returns The WorkerHandle (with shutdown()) when started, or null when the
  *   flag is absent/not "1" (worker code path is entirely untouched).
  */
@@ -24,7 +24,7 @@ export async function startEmbeddedWorker(
   const factory =
     startWorkerFn ??
     (async () => {
-      const { startWorker } = await import('@spatula/queue');
+      const { startWorker } = await import('@accidentally-awesome-labs/spatula-queue');
       return startWorker();
     });
 
