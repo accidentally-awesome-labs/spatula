@@ -142,22 +142,22 @@ their first pull request can be merged.
 **How it works:**
 
 1. Open a pull request against the Spatula repository.
-2. The **cla-assistant.io** bot will automatically comment on your PR with a link to
-   sign the CLA.
-3. Sign once using your GitHub account. Your signature is recorded by cla-assistant.io
-   and linked to your GitHub identity.
-4. Future pull requests from the same GitHub account will be automatically recognized
-   as signed — you do not need to sign again (unless the CLA text changes; see below).
+2. A maintainer will confirm CLA status before merge. If an automated CLA check is
+   enabled for the repository, follow its prompt; otherwise a maintainer may ask you to
+   acknowledge the current CLA text in the pull request.
+3. Acknowledge once using your GitHub account. Future pull requests from the same
+   GitHub account may be recognized as already covered unless the CLA text changes; see
+   below.
 
 The full CLA text is in [.github/CLA.md](.github/CLA.md).
 
 **Re-sign policy:**
 
 The CLA is versioned. When the `version` field in the frontmatter of `.github/CLA.md` is
-incremented (indicating a material change to the CLA text), past signatories must
-**re-sign** on their next pull request. The cla-assistant.io bot detects the text change
-automatically and will prompt you to re-sign. This re-sign-on-version-bump policy ensures
-all contributors have agreed to the current CLA terms.
+incremented (indicating a material change to the CLA text), contributors may be asked to
+re-acknowledge the updated CLA before their next contribution is merged. This
+re-acknowledge-on-version-bump policy ensures all contributors have agreed to the current
+CLA terms.
 
 **AI-generated contributions:**
 

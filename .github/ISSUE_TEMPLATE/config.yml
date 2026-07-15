@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Security vulnerability
+    url: https://github.com/accidentally-awesome-labs/spatula/security/advisories/new
+    about: Please report suspected vulnerabilities privately through GitHub Security Advisories.
+  - name: Security policy
+    url: https://github.com/accidentally-awesome-labs/spatula/blob/main/SECURITY.md
+    about: Read supported versions, disclosure scope, and response targets.

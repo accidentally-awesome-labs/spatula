@@ -30,7 +30,7 @@ const PUBLIC_DOC_INPUTS = [
 
 const SKIP_DIRS = new Set(['.git', 'node_modules']);
 
-const TEXT_EXTENSIONS = new Set(['.md', '.json']);
+const TEXT_EXTENSIONS = new Set(['.md', '.json', '.yml', '.yaml']);
 
 const STALE_PATTERNS: Array<{ pattern: RegExp; message: string }> = [
   {
@@ -112,6 +112,10 @@ const STALE_PATTERNS: Array<{ pattern: RegExp; message: string }> = [
   {
     pattern: /\bWave\s+\d+/i,
     message: 'public docs should use durable release/product language, not internal wave labels',
+  },
+  {
+    pattern: /cla-assistant\.io/i,
+    message: 'do not promise a specific external CLA bot unless it is repo-visible/enforced',
   },
 ];
 
@@ -236,6 +240,18 @@ describe('public documentation guard', () => {
     expect(pkg.repository?.url).toBe('https://github.com/accidentally-awesome-labs/spatula.git');
     expect(pkg.homepage).toBe('https://github.com/accidentally-awesome-labs/spatula#readme');
     expect(pkg.bugs?.url).toBe('https://github.com/accidentally-awesome-labs/spatula/issues');
+  });
+
+  it('routes security reports away from public issue templates', () => {
+    const configPath = join(root, '.github/ISSUE_TEMPLATE/config.yml');
+
+    expect(existsSync(configPath)).toBe(true);
+
+    const text = readFileSync(configPath, 'utf8');
+    expect(text).toContain('blank_issues_enabled: false');
+    expect(text).toContain(
+      'https://github.com/accidentally-awesome-labs/spatula/security/advisories/new',
+    );
   });
 
   it('only documents implemented top-level CLI commands in public docs', () => {

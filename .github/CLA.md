@@ -15,8 +15,8 @@ Agreement is for your protection as a Contributor as well as for the protection 
 Accidentally Awesome Labs and its users; it does not change your rights to use your own
 Contributions for any other purpose.
 
-Please read this Agreement carefully before signing via the cla-assistant.io bot. If you
-have questions, contact legal@spatula.dev.
+Please read this Agreement carefully before signing or acknowledging it through the
+repository's configured CLA process. If you have questions, contact legal@spatula.dev.
 
 ---
 
@@ -96,8 +96,9 @@ PARTICULAR PURPOSE.
 
 ## 7. Signing
 
-By signing via the cla-assistant.io bot on your pull request, you agree to the terms of
-this Agreement with respect to your current and future Contributions to the Project.
+By signing or acknowledging this Agreement through the repository's configured CLA
+process on your pull request, you agree to the terms of this Agreement with respect to
+your current and future Contributions to the Project.
 
 Signing is required once per major CLA version. If the `version` field in this file's
 frontmatter is incremented, you will be asked to re-sign on your next pull request.
