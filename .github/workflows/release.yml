@@ -146,31 +146,12 @@ jobs:
           echo "version=${GITHUB_REF_NAME#spatula-v}" >> "$GITHUB_OUTPUT"
           node scripts/check-release-version.mjs "$GITHUB_REF_NAME"
 
-      - name: Check first-publish authentication
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
-        run: |
-          if ! npm view "@accidentally-awesome-labs/spatula@${{ steps.version.outputs.version }}" version >/dev/null 2>&1 \
-            && ! npm view "@accidentally-awesome-labs/spatula" version >/dev/null 2>&1 \
-            && [ -z "$NODE_AUTH_TOKEN" ]; then
-            echo "::error::The first npm publish requires a short-lived NPM_TOKEN repository secret. After this release, configure release.yml as the trusted publisher for every package and delete the secret."
-            exit 1
-          fi
-
       # pnpm creates workspace-aware tarballs (rewriting workspace: ranges),
       # then npm publishes those exact artifacts through its documented OIDC
-      # path. --access public is required for the first scoped publish. npm >=
-      # 11.5.1 + id-token:write enables trusted publishing after bootstrap.
-      # Configure each package's trusted publisher in npm after the first
-      # publish (Organization: accidentally-awesome-labs; Repository: spatula;
-      # Workflow: release.yml), then delete the NPM_TOKEN repository secret.
+      # path. npm >= 11.5.1 + id-token:write enables trusted publishing for
+      # every package without a stored registry credential.
 
       - name: Publish packages in dependency order
-        env:
-          # Existing packages authenticate through npm trusted publishing
-          # (OIDC). The one-time bootstrap release supplies this short-lived
-          # secret because npm cannot attach trust until a package exists.
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
         run: |
           pack_dir="$RUNNER_TEMP/spatula-npm-packs"
           mkdir -p "$pack_dir"

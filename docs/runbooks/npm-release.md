@@ -37,14 +37,25 @@ first release therefore needs a short-lived bootstrap credential.
 7. Wait for `Publish npm Packages` and both `Verify npm install` matrix jobs to
    pass. The publish loop is idempotent, so rerunning a partially completed
    workflow skips versions already present in the registry.
-8. In the npm settings for each published package, configure this trusted
-   publisher with `npm publish` permission:
+8. With the latest npm CLI, configure and verify the GitHub Actions trusted
+   publisher for every package. npm requires an interactive 2FA approval for
+   this account-level change:
 
-   ```text
-   Provider: GitHub Actions
-   Organization: accidentally-awesome-labs
-   Repository: spatula
-   Workflow filename: release.yml
+   ```bash
+   packages=(
+     spatula-core-types spatula-client spatula-shared spatula-core
+     spatula-db spatula-queue spatula-api spatula
+   )
+
+   for package in "${packages[@]}"; do
+     name="@accidentally-awesome-labs/$package"
+     npm trust github "$name" \
+       --file release.yml \
+       --repo accidentally-awesome-labs/spatula \
+       --allow-publish \
+       --yes
+     npm trust list "$name"
+   done
    ```
 
 9. Delete the GitHub `NPM_TOKEN` secret and revoke the npm token. All later
