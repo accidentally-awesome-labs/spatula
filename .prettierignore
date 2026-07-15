@@ -3,3 +3,4 @@ node_modules
 .turbo
 pnpm-lock.yaml
 THIRD_PARTY_NOTICES.md
+**/CHANGELOG.md

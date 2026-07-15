@@ -50,6 +50,12 @@ describe('package manager metadata guard', () => {
     expect(offenders).toEqual([]);
   });
 
+  it('excludes Release Please changelogs from formatting', () => {
+    const prettierIgnore = readFileSync(join(root, '.prettierignore'), 'utf8');
+
+    expect(prettierIgnore).toMatch(/^\*\*\/CHANGELOG\.md$/m);
+  });
+
   it('starts lockstep publication from the root release-please tag', () => {
     const workflow = readFileSync(join(root, '.github/workflows/release.yml'), 'utf8');
 
