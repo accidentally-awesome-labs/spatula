@@ -139,7 +139,8 @@ export function createProjectChecks(config: ProjectCheckConfig): HealthCheck[] {
       async run() {
         return {
           status: 'pass',
-          message: 'Remote links not configured (available in a future release)',
+          message:
+            'Remote links are optional; use `spatula remote add <name> --url <api-url> --key <api-key>` to link a self-hosted API',
         };
       },
     },

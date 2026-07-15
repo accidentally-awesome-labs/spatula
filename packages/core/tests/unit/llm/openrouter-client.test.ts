@@ -58,7 +58,9 @@ describe('OpenRouterClient', () => {
     mockFetch.mockResolvedValue(mockResponse(successBody('Hi')));
     await client.complete(basicRequest);
     const callArgs = mockFetch.mock.calls[0][1];
-    expect(callArgs.headers['HTTP-Referer']).toBe('https://spatula.dev');
+    expect(callArgs.headers['HTTP-Referer']).toBe(
+      'https://github.com/accidentally-awesome-labs/spatula',
+    );
     expect(callArgs.headers['X-Title']).toBe('Spatula');
   });
 

@@ -3,12 +3,14 @@ import { buildUserAgent, DEFAULT_USER_AGENT } from './crawler-defaults.js';
 
 describe('buildUserAgent', () => {
   it('returns the correct User-Agent string for a given version', () => {
-    expect(buildUserAgent('1.2.3')).toBe('Spatula/1.2.3 (+https://spatula.dev/abuse)');
+    expect(buildUserAgent('1.2.3')).toBe(
+      'Spatula/1.2.3 (+https://github.com/accidentally-awesome-labs/spatula)',
+    );
   });
 
-  it('includes the abuse contact URL', () => {
+  it('includes the public project URL', () => {
     const ua = buildUserAgent('2.0.0');
-    expect(ua).toContain('+https://spatula.dev/abuse');
+    expect(ua).toContain('+https://github.com/accidentally-awesome-labs/spatula');
   });
 
   it('includes the Spatula prefix', () => {
@@ -23,15 +25,15 @@ describe('buildUserAgent', () => {
 });
 
 describe('DEFAULT_USER_AGENT', () => {
-  it('matches the Spatula/<semver> (+https://spatula.dev/abuse) shape', () => {
-    // Must match: Spatula/<semver> (+https://spatula.dev/abuse)
+  it('matches the Spatula/<semver> plus public project URL shape', () => {
+    // Must match: Spatula/<semver> (+https://github.com/accidentally-awesome-labs/spatula)
     expect(DEFAULT_USER_AGENT).toMatch(
-      /^Spatula\/\d+\.\d+\.\d+.*\(\+https:\/\/spatula\.dev\/abuse\)$/,
+      /^Spatula\/\d+\.\d+\.\d+.*\(\+https:\/\/github\.com\/accidentally-awesome-labs\/spatula\)$/,
     );
   });
 
-  it('contains the abuse contact URL', () => {
-    expect(DEFAULT_USER_AGENT).toContain('+https://spatula.dev/abuse');
+  it('contains the public project URL', () => {
+    expect(DEFAULT_USER_AGENT).toContain('+https://github.com/accidentally-awesome-labs/spatula');
   });
 
   it('starts with the Spatula/ prefix', () => {

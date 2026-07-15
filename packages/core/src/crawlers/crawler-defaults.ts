@@ -1,8 +1,8 @@
 /**
  * Default crawler configuration values.
  *
- * The default User-Agent identifies Spatula and includes an abuse-contact URL
- * so that site operators can reach Accidentally Awesome Labs if they observe
+ * The default User-Agent identifies Spatula and includes the public project
+ * URL so site operators can inspect the crawler software if they observe
  * unwanted crawl traffic. This string is applied automatically when no
  * `userAgent` option is provided to a crawler.
  */
@@ -15,14 +15,14 @@ import { dirname, resolve } from 'path';
  * Build a Spatula User-Agent string for a given version.
  *
  * @param version - The semver version string (e.g. "1.2.3")
- * @returns A User-Agent string of the form: `Spatula/<version> (+https://spatula.dev/abuse)`
+ * @returns A User-Agent string of the form: `Spatula/<version> (+https://github.com/accidentally-awesome-labs/spatula)`
  *
  * @example
  * buildUserAgent('1.2.3');
- * // => 'Spatula/1.2.3 (+https://spatula.dev/abuse)'
+ * // => 'Spatula/1.2.3 (+https://github.com/accidentally-awesome-labs/spatula)'
  */
 export function buildUserAgent(version: string): string {
-  return `Spatula/${version} (+https://spatula.dev/abuse)`;
+  return `Spatula/${version} (+https://github.com/accidentally-awesome-labs/spatula)`;
 }
 
 /**
@@ -44,6 +44,6 @@ function resolvePackageVersion(): string {
  * The default User-Agent string used by Spatula crawlers when no `userAgent` option
  * is explicitly provided. Sourced from the `@spatula/core` package version.
  *
- * Format: `Spatula/<version> (+https://spatula.dev/abuse)`
+ * Format: `Spatula/<version> (+https://github.com/accidentally-awesome-labs/spatula)`
  */
 export const DEFAULT_USER_AGENT: string = buildUserAgent(resolvePackageVersion());

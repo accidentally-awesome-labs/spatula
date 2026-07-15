@@ -9,10 +9,10 @@
  * - Comma-separated list of origins, whitespace trimmed.
  * - Bare `*` is NOT allowed.
  * - Wildcard entries (containing `*`) compile to a single-label regex:
- *   `https://*.spatula.dev` → `/^https:\/\/[^./]+\.spatula\.dev$/`
+ *   `https://*.example.com` → `/^https:\/\/[^./]+\.example\.com$/`
  *   This matches exactly one subdomain label (no dots, no slashes).
- *   It rejects `foo.bar.spatula.dev` (two labels) and
- *   `evil.spatula.dev.attacker.com` (suffix attack).
+ *   It rejects `foo.bar.example.com` (two labels) and
+ *   `evil.example.com.attacker.com` (suffix attack).
  * - Returns `null` when the parsed list is empty or a bare `*` is present —
  *   the caller must fail boot with CORS_CONFIG_INVALID.
  */

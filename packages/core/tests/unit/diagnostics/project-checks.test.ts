@@ -103,11 +103,12 @@ describe('createProjectChecks', () => {
     expect(result.status).toBe('pass');
   });
 
-  it('remote-link check returns pass with deferred message', async () => {
+  it('remote-link check returns pass with current setup guidance', async () => {
     const checks = createProjectChecks({ projectRoot: '/tmp/test', validateYaml: vi.fn() });
     const result = await checks.find((c) => c.name === 'remote-link')!.run();
     expect(result.status).toBe('pass');
-    expect(result.message).toContain('future release');
+    expect(result.message).toContain('spatula remote add');
+    expect(result.message).toContain('self-hosted API');
   });
 
   it('all 8 check names are unique', () => {

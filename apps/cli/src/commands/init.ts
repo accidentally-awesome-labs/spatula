@@ -93,7 +93,7 @@ export function ensureGlobalConfig(configPath?: string): boolean {
 
   const content = [
     '# Spatula global configuration',
-    '# See https://spatula.dev/docs/config for all options',
+    '# See https://github.com/accidentally-awesome-labs/spatula#configuration for options',
     'version: 1',
     '',
     '# LLM provider (openrouter or ollama)',

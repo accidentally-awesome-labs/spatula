@@ -44,7 +44,7 @@ export class OpenRouterClient implements LLMClient {
     this.maxRetries = options.maxRetries ?? 3;
     this.timeoutMs = options.timeoutMs ?? 60000;
     this.siteName = options.siteName ?? 'Spatula';
-    this.siteUrl = options.siteUrl ?? 'https://spatula.dev';
+    this.siteUrl = options.siteUrl ?? 'https://github.com/accidentally-awesome-labs/spatula';
   }
 
   setUsageRecorder(recorder: LLMUsageRecorder): void {

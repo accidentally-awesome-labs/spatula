@@ -31,7 +31,7 @@ import { VersionProbe } from './version-probe.js';
 const SDK_MAJOR_VERSION = 0;
 
 export interface SpatulaClientOptions {
-  /** Base URL of the Spatula API (e.g., `https://api.spatula.dev`). */
+  /** Base URL of your self-hosted Spatula API (for example, `http://localhost:3000`). */
   baseUrl: string;
   /** API key or bearer token sent in the `Authorization: Bearer ...` header. */
   apiKey: string;

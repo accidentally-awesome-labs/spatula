@@ -43,7 +43,7 @@ export async function runListCommand(
  */
 export function printListDeprecation(): void {
   console.warn(
-    '\n  ⚠ `spatula list` is deprecated. Use `spatula remote jobs <name>` (coming in a future release).\n' +
+    '\n  ⚠ `spatula list` is deprecated. Use `spatula remote list` or `spatula remote status <name>` for remote state.\n' +
       '  For local project status, use `spatula status`.\n',
   );
 }

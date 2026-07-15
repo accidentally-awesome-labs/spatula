@@ -330,7 +330,7 @@ yargs(hideBin(process.argv))
         return;
       }
       console.warn(
-        '\n  ⚠ `spatula status <jobId>` (remote) is deprecated. Use `spatula remote status <name>` (coming in a future release).\n',
+        '\n  ⚠ `spatula status <jobId>` direct API mode is deprecated. Use `spatula remote status <name>` for a linked remote job.\n',
       );
       const tenantId = argv.tenantId || getEnvOrFail('SPATULA_TENANT_ID');
       const client = getApiClient({ apiUrl: argv.apiUrl, tenantId });
