@@ -1,6 +1,6 @@
 {
   "name": "@accidentally-awesome-labs/spatula-db",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Internal Spatula PostgreSQL + SQLite database layer — NO TS-API compat guarantee. Public SDK is @accidentally-awesome-labs/spatula-client. See docs/compat-policy.md.",
   "license": "MIT",
   "repository": {
