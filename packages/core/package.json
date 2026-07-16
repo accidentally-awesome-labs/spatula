@@ -65,7 +65,7 @@
     "cheerio": "^1.2.0",
     "hyparquet": "^1.25.1",
     "hyparquet-writer": "^0.13.0",
-    "playwright": "^1.58.2",
+    "playwright": "^1.61.1",
     "robots-parser": "^3.0.1",
     "yaml": "^2.8.3",
     "zod": "^3.24.0"
