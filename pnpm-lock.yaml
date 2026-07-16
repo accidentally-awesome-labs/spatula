@@ -90,8 +90,8 @@ importers:
         specifier: workspace:*
         version: link:../../packages/shared
       '@bull-board/api':
-        specifier: ^6.20.6
-        version: 6.20.6(@bull-board/ui@6.20.6)
+        specifier: ^8.1.2
+        version: 8.1.2(@bull-board/ui@6.20.6)
       '@bull-board/hono':
         specifier: ^6.20.6
         version: 6.20.6(hono@4.12.29)
@@ -565,6 +565,11 @@ packages:
     resolution: {integrity: sha512-B/9OlKWJ/He421Lyuc7htMpKN4R8hcNu5uoIRiyh9y9J0kMOfxfs82GKXdfR9R0595LvAcCOSvjn8EtWHXesTA==}
     peerDependencies:
       '@bull-board/ui': 6.20.6
+
+  '@bull-board/api@8.1.2':
+    resolution: {integrity: sha512-6NGYCIRhHJmmoCwAFA1z4lPpR/D/BdOjyERd2MMeG4Samu05FSjzKKdN55S3ga30EcXeENfYzmNn6IDmVz5OTg==}
+    peerDependencies:
+      '@bull-board/ui': 8.1.2
 
   '@bull-board/hono@6.20.6':
     resolution: {integrity: sha512-l2yGfL6gT2Z5sVP12YRw4kmyNISA2NqR+5h5QaSHQfHAv62hnARPPrvzOCjPBXpzIWwBQwjhnYQXv89QoyoQiw==}
@@ -3982,6 +3987,11 @@ snapshots:
   '@aws/lambda-invoke-store@0.3.0': {}
 
   '@bull-board/api@6.20.6(@bull-board/ui@6.20.6)':
+    dependencies:
+      '@bull-board/ui': 6.20.6
+      redis-info: 3.1.0
+
+  '@bull-board/api@8.1.2(@bull-board/ui@6.20.6)':
     dependencies:
       '@bull-board/ui': 6.20.6
       redis-info: 3.1.0
