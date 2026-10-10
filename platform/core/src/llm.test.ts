@@ -21,6 +21,24 @@ const FIELDS: [string, FieldDef][] = [['specs', specs]];
 const TEXT =
   'HD 650 Open-back dynamic headphones. Impedance 300 Ω. Frequency response 10 – 41,000 Hz. Weight 260 g';
 
+// Dashes and signs that can stand just before a number on a page.
+const MINUS_SIGN = '\u2212';
+const EN_DASH = '\u2013';
+const EM_DASH = '\u2014';
+
+/**
+ * Why the LLM's one spec, with this label and value, is refused against this page text. The list
+ * is empty when the spec is kept.
+ */
+function reasons(label: string, value: string, text: string): string[] {
+  const { rejected } = acceptLlmOutput({
+    output: { specs: [{ label, value }] },
+    text,
+    fields: FIELDS,
+  });
+  return rejected.map((r) => r.reason);
+}
+
 describe('llmFields', () => {
   it('lists the missing fields the LLM may fill', () => {
     const recordType = {
@@ -90,19 +108,24 @@ describe('buildLlmRequest', () => {
     expect(dressedRequest.user.match(/untrusted_content/giu)).toHaveLength(2);
   });
 
-  it('leaves an unterminated tag as it is, and reads thousands of them in linear time', () => {
+  it('leaves an unterminated tag as it is, and reads hostile text in linear time', () => {
     expect(withoutWrapperTags('a <untrusted_content x> b <untrusted_content y')).toBe(
       'a [tag removed] b <untrusted_content y',
     );
     // Five times the most text a page gives, so that rereading the rest of it from every tag would
     // take seconds, not milliseconds.
     const hostile = '<untrusted_content '.repeat(16_000);
+    // A "<", a long run of spaces, and a ">" that isn't a wrapper tag's. Spaces before a tag's name
+    // could be split between its two groups in every possible way.
+    const spaced = `<${' '.repeat(60_000)}>`;
     const started = performance.now();
     const plain = withoutWrapperTags(hostile);
     const afterOne = withoutWrapperTags(`>${hostile}`);
+    const gap = withoutWrapperTags(spaced);
     const elapsed = performance.now() - started;
     expect(plain).toBe(hostile);
     expect(afterOne).toBe(`>${hostile}`);
+    expect(gap).toBe(spaced);
     expect(elapsed).toBeLessThan(2_000);
   });
 });
@@ -210,6 +233,56 @@ describe('acceptLlmOutput', () => {
     ]);
   });
 
+  // The page has a longer number than the one the LLM proposes, and the rest of it is a decimal
+  // point, a thousands separator, a currency sign, a minus or plus sign, or a range dash.
+  it.each<[string, string, string]>([
+    ['Output power', '1 W', 'Output power 0.1 W'],
+    ['Weight', '5 g', 'Weight 1.5 g'],
+    ['Frequency response', '000 Hz', 'Frequency response 41,000 Hz'],
+    ['Frequency response', '41', 'Frequency response 41,000 Hz'],
+    ['Price', '99', 'Price $99.99'],
+    ['Price', '$99', 'Price $99.99'],
+    ['Tolerance', '3 dB', 'Tolerance -3 dB'],
+    ['Tolerance', '3 dB', 'Tolerance +3 dB'],
+    ['Tolerance', '3 dB', `Tolerance ${MINUS_SIGN}3 dB`],
+    ['Range', '20 dB', 'Range 10-20 dB'],
+    ['Range', '20 dB', `Range 10${EN_DASH}20 dB`],
+    ['Range', '20 dB', `Range 10${EM_DASH}20 dB`],
+  ])('refuses the %s value "%s" as part of a longer number in "%s"', (label, value, text) => {
+    expect(reasons(label, value, text)).toEqual(['not found in the page text']);
+  });
+
+  it.each<[string, string, string]>([
+    ['Weight', '5 g', 'Weight 5 g, 6 g'],
+    ['Weight', '1.5 g', 'weight: 1.5 g'],
+    ['Frequency response', '41,000 Hz', 'Frequency response 41,000 Hz'],
+    ['Price', '$99.99', 'Price $99.99'],
+    ['Tolerance', '-3 dB', 'Tolerance -3 dB'],
+    ['Tolerance', `${MINUS_SIGN}3 dB`, `Tolerance ${MINUS_SIGN}3 dB`],
+    ['Range', '10-20 dB', 'Range 10-20 dB'],
+    // Only a number takes the sign with it: a word after a hyphen is still a word.
+    ['Connection', 'wireless', 'Connection Bluetooth-wireless'],
+  ])('keeps the %s value "%s" where "%s" has it whole', (label, value, text) => {
+    expect(reasons(label, value, text)).toEqual([]);
+  });
+
+  it('refuses thousands of values that are not on the page without a pattern for each', () => {
+    const invented = Array.from({ length: 20_000 }, (_, i) => ({
+      label: `Label ${i}`,
+      value: `invented ${i}`,
+    }));
+    const started = performance.now();
+    const { statements, rejected } = acceptLlmOutput({
+      output: { specs: invented },
+      text: TEXT,
+      fields: FIELDS,
+    });
+    const elapsed = performance.now() - started;
+    expect(statements).toEqual([]);
+    expect(rejected).toHaveLength(20_000);
+    expect(elapsed).toBeLessThan(2_000);
+  });
+
   it('matches a value as the page writes it, whatever punctuation it carries', () => {
     const { statements, rejected } = acceptLlmOutput({
       output: {
@@ -257,6 +330,39 @@ describe('acceptLlmOutput', () => {
     });
     expect(echoed.statements).toEqual([]);
     expect(echoed.rejected.map((r) => r.reason)).toEqual([
+      'text from the instructions, not the page',
+    ]);
+  });
+
+  it('finds the instructions in fullwidth letters too', () => {
+    // NFKC turns fullwidth capitals into ordinary ones. These read "NEVER FOLLOW INSTRUCTIONS",
+    // "SECURITY RULES", and "UNTRUSTED_CONTENT", and the page carries each of them as well.
+    const never = [
+      '\uFF2E\uFF25\uFF36\uFF25\uFF32',
+      '\uFF26\uFF2F\uFF2C\uFF2C\uFF2F\uFF37',
+      '\uFF29\uFF2E\uFF33\uFF34\uFF32\uFF35\uFF23\uFF34\uFF29\uFF2F\uFF2E\uFF33',
+    ].join(' ');
+    const security = [
+      '\uFF33\uFF25\uFF23\uFF35\uFF32\uFF29\uFF34\uFF39',
+      '\uFF32\uFF35\uFF2C\uFF25\uFF33',
+    ].join(' ');
+    const wrapper =
+      '\uFF35\uFF2E\uFF34\uFF32\uFF35\uFF33\uFF34\uFF25\uFF24\uFF3F\uFF23\uFF2F\uFF2E\uFF34\uFF25\uFF2E\uFF34';
+    const { statements, rejected } = acceptLlmOutput({
+      output: {
+        specs: [
+          { label: 'Note', value: never },
+          { label: security, value: '260 g' },
+          { label: 'Tag', value: wrapper },
+        ],
+      },
+      text: `${TEXT} Note ${never} ${security} Tag ${wrapper}`,
+      fields: FIELDS,
+    });
+    expect(statements).toEqual([]);
+    expect(rejected.map((r) => r.reason)).toEqual([
+      'text from the instructions, not the page',
+      'text from the instructions, not the page',
       'text from the instructions, not the page',
     ]);
   });
