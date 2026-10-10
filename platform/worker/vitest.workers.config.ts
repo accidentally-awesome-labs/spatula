@@ -9,14 +9,6 @@ export default defineConfig({
     // does, so a global setup inside the project would load postgres.js's Workers build into Node,
     // where `cloudflare:sockets` doesn't exist. Projects inherit what the root provides.
     globalSetup: ['test/workers/global-setup.ts'],
-    // postgres.js's Workers build leaves a read pending on its socket. Ending a client closes the
-    // socket, and the read then rejects after the connection has dropped its error listener. The
-    // rejection is harmless, but Vitest would fail the run for it. Nothing else is ignored.
-    onUnhandledError: (error) =>
-      !(
-        error.message === 'This socket has been closed.' &&
-        /postgres[^\n]*polyfills\.js/.test(error.stack ?? '')
-      ),
     projects: [
       {
         // The plugin has Vite process every dependency, and Vite warns about the packages that
