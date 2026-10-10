@@ -1,7 +1,7 @@
-import { APIConnectionTimeoutError } from '@anthropic-ai/sdk';
+import { APIConnectionTimeoutError, APIUserAbortError } from '@anthropic-ai/sdk';
 import { buildLlmRequest, LLM_MAX_TOKENS, llmFields, SYSTEM_PROMPT } from '@spatula/core';
 import { testDefinition } from '@spatula/store/fixtures';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { createAnthropicLlm } from './llm-anthropic';
 
 const product = testDefinition().recordTypes.product!;
@@ -31,14 +31,17 @@ function answer(text: string, stopReason = 'end_turn') {
   );
 }
 
-function setUp(reply: (init: RequestInit) => Response | Promise<Response>, timeoutMs?: number) {
+function setUp(
+  reply: (init: RequestInit) => Response | Promise<Response>,
+  limits: { timeoutMs?: number; deadlineMs?: number } = {},
+) {
   const calls: { url: string; init: RequestInit }[] = [];
   const llm = createAnthropicLlm({
     apiKey: 'test-key',
     model: 'claude-opus-5-5',
     baseURL: 'https://gateway.example/v1/account/spatula-llm/anthropic',
     gatewayToken: 'gateway-token',
-    timeoutMs,
+    ...limits,
     fetch: (async (input: string | URL | Request, init?: RequestInit) => {
       calls.push({ url: String(input), init: init ?? {} });
       return reply(init ?? {});
@@ -71,6 +74,8 @@ describe('createAnthropicLlm', () => {
       output_config: { format: { type: 'json_schema', schema: { type: 'object' } } },
     });
     expect(body.output_config.format.schema.properties.specs.type).toBe('array');
+    // Opus 5.5 always thinks and refuses `thinking: { type: 'disabled' }`, so none is sent.
+    expect(body).not.toHaveProperty('thinking');
   });
 
   it('returns no answer, with the usage, when the answer doesn’t fit the schema', async () => {
@@ -95,7 +100,7 @@ describe('createAnthropicLlm', () => {
         new Promise<Response>((_resolve, reject) => {
           signal?.addEventListener('abort', () => reject(signal.reason));
         }),
-      50,
+      { timeoutMs: 50 },
     );
     await expect(llm.structured({ ...question, maxTokens: LLM_MAX_TOKENS })).rejects.toBeInstanceOf(
       APIConnectionTimeoutError,
@@ -109,5 +114,57 @@ describe('createAnthropicLlm', () => {
     await llm.structured({ ...question, maxTokens: LLM_MAX_TOKENS });
     // The SDK tells the server the timeout it applies, in seconds.
     expect(new Headers(calls[0]!.init.headers).get('x-stainless-timeout')).toBe('150');
+  });
+
+  it('gives up at its deadline during a long retry-after', { timeout: 10_000 }, async () => {
+    // A rate limit that asks to be left alone for a quarter of an hour. The SDK would sleep that
+    // long before each retry, however short its own attempt timeout is.
+    const { llm, calls } = setUp(
+      () =>
+        new Response(
+          JSON.stringify({
+            type: 'error',
+            error: { type: 'rate_limit_error', message: 'Slow down.' },
+          }),
+          { status: 429, headers: { 'content-type': 'application/json', 'retry-after': '900' } },
+        ),
+      { deadlineMs: 300 },
+    );
+    await expect(llm.structured({ ...question, maxTokens: LLM_MAX_TOKENS })).rejects.toBeInstanceOf(
+      APIUserAbortError,
+    );
+    expect(calls).toHaveLength(1);
+  });
+
+  it('gives up at its deadline on an answer that stops arriving', { timeout: 10_000 }, async () => {
+    // The headers come and the body never ends. Like a real fetch's, this body fails when aborted.
+    const { llm, calls } = setUp(
+      ({ signal }) =>
+        new Response(
+          new ReadableStream<Uint8Array>({
+            start(controller) {
+              signal?.addEventListener('abort', () => controller.error(signal.reason));
+            },
+          }),
+          { status: 200, headers: { 'content-type': 'application/json' } },
+        ),
+      { deadlineMs: 300 },
+    );
+    await expect(llm.structured({ ...question, maxTokens: LLM_MAX_TOKENS })).rejects.toHaveProperty(
+      'name',
+      'AbortError',
+    );
+    expect(calls).toHaveLength(1);
+  });
+
+  it('bounds a whole call to 480 s unless told otherwise', async () => {
+    const timeout = vi.spyOn(AbortSignal, 'timeout');
+    try {
+      const { llm } = setUp(() => answer('{"specs": []}'));
+      await llm.structured({ ...question, maxTokens: LLM_MAX_TOKENS });
+      expect(timeout).toHaveBeenCalledWith(480_000);
+    } finally {
+      timeout.mockRestore();
+    }
   });
 });

@@ -37,18 +37,16 @@ export function createHttpFetcher(options: {
     async get(url, headers): Promise<HttpResult> {
       if (!url.startsWith('https://')) return { ok: false, error: `${url} isn’t an HTTPS address` };
       if (!URL.canParse(url)) return { ok: false, error: `${url} isn’t an address` };
-      const reason = addressError(new URL(url));
+      const parsed = new URL(url);
+      const reason = addressError(parsed);
       if (reason !== null) return { ok: false, error: `${url} is ${reason}` };
       let response: Response;
       try {
-        response = await send(url, {
+        // What is sent is the address that was just judged, not the text it was parsed from.
+        response = await send(parsed.href, {
           method: 'GET',
           redirect: 'manual',
-          headers: {
-            'user-agent': options.userAgent,
-            accept: 'text/html,application/xhtml+xml;q=0.9,*/*;q=0.1',
-            ...headers,
-          },
+          headers: requestHeaders(headers, options.userAgent),
           signal: AbortSignal.timeout(timeoutMs),
         });
       } catch (error) {
@@ -60,7 +58,8 @@ export function createHttpFetcher(options: {
         answered[name.toLowerCase()] = value;
       });
       if (response.status < 200 || response.status >= 300) {
-        await response.body?.cancel();
+        // The body isn't wanted, and one that has already failed mustn't fail the answer.
+        await response.body?.cancel().catch(() => undefined);
         return {
           ok: true,
           status: response.status,
@@ -81,6 +80,18 @@ export function createHttpFetcher(options: {
       }
     },
   };
+}
+
+/**
+ * The caller's headers on top of ours, except that the user agent is always ours. A `Headers`
+ * object counts names that differ only in case as one, so setting the agent last replaces
+ * whatever the caller sent, however it spelled the name.
+ */
+function requestHeaders(headers: Record<string, string>, userAgent: string): Headers {
+  const sent = new Headers({ accept: 'text/html,application/xhtml+xml;q=0.9,*/*;q=0.1' });
+  for (const [name, value] of Object.entries(headers)) sent.set(name, value);
+  sent.set('user-agent', userAgent);
+  return sent;
 }
 
 /** Reads a body up to `maxBytes`, and stops there. */

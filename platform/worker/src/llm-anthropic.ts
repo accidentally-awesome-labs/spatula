@@ -11,11 +11,19 @@ import type { LlmPort } from '@spatula/core';
  */
 
 /**
- * How long one attempt may take. Three attempts of 150 s, with the SDK's short backoff between
- * them, stay inside a Workflow step's 10-minute timeout. A normal extraction answer takes well
- * under a minute.
+ * How long one attempt may wait for its answer. A hung attempt is cut off after 150 s and tried
+ * again, and a normal extraction answer takes well under a minute.
  */
 export const LLM_TIMEOUT_MS = 150_000;
+
+/**
+ * How long the whole call may take: its attempts, the waits a server asks for between them, and
+ * reading the answer. The SDK's timeout ends when the response headers arrive and doesn't limit a
+ * server's `retry-after`, so this is what keeps a call from outliving a Workflow step's 10-minute
+ * timeout. It stops 2 minutes short, so the step can still record the failure. A step that times
+ * out is killed and repeated, and a late answer is billed and thrown away.
+ */
+export const LLM_CALL_DEADLINE_MS = 480_000;
 
 export function createAnthropicLlm(options: {
   apiKey: string;
@@ -23,6 +31,7 @@ export function createAnthropicLlm(options: {
   baseURL?: string;
   gatewayToken?: string;
   timeoutMs?: number;
+  deadlineMs?: number;
   fetch?: typeof fetch;
 }): LlmPort {
   const client = new Anthropic({
@@ -42,13 +51,17 @@ export function createAnthropicLlm(options: {
     async structured(request) {
       // `messages.create`, not `messages.parse`: create returns the answer and its usage whatever
       // the answer is, and the local schema check decides.
-      const response = await client.messages.create({
-        model: options.model,
-        max_tokens: request.maxTokens,
-        system: request.system,
-        messages: [{ role: 'user', content: request.user }],
-        output_config: { format: zodOutputFormat(request.schema) },
-      });
+      const response = await client.messages.create(
+        {
+          model: options.model,
+          max_tokens: request.maxTokens,
+          system: request.system,
+          messages: [{ role: 'user', content: request.user }],
+          output_config: { format: zodOutputFormat(request.schema) },
+        },
+        // The deadline starts with the call and stays armed through retries and reading the answer.
+        { signal: AbortSignal.timeout(options.deadlineMs ?? LLM_CALL_DEADLINE_MS) },
+      );
       const usage = {
         inputTokens: response.usage.input_tokens,
         outputTokens: response.usage.output_tokens,

@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { createHttpFetcher, userAgent } from './http';
 
 const UA = userAgent('0.2.0-dev', 'https://github.com/accidentally-awesome-labs/spatula');
@@ -46,6 +46,19 @@ describe('createHttpFetcher', () => {
     expect(calls[0]!.init.redirect).toBe('manual');
   });
 
+  it('sends only its own user agent, however a caller spells another', async () => {
+    const { fetch, calls } = stub(() => new Response('', { status: 200 }));
+    const http = createHttpFetcher({ userAgent: UA, fetch });
+    await http.get('https://maker-a.example/a', { 'user-agent': 'other' });
+    await http.get('https://maker-a.example/b', { 'User-Agent': 'other', 'if-none-match': '"v1"' });
+
+    expect(calls).toHaveLength(2);
+    for (const call of calls) {
+      expect(new Headers(call.init.headers).get('user-agent')).toBe(UA);
+    }
+    expect(new Headers(calls[1]!.init.headers).get('if-none-match')).toBe('"v1"');
+  });
+
   it('answers a redirect or an error without reading its body', async () => {
     const http = createHttpFetcher({
       userAgent: UA,
@@ -57,6 +70,25 @@ describe('createHttpFetcher', () => {
       ok: true,
       status: 301,
       headers: { location: '/products/a1-new', 'content-type': 'text/plain;charset=UTF-8' },
+      body: new Uint8Array(),
+      truncated: false,
+    });
+  });
+
+  it('answers an error status even when its body has already failed', async () => {
+    const failed = new ReadableStream<Uint8Array>({
+      start(controller) {
+        controller.error(new TypeError('terminated'));
+      },
+    });
+    const http = createHttpFetcher({
+      userAgent: UA,
+      fetch: stub(() => new Response(failed, { status: 503 })).fetch,
+    });
+    expect(await http.get('https://maker-a.example/down', {})).toEqual({
+      ok: true,
+      status: 503,
+      headers: {},
       body: new Uint8Array(),
       truncated: false,
     });
@@ -81,6 +113,29 @@ describe('createHttpFetcher', () => {
     const result = await http.get('https://maker-a.example/huge', {});
     expect(result).toMatchObject({ ok: true, truncated: true });
     expect(result.ok && result.body.byteLength).toBe(5 * 1024 * 1024);
+  });
+
+  it('stops reading a long stream at the limit, and cancels it', async () => {
+    const chunks = ['aaaa', 'bbbb', 'cccc', 'dddd'].map((text) => new TextEncoder().encode(text));
+    const cancelled = vi.fn();
+    let next = 0;
+    const long = new ReadableStream<Uint8Array>({
+      pull(controller) {
+        const chunk = chunks[next++];
+        if (chunk) controller.enqueue(chunk);
+        else controller.close();
+      },
+      cancel: cancelled,
+    });
+    const http = createHttpFetcher({
+      userAgent: UA,
+      maxBytes: 10,
+      fetch: stub(() => new Response(long, { status: 200 })).fetch,
+    });
+    const result = await http.get('https://maker-a.example/long', {});
+    expect(result).toMatchObject({ ok: true, truncated: true });
+    expect(result.ok && new TextDecoder().decode(result.body)).toBe('aaaabbbbcc');
+    expect(cancelled).toHaveBeenCalledTimes(1);
   });
 
   it('turns a timeout or a network error into a failed answer', async () => {
@@ -170,5 +225,12 @@ describe('createHttpFetcher', () => {
 
     expect(await http.get('https://shop.example/x', {})).toMatchObject({ ok: true, status: 200 });
     expect(calls.map((call) => call.url)).toEqual(['https://shop.example/x']);
+  });
+
+  it('asks for the address it checked, in the form it checked', async () => {
+    const { fetch, calls } = stub(() => new Response('', { status: 200 }));
+    const http = createHttpFetcher({ userAgent: UA, fetch });
+    await http.get('https://SHOP.example:443/a b', {});
+    expect(calls.map((call) => call.url)).toEqual(['https://shop.example/a%20b']);
   });
 });
