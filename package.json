@@ -49,7 +49,9 @@
     "platform:typecheck": "pnpm --filter \"@spatula/*\" run --if-present typecheck",
     "platform:test": "pnpm --filter \"@spatula/*\" run --if-present test",
     "platform:test:db": "pnpm --filter \"@spatula/*\" run --if-present test:db",
-    "platform:test:workers": "pnpm --filter \"@spatula/*\" run --if-present test:workers"
+    "platform:test:workers": "pnpm --filter \"@spatula/*\" run --if-present test:workers",
+    "platform:db:up": "docker compose -f platform/compose.yaml up -d --wait",
+    "platform:db:migrate": "pnpm --filter @spatula/store db:migrate"
   },
   "devDependencies": {
     "@typescript-eslint/eslint-plugin": "^8.18.0",

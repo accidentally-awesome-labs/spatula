@@ -1,0 +1,61 @@
+import type { Outcome } from './gate';
+import type { Excluded } from './snapshot';
+
+/*
+ * What the API and the CLI exchange. The store and the Worker produce these shapes; the CLI only
+ * reads them.
+ */
+
+/** What applying a definition changes, or would change on a dry run. */
+export interface ApplySummary {
+  dataset: string;
+  /** The definition's revision after applying; it moves only when the definition changes. */
+  revision: number;
+  created: boolean;
+  changed: boolean;
+  sources: { added: string[]; removed: string[]; changed: string[] };
+  pages: { added: number; removed: number };
+}
+
+/** What a run's snapshot step did. */
+export type PublishResult =
+  | {
+      published: true;
+      generation: number;
+      snapshotId: string;
+      records: number;
+      excluded: Excluded[];
+    }
+  | { published: false; reason: string; excluded: Excluded[] };
+
+/** What a refresh did. */
+export interface RunSummary {
+  items: number;
+  fetches: Record<Outcome, number>;
+  statements: { added: number; reseen: number; withdrawn: number };
+  llm: {
+    ran: number;
+    reused: number;
+    skipped: number;
+    failed: number;
+    inputTokens: number;
+    outputTokens: number;
+  };
+  entities: { created: number; linked: number; conflicts: number; unresolved: number };
+  snapshot: PublishResult;
+  /** What deserves a look, such as an LLM failure or an identity conflict: at most 50. */
+  notes: string[];
+}
+
+export type RunStatus = 'running' | 'complete' | 'failed';
+
+/** A run as the API returns it. */
+export interface RunView {
+  id: string;
+  datasetId: string;
+  status: RunStatus;
+  startedAt: string;
+  finishedAt: string | null;
+  summary: RunSummary | null;
+  error: string | null;
+}

@@ -1,0 +1,24 @@
+# Local Postgres for the platform: `pnpm platform:db:up`. The same major version as Neon.
+# Data persists in the named volume; `docker compose -f platform/compose.yaml down --volumes`
+# deletes it. Port 5434 keeps it apart from 0.1's database and from Crowdio's (5433).
+name: spatula-platform
+services:
+  postgres:
+    image: postgres:18-alpine
+    environment:
+      POSTGRES_USER: spatula
+      POSTGRES_PASSWORD: spatula
+      POSTGRES_DB: spatula
+    ports:
+      - '127.0.0.1:5434:5432'
+    volumes:
+      # From 18, the image keeps its data in a directory per major version, under this one.
+      - postgres-data:/var/lib/postgresql
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U spatula -d spatula']
+      interval: 2s
+      timeout: 5s
+      retries: 15
+
+volumes:
+  postgres-data:

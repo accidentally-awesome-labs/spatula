@@ -13,3 +13,4 @@ export * from './llm';
 export * from './identity';
 export * from './survivorship';
 export * from './snapshot';
+export * from './wire';
