@@ -1,0 +1,24 @@
+{
+  "name": "@spatula/worker",
+  "version": "0.2.0-dev",
+  "private": true,
+  "description": "Spatula's Worker: the API, the Refresh Workflow, HostGate, and their adapters.",
+  "license": "MIT",
+  "type": "module",
+  "scripts": {
+    "lint": "eslint src test",
+    "typecheck": "tsc --noEmit",
+    "test:db": "vitest run"
+  },
+  "dependencies": {
+    "@spatula/core": "workspace:*",
+    "@spatula/pack-products": "workspace:*",
+    "@spatula/store": "workspace:*"
+  },
+  "devDependencies": {
+    "@types/node": "^24.19.1",
+    "drizzle-orm": "^0.45.4",
+    "typescript": "~6.0.3",
+    "vitest": "^5.0.3"
+  }
+}
