@@ -5,6 +5,10 @@ name: spatula-platform
 services:
   postgres:
     image: postgres:18-alpine
+    # Locally, Hyperdrive connects straight to Postgres, and the Worker leaves each database client
+    # open until its invocation ends (about four per page in a refresh run), so a run needs more
+    # than the default 100 connections. Deployed, Hyperdrive pools them.
+    command: ['postgres', '-c', 'max_connections=300']
     environment:
       POSTGRES_USER: spatula
       POSTGRES_PASSWORD: spatula
