@@ -142,6 +142,8 @@ export const snapshotKey = (datasetId: string, snapshotId: string) =>
   `datasets/${datasetId}/snapshots/${snapshotId}.json`;
 /** Which definition revision and extraction code a page's statements came from. */
 export const extractionTag = (revision: number) => `r${revision}.v${EXTRACTION_VERSION}`;
+/** What a page is marked with when it has to be read again though nothing about it changed. */
+const retryTag = (revision: number) => `${extractionTag(revision)}.retry`;
 
 /**
  * What a snapshot's records say, without when each value was last seen. A run that only sees
@@ -286,7 +288,7 @@ export async function runRefresh(
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     await step.do('fail', () =>
-      ports.withDb((db) => finishRun(db, runId, { status: 'failed', error: message })),
+      ports.withDb((db) => finishRun(db, runId, { status: 'failed', error: storable(message) })),
     );
     throw error;
   }
@@ -304,8 +306,21 @@ function emptySummary(items: number): RunSummary {
   };
 }
 
+/** The most code units of a note, or of a failed run's error, that are stored. */
+const MAX_STORED_TEXT = 500;
+
+/**
+ * Text that Postgres will take. A note can carry an exception's message, and messages can quote
+ * their input, but jsonb refuses U+0000 and a lone surrogate. The run summary is jsonb and the
+ * last step writes it, so one bad character would fail a run that had otherwise finished. The
+ * text is cut before it is made well formed, which also repairs a pair that the cut split.
+ */
+function storable(text: string): string {
+  return text.replaceAll('\u0000', '').slice(0, MAX_STORED_TEXT).toWellFormed();
+}
+
 function note(summary: RunSummary, text: string) {
-  if (summary.notes.length < MAX_NOTES) summary.notes.push(text);
+  if (summary.notes.length < MAX_NOTES) summary.notes.push(storable(text));
 }
 
 /**
@@ -517,10 +532,27 @@ function validators(item: ItemRef): Record<string, string> {
 }
 
 /**
- * A page that wasn't read costs only itself. Nothing is written for it and it isn't marked as
- * read, so its statements stay as they were and the next run tries again.
+ * A page that wasn't read costs only itself. Nothing is written but the retry mark: its
+ * statements stay as they were, and it's marked as not current, so the next run reads its stored
+ * copy again. Without the mark, a page that was current when its HTML changed into something
+ * unreadable would only be re-seen from then on, with its old statements taken for fresh.
  */
-function unread(item: ItemRef, why: string): Extracted {
+async function unread(
+  context: Context,
+  item: ItemRef,
+  fetched: Fetched,
+  why: string,
+  ports: RefreshPorts,
+): Promise<Extracted> {
+  await ports.withDb((db) =>
+    recordExtraction(db, {
+      itemId: item.id,
+      fetchId: fetched.fetchId,
+      extractedWith: retryTag(context.revision),
+      llm: 'skipped: the page wasn’t read',
+      usage: NO_USAGE,
+    }),
+  );
   return {
     statements: NO_CHANGE,
     llm: 'skipped',
@@ -554,12 +586,15 @@ async function extractItem(
     extraction = extractFromPage({ page, source, recordType, pack });
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
-    return unread(item, `the page couldn’t be read: ${message}`);
+    return unread(context, item, fetched, `the page couldn’t be read: ${message}`, ports);
   }
   if (extraction.statements.length > MAX_PAGE_STATEMENTS) {
     return unread(
+      context,
       item,
+      fetched,
       `the page says more than ${MAX_PAGE_STATEMENTS.toLocaleString('en-US')} things, so it wasn’t read`,
+      ports,
     );
   }
   const seenAt = ports.now();
@@ -589,8 +624,7 @@ async function extractItem(
       fetchId: fetched.fetchId,
       // A failed LLM step leaves the page not current, so the next run reads the stored copy and
       // asks again, even after a 304 or an unchanged hash.
-      extractedWith:
-        llm.outcome === 'failed' ? `${extractionTag(revision)}.retry` : extractionTag(revision),
+      extractedWith: llm.outcome === 'failed' ? retryTag(revision) : extractionTag(revision),
       extractInputHash: llm.inputHash,
       llm: llm.detail,
       usage: llm.usage,

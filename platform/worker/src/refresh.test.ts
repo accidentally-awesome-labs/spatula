@@ -17,7 +17,7 @@ import {
   statements,
 } from '@spatula/store';
 import { testDefinition } from '@spatula/store/fixtures';
-import { and, eq } from 'drizzle-orm';
+import { and, eq, isNull } from 'drizzle-orm';
 import { describe, expect, it } from 'vitest';
 import { db } from '../test/node/db';
 import { fakeLlm, fakeStep, makeWorld, type World } from '../test/node/fakes';
@@ -25,6 +25,7 @@ import { A1, A2, answerFor, B1, standardRoutes, URLS } from '../test/pages';
 import {
   classifyResponse,
   DatasetMissingError,
+  extractionTag,
   MAX_NOTES,
   MAX_PAGE_STATEMENTS,
   runRefresh,
@@ -78,6 +79,17 @@ const fetchOf = async (runId: string, url: string) =>
 const entityOf = async (itemId: string) =>
   (await db.select({ entityId: items.entityId }).from(items).where(eq(items.id, itemId)))[0]!
     .entityId;
+
+/** When each of an item's current statements was last seen, as ISO text, in order. */
+const lastSeenOf = async (itemId: string) =>
+  (
+    await db
+      .select({ lastSeen: statements.lastSeen })
+      .from(statements)
+      .where(and(eq(statements.itemId, itemId), isNull(statements.withdrawnAt)))
+  )
+    .map((row) => row.lastSeen.toISOString())
+    .sort();
 
 /** The products pack, with what it finds changed for the pages `alter` picks, so a page can misbehave. */
 function alterPack(world: World, alter: (page: Page, found: Candidate[]) => Candidate[]) {
@@ -442,12 +454,12 @@ describe('runRefresh', () => {
       entities: { created: 2, unresolved: 1 },
       snapshot: { published: true, generation: 1, records: 2 },
     });
-    // Nothing was written for A1, and it isn't marked as read.
+    // No statement was written for A1, and it's marked for another try rather than as read.
     expect(await db.select().from(statements).where(eq(statements.itemId, a1.id))).toEqual([]);
     const unread = (await listLiveItems(db, 'refresh-unreadable')).find(
       (item) => item.id === a1.id,
     )!;
-    expect(unread.extractedWith).toBeNull();
+    expect(unread.extractedWith).toBe(`${extractionTag(1)}.retry`);
 
     // The page answers 304 and is still not current, so its stored copy is read again.
     world.ports.packs = packs;
@@ -460,6 +472,44 @@ describe('runRefresh', () => {
       llm: { ran: 1 },
       entities: { created: 1, unresolved: 0 },
       snapshot: { published: true, generation: 2, records: 3 },
+    });
+  });
+
+  it('tries again a page that stopped being readable', async () => {
+    const { world, a1 } = await setUp('refresh-unreadable-again');
+    await refresh(world, 'refresh-unreadable-again');
+    const readAt = await lastSeenOf(a1.id);
+
+    // A1 was read and is current. Then its HTML changes into something the pack can't read.
+    alterPack(world, (page, found) => {
+      if (page.url === URLS.a1) throw new Error('boom');
+      return found;
+    });
+    world.web.routes.set(URLS.a1, { status: 200, body: A1('two') });
+    const second = await refresh(world, 'refresh-unreadable-again');
+    expect(second.summary.notes).toContain(`${URLS.a1}: the page couldn’t be read: boom`);
+    // Its old statements stay as they were: A2's 7 and B1's 5 are the only ones re-seen.
+    expect(second.summary.statements).toMatchObject({ added: 0, reseen: 12, withdrawn: 0 });
+
+    // The same bytes again, with the pack still failing. The page isn't current, so it's tried
+    // and noted again, and its old statements aren't re-seen as if it had been read.
+    const third = await refresh(world, 'refresh-unreadable-again');
+    expect(third.names).toContain(`extract:${a1.id}`);
+    expect(third.summary.notes).toContain(`${URLS.a1}: the page couldn’t be read: boom`);
+    expect(third.summary).toMatchObject({
+      fetches: { unchanged: 3 },
+      statements: { added: 0, reseen: 12, withdrawn: 0 },
+      snapshot: { published: false, reason: 'nothing changed since generation 1' },
+    });
+    expect(await lastSeenOf(a1.id)).toEqual(readAt);
+
+    // The retry mark is on the page, and the fetch log says why nothing was read.
+    const marked = (await listLiveItems(db, 'refresh-unreadable-again')).find(
+      (item) => item.id === a1.id,
+    )!;
+    expect(marked.extractedWith).toBe(`${extractionTag(1)}.retry`);
+    expect(await fetchOf(third.runId, URLS.a1)).toMatchObject({
+      llm: 'skipped: the page wasn’t read',
     });
   });
 
@@ -572,6 +622,59 @@ describe('runRefresh', () => {
     });
     // So does the question the LLM is asked.
     expect(world.llm.calls).toContainEqual(expect.stringContaining(`Page address: ${URLS.a1}\n`));
+  });
+
+  it('stores notes whose text came from an error', async () => {
+    const { world } = await setUp('refresh-stored-notes');
+    const prefix = (url: string) => `${url}: the page couldn’t be read: `;
+    // A2's message is long, with an emoji (two code units) astride the 500th: the cut halves it.
+    const filler = 'x'.repeat(499 - prefix(URLS.a2).length);
+    alterPack(world, (page, found) => {
+      if (page.url === URLS.a1) throw new Error('bad \u0000 value \ud800');
+      if (page.url === URLS.a2) {
+        throw new Error(`${filler}${String.fromCodePoint(0x1f600)} and more`);
+      }
+      return found;
+    });
+
+    // Postgres refuses U+0000 and a lone surrogate in jsonb, and the run summary is written by
+    // the last step, so a single such note would fail a run that had otherwise finished.
+    const first = await refresh(world, 'refresh-stored-notes');
+    const stored = (await getRun(db, first.runId))!;
+    expect(stored.status).toBe('complete');
+    const replacement = String.fromCodePoint(0xfffd);
+    const expected = [
+      // U+0000 is dropped, and the lone surrogate becomes U+FFFD.
+      `${prefix(URLS.a1)}bad  value ${replacement}`,
+      // Cut to 500 code units first, which leaves half of the emoji, and then made well formed.
+      `${prefix(URLS.a2)}${filler}${replacement}`,
+    ];
+    expect(expected[1]).toHaveLength(500);
+    expect(first.summary.notes).toEqual(expect.arrayContaining(expected));
+    expect(stored.summary!.notes).toEqual(expect.arrayContaining(expected));
+  });
+
+  it('stores the error of a failed run, whatever it quotes', async () => {
+    const { world } = await setUp('refresh-stored-error');
+    const failure = new Error('bad \u0000 copy \ud800');
+    world.ports.blobs = {
+      ...world.ports.blobs,
+      async get() {
+        throw failure;
+      },
+    };
+    const { step } = fakeStep(world.clock);
+    const runId = runIdFor('refresh-stored-error', world.clock.now());
+
+    // The run still fails with its own error, and the stored copy of it has been cleaned. Without
+    // that, the failed run's own write is refused, and its error replaces the real one.
+    await expect(
+      runRefresh({ runId, datasetId: 'refresh-stored-error' }, step, world.ports),
+    ).rejects.toBe(failure);
+    expect(await getRun(db, runId)).toMatchObject({
+      status: 'failed',
+      error: `bad  copy ${String.fromCodePoint(0xfffd)}`,
+    });
   });
 });
 
