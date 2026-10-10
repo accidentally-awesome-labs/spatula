@@ -1,3 +1,4 @@
+import { APIConnectionTimeoutError } from '@anthropic-ai/sdk';
 import { buildLlmRequest, LLM_MAX_TOKENS, llmFields, SYSTEM_PROMPT } from '@spatula/core';
 import { testDefinition } from '@spatula/store/fixtures';
 import { describe, expect, it } from 'vitest';
@@ -30,16 +31,17 @@ function answer(text: string, stopReason = 'end_turn') {
   );
 }
 
-function setUp(reply: () => Response) {
+function setUp(reply: (init: RequestInit) => Response | Promise<Response>, timeoutMs?: number) {
   const calls: { url: string; init: RequestInit }[] = [];
   const llm = createAnthropicLlm({
     apiKey: 'test-key',
     model: 'claude-opus-5-5',
     baseURL: 'https://gateway.example/v1/account/spatula-llm/anthropic',
     gatewayToken: 'gateway-token',
+    timeoutMs,
     fetch: (async (input: string | URL | Request, init?: RequestInit) => {
       calls.push({ url: String(input), init: init ?? {} });
-      return reply();
+      return reply(init ?? {});
     }) as typeof fetch,
   });
   return { llm, calls };
@@ -84,5 +86,28 @@ describe('createAnthropicLlm', () => {
       const { llm } = setUp(() => answer('{"specs": []}', stopReason));
       expect((await llm.structured({ ...question, maxTokens: LLM_MAX_TOKENS })).output).toBeNull();
     }
+  });
+
+  it('gives up on a call that never answers', { timeout: 15_000 }, async () => {
+    // A hung connection: this fetch settles only when the client aborts the request at its timeout.
+    const { llm, calls } = setUp(
+      ({ signal }) =>
+        new Promise<Response>((_resolve, reject) => {
+          signal?.addEventListener('abort', () => reject(signal.reason));
+        }),
+      50,
+    );
+    await expect(llm.structured({ ...question, maxTokens: LLM_MAX_TOKENS })).rejects.toBeInstanceOf(
+      APIConnectionTimeoutError,
+    );
+    // The first attempt and the SDK's two retries.
+    expect(calls).toHaveLength(3);
+  });
+
+  it('allows each attempt 150 s unless told otherwise', async () => {
+    const { llm, calls } = setUp(() => answer('{"specs": []}'));
+    await llm.structured({ ...question, maxTokens: LLM_MAX_TOKENS });
+    // The SDK tells the server the timeout it applies, in seconds.
+    expect(new Headers(calls[0]!.init.headers).get('x-stainless-timeout')).toBe('150');
   });
 });

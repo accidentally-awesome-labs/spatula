@@ -10,11 +10,19 @@ import type { LlmPort } from '@spatula/core';
  * answer cut off by the token limit is no answer either.
  */
 
+/**
+ * How long one attempt may take. Three attempts of 150 s, with the SDK's short backoff between
+ * them, stay inside a Workflow step's 10-minute timeout. A normal extraction answer takes well
+ * under a minute.
+ */
+export const LLM_TIMEOUT_MS = 150_000;
+
 export function createAnthropicLlm(options: {
   apiKey: string;
   model: string;
   baseURL?: string;
   gatewayToken?: string;
+  timeoutMs?: number;
   fetch?: typeof fetch;
 }): LlmPort {
   const client = new Anthropic({
@@ -25,6 +33,7 @@ export function createAnthropicLlm(options: {
         ? undefined
         : { 'cf-aig-authorization': `Bearer ${options.gatewayToken}` },
     fetch: options.fetch,
+    timeout: options.timeoutMs ?? LLM_TIMEOUT_MS,
     maxRetries: 2,
   });
 
