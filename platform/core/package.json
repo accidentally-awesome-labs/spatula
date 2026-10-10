@@ -1,0 +1,21 @@
+{
+  "name": "@spatula/core",
+  "version": "0.2.0-dev",
+  "private": true,
+  "description": "Spatula's rules, as plain TypeScript: no Cloudflare imports.",
+  "license": "MIT",
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "lint": "eslint src",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run"
+  },
+  "devDependencies": {
+    "@types/node": "^24.19.1",
+    "typescript": "~6.0.3",
+    "vitest": "^5.0.3"
+  }
+}
