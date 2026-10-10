@@ -2,3 +2,5 @@ export * from './client';
 export * from './schema';
 export * from './datasets';
 export * from './runs';
+export * from './fetches';
+export * from './statements';
