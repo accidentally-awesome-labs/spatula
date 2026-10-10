@@ -5,3 +5,4 @@ export * from './css';
 export * from './definition';
 export * from './robots';
 export * from './gate';
+export * from './page';
