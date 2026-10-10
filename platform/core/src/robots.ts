@@ -25,6 +25,15 @@ interface ParsedGroup {
 
 const RULE_KEYS = new Set(['allow', 'disallow', 'crawl-delay', 'content-signal']);
 
+/** A Crawl-delay is a plain number of seconds: no sign, no exponent, no hexadecimal. */
+const PLAIN_NUMBER = /^\d+(\.\d+)?$/u;
+
+/**
+ * Crawl-delay is capped at one day. Task 5's gate turns seconds into milliseconds, and an absurd
+ * value must never become Infinity there.
+ */
+const MAX_CRAWL_DELAY_SECONDS = 86_400;
+
 /**
  * The rules that apply to a product token: every group naming it, merged, or else every `*`
  * group. `null` means no group applies, so everything is allowed.
@@ -45,7 +54,7 @@ export function parseRobots(text: string, productToken: string): RobotsGroup | n
         groups.push(current);
         readingAgents = true;
       }
-      current.agents.push((value.split('/')[0] ?? '').trim().toLowerCase());
+      current.agents.push(productTokenOf(value));
       continue;
     }
     // Other records, such as Sitemap, belong to no group and don't end one.
@@ -58,14 +67,16 @@ export function parseRobots(text: string, productToken: string): RobotsGroup | n
   const named = groups.filter((parsed) => parsed.agents.includes(token));
   const chosen = named.length > 0 ? named : groups.filter((parsed) => parsed.agents.includes('*'));
   if (chosen.length === 0) return null;
-  return chosen.reduce<RobotsGroup>(
-    (merged, { group }) => ({
-      rules: [...merged.rules, ...group.rules],
-      crawlDelaySeconds: merged.crawlDelaySeconds ?? group.crawlDelaySeconds,
-      signals: { ...group.signals, ...merged.signals },
-    }),
-    { rules: [], crawlDelaySeconds: null, signals: {} },
-  );
+  // Merged in place: building a new array for each group would take quadratic time.
+  const merged: RobotsGroup = { rules: [], crawlDelaySeconds: null, signals: {} };
+  for (const { group } of chosen) {
+    for (const rule of group.rules) merged.rules.push(rule);
+    merged.crawlDelaySeconds = longerDelay(merged.crawlDelaySeconds, group.crawlDelaySeconds);
+    for (const [name, setting] of Object.entries(group.signals)) {
+      if (setting !== undefined) merged.signals[name] = mergeSignal(merged.signals[name], setting);
+    }
+  }
+  return merged;
 }
 
 function readRule(group: RobotsGroup, key: string, value: string): void {
@@ -73,14 +84,41 @@ function readRule(group: RobotsGroup, key: string, value: string): void {
     // An empty Disallow means nothing is disallowed: it adds no rule.
     if (value !== '') group.rules.push({ allow: key === 'allow', pattern: encodePath(value) });
   } else if (key === 'crawl-delay') {
-    const seconds = Number(value);
-    if (Number.isFinite(seconds) && seconds >= 0) group.crawlDelaySeconds ??= seconds;
+    // An invalid value is ignored, never read as zero: Number('') is zero.
+    if (PLAIN_NUMBER.test(value)) {
+      const seconds = Math.min(Number(value), MAX_CRAWL_DELAY_SECONDS);
+      group.crawlDelaySeconds = longerDelay(group.crawlDelaySeconds, seconds);
+    }
   } else {
     for (const pair of value.split(',')) {
       const [name, setting] = pair.split('=').map((part) => part.trim().toLowerCase());
-      if (name && (setting === 'yes' || setting === 'no')) group.signals[name] = setting;
+      if (name && (setting === 'yes' || setting === 'no')) {
+        group.signals[name] = mergeSignal(group.signals[name], setting);
+      }
     }
   }
+}
+
+/**
+ * A User-agent line names its product token: its leading letters, underscores and hyphens,
+ * or `*`.
+ */
+function productTokenOf(value: string): string {
+  if (value.startsWith('*')) return '*';
+  const [token = ''] = /^[A-Za-z_-]*/u.exec(value) ?? [];
+  return token.toLowerCase();
+}
+
+/** The longer of two crawl delays. `null` means the group gave none. */
+function longerDelay(earlier: number | null, later: number | null): number | null {
+  if (earlier === null) return later;
+  if (later === null) return earlier;
+  return Math.max(earlier, later);
+}
+
+/** A "no" is sticky: a later "yes" in the same group or another never undoes it. */
+function mergeSignal(earlier: 'yes' | 'no' | undefined, later: 'yes' | 'no'): 'yes' | 'no' {
+  return earlier === 'no' || later === 'no' ? 'no' : 'yes';
 }
 
 /** Whether the group lets Spatula fetch a URL. robots.txt itself is always allowed. */
@@ -103,7 +141,10 @@ export function isAllowed(group: RobotsGroup | null, url: URL): boolean {
 
 /** Paths compare percent-encoded: non-ASCII characters encoded, escapes in uppercase. */
 function encodePath(path: string): string {
-  // Known slice 0 simplification: this does not decode percent-encoded unreserved characters or encode spaces, as RFC 9309 section 2.2.2 describes.
+  // A known slice 0 simplification, unlike RFC 9309 section 2.2.2: percent-encoded unreserved
+  // characters are not decoded, and spaces are not encoded. A pattern with a character the URL
+  // parser percent-encodes in paths ("<", ">", a double quote, a backtick, "{", "}") can't match
+  // either, so that rule fails open: the same class of gap.
   return path
     .replace(/%[0-9a-f]{2}/giu, (escape) => escape.toUpperCase())
     .replace(/[^\x00-\x7F]/gu, (char) => encodeURIComponent(char));
@@ -112,10 +153,18 @@ function encodePath(path: string): string {
 /** A rule's pattern against a path: `*` matches anything, and a final `$` anchors the end. */
 function matches(pattern: string, path: string): boolean {
   const anchored = pattern.endsWith('$');
-  const body = anchored ? pattern.slice(0, -1) : pattern;
-  const source = body
-    .split('*')
-    .map((part) => part.replace(/[.+?^${}()|[\]\\]/gu, '\\$&'))
-    .join('.*');
-  return new RegExp(`^${source}${anchored ? '$' : ''}`).test(path);
+  const [first = '', ...rest] = (anchored ? pattern.slice(0, -1) : pattern).split('*');
+  if (!path.startsWith(first)) return false;
+  if (rest.length === 0) return !anchored || path.length === first.length;
+  // Each piece goes at its earliest position, which leaves the most room for the rest.
+  const last = rest.pop() ?? '';
+  let position = first.length;
+  for (const part of rest) {
+    const found = path.indexOf(part, position);
+    if (found === -1) return false;
+    position = found + part.length;
+  }
+  return anchored
+    ? path.length - last.length >= position && path.endsWith(last)
+    : path.indexOf(last, position) !== -1;
 }

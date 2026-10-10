@@ -78,4 +78,52 @@ describe('parseRobots and isAllowed', () => {
     expect(parseRobots(robots, 'Spatula')?.rules).toEqual([{ allow: false, pattern: '/x' }]);
     expect(parseRobots(robots, 'A')?.rules).toEqual([{ allow: false, pattern: '/x' }]);
   });
+
+  it('matches a rule with about 40 wildcards in linear time', () => {
+    const robots = `User-agent: *\nDisallow: /${'*a'.repeat(40)}*b`;
+    expect(allowed(robots, `/${'a'.repeat(3000)}`)).toBe(true);
+    expect(allowed(robots, `/${'a'.repeat(3000)}b`)).toBe(false);
+  });
+
+  it('lets a "no" win over a later "yes" in the same group', () => {
+    const later = 'User-agent: *\nContent-Signal: ai-input=no\nContent-Signal: ai-input=yes';
+    const inline = 'User-agent: *\nContent-Signal: ai-input=no, ai-input=yes';
+    expect(parseRobots(later, 'Spatula')?.signals).toEqual({ 'ai-input': 'no' });
+    expect(parseRobots(inline, 'Spatula')?.signals).toEqual({ 'ai-input': 'no' });
+  });
+
+  it('lets a "no" in one chosen group win over a "yes" in another', () => {
+    const yesFirst =
+      'User-agent: Spatula\nContent-Signal: ai-train=yes\n\nUser-agent: Spatula\nContent-Signal: ai-train=no';
+    const noFirst =
+      'User-agent: Spatula\nContent-Signal: ai-train=no\n\nUser-agent: Spatula\nContent-Signal: ai-train=yes';
+    expect(parseRobots(yesFirst, 'Spatula')?.signals).toEqual({ 'ai-train': 'no' });
+    expect(parseRobots(noFirst, 'Spatula')?.signals).toEqual({ 'ai-train': 'no' });
+  });
+
+  it('takes the largest valid Crawl-delay, ignoring an empty line before it', () => {
+    const empty = 'User-agent: *\nCrawl-delay:\nCrawl-delay: 10';
+    const twoGroups = 'User-agent: Spatula\nCrawl-delay: 3\n\nUser-agent: Spatula\nCrawl-delay: 10';
+    expect(parseRobots(empty, 'Spatula')?.crawlDelaySeconds).toBe(10);
+    expect(parseRobots(twoGroups, 'Spatula')?.crawlDelaySeconds).toBe(10);
+  });
+
+  it('ignores a Crawl-delay that is not a plain number of seconds', () => {
+    for (const value of ['', 'abc', '-1', '0x10', '1e3', '1e308']) {
+      const robots = `User-agent: *\nCrawl-delay: ${value}`;
+      expect(parseRobots(robots, 'Spatula')?.crawlDelaySeconds).toBeNull();
+    }
+  });
+
+  it('caps a Crawl-delay at one day', () => {
+    const robots = 'User-agent: *\nCrawl-delay: 100000';
+    expect(parseRobots(robots, 'Spatula')?.crawlDelaySeconds).toBe(86400);
+  });
+
+  it('reads a product token as its leading letters, so trailing text still names Spatula', () => {
+    for (const agent of ['Spatula Bot', 'Spatula/0.2', 'Spatula;']) {
+      expect(allowed(`User-agent: ${agent}\nDisallow: /x`, '/x')).toBe(false);
+    }
+    expect(allowed('User-agent: Spatula-Bot\nDisallow: /x', '/x')).toBe(true);
+  });
 });
