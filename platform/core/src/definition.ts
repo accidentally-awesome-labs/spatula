@@ -16,11 +16,30 @@ type Report = (path: Path, message: string) => void;
 const NAME = /^[a-z][a-zA-Z0-9]*$/u;
 const SLUG = /^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$/u;
 
-const name = z.string().regex(NAME, 'Use a camelCase name, like officialUrl.');
+// Names are looked up in plain objects, which already have constructor, toString, and a few more
+// of their own. The refusal aborts the parse, so no cross-check ever looks a reserved name up.
+const name = z
+  .string()
+  .regex(NAME, 'Use a camelCase name, like officialUrl.')
+  .refine((value) => !(value in Object.prototype), {
+    error: 'That name is reserved. Pick another.',
+    abort: true,
+  });
 const slug = z
   .string()
   .regex(SLUG, 'Use lowercase letters, digits, and hyphens, up to 63 characters.');
-const httpsUrl = z.url({ protocol: /^https$/u, error: 'Use an https:// address.' });
+const httpsUrl = z
+  .url({ protocol: /^https$/u, error: 'Use an https:// address.' })
+  .superRefine((value, ctx) => {
+    // An address that doesn't parse has been reported already, so it's skipped here.
+    const reason = URL.canParse(value) ? addressError(new URL(value)) : null;
+    if (reason !== null) {
+      ctx.addIssue({
+        code: 'custom',
+        message: `This address is ${reason}. Use the site’s public https:// address.`,
+      });
+    }
+  });
 const isoDate = z.iso.date({ error: 'Write the date as YYYY-MM-DD.' });
 
 const fieldSchema = z
@@ -37,13 +56,16 @@ const fieldSchema = z
   })
   .transform((field): FieldDef => (field.type === 'specs' ? { ...field, list: true } : field));
 
-const ruleSchema = z.union([
-  z.strictObject({
-    css: z.string().trim().min(1).max(200),
-    attr: z.string().trim().min(1).max(60).optional(),
-  }),
-  z.strictObject({ url: z.literal('canonical') }),
-]);
+const ruleSchema = z.union(
+  [
+    z.strictObject({
+      css: z.string().trim().min(1).max(200),
+      attr: z.string().trim().min(1).max(60).optional(),
+    }),
+    z.strictObject({ url: z.literal('canonical') }),
+  ],
+  { error: 'Use { css: "<selector>" } with an optional attr, or { url: canonical }.' },
+);
 export type Rule = z.output<typeof ruleSchema>;
 
 const sourceSchema = z.strictObject({
@@ -101,13 +123,40 @@ export function parseDefinition(
 ): { ok: true; definition: Definition } | { ok: false; issues: string[] } {
   const result = definitionSchema.safeParse(input);
   if (result.success) return { ok: true, definition: result.data };
-  return {
-    ok: false,
-    issues: result.error.issues.map(
-      (issue) =>
-        `${issue.path.length > 0 ? issue.path.map(String).join('.') : '(definition)'}: ${issue.message}`,
-    ),
-  };
+  return { ok: false, issues: result.error.issues.flatMap((issue) => issueLines(issue)) };
+}
+
+/**
+ * An issue as `path: message`. A record key that fails is reported by zod as "Invalid key in
+ * record", and the issues inside it say what's wrong with the name, so those are what we print.
+ */
+function issueLines(issue: z.core.$ZodIssue, parent: PropertyKey[] = []): string[] {
+  const path = [...parent, ...issue.path];
+  if (issue.code === 'invalid_key') {
+    return issue.issues.flatMap((inner) => issueLines(inner, path));
+  }
+  return [`${path.length > 0 ? path.map(String).join('.') : '(definition)'}: ${issue.message}`];
+}
+
+const IPV4 = /^\d{1,3}(?:\.\d{1,3}){3}$/u;
+// Names that only mean something inside a private network.
+const PRIVATE_USE = /(?:^|\.)(?:local|internal|home\.arpa|lan)$/u;
+
+/**
+ * Why Spatula must not fetch an address, as a phrase that reads after "This address is", or `null`
+ * for an address it may fetch. Definitions are checked with it, and it takes a `URL` so that the
+ * fetcher can apply the same rule to each request. It judges only what the address says: a public
+ * name that resolves to a private address gets through.
+ */
+export function addressError(url: URL): string | null {
+  if (url.username !== '' || url.password !== '') return 'carrying a user name or password';
+  // The URL parser keeps a trailing dot, and "localhost." is the same host as "localhost".
+  const host = url.hostname.replace(/\.+$/u, '');
+  // The parser writes every form of an IPv4 address as a dotted quad, and an IPv6 one in brackets.
+  if (host.startsWith('[') || IPV4.test(host)) return 'an IP address, not a host name';
+  if (!host.includes('.') || host.endsWith('.localhost')) return 'a local name';
+  if (PRIVATE_USE.test(host)) return 'a private-use name';
+  return null;
 }
 
 function checkDefinition(definition: z.output<typeof shapeSchema>, report: Report): void {

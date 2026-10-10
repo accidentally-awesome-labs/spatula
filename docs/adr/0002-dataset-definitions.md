@@ -36,6 +36,12 @@ CLI and again in the API. It has four parts.
 Unknown keys are errors, so a misspelling never passes silently. Identity fields can't be filled
 by the LLM. The LLM fills only `specs` fields in this version.
 
+Names are camelCase, and the few that every object already has, such as `constructor` and
+`toString`, are reserved. Pages must be at public addresses, because Spatula must never fetch
+anything inside someone's network. It refuses an address that carries a user name or password, an
+IP address, `localhost`, a name with no dot, and the private-use endings `.local`, `.internal`,
+`.home.arpa`, and `.lan`. `addressError` in `@spatula/core` makes that call for any address.
+
 ## Consequences
 
 Budgets, freshness, gates, consumers, and other source kinds (sitemaps, feeds, APIs) are refused
