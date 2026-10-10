@@ -1,0 +1,14 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "target": "ES2024",
+    "lib": ["ES2024"],
+    "types": ["node"],
+    "noEmit": true,
+    "declaration": false,
+    "rootDir": ".",
+    "noUncheckedIndexedAccess": true
+  },
+  "include": ["worker-configuration.d.ts", "src"],
+  "exclude": ["src/*.test.ts"]
+}

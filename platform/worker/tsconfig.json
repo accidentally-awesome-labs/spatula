@@ -17,6 +17,8 @@
     "src/*.test.ts",
     "test/node",
     "test/pages.ts",
-    "vitest.config.ts"
+    "test/workers/global-setup.ts",
+    "vitest.config.ts",
+    "vitest.workers.config.ts"
   ]
 }

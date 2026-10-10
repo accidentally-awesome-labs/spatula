@@ -1,0 +1,7 @@
+# Copy to .dev.vars for `pnpm --filter @spatula/worker dev`. Never commit .dev.vars.
+# The SHA-256 of the owner token "dev", so `SPATULA_TOKEN=dev` works with a local Worker.
+OWNER_TOKEN_HASH=ef260e9aa3c673af240d17a2660480361a8e081d1ffeca2a5ed0e3219fc18567
+# Without a key, runs skip the LLM. With one, set the gateway too, so calls are logged and costed.
+# ANTHROPIC_API_KEY=
+# AI_GATEWAY_URL=https://gateway.ai.cloudflare.com/v1/<account ID>/spatula-llm/anthropic
+# AI_GATEWAY_TOKEN=

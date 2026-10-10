@@ -1,0 +1,29 @@
+{
+  "$schema": "./node_modules/wrangler/config-schema.json",
+  "name": "spatula-platform",
+  "main": "src/index.ts",
+  "compatibility_date": "2026-09-23",
+  "compatibility_flags": ["nodejs_compat"],
+  "observability": { "enabled": true },
+  "vars": {
+    "SPATULA_VERSION": "0.2.0-dev",
+    // Where the user agent sends a site that wants to know who's asking. It's the repository until
+    // the Worker is deployed; then it's the Worker's own address, whose page explains Spatula.
+    "PUBLIC_URL": "https://github.com/accidentally-awesome-labs/spatula",
+    "LLM_MODEL": "claude-opus-5-5",
+  },
+  "hyperdrive": [
+    {
+      "binding": "HYPERDRIVE",
+      // Replaced by spatula-db's ID when the owner creates it (Task 22).
+      "id": "00000000000000000000000000000000",
+      "localConnectionString": "postgres://spatula:spatula@localhost:5434/spatula",
+    },
+  ],
+  "r2_buckets": [{ "binding": "STORE", "bucket_name": "spatula-store" }],
+  "durable_objects": { "bindings": [{ "name": "HOST_GATE", "class_name": "HostGate" }] },
+  "migrations": [{ "tag": "v1", "new_sqlite_classes": ["HostGate"] }],
+  "workflows": [
+    { "name": "spatula-refresh", "binding": "REFRESH", "class_name": "RefreshWorkflow" },
+  ],
+}

@@ -1,0 +1,38 @@
+import type { RunSummary } from '@spatula/core';
+import { WorkflowEntrypoint, type WorkflowEvent, type WorkflowStep } from 'cloudflare:workers';
+import { NonRetryableError } from 'cloudflare:workflows';
+import { workerPorts } from './ports';
+import { DatasetMissingError, runRefresh, type RefreshParams, type StepRunner } from './refresh';
+
+/** The Refresh Workflow: the pipeline over real ports. Its instance ID is the run's ID. */
+export class RefreshWorkflow extends WorkflowEntrypoint<Env, RefreshParams> {
+  async run(
+    event: Readonly<WorkflowEvent<RefreshParams>>,
+    step: WorkflowStep,
+  ): Promise<RunSummary> {
+    return runRefresh(event.payload, stepRunner(step), workerPorts(this.env));
+  }
+}
+
+/** Workflows' steps as the pipeline's StepRunner. A dataset that doesn't exist isn't retried. */
+export function stepRunner(step: WorkflowStep): StepRunner {
+  // Workflows types step results as serializable values. The pipeline's are plain JSON, which the
+  // Node tests' fake step checks, so its generic signature is enough here. The step is an RPC stub
+  // of the Workflows engine, so its methods are only ever called on it: a bound or detached one
+  // would be a call to a remote method named "bind".
+  const plain = step as unknown as {
+    do<T>(name: string, callback: () => Promise<T>): Promise<T>;
+  };
+  return {
+    do: (name, fn) =>
+      plain.do(name, async () => {
+        try {
+          return await fn();
+        } catch (error) {
+          if (error instanceof DatasetMissingError) throw new NonRetryableError(error.message);
+          throw error;
+        }
+      }),
+    sleep: (name, ms) => step.sleep(name, ms),
+  };
+}

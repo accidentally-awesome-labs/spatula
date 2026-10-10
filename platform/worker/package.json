@@ -7,8 +7,11 @@
   "type": "module",
   "scripts": {
     "lint": "eslint src test",
-    "typecheck": "tsc --noEmit",
-    "test:db": "vitest run"
+    "typecheck": "wrangler types && tsc -p tsconfig.json && tsc -p tsconfig.worker.json && tsc -p test/workers/tsconfig.json",
+    "test:db": "vitest run",
+    "test:workers": "vitest run --config vitest.workers.config.ts",
+    "dev": "wrangler dev",
+    "deploy": "wrangler deploy"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.133.0",
@@ -18,9 +21,13 @@
     "zod": "^4.6.5"
   },
   "devDependencies": {
+    "@cloudflare/vitest-plugin": "^1.4.0",
+    "@msw/cloudflare": "^0.2.0",
     "@types/node": "^24.19.1",
     "drizzle-orm": "^0.45.4",
+    "msw": "^3.0.2",
     "typescript": "~6.0.3",
-    "vitest": "^5.0.3"
+    "vitest": "^5.0.3",
+    "wrangler": "^4.149.0"
   }
 }

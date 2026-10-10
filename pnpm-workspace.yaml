@@ -9,6 +9,8 @@ allowBuilds:
   esbuild: true
   msgpackr-extract: true
   protobufjs: true
+  sharp: true
+  workerd: true
 
 overrides:
   '@grpc/grpc-js': 1.14.4
@@ -33,3 +35,7 @@ overrides:
   uuid: 11.1.1
   vite: 6.4.3
   ws: 8.21.0
+  # Miniflare and Wrangler pin the versions they're tested with, which are newer than the pins above.
+  'miniflare>undici': 7.29.1
+  'wrangler>esbuild': 0.28.2
+  '@cloudflare/vitest-plugin>esbuild': 0.28.2
