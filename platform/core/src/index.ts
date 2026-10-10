@@ -8,3 +8,4 @@ export * from './gate';
 export * from './page';
 export * from './statements';
 export * from './pack';
+export * from './candidates';
