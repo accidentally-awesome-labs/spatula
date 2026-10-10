@@ -137,6 +137,55 @@ describe('writeStatements', () => {
       expect(current.map((statement) => statement.value)).toEqual(['508823', 'true']);
       expect(current.map((statement) => typeof statement.value)).toEqual(['string', 'string']);
     }));
+
+  it('adds a value again once it has been withdrawn, and keeps the withdrawn row', () =>
+    withRollback(async (db) => {
+      const {
+        items: [a1],
+        runId,
+      } = await seedDataset(db);
+      const base = { datasetId: 'test-products', itemId: a1!.id, methods: PAGE_METHODS };
+      const first = await fetchOf(db, runId, a1!, T(0));
+      await writeStatements(db, {
+        ...base,
+        fetchId: first,
+        seenAt: T(0),
+        statements: [statementOf('name', 'A1')],
+      });
+      const second = await fetchOf(db, runId, a1!, T(5));
+      await writeStatements(db, {
+        ...base,
+        fetchId: second,
+        seenAt: T(5),
+        statements: [statementOf('name', 'A1 Pro')],
+      });
+      const third = await fetchOf(db, runId, a1!, T(10));
+      expect(
+        await writeStatements(db, {
+          ...base,
+          fetchId: third,
+          seenAt: T(10),
+          statements: [statementOf('name', 'A1')],
+        }),
+      ).toEqual({ added: 1, reseen: 0, withdrawn: 1 });
+
+      // The first 'A1' stays withdrawn, as it was, and exactly one 'A1' is current.
+      const rows = await db
+        .select()
+        .from(statements)
+        .where(and(eq(statements.itemId, a1!.id), eq(statements.valueKey, 'A1')));
+      expect(rows).toHaveLength(2);
+      expect(rows.find((row) => row.fetchId === first)).toMatchObject({
+        lastSeen: T(0),
+        withdrawnAt: T(5),
+      });
+      expect(rows.filter((row) => row.withdrawnAt === null)).toMatchObject([
+        { fetchId: third, lastSeen: T(10) },
+      ]);
+      expect(
+        (await currentStatements(db, 'test-products')).map((statement) => statement.value),
+      ).toEqual(['A1']);
+    }));
 });
 
 describe('reseeStatements', () => {
@@ -179,6 +228,39 @@ describe('reseeStatements', () => {
         { property: 'name', lastSeen: T(10).toISOString() },
         { property: 'specs', lastSeen: T(10).toISOString() },
       ]);
+    }));
+
+  it('leaves withdrawn statements alone when the page is re-seen', () =>
+    withRollback(async (db) => {
+      const {
+        items: [a1],
+        runId,
+      } = await seedDataset(db);
+      const base = { datasetId: 'test-products', itemId: a1!.id, methods: PAGE_METHODS };
+      const first = await fetchOf(db, runId, a1!, T(0));
+      await writeStatements(db, {
+        ...base,
+        fetchId: first,
+        seenAt: T(0),
+        statements: [statementOf('name', 'A1')],
+      });
+      const second = await fetchOf(db, runId, a1!, T(5));
+      await writeStatements(db, {
+        ...base,
+        fetchId: second,
+        seenAt: T(5),
+        statements: [statementOf('name', 'A1 Pro')],
+      });
+      const [withdrawn] = await db
+        .select()
+        .from(statements)
+        .where(and(eq(statements.itemId, a1!.id), eq(statements.valueKey, 'A1')));
+
+      // Only 'A1 Pro' is current, so only it is re-seen. The withdrawn 'A1' keeps what it said.
+      const third = await fetchOf(db, runId, a1!, T(10));
+      expect(await reseeStatements(db, { itemId: a1!.id, fetchId: third, seenAt: T(10) })).toBe(1);
+      const [after] = await db.select().from(statements).where(eq(statements.id, withdrawn!.id));
+      expect(after).toMatchObject({ lastSeen: T(0), lastFetchId: first, withdrawnAt: T(5) });
     }));
 });
 

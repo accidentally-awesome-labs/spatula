@@ -4,8 +4,9 @@ import { describe, expect, it } from 'vitest';
 import { withRollback } from '../test/db';
 import { seedDataset, T } from '../test/seed';
 import type { Executor } from './client';
-import { listLiveItems, type ItemRef } from './datasets';
+import { applyDefinition, listLiveItems, type ItemRef } from './datasets';
 import { recordExtraction, recordFetch, type FetchInput } from './fetches';
+import { testDefinition } from './fixtures';
 import { fetches, items } from './schema';
 
 function attempt(runId: string, item: ItemRef, overrides: Partial<FetchInput>): FetchInput {
@@ -121,6 +122,28 @@ describe('recordFetch', () => {
       await recordFetch(db, blocked());
       await recordFetch(db, blocked());
       expect(await recordFetch(db, blocked())).toEqual({ itemStatus: 'refused' });
+    }));
+
+  it('keeps a page the definition no longer lists excluded, however its streak runs', () =>
+    withRollback(async (db) => {
+      const {
+        items: [a1, a2],
+        runId,
+      } = await seedDataset(db);
+      // Leaving a1 out of the definition excludes it.
+      const full = testDefinition();
+      await applyDefinition(db, {
+        ...full,
+        sources: [{ ...full.sources[0]!, pages: [a2!.locator] }, full.sources[1]!],
+      });
+      const gone = () => attempt(runId, a1!, { outcome: 'gone', httpStatus: 404 });
+      expect(await recordFetch(db, gone())).toEqual({ itemStatus: 'excluded' });
+      expect(await recordFetch(db, gone())).toEqual({ itemStatus: 'excluded' });
+      expect(await itemRow(db, a1!.id)).toMatchObject({
+        status: 'excluded',
+        lastOutcome: 'gone',
+        outcomeStreak: 2,
+      });
     }));
 });
 

@@ -30,10 +30,11 @@ export interface FetchInput {
 
 /**
  * Logs a fetch and moves its page's streak. A page is gone after two 404s or 410s in a row, and
- * refused after three blocks in a row. A page that's gone or refused leaves the live items, so it
- * isn't fetched again until it leaves the definition and is listed again. Only a fresh page moves
- * the stored hash and validators: a failed or blocked fetch leaves them, like every value, as they
- * were.
+ * refused after three blocks in a row. Only a live page can become gone or refused: an excluded
+ * page keeps its status however its streak runs. A page that's gone or refused leaves the live
+ * items, so it isn't fetched again until it leaves the definition and is listed again. Only a
+ * fresh page moves the stored hash and validators: a failed or blocked fetch leaves them, like
+ * every value, as they were.
  */
 export async function recordFetch(
   db: Executor,
@@ -51,10 +52,13 @@ export async function recordFetch(
       .for('update');
     if (item === undefined) throw new Error(`Item ${input.itemId} doesn't exist`);
     const streak = item.lastOutcome === input.outcome ? item.outcomeStreak + 1 : 1;
+    // Only a live page can become gone or refused. An excluded page keeps its status, though its
+    // streak still counts.
+    const live = item.status === 'live';
     const status: ItemStatus =
-      input.outcome === 'gone' && streak >= GONE_AFTER
+      live && input.outcome === 'gone' && streak >= GONE_AFTER
         ? 'gone'
-        : input.outcome === 'blocked' && streak >= REFUSED_AFTER
+        : live && input.outcome === 'blocked' && streak >= REFUSED_AFTER
           ? 'refused'
           : item.status;
     const { page, ...logged } = input;

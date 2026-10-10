@@ -36,6 +36,16 @@ describe('normalizeValue', () => {
     });
   });
 
+  it('refuses text with an unpaired surrogate, and keeps a valid pair', () => {
+    expect(normalizeValue(field({}), 'HD 650 \ud83c')).toMatchObject({ ok: false });
+    expect(normalizeValue(field({}), 'A\udc00B')).toMatchObject({ ok: false });
+    expect(normalizeValue(field({}), 'HD 650 \ud83c\udfa7')).toEqual({
+      ok: true,
+      value: 'HD 650 \ud83c\udfa7',
+      key: 'HD 650 \ud83c\udfa7',
+    });
+  });
+
   it('matches enums without regard to case, and writes them as declared', () => {
     const category = field({ type: 'enum', values: ['Headphones', 'DAC/Amp'] });
     expect(normalizeValue(category, 'headphones')).toMatchObject({ ok: true, value: 'Headphones' });
@@ -63,6 +73,22 @@ describe('normalizeValue', () => {
     });
     expect(normalizeValue(url, `https://example.com/${'a'.repeat(500)}`)).toMatchObject({
       ok: false,
+    });
+  });
+
+  it('refuses a web address with a NUL or an unpaired surrogate', () => {
+    const url = field({ type: 'url' });
+    expect(normalizeValue(url, 'https://a.example/x\u0000')).toEqual({
+      ok: false,
+      reason: 'not a web address',
+    });
+    expect(normalizeValue(url, 'https://a.example/\ud83c')).toEqual({
+      ok: false,
+      reason: 'not a web address',
+    });
+    expect(normalizeValue(url, 'https://a.example/x')).toMatchObject({
+      ok: true,
+      value: 'https://a.example/x',
     });
   });
 

@@ -48,13 +48,13 @@ export const SPEC_VALUE_MAX = 200;
 /**
  * Text on one line: Unicode-normalized, trimmed, with each run of whitespace as one space.
  * Numbers read as text. Returns `null` for anything else, for empty text, and for text that
- * keeps a control character.
+ * keeps a control character or an unpaired surrogate.
  */
 export function cleanText(raw: unknown): string | null {
   if (typeof raw === 'number' && Number.isFinite(raw)) return String(raw);
   if (typeof raw !== 'string') return null;
   const text = raw.normalize('NFC').replace(/\s+/gu, ' ').trim();
-  return text === '' || /\p{Cc}/u.test(text) ? null : text;
+  return text === '' || /\p{Cc}/u.test(text) || !text.isWellFormed() ? null : text;
 }
 
 /** How specs' labels compare: "Frequency response" and "frequency  Response" are one label. */
@@ -102,7 +102,15 @@ function choice(raw: unknown, values: string[]): Normalized {
 }
 
 function webAddress(raw: unknown): Normalized {
-  if (typeof raw !== 'string' || !URL.canParse(raw.trim()))
+  // The URL parser cleans the address it returns, but the raw text is kept as the statement's
+  // original. Postgres can't store a NUL, and an unpaired surrogate isn't text, so the raw text
+  // is checked first.
+  if (
+    typeof raw !== 'string' ||
+    raw.includes('\u0000') ||
+    !raw.isWellFormed() ||
+    !URL.canParse(raw.trim())
+  )
     return { ok: false, reason: 'not a web address' };
   const url = new URL(raw.trim());
   if (url.protocol !== 'https:') return { ok: false, reason: 'not an https:// address' };
