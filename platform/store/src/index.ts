@@ -4,3 +4,5 @@ export * from './datasets';
 export * from './runs';
 export * from './fetches';
 export * from './statements';
+export * from './entities';
+export * from './snapshots';
