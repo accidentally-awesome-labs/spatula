@@ -34,13 +34,25 @@ import {
 
 const HOUR = 3_600_000;
 
-/** One run of the dataset, then five minutes, so the next run gets its own ID. */
+/**
+ * One run of the dataset, then five minutes, so the next run gets its own ID. Workflows keep each
+ * step's result, so the run keeps them too, for tests that look at what a step returned.
+ */
 async function refresh(world: World, datasetId: string) {
   const runId = runIdFor(datasetId, world.clock.now());
   const { step, names } = fakeStep(world.clock);
-  const summary = await runRefresh({ runId, datasetId }, step, world.ports);
+  const results = new Map<string, unknown>();
+  const recording: StepRunner = {
+    ...step,
+    async do(name, fn) {
+      const result = await step.do(name, fn);
+      results.set(name, result);
+      return result;
+    },
+  };
+  const summary = await runRefresh({ runId, datasetId }, recording, world.ports);
   world.clock.advance(5 * 60_000);
-  return { summary, names, runId };
+  return { summary, names, runId, results };
 }
 
 /** A new dataset from the test definition, and a world whose pages answer as `routes` say. */
@@ -286,6 +298,10 @@ describe('runRefresh', () => {
       outcome: 'failed',
       error: 'redirected to http://maker-a.example/products/a2, which isn’t HTTPS',
     });
+    // The LLM is told the page that was listed, not where the site sent the request: that address
+    // is the site's text, and it would sit outside the wrapper around untrusted content.
+    expect(world.llm.calls).toContainEqual(expect.stringContaining(`Page address: ${URLS.a1}\n`));
+    expect(world.llm.calls.join('\n')).not.toContain('a1-new');
   });
 
   it('puts a page off while its host has a break, then fetches it', async () => {
@@ -513,6 +529,73 @@ describe('runRefresh', () => {
     });
   });
 
+  it('reads a changed page next time if its extraction failed', async () => {
+    const { world, a1 } = await setUp('refresh-changed-unread');
+    // The LLM reads the weight off the page, so it says 360 g once the page does.
+    const weights = fakeLlm((user) =>
+      user.includes('Weight: 360 g')
+        ? {
+            specs: [
+              { label: 'Impedance', value: '300 Ω' },
+              { label: 'Weight', value: '360 g' },
+            ],
+          }
+        : answerFor(user),
+    );
+    world.ports.llm = weights.llm;
+    await refresh(world, 'refresh-changed-unread');
+
+    // A1's weight changes, and the blob store is down when the extract step reads the new copy.
+    // The fetch step has stored the new page's hash by then, so the run fails with A1 half done.
+    world.web.routes.set(URLS.a1, {
+      status: 200,
+      body: A1().replace('Weight: 350 g', 'Weight: 360 g'),
+    });
+    const blobs = world.ports.blobs;
+    world.ports.blobs = {
+      ...blobs,
+      async get() {
+        throw new Error('the blob store is down');
+      },
+    };
+    await expect(refresh(world, 'refresh-changed-unread')).rejects.toThrow(
+      'the blob store is down',
+    );
+    world.ports.blobs = blobs;
+    world.clock.advance(5 * 60_000);
+
+    // The same bytes again. The page was never read, so it isn't current: it's read now, and
+    // what it says comes from this fetch, rather than the old 350 g being re-seen as fresh.
+    const third = await refresh(world, 'refresh-changed-unread');
+    expect(third.summary).toMatchObject({
+      fetches: { unchanged: 3 },
+      statements: { added: 1, reseen: 18, withdrawn: 1 },
+      llm: { ran: 1 },
+      snapshot: { published: true, generation: 2, records: 3 },
+    });
+    expect(third.names).toContain(`extract:${a1.id}`);
+    expect((await published(world, 'refresh-changed-unread'))!.byName.A1!.fields).toMatchObject({
+      specs: [
+        { label: 'Impedance', value: '300 Ω' },
+        { label: 'Weight', value: '360 g' },
+      ],
+    });
+    const weight = (
+      await db
+        .select()
+        .from(statements)
+        .where(
+          and(
+            eq(statements.itemId, a1.id),
+            isNull(statements.withdrawnAt),
+            eq(statements.property, 'specs'),
+          ),
+        )
+    ).find((row) => (row.value as { label: string }).label === 'Weight')!;
+    expect(weight.value).toEqual({ label: 'Weight', value: '360 g' });
+    expect(weight.fetchId).toBe((await fetchOf(third.runId, URLS.a1)).id);
+  });
+
   // The second run writes and resolves a thousand statements, so it gets more than the default 5 s.
   it('doesn’t read a page that says more than 1,000 things', { timeout: 20_000 }, async () => {
     const { world, a2 } = await setUp('refresh-too-much');
@@ -581,29 +664,13 @@ describe('runRefresh', () => {
     );
 
     // Workflows keep each step's result, and cap its size, so what the extract step returns is
-    // what has to stay small. This runner keeps those results.
-    const { step } = fakeStep(world.clock);
-    const results = new Map<string, unknown>();
-    const recording: StepRunner = {
-      ...step,
-      async do(name, fn) {
-        const result = await step.do(name, fn);
-        results.set(name, result);
-        return result;
-      },
-    };
-    const runId = runIdFor('refresh-many-bad-values', world.clock.now());
-    const summary = await runRefresh(
-      { runId, datasetId: 'refresh-many-bad-values' },
-      recording,
-      world.ports,
-    );
-
-    const { notes } = results.get(`extract:${a1.id}`) as { notes: string[] };
+    // what has to stay small.
+    const first = await refresh(world, 'refresh-many-bad-values');
+    const { notes } = first.results.get(`extract:${a1.id}`) as { notes: string[] };
     expect(notes).toHaveLength(MAX_NOTES + 1);
     expect(notes.at(-1)).toBe(`${URLS.a1}: 10 more values were rejected`);
     // The run's own notes were already held to MAX_NOTES.
-    expect(summary.notes).toHaveLength(MAX_NOTES);
+    expect(first.summary.notes).toHaveLength(MAX_NOTES);
   });
 
   it('fetches a page by its normalized address', async () => {
@@ -675,6 +742,38 @@ describe('runRefresh', () => {
       status: 'failed',
       error: `bad  copy ${String.fromCodePoint(0xfffd)}`,
     });
+  });
+
+  it('keeps what an error quotes out of step results and the fetch log', async () => {
+    const { world, a1, a2 } = await setUp('refresh-quoted-errors');
+    // Messages that quote a NUL, and run on past what a note may hold.
+    const noisy = (who: string) => `${who} \u0000 ${'x'.repeat(600)}`;
+    const cut = (text: string) => text.slice(0, 500);
+    alterPack(world, (page, found) => {
+      if (page.url === URLS.a1) throw new Error(noisy('pack'));
+      return found;
+    });
+    world.ports.llm = {
+      model: 'test-model',
+      async structured() {
+        throw new Error(noisy('llm'));
+      },
+    };
+
+    const first = await refresh(world, 'refresh-quoted-errors');
+    // Workflows keep what a step returns, so its notes are clean and short where they're made,
+    // not only once they reach the run summary.
+    const notesOf = (itemId: string) =>
+      (first.results.get(`extract:${itemId}`) as { notes: string[] }).notes;
+    expect(notesOf(a1.id)).toEqual([
+      cut(`${URLS.a1}: the page couldn’t be read: pack  ${'x'.repeat(600)}`),
+    ]);
+    expect(notesOf(a2.id)).toEqual([
+      cut(`${URLS.a2}: the LLM call failed: llm  ${'x'.repeat(600)}`),
+    ]);
+    // The fetch log says what the LLM step did. A NUL in that text would have failed the insert
+    // after the LLM had been paid for.
+    expect((await fetchOf(first.runId, URLS.a2)).llm).toBe(cut(`failed: llm  ${'x'.repeat(600)}`));
   });
 });
 

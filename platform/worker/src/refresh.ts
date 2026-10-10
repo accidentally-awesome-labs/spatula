@@ -274,7 +274,11 @@ export async function runRefresh(
       );
       return {
         ...resolved,
-        notes: capped(resolved.notes, (count) => `${count} more notes about entities`),
+        notes: capped(
+          resolved.notes,
+          (text) => text,
+          (count) => `${count} more notes about entities`,
+        ),
       };
     });
     summary.entities = entities;
@@ -326,11 +330,16 @@ function note(summary: RunSummary, text: string) {
 /**
  * At most MAX_NOTES notes, then one line saying how many more there were. Workflows keep each
  * step's result as JSON and cap its size, so a step can't return a note for every one of a page's
- * hundred thousand bad values.
+ * hundred thousand bad values. Only the notes that are kept are built.
  */
-function capped(notes: string[], more: (count: number) => string): string[] {
-  if (notes.length <= MAX_NOTES) return notes;
-  return [...notes.slice(0, MAX_NOTES), more(notes.length - MAX_NOTES)];
+function capped<T>(
+  items: T[],
+  render: (item: T) => string,
+  more: (count: number) => string,
+): string[] {
+  const notes = items.slice(0, MAX_NOTES).map(render);
+  if (items.length > MAX_NOTES) notes.push(more(items.length - MAX_NOTES));
+  return notes;
 }
 
 /** Fetches a page, sleeping between steps whenever its host asks for a longer wait. */
@@ -393,6 +402,19 @@ async function fetchItem(
       ...attempt,
     };
     await recordFetch(db, logged);
+    // The page now stored isn't the one the item's statements came from, and it hasn't been read
+    // yet. Until the extract step has, the item must not look current: if the run ended before
+    // then, the next fetch of the same bytes would be "unchanged" and "current", and would re-see
+    // the old statements as fresh. The extract step sets the real tag when it has read the page.
+    if (attempt.outcome === 'changed') {
+      await recordExtraction(db, {
+        itemId: item.id,
+        fetchId,
+        extractedWith: retryTag(context.revision),
+        llm: 'skipped: not read yet',
+        usage: NO_USAGE,
+      });
+    }
     // An unchanged page whose statements are current says what it said before.
     return attempt.outcome === 'unchanged' && current
       ? reseeStatements(db, { itemId: item.id, fetchId, seenAt: ports.now() })
@@ -430,8 +452,8 @@ async function request(
   | { kind: 'later'; retryAfterMs: number }
   | { kind: 'answered'; attempt: Attempt; signals: ContentSignals }
 > {
-  // Definitions keep a page as written and only validate it. From here on, every hop, the fetch
-  // log's final address, and the LLM's question use its href, as the redirects already do.
+  // Definitions keep a page as written and only validate it. From here on, every hop and the
+  // fetch log's final address use its href, as the redirects already do.
   let url = new URL(item.locator).href;
   let signals: ContentSignals = {};
   const answered = (attempt: Omit<Attempt, 'policy' | 'policyReason'> & Partial<Attempt>) => ({
@@ -557,7 +579,8 @@ async function unread(
     statements: NO_CHANGE,
     llm: 'skipped',
     usage: NO_USAGE,
-    notes: [`${item.locator}: ${why}`],
+    // The reason can quote an exception's message, and this note is part of the step's result.
+    notes: [storable(`${item.locator}: ${why}`)],
   };
 }
 
@@ -626,15 +649,16 @@ async function extractItem(
       // asks again, even after a 304 or an unchanged hash.
       extractedWith: llm.outcome === 'failed' ? retryTag(revision) : extractionTag(revision),
       extractInputHash: llm.inputHash,
-      llm: llm.detail,
+      // The detail can quote an LLM error's message, and a NUL in it would fail this write after
+      // the LLM has been paid for.
+      llm: storable(llm.detail),
       usage: llm.usage,
     }),
   );
   const notes = capped(
-    extraction.rejected.map(
-      (rejected) =>
-        `${item.locator}: ${rejected.property} from ${rejected.path} is ${rejected.reason}`,
-    ),
+    extraction.rejected,
+    (rejected) =>
+      `${item.locator}: ${rejected.property} from ${rejected.path} is ${rejected.reason}`,
     (count) => `${item.locator}: ${count} more values were rejected`,
   );
   if (llm.note !== null) notes.push(llm.note);
@@ -720,7 +744,10 @@ async function askLlm(
     };
   }
 
-  const question = buildLlmRequest({ url: fetched.finalUrl, text: page.text, fields });
+  // The question names the page that was listed, which the dataset's owner chose. After a
+  // redirect the final address is the site's text, and it would sit outside the wrapper around
+  // untrusted content.
+  const question = buildLlmRequest({ url: new URL(item.locator).href, text: page.text, fields });
   let answer: { output: Record<string, unknown> | null; usage: LlmUsage };
   try {
     answer = await llm.structured({ ...question, maxTokens: LLM_MAX_TOKENS });
@@ -730,7 +757,7 @@ async function askLlm(
       ...skipped(''),
       outcome: 'failed',
       detail: `failed: ${message}`,
-      note: `${item.locator}: the LLM call failed: ${message}`,
+      note: storable(`${item.locator}: the LLM call failed: ${message}`),
     };
   }
   if (answer.output === null) {
