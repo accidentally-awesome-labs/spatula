@@ -11,9 +11,11 @@
     "test:db": "vitest run"
   },
   "dependencies": {
+    "@anthropic-ai/sdk": "^0.133.0",
     "@spatula/core": "workspace:*",
     "@spatula/pack-products": "workspace:*",
-    "@spatula/store": "workspace:*"
+    "@spatula/store": "workspace:*",
+    "zod": "^4.6.5"
   },
   "devDependencies": {
     "@types/node": "^24.19.1",

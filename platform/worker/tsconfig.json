@@ -12,6 +12,8 @@
   "include": [
     "src/refresh.ts",
     "src/gate-port.ts",
+    "src/http.ts",
+    "src/llm-anthropic.ts",
     "src/*.test.ts",
     "test/node",
     "test/pages.ts",
