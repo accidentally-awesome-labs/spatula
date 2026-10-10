@@ -15,7 +15,10 @@ export interface Page {
   url: string;
   /** The page's own https address on the same host, from <link rel="canonical">, or `url`. */
   canonicalUrl: string;
-  /** Every JSON-LD object with an @type, in document order, with @graph members spread out. */
+  /**
+   * Every JSON-LD object with an @type, in document order, with @graph and mainEntity members
+   * spread out.
+   */
   jsonLd: JsonLdNode[];
   /** How many JSON-LD blocks couldn't be read as JSON. */
   jsonLdErrors: number;
@@ -53,7 +56,9 @@ export function parsePage(html: string, url: string): Page {
     const key = (tag.attribs.property ?? tag.attribs.name ?? '').trim().toLowerCase();
     const content = tag.attribs.content;
     if (key === '' || content === undefined) continue;
-    meta.set(key, [...(meta.get(key) ?? []), content.trim()]);
+    const values = meta.get(key);
+    if (values === undefined) meta.set(key, [content.trim()]);
+    else values.push(content.trim());
   }
 
   return {
@@ -67,7 +72,7 @@ export function parsePage(html: string, url: string): Page {
       const element = selectOne<AnyNode, Element>(css, document);
       if (element === null) return null;
       const value =
-        attribute === undefined ? DomUtils.textContent(element) : element.attribs[attribute];
+        attribute === undefined ? DomUtils.textContent(element) : attributeOf(element, attribute);
       const text = value?.replace(/\s+/gu, ' ').trim() ?? '';
       return text === '' ? null : text;
     },
@@ -116,9 +121,25 @@ function canonical(links: Element[], url: string): string {
   if (href !== undefined && URL.canParse(href, page.href)) {
     const target = new URL(href, page.href);
     target.hash = '';
-    if (target.protocol === 'https:' && target.host === page.host) return target.href;
+    // A username or password would be published with the address, so such an address is refused.
+    const hasCredentials = target.username !== '' || target.password !== '';
+    if (target.protocol === 'https:' && target.host === page.host && !hasCredentials) {
+      return target.href;
+    }
   }
+  // The page's own address, without credentials either.
+  page.username = '';
+  page.password = '';
   return page.href;
+}
+
+/**
+ * An attribute's value, found by its name in any case. Only the element's own attributes count,
+ * so a name such as `constructor` finds nothing.
+ */
+function attributeOf(element: Element, attribute: string): string | undefined {
+  const name = attribute.toLowerCase();
+  return Object.hasOwn(element.attribs, name) ? element.attribs[name] : undefined;
 }
 
 /**
@@ -128,12 +149,21 @@ function canonical(links: Element[], url: string): string {
 function mainText(root: Element | null, fallback: AnyNode[]): string {
   const skipped = root?.name === 'main' ? NEVER_TEXT : new Set([...NEVER_TEXT, ...CHROME]);
   const parts: string[] = [];
-  const walk = (nodes: AnyNode[]) => {
-    for (const node of nodes) {
-      if (isText(node)) parts.push(node.data);
-      else if (isTag(node) && !skipped.has(node.name)) walk(node.children);
+  // An explicit stack, not recursion, because a page can nest deeper than the call stack allows.
+  // Children go on in reverse, so they come off in document order.
+  const stack: AnyNode[] = [...(root?.children ?? fallback)].reverse();
+  for (let node = stack.pop(); node !== undefined; node = stack.pop()) {
+    if (isText(node)) parts.push(node.data);
+    else if (isTag(node) && !skipped.has(node.name)) {
+      for (const child of node.children.toReversed()) stack.push(child);
     }
-  };
-  walk(root?.children ?? fallback);
-  return parts.join(' ').replace(/\s+/gu, ' ').trim().slice(0, PAGE_TEXT_MAX);
+  }
+  // A cut through a surrogate pair leaves a lone high surrogate at the end. That isn't well formed
+  // text, and the text goes to the LLM as JSON, so it's dropped.
+  return parts
+    .join(' ')
+    .replace(/\s+/gu, ' ')
+    .trim()
+    .slice(0, PAGE_TEXT_MAX)
+    .replace(/[\uD800-\uDBFF]$/u, '');
 }

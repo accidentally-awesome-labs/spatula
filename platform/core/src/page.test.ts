@@ -75,6 +75,16 @@ describe('parsePage, other pages', () => {
     expect(plain.canonicalUrl).toBe('https://maker.example/a');
   });
 
+  it('refuses a canonical address with a username or password, and drops credentials from the page address too', () => {
+    const linked = parsePage(
+      '<link rel="canonical" href="https://u:pw@maker.example/p/7">',
+      'https://maker.example/p/7',
+    );
+    expect(linked.canonicalUrl).toBe('https://maker.example/p/7');
+    const credentialed = parsePage('<p>Hello</p>', 'https://u:pw@maker.example/p/7');
+    expect(credentialed.canonicalUrl).toBe('https://maker.example/p/7');
+  });
+
   it('reads JSON-LD with raw line breaks inside strings', () => {
     const page = parsePage(
       '<script type="application/ld+json">{"@type":"Product","name":"LCD\n2"}</script>',
@@ -87,6 +97,113 @@ describe('parsePage, other pages', () => {
   it('caps the text at PAGE_TEXT_MAX characters', () => {
     const page = parsePage(`<p>${'word '.repeat(20_000)}</p>`, 'https://maker.example/a');
     expect(page.text.length).toBe(PAGE_TEXT_MAX);
+  });
+});
+
+describe('parsePage, JSON-LD and meta', () => {
+  it('spreads mainEntity, given as an object or as a list, in document order', () => {
+    const page = parsePage(
+      '<script type="application/ld+json">{"@type":"WebPage","mainEntity":{"@type":"Product","name":"A"}}</script>' +
+        '<script type="application/ld+json">{"@type":"WebPage","mainEntity":[{"@type":"Product","name":"B"},{"@type":"Offer","name":"C"}]}</script>',
+      'https://maker.example/a',
+    );
+    expect(page.jsonLd.map((node) => jsonLdTypes(node))).toEqual([
+      ['WebPage'],
+      ['Product'],
+      ['WebPage'],
+      ['Product'],
+      ['Offer'],
+    ]);
+    expect(page.jsonLd.map((node) => node.name)).toEqual([undefined, 'A', undefined, 'B', 'C']);
+  });
+
+  it('reads a mixed-case meta key lowercased, with each of its values in order', () => {
+    const page = parsePage(
+      '<meta property="Product:Brand" content="Audeze"><meta property="Product:Brand" content=" Audeze LLC ">',
+      'https://maker.example/a',
+    );
+    expect(page.meta.get('product:brand')).toEqual(['Audeze', 'Audeze LLC']);
+    expect(page.meta.has('Product:Brand')).toBe(false);
+  });
+
+  it('keeps every value of a key repeated 100,000 times, in order, in linear time', () => {
+    let html = '';
+    for (let index = 0; index < 100_000; index += 1) html += `<meta name="x" content="v${index}">`;
+    const started = performance.now();
+    const page = parsePage(html, 'https://maker.example/a');
+    const elapsed = performance.now() - started;
+    const values = page.meta.get('x');
+    expect(values).toHaveLength(100_000);
+    expect(values?.[0]).toBe('v0');
+    expect(values?.at(-1)).toBe('v99999');
+    expect(elapsed).toBeLessThan(2_000);
+  });
+});
+
+describe('parsePage, text', () => {
+  it('leaves out body-level scripts, styles, noscript, and SVG, with their text', () => {
+    const page = parsePage(
+      '<body><p>Visible</p><script type="application/json">{"blob":"hidden"}</script>' +
+        '<style>p { color: red; }</style><noscript><p>Enable JavaScript</p></noscript>' +
+        '<svg><title>Icon</title><text>Label</text></svg></body>',
+      'https://maker.example/a',
+    );
+    expect(page.text).toBe('Visible');
+  });
+
+  it('leaves the same things out of <main>', () => {
+    const page = parsePage(
+      '<main><p>Visible</p><script>var hidden = 1;</script><style>p {}</style><noscript>Enable JavaScript</noscript><svg><title>Icon</title></svg></main>',
+      'https://maker.example/a',
+    );
+    expect(page.text).toBe('Visible');
+  });
+
+  it('reads markup nested 20,000 elements deep', () => {
+    const page = parsePage(
+      `${'<div>'.repeat(20_000)}Deep${'</div>'.repeat(20_000)}`,
+      'https://maker.example/a',
+    );
+    expect(page.text).toBe('Deep');
+  });
+
+  it('never cuts a surrogate pair at the length cap', () => {
+    const emoji = String.fromCodePoint(0x1f600);
+    const cut = parsePage(
+      `<p>${'a'.repeat(PAGE_TEXT_MAX - 1)}${emoji}b</p>`,
+      'https://maker.example/a',
+    );
+    expect(cut.text).toBe('a'.repeat(PAGE_TEXT_MAX - 1));
+    expect(cut.text.isWellFormed()).toBe(true);
+
+    const whole = parsePage(
+      `<p>${'a'.repeat(PAGE_TEXT_MAX - 2)}${emoji}</p>`,
+      'https://maker.example/a',
+    );
+    expect(whole.text.length).toBe(PAGE_TEXT_MAX);
+    expect(whole.text.endsWith(emoji)).toBe(true);
+  });
+});
+
+describe('select', () => {
+  it('collapses inner whitespace in text and in attributes', () => {
+    const page = parsePage(
+      '<h1>  LCD-X   Pro </h1><a href="/x" title="  Open   back  ">Shop</a>',
+      'https://maker.example/a',
+    );
+    expect(page.select('h1')).toBe('LCD-X Pro');
+    expect(page.select('a', 'title')).toBe('Open back');
+  });
+
+  it('finds an attribute whatever the case of its name', () => {
+    const page = parsePage('<a href="https://maker.example/x">Shop</a>', 'https://maker.example/a');
+    expect(page.select('a', 'HREF')).toBe('https://maker.example/x');
+  });
+
+  it('finds nothing for names that only objects have, such as constructor and __proto__', () => {
+    const page = parsePage('<h1 class="title">LCD-X</h1>', 'https://maker.example/a');
+    expect(page.select('h1', 'constructor')).toBeNull();
+    expect(page.select('h1', '__proto__')).toBeNull();
   });
 });
 
