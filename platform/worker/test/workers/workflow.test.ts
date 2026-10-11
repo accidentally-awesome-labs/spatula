@@ -74,7 +74,7 @@ describe('RefreshWorkflow', () => {
       URLS.b1,
     ]);
     expect(new Set(asked.map((sent) => sent.agent))).toEqual(
-      new Set(['Spatula/0.2.0-dev (+https://github.com/accidentally-awesome-labs/spatula)']),
+      new Set(['Spatula/0.2.0-dev (+https://spatula-platform.salar-sayyad.workers.dev)']),
     );
 
     await withDb(async (db) => {

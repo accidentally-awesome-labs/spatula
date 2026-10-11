@@ -7,16 +7,15 @@
   "observability": { "enabled": true },
   "vars": {
     "SPATULA_VERSION": "0.2.0-dev",
-    // Where the user agent sends a site that wants to know who's asking. It's the repository until
-    // the Worker is deployed; then it's the Worker's own address, whose page explains Spatula.
-    "PUBLIC_URL": "https://github.com/accidentally-awesome-labs/spatula",
+    // Where the user agent sends a site that wants to know who's asking: the Worker's public page.
+    "PUBLIC_URL": "https://spatula-platform.salar-sayyad.workers.dev",
     "LLM_MODEL": "claude-opus-5-5",
   },
   "hyperdrive": [
     {
       "binding": "HYPERDRIVE",
-      // Replaced by spatula-db's ID when the owner creates it (Task 22).
-      "id": "00000000000000000000000000000000",
+      // spatula-db, which the owner created; it connects to Neon as spatula_app.
+      "id": "8769cf79fdfe44d386441af12fce6aca",
       "localConnectionString": "postgres://spatula:spatula@localhost:5434/spatula",
     },
   ],
