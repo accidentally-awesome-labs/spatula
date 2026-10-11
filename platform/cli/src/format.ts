@@ -45,12 +45,18 @@ export function formatRun(run: RunView): string[] {
 
 /*
  * A terminal obeys some characters: escape sequences recolor and rewrite the screen, retitle the
- * window, write to the clipboard, and hide where a link goes, and bidi controls reorder the text
- * the eye reads. Spatula's messages can quote what a site wrote, so these are the characters it
- * never prints as they are: every C0 control (tab and newline too), DEL, every C1 control, and the
- * bidi embeddings, overrides, and isolates.
+ * window, write to the clipboard, and hide where a link goes, bidi controls reorder the text the
+ * eye reads, and a line or paragraph separator breaks a line in two wherever a display honors it.
+ * Spatula's messages can quote what a site wrote, so these are the characters it never prints as
+ * they are:
+ *   - the C0 controls (tab and newline too), DEL, and the C1 controls;
+ *   - the Bidi_Control characters: U+061C, U+200E, U+200F, U+202A to U+202E, and U+2066 to U+2069;
+ *   - the line and paragraph separators, U+2028 and U+2029.
+ * The zero-width characters (U+200B to U+200D, U+FEFF) can't drive a terminal or reorder a line, so
+ * they stay as they are.
  */
-const DRIVES_A_TERMINAL = /[\u{0}-\u{1f}\u{7f}-\u{9f}\u{202a}-\u{202e}\u{2066}-\u{2069}]/gu;
+const DRIVES_A_TERMINAL =
+  /[\u{0}-\u{1f}\u{7f}-\u{9f}\u{61c}\u{200e}\u{200f}\u{2028}\u{2029}\u{202a}-\u{202e}\u{2066}-\u{2069}]/gu;
 
 /** The text with each of those characters spelled out in its place, as \u{1b} for escape. */
 export function printable(text: string): string {

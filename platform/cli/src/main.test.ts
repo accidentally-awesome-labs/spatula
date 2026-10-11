@@ -529,8 +529,11 @@ describe('usage', () => {
 describe('what reaches the terminal', () => {
   // What Spatula prints can quote what a site wrote, and a terminal obeys some characters: escape
   // sequences recolor and rewrite the screen, retitle the window, write to the clipboard, and hide
-  // where a link goes, and bidi controls reorder the text the eye reads.
-  const DRIVES_A_TERMINAL = /[\u{0}-\u{1f}\u{7f}-\u{9f}\u{202a}-\u{202e}\u{2066}-\u{2069}]/u;
+  // where a link goes, bidi controls reorder the text the eye reads, and the line and paragraph
+  // separators break a line in two. These are the C0 and C1 controls with DEL, the Bidi_Control
+  // characters (U+061C, U+200E, U+200F, U+202A-U+202E, U+2066-U+2069), and U+2028 and U+2029.
+  const DRIVES_A_TERMINAL =
+    /[\u{0}-\u{1f}\u{7f}-\u{9f}\u{61c}\u{200e}\u{200f}\u{2028}-\u{202e}\u{2066}-\u{2069}]/u;
 
   it('prints a run’s error on one line, with its controls spelled out', async () => {
     const hostile: RunView = {
@@ -569,7 +572,10 @@ describe('what reaches the terminal', () => {
           reason: 'a \u001b[31mred\u001b[0m reason',
           excluded: [{ canonicalId: 'sp_1\u0007', missing: ['na\u009bme'] }],
         },
-        notes: ['see \u001b]8;;https://evil.example\u0007here\u001b]8;;\u0007'],
+        notes: [
+          'see \u001b]8;;https://evil.example\u0007here\u001b]8;;\u0007',
+          'marks \u{200e}\u{200f}\u{61c} and separators \u{2028}\u{2029}',
+        ],
       },
     };
     const { fetch } = stubApi(({ method }) =>
@@ -584,6 +590,9 @@ describe('what reaches the terminal', () => {
     );
     expect(out).toContain(String.raw`Left out: sp_1\u{7}, missing na\u{9b}me.`);
     expect(out).toContain(String.raw`  see \u{1b}]8;;https://evil.example\u{7}here\u{1b}]8;;\u{7}`);
+    expect(out).toContain(
+      String.raw`  marks \u{200e}\u{200f}\u{61c} and separators \u{2028}\u{2029}`,
+    );
     expect(err).toEqual([]);
     for (const line of [...out, ...err]) expect(line).not.toMatch(DRIVES_A_TERMINAL);
   });
@@ -657,17 +666,23 @@ describe('printable', () => {
     expect(printable(text)).toBe(spelledOut);
   });
 
+  // The ends of each range, and the characters that stand on their own.
   it.each([
     ['U+0000', '\u{0}', String.raw`\u{0}`],
     ['U+001F', '\u{1f}', String.raw`\u{1f}`],
     ['U+007F', '\u{7f}', String.raw`\u{7f}`],
     ['U+0080', '\u{80}', String.raw`\u{80}`],
     ['U+009F', '\u{9f}', String.raw`\u{9f}`],
+    ['U+061C', '\u{61c}', String.raw`\u{61c}`],
+    ['U+200E', '\u{200e}', String.raw`\u{200e}`],
+    ['U+200F', '\u{200f}', String.raw`\u{200f}`],
+    ['U+2028', '\u{2028}', String.raw`\u{2028}`],
+    ['U+2029', '\u{2029}', String.raw`\u{2029}`],
     ['U+202A', '\u{202a}', String.raw`\u{202a}`],
     ['U+202E', '\u{202e}', String.raw`\u{202e}`],
     ['U+2066', '\u{2066}', String.raw`\u{2066}`],
     ['U+2069', '\u{2069}', String.raw`\u{2069}`],
-  ])('spells out the edge of a range, %s', (_what, text, spelledOut) => {
+  ])('spells out %s', (_what, text, spelledOut) => {
     expect(printable(text)).toBe(spelledOut);
   });
 
@@ -675,15 +690,42 @@ describe('printable', () => {
     ['a space', ' '],
     ['a tilde', '~'],
     ['a no-break space', '\u{a0}'],
-    ['a paragraph separator', '\u{2029}'],
+    ['the code point before the Arabic letter mark', '\u{61b}'],
+    ['the code point after the Arabic letter mark', '\u{61d}'],
+    ['a zero-width space', '\u{200b}'],
+    ['a zero-width non-joiner', '\u{200c}'],
+    ['a zero-width joiner', '\u{200d}'],
+    ['the code point after the right-to-left mark', '\u{2010}'],
+    ['the code point before the line separator', '\u{2027}'],
     ['a narrow no-break space', '\u{202f}'],
     ['the code point before the isolates', '\u{2065}'],
     ['the code point after the isolates', '\u{206a}'],
+    ['a byte order mark', '\u{feff}'],
     ['accents and a typographic apostrophe', 'Zoë’s café'],
     ['a character outside the BMP', '\u{1f3a7}'],
     ['a backslash', 'C:\\Users\\salar'],
   ])('leaves %s alone', (_what, text) => {
     expect(printable(text)).toBe(text);
+  });
+
+  it('spells out exactly the characters in its ranges, across the whole BMP', () => {
+    const SPELLED_OUT: [number, number][] = [
+      [0x0, 0x1f], // the C0 controls
+      [0x7f, 0x9f], // DEL and the C1 controls
+      [0x61c, 0x61c], // the Arabic letter mark
+      [0x200e, 0x200f], // the left-to-right and right-to-left marks
+      [0x2028, 0x202e], // the line and paragraph separators, the embeddings, and the overrides
+      [0x2066, 0x2069], // the isolates
+    ];
+    const wrong: string[] = [];
+    for (let code = 0; code <= 0xffff; code += 1) {
+      const char = String.fromCharCode(code);
+      const expected = SPELLED_OUT.some(([from, to]) => code >= from && code <= to)
+        ? `\\u{${code.toString(16)}}`
+        : char;
+      if (printable(char) !== expected) wrong.push(`U+${code.toString(16).padStart(4, '0')}`);
+    }
+    expect(wrong).toEqual([]);
   });
 
   it('spells out every control in a long line, and nothing else', () => {
