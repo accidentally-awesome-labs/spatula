@@ -15,8 +15,8 @@
   "hyperdrive": [
     {
       "binding": "HYPERDRIVE",
-      // Replaced by spatula-db's ID when the owner creates it (Task 22).
-      "id": "00000000000000000000000000000000",
+      // spatula-db, which the owner created; it connects to Neon as spatula_app.
+      "id": "8769cf79fdfe44d386441af12fce6aca",
       "localConnectionString": "postgres://spatula:spatula@localhost:5434/spatula",
     },
   ],
