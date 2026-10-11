@@ -37,12 +37,16 @@ Unknown keys are errors, so a misspelling never passes silently. Identity fields
 by the LLM. The LLM fills only `specs` fields in this version.
 
 Names are camelCase, and the few that every object already has, such as `constructor` and
-`toString`, are reserved. Pages must be at public addresses, because Spatula must never fetch
-anything inside someone's network. It refuses an address that carries a user name or password, an
-IP address, `localhost`, a name with no dot, and the private-use endings `.local`, `.internal`,
-`.home.arpa`, and `.lan`. `addressError` in `@spatula/core` makes that call for any address.
+`toString`, are reserved. Pages and `evidence.terms.url` must both be at public addresses, because
+Spatula must never fetch anything inside someone's network. It refuses an address that carries a
+user name or password, an IP address, `localhost`, a name with no dot, and the private-use endings
+`.local`, `.internal`, `.home.arpa`, and `.lan`. `addressError` in `@spatula/core` makes that call
+for any address.
 
 ## Consequences
 
 Budgets, freshness, gates, consumers, and other source kinds (sitemaps, feeds, APIs) are refused
 until the slices that add them. That's a clear error, not a silently ignored key.
+
+Slice 0's `load` step returns every live item at once, so a dataset of roughly 3,000 pages would
+exceed the 1 MiB that Workflows allows a step's result; chunking that list comes before sitemaps.

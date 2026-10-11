@@ -554,10 +554,12 @@ function validators(item: ItemRef): Record<string, string> {
 }
 
 /**
- * A page that wasn't read costs only itself. Nothing is written but the retry mark: its
- * statements stay as they were, and it's marked as not current, so the next run reads its stored
- * copy again. Without the mark, a page that was current when its HTML changed into something
- * unreadable would only be re-seen from then on, with its old statements taken for fresh.
+ * A page that wasn't read costs only itself. Nothing is written but the retry mark, and its
+ * statements stay as they were. A changed page already carries the fetch step's mark, and that is
+ * what has the next run read its stored copy again. This mark matters for a page that was current
+ * and is read again because its site now says ai-input=no: without it, the page would look
+ * current again once the site changed its mind, and its statements, which this read never
+ * confirmed, would be re-seen as fresh.
  */
 async function unread(
   context: Context,

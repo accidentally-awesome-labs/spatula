@@ -66,7 +66,8 @@ describe('HostGate', () => {
 
   it('keeps a robots.txt as large as the fetcher allows', async () => {
     // The fetcher reads up to 512 KiB of a robots.txt, and the gate keeps all of it, text included,
-    // as one stored value.
+    // as one stored value. This proves the code path only: local workerd doesn't enforce
+    // production's limit on a stored value, so the first deployed run is what shows it fits.
     let text = 'User-agent: *\nAllow: /\n';
     while (text.length <= 512 * 1024) text += `# ${'x'.repeat(78)}\n`;
 

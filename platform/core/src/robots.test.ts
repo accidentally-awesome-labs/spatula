@@ -128,7 +128,8 @@ describe('parseRobots and isAllowed', () => {
   });
 
   it('strips a comment that holds a line separator, so the rule before it still counts', () => {
-    // Lines end only at CR and LF, so a comment can hold U+2028, which a pattern's "." never matches.
+    // Lines end only at CR and LF, so a comment can hold U+2028, which a pattern's "." never
+    // matches.
     const robots = 'User-agent: *\nDisallow: /private # keep\u{2028}out';
     expect(parseRobots(robots, 'Spatula')?.rules).toEqual([{ allow: false, pattern: '/private' }]);
     expect(allowed(robots, '/private')).toBe(false);
