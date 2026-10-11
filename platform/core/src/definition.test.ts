@@ -1,0 +1,337 @@
+import { describe, expect, it } from 'vitest';
+import { addressError, parseDefinition } from './definition';
+
+const EVIDENCE = {
+  robots: '2026-10-09',
+  terms: {
+    url: 'https://maker.example/policies/terms-of-service',
+    checked: '2026-10-09',
+    automatedAccess: 'not-mentioned',
+  },
+};
+
+// Fixtures are edited freely below, so they're untyped.
+function definition(overrides: Record<string, unknown> = {}): any {
+  return {
+    dataset: 'audio-products',
+    recordTypes: {
+      product: {
+        pack: 'products/product',
+        identity: { identifiers: ['gtins', 'mpns'], keys: [['brand', 'name']] },
+        fields: {
+          brand: { type: 'text', required: true, maxLength: 80 },
+          name: { type: 'text', required: true, maxLength: 120 },
+          category: { type: 'enum', required: true, values: ['Headphones', 'DAC/Amp'] },
+          gtins: { type: 'gtin', list: true, identifier: true },
+          mpns: { type: 'text', list: true, identifier: true, scope: 'brand', maxLength: 80 },
+          officialUrl: { type: 'url' },
+          specs: { type: 'specs', llm: true },
+        },
+      },
+    },
+    sources: [
+      {
+        id: 'maker',
+        kind: 'pages',
+        recordType: 'product',
+        pages: ['https://maker.example/products/one'],
+        fixed: { brand: 'Maker', category: 'Headphones' },
+        extract: { name: { css: 'h1' }, officialUrl: { url: 'canonical' } },
+        evidence: EVIDENCE,
+      },
+    ],
+    policy: { purposes: ['ai-input'] },
+    ...overrides,
+  };
+}
+
+function issuesOf(input: unknown): string[] {
+  const result = parseDefinition(input);
+  return result.ok ? [] : result.issues;
+}
+
+describe('parseDefinition', () => {
+  it('reads a definition and fills in defaults', () => {
+    const result = parseDefinition(definition());
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    const fields = result.definition.recordTypes.product?.fields;
+    expect(fields?.specs).toMatchObject({ type: 'specs', list: true, llm: true, required: false });
+    expect(fields?.brand).toMatchObject({ identifier: false, list: false, llm: false });
+    expect(result.definition.policy).toEqual({ purposes: ['ai-input'], perHostIntervalMs: 1000 });
+  });
+
+  it('refuses unknown keys, and says where', () => {
+    expect(issuesOf(definition({ budget: { monthlyUsd: 40 } }))).toEqual([
+      expect.stringContaining('budget'),
+    ]);
+  });
+
+  it('wants exactly one record type', () => {
+    const two = definition();
+    two.recordTypes = { ...two.recordTypes, offer: two.recordTypes.product };
+    expect(issuesOf(two)).toContain(
+      'recordTypes: Declare exactly one record type. Datasets with several arrive in a later version.',
+    );
+  });
+
+  it('checks fixed values against their fields', () => {
+    const bad = definition();
+    bad.sources[0].fixed = { category: 'Speakers', colour: 'red' };
+    expect(issuesOf(bad)).toEqual(
+      expect.arrayContaining([
+        'sources.0.fixed.category: “Speakers” is not one of Headphones, DAC/Amp.',
+        'sources.0.fixed.colour: There’s no field called colour.',
+      ]),
+    );
+  });
+
+  it('keeps the LLM away from fields that identify a record', () => {
+    const bad = definition();
+    bad.recordTypes.product.fields.name = {
+      type: 'text',
+      required: true,
+      maxLength: 120,
+      llm: true,
+    };
+    expect(issuesOf(bad)).toEqual(
+      expect.arrayContaining([
+        'recordTypes.product.fields.name.llm: In this version, the LLM fills specs fields only.',
+        'recordTypes.product.fields.name.llm: Fields that identify a record come from structured data or declared rules, never the LLM.',
+      ]),
+    );
+  });
+
+  it('refuses sources whose terms forbid automated access', () => {
+    const bad = definition();
+    bad.sources[0].evidence = {
+      ...EVIDENCE,
+      terms: { ...EVIDENCE.terms, automatedAccess: 'forbidden' },
+    };
+    expect(issuesOf(bad)).toContain(
+      'sources.0.evidence.terms.automatedAccess: The site’s terms forbid automated access, so Spatula can’t collect this source.',
+    );
+  });
+
+  it('checks rules: selectors must parse, and only url fields take the page address', () => {
+    const bad = definition();
+    bad.sources[0].extract = { name: { css: 'h1[' }, brand: { url: 'canonical' } };
+    bad.sources[0].fixed = { category: 'Headphones' };
+    const issues = issuesOf(bad);
+    expect(issues).toEqual(
+      expect.arrayContaining([
+        expect.stringMatching(/^sources\.0\.extract\.name\.css: The selector doesn’t parse/u),
+        'sources.0.extract.brand: Only url fields can take the page address.',
+      ]),
+    );
+  });
+
+  it('refuses a field that is both fixed and extracted, and pages listed twice', () => {
+    const bad = definition();
+    bad.sources[0].fixed = { name: 'One', category: 'Headphones' };
+    bad.sources.push({ ...bad.sources[0], id: 'again' });
+    expect(issuesOf(bad)).toEqual(
+      expect.arrayContaining([
+        'sources.0.extract.name: name is fixed, so it can’t also be extracted.',
+        'sources.1.pages: https://maker.example/products/one is listed twice.',
+      ]),
+    );
+  });
+
+  it('checks identity: identifiers, keys, and scopes must be usable fields', () => {
+    const bad = definition();
+    bad.recordTypes.product.identity = { identifiers: ['officialUrl'], keys: [['brand', 'gtins']] };
+    expect(issuesOf(bad)).toEqual(
+      expect.arrayContaining([
+        'recordTypes.product.identity.identifiers.0: Mark officialUrl as an identifier (identifier: true).',
+        'recordTypes.product.identity.keys.0.1: Key fields must be single text or enum values; gtins isn’t.',
+      ]),
+    );
+  });
+
+  it('wants https pages and real dates', () => {
+    const bad = definition();
+    bad.sources[0].pages = ['http://maker.example/products/one'];
+    bad.sources[0].evidence = { ...EVIDENCE, robots: '9 October' };
+    expect(issuesOf(bad)).toEqual(
+      expect.arrayContaining([
+        'sources.0.pages.0: Use an https:// address.',
+        'sources.0.evidence.robots: Write the date as YYYY-MM-DD.',
+      ]),
+    );
+  });
+
+  // Names are looked up in plain objects, which already have these. They're refused before any
+  // check can mistake an inherited function for a field or a record type.
+  it.each([
+    'constructor',
+    'hasOwnProperty',
+    'isPrototypeOf',
+    'propertyIsEnumerable',
+    'toLocaleString',
+    'toString',
+    'valueOf',
+  ])('reserves %s as a fixed field, and does not throw', (reserved) => {
+    const bad = definition();
+    bad.sources[0].fixed = { ...bad.sources[0].fixed, [reserved]: 'x' };
+    expect(parseDefinition(bad)).toEqual({
+      ok: false,
+      issues: [`sources.0.fixed.${reserved}: That name is reserved. Pick another.`],
+    });
+  });
+
+  it('reserves those names for record types and extracted fields too, and does not throw', () => {
+    const type = definition();
+    type.sources[0].recordType = 'toString';
+    expect(parseDefinition(type)).toEqual({
+      ok: false,
+      issues: ['sources.0.recordType: That name is reserved. Pick another.'],
+    });
+
+    const extracted = definition();
+    extracted.sources[0].extract = { ...extracted.sources[0].extract, toString: { css: 'h1' } };
+    expect(parseDefinition(extracted)).toEqual({
+      ok: false,
+      issues: ['sources.0.extract.toString: That name is reserved. Pick another.'],
+    });
+  });
+
+  it('says how to write a name, wherever a record has a key that is not one', () => {
+    const say = 'Use a camelCase name, like officialUrl.';
+    const bad = definition();
+    bad.recordTypes.product.fields.Brand = { type: 'text' };
+    bad.sources[0].fixed = { Brand: 'Maker' };
+    bad.sources[0].extract = { 'full name': { css: 'h1' } };
+    expect(issuesOf(bad)).toEqual([
+      `recordTypes.product.fields.Brand: ${say}`,
+      `sources.0.fixed.Brand: ${say}`,
+      `sources.0.extract.full name: ${say}`,
+    ]);
+
+    // A record type with a bad name isn't read any further, so it gets a definition of its own.
+    const type = definition();
+    type.recordTypes = { Product: type.recordTypes.product };
+    expect(issuesOf(type)).toEqual([`recordTypes.Product: ${say}`]);
+  });
+
+  it.each([
+    ['neither css nor url', { selector: 'h1' }],
+    ['a url that is not canonical', { url: 'self' }],
+    ['both css and url', { css: 'h1', url: 'canonical' }],
+  ])('says how to write a rule that has %s', (_case, rule) => {
+    const bad = definition();
+    bad.sources[0].extract = { name: rule };
+    expect(issuesOf(bad)).toEqual([
+      'sources.0.extract.name: Use { css: "<selector>" } with an optional attr, or { url: canonical }.',
+    ]);
+  });
+
+  it('refuses addresses Spatula must never fetch, in pages and in the terms', () => {
+    const bad = definition();
+    bad.sources[0].pages = [
+      'https://127.0.0.1/admin',
+      'https://printer.local/',
+      'https://user:secret@maker.example/',
+    ];
+    bad.sources[0].evidence = {
+      ...EVIDENCE,
+      terms: { ...EVIDENCE.terms, url: 'https://localhost/terms' },
+    };
+    const use = 'Use the site’s public https:// address.';
+    expect(issuesOf(bad)).toEqual([
+      `sources.0.pages.0: This address is an IP address, not a host name. ${use}`,
+      `sources.0.pages.1: This address is a private-use name. ${use}`,
+      `sources.0.pages.2: This address is carrying a user name or password. ${use}`,
+      `sources.0.evidence.terms.url: This address is a local name. ${use}`,
+    ]);
+  });
+
+  it('says only that an address does not parse, when it does not', () => {
+    const bad = definition();
+    bad.sources[0].pages = ['not an address'];
+    expect(issuesOf(bad)).toEqual(['sources.0.pages.0: Use an https:// address.']);
+  });
+
+  it('accepts the public addresses the fixtures use', () => {
+    const good = definition();
+    good.sources[0].pages = [
+      'https://maker-a.example/products/a1',
+      'https://www.audeze.com/products/lcd-x',
+    ];
+    expect(parseDefinition(good).ok).toBe(true);
+  });
+
+  it('allows a text field a maxLength of up to 600', () => {
+    const withMaxLength = (maxLength: number) => {
+      const input = definition();
+      input.recordTypes.product.fields.name.maxLength = maxLength;
+      return input;
+    };
+    expect(parseDefinition(withMaxLength(600)).ok).toBe(true);
+    expect(issuesOf(withMaxLength(601))).toEqual([
+      'recordTypes.product.fields.name.maxLength: Use a maxLength of 600 or less.',
+    ]);
+  });
+});
+
+describe('addressError', () => {
+  const reason = (address: string) => addressError(new URL(address));
+
+  it.each([
+    'https://maker-a.example/products/a1',
+    'https://www.audeze.com/products/lcd-x',
+    'https://store.example/',
+    'https://maker.test/',
+    'https://MAKER.Example:8443/x',
+    'https://bücher.example/',
+    'https://@maker.example/',
+    // Names that only look like the reserved ones.
+    'https://localhost.example/',
+    'https://lan.example/',
+    'https://example.local.com/',
+    'https://home.arpa.example/',
+    'https://1.2.3.4.example/',
+  ])('accepts %s', (address) => {
+    expect(reason(address)).toBeNull();
+  });
+
+  it.each([
+    ['https://user:secret@maker.example/', 'carrying a user name or password'],
+    ['https://user@maker.example/', 'carrying a user name or password'],
+    ['https://:secret@maker.example/', 'carrying a user name or password'],
+    ['https://127.0.0.1/', 'an IP address, not a host name'],
+    ['https://10.0.0.5/admin', 'an IP address, not a host name'],
+    ['https://169.254.169.254/latest/meta-data/', 'an IP address, not a host name'],
+    // The URL parser writes these other forms of 127.0.0.1 as a dotted quad.
+    ['https://2130706433/', 'an IP address, not a host name'],
+    ['https://0x7f.1/', 'an IP address, not a host name'],
+    ['https://[::1]/', 'an IP address, not a host name'],
+    ['https://[::ffff:127.0.0.1]/', 'an IP address, not a host name'],
+    ['https://localhost/', 'a local name'],
+    ['https://LOCALHOST:8443/', 'a local name'],
+    ['https://app.localhost/', 'a local name'],
+    ['https://intranet/', 'a local name'],
+    ['https://printer.local/', 'a private-use name'],
+    ['https://wiki.internal/', 'a private-use name'],
+    ['https://router.home.arpa/', 'a private-use name'],
+    ['https://home.arpa/', 'a private-use name'],
+    ['https://nas.lan/', 'a private-use name'],
+    // A trailing dot names the same host, and the URL parser keeps it.
+    ['https://localhost./', 'a local name'],
+    ['https://intranet./', 'a local name'],
+    ['https://printer.local./', 'a private-use name'],
+    ['https://127.0.0.1./', 'an IP address, not a host name'],
+  ])('refuses %s: it is %s', (address, why) => {
+    expect(reason(address)).toBe(why);
+  });
+
+  it('reads a host with a long run of dots in linear time', { timeout: 30_000 }, () => {
+    const inner = new URL(`https://a${'.'.repeat(40_000)}b/`);
+    const trailing = new URL(`https://localhost${'.'.repeat(40_000)}/`);
+    const started = performance.now();
+    const reasons = [addressError(inner), addressError(trailing)];
+    const elapsed = performance.now() - started;
+    expect(reasons).toEqual([null, 'a local name']);
+    expect(elapsed).toBeLessThan(500);
+  });
+});

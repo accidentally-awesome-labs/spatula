@@ -1,0 +1,40 @@
+name: Platform
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  platform:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:18-alpine
+        env:
+          POSTGRES_USER: spatula
+          POSTGRES_PASSWORD: spatula
+          POSTGRES_DB: spatula
+        ports:
+          - 5434:5432
+        options: >-
+          --health-cmd "pg_isready -U spatula -d spatula"
+          --health-interval 2s
+          --health-timeout 5s
+          --health-retries 30
+    steps:
+      - uses: actions/checkout@v7
+      - uses: pnpm/action-setup@v6
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm platform:lint
+      - run: pnpm platform:typecheck
+      - run: pnpm platform:test
+      - run: pnpm platform:test:db
+      - run: pnpm platform:test:workers

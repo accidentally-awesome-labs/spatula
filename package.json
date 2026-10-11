@@ -44,7 +44,15 @@
     "test:package-install": "node scripts/smoke-packed-cli.mjs",
     "live:matrix": "SPATULA_LIVE_LLM=1 node scripts/live-platform-matrix.mjs",
     "sizing:baseline": "SPATULA_LIVE_LLM=1 tsx scripts/sizing-baseline.ts",
-    "generate:notices": "node scripts/generate-notices.mjs"
+    "generate:notices": "node scripts/generate-notices.mjs",
+    "platform:lint": "pnpm --filter \"@spatula/*\" run --if-present lint",
+    "platform:typecheck": "pnpm --filter \"@spatula/*\" run --if-present typecheck",
+    "platform:test": "pnpm --filter \"@spatula/*\" run --if-present test",
+    "platform:test:db": "pnpm --filter \"@spatula/*\" run --if-present test:db",
+    "platform:test:workers": "pnpm --filter \"@spatula/*\" run --if-present test:workers",
+    "platform:db:up": "docker compose -f platform/compose.yaml up -d --wait",
+    "platform:db:migrate": "pnpm --filter @spatula/store db:migrate",
+    "spatula": "tsx platform/cli/src/bin.ts"
   },
   "devDependencies": {
     "@typescript-eslint/eslint-plugin": "^8.18.0",
