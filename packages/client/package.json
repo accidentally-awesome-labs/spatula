@@ -1,6 +1,6 @@
 {
   "name": "@accidentally-awesome-labs/spatula-client",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "description": "Spatula API client — TypeScript SDK for the Spatula REST API. ESM-only, browser+Node compatible, fetch-based.",
   "license": "MIT",
   "repository": {
@@ -41,7 +41,7 @@
     "eventsource": "4.1.0"
   },
   "peerDependencies": {
-    "@accidentally-awesome-labs/spatula-core-types": "0.1.1"
+    "@accidentally-awesome-labs/spatula-core-types": "0.1.2"
   },
   "devDependencies": {
     "@size-limit/esbuild": "^12.1.0",
