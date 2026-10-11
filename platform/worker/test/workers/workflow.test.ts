@@ -98,4 +98,42 @@ describe('RefreshWorkflow', () => {
       await instance.dispose();
     }
   });
+
+  it('marks the run failed when a step keeps failing', async () => {
+    network.use(
+      http.get('https://maker-a.example/robots.txt', () => HttpResponse.text(ROBOTS_OPEN)),
+      http.get('https://maker-b.example/robots.txt', () =>
+        HttpResponse.text('User-agent: *\nDisallow: /cart\n'),
+      ),
+      http.get(URLS.a1, () => html(A1())),
+      http.get(URLS.a2, () => html(A2())),
+      http.get(URLS.b1, () => html(B1())),
+    );
+    const datasetId = 'workers-failed';
+    await withDb((db) => applyDefinition(db, testDefinition(datasetId)));
+    const runId = runIdFor(datasetId, new Date());
+    const mocked = 'the resolve step was made to fail';
+
+    const instance = await introspectWorkflowInstance(env.REFRESH, runId);
+    try {
+      // The pages are fetched and read as usual; then the resolve step throws on every attempt.
+      // Its retries still happen, but without their delays, which would outlast the test.
+      await instance.modify(async (m) => {
+        await m.disableRetryDelays();
+        await m.mockStepError({ name: 'resolve' }, new Error(mocked));
+      });
+      await env.REFRESH.create({ id: runId, params: { runId, datasetId } });
+      await instance.waitForStatus('errored');
+    } finally {
+      await instance.dispose();
+    }
+
+    // The load step created the run's row, and the fail step closed it.
+    await withDb(async (db) => {
+      expect(await getRun(db, runId)).toMatchObject({
+        status: 'failed',
+        error: expect.stringContaining(mocked),
+      });
+    });
+  });
 });

@@ -76,4 +76,27 @@ describe('HostGate', () => {
       kind: 'go',
     });
   });
+
+  it('gives concurrent callers different slots', async () => {
+    const gate = gateFor('gate-concurrent.example');
+    await gate.storeRobots(
+      { status: 'ok', fetchedAt: NOW, text: 'User-agent: *\nAllow: /\n' },
+      NOW,
+    );
+
+    // Five runs ask for the same host at the same moment. The object's input gate holds each call
+    // while it reads and writes the host's state, so no two of them can take the same slot.
+    const decisions = await Promise.all(
+      [1, 2, 3, 4, 5].map((page) =>
+        gate.reserve(request(`https://gate-concurrent.example/${page}`)),
+      ),
+    );
+
+    // The first slot is a second out, not now: storing robots.txt counts as a request, so the
+    // host's next one starts a second after it. Each later slot is one pacing interval (a second)
+    // after the one before. The calls may be served in any order, so the waits are sorted.
+    expect(decisions.map((decision) => decision.kind)).toEqual(['go', 'go', 'go', 'go', 'go']);
+    const waits = decisions.map((decision) => (decision.kind === 'go' ? decision.waitMs : -1));
+    expect(waits.sort((a, b) => a - b)).toEqual([1000, 2000, 3000, 4000, 5000]);
+  });
 });
