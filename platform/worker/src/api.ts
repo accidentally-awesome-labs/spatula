@@ -92,14 +92,27 @@ api.post('/datasets/:id/runs', async (c) => {
   return c.json({ runId }, 202);
 });
 
+/**
+ * How long a run's row may say `running` with no Workflow to find before it reads as failed. A
+ * run's ID names its five-minute slot (runIdFor, platform/core/src/ids.ts), so five minutes after
+ * the row was inserted its slot is over: a POST in a later slot gets another ID, and one in the
+ * same slot finds this row and stops. No POST can still be about to create this Workflow.
+ */
+export const RUN_START_GRACE_MS = 5 * 60 * 1000;
+
 api.get('/runs/:id', async (c) => {
   const run = await withDatabase(c.env, (db) => getRun(db, c.req.param('id')));
   if (run === null) return c.json({ error: 'No such run.' }, 404);
   if (run.status === 'running') {
+    let instance: WorkflowInstance;
+    try {
+      instance = await c.env.REFRESH.get(run.id);
+    } catch (error) {
+      return c.json(withoutWorkflow(run, error));
+    }
     // A Workflow stopped from outside, such as one terminated by hand, never finishes its run.
-    const instance = await c.env.REFRESH.get(run.id).catch(() => null);
-    const state = instance === null ? null : await instance.status();
-    if (state !== null && (state.status === 'errored' || state.status === 'terminated')) {
+    const state = await instance.status();
+    if (state.status === 'errored' || state.status === 'terminated') {
       const stopped: RunView = { ...run, status: 'failed', error: describeStop(state.error) };
       return c.json(stopped);
     }
@@ -152,6 +165,18 @@ function sameText(a: string, b: string): boolean {
   for (let index = 0; index < a.length; index += 1)
     difference |= a.charCodeAt(index) ^ b.charCodeAt(index);
   return difference === 0;
+}
+
+/**
+ * A run whose row says `running` but whose Workflow can't be found. Just after the row is
+ * inserted that is normal: the POST that inserted it is about to create the Workflow. Once
+ * RUN_START_GRACE_MS has passed it never will, so the run reads as failed. This only reports,
+ * like the answer for a Workflow stopped from outside: the row stays as it is.
+ */
+function withoutWorkflow(run: RunView, error: unknown): RunView {
+  if (Date.now() - Date.parse(run.startedAt) <= RUN_START_GRACE_MS) return run;
+  const message = error instanceof Error ? error.message : String(error);
+  return { ...run, status: 'failed', error: `Spatula can’t find this run’s Workflow: ${message}` };
 }
 
 function describeStop(error: unknown): string {

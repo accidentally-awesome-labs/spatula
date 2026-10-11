@@ -1,11 +1,12 @@
 import { sha256Hex, type RunView } from '@spatula/core';
-import { commitSnapshot } from '@spatula/store';
+import { commitSnapshot, getRun, runs, startRun } from '@spatula/store';
 import { testDefinition } from '@spatula/store/fixtures';
 import { introspectWorkflow } from 'cloudflare:test';
 import { env, exports } from 'cloudflare:workers';
+import { eq } from 'drizzle-orm';
 import { http, HttpResponse } from 'msw';
 import { describe, expect, it, vi } from 'vitest';
-import { api } from '../../src/api';
+import { api, RUN_START_GRACE_MS } from '../../src/api';
 import { withDatabase } from '../../src/database';
 import { network } from './network';
 
@@ -48,6 +49,35 @@ const SLOT_ROOM_MS = 10_000;
 async function untilSlotHasRoom(): Promise<void> {
   const left = () => SLOT_MS - (Date.now() % SLOT_MS);
   while (left() < SLOT_ROOM_MS) await scheduler.wait(left());
+}
+
+/**
+ * Bindings whose Workflow binding has no instance to give: `get` rejects, as the real one does for
+ * an ID it never created. The real one prints a few lines of workerd noise each time, and a fake
+ * lets the test name the error.
+ */
+const withoutWorkflows = (): Env =>
+  ({
+    ...env,
+    REFRESH: { get: () => Promise.reject(new Error('no such instance')) },
+  }) as unknown as Env;
+
+/**
+ * A run's row with no Workflow behind it, started `ago` ms ago. A POST records the run and then
+ * creates its Workflow, so one that ended between the two leaves a row like this.
+ */
+async function runWithoutWorkflow(id: string, ago: number): Promise<void> {
+  const datasetId = 'api-orphans';
+  await call('PUT', `/datasets/${datasetId}`, { body: testDefinition(datasetId) });
+  await withDatabase(env, async (db) => {
+    await startRun(db, { id, datasetId });
+    if (ago > 0) {
+      await db
+        .update(runs)
+        .set({ startedAt: new Date(Date.now() - ago) })
+        .where(eq(runs.id, id));
+    }
+  });
 }
 
 describe('the public page', () => {
@@ -275,6 +305,31 @@ describe('the owner routes', () => {
       hold.letGo = true;
       await introspector.dispose();
     }
+  });
+
+  it('report a run with no Workflow as failed once its slot is over, and leave its row alone', async () => {
+    const id = 'api-orphans-old';
+    await runWithoutWorkflow(id, RUN_START_GRACE_MS + 60_000);
+
+    const response = await call('GET', `/runs/${id}`, { bindings: withoutWorkflows() });
+    expect(response.status).toBe(200);
+    const run = (await response.json()) as RunView;
+    expect(run.status).toBe('failed');
+    expect(run.error).toBe('Spatula can’t find this run’s Workflow: no such instance');
+    // Only the answer says so: the stored row is as it was.
+    expect(await withDatabase(env, (db) => getRun(db, id))).toMatchObject({
+      status: 'running',
+      error: null,
+    });
+  });
+
+  it('report a run with no Workflow as running while its POST may still be creating one', async () => {
+    const id = 'api-orphans-new';
+    await runWithoutWorkflow(id, 0);
+
+    const response = await call('GET', `/runs/${id}`, { bindings: withoutWorkflows() });
+    expect(response.status).toBe(200);
+    expect(await response.json()).toMatchObject({ id, status: 'running', error: null });
   });
 
   it('serve a snapshot with its hash and generation', async () => {
