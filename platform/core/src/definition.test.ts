@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { addressError, parseDefinition } from './definition';
+import { costRatio } from './testing/cost';
 
 const EVIDENCE = {
   robots: '2026-10-09',
@@ -326,12 +327,16 @@ describe('addressError', () => {
   });
 
   it('reads a host with a long run of dots in linear time', { timeout: 30_000 }, () => {
-    const inner = new URL(`https://a${'.'.repeat(40_000)}b/`);
-    const trailing = new URL(`https://localhost${'.'.repeat(40_000)}/`);
-    const started = performance.now();
-    const reasons = [addressError(inner), addressError(trailing)];
-    const elapsed = performance.now() - started;
-    expect(reasons).toEqual([null, 'a local name']);
-    expect(elapsed).toBeLessThan(500);
+    // One host with the dots inside it, and one with them at its end.
+    const dotted = (count: number) => [
+      new URL(`https://a${'.'.repeat(count)}b/`),
+      new URL(`https://localhost${'.'.repeat(count)}/`),
+    ];
+    const reasons = (hosts: URL[]) => () => hosts.map((host) => addressError(host));
+    const large = dotted(40_000);
+    expect(reasons(large)()).toEqual([null, 'a local name']);
+    // A pattern that took the dots off the end tried each dot as the start of the run, so each dot
+    // cost about 16 times as much among 40,000 as among a sixteenth of them. A loop costs the same.
+    expect(costRatio(reasons(dotted(2_500)), reasons(large), 16)).toBeLessThan(4);
   });
 });

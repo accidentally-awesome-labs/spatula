@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { isAllowed, parseRobots } from './robots';
+import { costRatio } from './testing/cost';
 
 const allowed = (robots: string, path: string) =>
   isAllowed(parseRobots(robots, 'Spatula'), new URL(`https://maker.example${path}`));
@@ -136,12 +137,17 @@ describe('parseRobots and isAllowed', () => {
   });
 
   it('strips a long comment in linear time', { timeout: 30_000 }, () => {
-    const robots = `User-agent: *\nDisallow: /x ${'#'.repeat(200_000)}\u{2028}`;
-    const started = performance.now();
-    const group = parseRobots(robots, 'Spatula');
-    const elapsed = performance.now() - started;
-    expect(group?.rules).toEqual([{ allow: false, pattern: '/x' }]);
-    expect(elapsed).toBeLessThan(1_000);
+    const commented = (length: number) =>
+      `User-agent: *\nDisallow: /x ${'#'.repeat(length)}\u{2028}`;
+    const robots = commented(10_000);
+    expect(parseRobots(robots, 'Spatula')?.rules).toEqual([{ allow: false, pattern: '/x' }]);
+    // A pattern for the comment tried each "#" as its start, so each cost about 16 times as much in
+    // this run as in one a sixteenth as long. Finding the first "#" costs the same at any length,
+    // and so little that each is read 20 times over to be measured at all.
+    const parse = (text: string) => () => {
+      for (let read = 0; read < 20; read += 1) parseRobots(text, 'Spatula');
+    };
+    expect(costRatio(parse(commented(625)), parse(robots), 16)).toBeLessThan(4);
   });
 
   it('drops a Content-Signal whose name is a NUL', () => {
