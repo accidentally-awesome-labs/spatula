@@ -366,6 +366,56 @@ describe('snapshot pull', () => {
     ]);
     expect(written.size).toBe(0);
   });
+
+  it('writes nothing when the snapshot is for another dataset', async () => {
+    // The hash is right and the headers agree with the body. Only the dataset is wrong.
+    const other = JSON.stringify({ ...JSON.parse(body), project: 'other-products' });
+    const headers = {
+      'content-type': 'application/json',
+      'x-spatula-sha256': await sha256Hex(other),
+      'x-spatula-generation': '2',
+      'x-spatula-snapshot-id': 'sn_x',
+    };
+    const api = stubApi(() => new Response(other, { headers }));
+    const { io, out, err, written } = memoryIo();
+    expect(
+      await main(['snapshot', 'pull', 'cli-products', '--out', 'snapshot.json'], {
+        io,
+        env: ENV,
+        fetch: api.fetch,
+      }),
+    ).toBe(1);
+    expect(err).toEqual([
+      'The snapshot is for other-products, but you asked for cli-products. Nothing was written.',
+    ]);
+    expect(out).toEqual([]);
+    expect(written.size).toBe(0);
+  });
+
+  it('says so in one line when the file can’t be written', async () => {
+    const headers = {
+      'content-type': 'application/json',
+      'x-spatula-sha256': await sha256Hex(body),
+      'x-spatula-generation': '2',
+      'x-spatula-snapshot-id': 'sn_x',
+    };
+    const api = stubApi(() => new Response(body, { headers }));
+    const { io, out, err } = memoryIo();
+    io.writeFile = async () => {
+      throw new Error("EACCES: permission denied, open '/locked/.snapshot.json.tmp'");
+    };
+    expect(
+      await main(['snapshot', 'pull', 'cli-products', '--out', 'snapshot.json'], {
+        io,
+        env: ENV,
+        fetch: api.fetch,
+      }),
+    ).toBe(1);
+    expect(err).toEqual([
+      "Couldn’t write snapshot.json: EACCES: permission denied, open '/locked/.snapshot.json.tmp'",
+    ]);
+    expect(out).toEqual([]);
+  });
 });
 
 describe('SPATULA_URL', () => {

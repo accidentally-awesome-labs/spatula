@@ -21,7 +21,9 @@ Run from the repository root, with pnpm 11 and Node 22 or later.
   to `.dev.vars` first.
 - `pnpm spatula <command>`: the CLI: `check`, `plan`, `apply`, `run`, and `snapshot pull`.
   `SPATULA_URL` and `SPATULA_TOKEN` say where Spatula is, and the owner token. The CLI sends the
-  token only to an `https://` address, or to this machine.
+  token only to an `https://` address, or to this machine. Run `pnpm spatula …` from the repository
+  root, or `pnpm -w spatula …` from anywhere inside it, because plain `pnpm spatula` in a
+  subdirectory may run the globally installed 0.1 CLI instead.
 - `pnpm --filter @spatula/store db:generate --name <change>`: a migration after changing the schema.
 
 Before committing, run all of these: `pnpm platform:lint`, `pnpm platform:typecheck`,

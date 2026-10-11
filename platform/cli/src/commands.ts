@@ -109,7 +109,10 @@ export async function run(
   });
 }
 
-/** Downloads a snapshot, and writes it only if its hash and format check out. */
+/**
+ * Downloads a snapshot, and writes it only if its hash and format check out and it is the dataset
+ * and generation Spatula said it was.
+ */
 export async function pullSnapshot(
   io: Io,
   client: Client,
@@ -142,14 +145,27 @@ export async function pullSnapshot(
     }
     // A proxy or a server bug that mixes up responses must not put a mislabelled generation on disk,
     // and whoever reads the file trusts the generation inside it.
-    const { generation, snapshotId, records } = checked.data;
+    const { project, generation, snapshotId, records } = checked.data;
     if (generation !== pulled.generation || snapshotId !== pulled.snapshotId) {
       io.err(
         `The snapshot says generation ${generation} (${snapshotId}), but Spatula said generation ${pulled.generation} (${pulled.snapshotId}). Nothing was written.`,
       );
       return 1;
     }
-    await io.writeFile(options.out, pulled.body);
+    // A whole response for the wrong dataset has a hash, a generation, and an ID that agree with
+    // each other, so only the dataset it names gives it away.
+    if (project !== datasetId) {
+      io.err(
+        `The snapshot is for ${project}, but you asked for ${datasetId}. Nothing was written.`,
+      );
+      return 1;
+    }
+    try {
+      await io.writeFile(options.out, pulled.body);
+    } catch (error) {
+      io.err(`Couldn’t write ${options.out}: ${describe(error)}`);
+      return 1;
+    }
     io.out(
       `Wrote generation ${generation} of ${datasetId} (${count(records.length, 'record')}) to ${options.out}.`,
     );
