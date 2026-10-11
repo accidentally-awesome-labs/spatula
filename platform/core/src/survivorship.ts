@@ -1,5 +1,5 @@
 import type { RecordType } from './definition';
-import { specLabelKey, type FieldValue, type Spec } from './fields';
+import { specLabelKey, type FieldDef, type FieldValue, type Spec } from './fields';
 import type { Method } from './statements';
 
 /*
@@ -7,6 +7,7 @@ import type { Method } from './statements';
  * statement that explains it. A person's word beats a declared rule, which beats an API or feed,
  * then structured data, then a page title, then the LLM. Among equals, the most recently seen
  * wins. Identifiers and other lists combine every current value; specs keep one value per label.
+ * A statement whose value doesn't have the shape its field's type takes is passed over.
  */
 
 export const METHOD_RANK: Readonly<Record<Method, number>> = {
@@ -45,13 +46,19 @@ export interface FieldResult {
   provenance: Provenance;
 }
 
-/** Orders statements best first: method, then most recently seen, then confidence. */
+/**
+ * Orders statements best first: method, then most recently seen, then confidence. Ties go by the
+ * value, then the address of the page that said it, then its position, so the order never depends
+ * on the order the statements were read in, and a snapshot doesn't change when only that does.
+ */
 export function compareStatements(a: StatementView, b: StatementView): number {
   return (
     METHOD_RANK[b.method] - METHOD_RANK[a.method] ||
     compareText(b.lastSeen, a.lastSeen) ||
     b.confidence - a.confidence ||
-    compareText(a.valueKey, b.valueKey)
+    compareText(a.valueKey, b.valueKey) ||
+    compareText(a.sourceUrl, b.sourceUrl) ||
+    (a.position ?? Number.MAX_SAFE_INTEGER) - (b.position ?? Number.MAX_SAFE_INTEGER)
   );
 }
 
@@ -63,7 +70,7 @@ export function survive(
   const results = new Map<string, FieldResult>();
   for (const [name, field] of Object.entries(recordType.fields)) {
     const own = statements
-      .filter((statement) => statement.property === name)
+      .filter((statement) => statement.property === name && fits(field, statement.value))
       .sort(compareStatements);
     const best = own[0];
     if (best === undefined) continue;
@@ -85,6 +92,24 @@ export function survive(
     });
   }
   return results;
+}
+
+/**
+ * Whether a stored value has the shape its field's type takes now: text for text, enum, gtin, and
+ * url fields, and a label with a value for specs. When a definition changes a field's type, the
+ * statements made under the old one stay current until their page is read again, which a failed
+ * or blocked fetch can put off.
+ */
+function fits(field: FieldDef, value: unknown): boolean {
+  if (field.type !== 'specs') return typeof value === 'string';
+  return (
+    typeof value === 'object' &&
+    value !== null &&
+    'label' in value &&
+    'value' in value &&
+    typeof value.label === 'string' &&
+    typeof value.value === 'string'
+  );
 }
 
 /** A list's order: trusted methods first, then the page's own order. */
