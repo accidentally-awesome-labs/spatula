@@ -15,6 +15,9 @@ export class ApiError extends Error {
 /** The only hosts where the owner token may travel over plain http: this machine. */
 const THIS_MACHINE = new Set(['localhost', '127.0.0.1', '[::1]']);
 
+/** The C0 controls and DEL, which a header can't hold. */
+const CONTROL = /[\u{0}-\u{1f}\u{7f}]/u;
+
 /**
  * The CLI sends the owner token to whatever SPATULA_URL names, so a mistyped http:// address for a
  * deployment would hand the token to anyone on the way. An address that doesn't parse isn't
@@ -42,14 +45,20 @@ export function createClient(options: {
     ((input: string | URL | Request, init?: RequestInit) => globalThis.fetch(input, init));
 
   async function request(method: string, path: string, body?: unknown): Promise<Response> {
-    // Both checks run here, before any request, and not when the client is made: `main` makes one
+    // These checks run here, before any request, and not when the client is made: `main` makes one
     // before it knows the command, and commands that send nothing, such as `check`, must not be
     // held to them.
     refuseClearText(options.baseUrl);
     if (options.token === undefined) throw new ApiError(0, 'Set SPATULA_TOKEN to the owner token.');
+    // fetch's error for such a token would quote the header it was put in, token and all.
+    if (CONTROL.test(options.token)) {
+      throw new ApiError(0, 'SPATULA_TOKEN holds a control character.');
+    }
     try {
       return await send(new URL(path, options.baseUrl), {
         method,
+        // The owner token goes to SPATULA_URL and nowhere else, so a redirect is an error.
+        redirect: 'error',
         headers: {
           authorization: `Bearer ${options.token}`,
           ...(body === undefined ? {} : { 'content-type': 'application/json' }),

@@ -160,6 +160,14 @@ export async function pullSnapshot(
       );
       return 1;
     }
+    // A whole response for another generation than the one asked for agrees with itself too, so
+    // only the request gives it away. The latest is whichever generation Spatula has.
+    if (options.generation !== 'latest' && generation !== options.generation) {
+      io.err(
+        `You asked for generation ${options.generation}, but Spatula sent generation ${generation}. Nothing was written.`,
+      );
+      return 1;
+    }
     try {
       await io.writeFile(options.out, pulled.body);
     } catch (error) {

@@ -4,7 +4,7 @@ import { describe, expect, it } from 'vitest';
 import { stringify } from 'yaml';
 import { POLL_MS, WAIT_LIMIT_MS, type Io } from './commands';
 import { printable } from './format';
-import { main, USAGE } from './main';
+import { failureLine, main, USAGE } from './main';
 
 const ENV = { SPATULA_URL: 'https://spatula.test', SPATULA_TOKEN: 'owner-token' };
 const DEFINITION = testDefinition('cli-products');
@@ -178,6 +178,43 @@ describe('plan and apply', () => {
     expect(await main(['plan', 'cli-products.yaml'], { io, env: {} })).toBe(1);
     expect(err).toEqual(['Set SPATULA_TOKEN to the owner token.']);
   });
+
+  // A header can't hold these, and fetch's error for one quotes the header, token and all.
+  it.each([
+    ['a line feed', '\n'],
+    ['a carriage return', '\r'],
+    ['a NUL', '\u{0}'],
+    ['a tab', '\t'],
+    ['DEL', '\u{7f}'],
+  ])(
+    'refuse a token holding %s, before any request, without printing it',
+    async (_what, control) => {
+      let requests = 0;
+      const fetch = (async () => {
+        requests += 1;
+        return Response.json({
+          dataset: 'cli-products',
+          revision: 1,
+          created: false,
+          changed: false,
+          sources: { added: [], removed: [], changed: [] },
+          pages: { added: 0, removed: 0 },
+        });
+      }) as typeof globalThis.fetch;
+      const { io, out, err } = memoryIo(FILES);
+      const env = {
+        SPATULA_URL: 'https://spatula.test',
+        SPATULA_TOKEN: `sekrit${control}tokenpart`,
+      };
+      expect(await main(['plan', 'cli-products.yaml'], { io, env, fetch })).toBe(1);
+      expect(err).toEqual(['SPATULA_TOKEN holds a control character.']);
+      expect(requests).toBe(0);
+      for (const line of [...out, ...err]) {
+        expect(line).not.toContain('sekrit');
+        expect(line).not.toContain('tokenpart');
+      }
+    },
+  );
 });
 
 describe('run', () => {
@@ -392,6 +429,34 @@ describe('snapshot pull', () => {
     expect(written.size).toBe(0);
   });
 
+  it('writes nothing when Spatula sends another generation than the one asked for', async () => {
+    // Generation 3, whole: its hash, its headers, and its body agree. Only the generation is wrong.
+    const third = JSON.stringify({ ...JSON.parse(body), generation: 3 });
+    const headers = {
+      'content-type': 'application/json',
+      'x-spatula-sha256': await sha256Hex(third),
+      'x-spatula-generation': '3',
+      'x-spatula-snapshot-id': 'sn_x',
+    };
+    const api = stubApi(() => new Response(third, { headers }));
+    const asked = memoryIo();
+    const args = ['snapshot', 'pull', 'cli-products', '--out', 'snapshot.json'];
+    expect(
+      await main([...args, '--generation', '2'], { io: asked.io, env: ENV, fetch: api.fetch }),
+    ).toBe(1);
+    expect(api.sent[0]!.path).toBe('/datasets/cli-products/snapshots/2');
+    expect(asked.err).toEqual([
+      'You asked for generation 2, but Spatula sent generation 3. Nothing was written.',
+    ]);
+    expect(asked.out).toEqual([]);
+    expect(asked.written.size).toBe(0);
+
+    // The latest is whichever generation Spatula has, so the same answer is written.
+    const latest = memoryIo();
+    expect(await main(args, { io: latest.io, env: ENV, fetch: api.fetch })).toBe(0);
+    expect(latest.written.get('snapshot.json')).toBe(third);
+  });
+
   it('says so in one line when the file can’t be written', async () => {
     const headers = {
       'content-type': 'application/json',
@@ -498,6 +563,33 @@ describe('SPATULA_URL', () => {
     expect(err[0]).toMatch(/^Spatula at spatula\.example\.com didn’t answer: /u);
     expect(sent).toHaveLength(0);
   });
+
+  it('never follows a redirect, so the owner token goes nowhere else', async () => {
+    // Every request is redirected, and the stub handles the redirect option as fetch does: it
+    // fails on "error", answers the 302 itself on "manual", and asks the new address on "follow".
+    const sent: { url: string; redirect: RequestInit['redirect'] }[] = [];
+    async function redirecting(input: string | URL | Request, init?: RequestInit) {
+      sent.push({ url: String(input), redirect: init?.redirect });
+      if (sent.length > 1) return Response.json(UNCHANGED);
+      const moved = 'https://elsewhere.example/datasets/cli-products';
+      switch (init?.redirect ?? 'follow') {
+        case 'error':
+          throw new TypeError('fetch failed');
+        case 'manual':
+          return new Response(null, { status: 302, headers: { location: moved } });
+        default:
+          return redirecting(moved, init);
+      }
+    }
+    const { io, out, err } = memoryIo(FILES);
+    const fetch = redirecting as typeof globalThis.fetch;
+    expect(await main(['plan', 'cli-products.yaml'], { io, env: ENV, fetch })).toBe(1);
+    expect(sent).toEqual([
+      { url: 'https://spatula.test/datasets/cli-products?dryRun=1', redirect: 'error' },
+    ]);
+    expect(err).toEqual(['Spatula at https://spatula.test didn’t answer: fetch failed']);
+    expect(out).toEqual([]);
+  });
 });
 
 describe('usage', () => {
@@ -515,6 +607,18 @@ describe('usage', () => {
       }),
     ).toBe(2);
     expect(err.join('\n')).toContain('Usage: spatula <command>');
+  });
+
+  it('takes an empty --out as a mistake in the call', async () => {
+    const { fetch, sent } = stubApi(() => {
+      throw new Error('a call with an empty --out sends nothing');
+    });
+    const { io, err, written } = memoryIo();
+    const argv = ['snapshot', 'pull', 'cli-products', '--out', ''];
+    expect(await main(argv, { io, env: ENV, fetch })).toBe(2);
+    expect(err).toEqual(USAGE.split('\n'));
+    expect(sent).toHaveLength(0);
+    expect(written.size).toBe(0);
   });
 
   it('prints the usage one line at a time, as it always read', async () => {
@@ -652,6 +756,16 @@ describe('what reaches the terminal', () => {
     expect(err[0]).toContain(String.raw`--bog\u{1b}us`);
     expect(err.slice(1)).toEqual(USAGE.split('\n'));
     for (const line of err) expect(line).not.toMatch(DRIVES_A_TERMINAL);
+  });
+});
+
+describe('failureLine', () => {
+  it('reports what escaped main as one printable line, without its stack', () => {
+    const error = new TypeError('boom \u{1b}[2J\nRun x complete');
+    const line = failureLine(error);
+    expect(line).toBe(String.raw`Spatula’s CLI failed: boom \u{1b}[2J\u{a}Run x complete`);
+    expect(line).not.toContain('main.test.ts');
+    expect(failureLine('a thrown string')).toBe('Spatula’s CLI failed: a thrown string');
   });
 });
 

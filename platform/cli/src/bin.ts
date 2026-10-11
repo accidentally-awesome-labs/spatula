@@ -2,7 +2,7 @@ import { randomUUID } from 'node:crypto';
 import { mkdir, readFile, rename, rm, writeFile } from 'node:fs/promises';
 import { basename, dirname, join, resolve } from 'node:path';
 import { setTimeout as sleep } from 'node:timers/promises';
-import { main } from './main';
+import { failureLine, main } from './main';
 
 // pnpm runs root scripts from the repository root; INIT_CWD is where the command was typed.
 const here = process.env.INIT_CWD ?? process.cwd();
@@ -26,13 +26,20 @@ async function writeWhole(target: string, data: string): Promise<void> {
   }
 }
 
-process.exitCode = await main(process.argv.slice(2), {
-  io: {
-    out: (line) => console.log(line),
-    err: (line) => console.error(line),
-    readFile: (path) => readFile(resolve(here, path), 'utf8'),
-    writeFile: (path, data) => writeWhole(resolve(here, path), data),
-    sleep: (ms) => sleep(ms),
-  },
-  env: process.env,
-});
+try {
+  process.exitCode = await main(process.argv.slice(2), {
+    io: {
+      out: (line) => console.log(line),
+      err: (line) => console.error(line),
+      readFile: (path) => readFile(resolve(here, path), 'utf8'),
+      writeFile: (path, data) => writeWhole(resolve(here, path), data),
+      sleep: (ms) => sleep(ms),
+    },
+    env: process.env,
+  });
+} catch (error) {
+  // Whatever escapes main, such as an answer the API never gives, still reaches the terminal as
+  // one printable line, not a raw trace.
+  console.error(failureLine(error));
+  process.exitCode = 1;
+}
