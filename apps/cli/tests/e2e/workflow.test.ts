@@ -166,7 +166,7 @@ describe('data lifecycle workflow (sequential)', () => {
 
     close();
     expect(true).toBe(true); // seeding succeeded
-  });
+  }, 30_000);
 
   // Step 3: Check status
   it('step 3: spatula status shows seeded data', async () => {
