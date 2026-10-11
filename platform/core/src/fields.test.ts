@@ -107,6 +107,51 @@ describe('normalizeValue', () => {
       ok: false,
     });
   });
+
+  it('refuses a long run of combining marks before normalizing it', { timeout: 30_000 }, () => {
+    // U+0301 sorts after U+0323, so every pair is out of order, and normalizing a run of them takes
+    // time that grows with the square of its length. The run is 40,000 marks long.
+    const marks = `a${'\u{301}\u{323}'.repeat(20_000)}`;
+    const specs = field({ type: 'specs', list: true });
+    const started = performance.now();
+    const results = [
+      normalizeValue(field({}), marks),
+      normalizeValue(field({ type: 'enum', values: ['Headphones'] }), marks),
+      normalizeValue(specs, { label: marks, value: '1' }),
+      normalizeValue(specs, { label: 'Weight', value: marks }),
+    ];
+    const elapsed = performance.now() - started;
+    const longSpec = 'a spec with a label over 60 or a value over 200 characters';
+    expect(results).toEqual([
+      { ok: false, reason: 'longer than 500 characters' },
+      { ok: false, reason: 'not one of Headphones' },
+      { ok: false, reason: longSpec },
+      { ok: false, reason: longSpec },
+    ]);
+    expect(elapsed).toBeLessThan(500);
+  });
+
+  it('collapses whitespace before deciding a value is too long to normalize', () => {
+    expect(normalizeValue(field({ maxLength: 3 }), `a${' '.repeat(100)}b`)).toEqual({
+      ok: true,
+      value: 'a b',
+      key: 'a b',
+    });
+  });
+
+  it('keeps text that normalizing shrinks fourfold to within its cap', () => {
+    // Alpha with psili, varia, and ypogegrammeni is four code points decomposed, and one composed.
+    const decomposed = '\u{3b1}\u{313}\u{300}\u{345}'.repeat(10);
+    expect(normalizeValue(field({ maxLength: 10 }), decomposed)).toEqual({
+      ok: true,
+      value: '\u{1f82}'.repeat(10),
+      key: '\u{1f82}'.repeat(10),
+    });
+    expect(normalizeValue(field({ maxLength: 10 }), `${decomposed}\u{3b1}`)).toEqual({
+      ok: false,
+      reason: 'longer than 10 characters',
+    });
+  });
 });
 
 describe('specLabelKey', () => {

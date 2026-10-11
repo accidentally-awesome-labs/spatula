@@ -50,7 +50,9 @@ const fieldSchema = z
     identifier: z.boolean().default(false),
     scope: name.optional(),
     values: z.array(z.string().trim().min(1)).min(1).optional(),
-    maxLength: z.number().int().min(1).max(10_000).optional(),
+    // statements_current indexes value_key in a btree, whose entries hold at most 2,704 bytes. 600
+    // characters, at up to 4 UTF-8 bytes each, fit there with the other columns.
+    maxLength: z.number().int().min(1).max(600, 'Use a maxLength of 600 or less.').optional(),
     llm: z.boolean().default(false),
     description: z.string().trim().min(1).max(300).optional(),
   })
@@ -150,8 +152,13 @@ const PRIVATE_USE = /(?:^|\.)(?:local|internal|home\.arpa|lan)$/u;
  */
 export function addressError(url: URL): string | null {
   if (url.username !== '' || url.password !== '') return 'carrying a user name or password';
-  // The URL parser keeps a trailing dot, and "localhost." is the same host as "localhost".
-  const host = url.hostname.replace(/\.+$/u, '');
+  // The URL parser keeps a trailing dot, and "localhost." is the same host as "localhost". The dots
+  // are counted off one by one: a pattern such as /\.+$/ backtracks through a long run of dots
+  // inside a name, in time that grows with the square of the run.
+  const { hostname } = url;
+  let end = hostname.length;
+  while (end > 0 && hostname.charCodeAt(end - 1) === 0x2e) end -= 1;
+  const host = hostname.slice(0, end);
   // The parser writes every form of an IPv4 address as a dotted quad, and an IPv6 one in brackets.
   if (host.startsWith('[') || IPV4.test(host)) return 'an IP address, not a host name';
   if (!host.includes('.') || host.endsWith('.localhost')) return 'a local name';

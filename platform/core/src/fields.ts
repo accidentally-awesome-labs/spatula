@@ -45,10 +45,29 @@ export const URL_MAX = 500;
 export const SPEC_LABEL_MAX = 60;
 export const SPEC_VALUE_MAX = 200;
 
+const LONG_SPEC = `a spec with a label over ${SPEC_LABEL_MAX} or a value over ${SPEC_VALUE_MAX} characters`;
+
+/**
+ * The most that NFC shortens text: four code units can compose into one (U+1F82, alpha with psili,
+ * varia, and ypogegrammeni, is four decomposed).
+ */
+const NFC_MOST_SHRINK = 4;
+
+/**
+ * Whether raw text is too long to fit `max` characters however it normalizes. It's judged with
+ * whitespace collapsed, as cleanText collapses it, and before anything is normalized: normalizing
+ * a long run of combining marks takes time that grows with the square of its length, and a page
+ * can hold megabytes of them.
+ */
+function tooLong(raw: unknown, max: number): boolean {
+  return typeof raw === 'string' && raw.replace(/\s+/gu, ' ').trim().length > NFC_MOST_SHRINK * max;
+}
+
 /**
  * Text on one line: Unicode-normalized, trimmed, with each run of whitespace as one space.
  * Numbers read as text. Returns `null` for anything else, for empty text, and for text that
- * keeps a control character or an unpaired surrogate.
+ * keeps a control character or an unpaired surrogate. Text from a page is checked with `tooLong`
+ * first, so that no more of it than could fit is normalized.
  */
 export function cleanText(raw: unknown): string | null {
   if (typeof raw === 'number' && Number.isFinite(raw)) return String(raw);
@@ -84,14 +103,19 @@ export function normalizeValue(field: FieldDef, raw: unknown): Normalized {
 }
 
 function text(raw: unknown, max: number): Normalized {
+  const long = { ok: false, reason: `longer than ${max} characters` } as const;
+  if (tooLong(raw, max)) return long;
   const value = cleanText(raw);
   if (value === null) return { ok: false, reason: 'not text, or empty' };
-  if (value.length > max) return { ok: false, reason: `longer than ${max} characters` };
+  if (value.length > max) return long;
   return { ok: true, value, key: value };
 }
 
 function choice(raw: unknown, values: string[]): Normalized {
-  const written = cleanText(raw);
+  // Lowercasing never shortens text, so nothing longer than the longest allowed value, lowercased,
+  // can match one.
+  const longest = values.reduce((most, value) => Math.max(most, value.toLowerCase().length), 0);
+  const written = tooLong(raw, longest) ? null : cleanText(raw);
   const match =
     written === null
       ? undefined
@@ -124,14 +148,14 @@ function spec(raw: unknown): Normalized {
   if (typeof raw !== 'object' || raw === null || !('label' in raw) || !('value' in raw)) {
     return { ok: false, reason: 'not a label and a value' };
   }
+  if (tooLong(raw.label, SPEC_LABEL_MAX) || tooLong(raw.value, SPEC_VALUE_MAX)) {
+    return { ok: false, reason: LONG_SPEC };
+  }
   const label = cleanText(raw.label);
   const value = cleanText(typeof raw.value === 'boolean' ? (raw.value ? 'Yes' : 'No') : raw.value);
   if (label === null || value === null) return { ok: false, reason: 'missing a label or a value' };
   if (label.length > SPEC_LABEL_MAX || value.length > SPEC_VALUE_MAX) {
-    return {
-      ok: false,
-      reason: `a spec with a label over ${SPEC_LABEL_MAX} or a value over ${SPEC_VALUE_MAX} characters`,
-    };
+    return { ok: false, reason: LONG_SPEC };
   }
   return { ok: true, value: { label, value }, key: `${specLabelKey(label)}\u001f${value}` };
 }

@@ -203,6 +203,25 @@ describe('acceptLlmOutput', () => {
     expect(statements.some((s) => s.property === 'name')).toBe(false);
   });
 
+  it('looks for no more values on the page once it has kept 40', { timeout: 30_000 }, () => {
+    const proposed = Array.from({ length: 2_000 }, (_, i) => ({
+      label: `Spec ${i}`,
+      value: `value ${i}`,
+    }));
+    const text = proposed.map(({ label, value }) => `${label} ${value}`).join(' ');
+    const started = performance.now();
+    const { statements, rejected } = acceptLlmOutput({
+      output: { specs: proposed },
+      text,
+      fields: FIELDS,
+    });
+    const elapsed = performance.now() - started;
+    expect(statements.map((s) => s.value)).toEqual(proposed.slice(0, 40));
+    expect(rejected).toHaveLength(1_960);
+    expect(new Set(rejected.map((r) => r.reason))).toEqual(new Set(['more than 40 values']));
+    expect(elapsed).toBeLessThan(1_000);
+  });
+
   it('accepts nothing from an answer that is not a list', () => {
     expect(
       acceptLlmOutput({ output: { specs: 'Impedance 300 Ω' }, text: TEXT, fields: FIELDS })

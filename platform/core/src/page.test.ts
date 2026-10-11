@@ -159,7 +159,9 @@ describe('parsePage, text', () => {
     expect(page.text).toBe('Visible');
   });
 
-  it('reads markup nested 20,000 elements deep', () => {
+  // About a second alone, but the default five seconds ran out once on a heavily loaded machine.
+  // The depth stays: it's the hostile case.
+  it('reads markup nested 20,000 elements deep', { timeout: 30_000 }, () => {
     const page = parsePage(
       `${'<div>'.repeat(20_000)}Deep${'</div>'.repeat(20_000)}`,
       'https://maker.example/a',

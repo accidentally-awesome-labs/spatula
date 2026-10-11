@@ -260,6 +260,18 @@ describe('parseDefinition', () => {
     ];
     expect(parseDefinition(good).ok).toBe(true);
   });
+
+  it('allows a text field a maxLength of up to 600', () => {
+    const withMaxLength = (maxLength: number) => {
+      const input = definition();
+      input.recordTypes.product.fields.name.maxLength = maxLength;
+      return input;
+    };
+    expect(parseDefinition(withMaxLength(600)).ok).toBe(true);
+    expect(issuesOf(withMaxLength(601))).toEqual([
+      'recordTypes.product.fields.name.maxLength: Use a maxLength of 600 or less.',
+    ]);
+  });
 });
 
 describe('addressError', () => {
@@ -311,5 +323,15 @@ describe('addressError', () => {
     ['https://127.0.0.1./', 'an IP address, not a host name'],
   ])('refuses %s: it is %s', (address, why) => {
     expect(reason(address)).toBe(why);
+  });
+
+  it('reads a host with a long run of dots in linear time', { timeout: 30_000 }, () => {
+    const inner = new URL(`https://a${'.'.repeat(40_000)}b/`);
+    const trailing = new URL(`https://localhost${'.'.repeat(40_000)}/`);
+    const started = performance.now();
+    const reasons = [addressError(inner), addressError(trailing)];
+    const elapsed = performance.now() - started;
+    expect(reasons).toEqual([null, 'a local name']);
+    expect(elapsed).toBeLessThan(500);
   });
 });

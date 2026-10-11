@@ -166,11 +166,13 @@ export function acceptLlmOutput(input: {
       if (INSTRUCTION_ECHOES.some((echo) => said.includes(echo))) {
         return reject('text from the instructions, not the page');
       }
+      // The cap comes before the page is searched, so an answer of thousands of values costs a
+      // search for each of the first 40 kept, not for every one.
+      if (labels.size >= LLM_MAX_SPECS) return reject(`more than ${LLM_MAX_SPECS} values`);
       if (!appearsIn(page, value)) return reject('not found in the page text');
       // A plain text field has no label on the page. Its "label" here is the field's own name.
       if (isSpec && !appearsIn(page, label)) return reject('label not found in the page text');
       if (labels.has(labelKey)) return reject(`a second value for the label ${labelKey}`);
-      if (labels.size >= LLM_MAX_SPECS) return reject(`more than ${LLM_MAX_SPECS} values`);
       labels.add(labelKey);
       statements.push({
         property: name,
