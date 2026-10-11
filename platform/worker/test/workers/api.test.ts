@@ -2,26 +2,52 @@ import { sha256Hex, type RunView } from '@spatula/core';
 import { commitSnapshot } from '@spatula/store';
 import { testDefinition } from '@spatula/store/fixtures';
 import { introspectWorkflow } from 'cloudflare:test';
-import { env } from 'cloudflare:workers';
-import { describe, expect, it } from 'vitest';
+import { env, exports } from 'cloudflare:workers';
+import { http, HttpResponse } from 'msw';
+import { describe, expect, it, vi } from 'vitest';
 import { api } from '../../src/api';
 import { withDatabase } from '../../src/database';
+import { network } from './network';
 
-/** Calls the API as the owner, unless told to send another token or none. A string body goes as is. */
+/**
+ * Calls the API as the owner, unless told to send another token, none, or a whole authorization
+ * header. A string body goes as is.
+ */
 function call(
   method: string,
   path: string,
-  options: { body?: unknown; token?: string | null; bindings?: Env } = {},
+  options: {
+    body?: unknown;
+    token?: string | null;
+    authorization?: string;
+    bindings?: Env;
+  } = {},
 ): Promise<Response> {
   const headers = new Headers();
-  if (options.token !== null)
-    headers.set('authorization', `Bearer ${options.token ?? 'test-token'}`);
+  const authorization =
+    options.authorization ??
+    (options.token === null ? undefined : `Bearer ${options.token ?? 'test-token'}`);
+  if (authorization !== undefined) headers.set('authorization', authorization);
   if (options.body !== undefined) headers.set('content-type', 'application/json');
   const body =
     options.body === undefined || typeof options.body === 'string'
       ? options.body
       : JSON.stringify(options.body);
   return Promise.resolve(api.request(path, { method, headers, body }, options.bindings ?? env));
+}
+
+/**
+ * How long a run ID's slot lasts. Core's runIdFor (platform/core/src/ids.ts) puts every run in a
+ * five-minute slot, and doesn't export the length.
+ */
+const SLOT_MS = 5 * 60 * 1000;
+/** What a slot needs left before requests that must share it are sent. They take far less. */
+const SLOT_ROOM_MS = 10_000;
+
+/** Waits for the next slot to start when this one has less than SLOT_ROOM_MS left. */
+async function untilSlotHasRoom(): Promise<void> {
+  const left = () => SLOT_MS - (Date.now() % SLOT_MS);
+  while (left() < SLOT_ROOM_MS) await scheduler.wait(left());
 }
 
 describe('the public page', () => {
@@ -32,6 +58,55 @@ describe('the public page', () => {
     const page = await response.text();
     expect(page).toContain('Spatula 0.2.0-dev');
     expect(page).toContain('User-agent: Spatula');
+  });
+});
+
+describe('the Worker’s entry', () => {
+  it('serves the public page, and keeps the owner routes behind the token', async () => {
+    // Not api.request: this calls the Worker's own default export, the way the platform does, so
+    // a wrong export in index.ts fails here.
+    const page = await exports.default.fetch('https://spatula.example/');
+    expect(page.status).toBe(200);
+    const text = await page.text();
+    expect(text).toContain('Spatula 0.2.0-dev');
+    expect(text).toContain('User-agent: Spatula');
+
+    expect((await exports.default.fetch('https://spatula.example/runs/x')).status).toBe(401);
+  });
+});
+
+describe('the answers that aren’t the page', () => {
+  it('keep an unknown path’s 404 out of every cache, with or without a token', async () => {
+    for (const response of [
+      await call('GET', '/nowhere', { token: null }),
+      await call('GET', '/nowhere'),
+    ]) {
+      expect(response.status).toBe(404);
+      expect(response.headers.get('cache-control')).toBe('private, no-store');
+      expect(await response.json()).toEqual({ error: 'Not found.' });
+    }
+  });
+
+  it('keep a failure’s 500 out of every cache, and log what failed', async () => {
+    // The page reads the version from the bindings, so bindings that throw make it fail. It is
+    // outside the owner routes, so nothing but the error handler can mark the answer.
+    const broken = {
+      get SPATULA_VERSION(): string {
+        throw new Error('the version could not be read');
+      },
+    } as unknown as Env;
+    const logged = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    try {
+      const response = await call('GET', '/', { token: null, bindings: broken });
+      expect(response.status).toBe(500);
+      expect(response.headers.get('cache-control')).toBe('private, no-store');
+      expect(await response.json()).toEqual({
+        error: 'Something went wrong. The Worker’s logs say what.',
+      });
+      expect(logged).toHaveBeenCalledWith('API error:', 'the version could not be read');
+    } finally {
+      logged.mockRestore();
+    }
   });
 });
 
@@ -48,6 +123,15 @@ describe('the owner routes', () => {
     });
     expect(unset.status).toBe(503);
     expect(unset.headers.get('cache-control')).toBe('private, no-store');
+  });
+
+  it('read the scheme in any case, and the token exactly', async () => {
+    // RFC 9110 makes an authentication scheme's name case-insensitive. The token is a secret, so
+    // its case counts. A run that doesn't exist is what an accepted token gets (404).
+    const attempt = (authorization: string) => call('GET', '/runs/nothing', { authorization });
+    expect((await attempt('bearer test-token')).status).toBe(404);
+    expect((await attempt('BEARER test-token')).status).toBe(404);
+    expect((await attempt('Bearer TEST-TOKEN')).status).toBe(401);
   });
 
   it('preview a definition, apply it, and refuse broken ones', async () => {
@@ -111,6 +195,8 @@ describe('the owner routes', () => {
           { revision: 1, definition: testDefinition('api-runs'), items: [] },
         );
       });
+      // The two POSTs below must land in one slot, so they aren't sent in the last seconds of one.
+      await untilSlotHasRoom();
       const started = await call('POST', '/datasets/api-runs/runs');
       expect(started.status).toBe(202);
       const { runId } = (await started.json()) as { runId: string };
@@ -137,6 +223,58 @@ describe('the owner routes', () => {
       await introspector.dispose();
     }
     expect((await call('POST', '/datasets/nothing-here/runs')).status).toBe(404);
+  });
+
+  it('report a run that is still going as running', async () => {
+    // One page, on a host no other test uses: HostGate keeps each host's robots.txt between tests,
+    // and this test needs the run to ask for it.
+    const base = testDefinition('api-inflight');
+    const definition = {
+      ...base,
+      sources: [{ ...base.sources[0]!, pages: ['https://inflight.example/products/i1'] }],
+    };
+    await call('PUT', '/datasets/api-inflight', { body: definition });
+
+    // The run's first request is for that robots.txt. The answer is held until the test lets go, so
+    // the run can't have finished before the test has looked at it. The two sides signal each other
+    // through plain flags that each polls on its own timers: a test that awaited a promise the
+    // Workflow resolves froze when the Workflow was disposed at the end.
+    const hold = { asked: false, letGo: false };
+    network.use(
+      http.get('https://inflight.example/robots.txt', async () => {
+        hold.asked = true;
+        while (!hold.letGo) await scheduler.wait(5);
+        return HttpResponse.text('User-agent: *\nDisallow: /\n');
+      }),
+    );
+
+    const introspector = await introspectWorkflow(env.REFRESH);
+    try {
+      const started = await call('POST', '/datasets/api-inflight/runs');
+      expect(started.status).toBe(202);
+      const { runId } = (await started.json()) as { runId: string };
+      await vi.waitFor(() => expect(hold.asked).toBe(true), { timeout: 10_000 });
+
+      const going = await call('GET', `/runs/${runId}`);
+      expect(going.status).toBe(200);
+      expect(await going.json()).toMatchObject({
+        id: runId,
+        status: 'running',
+        finishedAt: null,
+        summary: null,
+        error: null,
+      });
+
+      // Let go: robots.txt now refuses the page, and the run finishes.
+      hold.letGo = true;
+      const [instance] = await introspector.get();
+      await instance!.waitForStatus('complete');
+      const done = (await (await call('GET', `/runs/${runId}`)).json()) as RunView;
+      expect(done).toMatchObject({ status: 'complete', summary: { fetches: { blocked: 1 } } });
+    } finally {
+      hold.letGo = true;
+      await introspector.dispose();
+    }
   });
 
   it('serve a snapshot with its hash and generation', async () => {

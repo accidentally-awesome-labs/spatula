@@ -16,7 +16,8 @@ import { withDatabase } from './database';
 
 /*
  * The owner's API, and the public page. The owner sends a bearer token; the Worker keeps only its
- * SHA-256 and compares in constant time. Owner answers are personal, so nothing caches them.
+ * SHA-256 and compares in constant time. Owner answers are personal, so nothing caches them, and
+ * the same goes for every other answer but the page: an unknown path's 404 and a failure's 500.
  */
 
 type Api = { Bindings: Env };
@@ -30,7 +31,9 @@ const owner: MiddlewareHandler<Api> = async (c, next) => {
   const expected = secret(c.env, 'OWNER_TOKEN_HASH');
   if (expected === undefined)
     return c.json({ error: 'This deployment has no owner token yet.' }, 503);
-  const token = /^Bearer (.+)$/u.exec(c.req.header('authorization') ?? '')?.[1];
+  // RFC 9110 makes an authentication scheme's name case-insensitive. The token is not: the flag
+  // applies to the word "bearer" only, and the group keeps the token as it was sent.
+  const token = /^bearer (.+)$/iu.exec(c.req.header('authorization') ?? '')?.[1];
   if (token === undefined || !sameText(await sha256Hex(token), expected.toLowerCase())) {
     c.header('www-authenticate', 'Bearer');
     return c.json({ error: 'The owner token is missing or wrong.' }, 401);
@@ -129,10 +132,16 @@ api.get('/datasets/:id/snapshots/:generation', async (c) => {
   });
 });
 
-api.notFound((c) => c.json({ error: 'Not found.' }, 404));
+// These two answer whatever the path, including ones outside the owner routes, which set the
+// header themselves.
+api.notFound((c) => {
+  c.header('cache-control', 'private, no-store');
+  return c.json({ error: 'Not found.' }, 404);
+});
 
 api.onError((error, c) => {
   console.error('API error:', error instanceof Error ? error.message : String(error));
+  c.header('cache-control', 'private, no-store');
   return c.json({ error: 'Something went wrong. The Worker’s logs say what.' }, 500);
 });
 
