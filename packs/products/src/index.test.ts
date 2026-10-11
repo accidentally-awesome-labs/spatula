@@ -360,6 +360,24 @@ describe('productPack, on hostile pages', () => {
     expect(elapsed).toBeLessThan(1_500);
   });
 
+  it('looks each name’s brand up once, however often it repeats', { timeout: 30_000 }, () => {
+    // About 5 MB: 1,400 products share a name with a space at every other character, and each has
+    // a brand of its own length, so every name could be checked against a slice of every length.
+    const name = 'a '.repeat(1_400).trim();
+    const nodes = Array.from({ length: 1_400 }, (_, i) => ({
+      '@type': 'Product',
+      name,
+      brand: 'b'.repeat(i + 1),
+    }));
+    const crafted = page(ld(nodes));
+    const finish = productPack.finish ?? ((candidates: Candidate[]) => candidates);
+    const started = performance.now();
+    const candidates = finish(productPack.extract(crafted));
+    const elapsed = performance.now() - started;
+    expect(candidates.filter((c) => c.property === 'name' && c.raw === name)).toHaveLength(1_400);
+    expect(elapsed).toBeLessThan(500);
+  });
+
   it('reads a brand nested 20,000 arrays deep', () => {
     const deep = `${'['.repeat(20_000)}"Audeze"${']'.repeat(20_000)}`;
     const hostile = page(

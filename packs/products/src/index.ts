@@ -105,9 +105,7 @@ function fromOpenGraph(page: Page): Candidate[] {
 /** "Sennheiser HD 650", on a page whose brand is Sennheiser, names the product "HD 650". */
 function withoutBrandInNames(candidates: Candidate[]): Candidate[] {
   // Each brand once, by its lowercase form, with the order it was first given in: when two brands
-  // could start a name, the first one given is taken off. A name looks its brand up instead of
-  // trying every brand, so a page that repeats its product thousands of times, each with a brand,
-  // costs time in proportion to its length, not its square.
+  // could start a name, the first one given is taken off.
   const brands = new Map<string, { brand: string; order: number }>();
   for (const candidate of candidates) {
     if (candidate.property !== 'brand' || typeof candidate.raw !== 'string') continue;
@@ -115,21 +113,30 @@ function withoutBrandInNames(candidates: Candidate[]): Candidate[] {
     const key = brand.toLowerCase();
     if (brand !== '' && !brands.has(key)) brands.set(key, { brand, order: brands.size });
   }
-  const lengths = new Set([...brands.keys()].map((key) => key.length));
+  const lengths = [...new Set([...brands.keys()].map((key) => key.length))];
+  // A brand starts a name when the name's first characters are the brand, then a space.
+  const startingBrand = (lower: string): string | null => {
+    let first: { brand: string; order: number } | undefined;
+    for (const length of lengths) {
+      const brand = lower[length] === ' ' ? brands.get(lower.slice(0, length)) : undefined;
+      if (brand !== undefined && (first === undefined || brand.order < first.order)) first = brand;
+    }
+    return first?.brand ?? null;
+  };
+  // A name's brand is looked up by length, not searched for among every brand, and once for each
+  // name: a page that repeats its product repeats its name. So a page that repeats it thousands of
+  // times, each with a brand of its own, costs time in proportion to its length, not its square.
+  const brandOf = new Map<string, string | null>();
   return candidates.map((candidate) => {
     if (candidate.property !== 'name' || typeof candidate.raw !== 'string') return candidate;
     const name = candidate.raw.trim();
     const lower = name.toLowerCase();
-    // A brand starts the name when the name's first characters are the brand, then a space.
-    let starts: { brand: string; order: number } | undefined;
-    for (const length of lengths) {
-      if (lower[length] !== ' ') continue;
-      const brand = brands.get(lower.slice(0, length));
-      if (brand !== undefined && (starts === undefined || brand.order < starts.order)) {
-        starts = brand;
-      }
+    let brand = brandOf.get(lower);
+    if (brand === undefined) {
+      brand = startingBrand(lower);
+      brandOf.set(lower, brand);
     }
-    const rest = starts === undefined ? '' : name.slice(starts.brand.length + 1).trim();
+    const rest = brand === null ? '' : name.slice(brand.length + 1).trim();
     return rest === ''
       ? candidate
       : { ...candidate, raw: rest, path: `${candidate.path} (without the brand)` };
