@@ -290,6 +290,89 @@ describe('productPack.finish', () => {
       { property: 'name', raw: 'HD 650', method: 'rule', path: 'css:h1', confidence: 0.9 },
     ]);
   });
+
+  it('takes off the first brand given when two could start a name, in any case', () => {
+    const finish = productPack.finish ?? ((candidates: Candidate[]) => candidates);
+    const named = (brands: string[]) =>
+      finish([
+        ...brands.map(
+          (raw): Candidate => ({
+            property: 'brand',
+            raw,
+            method: 'jsonld',
+            path: 'b',
+            confidence: 1,
+          }),
+        ),
+        {
+          property: 'name',
+          raw: 'Sennheiser Pro HD 650',
+          method: 'jsonld',
+          path: 'n',
+          confidence: 1,
+        },
+      ]).find((c) => c.property === 'name')?.raw;
+    expect(named(['Sennheiser', 'Sennheiser Pro'])).toBe('Pro HD 650');
+    expect(named(['SENNHEISER PRO', 'Sennheiser'])).toBe('HD 650');
+    expect(named(['', 'Pro'])).toBe('Sennheiser Pro HD 650');
+  });
+});
+
+describe('productPack, on hostile pages', () => {
+  it('reads 20,000 products that share a name in linear time', { timeout: 30_000 }, () => {
+    const nodes = Array.from({ length: 20_000 }, (_, i) => ({
+      '@type': 'Product',
+      name: 'LCD-X',
+      brand: `Maker ${i}`,
+    }));
+    const hostile = page(ld(nodes));
+    const finish = productPack.finish ?? ((candidates: Candidate[]) => candidates);
+    const started = performance.now();
+    const candidates = finish(productPack.extract(hostile));
+    const elapsed = performance.now() - started;
+    expect(candidates).toHaveLength(40_000);
+    expect(candidates.slice(0, 2)).toEqual([
+      { property: 'name', raw: 'LCD-X', method: 'jsonld', path: 'jsonld[0].name', confidence: 0.9 },
+      {
+        property: 'brand',
+        raw: 'Maker 0',
+        method: 'jsonld',
+        path: 'jsonld[0].brand',
+        confidence: 0.9,
+      },
+    ]);
+    expect(candidates.at(-2)).toMatchObject({ raw: 'LCD-X', path: 'jsonld[19999].name' });
+    expect(elapsed).toBeLessThan(1_000);
+  });
+
+  it('reads a 5 MB page of one product, repeated, in linear time', { timeout: 30_000 }, () => {
+    // 160,000 products make about 5 MB, the most of a page the fetcher reads. Finding each one's
+    // place by searching the page takes about 3 s at this size, and only tens of milliseconds at
+    // the 20,000 above.
+    const nodes = Array.from({ length: 160_000 }, () => ({ '@type': 'Product', name: 'X' }));
+    const largest = page(ld(nodes));
+    const finish = productPack.finish ?? ((candidates: Candidate[]) => candidates);
+    const started = performance.now();
+    const candidates = finish(productPack.extract(largest));
+    const elapsed = performance.now() - started;
+    expect(candidates).toHaveLength(160_000);
+    expect(candidates.at(-1)).toMatchObject({ raw: 'X', path: 'jsonld[159999].name' });
+    expect(elapsed).toBeLessThan(1_500);
+  });
+
+  it('reads a brand nested 20,000 arrays deep', () => {
+    const deep = `${'['.repeat(20_000)}"Audeze"${']'.repeat(20_000)}`;
+    const hostile = page(
+      `<script type="application/ld+json">{"@type":"Product","name":"LCD-X","brand":${deep}}</script>`,
+    );
+    expect(productPack.extract(hostile)).toContainEqual({
+      property: 'brand',
+      raw: 'Audeze',
+      method: 'jsonld',
+      path: 'jsonld[0].brand',
+      confidence: 0.9,
+    });
+  });
 });
 
 describe('looksLikeGtin', () => {

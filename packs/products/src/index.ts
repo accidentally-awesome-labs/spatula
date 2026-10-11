@@ -57,9 +57,15 @@ function fromJsonLd(page: Page): Candidate[] {
     (node) =>
       node === first || (firstName !== undefined && text(node.name)?.toLowerCase() === firstName),
   );
+  // Each node's place on the page, found once. Searching the page for each chosen node would take
+  // time that grows with the square of a page that repeats its product thousands of times.
+  const places = new Map<JsonLdNode, number>();
+  page.jsonLd.forEach((node, index) => {
+    if (!places.has(node)) places.set(node, index);
+  });
   const candidates: Candidate[] = [];
   for (const node of chosen) {
-    const at = `jsonld[${page.jsonLd.indexOf(node)}]`;
+    const at = `jsonld[${places.get(node)}]`;
     const name = text(node.name);
     if (name !== null) candidates.push(found('name', name, `${at}.name`, JSONLD));
     const brand = brandName(node.brand);
@@ -98,18 +104,32 @@ function fromOpenGraph(page: Page): Candidate[] {
 
 /** "Sennheiser HD 650", on a page whose brand is Sennheiser, names the product "HD 650". */
 function withoutBrandInNames(candidates: Candidate[]): Candidate[] {
-  const brands = candidates.flatMap((candidate) =>
-    candidate.property === 'brand' && typeof candidate.raw === 'string'
-      ? [candidate.raw.trim()]
-      : [],
-  );
+  // Each brand once, by its lowercase form, with the order it was first given in: when two brands
+  // could start a name, the first one given is taken off. A name looks its brand up instead of
+  // trying every brand, so a page that repeats its product thousands of times, each with a brand,
+  // costs time in proportion to its length, not its square.
+  const brands = new Map<string, { brand: string; order: number }>();
+  for (const candidate of candidates) {
+    if (candidate.property !== 'brand' || typeof candidate.raw !== 'string') continue;
+    const brand = candidate.raw.trim();
+    const key = brand.toLowerCase();
+    if (brand !== '' && !brands.has(key)) brands.set(key, { brand, order: brands.size });
+  }
+  const lengths = new Set([...brands.keys()].map((key) => key.length));
   return candidates.map((candidate) => {
     if (candidate.property !== 'name' || typeof candidate.raw !== 'string') return candidate;
     const name = candidate.raw.trim();
-    const brand = brands.find(
-      (b) => b !== '' && name.toLowerCase().startsWith(`${b.toLowerCase()} `),
-    );
-    const rest = brand === undefined ? '' : name.slice(brand.length + 1).trim();
+    const lower = name.toLowerCase();
+    // A brand starts the name when the name's first characters are the brand, then a space.
+    let starts: { brand: string; order: number } | undefined;
+    for (const length of lengths) {
+      if (lower[length] !== ' ') continue;
+      const brand = brands.get(lower.slice(0, length));
+      if (brand !== undefined && (starts === undefined || brand.order < starts.order)) {
+        starts = brand;
+      }
+    }
+    const rest = starts === undefined ? '' : name.slice(starts.brand.length + 1).trim();
     return rest === ''
       ? candidate
       : { ...candidate, raw: rest, path: `${candidate.path} (without the brand)` };
@@ -162,7 +182,9 @@ function scalar(value: unknown): string | null {
 }
 
 function brandName(value: unknown): string | null {
-  if (Array.isArray(value)) return brandName(value[0]);
+  // The first of a list, however deep lists nest. A loop, not recursion: a page can nest its brand
+  // thousands of lists deep.
+  while (Array.isArray(value)) value = value[0];
   if (value !== null && typeof value === 'object' && 'name' in value) return text(value.name);
   return text(value);
 }
