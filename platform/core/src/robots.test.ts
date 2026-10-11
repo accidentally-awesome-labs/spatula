@@ -126,4 +126,38 @@ describe('parseRobots and isAllowed', () => {
     }
     expect(allowed('User-agent: Spatula-Bot\nDisallow: /x', '/x')).toBe(true);
   });
+
+  it('strips a comment that holds a line separator, so the rule before it still counts', () => {
+    // Lines end only at CR and LF, so a comment can hold U+2028, which a pattern's "." never matches.
+    const robots = 'User-agent: *\nDisallow: /private # keep\u{2028}out';
+    expect(parseRobots(robots, 'Spatula')?.rules).toEqual([{ allow: false, pattern: '/private' }]);
+    expect(allowed(robots, '/private')).toBe(false);
+  });
+
+  it('strips a long comment in linear time', { timeout: 30_000 }, () => {
+    const robots = `User-agent: *\nDisallow: /x ${'#'.repeat(200_000)}\u{2028}`;
+    const started = performance.now();
+    const group = parseRobots(robots, 'Spatula');
+    const elapsed = performance.now() - started;
+    expect(group?.rules).toEqual([{ allow: false, pattern: '/x' }]);
+    expect(elapsed).toBeLessThan(1_000);
+  });
+
+  it('drops a Content-Signal whose name is a NUL', () => {
+    const robots = 'User-agent: *\nContent-Signal: \u{0}=yes, ai-input=no';
+    expect(parseRobots(robots, 'Spatula')?.signals).toEqual({ 'ai-input': 'no' });
+  });
+
+  it('keeps only the signals the Content Signals Policy names, among 50,000 others', () => {
+    const names = Array.from({ length: 50_000 }, (_, i) => `n${i}=yes`).join(', ');
+    const robots = `User-agent: *\nContent-Signal: ${names}, ai-train=no`;
+    const signals = parseRobots(robots, 'Spatula')?.signals ?? {};
+    expect(Object.keys(signals)).toHaveLength(1);
+    expect(signals).toEqual({ 'ai-train': 'no' });
+  });
+
+  it('reads a signal’s name without regard to case, and keeps it in lowercase', () => {
+    const robots = 'User-agent: *\nContent-Signal: AI-Input=no';
+    expect(parseRobots(robots, 'Spatula')?.signals).toEqual({ 'ai-input': 'no' });
+  });
 });

@@ -5,7 +5,10 @@
  * what a site's content may be used for.
  */
 
-export type ContentSignals = Partial<Record<string, 'yes' | 'no'>>;
+/** The uses the Content Signals Policy defines. Any other name a robots.txt gives is dropped. */
+const SIGNALS = ['search', 'ai-input', 'ai-train'] as const;
+
+export type ContentSignals = Partial<Record<(typeof SIGNALS)[number], 'yes' | 'no'>>;
 
 interface RobotsRule {
   allow: boolean;
@@ -29,7 +32,7 @@ const RULE_KEYS = new Set(['allow', 'disallow', 'crawl-delay', 'content-signal']
 const PLAIN_NUMBER = /^\d+(\.\d+)?$/u;
 
 /**
- * Crawl-delay is capped at one day. Task 5's gate turns seconds into milliseconds, and an absurd
+ * Crawl-delay is capped at one day. The fetch gate turns seconds into milliseconds, and an absurd
  * value must never become Infinity there.
  */
 const MAX_CRAWL_DELAY_SECONDS = 86_400;
@@ -43,7 +46,11 @@ export function parseRobots(text: string, productToken: string): RobotsGroup | n
   let current: ParsedGroup | null = null;
   let readingAgents = false;
   for (const rawLine of text.replace(/^\uFEFF/u, '').split(/\r\n|\r|\n/u)) {
-    const line = rawLine.replace(/#.*$/u, '').trim();
+    // A comment runs from "#" to the end of the line. Lines end only at CR and LF, so one can hold
+    // U+2028, which a pattern's "." never matches: `#.*$` would leave such a comment in the rule,
+    // and would take time that grows with the square of a long run of "#".
+    const hash = rawLine.indexOf('#');
+    const line = (hash === -1 ? rawLine : rawLine.slice(0, hash)).trim();
     const colon = line.indexOf(':');
     if (colon < 1) continue;
     const key = line.slice(0, colon).trim().toLowerCase();
@@ -72,7 +79,8 @@ export function parseRobots(text: string, productToken: string): RobotsGroup | n
   for (const { group } of chosen) {
     for (const rule of group.rules) merged.rules.push(rule);
     merged.crawlDelaySeconds = longerDelay(merged.crawlDelaySeconds, group.crawlDelaySeconds);
-    for (const [name, setting] of Object.entries(group.signals)) {
+    for (const name of SIGNALS) {
+      const setting = group.signals[name];
       if (setting !== undefined) merged.signals[name] = mergeSignal(merged.signals[name], setting);
     }
   }
@@ -92,8 +100,12 @@ function readRule(group: RobotsGroup, key: string, value: string): void {
   } else {
     for (const pair of value.split(',')) {
       const [name, setting] = pair.split('=').map((part) => part.trim().toLowerCase());
-      if (name && (setting === 'yes' || setting === 'no')) {
-        group.signals[name] = mergeSignal(group.signals[name], setting);
+      // A name is the site's text, and travels into every fetch's record and step result: a NUL
+      // can't be stored there, and tens of thousands of names would outgrow a step's result. So
+      // only the policy's own names are kept.
+      const signal = SIGNALS.find((known) => known === name);
+      if (signal !== undefined && (setting === 'yes' || setting === 'no')) {
+        group.signals[signal] = mergeSignal(group.signals[signal], setting);
       }
     }
   }
