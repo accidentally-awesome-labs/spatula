@@ -38,7 +38,11 @@ export async function readDefinition(io: Io, file: string): Promise<Definition |
   try {
     data = parse(text);
   } catch (error) {
-    io.err(`${file} isn’t valid YAML: ${describe(error)}`);
+    // The YAML library's message shows the line it stopped at under its first line. Each line is
+    // printed by a call of its own.
+    const [first = '', ...frame] = describe(error).split('\n');
+    io.err(`${file} isn’t valid YAML: ${first}`);
+    for (const line of frame) io.err(line);
     return null;
   }
   const parsed = parseDefinition(data);

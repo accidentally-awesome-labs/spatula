@@ -42,3 +42,17 @@ export function formatRun(run: RunView): string[] {
   if (summary.notes.length > 0) lines.push('Notes:', ...summary.notes.map((note) => `  ${note}`));
   return lines;
 }
+
+/*
+ * A terminal obeys some characters: escape sequences recolor and rewrite the screen, retitle the
+ * window, write to the clipboard, and hide where a link goes, and bidi controls reorder the text
+ * the eye reads. Spatula's messages can quote what a site wrote, so these are the characters it
+ * never prints as they are: every C0 control (tab and newline too), DEL, every C1 control, and the
+ * bidi embeddings, overrides, and isolates.
+ */
+const DRIVES_A_TERMINAL = /[\u{0}-\u{1f}\u{7f}-\u{9f}\u{202a}-\u{202e}\u{2066}-\u{2069}]/gu;
+
+/** The text with each of those characters spelled out in its place, as \u{1b} for escape. */
+export function printable(text: string): string {
+  return text.replace(DRIVES_A_TERMINAL, (char) => `\\u{${char.charCodeAt(0).toString(16)}}`);
+}

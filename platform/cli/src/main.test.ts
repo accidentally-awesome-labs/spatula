@@ -3,7 +3,8 @@ import { testDefinition } from '@spatula/store/fixtures';
 import { describe, expect, it } from 'vitest';
 import { stringify } from 'yaml';
 import { POLL_MS, WAIT_LIMIT_MS, type Io } from './commands';
-import { main } from './main';
+import { printable } from './format';
+import { main, USAGE } from './main';
 
 const ENV = { SPATULA_URL: 'https://spatula.test', SPATULA_TOKEN: 'owner-token' };
 const DEFINITION = testDefinition('cli-products');
@@ -100,10 +101,21 @@ describe('check', () => {
     expect(err[0]).toMatch(/^training\.yaml has (a problem|\d+ problems):$/u);
     expect(err.join('\n')).toContain('policy.purposes');
 
+    // The YAML library's message has several lines, so the first line printed is the one to read.
+    const before = err.length;
     expect(await main(['check', 'broken.yaml'], { io, env: {} })).toBe(1);
-    expect(err.at(-1)).toMatch(/^broken\.yaml isn’t valid YAML: /u);
+    expect(err[before]).toMatch(/^broken\.yaml isn’t valid YAML: /u);
     expect(await main(['check', 'missing.yaml'], { io, env: {} })).toBe(1);
     expect(err.at(-1)).toBe('missing.yaml can’t be read: no such file');
+  });
+
+  it('prints a YAML error’s code frame a line at a time', async () => {
+    const { io, err } = memoryIo({ 'broken.yaml': 'dataset: [unclosed' });
+    expect(await main(['check', 'broken.yaml'], { io, env: {} })).toBe(1);
+    expect(err[0]).toMatch(/^broken\.yaml isn’t valid YAML: .+ at line 1, column \d+:$/u);
+    expect(err).toContain('dataset: [unclosed');
+    // A newline inside a line would have been spelled out as \u{a}.
+    expect(err.join('\n')).not.toContain(String.raw`\u{a}`);
   });
 });
 
@@ -453,5 +465,180 @@ describe('usage', () => {
       }),
     ).toBe(2);
     expect(err.join('\n')).toContain('Usage: spatula <command>');
+  });
+
+  it('prints the usage one line at a time, as it always read', async () => {
+    const { io, out, err } = memoryIo();
+    expect(await main(['--help'], { io, env: {} })).toBe(0);
+    expect(out).toEqual(USAGE.split('\n'));
+    expect(await main([], { io, env: {} })).toBe(2);
+    expect(err).toEqual(USAGE.split('\n'));
+  });
+});
+
+describe('what reaches the terminal', () => {
+  // What Spatula prints can quote what a site wrote, and a terminal obeys some characters: escape
+  // sequences recolor and rewrite the screen, retitle the window, write to the clipboard, and hide
+  // where a link goes, and bidi controls reorder the text the eye reads.
+  const DRIVES_A_TERMINAL = /[\u{0}-\u{1f}\u{7f}-\u{9f}\u{202a}-\u{202e}\u{2066}-\u{2069}]/u;
+
+  it('prints a run’s error on one line, with its controls spelled out', async () => {
+    const hostile: RunView = {
+      ...RUNNING,
+      status: 'failed',
+      error: 'boom \u001b]0;pwned\u0007\nRun x complete',
+    };
+    const { fetch } = stubApi(({ method }) =>
+      method === 'POST'
+        ? Response.json({ runId: RUN_ID }, { status: 202 })
+        : Response.json(hostile),
+    );
+    const { io, out, err } = memoryIo();
+    expect(await main(['run', 'cli-products', '--wait'], { io, env: ENV, fetch })).toBe(1);
+    expect(out).toEqual([
+      `Started ${RUN_ID}.`,
+      String.raw`Run ${RUN_ID} failed: boom \u{1b}]0;pwned\u{7}\u{a}Run x complete`,
+    ]);
+    expect(err).toEqual([]);
+    for (const line of [...out, ...err]) expect(line).not.toMatch(DRIVES_A_TERMINAL);
+  });
+
+  it('spells out controls in everything a finished run reports', async () => {
+    const hostile: RunView = {
+      ...RUNNING,
+      status: 'complete',
+      finishedAt: '2026-10-10T00:01:00.000Z',
+      summary: {
+        items: 1,
+        fetches: { changed: 1, unchanged: 0, gone: 0, failed: 0, blocked: 0 },
+        statements: { added: 1, reseen: 0, withdrawn: 0 },
+        llm: { ran: 0, reused: 0, skipped: 1, failed: 0, inputTokens: 0, outputTokens: 0 },
+        entities: { created: 1, linked: 0, conflicts: 0, unresolved: 0 },
+        snapshot: {
+          published: false,
+          reason: 'a \u001b[31mred\u001b[0m reason',
+          excluded: [{ canonicalId: 'sp_1\u0007', missing: ['na\u009bme'] }],
+        },
+        notes: ['see \u001b]8;;https://evil.example\u0007here\u001b]8;;\u0007'],
+      },
+    };
+    const { fetch } = stubApi(({ method }) =>
+      method === 'POST'
+        ? Response.json({ runId: RUN_ID }, { status: 202 })
+        : Response.json(hostile),
+    );
+    const { io, out, err } = memoryIo();
+    expect(await main(['run', 'cli-products', '--wait'], { io, env: ENV, fetch })).toBe(0);
+    expect(out).toContain(
+      String.raw`Snapshot: none published, because a \u{1b}[31mred\u{1b}[0m reason.`,
+    );
+    expect(out).toContain(String.raw`Left out: sp_1\u{7}, missing na\u{9b}me.`);
+    expect(out).toContain(String.raw`  see \u{1b}]8;;https://evil.example\u{7}here\u{1b}]8;;\u{7}`);
+    expect(err).toEqual([]);
+    for (const line of [...out, ...err]) expect(line).not.toMatch(DRIVES_A_TERMINAL);
+  });
+
+  it('spells out controls in a plan, and in what the API refuses with', async () => {
+    const summary: ApplySummary = {
+      dataset: 'cli-products',
+      revision: 2,
+      created: false,
+      changed: true,
+      sources: { added: ['a\u001b[2J'], removed: ['b\u0007'], changed: ['c\u{202e}'] },
+      pages: { added: 0, removed: 0 },
+    };
+    const planned = stubApi(() => Response.json(summary));
+    const first = memoryIo(FILES);
+    expect(
+      await main(['plan', 'cli-products.yaml'], {
+        io: first.io,
+        env: ENV,
+        fetch: planned.fetch,
+      }),
+    ).toBe(0);
+    expect(first.out).toEqual([
+      'cli-products would move to revision 2.',
+      String.raw`Sources added: a\u{1b}[2J.`,
+      String.raw`Sources removed: b\u{7}.`,
+      String.raw`Sources changed: c\u{202e}.`,
+    ]);
+
+    const refused = stubApi(() =>
+      Response.json(
+        { error: 'No \u001b[2Jway', issues: ['dataset: \u009b31mbad\u{202e}q'] },
+        { status: 400 },
+      ),
+    );
+    const second = memoryIo(FILES);
+    expect(
+      await main(['apply', 'cli-products.yaml'], {
+        io: second.io,
+        env: ENV,
+        fetch: refused.fetch,
+      }),
+    ).toBe(1);
+    expect(second.err).toEqual([
+      String.raw`No \u{1b}[2Jway`,
+      String.raw`  dataset: \u{9b}31mbad\u{202e}q`,
+    ]);
+    expect(second.out).toEqual([]);
+    for (const line of [...first.out, ...first.err, ...second.out, ...second.err]) {
+      expect(line).not.toMatch(DRIVES_A_TERMINAL);
+    }
+  });
+
+  it('spells out controls in what was typed', async () => {
+    const { io, err } = memoryIo();
+    expect(await main(['run', 'cli-products', '--bog\u001bus'], { io, env: {} })).toBe(2);
+    expect(err[0]).toContain(String.raw`--bog\u{1b}us`);
+    expect(err.slice(1)).toEqual(USAGE.split('\n'));
+    for (const line of err) expect(line).not.toMatch(DRIVES_A_TERMINAL);
+  });
+});
+
+describe('printable', () => {
+  it.each([
+    ['a tab', 'a\tb', String.raw`a\u{9}b`],
+    ['a newline', 'a\nb', String.raw`a\u{a}b`],
+    ['escape', '\u001b[31mred', String.raw`\u{1b}[31mred`],
+    ['the C1 control sequence introducer', '\u009b31m', String.raw`\u{9b}31m`],
+    ['a right-to-left override', 'abc\u{202e}def', String.raw`abc\u{202e}def`],
+  ])('spells out %s', (_what, text, spelledOut) => {
+    expect(printable(text)).toBe(spelledOut);
+  });
+
+  it.each([
+    ['U+0000', '\u{0}', String.raw`\u{0}`],
+    ['U+001F', '\u{1f}', String.raw`\u{1f}`],
+    ['U+007F', '\u{7f}', String.raw`\u{7f}`],
+    ['U+0080', '\u{80}', String.raw`\u{80}`],
+    ['U+009F', '\u{9f}', String.raw`\u{9f}`],
+    ['U+202A', '\u{202a}', String.raw`\u{202a}`],
+    ['U+202E', '\u{202e}', String.raw`\u{202e}`],
+    ['U+2066', '\u{2066}', String.raw`\u{2066}`],
+    ['U+2069', '\u{2069}', String.raw`\u{2069}`],
+  ])('spells out the edge of a range, %s', (_what, text, spelledOut) => {
+    expect(printable(text)).toBe(spelledOut);
+  });
+
+  it.each([
+    ['a space', ' '],
+    ['a tilde', '~'],
+    ['a no-break space', '\u{a0}'],
+    ['a paragraph separator', '\u{2029}'],
+    ['a narrow no-break space', '\u{202f}'],
+    ['the code point before the isolates', '\u{2065}'],
+    ['the code point after the isolates', '\u{206a}'],
+    ['accents and a typographic apostrophe', 'Zoë’s café'],
+    ['a character outside the BMP', '\u{1f3a7}'],
+    ['a backslash', 'C:\\Users\\salar'],
+  ])('leaves %s alone', (_what, text) => {
+    expect(printable(text)).toBe(text);
+  });
+
+  it('spells out every control in a long line, and nothing else', () => {
+    expect(printable('\u001b]0;title\u0007 and \u001b[2J and \u{202e}evil\u{2069}')).toBe(
+      String.raw`\u{1b}]0;title\u{7} and \u{1b}[2J and \u{202e}evil\u{2069}`,
+    );
   });
 });

@@ -1,6 +1,7 @@
 import { parseArgs } from 'node:util';
 import { createClient } from './client';
 import { check, plan, pullSnapshot, run, type Io } from './commands';
+import { printable } from './format';
 
 export const USAGE = `Usage: spatula <command>
 
@@ -15,6 +16,9 @@ Environment:
   SPATULA_URL    where Spatula is (http://localhost:8787 if unset)
   SPATULA_TOKEN  the owner token`;
 
+/** The usage a line at a time, because a line is what a call to the Io prints. */
+const USAGE_LINES = USAGE.split('\n');
+
 const OPTIONS = {
   wait: { type: 'boolean' },
   out: { type: 'string' },
@@ -25,14 +29,29 @@ const OPTIONS = {
 const parse = (argv: string[]) =>
   parseArgs({ args: argv, allowPositionals: true, options: OPTIONS });
 
+/**
+ * What the commands print goes through this, so no line they print can drive the terminal. A call
+ * prints one line: a newline inside it is spelled out like any other control.
+ */
+function printableIo(io: Io): Io {
+  return {
+    out: (line) => io.out(printable(line)),
+    err: (line) => io.err(printable(line)),
+    readFile: (path) => io.readFile(path),
+    writeFile: (path, data) => io.writeFile(path, data),
+    sleep: (ms) => io.sleep(ms),
+  };
+}
+
 /** Runs one command. 0 means it worked, 1 that it didn't, and 2 that it was called wrongly. */
 export async function main(
   argv: string[],
   context: { io: Io; env: Record<string, string | undefined>; fetch?: typeof fetch },
 ): Promise<number> {
-  const { io, env } = context;
+  const { env } = context;
+  const io = printableIo(context.io);
   const usage = () => {
-    io.err(USAGE);
+    for (const line of USAGE_LINES) io.err(line);
     return 2;
   };
   let parsed: ReturnType<typeof parse>;
@@ -44,7 +63,7 @@ export async function main(
   }
   const { values, positionals } = parsed;
   if (values.help === true) {
-    io.out(USAGE);
+    for (const line of USAGE_LINES) io.out(line);
     return 0;
   }
   const client = createClient({
