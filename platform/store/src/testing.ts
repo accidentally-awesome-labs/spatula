@@ -13,11 +13,22 @@ function testDatabaseUrl(name: string): string {
   return url.href;
 }
 
+/** A test database's name: plain enough to quote as an identifier, and saying what it's for. */
+const TEST_DATABASE_NAME = /^[a-z][a-z0-9_]*_test$/u;
+
 /**
  * Drops the database `name` next to the development database, recreates it from the migrations,
- * and returns its URL. Refuses servers that aren't local unless ALLOW_DB_RESET=1 is set.
+ * and returns its URL. Refuses servers that aren't local unless ALLOW_DB_RESET=1 is set, and any
+ * name but lowercase letters, digits, and underscores ending in `_test`.
  */
 export async function prepareTestDatabase(name: string): Promise<string> {
+  // The locality check reads only the host name, so another server on this machine passes it.
+  // The name is what keeps a drop from reaching a database that isn't for tests.
+  if (!TEST_DATABASE_NAME.test(name)) {
+    throw new Error(
+      `${JSON.stringify(name)} isn’t a test database’s name: use lowercase letters, digits, and underscores, ending in _test.`,
+    );
+  }
   const server = databaseUrl();
   if (!isLocalDatabase(server) && process.env.ALLOW_DB_RESET !== '1') {
     throw new Error(
@@ -25,16 +36,22 @@ export async function prepareTestDatabase(name: string): Promise<string> {
     );
   }
   const admin = postgres(server, { max: 1, onnotice: () => {} });
-  await admin.unsafe(`drop database if exists "${name}" with (force)`);
-  await admin.unsafe(`create database "${name}"`);
-  await admin.end();
+  try {
+    await admin.unsafe(`drop database if exists "${name}" with (force)`);
+    await admin.unsafe(`create database "${name}"`);
+  } finally {
+    await admin.end();
+  }
 
   const url = testDatabaseUrl(name);
   const client = postgres(url, { max: 1, onnotice: () => {} });
-  await migrate(drizzle(client), {
-    migrationsFolder: fileURLToPath(new URL('../drizzle', import.meta.url)),
-  });
-  await client.end();
+  try {
+    await migrate(drizzle(client), {
+      migrationsFolder: fileURLToPath(new URL('../drizzle', import.meta.url)),
+    });
+  } finally {
+    await client.end();
+  }
   return url;
 }
 

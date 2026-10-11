@@ -111,7 +111,8 @@ async function readCapped(
       chunks.push(value.subarray(0, maxBytes - size));
       size = maxBytes;
       truncated = true;
-      await reader.cancel();
+      // The body has all it will keep, so a stream that has failed since can't fail the answer.
+      await reader.cancel().catch(() => undefined);
       break;
     }
     chunks.push(value);

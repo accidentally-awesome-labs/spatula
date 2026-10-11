@@ -138,6 +138,27 @@ describe('createHttpFetcher', () => {
     expect(cancelled).toHaveBeenCalledTimes(1);
   });
 
+  it('keeps the body it read up to the limit when the stream fails right after', async () => {
+    // The first chunk passes the limit. The stream fails on the next pull, before the reader
+    // cancels it, so cancelling it fails too.
+    let pulls = 0;
+    const failing = new ReadableStream<Uint8Array>({
+      pull(controller) {
+        pulls += 1;
+        if (pulls === 1) controller.enqueue(new TextEncoder().encode('x'.repeat(25)));
+        else controller.error(new TypeError('terminated'));
+      },
+    });
+    const http = createHttpFetcher({
+      userAgent: UA,
+      maxBytes: 10,
+      fetch: stub(() => new Response(failing, { status: 200 })).fetch,
+    });
+    const result = await http.get('https://maker-a.example/cut-short', {});
+    expect(result).toMatchObject({ ok: true, status: 200, truncated: true });
+    expect(result.ok && new TextDecoder().decode(result.body)).toBe('x'.repeat(10));
+  });
+
   it('turns a timeout or a network error into a failed answer', async () => {
     const timedOut = createHttpFetcher({
       userAgent: UA,
