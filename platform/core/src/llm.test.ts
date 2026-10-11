@@ -9,6 +9,7 @@ import {
   withoutWrapperTags,
 } from './llm';
 import type { RecordType } from './definition';
+import { costRatio } from './testing/cost';
 
 const specs: FieldDef = {
   type: 'specs',
@@ -108,26 +109,32 @@ describe('buildLlmRequest', () => {
     expect(dressedRequest.user.match(/untrusted_content/giu)).toHaveLength(2);
   });
 
-  it('leaves an unterminated tag as it is, and reads hostile text in linear time', () => {
-    expect(withoutWrapperTags('a <untrusted_content x> b <untrusted_content y')).toBe(
-      'a [tag removed] b <untrusted_content y',
-    );
-    // Five times the most text a page gives, so that rereading the rest of it from every tag would
-    // take seconds, not milliseconds.
-    const hostile = '<untrusted_content '.repeat(16_000);
-    // A "<", a long run of spaces, and a ">" that isn't a wrapper tag's. Spaces before a tag's name
-    // could be split between its two groups in every possible way.
-    const spaced = `<${' '.repeat(60_000)}>`;
-    const started = performance.now();
-    const plain = withoutWrapperTags(hostile);
-    const afterOne = withoutWrapperTags(`>${hostile}`);
-    const gap = withoutWrapperTags(spaced);
-    const elapsed = performance.now() - started;
-    expect(plain).toBe(hostile);
-    expect(afterOne).toBe(`>${hostile}`);
-    expect(gap).toBe(spaced);
-    expect(elapsed).toBeLessThan(2_000);
-  });
+  it(
+    'leaves an unterminated tag as it is, and reads hostile text in linear time',
+    { timeout: 30_000 },
+    () => {
+      expect(withoutWrapperTags('a <untrusted_content x> b <untrusted_content y')).toBe(
+        'a [tag removed] b <untrusted_content y',
+      );
+      const hostile = (tags: number): [string, string, string] => {
+        // Five times the most text a page gives, at 16,000 tags, so that rereading the rest of it
+        // from every tag would take seconds, not milliseconds.
+        const tagged = '<untrusted_content '.repeat(tags);
+        // A "<", a long run of spaces, and a ">" that isn't a wrapper tag's. Spaces before a tag's
+        // name could be split between its two groups in every possible way.
+        const spaced = `<${' '.repeat(tags * 3.75)}>`;
+        return [tagged, `>${tagged}`, spaced];
+      };
+      const [plain, afterOne, spaced] = hostile(16_000);
+      expect(withoutWrapperTags(plain)).toBe(plain);
+      expect(withoutWrapperTags(afterOne)).toBe(afterOne);
+      expect(withoutWrapperTags(spaced)).toBe(spaced);
+      // Splitting the spaces every way made each one cost about 16 times as much among 30,000 as
+      // among a sixteenth of them. Reading them once costs about the same, as every tag does.
+      const strip = (texts: string[]) => () => texts.map((text) => withoutWrapperTags(text));
+      expect(costRatio(strip(hostile(500)), strip(hostile(8_000)), 16)).toBeLessThan(4);
+    },
+  );
 });
 
 describe('acceptLlmOutput', () => {
@@ -204,22 +211,26 @@ describe('acceptLlmOutput', () => {
   });
 
   it('looks for no more values on the page once it has kept 40', { timeout: 30_000 }, () => {
-    const proposed = Array.from({ length: 2_000 }, (_, i) => ({
-      label: `Spec ${i}`,
-      value: `value ${i}`,
-    }));
-    const text = proposed.map(({ label, value }) => `${label} ${value}`).join(' ');
-    const started = performance.now();
-    const { statements, rejected } = acceptLlmOutput({
-      output: { specs: proposed },
-      text,
-      fields: FIELDS,
-    });
-    const elapsed = performance.now() - started;
+    // A page that has every value proposed for it.
+    const offered = (count: number) => {
+      const proposed = Array.from({ length: count }, (_, i) => ({
+        label: `Spec ${i}`,
+        value: `value ${i}`,
+      }));
+      const text = proposed.map(({ label, value }) => `${label} ${value}`).join(' ');
+      return {
+        proposed,
+        accept: () => acceptLlmOutput({ output: { specs: proposed }, text, fields: FIELDS }),
+      };
+    };
+    const { proposed, accept } = offered(2_000);
+    const { statements, rejected } = accept();
     expect(statements.map((s) => s.value)).toEqual(proposed.slice(0, 40));
     expect(rejected).toHaveLength(1_960);
     expect(new Set(rejected.map((r) => r.reason))).toEqual(new Set(['more than 40 values']));
-    expect(elapsed).toBeLessThan(1_000);
+    // Searching the page for every value made each one cost about nine times as much among 2,000
+    // as among a sixteenth of them. Stopping at 40 costs about the same per value.
+    expect(costRatio(offered(125).accept, accept, 16)).toBeLessThan(4);
   });
 
   it('accepts nothing from an answer that is not a list', () => {
@@ -285,22 +296,26 @@ describe('acceptLlmOutput', () => {
     expect(reasons(label, value, text)).toEqual([]);
   });
 
-  it('refuses thousands of values that are not on the page without a pattern for each', () => {
-    const invented = Array.from({ length: 20_000 }, (_, i) => ({
-      label: `Label ${i}`,
-      value: `invented ${i}`,
-    }));
-    const started = performance.now();
-    const { statements, rejected } = acceptLlmOutput({
-      output: { specs: invented },
-      text: TEXT,
-      fields: FIELDS,
-    });
-    const elapsed = performance.now() - started;
-    expect(statements).toEqual([]);
-    expect(rejected).toHaveLength(20_000);
-    expect(elapsed).toBeLessThan(2_000);
-  });
+  it(
+    'refuses thousands of values that are not on the page without a pattern for each',
+    { timeout: 30_000 },
+    () => {
+      const inventing = (count: number) => {
+        const invented = Array.from({ length: count }, (_, i) => ({
+          label: `Label ${i}`,
+          value: `invented ${i}`,
+        }));
+        return () => acceptLlmOutput({ output: { specs: invented }, text: TEXT, fields: FIELDS });
+      };
+      const thousands = inventing(10_000);
+      const { statements, rejected } = thousands();
+      expect(statements).toEqual([]);
+      expect(rejected).toHaveLength(10_000);
+      // A pattern for every value cost more per value the more of them there were: each cost about
+      // 150 times as much among 10,000 as among a sixteenth of them. Looking first costs the same.
+      expect(costRatio(inventing(625), thousands, 16)).toBeLessThan(4);
+    },
+  );
 
   it('matches a value as the page writes it, whatever punctuation it carries', () => {
     const { statements, rejected } = acceptLlmOutput({

@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { cleanText, normalizeValue, specLabelKey, type FieldDef } from './fields';
+import { costRatio } from './testing/cost';
 
 const field = (overrides: Partial<FieldDef>): FieldDef => ({
   type: 'text',
@@ -111,24 +112,28 @@ describe('normalizeValue', () => {
   it('refuses a long run of combining marks before normalizing it', { timeout: 30_000 }, () => {
     // U+0301 sorts after U+0323, so every pair is out of order, and normalizing a run of them takes
     // time that grows with the square of its length. The run is 40,000 marks long.
-    const marks = `a${'\u{301}\u{323}'.repeat(20_000)}`;
     const specs = field({ type: 'specs', list: true });
-    const started = performance.now();
-    const results = [
-      normalizeValue(field({}), marks),
-      normalizeValue(field({ type: 'enum', values: ['Headphones'] }), marks),
-      normalizeValue(specs, { label: marks, value: '1' }),
-      normalizeValue(specs, { label: 'Weight', value: marks }),
-    ];
-    const elapsed = performance.now() - started;
+    const refusals = (pairs: number) => {
+      const marks = `a${'\u{301}\u{323}'.repeat(pairs)}`;
+      return () => [
+        normalizeValue(field({}), marks),
+        normalizeValue(field({ type: 'enum', values: ['Headphones'] }), marks),
+        normalizeValue(specs, { label: marks, value: '1' }),
+        normalizeValue(specs, { label: 'Weight', value: marks }),
+      ];
+    };
+    const longest = refusals(20_000);
     const longSpec = 'a spec with a label over 60 or a value over 200 characters';
-    expect(results).toEqual([
+    expect(longest()).toEqual([
       { ok: false, reason: 'longer than 500 characters' },
       { ok: false, reason: 'not one of Headphones' },
       { ok: false, reason: longSpec },
       { ok: false, reason: longSpec },
     ]);
-    expect(elapsed).toBeLessThan(500);
+    // Normalizing first made each mark cost about 16 times as much in this run as in one a
+    // sixteenth as long, itself over four times longer than any field allows. Refusing first costs
+    // about the same at any length.
+    expect(costRatio(refusals(1_250), longest, 16)).toBeLessThan(4);
   });
 
   it('collapses whitespace before deciding a value is too long to normalize', () => {

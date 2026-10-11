@@ -333,13 +333,14 @@ describe('productPack, on hostile pages', () => {
    * It counts this process's CPU time, not time on the clock. A busy machine, like CI running every
    * package's tests at once, stretches the clock for whatever it runs, by more than any fixed bound
    * could allow. Each round reads `small` `times` over and `large` once, so the two take about as
-   * long as each other, and the cheapest of five rounds of each is what counts.
+   * long as each other, and the cheapest of three rounds of each is what counts. @spatula/core's
+   * tests use the same check, which that package keeps to itself.
    */
   const costRatio = (small: Page, large: Page, times: number): number => {
     read(small); // V8 compiles the pass before any round counts.
     let cheapestSmall = Infinity;
     let cheapestLarge = Infinity;
-    for (let round = 0; round < 5; round++) {
+    for (let round = 0; round < 3; round++) {
       let started = cpuMicroseconds();
       for (let i = 0; i < times; i++) read(small);
       cheapestSmall = Math.min(cheapestSmall, cpuMicroseconds() - started);

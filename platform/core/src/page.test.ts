@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { jsonLdTypes, parsePage, PAGE_TEXT_MAX } from './page';
+import { costRatio } from './testing/cost';
 
 const SHOP_PAGE = `<!doctype html><html><head>
 <title>LCD-X - Audeze</title>
@@ -126,18 +127,28 @@ describe('parsePage, JSON-LD and meta', () => {
     expect(page.meta.has('Product:Brand')).toBe(false);
   });
 
-  it('keeps every value of a key repeated 100,000 times, in order, in linear time', () => {
-    let html = '';
-    for (let index = 0; index < 100_000; index += 1) html += `<meta name="x" content="v${index}">`;
-    const started = performance.now();
-    const page = parsePage(html, 'https://maker.example/a');
-    const elapsed = performance.now() - started;
-    const values = page.meta.get('x');
-    expect(values).toHaveLength(100_000);
-    expect(values?.[0]).toBe('v0');
-    expect(values?.at(-1)).toBe('v99999');
-    expect(elapsed).toBeLessThan(2_000);
-  });
+  it(
+    'keeps every value of a key repeated 100,000 times, in order, in linear time',
+    { timeout: 30_000 },
+    () => {
+      const repeated = (count: number) => {
+        let html = '';
+        for (let index = 0; index < count; index += 1)
+          html += `<meta name="x" content="v${index}">`;
+        return html;
+      };
+      const page = parsePage(repeated(100_000), 'https://maker.example/a');
+      const values = page.meta.get('x');
+      expect(values).toHaveLength(100_000);
+      expect(values?.[0]).toBe('v0');
+      expect(values?.at(-1)).toBe('v99999');
+      // Copying the list of values for every tag made each tag cost about nine times as much among
+      // 20,000 as among a sixteenth of them. Adding to the list costs about the same at any size.
+      const [small, large] = [repeated(1_250), repeated(20_000)];
+      const parse = (html: string) => () => parsePage(html, 'https://maker.example/a');
+      expect(costRatio(parse(small), parse(large), 16)).toBeLessThan(4);
+    },
+  );
 });
 
 describe('parsePage, text', () => {
