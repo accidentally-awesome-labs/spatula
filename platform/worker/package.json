@@ -18,6 +18,7 @@
     "@spatula/core": "workspace:*",
     "@spatula/pack-products": "workspace:*",
     "@spatula/store": "workspace:*",
+    "hono": "4.12.29",
     "zod": "^4.6.5"
   },
   "devDependencies": {

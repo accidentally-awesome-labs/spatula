@@ -19,9 +19,16 @@ export default defineConfig({
             wrangler: { configPath: './wrangler.jsonc' },
             miniflare: {
               hyperdrives: { HYPERDRIVE: inject('databaseUrl') },
-              // The Worker reads an empty secret as unset, so a key the owner later puts in
-              // .dev.vars can't make these tests call a paid model.
-              bindings: { ANTHROPIC_API_KEY: '', AI_GATEWAY_URL: '', AI_GATEWAY_TOKEN: '' },
+              bindings: {
+                // The Worker reads an empty secret as unset, so a key the owner later puts in
+                // .dev.vars can't make these tests call a paid model.
+                ANTHROPIC_API_KEY: '',
+                AI_GATEWAY_URL: '',
+                AI_GATEWAY_TOKEN: '',
+                // The SHA-256 of "test-token", which the API tests send.
+                OWNER_TOKEN_HASH:
+                  '4c5dc9b7708905f77f5e5d16316b5dfb425e68cb326dcd55a860e90a7707031e',
+              },
             },
           })),
         ],

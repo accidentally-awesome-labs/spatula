@@ -546,6 +546,9 @@ importers:
       '@spatula/store':
         specifier: workspace:*
         version: link:../store
+      hono:
+        specifier: 4.12.29
+        version: 4.12.29
       zod:
         specifier: ^4.6.5
         version: 4.6.5
