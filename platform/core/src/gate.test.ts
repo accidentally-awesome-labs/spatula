@@ -115,6 +115,97 @@ describe('reserve', () => {
     );
     expect(decision).toMatchObject({ kind: 'go', signals: { 'ai-input': 'no' } });
   });
+
+  it('fetches nothing before robots.txt has been read, and says why', () => {
+    expect(reserve(INITIAL_GATE_STATE, request('https://maker.example/a'))).toEqual({
+      state: INITIAL_GATE_STATE,
+      decision: {
+        kind: 'deny',
+        outcome: 'failed',
+        reason:
+          'robots.txt is unreachable, so nothing on maker.example is fetched until it answers',
+      },
+    });
+    const down: GateState = {
+      ...INITIAL_GATE_STATE,
+      robots: robotsRecord({ status: 503, text: '' }, NOW),
+    };
+    expect(reserve(down, request('https://maker.example/a')).decision).toEqual({
+      kind: 'deny',
+      outcome: 'failed',
+      reason:
+        'robots.txt is unreachable (HTTP 503), so nothing on maker.example is fetched until it answers',
+    });
+  });
+
+  it.each([401, 403, 410])('allows everything when robots.txt answered %i', (status) => {
+    const state: GateState = {
+      ...INITIAL_GATE_STATE,
+      robots: robotsRecord({ status, text: '' }, NOW),
+    };
+    expect(reserve(state, request('https://maker.example/anything')).decision).toEqual({
+      kind: 'go',
+      waitMs: 0,
+      signals: {},
+    });
+  });
+
+  it('spaces requests at least a second apart, even when the dataset asks for no interval', () => {
+    const { state } = reserve(withRobots(''), {
+      ...request('https://maker.example/a'),
+      minIntervalMs: 0,
+    });
+    expect(state.nextAt).toBe(NOW + 1000);
+  });
+
+  it('waits as long as the caller allows, and no longer', () => {
+    const atLimit = reserve(
+      { ...withRobots(''), nextAt: NOW + 15_000 },
+      request('https://maker.example/a'),
+    );
+    expect(atLimit.decision).toMatchObject({ kind: 'go', waitMs: 15_000 });
+    expect(atLimit.state.nextAt).toBe(NOW + 16_000);
+    const pastLimit = reserve(
+      { ...withRobots(''), nextAt: NOW + 15_001 },
+      request('https://maker.example/a'),
+    );
+    expect(pastLimit.decision).toEqual({
+      kind: 'later',
+      retryAfterMs: 15_001,
+      reason: 'maker.example is paced',
+    });
+  });
+
+  it('says a host asked for a break when its backoff is what the caller would wait for', () => {
+    const state: GateState = { ...withRobots(''), backoffUntil: NOW + 60_000 };
+    expect(reserve(state, request('https://maker.example/a')).decision).toEqual({
+      kind: 'later',
+      retryAfterMs: 60_000,
+      reason: 'maker.example asked for a break',
+    });
+  });
+
+  it('never changes the state it is given', () => {
+    // Any write to a frozen object throws, because these modules run in strict mode.
+    const frozen = (state: GateState): GateState => {
+      if (state.robots !== null) Object.freeze(state.robots);
+      return Object.freeze(state);
+    };
+    const paced = frozen({ ...withRobots(''), nextAt: NOW + 60_000 });
+    expect(reserve(paced, request('https://maker.example/a'))).toMatchObject({
+      state: paced,
+      decision: { kind: 'later' },
+    });
+    expect(paced.nextAt).toBe(NOW + 60_000);
+    const open = frozen(withRobots(''));
+    expect(reserve(open, request('https://maker.example/a')).decision).toMatchObject({
+      kind: 'go',
+    });
+    expect(open.nextAt).toBe(0);
+    const strained = recordResponse(open, { status: 429, now: NOW, retryAfter: '0' });
+    expect(strained.failures).toBe(1);
+    expect(open).toEqual(withRobots(''));
+  });
 });
 
 describe('recordResponse', () => {
@@ -140,6 +231,34 @@ describe('recordResponse', () => {
       recordResponse(INITIAL_GATE_STATE, { status: 503, now: NOW, retryAfter: '86400' })
         .backoffUntil,
     ).toBe(NOW + HOUR);
+  });
+
+  it('keeps growing the break when Retry-After asks for less', () => {
+    let state = INITIAL_GATE_STATE;
+    const breaks: number[] = [];
+    for (let i = 0; i < 4; i += 1) {
+      state = recordResponse(state, { status: 429, now: NOW, retryAfter: '0' });
+      breaks.push(state.backoffUntil - NOW);
+    }
+    expect(breaks).toEqual([30_000, 60_000, 120_000, 240_000]);
+    expect(state.failures).toBe(4);
+  });
+
+  it('keeps a longer break it already has when a short Retry-After arrives', () => {
+    const resting: GateState = { ...INITIAL_GATE_STATE, failures: 1, backoffUntil: NOW + HOUR };
+    expect(recordResponse(resting, { status: 429, now: NOW, retryAfter: '5' })).toEqual({
+      ...resting,
+      failures: 2,
+      backoffUntil: NOW + HOUR,
+    });
+  });
+
+  it.each([401, 402])('counts a %i as a strain', (status) => {
+    expect(recordResponse(INITIAL_GATE_STATE, { status, now: NOW, retryAfter: null })).toEqual({
+      ...INITIAL_GATE_STATE,
+      failures: 1,
+      backoffUntil: NOW + 30_000,
+    });
   });
 
   it('clears the failure count on any other answer, and keeps an earlier backoff', () => {

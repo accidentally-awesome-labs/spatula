@@ -6,7 +6,8 @@ import { isAllowed, parseRobots, type ContentSignals } from './robots';
  * means everything is allowed; a 5xx, a 429, or no answer means nothing is, until it recovers.
  * Requests to a host start at least a second apart, or further apart when robots.txt asks for a
  * crawl delay or the dataset for a longer interval. After a 429, a 5xx, a block (401, 402, or
- * 403), or no answer, the host gets a break that doubles with each strain.
+ * 403), or no answer, the host gets a break that doubles with each strain, or the longer one its
+ * Retry-After asks for.
  */
 
 export const PRODUCT_TOKEN = 'Spatula';
@@ -129,9 +130,10 @@ export function recordResponse(
   const strained = response.status === 0 || STRAINS.has(response.status) || response.status >= 500;
   if (!strained) return { ...state, failures: 0 };
   const failures = state.failures + 1;
-  const delay =
-    retryAfterMs(response.retryAfter, response.now) ??
-    Math.min(BACKOFF_MAX_MS, BACKOFF_BASE_MS * 2 ** (failures - 1));
+  // A Retry-After can lengthen the break, never shorten it: a host that keeps answering 429 with
+  // a short one still gets a break that grows.
+  const backoff = Math.min(BACKOFF_MAX_MS, BACKOFF_BASE_MS * 2 ** (failures - 1));
+  const delay = Math.max(backoff, retryAfterMs(response.retryAfter, response.now) ?? 0);
   return { ...state, failures, backoffUntil: Math.max(state.backoffUntil, response.now + delay) };
 }
 
