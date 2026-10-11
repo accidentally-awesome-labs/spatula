@@ -1,5 +1,5 @@
 import { sha256Hex, type RunView } from '@spatula/core';
-import { commitSnapshot, getRun, runs, startRun } from '@spatula/store';
+import { commitSnapshot, getDataset, getRun, runs, startRun } from '@spatula/store';
 import { testDefinition } from '@spatula/store/fixtures';
 import { introspectWorkflow } from 'cloudflare:test';
 import { env, exports } from 'cloudflare:workers';
@@ -35,6 +35,11 @@ function call(
       ? options.body
       : JSON.stringify(options.body);
   return Promise.resolve(api.request(path, { method, headers, body }, options.bindings ?? env));
+}
+
+/** Every answer but the public page is private, no-store, whatever its status. */
+function expectNoStore(response: Response): void {
+  expect(response.headers.get('cache-control')).toBe('private, no-store');
 }
 
 /**
@@ -88,6 +93,35 @@ describe('the public page', () => {
     const page = await response.text();
     expect(page).toContain('Spatula 0.2.0-dev');
     expect(page).toContain('User-agent: Spatula');
+  });
+
+  it('escapes the version it prints', async () => {
+    const pageFor = async (version: string) =>
+      (
+        await call('GET', '/', {
+          token: null,
+          bindings: { ...env, SPATULA_VERSION: version } as Env,
+        })
+      ).text();
+    const markup = await pageFor('1<b>');
+    expect(markup).toContain('Spatula 1&lt;b&gt;');
+    expect(markup).not.toContain('1<b>');
+    // All five characters, "&" among them, so a replacement that comes first isn't escaped again.
+    expect(await pageFor(`a&b<c>d"e'f`)).toContain('Spatula a&amp;b&lt;c&gt;d&quot;e&#39;f keeps');
+  });
+
+  it('says what it does with robots.txt and with Content Signals', async () => {
+    // The page's text, with its line breaks collapsed.
+    const page = (await (await call('GET', '/', { token: null })).text()).replace(/\s+/gu, ' ');
+    expect(page).toContain(
+      "While a site's robots.txt can't be reached, or answers with a server error or 429, it fetches nothing from that site. A site with no robots.txt (any other 4xx answer) has no rules for it.",
+    );
+    expect(page).toContain(
+      "it reads a page with an AI model unless the site's Content Signals say <code>ai-input=no</code>.",
+    );
+    // What it said before promised more than the code does.
+    expect(page).not.toContain("robots.txt can't be read");
+    expect(page).not.toContain('only where the site allows');
   });
 });
 
@@ -155,6 +189,25 @@ describe('the owner routes', () => {
     expect(unset.headers.get('cache-control')).toBe('private, no-store');
   });
 
+  it('keep every route under /datasets behind the token', async () => {
+    // The guard is on the prefix, so it covers a path that no route answers as well as the three
+    // that follow it, which edit a definition, spend on a run, and hand out a snapshot.
+    const requests = [
+      ['POST', '/datasets/api-guard/definition'],
+      ['PUT', '/datasets/api-guard'],
+      ['POST', '/datasets/api-guard/runs'],
+      ['GET', '/datasets/api-guard/snapshots/latest'],
+    ] as const;
+    for (const [method, path] of requests) {
+      for (const token of [null, 'wrong']) {
+        const response = await call(method, path, { token });
+        expect(response.status, `${method} ${path} with ${token ?? 'no token'}`).toBe(401);
+        expect(response.headers.get('www-authenticate')).toBe('Bearer');
+        expectNoStore(response);
+      }
+    }
+  });
+
   it('read the scheme in any case, and the token exactly', async () => {
     // RFC 9110 makes an authentication scheme's name case-insensitive. The token is a secret, so
     // its case counts. A run that doesn't exist is what an accepted token gets (404).
@@ -162,6 +215,20 @@ describe('the owner routes', () => {
     expect((await attempt('bearer test-token')).status).toBe(404);
     expect((await attempt('BEARER test-token')).status).toBe(404);
     expect((await attempt('Bearer TEST-TOKEN')).status).toBe(401);
+  });
+
+  it('refuse a dryRun that is neither 1 nor 0, and apply nothing', async () => {
+    const definition = testDefinition('api-dry-flag');
+    const refused = await call('PUT', '/datasets/api-dry-flag?dryRun=true', { body: definition });
+    expect(refused.status).toBe(400);
+    expectNoStore(refused);
+    expect(await refused.json()).toEqual({ error: 'dryRun is 1 or 0.' });
+    expect(await withDatabase(env, (db) => getDataset(db, 'api-dry-flag'))).toBeNull();
+
+    // 0 applies, as no dryRun does; it is the first time this dataset is written.
+    const applied = await call('PUT', '/datasets/api-dry-flag?dryRun=0', { body: definition });
+    expect(applied.status).toBe(200);
+    expect(await applied.json()).toMatchObject({ created: true, changed: true });
   });
 
   it('preview a definition, apply it, and refuse broken ones', async () => {
@@ -190,6 +257,7 @@ describe('the owner routes', () => {
 
     const elsewhere = await call('PUT', '/datasets/somewhere-else', { body: definition });
     expect(elsewhere.status).toBe(400);
+    expectNoStore(elsewhere);
     expect(await elsewhere.json()).toEqual({
       error: 'The definition has problems.',
       issues: ['dataset: it says api-definitions, but the address says somewhere-else'],
@@ -198,6 +266,7 @@ describe('the owner routes', () => {
     const training = { ...definition, policy: { purposes: ['ai-train'], perHostIntervalMs: 1000 } };
     const refused = await call('PUT', '/datasets/api-definitions', { body: training });
     expect(refused.status).toBe(400);
+    expectNoStore(refused);
     expect(await refused.json()).toMatchObject({
       issues: [expect.stringMatching(/^policy\.purposes/u)],
     });
@@ -206,11 +275,14 @@ describe('the owner routes', () => {
       ...definition,
       recordTypes: { product: { ...definition.recordTypes.product!, pack: 'products/nothing' } },
     };
-    expect((await call('PUT', '/datasets/api-definitions', { body: noPack })).status).toBe(400);
+    const unknownPack = await call('PUT', '/datasets/api-definitions', { body: noPack });
+    expect(unknownPack.status).toBe(400);
+    expectNoStore(unknownPack);
     const notJson = await call('PUT', '/datasets/api-definitions', {
       body: 'dataset: api-definitions',
     });
     expect(notJson.status).toBe(400);
+    expectNoStore(notJson);
     expect(await notJson.json()).toEqual({ error: 'The body isn’t JSON.' });
   });
 
@@ -229,12 +301,14 @@ describe('the owner routes', () => {
       await untilSlotHasRoom();
       const started = await call('POST', '/datasets/api-runs/runs');
       expect(started.status).toBe(202);
+      expectNoStore(started);
       const { runId } = (await started.json()) as { runId: string };
       expect(runId).toMatch(/^api-runs-\d{12}$/u);
       expect(started.headers.get('location')).toBe(`/runs/${runId}`);
 
       const twice = await call('POST', '/datasets/api-runs/runs');
       expect(twice.status).toBe(409);
+      expectNoStore(twice);
       expect(await twice.json()).toEqual({
         error: 'A run already started in this five-minute slot.',
         runId,
@@ -377,10 +451,49 @@ describe('the owner routes', () => {
     // reaching the query, where the database would reject it and the route would answer 500.
     const tooBig = await call('GET', '/datasets/api-snapshots/snapshots/9999999999');
     expect(tooBig.status).toBe(400);
+    expectNoStore(tooBig);
     expect(await tooBig.json()).toEqual({
       error: 'A generation is a whole number from 1, or latest.',
     });
     // The largest one the route accepts does reach the query, and is simply not found.
     expect((await call('GET', '/datasets/api-snapshots/snapshots/999999999')).status).toBe(404);
+  });
+
+  it('answer 500, and log it, when a snapshot’s file is gone from R2', async () => {
+    await call('PUT', '/datasets/api-lost-file', { body: testDefinition('api-lost-file') });
+    const key = 'datasets/api-lost-file/snapshots/sn_lost.json';
+    await env.STORE.put(key, '{}');
+    await withDatabase(env, (db) =>
+      commitSnapshot(db, {
+        id: 'sn_lost',
+        datasetId: 'api-lost-file',
+        generation: 1,
+        runId: null,
+        recordCount: 0,
+        recordsSha256: 'none',
+        key,
+        sha256: 'none',
+        bytes: 2,
+        publishedAt: '2026-10-10T00:00:00.000Z',
+        report: { excluded: [] },
+      }),
+    );
+    await env.STORE.delete(key);
+
+    const logged = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    try {
+      const response = await call('GET', '/datasets/api-lost-file/snapshots/latest');
+      expect(response.status).toBe(500);
+      expectNoStore(response);
+      expect(await response.json()).toEqual({
+        error: 'Something went wrong. The Worker’s logs say what.',
+      });
+      expect(logged).toHaveBeenCalledWith(
+        'API error:',
+        'The file for snapshot sn_lost is missing from R2',
+      );
+    } finally {
+      logged.mockRestore();
+    }
   });
 });

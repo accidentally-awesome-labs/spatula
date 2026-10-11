@@ -13,17 +13,18 @@ export function aboutPage(env: Env): string {
 <body>
 <main>
 <h1>Spatula</h1>
-<p>Spatula ${env.SPATULA_VERSION} keeps product facts current for the apps that depend on them:
+<p>Spatula ${escapeHtml(env.SPATULA_VERSION)} keeps product facts current for the apps that depend on them:
 names, identifiers such as GTINs and part numbers, and specifications. Its first app is Crowdio,
 a site about audio gear.</p>
 <h2>How it behaves</h2>
 <ul>
 <li>It obeys robots.txt: the rules for <code>Spatula</code>, or for <code>*</code> when none name it.
-While a site's robots.txt can't be read, it fetches nothing from that site.</li>
+While a site's robots.txt can't be reached, or answers with a server error or 429, it fetches
+nothing from that site. A site with no robots.txt (any other 4xx answer) has no rules for it.</li>
 <li>It waits at least a second between requests to a site, longer when robots.txt sets a
 Crawl-delay, and backs off when a site is busy or failing.</li>
-<li>It follows Content Signals: it reads a page with an AI model only where the site allows
-<code>ai-input</code>. Nothing it reads is used to train AI models.</li>
+<li>It follows Content Signals: it reads a page with an AI model unless the site's Content Signals
+say <code>ai-input=no</code>. Nothing it reads is used to train AI models.</li>
 <li>It collects facts only, never descriptions or photos. A block is an answer: it never tries
 to get around one.</li>
 </ul>
@@ -36,4 +37,14 @@ Disallow: /</code></pre>
 </body>
 </html>
 `;
+}
+
+/** Text as it can sit in HTML: the five characters that begin or end markup. */
+function escapeHtml(text: string): string {
+  return text
+    .replaceAll('&', '&amp;')
+    .replaceAll('<', '&lt;')
+    .replaceAll('>', '&gt;')
+    .replaceAll('"', '&quot;')
+    .replaceAll("'", '&#39;');
 }

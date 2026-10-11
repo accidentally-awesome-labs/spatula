@@ -22,12 +22,19 @@ import { withDatabase } from './database';
 
 type Api = { Bindings: Env };
 
+/**
+ * Every answer but the public page carries this. The owner middleware, notFound and onError set
+ * it with c.header, which Hono copies into the responses it builds (c.json). A handler that
+ * returns a raw Response has to set it by hand, as the snapshot route does.
+ */
+const PRIVATE_NO_STORE = 'private, no-store';
+
 export const api = new Hono<Api>();
 
 api.get('/', (c) => c.html(aboutPage(c.env)));
 
 const owner: MiddlewareHandler<Api> = async (c, next) => {
-  c.header('cache-control', 'private, no-store');
+  c.header('cache-control', PRIVATE_NO_STORE);
   const expected = secret(c.env, 'OWNER_TOKEN_HASH');
   if (expected === undefined)
     return c.json({ error: 'This deployment has no owner token yet.' }, 503);
@@ -45,6 +52,11 @@ api.use('/runs/*', owner);
 
 api.put('/datasets/:id', async (c) => {
   const id = c.req.param('id');
+  // A preview must never apply by mistake, so a flag that isn't 1 or 0 is refused, not guessed at.
+  const flag = c.req.query('dryRun');
+  if (flag !== undefined && flag !== '0' && flag !== '1') {
+    return c.json({ error: 'dryRun is 1 or 0.' }, 400);
+  }
   let body: unknown;
   try {
     body = await c.req.json();
@@ -62,7 +74,7 @@ api.put('/datasets/:id', async (c) => {
     ...packIssues(definition, packs),
   ];
   if (issues.length > 0) return c.json({ error: 'The definition has problems.', issues }, 400);
-  const dryRun = c.req.query('dryRun') === '1';
+  const dryRun = flag === '1';
   return c.json(await withDatabase(c.env, (db) => applyDefinition(db, definition, { dryRun })));
 });
 
@@ -137,7 +149,7 @@ api.get('/datasets/:id/snapshots/:generation', async (c) => {
   return new Response(file.body, {
     headers: {
       'content-type': 'application/json',
-      'cache-control': 'private, no-store',
+      'cache-control': PRIVATE_NO_STORE,
       'x-spatula-sha256': row.sha256,
       'x-spatula-generation': String(row.generation),
       'x-spatula-snapshot-id': row.id,
@@ -148,13 +160,13 @@ api.get('/datasets/:id/snapshots/:generation', async (c) => {
 // These two answer whatever the path, including ones outside the owner routes, which set the
 // header themselves.
 api.notFound((c) => {
-  c.header('cache-control', 'private, no-store');
+  c.header('cache-control', PRIVATE_NO_STORE);
   return c.json({ error: 'Not found.' }, 404);
 });
 
 api.onError((error, c) => {
   console.error('API error:', error instanceof Error ? error.message : String(error));
-  c.header('cache-control', 'private, no-store');
+  c.header('cache-control', PRIVATE_NO_STORE);
   return c.json({ error: 'Something went wrong. The Worker’s logs say what.' }, 500);
 });
 
