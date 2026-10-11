@@ -1,4 +1,4 @@
-import { parsePage, type Candidate } from '@spatula/core';
+import { parsePage, type Candidate, type Page } from '@spatula/core';
 import { describe, expect, it } from 'vitest';
 import { looksLikeGtin, productPack } from './index';
 
@@ -319,17 +319,50 @@ describe('productPack.finish', () => {
 });
 
 describe('productPack, on hostile pages', () => {
-  it('reads 20,000 products that share a name in linear time', { timeout: 30_000 }, () => {
-    const nodes = Array.from({ length: 20_000 }, (_, i) => ({
-      '@type': 'Product',
-      name: 'LCD-X',
-      brand: `Maker ${i}`,
-    }));
-    const hostile = page(ld(nodes));
-    const finish = productPack.finish ?? ((candidates: Candidate[]) => candidates);
-    const started = performance.now();
-    const candidates = finish(productPack.extract(hostile));
-    const elapsed = performance.now() - started;
+  const finish = productPack.finish ?? ((candidates: Candidate[]) => candidates);
+  const read = (given: Page) => finish(productPack.extract(given));
+  const cpuMicroseconds = () => {
+    const { user, system } = process.cpuUsage();
+    return user + system;
+  };
+
+  /**
+   * How many times as much each product costs on `large` as on `small`, a page with `times` fewer
+   * products. A pass that is linear in the page costs about the same per product on both: about 1.
+   *
+   * It counts this process's CPU time, not time on the clock. A busy machine, like CI running every
+   * package's tests at once, stretches the clock for whatever it runs, by more than any fixed bound
+   * could allow. Each round reads `small` `times` over and `large` once, so the two take about as
+   * long as each other, and the cheapest of five rounds of each is what counts.
+   */
+  const costRatio = (small: Page, large: Page, times: number): number => {
+    read(small); // V8 compiles the pass before any round counts.
+    let cheapestSmall = Infinity;
+    let cheapestLarge = Infinity;
+    for (let round = 0; round < 5; round++) {
+      let started = cpuMicroseconds();
+      for (let i = 0; i < times; i++) read(small);
+      cheapestSmall = Math.min(cheapestSmall, cpuMicroseconds() - started);
+      started = cpuMicroseconds();
+      read(large);
+      cheapestLarge = Math.min(cheapestLarge, cpuMicroseconds() - started);
+    }
+    return cheapestLarge / cheapestSmall;
+  };
+
+  it('reads 20,000 products that share a name in linear time', { timeout: 60_000 }, () => {
+    const sharing = (count: number) =>
+      page(
+        ld(
+          Array.from({ length: count }, (_, i) => ({
+            '@type': 'Product',
+            name: 'LCD-X',
+            brand: `Maker ${i}`,
+          })),
+        ),
+      );
+    const hostile = sharing(20_000);
+    const candidates = read(hostile);
     expect(candidates).toHaveLength(40_000);
     expect(candidates.slice(0, 2)).toEqual([
       { property: 'name', raw: 'LCD-X', method: 'jsonld', path: 'jsonld[0].name', confidence: 0.9 },
@@ -342,40 +375,45 @@ describe('productPack, on hostile pages', () => {
       },
     ]);
     expect(candidates.at(-2)).toMatchObject({ raw: 'LCD-X', path: 'jsonld[19999].name' });
-    expect(elapsed).toBeLessThan(1_000);
+    // Trying every brand on every name, and searching the page for each product's place, made each
+    // product cost about 16 times as much among 10,000 as among a sixteenth of them. Looking both up
+    // costs about the same per product at any size.
+    expect(costRatio(sharing(625), sharing(10_000), 16)).toBeLessThan(4);
   });
 
-  it('reads a 5 MB page of one product, repeated, in linear time', { timeout: 30_000 }, () => {
-    // 160,000 products make about 5 MB, the most of a page the fetcher reads. Finding each one's
-    // place by searching the page takes about 3 s at this size, and only tens of milliseconds at
-    // the 20,000 above.
-    const nodes = Array.from({ length: 160_000 }, () => ({ '@type': 'Product', name: 'X' }));
-    const largest = page(ld(nodes));
-    const finish = productPack.finish ?? ((candidates: Candidate[]) => candidates);
-    const started = performance.now();
-    const candidates = finish(productPack.extract(largest));
-    const elapsed = performance.now() - started;
+  it('reads a 5 MB page of one product, repeated, in linear time', { timeout: 60_000 }, () => {
+    // 160,000 products make about 5 MB, the most of a page the fetcher reads.
+    const repeated = (count: number) =>
+      page(ld(Array.from({ length: count }, () => ({ '@type': 'Product', name: 'X' }))));
+    const largest = repeated(160_000);
+    const candidates = read(largest);
     expect(candidates).toHaveLength(160_000);
     expect(candidates.at(-1)).toMatchObject({ raw: 'X', path: 'jsonld[159999].name' });
-    expect(elapsed).toBeLessThan(1_500);
+    // Searching the page for each product's place made each cost about 12 times as much here as on
+    // a page a sixteenth the size. Finding every place in one pass costs about the same per product.
+    expect(costRatio(repeated(10_000), largest, 16)).toBeLessThan(4);
   });
 
-  it('looks each name’s brand up once, however often it repeats', { timeout: 30_000 }, () => {
+  it('looks each name’s brand up once, however often it repeats', { timeout: 60_000 }, () => {
     // About 5 MB: 1,400 products share a name with a space at every other character, and each has
     // a brand of its own length, so every name could be checked against a slice of every length.
     const name = 'a '.repeat(1_400).trim();
-    const nodes = Array.from({ length: 1_400 }, (_, i) => ({
-      '@type': 'Product',
-      name,
-      brand: 'b'.repeat(i + 1),
-    }));
-    const crafted = page(ld(nodes));
-    const finish = productPack.finish ?? ((candidates: Candidate[]) => candidates);
-    const started = performance.now();
-    const candidates = finish(productPack.extract(crafted));
-    const elapsed = performance.now() - started;
+    const crafted = (count: number) =>
+      page(
+        ld(
+          Array.from({ length: count }, (_, i) => ({
+            '@type': 'Product',
+            name,
+            brand: 'b'.repeat(i + 1),
+          })),
+        ),
+      );
+    const largest = crafted(1_400);
+    const candidates = read(largest);
     expect(candidates.filter((c) => c.property === 'name' && c.raw === name)).toHaveLength(1_400);
-    expect(elapsed).toBeLessThan(500);
+    // Checking every name against every length made each product cost about 12 times as much here
+    // as with an eighth of the products. Checking each name once costs about the same per product.
+    expect(costRatio(crafted(175), largest, 8)).toBeLessThan(4);
   });
 
   it('reads a brand nested 20,000 arrays deep', () => {
