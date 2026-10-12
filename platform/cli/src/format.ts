@@ -65,17 +65,17 @@ export function printable(text: string): string {
 
 /**
  * What went wrong, as text, whatever was thrown. An error's cause is added when it says more: fetch
- * reports a refused connection or a redirect only there. `String()` itself throws for an object with
- * no text form, such as one made with `Object.create(null)`, and this must never throw.
+ * reports a refused connection or a redirect only there. Reading what was thrown can throw too:
+ * `String()` does for an object with no text form, such as one made with `Object.create(null)`, and
+ * so does a message or a cause that isn't what it should be. This must never throw, so any failure
+ * gives one fixed phrase.
  */
 export function describeError(error: unknown): string {
-  if (error instanceof Error) {
+  try {
+    if (!(error instanceof Error)) return String(error);
     const cause = causeMessage((error as { cause?: unknown }).cause);
     const more = cause !== '' && cause !== error.message ? ` (${cause})` : '';
     return `${error.message}${more}`;
-  }
-  try {
-    return String(error);
   } catch {
     return 'an error that can’t be shown as text';
   }

@@ -34,10 +34,9 @@ export interface Page {
 export const PAGE_TEXT_MAX = 60_000;
 
 /**
- * The deepest a page may nest its elements. Real product pages nest a few dozen deep. htmlparser2
- * keeps its open elements in an array that every tag it opens or closes works on, so its time grows
- * with the depth, and a Worker can't catch running out of CPU. A page past this is refused. At 1,000
- * a deep page costs about what a shallow one of the same size does.
+ * The deepest a page may nest its elements. Real product pages nest a few dozen deep. Reading a
+ * page, the parse and every walk over its tree alike, takes time that grows with its depth, and a
+ * Worker can't catch running out of CPU, so a page past this is refused before it's read.
  */
 export const MAX_NESTING = 1_000;
 
@@ -177,7 +176,6 @@ function attributeOf(element: Element, attribute: string): string | undefined {
 function mainText(root: Element | null, fallback: AnyNode[]): string {
   const skipped = root?.name === 'main' ? NEVER_TEXT : new Set([...NEVER_TEXT, ...CHROME]);
   const parts: string[] = [];
-  // An explicit stack, not recursion, because a page can nest deeper than the call stack allows.
   // Children go on in reverse, so they come off in document order.
   const stack: AnyNode[] = [...(root?.children ?? fallback)].reverse();
   for (let node = stack.pop(); node !== undefined; node = stack.pop()) {

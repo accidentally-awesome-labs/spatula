@@ -892,6 +892,31 @@ describe('describeError', () => {
     expect(describeError(Object.create(null))).toBe('an error that can’t be shown as text');
     expect(describeError('plain')).toBe('plain');
   });
+
+  it('gives the same phrase for an error it can’t read, and failureLine prints it', () => {
+    const phrase = 'an error that can’t be shown as text';
+    const noText = Object.create(null);
+    const aggregate = (errors: unknown) => Object.assign(new AggregateError([], ''), { errors });
+    const unreadable = [
+      // A cause whose errors aren't a list.
+      new Error('fetch failed', { cause: aggregate(null) }),
+      // A cause holding an error whose message has no text form.
+      new Error('fetch failed', {
+        cause: aggregate([Object.assign(new Error(), { message: noText })]),
+      }),
+      // A message with no text form, and one that throws when it's read.
+      Object.assign(new Error(), { message: noText }),
+      Object.defineProperty(new Error(), 'message', {
+        get() {
+          throw new Error('unreadable');
+        },
+      }),
+    ];
+    for (const error of unreadable) {
+      expect(describeError(error)).toBe(phrase);
+      expect(failureLine(error)).toBe(`Spatula’s CLI failed: ${phrase}`);
+    }
+  });
 });
 
 describe('failures', () => {
