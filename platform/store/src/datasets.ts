@@ -51,7 +51,9 @@ export async function applyDefinition(
       : await db
           .select({ id: sources.id, config: sources.config, removedAt: sources.removedAt })
           .from(sources)
-          .where(eq(sources.datasetId, id));
+          .where(eq(sources.datasetId, id))
+          // In a fixed order, so the summary lists removed sources the same way every time.
+          .orderBy(sources.id);
   const listed =
     existing === undefined
       ? []

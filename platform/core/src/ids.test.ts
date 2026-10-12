@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { newId, runIdFor, sha256Hex, stableStringify } from './ids';
+import { newId, runIdFor, sha256Hex, stableId, stableStringify } from './ids';
 
 describe('newId', () => {
   it('is the prefix and 20 base32 characters', () => {
@@ -49,5 +49,24 @@ describe('sha256Hex', () => {
 
   it('hashes bytes', async () => {
     expect(await sha256Hex(new TextEncoder().encode('abc'))).toBe(ABC);
+  });
+});
+
+describe('stableId', () => {
+  it('is the same for the same parts, and looks like any other ID', async () => {
+    const id = await stableId('fe', 'run-1', 'it_1', 0);
+    expect(id).toMatch(/^fe_[0-9a-hjkmnp-tv-z]{20}$/);
+    expect(await stableId('fe', 'run-1', 'it_1', 0)).toBe(id);
+  });
+
+  it('differs when any part does, and when parts split differently', async () => {
+    const ids = new Set([
+      await stableId('fe', 'run-1', 'it_1', 0),
+      await stableId('fe', 'run-1', 'it_1', 1),
+      await stableId('fe', 'run-2', 'it_1', 0),
+      await stableId('fe', 'run-1i', 't_1', 0),
+      await stableId('st', 'run-1', 'it_1', 0),
+    ]);
+    expect(ids.size).toBe(5);
   });
 });

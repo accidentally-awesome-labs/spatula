@@ -18,6 +18,22 @@ export function newId(prefix: string): string {
 }
 
 /**
+ * An ID that comes out the same every time it's made from the same parts: the prefix, an
+ * underscore, and 20 base32 characters of their SHA-256. A Workflow step that runs again after a
+ * crash makes the same ID, so what it writes is written once. Like `newId`'s, these IDs are
+ * opaque: nothing is read from them.
+ */
+export async function stableId(prefix: string, ...parts: (string | number)[]): Promise<string> {
+  // A NUL can't appear in an ID or a URL, so no two lists of parts join to the same text.
+  const hash = await sha256Hex(parts.map(String).join('\u0000'));
+  let id = '';
+  for (let index = 0; index < 20; index += 1) {
+    id += ALPHABET.charAt(Number.parseInt(hash.slice(index * 2, index * 2 + 2), 16) & 31);
+  }
+  return `${prefix}_${id}`;
+}
+
+/**
  * A run's ID: its dataset and the five-minute slot it starts in, in UTC. A second start in the
  * same slot asks for the same run, so a duplicate trigger is harmless.
  */

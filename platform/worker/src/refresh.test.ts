@@ -812,3 +812,33 @@ describe('classifyResponse', () => {
     expect(answer(200, { 'content-type': 'application/xhtml+xml' })).toEqual({ kind: 'page' });
   });
 });
+
+describe('a fetch step that runs again', () => {
+  it('logs the fetch once and moves the page’s streak once', async () => {
+    const { world, a1 } = await setUp('replayed-fetch');
+    const runId = runIdFor('replayed-fetch', world.clock.now());
+    // Each fetch step runs twice, as Workflows runs a step again after a crash. The steps that
+    // write statements run once, as they would after the crash.
+    const ran = new Set<string>();
+    const replaying: StepRunner = {
+      async do(name, fn) {
+        if (name.startsWith('fetch:') && !ran.has(name)) {
+          ran.add(name);
+          await fn();
+        }
+        return JSON.parse(JSON.stringify((await fn()) ?? null)) as never;
+      },
+      async sleep(_name, ms) {
+        world.clock.advance(ms);
+      },
+    };
+    await runRefresh({ runId, datasetId: 'replayed-fetch' }, replaying, world.ports);
+    const logged = await db.select().from(fetches).where(eq(fetches.itemId, a1.id));
+    expect(logged).toHaveLength(1);
+    const [item] = await db
+      .select({ streak: items.outcomeStreak })
+      .from(items)
+      .where(eq(items.id, a1.id));
+    expect(item!.streak).toBe(1);
+  });
+});

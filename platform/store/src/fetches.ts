@@ -26,6 +26,13 @@ export interface FetchInput {
   error: string | null;
   /** A full page's hash and validators. Absent when no page arrived, as after a 304 or a failure. */
   page?: { contentHash: string; etag: string | null; lastModified: string | null };
+  /**
+   * The item's extraction mark, written in this fetch's transaction. A changed page sets one that
+   * isn't current, so the page is read again even if the run stops before its extract step.
+   */
+  extractedWith?: string;
+  /** What the fetch log says about the LLM step, when the fetch already knows. */
+  llm?: string;
 }
 
 /**
@@ -51,6 +58,13 @@ export async function recordFetch(
       .where(eq(items.id, input.itemId))
       .for('update');
     if (item === undefined) throw new Error(`Item ${input.itemId} doesn't exist`);
+    // A fetch's ID comes from its run, item, and attempt, so a step that runs again after a crash
+    // logs the same fetch. It was recorded the first time, and nothing moves twice.
+    const [already] = await tx
+      .select({ id: fetches.id })
+      .from(fetches)
+      .where(eq(fetches.id, input.id));
+    if (already !== undefined) return { itemStatus: item.status };
     const streak = item.lastOutcome === input.outcome ? item.outcomeStreak + 1 : 1;
     // Only a live page can become gone or refused. An excluded page keeps its status, though its
     // streak still counts.
@@ -61,11 +75,17 @@ export async function recordFetch(
         : live && input.outcome === 'blocked' && streak >= REFUSED_AFTER
           ? 'refused'
           : item.status;
-    const { page, ...logged } = input;
+    const { page, extractedWith, ...logged } = input;
     await tx.insert(fetches).values({ ...logged, contentHash: page?.contentHash ?? null });
     await tx
       .update(items)
-      .set({ lastOutcome: input.outcome, outcomeStreak: streak, status, ...(page ?? {}) })
+      .set({
+        lastOutcome: input.outcome,
+        outcomeStreak: streak,
+        status,
+        ...(page ?? {}),
+        ...(extractedWith === undefined ? {} : { extractedWith }),
+      })
       .where(eq(items.id, input.itemId));
     return { itemStatus: status };
   });

@@ -1,5 +1,5 @@
 import { newId } from '@spatula/core';
-import { eq } from 'drizzle-orm';
+import { count, eq } from 'drizzle-orm';
 import { describe, expect, it } from 'vitest';
 import { withRollback } from '../test/db';
 import { seedDataset, T } from '../test/seed';
@@ -144,6 +144,83 @@ describe('recordFetch', () => {
         lastOutcome: 'gone',
         outcomeStreak: 2,
       });
+    }));
+
+  it('writes a fetch once, however often its step runs again', () =>
+    withRollback(async (tx) => {
+      const {
+        items: [a1],
+        runId,
+      } = await seedDataset(tx);
+      const input = {
+        id: 'fe_replayed00000000000000',
+        runId,
+        itemId: a1!.id,
+        url: a1!.locator,
+        finalUrl: a1!.locator,
+        policy: 'allowed' as const,
+        policyReason: null,
+        method: 'http',
+        outcome: 'blocked' as const,
+        httpStatus: 403,
+        bytes: null,
+        signals: {},
+        startedAt: T(1),
+        durationMs: 100,
+        error: 'HTTP 403',
+      };
+      await recordFetch(tx, input);
+      await recordFetch(tx, input);
+      await recordFetch(tx, input);
+      const [logged] = await tx
+        .select({ n: count() })
+        .from(fetches)
+        .where(eq(fetches.id, input.id));
+      expect(logged!.n).toBe(1);
+      const [item] = await tx
+        .select({ streak: items.outcomeStreak, status: items.status })
+        .from(items)
+        .where(eq(items.id, a1!.id));
+      // Three replays of one block are one block, not the three that would refuse the page.
+      expect(item).toEqual({ streak: 1, status: 'live' });
+    }));
+
+  it('marks a changed page’s statements as not current in the fetch’s own transaction', () =>
+    withRollback(async (tx) => {
+      const {
+        items: [a1],
+        runId,
+      } = await seedDataset(tx);
+      await recordFetch(tx, {
+        id: 'fe_changedpage00000000000',
+        runId,
+        itemId: a1!.id,
+        url: a1!.locator,
+        finalUrl: a1!.locator,
+        policy: 'allowed',
+        policyReason: null,
+        method: 'http',
+        outcome: 'changed',
+        httpStatus: 200,
+        bytes: 10,
+        signals: {},
+        startedAt: T(2),
+        durationMs: 100,
+        error: null,
+        page: { contentHash: 'hash-new', etag: null, lastModified: null },
+        extractedWith: 'r1.v1.retry',
+        llm: 'skipped: not read yet',
+      });
+      const [item] = await tx
+        .select({ extractedWith: items.extractedWith, contentHash: items.contentHash })
+        .from(items)
+        .where(eq(items.id, a1!.id));
+      expect(item).toEqual({ extractedWith: 'r1.v1.retry', contentHash: 'hash-new' });
+      const [fetch] = await tx
+        .select({ llm: fetches.llm })
+        .from(fetches)
+        .where(eq(fetches.id, 'fe_changedpage00000000000'));
+      expect(fetch!.llm).toBe('skipped: not read yet');
     }));
 });
 

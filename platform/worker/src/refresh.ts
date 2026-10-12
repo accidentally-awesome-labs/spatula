@@ -12,6 +12,7 @@ import {
   parsePage,
   sha256Hex,
   snapshotSchema,
+  stableId,
   stableStringify,
   type ContentSignals,
   type Definition,
@@ -351,7 +352,7 @@ async function fetchWithWaits(
 ): Promise<Fetched> {
   for (let attempt = 0; ; attempt += 1) {
     const result = await step.do(`fetch:${item.id}:${attempt}`, () =>
-      fetchItem(context, item, attempt >= MAX_WAITS, ports),
+      fetchItem(context, item, attempt, ports),
     );
     if (result.kind === 'done') return result.fetched;
     await step.sleep(`wait:${item.id}:${attempt}`, result.retryAfterMs);
@@ -373,22 +374,23 @@ interface Attempt {
 async function fetchItem(
   context: Context,
   item: ItemRef,
-  giveUp: boolean,
+  attempt: number,
   ports: RefreshPorts,
 ): Promise<{ kind: 'later'; retryAfterMs: number } | { kind: 'done'; fetched: Fetched }> {
   const startedAt = ports.now();
-  const requested = await request(context, item, giveUp, ports);
+  const requested = await request(context, item, attempt >= MAX_WAITS, ports);
   if (requested.kind === 'later') return requested;
-  const { attempt, signals } = requested;
+  const { attempt: answer, signals } = requested;
 
-  const fetchId = newId('fe');
+  // The same run, page, and attempt make the same ID, so a step that runs again logs one fetch.
+  const fetchId = await stableId('fe', context.runId, item.id, attempt);
   // A page whose statements came from older code isn't current. Neither is one the LLM read
   // while its site now says ai-input=no: it's extracted once more, and the LLM step withdraws
   // what the LLM said and clears its hash, so the page is current again next time.
   const current =
     item.extractedWith === extractionTag(context.revision) &&
     !(signals['ai-input'] === 'no' && item.extractInputHash !== null);
-  const extract = attempt.outcome === 'changed' || (attempt.outcome === 'unchanged' && !current);
+  const extract = answer.outcome === 'changed' || (answer.outcome === 'unchanged' && !current);
   const reseen = await ports.withDb(async (db) => {
     const logged: FetchInput = {
       id: fetchId,
@@ -399,42 +401,34 @@ async function fetchItem(
       signals,
       startedAt,
       durationMs: ports.now().getTime() - startedAt.getTime(),
-      ...attempt,
+      ...answer,
+      // The page now stored isn't the one the item's statements came from, and it hasn't been
+      // read yet. Until the extract step has, the item must not look current: if the run ended
+      // before then, the next fetch of the same bytes would be "unchanged" and "current", and would
+      // re-see the old statements as fresh. The mark goes in with the fetch, in one transaction.
+      ...(answer.outcome === 'changed'
+        ? { extractedWith: retryTag(context.revision), llm: 'skipped: not read yet' }
+        : {}),
     };
     await recordFetch(db, logged);
-    // The page now stored isn't the one the item's statements came from, and it hasn't been read
-    // yet. Until the extract step has, the item must not look current: if the run ended before
-    // then, the next fetch of the same bytes would be "unchanged" and "current", and would re-see
-    // the old statements as fresh. The extract step sets the real tag when it has read the page.
-    if (attempt.outcome === 'changed') {
-      await recordExtraction(db, {
-        itemId: item.id,
-        fetchId,
-        extractedWith: retryTag(context.revision),
-        llm: 'skipped: not read yet',
-        usage: NO_USAGE,
-      });
-    }
     // An unchanged page whose statements are current says what it said before.
-    return attempt.outcome === 'unchanged' && current
+    return answer.outcome === 'unchanged' && current
       ? reseeStatements(db, { itemId: item.id, fetchId, seenAt: ports.now() })
       : 0;
   });
-  const settled = attempt.outcome === 'changed' || attempt.outcome === 'unchanged';
-  const why = attempt.error ?? attempt.policyReason;
+  const settled = answer.outcome === 'changed' || answer.outcome === 'unchanged';
+  const why = answer.error ?? answer.policyReason;
   return {
     kind: 'done',
     fetched: {
       fetchId,
-      outcome: attempt.outcome,
-      finalUrl: attempt.finalUrl,
+      outcome: answer.outcome,
+      finalUrl: answer.finalUrl,
       signals,
-      contentHash: attempt.page?.contentHash ?? item.contentHash,
+      contentHash: answer.page?.contentHash ?? item.contentHash,
       extract,
       reseen,
-      note: settled
-        ? null
-        : `${item.locator}: ${attempt.outcome}${why === null ? '' : ` (${why})`}`,
+      note: settled ? null : `${item.locator}: ${answer.outcome}${why === null ? '' : ` (${why})`}`,
     },
   };
 }
