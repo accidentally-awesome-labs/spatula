@@ -61,8 +61,8 @@ export function createHttpFetcher(options: {
         response = await send(parsed.href, {
           method: 'GET',
           redirect: 'manual',
-          // The signature headers come last, so a caller's headers can't replace them.
-          headers: requestHeaders({ ...headers, ...signed }, options.userAgent, request.accept),
+          // The signer's headers and our user agent replace any of the caller's with the same name.
+          headers: requestHeaders(headers, signed, options.userAgent, request.accept),
           signal: AbortSignal.timeout(timeoutMs),
         });
       } catch (error) {
@@ -101,17 +101,21 @@ export function createHttpFetcher(options: {
 const PAGE_ACCEPT = 'text/html,application/xhtml+xml;q=0.9,*/*;q=0.1';
 
 /**
- * The caller's headers on top of ours, except that the user agent is always ours. A `Headers`
- * object counts names that differ only in case as one, so setting the agent last replaces
- * whatever the caller sent, however it spelled the name.
+ * The caller's headers on top of ours, except that the signer's headers and the user agent are
+ * always ours. A `Headers` object counts names that differ only in case as one, so setting ours
+ * after the caller's replaces whatever it sent, however it spelled a name and however many
+ * spellings it sent. The user agent is set last of all, so not even a signer can change who
+ * Spatula says it is.
  */
 function requestHeaders(
   headers: Record<string, string>,
+  signed: Record<string, string>,
   userAgent: string,
   accept = PAGE_ACCEPT,
 ): Headers {
   const sent = new Headers({ accept });
   for (const [name, value] of Object.entries(headers)) sent.set(name, value);
+  for (const [name, value] of Object.entries(signed)) sent.set(name, value);
   sent.set('user-agent', userAgent);
   return sent;
 }

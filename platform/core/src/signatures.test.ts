@@ -19,6 +19,19 @@ const TEST_KEY = JSON.stringify({
 const KEY_ID = 'poqkLGiymh_W0uP6PZFw-dvez3QJT5SolqXBCW38r0U';
 const NONCE =
   'e8N7S2MFd/qrd6T2R3tdfAuuANngKI7LFtKYI/vowzk4lAZYadIX6wW25MwG7DCT9RUKAJ0qVkU0mEeLElW1qg==';
+/** The key's private member, which no error may quote. */
+const KEY_D = (JSON.parse(TEST_KEY) as { d: string }).d;
+
+/** The message `importSigningKey` refuses `text` with. */
+async function refusalOf(text: string): Promise<string> {
+  const error: unknown = await importSigningKey(text).then(
+    () => undefined,
+    (caught: unknown) => caught,
+  );
+  if (!(error instanceof Error))
+    throw new Error('The key was accepted, and should have been refused');
+  return error.message;
+}
 
 describe('importSigningKey', () => {
   it('reads an Ed25519 JWK, and names it by its thumbprint', async () => {
@@ -38,18 +51,23 @@ describe('importSigningKey', () => {
   });
 
   it('refuses anything else, without quoting it', async () => {
-    await expect(importSigningKey('not json')).rejects.toThrow(
-      'WEB_BOT_AUTH_KEY isn’t JSON: set it to an Ed25519 private key as a JWK.',
+    // Every case holds the private member, so a message that quoted what it was given would show it.
+    const key = JSON.parse(TEST_KEY) as Record<string, string>;
+    const notJson = await refusalOf(TEST_KEY.slice(0, -1));
+    const notEd25519 = await refusalOf(JSON.stringify({ ...key, kty: 'RSA' }));
+    // RFC 8037's test key's public half, with RFC 9421's private half: they don't belong together.
+    const notAPair = await refusalOf(
+      JSON.stringify({ ...key, x: '11qYAYKxCrfVS_7TyWQHOg7hcvPapiMlrwIaaPcHURo' }),
     );
-    await expect(importSigningKey('{"kty":"RSA"}')).rejects.toThrow(
+
+    expect(notJson).toBe('WEB_BOT_AUTH_KEY isn’t JSON: set it to an Ed25519 private key as a JWK.');
+    expect(notEd25519).toBe(
       'WEB_BOT_AUTH_KEY isn’t an Ed25519 private key as a JWK (kty OKP, crv Ed25519, d, and x).',
     );
-    // RFC 8037's test key's public half, with RFC 9421's private half: they don't belong together.
-    const mismatched = JSON.stringify({
-      ...JSON.parse(TEST_KEY),
-      x: '11qYAYKxCrfVS_7TyWQHOg7hcvPapiMlrwIaaPcHURo',
-    });
-    await expect(importSigningKey(mismatched)).rejects.toThrow(/^WEB_BOT_AUTH_KEY/u);
+    expect(notAPair).toMatch(/^WEB_BOT_AUTH_KEY/u);
+    for (const message of [notJson, notEd25519, notAPair]) {
+      expect(message).not.toContain(KEY_D);
+    }
   });
 });
 
@@ -75,17 +93,64 @@ describe('signRequest', () => {
 
   it('refuses an agent that can’t be written as a structured string', async () => {
     const key = await importSigningKey(TEST_KEY);
-    await expect(
-      signRequest({
-        url: 'https://example.com/',
-        agent: 'https://a"b.test',
-        key,
-        now: 0,
-        nonce: NONCE,
-      }),
-    ).rejects.toThrow(
-      'The signature agent can’t hold a quote, a backslash, or a control character',
-    );
+    // A structured-field string holds printable ASCII, with no quote or backslash unescaped. The
+    // control characters include the line breaks a header value must never carry.
+    const characters = [
+      '"',
+      '\\',
+      '\r',
+      '\n',
+      '\t',
+      String.fromCharCode(0x1f),
+      String.fromCharCode(0x7f),
+      String.fromCodePoint(0xe9),
+      String.fromCodePoint(0x1f600),
+    ];
+    for (const character of characters) {
+      await expect(
+        signRequest({
+          url: 'https://example.com/',
+          agent: `https://a${character}b.test`,
+          key,
+          now: 0,
+          nonce: NONCE,
+        }),
+        `U+${character.codePointAt(0)!.toString(16)}`,
+      ).rejects.toThrow(
+        'The signature agent can’t hold a quote, a backslash, or a character outside printable ASCII',
+      );
+    }
+  });
+
+  it('takes the whole printable range, a space to a tilde', async () => {
+    const key = await importSigningKey(TEST_KEY);
+    const signed = await signRequest({
+      url: 'https://example.com/',
+      agent: 'https://a b~c.test',
+      key,
+      now: 0,
+      nonce: NONCE,
+    });
+    expect(signed['signature-agent']).toBe('"https://a b~c.test"');
+  });
+});
+
+describe('how long a signature is good for', () => {
+  it('is a minute unless told otherwise, so a captured request can’t be replayed later', async () => {
+    const key = await importSigningKey(TEST_KEY);
+    const now = 1_735_689_600_000;
+    const request = await signRequest({
+      url: 'https://example.com/',
+      agent: 'https://signature-agent.test',
+      key,
+      now,
+      nonce: NONCE,
+    });
+    const directory = await signDirectory({ authority: 'spatula.example', key, now, nonce: NONCE });
+    for (const input of [request['signature-input'], directory['signature-input']]) {
+      expect(input).toContain(';created=1735689600;');
+      expect(input).toContain(';expires=1735689660;');
+    }
   });
 });
 

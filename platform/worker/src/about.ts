@@ -1,5 +1,16 @@
+import { secret } from './config';
+
+/** The list item for a deployment that signs its requests. */
+const SIGNING_ITEM = `<li>It signs its requests with Web Bot Auth (HTTP Message Signatures), so a
+site can check that a request naming Spatula came from Spatula. Its public key is at
+<a href="/.well-known/http-message-signatures-directory"><code>/.well-known/http-message-signatures-directory</code></a>.</li>
+`;
+
 /** What Spatula is and how it behaves, for any site that follows the address in its user agent. */
 export function aboutPage(env: Env): string {
+  // Without a key nothing is signed and the key directory answers 404, so the page says Spatula
+  // signs only where this deployment does.
+  const signing = secret(env, 'WEB_BOT_AUTH_KEY') === undefined ? '' : SIGNING_ITEM;
   return `<!doctype html>
 <html lang="en">
 <head>
@@ -27,10 +38,7 @@ Crawl-delay, and backs off when a site is busy or failing.</li>
 say <code>ai-input=no</code>. Nothing it reads is used to train AI models.</li>
 <li>It collects facts only, never descriptions or photos. A block is an answer: it never tries
 to get around one.</li>
-<li>It signs its requests with Web Bot Auth (HTTP Message Signatures), so a site can check that a
-request naming Spatula came from Spatula. Its public key is at
-<a href="/.well-known/http-message-signatures-directory"><code>/.well-known/http-message-signatures-directory</code></a>.</li>
-</ul>
+${signing}</ul>
 <h2>Opting out</h2>
 <p>Add this to your robots.txt:</p>
 <pre><code>User-agent: Spatula

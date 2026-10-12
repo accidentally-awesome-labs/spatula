@@ -115,10 +115,12 @@ export async function signRequest(input: {
   nonce: string;
   ttlSeconds?: number;
 }): Promise<{ 'signature-agent': string; 'signature-input': string; signature: string }> {
-  // A structured-field string can't hold a quote or a backslash unescaped, and Spatula's own
-  // address never needs either.
-  if (/["\\\u0000-\u001f\u007f]/u.test(input.agent)) {
-    throw new Error('The signature agent can’t hold a quote, a backslash, or a control character');
+  // A structured-field string (RFC 8941) holds printable ASCII only, with no quote or backslash
+  // unescaped. Spatula's own address never needs any of that, so it's refused rather than escaped.
+  if (/[^\x20-\x7e]|["\\]/u.test(input.agent)) {
+    throw new Error(
+      'The signature agent can’t hold a quote, a backslash, or a character outside printable ASCII',
+    );
   }
   const agent = `"${input.agent}"`;
   const params = signatureParams({

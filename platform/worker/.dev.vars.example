@@ -6,3 +6,11 @@ OWNER_TOKEN_HASH=ef260e9aa3c673af240d17a2660480361a8e081d1ffeca2a5ed0e3219fc1856
 # ANTHROPIC_API_KEY=
 # AI_GATEWAY_URL=https://gateway.ai.cloudflare.com/v1/<account ID>/spatula-llm/anthropic
 # AI_GATEWAY_TOKEN=
+# WEB_BOT_AUTH_KEY, an Ed25519 private key as a JWK on one line, makes the Worker sign its requests
+# (Web Bot Auth) and serve its public key at /.well-known/http-message-signatures-directory. Leave
+# it out to run unsigned. One way to make a key (it prints the key, so keep that out of any log):
+#   node -p "JSON.stringify(require('crypto').generateKeyPairSync('ed25519').privateKey.export({format:'jwk'}))"
+# A `wrangler dev` run signs as the deployed Worker (PUBLIC_URL in wrangler.jsonc is its
+# Signature-Agent), and a site checks the signature against the key served there. So its
+# signatures verify only if this key is the deployed one.
+# WEB_BOT_AUTH_KEY='{"kty":"OKP","crv":"Ed25519","d":"...","x":"..."}'

@@ -288,6 +288,32 @@ describe('createHttpFetcher', () => {
     const sent = new Headers(calls[0]!.init.headers);
     expect(sent.get('signature')).toBe('sig1=:https://maker-a.example/a:');
     expect(sent.get('signature-agent')).toBe('"https://spatula.test"');
+
+    // However a caller spells a name, and however many spellings of it it sends. Its other
+    // headers still go.
+    await http.get('https://maker-a.example/b', {
+      signature: 'forged',
+      Signature: 'forged again',
+      'SIGNATURE-AGENT': 'forged',
+      'if-none-match': '"v1"',
+    });
+    const again = new Headers(calls[1]!.init.headers);
+    expect(again.get('signature')).toBe('sig1=:https://maker-a.example/b:');
+    expect(again.get('signature-agent')).toBe('"https://spatula.test"');
+    expect(again.get('if-none-match')).toBe('"v1"');
+  });
+
+  it('keeps its own user agent, whatever the signer returns', async () => {
+    const { fetch, calls } = stub(() => new Response('', { status: 200 }));
+    const http = createHttpFetcher({
+      userAgent: UA,
+      fetch,
+      sign: async () => ({ 'User-Agent': 'other', signature: 'sig1=::' }),
+    });
+    await http.get('https://maker-a.example/a', { 'user-agent': 'another' });
+    const sent = new Headers(calls[0]!.init.headers);
+    expect(sent.get('user-agent')).toBe(UA);
+    expect(sent.get('signature')).toBe('sig1=::');
   });
 
   it('fails the request, without sending it, when it can’t be signed', async () => {

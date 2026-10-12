@@ -99,6 +99,19 @@ async function runWithoutWorkflow(id: string, ago: number): Promise<void> {
   });
 }
 
+/**
+ * RFC 9421's Ed25519 test key (appendix B.1.4), as a JWK: published test material, not a key Spatula
+ * uses. The key directory's tests sign with it.
+ */
+const TEST_KEY = JSON.stringify({
+  kty: 'OKP',
+  crv: 'Ed25519',
+  d: 'n4Ni-HpISpVObnQMW0wOhCKROaIKqKtW_2ZYb2p9KcU',
+  x: 'JrQLj5P_89iXES9-vFgrIy29clF9CC_oPPsw3c5D0bs',
+});
+/** Its private member, which no answer may quote. */
+const KEY_D = (JSON.parse(TEST_KEY) as { d: string }).d;
+
 describe('the public page', () => {
   it('tells anyone what Spatula is and how to opt out', async () => {
     const response = await call('GET', '/', { token: null });
@@ -136,6 +149,30 @@ describe('the public page', () => {
     // What it said before promised more than the code does.
     expect(page).not.toContain("robots.txt can't be read");
     expect(page).not.toContain('only where the site allows');
+  });
+
+  /** The page's text for these bindings, with its line breaks collapsed. */
+  const textWith = async (bindings: Env) =>
+    (await (await call('GET', '/', { token: null, bindings })).text()).replace(/\s+/gu, ' ');
+
+  it('says it signs its requests, and where its key is, where it has a key', async () => {
+    const page = await textWith({ ...env, WEB_BOT_AUTH_KEY: TEST_KEY } as Env);
+    expect(page).toContain(
+      'It signs its requests with Web Bot Auth (HTTP Message Signatures), so a site can check that a request naming Spatula came from Spatula.',
+    );
+    // The link is the route's own path, so the two can't drift apart.
+    expect(page).toContain(`<a href="${DIRECTORY_PATH}"><code>${DIRECTORY_PATH}</code></a>`);
+  });
+
+  it('says nothing of signing where it has no key, as it signs nothing there', async () => {
+    // The Workers tests blank the key, so these bindings have none. Without one nothing is signed
+    // and the directory answers 404, so a page that said otherwise would promise more than the code
+    // does.
+    const page = await textWith(env);
+    expect(page).toContain('It collects facts only');
+    expect(page).not.toContain('Web Bot Auth');
+    expect(page).not.toContain('signs its requests');
+    expect(page).not.toContain(DIRECTORY_PATH);
   });
 });
 
@@ -675,13 +712,6 @@ describe('reviving pages', () => {
 });
 
 describe('the key directory', () => {
-  const TEST_KEY = JSON.stringify({
-    kty: 'OKP',
-    crv: 'Ed25519',
-    d: 'n4Ni-HpISpVObnQMW0wOhCKROaIKqKtW_2ZYb2p9KcU',
-    x: 'JrQLj5P_89iXES9-vFgrIy29clF9CC_oPPsw3c5D0bs',
-  });
-
   it('serves the public key, signed for the host that asked', async () => {
     const response = await call('GET', DIRECTORY_PATH, {
       token: null,
@@ -725,5 +755,39 @@ describe('the key directory', () => {
     const response = await call('GET', DIRECTORY_PATH, { token: null });
     expect(response.status).toBe(404);
     expectNoStore(response);
+    // The route's own answer, not the generic not-found.
+    expect(await response.json()).toEqual({
+      error: 'This deployment doesn’t sign its requests yet.',
+    });
+  });
+
+  it('answers 500, quoting nothing, for a private half that isn’t its public half’s', async () => {
+    // RFC 8037's test key's public half, with RFC 9421's private half. Node refuses such a pair
+    // when it imports it, so core's tests never reach the signature check on the key. Workers
+    // import it, and only that check catches it.
+    const mismatched = JSON.stringify({
+      ...JSON.parse(TEST_KEY),
+      x: '11qYAYKxCrfVS_7TyWQHOg7hcvPapiMlrwIaaPcHURo',
+    });
+    const logged = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    try {
+      const response = await call('GET', DIRECTORY_PATH, {
+        token: null,
+        bindings: { ...env, WEB_BOT_AUTH_KEY: mismatched } as Env,
+      });
+      expect(response.status).toBe(500);
+      expectNoStore(response);
+      expect(await response.json()).toEqual({
+        error: 'Something went wrong. The Worker’s logs say what.',
+      });
+      // The logs say what failed, and don't quote the key.
+      expect(logged).toHaveBeenCalledWith(
+        'API error:',
+        'WEB_BOT_AUTH_KEY’s private half (d) doesn’t belong to its public half (x).',
+      );
+      expect(JSON.stringify(logged.mock.calls)).not.toContain(KEY_D);
+    } finally {
+      logged.mockRestore();
+    }
   });
 });
