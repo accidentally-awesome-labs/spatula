@@ -95,6 +95,11 @@ describe('RefreshWorkflow', () => {
     try {
       await env.REFRESH.create({ id: runId, params: { runId, datasetId: 'workers-missing' } });
       await instance.waitForStatus('errored');
+      // A retried step would end the instance as a plain Error, after half a minute of retries.
+      expect(await instance.getError()).toMatchObject({
+        name: 'WorkflowFatalError',
+        message: expect.stringContaining('NonRetryableError'),
+      });
     } finally {
       await instance.dispose();
     }
