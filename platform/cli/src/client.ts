@@ -1,4 +1,5 @@
 import type { ApplySummary, Definition, RunView } from '@spatula/core';
+import { describeError } from './format';
 
 /** An answer the API refused with, and the problems it listed. Status 0 means no answer. */
 export class ApiError extends Error {
@@ -66,8 +67,7 @@ export function createClient(options: {
         body: body === undefined ? undefined : JSON.stringify(body),
       });
     } catch (error) {
-      const why = error instanceof Error ? error.message : String(error);
-      throw new ApiError(0, `Spatula at ${options.baseUrl} didn’t answer: ${why}`);
+      throw new ApiError(0, `Spatula at ${options.baseUrl} didn’t answer: ${describeError(error)}`);
     }
   }
 

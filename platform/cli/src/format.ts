@@ -62,3 +62,24 @@ const DRIVES_A_TERMINAL =
 export function printable(text: string): string {
   return text.replace(DRIVES_A_TERMINAL, (char) => `\\u{${char.charCodeAt(0).toString(16)}}`);
 }
+
+/**
+ * What went wrong, as text, whatever was thrown. An error's cause is added when it says more: fetch
+ * reports a refused connection or a redirect only there. `String()` itself throws for an object with
+ * no text form, such as one made with `Object.create(null)`, and this must never throw.
+ */
+export function describeError(error: unknown): string {
+  if (error instanceof Error) {
+    const cause = (error as { cause?: unknown }).cause;
+    const more =
+      cause instanceof Error && cause.message !== '' && cause.message !== error.message
+        ? ` (${cause.message})`
+        : '';
+    return `${error.message}${more}`;
+  }
+  try {
+    return String(error);
+  } catch {
+    return 'an error that can’t be shown as text';
+  }
+}

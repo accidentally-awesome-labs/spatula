@@ -49,7 +49,13 @@ const fieldSchema = z
     list: z.boolean().default(false),
     identifier: z.boolean().default(false),
     scope: name.optional(),
-    values: z.array(z.string().trim().min(1)).min(1).optional(),
+    // A decided field's question offers its values plus "None of these", and a choice holds at most
+    // 255 options. Each value is capped like a text field's maxLength, for the same btree index.
+    values: z
+      .array(z.string().trim().min(1).max(600, 'Use values of 600 characters or less.'))
+      .min(1)
+      .max(254, 'List at most 254 values.')
+      .optional(),
     // statements_current indexes value_key in a btree, whose entries hold at most 2,704 bytes. 600
     // characters, at up to 4 UTF-8 bytes each, fit there with the other columns.
     maxLength: z.number().int().min(1).max(600, 'Use a maxLength of 600 or less.').optional(),

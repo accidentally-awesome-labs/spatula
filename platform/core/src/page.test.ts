@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { jsonLdTypes, parsePage, PAGE_TEXT_MAX } from './page';
+import { jsonLdTypes, MAX_NESTING, nestingDepth, parsePage, PAGE_TEXT_MAX } from './page';
 import { costRatio } from './testing/cost';
 
 const SHOP_PAGE = `<!doctype html><html><head>
@@ -170,14 +170,14 @@ describe('parsePage, text', () => {
     expect(page.text).toBe('Visible');
   });
 
-  // About a second alone, but the default five seconds ran out once on a heavily loaded machine.
-  // The depth stays: it's the hostile case.
-  it('reads markup nested 20,000 elements deep', { timeout: 30_000 }, () => {
-    const page = parsePage(
-      `${'<div>'.repeat(20_000)}Deep${'</div>'.repeat(20_000)}`,
-      'https://maker.example/a',
-    );
-    expect(page.text).toBe('Deep');
+  // The hostile case: the nesting guard refuses it before htmlparser2 builds a tree.
+  it('refuses markup nested 20,000 elements deep', () => {
+    expect(() =>
+      parsePage(
+        `${'<div>'.repeat(20_000)}Deep${'</div>'.repeat(20_000)}`,
+        'https://maker.example/a',
+      ),
+    ).toThrow('the page nests elements 20,000 deep, more than 10,000');
   });
 
   it('never cuts a surrogate pair at the length cap', () => {
@@ -225,5 +225,51 @@ describe('jsonLdTypes', () => {
     expect(jsonLdTypes({ '@type': 'https://schema.org/ProductGroup' })).toEqual(['ProductGroup']);
     expect(jsonLdTypes({ '@type': ['Product', 7, 'schema:Thing'] })).toEqual(['Product', 'Thing']);
     expect(jsonLdTypes({})).toEqual([]);
+  });
+});
+
+describe('nestingDepth', () => {
+  it('counts elements left open, but not empty ones or those whose end tags may be left out', () => {
+    expect(nestingDepth('<div><span><b>x</b></span></div>')).toBe(3);
+    expect(nestingDepth('<div><br><img src="x"><input/><hr /></div>')).toBe(1);
+    expect(nestingDepth(`<ul>${'<li>item'.repeat(1000)}</ul>`)).toBe(1);
+    expect(nestingDepth('<p>one<p>two<p>three')).toBe(0);
+    expect(nestingDepth('<!doctype html><html><body><main></main></body></html>')).toBe(3);
+  });
+
+  it('reads scripts, styles, and comments as text', () => {
+    const page =
+      '<script>"<div><div><div>"</script><style>a<b{}</style><!-- <div><div> --><main></main>';
+    expect(nestingDepth(page)).toBe(1);
+  });
+
+  it('takes time in proportion to the page’s length', () => {
+    const small = '<div>'.repeat(500);
+    const large = '<div>'.repeat(50_000);
+    expect(
+      costRatio(
+        () => nestingDepth(small),
+        () => nestingDepth(large),
+        100,
+      ),
+    ).toBeLessThan(4);
+  });
+});
+
+describe('parsePage on a page nested deeper than any real one', () => {
+  it('refuses it before parsing it', () => {
+    const deep = '<div>'.repeat(MAX_NESTING + 1);
+    expect(() => parsePage(deep, 'https://maker-a.example/products/deep')).toThrow(
+      'the page nests elements 10,001 deep, more than 10,000',
+    );
+  });
+
+  // Nearly the deepest page that's read, and htmlparser2's time grows with the square of the depth.
+  it('reads a page just inside the limit', { timeout: 30_000 }, () => {
+    const page = parsePage(
+      `${'<div>'.repeat(MAX_NESTING - 2)}<h1>A1</h1>`,
+      'https://maker-a.example/p',
+    );
+    expect(page.select('h1')).toBe('A1');
   });
 });

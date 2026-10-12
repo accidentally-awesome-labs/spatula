@@ -3,7 +3,7 @@ import { testDefinition } from '@spatula/store/fixtures';
 import { describe, expect, it } from 'vitest';
 import { stringify } from 'yaml';
 import { POLL_MS, WAIT_LIMIT_MS, type Io } from './commands';
-import { printable } from './format';
+import { describeError, printable } from './format';
 import { failureLine, main, USAGE } from './main';
 
 const ENV = { SPATULA_URL: 'https://spatula.test', SPATULA_TOKEN: 'owner-token' };
@@ -845,6 +845,40 @@ describe('printable', () => {
   it('spells out every control in a long line, and nothing else', () => {
     expect(printable('\u001b]0;title\u0007 and \u001b[2J and \u{202e}evil\u{2069}')).toBe(
       String.raw`\u{1b}]0;title\u{7} and \u{1b}[2J and \u{202e}evil\u{2069}`,
+    );
+  });
+});
+
+describe('describeError', () => {
+  it('adds the cause when it says more', () => {
+    const error = new TypeError('fetch failed', {
+      cause: new Error('connect ECONNREFUSED 127.0.0.1:8787'),
+    });
+    expect(describeError(error)).toBe('fetch failed (connect ECONNREFUSED 127.0.0.1:8787)');
+    expect(describeError(new Error('same', { cause: new Error('same') }))).toBe('same');
+  });
+
+  it('never throws, even for a value with no text form', () => {
+    expect(describeError(Object.create(null))).toBe('an error that can’t be shown as text');
+    expect(describeError('plain')).toBe('plain');
+  });
+});
+
+describe('failures', () => {
+  it('say what the network said when Spatula doesn’t answer', async () => {
+    const { io, err } = memoryIo();
+    const fetch = (async () => {
+      throw new TypeError('fetch failed', { cause: new Error('unexpected redirect') });
+    }) as typeof globalThis.fetch;
+    expect(await main(['run', 'cli-products'], { io, env: ENV, fetch })).toBe(1);
+    expect(err).toEqual([
+      'Spatula at https://spatula.test didn’t answer: fetch failed (unexpected redirect)',
+    ]);
+  });
+
+  it('print a thrown value with no text form without failing again', () => {
+    expect(failureLine(Object.create(null))).toBe(
+      'Spatula’s CLI failed: an error that can’t be shown as text',
     );
   });
 });

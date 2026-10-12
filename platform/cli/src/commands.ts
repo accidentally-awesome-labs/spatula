@@ -8,7 +8,7 @@ import {
 import { packs } from '@spatula/pack-products';
 import { parse } from 'yaml';
 import { ApiError, type Client } from './client';
-import { formatApplySummary, formatRun } from './format';
+import { describeError, formatApplySummary, formatRun } from './format';
 
 /** Everything the commands do outside themselves, so tests can run them in memory. */
 export interface Io {
@@ -31,7 +31,7 @@ export async function readDefinition(io: Io, file: string): Promise<Definition |
   try {
     text = await io.readFile(file);
   } catch (error) {
-    io.err(`${file} can’t be read: ${describe(error)}`);
+    io.err(`${file} can’t be read: ${describeError(error)}`);
     return null;
   }
   let data: unknown;
@@ -40,7 +40,7 @@ export async function readDefinition(io: Io, file: string): Promise<Definition |
   } catch (error) {
     // The YAML library's message shows the line it stopped at under its first line. Each line is
     // printed by a call of its own.
-    const [first = '', ...frame] = describe(error).split('\n');
+    const [first = '', ...frame] = describeError(error).split('\n');
     io.err(`${file} isn’t valid YAML: ${first}`);
     for (const line of frame) io.err(line);
     return null;
@@ -171,7 +171,7 @@ export async function pullSnapshot(
     try {
       await io.writeFile(options.out, pulled.body);
     } catch (error) {
-      io.err(`Couldn’t write ${options.out}: ${describe(error)}`);
+      io.err(`Couldn’t write ${options.out}: ${describeError(error)}`);
       return 1;
     }
     io.out(
@@ -196,8 +196,4 @@ async function withApi(io: Io, fn: () => Promise<number>): Promise<number> {
 
 function count(n: number, noun: string): string {
   return `${n} ${noun}${n === 1 ? '' : 's'}`;
-}
-
-function describe(error: unknown): string {
-  return error instanceof Error ? error.message : String(error);
 }

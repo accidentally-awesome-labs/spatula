@@ -340,3 +340,35 @@ describe('addressError', () => {
     expect(costRatio(reasons(dotted(2_500)), reasons(large), 16)).toBeLessThan(4);
   });
 });
+
+describe('enum values', () => {
+  it('are at most 254, each at most 600 characters', () => {
+    const base = definition();
+    const withValues = (values: string[]) =>
+      definition({
+        recordTypes: {
+          product: {
+            ...base.recordTypes.product,
+            fields: {
+              ...base.recordTypes.product.fields,
+              category: { type: 'enum', required: true, values },
+            },
+          },
+        },
+        // The source fixes the category, so it has to be one of the values.
+        sources: [{ ...base.sources[0], fixed: { brand: 'Maker', category: values[0] } }],
+      });
+    const many = Array.from({ length: 255 }, (_, index) => `Kind ${index}`);
+    expect(parseDefinition(withValues(many))).toMatchObject({
+      ok: false,
+      issues: ['recordTypes.product.fields.category.values: List at most 254 values.'],
+    });
+    expect(parseDefinition(withValues(['x'.repeat(601)]))).toMatchObject({
+      ok: false,
+      issues: [
+        'recordTypes.product.fields.category.values.0: Use values of 600 characters or less.',
+      ],
+    });
+    expect(parseDefinition(withValues(many.slice(0, 254))).ok).toBe(true);
+  });
+});

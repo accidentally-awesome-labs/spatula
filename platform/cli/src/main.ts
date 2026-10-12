@@ -1,7 +1,7 @@
 import { parseArgs } from 'node:util';
 import { createClient } from './client';
 import { check, plan, pullSnapshot, run, type Io } from './commands';
-import { printable } from './format';
+import { describeError, printable } from './format';
 
 export const USAGE = `Usage: spatula <command>
 
@@ -48,8 +48,7 @@ function printableIo(io: Io): Io {
  * spelled out, and never a stack trace.
  */
 export function failureLine(error: unknown): string {
-  const message = error instanceof Error ? error.message : String(error);
-  return printable(`Spatula’s CLI failed: ${message}`);
+  return printable(`Spatula’s CLI failed: ${describeError(error)}`);
 }
 
 /** Runs one command. 0 means it worked, 1 that it didn't, and 2 that it was called wrongly. */
@@ -67,7 +66,7 @@ export async function main(
   try {
     parsed = parse(argv);
   } catch (error) {
-    io.err(error instanceof Error ? error.message : String(error));
+    io.err(describeError(error));
     return usage();
   }
   const { values, positionals } = parsed;
