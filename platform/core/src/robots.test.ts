@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { isAllowed, parseRobots } from './robots';
+import { isAllowed, parseRobots, pathPatternMatches } from './robots';
 import { costRatio } from './testing/cost';
 
 const allowed = (robots: string, path: string) =>
@@ -166,5 +166,20 @@ describe('parseRobots and isAllowed', () => {
   it('reads a signal’s name without regard to case, and keeps it in lowercase', () => {
     const robots = 'User-agent: *\nContent-Signal: AI-Input=no';
     expect(parseRobots(robots, 'Spatula')?.signals).toEqual({ 'ai-input': 'no' });
+  });
+});
+
+describe('pathPatternMatches', () => {
+  it('matches a path and query as robots.txt rules do', () => {
+    expect(pathPatternMatches('/products/', '/products/c1')).toBe(true);
+    expect(pathPatternMatches('/products/*', '/products/c1?variant=2')).toBe(true);
+    expect(pathPatternMatches('/products/*', '/collections/c1')).toBe(false);
+    // Without a final $, a pattern matches the start of the path.
+    expect(pathPatternMatches('/products/*-set', '/products/hd-set-2')).toBe(true);
+    expect(pathPatternMatches('/products/*-set$', '/products/hd-set-2')).toBe(false);
+    expect(pathPatternMatches('/products/*-set$', '/products/hd-set')).toBe(true);
+    // Patterns are case-sensitive, and compare percent-encoded.
+    expect(pathPatternMatches('/product/CMOYBB', '/product/cmoybb')).toBe(false);
+    expect(pathPatternMatches('/produkte/ä*', '/produkte/%C3%A4rger')).toBe(true);
   });
 });

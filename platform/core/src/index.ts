@@ -4,6 +4,7 @@ export * from './fields';
 export * from './css';
 export * from './definition';
 export * from './robots';
+export * from './sitemap';
 export * from './gate';
 export * from './page';
 export * from './statements';

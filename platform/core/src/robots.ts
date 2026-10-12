@@ -151,6 +151,15 @@ export function isAllowed(group: RobotsGroup | null, url: URL): boolean {
   return decisive === null || decisive.allow;
 }
 
+/**
+ * Whether a robots.txt-style pattern matches a path and its query: `*` matches anything, a final
+ * `$` anchors the end, and otherwise the pattern matches the path's start. Sitemap sources choose
+ * their pages with it, so an owner writes their patterns as they would a robots.txt rule.
+ */
+export function pathPatternMatches(pattern: string, pathAndQuery: string): boolean {
+  return matches(encodePath(pattern), encodePath(pathAndQuery));
+}
+
 /** Paths compare percent-encoded: non-ASCII characters encoded, escapes in uppercase. */
 function encodePath(path: string): string {
   // A known slice 0 simplification, unlike RFC 9309 section 2.2.2: percent-encoded unreserved
