@@ -83,7 +83,13 @@ const pattern = z
   .trim()
   .min(1)
   .max(200)
-  .regex(/^\/\S*$/u, 'Write a path pattern that starts with /, like /products/*.');
+  .regex(/^\/\S*$/u, 'Write a path pattern that starts with /, like /products/*.')
+  // A lone surrogate passes the check above, but it is only half of a character. Matching encodes
+  // every pattern, and encoding one throws.
+  .refine(
+    (value) => value.isWellFormed(),
+    'A pattern is well-formed text, with no lone surrogate.',
+  );
 
 const evidenceSchema = z.strictObject({
   robots: isoDate,

@@ -136,6 +136,25 @@ describe('parseSitemap', () => {
     });
   });
 
+  it('does not take an extension’s <loc> before the page’s own for its address', () => {
+    // Placed after the page's own <loc>, the first-<loc> rule would hide it anyway. Placed before
+    // it, only the prefix keeps it out.
+    const extension = '<image:loc>https://cdn.example/x.jpg</image:loc>';
+    const own = '<loc>https://maker-c.example/a</loc>';
+    const text = `<urlset xmlns:image="x"><url>${extension}${own}</url></urlset>`;
+    expect(parseSitemap(text)).toEqual({
+      kind: 'urlset',
+      capped: false,
+      entries: [{ loc: 'https://maker-c.example/a', lastmod: null }],
+    });
+  });
+
+  it('does not take an element of another namespace named <url> for an entry', () => {
+    // The <loc> inside it has the root's prefix, so only the prefix of the <url> keeps it out.
+    const text = '<urlset xmlns:o="x"><o:url><loc>https://maker-c.example/a</loc></o:url></urlset>';
+    expect(parseSitemap(text)).toEqual({ kind: 'urlset', capped: false, entries: [] });
+  });
+
   it('keeps an entry’s first <loc> and first <lastmod>, and joins the text of each', () => {
     // The first <loc> arrives as several pieces of text (around an entity and a CDATA section),
     // and every one of them is part of it. Only a later element is ignored.

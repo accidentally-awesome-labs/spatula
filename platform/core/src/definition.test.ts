@@ -429,6 +429,26 @@ describe('sitemap sources', () => {
     ).toEqual(['sources.0.exclude: Too big: expected array to have <=100 items']);
   });
 
+  it('refuse a pattern with a lone surrogate, half a character that can’t be matched', () => {
+    const message = 'A pattern is well-formed text, with no lone surrogate.';
+    const patterns = (lists: Record<string, string[]>) =>
+      definition({ sources: [{ ...sitemapSource, ...lists }] });
+    // A high surrogate, a low one, and the two in the wrong order, one in each list of patterns.
+    const lone = patterns({
+      follow: ['/sitemap-\u{D800}'],
+      include: ['/products/\u{DC00}*'],
+      exclude: ['/products/\u{DC00}\u{D800}'],
+    });
+    expect(issuesOf(lone)).toEqual([
+      `sources.0.follow.0: ${message}`,
+      `sources.0.include.0: ${message}`,
+      `sources.0.exclude.0: ${message}`,
+    ]);
+    // A pair of surrogates is a character, however it is written.
+    const characters = ['/produkte/\u{1F600}', '/produkte/\u{D83D}\u{DE00}', '/produkte/\u{E4}*'];
+    expect(parseDefinition(patterns({ include: characters })).ok).toBe(true);
+  });
+
   it('refuse sitemaps at addresses Spatula must never fetch', () => {
     const parsed = parseDefinition(
       definition({
