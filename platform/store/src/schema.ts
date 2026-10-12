@@ -33,7 +33,7 @@ import {
 
 const time = (name: string) => timestamp(name, { withTimezone: true, mode: 'date' });
 
-export const ITEM_STATUSES = ['live', 'gone', 'refused', 'excluded'] as const;
+export const ITEM_STATUSES = ['live', 'gone', 'refused', 'excluded', 'irrelevant'] as const;
 export type ItemStatus = (typeof ITEM_STATUSES)[number];
 
 export const datasets = pgTable(
@@ -64,6 +64,8 @@ export const sources = pgTable(
     kind: text('kind').notNull(),
     config: jsonb('config').$type<Definition['sources'][number]>().notNull(),
     removedAt: time('removed_at'),
+    /** When discovery last read all of the source's sitemaps, completely. */
+    listedAt: time('listed_at'),
   },
   (t) => [primaryKey({ columns: [t.datasetId, t.id] })],
 );
@@ -107,6 +109,16 @@ export const items = pgTable(
     extractedWith: text('extracted_with'),
     lastOutcome: text('last_outcome').$type<Outcome>(),
     outcomeStreak: integer('outcome_streak').notNull().default(0),
+    /** When discovery last found the page in its source's sitemaps; null for listed pages. */
+    listedAt: time('listed_at'),
+    /** The page's lastmod in that read, when its source trusts lastmods. */
+    listedLastmod: text('listed_lastmod'),
+    /** The listed lastmod when the page was last read, so a page whose lastmod moved is due. */
+    fetchedLastmod: text('fetched_lastmod'),
+    /** When the page was last asked for, whatever came of it. */
+    lastFetchedAt: time('last_fetched_at'),
+    /** Complete reads of its source's sitemaps in a row that left it out. */
+    missingStreak: integer('missing_streak').notNull().default(0),
     createdAt: time('created_at').notNull().defaultNow(),
   },
   (t) => [
@@ -117,7 +129,10 @@ export const items = pgTable(
     }).onDelete('cascade'),
     uniqueIndex('items_source_locator').on(t.datasetId, t.sourceId, t.locator),
     index('items_entity').on(t.entityId),
-    check('items_status', sql`${t.status} in ('live', 'gone', 'refused', 'excluded')`),
+    check(
+      'items_status',
+      sql`${t.status} in ('live', 'gone', 'refused', 'excluded', 'irrelevant')`,
+    ),
   ],
 );
 
@@ -141,6 +156,9 @@ export const runs = pgTable(
   ],
 );
 
+export const FETCH_KINDS = ['page', 'sitemap'] as const;
+export type FetchKind = (typeof FETCH_KINDS)[number];
+
 /** The fetch log: one row per fetch, with the policy decision, the outcome, and the cost. */
 export const fetches = pgTable(
   'fetches',
@@ -149,9 +167,14 @@ export const fetches = pgTable(
     runId: text('run_id')
       .notNull()
       .references(() => runs.id, { onDelete: 'cascade' }),
-    itemId: text('item_id')
-      .notNull()
-      .references(() => items.id, { onDelete: 'cascade' }),
+    /** What was fetched: an item's page, or one of a source's sitemaps. */
+    kind: text('kind').$type<FetchKind>().notNull().default('page'),
+    itemId: text('item_id').references(() => items.id, { onDelete: 'cascade' }),
+    /**
+     * The source whose sitemap this was. It has no foreign key: sources are keyed by dataset and
+     * ID, and are never deleted, only marked removed. A fetch goes with its run.
+     */
+    sourceId: text('source_id'),
     url: text('url').notNull(),
     finalUrl: text('final_url'),
     policy: text('policy').$type<'allowed' | 'denied'>().notNull(),
@@ -178,6 +201,11 @@ export const fetches = pgTable(
     check(
       'fetches_outcome',
       sql`${t.outcome} in ('changed', 'unchanged', 'gone', 'failed', 'blocked')`,
+    ),
+    check('fetches_kind', sql`${t.kind} in ('page', 'sitemap')`),
+    check(
+      'fetches_subject',
+      sql`(${t.kind} = 'page' and ${t.itemId} is not null) or (${t.kind} = 'sitemap' and ${t.itemId} is null and ${t.sourceId} is not null)`,
     ),
   ],
 );

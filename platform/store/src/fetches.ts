@@ -1,5 +1,5 @@
 import type { ContentSignals, Outcome } from '@spatula/core';
-import { eq } from 'drizzle-orm';
+import { eq, sql } from 'drizzle-orm';
 import type { Executor } from './client';
 import { fetches, items, type ItemStatus } from './schema';
 
@@ -98,6 +98,11 @@ export async function recordFetch(
         lastOutcome: input.outcome,
         outcomeStreak: streak,
         status,
+        lastFetchedAt: input.startedAt,
+        // A page that was read confirms the lastmod it was listed with; one that wasn't, doesn't.
+        ...(input.outcome === 'changed' || input.outcome === 'unchanged'
+          ? { fetchedLastmod: sql`${items.listedLastmod}` }
+          : {}),
         ...(page ?? {}),
         ...(extractedWith === undefined ? {} : { extractedWith }),
       })
