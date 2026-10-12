@@ -290,12 +290,17 @@ describe('the owner routes', () => {
     await call('PUT', '/datasets/api-runs', { body: testDefinition('api-runs') });
     const introspector = await introspectWorkflow(env.REFRESH);
     try {
-      // The run's load step returns no pages, so the run finishes without the network.
+      // The run plans no pages, so it finishes without the network.
       await introspector.modifyAll(async (m) => {
         await m.mockStepResult(
           { name: 'load' },
-          { revision: 1, definition: testDefinition('api-runs'), items: [] },
+          {
+            revision: 1,
+            definition: testDefinition('api-runs'),
+            startedAt: new Date().toISOString(),
+          },
         );
+        await m.mockStepResult({ name: 'plan' }, { ids: [], due: 0, live: 0 });
       });
       // The two POSTs below must land in one slot, so they aren't sent in the last seconds of one.
       await untilSlotHasRoom();
@@ -327,6 +332,35 @@ describe('the owner routes', () => {
       await introspector.dispose();
     }
     expect((await call('POST', '/datasets/nothing-here/runs')).status).toBe(404);
+    expect((await call('POST', '/datasets/api-runs/runs?all=yes')).status).toBe(400);
+  });
+
+  it('start a run that reads every page only when asked to', async () => {
+    // A Workflow binding that only records what it's asked to create. Each dataset has a run of its
+    // own, so none of them shares a five-minute slot with another.
+    const created: { params: unknown }[] = [];
+    const bindings = {
+      ...env,
+      REFRESH: {
+        create: async (options: { params: unknown }) => {
+          created.push(options);
+        },
+      },
+    } as unknown as Env;
+    for (const [dataset, query] of [
+      ['api-all-on', '?all=1'],
+      ['api-all-off', '?all=0'],
+      ['api-all-unset', ''],
+    ] as const) {
+      await call('PUT', `/datasets/${dataset}`, { body: testDefinition(dataset) });
+      const started = await call('POST', `/datasets/${dataset}/runs${query}`, { bindings });
+      expect(started.status).toBe(202);
+    }
+    expect(created.map(({ params }) => params)).toMatchObject([
+      { datasetId: 'api-all-on', all: true },
+      { datasetId: 'api-all-off', all: false },
+      { datasetId: 'api-all-unset', all: false },
+    ]);
   });
 
   it('refuse a run, and say why, when the stored definition no longer passes the checks', async () => {

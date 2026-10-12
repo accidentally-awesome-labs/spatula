@@ -28,8 +28,13 @@ export function formatRun(run: RunView): string[] {
   const summary = run.summary;
   if (summary === null) return lines;
   const { fetches, statements, llm, entities, snapshot } = summary;
+  // Runs from before slice 1 read every live page, and didn't count what was due.
+  const pages =
+    summary.due === undefined
+      ? `Pages: ${summary.items}.`
+      : `Pages: ${summary.items} read, of ${summary.due} due and ${summary.live ?? summary.due} live.`;
   lines.push(
-    `Pages: ${summary.items}. Changed ${fetches.changed}, unchanged ${fetches.unchanged}, gone ${fetches.gone}, failed ${fetches.failed}, blocked ${fetches.blocked}.`,
+    `${pages} Changed ${fetches.changed}, unchanged ${fetches.unchanged}, gone ${fetches.gone}, failed ${fetches.failed}, blocked ${fetches.blocked}.`,
     `Statements: ${statements.added} added, ${statements.reseen} seen again, ${statements.withdrawn} withdrawn.`,
     `LLM: ran ${llm.ran}, reused ${llm.reused}, skipped ${llm.skipped}, failed ${llm.failed}; ${llm.inputTokens} tokens in, ${llm.outputTokens} out.`,
     `Entities: ${entities.created} new, ${entities.linked} linked, ${entities.conflicts} conflicts, ${entities.unresolved} without an identity yet.`,

@@ -34,12 +34,19 @@ import {
 } from './refresh';
 
 const HOUR = 3_600_000;
+const DAY = 24 * HOUR;
 
 /**
  * One run of the dataset, then five minutes, so the next run gets its own ID. Workflows keep each
- * step's result, so the run keeps them too, for tests that look at what a step returned.
+ * step's result, so the run keeps them too, for tests that look at what a step returned. A run
+ * reads every page unless it's told otherwise, so tests that run again five minutes later still
+ * see every page read.
  */
-async function refresh(world: World, datasetId: string) {
+async function refresh(
+  world: World,
+  datasetId: string,
+  options: { all?: boolean } = { all: true },
+) {
   const runId = runIdFor(datasetId, world.clock.now());
   const { step, names } = fakeStep(world.clock);
   const results = new Map<string, unknown>();
@@ -51,7 +58,7 @@ async function refresh(world: World, datasetId: string) {
       return result;
     },
   };
-  const summary = await runRefresh({ runId, datasetId }, recording, world.ports);
+  const summary = await runRefresh({ runId, datasetId, all: options.all }, recording, world.ports);
   world.clock.advance(5 * 60_000);
   return { summary, names, runId, results };
 }
@@ -120,18 +127,22 @@ describe('runRefresh', () => {
     const first = await refresh(world, 'refresh-basics');
     expect(first.names).toEqual([
       'load',
+      'plan',
+      'items:0',
       `fetch:${a1.id}:0`,
       `extract:${a1.id}`,
-      `fetch:${a2.id}:0`,
-      `extract:${a2.id}`,
       `fetch:${b1.id}:0`,
       `extract:${b1.id}`,
+      `fetch:${a2.id}:0`,
+      `extract:${a2.id}`,
       'resolve',
       'snapshot',
       'finish',
     ]);
     expect(first.summary).toMatchObject({
       items: 3,
+      live: 3,
+      due: 3,
       fetches: { changed: 3, unchanged: 0, gone: 0, failed: 0, blocked: 0 },
       statements: { added: 19, reseen: 0, withdrawn: 0 },
       llm: { ran: 3, reused: 0, skipped: 0, failed: 0, inputTokens: 3000, outputTokens: 150 },
@@ -778,6 +789,96 @@ describe('runRefresh', () => {
     // The fetch log says what the LLM step did. A NUL in that text would have failed the insert
     // after the LLM had been paid for.
     expect((await fetchOf(first.runId, URLS.a2)).llm).toBe(cut(`failed: llm  ${'x'.repeat(600)}`));
+  });
+
+  it('reads only the pages that are due, taking turns between hosts', async () => {
+    const { world, a1, a2, b1 } = await setUp('refresh-plan');
+    const first = await refresh(world, 'refresh-plan', {});
+    expect(first.names.filter((name) => name.startsWith('fetch:'))).toEqual([
+      `fetch:${a1.id}:0`,
+      `fetch:${b1.id}:0`,
+      `fetch:${a2.id}:0`,
+    ]);
+    expect(first.summary).toMatchObject({ items: 3, due: 3, live: 3 });
+
+    // Read five minutes ago, so nothing is due and nothing is fetched.
+    const before = world.web.requests.length;
+    const second = await refresh(world, 'refresh-plan', {});
+    expect(second.names).toEqual(['load', 'plan', 'resolve', 'snapshot', 'finish']);
+    expect(second.summary).toMatchObject({ items: 0, due: 0, live: 3 });
+    expect(world.web.requests.length).toBe(before);
+
+    // A week on, every page is due again.
+    world.clock.advance(7 * DAY);
+    expect((await refresh(world, 'refresh-plan', {})).summary).toMatchObject({ items: 3, due: 3 });
+  });
+
+  it('reads at most the budget’s pages, and leaves the rest for the next run', async () => {
+    const definition = testDefinition('refresh-budget');
+    await applyDefinition(db, { ...definition, budget: { ...definition.budget, itemsPerRun: 2 } });
+    const world = makeWorld(db, standardRoutes());
+    const first = await refresh(world, 'refresh-budget', {});
+    expect(first.summary).toMatchObject({ items: 2, due: 3, live: 3 });
+    expect(first.summary.notes).toContain(
+      '1 due page waits for the next run: the budget reads 2 pages a run',
+    );
+    expect((await refresh(world, 'refresh-budget', {})).summary).toMatchObject({
+      items: 1,
+      due: 1,
+    });
+  });
+
+  it('loads the planned pages in steps of 50, in the order they were planned', async () => {
+    // Maker A has fifty-one pages and maker B one. Nothing answers, so each page is a 404 that
+    // costs only its fetch.
+    const definition = testDefinition('refresh-steps');
+    definition.sources[0] = {
+      ...(definition.sources[0] as PagesSource),
+      pages: Array.from({ length: 51 }, (_, index) => `https://maker-a.example/products/p${index}`),
+    };
+    await applyDefinition(db, definition);
+    const world = makeWorld(db, {});
+
+    const first = await refresh(world, 'refresh-steps', {});
+    const { ids } = first.results.get('plan') as { ids: string[] };
+    expect(ids).toHaveLength(52);
+    expect(first.names).toEqual([
+      'load',
+      'plan',
+      'items:0',
+      ...ids.slice(0, 50).map((id) => `fetch:${id}:0`),
+      'items:50',
+      ...ids.slice(50).map((id) => `fetch:${id}:0`),
+      'resolve',
+      'snapshot',
+      'finish',
+    ]);
+    expect(first.summary).toMatchObject({ items: 52, due: 52, live: 52, fetches: { gone: 52 } });
+  });
+
+  it('doesn’t count a planned page that left the live pages before it was loaded', async () => {
+    const { world, a1, a2, b1 } = await setUp('refresh-left');
+    const { step, names } = fakeStep(world.clock);
+    const leaving: StepRunner = {
+      ...step,
+      async do(name, fn) {
+        const result = await step.do(name, fn);
+        // A run that overlaps this one sees B1 answer 404 twice, after this run has planned it.
+        if (name === 'plan') {
+          await db.update(items).set({ status: 'gone' }).where(eq(items.id, b1.id));
+        }
+        return result;
+      },
+    };
+    const runId = runIdFor('refresh-left', world.clock.now());
+    const summary = await runRefresh({ runId, datasetId: 'refresh-left' }, leaving, world.ports);
+
+    expect(names.filter((name) => name.startsWith('fetch:'))).toEqual([
+      `fetch:${a1.id}:0`,
+      `fetch:${a2.id}:0`,
+    ]);
+    // It was planned, so it was due, but it wasn't read.
+    expect(summary).toMatchObject({ items: 2, due: 3, live: 3 });
   });
 });
 

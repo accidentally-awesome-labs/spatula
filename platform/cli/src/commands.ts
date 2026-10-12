@@ -95,10 +95,10 @@ export async function run(
   io: Io,
   client: Client,
   datasetId: string,
-  options: { wait: boolean },
+  options: { wait: boolean; all: boolean },
 ): Promise<number> {
   return withApi(io, async () => {
-    const { runId, existing } = await client.startRun(datasetId);
+    const { runId, existing } = await client.startRun(datasetId, { all: options.all });
     io.out(
       existing ? `A run already started in this five-minute slot: ${runId}.` : `Started ${runId}.`,
     );

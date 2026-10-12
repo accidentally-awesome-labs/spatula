@@ -8,7 +8,9 @@ export const USAGE = `Usage: spatula <command>
   check <definition.yaml>      Check a definition here, sending nothing
   plan <definition.yaml>       Show what applying it would change
   apply <definition.yaml>      Apply it
-  run <dataset> [--wait]       Start a refresh, and wait for it with --wait
+  run <dataset> [--wait] [--all]
+                               Start a refresh, and wait for it with --wait. A refresh
+                               reads the pages that are due; --all reads every page
   snapshot pull <dataset> --out <file> [--generation <n>]
                                Download a snapshot, check its hash, and write it
 
@@ -21,6 +23,7 @@ const USAGE_LINES = USAGE.split('\n');
 
 const OPTIONS = {
   wait: { type: 'boolean' },
+  all: { type: 'boolean' },
   out: { type: 'string' },
   generation: { type: 'string' },
   help: { type: 'boolean', short: 'h' },
@@ -90,7 +93,7 @@ export async function main(
         : usage();
     case 'run':
       return rest.length === 1
-        ? run(io, client, rest[0]!, { wait: values.wait === true })
+        ? run(io, client, rest[0]!, { wait: values.wait === true, all: values.all === true })
         : usage();
     case 'snapshot': {
       // An empty --out names no file, as a missing one doesn't.

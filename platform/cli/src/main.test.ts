@@ -335,6 +335,36 @@ describe('run', () => {
     expect(polls).toBe(lastPoll);
     expect(sleeps).toHaveLength(lastPoll - 1);
   });
+
+  it('reads every page with --all, and says how many were due', async () => {
+    const complete: RunView = {
+      ...RUNNING,
+      status: 'complete',
+      finishedAt: '2026-10-10T00:01:00.000Z',
+      summary: {
+        items: 2,
+        live: 9,
+        due: 5,
+        fetches: { changed: 1, unchanged: 1, gone: 0, failed: 0, blocked: 0 },
+        statements: { added: 4, reseen: 6, withdrawn: 0 },
+        llm: { ran: 1, reused: 0, skipped: 1, failed: 0, inputTokens: 1000, outputTokens: 50 },
+        entities: { created: 0, linked: 0, conflicts: 0, unresolved: 0 },
+        snapshot: { published: false, reason: 'nothing changed since generation 4', excluded: [] },
+        notes: [],
+      },
+    };
+    const { fetch, sent } = stubApi(({ method }) =>
+      method === 'POST'
+        ? Response.json({ runId: RUN_ID }, { status: 202 })
+        : Response.json(complete),
+    );
+    const { io, out } = memoryIo();
+    expect(await main(['run', 'cli-products', '--all', '--wait'], { io, env: ENV, fetch })).toBe(0);
+    expect(sent[0]!.path).toBe('/datasets/cli-products/runs?all=1');
+    expect(out).toContain(
+      'Pages: 2 read, of 5 due and 9 live. Changed 1, unchanged 1, gone 0, failed 0, blocked 0.',
+    );
+  });
 });
 
 describe('snapshot pull', () => {

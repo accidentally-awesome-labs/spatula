@@ -96,8 +96,14 @@ export function createClient(options: {
     },
 
     /** Starts a run, or finds the one already started in this five-minute slot. */
-    async startRun(datasetId: string): Promise<{ runId: string; existing: boolean }> {
-      const response = await request('POST', `/datasets/${encodeURIComponent(datasetId)}/runs`);
+    async startRun(
+      datasetId: string,
+      options: { all?: boolean } = {},
+    ): Promise<{ runId: string; existing: boolean }> {
+      const response = await request(
+        'POST',
+        `/datasets/${encodeURIComponent(datasetId)}/runs${options.all === true ? '?all=1' : ''}`,
+      );
       const answer = await json(response);
       if (
         (response.status === 202 || response.status === 409) &&

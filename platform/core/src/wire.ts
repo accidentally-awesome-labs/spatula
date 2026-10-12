@@ -30,7 +30,11 @@ export type PublishResult =
 
 /** What a refresh did. */
 export interface RunSummary {
+  /** The pages read this run. */
   items: number;
+  /** The live pages when the run planned, and how many of them were due. Absent in runs from before slice 1. */
+  live?: number;
+  due?: number;
   fetches: Record<Outcome, number>;
   statements: { added: number; reseen: number; withdrawn: number };
   llm: {

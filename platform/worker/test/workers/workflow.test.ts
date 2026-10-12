@@ -70,9 +70,9 @@ describe('RefreshWorkflow', () => {
     expect(asked.map((sent) => sent.url)).toEqual([
       'https://maker-a.example/robots.txt',
       URLS.a1,
-      URLS.a2,
       'https://maker-b.example/robots.txt',
       URLS.b1,
+      URLS.a2,
     ]);
     expect(new Set(asked.map((sent) => sent.agent))).toEqual(
       new Set(['Spatula/0.2.0-dev (+https://spatula-platform.salar-sayyad.workers.dev)']),

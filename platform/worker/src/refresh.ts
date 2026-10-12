@@ -34,10 +34,11 @@ import {
 import {
   commitSnapshot,
   currentStatements,
+  dueItems,
   finishRun,
   getDataset,
+  itemsByIds,
   latestSnapshot,
-  listLiveItems,
   recordExtraction,
   recordFetch,
   reseeStatements,
@@ -110,6 +111,8 @@ export interface RefreshPorts {
 export interface RefreshParams {
   runId: string;
   datasetId: string;
+  /** Read every live page, however recently it was read. */
+  all?: boolean;
 }
 
 /** Waits up to this long happen inside a fetch step; longer ones become Workflow sleeps. */
@@ -125,6 +128,11 @@ export const MAX_NOTES = 50;
  * survivorship reads. An honest product page says a few dozen things.
  */
 export const MAX_PAGE_STATEMENTS = 1_000;
+/**
+ * How many pages one step loads for the run. A step's result is kept as JSON and capped at 1 MiB, so
+ * the pages load in steps of 50 rather than all at once.
+ */
+const ITEMS_PER_STEP = 50;
 
 const REDIRECTS = new Set([301, 302, 303, 307, 308]);
 const NO_USAGE: LlmUsage = { inputTokens: 0, outputTokens: 0 };
@@ -199,6 +207,7 @@ interface Context {
   datasetId: string;
   revision: number;
   definition: Definition;
+  startedAt: Date;
 }
 
 /** A fetch's result, as its step returns it. */
@@ -234,10 +243,12 @@ export async function runRefresh(
         const dataset = await getDataset(db, datasetId);
         if (dataset === null) throw new DatasetMissingError(datasetId);
         await startRun(db, { id: runId, datasetId });
+        // The run's own time, for what's due and for what its sitemaps list. A step that runs again
+        // returns its first result, so every later step sees the same time.
         return {
           revision: dataset.revision,
           definition: dataset.definition,
-          items: await listLiveItems(db, datasetId),
+          startedAt: ports.now().toISOString(),
         };
       }),
     );
@@ -246,25 +257,42 @@ export async function runRefresh(
       datasetId,
       revision: loaded.revision,
       definition: loaded.definition,
+      startedAt: new Date(loaded.startedAt),
     };
-    const summary = emptySummary(loaded.items.length);
+    const summary = emptySummary();
 
-    for (const item of loaded.items) {
-      const fetched = await fetchWithWaits(context, item, step, ports);
-      summary.fetches[fetched.outcome] += 1;
-      summary.statements.reseen += fetched.reseen;
-      if (fetched.note !== null) note(summary, fetched.note);
-      if (!fetched.extract) continue;
-      const extracted = await step.do(`extract:${item.id}`, () =>
-        extractItem(context, item, fetched, ports),
+    const plan = await step.do('plan', () =>
+      ports.withDb((db) =>
+        dueItems(db, {
+          datasetId,
+          now: context.startedAt,
+          maxAgeDays: context.definition.freshness.maxAgeDays,
+          current: extractionTag(context.revision),
+          limit: context.definition.budget.itemsPerRun,
+          all: params.all === true,
+        }),
+      ),
+    );
+    summary.live = plan.live;
+    summary.due = plan.due;
+    const waiting = plan.due - plan.ids.length;
+    if (waiting > 0) {
+      const { itemsPerRun } = context.definition.budget;
+      note(
+        summary,
+        `${waiting} due ${waiting === 1 ? 'page waits' : 'pages wait'} for the next run: the budget reads ${itemsPerRun} ${itemsPerRun === 1 ? 'page' : 'pages'} a run`,
       );
-      summary.statements.added += extracted.statements.added;
-      summary.statements.reseen += extracted.statements.reseen;
-      summary.statements.withdrawn += extracted.statements.withdrawn;
-      summary.llm[extracted.llm] += 1;
-      summary.llm.inputTokens += extracted.usage.inputTokens;
-      summary.llm.outputTokens += extracted.usage.outputTokens;
-      for (const text of extracted.notes) note(summary, text);
+    }
+
+    for (let start = 0; start < plan.ids.length; start += ITEMS_PER_STEP) {
+      const batch = await step.do(`items:${start}`, () =>
+        ports.withDb((db) => itemsByIds(db, plan.ids.slice(start, start + ITEMS_PER_STEP))),
+      );
+      for (const item of batch) {
+        await refreshItem(context, item, summary, step, ports);
+        // The pages read: a planned page that's no longer live when its batch loads isn't one.
+        summary.items += 1;
+      }
     }
 
     // The counts stay exact. Only the notes, one for each page left unresolved and each claim in
@@ -299,9 +327,11 @@ export async function runRefresh(
   }
 }
 
-function emptySummary(items: number): RunSummary {
+function emptySummary(): RunSummary {
   return {
-    items,
+    items: 0,
+    live: 0,
+    due: 0,
     fetches: { changed: 0, unchanged: 0, gone: 0, failed: 0, blocked: 0 },
     statements: { ...NO_CHANGE },
     llm: { ran: 0, reused: 0, skipped: 0, failed: 0, inputTokens: 0, outputTokens: 0 },
@@ -326,6 +356,32 @@ function storable(text: string): string {
 
 function note(summary: RunSummary, text: string) {
   if (summary.notes.length < MAX_NOTES) summary.notes.push(storable(text));
+}
+
+/** Fetches one page, and reads it when it changed or its statements came from older code. */
+async function refreshItem(
+  context: Context,
+  item: ItemRef,
+  summary: RunSummary,
+  step: StepRunner,
+  ports: RefreshPorts,
+): Promise<Fetched> {
+  const fetched = await fetchWithWaits(context, item, step, ports);
+  summary.fetches[fetched.outcome] += 1;
+  summary.statements.reseen += fetched.reseen;
+  if (fetched.note !== null) note(summary, fetched.note);
+  if (!fetched.extract) return fetched;
+  const extracted = await step.do(`extract:${item.id}`, () =>
+    extractItem(context, item, fetched, ports),
+  );
+  summary.statements.added += extracted.statements.added;
+  summary.statements.reseen += extracted.statements.reseen;
+  summary.statements.withdrawn += extracted.statements.withdrawn;
+  summary.llm[extracted.llm] += 1;
+  summary.llm.inputTokens += extracted.usage.inputTokens;
+  summary.llm.outputTokens += extracted.usage.outputTokens;
+  for (const text of extracted.notes) note(summary, text);
+  return fetched;
 }
 
 /**

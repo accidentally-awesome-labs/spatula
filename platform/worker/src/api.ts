@@ -80,6 +80,11 @@ api.put('/datasets/:id', async (c) => {
 });
 
 api.post('/datasets/:id/runs', async (c) => {
+  // Like dryRun, a flag that isn't 1 or 0 is refused, not guessed at.
+  const all = c.req.query('all');
+  if (all !== undefined && all !== '0' && all !== '1') {
+    return c.json({ error: 'all is 1 or 0.' }, 400);
+  }
   const datasetId = c.req.param('id');
   const runId = runIdFor(datasetId, new Date());
   // The run is recorded first, so its ID can be reported at once, and a second request in the
@@ -101,7 +106,7 @@ api.post('/datasets/:id/runs', async (c) => {
     return c.json({ error: 'A run already started in this five-minute slot.', runId }, 409);
   }
   try {
-    await c.env.REFRESH.create({ id: runId, params: { runId, datasetId } });
+    await c.env.REFRESH.create({ id: runId, params: { runId, datasetId, all: all === '1' } });
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     await withDatabase(c.env, (db) =>
