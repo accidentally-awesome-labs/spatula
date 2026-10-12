@@ -1,4 +1,16 @@
-import { packIssues, parseDefinition, runIdFor, sha256Hex, type RunView } from '@spatula/core';
+import {
+  DIRECTORY_CONTENT_TYPE,
+  DIRECTORY_PATH,
+  importSigningKey,
+  keyDirectory,
+  packIssues,
+  parseDefinition,
+  randomNonce,
+  runIdFor,
+  sha256Hex,
+  signDirectory,
+  type RunView,
+} from '@spatula/core';
 import { packs } from '@spatula/pack-products';
 import {
   applyDefinition,
@@ -19,23 +31,53 @@ import { secret } from './config';
 import { withDatabase } from './database';
 
 /*
- * The owner's API, and the public page. The owner sends a bearer token; the Worker keeps only its
- * SHA-256 and compares in constant time. Owner answers are personal, so nothing caches them, and
- * the same goes for every other answer but the page: an unknown path's 404 and a failure's 500.
+ * The owner's API, the public page, and the key directory. The owner sends a bearer token; the
+ * Worker keeps only its SHA-256 and compares in constant time. Owner answers are personal, so
+ * nothing caches them, and the same goes for every other answer but the page and the key
+ * directory: an unknown path's 404 and a failure's 500.
  */
 
 type Api = { Bindings: Env };
 
 /**
- * Every answer but the public page carries this. The owner middleware, notFound and onError set
- * it with c.header, which Hono copies into the responses it builds (c.json). A handler that
- * returns a raw Response has to set it by hand, as the snapshot route does.
+ * Every answer carries this but the public page and the key directory's (which a site may keep
+ * for a few minutes). The owner middleware, notFound and onError set it with c.header, which Hono
+ * copies into the responses it builds (c.json). A handler that returns a raw Response has to set
+ * it by hand, as the snapshot route does.
  */
 const PRIVATE_NO_STORE = 'private, no-store';
 
 export const api = new Hono<Api>();
 
 api.get('/', (c) => c.html(aboutPage(c.env)));
+
+/** How long the key directory's signature is good for, and how long a client may keep the answer. */
+const DIRECTORY_TTL_SECONDS = 600;
+
+api.get(DIRECTORY_PATH, async (c) => {
+  const jwk = secret(c.env, 'WEB_BOT_AUTH_KEY');
+  if (jwk === undefined) {
+    c.header('cache-control', PRIVATE_NO_STORE);
+    return c.json({ error: 'This deployment doesn’t sign its requests yet.' }, 404);
+  }
+  const key = await importSigningKey(jwk);
+  const signed = await signDirectory({
+    authority: new URL(c.req.url).host,
+    key,
+    now: Date.now(),
+    nonce: randomNonce(),
+    ttlSeconds: DIRECTORY_TTL_SECONDS,
+  });
+  return new Response(keyDirectory(key), {
+    headers: {
+      'content-type': DIRECTORY_CONTENT_TYPE,
+      // The key is public, and a client that keeps the answer half as long as it's signed for
+      // always holds a signature that's still good.
+      'cache-control': `public, max-age=${DIRECTORY_TTL_SECONDS / 2}`,
+      ...signed,
+    },
+  });
+});
 
 const owner: MiddlewareHandler<Api> = async (c, next) => {
   c.header('cache-control', PRIVATE_NO_STORE);

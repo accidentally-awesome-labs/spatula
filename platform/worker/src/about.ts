@@ -27,6 +27,9 @@ Crawl-delay, and backs off when a site is busy or failing.</li>
 say <code>ai-input=no</code>. Nothing it reads is used to train AI models.</li>
 <li>It collects facts only, never descriptions or photos. A block is an answer: it never tries
 to get around one.</li>
+<li>It signs its requests with Web Bot Auth (HTTP Message Signatures), so a site can check that a
+request naming Spatula came from Spatula. Its public key is at
+<a href="/.well-known/http-message-signatures-directory"><code>/.well-known/http-message-signatures-directory</code></a>.</li>
 </ul>
 <h2>Opting out</h2>
 <p>Add this to your robots.txt:</p>

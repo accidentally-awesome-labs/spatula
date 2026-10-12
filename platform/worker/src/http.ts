@@ -7,7 +7,8 @@ import type { HttpPort, HttpResult } from './refresh';
  * reads at most 5 MB of a page, or the cap a caller sets, as a sitemap's is larger. It asks only
  * for the addresses a definition may name (public HTTPS ones). Every hop, page, and robots.txt
  * goes through here, and a redirect's address comes from the site, so this is where a redirect to
- * the local network is stopped.
+ * the local network is stopped. Requests are signed here too (Web Bot Auth), once their address has
+ * passed, so each hop carries a signature made for the host it asks.
  */
 
 export const MAX_PAGE_BYTES = 5 * 1024 * 1024;
@@ -26,6 +27,8 @@ export function createHttpFetcher(options: {
   fetch?: typeof fetch;
   timeoutMs?: number;
   maxBytes?: number;
+  /** Signs each request (Web Bot Auth); without it, requests go unsigned. */
+  sign?: (url: string) => Promise<Record<string, string>>;
 }): HttpPort {
   const timeoutMs = options.timeoutMs ?? REQUEST_TIMEOUT_MS;
   const maxBytes = options.maxBytes ?? MAX_PAGE_BYTES;
@@ -41,13 +44,25 @@ export function createHttpFetcher(options: {
       const parsed = new URL(url);
       const reason = addressError(parsed);
       if (reason !== null) return { ok: false, error: `${url} is ${reason}` };
+      let signed: Record<string, string> = {};
+      if (options.sign !== undefined) {
+        try {
+          signed = await options.sign(parsed.href);
+        } catch (error) {
+          return {
+            ok: false,
+            error: `the request couldn’t be signed: ${describe(error, timeoutMs)}`,
+          };
+        }
+      }
       let response: Response;
       try {
         // What is sent is the address that was just judged, not the text it was parsed from.
         response = await send(parsed.href, {
           method: 'GET',
           redirect: 'manual',
-          headers: requestHeaders(headers, options.userAgent, request.accept),
+          // The signature headers come last, so a caller's headers can't replace them.
+          headers: requestHeaders({ ...headers, ...signed }, options.userAgent, request.accept),
           signal: AbortSignal.timeout(timeoutMs),
         });
       } catch (error) {

@@ -1,3 +1,4 @@
+import { importSigningKey, randomNonce, signRequest, type SigningKey } from '@spatula/core';
 import { packs } from '@spatula/pack-products';
 import { r2Blobs } from './blobs';
 import { secret, spatulaUserAgent } from './config';
@@ -9,7 +10,7 @@ import type { RefreshPorts } from './refresh';
 
 /** The refresh pipeline's ports, from the Worker's bindings and secrets. */
 export function workerPorts(env: Env): RefreshPorts {
-  const http = createHttpFetcher({ userAgent: spatulaUserAgent(env) });
+  const http = createHttpFetcher({ userAgent: spatulaUserAgent(env), sign: signer(env) });
   const apiKey = secret(env, 'ANTHROPIC_API_KEY');
   const gatewayUrl = secret(env, 'AI_GATEWAY_URL');
   return {
@@ -44,5 +45,22 @@ export function workerPorts(env: Env): RefreshPorts {
     packs,
     now: () => new Date(),
     wait: (ms) => scheduler.wait(ms),
+  };
+}
+
+/** Signs each request with WEB_BOT_AUTH_KEY, if it's set. The key is read once per instance. */
+function signer(env: Env): ((url: string) => Promise<Record<string, string>>) | undefined {
+  const jwk = secret(env, 'WEB_BOT_AUTH_KEY');
+  if (jwk === undefined) return undefined;
+  let key: Promise<SigningKey> | null = null;
+  return async (url) => {
+    key ??= importSigningKey(jwk);
+    return signRequest({
+      url,
+      agent: new URL(env.PUBLIC_URL).origin,
+      key: await key,
+      now: Date.now(),
+      nonce: randomNonce(),
+    });
   };
 }

@@ -273,4 +273,37 @@ describe('createHttpFetcher', () => {
     });
     expect(new Headers(calls[0]!.init.headers).get('accept')).toBe('application/xml');
   });
+
+  it('adds the signer’s headers, which a caller can’t replace', async () => {
+    const { fetch, calls } = stub(() => new Response('', { status: 200 }));
+    const http = createHttpFetcher({
+      userAgent: UA,
+      fetch,
+      sign: async (url) => ({
+        signature: `sig1=:${url}:`,
+        'signature-agent': '"https://spatula.test"',
+      }),
+    });
+    await http.get('https://maker-a.example/a', { signature: 'forged' });
+    const sent = new Headers(calls[0]!.init.headers);
+    expect(sent.get('signature')).toBe('sig1=:https://maker-a.example/a:');
+    expect(sent.get('signature-agent')).toBe('"https://spatula.test"');
+  });
+
+  it('fails the request, without sending it, when it can’t be signed', async () => {
+    const { fetch, calls } = stub(() => new Response('', { status: 200 }));
+    const http = createHttpFetcher({
+      userAgent: UA,
+      fetch,
+      sign: async () => {
+        throw new Error('WEB_BOT_AUTH_KEY isn’t JSON: set it to an Ed25519 private key as a JWK.');
+      },
+    });
+    expect(await http.get('https://maker-a.example/a', {})).toEqual({
+      ok: false,
+      error:
+        'the request couldn’t be signed: WEB_BOT_AUTH_KEY isn’t JSON: set it to an Ed25519 private key as a JWK.',
+    });
+    expect(calls).toHaveLength(0);
+  });
 });

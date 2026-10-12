@@ -1,4 +1,10 @@
-import { sha256Hex, type PagesSource, type RunView } from '@spatula/core';
+import {
+  DIRECTORY_CONTENT_TYPE,
+  DIRECTORY_PATH,
+  sha256Hex,
+  type PagesSource,
+  type RunView,
+} from '@spatula/core';
 import {
   commitSnapshot,
   datasets,
@@ -665,5 +671,59 @@ describe('reviving pages', () => {
         ),
     );
     expect(other).toEqual({ status: 'refused' });
+  });
+});
+
+describe('the key directory', () => {
+  const TEST_KEY = JSON.stringify({
+    kty: 'OKP',
+    crv: 'Ed25519',
+    d: 'n4Ni-HpISpVObnQMW0wOhCKROaIKqKtW_2ZYb2p9KcU',
+    x: 'JrQLj5P_89iXES9-vFgrIy29clF9CC_oPPsw3c5D0bs',
+  });
+
+  it('serves the public key, signed for the host that asked', async () => {
+    const response = await call('GET', DIRECTORY_PATH, {
+      token: null,
+      bindings: { ...env, WEB_BOT_AUTH_KEY: TEST_KEY } as Env,
+    });
+    expect(response.status).toBe(200);
+    expect(response.headers.get('content-type')).toBe(DIRECTORY_CONTENT_TYPE);
+    const body = (await response.json()) as { keys: JsonWebKey[] };
+    expect(body).toEqual({
+      keys: [{ kty: 'OKP', crv: 'Ed25519', x: 'JrQLj5P_89iXES9-vFgrIy29clF9CC_oPPsw3c5D0bs' }],
+    });
+    expect(JSON.stringify(body)).not.toContain('"d"');
+    const input = response.headers.get('signature-input')!;
+    expect(input).toMatch(
+      /^sig1=\("@authority";req\);created=\d+;keyid="poqk[^"]+";alg="ed25519";expires=\d+;nonce="[^"]+";tag="http-message-signatures-directory"$/u,
+    );
+    // The signature checks out against the key it serves, for the host the request named.
+    const publicKey = await crypto.subtle.importKey(
+      'jwk',
+      body.keys[0]!,
+      { name: 'Ed25519' },
+      false,
+      ['verify'],
+    );
+    const base = `"@authority";req: localhost\n"@signature-params": ${input.slice('sig1='.length)}`;
+    const signature = Uint8Array.from(
+      atob(response.headers.get('signature')!.slice('sig1=:'.length, -1)),
+      (char) => char.charCodeAt(0),
+    );
+    expect(
+      await crypto.subtle.verify(
+        { name: 'Ed25519' },
+        publicKey,
+        signature,
+        new TextEncoder().encode(base),
+      ),
+    ).toBe(true);
+  });
+
+  it('answers 404 where the Worker has no key', async () => {
+    const response = await call('GET', DIRECTORY_PATH, { token: null });
+    expect(response.status).toBe(404);
+    expectNoStore(response);
   });
 });
