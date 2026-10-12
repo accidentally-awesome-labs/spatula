@@ -157,7 +157,22 @@ export function isAllowed(group: RobotsGroup | null, url: URL): boolean {
  * their pages with it, so an owner writes their patterns as they would a robots.txt rule.
  */
 export function pathPatternMatches(pattern: string, pathAndQuery: string): boolean {
-  return matches(encodePath(pattern), encodePath(pathAndQuery));
+  return pathPatternMatcher([pattern])(pathAndQuery);
+}
+
+/**
+ * `pathPatternMatches` for many paths against the same patterns: true when any pattern matches.
+ * Each pattern is encoded and split once, when this is called, and each path is encoded once per
+ * call, however many patterns there are. Choosing a sitemap's pages asks it of every address in
+ * the sitemap, against up to a hundred patterns.
+ */
+export function pathPatternMatcher(patterns: readonly string[]): (pathAndQuery: string) => boolean {
+  const compiled = patterns.map((pattern) => compile(encodePath(pattern)));
+  return (pathAndQuery) => {
+    if (compiled.length === 0) return false;
+    const path = encodePath(pathAndQuery);
+    return compiled.some((pattern) => matchesCompiled(pattern, path));
+  };
 }
 
 /** Paths compare percent-encoded: non-ASCII characters encoded, escapes in uppercase. */
@@ -171,16 +186,38 @@ function encodePath(path: string): string {
     .replace(/[^\x00-\x7F]/gu, (char) => encodeURIComponent(char));
 }
 
-/** A rule's pattern against a path: `*` matches anything, and a final `$` anchors the end. */
-function matches(pattern: string, path: string): boolean {
+/** An encoded pattern, split at its `*`s: the pieces `matchesCompiled` looks for in a path. */
+interface CompiledPattern {
+  anchored: boolean;
+  /** The text before the first `*`, or the whole pattern if it has none. */
+  first: string;
+  /** The text between one `*` and the next. */
+  between: string[];
+  /** The text after the last `*`; null if the pattern has no `*`. */
+  last: string | null;
+}
+
+function compile(pattern: string): CompiledPattern {
   const anchored = pattern.endsWith('$');
   const [first = '', ...rest] = (anchored ? pattern.slice(0, -1) : pattern).split('*');
+  const last = rest.pop() ?? null;
+  return { anchored, first, between: rest, last };
+}
+
+/** A rule's pattern against a path: `*` matches anything, and a final `$` anchors the end. */
+function matches(pattern: string, path: string): boolean {
+  return matchesCompiled(compile(pattern), path);
+}
+
+function matchesCompiled(
+  { anchored, first, between, last }: CompiledPattern,
+  path: string,
+): boolean {
   if (!path.startsWith(first)) return false;
-  if (rest.length === 0) return !anchored || path.length === first.length;
+  if (last === null) return !anchored || path.length === first.length;
   // Each piece goes at its earliest position, which leaves the most room for the rest.
-  const last = rest.pop() ?? '';
   let position = first.length;
-  for (const part of rest) {
+  for (const part of between) {
     const found = path.indexOf(part, position);
     if (found === -1) return false;
     position = found + part.length;
