@@ -1,4 +1,5 @@
 import type { RunSummary } from '@spatula/core';
+import { StaleDefinitionError } from '@spatula/store';
 import { WorkflowEntrypoint, type WorkflowEvent, type WorkflowStep } from 'cloudflare:workers';
 import { NonRetryableError } from 'cloudflare:workflows';
 import { workerPorts } from './ports';
@@ -14,7 +15,10 @@ export class RefreshWorkflow extends WorkflowEntrypoint<Env, RefreshParams> {
   }
 }
 
-/** Workflows' steps as the pipeline's StepRunner. A dataset that doesn't exist isn't retried. */
+/**
+ * Workflows' steps as the pipeline's StepRunner. A dataset that doesn't exist, or whose stored
+ * definition no longer passes the checks, isn't retried: a retry would find the same thing.
+ */
 export function stepRunner(step: WorkflowStep): StepRunner {
   // Workflows types step results as serializable values. The pipeline's are plain JSON, which the
   // Node tests' fake step checks, so its generic signature is enough here. The step is an RPC stub
@@ -29,7 +33,9 @@ export function stepRunner(step: WorkflowStep): StepRunner {
         try {
           return await fn();
         } catch (error) {
-          if (error instanceof DatasetMissingError) throw new NonRetryableError(error.message);
+          if (error instanceof DatasetMissingError || error instanceof StaleDefinitionError) {
+            throw new NonRetryableError(error.message);
+          }
           throw error;
         }
       }),

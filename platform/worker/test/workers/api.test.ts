@@ -1,5 +1,5 @@
 import { sha256Hex, type RunView } from '@spatula/core';
-import { commitSnapshot, getDataset, getRun, runs, startRun } from '@spatula/store';
+import { commitSnapshot, datasets, getDataset, getRun, runs, startRun } from '@spatula/store';
 import { testDefinition } from '@spatula/store/fixtures';
 import { introspectWorkflow } from 'cloudflare:test';
 import { env, exports } from 'cloudflare:workers';
@@ -327,6 +327,30 @@ describe('the owner routes', () => {
       await introspector.dispose();
     }
     expect((await call('POST', '/datasets/nothing-here/runs')).status).toBe(404);
+  });
+
+  it('refuse a run, and say why, when the stored definition no longer passes the checks', async () => {
+    await call('PUT', '/datasets/api-stale', { body: testDefinition('api-stale') });
+    // A later version's stricter checks would leave a stored definition like this one.
+    await withDatabase(env, (db) =>
+      db
+        .update(datasets)
+        .set({ definition: { ...testDefinition('api-stale'), consumers: ['Not A Slug'] } })
+        .where(eq(datasets.id, 'api-stale')),
+    );
+    const refused = await call('POST', '/datasets/api-stale/runs');
+    expect(refused.status).toBe(409);
+    expectNoStore(refused);
+    expect(await refused.json()).toEqual({
+      error:
+        'Dataset api-stale’s stored definition no longer passes the checks (consumers.0: Use lowercase letters, digits, and hyphens, up to 63 characters.). Apply it again.',
+    });
+    // The dataset can't run, so no run was recorded for it.
+    expect(
+      await withDatabase(env, (db) =>
+        db.select().from(runs).where(eq(runs.datasetId, 'api-stale')),
+      ),
+    ).toEqual([]);
   });
 
   it('report a run that is still going as running', async () => {

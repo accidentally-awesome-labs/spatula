@@ -7,6 +7,7 @@ import {
   getRun,
   getSnapshot,
   latestSnapshot,
+  StaleDefinitionError,
   startRun,
 } from '@spatula/store';
 import { Hono, type MiddlewareHandler } from 'hono';
@@ -84,10 +85,18 @@ api.post('/datasets/:id/runs', async (c) => {
   // The run is recorded first, so its ID can be reported at once, and a second request in the
   // same five-minute slot finds it.
   const started = await withDatabase(c.env, async (db) => {
-    if ((await getDataset(db, datasetId)) === null) return 'missing';
+    try {
+      if ((await getDataset(db, datasetId)) === null) return 'missing';
+    } catch (error) {
+      // A definition stored by an earlier version that no longer passes the checks. The owner fixes
+      // it by applying the definition again, and the error says so.
+      if (error instanceof StaleDefinitionError) return error;
+      throw error;
+    }
     return (await startRun(db, { id: runId, datasetId })).created ? 'started' : 'exists';
   });
   if (started === 'missing') return c.json({ error: `Dataset ${datasetId} doesn’t exist.` }, 404);
+  if (started instanceof StaleDefinitionError) return c.json({ error: started.message }, 409);
   if (started === 'exists') {
     return c.json({ error: 'A run already started in this five-minute slot.', runId }, 409);
   }

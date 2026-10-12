@@ -187,12 +187,17 @@ const shapeSchema = z.strictObject({
   dataset: slug,
   recordTypes: z.record(name, recordTypeSchema),
   sources: z.array(sourceSchema).min(1),
-  policy: policySchema.default({ purposes: [], perHostIntervalMs: 1000 }),
-  freshness: freshnessSchema.default({ maxAgeDays: 7 }),
-  gates: gatesSchema.default({ maxRemovals: { count: 25, share: 0.05 } }),
-  publication: publicationSchema.default({ approval: 'balanced' }),
-  decisions: decisionsSchema.default({ classify: { accept: 0.9 }, match: { accept: 0.95 } }),
-  budget: budgetSchema.default({ itemsPerRun: 1000, llmTokensPerRun: 2_000_000 }),
+  // These defaults are functions, so each parse gets objects of its own. Zod copies only the outer
+  // object of a default, and one that holds an object or an array would share it between parses.
+  policy: policySchema.default(() => ({ purposes: [], perHostIntervalMs: 1000 })),
+  freshness: freshnessSchema.default(() => ({ maxAgeDays: 7 })),
+  gates: gatesSchema.default(() => ({ maxRemovals: { count: 25, share: 0.05 } })),
+  publication: publicationSchema.default(() => ({ approval: 'balanced' as const })),
+  decisions: decisionsSchema.default(() => ({
+    classify: { accept: 0.9 },
+    match: { accept: 0.95 },
+  })),
+  budget: budgetSchema.default(() => ({ itemsPerRun: 1000, llmTokensPerRun: 2_000_000 })),
   consumers: z.array(slug).max(20).default([]),
 });
 

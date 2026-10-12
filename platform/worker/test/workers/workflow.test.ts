@@ -1,8 +1,9 @@
 import { runIdFor, sha256Hex, snapshotSchema, type RunSummary } from '@spatula/core';
-import { applyDefinition, getRun, latestSnapshot, type Executor } from '@spatula/store';
+import { applyDefinition, datasets, getRun, latestSnapshot, type Executor } from '@spatula/store';
 import { testDefinition } from '@spatula/store/fixtures';
 import { introspectWorkflowInstance } from 'cloudflare:test';
 import { env } from 'cloudflare:workers';
+import { eq } from 'drizzle-orm';
 import { http, HttpResponse, type HttpResponseResolver } from 'msw';
 import { describe, expect, it } from 'vitest';
 import { withDatabase } from '../../src/database';
@@ -94,6 +95,33 @@ describe('RefreshWorkflow', () => {
     try {
       await env.REFRESH.create({ id: runId, params: { runId, datasetId: 'workers-missing' } });
       await instance.waitForStatus('errored');
+    } finally {
+      await instance.dispose();
+    }
+  });
+
+  it('fails at once, without retrying, when the stored definition no longer passes the checks', async () => {
+    const datasetId = 'workers-stale';
+    await withDb(async (db) => {
+      await applyDefinition(db, testDefinition(datasetId));
+      // A later version's stricter checks would leave a stored definition like this one.
+      await db
+        .update(datasets)
+        .set({ definition: { ...testDefinition(datasetId), consumers: ['Not A Slug'] } })
+        .where(eq(datasets.id, datasetId));
+    });
+    const runId = `${datasetId}-202610100000`;
+    const instance = await introspectWorkflowInstance(env.REFRESH, runId);
+    try {
+      await env.REFRESH.create({ id: runId, params: { runId, datasetId } });
+      await instance.waitForStatus('errored');
+      // A step that is retried ends the instance with the error it threw, after about half a
+      // minute of retries, which the test's own time limit is too long to notice. A step that
+      // threw a NonRetryableError ends it at once, and the engine says so.
+      expect(await instance.getError()).toMatchObject({
+        name: 'WorkflowFatalError',
+        message: expect.stringContaining('NonRetryableError'),
+      });
     } finally {
       await instance.dispose();
     }

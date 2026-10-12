@@ -33,13 +33,14 @@ definitions through the schema again, so they get the defaults too.
   checked, and what the terms say about automated access; a source whose terms forbid it is
   refused). Two kinds:
   - `kind: pages` lists its pages, up to 1,000.
-  - `kind: sitemap` names up to 20 `sitemaps`, and the `include` and `exclude` patterns a page's
-    path must match, robots.txt-style (`*` for anything, a final `$` for the end). An index's
-    child sitemaps are read when their path matches one of the `follow` patterns, or all of them
-    when there are none. At most `maxPages` (default 1,000) of its pages are kept. `useLastmod`
-    (default false) says whether a moved `lastmod` means the page changed: many sitemaps stamp
-    every entry with the time of the request. Its pages come and go with its sitemaps (ADR 0005),
-    not with the definition.
+  - `kind: sitemap` names up to 20 `sitemaps`, and `include` and `exclude` patterns,
+    robots.txt-style (`*` for anything, a final `$` for the end): a page is kept when its path and
+    query match at least one include pattern and no exclude pattern. An index's child sitemaps are
+    read when their path matches one of the `follow` patterns, or all of them when there are none.
+    At most `maxPages` (default 1,000) of its pages are kept. `useLastmod` (default false) says
+    whether a moved `lastmod` means the page changed: many sitemaps stamp every entry with the
+    time of the request. Its pages come and go with its sitemaps (ADR 0005), not with the
+    definition.
   - A declared value or rule replaces whatever the pack would read for that field. If a declared
     rule finds nothing, the field is missing: Spatula never falls back to a weaker guess.
 - **`policy`:** `purposes` (the Content Signals uses the dataset makes: `ai-input` for anything an

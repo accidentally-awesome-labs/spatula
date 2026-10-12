@@ -174,9 +174,22 @@ export async function applyDefinition(
 }
 
 /**
+ * A dataset whose stored definition no longer passes the checks, as an earlier version of Spatula
+ * may have left it. Nothing can run on the dataset until the owner applies the definition again.
+ */
+export class StaleDefinitionError extends Error {
+  constructor(datasetId: string, issues: string[]) {
+    super(
+      `Dataset ${datasetId}’s stored definition no longer passes the checks (${issues[0]}). Apply it again.`,
+    );
+    this.name = 'StaleDefinitionError';
+  }
+}
+
+/**
  * The dataset, with its definition read through the schema again, so a definition stored by an
- * earlier version gets the defaults of keys added since. One that no longer passes is an error the
- * owner fixes by applying the definition again.
+ * earlier version gets the defaults of keys added since. One that no longer passes is a
+ * StaleDefinitionError, which the owner fixes by applying the definition again.
  */
 export async function getDataset(db: Executor, id: string): Promise<DatasetRow | null> {
   const [row] = await db
@@ -190,11 +203,7 @@ export async function getDataset(db: Executor, id: string): Promise<DatasetRow |
     .where(eq(datasets.id, id));
   if (row === undefined) return null;
   const parsed = parseDefinition(row.definition);
-  if (!parsed.ok) {
-    throw new Error(
-      `Dataset ${id}’s stored definition no longer passes the checks (${parsed.issues[0]}). Apply it again.`,
-    );
-  }
+  if (!parsed.ok) throw new StaleDefinitionError(id, parsed.issues);
   return { ...row, definition: parsed.definition };
 }
 

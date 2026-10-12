@@ -482,6 +482,42 @@ describe('a decided field', () => {
       ],
     });
   });
+
+  it('is refused on a field that identifies the record', () => {
+    const input = withCategory({
+      type: 'enum',
+      required: true,
+      values: ['Headphones'],
+      decide: true,
+    });
+    // The category is part of a key now: the brand, name, and category together name a record.
+    input.recordTypes.product.identity.keys = [['brand', 'name', 'category']];
+    expect(parseDefinition(input)).toMatchObject({
+      ok: false,
+      issues: [
+        'recordTypes.product.fields.category.decide: Fields that identify a record come from structured data or declared rules, never a decision.',
+      ],
+    });
+  });
+
+  it('is refused on a second field of the record type', () => {
+    const input = withCategory({
+      type: 'enum',
+      required: true,
+      values: ['Headphones'],
+      decide: true,
+    });
+    input.recordTypes.product.fields.connection = {
+      type: 'enum',
+      required: true,
+      values: ['Wired', 'Wireless'],
+      decide: true,
+    };
+    expect(parseDefinition(input)).toMatchObject({
+      ok: false,
+      issues: ['recordTypes.product.fields: Only one field of a record type can be decided.'],
+    });
+  });
 });
 
 describe('dataset settings', () => {
@@ -498,6 +534,25 @@ describe('dataset settings', () => {
       budget: { itemsPerRun: 1000, llmTokensPerRun: 2_000_000 },
       consumers: [],
     });
+  });
+
+  it('hand every parse its own objects for the defaults it fills in', () => {
+    // zod copies only a default's outer object, so a default holding an object or an array would
+    // give every parse the same one, and a Worker isolate parses for many requests.
+    const bare = () => {
+      const input = definition();
+      delete input.policy;
+      return input;
+    };
+    const first = parseDefinition(bare());
+    const second = parseDefinition(bare());
+    expect(first.ok && second.ok).toBe(true);
+    if (!first.ok || !second.ok) return;
+    expect(second.definition).toEqual(first.definition);
+    expect(second.definition.gates.maxRemovals).not.toBe(first.definition.gates.maxRemovals);
+    expect(second.definition.decisions.classify).not.toBe(first.definition.decisions.classify);
+    expect(second.definition.decisions.match).not.toBe(first.definition.decisions.match);
+    expect(second.definition.policy.purposes).not.toBe(first.definition.policy.purposes);
   });
 
   it('name consumers by slug', () => {
