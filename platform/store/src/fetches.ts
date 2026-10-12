@@ -9,6 +9,16 @@ export const REFUSED_AFTER = 3;
 
 /** The most code units of what the LLM step did that the fetch log keeps. */
 const MAX_LLM_DETAIL = 500;
+/** The longest ETag or Last-Modified kept: a host chooses them, and a step's result is capped. */
+const MAX_VALIDATOR = 512;
+
+/**
+ * A validator as it's kept. One that's too long is dropped, not cut: a cut validator would
+ * revalidate wrongly.
+ */
+function keptValidator(validator: string | null): string | null {
+  return validator !== null && validator.length > MAX_VALIDATOR ? null : validator;
+}
 
 export interface FetchInput {
   id: string;
@@ -51,7 +61,8 @@ export interface FetchInput {
  * while its sitemap still lists it. Every fetch notes when its page was asked for
  * (`lastFetchedAt`), and one that read the page, `changed` or `unchanged`, notes the lastmod the
  * page was listed with (`fetchedLastmod`). Only a fresh page moves the stored hash and validators:
- * a failed or blocked fetch leaves them, like every value, as they were.
+ * a failed or blocked fetch leaves them, like every value, as they were. A validator longer than
+ * `MAX_VALIDATOR` (512) characters is stored as null.
  */
 export async function recordFetch(
   db: Executor,
@@ -106,7 +117,13 @@ export async function recordFetch(
         ...(input.outcome === 'changed' || input.outcome === 'unchanged'
           ? { fetchedLastmod: sql`${items.listedLastmod}` }
           : {}),
-        ...(page ?? {}),
+        ...(page === undefined
+          ? {}
+          : {
+              ...page,
+              etag: keptValidator(page.etag),
+              lastModified: keptValidator(page.lastModified),
+            }),
         ...(extractedWith === undefined ? {} : { extractedWith }),
       })
       .where(eq(items.id, input.itemId));

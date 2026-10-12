@@ -21,7 +21,7 @@ import { testDefinition } from '@spatula/store/fixtures';
 import { and, eq, isNull } from 'drizzle-orm';
 import { describe, expect, it } from 'vitest';
 import { db } from '../test/node/db';
-import { fakeLlm, fakeStep, makeWorld, type World } from '../test/node/fakes';
+import { fakeLlm, fakeStep, makeWorld, type StepCache, type World } from '../test/node/fakes';
 import { A1, A2, answerFor, B1, standardRoutes, URLS } from '../test/pages';
 import {
   classifyResponse,
@@ -39,8 +39,8 @@ const DAY = 24 * HOUR;
 /**
  * One run of the dataset, then five minutes, so the next run gets its own ID. Workflows keep each
  * step's result, so the run keeps them too, for tests that look at what a step returned. A run
- * reads every page unless it's told otherwise, so tests that run again five minutes later still
- * see every page read.
+ * counts every page as due unless it's told otherwise, so tests that run again five minutes later
+ * still see every page read.
  */
 async function refresh(
   world: World,
@@ -828,6 +828,28 @@ describe('runRefresh', () => {
     });
   });
 
+  it.each([
+    [2, '1 live page wasn’t read: the budget reads 2 pages a run'],
+    [1, '2 live pages weren’t read: the budget reads 1 page a run'],
+  ])(
+    'says, when every page counts as due, which live pages a budget of %i left unread',
+    async (itemsPerRun, expected) => {
+      const datasetId = `refresh-all-${itemsPerRun}`;
+      const definition = testDefinition(datasetId);
+      await applyDefinition(db, { ...definition, budget: { ...definition.budget, itemsPerRun } });
+      const world = makeWorld(db, standardRoutes());
+      // The pages this run reads aren't due again five minutes on, but --all makes them so.
+      await refresh(world, datasetId, {});
+
+      const all = await refresh(world, datasetId, { all: true });
+      expect(all.summary).toMatchObject({ items: itemsPerRun, due: 3, live: 3 });
+      expect(all.summary.notes).toContain(expected);
+      // The next ordinary run reads only the pages whose freshness has run out, which may be none
+      // of these, so they aren't said to wait for it.
+      expect(all.summary.notes.join('\n')).not.toContain('next run');
+    },
+  );
+
   it('loads the planned pages in steps of 50, in the order they were planned', async () => {
     // Maker A has fifty-one pages and maker B one. Nothing answers, so each page is a 404 that
     // costs only its fetch.
@@ -945,5 +967,90 @@ describe('a fetch step that runs again', () => {
       .from(items)
       .where(eq(items.id, a1.id));
     expect(item!.streak).toBe(1);
+  });
+});
+
+describe('a run replayed from the steps it finished', () => {
+  it('doesn’t fetch or pay for a finished page again, and counts every page once', async () => {
+    const { world, a1, a2, b1 } = await setUp('refresh-replayed');
+    // What the Workflow keeps of its finished steps, which the second run replays.
+    const cache: StepCache = new Map();
+    const params = {
+      runId: runIdFor('refresh-replayed', world.clock.now()),
+      datasetId: 'refresh-replayed',
+    };
+
+    // The first run stops in its first batch: B1's request fails once, after A1 was read.
+    const web = world.ports.http;
+    let failing = true;
+    world.ports.http = {
+      async get(url, headers) {
+        if (failing && url === URLS.b1) {
+          failing = false;
+          throw new Error('the connection was reset');
+        }
+        return web.get(url, headers);
+      },
+    };
+    const first = fakeStep(world.clock, cache);
+    await expect(runRefresh(params, first.step, world.ports)).rejects.toThrow(
+      'the connection was reset',
+    );
+    expect(first.names).toEqual([
+      'load',
+      'plan',
+      'items:0',
+      `fetch:${a1.id}:0`,
+      `extract:${a1.id}`,
+      `fetch:${b1.id}:0`,
+      'fail',
+    ]);
+    const askedBefore = world.web.requests.length;
+
+    // The same run again. A1's steps come from the cache; B1's fetch threw, so nothing of it did.
+    const second = fakeStep(world.clock, cache);
+    const summary = await runRefresh(params, second.step, world.ports);
+    expect(second.replayed).toEqual([
+      'load',
+      'plan',
+      'items:0',
+      `fetch:${a1.id}:0`,
+      `extract:${a1.id}`,
+    ]);
+    expect(second.names).toEqual([
+      'load',
+      'plan',
+      'items:0',
+      `fetch:${a1.id}:0`,
+      `extract:${a1.id}`,
+      `fetch:${b1.id}:0`,
+      `extract:${b1.id}`,
+      `fetch:${a2.id}:0`,
+      `extract:${a2.id}`,
+      'resolve',
+      'snapshot',
+      'finish',
+    ]);
+    expect(new Set(second.names).size).toBe(second.names.length);
+
+    // Only the pages the first run didn't finish were asked for, and the LLM read each page once.
+    expect(world.web.requests.slice(askedBefore).map((sent) => sent.url)).toEqual([
+      URLS.b1,
+      URLS.a2,
+    ]);
+    expect(world.llm.calls).toHaveLength(3);
+    expect(await db.select().from(fetches).where(eq(fetches.runId, params.runId))).toHaveLength(3);
+
+    // The plan is the first run's. A1 is no longer due, but it was when the run planned, and it
+    // counts with the rest: the totals are those of a run that wasn't stopped.
+    expect(summary).toMatchObject({
+      items: 3,
+      live: 3,
+      due: 3,
+      fetches: { changed: 3, unchanged: 0, gone: 0, failed: 0, blocked: 0 },
+      statements: { added: 19, reseen: 0, withdrawn: 0 },
+      snapshot: { published: true, generation: 1, records: 3 },
+    });
+    expect(await getRun(db, params.runId)).toMatchObject({ status: 'complete', summary });
   });
 });

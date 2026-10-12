@@ -111,7 +111,7 @@ export interface RefreshPorts {
 export interface RefreshParams {
   runId: string;
   datasetId: string;
-  /** Read every live page, however recently it was read. */
+  /** Treat every live page as due, however recently it was read. The budget still applies. */
   all?: boolean;
 }
 
@@ -278,9 +278,14 @@ export async function runRefresh(
     const waiting = plan.due - plan.ids.length;
     if (waiting > 0) {
       const { itemsPerRun } = context.definition.budget;
+      const budget = `the budget reads ${itemsPerRun} ${itemsPerRun === 1 ? 'page' : 'pages'} a run`;
+      // Under --all every live page is due, and the next ordinary run reads only the pages whose
+      // freshness has run out, which may be none of these. So they aren't said to wait for it.
       note(
         summary,
-        `${waiting} due ${waiting === 1 ? 'page waits' : 'pages wait'} for the next run: the budget reads ${itemsPerRun} ${itemsPerRun === 1 ? 'page' : 'pages'} a run`,
+        params.all === true
+          ? `${waiting} live ${waiting === 1 ? 'page wasn’t' : 'pages weren’t'} read: ${budget}`
+          : `${waiting} due ${waiting === 1 ? 'page waits' : 'pages wait'} for the next run: ${budget}`,
       );
     }
 

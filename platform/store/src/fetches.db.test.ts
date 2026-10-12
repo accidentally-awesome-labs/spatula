@@ -234,6 +234,39 @@ describe('recordFetch', () => {
       const [logged] = await db.select().from(fetches).where(eq(fetches.id, fetch.id));
       expect(logged!.llm).toBe('a'.repeat(500));
     }));
+
+  it('keeps an ETag or Last-Modified of 512 characters, and stores a longer one as null', () =>
+    withRollback(async (db) => {
+      const {
+        items: [a1],
+        runId,
+      } = await seedDataset(db);
+      const stored = async (page: { contentHash: string; etag: string; lastModified: string }) => {
+        await recordFetch(db, attempt(runId, a1!, { outcome: 'changed', page }));
+        const { contentHash, etag, lastModified } = await itemRow(db, a1!.id);
+        return { contentHash, etag, lastModified };
+      };
+      const fits = 'x'.repeat(512);
+      const tooLong = 'x'.repeat(513);
+
+      expect(await stored({ contentHash: 'h1', etag: fits, lastModified: fits })).toEqual({
+        contentHash: 'h1',
+        etag: fits,
+        lastModified: fits,
+      });
+      // A longer one is dropped, never cut: a cut validator would revalidate wrongly. The page is
+      // stored all the same, and the other validator is judged on its own.
+      expect(await stored({ contentHash: 'h2', etag: tooLong, lastModified: fits })).toEqual({
+        contentHash: 'h2',
+        etag: null,
+        lastModified: fits,
+      });
+      expect(await stored({ contentHash: 'h3', etag: fits, lastModified: tooLong })).toEqual({
+        contentHash: 'h3',
+        etag: fits,
+        lastModified: null,
+      });
+    }));
 });
 
 describe('recordExtraction', () => {

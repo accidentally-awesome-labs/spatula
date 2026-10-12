@@ -335,9 +335,9 @@ describe('the owner routes', () => {
     expect((await call('POST', '/datasets/api-runs/runs?all=yes')).status).toBe(400);
   });
 
-  it('start a run that reads every page only when asked to', async () => {
-    // A Workflow binding that only records what it's asked to create. Each dataset has a run of its
-    // own, so none of them shares a five-minute slot with another.
+  it('start a run that counts every page as due only when asked to', async () => {
+    // A Workflow binding that only records what it's asked to create. Each request uses its own
+    // dataset, because a second run of one dataset in the same five-minute slot would be refused.
     const created: { params: unknown }[] = [];
     const bindings = {
       ...env,

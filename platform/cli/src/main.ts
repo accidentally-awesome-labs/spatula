@@ -10,7 +10,9 @@ export const USAGE = `Usage: spatula <command>
   apply <definition.yaml>      Apply it
   run <dataset> [--wait] [--all]
                                Start a refresh, and wait for it with --wait. A refresh
-                               reads the pages that are due; --all reads every page
+                               reads the pages that are due; --all counts every live
+                               page as due, however recently it was read. The budget
+                               still caps the run
   snapshot pull <dataset> --out <file> [--generation <n>]
                                Download a snapshot, check its hash, and write it
 

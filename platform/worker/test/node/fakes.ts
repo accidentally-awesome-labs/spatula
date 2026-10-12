@@ -14,22 +14,46 @@ export class Clock {
   };
 }
 
-/** Runs steps at once, in order. Results go through JSON, as Workflows keep them. */
-export function fakeStep(clock: Clock) {
+/** The steps a Workflow has finished, by name: each result as the JSON it was kept as. */
+export type StepCache = Map<string, string | undefined>;
+
+/** A finished step's result as the Workflow hands it back: a fresh copy, from its JSON. */
+const revive = (kept: string | undefined) => (kept === undefined ? undefined : JSON.parse(kept));
+
+/**
+ * Runs steps at once, in order. Results go through JSON, as Workflows keep them. Runs that share a
+ * cache are replays of one another, as Workflows replays an instance: a step with a result in the
+ * cache returns it without running (`replayed` lists those), and a step that finishes adds its own.
+ * A step that throws adds nothing, so a replay runs it again. `names` lists every step a run asks
+ * for, cached or not.
+ */
+export function fakeStep(clock: Clock, cache?: StepCache) {
   const names: string[] = [];
+  const replayed: string[] = [];
   const step: StepRunner = {
     async do(name, fn) {
       if (names.includes(name)) throw new Error(`Step ${name} ran twice`);
       names.push(name);
+      if (cache?.has(name)) {
+        replayed.push(name);
+        return revive(cache.get(name));
+      }
       const result = await fn();
-      return result === undefined ? result : JSON.parse(JSON.stringify(result));
+      const kept = result === undefined ? undefined : JSON.stringify(result);
+      cache?.set(name, kept);
+      return revive(kept);
     },
     async sleep(name, ms) {
       names.push(name);
+      if (cache?.has(name)) {
+        replayed.push(name);
+        return;
+      }
       clock.advance(ms);
+      cache?.set(name, undefined);
     },
   };
-  return { step, names };
+  return { step, names, replayed };
 }
 
 /** A small web: each address answers as its route says, or 404. Every request is logged. */
