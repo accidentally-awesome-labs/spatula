@@ -34,7 +34,10 @@ export interface FetchInput {
    * isn't current, so the page is read again even if the run stops before its extract step.
    */
   extractedWith?: string;
-  /** What the fetch log says about the LLM step, when the fetch already knows. */
+  /**
+   * What the fetch log says about the LLM step, when the fetch already knows. `recordFetch` keeps
+   * only its first `MAX_LLM_DETAIL` (500) characters.
+   */
   llm?: string;
 }
 
@@ -65,8 +68,9 @@ export async function recordFetch(
     // A fetch's ID comes from its run, item, and attempt, so a step that runs again after a crash
     // logs the same fetch. It was recorded the first time, and nothing moves twice. The step that
     // runs again still returns its own answer, which may differ from the one logged the first time.
-    // The item keeps only what the logged answer set, so the next run reads the page again if the
-    // page differs from that, and a failed fetch still never changes a value.
+    // The item's stored hash and validators stay as the logged answer set them, so the next run
+    // reads the page again if the page differs from them, and a failed fetch still never changes a
+    // value. A replayed changed answer's extract step can still set the extraction mark.
     const [already] = await tx
       .select({ id: fetches.id })
       .from(fetches)
