@@ -7,6 +7,9 @@ import { fetches, items, type ItemStatus } from './schema';
 export const GONE_AFTER = 2;
 export const REFUSED_AFTER = 3;
 
+/** The most code units of what the LLM step did that the fetch log keeps. */
+const MAX_LLM_DETAIL = 500;
+
 export interface FetchInput {
   id: string;
   runId: string;
@@ -36,12 +39,13 @@ export interface FetchInput {
 }
 
 /**
- * Logs a fetch and moves its page's streak. A page is gone after two 404s or 410s in a row, and
- * refused after three blocks in a row. Only a live page can become gone or refused: an excluded
- * page keeps its status however its streak runs. A page that's gone or refused leaves the live
- * items, so it isn't fetched again until it leaves the definition and is listed again. Only a
- * fresh page moves the stored hash and validators: a failed or blocked fetch leaves them, like
- * every value, as they were.
+ * Logs a fetch and moves its page's streak. It writes nothing when a fetch with the same ID is
+ * already logged, so a step that runs again after a crash logs its fetch once. A page is gone after
+ * two 404s or 410s in a row, and refused after three blocks in a row. Only a live page can become
+ * gone or refused: an excluded page keeps its status however its streak runs. A page that's gone or
+ * refused leaves the live items, so it isn't fetched again until it leaves the definition and is
+ * listed again. Only a fresh page moves the stored hash and validators: a failed or blocked fetch
+ * leaves them, like every value, as they were.
  */
 export async function recordFetch(
   db: Executor,
@@ -59,7 +63,10 @@ export async function recordFetch(
       .for('update');
     if (item === undefined) throw new Error(`Item ${input.itemId} doesn't exist`);
     // A fetch's ID comes from its run, item, and attempt, so a step that runs again after a crash
-    // logs the same fetch. It was recorded the first time, and nothing moves twice.
+    // logs the same fetch. It was recorded the first time, and nothing moves twice. The step that
+    // runs again still returns its own answer, which may differ from the one logged the first time.
+    // The item keeps only what the logged answer set, so the next run reads the page again if the
+    // page differs from that, and a failed fetch still never changes a value.
     const [already] = await tx
       .select({ id: fetches.id })
       .from(fetches)
@@ -75,8 +82,12 @@ export async function recordFetch(
         : live && input.outcome === 'blocked' && streak >= REFUSED_AFTER
           ? 'refused'
           : item.status;
-    const { page, extractedWith, ...logged } = input;
-    await tx.insert(fetches).values({ ...logged, contentHash: page?.contentHash ?? null });
+    const { page, extractedWith, llm, ...logged } = input;
+    await tx.insert(fetches).values({
+      ...logged,
+      contentHash: page?.contentHash ?? null,
+      llm: llm?.slice(0, MAX_LLM_DETAIL),
+    });
     await tx
       .update(items)
       .set({
@@ -117,7 +128,7 @@ export async function recordExtraction(
   await db
     .update(fetches)
     .set({
-      llm: input.llm.slice(0, 500),
+      llm: input.llm.slice(0, MAX_LLM_DETAIL),
       llmInputTokens: input.usage.inputTokens,
       llmOutputTokens: input.usage.outputTokens,
     })

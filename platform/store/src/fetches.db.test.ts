@@ -222,6 +222,18 @@ describe('recordFetch', () => {
         .where(eq(fetches.id, 'fe_changedpage00000000000'));
       expect(fetch!.llm).toBe('skipped: not read yet');
     }));
+
+  it('keeps at most 500 characters of what it says about the LLM step', () =>
+    withRollback(async (db) => {
+      const {
+        items: [a1],
+        runId,
+      } = await seedDataset(db);
+      const fetch = attempt(runId, a1!, { llm: `${'a'.repeat(500)}${'b'.repeat(100)}` });
+      await recordFetch(db, fetch);
+      const [logged] = await db.select().from(fetches).where(eq(fetches.id, fetch.id));
+      expect(logged!.llm).toBe('a'.repeat(500));
+    }));
 });
 
 describe('recordExtraction', () => {
@@ -269,5 +281,24 @@ describe('recordExtraction', () => {
         usage: { inputTokens: 0, outputTokens: 0 },
       });
       expect((await itemRow(db, a1!.id)).extractInputHash).toBeNull();
+    }));
+
+  it('keeps at most 500 characters of what the LLM step did, as recordFetch does', () =>
+    withRollback(async (db) => {
+      const {
+        items: [a1],
+        runId,
+      } = await seedDataset(db);
+      const fetch = attempt(runId, a1!, {});
+      await recordFetch(db, fetch);
+      await recordExtraction(db, {
+        itemId: a1!.id,
+        fetchId: fetch.id,
+        extractedWith: 'r1.v1',
+        llm: `${'a'.repeat(500)}${'b'.repeat(100)}`,
+        usage: { inputTokens: 0, outputTokens: 0 },
+      });
+      const [logged] = await db.select().from(fetches).where(eq(fetches.id, fetch.id));
+      expect(logged!.llm).toBe('a'.repeat(500));
     }));
 });
