@@ -4,9 +4,10 @@ import type { HttpPort, HttpResult } from './refresh';
 /*
  * Spatula's HTTP client. It names itself in its user agent, never follows a redirect on its own
  * (the pipeline sends each hop through its host's gate), stops waiting after 30 seconds, and
- * reads at most 5 MB of a page. It asks only for the addresses a definition may name (public
- * HTTPS ones). Every hop, page, and robots.txt goes through here, and a redirect's address comes
- * from the site, so this is where a redirect to the local network is stopped.
+ * reads at most 5 MB of a page, or the cap a caller sets, as a sitemap's is larger. It asks only
+ * for the addresses a definition may name (public HTTPS ones). Every hop, page, and robots.txt
+ * goes through here, and a redirect's address comes from the site, so this is where a redirect to
+ * the local network is stopped.
  */
 
 export const MAX_PAGE_BYTES = 5 * 1024 * 1024;
@@ -34,7 +35,7 @@ export function createHttpFetcher(options: {
     ((input: string | URL | Request, init?: RequestInit) => globalThis.fetch(input, init));
 
   return {
-    async get(url, headers): Promise<HttpResult> {
+    async get(url, headers, request = {}): Promise<HttpResult> {
       if (!url.startsWith('https://')) return { ok: false, error: `${url} isn’t an HTTPS address` };
       if (!URL.canParse(url)) return { ok: false, error: `${url} isn’t an address` };
       const parsed = new URL(url);
@@ -46,7 +47,7 @@ export function createHttpFetcher(options: {
         response = await send(parsed.href, {
           method: 'GET',
           redirect: 'manual',
-          headers: requestHeaders(headers, options.userAgent),
+          headers: requestHeaders(headers, options.userAgent, request.accept),
           signal: AbortSignal.timeout(timeoutMs),
         });
       } catch (error) {
@@ -73,7 +74,7 @@ export function createHttpFetcher(options: {
           ok: true,
           status: response.status,
           headers: answered,
-          ...(await readCapped(response, maxBytes)),
+          ...(await readCapped(response, request.maxBytes ?? maxBytes)),
         };
       } catch (error) {
         return { ok: false, error: describe(error, timeoutMs) };
@@ -82,13 +83,19 @@ export function createHttpFetcher(options: {
   };
 }
 
+const PAGE_ACCEPT = 'text/html,application/xhtml+xml;q=0.9,*/*;q=0.1';
+
 /**
  * The caller's headers on top of ours, except that the user agent is always ours. A `Headers`
  * object counts names that differ only in case as one, so setting the agent last replaces
  * whatever the caller sent, however it spelled the name.
  */
-function requestHeaders(headers: Record<string, string>, userAgent: string): Headers {
-  const sent = new Headers({ accept: 'text/html,application/xhtml+xml;q=0.9,*/*;q=0.1' });
+function requestHeaders(
+  headers: Record<string, string>,
+  userAgent: string,
+  accept = PAGE_ACCEPT,
+): Headers {
+  const sent = new Headers({ accept });
   for (const [name, value] of Object.entries(headers)) sent.set(name, value);
   sent.set('user-agent', userAgent);
   return sent;

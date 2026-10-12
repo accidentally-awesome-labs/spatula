@@ -28,6 +28,19 @@ export type PublishResult =
     }
   | { published: false; reason: string; excluded: Excluded[] };
 
+/** What reading the sitemap sources found. */
+export interface DiscoverySummary {
+  sources: number;
+  sitemaps: number;
+  listed: number;
+  added: number;
+  revived: number;
+  missing: number;
+  gone: number;
+  /** Sources whose read wasn't complete, with why. Nothing of theirs was marked missing. */
+  incomplete: string[];
+}
+
 /** What a refresh did. */
 export interface RunSummary {
   /** The pages read this run. */
@@ -35,6 +48,8 @@ export interface RunSummary {
   /** The live pages when the run planned, and how many of them were due. Absent in runs from before slice 1. */
   live?: number;
   due?: number;
+  /** What the sitemap sources listed. Absent in runs from before slice 1. */
+  discovery?: DiscoverySummary;
   fetches: Record<Outcome, number>;
   statements: { added: number; reseen: number; withdrawn: number };
   llm: {

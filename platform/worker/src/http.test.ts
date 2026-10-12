@@ -254,4 +254,23 @@ describe('createHttpFetcher', () => {
     await http.get('https://SHOP.example:443/a b', {});
     expect(calls.map((call) => call.url)).toEqual(['https://shop.example/a%20b']);
   });
+
+  it('reads up to the cap a caller sets, and asks for what it accepts', async () => {
+    const { fetch, calls } = stub(() => new Response('0123456789', { status: 200 }));
+    const http = createHttpFetcher({ userAgent: UA, fetch });
+    const result = await http.get(
+      'https://maker-c.example/sitemap.xml',
+      {},
+      {
+        maxBytes: 4,
+        accept: 'application/xml',
+      },
+    );
+    expect(result).toMatchObject({
+      ok: true,
+      truncated: true,
+      body: new TextEncoder().encode('0123'),
+    });
+    expect(new Headers(calls[0]!.init.headers).get('accept')).toBe('application/xml');
+  });
 });

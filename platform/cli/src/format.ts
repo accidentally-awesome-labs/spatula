@@ -35,6 +35,16 @@ export function formatRun(run: RunView): string[] {
       : `Pages: ${summary.items} read, of ${summary.due} due and ${summary.live ?? summary.due} live.`;
   lines.push(
     `${pages} Changed ${fetches.changed}, unchanged ${fetches.unchanged}, gone ${fetches.gone}, failed ${fetches.failed}, blocked ${fetches.blocked}.`,
+  );
+  // Runs from before slice 1, and datasets with no sitemap source, say nothing of sitemaps.
+  const discovery = summary.discovery;
+  if (discovery !== undefined && discovery.sources > 0) {
+    lines.push(
+      `Sitemaps: ${discovery.sitemaps} read for ${discovery.sources} ${discovery.sources === 1 ? 'source' : 'sources'}; ${discovery.listed} ${discovery.listed === 1 ? 'page' : 'pages'} listed, ${discovery.added} new, ${discovery.revived} back, ${discovery.missing} missing, ${discovery.gone} gone.`,
+    );
+    for (const reason of discovery.incomplete) lines.push(`Not read completely: ${reason}.`);
+  }
+  lines.push(
     `Statements: ${statements.added} added, ${statements.reseen} seen again, ${statements.withdrawn} withdrawn.`,
     `LLM: ran ${llm.ran}, reused ${llm.reused}, skipped ${llm.skipped}, failed ${llm.failed}; ${llm.inputTokens} tokens in, ${llm.outputTokens} out.`,
     `Entities: ${entities.created} new, ${entities.linked} linked, ${entities.conflicts} conflicts, ${entities.unresolved} without an identity yet.`,

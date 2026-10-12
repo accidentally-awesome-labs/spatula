@@ -10,6 +10,7 @@ import {
   newId,
   PAGE_METHODS,
   parsePage,
+  pathPatternMatches,
   sha256Hex,
   snapshotSchema,
   stableId,
@@ -50,9 +51,12 @@ import {
   type ItemRef,
   type StatementCounts,
 } from '@spatula/store';
+import { discoverSource } from './discovery';
+import { MAX_WAITS, requestThroughGate } from './requests';
 
 /*
- * One refresh of one dataset. Each page is fetched in its own step, through the gate, and only a
+ * One refresh of one dataset. A sitemap source's sitemaps are read first (discovery.ts), which
+ * lists its pages. Each page is fetched in its own step, through the gate, and only a
  * page that changed (or whose statements came from older code) is extracted, in a step of its
  * own, from the copy kept under its hash. A failed or blocked fetch changes no values. The LLM is
  * asked only for fields nothing else filled, only where the dataset and the site allow AI input,
@@ -86,9 +90,16 @@ export type HttpResult =
     }
   | { ok: false; error: string };
 
-/** One GET, never following redirects. Header names are lowercase; the body is read only for a 2xx. */
+/**
+ * One GET, never following redirects. Header names are lowercase; the body is read only for a 2xx,
+ * up to `maxBytes` (5 MB unless the caller says otherwise).
+ */
 export interface HttpPort {
-  get(url: string, headers: Record<string, string>): Promise<HttpResult>;
+  get(
+    url: string,
+    headers: Record<string, string>,
+    options?: { maxBytes?: number; accept?: string },
+  ): Promise<HttpResult>;
 }
 
 export interface BlobPort {
@@ -115,11 +126,6 @@ export interface RefreshParams {
   all?: boolean;
 }
 
-/** Waits up to this long happen inside a fetch step; longer ones become Workflow sleeps. */
-export const MAX_INLINE_WAIT_MS = 15_000;
-/** How many times one page may be put off before the run records it as failed. */
-export const MAX_WAITS = 5;
-export const MAX_REDIRECTS = 5;
 export const MAX_NOTES = 50;
 /**
  * The most statements one page's extraction may yield. writeStatements inserts them in one
@@ -134,7 +140,6 @@ export const MAX_PAGE_STATEMENTS = 1_000;
  */
 const ITEMS_PER_STEP = 50;
 
-const REDIRECTS = new Set([301, 302, 303, 307, 308]);
 const NO_USAGE: LlmUsage = { inputTokens: 0, outputTokens: 0 };
 const NO_CHANGE: StatementCounts = { added: 0, reseen: 0, withdrawn: 0 };
 
@@ -261,6 +266,23 @@ export async function runRefresh(
     };
     const summary = emptySummary();
 
+    for (const source of context.definition.sources) {
+      if (source.kind !== 'sitemap') continue;
+      const found = await discoverSource(context, source, step, ports);
+      const discovery = summary.discovery!;
+      discovery.sources += 1;
+      discovery.sitemaps += found.sitemaps;
+      discovery.listed += found.listed;
+      discovery.added += found.added;
+      discovery.revived += found.revived;
+      discovery.missing += found.missing;
+      discovery.gone += found.gone;
+      if (found.incomplete !== null) {
+        discovery.incomplete.push(storable(`${source.id}: ${found.incomplete}`));
+      }
+      for (const text of found.notes) note(summary, text);
+    }
+
     const plan = await step.do('plan', () =>
       ports.withDb((db) =>
         dueItems(db, {
@@ -337,6 +359,16 @@ function emptySummary(): RunSummary {
     items: 0,
     live: 0,
     due: 0,
+    discovery: {
+      sources: 0,
+      sitemaps: 0,
+      listed: 0,
+      added: 0,
+      revived: 0,
+      missing: 0,
+      gone: 0,
+      incomplete: [],
+    },
     fetches: { changed: 0, unchanged: 0, gone: 0, failed: 0, blocked: 0 },
     statements: { ...NO_CHANGE },
     llm: { ran: 0, reused: 0, skipped: 0, failed: 0, inputTokens: 0, outputTokens: 0 },
@@ -494,10 +526,7 @@ async function fetchItem(
   };
 }
 
-/**
- * Asks for a page, following redirects. Every request, redirects included, goes through its
- * host's gate first, and its answer goes back to the gate. Only HTTPS addresses are followed.
- */
+/** Asks for a page through its host's gate, and says what came of it. */
 async function request(
   context: Context,
   item: ItemRef,
@@ -509,94 +538,99 @@ async function request(
 > {
   // Definitions keep a page as written and only validate it. From here on, every hop and the
   // fetch log's final address use its href, as the redirects already do.
-  let url = new URL(item.locator).href;
-  let signals: ContentSignals = {};
+  const answer = await requestThroughGate(ports, new URL(item.locator).href, {
+    minIntervalMs: context.definition.policy.perHostIntervalMs,
+    giveUp,
+    headers: validators(item),
+  });
+  if (answer.kind === 'later') return answer;
   const answered = (attempt: Omit<Attempt, 'policy' | 'policyReason'> & Partial<Attempt>) => ({
     kind: 'answered' as const,
-    signals,
+    signals: answer.signals,
     attempt: { policy: 'allowed' as const, policyReason: null, ...attempt },
   });
-  const failed = (error: string, httpStatus: number | null = null) =>
-    answered({ outcome: 'failed', httpStatus, finalUrl: url, bytes: null, error });
-
-  for (let hop = 0; ; hop += 1) {
-    const decision = await ports.gate.reserve(url, {
-      minIntervalMs: context.definition.policy.perHostIntervalMs,
-      maxWaitMs: MAX_INLINE_WAIT_MS,
-    });
-    if (decision.kind === 'later') {
-      if (!giveUp) return { kind: 'later', retryAfterMs: decision.retryAfterMs };
-      return failed(`${decision.reason}, and the run stopped waiting after ${MAX_WAITS} tries`);
-    }
-    if (decision.kind === 'deny') {
-      return answered({
-        outcome: decision.outcome,
-        policy: 'denied',
-        policyReason: decision.reason,
-        httpStatus: null,
-        finalUrl: url,
-        bytes: null,
-        error: null,
-      });
-    }
-    signals = decision.signals;
-    if (decision.waitMs > 0) await ports.wait(decision.waitMs);
-
-    const response = await ports.http.get(url, hop === 0 ? validators(item) : {});
-    await ports.gate.record(
-      url,
-      response.ok
-        ? { status: response.status, retryAfter: response.headers['retry-after'] ?? null }
-        : { status: 0, retryAfter: null },
-    );
-    if (!response.ok) return failed(response.error);
-
-    const location = response.headers.location;
-    if (REDIRECTS.has(response.status) && location !== undefined) {
-      const next = URL.canParse(location, url) ? new URL(location, url) : null;
-      if (next === null)
-        return failed(`redirected to ${location}, which isn’t an address`, response.status);
-      if (next.protocol !== 'https:')
-        return failed(`redirected to ${next.href}, which isn’t HTTPS`, response.status);
-      if (hop === MAX_REDIRECTS)
-        return failed(`redirected more than ${MAX_REDIRECTS} times`, response.status);
-      url = next.href;
-      continue;
-    }
-
-    const classified = classifyResponse(response);
-    if (classified.kind === 'final') {
-      if (classified.outcome === 'unchanged' && item.contentHash === null) {
-        return failed(
-          'the site said the page is unchanged, but no copy of it is stored',
-          response.status,
-        );
-      }
-      return answered({
-        outcome: classified.outcome,
-        httpStatus: response.status,
-        finalUrl: url,
-        bytes: null,
-        error: classified.error,
-      });
-    }
-    const contentHash = await sha256Hex(response.body);
-    if (contentHash !== item.contentHash) {
-      await ports.blobs.put(pageKey(contentHash), response.body, 'text/html; charset=utf-8');
-    }
+  if (answer.kind === 'denied') {
     return answered({
-      outcome: contentHash === item.contentHash ? 'unchanged' : 'changed',
-      httpStatus: response.status,
-      finalUrl: url,
-      bytes: response.body.byteLength,
+      outcome: answer.outcome,
+      policy: 'denied',
+      policyReason: answer.reason,
+      httpStatus: null,
+      finalUrl: answer.url,
+      bytes: null,
       error: null,
-      page: {
-        contentHash,
-        etag: response.headers.etag ?? null,
-        lastModified: response.headers['last-modified'] ?? null,
-      },
     });
   }
+  if (answer.kind === 'failed') {
+    return answered({
+      outcome: 'failed',
+      httpStatus: answer.httpStatus,
+      finalUrl: answer.url,
+      bytes: null,
+      error: answer.error,
+    });
+  }
+  if (answer.status < 400 && redirectedAway(context.definition, item, answer.url)) {
+    // Gone, as a 404 is: two in a row make the page gone (ADR 0005).
+    return answered({
+      outcome: 'gone',
+      httpStatus: answer.status,
+      finalUrl: answer.url,
+      bytes: null,
+      error: `redirected away, to ${answer.url}`,
+    });
+  }
+  const classified = classifyResponse(answer);
+  if (classified.kind === 'final') {
+    if (classified.outcome === 'unchanged' && item.contentHash === null) {
+      return answered({
+        outcome: 'failed',
+        httpStatus: answer.status,
+        finalUrl: answer.url,
+        bytes: null,
+        error: 'the site said the page is unchanged, but no copy of it is stored',
+      });
+    }
+    return answered({
+      outcome: classified.outcome,
+      httpStatus: answer.status,
+      finalUrl: answer.url,
+      bytes: null,
+      error: classified.error,
+    });
+  }
+  const contentHash = await sha256Hex(answer.body);
+  if (contentHash !== item.contentHash) {
+    await ports.blobs.put(pageKey(contentHash), answer.body, 'text/html; charset=utf-8');
+  }
+  return answered({
+    outcome: contentHash === item.contentHash ? 'unchanged' : 'changed',
+    httpStatus: answer.status,
+    finalUrl: answer.url,
+    bytes: answer.body.byteLength,
+    error: null,
+    page: {
+      contentHash,
+      etag: answer.headers.etag ?? null,
+      lastModified: answer.headers['last-modified'] ?? null,
+    },
+  });
+}
+
+/**
+ * Whether a sitemap source's page was redirected away from itself: to an address whose path the
+ * source's patterns wouldn't list (ADR 0005). The host is left out, since a store that sends a
+ * region to another host keeps its paths. A pages source lists its pages by hand, so its
+ * redirects are followed.
+ */
+function redirectedAway(definition: Definition, item: ItemRef, finalUrl: string): boolean {
+  const source = definition.sources.find((one) => one.id === item.sourceId);
+  if (source?.kind !== 'sitemap' || finalUrl === new URL(item.locator).href) return false;
+  const to = new URL(finalUrl);
+  const path = to.pathname + to.search;
+  return (
+    !source.include.some((pattern) => pathPatternMatches(pattern, path)) ||
+    source.exclude.some((pattern) => pathPatternMatches(pattern, path))
+  );
 }
 
 /** Conditional request headers, sent only when a copy of the page is stored to fall back on. */

@@ -61,17 +61,21 @@ export function fakeWeb(clock: Clock) {
   const routes = new Map<string, Reply>();
   const requests: { url: string; headers: Record<string, string> }[] = [];
   const http: HttpPort = {
-    async get(url, headers) {
+    async get(url, headers, options = {}) {
       requests.push({ url, headers });
       clock.advance(100);
       const reply = routes.get(url) ?? { status: 404 };
       const ok = reply.status >= 200 && reply.status < 300;
+      const full = ok
+        ? (reply.bytes ?? new TextEncoder().encode(reply.body ?? ''))
+        : new Uint8Array();
+      const max = options.maxBytes ?? Number.POSITIVE_INFINITY;
       return {
         ok: true,
         status: reply.status,
         headers: { 'content-type': 'text/html; charset=utf-8', ...reply.headers },
-        body: ok ? new TextEncoder().encode(reply.body ?? '') : new Uint8Array(),
-        truncated: false,
+        body: full.subarray(0, max),
+        truncated: reply.truncated === true || full.byteLength > max,
       };
     },
   };

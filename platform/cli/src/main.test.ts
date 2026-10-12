@@ -1,4 +1,4 @@
-import { sha256Hex, type ApplySummary, type RunView } from '@spatula/core';
+import { sha256Hex, type ApplySummary, type DiscoverySummary, type RunView } from '@spatula/core';
 import { testDefinition } from '@spatula/store/fixtures';
 import { describe, expect, it } from 'vitest';
 import { stringify } from 'yaml';
@@ -363,6 +363,93 @@ describe('run', () => {
     expect(sent[0]!.path).toBe('/datasets/cli-products/runs?all=1');
     expect(out).toContain(
       'Pages: 2 read, of 5 due and 9 live. Changed 1, unchanged 1, gone 0, failed 0, blocked 0.',
+    );
+  });
+
+  it('says what the sitemaps listed, and which sources weren’t read completely', async () => {
+    const complete: RunView = {
+      ...RUNNING,
+      status: 'complete',
+      summary: {
+        items: 0,
+        live: 2,
+        due: 0,
+        discovery: {
+          sources: 2,
+          sitemaps: 3,
+          listed: 2,
+          added: 1,
+          revived: 0,
+          missing: 0,
+          gone: 0,
+          incomplete: ['maker-d: https://maker-d.example/sitemap.xml: failed (HTTP 503)'],
+        },
+        fetches: { changed: 0, unchanged: 0, gone: 0, failed: 0, blocked: 0 },
+        statements: { added: 0, reseen: 0, withdrawn: 0 },
+        llm: { ran: 0, reused: 0, skipped: 0, failed: 0, inputTokens: 0, outputTokens: 0 },
+        entities: { created: 0, linked: 0, conflicts: 0, unresolved: 0 },
+        snapshot: { published: false, reason: 'nothing changed since generation 1', excluded: [] },
+        notes: [],
+      },
+    };
+    const { fetch } = stubApi(({ method }) =>
+      method === 'POST'
+        ? Response.json({ runId: RUN_ID }, { status: 202 })
+        : Response.json(complete),
+    );
+    const { io, out } = memoryIo();
+    expect(await main(['run', 'cli-products', '--wait'], { io, env: ENV, fetch })).toBe(0);
+    expect(out).toContain(
+      'Sitemaps: 3 read for 2 sources; 2 pages listed, 1 new, 0 back, 0 missing, 0 gone.',
+    );
+    expect(out).toContain(
+      'Not read completely: maker-d: https://maker-d.example/sitemap.xml: failed (HTTP 503).',
+    );
+  });
+
+  it('says nothing of sitemaps when no source has any, and counts one page and one source', async () => {
+    const printed = async (discovery: DiscoverySummary) => {
+      const complete: RunView = {
+        ...RUNNING,
+        status: 'complete',
+        summary: {
+          items: 0,
+          discovery,
+          fetches: { changed: 0, unchanged: 0, gone: 0, failed: 0, blocked: 0 },
+          statements: { added: 0, reseen: 0, withdrawn: 0 },
+          llm: { ran: 0, reused: 0, skipped: 0, failed: 0, inputTokens: 0, outputTokens: 0 },
+          entities: { created: 0, linked: 0, conflicts: 0, unresolved: 0 },
+          snapshot: {
+            published: false,
+            reason: 'nothing changed since generation 1',
+            excluded: [],
+          },
+          notes: [],
+        },
+      };
+      const { fetch } = stubApi(({ method }) =>
+        method === 'POST'
+          ? Response.json({ runId: RUN_ID }, { status: 202 })
+          : Response.json(complete),
+      );
+      const { io, out } = memoryIo();
+      expect(await main(['run', 'cli-products', '--wait'], { io, env: ENV, fetch })).toBe(0);
+      return out;
+    };
+    // Every run reports its discovery, so a dataset of pages has one that read nothing.
+    const none = {
+      sources: 0,
+      sitemaps: 0,
+      listed: 0,
+      added: 0,
+      revived: 0,
+      missing: 0,
+      gone: 0,
+      incomplete: [],
+    };
+    expect((await printed(none)).filter((line) => line.startsWith('Sitemaps:'))).toEqual([]);
+    expect(await printed({ ...none, sources: 1, sitemaps: 1, listed: 1, added: 1 })).toContain(
+      'Sitemaps: 1 read for 1 source; 1 page listed, 1 new, 0 back, 0 missing, 0 gone.',
     );
   });
 });
