@@ -858,6 +858,36 @@ describe('describeError', () => {
     expect(describeError(new Error('same', { cause: new Error('same') }))).toBe('same');
   });
 
+  it('lists what an AggregateError cause holds when it has no message of its own', () => {
+    // Node's fetch reports a refused connection to a name with several addresses, such as
+    // localhost, this way: the reasons are in `errors`, and the message is empty.
+    const refused = new AggregateError(
+      [
+        new Error('connect ECONNREFUSED ::1:8787'),
+        new Error('connect ECONNREFUSED 127.0.0.1:8787'),
+      ],
+      '',
+    );
+    expect(describeError(new TypeError('fetch failed', { cause: refused }))).toBe(
+      'fetch failed (connect ECONNREFUSED ::1:8787; connect ECONNREFUSED 127.0.0.1:8787)',
+    );
+    // A reason given twice is said once. What isn't an error is left out, and a cause with nothing
+    // left to say adds nothing.
+    const twice = new AggregateError([new Error('timed out'), 'text', new Error('timed out')], '');
+    expect(describeError(new Error('fetch failed', { cause: twice }))).toBe(
+      'fetch failed (timed out)',
+    );
+    const empty = new AggregateError([], '');
+    expect(describeError(new Error('fetch failed', { cause: empty }))).toBe('fetch failed');
+  });
+
+  it('keeps an AggregateError’s own message when it has one', () => {
+    const cause = new AggregateError([new Error('inner')], 'every address refused');
+    expect(describeError(new Error('fetch failed', { cause }))).toBe(
+      'fetch failed (every address refused)',
+    );
+  });
+
   it('never throws, even for a value with no text form', () => {
     expect(describeError(Object.create(null))).toBe('an error that can’t be shown as text');
     expect(describeError('plain')).toBe('plain');
@@ -873,6 +903,26 @@ describe('failures', () => {
     expect(await main(['run', 'cli-products'], { io, env: ENV, fetch })).toBe(1);
     expect(err).toEqual([
       'Spatula at https://spatula.test didn’t answer: fetch failed (unexpected redirect)',
+    ]);
+  });
+
+  it('say why localhost, the default address, refused the connection', async () => {
+    const { io, err } = memoryIo();
+    const fetch = (async () => {
+      throw new TypeError('fetch failed', {
+        cause: new AggregateError(
+          [
+            new Error('connect ECONNREFUSED ::1:8787'),
+            new Error('connect ECONNREFUSED 127.0.0.1:8787'),
+          ],
+          '',
+        ),
+      });
+    }) as typeof globalThis.fetch;
+    const env = { SPATULA_TOKEN: 'owner-token' };
+    expect(await main(['run', 'cli-products'], { io, env, fetch })).toBe(1);
+    expect(err).toEqual([
+      'Spatula at http://localhost:8787 didn’t answer: fetch failed (connect ECONNREFUSED ::1:8787; connect ECONNREFUSED 127.0.0.1:8787)',
     ]);
   });
 

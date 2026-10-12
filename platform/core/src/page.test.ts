@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { jsonLdTypes, MAX_NESTING, nestingDepth, parsePage, PAGE_TEXT_MAX } from './page';
+import { jsonLdTypes, MAX_NESTING, parsePage, PAGE_TEXT_MAX } from './page';
 import { costRatio } from './testing/cost';
 
 const SHOP_PAGE = `<!doctype html><html><head>
@@ -170,16 +170,6 @@ describe('parsePage, text', () => {
     expect(page.text).toBe('Visible');
   });
 
-  // The hostile case: the nesting guard refuses it before htmlparser2 builds a tree.
-  it('refuses markup nested 20,000 elements deep', () => {
-    expect(() =>
-      parsePage(
-        `${'<div>'.repeat(20_000)}Deep${'</div>'.repeat(20_000)}`,
-        'https://maker.example/a',
-      ),
-    ).toThrow('the page nests elements 20,000 deep, more than 10,000');
-  });
-
   it('never cuts a surrogate pair at the length cap', () => {
     const emoji = String.fromCodePoint(0x1f600);
     const cut = parsePage(
@@ -228,48 +218,51 @@ describe('jsonLdTypes', () => {
   });
 });
 
-describe('nestingDepth', () => {
-  it('counts elements left open, but not empty ones or those whose end tags may be left out', () => {
-    expect(nestingDepth('<div><span><b>x</b></span></div>')).toBe(3);
-    expect(nestingDepth('<div><br><img src="x"><input/><hr /></div>')).toBe(1);
-    expect(nestingDepth(`<ul>${'<li>item'.repeat(1000)}</ul>`)).toBe(1);
-    expect(nestingDepth('<p>one<p>two<p>three')).toBe(0);
-    expect(nestingDepth('<!doctype html><html><body><main></main></body></html>')).toBe(3);
-  });
-
-  it('reads scripts, styles, and comments as text', () => {
-    const page =
-      '<script>"<div><div><div>"</script><style>a<b{}</style><!-- <div><div> --><main></main>';
-    expect(nestingDepth(page)).toBe(1);
-  });
-
-  it('takes time in proportion to the page’s length', () => {
-    const small = '<div>'.repeat(500);
-    const large = '<div>'.repeat(50_000);
-    expect(
-      costRatio(
-        () => nestingDepth(small),
-        () => nestingDepth(large),
-        100,
-      ),
-    ).toBeLessThan(4);
-  });
-});
-
 describe('parsePage on a page nested deeper than any real one', () => {
-  it('refuses it before parsing it', () => {
-    const deep = '<div>'.repeat(MAX_NESTING + 1);
-    expect(() => parsePage(deep, 'https://maker-a.example/products/deep')).toThrow(
-      'the page nests elements 10,001 deep, more than 10,000',
+  const PAGE_URL = 'https://maker-a.example/p';
+  const TOO_DEEP = 'the page nests elements more than 1,000 deep';
+
+  // Each of these makes htmlparser2 build a tree more than MAX_NESTING deep, from far less text than
+  // a real page. The depth is read from the parser's own stack because a guess made from the text
+  // was blind to every one but the first: it read each of the others as nesting nothing.
+  it.each([
+    ['plain elements', '<div>'.repeat(2_000)],
+    ['a "<" that opens no tag before each element', '< <div>'.repeat(2_000)],
+    ['an empty comment before the elements', `<!-->${'<div>'.repeat(2_000)}`],
+    ['elements that nothing closes, such as <caption>', '<caption>'.repeat(2_000)],
+    ['elements closed with a slash, which HTML ignores', '<div/>'.repeat(2_000)],
+    ['pairs of elements whose end tags may be left out', '<li><p>'.repeat(1_000)],
+  ])('refuses %s', (_what, deep) => {
+    expect(() => parsePage(deep, PAGE_URL)).toThrow(TOO_DEEP);
+  });
+
+  it('reads a page exactly MAX_NESTING deep, and refuses one a level deeper', () => {
+    const exactly = parsePage(`${'<div>'.repeat(MAX_NESTING - 1)}<h1>A1</h1>`, PAGE_URL);
+    expect(exactly.select('h1')).toBe('A1');
+    expect(() => parsePage(`${'<div>'.repeat(MAX_NESTING)}<h1>A1</h1>`, PAGE_URL)).toThrow(
+      TOO_DEEP,
     );
   });
 
-  // Nearly the deepest page that's read, and htmlparser2's time grows with the square of the depth.
-  it('reads a page just inside the limit', { timeout: 30_000 }, () => {
-    const page = parsePage(
-      `${'<div>'.repeat(MAX_NESTING - 2)}<h1>A1</h1>`,
-      'https://maker-a.example/p',
-    );
-    expect(page.select('h1')).toBe('A1');
+  it('reads sibling subtrees that are each MAX_NESTING deep, because depth does not add up', () => {
+    const subtree = `${'<div>'.repeat(MAX_NESTING - 1)}<h1>A1</h1>${'</div>'.repeat(MAX_NESTING - 1)}`;
+    const page = parsePage(subtree.repeat(50), PAGE_URL);
+    expect(page.text).toBe(Array.from({ length: 50 }, () => 'A1').join(' '));
+  });
+
+  it('costs the same to refuse a page however far past the limit it goes', () => {
+    // It stops at the first level past the limit, so a page 16 times as deep costs about what a
+    // shallower one does. Parsing the rest first would cost as much as the page is long, or more.
+    const refuse = (html: string) => () => {
+      try {
+        parsePage(html, PAGE_URL);
+      } catch {
+        return;
+      }
+      throw new Error('the page was read, not refused');
+    };
+    const near = refuse('<li><p>'.repeat(2_000));
+    const far = refuse('<li><p>'.repeat(32_000));
+    expect(costRatio(near, far, 16)).toBeLessThan(0.5);
   });
 });

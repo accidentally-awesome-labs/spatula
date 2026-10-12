@@ -70,11 +70,8 @@ export function printable(text: string): string {
  */
 export function describeError(error: unknown): string {
   if (error instanceof Error) {
-    const cause = (error as { cause?: unknown }).cause;
-    const more =
-      cause instanceof Error && cause.message !== '' && cause.message !== error.message
-        ? ` (${cause.message})`
-        : '';
+    const cause = causeMessage((error as { cause?: unknown }).cause);
+    const more = cause !== '' && cause !== error.message ? ` (${cause})` : '';
     return `${error.message}${more}`;
   }
   try {
@@ -82,4 +79,18 @@ export function describeError(error: unknown): string {
   } catch {
     return 'an error that can’t be shown as text';
   }
+}
+
+/**
+ * What a cause says. A name with several addresses, such as localhost, is refused once for each
+ * address, and fetch reports that as an AggregateError with an empty message and the refusals in
+ * `errors`, so those are said instead, each once.
+ */
+function causeMessage(cause: unknown): string {
+  if (!(cause instanceof Error)) return '';
+  if (cause.message !== '' || !(cause instanceof AggregateError)) return cause.message;
+  const messages = cause.errors.map((inner: unknown) =>
+    inner instanceof Error ? inner.message : '',
+  );
+  return [...new Set(messages.filter((message) => message !== ''))].join('; ');
 }
