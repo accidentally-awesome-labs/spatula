@@ -208,6 +208,23 @@ describe('listPages', () => {
         .where(eq(items.locator, page(1).locator));
       expect(c1).toEqual({ listedLastmod: '2026-10-05T00:00:00.000Z' });
     }));
+
+  it('lists a page whose row has no listing time, as when its source changed from pages', () =>
+    withRollback(async (tx) => {
+      await seed(tx);
+      await list(tx, T(1), [page(1)]);
+      // As when the source was a pages source under the same ID: its items were never listed.
+      await tx
+        .update(items)
+        .set({ listedAt: null })
+        .where(eq(items.locator, page(1).locator));
+      expect(await list(tx, T(2), [page(1)])).toEqual({ listed: 1, added: 0, revived: 0 });
+      const [c1] = await tx
+        .select({ listedAt: items.listedAt })
+        .from(items)
+        .where(eq(items.locator, page(1).locator));
+      expect(c1).toEqual({ listedAt: T(2) });
+    }));
 });
 
 describe('finishListing', () => {
