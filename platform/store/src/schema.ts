@@ -109,7 +109,10 @@ export const items = pgTable(
     extractedWith: text('extracted_with'),
     lastOutcome: text('last_outcome').$type<Outcome>(),
     outcomeStreak: integer('outcome_streak').notNull().default(0),
-    /** When discovery last found the page in its source's sitemaps; null for listed pages. */
+    /**
+     * When discovery last found the page in its source's sitemaps; null for a definition's own
+     * pages.
+     */
     listedAt: time('listed_at'),
     /** The page's lastmod in that read, when its source trusts lastmods. */
     listedLastmod: text('listed_lastmod'),

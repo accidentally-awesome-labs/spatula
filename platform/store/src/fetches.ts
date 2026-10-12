@@ -46,9 +46,12 @@ export interface FetchInput {
  * already logged, so a step that runs again after a crash logs its fetch once. A page is gone after
  * two 404s or 410s in a row, and refused after three blocks in a row. Only a live page can become
  * gone or refused: an excluded page keeps its status however its streak runs. A page that's gone or
- * refused leaves the live items, so it isn't fetched again until it leaves the definition and is
- * listed again. Only a fresh page moves the stored hash and validators: a failed or blocked fetch
- * leaves them, like every value, as they were.
+ * refused leaves the live items, so it isn't fetched again. A definition's own page comes back when
+ * it leaves the definition and is listed again; a sitemap page that went after 404s stays gone
+ * while its sitemap still lists it. Every fetch notes when its page was asked for
+ * (`lastFetchedAt`), and one that read the page, `changed` or `unchanged`, notes the lastmod the
+ * page was listed with (`fetchedLastmod`). Only a fresh page moves the stored hash and validators:
+ * a failed or blocked fetch leaves them, like every value, as they were.
  */
 export async function recordFetch(
   db: Executor,

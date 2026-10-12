@@ -95,6 +95,119 @@ describe('listPages', () => {
       expect(await list(tx, T(2), [page(1)])).toMatchObject({ revived: 0 });
       expect((await stateOf(tx, 1))!.status).toBe('gone');
     }));
+
+  it('brings back a page that left the definition, but not one refused or irrelevant', () =>
+    withRollback(async (tx) => {
+      await seed(tx);
+      await list(tx, T(1), [page(1), page(2), page(3)]);
+      // As the source leaving the definition, three blocks in a row, and a "None of these" answer
+      // leave them.
+      for (const [n, status] of [
+        [1, 'excluded'],
+        [2, 'refused'],
+        [3, 'irrelevant'],
+      ] as const) {
+        await tx
+          .update(items)
+          .set({ status })
+          .where(eq(items.locator, page(n).locator));
+      }
+      expect(await list(tx, T(2), [page(1), page(2), page(3)])).toEqual({
+        listed: 3,
+        added: 0,
+        revived: 1,
+      });
+      expect((await stateOf(tx, 1))!.status).toBe('live');
+      expect((await stateOf(tx, 2))!.status).toBe('refused');
+      expect((await stateOf(tx, 3))!.status).toBe('irrelevant');
+    }));
+
+  it('lists a page given twice once, with the latest lastmod it was given', () =>
+    withRollback(async (tx) => {
+      await seed(tx);
+      // The later lastmod wins whichever comes first, and a date beats none.
+      expect(
+        await list(tx, T(1), [
+          page(1, '2026-10-01T00:00:00.000Z'),
+          page(2, '2026-10-07T00:00:00.000Z'),
+          page(3),
+          page(4, '2026-10-02T00:00:00.000Z'),
+          page(1, '2026-10-05T00:00:00.000Z'),
+          page(2, '2026-10-03T00:00:00.000Z'),
+          page(3, '2026-10-02T00:00:00.000Z'),
+          page(4),
+        ]),
+      ).toEqual({ listed: 4, added: 4, revived: 0 });
+      const listed = await tx
+        .select({ listedLastmod: items.listedLastmod })
+        .from(items)
+        .where(eq(items.sourceId, 'maker-c'))
+        .orderBy(items.locator);
+      expect(listed.map((row) => row.listedLastmod)).toEqual([
+        '2026-10-05T00:00:00.000Z',
+        '2026-10-07T00:00:00.000Z',
+        '2026-10-02T00:00:00.000Z',
+        '2026-10-02T00:00:00.000Z',
+      ]);
+    }));
+
+  it('counts a page given again in a later batch of one call once', () =>
+    withRollback(async (tx) => {
+      await seed(tx);
+      // Enough pages that the repeat is written by a later statement than the page it repeats.
+      const pages = Array.from({ length: 1500 }, (_, n) => page(n));
+      expect(await list(tx, T(1), [...pages, page(0, '2026-10-01T00:00:00.000Z')])).toEqual({
+        listed: 1500,
+        added: 1500,
+        revived: 0,
+      });
+    }));
+
+  it('leaves a page alone that a later read already listed, and still lists the rest', () =>
+    withRollback(async (tx) => {
+      await seed(tx);
+      await list(tx, T(2), [page(1, '2026-10-05T00:00:00.000Z')]);
+      // Three complete reads after it that leave it out.
+      for (const minute of [3, 4, 5]) await finish(tx, T(minute));
+      expect(await stateOf(tx, 1)).toEqual({ status: 'gone', missingStreak: MISSING_GONE_AFTER });
+      // The oldest read's step lands last, as it can when two runs of a dataset overlap.
+      expect(await list(tx, T(1), [page(1, '2026-10-01T00:00:00.000Z'), page(2)])).toEqual({
+        listed: 1,
+        added: 1,
+        revived: 0,
+      });
+      const [c1] = await tx
+        .select({
+          listedAt: items.listedAt,
+          listedLastmod: items.listedLastmod,
+          status: items.status,
+          missingStreak: items.missingStreak,
+        })
+        .from(items)
+        .where(eq(items.locator, page(1).locator));
+      expect(c1).toEqual({
+        listedAt: T(2),
+        listedLastmod: '2026-10-05T00:00:00.000Z',
+        status: 'gone',
+        missingStreak: MISSING_GONE_AFTER,
+      });
+    }));
+
+  it('lets one read list a page again, as a step that runs again does', () =>
+    withRollback(async (tx) => {
+      await seed(tx);
+      await list(tx, T(2), [page(1, '2026-10-01T00:00:00.000Z')]);
+      expect(await list(tx, T(2), [page(1, '2026-10-05T00:00:00.000Z')])).toEqual({
+        listed: 1,
+        added: 0,
+        revived: 0,
+      });
+      const [c1] = await tx
+        .select({ listedLastmod: items.listedLastmod })
+        .from(items)
+        .where(eq(items.locator, page(1).locator));
+      expect(c1).toEqual({ listedLastmod: '2026-10-05T00:00:00.000Z' });
+    }));
 });
 
 describe('finishListing', () => {
@@ -127,6 +240,19 @@ describe('finishListing', () => {
       expect(await finish(tx, T(2))).toEqual({ missing: 0, gone: 0 });
       expect((await stateOf(tx, 2))!.missingStreak).toBe(1);
     }));
+
+  it('refuses a source with no sitemaps, whose pages would all count missing', () =>
+    withRollback(async (tx) => {
+      await seed(tx);
+      await expect(
+        finishListing(tx, { datasetId: DATASET, sourceId: 'maker-a', listedAt: T(1) }),
+      ).rejects.toThrow('Source maker-a isn’t a sitemap source, so it has no listings to finish.');
+      const [a1] = await tx
+        .select({ status: items.status, missingStreak: items.missingStreak })
+        .from(items)
+        .where(eq(items.locator, 'https://maker-a.example/products/a1'));
+      expect(a1).toEqual({ status: 'live', missingStreak: 0 });
+    }));
 });
 
 describe('dueItems', () => {
@@ -152,6 +278,8 @@ describe('dueItems', () => {
       const first = await plan();
       expect(short(first.ids)).toEqual(['a1', 'b1', 'c1', 'a2', 'c2', 'c3']);
       expect(first).toMatchObject({ due: 6, live: 6 });
+      // A limit cuts the plan by turns: no host takes the budget before the others have a page.
+      expect(short((await plan({ limit: 3 })).ids)).toEqual(['a1', 'b1', 'c1']);
 
       // Every page read, at the lastmod it was listed with, current, and fresh: nothing is due.
       await tx

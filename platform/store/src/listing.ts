@@ -22,10 +22,33 @@ export interface ListedPage {
 }
 
 /**
+ * The pages with each locator once, in the order they first appear, each with the latest lastmod
+ * it was given. ISO times compare as text, and a date beats none.
+ */
+function oncePerLocator(pages: ListedPage[]): ListedPage[] {
+  const latest = new Map<string, ListedPage>();
+  for (const page of pages) {
+    const earlier = latest.get(page.locator);
+    if (earlier === undefined) {
+      latest.set(page.locator, { ...page });
+    } else if (
+      page.lastmod !== null &&
+      (earlier.lastmod === null || page.lastmod > earlier.lastmod)
+    ) {
+      earlier.lastmod = page.lastmod;
+    }
+  }
+  return [...latest.values()];
+}
+
+/**
  * Lists a source's pages as one read of its sitemaps found them. A new page becomes a live item.
  * A page listed again comes back if it had left the definition or gone missing; one that's gone
  * after 404s, refused, or irrelevant stays as it is. Every page this read listed carries its time,
- * so `finishListing` can tell which pages it left out.
+ * so `finishListing` can tell which pages it left out. A page given twice is listed once, with its
+ * latest lastmod. A page that a later read already listed is left as that read left it, because
+ * two runs of a dataset can overlap and land their steps out of order. The counts are of the pages
+ * this call wrote.
  */
 export async function listPages(
   db: Executor,
@@ -37,7 +60,9 @@ export async function listPages(
     pages: ListedPage[];
   },
 ): Promise<{ listed: number; added: number; revived: number }> {
-  if (input.pages.length === 0) return { listed: 0, added: 0, revived: 0 };
+  // A repeat is one page: a statement can't write a row twice, and the counts would count it twice.
+  const pages = oncePerLocator(input.pages);
+  if (pages.length === 0) return { listed: 0, added: 0, revived: 0 };
   return db.transaction(async (tx) => {
     const before = new Map(
       (
@@ -51,22 +76,10 @@ export async function listPages(
           .where(and(eq(items.datasetId, input.datasetId), eq(items.sourceId, input.sourceId)))
       ).map((row) => [row.locator, row]),
     );
-    let added = 0;
-    let revived = 0;
-    for (const page of input.pages) {
-      const row = before.get(page.locator);
-      if (row === undefined) added += 1;
-      // The same rule as the upsert's status below: keep the two in step.
-      else if (
-        row.status === 'excluded' ||
-        (row.status === 'gone' && row.missingStreak >= MISSING_GONE_AFTER)
-      ) {
-        revived += 1;
-      }
-    }
-    for (let start = 0; start < input.pages.length; start += LIST_CHUNK) {
-      const chunk = input.pages.slice(start, start + LIST_CHUNK);
-      await tx
+    const written: string[] = [];
+    for (let start = 0; start < pages.length; start += LIST_CHUNK) {
+      const chunk = pages.slice(start, start + LIST_CHUNK);
+      const rows = await tx
         .insert(items)
         .values(
           chunk.map((page) => ({
@@ -81,6 +94,9 @@ export async function listPages(
         )
         .onConflictDoUpdate({
           target: [items.datasetId, items.sourceId, items.locator],
+          // A row that a later read listed keeps everything that read gave it. The same read may
+          // list a row again, as a step that runs again does.
+          setWhere: sql`${items.listedAt} is null or ${items.listedAt} <= excluded.listed_at`,
           // Each expression reads the row as it was, so the status sees the old streak.
           set: {
             recordType: input.recordType,
@@ -89,15 +105,31 @@ export async function listPages(
             missingStreak: 0,
             status: sql`case when ${items.status} = 'excluded' or (${items.status} = 'gone' and ${items.missingStreak} >= ${MISSING_GONE_AFTER}) then 'live' else ${items.status} end`,
           },
-        });
+        })
+        .returning({ locator: items.locator });
+      written.push(...rows.map((row) => row.locator));
     }
-    return { listed: input.pages.length, added, revived };
+    let added = 0;
+    let revived = 0;
+    for (const locator of written) {
+      const row = before.get(locator);
+      if (row === undefined) added += 1;
+      // The same rule as the upsert's status above: keep the two in step.
+      else if (
+        row.status === 'excluded' ||
+        (row.status === 'gone' && row.missingStreak >= MISSING_GONE_AFTER)
+      ) {
+        revived += 1;
+      }
+    }
+    return { listed: written.length, added, revived };
   });
 }
 
 /**
  * Ends a complete read of a source's sitemaps: each live page it didn't list is one read closer to
- * gone. The source keeps the read's time, so a step that runs again counts nothing twice.
+ * gone. The source keeps the read's time, so a step that runs again counts nothing twice. A source
+ * with no sitemaps is refused: its pages were never listed, so every one would count as missing.
  */
 export async function finishListing(
   db: Executor,
@@ -105,11 +137,16 @@ export async function finishListing(
 ): Promise<{ missing: number; gone: number }> {
   return db.transaction(async (tx) => {
     const [source] = await tx
-      .select({ listedAt: sources.listedAt })
+      .select({ kind: sources.kind, listedAt: sources.listedAt })
       .from(sources)
       .where(and(eq(sources.datasetId, input.datasetId), eq(sources.id, input.sourceId)))
       .for('update');
     if (source === undefined) throw new Error(`Source ${input.sourceId} doesn't exist`);
+    if (source.kind !== 'sitemap') {
+      throw new Error(
+        `Source ${input.sourceId} isn’t a sitemap source, so it has no listings to finish.`,
+      );
+    }
     if (source.listedAt !== null && source.listedAt >= input.listedAt)
       return { missing: 0, gone: 0 };
     const missed = await tx
