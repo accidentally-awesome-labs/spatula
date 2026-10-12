@@ -4,6 +4,7 @@ import {
   sha256Hex,
   snapshotSchema,
   type Candidate,
+  type GateDecision,
   type Page,
   type PagesSource,
 } from '@spatula/core';
@@ -30,9 +31,10 @@ import {
   MAX_NOTES,
   MAX_PAGE_STATEMENTS,
   runRefresh,
+  type HttpResult,
   type StepRunner,
 } from './refresh';
-import { MAX_WAITS } from './requests';
+import { MAX_REDIRECTS, MAX_WAITS, requestThroughGate } from './requests';
 
 const HOUR = 3_600_000;
 const DAY = 24 * HOUR;
@@ -1231,6 +1233,104 @@ describe('classifyResponse', () => {
     });
     expect(answer(200)).toEqual({ kind: 'page' });
     expect(answer(200, { 'content-type': 'application/xhtml+xml' })).toEqual({ kind: 'page' });
+  });
+});
+
+describe('a request put off partway through its redirects', () => {
+  const first = 'https://maker-a.example/products/a1';
+  const moved = 'https://maker-a.example/products/moved';
+  // What a page read before sends to ask whether it changed. Only the first address gets them.
+  const validators = {
+    'if-none-match': '"v1"',
+    'if-modified-since': 'Mon, 05 Oct 2026 00:00:00 GMT',
+  };
+  const redirectTo = (location: string): HttpResult => ({
+    ok: true,
+    status: 301,
+    headers: { location },
+    body: new Uint8Array(),
+    truncated: false,
+  });
+  const page: HttpResult = {
+    ok: true,
+    status: 200,
+    headers: { 'content-type': 'text/html' },
+    body: new TextEncoder().encode('<html></html>'),
+    truncated: false,
+  };
+
+  /**
+   * Ports that answer from a script. The gate puts off the reservations numbered in `putOff`
+   * (counted from 0 across every call) and lets the rest go at once; `routes` says what each
+   * address answers; `sent` is each request that reached the web, with the headers it went with.
+   */
+  function scripted(routes: Record<string, HttpResult>, putOff: number[]) {
+    const sent: { url: string; headers: Record<string, string> }[] = [];
+    let reserved = 0;
+    const ports = {
+      gate: {
+        async reserve(): Promise<GateDecision> {
+          const number = reserved;
+          reserved += 1;
+          return putOff.includes(number)
+            ? { kind: 'later', retryAfterMs: 20_000, reason: 'maker-a.example isn’t open yet' }
+            : { kind: 'go', waitMs: 0, signals: {} };
+        },
+        async record() {},
+      },
+      http: {
+        async get(url: string, headers: Record<string, string>): Promise<HttpResult> {
+          sent.push({ url, headers });
+          return routes[url] ?? { ok: false, error: `nothing is served at ${url}` };
+        },
+      },
+      async wait() {},
+    };
+    return { ports, sent };
+  }
+
+  it('picks up at the hop it was put off at, which sends none of the first hop’s headers', async () => {
+    const { ports, sent } = scripted({ [first]: redirectTo(moved), [moved]: page }, [1]);
+    const options = { minIntervalMs: 20_000, giveUp: false, headers: validators };
+
+    // The redirect is followed, and the reservation for where it leads is put off.
+    const putOff = await requestThroughGate(ports, first, options);
+    expect(putOff).toEqual({ kind: 'later', retryAfterMs: 20_000, resume: { url: moved, hop: 1 } });
+    expect(sent).toEqual([{ url: first, headers: validators }]);
+
+    // The next attempt asks for the redirect's target as hop 1, so the first address's validators
+    // aren't sent to it, and the first address isn't asked again.
+    if (putOff.kind !== 'later') throw new Error('expected the request to be put off');
+    const answered = await requestThroughGate(ports, first, { ...options, resume: putOff.resume });
+    expect(answered).toMatchObject({ kind: 'answered', url: moved, status: 200 });
+    expect(sent).toEqual([
+      { url: first, headers: validators },
+      { url: moved, headers: {} },
+    ]);
+  });
+
+  it('counts the redirects it had followed when it was put off against the limit', async () => {
+    // Two addresses that send each other on, so the request never ends by itself. The reservation
+    // for hop 2 is put off.
+    const { ports, sent } = scripted(
+      { [first]: redirectTo(moved), [moved]: redirectTo(first) },
+      [2],
+    );
+    const options = { minIntervalMs: 20_000, giveUp: false, headers: {} };
+
+    const putOff = await requestThroughGate(ports, first, options);
+    expect(putOff).toEqual({ kind: 'later', retryAfterMs: 20_000, resume: { url: first, hop: 2 } });
+    expect(sent.map((one) => one.url)).toEqual([first, moved]);
+
+    // The attempt that resumes stops where one that was never put off would: after the first
+    // address and MAX_REDIRECTS redirects, not MAX_REDIRECTS hops after it picked up.
+    if (putOff.kind !== 'later') throw new Error('expected the request to be put off');
+    const stopped = await requestThroughGate(ports, first, { ...options, resume: putOff.resume });
+    expect(stopped).toMatchObject({
+      kind: 'failed',
+      error: `redirected more than ${MAX_REDIRECTS} times`,
+    });
+    expect(sent).toHaveLength(MAX_REDIRECTS + 1);
   });
 });
 

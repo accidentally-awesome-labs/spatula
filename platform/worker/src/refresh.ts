@@ -325,8 +325,10 @@ export async function runRefresh(
       );
     }
 
-    // Blocks in a row by source, and the pages each paused source left for the next run. Both come
-    // from steps' results, so a run that replays its steps pauses at the same page.
+    // Blocks in a row by source, and the pages each paused source left unread. They stay due, so an
+    // ordinary run's next one reads them; under --all every page was due, so none is promised to
+    // the next run, as the note below says. Both come from steps' results, so a run that replays
+    // its steps pauses at the same page.
     const blocksInARow = new Map<string, number>();
     const paused = new Map<string, number>();
     for (let start = 0; start < plan.ids.length; start += ITEMS_PER_STEP) {
@@ -341,7 +343,7 @@ export async function runRefresh(
         }
         const fetched = await refreshItem(context, item, summary, step, ports);
         // The pages read: a planned page that's no longer live when its batch loads isn't one, and
-        // neither is one a paused source left for the next run.
+        // neither is one a paused source left unread.
         summary.items += 1;
         // Only a block the host answered counts. A gate refusal sent no request, and starts the count
         // again, as any answer that isn't a block does.
