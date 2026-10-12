@@ -1,7 +1,8 @@
+import type { GateState } from '@spatula/core';
 import { describe, expect, it } from 'vitest';
 import { Clock, fakeWeb, memoryGates } from '../test/node/fakes';
 import { ROBOTS_OPEN } from '../test/pages';
-import { createGatePort } from './gate-port';
+import { createGatePort, GateKeeper } from './gate-port';
 
 const HOUR = 3_600_000;
 
@@ -76,5 +77,51 @@ describe('createGatePort', () => {
       kind: 'later',
       retryAfterMs: 30_000,
     });
+  });
+});
+
+describe('GateKeeper', () => {
+  it('reads a state saved before slice 1, which has no interval', async () => {
+    let saved: unknown = { robots: null, nextAt: 0, backoffUntil: 0, failures: 0 };
+    const keeper = new GateKeeper({
+      load: async () => saved as GateState,
+      save: async (state) => {
+        saved = state;
+      },
+    });
+    // An answer to a request reserved before the deploy: without the default interval, nextAt
+    // would be NaN, and the host would go unpaced for good.
+    await keeper.record({ status: 200, now: 16_000, retryAfter: null });
+    expect(saved).toMatchObject({ intervalMs: 1000, nextAt: 17_000 });
+  });
+
+  it('paces each answer by the interval its reservation chose', async () => {
+    let saved: unknown = { robots: null, nextAt: 0, backoffUntil: 0, failures: 0 };
+    const keeper = new GateKeeper({
+      load: async () => saved as GateState,
+      save: async (state) => {
+        saved = state;
+      },
+    });
+    await keeper.storeRobots({ status: 'ok', fetchedAt: 0, text: ROBOTS_OPEN }, 0, 15_000);
+    await keeper.reserve({
+      url: 'https://maker-a.example/a',
+      now: 15_000,
+      minIntervalMs: 15_000,
+      maxWaitMs: 15_000,
+    });
+    await keeper.record({ status: 200, now: 16_000, retryAfter: null });
+    expect(saved).toMatchObject({ intervalMs: 15_000, nextAt: 31_000 });
+  });
+
+  it('waits the dataset’s interval after reading robots.txt', async () => {
+    const { web, gate } = setUp();
+    web.routes.set('https://maker-a.example/robots.txt', { status: 200, body: ROBOTS_OPEN });
+    expect(
+      await gate.reserve('https://maker-a.example/products/a1', {
+        minIntervalMs: 15_000,
+        maxWaitMs: 15_000,
+      }),
+    ).toEqual({ kind: 'go', waitMs: 15_000, signals: {} });
   });
 });

@@ -3,8 +3,15 @@ import { eq } from 'drizzle-orm';
 import { describe, expect, it } from 'vitest';
 import { withRollback } from '../test/db';
 import type { Executor } from './client';
-import { applyDefinition, getDataset, listLiveItems, StaleDefinitionError } from './datasets';
+import {
+  applyDefinition,
+  getDataset,
+  listLiveItems,
+  reviveItems,
+  StaleDefinitionError,
+} from './datasets';
 import { testDefinition } from './fixtures';
+import { dueItems } from './listing';
 import { finishRun, getRun, startRun } from './runs';
 import { datasets, items, sources } from './schema';
 
@@ -180,6 +187,57 @@ describe('applyDefinition', () => {
       await expect(stale()).rejects.toBeInstanceOf(StaleDefinitionError);
       await expect(stale()).rejects.toMatchObject({ name: 'StaleDefinitionError' });
       await expect(stale()).rejects.toThrow(/no longer passes the checks/u);
+    }));
+
+  it('revives refused pages, and the pages named, with fresh streaks', () =>
+    withRollback(async (tx) => {
+      await applyDefinition(tx, testDefinition('revive'));
+      const [a1, a2, b1] = await listLiveItems(tx, 'revive');
+      await tx
+        .update(items)
+        .set({
+          status: 'refused',
+          lastOutcome: 'blocked',
+          outcomeStreak: 3,
+          lastFetchedAt: new Date(),
+          extractedWith: 'r1.v1',
+        })
+        .where(eq(items.id, a1!.id));
+      await tx
+        .update(items)
+        .set({
+          status: 'gone',
+          lastOutcome: 'gone',
+          outcomeStreak: 2,
+          lastFetchedAt: new Date(),
+          extractedWith: 'r1.v1',
+        })
+        .where(eq(items.id, a2!.id));
+      await tx.update(items).set({ status: 'excluded' }).where(eq(items.id, b1!.id));
+
+      expect(await reviveItems(tx, { datasetId: 'revive', refused: true })).toBe(1);
+      // A page that left the definition stays out: listing it again is what brings it back.
+      expect(
+        await reviveItems(tx, { datasetId: 'revive', pages: [a2!.locator, b1!.locator] }),
+      ).toBe(1);
+      const rows = await tx
+        .select({ locator: items.locator, status: items.status, streak: items.outcomeStreak })
+        .from(items)
+        .where(eq(items.datasetId, 'revive'));
+      expect(rows.map((row) => [row.status, row.streak]).sort()).toEqual([
+        ['excluded', 0],
+        ['live', 0],
+        ['live', 0],
+      ]);
+      // Revived pages are read at the next run, whenever they were last read.
+      const plan = await dueItems(tx, {
+        datasetId: 'revive',
+        now: new Date(),
+        maxAgeDays: 7,
+        current: 'r1.v1',
+        limit: 10,
+      });
+      expect([...plan.ids].sort()).toEqual([a1!.id, a2!.id].sort());
     }));
 });
 

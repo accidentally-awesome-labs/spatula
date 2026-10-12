@@ -121,6 +121,20 @@ export function createClient(options: {
       return answer as unknown as RunView;
     },
 
+    async reviveItems(
+      datasetId: string,
+      body: { refused?: true; pages?: string[] },
+    ): Promise<{ revived: number }> {
+      const response = await request(
+        'POST',
+        `/datasets/${encodeURIComponent(datasetId)}/items/revive`,
+        body,
+      );
+      const answer = await json(response);
+      if (!response.ok) throw refused(response.status, answer);
+      return { revived: Number(answer.revived) };
+    },
+
     async pullSnapshot(
       datasetId: string,
       generation: number | 'latest',

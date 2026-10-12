@@ -1,11 +1,12 @@
-import { isAllowed, parseRobots, type ContentSignals } from './robots';
+import { isAllowed, parseRobots, type ContentSignals, type RobotsGroup } from './robots';
 
 /*
  * The politeness each host gets, as pure functions of its state. HostGate, a Durable Object per
  * host, keeps the state and asks these before every request. robots.txt follows RFC 9309: a 4xx
  * means everything is allowed; a 5xx, a 429, or no answer means nothing is, until it recovers.
  * Requests to a host start at least a second apart, or further apart when robots.txt asks for a
- * crawl delay or the dataset for a longer interval. After a 429, a 5xx, a block (401, 402, or
+ * crawl delay or the dataset for a longer interval. The interval counts from when the last answer
+ * arrived, so a slow host isn't asked again sooner. After a 429, a 5xx, a block (401, 402, or
  * 403), or no answer, the host gets a break that doubles with each strain, or the longer one its
  * Retry-After asks for.
  */
@@ -31,6 +32,8 @@ export interface GateState {
   robots: RobotsRecord | null;
   /** When the next request may start, in milliseconds since the epoch. */
   nextAt: number;
+  /** The interval between this host's requests that the last reservation used. */
+  intervalMs: number;
   /** No request starts before this, after the host showed strain. */
   backoffUntil: number;
   /** Strains in a row: 429s, 5xx answers, blocks, or no answers. */
@@ -40,6 +43,7 @@ export interface GateState {
 export const INITIAL_GATE_STATE: GateState = {
   robots: null,
   nextAt: 0,
+  intervalMs: MIN_INTERVAL_MS,
   backoffUntil: 0,
   failures: 0,
 };
@@ -67,6 +71,20 @@ export function robotsRecord(
     return { status: 'unavailable', fetchedAt: now, httpStatus: status };
   }
   return { status: 'unreachable', fetchedAt: now, reason: `HTTP ${status}` };
+}
+
+/** The interval a group's Crawl-delay and the dataset ask for, and never less than a second. */
+function intervalOf(group: RobotsGroup | null, minIntervalMs: number): number {
+  return Math.max(MIN_INTERVAL_MS, minIntervalMs, (group?.crawlDelaySeconds ?? 0) * 1000);
+}
+
+/**
+ * The interval between requests to a host: a second at least, or longer when the dataset or the
+ * host's robots.txt Crawl-delay asks for it.
+ */
+export function gateInterval(robots: RobotsRecord | null, minIntervalMs: number): number {
+  const group = robots?.status === 'ok' ? parseRobots(robots.text, PRODUCT_TOKEN) : null;
+  return intervalOf(group, minIntervalMs);
 }
 
 /**
@@ -108,13 +126,9 @@ export function reserve(
       state.backoffUntil > request.now ? `${url.host} asked for a break` : `${url.host} is paced`;
     return { state, decision: { kind: 'later', retryAfterMs: waitMs, reason } };
   }
-  const interval = Math.max(
-    MIN_INTERVAL_MS,
-    request.minIntervalMs,
-    (group?.crawlDelaySeconds ?? 0) * 1000,
-  );
+  const interval = intervalOf(group, request.minIntervalMs);
   return {
-    state: { ...state, nextAt: start + interval },
+    state: { ...state, nextAt: start + interval, intervalMs: interval },
     decision: { kind: 'go', waitMs, signals: group?.signals ?? {} },
   };
 }
@@ -127,14 +141,17 @@ export function recordResponse(
   state: GateState,
   response: { status: number; now: number; retryAfter: string | null },
 ): GateState {
+  // A slow answer mustn't eat into the next request's wait: the interval counts from when the
+  // answer arrived.
+  const paced = { ...state, nextAt: Math.max(state.nextAt, response.now + state.intervalMs) };
   const strained = response.status === 0 || STRAINS.has(response.status) || response.status >= 500;
-  if (!strained) return { ...state, failures: 0 };
+  if (!strained) return { ...paced, failures: 0 };
   const failures = state.failures + 1;
   // A Retry-After can lengthen the break, never shorten it: a host that keeps answering 429 with
   // a short one still gets a break that grows.
   const backoff = Math.min(BACKOFF_MAX_MS, BACKOFF_BASE_MS * 2 ** (failures - 1));
   const delay = Math.max(backoff, retryAfterMs(response.retryAfter, response.now) ?? 0);
-  return { ...state, failures, backoffUntil: Math.max(state.backoffUntil, response.now + delay) };
+  return { ...paced, failures, backoffUntil: Math.max(state.backoffUntil, response.now + delay) };
 }
 
 /** A Retry-After header, in seconds or as an HTTP date, as milliseconds from now: at most an hour. */

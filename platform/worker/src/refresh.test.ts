@@ -953,6 +953,126 @@ describe('runRefresh', () => {
     // It was planned, so it was due, but it wasn't read.
     expect(summary).toMatchObject({ items: 2, due: 3, live: 3 });
   });
+
+  it('pauses a source that keeps answering with challenges, and still reads the others', async () => {
+    const base = testDefinition('refresh-pause');
+    const pages = ['a1', 'a2', 'a3', 'a4', 'a5'].map(
+      (name) => `https://maker-a.example/products/${name}`,
+    );
+    await applyDefinition(db, {
+      ...base,
+      sources: base.sources.map((source) =>
+        source.id === 'maker-a' && source.kind === 'pages' ? { ...source, pages } : source,
+      ),
+    });
+    const routes = standardRoutes();
+    for (const url of pages) {
+      routes[url] = { status: 403, headers: { 'cf-mitigated': 'challenge' } };
+    }
+    const world = makeWorld(db, routes);
+    const run = await refresh(world, 'refresh-pause', {});
+    // a1, b1, a2, a3 are asked for; after a3, three blocks in a row pause maker-a.
+    expect(run.summary.fetches).toMatchObject({ blocked: 3, changed: 1 });
+    expect(run.summary.paused).toEqual({ 'maker-a': 2 });
+    // Four pages were read, and the two the pause left aren't counted as read.
+    expect(run.summary.items).toBe(4);
+    expect(run.summary.notes).toContain(
+      'maker-a: paused after 3 blocks in a row; 2 pages wait for the next run',
+    );
+    const asked = world.web.requests.map((sent) => sent.url);
+    expect(asked).not.toContain(pages[3]);
+    expect(asked).not.toContain(pages[4]);
+    // No page was refused: each was blocked once, and the next run asks again.
+    const statuses = await db
+      .select({ status: items.status })
+      .from(items)
+      .where(eq(items.datasetId, 'refresh-pause'));
+    expect(new Set(statuses.map((row) => row.status))).toEqual(new Set(['live']));
+  });
+
+  it('doesn’t pause a source for pages its robots.txt turns away, which send no request', async () => {
+    const base = testDefinition('refresh-pause-robots');
+    const pages = ['a1', 'a2', 'a3', 'a4'].map(
+      (name) => `https://maker-a.example/products/${name}`,
+    );
+    await applyDefinition(db, {
+      ...base,
+      sources: base.sources.map((source) =>
+        source.id === 'maker-a' && source.kind === 'pages' ? { ...source, pages } : source,
+      ),
+    });
+    const routes = standardRoutes();
+    routes['https://maker-a.example/robots.txt'] = {
+      status: 200,
+      body: 'User-agent: *\nDisallow: /products/a1\nDisallow: /products/a2\nDisallow: /products/a3\n',
+    };
+    routes[pages[3]!] = { status: 200, body: A2() };
+    const world = makeWorld(db, routes, { llm: false });
+
+    // Three pages in a row come back blocked, but none of them was the host's answer: the gate
+    // turned them away without asking. Pausing maker-a for that would leave its fourth page unread.
+    const first = await refresh(world, 'refresh-pause-robots', {});
+    expect(first.summary.fetches).toMatchObject({ blocked: 3, changed: 2 });
+    expect(first.summary.paused).toEqual({});
+    expect(first.summary.items).toBe(5);
+    const asked = world.web.requests.map((sent) => sent.url);
+    expect(asked).toContain(pages[3]);
+    for (const name of ['a1', 'a2', 'a3']) {
+      const url = `https://maker-a.example/products/${name}`;
+      expect(asked).not.toContain(url);
+      expect(await fetchOf(first.runId, url)).toMatchObject({
+        policy: 'denied',
+        outcome: 'blocked',
+        policyReason: `robots.txt disallows /products/${name} for Spatula`,
+      });
+    }
+
+    // Each page's own streak still counts, as in slice 0: turned away in three runs, it is refused.
+    await refresh(world, 'refresh-pause-robots', {});
+    const third = await refresh(world, 'refresh-pause-robots', {});
+    expect(third.summary.paused).toEqual({});
+    const statuses = await db
+      .select({ locator: items.locator, status: items.status })
+      .from(items)
+      .where(eq(items.datasetId, 'refresh-pause-robots'));
+    expect(Object.fromEntries(statuses.map((row) => [row.locator, row.status]))).toEqual({
+      [pages[0]!]: 'refused',
+      [pages[1]!]: 'refused',
+      [pages[2]!]: 'refused',
+      [pages[3]!]: 'live',
+      [URLS.b1]: 'live',
+    });
+  });
+
+  it('starts the count again at a page robots.txt turns away between challenges', async () => {
+    const base = testDefinition('refresh-pause-reset');
+    const pages = ['a1', 'a2', 'a3', 'a4', 'a5'].map(
+      (name) => `https://maker-a.example/products/${name}`,
+    );
+    await applyDefinition(db, {
+      ...base,
+      sources: base.sources.map((source) =>
+        source.id === 'maker-a' && source.kind === 'pages' ? { ...source, pages } : source,
+      ),
+    });
+    const routes = standardRoutes();
+    routes['https://maker-a.example/robots.txt'] = {
+      status: 200,
+      body: 'User-agent: *\nDisallow: /products/a3\n',
+    };
+    for (const url of [pages[0]!, pages[1]!, pages[3]!]) {
+      routes[url] = { status: 403, headers: { 'cf-mitigated': 'challenge' } };
+    }
+    routes[pages[4]!] = { status: 200, body: A2() };
+    const world = makeWorld(db, routes, { llm: false });
+
+    // The host challenged a1, a2, and a4, with a page it was never asked about between them. Only
+    // answered blocks count, and the page the gate turned away starts the count again.
+    const run = await refresh(world, 'refresh-pause-reset', {});
+    expect(run.summary.fetches).toMatchObject({ blocked: 4, changed: 2 });
+    expect(run.summary.paused).toEqual({});
+    expect(world.web.requests.map((sent) => sent.url)).toContain(pages[4]);
+  });
 });
 
 describe('classifyResponse', () => {
@@ -1103,5 +1223,61 @@ describe('a run replayed from the steps it finished', () => {
       snapshot: { published: true, generation: 1, records: 3 },
     });
     expect(await getRun(db, params.runId)).toMatchObject({ status: 'complete', summary });
+  });
+
+  it('pauses a source at the same page as a run that wasn’t stopped', async () => {
+    const base = testDefinition('refresh-pause-replayed');
+    const pages = ['a1', 'a2', 'a3', 'a4', 'a5'].map(
+      (name) => `https://maker-a.example/products/${name}`,
+    );
+    await applyDefinition(db, {
+      ...base,
+      sources: base.sources.map((source) =>
+        source.id === 'maker-a' && source.kind === 'pages' ? { ...source, pages } : source,
+      ),
+    });
+    const routes = standardRoutes();
+    for (const url of pages) {
+      routes[url] = { status: 403, headers: { 'cf-mitigated': 'challenge' } };
+    }
+    const world = makeWorld(db, routes);
+    const [a1] = await listLiveItems(db, 'refresh-pause-replayed');
+    const cache: StepCache = new Map();
+    const params = {
+      runId: runIdFor('refresh-pause-replayed', world.clock.now()),
+      datasetId: 'refresh-pause-replayed',
+    };
+
+    // The first run stops at a2's request, after a1 was blocked and b1 was read.
+    const web = world.ports.http;
+    let failing = true;
+    world.ports.http = {
+      async get(url, headers) {
+        if (failing && url === pages[1]) {
+          failing = false;
+          throw new Error('the connection was reset');
+        }
+        return web.get(url, headers);
+      },
+    };
+    const first = fakeStep(world.clock, cache);
+    await expect(runRefresh(params, first.step, world.ports)).rejects.toThrow(
+      'the connection was reset',
+    );
+
+    // The replay counts a1's block from its finished step, which is not run again, and so pauses
+    // maker-a after a3 as a run that wasn't stopped does.
+    const askedBefore = world.web.requests.length;
+    const second = fakeStep(world.clock, cache);
+    const summary = await runRefresh(params, second.step, world.ports);
+    expect(second.replayed).toContain(`fetch:${a1!.id}:0`);
+    const asked = world.web.requests.slice(askedBefore).map((sent) => sent.url);
+    expect(asked).not.toContain(pages[0]);
+    expect(asked).toEqual(expect.arrayContaining([pages[1], pages[2]]));
+    expect(asked).not.toContain(pages[3]);
+    expect(asked).not.toContain(pages[4]);
+    expect(summary.fetches).toMatchObject({ blocked: 3, changed: 1 });
+    expect(summary.paused).toEqual({ 'maker-a': 2 });
+    expect(summary.items).toBe(4);
   });
 });

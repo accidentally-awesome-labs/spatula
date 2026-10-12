@@ -1,5 +1,13 @@
-import { sha256Hex, type RunView } from '@spatula/core';
-import { commitSnapshot, datasets, getDataset, getRun, runs, startRun } from '@spatula/store';
+import { sha256Hex, type PagesSource, type RunView } from '@spatula/core';
+import {
+  commitSnapshot,
+  datasets,
+  getDataset,
+  getRun,
+  items,
+  runs,
+  startRun,
+} from '@spatula/store';
 import { testDefinition } from '@spatula/store/fixtures';
 import { introspectWorkflow } from 'cloudflare:test';
 import { env, exports } from 'cloudflare:workers';
@@ -553,5 +561,68 @@ describe('the owner routes', () => {
     } finally {
       logged.mockRestore();
     }
+  });
+});
+
+describe('reviving pages', () => {
+  it('takes refused pages or named ones, and refuses a body that names neither', async () => {
+    await call('PUT', '/datasets/api-revive', { body: testDefinition('api-revive') });
+    const revived = await call('POST', '/datasets/api-revive/items/revive', {
+      body: { refused: true },
+    });
+    expect(revived.status).toBe(200);
+    expectNoStore(revived);
+    expect(await revived.json()).toEqual({ revived: 0 });
+    expect((await call('POST', '/datasets/api-revive/items/revive', { body: {} })).status).toBe(
+      400,
+    );
+    expect(
+      (
+        await call('POST', '/datasets/api-revive/items/revive', {
+          body: { refused: true },
+          token: null,
+        })
+      ).status,
+    ).toBe(401);
+
+    // These ask for no page, or for more than the route takes: refused set to false, an empty
+    // list, a key it doesn't know, and text where an object belongs.
+    for (const body of [
+      { refused: false },
+      { pages: [] },
+      { pages: ['https://maker-a.example/products/a1'], everything: true },
+      'refused',
+    ]) {
+      const refused = await call('POST', '/datasets/api-revive/items/revive', { body });
+      expect(refused.status, JSON.stringify(body)).toBe(400);
+      expectNoStore(refused);
+    }
+  });
+
+  it('finds a page by the name its definition gave it, and puts it back to be read', async () => {
+    // A pages source keeps a page as the definition wrote it, so that is the name that finds it.
+    const written = 'https://MAKER-A.example/products/a1';
+    const definition = testDefinition('api-revive-named');
+    definition.sources[0] = { ...(definition.sources[0] as PagesSource), pages: [written] };
+    await call('PUT', '/datasets/api-revive-named', { body: definition });
+    await withDatabase(env, (db) =>
+      db
+        .update(items)
+        .set({ status: 'refused', lastOutcome: 'blocked', outcomeStreak: 3 })
+        .where(eq(items.datasetId, 'api-revive-named')),
+    );
+
+    const revived = await call('POST', '/datasets/api-revive-named/items/revive', {
+      body: { pages: [written, 'not an address'] },
+    });
+    expect(revived.status).toBe(200);
+    expect(await revived.json()).toEqual({ revived: 1 });
+    const [item] = await withDatabase(env, (db) =>
+      db
+        .select({ status: items.status, streak: items.outcomeStreak })
+        .from(items)
+        .where(eq(items.datasetId, 'api-revive-named')),
+    );
+    expect(item).toEqual({ status: 'live', streak: 0 });
   });
 });

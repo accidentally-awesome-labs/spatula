@@ -7,10 +7,12 @@ import {
   getRun,
   getSnapshot,
   latestSnapshot,
+  reviveItems,
   StaleDefinitionError,
   startRun,
 } from '@spatula/store';
 import { Hono, type MiddlewareHandler } from 'hono';
+import { z } from 'zod';
 import { aboutPage } from './about';
 import { secret } from './config';
 import { withDatabase } from './database';
@@ -169,6 +171,38 @@ api.get('/datasets/:id/snapshots/:generation', async (c) => {
       'x-spatula-snapshot-id': row.id,
     },
   });
+});
+
+const reviveSchema = z
+  .strictObject({
+    refused: z.literal(true).optional(),
+    pages: z.array(z.string().max(2048)).max(1000).optional(),
+  })
+  .refine((body) => body.refused === true || (body.pages?.length ?? 0) > 0);
+
+api.post('/datasets/:id/items/revive', async (c) => {
+  let body: unknown;
+  try {
+    body = await c.req.json();
+  } catch {
+    return c.json({ error: 'The body isn’t JSON.' }, 400);
+  }
+  const parsed = reviveSchema.safeParse(body);
+  if (!parsed.success) {
+    return c.json(
+      { error: 'Send { "refused": true }, or { "pages": [addresses] }, or both.' },
+      400,
+    );
+  }
+  // A sitemap's pages are kept as their href, and a pages source's as the definition wrote them,
+  // so an address is compared in both forms.
+  const pages = parsed.data.pages?.flatMap((page) =>
+    URL.canParse(page) ? [...new Set([page, new URL(page).href])] : [page],
+  );
+  const revived = await withDatabase(c.env, (db) =>
+    reviveItems(db, { datasetId: c.req.param('id'), refused: parsed.data.refused, pages }),
+  );
+  return c.json({ revived });
 });
 
 // These two answer whatever the path, including ones outside the owner routes, which set the

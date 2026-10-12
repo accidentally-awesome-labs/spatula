@@ -7,9 +7,9 @@ import {
   type Definition,
   type PagesSource,
 } from '@spatula/core';
-import { and, eq, inArray, notInArray, sql } from 'drizzle-orm';
+import { and, eq, inArray, notInArray, or, sql } from 'drizzle-orm';
 import type { Executor } from './client';
-import { datasets, items, sources } from './schema';
+import { datasets, items, sources, type ItemStatus } from './schema';
 
 export interface DatasetRow {
   id: string;
@@ -224,4 +224,37 @@ export async function listLiveItems(db: Executor, datasetId: string): Promise<It
     .from(items)
     .where(and(eq(items.datasetId, datasetId), eq(items.status, 'live')))
     .orderBy(items.sourceId, items.locator);
+}
+
+/** The statuses a named page can be revived from. Excluded pages come back by being listed. */
+export const REVIVABLE_STATUSES: ItemStatus[] = ['refused', 'gone'];
+
+/**
+ * Puts pages back to live: every refused page with `refused`, and the pages named, from any
+ * revivable status. Their streaks start again, and a revived page counts as never read, so the
+ * next run reads it whenever it was last read.
+ */
+export async function reviveItems(
+  db: Executor,
+  input: { datasetId: string; pages?: string[]; refused?: boolean },
+): Promise<number> {
+  const which = [
+    ...(input.refused === true ? [eq(items.status, 'refused')] : []),
+    ...(input.pages !== undefined && input.pages.length > 0
+      ? [and(inArray(items.locator, input.pages), inArray(items.status, REVIVABLE_STATUSES))]
+      : []),
+  ];
+  if (which.length === 0) return 0;
+  const rows = await db
+    .update(items)
+    .set({
+      status: 'live',
+      lastOutcome: null,
+      outcomeStreak: 0,
+      missingStreak: 0,
+      lastFetchedAt: null,
+    })
+    .where(and(eq(items.datasetId, input.datasetId), or(...which)))
+    .returning({ id: items.id });
+  return rows.length;
 }

@@ -118,6 +118,23 @@ export async function run(
   });
 }
 
+/** Puts refused pages, or the pages named, back for the next run. */
+export async function revive(
+  io: Io,
+  client: Client,
+  datasetId: string,
+  options: { refused: boolean; pages: string[] },
+): Promise<number> {
+  return withApi(io, async () => {
+    const { revived } = await client.reviveItems(datasetId, {
+      ...(options.refused ? { refused: true as const } : {}),
+      ...(options.pages.length > 0 ? { pages: options.pages } : {}),
+    });
+    io.out(`Revived ${count(revived, 'page')} of ${datasetId}. The next run reads them.`);
+    return 0;
+  });
+}
+
 /**
  * Downloads a snapshot, and writes it only if its hash and format check out and it is the dataset
  * and generation Spatula said it was.

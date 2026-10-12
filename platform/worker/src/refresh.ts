@@ -140,6 +140,13 @@ export const MAX_PAGE_STATEMENTS = 1_000;
  * the pages load in steps of 50 rather than all at once.
  */
 const ITEMS_PER_STEP = 50;
+/**
+ * Blocks in a row from one source that pause the rest of its pages for this run. A block here is
+ * the host's: a 401, 402, or 403 it answered with, or a challenge. A page robots.txt turns away
+ * sends no request, so it protects no host and counts for nothing. Challenges come with requests
+ * close together, so the source rests until the next run; nothing is refused for it.
+ */
+export const SOURCE_PAUSE_AFTER = 3;
 
 const NO_USAGE: LlmUsage = { inputTokens: 0, outputTokens: 0 };
 const NO_CHANGE: StatementCounts = { added: 0, reseen: 0, withdrawn: 0 };
@@ -220,6 +227,12 @@ interface Context {
 interface Fetched {
   fetchId: string;
   outcome: Outcome;
+  /**
+   * Whether the gate let the request go, so the host's own answer decided the outcome. False for a
+   * gate refusal, such as a page robots.txt disallows: nothing was sent, so a `blocked` outcome
+   * there is Spatula's, not the host's.
+   */
+  hostAnswered: boolean;
   finalUrl: string;
   signals: ContentSignals;
   /** The page the statements will come from: the fresh one, or the one stored before. */
@@ -312,15 +325,41 @@ export async function runRefresh(
       );
     }
 
+    // Blocks in a row by source, and the pages each paused source left for the next run. Both come
+    // from steps' results, so a run that replays its steps pauses at the same page.
+    const blocksInARow = new Map<string, number>();
+    const paused = new Map<string, number>();
     for (let start = 0; start < plan.ids.length; start += ITEMS_PER_STEP) {
       const batch = await step.do(`items:${start}`, () =>
         ports.withDb((db) => itemsByIds(db, plan.ids.slice(start, start + ITEMS_PER_STEP))),
       );
       for (const item of batch) {
-        await refreshItem(context, item, summary, step, ports);
-        // The pages read: a planned page that's no longer live when its batch loads isn't one.
+        const left = paused.get(item.sourceId);
+        if (left !== undefined) {
+          paused.set(item.sourceId, left + 1);
+          continue;
+        }
+        const fetched = await refreshItem(context, item, summary, step, ports);
+        // The pages read: a planned page that's no longer live when its batch loads isn't one, and
+        // neither is one a paused source left for the next run.
         summary.items += 1;
+        // Only a block the host answered counts. A gate refusal sent no request, and starts the count
+        // again, as any answer that isn't a block does.
+        const blocks =
+          fetched.outcome === 'blocked' && fetched.hostAnswered
+            ? (blocksInARow.get(item.sourceId) ?? 0) + 1
+            : 0;
+        blocksInARow.set(item.sourceId, blocks);
+        if (blocks >= SOURCE_PAUSE_AFTER) paused.set(item.sourceId, 0);
       }
+    }
+    summary.paused = Object.fromEntries(paused);
+    for (const [sourceId, left] of paused) {
+      if (left === 0) continue;
+      note(
+        summary,
+        `${sourceId}: paused after ${SOURCE_PAUSE_AFTER} blocks in a row; ${left} ${left === 1 ? 'page waits' : 'pages wait'} for the next run`,
+      );
     }
 
     // The counts stay exact. Only the notes, one for each page left unresolved and each claim in
@@ -504,6 +543,7 @@ async function fetchItem(
     fetched: {
       fetchId,
       outcome: answer.outcome,
+      hostAnswered: answer.policy === 'allowed',
       finalUrl: answer.finalUrl,
       signals,
       contentHash: answer.page?.contentHash ?? item.contentHash,

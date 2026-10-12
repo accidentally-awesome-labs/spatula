@@ -50,6 +50,8 @@ export interface RunSummary {
   due?: number;
   /** What the sitemap sources listed. Absent in runs from before slice 1. */
   discovery?: DiscoverySummary;
+  /** Pages left for the next run because their source kept blocking, by source. */
+  paused?: Record<string, number>;
   fetches: Record<Outcome, number>;
   statements: { added: number; reseen: number; withdrawn: number };
   llm: {

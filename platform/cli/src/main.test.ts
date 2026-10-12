@@ -454,6 +454,26 @@ describe('run', () => {
   });
 });
 
+describe('revive', () => {
+  it('puts refused pages, or the pages named, back for the next run', async () => {
+    const { fetch, sent } = stubApi(() => Response.json({ revived: 2 }));
+    const { io, out } = memoryIo();
+    const argv = ['revive', 'cli-products', '--refused', 'https://maker-a.example/products/a1'];
+    expect(await main(argv, { io, env: ENV, fetch })).toBe(0);
+    expect(sent[0]).toMatchObject({
+      method: 'POST',
+      path: '/datasets/cli-products/items/revive',
+      body: { refused: true, pages: ['https://maker-a.example/products/a1'] },
+    });
+    expect(out).toEqual(['Revived 2 pages of cli-products. The next run reads them.']);
+  });
+
+  it('needs pages to revive, or --refused', async () => {
+    const { io } = memoryIo();
+    expect(await main(['revive', 'cli-products'], { io, env: ENV })).toBe(2);
+  });
+});
+
 describe('snapshot pull', () => {
   const body = JSON.stringify({
     project: 'cli-products',

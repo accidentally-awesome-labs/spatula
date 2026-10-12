@@ -1,6 +1,6 @@
 import { parseArgs } from 'node:util';
 import { createClient } from './client';
-import { check, plan, pullSnapshot, run, type Io } from './commands';
+import { check, plan, pullSnapshot, revive, run, type Io } from './commands';
 import { describeError, printable } from './format';
 
 export const USAGE = `Usage: spatula <command>
@@ -13,6 +13,8 @@ export const USAGE = `Usage: spatula <command>
                                reads the pages that are due; --all counts every live
                                page as due, however recently it was read. The budget
                                still caps the run
+  revive <dataset> [--refused] [<page>...]
+                               Put refused pages, or the pages named, back for the next run
   snapshot pull <dataset> --out <file> [--generation <n>]
                                Download a snapshot, check its hash, and write it
 
@@ -26,6 +28,7 @@ const USAGE_LINES = USAGE.split('\n');
 const OPTIONS = {
   wait: { type: 'boolean' },
   all: { type: 'boolean' },
+  refused: { type: 'boolean' },
   out: { type: 'string' },
   generation: { type: 'string' },
   help: { type: 'boolean', short: 'h' },
@@ -97,6 +100,13 @@ export async function main(
       return rest.length === 1
         ? run(io, client, rest[0]!, { wait: values.wait === true, all: values.all === true })
         : usage();
+    case 'revive': {
+      const [datasetId, ...pages] = rest;
+      if (datasetId === undefined || (pages.length === 0 && values.refused !== true)) {
+        return usage();
+      }
+      return revive(io, client, datasetId, { refused: values.refused === true, pages });
+    }
     case 'snapshot': {
       // An empty --out names no file, as a missing one doesn't.
       if (rest[0] !== 'pull' || rest.length !== 2 || !values.out) return usage();

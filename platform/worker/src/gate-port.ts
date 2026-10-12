@@ -1,4 +1,6 @@
 import {
+  gateInterval,
+  INITIAL_GATE_STATE,
   recordResponse,
   reserve,
   robotsNeedsRefresh,
@@ -23,8 +25,6 @@ export interface GateStore {
   save(state: GateState): Promise<void>;
 }
 
-/** Reading robots.txt is a request too, so the host's next request waits this long after it. */
-const AFTER_ROBOTS_MS = 1000;
 /** RFC 9309 asks crawlers to read at least 500 KiB of a robots.txt file. */
 const ROBOTS_MAX_BYTES = 512 * 1024;
 /** RFC 9309 asks crawlers to follow at least five redirects. */
@@ -33,16 +33,22 @@ const ROBOTS_MAX_REDIRECTS = 5;
 export class GateKeeper {
   constructor(private readonly store: GateStore) {}
 
-  async robotsDue(now: number): Promise<boolean> {
-    return robotsNeedsRefresh((await this.store.load()).robots, now);
+  /** The stored state, with the defaults of anything added since it was saved. */
+  private async state(): Promise<GateState> {
+    return { ...INITIAL_GATE_STATE, ...(await this.store.load()) };
   }
 
-  async storeRobots(record: RobotsRecord, now: number): Promise<void> {
-    const state = await this.store.load();
+  async robotsDue(now: number): Promise<boolean> {
+    return robotsNeedsRefresh((await this.state()).robots, now);
+  }
+
+  /** Reading robots.txt is a request too, so the host's next one waits an interval after it. */
+  async storeRobots(record: RobotsRecord, now: number, minIntervalMs = 0): Promise<void> {
+    const state = await this.state();
     await this.store.save({
       ...state,
       robots: record,
-      nextAt: Math.max(state.nextAt, now + AFTER_ROBOTS_MS),
+      nextAt: Math.max(state.nextAt, now + gateInterval(record, minIntervalMs)),
     });
   }
 
@@ -52,7 +58,7 @@ export class GateKeeper {
     minIntervalMs: number;
     maxWaitMs: number;
   }): Promise<GateDecision> {
-    const { state, decision } = reserve(await this.store.load(), request);
+    const { state, decision } = reserve(await this.state(), request);
     await this.store.save(state);
     return decision;
   }
@@ -62,7 +68,7 @@ export class GateKeeper {
     now: number;
     retryAfter: string | null;
   }): Promise<void> {
-    await this.store.save(recordResponse(await this.store.load(), response));
+    await this.store.save(recordResponse(await this.state(), response));
   }
 }
 
@@ -80,7 +86,7 @@ export function createGatePort(options: {
       const gate = options.gateFor(target.host);
       if (await gate.robotsDue(options.now())) {
         const record = await fetchRobots(options.http, target.origin, options.now);
-        await gate.storeRobots(record, options.now());
+        await gate.storeRobots(record, options.now(), request.minIntervalMs);
       }
       return gate.reserve({ url, now: options.now(), ...request });
     },
