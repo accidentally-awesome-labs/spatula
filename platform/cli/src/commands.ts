@@ -130,7 +130,11 @@ export async function revive(
       ...(options.refused ? { refused: true as const } : {}),
       ...(options.pages.length > 0 ? { pages: options.pages } : {}),
     });
-    io.out(`Revived ${count(revived, 'page')} of ${datasetId}. The next run reads them.`);
+    io.out(
+      revived === 0
+        ? `Nothing matched in ${datasetId}, so no page was revived.`
+        : `Revived ${count(revived, 'page')} of ${datasetId}. The next run reads them.`,
+    );
     return 0;
   });
 }

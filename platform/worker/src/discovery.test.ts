@@ -307,6 +307,30 @@ describe('discovery', { timeout: 20_000 }, () => {
     ]);
   });
 
+  it('follows a sitemap’s redirect on its own host when the host’s interval is longer than a step waits', async () => {
+    // Each hop waits a full 20 s after the answer before it, which a step may not wait (15 s), so
+    // the hop after the first is put off. It is asked for again where it left off, not from the
+    // top.
+    const moved = 'https://maker-c.example/sitemaps/index.xml';
+    const routes = sitemapRoutes();
+    routes[SITEMAPS.index] = { status: 301, headers: { location: moved } };
+    routes[moved] = {
+      status: 200,
+      body: sitemapIndex(),
+      headers: { 'content-type': 'application/xml' },
+    };
+    const world = await setUp('discovery-slow-redirect', routes, (definition) => ({
+      ...definition,
+      policy: { ...definition.policy, perHostIntervalMs: 20_000 },
+    }));
+    const { summary } = await refresh(world, 'discovery-slow-redirect');
+
+    const asked = world.web.requests.map((sent) => sent.url);
+    expect(asked.filter((url) => url === SITEMAPS.index)).toHaveLength(1);
+    expect(asked.filter((url) => url === moved)).toHaveLength(1);
+    expect(summary.discovery).toMatchObject({ sitemaps: 2, listed: 2, incomplete: [] });
+  });
+
   it('lists the pages of a sitemap that moved from the apex to www', async () => {
     const www = 'https://www.maker-c.example';
     const routes = sitemapRoutes();

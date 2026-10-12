@@ -19,6 +19,7 @@ export function workerPorts(env: Env): RefreshPorts {
         const stub = env.HOST_GATE.get(env.HOST_GATE.idFromName(host));
         return {
           robotsDue: (now) => stub.robotsDue(now),
+          opensAt: () => stub.opensAt(),
           storeRobots: (record, now, minIntervalMs) => stub.storeRobots(record, now, minIntervalMs),
           reserve: (request) => stub.reserve(request),
           record: (response) => stub.record(response),

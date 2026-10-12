@@ -207,6 +207,15 @@ export async function getDataset(db: Executor, id: string): Promise<DatasetRow |
   return { ...row, definition: parsed.definition };
 }
 
+/**
+ * Whether the dataset is stored. Unlike `getDataset` it doesn't read the definition, so a dataset
+ * whose stored definition no longer passes the checks still counts.
+ */
+export async function datasetExists(db: Executor, id: string): Promise<boolean> {
+  const [row] = await db.select({ id: datasets.id }).from(datasets).where(eq(datasets.id, id));
+  return row !== undefined;
+}
+
 /** The dataset's live items, by source and page. */
 export async function listLiveItems(db: Executor, datasetId: string): Promise<ItemRef[]> {
   return db

@@ -5,6 +5,10 @@ import type { GatePort, HttpPort } from './refresh';
  * One request through its host's gate. Every hop, redirects included, asks the host's gate first,
  * and every answer goes back to it, so pacing, robots.txt, and back-off apply to each. Only HTTPS
  * addresses are followed. Pages and sitemaps both come through here.
+ *
+ * A hop the gate puts off is asked for again where it left off. Starting over would ask the first
+ * hop again for an answer it already gave, and when the pacing interval is longer than a step
+ * waits, every hop after the first is put off, so the request would never get past a redirect.
  */
 
 /** Waits up to this long happen inside a step; longer ones become Workflow sleeps. */
@@ -15,8 +19,22 @@ export const MAX_REDIRECTS = 5;
 
 const REDIRECTS = new Set([301, 302, 303, 307, 308]);
 
+/**
+ * Whether the site served a challenge in place of what was asked for, as Cloudflare marks it, with
+ * whatever status. Pages, sitemaps, and robots.txt all read an answer this way.
+ */
+export function isChallenge(headers: Record<string, string>): boolean {
+  return headers['cf-mitigated'] === 'challenge';
+}
+
+/** Where a request that was put off picks up again: the hop the gate refused. */
+export interface Resume {
+  url: string;
+  hop: number;
+}
+
 export type Requested =
-  | { kind: 'later'; retryAfterMs: number }
+  | { kind: 'later'; retryAfterMs: number; resume: Resume }
   | {
       kind: 'denied';
       outcome: 'blocked' | 'failed';
@@ -50,11 +68,13 @@ export async function requestThroughGate(
     giveUp: boolean;
     /** Headers for the first hop only, such as conditional ones. */
     headers: Record<string, string>;
+    /** Where an attempt put off left off; without it, the request starts at its address. */
+    resume?: Resume;
     maxBytes?: number;
     accept?: string;
   },
 ): Promise<Requested> {
-  let url = address;
+  let url = options.resume?.url ?? address;
   let signals: ContentSignals = {};
   const failed = (error: string, httpStatus: number | null = null): Requested => ({
     kind: 'failed',
@@ -64,13 +84,15 @@ export async function requestThroughGate(
     signals,
   });
 
-  for (let hop = 0; ; hop += 1) {
+  for (let hop = options.resume?.hop ?? 0; ; hop += 1) {
     const decision = await ports.gate.reserve(url, {
       minIntervalMs: options.minIntervalMs,
       maxWaitMs: MAX_INLINE_WAIT_MS,
     });
     if (decision.kind === 'later') {
-      if (!options.giveUp) return { kind: 'later', retryAfterMs: decision.retryAfterMs };
+      if (!options.giveUp) {
+        return { kind: 'later', retryAfterMs: decision.retryAfterMs, resume: { url, hop } };
+      }
       return failed(`${decision.reason}, and the run stopped waiting after ${MAX_WAITS} tries`);
     }
     if (decision.kind === 'deny') {

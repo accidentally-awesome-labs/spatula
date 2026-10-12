@@ -11,7 +11,7 @@ import {
 import { testDefinition } from '@spatula/store/fixtures';
 import { introspectWorkflow } from 'cloudflare:test';
 import { env, exports } from 'cloudflare:workers';
-import { eq } from 'drizzle-orm';
+import { and, eq } from 'drizzle-orm';
 import { http, HttpResponse } from 'msw';
 import { describe, expect, it, vi } from 'vitest';
 import { api, RUN_START_GRACE_MS } from '../../src/api';
@@ -599,6 +599,34 @@ describe('reviving pages', () => {
     }
   });
 
+  it('takes at most 1,000 pages, each at most 2,048 characters long', async () => {
+    await call('PUT', '/datasets/api-revive-limits', { body: testDefinition('api-revive-limits') });
+    const revive = (pages: string[]) =>
+      call('POST', '/datasets/api-revive-limits/items/revive', { body: { pages } });
+    const many = (count: number) =>
+      Array.from({ length: count }, (_, index) => `https://maker-a.example/products/p${index}`);
+    const prefix = 'https://maker-a.example/';
+    const long = (length: number) => `${prefix}${'x'.repeat(length - prefix.length)}`;
+
+    expect((await revive(many(1000))).status).toBe(200);
+    const tooMany = await revive(many(1001));
+    expect(tooMany.status).toBe(400);
+    expectNoStore(tooMany);
+    expect((await revive([long(2048)])).status).toBe(200);
+    const tooLong = await revive([long(2049)]);
+    expect(tooLong.status).toBe(400);
+    expectNoStore(tooLong);
+  });
+
+  it('answers 404 for a dataset that doesn’t exist, as a run does', async () => {
+    const response = await call('POST', '/datasets/api-revive-nothing/items/revive', {
+      body: { refused: true },
+    });
+    expect(response.status).toBe(404);
+    expectNoStore(response);
+    expect(await response.json()).toEqual({ error: 'Dataset api-revive-nothing doesn’t exist.' });
+  });
+
   it('finds a page by the name its definition gave it, and puts it back to be read', async () => {
     // A pages source keeps a page as the definition wrote it, so that is the name that finds it.
     const written = 'https://MAKER-A.example/products/a1';
@@ -621,8 +649,21 @@ describe('reviving pages', () => {
       db
         .select({ status: items.status, streak: items.outcomeStreak })
         .from(items)
-        .where(eq(items.datasetId, 'api-revive-named')),
+        .where(and(eq(items.datasetId, 'api-revive-named'), eq(items.locator, written))),
     );
     expect(item).toEqual({ status: 'live', streak: 0 });
+    // The dataset's other page wasn't named, so it is still refused.
+    const [other] = await withDatabase(env, (db) =>
+      db
+        .select({ status: items.status })
+        .from(items)
+        .where(
+          and(
+            eq(items.datasetId, 'api-revive-named'),
+            eq(items.locator, 'https://maker-b.example/products/b1'),
+          ),
+        ),
+    );
+    expect(other).toEqual({ status: 'refused' });
   });
 });

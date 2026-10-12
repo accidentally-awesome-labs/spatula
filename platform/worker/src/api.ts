@@ -2,6 +2,7 @@ import { packIssues, parseDefinition, runIdFor, sha256Hex, type RunView } from '
 import { packs } from '@spatula/pack-products';
 import {
   applyDefinition,
+  datasetExists,
   finishRun,
   getDataset,
   getRun,
@@ -199,9 +200,13 @@ api.post('/datasets/:id/items/revive', async (c) => {
   const pages = parsed.data.pages?.flatMap((page) =>
     URL.canParse(page) ? [...new Set([page, new URL(page).href])] : [page],
   );
-  const revived = await withDatabase(c.env, (db) =>
-    reviveItems(db, { datasetId: c.req.param('id'), refused: parsed.data.refused, pages }),
+  const datasetId = c.req.param('id');
+  const revived = await withDatabase(c.env, async (db) =>
+    (await datasetExists(db, datasetId))
+      ? reviveItems(db, { datasetId, refused: parsed.data.refused, pages })
+      : null,
   );
+  if (revived === null) return c.json({ error: `Dataset ${datasetId} doesn’t exist.` }, 404);
   return c.json({ revived });
 });
 

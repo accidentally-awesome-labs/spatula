@@ -52,7 +52,7 @@ import {
   type StatementCounts,
 } from '@spatula/store';
 import { discoverSource } from './discovery';
-import { MAX_WAITS, requestThroughGate } from './requests';
+import { isChallenge, MAX_WAITS, requestThroughGate, type Resume } from './requests';
 import { storable } from './text';
 
 /*
@@ -201,8 +201,7 @@ export function classifyResponse(response: {
     error,
   });
   if (status === 304) return final('unchanged', null);
-  if (headers['cf-mitigated'] === 'challenge')
-    return final('blocked', 'the site answered with a challenge');
+  if (isChallenge(headers)) return final('blocked', 'the site answered with a challenge');
   // A lone 429 is a busy host, not a refusal: it fails the fetch, and the gate backs off.
   if ([401, 402, 403].includes(status)) return final('blocked', `HTTP ${status}`);
   if (status === 404 || status === 410) return final('gone', `HTTP ${status}`);
@@ -228,9 +227,10 @@ interface Fetched {
   fetchId: string;
   outcome: Outcome;
   /**
-   * Whether the gate let the request go, so the host's own answer decided the outcome. False for a
-   * gate refusal, such as a page robots.txt disallows: nothing was sent, so a `blocked` outcome
-   * there is Spatula's, not the host's.
+   * Whether the host answered, so its status decided the outcome. False for a gate refusal, such as
+   * a page robots.txt disallows, and for a request that got no answer: the network dropped it, or
+   * the run gave up waiting to send it. A `blocked` outcome without an answer is Spatula's, not
+   * the host's.
    */
   hostAnswered: boolean;
   finalUrl: string;
@@ -356,9 +356,15 @@ export async function runRefresh(
     summary.paused = Object.fromEntries(paused);
     for (const [sourceId, left] of paused) {
       if (left === 0) continue;
+      // Under --all every live page was due, and the next ordinary run reads only the pages whose
+      // freshness has run out, which may be none of these. So they aren't said to wait for it.
+      const fate =
+        params.all === true
+          ? `${left === 1 ? 'page wasn’t' : 'pages weren’t'} read`
+          : `${left === 1 ? 'page waits' : 'pages wait'} for the next run`;
       note(
         summary,
-        `${sourceId}: paused after ${SOURCE_PAUSE_AFTER} blocks in a row; ${left} ${left === 1 ? 'page waits' : 'pages wait'} for the next run`,
+        `${sourceId}: paused after ${SOURCE_PAUSE_AFTER} blocks in a row; ${left} ${fate}`,
       );
     }
 
@@ -463,18 +469,26 @@ function capped<T>(
   return notes;
 }
 
-/** Fetches a page, sleeping between steps whenever its host asks for a longer wait. */
+/**
+ * Fetches a page, sleeping between steps whenever its host asks for a longer wait. An attempt that
+ * was put off at a redirect's later hop picks up there, from what the step before it returned, so
+ * a run that replays its steps asks for the same hops.
+ */
 async function fetchWithWaits(
   context: Context,
   item: ItemRef,
   step: StepRunner,
   ports: RefreshPorts,
 ): Promise<Fetched> {
+  let resume: Resume | undefined;
   for (let attempt = 0; ; attempt += 1) {
+    const from = resume;
     const result = await step.do(`fetch:${item.id}:${attempt}`, () =>
-      fetchItem(context, item, attempt, ports),
+      fetchItem(context, item, attempt, ports, from),
     );
     if (result.kind === 'done') return result.fetched;
+    // A result kept by an earlier version has none, and starts again from the page's own address.
+    resume = result.resume;
     await step.sleep(`wait:${item.id}:${attempt}`, result.retryAfterMs);
   }
 }
@@ -496,9 +510,12 @@ async function fetchItem(
   item: ItemRef,
   attempt: number,
   ports: RefreshPorts,
-): Promise<{ kind: 'later'; retryAfterMs: number } | { kind: 'done'; fetched: Fetched }> {
+  resume: Resume | undefined,
+): Promise<
+  { kind: 'later'; retryAfterMs: number; resume: Resume } | { kind: 'done'; fetched: Fetched }
+> {
   const startedAt = ports.now();
-  const requested = await request(context, item, attempt >= MAX_WAITS, ports);
+  const requested = await request(context, item, attempt >= MAX_WAITS, ports, resume);
   if (requested.kind === 'later') return requested;
   const { attempt: answer, signals } = requested;
 
@@ -543,7 +560,7 @@ async function fetchItem(
     fetched: {
       fetchId,
       outcome: answer.outcome,
-      hostAnswered: answer.policy === 'allowed',
+      hostAnswered: answer.httpStatus !== null,
       finalUrl: answer.finalUrl,
       signals,
       contentHash: answer.page?.contentHash ?? item.contentHash,
@@ -562,8 +579,9 @@ async function request(
   item: ItemRef,
   giveUp: boolean,
   ports: RefreshPorts,
+  resume: Resume | undefined,
 ): Promise<
-  | { kind: 'later'; retryAfterMs: number }
+  | { kind: 'later'; retryAfterMs: number; resume: Resume }
   | { kind: 'answered'; attempt: Attempt; signals: ContentSignals }
 > {
   // Definitions keep a page as written and only validate it. From here on, every hop and the
@@ -572,6 +590,7 @@ async function request(
     minIntervalMs: context.definition.policy.perHostIntervalMs,
     giveUp,
     headers: validators(item),
+    resume,
   });
   if (answer.kind === 'later') return answer;
   const answered = (attempt: Omit<Attempt, 'policy' | 'policyReason'> & Partial<Attempt>) => {

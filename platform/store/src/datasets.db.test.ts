@@ -1,10 +1,11 @@
 import { newId, parseDefinition, type Definition } from '@spatula/core';
-import { eq } from 'drizzle-orm';
+import { eq, inArray } from 'drizzle-orm';
 import { describe, expect, it } from 'vitest';
 import { withRollback } from '../test/db';
 import type { Executor } from './client';
 import {
   applyDefinition,
+  datasetExists,
   getDataset,
   listLiveItems,
   reviveItems,
@@ -187,6 +188,52 @@ describe('applyDefinition', () => {
       await expect(stale()).rejects.toBeInstanceOf(StaleDefinitionError);
       await expect(stale()).rejects.toMatchObject({ name: 'StaleDefinitionError' });
       await expect(stale()).rejects.toThrow(/no longer passes the checks/u);
+    }));
+
+  it('knows a dataset by its row, however its stored definition now reads', () =>
+    withRollback(async (tx) => {
+      expect(await datasetExists(tx, 'exists-new')).toBe(false);
+      await applyDefinition(tx, testDefinition('exists-new'));
+      expect(await datasetExists(tx, 'exists-new')).toBe(true);
+      // A definition that no longer passes the checks is still a dataset: its pages can be revived
+      // before it is applied again.
+      await tx.insert(datasets).values({
+        id: 'exists-stale',
+        revision: 1,
+        definition: { ...testDefinition('exists-stale'), consumers: ['Not A Slug'] },
+        definitionHash: 'stale',
+      });
+      expect(await datasetExists(tx, 'exists-stale')).toBe(true);
+    }));
+
+  it('revives only the dataset it is told', () =>
+    withRollback(async (tx) => {
+      // Two datasets list the same three pages, and every page of both is refused.
+      await applyDefinition(tx, testDefinition('revive-one'));
+      await applyDefinition(tx, testDefinition('revive-two'));
+      const both = ['revive-one', 'revive-two'];
+      await tx.update(items).set({ status: 'refused' }).where(inArray(items.datasetId, both));
+      const statusesOf = async (datasetId: string) =>
+        (
+          await tx
+            .select({ status: items.status })
+            .from(items)
+            .where(eq(items.datasetId, datasetId))
+        )
+          .map((row) => row.status)
+          .sort();
+
+      expect(await reviveItems(tx, { datasetId: 'revive-one', refused: true })).toBe(3);
+      expect(await statusesOf('revive-one')).toEqual(['live', 'live', 'live']);
+      expect(await statusesOf('revive-two')).toEqual(['refused', 'refused', 'refused']);
+
+      // Naming the pages finds them in the one dataset only, though the other has them refused.
+      const named = (await tx.select({ locator: items.locator }).from(items)).map(
+        (row) => row.locator,
+      );
+      expect(await reviveItems(tx, { datasetId: 'revive-one', pages: named })).toBe(0);
+      expect(await statusesOf('revive-two')).toEqual(['refused', 'refused', 'refused']);
+      expect(await reviveItems(tx, { datasetId: 'revive-two', pages: named })).toBe(3);
     }));
 
   it('revives refused pages, and the pages named, with fresh streaks', () =>

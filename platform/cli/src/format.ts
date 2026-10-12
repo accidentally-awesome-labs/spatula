@@ -36,6 +36,14 @@ export function formatRun(run: RunView): string[] {
   lines.push(
     `${pages} Changed ${fetches.changed}, unchanged ${fetches.unchanged}, gone ${fetches.gone}, failed ${fetches.failed}, blocked ${fetches.blocked}.`,
   );
+  // The run's notes are held to a few, and this is how a pause is seen when they ran out.
+  const paused = Object.entries(summary.paused ?? {});
+  if (paused.length > 0) {
+    const sources = paused.map(
+      ([source, left]) => `${source}, ${left} ${left === 1 ? 'page' : 'pages'} unread`,
+    );
+    lines.push(`Paused after blocks in a row: ${sources.join('; ')}.`);
+  }
   // Runs from before slice 1, and datasets with no sitemap source, say nothing of sitemaps.
   const discovery = summary.discovery;
   if (discovery !== undefined && discovery.sources > 0) {

@@ -7,6 +7,7 @@ import {
   retryAfterMs,
   robotsNeedsRefresh,
   robotsRecord,
+  robotsToKeep,
   type GateState,
 } from './gate';
 
@@ -42,6 +43,46 @@ describe('robots.txt answers', () => {
     const down = robotsRecord({ status: 503, text: '' }, NOW);
     expect(robotsNeedsRefresh(down, NOW + HOUR - 1)).toBe(false);
     expect(robotsNeedsRefresh(down, NOW + HOUR)).toBe(true);
+  });
+});
+
+describe('a robots.txt refresh that meets a challenge', () => {
+  const challenged = robotsRecord({ challenged: true }, NOW);
+  const held = robotsRecord(
+    { status: 200, text: 'User-agent: *\nDisallow: /private\nCrawl-delay: 5\n' },
+    NOW - 25 * HOUR,
+  );
+
+  it('reads as unreachable, which refuses everything until it is read again in an hour', () => {
+    expect(challenged).toEqual({
+      status: 'unreachable',
+      fetchedAt: NOW,
+      reason: 'the site answered robots.txt with a challenge',
+      challengedAt: NOW,
+    });
+    expect(robotsNeedsRefresh(challenged, NOW + HOUR - 1)).toBe(false);
+    expect(robotsNeedsRefresh(challenged, NOW + HOUR)).toBe(true);
+  });
+
+  it('leaves the rules held in force, crawl delay included, and tries again in an hour', () => {
+    const kept = robotsToKeep(held, challenged);
+    expect(kept).toEqual({ ...held, challengedAt: NOW });
+    const state: GateState = { ...INITIAL_GATE_STATE, robots: kept };
+    expect(reserve(state, request('https://maker.example/private/x')).decision).toMatchObject({
+      kind: 'deny',
+      outcome: 'blocked',
+    });
+    expect(gateInterval(kept, 0)).toBe(5000);
+    // It was read a day ago, so without the challenge it would be due now.
+    expect(robotsNeedsRefresh(held, NOW)).toBe(true);
+    expect(robotsNeedsRefresh(kept, NOW + HOUR - 1)).toBe(false);
+    expect(robotsNeedsRefresh(kept, NOW + HOUR)).toBe(true);
+  });
+
+  it('replaces nothing but what it must: with no record held it is the record, and any other answer replaces', () => {
+    expect(robotsToKeep(null, challenged)).toEqual(challenged);
+    const none = robotsRecord({ status: 404, text: '' }, NOW);
+    expect(robotsToKeep(held, none)).toEqual(none);
   });
 });
 

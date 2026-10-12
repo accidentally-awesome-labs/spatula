@@ -8,7 +8,13 @@ import {
 } from '@spatula/core';
 import { finishListing, listPages, recordSitemapFetch } from '@spatula/store';
 import type { RefreshPorts, StepRunner } from './refresh';
-import { MAX_WAITS, requestThroughGate, type Requested } from './requests';
+import {
+  isChallenge,
+  MAX_WAITS,
+  requestThroughGate,
+  type Requested,
+  type Resume,
+} from './requests';
 import { storable } from './text';
 
 /*
@@ -146,11 +152,15 @@ async function readWithWaits(
   step: StepRunner,
   ports: RefreshPorts,
 ): Promise<SitemapStep> {
+  // An attempt put off at a redirect's later hop picks up there, as a page's does.
+  let resume: Resume | undefined;
   for (let attempt = 0; ; attempt += 1) {
+    const from = resume;
     const result = await step.do(`sitemap:${source.id}:${index}:${attempt}`, () =>
-      readSitemap(context, source, url, attempt, source.maxPages - listedSoFar, ports),
+      readSitemap(context, source, url, attempt, source.maxPages - listedSoFar, ports, from),
     );
     if (result.kind === 'done') return result.read;
+    resume = result.resume;
     await step.sleep(`sitemap-wait:${source.id}:${index}:${attempt}`, result.retryAfterMs);
   }
 }
@@ -162,12 +172,16 @@ async function readSitemap(
   attempt: number,
   room: number,
   ports: RefreshPorts,
-): Promise<{ kind: 'later'; retryAfterMs: number } | { kind: 'done'; read: SitemapStep }> {
+  resume: Resume | undefined,
+): Promise<
+  { kind: 'later'; retryAfterMs: number; resume: Resume } | { kind: 'done'; read: SitemapStep }
+> {
   const startedAt = ports.now();
   const answer = await requestThroughGate(ports, url, {
     minIntervalMs: context.definition.policy.perHostIntervalMs,
     giveUp: attempt >= MAX_WAITS,
     headers: {},
+    resume,
     maxBytes: SITEMAP_MAX_BYTES,
     accept: SITEMAP_ACCEPT,
   });
@@ -294,9 +308,7 @@ async function readAnswer(
   }
   const { status, headers } = answer;
   if (status === 404 || status === 410) return failed('gone', `HTTP ${status}`);
-  if (headers['cf-mitigated'] === 'challenge') {
-    return failed('blocked', 'the site answered with a challenge');
-  }
+  if (isChallenge(headers)) return failed('blocked', 'the site answered with a challenge');
   if ([401, 402, 403].includes(status)) return failed('blocked', `HTTP ${status}`);
   if (status < 200 || status >= 300) return failed('failed', `HTTP ${status}`);
   if (answer.truncated) return failed('failed', 'larger than 20 MB');

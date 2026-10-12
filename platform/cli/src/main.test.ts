@@ -407,6 +407,51 @@ describe('run', () => {
     );
   });
 
+  it('names the sources a run paused, and how many pages each left unread', async () => {
+    const printed = async (paused: Record<string, number> | undefined) => {
+      const complete: RunView = {
+        ...RUNNING,
+        status: 'complete',
+        summary: {
+          items: 4,
+          live: 6,
+          due: 6,
+          fetches: { changed: 1, unchanged: 0, gone: 0, failed: 0, blocked: 3 },
+          statements: { added: 0, reseen: 0, withdrawn: 0 },
+          llm: { ran: 0, reused: 0, skipped: 0, failed: 0, inputTokens: 0, outputTokens: 0 },
+          entities: { created: 0, linked: 0, conflicts: 0, unresolved: 0 },
+          snapshot: {
+            published: false,
+            reason: 'nothing changed since generation 1',
+            excluded: [],
+          },
+          notes: [],
+          ...(paused === undefined ? {} : { paused }),
+        },
+      };
+      const { fetch } = stubApi(({ method }) =>
+        method === 'POST'
+          ? Response.json({ runId: RUN_ID }, { status: 202 })
+          : Response.json(complete),
+      );
+      const { io, out } = memoryIo();
+      expect(await main(['run', 'cli-products', '--wait'], { io, env: ENV, fetch })).toBe(0);
+      return out;
+    };
+    const pages =
+      'Pages: 4 read, of 6 due and 6 live. Changed 1, unchanged 0, gone 0, failed 0, blocked 3.';
+    // A run's notes are held to fifty, and the pause's own can be one of those dropped, so the
+    // paused sources are named apart from them.
+    const out = await printed({ 'maker-a': 2, 'maker-b': 1, 'maker-c': 0 });
+    expect(out.slice(2, 4)).toEqual([
+      pages,
+      'Paused after blocks in a row: maker-a, 2 pages unread; maker-b, 1 page unread; maker-c, 0 pages unread.',
+    ]);
+    // Runs from before slice 1, and runs that paused nothing, say nothing of it.
+    expect((await printed(undefined)).join('\n')).not.toContain('Paused');
+    expect((await printed({})).join('\n')).not.toContain('Paused');
+  });
+
   it('says nothing of sitemaps when no source has any, and counts one page and one source', async () => {
     const printed = async (discovery: DiscoverySummary) => {
       const complete: RunView = {
@@ -466,6 +511,24 @@ describe('revive', () => {
       body: { refused: true, pages: ['https://maker-a.example/products/a1'] },
     });
     expect(out).toEqual(['Revived 2 pages of cli-products. The next run reads them.']);
+  });
+
+  it('says when nothing matched, not that the next run reads it', async () => {
+    const { fetch } = stubApi(() => Response.json({ revived: 0 }));
+    const { io, out, err } = memoryIo();
+    expect(await main(['revive', 'cli-products', '--refused'], { io, env: ENV, fetch })).toBe(0);
+    expect(out).toEqual(['Nothing matched in cli-products, so no page was revived.']);
+    expect(err).toEqual([]);
+  });
+
+  it('reports a dataset Spatula doesn’t have', async () => {
+    const { fetch } = stubApi(() =>
+      Response.json({ error: 'Dataset nothing doesn’t exist.' }, { status: 404 }),
+    );
+    const { io, out, err } = memoryIo();
+    expect(await main(['revive', 'nothing', '--refused'], { io, env: ENV, fetch })).toBe(1);
+    expect(err).toEqual(['Dataset nothing doesn’t exist.']);
+    expect(out).toEqual([]);
   });
 
   it('needs pages to revive, or --refused', async () => {

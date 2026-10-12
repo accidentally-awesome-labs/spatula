@@ -81,6 +81,17 @@ describe('HostGate', () => {
     });
   });
 
+  it('says when it opens: after its pacing and after its break, whichever is later', async () => {
+    const gate = gateFor('gate-opens.example');
+    expect(await gate.opensAt()).toBe(0);
+    await gate.storeRobots({ status: 'unavailable', fetchedAt: NOW, httpStatus: 404 }, NOW);
+    expect(await gate.opensAt()).toBe(NOW + 1000);
+    await gate.reserve(request('https://gate-opens.example/a'));
+    expect(await gate.opensAt()).toBe(NOW + 2000);
+    await gate.record({ status: 429, now: NOW, retryAfter: '120' });
+    expect(await gate.opensAt()).toBe(NOW + 120_000);
+  });
+
   it('waits the dataset’s interval after reading robots.txt, asked through the Worker’s ports', async () => {
     // The interval goes from the gate port through the Durable Object's stub to the object, and
     // each of those could drop it without a type error: it is an optional argument.

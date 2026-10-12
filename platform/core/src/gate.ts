@@ -23,10 +23,16 @@ const MIN_INTERVAL_MS = 1000;
 const BACKOFF_BASE_MS = 30_000;
 const BACKOFF_MAX_MS = 600_000;
 
+interface RobotsRead {
+  fetchedAt: number;
+  /** When a refresh of it was last answered with a challenge, which left it in force. */
+  challengedAt?: number;
+}
+
 export type RobotsRecord =
-  | { status: 'ok'; fetchedAt: number; text: string }
-  | { status: 'unavailable'; fetchedAt: number; httpStatus: number }
-  | { status: 'unreachable'; fetchedAt: number; reason: string };
+  | (RobotsRead & { status: 'ok'; text: string })
+  | (RobotsRead & { status: 'unavailable'; httpStatus: number })
+  | (RobotsRead & { status: 'unreachable'; reason: string });
 
 export interface GateState {
   robots: RobotsRecord | null;
@@ -53,24 +59,53 @@ export type GateDecision =
   | { kind: 'later'; retryAfterMs: number; reason: string }
   | { kind: 'go'; waitMs: number; signals: ContentSignals };
 
-/** robots.txt is read again after a day, or after an hour while it's unreachable. */
+/**
+ * robots.txt is read again after a day, or after an hour while it's unreachable. A refresh that
+ * was answered with a challenge is tried again after an hour too, however old the record is that
+ * it left in force.
+ */
 export function robotsNeedsRefresh(robots: RobotsRecord | null, now: number): boolean {
   if (robots === null) return true;
+  if (robots.challengedAt !== undefined && now - robots.challengedAt < HOUR) return false;
   return now - robots.fetchedAt >= (robots.status === 'unreachable' ? HOUR : DAY);
 }
 
-/** What an answer to a robots.txt request means, as RFC 9309 reads it. */
+/**
+ * What an answer to a robots.txt request means, as RFC 9309 reads it. A challenge is not an answer
+ * about robots.txt: the host is refusing Spatula, and says nothing of its rules. Nothing is known,
+ * so nothing is allowed, as when robots.txt can't be reached; `robotsToKeep` decides whether it
+ * replaces rules already held.
+ */
 export function robotsRecord(
-  response: { status: number; text: string } | { error: string },
+  response: { status: number; text: string } | { error: string } | { challenged: true },
   now: number,
 ): RobotsRecord {
   if ('error' in response) return { status: 'unreachable', fetchedAt: now, reason: response.error };
+  if ('challenged' in response) {
+    return {
+      status: 'unreachable',
+      fetchedAt: now,
+      reason: 'the site answered robots.txt with a challenge',
+      challengedAt: now,
+    };
+  }
   const { status } = response;
   if (status >= 200 && status < 300) return { status: 'ok', fetchedAt: now, text: response.text };
   if (status >= 400 && status < 500 && status !== 429) {
     return { status: 'unavailable', fetchedAt: now, httpStatus: status };
   }
   return { status: 'unreachable', fetchedAt: now, reason: `HTTP ${status}` };
+}
+
+/**
+ * The record that stays in force once robots.txt has been read again. A read that met a challenge
+ * doesn't replace the record held: the host is refusing Spatula, not saying it has no rules, so
+ * those rules and their Crawl-delay stay, and the read is tried again in an hour. Any other answer
+ * replaces it.
+ */
+export function robotsToKeep(held: RobotsRecord | null, read: RobotsRecord): RobotsRecord {
+  if (read.challengedAt === undefined || held === null) return read;
+  return { ...held, challengedAt: read.challengedAt };
 }
 
 /** The interval a group's Crawl-delay and the dataset ask for, and never less than a second. */
