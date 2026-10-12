@@ -53,6 +53,7 @@ import {
 } from '@spatula/store';
 import { discoverSource } from './discovery';
 import { MAX_WAITS, requestThroughGate } from './requests';
+import { storable } from './text';
 
 /*
  * One refresh of one dataset. A sitemap source's sitemaps are read first (discovery.ts), which
@@ -378,19 +379,6 @@ function emptySummary(): RunSummary {
   };
 }
 
-/** The most code units of a note, or of a failed run's error, that are stored. */
-const MAX_STORED_TEXT = 500;
-
-/**
- * Text that Postgres will take. A note can carry an exception's message, and messages can quote
- * their input, but jsonb refuses U+0000 and a lone surrogate. The run summary is jsonb and the
- * last step writes it, so one bad character would fail a run that had otherwise finished. The
- * text is cut before it is made well formed, which also repairs a pair that the cut split.
- */
-function storable(text: string): string {
-  return text.replaceAll('\u0000', '').slice(0, MAX_STORED_TEXT).toWellFormed();
-}
-
 function note(summary: RunSummary, text: string) {
   if (summary.notes.length < MAX_NOTES) summary.notes.push(storable(text));
 }
@@ -521,7 +509,9 @@ async function fetchItem(
       contentHash: answer.page?.contentHash ?? item.contentHash,
       extract,
       reseen,
-      note: settled ? null : `${item.locator}: ${answer.outcome}${why === null ? '' : ` (${why})`}`,
+      note: settled
+        ? null
+        : storable(`${item.locator}: ${answer.outcome}${why === null ? '' : ` (${why})`}`),
     },
   };
 }
@@ -544,11 +534,20 @@ async function request(
     headers: validators(item),
   });
   if (answer.kind === 'later') return answer;
-  const answered = (attempt: Omit<Attempt, 'policy' | 'policyReason'> & Partial<Attempt>) => ({
-    kind: 'answered' as const,
-    signals: answer.signals,
-    attempt: { policy: 'allowed' as const, policyReason: null, ...attempt },
-  });
+  const answered = (attempt: Omit<Attempt, 'policy' | 'policyReason'> & Partial<Attempt>) => {
+    const whole = { policy: 'allowed' as const, policyReason: null, ...attempt };
+    return {
+      kind: 'answered' as const,
+      signals: answer.signals,
+      // A reason or an error can quote the site, such as the Location of a redirect that isn't an
+      // address or of a robots.txt's redirect. Both are stored as text, and Postgres refuses U+0000.
+      attempt: {
+        ...whole,
+        policyReason: whole.policyReason === null ? null : storable(whole.policyReason),
+        error: whole.error === null ? null : storable(whole.error),
+      },
+    };
+  };
   if (answer.kind === 'denied') {
     return answered({
       outcome: answer.outcome,
@@ -617,20 +616,34 @@ async function request(
 }
 
 /**
- * Whether a sitemap source's page was redirected away from itself: to an address whose path the
- * source's patterns wouldn't list (ADR 0005). The host is left out, since a store that sends a
- * region to another host keeps its paths. A pages source lists its pages by hand, so its
- * redirects are followed.
+ * Whether a sitemap source's page was redirected away from itself (ADR 0005): to an address whose
+ * path the source's patterns wouldn't list, that doesn't keep the page's name, which is the last
+ * segment of its path. A discontinued product's page often redirects to a collection or the home
+ * page, which are other pages. A store sends a region to a path of its own, as /products/c1 to
+ * /en-gb/products/c1, which no pattern lists but which is the same page, so it is followed. The
+ * host is left out, since a store that sends a region to another host keeps its paths. A pages
+ * source lists its pages by hand, so its redirects are followed.
  */
 function redirectedAway(definition: Definition, item: ItemRef, finalUrl: string): boolean {
   const source = definition.sources.find((one) => one.id === item.sourceId);
-  if (source?.kind !== 'sitemap' || finalUrl === new URL(item.locator).href) return false;
+  const from = new URL(item.locator);
+  if (source?.kind !== 'sitemap' || finalUrl === from.href) return false;
   const to = new URL(finalUrl);
   const path = to.pathname + to.search;
-  return (
-    !source.include.some((pattern) => pathPatternMatches(pattern, path)) ||
-    source.exclude.some((pattern) => pathPatternMatches(pattern, path))
-  );
+  const listed =
+    source.include.some((pattern) => pathPatternMatches(pattern, path)) &&
+    !source.exclude.some((pattern) => pathPatternMatches(pattern, path));
+  return !listed && lastSegment(to.pathname) !== lastSegment(from.pathname);
+}
+
+/**
+ * A path's last segment that isn't empty, so a trailing slash doesn't matter, with its percent
+ * escapes in uppercase, however they were written. The root has none (''), so a redirect to it
+ * leaves every page that has one.
+ */
+function lastSegment(pathname: string): string {
+  const last = pathname.split('/').findLast((segment) => segment !== '') ?? '';
+  return last.replace(/%[0-9a-f]{2}/giu, (escape) => escape.toUpperCase());
 }
 
 /** Conditional request headers, sent only when a copy of the page is stored to fall back on. */

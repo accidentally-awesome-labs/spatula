@@ -1,5 +1,5 @@
 import { gzipSync } from 'node:zlib';
-import { applyDefinition, fetches, items, listLiveItems } from '@spatula/store';
+import { applyDefinition, fetches, getRun, items, listLiveItems } from '@spatula/store';
 import { testSitemapDefinition } from '@spatula/store/fixtures';
 import { runIdFor, type Definition } from '@spatula/core';
 import { and, eq } from 'drizzle-orm';
@@ -63,6 +63,12 @@ async function makerC(datasetId: string) {
     .where(and(eq(items.datasetId, datasetId), eq(items.sourceId, 'maker-c')));
   return Object.fromEntries(rows.map((row) => [row.locator, row]));
 }
+
+/** A sitemap index naming these sitemaps. */
+const indexOf = (locs: string[]) =>
+  '<?xml version="1.0" encoding="UTF-8"?><sitemapindex xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">' +
+  locs.map((loc) => `<sitemap><loc>${loc}</loc></sitemap>`).join('') +
+  '</sitemapindex>';
 
 // Each test runs the pipeline against a real database, several runs in some, and a busy machine
 // needs more than the five seconds a test gets by default.
@@ -500,6 +506,319 @@ describe('discovery', { timeout: 20_000 }, () => {
       listed: 2,
       incomplete: [`maker-c: ${a}: failed (HTTP 503)`],
     });
+  });
+
+  it('lists the pages around an address too long to store', async () => {
+    // Each of these characters is nine characters long once percent-encoded, so the address Spatula
+    // keeps is far longer than the index on a page's address can hold. The characters differ, as
+    // Postgres compresses what it can. A run that tried to store the address would fail every time.
+    const characters = Array.from({ length: 1000 }, (_, n) =>
+      String.fromCodePoint(0x4e00 + ((n * 7919) % 20_000)),
+    );
+    const long = `https://maker-c.example/products/${characters.join('')}`;
+    const routes = sitemapRoutes();
+    routes[SITEMAPS.products] = {
+      status: 200,
+      body: productSitemap([{ loc: URLS_C.c1 }, { loc: URLS_C.c2 }, { loc: long }]),
+    };
+    const world = await setUp('discovery-too-long', routes);
+    const { summary } = await refresh(world, 'discovery-too-long');
+
+    expect(summary.discovery).toMatchObject({ listed: 2, incomplete: [] });
+    expect(summary.notes).toContain(
+      `maker-c: ${SITEMAPS.products} lists 1 address on other hosts or that Spatula doesn’t fetch`,
+    );
+    expect(Object.keys(await makerC('discovery-too-long')).sort()).toEqual([URLS_C.c1, URLS_C.c2]);
+  });
+
+  it('keeps what a redirect quotes out of the fetch log and the summary', async () => {
+    // A Location that isn't an address is quoted in the reason a read failed, and a site chooses it.
+    // Postgres refuses U+0000 in the log's text, and the summary is jsonb, which refuses it too.
+    const nul = String.fromCodePoint(0);
+    const world = await setUp('discovery-quoted-location');
+    world.web.routes.set(SITEMAPS.products, {
+      status: 301,
+      headers: { location: `https://${nul} bad` },
+    });
+    const { summary, runId, results } = await refresh(world, 'discovery-quoted-location');
+
+    const why = 'redirected to https:// bad, which isn’t an address';
+    expect(summary.discovery?.incomplete).toEqual([
+      `maker-c: ${SITEMAPS.products}: failed (${why})`,
+    ]);
+    const step = results.get('sitemap:maker-c:1:0') as { read: { incomplete: string } };
+    expect(step.read.incomplete).toBe(`${SITEMAPS.products}: failed (${why})`);
+    const logged = await db
+      .select({ error: fetches.error, httpStatus: fetches.httpStatus })
+      .from(fetches)
+      .where(and(eq(fetches.runId, runId), eq(fetches.url, SITEMAPS.products)));
+    expect(logged).toEqual([{ error: why, httpStatus: 301 }]);
+    expect(await getRun(db, runId)).toMatchObject({ status: 'complete' });
+  });
+
+  it('keeps what a robots.txt redirect quotes out of the fetch log', async () => {
+    // The gate quotes a robots.txt redirect's address in the reason it refuses the host's requests.
+    const nul = String.fromCodePoint(0);
+    const routes = sitemapRoutes();
+    routes['https://maker-c.example/robots.txt'] = {
+      status: 301,
+      headers: { location: `https://${nul} bad` },
+    };
+    const world = await setUp('discovery-quoted-robots', routes);
+    const { summary, runId } = await refresh(world, 'discovery-quoted-robots');
+
+    const why =
+      'robots.txt is unreachable (robots.txt redirected to https:// bad, which isn’t an HTTPS address), so nothing on maker-c.example is fetched until it answers';
+    expect(summary.discovery?.incomplete).toEqual([`maker-c: ${SITEMAPS.index}: failed (${why})`]);
+    const logged = await db
+      .select({ policy: fetches.policy, policyReason: fetches.policyReason, error: fetches.error })
+      .from(fetches)
+      .where(and(eq(fetches.runId, runId), eq(fetches.url, SITEMAPS.index)));
+    expect(logged).toEqual([{ policy: 'denied', policyReason: why, error: why }]);
+    expect(await getRun(db, runId)).toMatchObject({ status: 'complete' });
+  });
+
+  it('reads a sitemap once, however many times and however spelled the definition lists it', async () => {
+    const world = await setUp('discovery-listed-twice', sitemapRoutes(), (definition) => ({
+      ...definition,
+      sources: definition.sources.map((source) =>
+        source.kind === 'sitemap'
+          ? {
+              ...source,
+              sitemaps: [SITEMAPS.index, SITEMAPS.index, 'https://MAKER-C.example:443/sitemap.xml'],
+            }
+          : source,
+      ),
+    }));
+    const { summary, names } = await refresh(world, 'discovery-listed-twice');
+
+    expect(world.web.requests.filter((sent) => sent.url === SITEMAPS.index)).toHaveLength(1);
+    expect(names.filter((name) => name.startsWith('sitemap:'))).toEqual([
+      'sitemap:maker-c:0:0',
+      'sitemap:maker-c:1:0',
+    ]);
+    expect(summary.discovery).toMatchObject({ sitemaps: 2, listed: 2, incomplete: [] });
+  });
+
+  it('reads a gzipped sitemap whose multi-byte characters straddle the chunks it unzips in', async () => {
+    // The file is far larger than a chunk of the unzipped stream, and its addresses are CJK
+    // characters of three bytes each, so some chunk ends in the middle of one.
+    const locs = Array.from(
+      { length: 200 },
+      (_, n) =>
+        `https://maker-c.example/products/${Array.from({ length: 150 }, (_, i) => String.fromCodePoint(0x4e00 + n * 150 + i)).join('')}`,
+    );
+    const routes = sitemapRoutes();
+    routes[SITEMAPS.products] = {
+      status: 200,
+      bytes: gzipSync(productSitemap(locs.map((loc) => ({ loc })))),
+      headers: { 'content-type': 'application/gzip' },
+    };
+    // One page is read, since the pages themselves aren't what this is about.
+    const world = await setUp('discovery-multibyte', routes, (definition) => ({
+      ...definition,
+      budget: { ...definition.budget, itemsPerRun: 1 },
+    }));
+    const { summary } = await refresh(world, 'discovery-multibyte');
+
+    expect(summary.discovery).toMatchObject({ listed: 200, incomplete: [] });
+    expect(Object.keys(await makerC('discovery-multibyte')).sort()).toEqual(
+      locs.map((loc) => new URL(loc).href).sort(),
+    );
+  });
+
+  it('calls a read incomplete when a text sitemap has more than 50,000 entries', async () => {
+    const world = await setUp('discovery-50001');
+    await refresh(world, 'discovery-50001');
+
+    // Only the first address is a product. A file cut off at the limit may have left out the rest
+    // of the products too, so this read can't say that the page it doesn't list is missing.
+    const lines = [
+      URLS_C.c1,
+      ...Array.from({ length: 50_000 }, (_, n) => `https://maker-c.example/blog/post-${n}`),
+    ];
+    world.web.routes.set(SITEMAPS.products, {
+      status: 200,
+      body: lines.join('\n'),
+      headers: { 'content-type': 'text/plain' },
+    });
+    const { summary, names } = await refresh(world, 'discovery-50001');
+
+    expect(summary.discovery).toMatchObject({
+      listed: 1,
+      missing: 0,
+      gone: 0,
+      incomplete: [`maker-c: ${SITEMAPS.products}: it has more entries than a sitemap may hold`],
+    });
+    expect(names).not.toContain('listed:maker-c');
+    const pages = await makerC('discovery-50001');
+    expect(
+      [URLS_C.c1, URLS_C.c2].map((url) => [pages[url]!.status, pages[url]!.missingStreak]),
+    ).toEqual([
+      ['live', 0],
+      ['live', 0],
+    ]);
+  });
+
+  it('follows the children of a child index, and counts them toward the cap', async () => {
+    const child = 'https://maker-c.example/sitemap_products_index.xml';
+    const grandchild = (n: number) => `https://maker-c.example/sitemap_products_g${n}.xml`;
+    const notFollowed = 'https://maker-c.example/sitemap_pages_9.xml';
+    // The root index names one sitemap, an index, and that names `count` more.
+    const readIndexes = async (datasetId: string, count: number) => {
+      const routes = sitemapRoutes();
+      routes[SITEMAPS.index] = { status: 200, body: indexOf([child]) };
+      routes[child] = {
+        status: 200,
+        body: indexOf([...Array.from({ length: count }, (_, n) => grandchild(n)), notFollowed]),
+      };
+      for (let n = 0; n < count; n += 1) {
+        const pages = n === 0 ? [{ loc: URLS_C.c1 }, { loc: URLS_C.c2 }] : [];
+        routes[grandchild(n)] = { status: 200, body: productSitemap(pages) };
+      }
+      const world = await setUp(datasetId, routes);
+      return { world, ...(await refresh(world, datasetId)) };
+    };
+
+    // The root, the child index, and 48 more make 50 sitemaps, which the cap allows.
+    const fits = await readIndexes('discovery-indexes-fit', 48);
+    expect(fits.summary.discovery).toMatchObject({ sitemaps: 50, listed: 2, incomplete: [] });
+    expect(fits.names.filter((name) => name.startsWith('sitemap:')).slice(0, 3)).toEqual([
+      'sitemap:maker-c:0:0',
+      'sitemap:maker-c:1:0',
+      'sitemap:maker-c:2:0',
+    ]);
+    expect(fits.names).toContain('listed:maker-c');
+    const asked = fits.world.web.requests.map((sent) => sent.url);
+    expect(asked).toEqual(expect.arrayContaining([child, grandchild(0), grandchild(47)]));
+    expect(asked).not.toContain(notFollowed);
+
+    // One more makes 51, though neither index names more than 50.
+    const over = await readIndexes('discovery-indexes-over', 49);
+    expect(over.summary.discovery).toMatchObject({
+      sitemaps: 50,
+      listed: 2,
+      incomplete: ['maker-c: it names more than 50 sitemaps'],
+    });
+    expect(over.names).not.toContain('listed:maker-c');
+  });
+
+  it('calls a body with a gzip header that doesn’t unzip a failed read', async () => {
+    const world = await setUp('discovery-bad-gzip');
+    await refresh(world, 'discovery-bad-gzip');
+
+    const whole = gzipSync(productSitemap([{ loc: URLS_C.c1 }, { loc: URLS_C.c2 }]));
+    const bodies = {
+      'a header and then no deflate stream': Buffer.concat([
+        whole.subarray(0, 10),
+        Buffer.from('this is not what a deflate stream looks like'),
+      ]),
+      'a file cut off before its end': whole.subarray(0, whole.length - 12),
+    };
+    for (const bytes of Object.values(bodies)) {
+      world.web.routes.set(SITEMAPS.products, {
+        status: 200,
+        bytes,
+        headers: { 'content-type': 'application/gzip' },
+      });
+      const { summary, names, runId } = await refresh(world, 'discovery-bad-gzip');
+
+      expect(summary.discovery?.incomplete).toEqual([
+        expect.stringContaining(`maker-c: ${SITEMAPS.products}: failed (not gzip that unzips: `),
+      ]);
+      expect(names).not.toContain('listed:maker-c');
+      const logged = await db
+        .select({ outcome: fetches.outcome, httpStatus: fetches.httpStatus, error: fetches.error })
+        .from(fetches)
+        .where(and(eq(fetches.runId, runId), eq(fetches.url, SITEMAPS.products)));
+      expect(logged).toEqual([
+        {
+          outcome: 'failed',
+          httpStatus: 200,
+          error: expect.stringMatching(/^not gzip that unzips: /u),
+        },
+      ]);
+    }
+    const pages = await makerC('discovery-bad-gzip');
+    expect(
+      [URLS_C.c1, URLS_C.c2].map((url) => [pages[url]!.status, pages[url]!.missingStreak]),
+    ).toEqual([
+      ['live', 0],
+      ['live', 0],
+    ]);
+  });
+
+  it('reads a listed page once, and again only when its lastmod moves', async () => {
+    const world = await setUp('discovery-lastmod');
+    const first = await refresh(world, 'discovery-lastmod');
+    // Maker C's pages extract like the other makers'.
+    expect(first.summary.llm).toMatchObject({ ran: 5, failed: 0 });
+
+    const second = await refresh(world, 'discovery-lastmod');
+    expect(second.summary).toMatchObject({ items: 0, due: 0, live: 5 });
+
+    world.web.routes.set(SITEMAPS.products, {
+      status: 200,
+      body: productSitemap([{ loc: URLS_C.c1, lastmod: '2026-10-11' }, { loc: URLS_C.c2 }]),
+    });
+    const third = await refresh(world, 'discovery-lastmod');
+    expect(third.summary).toMatchObject({ items: 1, due: 1, live: 5 });
+    const read = await db
+      .select({ url: fetches.url })
+      .from(fetches)
+      .where(and(eq(fetches.runId, third.runId), eq(fetches.kind, 'page')));
+    expect(read).toEqual([{ url: URLS_C.c1 }]);
+  });
+
+  it('follows a redirect that keeps the page’s name, and calls one that leaves it gone', async () => {
+    // A store may send a region to a path of its own, as /en-gb/products/c1, which the source's
+    // patterns don't list. That is the same page. A collection or the home page is not.
+    const cases = [
+      { name: 'c1', to: '/en-gb/products/c1', away: false },
+      { name: 'c2', to: '/en-gb/products/c2/', away: false },
+      { name: 'caf%C3%A9', to: '/en-gb/products/caf%c3%a9', away: false },
+      { name: 'old', to: '/products/new', away: false },
+      { name: 'collection', to: '/collections/all', away: true },
+      { name: 'home', to: '/', away: true },
+    ];
+    const address = (path: string) => `https://maker-c.example${path}`;
+    const routes = sitemapRoutes();
+    routes[SITEMAPS.products] = {
+      status: 200,
+      body: productSitemap(cases.map((one) => ({ loc: address(`/products/${one.name}`) }))),
+    };
+    for (const one of cases) {
+      routes[address(`/products/${one.name}`)] = { status: 301, headers: { location: one.to } };
+      routes[address(one.to)] = { status: 200, body: C1() };
+    }
+    const world = await setUp('discovery-regions', routes);
+    const reads = async (runId: string) =>
+      Object.fromEntries(
+        (
+          await db
+            .select({ url: fetches.url, outcome: fetches.outcome, finalUrl: fetches.finalUrl })
+            .from(fetches)
+            .where(and(eq(fetches.runId, runId), eq(fetches.kind, 'page')))
+        ).map((row) => [row.url, row]),
+      );
+
+    const first = await refresh(world, 'discovery-regions');
+    const read = await reads(first.runId);
+    for (const one of cases) {
+      const url = address(`/products/${one.name}`);
+      expect(read[url], one.name).toMatchObject({
+        outcome: one.away ? 'gone' : 'changed',
+        finalUrl: address(one.to),
+      });
+    }
+
+    // Two redirects away in a row make a page gone, as two 404s do. The followed pages stay live.
+    await refresh(world, 'discovery-regions');
+    const pages = await makerC('discovery-regions');
+    for (const one of cases) {
+      const row = pages[address(`/products/${one.name}`)];
+      expect(row?.status, one.name).toBe(one.away ? 'gone' : 'live');
+    }
   });
 
   it('reads at most 50 sitemaps, and keeps an index’s long list of children out of its step', async () => {

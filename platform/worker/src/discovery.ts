@@ -9,6 +9,7 @@ import {
 import { finishListing, listPages, recordSitemapFetch } from '@spatula/store';
 import type { RefreshPorts, StepRunner } from './refresh';
 import { MAX_WAITS, requestThroughGate, type Requested } from './requests';
+import { storable } from './text';
 
 /*
  * Discovery: one read of a sitemap source's sitemaps, at the start of a run. Each sitemap is a
@@ -25,7 +26,7 @@ export const MAX_SITEMAPS_PER_SOURCE = 50;
 export const SITEMAP_MAX_BYTES = 20 * 1024 * 1024;
 const SITEMAP_ACCEPT = 'application/xml,text/xml;q=0.9,text/plain;q=0.8,*/*;q=0.1';
 const GZIP_MAGIC = [0x1f, 0x8b];
-/** The most code units of a sitemap's own words that the fetch log and a step's result keep. */
+/** The most code units of a sitemap's own words, such as an element's name, that a reason quotes. */
 const MAX_QUOTED = 200;
 
 export interface DiscoveryContext {
@@ -82,7 +83,8 @@ export async function discoverSource(
     incomplete: null,
     notes: [],
   };
-  const queue = [...source.sitemaps];
+  // A sitemap is read once, however often and however a definition spells it.
+  const queue = [...new Set(source.sitemaps.map((url) => new URL(url).href))];
   const queued = new Set(queue);
   let over = 0;
   for (let index = 0; index < queue.length; index += 1) {
@@ -179,7 +181,7 @@ async function readSitemap(
     url,
     finalUrl: answer.url,
     policy: answer.kind === 'denied' ? ('denied' as const) : ('allowed' as const),
-    policyReason: answer.kind === 'denied' ? answer.reason : null,
+    policyReason: answer.kind === 'denied' ? storable(answer.reason) : null,
     outcome: read.outcome,
     httpStatus:
       answer.kind === 'answered'
@@ -212,7 +214,7 @@ async function readSitemap(
 
   const sitemap = parseSitemap(read.text);
   if (sitemap.kind === 'unreadable') {
-    const reason = quoted(sitemap.reason);
+    const reason = storable(sitemap.reason, MAX_QUOTED);
     await ports.withDb((db) =>
       recordSitemapFetch(db, { ...log, outcome: 'failed', error: `not a sitemap: ${reason}` }),
     );
@@ -258,15 +260,6 @@ async function readSitemap(
   });
 }
 
-/**
- * A reason that quotes the sitemap, such as the name of an element the site chose. It's cut short
- * and made fit for Postgres, which refuses U+0000, so a sitemap can't fail the fetch log's insert
- * or swell a step's result, which Workflows cap at 1 MiB.
- */
-function quoted(reason: string): string {
-  return reason.replaceAll('\u0000', '').slice(0, MAX_QUOTED).toWellFormed();
-}
-
 /** The same site under its other spelling: with a leading `www.` taken off, or added. */
 function otherSpelling(host: string): string {
   return host.startsWith('www.') ? host.slice('www.'.length) : `www.${host}`;
@@ -280,10 +273,16 @@ async function readAnswer(
   | { kind: 'text'; outcome: Outcome; text: string }
   | { kind: 'failed'; outcome: Outcome; error: string }
 > {
-  if (answer.kind === 'denied') {
-    return { kind: 'failed', outcome: answer.outcome, error: answer.reason };
-  }
-  if (answer.kind === 'failed') return { kind: 'failed', outcome: 'failed', error: answer.error };
+  // What a failure says can quote the site, such as the Location of a redirect that isn't an
+  // address. It goes into the fetch log and a step's result, so it is cut short and made fit to
+  // store, as Postgres refuses U+0000 and Workflows cap a step's result at 1 MiB.
+  const failed = (outcome: Outcome, error: string) => ({
+    kind: 'failed' as const,
+    outcome,
+    error: storable(error),
+  });
+  if (answer.kind === 'denied') return failed(answer.outcome, answer.reason);
+  if (answer.kind === 'failed') return failed('failed', answer.error);
 
   // A redirect can lead anywhere, but a sitemap speaks only for its own site: the host that was
   // asked for, or its other spelling, as a store that moved to or from www. sends its sitemap.
@@ -291,22 +290,16 @@ async function readAnswer(
   const own = new URL(requested).host;
   const host = new URL(answer.url).host;
   if (host !== own && host !== otherSpelling(own)) {
-    return { kind: 'failed', outcome: 'failed', error: `redirected to another site, ${host}` };
+    return failed('failed', `redirected to another site, ${host}`);
   }
   const { status, headers } = answer;
-  if (status === 404 || status === 410) {
-    return { kind: 'failed', outcome: 'gone', error: `HTTP ${status}` };
-  }
+  if (status === 404 || status === 410) return failed('gone', `HTTP ${status}`);
   if (headers['cf-mitigated'] === 'challenge') {
-    return { kind: 'failed', outcome: 'blocked', error: 'the site answered with a challenge' };
+    return failed('blocked', 'the site answered with a challenge');
   }
-  if ([401, 402, 403].includes(status)) {
-    return { kind: 'failed', outcome: 'blocked', error: `HTTP ${status}` };
-  }
-  if (status < 200 || status >= 300) {
-    return { kind: 'failed', outcome: 'failed', error: `HTTP ${status}` };
-  }
-  if (answer.truncated) return { kind: 'failed', outcome: 'failed', error: 'larger than 20 MB' };
+  if ([401, 402, 403].includes(status)) return failed('blocked', `HTTP ${status}`);
+  if (status < 200 || status >= 300) return failed('failed', `HTTP ${status}`);
+  if (answer.truncated) return failed('failed', 'larger than 20 MB');
   const zipped = GZIP_MAGIC.every((byte, index) => answer.body[index] === byte);
   if (!zipped) {
     return { kind: 'text', outcome: 'changed', text: new TextDecoder().decode(answer.body) };
@@ -314,20 +307,28 @@ async function readAnswer(
   const unzipped = await gunzip(answer.body, SITEMAP_MAX_BYTES);
   return 'text' in unzipped
     ? { kind: 'text', outcome: 'changed', text: unzipped.text }
-    : { kind: 'failed', outcome: 'failed', error: unzipped.error };
+    : failed('failed', unzipped.error);
 }
 
-/** A gzipped body as text, read no further than `maxBytes` once unzipped. */
+/**
+ * A gzipped body as text, read no further than `maxBytes` once unzipped. The body is streamed in as
+ * it is, and each chunk that comes out is decoded at once, so the unzipped bytes are never held
+ * whole beside the text they become. A character split between two chunks waits in the decoder.
+ */
 async function gunzip(
   body: Uint8Array,
   maxBytes: number,
 ): Promise<{ text: string } | { error: string }> {
-  // A copy, so the Blob gets an ArrayBuffer of its own whatever the body was a view of.
-  const reader = new Blob([new Uint8Array(body)])
-    .stream()
+  const reader = new ReadableStream({
+    start(controller) {
+      controller.enqueue(body);
+      controller.close();
+    },
+  })
     .pipeThrough(new DecompressionStream('gzip'))
     .getReader();
-  const chunks: Uint8Array[] = [];
+  const decoder = new TextDecoder();
+  let text = '';
   let size = 0;
   try {
     for (;;) {
@@ -338,18 +339,13 @@ async function gunzip(
         await reader.cancel().catch(() => undefined);
         return { error: 'larger than 20 MB unzipped' };
       }
-      chunks.push(value);
+      text += decoder.decode(value, { stream: true });
     }
+    text += decoder.decode();
   } catch (error) {
     return {
       error: `not gzip that unzips: ${error instanceof Error ? error.message : String(error)}`,
     };
   }
-  const bytes = new Uint8Array(size);
-  let offset = 0;
-  for (const chunk of chunks) {
-    bytes.set(chunk, offset);
-    offset += chunk.byteLength;
-  }
-  return { text: new TextDecoder().decode(bytes) };
+  return { text };
 }

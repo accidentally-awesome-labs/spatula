@@ -16,7 +16,7 @@ import { pathPatternMatcher } from './robots';
 export const SITEMAP_MAX_ENTRIES = 50_000;
 /** A sitemap nests three elements deep. A file nested deeper than this isn't one. */
 export const SITEMAP_MAX_DEPTH = 64;
-/** The protocol's limit on an address's length. */
+/** The protocol's limit on an address's length, as written and as kept. */
 const MAX_LOC = 2048;
 
 export interface SitemapEntry {
@@ -222,8 +222,10 @@ export interface PageSelection {
  * The entries a source keeps: https addresses on the sitemap's own host that Spatula may fetch,
  * whose path and query match an include pattern and no exclude pattern. Each address is kept once,
  * with the latest lastmod given for it, in one spelling: without its fragment, and with its percent
- * escapes in uppercase, as robots.txt compares paths. An index's child sitemaps are chosen the same
- * way, with the source's `follow` patterns as the includes.
+ * escapes in uppercase, as robots.txt compares paths. That spelling may be no longer than the
+ * protocol allows an address (2,048 characters), so an address of non-ASCII characters that fit when
+ * it was written can be left out as unusable. An index's child sitemaps are chosen the same way,
+ * with the source's `follow` patterns as the includes.
  */
 export function selectPages(
   entries: readonly SitemapEntry[],
@@ -254,6 +256,12 @@ export function selectPages(
       continue;
     }
     const href = url.href.replace(/%[0-9a-f]{2}/giu, (escape) => escape.toUpperCase());
+    // The limit is for the address as it is kept: a character that took one code unit in the
+    // sitemap takes up to nine once escaped, and a longer address can't be stored under an index.
+    if (href.length > MAX_LOC) {
+      left.unusable += 1;
+      continue;
+    }
     const earlier = kept.get(href);
     if (earlier === undefined) {
       kept.set(href, { loc: href, lastmod: entry.lastmod });

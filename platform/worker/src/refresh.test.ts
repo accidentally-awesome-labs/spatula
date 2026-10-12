@@ -316,6 +316,57 @@ describe('runRefresh', () => {
     expect(world.llm.calls.join('\n')).not.toContain('a1-new');
   });
 
+  it('keeps what a redirect quotes out of the fetch log, the step’s result, and the summary', async () => {
+    // A Location that isn't an address is quoted in the reason a fetch failed, and the site chose
+    // it. Postgres refuses U+0000 in the log's text and in the summary's jsonb, and a step's result
+    // is kept by Workflows, so the text is clean and short where it is made.
+    const nul = String.fromCodePoint(0);
+    const routes = standardRoutes();
+    routes[URLS.a1] = {
+      status: 301,
+      headers: { location: `https://${nul} bad ${'x'.repeat(600)}` },
+    };
+    const { world, a1 } = await setUp('refresh-quoted-location', routes);
+    const first = await refresh(world, 'refresh-quoted-location');
+
+    const why = `redirected to https:// bad ${'x'.repeat(600)}, which isn’t an address`.slice(
+      0,
+      500,
+    );
+    expect(await fetchOf(first.runId, URLS.a1)).toMatchObject({
+      outcome: 'failed',
+      httpStatus: 301,
+      error: why,
+    });
+    const note = `${URLS.a1}: failed (${why})`.slice(0, 500);
+    const step = first.results.get(`fetch:${a1.id}:0`) as { fetched: { note: string } };
+    expect(step.fetched.note).toBe(note);
+    expect(first.summary.notes).toContain(note);
+    expect(await getRun(db, first.runId)).toMatchObject({ status: 'complete' });
+  });
+
+  it('keeps what a robots.txt redirect quotes out of the fetch log', async () => {
+    // The gate quotes the address a robots.txt redirected to in the reason it refuses the host.
+    const nul = String.fromCodePoint(0);
+    const routes = standardRoutes();
+    routes['https://maker-b.example/robots.txt'] = {
+      status: 301,
+      headers: { location: `https://${nul} bad` },
+    };
+    const { world } = await setUp('refresh-quoted-robots', routes);
+    const first = await refresh(world, 'refresh-quoted-robots');
+
+    const why =
+      'robots.txt is unreachable (robots.txt redirected to https:// bad, which isn’t an HTTPS address), so nothing on maker-b.example is fetched until it answers';
+    expect(await fetchOf(first.runId, URLS.b1)).toMatchObject({
+      policy: 'denied',
+      policyReason: why,
+      outcome: 'failed',
+    });
+    expect(first.summary.notes).toContain(`${URLS.b1}: failed (${why})`);
+    expect(await getRun(db, first.runId)).toMatchObject({ status: 'complete' });
+  });
+
   it('puts a page off while its host has a break, then fetches it', async () => {
     const routes = standardRoutes();
     routes[URLS.a1] = { status: 503 };

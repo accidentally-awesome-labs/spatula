@@ -87,6 +87,10 @@ export function answerFor(user: string): Record<string, unknown> | null {
     };
   }
   if (user.includes('/products/a2')) return { specs: [{ label: 'Impedance', value: '32 Ω' }] };
+  // Maker C's two pages say the same thing.
+  if (user.includes('/products/c1') || user.includes('/products/c2')) {
+    return { specs: [{ label: 'Impedance', value: '250 Ω' }] };
+  }
   if (user.includes('/products/b1')) {
     return {
       specs: [

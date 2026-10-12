@@ -381,6 +381,43 @@ describe('selectPages', () => {
     expect(selectPages([upper, lower], patterns, sitemapUrl)).toEqual(chosen);
   });
 
+  describe('at the edge of the longest address kept', () => {
+    // A stored address is an index key, and Postgres refuses a key past about 2.7 KB. parseSitemap
+    // limits an address as written to 2,048 characters, but the address kept is longer whenever it
+    // needs percent escapes: each CJK character becomes nine characters.
+    const base = 'https://maker-c.example/products/';
+    const choose = (loc: string) =>
+      selectPages(
+        [{ loc, lastmod: null }],
+        { include: ['/products/'], exclude: [] },
+        'https://maker-c.example/sitemap.xml',
+      );
+    const unusable = { pages: [], left: { elsewhere: 0, unusable: 1, unmatched: 0, repeated: 0 } };
+
+    it('keeps an address of 2,048 characters, and leaves out one of 2,049', () => {
+      const longest = `${base}${'a'.repeat(2048 - base.length)}`;
+      expect(choose(longest).pages).toEqual([{ loc: longest, lastmod: null }]);
+      expect(choose(`${longest}a`)).toEqual(unusable);
+    });
+
+    it('measures the address as it is kept, not as it is written', () => {
+      const loc = `${base}${String.fromCodePoint(0x6f22).repeat(300)}`;
+      expect(loc.length).toBeLessThan(2048);
+      expect(parseSitemap(`<urlset><url><loc>${loc}</loc></url></urlset>`)).toMatchObject({
+        entries: [{ loc }],
+      });
+      expect(new URL(loc).href.length).toBeGreaterThan(2048);
+      expect(choose(loc)).toEqual(unusable);
+    });
+
+    it('doesn’t count a fragment, which isn’t kept', () => {
+      const longest = `${base}${'a'.repeat(2048 - base.length)}`;
+      expect(choose(`${longest}#${'b'.repeat(500)}`).pages).toEqual([
+        { loc: longest, lastmod: null },
+      ]);
+    });
+  });
+
   describe('at the edge of the sitemap’s host', () => {
     const none = { elsewhere: 0, unusable: 0, unmatched: 0, repeated: 0 };
     const choose = (loc: string) =>
