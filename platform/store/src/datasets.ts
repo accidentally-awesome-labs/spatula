@@ -1,9 +1,11 @@
 import {
   newId,
+  parseDefinition,
   sha256Hex,
   stableStringify,
   type ApplySummary,
   type Definition,
+  type PagesSource,
 } from '@spatula/core';
 import { and, eq, inArray, notInArray, sql } from 'drizzle-orm';
 import type { Executor } from './client';
@@ -30,9 +32,10 @@ export interface ItemRef {
 }
 
 /**
- * Applies a definition: the dataset, its sources, and an item for each page. Pages and sources
- * that leave the definition are excluded, not deleted, and come back if they return. Nothing
- * changes, and the revision stays, when the definition is the same. A dry run only reports.
+ * Applies a definition: the dataset, its sources, and an item for each page a pages source lists.
+ * Pages and sources that leave the definition are excluded, not deleted, and come back if they
+ * return. A sitemap source's pages are not the definition's to make or exclude: discovery does.
+ * Nothing changes, and the revision stays, when the definition is the same. A dry run only reports.
  */
 export async function applyDefinition(
   db: Executor,
@@ -68,12 +71,19 @@ export async function applyDefinition(
       .map((source) => [source.id, source.config]),
   );
   const wanted = new Map(definition.sources.map((source) => [source.id, source]));
-  const wantedPages = new Set(
-    definition.sources.flatMap((source) => source.pages.map((page) => `${source.id} ${page}`)),
+  const pageSources = definition.sources.filter(
+    (source): source is PagesSource => source.kind === 'pages',
   );
+  const listedBySitemaps = new Set(
+    definition.sources.filter((source) => source.kind === 'sitemap').map((source) => source.id),
+  );
+  const wantedPages = new Set(
+    pageSources.flatMap((source) => source.pages.map((page) => `${source.id} ${page}`)),
+  );
+  // A sitemap source's pages come and go with its sitemaps (discovery), not with the definition.
   const livePages = new Set(
     listed
-      .filter((item) => item.status !== 'excluded')
+      .filter((item) => item.status !== 'excluded' && !listedBySitemaps.has(item.sourceId))
       .map((item) => `${item.sourceId} ${item.locator}`),
   );
   const changed = existing === undefined || existing.definitionHash !== hash;
@@ -117,35 +127,37 @@ export async function applyDefinition(
           target: [sources.datasetId, sources.id],
           set: { kind: source.kind, config: source, removedAt: null },
         });
-      for (const page of source.pages) {
-        await tx
-          .insert(items)
-          .values({
-            id: newId('it'),
-            datasetId: id,
-            sourceId: source.id,
-            recordType: source.recordType,
-            locator: page,
-          })
-          .onConflictDoUpdate({
-            target: [items.datasetId, items.sourceId, items.locator],
-            // A page listed again comes back; one that's gone or refused stays as it is.
-            set: {
+      if (source.kind === 'pages') {
+        for (const page of source.pages) {
+          await tx
+            .insert(items)
+            .values({
+              id: newId('it'),
+              datasetId: id,
+              sourceId: source.id,
               recordType: source.recordType,
-              status: sql`case when ${items.status} = 'excluded' then 'live' else ${items.status} end`,
-            },
-          });
+              locator: page,
+            })
+            .onConflictDoUpdate({
+              target: [items.datasetId, items.sourceId, items.locator],
+              // A page listed again comes back; one that's gone or refused stays as it is.
+              set: {
+                recordType: source.recordType,
+                status: sql`case when ${items.status} = 'excluded' then 'live' else ${items.status} end`,
+              },
+            });
+        }
+        await tx
+          .update(items)
+          .set({ status: 'excluded' })
+          .where(
+            and(
+              eq(items.datasetId, id),
+              eq(items.sourceId, source.id),
+              notInArray(items.locator, source.pages),
+            ),
+          );
       }
-      await tx
-        .update(items)
-        .set({ status: 'excluded' })
-        .where(
-          and(
-            eq(items.datasetId, id),
-            eq(items.sourceId, source.id),
-            notInArray(items.locator, source.pages),
-          ),
-        );
     }
     if (summary.sources.removed.length > 0) {
       await tx
@@ -161,6 +173,11 @@ export async function applyDefinition(
   return summary;
 }
 
+/**
+ * The dataset, with its definition read through the schema again, so a definition stored by an
+ * earlier version gets the defaults of keys added since. One that no longer passes is an error the
+ * owner fixes by applying the definition again.
+ */
 export async function getDataset(db: Executor, id: string): Promise<DatasetRow | null> {
   const [row] = await db
     .select({
@@ -171,7 +188,14 @@ export async function getDataset(db: Executor, id: string): Promise<DatasetRow |
     })
     .from(datasets)
     .where(eq(datasets.id, id));
-  return row ?? null;
+  if (row === undefined) return null;
+  const parsed = parseDefinition(row.definition);
+  if (!parsed.ok) {
+    throw new Error(
+      `Dataset ${id}’s stored definition no longer passes the checks (${parsed.issues[0]}). Apply it again.`,
+    );
+  }
+  return { ...row, definition: parsed.definition };
 }
 
 /** The dataset's live items, by source and page. */

@@ -58,11 +58,20 @@ export async function readDefinition(io: Io, file: string): Promise<Definition |
 export async function check(io: Io, file: string): Promise<number> {
   const definition = await readDefinition(io, file);
   if (definition === null) return 1;
-  const pages = definition.sources.reduce((count, source) => count + source.pages.length, 0);
+  let pages = 0;
+  let sitemaps = 0;
+  for (const source of definition.sources) {
+    if (source.kind === 'pages') pages += source.pages.length;
+    else sitemaps += source.sitemaps.length;
+  }
   const types = Object.keys(definition.recordTypes).length;
-  io.out(
-    `${definition.dataset}: ${count(types, 'record type')}, ${count(definition.sources.length, 'source')}, ${count(pages, 'page')}. Nothing is wrong with it.`,
-  );
+  const listed = [
+    count(types, 'record type'),
+    count(definition.sources.length, 'source'),
+    ...(pages > 0 || sitemaps === 0 ? [count(pages, 'page')] : []),
+    ...(sitemaps > 0 ? [count(sitemaps, 'sitemap')] : []),
+  ];
+  io.out(`${definition.dataset}: ${listed.join(', ')}. Nothing is wrong with it.`);
   return 0;
 }
 

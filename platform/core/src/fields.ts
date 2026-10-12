@@ -24,6 +24,11 @@ export interface FieldDef {
   maxLength?: number;
   /** Whether the LLM may fill the field when no structured source has it. */
   llm: boolean;
+  /**
+   * Whether the decision cascade may fill the field when no rule does: a required enum, whose
+   * question offers its values and "None of these". Absent means false.
+   */
+  decide?: boolean;
   /** What the field holds, in words, for the LLM. */
   description?: string;
 }

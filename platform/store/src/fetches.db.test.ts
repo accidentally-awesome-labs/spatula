@@ -1,4 +1,4 @@
-import { newId } from '@spatula/core';
+import { newId, type PagesSource } from '@spatula/core';
 import { count, eq } from 'drizzle-orm';
 import { describe, expect, it } from 'vitest';
 import { withRollback } from '../test/db';
@@ -134,7 +134,7 @@ describe('recordFetch', () => {
       const full = testDefinition();
       await applyDefinition(db, {
         ...full,
-        sources: [{ ...full.sources[0]!, pages: [a2!.locator] }, full.sources[1]!],
+        sources: [{ ...(full.sources[0] as PagesSource), pages: [a2!.locator] }, full.sources[1]!],
       });
       const gone = () => attempt(runId, a1!, { outcome: 'gone', httpStatus: 404 });
       expect(await recordFetch(db, gone())).toEqual({ itemStatus: 'excluded' });

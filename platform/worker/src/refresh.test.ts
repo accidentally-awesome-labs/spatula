@@ -5,6 +5,7 @@ import {
   snapshotSchema,
   type Candidate,
   type Page,
+  type PagesSource,
 } from '@spatula/core';
 import { packs } from '@spatula/pack-products';
 import {
@@ -677,7 +678,10 @@ describe('runRefresh', () => {
     // Definitions keep each page as written, and only validate it.
     const written = 'https://MAKER-A.example/products/a1';
     const definition = testDefinition('refresh-normalized');
-    definition.sources[0] = { ...definition.sources[0]!, pages: [written, URLS.a2] };
+    definition.sources[0] = {
+      ...(definition.sources[0] as PagesSource),
+      pages: [written, URLS.a2],
+    };
     await applyDefinition(db, definition);
     const world = makeWorld(db, standardRoutes());
 

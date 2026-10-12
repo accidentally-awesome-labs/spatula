@@ -1,4 +1,4 @@
-import { PAGE_METHODS } from '@spatula/core';
+import { PAGE_METHODS, type PagesSource } from '@spatula/core';
 import { and, eq } from 'drizzle-orm';
 import { describe, expect, it } from 'vitest';
 import { withRollback } from '../test/db';
@@ -314,7 +314,7 @@ describe('currentStatements', () => {
       const full = testDefinition();
       await applyDefinition(db, {
         ...full,
-        sources: [{ ...full.sources[0]!, pages: [a1!.locator] }, full.sources[1]!],
+        sources: [{ ...(full.sources[0] as PagesSource), pages: [a1!.locator] }, full.sources[1]!],
       });
       expect(
         (await currentStatements(db, 'test-products')).map((statement) => statement.value),

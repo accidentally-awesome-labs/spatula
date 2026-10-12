@@ -88,6 +88,28 @@ describe('check', () => {
     expect(sent).toHaveLength(0);
   });
 
+  it('counts a sitemap source’s sitemaps', async () => {
+    const definition = {
+      ...DEFINITION,
+      sources: [
+        {
+          id: 'maker-c',
+          kind: 'sitemap',
+          recordType: 'product',
+          sitemaps: ['https://maker-c.example/a.xml', 'https://maker-c.example/b.xml'],
+          include: ['/products/*'],
+          fixed: { brand: 'Maker C', category: 'Headphones' },
+          evidence: DEFINITION.sources[0]!.evidence,
+        },
+      ],
+    };
+    const { io, out } = memoryIo({ 'c.yaml': stringify(definition) });
+    expect(await main(['check', 'c.yaml'], { io, env: ENV })).toBe(0);
+    expect(out).toEqual([
+      'cli-products: 1 record type, 1 source, 2 sitemaps. Nothing is wrong with it.',
+    ]);
+  });
+
   it('lists what’s wrong with a definition, or with its YAML', async () => {
     const training = stringify({
       ...DEFINITION,

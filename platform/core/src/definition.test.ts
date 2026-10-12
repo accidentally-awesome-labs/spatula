@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { addressError, parseDefinition } from './definition';
+import { addressError, decidedField, parseDefinition } from './definition';
 import { costRatio } from './testing/cost';
 
 const EVIDENCE = {
@@ -63,8 +63,8 @@ describe('parseDefinition', () => {
   });
 
   it('refuses unknown keys, and says where', () => {
-    expect(issuesOf(definition({ budget: { monthlyUsd: 40 } }))).toEqual([
-      expect.stringContaining('budget'),
+    expect(issuesOf(definition({ schedule: 'daily' }))).toEqual([
+      expect.stringContaining('schedule'),
     ]);
   });
 
@@ -370,5 +370,141 @@ describe('enum values', () => {
       ],
     });
     expect(parseDefinition(withValues(many.slice(0, 254))).ok).toBe(true);
+  });
+});
+
+const sitemapSource = {
+  id: 'maker-c',
+  kind: 'sitemap',
+  recordType: 'product',
+  sitemaps: ['https://maker-c.example/sitemap.xml'],
+  include: ['/products/*'],
+  fixed: { brand: 'Maker C' },
+  evidence: {
+    robots: '2026-10-12',
+    terms: {
+      url: 'https://maker-c.example/terms',
+      checked: '2026-10-12',
+      automatedAccess: 'not-mentioned',
+    },
+  },
+};
+
+describe('sitemap sources', () => {
+  it('read their pages from sitemaps, with defaults for what they leave out', () => {
+    const base = definition();
+    const parsed = parseDefinition(definition({ sources: [...base.sources, sitemapSource] }));
+    expect(parsed.ok).toBe(true);
+    if (!parsed.ok) return;
+    expect(parsed.definition.sources[1]).toMatchObject({
+      kind: 'sitemap',
+      follow: [],
+      exclude: [],
+      maxPages: 1000,
+      useLastmod: false,
+      extract: {},
+    });
+  });
+
+  it('need at least one include pattern, and patterns that start with /', () => {
+    const parsed = parseDefinition(
+      definition({ sources: [{ ...sitemapSource, include: [], exclude: ['products/*'] }] }),
+    );
+    expect(parsed).toMatchObject({ ok: false });
+    if (parsed.ok) return;
+    expect(parsed.issues).toEqual([
+      'sources.0.include: Too small: expected array to have >=1 items',
+      'sources.0.exclude.0: Write a path pattern that starts with /, like /products/*.',
+    ]);
+  });
+
+  it('take up to 100 exclude patterns, as a large store needs', () => {
+    const excludes = (count: number) =>
+      Array.from({ length: count }, (_, index) => `/products/*part-${index}*`);
+    expect(
+      parseDefinition(definition({ sources: [{ ...sitemapSource, exclude: excludes(100) }] })).ok,
+    ).toBe(true);
+    expect(
+      issuesOf(definition({ sources: [{ ...sitemapSource, exclude: excludes(101) }] })),
+    ).toEqual(['sources.0.exclude: Too big: expected array to have <=100 items']);
+  });
+
+  it('refuse sitemaps at addresses Spatula must never fetch', () => {
+    const parsed = parseDefinition(
+      definition({
+        sources: [{ ...sitemapSource, sitemaps: ['https://intranet.local/sitemap.xml'] }],
+      }),
+    );
+    expect(parsed).toMatchObject({
+      ok: false,
+      issues: [
+        'sources.0.sitemaps.0: This address is a private-use name. Use the site’s public https:// address.',
+      ],
+    });
+  });
+});
+
+describe('a decided field', () => {
+  const withCategory = (category: Record<string, unknown>) => {
+    const base = definition();
+    return definition({
+      recordTypes: {
+        product: {
+          ...base.recordTypes.product,
+          fields: { ...base.recordTypes.product.fields, category },
+        },
+      },
+    });
+  };
+
+  it('is a required enum that identifies nothing', () => {
+    const parsed = parseDefinition(
+      withCategory({ type: 'enum', required: true, values: ['Headphones'], decide: true }),
+    );
+    expect(parsed.ok).toBe(true);
+    if (!parsed.ok) return;
+    expect(decidedField(parsed.definition.recordTypes.product!)?.[0]).toBe('category');
+  });
+
+  it('is refused anywhere else', () => {
+    expect(
+      parseDefinition(withCategory({ type: 'text', required: true, decide: true })),
+    ).toMatchObject({
+      ok: false,
+      issues: ['recordTypes.product.fields.category.decide: Only enum fields can be decided.'],
+    });
+    expect(
+      parseDefinition(withCategory({ type: 'enum', values: ['Headphones'], decide: true })),
+    ).toMatchObject({
+      ok: false,
+      issues: [
+        'recordTypes.product.fields.category.decide: A decided field must be required: “None of these” is how a page leaves the dataset.',
+      ],
+    });
+  });
+});
+
+describe('dataset settings', () => {
+  it('default to a week’s freshness, the 5%-or-25 removal guard, balanced approval, and no consumers', () => {
+    // Slice 0's definitions carry none of these keys.
+    const parsed = parseDefinition(definition());
+    expect(parsed.ok).toBe(true);
+    if (!parsed.ok) return;
+    expect(parsed.definition).toMatchObject({
+      freshness: { maxAgeDays: 7 },
+      gates: { maxRemovals: { count: 25, share: 0.05 } },
+      publication: { approval: 'balanced' },
+      decisions: { classify: { accept: 0.9 }, match: { accept: 0.95 } },
+      budget: { itemsPerRun: 1000, llmTokensPerRun: 2_000_000 },
+      consumers: [],
+    });
+  });
+
+  it('name consumers by slug', () => {
+    const parsed = parseDefinition(definition({ consumers: ['crowdio', 'Not A Slug'] }));
+    expect(parsed).toMatchObject({
+      ok: false,
+      issues: ['consumers.1: Use lowercase letters, digits, and hyphens, up to 63 characters.'],
+    });
   });
 });
