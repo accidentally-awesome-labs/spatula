@@ -98,7 +98,11 @@ function racing(db: Executor, between: () => Promise<void>): Executor {
   return { transaction } as unknown as Executor;
 }
 
-/** Resolves once `work` has finished, or once a session in this database is waiting for a lock. */
+/**
+ * Resolves once `work` has finished, or once another client's session in this database is waiting
+ * for a lock. Postgres's own background workers, such as autovacuum, can wait for locks too, and
+ * aren't the work the test is waiting on.
+ */
 async function settledOrWaiting(work: Promise<unknown>): Promise<void> {
   let settled = false;
   void work.then(
@@ -107,7 +111,7 @@ async function settledOrWaiting(work: Promise<unknown>): Promise<void> {
   );
   for (let tries = 0; tries < 500 && !settled; tries += 1) {
     const [row] = await pool.execute<{ n: number }>(
-      sql`select count(*)::int as n from pg_stat_activity where datname = current_database() and wait_event_type = 'Lock'`,
+      sql`select count(*)::int as n from pg_stat_activity where datname = current_database() and wait_event_type = 'Lock' and backend_type = 'client backend' and pid <> pg_backend_pid()`,
     );
     if ((row?.n ?? 0) > 0) return;
     await new Promise((resolve) => setTimeout(resolve, 10));

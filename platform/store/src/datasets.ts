@@ -264,7 +264,7 @@ export async function reviveItems(
   ];
   if (which.length === 0) return 0;
   return db.transaction(async (tx) => {
-    // In a fixed order, so two revivals that overlap can't wait for each other.
+    // In a fixed order, so two revivals that overlap can't deadlock: one waits for the other.
     const locked = await tx
       .select({ id: items.id, status: items.status })
       .from(items)
