@@ -475,6 +475,29 @@ describe('withoutProductType', () => {
     ['Utopia Reference open-back hi-fi headphones', 'Utopia'],
     ['Bathys MG Wireless Headphones', 'Bathys MG'],
     ['Chu  II  IEMs and   earphones', 'Chu II'],
+    // A comma or colon after the name needs no space before it.
+    ['Mojo 2, Portable DAC/Amp', 'Mojo 2'],
+    ['Mojo 2: Portable DAC/Amp', 'Mojo 2'],
+    ['HD 600, Open-Back Headphones', 'HD 600'],
+    // "for" says what a type is for: it doesn't make a list of types out of "Atom Amp".
+    ['Atom Amp for Headphones', 'Atom Amp'],
+    ['Atom DAC for IEMs', 'Atom DAC'],
+    ['Anni Amplifier for Headphones', 'Anni'],
+    // Descriptors and spellings makers use.
+    ['DT 770 PRO 80 Ohm Closed-Back Studio Headphones', 'DT 770 PRO 80 Ohm'],
+    ['Anni Desktop Integrated Amplifier', 'Anni'],
+    ['X Active Noise Cancelling Headphones', 'X'],
+    ['X Active Noise Canceling Headphones', 'X'],
+    ['X Noise-Canceling Headphones', 'X'],
+    ['X Cancelling Headphones', 'X'],
+    ['BLESSING3 2DD+4BA In-Ear Monitors', 'BLESSING3'],
+    ['Chu II Earphone', 'Chu II'],
+    ['Chu II Earbud', 'Chu II'],
+    ['Mojo 2 Portable DAC/Amp', 'Mojo 2'],
+    ['Mojo 2 Portable DAC / Amp', 'Mojo 2'],
+    ['Mojo 2 Portable DAC & Amp', 'Mojo 2'],
+    ['Mojo 2 Portable Amp / DAC', 'Mojo 2'],
+    ['Mojo 2 Portable Amp & DAC', 'Mojo 2'],
   ])('takes the product type off %s', (name, expected) => {
     expect(withoutProductType(name)).toBe(expected);
   });
@@ -488,8 +511,32 @@ describe('withoutProductType', () => {
     'Stand for Headphones',
     'Headphones',
     'HD 800 S',
+    // What would be left is only words that describe the type, or a separator.
+    'Wireless Headphones',
+    'Open-Back Headphones',
+    '- Headphones',
+    'Headphones Amplifier',
+    '2DD+4BA In-Ear Monitor',
+    // A bare abbreviation after a model stays, however it is spelled.
+    'Mojo 2 DAC/Amp',
+    'Mojo 2 DAC / Amp',
+    'Mojo 2 DAC & Amp',
+    'Mojo 2 Amp / DAC',
+    'Mojo 2 Amp & DAC',
   ])('leaves %s as it is', (name) => {
     expect(withoutProductType(name)).toBeNull();
+  });
+
+  it('reads a name made of separators in the time of any other name of its length', () => {
+    // A regex that retried from every " -" took about 900 microseconds on the first of these, more
+    // than 60 times what the second takes.
+    const crafted = `a${' -'.repeat(490)} x Headphones`;
+    const ordinary = `a${' b'.repeat(490)} x Headphones`;
+    expect(withoutProductType(crafted)).toBe(`a${' -'.repeat(490)} x`);
+    const strip = (name: string) => () => {
+      for (let run = 0; run < 500; run += 1) withoutProductType(name);
+    };
+    expect(costRatio(strip(ordinary), strip(crafted), 1)).toBeLessThan(4);
   });
 });
 
@@ -532,13 +579,37 @@ describe('productPack.finish, with product types', () => {
     ]);
   });
 
+  it('keeps a name that the brand and the type together would leave as a fragment', () => {
+    const result = finish([
+      { property: 'brand', raw: 'Audeze', method: 'rule', path: 'fixed', confidence: 1 },
+      {
+        property: 'name',
+        raw: 'Audeze - Headphones',
+        method: 'opengraph',
+        path: 'og:title',
+        confidence: 0.6,
+      },
+    ]);
+    // The brand comes off, as it does from any name. The type then would leave only "-".
+    expect(result.filter((candidate) => candidate.property === 'name')).toEqual([
+      {
+        property: 'name',
+        raw: '- Headphones',
+        method: 'opengraph',
+        path: 'og:title (without the brand)',
+        confidence: 0.6,
+      },
+    ]);
+  });
+
   it('reads each name once, in time that grows with the page', { timeout: 60_000 }, () => {
+    // A page that repeats its product repeats its name: each name here comes four times.
     const names = (count: number) =>
       Array.from(
         { length: count },
         (_, i): Candidate => ({
           property: 'name',
-          raw: `C${i} ${'Flagship Open-Back '.repeat(20)}DAC & Amp & Headphones`,
+          raw: `C${Math.floor(i / 4)} ${'Flagship Open-Back '.repeat(20)}DAC & Amp & Headphones`,
           method: 'jsonld',
           path: `jsonld[${i}].name`,
           confidence: 0.9,
@@ -556,5 +627,40 @@ describe('productPack.finish, with product types', () => {
     // A name far longer than any field keeps is left as it is, unread.
     const huge = `${'headphones '.repeat(100_000)}headphones`;
     expect(withoutProductType(huge)).toBeNull();
+  });
+
+  it('reads a name once however often a page repeats it', { timeout: 60_000 }, () => {
+    // The same name 50,000 times, on two pages. The first name is 1,000 characters long and ends in
+    // sixteen types and sixteen descriptors, which takes about fifteen microseconds to read. The
+    // second is a character longer, more than a name is read at all, so reading it costs nothing.
+    // Reading every repeat again would make the first page cost about seven times what the second
+    // does.
+    const types = `${'usb '.repeat(16)}${'Headphones & '.repeat(15)}Headphones`;
+    const read = `${'x'.repeat(999 - types.length)} ${types}`;
+    const unread = `x${read}`;
+    expect([read.length, unread.length]).toEqual([1_000, 1_001]);
+    const repeated = (raw: string) =>
+      Array.from(
+        { length: 50_000 },
+        (_, i): Candidate => ({
+          property: 'name',
+          raw,
+          method: 'jsonld',
+          path: `jsonld[${i}].name`,
+          confidence: 0.9,
+        }),
+      );
+    const stripped = repeated(read);
+    const refused = repeated(unread);
+    expect(withoutProductType(read)).not.toBeNull();
+    expect(finish(stripped).every((candidate) => candidate.raw !== read)).toBe(true);
+    expect(finish(refused).every((candidate) => candidate.raw === unread)).toBe(true);
+    expect(
+      costRatio(
+        () => finish(refused),
+        () => finish(stripped),
+        1,
+      ),
+    ).toBeLessThan(4);
   });
 });

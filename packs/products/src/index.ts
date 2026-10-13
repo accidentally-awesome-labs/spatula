@@ -158,34 +158,57 @@ const WORD_TYPES = [
   'headphone',
   'amplifier',
   'earphones',
+  'earphone',
   'headsets',
   'headset',
   'earbuds',
+  'earbud',
 ];
 
 /**
  * Abbreviations that are types only beside other descriptors: "K19 Desktop DAC & Amp" loses them,
- * but "Atom Amp" is a name.
+ * but "Atom Amp" is a name. "DAC/Amp", "DAC / Amp", and "DAC & Amp" are one type, so a bare one
+ * after a model stays whichever way it is written.
  */
-const SHORT_TYPES = ['dac/amplifier', 'dac/amp', 'amp/dac', 'preamp', 'iems', 'iem', 'dac', 'amp'];
+const SHORT_TYPES = [
+  'dac/amplifier',
+  'dac & amp',
+  'dac / amp',
+  'amp & dac',
+  'amp / dac',
+  'dac/amp',
+  'amp/dac',
+  'preamp',
+  'iems',
+  'iem',
+  'dac',
+  'amp',
+];
 
-/** Words that join types: "DAC & Amp", "IEMs and earphones", "Amplifier for Headphones". */
+/**
+ * Words that join types: "DAC & Amp", "IEMs and earphones". "for" says what a type is for, as in
+ * "Amplifier for Headphones", so it can end a name's type but it doesn't make a list of types.
+ */
 const JOINERS = ['and', 'for', '&', '/', '+'];
 
 /** Descriptors taken off with a type, never on their own: "Momentum 4 Wireless" keeps its name. */
 const DESCRIPTORS = [
   'noise-cancelling',
   'noise cancelling',
+  'noise-canceling',
   'planar magnetic',
   'fully balanced',
   'true wireless',
   'electrostatic',
   'closed-back',
   'closed back',
+  'cancelling',
+  'integrated',
   'audiophile',
   'open-back',
   'open back',
   'bluetooth',
+  'canceling',
   'reference',
   'flagship',
   'portable',
@@ -202,10 +225,27 @@ const DESCRIPTORS = [
   'hybrid',
   'planar',
   'analog',
+  'studio',
+  'active',
   'hi-fi',
   'wired',
+  'noise',
   'usb',
 ];
+
+/** Every phrase and mark that can only be a fragment of a name, longest first. */
+const GENERIC = [
+  ...WORD_TYPES,
+  ...SHORT_TYPES,
+  ...DESCRIPTORS,
+  ...JOINERS,
+  '-',
+  '–',
+  '—',
+  '|',
+  ':',
+  ',',
+].sort((a, b) => b.length - a.length);
 
 /** Drivers, as IEM makers write them: "2DD+4BA", "1DD", "10BA". */
 const DRIVERS = /^\d+(?:dd|ba|est|pzt|pd)(?:\+\d+(?:dd|ba|est|pzt|pd))*$/iu;
@@ -240,10 +280,40 @@ function describes(text: string): boolean {
 }
 
 /**
+ * Whether `text` is nothing but types, descriptors, drivers, joiners, and separators, as "Wireless"
+ * is, once the type is off "Wireless Headphones". It reads at most MAX_TAKEN of them, and calls
+ * anything longer a name.
+ */
+function onlyGeneric(text: string): boolean {
+  const lower = text.toLowerCase();
+  let at = 0;
+  for (let words = 0; words <= MAX_TAKEN; words += 1) {
+    while (lower[at] === ' ') at += 1;
+    if (at >= lower.length) return true;
+    // The longest phrase that starts here and ends at a word.
+    const phrase = GENERIC.find(
+      (candidate) =>
+        lower.startsWith(candidate, at) &&
+        (at + candidate.length === lower.length || lower[at + candidate.length] === ' '),
+    );
+    if (phrase !== undefined) {
+      at += phrase.length;
+      continue;
+    }
+    const space = lower.indexOf(' ', at);
+    const word = lower.slice(at, space === -1 ? lower.length : space);
+    if (!DRIVERS.test(word)) return false;
+    at += word.length;
+  }
+  return false;
+}
+
+/**
  * A name without the product type it ends with, and the descriptors just before it: "LCD-5
  * Flagship Headphones" is "LCD-5". Returns null when nothing comes off, including when taking the
- * type off would leave the name empty, or would leave a joiner with no type before it ("Stand for
- * Headphones" is a stand).
+ * type off would leave the name empty or only words that describe a type ("Wireless Headphones"
+ * is not "Wireless"), or would leave a joiner with no type before it ("Stand for Headphones" is a
+ * stand).
  */
 export function withoutProductType(name: string): string | null {
   if (name.length > NAME_READ_MAX) return null;
@@ -268,7 +338,9 @@ export function withoutProductType(name: string): string | null {
       if (endingIn(rest, WORD_TYPES) === undefined && endingIn(rest, SHORT_TYPES) === undefined) {
         return null;
       }
-      joined = true;
+      // "and", "&", and "+" make a list, so a short type before them is a type. "for" doesn't:
+      // "Atom Amp for Headphones" is an Amp, for headphones.
+      joined = joiner !== 'for';
     }
   }
   if (taken === 0) return null;
@@ -280,9 +352,12 @@ export function withoutProductType(name: string): string | null {
     if (word === undefined || cut(rest, word) === '') break;
     rest = cut(rest, word);
   }
-  // A separator left at the end, as in "Mojo 2 - Portable DAC/Amp".
-  rest = rest.replace(/(?:\s+[-–—|:,])+$/u, '').trimEnd();
-  return rest === '' || rest === original ? null : rest;
+  // A separator left at the end, as in "Mojo 2 - Portable DAC/Amp" or "Mojo 2, Portable DAC/Amp". A
+  // dash or bar counts only with a space before it, because a hyphen can belong to a model's name
+  // ("LCD-X"); a comma or colon never ends one. They go one at a time from the end: a pattern over
+  // a run of them retries from each, which took 900 microseconds on a name of 990 characters.
+  while (/ [-–—|]$|[:,]$/u.test(rest.slice(-2))) rest = rest.slice(0, -1).trimEnd();
+  return rest === '' || rest === original || onlyGeneric(rest) ? null : rest;
 }
 
 /** Each name without its product type, read once however often a page repeats it. */

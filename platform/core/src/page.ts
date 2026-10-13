@@ -1,5 +1,5 @@
 import { selectOne } from 'css-select';
-import { DomHandler, isTag, isText, type AnyNode, type Element } from 'domhandler';
+import { DomHandler, isTag, isText, type AnyNode, type Document, type Element } from 'domhandler';
 import { DomUtils, Parser } from 'htmlparser2';
 
 /*
@@ -15,13 +15,13 @@ export interface Page {
   url: string;
   /** The page's own https address on the same host, from <link rel="canonical">, or `url`. */
   canonicalUrl: string;
-  /** The page's <title>, on one line: at most 300 characters, or null. */
+  /** The page's own <title>, not an SVG icon's, on one line: at most 300 characters, or null. */
   title: string | null;
   /** The names in the page's JSON-LD BreadcrumbList, in position order: at most 10. */
   breadcrumbs: string[];
   /**
-   * Every JSON-LD object with an @type, in document order, with @graph and mainEntity members
-   * spread out.
+   * Every JSON-LD object with an @type, in document order, with @graph, mainEntity, and breadcrumb
+   * members spread out.
    */
   jsonLd: JsonLdNode[];
   /** How many JSON-LD blocks couldn't be read as JSON. */
@@ -92,7 +92,7 @@ export function parsePage(html: string, url: string): Page {
     else values.push(content.trim());
   }
 
-  const title = elements('title')[0];
+  const title = pageTitle(document);
 
   return {
     url,
@@ -128,19 +128,23 @@ function oneLine(text: string, max: number): string | null {
     .replace(/\s+/gu, ' ')
     .trim()
     .slice(0, max)
-    .replace(/[\uD800-\uDBFF]$/u, '');
+    .replace(/[\uD800-\uDBFF]$/u, '')
+    .trimEnd();
   return line === '' ? null : line;
 }
 
 /**
- * The names in the page's first JSON-LD BreadcrumbList, by position. A crumb names itself, or the
- * page it links to does. At most 50 are read and 10 kept, each at most 100 characters.
+ * The names in the page's first JSON-LD BreadcrumbList, by position; a crumb with no number for
+ * one stands where it is in the list. A crumb names itself, or the page it links to does. At most
+ * 50 are read and 10 kept, each at most 100 characters.
  */
 function breadcrumbsOf(jsonLd: JsonLdNode[]): string[] {
   const list = jsonLd.find((node) => jsonLdTypes(node).includes('BreadcrumbList'));
-  const elements = Array.isArray(list?.itemListElement) ? list.itemListElement.slice(0, 50) : [];
+  const given = list?.itemListElement;
+  // JSON-LD allows one value where a list of one would go.
+  const elements: unknown[] = Array.isArray(given) ? given.slice(0, 50) : [given];
   const crumbs: { position: number; name: string }[] = [];
-  elements.forEach((element: unknown, index) => {
+  elements.forEach((element, index) => {
     if (element === null || typeof element !== 'object') return;
     const crumb = element as JsonLdNode;
     const linked =
@@ -148,7 +152,15 @@ function breadcrumbsOf(jsonLd: JsonLdNode[]): string[] {
     const raw = typeof crumb.name === 'string' ? crumb.name : linked.name;
     const name = typeof raw === 'string' ? oneLine(raw, 100) : null;
     if (name === null) return;
-    const position = Number(crumb.position);
+    // Only a number or a numeric string says where a crumb goes. Coercing anything else would put
+    // null, "", and [] first as 0, and a page can nest an array so deep that coercing it throws.
+    const at = crumb.position;
+    const position =
+      typeof at === 'number'
+        ? at
+        : typeof at === 'string' && at.trim() !== ''
+          ? Number(at)
+          : Number.NaN;
     crumbs.push({ position: Number.isFinite(position) ? position : index + 1, name });
   });
   return crumbs
@@ -179,6 +191,7 @@ function collectNodes(value: unknown, into: JsonLdNode[], depth: number): void {
   if ('@type' in node) into.push(node);
   collectNodes(node['@graph'], into, depth + 1);
   collectNodes(node.mainEntity, into, depth + 1);
+  collectNodes(node.breadcrumb, into, depth + 1);
 }
 
 function canonical(links: Element[], url: string): string {
@@ -201,6 +214,24 @@ function canonical(links: Element[], url: string): string {
   page.username = '';
   page.password = '';
   return page.href;
+}
+
+/**
+ * The page's own <title>: the first one in document order that isn't inside an <svg>, which is how
+ * a browser reads document.title. An icon's <svg><title> only labels the icon, and it can hold
+ * elements, which an HTML title never does. One walk with its own stack, like mainText's, that
+ * doesn't enter an <svg> at all: looking up from each title for an <svg> costs up to MAX_NESTING
+ * steps a title, about 7 seconds for a 5 MB page of icon titles.
+ */
+function pageTitle(document: Document): Element | undefined {
+  // Children go on in reverse, so they come off in document order.
+  const stack: AnyNode[] = [...document.children].reverse();
+  for (let node = stack.pop(); node !== undefined; node = stack.pop()) {
+    if (!isTag(node) || node.name === 'svg') continue;
+    if (node.name === 'title') return node;
+    for (const child of node.children.toReversed()) stack.push(child);
+  }
+  return undefined;
 }
 
 /**

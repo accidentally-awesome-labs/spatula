@@ -305,3 +305,168 @@ describe('what a page says about itself', () => {
     expect(parsePage('<p></p>', 'https://chord.example/').breadcrumbs).toEqual([]);
   });
 });
+
+describe('a page’s title and breadcrumbs, on odd and hostile pages', () => {
+  const PAGE_URL = 'https://chord.example/product/mojo-2';
+  const titleOf = (html: string) => parsePage(html, PAGE_URL).title;
+  const ldScript = (json: string) => `<script type="application/ld+json">${json}</script>`;
+  const crumbsOf = (value: unknown) =>
+    parsePage(ldScript(JSON.stringify(value)), PAGE_URL).breadcrumbs;
+  const listOf = (itemListElement: unknown) => ({ '@type': 'BreadcrumbList', itemListElement });
+  const crumb = (position: unknown, name: unknown) => ({ '@type': 'ListItem', position, name });
+  // One character, written as two UTF-16 halves.
+  const EMOJI = String.fromCodePoint(0x1f600);
+
+  it('reads the page’s own <title>, not one an SVG icon carries', () => {
+    // An icon's <svg><title> only labels the icon. It can come ahead of the page's own title...
+    expect(
+      titleOf('<head><svg><title>Menu</title></svg><title>Mojo 2 - Chord</title></head>'),
+    ).toBe('Mojo 2 - Chord');
+    // ...however deep in the icon it sits...
+    expect(
+      titleOf('<svg><g><g><title>Menu</title></g></g></svg><title>Mojo 2 - Chord</title>'),
+    ).toBe('Mojo 2 - Chord');
+    // ...and a page whose only title is an icon's has none.
+    expect(titleOf('<body><svg><title>Menu</title></svg></body>')).toBeNull();
+    // The head comes first in a document, so its title wins over one further down.
+    expect(
+      titleOf(
+        '<html><head><title>Mojo 2</title></head><body><div><title>Menu</title></div></body></html>',
+      ),
+    ).toBe('Mojo 2');
+  });
+
+  it('finds no title among 20,000 icon titles at the deepest nesting, at the cost of parsing', () => {
+    // Looking up from each title for an <svg> costs up to MAX_NESTING steps a title, about 24
+    // microseconds: 25 times what parsing it costs. Not entering the <svg> costs nothing. The other
+    // page is the same size, with <tspan> where this one has <title>.
+    const icons = (tag: string) =>
+      `<svg>${'<g>'.repeat(MAX_NESTING - 2)}${`<${tag}>x</${tag}>`.repeat(20_000)}`;
+    const titles = icons('title');
+    const others = icons('tspan');
+    expect(parsePage(titles, PAGE_URL).title).toBeNull();
+    const parse = (html: string) => () => parsePage(html, PAGE_URL);
+    expect(costRatio(parse(others), parse(titles), 1)).toBeLessThan(4);
+  });
+
+  it('keeps a title to 300 characters, and drops the half of a surrogate pair that the cut leaves', () => {
+    expect(titleOf(`<title>${'a'.repeat(400)}</title>`)).toBe('a'.repeat(300));
+    // The 300th character is the first half of a pair, which is dropped with its other half.
+    expect(titleOf(`<title>${'a'.repeat(299)}${EMOJI}b</title>`)).toBe('a'.repeat(299));
+    // A pair that fits whole stays.
+    expect(titleOf(`<title>${'a'.repeat(298)}${EMOJI}b</title>`)).toBe(
+      `${'a'.repeat(298)}${EMOJI}`,
+    );
+  });
+
+  it('ends neither a title nor a breadcrumb in the space that a cut leaves', () => {
+    expect(titleOf(`<title>${'a'.repeat(299)} b</title>`)).toBe('a'.repeat(299));
+    expect(crumbsOf(listOf([crumb(1, `${'n'.repeat(99)} m`)]))).toEqual(['n'.repeat(99)]);
+    // Dropping half a pair can leave a space at the end too.
+    expect(titleOf(`<title>${'a'.repeat(298)} ${EMOJI}b</title>`)).toBe('a'.repeat(298));
+  });
+
+  it('keeps 10 breadcrumbs of 100 characters at most, and reads only the first 50 entries', () => {
+    const named = (count: number, position: (index: number) => number) =>
+      Array.from({ length: count }, (_, index) => crumb(position(index), `c${position(index)}`));
+    // Sixty in order: the first ten.
+    expect(crumbsOf(listOf(named(60, (index) => index + 1)))).toEqual(
+      Array.from({ length: 10 }, (_, index) => `c${index + 1}`),
+    );
+    // Sixty in reverse: the last ten, the lowest positions, are never read, so the ten lowest of the
+    // first fifty are kept.
+    expect(crumbsOf(listOf(named(60, (index) => 60 - index)))).toEqual(
+      Array.from({ length: 10 }, (_, index) => `c${index + 11}`),
+    );
+    // A name is cut at 100 characters, and not through a surrogate pair.
+    expect(crumbsOf(listOf([crumb(1, 'n'.repeat(150))]))).toEqual(['n'.repeat(100)]);
+    expect(crumbsOf(listOf([crumb(1, `${'n'.repeat(99)}${EMOJI}x`)]))).toEqual(['n'.repeat(99)]);
+  });
+
+  it('puts a crumb whose position is no number where it stands in the list', () => {
+    // null, "", and [] all turn into 0 when coerced, which would put them ahead of "Home".
+    const list = listOf([
+      crumb(1, 'Home'),
+      crumb(null, 'Products'),
+      crumb('', 'Audio'),
+      crumb([], 'Mojo'),
+      crumb('  ', 'Mojo 2'),
+      crumb({}, 'Mojo 2 Black'),
+      crumb(true, 'Stand'),
+    ]);
+    expect(crumbsOf(list)).toEqual([
+      'Home',
+      'Products',
+      'Audio',
+      'Mojo',
+      'Mojo 2',
+      'Mojo 2 Black',
+      'Stand',
+    ]);
+    // Numbers and numeric strings still say where they go.
+    expect(crumbsOf(listOf([crumb('2', 'B'), crumb(1.5, 'A'), crumb(' 3 ', 'C')]))).toEqual([
+      'A',
+      'B',
+      'C',
+    ]);
+  });
+
+  it('reads a page whose breadcrumb position is an array nested 10,000 deep', () => {
+    // Coercing that array to a number recurses once for every level, and throws a RangeError.
+    const deep = `${'['.repeat(10_000)}1${']'.repeat(10_000)}`;
+    const page = parsePage(
+      ldScript('{"@type":"Product","name":"Mojo 2"}') +
+        ldScript(
+          `{"@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":${deep},"name":"Home"},` +
+            '{"@type":"ListItem","position":2,"name":"Products"}]}',
+        ),
+      PAGE_URL,
+    );
+    expect(page.jsonLd.map((node) => node.name)).toEqual(['Mojo 2', undefined]);
+    expect(page.breadcrumbs).toEqual(['Home', 'Products']);
+  });
+
+  it('reads a breadcrumb list given as one object, which JSON-LD allows for a list of one', () => {
+    expect(crumbsOf(listOf(crumb(1, 'Home')))).toEqual(['Home']);
+    // Anything else that is not a list is no list of crumbs.
+    expect(crumbsOf(listOf('Home'))).toEqual([]);
+    expect(crumbsOf(listOf(null))).toEqual([]);
+  });
+
+  it('reads a breadcrumb list under a WebPage’s breadcrumb property', () => {
+    const page = parsePage(
+      ldScript(
+        JSON.stringify({
+          '@type': 'WebPage',
+          name: 'Mojo 2',
+          breadcrumb: listOf([crumb(1, 'Home'), crumb(2, 'Mojo 2')]),
+        }),
+      ),
+      PAGE_URL,
+    );
+    expect(page.breadcrumbs).toEqual(['Home', 'Mojo 2']);
+    expect(page.jsonLd.map((node) => jsonLdTypes(node))).toEqual([['WebPage'], ['BreadcrumbList']]);
+    // A breadcrumb that is only a reference, or text, adds nothing.
+    const referred = parsePage(
+      ldScript('{"@type":"WebPage","breadcrumb":{"@id":"https://chord.example/#breadcrumb"}}') +
+        ldScript('{"@type":"WebPage","breadcrumb":"Home > Mojo 2"}'),
+      PAGE_URL,
+    );
+    expect(referred.jsonLd).toHaveLength(2);
+    expect(referred.breadcrumbs).toEqual([]);
+  });
+
+  it('follows breadcrumb no deeper than it follows @graph and mainEntity', () => {
+    const nested = (levels: number): unknown =>
+      levels === 0
+        ? listOf([crumb(1, 'Home')])
+        : { '@type': 'WebPage', breadcrumb: nested(levels - 1) };
+    expect(crumbsOf(nested(3))).toEqual(['Home']);
+    // A page can nest the property as deep as it likes: the walk stops at the same depth it stops
+    // at for @graph and mainEntity, and doesn't recurse as far as the page does.
+    const deep = `${'{"@type":"WebPage","breadcrumb":'.repeat(20_000)}null${'}'.repeat(20_000)}`;
+    const page = parsePage(ldScript(deep), PAGE_URL);
+    expect(page.jsonLd.length).toBeLessThanOrEqual(10);
+    expect(page.breadcrumbs).toEqual([]);
+  });
+});

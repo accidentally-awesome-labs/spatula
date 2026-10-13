@@ -900,6 +900,25 @@ describe('runRefresh', () => {
     expect((await refresh(world, 'refresh-plan', {})).summary).toMatchObject({ items: 3, due: 3 });
   });
 
+  it('reads a page again when the extraction code that read it was the first version', async () => {
+    const { world, a1 } = await setUp('refresh-older-code');
+    await refresh(world, 'refresh-older-code', {});
+    // Read five minutes ago, by this code: nothing is due.
+    expect((await refresh(world, 'refresh-older-code', {})).summary).toMatchObject({
+      items: 0,
+      due: 0,
+    });
+
+    // Version 1 left product types on names ("LCD-5 Flagship Headphones"), and a definition that
+    // hasn't changed doesn't change the tag, so a page it read stays as it was unless this says so.
+    await db.update(items).set({ extractedWith: 'r1.v1' }).where(eq(items.id, a1.id));
+    const next = await refresh(world, 'refresh-older-code', {});
+    expect(next.summary).toMatchObject({ items: 1, due: 1 });
+    expect((await db.select().from(items).where(eq(items.id, a1.id)))[0]!.extractedWith).toBe(
+      extractionTag(1),
+    );
+  });
+
   it('reads at most the budget’s pages, and leaves the rest for the next run', async () => {
     const definition = testDefinition('refresh-budget');
     await applyDefinition(db, { ...definition, budget: { ...definition.budget, itemsPerRun: 2 } });

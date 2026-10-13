@@ -14,7 +14,7 @@ import type { Candidate, Method, StatementInput } from './statements';
  */
 
 /** Bump when extraction code changes what it finds, so stored pages are read again. */
-export const EXTRACTION_VERSION = 1;
+export const EXTRACTION_VERSION = 2;
 
 /** The methods a page's extraction speaks for: their statements that aren't found again are withdrawn. */
 export const PAGE_METHODS: readonly Method[] = ['jsonld', 'opengraph', 'rule'];
