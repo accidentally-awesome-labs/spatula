@@ -266,3 +266,42 @@ describe('parsePage on a page nested deeper than any real one', () => {
     expect(costRatio(near, far, 16)).toBeLessThan(0.5);
   });
 });
+
+describe('what a page says about itself', () => {
+  it('reads its title, on one line', () => {
+    const page = parsePage(
+      '<html><head><title>\n  Mojo 2 -\n Chord Electronics Ltd </title></head><body></body></html>',
+      'https://chord.example/product/mojo-2',
+    );
+    expect(page.title).toBe('Mojo 2 - Chord Electronics Ltd');
+    expect(parsePage('<p>no title</p>', 'https://chord.example/').title).toBeNull();
+  });
+
+  it('reads its JSON-LD breadcrumbs, in position order', () => {
+    const graph = {
+      '@context': 'https://schema.org',
+      '@graph': [
+        { '@type': 'WebPage', name: 'Mojo 2 - Chord Electronics Ltd' },
+        {
+          '@type': 'BreadcrumbList',
+          itemListElement: [
+            { '@type': 'ListItem', position: 3, name: 'Mojo 2' },
+            {
+              '@type': 'ListItem',
+              position: 1,
+              item: { '@id': 'https://chord.example/', name: 'Home' },
+            },
+            { '@type': 'ListItem', position: '2', name: '  Products ' },
+            { '@type': 'ListItem', position: 4 },
+          ],
+        },
+      ],
+    };
+    const page = parsePage(
+      `<script type="application/ld+json">${JSON.stringify(graph)}</script>`,
+      'https://chord.example/product/mojo-2',
+    );
+    expect(page.breadcrumbs).toEqual(['Home', 'Products', 'Mojo 2']);
+    expect(parsePage('<p></p>', 'https://chord.example/').breadcrumbs).toEqual([]);
+  });
+});

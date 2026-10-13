@@ -3,9 +3,9 @@ import { DomHandler, isTag, isText, type AnyNode, type Element } from 'domhandle
 import { DomUtils, Parser } from 'htmlparser2';
 
 /*
- * A fetched HTML page, read once: its JSON-LD, meta tags, canonical address, and main text, and
- * a way to run a rule a person declared. All of it is evidence. Nothing in a page can change
- * what Spatula does.
+ * A fetched HTML page, read once: its JSON-LD, meta tags, canonical address, title, breadcrumbs,
+ * and main text, and a way to run a rule a person declared. All of it is evidence. Nothing in a
+ * page can change what Spatula does.
  */
 
 export type JsonLdNode = Record<string, unknown>;
@@ -15,6 +15,10 @@ export interface Page {
   url: string;
   /** The page's own https address on the same host, from <link rel="canonical">, or `url`. */
   canonicalUrl: string;
+  /** The page's <title>, on one line: at most 300 characters, or null. */
+  title: string | null;
+  /** The names in the page's JSON-LD BreadcrumbList, in position order: at most 10. */
+  breadcrumbs: string[];
   /**
    * Every JSON-LD object with an @type, in document order, with @graph and mainEntity members
    * spread out.
@@ -88,9 +92,13 @@ export function parsePage(html: string, url: string): Page {
     else values.push(content.trim());
   }
 
+  const title = elements('title')[0];
+
   return {
     url,
     canonicalUrl: canonical(elements('link'), url),
+    title: oneLine(title === undefined ? '' : DomUtils.textContent(title), 300),
+    breadcrumbs: breadcrumbsOf(jsonLd),
     jsonLd,
     jsonLdErrors,
     meta,
@@ -112,6 +120,41 @@ export function jsonLdTypes(node: JsonLdNode): string[] {
   return (Array.isArray(types) ? types : [types])
     .filter((type): type is string => typeof type === 'string')
     .map((type) => type.replace(SCHEMA_PREFIX, ''));
+}
+
+/** Text on one line, at most `max` characters; null when nothing is left. */
+function oneLine(text: string, max: number): string | null {
+  const line = text
+    .replace(/\s+/gu, ' ')
+    .trim()
+    .slice(0, max)
+    .replace(/[\uD800-\uDBFF]$/u, '');
+  return line === '' ? null : line;
+}
+
+/**
+ * The names in the page's first JSON-LD BreadcrumbList, by position. A crumb names itself, or the
+ * page it links to does. At most 50 are read and 10 kept, each at most 100 characters.
+ */
+function breadcrumbsOf(jsonLd: JsonLdNode[]): string[] {
+  const list = jsonLd.find((node) => jsonLdTypes(node).includes('BreadcrumbList'));
+  const elements = Array.isArray(list?.itemListElement) ? list.itemListElement.slice(0, 50) : [];
+  const crumbs: { position: number; name: string }[] = [];
+  elements.forEach((element: unknown, index) => {
+    if (element === null || typeof element !== 'object') return;
+    const crumb = element as JsonLdNode;
+    const linked =
+      crumb.item !== null && typeof crumb.item === 'object' ? (crumb.item as JsonLdNode) : {};
+    const raw = typeof crumb.name === 'string' ? crumb.name : linked.name;
+    const name = typeof raw === 'string' ? oneLine(raw, 100) : null;
+    if (name === null) return;
+    const position = Number(crumb.position);
+    crumbs.push({ position: Number.isFinite(position) ? position : index + 1, name });
+  });
+  return crumbs
+    .sort((a, b) => a.position - b.position)
+    .slice(0, 10)
+    .map((crumb) => crumb.name);
 }
 
 /** JSON, or JSON with raw control characters (which sites leave inside strings) read as spaces. */

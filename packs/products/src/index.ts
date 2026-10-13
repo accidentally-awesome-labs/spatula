@@ -30,7 +30,7 @@ export const productPack: RecordTypePack = {
     mpns: { type: 'text', list: true },
   },
   extract: (page) => [...fromJsonLd(page), ...fromOpenGraph(page)],
-  finish: withoutBrandInNames,
+  finish: (candidates) => withoutProductTypes(withoutBrandInNames(candidates)),
 };
 
 /** The packs this package provides, by the name definitions use. */
@@ -140,6 +140,164 @@ function withoutBrandInNames(candidates: Candidate[]): Candidate[] {
     return rest === ''
       ? candidate
       : { ...candidate, raw: rest, path: `${candidate.path} (without the brand)` };
+  });
+}
+
+/**
+ * Product types that end a name on their own: "LCD-5 Flagship Headphones". Longest first, so the
+ * longest a name ends with is the one taken.
+ */
+const WORD_TYPES = [
+  'headphones amplifier',
+  'headphone amplifier',
+  'in-ear monitors',
+  'in-ear monitor',
+  'headphone amp',
+  'preamplifier',
+  'headphones',
+  'headphone',
+  'amplifier',
+  'earphones',
+  'headsets',
+  'headset',
+  'earbuds',
+];
+
+/**
+ * Abbreviations that are types only beside other descriptors: "K19 Desktop DAC & Amp" loses them,
+ * but "Atom Amp" is a name.
+ */
+const SHORT_TYPES = ['dac/amplifier', 'dac/amp', 'amp/dac', 'preamp', 'iems', 'iem', 'dac', 'amp'];
+
+/** Words that join types: "DAC & Amp", "IEMs and earphones", "Amplifier for Headphones". */
+const JOINERS = ['and', 'for', '&', '/', '+'];
+
+/** Descriptors taken off with a type, never on their own: "Momentum 4 Wireless" keeps its name. */
+const DESCRIPTORS = [
+  'noise-cancelling',
+  'noise cancelling',
+  'planar magnetic',
+  'fully balanced',
+  'true wireless',
+  'electrostatic',
+  'closed-back',
+  'closed back',
+  'audiophile',
+  'open-back',
+  'open back',
+  'bluetooth',
+  'reference',
+  'flagship',
+  'portable',
+  'balanced',
+  'wireless',
+  'over-ear',
+  'desktop',
+  'dynamic',
+  'digital',
+  'on-ear',
+  'in-ear',
+  'gaming',
+  'hi-res',
+  'hybrid',
+  'planar',
+  'analog',
+  'hi-fi',
+  'wired',
+  'usb',
+];
+
+/** Drivers, as IEM makers write them: "2DD+4BA", "1DD", "10BA". */
+const DRIVERS = /^\d+(?:dd|ba|est|pzt|pd)(?:\+\d+(?:dd|ba|est|pzt|pd))*$/iu;
+
+/** A name longer than this is longer than any field keeps, so it's left for the field to refuse. */
+const NAME_READ_MAX = 1000;
+/** No real name ends in more types and descriptors than this. */
+const MAX_TAKEN = 16;
+
+/** The phrase from `phrases` that ends `text` after a space, ignoring case, or undefined. */
+function endingIn(text: string, phrases: readonly string[]): string | undefined {
+  return phrases.find(
+    (phrase) =>
+      text.length > phrase.length &&
+      text[text.length - phrase.length - 1] === ' ' &&
+      text.slice(-phrase.length).toLowerCase() === phrase,
+  );
+}
+
+function cut(text: string, phrase: string): string {
+  return text.slice(0, text.length - phrase.length).trimEnd();
+}
+
+/** Whether the word before a short type makes it one: another type, a descriptor, or a joiner. */
+function describes(text: string): boolean {
+  return (
+    endingIn(text, WORD_TYPES) !== undefined ||
+    endingIn(text, SHORT_TYPES) !== undefined ||
+    endingIn(text, DESCRIPTORS) !== undefined ||
+    endingIn(text, JOINERS) !== undefined
+  );
+}
+
+/**
+ * A name without the product type it ends with, and the descriptors just before it: "LCD-5
+ * Flagship Headphones" is "LCD-5". Returns null when nothing comes off, including when taking the
+ * type off would leave the name empty, or would leave a joiner with no type before it ("Stand for
+ * Headphones" is a stand).
+ */
+export function withoutProductType(name: string): string | null {
+  if (name.length > NAME_READ_MAX) return null;
+  const original = name.replace(/\s+/gu, ' ').trim();
+  let rest = original;
+  let taken = 0;
+  // Whether the type now at the end is joined to one already taken, as "IEMs" is in "IEMs and
+  // earphones": a short type in a list of types is a type.
+  let joined = false;
+  for (; taken < MAX_TAKEN; taken += 1) {
+    const type = endingIn(rest, WORD_TYPES) ?? endingIn(rest, SHORT_TYPES);
+    if (type === undefined) break;
+    const before = cut(rest, type);
+    if (before === '') break;
+    if (!joined && SHORT_TYPES.includes(type) && !describes(before)) break;
+    rest = before;
+    joined = false;
+    const joiner = endingIn(rest, JOINERS);
+    if (joiner !== undefined) {
+      rest = cut(rest, joiner);
+      // A joiner with no type before it means the words weren't a list of types.
+      if (endingIn(rest, WORD_TYPES) === undefined && endingIn(rest, SHORT_TYPES) === undefined) {
+        return null;
+      }
+      joined = true;
+    }
+  }
+  if (taken === 0) return null;
+  for (let more = 0; more < MAX_TAKEN; more += 1) {
+    const descriptor = endingIn(rest, DESCRIPTORS);
+    const last = rest.slice(rest.lastIndexOf(' ') + 1);
+    const drivers = rest.includes(' ') && DRIVERS.test(last) ? last.toLowerCase() : undefined;
+    const word = descriptor ?? drivers;
+    if (word === undefined || cut(rest, word) === '') break;
+    rest = cut(rest, word);
+  }
+  // A separator left at the end, as in "Mojo 2 - Portable DAC/Amp".
+  rest = rest.replace(/(?:\s+[-–—|:,])+$/u, '').trimEnd();
+  return rest === '' || rest === original ? null : rest;
+}
+
+/** Each name without its product type, read once however often a page repeats it. */
+function withoutProductTypes(candidates: Candidate[]): Candidate[] {
+  const read = new Map<string, string | null>();
+  return candidates.map((candidate) => {
+    if (candidate.property !== 'name' || typeof candidate.raw !== 'string') return candidate;
+    let stripped = read.get(candidate.raw);
+    if (stripped === undefined) {
+      stripped = withoutProductType(candidate.raw);
+      read.set(candidate.raw, stripped);
+    }
+    return stripped === null
+      ? candidate
+      : { ...candidate, raw: stripped, path: `${candidate.path} (without the product type)` };
   });
 }
 

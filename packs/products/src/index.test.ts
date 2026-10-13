@@ -1,11 +1,38 @@
 import { parsePage, type Candidate, type Page } from '@spatula/core';
 import { describe, expect, it } from 'vitest';
-import { looksLikeGtin, productPack } from './index';
+import { looksLikeGtin, productPack, withoutProductType } from './index';
 
 const page = (head: string) =>
   parsePage(`<html><head>${head}</head><body></body></html>`, 'https://maker.example/products/x');
 const ld = (value: unknown) =>
   `<script type="application/ld+json">${JSON.stringify(value)}</script>`;
+
+const cpuMicroseconds = () => {
+  const { user, system } = process.cpuUsage();
+  return user + system;
+};
+
+/**
+ * How many times as much each unit of work costs in `large` as in `small`, which does `times`
+ * fewer units: about 1 for work that grows in step with its size. It counts this process's CPU
+ * time, not time on the clock, because a busy machine stretches the clock for whatever it runs.
+ * Each round runs `small` `times` over and `large` once, and the cheapest of three rounds of each
+ * is what counts. @spatula/core's tests use the same check, which that package keeps to itself.
+ */
+const costRatio = (small: () => unknown, large: () => unknown, times: number): number => {
+  small(); // V8 compiles the work before any round counts.
+  let cheapestSmall = Infinity;
+  let cheapestLarge = Infinity;
+  for (let round = 0; round < 3; round += 1) {
+    let started = cpuMicroseconds();
+    for (let run = 0; run < times; run += 1) small();
+    cheapestSmall = Math.min(cheapestSmall, cpuMicroseconds() - started);
+    started = cpuMicroseconds();
+    large();
+    cheapestLarge = Math.min(cheapestLarge, cpuMicroseconds() - started);
+  }
+  return cheapestLarge / cheapestSmall;
+};
 
 describe('productPack.extract', () => {
   it('reads a store’s product whose mpn is its barcode as a GTIN, not a part number', () => {
@@ -321,35 +348,6 @@ describe('productPack.finish', () => {
 describe('productPack, on hostile pages', () => {
   const finish = productPack.finish ?? ((candidates: Candidate[]) => candidates);
   const read = (given: Page) => finish(productPack.extract(given));
-  const cpuMicroseconds = () => {
-    const { user, system } = process.cpuUsage();
-    return user + system;
-  };
-
-  /**
-   * How many times as much each product costs on `large` as on `small`, a page with `times` fewer
-   * products. A pass that is linear in the page costs about the same per product on both: about 1.
-   *
-   * It counts this process's CPU time, not time on the clock. A busy machine, like CI running every
-   * package's tests at once, stretches the clock for whatever it runs, by more than any fixed bound
-   * could allow. Each round reads `small` `times` over and `large` once, so the two take about as
-   * long as each other, and the cheapest of three rounds of each is what counts. @spatula/core's
-   * tests use the same check, which that package keeps to itself.
-   */
-  const costRatio = (small: Page, large: Page, times: number): number => {
-    read(small); // V8 compiles the pass before any round counts.
-    let cheapestSmall = Infinity;
-    let cheapestLarge = Infinity;
-    for (let round = 0; round < 3; round++) {
-      let started = cpuMicroseconds();
-      for (let i = 0; i < times; i++) read(small);
-      cheapestSmall = Math.min(cheapestSmall, cpuMicroseconds() - started);
-      started = cpuMicroseconds();
-      read(large);
-      cheapestLarge = Math.min(cheapestLarge, cpuMicroseconds() - started);
-    }
-    return cheapestLarge / cheapestSmall;
-  };
 
   it('reads 20,000 products that share a name in linear time', { timeout: 60_000 }, () => {
     const sharing = (count: number) =>
@@ -379,7 +377,15 @@ describe('productPack, on hostile pages', () => {
     // Trying every brand on every name, and searching the page for each product's place, made each
     // product cost about 16 times as much among 10,000 as among a sixteenth of them. Looking both up
     // costs about the same per product at any size.
-    expect(costRatio(sharing(625), sharing(10_000), 16)).toBeLessThan(4);
+    const fewer = sharing(625);
+    const more = sharing(10_000);
+    expect(
+      costRatio(
+        () => read(fewer),
+        () => read(more),
+        16,
+      ),
+    ).toBeLessThan(4);
   });
 
   it('reads a 5 MB page of one product, repeated, in linear time', { timeout: 60_000 }, () => {
@@ -392,7 +398,14 @@ describe('productPack, on hostile pages', () => {
     expect(candidates.at(-1)).toMatchObject({ raw: 'X', path: 'jsonld[159999].name' });
     // Searching the page for each product's place made each cost about 12 times as much here as on
     // a page a sixteenth the size. Finding every place in one pass costs about the same per product.
-    expect(costRatio(repeated(10_000), largest, 16)).toBeLessThan(4);
+    const smaller = repeated(10_000);
+    expect(
+      costRatio(
+        () => read(smaller),
+        () => read(largest),
+        16,
+      ),
+    ).toBeLessThan(4);
   });
 
   it('looks each name’s brand up once, however often it repeats', { timeout: 60_000 }, () => {
@@ -414,7 +427,14 @@ describe('productPack, on hostile pages', () => {
     expect(candidates.filter((c) => c.property === 'name' && c.raw === name)).toHaveLength(1_400);
     // Checking every name against every length made each product cost about 12 times as much here
     // as with an eighth of the products. Checking each name once costs about the same per product.
-    expect(costRatio(crafted(175), largest, 8)).toBeLessThan(4);
+    const smaller = crafted(175);
+    expect(
+      costRatio(
+        () => read(smaller),
+        () => read(largest),
+        8,
+      ),
+    ).toBeLessThan(4);
   });
 
   it('reads a brand nested 20,000 arrays deep', () => {
@@ -439,5 +459,102 @@ describe('looksLikeGtin', () => {
     expect(looksLikeGtin('508825')).toBe(false);
     expect(looksLikeGtin('96385074')).toBe(false);
     expect(looksLikeGtin('819343015005')).toBe(false);
+  });
+});
+
+describe('withoutProductType', () => {
+  it.each([
+    ['LCD-5 Flagship Headphones', 'LCD-5'],
+    ['CRBN2 Electrostatic Headphone', 'CRBN2'],
+    ['HD 660S2 Open-Back Audiophile Headphones', 'HD 660S2'],
+    ['K19 Desktop DAC & Amp', 'K19'],
+    ['BLESSING3 2DD+4BA In-Ear Monitor', 'BLESSING3'],
+    ['MOONRIVER2 USB DAC/AMP', 'MOONRIVER2'],
+    ['Mojo 2 - Portable DAC/Amp', 'Mojo 2'],
+    ['HDV 820 Headphone Amplifier', 'HDV 820'],
+    ['Utopia Reference open-back hi-fi headphones', 'Utopia'],
+    ['Bathys MG Wireless Headphones', 'Bathys MG'],
+    ['Chu  II  IEMs and   earphones', 'Chu II'],
+  ])('takes the product type off %s', (name, expected) => {
+    expect(withoutProductType(name)).toBe(expected);
+  });
+
+  it.each([
+    'Atom Amp+',
+    'Atom Amp 2',
+    'Atom Amp',
+    'Momentum 4 Wireless',
+    'Clear MG Professional',
+    'Stand for Headphones',
+    'Headphones',
+    'HD 800 S',
+  ])('leaves %s as it is', (name) => {
+    expect(withoutProductType(name)).toBeNull();
+  });
+});
+
+describe('productPack.finish, with product types', () => {
+  const finish = productPack.finish ?? ((candidates: Candidate[]) => candidates);
+
+  it('takes off the brand, then the product type, whatever the method', () => {
+    const result = finish([
+      { property: 'brand', raw: 'Audeze', method: 'rule', path: 'fixed', confidence: 1 },
+      {
+        property: 'name',
+        raw: 'Audeze LCD-5 Flagship Headphones',
+        method: 'jsonld',
+        path: 'jsonld[1].name',
+        confidence: 0.9,
+      },
+      {
+        property: 'name',
+        raw: 'MOONDROP BLESSING3 2DD+4BA In-Ear Monitor',
+        method: 'rule',
+        path: 'css:.bradcrumb-text',
+        confidence: 0.9,
+      },
+    ]);
+    expect(result.filter((candidate) => candidate.property === 'name')).toEqual([
+      {
+        property: 'name',
+        raw: 'LCD-5',
+        method: 'jsonld',
+        path: 'jsonld[1].name (without the brand) (without the product type)',
+        confidence: 0.9,
+      },
+      {
+        property: 'name',
+        raw: 'MOONDROP BLESSING3',
+        method: 'rule',
+        path: 'css:.bradcrumb-text (without the product type)',
+        confidence: 0.9,
+      },
+    ]);
+  });
+
+  it('reads each name once, in time that grows with the page', { timeout: 60_000 }, () => {
+    const names = (count: number) =>
+      Array.from(
+        { length: count },
+        (_, i): Candidate => ({
+          property: 'name',
+          raw: `C${i} ${'Flagship Open-Back '.repeat(20)}DAC & Amp & Headphones`,
+          method: 'jsonld',
+          path: `jsonld[${i}].name`,
+          confidence: 0.9,
+        }),
+      );
+    const small = names(100);
+    const large = names(10_000);
+    expect(
+      costRatio(
+        () => finish(small),
+        () => finish(large),
+        100,
+      ),
+    ).toBeLessThan(4);
+    // A name far longer than any field keeps is left as it is, unread.
+    const huge = `${'headphones '.repeat(100_000)}headphones`;
+    expect(withoutProductType(huge)).toBeNull();
   });
 });
