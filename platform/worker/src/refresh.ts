@@ -2,7 +2,6 @@ import {
   acceptLlmOutput,
   buildLlmRequest,
   buildRecords,
-  EXTRACTION_VERSION,
   extractFromPage,
   LLM_MAX_TOKENS,
   llmFields,
@@ -18,11 +17,8 @@ import {
   type ContentSignals,
   type Definition,
   type EntityStatements,
-  type GateDecision,
-  type LlmPort,
   type LlmUsage,
   type Outcome,
-  type PackRegistry,
   type Page,
   type PageExtraction,
   type PublishResult,
@@ -45,15 +41,42 @@ import {
   reseeStatements,
   resolveEntities,
   startRun,
+  statementsOf,
   writeStatements,
-  type Executor,
   type FetchInput,
   type ItemRef,
   type StatementCounts,
 } from '@spatula/store';
+import { cascadeField, classifyItem, classifyTarget } from './classify';
 import { discoverSource } from './discovery';
+import {
+  budgetLeft,
+  decisionsOf,
+  extractionTag,
+  NO_CHANGE,
+  NO_USAGE,
+  pageKey,
+  retryTag,
+  snapshotKey,
+  type Context,
+  type RefreshPorts,
+  type StepRunner,
+} from './pipeline';
 import { isChallenge, MAX_WAITS, requestThroughGate, type Resume } from './requests';
 import { storable } from './text';
+
+// What other modules have always imported from here.
+export {
+  extractionTag,
+  pageKey,
+  snapshotKey,
+  type BlobPort,
+  type GatePort,
+  type HttpPort,
+  type HttpResult,
+  type RefreshPorts,
+  type StepRunner,
+} from './pipeline';
 
 /*
  * One refresh of one dataset. A sitemap source's sitemaps are read first (discovery.ts), which
@@ -61,64 +84,12 @@ import { storable } from './text';
  * page that changed (or whose statements came from older code) is extracted, in a step of its
  * own, from the copy kept under its hash. A failed or blocked fetch changes no values. The LLM is
  * asked only for fields nothing else filled, only where the dataset and the site allow AI input,
- * and only when its question changed. Then entities are resolved, and a snapshot is published if
- * the records changed. Nothing here imports Cloudflare: the Workflow passes real ports, and the
- * tests pass fakes.
+ * and only when its question changed. A page whose source leaves the record type's decided field
+ * to the cascade is then classified, in a step of its own (classify.ts), and isn't current until
+ * that step has finished. The LLM and the decider share the run's token budget (pipeline.ts). Then
+ * entities are resolved, and a snapshot is published if the records changed. Nothing here imports
+ * Cloudflare: the Workflow passes real ports, and the tests pass fakes.
  */
-
-/** The Workflow's steps, as the pipeline uses them. Step results are kept as JSON. */
-export interface StepRunner {
-  do<T>(name: string, fn: () => Promise<T>): Promise<T>;
-  sleep(name: string, ms: number): Promise<void>;
-}
-
-/** Whether a request to a URL may go now, and what came of it. */
-export interface GatePort {
-  reserve(
-    url: string,
-    request: { minIntervalMs: number; maxWaitMs: number },
-  ): Promise<GateDecision>;
-  record(url: string, response: { status: number; retryAfter: string | null }): Promise<void>;
-}
-
-export type HttpResult =
-  | {
-      ok: true;
-      status: number;
-      headers: Record<string, string>;
-      body: Uint8Array;
-      truncated: boolean;
-    }
-  | { ok: false; error: string };
-
-/**
- * One GET, never following redirects. Header names are lowercase; the body is read only for a 2xx,
- * up to `maxBytes` (5 MB unless the caller says otherwise).
- */
-export interface HttpPort {
-  get(
-    url: string,
-    headers: Record<string, string>,
-    options?: { maxBytes?: number; accept?: string },
-  ): Promise<HttpResult>;
-}
-
-export interface BlobPort {
-  put(key: string, body: Uint8Array | string, contentType: string): Promise<void>;
-  get(key: string): Promise<Uint8Array | null>;
-}
-
-export interface RefreshPorts {
-  withDb<T>(fn: (db: Executor) => Promise<T>): Promise<T>;
-  gate: GatePort;
-  http: HttpPort;
-  blobs: BlobPort;
-  llm: LlmPort | null;
-  packs: PackRegistry;
-  now(): Date;
-  /** A wait inside a step, never longer than MAX_INLINE_WAIT_MS. */
-  wait(ms: number): Promise<void>;
-}
 
 export interface RefreshParams {
   runId: string;
@@ -148,24 +119,12 @@ const ITEMS_PER_STEP = 50;
  */
 export const SOURCE_PAUSE_AFTER = 3;
 
-const NO_USAGE: LlmUsage = { inputTokens: 0, outputTokens: 0 };
-const NO_CHANGE: StatementCounts = { added: 0, reseen: 0, withdrawn: 0 };
-
 export class DatasetMissingError extends Error {
   constructor(datasetId: string) {
     super(`Dataset ${datasetId} doesn’t exist`);
     this.name = 'DatasetMissingError';
   }
 }
-
-/** Where a page's HTML is kept: under its SHA-256, so an unchanged page is stored once. */
-export const pageKey = (contentHash: string) => `pages/${contentHash}`;
-export const snapshotKey = (datasetId: string, snapshotId: string) =>
-  `datasets/${datasetId}/snapshots/${snapshotId}.json`;
-/** Which definition revision and extraction code a page's statements came from. */
-export const extractionTag = (revision: number) => `r${revision}.v${EXTRACTION_VERSION}`;
-/** What a page is marked with when it has to be read again though nothing about it changed. */
-const retryTag = (revision: number) => `${extractionTag(revision)}.retry`;
 
 /**
  * What a snapshot's records say, without when each value was last seen. A run that only sees
@@ -214,14 +173,6 @@ export function classifyResponse(response: {
   return { kind: 'page' };
 }
 
-interface Context {
-  runId: string;
-  datasetId: string;
-  revision: number;
-  definition: Definition;
-  startedAt: Date;
-}
-
 /** A fetch's result, as its step returns it. */
 interface Fetched {
   fetchId: string;
@@ -248,6 +199,10 @@ interface Extracted {
   llm: 'ran' | 'reused' | 'skipped' | 'failed';
   usage: LlmUsage;
   notes: string[];
+  /** Whether the page was read: a page that couldn't be has nothing to classify. */
+  read: boolean;
+  /** Whether the LLM wasn't asked because the run's budget was spent. */
+  waitsForBudget: boolean;
 }
 
 export async function runRefresh(
@@ -331,6 +286,7 @@ export async function runRefresh(
     // its steps pauses at the same page.
     const blocksInARow = new Map<string, number>();
     const paused = new Map<string, number>();
+    let budgetWaits = 0;
     for (let start = 0; start < plan.ids.length; start += ITEMS_PER_STEP) {
       const batch = await step.do(`items:${start}`, () =>
         ports.withDb((db) => itemsByIds(db, plan.ids.slice(start, start + ITEMS_PER_STEP))),
@@ -341,18 +297,19 @@ export async function runRefresh(
           paused.set(item.sourceId, left + 1);
           continue;
         }
-        const fetched = await refreshItem(context, item, summary, step, ports);
+        const refreshed = await refreshItem(context, item, summary, step, ports);
         // The pages read: a planned page that's no longer live when its batch loads isn't one, and
         // neither is one a paused source left unread.
         summary.items += 1;
         // Only a block the host answered counts. A gate refusal sent no request, and starts the count
         // again, as any answer that isn't a block does.
         const blocks =
-          fetched.outcome === 'blocked' && fetched.hostAnswered
+          refreshed.outcome === 'blocked' && refreshed.hostAnswered
             ? (blocksInARow.get(item.sourceId) ?? 0) + 1
             : 0;
         blocksInARow.set(item.sourceId, blocks);
         if (blocks >= SOURCE_PAUSE_AFTER) paused.set(item.sourceId, 0);
+        if (refreshed.waitsForBudget) budgetWaits += 1;
       }
     }
     summary.paused = Object.fromEntries(paused);
@@ -367,6 +324,13 @@ export async function runRefresh(
       note(
         summary,
         `${sourceId}: paused after ${SOURCE_PAUSE_AFTER} blocks in a row; ${left} ${fate}`,
+      );
+    }
+    if (budgetWaits > 0) {
+      const { llmTokensPerRun } = context.definition.budget;
+      note(
+        summary,
+        `${budgetWaits} ${budgetWaits === 1 ? 'page waits' : 'pages wait'} for the next run: this run’s LLM budget of ${llmTokensPerRun.toLocaleString('en-US')} tokens is spent`,
       );
     }
 
@@ -430,21 +394,23 @@ function note(summary: RunSummary, text: string) {
   if (summary.notes.length < MAX_NOTES) summary.notes.push(storable(text));
 }
 
-/** Fetches one page, and reads it when it changed or its statements came from older code. */
+/** Fetches one page; reads it when it changed or its statements came from older code; classifies it. */
 async function refreshItem(
   context: Context,
   item: ItemRef,
   summary: RunSummary,
   step: StepRunner,
   ports: RefreshPorts,
-): Promise<Fetched> {
+): Promise<{ outcome: Outcome; hostAnswered: boolean; waitsForBudget: boolean }> {
   const fetched = await fetchWithWaits(context, item, step, ports);
   summary.fetches[fetched.outcome] += 1;
   summary.statements.reseen += fetched.reseen;
   if (fetched.note !== null) note(summary, fetched.note);
-  if (!fetched.extract) return fetched;
+  if (!fetched.extract) {
+    return { outcome: fetched.outcome, hostAnswered: fetched.hostAnswered, waitsForBudget: false };
+  }
   const extracted = await step.do(`extract:${item.id}`, () =>
-    extractItem(context, item, fetched, ports),
+    extractItem(context, item, fetched, budgetLeft(context, summary), ports),
   );
   summary.statements.added += extracted.statements.added;
   summary.statements.reseen += extracted.statements.reseen;
@@ -453,7 +419,23 @@ async function refreshItem(
   summary.llm.inputTokens += extracted.usage.inputTokens;
   summary.llm.outputTokens += extracted.usage.outputTokens;
   for (const text of extracted.notes) note(summary, text);
-  return fetched;
+  let waitsForBudget = extracted.waitsForBudget;
+  if (extracted.read && classifyTarget(context.definition, item) !== null) {
+    // A page whose LLM step failed or waited for the budget is read again next run, whatever
+    // classifying it comes to.
+    const complete = extracted.llm !== 'failed' && !extracted.waitsForBudget;
+    const classified = await step.do(`classify:${item.id}`, () =>
+      classifyItem(context, item, fetched, budgetLeft(context, summary), ports, complete),
+    );
+    const counts = decisionsOf(summary, 'classify');
+    counts[classified.outcome] += 1;
+    counts.inputTokens += classified.usage.inputTokens;
+    counts.outputTokens += classified.usage.outputTokens;
+    if (classified.irrelevant) summary.irrelevant = (summary.irrelevant ?? 0) + 1;
+    if (classified.note !== null) note(summary, classified.note);
+    waitsForBudget ||= classified.outcome === 'skipped';
+  }
+  return { outcome: fetched.outcome, hostAnswered: fetched.hostAnswered, waitsForBudget };
 }
 
 /**
@@ -525,10 +507,17 @@ async function fetchItem(
   const fetchId = await stableId('fe', context.runId, item.id, attempt);
   // A page whose statements came from older code isn't current. Neither is one the LLM read
   // while its site now says ai-input=no: it's extracted once more, and the LLM step withdraws
-  // what the LLM said and clears its hash, so the page is current again next time.
-  const current =
+  // what the LLM said and clears its hash, so the page is current again next time. The same goes
+  // for a page whose category the decider gave, though the LLM read nothing else of it: its
+  // classify step finds the answer can't stand, and withdraws it. That statement is looked up only
+  // for such a page, so a run costs nothing more otherwise.
+  const noAiInput = signals['ai-input'] === 'no';
+  let current =
     item.extractedWith === extractionTag(context.revision) &&
-    !(signals['ai-input'] === 'no' && item.extractInputHash !== null);
+    !(noAiInput && item.extractInputHash !== null);
+  if (current && noAiInput && answer.outcome === 'unchanged') {
+    current = !(await categoryFromLlm(context, item, ports));
+  }
   const extract = answer.outcome === 'changed' || (answer.outcome === 'unchanged' && !current);
   const reseen = await ports.withDb(async (db) => {
     const logged: FetchInput = {
@@ -573,6 +562,23 @@ async function fetchItem(
         : storable(`${item.locator}: ${answer.outcome}${why === null ? '' : ` (${why})`}`),
     },
   };
+}
+
+/**
+ * Whether the page's category is a decider's answer: the current statement of the field the
+ * cascade decides has the method llm. A rule's answer and a person's don't rest on AI input.
+ */
+async function categoryFromLlm(
+  context: Context,
+  item: ItemRef,
+  ports: RefreshPorts,
+): Promise<boolean> {
+  const target = classifyTarget(context.definition, item);
+  if (target === null) return false;
+  const said = await ports.withDb((db) => statementsOf(db, [item.id]));
+  return (said.get(item.id) ?? []).some(
+    (statement) => statement.property === target.name && statement.method === 'llm',
+  );
 }
 
 /** Asks for a page through its host's gate, and says what came of it. */
@@ -746,6 +752,8 @@ async function unread(
     usage: NO_USAGE,
     // The reason can quote an exception's message, and this note is part of the step's result.
     notes: [storable(`${item.locator}: ${why}`)],
+    read: false,
+    waitsForBudget: false,
   };
 }
 
@@ -754,6 +762,7 @@ async function extractItem(
   context: Context,
   item: ItemRef,
   fetched: Fetched,
+  tokensLeft: number,
   ports: RefreshPorts,
 ): Promise<Extracted> {
   const { definition, revision, datasetId } = context;
@@ -786,6 +795,18 @@ async function extractItem(
     );
   }
   const seenAt = ports.now();
+  const decided = cascadeField(source, recordType);
+  // The cascade owns the decided field, so the page speaks for every other field, and its
+  // extraction never withdraws a decided answer.
+  const pageWrite =
+    decided === null
+      ? { statements: extraction.statements }
+      : {
+          statements: extraction.statements.filter(
+            (statement) => statement.property !== decided[0],
+          ),
+          properties: Object.keys(recordType.fields).filter((name) => name !== decided[0]),
+        };
   const pageCounts = await ports.withDb((db) =>
     writeStatements(db, {
       datasetId,
@@ -793,7 +814,7 @@ async function extractItem(
       fetchId: fetched.fetchId,
       seenAt,
       methods: PAGE_METHODS,
-      statements: extraction.statements,
+      ...pageWrite,
     }),
   );
   const llm = await askLlm(
@@ -804,6 +825,7 @@ async function extractItem(
     recordType,
     extraction.missing,
     seenAt,
+    tokensLeft,
     ports,
   );
   await ports.withDb((db) =>
@@ -811,8 +833,13 @@ async function extractItem(
       itemId: item.id,
       fetchId: fetched.fetchId,
       // A failed LLM step leaves the page not current, so the next run reads the stored copy and
-      // asks again, even after a 304 or an unchanged hash.
-      extractedWith: llm.outcome === 'failed' ? retryTag(revision) : extractionTag(revision),
+      // asks again, even after a 304 or an unchanged hash. So does an LLM step that waited for the
+      // run's budget. A page whose category the cascade decides isn't current until its classify
+      // step has finished, and that step marks it.
+      extractedWith:
+        llm.outcome === 'failed' || llm.waitsForBudget === true || decided !== null
+          ? retryTag(revision)
+          : extractionTag(revision),
       extractInputHash: llm.inputHash,
       // The detail can quote an LLM error's message, and a NUL in it would fail this write after
       // the LLM has been paid for.
@@ -836,6 +863,8 @@ async function extractItem(
     llm: llm.outcome,
     usage: llm.usage,
     notes,
+    read: true,
+    waitsForBudget: llm.waitsForBudget === true,
   };
 }
 
@@ -848,6 +877,8 @@ interface LlmStep {
   /** The new question's hash; null clears the stored one; undefined keeps it. */
   inputHash: string | null | undefined;
   note: string | null;
+  /** Whether the LLM wasn't asked because the run's budget was spent. */
+  waitsForBudget?: boolean;
 }
 
 async function askLlm(
@@ -858,6 +889,7 @@ async function askLlm(
   recordType: RecordType,
   missing: string[],
   seenAt: Date,
+  tokensLeft: number,
   ports: RefreshPorts,
 ): Promise<LlmStep> {
   const skipped = (why: string, more: Partial<LlmStep> = {}): LlmStep => ({
@@ -869,12 +901,14 @@ async function askLlm(
     note: null,
     ...more,
   });
+  // The LLM speaks only for the fields it fills, so it never withdraws the cascade's answers.
   const write = {
     datasetId: context.datasetId,
     itemId: item.id,
     fetchId: fetched.fetchId,
     seenAt,
     methods: ['llm'] as const,
+    properties: Object.keys(recordType.fields).filter((name) => recordType.fields[name]!.llm),
   };
 
   const fields = llmFields(recordType, missing);
@@ -908,6 +942,8 @@ async function askLlm(
       note: null,
     };
   }
+  // A reused answer costs nothing; a new one waits for the next run's budget.
+  if (tokensLeft <= 0) return skipped('the run’s LLM budget is spent', { waitsForBudget: true });
 
   // The question names the page that was listed, which the dataset's owner chose. After a
   // redirect the final address is the site's text, and it would sit outside the wrapper around

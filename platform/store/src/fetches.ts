@@ -186,3 +186,15 @@ export async function setItemStatus(
 ): Promise<void> {
   await db.update(items).set({ status }).where(eq(items.id, itemId));
 }
+
+/**
+ * Marks which code an item's statements came from, as a step does that reads a page without a
+ * fetch of its own. The retry tag has the next run read the page again.
+ */
+export async function setExtractedWith(
+  db: Executor,
+  itemId: string,
+  extractedWith: string,
+): Promise<void> {
+  await db.update(items).set({ extractedWith }).where(eq(items.id, itemId));
+}

@@ -42,6 +42,24 @@ export interface DiscoverySummary {
   incomplete: string[];
 }
 
+/** What a run's decisions of one kind came to (ADR 0003). */
+export interface DecisionSummary {
+  /** Answered by a rule. */
+  rule: number;
+  /** Answered by a decider sure enough to accept. */
+  accepted: number;
+  /** With a person: sent this run, or sent before and still open. */
+  escalated: number;
+  /** Answered before on the same evidence, or by a person, and applied again. */
+  reused: number;
+  /** Left for the next run, because the run's LLM budget was spent. */
+  skipped: number;
+  /** Left for the next run, because the decider failed. */
+  failed: number;
+  inputTokens: number;
+  outputTokens: number;
+}
+
 /** What a refresh did. */
 export interface RunSummary {
   /** The pages read this run. */
@@ -66,6 +84,12 @@ export interface RunSummary {
     inputTokens: number;
     outputTokens: number;
   };
+  /** The run's classifications. Absent in runs before slice 1. */
+  classify?: DecisionSummary;
+  /** The run's match questions. Absent in runs before slice 1. */
+  match?: DecisionSummary;
+  /** Pages this run found aren't the dataset's ("None of these"). */
+  irrelevant?: number;
   entities: { created: number; linked: number; conflicts: number; unresolved: number };
   snapshot: PublishResult;
   /** What deserves a look, such as an LLM failure or an identity conflict: at most 50. */

@@ -5,6 +5,8 @@
  * in its head that changes on every fetch, as Shopify's do, while its text stays the same.
  */
 
+import type { DecisionRequest } from '@spatula/core';
+
 const page = (head: string, main: string) =>
   `<!doctype html><html><head>${head}</head><body><header><nav>Shop</nav></header><main>${main}</main><footer>Maker</footer></body></html>`;
 
@@ -99,6 +101,25 @@ export function answerFor(user: string): Record<string, unknown> | null {
       ],
     };
   }
+  return null;
+}
+
+/** A product page with only the JSON-LD a test gives it. */
+export const productPage = (data: Record<string, unknown>) =>
+  page(
+    `<title>${String(data.name)}</title>${jsonLd({ '@type': 'Product', ...data })}`,
+    `<h1>${String(data.name)}</h1>`,
+  );
+
+/**
+ * What the fake decider answers: maker-a's pages are headphones, B1 is a DAC/amp, and every match
+ * question is about different products.
+ */
+export function decisionFor(request: DecisionRequest): Record<string, number> | null {
+  if (request.type === 'classify') {
+    return request.evidence.includes(URLS.b1) ? { 'DAC/Amp': 0.97 } : { Headphones: 0.97 };
+  }
+  if (request.type === 'match') return { different: 0.97 };
   return null;
 }
 

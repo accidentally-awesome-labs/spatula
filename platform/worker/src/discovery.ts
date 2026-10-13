@@ -7,7 +7,7 @@ import {
   type SitemapSource,
 } from '@spatula/core';
 import { finishListing, listPages, recordSitemapFetch } from '@spatula/store';
-import type { RefreshPorts, StepRunner } from './refresh';
+import type { RefreshPorts, StepRunner } from './pipeline';
 import {
   isChallenge,
   MAX_WAITS,

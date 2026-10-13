@@ -55,6 +55,32 @@ export function formatRun(run: RunView): string[] {
   lines.push(
     `Statements: ${statements.added} added, ${statements.reseen} seen again, ${statements.withdrawn} withdrawn.`,
     `LLM: ran ${llm.ran}, reused ${llm.reused}, skipped ${llm.skipped}, failed ${llm.failed}; ${llm.inputTokens} tokens in, ${llm.outputTokens} out.`,
+  );
+  // Runs from before slice 1, and datasets that decide nothing, say nothing of decisions.
+  for (const [label, counts] of [
+    ['Classified', summary.classify],
+    ['Matched', summary.match],
+  ] as const) {
+    if (counts === undefined) continue;
+    const asked =
+      counts.rule +
+      counts.accepted +
+      counts.escalated +
+      counts.reused +
+      counts.skipped +
+      counts.failed;
+    if (asked === 0) continue;
+    lines.push(
+      `${label}: ${counts.rule} by rule, ${counts.accepted} by the decider, ${counts.escalated} for review, ${counts.reused} as before, ${counts.skipped} for the next run, ${counts.failed} failed; ${counts.inputTokens} tokens in, ${counts.outputTokens} out.`,
+    );
+  }
+  const irrelevant = summary.irrelevant ?? 0;
+  if (irrelevant > 0) {
+    lines.push(
+      `Not the dataset’s: ${irrelevant} ${irrelevant === 1 ? 'page' : 'pages'}, out until revived.`,
+    );
+  }
+  lines.push(
     `Entities: ${entities.created} new, ${entities.linked} linked, ${entities.conflicts} conflicts, ${entities.unresolved} without an identity yet.`,
     snapshot.published
       ? `Snapshot: generation ${snapshot.generation}, ${snapshot.records} records.`

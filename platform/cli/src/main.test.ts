@@ -1,4 +1,10 @@
-import { sha256Hex, type ApplySummary, type DiscoverySummary, type RunView } from '@spatula/core';
+import {
+  sha256Hex,
+  type ApplySummary,
+  type DiscoverySummary,
+  type RunSummary,
+  type RunView,
+} from '@spatula/core';
 import { testDefinition } from '@spatula/store/fixtures';
 import { describe, expect, it } from 'vitest';
 import { stringify } from 'yaml';
@@ -496,6 +502,105 @@ describe('run', () => {
     expect(await printed({ ...none, sources: 1, sitemaps: 1, listed: 1, added: 1 })).toContain(
       'Sitemaps: 1 read for 1 source; 1 page listed, 1 new, 0 back, 0 missing, 0 gone.',
     );
+  });
+
+  it('says what the run decided', async () => {
+    const complete: RunView = {
+      ...RUNNING,
+      status: 'complete',
+      finishedAt: '2026-10-10T00:01:00.000Z',
+      summary: {
+        items: 12,
+        fetches: { changed: 12, unchanged: 0, gone: 0, failed: 0, blocked: 0 },
+        statements: { added: 60, reseen: 0, withdrawn: 0 },
+        llm: { ran: 12, reused: 0, skipped: 0, failed: 0, inputTokens: 12000, outputTokens: 600 },
+        classify: {
+          rule: 1,
+          accepted: 9,
+          escalated: 2,
+          reused: 0,
+          skipped: 0,
+          failed: 0,
+          inputTokens: 5000,
+          outputTokens: 200,
+        },
+        irrelevant: 1,
+        entities: { created: 9, linked: 0, conflicts: 0, unresolved: 0 },
+        snapshot: { published: true, generation: 3, snapshotId: 'sn_x', records: 9, excluded: [] },
+        notes: [],
+      },
+    };
+    const { fetch } = stubApi(({ method }) =>
+      method === 'POST'
+        ? Response.json({ runId: RUN_ID }, { status: 202 })
+        : Response.json(complete),
+    );
+    const { io, out } = memoryIo();
+    expect(await main(['run', 'cli-products', '--wait'], { io, env: ENV, fetch })).toBe(0);
+    expect(out).toContain(
+      'Classified: 1 by rule, 9 by the decider, 2 for review, 0 as before, 0 for the next run, 0 failed; 5000 tokens in, 200 out.',
+    );
+    expect(out).toContain('Not the dataset’s: 1 page, out until revived.');
+    expect(out.some((line) => line.startsWith('Matched:'))).toBe(false);
+  });
+
+  it('says each kind of decision that was asked, in order, and nothing of one that wasn’t', async () => {
+    const none = {
+      rule: 0,
+      accepted: 0,
+      escalated: 0,
+      reused: 0,
+      skipped: 0,
+      failed: 0,
+      inputTokens: 0,
+      outputTokens: 0,
+    };
+    const printed = async (more: Partial<RunSummary>) => {
+      const complete: RunView = {
+        ...RUNNING,
+        status: 'complete',
+        summary: {
+          items: 0,
+          fetches: { changed: 0, unchanged: 0, gone: 0, failed: 0, blocked: 0 },
+          statements: { added: 0, reseen: 0, withdrawn: 0 },
+          llm: { ran: 0, reused: 0, skipped: 0, failed: 0, inputTokens: 0, outputTokens: 0 },
+          entities: { created: 0, linked: 0, conflicts: 0, unresolved: 0 },
+          snapshot: {
+            published: false,
+            reason: 'nothing changed since generation 1',
+            excluded: [],
+          },
+          notes: [],
+          ...more,
+        },
+      };
+      const { fetch } = stubApi(({ method }) =>
+        method === 'POST'
+          ? Response.json({ runId: RUN_ID }, { status: 202 })
+          : Response.json(complete),
+      );
+      const { io, out } = memoryIo();
+      expect(await main(['run', 'cli-products', '--wait'], { io, env: ENV, fetch })).toBe(0);
+      return out;
+    };
+
+    // A run that asked nothing says nothing, whether its counts are zero or absent.
+    const quiet = await printed({ classify: none, match: none, irrelevant: 0 });
+    expect(quiet.filter((line) => /^(Classified|Matched|Not the dataset)/u.test(line))).toEqual([]);
+
+    const busy = await printed({
+      match: { ...none, accepted: 3, skipped: 1, inputTokens: 1500, outputTokens: 60 },
+      irrelevant: 2,
+    });
+    expect(busy).toContain(
+      'Matched: 0 by rule, 3 by the decider, 0 for review, 0 as before, 1 for the next run, 0 failed; 1500 tokens in, 60 out.',
+    );
+    expect(busy).toContain('Not the dataset’s: 2 pages, out until revived.');
+    expect(busy.some((line) => line.startsWith('Classified:'))).toBe(false);
+    const at = (prefix: string) => busy.findIndex((line) => line.startsWith(prefix));
+    expect(at('LLM:')).toBeLessThan(at('Matched:'));
+    expect(at('Matched:')).toBeLessThan(at('Not the dataset’s:'));
+    expect(at('Not the dataset’s:')).toBeLessThan(at('Entities:'));
   });
 });
 

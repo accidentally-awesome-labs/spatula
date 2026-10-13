@@ -1,12 +1,12 @@
-import { PAGE_METHODS, type PagesSource } from '@spatula/core';
+import { PAGE_METHODS, type PagesSource, type StatementInput } from '@spatula/core';
 import { and, eq } from 'drizzle-orm';
 import { describe, expect, it } from 'vitest';
 import { withRollback } from '../test/db';
 import { fetchOf, seedDataset, statementOf, T } from '../test/seed';
 import { testDefinition } from './fixtures';
-import { applyDefinition } from './datasets';
+import { applyDefinition, type ItemRef } from './datasets';
 import { statements } from './schema';
-import { currentStatements, reseeStatements, writeStatements } from './statements';
+import { currentStatements, reseeStatements, statementsOf, writeStatements } from './statements';
 
 describe('writeStatements', () => {
   it('adds new values, re-sees old ones, and withdraws what the page stopped saying', () =>
@@ -441,5 +441,33 @@ describe('currentStatements', () => {
       expect(
         (await currentStatements(db, 'test-products')).map((statement) => statement.value),
       ).toEqual(['A1']);
+    }));
+});
+
+describe('statementsOf', () => {
+  it('reads several items’ current statements at once, by item', () =>
+    withRollback(async (tx) => {
+      const {
+        items: [a1, a2],
+        runId,
+      } = await seedDataset(tx);
+      const write = async (item: ItemRef, minute: number, said: StatementInput[]) =>
+        writeStatements(tx, {
+          datasetId: 'test-products',
+          itemId: item.id,
+          fetchId: await fetchOf(tx, runId, item, T(minute)),
+          seenAt: T(minute),
+          methods: PAGE_METHODS,
+          statements: said,
+        });
+      await write(a1!, 1, [statementOf('name', 'A1', 'jsonld'), statementOf('brand', 'Maker A')]);
+      await write(a1!, 2, [statementOf('name', 'A1', 'jsonld')]);
+      await write(a2!, 2, [statementOf('name', 'A2', 'jsonld')]);
+      const said = await statementsOf(tx, [a1!.id, a2!.id]);
+      expect(said.get(a1!.id)?.map((statement) => statement.property)).toEqual(['name']);
+      expect(said.get(a2!.id)).toMatchObject([
+        { property: 'name', value: 'A2', method: 'jsonld', sourceUrl: a2!.locator },
+      ]);
+      expect(await statementsOf(tx, [])).toEqual(new Map());
     }));
 });

@@ -115,6 +115,27 @@ describe('the Worker’s ports', () => {
     }
   });
 
+  it('give the decider the LLM they have, and neither where there is no LLM', async () => {
+    // The Workers tests blank the key and the gateway's address, so a deployment's secrets can't
+    // reach them.
+    expect(workerPorts(env)).toMatchObject({ llm: null, decider: null });
+
+    const ports = workerPorts({
+      ...env,
+      ANTHROPIC_API_KEY: 'sk-test',
+      AI_GATEWAY_URL: 'https://gateway.example/v1/anthropic',
+    } as Env);
+    expect(ports.llm?.model).toBe(env.LLM_MODEL);
+    expect(ports.decider?.name).toBe(`llm:${env.LLM_MODEL}`);
+
+    // A key without the gateway's address would call Anthropic directly, unlogged. It gets no LLM,
+    // and so no decider.
+    expect(workerPorts({ ...env, ANTHROPIC_API_KEY: 'sk-test' } as Env)).toMatchObject({
+      llm: null,
+      decider: null,
+    });
+  });
+
   it('fail before sending anything where the key won’t import', async () => {
     const sent: Sent[] = [];
     network.use(recording('badkey.example', sent));

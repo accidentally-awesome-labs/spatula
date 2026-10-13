@@ -1,4 +1,10 @@
-import { importSigningKey, randomNonce, signRequest, type SigningKey } from '@spatula/core';
+import {
+  createLlmDecider,
+  importSigningKey,
+  randomNonce,
+  signRequest,
+  type SigningKey,
+} from '@spatula/core';
 import { packs } from '@spatula/pack-products';
 import { r2Blobs } from './blobs';
 import { secret, spatulaUserAgent } from './config';
@@ -13,6 +19,17 @@ export function workerPorts(env: Env): RefreshPorts {
   const http = createHttpFetcher({ userAgent: spatulaUserAgent(env), sign: signer(env) });
   const apiKey = secret(env, 'ANTHROPIC_API_KEY');
   const gatewayUrl = secret(env, 'AI_GATEWAY_URL');
+  // Calls go through AI Gateway, which logs them and records their cost. A key without the
+  // gateway's address would call Anthropic directly, unlogged, so it gets no LLM at all.
+  const llm =
+    apiKey === undefined || gatewayUrl === undefined
+      ? null
+      : createAnthropicLlm({
+          apiKey,
+          model: env.LLM_MODEL,
+          baseURL: gatewayUrl,
+          gatewayToken: secret(env, 'AI_GATEWAY_TOKEN'),
+        });
   return {
     withDb: (fn) => withDatabase(env, fn),
     gate: createGatePort({
@@ -31,17 +48,8 @@ export function workerPorts(env: Env): RefreshPorts {
     }),
     http,
     blobs: r2Blobs(env.STORE),
-    // Calls go through AI Gateway, which logs them and records their cost. A key without the
-    // gateway's address would call Anthropic directly, unlogged, so it gets no LLM at all.
-    llm:
-      apiKey === undefined || gatewayUrl === undefined
-        ? null
-        : createAnthropicLlm({
-            apiKey,
-            model: env.LLM_MODEL,
-            baseURL: gatewayUrl,
-            gatewayToken: secret(env, 'AI_GATEWAY_TOKEN'),
-          }),
+    llm,
+    decider: llm === null ? null : createLlmDecider(llm),
     packs,
     now: () => new Date(),
     wait: (ms) => scheduler.wait(ms),

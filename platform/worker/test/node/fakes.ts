@@ -1,9 +1,15 @@
-import { INITIAL_GATE_STATE, type GateState, type LlmPort } from '@spatula/core';
+import {
+  INITIAL_GATE_STATE,
+  type Decider,
+  type DecisionRequest,
+  type GateState,
+  type LlmPort,
+} from '@spatula/core';
 import { packs } from '@spatula/pack-products';
 import type { Executor } from '@spatula/store';
 import { createGatePort, GateKeeper } from '../../src/gate-port';
 import type { HttpPort, RefreshPorts, StepRunner } from '../../src/refresh';
-import { answerFor, type Reply } from '../pages';
+import { answerFor, decisionFor, type Reply } from '../pages';
 
 /** Time that moves only when told: by waits, sleeps, and each request's 100 ms. */
 export class Clock {
@@ -115,11 +121,31 @@ export function fakeLlm(answer: (user: string) => Record<string, unknown> | null
   return { llm, calls };
 }
 
+/** A decider that answers from a table, and keeps each question it's asked. */
+export function fakeDecider(answer: (request: DecisionRequest) => Record<string, number> | null) {
+  const calls: DecisionRequest[] = [];
+  const decider: Decider = {
+    name: 'llm:test-model',
+    async decide(request) {
+      calls.push(request);
+      const probabilities = answer(request) ?? {};
+      const [best] = Object.entries(probabilities).sort((a, b) => b[1] - a[1]);
+      return {
+        answer: best?.[0] ?? null,
+        probabilities,
+        evidence: 'the test’s reason',
+        usage: { inputTokens: 500, outputTokens: 20 },
+      };
+    },
+  };
+  return { decider, calls };
+}
+
 /** Everything a refresh touches, faked, around a real database. State lasts across runs. */
 export function makeWorld(
   db: Executor,
   routes: Record<string, Reply>,
-  options: { llm?: boolean } = {},
+  options: { llm?: boolean; decider?: boolean } = {},
 ) {
   const clock = new Clock(Date.UTC(2026, 9, 10));
   const web = fakeWeb(clock);
@@ -127,6 +153,7 @@ export function makeWorld(
   const gates = memoryGates();
   const stored = new Map<string, Uint8Array>();
   const llm = fakeLlm(answerFor);
+  const decider = fakeDecider(decisionFor);
   const ports: RefreshPorts = {
     withDb: (fn) => fn(db),
     gate: createGatePort({ gateFor: gates.gateFor, http: web.http, now: () => clock.ms }),
@@ -140,11 +167,12 @@ export function makeWorld(
       },
     },
     llm: options.llm === false ? null : llm.llm,
+    decider: options.decider === false ? null : decider.decider,
     packs,
     now: clock.now,
     wait: async (ms) => clock.advance(ms),
   };
-  return { clock, web, gates, stored, llm, ports };
+  return { clock, web, gates, stored, llm, decider, ports };
 }
 
 export type World = ReturnType<typeof makeWorld>;

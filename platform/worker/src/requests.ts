@@ -1,5 +1,5 @@
 import type { ContentSignals } from '@spatula/core';
-import type { GatePort, HttpPort } from './refresh';
+import type { GatePort, HttpPort } from './pipeline';
 
 /*
  * One request through its host's gate. Every hop, redirects included, asks the host's gate first,

@@ -94,6 +94,16 @@ export function survive(
   return results;
 }
 
+/** Each field's surviving values, by name: what a record says, without the statements behind it. */
+export function survivingValues(
+  recordType: RecordType,
+  statements: StatementView[],
+): Record<string, FieldValue[]> {
+  const values: Record<string, FieldValue[]> = {};
+  for (const [name, field] of survive(recordType, statements)) values[name] = field.values;
+  return values;
+}
+
 /**
  * Whether a stored value has the shape its field's type takes now: text for text, enum, gtin, and
  * url fields, and a label with a value for specs. When a definition changes a field's type, the

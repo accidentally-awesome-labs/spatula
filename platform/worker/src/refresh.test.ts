@@ -1,28 +1,19 @@
 import {
   normalizeGtin,
   runIdFor,
-  sha256Hex,
-  snapshotSchema,
   type Candidate,
   type GateDecision,
   type Page,
   type PagesSource,
 } from '@spatula/core';
 import { packs } from '@spatula/pack-products';
-import {
-  applyDefinition,
-  fetches,
-  getRun,
-  items,
-  latestSnapshot,
-  listLiveItems,
-  statements,
-} from '@spatula/store';
+import { applyDefinition, fetches, getRun, items, listLiveItems, statements } from '@spatula/store';
 import { testDefinition } from '@spatula/store/fixtures';
 import { and, eq, isNull } from 'drizzle-orm';
 import { describe, expect, it } from 'vitest';
 import { db } from '../test/node/db';
 import { fakeLlm, fakeStep, makeWorld, type StepCache, type World } from '../test/node/fakes';
+import { entityOf, fetchOf, published, refresh } from '../test/node/runs';
 import { A1, A2, answerFor, B1, standardRoutes, URLS } from '../test/pages';
 import {
   classifyResponse,
@@ -39,33 +30,6 @@ import { MAX_REDIRECTS, MAX_WAITS, requestThroughGate } from './requests';
 const HOUR = 3_600_000;
 const DAY = 24 * HOUR;
 
-/**
- * One run of the dataset, then five minutes, so the next run gets its own ID. Workflows keep each
- * step's result, so the run keeps them too, for tests that look at what a step returned. A run
- * counts every page as due unless it's told otherwise, so tests that run again five minutes later
- * still see every page read.
- */
-async function refresh(
-  world: World,
-  datasetId: string,
-  options: { all?: boolean } = { all: true },
-) {
-  const runId = runIdFor(datasetId, world.clock.now());
-  const { step, names } = fakeStep(world.clock);
-  const results = new Map<string, unknown>();
-  const recording: StepRunner = {
-    ...step,
-    async do(name, fn) {
-      const result = await step.do(name, fn);
-      results.set(name, result);
-      return result;
-    },
-  };
-  const summary = await runRefresh({ runId, datasetId, all: options.all }, recording, world.ports);
-  world.clock.advance(5 * 60_000);
-  return { summary, names, runId, results };
-}
-
 /** A new dataset from the test definition, and a world whose pages answer as `routes` say. */
 async function setUp(
   datasetId: string,
@@ -77,31 +41,6 @@ async function setUp(
   const [a1, a2, b1] = await listLiveItems(db, datasetId);
   return { world, a1: a1!, a2: a2!, b1: b1! };
 }
-
-/** The latest snapshot's row and file, checking the file against its recorded hash. */
-async function published(world: World, datasetId: string) {
-  const row = await latestSnapshot(db, datasetId);
-  if (row === null) return null;
-  const body = world.stored.get(row.key)!;
-  expect(await sha256Hex(body)).toBe(row.sha256);
-  const snapshot = snapshotSchema.parse(JSON.parse(new TextDecoder().decode(body)));
-  const byName = Object.fromEntries(
-    snapshot.records.map((record) => [String(record.fields.name), record]),
-  );
-  return { row, snapshot, byName };
-}
-
-const fetchOf = async (runId: string, url: string) =>
-  (
-    await db
-      .select()
-      .from(fetches)
-      .where(and(eq(fetches.runId, runId), eq(fetches.url, url)))
-  )[0]!;
-
-const entityOf = async (itemId: string) =>
-  (await db.select({ entityId: items.entityId }).from(items).where(eq(items.id, itemId)))[0]!
-    .entityId;
 
 /** When each of an item's current statements was last seen, as ISO text, in order. */
 const lastSeenOf = async (itemId: string) =>
@@ -1216,6 +1155,41 @@ describe('runRefresh', () => {
     expect(run.summary.fetches).toMatchObject({ blocked: 4, changed: 2 });
     expect(run.summary.paused).toEqual({});
     expect(world.web.requests.map((sent) => sent.url)).toContain(pages[4]);
+  });
+
+  it('stops asking the LLM once the run’s budget is spent, and reads those pages next run', async () => {
+    const definition = testDefinition('refresh-llm-budget');
+    await applyDefinition(db, {
+      ...definition,
+      budget: { ...definition.budget, llmTokensPerRun: 1000 },
+    });
+    const world = makeWorld(db, standardRoutes());
+    // A1 is read first, and its answer spends 1,050 tokens; B1 and A2 wait.
+    const first = await refresh(world, 'refresh-llm-budget');
+    expect(first.summary.llm).toMatchObject({ ran: 1, skipped: 2, inputTokens: 1000 });
+    expect(first.summary.notes).toContain(
+      '2 pages wait for the next run: this run’s LLM budget of 1,000 tokens is spent',
+    );
+    expect(await fetchOf(first.runId, URLS.b1)).toMatchObject({
+      llm: 'skipped: the run’s LLM budget is spent',
+    });
+    // The next run has a budget of its own: B1 is read from its stored copy, and A2 waits again.
+    const second = await refresh(world, 'refresh-llm-budget');
+    expect(second.summary.llm).toMatchObject({ ran: 1, reused: 0, skipped: 1 });
+    expect(world.llm.calls).toHaveLength(2);
+  });
+
+  it('stops asking the LLM when the run’s budget is spent to the token', async () => {
+    const definition = testDefinition('refresh-llm-budget-exact');
+    await applyDefinition(db, {
+      ...definition,
+      budget: { ...definition.budget, llmTokensPerRun: 1050 },
+    });
+    const world = makeWorld(db, standardRoutes());
+    // A1's answer spends 1,050 tokens, which is all of the budget.
+    const first = await refresh(world, 'refresh-llm-budget-exact');
+    expect(first.summary.llm).toMatchObject({ ran: 1, skipped: 2 });
+    expect(world.llm.calls).toHaveLength(1);
   });
 });
 

@@ -172,3 +172,35 @@ export async function currentStatements(
     .orderBy(asc(statements.itemId), asc(statements.property), asc(statements.id));
   return rows.map((row) => ({ ...row, lastSeen: row.lastSeen.toISOString() }));
 }
+
+/** The current statements of these items, by item, as survivorship reads them. */
+export async function statementsOf(
+  db: Executor,
+  itemIds: readonly string[],
+): Promise<Map<string, StatementView[]>> {
+  const said = new Map<string, StatementView[]>();
+  if (itemIds.length === 0) return said;
+  const rows = await db
+    .select({
+      itemId: statements.itemId,
+      sourceUrl: items.locator,
+      property: statements.property,
+      value: statements.value,
+      valueKey: statements.valueKey,
+      method: statements.method,
+      confidence: statements.confidence,
+      lastSeen: statements.lastSeen,
+      position: statements.position,
+    })
+    .from(statements)
+    .innerJoin(items, eq(items.id, statements.itemId))
+    .where(and(inArray(statements.itemId, [...itemIds]), isNull(statements.withdrawnAt)))
+    .orderBy(asc(statements.itemId), asc(statements.property), asc(statements.id));
+  for (const { itemId, ...row } of rows) {
+    const view = { ...row, lastSeen: row.lastSeen.toISOString() };
+    const list = said.get(itemId);
+    if (list === undefined) said.set(itemId, [view]);
+    else list.push(view);
+  }
+  return said;
+}

@@ -9,6 +9,7 @@ import {
   latestFetchId,
   recordExtraction,
   recordFetch,
+  setExtractedWith,
   setItemStatus,
   type FetchInput,
 } from './fetches';
@@ -388,5 +389,32 @@ describe('setItemStatus', () => {
       expect((await listLiveItems(db, 'test-products')).map((item) => item.id)).not.toContain(
         a1!.id,
       );
+    }));
+});
+
+describe('setExtractedWith', () => {
+  it('marks one item’s statements as from other code, and changes nothing else', () =>
+    withRollback(async (db) => {
+      const {
+        items: [a1, a2],
+        runId,
+      } = await seedDataset(db);
+      await fetchOf(db, runId, a1!, T(1));
+      await recordExtraction(db, {
+        itemId: a1!.id,
+        fetchId: (await latestFetchId(db, a1!.id))!,
+        extractedWith: 'r1.v2',
+        extractInputHash: 'hash-1',
+        llm: 'ran',
+        usage: { inputTokens: 1, outputTokens: 1 },
+      });
+      const before = await itemRow(db, a1!.id);
+      await setExtractedWith(db, a1!.id, 'r1.v2.retry');
+      expect(await itemRow(db, a1!.id)).toEqual({ ...before, extractedWith: 'r1.v2.retry' });
+      expect((await itemRow(db, a2!.id)).extractedWith).toBeNull();
+      // Written again, it says what it said before, which a step that runs again does.
+      await setExtractedWith(db, a1!.id, 'r1.v2');
+      await setExtractedWith(db, a1!.id, 'r1.v2');
+      expect((await itemRow(db, a1!.id)).extractedWith).toBe('r1.v2');
     }));
 });
