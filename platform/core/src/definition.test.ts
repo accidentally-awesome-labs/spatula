@@ -538,6 +538,41 @@ describe('a decided field', () => {
       issues: ['recordTypes.product.fields: Only one field of a record type can be decided.'],
     });
   });
+
+  describe('has values that', () => {
+    const issue =
+      'recordTypes.product.fields.category.values: A decided field’s values are distinct, and none is “None of these”.';
+    const decided = (values: string[]) =>
+      withCategory({ type: 'enum', required: true, values, decide: true });
+
+    it('are distinct', () => {
+      expect(parseDefinition(decided(['Headphones', 'DAC/Amp', 'Headphones']))).toMatchObject({
+        ok: false,
+        issues: [issue],
+      });
+    });
+
+    it('leave out “None of these”, the answer that takes a page out of the dataset', () => {
+      expect(parseDefinition(decided(['Headphones', 'None of these']))).toMatchObject({
+        ok: false,
+        issues: [issue],
+      });
+      // One report for the field, however many ways its values are wrong.
+      expect(
+        parseDefinition(decided(['None of these', 'Headphones', 'None of these'])),
+      ).toMatchObject({ ok: false, issues: [issue] });
+    });
+
+    it('are not checked on a field that is not decided', () => {
+      // Only a decided field's question adds an answer of its own to the values.
+      const input = withCategory({
+        type: 'enum',
+        required: true,
+        values: ['Headphones', 'None of these', 'Headphones'],
+      });
+      expect(parseDefinition(input).ok).toBe(true);
+    });
+  });
 });
 
 describe('dataset settings', () => {

@@ -772,3 +772,10 @@ describe('productPack.finish, with product types', () => {
     ).toBeLessThan(4);
   });
 });
+
+describe('productPack.match', () => {
+  it('says what makes two products the same, versioned', () => {
+    expect(productPack.match).toMatchObject({ version: 1 });
+    expect(productPack.match?.criteria).toContain('variant: a version of the model');
+  });
+});

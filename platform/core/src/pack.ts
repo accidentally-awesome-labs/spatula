@@ -16,6 +16,11 @@ export interface RecordTypePack {
   extract(page: Page): Candidate[];
   /** A last pass over all of a page's candidates, declared ones included, before they're normalized. */
   finish?(candidates: Candidate[]): Candidate[];
+  /**
+   * How the decision cascade tells whether two records of this kind are the same (ADR 0003), and
+   * the version of that wording. Bump the version when the criteria change.
+   */
+  match?: { version: number; criteria: string };
 }
 
 export type PackRegistry = Readonly<Record<string, RecordTypePack>>;

@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { selectorError } from './css';
+import { NONE_OF_THESE } from './decision-types';
 import { FIELD_TYPES, normalizeValue, type FieldDef } from './fields';
 
 /*
@@ -382,6 +383,19 @@ function checkRecordType(at: Path, recordType: RecordType, report: Report): void
         report(
           [...path, 'decide'],
           'Fields that identify a record come from structured data or declared rules, never a decision.',
+        );
+      }
+      // The question offers the values and “None of these”, and an answer is read back by its text.
+      // A value that repeats would be offered twice. A value that is “None of these” would be
+      // offered twice too, and choosing it would take a page out of the dataset, not file it.
+      if (
+        field.type === 'enum' &&
+        field.values !== undefined &&
+        (field.values.includes(NONE_OF_THESE) || new Set(field.values).size !== field.values.length)
+      ) {
+        report(
+          [...path, 'values'],
+          'A decided field’s values are distinct, and none is “None of these”.',
         );
       }
     }

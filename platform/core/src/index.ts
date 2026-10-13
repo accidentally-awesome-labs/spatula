@@ -16,3 +16,5 @@ export * from './survivorship';
 export * from './snapshot';
 export * from './wire';
 export * from './signatures';
+export * from './decisions';
+export * from './decision-types';
