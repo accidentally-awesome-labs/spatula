@@ -90,7 +90,14 @@ export interface RunSummary {
   match?: DecisionSummary;
   /** Pages this run found aren't the dataset's ("None of these"). */
   irrelevant?: number;
-  entities: { created: number; linked: number; conflicts: number; unresolved: number };
+  entities: {
+    created: number;
+    linked: number;
+    conflicts: number;
+    unresolved: number;
+    /** Pages waiting for a match question to be asked or answered. Absent before slice 1. */
+    waiting?: number;
+  };
   snapshot: PublishResult;
   /** What deserves a look, such as an LLM failure or an identity conflict: at most 50. */
   notes: string[];

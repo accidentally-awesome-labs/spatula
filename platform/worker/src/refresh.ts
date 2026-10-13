@@ -6,6 +6,7 @@ import {
   LLM_MAX_TOKENS,
   llmFields,
   llmInputHash,
+  MAX_MATCH_QUESTIONS,
   newId,
   PAGE_METHODS,
   parsePage,
@@ -48,6 +49,7 @@ import {
 } from '@spatula/store';
 import { cascadeField, classifyItem, classifyTarget, decidedByLlm } from './classify';
 import { discoverSource } from './discovery';
+import { matchItem } from './match';
 import {
   budgetLeft,
   decisionsOf,
@@ -86,8 +88,10 @@ export {
  * and only when its question changed. A page whose source leaves the record type's decided field
  * to the cascade is then classified, in a step of its own (classify.ts), and isn't current until
  * that step has finished. The LLM and the decider share the run's token budget (pipeline.ts). Then
- * entities are resolved, and a snapshot is published if the records changed. Nothing here imports
- * Cloudflare: the Workflow passes real ports, and the tests pass fakes.
+ * entities are resolved, and a snapshot is published if the records changed. Resolution asks about
+ * the pairs it can't settle by rule, each in a step of its own (match.ts), and defers them until
+ * they're answered. Nothing here imports Cloudflare: the Workflow passes real ports, and the tests
+ * pass fakes.
  */
 
 export interface RefreshParams {
@@ -333,23 +337,37 @@ export async function runRefresh(
       );
     }
 
+    // Resolution, then the match questions it raised, then resolution again with their verdicts.
     // The counts stay exact. Only the notes, one for each page left unresolved and each claim in
     // conflict, are held to what a step's result may carry.
-    const { notes, ...entities } = await step.do('resolve', async () => {
-      const resolved = await ports.withDb((db) =>
-        resolveEntities(db, { datasetId, definition: context.definition }),
+    const first = await step.do('resolve', () => resolveStep(context, ports));
+    let resolved = first;
+    for (const question of first.questions) {
+      const matched = await step.do(`match:${question.itemId}:${question.entityId}`, () =>
+        matchItem(context, question, budgetLeft(context, summary), ports),
       );
-      return {
-        ...resolved,
-        notes: capped(
-          resolved.notes,
-          (text) => text,
-          (count) => `${count} more notes about entities`,
-        ),
+      const counts = decisionsOf(summary, 'match');
+      counts[matched.outcome] += 1;
+      counts.inputTokens += matched.usage.inputTokens;
+      counts.outputTokens += matched.usage.outputTokens;
+      if (matched.note !== null) note(summary, matched.note);
+    }
+    if (first.questions.length > 0) {
+      const again = await step.do('resolve:matched', () => resolveStep(context, ports));
+      resolved = {
+        ...again,
+        created: first.created + again.created,
+        linked: first.linked + again.linked,
       };
-    });
-    summary.entities = entities;
-    for (const text of notes) note(summary, text);
+    }
+    summary.entities = {
+      created: resolved.created,
+      linked: resolved.linked,
+      conflicts: resolved.conflicts,
+      unresolved: resolved.unresolved,
+      waiting: resolved.waiting,
+    };
+    for (const text of resolved.notes) note(summary, text);
 
     summary.snapshot = await step.do('snapshot', () => publish(context, ports));
     await step.do('finish', () =>
@@ -383,7 +401,7 @@ function emptySummary(): RunSummary {
     fetches: { changed: 0, unchanged: 0, gone: 0, failed: 0, blocked: 0 },
     statements: { ...NO_CHANGE },
     llm: { ran: 0, reused: 0, skipped: 0, failed: 0, inputTokens: 0, outputTokens: 0 },
-    entities: { created: 0, linked: 0, conflicts: 0, unresolved: 0 },
+    entities: { created: 0, linked: 0, conflicts: 0, unresolved: 0, waiting: 0 },
     snapshot: { published: false, reason: 'the run didn’t reach publishing', excluded: [] },
     notes: [],
   };
@@ -450,6 +468,32 @@ function capped<T>(
   const notes = items.slice(0, MAX_NOTES).map(render);
   if (items.length > MAX_NOTES) notes.push(more(items.length - MAX_NOTES));
   return notes;
+}
+
+/**
+ * Joins pages to entities, and returns the match questions to ask, with notes held to what a step
+ * carries. A pair that was escalated when no decider could be asked is a question again once one
+ * can, which takes a decider and a dataset that allows it. A site's own refusal is for the
+ * question's step to find.
+ */
+async function resolveStep(context: Context, ports: RefreshPorts) {
+  const resolved = await ports.withDb((db) =>
+    resolveEntities(db, {
+      datasetId: context.datasetId,
+      definition: context.definition,
+      maxQuestions: MAX_MATCH_QUESTIONS,
+      deciderCanAnswer:
+        ports.decider !== null && context.definition.policy.purposes.includes('ai-input'),
+    }),
+  );
+  return {
+    ...resolved,
+    notes: capped(
+      resolved.notes,
+      (text) => text,
+      (count) => `${count} more notes about entities`,
+    ),
+  };
 }
 
 /**

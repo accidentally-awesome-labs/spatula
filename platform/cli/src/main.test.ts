@@ -602,6 +602,71 @@ describe('run', () => {
     expect(at('Matched:')).toBeLessThan(at('Not the dataset’s:'));
     expect(at('Not the dataset’s:')).toBeLessThan(at('Entities:'));
   });
+
+  it('says how many pages wait for a match answer', async () => {
+    const complete: RunView = {
+      ...RUNNING,
+      status: 'complete',
+      finishedAt: '2026-10-10T00:01:00.000Z',
+      summary: {
+        items: 10,
+        fetches: { changed: 10, unchanged: 0, gone: 0, failed: 0, blocked: 0 },
+        statements: { added: 50, reseen: 0, withdrawn: 0 },
+        llm: { ran: 10, reused: 0, skipped: 0, failed: 0, inputTokens: 10000, outputTokens: 500 },
+        match: {
+          rule: 0,
+          accepted: 3,
+          escalated: 2,
+          reused: 0,
+          skipped: 0,
+          failed: 0,
+          inputTokens: 2500,
+          outputTokens: 100,
+        },
+        entities: { created: 9, linked: 1, conflicts: 0, unresolved: 0, waiting: 2 },
+        snapshot: { published: true, generation: 4, snapshotId: 'sn_y', records: 9, excluded: [] },
+        notes: [],
+      },
+    };
+    const { fetch } = stubApi(({ method }) =>
+      method === 'POST'
+        ? Response.json({ runId: RUN_ID }, { status: 202 })
+        : Response.json(complete),
+    );
+    const { io, out } = memoryIo();
+    expect(await main(['run', 'cli-products', '--wait'], { io, env: ENV, fetch })).toBe(0);
+    expect(out).toContain(
+      'Entities: 9 new, 1 linked, 0 conflicts, 0 without an identity yet, 2 waiting for a match answer.',
+    );
+    expect(out).toContain(
+      'Matched: 0 by rule, 3 by the decider, 2 for review, 0 as before, 0 for the next run, 0 failed; 2500 tokens in, 100 out.',
+    );
+  });
+
+  it('says nothing of waiting when no page waits', async () => {
+    const complete: RunView = {
+      ...RUNNING,
+      status: 'complete',
+      finishedAt: '2026-10-10T00:01:00.000Z',
+      summary: {
+        items: 3,
+        fetches: { changed: 3, unchanged: 0, gone: 0, failed: 0, blocked: 0 },
+        statements: { added: 15, reseen: 0, withdrawn: 0 },
+        llm: { ran: 3, reused: 0, skipped: 0, failed: 0, inputTokens: 3000, outputTokens: 150 },
+        entities: { created: 3, linked: 0, conflicts: 0, unresolved: 0, waiting: 0 },
+        snapshot: { published: true, generation: 1, snapshotId: 'sn_z', records: 3, excluded: [] },
+        notes: [],
+      },
+    };
+    const { fetch } = stubApi(({ method }) =>
+      method === 'POST'
+        ? Response.json({ runId: RUN_ID }, { status: 202 })
+        : Response.json(complete),
+    );
+    const { io, out } = memoryIo();
+    expect(await main(['run', 'cli-products', '--wait'], { io, env: ENV, fetch })).toBe(0);
+    expect(out).toContain('Entities: 3 new, 0 linked, 0 conflicts, 0 without an identity yet.');
+  });
 });
 
 describe('revive', () => {

@@ -81,7 +81,7 @@ export function formatRun(run: RunView): string[] {
     );
   }
   lines.push(
-    `Entities: ${entities.created} new, ${entities.linked} linked, ${entities.conflicts} conflicts, ${entities.unresolved} without an identity yet.`,
+    `Entities: ${entities.created} new, ${entities.linked} linked, ${entities.conflicts} conflicts, ${entities.unresolved} without an identity yet${(entities.waiting ?? 0) > 0 ? `, ${entities.waiting} waiting for a match answer` : ''}.`,
     snapshot.published
       ? `Snapshot: generation ${snapshot.generation}, ${snapshot.records} records.`
       : `Snapshot: none published, because ${snapshot.reason}.`,

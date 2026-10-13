@@ -6,6 +6,7 @@ import { fetchOf, seedDataset, T } from '../test/seed';
 import type { Executor } from './client';
 import { applyDefinition, listLiveItems, type ItemRef } from './datasets';
 import {
+  anyRefusesAiInput,
   latestFetchId,
   recordExtraction,
   recordFetch,
@@ -374,6 +375,129 @@ describe('latestFetchId', () => {
       await startedTogether(a2!, ['fe_tie_d', 'fe_tie_c']);
       expect(await latestFetchId(db, a1!.id)).toBe('fe_tie_b');
       expect(await latestFetchId(db, a2!.id)).toBe('fe_tie_d');
+    }));
+});
+
+describe('anyRefusesAiInput', () => {
+  /** An unchanged fetch of the page, which saw its site say these things about AI. */
+  const fetched = (
+    db: Executor,
+    runId: string,
+    item: ItemRef,
+    { id, minute, signals }: { id: string; minute: number; signals: Record<string, string> },
+  ) =>
+    recordFetch(db, {
+      id,
+      runId,
+      itemId: item.id,
+      url: item.locator,
+      finalUrl: item.locator,
+      policy: 'allowed',
+      policyReason: null,
+      method: 'http',
+      outcome: 'unchanged',
+      httpStatus: 200,
+      bytes: 100,
+      signals,
+      startedAt: T(minute),
+      durationMs: 10,
+      error: null,
+    });
+
+  it('reads each page’s latest fetch', () =>
+    withRollback(async (db) => {
+      const {
+        items: [a1, a2],
+        runId,
+      } = await seedDataset(db);
+      const at = (item: ItemRef, minute: number, signals: Record<string, string>) =>
+        fetched(db, runId, item, { id: `fe_${item.id}_${minute}`, minute, signals });
+      await at(a1!, 1, { 'ai-input': 'no' });
+      await at(a1!, 2, { 'ai-input': 'yes' });
+      await at(a2!, 1, {});
+      expect(await anyRefusesAiInput(db, [a1!.id, a2!.id])).toBe(false);
+      await at(a2!, 3, { 'ai-input': 'no' });
+      expect(await anyRefusesAiInput(db, [a1!.id, a2!.id])).toBe(true);
+      expect(await anyRefusesAiInput(db, [])).toBe(false);
+    }));
+
+  it('reads the latest fetch by when it started, whatever the IDs say', () =>
+    withRollback(async (db) => {
+      const {
+        items: [a1],
+        runId,
+      } = await seedDataset(db);
+      // The newer fetch has the lesser ID, and says the site allows it.
+      await fetched(db, runId, a1!, { id: 'fe_b', minute: 1, signals: { 'ai-input': 'no' } });
+      await fetched(db, runId, a1!, { id: 'fe_a', minute: 2, signals: { 'ai-input': 'yes' } });
+      expect(await anyRefusesAiInput(db, [a1!.id])).toBe(false);
+    }));
+
+  it('reads a page never fetched, or whose fetches kept no signals, as not refusing', () =>
+    withRollback(async (db) => {
+      const {
+        items: [a1, a2, b1],
+        runId,
+      } = await seedDataset(db);
+      // A fetch that recorded no signals at all, as the gate's refusal of a page might.
+      const unsaid = (item: ItemRef, minute: number) =>
+        recordFetch(db, {
+          id: `fe_unsaid_${item.id}_${minute}`,
+          runId,
+          itemId: item.id,
+          url: item.locator,
+          finalUrl: null,
+          policy: 'denied',
+          policyReason: 'robots.txt disallows it',
+          method: 'http',
+          outcome: 'blocked',
+          httpStatus: null,
+          bytes: null,
+          signals: null,
+          startedAt: T(minute),
+          durationMs: 0,
+          error: null,
+        });
+      await unsaid(a2!, 1);
+      expect(await anyRefusesAiInput(db, [a1!.id, a2!.id, b1!.id])).toBe(false);
+
+      // A newer fetch that says nothing doesn't lift what an older one said: consent isn't assumed.
+      await fetched(db, runId, a1!, { id: 'fe_refused', minute: 1, signals: { 'ai-input': 'no' } });
+      await unsaid(a1!, 2);
+      expect(await anyRefusesAiInput(db, [a1!.id])).toBe(true);
+    }));
+
+  it('breaks a tie between fetches that started together by the greater ID', () =>
+    withRollback(async (db) => {
+      const {
+        items: [a1, a2, b1],
+        runId,
+      } = await seedDataset(db);
+      const together = async (
+        item: ItemRef,
+        fetches: { id: string; signals: Record<string, string> }[],
+      ) => {
+        for (const fetch of fetches) await fetched(db, runId, item, { ...fetch, minute: 1 });
+      };
+      const no = { 'ai-input': 'no' };
+      const yes = { 'ai-input': 'yes' };
+      // Whichever was logged first, the greater ID is the latest: a tie is never left to the database.
+      await together(a1!, [
+        { id: 'fe_tie_a', signals: yes },
+        { id: 'fe_tie_b', signals: no },
+      ]);
+      await together(a2!, [
+        { id: 'fe_tie_d', signals: no },
+        { id: 'fe_tie_c', signals: yes },
+      ]);
+      await together(b1!, [
+        { id: 'fe_tie_e', signals: no },
+        { id: 'fe_tie_f', signals: yes },
+      ]);
+      expect(await anyRefusesAiInput(db, [a1!.id])).toBe(true);
+      expect(await anyRefusesAiInput(db, [a2!.id])).toBe(true);
+      // Here the greater ID says yes.
+      expect(await anyRefusesAiInput(db, [b1!.id])).toBe(false);
     }));
 });
 

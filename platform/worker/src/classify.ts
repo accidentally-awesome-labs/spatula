@@ -146,7 +146,7 @@ const madeBy = (decision: DecisionRow): Classified['outcome'] =>
  * can be asked: an escalation made when none was asked, or one whose decider named no
  * probabilities, as it does when its answer doesn't fit the schema.
  */
-function stands(
+export function stands(
   earlier: DecisionRow,
   now: { consent: boolean; canAsk: boolean; accept: number },
 ): boolean {

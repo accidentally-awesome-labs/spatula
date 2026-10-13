@@ -1,5 +1,5 @@
 import type { ContentSignals, Outcome } from '@spatula/core';
-import { desc, eq, sql } from 'drizzle-orm';
+import { and, desc, eq, inArray, isNotNull, sql } from 'drizzle-orm';
 import type { Executor } from './client';
 import { fetches, items, type ItemStatus } from './schema';
 
@@ -197,4 +197,23 @@ export async function setExtractedWith(
   extractedWith: string,
 ): Promise<void> {
   await db.update(items).set({ extractedWith }).where(eq(items.id, itemId));
+}
+
+/**
+ * Whether the latest fetch of any of these pages found its site saying ai-input=no. A question
+ * that shows a decider what pages said needs every one of their sites' consent. Of fetches that
+ * started together, the latest is the one with the greater ID, as `latestFetchId` has it, so a tie
+ * is never left to the database.
+ */
+export async function anyRefusesAiInput(
+  db: Executor,
+  itemIds: readonly string[],
+): Promise<boolean> {
+  if (itemIds.length === 0) return false;
+  const latest = await db
+    .selectDistinctOn([fetches.itemId], { signals: fetches.signals })
+    .from(fetches)
+    .where(and(inArray(fetches.itemId, [...itemIds]), isNotNull(fetches.signals)))
+    .orderBy(fetches.itemId, desc(fetches.startedAt), desc(fetches.id));
+  return latest.some((row) => row.signals?.['ai-input'] === 'no');
 }
