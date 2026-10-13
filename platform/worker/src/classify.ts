@@ -7,6 +7,7 @@ import {
   classifyState,
   decidedField,
   NONE_OF_THESE,
+  optionsOf,
   parsePage,
   stableId,
   stateEvidence,
@@ -51,7 +52,9 @@ import { storable } from './text';
  * every product the page's structured data describes states the same category, one of the values.
  * Otherwise the decider answers, where the dataset and the site allow AI input and the run has
  * budget left, and a person answers what the decider isn't sure of. A question asked before, on the
- * same evidence, isn't asked again, and a person's answer stands until a person changes it.
+ * same evidence, isn't asked again unless asking might now come to something else: its answer is
+ * less sure than the dataset now asks for, or no decider could be asked then and one can be now. A
+ * person's answer stands until a person changes it.
  */
 
 /** The methods of the cascade's own statements: a rule's answer, and a decider's. */
@@ -80,11 +83,37 @@ export function classifyTarget(definition: Definition, item: ItemRef): ClassifyT
   return decided === null ? null : { name: decided[0], field: decided[1], recordType };
 }
 
-/** The answer with the highest probability, or null when there is none. */
-export function likeliest(probabilities: Record<string, number>): string | null {
+/**
+ * Whether the page's decided field holds a decider's answer: its current statement has the method
+ * llm. A rule's answer and a person's don't rest on AI input.
+ */
+export async function decidedByLlm(
+  context: Context,
+  item: ItemRef,
+  ports: RefreshPorts,
+): Promise<boolean> {
+  const target = classifyTarget(context.definition, item);
+  if (target === null) return false;
+  const said = await ports.withDb((db) => statementsOf(db, [item.id]));
+  return (said.get(item.id) ?? []).some(
+    (statement) => statement.property === target.name && statement.method === 'llm',
+  );
+}
+
+/**
+ * The offered answer with the highest probability, or null when there is none. A tie goes to the
+ * option offered first, as it does in the cascade, so the answer a person is shown doesn't depend
+ * on the order Postgres hands the probabilities back in.
+ */
+export function likeliest(
+  probabilities: Record<string, number>,
+  options: readonly string[],
+): string | null {
   let best: string | null = null;
-  for (const [answer, probability] of Object.entries(probabilities)) {
-    if (best === null || probability > (probabilities[best] ?? 0)) best = answer;
+  for (const option of options) {
+    const probability = probabilities[option];
+    if (!Object.hasOwn(probabilities, option) || probability === undefined) continue;
+    if (best === null || probability > (probabilities[best] ?? 0)) best = option;
   }
   return best;
 }
@@ -110,6 +139,25 @@ const madeBy = (decision: DecisionRow): Classified['outcome'] =>
   decision.outcome === 'rule' ? 'rule' : decision.outcome === 'accepted' ? 'accepted' : 'escalated';
 
 /**
+ * Whether an earlier decision on the same evidence still answers the question. A rule's answer
+ * does, and so does a person's. A decider's answer does while the dataset and the site allow AI
+ * input and the answer is as sure as the dataset now asks. An escalation a decider saw does:
+ * asking again would put the same question to it. One that no decider saw, because none could be
+ * asked, does only while none can be.
+ */
+function stands(
+  earlier: DecisionRow,
+  now: { consent: boolean; canAsk: boolean; accept: number },
+): boolean {
+  if (earlier.finalAnswer !== null || earlier.outcome === 'rule') return true;
+  if (earlier.outcome === 'accepted') {
+    const probability = earlier.answer === null ? 0 : (earlier.probabilities[earlier.answer] ?? 0);
+    return now.consent && probability >= now.accept;
+  }
+  return earlier.adapter !== null || !now.canAsk;
+}
+
+/**
  * Classifies a page, and with that finishes reading it. The extract step leaves a page whose
  * category the cascade decides marked for another read, and a classification that finished,
  * whoever answered and whatever the answer, makes it current. A step that stopped short of that,
@@ -123,7 +171,7 @@ export async function classifyItem(
   fetched: ClassifyFetch,
   budgetLeft: number,
   ports: RefreshPorts,
-  extractionComplete = true,
+  extractionComplete: boolean,
 ): Promise<Classified> {
   const classified = await classifyPage(context, item, fetched, budgetLeft, ports);
   if (extractionComplete && classified.outcome !== 'skipped' && classified.outcome !== 'failed') {
@@ -154,8 +202,18 @@ async function classifyPage(
   const said = await ports.withDb(
     async (db) => (await statementsOf(db, [item.id])).get(item.id) ?? [],
   );
-  // A person's answer stands until a person changes it.
+  // A person's answer stands until a person changes it, and replaces the cascade's, which is
+  // withdrawn here if it is still current. That changes nothing once it has been.
   if (said.some((statement) => statement.property === name && statement.method === 'human')) {
+    await ports.withDb((db) =>
+      withdrawCascade(db, {
+        datasetId,
+        itemId: item.id,
+        name,
+        fetchId: fetched.fetchId,
+        at: ports.now(),
+      }),
+    );
     return result('reused');
   }
   const body =
@@ -174,6 +232,11 @@ async function classifyPage(
   const decisionId = await stableId('dc', runId, subjectKey);
   const consent =
     definition.policy.purposes.includes('ai-input') && fetched.signals['ai-input'] !== 'no';
+  const decider = consent ? ports.decider : null;
+  const accept = definition.decisions.classify.accept;
+  // Extraction marked the page for another read already; this keeps classifyItem safe on its own.
+  const readAgain = () =>
+    ports.withDb((db) => setExtractedWith(db, item.id, retryTag(context.revision)));
   const at = ports.now();
   const apply = (decision: DecisionRow) =>
     ports.withDb((db) =>
@@ -188,8 +251,8 @@ async function classifyPage(
       criteriaVersion: CLASSIFY_CRITERIA_VERSION,
     }),
   );
-  // A decider's answer is used again only while the dataset and the site still allow AI input.
-  if (earlier !== null && (earlier.outcome !== 'accepted' || consent)) {
+  // A question asked before isn't asked again, unless asking might now come to something else.
+  if (earlier !== null && stands(earlier, { consent, canAsk: decider !== null, accept })) {
     const applied = await apply(earlier);
     // A step that runs again finds its own decision, and reports it as it was made.
     const again = earlier.id === decisionId;
@@ -202,10 +265,9 @@ async function classifyPage(
   }
 
   const rule = classifyRule(state, field);
-  const decider = consent ? ports.decider : null;
   if (rule === null && decider !== null && budgetLeft <= 0) {
     // The next run reads the page again, with a budget of its own.
-    await ports.withDb((db) => setExtractedWith(db, item.id, retryTag(context.revision)));
+    await readAgain();
     return result('skipped');
   }
   let outcome: CascadeOutcome;
@@ -219,10 +281,10 @@ async function classifyPage(
       },
       rule,
       deciders: decider === null ? [] : [decider],
-      accept: definition.decisions.classify.accept,
+      accept,
     });
   } catch (error) {
-    await ports.withDb((db) => setExtractedWith(db, item.id, retryTag(context.revision)));
+    await readAgain();
     const message = error instanceof Error ? error.message : String(error);
     return result('failed', { note: storable(`${item.locator}: the decider failed: ${message}`) });
   }
@@ -244,7 +306,7 @@ async function classifyPage(
         outcome.by === 'rule'
           ? 'The page’s structured data gives this category.'
           : outcome.evidence,
-      thresholds: { accept: definition.decisions.classify.accept },
+      thresholds: { accept },
       outcome: outcome.by === 'rule' ? 'rule' : outcome.by === 'adapter' ? 'accepted' : 'escalated',
       answer: outcome.by === 'person' ? null : outcome.answer,
       inputTokens: usage.inputTokens,
@@ -254,6 +316,23 @@ async function classifyPage(
   );
   const applied = await apply(decision);
   return result(madeBy(decision), { irrelevant: applied === 'irrelevant', usage });
+}
+
+/** Withdraws the cascade's own statements about the decided field: a rule's and a decider's. */
+function withdrawCascade(
+  db: Executor,
+  input: { datasetId: string; itemId: string; name: string; fetchId: string; at: Date },
+) {
+  const { datasetId, itemId, name, fetchId, at } = input;
+  return writeStatements(db, {
+    datasetId,
+    itemId,
+    fetchId,
+    seenAt: at,
+    properties: [name],
+    methods: CASCADE_METHODS,
+    statements: [],
+  });
 }
 
 /**
@@ -275,7 +354,7 @@ async function applyClassification(
   const { datasetId, item, name, fetchId, decision, at } = input;
   const write = { datasetId, itemId: item.id, fetchId, seenAt: at, properties: [name] };
   const withdrawAutomatic = () =>
-    writeStatements(db, { ...write, methods: CASCADE_METHODS, statements: [] });
+    withdrawCascade(db, { datasetId, itemId: item.id, name, fetchId, at });
   const answer = decision.finalAnswer ?? decision.answer;
   if (answer === null) {
     await withdrawAutomatic();
@@ -291,7 +370,7 @@ async function applyClassification(
         url: item.locator,
         // The field a person's answer fills, so that answering needn't work it out.
         field: name,
-        proposed: likeliest(decision.probabilities),
+        proposed: likeliest(decision.probabilities, optionsOf(decision.question)),
         probabilities: decision.probabilities,
         reason: decision.evidence,
       },

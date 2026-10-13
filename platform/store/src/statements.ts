@@ -122,11 +122,23 @@ export async function writeStatements(
   });
 }
 
-/** An unchanged page says what it said before: its current statements are re-seen. */
+/**
+ * An unchanged page says what it said before: its current statements are re-seen. Naming
+ * `methods` or `properties` re-sees only those, so a step that confirmed some of a page's
+ * statements doesn't re-see what another step decided. Absent means all, and an empty list
+ * re-sees nothing.
+ */
 export async function reseeStatements(
   db: Executor,
-  input: { itemId: string; fetchId: string; seenAt: Date; methods?: readonly Method[] },
+  input: {
+    itemId: string;
+    fetchId: string;
+    seenAt: Date;
+    methods?: readonly Method[];
+    properties?: readonly string[];
+  },
 ): Promise<number> {
+  if (input.properties !== undefined && input.properties.length === 0) return 0;
   const rows = await db
     .update(statements)
     .set({ lastSeen: input.seenAt, lastFetchId: input.fetchId })
@@ -135,6 +147,9 @@ export async function reseeStatements(
         eq(statements.itemId, input.itemId),
         isNull(statements.withdrawnAt),
         input.methods === undefined ? undefined : inArray(statements.method, [...input.methods]),
+        input.properties === undefined
+          ? undefined
+          : inArray(statements.property, [...input.properties]),
       ),
     )
     .returning({ id: statements.id });

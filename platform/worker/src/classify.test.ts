@@ -3,6 +3,7 @@ import { packs } from '@spatula/pack-products';
 import {
   applyDefinition,
   decisionRecords,
+  finalizeDecision,
   items,
   latestFetchId,
   listLiveItems,
@@ -23,7 +24,7 @@ import {
   refresh,
   worldFor,
 } from '../test/node/runs';
-import { A1, A2, answerFor, decisionFor, standardRoutes, URLS } from '../test/pages';
+import { A1, A2, answerFor, decisionFor, ROBOTS_OPEN, standardRoutes, URLS } from '../test/pages';
 import { cascadeField, CASCADE_METHODS, classifyTarget, likeliest } from './classify';
 import { extractionTag, pageKey, runRefresh, type StepRunner } from './refresh';
 
@@ -33,6 +34,21 @@ const NO_AI_INPUT = 'User-agent: *\nContent-Signal: ai-input=no\nAllow: /\n';
 const decisionsAbout = async (datasetId: string, itemId: string) =>
   (await db.select().from(decisionRecords).where(eq(decisionRecords.datasetId, datasetId))).filter(
     (row) => row.subject === itemId,
+  );
+
+/** When each of an item's current statements was last seen, as ISO text, by property and method. */
+const seenOf = async (itemId: string) =>
+  Object.fromEntries(
+    (
+      await db
+        .select({
+          property: statements.property,
+          method: statements.method,
+          lastSeen: statements.lastSeen,
+        })
+        .from(statements)
+        .where(and(eq(statements.itemId, itemId), isNull(statements.withdrawnAt)))
+    ).map((row) => [`${row.property}/${row.method}`, row.lastSeen.toISOString()]),
   );
 
 /** What each of the dataset's live pages is marked with, by page address. */
@@ -131,16 +147,19 @@ describe('classifying pages', { timeout: 20_000 }, () => {
   });
 
   it('asks a person when the decider isn’t sure, and leaves the record out until then', async () => {
+    const definition = decided('classify-unsure');
     const {
       world,
       pages: [a1],
-    } = await worldFor(decided('classify-unsure'), standardRoutes());
-    world.ports.decider = fakeDecider(
+    } = await worldFor(definition, standardRoutes());
+    let sure = false;
+    const scripted = fakeDecider(
       (request): Record<string, number> =>
-        request.evidence.includes(URLS.a1)
-          ? { Headphones: 0.6, 'DAC/Amp': 0.3 }
+        request.evidence.includes(URLS.a1) && !sure
+          ? { Headphones: 0.45, 'DAC/Amp': 0.45 }
           : { Headphones: 0.97 },
-    ).decider;
+    );
+    world.ports.decider = scripted.decider;
     const first = await refresh(world, 'classify-unsure');
     expect(first.summary.classify).toMatchObject({ accepted: 1, escalated: 1 });
     expect(await listOpenReviews(db, 'classify-unsure')).toEqual([
@@ -157,7 +176,7 @@ describe('classifying pages', { timeout: 20_000 }, () => {
           url: URLS.a1,
           field: 'category',
           proposed: 'Headphones',
-          probabilities: { Headphones: 0.6, 'DAC/Amp': 0.3 },
+          probabilities: { Headphones: 0.45, 'DAC/Amp': 0.45 },
           reason: 'the test’s reason',
         },
         createdAt: expect.any(String),
@@ -167,6 +186,32 @@ describe('classifying pages', { timeout: 20_000 }, () => {
     expect(first.summary.snapshot.excluded).toEqual([
       { canonicalId: await entityOf(a1!.id), missing: ['category'] },
     ]);
+
+    // Read again on the same evidence, the question is the one already asked: the decider isn't
+    // asked again, the page still waits, and the review stays open.
+    await applyDefinition(db, decided('classify-unsure', { freshness: { maxAgeDays: 6 } }));
+    const again = await refresh(world, 'classify-unsure');
+    expect(again.summary.classify).toMatchObject({ escalated: 1, reused: 1, accepted: 0 });
+    expect(scripted.calls).toHaveLength(2);
+    expect((await listOpenReviews(db, 'classify-unsure')).map((review) => review.subject)).toEqual([
+      a1!.id,
+    ]);
+
+    // New words for the values are a new question. The decider is sure of its answer to that one,
+    // and the answer closes the review.
+    sure = true;
+    const product = definition.recordTypes.product!;
+    const category = { ...product.fields.category!, description: 'Earbuds are headphones.' };
+    await applyDefinition(db, {
+      ...definition,
+      recordTypes: { product: { ...product, fields: { ...product.fields, category } } },
+    });
+    const third = await refresh(world, 'classify-unsure');
+    expect(third.summary.classify).toMatchObject({ accepted: 2, escalated: 0, reused: 0 });
+    expect(await listOpenReviews(db, 'classify-unsure')).toEqual([]);
+    expect((await published(world, 'classify-unsure'))!.byName.A1!.fields.category).toBe(
+      'Headphones',
+    );
   });
 
   it('takes a structured-data category as the answer, and asks no decider where AI input isn’t allowed', async () => {
@@ -252,19 +297,27 @@ describe('classifying pages', { timeout: 20_000 }, () => {
   });
 
   it('asks a person, not the decider, where the dataset doesn’t declare ai-input', async () => {
+    const policy = { purposes: [], perHostIntervalMs: 1000 };
     const {
       world,
       pages: [a1, a2],
-    } = await worldFor(
-      decided('classify-no-purpose', { policy: { purposes: [], perHostIntervalMs: 1000 } }),
-      standardRoutes(),
-    );
+    } = await worldFor(decided('classify-no-purpose', { policy }), standardRoutes());
     const first = await refresh(world, 'classify-no-purpose');
     expect(first.summary.classify).toMatchObject({ escalated: 2, accepted: 0 });
     expect(world.decider.calls).toEqual([]);
     expect(world.llm.calls).toEqual([]);
     const open = await listOpenReviews(db, 'classify-no-purpose');
     expect(open.map((review) => review.subject).sort()).toEqual([a1!.id, a2!.id].sort());
+
+    // Read again with nothing more to ask than before, it is the same escalation, not a new one.
+    await applyDefinition(
+      db,
+      decided('classify-no-purpose', { policy, freshness: { maxAgeDays: 6 } }),
+    );
+    const second = await refresh(world, 'classify-no-purpose');
+    expect(second.summary.classify).toMatchObject({ escalated: 2, accepted: 0 });
+    expect(await decisionsAbout('classify-no-purpose', a1!.id)).toHaveLength(1);
+    expect(world.decider.calls).toEqual([]);
   });
 
   it('asks again when the words describing the values change', async () => {
@@ -308,6 +361,19 @@ describe('classifying pages', { timeout: 20_000 }, () => {
     expect((await published(world, 'classify-consent'))!.byName.A1).toBeUndefined();
     const open = await listOpenReviews(db, 'classify-consent');
     expect(open.map((review) => review.subject)).toContain(a1!.id);
+
+    // The site changes its mind. Those two were escalated with no decider asked, so now it is,
+    // and its answers close the reviews.
+    world.clock.advance(25 * HOUR);
+    world.web.routes.set('https://maker-a.example/robots.txt', { status: 200, body: ROBOTS_OPEN });
+    await applyDefinition(db, decided('classify-consent', { freshness: { maxAgeDays: 5 } }));
+    const third = await refresh(world, 'classify-consent');
+    expect(third.summary.classify).toMatchObject({ accepted: 2, escalated: 0 });
+    expect(world.decider.calls).toHaveLength(4);
+    expect(await listOpenReviews(db, 'classify-consent')).toEqual([]);
+    expect((await published(world, 'classify-consent'))!.byName.A1!.fields.category).toBe(
+      'Headphones',
+    );
   });
 });
 
@@ -534,6 +600,79 @@ describe('a site that no longer allows AI input', { timeout: 20_000 }, () => {
   });
 });
 
+describe('an earlier decision about the same evidence', { timeout: 20_000 }, () => {
+  it('asks the decider about a page that was escalated before one could be asked', async () => {
+    const { world } = await worldFor(decided('classify-late-decider'), standardRoutes(), {
+      decider: false,
+    });
+    const first = await refresh(world, 'classify-late-decider');
+    expect(first.summary.classify).toMatchObject({ escalated: 2, accepted: 0 });
+    expect(await listOpenReviews(db, 'classify-late-decider')).toHaveLength(2);
+
+    // The decider is set up, and a new revision has every page read again.
+    world.ports.decider = world.decider.decider;
+    await applyDefinition(db, decided('classify-late-decider', { freshness: { maxAgeDays: 6 } }));
+    const second = await refresh(world, 'classify-late-decider');
+    expect(second.summary.classify).toMatchObject({ accepted: 2, escalated: 0, reused: 0 });
+    expect(world.decider.calls).toHaveLength(2);
+    expect(await listOpenReviews(db, 'classify-late-decider')).toEqual([]);
+    const file = (await published(world, 'classify-late-decider'))!;
+    expect(file.byName.A1!.fields.category).toBe('Headphones');
+    expect(file.byName.A2!.fields.category).toBe('Headphones');
+  });
+
+  it('asks again about an answer that no longer reaches the threshold', async () => {
+    const { world } = await worldFor(decided('classify-threshold'), standardRoutes());
+    const unsure = fakeDecider((): Record<string, number> => ({ Headphones: 0.92 }));
+    world.ports.decider = unsure.decider;
+    const first = await refresh(world, 'classify-threshold');
+    expect(first.summary.classify).toMatchObject({ accepted: 2 });
+
+    // An answer as sure as the threshold asks is still enough.
+    await applyDefinition(
+      db,
+      decided('classify-threshold', { decisions: { classify: { accept: 0.92 } } }),
+    );
+    const second = await refresh(world, 'classify-threshold');
+    expect(second.summary.classify).toMatchObject({ reused: 2, escalated: 0, accepted: 0 });
+    expect(unsure.calls).toHaveLength(2);
+
+    // 0.92 was enough under 0.9, and a new revision asks for 0.95. The decider is as sure as it was,
+    // which is no longer enough.
+    await applyDefinition(
+      db,
+      decided('classify-threshold', { decisions: { classify: { accept: 0.95 } } }),
+    );
+    const third = await refresh(world, 'classify-threshold');
+    expect(third.summary.classify).toMatchObject({ escalated: 2, accepted: 0, reused: 0 });
+    expect(unsure.calls).toHaveLength(4);
+    expect(await listOpenReviews(db, 'classify-threshold')).toHaveLength(2);
+    expect((await published(world, 'classify-threshold'))!.byName.A1).toBeUndefined();
+  });
+
+  it('keeps a person’s answer to a question, though a decider can be asked now', async () => {
+    const {
+      world,
+      pages: [a1],
+    } = await worldFor(decided('classify-answered'), standardRoutes(), { decider: false });
+    await refresh(world, 'classify-answered');
+    // A person answers A1's question, and the decision records the answer.
+    const [asked] = await decisionsAbout('classify-answered', a1!.id);
+    await finalizeDecision(db, { id: asked!.id, finalAnswer: 'DAC/Amp', at: world.clock.now() });
+
+    world.ports.decider = world.decider.decider;
+    await applyDefinition(db, decided('classify-answered', { freshness: { maxAgeDays: 6 } }));
+    const second = await refresh(world, 'classify-answered');
+    expect(second.summary.classify).toMatchObject({ reused: 1, accepted: 1, escalated: 0 });
+    // Only A2 is asked.
+    expect(world.decider.calls.map((call) => call.evidence.includes(URLS.a2))).toEqual([true]);
+    const file = (await published(world, 'classify-answered'))!;
+    expect(file.byName.A1!.fields.category).toBe('DAC/Amp');
+    expect(file.byName.A1!.provenance.category).toMatchObject({ method: 'human', confidence: 1 });
+    expect(file.byName.A2!.fields.category).toBe('Headphones');
+  });
+});
+
 describe('the classify step', { timeout: 20_000 }, () => {
   it('reports the decision it made when it runs again, and counts it once', async () => {
     const { world } = await worldFor(decided('classify-replayed'), standardRoutes());
@@ -599,7 +738,8 @@ describe('the classify step', { timeout: 20_000 }, () => {
     // extraction doesn't withdraw the cascade's answers; classifying again on the same evidence
     // sees the same statements again.
     await applyDefinition(db, decided('classify-keeps', { freshness: { maxAgeDays: 6 } }));
-    await refresh(world, 'classify-keeps');
+    const second = await refresh(world, 'classify-keeps');
+    expect(second.summary.classify).toMatchObject({ reused: 2, rule: 0, accepted: 0 });
     for (const [item, before] of [
       [a1!, ruled],
       [a2!, decider],
@@ -622,6 +762,87 @@ describe('the classify step', { timeout: 20_000 }, () => {
     expect(world.decider.calls).toHaveLength(1);
   });
 
+  it('withdraws what the LLM said for a field it no longer fills, and keeps the category', async () => {
+    const definition = decided('classify-llm-field-off');
+    const product = definition.recordTypes.product!;
+    const withExtras = (llm: boolean) => ({
+      ...definition,
+      recordTypes: {
+        product: {
+          ...product,
+          fields: { ...product.fields, extras: { ...product.fields.specs!, llm } },
+        },
+      },
+    });
+    const {
+      world,
+      pages: [a1, , b1],
+    } = await worldFor(withExtras(true), standardRoutes());
+    // The LLM says the same of a page in both of its fields.
+    world.ports.llm = fakeLlm((user) => {
+      const given = answerFor(user);
+      return given === null ? null : { ...given, extras: given.specs };
+    }).llm;
+    const llmSaid = async (itemId: string) => [
+      ...new Set(
+        (
+          await db
+            .select({ property: statements.property })
+            .from(statements)
+            .where(
+              and(
+                eq(statements.itemId, itemId),
+                eq(statements.method, 'llm'),
+                isNull(statements.withdrawnAt),
+              ),
+            )
+        ).map((row) => row.property),
+      ),
+    ];
+    await refresh(world, 'classify-llm-field-off');
+    expect((await llmSaid(a1!.id)).sort()).toEqual(['category', 'extras', 'specs']);
+    expect((await llmSaid(b1!.id)).sort()).toEqual(['extras', 'specs']);
+
+    // A new revision stops asking the LLM for extras. What it said of them is withdrawn, from a page
+    // the cascade classifies and from one it doesn't, and the category the decider gave stays.
+    await applyDefinition(db, withExtras(false));
+    const second = await refresh(world, 'classify-llm-field-off');
+    expect(second.summary.llm).toMatchObject({ ran: 3 });
+    expect((await llmSaid(a1!.id)).sort()).toEqual(['category', 'specs']);
+    expect((await llmSaid(b1!.id)).sort()).toEqual(['specs']);
+  });
+
+  it('leaves the category alone when the LLM’s answer is reused and classifying then fails', async () => {
+    const definition = decided('classify-reuse-fails');
+    const {
+      world,
+      pages: [a1],
+    } = await worldFor(definition, standardRoutes());
+    await refresh(world, 'classify-reuse-fails');
+    const before = await seenOf(a1!.id);
+
+    // New words for the values are a new question, and the decider is down. A1 is read again from
+    // its stored copy and the LLM's question is the same, so its answer is reused and seen again.
+    // The category isn't the LLM's to see again: nothing has confirmed it.
+    world.ports.decider = {
+      name: 'llm:test-model',
+      async decide() {
+        throw new Error('the decider is down');
+      },
+    };
+    const product = definition.recordTypes.product!;
+    const category = { ...product.fields.category!, description: 'Earbuds are headphones.' };
+    await applyDefinition(db, {
+      ...definition,
+      recordTypes: { product: { ...product, fields: { ...product.fields, category } } },
+    });
+    const second = await refresh(world, 'classify-reuse-fails');
+    expect(second.summary).toMatchObject({ llm: { reused: 3 }, classify: { failed: 2 } });
+    const after = await seenOf(a1!.id);
+    expect(after['specs/llm']).not.toBe(before['specs/llm']);
+    expect(after['category/llm']).toBe(before['category/llm']);
+  });
+
   it('leaves a person’s category alone, whatever the decider would be asked now', async () => {
     const definition = decided('classify-human');
     const {
@@ -629,7 +850,7 @@ describe('the classify step', { timeout: 20_000 }, () => {
       pages: [a1],
     } = await worldFor(definition, standardRoutes());
     await refresh(world, 'classify-human');
-    // What answering a question does: the automatic answer goes, and the person's takes its place.
+    // A person's answer is written while the decider's, which it replaces, is still current.
     const write = {
       datasetId: 'classify-human',
       itemId: a1!.id,
@@ -637,7 +858,6 @@ describe('the classify step', { timeout: 20_000 }, () => {
       seenAt: world.clock.now(),
       properties: ['category'],
     };
-    await writeStatements(db, { ...write, methods: CASCADE_METHODS, statements: [] });
     await writeStatements(db, {
       ...write,
       methods: ['human'],
@@ -656,7 +876,8 @@ describe('the classify step', { timeout: 20_000 }, () => {
     });
 
     // New words for the values are a new question for the decider, so A2 is asked again. A1 isn't:
-    // the person's answer stands until a person changes it, and the decider's would be hidden by it.
+    // the person's answer stands until a person changes it, and the decider's would be hidden by
+    // it. Reading A1 again withdraws the decider's answer, which the person's has replaced.
     const product = definition.recordTypes.product!;
     const category = { ...product.fields.category!, description: 'Speakers are not headphones.' };
     await applyDefinition(db, {
@@ -718,9 +939,17 @@ describe('what the cascade classifies', () => {
     expect(classifyTarget(definition, { ...a1!, recordType: 'cable' })).toBeNull();
   });
 
-  it('names the likeliest answer', () => {
-    expect(likeliest({})).toBeNull();
-    expect(likeliest({ Headphones: 0.6, 'DAC/Amp': 0.3 })).toBe('Headphones');
-    expect(likeliest({ Headphones: 0.2, 'DAC/Amp': 0.7 })).toBe('DAC/Amp');
+  it('names the likeliest answer, and on a tie the option offered first', () => {
+    const options = ['Headphones', 'DAC/Amp', 'None of these'];
+    expect(likeliest({}, options)).toBeNull();
+    expect(likeliest({ Headphones: 0.6, 'DAC/Amp': 0.3 }, options)).toBe('Headphones');
+    expect(likeliest({ Headphones: 0.2, 'DAC/Amp': 0.7 }, options)).toBe('DAC/Amp');
+    // Postgres hands an object's keys back shortest first, so a tie can't go to the key met first.
+    expect(likeliest({ 'DAC/Amp': 0.45, Headphones: 0.45 }, options)).toBe('Headphones');
+    expect(likeliest({ Headphones: 0.45, 'DAC/Amp': 0.45 }, options)).toBe('Headphones');
+    expect(likeliest({ 'None of these': 0.4, 'DAC/Amp': 0.4 }, options)).toBe('DAC/Amp');
+    // An answer the question doesn't offer is not one to propose, and an option is a key of its own.
+    expect(likeliest({ Speakers: 0.9 }, options)).toBeNull();
+    expect(likeliest({ Headphones: 0.5 }, ['constructor', 'Headphones'])).toBe('Headphones');
   });
 });

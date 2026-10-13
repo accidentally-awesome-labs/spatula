@@ -41,13 +41,12 @@ import {
   reseeStatements,
   resolveEntities,
   startRun,
-  statementsOf,
   writeStatements,
   type FetchInput,
   type ItemRef,
   type StatementCounts,
 } from '@spatula/store';
-import { cascadeField, classifyItem, classifyTarget } from './classify';
+import { cascadeField, classifyItem, classifyTarget, decidedByLlm } from './classify';
 import { discoverSource } from './discovery';
 import {
   budgetLeft,
@@ -516,7 +515,7 @@ async function fetchItem(
     item.extractedWith === extractionTag(context.revision) &&
     !(noAiInput && item.extractInputHash !== null);
   if (current && noAiInput && answer.outcome === 'unchanged') {
-    current = !(await categoryFromLlm(context, item, ports));
+    current = !(await decidedByLlm(context, item, ports));
   }
   const extract = answer.outcome === 'changed' || (answer.outcome === 'unchanged' && !current);
   const reseen = await ports.withDb(async (db) => {
@@ -562,23 +561,6 @@ async function fetchItem(
         : storable(`${item.locator}: ${answer.outcome}${why === null ? '' : ` (${why})`}`),
     },
   };
-}
-
-/**
- * Whether the page's category is a decider's answer: the current statement of the field the
- * cascade decides has the method llm. A rule's answer and a person's don't rest on AI input.
- */
-async function categoryFromLlm(
-  context: Context,
-  item: ItemRef,
-  ports: RefreshPorts,
-): Promise<boolean> {
-  const target = classifyTarget(context.definition, item);
-  if (target === null) return false;
-  const said = await ports.withDb((db) => statementsOf(db, [item.id]));
-  return (said.get(item.id) ?? []).some(
-    (statement) => statement.property === target.name && statement.method === 'llm',
-  );
 }
 
 /** Asks for a page through its host's gate, and says what came of it. */
@@ -796,17 +778,9 @@ async function extractItem(
   }
   const seenAt = ports.now();
   const decided = cascadeField(source, recordType);
-  // The cascade owns the decided field, so the page speaks for every other field, and its
-  // extraction never withdraws a decided answer.
-  const pageWrite =
-    decided === null
-      ? { statements: extraction.statements }
-      : {
-          statements: extraction.statements.filter(
-            (statement) => statement.property !== decided[0],
-          ),
-          properties: Object.keys(recordType.fields).filter((name) => name !== decided[0]),
-        };
+  // The cascade owns the decided field, so the page and the LLM speak for every other field, and
+  // neither gives or withdraws a decided answer.
+  const own = speaksFor(recordType, decided?.[0] ?? null);
   const pageCounts = await ports.withDb((db) =>
     writeStatements(db, {
       datasetId,
@@ -814,7 +788,11 @@ async function extractItem(
       fetchId: fetched.fetchId,
       seenAt,
       methods: PAGE_METHODS,
-      ...pageWrite,
+      statements:
+        decided === null
+          ? extraction.statements
+          : extraction.statements.filter((statement) => statement.property !== decided[0]),
+      ...own,
     }),
   );
   const llm = await askLlm(
@@ -823,6 +801,7 @@ async function extractItem(
     fetched,
     page,
     recordType,
+    own,
     extraction.missing,
     seenAt,
     tokensLeft,
@@ -868,6 +847,17 @@ async function extractItem(
   };
 }
 
+/**
+ * The properties a write by the page's extraction or by the LLM speaks for: every field but the
+ * one the cascade decides. With no decided field none is named, so the write speaks for every
+ * property, as it did before there was a cascade.
+ */
+function speaksFor(recordType: RecordType, decided: string | null): { properties?: string[] } {
+  return decided === null
+    ? {}
+    : { properties: Object.keys(recordType.fields).filter((name) => name !== decided) };
+}
+
 interface LlmStep {
   outcome: Extracted['llm'];
   /** What the fetch log says the LLM step did. */
@@ -887,6 +877,7 @@ async function askLlm(
   fetched: Fetched,
   page: Page,
   recordType: RecordType,
+  own: { properties?: string[] },
   missing: string[],
   seenAt: Date,
   tokensLeft: number,
@@ -901,14 +892,15 @@ async function askLlm(
     note: null,
     ...more,
   });
-  // The LLM speaks only for the fields it fills, so it never withdraws the cascade's answers.
+  // The LLM speaks for every field but the cascade's, so what it said of a field it no longer
+  // fills is withdrawn with the rest, and the cascade's answer is left alone.
   const write = {
     datasetId: context.datasetId,
     itemId: item.id,
     fetchId: fetched.fetchId,
     seenAt,
     methods: ['llm'] as const,
-    properties: Object.keys(recordType.fields).filter((name) => recordType.fields[name]!.llm),
+    ...own,
   };
 
   const fields = llmFields(recordType, missing);
@@ -930,8 +922,15 @@ async function askLlm(
   const inputHash = await llmInputHash({ model: llm.model, text: page.text, fields });
   if (inputHash === item.extractInputHash) {
     // The same text, fields, and model would get the same answer, so its statements are re-seen.
+    // The cascade's answer isn't among them: nothing has confirmed it until its own step has.
     const reseen = await ports.withDb((db) =>
-      reseeStatements(db, { itemId: item.id, fetchId: fetched.fetchId, seenAt, methods: ['llm'] }),
+      reseeStatements(db, {
+        itemId: item.id,
+        fetchId: fetched.fetchId,
+        seenAt,
+        methods: ['llm'],
+        ...own,
+      }),
     );
     return {
       outcome: 'reused',

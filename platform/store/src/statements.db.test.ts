@@ -384,6 +384,57 @@ describe('reseeStatements', () => {
       const [after] = await db.select().from(statements).where(eq(statements.id, withdrawn!.id));
       expect(after).toMatchObject({ lastSeen: T(0), lastFetchId: first, withdrawnAt: T(5) });
     }));
+
+  it('re-sees only the properties it names, and nothing when it names none', () =>
+    withRollback(async (db) => {
+      const {
+        items: [a1],
+        runId,
+      } = await seedDataset(db);
+      await writeStatements(db, {
+        datasetId: 'test-products',
+        itemId: a1!.id,
+        fetchId: await fetchOf(db, runId, a1!, T(1)),
+        seenAt: T(1),
+        methods: ['llm'],
+        statements: [
+          statementOf('category', 'Headphones', 'llm'),
+          statementOf('specs', { label: 'Weight', value: '350 g' }, 'llm'),
+        ],
+      });
+      const seen = async () =>
+        (await currentStatements(db, 'test-products')).map(({ property, lastSeen }) => ({
+          property,
+          lastSeen,
+        }));
+
+      // The LLM's answer is seen again; the category, which another step decided, is not.
+      expect(
+        await reseeStatements(db, {
+          itemId: a1!.id,
+          fetchId: await fetchOf(db, runId, a1!, T(2)),
+          seenAt: T(2),
+          methods: ['llm'],
+          properties: ['specs'],
+        }),
+      ).toBe(1);
+      const names = [
+        { property: 'category', lastSeen: T(1).toISOString() },
+        { property: 'specs', lastSeen: T(2).toISOString() },
+      ];
+      expect(await seen()).toEqual(names);
+
+      // A call that speaks for no property sees nothing again.
+      expect(
+        await reseeStatements(db, {
+          itemId: a1!.id,
+          fetchId: await fetchOf(db, runId, a1!, T(3)),
+          seenAt: T(3),
+          properties: [],
+        }),
+      ).toBe(0);
+      expect(await seen()).toEqual(names);
+    }));
 });
 
 describe('currentStatements', () => {
