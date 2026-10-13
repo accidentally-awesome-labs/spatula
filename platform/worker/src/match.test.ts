@@ -1,4 +1,5 @@
 import {
+  createLlmDecider,
   GENERIC_MATCH_CRITERIA,
   runIdFor,
   type Decider,
@@ -11,7 +12,7 @@ import { testDefinition } from '@spatula/store/fixtures';
 import { eq } from 'drizzle-orm';
 import { describe, expect, it } from 'vitest';
 import { db } from '../test/node/db';
-import { fakeDecider, type World } from '../test/node/fakes';
+import { fakeDecider, fakeLlm, type World } from '../test/node/fakes';
 import { entityOf, published, refresh, worldFor } from '../test/node/runs';
 import { productPage, ROBOTS_OPEN, standardRoutes, URLS } from '../test/pages';
 import { matchItem } from './match';
@@ -30,6 +31,9 @@ const DT_80 = { name: 'DT 770 PRO', gtin13: '4010118471063' };
 const DT_250 = { name: 'DT 770 PRO', gtin13: '4010118471070' };
 const DT_600 = { name: 'DT 770 PRO', gtin13: '4010118471087' };
 const URL_A3 = 'https://maker-a.example/products/a3';
+
+/** The version of the criteria the products pack gives the decider. */
+const PACK_VERSION = packs['products/product']!.match!.version;
 
 const HOUR = 3_600_000;
 const NO_AI_INPUT = 'User-agent: *\nContent-Signal: ai-input=no\nAllow: /\n';
@@ -174,7 +178,7 @@ describe('matching pages', { timeout: 20_000 }, () => {
         subject: `${a2!.id}|${e1}`,
         outcome: 'accepted',
         answer: 'different',
-        criteriaVersion: 1,
+        criteriaVersion: PACK_VERSION,
       },
     ]);
   });
@@ -192,6 +196,46 @@ describe('matching pages', { timeout: 20_000 }, () => {
         context: { proposed: 'same', probabilities: { variant: 0.45, same: 0.45 } },
       },
     ]);
+  });
+});
+
+describe('a page that gives only a name', { timeout: 20_000 }, () => {
+  it('waits for the variant to be settled, then is asked about both versions', async () => {
+    const routes = routesWith(DT_80, DT_250);
+    routes[URL_A3] = { status: 200, body: productPage({ name: 'DT 770 PRO' }) };
+    const {
+      world,
+      pages: [a1, a2, a3],
+    } = await worldFor(withThirdPage(testDefinition('match-name-only')), routes);
+    // A2 is a version of A1's model. A3 is the 250 ohm one: the same as A2, not as A1.
+    const scripted = fakeDecider((request): Record<string, number> => {
+      if (request.evidence.startsWith(`Record A (${URLS.a2}):`)) return { variant: 0.97 };
+      return request.evidence.includes(`Record B (${URLS.a2}):`)
+        ? { same: 0.98 }
+        : { different: 0.97 };
+    });
+    world.ports.decider = scripted.decider;
+
+    // A name alone doesn't say which version A3 is, so it isn't joined to A1's entity while A2's
+    // question about that entity is open. Once A2 is a version of its own, A3 is asked about both.
+    const first = await refresh(world, 'match-name-only');
+    const e1 = await entityOf(a1!.id);
+    const e2 = await entityOf(a2!.id);
+    expect(matchSteps(first.names)).toEqual([`match:${a2!.id}:${e1}`]);
+    expect(e2).not.toBe(e1);
+    expect(await entityOf(a3!.id)).toBeNull();
+    expect(first.summary.entities).toMatchObject({ waiting: 1 });
+
+    const second = await refresh(world, 'match-name-only');
+    expect(matchSteps(second.names)).toEqual([`match:${a3!.id}:${e1}`, `match:${a3!.id}:${e2}`]);
+    const verdicts = (await judgementsFor(db, 'match-name-only')).map(
+      (judgement) => `${judgement.itemId}|${judgement.entityId}|${judgement.verdict}`,
+    );
+    expect(verdicts.sort()).toEqual(
+      [`${a2!.id}|${e1}|not_same`, `${a3!.id}|${e1}|not_same`, `${a3!.id}|${e2}|same`].sort(),
+    );
+    expect(await entityOf(a3!.id)).toBe(e2);
+    expect(second.summary.entities).toMatchObject({ waiting: 0, conflicts: 0 });
   });
 });
 
@@ -332,6 +376,36 @@ describe('a question that isn’t answered in the run that raised it', { timeout
     expect((await published(world, 'match-decider-fails'))!.snapshot.records).toHaveLength(3);
   });
 
+  it('asks again about an answer that didn’t fit the schema, rather than wait for a person', async () => {
+    const {
+      world,
+      pages: [a1, a2],
+    } = await worldFor(testDefinition('match-off-schema'), routesWith(DT_80, DT_250));
+    // A model's answer that doesn't fit the schema comes back as no probabilities at all.
+    world.ports.decider = createLlmDecider(fakeLlm(() => null).llm);
+    const first = await refresh(world, 'match-off-schema');
+    const e1 = await entityOf(a1!.id);
+    expect(first.summary.match).toMatchObject({ escalated: 1, accepted: 0 });
+    // The decider weighed nothing, so it gave no answer. Its "unsure" is the rule's, which asks a
+    // person for now, and asks the decider again once there is one that answers.
+    expect(await judgementsFor(db, 'match-off-schema')).toMatchObject([
+      { itemId: a2!.id, entityId: e1, verdict: 'unsure', who: 'rule' },
+    ]);
+    expect(await listOpenReviews(db, 'match-off-schema')).toHaveLength(1);
+
+    const answering = fakeDecider(() => ({ variant: 0.97 }));
+    world.ports.decider = answering.decider;
+    const second = await refresh(world, 'match-off-schema');
+    expect(matchSteps(second.names)).toEqual([`match:${a2!.id}:${e1}`]);
+    expect(second.summary.match).toMatchObject({ accepted: 1, escalated: 0, reused: 0 });
+    expect(answering.calls).toHaveLength(1);
+    expect(await listOpenReviews(db, 'match-off-schema')).toEqual([]);
+    expect(await judgementsFor(db, 'match-off-schema')).toMatchObject([
+      { itemId: a2!.id, entityId: e1, verdict: 'not_same', who: 'llm' },
+    ]);
+    expect(await entityOf(a2!.id)).not.toBeNull();
+  });
+
   it('stops asking once the run’s LLM budget is spent, and asks the rest next run', async () => {
     const definition = withThirdPage(testDefinition('match-budget'));
     const routes = routesWith(DT_80, DT_250);
@@ -392,6 +466,37 @@ describe('a question that isn’t answered in the run that raised it', { timeout
     });
     const e1 = await entityOf(a1!.id);
     expect([await entityOf(a2!.id), await entityOf(a3!.id)]).toEqual([e1, e1]);
+  });
+
+  it('carries on from a resolution that a version without match questions kept', async () => {
+    const datasetId = 'match-old-resolve';
+    const {
+      world,
+      pages: [a1, a2],
+    } = await worldFor(testDefinition(datasetId), routesWith(DT_80, DT_250));
+    // Workflows keep what a step returns, and a resolution from before questions has none.
+    const kept: StepRunner = {
+      async do(name, fn) {
+        const result = JSON.parse(JSON.stringify((await fn()) ?? null)) as Record<string, unknown>;
+        if (name === 'resolve') delete result.questions;
+        return result as never;
+      },
+      async sleep(_name, ms) {
+        world.clock.advance(ms);
+      },
+    };
+    const summary = await runRefresh(
+      { runId: runIdFor(datasetId, world.clock.now()), datasetId },
+      kept,
+      world.ports,
+    );
+    // Nothing was asked, and the page waits for the next run, which asks.
+    expect(summary.entities).toMatchObject({ created: 2, waiting: 1 });
+    expect(world.decider.calls).toEqual([]);
+    world.clock.advance(5 * 60_000);
+    const next = await refresh(world, datasetId);
+    expect(matchSteps(next.names)).toEqual([`match:${a2!.id}:${await entityOf(a1!.id)}`]);
+    expect(next.summary.match).toMatchObject({ accepted: 1 });
   });
 
   it('reports the decision it made when it runs again, and counts it once', async () => {
@@ -500,7 +605,9 @@ describe('the match step', { timeout: 20_000 }, () => {
     const [asked] = await decisionsAbout('match-person');
     await finalizeDecision(db, { id: asked!.id, finalAnswer: 'same', at: world.clock.now() });
 
-    // The person's answer stands, though the decider could be asked again.
+    // The person's answer stands, though the decider could be asked again. In the pipeline it
+    // reaches the next run through the `judge` call that Task 16 adds; this test drives `matchItem`
+    // after `finalizeDecision` directly.
     const matched = await matchItem(
       contextOf(world, definition),
       { itemId: a2!.id, entityId: e1 },
@@ -582,17 +689,17 @@ describe('the match step', { timeout: 20_000 }, () => {
     const worded = (version: number) => ({
       'products/product': { ...pack, match: { version, criteria: 'same: only a colour.' } },
     });
-    world.ports.packs = worded(1);
+    world.ports.packs = worded(PACK_VERSION);
     expect(await ask()).toMatchObject({ outcome: 'accepted' });
     expect(scripted.calls).toHaveLength(2);
     expect(scripted.calls[1]!.criteria).toBe('same: only a colour.');
 
     // A new version under the same words is one too.
-    world.ports.packs = worded(2);
+    world.ports.packs = worded(PACK_VERSION + 1);
     expect(await ask()).toMatchObject({ outcome: 'accepted' });
     expect(scripted.calls).toHaveLength(3);
     const versions = (await decisionsAbout('match-criteria')).map((row) => row.criteriaVersion);
-    expect(versions.sort()).toEqual([1, 1, 2]);
+    expect(versions.sort()).toEqual([PACK_VERSION, PACK_VERSION, PACK_VERSION + 1]);
   });
 
   it('describes "same" with the generic criteria where the record type has no pack', async () => {

@@ -20,7 +20,7 @@ import {
   type DecisionRow,
   type Executor,
 } from '@spatula/store';
-import { likeliest, stands } from './classify';
+import { likeliest, stands, weighed } from './classify';
 import { NO_USAGE, type Context, type RefreshPorts } from './pipeline';
 import { storable } from './text';
 
@@ -138,8 +138,9 @@ export async function matchItem(
 
 /**
  * A match decision as a verdict: "same" joins, "variant" and "different" keep the page apart, and
- * no answer yet asks a person. A decision that no decider answered is recorded as the rule's
- * ("rule" means no decider weighed it), so that resolution asks the pair again once one can.
+ * no answer yet asks a person. A decision that no decider weighed, because none was asked or
+ * because its answer fit no schema and named no probabilities, is recorded as the rule's ("rule"
+ * means no decider weighed it), so that resolution asks the pair again once one can.
  */
 async function applyVerdict(
   db: Executor,
@@ -162,7 +163,7 @@ async function applyVerdict(
       itemId,
       entityId,
       verdict: 'unsure',
-      who: decision.adapter === null ? 'rule' : 'llm',
+      who: weighed(decision) ? 'llm' : 'rule',
       confidence: proposed === null ? 0 : (decision.probabilities[proposed] ?? 0),
       decisionId: decision.id,
       at,

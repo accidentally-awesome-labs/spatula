@@ -7,7 +7,9 @@ import { similarity } from './trigrams';
  * Matching (ADR 0003): which entity a page that isn't joined yet belongs to. Identifiers outrank
  * names, so a page whose identifier an entity owns joins it. A name joins too, unless both records
  * give identifiers of the same kind and none agree: then the cascade is asked, because another
- * color and another impedance both change a GTIN, and only one of them is another product. A page
+ * color and another impedance both change a GTIN, and only one of them is another product. The
+ * same goes for a name that several entities carry, as the versions of one model do once an answer
+ * has split them: a name alone doesn't say which, so the cascade is asked about them all. A page
  * that matches nothing starts its own entity, unless an entity within its scope (for products, its
  * brand) has a similar name: then the cascade is asked about the closest few first. Verdicts
  * decide: "same" joins, "not the same" keeps the page apart for good, and "unsure" waits for a
@@ -51,6 +53,18 @@ export function nameScope(
   const scope = key.slice(0, -1).map((field) => textKey(textOf(values[field]?.[0]) ?? ''));
   if (name === null || scope.some((part) => part === '')) return null;
   return { scope: scope.join('|'), name };
+}
+
+/**
+ * A record's name as a key within its scope: records that share it are named alike, whatever their
+ * case, accents, spaces, and punctuation. Null where `nameScope` is.
+ */
+export function nameKey(
+  recordType: RecordType,
+  values: Record<string, FieldValue[]>,
+): string | null {
+  const own = nameScope(recordType, values);
+  return own === null ? null : `${own.scope}\u001f${textKey(own.name)}`;
 }
 
 /** Whether two records give identifiers of the same kind and none of their identifiers agree. */
@@ -100,6 +114,8 @@ export function planMatch(input: {
   sameScope: readonly { id: string; names: readonly string[] }[];
   /** The verdicts already given on this page, by entity. */
   verdicts: ReadonlyMap<string, MatchVerdict>;
+  /** The entities that other pages with this page's name are waiting on an answer about. */
+  waitingOn: ReadonlySet<string>;
 }): MatchPlan {
   const { recordType, values, owners, verdicts } = input;
   const claims = identityClaims(recordType, values);
@@ -124,31 +140,65 @@ export function planMatch(input: {
         owned.entityId !== undefined && !apart.has(owned.entityId),
     );
   if (strongest !== undefined) {
-    if (pending.has(strongest.entityId)) return { kind: 'wait' };
-    const byIdentifier = strongest.claim.rank < recordType.identity.identifiers.length;
-    const theirs = input.identifiers.get(strongest.entityId) ?? {};
-    if (byIdentifier || !identifiersDisagree(recordType, values, theirs)) {
-      return { kind: 'join', entityId: strongest.entityId };
+    const owner = strongest.entityId;
+    if (pending.has(owner)) return { kind: 'wait' };
+    if (strongest.claim.rank < recordType.identity.identifiers.length) {
+      return { kind: 'join', entityId: owner };
     }
-    return { kind: 'ask', entityIds: [strongest.entityId] };
+    // A name belongs to whichever entity claimed it first, but others may carry it too: a "variant"
+    // answer splits a version off with the name it shares. The page could be any of them.
+    const sharing = sharingName(recordType, values, input.sameScope).filter(
+      (entityId) => entityId !== owner && !apart.has(entityId),
+    );
+    if (sharing.length > 0) {
+      const asked = [owner, ...sharing].slice(0, MAX_MATCH_CANDIDATES);
+      return asked.some((entityId) => pending.has(entityId))
+        ? { kind: 'wait' }
+        : { kind: 'ask', entityIds: asked };
+    }
+    if (identifiersDisagree(recordType, values, input.identifiers.get(owner) ?? {})) {
+      return { kind: 'ask', entityIds: [owner] };
+    }
+    // Another page with this name is waiting to hear whether the entity is one version of the model
+    // or another, and this page, with a name alone, could be either.
+    return input.waitingOn.has(owner) ? { kind: 'wait' } : { kind: 'join', entityId: owner };
   }
 
-  const similar = similarNames(recordType, values, input.sameScope).filter(
-    (entityId) => !apart.has(entityId),
-  );
+  const similar = similarNames(recordType, values, input.sameScope, apart);
   if (similar.some((entityId) => pending.has(entityId))) return { kind: 'wait' };
   return similar.length === 0 ? { kind: 'create' } : { kind: 'ask', entityIds: similar };
 }
 
-/** The entities within the page's scope whose names are most like its own, closest first. */
-function similarNames(
+/** The entities within the page's scope with a page named as it is, by their IDs. */
+function sharingName(
   recordType: RecordType,
   values: Record<string, FieldValue[]>,
   sameScope: readonly { id: string; names: readonly string[] }[],
 ): string[] {
   const own = nameScope(recordType, values);
   if (own === null) return [];
+  const key = textKey(own.name);
   return sameScope
+    .filter(({ names }) => names.some((name) => textKey(name) === key))
+    .map(({ id }) => id)
+    .sort();
+}
+
+/**
+ * The entities within the page's scope whose names are most like its own, closest first, leaving
+ * out those already judged not the same: the closest few that remain, so that judging three apart
+ * brings the fourth.
+ */
+function similarNames(
+  recordType: RecordType,
+  values: Record<string, FieldValue[]>,
+  sameScope: readonly { id: string; names: readonly string[] }[],
+  apart: ReadonlySet<string>,
+): string[] {
+  const own = nameScope(recordType, values);
+  if (own === null) return [];
+  return sameScope
+    .filter(({ id }) => !apart.has(id))
     .map(({ id, names }) => ({
       id,
       score: names.reduce((best, name) => Math.max(best, similarity(own.name, name)), 0),

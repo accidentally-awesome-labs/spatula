@@ -2,6 +2,7 @@ import {
   identityClaims,
   MAX_MATCH_QUESTIONS,
   mergeValues,
+  nameKey,
   nameScope,
   newId,
   planMatch,
@@ -33,15 +34,20 @@ export interface EntityResolution {
 /**
  * Joins each live page to the entity it describes. Pages already joined claim their keys first,
  * so a new page finds them. A page that isn't joined yet follows its match plan: it joins on an
- * identifier, or on a name that no identifier contradicts; it starts a new entity, with a canonical
- * ID assigned once; or it waits for a question about an entity to be asked and answered. A claim
- * another entity already owns is reported as a conflict and changes nothing, unless a verdict says
- * the two aren't the same.
+ * identifier, or on a name that no identifier contradicts and no other entity shares; it starts a
+ * new entity, with a canonical ID assigned once; or it waits for a question about an entity to be
+ * asked and answered. A page that could join an entity on its name alone waits too while a page
+ * with that name has a question about the entity open, since the answer may make it another
+ * version of the same model. A claim another entity already owns is reported as a conflict and
+ * changes nothing. The exception is a name that two entities share once their pages have been
+ * judged not the same: that is what a "variant" answer leaves. A GTIN or part number two entities
+ * claim is always a conflict.
  *
  * A pair that was escalated when no decider could be asked is recorded as unsure "by rule". While
  * `deciderCanAnswer` is false that waits for a person, like any unsure verdict. Once it is true,
- * the pair is a question again, so it is asked now that something can answer it. A decider's own
- * "unsure" and a person's are answers, and still wait for a person.
+ * the pair is a question again, so it is asked now that something can answer it, after the
+ * questions nobody has asked yet when there is room for only some. A decider's own "unsure" and a
+ * person's are answers, and still wait for a person.
  */
 export async function resolveEntities(
   db: Executor,
@@ -84,9 +90,14 @@ export async function resolveEntities(
       ).map((key) => [key.value, key.entityId]),
     );
     const verdicts = new Map<string, Map<string, MatchVerdict>>();
+    const pairOf = (itemId: string, entityId: string) => `${itemId}|${entityId}`;
+    const askedAgain = new Set<string>();
     for (const judgement of await judgementsFor(tx, datasetId)) {
       // "Unsure by rule" means no decider was asked. It is no answer once one can be.
-      if (deciderCanAnswer && judgement.verdict === 'unsure' && judgement.who === 'rule') continue;
+      if (deciderCanAnswer && judgement.verdict === 'unsure' && judgement.who === 'rule') {
+        askedAgain.add(pairOf(judgement.itemId, judgement.entityId));
+        continue;
+      }
       const own = verdicts.get(judgement.itemId) ?? new Map<string, MatchVerdict>();
       own.set(judgement.entityId, judgement.verdict);
       verdicts.set(judgement.itemId, own);
@@ -116,12 +127,24 @@ export async function resolveEntities(
     };
     const valuesOf = (page: (typeof pages)[number], recordType: RecordType) =>
       survivingValues(recordType, said.get(page.id) ?? []);
+    // The entities kept apart: a page that belongs to one was judged not the same as the other.
+    const keptApart = new Map<string, Set<string>>();
+    const keepApart = (entityId: string, pageVerdicts: ReadonlyMap<string, MatchVerdict>) => {
+      for (const [other, verdict] of pageVerdicts) {
+        if (verdict !== 'not_same' || other === entityId) continue;
+        keptApart.set(entityId, (keptApart.get(entityId) ?? new Set<string>()).add(other));
+        keptApart.set(other, (keptApart.get(other) ?? new Set<string>()).add(entityId));
+      }
+    };
     for (const page of pages) {
       const recordType = definition.recordTypes[page.recordType];
       if (page.entityId !== null && recordType !== undefined) {
         remember(page.entityId, recordType, valuesOf(page, recordType));
+        keepApart(page.entityId, verdicts.get(page.id) ?? new Map<string, MatchVerdict>());
       }
     }
+    // The entities that pages are waiting on a question about, by the name those pages share.
+    const waitingOn = new Map<string, Set<string>>();
 
     const result: EntityResolution = {
       created: 0,
@@ -132,6 +155,8 @@ export async function resolveEntities(
       questions: [],
       notes: [],
     };
+    const fresh: EntityResolution['questions'] = [];
+    const again: EntityResolution['questions'] = [];
     const joined = pages.filter((page) => page.entityId !== null);
     const unjoined = pages.filter((page) => page.entityId === null);
     for (const page of [...joined, ...unjoined]) {
@@ -143,6 +168,7 @@ export async function resolveEntities(
       let entityId = page.entityId;
       if (entityId === null) {
         const named = nameScope(recordType, values);
+        const name = nameKey(recordType, values);
         const plan = planMatch({
           recordType,
           values,
@@ -152,6 +178,7 @@ export async function resolveEntities(
             ([id, names]) => ({ id, names }),
           ),
           verdicts: pageVerdicts,
+          waitingOn: (name === null ? undefined : waitingOn.get(name)) ?? new Set<string>(),
         });
         if (plan.kind === 'unresolvable') {
           result.unresolved += 1;
@@ -162,11 +189,20 @@ export async function resolveEntities(
         }
         if (plan.kind === 'wait' || plan.kind === 'ask') {
           result.waiting += 1;
+          // The entities this page waits to hear about, whether or not there is room to ask yet.
+          const open =
+            plan.kind === 'ask'
+              ? plan.entityIds
+              : [...pageVerdicts].filter(([, verdict]) => verdict === 'unsure').map(([id]) => id);
+          if (name !== null && open.length > 0) {
+            const others = waitingOn.get(name) ?? new Set<string>();
+            for (const id of open) others.add(id);
+            waitingOn.set(name, others);
+          }
           if (plan.kind === 'ask') {
             for (const candidate of plan.entityIds) {
-              if (result.questions.length < maxQuestions) {
-                result.questions.push({ itemId: page.id, entityId: candidate });
-              }
+              const question = { itemId: page.id, entityId: candidate };
+              (askedAgain.has(pairOf(page.id, candidate)) ? again : fresh).push(question);
             }
           }
           continue;
@@ -183,6 +219,7 @@ export async function resolveEntities(
         }
         await tx.update(items).set({ entityId }).where(eq(items.id, page.id));
         remember(entityId, recordType, values);
+        keepApart(entityId, pageVerdicts);
       }
 
       for (const claim of identityClaims(recordType, values)) {
@@ -190,7 +227,14 @@ export async function resolveEntities(
         if (owner === undefined) {
           owners.set(claim.value, entityId);
           await tx.insert(entityKeys).values({ datasetId, value: claim.value, entityId });
-        } else if (owner !== entityId && pageVerdicts.get(owner) !== 'not_same') {
+        } else if (
+          owner !== entityId &&
+          // A name is no conflict between entities kept apart. An identifier always is.
+          !(
+            claim.rank >= recordType.identity.identifiers.length &&
+            keptApart.get(entityId)?.has(owner) === true
+          )
+        ) {
           result.conflicts += 1;
           result.notes.push(
             `${page.locator} claims ${claim.value}, which belongs to ${owner}, while the page belongs to ${entityId}`,
@@ -198,6 +242,8 @@ export async function resolveEntities(
         }
       }
     }
+    // Questions nobody has asked yet come first, so asking again can't crowd them out of the cap.
+    result.questions = [...fresh, ...again].slice(0, maxQuestions);
     return result;
   });
 }

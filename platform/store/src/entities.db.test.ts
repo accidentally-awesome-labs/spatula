@@ -46,6 +46,42 @@ const entityOf = async (db: Executor, item: ItemRef) =>
 const resolve = (db: Executor, more: { maxQuestions?: number; deciderCanAnswer?: boolean } = {}) =>
   resolveEntities(db, { datasetId: 'test-products', definition: testDefinition(), ...more });
 
+/** The test dataset with a third page for maker A, and maker A's three pages. */
+async function makerAThree(db: Executor) {
+  const full = testDefinition();
+  const makerA = full.sources[0] as PagesSource;
+  await applyDefinition(db, {
+    ...full,
+    sources: [
+      { ...makerA, pages: [...makerA.pages, 'https://maker-a.example/products/a3'] },
+      full.sources[1]!,
+    ],
+  });
+  const [a1, a2, a3] = (await listLiveItems(db, 'test-products')).filter(
+    (item) => item.sourceId === 'maker-a',
+  );
+  return [a1!, a2!, a3!] as const;
+}
+
+/** A verdict on a page, against an entity. */
+const judged = (
+  db: Executor,
+  item: ItemRef,
+  entityId: string,
+  verdict: 'same' | 'not_same' | 'unsure',
+  who: Judge = 'llm',
+) =>
+  judge(db, {
+    datasetId: 'test-products',
+    itemId: item.id,
+    entityId,
+    verdict,
+    who,
+    confidence: 1,
+    decisionId: null,
+    at: T(1),
+  });
+
 describe('resolveEntities', () => {
   it('gives each new record a canonical ID once, and keeps it', () =>
     withRollback(async (db) => {
@@ -267,30 +303,203 @@ describe('resolveEntities', () => {
     withRollback(async (db) => {
       const { runId } = await seedDataset(db);
       // A third page for maker A: two pages give GTINs that disagree with the first's.
-      const full = testDefinition();
-      const makerA = full.sources[0] as PagesSource;
-      await applyDefinition(db, {
-        ...full,
-        sources: [
-          { ...makerA, pages: [...makerA.pages, 'https://maker-a.example/products/a3'] },
-          full.sources[1]!,
-        ],
-      });
-      const [a1, a2, a3] = (await listLiveItems(db, 'test-products')).filter(
-        (item) => item.sourceId === 'maker-a',
-      );
-      await says(db, runId, a1!, 0, product('Maker A', 'DT 770 PRO', '04010118471063'));
-      await says(db, runId, a2!, 0, product('Maker A', 'DT 770 PRO', '04010118471070'));
-      await says(db, runId, a3!, 0, product('Maker A', 'DT 770 PRO', '04010118471087'));
+      const [a1, a2, a3] = await makerAThree(db);
+      await says(db, runId, a1, 0, product('Maker A', 'DT 770 PRO', '04010118471063'));
+      await says(db, runId, a2, 0, product('Maker A', 'DT 770 PRO', '04010118471070'));
+      await says(db, runId, a3, 0, product('Maker A', 'DT 770 PRO', '04010118471087'));
 
       const capped = await resolve(db, { maxQuestions: 1 });
-      const e1 = await entityOf(db, a1!);
+      const e1 = await entityOf(db, a1);
       expect(capped).toMatchObject({ created: 1, waiting: 2 });
-      expect(capped.questions).toEqual([{ itemId: a2!.id, entityId: e1 }]);
+      expect(capped.questions).toEqual([{ itemId: a2.id, entityId: e1 }]);
       // Without a cap, each page is asked about.
       expect((await resolve(db)).questions).toEqual([
-        { itemId: a2!.id, entityId: e1 },
-        { itemId: a3!.id, entityId: e1 },
+        { itemId: a2.id, entityId: e1 },
+        { itemId: a3.id, entityId: e1 },
+      ]);
+    }));
+
+  it('raises the questions it asks for the first time before those it asks again', () =>
+    withRollback(async (db) => {
+      const { runId } = await seedDataset(db);
+      const [a1, a2, a3] = await makerAThree(db);
+      await says(db, runId, a1, 0, product('Maker A', 'DT 770 PRO', '04010118471063'));
+      await says(db, runId, a2, 0, product('Maker A', 'DT 770 PRO', '04010118471070'));
+      await says(db, runId, a3, 0, product('Maker A', 'DT 770 PRO', '04010118471087'));
+      await resolve(db);
+      const e1 = (await entityOf(db, a1))!;
+
+      // A2's pair was escalated when no decider could be asked. A3's was never asked at all.
+      await judged(db, a2, e1, 'unsure', 'rule');
+      const asked = { deciderCanAnswer: true };
+      // With room for one question, the one nobody has asked yet takes it, though A2 comes first.
+      expect((await resolve(db, { ...asked, maxQuestions: 1 })).questions).toEqual([
+        { itemId: a3.id, entityId: e1 },
+      ]);
+      expect((await resolve(db, asked)).questions).toEqual([
+        { itemId: a3.id, entityId: e1 },
+        { itemId: a2.id, entityId: e1 },
+      ]);
+    }));
+});
+
+describe('resolveEntities where one name carries several versions', () => {
+  /** A page that gives its name and nothing else. */
+  const named = [statementOf('brand', 'Maker A'), statementOf('name', 'DT 770 PRO', 'jsonld')];
+
+  it('holds a page with only a name while a page of that name waits to hear about its entity', () =>
+    withRollback(async (db) => {
+      const { runId } = await seedDataset(db);
+      const [a1, a2, a3] = await makerAThree(db);
+      await says(db, runId, a1, 0, product('Maker A', 'DT 770 PRO', '04010118471063'));
+      await says(db, runId, a2, 0, product('Maker A', 'DT 770 PRO', '04010118471070'));
+      await says(db, runId, a3, 0, named);
+
+      // A2 asks whether it is A1's product. A3 could be either version, and waits for the answer.
+      const first = await resolve(db);
+      const e1 = (await entityOf(db, a1))!;
+      expect(first).toMatchObject({ created: 1, linked: 0, waiting: 2 });
+      expect(first.questions).toEqual([{ itemId: a2.id, entityId: e1 }]);
+      expect(await entityOf(db, a3)).toBeNull();
+
+      // A variant: A2 has its own entity now, and A3 is asked about both.
+      await judged(db, a2, e1, 'not_same');
+      const second = await resolve(db);
+      const e2 = (await entityOf(db, a2))!;
+      expect(e2).not.toBe(e1);
+      expect(second).toMatchObject({ created: 1, linked: 0, conflicts: 0, waiting: 1 });
+      expect(second.questions).toEqual([
+        { itemId: a3.id, entityId: e1 },
+        { itemId: a3.id, entityId: e2 },
+      ]);
+      expect(await entityOf(db, a3)).toBeNull();
+    }));
+
+  it('holds it while a person has yet to answer, and joins it when the pages are one product', () =>
+    withRollback(async (db) => {
+      const { runId } = await seedDataset(db);
+      const [a1, a2, a3] = await makerAThree(db);
+      await says(db, runId, a1, 0, product('Maker A', 'DT 770 PRO', '04010118471063'));
+      await says(db, runId, a2, 0, product('Maker A', 'DT 770 PRO', '04010118471070'));
+      await says(db, runId, a3, 0, named);
+      await resolve(db);
+      const e1 = (await entityOf(db, a1))!;
+
+      await judged(db, a2, e1, 'unsure');
+      expect(await resolve(db)).toMatchObject({ linked: 0, waiting: 2, questions: [] });
+      expect(await entityOf(db, a3)).toBeNull();
+
+      // They are one product, and so is the page that gave only a name.
+      await judged(db, a2, e1, 'same', 'person');
+      expect(await resolve(db)).toMatchObject({ linked: 2, waiting: 0, questions: [] });
+      expect(await entityOf(db, a2)).toBe(e1);
+      expect(await entityOf(db, a3)).toBe(e1);
+    }));
+
+  it('joins a page with only a name to the one entity that has it, as before', () =>
+    withRollback(async (db) => {
+      const { runId } = await seedDataset(db);
+      const [a1, , a3] = await makerAThree(db);
+      await says(db, runId, a1, 0, product('Maker A', 'DT 770 PRO', '04010118471063'));
+      await says(db, runId, a3, 0, named);
+      expect(await resolve(db)).toMatchObject({ created: 1, linked: 1, waiting: 0, questions: [] });
+      expect(await entityOf(db, a3)).toBe(await entityOf(db, a1));
+    }));
+});
+
+describe('resolveEntities where two entities are kept apart', () => {
+  /** A1 and A2 are two versions of one model, A2 split off A1 by a "variant" answer. */
+  async function split(db: Executor) {
+    const { runId } = await seedDataset(db);
+    const [a1, a2, a3] = await makerAThree(db);
+    await says(db, runId, a1, 0, product('Maker A', 'DT 770 PRO', '04010118471063'));
+    await says(db, runId, a2, 0, product('Maker A', 'DT 770 PRO', '04010118471070'));
+    await resolve(db);
+    const e1 = (await entityOf(db, a1))!;
+    await judged(db, a2, e1, 'not_same');
+    expect(await resolve(db)).toMatchObject({ created: 1, conflicts: 0 });
+    return { runId, a1, a2, a3, e1, e2: (await entityOf(db, a2))! };
+  }
+
+  /** What a run noted about claims in conflict. */
+  const conflictNotes = (notes: string[]) => notes.filter((text) => text.includes(' claims '));
+
+  it('reports no conflict over the name they share, whichever page joins the split-off one', () =>
+    withRollback(async (db) => {
+      const { runId } = await seedDataset(db);
+      const [a1, a2, a3] = await makerAThree(db);
+      await says(db, runId, a1, 0, product('Maker A', 'DT 770 PRO', '04010118471063'));
+      await says(db, runId, a2, 0, product('Maker A', 'DT 770 PRO', '04010118471070'));
+      await says(db, runId, a3, 0, product('Maker A', 'DT 770 PRO', '04010118471070'));
+      await resolve(db);
+      const e1 = (await entityOf(db, a1))!;
+      await judged(db, a2, e1, 'not_same');
+
+      // A2 starts the split-off entity, and A3, with no verdict of its own, joins it by their GTIN.
+      const split = await resolve(db);
+      const e2 = (await entityOf(db, a2))!;
+      expect(split).toMatchObject({ created: 1, linked: 1, conflicts: 0 });
+      expect(await entityOf(db, a3)).toBe(e2);
+      expect(conflictNotes(split.notes)).toEqual([]);
+      // And it stays quiet: the pair doesn't become a conflict on the next run.
+      const next = await resolve(db);
+      expect(next).toMatchObject({ created: 0, linked: 0, conflicts: 0 });
+      expect(conflictNotes(next.notes)).toEqual([]);
+      expect([await entityOf(db, a1), await entityOf(db, a2)]).toEqual([e1, e2]);
+    }));
+
+  it('keeps them apart from either side', () =>
+    withRollback(async (db) => {
+      const { runId, a1, a2 } = await split(db);
+      // A2 names its product for another version, which its entity claims...
+      await says(db, runId, a2, 5, product('Maker A', 'DT 770 PRO 250', '04010118471070'));
+      expect(await resolve(db)).toMatchObject({ conflicts: 0 });
+      // ...and A1 takes the name too. The entity that claimed it belongs to the other side.
+      await says(db, runId, a1, 6, product('Maker A', 'DT 770 PRO 250', '04010118471063'));
+      const named = await resolve(db);
+      expect(named).toMatchObject({ conflicts: 0 });
+      expect(conflictNotes(named.notes)).toEqual([]);
+    }));
+
+  it('reports a shared name when nobody judged the two not the same', () =>
+    withRollback(async (db) => {
+      const { runId } = await seedDataset(db);
+      const [a1, a2, b1] = (await listLiveItems(db, 'test-products')).sort((a, b) =>
+        a.locator.localeCompare(b.locator),
+      );
+      await says(db, runId, a1!, 0, product('Maker A', 'DT 770 PRO', '04010118471063'));
+      await says(db, runId, b1!, 0, product('Maker B', 'B1 Amp', '04006381333931'));
+      await says(db, runId, a2!, 0, product('Maker A', 'DT 770 PRO', '04010118471070'));
+      await resolve(db);
+      const e1 = (await entityOf(db, a1!))!;
+      // A2 isn't sure of being A1's product, and nobody has said. It gives B1's GTIN too, which
+      // joins it to B1's entity, and leaves the name it shares with A1 in conflict.
+      await judged(db, a2!, e1, 'unsure');
+      await says(db, runId, a2!, 5, [
+        ...product('Maker A', 'DT 770 PRO', '04010118471070'),
+        statementOf('gtins', '04006381333931', 'jsonld'),
+      ]);
+      const joined = await resolve(db);
+      expect(joined).toMatchObject({ linked: 1, conflicts: 1 });
+      expect(await entityOf(db, a2!)).toBe(await entityOf(db, b1!));
+      expect(conflictNotes(joined.notes)).toEqual([
+        expect.stringContaining('claims key0:makera|dt770pro'),
+      ]);
+    }));
+
+  it('reports the GTIN of one that a page of the other gives, however far apart they are kept', () =>
+    withRollback(async (db) => {
+      const { runId, a2, e1, e2 } = await split(db);
+      // A2, kept apart from A1's entity, now lists A1's GTIN too.
+      await says(db, runId, a2, 5, [
+        ...product('Maker A', 'DT 770 PRO', '04010118471070'),
+        statementOf('gtins', '04010118471063', 'jsonld'),
+      ]);
+      const again = await resolve(db);
+      // One conflict: the GTIN. The name the two share is still no conflict.
+      expect(again).toMatchObject({ conflicts: 1, linked: 0, created: 0 });
+      expect(conflictNotes(again.notes)).toEqual([
+        `${a2.locator} claims gtins:04010118471063, which belongs to ${e1}, while the page belongs to ${e2}`,
       ]);
     }));
 });

@@ -139,6 +139,15 @@ const madeBy = (decision: DecisionRow): Classified['outcome'] =>
   decision.outcome === 'rule' ? 'rule' : decision.outcome === 'accepted' ? 'accepted' : 'escalated';
 
 /**
+ * Whether a decider weighed a decision: one was asked, and it named probabilities. One that named
+ * none, as it does when its answer doesn't fit the schema, gave no answer, and what it escalated
+ * is a person's to settle only until a decider can be asked again.
+ */
+export function weighed(decision: DecisionRow): boolean {
+  return decision.adapter !== null && Object.keys(decision.probabilities).length > 0;
+}
+
+/**
  * Whether an earlier decision on the same evidence still answers the question. A rule's answer
  * does, and so does a person's. A decider's answer does while the dataset and the site allow AI
  * input and the answer is as sure as the dataset now asks. An escalation a decider weighed does:
@@ -155,8 +164,7 @@ export function stands(
     const probability = earlier.answer === null ? 0 : (earlier.probabilities[earlier.answer] ?? 0);
     return now.consent && probability >= now.accept;
   }
-  const weighed = earlier.adapter !== null && Object.keys(earlier.probabilities).length > 0;
-  return weighed || !now.canAsk;
+  return weighed(earlier) || !now.canAsk;
 }
 
 /**

@@ -32,12 +32,12 @@ export const productPack: RecordTypePack = {
   extract: (page) => [...fromJsonLd(page), ...fromOpenGraph(page)],
   finish: (candidates) => withoutProductTypes(withoutBrandInNames(candidates)),
   match: {
-    version: 1,
+    version: 2,
     criteria: [
       'same: the same model. Colors, finishes, and bundles of the same model are the same product.',
       'variant: a version of the model whose specifications differ, such as another impedance, a Pro or Mk II version, a newer generation, or wired against wireless.',
       'different: different models.',
-      'Identifiers decide when both records have them: different GTINs or part numbers for one brand mean a variant or a different product.',
+      "Identifiers don't decide alone: each color, finish, and bundle has its own GTIN, and often its own part number. Compare the model name and the specifications.",
     ].join('\n'),
   },
 };

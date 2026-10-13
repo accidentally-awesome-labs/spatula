@@ -775,7 +775,19 @@ describe('productPack.finish, with product types', () => {
 
 describe('productPack.match', () => {
   it('says what makes two products the same, versioned', () => {
-    expect(productPack.match).toMatchObject({ version: 1 });
+    expect(productPack.match).toMatchObject({ version: 2 });
     expect(productPack.match?.criteria).toContain('variant: a version of the model');
+  });
+
+  it('doesn’t let identifiers decide alone, since each color has its own GTIN', () => {
+    const lines = productPack.match?.criteria.split('\n') ?? [];
+    // Colors of one model are the same product, so a different GTIN can't make them another.
+    expect(lines[0]).toContain(
+      'Colors, finishes, and bundles of the same model are the same product',
+    );
+    expect(lines).toContain(
+      "Identifiers don't decide alone: each color, finish, and bundle has its own GTIN, and often its own part number. Compare the model name and the specifications.",
+    );
+    expect(productPack.match?.criteria).not.toContain('Identifiers decide');
   });
 });

@@ -342,7 +342,9 @@ export async function runRefresh(
     // conflict, are held to what a step's result may carry.
     const first = await step.do('resolve', () => resolveStep(context, ports));
     let resolved = first;
-    for (const question of first.questions) {
+    // A resolution kept by an earlier version has no questions: its pages wait for the next run.
+    const questions = first.questions ?? [];
+    for (const question of questions) {
       const matched = await step.do(`match:${question.itemId}:${question.entityId}`, () =>
         matchItem(context, question, budgetLeft(context, summary), ports),
       );
@@ -352,7 +354,7 @@ export async function runRefresh(
       counts.outputTokens += matched.usage.outputTokens;
       if (matched.note !== null) note(summary, matched.note);
     }
-    if (first.questions.length > 0) {
+    if (questions.length > 0) {
       const again = await step.do('resolve:matched', () => resolveStep(context, ports));
       resolved = {
         ...again,
