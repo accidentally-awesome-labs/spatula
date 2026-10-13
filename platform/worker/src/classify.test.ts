@@ -1,4 +1,4 @@
-import { runIdFor, sha256Hex } from '@spatula/core';
+import { createLlmDecider, runIdFor, sha256Hex } from '@spatula/core';
 import { packs } from '@spatula/pack-products';
 import {
   applyDefinition,
@@ -16,7 +16,7 @@ import { testDefinition } from '@spatula/store/fixtures';
 import { and, eq, isNull } from 'drizzle-orm';
 import { describe, expect, it } from 'vitest';
 import { db } from '../test/node/db';
-import { fakeDecider, fakeLlm } from '../test/node/fakes';
+import { fakeDecider, fakeLlm, type World } from '../test/node/fakes';
 import {
   decidedDefinition as decided,
   entityOf,
@@ -56,6 +56,43 @@ const marksOf = async (datasetId: string) =>
   Object.fromEntries(
     (await listLiveItems(db, datasetId)).map((item) => [item.locator, item.extractedWith]),
   );
+
+/** The method and value of each of an item's current category statements. */
+const categoryOf = (itemId: string) =>
+  db
+    .select({ method: statements.method, value: statements.value })
+    .from(statements)
+    .where(
+      and(
+        eq(statements.itemId, itemId),
+        eq(statements.property, 'category'),
+        isNull(statements.withdrawnAt),
+      ),
+    );
+
+/** A person's answer for an item's category, written beside whatever the cascade said of it. */
+async function answerCategory(world: World, datasetId: string, itemId: string, value: string) {
+  await writeStatements(db, {
+    datasetId,
+    itemId,
+    fetchId: (await latestFetchId(db, itemId))!,
+    seenAt: world.clock.now(),
+    methods: ['human'],
+    properties: ['category'],
+    statements: [
+      {
+        property: 'category',
+        value,
+        valueKey: value,
+        original: value,
+        method: 'human',
+        path: 'review:test',
+        confidence: 1,
+        position: null,
+      },
+    ],
+  });
+}
 
 // Each test runs the pipeline against a real database, several runs in most, and a busy machine
 // needs more than the five seconds a test gets by default.
@@ -560,34 +597,17 @@ describe('a site that no longer allows AI input', { timeout: 20_000 }, () => {
       pages: [a1, a2],
     } = await worldFor(decided('classify-consent-kept'), routes, { llm: false });
     await refresh(world, 'classify-consent-kept');
-    // A person decides A2.
-    const fetchId = (await latestFetchId(db, a2!.id))!;
-    const write = { datasetId: 'classify-consent-kept', itemId: a2!.id, fetchId };
+    // A person decides A2: the decider's answer goes, and the person's takes its place.
     await writeStatements(db, {
-      ...write,
+      datasetId: 'classify-consent-kept',
+      itemId: a2!.id,
+      fetchId: (await latestFetchId(db, a2!.id))!,
       seenAt: world.clock.now(),
       methods: CASCADE_METHODS,
       properties: ['category'],
       statements: [],
     });
-    await writeStatements(db, {
-      ...write,
-      seenAt: world.clock.now(),
-      methods: ['human'],
-      properties: ['category'],
-      statements: [
-        {
-          property: 'category',
-          value: 'DAC/Amp',
-          valueKey: 'DAC/Amp',
-          original: 'DAC/Amp',
-          method: 'human',
-          path: 'review:test',
-          confidence: 1,
-          position: null,
-        },
-      ],
-    });
+    await answerCategory(world, 'classify-consent-kept', a2!.id, 'DAC/Amp');
 
     world.clock.advance(25 * HOUR);
     world.web.routes.set('https://maker-a.example/robots.txt', { status: 200, body: NO_AI_INPUT });
@@ -602,12 +622,19 @@ describe('a site that no longer allows AI input', { timeout: 20_000 }, () => {
 
 describe('an earlier decision about the same evidence', { timeout: 20_000 }, () => {
   it('asks the decider about a page that was escalated before one could be asked', async () => {
-    const { world } = await worldFor(decided('classify-late-decider'), standardRoutes(), {
-      decider: false,
-    });
+    const {
+      world,
+      pages: [a1],
+    } = await worldFor(decided('classify-late-decider'), standardRoutes(), { decider: false });
     const first = await refresh(world, 'classify-late-decider');
     expect(first.summary.classify).toMatchObject({ escalated: 2, accepted: 0 });
     expect(await listOpenReviews(db, 'classify-late-decider')).toHaveLength(2);
+
+    // Read again with no decider yet, it is the same escalation, not a new decision.
+    await applyDefinition(db, decided('classify-late-decider', { freshness: { maxAgeDays: 5 } }));
+    const again = await refresh(world, 'classify-late-decider');
+    expect(again.summary.classify).toMatchObject({ escalated: 2, accepted: 0 });
+    expect(await decisionsAbout('classify-late-decider', a1!.id)).toHaveLength(1);
 
     // The decider is set up, and a new revision has every page read again.
     world.ports.decider = world.decider.decider;
@@ -619,6 +646,37 @@ describe('an earlier decision about the same evidence', { timeout: 20_000 }, () 
     const file = (await published(world, 'classify-late-decider'))!;
     expect(file.byName.A1!.fields.category).toBe('Headphones');
     expect(file.byName.A2!.fields.category).toBe('Headphones');
+  });
+
+  it('asks again about an escalation the decider gave no answer to', async () => {
+    const {
+      world,
+      pages: [a1],
+    } = await worldFor(decided('classify-off-schema'), standardRoutes());
+    // A model's answer that doesn't fit the schema comes back as no probabilities at all.
+    let fitting = false;
+    const model = fakeLlm(() =>
+      fitting
+        ? { probabilities: [{ option: 'Headphones', probability: 0.97 }], reason: 'ok' }
+        : null,
+    );
+    world.ports.decider = createLlmDecider(model.llm);
+    const first = await refresh(world, 'classify-off-schema');
+    expect(first.summary.classify).toMatchObject({ escalated: 2, accepted: 0 });
+    expect(await decisionsAbout('classify-off-schema', a1!.id)).toMatchObject([
+      { adapter: 'llm:test-model', outcome: 'escalated', answer: null, probabilities: {} },
+    ]);
+
+    // Read again, the decider is asked the same question, and this time it answers.
+    fitting = true;
+    await applyDefinition(db, decided('classify-off-schema', { freshness: { maxAgeDays: 6 } }));
+    const second = await refresh(world, 'classify-off-schema');
+    expect(second.summary.classify).toMatchObject({ accepted: 2, escalated: 0, reused: 0 });
+    expect(model.calls).toHaveLength(4);
+    expect(await listOpenReviews(db, 'classify-off-schema')).toEqual([]);
+    expect((await published(world, 'classify-off-schema'))!.byName.A1!.fields.category).toBe(
+      'Headphones',
+    );
   });
 
   it('asks again about an answer that no longer reaches the threshold', async () => {
@@ -851,29 +909,7 @@ describe('the classify step', { timeout: 20_000 }, () => {
     } = await worldFor(definition, standardRoutes());
     await refresh(world, 'classify-human');
     // A person's answer is written while the decider's, which it replaces, is still current.
-    const write = {
-      datasetId: 'classify-human',
-      itemId: a1!.id,
-      fetchId: (await latestFetchId(db, a1!.id))!,
-      seenAt: world.clock.now(),
-      properties: ['category'],
-    };
-    await writeStatements(db, {
-      ...write,
-      methods: ['human'],
-      statements: [
-        {
-          property: 'category',
-          value: 'DAC/Amp',
-          valueKey: 'DAC/Amp',
-          original: 'DAC/Amp',
-          method: 'human',
-          path: 'review:test',
-          confidence: 1,
-          position: null,
-        },
-      ],
-    });
+    await answerCategory(world, 'classify-human', a1!.id, 'DAC/Amp');
 
     // New words for the values are a new question for the decider, so A2 is asked again. A1 isn't:
     // the person's answer stands until a person changes it, and the decider's would be hidden by
@@ -890,22 +926,31 @@ describe('the classify step', { timeout: 20_000 }, () => {
       world.decider.calls.filter((call) => call.evidence.includes(url)).length;
     expect(askedAbout(URLS.a1)).toBe(1);
     expect(askedAbout(URLS.a2)).toBe(2);
-    expect(
-      await db
-        .select({ method: statements.method, value: statements.value })
-        .from(statements)
-        .where(
-          and(
-            eq(statements.itemId, a1!.id),
-            eq(statements.property, 'category'),
-            isNull(statements.withdrawnAt),
-          ),
-        ),
-    ).toEqual([{ method: 'human', value: 'DAC/Amp' }]);
+    expect(await categoryOf(a1!.id)).toEqual([{ method: 'human', value: 'DAC/Amp' }]);
     const file = (await published(world, 'classify-human'))!;
     expect(file.byName.A1!.fields.category).toBe('DAC/Amp');
     expect(file.byName.A1!.provenance.category).toMatchObject({ method: 'human', confidence: 1 });
     expect(file.byName.A2!.fields.category).toBe('Headphones');
+  });
+
+  it('withdraws a rule’s category too, when a person has answered', async () => {
+    const routes = standardRoutes();
+    routes[URLS.a1] = {
+      status: 200,
+      body: A1().replace('"sku":"A1-BLK"', '"sku":"A1-BLK","category":"Headphones"'),
+    };
+    const {
+      world,
+      pages: [a1],
+    } = await worldFor(decided('classify-human-rule'), routes);
+    await refresh(world, 'classify-human-rule');
+    expect(await categoryOf(a1!.id)).toEqual([{ method: 'rule', value: 'Headphones' }]);
+
+    // A person's answer is written while the rule's, which it replaces, is still current.
+    await answerCategory(world, 'classify-human-rule', a1!.id, 'DAC/Amp');
+    await applyDefinition(db, decided('classify-human-rule', { freshness: { maxAgeDays: 6 } }));
+    await refresh(world, 'classify-human-rule');
+    expect(await categoryOf(a1!.id)).toEqual([{ method: 'human', value: 'DAC/Amp' }]);
   });
 });
 

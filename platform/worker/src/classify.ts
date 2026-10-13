@@ -141,9 +141,10 @@ const madeBy = (decision: DecisionRow): Classified['outcome'] =>
 /**
  * Whether an earlier decision on the same evidence still answers the question. A rule's answer
  * does, and so does a person's. A decider's answer does while the dataset and the site allow AI
- * input and the answer is as sure as the dataset now asks. An escalation a decider saw does:
- * asking again would put the same question to it. One that no decider saw, because none could be
- * asked, does only while none can be.
+ * input and the answer is as sure as the dataset now asks. An escalation a decider weighed does:
+ * asking again would put the same question to it. One that no decider weighed does only while none
+ * can be asked: an escalation made when none was asked, or one whose decider named no
+ * probabilities, as it does when its answer doesn't fit the schema.
  */
 function stands(
   earlier: DecisionRow,
@@ -154,7 +155,8 @@ function stands(
     const probability = earlier.answer === null ? 0 : (earlier.probabilities[earlier.answer] ?? 0);
     return now.consent && probability >= now.accept;
   }
-  return earlier.adapter !== null || !now.canAsk;
+  const weighed = earlier.adapter !== null && Object.keys(earlier.probabilities).length > 0;
+  return weighed || !now.canAsk;
 }
 
 /**

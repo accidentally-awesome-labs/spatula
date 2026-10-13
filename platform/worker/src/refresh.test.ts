@@ -1,5 +1,6 @@
 import {
   normalizeGtin,
+  parseDefinition,
   runIdFor,
   type Candidate,
   type GateDecision,
@@ -486,6 +487,59 @@ describe('runRefresh', () => {
       statements: { added: 0, reseen: 16, withdrawn: 0 },
       snapshot: { published: false, reason: 'nothing changed since generation 2' },
     });
+  });
+
+  it('withdraws what the page and the LLM said of a field that left the record type', async () => {
+    const base = testDefinition('refresh-field-removed');
+    const product = base.recordTypes.product!;
+    const without = <T>(values: Record<string, T>, name: string) =>
+      Object.fromEntries(Object.entries(values).filter(([key]) => key !== name));
+    // The LLM fills a second field, and each page's canonical address is read into officialUrl.
+    await applyDefinition(db, {
+      ...base,
+      recordTypes: {
+        product: {
+          ...product,
+          fields: { ...product.fields, extras: { ...product.fields.specs!, llm: true } },
+        },
+      },
+    });
+    const world = makeWorld(db, standardRoutes());
+    world.ports.llm = fakeLlm((user) => {
+      const given = answerFor(user);
+      return given === null ? null : { ...given, extras: given.specs };
+    }).llm;
+    const [a1] = await listLiveItems(db, 'refresh-field-removed');
+    const said = async () =>
+      [
+        ...new Set(
+          (
+            await db
+              .select({ property: statements.property, method: statements.method })
+              .from(statements)
+              .where(and(eq(statements.itemId, a1!.id), isNull(statements.withdrawnAt)))
+          )
+            .filter((row) => ['extras', 'officialUrl'].includes(row.property))
+            .map((row) => `${row.property}/${row.method}`),
+        ),
+      ].sort();
+    await refresh(world, 'refresh-field-removed');
+    expect(await said()).toEqual(['extras/llm', 'officialUrl/rule']);
+
+    // A new revision has neither field. With no field left to the cascade, the page and the LLM
+    // each speak for every statement they gave, so both are withdrawn.
+    const revised = parseDefinition({
+      ...base,
+      recordTypes: { product: { ...product, fields: without(product.fields, 'officialUrl') } },
+      sources: base.sources.map((source) => ({
+        ...source,
+        extract: without(source.extract, 'officialUrl'),
+      })),
+    });
+    if (!revised.ok) throw new Error(revised.issues.join('\n'));
+    await applyDefinition(db, revised.definition);
+    await refresh(world, 'refresh-field-removed');
+    expect(await said()).toEqual([]);
   });
 
   it('notes a page that can’t be read, and reads it next time', async () => {
