@@ -1,5 +1,5 @@
 import type { ContentSignals, Outcome } from '@spatula/core';
-import { eq, sql } from 'drizzle-orm';
+import { desc, eq, sql } from 'drizzle-orm';
 import type { Executor } from './client';
 import { fetches, items, type ItemStatus } from './schema';
 
@@ -162,4 +162,24 @@ export async function recordExtraction(
       llmOutputTokens: input.usage.outputTokens,
     })
     .where(eq(fetches.id, input.fetchId));
+}
+
+/** The item's latest fetch, which a person's answer is recorded against. */
+export async function latestFetchId(db: Executor, itemId: string): Promise<string | null> {
+  const [row] = await db
+    .select({ id: fetches.id })
+    .from(fetches)
+    .where(eq(fetches.itemId, itemId))
+    .orderBy(desc(fetches.startedAt))
+    .limit(1);
+  return row?.id ?? null;
+}
+
+/** Sets an item's status, as a decision does when it finds a page isn't one of the dataset's. */
+export async function setItemStatus(
+  db: Executor,
+  itemId: string,
+  status: ItemStatus,
+): Promise<void> {
+  await db.update(items).set({ status }).where(eq(items.id, itemId));
 }

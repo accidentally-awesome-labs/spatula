@@ -15,6 +15,13 @@
       "when": 1791828538313,
       "tag": "0001_listing",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1791863230440,
+      "tag": "0002_decisions",
+      "breakpoints": true
     }
   ]
 }

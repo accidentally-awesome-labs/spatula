@@ -1,5 +1,5 @@
 import { newId, parseDefinition, type Definition } from '@spatula/core';
-import { eq, inArray } from 'drizzle-orm';
+import { eq, inArray, sql } from 'drizzle-orm';
 import { describe, expect, it } from 'vitest';
 import { withRollback } from '../test/db';
 import type { Executor } from './client';
@@ -11,6 +11,7 @@ import {
   reviveItems,
   StaleDefinitionError,
 } from './datasets';
+import { findDecision, saveDecision, type NewDecision } from './decisions';
 import { testDefinition } from './fixtures';
 import { dueItems } from './listing';
 import { finishRun, getRun, startRun } from './runs';
@@ -18,6 +19,28 @@ import { datasets, items, sources } from './schema';
 
 const pagesOf = async (db: Executor) =>
   (await listLiveItems(db, 'test-products')).map((item) => item.locator);
+
+/** The answer that made a page irrelevant: it is none of the dataset's categories. */
+const noneOfThese = (datasetId: string, itemId: string): NewDecision => ({
+  id: `dc_none_${itemId}`,
+  datasetId,
+  type: 'classify',
+  subject: itemId,
+  subjectKey: `classify:${itemId}`,
+  state: {},
+  stateHash: 'hash',
+  question: { type: 'choice', prompt: 'Which?', options: ['Headphones', 'None of these'] },
+  criteriaVersion: 1,
+  adapter: 'llm:test-model',
+  probabilities: { 'None of these': 0.95 },
+  evidence: 'Ear pads.',
+  thresholds: { accept: 0.9 },
+  outcome: 'accepted',
+  answer: 'None of these',
+  inputTokens: 0,
+  outputTokens: 0,
+  decidedAt: new Date(),
+});
 
 describe('applyDefinition', () => {
   it('previews a new dataset without writing it, then creates it', () =>
@@ -285,6 +308,68 @@ describe('applyDefinition', () => {
         limit: 10,
       });
       expect([...plan.ids].sort()).toEqual([a1!.id, a2!.id].sort());
+    }));
+
+  it('revives an irrelevant page so it is asked again', () =>
+    withRollback(async (tx) => {
+      await applyDefinition(tx, testDefinition('revive-irrelevant'));
+      const [a1] = await listLiveItems(tx, 'revive-irrelevant');
+      await tx
+        .update(items)
+        .set({ status: 'irrelevant', extractedWith: 'r1.v1' })
+        .where(eq(items.id, a1!.id));
+      await saveDecision(tx, noneOfThese('revive-irrelevant', a1!.id));
+      expect(await reviveItems(tx, { datasetId: 'revive-irrelevant', pages: [a1!.locator] })).toBe(
+        1,
+      );
+      expect(
+        await findDecision(tx, {
+          datasetId: 'revive-irrelevant',
+          subjectKey: `classify:${a1!.id}`,
+          stateHash: 'hash',
+          criteriaVersion: 1,
+        }),
+      ).toBeNull();
+      const [row] = await tx
+        .select({ status: items.status, extractedWith: items.extractedWith })
+        .from(items)
+        .where(eq(items.id, a1!.id));
+      expect(row).toEqual({ status: 'live', extractedWith: null });
+    }));
+
+  it('revives nothing when one of its writes fails', () =>
+    withRollback(async (tx) => {
+      await applyDefinition(tx, testDefinition('revive-atomic'));
+      const [a1] = await listLiveItems(tx, 'revive-atomic');
+      await tx
+        .update(items)
+        .set({ status: 'irrelevant', extractedWith: 'r1.v1' })
+        .where(eq(items.id, a1!.id));
+      const none = await saveDecision(tx, noneOfThese('revive-atomic', a1!.id));
+      // The last of its writes fails, as if the database went away between them.
+      await tx.execute(
+        sql`create function refuse_clearing() returns trigger language plpgsql as $$ begin raise exception 'refused'; end $$`,
+      );
+      await tx.execute(
+        sql`create trigger refuse_clearing before update of extracted_with on items for each row when (new.extracted_with is null) execute function refuse_clearing()`,
+      );
+      await expect(
+        reviveItems(tx, { datasetId: 'revive-atomic', pages: [a1!.locator] }),
+      ).rejects.toThrow();
+      // The page is as it was: still irrelevant, still read, and its answer still current.
+      const [row] = await tx
+        .select({ status: items.status, extractedWith: items.extractedWith })
+        .from(items)
+        .where(eq(items.id, a1!.id));
+      expect(row).toEqual({ status: 'irrelevant', extractedWith: 'r1.v1' });
+      expect(
+        await findDecision(tx, {
+          datasetId: 'revive-atomic',
+          subjectKey: none.subjectKey,
+          stateHash: none.stateHash,
+          criteriaVersion: none.criteriaVersion,
+        }),
+      ).toMatchObject({ id: none.id });
     }));
 });
 

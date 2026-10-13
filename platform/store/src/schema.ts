@@ -5,6 +5,7 @@ import type {
   FieldValue,
   Method,
   Outcome,
+  Question,
   RunStatus,
   RunSummary,
 } from '@spatula/core';
@@ -301,5 +302,127 @@ export const snapshots = pgTable(
     uniqueIndex('snapshots_generation').on(t.datasetId, t.generation),
     index('snapshots_run').on(t.runId),
     check('snapshots_generation_positive', sql`${t.generation} > 0`),
+  ],
+);
+
+export const DECISION_OUTCOMES = ['rule', 'accepted', 'escalated'] as const;
+export type DecisionOutcome = (typeof DECISION_OUTCOMES)[number];
+export const VERDICTS = ['same', 'not_same', 'unsure'] as const;
+export type Verdict = (typeof VERDICTS)[number];
+export const JUDGES = ['rule', 'llm', 'person', 'consumer'] as const;
+export type Judge = (typeof JUDGES)[number];
+export const REVIEW_KINDS = ['classify', 'match', 'publication'] as const;
+export type ReviewKind = (typeof REVIEW_KINDS)[number];
+export const REVIEW_STATUSES = ['open', 'decided', 'dismissed'] as const;
+export type ReviewStatus = (typeof REVIEW_STATUSES)[number];
+
+/**
+ * What the decision cascade was asked, on what evidence, by which adapter, and what came of it.
+ * A record is never rewritten, but a person's answer finalizes it, and a newer question about the
+ * same subject supersedes it.
+ */
+export const decisionRecords = pgTable(
+  'decision_records',
+  {
+    id: text('id').primaryKey(),
+    datasetId: text('dataset_id')
+      .notNull()
+      .references(() => datasets.id, { onDelete: 'cascade' }),
+    type: text('type').notNull(),
+    /** What it was about: an item's ID, or an item's and an entity's joined by a bar. */
+    subject: text('subject').notNull(),
+    /** What makes two questions the same question. */
+    subjectKey: text('subject_key').notNull(),
+    state: jsonb('state').$type<unknown>().notNull(),
+    stateHash: text('state_hash').notNull(),
+    question: jsonb('question').$type<Question>().notNull(),
+    criteriaVersion: integer('criteria_version').notNull(),
+    /** The adapter and model that answered; null for a rule's answer or no adapter at all. */
+    adapter: text('adapter'),
+    probabilities: jsonb('probabilities').$type<Record<string, number>>().notNull(),
+    evidence: text('evidence').notNull(),
+    thresholds: jsonb('thresholds').$type<{ accept: number }>().notNull(),
+    outcome: text('outcome').$type<DecisionOutcome>().notNull(),
+    answer: text('answer'),
+    /** A person's confirmation or correction. */
+    finalAnswer: text('final_answer'),
+    inputTokens: integer('input_tokens').notNull().default(0),
+    outputTokens: integer('output_tokens').notNull().default(0),
+    decidedAt: time('decided_at').notNull(),
+    finalizedAt: time('finalized_at'),
+    supersededAt: time('superseded_at'),
+  },
+  (t) => [
+    uniqueIndex('decision_records_current')
+      .on(t.datasetId, t.subjectKey, t.stateHash, t.criteriaVersion)
+      .where(sql`${t.supersededAt} is null`),
+    index('decision_records_subject').on(t.datasetId, t.subject),
+    check('decision_records_outcome', sql`${t.outcome} in ('rule', 'accepted', 'escalated')`),
+  ],
+);
+
+/**
+ * Whether a page and an entity describe the same product. "Same" joins them; "not the same" keeps
+ * them apart for good; "unsure" waits for a person. A person's verdict outranks any other.
+ */
+export const judgements = pgTable(
+  'judgements',
+  {
+    datasetId: text('dataset_id')
+      .notNull()
+      .references(() => datasets.id, { onDelete: 'cascade' }),
+    itemId: text('item_id')
+      .notNull()
+      .references(() => items.id, { onDelete: 'cascade' }),
+    entityId: text('entity_id')
+      .notNull()
+      .references(() => entities.id, { onDelete: 'cascade' }),
+    verdict: text('verdict').$type<Verdict>().notNull(),
+    who: text('who').$type<Judge>().notNull(),
+    confidence: doublePrecision('confidence').notNull(),
+    decisionId: text('decision_id').references(() => decisionRecords.id, { onDelete: 'set null' }),
+    updatedAt: time('updated_at').notNull(),
+  },
+  (t) => [
+    primaryKey({ columns: [t.itemId, t.entityId] }),
+    index('judgements_dataset').on(t.datasetId),
+    index('judgements_entity').on(t.entityId),
+    index('judgements_decision').on(t.decisionId),
+    check('judgements_verdict', sql`${t.verdict} in ('same', 'not_same', 'unsure')`),
+    check('judgements_who', sql`${t.who} in ('rule', 'llm', 'person', 'consumer')`),
+    check('judgements_confidence', sql`${t.confidence} >= 0 and ${t.confidence} <= 1`),
+  ],
+);
+
+/** Questions waiting for a person: at most one open per subject. */
+export const reviewItems = pgTable(
+  'review_items',
+  {
+    id: text('id').primaryKey(),
+    datasetId: text('dataset_id')
+      .notNull()
+      .references(() => datasets.id, { onDelete: 'cascade' }),
+    kind: text('kind').$type<ReviewKind>().notNull(),
+    subject: text('subject').notNull(),
+    itemId: text('item_id').references(() => items.id, { onDelete: 'cascade' }),
+    entityId: text('entity_id').references(() => entities.id, { onDelete: 'cascade' }),
+    decisionId: text('decision_id').references(() => decisionRecords.id, { onDelete: 'set null' }),
+    question: jsonb('question').$type<Question>().notNull(),
+    context: jsonb('context').$type<Record<string, unknown>>().notNull(),
+    status: text('status').$type<ReviewStatus>().notNull().default('open'),
+    answer: text('answer'),
+    createdAt: time('created_at').notNull(),
+    closedAt: time('closed_at'),
+  },
+  (t) => [
+    uniqueIndex('review_items_open')
+      .on(t.datasetId, t.kind, t.subject)
+      .where(sql`${t.status} = 'open'`),
+    index('review_items_dataset').on(t.datasetId, t.status),
+    index('review_items_item').on(t.itemId),
+    index('review_items_entity').on(t.entityId),
+    index('review_items_decision').on(t.decisionId),
+    check('review_items_kind', sql`${t.kind} in ('classify', 'match', 'publication')`),
+    check('review_items_status', sql`${t.status} in ('open', 'decided', 'dismissed')`),
   ],
 );

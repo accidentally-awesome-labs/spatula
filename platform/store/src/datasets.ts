@@ -9,6 +9,7 @@ import {
 } from '@spatula/core';
 import { and, eq, inArray, notInArray, or, sql } from 'drizzle-orm';
 import type { Executor } from './client';
+import { supersedeDecisions } from './decisions';
 import { datasets, items, sources, type ItemStatus } from './schema';
 
 export interface DatasetRow {
@@ -236,12 +237,14 @@ export async function listLiveItems(db: Executor, datasetId: string): Promise<It
 }
 
 /** The statuses a named page can be revived from. Excluded pages come back by being listed. */
-export const REVIVABLE_STATUSES: ItemStatus[] = ['refused', 'gone'];
+export const REVIVABLE_STATUSES: ItemStatus[] = ['refused', 'gone', 'irrelevant'];
 
 /**
  * Puts pages back to live: every refused page with `refused`, and the pages named, from any
  * revivable status. Their streaks start again, and a revived page counts as never read, so the
- * next run reads it whenever it was last read.
+ * next run reads it whenever it was last read. A revived irrelevant page also loses the decision
+ * that made it irrelevant and its extraction mark, so the next run reads it and asks afresh. The
+ * revival is one transaction: a failure partway leaves every page as it was.
  */
 export async function reviveItems(
   db: Executor,
@@ -254,16 +257,43 @@ export async function reviveItems(
       : []),
   ];
   if (which.length === 0) return 0;
-  const rows = await db
-    .update(items)
-    .set({
-      status: 'live',
-      lastOutcome: null,
-      outcomeStreak: 0,
-      missingStreak: 0,
-      lastFetchedAt: null,
-    })
-    .where(and(eq(items.datasetId, input.datasetId), or(...which)))
-    .returning({ id: items.id });
-  return rows.length;
+  return db.transaction(async (tx) => {
+    const irrelevant =
+      input.pages === undefined || input.pages.length === 0
+        ? []
+        : (
+            await tx
+              .select({ id: items.id })
+              .from(items)
+              .where(
+                and(
+                  eq(items.datasetId, input.datasetId),
+                  inArray(items.locator, input.pages),
+                  eq(items.status, 'irrelevant'),
+                ),
+              )
+          ).map((row) => row.id);
+    const rows = await tx
+      .update(items)
+      .set({
+        status: 'live',
+        lastOutcome: null,
+        outcomeStreak: 0,
+        missingStreak: 0,
+        lastFetchedAt: null,
+      })
+      .where(and(eq(items.datasetId, input.datasetId), or(...which)))
+      .returning({ id: items.id });
+    if (irrelevant.length > 0) {
+      // The answer that made them irrelevant is retired, and the pages read again, so the next run
+      // asks afresh instead of reusing it.
+      await supersedeDecisions(tx, {
+        datasetId: input.datasetId,
+        subjects: irrelevant,
+        at: new Date(),
+      });
+      await tx.update(items).set({ extractedWith: null }).where(inArray(items.id, irrelevant));
+    }
+    return rows.length;
+  });
 }

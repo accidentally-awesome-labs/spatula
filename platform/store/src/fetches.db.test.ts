@@ -2,10 +2,16 @@ import { newId, type PagesSource } from '@spatula/core';
 import { count, eq } from 'drizzle-orm';
 import { describe, expect, it } from 'vitest';
 import { withRollback } from '../test/db';
-import { seedDataset, T } from '../test/seed';
+import { fetchOf, seedDataset, T } from '../test/seed';
 import type { Executor } from './client';
 import { applyDefinition, listLiveItems, type ItemRef } from './datasets';
-import { recordExtraction, recordFetch, type FetchInput } from './fetches';
+import {
+  latestFetchId,
+  recordExtraction,
+  recordFetch,
+  setItemStatus,
+  type FetchInput,
+} from './fetches';
 import { testDefinition } from './fixtures';
 import { fetches, items } from './schema';
 
@@ -333,5 +339,38 @@ describe('recordExtraction', () => {
       });
       const [logged] = await db.select().from(fetches).where(eq(fetches.id, fetch.id));
       expect(logged!.llm).toBe('a'.repeat(500));
+    }));
+});
+
+describe('latestFetchId', () => {
+  it('names the item’s newest fetch, and none for an item never fetched', () =>
+    withRollback(async (db) => {
+      const {
+        items: [a1, a2],
+        runId,
+      } = await seedDataset(db);
+      expect(await latestFetchId(db, a1!.id)).toBeNull();
+      const older = await fetchOf(db, runId, a1!, T(1));
+      const newer = await fetchOf(db, runId, a1!, T(2));
+      // Another item's fetch is never this item's, however recent.
+      await fetchOf(db, runId, a2!, T(3));
+      expect(older).not.toBe(newer);
+      expect(await latestFetchId(db, a1!.id)).toBe(newer);
+      expect(await latestFetchId(db, a2!.id)).not.toBe(newer);
+    }));
+});
+
+describe('setItemStatus', () => {
+  it('sets one item’s status, which takes an irrelevant page out of the live items', () =>
+    withRollback(async (db) => {
+      const {
+        items: [a1, a2],
+      } = await seedDataset(db);
+      await setItemStatus(db, a1!.id, 'irrelevant');
+      expect((await itemRow(db, a1!.id)).status).toBe('irrelevant');
+      expect((await itemRow(db, a2!.id)).status).toBe('live');
+      expect((await listLiveItems(db, 'test-products')).map((item) => item.id)).not.toContain(
+        a1!.id,
+      );
     }));
 });

@@ -1,3 +1,4 @@
+import type { Question } from './decisions';
 import type { Outcome } from './gate';
 import type { Excluded } from './snapshot';
 
@@ -82,4 +83,16 @@ export interface RunView {
   finishedAt: string | null;
   summary: RunSummary | null;
   error: string | null;
+}
+
+/** A question waiting for a person, as the API lists it. */
+export interface ReviewView {
+  id: string;
+  kind: 'classify' | 'match' | 'publication';
+  /** What it's about: a page, a page and an entity, or a held snapshot. */
+  subject: string;
+  question: Question;
+  /** What the person needs to answer: addresses, the proposal and its probabilities, counts. */
+  context: Record<string, unknown>;
+  createdAt: string;
 }

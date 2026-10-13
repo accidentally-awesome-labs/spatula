@@ -23,7 +23,8 @@ const keyOf = (statement: { property: string; method: string; valueKey: string }
  * Writes what an extraction found, for the methods it speaks for. A value already current is
  * re-seen; a new value is a new statement; a current value the extraction no longer finds is
  * withdrawn. Statements of other methods are left alone, so a page extraction never withdraws
- * what the LLM said, and the other way round.
+ * what the LLM said, and the other way round. Naming `properties` narrows the write the same way:
+ * it adds, re-sees, and withdraws only those properties' statements, and rejects any other.
  */
 export async function writeStatements(
   db: Executor,
@@ -33,6 +34,12 @@ export async function writeStatements(
     fetchId: string;
     seenAt: Date;
     methods: readonly Method[];
+    /**
+     * The properties the write speaks for. Others' statements are left alone, so a page's
+     * extraction never withdraws a decided category, and the LLM's specs step never withdraws the
+     * LLM's classification. Absent means every property.
+     */
+    properties?: readonly string[];
     statements: StatementInput[];
   },
 ): Promise<StatementCounts> {
@@ -41,6 +48,19 @@ export async function writeStatements(
     throw new Error(
       `A ${outside.method} statement can’t be written for ${write.methods.join(', ')}`,
     );
+  }
+  const strayProperty =
+    write.properties === undefined
+      ? undefined
+      : write.statements.find((statement) => !write.properties!.includes(statement.property));
+  if (strayProperty !== undefined) {
+    throw new Error(
+      `A ${strayProperty.property} statement can’t be written for ${write.properties!.join(', ')}`,
+    );
+  }
+  // A write that speaks for no property has nothing to add, re-see, or withdraw.
+  if (write.properties !== undefined && write.properties.length === 0) {
+    return { added: 0, reseen: 0, withdrawn: 0 };
   }
   return db.transaction(async (tx) => {
     const current = await tx
@@ -55,6 +75,9 @@ export async function writeStatements(
         and(
           eq(statements.itemId, write.itemId),
           inArray(statements.method, [...write.methods]),
+          write.properties === undefined
+            ? undefined
+            : inArray(statements.property, [...write.properties]),
           isNull(statements.withdrawnAt),
         ),
       );
