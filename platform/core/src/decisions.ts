@@ -89,8 +89,28 @@ export type CascadeOutcome =
     };
 
 /**
+ * A decider's probabilities once checked: those for offered answers only, each a number above 0
+ * and at most 1. A decider is a model, or stands in for one, so what it gives is checked and not
+ * believed. The rest reaches no outcome, and can't make an answer sure enough.
+ */
+function offeredProbabilities(
+  allowed: readonly string[],
+  given: Record<string, number>,
+): Record<string, number> {
+  const offered = new Set(allowed);
+  return Object.fromEntries(
+    Object.entries(given).filter(
+      ([option, probability]) =>
+        offered.has(option) && Number.isFinite(probability) && probability > 0 && probability <= 1,
+    ),
+  );
+}
+
+/**
  * A question through the cascade. A decider that throws fails the call, and the caller records the
  * failure and asks again on a later run: a person isn't asked what a decider could still answer.
+ * What a decider answers is checked: only an offered answer with a probability can be taken or
+ * proposed, and only the probabilities of offered answers are passed on.
  */
 export async function cascade(input: {
   request: DecisionRequest;
@@ -108,20 +128,31 @@ export async function cascade(input: {
     return { by: 'rule', answer: input.rule };
   }
   const usage = { inputTokens: 0, outputTokens: 0 };
-  let last: { name: string; answer: AdapterAnswer } | null = null;
+  let last: {
+    name: string;
+    proposed: string | null;
+    probabilities: Record<string, number>;
+    evidence: string;
+  } | null = null;
   for (const decider of input.deciders) {
     const answer = await decider.decide(input.request);
     usage.inputTokens += answer.usage.inputTokens;
     usage.outputTokens += answer.usage.outputTokens;
-    last = { name: decider.name, answer };
-    const probability = answer.answer === null ? 0 : (answer.probabilities[answer.answer] ?? 0);
-    if (answer.answer !== null && allowed.includes(answer.answer) && probability >= input.accept) {
+    const probabilities = offeredProbabilities(allowed, answer.probabilities);
+    const proposed =
+      answer.answer !== null && allowed.includes(answer.answer) ? answer.answer : null;
+    last = { name: decider.name, proposed, probabilities, evidence: answer.evidence };
+    const probability =
+      proposed !== null && Object.hasOwn(probabilities, proposed)
+        ? probabilities[proposed]
+        : undefined;
+    if (proposed !== null && probability !== undefined && probability >= input.accept) {
       return {
         by: 'adapter',
         adapter: decider.name,
-        answer: answer.answer,
+        answer: proposed,
         probability,
-        probabilities: answer.probabilities,
+        probabilities,
         evidence: answer.evidence,
         usage,
       };
@@ -130,9 +161,9 @@ export async function cascade(input: {
   return {
     by: 'person',
     adapter: last?.name ?? null,
-    proposed: last?.answer.answer ?? null,
-    probabilities: last?.answer.probabilities ?? {},
-    evidence: last?.answer.evidence ?? '',
+    proposed: last?.proposed ?? null,
+    probabilities: last?.probabilities ?? {},
+    evidence: last?.evidence ?? '',
     usage,
   };
 }
@@ -174,24 +205,30 @@ export function buildDeciderRequest(request: DecisionRequest): { system: string;
 }
 
 /**
- * A model's probabilities, kept for allowed answers only, each at most 1. Probabilities that sum
- * past 1 are scaled down to sum to 1; ones that sum to less are kept as they are, so an answer the
- * model left out never makes it surer of the rest.
+ * A model's probabilities for the allowed answers. Every answer it gave counts toward the total,
+ * offered or not, because a model that puts 0.5 on an answer that isn't on the list (it wrote the
+ * name in another case, say) is not as sure of the rest as it would be without that. Each counts
+ * at most 1, and an answer given twice counts once, at the higher. Only the offered ones are kept.
+ * A total past 1 scales them all down so that it is 1. A total under 1 leaves them as they are, so
+ * an answer the model left out never makes it surer of the rest.
  */
 export function readProbabilities(
   options: readonly string[],
   proposed: readonly { option: string; probability: number }[],
 ): Record<string, number> {
-  const kept = new Map<string, number>();
+  const given = new Map<string, number>();
   for (const { option, probability } of proposed) {
-    const allowed = options.find((candidate) => candidate === option.trim());
-    if (allowed === undefined || !Number.isFinite(probability) || probability <= 0) continue;
-    kept.set(allowed, Math.max(kept.get(allowed) ?? 0, Math.min(probability, 1)));
+    if (!Number.isFinite(probability) || probability <= 0) continue;
+    const answer = option.trim();
+    given.set(answer, Math.max(given.get(answer) ?? 0, Math.min(probability, 1)));
   }
-  const total = [...kept.values()].reduce((sum, probability) => sum + probability, 0);
+  const total = [...given.values()].reduce((sum, probability) => sum + probability, 0);
   const scale = total > 1 ? 1 / total : 1;
+  const offered = new Set(options);
   return Object.fromEntries(
-    [...kept].map(([option, probability]) => [option, probability * scale]),
+    [...given]
+      .filter(([answer]) => offered.has(answer))
+      .map(([answer, probability]) => [answer, probability * scale]),
   );
 }
 

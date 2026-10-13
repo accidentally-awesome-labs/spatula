@@ -541,12 +541,24 @@ describe('a decided field', () => {
 
   describe('has values that', () => {
     const issue =
-      'recordTypes.product.fields.category.values: A decided field’s values are distinct, and none is “None of these”.';
+      'recordTypes.product.fields.category.values: A decided field’s values are distinct regardless of case, and none is “None of these”.';
     const decided = (values: string[]) =>
       withCategory({ type: 'enum', required: true, values, decide: true });
 
     it('are distinct', () => {
       expect(parseDefinition(decided(['Headphones', 'DAC/Amp', 'Headphones']))).toMatchObject({
+        ok: false,
+        issues: [issue],
+      });
+    });
+
+    it('are distinct regardless of case', () => {
+      // A decided answer is matched to a value without regard to case, so these would be one.
+      expect(parseDefinition(decided(['Headphones', 'DAC/Amp', 'headphones']))).toMatchObject({
+        ok: false,
+        issues: [issue],
+      });
+      expect(parseDefinition(decided(['Headphones', 'DAC/Amp', 'dac/AMP']))).toMatchObject({
         ok: false,
         issues: [issue],
       });
@@ -563,12 +575,29 @@ describe('a decided field', () => {
       ).toMatchObject({ ok: false, issues: [issue] });
     });
 
+    it('leave out “None of these” in any case', () => {
+      expect(parseDefinition(decided(['Headphones', 'none of these']))).toMatchObject({
+        ok: false,
+        issues: [issue],
+      });
+      expect(parseDefinition(decided(['NONE OF THESE', 'Headphones']))).toMatchObject({
+        ok: false,
+        issues: [issue],
+      });
+    });
+
+    it('may differ in more than case', () => {
+      expect(parseDefinition(decided(['Headphones', 'Headphone', 'None of these items'])).ok).toBe(
+        true,
+      );
+    });
+
     it('are not checked on a field that is not decided', () => {
       // Only a decided field's question adds an answer of its own to the values.
       const input = withCategory({
         type: 'enum',
         required: true,
-        values: ['Headphones', 'None of these', 'Headphones'],
+        values: ['Headphones', 'None of these', 'Headphones', 'headphones', 'none of these'],
       });
       expect(parseDefinition(input).ok).toBe(true);
     });

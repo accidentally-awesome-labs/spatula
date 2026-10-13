@@ -385,18 +385,22 @@ function checkRecordType(at: Path, recordType: RecordType, report: Report): void
           'Fields that identify a record come from structured data or declared rules, never a decision.',
         );
       }
-      // The question offers the values and “None of these”, and an answer is read back by its text.
-      // A value that repeats would be offered twice. A value that is “None of these” would be
-      // offered twice too, and choosing it would take a page out of the dataset, not file it.
-      if (
-        field.type === 'enum' &&
-        field.values !== undefined &&
-        (field.values.includes(NONE_OF_THESE) || new Set(field.values).size !== field.values.length)
-      ) {
-        report(
-          [...path, 'values'],
-          'A decided field’s values are distinct, and none is “None of these”.',
-        );
+      // The question offers the values and “None of these”. A value is matched without regard to
+      // case (a page's category by the rule, a statement's value by its field), so two values that
+      // differ only in case are one value written twice. A value that is “None of these” in any
+      // case would be offered twice too, and choosing it would take a page out of the dataset, not
+      // file it.
+      if (field.type === 'enum' && field.values !== undefined) {
+        const lowered = field.values.map((value) => value.toLowerCase());
+        if (
+          lowered.includes(NONE_OF_THESE.toLowerCase()) ||
+          new Set(lowered).size !== lowered.length
+        ) {
+          report(
+            [...path, 'values'],
+            'A decided field’s values are distinct regardless of case, and none is “None of these”.',
+          );
+        }
       }
     }
   }

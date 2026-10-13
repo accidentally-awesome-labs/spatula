@@ -190,13 +190,106 @@ describe('cascade', () => {
   });
 
   it('never takes an answer the question doesn’t offer, however sure the decider is', async () => {
-    const outcome = await cascade({
-      request: REQUEST,
-      rule: null,
-      deciders: [decider('off-menu', { Speakers: 0.99 })],
-      accept: 0.9,
+    // It proposes what isn't offered, and its probabilities are junk: for an answer that isn't
+    // offered, not a number, not above 0, or above 1. None of it reaches the person's outcome.
+    const junk: Decider = {
+      name: 'off-menu',
+      decide: async () => ({
+        answer: 'Speakers',
+        probabilities: { Speakers: 0.99, Headphones: Number.NaN, DAC: 7, 'None of these': -1 },
+        evidence: 'Speakers, surely.',
+        usage,
+      }),
+    };
+    expect(await cascade({ request: REQUEST, rule: null, deciders: [junk], accept: 0.9 })).toEqual({
+      by: 'person',
+      adapter: 'off-menu',
+      proposed: null,
+      probabilities: {},
+      evidence: 'Speakers, surely.',
+      usage,
     });
-    expect(outcome).toMatchObject({ by: 'person', adapter: 'off-menu' });
+  });
+
+  it('keeps only the probabilities of offered answers that are above 0 and at most 1', async () => {
+    const mixed: Decider = {
+      name: 'mixed',
+      decide: async () => ({
+        answer: 'Headphones',
+        probabilities: {
+          Headphones: 0.95,
+          DAC: 0.04,
+          'None of these': 0.01,
+          Speakers: 0.5,
+          Amplifier: Number.POSITIVE_INFINITY,
+        },
+        evidence: 'Mostly headphones.',
+        usage,
+      }),
+    };
+    expect(await cascade({ request: REQUEST, rule: null, deciders: [mixed], accept: 0.9 })).toEqual(
+      {
+        by: 'adapter',
+        adapter: 'mixed',
+        answer: 'Headphones',
+        probability: 0.95,
+        probabilities: { Headphones: 0.95, DAC: 0.04, 'None of these': 0.01 },
+        evidence: 'Mostly headphones.',
+        usage,
+      },
+    );
+  });
+
+  it('doesn’t take an answer whose own probability is no probability, but still proposes it', async () => {
+    const claiming = (probability: number): Decider => ({
+      name: 'claiming',
+      decide: async () => ({
+        answer: 'Headphones',
+        probabilities: { Headphones: probability },
+        evidence: 'Sure.',
+        usage,
+      }),
+    });
+    const junk = [
+      Number.NaN,
+      Infinity,
+      -Infinity,
+      0,
+      -0.5,
+      1.0000001,
+      7,
+      '0.99' as unknown as number,
+    ];
+    for (const probability of junk) {
+      expect(
+        await cascade({
+          request: REQUEST,
+          rule: null,
+          deciders: [claiming(probability)],
+          accept: 0.5,
+        }),
+        `a probability of ${String(probability)}`,
+      ).toEqual({
+        by: 'person',
+        adapter: 'claiming',
+        proposed: 'Headphones',
+        probabilities: {},
+        evidence: 'Sure.',
+        usage,
+      });
+    }
+    // Exactly 1 is a probability, and so is the smallest number above 0.
+    expect(
+      await cascade({ request: REQUEST, rule: null, deciders: [claiming(1)], accept: 0.9 }),
+    ).toMatchObject({ by: 'adapter', probability: 1, probabilities: { Headphones: 1 } });
+    expect(
+      await cascade({
+        request: REQUEST,
+        rule: null,
+        deciders: [claiming(Number.MIN_VALUE)],
+        accept: Number.MIN_VALUE,
+      }),
+    ).toMatchObject({ by: 'adapter', probabilities: { Headphones: Number.MIN_VALUE } });
   });
 
   it('passes on a decider that names no answer, whatever probabilities it gives', async () => {
@@ -286,16 +379,17 @@ describe('the LLM decider', () => {
   });
 
   it('keeps only allowed answers, and never makes the model surer than it said', () => {
+    // Under 1 in all, offered or not, so each is kept as it is.
     expect(
       readProbabilities(
         ['Headphones', 'DAC', 'None of these'],
         [
-          { option: ' Headphones ', probability: 0.9 },
-          { option: 'Speakers', probability: 0.5 },
+          { option: ' Headphones ', probability: 0.5 },
+          { option: 'Speakers', probability: 0.3 },
           { option: 'DAC', probability: -1 },
         ],
       ),
-    ).toEqual({ Headphones: 0.9 });
+    ).toEqual({ Headphones: 0.5 });
     expect(
       readProbabilities(
         ['Headphones', 'DAC'],
@@ -305,6 +399,45 @@ describe('the LLM decider', () => {
         ],
       ),
     ).toEqual({ Headphones: 0.5, DAC: 0.5 });
+  });
+
+  it('takes its scale from every answer the model gave, offered or not', () => {
+    // 0.9 for Headphones, and 0.5 for an answer that isn't offered because the model wrote it in
+    // another case, is 1.4 in all. Headphones is then 0.9 of 1.4, not a sure 0.9.
+    const shares = readProbabilities(
+      ['Headphones', 'In-ear monitors'],
+      [
+        { option: 'Headphones', probability: 0.9 },
+        { option: 'In-Ear Monitors', probability: 0.5 },
+      ],
+    );
+    expect(Object.keys(shares)).toEqual(['Headphones']);
+    expect(shares.Headphones).toBeCloseTo(0.9 / 1.4, 12);
+    expect(shares.Headphones).toBeCloseTo(0.643, 3);
+  });
+
+  it('counts an answer that isn’t offered as it counts one that is', () => {
+    const given = (...entries: [string, number][]) =>
+      entries.map(([option, probability]) => ({ option, probability }));
+    const options = ['Headphones', 'DAC'];
+    // Capped at 1: 0.5, and 5 for Speakers read as 1, are 1.5 in all.
+    const capped = readProbabilities(options, given(['Headphones', 0.5], ['Speakers', 5]));
+    expect(Object.keys(capped)).toEqual(['Headphones']);
+    expect(capped.Headphones).toBeCloseTo(0.5 / 1.5, 12);
+    // Given twice, it counts once, at the higher: 0.5 and 0.6 are 1.1 in all.
+    const twice = readProbabilities(
+      options,
+      given(['Headphones', 0.5], ['Speakers', 0.6], [' Speakers', 0.3]),
+    );
+    expect(Object.keys(twice)).toEqual(['Headphones']);
+    expect(twice.Headphones).toBeCloseTo(0.5 / 1.1, 12);
+    // What isn't a probability counts for nothing, so the sum is 0.9 and 0.9 stays.
+    expect(
+      readProbabilities(
+        options,
+        given(['Headphones', 0.9], ['Speakers', Number.NaN], ['Amplifier', 0], ['Mixer', -3]),
+      ),
+    ).toEqual({ Headphones: 0.9 });
   });
 
   it('reads a probability above 1 as 1, so it takes no more than a whole share', () => {

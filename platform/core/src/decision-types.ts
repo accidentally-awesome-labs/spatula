@@ -42,16 +42,23 @@ export interface ClassifyState {
   url: string;
   title: string | null;
   breadcrumbs: string[];
-  /** The JSON-LD types on the page. */
+  /** The JSON-LD types on the page, each once, in the order the page gives them. */
   types: string[];
-  /** The categories its JSON-LD products give. */
+  /** How many Product or ProductGroup nodes the page's JSON-LD has. */
+  products: number;
+  /** The categories its JSON-LD products give, one for each product that states one. */
   categories: string[];
-  /** What its statements say: each property's values as text, sorted by property. */
+  /**
+   * What its statements say: each property's values as text, each once and in order of text, so
+   * that the order they were read in doesn't matter. The properties are sorted too.
+   */
   values: Record<string, string[]>;
 }
 
 /** At most this many values of a property go into a state. */
 const STATE_VALUES_MAX = 20;
+/** No field keeps a value longer than this many characters. */
+const STATE_VALUE_MAX = 600;
 
 /**
  * A page's words as a state keeps them: on one line, cut to `max` characters, and in a form a
@@ -70,14 +77,32 @@ function stateText(text: string, max: number): string {
 }
 
 /**
+ * A list of a page's words as a state keeps it: each cleaned, the empty ones dropped, each text
+ * once, and only then cut to STATE_VALUES_MAX, in the order given or in order of text. Texts that
+ * clean to the same text count as one, and ones that clean to nothing as none, before the cut
+ * decides which are kept. Each text is cleaned once, however often a page repeats it.
+ */
+function stateTexts(texts: readonly string[], max: number, sorted: boolean): string[] {
+  const kept = new Set<string>();
+  for (const text of new Set(texts)) {
+    const clean = stateText(text, max);
+    if (clean !== '') kept.add(clean);
+  }
+  return (sorted ? [...kept].sort() : [...kept]).slice(0, STATE_VALUES_MAX);
+}
+
+/**
  * What a page's classification rests on. A title is cut to 300 characters and a crumb to 100, the
  * lengths a page keeps them to already. A type or a category is cut to 200, because either can be
- * as long as the page.
+ * as long as the page. Breadcrumbs keep their order, which is a path. A property's values are
+ * sorted, so the state and its hash don't depend on the order they were read in.
  */
 export function classifyState(page: Page, values: Record<string, FieldValue[]>): ClassifyState {
+  let products = 0;
   const categories: string[] = [];
   for (const node of page.jsonLd) {
     if (!jsonLdTypes(node).some((type) => type === 'Product' || type === 'ProductGroup')) continue;
+    products += 1;
     const category = typeof node.category === 'string' ? stateText(node.category, 200) : '';
     if (category !== '') categories.push(category);
   }
@@ -88,26 +113,37 @@ export function classifyState(page: Page, values: Record<string, FieldValue[]>):
     breadcrumbs: page.breadcrumbs
       .map((crumb) => stateText(crumb, 100))
       .filter((crumb) => crumb !== ''),
-    types: [...new Set(page.jsonLd.flatMap(jsonLdTypes))]
-      .slice(0, STATE_VALUES_MAX)
-      .map((type) => stateText(type, 200))
-      .filter((type) => type !== ''),
+    types: stateTexts(page.jsonLd.flatMap(jsonLdTypes), 200, false),
+    products,
     categories: categories.slice(0, STATE_VALUES_MAX),
     values: Object.fromEntries(
       Object.keys(values)
         .sort()
-        .map((name) => [name, (values[name] ?? []).slice(0, STATE_VALUES_MAX).map(valueText)]),
+        .map((name) => [
+          name,
+          stateTexts((values[name] ?? []).map(valueText), STATE_VALUE_MAX, true),
+        ]),
     ),
   };
 }
 
-/** A structured-data category that is one of the field's values answers without asking anyone. */
+/**
+ * A structured-data category answers without asking anyone, so only when the page leaves no doubt.
+ * A rule's answer is published as it stands, with no model and no person to look at it. Every
+ * product the page has must state a category, and all of them must be the same one of the field's
+ * values, in whatever case. A page with a related product, several products, a product that
+ * states none, or one whose category is no value (such as Accessories) is left to the deciders.
+ * The answer is the value as the definition spells it.
+ */
 export function classifyRule(state: ClassifyState, field: FieldDef): string | null {
-  for (const category of state.categories) {
-    const match = field.values?.find((value) => value.toLowerCase() === category.toLowerCase());
-    if (match !== undefined) return match;
-  }
-  return null;
+  const { categories, products } = state;
+  // There is a product, and each product states a category: no category at all means no product,
+  // and fewer categories than products means one states none.
+  const [first] = categories;
+  if (first === undefined || categories.length !== products) return null;
+  const category = first.toLowerCase();
+  if (categories.some((other) => other.toLowerCase() !== category)) return null;
+  return field.values?.find((value) => value.toLowerCase() === category) ?? null;
 }
 
 /** A classification state as evidence for a decider. */

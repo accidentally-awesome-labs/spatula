@@ -73,6 +73,7 @@ describe('classifying a page', () => {
       title: 'CRBN2 Electrostatic Headphone - Audeze',
       breadcrumbs: [],
       types: ['Product'],
+      products: 1,
       categories: ['Headphones'],
       values: { brand: ['Audeze'], name: ['CRBN2'], specs: ['Type: Electrostatic'] },
     });
@@ -96,14 +97,11 @@ describe('classifying a page', () => {
     expect(await stateHash(again)).toBe(await stateHash(state));
   });
 
-  it('lets structured data answer when its category is one of the values', () => {
-    expect(classifyRule(classifyState(PAGE, {}), CATEGORY)).toBe('Headphones');
-    const other = parsePage('<title>Ear pads</title>', 'https://www.audeze.com/products/pads');
-    expect(classifyRule(classifyState(other, {}), CATEGORY)).toBeNull();
-  });
-
-  it('matches a category to a value without regard to case, and answers with the value as written', () => {
-    const answer = (...categories: string[]) =>
+  describe('the rule that lets structured data answer', () => {
+    // A rule's answer is published with no model and no person to look at it, so it answers only
+    // when the page leaves no doubt. `answer` is the rule's answer for a page with one Product node
+    // for each category given; `undefined` is a product that states none.
+    const answer = (...categories: (string | undefined)[]) =>
       classifyRule(
         classifyState(
           headOf(categories.map((category) => ld({ '@type': 'Product', category })).join('')),
@@ -111,18 +109,91 @@ describe('classifying a page', () => {
         ),
         CATEGORY,
       );
-    expect(answer('dac/AMP')).toBe('DAC/Amp');
-    expect(answer('IN-EAR MONITORS')).toBe('In-ear monitors');
-    expect(answer('\n  Headphones \t')).toBe('Headphones');
-    // The first category that is one of the values answers.
-    expect(answer('Audio', 'in-ear monitors', 'Headphones')).toBe('In-ear monitors');
-    expect(answer('Audio', 'Earbuds')).toBeNull();
+
+    it('answers when the one product gives a category that is one of the values', () => {
+      expect(classifyRule(classifyState(PAGE, {}), CATEGORY)).toBe('Headphones');
+      const other = parsePage('<title>Ear pads</title>', 'https://www.audeze.com/products/pads');
+      expect(classifyRule(classifyState(other, {}), CATEGORY)).toBeNull();
+    });
+
+    it('matches without regard to case, and answers with the value as the definition spells it', () => {
+      expect(answer('dac/AMP')).toBe('DAC/Amp');
+      expect(answer('IN-EAR MONITORS')).toBe('In-ear monitors');
+      expect(answer('\n  Headphones \t')).toBe('Headphones');
+    });
+
+    it('answers when every product gives the same value, in whatever case', () => {
+      expect(answer('in-ear monitors', 'IN-EAR MONITORS')).toBe('In-ear monitors');
+      expect(answer('Headphones', 'headphones', 'HEADPHONES')).toBe('Headphones');
+      // A product group counts as a product.
+      const state = classifyState(
+        headOf(
+          ld([
+            { '@type': 'ProductGroup', category: 'dac/amp' },
+            { '@type': 'Product', category: 'DAC/AMP' },
+          ]),
+        ),
+        {},
+      );
+      expect(classifyRule(state, CATEGORY)).toBe('DAC/Amp');
+    });
+
+    it('leaves the page to the deciders when its products give different values', () => {
+      expect(answer('in-ear monitors', 'Headphones')).toBeNull();
+      expect(answer('Audio', 'in-ear monitors', 'Headphones')).toBeNull();
+    });
+
+    it('leaves the page to the deciders when a product gives no category', () => {
+      expect(answer('Headphones', undefined)).toBeNull();
+      expect(answer(undefined, 'Headphones')).toBeNull();
+      expect(answer(undefined)).toBeNull();
+    });
+
+    it('leaves the page to the deciders when a product’s category is not one of the values', () => {
+      expect(answer('Headphones', 'Accessories')).toBeNull();
+      expect(answer('Accessories', 'Headphones')).toBeNull();
+      expect(answer('Audio', 'Earbuds')).toBeNull();
+    });
+
+    it('leaves the page to the deciders when it has no product', () => {
+      const state = classifyState(
+        headOf(
+          ld([
+            { '@type': 'Organization', category: 'Headphones' },
+            { '@type': 'Offer', category: 'Headphones' },
+          ]),
+        ),
+        {},
+      );
+      expect(state.products).toBe(0);
+      expect(classifyRule(state, CATEGORY)).toBeNull();
+    });
+
+    it('leaves the page to the deciders when it has more products than a state has places for', () => {
+      expect(answer(...Array.from({ length: 20 }, () => 'Headphones'))).toBe('Headphones');
+      expect(answer(...Array.from({ length: 21 }, () => 'Headphones'))).toBeNull();
+    });
+
+    it('never answers “None of these”, whatever a page calls its category', () => {
+      const state = classifyState(headOf(ld({ '@type': 'Product', category: NONE_OF_THESE })), {});
+      expect(state.categories).toEqual([NONE_OF_THESE]);
+      expect(classifyRule(state, CATEGORY)).toBeNull();
+    });
   });
 
-  it('never lets structured data answer “None of these”, whatever a page calls its category', () => {
-    const state = classifyState(headOf(ld({ '@type': 'Product', category: NONE_OF_THESE })), {});
-    expect(state.categories).toEqual([NONE_OF_THESE]);
-    expect(classifyRule(state, CATEGORY)).toBeNull();
+  it('counts the products a page has, once each, however many of its types say so', () => {
+    const state = classifyState(
+      headOf(
+        ld([
+          { '@type': ['Product', 'ProductGroup'], category: 'Headphones' },
+          { '@type': 'Product' },
+          { '@type': 'Organization' },
+        ]),
+      ),
+      {},
+    );
+    expect(state.products).toBe(2);
+    expect(state.categories).toEqual(['Headphones']);
   });
 
   it('reads categories from products and product groups only, and each type once', () => {
@@ -139,6 +210,7 @@ describe('classifying a page', () => {
       {},
     );
     expect(state.categories).toEqual(['Headphones', 'DAC/Amp', 'In-ear monitors']);
+    expect(state.products).toBe(3);
     expect(state.types).toEqual(['Organization', 'ProductGroup', 'Product', 'Thing', 'Offer']);
   });
 
@@ -156,13 +228,71 @@ describe('classifying a page', () => {
       { gtins: many('0'), specs: many('s').map((label) => ({ label, value: 'x' })) },
     );
     expect(state.types).toEqual(['Product', ...many('Type').slice(0, 19)]);
+    expect(state.products).toBe(25);
     expect(state.categories).toEqual(
       many('Type')
         .slice(0, 20)
         .map((type) => `Category ${type}`),
     );
-    expect(state.values.gtins).toEqual(many('0').slice(0, 20));
+    // The values kept are the first 20 in order of text, not the first 20 it was given.
+    expect(state.values.gtins).toEqual(many('0').sort().slice(0, 20));
     expect(state.values.specs).toHaveLength(20);
+  });
+
+  it('cleans types, drops the empty ones, and keeps each once, all before it keeps 20', () => {
+    // Types that clean to the same text, or to nothing, must not take up places among the 20.
+    const types = [
+      '\u0001',
+      '\u0000 ',
+      ...Array.from({ length: 15 }, (_, n) => [`T${n}`, `T${n}\u0000`, ` T${n} `]).flat(),
+      ...Array.from({ length: 10 }, (_, n) => `U${n}`),
+    ];
+    const state = classifyState(headOf(ld({ '@type': types })), {});
+    expect(state.types).toEqual([
+      ...Array.from({ length: 15 }, (_, n) => `T${n}`),
+      ...Array.from({ length: 5 }, (_, n) => `U${n}`),
+    ]);
+  });
+
+  it('keeps a property’s values cleaned, once each, in order of text, whatever order they came in', async () => {
+    const forward = classifyState(PAGE, {
+      mpns: ['M2', 'M1 ', 'M3', 'M1'],
+      specs: [
+        { label: 'B', value: '2' },
+        { label: 'A', value: '1' },
+      ],
+    });
+    const backward = classifyState(PAGE, {
+      specs: [
+        { label: 'A', value: '1' },
+        { label: 'B', value: '2' },
+      ],
+      mpns: ['M1', 'M3', 'M1 ', 'M2'],
+    });
+    expect(forward.values).toEqual({ mpns: ['M1', 'M2', 'M3'], specs: ['A: 1', 'B: 2'] });
+    expect(backward).toEqual(forward);
+    expect(await stateHash(backward)).toBe(await stateHash(forward));
+  });
+
+  it('keeps the first 20 values in order of text, however many it was given, in any order', () => {
+    const all = Array.from({ length: 25 }, (_, n) => `M${n}`);
+    const first20 = [...all].sort().slice(0, 20);
+    expect(classifyState(PAGE, { mpns: all }).values.mpns).toEqual(first20);
+    expect(classifyState(PAGE, { mpns: all.toReversed() }).values.mpns).toEqual(first20);
+  });
+
+  it('keeps breadcrumbs in the order the page gives them, which is a path', () => {
+    const crumb = (position: number, name: string) => ({ '@type': 'ListItem', position, name });
+    const state = classifyState(
+      headOf(
+        ld({
+          '@type': 'BreadcrumbList',
+          itemListElement: [crumb(1, 'Home'), crumb(2, 'Audio'), crumb(3, 'DACs')],
+        }),
+      ),
+      {},
+    );
+    expect(state.breadcrumbs).toEqual(['Home', 'Audio', 'DACs']);
   });
 
   it('writes only what a state has', () => {
@@ -260,8 +390,16 @@ describe('a hostile page’s classification state', () => {
       title: null,
       breadcrumbs: ['Audio'],
       types: ['Product', 'BreadcrumbList'],
+      products: 1,
       categories: [],
     });
+    // A category that cleans to nothing is no category, so the rule leaves the page to the deciders.
+    expect(classifyRule(state, CATEGORY)).toBeNull();
+  });
+
+  it('writes values a database takes, and none longer than any field keeps', () => {
+    const state = classifyState(PAGE, { name: ['CRBN2\u0000 Pro', '\u0001', 'x'.repeat(700)] });
+    expect(state.values.name).toEqual(['CRBN2 Pro', 'x'.repeat(600)]);
   });
 });
 
