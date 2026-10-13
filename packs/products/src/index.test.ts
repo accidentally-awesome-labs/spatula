@@ -498,6 +498,35 @@ describe('withoutProductType', () => {
     ['Mojo 2 Portable DAC & Amp', 'Mojo 2'],
     ['Mojo 2 Portable Amp / DAC', 'Mojo 2'],
     ['Mojo 2 Portable Amp & DAC', 'Mojo 2'],
+    // A joiner that the descriptors leave at the end comes off with them. When a type is before it,
+    // that type goes the way it does in "Anni Amplifier for Headphones", and so does the type
+    // before that one.
+    ['Magni Heresy Headphone Amplifier for Open-Back Headphones', 'Magni Heresy'],
+    ['Heresy Headphone Amplifier for Wired Headphones for Open-Back Earphones', 'Heresy'],
+    ['Anni Amplifier, for Open-Back Headphones', 'Anni'],
+    // "and", "&", "+", and "/" make a list, so a short type before them is a type.
+    ['K19 Desktop DAC & Portable Amp', 'K19'],
+    ['Mojo 2 DAC & Portable Amp', 'Mojo 2'],
+    // "for" and "with" don't, so a short type before them is a name.
+    ['Atom Amp for Open-Back Headphones', 'Atom Amp'],
+    ['Zen DAC with Headphone Amplifier', 'Zen DAC'],
+    // With no type before it, a joiner that only joined the name to its type goes alone.
+    ['Mojo 2 & Portable DAC/Amp', 'Mojo 2'],
+    ['Mojo 2 and Portable DAC/Amp', 'Mojo 2'],
+    ['Mojo 2 + Portable DAC/Amp', 'Mojo 2'],
+    ['Mojo 2 / Portable DAC/Amp', 'Mojo 2'],
+    ['Mojo 2, and Portable DAC/Amp', 'Mojo 2'],
+    ['Mojo 2 & - Portable DAC/Amp', 'Mojo 2'],
+    // More descriptors, and the sizes of connectors and drivers. "PRO" is part of a name.
+    ['MM-500 Professional Planar Magnetic Headphones', 'MM-500'],
+    ['DT 990 PRO Open Studio Headphones', 'DT 990 PRO'],
+    ['ARIA 2 Dynamic Driver In-Ear Earphones', 'ARIA 2'],
+    ['Dawn Pro 3.5mm Headphone Amp', 'Dawn Pro'],
+    ['Dawn Pro 4.4 mm Balanced Headphone Amp', 'Dawn Pro'],
+    ['Dawn Pro 6.35MM Headphone Amp', 'Dawn Pro'],
+    ['ARIA 2 40mm Dynamic Driver Earphones', 'ARIA 2'],
+    // A size is a word of its own.
+    ['Studio 3.5mmusb Headphones', 'Studio 3.5mmusb'],
   ])('takes the product type off %s', (name, expected) => {
     expect(withoutProductType(name)).toBe(expected);
   });
@@ -523,9 +552,21 @@ describe('withoutProductType', () => {
     'Mojo 2 DAC & Amp',
     'Mojo 2 Amp / DAC',
     'Mojo 2 Amp & DAC',
+    // Something for a type, or with one, is not a type: its joiner stays with what it joins.
+    'Stand for Open-Back Headphones',
+    'Case with Planar Magnetic Headphones',
+    // Sizes, spaced or not, and the types beside them, are no name.
+    '3.5mm Headphones',
+    '3.5 mm Headphones',
+    '3.5mm Amp Headphones',
   ])('leaves %s as it is', (name) => {
     expect(withoutProductType(name)).toBeNull();
   });
+
+  // A name is stripped in microseconds, so each measure strips it 500 times.
+  const strippedRepeatedly = (name: string) => () => {
+    for (let run = 0; run < 500; run += 1) withoutProductType(name);
+  };
 
   it('reads a name made of separators in the time of any other name of its length', () => {
     // A regex that retried from every " -" took about 900 microseconds on the first of these, more
@@ -533,11 +574,53 @@ describe('withoutProductType', () => {
     const crafted = `a${' -'.repeat(490)} x Headphones`;
     const ordinary = `a${' b'.repeat(490)} x Headphones`;
     expect(withoutProductType(crafted)).toBe(`a${' -'.repeat(490)} x`);
-    const strip = (name: string) => () => {
-      for (let run = 0; run < 500; run += 1) withoutProductType(name);
-    };
-    expect(costRatio(strip(ordinary), strip(crafted), 1)).toBeLessThan(4);
+    expect(costRatio(strippedRepeatedly(ordinary), strippedRepeatedly(crafted), 1)).toBeLessThan(4);
   });
+
+  it('takes a run of separators off the end in the time of any other name of its length', () => {
+    // The separators here are at the end, so each of them comes off, one at a time. A loop body
+    // that read the whole name again for each one took about 200 times what the ordinary name
+    // takes, and the test above never reached it: that name ends in a letter.
+    const crafted = `a${' -'.repeat(400)} Headphones`;
+    const ordinary = `a${' b'.repeat(400)} Headphones`;
+    expect(crafted.length).toBe(ordinary.length);
+    expect(withoutProductType(crafted)).toBe('a');
+    expect(costRatio(strippedRepeatedly(ordinary), strippedRepeatedly(crafted), 1)).toBeLessThan(4);
+  });
+
+  // An ordinary name of the length given: a word, then single letters, then a type.
+  const ordinaryName = (length: number) => {
+    const pairs = Math.floor((length - 12) / 2);
+    return `${'x'.repeat(length - 11 - 2 * pairs)}${' b'.repeat(pairs)} Headphones`;
+  };
+
+  // Each group below is a joiner, descriptors, and a type, which is a round of its own. The rounds
+  // end with the sixteen types and the sixteen descriptors that a name may lose in all.
+  it.each([
+    {
+      limit: 'types',
+      group: ' for usb Headphones',
+      groups: 50,
+      // Sixteen groups come off whole.
+      left: (group: string) => `x${group.repeat(34)}`,
+    },
+    {
+      limit: 'descriptors',
+      group: ' for usb usb Headphones',
+      groups: 40,
+      // Eight groups come off whole, and the ninth loses only its type.
+      left: (group: string) => `x${group.repeat(31)} for usb usb`,
+    },
+  ])(
+    'stops a chain at sixteen $limit, in the time of any other name',
+    ({ group, groups, left }) => {
+      const chain = `x${group.repeat(groups)}`;
+      const ordinary = ordinaryName(chain.length);
+      expect(ordinary.length).toBe(chain.length);
+      expect(withoutProductType(chain)).toBe(left(group));
+      expect(costRatio(strippedRepeatedly(ordinary), strippedRepeatedly(chain), 1)).toBeLessThan(4);
+    },
+  );
 });
 
 describe('productPack.finish, with product types', () => {
@@ -579,26 +662,51 @@ describe('productPack.finish, with product types', () => {
     ]);
   });
 
-  it('keeps a name that the brand and the type together would leave as a fragment', () => {
-    const result = finish([
-      { property: 'brand', raw: 'Audeze', method: 'rule', path: 'fixed', confidence: 1 },
-      {
-        property: 'name',
-        raw: 'Audeze - Headphones',
-        method: 'opengraph',
-        path: 'og:title',
-        confidence: 0.6,
-      },
+  const audeze: Candidate = {
+    property: 'brand',
+    raw: 'Audeze',
+    method: 'rule',
+    path: 'fixed',
+    confidence: 1,
+  };
+  const titled = (raw: string): Candidate => ({
+    property: 'name',
+    raw,
+    method: 'opengraph',
+    path: 'og:title',
+    confidence: 0.6,
+  });
+  const nameCandidates = (candidates: Candidate[]) =>
+    candidates.filter((candidate) => candidate.property === 'name');
+
+  it.each(['-', '–', '—', '|', ':'])('takes a "%s" after the brand off with it', (separator) => {
+    const result = finish([audeze, titled(`Audeze ${separator} LCD-5 Flagship Headphones`)]);
+    expect(nameCandidates(result)).toEqual([
+      { ...titled('LCD-5'), path: 'og:title (without the brand) (without the product type)' },
     ]);
-    // The brand comes off, as it does from any name. The type then would leave only "-".
-    expect(result.filter((candidate) => candidate.property === 'name')).toEqual([
-      {
-        property: 'name',
-        raw: '- Headphones',
-        method: 'opengraph',
-        path: 'og:title (without the brand)',
-        confidence: 0.6,
-      },
+  });
+
+  it('leaves a hyphen that starts the model after the brand', () => {
+    // "-5" has no space after its hyphen, so the hyphen is not a separator.
+    expect(nameCandidates(finish([audeze, titled('Audeze -5 Flagship Headphones')]))).toEqual([
+      { ...titled('-5'), path: 'og:title (without the brand) (without the product type)' },
+    ]);
+  });
+
+  it('takes only the separator that leads the name', () => {
+    expect(nameCandidates(finish([audeze, titled('Audeze LCD-5 - Planar')]))).toEqual([
+      { ...titled('LCD-5 - Planar'), path: 'og:title (without the brand)' },
+    ]);
+  });
+
+  it('leaves a name that is only the brand and a separator', () => {
+    expect(nameCandidates(finish([audeze, titled('Audeze -')]))).toEqual([titled('Audeze -')]);
+  });
+
+  it('takes the brand and its separator off a name that is then only a type, and leaves the type', () => {
+    // Taking the type off would leave nothing, so it stays: "Headphones" is no fragment of a name.
+    expect(nameCandidates(finish([audeze, titled('Audeze - Headphones')]))).toEqual([
+      { ...titled('Headphones'), path: 'og:title (without the brand)' },
     ]);
   });
 
