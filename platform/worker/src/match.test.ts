@@ -200,43 +200,60 @@ describe('matching pages', { timeout: 20_000 }, () => {
 });
 
 describe('a page that gives only a name', { timeout: 20_000 }, () => {
-  it('waits for the variant to be settled, then is asked about both versions', async () => {
-    const routes = routesWith(DT_80, DT_250);
-    routes[URL_A3] = { status: 200, body: productPage({ name: 'DT 770 PRO' }) };
-    const {
-      world,
-      pages: [a1, a2, a3],
-    } = await worldFor(withThirdPage(testDefinition('match-name-only')), routes);
-    // A2 is a version of A1's model. A3 is the 250 ohm one: the same as A2, not as A1.
-    const scripted = fakeDecider((request): Record<string, number> => {
-      if (request.evidence.startsWith(`Record A (${URLS.a2}):`)) return { variant: 0.97 };
-      return request.evidence.includes(`Record B (${URLS.a2}):`)
-        ? { same: 0.98 }
-        : { different: 0.97 };
+  for (const order of ['before', 'after'] as const) {
+    it(`waits for the variant to be settled, then is asked about both versions, sorting ${order} them`, async () => {
+      const datasetId = `match-name-only-${order}`;
+      const routes = routesWith(DT_80, DT_250);
+      const nameOnly = { name: 'DT 770 PRO' };
+      // The page that gives only a name sorts before the two versions, or after them.
+      if (order === 'before') {
+        routes[URLS.a1] = { status: 200, body: productPage(nameOnly) };
+        routes[URLS.a2] = { status: 200, body: productPage(DT_80) };
+        routes[URL_A3] = { status: 200, body: productPage(DT_250) };
+      } else {
+        routes[URL_A3] = { status: 200, body: productPage(nameOnly) };
+      }
+      const {
+        world,
+        pages: [a1, a2, a3],
+      } = await worldFor(withThirdPage(testDefinition(datasetId)), routes);
+      const [page, v80, v250] = order === 'before' ? [a1!, a2!, a3!] : [a3!, a1!, a2!];
+      const v250Url = order === 'before' ? URL_A3 : URLS.a2;
+      // The 250 is a version of the 80. The page is the 250 ohm one: the same as that, not as the 80.
+      const scripted = fakeDecider((request): Record<string, number> => {
+        if (request.evidence.startsWith(`Record A (${v250Url}):`)) return { variant: 0.97 };
+        return request.evidence.includes(`Record B (${v250Url}):`)
+          ? { same: 0.98 }
+          : { different: 0.97 };
+      });
+      world.ports.decider = scripted.decider;
+
+      // A name alone doesn't say which version the page is, so it joins nothing and starts nothing
+      // while the 250's question is open, or in the pass that answers it.
+      const first = await refresh(world, datasetId);
+      const e1 = await entityOf(v80.id);
+      const e2 = await entityOf(v250.id);
+      expect(matchSteps(first.names)).toEqual([`match:${v250.id}:${e1}`]);
+      expect(e2).not.toBe(e1);
+      expect(await entityOf(page.id)).toBeNull();
+      expect(first.summary.entities).toMatchObject({ waiting: 1 });
+
+      // Once each version has its entity, the page is asked about both.
+      const second = await refresh(world, datasetId);
+      expect(matchSteps(second.names)).toEqual([
+        `match:${page.id}:${e1}`,
+        `match:${page.id}:${e2}`,
+      ]);
+      const verdicts = (await judgementsFor(db, datasetId)).map(
+        (judgement) => `${judgement.itemId}|${judgement.entityId}|${judgement.verdict}`,
+      );
+      expect(verdicts.sort()).toEqual(
+        [`${v250.id}|${e1}|not_same`, `${page.id}|${e1}|not_same`, `${page.id}|${e2}|same`].sort(),
+      );
+      expect(await entityOf(page.id)).toBe(e2);
+      expect(second.summary.entities).toMatchObject({ waiting: 0, conflicts: 0 });
     });
-    world.ports.decider = scripted.decider;
-
-    // A name alone doesn't say which version A3 is, so it isn't joined to A1's entity while A2's
-    // question about that entity is open. Once A2 is a version of its own, A3 is asked about both.
-    const first = await refresh(world, 'match-name-only');
-    const e1 = await entityOf(a1!.id);
-    const e2 = await entityOf(a2!.id);
-    expect(matchSteps(first.names)).toEqual([`match:${a2!.id}:${e1}`]);
-    expect(e2).not.toBe(e1);
-    expect(await entityOf(a3!.id)).toBeNull();
-    expect(first.summary.entities).toMatchObject({ waiting: 1 });
-
-    const second = await refresh(world, 'match-name-only');
-    expect(matchSteps(second.names)).toEqual([`match:${a3!.id}:${e1}`, `match:${a3!.id}:${e2}`]);
-    const verdicts = (await judgementsFor(db, 'match-name-only')).map(
-      (judgement) => `${judgement.itemId}|${judgement.entityId}|${judgement.verdict}`,
-    );
-    expect(verdicts.sort()).toEqual(
-      [`${a2!.id}|${e1}|not_same`, `${a3!.id}|${e1}|not_same`, `${a3!.id}|${e2}|same`].sort(),
-    );
-    expect(await entityOf(a3!.id)).toBe(e2);
-    expect(second.summary.entities).toMatchObject({ waiting: 0, conflicts: 0 });
-  });
+  }
 });
 
 describe('a pair that no decider could be asked about', { timeout: 20_000 }, () => {

@@ -10,10 +10,12 @@ import { similarity } from './trigrams';
  * color and another impedance both change a GTIN, and only one of them is another product. The
  * same goes for a name that several entities carry, as the versions of one model do once an answer
  * has split them: a name alone doesn't say which, so the cascade is asked about them all. A page
- * that matches nothing starts its own entity, unless an entity within its scope (for products, its
- * brand) has a similar name: then the cascade is asked about the closest few first. Verdicts
- * decide: "same" joins, "not the same" keeps the page apart for good, and "unsure" waits for a
- * person.
+ * that gives only a name waits, rather than join an entity or start one, while the pages that give
+ * identifiers under that name are still sorting out the entities that carry it (`contestedNames`).
+ * A page that matches nothing starts its own entity, unless an entity within its scope (for
+ * products, its brand) has a similar name: then the cascade is asked about the closest few first.
+ * Verdicts decide: "same" joins, "not the same" keeps the page apart for good, and "unsure" waits
+ * for a person.
  */
 
 /** How alike two names must be, by trigrams, for the cascade to be asked whether they're one. */
@@ -55,18 +57,6 @@ export function nameScope(
   return { scope: scope.join('|'), name };
 }
 
-/**
- * A record's name as a key within its scope: records that share it are named alike, whatever their
- * case, accents, spaces, and punctuation. Null where `nameScope` is.
- */
-export function nameKey(
-  recordType: RecordType,
-  values: Record<string, FieldValue[]>,
-): string | null {
-  const own = nameScope(recordType, values);
-  return own === null ? null : `${own.scope}\u001f${textKey(own.name)}`;
-}
-
 /** Whether two records give identifiers of the same kind and none of their identifiers agree. */
 export function identifiersDisagree(
   recordType: RecordType,
@@ -82,6 +72,79 @@ export function identifiersDisagree(
     disagree = true;
   }
   return disagree;
+}
+
+/**
+ * The names whose entities aren't settled, as the claims that make them. A name is contested while
+ * the pages that give identifiers under it and aren't joined yet give some that disagree with each
+ * other, or with the entity that owns the name, compared as `planMatch` compares a page with an
+ * entity; and while a page that carries it waits for a person to say whether it is that entity's.
+ * A page that gives only a name can't tell which entity it belongs to, or whether it starts one,
+ * until the contest settles.
+ */
+export function contestedNames(input: {
+  recordType: RecordType;
+  /** The pages that aren't joined yet: their surviving values, and the verdicts given on them. */
+  pages: readonly {
+    values: Record<string, FieldValue[]>;
+    verdicts: ReadonlyMap<string, MatchVerdict>;
+  }[];
+  /** Which entity owns each identity claim. */
+  owners: ReadonlyMap<string, string>;
+  /** The identifiers each entity's pages give, by entity. */
+  identifiers: ReadonlyMap<string, Record<string, FieldValue[]>>;
+}): Set<string> {
+  const { recordType, owners } = input;
+  const contested = new Set<string>();
+  // The identifiers pages give under each name, one record for each distinct set.
+  const given = new Map<string, Map<string, Record<string, FieldValue[]>>>();
+  for (const { values, verdicts } of input.pages) {
+    const signature = identifierSignature(recordType, values);
+    for (const claim of identityClaims(recordType, values)) {
+      if (claim.rank < recordType.identity.identifiers.length) continue;
+      const owner = owners.get(claim.value);
+      if (owner !== undefined && verdicts.get(owner) === 'unsure') contested.add(claim.value);
+      if (signature === null) continue;
+      const sets = given.get(claim.value) ?? new Map<string, Record<string, FieldValue[]>>();
+      sets.set(signature, values);
+      given.set(claim.value, sets);
+    }
+  }
+  for (const [name, sets] of given) {
+    if (contested.has(name)) continue;
+    const owner = owners.get(name);
+    const theirs = owner === undefined ? undefined : input.identifiers.get(owner);
+    if (
+      anyDisagree(
+        recordType,
+        theirs === undefined ? [...sets.values()] : [theirs, ...sets.values()],
+      )
+    ) {
+      contested.add(name);
+    }
+  }
+  return contested;
+}
+
+/** Whether any two of the records give identifiers that disagree. */
+function anyDisagree(recordType: RecordType, records: readonly Record<string, FieldValue[]>[]) {
+  return records.some((record, index) =>
+    records.slice(index + 1).some((other) => identifiersDisagree(recordType, record, other)),
+  );
+}
+
+/**
+ * The identifiers a record gives, as `identifiersDisagree` compares them, or null where it gives
+ * none. Records with one signature compare alike with any other record.
+ */
+function identifierSignature(
+  recordType: RecordType,
+  values: Record<string, FieldValue[]>,
+): string | null {
+  const kinds = recordType.identity.identifiers.map((name) =>
+    [...new Set((values[name] ?? []).map(identifierKey))].sort(),
+  );
+  return kinds.every((keys) => keys.length === 0) ? null : JSON.stringify(kinds);
 }
 
 /** Adds values to a record's, each once: what an entity's pages say together. */
@@ -114,12 +177,13 @@ export function planMatch(input: {
   sameScope: readonly { id: string; names: readonly string[] }[];
   /** The verdicts already given on this page, by entity. */
   verdicts: ReadonlyMap<string, MatchVerdict>;
-  /** The entities that other pages with this page's name are waiting on an answer about. */
-  waitingOn: ReadonlySet<string>;
+  /** The names that are contested, by the claims that make them (see `contestedNames`). */
+  contested: ReadonlySet<string>;
 }): MatchPlan {
   const { recordType, values, owners, verdicts } = input;
   const claims = identityClaims(recordType, values);
   if (claims.length === 0) return { kind: 'unresolvable' };
+  const keyRank = recordType.identity.identifiers.length;
   const given = (verdict: MatchVerdict) =>
     [...verdicts]
       .filter(([, answer]) => answer === verdict)
@@ -130,6 +194,15 @@ export function planMatch(input: {
   if (same !== undefined) return { kind: 'join', entityId: same };
   const apart = new Set(given('not_same'));
   const pending = new Set(given('unsure'));
+  // A page that gives only a name can't say which entity it belongs to, or whether it starts one,
+  // while the pages that give identifiers under that name are sorting out the entities that carry
+  // it. It waits whatever it would do: joining, starting an entity, or asking about the others.
+  if (
+    claims.every((claim) => claim.rank >= keyRank) &&
+    claims.some((claim) => input.contested.has(claim.value))
+  ) {
+    return { kind: 'wait' };
+  }
 
   // The strongest claim an entity owns, unless a verdict keeps the page apart from that entity.
   const strongest = [...claims]
@@ -142,9 +215,7 @@ export function planMatch(input: {
   if (strongest !== undefined) {
     const owner = strongest.entityId;
     if (pending.has(owner)) return { kind: 'wait' };
-    if (strongest.claim.rank < recordType.identity.identifiers.length) {
-      return { kind: 'join', entityId: owner };
-    }
+    if (strongest.claim.rank < keyRank) return { kind: 'join', entityId: owner };
     // A name belongs to whichever entity claimed it first, but others may carry it too: a "variant"
     // answer splits a version off with the name it shares. The page could be any of them.
     const sharing = sharingName(recordType, values, input.sameScope).filter(
@@ -159,9 +230,7 @@ export function planMatch(input: {
     if (identifiersDisagree(recordType, values, input.identifiers.get(owner) ?? {})) {
       return { kind: 'ask', entityIds: [owner] };
     }
-    // Another page with this name is waiting to hear whether the entity is one version of the model
-    // or another, and this page, with a name alone, could be either.
-    return input.waitingOn.has(owner) ? { kind: 'wait' } : { kind: 'join', entityId: owner };
+    return { kind: 'join', entityId: owner };
   }
 
   const similar = similarNames(recordType, values, input.sameScope, apart);

@@ -1,8 +1,8 @@
 import {
+  contestedNames,
   identityClaims,
   MAX_MATCH_QUESTIONS,
   mergeValues,
-  nameKey,
   nameScope,
   newId,
   planMatch,
@@ -24,7 +24,10 @@ export interface EntityResolution {
   linked: number;
   conflicts: number;
   unresolved: number;
-  /** Pages waiting for a match question to be asked or answered. */
+  /**
+   * Pages waiting for a match question to be asked or answered, or for the pages that give
+   * identifiers under their name to settle.
+   */
   waiting: number;
   /** The match questions to ask: a page, and an entity it may belong to. */
   questions: { itemId: string; entityId: string }[];
@@ -36,10 +39,11 @@ export interface EntityResolution {
  * so a new page finds them. A page that isn't joined yet follows its match plan: it joins on an
  * identifier, or on a name that no identifier contradicts and no other entity shares; it starts a
  * new entity, with a canonical ID assigned once; or it waits for a question about an entity to be
- * asked and answered. A page that could join an entity on its name alone waits too while a page
- * with that name has a question about the entity open, since the answer may make it another
- * version of the same model. A claim another entity already owns is reported as a conflict and
- * changes nothing. The exception is a name that two entities share once their pages have been
+ * asked and answered. A page that gives only a name waits too, whichever pages sort before it,
+ * while its name is contested (`contestedNames`, worked out from where the pass begins): the pages
+ * that give identifiers under it disagree, or a person has yet to say whether one is an entity's.
+ * Once they settle it follows the plan above. A claim another entity already owns is reported as a
+ * conflict and changes nothing. The exception is a name that two entities share once their pages have been
  * judged not the same: that is what a "variant" answer leaves. A GTIN or part number two entities
  * claim is always a conflict.
  *
@@ -143,8 +147,26 @@ export async function resolveEntities(
         keepApart(page.entityId, verdicts.get(page.id) ?? new Map<string, MatchVerdict>());
       }
     }
-    // The entities that pages are waiting on a question about, by the name those pages share.
-    const waitingOn = new Map<string, Set<string>>();
+    // The names whose entities the pages that give identifiers are still sorting out. They are
+    // worked out from the pages not joined yet as the pass begins, so that what a page does about
+    // its name doesn't depend on which pages sort before it.
+    const contested = new Set<string>();
+    for (const [typeName, recordType] of Object.entries(definition.recordTypes)) {
+      const unjoinedOfType = pages.filter(
+        (page) => page.entityId === null && page.recordType === typeName,
+      );
+      for (const name of contestedNames({
+        recordType,
+        pages: unjoinedOfType.map((page) => ({
+          values: valuesOf(page, recordType),
+          verdicts: verdicts.get(page.id) ?? new Map<string, MatchVerdict>(),
+        })),
+        owners,
+        identifiers,
+      })) {
+        contested.add(name);
+      }
+    }
 
     const result: EntityResolution = {
       created: 0,
@@ -168,7 +190,6 @@ export async function resolveEntities(
       let entityId = page.entityId;
       if (entityId === null) {
         const named = nameScope(recordType, values);
-        const name = nameKey(recordType, values);
         const plan = planMatch({
           recordType,
           values,
@@ -178,7 +199,7 @@ export async function resolveEntities(
             ([id, names]) => ({ id, names }),
           ),
           verdicts: pageVerdicts,
-          waitingOn: (name === null ? undefined : waitingOn.get(name)) ?? new Set<string>(),
+          contested,
         });
         if (plan.kind === 'unresolvable') {
           result.unresolved += 1;
@@ -189,16 +210,6 @@ export async function resolveEntities(
         }
         if (plan.kind === 'wait' || plan.kind === 'ask') {
           result.waiting += 1;
-          // The entities this page waits to hear about, whether or not there is room to ask yet.
-          const open =
-            plan.kind === 'ask'
-              ? plan.entityIds
-              : [...pageVerdicts].filter(([, verdict]) => verdict === 'unsure').map(([id]) => id);
-          if (name !== null && open.length > 0) {
-            const others = waitingOn.get(name) ?? new Set<string>();
-            for (const id of open) others.add(id);
-            waitingOn.set(name, others);
-          }
           if (plan.kind === 'ask') {
             for (const candidate of plan.entityIds) {
               const question = { itemId: page.id, entityId: candidate };

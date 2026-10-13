@@ -343,60 +343,153 @@ describe('resolveEntities', () => {
     }));
 });
 
-describe('resolveEntities where one name carries several versions', () => {
+describe('resolveEntities where a page gives only a name', () => {
   /** A page that gives its name and nothing else. */
   const named = [statementOf('brand', 'Maker A'), statementOf('name', 'DT 770 PRO', 'jsonld')];
 
-  it('holds a page with only a name while a page of that name waits to hear about its entity', () =>
+  for (const order of ['before', 'after'] as const) {
+    it(`holds it, whichever its address sorts ${order} the pages whose identifiers disagree, until they settle`, () =>
+      withRollback(async (db) => {
+        const { runId } = await seedDataset(db);
+        const pages = await makerAThree(db);
+        const [p, v80, v250] = order === 'before' ? pages : [pages[2], pages[0], pages[1]];
+        await says(db, runId, p, 0, named);
+        await says(db, runId, v80, 0, product('Maker A', 'DT 770 PRO', '04010118471063'));
+        await says(db, runId, v250, 0, product('Maker A', 'DT 770 PRO', '04010118471070'));
+
+        // The 250 asks about the 80's entity. A name alone doesn't say which of them the page
+        // is, so it neither joins that entity nor starts one.
+        const first = await resolve(db);
+        const e1 = (await entityOf(db, v80))!;
+        expect(first).toMatchObject({ created: 1, linked: 0, waiting: 2 });
+        expect(first.questions).toEqual([{ itemId: v250.id, entityId: e1 }]);
+        expect(await entityOf(db, p)).toBeNull();
+
+        // A variant. The page waits this pass too: the 250 was still sorting itself out when the
+        // pass began, and no question is raised for the page meanwhile.
+        await judged(db, v250, e1, 'not_same');
+        const second = await resolve(db);
+        const e2 = (await entityOf(db, v250))!;
+        expect(e2).not.toBe(e1);
+        expect(second).toMatchObject({ created: 1, linked: 0, conflicts: 0, waiting: 1 });
+        expect(second.questions).toEqual([]);
+        expect(await entityOf(db, p)).toBeNull();
+
+        // Each version has its entity now, and the page is asked about both.
+        const third = await resolve(db);
+        expect(third).toMatchObject({ created: 0, linked: 0, waiting: 1 });
+        expect(third.questions).toEqual([
+          { itemId: p.id, entityId: e1 },
+          { itemId: p.id, entityId: e2 },
+        ]);
+        expect(await entityOf(db, p)).toBeNull();
+      }));
+  }
+
+  it('holds it while a person has yet to say whether another page of that name is its entity’s', () =>
     withRollback(async (db) => {
       const { runId } = await seedDataset(db);
-      const [a1, a2, a3] = await makerAThree(db);
+      const [a1, p, a3] = await makerAThree(db);
       await says(db, runId, a1, 0, product('Maker A', 'DT 770 PRO', '04010118471063'));
-      await says(db, runId, a2, 0, product('Maker A', 'DT 770 PRO', '04010118471070'));
-      await says(db, runId, a3, 0, named);
-
-      // A2 asks whether it is A1's product. A3 could be either version, and waits for the answer.
-      const first = await resolve(db);
-      const e1 = (await entityOf(db, a1))!;
-      expect(first).toMatchObject({ created: 1, linked: 0, waiting: 2 });
-      expect(first.questions).toEqual([{ itemId: a2.id, entityId: e1 }]);
-      expect(await entityOf(db, a3)).toBeNull();
-
-      // A variant: A2 has its own entity now, and A3 is asked about both.
-      await judged(db, a2, e1, 'not_same');
-      const second = await resolve(db);
-      const e2 = (await entityOf(db, a2))!;
-      expect(e2).not.toBe(e1);
-      expect(second).toMatchObject({ created: 1, linked: 0, conflicts: 0, waiting: 1 });
-      expect(second.questions).toEqual([
-        { itemId: a3.id, entityId: e1 },
-        { itemId: a3.id, entityId: e2 },
-      ]);
-      expect(await entityOf(db, a3)).toBeNull();
-    }));
-
-  it('holds it while a person has yet to answer, and joins it when the pages are one product', () =>
-    withRollback(async (db) => {
-      const { runId } = await seedDataset(db);
-      const [a1, a2, a3] = await makerAThree(db);
-      await says(db, runId, a1, 0, product('Maker A', 'DT 770 PRO', '04010118471063'));
-      await says(db, runId, a2, 0, product('Maker A', 'DT 770 PRO', '04010118471070'));
-      await says(db, runId, a3, 0, named);
       await resolve(db);
       const e1 = (await entityOf(db, a1))!;
 
-      await judged(db, a2, e1, 'unsure');
-      expect(await resolve(db)).toMatchObject({ linked: 0, waiting: 2, questions: [] });
-      expect(await entityOf(db, a3)).toBeNull();
+      // From an earlier run: the page A3 waits for a person to say whether it is A1's product.
+      // It gives only a name, as the page does that sorts before it, so no identifiers disagree.
+      await says(db, runId, p, 5, named);
+      await says(db, runId, a3, 5, named);
+      await judged(db, a3, e1, 'unsure');
+      const held = await resolve(db);
+      expect(held).toMatchObject({ created: 0, linked: 0, waiting: 2, questions: [] });
+      expect(await entityOf(db, p)).toBeNull();
+      expect(await resolve(db)).toMatchObject({ linked: 0, waiting: 2 });
 
-      // They are one product, and so is the page that gave only a name.
-      await judged(db, a2, e1, 'same', 'person');
+      // The person says they are the same, and the name is no longer contested.
+      await judged(db, a3, e1, 'same', 'person');
       expect(await resolve(db)).toMatchObject({ linked: 2, waiting: 0, questions: [] });
-      expect(await entityOf(db, a2)).toBe(e1);
+      expect(await entityOf(db, p)).toBe(e1);
       expect(await entityOf(db, a3)).toBe(e1);
     }));
 
-  it('joins a page with only a name to the one entity that has it, as before', () =>
+  it('counts a verdict only while it still stands, once a decider can be asked', () =>
+    withRollback(async (db) => {
+      const { runId } = await seedDataset(db);
+      const [a1, p, a3] = await makerAThree(db);
+      await says(db, runId, a1, 0, product('Maker A', 'DT 770 PRO', '04010118471063'));
+      await resolve(db);
+      const e1 = (await entityOf(db, a1))!;
+      await says(db, runId, p, 5, named);
+      await says(db, runId, a3, 5, named);
+
+      // Unsure "by rule": nobody was asked, so it waits for a person while nobody can be...
+      await judged(db, a3, e1, 'unsure', 'rule');
+      expect(await resolve(db)).toMatchObject({ linked: 0, waiting: 2 });
+      expect(await entityOf(db, p)).toBeNull();
+      // ...and is no answer once a decider can be, so it contests nothing.
+      expect(await resolve(db, { deciderCanAnswer: true })).toMatchObject({
+        linked: 2,
+        waiting: 0,
+      });
+      expect(await entityOf(db, p)).toBe(e1);
+    }));
+
+  for (const order of ['before', 'after'] as const) {
+    it(`joins the name to one entity where the pages that give identifiers agree, sorting ${order} them`, () =>
+      withRollback(async (db) => {
+        const { runId } = await seedDataset(db);
+        const pages = await makerAThree(db);
+        const [p, g1, g2] = order === 'before' ? pages : [pages[2], pages[0], pages[1]];
+        await says(db, runId, p, 0, named);
+        await says(db, runId, g1, 0, product('Maker A', 'DT 770 PRO', '04010118471063'));
+        await says(db, runId, g2, 0, product('Maker A', 'DT 770 PRO (2024)', '04010118471063'));
+        expect(await resolve(db)).toMatchObject({
+          created: 1,
+          linked: 2,
+          waiting: 0,
+          questions: [],
+        });
+        const entity = await entityOf(db, g1);
+        expect([await entityOf(db, p), await entityOf(db, g2)]).toEqual([entity, entity]);
+      }));
+  }
+
+  it('joins it to the entity once the pages that give identifiers are one entity', () =>
+    withRollback(async (db) => {
+      const { runId } = await seedDataset(db);
+      const [a1, a2, p] = await makerAThree(db);
+      await says(db, runId, a1, 0, product('Maker A', 'DT 770 PRO', '04010118471063'));
+      await says(db, runId, a2, 0, product('Maker A', 'DT 770 PRO', '04010118471070'));
+      await says(db, runId, p, 0, named);
+      await resolve(db);
+      const e1 = (await entityOf(db, a1))!;
+      expect(await entityOf(db, p)).toBeNull();
+
+      // They are one product. The page waits through the pass that joins them, which began with
+      // their identifiers in dispute, and joins in the next.
+      await judged(db, a2, e1, 'same', 'person');
+      expect(await resolve(db)).toMatchObject({ linked: 1, waiting: 1, questions: [] });
+      expect(await entityOf(db, a2)).toBe(e1);
+      expect(await entityOf(db, p)).toBeNull();
+      expect(await resolve(db)).toMatchObject({ linked: 1, waiting: 0, questions: [] });
+      expect(await entityOf(db, p)).toBe(e1);
+    }));
+
+  it('joins or starts an entity for a page of another name, whatever is contested', () =>
+    withRollback(async (db) => {
+      const { runId } = await seedDataset(db);
+      const [a1, a2, other] = await makerAThree(db);
+      await says(db, runId, a1, 0, product('Maker A', 'DT 770 PRO', '04010118471063'));
+      await says(db, runId, a2, 0, product('Maker A', 'DT 770 PRO', '04010118471070'));
+      await says(db, runId, other, 0, [
+        statementOf('brand', 'Maker A'),
+        statementOf('name', 'Amiron Home', 'jsonld'),
+      ]);
+      // The 770's identifiers disagree, and the page that names a different product starts its own.
+      expect(await resolve(db)).toMatchObject({ created: 2, linked: 0, waiting: 1 });
+      expect(await entityOf(db, other)).not.toBeNull();
+    }));
+
+  it('joins it to the one entity that has the name, as before', () =>
     withRollback(async (db) => {
       const { runId } = await seedDataset(db);
       const [a1, , a3] = await makerAThree(db);
