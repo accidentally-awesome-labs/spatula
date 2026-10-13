@@ -89,10 +89,19 @@ export async function findDecision(
 
 /**
  * Records a decision, and retires the subject's earlier ones: the newest question about a subject
- * is its current one. A step that runs again gets back the record it saved the first time.
+ * is its current one. A step that runs again gets back the record it saved the first time, even
+ * when a newer question has retired it since, and retires nothing. Saves about one subject go one
+ * at a time, so when two runs overlap, the later save retires the earlier one even if the earlier
+ * hadn't committed when the later began.
  */
 export async function saveDecision(db: Executor, decision: NewDecision): Promise<DecisionRow> {
   return db.transaction(async (tx) => {
+    // Two saves under different IDs can't see each other's insert until it commits, so without
+    // this lock each could retire nothing, and both would stay current. The lock is held until the
+    // outermost transaction ends, whether this one is a savepoint in the caller's or not.
+    await tx.execute(
+      sql`select pg_advisory_xact_lock(hashtextextended(${decision.datasetId}::text || ':' || ${decision.subjectKey}::text, 0))`,
+    );
     const [saved] = await tx
       .select(DECISION)
       .from(decisionRecords)
@@ -208,7 +217,10 @@ export interface ReviewRow {
 
 /**
  * Opens a question for a person, or updates the one already open about the same subject, and
- * returns the open question's ID.
+ * returns the open question's ID. A step that runs again sends the ID it sent before, and gets it
+ * back: a review with that ID that is closed by now stays as it is and nothing is written, so the
+ * replay can neither open the question again nor write what it knew then over a newer question
+ * about the subject.
  */
 export async function openReview(
   db: Executor,
@@ -225,34 +237,44 @@ export async function openReview(
     at: Date;
   },
 ): Promise<string> {
-  const [row] = await db
-    .insert(reviewItems)
-    .values({
-      id: input.id,
-      datasetId: input.datasetId,
-      kind: input.kind,
-      subject: input.subject,
-      itemId: input.itemId ?? null,
-      entityId: input.entityId ?? null,
-      decisionId: input.decisionId ?? null,
-      question: input.question,
-      context: input.context,
-      createdAt: input.at,
-    })
-    .onConflictDoUpdate({
-      target: [reviewItems.datasetId, reviewItems.kind, reviewItems.subject],
-      targetWhere: sql`${reviewItems.status} = 'open'`,
-      set: {
-        question: sql`excluded.question`,
-        context: sql`excluded.context`,
-        decisionId: sql`excluded.decision_id`,
-        itemId: sql`excluded.item_id`,
-        entityId: sql`excluded.entity_id`,
-      },
-    })
-    .returning({ id: reviewItems.id });
-  if (row === undefined) throw new Error(`Review ${input.id} could not be opened`);
-  return row.id;
+  return db.transaction(async (tx) => {
+    // The lock keeps an answer from closing the review between this look and the write below, and
+    // is the one the write takes, so two replays of one step wait for each other and can't deadlock.
+    const [existing] = await tx
+      .select({ status: reviewItems.status })
+      .from(reviewItems)
+      .where(eq(reviewItems.id, input.id))
+      .for('no key update');
+    if (existing !== undefined && existing.status !== 'open') return input.id;
+    const [row] = await tx
+      .insert(reviewItems)
+      .values({
+        id: input.id,
+        datasetId: input.datasetId,
+        kind: input.kind,
+        subject: input.subject,
+        itemId: input.itemId ?? null,
+        entityId: input.entityId ?? null,
+        decisionId: input.decisionId ?? null,
+        question: input.question,
+        context: input.context,
+        createdAt: input.at,
+      })
+      .onConflictDoUpdate({
+        target: [reviewItems.datasetId, reviewItems.kind, reviewItems.subject],
+        targetWhere: sql`${reviewItems.status} = 'open'`,
+        set: {
+          question: sql`excluded.question`,
+          context: sql`excluded.context`,
+          decisionId: sql`excluded.decision_id`,
+          itemId: sql`excluded.item_id`,
+          entityId: sql`excluded.entity_id`,
+        },
+      })
+      .returning({ id: reviewItems.id });
+    if (row === undefined) throw new Error(`Review ${input.id} could not be opened`);
+    return row.id;
+  });
 }
 
 /** The dataset's open questions, oldest first. */

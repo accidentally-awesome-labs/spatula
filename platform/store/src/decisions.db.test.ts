@@ -93,6 +93,28 @@ describe('decision records', () => {
         'dc_classifya100000000002',
       );
     }));
+
+  it('give a step that runs again its own record, though a newer question has retired it', () =>
+    withRollback(async (tx) => {
+      await seedDataset(tx);
+      const key = {
+        datasetId: 'test-products',
+        subjectKey: 'classify:it_a1',
+        stateHash: 'hash-1',
+        criteriaVersion: 1,
+      };
+      const first = await saveDecision(tx, decision());
+      const second = await saveDecision(
+        tx,
+        decision({ id: 'dc_classifya100000000001', stateHash: 'hash-2', decidedAt: T(2) }),
+      );
+      expect(await findDecision(tx, key)).toBeNull();
+      // The first run's step runs again after the newer question retired its record. It gets that
+      // record back, unchanged, and the newer question stays the subject's current one.
+      expect(await saveDecision(tx, decision({ answer: 'DAC/Amp' }))).toEqual(first);
+      expect(await findDecision(tx, key)).toBeNull();
+      expect((await findDecision(tx, { ...key, stateHash: 'hash-2' }))?.id).toBe(second.id);
+    }));
 });
 
 describe('judgements', () => {
@@ -215,6 +237,67 @@ describe('review items', () => {
       expect(await ask('DAC/Amp')).toBe(first);
       expect(await listOpenReviews(tx, 'test-products')).toMatchObject([
         { id: first, context: { proposed: 'DAC/Amp' } },
+      ]);
+    }));
+
+  it('stay closed and unchanged when a step that runs again sends their ID', () =>
+    withRollback(async (tx) => {
+      const {
+        items: [a1],
+      } = await seedDataset(tx);
+      const ask = (id: string, proposed: string) =>
+        openReview(tx, {
+          id,
+          datasetId: 'test-products',
+          kind: 'classify',
+          subject: a1!.id,
+          itemId: a1!.id,
+          question: QUESTION,
+          context: { proposed },
+          at: T(1),
+        });
+      const id = await ask('rv_replayed0000000000000', 'Headphones');
+      const closed = await closeReview(tx, {
+        id,
+        status: 'decided',
+        answer: 'Headphones',
+        at: T(2),
+      });
+      expect(closed).toMatchObject({ status: 'decided' });
+      // The step that opened it runs again after the answer, and sends the ID of a closed review.
+      expect(await ask(id, 'DAC/Amp')).toBe(id);
+      expect(await getReview(tx, id)).toEqual(closed);
+      expect(await listOpenReviews(tx, 'test-products')).toEqual([]);
+    }));
+
+  it('keep a newer question about the subject when an older step runs again', () =>
+    withRollback(async (tx) => {
+      const {
+        items: [a1],
+      } = await seedDataset(tx);
+      const ask = (id: string, proposed: string) =>
+        openReview(tx, {
+          id,
+          datasetId: 'test-products',
+          kind: 'classify',
+          subject: a1!.id,
+          itemId: a1!.id,
+          question: QUESTION,
+          context: { proposed },
+          at: T(1),
+        });
+      const older = await ask('rv_older00000000000000000', 'Headphones');
+      await closeReview(tx, { id: older, status: 'dismissed', answer: null, at: T(2) });
+      const newer = await ask('rv_newer00000000000000000', 'None of these');
+      // The older step runs again, with what it knew then. That mustn't be written over the newer
+      // question, which is the one a person is being asked.
+      expect(await ask(older, 'Headphones')).toBe(older);
+      expect(await getReview(tx, newer)).toMatchObject({
+        status: 'open',
+        context: { proposed: 'None of these' },
+      });
+      expect((await listOpenReviews(tx, 'test-products')).map((review) => review.id)).toEqual([
+        newer,
       ]);
     }));
 

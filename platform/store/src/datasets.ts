@@ -243,8 +243,14 @@ export const REVIVABLE_STATUSES: ItemStatus[] = ['refused', 'gone', 'irrelevant'
  * Puts pages back to live: every refused page with `refused`, and the pages named, from any
  * revivable status. Their streaks start again, and a revived page counts as never read, so the
  * next run reads it whenever it was last read. A revived irrelevant page also loses the decision
- * that made it irrelevant and its extraction mark, so the next run reads it and asks afresh. The
- * revival is one transaction: a failure partway leaves every page as it was.
+ * that made it irrelevant and its extraction mark, so the next run reads it and asks afresh.
+ *
+ * The revival is one transaction: a failure partway leaves every page as it was. It starts by
+ * locking the pages it will revive, and then acts on those and no others. A run can commit between
+ * two statements, so a page that was something else when the revive read it, such as one a run has
+ * just found irrelevant, is left alone: reviving it would leave its answer current and its mark
+ * set, and no run would read or ask again. The lock holds back other changes to a locked page's
+ * status until the revival ends, but not the inserts of a run that refer to the page.
  */
 export async function reviveItems(
   db: Executor,
@@ -258,21 +264,14 @@ export async function reviveItems(
   ];
   if (which.length === 0) return 0;
   return db.transaction(async (tx) => {
-    const irrelevant =
-      input.pages === undefined || input.pages.length === 0
-        ? []
-        : (
-            await tx
-              .select({ id: items.id })
-              .from(items)
-              .where(
-                and(
-                  eq(items.datasetId, input.datasetId),
-                  inArray(items.locator, input.pages),
-                  eq(items.status, 'irrelevant'),
-                ),
-              )
-          ).map((row) => row.id);
+    // In a fixed order, so two revivals that overlap can't wait for each other.
+    const locked = await tx
+      .select({ id: items.id, status: items.status })
+      .from(items)
+      .where(and(eq(items.datasetId, input.datasetId), or(...which)))
+      .orderBy(items.id)
+      .for('no key update');
+    if (locked.length === 0) return 0;
     const rows = await tx
       .update(items)
       .set({
@@ -282,8 +281,14 @@ export async function reviveItems(
         missingStreak: 0,
         lastFetchedAt: null,
       })
-      .where(and(eq(items.datasetId, input.datasetId), or(...which)))
+      .where(
+        inArray(
+          items.id,
+          locked.map((row) => row.id),
+        ),
+      )
       .returning({ id: items.id });
+    const irrelevant = locked.filter((row) => row.status === 'irrelevant').map((row) => row.id);
     if (irrelevant.length > 0) {
       // The answer that made them irrelevant is retired, and the pages read again, so the next run
       // asks afresh instead of reusing it.

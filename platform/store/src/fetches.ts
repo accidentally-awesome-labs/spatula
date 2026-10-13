@@ -164,13 +164,16 @@ export async function recordExtraction(
     .where(eq(fetches.id, input.fetchId));
 }
 
-/** The item's latest fetch, which a person's answer is recorded against. */
+/**
+ * The item's latest fetch, which a person's answer is recorded against. Of fetches that started
+ * together, the one with the greater ID.
+ */
 export async function latestFetchId(db: Executor, itemId: string): Promise<string | null> {
   const [row] = await db
     .select({ id: fetches.id })
     .from(fetches)
     .where(eq(fetches.itemId, itemId))
-    .orderBy(desc(fetches.startedAt))
+    .orderBy(desc(fetches.startedAt), desc(fetches.id))
     .limit(1);
   return row?.id ?? null;
 }

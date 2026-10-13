@@ -353,10 +353,26 @@ describe('latestFetchId', () => {
       const older = await fetchOf(db, runId, a1!, T(1));
       const newer = await fetchOf(db, runId, a1!, T(2));
       // Another item's fetch is never this item's, however recent.
-      await fetchOf(db, runId, a2!, T(3));
+      const other = await fetchOf(db, runId, a2!, T(3));
       expect(older).not.toBe(newer);
       expect(await latestFetchId(db, a1!.id)).toBe(newer);
-      expect(await latestFetchId(db, a2!.id)).not.toBe(newer);
+      expect(await latestFetchId(db, a2!.id)).toBe(other);
+    }));
+
+  it('breaks a tie between fetches that started together by the greater ID', () =>
+    withRollback(async (db) => {
+      const {
+        items: [a1, a2],
+        runId,
+      } = await seedDataset(db);
+      const startedTogether = async (item: ItemRef, ids: string[]) => {
+        for (const id of ids) await recordFetch(db, attempt(runId, item, { id, startedAt: T(1) }));
+      };
+      // Whichever was logged first, the greater ID is the latest: a tie is never left to the database.
+      await startedTogether(a1!, ['fe_tie_a', 'fe_tie_b']);
+      await startedTogether(a2!, ['fe_tie_d', 'fe_tie_c']);
+      expect(await latestFetchId(db, a1!.id)).toBe('fe_tie_b');
+      expect(await latestFetchId(db, a2!.id)).toBe('fe_tie_d');
     }));
 });
 

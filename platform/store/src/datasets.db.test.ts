@@ -2,6 +2,7 @@ import { newId, parseDefinition, type Definition } from '@spatula/core';
 import { eq, inArray, sql } from 'drizzle-orm';
 import { describe, expect, it } from 'vitest';
 import { withRollback } from '../test/db';
+import { noneOfThese } from '../test/seed';
 import type { Executor } from './client';
 import {
   applyDefinition,
@@ -11,7 +12,7 @@ import {
   reviveItems,
   StaleDefinitionError,
 } from './datasets';
-import { findDecision, saveDecision, type NewDecision } from './decisions';
+import { findDecision, saveDecision } from './decisions';
 import { testDefinition } from './fixtures';
 import { dueItems } from './listing';
 import { finishRun, getRun, startRun } from './runs';
@@ -19,28 +20,6 @@ import { datasets, items, sources } from './schema';
 
 const pagesOf = async (db: Executor) =>
   (await listLiveItems(db, 'test-products')).map((item) => item.locator);
-
-/** The answer that made a page irrelevant: it is none of the dataset's categories. */
-const noneOfThese = (datasetId: string, itemId: string): NewDecision => ({
-  id: `dc_none_${itemId}`,
-  datasetId,
-  type: 'classify',
-  subject: itemId,
-  subjectKey: `classify:${itemId}`,
-  state: {},
-  stateHash: 'hash',
-  question: { type: 'choice', prompt: 'Which?', options: ['Headphones', 'None of these'] },
-  criteriaVersion: 1,
-  adapter: 'llm:test-model',
-  probabilities: { 'None of these': 0.95 },
-  evidence: 'Ear pads.',
-  thresholds: { accept: 0.9 },
-  outcome: 'accepted',
-  answer: 'None of these',
-  inputTokens: 0,
-  outputTokens: 0,
-  decidedAt: new Date(),
-});
 
 describe('applyDefinition', () => {
   it('previews a new dataset without writing it, then creates it', () =>
@@ -370,6 +349,52 @@ describe('applyDefinition', () => {
           criteriaVersion: none.criteriaVersion,
         }),
       ).toMatchObject({ id: none.id });
+    }));
+
+  it('retires the answer and the mark of the irrelevant pages it revives, and of no others', () =>
+    withRollback(async (tx) => {
+      await applyDefinition(tx, testDefinition('revive-mixed'));
+      const [a1, a2] = await listLiveItems(tx, 'revive-mixed');
+      await tx
+        .update(items)
+        .set({ status: 'irrelevant', extractedWith: 'r1.v1' })
+        .where(eq(items.id, a1!.id));
+      await tx
+        .update(items)
+        .set({ status: 'refused', extractedWith: 'r1.v1' })
+        .where(eq(items.id, a2!.id));
+      const irrelevant = noneOfThese('revive-mixed', a1!.id);
+      const refused = {
+        ...noneOfThese('revive-mixed', a2!.id),
+        probabilities: { Headphones: 0.95 },
+        answer: 'Headphones',
+      };
+      await saveDecision(tx, irrelevant);
+      await saveDecision(tx, refused);
+      const current = (decision: typeof irrelevant) =>
+        findDecision(tx, {
+          datasetId: 'revive-mixed',
+          subjectKey: decision.subjectKey,
+          stateHash: decision.stateHash,
+          criteriaVersion: decision.criteriaVersion,
+        });
+
+      expect(
+        await reviveItems(tx, { datasetId: 'revive-mixed', pages: [a1!.locator, a2!.locator] }),
+      ).toBe(2);
+      // Only the page that was irrelevant is asked again. The refused page was never answered "none
+      // of these", so what it was read with and asked stands.
+      expect(await current(irrelevant)).toBeNull();
+      expect(await current(refused)).toMatchObject({ id: refused.id });
+      const stateOf = async (id: string) =>
+        (
+          await tx
+            .select({ status: items.status, extractedWith: items.extractedWith })
+            .from(items)
+            .where(eq(items.id, id))
+        )[0];
+      expect(await stateOf(a1!.id)).toEqual({ status: 'live', extractedWith: null });
+      expect(await stateOf(a2!.id)).toEqual({ status: 'live', extractedWith: 'r1.v1' });
     }));
 });
 
