@@ -131,9 +131,9 @@ export function classifyState(page: Page, values: Record<string, FieldValue[]>):
  * A structured-data category answers without asking anyone, so only when the page leaves no doubt.
  * A rule's answer is published as it stands, with no model and no person to look at it. Every
  * product the page has must state a category, and all of them must be the same one of the field's
- * values, in whatever case. A page with a related product, several products, a product that
- * states none, or one whose category is no value (such as Accessories) is left to the deciders.
- * The answer is the value as the definition spells it.
+ * values, in whatever case. A page is left to the deciders when its products' categories differ
+ * (a related product, or several different ones), when a product states none, or when a category
+ * is no value (such as Accessories). The answer is the value as the definition spells it.
  */
 export function classifyRule(state: ClassifyState, field: FieldDef): string | null {
   const { categories, products } = state;

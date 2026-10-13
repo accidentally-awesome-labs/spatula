@@ -109,8 +109,9 @@ function offeredProbabilities(
 /**
  * A question through the cascade. A decider that throws fails the call, and the caller records the
  * failure and asks again on a later run: a person isn't asked what a decider could still answer.
- * What a decider answers is checked: only an offered answer with a probability can be taken or
- * proposed, and only the probabilities of offered answers are passed on.
+ * What a decider answers is checked: an answer that wasn't offered is neither taken nor proposed,
+ * and an answer is taken only on its own probability. Only the offered answers' probabilities,
+ * each above 0 and at most 1, are passed on.
  */
 export async function cascade(input: {
   request: DecisionRequest;
