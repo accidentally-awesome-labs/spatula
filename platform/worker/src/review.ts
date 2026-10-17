@@ -176,8 +176,9 @@ async function refuseSecondRecord(tx: Executor, review: ReviewRow): Promise<Revi
 }
 
 /**
- * Publishing and discarding close the snapshot's question in the same transaction (Task 15), so an
- * answer that loses a race to another, or to a newer run, finds the snapshot no longer held.
+ * Publishing and discarding close the snapshot's question in the same transaction (`publishHeld`
+ * and `discardHeld` in the store), so an answer that loses a race to another, or to a newer run,
+ * finds the snapshot no longer held.
  */
 async function answerPublication(
   ports: ReviewPorts,

@@ -25,14 +25,7 @@ import { and, eq, isNull, sql } from 'drizzle-orm';
 import { describe, expect, it } from 'vitest';
 import { db } from '../test/node/db';
 import { fakeDecider, type World } from '../test/node/fakes';
-import {
-  DT_250,
-  DT_80,
-  routesWith,
-  URL_A3,
-  versionsAndAPage,
-  withThirdPage,
-} from '../test/node/match-world';
+import { DT_250, DT_80, routesWith, versionsAndAPage } from '../test/node/match-world';
 import { decidedDefinition, entityOf, published, refresh, worldFor } from '../test/node/runs';
 import { productPage, standardRoutes, URLS } from '../test/pages';
 import { PUBLISH_QUESTION, publishHeldSnapshot } from './publish';
@@ -195,13 +188,16 @@ async function classifyAsked(datasetId: string, probabilities: Record<string, nu
   return { world, page: a1!, question: question! };
 }
 
+/** What a decider says of a page and a record when it can't tell whether they are the same. */
+const UNSURE = { same: 0.5, variant: 0.45 };
+
 /** Two versions of one headphone, and a decider that can't tell whether the page is the same. */
 async function matchAsked(datasetId: string) {
   const {
     world,
     pages: [a1, a2],
   } = await worldFor(testDefinition(datasetId), routesWith(DT_80, DT_250));
-  world.ports.decider = fakeDecider(() => ({ same: 0.5, variant: 0.45 })).decider;
+  world.ports.decider = fakeDecider(() => UNSURE).decider;
   await refresh(world, datasetId);
   const [question] = await listOpenReviews(db, datasetId);
   return { world, a1: a1!, page: a2!, question: question! };
@@ -641,31 +637,14 @@ describe('answering a publication question after its snapshot changed', { timeou
 
 describe('a page that two questions ask about', { timeout: 20_000 }, () => {
   /**
-   * Two versions of one headphone, split in the first run, and a page that gives only their name.
-   * The decider is sure the 250 is a version of the 80, and unsure whether the page is either, so
-   * the second run asks a person about the page and each record.
+   * The questions that wait when a decider, unsure whether a page is either of two records, leaves
+   * a person to say (`versionsAndAPage` with UNSURE): one for each record, found by its ID.
    */
-  async function pageWithTwoQuestions(datasetId: string) {
-    const routes = routesWith(DT_80, DT_250);
-    routes[URL_A3] = { status: 200, body: productPage({ name: 'DT 770 PRO' }) };
-    const {
-      world,
-      pages: [a1, a2, page],
-    } = await worldFor(withThirdPage(testDefinition(datasetId)), routes);
-    world.ports.decider = fakeDecider(
-      (request): Record<string, number> =>
-        request.evidence.startsWith(`Record A (${URLS.a2}):`)
-          ? { variant: 0.97 }
-          : { same: 0.5, variant: 0.45 },
-    ).decider;
-    await refresh(world, datasetId);
-    const [e1, e2] = [(await entityOf(a1!.id))!, (await entityOf(a2!.id))!];
-    await refresh(world, datasetId);
+  async function askedAbout(datasetId: string, pageId: string) {
     const asked = await listOpenReviews(db, datasetId);
     expect(asked).toHaveLength(2);
-    const about = (entityId: string) =>
-      asked.find((review) => review.subject === `${page!.id}|${entityId}`)!;
-    return { world, page: page!, e1, e2, about };
+    return (entityId: string) =>
+      asked.find((review) => review.subject === `${pageId}|${entityId}`)!;
   }
 
   const answer = (world: World, datasetId: string, reviewId: string, value: string) =>
@@ -673,7 +652,8 @@ describe('a page that two questions ask about', { timeout: 20_000 }, () => {
 
   it('refuses a second “same” from a person, names the record the first chose, and keeps its question open', async () => {
     const datasetId = 'review-two-same';
-    const { world, page, e1, e2, about } = await pageWithTwoQuestions(datasetId);
+    const { world, page, e1, e2 } = await versionsAndAPage(datasetId, UNSURE);
+    const about = await askedAbout(datasetId, page.id);
     expect(await answer(world, datasetId, about(e1).id, 'same')).toEqual({
       kind: 'answered',
       effect: 'The page joins that record at the next run.',
@@ -708,8 +688,8 @@ describe('a page that two questions ask about', { timeout: 20_000 }, () => {
 
   it('takes a person’s “same” again about the record they already chose', async () => {
     const datasetId = 'review-same-again';
-    const { world, page, e1, about } = await pageWithTwoQuestions(datasetId);
-    const asked = about(e1);
+    const { world, page, e1 } = await versionsAndAPage(datasetId, UNSURE);
+    const asked = (await askedAbout(datasetId, page.id))(e1);
     expect(await answer(world, datasetId, asked.id, 'same')).toMatchObject({ kind: 'answered' });
     // The pair is asked once more, as a change to the question would have it.
     await openReview(db, {
@@ -731,7 +711,8 @@ describe('a page that two questions ask about', { timeout: 20_000 }, () => {
 
   it('refuses a “same” for a page that is joined to another record already', async () => {
     const datasetId = 'review-joined';
-    const { world, page, e1, e2, about } = await pageWithTwoQuestions(datasetId);
+    const { world, page, e1, e2 } = await versionsAndAPage(datasetId, UNSURE);
+    const about = await askedAbout(datasetId, page.id);
     await db.update(items).set({ entityId: e1 }).where(eq(items.id, page.id));
     expect(await answer(world, datasetId, about(e2).id, 'same')).toEqual({
       kind: 'refused',
@@ -769,7 +750,8 @@ describe('a page that two questions ask about', { timeout: 20_000 }, () => {
 
   it('waits for an answer in progress about the page, and then checks what that one said', async () => {
     const datasetId = 'review-page-lock';
-    const { world, page, e1, e2, about } = await pageWithTwoQuestions(datasetId);
+    const { world, page, e1, e2 } = await versionsAndAPage(datasetId, UNSURE);
+    const about = await askedAbout(datasetId, page.id);
     let answering!: ReturnType<typeof answer>;
     let answeredEarly = false;
     // Another answer about the page has its lock and has said "same" for e1, and hasn't committed.
@@ -806,7 +788,8 @@ describe('a page that two questions ask about', { timeout: 20_000 }, () => {
 
   it('lets only one of two “same” answers sent at once take effect', async () => {
     const datasetId = 'review-same-at-once';
-    const { world, page, e1, e2, about } = await pageWithTwoQuestions(datasetId);
+    const { world, page, e1, e2 } = await versionsAndAPage(datasetId, UNSURE);
+    const about = await askedAbout(datasetId, page.id);
     const entities = [e1, e2];
     const results = await Promise.all(
       entities.map((entityId) => answer(world, datasetId, about(entityId).id, 'same')),

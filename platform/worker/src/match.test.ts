@@ -152,6 +152,21 @@ describe('matching pages', { timeout: 20_000 }, () => {
     expect(scripted.calls).toHaveLength(1);
   });
 
+  it('names the record a question asks about by its ID, beside the page that stands for it', async () => {
+    const {
+      world,
+      pages: [a1],
+    } = await worldFor(testDefinition('match-record'), routesWith(DT_80, DT_250));
+    world.ports.decider = fakeDecider(() => ({ same: 0.5, variant: 0.45 })).decider;
+    await refresh(world, 'match-record');
+    // A refusal names a record by its ID, so the listing has to show which question that is.
+    const e1 = await entityOf(a1!.id);
+    expect(e1).not.toBeNull();
+    const [question] = await listOpenReviews(db, 'match-record');
+    expect(question!.context).toMatchObject({ entity: URLS.a1, page: URLS.a2 });
+    expect(question!.context.record).toBe(e1);
+  });
+
   it('asks about a similar name within the brand, showing the decider both records', async () => {
     const {
       world,

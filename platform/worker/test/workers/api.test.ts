@@ -925,9 +925,17 @@ describe('review', () => {
       ],
     });
     // Another dataset's questions aren't this one's.
-    expect(await (await call('GET', '/datasets/api-review/review')).json()).toEqual({
+    await call('PUT', '/datasets/api-review-other', { body: testDefinition('api-review-other') });
+    expect(await (await call('GET', '/datasets/api-review-other/review')).json()).toEqual({
       reviews: [],
     });
+  });
+
+  it('answers 404 for a dataset that doesn’t exist, as a run does, not an empty list', async () => {
+    const response = await call('GET', '/datasets/api-review-nothing/review');
+    expect(response.status).toBe(404);
+    expectNoStore(response);
+    expect(await response.json()).toEqual({ error: 'Dataset api-review-nothing doesn’t exist.' });
   });
 
   it('refuses an answer that isn’t an option, one for a question answered already, and one it can’t read', async () => {

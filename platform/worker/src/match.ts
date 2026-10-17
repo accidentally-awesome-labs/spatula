@@ -201,6 +201,9 @@ async function applyVerdict(
       question: decision.question,
       context: {
         page: sides.page.url,
+        // The record's ID, which is how a refusal names it, and the address of the page that
+        // stands for the record.
+        record: entityId,
         entity: sides.entity.url,
         proposed,
         probabilities: decision.probabilities,

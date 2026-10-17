@@ -109,11 +109,19 @@ export function formatReviews(datasetId: string, reviews: ReviewView[]): string[
       typeof context[key] === 'string' ? (context[key] as string) : '';
     const number = (key: string) =>
       typeof context[key] === 'number' ? (context[key] as number) : 0;
+    // A match question names the record by its ID, which is how a refusal names it, and then the
+    // address of the page that stands for it. A question asked before the ID was kept names the two
+    // pages alone.
+    const record = text('record');
+    const pair =
+      record === ''
+        ? `${text('page')} and ${text('entity')}`
+        : `${text('page')} and ${record} (${text('entity')})`;
     const about =
       review.kind === 'classify'
         ? text('url')
         : review.kind === 'match'
-          ? `${text('page')} and ${text('entity')}`
+          ? pair
           : text('snapshotId');
     lines.push('', `${review.id}  ${review.kind}  ${about}`);
     if (review.kind === 'publication') {
@@ -136,12 +144,15 @@ export function formatReviews(datasetId: string, reviews: ReviewView[]): string[
     } else {
       lines.push(`  ${review.question.prompt}`);
       const proposed = text('proposed');
-      const probabilities = (context.probabilities ?? {}) as Record<string, unknown>;
-      const probability = probabilities[proposed];
+      const reason = text('reason');
       if (proposed !== '') {
+        const probabilities = (context.probabilities ?? {}) as Record<string, unknown>;
+        const probability = probabilities[proposed];
         const sure = typeof probability === 'number' ? ` (${probability.toFixed(2)})` : '';
-        const reason = text('reason');
         lines.push(`  Proposed: ${proposed}${sure}.${reason === '' ? '' : ` ${reason}`}`);
+      } else if (reason !== '') {
+        // The decider named no answer, but a person deciding still wants to know why.
+        lines.push(`  Nothing proposed. ${reason}`);
       }
     }
     lines.push(`  Answers: ${optionsOf(review.question).join(' | ')}`);

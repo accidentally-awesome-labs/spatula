@@ -256,7 +256,12 @@ api.post('/datasets/:id/items/revive', async (c) => {
 });
 
 api.get('/datasets/:id/review', async (c) => {
-  const reviews = await withDatabase(c.env, (db) => listOpenReviews(db, c.req.param('id')));
+  const datasetId = c.req.param('id');
+  // A dataset that isn't there has no questions, but an empty list would read as nothing waiting.
+  const reviews = await withDatabase(c.env, async (db) =>
+    (await datasetExists(db, datasetId)) ? listOpenReviews(db, datasetId) : null,
+  );
+  if (reviews === null) return c.json({ error: `Dataset ${datasetId} doesn’t exist.` }, 404);
   return c.json({ reviews });
 });
 

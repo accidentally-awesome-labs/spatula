@@ -873,31 +873,34 @@ describe('review', () => {
     ]);
   });
 
+  // A match question as a run asks it now: it names the record by its ID, which is how a refusal
+  // names it, and by the address of the page that stands for the record.
+  const MATCH_CONTEXT = {
+    page: 'https://maker-a.example/products/a3',
+    entity: 'https://maker-a.example/products/a1',
+    proposed: 'same',
+    probabilities: { same: 0.5, variant: 0.45 },
+    reason: 'The names agree.',
+  };
+  const MATCH: ReviewView = {
+    id: 'rv_match',
+    kind: 'match',
+    subject: 'it_a3|sp_one',
+    question: {
+      type: 'choice',
+      prompt: 'Is this page the same product as the record?',
+      options: ['same', 'variant', 'different'],
+    },
+    context: { ...MATCH_CONTEXT, record: 'sp_one' },
+    createdAt: '2026-10-10T00:00:00.000Z',
+  };
+
   it('shows a match question’s page and record, and a question that waits alone in the singular', async () => {
-    const out = await listed([
-      {
-        id: 'rv_match',
-        kind: 'match',
-        subject: 'it_a3|sp_one',
-        question: {
-          type: 'choice',
-          prompt: 'Is this page the same product as the record?',
-          options: ['same', 'variant', 'different'],
-        },
-        context: {
-          page: 'https://maker-a.example/products/a3',
-          entity: 'https://maker-a.example/products/a1',
-          proposed: 'same',
-          probabilities: { same: 0.5, variant: 0.45 },
-          reason: 'The names agree.',
-        },
-        createdAt: '2026-10-10T00:00:00.000Z',
-      },
-    ]);
+    const out = await listed([MATCH]);
     expect(out).toEqual([
       '1 question waits for an answer.',
       '',
-      'rv_match  match  https://maker-a.example/products/a3 and https://maker-a.example/products/a1',
+      'rv_match  match  https://maker-a.example/products/a3 and sp_one (https://maker-a.example/products/a1)',
       '  Is this page the same product as the record?',
       '  Proposed: same (0.50). The names agree.',
       '  Answers: same | variant | different',
@@ -906,13 +909,23 @@ describe('review', () => {
     ]);
   });
 
-  it('shows what the decider proposed as far as it said, and nothing where it proposed nothing', async () => {
+  it('names the two pages alone for a match question asked before it named the record', async () => {
+    const out = await listed([{ ...MATCH, context: MATCH_CONTEXT }]);
+    expect(out[2]).toBe(
+      'rv_match  match  https://maker-a.example/products/a3 and https://maker-a.example/products/a1',
+    );
+    // An empty record, or one that isn't text, is no record.
+    for (const record of ['', null, 7]) {
+      const listing = await listed([{ ...MATCH, context: { ...MATCH_CONTEXT, record } }]);
+      expect(listing[2], JSON.stringify(record)).toBe(out[2]);
+    }
+  });
+
+  it('shows what the decider proposed as far as it said, and why where it proposed nothing', async () => {
+    const shown = (context: Record<string, unknown>) =>
+      listed([{ ...REVIEWS[0]!, context: { url: 'https://maker-a.example/a1', ...context } }]);
     const proposals = async (context: Record<string, unknown>) =>
-      (
-        await listed([
-          { ...REVIEWS[0]!, context: { url: 'https://maker-a.example/a1', ...context } },
-        ])
-      ).filter((line) => line.startsWith('  Proposed'));
+      (await shown(context)).filter((line) => line.startsWith('  Proposed'));
     expect(
       await proposals({ proposed: 'Headphones', probabilities: { Headphones: 0.62 } }),
     ).toEqual(['  Proposed: Headphones (0.62).']);
@@ -926,6 +939,29 @@ describe('review', () => {
         reason: 'The decider named no answer.',
       }),
     ).toEqual([]);
+
+    // Where nothing was proposed, the reason is still the one thing the decider said.
+    expect(
+      await shown({ proposed: null, probabilities: {}, reason: 'The decider named no answer.' }),
+    ).toEqual([
+      '1 question waits for an answer.',
+      '',
+      'rv_classify  classify  https://maker-a.example/a1',
+      '  Which category does the one product this page is about have?',
+      '  Nothing proposed. The decider named no answer.',
+      '  Answers: Headphones | DAC/Amp | None of these',
+      '',
+      'Answer with: spatula review cli-products <id> "<answer>"',
+    ]);
+    // With no reason either, there is nothing to say.
+    for (const context of [{ proposed: null, probabilities: {} }, { reason: '' }, {}]) {
+      const lines = await shown(context);
+      expect(
+        lines.filter((line) => /^ {2}(Proposed|Nothing proposed)/u.test(line)),
+        JSON.stringify(context),
+      ).toEqual([]);
+      expect(lines, JSON.stringify(context)).toHaveLength(7);
+    }
   });
 
   it('counts a held snapshot’s records, and how many of them are new and how many went', async () => {
@@ -1033,6 +1069,19 @@ describe('review', () => {
     expect(await main(['review', 'cli-products'], { io, env: ENV, fetch })).toBe(1);
     expect(err).toEqual(['The owner token is missing or wrong.']);
     expect(out).toEqual([]);
+  });
+
+  it('reports a dataset Spatula doesn’t have, as revive does, and sends only the listing', async () => {
+    const { fetch, sent } = stubApi(() =>
+      Response.json({ error: 'Dataset nothing doesn’t exist.' }, { status: 404 }),
+    );
+    const { io, out, err } = memoryIo();
+    expect(await main(['review', 'nothing'], { io, env: ENV, fetch })).toBe(1);
+    expect(err).toEqual(['Dataset nothing doesn’t exist.']);
+    expect(out).toEqual([]);
+    expect(sent.map(({ method, path }) => ({ method, path }))).toEqual([
+      { method: 'GET', path: '/datasets/nothing/review' },
+    ]);
   });
 });
 
@@ -1492,7 +1541,11 @@ describe('what reaches the terminal', () => {
         kind: 'match',
         subject: 'it_2|sp_1',
         question,
-        context: { page: 'https://evil.example/\u009b31m', entity: 'sp\u{2028}1' },
+        context: {
+          page: 'https://evil.example/\u009b31m',
+          entity: 'sp\u{2028}1',
+          record: 'sp_\u001b[2J1',
+        },
         createdAt: '2026-10-10T00:00:00.000Z',
       },
       {
@@ -1516,7 +1569,7 @@ describe('what reaches the terminal', () => {
       String.raw`  Proposed: a (0.60). ignore \u{1b}[2J all that\u{a}Answered rv_x: b \u{202e}`,
     );
     expect(first.out).toContain(
-      String.raw`rv_match  match  https://evil.example/\u{9b}31m and sp\u{2028}1`,
+      String.raw`rv_match  match  https://evil.example/\u{9b}31m and sp_\u{1b}[2J1 (sp\u{2028}1)`,
     );
     expect(first.out).toContain(String.raw`rv_publish  publication  sn_\u{7}`);
     expect(first.out).toContain(String.raw`  Held because a \u{1b}[31mred\u{1b}[0m reason.`);

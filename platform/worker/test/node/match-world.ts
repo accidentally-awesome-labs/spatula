@@ -34,9 +34,14 @@ export function withThirdPage(definition: Definition): Definition {
 
 /**
  * Two versions, split in the first run, and a page that gives only their name. The decider says
- * the 250 is a version of the 80, and the page is the same as whichever it is asked about.
+ * the 250 is a version of the 80, and `otherwise` is what it says of the page and each record: by
+ * default it is sure the page is the same as whichever it is asked about, and a test that wants a
+ * person asked about both passes probabilities that aren't sure.
  */
-export async function versionsAndAPage(datasetId: string) {
+export async function versionsAndAPage(
+  datasetId: string,
+  otherwise: Record<string, number> = { same: 0.98 },
+) {
   const routes = routesWith(DT_80, DT_250);
   routes[URL_A3] = { status: 200, body: productPage({ name: 'DT 770 PRO' }) };
   const definition = withThirdPage(testDefinition(datasetId));
@@ -46,7 +51,7 @@ export async function versionsAndAPage(datasetId: string) {
   } = await worldFor(definition, routes);
   const scripted = fakeDecider(
     (request): Record<string, number> =>
-      request.evidence.startsWith(`Record A (${URLS.a2}):`) ? { variant: 0.97 } : { same: 0.98 },
+      request.evidence.startsWith(`Record A (${URLS.a2}):`) ? { variant: 0.97 } : otherwise,
   );
   world.ports.decider = scripted.decider;
   await refresh(world, datasetId);
