@@ -10,13 +10,15 @@ import { similarity } from './trigrams';
  * color and another impedance both change a GTIN, and only one of them is another product. The
  * same goes for a name that several entities carry, as the versions of one model do once an answer
  * has split them: a name alone doesn't say which, so the cascade is asked about them all. A page
- * that gives only a name waits, rather than join an entity or start one, while the pages that give
- * identifiers under that name are still sorting out the entities that carry it (`contestedNames`).
+ * that gives only a name waits, rather than join an entity or start one, while it isn't settled
+ * which entities carry that name: the pages that give identifiers under it still disagree, or a
+ * person has yet to say whether a page of that name is an entity's (`contestedNames`).
  * A page that matches nothing starts its own entity, unless an entity within its scope (for
  * products, its brand) has a similar name: then the cascade is asked about the closest few first.
  * Verdicts decide: "same" joins, "not the same" keeps the page apart for good, and "unsure" waits
- * for a person. A page that is said to be the same as several entities, or as one while a question
- * about it waits, joins only the one a person chose, and otherwise waits for a person.
+ * for a person. Several "same" verdicts join the page to nothing, unless exactly one is a person's:
+ * the page joins that entity. One "same" beside a question that waits for a person waits for that
+ * question.
  */
 
 /** How alike two names must be, by trigrams, for the cascade to be asked whether they're one. */
@@ -215,9 +217,10 @@ export function planMatch(input: {
   const apart = new Set(given('not_same'));
   const pending = new Set(given('unsure'));
   // "Same" is final, and the page joins the entity, when it is the only one and nothing else about
-  // the page waits for a person. A person's "same" settles it whatever else is said. Several
-  // decisions that the page is the same as entities that were kept apart contradict each other, and
-  // so does one beside a question that waits: a person says which.
+  // the page waits for a person. A person's "same" settles it whatever else is said, if it is the
+  // only one a person gave. Several "same" verdicts contradict each other, as the entities were
+  // kept apart: the page joins none of them. One beside a question that waits for a person waits
+  // for that question.
   const same = given('same');
   const chosen = same.filter((entityId) => input.byPerson.has(entityId));
   if (chosen.length === 1) return { kind: 'join', entityId: chosen[0]! };
@@ -225,8 +228,9 @@ export function planMatch(input: {
   if (same.length > 1) return { kind: 'dispute', entityIds: same };
   if (same.length === 1) return { kind: 'wait' };
   // A page that gives only a name can't say which entity it belongs to, or whether it starts one,
-  // while the pages that give identifiers under that name are sorting out the entities that carry
-  // it. It waits whatever it would do: joining, starting an entity, or asking about the others.
+  // while it isn't settled which entities carry that name: the pages that give identifiers under it
+  // are sorting that out, or a person has a question to answer about a page of that name. It waits
+  // whatever it would do: joining, starting an entity, or asking about the others.
   const contested = claims.find((claim) => input.contested.has(claim.value));
   if (contested !== undefined && claims.every((claim) => claim.rank >= keyRank)) {
     // One that waits for a person already is not held for the contest.

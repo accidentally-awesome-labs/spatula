@@ -184,7 +184,7 @@ describe('planMatch', () => {
   });
 
   describe('where several entities share the name', () => {
-    // DT_250 was split off DT_80 by a "variant" answer. Both carry the name, and DT_80 owns its key.
+    // DT_250 was split off DT_80 by a "variant" answer. Both carry the name; DT_80 owns its key.
     const named = { brand: ['beyerdynamic'], name: ['DT 770 PRO'] };
     const split = { sp_e1: DT_80, sp_e2: DT_250 };
 

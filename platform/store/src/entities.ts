@@ -37,18 +37,24 @@ export interface EntityResolution {
 
 /**
  * Joins each live page to the entity it describes. Pages already joined claim their keys first,
- * so a new page finds them, and then the pages that give an identifier, ahead of those that give
- * only a name: where the first join or start entities decides which entities carry a name. A page
- * that isn't joined yet follows its match plan: it joins on an identifier, or on a name that no
- * identifier contradicts and no other entity shares; it starts a new entity, with a canonical ID
- * assigned once; or it waits for a question about an entity to be asked and answered.
+ * so a new page finds them. The pages that aren't joined yet follow, each group ahead of the pages
+ * that have to see where it lands: first those that give an identifier, since joining by one makes
+ * an entity carry the page's name too; then those that give only a name and have a verdict, since
+ * a verdict places a page (it joins the entity a person chose, or starts one of its own); and last
+ * those that give only a name and have none. A page follows its match plan: it joins on an
+ * identifier, or on a name that no identifier contradicts and no other entity shares; it starts a
+ * new entity, with a canonical ID assigned once; or it waits for a question about an entity to be
+ * asked and answered.
  *
  * A page that gives only a name waits too, whichever pages sort before it, while its name is
  * contested (`contestedNames`, worked out from where the pass begins): the pages that give
- * identifiers under it disagree, or a person has yet to say whether one is an entity's. A note
- * says how many pages wait on each such name. Once the contest settles the page follows the plan
- * above. A page that decisions say is the same as several entities waits for a person, with a
- * note, unless one person chose among them.
+ * identifiers under it disagree, or a person has yet to say whether a page of that name is an
+ * entity's. A note says how many pages wait on each such name. Once the contest settles the page
+ * follows the plan above.
+ *
+ * Several "same" verdicts about a page join it to none of those entities, and a note says so,
+ * unless exactly one is a person's: the page joins that entity. One "same" beside a question that
+ * waits for a person waits for that question.
  *
  * A claim another entity already owns is reported as a conflict and changes nothing. The
  * exception is a name that two entities share once their pages have been judged not the same:
@@ -200,9 +206,12 @@ export async function resolveEntities(
     const held = new Map<string, { label: string; pages: number }>();
     const joined = pages.filter((page) => page.entityId !== null);
     const unjoined = pages.filter((page) => page.entityId === null);
-    // Pages that give an identifier go before those that give only a name. A page that joins an
-    // entity by an identifier makes that entity carry its name too, and a page that gives only the
-    // name has to see that before it joins the entity that carried the name first.
+    // The pages that aren't joined yet go in three groups, each ahead of the pages that have to see
+    // where it lands. A page that joins an entity by an identifier makes that entity carry its name
+    // too, and a page that gives only a name has to see that before it joins the entity that
+    // carried the name first. Among the pages that give only a name, a verdict places a page: it
+    // joins the entity a person chose, or is kept apart from it and starts an entity of its own,
+    // which then carries the name. A page with no verdict has to see where those land.
     const givesIdentifier = (page: (typeof pages)[number]) => {
       const recordType = definition.recordTypes[page.recordType];
       return (
@@ -214,7 +223,9 @@ export async function resolveEntities(
     };
     const identified = unjoined.filter(givesIdentifier);
     const nameOnly = unjoined.filter((page) => !givesIdentifier(page));
-    for (const page of [...joined, ...identified, ...nameOnly]) {
+    const judged = nameOnly.filter((page) => verdicts.has(page.id));
+    const unjudged = nameOnly.filter((page) => !verdicts.has(page.id));
+    for (const page of [...joined, ...identified, ...judged, ...unjudged]) {
       const recordType = definition.recordTypes[page.recordType];
       if (recordType === undefined) continue;
       const values = valuesOf(page, recordType);
@@ -252,9 +263,11 @@ export async function resolveEntities(
           continue;
         }
         if (plan.kind === 'dispute') {
+          // The note states the fact. Nothing here asks anyone to settle it.
           result.waiting += 1;
+          const joins = plan.entityIds.length === 2 ? 'neither' : 'none of them';
           result.notes.push(
-            `${page.locator} is judged the same as ${listed(plan.entityIds)}, and waits for a person to say which`,
+            `${page.locator} is judged the same as ${listed(plan.entityIds)}, so it joins ${joins}`,
           );
           continue;
         }
@@ -303,11 +316,13 @@ export async function resolveEntities(
         }
       }
     }
-    // One note for each name, so that a held page doesn't show only in a count.
+    // One note for each name, so that a held page doesn't show only in a count. It doesn't say why
+    // the name is contested: pages that give identifiers may disagree, or a person may have a
+    // question to answer about a page of that name.
     for (const { label, pages: count } of held.values()) {
       const who = count === 1 ? 'page that gives only the name' : 'pages that give only the name';
       result.notes.push(
-        `${count} ${who} "${cut(label)}" ${count === 1 ? 'waits' : 'wait'} for the pages that give identifiers under it to settle`,
+        `${count} ${who} "${cut(label)}" ${count === 1 ? 'waits' : 'wait'} until it’s settled which entities carry the name`,
       );
     }
     // Questions nobody has asked yet come first, so asking again can't crowd them out of the cap.

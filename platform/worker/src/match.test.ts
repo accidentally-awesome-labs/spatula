@@ -236,7 +236,7 @@ describe('a page that gives only a name', { timeout: 20_000 }, () => {
       } = await worldFor(withThirdPage(testDefinition(datasetId)), routes);
       const [page, v80, v250] = order === 'before' ? [a1!, a2!, a3!] : [a3!, a1!, a2!];
       const v250Url = order === 'before' ? URL_A3 : URLS.a2;
-      // The 250 is a version of the 80. The page is the 250 ohm one: the same as that, not as the 80.
+      // The 250 is a version of the 80. The page is the 250 ohm one: the same as that, not the 80.
       const scripted = fakeDecider((request): Record<string, number> => {
         if (request.evidence.startsWith(`Record A (${v250Url}):`)) return { variant: 0.97 };
         return request.evidence.includes(`Record B (${v250Url}):`)
@@ -256,7 +256,7 @@ describe('a page that gives only a name', { timeout: 20_000 }, () => {
       expect(first.summary.entities).toMatchObject({ waiting: 1 });
       expect(first.summary.notes).toContainEqual(
         expect.stringMatching(
-          /^1 page that gives only the name ".*DT 770 PRO" waits for the pages/u,
+          /^1 page that gives only the name ".*DT 770 PRO" waits until it’s settled/u,
         ),
       );
 

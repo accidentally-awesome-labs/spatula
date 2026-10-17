@@ -389,7 +389,7 @@ describe('resolveEntities where a page gives only a name', () => {
         expect(first.questions).toEqual([{ itemId: v250.id, entityId: e1 }]);
         expect(await entityOf(db, p)).toBeNull();
         expect(first.notes).toContain(
-          '1 page that gives only the name "Maker A DT 770 PRO" waits for the pages that give identifiers under it to settle',
+          '1 page that gives only the name "Maker A DT 770 PRO" waits until it’s settled which entities carry the name',
         );
 
         // A variant. The page waits this pass too: the 250 was still sorting itself out when the
@@ -425,7 +425,7 @@ describe('resolveEntities where a page gives only a name', () => {
       await says(db, runId, p2, 0, named);
       const { notes } = await resolve(db);
       expect(notes.filter((text) => text.includes(' only the name '))).toEqual([
-        '2 pages that give only the name "Maker A DT 770 PRO" wait for the pages that give identifiers under it to settle',
+        '2 pages that give only the name "Maker A DT 770 PRO" wait until it’s settled which entities carry the name',
       ]);
     }));
 
@@ -444,7 +444,7 @@ describe('resolveEntities where a page gives only a name', () => {
       const [note, ...more] = notes.filter((text) => text.includes(' only the name '));
       expect(more).toEqual([]);
       expect(note).toMatch(
-        /^1 page that gives only the name "Maker A Studio x+…" waits for the pages/u,
+        /^1 page that gives only the name "Maker A Studio x+…" waits until it’s settled/u,
       );
       expect(note!.length).toBeLessThan(200);
     }));
@@ -465,6 +465,10 @@ describe('resolveEntities where a page gives only a name', () => {
       const held = await resolve(db);
       expect(held).toMatchObject({ created: 0, linked: 0, waiting: 2, questions: [] });
       expect(await entityOf(db, p)).toBeNull();
+      // No page gives an identifier under the name, and the note doesn't say one does.
+      expect(held.notes.filter((text) => text.includes(' only the name '))).toEqual([
+        '1 page that gives only the name "Maker A DT 770 PRO" waits until it’s settled which entities carry the name',
+      ]);
       expect(await resolve(db)).toMatchObject({ linked: 0, waiting: 2 });
 
       // The person says they are the same, and the name is no longer contested.
@@ -632,6 +636,79 @@ describe('resolveEntities where a page that gives an identifier joins an entity 
   }
 });
 
+/** Every order of a list. */
+const orders = <T>(list: readonly T[]): T[][] =>
+  list.length < 2
+    ? [[...list]]
+    : list.flatMap((item, at) =>
+        orders([...list.slice(0, at), ...list.slice(at + 1)]).map((rest) => [item, ...rest]),
+      );
+
+describe('resolveEntities where a verdict places a page that gives only a name', () => {
+  const nameOnly = [statementOf('brand', 'Maker A'), statementOf('name', 'DT 770 PRO', 'jsonld')];
+  const roles = ['same', 'apart', 'new'] as const;
+
+  // A decider says the "same" page is the entity's and a person says the "apart" page isn't, so in
+  // the pass that reads the answers the first joins the entity and the second starts one, and both
+  // then carry the name. The new page has no verdict. Whichever of the three sorts first, it has to
+  // see where the others land: it is asked about both entities, and joins neither.
+  for (const order of orders(roles)) {
+    it(`asks a page with no verdict about both entities, with the pages sorting ${order.join(', ')}`, () =>
+      withRollback(async (db) => {
+        const { runId } = await seedDataset(db);
+        const [owner, ...sorted] = await makerAFour(db);
+        const at = Object.fromEntries(order.map((role, index) => [role, sorted[index]!])) as Record<
+          (typeof roles)[number],
+          ItemRef
+        >;
+        await says(db, runId, owner!, 0, product('Maker A', 'DT 770 PRO X', '04010118471087'));
+        await says(db, runId, at.same, 0, nameOnly);
+        await says(db, runId, at.apart, 0, nameOnly);
+        const first = await resolve(db);
+        expect(first).toMatchObject({ created: 1, linked: 0, waiting: 2 });
+        const e1 = (await entityOf(db, owner!))!;
+        expect(first.questions).toHaveLength(2);
+
+        await judged(db, at.same, e1, 'same');
+        await judged(db, at.apart, e1, 'not_same', 'person');
+        await says(db, runId, at.new, 5, nameOnly);
+        const second = await resolve(db);
+        expect(await entityOf(db, at.same)).toBe(e1);
+        const started = await entityOf(db, at.apart);
+        expect(started).not.toBeNull();
+        expect(started).not.toBe(e1);
+        expect(await entityOf(db, at.new)).toBeNull();
+        expect(second).toMatchObject({ linked: 1, created: 1, conflicts: 0, waiting: 1 });
+        expect(second.questions.map((question) => question.itemId)).toEqual([at.new.id, at.new.id]);
+        expect(second.questions.map((question) => question.entityId).sort()).toEqual(
+          [e1, started!].sort(),
+        );
+      }));
+  }
+
+  it('plans a page that gives an identifier ahead of one with a verdict, which then sees where it lands', () =>
+    withRollback(async (db) => {
+      const { runId } = await seedDataset(db);
+      const [owner, other, page, joining] = await makerAFour(db);
+      await says(db, runId, owner!, 0, product('Maker A', 'DT 770 PRO X', '04010118471087'));
+      await says(db, runId, other!, 0, product('Maker A', 'DT 770 Studio', '04010118471070'));
+      await says(db, runId, page!, 0, nameOnly);
+      const first = await resolve(db);
+      expect(first).toMatchObject({ created: 2, waiting: 1 });
+      const [e1, eY] = [(await entityOf(db, owner!))!, (await entityOf(db, other!))!];
+      expect(first.questions).toEqual([{ itemId: page!.id, entityId: e1 }]);
+
+      // A person says the page isn't the "X". Then a page that sorts after it gives the GTIN of the
+      // other entity and the same name, and joins that entity, which carries the name from then on.
+      await judged(db, page!, e1, 'not_same', 'person');
+      await says(db, runId, joining!, 5, product('Maker A', 'DT 770 PRO', '04010118471070'));
+      const second = await resolve(db);
+      expect(await entityOf(db, joining!)).toBe(eY);
+      expect(await entityOf(db, page!)).toBe(eY);
+      expect(second).toMatchObject({ linked: 2, created: 0, conflicts: 0, waiting: 0 });
+    }));
+});
+
 describe('resolveEntities where verdicts say a page is the same as several entities', () => {
   const nameOnly = [statementOf('brand', 'Maker A'), statementOf('name', 'DT 770 PRO', 'jsonld')];
 
@@ -643,7 +720,7 @@ describe('resolveEntities where verdicts say a page is the same as several entit
     return { page, low: low!, high: high! };
   }
 
-  it('waits when decider verdicts say it is both, and says so', () =>
+  it('joins neither where decider verdicts say it is both, and says so', () =>
     withRollback(async (db) => {
       const { page, low, high } = await pageAndVersions(db);
       await judged(db, page, low, 'same');
@@ -652,7 +729,34 @@ describe('resolveEntities where verdicts say a page is the same as several entit
       expect(result).toMatchObject({ linked: 0, waiting: 1, questions: [] });
       expect(await entityOf(db, page)).toBeNull();
       expect(result.notes).toContain(
-        `${page.locator} is judged the same as ${low} and ${high}, and waits for a person to say which`,
+        `${page.locator} is judged the same as ${low} and ${high}, so it joins neither`,
+      );
+      // Nothing in the note promises that a person will settle it, and nothing is asked.
+      expect(await resolve(db)).toMatchObject({ linked: 0, waiting: 1, questions: [] });
+    }));
+
+  it('joins none of three that decider verdicts say it is, and says so', () =>
+    withRollback(async (db) => {
+      const { runId } = await seedDataset(db);
+      const [a1, a2, a3, page] = await makerAFour(db);
+      // Three entities whose names are nothing alike, so that nothing is asked about them.
+      await says(db, runId, a1, 0, product('Maker A', 'Aurora', '04010118471063'));
+      await says(db, runId, a2, 0, product('Maker A', 'Zephyr', '04010118471070'));
+      await says(db, runId, a3, 0, product('Maker A', 'Quartz', '04010118471087'));
+      expect(await resolve(db)).toMatchObject({ created: 3, questions: [] });
+      const entities = [
+        (await entityOf(db, a1))!,
+        (await entityOf(db, a2))!,
+        (await entityOf(db, a3))!,
+      ].sort();
+      await says(db, runId, page, 5, nameOnly);
+      for (const entityId of entities) await judged(db, page, entityId, 'same');
+      const result = await resolve(db);
+      expect(result).toMatchObject({ linked: 0, waiting: 1, questions: [] });
+      expect(await entityOf(db, page)).toBeNull();
+      const [first, second, third] = entities;
+      expect(result.notes).toContain(
+        `${page.locator} is judged the same as ${first}, ${second} and ${third}, so it joins none of them`,
       );
     }));
 
@@ -665,19 +769,20 @@ describe('resolveEntities where verdicts say a page is the same as several entit
       expect(await entityOf(db, page)).toBe(high);
     }));
 
-  it('waits where a person said it is both, since neither is the person’s choice', () =>
+  it('joins neither where a person said it is both, since neither is the person’s choice', () =>
     withRollback(async (db) => {
       const { page, low, high } = await pageAndVersions(db);
       await judged(db, page, low, 'same', 'person');
       await judged(db, page, high, 'same', 'person');
       const result = await resolve(db);
       expect(result).toMatchObject({ linked: 0, waiting: 1 });
+      expect(await entityOf(db, page)).toBeNull();
       expect(result.notes).toContain(
-        `${page.locator} is judged the same as ${low} and ${high}, and waits for a person to say which`,
+        `${page.locator} is judged the same as ${low} and ${high}, so it joins neither`,
       );
     }));
 
-  it('waits for a person’s answer about one entity, though a decider said it is the other', () =>
+  it('waits for the question about one entity, though a decider said it is the other', () =>
     withRollback(async (db) => {
       const { page, low, high } = await pageAndVersions(db);
       await judged(db, page, low, 'same');
