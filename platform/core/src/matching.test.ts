@@ -3,6 +3,7 @@ import { parseDefinition, type RecordType } from './definition';
 import type { FieldValue } from './fields';
 import { identityClaims } from './identity';
 import {
+  claimLabel,
   contestedNames,
   identifiersDisagree,
   mergeValues,
@@ -63,6 +64,7 @@ const plan = (
   others: Record<string, Values> = {},
   verdicts: Record<string, MatchVerdict> = {},
   contested: boolean | string[] = false,
+  people: string[] = [],
 ) => {
   const owners = new Map<string, string>();
   const scope = nameScope(product, values)?.scope;
@@ -81,6 +83,7 @@ const plan = (
     sameScope,
     verdicts: new Map(Object.entries(verdicts)),
     contested: new Set(contested === true ? nameClaims(values) : contested || []),
+    byPerson: new Set(people),
   });
 };
 
@@ -245,14 +248,65 @@ describe('planMatch', () => {
     });
   });
 
+  describe('where verdicts say the page is the same as an entity', () => {
+    const named = { brand: ['beyerdynamic'], name: ['DT 770 PRO'] };
+    const split = { sp_e1: DT_80, sp_e2: DT_250 };
+
+    it('joins the one entity a decider said it is, when nothing contradicts that', () => {
+      expect(plan(named, split, { sp_e2: 'same' })).toEqual({ kind: 'join', entityId: 'sp_e2' });
+      expect(plan(named, split, { sp_e1: 'not_same', sp_e2: 'same' })).toEqual({
+        kind: 'join',
+        entityId: 'sp_e2',
+      });
+    });
+
+    it('waits while a question about the page waits for a person, whatever a decider said', () => {
+      expect(plan(named, split, { sp_e1: 'same', sp_e2: 'unsure' })).toEqual({ kind: 'wait' });
+    });
+
+    it('waits for the question whatever the entities carry now, and starts no entity', () => {
+      // Nothing else holds the page: no entity carries its name any longer.
+      const verdicts: Record<string, MatchVerdict> = { sp_e1: 'same', sp_e2: 'unsure' };
+      expect(plan(named, {}, verdicts)).toEqual({ kind: 'wait' });
+      const unrelated = { sp_e3: { brand: ['beyerdynamic'], name: ['Amiron Home'] } };
+      expect(plan(named, unrelated, verdicts)).toEqual({ kind: 'wait' });
+    });
+
+    it('joins the entity a person said it is, whatever else is said', () => {
+      const both: Record<string, MatchVerdict> = { sp_e1: 'same', sp_e2: 'same' };
+      expect(plan(named, split, both, false, ['sp_e2'])).toEqual({
+        kind: 'join',
+        entityId: 'sp_e2',
+      });
+      expect(plan(named, split, { sp_e1: 'same', sp_e2: 'unsure' }, false, ['sp_e1'])).toEqual({
+        kind: 'join',
+        entityId: 'sp_e1',
+      });
+    });
+
+    it('is in dispute where several entities are said to be it, and one person didn’t choose', () => {
+      const both: Record<string, MatchVerdict> = { sp_e1: 'same', sp_e2: 'same' };
+      const dispute = { kind: 'dispute', entityIds: ['sp_e1', 'sp_e2'] };
+      expect(plan(named, split, both)).toEqual(dispute);
+      expect(plan(named, split, both, false, ['sp_e1', 'sp_e2'])).toEqual(dispute);
+      // A person's "same" about an entity the page isn't judged the same as chooses nothing.
+      expect(plan(named, split, both, false, ['sp_e9'])).toEqual(dispute);
+    });
+  });
+
   describe('where the name is contested', () => {
     const named = { brand: ['beyerdynamic'], name: ['DT 770 PRO'] };
 
-    it('waits, rather than join an entity or start one on a name alone', () => {
+    it('holds the page, rather than join an entity or start one on a name alone', () => {
+      const held = { kind: 'hold', name: 'key0:beyerdynamic|dt770pro' };
       expect(plan(named, { sp_e1: DT_80 })).toEqual({ kind: 'join', entityId: 'sp_e1' });
-      expect(plan(named, { sp_e1: DT_80 }, {}, true)).toEqual({ kind: 'wait' });
+      expect(plan(named, { sp_e1: DT_80 }, {}, true)).toEqual(held);
       expect(plan(named)).toEqual({ kind: 'create' });
-      expect(plan(named, {}, {}, true)).toEqual({ kind: 'wait' });
+      expect(plan(named, {}, {}, true)).toEqual(held);
+    });
+
+    it('waits as it did, not held, where it waits for a person already', () => {
+      expect(plan(named, { sp_e1: DT_80 }, { sp_e1: 'unsure' }, true)).toEqual({ kind: 'wait' });
     });
 
     it('isn’t held by the contest over another name', () => {
@@ -273,11 +327,11 @@ describe('planMatch', () => {
     it('waits instead of asking, so that what it does doesn’t depend on which entities exist yet', () => {
       const split = { sp_e1: DT_80, sp_e2: DT_250 };
       expect(plan(named, split)).toEqual({ kind: 'ask', entityIds: ['sp_e1', 'sp_e2'] });
-      expect(plan(named, split, {}, true)).toEqual({ kind: 'wait' });
+      expect(plan(named, split, {}, true)).toMatchObject({ kind: 'hold' });
       const similar = { brand: ['Sennheiser'], name: ['HD 660S2'] };
       const others = { sp_e1: { brand: ['Sennheiser'], name: ['HD 660S'] } };
       expect(plan(similar, others)).toEqual({ kind: 'ask', entityIds: ['sp_e1'] });
-      expect(plan(similar, others, {}, true)).toEqual({ kind: 'wait' });
+      expect(plan(similar, others, {}, true)).toMatchObject({ kind: 'hold' });
     });
 
     it('still asks a page that gives identifiers', () => {
@@ -390,6 +444,16 @@ describe('the helpers', () => {
       }),
     ).toBe(false);
     expect(identifiersDisagree(product, DT_80, { brand: ['beyerdynamic'] })).toBe(false);
+  });
+
+  it('label a claim on a name with the words that made it', () => {
+    const claim = 'key0:sennheisergmbh|hd650';
+    expect(claimLabel(product, { brand: ['Sennheiser GmbH'], name: ['HD-650'] }, claim)).toBe(
+      'Sennheiser GmbH HD-650',
+    );
+    expect(claimLabel(product, { name: ['HD-650'] }, claim)).toBeNull();
+    expect(claimLabel(product, { brand: ['Sennheiser'], name: ['HD 650'] }, 'gtins:1')).toBeNull();
+    expect(claimLabel(product, { brand: ['Sennheiser'], name: ['HD 650'] }, 'key7:x')).toBeNull();
   });
 
   it('merge values once each', () => {

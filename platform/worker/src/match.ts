@@ -17,6 +17,7 @@ import {
   matchSides,
   openReview,
   saveDecision,
+  sameVerdictsOf,
   type DecisionRow,
   type Executor,
 } from '@spatula/store';
@@ -29,8 +30,10 @@ import { storable } from './text';
  * a different one? The decider sees both records' values, never their pages' text, and answers
  * where the dataset and every page's site allow AI input. "Same" becomes a verdict that joins them,
  * "variant" and "different" one that keeps them apart, and an answer that isn't sure enough goes to
- * a person while the page waits. A question answered before, on the same evidence, isn't asked
- * again unless asking might now come to something else (`stands`, in classify.ts).
+ * a person while the page waits. A decider's "same" is no exception to that where the page is
+ * judged the same as another entity already: that contradicts it, and a person says which. A
+ * question answered before, on the same evidence, isn't asked again unless asking might now come to
+ * something else (`stands`, in classify.ts).
  */
 
 export interface Matched {
@@ -107,6 +110,25 @@ export async function matchItem(
     return result('failed', {
       note: storable(`${sides.page.url}: the decider failed on a match question: ${message}`),
     });
+  }
+  // A decider's "same" about a page that is judged the same as another entity already contradicts
+  // that, whoever gave it: the entities were kept apart, or the page tells them too little apart.
+  // It isn't accepted. A person is asked, with the decider's answer proposed.
+  if (outcome.by === 'adapter' && outcome.answer === 'same') {
+    const others = (await ports.withDb((db) => sameVerdictsOf(db, itemId))).filter(
+      (verdict) => verdict.entityId !== entityId,
+    );
+    if (others.length > 0) {
+      const also = others.length === 1 ? 'another entity' : `${others.length} other entities`;
+      outcome = {
+        by: 'person',
+        adapter: outcome.adapter,
+        proposed: 'same',
+        probabilities: outcome.probabilities,
+        evidence: `${outcome.evidence} The page is judged the same as ${also} already.`,
+        usage: outcome.usage,
+      };
+    }
   }
   // The cascade has no rule for matching, so its outcome is a decider's or a person's.
   const usage = outcome.by === 'rule' ? NO_USAGE : outcome.usage;

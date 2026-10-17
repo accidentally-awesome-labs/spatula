@@ -183,6 +183,18 @@ export async function judge(
     });
 }
 
+/** The entities a page is judged the same as, with who judged each, by entity. */
+export async function sameVerdictsOf(
+  db: Executor,
+  itemId: string,
+): Promise<{ entityId: string; who: Judge }[]> {
+  return db
+    .select({ entityId: judgements.entityId, who: judgements.who })
+    .from(judgements)
+    .where(and(eq(judgements.itemId, itemId), eq(judgements.verdict, 'same')))
+    .orderBy(asc(judgements.entityId));
+}
+
 /** Every verdict in the dataset. */
 export async function judgementsFor(db: Executor, datasetId: string): Promise<JudgementRow[]> {
   return db

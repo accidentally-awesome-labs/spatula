@@ -1,4 +1,5 @@
 import {
+  claimLabel,
   contestedNames,
   identityClaims,
   MAX_MATCH_QUESTIONS,
@@ -36,16 +37,23 @@ export interface EntityResolution {
 
 /**
  * Joins each live page to the entity it describes. Pages already joined claim their keys first,
- * so a new page finds them. A page that isn't joined yet follows its match plan: it joins on an
- * identifier, or on a name that no identifier contradicts and no other entity shares; it starts a
- * new entity, with a canonical ID assigned once; or it waits for a question about an entity to be
- * asked and answered. A page that gives only a name waits too, whichever pages sort before it,
- * while its name is contested (`contestedNames`, worked out from where the pass begins): the pages
- * that give identifiers under it disagree, or a person has yet to say whether one is an entity's.
- * Once they settle it follows the plan above. A claim another entity already owns is reported as a
- * conflict and changes nothing. The exception is a name that two entities share once their pages have been
- * judged not the same: that is what a "variant" answer leaves. A GTIN or part number two entities
- * claim is always a conflict.
+ * so a new page finds them, and then the pages that give an identifier, ahead of those that give
+ * only a name: where the first join or start entities decides which entities carry a name. A page
+ * that isn't joined yet follows its match plan: it joins on an identifier, or on a name that no
+ * identifier contradicts and no other entity shares; it starts a new entity, with a canonical ID
+ * assigned once; or it waits for a question about an entity to be asked and answered.
+ *
+ * A page that gives only a name waits too, whichever pages sort before it, while its name is
+ * contested (`contestedNames`, worked out from where the pass begins): the pages that give
+ * identifiers under it disagree, or a person has yet to say whether one is an entity's. A note
+ * says how many pages wait on each such name. Once the contest settles the page follows the plan
+ * above. A page that decisions say is the same as several entities waits for a person, with a
+ * note, unless one person chose among them.
+ *
+ * A claim another entity already owns is reported as a conflict and changes nothing. The
+ * exception is a name that two entities share once their pages have been judged not the same:
+ * that is what a "variant" answer leaves. A GTIN or part number two entities claim is always a
+ * conflict.
  *
  * A pair that was escalated when no decider could be asked is recorded as unsure "by rule". While
  * `deciderCanAnswer` is false that waits for a person, like any unsure verdict. Once it is true,
@@ -58,9 +66,13 @@ export async function resolveEntities(
   input: {
     datasetId: string;
     definition: Definition;
-    /** The most questions to raise. The pages with no room for theirs wait for the next run. */
+    /**
+     * The most questions to raise. The pages with no room for theirs wait for the next run.
+     */
     maxQuestions?: number;
-    /** Whether a decider can be asked a match question: one is set up, and the dataset allows it. */
+    /**
+     * Whether a decider can be asked a match question: one is set up, and the dataset allows it.
+     */
     deciderCanAnswer?: boolean;
   },
 ): Promise<EntityResolution> {
@@ -94,6 +106,7 @@ export async function resolveEntities(
       ).map((key) => [key.value, key.entityId]),
     );
     const verdicts = new Map<string, Map<string, MatchVerdict>>();
+    const byPerson = new Map<string, Set<string>>();
     const pairOf = (itemId: string, entityId: string) => `${itemId}|${entityId}`;
     const askedAgain = new Set<string>();
     for (const judgement of await judgementsFor(tx, datasetId)) {
@@ -105,6 +118,10 @@ export async function resolveEntities(
       const own = verdicts.get(judgement.itemId) ?? new Map<string, MatchVerdict>();
       own.set(judgement.entityId, judgement.verdict);
       verdicts.set(judgement.itemId, own);
+      if (judgement.who === 'person') {
+        const theirs = byPerson.get(judgement.itemId) ?? new Set<string>();
+        byPerson.set(judgement.itemId, theirs.add(judgement.entityId));
+      }
     }
 
     // What each entity's pages give as identifiers, and its names by scope, as pages join.
@@ -179,9 +196,25 @@ export async function resolveEntities(
     };
     const fresh: EntityResolution['questions'] = [];
     const again: EntityResolution['questions'] = [];
+    // The pages held on a contested name, by name, with the words of the first.
+    const held = new Map<string, { label: string; pages: number }>();
     const joined = pages.filter((page) => page.entityId !== null);
     const unjoined = pages.filter((page) => page.entityId === null);
-    for (const page of [...joined, ...unjoined]) {
+    // Pages that give an identifier go before those that give only a name. A page that joins an
+    // entity by an identifier makes that entity carry its name too, and a page that gives only the
+    // name has to see that before it joins the entity that carried the name first.
+    const givesIdentifier = (page: (typeof pages)[number]) => {
+      const recordType = definition.recordTypes[page.recordType];
+      return (
+        recordType !== undefined &&
+        identityClaims(recordType, valuesOf(page, recordType)).some(
+          (claim) => claim.rank < recordType.identity.identifiers.length,
+        )
+      );
+    };
+    const identified = unjoined.filter(givesIdentifier);
+    const nameOnly = unjoined.filter((page) => !givesIdentifier(page));
+    for (const page of [...joined, ...identified, ...nameOnly]) {
       const recordType = definition.recordTypes[page.recordType];
       if (recordType === undefined) continue;
       const values = valuesOf(page, recordType);
@@ -199,12 +232,29 @@ export async function resolveEntities(
             ([id, names]) => ({ id, names }),
           ),
           verdicts: pageVerdicts,
+          byPerson: byPerson.get(page.id) ?? new Set<string>(),
           contested,
         });
         if (plan.kind === 'unresolvable') {
           result.unresolved += 1;
           result.notes.push(
             `${page.locator} has nothing to identify it by yet, so it has no entity`,
+          );
+          continue;
+        }
+        if (plan.kind === 'hold') {
+          result.waiting += 1;
+          const on = held.get(plan.name) ?? {
+            label: claimLabel(recordType, values, plan.name) ?? plan.name,
+            pages: 0,
+          };
+          held.set(plan.name, { ...on, pages: on.pages + 1 });
+          continue;
+        }
+        if (plan.kind === 'dispute') {
+          result.waiting += 1;
+          result.notes.push(
+            `${page.locator} is judged the same as ${listed(plan.entityIds)}, and waits for a person to say which`,
           );
           continue;
         }
@@ -253,10 +303,32 @@ export async function resolveEntities(
         }
       }
     }
+    // One note for each name, so that a held page doesn't show only in a count.
+    for (const { label, pages: count } of held.values()) {
+      const who = count === 1 ? 'page that gives only the name' : 'pages that give only the name';
+      result.notes.push(
+        `${count} ${who} "${cut(label)}" ${count === 1 ? 'waits' : 'wait'} for the pages that give identifiers under it to settle`,
+      );
+    }
     // Questions nobody has asked yet come first, so asking again can't crowd them out of the cap.
     result.questions = [...fresh, ...again].slice(0, maxQuestions);
     return result;
   });
+}
+
+/** "a and b", or "a, b and c". */
+const listed = (ids: readonly string[]) =>
+  ids.length < 3 ? ids.join(' and ') : `${ids.slice(0, -1).join(', ')} and ${ids[ids.length - 1]}`;
+
+/** At most this many characters of a name go into a note, so that the rest of it survives. */
+const NOTE_NAME_MAX = 80;
+
+/** A name for a note, cut at a whole character with an ellipsis where it is long. */
+function cut(name: string): string {
+  const characters = [...name];
+  return characters.length > NOTE_NAME_MAX
+    ? `${characters.slice(0, NOTE_NAME_MAX).join('')}…`
+    : name;
 }
 
 export interface MatchSides {

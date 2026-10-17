@@ -15,7 +15,8 @@ import { similarity } from './trigrams';
  * A page that matches nothing starts its own entity, unless an entity within its scope (for
  * products, its brand) has a similar name: then the cascade is asked about the closest few first.
  * Verdicts decide: "same" joins, "not the same" keeps the page apart for good, and "unsure" waits
- * for a person.
+ * for a person. A page that is said to be the same as several entities, or as one while a question
+ * about it waits, joins only the one a person chose, and otherwise waits for a person.
  */
 
 /** How alike two names must be, by trigrams, for the cascade to be asked whether they're one. */
@@ -39,7 +40,11 @@ export type MatchPlan =
   | { kind: 'join'; entityId: string }
   | { kind: 'create' }
   | { kind: 'ask'; entityIds: string[] }
-  | { kind: 'wait' };
+  | { kind: 'wait' }
+  /** The page gives only a name, and the claim on that name is contested. */
+  | { kind: 'hold'; name: string }
+  /** The page is said to be the same as these entities, and no person chose one of them. */
+  | { kind: 'dispute'; entityIds: string[] };
 
 /**
  * A record's name, and the scope it's compared within: the record type's first key of two or more
@@ -72,6 +77,22 @@ export function identifiersDisagree(
     disagree = true;
   }
   return disagree;
+}
+
+/**
+ * The words that make a claim on a name, as the record wrote them, such as its brand and name. Null
+ * where the claim isn't one of the record type's keys, or the record lacks one of its values.
+ */
+export function claimLabel(
+  recordType: RecordType,
+  values: Record<string, FieldValue[]>,
+  claim: string,
+): string | null {
+  const index = /^key(\d+):/u.exec(claim)?.[1];
+  const fields = index === undefined ? undefined : recordType.identity.keys[Number(index)];
+  if (fields === undefined) return null;
+  const parts = fields.map((field) => textOf(values[field]?.[0]) ?? '');
+  return parts.some((part) => part === '') ? null : parts.join(' ');
 }
 
 /**
@@ -177,6 +198,8 @@ export function planMatch(input: {
   sameScope: readonly { id: string; names: readonly string[] }[];
   /** The verdicts already given on this page, by entity. */
   verdicts: ReadonlyMap<string, MatchVerdict>;
+  /** The entities a person gave a verdict about on this page. */
+  byPerson: ReadonlySet<string>;
   /** The names that are contested, by the claims that make them (see `contestedNames`). */
   contested: ReadonlySet<string>;
 }): MatchPlan {
@@ -189,19 +212,25 @@ export function planMatch(input: {
       .filter(([, answer]) => answer === verdict)
       .map(([entityId]) => entityId)
       .sort();
-  // "Same" is final, and transitive: the page joins the entity.
-  const [same] = given('same');
-  if (same !== undefined) return { kind: 'join', entityId: same };
   const apart = new Set(given('not_same'));
   const pending = new Set(given('unsure'));
+  // "Same" is final, and the page joins the entity, when it is the only one and nothing else about
+  // the page waits for a person. A person's "same" settles it whatever else is said. Several
+  // decisions that the page is the same as entities that were kept apart contradict each other, and
+  // so does one beside a question that waits: a person says which.
+  const same = given('same');
+  const chosen = same.filter((entityId) => input.byPerson.has(entityId));
+  if (chosen.length === 1) return { kind: 'join', entityId: chosen[0]! };
+  if (same.length === 1 && pending.size === 0) return { kind: 'join', entityId: same[0]! };
+  if (same.length > 1) return { kind: 'dispute', entityIds: same };
+  if (same.length === 1) return { kind: 'wait' };
   // A page that gives only a name can't say which entity it belongs to, or whether it starts one,
   // while the pages that give identifiers under that name are sorting out the entities that carry
   // it. It waits whatever it would do: joining, starting an entity, or asking about the others.
-  if (
-    claims.every((claim) => claim.rank >= keyRank) &&
-    claims.some((claim) => input.contested.has(claim.value))
-  ) {
-    return { kind: 'wait' };
+  const contested = claims.find((claim) => input.contested.has(claim.value));
+  if (contested !== undefined && claims.every((claim) => claim.rank >= keyRank)) {
+    // One that waits for a person already is not held for the contest.
+    return pending.size > 0 ? { kind: 'wait' } : { kind: 'hold', name: contested.value };
   }
 
   // The strongest claim an entity owns, unless a verdict keeps the page apart from that entity.

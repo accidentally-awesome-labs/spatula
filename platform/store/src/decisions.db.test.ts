@@ -15,6 +15,7 @@ import {
   listOpenReviews,
   openReview,
   saveDecision,
+  sameVerdictsOf,
   supersedeDecisions,
   type NewDecision,
 } from './decisions';
@@ -149,6 +150,46 @@ describe('judgements', () => {
       expect(await judgementsFor(tx, 'test-products')).toMatchObject([
         { verdict: 'same', who: 'person' },
       ]);
+    }));
+});
+
+describe('the entities a page was judged the same as', () => {
+  it('are the ones with a “same” verdict about the page, and who gave it', () =>
+    withRollback(async (tx) => {
+      const {
+        items: [a1, a2],
+      } = await seedDataset(tx);
+      const [one, two, three] = await Promise.all(
+        ['sp_entityone000000000000', 'sp_entitytwo000000000000', 'sp_entitythree0000000000'].map(
+          (id) => anEntity(tx, id),
+        ),
+      );
+      const verdict = (
+        itemId: string,
+        entityId: string,
+        value: 'same' | 'not_same' | 'unsure',
+        who: 'llm' | 'person',
+      ) =>
+        judge(tx, {
+          datasetId: 'test-products',
+          itemId,
+          entityId,
+          verdict: value,
+          who,
+          confidence: 0.9,
+          decisionId: null,
+          at: T(1),
+        });
+      await verdict(a1!.id, three!, 'same', 'person');
+      await verdict(a1!.id, one!, 'same', 'llm');
+      await verdict(a1!.id, two!, 'not_same', 'llm');
+      await verdict(a2!.id, two!, 'same', 'llm');
+      expect(await sameVerdictsOf(tx, a1!.id)).toEqual([
+        { entityId: one, who: 'llm' },
+        { entityId: three, who: 'person' },
+      ]);
+      expect(await sameVerdictsOf(tx, a2!.id)).toEqual([{ entityId: two, who: 'llm' }]);
+      expect(await sameVerdictsOf(tx, 'it_nobody00000000000')).toEqual([]);
     }));
 });
 

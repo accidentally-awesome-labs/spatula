@@ -7,7 +7,13 @@ import {
   type PagesSource,
 } from '@spatula/core';
 import { packs } from '@spatula/pack-products';
-import { decisionRecords, finalizeDecision, judgementsFor, listOpenReviews } from '@spatula/store';
+import {
+  decisionRecords,
+  finalizeDecision,
+  judge,
+  judgementsFor,
+  listOpenReviews,
+} from '@spatula/store';
 import { testDefinition } from '@spatula/store/fixtures';
 import { eq } from 'drizzle-orm';
 import { describe, expect, it } from 'vitest';
@@ -49,6 +55,17 @@ function withThirdPage(definition: Definition): Definition {
 
 const decisionsAbout = (datasetId: string) =>
   db.select().from(decisionRecords).where(eq(decisionRecords.datasetId, datasetId));
+
+const contextOf = (world: World, definition: Definition): Context => ({
+  runId: runIdFor(definition.dataset, world.clock.now()),
+  datasetId: definition.dataset,
+  revision: 1,
+  definition,
+  startedAt: world.clock.now(),
+});
+
+/** The next run's time, so what a step makes is a new run's decision. */
+const nextRun = (world: World) => world.clock.advance(5 * 60_000);
 
 /** The names of the steps that asked a match question. */
 const matchSteps = (names: string[]) => names.filter((name) => name.startsWith('match:'));
@@ -237,6 +254,11 @@ describe('a page that gives only a name', { timeout: 20_000 }, () => {
       expect(e2).not.toBe(e1);
       expect(await entityOf(page.id)).toBeNull();
       expect(first.summary.entities).toMatchObject({ waiting: 1 });
+      expect(first.summary.notes).toContainEqual(
+        expect.stringMatching(
+          /^1 page that gives only the name ".*DT 770 PRO" waits for the pages/u,
+        ),
+      );
 
       // Once each version has its entity, the page is asked about both.
       const second = await refresh(world, datasetId);
@@ -254,6 +276,172 @@ describe('a page that gives only a name', { timeout: 20_000 }, () => {
       expect(second.summary.entities).toMatchObject({ waiting: 0, conflicts: 0 });
     });
   }
+});
+
+describe('a decider that says a page is the same as two entities', { timeout: 20_000 }, () => {
+  /**
+   * Two versions, split in the first run, and a page that gives only their name. The decider says
+   * the 250 is a version of the 80, and the page is the same as whichever it is asked about.
+   */
+  async function versionsAndAPage(datasetId: string) {
+    const routes = routesWith(DT_80, DT_250);
+    routes[URL_A3] = { status: 200, body: productPage({ name: 'DT 770 PRO' }) };
+    const definition = withThirdPage(testDefinition(datasetId));
+    const {
+      world,
+      pages: [a1, a2, page],
+    } = await worldFor(definition, routes);
+    const scripted = fakeDecider(
+      (request): Record<string, number> =>
+        request.evidence.startsWith(`Record A (${URLS.a2}):`) ? { variant: 0.97 } : { same: 0.98 },
+    );
+    world.ports.decider = scripted.decider;
+    await refresh(world, datasetId);
+    const [e1, e2] = [(await entityOf(a1!.id))!, (await entityOf(a2!.id))!];
+    expect(await entityOf(page!.id)).toBeNull();
+    // The questions about the page are asked in the next run: one is accepted, and the other isn't.
+    const second = await refresh(world, datasetId);
+    return { world, definition, scripted, page: page!, e1, e2, second };
+  }
+
+  /** The verdicts on a page, by entity. */
+  const verdictsAbout = async (datasetId: string, pageId: string) =>
+    new Map(
+      (await judgementsFor(db, datasetId))
+        .filter((row) => row.itemId === pageId)
+        .map((row) => [row.entityId, row]),
+    );
+
+  /** What the cascade said about the page and an entity, as the decision the step made. */
+  const decisionAbout = async (datasetId: string, pageId: string, entityId: string) =>
+    (await decisionsAbout(datasetId)).find((row) => row.subject === `${pageId}|${entityId}`)!;
+
+  it('accepts one, and asks a person about the other, with the page waiting', async () => {
+    const datasetId = 'match-contradiction';
+    const { page, e1, e2, second } = await versionsAndAPage(datasetId);
+    expect(matchSteps(second.names)).toEqual([`match:${page.id}:${e1}`, `match:${page.id}:${e2}`]);
+    expect(second.summary.match).toMatchObject({ accepted: 1, escalated: 1 });
+    expect(second.summary.entities).toMatchObject({ waiting: 1 });
+    expect(await entityOf(page.id)).toBeNull();
+    expect(await listOpenReviews(db, datasetId)).toMatchObject([
+      { kind: 'match', subject: `${page.id}|${e2}`, context: { page: URL_A3, proposed: 'same' } },
+    ]);
+    const verdicts = await verdictsAbout(datasetId, page.id);
+    expect(verdicts.get(e1)).toMatchObject({ verdict: 'same', who: 'llm' });
+    expect(verdicts.get(e2)).toMatchObject({ verdict: 'unsure', who: 'llm' });
+    expect(await decisionAbout(datasetId, page.id, e2)).toMatchObject({
+      outcome: 'escalated',
+      answer: null,
+      probabilities: { same: 0.98 },
+    });
+  });
+
+  it('accepts what isn’t a contradiction: a “different”, or its “same” again about the one entity', async () => {
+    const datasetId = 'match-no-contradiction';
+    const { world, definition, page, e1, e2 } = await versionsAndAPage(datasetId);
+    // A new version of the criteria is a new question about each pair, which the decider answers.
+    const pack = packs['products/product']!;
+    world.ports.packs = {
+      'products/product': {
+        ...pack,
+        match: { version: PACK_VERSION + 1, criteria: pack.match!.criteria },
+      },
+    };
+    const ask = async (entityId: string) => {
+      nextRun(world);
+      return matchItem(
+        contextOf(world, definition),
+        { itemId: page.id, entityId },
+        10_000,
+        world.ports,
+      );
+    };
+    // The page is the same as the first entity already: a "same" about that entity again agrees
+    // with it, and a "different" about the other disagrees with nothing.
+    expect(await ask(e1)).toMatchObject({ outcome: 'accepted' });
+    world.ports.decider = fakeDecider(() => ({ different: 0.97 })).decider;
+    expect(await ask(e2)).toMatchObject({ outcome: 'accepted' });
+    const verdicts = await verdictsAbout(datasetId, page.id);
+    expect(verdicts.get(e1)).toMatchObject({ verdict: 'same' });
+    expect(verdicts.get(e2)).toMatchObject({ verdict: 'not_same' });
+  });
+
+  it('lets the page join the other entity when a person says it isn’t the one asked about', async () => {
+    const datasetId = 'match-contradiction-different';
+    const { world, definition, page, e1, e2 } = await versionsAndAPage(datasetId);
+    const asked = await decisionAbout(datasetId, page.id, e2);
+    await finalizeDecision(db, { id: asked.id, finalAnswer: 'different', at: world.clock.now() });
+    // In the pipeline the answer reaches the next run through the `judge` call that Task 16 adds.
+    // This applies it by the step, as the test of a person’s answer does.
+    expect(
+      await matchItem(
+        contextOf(world, definition),
+        { itemId: page.id, entityId: e2 },
+        10_000,
+        world.ports,
+      ),
+    ).toMatchObject({ outcome: 'reused' });
+    expect(await listOpenReviews(db, datasetId)).toEqual([]);
+    await refresh(world, datasetId);
+    expect(await entityOf(page.id)).toBe(e1);
+  });
+
+  it('joins the page to the entity a person says it is, not the one a decider accepted', async () => {
+    const datasetId = 'match-contradiction-same';
+    const { world, definition, page, e2 } = await versionsAndAPage(datasetId);
+    const asked = await decisionAbout(datasetId, page.id, e2);
+    await finalizeDecision(db, { id: asked.id, finalAnswer: 'same', at: world.clock.now() });
+    await matchItem(
+      contextOf(world, definition),
+      { itemId: page.id, entityId: e2 },
+      10_000,
+      world.ports,
+    );
+    await refresh(world, datasetId);
+    expect(await entityOf(page.id)).toBe(e2);
+  });
+
+  it('asks a person about its “same” too where a person already said the page is another entity', async () => {
+    const datasetId = 'match-contradiction-person';
+    const routes = routesWith(DT_80, DT_250);
+    routes[URL_A3] = { status: 200, body: productPage({ name: 'DT 770 PRO' }) };
+    const definition = withThirdPage(testDefinition(datasetId));
+    const {
+      world,
+      pages: [a1, a2, page],
+    } = await worldFor(definition, routes);
+    const scripted = fakeDecider(
+      (request): Record<string, number> =>
+        request.evidence.startsWith(`Record A (${URLS.a2}):`) ? { variant: 0.97 } : { same: 0.98 },
+    );
+    world.ports.decider = scripted.decider;
+    await refresh(world, datasetId);
+    const [e1, e2] = [(await entityOf(a1!.id))!, (await entityOf(a2!.id))!];
+    await judge(db, {
+      datasetId,
+      itemId: page!.id,
+      entityId: e1,
+      verdict: 'same',
+      who: 'person',
+      confidence: 1,
+      decisionId: null,
+      at: world.clock.now(),
+    });
+    nextRun(world);
+    const matched = await matchItem(
+      contextOf(world, definition),
+      { itemId: page!.id, entityId: e2 },
+      10_000,
+      world.ports,
+    );
+    expect(matched).toMatchObject({ outcome: 'escalated' });
+    expect(await listOpenReviews(db, datasetId)).toMatchObject([
+      { subject: `${page!.id}|${e2}`, context: { proposed: 'same' } },
+    ]);
+    // The person's word settles which entity the page is, and the question about the other is moot.
+    await refresh(world, datasetId);
+    expect(await entityOf(page!.id)).toBe(e1);
+  });
 });
 
 describe('a pair that no decider could be asked about', { timeout: 20_000 }, () => {
@@ -555,16 +743,6 @@ describe('a question that isn’t answered in the run that raised it', { timeout
 });
 
 describe('the match step', { timeout: 20_000 }, () => {
-  const contextOf = (world: World, definition: Definition): Context => ({
-    runId: runIdFor(definition.dataset, world.clock.now()),
-    datasetId: definition.dataset,
-    revision: 1,
-    definition,
-    startedAt: world.clock.now(),
-  });
-  /** The next run's time, so what the step makes is a new run's decision. */
-  const nextRun = (world: World) => world.clock.advance(5 * 60_000);
-
   /** A run whose decider is down: A2's question was raised, and nothing came of it. */
   async function unanswered(definition: Definition) {
     const { world, pages } = await worldFor(definition, routesWith(DT_80, DT_250));
