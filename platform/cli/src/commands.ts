@@ -8,7 +8,7 @@ import {
 import { packs } from '@spatula/pack-products';
 import { parse } from 'yaml';
 import { ApiError, type Client } from './client';
-import { describeError, formatApplySummary, formatRun } from './format';
+import { describeError, formatApplySummary, formatReviews, formatRun } from './format';
 
 /** Everything the commands do outside themselves, so tests can run them in memory. */
 export interface Io {
@@ -134,6 +134,27 @@ export async function revive(
       revived === 0
         ? `Nothing matched in ${datasetId}, so no page was revived.`
         : `Revived ${count(revived, 'page')} of ${datasetId}. The next run reads them.`,
+    );
+    return 0;
+  });
+}
+
+/** Lists the dataset's open questions, or answers one. */
+export async function review(
+  io: Io,
+  client: Client,
+  datasetId: string,
+  answering: { reviewId: string; answer: string } | null,
+): Promise<number> {
+  return withApi(io, async () => {
+    if (answering === null) {
+      const reviews = await client.listReviews(datasetId);
+      for (const line of formatReviews(datasetId, reviews)) io.out(line);
+      return 0;
+    }
+    const { effect } = await client.answerReview(datasetId, answering.reviewId, answering.answer);
+    io.out(
+      `Answered ${answering.reviewId}: ${answering.answer}.${effect === '' ? '' : ` ${effect}`}`,
     );
     return 0;
   });

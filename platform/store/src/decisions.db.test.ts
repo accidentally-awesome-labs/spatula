@@ -10,6 +10,7 @@ import {
   findDecision,
   finalizeDecision,
   getReview,
+  joinedEntityOf,
   judge,
   judgementsFor,
   listOpenReviews,
@@ -190,6 +191,36 @@ describe('the entities a page was judged the same as', () => {
       ]);
       expect(await sameVerdictsOf(tx, a2!.id)).toEqual([{ entityId: two, who: 'llm' }]);
       expect(await sameVerdictsOf(tx, 'it_nobody00000000000')).toEqual([]);
+    }));
+});
+
+describe('the entity a page is joined to', () => {
+  it('is the one the page’s row names, and none before the page is joined', () =>
+    withRollback(async (tx) => {
+      const {
+        items: [a1, a2],
+      } = await seedDataset(tx);
+      const [one, two] = await Promise.all(
+        ['sp_entityone000000000000', 'sp_entitytwo000000000000'].map((id) => anEntity(tx, id)),
+      );
+      expect(await joinedEntityOf(tx, a1!.id)).toBeNull();
+      await tx.update(items).set({ entityId: one }).where(eq(items.id, a1!.id));
+      await tx.update(items).set({ entityId: two }).where(eq(items.id, a2!.id));
+      expect(await joinedEntityOf(tx, a1!.id)).toBe(one);
+      expect(await joinedEntityOf(tx, a2!.id)).toBe(two);
+      // A verdict doesn't join a page; only the row does.
+      await judge(tx, {
+        datasetId: 'test-products',
+        itemId: a1!.id,
+        entityId: two!,
+        verdict: 'same',
+        who: 'person',
+        confidence: 1,
+        decisionId: null,
+        at: T(1),
+      });
+      expect(await joinedEntityOf(tx, a1!.id)).toBe(one);
+      expect(await joinedEntityOf(tx, 'it_nobody00000000000')).toBeNull();
     }));
 });
 

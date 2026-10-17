@@ -1,4 +1,4 @@
-import type { ApplySummary, RunView } from '@spatula/core';
+import { optionsOf, type ApplySummary, type ReviewView, type RunView } from '@spatula/core';
 
 /** What applying a definition changed, or would change. */
 export function formatApplySummary(summary: ApplySummary, dryRun: boolean): string[] {
@@ -94,6 +94,59 @@ export function formatRun(run: RunView): string[] {
   for (const left of snapshot.excluded)
     lines.push(`Left out: ${left.canonicalId}, missing ${left.missing.join(', ')}.`);
   if (summary.notes.length > 0) lines.push('Notes:', ...summary.notes.map((note) => `  ${note}`));
+  return lines;
+}
+
+/** The open questions, each with what it proposes and the answers it takes. */
+export function formatReviews(datasetId: string, reviews: ReviewView[]): string[] {
+  if (reviews.length === 0) return ['No questions wait for an answer.'];
+  const lines = [
+    `${reviews.length} ${reviews.length === 1 ? 'question waits' : 'questions wait'} for an answer.`,
+  ];
+  for (const review of reviews) {
+    const context = review.context;
+    const text = (key: string) =>
+      typeof context[key] === 'string' ? (context[key] as string) : '';
+    const number = (key: string) =>
+      typeof context[key] === 'number' ? (context[key] as number) : 0;
+    const about =
+      review.kind === 'classify'
+        ? text('url')
+        : review.kind === 'match'
+          ? `${text('page')} and ${text('entity')}`
+          : text('snapshotId');
+    lines.push('', `${review.id}  ${review.kind}  ${about}`);
+    if (review.kind === 'publication') {
+      lines.push(
+        `  ${review.question.prompt} ${number('records')} records: ${number('added')} new, ${number('removed')} removed.`,
+      );
+      const reasons = Array.isArray(context.reasons) ? context.reasons.map(String) : [];
+      if (reasons.length > 0) lines.push(`  Held because ${reasons.join('; ')}.`);
+      // Why records left: those the run couldn't complete, and the questions that still wait.
+      const incomplete = number('incomplete');
+      const openClassify = number('openClassify');
+      const openMatch = number('openMatch');
+      const why = [
+        ...(incomplete > 0 ? [`Left out as incomplete: ${incomplete}.`] : []),
+        ...(openClassify + openMatch > 0
+          ? [`Open questions: ${openClassify} classify, ${openMatch} match.`]
+          : []),
+      ];
+      if (why.length > 0) lines.push(`  ${why.join(' ')}`);
+    } else {
+      lines.push(`  ${review.question.prompt}`);
+      const proposed = text('proposed');
+      const probabilities = (context.probabilities ?? {}) as Record<string, unknown>;
+      const probability = probabilities[proposed];
+      if (proposed !== '') {
+        const sure = typeof probability === 'number' ? ` (${probability.toFixed(2)})` : '';
+        const reason = text('reason');
+        lines.push(`  Proposed: ${proposed}${sure}.${reason === '' ? '' : ` ${reason}`}`);
+      }
+    }
+    lines.push(`  Answers: ${optionsOf(review.question).join(' | ')}`);
+  }
+  lines.push('', `Answer with: spatula review ${datasetId} <id> "<answer>"`);
   return lines;
 }
 

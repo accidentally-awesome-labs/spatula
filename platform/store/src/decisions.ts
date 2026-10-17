@@ -3,6 +3,7 @@ import { and, asc, eq, inArray, isNull, sql } from 'drizzle-orm';
 import type { Executor } from './client';
 import {
   decisionRecords,
+  items,
   judgements,
   reviewItems,
   type DecisionOutcome,
@@ -193,6 +194,25 @@ export async function sameVerdictsOf(
     .from(judgements)
     .where(and(eq(judgements.itemId, itemId), eq(judgements.verdict, 'same')))
     .orderBy(asc(judgements.entityId));
+}
+
+/**
+ * Holds back every other answer about the page's verdicts until this transaction ends, so two
+ * answers about one page can't both pass a check of what was said about it.
+ */
+export async function lockPageVerdicts(db: Executor, itemId: string): Promise<void> {
+  await db.execute(
+    sql`select pg_advisory_xact_lock(hashtextextended('same:' || ${itemId}::text, 0))`,
+  );
+}
+
+/** The entity the page is joined to, or null. */
+export async function joinedEntityOf(db: Executor, itemId: string): Promise<string | null> {
+  const [row] = await db
+    .select({ entityId: items.entityId })
+    .from(items)
+    .where(eq(items.id, itemId));
+  return row?.entityId ?? null;
 }
 
 /** Every verdict in the dataset. */

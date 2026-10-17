@@ -2,6 +2,7 @@ import {
   sha256Hex,
   type ApplySummary,
   type DiscoverySummary,
+  type ReviewView,
   type RunSummary,
   type RunView,
 } from '@spatula/core';
@@ -792,6 +793,249 @@ describe('revive', () => {
   });
 });
 
+describe('review', () => {
+  const PUBLISH_CONTEXT = {
+    snapshotId: 'sn_held',
+    records: 412,
+    added: 412,
+    removed: 0,
+    reasons: ['it’s the dataset’s first publication'],
+    previousGeneration: null,
+  };
+  const REVIEWS: ReviewView[] = [
+    {
+      id: 'rv_classify',
+      kind: 'classify',
+      subject: 'it_a1',
+      question: {
+        type: 'choice',
+        prompt: 'Which category does the one product this page is about have?',
+        options: ['Headphones', 'DAC/Amp', 'None of these'],
+      },
+      context: {
+        url: 'https://maker-a.example/products/a1',
+        field: 'category',
+        proposed: 'Headphones',
+        probabilities: { Headphones: 0.62, 'DAC/Amp': 0.3 },
+        reason: 'It sits over the ears.',
+      },
+      createdAt: '2026-10-10T00:00:00.000Z',
+    },
+    {
+      id: 'rv_publish',
+      kind: 'publication',
+      subject: 'sn_held',
+      question: {
+        type: 'choice',
+        prompt: 'Publish this held snapshot?',
+        options: ['publish', 'discard'],
+      },
+      context: { ...PUBLISH_CONTEXT, incomplete: 3, openClassify: 2, openMatch: 1 },
+      createdAt: '2026-10-10T00:01:00.000Z',
+    },
+  ];
+
+  /** What `spatula review cli-products` prints for these questions. */
+  async function listed(reviews: ReviewView[]) {
+    const { fetch } = stubApi(() => Response.json({ reviews }));
+    const { io, out, err } = memoryIo();
+    expect(await main(['review', 'cli-products'], { io, env: ENV, fetch })).toBe(0);
+    expect(err).toEqual([]);
+    return out;
+  }
+
+  /** The held snapshot's question, with these in its context. */
+  const publication = (context: Record<string, unknown>): ReviewView => ({
+    ...REVIEWS[1]!,
+    context: { ...PUBLISH_CONTEXT, ...context },
+  });
+
+  it('lists the open questions, with what each proposes and how to answer', async () => {
+    const { fetch, sent } = stubApi(() => Response.json({ reviews: REVIEWS }));
+    const { io, out } = memoryIo();
+    expect(await main(['review', 'cli-products'], { io, env: ENV, fetch })).toBe(0);
+    expect(sent[0]).toMatchObject({ method: 'GET', path: '/datasets/cli-products/review' });
+    expect(out).toEqual([
+      '2 questions wait for an answer.',
+      '',
+      'rv_classify  classify  https://maker-a.example/products/a1',
+      '  Which category does the one product this page is about have?',
+      '  Proposed: Headphones (0.62). It sits over the ears.',
+      '  Answers: Headphones | DAC/Amp | None of these',
+      '',
+      'rv_publish  publication  sn_held',
+      '  Publish this held snapshot? 412 records: 412 new, 0 removed.',
+      '  Held because it’s the dataset’s first publication.',
+      '  Left out as incomplete: 3. Open questions: 2 classify, 1 match.',
+      '  Answers: publish | discard',
+      '',
+      'Answer with: spatula review cli-products <id> "<answer>"',
+    ]);
+  });
+
+  it('shows a match question’s page and record, and a question that waits alone in the singular', async () => {
+    const out = await listed([
+      {
+        id: 'rv_match',
+        kind: 'match',
+        subject: 'it_a3|sp_one',
+        question: {
+          type: 'choice',
+          prompt: 'Is this page the same product as the record?',
+          options: ['same', 'variant', 'different'],
+        },
+        context: {
+          page: 'https://maker-a.example/products/a3',
+          entity: 'https://maker-a.example/products/a1',
+          proposed: 'same',
+          probabilities: { same: 0.5, variant: 0.45 },
+          reason: 'The names agree.',
+        },
+        createdAt: '2026-10-10T00:00:00.000Z',
+      },
+    ]);
+    expect(out).toEqual([
+      '1 question waits for an answer.',
+      '',
+      'rv_match  match  https://maker-a.example/products/a3 and https://maker-a.example/products/a1',
+      '  Is this page the same product as the record?',
+      '  Proposed: same (0.50). The names agree.',
+      '  Answers: same | variant | different',
+      '',
+      'Answer with: spatula review cli-products <id> "<answer>"',
+    ]);
+  });
+
+  it('shows what the decider proposed as far as it said, and nothing where it proposed nothing', async () => {
+    const proposals = async (context: Record<string, unknown>) =>
+      (
+        await listed([
+          { ...REVIEWS[0]!, context: { url: 'https://maker-a.example/a1', ...context } },
+        ])
+      ).filter((line) => line.startsWith('  Proposed'));
+    expect(
+      await proposals({ proposed: 'Headphones', probabilities: { Headphones: 0.62 } }),
+    ).toEqual(['  Proposed: Headphones (0.62).']);
+    expect(await proposals({ proposed: 'Headphones', reason: 'It sits over the ears.' })).toEqual([
+      '  Proposed: Headphones. It sits over the ears.',
+    ]);
+    expect(
+      await proposals({
+        proposed: null,
+        probabilities: {},
+        reason: 'The decider named no answer.',
+      }),
+    ).toEqual([]);
+  });
+
+  it('counts a held snapshot’s records, and how many of them are new and how many went', async () => {
+    const out = await listed([publication({ records: 10, added: 4, removed: 2 })]);
+    expect(out).toContain('  Publish this held snapshot? 10 records: 4 new, 2 removed.');
+  });
+
+  it('says why records left a held snapshot only for the numbers that are above zero', async () => {
+    const heldLines = async (context: Record<string, unknown>) =>
+      (await listed([publication(context)])).filter(
+        (line) => line.includes('Left out as incomplete') || line.includes('Open questions'),
+      );
+    expect(await heldLines({ incomplete: 3, openClassify: 2, openMatch: 1 })).toEqual([
+      '  Left out as incomplete: 3. Open questions: 2 classify, 1 match.',
+    ]);
+    expect(await heldLines({ incomplete: 3, openClassify: 0, openMatch: 0 })).toEqual([
+      '  Left out as incomplete: 3.',
+    ]);
+    expect(await heldLines({ incomplete: 0, openClassify: 0, openMatch: 2 })).toEqual([
+      '  Open questions: 0 classify, 2 match.',
+    ]);
+    // Nothing left out and nothing open, or a question from before the counts: no such line.
+    expect(await heldLines({ incomplete: 0, openClassify: 0, openMatch: 0 })).toEqual([]);
+    expect(await heldLines({})).toEqual([]);
+  });
+
+  it('sends an answer, and prints what it did', async () => {
+    const { fetch, sent } = stubApi(() =>
+      Response.json({
+        answered: 'rv_classify',
+        answer: 'DAC/Amp',
+        effect: 'The page’s category is DAC/Amp. The next run publishes it.',
+      }),
+    );
+    const { io, out } = memoryIo();
+    expect(
+      await main(['review', 'cli-products', 'rv_classify', 'DAC/Amp'], { io, env: ENV, fetch }),
+    ).toBe(0);
+    expect(sent[0]).toMatchObject({
+      method: 'POST',
+      path: '/datasets/cli-products/review/rv_classify',
+      body: { answer: 'DAC/Amp' },
+      authorization: 'Bearer owner-token',
+    });
+    expect(out).toEqual([
+      'Answered rv_classify: DAC/Amp. The page’s category is DAC/Amp. The next run publishes it.',
+    ]);
+  });
+
+  it('answers without a trailing space when the API says nothing of the effect', async () => {
+    const { fetch } = stubApi(() => Response.json({ answered: 'rv_publish', answer: 'publish' }));
+    const { io, out } = memoryIo();
+    expect(
+      await main(['review', 'cli-products', 'rv_publish', 'publish'], { io, env: ENV, fetch }),
+    ).toBe(0);
+    expect(out).toEqual(['Answered rv_publish: publish.']);
+  });
+
+  it('keeps a dataset’s name and a question’s ID to their place in the address', async () => {
+    const { fetch, sent } = stubApi(() => Response.json({ reviews: [] }));
+    const { io } = memoryIo();
+    await main(['review', 'a b/c'], { io, env: ENV, fetch });
+    await main(['review', 'a b/c', 'rv ?x', 'None of these'], { io, env: ENV, fetch });
+    expect(sent.map(({ method, path }) => ({ method, path }))).toEqual([
+      { method: 'GET', path: '/datasets/a%20b%2Fc/review' },
+      { method: 'POST', path: '/datasets/a%20b%2Fc/review/rv%20%3Fx' },
+    ]);
+    expect(sent[1]!.body).toEqual({ answer: 'None of these' });
+  });
+
+  it('says when nothing waits, and needs both an ID and an answer to answer', async () => {
+    const { fetch, sent } = stubApi(() => Response.json({ reviews: [] }));
+    const { io, out } = memoryIo();
+    expect(await main(['review', 'cli-products'], { io, env: ENV, fetch })).toBe(0);
+    expect(out).toEqual(['No questions wait for an answer.']);
+    const { io: called, err } = memoryIo();
+    const calls = sent.length;
+    // An ID with no answer, no dataset, and more than an answer are mistakes in the call.
+    for (const argv of [
+      ['review', 'cli-products', 'rv_classify'],
+      ['review'],
+      ['review', 'cli-products', 'rv_classify', 'DAC/Amp', 'extra'],
+    ]) {
+      expect(await main(argv, { io: called, env: ENV, fetch }), argv.join(' ')).toBe(2);
+    }
+    expect(err.slice(0, USAGE.split('\n').length)).toEqual(USAGE.split('\n'));
+    expect(sent).toHaveLength(calls);
+  });
+
+  it('shows why the API refused an answer, and exits 1', async () => {
+    const reason =
+      'A person already said this page is the same product as sp_one, and a page joins one record. Answer variant or different.';
+    const { fetch } = stubApi(() => Response.json({ error: reason }, { status: 409 }));
+    const { io, out, err } = memoryIo();
+    expect(await main(['review', 'cli-products', 'rv_m', 'same'], { io, env: ENV, fetch })).toBe(1);
+    expect(err).toEqual([reason]);
+    expect(out).toEqual([]);
+  });
+
+  it('shows why the API refused to list the questions, and exits 1', async () => {
+    const { fetch } = stubApi(() =>
+      Response.json({ error: 'The owner token is missing or wrong.' }, { status: 401 }),
+    );
+    const { io, out, err } = memoryIo();
+    expect(await main(['review', 'cli-products'], { io, env: ENV, fetch })).toBe(1);
+    expect(err).toEqual(['The owner token is missing or wrong.']);
+    expect(out).toEqual([]);
+  });
+});
+
 describe('snapshot pull', () => {
   const body = JSON.stringify({
     project: 'cli-products',
@@ -1222,6 +1466,79 @@ describe('what reaches the terminal', () => {
       String.raw`  dataset: \u{9b}31mbad\u{202e}q`,
     ]);
     expect(second.out).toEqual([]);
+    for (const line of [...first.out, ...first.err, ...second.out, ...second.err]) {
+      expect(line).not.toMatch(DRIVES_A_TERMINAL);
+    }
+  });
+
+  it('spells out controls in the questions a review lists, and in what answering says', async () => {
+    const question = { type: 'choice' as const, prompt: 'Which?', options: ['a', 'b'] };
+    const hostile: ReviewView[] = [
+      {
+        id: 'rv_classify',
+        kind: 'classify',
+        subject: 'it_1',
+        question,
+        context: {
+          url: 'https://evil.example/\u001b]8;;https://good.example\u0007here',
+          proposed: 'a',
+          probabilities: { a: 0.6 },
+          reason: 'ignore \u001b[2J all that\nAnswered rv_x: b \u{202e}',
+        },
+        createdAt: '2026-10-10T00:00:00.000Z',
+      },
+      {
+        id: 'rv_match',
+        kind: 'match',
+        subject: 'it_2|sp_1',
+        question,
+        context: { page: 'https://evil.example/\u009b31m', entity: 'sp\u{2028}1' },
+        createdAt: '2026-10-10T00:00:00.000Z',
+      },
+      {
+        id: 'rv_publish',
+        kind: 'publication',
+        subject: 'sn_1',
+        question,
+        context: { snapshotId: 'sn_\u0007', reasons: ['a \u001b[31mred\u001b[0m reason'] },
+        createdAt: '2026-10-10T00:00:00.000Z',
+      },
+    ];
+    const listing = stubApi(() => Response.json({ reviews: hostile }));
+    const first = memoryIo();
+    expect(
+      await main(['review', 'cli-products'], { io: first.io, env: ENV, fetch: listing.fetch }),
+    ).toBe(0);
+    expect(first.out).toContain(
+      String.raw`rv_classify  classify  https://evil.example/\u{1b}]8;;https://good.example\u{7}here`,
+    );
+    expect(first.out).toContain(
+      String.raw`  Proposed: a (0.60). ignore \u{1b}[2J all that\u{a}Answered rv_x: b \u{202e}`,
+    );
+    expect(first.out).toContain(
+      String.raw`rv_match  match  https://evil.example/\u{9b}31m and sp\u{2028}1`,
+    );
+    expect(first.out).toContain(String.raw`rv_publish  publication  sn_\u{7}`);
+    expect(first.out).toContain(String.raw`  Held because a \u{1b}[31mred\u{1b}[0m reason.`);
+
+    const answering = stubApi(() =>
+      Response.json({
+        answered: 'rv_x',
+        answer: 'b',
+        effect: 'Done \u001b]0;pwned\u0007\nAnswered rv_y: a',
+      }),
+    );
+    const second = memoryIo();
+    expect(
+      await main(['review', 'cli-products', 'rv_x', 'b'], {
+        io: second.io,
+        env: ENV,
+        fetch: answering.fetch,
+      }),
+    ).toBe(0);
+    expect(second.out).toEqual([
+      String.raw`Answered rv_x: b. Done \u{1b}]0;pwned\u{7}\u{a}Answered rv_y: a`,
+    ]);
     for (const line of [...first.out, ...first.err, ...second.out, ...second.err]) {
       expect(line).not.toMatch(DRIVES_A_TERMINAL);
     }

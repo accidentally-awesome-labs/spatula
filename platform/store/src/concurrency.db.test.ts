@@ -7,6 +7,7 @@ import {
   closeReview,
   findDecision,
   getReview,
+  lockPageVerdicts,
   openReview,
   saveDecision,
   type NewDecision,
@@ -579,4 +580,32 @@ describe('changing a snapshot’s state while another session does', () => {
       await changing;
     }),
   );
+});
+
+describe('lockPageVerdicts', () => {
+  it('holds back another answer about the same page until its transaction ends, and none about another', async () => {
+    // The lock is held by a session of its own, as an answer in progress would hold it.
+    const lock = await holdingRow((tx) => lockPageVerdicts(tx, 'it_page_one'));
+    let finished = false;
+    const answering = pool.transaction((tx) => lockPageVerdicts(tx, 'it_page_one'));
+    void answering.then(
+      () => (finished = true),
+      () => (finished = true),
+    );
+    try {
+      await settledOrWaiting(answering);
+      expect(finished).toBe(false);
+      // An answer about another page isn't held up by it.
+      await within(
+        2000,
+        pool.transaction((tx) => lockPageVerdicts(tx, 'it_page_two')),
+      );
+    } finally {
+      lock.release();
+      await lock.done;
+      await answering.catch(() => undefined);
+    }
+    await within(2000, answering);
+    expect(finished).toBe(true);
+  });
 });

@@ -1,4 +1,4 @@
-import type { ApplySummary, Definition, RunView } from '@spatula/core';
+import type { ApplySummary, Definition, ReviewView, RunView } from '@spatula/core';
 import { describeError } from './format';
 
 /** An answer the API refused with, and the problems it listed. Status 0 means no answer. */
@@ -133,6 +133,28 @@ export function createClient(options: {
       const answer = await json(response);
       if (!response.ok) throw refused(response.status, answer);
       return { revived: Number(answer.revived) };
+    },
+
+    async listReviews(datasetId: string): Promise<ReviewView[]> {
+      const response = await request('GET', `/datasets/${encodeURIComponent(datasetId)}/review`);
+      const answer = await json(response);
+      if (!response.ok) throw refused(response.status, answer);
+      return Array.isArray(answer.reviews) ? (answer.reviews as ReviewView[]) : [];
+    },
+
+    async answerReview(
+      datasetId: string,
+      reviewId: string,
+      answer: string,
+    ): Promise<{ effect: string }> {
+      const response = await request(
+        'POST',
+        `/datasets/${encodeURIComponent(datasetId)}/review/${encodeURIComponent(reviewId)}`,
+        { answer },
+      );
+      const body = await json(response);
+      if (!response.ok) throw refused(response.status, body);
+      return { effect: typeof body.effect === 'string' ? body.effect : '' };
     },
 
     async pullSnapshot(

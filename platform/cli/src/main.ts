@@ -1,6 +1,6 @@
 import { parseArgs } from 'node:util';
 import { createClient } from './client';
-import { check, plan, pullSnapshot, revive, run, type Io } from './commands';
+import { check, plan, pullSnapshot, revive, review, run, type Io } from './commands';
 import { describeError, printable } from './format';
 
 export const USAGE = `Usage: spatula <command>
@@ -15,6 +15,8 @@ export const USAGE = `Usage: spatula <command>
                                still caps the run
   revive <dataset> [--refused] [<page>...]
                                Put refused pages, or the pages named, back for the next run
+  review <dataset> [<id> <answer>]
+                               List the questions waiting for an answer, or answer one
   snapshot pull <dataset> --out <file> [--generation <n>]
                                Download a snapshot, check its hash, and write it
 
@@ -106,6 +108,22 @@ export async function main(
         return usage();
       }
       return revive(io, client, datasetId, { refused: values.refused === true, pages });
+    }
+    case 'review': {
+      const [datasetId, reviewId, answer, ...extra] = rest;
+      if (
+        datasetId === undefined ||
+        extra.length > 0 ||
+        (reviewId !== undefined) !== (answer !== undefined)
+      ) {
+        return usage();
+      }
+      return review(
+        io,
+        client,
+        datasetId,
+        reviewId === undefined ? null : { reviewId, answer: answer! },
+      );
     }
     case 'snapshot': {
       // An empty --out names no file, as a missing one doesn't.

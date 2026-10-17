@@ -20,6 +20,7 @@ import {
   getRun,
   getSnapshot,
   latestSnapshot,
+  listOpenReviews,
   reviveItems,
   StaleDefinitionError,
   startRun,
@@ -27,8 +28,10 @@ import {
 import { Hono, type MiddlewareHandler } from 'hono';
 import { z } from 'zod';
 import { aboutPage } from './about';
+import { r2Blobs } from './blobs';
 import { secret } from './config';
 import { withDatabase } from './database';
+import { answerReview } from './review';
 
 /*
  * The owner's API, the public page, and the key directory. The owner sends a bearer token; the
@@ -250,6 +253,44 @@ api.post('/datasets/:id/items/revive', async (c) => {
   );
   if (revived === null) return c.json({ error: `Dataset ${datasetId} doesn’t exist.` }, 404);
   return c.json({ revived });
+});
+
+api.get('/datasets/:id/review', async (c) => {
+  const reviews = await withDatabase(c.env, (db) => listOpenReviews(db, c.req.param('id')));
+  return c.json({ reviews });
+});
+
+const answerSchema = z.strictObject({ answer: z.string().min(1).max(600) });
+
+api.post('/datasets/:id/review/:reviewId', async (c) => {
+  let body: unknown;
+  try {
+    body = await c.req.json();
+  } catch {
+    return c.json({ error: 'The body isn’t JSON.' }, 400);
+  }
+  const parsed = answerSchema.safeParse(body);
+  if (!parsed.success) {
+    return c.json({ error: 'Send { "answer": one of the question’s options }.' }, 400);
+  }
+  const result = await answerReview(
+    { withDb: (fn) => withDatabase(c.env, fn), blobs: r2Blobs(c.env.STORE), now: () => new Date() },
+    { datasetId: c.req.param('id'), reviewId: c.req.param('reviewId'), answer: parsed.data.answer },
+  );
+  switch (result.kind) {
+    case 'missing':
+      return c.json({ error: 'No such question for this dataset.' }, 404);
+    case 'closed':
+      return c.json({ error: 'That question has been answered already.' }, 409);
+    case 'refused':
+      return c.json({ error: result.reason }, result.status);
+    case 'answered':
+      return c.json({
+        answered: c.req.param('reviewId'),
+        answer: parsed.data.answer,
+        effect: result.effect,
+      });
+  }
 });
 
 // These two answer whatever the path, including ones outside the owner routes, which set the

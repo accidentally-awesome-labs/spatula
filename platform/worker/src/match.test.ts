@@ -4,7 +4,6 @@ import {
   runIdFor,
   type Decider,
   type Definition,
-  type PagesSource,
 } from '@spatula/core';
 import { packs } from '@spatula/pack-products';
 import {
@@ -19,39 +18,27 @@ import { eq } from 'drizzle-orm';
 import { describe, expect, it } from 'vitest';
 import { db } from '../test/node/db';
 import { fakeDecider, fakeLlm, type World } from '../test/node/fakes';
+import {
+  DT_250,
+  DT_80,
+  routesWith,
+  URL_A3,
+  versionsAndAPage,
+  withThirdPage,
+} from '../test/node/match-world';
 import { entityOf, published, refresh, worldFor } from '../test/node/runs';
-import { productPage, ROBOTS_OPEN, standardRoutes, URLS } from '../test/pages';
+import { productPage, ROBOTS_OPEN, URLS } from '../test/pages';
 import { matchItem } from './match';
 import type { Context } from './pipeline';
 import { runRefresh, type StepRunner } from './refresh';
 
-/** The test dataset, with maker-a's two pages saying what a test needs them to. */
-function routesWith(a1: Record<string, unknown>, a2: Record<string, unknown>) {
-  const routes = standardRoutes();
-  routes[URLS.a1] = { status: 200, body: productPage(a1) };
-  routes[URLS.a2] = { status: 200, body: productPage(a2) };
-  return routes;
-}
-
-const DT_80 = { name: 'DT 770 PRO', gtin13: '4010118471063' };
-const DT_250 = { name: 'DT 770 PRO', gtin13: '4010118471070' };
 const DT_600 = { name: 'DT 770 PRO', gtin13: '4010118471087' };
-const URL_A3 = 'https://maker-a.example/products/a3';
 
 /** The version of the criteria the products pack gives the decider. */
 const PACK_VERSION = packs['products/product']!.match!.version;
 
 const HOUR = 3_600_000;
 const NO_AI_INPUT = 'User-agent: *\nContent-Signal: ai-input=no\nAllow: /\n';
-
-/** The test dataset with a third page for maker A, at a3. */
-function withThirdPage(definition: Definition): Definition {
-  const makerA = definition.sources[0] as PagesSource;
-  return {
-    ...definition,
-    sources: [{ ...makerA, pages: [...makerA.pages, URL_A3] }, definition.sources[1]!],
-  };
-}
 
 const decisionsAbout = (datasetId: string) =>
   db.select().from(decisionRecords).where(eq(decisionRecords.datasetId, datasetId));
@@ -279,31 +266,6 @@ describe('a page that gives only a name', { timeout: 20_000 }, () => {
 });
 
 describe('a decider that says a page is the same as two entities', { timeout: 20_000 }, () => {
-  /**
-   * Two versions, split in the first run, and a page that gives only their name. The decider says
-   * the 250 is a version of the 80, and the page is the same as whichever it is asked about.
-   */
-  async function versionsAndAPage(datasetId: string) {
-    const routes = routesWith(DT_80, DT_250);
-    routes[URL_A3] = { status: 200, body: productPage({ name: 'DT 770 PRO' }) };
-    const definition = withThirdPage(testDefinition(datasetId));
-    const {
-      world,
-      pages: [a1, a2, page],
-    } = await worldFor(definition, routes);
-    const scripted = fakeDecider(
-      (request): Record<string, number> =>
-        request.evidence.startsWith(`Record A (${URLS.a2}):`) ? { variant: 0.97 } : { same: 0.98 },
-    );
-    world.ports.decider = scripted.decider;
-    await refresh(world, datasetId);
-    const [e1, e2] = [(await entityOf(a1!.id))!, (await entityOf(a2!.id))!];
-    expect(await entityOf(page!.id)).toBeNull();
-    // The questions about the page are asked in the next run: one is accepted, and the other isn't.
-    const second = await refresh(world, datasetId);
-    return { world, definition, scripted, page: page!, e1, e2, second };
-  }
-
   /** The verdicts on a page, by entity. */
   const verdictsAbout = async (datasetId: string, pageId: string) =>
     new Map(
@@ -371,8 +333,8 @@ describe('a decider that says a page is the same as two entities', { timeout: 20
     const { world, definition, page, e1, e2 } = await versionsAndAPage(datasetId);
     const asked = await decisionAbout(datasetId, page.id, e2);
     await finalizeDecision(db, { id: asked.id, finalAnswer: 'different', at: world.clock.now() });
-    // In the pipeline the answer reaches the next run through the `judge` call that Task 16 adds.
-    // This applies it by the step, as the test of a person’s answer does.
+    // In the pipeline the answer reaches the next run through the `judge` call in `answerReview`
+    // (review.ts). This applies it by the step, as the test of a person’s answer does.
     expect(
       await matchItem(
         contextOf(world, definition),
@@ -801,8 +763,8 @@ describe('the match step', { timeout: 20_000 }, () => {
     await finalizeDecision(db, { id: asked!.id, finalAnswer: 'same', at: world.clock.now() });
 
     // The person's answer stands, though the decider could be asked again. In the pipeline it
-    // reaches the next run through the `judge` call that Task 16 adds; this test drives `matchItem`
-    // after `finalizeDecision` directly.
+    // reaches the next run through the `judge` call in `answerReview` (review.ts); this test
+    // drives `matchItem` after `finalizeDecision` directly.
     const matched = await matchItem(
       contextOf(world, definition),
       { itemId: a2!.id, entityId: e1 },

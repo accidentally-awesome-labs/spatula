@@ -1,17 +1,26 @@
 import {
   DIRECTORY_CONTENT_TYPE,
   DIRECTORY_PATH,
+  matchQuestion,
   sha256Hex,
   type PagesSource,
   type RunView,
 } from '@spatula/core';
 import {
+  closeReview,
   commitSnapshot,
   datasets,
+  entities,
   getDataset,
   getRun,
+  holdSnapshot,
   items,
+  judgementsFor,
+  listLiveItems,
+  openReview,
   runs,
+  snapshotById,
+  snapshots,
   startRun,
 } from '@spatula/store';
 import { testDefinition } from '@spatula/store/fixtures';
@@ -22,6 +31,7 @@ import { http, HttpResponse } from 'msw';
 import { describe, expect, it, vi } from 'vitest';
 import { api, RUN_START_GRACE_MS } from '../../src/api';
 import { withDatabase } from '../../src/database';
+import { PUBLISH_QUESTION } from '../../src/publish';
 import { network } from './network';
 
 /**
@@ -248,6 +258,7 @@ describe('the owner routes', () => {
       ['PUT', '/datasets/api-guard'],
       ['POST', '/datasets/api-guard/runs'],
       ['GET', '/datasets/api-guard/snapshots/latest'],
+      ['POST', '/datasets/api-guard/review/rv_x'],
     ] as const;
     for (const [method, path] of requests) {
       for (const token of [null, 'wrong']) {
@@ -789,5 +800,317 @@ describe('the key directory', () => {
     } finally {
       logged.mockRestore();
     }
+  });
+});
+
+describe('review', () => {
+  const CLASSIFY_QUESTION = {
+    type: 'choice' as const,
+    prompt: 'Which category does the one product this page is about have?',
+    options: ['Headphones', 'DAC/Amp', 'None of these'],
+  };
+
+  /**
+   * The classification question a run asks when its decider isn't sure, about the dataset's first
+   * page.
+   */
+  async function askedAboutAPage(datasetId: string, reviewId: string, at: string) {
+    await call('PUT', `/datasets/${datasetId}`, { body: testDefinition(datasetId) });
+    const [page] = await withDatabase(env, (db) => listLiveItems(db, datasetId));
+    const context = {
+      url: page!.locator,
+      field: 'category',
+      proposed: 'Headphones',
+      probabilities: { Headphones: 0.62, 'DAC/Amp': 0.3 },
+      reason: 'It sits over the ears.',
+    };
+    await withDatabase(env, (db) =>
+      openReview(db, {
+        id: reviewId,
+        datasetId,
+        kind: 'classify',
+        subject: page!.id,
+        itemId: page!.id,
+        question: CLASSIFY_QUESTION,
+        context,
+        at: new Date(at),
+      }),
+    );
+    return { page: page!, context };
+  }
+
+  /** A snapshot held for the owner, its records in R2 where a run puts them. */
+  async function heldSnapshot(datasetId: string, id: string, at: string) {
+    const key = `datasets/${datasetId}/held/${id}.json`;
+    const draft = JSON.stringify({
+      project: datasetId,
+      snapshotId: id,
+      records: [{ canonicalId: `sp_${id}`, fields: { name: 'A1' }, provenance: {} }],
+    });
+    await env.STORE.put(key, draft);
+    const context = {
+      snapshotId: id,
+      records: 1,
+      added: 1,
+      removed: 0,
+      reasons: ['the dataset’s approval is manual'],
+      previousGeneration: null,
+      incomplete: 0,
+      openClassify: 0,
+      openMatch: 0,
+    };
+    await withDatabase(env, async (db) =>
+      holdSnapshot(db, {
+        id,
+        datasetId,
+        runId: null,
+        revision: 1,
+        recordCount: 1,
+        recordsSha256: `records-${id}`,
+        key,
+        sha256: await sha256Hex(draft),
+        bytes: draft.length,
+        heldReason: 'the dataset’s approval is manual',
+        report: { excluded: [] },
+        at: new Date(at),
+        review: { id: `rv_${id}`, question: PUBLISH_QUESTION, context },
+      }),
+    );
+    return { reviewId: `rv_${id}`, context };
+  }
+
+  it('lists open questions, and refuses answers that aren’t options or aren’t open', async () => {
+    await call('PUT', '/datasets/api-review', { body: testDefinition('api-review') });
+    const listed = await call('GET', '/datasets/api-review/review');
+    expect(listed.status).toBe(200);
+    expectNoStore(listed);
+    expect(await listed.json()).toEqual({ reviews: [] });
+
+    const answer = (body: unknown) => call('POST', '/datasets/api-review/review/rv_none', { body });
+    expect((await answer({ answer: 'same' })).status).toBe(404);
+    expect((await answer('not json')).status).toBe(400);
+    expect((await answer({ answer: 'same', extra: 1 })).status).toBe(400);
+    expect((await call('GET', '/datasets/api-review/review', { token: null })).status).toBe(401);
+  });
+
+  it('lists the questions that wait, oldest first, with what each proposes', async () => {
+    const datasetId = 'api-review-list';
+    const { page, context } = await askedAboutAPage(
+      datasetId,
+      'rv_api_classify',
+      '2026-10-10T00:00:00.000Z',
+    );
+    const held = await heldSnapshot(datasetId, 'sn_api_listed', '2026-10-10T00:01:00.000Z');
+    const listed = await call('GET', `/datasets/${datasetId}/review`);
+    expect(listed.status).toBe(200);
+    expectNoStore(listed);
+    expect(await listed.json()).toEqual({
+      reviews: [
+        {
+          id: 'rv_api_classify',
+          kind: 'classify',
+          subject: page.id,
+          question: CLASSIFY_QUESTION,
+          context,
+          createdAt: '2026-10-10T00:00:00.000Z',
+        },
+        {
+          id: held.reviewId,
+          kind: 'publication',
+          subject: 'sn_api_listed',
+          question: PUBLISH_QUESTION,
+          context: held.context,
+          createdAt: '2026-10-10T00:01:00.000Z',
+        },
+      ],
+    });
+    // Another dataset's questions aren't this one's.
+    expect(await (await call('GET', '/datasets/api-review/review')).json()).toEqual({
+      reviews: [],
+    });
+  });
+
+  it('refuses an answer that isn’t an option, one for a question answered already, and one it can’t read', async () => {
+    const datasetId = 'api-review-refused';
+    await askedAboutAPage(datasetId, 'rv_api_refused', '2026-10-10T00:00:00.000Z');
+    const path = `/datasets/${datasetId}/review/rv_api_refused`;
+
+    const notAnOption = await call('POST', path, { body: { answer: 'Speakers' } });
+    expect(notAnOption.status).toBe(400);
+    expectNoStore(notAnOption);
+    expect(await notAnOption.json()).toEqual({
+      error: 'Answer with one of: Headphones, DAC/Amp, None of these.',
+    });
+    // It was refused, so the question still waits.
+    const waiting = await call('GET', `/datasets/${datasetId}/review`);
+    expect(((await waiting.json()) as { reviews: unknown[] }).reviews).toHaveLength(1);
+
+    // These aren't answers: nothing, too little or too much, text that isn't an answer's shape, or
+    // not JSON at all.
+    for (const body of [
+      {},
+      { answer: '' },
+      { answer: 'x'.repeat(601) },
+      { answer: 1 },
+      '"DAC/Amp"',
+    ]) {
+      const refused = await call('POST', path, { body });
+      expect(refused.status, JSON.stringify(body)).toBe(400);
+      expectNoStore(refused);
+      expect(await refused.json(), JSON.stringify(body)).toEqual({
+        error: 'Send { "answer": one of the question’s options }.',
+      });
+    }
+    const notJson = await call('POST', path, { body: 'DAC/Amp' });
+    expect(notJson.status).toBe(400);
+    expectNoStore(notJson);
+    expect(await notJson.json()).toEqual({ error: 'The body isn’t JSON.' });
+
+    // Only the owner answers, and only for the dataset the question is about.
+    const unsigned = await call('POST', path, { body: { answer: 'DAC/Amp' }, token: null });
+    expect(unsigned.status).toBe(401);
+    expect(unsigned.headers.get('www-authenticate')).toBe('Bearer');
+    expectNoStore(unsigned);
+    const elsewhere = await call('POST', '/datasets/api-review/review/rv_api_refused', {
+      body: { answer: 'DAC/Amp' },
+    });
+    expect(elsewhere.status).toBe(404);
+    expectNoStore(elsewhere);
+    expect(await elsewhere.json()).toEqual({ error: 'No such question for this dataset.' });
+
+    await withDatabase(env, (db) =>
+      closeReview(db, {
+        id: 'rv_api_refused',
+        status: 'decided',
+        answer: 'Headphones',
+        at: new Date('2026-10-10T00:02:00.000Z'),
+      }),
+    );
+    const closed = await call('POST', path, { body: { answer: 'DAC/Amp' } });
+    expect(closed.status).toBe(409);
+    expectNoStore(closed);
+    expect(await closed.json()).toEqual({ error: 'That question has been answered already.' });
+  });
+
+  it('records a person’s match verdict, and refuses a second “same” for the page', async () => {
+    const datasetId = 'api-review-match';
+    await call('PUT', `/datasets/${datasetId}`, { body: testDefinition(datasetId) });
+    const [page] = await withDatabase(env, (db) => listLiveItems(db, datasetId));
+    // Two records the page might be, each with a question for a person.
+    const records = ['sp_api_match_one', 'sp_api_match_two'];
+    await withDatabase(env, async (db) => {
+      await db
+        .insert(entities)
+        .values(records.map((id) => ({ id, datasetId, recordType: 'product' })));
+      for (const [index, entityId] of records.entries()) {
+        await openReview(db, {
+          id: `rv_api_match_${index}`,
+          datasetId,
+          kind: 'match',
+          subject: `${page!.id}|${entityId}`,
+          itemId: page!.id,
+          entityId,
+          question: matchQuestion(),
+          context: { page: page!.locator, entity: page!.locator, proposed: 'same' },
+          at: new Date('2026-10-10T00:00:00.000Z'),
+        });
+      }
+    });
+    const answer = (index: number, value: string) =>
+      call('POST', `/datasets/${datasetId}/review/rv_api_match_${index}`, {
+        body: { answer: value },
+      });
+
+    const first = await answer(0, 'same');
+    expect(first.status).toBe(200);
+    expect(await first.json()).toEqual({
+      answered: 'rv_api_match_0',
+      answer: 'same',
+      effect: 'The page joins that record at the next run.',
+    });
+    // A page joins one record, so the same word about the other is refused, and its question waits.
+    const second = await answer(1, 'same');
+    expect(second.status).toBe(409);
+    expectNoStore(second);
+    expect(await second.json()).toEqual({
+      error: `A person already said this page is the same product as ${records[0]}, and a page joins one record. Answer variant or different.`,
+    });
+    expect((await answer(1, 'variant')).status).toBe(200);
+    expect(await withDatabase(env, (db) => judgementsFor(db, datasetId))).toMatchObject([
+      { itemId: page!.id, entityId: records[0], verdict: 'same', who: 'person' },
+      { itemId: page!.id, entityId: records[1], verdict: 'not_same', who: 'person' },
+    ]);
+  });
+
+  it('publishes a held snapshot when the owner says so, and discards the next', async () => {
+    const datasetId = 'api-review-publish';
+    await call('PUT', `/datasets/${datasetId}`, { body: testDefinition(datasetId) });
+    const first = await heldSnapshot(datasetId, 'sn_api_first', '2026-10-10T00:00:00.000Z');
+    const published = await call('POST', `/datasets/${datasetId}/review/${first.reviewId}`, {
+      body: { answer: 'publish' },
+    });
+    expect(published.status).toBe(200);
+    expectNoStore(published);
+    expect(await published.json()).toEqual({
+      answered: first.reviewId,
+      answer: 'publish',
+      effect: 'Published as generation 1.',
+    });
+    // The consumer's route serves what was held, as generation 1.
+    const served = await call('GET', `/datasets/${datasetId}/snapshots/latest`);
+    expect(served.status).toBe(200);
+    expect(served.headers.get('x-spatula-generation')).toBe('1');
+    expect(served.headers.get('x-spatula-snapshot-id')).toBe('sn_api_first');
+    const file = (await served.json()) as { publishedAt: string };
+    expect(file).toMatchObject({
+      project: datasetId,
+      generation: 1,
+      records: [{ canonicalId: 'sp_sn_api_first' }],
+    });
+    // It was published when the owner said so, not when it was held.
+    expect(Math.abs(Date.now() - Date.parse(file.publishedAt))).toBeLessThan(60_000);
+
+    const second = await heldSnapshot(datasetId, 'sn_api_second', '2026-10-10T00:05:00.000Z');
+    const discarded = await call('POST', `/datasets/${datasetId}/review/${second.reviewId}`, {
+      body: { answer: 'discard' },
+    });
+    expect(discarded.status).toBe(200);
+    expect(await discarded.json()).toEqual({
+      answered: second.reviewId,
+      answer: 'discard',
+      effect: 'The held snapshot is discarded.',
+    });
+    expect((await withDatabase(env, (db) => snapshotById(db, 'sn_api_second')))?.state).toBe(
+      'discarded',
+    );
+    // Neither is waiting any more, and an answer sent again finds its question closed.
+    expect(await (await call('GET', `/datasets/${datasetId}/review`)).json()).toEqual({
+      reviews: [],
+    });
+    const again = await call('POST', `/datasets/${datasetId}/review/${second.reviewId}`, {
+      body: { answer: 'discard' },
+    });
+    expect(again.status).toBe(409);
+    expectNoStore(again);
+    expect(await again.json()).toEqual({ error: 'That question has been answered already.' });
+  });
+
+  it('refuses to publish a snapshot that isn’t held any more, and says what became of it', async () => {
+    const datasetId = 'api-review-stale';
+    await call('PUT', `/datasets/${datasetId}`, { body: testDefinition(datasetId) });
+    const held = await heldSnapshot(datasetId, 'sn_api_stale', '2026-10-10T00:00:00.000Z');
+    // A newer run replaced it, and its question is still open for the moment the answer arrives.
+    await withDatabase(env, (db) =>
+      db.update(snapshots).set({ state: 'superseded' }).where(eq(snapshots.id, 'sn_api_stale')),
+    );
+    const stale = await call('POST', `/datasets/${datasetId}/review/${held.reviewId}`, {
+      body: { answer: 'publish' },
+    });
+    expect(stale.status).toBe(409);
+    expectNoStore(stale);
+    expect(await stale.json()).toEqual({ error: 'A newer run replaced that snapshot.' });
+    expect((await withDatabase(env, (db) => snapshotById(db, 'sn_api_stale')))?.state).toBe(
+      'superseded',
+    );
   });
 });
