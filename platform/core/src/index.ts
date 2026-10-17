@@ -6,6 +6,7 @@ export * from './definition';
 export * from './robots';
 export * from './sitemap';
 export * from './gate';
+export * from './gates';
 export * from './page';
 export * from './statements';
 export * from './pack';

@@ -667,6 +667,91 @@ describe('run', () => {
     expect(await main(['run', 'cli-products', '--wait'], { io, env: ENV, fetch })).toBe(0);
     expect(out).toContain('Entities: 3 new, 0 linked, 0 conflicts, 0 without an identity yet.');
   });
+
+  it('says when the run’s snapshot is held for review', async () => {
+    const complete: RunView = {
+      ...RUNNING,
+      status: 'complete',
+      finishedAt: '2026-10-10T00:01:00.000Z',
+      summary: {
+        items: 3,
+        fetches: { changed: 3, unchanged: 0, gone: 0, failed: 0, blocked: 0 },
+        statements: { added: 19, reseen: 0, withdrawn: 0 },
+        llm: { ran: 3, reused: 0, skipped: 0, failed: 0, inputTokens: 3000, outputTokens: 150 },
+        entities: { created: 3, linked: 0, conflicts: 0, unresolved: 0 },
+        snapshot: {
+          published: false,
+          reason: 'it’s held for review: it’s the dataset’s first publication',
+          excluded: [],
+          held: {
+            snapshotId: 'sn_held',
+            records: 3,
+            reasons: ['it’s the dataset’s first publication'],
+          },
+        },
+        notes: [],
+      },
+    };
+    const { fetch } = stubApi(({ method }) =>
+      method === 'POST'
+        ? Response.json({ runId: RUN_ID }, { status: 202 })
+        : Response.json(complete),
+    );
+    const { io, out } = memoryIo();
+    expect(await main(['run', 'cli-products', '--wait'], { io, env: ENV, fetch })).toBe(0);
+    expect(out).toContain(
+      'Snapshot: none published, because it’s held for review: it’s the dataset’s first publication.',
+    );
+    expect(out).toContain('Held: sn_held, 3 records. Publish or discard it with spatula review.');
+  });
+
+  it('says what is held before what was left out, and nothing of it when a snapshot published', async () => {
+    const summary = (snapshot: RunSummary['snapshot']): RunView => ({
+      ...RUNNING,
+      status: 'complete',
+      finishedAt: '2026-10-10T00:01:00.000Z',
+      summary: {
+        items: 3,
+        fetches: { changed: 3, unchanged: 0, gone: 0, failed: 0, blocked: 0 },
+        statements: { added: 19, reseen: 0, withdrawn: 0 },
+        llm: { ran: 3, reused: 0, skipped: 0, failed: 0, inputTokens: 3000, outputTokens: 150 },
+        entities: { created: 3, linked: 0, conflicts: 0, unresolved: 0 },
+        snapshot,
+        notes: [],
+      },
+    });
+    const run = async (snapshot: RunSummary['snapshot']) => {
+      const { fetch } = stubApi(({ method }) =>
+        method === 'POST'
+          ? Response.json({ runId: RUN_ID }, { status: 202 })
+          : Response.json(summary(snapshot)),
+      );
+      const { io, out } = memoryIo();
+      expect(await main(['run', 'cli-products', '--wait'], { io, env: ENV, fetch })).toBe(0);
+      return out;
+    };
+
+    const held = await run({
+      published: false,
+      reason: 'it’s held for review: the dataset’s approval is manual',
+      excluded: [{ canonicalId: 'sp_x', missing: ['category'] }],
+      held: { snapshotId: 'sn_held', records: 2, reasons: ['the dataset’s approval is manual'] },
+    });
+    expect(held.filter((line) => /^(Snapshot|Held|Left out):/u.test(line))).toEqual([
+      'Snapshot: none published, because it’s held for review: the dataset’s approval is manual.',
+      'Held: sn_held, 2 records. Publish or discard it with spatula review.',
+      'Left out: sp_x, missing category.',
+    ]);
+
+    const publishedOne = await run({
+      published: true,
+      generation: 2,
+      snapshotId: 'sn_new',
+      records: 3,
+      excluded: [],
+    });
+    expect(publishedOne.some((line) => line.startsWith('Held:'))).toBe(false);
+  });
 });
 
 describe('revive', () => {

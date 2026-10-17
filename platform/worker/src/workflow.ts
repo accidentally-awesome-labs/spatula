@@ -3,6 +3,7 @@ import { StaleDefinitionError } from '@spatula/store';
 import { WorkflowEntrypoint, type WorkflowEvent, type WorkflowStep } from 'cloudflare:workers';
 import { NonRetryableError } from 'cloudflare:workflows';
 import { workerPorts } from './ports';
+import { SnapshotFileMissingError } from './publish';
 import { DatasetMissingError, runRefresh, type RefreshParams, type StepRunner } from './refresh';
 
 /** The Refresh Workflow: the pipeline over real ports. Its instance ID is the run's ID. */
@@ -16,8 +17,9 @@ export class RefreshWorkflow extends WorkflowEntrypoint<Env, RefreshParams> {
 }
 
 /**
- * Workflows' steps as the pipeline's StepRunner. A dataset that doesn't exist, or whose stored
- * definition no longer passes the checks, isn't retried: a retry would find the same thing.
+ * Workflows' steps as the pipeline's StepRunner. A dataset that doesn't exist, whose stored
+ * definition no longer passes the checks, or whose last snapshot's file is gone, isn't retried: a
+ * retry would find the same thing.
  */
 export function stepRunner(step: WorkflowStep): StepRunner {
   // Workflows types step results as serializable values. The pipeline's are plain JSON, which the
@@ -33,7 +35,11 @@ export function stepRunner(step: WorkflowStep): StepRunner {
         try {
           return await fn();
         } catch (error) {
-          if (error instanceof DatasetMissingError || error instanceof StaleDefinitionError) {
+          if (
+            error instanceof DatasetMissingError ||
+            error instanceof StaleDefinitionError ||
+            error instanceof SnapshotFileMissingError
+          ) {
             throw new NonRetryableError(error.message);
           }
           throw error;

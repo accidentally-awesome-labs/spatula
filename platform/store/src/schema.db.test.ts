@@ -10,6 +10,7 @@ import {
   JUDGES,
   REVIEW_KINDS,
   REVIEW_STATUSES,
+  SNAPSHOT_STATES,
   VERDICTS,
 } from './schema';
 
@@ -42,5 +43,10 @@ describe('the CHECK lists', () => {
       expect(await allowed(tx, 'judgements_who')).toEqual([...JUDGES].sort());
       expect(await allowed(tx, 'review_items_kind')).toEqual([...REVIEW_KINDS].sort());
       expect(await allowed(tx, 'review_items_status')).toEqual([...REVIEW_STATUSES].sort());
+    }));
+
+  it('allow exactly the snapshot states the store names', () =>
+    withRollback(async (tx) => {
+      expect(await allowed(tx, 'snapshots_state')).toEqual([...SNAPSHOT_STATES].sort());
     }));
 });

@@ -27,7 +27,13 @@ export type PublishResult =
       records: number;
       excluded: Excluded[];
     }
-  | { published: false; reason: string; excluded: Excluded[] };
+  | {
+      published: false;
+      reason: string;
+      excluded: Excluded[];
+      /** The snapshot held for the owner's review, when the gates held one. */
+      held?: { snapshotId: string; records: number; reasons: string[] };
+    };
 
 /** What reading the sitemap sources found. */
 export interface DiscoverySummary {

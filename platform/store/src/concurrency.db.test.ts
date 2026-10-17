@@ -13,7 +13,17 @@ import {
 } from './decisions';
 import { setItemStatus } from './fetches';
 import { testDefinition } from './fixtures';
-import { datasets, decisionRecords, items } from './schema';
+import { startRun } from './runs';
+import { datasets, decisionRecords, items, snapshots } from './schema';
+import {
+  commitSnapshot,
+  discardHeld,
+  headGenerationOf,
+  holdSnapshot,
+  publishHeld,
+  snapshotById,
+  supersedeHeld,
+} from './snapshots';
 
 /*
  * What only several connections can show. Every other test here runs in one transaction that is
@@ -326,4 +336,247 @@ describe('openReview while an answer closes the review', () => {
         answer: 'None of these',
       });
     }));
+});
+
+/** A snapshot held for the owner's review, in a dataset these tests made. */
+const heldIn = (datasetId: string, id: string, at: Date) => ({
+  id,
+  datasetId,
+  runId: null,
+  revision: 1,
+  recordCount: 3,
+  recordsSha256: `records-${id}`,
+  key: `datasets/${datasetId}/held/${id}.json`,
+  sha256: `file-${id}`,
+  bytes: 100,
+  heldReason: 'it’s the dataset’s first publication',
+  report: { excluded: [] },
+  at,
+  review: {
+    id: `rv_${id}`,
+    question: {
+      type: 'choice' as const,
+      prompt: 'Publish this held snapshot?',
+      options: ['publish', 'discard'],
+    },
+    context: { snapshotId: id },
+  },
+});
+
+/** A snapshot a run publishes itself, at a generation. */
+const directIn = (datasetId: string, generation: number) => ({
+  id: `sn_direct_${generation}`,
+  datasetId,
+  generation,
+  runId: null,
+  revision: 1,
+  recordCount: 3,
+  recordsSha256: `direct-${generation}`,
+  key: `datasets/${datasetId}/snapshots/direct-${generation}.json`,
+  sha256: `direct-${generation}`,
+  bytes: 100,
+  publishedAt: T(10 + generation).toISOString(),
+  report: { excluded: [] },
+});
+
+/** The owner's publication of a held snapshot, once its final file is written. */
+const publishing = (datasetId: string, snapshotId: string, generation: number) => ({
+  datasetId,
+  snapshotId,
+  generation,
+  key: `datasets/${datasetId}/snapshots/${snapshotId}.json`,
+  sha256: 'final',
+  bytes: 120,
+  publishedAt: T(20).toISOString(),
+});
+
+/**
+ * A session that holds a row until it's let go, as a change to a snapshot's state does. `lock` is
+ * the session's first statement, so it has the row by the time this returns.
+ */
+async function holdingRow(lock: (tx: Executor) => PromiseLike<unknown>) {
+  let release!: () => void;
+  const released = new Promise<void>((resolve) => (release = resolve));
+  let taken!: () => void;
+  const locked = new Promise<void>((resolve) => (taken = resolve));
+  const session = pool.transaction(async (tx) => {
+    await lock(tx);
+    taken();
+    await released;
+  });
+  await Promise.race([locked, session]);
+  return { release, done: session };
+}
+
+const holdingSnapshot = (snapshotId: string) =>
+  holdingRow((tx) =>
+    tx
+      .select({ id: snapshots.id })
+      .from(snapshots)
+      .where(eq(snapshots.id, snapshotId))
+      .for('update'),
+  );
+
+const holdingDataset = (datasetId: string) =>
+  holdingRow((tx) =>
+    tx
+      .select({ id: datasets.id })
+      .from(datasets)
+      .where(eq(datasets.id, datasetId))
+      .for('no key update'),
+  );
+
+/**
+ * How many rows the sessions waiting for a lock have written or locked in the tables of snapshots
+ * and of questions. A session that has only read them, or taken the dataset's row, has none.
+ */
+async function writtenWhileWaiting(): Promise<number> {
+  const [row] = await pool.execute<{ n: number }>(
+    sql`select count(*)::int as n from pg_locks l join pg_stat_activity a on a.pid = l.pid where a.datname = current_database() and a.wait_event_type = 'Lock' and a.backend_type = 'client backend' and l.granted and l.locktype = 'relation' and l.relation in ('snapshots'::regclass, 'review_items'::regclass) and l.mode in ('RowExclusiveLock', 'RowShareLock')`,
+  );
+  return row?.n ?? 0;
+}
+
+/** Whether another session holds the dataset's row: a lock that mustn't wait finds it taken. */
+async function datasetRowIsTaken(datasetId: string): Promise<boolean> {
+  try {
+    await pool.transaction(async (tx) => {
+      await tx
+        .select({ id: datasets.id })
+        .from(datasets)
+        .where(eq(datasets.id, datasetId))
+        .for('no key update', { noWait: true });
+    });
+    return false;
+  } catch (error) {
+    // 55P03: the lock was not available.
+    const code = (error as { code?: string; cause?: { code?: string } }).code;
+    const causeCode = (error as { cause?: { code?: string } }).cause?.code;
+    if (code === '55P03' || causeCode === '55P03') return true;
+    throw error;
+  }
+}
+
+/**
+ * Rejects if `work` hasn't finished in `ms`, so a statement that waits fails the test instead of
+ * hanging it.
+ */
+const within = <T>(ms: number, work: Promise<T>): Promise<T> =>
+  Promise.race([
+    work,
+    new Promise<never>((_, reject) =>
+      setTimeout(() => reject(new Error(`still waiting after ${ms} ms`)), ms),
+    ),
+  ]);
+
+describe('changing a snapshot’s state while another session does', () => {
+  it('finishes a publish and a commit that race for one generation, the publish first', () =>
+    inDataset('publish-first', async (datasetId) => {
+      await holdSnapshot(pool, heldIn(datasetId, 'sn_held', T(1)));
+      let commit: Promise<unknown> = Promise.resolve();
+      try {
+        const published = await publishHeld(
+          racing(pool, async () => {
+            // A run publishes generation 1 itself once the publish has begun, before the publish
+            // moves the head. If the publish held the snapshot's row and then wanted the dataset's,
+            // while the commit held the dataset's and then wanted the snapshot's, Postgres would
+            // end one of them with "deadlock detected".
+            commit = commitSnapshot(pool, directIn(datasetId, 1));
+            await settledOrWaiting(commit);
+          }),
+          publishing(datasetId, 'sn_held', 1),
+        );
+        expect(published).toEqual({ committed: true });
+        expect(await commit).toEqual({ committed: false, headGeneration: 1 });
+        expect((await snapshotById(pool, 'sn_held'))?.state).toBe('published');
+        expect(await headGenerationOf(pool, datasetId)).toBe(1);
+      } finally {
+        // Let the commit end before the dataset goes, whatever the test found.
+        await commit.catch(() => undefined);
+      }
+    }));
+
+  it('finishes a commit and a publish that race for one generation, the commit first', () =>
+    inDataset('commit-first', async (datasetId) => {
+      await holdSnapshot(pool, heldIn(datasetId, 'sn_held', T(1)));
+      let publish: Promise<unknown> = Promise.resolve();
+      try {
+        const committed = await commitSnapshot(
+          racing(pool, async () => {
+            publish = publishHeld(pool, publishing(datasetId, 'sn_held', 1));
+            await settledOrWaiting(publish);
+          }),
+          directIn(datasetId, 1),
+        );
+        expect(committed).toEqual({ committed: true });
+        // The commit superseded what was held, so the publish finds it stale.
+        expect(await publish).toEqual({ stale: 'superseded' });
+        expect((await snapshotById(pool, 'sn_held'))?.state).toBe('superseded');
+        expect(await headGenerationOf(pool, datasetId)).toBe(1);
+      } finally {
+        await publish.catch(() => undefined);
+      }
+    }));
+
+  const changes: [string, (datasetId: string) => Promise<unknown>][] = [
+    ['commit', (datasetId) => commitSnapshot(pool, directIn(datasetId, 1))],
+    ['hold', (datasetId) => holdSnapshot(pool, heldIn(datasetId, 'sn_newer', T(2)))],
+    ['publish', (datasetId) => publishHeld(pool, publishing(datasetId, 'sn_held', 1))],
+    ['discard', () => discardHeld(pool, { snapshotId: 'sn_held', at: T(2) })],
+    ['supersede', (datasetId) => supersedeHeld(pool, { datasetId, at: T(2) })],
+  ];
+  it.each(changes)('%s writes nothing before it has the dataset’s row', (name, change) =>
+    inDataset(`first-${name}`, async (datasetId) => {
+      await holdSnapshot(pool, heldIn(datasetId, 'sn_held', T(1)));
+      // Another session has the dataset's row, so the change waits for it, and so far it has
+      // written no snapshot and no question. A change that wrote its own snapshot first, as a
+      // hold does, would hold it while it waits.
+      const lock = await holdingDataset(datasetId);
+      let finished = false;
+      const changing = change(datasetId);
+      void changing.then(
+        () => (finished = true),
+        () => (finished = true),
+      );
+      try {
+        await settledOrWaiting(changing);
+        expect(finished).toBe(false);
+        expect(await writtenWhileWaiting()).toBe(0);
+      } finally {
+        lock.release();
+        await lock.done;
+        await changing.catch(() => undefined);
+      }
+      await changing;
+    }),
+  );
+
+  it.each(changes)('%s takes the dataset’s row before the snapshot’s', (name, change) =>
+    inDataset(`order-${name}`, async (datasetId) => {
+      await holdSnapshot(pool, heldIn(datasetId, 'sn_held', T(1)));
+      // Another session has the held snapshot's row, so the change waits for it.
+      const lock = await holdingSnapshot('sn_held');
+      let finished = false;
+      const changing = change(datasetId);
+      void changing.then(
+        () => (finished = true),
+        () => (finished = true),
+      );
+      try {
+        await settledOrWaiting(changing);
+        expect(finished).toBe(false);
+        // It already has the dataset's row. Changes that took the snapshot's row first and the
+        // dataset's second would deadlock with one that took them the other way.
+        expect(await datasetRowIsTaken(datasetId)).toBe(true);
+        // That lock is the weaker one: a run starting while a snapshot changes isn't held up.
+        await within(2000, startRun(pool, { id: `${datasetId}-202610100005`, datasetId }));
+      } finally {
+        lock.release();
+        await lock.done;
+        // Let the change end before the dataset goes, whatever the test found.
+        await changing.catch(() => undefined);
+      }
+      await changing;
+    }),
+  );
 });

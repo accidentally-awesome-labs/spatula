@@ -343,3 +343,23 @@ export async function dismissReviews(
     .returning({ id: reviewItems.id });
   return rows.length;
 }
+
+/** Closes the open question about a subject with the answer it got, whichever way it came. */
+export async function decideReviews(
+  db: Executor,
+  input: { datasetId: string; kind: ReviewKind; subject: string; answer: string; at: Date },
+): Promise<number> {
+  const rows = await db
+    .update(reviewItems)
+    .set({ status: 'decided', answer: input.answer, closedAt: input.at })
+    .where(
+      and(
+        eq(reviewItems.datasetId, input.datasetId),
+        eq(reviewItems.kind, input.kind),
+        eq(reviewItems.subject, input.subject),
+        eq(reviewItems.status, 'open'),
+      ),
+    )
+    .returning({ id: reviewItems.id });
+  return rows.length;
+}

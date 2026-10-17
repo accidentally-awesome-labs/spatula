@@ -3,6 +3,7 @@ import type {
   Definition,
   Excluded,
   FieldValue,
+  GateResult,
   Method,
   Outcome,
   Question,
@@ -279,7 +280,20 @@ export const entityKeys = pgTable(
   ],
 );
 
-/** Published snapshots. The file lives in R2 under `key`; its generation is unique per dataset. */
+export const SNAPSHOT_STATES = ['published', 'held', 'superseded', 'discarded'] as const;
+export type SnapshotState = (typeof SNAPSHOT_STATES)[number];
+
+/** What a snapshot left out, and what the gates found. */
+export interface SnapshotReport {
+  excluded: Excluded[];
+  gates?: GateResult;
+}
+
+/**
+ * Snapshots: published ones, with a generation unique per dataset, and held ones, with none, which
+ * wait for the owner. A held snapshot is published, superseded by a newer run's, or discarded. The
+ * file lives in R2 under `key`.
+ */
 export const snapshots = pgTable(
   'snapshots',
   {
@@ -287,21 +301,33 @@ export const snapshots = pgTable(
     datasetId: text('dataset_id')
       .notNull()
       .references(() => datasets.id, { onDelete: 'cascade' }),
-    generation: integer('generation').notNull(),
+    state: text('state').$type<SnapshotState>().notNull().default('published'),
+    generation: integer('generation'),
     runId: text('run_id').references(() => runs.id, { onDelete: 'set null' }),
+    /** The definition revision the records came from; null for snapshots from before slice 1. */
+    revision: integer('revision'),
     recordCount: integer('record_count').notNull(),
     /** The hash of the records alone, to tell whether anything changed since the last one. */
     recordsSha256: text('records_sha256').notNull(),
     key: text('key').notNull(),
     sha256: text('sha256').notNull(),
     bytes: integer('bytes').notNull(),
-    publishedAt: time('published_at').notNull(),
-    report: jsonb('report').$type<{ excluded: Excluded[] }>().notNull(),
+    heldReason: text('held_reason'),
+    createdAt: time('created_at').notNull().defaultNow(),
+    publishedAt: time('published_at'),
+    report: jsonb('report').$type<SnapshotReport>().notNull(),
   },
   (t) => [
     uniqueIndex('snapshots_generation').on(t.datasetId, t.generation),
     index('snapshots_run').on(t.runId),
+    index('snapshots_dataset_state').on(t.datasetId, t.state),
     check('snapshots_generation_positive', sql`${t.generation} > 0`),
+    check('snapshots_state', sql`${t.state} in ('published', 'held', 'superseded', 'discarded')`),
+    // A snapshot has a generation, and a publication time, exactly when it's published.
+    check(
+      'snapshots_published',
+      sql`(${t.state} = 'published') = (${t.generation} is not null) and (${t.state} = 'published') = (${t.publishedAt} is not null)`,
+    ),
   ],
 );
 

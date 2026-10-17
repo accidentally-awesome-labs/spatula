@@ -1,5 +1,12 @@
 import { runIdFor, sha256Hex, snapshotSchema, type RunSummary } from '@spatula/core';
-import { applyDefinition, datasets, getRun, latestSnapshot, type Executor } from '@spatula/store';
+import {
+  applyDefinition,
+  commitSnapshot,
+  datasets,
+  getRun,
+  latestSnapshot,
+  type Executor,
+} from '@spatula/store';
 import { testDefinition } from '@spatula/store/fixtures';
 import { introspectWorkflowInstance } from 'cloudflare:test';
 import { env } from 'cloudflare:workers';
@@ -130,6 +137,60 @@ describe('RefreshWorkflow', () => {
     } finally {
       await instance.dispose();
     }
+  });
+
+  it('fails at once, without retrying, when the last published snapshot’s file is gone', async () => {
+    network.use(
+      http.get('https://maker-a.example/robots.txt', () => HttpResponse.text(ROBOTS_OPEN)),
+      http.get('https://maker-b.example/robots.txt', () =>
+        HttpResponse.text('User-agent: *\nDisallow: /cart\n'),
+      ),
+      http.get(URLS.a1, () => html(A1())),
+      http.get(URLS.a2, () => html(A2())),
+      http.get(URLS.b1, () => html(B1())),
+    );
+    const datasetId = 'workers-lost-file';
+    await withDb(async (db) => {
+      await applyDefinition(db, testDefinition(datasetId));
+      // A published snapshot that R2 doesn't hold, and whose records aren't the ones this run
+      // finds, so the gates need to read it.
+      await commitSnapshot(db, {
+        id: 'sn_workflow_lost',
+        datasetId,
+        generation: 1,
+        runId: null,
+        revision: 1,
+        recordCount: 1,
+        recordsSha256: 'lost',
+        key: `datasets/${datasetId}/snapshots/sn_workflow_lost.json`,
+        sha256: 'lost',
+        bytes: 1,
+        publishedAt: new Date().toISOString(),
+        report: { excluded: [] },
+      });
+    });
+    const runId = runIdFor(datasetId, new Date());
+
+    const instance = await introspectWorkflowInstance(env.REFRESH, runId);
+    try {
+      await env.REFRESH.create({ id: runId, params: { runId, datasetId } });
+      await instance.waitForStatus('errored');
+      // A retried step would end the instance as a plain Error, after half a minute of retries.
+      expect(await instance.getError()).toMatchObject({
+        name: 'WorkflowFatalError',
+        message: expect.stringContaining('NonRetryableError'),
+      });
+    } finally {
+      await instance.dispose();
+    }
+
+    // The fail step closed the run, saying which snapshot's file was missing.
+    await withDb(async (db) => {
+      expect(await getRun(db, runId)).toMatchObject({
+        status: 'failed',
+        error: expect.stringContaining('sn_workflow_lost'),
+      });
+    });
   });
 
   it('marks the run failed when a step keeps failing', async () => {

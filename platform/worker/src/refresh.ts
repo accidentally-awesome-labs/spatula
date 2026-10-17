@@ -1,42 +1,30 @@
 import {
   acceptLlmOutput,
   buildLlmRequest,
-  buildRecords,
   extractFromPage,
   LLM_MAX_TOKENS,
   llmFields,
   llmInputHash,
   MAX_MATCH_QUESTIONS,
-  newId,
   PAGE_METHODS,
   parsePage,
   pathPatternMatches,
   sha256Hex,
-  snapshotSchema,
   stableId,
-  stableStringify,
   type ContentSignals,
   type Definition,
-  type EntityStatements,
   type LlmUsage,
   type Outcome,
   type Page,
   type PageExtraction,
-  type PublishResult,
   type RecordType,
   type RunSummary,
-  type Snapshot,
-  type SnapshotRecord,
-  type StatementView,
 } from '@spatula/core';
 import {
-  commitSnapshot,
-  currentStatements,
   dueItems,
   finishRun,
   getDataset,
   itemsByIds,
-  latestSnapshot,
   recordExtraction,
   recordFetch,
   reseeStatements,
@@ -58,11 +46,11 @@ import {
   NO_USAGE,
   pageKey,
   retryTag,
-  snapshotKey,
   type Context,
   type RefreshPorts,
   type StepRunner,
 } from './pipeline';
+import { publish } from './publish';
 import { isChallenge, MAX_WAITS, requestThroughGate, type Resume } from './requests';
 import { storable } from './text';
 
@@ -88,10 +76,11 @@ export {
  * and only when its question changed. A page whose source leaves the record type's decided field
  * to the cascade is then classified, in a step of its own (classify.ts), and isn't current until
  * that step has finished. The LLM and the decider share the run's token budget (pipeline.ts). Then
- * entities are resolved, and a snapshot is published if the records changed. Resolution asks about
- * the pairs it can't settle by rule, each in a step of its own (match.ts), and defers them until
- * they're answered. Nothing here imports Cloudflare: the Workflow passes real ports, and the tests
- * pass fakes.
+ * entities are resolved. Resolution asks about the pairs it can't settle by rule, each in a step
+ * of its own (match.ts), and defers them until they're answered. If the records changed, they go
+ * through the dataset's gates (publish.ts): a snapshot is published when the gates allow it, and
+ * held for the owner's review when they don't. Nothing here imports Cloudflare: the Workflow
+ * passes real ports, and the tests pass fakes.
  */
 
 export interface RefreshParams {
@@ -127,27 +116,6 @@ export class DatasetMissingError extends Error {
     super(`Dataset ${datasetId} doesn’t exist`);
     this.name = 'DatasetMissingError';
   }
-}
-
-/**
- * What a snapshot's records say, without when each value was last seen. A run that only sees
- * the same values again publishes nothing; consumers already have them.
- */
-export async function recordsDigest(records: SnapshotRecord[]): Promise<string> {
-  return sha256Hex(
-    stableStringify(
-      records.map((record) => ({
-        canonicalId: record.canonicalId,
-        fields: record.fields,
-        provenance: Object.fromEntries(
-          Object.entries(record.provenance).map(([name, { sourceUrl, method, confidence }]) => [
-            name,
-            { sourceUrl, method, confidence },
-          ]),
-        ),
-      })),
-    ),
-  );
 }
 
 /** What a final answer means. A page that arrived is then changed or unchanged by its hash. */
@@ -1028,96 +996,4 @@ async function askLlm(
     inputHash,
     note: dropped === 0 ? null : `${item.locator}: dropped ${dropped} of the LLM’s values`,
   };
-}
-
-/**
- * Publishes the dataset's records, if they changed. The file goes to the blob store first; then
- * the head generation moves, compared and set. A step that runs again after publishing finds its
- * own snapshot and reports it.
- */
-async function publish(context: Context, ports: RefreshPorts): Promise<PublishResult> {
-  const { runId, datasetId, definition } = context;
-  return ports.withDb(async (db) => {
-    const latest = await latestSnapshot(db, datasetId);
-    if (latest !== null && latest.runId === runId) {
-      return {
-        published: true,
-        generation: latest.generation,
-        snapshotId: latest.id,
-        records: latest.recordCount,
-        excluded: latest.report.excluded,
-      };
-    }
-    const [recordType] = Object.values(definition.recordTypes);
-    if (recordType === undefined) throw new Error(`Dataset ${datasetId} has no record type`);
-    // Pushed in place: copying an entity's list for every statement would be quadratic.
-    const said = new Map<string, StatementView[]>();
-    for (const statement of await currentStatements(db, datasetId)) {
-      const id = statement.entityId;
-      if (id === null) continue;
-      const list = said.get(id);
-      if (list === undefined) said.set(id, [statement]);
-      else list.push(statement);
-    }
-    const entities: EntityStatements[] = [...said].map(([canonicalId, statements]) => ({
-      canonicalId,
-      statements,
-    }));
-    const { records, excluded } = buildRecords(recordType, entities);
-    if (records.length === 0)
-      return { published: false, reason: 'no record is complete', excluded };
-    const digest = await recordsDigest(records);
-    if (latest !== null && latest.recordsSha256 === digest) {
-      return {
-        published: false,
-        reason: `nothing changed since generation ${latest.generation}`,
-        excluded,
-      };
-    }
-
-    const dataset = await getDataset(db, datasetId);
-    const generation = (dataset?.headGeneration ?? 0) + 1;
-    const snapshot: Snapshot = {
-      project: datasetId,
-      snapshotId: newId('sn'),
-      generation,
-      publishedAt: ports.now().toISOString(),
-      records,
-    };
-    const checked = snapshotSchema.safeParse(snapshot);
-    if (!checked.success) {
-      const issue = checked.error.issues[0];
-      return {
-        published: false,
-        reason: `the snapshot breaks the published format at ${issue?.path.join('.')}: ${issue?.message}`,
-        excluded,
-      };
-    }
-    const body = JSON.stringify(snapshot);
-    const key = snapshotKey(datasetId, snapshot.snapshotId);
-    await ports.blobs.put(key, body, 'application/json');
-    const committed = await commitSnapshot(db, {
-      id: snapshot.snapshotId,
-      datasetId,
-      generation,
-      runId,
-      recordCount: records.length,
-      recordsSha256: digest,
-      key,
-      sha256: await sha256Hex(body),
-      bytes: new TextEncoder().encode(body).byteLength,
-      publishedAt: snapshot.publishedAt,
-      report: { excluded },
-    });
-    // Another run took this generation first. The step fails, and its retry starts from the new head.
-    if (!committed.committed)
-      throw new Error(`Generation ${committed.headGeneration} was published by another run`);
-    return {
-      published: true,
-      generation,
-      snapshotId: snapshot.snapshotId,
-      records: records.length,
-      excluded,
-    };
-  });
 }

@@ -88,6 +88,9 @@ export const NO_CHANGE: StatementCounts = { added: 0, reseen: 0, withdrawn: 0 };
 export const pageKey = (contentHash: string) => `pages/${contentHash}`;
 export const snapshotKey = (datasetId: string, snapshotId: string) =>
   `datasets/${datasetId}/snapshots/${snapshotId}.json`;
+/** Where a held snapshot's records wait, before it has a generation. */
+export const heldKey = (datasetId: string, snapshotId: string) =>
+  `datasets/${datasetId}/held/${snapshotId}.json`;
 /** Which definition revision and extraction code a page's statements came from. */
 export const extractionTag = (revision: number) => `r${revision}.v${EXTRACTION_VERSION}`;
 /** What a page is marked with when it has to be read again though nothing about it changed. */

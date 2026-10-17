@@ -86,6 +86,11 @@ export function formatRun(run: RunView): string[] {
       ? `Snapshot: generation ${snapshot.generation}, ${snapshot.records} records.`
       : `Snapshot: none published, because ${snapshot.reason}.`,
   );
+  if (!snapshot.published && snapshot.held !== undefined) {
+    lines.push(
+      `Held: ${snapshot.held.snapshotId}, ${snapshot.held.records} records. Publish or discard it with spatula review.`,
+    );
+  }
   for (const left of snapshot.excluded)
     lines.push(`Left out: ${left.canonicalId}, missing ${left.missing.join(', ')}.`);
   if (summary.notes.length > 0) lines.push('Notes:', ...summary.notes.map((note) => `  ${note}`));

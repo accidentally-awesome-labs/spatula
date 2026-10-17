@@ -49,6 +49,9 @@ export function testDefinition(dataset = 'test-products'): Definition {
       },
     ],
     policy: { purposes: ['ai-input'], perHostIntervalMs: 1000 },
+    // Tests see every snapshot published; the gates' own tests choose theirs.
+    publication: { approval: 'auto' },
+    gates: { maxRemovals: { count: 25, share: 1 } },
   });
   if (!result.ok) throw new Error(result.issues.join('\n'));
   return result.definition;
