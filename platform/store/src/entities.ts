@@ -26,8 +26,8 @@ export interface EntityResolution {
   conflicts: number;
   unresolved: number;
   /**
-   * Pages waiting for a match question to be asked or answered, or for the pages that give
-   * identifiers under their name to settle.
+   * Pages waiting for a match question to be asked or answered, for it to be settled which
+   * entities carry their name, or because their "same" verdicts contradict each other.
    */
   waiting: number;
   /** The match questions to ask: a page, and an entity it may belong to. */
@@ -39,12 +39,14 @@ export interface EntityResolution {
  * Joins each live page to the entity it describes. Pages already joined claim their keys first,
  * so a new page finds them. The pages that aren't joined yet follow, each group ahead of the pages
  * that have to see where it lands: first those that give an identifier, since joining by one makes
- * an entity carry the page's name too; then those that give only a name and have a verdict, since
- * a verdict places a page (it joins the entity a person chose, or starts one of its own); and last
- * those that give only a name and have none. A page follows its match plan: it joins on an
- * identifier, or on a name that no identifier contradicts and no other entity shares; it starts a
- * new entity, with a canonical ID assigned once; or it waits for a question about an entity to be
- * asked and answered.
+ * an entity carry the page's name too; then those that give only a name and have a "same" or "not
+ * the same" verdict, since those place a page ("same" joins the entity it was judged the same as,
+ * a person's or a decider's lone one; "not the same" keeps it apart, so it starts an entity or
+ * joins another); and last those that give only a name and have no such verdict, an "unsure" one
+ * included, since that places nothing. A page follows its match plan: it joins on an identifier,
+ * or on a name that no identifier contradicts and no other entity shares; it starts a new entity,
+ * with a canonical ID assigned once; or it waits for a question about an entity to be asked and
+ * answered.
  *
  * A page that gives only a name waits too, whichever pages sort before it, while its name is
  * contested (`contestedNames`, worked out from where the pass begins): the pages that give
@@ -53,8 +55,8 @@ export interface EntityResolution {
  * follows the plan above.
  *
  * Several "same" verdicts about a page join it to none of those entities, and a note says so,
- * unless exactly one is a person's: the page joins that entity. One "same" beside a question that
- * waits for a person waits for that question.
+ * unless exactly one is a person's: the page joins that entity. A decider's lone "same" beside a
+ * question that waits for a person waits for that question.
  *
  * A claim another entity already owns is reported as a conflict and changes nothing. The
  * exception is a name that two entities share once their pages have been judged not the same:
@@ -209,9 +211,11 @@ export async function resolveEntities(
     // The pages that aren't joined yet go in three groups, each ahead of the pages that have to see
     // where it lands. A page that joins an entity by an identifier makes that entity carry its name
     // too, and a page that gives only a name has to see that before it joins the entity that
-    // carried the name first. Among the pages that give only a name, a verdict places a page: it
-    // joins the entity a person chose, or is kept apart from it and starts an entity of its own,
-    // which then carries the name. A page with no verdict has to see where those land.
+    // carried the name first. Among the pages that give only a name, a "same" or "not the same"
+    // verdict places a page: "same" joins the entity it was judged the same as, whether a person's
+    // or a decider's lone one, and "not the same" keeps the page apart, so that it starts an entity
+    // or joins another, which then carries the name. "Unsure" places nothing. A page with no such
+    // verdict has to see where those land.
     const givesIdentifier = (page: (typeof pages)[number]) => {
       const recordType = definition.recordTypes[page.recordType];
       return (
@@ -223,9 +227,11 @@ export async function resolveEntities(
     };
     const identified = unjoined.filter(givesIdentifier);
     const nameOnly = unjoined.filter((page) => !givesIdentifier(page));
-    const judged = nameOnly.filter((page) => verdicts.has(page.id));
-    const unjudged = nameOnly.filter((page) => !verdicts.has(page.id));
-    for (const page of [...joined, ...identified, ...judged, ...unjudged]) {
+    const placedByVerdict = (page: (typeof pages)[number]) =>
+      [...(verdicts.get(page.id)?.values() ?? [])].some((verdict) => verdict !== 'unsure');
+    const placed = nameOnly.filter(placedByVerdict);
+    const unplaced = nameOnly.filter((page) => !placedByVerdict(page));
+    for (const page of [...joined, ...identified, ...placed, ...unplaced]) {
       const recordType = definition.recordTypes[page.recordType];
       if (recordType === undefined) continue;
       const values = valuesOf(page, recordType);

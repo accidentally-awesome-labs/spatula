@@ -17,8 +17,8 @@ import { similarity } from './trigrams';
  * products, its brand) has a similar name: then the cascade is asked about the closest few first.
  * Verdicts decide: "same" joins, "not the same" keeps the page apart for good, and "unsure" waits
  * for a person. Several "same" verdicts join the page to nothing, unless exactly one is a person's:
- * the page joins that entity. One "same" beside a question that waits for a person waits for that
- * question.
+ * the page joins that entity. A decider's lone "same" beside a question that waits for a person
+ * waits for that question.
  */
 
 /** How alike two names must be, by trigrams, for the cascade to be asked whether they're one. */

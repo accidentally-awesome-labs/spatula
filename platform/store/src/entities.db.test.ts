@@ -686,6 +686,77 @@ describe('resolveEntities where a verdict places a page that gives only a name',
       }));
   }
 
+  // Three pages of that name are asked about the entity. A decider says the "same" page is the
+  // entity's, a person says the "apart" page isn't, and a decider is unsure about the third. Only
+  // the first two place a page: "unsure" places nothing, so the third has to see where they land.
+  // Whichever of the three sorts first, it waits for the answer to its question.
+  const unsureRoles = ['same', 'apart', 'unsure'] as const;
+  for (const order of orders(unsureRoles)) {
+    it(`holds back a page that is only unsure, with the pages sorting ${order.join(', ')}`, () =>
+      withRollback(async (db) => {
+        const { runId } = await seedDataset(db);
+        const [owner, ...sorted] = await makerAFour(db);
+        const at = Object.fromEntries(order.map((role, index) => [role, sorted[index]!])) as Record<
+          (typeof unsureRoles)[number],
+          ItemRef
+        >;
+        await says(db, runId, owner!, 0, product('Maker A', 'DT 770 PRO X', '04010118471087'));
+        for (const page of sorted) await says(db, runId, page, 0, nameOnly);
+        const first = await resolve(db);
+        expect(first).toMatchObject({ created: 1, linked: 0, waiting: 3 });
+        const e1 = (await entityOf(db, owner!))!;
+        expect(first.questions).toHaveLength(3);
+
+        await judged(db, at.same, e1, 'same');
+        await judged(db, at.apart, e1, 'not_same', 'person');
+        await judged(db, at.unsure, e1, 'unsure');
+        const second = await resolve(db);
+        expect(await entityOf(db, at.same)).toBe(e1);
+        const started = await entityOf(db, at.apart);
+        expect(started).not.toBeNull();
+        expect(started).not.toBe(e1);
+        expect(await entityOf(db, at.unsure)).toBeNull();
+        expect(second).toMatchObject({
+          linked: 1,
+          created: 1,
+          conflicts: 0,
+          waiting: 1,
+          questions: [],
+        });
+      }));
+  }
+
+  it('keeps a page that a verdict places ahead, though unsure about another entity too', () =>
+    withRollback(async (db) => {
+      const { runId } = await seedDataset(db);
+      const [owner, fresh, mixed, same] = await makerAFour(db);
+      const [aside] = (await listLiveItems(db, 'test-products')).filter(
+        (item) => item.sourceId === 'maker-b',
+      );
+      await says(db, runId, owner!, 0, product('Maker A', 'DT 770 PRO X', '04010118471087'));
+      await says(db, runId, aside!, 0, product('Maker A', 'Quartz', '04010118471070'));
+      for (const page of [fresh!, mixed!, same!]) await says(db, runId, page, 0, nameOnly);
+      expect(await resolve(db)).toMatchObject({ created: 2, waiting: 3 });
+      const [e1, e2] = [(await entityOf(db, owner!))!, (await entityOf(db, aside!))!];
+
+      // The mixed page has a question open about the other entity, which has nothing to do with
+      // its name, so that question holds nothing back. A person says it isn't the first entity's.
+      await judged(db, mixed!, e1, 'not_same', 'person');
+      await judged(db, mixed!, e2, 'unsure');
+      await judged(db, same!, e1, 'same');
+      const second = await resolve(db);
+      expect(await entityOf(db, same!)).toBe(e1);
+      const started = await entityOf(db, mixed!);
+      expect(started).not.toBeNull();
+      expect([e1, e2]).not.toContain(started);
+      expect(await entityOf(db, fresh!)).toBeNull();
+      expect(second).toMatchObject({ linked: 1, created: 1, conflicts: 0, waiting: 1 });
+      expect(second.questions.map((question) => question.itemId)).toEqual([fresh!.id, fresh!.id]);
+      expect(second.questions.map((question) => question.entityId).sort()).toEqual(
+        [e1, started!].sort(),
+      );
+    }));
+
   it('plans a page that gives an identifier ahead of one with a verdict, which then sees where it lands', () =>
     withRollback(async (db) => {
       const { runId } = await seedDataset(db);
