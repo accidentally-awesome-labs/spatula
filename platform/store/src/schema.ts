@@ -452,3 +452,37 @@ export const reviewItems = pgTable(
     check('review_items_status', sql`${t.status} in ('open', 'decided', 'dismissed')`),
   ],
 );
+
+export const ACK_OUTCOMES = ['applied', 'refused'] as const;
+export type AckOutcome = (typeof ACK_OUTCOMES)[number];
+
+/**
+ * What consumers said about the snapshots they read, signed. One per consumer and generation: the
+ * same body again is a repeat, and another body is refused.
+ */
+export const acknowledgments = pgTable(
+  'acknowledgments',
+  {
+    id: text('id').primaryKey(),
+    datasetId: text('dataset_id')
+      .notNull()
+      .references(() => datasets.id, { onDelete: 'cascade' }),
+    consumer: text('consumer').notNull(),
+    generation: integer('generation').notNull(),
+    snapshotId: text('snapshot_id')
+      .notNull()
+      .references(() => snapshots.id, { onDelete: 'cascade' }),
+    outcome: text('outcome').$type<AckOutcome>().notNull(),
+    detail: text('detail'),
+    counts: jsonb('counts').$type<Record<string, number>>(),
+    sentAt: time('sent_at').notNull(),
+    receivedAt: time('received_at').notNull(),
+    /** The hash of the signed body, to tell a repeat from a different acknowledgment. */
+    bodySha256: text('body_sha256').notNull(),
+  },
+  (t) => [
+    uniqueIndex('acknowledgments_generation').on(t.datasetId, t.consumer, t.generation),
+    index('acknowledgments_snapshot').on(t.snapshotId),
+    check('acknowledgments_outcome', sql`${t.outcome} in ('applied', 'refused')`),
+  ],
+);

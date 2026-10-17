@@ -1,3 +1,4 @@
+import { z } from 'zod';
 import type { Question } from './decisions';
 import type { Outcome } from './gate';
 import type { Excluded } from './snapshot';
@@ -111,6 +112,9 @@ export interface RunSummary {
 
 export type RunStatus = 'running' | 'complete' | 'failed';
 
+/** What the API says of a run asked for in a five-minute slot that has one: the CLI knows it. */
+export const RUN_SLOT_TAKEN = 'A run already started in this five-minute slot.';
+
 /** A run as the API returns it. */
 export interface RunView {
   id: string;
@@ -132,4 +136,37 @@ export interface ReviewView {
   /** What the person needs to answer: addresses, the proposal and its probabilities, counts. */
   context: Record<string, unknown>;
   createdAt: string;
+}
+
+/** How far an acknowledgment's sentAt may be from Spatula's clock: older ones may be replays. */
+export const ACK_WINDOW_MS = 10 * 60 * 1000;
+
+/**
+ * What a consumer says about a snapshot it read: that it applied it, or refused it, and why. The
+ * consumer signs the exact bytes it sends with HMAC-SHA256 under its key, in
+ * `x-spatula-signature: sha256=<hex>`.
+ */
+export const acknowledgmentSchema = z.strictObject({
+  generation: z.number().int().min(1).max(999_999_999),
+  snapshotId: z.string().min(1).max(64),
+  outcome: z.enum(['applied', 'refused']),
+  sentAt: z.iso.datetime({ offset: true }),
+  detail: z.string().max(500).optional(),
+  counts: z.record(z.string().max(40), z.number().int().min(0)).optional(),
+});
+export type Acknowledgment = z.infer<typeof acknowledgmentSchema>;
+
+/** Where a dataset stands, as `spatula status` shows it. */
+export interface DatasetStatus {
+  dataset: string;
+  revision: number;
+  headGeneration: number;
+  held: { snapshotId: string; records: number; reason: string | null; createdAt: string } | null;
+  reviews: { classify: number; match: number; publication: number };
+  consumers: {
+    name: string;
+    generation: number | null;
+    outcome: 'applied' | 'refused' | null;
+    receivedAt: string | null;
+  }[];
 }

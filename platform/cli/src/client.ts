@@ -1,4 +1,4 @@
-import type { ApplySummary, Definition, ReviewView, RunView } from '@spatula/core';
+import type { ApplySummary, DatasetStatus, Definition, ReviewView, RunView } from '@spatula/core';
 import { describeError } from './format';
 
 /** An answer the API refused with, and the problems it listed. Status 0 means no answer. */
@@ -95,11 +95,14 @@ export function createClient(options: {
       return answer as unknown as ApplySummary;
     },
 
-    /** Starts a run, or finds the one already started in this five-minute slot. */
+    /**
+     * Starts a run, or finds the run in its way: the one already started in this five-minute slot,
+     * or an earlier one still going. `message` is what the API said of that run, if it said.
+     */
     async startRun(
       datasetId: string,
       options: { all?: boolean } = {},
-    ): Promise<{ runId: string; existing: boolean }> {
+    ): Promise<{ runId: string; existing: boolean; message: string | null }> {
       const response = await request(
         'POST',
         `/datasets/${encodeURIComponent(datasetId)}/runs${options.all === true ? '?all=1' : ''}`,
@@ -109,7 +112,11 @@ export function createClient(options: {
         (response.status === 202 || response.status === 409) &&
         typeof answer.runId === 'string'
       ) {
-        return { runId: answer.runId, existing: response.status === 409 };
+        return {
+          runId: answer.runId,
+          existing: response.status === 409,
+          message: typeof answer.error === 'string' ? answer.error : null,
+        };
       }
       throw refused(response.status, answer);
     },
@@ -155,6 +162,13 @@ export function createClient(options: {
       const body = await json(response);
       if (!response.ok) throw refused(response.status, body);
       return { effect: typeof body.effect === 'string' ? body.effect : '' };
+    },
+
+    async getStatus(datasetId: string): Promise<DatasetStatus> {
+      const response = await request('GET', `/datasets/${encodeURIComponent(datasetId)}/status`);
+      const answer = await json(response);
+      if (!response.ok) throw refused(response.status, answer);
+      return answer as unknown as DatasetStatus;
     },
 
     async pullSnapshot(

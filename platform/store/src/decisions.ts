@@ -383,3 +383,18 @@ export async function decideReviews(
     .returning({ id: reviewItems.id });
   return rows.length;
 }
+
+/** How many questions of each kind are open. */
+export async function countOpenReviews(
+  db: Executor,
+  datasetId: string,
+): Promise<Record<ReviewKind, number>> {
+  const rows = await db
+    .select({ kind: reviewItems.kind, count: sql<number>`count(*)::int` })
+    .from(reviewItems)
+    .where(and(eq(reviewItems.datasetId, datasetId), eq(reviewItems.status, 'open')))
+    .groupBy(reviewItems.kind);
+  const counts: Record<ReviewKind, number> = { classify: 0, match: 0, publication: 0 };
+  for (const row of rows) counts[row.kind] = row.count;
+  return counts;
+}

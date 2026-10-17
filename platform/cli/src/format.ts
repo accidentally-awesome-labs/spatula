@@ -1,4 +1,10 @@
-import { optionsOf, type ApplySummary, type ReviewView, type RunView } from '@spatula/core';
+import {
+  optionsOf,
+  type ApplySummary,
+  type DatasetStatus,
+  type ReviewView,
+  type RunView,
+} from '@spatula/core';
 
 /** What applying a definition changed, or would change. */
 export function formatApplySummary(summary: ApplySummary, dryRun: boolean): string[] {
@@ -158,6 +164,34 @@ export function formatReviews(datasetId: string, reviews: ReviewView[]): string[
     lines.push(`  Answers: ${optionsOf(review.question).join(' | ')}`);
   }
   lines.push('', `Answer with: spatula review ${datasetId} <id> "<answer>"`);
+  return lines;
+}
+
+/** Where a dataset stands: its head, what's held, what waits, and what consumers acknowledged. */
+export function formatStatus(status: DatasetStatus): string[] {
+  const lines = [
+    status.headGeneration === 0
+      ? `${status.dataset}, revision ${status.revision}: nothing is published yet.`
+      : `${status.dataset}, revision ${status.revision}: generation ${status.headGeneration} is published.`,
+  ];
+  if (status.held !== null) {
+    lines.push(
+      `Held: ${status.held.snapshotId}, ${status.held.records} records${status.held.reason === null ? '' : `, because ${status.held.reason}`}.`,
+    );
+  }
+  const { classify, match, publication } = status.reviews;
+  lines.push(
+    classify + match + publication === 0
+      ? 'Nothing waits for review.'
+      : `Waiting for review: ${classify} classify, ${match} match, ${publication} publication.`,
+  );
+  for (const consumer of status.consumers) {
+    lines.push(
+      consumer.generation === null
+        ? `${consumer.name}: has acknowledged nothing yet.`
+        : `${consumer.name}: ${consumer.outcome} generation ${consumer.generation} at ${consumer.receivedAt}.`,
+    );
+  }
   return lines;
 }
 

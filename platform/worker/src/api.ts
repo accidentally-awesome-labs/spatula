@@ -1,52 +1,62 @@
 import {
+  ACK_WINDOW_MS,
+  acknowledgmentSchema,
   DIRECTORY_CONTENT_TYPE,
   DIRECTORY_PATH,
+  hmacSha256Hex,
   importSigningKey,
   keyDirectory,
   packIssues,
   parseDefinition,
   randomNonce,
+  RUN_SLOT_TAKEN,
   runIdFor,
   sha256Hex,
   signDirectory,
+  type DatasetStatus,
   type RunView,
 } from '@spatula/core';
 import { packs } from '@spatula/pack-products';
 import {
   applyDefinition,
+  countOpenReviews,
   datasetExists,
   finishRun,
   getDataset,
   getRun,
   getSnapshot,
+  heldSnapshot,
+  latestAcknowledgments,
   latestSnapshot,
   listOpenReviews,
+  recordAcknowledgment,
   reviveItems,
   StaleDefinitionError,
-  startRun,
+  startRunAlone,
 } from '@spatula/store';
 import { Hono, type MiddlewareHandler } from 'hono';
 import { z } from 'zod';
 import { aboutPage } from './about';
 import { r2Blobs } from './blobs';
-import { secret } from './config';
+import { consumerSecret, secret } from './config';
 import { withDatabase } from './database';
 import { answerReview } from './review';
 
 /*
- * The owner's API, the public page, and the key directory. The owner sends a bearer token; the
- * Worker keeps only its SHA-256 and compares in constant time. Owner answers are personal, so
- * nothing caches them, and the same goes for every other answer but the page and the key
- * directory: an unknown path's 404 and a failure's 500.
+ * The owner's API, the consumers' routes, the public page, and the key directory. Callers send a
+ * bearer token; the Worker keeps only SHA-256s and compares in constant time. Answers to callers
+ * are personal, so nothing caches them, and the same goes for every other answer but the page and
+ * the key directory: an unknown path's 404 and a failure's 500.
  */
 
-type Api = { Bindings: Env };
+/** `consumer` is who a route's `reader` found: a listed consumer's name, or null for the owner. */
+type Api = { Bindings: Env; Variables: { consumer: string | null } };
 
 /**
  * Every answer carries this but the public page and the key directory's (which a site may keep
- * for a few minutes). The owner middleware, notFound and onError set it with c.header, which Hono
- * copies into the responses it builds (c.json). A handler that returns a raw Response has to set
- * it by hand, as the snapshot route does.
+ * for a few minutes). The owner and reader middlewares, notFound and onError set it with
+ * c.header, which Hono copies into the responses it builds (c.json). A handler that returns a raw
+ * Response has to set it by hand, as the snapshot route does.
  */
 const PRIVATE_NO_STORE = 'private, no-store';
 
@@ -82,22 +92,82 @@ api.get(DIRECTORY_PATH, async (c) => {
   });
 });
 
+/**
+ * The bearer token sent, if any. The scheme's name is case-insensitive (RFC 9110); the token isn't.
+ */
+function bearer(c: { req: { header(name: string): string | undefined } }): string | undefined {
+  return /^bearer (.+)$/iu.exec(c.req.header('authorization') ?? '')?.[1];
+}
+
 const owner: MiddlewareHandler<Api> = async (c, next) => {
   c.header('cache-control', PRIVATE_NO_STORE);
   const expected = secret(c.env, 'OWNER_TOKEN_HASH');
   if (expected === undefined)
     return c.json({ error: 'This deployment has no owner token yet.' }, 503);
-  // RFC 9110 makes an authentication scheme's name case-insensitive. The token is not: the flag
-  // applies to the word "bearer" only, and the group keeps the token as it was sent.
-  const token = /^bearer (.+)$/iu.exec(c.req.header('authorization') ?? '')?.[1];
+  const token = bearer(c);
   if (token === undefined || !sameText(await sha256Hex(token), expected.toLowerCase())) {
     c.header('www-authenticate', 'Bearer');
     return c.json({ error: 'The owner token is missing or wrong.' }, 401);
   }
   await next();
 };
-api.use('/datasets/*', owner);
+
+/**
+ * The routes a consumer may call as well as the owner: reading a dataset's snapshots, and
+ * acknowledging them. Every other route under /datasets is the owner's alone, including any added
+ * later, so a new route can't be left open by mistake. A route is a method and a path, so one added
+ * later at the same path with another method is the owner's too.
+ */
+const CONSUMER_ROUTES = [
+  { method: 'GET', path: /^\/datasets\/[^/]+\/snapshots\/[^/]+$/u },
+  { method: 'POST', path: /^\/datasets\/[^/]+\/acknowledgments$/u },
+];
+
+api.use('/datasets/*', async (c, next) =>
+  CONSUMER_ROUTES.some(({ method, path }) => c.req.method === method && path.test(c.req.path))
+    ? next()
+    : owner(c, next),
+);
 api.use('/runs/*', owner);
+
+/**
+ * The owner, or a consumer the dataset lists. A consumer is known by its token alone: its hash is
+ * compared, in constant time, with each listed consumer's. Who called is kept for the route.
+ */
+const reader: MiddlewareHandler<Api> = async (c, next) => {
+  c.header('cache-control', PRIVATE_NO_STORE);
+  const ownerHash = secret(c.env, 'OWNER_TOKEN_HASH');
+  if (ownerHash === undefined)
+    return c.json({ error: 'This deployment has no owner token yet.' }, 503);
+  const token = bearer(c);
+  const refuse = () => {
+    c.header('www-authenticate', 'Bearer');
+    return c.json({ error: 'The token is missing or wrong.' }, 401);
+  };
+  if (token === undefined) return refuse();
+  const hash = await sha256Hex(token);
+  if (sameText(hash, ownerHash.toLowerCase())) {
+    c.set('consumer', null);
+    return next();
+  }
+  const dataset = await withDatabase(c.env, async (db) => {
+    try {
+      return await getDataset(db, c.req.param('id') ?? '');
+    } catch (error) {
+      // A consumer can't fix a definition, and a stranger mustn't learn of one.
+      if (error instanceof StaleDefinitionError) return null;
+      throw error;
+    }
+  });
+  const consumer = dataset?.definition.consumers.find((name) => {
+    const expected = consumerSecret(c.env, name, 'TOKEN_HASH');
+    return expected !== undefined && sameText(hash, expected.toLowerCase());
+  });
+  // Whether the dataset exists isn't said to a token that can't read it.
+  if (consumer === undefined) return refuse();
+  c.set('consumer', consumer);
+  return next();
+};
 
 api.put('/datasets/:id', async (c) => {
   const id = c.req.param('id');
@@ -134,25 +204,28 @@ api.post('/datasets/:id/runs', async (c) => {
     return c.json({ error: 'all is 1 or 0.' }, 400);
   }
   const datasetId = c.req.param('id');
-  const runId = runIdFor(datasetId, new Date());
+  const now = new Date();
+  const runId = runIdFor(datasetId, now);
   // The run is recorded first, so its ID can be reported at once, and a second request in the
-  // same five-minute slot finds it.
+  // same five-minute slot finds it. A dataset has one run going at a time: while another is, the
+  // request is refused, and that run is named.
   const started = await withDatabase(c.env, async (db) => {
-    try {
-      if ((await getDataset(db, datasetId)) === null) return 'missing';
-    } catch (error) {
-      // A definition stored by an earlier version that no longer passes the checks. The owner fixes
-      // it by applying the definition again, and the error says so.
-      if (error instanceof StaleDefinitionError) return error;
-      throw error;
-    }
-    return (await startRun(db, { id: runId, datasetId })).created ? 'started' : 'exists';
+    // A definition stored by an earlier version that no longer passes the checks throws here, and
+    // onError answers it.
+    if ((await getDataset(db, datasetId)) === null) return 'missing' as const;
+    return startRunAlone(db, { id: runId, datasetId, at: now });
   });
   if (started === 'missing') return c.json({ error: `Dataset ${datasetId} doesn’t exist.` }, 404);
-  if (started instanceof StaleDefinitionError) return c.json({ error: started.message }, 409);
-  if (started === 'exists') {
-    return c.json({ error: 'A run already started in this five-minute slot.', runId }, 409);
+  if ('running' in started) {
+    return c.json(
+      {
+        error: `A run of ${datasetId} is already running (${started.running.id}). Wait for it to finish.`,
+        runId: started.running.id,
+      },
+      409,
+    );
   }
+  if (!started.created) return c.json({ error: RUN_SLOT_TAKEN, runId }, 409);
   try {
     await c.env.REFRESH.create({ id: runId, params: { runId, datasetId, all: all === '1' } });
   } catch (error) {
@@ -194,7 +267,7 @@ api.get('/runs/:id', async (c) => {
   return c.json(run);
 });
 
-api.get('/datasets/:id/snapshots/:generation', async (c) => {
+api.get('/datasets/:id/snapshots/:generation', reader, async (c) => {
   const datasetId = c.req.param('id');
   const which = c.req.param('generation');
   // At most nine digits, so the number fits Postgres's integer column. A longer one would make
@@ -298,6 +371,110 @@ api.post('/datasets/:id/review/:reviewId', async (c) => {
   }
 });
 
+api.post('/datasets/:id/acknowledgments', reader, async (c) => {
+  const consumer = c.get('consumer');
+  if (consumer === null) return c.json({ error: 'Acknowledgments come from consumers.' }, 403);
+  const key = consumerSecret(c.env, consumer, 'HMAC_KEY');
+  if (key === undefined) return c.json({ error: `${consumer} has no HMAC key yet.` }, 503);
+  // The signature covers the exact bytes sent, so the body is read as text before it's parsed.
+  const raw = await c.req.text();
+  const signature = /^sha256=([0-9a-f]{64})$/u.exec(c.req.header('x-spatula-signature') ?? '')?.[1];
+  if (signature === undefined || !sameText(signature, await hmacSha256Hex(key, raw))) {
+    return c.json({ error: 'The signature is missing or wrong.' }, 401);
+  }
+  let data: unknown;
+  try {
+    data = JSON.parse(raw);
+  } catch {
+    return c.json({ error: 'The body isn’t JSON.' }, 400);
+  }
+  const parsed = acknowledgmentSchema.safeParse(data);
+  if (!parsed.success) {
+    const issue = parsed.error.issues[0];
+    return c.json(
+      {
+        error: `The acknowledgment is wrong at ${issue?.path.join('.') || 'the body'}: ${issue?.message}`,
+      },
+      400,
+    );
+  }
+  const ack = parsed.data;
+  const receivedAt = new Date();
+  // An acknowledgment sent long ago may be a replay of one captured on the way.
+  if (Math.abs(receivedAt.getTime() - Date.parse(ack.sentAt)) > ACK_WINDOW_MS) {
+    return c.json({ error: 'sentAt is more than 10 minutes from Spatula’s clock.' }, 400);
+  }
+  const datasetId = c.req.param('id');
+  const outcome = await withDatabase(c.env, async (db) => {
+    const snapshot = await getSnapshot(db, datasetId, ack.generation);
+    if (snapshot === null) return 'missing' as const;
+    if (snapshot.id !== ack.snapshotId) return 'mismatch' as const;
+    return recordAcknowledgment(db, {
+      datasetId,
+      consumer,
+      generation: ack.generation,
+      snapshotId: ack.snapshotId,
+      outcome: ack.outcome,
+      detail: ack.detail ?? null,
+      counts: ack.counts ?? null,
+      sentAt: new Date(ack.sentAt),
+      receivedAt,
+      bodySha256: await sha256Hex(raw),
+    });
+  });
+  switch (outcome) {
+    case 'missing':
+      return c.json({ error: `Generation ${ack.generation} isn’t published.` }, 404);
+    case 'mismatch':
+      return c.json(
+        { error: `Generation ${ack.generation} isn’t snapshot ${ack.snapshotId}.` },
+        400,
+      );
+    case 'conflict':
+      return c.json({ error: `Generation ${ack.generation} was acknowledged differently.` }, 409);
+    case 'repeated':
+      return c.json({ acknowledged: ack.generation }, 200);
+    case 'recorded':
+      return c.json({ acknowledged: ack.generation }, 201);
+  }
+});
+
+api.get('/datasets/:id/status', async (c) => {
+  const datasetId = c.req.param('id');
+  const status = await withDatabase(c.env, async (db): Promise<DatasetStatus | null> => {
+    const dataset = await getDataset(db, datasetId);
+    if (dataset === null) return null;
+    const held = await heldSnapshot(db, datasetId);
+    const acks = await latestAcknowledgments(db, datasetId);
+    return {
+      dataset: datasetId,
+      revision: dataset.revision,
+      headGeneration: dataset.headGeneration,
+      held:
+        held === null
+          ? null
+          : {
+              snapshotId: held.id,
+              records: held.recordCount,
+              reason: held.heldReason,
+              createdAt: held.createdAt,
+            },
+      reviews: await countOpenReviews(db, datasetId),
+      consumers: dataset.definition.consumers.map((name) => {
+        const last = acks.find((ack) => ack.consumer === name);
+        return {
+          name,
+          generation: last?.generation ?? null,
+          outcome: last?.outcome ?? null,
+          receivedAt: last?.receivedAt ?? null,
+        };
+      }),
+    };
+  });
+  if (status === null) return c.json({ error: `Dataset ${datasetId} doesn’t exist.` }, 404);
+  return c.json(status);
+});
+
 // These two answer whatever the path, including ones outside the owner routes, which set the
 // header themselves.
 api.notFound((c) => {
@@ -306,8 +483,11 @@ api.notFound((c) => {
 });
 
 api.onError((error, c) => {
-  console.error('API error:', error instanceof Error ? error.message : String(error));
   c.header('cache-control', PRIVATE_NO_STORE);
+  // A definition stored by an earlier version that no longer passes the checks. The owner fixes it
+  // by applying the definition again, and the message says so, so it's an answer, not a failure.
+  if (error instanceof StaleDefinitionError) return c.json({ error: error.message }, 409);
+  console.error('API error:', error instanceof Error ? error.message : String(error));
   return c.json({ error: 'Something went wrong. The Worker’s logs say what.' }, 500);
 });
 

@@ -29,6 +29,13 @@
       "when": 1792262676687,
       "tag": "0003_held_snapshots",
       "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1792273864378,
+      "tag": "0004_consumers",
+      "breakpoints": true
     }
   ]
 }

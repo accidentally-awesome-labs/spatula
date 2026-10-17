@@ -1,6 +1,7 @@
 import {
   packIssues,
   parseDefinition,
+  RUN_SLOT_TAKEN,
   sha256Hex,
   snapshotSchema,
   type Definition,
@@ -8,7 +9,13 @@ import {
 import { packs } from '@spatula/pack-products';
 import { parse } from 'yaml';
 import { ApiError, type Client } from './client';
-import { describeError, formatApplySummary, formatReviews, formatRun } from './format';
+import {
+  describeError,
+  formatApplySummary,
+  formatReviews,
+  formatRun,
+  formatStatus,
+} from './format';
 
 /** Everything the commands do outside themselves, so tests can run them in memory. */
 export interface Io {
@@ -98,9 +105,15 @@ export async function run(
   options: { wait: boolean; all: boolean },
 ): Promise<number> {
   return withApi(io, async () => {
-    const { runId, existing } = await client.startRun(datasetId, { all: options.all });
+    const { runId, existing, message } = await client.startRun(datasetId, { all: options.all });
+    // The API names a run of an earlier slot that is still going in its own words. The slot's
+    // sentence is the CLI's, with the run's ID, for the run this one repeats.
     io.out(
-      existing ? `A run already started in this five-minute slot: ${runId}.` : `Started ${runId}.`,
+      !existing
+        ? `Started ${runId}.`
+        : message === null || message === RUN_SLOT_TAKEN
+          ? `A run already started in this five-minute slot: ${runId}.`
+          : message,
     );
     if (!options.wait) return 0;
     // The API answers running until a run finishes, so a stuck or misreported run would keep this
@@ -156,6 +169,14 @@ export async function review(
     io.out(
       `Answered ${answering.reviewId}: ${answering.answer}.${effect === '' ? '' : ` ${effect}`}`,
     );
+    return 0;
+  });
+}
+
+/** Says where a dataset stands. */
+export async function status(io: Io, client: Client, datasetId: string): Promise<number> {
+  return withApi(io, async () => {
+    for (const line of formatStatus(await client.getStatus(datasetId))) io.out(line);
     return 0;
   });
 }

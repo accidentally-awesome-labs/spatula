@@ -80,3 +80,17 @@ export async function sha256Hex(data: string | Uint8Array): Promise<string> {
   const digest = await crypto.subtle.digest('SHA-256', bytes);
   return Array.from(new Uint8Array(digest), (byte) => byte.toString(16).padStart(2, '0')).join('');
 }
+
+/** HMAC-SHA256 of the data under the key, in hex: how consumers sign their acknowledgments. */
+export async function hmacSha256Hex(key: string, data: string): Promise<string> {
+  const encoder = new TextEncoder();
+  const imported = await crypto.subtle.importKey(
+    'raw',
+    encoder.encode(key),
+    { name: 'HMAC', hash: 'SHA-256' },
+    false,
+    ['sign'],
+  );
+  const signature = await crypto.subtle.sign('HMAC', imported, encoder.encode(data));
+  return [...new Uint8Array(signature)].map((byte) => byte.toString(16).padStart(2, '0')).join('');
+}

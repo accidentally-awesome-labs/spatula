@@ -5,8 +5,9 @@ import { userAgent } from './http';
  * without OWNER_TOKEN_HASH the API answers 503, and runs skip the LLM unless both
  * ANTHROPIC_API_KEY and AI_GATEWAY_URL are set (AI_GATEWAY_TOKEN is optional).
  * WEB_BOT_AUTH_KEY, an Ed25519 private key as a JWK, makes the Worker sign its requests and serve
- * its key directory. Secrets are read by name rather than through Env, whose generated type
- * depends on whether a .dev.vars file happens to exist.
+ * its key directory. Each consumer has two more, named after it (see consumerSecret). Secrets are
+ * read by name rather than through Env, whose generated type depends on whether a .dev.vars file
+ * happens to exist.
  */
 
 export type SecretName =
@@ -17,6 +18,21 @@ export type SecretName =
   | 'WEB_BOT_AUTH_KEY';
 
 export function secret(env: Env, name: SecretName): string | undefined {
+  const value = (env as unknown as Record<string, unknown>)[name];
+  return typeof value === 'string' && value !== '' ? value : undefined;
+}
+
+/**
+ * A consumer's secret: CONSUMER_<NAME>_TOKEN_HASH, the SHA-256 of its token, or
+ * CONSUMER_<NAME>_HMAC_KEY, which signs its acknowledgments. The name is the consumer's, in
+ * capitals with underscores for hyphens: crowdio's are CONSUMER_CROWDIO_….
+ */
+export function consumerSecret(
+  env: Env,
+  consumer: string,
+  kind: 'TOKEN_HASH' | 'HMAC_KEY',
+): string | undefined {
+  const name = `CONSUMER_${consumer.toUpperCase().replaceAll('-', '_')}_${kind}`;
   const value = (env as unknown as Record<string, unknown>)[name];
   return typeof value === 'string' && value !== '' ? value : undefined;
 }

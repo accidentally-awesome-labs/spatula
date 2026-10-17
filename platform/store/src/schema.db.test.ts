@@ -4,6 +4,7 @@ import { describe, expect, it } from 'vitest';
 import { withRollback } from '../test/db';
 import type { Executor } from './client';
 import {
+  ACK_OUTCOMES,
   DECISION_OUTCOMES,
   FETCH_KINDS,
   ITEM_STATUSES,
@@ -48,5 +49,10 @@ describe('the CHECK lists', () => {
   it('allow exactly the snapshot states the store names', () =>
     withRollback(async (tx) => {
       expect(await allowed(tx, 'snapshots_state')).toEqual([...SNAPSHOT_STATES].sort());
+    }));
+
+  it('allow exactly the acknowledgment outcomes the store names', () =>
+    withRollback(async (tx) => {
+      expect(await allowed(tx, 'acknowledgments_outcome')).toEqual([...ACK_OUTCOMES].sort());
     }));
 });

@@ -14,8 +14,8 @@ import {
 } from './decisions';
 import { setItemStatus } from './fetches';
 import { testDefinition } from './fixtures';
-import { startRun } from './runs';
-import { datasets, decisionRecords, items, snapshots } from './schema';
+import { startRun, startRunAlone } from './runs';
+import { datasets, decisionRecords, items, runs, snapshots } from './schema';
 import {
   commitSnapshot,
   discardHeld,
@@ -608,4 +608,59 @@ describe('lockPageVerdicts', () => {
     await within(2000, answering);
     expect(finished).toBe(true);
   });
+});
+
+describe('startRunAlone while another session starts a run', () => {
+  const runIds = async (datasetId: string) =>
+    (
+      await pool
+        .select({ id: runs.id })
+        .from(runs)
+        .where(eq(runs.datasetId, datasetId))
+        .orderBy(runs.id)
+    ).map((row) => row.id);
+
+  it('waits for the session that has the dataset’s row, and then finds that session’s run', () =>
+    inDataset('start-wait', async (datasetId) => {
+      const first = `${datasetId}-202610100000`;
+      const second = `${datasetId}-202610100005`;
+      const at = new Date();
+      // The first start has the dataset's row and has recorded its run, and hasn't committed.
+      const session = await holdingRow((tx) => startRunAlone(tx, { id: first, datasetId, at }));
+      let finished = false;
+      const starting = startRunAlone(pool, { id: second, datasetId, at });
+      void starting.then(
+        () => (finished = true),
+        () => (finished = true),
+      );
+      try {
+        await settledOrWaiting(starting);
+        // Without the row it would have looked at once, seen no run that has committed, and started
+        // its own.
+        expect(finished).toBe(false);
+      } finally {
+        session.release();
+        await session.done;
+        await starting.catch(() => undefined);
+      }
+      // It looks only once it has the row, so it sees the run the first start committed, and
+      // records none of its own.
+      expect(await starting).toMatchObject({ running: { id: first } });
+      expect(await runIds(datasetId)).toEqual([first]);
+    }));
+
+  it('gives exactly one run to two starts made at once', () =>
+    inDataset('start-both', async (datasetId) => {
+      const at = new Date();
+      const ids = [`${datasetId}-202610100000`, `${datasetId}-202610100005`];
+      const results = await Promise.all(
+        ids.map((id) => startRunAlone(pool, { id, datasetId, at })),
+      );
+      const started = results.filter((result) => 'created' in result);
+      const refused = results.filter((result) => 'running' in result);
+      expect(started).toHaveLength(1);
+      expect(refused).toHaveLength(1);
+      expect(await runIds(datasetId)).toEqual([started[0]!.run.id]);
+      expect(refused[0]!.running.id).toBe(started[0]!.run.id);
+    }));
 });

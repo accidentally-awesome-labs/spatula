@@ -1,5 +1,6 @@
+import { createHmac } from 'node:crypto';
 import { describe, expect, it } from 'vitest';
-import { newId, runIdFor, sha256Hex, stableId, stableStringify } from './ids';
+import { hmacSha256Hex, newId, runIdFor, sha256Hex, stableId, stableStringify } from './ids';
 
 describe('newId', () => {
   it('is the prefix and 20 base32 characters', () => {
@@ -68,5 +69,38 @@ describe('stableId', () => {
       await stableId('st', 'run-1', 'it_1', 0),
     ]);
     expect(ids.size).toBe(5);
+  });
+});
+
+describe('hmacSha256Hex', () => {
+  it('signs as RFC 4231’s second test case says', async () => {
+    expect(await hmacSha256Hex('Jefe', 'what do ya want for nothing?')).toBe(
+      '5bdcc146bf60754e6a042426089575c75a003f089d2739839dec58b964ec3843',
+    );
+  });
+
+  it('signs any text as the UTF-8 bytes it is, whitespace and all, under any key', async () => {
+    // Node's own HMAC is the second opinion. A signature covers the exact bytes sent, so a newline
+    // after a body, or text outside ASCII, must not change what is signed.
+    const texts = [
+      '',
+      'a',
+      'what do ya want for nothing?\n',
+      ' padded ',
+      '\tcolumns\r\n',
+      'ünï 🎧 日本語',
+      '{"generation":1}\n',
+      'x'.repeat(10_000),
+    ];
+    // Keys shorter than a block, as long as one, and longer, which HMAC hashes first.
+    const keys = ['Jefe', 'k', 'a key with ünï 🎧', 'x'.repeat(64), 'x'.repeat(131)];
+    for (const key of keys) {
+      for (const text of texts) {
+        expect(
+          await hmacSha256Hex(key, text),
+          `${key.slice(0, 8)} signing ${text.slice(0, 8)}`,
+        ).toBe(createHmac('sha256', key).update(text, 'utf8').digest('hex'));
+      }
+    }
   });
 });

@@ -7,10 +7,12 @@ import {
   type RunView,
 } from '@spatula/core';
 import {
+  applyDefinition,
   closeReview,
   commitSnapshot,
   datasets,
   entities,
+  finishRun,
   getDataset,
   getRun,
   holdSnapshot,
@@ -29,42 +31,11 @@ import { env, exports } from 'cloudflare:workers';
 import { and, eq } from 'drizzle-orm';
 import { http, HttpResponse } from 'msw';
 import { describe, expect, it, vi } from 'vitest';
-import { api, RUN_START_GRACE_MS } from '../../src/api';
+import { RUN_START_GRACE_MS } from '../../src/api';
 import { withDatabase } from '../../src/database';
 import { PUBLISH_QUESTION } from '../../src/publish';
+import { call, expectNoStore } from './api-support';
 import { network } from './network';
-
-/**
- * Calls the API as the owner, unless told to send another token, none, or a whole authorization
- * header. A string body goes as is.
- */
-function call(
-  method: string,
-  path: string,
-  options: {
-    body?: unknown;
-    token?: string | null;
-    authorization?: string;
-    bindings?: Env;
-  } = {},
-): Promise<Response> {
-  const headers = new Headers();
-  const authorization =
-    options.authorization ??
-    (options.token === null ? undefined : `Bearer ${options.token ?? 'test-token'}`);
-  if (authorization !== undefined) headers.set('authorization', authorization);
-  if (options.body !== undefined) headers.set('content-type', 'application/json');
-  const body =
-    options.body === undefined || typeof options.body === 'string'
-      ? options.body
-      : JSON.stringify(options.body);
-  return Promise.resolve(api.request(path, { method, headers, body }, options.bindings ?? env));
-}
-
-/** Every answer but the public page is private, no-store, whatever its status. */
-function expectNoStore(response: Response): void {
-  expect(response.headers.get('cache-control')).toBe('private, no-store');
-}
 
 /**
  * How long a run ID's slot lasts. Core's runIdFor (platform/core/src/ids.ts) puts every run in a
@@ -93,12 +64,16 @@ const withoutWorkflows = (): Env =>
 
 /**
  * A run's row with no Workflow behind it, started `ago` ms ago. A POST records the run and then
- * creates its Workflow, so one that ended between the two leaves a row like this.
+ * creates its Workflow, so one that ended between the two leaves a row like this. To the dataset
+ * it is a run that is going.
  */
-async function runWithoutWorkflow(id: string, ago: number): Promise<void> {
-  const datasetId = 'api-orphans';
-  await call('PUT', `/datasets/${datasetId}`, { body: testDefinition(datasetId) });
+async function runWithoutWorkflow(
+  id: string,
+  ago: number,
+  datasetId = 'api-orphans',
+): Promise<void> {
   await withDatabase(env, async (db) => {
+    await applyDefinition(db, testDefinition(datasetId));
     await startRun(db, { id, datasetId });
     if (ago > 0) {
       await db
@@ -106,6 +81,40 @@ async function runWithoutWorkflow(id: string, ago: number): Promise<void> {
         .set({ startedAt: new Date(Date.now() - ago) })
         .where(eq(runs.id, id));
     }
+  });
+}
+
+/**
+ * An hour. The tests write the six hours after which a run still going is taken as dead as
+ * 6 * HOUR, so a change to the store's RUN_STALE_MS shows.
+ */
+const HOUR = 60 * 60 * 1000;
+
+/** Bindings whose Workflow binding only records the instances it is asked to create. */
+function recordingWorkflows(): { bindings: Env; created: string[] } {
+  const created: string[] = [];
+  const bindings = {
+    ...env,
+    REFRESH: {
+      create: async (options: { id: string }) => {
+        created.push(options.id);
+      },
+    },
+  } as unknown as Env;
+  return { bindings, created };
+}
+
+/**
+ * A dataset whose stored definition no longer passes the checks, as a later version's stricter
+ * ones would leave it.
+ */
+async function staleDataset(datasetId: string): Promise<void> {
+  await withDatabase(env, async (db) => {
+    await applyDefinition(db, testDefinition(datasetId));
+    await db
+      .update(datasets)
+      .set({ definition: { ...testDefinition(datasetId), consumers: ['Not A Slug'] } })
+      .where(eq(datasets.id, datasetId));
   });
 }
 
@@ -248,11 +257,20 @@ describe('the owner routes', () => {
     });
     expect(unset.status).toBe(503);
     expect(unset.headers.get('cache-control')).toBe('private, no-store');
+
+    // A consumers' route says so too, rather than telling a consumer its token is wrong.
+    const unsetRead = await call('GET', '/datasets/x/snapshots/latest', {
+      bindings: { ...env, OWNER_TOKEN_HASH: '' } as Env,
+    });
+    expect(unsetRead.status).toBe(503);
+    expectNoStore(unsetRead);
   });
 
   it('keep every route under /datasets behind the token', async () => {
-    // The guard is on the prefix, so it covers a path that no route answers as well as the three
-    // that follow it, which edit a definition, spend on a run, and hand out a snapshot.
+    // Every path under /datasets is the owner's, but a consumer's two, which a listed consumer's
+    // token opens too. So the guard covers a path that no route answers as well as the four that
+    // follow it, which edit a definition, spend on a run, hand out a snapshot, and answer a review
+    // question.
     const requests = [
       ['POST', '/datasets/api-guard/definition'],
       ['PUT', '/datasets/api-guard'],
@@ -447,6 +465,76 @@ describe('the owner routes', () => {
         db.select().from(runs).where(eq(runs.datasetId, 'api-stale')),
       ),
     ).toEqual([]);
+  });
+
+  it('refuse a run while another run of the dataset is going, and name it', async () => {
+    const datasetId = 'api-one-at-a-time';
+    // A run from an earlier slot, whose Workflow is still working.
+    const going = `${datasetId}-202601010000`;
+    await runWithoutWorkflow(going, HOUR, datasetId);
+    const { bindings, created } = recordingWorkflows();
+
+    const refused = await call('POST', `/datasets/${datasetId}/runs`, { bindings });
+    expect(refused.status).toBe(409);
+    expectNoStore(refused);
+    expect(await refused.json()).toEqual({
+      error: `A run of ${datasetId} is already running (${going}). Wait for it to finish.`,
+      runId: going,
+    });
+    // Nothing was recorded for the request, and no Workflow was created.
+    expect(created).toEqual([]);
+    expect(
+      await withDatabase(env, (db) =>
+        db.select({ id: runs.id }).from(runs).where(eq(runs.datasetId, datasetId)),
+      ),
+    ).toEqual([{ id: going }]);
+  });
+
+  it('start a run once the one before it has finished', async () => {
+    const datasetId = 'api-after-the-last';
+    const before = `${datasetId}-202601010000`;
+    await runWithoutWorkflow(before, HOUR, datasetId);
+    await withDatabase(env, (db) =>
+      finishRun(db, before, { status: 'failed', error: 'robots.txt is unreachable' }),
+    );
+    const { bindings, created } = recordingWorkflows();
+
+    const started = await call('POST', `/datasets/${datasetId}/runs`, { bindings });
+    expect(started.status).toBe(202);
+    const { runId } = (await started.json()) as { runId: string };
+    expect(created).toEqual([runId]);
+  });
+
+  it('take a run still going after six hours as dead, and one that began under six hours ago as going', async () => {
+    // The same request either side of the line: a minute over six hours, and a minute under.
+    await runWithoutWorkflow('api-dead-202601010000', 6 * HOUR + 60_000, 'api-dead');
+    await runWithoutWorkflow('api-going-202601010000', 6 * HOUR - 60_000, 'api-going');
+    const { bindings, created } = recordingWorkflows();
+
+    const afterDead = await call('POST', '/datasets/api-dead/runs', { bindings });
+    expect(afterDead.status).toBe(202);
+    const afterGoing = await call('POST', '/datasets/api-going/runs', { bindings });
+    expect(afterGoing.status).toBe(409);
+    expect(await afterGoing.json()).toMatchObject({ runId: 'api-going-202601010000' });
+    expect(created).toHaveLength(1);
+  });
+
+  it('say why a dataset’s status can’t be given when its stored definition no longer passes the checks', async () => {
+    await staleDataset('api-stale-status');
+    const logged = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    try {
+      const refused = await call('GET', '/datasets/api-stale-status/status');
+      expect(refused.status).toBe(409);
+      expectNoStore(refused);
+      expect(await refused.json()).toEqual({
+        error:
+          'Dataset api-stale-status’s stored definition no longer passes the checks (consumers.0: Use lowercase letters, digits, and hyphens, up to 63 characters.). Apply it again.',
+      });
+      // The owner fixes it by applying the definition again, so it is an answer, not a failure.
+      expect(logged).not.toHaveBeenCalled();
+    } finally {
+      logged.mockRestore();
+    }
   });
 
   it('report a run that is still going as running', async () => {

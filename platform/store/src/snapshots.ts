@@ -46,12 +46,13 @@ export interface StoredSnapshot extends Omit<SnapshotRow, 'generation' | 'publis
 }
 
 /**
- * Takes the dataset's row, which a change to a snapshot's state takes before any snapshot's. It's
- * the lock an UPDATE of the row takes (`for no key update`), not `for update`. The stronger one
- * would hold up every insert that refers to the dataset, such as a run's, and two sessions that had
- * each inserted such a row, which takes a share of the dataset's row, would deadlock asking for it.
+ * Takes the dataset's row, which a change to a snapshot's state takes before any snapshot's, and
+ * so does starting a run (`startRunAlone`). It's the lock an UPDATE of the row takes (`for no key
+ * update`), not `for update`. The stronger one would hold up every insert that refers to the
+ * dataset, such as a run's, and two sessions that had each inserted such a row, which takes a share
+ * of the dataset's row, would deadlock asking for it.
  */
-async function lockDataset(tx: Executor, datasetId: string): Promise<void> {
+export async function lockDataset(tx: Executor, datasetId: string): Promise<void> {
   await tx
     .select({ id: datasets.id })
     .from(datasets)

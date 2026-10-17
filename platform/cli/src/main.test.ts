@@ -1,6 +1,7 @@
 import {
   sha256Hex,
   type ApplySummary,
+  type DatasetStatus,
   type DiscoverySummary,
   type ReviewView,
   type RunSummary,
@@ -304,6 +305,39 @@ describe('run', () => {
       `A run already started in this five-minute slot: ${RUN_ID}.`,
       `Run ${RUN_ID} failed: Dataset cli-products doesn’t exist`,
     ]);
+  });
+
+  it('says which run is going when the API turns the run away for it, and follows that run', async () => {
+    // A run from an earlier slot, still working: not this slot's, so the slot's sentence would be
+    // wrong. The API's own words say it.
+    const going = 'cli-products-202610090000';
+    const message = `A run of cli-products is already running (${going}). Wait for it to finish.`;
+    const complete: RunView = { ...RUNNING, id: going, status: 'complete' };
+    const { fetch, sent } = stubApi(({ method }) =>
+      method === 'POST'
+        ? Response.json({ error: message, runId: going }, { status: 409 })
+        : Response.json(complete),
+    );
+    const { io, out, err } = memoryIo();
+    expect(await main(['run', 'cli-products', '--wait'], { io, env: ENV, fetch })).toBe(0);
+    expect(out).toEqual([message, `Run ${going}: complete.`]);
+    expect(err).toEqual([]);
+    expect(sent.map(({ method, path }) => ({ method, path }))).toEqual([
+      { method: 'POST', path: '/datasets/cli-products/runs' },
+      { method: 'GET', path: `/runs/${going}` },
+    ]);
+
+    // Without --wait it says so and stops.
+    const alone = memoryIo();
+    expect(await main(['run', 'cli-products'], { io: alone.io, env: ENV, fetch })).toBe(0);
+    expect(alone.out).toEqual([message]);
+  });
+
+  it('says the slot’s sentence when the API gives a run but no words for it', async () => {
+    const { fetch } = stubApi(() => Response.json({ runId: RUN_ID }, { status: 409 }));
+    const { io, out } = memoryIo();
+    expect(await main(['run', 'cli-products'], { io, env: ENV, fetch })).toBe(0);
+    expect(out).toEqual([`A run already started in this five-minute slot: ${RUN_ID}.`]);
   });
 
   it('stops waiting after an hour', async () => {
@@ -1085,6 +1119,135 @@ describe('review', () => {
   });
 });
 
+describe('status', () => {
+  const STATUS: DatasetStatus = {
+    dataset: 'cli-products',
+    revision: 3,
+    headGeneration: 4,
+    held: {
+      snapshotId: 'sn_held',
+      records: 412,
+      reason: 'the definition changed since the last publication (revision 2 to 3)',
+      createdAt: '2026-10-12T10:00:00.000Z',
+    },
+    reviews: { classify: 3, match: 2, publication: 1 },
+    consumers: [
+      {
+        name: 'crowdio',
+        generation: 4,
+        outcome: 'applied',
+        receivedAt: '2026-10-12T09:00:00.000Z',
+      },
+      { name: 'other', generation: null, outcome: null, receivedAt: null },
+    ],
+  };
+
+  it('says where a dataset stands', async () => {
+    const { fetch, sent } = stubApi(() => Response.json(STATUS));
+    const { io, out } = memoryIo();
+    expect(await main(['status', 'cli-products'], { io, env: ENV, fetch })).toBe(0);
+    expect(sent[0]).toMatchObject({ method: 'GET', path: '/datasets/cli-products/status' });
+    expect(out).toEqual([
+      'cli-products, revision 3: generation 4 is published.',
+      'Held: sn_held, 412 records, because the definition changed since the last publication (revision 2 to 3).',
+      'Waiting for review: 3 classify, 2 match, 1 publication.',
+      'crowdio: applied generation 4 at 2026-10-12T09:00:00.000Z.',
+      'other: has acknowledged nothing yet.',
+    ]);
+  });
+
+  it('says what is missing: nothing published, nothing held, nothing waiting, nobody listed', async () => {
+    const fresh: DatasetStatus = {
+      dataset: 'cli-new',
+      revision: 1,
+      headGeneration: 0,
+      held: null,
+      reviews: { classify: 0, match: 0, publication: 0 },
+      consumers: [],
+    };
+    const { fetch } = stubApi(() => Response.json(fresh));
+    const { io, out, err } = memoryIo();
+    expect(await main(['status', 'cli-new'], { io, env: ENV, fetch })).toBe(0);
+    expect(out).toEqual([
+      'cli-new, revision 1: nothing is published yet.',
+      'Nothing waits for review.',
+    ]);
+    expect(err).toEqual([]);
+  });
+
+  it('names a refusal as it names an application, and a hold that gave no reason', async () => {
+    const status: DatasetStatus = {
+      ...STATUS,
+      held: {
+        snapshotId: 'sn_held',
+        records: 2,
+        reason: null,
+        createdAt: '2026-10-12T10:00:00.000Z',
+      },
+      reviews: { classify: 0, match: 0, publication: 1 },
+      consumers: [
+        {
+          name: 'crowdio',
+          generation: 2,
+          outcome: 'refused',
+          receivedAt: '2026-10-12T09:00:00.000Z',
+        },
+      ],
+    };
+    const { fetch } = stubApi(() => Response.json(status));
+    const { io, out } = memoryIo();
+    expect(await main(['status', 'cli-products'], { io, env: ENV, fetch })).toBe(0);
+    expect(out).toEqual([
+      'cli-products, revision 3: generation 4 is published.',
+      'Held: sn_held, 2 records.',
+      'Waiting for review: 0 classify, 0 match, 1 publication.',
+      'crowdio: refused generation 2 at 2026-10-12T09:00:00.000Z.',
+    ]);
+  });
+
+  it('keeps a dataset’s name to its place in the address', async () => {
+    const { fetch, sent } = stubApi(() => Response.json(STATUS));
+    const { io } = memoryIo();
+    await main(['status', 'a b/c'], { io, env: ENV, fetch });
+    expect(sent.map(({ method, path }) => ({ method, path }))).toEqual([
+      { method: 'GET', path: '/datasets/a%20b%2Fc/status' },
+    ]);
+  });
+
+  it('shows why the API refused, and exits 1', async () => {
+    const stale =
+      'Dataset cli-products’s stored definition no longer passes the checks (consumers.0: Use lowercase letters, digits, and hyphens, up to 63 characters.). Apply it again.';
+    for (const [status, error] of [
+      [404, 'Dataset nothing doesn’t exist.'],
+      [401, 'The owner token is missing or wrong.'],
+      [409, stale],
+    ] as const) {
+      const { fetch } = stubApi(() => Response.json({ error }, { status }));
+      const { io, out, err } = memoryIo();
+      expect(await main(['status', 'cli-products'], { io, env: ENV, fetch }), `${status}`).toBe(1);
+      expect(err).toEqual([error]);
+      expect(out).toEqual([]);
+    }
+  });
+
+  it('needs exactly one dataset', async () => {
+    const { fetch, sent } = stubApi(() => Response.json(STATUS));
+    const { io, out, err } = memoryIo();
+    for (const argv of [['status'], ['status', 'cli-products', 'extra']]) {
+      expect(await main(argv, { io, env: ENV, fetch }), argv.join(' ')).toBe(2);
+    }
+    expect(err.slice(0, USAGE.split('\n').length)).toEqual(USAGE.split('\n'));
+    expect(out).toEqual([]);
+    expect(sent).toHaveLength(0);
+  });
+
+  it('is in the usage, with the apostrophe every other message uses', () => {
+    expect(USAGE).toContain('status <dataset>');
+    expect(USAGE).toContain('what’s held');
+    expect(USAGE).not.toContain("what's held");
+  });
+});
+
 describe('snapshot pull', () => {
   const body = JSON.stringify({
     project: 'cli-products',
@@ -1595,6 +1758,51 @@ describe('what reaches the terminal', () => {
     for (const line of [...first.out, ...first.err, ...second.out, ...second.err]) {
       expect(line).not.toMatch(DRIVES_A_TERMINAL);
     }
+  });
+
+  it('spells out controls in the status of a dataset', async () => {
+    const hostile: DatasetStatus = {
+      dataset: 'cli\u001b[2J',
+      revision: 3,
+      headGeneration: 4,
+      held: {
+        snapshotId: 'sn_\u0007',
+        records: 1,
+        reason: 'a \u001b[31mred\u001b[0m reason\nHeld: sn_ok, 9 records',
+        createdAt: '2026-10-12T10:00:00.000Z',
+      },
+      reviews: { classify: 0, match: 0, publication: 1 },
+      consumers: [
+        { name: 'c\u{202e}x', generation: 2, outcome: 'applied', receivedAt: 'at \u009b31m' },
+        { name: 'o\u001bther', generation: null, outcome: null, receivedAt: null },
+      ],
+    };
+    const { fetch } = stubApi(() => Response.json(hostile));
+    const { io, out, err } = memoryIo();
+    expect(await main(['status', 'cli-products'], { io, env: ENV, fetch })).toBe(0);
+    expect(out).toEqual([
+      String.raw`cli\u{1b}[2J, revision 3: generation 4 is published.`,
+      String.raw`Held: sn_\u{7}, 1 records, because a \u{1b}[31mred\u{1b}[0m reason\u{a}Held: sn_ok, 9 records.`,
+      'Waiting for review: 0 classify, 0 match, 1 publication.',
+      String.raw`c\u{202e}x: applied generation 2 at at \u{9b}31m.`,
+      String.raw`o\u{1b}ther: has acknowledged nothing yet.`,
+    ]);
+    expect(err).toEqual([]);
+    for (const line of [...out, ...err]) expect(line).not.toMatch(DRIVES_A_TERMINAL);
+  });
+
+  it('spells out controls in the run another run is going', async () => {
+    const message = 'A run of x is already running (x-1\u001b]0;pwned\u0007). Wait.\nStarted y.';
+    const { fetch } = stubApi(() =>
+      Response.json({ error: message, runId: 'x-1\u001b' }, { status: 409 }),
+    );
+    const { io, out, err } = memoryIo();
+    expect(await main(['run', 'cli-products'], { io, env: ENV, fetch })).toBe(0);
+    expect(out).toEqual([
+      String.raw`A run of x is already running (x-1\u{1b}]0;pwned\u{7}). Wait.\u{a}Started y.`,
+    ]);
+    expect(err).toEqual([]);
+    for (const line of [...out, ...err]) expect(line).not.toMatch(DRIVES_A_TERMINAL);
   });
 
   it('spells out controls in what was typed', async () => {

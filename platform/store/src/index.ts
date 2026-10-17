@@ -8,3 +8,4 @@ export * from './entities';
 export * from './snapshots';
 export * from './listing';
 export * from './decisions';
+export * from './consumers';
