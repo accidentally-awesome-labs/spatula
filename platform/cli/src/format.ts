@@ -25,8 +25,26 @@ export function formatApplySummary(summary: ApplySummary, dryRun: boolean): stri
   if (added.length > 0) lines.push(`Sources added: ${added.join(', ')}.`);
   if (removed.length > 0) lines.push(`Sources removed: ${removed.join(', ')}.`);
   if (changed.length > 0) lines.push(`Sources changed: ${changed.join(', ')}.`);
-  if (summary.pages.added + summary.pages.removed > 0) {
+  // A Worker before ADR 0006 sends no moves, and its plans read as they always did.
+  const moved = summary.pages.moved ?? 0;
+  if (moved > 0) {
+    const where = (summary.moves ?? [])
+      .map((move) => `${move.from.join(', ')} → ${move.to}`)
+      .join('; ');
+    lines.push(
+      `Pages: ${summary.pages.added} added, ${moved} moved (${where}), ${summary.pages.removed} removed.`,
+    );
+  } else if (summary.pages.added + summary.pages.removed > 0) {
     lines.push(`Pages: ${summary.pages.added} added, ${summary.pages.removed} removed.`);
+  }
+  const unmoved = summary.unmoved;
+  if (unmoved !== undefined) {
+    const why = [
+      unmoved.uncovered > 0 ? `${unmoved.uncovered} that no remaining source covers` : null,
+      unmoved.ambiguous > 0 ? `${unmoved.ambiguous} that two or more sources cover` : null,
+      unmoved.taken > 0 ? `${unmoved.taken} that their new source already has` : null,
+    ].filter((part) => part !== null);
+    if (why.length > 0) lines.push(`Pages left excluded: ${why.join(', ')}.`);
   }
   return lines;
 }

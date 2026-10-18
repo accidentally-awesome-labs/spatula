@@ -17,7 +17,15 @@ export interface ApplySummary {
   created: boolean;
   changed: boolean;
   sources: { added: string[]; removed: string[]; changed: string[] };
-  pages: { added: number; removed: number };
+  /** Pages added and excluded, and pages of removed sources that moved (absent before ADR 0006). */
+  pages: { added: number; removed: number; moved?: number };
+  /** Where the moved pages went: the sources they left, by the source that took them in. */
+  moves?: { from: string[]; to: string; pages: number }[];
+  /**
+   * Pages of sources removed now that stayed excluded, by why: no remaining source covers their
+   * address, two or more do, or the one that does already has a page there.
+   */
+  unmoved?: { uncovered: number; ambiguous: number; taken: number };
 }
 
 /** What a run's snapshot step did. */

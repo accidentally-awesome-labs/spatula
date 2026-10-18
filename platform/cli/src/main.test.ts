@@ -187,6 +187,44 @@ describe('plan and apply', () => {
     ]);
   });
 
+  it('says which pages moved where, and which stayed excluded and why', async () => {
+    const summary: ApplySummary = {
+      dataset: 'crowdio-audio-products',
+      revision: 2,
+      created: false,
+      changed: false,
+      sources: { added: [], removed: [], changed: [] },
+      pages: { added: 0, removed: 0, moved: 11 },
+      moves: [
+        { from: ['sennheiser-amplifiers', 'sennheiser-headphones'], to: 'sennheiser', pages: 11 },
+      ],
+      unmoved: { uncovered: 1, ambiguous: 0, taken: 2 },
+    };
+    const { fetch } = stubApi(() => Response.json(summary));
+    const { io, out } = memoryIo(FILES);
+    expect(await main(['plan', 'cli-products.yaml'], { io, env: ENV, fetch })).toBe(0);
+    expect(out).toEqual([
+      'crowdio-audio-products is unchanged, at revision 2.',
+      'Pages: 0 added, 11 moved (sennheiser-amplifiers, sennheiser-headphones → sennheiser), 0 removed.',
+      'Pages left excluded: 1 that no remaining source covers, 2 that their new source already has.',
+    ]);
+  });
+
+  it('prints a plan from a Worker before ADR 0006 as before', async () => {
+    const summary = {
+      dataset: 'cli-products',
+      revision: 2,
+      created: false,
+      changed: true,
+      sources: { added: [], removed: [], changed: [] },
+      pages: { added: 3, removed: 1 },
+    } satisfies ApplySummary;
+    const { fetch } = stubApi(() => Response.json(summary));
+    const { io, out } = memoryIo(FILES);
+    expect(await main(['plan', 'cli-products.yaml'], { io, env: ENV, fetch })).toBe(0);
+    expect(out).toEqual(['cli-products would move to revision 2.', 'Pages: 3 added, 1 removed.']);
+  });
+
   it('show what the API refused, and why', async () => {
     const { fetch } = stubApi(() =>
       Response.json(
