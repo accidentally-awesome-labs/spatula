@@ -26,6 +26,7 @@ import {
   supersedeHeld,
   unlessNewerRun,
 } from './snapshots';
+import { recordSourceRuns, reviveSources, sourceStates } from './source-states';
 
 /*
  * What only several connections can show. Every other test here runs in one transaction that is
@@ -699,5 +700,51 @@ describe('startRunAlone while another session starts a run', () => {
       expect(refused).toHaveLength(1);
       expect(await runIds(datasetId)).toEqual([started[0]!.run.id]);
       expect(refused[0]!.running.id).toBe(started[0]!.run.id);
+    }));
+});
+
+describe('recordSourceRuns while a revive holds the source', () => {
+  it('waits for the revive, and then counts the revived source, not the refused one it first saw', () =>
+    inDataset('record-revive', async (datasetId) => {
+      for (const n of [1, 2, 3]) {
+        await recordSourceRuns(pool, {
+          datasetId,
+          at: T(n),
+          verdicts: { 'maker-a': 'blocked' },
+          probes: {},
+        });
+      }
+      // The owner's revive has the source's row, and hasn't committed.
+      const revive = await holdingRow((tx) =>
+        reviveSources(tx, { datasetId, sources: ['maker-a'] }),
+      );
+      let finished = false;
+      const counting = recordSourceRuns(pool, {
+        datasetId,
+        at: T(4),
+        verdicts: { 'maker-a': 'blocked' },
+        probes: {},
+      });
+      void counting.then(
+        () => (finished = true),
+        () => (finished = true),
+      );
+      try {
+        await settledOrWaiting(counting);
+        expect(finished).toBe(false);
+      } finally {
+        revive.release();
+        await revive.done;
+        await counting.catch(() => undefined);
+      }
+      // It read the row only once it held it, so it saw the revival and counted one blocked run.
+      // Had it read the refused row first, it would have left the count at three and written that
+      // over the revival.
+      expect(await counting).toEqual({ blocked: [{ id: 'maker-a', blockedRuns: 1 }], refused: [] });
+      const states = await sourceStates(pool, datasetId);
+      expect(states.find((state) => state.id === 'maker-a')).toMatchObject({
+        blockedRuns: 1,
+        refusedAt: null,
+      });
     }));
 });

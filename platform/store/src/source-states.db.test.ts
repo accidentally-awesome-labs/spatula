@@ -31,6 +31,52 @@ const standing = async (db: Executor, datasetId: string) =>
     ]),
   );
 
+/** One source's whole standing. */
+const stateOf = async (db: Executor, datasetId: string, id: string) =>
+  (await sourceStates(db, datasetId)).find((state) => state.id === id)!;
+
+/** What a live source's standing is: no blocked runs, no refusal, no probe. */
+const liveState = (id: string) => ({
+  id,
+  blockedRuns: 0,
+  refusedAt: null,
+  lastProbeAt: null,
+  lastProbe: null,
+});
+
+/** The dataset's source rows as stored, every column, by ID. */
+const storedSources = (db: Executor, datasetId: string) =>
+  db.select().from(sources).where(eq(sources.datasetId, datasetId)).orderBy(sources.id);
+
+/** Three blocked runs in a row refuse `maker-a`, the third at `runAt(3)`. */
+async function refuseMakerA(db: Executor, datasetId: string) {
+  for (const n of [1, 2, 3]) {
+    await recordSourceRuns(db, {
+      datasetId,
+      at: runAt(n),
+      verdicts: { 'maker-a': 'blocked' },
+      probes: {},
+    });
+  }
+}
+
+/** Refuses `maker-a`, and keeps what a probe of it met at `runAt(4)`. */
+async function refusedAndProbed(db: Executor, datasetId: string) {
+  await applyDefinition(db, testDefinition(datasetId));
+  await refuseMakerA(db, datasetId);
+  await recordSourceRuns(db, {
+    datasetId,
+    at: runAt(4),
+    verdicts: { 'maker-a': 'untouched' },
+    probes: { 'maker-a': 'blocked' },
+  });
+  expect(await stateOf(db, datasetId, 'maker-a')).toMatchObject({
+    blockedRuns: 3,
+    lastProbe: 'blocked',
+    lastProbeAt: runAt(4),
+  });
+}
+
 describe('recordSourceRuns', () => {
   it('counts blocked runs, refuses a source at the third, and starts again once one gets through', () =>
     withRollback(async (db) => {
@@ -110,8 +156,16 @@ describe('recordSourceRuns', () => {
         probes: {},
       };
       await recordSourceRuns(db, input);
-      expect(await recordSourceRuns(db, input)).toEqual({ blocked: [], refused: [] });
-      await recordSourceRuns(db, { ...input, at: runAt(1) });
+      // The step runs again: it says what its first attempt said, and counts nothing more.
+      expect(await recordSourceRuns(db, input)).toEqual({
+        blocked: [{ id: 'maker-a', blockedRuns: 1 }],
+        refused: [],
+      });
+      // A newer run has counted the source, so the older run has nothing to say.
+      expect(await recordSourceRuns(db, { ...input, at: runAt(1) })).toEqual({
+        blocked: [],
+        refused: [],
+      });
       expect((await standing(db, 'once'))['maker-a']!.blockedRuns).toBe(1);
     }));
 
@@ -139,6 +193,132 @@ describe('recordSourceRuns', () => {
         lastProbeAt: runAt(4),
       });
       expect(state!.refusedAt).toEqual(runAt(3));
+    }));
+
+  it('keeps a refused source at three blocked runs when a run is blocked on it again, and reports nothing', () =>
+    withRollback(async (db) => {
+      await applyDefinition(db, testDefinition('refused-stays'));
+      await refuseMakerA(db, 'refused-stays');
+      expect(
+        await recordSourceRuns(db, {
+          datasetId: 'refused-stays',
+          at: runAt(4),
+          verdicts: { 'maker-a': 'blocked' },
+          probes: {},
+        }),
+      ).toEqual({ blocked: [], refused: [] });
+      expect((await standing(db, 'refused-stays'))['maker-a']).toEqual({
+        blockedRuns: 3,
+        refused: runAt(3).toISOString(),
+        lastProbe: null,
+      });
+    }));
+
+  it('refuses a source only on a blocked run, however high its count stands', () =>
+    withRollback(async (db) => {
+      await applyDefinition(db, testDefinition('out-of-turn'));
+      // The count of a refusal without the refusal. Nothing in the store writes such a row, so this
+      // shows that the run's verdict decides, not the count.
+      await db.update(sources).set({ blockedRuns: 3 }).where(eq(sources.datasetId, 'out-of-turn'));
+      expect(
+        await recordSourceRuns(db, {
+          datasetId: 'out-of-turn',
+          at: runAt(1),
+          verdicts: { 'maker-a': 'untouched', 'maker-b': 'through' },
+          probes: {},
+        }),
+      ).toEqual({ blocked: [], refused: [] });
+      expect(await standing(db, 'out-of-turn')).toEqual({
+        'maker-a': { blockedRuns: 3, refused: null, lastProbe: null },
+        'maker-b': { blockedRuns: 0, refused: null, lastProbe: null },
+      });
+    }));
+
+  it('keeps no probe for a source that was revived while the run that probed it was going', () =>
+    withRollback(async (db) => {
+      await applyDefinition(db, testDefinition('revived-mid-run'));
+      await refuseMakerA(db, 'revived-mid-run');
+      expect(await reviveSources(db, { datasetId: 'revived-mid-run', sources: ['maker-a'] })).toBe(
+        1,
+      );
+      // The run began before the revive and probed the source then; it counts after.
+      await recordSourceRuns(db, {
+        datasetId: 'revived-mid-run',
+        at: runAt(4),
+        verdicts: { 'maker-a': 'untouched' },
+        probes: { 'maker-a': 'blocked' },
+      });
+      expect(await stateOf(db, 'revived-mid-run', 'maker-a')).toEqual(liveState('maker-a'));
+    }));
+
+  it('forgets a kept probe when a run gets through', () =>
+    withRollback(async (db) => {
+      await refusedAndProbed(db, 'probe-through');
+      await recordSourceRuns(db, {
+        datasetId: 'probe-through',
+        at: runAt(5),
+        verdicts: { 'maker-a': 'through' },
+        probes: {},
+      });
+      expect(await stateOf(db, 'probe-through', 'maker-a')).toEqual(liveState('maker-a'));
+    }));
+});
+
+describe('a step that runs again', () => {
+  it('reports a blocked run as its first attempt did, and leaves the rows as they were', () =>
+    withRollback(async (db) => {
+      await applyDefinition(db, testDefinition('replay-blocked'));
+      const input = {
+        datasetId: 'replay-blocked',
+        at: runAt(1),
+        verdicts: { 'maker-a': 'blocked' as const, 'maker-b': 'through' as const },
+        probes: {},
+      };
+      const first = await recordSourceRuns(db, input);
+      expect(first).toEqual({ blocked: [{ id: 'maker-a', blockedRuns: 1 }], refused: [] });
+      const stored = await storedSources(db, 'replay-blocked');
+      expect(await recordSourceRuns(db, input)).toEqual(first);
+      expect(await storedSources(db, 'replay-blocked')).toEqual(stored);
+    }));
+
+  it('reports a refusal as its first attempt did, and leaves the rows as they were', () =>
+    withRollback(async (db) => {
+      await applyDefinition(db, testDefinition('replay-refused'));
+      for (const n of [1, 2]) {
+        await recordSourceRuns(db, {
+          datasetId: 'replay-refused',
+          at: runAt(n),
+          verdicts: { 'maker-a': 'blocked' },
+          probes: {},
+        });
+      }
+      const third = {
+        datasetId: 'replay-refused',
+        at: runAt(3),
+        verdicts: { 'maker-a': 'blocked' as const },
+        probes: {},
+      };
+      const first = await recordSourceRuns(db, third);
+      expect(first).toEqual({ blocked: [{ id: 'maker-a', blockedRuns: 3 }], refused: ['maker-a'] });
+      const stored = await storedSources(db, 'replay-refused');
+      expect(await recordSourceRuns(db, third)).toEqual(first);
+      expect(await storedSources(db, 'replay-refused')).toEqual(stored);
+    }));
+
+  it('reports nothing for a blocked run on a source refused before the run, as its first attempt did', () =>
+    withRollback(async (db) => {
+      await applyDefinition(db, testDefinition('replay-before'));
+      await refuseMakerA(db, 'replay-before');
+      const fourth = {
+        datasetId: 'replay-before',
+        at: runAt(4),
+        verdicts: { 'maker-a': 'blocked' as const },
+        probes: {},
+      };
+      expect(await recordSourceRuns(db, fourth)).toEqual({ blocked: [], refused: [] });
+      const stored = await storedSources(db, 'replay-before');
+      expect(await recordSourceRuns(db, fourth)).toEqual({ blocked: [], refused: [] });
+      expect(await storedSources(db, 'replay-before')).toEqual(stored);
     }));
 });
 
@@ -179,6 +359,54 @@ describe('liveAgain and reviveSources', () => {
       ).toBe(1);
       expect((await standing(db, 'revive-sources'))['maker-a']!.blockedRuns).toBe(0);
     }));
+
+  it('forgets a kept probe when its source is live again', () =>
+    withRollback(async (db) => {
+      await refusedAndProbed(db, 'probe-live-again');
+      await liveAgain(db, { datasetId: 'probe-live-again', sourceIds: ['maker-a'] });
+      expect(await stateOf(db, 'probe-live-again', 'maker-a')).toEqual(liveState('maker-a'));
+    }));
+
+  it('revives a refused source, its probe and all, and leaves a removed source alone', () =>
+    withRollback(async (db) => {
+      const definition = testDefinition('revive-refused');
+      await applyDefinition(db, definition);
+      for (const n of [1, 2, 3]) {
+        await recordSourceRuns(db, {
+          datasetId: 'revive-refused',
+          at: runAt(n),
+          verdicts: { 'maker-a': 'blocked', 'maker-b': 'blocked' },
+          probes: {},
+        });
+      }
+      await recordSourceRuns(db, {
+        datasetId: 'revive-refused',
+        at: runAt(4),
+        verdicts: { 'maker-a': 'untouched', 'maker-b': 'untouched' },
+        probes: { 'maker-a': 'blocked', 'maker-b': 'no answer' },
+      });
+      // maker-b leaves the definition while it is still refused.
+      await applyDefinition(db, {
+        ...definition,
+        sources: definition.sources.filter((source) => source.id === 'maker-a'),
+      });
+      const removed = (await storedSources(db, 'revive-refused')).find(
+        (row) => row.id === 'maker-b',
+      )!;
+      expect(removed).toMatchObject({ blockedRuns: 3, lastProbe: 'no answer' });
+      expect(removed.removedAt).not.toBeNull();
+
+      expect(
+        await reviveSources(db, {
+          datasetId: 'revive-refused',
+          sources: ['maker-a', 'maker-b'],
+        }),
+      ).toBe(1);
+      expect(await sourceStates(db, 'revive-refused')).toEqual([liveState('maker-a')]);
+      expect(
+        (await storedSources(db, 'revive-refused')).find((row) => row.id === 'maker-b'),
+      ).toEqual(removed);
+    }));
 });
 
 describe('the run plan and probes', () => {
@@ -201,6 +429,8 @@ describe('the run plan and probes', () => {
           all,
         });
         expect(plan.ids).toEqual([b1.id]);
+        // Only maker-b's page is due, and the refused source's two pages are still live.
+        expect(plan.due).toBe(1);
         expect(plan.live).toBe(3);
       }
     }));
@@ -226,5 +456,21 @@ describe('the run plan and probes', () => {
         a1!.id,
       );
       expect(await probeItem(db, { datasetId: 'probe-item', sourceId: 'nobody' })).toBeNull();
+    }));
+
+  it('probes a page nobody has read before one that was read long ago', () =>
+    withRollback(async (db) => {
+      await applyDefinition(db, testDefinition('probe-unread'));
+      const live = await listLiveItems(db, 'probe-unread');
+      const [a1, a2] = live.filter((item) => item.sourceId === 'maker-a');
+      // Postgres sorts nulls last unless told otherwise. The unread page has the later address and no
+      // read at all, so only the ordering puts it first.
+      await db
+        .update(items)
+        .set({ lastFetchedAt: runAt(0) })
+        .where(eq(items.id, a1!.id));
+      expect((await probeItem(db, { datasetId: 'probe-unread', sourceId: 'maker-a' }))?.id).toBe(
+        a2!.id,
+      );
     }));
 });

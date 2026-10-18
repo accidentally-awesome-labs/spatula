@@ -38,11 +38,15 @@ const LIVE = { blockedRuns: 0, refusedAt: null, lastProbe: null, lastProbeAt: nu
 
 /**
  * Counts a run's verdicts. A source the run got through to starts again at zero, and is live. A
- * blocked one counts one more blocked run, and the third in a row refuses it. An untouched one keeps
- * its count. A refused source whose probe didn't get through keeps when it was probed and what the
- * probe met. Each source keeps the start of the run it counted last, so a step that runs again, or
- * an older run that ends after a newer one, counts nothing. Returns the sources this run blocked,
- * with their counts, and those it refused.
+ * blocked one counts one more blocked run, and the third in a row refuses it. A source that is
+ * already refused counts no further blocked run (ADR 0006), and only a blocked run refuses a
+ * source. An untouched one keeps its count. A refused source whose probe didn't get through keeps
+ * when it was probed and what the probe met; one that isn't refused keeps no probe, so a source
+ * revived while the run was going stays clean. Each source keeps the start of the run it counted
+ * last. An older run that ends after a newer one counts nothing and says nothing. A step that runs
+ * again counts nothing and writes nothing, and says what its first attempt said, from the rows as
+ * they stand. Returns the sources this run counted a blocked run for, with their counts, and those
+ * it refused.
  */
 export async function recordSourceRuns(
   db: Executor,
@@ -71,11 +75,27 @@ export async function recordSourceRuns(
     const blocked: { id: string; blockedRuns: number }[] = [];
     const refused: string[] = [];
     for (const row of rows) {
-      if (row.countedAt !== null && row.countedAt >= input.at) continue;
       const verdict = input.verdicts[row.id]!;
+      if (row.countedAt !== null && row.countedAt >= input.at) {
+        // A newer run counted the source, and this one has nothing to add. This very run did, in an
+        // earlier attempt of the step: say what that attempt said, and write nothing. The row shows
+        // it: that attempt reported a blocked run unless the source was refused before the run, and
+        // a refusal if it set the refusal at this run's start.
+        if (row.countedAt.getTime() === input.at.getTime()) {
+          const refusedBefore = row.refusedAt !== null && row.refusedAt < input.at;
+          if (verdict === 'blocked' && !refusedBefore) {
+            blocked.push({ id: row.id, blockedRuns: row.blockedRuns });
+          }
+          if (row.refusedAt?.getTime() === input.at.getTime()) refused.push(row.id);
+        }
+        continue;
+      }
+      // Only a source that isn't refused counts a blocked run, and only a blocked run refuses it.
+      const wasRefused = row.refusedAt !== null;
+      const counts = verdict === 'blocked' && !wasRefused;
+      const blockedRuns = counts ? row.blockedRuns + 1 : row.blockedRuns;
+      const refusedNow = counts && blockedRuns >= REFUSE_AFTER_RUNS;
       const probe = input.probes[row.id];
-      const blockedRuns = verdict === 'blocked' ? row.blockedRuns + 1 : row.blockedRuns;
-      const refusedNow = row.refusedAt === null && blockedRuns >= REFUSE_AFTER_RUNS;
       await tx
         .update(sources)
         .set(
@@ -84,12 +104,16 @@ export async function recordSourceRuns(
             : {
                 blockedRuns,
                 ...(refusedNow ? { refusedAt: input.at } : {}),
-                ...(probe === undefined ? {} : { lastProbe: probe, lastProbeAt: input.at }),
+                // A probe's outcome belongs to a refused source. A source a person revived while the
+                // run was going has none to keep.
+                ...(probe !== undefined && wasRefused
+                  ? { lastProbe: probe, lastProbeAt: input.at }
+                  : {}),
                 countedAt: input.at,
               },
         )
         .where(and(eq(sources.datasetId, input.datasetId), eq(sources.id, row.id)));
-      if (verdict === 'blocked') blocked.push({ id: row.id, blockedRuns });
+      if (counts) blocked.push({ id: row.id, blockedRuns });
       if (refusedNow) refused.push(row.id);
     }
     return { blocked, refused };
