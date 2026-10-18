@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import type { Question } from './decisions';
 import type { Outcome } from './gate';
+import type { EvalScores } from './golden';
 import type { Excluded } from './snapshot';
 
 /*
@@ -169,4 +170,13 @@ export interface DatasetStatus {
     outcome: 'applied' | 'refused' | null;
     receivedAt: string | null;
   }[];
+}
+
+/** A saved score, as the API lists it. */
+export interface EvalView {
+  id: string;
+  generation: number;
+  goldenVersion: number;
+  scores: EvalScores;
+  createdAt: string;
 }

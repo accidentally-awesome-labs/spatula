@@ -1,6 +1,17 @@
 import { parseArgs } from 'node:util';
 import { createClient } from './client';
-import { check, plan, pullSnapshot, revive, review, run, status, type Io } from './commands';
+import {
+  check,
+  evals,
+  evaluate,
+  plan,
+  pullSnapshot,
+  revive,
+  review,
+  run,
+  status,
+  type Io,
+} from './commands';
 import { describeError, printable } from './format';
 
 export const USAGE = `Usage: spatula <command>
@@ -19,6 +30,9 @@ export const USAGE = `Usage: spatula <command>
                                List the questions waiting for an answer, or answer one
   status <dataset>             Where a dataset stands: its head, what’s held, what waits,
                                and what its consumers acknowledged
+  eval <golden.json> [--save]  Score the latest snapshot against a golden set, and keep
+                               the score with --save
+  evals <dataset>              The history of a dataset’s scores
   snapshot pull <dataset> --out <file> [--generation <n>]
                                Download a snapshot, check its hash, and write it
 
@@ -33,6 +47,7 @@ const OPTIONS = {
   wait: { type: 'boolean' },
   all: { type: 'boolean' },
   refused: { type: 'boolean' },
+  save: { type: 'boolean' },
   out: { type: 'string' },
   generation: { type: 'string' },
   help: { type: 'boolean', short: 'h' },
@@ -129,6 +144,12 @@ export async function main(
     }
     case 'status':
       return rest.length === 1 ? status(io, client, rest[0]!) : usage();
+    case 'eval':
+      return rest.length === 1
+        ? evaluate(io, client, rest[0]!, { save: values.save === true })
+        : usage();
+    case 'evals':
+      return rest.length === 1 ? evals(io, client, rest[0]!) : usage();
     case 'snapshot': {
       // An empty --out names no file, as a missing one doesn't.
       if (rest[0] !== 'pull' || rest.length !== 2 || !values.out) return usage();

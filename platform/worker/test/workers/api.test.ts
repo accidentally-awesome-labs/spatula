@@ -270,15 +270,18 @@ describe('the owner routes', () => {
 
   it('keep every route under /datasets behind the token', async () => {
     // Every path under /datasets is the owner's, but a consumer's two, which a listed consumer's
-    // token opens too. So the guard covers a path that no route answers as well as the four that
-    // follow it, which edit a definition, spend on a run, hand out a snapshot, and answer a review
-    // question.
+    // token opens too. So the guard covers a path that no route answers as well as the routes that
+    // follow it, which edit a definition, spend on a run, hand out a snapshot, answer a review
+    // question, or read and save scores.
     const requests = [
       ['POST', '/datasets/api-guard/definition'],
       ['PUT', '/datasets/api-guard'],
       ['POST', '/datasets/api-guard/runs'],
       ['GET', '/datasets/api-guard/snapshots/latest'],
       ['POST', '/datasets/api-guard/review/rv_x'],
+      ['GET', '/datasets/api-guard/items'],
+      ['POST', '/datasets/api-guard/evals'],
+      ['GET', '/datasets/api-guard/evals'],
     ] as const;
     for (const [method, path] of requests) {
       for (const token of [null, 'wrong']) {

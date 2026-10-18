@@ -5,6 +5,7 @@ import {
   stableStringify,
   type ApplySummary,
   type Definition,
+  type ItemView,
   type PagesSource,
 } from '@spatula/core';
 import { and, eq, inArray, notInArray, or, sql } from 'drizzle-orm';
@@ -233,6 +234,20 @@ export async function listLiveItems(db: Executor, datasetId: string): Promise<It
     })
     .from(items)
     .where(and(eq(items.datasetId, datasetId), eq(items.status, 'live')))
+    .orderBy(items.sourceId, items.locator);
+}
+
+/** Every item of the dataset, whatever its status, with the entity it joined. */
+export async function listItems(db: Executor, datasetId: string): Promise<ItemView[]> {
+  return db
+    .select({
+      locator: items.locator,
+      sourceId: items.sourceId,
+      status: items.status,
+      entityId: items.entityId,
+    })
+    .from(items)
+    .where(eq(items.datasetId, datasetId))
     .orderBy(items.sourceId, items.locator);
 }
 

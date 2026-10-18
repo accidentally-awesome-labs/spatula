@@ -39,6 +39,9 @@ describe('consumers', () => {
       ['GET', '/datasets/cr-listed/review'],
       ['POST', '/datasets/cr-listed/runs'],
       ['GET', '/datasets/cr-listed/status'],
+      ['GET', '/datasets/cr-listed/items'],
+      ['POST', '/datasets/cr-listed/evals'],
+      ['GET', '/datasets/cr-listed/evals'],
     ] as const) {
       const response = await call(method, path, { token: CONSUMER_TOKEN, bindings });
       expect(response.status, `${method} ${path}`).toBe(401);

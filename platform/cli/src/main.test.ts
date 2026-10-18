@@ -3,6 +3,8 @@ import {
   type ApplySummary,
   type DatasetStatus,
   type DiscoverySummary,
+  type EvalView,
+  type ItemView,
   type ReviewView,
   type RunSummary,
   type RunView,
@@ -1418,6 +1420,375 @@ describe('snapshot pull', () => {
   });
 });
 
+describe('eval', () => {
+  const A2 = 'https://maker-a.example/products/a2';
+  const GOLDEN = {
+    dataset: 'cli-products',
+    version: 2,
+    checked: '2026-10-14',
+    identifiers: ['gtins', 'mpns'],
+    specs: 'specs',
+    products: [
+      {
+        key: 'maker-a-a2',
+        pages: [A2],
+        fields: { brand: 'Maker A', name: 'A2', gtins: ['04006381333931'] },
+        checkedAgainst: ['https://retailer.example/a2'],
+      },
+    ],
+  };
+  const snapshotOf = (records: { canonicalId: string; fields: Record<string, unknown> }[]) =>
+    JSON.stringify({
+      project: 'cli-products',
+      snapshotId: 'sn_x',
+      generation: 3,
+      publishedAt: '2026-10-14T00:00:00.000Z',
+      records: records.map((record) => ({ ...record, provenance: {} })),
+    });
+  const SNAPSHOT = snapshotOf([
+    {
+      canonicalId: 'sp_a2',
+      fields: { brand: 'Maker A', name: 'A2', gtins: ['04006381333931'] },
+    },
+  ]);
+  const item = (locator: string, entityId: string | null): ItemView => ({
+    locator,
+    sourceId: 'maker-a',
+    status: 'live',
+    entityId,
+  });
+
+  /**
+   * Spatula's answers, with the snapshot's real hash, which the command checks, unless a test
+   * says another. A score is kept (201), and the history is empty.
+   */
+  async function serve(
+    options: { snapshot?: string; items?: ItemView[]; headers?: Record<string, string> } = {},
+  ) {
+    const snapshot = options.snapshot ?? SNAPSHOT;
+    const headers = {
+      'x-spatula-sha256': await sha256Hex(snapshot),
+      'x-spatula-generation': '3',
+      'x-spatula-snapshot-id': 'sn_x',
+      ...options.headers,
+    };
+    return stubApi(({ method, path }) => {
+      if (path.endsWith('/items'))
+        return Response.json({ items: options.items ?? [item(A2, 'sp_a2')] });
+      if (path.includes('/snapshots/')) return new Response(snapshot, { headers });
+      if (method === 'POST') return Response.json({ id: 'ev_1' }, { status: 201 });
+      return Response.json({ evals: [] });
+    });
+  }
+
+  it('scores the latest snapshot against a golden set, and keeps the score with --save', async () => {
+    const { fetch, sent } = await serve();
+    const { io, out } = memoryIo({ 'golden.json': JSON.stringify(GOLDEN) });
+    expect(await main(['eval', 'golden.json', '--save'], { io, env: ENV, fetch })).toBe(0);
+    expect(out).toEqual([
+      'cli-products, generation 3, against golden set version 2 (1 product):',
+      'Precision: 100.0% (target 99%): met.',
+      'Recall: 100.0%, 1 of 1 found (target 90%): met.',
+      'Identifiers: 100.0% of 1 stated (target 98%): met.',
+      'Key specs: none checked.',
+      'Fields: brand 100.0% of 1, gtins 100.0% of 1, name 100.0% of 1.',
+      'Saved the score.',
+    ]);
+    expect(sent.at(-1)).toMatchObject({
+      method: 'POST',
+      path: '/datasets/cli-products/evals',
+      body: { generation: 3, goldenVersion: 2, scores: { precision: 1, recall: 1, found: 1 } },
+    });
+  });
+
+  it('keeps the score only when asked to', async () => {
+    const { fetch, sent } = await serve();
+    const { io, out } = memoryIo({ 'golden.json': JSON.stringify(GOLDEN) });
+    expect(await main(['eval', 'golden.json'], { io, env: ENV, fetch })).toBe(0);
+    expect(sent.map(({ method, path }) => `${method} ${path}`)).toEqual([
+      'GET /datasets/cli-products/snapshots/latest',
+      'GET /datasets/cli-products/items',
+    ]);
+    expect(out).not.toContain('Saved the score.');
+  });
+
+  it('lists what missed, what the records left out, and what spread over several records', async () => {
+    const golden = {
+      ...GOLDEN,
+      products: [
+        {
+          ...GOLDEN.products[0]!,
+          fields: {
+            ...GOLDEN.products[0]!.fields,
+            mpns: ['A-2'],
+            specs: [{ label: 'Impedance', value: '32 Ω' }],
+          },
+        },
+        {
+          key: 'maker-a-a1',
+          pages: ['https://maker-a.example/products/a1', 'https://maker-a.example/products/a1-new'],
+          fields: { name: 'A1' },
+          checkedAgainst: ['https://retailer.example/a1'],
+        },
+      ],
+    };
+    const snapshot = snapshotOf([
+      {
+        canonicalId: 'sp_a2',
+        fields: { brand: 'Maker A', name: 'A2 Pro', gtins: ['04006381333931'] },
+      },
+      { canonicalId: 'sp_a1', fields: { name: 'A1' } },
+      { canonicalId: 'sp_a1_new', fields: { name: 'A1 New' } },
+    ]);
+    const { fetch } = await serve({
+      snapshot,
+      items: [
+        item(A2, 'sp_a2'),
+        item('https://maker-a.example/products/a1', 'sp_a1'),
+        item('https://maker-a.example/products/a1-new', 'sp_a1_new'),
+      ],
+    });
+    const { io, out } = memoryIo({ 'golden.json': JSON.stringify(golden) });
+    expect(await main(['eval', 'golden.json'], { io, env: ENV, fetch })).toBe(0);
+    expect(out).toEqual([
+      'cli-products, generation 3, against golden set version 2 (2 products):',
+      'Precision: 100.0% (target 99%): met.',
+      'Recall: 100.0%, 2 of 2 found (target 90%): met.',
+      'Identifiers: 100.0% of 1 stated, 1 left out (target 98%): met.',
+      'Key specs: none checked, 1 left out: not met.',
+      'Fields: brand 100.0% of 1, gtins 100.0% of 1, mpns none checked (1 left out), name 50.0% of 2.',
+      'Spread over several records: 1.',
+      'Misses:',
+      '  maker-a-a2: name is A2 Pro, not A2',
+      '  maker-a-a2: mpns is missing, not A-2',
+      '  maker-a-a2: specs Impedance is missing, not 32 Ω',
+      '  maker-a-a1: spread over 2 records',
+    ]);
+  });
+
+  it('scores nothing when the snapshot’s hash isn’t the one Spatula sent', async () => {
+    const { fetch, sent } = await serve({ headers: { 'x-spatula-sha256': '0'.repeat(64) } });
+    const { io, out, err } = memoryIo({ 'golden.json': JSON.stringify(GOLDEN) });
+    expect(await main(['eval', 'golden.json', '--save'], { io, env: ENV, fetch })).toBe(1);
+    expect(err).toEqual([
+      `The snapshot’s SHA-256 doesn’t match what Spatula said (${'0'.repeat(64)}). Nothing was scored.`,
+    ]);
+    expect(out).toEqual([]);
+    expect(sent.map((request) => request.method)).toEqual(['GET']);
+  });
+
+  it.each<{ label: string; snapshot: string; headers: Record<string, string>; said: string }>([
+    {
+      label: 'is not JSON',
+      snapshot: 'not json',
+      headers: {},
+      said: 'The snapshot isn’t JSON. Nothing was scored.',
+    },
+    {
+      label: 'is not in the published format',
+      snapshot: JSON.stringify({ project: 'cli-products' }),
+      headers: {},
+      said: 'The snapshot isn’t cli-products’s, in the published format. Nothing was scored.',
+    },
+    {
+      label: 'is for another dataset',
+      snapshot: SNAPSHOT.replace('"project":"cli-products"', '"project":"other-products"'),
+      headers: {},
+      said: 'The snapshot isn’t cli-products’s, in the published format. Nothing was scored.',
+    },
+    {
+      label: 'says another generation than Spatula did',
+      snapshot: SNAPSHOT,
+      headers: { 'x-spatula-generation': '4' },
+      said: 'The snapshot says generation 3 (sn_x), but Spatula said generation 4 (sn_x). Nothing was scored.',
+    },
+    {
+      label: 'says another ID than Spatula did',
+      snapshot: SNAPSHOT,
+      headers: { 'x-spatula-snapshot-id': 'sn_y' },
+      said: 'The snapshot says generation 3 (sn_x), but Spatula said generation 3 (sn_y). Nothing was scored.',
+    },
+  ])('scores nothing when the snapshot $label', async ({ snapshot, headers, said }) => {
+    // The hash is right for what was sent, so only these checks can tell.
+    const { fetch, sent } = await serve({ snapshot, headers });
+    const { io, out, err } = memoryIo({ 'golden.json': JSON.stringify(GOLDEN) });
+    expect(await main(['eval', 'golden.json', '--save'], { io, env: ENV, fetch })).toBe(1);
+    expect(err).toEqual([said]);
+    expect(out).toEqual([]);
+    expect(sent.map(({ method, path }) => `${method} ${path}`)).toEqual([
+      'GET /datasets/cli-products/snapshots/latest',
+    ]);
+  });
+
+  it('says so, after the scores, when the score can’t be kept', async () => {
+    const headers = {
+      'x-spatula-sha256': await sha256Hex(SNAPSHOT),
+      'x-spatula-generation': '3',
+      'x-spatula-snapshot-id': 'sn_x',
+    };
+    const { fetch } = stubApi(({ method, path }) => {
+      if (path.endsWith('/items')) return Response.json({ items: [item(A2, 'sp_a2')] });
+      if (method === 'POST') {
+        return Response.json({ error: 'Dataset cli-products doesn’t exist.' }, { status: 404 });
+      }
+      return new Response(SNAPSHOT, { headers });
+    });
+    const { io, out, err } = memoryIo({ 'golden.json': JSON.stringify(GOLDEN) });
+    expect(await main(['eval', 'golden.json', '--save'], { io, env: ENV, fetch })).toBe(1);
+    expect(out).toHaveLength(6);
+    expect(out).not.toContain('Saved the score.');
+    expect(err).toEqual(['Dataset cli-products doesn’t exist.']);
+  });
+
+  it('refuses a golden set that isn’t one', async () => {
+    const { fetch, sent } = await serve();
+    const { io, out, err } = memoryIo({
+      'golden.json': JSON.stringify({ dataset: 'cli-products' }),
+    });
+    expect(await main(['eval', 'golden.json'], { io, env: ENV, fetch })).toBe(1);
+    expect(err[0]).toBe('golden.json isn’t a golden set:');
+    expect(err.length).toBeGreaterThan(1);
+    expect(err.slice(1).every((line) => /^ {2}\S/u.test(line))).toBe(true);
+    expect(out).toEqual([]);
+    expect(sent).toEqual([]);
+  });
+
+  it('lists the first 20 problems of a golden set that has more', async () => {
+    const bad = { key: 'Bad Key', pages: ['http://a.example/x'], fields: {}, checkedAgainst: [] };
+    const golden = { ...GOLDEN, products: Array.from({ length: 25 }, () => bad) };
+    const { fetch } = await serve();
+    const { io, err } = memoryIo({ 'golden.json': JSON.stringify(golden) });
+    expect(await main(['eval', 'golden.json'], { io, env: ENV, fetch })).toBe(1);
+    expect(err).toHaveLength(21);
+    expect(err[1]).toMatch(/^ {2}products\.0\./u);
+  });
+
+  it('says so when the golden set can’t be read or isn’t JSON, and sends nothing', async () => {
+    const { fetch, sent } = await serve();
+    const { io, out, err } = memoryIo({ 'broken.json': '{ "dataset": ' });
+    expect(await main(['eval', 'missing.json'], { io, env: ENV, fetch })).toBe(1);
+    expect(await main(['eval', 'broken.json'], { io, env: ENV, fetch })).toBe(1);
+    expect(err).toHaveLength(2);
+    expect(err[0]).toBe('missing.json can’t be read: no such file');
+    expect(err[1]).toMatch(/^broken\.json isn’t JSON: \S/u);
+    expect(out).toEqual([]);
+    expect(sent).toEqual([]);
+  });
+
+  it('needs exactly one golden set', async () => {
+    const { fetch, sent } = await serve();
+    const { io, out, err } = memoryIo();
+    for (const argv of [['eval'], ['eval', 'a.json', 'b.json']]) {
+      expect(await main(argv, { io, env: ENV, fetch }), argv.join(' ')).toBe(2);
+    }
+    expect(err.slice(0, USAGE.split('\n').length)).toEqual(USAGE.split('\n'));
+    expect(out).toEqual([]);
+    expect(sent).toHaveLength(0);
+  });
+});
+
+describe('evals', () => {
+  const score = (identifiers: Record<string, number>, keySpecs: Record<string, number>) =>
+    ({
+      precision: 1,
+      recall: 0.92,
+      identifiers,
+      keySpecs,
+    }) as unknown as EvalView['scores'];
+
+  it('shows the history of a dataset’s scores', async () => {
+    const saved: EvalView[] = [
+      {
+        id: 'ev_2',
+        generation: 4,
+        goldenVersion: 2,
+        createdAt: '2026-10-15T00:00:00.000Z',
+        scores: {
+          precision: 1,
+          recall: 0.92,
+          identifiers: { accuracy: 0.99 },
+          keySpecs: { accuracy: 0.97 },
+        } as unknown as EvalView['scores'],
+      },
+      {
+        id: 'ev_1',
+        generation: 3,
+        goldenVersion: 2,
+        createdAt: '2026-10-14T00:00:00.000Z',
+        // Nothing was stated, which is not a perfect score.
+        scores: score({ checked: 0, accuracy: 1 }, { checked: 0, accuracy: 1 }),
+      },
+      {
+        id: 'ev_0',
+        generation: 2,
+        goldenVersion: 1,
+        createdAt: '2026-10-13T00:00:00.000Z',
+        scores: score({ checked: 20, accuracy: 1 }, { checked: 5, accuracy: 0.8 }),
+      },
+    ];
+    const { fetch, sent } = stubApi(() => Response.json({ evals: saved }));
+    const { io, out } = memoryIo();
+    expect(await main(['evals', 'cli-products'], { io, env: ENV, fetch })).toBe(0);
+    expect(sent[0]).toMatchObject({ method: 'GET', path: '/datasets/cli-products/evals' });
+    expect(out).toEqual([
+      '2026-10-15T00:00:00.000Z  generation 4  golden v2  precision 100.0%  recall 92.0%  identifiers 99.0%  key specs 97.0%',
+      '2026-10-14T00:00:00.000Z  generation 3  golden v2  precision 100.0%  recall 92.0%  identifiers none checked  key specs none checked',
+      '2026-10-13T00:00:00.000Z  generation 2  golden v1  precision 100.0%  recall 92.0%  identifiers 100.0%  key specs 80.0%',
+    ]);
+  });
+
+  it('says how to keep a score when none is kept yet', async () => {
+    const { fetch } = stubApi(() => Response.json({ evals: [] }));
+    const { io, out } = memoryIo();
+    expect(await main(['evals', 'cli-products'], { io, env: ENV, fetch })).toBe(0);
+    expect(out).toEqual(['No scores are kept yet. spatula eval <golden.json> --save keeps one.']);
+  });
+
+  it('keeps a dataset’s name to its place in the address', async () => {
+    const { fetch, sent } = stubApi(() => Response.json({ evals: [] }));
+    const { io } = memoryIo();
+    await main(['evals', 'a b/c'], { io, env: ENV, fetch });
+    expect(sent.map(({ method, path }) => ({ method, path }))).toEqual([
+      { method: 'GET', path: '/datasets/a%20b%2Fc/evals' },
+    ]);
+  });
+
+  it('shows why the API refused, and exits 1', async () => {
+    const { fetch } = stubApi(() =>
+      Response.json({ error: 'The owner token is missing or wrong.' }, { status: 401 }),
+    );
+    const { io, out, err } = memoryIo();
+    expect(await main(['evals', 'cli-products'], { io, env: ENV, fetch })).toBe(1);
+    expect(err).toEqual(['The owner token is missing or wrong.']);
+    expect(out).toEqual([]);
+  });
+
+  it('needs exactly one dataset', async () => {
+    const { fetch, sent } = stubApi(() => Response.json({ evals: [] }));
+    const { io, out, err } = memoryIo();
+    for (const argv of [['evals'], ['evals', 'cli-products', 'extra']]) {
+      expect(await main(argv, { io, env: ENV, fetch }), argv.join(' ')).toBe(2);
+    }
+    expect(err.slice(0, USAGE.split('\n').length)).toEqual(USAGE.split('\n'));
+    expect(out).toEqual([]);
+    expect(sent).toHaveLength(0);
+  });
+
+  it('are in the usage, before snapshot pull, with the apostrophe every other message uses', () => {
+    // The descriptions start in the same column as the other commands'.
+    expect(USAGE).toContain(
+      [
+        '  eval <golden.json> [--save]  Score the latest snapshot against a golden set, and keep',
+        '                               the score with --save',
+        '  evals <dataset>              The history of a dataset’s scores',
+      ].join('\n'),
+    );
+    expect(USAGE).not.toContain("dataset's");
+    expect(USAGE.indexOf('evals <dataset>')).toBeLessThan(USAGE.indexOf('snapshot pull'));
+    expect(USAGE.indexOf('status <dataset>')).toBeLessThan(USAGE.indexOf('eval <golden.json>'));
+  });
+});
+
 describe('SPATULA_URL', () => {
   const REFUSED = 'SPATULA_URL must be an https:// address unless Spatula runs on this machine.';
   const UNCHANGED: ApplySummary = {
@@ -1788,6 +2159,70 @@ describe('what reaches the terminal', () => {
       'Waiting for review: 0 classify, 0 match, 1 publication.',
       String.raw`c\u{202e}x: applied generation 2 at at \u{9b}31m.`,
       String.raw`o\u{1b}ther: has acknowledged nothing yet.`,
+    ]);
+    expect(err).toEqual([]);
+    for (const line of [...out, ...err]) expect(line).not.toMatch(DRIVES_A_TERMINAL);
+  });
+
+  it('spells out controls in the misses an eval lists', async () => {
+    const golden = {
+      dataset: 'cli-products',
+      version: 1,
+      checked: '2026-10-14',
+      identifiers: [],
+      products: [
+        {
+          key: 'maker-a-a2',
+          pages: ['https://maker-a.example/products/a2'],
+          fields: { name: 'A2' },
+          checkedAgainst: ['https://retailer.example/a2'],
+        },
+      ],
+    };
+    // What a record says is what a site wrote, and it comes back in the miss that quotes it.
+    const snapshot = JSON.stringify({
+      project: 'cli-products',
+      snapshotId: 'sn_x',
+      generation: 3,
+      publishedAt: '2026-10-14T00:00:00.000Z',
+      records: [
+        {
+          canonicalId: 'sp_a2',
+          fields: { name: 'A2\u001b]0;pwned\u0007\nMisses:\n  maker-a-a1: fine \u{202e}' },
+          provenance: {},
+        },
+      ],
+    });
+    const headers = {
+      'x-spatula-sha256': await sha256Hex(snapshot),
+      'x-spatula-generation': '3',
+      'x-spatula-snapshot-id': 'sn_x',
+    };
+    const { fetch } = stubApi(({ path }) =>
+      path.endsWith('/items')
+        ? Response.json({
+            items: [
+              {
+                locator: 'https://maker-a.example/products/a2',
+                sourceId: 'maker-a',
+                status: 'live',
+                entityId: 'sp_a2',
+              },
+            ],
+          })
+        : new Response(snapshot, { headers }),
+    );
+    const { io, out, err } = memoryIo({ 'golden.json': JSON.stringify(golden) });
+    expect(await main(['eval', 'golden.json'], { io, env: ENV, fetch })).toBe(0);
+    expect(out).toEqual([
+      'cli-products, generation 3, against golden set version 1 (1 product):',
+      'Precision: 100.0% (target 99%): met.',
+      'Recall: 100.0%, 1 of 1 found (target 90%): met.',
+      'Identifiers: none checked.',
+      'Key specs: none checked.',
+      'Fields: name 0.0% of 1.',
+      'Misses:',
+      String.raw`  maker-a-a2: name is A2\u{1b}]0;pwned\u{7}\u{a}Misses:\u{a}  maker-a-a1: fine \u{202e}, not A2`,
     ]);
     expect(err).toEqual([]);
     for (const line of [...out, ...err]) expect(line).not.toMatch(DRIVES_A_TERMINAL);

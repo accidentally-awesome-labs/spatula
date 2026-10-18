@@ -1,4 +1,13 @@
-import type { ApplySummary, DatasetStatus, Definition, ReviewView, RunView } from '@spatula/core';
+import type {
+  ApplySummary,
+  DatasetStatus,
+  Definition,
+  EvalScores,
+  EvalView,
+  ItemView,
+  ReviewView,
+  RunView,
+} from '@spatula/core';
 import { describeError } from './format';
 
 /** An answer the API refused with, and the problems it listed. Status 0 means no answer. */
@@ -186,6 +195,32 @@ export function createClient(options: {
         generation: Number(response.headers.get('x-spatula-generation')),
         snapshotId: response.headers.get('x-spatula-snapshot-id') ?? '',
       };
+    },
+
+    async listItems(datasetId: string): Promise<ItemView[]> {
+      const response = await request('GET', `/datasets/${encodeURIComponent(datasetId)}/items`);
+      const answer = await json(response);
+      if (!response.ok) throw refused(response.status, answer);
+      return Array.isArray(answer.items) ? (answer.items as ItemView[]) : [];
+    },
+
+    async saveEval(
+      datasetId: string,
+      body: { generation: number; goldenVersion: number; scores: EvalScores },
+    ): Promise<void> {
+      const response = await request(
+        'POST',
+        `/datasets/${encodeURIComponent(datasetId)}/evals`,
+        body,
+      );
+      if (!response.ok) throw refused(response.status, await json(response));
+    },
+
+    async listEvals(datasetId: string): Promise<EvalView[]> {
+      const response = await request('GET', `/datasets/${encodeURIComponent(datasetId)}/evals`);
+      const answer = await json(response);
+      if (!response.ok) throw refused(response.status, answer);
+      return Array.isArray(answer.evals) ? (answer.evals as EvalView[]) : [];
     },
   };
 }

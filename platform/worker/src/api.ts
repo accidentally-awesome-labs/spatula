@@ -14,6 +14,7 @@ import {
   sha256Hex,
   signDirectory,
   type DatasetStatus,
+  type EvalScores,
   type RunView,
 } from '@spatula/core';
 import { packs } from '@spatula/pack-products';
@@ -28,9 +29,12 @@ import {
   heldSnapshot,
   latestAcknowledgments,
   latestSnapshot,
+  listEvals,
+  listItems,
   listOpenReviews,
   recordAcknowledgment,
   reviveItems,
+  saveEval,
   StaleDefinitionError,
   startRunAlone,
 } from '@spatula/store';
@@ -508,6 +512,60 @@ api.get('/datasets/:id/status', async (c) => {
   });
   if (status === null) return c.json({ error: `Dataset ${datasetId} doesn’t exist.` }, 404);
   return c.json(status);
+});
+
+api.get('/datasets/:id/items', async (c) => {
+  const items = await withDatabase(c.env, (db) => listItems(db, c.req.param('id')));
+  return c.json({ items });
+});
+
+/** A share, from 0 to 1. */
+const share = z.number().min(0).max(1);
+
+const evalSchema = z.strictObject({
+  generation: z.number().int().min(1),
+  goldenVersion: z.number().int().min(1),
+  // The CLI computes the scores, and the Worker keeps them as they are, checking only their size
+  // and the four figures spatula evals shows.
+  scores: z.looseObject({
+    precision: share,
+    recall: share,
+    identifiers: z.looseObject({ accuracy: share }),
+    keySpecs: z.looseObject({ accuracy: share }),
+  }),
+});
+
+api.post('/datasets/:id/evals', async (c) => {
+  const raw = await c.req.text();
+  if (raw.length > 512 * 1024) return c.json({ error: 'The scores are larger than 512 KB.' }, 400);
+  let body: unknown;
+  try {
+    body = JSON.parse(raw);
+  } catch {
+    return c.json({ error: 'The body isn’t JSON.' }, 400);
+  }
+  const parsed = evalSchema.safeParse(body);
+  if (!parsed.success) {
+    return c.json({ error: 'Send { "generation", "goldenVersion", "scores" }.' }, 400);
+  }
+  const saved = await withDatabase(c.env, async (db) =>
+    (await getDataset(db, c.req.param('id'))) === null
+      ? null
+      : saveEval(db, {
+          datasetId: c.req.param('id'),
+          generation: parsed.data.generation,
+          goldenVersion: parsed.data.goldenVersion,
+          scores: parsed.data.scores as unknown as EvalScores,
+          at: new Date(),
+        }),
+  );
+  if (saved === null) return c.json({ error: `Dataset ${c.req.param('id')} doesn’t exist.` }, 404);
+  return c.json(saved, 201);
+});
+
+api.get('/datasets/:id/evals', async (c) => {
+  const evals = await withDatabase(c.env, (db) => listEvals(db, c.req.param('id')));
+  return c.json({ evals });
 });
 
 // These two answer whatever the path, including ones outside the owner routes, which set the

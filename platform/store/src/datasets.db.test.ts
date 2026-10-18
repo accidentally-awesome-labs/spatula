@@ -1,5 +1,5 @@
 import { newId, parseDefinition, type Definition, type RunSummary } from '@spatula/core';
-import { eq, inArray, sql } from 'drizzle-orm';
+import { and, eq, inArray, sql } from 'drizzle-orm';
 import { describe, expect, it } from 'vitest';
 import { withRollback } from '../test/db';
 import { noneOfThese } from '../test/seed';
@@ -8,6 +8,7 @@ import {
   applyDefinition,
   datasetExists,
   getDataset,
+  listItems,
   listLiveItems,
   reviveItems,
   StaleDefinitionError,
@@ -16,7 +17,7 @@ import { findDecision, saveDecision } from './decisions';
 import { testDefinition } from './fixtures';
 import { dueItems } from './listing';
 import { finishRun, getRun, RUN_STALE_MS, startRun, startRunAlone } from './runs';
-import { datasets, items, runs, sources } from './schema';
+import { datasets, entities, items, runs, sources } from './schema';
 
 const pagesOf = async (db: Executor) =>
   (await listLiveItems(db, 'test-products')).map((item) => item.locator);
@@ -395,6 +396,33 @@ describe('applyDefinition', () => {
         )[0];
       expect(await stateOf(a1!.id)).toEqual({ status: 'live', extractedWith: null });
       expect(await stateOf(a2!.id)).toEqual({ status: 'live', extractedWith: 'r1.v1' });
+    }));
+
+  it('lists every item, whatever its status, with the entity it joined', () =>
+    withRollback(async (db) => {
+      await applyDefinition(db, testDefinition('list-items'));
+      // Another dataset's items, which the list leaves out.
+      await applyDefinition(db, testDefinition('list-items-other'));
+      const a1 = 'https://maker-a.example/products/a1';
+      const a2 = 'https://maker-a.example/products/a2';
+      const itemAt = (locator: string) =>
+        and(eq(items.datasetId, 'list-items'), eq(items.locator, locator));
+      await db.update(items).set({ status: 'gone' }).where(itemAt(a1));
+      await db
+        .insert(entities)
+        .values({ id: 'sp_listed', datasetId: 'list-items', recordType: 'product' });
+      await db.update(items).set({ entityId: 'sp_listed' }).where(itemAt(a2));
+      expect(await listItems(db, 'list-items')).toEqual([
+        { locator: a1, sourceId: 'maker-a', status: 'gone', entityId: null },
+        { locator: a2, sourceId: 'maker-a', status: 'live', entityId: 'sp_listed' },
+        {
+          locator: 'https://maker-b.example/products/b1',
+          sourceId: 'maker-b',
+          status: 'live',
+          entityId: null,
+        },
+      ]);
+      expect(await listItems(db, 'nothing')).toEqual([]);
     }));
 });
 

@@ -1,6 +1,7 @@
 import type {
   ContentSignals,
   Definition,
+  EvalScores,
   Excluded,
   FieldValue,
   GateResult,
@@ -485,4 +486,20 @@ export const acknowledgments = pgTable(
     index('acknowledgments_snapshot').on(t.snapshotId),
     check('acknowledgments_outcome', sql`${t.outcome} in ('applied', 'refused')`),
   ],
+);
+
+/** A dataset's scores against its golden set, kept so their history shows (learning loop 6). */
+export const evals = pgTable(
+  'evals',
+  {
+    id: text('id').primaryKey(),
+    datasetId: text('dataset_id')
+      .notNull()
+      .references(() => datasets.id, { onDelete: 'cascade' }),
+    generation: integer('generation').notNull(),
+    goldenVersion: integer('golden_version').notNull(),
+    scores: jsonb('scores').$type<EvalScores>().notNull(),
+    createdAt: time('created_at').notNull(),
+  },
+  (t) => [index('evals_dataset').on(t.datasetId, t.createdAt)],
 );

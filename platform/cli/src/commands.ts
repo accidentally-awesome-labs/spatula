@@ -1,10 +1,13 @@
 import {
+  goldenSetSchema,
   packIssues,
   parseDefinition,
   RUN_SLOT_TAKEN,
+  scoreDataset,
   sha256Hex,
   snapshotSchema,
   type Definition,
+  type GoldenSet,
 } from '@spatula/core';
 import { packs } from '@spatula/pack-products';
 import { parse } from 'yaml';
@@ -12,8 +15,10 @@ import { ApiError, type Client } from './client';
 import {
   describeError,
   formatApplySummary,
+  formatEvals,
   formatReviews,
   formatRun,
+  formatScores,
   formatStatus,
 } from './format';
 
@@ -179,6 +184,91 @@ export async function review(
 export async function status(io: Io, client: Client, datasetId: string): Promise<number> {
   return withApi(io, async () => {
     for (const line of formatStatus(await client.getStatus(datasetId))) io.out(line);
+    return 0;
+  });
+}
+
+/** Scores the dataset's latest snapshot against a golden set, and keeps the score with `save`. */
+export async function evaluate(
+  io: Io,
+  client: Client,
+  file: string,
+  options: { save: boolean },
+): Promise<number> {
+  let text: string;
+  try {
+    text = await io.readFile(file);
+  } catch (error) {
+    io.err(`${file} can’t be read: ${describeError(error)}`);
+    return 1;
+  }
+  let json: unknown;
+  try {
+    json = JSON.parse(text);
+  } catch (error) {
+    io.err(`${file} isn’t JSON: ${describeError(error)}`);
+    return 1;
+  }
+  const parsed = goldenSetSchema.safeParse(json);
+  if (!parsed.success) {
+    io.err(`${file} isn’t a golden set:`);
+    for (const issue of parsed.error.issues.slice(0, 20)) {
+      io.err(`  ${issue.path.join('.')}: ${issue.message}`);
+    }
+    return 1;
+  }
+  const golden: GoldenSet = parsed.data;
+  return withApi(io, async () => {
+    // The checks snapshot pull makes: a score of the wrong file would mislead.
+    const pulled = await client.pullSnapshot(golden.dataset, 'latest');
+    if ((await sha256Hex(pulled.body)) !== pulled.sha256) {
+      io.err(
+        `The snapshot’s SHA-256 doesn’t match what Spatula said (${pulled.sha256 || 'nothing'}). Nothing was scored.`,
+      );
+      return 1;
+    }
+    let data: unknown;
+    try {
+      data = JSON.parse(pulled.body);
+    } catch {
+      io.err('The snapshot isn’t JSON. Nothing was scored.');
+      return 1;
+    }
+    const checked = snapshotSchema.safeParse(data);
+    if (!checked.success || checked.data.project !== golden.dataset) {
+      io.err(
+        `The snapshot isn’t ${golden.dataset}’s, in the published format. Nothing was scored.`,
+      );
+      return 1;
+    }
+    if (
+      checked.data.generation !== pulled.generation ||
+      checked.data.snapshotId !== pulled.snapshotId
+    ) {
+      io.err(
+        `The snapshot says generation ${checked.data.generation} (${checked.data.snapshotId}), but Spatula said generation ${pulled.generation} (${pulled.snapshotId}). Nothing was scored.`,
+      );
+      return 1;
+    }
+    const items = await client.listItems(golden.dataset);
+    const scores = scoreDataset({ golden, snapshot: checked.data, items });
+    for (const line of formatScores(golden, scores)) io.out(line);
+    if (options.save) {
+      await client.saveEval(golden.dataset, {
+        generation: scores.generation,
+        goldenVersion: golden.version,
+        scores,
+      });
+      io.out('Saved the score.');
+    }
+    return 0;
+  });
+}
+
+/** Shows the history of a dataset's scores. */
+export async function evals(io: Io, client: Client, datasetId: string): Promise<number> {
+  return withApi(io, async () => {
+    for (const line of formatEvals(await client.listEvals(datasetId))) io.out(line);
     return 0;
   });
 }

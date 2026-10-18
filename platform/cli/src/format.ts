@@ -1,9 +1,14 @@
 import {
+  EVAL_TARGETS,
   optionsOf,
   type ApplySummary,
   type DatasetStatus,
+  type EvalScores,
+  type EvalView,
+  type GoldenSet,
   type ReviewView,
   type RunView,
+  type Tally,
 } from '@spatula/core';
 
 /** What applying a definition changed, or would change. */
@@ -193,6 +198,56 @@ export function formatStatus(status: DatasetStatus): string[] {
     );
   }
   return lines;
+}
+
+const percent = (share: number) => `${(share * 100).toFixed(1)}%`;
+const verdict = (met: boolean) => (met ? 'met' : 'not met');
+
+/** A score against the golden set, target by target, then each field. */
+export function formatScores(golden: GoldenSet, scores: EvalScores): string[] {
+  const lines = [
+    `${golden.dataset}, generation ${scores.generation}, against golden set version ${golden.version} (${scores.products} ${scores.products === 1 ? 'product' : 'products'}):`,
+    `Precision: ${percent(scores.precision)} (target ${EVAL_TARGETS.precision * 100}%): ${verdict(scores.targets.precision)}.`,
+    `Recall: ${percent(scores.recall)}, ${scores.found} of ${scores.products} found (target ${EVAL_TARGETS.recall * 100}%): ${verdict(scores.targets.recall)}.`,
+  ];
+  for (const [label, tally, met, target] of [
+    ['Identifiers', scores.identifiers, scores.targets.identifiers, EVAL_TARGETS.identifiers],
+    ['Key specs', scores.keySpecs, scores.targets.keySpecs, EVAL_TARGETS.keySpecs],
+  ] as const) {
+    const left = tally.missing === 0 ? '' : `, ${tally.missing} left out`;
+    lines.push(
+      tally.checked === 0
+        ? `${label}: none checked${left}${tally.missing === 0 ? '' : ': not met'}.`
+        : `${label}: ${percent(tally.accuracy)} of ${tally.checked} stated${left} (target ${target * 100}%): ${verdict(met)}.`,
+    );
+  }
+  const fields = Object.entries(scores.fields).sort(([a], [b]) => (a < b ? -1 : 1));
+  if (fields.length > 0) {
+    // A field none of whose values were stated has no accuracy to show, only what was left out.
+    const shown = fields.map(([name, tally]) => {
+      const figure =
+        tally.checked === 0 ? 'none checked' : `${percent(tally.accuracy)} of ${tally.checked}`;
+      return `${name} ${figure}${tally.missing === 0 ? '' : ` (${tally.missing} left out)`}`;
+    });
+    lines.push(`Fields: ${shown.join(', ')}.`);
+  }
+  if (scores.split > 0) lines.push(`Spread over several records: ${scores.split}.`);
+  if (scores.misses.length > 0) lines.push('Misses:', ...scores.misses.map((miss) => `  ${miss}`));
+  return lines;
+}
+
+/** The history of a dataset's scores, newest first. */
+export function formatEvals(evals: EvalView[]): string[] {
+  if (evals.length === 0) {
+    return ['No scores are kept yet. spatula eval <golden.json> --save keeps one.'];
+  }
+  // Nothing checked is not a perfect score, so a tally with nothing checked shows no percentage.
+  const accuracy = (tally: Tally) =>
+    tally.checked === 0 ? 'none checked' : percent(tally.accuracy);
+  return evals.map(
+    (saved) =>
+      `${saved.createdAt}  generation ${saved.generation}  golden v${saved.goldenVersion}  precision ${percent(saved.scores.precision)}  recall ${percent(saved.scores.recall)}  identifiers ${accuracy(saved.scores.identifiers)}  key specs ${accuracy(saved.scores.keySpecs)}`,
+  );
 }
 
 /*
