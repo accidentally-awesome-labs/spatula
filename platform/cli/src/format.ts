@@ -200,7 +200,12 @@ export function formatStatus(status: DatasetStatus): string[] {
   return lines;
 }
 
-const percent = (share: number) => `${(share * 100).toFixed(1)}%`;
+/**
+ * A share as a percentage, floored to one decimal, so a score just under its target never reads as
+ * the target: 0.9896 is 98.9%, not 99.0%. The 1e-9 keeps an exact share such as 0.99 from flooring
+ * below itself.
+ */
+const percent = (share: number) => `${(Math.floor(share * 1000 + 1e-9) / 10).toFixed(1)}%`;
 const verdict = (met: boolean) => (met ? 'met' : 'not met');
 
 /** A score against the golden set, target by target, then each field. */

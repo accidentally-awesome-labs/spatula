@@ -30,14 +30,15 @@ const httpsUrl = z
     message: 'Use an https:// address.',
   });
 const specSchema = z.strictObject({
-  label: z.string().min(1).max(60),
+  label: z.string().trim().min(1).max(60),
   value: z.string().min(1).max(200),
 });
 
 export const goldenSetSchema = z
   .strictObject({
     dataset: z.string().regex(/^[a-z0-9][a-z0-9-]{0,62}$/u),
-    version: z.number().int().min(1),
+    // Kept with each score in a Postgres integer, so nine digits at most.
+    version: z.number().int().min(1).max(999_999_999),
     /** When a person last checked it all. */
     checked: z.iso.date(),
     /** The fields scored together against the identifiers target. */
@@ -112,7 +113,10 @@ export interface EvalScores {
   identifiers: Tally;
   keySpecs: Tally;
   targets: { precision: boolean; recall: boolean; identifiers: boolean; keySpecs: boolean };
-  /** The first 200 misses, and a last line saying how many more there were, if any. */
+  /**
+   * The merges of golden products into one record, then the products' misses: the first 200 of
+   * them, and a last line saying how many more there were, if any.
+   */
   misses: string[];
 }
 
@@ -175,10 +179,13 @@ export function scoreDataset(input: {
         // Golden specs that aren't a list of label-and-value pairs count nothing.
         for (const spec of (Array.isArray(expected) ? expected : []).filter(isSpec)) {
           // Several of the record's labels can fit a short golden label ("Weight" is in "Shipping
-          // weight"), so the one with the golden value wins, and else the first.
+          // weight"), so the one with the golden value wins, then the one with the golden label
+          // itself, which is the one a miss should name, and else the first.
           const named = theirs.filter((candidate) => sameLabel(candidate.label, spec.label));
           const match =
-            named.find((candidate) => textKey(candidate.value) === textKey(spec.value)) ?? named[0];
+            named.find((candidate) => textKey(candidate.value) === textKey(spec.value)) ??
+            named.find((candidate) => specLabelKey(candidate.label) === specLabelKey(spec.label)) ??
+            named[0];
           const right = match !== undefined && textKey(match.value) === textKey(spec.value);
           count(keySpecs, match !== undefined, right);
           if (!right) {
@@ -202,9 +209,9 @@ export function scoreDataset(input: {
     }
   }
   const touching = [...goldenOf];
-  for (const [id, keys] of touching) {
-    if (keys.size > 1) misses.push(`${id} mixes ${[...keys].sort().join(', ')}`);
-  }
+  const mixes = touching
+    .filter(([, keys]) => keys.size > 1)
+    .map(([id, keys]) => `${id} mixes ${[...keys].sort().join(', ')}`);
   const pure = touching.filter(([, keys]) => keys.size === 1).length;
   const tallied = (tally: Counts): Tally => ({
     ...tally,
@@ -216,8 +223,11 @@ export function scoreDataset(input: {
     identifiers: tallied(identifiers),
     keySpecs: tallied(keySpecs),
   };
-  const listed = misses.slice(0, MAX_MISSES);
-  if (misses.length > MAX_MISSES) listed.push(`…and ${misses.length - MAX_MISSES} more`);
+  // A merge is what a precision failure comes from, and a run can miss more than 200 values, so the
+  // merges go first and the cut takes other misses before them.
+  const all = [...mixes, ...misses];
+  const listed = all.slice(0, MAX_MISSES);
+  if (all.length > MAX_MISSES) listed.push(`…and ${all.length - MAX_MISSES} more`);
   return {
     generation: snapshot.generation,
     products: golden.products.length,
@@ -274,14 +284,19 @@ function sameLabel(a: string, b: string): boolean {
 }
 
 /**
- * The key of a text value, or of each text in a list. Anything that isn't text has none. The golden
- * set writes a GTIN as its source does (8, 12, 13, or 14 digits), and Spatula keeps 14, so a GTIN
- * compares as GS1 compares them. Anything else compares by its key.
+ * The key of a text value, or of each text in a list. Anything that isn't text has none. Everything
+ * compares by its key, and a key that is a valid GTIN compares as its 14 digits: the golden set
+ * writes a GTIN as its source does (8, 12, 13, or 14 digits), and Spatula keeps 14, so they compare
+ * as GS1 compares them. A part number as long as a GTIN is a key first too, so "1234.5670" and
+ * "12345670" are one part number.
  */
 function valueKeys(value: unknown): string[] {
   return (Array.isArray(value) ? value : value === undefined ? [] : [value])
     .filter((entry): entry is string => typeof entry === 'string')
-    .map((entry) => normalizeGtin(entry) ?? textKey(entry));
+    .map((entry) => {
+      const key = textKey(entry);
+      return normalizeGtin(key) ?? key;
+    });
 }
 
 /**

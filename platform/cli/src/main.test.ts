@@ -1566,6 +1566,41 @@ describe('eval', () => {
     ]);
   });
 
+  it('floors a share to one decimal, so a score just under its target never reads as met', async () => {
+    // 98 products: 96 have a record of their own, and the last two share one. So 97 records touch
+    // the golden products and 96 of them are pure, a precision of 0.98969, under the target of 99%.
+    const page = (index: number) => `https://maker-a.example/products/p-${index}`;
+    const golden = {
+      ...GOLDEN,
+      products: Array.from({ length: 98 }, (_, index) => ({
+        key: `maker-a-p-${index}`,
+        pages: [page(index)],
+        fields: {},
+        checkedAgainst: ['https://retailer.example/p'],
+      })),
+    };
+    const recordOf = (index: number) => (index < 96 ? `sp_${index}` : 'sp_shared');
+    const snapshot = snapshotOf([
+      ...Array.from({ length: 96 }, (_, index) => ({ canonicalId: `sp_${index}`, fields: {} })),
+      { canonicalId: 'sp_shared', fields: {} },
+    ]);
+    const { fetch } = await serve({
+      snapshot,
+      items: Array.from({ length: 98 }, (_, index) => item(page(index), recordOf(index))),
+    });
+    const { io, out } = memoryIo({ 'golden.json': JSON.stringify(golden) });
+    expect(await main(['eval', 'golden.json'], { io, env: ENV, fetch })).toBe(0);
+    expect(out).toEqual([
+      'cli-products, generation 3, against golden set version 2 (98 products):',
+      'Precision: 98.9% (target 99%): not met.',
+      'Recall: 100.0%, 98 of 98 found (target 90%): met.',
+      'Identifiers: none checked.',
+      'Key specs: none checked.',
+      'Misses:',
+      '  sp_shared mixes maker-a-p-96, maker-a-p-97',
+    ]);
+  });
+
   it('scores nothing when the snapshot’s hash isn’t the one Spatula sent', async () => {
     const { fetch, sent } = await serve({ headers: { 'x-spatula-sha256': '0'.repeat(64) } });
     const { io, out, err } = memoryIo({ 'golden.json': JSON.stringify(GOLDEN) });
@@ -1761,6 +1796,58 @@ describe('evals', () => {
     expect(await main(['evals', 'cli-products'], { io, env: ENV, fetch })).toBe(1);
     expect(err).toEqual(['The owner token is missing or wrong.']);
     expect(out).toEqual([]);
+  });
+
+  it('reports a dataset Spatula doesn’t have, as review does, and sends only the listing', async () => {
+    const { fetch, sent } = stubApi(() =>
+      Response.json({ error: 'Dataset api-nothing doesn’t exist.' }, { status: 404 }),
+    );
+    const { io, out, err } = memoryIo();
+    expect(await main(['evals', 'api-nothing'], { io, env: ENV, fetch })).toBe(1);
+    expect(err).toEqual(['Dataset api-nothing doesn’t exist.']);
+    expect(out).toEqual([]);
+    expect(sent.map(({ method, path }) => ({ method, path }))).toEqual([
+      { method: 'GET', path: '/datasets/api-nothing/evals' },
+    ]);
+  });
+
+  it('floors a share to one decimal, so a score just under its target never reads as the target', async () => {
+    const saved: EvalView[] = [
+      {
+        id: 'ev_3',
+        generation: 5,
+        goldenVersion: 2,
+        createdAt: '2026-10-16T00:00:00.000Z',
+        scores: {
+          precision: 0.9896,
+          recall: 0.99,
+          identifiers: { checked: 50, accuracy: 0.99999 },
+          keySpecs: { checked: 5, accuracy: 1 },
+        } as unknown as EvalView['scores'],
+      },
+      {
+        id: 'ev_4',
+        generation: 6,
+        goldenVersion: 2,
+        createdAt: '2026-10-17T00:00:00.000Z',
+        scores: {
+          precision: 1,
+          recall: 1,
+          // 0.7 - 0.4 is 0.29999999999999993, a share meant to be exactly 30.0%.
+          identifiers: { checked: 50, accuracy: 0.7 - 0.4 },
+          keySpecs: { checked: 5, accuracy: 0 },
+        } as unknown as EvalView['scores'],
+      },
+    ];
+    const { fetch } = stubApi(() => Response.json({ evals: saved }));
+    const { io, out } = memoryIo();
+    expect(await main(['evals', 'cli-products'], { io, env: ENV, fetch })).toBe(0);
+    // 0.9896 is 98.9%, not 99.0%; 0.99 is exactly 99.0%; and 0.99999 never reads as 100.0%. A share
+    // a hair under a boundary through floating-point error is that boundary.
+    expect(out).toEqual([
+      '2026-10-16T00:00:00.000Z  generation 5  golden v2  precision 98.9%  recall 99.0%  identifiers 99.9%  key specs 100.0%',
+      '2026-10-17T00:00:00.000Z  generation 6  golden v2  precision 100.0%  recall 100.0%  identifiers 30.0%  key specs 0.0%',
+    ]);
   });
 
   it('needs exactly one dataset', async () => {

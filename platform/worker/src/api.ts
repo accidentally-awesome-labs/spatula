@@ -515,16 +515,22 @@ api.get('/datasets/:id/status', async (c) => {
 });
 
 api.get('/datasets/:id/items', async (c) => {
-  const items = await withDatabase(c.env, (db) => listItems(db, c.req.param('id')));
+  const datasetId = c.req.param('id');
+  // A dataset that isn't there has no items, but an empty list would read as nothing found.
+  const items = await withDatabase(c.env, async (db) =>
+    (await datasetExists(db, datasetId)) ? listItems(db, datasetId) : null,
+  );
+  if (items === null) return c.json({ error: `Dataset ${datasetId} doesn’t exist.` }, 404);
   return c.json({ items });
 });
 
 /** A share, from 0 to 1. */
 const share = z.number().min(0).max(1);
 
+// Nine digits at most, so the numbers fit Postgres's integer column, as the snapshot route's do.
 const evalSchema = z.strictObject({
-  generation: z.number().int().min(1),
-  goldenVersion: z.number().int().min(1),
+  generation: z.number().int().min(1).max(999_999_999),
+  goldenVersion: z.number().int().min(1).max(999_999_999),
   // The CLI computes the scores, and the Worker keeps them as they are, checking only their size
   // and the four figures spatula evals shows.
   scores: z.looseObject({
@@ -535,36 +541,56 @@ const evalSchema = z.strictObject({
   }),
 });
 
-api.post('/datasets/:id/evals', async (c) => {
-  const raw = await c.req.text();
-  if (raw.length > 512 * 1024) return c.json({ error: 'The scores are larger than 512 KB.' }, 400);
-  let body: unknown;
-  try {
-    body = JSON.parse(raw);
-  } catch {
-    return c.json({ error: 'The body isn’t JSON.' }, 400);
-  }
-  const parsed = evalSchema.safeParse(body);
-  if (!parsed.success) {
-    return c.json({ error: 'Send { "generation", "goldenVersion", "scores" }.' }, 400);
-  }
-  const saved = await withDatabase(c.env, async (db) =>
-    (await getDataset(db, c.req.param('id'))) === null
-      ? null
-      : saveEval(db, {
-          datasetId: c.req.param('id'),
-          generation: parsed.data.generation,
-          goldenVersion: parsed.data.goldenVersion,
-          scores: parsed.data.scores as unknown as EvalScores,
-          at: new Date(),
-        }),
-  );
-  if (saved === null) return c.json({ error: `Dataset ${c.req.param('id')} doesn’t exist.` }, 404);
-  return c.json(saved, 201);
-});
+/** A score is a few kilobytes. The limit bounds what one can store. */
+const EVAL_MAX_BYTES = 512 * 1024;
+
+api.post(
+  '/datasets/:id/evals',
+  bodyLimit({
+    maxSize: EVAL_MAX_BYTES,
+    onError: (c) => c.json({ error: `The scores are at most ${EVAL_MAX_BYTES / 1024} KiB.` }, 413),
+  }),
+  async (c) => {
+    let body: unknown;
+    try {
+      body = JSON.parse(await c.req.text());
+    } catch {
+      return c.json({ error: 'The body isn’t JSON.' }, 400);
+    }
+    const parsed = evalSchema.safeParse(body);
+    if (!parsed.success) {
+      const issue = parsed.error.issues[0];
+      return c.json(
+        { error: `The eval is wrong at ${issue?.path.join('.') || 'the body'}: ${issue?.message}` },
+        400,
+      );
+    }
+    const datasetId = c.req.param('id');
+    // A score doesn't read the dataset's definition, so one that no longer passes the checks doesn't
+    // stop it, as it doesn't stop a revival or a question.
+    const saved = await withDatabase(c.env, async (db) =>
+      (await datasetExists(db, datasetId))
+        ? saveEval(db, {
+            datasetId,
+            generation: parsed.data.generation,
+            goldenVersion: parsed.data.goldenVersion,
+            scores: parsed.data.scores as unknown as EvalScores,
+            at: new Date(),
+          })
+        : null,
+    );
+    if (saved === null) return c.json({ error: `Dataset ${datasetId} doesn’t exist.` }, 404);
+    return c.json(saved, 201);
+  },
+);
 
 api.get('/datasets/:id/evals', async (c) => {
-  const evals = await withDatabase(c.env, (db) => listEvals(db, c.req.param('id')));
+  const datasetId = c.req.param('id');
+  // A dataset that isn't there has no scores, but an empty list would read as none kept yet.
+  const evals = await withDatabase(c.env, async (db) =>
+    (await datasetExists(db, datasetId)) ? listEvals(db, datasetId) : null,
+  );
+  if (evals === null) return c.json({ error: `Dataset ${datasetId} doesn’t exist.` }, 404);
   return c.json({ evals });
 });
 

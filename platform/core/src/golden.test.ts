@@ -119,11 +119,12 @@ describe('scoreDataset', () => {
       targets: { precision: false, recall: false, identifiers: true, keySpecs: false },
     });
     expect(scores.fields.name).toEqual({ checked: 3, correct: 2, missing: 0, accuracy: 2 / 3 });
+    // A merge explains a precision failure, so it leads the list.
     expect(scores.misses).toEqual([
+      'sp_mixed mixes maker-hd-650, maker-hd-660s',
       'maker-hd-600: specs Weight is 250 g, not 260 g',
       'maker-hd-660s: name is HD 650, not HD 660S',
       'maker-hd-800: no published record',
-      'sp_mixed mixes maker-hd-650, maker-hd-660s',
     ]);
   });
 
@@ -154,6 +155,21 @@ describe('scoreDataset', () => {
     });
   });
 
+  it('compares a part number as long as a GTIN by its key, so a dot in it is no difference', () => {
+    // 12345670 is a valid GTIN-8, and "1234.5670" is the same part number written with a dot.
+    const identifiersOf = (golden: string, stated: string) =>
+      scoreOne({ mpns: [golden] }, { mpns: [stated] }).identifiers;
+    expect(identifiersOf('1234.5670', '12345670')).toMatchObject({ checked: 1, correct: 1 });
+    expect(identifiersOf('12345670', '1234.5670')).toMatchObject({ checked: 1, correct: 1 });
+    // With a wrong check digit it is not a GTIN, and another part number.
+    expect(identifiersOf('1234.5671', '12345670')).toMatchObject({ checked: 1, correct: 0 });
+    // A GTIN written with spaces and hyphens, as a source prints it, is still the same GTIN.
+    expect(identifiersOf('8 19343-015004', '00819343015004')).toMatchObject({
+      checked: 1,
+      correct: 1,
+    });
+  });
+
   it('counts the values a record states, and reports the ones it leaves out apart', () => {
     // The record states the GTIN, and says nothing of the part number or the impedance.
     const scores = scoreOne(
@@ -179,6 +195,27 @@ describe('scoreDataset', () => {
   it('does not meet the identifiers target when none of the golden identifiers is stated', () => {
     const scores = scoreOne({ gtins: ['04044155011734'], mpns: ['483.664'] }, { name: 'HD 600' });
     expect(scores.identifiers).toEqual({ checked: 0, correct: 0, missing: 2, accuracy: 1 });
+    expect(scores.targets.identifiers).toBe(false);
+  });
+
+  it('counts a field once however many times the golden set lists it as an identifier', () => {
+    const golden = goldenSetSchema.parse({
+      ...GOLDEN,
+      identifiers: ['gtins', 'mpns', 'gtins'],
+      products: [{ ...GOLDEN.products[0]!, fields: { gtins: ['04044155011734'], mpns: ['A-1'] } }],
+    });
+    const snapshot = snapshotWith({ gtins: ['04044155011734'], mpns: ['A-1'] });
+    const { identifiers } = scoreDataset({ golden, snapshot, items: ITEMS });
+    expect(identifiers).toEqual({ checked: 2, correct: 2, missing: 0, accuracy: 1 });
+  });
+
+  it.each([
+    ['an empty list', []],
+    ['a list with no text in it', [42]],
+  ])('counts an identifier a record states as %s as left out, not checked', (_name, stated) => {
+    const scores = scoreOne({ gtins: ['04044155011734'] }, { gtins: stated });
+    expect(scores.identifiers).toEqual({ checked: 0, correct: 0, missing: 1, accuracy: 1 });
+    expect(scores.fields.gtins).toEqual({ checked: 0, correct: 0, missing: 1, accuracy: 1 });
     expect(scores.targets.identifiers).toBe(false);
   });
 
@@ -218,10 +255,16 @@ describe('scoreDataset', () => {
     const right = scoreOne(golden, { specs: [shipping, { label: 'Weight', value: '612g' }] });
     expect(right.keySpecs).toEqual({ checked: 1, correct: 1, missing: 0, accuracy: 1 });
     expect(right.misses).toEqual([]);
-    // With no value right, the first that fits is the one named.
+    // With no value right, a miss names the spec with the golden label itself, however it is cased,
+    // and not one whose label only contains it.
     const wrong = scoreOne(golden, { specs: [shipping, { label: 'Weight', value: '700 g' }] });
     expect(wrong.keySpecs).toEqual({ checked: 1, correct: 0, missing: 0, accuracy: 0 });
-    expect(wrong.misses).toEqual(['maker-hd-600: specs Weight is 2 kg, not 612 g']);
+    expect(wrong.misses).toEqual(['maker-hd-600: specs Weight is 700 g, not 612 g']);
+    const cased = scoreOne(golden, { specs: [shipping, { label: ' WEIGHT ', value: '700 g' }] });
+    expect(cased.misses).toEqual(['maker-hd-600: specs Weight is 700 g, not 612 g']);
+    // With no label the same as the golden one, the first that fits is named.
+    const fits = scoreOne(golden, { specs: [shipping, { label: 'Net weight', value: '700 g' }] });
+    expect(fits.misses).toEqual(['maker-hd-600: specs Weight is 2 kg, not 612 g']);
   });
 
   it.each([['300 ohms'], [['300 ohms']]])(
@@ -386,6 +429,35 @@ describe('scoreDataset', () => {
     expect(missesOf(201).at(-1)).toBe('…and 1 more');
   });
 
+  it('lists a merge ahead of the products’ misses, so the cut never drops it', () => {
+    // 201 products with no item to find, and two that share a record: more than 200 misses in all.
+    const golden = goldenSetSchema.parse({
+      ...GOLDEN,
+      products: [
+        ...Array.from({ length: 201 }, (_, index) =>
+          productOf(`maker-p-${index}`, [page(`p-${index}`)]),
+        ),
+        { ...productOf('maker-merged-a', [page('merged-a')]), fields: {} },
+        { ...productOf('maker-merged-b', [page('merged-b')]), fields: {} },
+      ],
+    });
+    const items: ItemView[] = ['a', 'b'].map((letter) => ({
+      locator: page(`merged-${letter}`),
+      sourceId: 'maker',
+      status: 'live',
+      entityId: 'sp_merged',
+    }));
+    const snapshot = { ...SNAPSHOT, records: [record('sp_merged', {})] };
+    const scores = scoreDataset({ golden, snapshot, items });
+    expect(scores.precision).toBe(0);
+    // The merge, the first 199 products' misses, and how many more there were: 1 + 201 in all.
+    expect(scores.misses).toHaveLength(201);
+    expect(scores.misses[0]).toBe('sp_merged mixes maker-merged-a, maker-merged-b');
+    expect(scores.misses[1]).toBe('maker-p-0: no item for its page');
+    expect(scores.misses[199]).toBe('maker-p-198: no item for its page');
+    expect(scores.misses[200]).toBe('…and 2 more');
+  });
+
   it('counts a product spread over several records once, and scores its first', () => {
     const golden = goldenSetSchema.parse({
       ...GOLDEN,
@@ -423,11 +495,25 @@ describe('goldenSetSchema', () => {
     ['a date that is not one', { checked: '14 October' }],
     ['a product key in capitals', { products: [{ ...GOLDEN.products[0], key: 'Maker-HD-600' }] }],
     ['a version below 1', { version: 0 }],
+    // The score is kept with the version in a Postgres integer, so it stops short of 2^31.
+    ['a version above 999,999,999', { version: 1_000_000_000 }],
   ])('refuses %s', (_name, change) => {
     expect(goldenSetSchema.safeParse({ ...GOLDEN, ...change }).success).toBe(false);
   });
 
-  it('takes a golden set as it is written', () => {
+  it('takes a golden set as it is written, and the largest version that is kept', () => {
     expect(goldenSetSchema.safeParse(GOLDEN).success).toBe(true);
+    expect(goldenSetSchema.safeParse({ ...GOLDEN, version: 999_999_999 }).success).toBe(true);
+  });
+
+  it('refuses a spec whose label is blank, and takes the others’ labels trimmed', () => {
+    const withLabel = (label: string) => ({
+      ...GOLDEN,
+      products: [{ ...GOLDEN.products[0], fields: { specs: [{ label, value: '300 Ω' }] } }],
+    });
+    expect(goldenSetSchema.safeParse(withLabel('   ')).success).toBe(false);
+    expect(goldenSetSchema.safeParse(withLabel('')).success).toBe(false);
+    const taken = goldenSetSchema.parse(withLabel(' Impedance '));
+    expect(taken.products[0]!.fields.specs).toEqual([{ label: 'Impedance', value: '300 Ω' }]);
   });
 });
