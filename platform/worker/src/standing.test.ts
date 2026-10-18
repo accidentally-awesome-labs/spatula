@@ -17,6 +17,17 @@ import { runRefresh, type StepRunner } from './refresh';
 
 const CHALLENGE: Reply = { status: 403, headers: { 'cf-mitigated': 'challenge' } };
 
+/**
+ * What the snapshot step says when no record changed since the first publication: nothing was
+ * published, nothing is held for review, and no record was left out. A snapshot that dropped a
+ * record would be published or held, and neither says this.
+ */
+const NOTHING_CHANGED = {
+  published: false,
+  reason: 'nothing changed since generation 1',
+  excluded: [],
+};
+
 /** Each source's standing, by ID. */
 async function standing(datasetId: string) {
   return Object.fromEntries(
@@ -159,6 +170,9 @@ describe('a source’s standing across runs', { timeout: 30_000 }, () => {
       refused: true,
       lastProbe: 'blocked',
     });
+    // The probe's page and B1 were read. Both were due, so the Pages line reads "2 read, of 2 due
+    // and 3 live", and not "of 1 due".
+    expect(probing.summary).toMatchObject({ items: 2, due: 2, live: 3 });
   });
 
   it('makes a refused source live again when its probe gets through, and reads its due pages in that run', async () => {
@@ -188,6 +202,9 @@ describe('a source’s standing across runs', { timeout: 30_000 }, () => {
     // The probe read one page. The plan, made once the source was live again, read the other,
     // which was due after its blocks. Neither was asked for twice.
     expect(askedOn(world, 'maker-a.example', from).sort()).toEqual([URLS.a1, URLS.a2]);
+    // The plan found one page due. The probe's page, read before it and so not due any more, is
+    // counted with it: two pages read, two due.
+    expect(back.summary).toMatchObject({ items: 2, due: 2, live: 3 });
     expect((await standing(datasetId))['maker-a']).toEqual({
       blockedRuns: 0,
       refused: false,
@@ -346,6 +363,8 @@ describe('what a run counts of a source', { timeout: 30_000 }, () => {
     const back = await refresh(world, datasetId, { all: true });
     expect(back.summary.sources?.probed).toEqual([{ id: 'maker-a', outcome: 'through' }]);
     expect(askedOn(world, 'maker-a.example', from).sort()).toEqual([URLS.a1, URLS.a2]);
+    // The plan counts the probe's page among the three due, so the probe adds no fourth.
+    expect(back.summary).toMatchObject({ items: 3, due: 3, live: 3 });
   });
 
   it('counts a probe that got through with the pages read after it, so a challenge among them is no blocked run', async () => {
@@ -480,7 +499,7 @@ describe('what a run counts of a source', { timeout: 30_000 }, () => {
     world.web.routes.set(URLS.a2, CHALLENGE);
     for (let run = 1; run <= REFUSE_AFTER_RUNS; run += 1) {
       const blocked = await refresh(world, datasetId);
-      expect(blocked.summary.snapshot).toMatchObject({ published: false });
+      expect(blocked.summary.snapshot).toEqual(NOTHING_CHANGED);
     }
     expect((await standing(datasetId))['maker-a']).toMatchObject({ blockedRuns: 3, refused: true });
     expect(await livePages(datasetId)).toEqual([URLS.a1, URLS.a2, URLS.b1]);
@@ -488,7 +507,7 @@ describe('what a run counts of a source', { timeout: 30_000 }, () => {
 
     // The refused source's probe is blocked too, and takes nothing from the snapshot either.
     const probing = await refresh(world, datasetId);
-    expect(probing.summary.snapshot).toMatchObject({ published: false });
+    expect(probing.summary.snapshot).toEqual(NOTHING_CHANGED);
     expect(await records()).toEqual(['A1', 'A2', 'B1 Amp']);
   });
 
@@ -510,7 +529,7 @@ describe('what a run counts of a source', { timeout: 30_000 }, () => {
     world.web.routes.set(URLS.a2, CHALLENGE);
     const run = await refresh(world, datasetId);
     expect(run.summary.sources?.blocked).toEqual([{ id: 'maker-a', blockedRuns: 1 }]);
-    expect(run.summary.snapshot).toMatchObject({ published: false });
+    expect(run.summary.snapshot).toEqual(NOTHING_CHANGED);
     expect(await livePages(datasetId)).toEqual([URLS.a1, URLS.a2, URLS.b1]);
     const file = (await published(world, datasetId))!;
     expect(Object.keys(file.byName).sort()).toEqual(['A1', 'A2', 'B1 Amp']);

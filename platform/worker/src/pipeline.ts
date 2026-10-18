@@ -94,7 +94,8 @@ export interface Context {
 
 /**
  * How far apart this run asks a source's hosts: the definition's interval, doubled for each blocked
- * run in a row, up to four times (ADR 0006). robots.txt's crawl delay still applies on top.
+ * run in a row, up to four times (ADR 0006). robots.txt's Crawl-delay still applies when it asks for
+ * longer: the gate takes the larger of the two.
  */
 export function intervalFor(
   context: { definition: Definition; standing?: Record<string, Standing> },

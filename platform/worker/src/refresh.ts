@@ -322,7 +322,6 @@ export async function runRefresh(
       ),
     );
     summary.live = plan.live;
-    summary.due = plan.due;
     const waiting = plan.due - plan.ids.length;
     if (waiting > 0) {
       const { itemsPerRun } = context.definition.budget;
@@ -338,6 +337,9 @@ export async function runRefresh(
     }
     // A probe already read its page this run, and a page is read once a run.
     const ids = plan.ids.filter((id) => !probedPages.has(id));
+    // A probe's page is due, like the pages the plan chose. The plan has counted it already if it
+    // chose it too; one that the item budget left out of its choice is counted twice.
+    summary.due = plan.due + probedPages.size - (plan.ids.length - ids.length);
 
     // Pages in a row by source that were blocked or that strained their host, and the pages each
     // paused source left unread. They stay due, so an ordinary run's next one reads them; under --all every

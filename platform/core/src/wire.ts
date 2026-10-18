@@ -81,7 +81,10 @@ export interface DecisionSummary {
 export interface RunSummary {
   /** The pages read this run. */
   items: number;
-  /** The live pages when the run planned, and how many of them were due. Absent in runs from before slice 1. */
+  /**
+   * The live pages when the run planned, and how many of them were due, counting the page a refused
+   * source was probed with (ADR 0006). Absent in runs from before slice 1.
+   */
   live?: number;
   due?: number;
   /** What the sitemap sources listed. Absent in runs from before slice 1. */
