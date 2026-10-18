@@ -398,6 +398,17 @@ describe('applyDefinition', () => {
     }));
 });
 
+/** What a run that did nothing reports. */
+const SUMMARY: RunSummary = {
+  items: 0,
+  fetches: { changed: 0, unchanged: 0, gone: 0, failed: 0, blocked: 0 },
+  statements: { added: 0, reseen: 0, withdrawn: 0 },
+  llm: { ran: 0, reused: 0, skipped: 0, failed: 0, inputTokens: 0, outputTokens: 0 },
+  entities: { created: 0, linked: 0, conflicts: 0, unresolved: 0 },
+  snapshot: { published: false, reason: 'nothing changed', excluded: [] },
+  notes: [],
+};
+
 describe('runs', () => {
   it('starts a run once per ID, and records how it finished', () =>
     withRollback(async (db) => {
@@ -417,22 +428,41 @@ describe('runs', () => {
       });
       expect(await getRun(db, 'no-such-run')).toBeNull();
     }));
+
+  it('finishes a run once: one that is complete or failed is left as it is', () =>
+    withRollback(async (db) => {
+      await applyDefinition(db, testDefinition());
+      const done = 'test-products-202610100000';
+      const lost = 'test-products-202610100500';
+      await startRun(db, { id: done, datasetId: 'test-products' });
+      await startRun(db, { id: lost, datasetId: 'test-products' });
+
+      // Complete, then failed: it stays complete, with its summary. This is a Workflow that
+      // finished a run another request had already given up on, or the other way round.
+      await finishRun(db, done, { status: 'complete', summary: SUMMARY });
+      const complete = await getRun(db, done);
+      expect(complete).toMatchObject({ status: 'complete', summary: SUMMARY, error: null });
+      await finishRun(db, done, { status: 'failed', error: 'The Workflow was lost.' });
+      expect(await getRun(db, done)).toEqual(complete);
+
+      // Failed, then complete: it stays failed, with its error. A second failure doesn't replace
+      // the first either.
+      await finishRun(db, lost, { status: 'failed', error: 'robots.txt is unreachable' });
+      const failed = await getRun(db, lost);
+      expect(failed).toMatchObject({
+        status: 'failed',
+        error: 'robots.txt is unreachable',
+        summary: null,
+      });
+      await finishRun(db, lost, { status: 'complete', summary: SUMMARY });
+      await finishRun(db, lost, { status: 'failed', error: 'The Workflow was lost.' });
+      expect(await getRun(db, lost)).toEqual(failed);
+    }));
 });
 
 describe('startRunAlone', () => {
   const datasetId = 'test-products';
   const HOUR = 60 * 60 * 1000;
-
-  /** What a run that did nothing reports. */
-  const SUMMARY: RunSummary = {
-    items: 0,
-    fetches: { changed: 0, unchanged: 0, gone: 0, failed: 0, blocked: 0 },
-    statements: { added: 0, reseen: 0, withdrawn: 0 },
-    llm: { ran: 0, reused: 0, skipped: 0, failed: 0, inputTokens: 0, outputTokens: 0 },
-    entities: { created: 0, linked: 0, conflicts: 0, unresolved: 0 },
-    snapshot: { published: false, reason: 'nothing changed', excluded: [] },
-    notes: [],
-  };
 
   /**
    * A run that is going and began `ago` ms before `at`, started as the Workflow's own start does,

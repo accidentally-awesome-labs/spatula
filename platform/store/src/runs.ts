@@ -57,6 +57,11 @@ export async function startRunAlone(
   });
 }
 
+/**
+ * Records how a run ended. A run finishes once: only a row that is still `running` changes, so a
+ * result that comes late, such as a Workflow completing a run that a start of the next one had
+ * already recorded as lost, can't overwrite the first.
+ */
 export async function finishRun(
   db: Executor,
   id: string,
@@ -70,7 +75,7 @@ export async function finishRun(
         ? { status: 'complete', summary: result.summary, finishedAt }
         : { status: 'failed', error: result.error.slice(0, 2000), finishedAt },
     )
-    .where(eq(runs.id, id));
+    .where(and(eq(runs.id, id), eq(runs.status, 'running')));
 }
 
 export async function getRun(db: Executor, id: string): Promise<RunView | null> {

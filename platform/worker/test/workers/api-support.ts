@@ -1,7 +1,8 @@
 import { hmacSha256Hex, sha256Hex } from '@spatula/core';
-import { applyDefinition, commitSnapshot } from '@spatula/store';
+import { applyDefinition, commitSnapshot, datasets } from '@spatula/store';
 import { testDefinition } from '@spatula/store/fixtures';
 import { env } from 'cloudflare:workers';
+import { eq } from 'drizzle-orm';
 import { expect } from 'vitest';
 import { api } from '../../src/api';
 import { withDatabase } from '../../src/database';
@@ -87,6 +88,23 @@ export async function subscribed(datasetId: string, consumers = ['crowdio']): Pr
       publishedAt,
       report: { excluded: [] },
     });
+  });
+}
+
+/**
+ * A dataset whose stored definition no longer passes the checks, as a later version's stricter
+ * ones would leave it: the dataset is applied (listing these consumers), and then its stored
+ * definition gets a consumer name that fails, beside them. It opens one database client.
+ */
+export async function staleDataset(datasetId: string, consumers: string[] = []): Promise<void> {
+  await withDatabase(env, async (db) => {
+    await applyDefinition(db, { ...testDefinition(datasetId), consumers });
+    await db
+      .update(datasets)
+      .set({
+        definition: { ...testDefinition(datasetId), consumers: [...consumers, 'Not A Slug'] },
+      })
+      .where(eq(datasets.id, datasetId));
   });
 }
 

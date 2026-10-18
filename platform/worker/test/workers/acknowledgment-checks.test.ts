@@ -200,6 +200,63 @@ describe('the checks on an acknowledgment', () => {
     expect((await acknowledge(datasetId, applied(datasetId))).status).toBe(201);
   });
 
+  it('take no more than 16 KiB, and are not read at all from a caller that is not a listed consumer', async () => {
+    const LIMIT = 16 * 1024;
+    const bytesOf = (text: string) => new TextEncoder().encode(text).length;
+    // An acknowledgment the schema takes, of exactly this many bytes: counts to fill most of it,
+    // and a detail for the rest.
+    const ackOfBytes = (datasetId: string, bytes: number): string => {
+      const counts: Record<string, number> = {};
+      const shortOf = () =>
+        bytes - bytesOf(JSON.stringify(applied(datasetId, { detail: '', counts })));
+      let index = 0;
+      while (shortOf() > 500) counts[`count-${index++}`] = 0;
+      const detail = 'd'.repeat(shortOf());
+      const text = JSON.stringify(applied(datasetId, { detail, counts }));
+      expect(bytesOf(text)).toBe(bytes);
+      return text;
+    };
+    const sendAs = async (datasetId: string, text: string, more: Record<string, string> = {}) =>
+      post(datasetId, text, {
+        authorization: `Bearer ${CONSUMER_TOKEN}`,
+        ...(await signed(text)),
+        ...more,
+      });
+    await subscribed('ac-size');
+    await subscribed('ac-size-over');
+
+    // Exactly the limit is taken, whether the request says how long it is or not...
+    const atLimit = ackOfBytes('ac-size', LIMIT);
+    expect((await sendAs('ac-size', atLimit)).status).toBe(201);
+    expect((await sendAs('ac-size', atLimit, { 'content-length': String(LIMIT) })).status).toBe(
+      200,
+    );
+
+    // ...and one byte more is not, and is never recorded.
+    const over = ackOfBytes('ac-size-over', LIMIT + 1);
+    const refused = await sendAs('ac-size-over', over);
+    expect(refused.status).toBe(413);
+    expectNoStore(refused);
+    expect(await refused.json()).toEqual({ error: 'An acknowledgment is at most 16 KiB.' });
+    const told = await sendAs('ac-size-over', over, { 'content-length': String(LIMIT + 1) });
+    expect(told.status).toBe(413);
+    expect(await told.json()).toEqual({ error: 'An acknowledgment is at most 16 KiB.' });
+    expect(
+      await withDatabase(env, (db) =>
+        db.select().from(acknowledgments).where(eq(acknowledgments.datasetId, 'ac-size-over')),
+      ),
+    ).toEqual([]);
+
+    // Who is calling is settled first: a caller with the wrong token is refused as one, and its
+    // body is not looked at.
+    const stranger = await post('ac-size-over', over, {
+      authorization: 'Bearer wrong',
+      ...(await signed(over)),
+    });
+    expect(stranger.status).toBe(401);
+    expect(await stranger.json()).toEqual({ error: 'The token is missing or wrong.' });
+  });
+
   it('take one at the limits of what the schema allows', async () => {
     const datasetId = 'ac-limits';
     await subscribed(datasetId);

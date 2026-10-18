@@ -106,14 +106,16 @@ export async function run(
 ): Promise<number> {
   return withApi(io, async () => {
     const { runId, existing, message } = await client.startRun(datasetId, { all: options.all });
-    // The API names a run of an earlier slot that is still going in its own words. The slot's
-    // sentence is the CLI's, with the run's ID, for the run this one repeats.
+    // The API names a run of an earlier slot that is still going in its own words. The run asked
+    // for never started, so this is a refusal, and the other run is not followed: a script that
+    // waits for this run would go on to use the result of one that isn't it. The slot's sentence is
+    // the CLI's, with the run's ID, for the run this one repeats, which is followed.
+    if (existing && message !== null && message !== RUN_SLOT_TAKEN) {
+      io.err(message);
+      return 1;
+    }
     io.out(
-      !existing
-        ? `Started ${runId}.`
-        : message === null || message === RUN_SLOT_TAKEN
-          ? `A run already started in this five-minute slot: ${runId}.`
-          : message,
+      existing ? `A run already started in this five-minute slot: ${runId}.` : `Started ${runId}.`,
     );
     if (!options.wait) return 0;
     // The API answers running until a run finishes, so a stuck or misreported run would keep this

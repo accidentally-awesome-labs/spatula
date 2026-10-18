@@ -1,8 +1,7 @@
 import { sha256Hex } from '@spatula/core';
-import { datasets, holdSnapshot, openReview } from '@spatula/store';
+import { holdSnapshot, openReview } from '@spatula/store';
 import { testDefinition } from '@spatula/store/fixtures';
 import { env } from 'cloudflare:workers';
-import { eq } from 'drizzle-orm';
 import { describe, expect, it } from 'vitest';
 import { withDatabase } from '../../src/database';
 import { PUBLISH_QUESTION } from '../../src/publish';
@@ -15,6 +14,7 @@ import {
   expectNoStore,
   post,
   signed,
+  staleDataset,
   subscribed,
 } from './api-support';
 
@@ -134,14 +134,7 @@ describe('consumers', () => {
     await subscribed(datasetId);
     // A later version's stricter checks would leave a stored definition like this one, with the
     // consumer still listed beside the name that fails.
-    await withDatabase(env, (db) =>
-      db
-        .update(datasets)
-        .set({
-          definition: { ...testDefinition(datasetId), consumers: ['crowdio', 'Not A Slug'] },
-        })
-        .where(eq(datasets.id, datasetId)),
-    );
+    await staleDataset(datasetId, ['crowdio']);
     const bindings = await consumerBindings();
     const text = JSON.stringify(applied(datasetId));
     const responses = [
@@ -202,6 +195,46 @@ describe('consumers', () => {
     expect(refused.status).toBe(401);
     expect(refused.headers.get('www-authenticate')).toBe('Bearer');
     expect((await call('HEAD', head, { bindings })).status).toBe(200);
+  });
+
+  it('keep a path shaped like the snapshot route’s, but not one of its forms, behind the owner’s token', async () => {
+    const datasetId = 'cr-forms';
+    await subscribed(datasetId);
+    const bindings = await consumerBindings();
+    // The route takes `latest` and a generation of up to nine digits from 1, and answers any other
+    // with a 400 of its own. A route added later at one of these paths is the owner's until it is
+    // added to the guard's table.
+    for (const form of ['other', 'LATEST', '0', '01', '-1', '1.5', '1234567890', 'latest.json']) {
+      const path = `/datasets/${datasetId}/snapshots/${form}`;
+      for (const token of [null, 'wrong', CONSUMER_TOKEN]) {
+        const response = await call('GET', path, { token, bindings });
+        const name = `${path} with ${token ?? 'no token'}`;
+        expect(response.status, name).toBe(401);
+        expect(response.headers.get('www-authenticate'), name).toBe('Bearer');
+        expectNoStore(response);
+        expect(await response.json(), name).toEqual({
+          error: 'The owner token is missing or wrong.',
+        });
+      }
+      // The owner gets past the guard, to the route's own refusal.
+      const owner = await call('GET', path, { bindings });
+      expect(owner.status, path).toBe(400);
+      expect(await owner.json(), path).toEqual({
+        error: 'A generation is a whole number from 1, or latest.',
+      });
+    }
+    // The forms it takes stay open to a listed consumer, up to its own answer.
+    for (const [form, status] of [
+      ['latest', 200],
+      ['1', 200],
+      ['999999999', 404],
+    ] as const) {
+      const response = await call('GET', `/datasets/${datasetId}/snapshots/${form}`, {
+        token: CONSUMER_TOKEN,
+        bindings,
+      });
+      expect(response.status, form).toBe(status);
+    }
   });
 });
 

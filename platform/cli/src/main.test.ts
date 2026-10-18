@@ -307,30 +307,32 @@ describe('run', () => {
     ]);
   });
 
-  it('says which run is going when the API turns the run away for it, and follows that run', async () => {
-    // A run from an earlier slot, still working: not this slot's, so the slot's sentence would be
-    // wrong. The API's own words say it.
+  it('refuses, in the API’s words and with exit 1, when another run is in the way, and follows none', async () => {
+    // A run from an earlier slot, still working: the run asked for never started, so the slot's
+    // sentence would be wrong, and following the other run would report on a run that isn't it.
+    // `spatula apply && spatula run x --wait` must not go on to use a snapshot the run didn't make.
     const going = 'cli-products-202610090000';
     const message = `A run of cli-products is already running (${going}). Wait for it to finish.`;
-    const complete: RunView = { ...RUNNING, id: going, status: 'complete' };
     const { fetch, sent } = stubApi(({ method }) =>
       method === 'POST'
         ? Response.json({ error: message, runId: going }, { status: 409 })
-        : Response.json(complete),
+        : Response.json({ ...RUNNING, id: going, status: 'complete' }),
     );
-    const { io, out, err } = memoryIo();
-    expect(await main(['run', 'cli-products', '--wait'], { io, env: ENV, fetch })).toBe(0);
-    expect(out).toEqual([message, `Run ${going}: complete.`]);
-    expect(err).toEqual([]);
-    expect(sent.map(({ method, path }) => ({ method, path }))).toEqual([
-      { method: 'POST', path: '/datasets/cli-products/runs' },
-      { method: 'GET', path: `/runs/${going}` },
-    ]);
-
-    // Without --wait it says so and stops.
-    const alone = memoryIo();
-    expect(await main(['run', 'cli-products'], { io: alone.io, env: ENV, fetch })).toBe(0);
-    expect(alone.out).toEqual([message]);
+    for (const argv of [
+      ['run', 'cli-products', '--wait'],
+      ['run', 'cli-products'],
+    ]) {
+      sent.length = 0;
+      const { io, out, err } = memoryIo();
+      expect(await main(argv, { io, env: ENV, fetch }), argv.join(' ')).toBe(1);
+      expect(err, argv.join(' ')).toEqual([message]);
+      expect(out, argv.join(' ')).toEqual([]);
+      // Only the start was sent: the other run was not asked after.
+      expect(
+        sent.map(({ method, path }) => ({ method, path })),
+        argv.join(' '),
+      ).toEqual([{ method: 'POST', path: '/datasets/cli-products/runs' }]);
+    }
   });
 
   it('says the slot’s sentence when the API gives a run but no words for it', async () => {
@@ -1797,11 +1799,11 @@ describe('what reaches the terminal', () => {
       Response.json({ error: message, runId: 'x-1\u001b' }, { status: 409 }),
     );
     const { io, out, err } = memoryIo();
-    expect(await main(['run', 'cli-products'], { io, env: ENV, fetch })).toBe(0);
-    expect(out).toEqual([
+    expect(await main(['run', 'cli-products'], { io, env: ENV, fetch })).toBe(1);
+    expect(err).toEqual([
       String.raw`A run of x is already running (x-1\u{1b}]0;pwned\u{7}). Wait.\u{a}Started y.`,
     ]);
-    expect(err).toEqual([]);
+    expect(out).toEqual([]);
     for (const line of [...out, ...err]) expect(line).not.toMatch(DRIVES_A_TERMINAL);
   });
 

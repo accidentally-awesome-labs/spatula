@@ -11,22 +11,21 @@ permissions:
 jobs:
   platform:
     runs-on: ubuntu-latest
-    services:
-      postgres:
-        image: postgres:18-alpine
-        env:
-          POSTGRES_USER: spatula
-          POSTGRES_PASSWORD: spatula
-          POSTGRES_DB: spatula
-        ports:
-          - 5434:5432
-        options: >-
-          --health-cmd "pg_isready -U spatula -d spatula"
-          --health-interval 2s
-          --health-timeout 5s
-          --health-retries 30
     steps:
       - uses: actions/checkout@v7
+      # Postgres as platform/compose.yaml starts it. Locally, Hyperdrive connects straight to
+      # Postgres and the Worker leaves each database client open until its invocation ends, so the
+      # Worker's tests need more than the default 100 connections. A service container can't take
+      # server options, so this step starts it.
+      - name: Start Postgres
+        timeout-minutes: 2
+        run: |
+          docker run --detach --name postgres --publish 5434:5432 \
+            --env POSTGRES_USER=spatula --env POSTGRES_PASSWORD=spatula --env POSTGRES_DB=spatula \
+            postgres:18-alpine postgres -c max_connections=300
+          until docker exec postgres pg_isready --host 127.0.0.1 --username spatula --dbname spatula; do
+            sleep 1
+          done
       - uses: pnpm/action-setup@v6
       - uses: actions/setup-node@v6
         with:

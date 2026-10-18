@@ -4,6 +4,7 @@ import {
   matchQuestion,
   sha256Hex,
   type PagesSource,
+  type RunSummary,
   type RunView,
 } from '@spatula/core';
 import {
@@ -26,7 +27,7 @@ import {
   startRun,
 } from '@spatula/store';
 import { testDefinition } from '@spatula/store/fixtures';
-import { introspectWorkflow } from 'cloudflare:test';
+import { introspectWorkflow, introspectWorkflowInstance } from 'cloudflare:test';
 import { env, exports } from 'cloudflare:workers';
 import { and, eq } from 'drizzle-orm';
 import { http, HttpResponse } from 'msw';
@@ -34,7 +35,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { RUN_START_GRACE_MS } from '../../src/api';
 import { withDatabase } from '../../src/database';
 import { PUBLISH_QUESTION } from '../../src/publish';
-import { call, expectNoStore } from './api-support';
+import { call, expectNoStore, staleDataset } from './api-support';
 import { network } from './network';
 
 /**
@@ -63,9 +64,10 @@ const withoutWorkflows = (): Env =>
   }) as unknown as Env;
 
 /**
- * A run's row with no Workflow behind it, started `ago` ms ago. A POST records the run and then
- * creates its Workflow, so one that ended between the two leaves a row like this. To the dataset
- * it is a run that is going.
+ * A run's row with no Workflow created for it, started `ago` ms ago. A POST records the run and
+ * then creates its Workflow, so one that ended between the two leaves a row like this. Whether
+ * the run reads as going is up to the bindings a test calls with: they say what Workflow, if any,
+ * is behind the run's ID.
  */
 async function runWithoutWorkflow(
   id: string,
@@ -90,12 +92,18 @@ async function runWithoutWorkflow(
  */
 const HOUR = 60 * 60 * 1000;
 
-/** Bindings whose Workflow binding only records the instances it is asked to create. */
-function recordingWorkflows(): { bindings: Env; created: string[] } {
+/**
+ * Bindings whose Workflow binding records the IDs of the instances it is asked to create, and finds
+ * instances through `find`. By default it finds none, as the real one finds none it never created.
+ */
+function recordingWorkflows(
+  find: (id: string) => Promise<unknown> = () => Promise.reject(new Error('no such instance')),
+): { bindings: Env; created: string[] } {
   const created: string[] = [];
   const bindings = {
     ...env,
     REFRESH: {
+      get: find,
       create: async (options: { id: string }) => {
         created.push(options.id);
       },
@@ -104,18 +112,12 @@ function recordingWorkflows(): { bindings: Env; created: string[] } {
   return { bindings, created };
 }
 
-/**
- * A dataset whose stored definition no longer passes the checks, as a later version's stricter
- * ones would leave it.
- */
-async function staleDataset(datasetId: string): Promise<void> {
-  await withDatabase(env, async (db) => {
-    await applyDefinition(db, testDefinition(datasetId));
-    await db
-      .update(datasets)
-      .set({ definition: { ...testDefinition(datasetId), consumers: ['Not A Slug'] } })
-      .where(eq(datasets.id, datasetId));
-  });
+/** Finds a Workflow that is still working for each of these runs, and none for any other. */
+function goingWorkflows(...ids: string[]): (id: string) => Promise<unknown> {
+  return (id) =>
+    ids.includes(id)
+      ? Promise.resolve({ status: () => Promise.resolve({ status: 'running' }) })
+      : Promise.reject(new Error('no such instance'));
 }
 
 /**
@@ -472,7 +474,7 @@ describe('the owner routes', () => {
     // A run from an earlier slot, whose Workflow is still working.
     const going = `${datasetId}-202601010000`;
     await runWithoutWorkflow(going, HOUR, datasetId);
-    const { bindings, created } = recordingWorkflows();
+    const { bindings, created } = recordingWorkflows(goingWorkflows(going));
 
     const refused = await call('POST', `/datasets/${datasetId}/runs`, { bindings });
     expect(refused.status).toBe(409);
@@ -509,7 +511,7 @@ describe('the owner routes', () => {
     // The same request either side of the line: a minute over six hours, and a minute under.
     await runWithoutWorkflow('api-dead-202601010000', 6 * HOUR + 60_000, 'api-dead');
     await runWithoutWorkflow('api-going-202601010000', 6 * HOUR - 60_000, 'api-going');
-    const { bindings, created } = recordingWorkflows();
+    const { bindings, created } = recordingWorkflows(goingWorkflows('api-going-202601010000'));
 
     const afterDead = await call('POST', '/datasets/api-dead/runs', { bindings });
     expect(afterDead.status).toBe(202);
@@ -517,6 +519,168 @@ describe('the owner routes', () => {
     expect(afterGoing.status).toBe(409);
     expect(await afterGoing.json()).toMatchObject({ runId: 'api-going-202601010000' });
     expect(created).toHaveLength(1);
+  });
+
+  it('record a run whose Workflow can’t be found as failed once its slot is over, and start the next', async () => {
+    const datasetId = 'api-lost-run';
+    const old = `${datasetId}-202601010000`;
+    await runWithoutWorkflow(old, RUN_START_GRACE_MS + 60_000, datasetId);
+    const { bindings, created } = recordingWorkflows();
+    // What the run's status says of it is what a start has to go by: it can't be going.
+    const reported = (await (await call('GET', `/runs/${old}`, { bindings })).json()) as RunView;
+    expect(reported).toMatchObject({
+      status: 'failed',
+      error: 'Spatula can’t find this run’s Workflow: no such instance',
+    });
+
+    const started = await call('POST', `/datasets/${datasetId}/runs`, { bindings });
+    expect(started.status).toBe(202);
+    const { runId } = (await started.json()) as { runId: string };
+    expect(runId).toMatch(/^api-lost-run-\d{12}$/u);
+    expect(runId).not.toBe(old);
+    expect(created).toEqual([runId]);
+    // The failure the status reported is now the row's own, so the run no longer blocks anything.
+    expect(await withDatabase(env, (db) => getRun(db, old))).toMatchObject({
+      status: 'failed',
+      error: reported.error,
+      finishedAt: expect.any(String),
+    });
+  });
+
+  it('refuse a run beside one whose Workflow may still be on its way, and leave that one alone', async () => {
+    const datasetId = 'api-new-run';
+    const old = `${datasetId}-202601010000`;
+    // Started a minute ago: the POST that recorded it may not have created its Workflow yet.
+    await runWithoutWorkflow(old, 60_000, datasetId);
+    const { bindings, created } = recordingWorkflows();
+
+    const refused = await call('POST', `/datasets/${datasetId}/runs`, { bindings });
+    expect(refused.status).toBe(409);
+    expect(await refused.json()).toEqual({
+      error: `A run of ${datasetId} is already running (${old}). Wait for it to finish.`,
+      runId: old,
+    });
+    expect(created).toEqual([]);
+    expect(await withDatabase(env, (db) => getRun(db, old))).toMatchObject({
+      status: 'running',
+      error: null,
+      finishedAt: null,
+    });
+  });
+
+  it('record the dead run in the way, and still refuse when another run is going', async () => {
+    const datasetId = 'api-two-in-the-way';
+    const going = `${datasetId}-202601010000`;
+    const dead = `${datasetId}-202601010100`;
+    // A database can hold overlapping runs from before the rule. The newer has lost its Workflow;
+    // the older is working.
+    await runWithoutWorkflow(going, 2 * HOUR, datasetId);
+    await runWithoutWorkflow(dead, HOUR, datasetId);
+    const { bindings, created } = recordingWorkflows(goingWorkflows(going));
+
+    // The start finds the newer run, sees it is dead and records that, and tries once more: that
+    // attempt finds the older run, and is answered as the first would have been.
+    const refused = await call('POST', `/datasets/${datasetId}/runs`, { bindings });
+    expect(refused.status).toBe(409);
+    expect(await refused.json()).toEqual({
+      error: `A run of ${datasetId} is already running (${going}). Wait for it to finish.`,
+      runId: going,
+    });
+    expect(created).toEqual([]);
+    expect(await withDatabase(env, (db) => getRun(db, dead))).toMatchObject({ status: 'failed' });
+    expect(await withDatabase(env, (db) => getRun(db, going))).toMatchObject({
+      status: 'running',
+      error: null,
+    });
+  });
+
+  it('record a run whose Workflow errored as failed, with the Workflow’s error, and start the next', async () => {
+    const datasetId = 'api-errored-run';
+    const old = `${datasetId}-202601010000`;
+    await runWithoutWorkflow(old, HOUR, datasetId);
+    const mocked = 'the resolve step and the fail step were made to fail';
+    const instance = await introspectWorkflowInstance(env.REFRESH, old);
+    try {
+      await instance.modify(async (m) => {
+        // The run plans no pages, so it gets as far as the resolve step without the network.
+        await m.disableRetryDelays();
+        await m.mockStepResult(
+          { name: 'load' },
+          {
+            revision: 1,
+            definition: testDefinition(datasetId),
+            startedAt: new Date().toISOString(),
+          },
+        );
+        await m.mockStepResult({ name: 'plan' }, { ids: [], due: 0, live: 0 });
+        await m.mockStepError({ name: 'resolve' }, new Error(mocked));
+        // The fail step is what would close the run's row, so it fails too.
+        await m.mockStepError({ name: 'fail' }, new Error(mocked));
+      });
+      await env.REFRESH.create({ id: old, params: { runId: old, datasetId } });
+      await instance.waitForStatus('errored');
+      expect(await withDatabase(env, (db) => getRun(db, old))).toMatchObject({
+        status: 'running',
+      });
+
+      // The real Workflow binding finds the instance and says how it ended; only the creation of
+      // the new run's Workflow is recorded instead of done.
+      const { bindings, created } = recordingWorkflows((id) => env.REFRESH.get(id));
+      const started = await call('POST', `/datasets/${datasetId}/runs`, { bindings });
+      expect(started.status).toBe(202);
+      const { runId } = (await started.json()) as { runId: string };
+      expect(created).toEqual([runId]);
+      expect(await withDatabase(env, (db) => getRun(db, old))).toMatchObject({
+        status: 'failed',
+        error: expect.stringContaining(mocked),
+        finishedAt: expect.any(String),
+      });
+    } finally {
+      await instance.dispose();
+    }
+  });
+
+  it('record a run whose Workflow was terminated as failed, and start the next', async () => {
+    const datasetId = 'api-terminated-run';
+    const old = `${datasetId}-202601010000`;
+    await runWithoutWorkflow(old, HOUR, datasetId);
+    const instance = await introspectWorkflowInstance(env.REFRESH, old);
+    try {
+      await instance.modify(async (m) => {
+        await m.mockStepResult(
+          { name: 'load' },
+          {
+            revision: 1,
+            definition: testDefinition(datasetId),
+            startedAt: new Date().toISOString(),
+          },
+        );
+        await m.mockStepResult({ name: 'plan' }, { ids: [], due: 0, live: 0 });
+        // The resolve step fails and waits to be tried again, so the run is still going when it
+        // is stopped from outside, and a stopped Workflow never gets to its fail step.
+        await m.mockStepError({ name: 'resolve' }, new Error('the resolve step was made to fail'));
+      });
+      await env.REFRESH.create({ id: old, params: { runId: old, datasetId } });
+      await instance.waitForStatus('running');
+      await (await env.REFRESH.get(old)).terminate();
+      await instance.waitForStatus('terminated');
+      expect(await withDatabase(env, (db) => getRun(db, old))).toMatchObject({
+        status: 'running',
+      });
+
+      const { bindings, created } = recordingWorkflows((id) => env.REFRESH.get(id));
+      const started = await call('POST', `/datasets/${datasetId}/runs`, { bindings });
+      expect(started.status).toBe(202);
+      const { runId } = (await started.json()) as { runId: string };
+      expect(created).toEqual([runId]);
+      expect(await withDatabase(env, (db) => getRun(db, old))).toMatchObject({
+        status: 'failed',
+        error: 'The Workflow stopped before the run finished.',
+        finishedAt: expect.any(String),
+      });
+    } finally {
+      await instance.dispose();
+    }
   });
 
   it('say why a dataset’s status can’t be given when its stored definition no longer passes the checks', async () => {
@@ -612,6 +776,39 @@ describe('the owner routes', () => {
     const response = await call('GET', `/runs/${id}`, { bindings: withoutWorkflows() });
     expect(response.status).toBe(200);
     expect(await response.json()).toMatchObject({ id, status: 'running', error: null });
+  });
+
+  it('report a finished run as its row says, whether or not its Workflow can be found', async () => {
+    const datasetId = 'api-finished-runs';
+    const done = `${datasetId}-202601010000`;
+    const failed = `${datasetId}-202601010100`;
+    // A Workflow's record doesn't last for ever, and only a run still going is checked against it.
+    const summary: RunSummary = {
+      items: 0,
+      fetches: { changed: 0, unchanged: 0, gone: 0, failed: 0, blocked: 0 },
+      statements: { added: 0, reseen: 0, withdrawn: 0 },
+      llm: { ran: 0, reused: 0, skipped: 0, failed: 0, inputTokens: 0, outputTokens: 0 },
+      entities: { created: 0, linked: 0, conflicts: 0, unresolved: 0 },
+      snapshot: { published: false, reason: 'nothing changed', excluded: [] },
+      notes: [],
+    };
+    await runWithoutWorkflow(done, HOUR, datasetId);
+    await runWithoutWorkflow(failed, HOUR, datasetId);
+    await withDatabase(env, async (db) => {
+      await finishRun(db, done, { status: 'complete', summary });
+      await finishRun(db, failed, { status: 'failed', error: 'robots.txt is unreachable' });
+    });
+
+    const asked = async (id: string) =>
+      (await (
+        await call('GET', `/runs/${id}`, { bindings: withoutWorkflows() })
+      ).json()) as RunView;
+    expect(await asked(done)).toMatchObject({ id: done, status: 'complete', summary, error: null });
+    expect(await asked(failed)).toMatchObject({
+      id: failed,
+      status: 'failed',
+      error: 'robots.txt is unreachable',
+    });
   });
 
   it('serve a snapshot with its hash and generation', async () => {

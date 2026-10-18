@@ -35,6 +35,7 @@ import {
   startRunAlone,
 } from '@spatula/store';
 import { Hono, type MiddlewareHandler } from 'hono';
+import { bodyLimit } from 'hono/body-limit';
 import { z } from 'zod';
 import { aboutPage } from './about';
 import { r2Blobs } from './blobs';
@@ -116,10 +117,12 @@ const owner: MiddlewareHandler<Api> = async (c, next) => {
  * The routes a consumer may call as well as the owner: reading a dataset's snapshots, and
  * acknowledging them. Every other route under /datasets is the owner's alone, including any added
  * later, so a new route can't be left open by mistake. A route is a method and a path, so one added
- * later at the same path with another method is the owner's too.
+ * later at the same path with another method is the owner's too, and so is one added later at a
+ * path of the snapshot route's shape: the pattern is the snapshot route's own forms, `latest` and a
+ * generation of up to nine digits from 1 (see the route, which answers any other with a 400).
  */
 const CONSUMER_ROUTES = [
-  { method: 'GET', path: /^\/datasets\/[^/]+\/snapshots\/[^/]+$/u },
+  { method: 'GET', path: /^\/datasets\/[^/]+\/snapshots\/(?:latest|[1-9]\d{0,8})$/u },
   { method: 'POST', path: /^\/datasets\/[^/]+\/acknowledgments$/u },
 ];
 
@@ -208,11 +211,20 @@ api.post('/datasets/:id/runs', async (c) => {
   const runId = runIdFor(datasetId, now);
   // The run is recorded first, so its ID can be reported at once, and a second request in the
   // same five-minute slot finds it. A dataset has one run going at a time: while another is, the
-  // request is refused, and that run is named.
+  // request is refused, and that run is named. A run that reads as failed (see viewRun) isn't
+  // going, and mustn't block its dataset for hours: the start records its failure, which
+  // GET /runs/:id only reports, and tries once more.
   const started = await withDatabase(c.env, async (db) => {
     // A definition stored by an earlier version that no longer passes the checks throws here, and
     // onError answers it.
     if ((await getDataset(db, datasetId)) === null) return 'missing' as const;
+    const first = await startRunAlone(db, { id: runId, datasetId, at: now });
+    if (!('running' in first)) return first;
+    const view = await viewRun(c.env, first.running);
+    // Every run viewRun reads as failed has its reason, so a missing one is not a run to record.
+    if (view.status !== 'failed' || view.error === null) return first;
+    await finishRun(db, view.id, { status: 'failed', error: view.error });
+    // Once: the answer to this attempt is the answer, even if another run is in the way.
     return startRunAlone(db, { id: runId, datasetId, at: now });
   });
   if (started === 'missing') return c.json({ error: `Dataset ${datasetId} doesn’t exist.` }, 404);
@@ -250,22 +262,30 @@ export const RUN_START_GRACE_MS = 5 * 60 * 1000;
 api.get('/runs/:id', async (c) => {
   const run = await withDatabase(c.env, (db) => getRun(db, c.req.param('id')));
   if (run === null) return c.json({ error: 'No such run.' }, 404);
-  if (run.status === 'running') {
-    let instance: WorkflowInstance;
-    try {
-      instance = await c.env.REFRESH.get(run.id);
-    } catch (error) {
-      return c.json(withoutWorkflow(run, error));
-    }
-    // A Workflow stopped from outside, such as one terminated by hand, never finishes its run.
-    const state = await instance.status();
-    if (state.status === 'errored' || state.status === 'terminated') {
-      const stopped: RunView = { ...run, status: 'failed', error: describeStop(state.error) };
-      return c.json(stopped);
-    }
-  }
-  return c.json(run);
+  return c.json(await viewRun(c.env, run));
 });
+
+/**
+ * A run as the API reports it. A row that says `running` is checked against its Workflow: one that
+ * was stopped from outside, such as one terminated by hand, never finishes its run, and one that
+ * can't be found never will once RUN_START_GRACE_MS has passed, so both read as failed. Any other
+ * row is reported as it is. This only reports: GET /runs/:id leaves the row alone, and the start of
+ * the dataset's next run records the failure.
+ */
+async function viewRun(env: Env, run: RunView): Promise<RunView> {
+  if (run.status !== 'running') return run;
+  let instance: WorkflowInstance;
+  try {
+    instance = await env.REFRESH.get(run.id);
+  } catch (error) {
+    return withoutWorkflow(run, error);
+  }
+  const state = await instance.status();
+  if (state.status === 'errored' || state.status === 'terminated') {
+    return { ...run, status: 'failed', error: describeStop(state.error) };
+  }
+  return run;
+}
 
 api.get('/datasets/:id/snapshots/:generation', reader, async (c) => {
   const datasetId = c.req.param('id');
@@ -371,73 +391,87 @@ api.post('/datasets/:id/review/:reviewId', async (c) => {
   }
 });
 
-api.post('/datasets/:id/acknowledgments', reader, async (c) => {
-  const consumer = c.get('consumer');
-  if (consumer === null) return c.json({ error: 'Acknowledgments come from consumers.' }, 403);
-  const key = consumerSecret(c.env, consumer, 'HMAC_KEY');
-  if (key === undefined) return c.json({ error: `${consumer} has no HMAC key yet.` }, 503);
-  // The signature covers the exact bytes sent, so the body is read as text before it's parsed.
-  const raw = await c.req.text();
-  const signature = /^sha256=([0-9a-f]{64})$/u.exec(c.req.header('x-spatula-signature') ?? '')?.[1];
-  if (signature === undefined || !sameText(signature, await hmacSha256Hex(key, raw))) {
-    return c.json({ error: 'The signature is missing or wrong.' }, 401);
-  }
-  let data: unknown;
-  try {
-    data = JSON.parse(raw);
-  } catch {
-    return c.json({ error: 'The body isn’t JSON.' }, 400);
-  }
-  const parsed = acknowledgmentSchema.safeParse(data);
-  if (!parsed.success) {
-    const issue = parsed.error.issues[0];
-    return c.json(
-      {
-        error: `The acknowledgment is wrong at ${issue?.path.join('.') || 'the body'}: ${issue?.message}`,
-      },
-      400,
-    );
-  }
-  const ack = parsed.data;
-  const receivedAt = new Date();
-  // An acknowledgment sent long ago may be a replay of one captured on the way.
-  if (Math.abs(receivedAt.getTime() - Date.parse(ack.sentAt)) > ACK_WINDOW_MS) {
-    return c.json({ error: 'sentAt is more than 10 minutes from Spatula’s clock.' }, 400);
-  }
-  const datasetId = c.req.param('id');
-  const outcome = await withDatabase(c.env, async (db) => {
-    const snapshot = await getSnapshot(db, datasetId, ack.generation);
-    if (snapshot === null) return 'missing' as const;
-    if (snapshot.id !== ack.snapshotId) return 'mismatch' as const;
-    return recordAcknowledgment(db, {
-      datasetId,
-      consumer,
-      generation: ack.generation,
-      snapshotId: ack.snapshotId,
-      outcome: ack.outcome,
-      detail: ack.detail ?? null,
-      counts: ack.counts ?? null,
-      sentAt: new Date(ack.sentAt),
-      receivedAt,
-      bodySha256: await sha256Hex(raw),
-    });
-  });
-  switch (outcome) {
-    case 'missing':
-      return c.json({ error: `Generation ${ack.generation} isn’t published.` }, 404);
-    case 'mismatch':
+/** Crowdio's acknowledgments are a few hundred bytes. The limit bounds what one can store. */
+const ACK_MAX_BYTES = 16 * 1024;
+
+api.post(
+  '/datasets/:id/acknowledgments',
+  reader,
+  bodyLimit({
+    maxSize: ACK_MAX_BYTES,
+    onError: (c) =>
+      c.json({ error: `An acknowledgment is at most ${ACK_MAX_BYTES / 1024} KiB.` }, 413),
+  }),
+  async (c) => {
+    const consumer = c.get('consumer');
+    if (consumer === null) return c.json({ error: 'Acknowledgments come from consumers.' }, 403);
+    const key = consumerSecret(c.env, consumer, 'HMAC_KEY');
+    if (key === undefined) return c.json({ error: `${consumer} has no HMAC key yet.` }, 503);
+    // The signature covers the exact bytes sent, so the body is read as text before it's parsed.
+    const raw = await c.req.text();
+    const signature = /^sha256=([0-9a-f]{64})$/u.exec(
+      c.req.header('x-spatula-signature') ?? '',
+    )?.[1];
+    if (signature === undefined || !sameText(signature, await hmacSha256Hex(key, raw))) {
+      return c.json({ error: 'The signature is missing or wrong.' }, 401);
+    }
+    let data: unknown;
+    try {
+      data = JSON.parse(raw);
+    } catch {
+      return c.json({ error: 'The body isn’t JSON.' }, 400);
+    }
+    const parsed = acknowledgmentSchema.safeParse(data);
+    if (!parsed.success) {
+      const issue = parsed.error.issues[0];
       return c.json(
-        { error: `Generation ${ack.generation} isn’t snapshot ${ack.snapshotId}.` },
+        {
+          error: `The acknowledgment is wrong at ${issue?.path.join('.') || 'the body'}: ${issue?.message}`,
+        },
         400,
       );
-    case 'conflict':
-      return c.json({ error: `Generation ${ack.generation} was acknowledged differently.` }, 409);
-    case 'repeated':
-      return c.json({ acknowledged: ack.generation }, 200);
-    case 'recorded':
-      return c.json({ acknowledged: ack.generation }, 201);
-  }
-});
+    }
+    const ack = parsed.data;
+    const receivedAt = new Date();
+    // An acknowledgment sent long ago may be a replay of one captured on the way.
+    if (Math.abs(receivedAt.getTime() - Date.parse(ack.sentAt)) > ACK_WINDOW_MS) {
+      return c.json({ error: 'sentAt is more than 10 minutes from Spatula’s clock.' }, 400);
+    }
+    const datasetId = c.req.param('id');
+    const outcome = await withDatabase(c.env, async (db) => {
+      const snapshot = await getSnapshot(db, datasetId, ack.generation);
+      if (snapshot === null) return 'missing' as const;
+      if (snapshot.id !== ack.snapshotId) return 'mismatch' as const;
+      return recordAcknowledgment(db, {
+        datasetId,
+        consumer,
+        generation: ack.generation,
+        snapshotId: ack.snapshotId,
+        outcome: ack.outcome,
+        detail: ack.detail ?? null,
+        counts: ack.counts ?? null,
+        sentAt: new Date(ack.sentAt),
+        receivedAt,
+        bodySha256: await sha256Hex(raw),
+      });
+    });
+    switch (outcome) {
+      case 'missing':
+        return c.json({ error: `Generation ${ack.generation} isn’t published.` }, 404);
+      case 'mismatch':
+        return c.json(
+          { error: `Generation ${ack.generation} isn’t snapshot ${ack.snapshotId}.` },
+          400,
+        );
+      case 'conflict':
+        return c.json({ error: `Generation ${ack.generation} was acknowledged differently.` }, 409);
+      case 'repeated':
+        return c.json({ acknowledged: ack.generation }, 200);
+      case 'recorded':
+        return c.json({ acknowledged: ack.generation }, 201);
+    }
+  },
+);
 
 api.get('/datasets/:id/status', async (c) => {
   const datasetId = c.req.param('id');
@@ -503,8 +537,10 @@ function sameText(a: string, b: string): boolean {
 /**
  * A run whose row says `running` but whose Workflow can't be found. Just after the row is
  * inserted that is normal: the POST that inserted it is about to create the Workflow. Once
- * RUN_START_GRACE_MS has passed it never will, so the run reads as failed. This only reports,
- * like the answer for a Workflow stopped from outside: the row stays as it is.
+ * RUN_START_GRACE_MS has passed it never will, so the run reads as failed. GET /runs/:id only
+ * reports that, like the answer for a Workflow stopped from outside: the row stays as it is until
+ * the start of the dataset's next run records the failure, because a run that reads as failed
+ * mustn't block its dataset.
  */
 function withoutWorkflow(run: RunView, error: unknown): RunView {
   if (Date.now() - Date.parse(run.startedAt) <= RUN_START_GRACE_MS) return run;
