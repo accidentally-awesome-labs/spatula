@@ -49,9 +49,9 @@ visitor.
     matters.
 - **Pacing.**
   - Within a run, each host's next request waits a full interval after the previous answer
-    arrived. Runs can still overlap on a host when two datasets share one, as one dataset's runs
-    go one at a time (ADR 0004). Then the interval in force is whichever reservation came last, and
-    a slot reserved before an answer arrives isn't moved by it.
+    arrived. Runs can still overlap on a host: two datasets can share one, and a dataset's run can
+    go on after its Workflow read as stopped (ADR 0004). Then the interval in force is whichever
+    reservation came last, and a slot reserved before an answer arrives isn't moved by it.
   - The interval is the dataset's `perHostIntervalMs` (at least 1,000) or the site's Crawl-delay,
     whichever is longer, and reading robots.txt counts as a request: it waits for the host like
     any other. A robots.txt answered with a challenge keeps the rules stored before it (with none
