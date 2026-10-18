@@ -1,7 +1,8 @@
 import type { RunSummary, RunView } from '@spatula/core';
-import { eq } from 'drizzle-orm';
+import { and, desc, eq, ne } from 'drizzle-orm';
 import type { Executor } from './client';
 import { runs } from './schema';
+import { lockDataset } from './snapshots';
 
 /** Starts a run, unless one with this ID exists: then it's returned, and `created` is false. */
 export async function startRun(
@@ -18,6 +19,40 @@ export async function startRun(
   return { created: inserted.length > 0, run: toView(row) };
 }
 
+/**
+ * Starts a run unless another run of the dataset is going: then that run is returned, as `running`,
+ * and nothing is recorded. A run is going while its row says `running`, however long ago it
+ * started: only its Workflow can say it has stopped, so the API asks that (viewRun in the Worker's
+ * api.ts), records the run failed when it has, and starts again. A run with the same ID isn't
+ * another: it's this one asked for again, and `startRun` finds it. The dataset's row is taken
+ * first, as every change to its snapshots takes it, so two starts at once go one at a time, and the
+ * second looks only after the first has committed.
+ */
+export async function startRunAlone(
+  db: Executor,
+  run: { id: string; datasetId: string },
+): Promise<{ created: boolean; run: RunView } | { running: RunView }> {
+  return db.transaction(async (tx) => {
+    await lockDataset(tx, run.datasetId);
+    const [going] = await tx
+      .select()
+      .from(runs)
+      .where(
+        and(eq(runs.datasetId, run.datasetId), ne(runs.id, run.id), eq(runs.status, 'running')),
+      )
+      .orderBy(desc(runs.startedAt))
+      .limit(1);
+    if (going !== undefined) return { running: toView(going) };
+    return startRun(tx, { id: run.id, datasetId: run.datasetId });
+  });
+}
+
+/**
+ * Records how a run ended. A complete run stays complete: a failure recorded later, such as a
+ * start of the next run recording this one as lost, can't overwrite it. A failed run can still
+ * complete, as a Workflow replayed or restarted from its finished steps does, so the row says how
+ * the run ended last.
+ */
 export async function finishRun(
   db: Executor,
   id: string,
@@ -28,10 +63,10 @@ export async function finishRun(
     .update(runs)
     .set(
       result.status === 'complete'
-        ? { status: 'complete', summary: result.summary, finishedAt }
+        ? { status: 'complete', summary: result.summary, error: null, finishedAt }
         : { status: 'failed', error: result.error.slice(0, 2000), finishedAt },
     )
-    .where(eq(runs.id, id));
+    .where(and(eq(runs.id, id), ne(runs.status, 'complete')));
 }
 
 export async function getRun(db: Executor, id: string): Promise<RunView | null> {

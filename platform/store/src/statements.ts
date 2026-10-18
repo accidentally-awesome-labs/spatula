@@ -23,7 +23,8 @@ const keyOf = (statement: { property: string; method: string; valueKey: string }
  * Writes what an extraction found, for the methods it speaks for. A value already current is
  * re-seen; a new value is a new statement; a current value the extraction no longer finds is
  * withdrawn. Statements of other methods are left alone, so a page extraction never withdraws
- * what the LLM said, and the other way round.
+ * what the LLM said, and the other way round. Naming `properties` narrows the write the same way:
+ * it adds, re-sees, and withdraws only those properties' statements, and rejects any other.
  */
 export async function writeStatements(
   db: Executor,
@@ -33,6 +34,12 @@ export async function writeStatements(
     fetchId: string;
     seenAt: Date;
     methods: readonly Method[];
+    /**
+     * The properties the write speaks for. Others' statements are left alone, so a page's
+     * extraction never withdraws a decided category, and the LLM's specs step never withdraws the
+     * LLM's classification. Absent means every property.
+     */
+    properties?: readonly string[];
     statements: StatementInput[];
   },
 ): Promise<StatementCounts> {
@@ -41,6 +48,19 @@ export async function writeStatements(
     throw new Error(
       `A ${outside.method} statement can’t be written for ${write.methods.join(', ')}`,
     );
+  }
+  const strayProperty =
+    write.properties === undefined
+      ? undefined
+      : write.statements.find((statement) => !write.properties!.includes(statement.property));
+  if (strayProperty !== undefined) {
+    throw new Error(
+      `A ${strayProperty.property} statement can’t be written for ${write.properties!.join(', ')}`,
+    );
+  }
+  // A write that speaks for no property has nothing to add, re-see, or withdraw.
+  if (write.properties !== undefined && write.properties.length === 0) {
+    return { added: 0, reseen: 0, withdrawn: 0 };
   }
   return db.transaction(async (tx) => {
     const current = await tx
@@ -55,6 +75,9 @@ export async function writeStatements(
         and(
           eq(statements.itemId, write.itemId),
           inArray(statements.method, [...write.methods]),
+          write.properties === undefined
+            ? undefined
+            : inArray(statements.property, [...write.properties]),
           isNull(statements.withdrawnAt),
         ),
       );
@@ -99,11 +122,23 @@ export async function writeStatements(
   });
 }
 
-/** An unchanged page says what it said before: its current statements are re-seen. */
+/**
+ * An unchanged page says what it said before: its current statements are re-seen. Naming
+ * `methods` or `properties` re-sees only those, so a step that confirmed some of a page's
+ * statements doesn't re-see what another step decided. Absent means all, and an empty list
+ * re-sees nothing.
+ */
 export async function reseeStatements(
   db: Executor,
-  input: { itemId: string; fetchId: string; seenAt: Date; methods?: readonly Method[] },
+  input: {
+    itemId: string;
+    fetchId: string;
+    seenAt: Date;
+    methods?: readonly Method[];
+    properties?: readonly string[];
+  },
 ): Promise<number> {
+  if (input.properties !== undefined && input.properties.length === 0) return 0;
   const rows = await db
     .update(statements)
     .set({ lastSeen: input.seenAt, lastFetchId: input.fetchId })
@@ -112,6 +147,9 @@ export async function reseeStatements(
         eq(statements.itemId, input.itemId),
         isNull(statements.withdrawnAt),
         input.methods === undefined ? undefined : inArray(statements.method, [...input.methods]),
+        input.properties === undefined
+          ? undefined
+          : inArray(statements.property, [...input.properties]),
       ),
     )
     .returning({ id: statements.id });
@@ -148,4 +186,36 @@ export async function currentStatements(
     )
     .orderBy(asc(statements.itemId), asc(statements.property), asc(statements.id));
   return rows.map((row) => ({ ...row, lastSeen: row.lastSeen.toISOString() }));
+}
+
+/** The current statements of these items, by item, as survivorship reads them. */
+export async function statementsOf(
+  db: Executor,
+  itemIds: readonly string[],
+): Promise<Map<string, StatementView[]>> {
+  const said = new Map<string, StatementView[]>();
+  if (itemIds.length === 0) return said;
+  const rows = await db
+    .select({
+      itemId: statements.itemId,
+      sourceUrl: items.locator,
+      property: statements.property,
+      value: statements.value,
+      valueKey: statements.valueKey,
+      method: statements.method,
+      confidence: statements.confidence,
+      lastSeen: statements.lastSeen,
+      position: statements.position,
+    })
+    .from(statements)
+    .innerJoin(items, eq(items.id, statements.itemId))
+    .where(and(inArray(statements.itemId, [...itemIds]), isNull(statements.withdrawnAt)))
+    .orderBy(asc(statements.itemId), asc(statements.property), asc(statements.id));
+  for (const { itemId, ...row } of rows) {
+    const view = { ...row, lastSeen: row.lastSeen.toISOString() };
+    const list = said.get(itemId);
+    if (list === undefined) said.set(itemId, [view]);
+    else list.push(view);
+  }
+  return said;
 }

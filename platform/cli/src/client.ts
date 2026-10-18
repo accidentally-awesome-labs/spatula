@@ -1,4 +1,14 @@
-import type { ApplySummary, Definition, RunView } from '@spatula/core';
+import type {
+  ApplySummary,
+  DatasetStatus,
+  Definition,
+  EvalScores,
+  EvalView,
+  ItemView,
+  ReviewView,
+  RunView,
+} from '@spatula/core';
+import { describeError } from './format';
 
 /** An answer the API refused with, and the problems it listed. Status 0 means no answer. */
 export class ApiError extends Error {
@@ -66,8 +76,7 @@ export function createClient(options: {
         body: body === undefined ? undefined : JSON.stringify(body),
       });
     } catch (error) {
-      const why = error instanceof Error ? error.message : String(error);
-      throw new ApiError(0, `Spatula at ${options.baseUrl} didn’t answer: ${why}`);
+      throw new ApiError(0, `Spatula at ${options.baseUrl} didn’t answer: ${describeError(error)}`);
     }
   }
 
@@ -95,15 +104,28 @@ export function createClient(options: {
       return answer as unknown as ApplySummary;
     },
 
-    /** Starts a run, or finds the one already started in this five-minute slot. */
-    async startRun(datasetId: string): Promise<{ runId: string; existing: boolean }> {
-      const response = await request('POST', `/datasets/${encodeURIComponent(datasetId)}/runs`);
+    /**
+     * Starts a run, or finds the run in its way: the one already started in this five-minute slot,
+     * or an earlier one still going. `message` is what the API said of that run, if it said.
+     */
+    async startRun(
+      datasetId: string,
+      options: { all?: boolean } = {},
+    ): Promise<{ runId: string; existing: boolean; message: string | null }> {
+      const response = await request(
+        'POST',
+        `/datasets/${encodeURIComponent(datasetId)}/runs${options.all === true ? '?all=1' : ''}`,
+      );
       const answer = await json(response);
       if (
         (response.status === 202 || response.status === 409) &&
         typeof answer.runId === 'string'
       ) {
-        return { runId: answer.runId, existing: response.status === 409 };
+        return {
+          runId: answer.runId,
+          existing: response.status === 409,
+          message: typeof answer.error === 'string' ? answer.error : null,
+        };
       }
       throw refused(response.status, answer);
     },
@@ -113,6 +135,49 @@ export function createClient(options: {
       const answer = await json(response);
       if (!response.ok) throw refused(response.status, answer);
       return answer as unknown as RunView;
+    },
+
+    async reviveItems(
+      datasetId: string,
+      body: { refused?: true; pages?: string[] },
+    ): Promise<{ revived: number }> {
+      const response = await request(
+        'POST',
+        `/datasets/${encodeURIComponent(datasetId)}/items/revive`,
+        body,
+      );
+      const answer = await json(response);
+      if (!response.ok) throw refused(response.status, answer);
+      return { revived: Number(answer.revived) };
+    },
+
+    async listReviews(datasetId: string): Promise<ReviewView[]> {
+      const response = await request('GET', `/datasets/${encodeURIComponent(datasetId)}/review`);
+      const answer = await json(response);
+      if (!response.ok) throw refused(response.status, answer);
+      return Array.isArray(answer.reviews) ? (answer.reviews as ReviewView[]) : [];
+    },
+
+    async answerReview(
+      datasetId: string,
+      reviewId: string,
+      answer: string,
+    ): Promise<{ effect: string }> {
+      const response = await request(
+        'POST',
+        `/datasets/${encodeURIComponent(datasetId)}/review/${encodeURIComponent(reviewId)}`,
+        { answer },
+      );
+      const body = await json(response);
+      if (!response.ok) throw refused(response.status, body);
+      return { effect: typeof body.effect === 'string' ? body.effect : '' };
+    },
+
+    async getStatus(datasetId: string): Promise<DatasetStatus> {
+      const response = await request('GET', `/datasets/${encodeURIComponent(datasetId)}/status`);
+      const answer = await json(response);
+      if (!response.ok) throw refused(response.status, answer);
+      return answer as unknown as DatasetStatus;
     },
 
     async pullSnapshot(
@@ -130,6 +195,32 @@ export function createClient(options: {
         generation: Number(response.headers.get('x-spatula-generation')),
         snapshotId: response.headers.get('x-spatula-snapshot-id') ?? '',
       };
+    },
+
+    async listItems(datasetId: string): Promise<ItemView[]> {
+      const response = await request('GET', `/datasets/${encodeURIComponent(datasetId)}/items`);
+      const answer = await json(response);
+      if (!response.ok) throw refused(response.status, answer);
+      return Array.isArray(answer.items) ? (answer.items as ItemView[]) : [];
+    },
+
+    async saveEval(
+      datasetId: string,
+      body: { generation: number; goldenVersion: number; scores: EvalScores },
+    ): Promise<void> {
+      const response = await request(
+        'POST',
+        `/datasets/${encodeURIComponent(datasetId)}/evals`,
+        body,
+      );
+      if (!response.ok) throw refused(response.status, await json(response));
+    },
+
+    async listEvals(datasetId: string): Promise<EvalView[]> {
+      const response = await request('GET', `/datasets/${encodeURIComponent(datasetId)}/evals`);
+      const answer = await json(response);
+      if (!response.ok) throw refused(response.status, answer);
+      return Array.isArray(answer.evals) ? (answer.evals as EvalView[]) : [];
     },
   };
 }

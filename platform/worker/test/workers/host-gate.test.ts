@@ -1,8 +1,11 @@
 import type { GateState } from '@spatula/core';
 import { runInDurableObject } from 'cloudflare:test';
 import { env } from 'cloudflare:workers';
+import { http, HttpResponse } from 'msw';
 import { describe, expect, it } from 'vitest';
 import type { HostGate } from '../../src/host-gate';
+import { workerPorts } from '../../src/ports';
+import { network } from './network';
 
 const NOW = Date.UTC(2026, 9, 10);
 const gateFor = (host: string) => env.HOST_GATE.get(env.HOST_GATE.idFromName(host));
@@ -76,6 +79,36 @@ describe('HostGate', () => {
     expect(await gate.reserve(request('https://gate-large.example/a'))).toMatchObject({
       kind: 'go',
     });
+  });
+
+  it('says when it opens: after its pacing and after its break, whichever is later', async () => {
+    const gate = gateFor('gate-opens.example');
+    expect(await gate.opensAt()).toBe(0);
+    await gate.storeRobots({ status: 'unavailable', fetchedAt: NOW, httpStatus: 404 }, NOW);
+    expect(await gate.opensAt()).toBe(NOW + 1000);
+    await gate.reserve(request('https://gate-opens.example/a'));
+    expect(await gate.opensAt()).toBe(NOW + 2000);
+    await gate.record({ status: 429, now: NOW, retryAfter: '120' });
+    expect(await gate.opensAt()).toBe(NOW + 120_000);
+  });
+
+  it('waits the dataset’s interval after reading robots.txt, asked through the Worker’s ports', async () => {
+    // The interval goes from the gate port through the Durable Object's stub to the object, and
+    // each of those could drop it without a type error: it is an optional argument.
+    network.use(
+      http.get('https://gate-dataset.example/robots.txt', () =>
+        HttpResponse.text('User-agent: *\nAllow: /\n'),
+      ),
+    );
+    const decision = await workerPorts(env).gate.reserve('https://gate-dataset.example/a', {
+      minIntervalMs: 15_000,
+      maxWaitMs: 20_000,
+    });
+    // Real time passes between reading robots.txt and asking, so the wait is a little under 15 s.
+    expect(decision.kind).toBe('go');
+    const waitMs = decision.kind === 'go' ? decision.waitMs : 0;
+    expect(waitMs).toBeGreaterThan(10_000);
+    expect(waitMs).toBeLessThanOrEqual(15_000);
   });
 
   it('gives concurrent callers different slots', async () => {

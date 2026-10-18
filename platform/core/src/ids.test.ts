@@ -1,5 +1,6 @@
+import { createHmac } from 'node:crypto';
 import { describe, expect, it } from 'vitest';
-import { newId, runIdFor, sha256Hex, stableStringify } from './ids';
+import { hmacSha256Hex, newId, runIdFor, sha256Hex, stableId, stableStringify } from './ids';
 
 describe('newId', () => {
   it('is the prefix and 20 base32 characters', () => {
@@ -49,5 +50,73 @@ describe('sha256Hex', () => {
 
   it('hashes bytes', async () => {
     expect(await sha256Hex(new TextEncoder().encode('abc'))).toBe(ABC);
+  });
+});
+
+describe('stableId', () => {
+  it('is the same for the same parts, and looks like any other ID', async () => {
+    const id = await stableId('fe', 'run-1', 'it_1', 0);
+    expect(id).toMatch(/^fe_[0-9a-hjkmnp-tv-z]{20}$/);
+    expect(await stableId('fe', 'run-1', 'it_1', 0)).toBe(id);
+  });
+
+  it('differs when any part does, and when parts split differently', async () => {
+    const ids = new Set([
+      await stableId('fe', 'run-1', 'it_1', 0),
+      await stableId('fe', 'run-1', 'it_1', 1),
+      await stableId('fe', 'run-2', 'it_1', 0),
+      await stableId('fe', 'run-1i', 't_1', 0),
+      await stableId('st', 'run-1', 'it_1', 0),
+    ]);
+    expect(ids.size).toBe(5);
+  });
+});
+
+describe('hmacSha256Hex', () => {
+  it('signs as RFC 4231’s second test case says', async () => {
+    expect(await hmacSha256Hex('Jefe', 'what do ya want for nothing?')).toBe(
+      '5bdcc146bf60754e6a042426089575c75a003f089d2739839dec58b964ec3843',
+    );
+  });
+
+  it('signs any text as the UTF-8 bytes it is, whitespace and all, under any key', async () => {
+    // Node's own HMAC is the second opinion. A signature covers the exact bytes sent, so a newline
+    // after a body, or text outside ASCII, must not change what is signed.
+    const texts = [
+      '',
+      'a',
+      'what do ya want for nothing?\n',
+      ' padded ',
+      '\tcolumns\r\n',
+      'ünï 🎧 日本語',
+      '{"generation":1}\n',
+      'x'.repeat(10_000),
+    ];
+    // Keys shorter than a block, as long as one, and longer, which HMAC hashes first.
+    const keys = ['Jefe', 'k', 'a key with ünï 🎧', 'x'.repeat(64), 'x'.repeat(131)];
+    for (const key of keys) {
+      for (const text of texts) {
+        expect(
+          await hmacSha256Hex(key, text),
+          `${key.slice(0, 8)} signing ${text.slice(0, 8)}`,
+        ).toBe(createHmac('sha256', key).update(text, 'utf8').digest('hex'));
+      }
+    }
+  });
+
+  it('signs bytes as the bytes they are, a byte-order mark or bytes that aren’t UTF-8 included', async () => {
+    const key = 'crowdio-hmac-key';
+    const text = '{"generation":1,"detail":"ünï"}';
+    const encoded = new TextEncoder().encode(text);
+    // Text is signed as the UTF-8 bytes it encodes to, so the two are signed alike.
+    expect(await hmacSha256Hex(key, encoded)).toBe(await hmacSha256Hex(key, text));
+    // No text encodes to these, so only their bytes can be what's signed.
+    const marked = new Uint8Array([0xef, 0xbb, 0xbf, ...encoded]);
+    const broken = new Uint8Array([...encoded.slice(0, -1), 0xff, 0x7d]);
+    for (const bytes of [marked, broken]) {
+      expect(await hmacSha256Hex(key, bytes)).toBe(
+        createHmac('sha256', key).update(bytes).digest('hex'),
+      );
+    }
   });
 });

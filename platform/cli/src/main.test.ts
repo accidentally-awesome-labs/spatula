@@ -1,9 +1,19 @@
-import { sha256Hex, type ApplySummary, type RunView } from '@spatula/core';
+import {
+  sha256Hex,
+  type ApplySummary,
+  type DatasetStatus,
+  type DiscoverySummary,
+  type EvalView,
+  type ItemView,
+  type ReviewView,
+  type RunSummary,
+  type RunView,
+} from '@spatula/core';
 import { testDefinition } from '@spatula/store/fixtures';
 import { describe, expect, it } from 'vitest';
 import { stringify } from 'yaml';
 import { POLL_MS, WAIT_LIMIT_MS, type Io } from './commands';
-import { printable } from './format';
+import { describeError, printable } from './format';
 import { failureLine, main, USAGE } from './main';
 
 const ENV = { SPATULA_URL: 'https://spatula.test', SPATULA_TOKEN: 'owner-token' };
@@ -86,6 +96,28 @@ describe('check', () => {
       'cli-products: 1 record type, 2 sources, 3 pages. Nothing is wrong with it.',
     ]);
     expect(sent).toHaveLength(0);
+  });
+
+  it('counts a sitemap source’s sitemaps', async () => {
+    const definition = {
+      ...DEFINITION,
+      sources: [
+        {
+          id: 'maker-c',
+          kind: 'sitemap',
+          recordType: 'product',
+          sitemaps: ['https://maker-c.example/a.xml', 'https://maker-c.example/b.xml'],
+          include: ['/products/*'],
+          fixed: { brand: 'Maker C', category: 'Headphones' },
+          evidence: DEFINITION.sources[0]!.evidence,
+        },
+      ],
+    };
+    const { io, out } = memoryIo({ 'c.yaml': stringify(definition) });
+    expect(await main(['check', 'c.yaml'], { io, env: ENV })).toBe(0);
+    expect(out).toEqual([
+      'cli-products: 1 record type, 1 source, 2 sitemaps. Nothing is wrong with it.',
+    ]);
   });
 
   it('lists what’s wrong with a definition, or with its YAML', async () => {
@@ -277,6 +309,63 @@ describe('run', () => {
     ]);
   });
 
+  it('refuses, in the API’s words and with exit 1, when another run is in the way, and follows none', async () => {
+    // A run from an earlier slot, still working: the run asked for never started, so the slot's
+    // sentence would be wrong, and following the other run would report on a run that isn't it.
+    // `spatula apply && spatula run x --wait` must not go on to use a snapshot the run didn't make.
+    const going = 'cli-products-202610090000';
+    const message = `A run of cli-products is already running (${going}). Wait for it to finish.`;
+    const { fetch, sent } = stubApi(({ method }) =>
+      method === 'POST'
+        ? Response.json({ error: message, runId: going }, { status: 409 })
+        : Response.json({ ...RUNNING, id: going, status: 'complete' }),
+    );
+    for (const argv of [
+      ['run', 'cli-products', '--wait'],
+      ['run', 'cli-products'],
+    ]) {
+      sent.length = 0;
+      const { io, out, err } = memoryIo();
+      expect(await main(argv, { io, env: ENV, fetch }), argv.join(' ')).toBe(1);
+      expect(err, argv.join(' ')).toEqual([message]);
+      expect(out, argv.join(' ')).toEqual([]);
+      // Only the start was sent: the other run was not asked after.
+      expect(
+        sent.map(({ method, path }) => ({ method, path })),
+        argv.join(' '),
+      ).toEqual([{ method: 'POST', path: '/datasets/cli-products/runs' }]);
+    }
+  });
+
+  it('refuses, in the API’s words and with exit 1, when the stored definition no longer passes the checks', async () => {
+    // The start's other 409 names no run, because none was recorded: there's no run to follow, and
+    // the slot's sentence would be wrong. It's reported as any other refusal is.
+    const stale =
+      'Dataset cli-products’s stored definition no longer passes the checks (consumers.0: Use lowercase letters, digits, and hyphens, up to 63 characters.). Apply it again.';
+    const { fetch, sent } = stubApi(() => Response.json({ error: stale }, { status: 409 }));
+    for (const argv of [
+      ['run', 'cli-products', '--wait'],
+      ['run', 'cli-products'],
+    ]) {
+      sent.length = 0;
+      const { io, out, err } = memoryIo();
+      expect(await main(argv, { io, env: ENV, fetch }), argv.join(' ')).toBe(1);
+      expect(err, argv.join(' ')).toEqual([stale]);
+      expect(out, argv.join(' ')).toEqual([]);
+      expect(
+        sent.map(({ method, path }) => ({ method, path })),
+        argv.join(' '),
+      ).toEqual([{ method: 'POST', path: '/datasets/cli-products/runs' }]);
+    }
+  });
+
+  it('says the slot’s sentence when the API gives a run but no words for it', async () => {
+    const { fetch } = stubApi(() => Response.json({ runId: RUN_ID }, { status: 409 }));
+    const { io, out } = memoryIo();
+    expect(await main(['run', 'cli-products'], { io, env: ENV, fetch })).toBe(0);
+    expect(out).toEqual([`A run already started in this five-minute slot: ${RUN_ID}.`]);
+  });
+
   it('stops waiting after an hour', async () => {
     // The API answers running until a run finishes, so a stuck run would keep the CLI asking for
     // ever. The stub's own limit makes a loop that never ends fail this test instead of hanging it.
@@ -312,6 +401,876 @@ describe('run', () => {
     expect(out).toEqual([`Started ${RUN_ID}.`, `Run ${RUN_ID}: complete.`]);
     expect(polls).toBe(lastPoll);
     expect(sleeps).toHaveLength(lastPoll - 1);
+  });
+
+  it('reads every page with --all, and says how many were due', async () => {
+    const complete: RunView = {
+      ...RUNNING,
+      status: 'complete',
+      finishedAt: '2026-10-10T00:01:00.000Z',
+      summary: {
+        items: 2,
+        live: 9,
+        due: 5,
+        fetches: { changed: 1, unchanged: 1, gone: 0, failed: 0, blocked: 0 },
+        statements: { added: 4, reseen: 6, withdrawn: 0 },
+        llm: { ran: 1, reused: 0, skipped: 1, failed: 0, inputTokens: 1000, outputTokens: 50 },
+        entities: { created: 0, linked: 0, conflicts: 0, unresolved: 0 },
+        snapshot: { published: false, reason: 'nothing changed since generation 4', excluded: [] },
+        notes: [],
+      },
+    };
+    const { fetch, sent } = stubApi(({ method }) =>
+      method === 'POST'
+        ? Response.json({ runId: RUN_ID }, { status: 202 })
+        : Response.json(complete),
+    );
+    const { io, out } = memoryIo();
+    expect(await main(['run', 'cli-products', '--all', '--wait'], { io, env: ENV, fetch })).toBe(0);
+    expect(sent[0]!.path).toBe('/datasets/cli-products/runs?all=1');
+    expect(out).toContain(
+      'Pages: 2 read, of 5 due and 9 live. Changed 1, unchanged 1, gone 0, failed 0, blocked 0.',
+    );
+  });
+
+  it('says what the sitemaps listed, and which sources weren’t read completely', async () => {
+    const complete: RunView = {
+      ...RUNNING,
+      status: 'complete',
+      summary: {
+        items: 0,
+        live: 2,
+        due: 0,
+        discovery: {
+          sources: 2,
+          sitemaps: 3,
+          listed: 2,
+          added: 1,
+          revived: 0,
+          missing: 0,
+          gone: 0,
+          incomplete: ['maker-d: https://maker-d.example/sitemap.xml: failed (HTTP 503)'],
+        },
+        fetches: { changed: 0, unchanged: 0, gone: 0, failed: 0, blocked: 0 },
+        statements: { added: 0, reseen: 0, withdrawn: 0 },
+        llm: { ran: 0, reused: 0, skipped: 0, failed: 0, inputTokens: 0, outputTokens: 0 },
+        entities: { created: 0, linked: 0, conflicts: 0, unresolved: 0 },
+        snapshot: { published: false, reason: 'nothing changed since generation 1', excluded: [] },
+        notes: [],
+      },
+    };
+    const { fetch } = stubApi(({ method }) =>
+      method === 'POST'
+        ? Response.json({ runId: RUN_ID }, { status: 202 })
+        : Response.json(complete),
+    );
+    const { io, out } = memoryIo();
+    expect(await main(['run', 'cli-products', '--wait'], { io, env: ENV, fetch })).toBe(0);
+    expect(out).toContain(
+      'Sitemaps: 3 read for 2 sources; 2 pages listed, 1 new, 0 back, 0 missing, 0 gone.',
+    );
+    expect(out).toContain(
+      'Not read completely: maker-d: https://maker-d.example/sitemap.xml: failed (HTTP 503).',
+    );
+  });
+
+  it('names the sources a run paused, and how many pages each left unread', async () => {
+    const printed = async (paused: Record<string, number> | undefined) => {
+      const complete: RunView = {
+        ...RUNNING,
+        status: 'complete',
+        summary: {
+          items: 4,
+          live: 6,
+          due: 6,
+          fetches: { changed: 1, unchanged: 0, gone: 0, failed: 0, blocked: 3 },
+          statements: { added: 0, reseen: 0, withdrawn: 0 },
+          llm: { ran: 0, reused: 0, skipped: 0, failed: 0, inputTokens: 0, outputTokens: 0 },
+          entities: { created: 0, linked: 0, conflicts: 0, unresolved: 0 },
+          snapshot: {
+            published: false,
+            reason: 'nothing changed since generation 1',
+            excluded: [],
+          },
+          notes: [],
+          ...(paused === undefined ? {} : { paused }),
+        },
+      };
+      const { fetch } = stubApi(({ method }) =>
+        method === 'POST'
+          ? Response.json({ runId: RUN_ID }, { status: 202 })
+          : Response.json(complete),
+      );
+      const { io, out } = memoryIo();
+      expect(await main(['run', 'cli-products', '--wait'], { io, env: ENV, fetch })).toBe(0);
+      return out;
+    };
+    const pages =
+      'Pages: 4 read, of 6 due and 6 live. Changed 1, unchanged 0, gone 0, failed 0, blocked 3.';
+    // A run's notes are held to fifty, and the pause's own can be one of those dropped, so the
+    // paused sources are named apart from them.
+    const out = await printed({ 'maker-a': 2, 'maker-b': 1, 'maker-c': 0 });
+    expect(out.slice(2, 4)).toEqual([
+      pages,
+      'Paused after pages in a row were blocked or strained: maker-a, 2 pages unread; maker-b, 1 page unread; maker-c, 0 pages unread.',
+    ]);
+    // Runs from before slice 1, and runs that paused nothing, say nothing of it.
+    expect((await printed(undefined)).join('\n')).not.toContain('Paused');
+    expect((await printed({})).join('\n')).not.toContain('Paused');
+  });
+
+  it('says nothing of sitemaps when no source has any, and counts one page and one source', async () => {
+    const printed = async (discovery: DiscoverySummary) => {
+      const complete: RunView = {
+        ...RUNNING,
+        status: 'complete',
+        summary: {
+          items: 0,
+          discovery,
+          fetches: { changed: 0, unchanged: 0, gone: 0, failed: 0, blocked: 0 },
+          statements: { added: 0, reseen: 0, withdrawn: 0 },
+          llm: { ran: 0, reused: 0, skipped: 0, failed: 0, inputTokens: 0, outputTokens: 0 },
+          entities: { created: 0, linked: 0, conflicts: 0, unresolved: 0 },
+          snapshot: {
+            published: false,
+            reason: 'nothing changed since generation 1',
+            excluded: [],
+          },
+          notes: [],
+        },
+      };
+      const { fetch } = stubApi(({ method }) =>
+        method === 'POST'
+          ? Response.json({ runId: RUN_ID }, { status: 202 })
+          : Response.json(complete),
+      );
+      const { io, out } = memoryIo();
+      expect(await main(['run', 'cli-products', '--wait'], { io, env: ENV, fetch })).toBe(0);
+      return out;
+    };
+    // Every run reports its discovery, so a dataset of pages has one that read nothing.
+    const none = {
+      sources: 0,
+      sitemaps: 0,
+      listed: 0,
+      added: 0,
+      revived: 0,
+      missing: 0,
+      gone: 0,
+      incomplete: [],
+    };
+    expect((await printed(none)).filter((line) => line.startsWith('Sitemaps:'))).toEqual([]);
+    expect(await printed({ ...none, sources: 1, sitemaps: 1, listed: 1, added: 1 })).toContain(
+      'Sitemaps: 1 read for 1 source; 1 page listed, 1 new, 0 back, 0 missing, 0 gone.',
+    );
+  });
+
+  it('says what the run decided', async () => {
+    const complete: RunView = {
+      ...RUNNING,
+      status: 'complete',
+      finishedAt: '2026-10-10T00:01:00.000Z',
+      summary: {
+        items: 12,
+        fetches: { changed: 12, unchanged: 0, gone: 0, failed: 0, blocked: 0 },
+        statements: { added: 60, reseen: 0, withdrawn: 0 },
+        llm: { ran: 12, reused: 0, skipped: 0, failed: 0, inputTokens: 12000, outputTokens: 600 },
+        classify: {
+          rule: 1,
+          accepted: 9,
+          escalated: 2,
+          reused: 0,
+          skipped: 0,
+          failed: 0,
+          inputTokens: 5000,
+          outputTokens: 200,
+        },
+        irrelevant: 1,
+        entities: { created: 9, linked: 0, conflicts: 0, unresolved: 0 },
+        snapshot: { published: true, generation: 3, snapshotId: 'sn_x', records: 9, excluded: [] },
+        notes: [],
+      },
+    };
+    const { fetch } = stubApi(({ method }) =>
+      method === 'POST'
+        ? Response.json({ runId: RUN_ID }, { status: 202 })
+        : Response.json(complete),
+    );
+    const { io, out } = memoryIo();
+    expect(await main(['run', 'cli-products', '--wait'], { io, env: ENV, fetch })).toBe(0);
+    expect(out).toContain(
+      'Classified: 1 by rule, 9 by the decider, 2 for review, 0 as before, 0 for the next run, 0 failed; 5000 tokens in, 200 out.',
+    );
+    expect(out).toContain('Not the dataset’s: 1 page, out until revived.');
+    expect(out.some((line) => line.startsWith('Matched:'))).toBe(false);
+  });
+
+  it('says each kind of decision that was asked, in order, and nothing of one that wasn’t', async () => {
+    const none = {
+      rule: 0,
+      accepted: 0,
+      escalated: 0,
+      reused: 0,
+      skipped: 0,
+      failed: 0,
+      inputTokens: 0,
+      outputTokens: 0,
+    };
+    const printed = async (more: Partial<RunSummary>) => {
+      const complete: RunView = {
+        ...RUNNING,
+        status: 'complete',
+        summary: {
+          items: 0,
+          fetches: { changed: 0, unchanged: 0, gone: 0, failed: 0, blocked: 0 },
+          statements: { added: 0, reseen: 0, withdrawn: 0 },
+          llm: { ran: 0, reused: 0, skipped: 0, failed: 0, inputTokens: 0, outputTokens: 0 },
+          entities: { created: 0, linked: 0, conflicts: 0, unresolved: 0 },
+          snapshot: {
+            published: false,
+            reason: 'nothing changed since generation 1',
+            excluded: [],
+          },
+          notes: [],
+          ...more,
+        },
+      };
+      const { fetch } = stubApi(({ method }) =>
+        method === 'POST'
+          ? Response.json({ runId: RUN_ID }, { status: 202 })
+          : Response.json(complete),
+      );
+      const { io, out } = memoryIo();
+      expect(await main(['run', 'cli-products', '--wait'], { io, env: ENV, fetch })).toBe(0);
+      return out;
+    };
+
+    // A run that asked nothing says nothing, whether its counts are zero or absent.
+    const quiet = await printed({ classify: none, match: none, irrelevant: 0 });
+    expect(quiet.filter((line) => /^(Classified|Matched|Not the dataset)/u.test(line))).toEqual([]);
+
+    const busy = await printed({
+      match: { ...none, accepted: 3, skipped: 1, inputTokens: 1500, outputTokens: 60 },
+      irrelevant: 2,
+    });
+    expect(busy).toContain(
+      'Matched: 0 by rule, 3 by the decider, 0 for review, 0 as before, 1 for the next run, 0 failed; 1500 tokens in, 60 out.',
+    );
+    expect(busy).toContain('Not the dataset’s: 2 pages, out until revived.');
+    expect(busy.some((line) => line.startsWith('Classified:'))).toBe(false);
+    const at = (prefix: string) => busy.findIndex((line) => line.startsWith(prefix));
+    expect(at('LLM:')).toBeLessThan(at('Matched:'));
+    expect(at('Matched:')).toBeLessThan(at('Not the dataset’s:'));
+    expect(at('Not the dataset’s:')).toBeLessThan(at('Entities:'));
+  });
+
+  it('says how many pages wait for a match answer', async () => {
+    const complete: RunView = {
+      ...RUNNING,
+      status: 'complete',
+      finishedAt: '2026-10-10T00:01:00.000Z',
+      summary: {
+        items: 10,
+        fetches: { changed: 10, unchanged: 0, gone: 0, failed: 0, blocked: 0 },
+        statements: { added: 50, reseen: 0, withdrawn: 0 },
+        llm: { ran: 10, reused: 0, skipped: 0, failed: 0, inputTokens: 10000, outputTokens: 500 },
+        match: {
+          rule: 0,
+          accepted: 3,
+          escalated: 2,
+          reused: 0,
+          skipped: 0,
+          failed: 0,
+          inputTokens: 2500,
+          outputTokens: 100,
+        },
+        entities: { created: 9, linked: 1, conflicts: 0, unresolved: 0, waiting: 2 },
+        snapshot: { published: true, generation: 4, snapshotId: 'sn_y', records: 9, excluded: [] },
+        notes: [],
+      },
+    };
+    const { fetch } = stubApi(({ method }) =>
+      method === 'POST'
+        ? Response.json({ runId: RUN_ID }, { status: 202 })
+        : Response.json(complete),
+    );
+    const { io, out } = memoryIo();
+    expect(await main(['run', 'cli-products', '--wait'], { io, env: ENV, fetch })).toBe(0);
+    expect(out).toContain(
+      'Entities: 9 new, 1 linked, 0 conflicts, 0 without an identity yet, 2 waiting for a match answer.',
+    );
+    expect(out).toContain(
+      'Matched: 0 by rule, 3 by the decider, 2 for review, 0 as before, 0 for the next run, 0 failed; 2500 tokens in, 100 out.',
+    );
+  });
+
+  it('says nothing of waiting when no page waits', async () => {
+    const complete: RunView = {
+      ...RUNNING,
+      status: 'complete',
+      finishedAt: '2026-10-10T00:01:00.000Z',
+      summary: {
+        items: 3,
+        fetches: { changed: 3, unchanged: 0, gone: 0, failed: 0, blocked: 0 },
+        statements: { added: 15, reseen: 0, withdrawn: 0 },
+        llm: { ran: 3, reused: 0, skipped: 0, failed: 0, inputTokens: 3000, outputTokens: 150 },
+        entities: { created: 3, linked: 0, conflicts: 0, unresolved: 0, waiting: 0 },
+        snapshot: { published: true, generation: 1, snapshotId: 'sn_z', records: 3, excluded: [] },
+        notes: [],
+      },
+    };
+    const { fetch } = stubApi(({ method }) =>
+      method === 'POST'
+        ? Response.json({ runId: RUN_ID }, { status: 202 })
+        : Response.json(complete),
+    );
+    const { io, out } = memoryIo();
+    expect(await main(['run', 'cli-products', '--wait'], { io, env: ENV, fetch })).toBe(0);
+    expect(out).toContain('Entities: 3 new, 0 linked, 0 conflicts, 0 without an identity yet.');
+  });
+
+  it('says when the run’s snapshot is held for review', async () => {
+    const complete: RunView = {
+      ...RUNNING,
+      status: 'complete',
+      finishedAt: '2026-10-10T00:01:00.000Z',
+      summary: {
+        items: 3,
+        fetches: { changed: 3, unchanged: 0, gone: 0, failed: 0, blocked: 0 },
+        statements: { added: 19, reseen: 0, withdrawn: 0 },
+        llm: { ran: 3, reused: 0, skipped: 0, failed: 0, inputTokens: 3000, outputTokens: 150 },
+        entities: { created: 3, linked: 0, conflicts: 0, unresolved: 0 },
+        snapshot: {
+          published: false,
+          reason: 'it’s held for review: it’s the dataset’s first publication',
+          excluded: [],
+          held: {
+            snapshotId: 'sn_held',
+            records: 3,
+            reasons: ['it’s the dataset’s first publication'],
+          },
+        },
+        notes: [],
+      },
+    };
+    const { fetch } = stubApi(({ method }) =>
+      method === 'POST'
+        ? Response.json({ runId: RUN_ID }, { status: 202 })
+        : Response.json(complete),
+    );
+    const { io, out } = memoryIo();
+    expect(await main(['run', 'cli-products', '--wait'], { io, env: ENV, fetch })).toBe(0);
+    expect(out).toContain(
+      'Snapshot: none published, because it’s held for review: it’s the dataset’s first publication.',
+    );
+    expect(out).toContain('Held: sn_held, 3 records. Publish or discard it with spatula review.');
+  });
+
+  it('says what is held before what was left out, and nothing of it when a snapshot published', async () => {
+    const summary = (snapshot: RunSummary['snapshot']): RunView => ({
+      ...RUNNING,
+      status: 'complete',
+      finishedAt: '2026-10-10T00:01:00.000Z',
+      summary: {
+        items: 3,
+        fetches: { changed: 3, unchanged: 0, gone: 0, failed: 0, blocked: 0 },
+        statements: { added: 19, reseen: 0, withdrawn: 0 },
+        llm: { ran: 3, reused: 0, skipped: 0, failed: 0, inputTokens: 3000, outputTokens: 150 },
+        entities: { created: 3, linked: 0, conflicts: 0, unresolved: 0 },
+        snapshot,
+        notes: [],
+      },
+    });
+    const run = async (snapshot: RunSummary['snapshot']) => {
+      const { fetch } = stubApi(({ method }) =>
+        method === 'POST'
+          ? Response.json({ runId: RUN_ID }, { status: 202 })
+          : Response.json(summary(snapshot)),
+      );
+      const { io, out } = memoryIo();
+      expect(await main(['run', 'cli-products', '--wait'], { io, env: ENV, fetch })).toBe(0);
+      return out;
+    };
+
+    const held = await run({
+      published: false,
+      reason: 'it’s held for review: the dataset’s approval is manual',
+      excluded: [{ canonicalId: 'sp_x', missing: ['category'] }],
+      held: { snapshotId: 'sn_held', records: 2, reasons: ['the dataset’s approval is manual'] },
+    });
+    expect(held.filter((line) => /^(Snapshot|Held|Left out):/u.test(line))).toEqual([
+      'Snapshot: none published, because it’s held for review: the dataset’s approval is manual.',
+      'Held: sn_held, 2 records. Publish or discard it with spatula review.',
+      'Left out: sp_x, missing category.',
+    ]);
+
+    const publishedOne = await run({
+      published: true,
+      generation: 2,
+      snapshotId: 'sn_new',
+      records: 3,
+      excluded: [],
+    });
+    expect(publishedOne.some((line) => line.startsWith('Held:'))).toBe(false);
+  });
+});
+
+describe('revive', () => {
+  it('puts refused pages, or the pages named, back for the next run', async () => {
+    const { fetch, sent } = stubApi(() => Response.json({ revived: 2 }));
+    const { io, out } = memoryIo();
+    const argv = ['revive', 'cli-products', '--refused', 'https://maker-a.example/products/a1'];
+    expect(await main(argv, { io, env: ENV, fetch })).toBe(0);
+    expect(sent[0]).toMatchObject({
+      method: 'POST',
+      path: '/datasets/cli-products/items/revive',
+      body: { refused: true, pages: ['https://maker-a.example/products/a1'] },
+    });
+    expect(out).toEqual(['Revived 2 pages of cli-products. The next run reads them.']);
+  });
+
+  it('says when nothing matched, not that the next run reads it', async () => {
+    const { fetch } = stubApi(() => Response.json({ revived: 0 }));
+    const { io, out, err } = memoryIo();
+    expect(await main(['revive', 'cli-products', '--refused'], { io, env: ENV, fetch })).toBe(0);
+    expect(out).toEqual(['Nothing matched in cli-products, so no page was revived.']);
+    expect(err).toEqual([]);
+  });
+
+  it('reports a dataset Spatula doesn’t have', async () => {
+    const { fetch } = stubApi(() =>
+      Response.json({ error: 'Dataset nothing doesn’t exist.' }, { status: 404 }),
+    );
+    const { io, out, err } = memoryIo();
+    expect(await main(['revive', 'nothing', '--refused'], { io, env: ENV, fetch })).toBe(1);
+    expect(err).toEqual(['Dataset nothing doesn’t exist.']);
+    expect(out).toEqual([]);
+  });
+
+  it('needs pages to revive, or --refused', async () => {
+    const { io } = memoryIo();
+    expect(await main(['revive', 'cli-products'], { io, env: ENV })).toBe(2);
+  });
+});
+
+describe('review', () => {
+  const PUBLISH_CONTEXT = {
+    snapshotId: 'sn_held',
+    records: 412,
+    added: 412,
+    removed: 0,
+    reasons: ['it’s the dataset’s first publication'],
+    previousGeneration: null,
+  };
+  const REVIEWS: ReviewView[] = [
+    {
+      id: 'rv_classify',
+      kind: 'classify',
+      subject: 'it_a1',
+      question: {
+        type: 'choice',
+        prompt: 'Which category does the one product this page is about have?',
+        options: ['Headphones', 'DAC/Amp', 'None of these'],
+      },
+      context: {
+        url: 'https://maker-a.example/products/a1',
+        field: 'category',
+        proposed: 'Headphones',
+        probabilities: { Headphones: 0.62, 'DAC/Amp': 0.3 },
+        reason: 'It sits over the ears.',
+      },
+      createdAt: '2026-10-10T00:00:00.000Z',
+    },
+    {
+      id: 'rv_publish',
+      kind: 'publication',
+      subject: 'sn_held',
+      question: {
+        type: 'choice',
+        prompt: 'Publish this held snapshot?',
+        options: ['publish', 'discard'],
+      },
+      context: { ...PUBLISH_CONTEXT, incomplete: 3, openClassify: 2, openMatch: 1 },
+      createdAt: '2026-10-10T00:01:00.000Z',
+    },
+  ];
+
+  /** What `spatula review cli-products` prints for these questions. */
+  async function listed(reviews: ReviewView[]) {
+    const { fetch } = stubApi(() => Response.json({ reviews }));
+    const { io, out, err } = memoryIo();
+    expect(await main(['review', 'cli-products'], { io, env: ENV, fetch })).toBe(0);
+    expect(err).toEqual([]);
+    return out;
+  }
+
+  /** The held snapshot's question, with these in its context. */
+  const publication = (context: Record<string, unknown>): ReviewView => ({
+    ...REVIEWS[1]!,
+    context: { ...PUBLISH_CONTEXT, ...context },
+  });
+
+  it('lists the open questions, with what each proposes and how to answer', async () => {
+    const { fetch, sent } = stubApi(() => Response.json({ reviews: REVIEWS }));
+    const { io, out } = memoryIo();
+    expect(await main(['review', 'cli-products'], { io, env: ENV, fetch })).toBe(0);
+    expect(sent[0]).toMatchObject({ method: 'GET', path: '/datasets/cli-products/review' });
+    expect(out).toEqual([
+      '2 questions wait for an answer.',
+      '',
+      'rv_classify  classify  https://maker-a.example/products/a1',
+      '  Which category does the one product this page is about have?',
+      '  Proposed: Headphones (0.62). It sits over the ears.',
+      '  Answers: Headphones | DAC/Amp | None of these',
+      '',
+      'rv_publish  publication  sn_held',
+      '  Publish this held snapshot? 412 records: 412 new, 0 removed.',
+      '  Held because it’s the dataset’s first publication.',
+      '  Left out as incomplete: 3. Open questions: 2 classify, 1 match.',
+      '  Answers: publish | discard',
+      '',
+      'Answer with: spatula review cli-products <id> "<answer>"',
+    ]);
+  });
+
+  // A match question as a run asks it now: it names the record by its ID, which is how a refusal
+  // names it, and by the address of the page that stands for the record.
+  const MATCH_CONTEXT = {
+    page: 'https://maker-a.example/products/a3',
+    entity: 'https://maker-a.example/products/a1',
+    proposed: 'same',
+    probabilities: { same: 0.5, variant: 0.45 },
+    reason: 'The names agree.',
+  };
+  const MATCH: ReviewView = {
+    id: 'rv_match',
+    kind: 'match',
+    subject: 'it_a3|sp_one',
+    question: {
+      type: 'choice',
+      prompt: 'Is this page the same product as the record?',
+      options: ['same', 'variant', 'different'],
+    },
+    context: { ...MATCH_CONTEXT, record: 'sp_one' },
+    createdAt: '2026-10-10T00:00:00.000Z',
+  };
+
+  it('shows a match question’s page and record, and a question that waits alone in the singular', async () => {
+    const out = await listed([MATCH]);
+    expect(out).toEqual([
+      '1 question waits for an answer.',
+      '',
+      'rv_match  match  https://maker-a.example/products/a3 and sp_one (https://maker-a.example/products/a1)',
+      '  Is this page the same product as the record?',
+      '  Proposed: same (0.50). The names agree.',
+      '  Answers: same | variant | different',
+      '',
+      'Answer with: spatula review cli-products <id> "<answer>"',
+    ]);
+  });
+
+  it('names the two pages alone for a match question asked before it named the record', async () => {
+    const out = await listed([{ ...MATCH, context: MATCH_CONTEXT }]);
+    expect(out[2]).toBe(
+      'rv_match  match  https://maker-a.example/products/a3 and https://maker-a.example/products/a1',
+    );
+    // An empty record, or one that isn't text, is no record.
+    for (const record of ['', null, 7]) {
+      const listing = await listed([{ ...MATCH, context: { ...MATCH_CONTEXT, record } }]);
+      expect(listing[2], JSON.stringify(record)).toBe(out[2]);
+    }
+  });
+
+  it('shows what the decider proposed as far as it said, and why where it proposed nothing', async () => {
+    const shown = (context: Record<string, unknown>) =>
+      listed([{ ...REVIEWS[0]!, context: { url: 'https://maker-a.example/a1', ...context } }]);
+    const proposals = async (context: Record<string, unknown>) =>
+      (await shown(context)).filter((line) => line.startsWith('  Proposed'));
+    expect(
+      await proposals({ proposed: 'Headphones', probabilities: { Headphones: 0.62 } }),
+    ).toEqual(['  Proposed: Headphones (0.62).']);
+    expect(await proposals({ proposed: 'Headphones', reason: 'It sits over the ears.' })).toEqual([
+      '  Proposed: Headphones. It sits over the ears.',
+    ]);
+    expect(
+      await proposals({
+        proposed: null,
+        probabilities: {},
+        reason: 'The decider named no answer.',
+      }),
+    ).toEqual([]);
+
+    // Where nothing was proposed, the reason is still the one thing the decider said.
+    expect(
+      await shown({ proposed: null, probabilities: {}, reason: 'The decider named no answer.' }),
+    ).toEqual([
+      '1 question waits for an answer.',
+      '',
+      'rv_classify  classify  https://maker-a.example/a1',
+      '  Which category does the one product this page is about have?',
+      '  Nothing proposed. The decider named no answer.',
+      '  Answers: Headphones | DAC/Amp | None of these',
+      '',
+      'Answer with: spatula review cli-products <id> "<answer>"',
+    ]);
+    // With no reason either, there is nothing to say.
+    for (const context of [{ proposed: null, probabilities: {} }, { reason: '' }, {}]) {
+      const lines = await shown(context);
+      expect(
+        lines.filter((line) => /^ {2}(Proposed|Nothing proposed)/u.test(line)),
+        JSON.stringify(context),
+      ).toEqual([]);
+      expect(lines, JSON.stringify(context)).toHaveLength(7);
+    }
+  });
+
+  it('counts a held snapshot’s records, and how many of them are new and how many went', async () => {
+    const out = await listed([publication({ records: 10, added: 4, removed: 2 })]);
+    expect(out).toContain('  Publish this held snapshot? 10 records: 4 new, 2 removed.');
+  });
+
+  it('says why records left a held snapshot only for the numbers that are above zero', async () => {
+    const heldLines = async (context: Record<string, unknown>) =>
+      (await listed([publication(context)])).filter(
+        (line) => line.includes('Left out as incomplete') || line.includes('Open questions'),
+      );
+    expect(await heldLines({ incomplete: 3, openClassify: 2, openMatch: 1 })).toEqual([
+      '  Left out as incomplete: 3. Open questions: 2 classify, 1 match.',
+    ]);
+    expect(await heldLines({ incomplete: 3, openClassify: 0, openMatch: 0 })).toEqual([
+      '  Left out as incomplete: 3.',
+    ]);
+    expect(await heldLines({ incomplete: 0, openClassify: 0, openMatch: 2 })).toEqual([
+      '  Open questions: 0 classify, 2 match.',
+    ]);
+    // Nothing left out and nothing open, or a question from before the counts: no such line.
+    expect(await heldLines({ incomplete: 0, openClassify: 0, openMatch: 0 })).toEqual([]);
+    expect(await heldLines({})).toEqual([]);
+  });
+
+  it('sends an answer, and prints what it did', async () => {
+    const { fetch, sent } = stubApi(() =>
+      Response.json({
+        answered: 'rv_classify',
+        answer: 'DAC/Amp',
+        effect: 'The page’s category is DAC/Amp. The next run publishes it.',
+      }),
+    );
+    const { io, out } = memoryIo();
+    expect(
+      await main(['review', 'cli-products', 'rv_classify', 'DAC/Amp'], { io, env: ENV, fetch }),
+    ).toBe(0);
+    expect(sent[0]).toMatchObject({
+      method: 'POST',
+      path: '/datasets/cli-products/review/rv_classify',
+      body: { answer: 'DAC/Amp' },
+      authorization: 'Bearer owner-token',
+    });
+    expect(out).toEqual([
+      'Answered rv_classify: DAC/Amp. The page’s category is DAC/Amp. The next run publishes it.',
+    ]);
+  });
+
+  it('answers without a trailing space when the API says nothing of the effect', async () => {
+    const { fetch } = stubApi(() => Response.json({ answered: 'rv_publish', answer: 'publish' }));
+    const { io, out } = memoryIo();
+    expect(
+      await main(['review', 'cli-products', 'rv_publish', 'publish'], { io, env: ENV, fetch }),
+    ).toBe(0);
+    expect(out).toEqual(['Answered rv_publish: publish.']);
+  });
+
+  it('keeps a dataset’s name and a question’s ID to their place in the address', async () => {
+    const { fetch, sent } = stubApi(() => Response.json({ reviews: [] }));
+    const { io } = memoryIo();
+    await main(['review', 'a b/c'], { io, env: ENV, fetch });
+    await main(['review', 'a b/c', 'rv ?x', 'None of these'], { io, env: ENV, fetch });
+    expect(sent.map(({ method, path }) => ({ method, path }))).toEqual([
+      { method: 'GET', path: '/datasets/a%20b%2Fc/review' },
+      { method: 'POST', path: '/datasets/a%20b%2Fc/review/rv%20%3Fx' },
+    ]);
+    expect(sent[1]!.body).toEqual({ answer: 'None of these' });
+  });
+
+  it('says when nothing waits, and needs both an ID and an answer to answer', async () => {
+    const { fetch, sent } = stubApi(() => Response.json({ reviews: [] }));
+    const { io, out } = memoryIo();
+    expect(await main(['review', 'cli-products'], { io, env: ENV, fetch })).toBe(0);
+    expect(out).toEqual(['No questions wait for an answer.']);
+    const { io: called, err } = memoryIo();
+    const calls = sent.length;
+    // An ID with no answer, no dataset, and more than an answer are mistakes in the call.
+    for (const argv of [
+      ['review', 'cli-products', 'rv_classify'],
+      ['review'],
+      ['review', 'cli-products', 'rv_classify', 'DAC/Amp', 'extra'],
+    ]) {
+      expect(await main(argv, { io: called, env: ENV, fetch }), argv.join(' ')).toBe(2);
+    }
+    expect(err.slice(0, USAGE.split('\n').length)).toEqual(USAGE.split('\n'));
+    expect(sent).toHaveLength(calls);
+  });
+
+  it('shows why the API refused an answer, and exits 1', async () => {
+    const reason =
+      'A person already said this page is the same product as sp_one, and a page joins one record. Answer variant or different.';
+    const { fetch } = stubApi(() => Response.json({ error: reason }, { status: 409 }));
+    const { io, out, err } = memoryIo();
+    expect(await main(['review', 'cli-products', 'rv_m', 'same'], { io, env: ENV, fetch })).toBe(1);
+    expect(err).toEqual([reason]);
+    expect(out).toEqual([]);
+  });
+
+  it('shows why the API refused to list the questions, and exits 1', async () => {
+    const { fetch } = stubApi(() =>
+      Response.json({ error: 'The owner token is missing or wrong.' }, { status: 401 }),
+    );
+    const { io, out, err } = memoryIo();
+    expect(await main(['review', 'cli-products'], { io, env: ENV, fetch })).toBe(1);
+    expect(err).toEqual(['The owner token is missing or wrong.']);
+    expect(out).toEqual([]);
+  });
+
+  it('reports a dataset Spatula doesn’t have, as revive does, and sends only the listing', async () => {
+    const { fetch, sent } = stubApi(() =>
+      Response.json({ error: 'Dataset nothing doesn’t exist.' }, { status: 404 }),
+    );
+    const { io, out, err } = memoryIo();
+    expect(await main(['review', 'nothing'], { io, env: ENV, fetch })).toBe(1);
+    expect(err).toEqual(['Dataset nothing doesn’t exist.']);
+    expect(out).toEqual([]);
+    expect(sent.map(({ method, path }) => ({ method, path }))).toEqual([
+      { method: 'GET', path: '/datasets/nothing/review' },
+    ]);
+  });
+});
+
+describe('status', () => {
+  const STATUS: DatasetStatus = {
+    dataset: 'cli-products',
+    revision: 3,
+    headGeneration: 4,
+    held: {
+      snapshotId: 'sn_held',
+      records: 412,
+      reason: 'the definition changed since the last publication (revision 2 to 3)',
+      createdAt: '2026-10-12T10:00:00.000Z',
+    },
+    reviews: { classify: 3, match: 2, publication: 1 },
+    consumers: [
+      {
+        name: 'crowdio',
+        generation: 4,
+        outcome: 'applied',
+        receivedAt: '2026-10-12T09:00:00.000Z',
+      },
+      { name: 'other', generation: null, outcome: null, receivedAt: null },
+    ],
+  };
+
+  it('says where a dataset stands', async () => {
+    const { fetch, sent } = stubApi(() => Response.json(STATUS));
+    const { io, out } = memoryIo();
+    expect(await main(['status', 'cli-products'], { io, env: ENV, fetch })).toBe(0);
+    expect(sent[0]).toMatchObject({ method: 'GET', path: '/datasets/cli-products/status' });
+    expect(out).toEqual([
+      'cli-products, revision 3: generation 4 is published.',
+      'Held: sn_held, 412 records, because the definition changed since the last publication (revision 2 to 3).',
+      'Waiting for review: 3 classify, 2 match, 1 publication.',
+      'crowdio: applied generation 4 at 2026-10-12T09:00:00.000Z.',
+      'other: has acknowledged nothing yet.',
+    ]);
+  });
+
+  it('says what is missing: nothing published, nothing held, nothing waiting, nobody listed', async () => {
+    const fresh: DatasetStatus = {
+      dataset: 'cli-new',
+      revision: 1,
+      headGeneration: 0,
+      held: null,
+      reviews: { classify: 0, match: 0, publication: 0 },
+      consumers: [],
+    };
+    const { fetch } = stubApi(() => Response.json(fresh));
+    const { io, out, err } = memoryIo();
+    expect(await main(['status', 'cli-new'], { io, env: ENV, fetch })).toBe(0);
+    expect(out).toEqual([
+      'cli-new, revision 1: nothing is published yet.',
+      'Nothing waits for review.',
+    ]);
+    expect(err).toEqual([]);
+  });
+
+  it('names a refusal as it names an application, and a hold that gave no reason', async () => {
+    const status: DatasetStatus = {
+      ...STATUS,
+      held: {
+        snapshotId: 'sn_held',
+        records: 2,
+        reason: null,
+        createdAt: '2026-10-12T10:00:00.000Z',
+      },
+      reviews: { classify: 0, match: 0, publication: 1 },
+      consumers: [
+        {
+          name: 'crowdio',
+          generation: 2,
+          outcome: 'refused',
+          receivedAt: '2026-10-12T09:00:00.000Z',
+        },
+      ],
+    };
+    const { fetch } = stubApi(() => Response.json(status));
+    const { io, out } = memoryIo();
+    expect(await main(['status', 'cli-products'], { io, env: ENV, fetch })).toBe(0);
+    expect(out).toEqual([
+      'cli-products, revision 3: generation 4 is published.',
+      'Held: sn_held, 2 records.',
+      'Waiting for review: 0 classify, 0 match, 1 publication.',
+      'crowdio: refused generation 2 at 2026-10-12T09:00:00.000Z.',
+    ]);
+  });
+
+  it('keeps a dataset’s name to its place in the address', async () => {
+    const { fetch, sent } = stubApi(() => Response.json(STATUS));
+    const { io } = memoryIo();
+    await main(['status', 'a b/c'], { io, env: ENV, fetch });
+    expect(sent.map(({ method, path }) => ({ method, path }))).toEqual([
+      { method: 'GET', path: '/datasets/a%20b%2Fc/status' },
+    ]);
+  });
+
+  it('shows why the API refused, and exits 1', async () => {
+    const stale =
+      'Dataset cli-products’s stored definition no longer passes the checks (consumers.0: Use lowercase letters, digits, and hyphens, up to 63 characters.). Apply it again.';
+    for (const [status, error] of [
+      [404, 'Dataset nothing doesn’t exist.'],
+      [401, 'The owner token is missing or wrong.'],
+      [409, stale],
+    ] as const) {
+      const { fetch } = stubApi(() => Response.json({ error }, { status }));
+      const { io, out, err } = memoryIo();
+      expect(await main(['status', 'cli-products'], { io, env: ENV, fetch }), `${status}`).toBe(1);
+      expect(err).toEqual([error]);
+      expect(out).toEqual([]);
+    }
+  });
+
+  it('needs exactly one dataset', async () => {
+    const { fetch, sent } = stubApi(() => Response.json(STATUS));
+    const { io, out, err } = memoryIo();
+    for (const argv of [['status'], ['status', 'cli-products', 'extra']]) {
+      expect(await main(argv, { io, env: ENV, fetch }), argv.join(' ')).toBe(2);
+    }
+    expect(err.slice(0, USAGE.split('\n').length)).toEqual(USAGE.split('\n'));
+    expect(out).toEqual([]);
+    expect(sent).toHaveLength(0);
+  });
+
+  it('is in the usage, with the apostrophe every other message uses', () => {
+    expect(USAGE).toContain('status <dataset>');
+    expect(USAGE).toContain('what’s held');
+    expect(USAGE).not.toContain("what's held");
   });
 });
 
@@ -480,6 +1439,462 @@ describe('snapshot pull', () => {
       "Couldn’t write snapshot.json: EACCES: permission denied, open '/locked/.snapshot.json.tmp'",
     ]);
     expect(out).toEqual([]);
+  });
+});
+
+describe('eval', () => {
+  const A2 = 'https://maker-a.example/products/a2';
+  const GOLDEN = {
+    dataset: 'cli-products',
+    version: 2,
+    checked: '2026-10-14',
+    identifiers: ['gtins', 'mpns'],
+    specs: 'specs',
+    products: [
+      {
+        key: 'maker-a-a2',
+        pages: [A2],
+        fields: { brand: 'Maker A', name: 'A2', gtins: ['04006381333931'] },
+        checkedAgainst: ['https://retailer.example/a2'],
+      },
+    ],
+  };
+  const snapshotOf = (records: { canonicalId: string; fields: Record<string, unknown> }[]) =>
+    JSON.stringify({
+      project: 'cli-products',
+      snapshotId: 'sn_x',
+      generation: 3,
+      publishedAt: '2026-10-14T00:00:00.000Z',
+      records: records.map((record) => ({ ...record, provenance: {} })),
+    });
+  const SNAPSHOT = snapshotOf([
+    {
+      canonicalId: 'sp_a2',
+      fields: { brand: 'Maker A', name: 'A2', gtins: ['04006381333931'] },
+    },
+  ]);
+  const item = (locator: string, entityId: string | null): ItemView => ({
+    locator,
+    sourceId: 'maker-a',
+    status: 'live',
+    entityId,
+  });
+
+  /**
+   * Spatula's answers, with the snapshot's real hash, which the command checks, unless a test
+   * says another. A score is kept (201), and the history is empty.
+   */
+  async function serve(
+    options: { snapshot?: string; items?: ItemView[]; headers?: Record<string, string> } = {},
+  ) {
+    const snapshot = options.snapshot ?? SNAPSHOT;
+    const headers = {
+      'x-spatula-sha256': await sha256Hex(snapshot),
+      'x-spatula-generation': '3',
+      'x-spatula-snapshot-id': 'sn_x',
+      ...options.headers,
+    };
+    return stubApi(({ method, path }) => {
+      if (path.endsWith('/items'))
+        return Response.json({ items: options.items ?? [item(A2, 'sp_a2')] });
+      if (path.includes('/snapshots/')) return new Response(snapshot, { headers });
+      if (method === 'POST') return Response.json({ id: 'ev_1' }, { status: 201 });
+      return Response.json({ evals: [] });
+    });
+  }
+
+  it('scores the latest snapshot against a golden set, and keeps the score with --save', async () => {
+    const { fetch, sent } = await serve();
+    const { io, out } = memoryIo({ 'golden.json': JSON.stringify(GOLDEN) });
+    expect(await main(['eval', 'golden.json', '--save'], { io, env: ENV, fetch })).toBe(0);
+    expect(out).toEqual([
+      'cli-products, generation 3, against golden set version 2 (1 product):',
+      'Precision: 100.0% (target 99%): met.',
+      'Recall: 100.0%, 1 of 1 found (target 90%): met.',
+      'Identifiers: 100.0% of 1 stated (target 98%): met.',
+      'Key specs: none checked.',
+      'Fields: brand 100.0% of 1, gtins 100.0% of 1, name 100.0% of 1.',
+      'Saved the score.',
+    ]);
+    expect(sent.at(-1)).toMatchObject({
+      method: 'POST',
+      path: '/datasets/cli-products/evals',
+      body: { generation: 3, goldenVersion: 2, scores: { precision: 1, recall: 1, found: 1 } },
+    });
+  });
+
+  it('keeps the score only when asked to', async () => {
+    const { fetch, sent } = await serve();
+    const { io, out } = memoryIo({ 'golden.json': JSON.stringify(GOLDEN) });
+    expect(await main(['eval', 'golden.json'], { io, env: ENV, fetch })).toBe(0);
+    expect(sent.map(({ method, path }) => `${method} ${path}`)).toEqual([
+      'GET /datasets/cli-products/snapshots/latest',
+      'GET /datasets/cli-products/items',
+    ]);
+    expect(out).not.toContain('Saved the score.');
+  });
+
+  it('lists what missed, what the records left out, and what spread over several records', async () => {
+    const golden = {
+      ...GOLDEN,
+      products: [
+        {
+          ...GOLDEN.products[0]!,
+          fields: {
+            ...GOLDEN.products[0]!.fields,
+            mpns: ['A-2'],
+            specs: [{ label: 'Impedance', value: '32 Ω' }],
+          },
+        },
+        {
+          key: 'maker-a-a1',
+          pages: ['https://maker-a.example/products/a1', 'https://maker-a.example/products/a1-new'],
+          fields: { name: 'A1' },
+          checkedAgainst: ['https://retailer.example/a1'],
+        },
+      ],
+    };
+    const snapshot = snapshotOf([
+      {
+        canonicalId: 'sp_a2',
+        fields: { brand: 'Maker A', name: 'A2 Pro', gtins: ['04006381333931'] },
+      },
+      { canonicalId: 'sp_a1', fields: { name: 'A1' } },
+      { canonicalId: 'sp_a1_new', fields: { name: 'A1 New' } },
+    ]);
+    const { fetch } = await serve({
+      snapshot,
+      items: [
+        item(A2, 'sp_a2'),
+        item('https://maker-a.example/products/a1', 'sp_a1'),
+        item('https://maker-a.example/products/a1-new', 'sp_a1_new'),
+      ],
+    });
+    const { io, out } = memoryIo({ 'golden.json': JSON.stringify(golden) });
+    expect(await main(['eval', 'golden.json'], { io, env: ENV, fetch })).toBe(0);
+    expect(out).toEqual([
+      'cli-products, generation 3, against golden set version 2 (2 products):',
+      'Precision: 100.0% (target 99%): met.',
+      'Recall: 100.0%, 2 of 2 found (target 90%): met.',
+      'Identifiers: 100.0% of 1 stated, 1 left out (target 98%): met.',
+      'Key specs: none checked, 1 left out: not met.',
+      'Fields: brand 100.0% of 1, gtins 100.0% of 1, mpns none checked (1 left out), name 50.0% of 2.',
+      'Spread over several records: 1.',
+      'Misses:',
+      '  maker-a-a2: name is A2 Pro, not A2',
+      '  maker-a-a2: mpns is missing, not A-2',
+      '  maker-a-a2: specs Impedance is missing, not 32 Ω',
+      '  maker-a-a1: spread over 2 records',
+    ]);
+  });
+
+  it('floors a share to one decimal, so a score just under its target never reads as met', async () => {
+    // 98 products: 96 have a record of their own, and the last two share one. So 97 records touch
+    // the golden products and 96 of them are pure, a precision of 0.98969, under the target of 99%.
+    const page = (index: number) => `https://maker-a.example/products/p-${index}`;
+    const golden = {
+      ...GOLDEN,
+      products: Array.from({ length: 98 }, (_, index) => ({
+        key: `maker-a-p-${index}`,
+        pages: [page(index)],
+        fields: {},
+        checkedAgainst: ['https://retailer.example/p'],
+      })),
+    };
+    const recordOf = (index: number) => (index < 96 ? `sp_${index}` : 'sp_shared');
+    const snapshot = snapshotOf([
+      ...Array.from({ length: 96 }, (_, index) => ({ canonicalId: `sp_${index}`, fields: {} })),
+      { canonicalId: 'sp_shared', fields: {} },
+    ]);
+    const { fetch } = await serve({
+      snapshot,
+      items: Array.from({ length: 98 }, (_, index) => item(page(index), recordOf(index))),
+    });
+    const { io, out } = memoryIo({ 'golden.json': JSON.stringify(golden) });
+    expect(await main(['eval', 'golden.json'], { io, env: ENV, fetch })).toBe(0);
+    expect(out).toEqual([
+      'cli-products, generation 3, against golden set version 2 (98 products):',
+      'Precision: 98.9% (target 99%): not met.',
+      'Recall: 100.0%, 98 of 98 found (target 90%): met.',
+      'Identifiers: none checked.',
+      'Key specs: none checked.',
+      'Misses:',
+      '  sp_shared mixes maker-a-p-96, maker-a-p-97',
+    ]);
+  });
+
+  it('scores nothing when the snapshot’s hash isn’t the one Spatula sent', async () => {
+    const { fetch, sent } = await serve({ headers: { 'x-spatula-sha256': '0'.repeat(64) } });
+    const { io, out, err } = memoryIo({ 'golden.json': JSON.stringify(GOLDEN) });
+    expect(await main(['eval', 'golden.json', '--save'], { io, env: ENV, fetch })).toBe(1);
+    expect(err).toEqual([
+      `The snapshot’s SHA-256 doesn’t match what Spatula said (${'0'.repeat(64)}). Nothing was scored.`,
+    ]);
+    expect(out).toEqual([]);
+    expect(sent.map((request) => request.method)).toEqual(['GET']);
+  });
+
+  it.each<{ label: string; snapshot: string; headers: Record<string, string>; said: string }>([
+    {
+      label: 'is not JSON',
+      snapshot: 'not json',
+      headers: {},
+      said: 'The snapshot isn’t JSON. Nothing was scored.',
+    },
+    {
+      label: 'is not in the published format',
+      snapshot: JSON.stringify({ project: 'cli-products' }),
+      headers: {},
+      said: 'The snapshot isn’t cli-products’s, in the published format. Nothing was scored.',
+    },
+    {
+      label: 'is for another dataset',
+      snapshot: SNAPSHOT.replace('"project":"cli-products"', '"project":"other-products"'),
+      headers: {},
+      said: 'The snapshot isn’t cli-products’s, in the published format. Nothing was scored.',
+    },
+    {
+      label: 'says another generation than Spatula did',
+      snapshot: SNAPSHOT,
+      headers: { 'x-spatula-generation': '4' },
+      said: 'The snapshot says generation 3 (sn_x), but Spatula said generation 4 (sn_x). Nothing was scored.',
+    },
+    {
+      label: 'says another ID than Spatula did',
+      snapshot: SNAPSHOT,
+      headers: { 'x-spatula-snapshot-id': 'sn_y' },
+      said: 'The snapshot says generation 3 (sn_x), but Spatula said generation 3 (sn_y). Nothing was scored.',
+    },
+  ])('scores nothing when the snapshot $label', async ({ snapshot, headers, said }) => {
+    // The hash is right for what was sent, so only these checks can tell.
+    const { fetch, sent } = await serve({ snapshot, headers });
+    const { io, out, err } = memoryIo({ 'golden.json': JSON.stringify(GOLDEN) });
+    expect(await main(['eval', 'golden.json', '--save'], { io, env: ENV, fetch })).toBe(1);
+    expect(err).toEqual([said]);
+    expect(out).toEqual([]);
+    expect(sent.map(({ method, path }) => `${method} ${path}`)).toEqual([
+      'GET /datasets/cli-products/snapshots/latest',
+    ]);
+  });
+
+  it('says so, after the scores, when the score can’t be kept', async () => {
+    const headers = {
+      'x-spatula-sha256': await sha256Hex(SNAPSHOT),
+      'x-spatula-generation': '3',
+      'x-spatula-snapshot-id': 'sn_x',
+    };
+    const { fetch } = stubApi(({ method, path }) => {
+      if (path.endsWith('/items')) return Response.json({ items: [item(A2, 'sp_a2')] });
+      if (method === 'POST') {
+        return Response.json({ error: 'Dataset cli-products doesn’t exist.' }, { status: 404 });
+      }
+      return new Response(SNAPSHOT, { headers });
+    });
+    const { io, out, err } = memoryIo({ 'golden.json': JSON.stringify(GOLDEN) });
+    expect(await main(['eval', 'golden.json', '--save'], { io, env: ENV, fetch })).toBe(1);
+    expect(out).toHaveLength(6);
+    expect(out).not.toContain('Saved the score.');
+    expect(err).toEqual(['Dataset cli-products doesn’t exist.']);
+  });
+
+  it('refuses a golden set that isn’t one', async () => {
+    const { fetch, sent } = await serve();
+    const { io, out, err } = memoryIo({
+      'golden.json': JSON.stringify({ dataset: 'cli-products' }),
+    });
+    expect(await main(['eval', 'golden.json'], { io, env: ENV, fetch })).toBe(1);
+    expect(err[0]).toBe('golden.json isn’t a golden set:');
+    expect(err.length).toBeGreaterThan(1);
+    expect(err.slice(1).every((line) => /^ {2}\S/u.test(line))).toBe(true);
+    expect(out).toEqual([]);
+    expect(sent).toEqual([]);
+  });
+
+  it('lists the first 20 problems of a golden set that has more', async () => {
+    const bad = { key: 'Bad Key', pages: ['http://a.example/x'], fields: {}, checkedAgainst: [] };
+    const golden = { ...GOLDEN, products: Array.from({ length: 25 }, () => bad) };
+    const { fetch } = await serve();
+    const { io, err } = memoryIo({ 'golden.json': JSON.stringify(golden) });
+    expect(await main(['eval', 'golden.json'], { io, env: ENV, fetch })).toBe(1);
+    expect(err).toHaveLength(21);
+    expect(err[1]).toMatch(/^ {2}products\.0\./u);
+  });
+
+  it('says so when the golden set can’t be read or isn’t JSON, and sends nothing', async () => {
+    const { fetch, sent } = await serve();
+    const { io, out, err } = memoryIo({ 'broken.json': '{ "dataset": ' });
+    expect(await main(['eval', 'missing.json'], { io, env: ENV, fetch })).toBe(1);
+    expect(await main(['eval', 'broken.json'], { io, env: ENV, fetch })).toBe(1);
+    expect(err).toHaveLength(2);
+    expect(err[0]).toBe('missing.json can’t be read: no such file');
+    expect(err[1]).toMatch(/^broken\.json isn’t JSON: \S/u);
+    expect(out).toEqual([]);
+    expect(sent).toEqual([]);
+  });
+
+  it('needs exactly one golden set', async () => {
+    const { fetch, sent } = await serve();
+    const { io, out, err } = memoryIo();
+    for (const argv of [['eval'], ['eval', 'a.json', 'b.json']]) {
+      expect(await main(argv, { io, env: ENV, fetch }), argv.join(' ')).toBe(2);
+    }
+    expect(err.slice(0, USAGE.split('\n').length)).toEqual(USAGE.split('\n'));
+    expect(out).toEqual([]);
+    expect(sent).toHaveLength(0);
+  });
+});
+
+describe('evals', () => {
+  const score = (identifiers: Record<string, number>, keySpecs: Record<string, number>) =>
+    ({
+      precision: 1,
+      recall: 0.92,
+      identifiers,
+      keySpecs,
+    }) as unknown as EvalView['scores'];
+
+  it('shows the history of a dataset’s scores', async () => {
+    const saved: EvalView[] = [
+      {
+        id: 'ev_2',
+        generation: 4,
+        goldenVersion: 2,
+        createdAt: '2026-10-15T00:00:00.000Z',
+        scores: {
+          precision: 1,
+          recall: 0.92,
+          identifiers: { accuracy: 0.99 },
+          keySpecs: { accuracy: 0.97 },
+        } as unknown as EvalView['scores'],
+      },
+      {
+        id: 'ev_1',
+        generation: 3,
+        goldenVersion: 2,
+        createdAt: '2026-10-14T00:00:00.000Z',
+        // Nothing was stated, which is not a perfect score.
+        scores: score({ checked: 0, accuracy: 1 }, { checked: 0, accuracy: 1 }),
+      },
+      {
+        id: 'ev_0',
+        generation: 2,
+        goldenVersion: 1,
+        createdAt: '2026-10-13T00:00:00.000Z',
+        scores: score({ checked: 20, accuracy: 1 }, { checked: 5, accuracy: 0.8 }),
+      },
+    ];
+    const { fetch, sent } = stubApi(() => Response.json({ evals: saved }));
+    const { io, out } = memoryIo();
+    expect(await main(['evals', 'cli-products'], { io, env: ENV, fetch })).toBe(0);
+    expect(sent[0]).toMatchObject({ method: 'GET', path: '/datasets/cli-products/evals' });
+    expect(out).toEqual([
+      '2026-10-15T00:00:00.000Z  generation 4  golden v2  precision 100.0%  recall 92.0%  identifiers 99.0%  key specs 97.0%',
+      '2026-10-14T00:00:00.000Z  generation 3  golden v2  precision 100.0%  recall 92.0%  identifiers none checked  key specs none checked',
+      '2026-10-13T00:00:00.000Z  generation 2  golden v1  precision 100.0%  recall 92.0%  identifiers 100.0%  key specs 80.0%',
+    ]);
+  });
+
+  it('says how to keep a score when none is kept yet', async () => {
+    const { fetch } = stubApi(() => Response.json({ evals: [] }));
+    const { io, out } = memoryIo();
+    expect(await main(['evals', 'cli-products'], { io, env: ENV, fetch })).toBe(0);
+    expect(out).toEqual(['No scores are kept yet. spatula eval <golden.json> --save keeps one.']);
+  });
+
+  it('keeps a dataset’s name to its place in the address', async () => {
+    const { fetch, sent } = stubApi(() => Response.json({ evals: [] }));
+    const { io } = memoryIo();
+    await main(['evals', 'a b/c'], { io, env: ENV, fetch });
+    expect(sent.map(({ method, path }) => ({ method, path }))).toEqual([
+      { method: 'GET', path: '/datasets/a%20b%2Fc/evals' },
+    ]);
+  });
+
+  it('shows why the API refused, and exits 1', async () => {
+    const { fetch } = stubApi(() =>
+      Response.json({ error: 'The owner token is missing or wrong.' }, { status: 401 }),
+    );
+    const { io, out, err } = memoryIo();
+    expect(await main(['evals', 'cli-products'], { io, env: ENV, fetch })).toBe(1);
+    expect(err).toEqual(['The owner token is missing or wrong.']);
+    expect(out).toEqual([]);
+  });
+
+  it('reports a dataset Spatula doesn’t have, as review does, and sends only the listing', async () => {
+    const { fetch, sent } = stubApi(() =>
+      Response.json({ error: 'Dataset api-nothing doesn’t exist.' }, { status: 404 }),
+    );
+    const { io, out, err } = memoryIo();
+    expect(await main(['evals', 'api-nothing'], { io, env: ENV, fetch })).toBe(1);
+    expect(err).toEqual(['Dataset api-nothing doesn’t exist.']);
+    expect(out).toEqual([]);
+    expect(sent.map(({ method, path }) => ({ method, path }))).toEqual([
+      { method: 'GET', path: '/datasets/api-nothing/evals' },
+    ]);
+  });
+
+  it('floors a share to one decimal, so a score just under its target never reads as the target', async () => {
+    const saved: EvalView[] = [
+      {
+        id: 'ev_3',
+        generation: 5,
+        goldenVersion: 2,
+        createdAt: '2026-10-16T00:00:00.000Z',
+        scores: {
+          precision: 0.9896,
+          recall: 0.99,
+          identifiers: { checked: 50, accuracy: 0.99999 },
+          keySpecs: { checked: 5, accuracy: 1 },
+        } as unknown as EvalView['scores'],
+      },
+      {
+        id: 'ev_4',
+        generation: 6,
+        goldenVersion: 2,
+        createdAt: '2026-10-17T00:00:00.000Z',
+        scores: {
+          precision: 1,
+          recall: 1,
+          // 0.7 - 0.4 is 0.29999999999999993, a share meant to be exactly 30.0%.
+          identifiers: { checked: 50, accuracy: 0.7 - 0.4 },
+          keySpecs: { checked: 5, accuracy: 0 },
+        } as unknown as EvalView['scores'],
+      },
+    ];
+    const { fetch } = stubApi(() => Response.json({ evals: saved }));
+    const { io, out } = memoryIo();
+    expect(await main(['evals', 'cli-products'], { io, env: ENV, fetch })).toBe(0);
+    // 0.9896 is 98.9%, not 99.0%; 0.99 is exactly 99.0%; and 0.99999 never reads as 100.0%. A share
+    // a hair under a boundary through floating-point error is that boundary.
+    expect(out).toEqual([
+      '2026-10-16T00:00:00.000Z  generation 5  golden v2  precision 98.9%  recall 99.0%  identifiers 99.9%  key specs 100.0%',
+      '2026-10-17T00:00:00.000Z  generation 6  golden v2  precision 100.0%  recall 100.0%  identifiers 30.0%  key specs 0.0%',
+    ]);
+  });
+
+  it('needs exactly one dataset', async () => {
+    const { fetch, sent } = stubApi(() => Response.json({ evals: [] }));
+    const { io, out, err } = memoryIo();
+    for (const argv of [['evals'], ['evals', 'cli-products', 'extra']]) {
+      expect(await main(argv, { io, env: ENV, fetch }), argv.join(' ')).toBe(2);
+    }
+    expect(err.slice(0, USAGE.split('\n').length)).toEqual(USAGE.split('\n'));
+    expect(out).toEqual([]);
+    expect(sent).toHaveLength(0);
+  });
+
+  it('are in the usage, before snapshot pull, with the apostrophe every other message uses', () => {
+    // The descriptions start in the same column as the other commands'.
+    expect(USAGE).toContain(
+      [
+        '  eval <golden.json> [--save]  Score the latest snapshot against a golden set, and keep',
+        '                               the score with --save',
+        '  evals <dataset>              The history of a dataset’s scores',
+      ].join('\n'),
+    );
+    expect(USAGE).not.toContain("dataset's");
+    expect(USAGE.indexOf('evals <dataset>')).toBeLessThan(USAGE.indexOf('snapshot pull'));
+    expect(USAGE.indexOf('status <dataset>')).toBeLessThan(USAGE.indexOf('eval <golden.json>'));
   });
 });
 
@@ -750,6 +2165,192 @@ describe('what reaches the terminal', () => {
     }
   });
 
+  it('spells out controls in the questions a review lists, and in what answering says', async () => {
+    const question = { type: 'choice' as const, prompt: 'Which?', options: ['a', 'b'] };
+    const hostile: ReviewView[] = [
+      {
+        id: 'rv_classify',
+        kind: 'classify',
+        subject: 'it_1',
+        question,
+        context: {
+          url: 'https://evil.example/\u001b]8;;https://good.example\u0007here',
+          proposed: 'a',
+          probabilities: { a: 0.6 },
+          reason: 'ignore \u001b[2J all that\nAnswered rv_x: b \u{202e}',
+        },
+        createdAt: '2026-10-10T00:00:00.000Z',
+      },
+      {
+        id: 'rv_match',
+        kind: 'match',
+        subject: 'it_2|sp_1',
+        question,
+        context: {
+          page: 'https://evil.example/\u009b31m',
+          entity: 'sp\u{2028}1',
+          record: 'sp_\u001b[2J1',
+        },
+        createdAt: '2026-10-10T00:00:00.000Z',
+      },
+      {
+        id: 'rv_publish',
+        kind: 'publication',
+        subject: 'sn_1',
+        question,
+        context: { snapshotId: 'sn_\u0007', reasons: ['a \u001b[31mred\u001b[0m reason'] },
+        createdAt: '2026-10-10T00:00:00.000Z',
+      },
+    ];
+    const listing = stubApi(() => Response.json({ reviews: hostile }));
+    const first = memoryIo();
+    expect(
+      await main(['review', 'cli-products'], { io: first.io, env: ENV, fetch: listing.fetch }),
+    ).toBe(0);
+    expect(first.out).toContain(
+      String.raw`rv_classify  classify  https://evil.example/\u{1b}]8;;https://good.example\u{7}here`,
+    );
+    expect(first.out).toContain(
+      String.raw`  Proposed: a (0.60). ignore \u{1b}[2J all that\u{a}Answered rv_x: b \u{202e}`,
+    );
+    expect(first.out).toContain(
+      String.raw`rv_match  match  https://evil.example/\u{9b}31m and sp_\u{1b}[2J1 (sp\u{2028}1)`,
+    );
+    expect(first.out).toContain(String.raw`rv_publish  publication  sn_\u{7}`);
+    expect(first.out).toContain(String.raw`  Held because a \u{1b}[31mred\u{1b}[0m reason.`);
+
+    const answering = stubApi(() =>
+      Response.json({
+        answered: 'rv_x',
+        answer: 'b',
+        effect: 'Done \u001b]0;pwned\u0007\nAnswered rv_y: a',
+      }),
+    );
+    const second = memoryIo();
+    expect(
+      await main(['review', 'cli-products', 'rv_x', 'b'], {
+        io: second.io,
+        env: ENV,
+        fetch: answering.fetch,
+      }),
+    ).toBe(0);
+    expect(second.out).toEqual([
+      String.raw`Answered rv_x: b. Done \u{1b}]0;pwned\u{7}\u{a}Answered rv_y: a`,
+    ]);
+    for (const line of [...first.out, ...first.err, ...second.out, ...second.err]) {
+      expect(line).not.toMatch(DRIVES_A_TERMINAL);
+    }
+  });
+
+  it('spells out controls in the status of a dataset', async () => {
+    const hostile: DatasetStatus = {
+      dataset: 'cli\u001b[2J',
+      revision: 3,
+      headGeneration: 4,
+      held: {
+        snapshotId: 'sn_\u0007',
+        records: 1,
+        reason: 'a \u001b[31mred\u001b[0m reason\nHeld: sn_ok, 9 records',
+        createdAt: '2026-10-12T10:00:00.000Z',
+      },
+      reviews: { classify: 0, match: 0, publication: 1 },
+      consumers: [
+        { name: 'c\u{202e}x', generation: 2, outcome: 'applied', receivedAt: 'at \u009b31m' },
+        { name: 'o\u001bther', generation: null, outcome: null, receivedAt: null },
+      ],
+    };
+    const { fetch } = stubApi(() => Response.json(hostile));
+    const { io, out, err } = memoryIo();
+    expect(await main(['status', 'cli-products'], { io, env: ENV, fetch })).toBe(0);
+    expect(out).toEqual([
+      String.raw`cli\u{1b}[2J, revision 3: generation 4 is published.`,
+      String.raw`Held: sn_\u{7}, 1 records, because a \u{1b}[31mred\u{1b}[0m reason\u{a}Held: sn_ok, 9 records.`,
+      'Waiting for review: 0 classify, 0 match, 1 publication.',
+      String.raw`c\u{202e}x: applied generation 2 at at \u{9b}31m.`,
+      String.raw`o\u{1b}ther: has acknowledged nothing yet.`,
+    ]);
+    expect(err).toEqual([]);
+    for (const line of [...out, ...err]) expect(line).not.toMatch(DRIVES_A_TERMINAL);
+  });
+
+  it('spells out controls in the misses an eval lists', async () => {
+    const golden = {
+      dataset: 'cli-products',
+      version: 1,
+      checked: '2026-10-14',
+      identifiers: [],
+      products: [
+        {
+          key: 'maker-a-a2',
+          pages: ['https://maker-a.example/products/a2'],
+          fields: { name: 'A2' },
+          checkedAgainst: ['https://retailer.example/a2'],
+        },
+      ],
+    };
+    // What a record says is what a site wrote, and it comes back in the miss that quotes it.
+    const snapshot = JSON.stringify({
+      project: 'cli-products',
+      snapshotId: 'sn_x',
+      generation: 3,
+      publishedAt: '2026-10-14T00:00:00.000Z',
+      records: [
+        {
+          canonicalId: 'sp_a2',
+          fields: { name: 'A2\u001b]0;pwned\u0007\nMisses:\n  maker-a-a1: fine \u{202e}' },
+          provenance: {},
+        },
+      ],
+    });
+    const headers = {
+      'x-spatula-sha256': await sha256Hex(snapshot),
+      'x-spatula-generation': '3',
+      'x-spatula-snapshot-id': 'sn_x',
+    };
+    const { fetch } = stubApi(({ path }) =>
+      path.endsWith('/items')
+        ? Response.json({
+            items: [
+              {
+                locator: 'https://maker-a.example/products/a2',
+                sourceId: 'maker-a',
+                status: 'live',
+                entityId: 'sp_a2',
+              },
+            ],
+          })
+        : new Response(snapshot, { headers }),
+    );
+    const { io, out, err } = memoryIo({ 'golden.json': JSON.stringify(golden) });
+    expect(await main(['eval', 'golden.json'], { io, env: ENV, fetch })).toBe(0);
+    expect(out).toEqual([
+      'cli-products, generation 3, against golden set version 1 (1 product):',
+      'Precision: 100.0% (target 99%): met.',
+      'Recall: 100.0%, 1 of 1 found (target 90%): met.',
+      'Identifiers: none checked.',
+      'Key specs: none checked.',
+      'Fields: name 0.0% of 1.',
+      'Misses:',
+      String.raw`  maker-a-a2: name is A2\u{1b}]0;pwned\u{7}\u{a}Misses:\u{a}  maker-a-a1: fine \u{202e}, not A2`,
+    ]);
+    expect(err).toEqual([]);
+    for (const line of [...out, ...err]) expect(line).not.toMatch(DRIVES_A_TERMINAL);
+  });
+
+  it('spells out controls in the run another run is going', async () => {
+    const message = 'A run of x is already running (x-1\u001b]0;pwned\u0007). Wait.\nStarted y.';
+    const { fetch } = stubApi(() =>
+      Response.json({ error: message, runId: 'x-1\u001b' }, { status: 409 }),
+    );
+    const { io, out, err } = memoryIo();
+    expect(await main(['run', 'cli-products'], { io, env: ENV, fetch })).toBe(1);
+    expect(err).toEqual([
+      String.raw`A run of x is already running (x-1\u{1b}]0;pwned\u{7}). Wait.\u{a}Started y.`,
+    ]);
+    expect(out).toEqual([]);
+    for (const line of [...out, ...err]) expect(line).not.toMatch(DRIVES_A_TERMINAL);
+  });
+
   it('spells out controls in what was typed', async () => {
     const { io, err } = memoryIo();
     expect(await main(['run', 'cli-products', '--bog\u001bus'], { io, env: {} })).toBe(2);
@@ -845,6 +2446,115 @@ describe('printable', () => {
   it('spells out every control in a long line, and nothing else', () => {
     expect(printable('\u001b]0;title\u0007 and \u001b[2J and \u{202e}evil\u{2069}')).toBe(
       String.raw`\u{1b}]0;title\u{7} and \u{1b}[2J and \u{202e}evil\u{2069}`,
+    );
+  });
+});
+
+describe('describeError', () => {
+  it('adds the cause when it says more', () => {
+    const error = new TypeError('fetch failed', {
+      cause: new Error('connect ECONNREFUSED 127.0.0.1:8787'),
+    });
+    expect(describeError(error)).toBe('fetch failed (connect ECONNREFUSED 127.0.0.1:8787)');
+    expect(describeError(new Error('same', { cause: new Error('same') }))).toBe('same');
+  });
+
+  it('lists what an AggregateError cause holds when it has no message of its own', () => {
+    // Node's fetch reports a refused connection to a name with several addresses, such as
+    // localhost, this way: the reasons are in `errors`, and the message is empty.
+    const refused = new AggregateError(
+      [
+        new Error('connect ECONNREFUSED ::1:8787'),
+        new Error('connect ECONNREFUSED 127.0.0.1:8787'),
+      ],
+      '',
+    );
+    expect(describeError(new TypeError('fetch failed', { cause: refused }))).toBe(
+      'fetch failed (connect ECONNREFUSED ::1:8787; connect ECONNREFUSED 127.0.0.1:8787)',
+    );
+    // A reason given twice is said once. What isn't an error is left out, and a cause with nothing
+    // left to say adds nothing.
+    const twice = new AggregateError([new Error('timed out'), 'text', new Error('timed out')], '');
+    expect(describeError(new Error('fetch failed', { cause: twice }))).toBe(
+      'fetch failed (timed out)',
+    );
+    const empty = new AggregateError([], '');
+    expect(describeError(new Error('fetch failed', { cause: empty }))).toBe('fetch failed');
+  });
+
+  it('keeps an AggregateError’s own message when it has one', () => {
+    const cause = new AggregateError([new Error('inner')], 'every address refused');
+    expect(describeError(new Error('fetch failed', { cause }))).toBe(
+      'fetch failed (every address refused)',
+    );
+  });
+
+  it('never throws, even for a value with no text form', () => {
+    expect(describeError(Object.create(null))).toBe('an error that can’t be shown as text');
+    expect(describeError('plain')).toBe('plain');
+  });
+
+  it('gives the same phrase for an error it can’t read, and failureLine prints it', () => {
+    const phrase = 'an error that can’t be shown as text';
+    const noText = Object.create(null);
+    const aggregate = (errors: unknown) => Object.assign(new AggregateError([], ''), { errors });
+    const unreadable = [
+      // A cause whose errors aren't a list.
+      new Error('fetch failed', { cause: aggregate(null) }),
+      // A cause holding an error whose message has no text form.
+      new Error('fetch failed', {
+        cause: aggregate([Object.assign(new Error(), { message: noText })]),
+      }),
+      // A message with no text form, and one that throws when it's read.
+      Object.assign(new Error(), { message: noText }),
+      Object.defineProperty(new Error(), 'message', {
+        get() {
+          throw new Error('unreadable');
+        },
+      }),
+    ];
+    for (const error of unreadable) {
+      expect(describeError(error)).toBe(phrase);
+      expect(failureLine(error)).toBe(`Spatula’s CLI failed: ${phrase}`);
+    }
+  });
+});
+
+describe('failures', () => {
+  it('say what the network said when Spatula doesn’t answer', async () => {
+    const { io, err } = memoryIo();
+    const fetch = (async () => {
+      throw new TypeError('fetch failed', { cause: new Error('unexpected redirect') });
+    }) as typeof globalThis.fetch;
+    expect(await main(['run', 'cli-products'], { io, env: ENV, fetch })).toBe(1);
+    expect(err).toEqual([
+      'Spatula at https://spatula.test didn’t answer: fetch failed (unexpected redirect)',
+    ]);
+  });
+
+  it('say why localhost, the default address, refused the connection', async () => {
+    const { io, err } = memoryIo();
+    const fetch = (async () => {
+      throw new TypeError('fetch failed', {
+        cause: new AggregateError(
+          [
+            new Error('connect ECONNREFUSED ::1:8787'),
+            new Error('connect ECONNREFUSED 127.0.0.1:8787'),
+          ],
+          '',
+        ),
+      });
+    }) as typeof globalThis.fetch;
+    const env = { SPATULA_TOKEN: 'owner-token' };
+    expect(await main(['run', 'cli-products'], { io, env, fetch })).toBe(1);
+    expect(err).toEqual([
+      'Spatula at http://localhost:8787 didn’t answer: fetch failed (connect ECONNREFUSED ::1:8787; connect ECONNREFUSED 127.0.0.1:8787)',
+    ]);
+  });
+
+  it('print a thrown value with no text form without failing again', () => {
+    expect(failureLine(Object.create(null))).toBe(
+      'Spatula’s CLI failed: an error that can’t be shown as text',
     );
   });
 });

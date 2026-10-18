@@ -49,6 +49,38 @@ export function testDefinition(dataset = 'test-products'): Definition {
       },
     ],
     policy: { purposes: ['ai-input'], perHostIntervalMs: 1000 },
+    // Tests see every snapshot published; the gates' own tests choose theirs.
+    publication: { approval: 'auto' },
+    gates: { maxRemovals: { count: 25, share: 1 } },
+  });
+  if (!result.ok) throw new Error(result.issues.join('\n'));
+  return result.definition;
+}
+
+/**
+ * The test dataset with a third maker, whose pages its sitemaps list. Its category is fixed, as the
+ * others' are, so its records are complete without the decision cascade.
+ */
+export function testSitemapDefinition(dataset = 'test-sitemaps'): Definition {
+  const base = testDefinition(dataset);
+  const result = parseDefinition({
+    ...base,
+    sources: [
+      ...base.sources,
+      {
+        id: 'maker-c',
+        kind: 'sitemap',
+        recordType: 'product',
+        sitemaps: ['https://maker-c.example/sitemap.xml'],
+        follow: ['/sitemap_products_*'],
+        include: ['/products/*'],
+        exclude: ['/products/*-gift-card'],
+        useLastmod: true,
+        fixed: { brand: 'Maker C', category: 'Headphones' },
+        extract: { officialUrl: { url: 'canonical' } },
+        evidence: evidence('maker-c.example'),
+      },
+    ],
   });
   if (!result.ok) throw new Error(result.issues.join('\n'));
   return result.definition;

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { addressError, parseDefinition } from './definition';
+import { addressError, decidedField, parseDefinition } from './definition';
 import { costRatio } from './testing/cost';
 
 const EVIDENCE = {
@@ -63,8 +63,8 @@ describe('parseDefinition', () => {
   });
 
   it('refuses unknown keys, and says where', () => {
-    expect(issuesOf(definition({ budget: { monthlyUsd: 40 } }))).toEqual([
-      expect.stringContaining('budget'),
+    expect(issuesOf(definition({ schedule: 'daily' }))).toEqual([
+      expect.stringContaining('schedule'),
     ]);
   });
 
@@ -338,5 +338,312 @@ describe('addressError', () => {
     // A pattern that took the dots off the end tried each dot as the start of the run, so each dot
     // cost about 16 times as much among 40,000 as among a sixteenth of them. A loop costs the same.
     expect(costRatio(reasons(dotted(2_500)), reasons(large), 16)).toBeLessThan(4);
+  });
+});
+
+describe('enum values', () => {
+  it('are at most 254, each at most 600 characters', () => {
+    const base = definition();
+    const withValues = (values: string[]) =>
+      definition({
+        recordTypes: {
+          product: {
+            ...base.recordTypes.product,
+            fields: {
+              ...base.recordTypes.product.fields,
+              category: { type: 'enum', required: true, values },
+            },
+          },
+        },
+        // The source fixes the category, so it has to be one of the values.
+        sources: [{ ...base.sources[0], fixed: { brand: 'Maker', category: values[0] } }],
+      });
+    const many = Array.from({ length: 255 }, (_, index) => `Kind ${index}`);
+    expect(parseDefinition(withValues(many))).toMatchObject({
+      ok: false,
+      issues: ['recordTypes.product.fields.category.values: List at most 254 values.'],
+    });
+    expect(parseDefinition(withValues(['x'.repeat(601)]))).toMatchObject({
+      ok: false,
+      issues: [
+        'recordTypes.product.fields.category.values.0: Use values of 600 characters or less.',
+      ],
+    });
+    expect(parseDefinition(withValues(many.slice(0, 254))).ok).toBe(true);
+  });
+});
+
+const sitemapSource = {
+  id: 'maker-c',
+  kind: 'sitemap',
+  recordType: 'product',
+  sitemaps: ['https://maker-c.example/sitemap.xml'],
+  include: ['/products/*'],
+  fixed: { brand: 'Maker C' },
+  evidence: {
+    robots: '2026-10-12',
+    terms: {
+      url: 'https://maker-c.example/terms',
+      checked: '2026-10-12',
+      automatedAccess: 'not-mentioned',
+    },
+  },
+};
+
+describe('sitemap sources', () => {
+  it('read their pages from sitemaps, with defaults for what they leave out', () => {
+    const base = definition();
+    const parsed = parseDefinition(definition({ sources: [...base.sources, sitemapSource] }));
+    expect(parsed.ok).toBe(true);
+    if (!parsed.ok) return;
+    expect(parsed.definition.sources[1]).toMatchObject({
+      kind: 'sitemap',
+      follow: [],
+      exclude: [],
+      maxPages: 1000,
+      useLastmod: false,
+      extract: {},
+    });
+  });
+
+  it('need at least one include pattern, and patterns that start with /', () => {
+    const parsed = parseDefinition(
+      definition({ sources: [{ ...sitemapSource, include: [], exclude: ['products/*'] }] }),
+    );
+    expect(parsed).toMatchObject({ ok: false });
+    if (parsed.ok) return;
+    expect(parsed.issues).toEqual([
+      'sources.0.include: Too small: expected array to have >=1 items',
+      'sources.0.exclude.0: Write a path pattern that starts with /, like /products/*.',
+    ]);
+  });
+
+  it('take up to 100 exclude patterns, as a large store needs', () => {
+    const excludes = (count: number) =>
+      Array.from({ length: count }, (_, index) => `/products/*part-${index}*`);
+    expect(
+      parseDefinition(definition({ sources: [{ ...sitemapSource, exclude: excludes(100) }] })).ok,
+    ).toBe(true);
+    expect(
+      issuesOf(definition({ sources: [{ ...sitemapSource, exclude: excludes(101) }] })),
+    ).toEqual(['sources.0.exclude: Too big: expected array to have <=100 items']);
+  });
+
+  it('refuse a pattern with a lone surrogate, half a character that can’t be matched', () => {
+    const message = 'A pattern is well-formed text, with no lone surrogate.';
+    const patterns = (lists: Record<string, string[]>) =>
+      definition({ sources: [{ ...sitemapSource, ...lists }] });
+    // A high surrogate, a low one, and the two in the wrong order, one in each list of patterns.
+    const lone = patterns({
+      follow: ['/sitemap-\u{D800}'],
+      include: ['/products/\u{DC00}*'],
+      exclude: ['/products/\u{DC00}\u{D800}'],
+    });
+    expect(issuesOf(lone)).toEqual([
+      `sources.0.follow.0: ${message}`,
+      `sources.0.include.0: ${message}`,
+      `sources.0.exclude.0: ${message}`,
+    ]);
+    // A pair of surrogates is a character, however it is written.
+    const characters = ['/produkte/\u{1F600}', '/produkte/\u{D83D}\u{DE00}', '/produkte/\u{E4}*'];
+    expect(parseDefinition(patterns({ include: characters })).ok).toBe(true);
+  });
+
+  it('refuse sitemaps at addresses Spatula must never fetch', () => {
+    const parsed = parseDefinition(
+      definition({
+        sources: [{ ...sitemapSource, sitemaps: ['https://intranet.local/sitemap.xml'] }],
+      }),
+    );
+    expect(parsed).toMatchObject({
+      ok: false,
+      issues: [
+        'sources.0.sitemaps.0: This address is a private-use name. Use the site’s public https:// address.',
+      ],
+    });
+  });
+});
+
+describe('a decided field', () => {
+  const withCategory = (category: Record<string, unknown>) => {
+    const base = definition();
+    return definition({
+      recordTypes: {
+        product: {
+          ...base.recordTypes.product,
+          fields: { ...base.recordTypes.product.fields, category },
+        },
+      },
+    });
+  };
+
+  it('is a required enum that identifies nothing', () => {
+    const parsed = parseDefinition(
+      withCategory({ type: 'enum', required: true, values: ['Headphones'], decide: true }),
+    );
+    expect(parsed.ok).toBe(true);
+    if (!parsed.ok) return;
+    expect(decidedField(parsed.definition.recordTypes.product!)?.[0]).toBe('category');
+  });
+
+  it('is refused anywhere else', () => {
+    expect(
+      parseDefinition(withCategory({ type: 'text', required: true, decide: true })),
+    ).toMatchObject({
+      ok: false,
+      issues: ['recordTypes.product.fields.category.decide: Only enum fields can be decided.'],
+    });
+    expect(
+      parseDefinition(withCategory({ type: 'enum', values: ['Headphones'], decide: true })),
+    ).toMatchObject({
+      ok: false,
+      issues: [
+        'recordTypes.product.fields.category.decide: A decided field must be required: “None of these” is how a page leaves the dataset.',
+      ],
+    });
+  });
+
+  it('is refused on a field that identifies the record', () => {
+    const input = withCategory({
+      type: 'enum',
+      required: true,
+      values: ['Headphones'],
+      decide: true,
+    });
+    // The category is part of a key now: the brand, name, and category together name a record.
+    input.recordTypes.product.identity.keys = [['brand', 'name', 'category']];
+    expect(parseDefinition(input)).toMatchObject({
+      ok: false,
+      issues: [
+        'recordTypes.product.fields.category.decide: Fields that identify a record come from structured data or declared rules, never a decision.',
+      ],
+    });
+  });
+
+  it('is refused on a second field of the record type', () => {
+    const input = withCategory({
+      type: 'enum',
+      required: true,
+      values: ['Headphones'],
+      decide: true,
+    });
+    input.recordTypes.product.fields.connection = {
+      type: 'enum',
+      required: true,
+      values: ['Wired', 'Wireless'],
+      decide: true,
+    };
+    expect(parseDefinition(input)).toMatchObject({
+      ok: false,
+      issues: ['recordTypes.product.fields: Only one field of a record type can be decided.'],
+    });
+  });
+
+  describe('has values that', () => {
+    const issue =
+      'recordTypes.product.fields.category.values: A decided field’s values are distinct regardless of case, and none is “None of these”.';
+    const decided = (values: string[]) =>
+      withCategory({ type: 'enum', required: true, values, decide: true });
+
+    it('are distinct', () => {
+      expect(parseDefinition(decided(['Headphones', 'DAC/Amp', 'Headphones']))).toMatchObject({
+        ok: false,
+        issues: [issue],
+      });
+    });
+
+    it('are distinct regardless of case', () => {
+      // A decided answer is matched to a value without regard to case, so these would be one.
+      expect(parseDefinition(decided(['Headphones', 'DAC/Amp', 'headphones']))).toMatchObject({
+        ok: false,
+        issues: [issue],
+      });
+      expect(parseDefinition(decided(['Headphones', 'DAC/Amp', 'dac/AMP']))).toMatchObject({
+        ok: false,
+        issues: [issue],
+      });
+    });
+
+    it('leave out “None of these”, the answer that takes a page out of the dataset', () => {
+      expect(parseDefinition(decided(['Headphones', 'None of these']))).toMatchObject({
+        ok: false,
+        issues: [issue],
+      });
+      // One report for the field, however many ways its values are wrong.
+      expect(
+        parseDefinition(decided(['None of these', 'Headphones', 'None of these'])),
+      ).toMatchObject({ ok: false, issues: [issue] });
+    });
+
+    it('leave out “None of these” in any case', () => {
+      expect(parseDefinition(decided(['Headphones', 'none of these']))).toMatchObject({
+        ok: false,
+        issues: [issue],
+      });
+      expect(parseDefinition(decided(['NONE OF THESE', 'Headphones']))).toMatchObject({
+        ok: false,
+        issues: [issue],
+      });
+    });
+
+    it('may differ in more than case', () => {
+      expect(parseDefinition(decided(['Headphones', 'Headphone', 'None of these items'])).ok).toBe(
+        true,
+      );
+    });
+
+    it('are not checked on a field that is not decided', () => {
+      // Only a decided field's question adds an answer of its own to the values.
+      const input = withCategory({
+        type: 'enum',
+        required: true,
+        values: ['Headphones', 'None of these', 'Headphones', 'headphones', 'none of these'],
+      });
+      expect(parseDefinition(input).ok).toBe(true);
+    });
+  });
+});
+
+describe('dataset settings', () => {
+  it('default to a week’s freshness, the 5%-or-25 removal guard, balanced approval, and no consumers', () => {
+    // Slice 0's definitions carry none of these keys.
+    const parsed = parseDefinition(definition());
+    expect(parsed.ok).toBe(true);
+    if (!parsed.ok) return;
+    expect(parsed.definition).toMatchObject({
+      freshness: { maxAgeDays: 7 },
+      gates: { maxRemovals: { count: 25, share: 0.05 } },
+      publication: { approval: 'balanced' },
+      decisions: { classify: { accept: 0.9 }, match: { accept: 0.95 } },
+      budget: { itemsPerRun: 1000, llmTokensPerRun: 2_000_000 },
+      consumers: [],
+    });
+  });
+
+  it('hand every parse its own objects for the defaults it fills in', () => {
+    // zod copies only a default's outer object, so a default holding an object or an array would
+    // give every parse the same one, and a Worker isolate parses for many requests.
+    const bare = () => {
+      const input = definition();
+      delete input.policy;
+      return input;
+    };
+    const first = parseDefinition(bare());
+    const second = parseDefinition(bare());
+    expect(first.ok && second.ok).toBe(true);
+    if (!first.ok || !second.ok) return;
+    expect(second.definition).toEqual(first.definition);
+    expect(second.definition.gates.maxRemovals).not.toBe(first.definition.gates.maxRemovals);
+    expect(second.definition.decisions.classify).not.toBe(first.definition.decisions.classify);
+    expect(second.definition.decisions.match).not.toBe(first.definition.decisions.match);
+    expect(second.definition.policy.purposes).not.toBe(first.definition.policy.purposes);
+  });
+
+  it('name consumers by slug', () => {
+    const parsed = parseDefinition(definition({ consumers: ['crowdio', 'Not A Slug'] }));
+    expect(parsed).toMatchObject({
+      ok: false,
+      issues: ['consumers.1: Use lowercase letters, digits, and hyphens, up to 63 characters.'],
+    });
   });
 });

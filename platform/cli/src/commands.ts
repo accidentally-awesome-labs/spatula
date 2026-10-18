@@ -1,14 +1,26 @@
 import {
+  goldenSetSchema,
   packIssues,
   parseDefinition,
+  RUN_SLOT_TAKEN,
+  scoreDataset,
   sha256Hex,
   snapshotSchema,
   type Definition,
+  type GoldenSet,
 } from '@spatula/core';
 import { packs } from '@spatula/pack-products';
 import { parse } from 'yaml';
 import { ApiError, type Client } from './client';
-import { formatApplySummary, formatRun } from './format';
+import {
+  describeError,
+  formatApplySummary,
+  formatEvals,
+  formatReviews,
+  formatRun,
+  formatScores,
+  formatStatus,
+} from './format';
 
 /** Everything the commands do outside themselves, so tests can run them in memory. */
 export interface Io {
@@ -31,7 +43,7 @@ export async function readDefinition(io: Io, file: string): Promise<Definition |
   try {
     text = await io.readFile(file);
   } catch (error) {
-    io.err(`${file} can’t be read: ${describe(error)}`);
+    io.err(`${file} can’t be read: ${describeError(error)}`);
     return null;
   }
   let data: unknown;
@@ -40,7 +52,7 @@ export async function readDefinition(io: Io, file: string): Promise<Definition |
   } catch (error) {
     // The YAML library's message shows the line it stopped at under its first line. Each line is
     // printed by a call of its own.
-    const [first = '', ...frame] = describe(error).split('\n');
+    const [first = '', ...frame] = describeError(error).split('\n');
     io.err(`${file} isn’t valid YAML: ${first}`);
     for (const line of frame) io.err(line);
     return null;
@@ -58,11 +70,20 @@ export async function readDefinition(io: Io, file: string): Promise<Definition |
 export async function check(io: Io, file: string): Promise<number> {
   const definition = await readDefinition(io, file);
   if (definition === null) return 1;
-  const pages = definition.sources.reduce((count, source) => count + source.pages.length, 0);
+  let pages = 0;
+  let sitemaps = 0;
+  for (const source of definition.sources) {
+    if (source.kind === 'pages') pages += source.pages.length;
+    else sitemaps += source.sitemaps.length;
+  }
   const types = Object.keys(definition.recordTypes).length;
-  io.out(
-    `${definition.dataset}: ${count(types, 'record type')}, ${count(definition.sources.length, 'source')}, ${count(pages, 'page')}. Nothing is wrong with it.`,
-  );
+  const listed = [
+    count(types, 'record type'),
+    count(definition.sources.length, 'source'),
+    ...(pages > 0 || sitemaps === 0 ? [count(pages, 'page')] : []),
+    ...(sitemaps > 0 ? [count(sitemaps, 'sitemap')] : []),
+  ];
+  io.out(`${definition.dataset}: ${listed.join(', ')}. Nothing is wrong with it.`);
   return 0;
 }
 
@@ -86,10 +107,18 @@ export async function run(
   io: Io,
   client: Client,
   datasetId: string,
-  options: { wait: boolean },
+  options: { wait: boolean; all: boolean },
 ): Promise<number> {
   return withApi(io, async () => {
-    const { runId, existing } = await client.startRun(datasetId);
+    const { runId, existing, message } = await client.startRun(datasetId, { all: options.all });
+    // The API names a run of an earlier slot that is still going in its own words. The run asked
+    // for never started, so this is a refusal, and the other run is not followed: a script that
+    // waits for this run would go on to use the result of one that isn't it. The slot's sentence is
+    // the CLI's, with the run's ID, for the run this one repeats, which is followed.
+    if (existing && message !== null && message !== RUN_SLOT_TAKEN) {
+      io.err(message);
+      return 1;
+    }
     io.out(
       existing ? `A run already started in this five-minute slot: ${runId}.` : `Started ${runId}.`,
     );
@@ -106,6 +135,141 @@ export async function run(
     }
     io.err(`Stopped waiting after ${WAIT_LIMIT_MS / 60_000} minutes; ${runId} is still running.`);
     return 1;
+  });
+}
+
+/** Puts refused pages, or the pages named, back for the next run. */
+export async function revive(
+  io: Io,
+  client: Client,
+  datasetId: string,
+  options: { refused: boolean; pages: string[] },
+): Promise<number> {
+  return withApi(io, async () => {
+    const { revived } = await client.reviveItems(datasetId, {
+      ...(options.refused ? { refused: true as const } : {}),
+      ...(options.pages.length > 0 ? { pages: options.pages } : {}),
+    });
+    io.out(
+      revived === 0
+        ? `Nothing matched in ${datasetId}, so no page was revived.`
+        : `Revived ${count(revived, 'page')} of ${datasetId}. The next run reads them.`,
+    );
+    return 0;
+  });
+}
+
+/** Lists the dataset's open questions, or answers one. */
+export async function review(
+  io: Io,
+  client: Client,
+  datasetId: string,
+  answering: { reviewId: string; answer: string } | null,
+): Promise<number> {
+  return withApi(io, async () => {
+    if (answering === null) {
+      const reviews = await client.listReviews(datasetId);
+      for (const line of formatReviews(datasetId, reviews)) io.out(line);
+      return 0;
+    }
+    const { effect } = await client.answerReview(datasetId, answering.reviewId, answering.answer);
+    io.out(
+      `Answered ${answering.reviewId}: ${answering.answer}.${effect === '' ? '' : ` ${effect}`}`,
+    );
+    return 0;
+  });
+}
+
+/** Says where a dataset stands. */
+export async function status(io: Io, client: Client, datasetId: string): Promise<number> {
+  return withApi(io, async () => {
+    for (const line of formatStatus(await client.getStatus(datasetId))) io.out(line);
+    return 0;
+  });
+}
+
+/** Scores the dataset's latest snapshot against a golden set, and keeps the score with `save`. */
+export async function evaluate(
+  io: Io,
+  client: Client,
+  file: string,
+  options: { save: boolean },
+): Promise<number> {
+  let text: string;
+  try {
+    text = await io.readFile(file);
+  } catch (error) {
+    io.err(`${file} can’t be read: ${describeError(error)}`);
+    return 1;
+  }
+  let json: unknown;
+  try {
+    json = JSON.parse(text);
+  } catch (error) {
+    io.err(`${file} isn’t JSON: ${describeError(error)}`);
+    return 1;
+  }
+  const parsed = goldenSetSchema.safeParse(json);
+  if (!parsed.success) {
+    io.err(`${file} isn’t a golden set:`);
+    for (const issue of parsed.error.issues.slice(0, 20)) {
+      io.err(`  ${issue.path.join('.')}: ${issue.message}`);
+    }
+    return 1;
+  }
+  const golden: GoldenSet = parsed.data;
+  return withApi(io, async () => {
+    // The checks snapshot pull makes: a score of the wrong file would mislead.
+    const pulled = await client.pullSnapshot(golden.dataset, 'latest');
+    if ((await sha256Hex(pulled.body)) !== pulled.sha256) {
+      io.err(
+        `The snapshot’s SHA-256 doesn’t match what Spatula said (${pulled.sha256 || 'nothing'}). Nothing was scored.`,
+      );
+      return 1;
+    }
+    let data: unknown;
+    try {
+      data = JSON.parse(pulled.body);
+    } catch {
+      io.err('The snapshot isn’t JSON. Nothing was scored.');
+      return 1;
+    }
+    const checked = snapshotSchema.safeParse(data);
+    if (!checked.success || checked.data.project !== golden.dataset) {
+      io.err(
+        `The snapshot isn’t ${golden.dataset}’s, in the published format. Nothing was scored.`,
+      );
+      return 1;
+    }
+    if (
+      checked.data.generation !== pulled.generation ||
+      checked.data.snapshotId !== pulled.snapshotId
+    ) {
+      io.err(
+        `The snapshot says generation ${checked.data.generation} (${checked.data.snapshotId}), but Spatula said generation ${pulled.generation} (${pulled.snapshotId}). Nothing was scored.`,
+      );
+      return 1;
+    }
+    const items = await client.listItems(golden.dataset);
+    const scores = scoreDataset({ golden, snapshot: checked.data, items });
+    for (const line of formatScores(golden, scores)) io.out(line);
+    if (options.save) {
+      await client.saveEval(golden.dataset, {
+        generation: scores.generation,
+        goldenVersion: golden.version,
+        scores,
+      });
+      io.out('Saved the score.');
+    }
+    return 0;
+  });
+}
+
+/** Shows the history of a dataset's scores. */
+export async function evals(io: Io, client: Client, datasetId: string): Promise<number> {
+  return withApi(io, async () => {
+    for (const line of formatEvals(await client.listEvals(datasetId))) io.out(line);
+    return 0;
   });
 }
 
@@ -171,7 +335,7 @@ export async function pullSnapshot(
     try {
       await io.writeFile(options.out, pulled.body);
     } catch (error) {
-      io.err(`Couldn’t write ${options.out}: ${describe(error)}`);
+      io.err(`Couldn’t write ${options.out}: ${describeError(error)}`);
       return 1;
     }
     io.out(
@@ -196,8 +360,4 @@ async function withApi(io: Io, fn: () => Promise<number>): Promise<number> {
 
 function count(n: number, noun: string): string {
   return `${n} ${noun}${n === 1 ? '' : 's'}`;
-}
-
-function describe(error: unknown): string {
-  return error instanceof Error ? error.message : String(error);
 }

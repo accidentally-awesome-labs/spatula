@@ -18,6 +18,22 @@ export function newId(prefix: string): string {
 }
 
 /**
+ * An ID that comes out the same every time it's made from the same parts: the prefix, an
+ * underscore, and 20 base32 characters of their SHA-256. A Workflow step that runs again after a
+ * crash makes the same ID, so what it writes is written once. Like `newId`'s, these IDs are
+ * opaque: nothing is read from them.
+ */
+export async function stableId(prefix: string, ...parts: (string | number)[]): Promise<string> {
+  // A NUL can't appear in an ID or a URL, so no two lists of parts join to the same text.
+  const hash = await sha256Hex(parts.map(String).join('\u0000'));
+  let id = '';
+  for (let index = 0; index < 20; index += 1) {
+    id += ALPHABET.charAt(Number.parseInt(hash.slice(index * 2, index * 2 + 2), 16) & 31);
+  }
+  return `${prefix}_${id}`;
+}
+
+/**
  * A run's ID: its dataset and the five-minute slot it starts in, in UTC. A second start in the
  * same slot asks for the same run, so a duplicate trigger is harmless.
  */
@@ -63,4 +79,23 @@ export async function sha256Hex(data: string | Uint8Array): Promise<string> {
   const bytes = typeof data === 'string' ? new TextEncoder().encode(data) : new Uint8Array(data);
   const digest = await crypto.subtle.digest('SHA-256', bytes);
   return Array.from(new Uint8Array(digest), (byte) => byte.toString(16).padStart(2, '0')).join('');
+}
+
+/**
+ * HMAC-SHA256 of text (as UTF-8) or of bytes under the key, in hex: how consumers sign their
+ * acknowledgments. A body's signature is checked over its bytes, which may be ones no text
+ * encodes to, such as a byte-order mark.
+ */
+export async function hmacSha256Hex(key: string, data: string | Uint8Array): Promise<string> {
+  const encoder = new TextEncoder();
+  const imported = await crypto.subtle.importKey(
+    'raw',
+    encoder.encode(key),
+    { name: 'HMAC', hash: 'SHA-256' },
+    false,
+    ['sign'],
+  );
+  const bytes = typeof data === 'string' ? encoder.encode(data) : new Uint8Array(data);
+  const signature = await crypto.subtle.sign('HMAC', imported, bytes);
+  return [...new Uint8Array(signature)].map((byte) => byte.toString(16).padStart(2, '0')).join('');
 }

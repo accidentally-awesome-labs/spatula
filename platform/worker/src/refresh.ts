@@ -1,121 +1,95 @@
 import {
   acceptLlmOutput,
   buildLlmRequest,
-  buildRecords,
-  EXTRACTION_VERSION,
   extractFromPage,
   LLM_MAX_TOKENS,
   llmFields,
   llmInputHash,
-  newId,
+  MAX_MATCH_QUESTIONS,
   PAGE_METHODS,
   parsePage,
+  pathPatternMatches,
   sha256Hex,
-  snapshotSchema,
-  stableStringify,
+  stableId,
   type ContentSignals,
   type Definition,
-  type EntityStatements,
-  type GateDecision,
-  type LlmPort,
   type LlmUsage,
   type Outcome,
-  type PackRegistry,
   type Page,
   type PageExtraction,
-  type PublishResult,
   type RecordType,
   type RunSummary,
-  type Snapshot,
-  type SnapshotRecord,
-  type StatementView,
 } from '@spatula/core';
 import {
-  commitSnapshot,
-  currentStatements,
+  dueItems,
   finishRun,
   getDataset,
-  latestSnapshot,
-  listLiveItems,
+  itemsByIds,
   recordExtraction,
   recordFetch,
   reseeStatements,
   resolveEntities,
   startRun,
   writeStatements,
-  type Executor,
   type FetchInput,
   type ItemRef,
   type StatementCounts,
 } from '@spatula/store';
+import { cascadeField, classifyItem, classifyTarget, decidedByLlm } from './classify';
+import { discoverSource } from './discovery';
+import { matchItem } from './match';
+import {
+  budgetLeft,
+  decisionsOf,
+  extractionTag,
+  NO_CHANGE,
+  NO_USAGE,
+  pageKey,
+  retryTag,
+  type Context,
+  type RefreshPorts,
+  type StepRunner,
+} from './pipeline';
+import { publish } from './publish';
+import { isChallenge, MAX_WAITS, requestThroughGate, type Resume } from './requests';
+import { storable } from './text';
+
+// What other modules have always imported from here.
+export {
+  extractionTag,
+  pageKey,
+  snapshotKey,
+  type BlobPort,
+  type GatePort,
+  type HttpPort,
+  type HttpResult,
+  type RefreshPorts,
+  type StepRunner,
+} from './pipeline';
 
 /*
- * One refresh of one dataset. Each page is fetched in its own step, through the gate, and only a
+ * One refresh of one dataset. A sitemap source's sitemaps are read first (discovery.ts), which
+ * lists its pages. Each page is fetched in its own step, through the gate, and only a
  * page that changed (or whose statements came from older code) is extracted, in a step of its
  * own, from the copy kept under its hash. A failed or blocked fetch changes no values. The LLM is
  * asked only for fields nothing else filled, only where the dataset and the site allow AI input,
- * and only when its question changed. Then entities are resolved, and a snapshot is published if
- * the records changed. Nothing here imports Cloudflare: the Workflow passes real ports, and the
- * tests pass fakes.
+ * and only when its question changed. A page whose source leaves the record type's decided field
+ * to the cascade is then classified, in a step of its own (classify.ts), and isn't current until
+ * that step has finished. The LLM and the decider share the run's token budget (pipeline.ts). Then
+ * entities are resolved. Resolution asks about the pairs it can't settle by rule, each in a step
+ * of its own (match.ts), and defers them until they're answered. If the records changed, they go
+ * through the dataset's gates (publish.ts): a snapshot is published when the gates allow it, and
+ * held for the owner's review when they don't. Nothing here imports Cloudflare: the Workflow
+ * passes real ports, and the tests pass fakes.
  */
-
-/** The Workflow's steps, as the pipeline uses them. Step results are kept as JSON. */
-export interface StepRunner {
-  do<T>(name: string, fn: () => Promise<T>): Promise<T>;
-  sleep(name: string, ms: number): Promise<void>;
-}
-
-/** Whether a request to a URL may go now, and what came of it. */
-export interface GatePort {
-  reserve(
-    url: string,
-    request: { minIntervalMs: number; maxWaitMs: number },
-  ): Promise<GateDecision>;
-  record(url: string, response: { status: number; retryAfter: string | null }): Promise<void>;
-}
-
-export type HttpResult =
-  | {
-      ok: true;
-      status: number;
-      headers: Record<string, string>;
-      body: Uint8Array;
-      truncated: boolean;
-    }
-  | { ok: false; error: string };
-
-/** One GET, never following redirects. Header names are lowercase; the body is read only for a 2xx. */
-export interface HttpPort {
-  get(url: string, headers: Record<string, string>): Promise<HttpResult>;
-}
-
-export interface BlobPort {
-  put(key: string, body: Uint8Array | string, contentType: string): Promise<void>;
-  get(key: string): Promise<Uint8Array | null>;
-}
-
-export interface RefreshPorts {
-  withDb<T>(fn: (db: Executor) => Promise<T>): Promise<T>;
-  gate: GatePort;
-  http: HttpPort;
-  blobs: BlobPort;
-  llm: LlmPort | null;
-  packs: PackRegistry;
-  now(): Date;
-  /** A wait inside a step, never longer than MAX_INLINE_WAIT_MS. */
-  wait(ms: number): Promise<void>;
-}
 
 export interface RefreshParams {
   runId: string;
   datasetId: string;
+  /** Treat every live page as due, however recently it was read. The budget still applies. */
+  all?: boolean;
 }
 
-/** Waits up to this long happen inside a fetch step; longer ones become Workflow sleeps. */
-export const MAX_INLINE_WAIT_MS = 15_000;
-/** How many times one page may be put off before the run records it as failed. */
-export const MAX_WAITS = 5;
-export const MAX_REDIRECTS = 5;
 export const MAX_NOTES = 50;
 /**
  * The most statements one page's extraction may yield. writeStatements inserts them in one
@@ -124,46 +98,30 @@ export const MAX_NOTES = 50;
  * survivorship reads. An honest product page says a few dozen things.
  */
 export const MAX_PAGE_STATEMENTS = 1_000;
-
-const REDIRECTS = new Set([301, 302, 303, 307, 308]);
-const NO_USAGE: LlmUsage = { inputTokens: 0, outputTokens: 0 };
-const NO_CHANGE: StatementCounts = { added: 0, reseen: 0, withdrawn: 0 };
+/**
+ * How many pages one step loads for the run. A step's result is kept as JSON and capped at 1 MiB, so
+ * the pages load in steps of 50 rather than all at once.
+ */
+const ITEMS_PER_STEP = 50;
+/**
+ * Pages in a row from one source, each blocked or straining its host, that pause the rest of the
+ * source's pages for this run. A block here is the host's: a 401, 402, or 403 it answered with, or
+ * a challenge. A strain is a 429 or a 5xx it answered with, or no answer to a request the gate let
+ * go: the network dropped it, it timed out, or the HTTP client wouldn't send it. The gate records
+ * each strain and lengthens the host's break, and the run sleeps through it before its next page,
+ * on whatever host, so a host that strains on every page would hold up every other one. Anything
+ * else starts the count again: a page the gate turns away, or that the run gave up waiting to ask
+ * for, sent no request and lengthened no break; and any other answer, a failure such as "not
+ * HTML" included, shows the host answering. Challenges come with requests close together, so the
+ * source rests until the next run, and its pages stay due; nothing is refused.
+ */
+export const SOURCE_PAUSE_AFTER = 3;
 
 export class DatasetMissingError extends Error {
   constructor(datasetId: string) {
     super(`Dataset ${datasetId} doesn’t exist`);
     this.name = 'DatasetMissingError';
   }
-}
-
-/** Where a page's HTML is kept: under its SHA-256, so an unchanged page is stored once. */
-export const pageKey = (contentHash: string) => `pages/${contentHash}`;
-export const snapshotKey = (datasetId: string, snapshotId: string) =>
-  `datasets/${datasetId}/snapshots/${snapshotId}.json`;
-/** Which definition revision and extraction code a page's statements came from. */
-export const extractionTag = (revision: number) => `r${revision}.v${EXTRACTION_VERSION}`;
-/** What a page is marked with when it has to be read again though nothing about it changed. */
-const retryTag = (revision: number) => `${extractionTag(revision)}.retry`;
-
-/**
- * What a snapshot's records say, without when each value was last seen. A run that only sees
- * the same values again publishes nothing; consumers already have them.
- */
-export async function recordsDigest(records: SnapshotRecord[]): Promise<string> {
-  return sha256Hex(
-    stableStringify(
-      records.map((record) => ({
-        canonicalId: record.canonicalId,
-        fields: record.fields,
-        provenance: Object.fromEntries(
-          Object.entries(record.provenance).map(([name, { sourceUrl, method, confidence }]) => [
-            name,
-            { sourceUrl, method, confidence },
-          ]),
-        ),
-      })),
-    ),
-  );
 }
 
 /** What a final answer means. A page that arrived is then changed or unchanged by its hash. */
@@ -179,8 +137,7 @@ export function classifyResponse(response: {
     error,
   });
   if (status === 304) return final('unchanged', null);
-  if (headers['cf-mitigated'] === 'challenge')
-    return final('blocked', 'the site answered with a challenge');
+  if (isChallenge(headers)) return final('blocked', 'the site answered with a challenge');
   // A lone 429 is a busy host, not a refusal: it fails the fetch, and the gate backs off.
   if ([401, 402, 403].includes(status)) return final('blocked', `HTTP ${status}`);
   if (status === 404 || status === 410) return final('gone', `HTTP ${status}`);
@@ -193,17 +150,22 @@ export function classifyResponse(response: {
   return { kind: 'page' };
 }
 
-interface Context {
-  runId: string;
-  datasetId: string;
-  revision: number;
-  definition: Definition;
-}
-
 /** A fetch's result, as its step returns it. */
 interface Fetched {
   fetchId: string;
   outcome: Outcome;
+  /**
+   * Whether the host answered, so its status decided the outcome. False for a gate refusal, such as
+   * a page robots.txt disallows, and for a request that got no answer: the network dropped it, or
+   * the run gave up waiting to send it. A `blocked` outcome without an answer is Spatula's, not
+   * the host's.
+   */
+  hostAnswered: boolean;
+  /**
+   * Whether the fetch strained the host: it answered 429 or a 5xx, or no answer came to a request
+   * the gate let go. A result kept by an earlier version has none, which reads as no strain.
+   */
+  strained?: boolean;
   finalUrl: string;
   signals: ContentSignals;
   /** The page the statements will come from: the fresh one, or the one stored before. */
@@ -219,6 +181,10 @@ interface Extracted {
   llm: 'ran' | 'reused' | 'skipped' | 'failed';
   usage: LlmUsage;
   notes: string[];
+  /** Whether the page was read: a page that couldn't be has nothing to classify. */
+  read: boolean;
+  /** Whether the LLM wasn't asked because the run's budget was spent. */
+  waitsForBudget: boolean;
 }
 
 export async function runRefresh(
@@ -233,10 +199,12 @@ export async function runRefresh(
         const dataset = await getDataset(db, datasetId);
         if (dataset === null) throw new DatasetMissingError(datasetId);
         await startRun(db, { id: runId, datasetId });
+        // The run's own time, for what's due and for what its sitemaps list. A step that runs again
+        // returns its first result, so every later step sees the same time.
         return {
           revision: dataset.revision,
           definition: dataset.definition,
-          items: await listLiveItems(db, datasetId),
+          startedAt: ports.now().toISOString(),
         };
       }),
     );
@@ -245,44 +213,141 @@ export async function runRefresh(
       datasetId,
       revision: loaded.revision,
       definition: loaded.definition,
+      startedAt: new Date(loaded.startedAt),
     };
-    const summary = emptySummary(loaded.items.length);
+    const summary = emptySummary();
 
-    for (const item of loaded.items) {
-      const fetched = await fetchWithWaits(context, item, step, ports);
-      summary.fetches[fetched.outcome] += 1;
-      summary.statements.reseen += fetched.reseen;
-      if (fetched.note !== null) note(summary, fetched.note);
-      if (!fetched.extract) continue;
-      const extracted = await step.do(`extract:${item.id}`, () =>
-        extractItem(context, item, fetched, ports),
-      );
-      summary.statements.added += extracted.statements.added;
-      summary.statements.reseen += extracted.statements.reseen;
-      summary.statements.withdrawn += extracted.statements.withdrawn;
-      summary.llm[extracted.llm] += 1;
-      summary.llm.inputTokens += extracted.usage.inputTokens;
-      summary.llm.outputTokens += extracted.usage.outputTokens;
-      for (const text of extracted.notes) note(summary, text);
+    for (const source of context.definition.sources) {
+      if (source.kind !== 'sitemap') continue;
+      const found = await discoverSource(context, source, step, ports);
+      const discovery = summary.discovery!;
+      discovery.sources += 1;
+      discovery.sitemaps += found.sitemaps;
+      discovery.listed += found.listed;
+      discovery.added += found.added;
+      discovery.revived += found.revived;
+      discovery.missing += found.missing;
+      discovery.gone += found.gone;
+      if (found.incomplete !== null) {
+        discovery.incomplete.push(storable(`${source.id}: ${found.incomplete}`));
+      }
+      for (const text of found.notes) note(summary, text);
     }
 
+    const plan = await step.do('plan', () =>
+      ports.withDb((db) =>
+        dueItems(db, {
+          datasetId,
+          now: context.startedAt,
+          maxAgeDays: context.definition.freshness.maxAgeDays,
+          current: extractionTag(context.revision),
+          limit: context.definition.budget.itemsPerRun,
+          all: params.all === true,
+        }),
+      ),
+    );
+    summary.live = plan.live;
+    summary.due = plan.due;
+    const waiting = plan.due - plan.ids.length;
+    if (waiting > 0) {
+      const { itemsPerRun } = context.definition.budget;
+      const budget = `the budget reads ${itemsPerRun} ${itemsPerRun === 1 ? 'page' : 'pages'} a run`;
+      // Under --all every live page is due, and the next ordinary run reads only the pages whose
+      // freshness has run out, which may be none of these. So they aren't said to wait for it.
+      note(
+        summary,
+        params.all === true
+          ? `${waiting} live ${waiting === 1 ? 'page wasn’t' : 'pages weren’t'} read: ${budget}`
+          : `${waiting} due ${waiting === 1 ? 'page waits' : 'pages wait'} for the next run: ${budget}`,
+      );
+    }
+
+    // Pages in a row by source that were blocked or that strained their host, and the pages each
+    // paused source left unread. They stay due, so an ordinary run's next one reads them; under --all every
+    // page was due, so none is promised to the next run, as the note below says. Both come from
+    // steps' results, so a run that replays its steps pauses at the same page.
+    const inARow = new Map<string, number>();
+    const paused = new Map<string, number>();
+    let budgetWaits = 0;
+    for (let start = 0; start < plan.ids.length; start += ITEMS_PER_STEP) {
+      const batch = await step.do(`items:${start}`, () =>
+        ports.withDb((db) => itemsByIds(db, plan.ids.slice(start, start + ITEMS_PER_STEP))),
+      );
+      for (const item of batch) {
+        const left = paused.get(item.sourceId);
+        if (left !== undefined) {
+          paused.set(item.sourceId, left + 1);
+          continue;
+        }
+        const refreshed = await refreshItem(context, item, summary, step, ports);
+        // The pages read: a planned page that's no longer live when its batch loads isn't one, and
+        // neither is one a paused source left unread.
+        summary.items += 1;
+        // A block counts only when the host answered it; a strain always does. A gate refusal sent
+        // no request, and starts the count again, as any other answer does.
+        const counts =
+          (refreshed.outcome === 'blocked' && refreshed.hostAnswered) || refreshed.strained;
+        const count = counts ? (inARow.get(item.sourceId) ?? 0) + 1 : 0;
+        inARow.set(item.sourceId, count);
+        if (count >= SOURCE_PAUSE_AFTER) paused.set(item.sourceId, 0);
+        if (refreshed.waitsForBudget) budgetWaits += 1;
+      }
+    }
+    summary.paused = Object.fromEntries(paused);
+    for (const [sourceId, left] of paused) {
+      if (left === 0) continue;
+      // Under --all every live page was due, and the next ordinary run reads only the pages whose
+      // freshness has run out, which may be none of these. So they aren't said to wait for it.
+      const fate =
+        params.all === true
+          ? `${left === 1 ? 'page wasn’t' : 'pages weren’t'} read`
+          : `${left === 1 ? 'page waits' : 'pages wait'} for the next run`;
+      note(
+        summary,
+        `${sourceId}: paused after ${SOURCE_PAUSE_AFTER} pages in a row were blocked or strained; ${left} ${fate}`,
+      );
+    }
+    if (budgetWaits > 0) {
+      const { llmTokensPerRun } = context.definition.budget;
+      note(
+        summary,
+        `${budgetWaits} ${budgetWaits === 1 ? 'page waits' : 'pages wait'} for the next run: this run’s LLM budget of ${llmTokensPerRun.toLocaleString('en-US')} tokens is spent`,
+      );
+    }
+
+    // Resolution, then the match questions it raised, then resolution again with their verdicts.
     // The counts stay exact. Only the notes, one for each page left unresolved and each claim in
     // conflict, are held to what a step's result may carry.
-    const { notes, ...entities } = await step.do('resolve', async () => {
-      const resolved = await ports.withDb((db) =>
-        resolveEntities(db, { datasetId, definition: context.definition }),
+    const first = await step.do('resolve', () => resolveStep(context, ports));
+    let resolved = first;
+    // A resolution kept by an earlier version has no questions: its pages wait for the next run.
+    const questions = first.questions ?? [];
+    for (const question of questions) {
+      const matched = await step.do(`match:${question.itemId}:${question.entityId}`, () =>
+        matchItem(context, question, budgetLeft(context, summary), ports),
       );
-      return {
-        ...resolved,
-        notes: capped(
-          resolved.notes,
-          (text) => text,
-          (count) => `${count} more notes about entities`,
-        ),
+      const counts = decisionsOf(summary, 'match');
+      counts[matched.outcome] += 1;
+      counts.inputTokens += matched.usage.inputTokens;
+      counts.outputTokens += matched.usage.outputTokens;
+      if (matched.note !== null) note(summary, matched.note);
+    }
+    if (questions.length > 0) {
+      const again = await step.do('resolve:matched', () => resolveStep(context, ports));
+      resolved = {
+        ...again,
+        created: first.created + again.created,
+        linked: first.linked + again.linked,
       };
-    });
-    summary.entities = entities;
-    for (const text of notes) note(summary, text);
+    }
+    summary.entities = {
+      created: resolved.created,
+      linked: resolved.linked,
+      conflicts: resolved.conflicts,
+      unresolved: resolved.unresolved,
+      waiting: resolved.waiting,
+    };
+    for (const text of resolved.notes) note(summary, text);
 
     summary.snapshot = await step.do('snapshot', () => publish(context, ports));
     await step.do('finish', () =>
@@ -298,33 +363,85 @@ export async function runRefresh(
   }
 }
 
-function emptySummary(items: number): RunSummary {
+function emptySummary(): RunSummary {
   return {
-    items,
+    items: 0,
+    live: 0,
+    due: 0,
+    discovery: {
+      sources: 0,
+      sitemaps: 0,
+      listed: 0,
+      added: 0,
+      revived: 0,
+      missing: 0,
+      gone: 0,
+      incomplete: [],
+    },
     fetches: { changed: 0, unchanged: 0, gone: 0, failed: 0, blocked: 0 },
     statements: { ...NO_CHANGE },
     llm: { ran: 0, reused: 0, skipped: 0, failed: 0, inputTokens: 0, outputTokens: 0 },
-    entities: { created: 0, linked: 0, conflicts: 0, unresolved: 0 },
+    entities: { created: 0, linked: 0, conflicts: 0, unresolved: 0, waiting: 0 },
     snapshot: { published: false, reason: 'the run didn’t reach publishing', excluded: [] },
     notes: [],
   };
 }
 
-/** The most code units of a note, or of a failed run's error, that are stored. */
-const MAX_STORED_TEXT = 500;
-
-/**
- * Text that Postgres will take. A note can carry an exception's message, and messages can quote
- * their input, but jsonb refuses U+0000 and a lone surrogate. The run summary is jsonb and the
- * last step writes it, so one bad character would fail a run that had otherwise finished. The
- * text is cut before it is made well formed, which also repairs a pair that the cut split.
- */
-function storable(text: string): string {
-  return text.replaceAll('\u0000', '').slice(0, MAX_STORED_TEXT).toWellFormed();
-}
-
 function note(summary: RunSummary, text: string) {
   if (summary.notes.length < MAX_NOTES) summary.notes.push(storable(text));
+}
+
+/** Fetches one page; reads it when it changed or its statements came from older code; classifies it. */
+async function refreshItem(
+  context: Context,
+  item: ItemRef,
+  summary: RunSummary,
+  step: StepRunner,
+  ports: RefreshPorts,
+): Promise<{
+  outcome: Outcome;
+  hostAnswered: boolean;
+  strained: boolean;
+  waitsForBudget: boolean;
+}> {
+  const fetched = await fetchWithWaits(context, item, step, ports);
+  summary.fetches[fetched.outcome] += 1;
+  summary.statements.reseen += fetched.reseen;
+  if (fetched.note !== null) note(summary, fetched.note);
+  // What the fetch step's result says of the host, which a run that replays its steps reads again.
+  const host = {
+    outcome: fetched.outcome,
+    hostAnswered: fetched.hostAnswered,
+    strained: fetched.strained === true,
+  };
+  if (!fetched.extract) return { ...host, waitsForBudget: false };
+  const extracted = await step.do(`extract:${item.id}`, () =>
+    extractItem(context, item, fetched, budgetLeft(context, summary), ports),
+  );
+  summary.statements.added += extracted.statements.added;
+  summary.statements.reseen += extracted.statements.reseen;
+  summary.statements.withdrawn += extracted.statements.withdrawn;
+  summary.llm[extracted.llm] += 1;
+  summary.llm.inputTokens += extracted.usage.inputTokens;
+  summary.llm.outputTokens += extracted.usage.outputTokens;
+  for (const text of extracted.notes) note(summary, text);
+  let waitsForBudget = extracted.waitsForBudget;
+  if (extracted.read && classifyTarget(context.definition, item) !== null) {
+    // A page whose LLM step failed or waited for the budget is read again next run, whatever
+    // classifying it comes to.
+    const complete = extracted.llm !== 'failed' && !extracted.waitsForBudget;
+    const classified = await step.do(`classify:${item.id}`, () =>
+      classifyItem(context, item, fetched, budgetLeft(context, summary), ports, complete),
+    );
+    const counts = decisionsOf(summary, 'classify');
+    counts[classified.outcome] += 1;
+    counts.inputTokens += classified.usage.inputTokens;
+    counts.outputTokens += classified.usage.outputTokens;
+    if (classified.irrelevant) summary.irrelevant = (summary.irrelevant ?? 0) + 1;
+    if (classified.note !== null) note(summary, classified.note);
+    waitsForBudget ||= classified.outcome === 'skipped';
+  }
+  return { ...host, waitsForBudget };
 }
 
 /**
@@ -342,18 +459,52 @@ function capped<T>(
   return notes;
 }
 
-/** Fetches a page, sleeping between steps whenever its host asks for a longer wait. */
+/**
+ * Joins pages to entities, and returns the match questions to ask, with notes held to what a step
+ * carries. A pair that was escalated when no decider could be asked is a question again once one
+ * can, which takes a decider and a dataset that allows it. A site's own refusal is for the
+ * question's step to find.
+ */
+async function resolveStep(context: Context, ports: RefreshPorts) {
+  const resolved = await ports.withDb((db) =>
+    resolveEntities(db, {
+      datasetId: context.datasetId,
+      definition: context.definition,
+      maxQuestions: MAX_MATCH_QUESTIONS,
+      deciderCanAnswer:
+        ports.decider !== null && context.definition.policy.purposes.includes('ai-input'),
+    }),
+  );
+  return {
+    ...resolved,
+    notes: capped(
+      resolved.notes,
+      (text) => text,
+      (count) => `${count} more notes about entities`,
+    ),
+  };
+}
+
+/**
+ * Fetches a page, sleeping between steps whenever its host asks for a longer wait. An attempt that
+ * was put off at a redirect's later hop picks up there, from what the step before it returned, so
+ * a run that replays its steps asks for the same hops.
+ */
 async function fetchWithWaits(
   context: Context,
   item: ItemRef,
   step: StepRunner,
   ports: RefreshPorts,
 ): Promise<Fetched> {
+  let resume: Resume | undefined;
   for (let attempt = 0; ; attempt += 1) {
+    const from = resume;
     const result = await step.do(`fetch:${item.id}:${attempt}`, () =>
-      fetchItem(context, item, attempt >= MAX_WAITS, ports),
+      fetchItem(context, item, attempt, ports, from),
     );
     if (result.kind === 'done') return result.fetched;
+    // A result kept by an earlier version has none, and starts again from the page's own address.
+    resume = result.resume;
     await step.sleep(`wait:${item.id}:${attempt}`, result.retryAfterMs);
   }
 }
@@ -373,22 +524,33 @@ interface Attempt {
 async function fetchItem(
   context: Context,
   item: ItemRef,
-  giveUp: boolean,
+  attempt: number,
   ports: RefreshPorts,
-): Promise<{ kind: 'later'; retryAfterMs: number } | { kind: 'done'; fetched: Fetched }> {
+  resume: Resume | undefined,
+): Promise<
+  { kind: 'later'; retryAfterMs: number; resume: Resume } | { kind: 'done'; fetched: Fetched }
+> {
   const startedAt = ports.now();
-  const requested = await request(context, item, giveUp, ports);
+  const requested = await request(context, item, attempt >= MAX_WAITS, ports, resume);
   if (requested.kind === 'later') return requested;
-  const { attempt, signals } = requested;
+  const { attempt: answer, signals, noAnswer } = requested;
 
-  const fetchId = newId('fe');
+  // The same run, page, and attempt make the same ID, so a step that runs again logs one fetch.
+  const fetchId = await stableId('fe', context.runId, item.id, attempt);
   // A page whose statements came from older code isn't current. Neither is one the LLM read
   // while its site now says ai-input=no: it's extracted once more, and the LLM step withdraws
-  // what the LLM said and clears its hash, so the page is current again next time.
-  const current =
+  // what the LLM said and clears its hash, so the page is current again next time. The same goes
+  // for a page whose category the decider gave, though the LLM read nothing else of it: its
+  // classify step finds the answer can't stand, and withdraws it. That statement is looked up only
+  // for such a page, so a run costs nothing more otherwise.
+  const noAiInput = signals['ai-input'] === 'no';
+  let current =
     item.extractedWith === extractionTag(context.revision) &&
-    !(signals['ai-input'] === 'no' && item.extractInputHash !== null);
-  const extract = attempt.outcome === 'changed' || (attempt.outcome === 'unchanged' && !current);
+    !(noAiInput && item.extractInputHash !== null);
+  if (current && noAiInput && answer.outcome === 'unchanged') {
+    current = !(await decidedByLlm(context, item, ports));
+  }
+  const extract = answer.outcome === 'changed' || (answer.outcome === 'unchanged' && !current);
   const reseen = await ports.withDb(async (db) => {
     const logged: FetchInput = {
       id: fetchId,
@@ -399,149 +561,184 @@ async function fetchItem(
       signals,
       startedAt,
       durationMs: ports.now().getTime() - startedAt.getTime(),
-      ...attempt,
+      ...answer,
+      // The page now stored isn't the one the item's statements came from, and it hasn't been
+      // read yet. Until the extract step has, the item must not look current: if the run ended
+      // before then, the next fetch of the same bytes would be "unchanged" and "current", and would
+      // re-see the old statements as fresh. The mark goes in with the fetch, in one transaction.
+      ...(answer.outcome === 'changed'
+        ? { extractedWith: retryTag(context.revision), llm: 'skipped: not read yet' }
+        : {}),
     };
     await recordFetch(db, logged);
-    // The page now stored isn't the one the item's statements came from, and it hasn't been read
-    // yet. Until the extract step has, the item must not look current: if the run ended before
-    // then, the next fetch of the same bytes would be "unchanged" and "current", and would re-see
-    // the old statements as fresh. The extract step sets the real tag when it has read the page.
-    if (attempt.outcome === 'changed') {
-      await recordExtraction(db, {
-        itemId: item.id,
-        fetchId,
-        extractedWith: retryTag(context.revision),
-        llm: 'skipped: not read yet',
-        usage: NO_USAGE,
-      });
-    }
     // An unchanged page whose statements are current says what it said before.
-    return attempt.outcome === 'unchanged' && current
+    return answer.outcome === 'unchanged' && current
       ? reseeStatements(db, { itemId: item.id, fetchId, seenAt: ports.now() })
       : 0;
   });
-  const settled = attempt.outcome === 'changed' || attempt.outcome === 'unchanged';
-  const why = attempt.error ?? attempt.policyReason;
+  const settled = answer.outcome === 'changed' || answer.outcome === 'unchanged';
+  const why = answer.error ?? answer.policyReason;
   return {
     kind: 'done',
     fetched: {
       fetchId,
-      outcome: attempt.outcome,
-      finalUrl: attempt.finalUrl,
+      outcome: answer.outcome,
+      hostAnswered: answer.httpStatus !== null,
+      strained: noAnswer || strains(answer.httpStatus),
+      finalUrl: answer.finalUrl,
       signals,
-      contentHash: attempt.page?.contentHash ?? item.contentHash,
+      contentHash: answer.page?.contentHash ?? item.contentHash,
       extract,
       reseen,
       note: settled
         ? null
-        : `${item.locator}: ${attempt.outcome}${why === null ? '' : ` (${why})`}`,
+        : storable(`${item.locator}: ${answer.outcome}${why === null ? '' : ` (${why})`}`),
     },
   };
 }
 
 /**
- * Asks for a page, following redirects. Every request, redirects included, goes through its
- * host's gate first, and its answer goes back to the gate. Only HTTPS addresses are followed.
+ * Whether an answer's status strains its host, as the gate backs off on: a 429 or a 5xx. The gate
+ * backs off on blocks too, which the run counts as blocks.
+ */
+function strains(status: number | null): boolean {
+  return status !== null && (status === 429 || status >= 500);
+}
+
+/**
+ * Asks for a page through its host's gate, and says what came of it, and whether no answer came to
+ * a request the gate let go.
  */
 async function request(
   context: Context,
   item: ItemRef,
   giveUp: boolean,
   ports: RefreshPorts,
+  resume: Resume | undefined,
 ): Promise<
-  | { kind: 'later'; retryAfterMs: number }
-  | { kind: 'answered'; attempt: Attempt; signals: ContentSignals }
+  | { kind: 'later'; retryAfterMs: number; resume: Resume }
+  | { kind: 'answered'; attempt: Attempt; signals: ContentSignals; noAnswer: boolean }
 > {
   // Definitions keep a page as written and only validate it. From here on, every hop and the
   // fetch log's final address use its href, as the redirects already do.
-  let url = new URL(item.locator).href;
-  let signals: ContentSignals = {};
-  const answered = (attempt: Omit<Attempt, 'policy' | 'policyReason'> & Partial<Attempt>) => ({
-    kind: 'answered' as const,
-    signals,
-    attempt: { policy: 'allowed' as const, policyReason: null, ...attempt },
+  const answer = await requestThroughGate(ports, new URL(item.locator).href, {
+    minIntervalMs: context.definition.policy.perHostIntervalMs,
+    giveUp,
+    headers: validators(item),
+    resume,
   });
-  const failed = (error: string, httpStatus: number | null = null) =>
-    answered({ outcome: 'failed', httpStatus, finalUrl: url, bytes: null, error });
-
-  for (let hop = 0; ; hop += 1) {
-    const decision = await ports.gate.reserve(url, {
-      minIntervalMs: context.definition.policy.perHostIntervalMs,
-      maxWaitMs: MAX_INLINE_WAIT_MS,
-    });
-    if (decision.kind === 'later') {
-      if (!giveUp) return { kind: 'later', retryAfterMs: decision.retryAfterMs };
-      return failed(`${decision.reason}, and the run stopped waiting after ${MAX_WAITS} tries`);
-    }
-    if (decision.kind === 'deny') {
-      return answered({
-        outcome: decision.outcome,
-        policy: 'denied',
-        policyReason: decision.reason,
-        httpStatus: null,
-        finalUrl: url,
-        bytes: null,
-        error: null,
-      });
-    }
-    signals = decision.signals;
-    if (decision.waitMs > 0) await ports.wait(decision.waitMs);
-
-    const response = await ports.http.get(url, hop === 0 ? validators(item) : {});
-    await ports.gate.record(
-      url,
-      response.ok
-        ? { status: response.status, retryAfter: response.headers['retry-after'] ?? null }
-        : { status: 0, retryAfter: null },
-    );
-    if (!response.ok) return failed(response.error);
-
-    const location = response.headers.location;
-    if (REDIRECTS.has(response.status) && location !== undefined) {
-      const next = URL.canParse(location, url) ? new URL(location, url) : null;
-      if (next === null)
-        return failed(`redirected to ${location}, which isn’t an address`, response.status);
-      if (next.protocol !== 'https:')
-        return failed(`redirected to ${next.href}, which isn’t HTTPS`, response.status);
-      if (hop === MAX_REDIRECTS)
-        return failed(`redirected more than ${MAX_REDIRECTS} times`, response.status);
-      url = next.href;
-      continue;
-    }
-
-    const classified = classifyResponse(response);
-    if (classified.kind === 'final') {
-      if (classified.outcome === 'unchanged' && item.contentHash === null) {
-        return failed(
-          'the site said the page is unchanged, but no copy of it is stored',
-          response.status,
-        );
-      }
-      return answered({
-        outcome: classified.outcome,
-        httpStatus: response.status,
-        finalUrl: url,
-        bytes: null,
-        error: classified.error,
-      });
-    }
-    const contentHash = await sha256Hex(response.body);
-    if (contentHash !== item.contentHash) {
-      await ports.blobs.put(pageKey(contentHash), response.body, 'text/html; charset=utf-8');
-    }
-    return answered({
-      outcome: contentHash === item.contentHash ? 'unchanged' : 'changed',
-      httpStatus: response.status,
-      finalUrl: url,
-      bytes: response.body.byteLength,
-      error: null,
-      page: {
-        contentHash,
-        etag: response.headers.etag ?? null,
-        lastModified: response.headers['last-modified'] ?? null,
+  if (answer.kind === 'later') return answer;
+  const answered = (attempt: Omit<Attempt, 'policy' | 'policyReason'> & Partial<Attempt>) => {
+    const whole = { policy: 'allowed' as const, policyReason: null, ...attempt };
+    return {
+      kind: 'answered' as const,
+      signals: answer.signals,
+      noAnswer: answer.kind === 'failed' && answer.noAnswer,
+      // A reason or an error can quote the site, such as the Location of a redirect that isn't an
+      // address or of a robots.txt's redirect. Both are stored as text, and Postgres refuses U+0000.
+      attempt: {
+        ...whole,
+        policyReason: whole.policyReason === null ? null : storable(whole.policyReason),
+        error: whole.error === null ? null : storable(whole.error),
       },
+    };
+  };
+  if (answer.kind === 'denied') {
+    return answered({
+      outcome: answer.outcome,
+      policy: 'denied',
+      policyReason: answer.reason,
+      httpStatus: null,
+      finalUrl: answer.url,
+      bytes: null,
+      error: null,
     });
   }
+  if (answer.kind === 'failed') {
+    return answered({
+      outcome: 'failed',
+      httpStatus: answer.httpStatus,
+      finalUrl: answer.url,
+      bytes: null,
+      error: answer.error,
+    });
+  }
+  if (answer.status < 400 && redirectedAway(context.definition, item, answer.url)) {
+    // Gone, as a 404 is: two in a row make the page gone (ADR 0005).
+    return answered({
+      outcome: 'gone',
+      httpStatus: answer.status,
+      finalUrl: answer.url,
+      bytes: null,
+      error: `redirected away, to ${answer.url}`,
+    });
+  }
+  const classified = classifyResponse(answer);
+  if (classified.kind === 'final') {
+    if (classified.outcome === 'unchanged' && item.contentHash === null) {
+      return answered({
+        outcome: 'failed',
+        httpStatus: answer.status,
+        finalUrl: answer.url,
+        bytes: null,
+        error: 'the site said the page is unchanged, but no copy of it is stored',
+      });
+    }
+    return answered({
+      outcome: classified.outcome,
+      httpStatus: answer.status,
+      finalUrl: answer.url,
+      bytes: null,
+      error: classified.error,
+    });
+  }
+  const contentHash = await sha256Hex(answer.body);
+  if (contentHash !== item.contentHash) {
+    await ports.blobs.put(pageKey(contentHash), answer.body, 'text/html; charset=utf-8');
+  }
+  return answered({
+    outcome: contentHash === item.contentHash ? 'unchanged' : 'changed',
+    httpStatus: answer.status,
+    finalUrl: answer.url,
+    bytes: answer.body.byteLength,
+    error: null,
+    page: {
+      contentHash,
+      etag: answer.headers.etag ?? null,
+      lastModified: answer.headers['last-modified'] ?? null,
+    },
+  });
+}
+
+/**
+ * Whether a sitemap source's page was redirected away from itself (ADR 0005): to an address whose
+ * path the source's patterns wouldn't list, that doesn't keep the page's name, which is the last
+ * segment of its path. A discontinued product's page often redirects to a collection or the home
+ * page, which are other pages. A store sends a region to a path of its own, as /products/c1 to
+ * /en-gb/products/c1, which no pattern lists but which is the same page, so it is followed. The
+ * host is left out, since a store that sends a region to another host keeps its paths. A pages
+ * source lists its pages by hand, so its redirects are followed.
+ */
+function redirectedAway(definition: Definition, item: ItemRef, finalUrl: string): boolean {
+  const source = definition.sources.find((one) => one.id === item.sourceId);
+  const from = new URL(item.locator);
+  if (source?.kind !== 'sitemap' || finalUrl === from.href) return false;
+  const to = new URL(finalUrl);
+  const path = to.pathname + to.search;
+  const listed =
+    source.include.some((pattern) => pathPatternMatches(pattern, path)) &&
+    !source.exclude.some((pattern) => pathPatternMatches(pattern, path));
+  return !listed && lastSegment(to.pathname) !== lastSegment(from.pathname);
+}
+
+/**
+ * A path's last segment that isn't empty, so a trailing slash doesn't matter, with its percent
+ * escapes in uppercase, however they were written. The root has none (''), so a redirect to it
+ * leaves every page that has one.
+ */
+function lastSegment(pathname: string): string {
+  const last = pathname.split('/').findLast((segment) => segment !== '') ?? '';
+  return last.replace(/%[0-9a-f]{2}/giu, (escape) => escape.toUpperCase());
 }
 
 /** Conditional request headers, sent only when a copy of the page is stored to fall back on. */
@@ -583,6 +780,8 @@ async function unread(
     usage: NO_USAGE,
     // The reason can quote an exception's message, and this note is part of the step's result.
     notes: [storable(`${item.locator}: ${why}`)],
+    read: false,
+    waitsForBudget: false,
   };
 }
 
@@ -591,6 +790,7 @@ async function extractItem(
   context: Context,
   item: ItemRef,
   fetched: Fetched,
+  tokensLeft: number,
   ports: RefreshPorts,
 ): Promise<Extracted> {
   const { definition, revision, datasetId } = context;
@@ -623,6 +823,10 @@ async function extractItem(
     );
   }
   const seenAt = ports.now();
+  const decided = cascadeField(source, recordType);
+  // The cascade owns the decided field, so the page and the LLM speak for every other field, and
+  // neither gives or withdraws a decided answer.
+  const own = speaksFor(recordType, decided?.[0] ?? null);
   const pageCounts = await ports.withDb((db) =>
     writeStatements(db, {
       datasetId,
@@ -630,7 +834,11 @@ async function extractItem(
       fetchId: fetched.fetchId,
       seenAt,
       methods: PAGE_METHODS,
-      statements: extraction.statements,
+      statements:
+        decided === null
+          ? extraction.statements
+          : extraction.statements.filter((statement) => statement.property !== decided[0]),
+      ...own,
     }),
   );
   const llm = await askLlm(
@@ -639,8 +847,10 @@ async function extractItem(
     fetched,
     page,
     recordType,
+    own,
     extraction.missing,
     seenAt,
+    tokensLeft,
     ports,
   );
   await ports.withDb((db) =>
@@ -648,8 +858,13 @@ async function extractItem(
       itemId: item.id,
       fetchId: fetched.fetchId,
       // A failed LLM step leaves the page not current, so the next run reads the stored copy and
-      // asks again, even after a 304 or an unchanged hash.
-      extractedWith: llm.outcome === 'failed' ? retryTag(revision) : extractionTag(revision),
+      // asks again, even after a 304 or an unchanged hash. So does an LLM step that waited for the
+      // run's budget. A page whose category the cascade decides isn't current until its classify
+      // step has finished, and that step marks it.
+      extractedWith:
+        llm.outcome === 'failed' || llm.waitsForBudget === true || decided !== null
+          ? retryTag(revision)
+          : extractionTag(revision),
       extractInputHash: llm.inputHash,
       // The detail can quote an LLM error's message, and a NUL in it would fail this write after
       // the LLM has been paid for.
@@ -673,7 +888,20 @@ async function extractItem(
     llm: llm.outcome,
     usage: llm.usage,
     notes,
+    read: true,
+    waitsForBudget: llm.waitsForBudget === true,
   };
+}
+
+/**
+ * The properties a write by the page's extraction or by the LLM speaks for: every field but the
+ * one the cascade decides. With no decided field none is named, so the write speaks for every
+ * property, as it did before there was a cascade.
+ */
+function speaksFor(recordType: RecordType, decided: string | null): { properties?: string[] } {
+  return decided === null
+    ? {}
+    : { properties: Object.keys(recordType.fields).filter((name) => name !== decided) };
 }
 
 interface LlmStep {
@@ -685,6 +913,8 @@ interface LlmStep {
   /** The new question's hash; null clears the stored one; undefined keeps it. */
   inputHash: string | null | undefined;
   note: string | null;
+  /** Whether the LLM wasn't asked because the run's budget was spent. */
+  waitsForBudget?: boolean;
 }
 
 async function askLlm(
@@ -693,8 +923,10 @@ async function askLlm(
   fetched: Fetched,
   page: Page,
   recordType: RecordType,
+  own: { properties?: string[] },
   missing: string[],
   seenAt: Date,
+  tokensLeft: number,
   ports: RefreshPorts,
 ): Promise<LlmStep> {
   const skipped = (why: string, more: Partial<LlmStep> = {}): LlmStep => ({
@@ -706,12 +938,15 @@ async function askLlm(
     note: null,
     ...more,
   });
+  // The LLM speaks for every field but the cascade's, so what it said of a field it no longer
+  // fills is withdrawn with the rest, and the cascade's answer is left alone.
   const write = {
     datasetId: context.datasetId,
     itemId: item.id,
     fetchId: fetched.fetchId,
     seenAt,
     methods: ['llm'] as const,
+    ...own,
   };
 
   const fields = llmFields(recordType, missing);
@@ -733,8 +968,15 @@ async function askLlm(
   const inputHash = await llmInputHash({ model: llm.model, text: page.text, fields });
   if (inputHash === item.extractInputHash) {
     // The same text, fields, and model would get the same answer, so its statements are re-seen.
+    // The cascade's answer isn't among them: nothing has confirmed it until its own step has.
     const reseen = await ports.withDb((db) =>
-      reseeStatements(db, { itemId: item.id, fetchId: fetched.fetchId, seenAt, methods: ['llm'] }),
+      reseeStatements(db, {
+        itemId: item.id,
+        fetchId: fetched.fetchId,
+        seenAt,
+        methods: ['llm'],
+        ...own,
+      }),
     );
     return {
       outcome: 'reused',
@@ -745,6 +987,8 @@ async function askLlm(
       note: null,
     };
   }
+  // A reused answer costs nothing; a new one waits for the next run's budget.
+  if (tokensLeft <= 0) return skipped('the run’s LLM budget is spent', { waitsForBudget: true });
 
   // The question names the page that was listed, which the dataset's owner chose. After a
   // redirect the final address is the site's text, and it would sit outside the wrapper around
@@ -784,96 +1028,4 @@ async function askLlm(
     inputHash,
     note: dropped === 0 ? null : `${item.locator}: dropped ${dropped} of the LLM’s values`,
   };
-}
-
-/**
- * Publishes the dataset's records, if they changed. The file goes to the blob store first; then
- * the head generation moves, compared and set. A step that runs again after publishing finds its
- * own snapshot and reports it.
- */
-async function publish(context: Context, ports: RefreshPorts): Promise<PublishResult> {
-  const { runId, datasetId, definition } = context;
-  return ports.withDb(async (db) => {
-    const latest = await latestSnapshot(db, datasetId);
-    if (latest !== null && latest.runId === runId) {
-      return {
-        published: true,
-        generation: latest.generation,
-        snapshotId: latest.id,
-        records: latest.recordCount,
-        excluded: latest.report.excluded,
-      };
-    }
-    const [recordType] = Object.values(definition.recordTypes);
-    if (recordType === undefined) throw new Error(`Dataset ${datasetId} has no record type`);
-    // Pushed in place: copying an entity's list for every statement would be quadratic.
-    const said = new Map<string, StatementView[]>();
-    for (const statement of await currentStatements(db, datasetId)) {
-      const id = statement.entityId;
-      if (id === null) continue;
-      const list = said.get(id);
-      if (list === undefined) said.set(id, [statement]);
-      else list.push(statement);
-    }
-    const entities: EntityStatements[] = [...said].map(([canonicalId, statements]) => ({
-      canonicalId,
-      statements,
-    }));
-    const { records, excluded } = buildRecords(recordType, entities);
-    if (records.length === 0)
-      return { published: false, reason: 'no record is complete', excluded };
-    const digest = await recordsDigest(records);
-    if (latest !== null && latest.recordsSha256 === digest) {
-      return {
-        published: false,
-        reason: `nothing changed since generation ${latest.generation}`,
-        excluded,
-      };
-    }
-
-    const dataset = await getDataset(db, datasetId);
-    const generation = (dataset?.headGeneration ?? 0) + 1;
-    const snapshot: Snapshot = {
-      project: datasetId,
-      snapshotId: newId('sn'),
-      generation,
-      publishedAt: ports.now().toISOString(),
-      records,
-    };
-    const checked = snapshotSchema.safeParse(snapshot);
-    if (!checked.success) {
-      const issue = checked.error.issues[0];
-      return {
-        published: false,
-        reason: `the snapshot breaks the published format at ${issue?.path.join('.')}: ${issue?.message}`,
-        excluded,
-      };
-    }
-    const body = JSON.stringify(snapshot);
-    const key = snapshotKey(datasetId, snapshot.snapshotId);
-    await ports.blobs.put(key, body, 'application/json');
-    const committed = await commitSnapshot(db, {
-      id: snapshot.snapshotId,
-      datasetId,
-      generation,
-      runId,
-      recordCount: records.length,
-      recordsSha256: digest,
-      key,
-      sha256: await sha256Hex(body),
-      bytes: new TextEncoder().encode(body).byteLength,
-      publishedAt: snapshot.publishedAt,
-      report: { excluded },
-    });
-    // Another run took this generation first. The step fails, and its retry starts from the new head.
-    if (!committed.committed)
-      throw new Error(`Generation ${committed.headGeneration} was published by another run`);
-    return {
-      published: true,
-      generation,
-      snapshotId: snapshot.snapshotId,
-      records: records.length,
-      excluded,
-    };
-  });
 }

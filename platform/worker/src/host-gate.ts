@@ -22,8 +22,12 @@ export class HostGate extends DurableObject<Env> {
     return this.#keeper.robotsDue(now);
   }
 
-  storeRobots(record: RobotsRecord, now: number): Promise<void> {
-    return this.#keeper.storeRobots(record, now);
+  opensAt(): Promise<number> {
+    return this.#keeper.opensAt();
+  }
+
+  storeRobots(record: RobotsRecord, now: number, minIntervalMs?: number): Promise<void> {
+    return this.#keeper.storeRobots(record, now, minIntervalMs);
   }
 
   reserve(request: {

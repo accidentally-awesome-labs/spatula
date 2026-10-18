@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { parseDefinition, type RecordType } from './definition';
 import { buildRecords } from './snapshot';
-import { compareStatements, survive, type StatementView } from './survivorship';
+import { compareStatements, survive, survivingValues, type StatementView } from './survivorship';
 
 const parsed = parseDefinition({
   dataset: 'audio-products',
@@ -192,5 +192,16 @@ describe('survive', () => {
     const second = statement({ property: 'gtins', value: '00819343015004', position: 1 });
     expect(compareStatements(first, second)).toBeLessThan(0);
     expect(compareStatements(second, first)).toBeGreaterThan(0);
+  });
+});
+
+describe('survivingValues', () => {
+  it('gives each field’s surviving values by name, without their statements', () => {
+    const values = survivingValues(product, [
+      statement({ property: 'name', value: 'HD 650', method: 'jsonld' }),
+      statement({ property: 'name', value: 'HD650', method: 'opengraph' }),
+      statement({ property: 'gtins', value: '04044155034536', method: 'jsonld', position: 0 }),
+    ]);
+    expect(values).toEqual({ name: ['HD 650'], gtins: ['04044155034536'] });
   });
 });

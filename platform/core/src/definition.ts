@@ -1,13 +1,15 @@
 import { z } from 'zod';
 import { selectorError } from './css';
+import { NONE_OF_THESE } from './decision-types';
 import { FIELD_TYPES, normalizeValue, type FieldDef } from './fields';
 
 /*
  * A dataset definition: the record type a dataset keeps, its fields and identity, the sources it
  * reads, and its collection policy. Owners write definitions as YAML in their own repository; the
  * CLI checks them and sends them as JSON, and the API checks them again with the same schema.
- * This is slice 0's subset: one record type, sources that are lists of pages, and rules a person
- * declares. ADR 0002 explains the format.
+ * This is version 2: one record type, sources that list pages or read sitemaps, rules a person
+ * declares, and the dataset's freshness, gates, publication, decisions, budget, and consumers.
+ * Every key added since slice 0 has a default. ADR 0002 explains the format.
  */
 
 type Path = (string | number)[];
@@ -49,11 +51,18 @@ const fieldSchema = z
     list: z.boolean().default(false),
     identifier: z.boolean().default(false),
     scope: name.optional(),
-    values: z.array(z.string().trim().min(1)).min(1).optional(),
+    // A decided field's question offers its values plus "None of these", and a choice holds at most
+    // 255 options. Each value is capped like a text field's maxLength, for the same btree index.
+    values: z
+      .array(z.string().trim().min(1).max(600, 'Use values of 600 characters or less.'))
+      .min(1)
+      .max(254, 'List at most 254 values.')
+      .optional(),
     // statements_current indexes value_key in a btree, whose entries hold at most 2,704 bytes. 600
     // characters, at up to 4 UTF-8 bytes each, fit there with the other columns.
     maxLength: z.number().int().min(1).max(600, 'Use a maxLength of 600 or less.').optional(),
     llm: z.boolean().default(false),
+    decide: z.boolean().default(false),
     description: z.string().trim().min(1).max(300).optional(),
   })
   .transform((field): FieldDef => (field.type === 'specs' ? { ...field, list: true } : field));
@@ -70,21 +79,69 @@ const ruleSchema = z.union(
 );
 export type Rule = z.output<typeof ruleSchema>;
 
-const sourceSchema = z.strictObject({
+const pattern = z
+  .string()
+  .trim()
+  .min(1)
+  .max(200)
+  .regex(/^\/\S*$/u, 'Write a path pattern that starts with /, like /products/*.')
+  // A lone surrogate passes the check above, but it is only half of a character. Matching encodes
+  // every pattern, and encoding one throws.
+  .refine(
+    (value) => value.isWellFormed(),
+    'A pattern is well-formed text, with no lone surrogate.',
+  );
+
+const evidenceSchema = z.strictObject({
+  robots: isoDate,
+  terms: z.strictObject({
+    url: httpsUrl,
+    checked: isoDate,
+    automatedAccess: z.enum(['allowed', 'not-mentioned', 'forbidden']),
+  }),
+});
+
+/**
+ * What every kind of source has: its record type, the values it fixes or declares, and its evidence.
+ * Each kind spreads these after its own fields, because problems are reported in the order of the
+ * schema's keys, and a source's pages have always been reported before its evidence.
+ */
+const sourceFields = {
   id: slug,
-  kind: z.literal('pages'),
   recordType: name,
-  pages: z.array(httpsUrl).min(1).max(1000),
   fixed: z.record(name, z.unknown()).default({}),
   extract: z.record(name, ruleSchema).default({}),
-  evidence: z.strictObject({
-    robots: isoDate,
-    terms: z.strictObject({
-      url: httpsUrl,
-      checked: isoDate,
-      automatedAccess: z.enum(['allowed', 'not-mentioned', 'forbidden']),
-    }),
-  }),
+  evidence: evidenceSchema,
+};
+
+const pagesSourceSchema = z.strictObject({
+  kind: z.literal('pages'),
+  pages: z.array(httpsUrl).min(1).max(1000),
+  ...sourceFields,
+});
+
+/**
+ * A source whose pages a site's sitemaps list. Patterns match a page's path and query as
+ * robots.txt's do: `*` for anything, and a final `$` for the end. A page must match an include and no
+ * exclude, and at most `maxPages` of a source's pages are kept. An index's child sitemaps are read
+ * when their path matches a `follow` pattern, or all of them when there is none.
+ */
+const sitemapSourceSchema = z.strictObject({
+  kind: z.literal('sitemap'),
+  sitemaps: z.array(httpsUrl).min(1).max(20),
+  // Which of an index's child sitemaps to read, by path; none means all of them.
+  follow: z.array(pattern).max(20).default([]),
+  include: z.array(pattern).min(1).max(100),
+  exclude: z.array(pattern).max(100).default([]),
+  maxPages: z.number().int().min(1).max(5000).default(1000),
+  // Many sitemaps stamp every entry with the time of the request, so lastmod is ignored unless the
+  // owner has seen it change only when the page did.
+  useLastmod: z.boolean().default(false),
+  ...sourceFields,
+});
+
+const sourceSchema = z.discriminatedUnion('kind', [pagesSourceSchema, sitemapSourceSchema], {
+  error: 'A source’s kind is pages or sitemap.',
 });
 
 const recordTypeSchema = z.strictObject({
@@ -104,11 +161,51 @@ const policySchema = z.strictObject({
   perHostIntervalMs: z.number().int().min(1000).max(600_000).default(1000),
 });
 
+const freshnessSchema = z.strictObject({
+  maxAgeDays: z.number().int().min(1).max(365).default(7),
+});
+
+const gatesSchema = z.strictObject({
+  maxRemovals: z
+    .strictObject({
+      count: z.number().int().min(0).max(100_000).default(25),
+      share: z.number().min(0).max(1).default(0.05),
+    })
+    .default({ count: 25, share: 0.05 }),
+});
+
+const publicationSchema = z.strictObject({
+  approval: z.enum(['auto', 'balanced', 'manual']).default('balanced'),
+});
+
+const thresholdSchema = z.strictObject({ accept: z.number().min(0.5).max(1) });
+
+const decisionsSchema = z.strictObject({
+  classify: thresholdSchema.default({ accept: 0.9 }),
+  match: thresholdSchema.default({ accept: 0.95 }),
+});
+
+const budgetSchema = z.strictObject({
+  itemsPerRun: z.number().int().min(1).max(3000).default(1000),
+  llmTokensPerRun: z.number().int().min(0).max(50_000_000).default(2_000_000),
+});
+
 const shapeSchema = z.strictObject({
   dataset: slug,
   recordTypes: z.record(name, recordTypeSchema),
   sources: z.array(sourceSchema).min(1),
-  policy: policySchema.default({ purposes: [], perHostIntervalMs: 1000 }),
+  // These defaults are functions, so each parse gets objects of its own. Zod copies only the outer
+  // object of a default, and one that holds an object or an array would share it between parses.
+  policy: policySchema.default(() => ({ purposes: [], perHostIntervalMs: 1000 })),
+  freshness: freshnessSchema.default(() => ({ maxAgeDays: 7 })),
+  gates: gatesSchema.default(() => ({ maxRemovals: { count: 25, share: 0.05 } })),
+  publication: publicationSchema.default(() => ({ approval: 'balanced' as const })),
+  decisions: decisionsSchema.default(() => ({
+    classify: { accept: 0.9 },
+    match: { accept: 0.95 },
+  })),
+  budget: budgetSchema.default(() => ({ itemsPerRun: 1000, llmTokensPerRun: 2_000_000 })),
+  consumers: z.array(slug).max(20).default([]),
 });
 
 export const definitionSchema = shapeSchema.superRefine((definition, ctx) =>
@@ -118,6 +215,13 @@ export const definitionSchema = shapeSchema.superRefine((definition, ctx) =>
 export type Definition = z.output<typeof shapeSchema>;
 export type RecordType = Definition['recordTypes'][string];
 export type Source = Definition['sources'][number];
+export type PagesSource = Extract<Source, { kind: 'pages' }>;
+export type SitemapSource = Extract<Source, { kind: 'sitemap' }>;
+
+/** The record type's field that the decision cascade may fill, if it has one. */
+export function decidedField(recordType: RecordType): [string, FieldDef] | null {
+  return Object.entries(recordType.fields).find(([, field]) => field.decide === true) ?? null;
+}
 
 /** A definition, with defaults filled in, or every problem with it as `path: message`. */
 export function parseDefinition(
@@ -184,9 +288,11 @@ function checkDefinition(definition: z.output<typeof shapeSchema>, report: Repor
     if (sourceIds.has(source.id))
       report([...at, 'id'], `Another source is also called ${source.id}.`);
     sourceIds.add(source.id);
-    for (const page of source.pages) {
-      if (pages.has(page)) report([...at, 'pages'], `${page} is listed twice.`);
-      pages.add(page);
+    if (source.kind === 'pages') {
+      for (const page of source.pages) {
+        if (pages.has(page)) report([...at, 'pages'], `${page} is listed twice.`);
+        pages.add(page);
+      }
     }
     if (source.evidence.terms.automatedAccess === 'forbidden') {
       report(
@@ -264,6 +370,42 @@ function checkRecordType(at: Path, recordType: RecordType, report: Report): void
         );
       }
     }
+    if (field.decide) {
+      if (field.type !== 'enum') {
+        report([...path, 'decide'], 'Only enum fields can be decided.');
+      } else if (!field.required) {
+        report(
+          [...path, 'decide'],
+          'A decided field must be required: “None of these” is how a page leaves the dataset.',
+        );
+      }
+      if (field.identifier || identifying.has(fieldName)) {
+        report(
+          [...path, 'decide'],
+          'Fields that identify a record come from structured data or declared rules, never a decision.',
+        );
+      }
+      // The question offers the values and “None of these”. A value is matched without regard to
+      // case (a page's category by the rule, a statement's value by its field), so two values that
+      // differ only in case are one value written twice. A value that is “None of these” in any
+      // case would be offered twice too, and choosing it would take a page out of the dataset, not
+      // file it.
+      if (field.type === 'enum' && field.values !== undefined) {
+        const lowered = field.values.map((value) => value.toLowerCase());
+        if (
+          lowered.includes(NONE_OF_THESE.toLowerCase()) ||
+          new Set(lowered).size !== lowered.length
+        ) {
+          report(
+            [...path, 'values'],
+            'A decided field’s values are distinct regardless of case, and none is “None of these”.',
+          );
+        }
+      }
+    }
+  }
+  if (Object.values(fields).filter((field) => field.decide).length > 1) {
+    report([...at, 'fields'], 'Only one field of a record type can be decided.');
   }
 }
 

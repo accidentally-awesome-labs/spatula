@@ -1,11 +1,11 @@
 import { selectOne } from 'css-select';
-import { isTag, isText, type AnyNode, type Element } from 'domhandler';
-import { DomUtils, parseDocument } from 'htmlparser2';
+import { DomHandler, isTag, isText, type AnyNode, type Document, type Element } from 'domhandler';
+import { DomUtils, Parser } from 'htmlparser2';
 
 /*
- * A fetched HTML page, read once: its JSON-LD, meta tags, canonical address, and main text, and
- * a way to run a rule a person declared. All of it is evidence. Nothing in a page can change
- * what Spatula does.
+ * A fetched HTML page, read once: its JSON-LD, meta tags, canonical address, title, breadcrumbs,
+ * and main text, and a way to run a rule a person declared. All of it is evidence. Nothing in a
+ * page can change what Spatula does.
  */
 
 export type JsonLdNode = Record<string, unknown>;
@@ -15,9 +15,13 @@ export interface Page {
   url: string;
   /** The page's own https address on the same host, from <link rel="canonical">, or `url`. */
   canonicalUrl: string;
+  /** The page's own <title>, not an SVG icon's, on one line: at most 300 characters, or null. */
+  title: string | null;
+  /** The names in the page's JSON-LD BreadcrumbList, in position order: at most 10. */
+  breadcrumbs: string[];
   /**
-   * Every JSON-LD object with an @type, in document order, with @graph and mainEntity members
-   * spread out.
+   * Every JSON-LD object with an @type, in document order, with @graph, mainEntity, and breadcrumb
+   * members spread out.
    */
   jsonLd: JsonLdNode[];
   /** How many JSON-LD blocks couldn't be read as JSON. */
@@ -33,12 +37,39 @@ export interface Page {
 /** The most text a page gives the LLM: about 15,000 tokens. */
 export const PAGE_TEXT_MAX = 60_000;
 
+/**
+ * The deepest a page may nest its elements. Real product pages nest a few dozen deep. Reading a
+ * page, the parse and every walk over its tree alike, takes time that grows with its depth, and a
+ * Worker can't catch running out of CPU, so a page past this is refused before it's read.
+ */
+export const MAX_NESTING = 1_000;
+
 const NEVER_TEXT = new Set(['script', 'style', 'noscript', 'template', 'svg', 'iframe', 'head']);
 const CHROME = new Set(['nav', 'header', 'footer']);
 const SCHEMA_PREFIX = /^(?:https?:\/\/schema\.org\/|schema:)/u;
 
+/**
+ * Builds the tree, and stops the moment htmlparser2's own stack of open elements passes
+ * MAX_NESTING. The depth has to come from the parser: what an unclosed tag, a stray end tag, or
+ * `<div/>` means is its decision, and a guess made from the text disagreed with it.
+ */
+class DepthLimitedHandler extends DomHandler {
+  override onopentag(name: string, attribs: Record<string, string>): void {
+    super.onopentag(name, attribs);
+    // The stack holds the document, then every open element down to the one just opened.
+    if (this.tagStack.length - 1 > MAX_NESTING) {
+      throw new Error(
+        `the page nests elements more than ${MAX_NESTING.toLocaleString('en-US')} deep`,
+      );
+    }
+  }
+}
+
+/** Reads a page. It throws for one that nests elements more than MAX_NESTING deep. */
 export function parsePage(html: string, url: string): Page {
-  const document = parseDocument(html);
+  const handler = new DepthLimitedHandler();
+  new Parser(handler).end(html);
+  const document = handler.root;
   const elements = (tag: string) => DomUtils.getElementsByTagName(tag, document, true);
 
   const jsonLd: JsonLdNode[] = [];
@@ -61,9 +92,13 @@ export function parsePage(html: string, url: string): Page {
     else values.push(content.trim());
   }
 
+  const title = pageTitle(document);
+
   return {
     url,
     canonicalUrl: canonical(elements('link'), url),
+    title: oneLine(title === undefined ? '' : DomUtils.textContent(title), 300),
+    breadcrumbs: breadcrumbsOf(jsonLd),
     jsonLd,
     jsonLdErrors,
     meta,
@@ -85,6 +120,53 @@ export function jsonLdTypes(node: JsonLdNode): string[] {
   return (Array.isArray(types) ? types : [types])
     .filter((type): type is string => typeof type === 'string')
     .map((type) => type.replace(SCHEMA_PREFIX, ''));
+}
+
+/** Text on one line, at most `max` characters; null when nothing is left. */
+function oneLine(text: string, max: number): string | null {
+  const line = text
+    .replace(/\s+/gu, ' ')
+    .trim()
+    .slice(0, max)
+    .replace(/[\uD800-\uDBFF]$/u, '')
+    .trimEnd();
+  return line === '' ? null : line;
+}
+
+/**
+ * The names in the page's first JSON-LD BreadcrumbList, by position; a crumb with no number for
+ * one stands where it is in the list. A crumb names itself, or the page it links to does. At most
+ * 50 are read and 10 kept, each at most 100 characters.
+ */
+function breadcrumbsOf(jsonLd: JsonLdNode[]): string[] {
+  const list = jsonLd.find((node) => jsonLdTypes(node).includes('BreadcrumbList'));
+  const given = list?.itemListElement;
+  // JSON-LD allows one value where a list of one would go.
+  const elements: unknown[] = Array.isArray(given) ? given.slice(0, 50) : [given];
+  const crumbs: { position: number; name: string }[] = [];
+  elements.forEach((element, index) => {
+    if (element === null || typeof element !== 'object') return;
+    const crumb = element as JsonLdNode;
+    const linked =
+      crumb.item !== null && typeof crumb.item === 'object' ? (crumb.item as JsonLdNode) : {};
+    const raw = typeof crumb.name === 'string' ? crumb.name : linked.name;
+    const name = typeof raw === 'string' ? oneLine(raw, 100) : null;
+    if (name === null) return;
+    // Only a number or a numeric string says where a crumb goes. Coercing anything else would put
+    // null, "", and [] first as 0, and a page can nest an array so deep that coercing it throws.
+    const at = crumb.position;
+    const position =
+      typeof at === 'number'
+        ? at
+        : typeof at === 'string' && at.trim() !== ''
+          ? Number(at)
+          : Number.NaN;
+    crumbs.push({ position: Number.isFinite(position) ? position : index + 1, name });
+  });
+  return crumbs
+    .sort((a, b) => a.position - b.position)
+    .slice(0, 10)
+    .map((crumb) => crumb.name);
 }
 
 /** JSON, or JSON with raw control characters (which sites leave inside strings) read as spaces. */
@@ -109,6 +191,7 @@ function collectNodes(value: unknown, into: JsonLdNode[], depth: number): void {
   if ('@type' in node) into.push(node);
   collectNodes(node['@graph'], into, depth + 1);
   collectNodes(node.mainEntity, into, depth + 1);
+  collectNodes(node.breadcrumb, into, depth + 1);
 }
 
 function canonical(links: Element[], url: string): string {
@@ -134,6 +217,24 @@ function canonical(links: Element[], url: string): string {
 }
 
 /**
+ * The page's own <title>: the first one in document order that isn't inside an <svg>, which is how
+ * a browser reads document.title. An icon's <svg><title> only labels the icon, and it can hold
+ * elements, which an HTML title never does. One walk with its own stack, like mainText's, that
+ * doesn't enter an <svg> at all: looking up from each title for an <svg> costs up to MAX_NESTING
+ * steps a title, about 7 seconds for a 5 MB page of icon titles.
+ */
+function pageTitle(document: Document): Element | undefined {
+  // Children go on in reverse, so they come off in document order.
+  const stack: AnyNode[] = [...document.children].reverse();
+  for (let node = stack.pop(); node !== undefined; node = stack.pop()) {
+    if (!isTag(node) || node.name === 'svg') continue;
+    if (node.name === 'title') return node;
+    for (const child of node.children.toReversed()) stack.push(child);
+  }
+  return undefined;
+}
+
+/**
  * An attribute's value, found by its name in any case. Only the element's own attributes count,
  * so a name such as `constructor` finds nothing.
  */
@@ -149,7 +250,6 @@ function attributeOf(element: Element, attribute: string): string | undefined {
 function mainText(root: Element | null, fallback: AnyNode[]): string {
   const skipped = root?.name === 'main' ? NEVER_TEXT : new Set([...NEVER_TEXT, ...CHROME]);
   const parts: string[] = [];
-  // An explicit stack, not recursion, because a page can nest deeper than the call stack allows.
   // Children go on in reverse, so they come off in document order.
   const stack: AnyNode[] = [...(root?.children ?? fallback)].reverse();
   for (let node = stack.pop(); node !== undefined; node = stack.pop()) {

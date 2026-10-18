@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { isAllowed, parseRobots } from './robots';
+import { isAllowed, parseRobots, pathPatternMatcher, pathPatternMatches } from './robots';
 import { costRatio } from './testing/cost';
 
 const allowed = (robots: string, path: string) =>
@@ -166,5 +166,61 @@ describe('parseRobots and isAllowed', () => {
   it('reads a signal’s name without regard to case, and keeps it in lowercase', () => {
     const robots = 'User-agent: *\nContent-Signal: AI-Input=no';
     expect(parseRobots(robots, 'Spatula')?.signals).toEqual({ 'ai-input': 'no' });
+  });
+});
+
+describe('pathPatternMatches', () => {
+  it('matches a path and query as robots.txt rules do', () => {
+    expect(pathPatternMatches('/products/', '/products/c1')).toBe(true);
+    expect(pathPatternMatches('/products/*', '/products/c1?variant=2')).toBe(true);
+    expect(pathPatternMatches('/products/*', '/collections/c1')).toBe(false);
+    // Without a final $, a pattern matches the start of the path.
+    expect(pathPatternMatches('/products/*-set', '/products/hd-set-2')).toBe(true);
+    expect(pathPatternMatches('/products/*-set$', '/products/hd-set-2')).toBe(false);
+    expect(pathPatternMatches('/products/*-set$', '/products/hd-set')).toBe(true);
+    // Patterns are case-sensitive, and compare percent-encoded.
+    expect(pathPatternMatches('/product/CMOYBB', '/product/cmoybb')).toBe(false);
+    expect(pathPatternMatches('/produkte/ä*', '/produkte/%C3%A4rger')).toBe(true);
+  });
+});
+
+describe('pathPatternMatcher', () => {
+  it('matches a path when any of its patterns does, by the same rule', () => {
+    const matcher = pathPatternMatcher(['/products/*-set$', '/guides/', '/produkte/ä*']);
+    expect(matcher('/products/hd-set')).toBe(true);
+    expect(matcher('/products/hd-set-2')).toBe(false);
+    expect(matcher('/guides/setup?lang=de')).toBe(true);
+    expect(matcher('/produkte/%C3%A4rger')).toBe(true);
+    expect(matcher('/Guides/setup')).toBe(false);
+    expect(matcher('/collections/c1')).toBe(false);
+  });
+
+  it('matches nothing without patterns, and can be used for any number of paths', () => {
+    expect(pathPatternMatcher([])('/anything')).toBe(false);
+    const matcher = pathPatternMatcher(['/a*b']);
+    for (let run = 0; run < 3; run += 1) {
+      expect(matcher('/a-and-b')).toBe(true);
+      expect(matcher('/a-and-c')).toBe(false);
+    }
+  });
+
+  it('agrees with a robots.txt Disallow of the same pattern', () => {
+    const patterns = ['/', '/products/', '/products/*', '/*.gif$', '/*?sort=', '/a*b*c', '/café'];
+    const paths = [
+      '/',
+      '/products/c1',
+      '/a/b.gif',
+      '/a/b.gif?size=2',
+      '/p?sort=price',
+      '/x-a-b-c-y',
+      '/caf%C3%A9/menu',
+      '/cart',
+    ];
+    for (const pattern of patterns) {
+      for (const path of paths) {
+        const disallowed = !allowed(`User-agent: *\nDisallow: ${pattern}`, path);
+        expect(pathPatternMatcher([pattern])(path), `${pattern} against ${path}`).toBe(disallowed);
+      }
+    }
   });
 });

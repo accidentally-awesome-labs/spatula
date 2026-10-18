@@ -7,3 +7,4 @@ THIRD_PARTY_NOTICES.md
 platform/store/drizzle/meta/
 **/.wrangler
 **/worker-configuration.d.ts
+.superpowers/

@@ -1,13 +1,17 @@
 import {
   newId,
+  parseDefinition,
   sha256Hex,
   stableStringify,
   type ApplySummary,
   type Definition,
+  type ItemView,
+  type PagesSource,
 } from '@spatula/core';
-import { and, eq, inArray, notInArray, sql } from 'drizzle-orm';
+import { and, eq, inArray, notInArray, or, sql } from 'drizzle-orm';
 import type { Executor } from './client';
-import { datasets, items, sources } from './schema';
+import { supersedeDecisions } from './decisions';
+import { datasets, items, sources, type ItemStatus } from './schema';
 
 export interface DatasetRow {
   id: string;
@@ -30,9 +34,10 @@ export interface ItemRef {
 }
 
 /**
- * Applies a definition: the dataset, its sources, and an item for each page. Pages and sources
- * that leave the definition are excluded, not deleted, and come back if they return. Nothing
- * changes, and the revision stays, when the definition is the same. A dry run only reports.
+ * Applies a definition: the dataset, its sources, and an item for each page a pages source lists.
+ * Pages and sources that leave the definition are excluded, not deleted, and come back if they
+ * return. A sitemap source's pages are not the definition's to make or exclude: discovery does.
+ * Nothing changes, and the revision stays, when the definition is the same. A dry run only reports.
  */
 export async function applyDefinition(
   db: Executor,
@@ -51,7 +56,9 @@ export async function applyDefinition(
       : await db
           .select({ id: sources.id, config: sources.config, removedAt: sources.removedAt })
           .from(sources)
-          .where(eq(sources.datasetId, id));
+          .where(eq(sources.datasetId, id))
+          // In a fixed order, so the summary lists removed sources the same way every time.
+          .orderBy(sources.id);
   const listed =
     existing === undefined
       ? []
@@ -66,12 +73,19 @@ export async function applyDefinition(
       .map((source) => [source.id, source.config]),
   );
   const wanted = new Map(definition.sources.map((source) => [source.id, source]));
-  const wantedPages = new Set(
-    definition.sources.flatMap((source) => source.pages.map((page) => `${source.id} ${page}`)),
+  const pageSources = definition.sources.filter(
+    (source): source is PagesSource => source.kind === 'pages',
   );
+  const listedBySitemaps = new Set(
+    definition.sources.filter((source) => source.kind === 'sitemap').map((source) => source.id),
+  );
+  const wantedPages = new Set(
+    pageSources.flatMap((source) => source.pages.map((page) => `${source.id} ${page}`)),
+  );
+  // A sitemap source's pages come and go with its sitemaps (discovery), not with the definition.
   const livePages = new Set(
     listed
-      .filter((item) => item.status !== 'excluded')
+      .filter((item) => item.status !== 'excluded' && !listedBySitemaps.has(item.sourceId))
       .map((item) => `${item.sourceId} ${item.locator}`),
   );
   const changed = existing === undefined || existing.definitionHash !== hash;
@@ -115,35 +129,37 @@ export async function applyDefinition(
           target: [sources.datasetId, sources.id],
           set: { kind: source.kind, config: source, removedAt: null },
         });
-      for (const page of source.pages) {
-        await tx
-          .insert(items)
-          .values({
-            id: newId('it'),
-            datasetId: id,
-            sourceId: source.id,
-            recordType: source.recordType,
-            locator: page,
-          })
-          .onConflictDoUpdate({
-            target: [items.datasetId, items.sourceId, items.locator],
-            // A page listed again comes back; one that's gone or refused stays as it is.
-            set: {
+      if (source.kind === 'pages') {
+        for (const page of source.pages) {
+          await tx
+            .insert(items)
+            .values({
+              id: newId('it'),
+              datasetId: id,
+              sourceId: source.id,
               recordType: source.recordType,
-              status: sql`case when ${items.status} = 'excluded' then 'live' else ${items.status} end`,
-            },
-          });
+              locator: page,
+            })
+            .onConflictDoUpdate({
+              target: [items.datasetId, items.sourceId, items.locator],
+              // A page listed again comes back; one that's gone or refused stays as it is.
+              set: {
+                recordType: source.recordType,
+                status: sql`case when ${items.status} = 'excluded' then 'live' else ${items.status} end`,
+              },
+            });
+        }
+        await tx
+          .update(items)
+          .set({ status: 'excluded' })
+          .where(
+            and(
+              eq(items.datasetId, id),
+              eq(items.sourceId, source.id),
+              notInArray(items.locator, source.pages),
+            ),
+          );
       }
-      await tx
-        .update(items)
-        .set({ status: 'excluded' })
-        .where(
-          and(
-            eq(items.datasetId, id),
-            eq(items.sourceId, source.id),
-            notInArray(items.locator, source.pages),
-          ),
-        );
     }
     if (summary.sources.removed.length > 0) {
       await tx
@@ -159,6 +175,24 @@ export async function applyDefinition(
   return summary;
 }
 
+/**
+ * A dataset whose stored definition no longer passes the checks, as an earlier version of Spatula
+ * may have left it. Nothing can run on the dataset until the owner applies the definition again.
+ */
+export class StaleDefinitionError extends Error {
+  constructor(datasetId: string, issues: string[]) {
+    super(
+      `Dataset ${datasetId}’s stored definition no longer passes the checks (${issues[0]}). Apply it again.`,
+    );
+    this.name = 'StaleDefinitionError';
+  }
+}
+
+/**
+ * The dataset, with its definition read through the schema again, so a definition stored by an
+ * earlier version gets the defaults of keys added since. One that no longer passes is a
+ * StaleDefinitionError, which the owner fixes by applying the definition again.
+ */
 export async function getDataset(db: Executor, id: string): Promise<DatasetRow | null> {
   const [row] = await db
     .select({
@@ -169,7 +203,31 @@ export async function getDataset(db: Executor, id: string): Promise<DatasetRow |
     })
     .from(datasets)
     .where(eq(datasets.id, id));
-  return row ?? null;
+  if (row === undefined) return null;
+  const parsed = parseDefinition(row.definition);
+  if (!parsed.ok) throw new StaleDefinitionError(id, parsed.issues);
+  return { ...row, definition: parsed.definition };
+}
+
+/**
+ * The dataset's definition revision, or null when it isn't stored. Like `datasetExists` it doesn't
+ * read the definition, so a stored definition that no longer passes the checks doesn't stop it.
+ */
+export async function revisionOf(db: Executor, datasetId: string): Promise<number | null> {
+  const [row] = await db
+    .select({ revision: datasets.revision })
+    .from(datasets)
+    .where(eq(datasets.id, datasetId));
+  return row?.revision ?? null;
+}
+
+/**
+ * Whether the dataset is stored. Unlike `getDataset` it doesn't read the definition, so a dataset
+ * whose stored definition no longer passes the checks still counts.
+ */
+export async function datasetExists(db: Executor, id: string): Promise<boolean> {
+  const [row] = await db.select({ id: datasets.id }).from(datasets).where(eq(datasets.id, id));
+  return row !== undefined;
 }
 
 /** The dataset's live items, by source and page. */
@@ -189,4 +247,85 @@ export async function listLiveItems(db: Executor, datasetId: string): Promise<It
     .from(items)
     .where(and(eq(items.datasetId, datasetId), eq(items.status, 'live')))
     .orderBy(items.sourceId, items.locator);
+}
+
+/** Every item of the dataset, whatever its status, with the entity it joined. */
+export async function listItems(db: Executor, datasetId: string): Promise<ItemView[]> {
+  return db
+    .select({
+      locator: items.locator,
+      sourceId: items.sourceId,
+      status: items.status,
+      entityId: items.entityId,
+    })
+    .from(items)
+    .where(eq(items.datasetId, datasetId))
+    .orderBy(items.sourceId, items.locator);
+}
+
+/** The statuses a named page can be revived from. Excluded pages come back by being listed. */
+export const REVIVABLE_STATUSES: ItemStatus[] = ['refused', 'gone', 'irrelevant'];
+
+/**
+ * Puts pages back to live: every refused page with `refused`, and the pages named, from any
+ * revivable status. Their streaks start again, and a revived page counts as never read, so the
+ * next run reads it whenever it was last read. A revived irrelevant page also loses the decision
+ * that made it irrelevant and its extraction mark, so the next run reads it and asks afresh.
+ *
+ * The revival is one transaction: a failure partway leaves every page as it was. It starts by
+ * locking the pages it will revive, and then acts on those and no others. A run can commit between
+ * two statements, so a page that was something else when the revive read it, such as one a run has
+ * just found irrelevant, is left alone: reviving it would leave its answer current and its mark
+ * set, and no run would read or ask again. The lock holds back other changes to a locked page's
+ * status until the revival ends, but not the inserts of a run that refer to the page.
+ */
+export async function reviveItems(
+  db: Executor,
+  input: { datasetId: string; pages?: string[]; refused?: boolean },
+): Promise<number> {
+  const which = [
+    ...(input.refused === true ? [eq(items.status, 'refused')] : []),
+    ...(input.pages !== undefined && input.pages.length > 0
+      ? [and(inArray(items.locator, input.pages), inArray(items.status, REVIVABLE_STATUSES))]
+      : []),
+  ];
+  if (which.length === 0) return 0;
+  return db.transaction(async (tx) => {
+    // In a fixed order, so two revivals that overlap can't deadlock: one waits for the other.
+    const locked = await tx
+      .select({ id: items.id, status: items.status })
+      .from(items)
+      .where(and(eq(items.datasetId, input.datasetId), or(...which)))
+      .orderBy(items.id)
+      .for('no key update');
+    if (locked.length === 0) return 0;
+    const rows = await tx
+      .update(items)
+      .set({
+        status: 'live',
+        lastOutcome: null,
+        outcomeStreak: 0,
+        missingStreak: 0,
+        lastFetchedAt: null,
+      })
+      .where(
+        inArray(
+          items.id,
+          locked.map((row) => row.id),
+        ),
+      )
+      .returning({ id: items.id });
+    const irrelevant = locked.filter((row) => row.status === 'irrelevant').map((row) => row.id);
+    if (irrelevant.length > 0) {
+      // The answer that made them irrelevant is retired, and the pages read again, so the next run
+      // asks afresh instead of reusing it.
+      await supersedeDecisions(tx, {
+        datasetId: input.datasetId,
+        subjects: irrelevant,
+        at: new Date(),
+      });
+      await tx.update(items).set({ extractedWith: null }).where(inArray(items.id, irrelevant));
+    }
+    return rows.length;
+  });
 }

@@ -254,4 +254,82 @@ describe('createHttpFetcher', () => {
     await http.get('https://SHOP.example:443/a b', {});
     expect(calls.map((call) => call.url)).toEqual(['https://shop.example/a%20b']);
   });
+
+  it('reads up to the cap a caller sets, and asks for what it accepts', async () => {
+    const { fetch, calls } = stub(() => new Response('0123456789', { status: 200 }));
+    const http = createHttpFetcher({ userAgent: UA, fetch });
+    const result = await http.get(
+      'https://maker-c.example/sitemap.xml',
+      {},
+      {
+        maxBytes: 4,
+        accept: 'application/xml',
+      },
+    );
+    expect(result).toMatchObject({
+      ok: true,
+      truncated: true,
+      body: new TextEncoder().encode('0123'),
+    });
+    expect(new Headers(calls[0]!.init.headers).get('accept')).toBe('application/xml');
+  });
+
+  it('adds the signer’s headers, which a caller can’t replace', async () => {
+    const { fetch, calls } = stub(() => new Response('', { status: 200 }));
+    const http = createHttpFetcher({
+      userAgent: UA,
+      fetch,
+      sign: async (url) => ({
+        signature: `sig1=:${url}:`,
+        'signature-agent': '"https://spatula.test"',
+      }),
+    });
+    await http.get('https://maker-a.example/a', { signature: 'forged' });
+    const sent = new Headers(calls[0]!.init.headers);
+    expect(sent.get('signature')).toBe('sig1=:https://maker-a.example/a:');
+    expect(sent.get('signature-agent')).toBe('"https://spatula.test"');
+
+    // However a caller spells a name, and however many spellings of it it sends. Its other
+    // headers still go.
+    await http.get('https://maker-a.example/b', {
+      signature: 'forged',
+      Signature: 'forged again',
+      'SIGNATURE-AGENT': 'forged',
+      'if-none-match': '"v1"',
+    });
+    const again = new Headers(calls[1]!.init.headers);
+    expect(again.get('signature')).toBe('sig1=:https://maker-a.example/b:');
+    expect(again.get('signature-agent')).toBe('"https://spatula.test"');
+    expect(again.get('if-none-match')).toBe('"v1"');
+  });
+
+  it('keeps its own user agent, whatever the signer returns', async () => {
+    const { fetch, calls } = stub(() => new Response('', { status: 200 }));
+    const http = createHttpFetcher({
+      userAgent: UA,
+      fetch,
+      sign: async () => ({ 'User-Agent': 'other', signature: 'sig1=::' }),
+    });
+    await http.get('https://maker-a.example/a', { 'user-agent': 'another' });
+    const sent = new Headers(calls[0]!.init.headers);
+    expect(sent.get('user-agent')).toBe(UA);
+    expect(sent.get('signature')).toBe('sig1=::');
+  });
+
+  it('fails the request, without sending it, when it can’t be signed', async () => {
+    const { fetch, calls } = stub(() => new Response('', { status: 200 }));
+    const http = createHttpFetcher({
+      userAgent: UA,
+      fetch,
+      sign: async () => {
+        throw new Error('WEB_BOT_AUTH_KEY isn’t JSON: set it to an Ed25519 private key as a JWK.');
+      },
+    });
+    expect(await http.get('https://maker-a.example/a', {})).toEqual({
+      ok: false,
+      error:
+        'the request couldn’t be signed: WEB_BOT_AUTH_KEY isn’t JSON: set it to an Ed25519 private key as a JWK.',
+    });
+    expect(calls).toHaveLength(0);
+  });
 });

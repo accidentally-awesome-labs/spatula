@@ -8,6 +8,41 @@
       "when": 1791659353691,
       "tag": "0000_init",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1791828538313,
+      "tag": "0001_listing",
+      "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1791863230440,
+      "tag": "0002_decisions",
+      "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1792262676687,
+      "tag": "0003_held_snapshots",
+      "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1792273864378,
+      "tag": "0004_consumers",
+      "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1792284766638,
+      "tag": "0005_evals",
+      "breakpoints": true
     }
   ]
 }

@@ -1,11 +1,13 @@
 import { describe, expect, it } from 'vitest';
 import {
+  gateInterval,
   INITIAL_GATE_STATE,
   recordResponse,
   reserve,
   retryAfterMs,
   robotsNeedsRefresh,
   robotsRecord,
+  robotsToKeep,
   type GateState,
 } from './gate';
 
@@ -41,6 +43,46 @@ describe('robots.txt answers', () => {
     const down = robotsRecord({ status: 503, text: '' }, NOW);
     expect(robotsNeedsRefresh(down, NOW + HOUR - 1)).toBe(false);
     expect(robotsNeedsRefresh(down, NOW + HOUR)).toBe(true);
+  });
+});
+
+describe('a robots.txt refresh that meets a challenge', () => {
+  const challenged = robotsRecord({ challenged: true }, NOW);
+  const held = robotsRecord(
+    { status: 200, text: 'User-agent: *\nDisallow: /private\nCrawl-delay: 5\n' },
+    NOW - 25 * HOUR,
+  );
+
+  it('reads as unreachable, which refuses everything until it is read again in an hour', () => {
+    expect(challenged).toEqual({
+      status: 'unreachable',
+      fetchedAt: NOW,
+      reason: 'the site answered robots.txt with a challenge',
+      challengedAt: NOW,
+    });
+    expect(robotsNeedsRefresh(challenged, NOW + HOUR - 1)).toBe(false);
+    expect(robotsNeedsRefresh(challenged, NOW + HOUR)).toBe(true);
+  });
+
+  it('leaves the rules held in force, crawl delay included, and tries again in an hour', () => {
+    const kept = robotsToKeep(held, challenged);
+    expect(kept).toEqual({ ...held, challengedAt: NOW });
+    const state: GateState = { ...INITIAL_GATE_STATE, robots: kept };
+    expect(reserve(state, request('https://maker.example/private/x')).decision).toMatchObject({
+      kind: 'deny',
+      outcome: 'blocked',
+    });
+    expect(gateInterval(kept, 0)).toBe(5000);
+    // It was read a day ago, so without the challenge it would be due now.
+    expect(robotsNeedsRefresh(held, NOW)).toBe(true);
+    expect(robotsNeedsRefresh(kept, NOW + HOUR - 1)).toBe(false);
+    expect(robotsNeedsRefresh(kept, NOW + HOUR)).toBe(true);
+  });
+
+  it('replaces nothing but what it must: with no record held it is the record, and any other answer replaces', () => {
+    expect(robotsToKeep(null, challenged)).toEqual(challenged);
+    const none = robotsRecord({ status: 404, text: '' }, NOW);
+    expect(robotsToKeep(held, none)).toEqual(none);
   });
 });
 
@@ -250,6 +292,7 @@ describe('recordResponse', () => {
       ...resting,
       failures: 2,
       backoffUntil: NOW + HOUR,
+      nextAt: NOW + 1000,
     });
   });
 
@@ -258,6 +301,7 @@ describe('recordResponse', () => {
       ...INITIAL_GATE_STATE,
       failures: 1,
       backoffUntil: NOW + 30_000,
+      nextAt: NOW + 1000,
     });
   });
 
@@ -270,6 +314,7 @@ describe('recordResponse', () => {
     expect(recordResponse(strained, { status: 200, now: NOW + 1, retryAfter: null })).toEqual({
       ...strained,
       failures: 0,
+      nextAt: NOW + 1001,
     });
   });
 });
@@ -280,5 +325,44 @@ describe('retryAfterMs', () => {
     expect(retryAfterMs(new Date(NOW + 90_000).toUTCString(), NOW)).toBe(90_000);
     expect(retryAfterMs('soon', NOW)).toBeNull();
     expect(retryAfterMs(null, NOW)).toBeNull();
+  });
+});
+
+describe('pacing from each answer', () => {
+  const open: GateState = {
+    ...INITIAL_GATE_STATE,
+    robots: { status: 'ok', fetchedAt: 0, text: 'User-agent: *\nAllow: /\n' },
+  };
+  const request = (now: number) => ({
+    url: 'https://maker-a.example/products/a1',
+    now,
+    minIntervalMs: 15_000,
+    maxWaitMs: 15_000,
+  });
+
+  it('waits a full interval after a slow answer arrives, not after its request left', () => {
+    const first = reserve(open, request(1000));
+    expect(first.state).toMatchObject({ nextAt: 16_000, intervalMs: 15_000 });
+    // The answer took eight seconds.
+    const answered = recordResponse(first.state, { status: 200, now: 9000, retryAfter: null });
+    expect(answered.nextAt).toBe(24_000);
+    expect(reserve(answered, request(9000)).decision).toEqual({
+      kind: 'go',
+      waitMs: 15_000,
+      signals: {},
+    });
+  });
+
+  it('keeps the crawl delay robots.txt asks for, when it’s longer', () => {
+    const slow: GateState = {
+      ...open,
+      robots: { status: 'ok', fetchedAt: 0, text: 'User-agent: *\nCrawl-delay: 20\n' },
+    };
+    const first = reserve(slow, request(0));
+    expect(recordResponse(first.state, { status: 200, now: 500, retryAfter: null }).nextAt).toBe(
+      20_500,
+    );
+    expect(gateInterval(slow.robots, 15_000)).toBe(20_000);
+    expect(gateInterval(null, 0)).toBe(1000);
   });
 });

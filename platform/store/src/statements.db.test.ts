@@ -1,12 +1,12 @@
-import { PAGE_METHODS } from '@spatula/core';
+import { PAGE_METHODS, type PagesSource, type StatementInput } from '@spatula/core';
 import { and, eq } from 'drizzle-orm';
 import { describe, expect, it } from 'vitest';
 import { withRollback } from '../test/db';
 import { fetchOf, seedDataset, statementOf, T } from '../test/seed';
 import { testDefinition } from './fixtures';
-import { applyDefinition } from './datasets';
+import { applyDefinition, type ItemRef } from './datasets';
 import { statements } from './schema';
-import { currentStatements, reseeStatements, writeStatements } from './statements';
+import { currentStatements, reseeStatements, statementsOf, writeStatements } from './statements';
 
 describe('writeStatements', () => {
   it('adds new values, re-sees old ones, and withdraws what the page stopped saying', () =>
@@ -186,6 +186,128 @@ describe('writeStatements', () => {
         (await currentStatements(db, 'test-products')).map((statement) => statement.value),
       ).toEqual(['A1']);
     }));
+
+  it('speaks only for the properties a write names', () =>
+    withRollback(async (tx) => {
+      const {
+        items: [a1],
+        runId,
+      } = await seedDataset(tx);
+      const first = await fetchOf(tx, runId, a1!, T(1));
+      await writeStatements(tx, {
+        datasetId: 'test-products',
+        itemId: a1!.id,
+        fetchId: first,
+        seenAt: T(1),
+        methods: ['llm'],
+        statements: [
+          statementOf('category', 'Headphones', 'llm'),
+          statementOf('specs', { label: 'Weight', value: '350 g' }, 'llm'),
+        ],
+      });
+      // The LLM's specs step runs again, with no specs this time: only specs are withdrawn.
+      const counts = await writeStatements(tx, {
+        datasetId: 'test-products',
+        itemId: a1!.id,
+        fetchId: await fetchOf(tx, runId, a1!, T(2)),
+        seenAt: T(2),
+        methods: ['llm'],
+        properties: ['specs'],
+        statements: [],
+      });
+      expect(counts).toEqual({ added: 0, reseen: 0, withdrawn: 1 });
+      const current = await currentStatements(tx, 'test-products');
+      expect(current.map((statement) => statement.property)).toEqual(['category']);
+      await expect(
+        writeStatements(tx, {
+          datasetId: 'test-products',
+          itemId: a1!.id,
+          fetchId: first,
+          seenAt: T(3),
+          methods: ['llm'],
+          properties: ['specs'],
+          statements: [statementOf('category', 'DAC/Amp', 'llm')],
+        }),
+      ).rejects.toThrow('A category statement can’t be written for specs');
+    }));
+
+  it('re-sees only the properties a write names', () =>
+    withRollback(async (tx) => {
+      const {
+        items: [a1],
+        runId,
+      } = await seedDataset(tx);
+      const base = { datasetId: 'test-products', itemId: a1!.id, methods: ['llm'] as const };
+      await writeStatements(tx, {
+        ...base,
+        fetchId: await fetchOf(tx, runId, a1!, T(1)),
+        seenAt: T(1),
+        statements: [
+          statementOf('category', 'Headphones', 'llm'),
+          statementOf('specs', { label: 'Weight', value: '350 g' }, 'llm'),
+        ],
+      });
+      // The classification runs again and says the same: only the category is re-seen.
+      expect(
+        await writeStatements(tx, {
+          ...base,
+          fetchId: await fetchOf(tx, runId, a1!, T(2)),
+          seenAt: T(2),
+          properties: ['category'],
+          statements: [statementOf('category', 'Headphones', 'llm')],
+        }),
+      ).toEqual({ added: 0, reseen: 1, withdrawn: 0 });
+      expect(
+        (await currentStatements(tx, 'test-products')).map(({ property, lastSeen }) => ({
+          property,
+          lastSeen,
+        })),
+      ).toEqual([
+        { property: 'category', lastSeen: T(2).toISOString() },
+        { property: 'specs', lastSeen: T(1).toISOString() },
+      ]);
+    }));
+
+  it('changes nothing when it names no properties', () =>
+    withRollback(async (tx) => {
+      const {
+        items: [a1],
+        runId,
+      } = await seedDataset(tx);
+      const base = { datasetId: 'test-products', itemId: a1!.id, methods: ['llm'] as const };
+      await writeStatements(tx, {
+        ...base,
+        fetchId: await fetchOf(tx, runId, a1!, T(1)),
+        seenAt: T(1),
+        statements: [statementOf('category', 'Headphones', 'llm')],
+      });
+      const second = await fetchOf(tx, runId, a1!, T(2));
+      expect(
+        await writeStatements(tx, {
+          ...base,
+          fetchId: second,
+          seenAt: T(2),
+          properties: [],
+          statements: [],
+        }),
+      ).toEqual({ added: 0, reseen: 0, withdrawn: 0 });
+      expect(
+        (await currentStatements(tx, 'test-products')).map(({ property, lastSeen }) => ({
+          property,
+          lastSeen,
+        })),
+      ).toEqual([{ property: 'category', lastSeen: T(1).toISOString() }]);
+      // Speaking for no property, it has no statement it may write either.
+      await expect(
+        writeStatements(tx, {
+          ...base,
+          fetchId: second,
+          seenAt: T(2),
+          properties: [],
+          statements: [statementOf('category', 'DAC/Amp', 'llm')],
+        }),
+      ).rejects.toThrow('A category statement can’t be written for');
+    }));
 });
 
 describe('reseeStatements', () => {
@@ -262,6 +384,57 @@ describe('reseeStatements', () => {
       const [after] = await db.select().from(statements).where(eq(statements.id, withdrawn!.id));
       expect(after).toMatchObject({ lastSeen: T(0), lastFetchId: first, withdrawnAt: T(5) });
     }));
+
+  it('re-sees only the properties it names, and nothing when it names none', () =>
+    withRollback(async (db) => {
+      const {
+        items: [a1],
+        runId,
+      } = await seedDataset(db);
+      await writeStatements(db, {
+        datasetId: 'test-products',
+        itemId: a1!.id,
+        fetchId: await fetchOf(db, runId, a1!, T(1)),
+        seenAt: T(1),
+        methods: ['llm'],
+        statements: [
+          statementOf('category', 'Headphones', 'llm'),
+          statementOf('specs', { label: 'Weight', value: '350 g' }, 'llm'),
+        ],
+      });
+      const seen = async () =>
+        (await currentStatements(db, 'test-products')).map(({ property, lastSeen }) => ({
+          property,
+          lastSeen,
+        }));
+
+      // The LLM's answer is seen again; the category, which another step decided, is not.
+      expect(
+        await reseeStatements(db, {
+          itemId: a1!.id,
+          fetchId: await fetchOf(db, runId, a1!, T(2)),
+          seenAt: T(2),
+          methods: ['llm'],
+          properties: ['specs'],
+        }),
+      ).toBe(1);
+      const names = [
+        { property: 'category', lastSeen: T(1).toISOString() },
+        { property: 'specs', lastSeen: T(2).toISOString() },
+      ];
+      expect(await seen()).toEqual(names);
+
+      // A call that speaks for no property sees nothing again.
+      expect(
+        await reseeStatements(db, {
+          itemId: a1!.id,
+          fetchId: await fetchOf(db, runId, a1!, T(3)),
+          seenAt: T(3),
+          properties: [],
+        }),
+      ).toBe(0);
+      expect(await seen()).toEqual(names);
+    }));
 });
 
 describe('currentStatements', () => {
@@ -314,10 +487,38 @@ describe('currentStatements', () => {
       const full = testDefinition();
       await applyDefinition(db, {
         ...full,
-        sources: [{ ...full.sources[0]!, pages: [a1!.locator] }, full.sources[1]!],
+        sources: [{ ...(full.sources[0] as PagesSource), pages: [a1!.locator] }, full.sources[1]!],
       });
       expect(
         (await currentStatements(db, 'test-products')).map((statement) => statement.value),
       ).toEqual(['A1']);
+    }));
+});
+
+describe('statementsOf', () => {
+  it('reads several items’ current statements at once, by item', () =>
+    withRollback(async (tx) => {
+      const {
+        items: [a1, a2],
+        runId,
+      } = await seedDataset(tx);
+      const write = async (item: ItemRef, minute: number, said: StatementInput[]) =>
+        writeStatements(tx, {
+          datasetId: 'test-products',
+          itemId: item.id,
+          fetchId: await fetchOf(tx, runId, item, T(minute)),
+          seenAt: T(minute),
+          methods: PAGE_METHODS,
+          statements: said,
+        });
+      await write(a1!, 1, [statementOf('name', 'A1', 'jsonld'), statementOf('brand', 'Maker A')]);
+      await write(a1!, 2, [statementOf('name', 'A1', 'jsonld')]);
+      await write(a2!, 2, [statementOf('name', 'A2', 'jsonld')]);
+      const said = await statementsOf(tx, [a1!.id, a2!.id]);
+      expect(said.get(a1!.id)?.map((statement) => statement.property)).toEqual(['name']);
+      expect(said.get(a2!.id)).toMatchObject([
+        { property: 'name', value: 'A2', method: 'jsonld', sourceUrl: a2!.locator },
+      ]);
+      expect(await statementsOf(tx, [])).toEqual(new Map());
     }));
 });

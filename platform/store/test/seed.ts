@@ -7,6 +7,7 @@ import {
 } from '@spatula/core';
 import type { Executor } from '../src/client';
 import { applyDefinition, listLiveItems, type ItemRef } from '../src/datasets';
+import type { NewDecision } from '../src/decisions';
 import { recordFetch } from '../src/fetches';
 import { testDefinition } from '../src/fixtures';
 import { startRun } from '../src/runs';
@@ -72,3 +73,25 @@ export function statementOf(
     position: property === 'gtins' || property === 'mpns' || property === 'specs' ? 0 : null,
   };
 }
+
+/** The answer that made a page irrelevant: it is none of the dataset's categories. */
+export const noneOfThese = (datasetId: string, itemId: string): NewDecision => ({
+  id: `dc_none_${itemId}`,
+  datasetId,
+  type: 'classify',
+  subject: itemId,
+  subjectKey: `classify:${itemId}`,
+  state: {},
+  stateHash: 'hash',
+  question: { type: 'choice', prompt: 'Which?', options: ['Headphones', 'None of these'] },
+  criteriaVersion: 1,
+  adapter: 'llm:test-model',
+  probabilities: { 'None of these': 0.95 },
+  evidence: 'Ear pads.',
+  thresholds: { accept: 0.9 },
+  outcome: 'accepted',
+  answer: 'None of these',
+  inputTokens: 0,
+  outputTokens: 0,
+  decidedAt: new Date(),
+});
