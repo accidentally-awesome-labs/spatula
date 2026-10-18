@@ -34,8 +34,19 @@ describe('siteAnswer', () => {
     expect(siteAnswer({ status: null, challenge: false })).toBeNull();
   });
 
-  it('reads the gate holding a request back for a challenged robots.txt as a refusal', () => {
-    expect(siteAnswer({ status: null, challenge: false, robotsChallenged: true })).toBe('refused');
+  it('reads an answer that says nothing of its own as a refusal when robots.txt refused', () => {
+    // No answer, as when the gate held the request back, and an outage.
+    expect(siteAnswer({ status: null, challenge: false, robotsRefused: true })).toBe('refused');
+    expect(siteAnswer({ status: 503, challenge: false, robotsRefused: true })).toBe('refused');
+    expect(siteAnswer({ status: null, challenge: false, robotsRefused: false })).toBeNull();
+    expect(siteAnswer({ status: 503, challenge: false, robotsRefused: false })).toBeNull();
+  });
+
+  it('leaves an answer its own verdict when robots.txt refused: it can only add a refusal', () => {
+    expect(siteAnswer({ status: 200, challenge: false, robotsRefused: true })).toBe('through');
+    expect(siteAnswer({ status: 404, challenge: false, robotsRefused: true })).toBe('through');
+    expect(siteAnswer({ status: 429, challenge: false, robotsRefused: true })).toBe('refused');
+    expect(siteAnswer({ status: 200, challenge: true, robotsRefused: true })).toBe('refused');
   });
 });
 

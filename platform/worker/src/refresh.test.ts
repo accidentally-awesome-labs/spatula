@@ -103,6 +103,19 @@ function straining(world: World, pages: string[], reply: HttpResult) {
   return { strain, asked };
 }
 
+/**
+ * What a page's fetch step returned in a run: its last attempt's, since a page that waited behind
+ * its host's break took more than one. Undefined when no attempt finished.
+ */
+function lastFetched(run: { results: Map<string, unknown> }, itemId: string) {
+  const attempts = [...run.results.keys()].filter((name) => name.startsWith(`fetch:${itemId}:`));
+  const result = run.results.get(attempts.at(-1) ?? '') as
+    | { kind: 'done'; fetched: { site?: string | null; hostAnswered: boolean; outcome: string } }
+    | { kind: 'later' }
+    | undefined;
+  return result?.kind === 'done' ? result.fetched : undefined;
+}
+
 describe('runRefresh', () => {
   it('collects, identifies, and publishes, then publishes nothing when nothing changed', async () => {
     const { world, a1, a2, b1 } = await setUp('refresh-basics');
@@ -1263,18 +1276,17 @@ describe('runRefresh', () => {
     const world = makeWorld(db, routes);
     const run = await refresh(world, datasetId);
     const live = await listLiveItems(db, datasetId);
+    // A page that waited behind its host's break took more than one attempt: the last answered.
+    const fetchedOf = (url: string) =>
+      lastFetched(run, live.find((row) => row.locator === url)!.id);
     const siteOf = (url: string) => {
-      const item = live.find((row) => row.locator === url)!;
-      // A page that waited behind its host's break took more than one attempt: the last answered.
-      const attempts = [...run.results.keys()].filter((name) =>
-        name.startsWith(`fetch:${item.id}:`),
-      );
-      const result = run.results.get(attempts.at(-1) ?? '') as
-        | { kind: 'done'; fetched: { site?: string | null } }
-        | undefined;
-      return result?.kind === 'done' ? (result.fetched.site ?? null) : 'not asked';
+      const fetched = fetchedOf(url);
+      return fetched === undefined ? 'not asked' : (fetched.site ?? null);
     };
     expect(pages.map(siteOf)).toEqual(['through', 'through', 'refused', 'refused', null]);
+    // The last is a 503, which the host answered: it says nothing of the site, as a page given up
+    // on would, but it is not one.
+    expect(fetchedOf(pages[4]!)).toMatchObject({ outcome: 'failed', hostAnswered: true });
   });
 
   it('reads a page held back for a challenged robots.txt as refused', async () => {
@@ -1290,6 +1302,52 @@ describe('runRefresh', () => {
       fetched: { site?: string | null; hostAnswered: boolean };
     };
     expect(result.fetched).toMatchObject({ site: 'refused', hostAnswered: false });
+  });
+
+  it('reads every page of a host whose robots.txt answers 429 as refused, though none is asked for', async () => {
+    const routes = standardRoutes();
+    routes['https://maker-a.example/robots.txt'] = { status: 429 };
+    const { world, a1, a2, b1 } = await setUp('refresh-robots-429', routes, { llm: false });
+    const run = await refresh(world, 'refresh-robots-429');
+    // The gate holds maker-a's pages back while its robots.txt can't be read, as it always has.
+    const asked = world.web.requests.map((sent) => sent.url);
+    expect(asked).not.toContain(URLS.a1);
+    expect(asked).not.toContain(URLS.a2);
+    for (const page of [a1, a2]) {
+      expect(lastFetched(run, page.id)).toMatchObject({
+        outcome: 'failed',
+        hostAnswered: false,
+        site: 'refused',
+      });
+    }
+    // The other host's page is its own.
+    expect(lastFetched(run, b1.id)).toMatchObject({ outcome: 'changed', site: 'through' });
+  });
+
+  it('reads a page that says nothing as refused when robots.txt answered 403, and one that got through as through', async () => {
+    const pages = await makerAPages('refresh-robots-403', ['p1-busy', 'p2-ok']);
+    const routes = standardRoutes();
+    routes['https://maker-a.example/robots.txt'] = { status: 403 };
+    routes[pages[0]!] = { status: 503 };
+    routes[pages[1]!] = { status: 200, body: A1() };
+    const world = makeWorld(db, routes, { llm: false });
+    const run = await refresh(world, 'refresh-robots-403');
+    const live = await listLiveItems(db, 'refresh-robots-403');
+    const fetchedOf = (url: string) =>
+      lastFetched(run, live.find((row) => row.locator === url)!.id);
+    // A 403 for robots.txt means it holds no rules, so both pages are asked for. The 503 says
+    // nothing of its own, so the refusal is what it comes to; the page that got through stays so.
+    expect(world.web.requests.map((sent) => sent.url)).toEqual(expect.arrayContaining(pages));
+    expect(fetchedOf(pages[0]!)).toMatchObject({
+      outcome: 'failed',
+      hostAnswered: true,
+      site: 'refused',
+    });
+    expect(fetchedOf(pages[1]!)).toMatchObject({
+      outcome: 'changed',
+      hostAnswered: true,
+      site: 'through',
+    });
   });
 
   it('starts the count again at a page robots.txt turns away between challenges', async () => {
@@ -1595,6 +1653,111 @@ describe('a request put off partway through its redirects', () => {
       error: `redirected more than ${MAX_REDIRECTS} times`,
     });
     expect(sent).toHaveLength(MAX_REDIRECTS + 1);
+  });
+});
+
+describe('a request that learns the host refused robots.txt', () => {
+  const address = 'https://maker-a.example/products/a1';
+  const moved = 'https://maker-b.example/products/a1';
+  const options = { minIntervalMs: 1000, giveUp: false, headers: {} };
+  const go: GateDecision = { kind: 'go', waitMs: 0, signals: {} };
+  const deny: GateDecision = {
+    kind: 'deny',
+    outcome: 'failed',
+    reason: 'robots.txt is unreachable (HTTP 429)',
+  };
+  const refused = { robotsRefused: true } as const;
+  const page: HttpResult = {
+    ok: true,
+    status: 200,
+    headers: { 'content-type': 'text/html' },
+    body: new Uint8Array(),
+    truncated: false,
+  };
+  const redirect: HttpResult = { ...page, status: 301, headers: { location: moved } };
+
+  /** Ports whose gate gives these decisions in turn, and whose web answers with `reply`. */
+  function ports(decisions: GateDecision[], reply: (url: string) => HttpResult) {
+    const left = [...decisions];
+    return {
+      gate: {
+        async reserve(): Promise<GateDecision> {
+          return left.shift()!;
+        },
+        async record() {},
+      },
+      http: {
+        async get(url: string): Promise<HttpResult> {
+          return reply(url);
+        },
+      },
+      async wait() {},
+    };
+  }
+
+  it('says so on a page that came back, whatever the page said', async () => {
+    const flagged = ports([{ ...go, ...refused }], () => page);
+    expect(await requestThroughGate(flagged, address, options)).toMatchObject({
+      kind: 'answered',
+      robotsRefused: true,
+    });
+    const plain = ports([go], () => page);
+    expect(await requestThroughGate(plain, address, options)).toMatchObject({
+      kind: 'answered',
+      robotsRefused: false,
+    });
+  });
+
+  it('says so on a request the gate held back', async () => {
+    const flagged = ports([{ ...deny, ...refused }], () => page);
+    expect(await requestThroughGate(flagged, address, options)).toMatchObject({
+      kind: 'denied',
+      robotsRefused: true,
+    });
+    const plain = ports([deny], () => page);
+    expect(await requestThroughGate(plain, address, options)).toMatchObject({
+      kind: 'denied',
+      robotsRefused: false,
+    });
+  });
+
+  it('says so on a request that got no answer, and on one that stopped waiting', async () => {
+    const dropped: HttpResult = { ok: false, error: 'connection reset' };
+    const unanswered = ports([{ ...go, ...refused }], () => dropped);
+    expect(await requestThroughGate(unanswered, address, options)).toMatchObject({
+      kind: 'failed',
+      noAnswer: true,
+      robotsRefused: true,
+    });
+    const busy: GateDecision = { kind: 'later', retryAfterMs: 20_000, reason: 'busy' };
+    const stopped = ports([{ ...busy, ...refused }], () => page);
+    expect(await requestThroughGate(stopped, address, { ...options, giveUp: true })).toMatchObject({
+      kind: 'failed',
+      noAnswer: false,
+      robotsRefused: true,
+    });
+    const idle = ports([busy], () => page);
+    expect(await requestThroughGate(idle, address, { ...options, giveUp: true })).toMatchObject({
+      kind: 'failed',
+      noAnswer: false,
+      robotsRefused: false,
+    });
+  });
+
+  it('says what the decision for the hop it ended at said', async () => {
+    const web = (url: string) => (url === address ? redirect : page);
+    const refusedFirst = ports([{ ...go, ...refused }, go], web);
+    expect(await requestThroughGate(refusedFirst, address, options)).toMatchObject({
+      kind: 'answered',
+      url: moved,
+      robotsRefused: false,
+    });
+    const refusedLast = ports([go, { ...go, ...refused }], web);
+    expect(await requestThroughGate(refusedLast, address, options)).toMatchObject({
+      kind: 'answered',
+      url: moved,
+      robotsRefused: true,
+    });
   });
 });
 

@@ -7,8 +7,10 @@ import {
   retryAfterMs,
   robotsNeedsRefresh,
   robotsRecord,
+  robotsRefused,
   robotsToKeep,
   type GateState,
+  type RobotsRecord,
 } from './gate';
 
 const NOW = Date.parse('2026-10-10T00:00:00Z');
@@ -33,6 +35,17 @@ describe('robots.txt answers', () => {
       status: 'unreachable',
       reason: 'TimeoutError',
     });
+  });
+
+  it('keep the status that left them unreachable, and none for an error or a challenge', () => {
+    expect(robotsRecord({ status: 429, text: '' }, NOW)).toMatchObject({
+      status: 'unreachable',
+      reason: 'HTTP 429',
+      httpStatus: 429,
+    });
+    expect(robotsRecord({ status: 503, text: '' }, NOW)).toMatchObject({ httpStatus: 503 });
+    expect(robotsRecord({ error: 'TimeoutError' }, NOW)).not.toHaveProperty('httpStatus');
+    expect(robotsRecord({ challenged: true }, NOW)).not.toHaveProperty('httpStatus');
   });
 
   it('are kept a day, or an hour while unreachable', () => {
@@ -83,6 +96,34 @@ describe('a robots.txt refresh that meets a challenge', () => {
     expect(robotsToKeep(null, challenged)).toEqual(challenged);
     const none = robotsRecord({ status: 404, text: '' }, NOW);
     expect(robotsToKeep(held, none)).toEqual(none);
+  });
+
+  it('leaves a record that holds no rules to the challenge: a denial names it, not the outage', () => {
+    // Nothing is in force to keep, and keeping the outage would have every denial say HTTP 503
+    // while the host is refusing.
+    const down = robotsRecord({ status: 503, text: '' }, NOW - 2 * HOUR);
+    const kept = robotsToKeep(down, challenged);
+    expect(kept).toEqual(challenged);
+    const { decision } = reserve(
+      { ...INITIAL_GATE_STATE, robots: kept },
+      request('https://maker.example/a'),
+    );
+    expect(decision).toMatchObject({
+      kind: 'deny',
+      reason: expect.stringContaining('the site answered robots.txt with a challenge'),
+    });
+    expect(decision).not.toMatchObject({ reason: expect.stringContaining('HTTP 503') });
+    // The next read is due when it was: an hour after the challenge, as with the outage kept.
+    expect(robotsNeedsRefresh(kept, NOW + HOUR - 1)).toBe(false);
+    expect(robotsNeedsRefresh(kept, NOW + HOUR)).toBe(true);
+    const outageKept = { ...down, challengedAt: NOW };
+    expect(robotsNeedsRefresh(outageKept, NOW + HOUR - 1)).toBe(false);
+    expect(robotsNeedsRefresh(outageKept, NOW + HOUR)).toBe(true);
+  });
+
+  it('leaves a record that says there are no rules in force too', () => {
+    const none = robotsRecord({ status: 404, text: '' }, NOW - 25 * HOUR);
+    expect(robotsToKeep(none, challenged)).toEqual({ ...none, challengedAt: NOW });
   });
 });
 
@@ -180,32 +221,25 @@ describe('reserve', () => {
     });
   });
 
-  it('says when it holds a request back because robots.txt answered with a challenge', () => {
-    const now = Date.UTC(2026, 9, 18);
-    const challenged = robotsRecord({ challenged: true }, now);
-    const unreachable = robotsRecord({ error: 'the network dropped it' }, now);
-    const request = { url: 'https://maker.example/p', now, minIntervalMs: 1000, maxWaitMs: 0 };
-    expect(reserve({ ...INITIAL_GATE_STATE, robots: challenged }, request).decision).toMatchObject({
-      kind: 'deny',
-      outcome: 'failed',
-      robotsChallenged: true,
-    });
-    expect(
-      reserve({ ...INITIAL_GATE_STATE, robots: unreachable }, request).decision,
-    ).not.toHaveProperty('robotsChallenged');
-  });
-
-  it.each([401, 403, 410])('allows everything when robots.txt answered %i', (status) => {
-    const state: GateState = {
-      ...INITIAL_GATE_STATE,
-      robots: robotsRecord({ status, text: '' }, NOW),
-    };
-    expect(reserve(state, request('https://maker.example/anything')).decision).toEqual({
-      kind: 'go',
-      waitMs: 0,
-      signals: {},
-    });
-  });
+  it.each([
+    [401, true],
+    [403, true],
+    [410, false],
+  ])(
+    'allows everything when robots.txt answered %i, and says whether it refused',
+    (status, refused) => {
+      const state: GateState = {
+        ...INITIAL_GATE_STATE,
+        robots: robotsRecord({ status, text: '' }, NOW),
+      };
+      expect(reserve(state, request('https://maker.example/anything')).decision).toEqual({
+        kind: 'go',
+        waitMs: 0,
+        signals: {},
+        ...(refused ? { robotsRefused: true } : {}),
+      });
+    },
+  );
 
   it('spaces requests at least a second apart, even when the dataset asks for no interval', () => {
     const { state } = reserve(withRobots(''), {
@@ -262,6 +296,112 @@ describe('reserve', () => {
     const strained = recordResponse(open, { status: 429, now: NOW, retryAfter: '0' });
     expect(strained.failures).toBe(1);
     expect(open).toEqual(withRobots(''));
+  });
+});
+
+describe('robotsRefused', () => {
+  const answers: [string, RobotsRecord | null, boolean][] = [
+    ['rules', robotsRecord({ status: 200, text: 'User-agent: *' }, NOW), false],
+    ['a 404', robotsRecord({ status: 404, text: '' }, NOW), false],
+    ['a 410', robotsRecord({ status: 410, text: '' }, NOW), false],
+    ['a 401', robotsRecord({ status: 401, text: '' }, NOW), true],
+    ['a 402', robotsRecord({ status: 402, text: '' }, NOW), true],
+    ['a 403', robotsRecord({ status: 403, text: '' }, NOW), true],
+    ['a 429', robotsRecord({ status: 429, text: '' }, NOW), true],
+    ['a 503', robotsRecord({ status: 503, text: '' }, NOW), false],
+    ['a network error', robotsRecord({ error: 'TimeoutError' }, NOW), false],
+    ['a challenge', robotsRecord({ challenged: true }, NOW), true],
+    // Durable Object state from before the status was kept: not refusing until it is read again.
+    [
+      'a 429 kept without its status',
+      { status: 'unreachable', fetchedAt: NOW, reason: 'HTTP 429' },
+      false,
+    ],
+    ['nothing read yet', null, false],
+  ];
+
+  it.each(answers)('reads robots.txt after %s as refusing: %s', (_answer, robots, expected) => {
+    expect(robotsRefused(robots)).toBe(expected);
+  });
+
+  it('keeps a challenge against the host while rules stay in force, until it is read again', () => {
+    const rules = 'User-agent: *\nDisallow: /private\n';
+    const held = robotsRecord({ status: 200, text: rules }, NOW - 25 * HOUR);
+    const kept = robotsToKeep(held, robotsRecord({ challenged: true }, NOW));
+    expect(kept.status).toBe('ok');
+    expect(robotsRefused(kept)).toBe(true);
+    const again = robotsRecord({ status: 200, text: rules }, NOW + HOUR);
+    expect(robotsRefused(robotsToKeep(kept, again))).toBe(false);
+  });
+});
+
+describe('a host whose robots.txt refuses Spatula', () => {
+  const rules = 'User-agent: *\nDisallow: /private\n';
+  const stateOf = (robots: RobotsRecord): GateState => ({ ...INITIAL_GATE_STATE, robots });
+  const asking = (path = '/p') => request(`https://maker.example${path}`);
+
+  it.each([
+    ['a 429', robotsRecord({ status: 429, text: '' }, NOW)],
+    ['a challenge', robotsRecord({ challenged: true }, NOW)],
+  ])('holds requests back, and says robots.txt refused, after %s', (_answer, robots) => {
+    expect(reserve(stateOf(robots), asking()).decision).toMatchObject({
+      kind: 'deny',
+      outcome: 'failed',
+      robotsRefused: true,
+    });
+  });
+
+  it.each([401, 402, 403])(
+    'lets requests go, and says robots.txt refused, after a %i',
+    (status) => {
+      const robots = robotsRecord({ status, text: '' }, NOW);
+      expect(reserve(stateOf(robots), asking()).decision).toEqual({
+        kind: 'go',
+        waitMs: 0,
+        signals: {},
+        robotsRefused: true,
+      });
+    },
+  );
+
+  it('says it when it puts a request off too, and only for a host that refused', () => {
+    const refused = robotsRecord({ status: 403, text: '' }, NOW);
+    const resting = { backoffUntil: NOW + 60_000 };
+    expect(reserve({ ...stateOf(refused), ...resting }, asking()).decision).toEqual({
+      kind: 'later',
+      retryAfterMs: 60_000,
+      reason: 'maker.example asked for a break',
+      robotsRefused: true,
+    });
+    const answered = robotsRecord({ status: 404, text: '' }, NOW);
+    expect(reserve({ ...stateOf(answered), ...resting }, asking()).decision).not.toHaveProperty(
+      'robotsRefused',
+    );
+  });
+
+  it('says it after a challenge for what the rules held allow, and for what they disallow', () => {
+    const held = robotsRecord({ status: 200, text: rules }, NOW - 25 * HOUR);
+    const challenged = stateOf(robotsToKeep(held, robotsRecord({ challenged: true }, NOW)));
+    expect(reserve(challenged, asking('/p')).decision).toMatchObject({
+      kind: 'go',
+      robotsRefused: true,
+    });
+    expect(reserve(challenged, asking('/private/x')).decision).toMatchObject({
+      kind: 'deny',
+      outcome: 'blocked',
+      robotsRefused: true,
+    });
+  });
+
+  it.each([
+    ['rules that allow the page', robotsRecord({ status: 200, text: rules }, NOW), '/p'],
+    ['rules that disallow it', robotsRecord({ status: 200, text: rules }, NOW), '/private/x'],
+    ['a 404', robotsRecord({ status: 404, text: '' }, NOW), '/p'],
+    ['a 410', robotsRecord({ status: 410, text: '' }, NOW), '/p'],
+    ['a 503', robotsRecord({ status: 503, text: '' }, NOW), '/p'],
+    ['a network error', robotsRecord({ error: 'the network dropped it' }, NOW), '/p'],
+  ])('says nothing of a refusal after %s', (_answer, robots, path) => {
+    expect(reserve(stateOf(robots), asking(path)).decision).not.toHaveProperty('robotsRefused');
   });
 });
 
