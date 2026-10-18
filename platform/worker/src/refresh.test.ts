@@ -1215,31 +1215,81 @@ describe('runRefresh', () => {
     // A challenge and a page are the host's answers. A page robots.txt turns away, a request the
     // network dropped, and one given up after the host kept asking for a wait are not. Of those,
     // only the dropped request went out, so only it strained the host: the others sent nothing.
+    // What each says of the site (ADR 0006): the challenge is a refusal and the page got through,
+    // while the three that weren't the host's answers say nothing either way.
     expect(fetchedOf(pages[0]!)).toMatchObject({
       outcome: 'blocked',
       hostAnswered: true,
       strained: false,
+      site: 'refused',
     });
     expect(fetchedOf(pages[1]!)).toMatchObject({
       outcome: 'blocked',
       hostAnswered: false,
       strained: false,
+      site: null,
     });
     expect(fetchedOf(pages[2]!)).toMatchObject({
       outcome: 'failed',
       hostAnswered: false,
       strained: true,
+      site: null,
     });
     expect(fetchedOf(pages[3]!)).toMatchObject({
       outcome: 'changed',
       hostAnswered: true,
       strained: false,
+      site: 'through',
     });
     expect(fetchedOf(pages[4]!)).toMatchObject({
       outcome: 'failed',
       hostAnswered: false,
       strained: false,
+      site: null,
     });
+  });
+
+  it('keeps what each page’s answer says of the site in its fetch step’s result', async () => {
+    const datasetId = 'refresh-site-answers';
+    // Read in this order (by address): through, through, refused, refused, neither.
+    const names = ['p1-ok', 'p2-gone', 'p3-busy', 'p4-challenged', 'p5-down'];
+    const pages = await makerAPages(datasetId, names);
+    const routes = standardRoutes();
+    routes[pages[0]!] = { status: 200, body: A1() };
+    routes[pages[1]!] = { status: 404 };
+    routes[pages[2]!] = { status: 429 };
+    routes[pages[3]!] = { status: 403, headers: { 'cf-mitigated': 'challenge' } };
+    routes[pages[4]!] = { status: 503 };
+    const world = makeWorld(db, routes);
+    const run = await refresh(world, datasetId);
+    const live = await listLiveItems(db, datasetId);
+    const siteOf = (url: string) => {
+      const item = live.find((row) => row.locator === url)!;
+      // A page that waited behind its host's break took more than one attempt: the last answered.
+      const attempts = [...run.results.keys()].filter((name) =>
+        name.startsWith(`fetch:${item.id}:`),
+      );
+      const result = run.results.get(attempts.at(-1) ?? '') as
+        | { kind: 'done'; fetched: { site?: string | null } }
+        | undefined;
+      return result?.kind === 'done' ? (result.fetched.site ?? null) : 'not asked';
+    };
+    expect(pages.map(siteOf)).toEqual(['through', 'through', 'refused', 'refused', null]);
+  });
+
+  it('reads a page held back for a challenged robots.txt as refused', async () => {
+    const routes = standardRoutes();
+    routes['https://maker-b.example/robots.txt'] = {
+      status: 403,
+      headers: { 'cf-mitigated': 'challenge' },
+    };
+    const { world, b1 } = await setUp('refresh-robots-challenged', routes);
+    const run = await refresh(world, 'refresh-robots-challenged');
+    const result = run.results.get(`fetch:${b1.id}:0`) as {
+      kind: 'done';
+      fetched: { site?: string | null; hostAnswered: boolean };
+    };
+    expect(result.fetched).toMatchObject({ site: 'refused', hostAnswered: false });
   });
 
   it('starts the count again at a page robots.txt turns away between challenges', async () => {

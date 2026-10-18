@@ -55,7 +55,13 @@ export const INITIAL_GATE_STATE: GateState = {
 };
 
 export type GateDecision =
-  | { kind: 'deny'; outcome: 'blocked' | 'failed'; reason: string }
+  | {
+      kind: 'deny';
+      outcome: 'blocked' | 'failed';
+      reason: string;
+      /** Held back because the host answered robots.txt with a challenge: a refusal (ADR 0006). */
+      robotsChallenged?: true;
+    }
   | { kind: 'later'; retryAfterMs: number; reason: string }
   | { kind: 'go'; waitMs: number; signals: ContentSignals };
 
@@ -140,6 +146,7 @@ export function reserve(
         kind: 'deny',
         outcome: 'failed',
         reason: `robots.txt is unreachable${why}, so nothing on ${url.host} is fetched until it answers`,
+        ...(robots?.challengedAt === undefined ? {} : { robotsChallenged: true as const }),
       },
     };
   }

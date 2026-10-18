@@ -7,6 +7,7 @@ export * from './robots';
 export * from './sitemap';
 export * from './sources';
 export * from './gate';
+export * from './refusals';
 export * from './gates';
 export * from './page';
 export * from './statements';

@@ -19,6 +19,7 @@ import {
   type PageExtraction,
   type RecordType,
   type RunSummary,
+  type SiteAnswer,
 } from '@spatula/core';
 import {
   dueItems,
@@ -51,7 +52,7 @@ import {
   type StepRunner,
 } from './pipeline';
 import { publish } from './publish';
-import { isChallenge, MAX_WAITS, requestThroughGate, type Resume } from './requests';
+import { isChallenge, MAX_WAITS, requestThroughGate, siteAnswerOf, type Resume } from './requests';
 import { storable } from './text';
 
 // What other modules have always imported from here.
@@ -166,6 +167,11 @@ interface Fetched {
    * the gate let go. A result kept by an earlier version has none, which reads as no strain.
    */
   strained?: boolean;
+  /**
+   * What the answer says of the site (ADR 0006): Spatula got through, or was refused. A result
+   * kept by an earlier version has none, which reads as neither, as an outage does.
+   */
+  site?: SiteAnswer | null;
   finalUrl: string;
   signals: ContentSignals;
   /** The page the statements will come from: the fresh one, or the one stored before. */
@@ -402,6 +408,7 @@ async function refreshItem(
   outcome: Outcome;
   hostAnswered: boolean;
   strained: boolean;
+  site: SiteAnswer | null;
   waitsForBudget: boolean;
 }> {
   const fetched = await fetchWithWaits(context, item, step, ports);
@@ -413,6 +420,7 @@ async function refreshItem(
     outcome: fetched.outcome,
     hostAnswered: fetched.hostAnswered,
     strained: fetched.strained === true,
+    site: fetched.site ?? null,
   };
   if (!fetched.extract) return { ...host, waitsForBudget: false };
   const extracted = await step.do(`extract:${item.id}`, () =>
@@ -533,7 +541,7 @@ async function fetchItem(
   const startedAt = ports.now();
   const requested = await request(context, item, attempt >= MAX_WAITS, ports, resume);
   if (requested.kind === 'later') return requested;
-  const { attempt: answer, signals, noAnswer } = requested;
+  const { attempt: answer, signals, noAnswer, site } = requested;
 
   // The same run, page, and attempt make the same ID, so a step that runs again logs one fetch.
   const fetchId = await stableId('fe', context.runId, item.id, attempt);
@@ -585,6 +593,7 @@ async function fetchItem(
       outcome: answer.outcome,
       hostAnswered: answer.httpStatus !== null,
       strained: noAnswer || strains(answer.httpStatus),
+      site,
       finalUrl: answer.finalUrl,
       signals,
       contentHash: answer.page?.contentHash ?? item.contentHash,
@@ -617,7 +626,13 @@ async function request(
   resume: Resume | undefined,
 ): Promise<
   | { kind: 'later'; retryAfterMs: number; resume: Resume }
-  | { kind: 'answered'; attempt: Attempt; signals: ContentSignals; noAnswer: boolean }
+  | {
+      kind: 'answered';
+      attempt: Attempt;
+      signals: ContentSignals;
+      noAnswer: boolean;
+      site: SiteAnswer | null;
+    }
 > {
   // Definitions keep a page as written and only validate it. From here on, every hop and the
   // fetch log's final address use its href, as the redirects already do.
@@ -628,12 +643,14 @@ async function request(
     resume,
   });
   if (answer.kind === 'later') return answer;
+  const site = siteAnswerOf(answer);
   const answered = (attempt: Omit<Attempt, 'policy' | 'policyReason'> & Partial<Attempt>) => {
     const whole = { policy: 'allowed' as const, policyReason: null, ...attempt };
     return {
       kind: 'answered' as const,
       signals: answer.signals,
       noAnswer: answer.kind === 'failed' && answer.noAnswer,
+      site,
       // A reason or an error can quote the site, such as the Location of a redirect that isn't an
       // address or of a robots.txt's redirect. Both are stored as text, and Postgres refuses U+0000.
       attempt: {

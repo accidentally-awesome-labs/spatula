@@ -1,5 +1,5 @@
 import { gzipSync } from 'node:zlib';
-import { applyDefinition, fetches, getRun, items, listLiveItems } from '@spatula/store';
+import { applyDefinition, fetches, getRun, items, listLiveItems, startRun } from '@spatula/store';
 import { testSitemapDefinition } from '@spatula/store/fixtures';
 import { runIdFor, type Definition } from '@spatula/core';
 import { and, eq } from 'drizzle-orm';
@@ -17,7 +17,7 @@ import {
   URLS_C,
   type Reply,
 } from '../test/pages';
-import { SITEMAP_MAX_BYTES } from './discovery';
+import { discoverSource, SITEMAP_MAX_BYTES } from './discovery';
 import { runRefresh, type StepRunner } from './refresh';
 
 /**
@@ -502,6 +502,35 @@ describe('discovery', { timeout: 20_000 }, () => {
         .where(and(eq(fetches.runId, runId), eq(fetches.kind, 'sitemap')));
       expect(logged).toEqual([{ outcome, httpStatus: reply.status, error }]);
     }
+  });
+
+  it('keeps what each sitemap’s answer says of the site', async () => {
+    const routes = sitemapRoutes();
+    routes[SITEMAPS.products] = { status: 403, headers: { 'cf-mitigated': 'challenge' } };
+    const world = await setUp('discovery-site-answers', routes);
+    const run = await refresh(world, 'discovery-site-answers');
+    const siteOf = (name: string) =>
+      (run.results.get(name) as { kind: 'done'; read: { site?: string | null } }).read.site;
+    expect(siteOf('sitemap:maker-c:0:0')).toBe('through');
+    expect(siteOf('sitemap:maker-c:1:0')).toBe('refused');
+  });
+
+  it('lists what each sitemap the read asked for says of the site, in the order asked', async () => {
+    const datasetId = 'discovery-sites';
+    const routes = sitemapRoutes();
+    routes[SITEMAPS.products] = { status: 403, headers: { 'cf-mitigated': 'challenge' } };
+    const definition = testSitemapDefinition(datasetId);
+    const world = await setUp(datasetId, routes);
+    const runId = runIdFor(datasetId, world.clock.now());
+    await startRun(db, { id: runId, datasetId });
+    const source = definition.sources.find((one) => one.kind === 'sitemap')!;
+    const found = await discoverSource(
+      { runId, datasetId, definition, startedAt: world.clock.now() },
+      source,
+      fakeStep(world.clock).step,
+      world.ports,
+    );
+    expect(found).toMatchObject({ sitemaps: 2, sites: ['through', 'refused'] });
   });
 
   it('puts a sitemap off while its host has a break, then reads it', async () => {

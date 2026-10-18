@@ -4,6 +4,7 @@ import {
   stableId,
   type Definition,
   type Outcome,
+  type SiteAnswer,
   type SitemapSource,
 } from '@spatula/core';
 import { finishListing, listPages, recordSitemapFetch } from '@spatula/store';
@@ -12,6 +13,7 @@ import {
   isChallenge,
   MAX_WAITS,
   requestThroughGate,
+  siteAnswerOf,
   type Requested,
   type Resume,
 } from './requests';
@@ -53,6 +55,8 @@ export interface SourceDiscovery {
   /** Why the read wasn't complete, or null when it was. */
   incomplete: string | null;
   notes: string[];
+  /** What each sitemap the read asked for says of the site, in order (ADR 0006). */
+  sites: (SiteAnswer | null)[];
 }
 
 /** What one sitemap's step did. Its result is kept as JSON, so it carries counts, not pages. */
@@ -71,6 +75,8 @@ interface SitemapStep {
   /** Why this sitemap leaves the read incomplete, or null. */
   incomplete: string | null;
   note: string | null;
+  /** What the answer says of the site (ADR 0006); a result kept by an earlier version has none. */
+  site?: SiteAnswer | null;
 }
 
 export async function discoverSource(
@@ -88,6 +94,7 @@ export async function discoverSource(
     gone: 0,
     incomplete: null,
     notes: [],
+    sites: [],
   };
   // A sitemap is read once, however often and however a definition spells it.
   const queue = [...new Set(source.sitemaps.map((url) => new URL(url).href))];
@@ -108,6 +115,7 @@ export async function discoverSource(
       ports,
     );
     found.sitemaps += 1;
+    found.sites.push(read.site ?? null);
     found.listed += read.listed;
     found.added += read.added;
     found.revived += read.revived;
@@ -186,6 +194,7 @@ async function readSitemap(
     accept: SITEMAP_ACCEPT,
   });
   if (answer.kind === 'later') return answer;
+  const site = siteAnswerOf(answer);
 
   const read = await readAnswer(answer, url);
   const log = {
@@ -218,6 +227,7 @@ async function readSitemap(
       over: 0,
       incomplete: null,
       note: null,
+      site,
       ...result,
     },
   });

@@ -180,6 +180,21 @@ describe('reserve', () => {
     });
   });
 
+  it('says when it holds a request back because robots.txt answered with a challenge', () => {
+    const now = Date.UTC(2026, 9, 18);
+    const challenged = robotsRecord({ challenged: true }, now);
+    const unreachable = robotsRecord({ error: 'the network dropped it' }, now);
+    const request = { url: 'https://maker.example/p', now, minIntervalMs: 1000, maxWaitMs: 0 };
+    expect(reserve({ ...INITIAL_GATE_STATE, robots: challenged }, request).decision).toMatchObject({
+      kind: 'deny',
+      outcome: 'failed',
+      robotsChallenged: true,
+    });
+    expect(
+      reserve({ ...INITIAL_GATE_STATE, robots: unreachable }, request).decision,
+    ).not.toHaveProperty('robotsChallenged');
+  });
+
   it.each([401, 403, 410])('allows everything when robots.txt answered %i', (status) => {
     const state: GateState = {
       ...INITIAL_GATE_STATE,

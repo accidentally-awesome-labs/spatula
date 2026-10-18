@@ -1,4 +1,4 @@
-import type { ContentSignals } from '@spatula/core';
+import { siteAnswer, type ContentSignals, type SiteAnswer } from '@spatula/core';
 import type { GatePort, HttpPort } from './pipeline';
 
 /*
@@ -39,6 +39,8 @@ export type Requested =
       kind: 'denied';
       outcome: 'blocked' | 'failed';
       reason: string;
+      /** The gate held it back because robots.txt answered with a challenge (ADR 0006). */
+      robotsChallenged: boolean;
       url: string;
       signals: ContentSignals;
     }
@@ -107,7 +109,14 @@ export async function requestThroughGate(
       return failed(`${decision.reason}, and the run stopped waiting after ${MAX_WAITS} tries`);
     }
     if (decision.kind === 'deny') {
-      return { kind: 'denied', outcome: decision.outcome, reason: decision.reason, url, signals };
+      return {
+        kind: 'denied',
+        outcome: decision.outcome,
+        reason: decision.reason,
+        robotsChallenged: decision.robotsChallenged === true,
+        url,
+        signals,
+      };
     }
     signals = decision.signals;
     if (decision.waitMs > 0) await ports.wait(decision.waitMs);
@@ -150,4 +159,17 @@ export async function requestThroughGate(
       truncated: response.truncated,
     };
   }
+}
+
+/** What a request's answer says of the site (ADR 0006), however the request ended. */
+export function siteAnswerOf(answer: Exclude<Requested, { kind: 'later' }>): SiteAnswer | null {
+  if (answer.kind === 'denied') {
+    return siteAnswer({
+      status: null,
+      challenge: false,
+      robotsChallenged: answer.robotsChallenged,
+    });
+  }
+  if (answer.kind === 'failed') return siteAnswer({ status: answer.httpStatus, challenge: false });
+  return siteAnswer({ status: answer.status, challenge: isChallenge(answer.headers) });
 }

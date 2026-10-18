@@ -179,6 +179,8 @@ describe('a robots.txt that meets a challenge', () => {
         outcome: 'failed',
         reason:
           'robots.txt is unreachable (the site answered robots.txt with a challenge), so nothing on maker-a.example is fetched until it answers',
+        // The gate says the challenge is why, which the run reads as a refusal (ADR 0006).
+        robotsChallenged: true,
       });
       const asked = web.requests.length;
       clock.advance(HOUR - 60_000);
