@@ -1,6 +1,6 @@
 # 0002. Dataset definitions
 
-- Status: accepted (slice 1)
+- Status: accepted for slice 0; revised for slice 1, proposed with slice 1
 - Date: 2026-10-09, revised 2026-10-12 for slice 1
 
 ## Context
@@ -27,7 +27,8 @@ definitions through the schema again, so they get the defaults too.
     `description`.
   - `decide: true` lets the decision cascade fill one required enum field that no rule fills
     (ADR 0003). Its question offers the field's values and "None of these"; that answer makes the
-    page irrelevant.
+    page irrelevant. A decided field's values are distinct regardless of case, and none is
+    “None of these”.
 - **`sources`:** each has an `id`, a `recordType`, `fixed` values, declared `extract` rules
   (`{ css, attr? }` or `{ url: canonical }`), and `evidence` (when robots.txt and the terms were
   checked, and what the terms say about automated access; a source whose terms forbid it is
