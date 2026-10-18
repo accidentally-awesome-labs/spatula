@@ -1,4 +1,5 @@
-import { and, eq } from 'drizzle-orm';
+import type { PagesSource } from '@spatula/core';
+import { and, eq, inArray } from 'drizzle-orm';
 import { describe, expect, it } from 'vitest';
 import { withRollback } from '../test/db';
 import type { Executor } from './client';
@@ -472,5 +473,230 @@ describe('the run plan and probes', () => {
       expect((await probeItem(db, { datasetId: 'probe-unread', sourceId: 'maker-a' }))?.id).toBe(
         a2!.id,
       );
+    }));
+});
+
+/*
+ * A page's own blocks count toward its refusal (ADR 0005) only in runs where its source got through.
+ * When a run blocks a whole source, the blocks it gave the source's pages are the source's to count
+ * (ADR 0006), so recordSourceRuns takes them back, and the refusal they caused with them.
+ */
+
+/** The test dataset with `count` pages for maker-a, a1 to a<count>. */
+function makerAPages(datasetId: string, count: number) {
+  const definition = testDefinition(datasetId);
+  definition.sources[0] = {
+    ...(definition.sources[0] as PagesSource),
+    pages: Array.from({ length: count }, (_, n) => `https://maker-a.example/products/a${n + 1}`),
+  };
+  return definition;
+}
+
+/** What a page's fetches have left of it: where it stands with ADR 0005's refusal. */
+const pageStates = async (db: Executor, pages: Record<string, string>) => {
+  const rows = await db
+    .select({
+      id: items.id,
+      status: items.status,
+      lastOutcome: items.lastOutcome,
+      outcomeStreak: items.outcomeStreak,
+    })
+    .from(items)
+    .where(inArray(items.id, Object.values(pages)));
+  return Object.fromEntries(
+    Object.entries(pages).map(([name, id]) => {
+      const { status, lastOutcome, outcomeStreak } = rows.find((row) => row.id === id)!;
+      return [name, { status, lastOutcome, outcomeStreak }];
+    }),
+  );
+};
+
+/**
+ * The pages as a run starting at `at` leaves them, each as its fetches did: maker-a's page that
+ * this run's block refused, one it blocked and left live, one blocked in an earlier run, one that
+ * met an outage, and one blocked and then excluded; and maker-b's page, blocked this run too.
+ */
+async function leaveBlockedPages(db: Executor, datasetId: string, at: Date) {
+  await applyDefinition(db, makerAPages(datasetId, 5));
+  const live = (await listLiveItems(db, datasetId)).map((page) => page.id);
+  const pages = {
+    refusedByIt: live[0]!,
+    blockedNow: live[1]!,
+    blockedBefore: live[2]!,
+    failedNow: live[3]!,
+    excludedNow: live[4]!,
+    otherSource: live[5]!,
+  };
+  const leave = (id: string, values: Partial<typeof items.$inferInsert>) =>
+    db.update(items).set(values).where(eq(items.id, id));
+  await leave(pages.refusedByIt, {
+    status: 'refused',
+    lastOutcome: 'blocked',
+    outcomeStreak: 3,
+    lastFetchedAt: at,
+  });
+  await leave(pages.blockedNow, {
+    lastOutcome: 'blocked',
+    outcomeStreak: 2,
+    lastFetchedAt: new Date(at.getTime() + 60_000),
+  });
+  await leave(pages.blockedBefore, {
+    lastOutcome: 'blocked',
+    outcomeStreak: 2,
+    lastFetchedAt: new Date(at.getTime() - DAY),
+  });
+  await leave(pages.failedNow, { lastOutcome: 'failed', outcomeStreak: 2, lastFetchedAt: at });
+  await leave(pages.excludedNow, {
+    status: 'excluded',
+    lastOutcome: 'blocked',
+    outcomeStreak: 2,
+    lastFetchedAt: at,
+  });
+  await leave(pages.otherSource, { lastOutcome: 'blocked', outcomeStreak: 2, lastFetchedAt: at });
+  return pages;
+}
+
+describe('the page blocks of a blocked source', () => {
+  it('are taken back by the run that blocked it, with the refusal they caused', () =>
+    withRollback(async (db) => {
+      const at = runAt(3);
+      const pages = await leaveBlockedPages(db, 'take-back', at);
+      // Another dataset has a maker-a too, whose page was blocked at the same time.
+      await applyDefinition(db, testDefinition('take-back-bystander'));
+      const [bystander] = await listLiveItems(db, 'take-back-bystander');
+      const blockedTwice = { status: 'live', lastOutcome: 'blocked', outcomeStreak: 2 } as const;
+      await db
+        .update(items)
+        .set({ ...blockedTwice, lastFetchedAt: at })
+        .where(eq(items.id, bystander!.id));
+      expect(
+        await recordSourceRuns(db, {
+          datasetId: 'take-back',
+          at,
+          verdicts: { 'maker-a': 'blocked', 'maker-b': 'through' },
+          probes: {},
+        }),
+      ).toEqual({ blocked: [{ id: 'maker-a', blockedRuns: 1 }], refused: [] });
+      expect(await pageStates(db, { bystander: bystander!.id })).toEqual({
+        bystander: blockedTwice,
+      });
+      expect(await pageStates(db, pages)).toEqual({
+        // The run's blocks start again at zero, and the block that refused a page is undone.
+        refusedByIt: { status: 'live', lastOutcome: 'blocked', outcomeStreak: 0 },
+        blockedNow: { status: 'live', lastOutcome: 'blocked', outcomeStreak: 0 },
+        // Not this run's to take back: an earlier run's block, another outcome, another source's page.
+        blockedBefore: { status: 'live', lastOutcome: 'blocked', outcomeStreak: 2 },
+        failedNow: { status: 'live', lastOutcome: 'failed', outcomeStreak: 2 },
+        otherSource: { status: 'live', lastOutcome: 'blocked', outcomeStreak: 2 },
+        // Only a refused page changes its status.
+        excludedNow: { status: 'excluded', lastOutcome: 'blocked', outcomeStreak: 0 },
+      });
+    }));
+
+  it.each(['through', 'untouched'] as const)(
+    'stay as they are when the run left the source %s',
+    (verdict) =>
+      withRollback(async (db) => {
+        const at = runAt(3);
+        const pages = await leaveBlockedPages(db, `kept-${verdict}`, at);
+        const before = await pageStates(db, pages);
+        expect(before.refusedByIt).toEqual({
+          status: 'refused',
+          lastOutcome: 'blocked',
+          outcomeStreak: 3,
+        });
+        await recordSourceRuns(db, {
+          datasetId: `kept-${verdict}`,
+          at,
+          verdicts: { 'maker-a': verdict, 'maker-b': 'through' },
+          probes: {},
+        });
+        expect(await pageStates(db, pages)).toEqual(before);
+      }),
+  );
+
+  it('are taken back from a refused source’s probe page, and the source stays refused', () =>
+    withRollback(async (db) => {
+      await applyDefinition(db, testDefinition('take-back-probe'));
+      await refuseMakerA(db, 'take-back-probe');
+      const [a1] = await listLiveItems(db, 'take-back-probe');
+      // The probe was blocked, and its block was the third on this page: ADR 0005 refused it.
+      const at = runAt(4);
+      await db
+        .update(items)
+        .set({ status: 'refused', lastOutcome: 'blocked', outcomeStreak: 3, lastFetchedAt: at })
+        .where(eq(items.id, a1!.id));
+      expect(
+        await recordSourceRuns(db, {
+          datasetId: 'take-back-probe',
+          at,
+          verdicts: { 'maker-a': 'untouched' },
+          probes: { 'maker-a': 'blocked' },
+        }),
+      ).toEqual({ blocked: [], refused: [] });
+      expect(await pageStates(db, { probe: a1!.id })).toEqual({
+        probe: { status: 'live', lastOutcome: 'blocked', outcomeStreak: 0 },
+      });
+      const state = await stateOf(db, 'take-back-probe', 'maker-a');
+      expect(state).toMatchObject({ blockedRuns: 3, lastProbe: 'blocked' });
+      expect(state.refusedAt).toEqual(runAt(3));
+    }));
+
+  it('are left to the page when the source was revived while the run that probed it was going', () =>
+    withRollback(async (db) => {
+      await applyDefinition(db, testDefinition('take-back-revived'));
+      await refuseMakerA(db, 'take-back-revived');
+      expect(
+        await reviveSources(db, { datasetId: 'take-back-revived', sources: ['maker-a'] }),
+      ).toBe(1);
+      const [a1] = await listLiveItems(db, 'take-back-revived');
+      const at = runAt(4);
+      const refusedByIt = { status: 'refused', lastOutcome: 'blocked', outcomeStreak: 3 } as const;
+      await db
+        .update(items)
+        .set({ ...refusedByIt, lastFetchedAt: at })
+        .where(eq(items.id, a1!.id));
+      // The run probed the source while it was refused, but a person has put it back since.
+      await recordSourceRuns(db, {
+        datasetId: 'take-back-revived',
+        at,
+        verdicts: { 'maker-a': 'untouched' },
+        probes: { 'maker-a': 'blocked' },
+      });
+      expect(await pageStates(db, { probe: a1!.id })).toEqual({ probe: refusedByIt });
+    }));
+
+  it('are taken back once, however often the step runs, and by no older run', () =>
+    withRollback(async (db) => {
+      const at = runAt(3);
+      const pages = await leaveBlockedPages(db, 'take-back-replay', at);
+      const input = {
+        datasetId: 'take-back-replay',
+        at,
+        verdicts: { 'maker-a': 'blocked' as const },
+        probes: {},
+      };
+      const first = await recordSourceRuns(db, input);
+      expect((await pageStates(db, pages)).refusedByIt).toEqual({
+        status: 'live',
+        lastOutcome: 'blocked',
+        outcomeStreak: 0,
+      });
+
+      // A page is blocked and refused again, as a hand does here. The step that runs again leaves it.
+      const refusedAgain = { status: 'refused', lastOutcome: 'blocked', outcomeStreak: 3 } as const;
+      await db
+        .update(items)
+        .set({ ...refusedAgain, lastFetchedAt: at })
+        .where(eq(items.id, pages.refusedByIt));
+      expect(await recordSourceRuns(db, input)).toEqual(first);
+      expect((await pageStates(db, pages)).refusedByIt).toEqual(refusedAgain);
+
+      // Nor does a run that began earlier, and ends after a newer one has counted the source.
+      expect(await recordSourceRuns(db, { ...input, at: runAt(2) })).toEqual({
+        blocked: [],
+        refused: [],
+      });
+      expect((await pageStates(db, pages)).refusedByIt).toEqual(refusedAgain);
     }));
 });

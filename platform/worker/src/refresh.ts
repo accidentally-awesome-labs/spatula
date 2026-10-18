@@ -283,6 +283,8 @@ export async function runRefresh(
       for (const text of found.notes) note(summary, text);
     }
 
+    // The pages that wait for the next run because the run's LLM budget is spent, a probe's included.
+    let budgetWaits = 0;
     // A refused pages source is probed with its least recently read page.
     const probedPages = new Set<string>();
     for (const source of context.definition.sources) {
@@ -296,6 +298,7 @@ export async function runRefresh(
       summary.items += 1;
       heard(source.id, refreshed.site);
       probed.set(source.id, refreshed.site);
+      if (refreshed.waitsForBudget) budgetWaits += 1;
     }
     // A probe that got through makes its source live again before the plan, so this run reads its
     // due pages.
@@ -342,7 +345,6 @@ export async function runRefresh(
     // steps' results, so a run that replays its steps pauses at the same page.
     const inARow = new Map<string, number>();
     const paused = new Map<string, number>();
-    let budgetWaits = 0;
     for (let start = 0; start < ids.length; start += ITEMS_PER_STEP) {
       const batch = await step.do(`items:${start}`, () =>
         ports.withDb((db) => itemsByIds(db, ids.slice(start, start + ITEMS_PER_STEP))),
@@ -392,6 +394,9 @@ export async function runRefresh(
 
     // The run's verdict for each source, counted across runs (ADR 0006). A refused source whose
     // probe didn't get through counts no blocked run: what its probe met is kept as the probe's.
+    // Counting a blocked source also takes back this run's blocks on its pages, which would count
+    // toward refusing them (ADR 0005), and a refused page leaves resolution and the snapshot. So
+    // this step comes before them.
     const verdicts: Record<string, SourceVerdict> = {};
     const probes: Record<string, SourceProbe> = {};
     for (const source of context.definition.sources) {

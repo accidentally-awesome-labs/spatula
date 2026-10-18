@@ -1,11 +1,11 @@
 import { REFUSE_AFTER_RUNS, runIdFor } from '@spatula/core';
-import { applyDefinition, sources, sourceStates } from '@spatula/store';
+import { applyDefinition, listLiveItems, sources, sourceStates } from '@spatula/store';
 import { testDefinition, testSitemapDefinition } from '@spatula/store/fixtures';
 import { and, eq } from 'drizzle-orm';
 import { describe, expect, it } from 'vitest';
 import { db } from '../test/node/db';
 import { fakeStep, makeWorld, type StepCache, type World } from '../test/node/fakes';
-import { refresh } from '../test/node/runs';
+import { published, refresh } from '../test/node/runs';
 import { SITEMAPS, sitemapRoutes, standardRoutes, URLS, URLS_C, type Reply } from '../test/pages';
 import { runRefresh, type StepRunner } from './refresh';
 
@@ -31,15 +31,9 @@ async function standing(datasetId: string) {
   );
 }
 
-/**
- * The test dataset, reading `itemsPerRun` pages a run. A page is refused after three blocks of its
- * own (ADR 0005). Read in full, maker-a's two pages would both be blocked in each of three runs and
- * be refused along with their source, leaving nothing live to probe or to plan. A smaller budget
- * keeps every page below three blocks, so the pages of a refused source stay live, as the spec has it.
- */
-function budgeted(datasetId: string, itemsPerRun: number) {
-  const definition = testDefinition(datasetId);
-  return { ...definition, budget: { ...definition.budget, itemsPerRun } };
+/** The addresses of the dataset's live pages. */
+async function livePages(datasetId: string) {
+  return (await listLiveItems(db, datasetId)).map((page) => page.locator).sort();
 }
 
 /** Refuses a source, as three blocked runs in a row would. */
@@ -118,8 +112,7 @@ describe('a source’s standing across runs', { timeout: 30_000 }, () => {
 
   it('refuses a source at its third blocked run, asking its hosts more slowly each time, then only probes it', async () => {
     const datasetId = 'standing-refused';
-    // A run reads one page of maker-a and B1, so no page of maker-a is blocked three times.
-    await applyDefinition(db, budgeted(datasetId, 2));
+    await applyDefinition(db, testDefinition(datasetId));
     const routes = standardRoutes();
     routes[URLS.a1] = CHALLENGE;
     routes[URLS.a2] = CHALLENGE;
@@ -142,6 +135,9 @@ describe('a source’s standing across runs', { timeout: 30_000 }, () => {
       refused: true,
       lastProbe: null,
     });
+    // Each page was blocked in all three runs, but a block of the whole source is the source's to
+    // count, not the page's (ADR 0006), so ADR 0005 refused neither page: both are live to be probed.
+    expect(await livePages(datasetId)).toEqual([URLS.a1, URLS.a2, URLS.b1]);
 
     // Refused, it gets one probe a run, though this run counts every page as due (Review Focus 3),
     // and its hosts stay at four times the interval. A probe that's refused counts no fourth run.
@@ -167,8 +163,7 @@ describe('a source’s standing across runs', { timeout: 30_000 }, () => {
 
   it('makes a refused source live again when its probe gets through, and reads its due pages in that run', async () => {
     const datasetId = 'standing-back';
-    // A run reads one page, the least recently read of maker-a's, so none is blocked three times.
-    await applyDefinition(db, budgeted(datasetId, 1));
+    await applyDefinition(db, testDefinition(datasetId));
     const routes = standardRoutes();
     routes[URLS.a1] = CHALLENGE;
     routes[URLS.a2] = CHALLENGE;
@@ -177,6 +172,7 @@ describe('a source’s standing across runs', { timeout: 30_000 }, () => {
       await refresh(world, datasetId, { all: false });
     }
     expect((await standing(datasetId))['maker-a']!.refused).toBe(true);
+    expect(await livePages(datasetId)).toEqual([URLS.a1, URLS.a2, URLS.b1]);
 
     const open = standardRoutes();
     world.web.routes.set(URLS.a1, open[URLS.a1]!);
@@ -392,6 +388,26 @@ describe('what a run counts of a source', { timeout: 30_000 }, () => {
     });
   });
 
+  it('counts a probe page that waited for the LLM budget among the pages that wait', async () => {
+    const datasetId = 'standing-probe-budget';
+    const definition = testDefinition(datasetId);
+    await applyDefinition(db, {
+      ...definition,
+      budget: { ...definition.budget, llmTokensPerRun: 0 },
+    });
+    const world = makeWorld(db, standardRoutes());
+    await refresh(world, datasetId);
+    await refuse(datasetId, 'maker-a');
+
+    // The budget is spent before the first page, so no page is asked of the LLM. A1, the probe,
+    // gets through, and then A2 and B1 are read: all three wait for the next run.
+    const run = await refresh(world, datasetId, { all: true });
+    expect(run.summary.sources?.probed).toEqual([{ id: 'maker-a', outcome: 'through' }]);
+    expect(run.summary.notes).toContain(
+      '3 pages wait for the next run: this run’s LLM budget of 0 tokens is spent',
+    );
+  });
+
   it('sends a refused sitemap source one request, though its definition lists two sitemaps', async () => {
     const datasetId = 'standing-two-sitemaps';
     const definition = testSitemapDefinition(datasetId);
@@ -448,5 +464,55 @@ describe('what a run counts of a source', { timeout: 30_000 }, () => {
       probed: [],
     });
     expect((await standing(datasetId))['maker-b']!.blockedRuns).toBe(1);
+  });
+
+  it('keeps the records of a source it refuses in the snapshot, since three blocked runs leave its pages live', async () => {
+    const datasetId = 'standing-records-kept';
+    await applyDefinition(db, testDefinition(datasetId));
+    const world = makeWorld(db, standardRoutes());
+    await refresh(world, datasetId);
+    const records = async () => Object.keys((await published(world, datasetId))!.byName).sort();
+    expect(await records()).toEqual(['A1', 'A2', 'B1 Amp']);
+
+    // Maker A starts refusing Spatula. A page blocked in three runs in a row is refused (ADR 0005),
+    // and a refused page leaves the snapshot. These blocks were the source's to count (ADR 0006).
+    world.web.routes.set(URLS.a1, CHALLENGE);
+    world.web.routes.set(URLS.a2, CHALLENGE);
+    for (let run = 1; run <= REFUSE_AFTER_RUNS; run += 1) {
+      const blocked = await refresh(world, datasetId);
+      expect(blocked.summary.snapshot).toMatchObject({ published: false });
+    }
+    expect((await standing(datasetId))['maker-a']).toMatchObject({ blockedRuns: 3, refused: true });
+    expect(await livePages(datasetId)).toEqual([URLS.a1, URLS.a2, URLS.b1]);
+    expect(await records()).toEqual(['A1', 'A2', 'B1 Amp']);
+
+    // The refused source's probe is blocked too, and takes nothing from the snapshot either.
+    const probing = await refresh(world, datasetId);
+    expect(probing.summary.snapshot).toMatchObject({ published: false });
+    expect(await records()).toEqual(['A1', 'A2', 'B1 Amp']);
+  });
+
+  it('takes back a page’s third block before the run’s snapshot, when the run blocked the whole source', async () => {
+    const datasetId = 'standing-records-ordered';
+    await applyDefinition(db, testDefinition(datasetId));
+    const world = makeWorld(db, standardRoutes());
+    await refresh(world, datasetId);
+
+    // A1 is blocked in two runs while A2 gets through, so those blocks are the page's own (ADR 0005).
+    world.web.routes.set(URLS.a1, CHALLENGE);
+    await refresh(world, datasetId);
+    await refresh(world, datasetId);
+    expect((await standing(datasetId))['maker-a']!.blockedRuns).toBe(0);
+
+    // Then A2 is blocked too. This run's block on A1 would be its third, and refuse it, and a refused
+    // page leaves the snapshot. It is the source's block, so the sources step takes it back, and does
+    // so before the snapshot is made.
+    world.web.routes.set(URLS.a2, CHALLENGE);
+    const run = await refresh(world, datasetId);
+    expect(run.summary.sources?.blocked).toEqual([{ id: 'maker-a', blockedRuns: 1 }]);
+    expect(run.summary.snapshot).toMatchObject({ published: false });
+    expect(await livePages(datasetId)).toEqual([URLS.a1, URLS.a2, URLS.b1]);
+    const file = (await published(world, datasetId))!;
+    expect(Object.keys(file.byName).sort()).toEqual(['A1', 'A2', 'B1 Amp']);
   });
 });

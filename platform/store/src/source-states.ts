@@ -1,5 +1,5 @@
 import { REFUSE_AFTER_RUNS, type SourceProbe, type SourceVerdict } from '@spatula/core';
-import { and, eq, inArray, isNotNull, isNull, or, sql } from 'drizzle-orm';
+import { and, eq, gte, inArray, isNotNull, isNull, or, sql } from 'drizzle-orm';
 import type { Executor } from './client';
 import type { ItemRef } from './datasets';
 import { items, sources } from './schema';
@@ -47,6 +47,16 @@ const LIVE = { blockedRuns: 0, refusedAt: null, lastProbe: null, lastProbeAt: nu
  * again counts nothing and writes nothing, and says what its first attempt said, from the rows as
  * they stand. Returns the sources this run counted a blocked run for, with their counts, and those
  * it refused.
+ *
+ * A page's own blocks count toward its refusal (ADR 0005) only in runs where its source got
+ * through. When a run blocked a source, or probed a refused one and the probe didn't get through,
+ * the blocks that run gave the source's pages are the source's to count (ADR 0006), so they are
+ * taken back in the same write: each page last read in this run and blocked counts its blocks in a
+ * row from zero again, and one that block refused is live again. Its last outcome stays blocked,
+ * which is true of its last fetch, and no other status changes. So a source blocked in every run of
+ * a row never refuses its pages, which keep their records in the snapshots and a page to probe the
+ * source with. A run that got through to the source, or left it untouched without probing it,
+ * leaves its pages' blocks as they are.
  */
 export async function recordSourceRuns(
   db: Executor,
@@ -74,6 +84,8 @@ export async function recordSourceRuns(
       .for('update');
     const blocked: { id: string; blockedRuns: number }[] = [];
     const refused: string[] = [];
+    // The sources whose pages' blocks from this run are the source's to count.
+    const takeBack: string[] = [];
     for (const row of rows) {
       const verdict = input.verdicts[row.id]!;
       if (row.countedAt !== null && row.countedAt >= input.at) {
@@ -115,6 +127,25 @@ export async function recordSourceRuns(
         .where(and(eq(sources.datasetId, input.datasetId), eq(sources.id, row.id)));
       if (counts) blocked.push({ id: row.id, blockedRuns });
       if (refusedNow) refused.push(row.id);
+      if (verdict === 'blocked' || (verdict === 'untouched' && wasRefused && probe !== undefined)) {
+        takeBack.push(row.id);
+      }
+    }
+    if (takeBack.length > 0) {
+      await tx
+        .update(items)
+        .set({
+          outcomeStreak: 0,
+          status: sql`case when ${items.status} = 'refused' then 'live' else ${items.status} end`,
+        })
+        .where(
+          and(
+            eq(items.datasetId, input.datasetId),
+            inArray(items.sourceId, takeBack),
+            eq(items.lastOutcome, 'blocked'),
+            gte(items.lastFetchedAt, input.at),
+          ),
+        );
     }
     return { blocked, refused };
   });
