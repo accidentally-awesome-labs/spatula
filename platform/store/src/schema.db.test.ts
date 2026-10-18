@@ -1,4 +1,4 @@
-import { METHODS, OUTCOMES } from '@spatula/core';
+import { METHODS, OUTCOMES, SOURCE_PROBES } from '@spatula/core';
 import { sql } from 'drizzle-orm';
 import { describe, expect, it } from 'vitest';
 import { withRollback } from '../test/db';
@@ -30,6 +30,7 @@ describe('the CHECK lists', () => {
       expect(await allowed(tx, 'fetches_outcome')).toEqual([...OUTCOMES].sort());
       expect(await allowed(tx, 'statements_method')).toEqual([...METHODS].sort());
       expect(await allowed(tx, 'items_status')).toEqual([...ITEM_STATUSES].sort());
+      expect(await allowed(tx, 'sources_last_probe')).toEqual([...SOURCE_PROBES].sort());
     }));
 
   it('allow exactly the fetch kinds the store names', () =>

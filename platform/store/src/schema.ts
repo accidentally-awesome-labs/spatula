@@ -10,6 +10,7 @@ import type {
   Question,
   RunStatus,
   RunSummary,
+  SourceProbe,
 } from '@spatula/core';
 import { sql } from 'drizzle-orm';
 import {
@@ -69,8 +70,24 @@ export const sources = pgTable(
     removedAt: time('removed_at'),
     /** When discovery last read all of the source's sitemaps, completely. */
     listedAt: time('listed_at'),
+    /** Runs in a row that read nothing of the source and met a refusal (ADR 0006). */
+    blockedRuns: integer('blocked_runs').notNull().default(0),
+    /** When the third blocked run in a row refused the source; null while it's live. */
+    refusedAt: time('refused_at'),
+    /** When a run last probed the source while it was refused, and what the probe met. */
+    lastProbeAt: time('last_probe_at'),
+    lastProbe: text('last_probe').$type<SourceProbe>(),
+    /**
+     * The start of the run whose verdict was counted last, so a step that runs again, or an older
+     * run that ends after a newer one, counts nothing.
+     */
+    countedAt: time('counted_at'),
   },
-  (t) => [primaryKey({ columns: [t.datasetId, t.id] })],
+  (t) => [
+    primaryKey({ columns: [t.datasetId, t.id] }),
+    check('sources_blocked_runs', sql`${t.blockedRuns} >= 0`),
+    check('sources_last_probe', sql`${t.lastProbe} in ('blocked', 'no answer')`),
+  ],
 );
 
 export const entities = pgTable(
