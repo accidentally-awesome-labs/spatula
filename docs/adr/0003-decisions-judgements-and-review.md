@@ -49,17 +49,20 @@ whose every answer is recorded and can be corrected by a person.
 - **Matching.** A page that isn't joined yet is compared with:
   - the entities that own its identifiers, then its keys;
   - then up to three entities in the same scope (for products, the same brand) whose names are at
-    least 0.6 similar by trigrams (at most 100 questions a run).
+    least 0.6 similar by trigrams.
 
   A key joins a page only when no identifiers disagree and no other entity in its scope carries
   the same name, as two versions of a model do once a "variant" answer has split them; otherwise
-  the cascade is asked. A page that gives only a name waits, rather than join or start an entity,
-  while it isn't settled which entities carry that name. The answers are same, variant, or
-  different, and the pack words the criteria: for products, colors and bundles are the same
-  product, and versions whose specs differ are variants. "Same" joins the page to that entity,
-  but a page judged the same as several entities joins none of them, unless exactly one of those
-  verdicts is a person's. "Variant" and "different" both mean "not the same", which keeps the two
-  apart for good. "Unsure" waits for a person, and the page stays out of snapshots until then.
+  the cascade is asked. A run asks at most 100 match questions of any kind, and the rest wait for
+  the next run. A page that gives only a name waits, rather than join or start an entity, while
+  it isn't settled which entities carry that name. The answers are same, variant, or different,
+  and the pack words the criteria: for products, colors and bundles are the same product, and
+  versions whose specs differ are variants. "Same" joins the page to that entity, and a page
+  joins only one: a decider's "same" about a page already judged the same as another entity goes
+  to a person, and a person's "same" about a second entity is refused (409). A page judged the
+  same as several entities anyway joins none of them, unless exactly one of those verdicts is a
+  person's. "Variant" and "different" both mean "not the same", which keeps the two apart for
+  good. "Unsure" waits for a person, and the page stays out of snapshots until then.
 
 - **Judgements.** One per page and entity. A person's verdict outranks every other, and only a
   person replaces it.
@@ -77,4 +80,5 @@ whose every answer is recorded and can be corrected by a person.
 - Every automated value can show why: its statement names the decision, and the decision its
   evidence.
 - A person's review time goes to the uncertain middle only.
-- Corrections that teach the rules, splitting an entity, and moving a joined page come later.
+- Corrections that teach the rules, splitting an entity, and moving a joined page come later, and
+  so does merging entities, which would make "same" transitive.

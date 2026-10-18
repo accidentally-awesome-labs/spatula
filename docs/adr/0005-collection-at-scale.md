@@ -48,10 +48,11 @@ visitor.
     deliberate: a tag over chosen parts could leave extractions stale after a change that
     matters.
 - **Pacing.**
-  - Each host's next request waits a full interval after the previous answer arrived. Runs can
-    overlap on a host: two datasets can share one, and a run that outlives six hours stops
-    blocking its dataset's next start (ADR 0004). Then the interval in force is whichever
-    reservation came last, and a slot reserved before an answer arrives isn't moved by it.
+  - Within a run, each host's next request waits a full interval after the previous answer
+    arrived. Runs can overlap on a host: two datasets can share one, and a run that outlives six
+    hours stops blocking its dataset's next start (ADR 0004). Then the interval in force is
+    whichever reservation came last, and a slot reserved before an answer arrives isn't moved by
+    it.
   - The interval is the dataset's `perHostIntervalMs` (at least 1,000) or the site's Crawl-delay,
     whichever is longer, and reading robots.txt counts as a request: it waits for the host like
     any other. A robots.txt answered with a challenge keeps the rules stored before it (with none
@@ -70,13 +71,14 @@ visitor.
   - Without the key, nothing is signed and the directory answers 404. Registering the key with
     Cloudflare is an optional owner step.
 - **Reading a page.** A page whose elements nest more than 1,000 deep, as htmlparser2 builds its
-  tree, is refused before it's read, and recorded with that reason. The parser's own stack decides
-  (a DomHandler that refuses past `MAX_NESTING`), because a separate estimate disagreed with the
-  parser and let hostile pages through. Reading a page, the parse and every walk over its tree
-  alike, takes time that grows with its depth, and a Worker can't catch running out of CPU. The
-  trade-off: markup that leaves out end tags in long lists can reach the limit (htmlparser2
-  doesn't close an open `<p>` when a new `<li>` starts, so 500 or more `<li><p>Item` entries nest
-  1,000 deep), and such a page is refused, not misread.
+  tree, isn't read: the run's notes say the page couldn't be read, and why. It stays live with its
+  statements as they were, is tagged to retry, and is tried again every run. The parser's own
+  stack decides (a DomHandler that refuses past `MAX_NESTING`), because a separate estimate
+  disagreed with the parser and let hostile pages through. Reading a page, the parse and every
+  walk over its tree alike, takes time that grows with its depth, and a Worker can't catch
+  running out of CPU. The trade-off: markup that leaves out end tags in long lists can reach the
+  limit (htmlparser2 doesn't close an open `<p>` when a new `<li>` starts, so 500 or more
+  `<li><p>Item` entries nest 1,000 deep), and such a page goes unread, not misread.
 - **The fetch log** records sitemap reads beside page reads.
 
 ## Consequences
@@ -85,6 +87,7 @@ visitor.
   without a person listing them.
 - At 15 seconds a request, a host with 130 pages takes about half an hour, while the other hosts
   are read in the same run.
-- The pacing test of 2026-10-12 found the gap between runs matters more than the spacing within
-  one: no page of 21 was challenged in the first run, and 2 were an hour later. Runs are kept
-  far apart; daily offers wait for signed requests to earn trust.
+- The pacing test of 2026-10-12 and 13, at 15 seconds a request, found the gap between runs
+  matters as much as the spacing within one: no page of 21 was challenged in the first run, 2
+  were in a run an hour later, and none in a run a day after the first. Runs on Shopify makers
+  are kept a day apart; daily offers wait for signed requests to earn trust.

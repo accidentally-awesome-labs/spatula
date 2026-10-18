@@ -27,7 +27,8 @@ for gates, held snapshots, consumer tokens, and signed acknowledgments.
     question for the owner.
   - A newer run supersedes it, whether that run holds a snapshot of its own, publishes one, finds
     the published records again, or finds no record complete. One that builds the same records
-    again leaves it held. A superseded snapshot can't be published.
+    again from the same definition revision leaves it held. A superseded snapshot can't be
+    published.
   - Publishing it moves the head generation compared and set, like any publication, so it takes
     the next generation, never one already taken. Publishing or discarding it closes its
     question in the same transaction.
@@ -36,7 +37,9 @@ for gates, held snapshots, consumer tokens, and signed acknowledgments.
   stopped, or can't be found five minutes after its start, isn't going either: the next start
   records its failure and starts. A complete run stays complete; a failed one can still complete,
   as a Workflow replayed from its finished steps does. So an older run can't publish over a newer
-  one's held snapshot, unless it keeps running past the six hours.
+  one's held snapshot while it counts as going. One still running after six hours can, and so can
+  a Workflow that read as stopped or lost and then runs on, such as one restarted by hand:
+  publishing doesn't check which run is newer.
 - **Consumers.** A dataset lists its consumers by name. Each has two Worker secrets:
   `CONSUMER_<NAME>_TOKEN_HASH` (the SHA-256 of its bearer token) and `CONSUMER_<NAME>_HMAC_KEY`,
   where the name is the consumer's, in capitals, with underscores for hyphens.
@@ -67,8 +70,9 @@ for gates, held snapshots, consumer tokens, and signed acknowledgments.
     not counted as wrong, and a target with values left out and none stated isn't met.
   - The CLI floors each share to one decimal, so a score just under its target never reads as the
     target.
-  - `--save` keeps the score, and `pnpm spatula evals` shows their history. A saved score's
-    generation and golden-set version are at most 999,999,999, and the scores at most 512 KiB.
+  - `--save` keeps the score, and `pnpm spatula evals <dataset>` shows their history. A saved
+    score's generation and golden-set version are at most 999,999,999, and the scores at most
+    512 KiB.
   - Scoring runs in the CLI, so the golden set never lives in the Worker. The CLI reads the
     dataset's pages from `GET /datasets/:id/items`, to find each golden product's record. That
     route and `GET /datasets/:id/evals` answer 404 for a dataset that doesn't exist.
@@ -79,5 +83,6 @@ for gates, held snapshots, consumer tokens, and signed acknowledgments.
   changed definition, never reaches Crowdio without a person's yes.
 - Consumers' tokens and keys rotate by setting the secrets again.
 - Acknowledgments are evidence of consumption, which the pilot's verdict counts.
-- Held drafts, and the file of a publish attempt that lost a race, stay in R2. Nothing reads
-  them; a later slice's cleanup deletes them.
+- A held snapshot's draft is read when it is published, but nothing deletes it once the snapshot
+  is published, superseded, or discarded, nor the file of a publish attempt that lost a race.
+  They stay in R2 until a later slice's cleanup deletes them.

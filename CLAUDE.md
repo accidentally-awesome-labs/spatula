@@ -43,9 +43,10 @@ Before committing, run all of these: `pnpm platform:lint`, `pnpm platform:typech
 - `platform/worker` (`@spatula/worker`): the Worker. `src/refresh.ts` is a whole refresh, as steps
   over ports (`src/pipeline.ts`): discovery (`discovery.ts`), the run plan, fetches
   (`requests.ts`), extraction, classification (`classify.ts`), matching (`match.ts`), and
-  publishing through the gates (`publish.ts`). Node tests run it against Postgres. The Workflow,
-  HostGate (a Durable Object per host), the HTTP, LLM, and signing adapters, review
-  (`review.ts`), and the API connect it to Cloudflare.
+  publishing through the gates (`publish.ts`). Node tests run it against Postgres. Review
+  (`review.ts`) applies a person's answers to the questions those steps raise. The Workflow,
+  HostGate (a Durable Object per host), the HTTP, LLM, and signing adapters, and the API connect
+  it to Cloudflare.
 - `platform/cli` (`@spatula/cli`): the CLI, over the API.
 
 ## Rules
@@ -67,7 +68,7 @@ Before committing, run all of these: `pnpm platform:lint`, `pnpm platform:typech
   - failed and blocked fetches change nothing.
 - Canonical IDs (`sp_…`) are assigned once and stored, never derived from values again.
 - Decisions are typed questions whose answers code applies. A person's answer outranks every
-  other, and a decision that read pages needs `ai-input` (ADR 0003).
+  other, and a decider's decision needs `ai-input` (ADR 0003).
 - Snapshots publish only through the gates; a held snapshot waits for the owner (ADR 0004).
 - Consumers read only the datasets that list them, and sign their acknowledgments.
 - Snapshots use the format Crowdio reads (its ADR 0021). The head generation moves by compare-and-set.

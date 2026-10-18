@@ -181,9 +181,14 @@ describe('acknowledgments', () => {
     const datasetId = 'ak-nokey';
     const text = JSON.stringify(applied(datasetId));
     const hash = await sha256Hex(CONSUMER_TOKEN);
+    // The test bindings set crowdio's key to nothing (vitest.workers.config.ts), so a key that is
+    // not set at all is a copy of them with the key taken out.
+    const unset = { ...env, CONSUMER_CROWDIO_TOKEN_HASH: hash } as Record<string, unknown>;
+    delete unset.CONSUMER_CROWDIO_HMAC_KEY;
+    expect('CONSUMER_CROWDIO_HMAC_KEY' in unset).toBe(false);
     // A key that is not set, and one that is set to nothing, are one case.
     for (const keyless of [
-      { ...env, CONSUMER_CROWDIO_TOKEN_HASH: hash } as Env,
+      unset as unknown as Env,
       { ...env, CONSUMER_CROWDIO_TOKEN_HASH: hash, CONSUMER_CROWDIO_HMAC_KEY: '' } as Env,
     ]) {
       const response = await post(
@@ -199,7 +204,7 @@ describe('acknowledgments', () => {
     // Reading needs no key.
     const read = await call('GET', `/datasets/${datasetId}/snapshots/latest`, {
       token: CONSUMER_TOKEN,
-      bindings: { ...env, CONSUMER_CROWDIO_TOKEN_HASH: hash } as Env,
+      bindings: unset as unknown as Env,
     });
     expect(read.status).toBe(200);
   });
