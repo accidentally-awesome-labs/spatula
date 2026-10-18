@@ -2,7 +2,7 @@ import {
   newId,
   parseDefinition,
   sha256Hex,
-  sourceCovers,
+  sourceCoverage,
   stableStringify,
   type ApplySummary,
   type Definition,
@@ -55,8 +55,8 @@ interface Move {
  * address, unless that source already has a page there. A source removed now gives up every page; a
  * source removed before gives up its excluded pages, which come back. A page that can't move stays
  * excluded. Only those of sources removed now are counted, so a page an earlier apply couldn't move
- * isn't reported on every apply. Live pages claim an address before excluded ones, then by source
- * and address, so the outcome doesn't depend on the order the rows came in.
+ * isn't reported on every apply. Pages that aren't excluded claim an address before excluded ones,
+ * then by source and address, so the outcome doesn't depend on the order the rows came in.
  */
 function planMoves(input: {
   definition: Definition;
@@ -82,6 +82,14 @@ function planMoves(input: {
       .filter((page) => wanted.has(page.sourceId))
       .map((page) => `${page.sourceId} ${page.locator}`),
   );
+  // What each remaining source covers, worked out once. The store keys a page by its text, so a
+  // pages source holds an address under the spelling it lists. A page it lists another way stays
+  // where it is: moved, it would be a second page for the address, beside the source's own.
+  const remaining = input.definition.sources.map((source) => ({
+    id: source.id,
+    covers: sourceCoverage(source),
+    listed: source.kind === 'pages' ? new Set(source.pages) : null,
+  }));
   const ordered = [...leaving].sort(
     (a, b) =>
       Number(a.status === 'excluded') - Number(b.status === 'excluded') ||
@@ -91,21 +99,20 @@ function planMoves(input: {
   const moved: Move[] = [];
   const unmoved = { uncovered: 0, ambiguous: 0, taken: 0 };
   for (const page of ordered) {
-    const covering = input.definition.sources.filter((source) =>
-      sourceCovers(source, page.locator),
-    );
-    const to = covering.length === 1 ? covering[0]!.id : null;
+    const covering = remaining.filter((source) => source.covers(page.locator));
+    const to = covering.length === 1 ? covering[0]! : null;
     const why =
       covering.length === 0
         ? ('uncovered' as const)
-        : covering.length > 1
+        : to === null
           ? ('ambiguous' as const)
-          : claimed.has(`${to} ${page.locator}`)
+          : claimed.has(`${to.id} ${page.locator}`) ||
+              (to.listed !== null && !to.listed.has(page.locator))
             ? ('taken' as const)
             : null;
     if (why === null && to !== null) {
-      claimed.add(`${to} ${page.locator}`);
-      moved.push({ id: page.id, from: page.sourceId, to, locator: page.locator });
+      claimed.add(`${to.id} ${page.locator}`);
+      moved.push({ id: page.id, from: page.sourceId, to: to.id, locator: page.locator });
     } else if (why !== null && removedNow.has(page.sourceId) && page.status !== 'excluded') {
       unmoved[why] += 1;
     }
@@ -248,14 +255,22 @@ export async function applyDefinition(
     // page its new pages source lists, not a second one.
     const byTarget = new Map<string, string[]>();
     for (const move of moves.moved) {
-      byTarget.set(move.to, [...(byTarget.get(move.to) ?? []), move.id]);
+      const ids = byTarget.get(move.to);
+      if (ids === undefined) byTarget.set(move.to, [move.id]);
+      else ids.push(move.id);
     }
-    for (const [to, ids] of byTarget) {
+    for (const source of definition.sources) {
+      const ids = byTarget.get(source.id);
+      if (ids === undefined) continue;
       await tx
         .update(items)
         .set({
-          sourceId: to,
-          // An excluded page of a source removed earlier comes back, as a listing brings it back.
+          sourceId: source.id,
+          // The new source's record type, as its own listing writes it.
+          recordType: source.recordType,
+          // A page that apply had excluded comes back live, as a listing brings one back: whether
+          // its source was removed earlier, or had dropped the page from its list before it left.
+          // Every other status stays: gone, refused, and irrelevant, the owner's "None of these".
           status: sql`case when ${items.status} = 'excluded' then 'live' else ${items.status} end`,
           // The new source's first complete read takes the page over.
           listedAt: null,

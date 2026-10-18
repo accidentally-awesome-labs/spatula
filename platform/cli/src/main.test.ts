@@ -225,6 +225,24 @@ describe('plan and apply', () => {
     expect(out).toEqual(['cli-products would move to revision 2.', 'Pages: 3 added, 1 removed.']);
   });
 
+  it('says nothing of pages an earlier apply left excluded, when this one moves none', async () => {
+    // What a Worker answers on the second apply of a definition that left pages excluded.
+    const summary: ApplySummary = {
+      dataset: 'cli-products',
+      revision: 2,
+      created: false,
+      changed: false,
+      sources: { added: [], removed: [], changed: [] },
+      pages: { added: 0, removed: 0, moved: 0 },
+      moves: [],
+      unmoved: { uncovered: 0, ambiguous: 0, taken: 0 },
+    };
+    const { fetch } = stubApi(() => Response.json(summary));
+    const { io, out } = memoryIo(FILES);
+    expect(await main(['plan', 'cli-products.yaml'], { io, env: ENV, fetch })).toBe(0);
+    expect(out).toEqual(['cli-products is unchanged, at revision 2.']);
+  });
+
   it('show what the API refused, and why', async () => {
     const { fetch } = stubApi(() =>
       Response.json(

@@ -18,18 +18,17 @@ function spelled(href: string): string {
 }
 
 /**
- * Whether a source would hold this page: a pages source that lists it, or a sitemap source with a
- * sitemap on its host (or the host's other spelling, as a sitemap may redirect between them) whose
- * patterns keep its path and query, as discovery chooses pages.
+ * `sourceCovers` for many addresses against one source. What depends on the source alone is done
+ * once, when this is called: respelling the pages a pages source lists, or reading a sitemap
+ * source's hosts and compiling its patterns.
  */
-export function sourceCovers(source: Source, locator: string): boolean {
-  if (!URL.canParse(locator)) return false;
-  const url = new URL(locator);
-  url.hash = '';
+export function sourceCoverage(source: Source): (locator: string) => boolean {
   if (source.kind === 'pages') {
-    return source.pages.some(
-      (page) => URL.canParse(page) && spelled(new URL(page).href) === spelled(url.href),
+    // A pages source holds an address as it lists it, fragment and all.
+    const listed = new Set(
+      source.pages.filter((page) => URL.canParse(page)).map((page) => spelled(new URL(page).href)),
     );
+    return (locator) => URL.canParse(locator) && listed.has(spelled(new URL(locator).href));
   }
   const hosts = new Set(
     source.sitemaps.flatMap((sitemap) => {
@@ -37,7 +36,24 @@ export function sourceCovers(source: Source, locator: string): boolean {
       return [host, otherSpelling(host)];
     }),
   );
-  if (!hosts.has(url.host)) return false;
-  const path = url.pathname + url.search;
-  return pathPatternMatcher(source.include)(path) && !pathPatternMatcher(source.exclude)(path);
+  const included = pathPatternMatcher(source.include);
+  const excluded = pathPatternMatcher(source.exclude);
+  return (locator) => {
+    if (!URL.canParse(locator)) return false;
+    const url = new URL(locator);
+    if (!hosts.has(url.host)) return false;
+    // Discovery keeps no fragment, and a fragment is no part of the path or query that patterns
+    // read, so it makes no difference to a sitemap source.
+    const path = url.pathname + url.search;
+    return included(path) && !excluded(path);
+  };
+}
+
+/**
+ * Whether a source would hold this page: a pages source that lists its address, fragment and all,
+ * or a sitemap source with a sitemap on its host (or the host's other spelling, as a sitemap may
+ * redirect between them) whose patterns keep its path and query, as discovery chooses pages.
+ */
+export function sourceCovers(source: Source, locator: string): boolean {
+  return sourceCoverage(source)(locator);
 }

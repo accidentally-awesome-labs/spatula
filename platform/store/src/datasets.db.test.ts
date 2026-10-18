@@ -3,6 +3,7 @@ import {
   parseDefinition,
   sourceCovers,
   type Definition,
+  type PagesSource,
   type RunSummary,
   type Source,
 } from '@spatula/core';
@@ -449,6 +450,13 @@ function sitemapOnMakerA(id: string, include: string[]): Source {
   };
 }
 
+/** The pages source of a fixture definition with this ID. */
+function pagesSource(definition: Definition, id: string): PagesSource {
+  const source = definition.sources.find((candidate) => candidate.id === id);
+  if (source?.kind !== 'pages') throw new Error(`${id} is a pages source`);
+  return source;
+}
+
 /** Each page's source and status, by address, then source. */
 const placeOf = async (db: Executor, datasetId: string) =>
   db
@@ -468,10 +476,18 @@ describe('applyDefinition, when a source is replaced', () => {
       const before = testDefinition('moves');
       await applyDefinition(db, before);
       const [a1] = await placeOf(db, 'moves');
-      // A read's marks stay with the page when it moves.
+      // A read's marks stay with the page when it moves. Its listing marks belonged to the old
+      // source, so they reset, for the new source's first complete read to set again.
       await db
         .update(items)
-        .set({ contentHash: 'h-a1', lastOutcome: 'changed', lastFetchedAt: new Date() })
+        .set({
+          contentHash: 'h-a1',
+          lastOutcome: 'changed',
+          lastFetchedAt: new Date(),
+          listedAt: new Date('2026-10-01T00:00:00Z'),
+          listedLastmod: '2026-09-30T00:00:00.000Z',
+          missingStreak: 2,
+        })
         .where(eq(items.id, a1!.id));
       const after: Definition = {
         ...before,
@@ -505,6 +521,7 @@ describe('applyDefinition, when a source is replaced', () => {
         contentHash: 'h-a1',
         lastOutcome: 'changed',
         listedAt: null,
+        listedLastmod: null,
         missingStreak: 0,
       });
       expect((await placeOf(db, 'moves')).map((page) => [page.sourceId, page.status])).toEqual([
@@ -512,6 +529,88 @@ describe('applyDefinition, when a source is replaced', () => {
         ['maker-a-all', 'live'],
         ['maker-b', 'live'],
       ]);
+    }));
+
+  it('keeps the status of a page that isn’t live when it moves, and the answer behind it', () =>
+    withRollback(async (db) => {
+      const base = testDefinition('keeps-status');
+      const makerA = pagesSource(base, 'maker-a');
+      const before: Definition = {
+        ...base,
+        sources: [
+          { ...makerA, pages: [...makerA.pages, 'https://maker-a.example/products/a3'] },
+          pagesSource(base, 'maker-b'),
+        ],
+      };
+      await applyDefinition(db, before);
+      const [a1, a2, a3] = await placeOf(db, 'keeps-status');
+      await db
+        .update(items)
+        .set({ status: 'gone', lastOutcome: 'gone', outcomeStreak: 2 })
+        .where(eq(items.id, a1!.id));
+      // The owner's "None of these": the page is irrelevant, and not read or asked about again.
+      await db
+        .update(items)
+        .set({ status: 'irrelevant', extractedWith: 'r1.v1' })
+        .where(eq(items.id, a2!.id));
+      const none = await saveDecision(db, noneOfThese('keeps-status', a2!.id));
+      await db
+        .update(items)
+        .set({ status: 'refused', lastOutcome: 'blocked', outcomeStreak: 3 })
+        .where(eq(items.id, a3!.id));
+      const after: Definition = {
+        ...before,
+        sources: [pagesSource(base, 'maker-b'), sitemapOnMakerA('maker-a-all', ['/products/*'])],
+      };
+
+      expect(await applyDefinition(db, after)).toMatchObject({
+        pages: { moved: 3 },
+        moves: [{ from: ['maker-a'], to: 'maker-a-all', pages: 3 }],
+        unmoved: { uncovered: 0, ambiguous: 0, taken: 0 },
+      });
+      const rows = await db
+        .select({
+          sourceId: items.sourceId,
+          status: items.status,
+          lastOutcome: items.lastOutcome,
+          outcomeStreak: items.outcomeStreak,
+          extractedWith: items.extractedWith,
+        })
+        .from(items)
+        .where(inArray(items.id, [a1!.id, a2!.id, a3!.id]))
+        .orderBy(items.locator);
+      expect(rows).toEqual([
+        {
+          sourceId: 'maker-a-all',
+          status: 'gone',
+          lastOutcome: 'gone',
+          outcomeStreak: 2,
+          extractedWith: null,
+        },
+        {
+          sourceId: 'maker-a-all',
+          status: 'irrelevant',
+          lastOutcome: null,
+          outcomeStreak: 0,
+          extractedWith: 'r1.v1',
+        },
+        {
+          sourceId: 'maker-a-all',
+          status: 'refused',
+          lastOutcome: 'blocked',
+          outcomeStreak: 3,
+          extractedWith: null,
+        },
+      ]);
+      // The answer that made the page irrelevant stands.
+      expect(
+        await findDecision(db, {
+          datasetId: 'keeps-status',
+          subjectKey: none.subjectKey,
+          stateHash: none.stateHash,
+          criteriaVersion: none.criteriaVersion,
+        }),
+      ).toMatchObject({ id: none.id });
     }));
 
   it('leaves a page excluded when no source, or two sources, cover it, and counts why', () =>
@@ -538,6 +637,41 @@ describe('applyDefinition, when a source is replaced', () => {
         ['https://maker-a.example/products/a1', 'wide', 'live'],
         ['https://maker-a.example/products/a2', 'maker-a', 'excluded'],
         ['https://maker-b.example/products/b1', 'maker-b', 'excluded'],
+      ]);
+    }));
+
+  it('says nothing more of the pages it left excluded, when it is applied again', () =>
+    withRollback(async (db) => {
+      const before = testDefinition('left-excluded');
+      await applyDefinition(db, before);
+      const after: Definition = {
+        ...before,
+        // maker-a's a2 has two homes, and maker-b's b1 none.
+        sources: [
+          sitemapOnMakerA('wide', ['/products/*']),
+          sitemapOnMakerA('narrow', ['/products/a2']),
+        ],
+      };
+      await applyDefinition(db, after);
+
+      // Both sources left are removed already, so their pages are no news: nothing moves, and none
+      // is counted again.
+      expect(await applyDefinition(db, after)).toEqual({
+        dataset: 'left-excluded',
+        revision: 2,
+        created: false,
+        changed: false,
+        sources: { added: [], removed: [], changed: [] },
+        pages: { added: 0, removed: 0, moved: 0 },
+        moves: [],
+        unmoved: { uncovered: 0, ambiguous: 0, taken: 0 },
+      });
+      expect(
+        (await placeOf(db, 'left-excluded')).map((page) => [page.sourceId, page.status]),
+      ).toEqual([
+        ['wide', 'live'],
+        ['maker-a', 'excluded'],
+        ['maker-b', 'excluded'],
       ]);
     }));
 
@@ -644,6 +778,83 @@ describe('applyDefinition, when a source is replaced', () => {
         status: 'live',
       });
       expect(sourceCovers(after.sources[1]!, a1!.locator)).toBe(true);
+    }));
+
+  it('leaves a page excluded when a pages source lists its address under another spelling', () =>
+    withRollback(async (db) => {
+      const base = testDefinition('spelled');
+      const makerA = pagesSource(base, 'maker-a');
+      const makerB = pagesSource(base, 'maker-b');
+      const lower = 'https://maker-a.example/products/%c3%a9';
+      const upper = 'https://maker-a.example/products/%C3%A9';
+      await applyDefinition(db, { ...base, sources: [{ ...makerA, pages: [lower] }, makerB] });
+      const after: Definition = {
+        ...base,
+        sources: [{ ...makerA, id: 'maker-a-renamed', pages: [upper] }, makerB],
+      };
+
+      // The store keys a page by its text. Moving this one would put a second row for the address
+      // in the source, beside the one the same apply adds for what the source lists.
+      expect(await applyDefinition(db, after)).toMatchObject({
+        pages: { added: 1, removed: 1, moved: 0 },
+        moves: [],
+        unmoved: { uncovered: 0, ambiguous: 0, taken: 1 },
+      });
+      const rows = await placeOf(db, 'spelled');
+      expect(
+        rows
+          .filter((row) => row.sourceId === 'maker-a-renamed')
+          .map((row) => [row.locator, row.status]),
+      ).toEqual([[upper, 'live']]);
+      expect(
+        rows.filter((row) => row.sourceId === 'maker-a').map((row) => [row.locator, row.status]),
+      ).toEqual([[lower, 'excluded']]);
+    }));
+
+  it('doesn’t take an excluded page back into a pages source that lists it spelled another way', () =>
+    withRollback(async (db) => {
+      const base = testDefinition('spelled-back');
+      const makerA = pagesSource(base, 'maker-a');
+      const lower = 'https://maker-a.example/products/%c3%a9';
+      const upper = 'https://maker-a.example/products/%C3%A9';
+      const now: Definition = {
+        ...base,
+        sources: [
+          { ...makerA, id: 'maker-a-renamed', pages: [upper] },
+          pagesSource(base, 'maker-b'),
+        ],
+      };
+      await applyDefinition(db, now);
+      // What an apply before ADR 0006 left: maker-a removed, and its page excluded.
+      await db.insert(sources).values({
+        datasetId: 'spelled-back',
+        id: 'maker-a',
+        kind: 'pages',
+        config: makerA,
+        removedAt: new Date(),
+      });
+      await db.insert(items).values({
+        id: newId('it'),
+        datasetId: 'spelled-back',
+        sourceId: 'maker-a',
+        recordType: 'product',
+        locator: lower,
+        status: 'excluded',
+      });
+
+      expect(await applyDefinition(db, now)).toMatchObject({
+        changed: false,
+        pages: { added: 0, removed: 0, moved: 0 },
+        moves: [],
+        unmoved: { uncovered: 0, ambiguous: 0, taken: 0 },
+      });
+      // The address is one live page, under the spelling its source lists.
+      const rows = await placeOf(db, 'spelled-back');
+      expect(rows.filter((row) => row.sourceId === 'maker-a-renamed')).toHaveLength(1);
+      expect(rows.filter((row) => row.status === 'live')).toHaveLength(2);
+      expect(rows.filter((row) => row.sourceId === 'maker-a').map((row) => row.status)).toEqual([
+        'excluded',
+      ]);
     }));
 });
 
