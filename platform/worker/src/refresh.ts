@@ -106,13 +106,14 @@ const ITEMS_PER_STEP = 50;
 /**
  * Pages in a row from one source, each blocked or straining its host, that pause the rest of the
  * source's pages for this run. A block here is the host's: a 401, 402, or 403 it answered with, or
- * a challenge. A strain is a 429 or a 5xx it answered with, or a request that went out and got no
- * answer. Each strain lengthens the host's break, and the run sleeps through it before its next
- * page, on whatever host, so a host that strains on every page would hold up every other one.
- * Anything else starts the count again: a page the gate turns away, or that the run gave up
- * waiting to ask for, sent no request, so it protects no host; and any other answer, a failure
- * such as "not HTML" included, shows the host answering. Challenges come with requests close
- * together, so the source rests until the next run, and its pages stay due; nothing is refused.
+ * a challenge. A strain is a 429 or a 5xx it answered with, or no answer to a request the gate let
+ * go: the network dropped it, it timed out, or the HTTP client wouldn't send it. The gate records
+ * each strain and lengthens the host's break, and the run sleeps through it before its next page,
+ * on whatever host, so a host that strains on every page would hold up every other one. Anything
+ * else starts the count again: a page the gate turns away, or that the run gave up waiting to ask
+ * for, sent no request and lengthened no break; and any other answer, a failure such as "not
+ * HTML" included, shows the host answering. Challenges come with requests close together, so the
+ * source rests until the next run, and its pages stay due; nothing is refused.
  */
 export const SOURCE_PAUSE_AFTER = 3;
 
@@ -161,8 +162,8 @@ interface Fetched {
    */
   hostAnswered: boolean;
   /**
-   * Whether the fetch strained the host: it answered 429 or a 5xx, or a request went out and got
-   * no answer. A result kept by an earlier version has none, which reads as no strain.
+   * Whether the fetch strained the host: it answered 429 or a 5xx, or no answer came to a request
+   * the gate let go. A result kept by an earlier version has none, which reads as no strain.
    */
   strained?: boolean;
   finalUrl: string;
@@ -605,8 +606,8 @@ function strains(status: number | null): boolean {
 }
 
 /**
- * Asks for a page through its host's gate, and says what came of it, and whether a request went
- * out and got no answer.
+ * Asks for a page through its host's gate, and says what came of it, and whether no answer came to
+ * a request the gate let go.
  */
 async function request(
   context: Context,

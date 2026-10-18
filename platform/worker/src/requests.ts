@@ -47,8 +47,10 @@ export type Requested =
       error: string;
       httpStatus: number | null;
       /**
-       * Whether a request went out and no answer came: the network dropped it, or it timed out. A
-       * request the run gave up waiting to send never went out.
+       * Whether no answer came to a request the gate let go: the network dropped it, it timed out,
+       * or the HTTP client wouldn't send it, as it won't to the local network, where a redirect can
+       * point, or when it couldn't sign it. The gate records each as a strain. A request the run
+       * gave up waiting to send was never let go.
        */
       noAnswer: boolean;
       url: string;
