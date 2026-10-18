@@ -4,13 +4,18 @@ import { checkGates, type GateInput } from './gates';
 const ids = (count: number, from = 0) =>
   Array.from({ length: count }, (_, index) => `sp_${String(index + from).padStart(4, '0')}`);
 
-const input = (overrides: Partial<GateInput>): GateInput => ({
-  approval: 'balanced',
-  maxRemovals: { count: 25, share: 0.05 },
-  previous: { canonicalIds: ids(400), revision: 3 },
-  next: { canonicalIds: ids(400), revision: 3 },
-  ...overrides,
-});
+const input = (overrides: Partial<GateInput>): GateInput => {
+  const next = overrides.next ?? { canonicalIds: ids(400), revision: 3 };
+  return {
+    approval: 'balanced',
+    maxRemovals: { count: 25, share: 0.05 },
+    previous: { canonicalIds: ids(400), revision: 3 },
+    next,
+    // The definition stayed as the run found it, unless a test says otherwise.
+    revisionNow: next.revision,
+    ...overrides,
+  };
+};
 
 describe('checkGates', () => {
   it('publishes a balanced dataset’s routine changes', () => {
@@ -65,6 +70,26 @@ describe('checkGates', () => {
         .publish,
     ).toBe(false);
     expect(checkGates(input({ approval: 'manual' })).reasons).toEqual([
+      'the dataset’s approval is manual',
+    ]);
+  });
+
+  it('holds a snapshot whose definition changed while its run went, whatever the approval', () => {
+    const during = 'the definition changed during this run (revision 3 to 4)';
+    // A routine change under auto or balanced would publish, and the first under auto too.
+    for (const approval of ['auto', 'balanced'] as const) {
+      expect(checkGates(input({ approval, revisionNow: 4 })), approval).toMatchObject({
+        publish: false,
+        reasons: [during],
+      });
+    }
+    expect(checkGates(input({ approval: 'auto', previous: null, revisionNow: 4 }))).toMatchObject({
+      publish: false,
+      reasons: [during],
+    });
+    // It's said first, beside whatever else holds the snapshot.
+    expect(checkGates(input({ approval: 'manual', revisionNow: 4 })).reasons).toEqual([
+      during,
       'the dataset’s approval is manual',
     ]);
   });

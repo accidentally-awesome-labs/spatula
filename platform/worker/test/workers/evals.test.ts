@@ -1,7 +1,7 @@
 import type { EvalView } from '@spatula/core';
 import { testDefinition } from '@spatula/store/fixtures';
 import { env } from 'cloudflare:workers';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { api } from '../../src/api';
 import { call, expectNoStore, staleDataset } from './api-support';
 
@@ -208,6 +208,41 @@ describe('items and evals', () => {
     // Only the two that fit were kept.
     const history = await call('GET', '/datasets/api-evals-size/evals');
     expect(((await history.json()) as { evals: unknown[] }).evals).toHaveLength(2);
+  });
+
+  it('answers a body it couldn’t read as a failure, and logs why, not as one that isn’t JSON', async () => {
+    // The connection drops partway through a body that said how long it would be. The body limit
+    // goes by that length and leaves the reading to the route, whose read then fails.
+    const body = new ReadableStream<Uint8Array>({
+      start(controller) {
+        controller.enqueue(new TextEncoder().encode('{"generation":'));
+        controller.error(new Error('the connection was reset'));
+      },
+    });
+    const logged = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    try {
+      const response = await api.request(
+        '/datasets/api-evals-unread/evals',
+        {
+          method: 'POST',
+          headers: {
+            authorization: 'Bearer test-token',
+            'content-type': 'application/json',
+            'content-length': '64',
+          },
+          body,
+        },
+        env,
+      );
+      expect(response.status).toBe(500);
+      expectNoStore(response);
+      expect(await response.json()).toEqual({
+        error: 'Something went wrong. The Worker’s logs say what.',
+      });
+      expect(logged).toHaveBeenCalledWith('API error:', 'the connection was reset');
+    } finally {
+      logged.mockRestore();
+    }
   });
 
   it('keeps a score, and lists items, for a dataset whose stored definition went stale', async () => {

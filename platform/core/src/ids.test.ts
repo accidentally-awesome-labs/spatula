@@ -103,4 +103,20 @@ describe('hmacSha256Hex', () => {
       }
     }
   });
+
+  it('signs bytes as the bytes they are, a byte-order mark or bytes that aren’t UTF-8 included', async () => {
+    const key = 'crowdio-hmac-key';
+    const text = '{"generation":1,"detail":"ünï"}';
+    const encoded = new TextEncoder().encode(text);
+    // Text is signed as the UTF-8 bytes it encodes to, so the two are signed alike.
+    expect(await hmacSha256Hex(key, encoded)).toBe(await hmacSha256Hex(key, text));
+    // No text encodes to these, so only their bytes can be what's signed.
+    const marked = new Uint8Array([0xef, 0xbb, 0xbf, ...encoded]);
+    const broken = new Uint8Array([...encoded.slice(0, -1), 0xff, 0x7d]);
+    for (const bytes of [marked, broken]) {
+      expect(await hmacSha256Hex(key, bytes)).toBe(
+        createHmac('sha256', key).update(bytes).digest('hex'),
+      );
+    }
+  });
 });

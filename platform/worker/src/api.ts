@@ -215,29 +215,31 @@ api.post('/datasets/:id/runs', async (c) => {
   const runId = runIdFor(datasetId, now);
   // The run is recorded first, so its ID can be reported at once, and a second request in the
   // same five-minute slot finds it. A dataset has one run going at a time: while another is, the
-  // request is refused, and that run is named. A run that reads as failed (see viewRun) isn't
-  // going, and mustn't block its dataset for hours: the start records its failure, which
+  // request is refused, and that run is named, with when it started. A run that reads as failed
+  // (see viewRun) isn't going, and mustn't block its dataset: the start records its failure, which
   // GET /runs/:id only reports, and tries once more. Should that run's Workflow finish it after
   // all, finishRun lets a failed run complete, so the row ends up saying how it ended.
   const started = await withDatabase(c.env, async (db) => {
     // A definition stored by an earlier version that no longer passes the checks throws here, and
     // onError answers it.
     if ((await getDataset(db, datasetId)) === null) return 'missing' as const;
-    const first = await startRunAlone(db, { id: runId, datasetId, at: now });
+    const first = await startRunAlone(db, { id: runId, datasetId });
     if (!('running' in first)) return first;
     const view = await viewRun(c.env, first.running);
     // Every run viewRun reads as failed has its reason, so a missing one is not a run to record.
     if (view.status !== 'failed' || view.error === null) return first;
     await finishRun(db, view.id, { status: 'failed', error: view.error });
     // Once: the answer to this attempt is the answer, even if another run is in the way.
-    return startRunAlone(db, { id: runId, datasetId, at: now });
+    return startRunAlone(db, { id: runId, datasetId });
   });
   if (started === 'missing') return c.json({ error: `Dataset ${datasetId} doesn’t exist.` }, 404);
   if ('running' in started) {
+    const going = started.running;
+    const since = ago(now.getTime() - Date.parse(going.startedAt));
     return c.json(
       {
-        error: `A run of ${datasetId} is already running (${started.running.id}). Wait for it to finish.`,
-        runId: started.running.id,
+        error: `A run of ${datasetId} is already running (${going.id}, started ${since}). Wait for it to finish.`,
+        runId: going.id,
       },
       409,
     );
@@ -264,6 +266,31 @@ api.post('/datasets/:id/runs', async (c) => {
  */
 export const RUN_START_GRACE_MS = 5 * 60 * 1000;
 
+const MINUTE_MS = 60 * 1000;
+const HOUR_MS = 60 * MINUTE_MS;
+
+/**
+ * How long a run whose Workflow reads as neither going nor stopped (`complete` or `unknown`, while
+ * the run's row still says running) keeps holding its dataset. Past it, the run reads as failed
+ * (viewRun), so the next start records it and starts. A Workflow that reads as going blocks the
+ * next start however long it runs, and one that has stopped, or can't be found once
+ * RUN_START_GRACE_MS has passed, never does.
+ */
+export const RUN_STALE_MS = 6 * HOUR_MS;
+
+/**
+ * What a Workflow still at work reads as, among the Worker's InstanceStatus type's statuses. One
+ * rolling back is still running code, so it counts.
+ */
+const GOING: ReadonlySet<InstanceStatus['status']> = new Set([
+  'queued',
+  'running',
+  'waiting',
+  'paused',
+  'waitingForPause',
+  'rollingBack',
+]);
+
 api.get('/runs/:id', async (c) => {
   const run = await withDatabase(c.env, (db) => getRun(db, c.req.param('id')));
   if (run === null) return c.json({ error: 'No such run.' }, 404);
@@ -273,9 +300,10 @@ api.get('/runs/:id', async (c) => {
 /**
  * A run as the API reports it. A row that says `running` is checked against its Workflow: one that
  * was stopped from outside, such as one terminated by hand, never finishes its run, and one that
- * can't be found never will once RUN_START_GRACE_MS has passed, so both read as failed. Any other
- * row is reported as it is. This only reports: GET /runs/:id leaves the row alone, and the start of
- * the dataset's next run records the failure.
+ * can't be found never will once RUN_START_GRACE_MS has passed, so both read as failed. So does one
+ * past RUN_STALE_MS whose Workflow reads as neither going nor stopped. Any other row is reported as
+ * it is. This only reports: GET /runs/:id leaves the row alone, and the start of the dataset's next
+ * run records the failure.
  */
 async function viewRun(env: Env, run: RunView): Promise<RunView> {
   if (run.status !== 'running') return run;
@@ -288,6 +316,13 @@ async function viewRun(env: Env, run: RunView): Promise<RunView> {
   const state = await instance.status();
   if (state.status === 'errored' || state.status === 'terminated') {
     return { ...run, status: 'failed', error: describeStop(state.error) };
+  }
+  if (!GOING.has(state.status) && Date.now() - Date.parse(run.startedAt) > RUN_STALE_MS) {
+    return {
+      ...run,
+      status: 'failed',
+      error: `This run’s Workflow reads ${state.status}, though the run never finished, and it started more than ${RUN_STALE_MS / HOUR_MS} hours ago.`,
+    };
   }
   return run;
 }
@@ -412,17 +447,24 @@ api.post(
     if (consumer === null) return c.json({ error: 'Acknowledgments come from consumers.' }, 403);
     const key = consumerSecret(c.env, consumer, 'HMAC_KEY');
     if (key === undefined) return c.json({ error: `${consumer} has no HMAC key yet.` }, 503);
-    // The signature covers the exact bytes sent, so the body is read as text before it's parsed.
-    const raw = await c.req.text();
+    // The signature covers the exact bytes sent, so it's checked over them before they're read as
+    // text: reading them as text would drop a byte-order mark and replace what isn't UTF-8.
+    const raw = new Uint8Array(await c.req.arrayBuffer());
     const signature = /^sha256=([0-9a-f]{64})$/u.exec(
       c.req.header('x-spatula-signature') ?? '',
     )?.[1];
     if (signature === undefined || !sameText(signature, await hmacSha256Hex(key, raw))) {
       return c.json({ error: 'The signature is missing or wrong.' }, 401);
     }
+    let text: string;
+    try {
+      text = new TextDecoder('utf-8', { fatal: true, ignoreBOM: false }).decode(raw);
+    } catch {
+      return c.json({ error: 'The body isn’t UTF-8.' }, 400);
+    }
     let data: unknown;
     try {
-      data = JSON.parse(raw);
+      data = JSON.parse(text);
     } catch {
       return c.json({ error: 'The body isn’t JSON.' }, 400);
     }
@@ -551,9 +593,12 @@ api.post(
     onError: (c) => c.json({ error: `The scores are at most ${EVAL_MAX_BYTES / 1024} KiB.` }, 413),
   }),
   async (c) => {
+    // Read before it's parsed, as the acknowledgments route reads its body: a body that couldn't be
+    // read is a failure, which onError answers and logs, not a body that isn't JSON.
+    const text = await c.req.text();
     let body: unknown;
     try {
-      body = JSON.parse(await c.req.text());
+      body = JSON.parse(text);
     } catch {
       return c.json({ error: 'The body isn’t JSON.' }, 400);
     }
@@ -631,6 +676,15 @@ function withoutWorkflow(run: RunView, error: unknown): RunView {
   if (Date.now() - Date.parse(run.startedAt) <= RUN_START_GRACE_MS) return run;
   const message = error instanceof Error ? error.message : String(error);
   return { ...run, status: 'failed', error: `Spatula can’t find this run’s Workflow: ${message}` };
+}
+
+/** How long ago something began: in whole minutes, and in whole hours from the first hour. */
+function ago(ms: number): string {
+  const minutes = Math.floor(ms / MINUTE_MS);
+  if (minutes < 1) return 'less than a minute ago';
+  if (minutes < 60) return `${minutes} ${minutes === 1 ? 'minute' : 'minutes'} ago`;
+  const hours = Math.floor(ms / HOUR_MS);
+  return `${hours} ${hours === 1 ? 'hour' : 'hours'} ago`;
 }
 
 function describeStop(error: unknown): string {

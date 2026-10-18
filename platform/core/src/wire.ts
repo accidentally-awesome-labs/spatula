@@ -78,8 +78,9 @@ export interface RunSummary {
   /** What the sitemap sources listed. Absent in runs from before slice 1. */
   discovery?: DiscoverySummary;
   /**
-   * Pages left unread because their source kept blocking, by source. They stay due, so an ordinary
-   * run's next one reads them; a run that counted every page as due (--all) promises nothing.
+   * Pages left unread because their source's pages kept being blocked or straining the host, by
+   * source. They stay due, so an ordinary run's next one reads them; a run that counted every page
+   * as due (--all) promises nothing.
    */
   paused?: Record<string, number>;
   fetches: Record<Outcome, number>;

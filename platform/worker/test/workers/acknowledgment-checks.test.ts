@@ -143,6 +143,41 @@ describe('the checks on an acknowledgment', () => {
     expect(kept!.detail).toBe('ünï 🎧');
   });
 
+  it('check the signature over the raw bytes, a byte-order mark too, and refuse bytes that aren’t UTF-8', async () => {
+    const datasetId = 'ac-raw-bytes';
+    await subscribed(datasetId);
+    const consumer = { authorization: `Bearer ${CONSUMER_TOKEN}` };
+    const text = JSON.stringify(applied(datasetId));
+    const plain = new TextEncoder().encode(text);
+    const marked = new Uint8Array([0xef, 0xbb, 0xbf, ...plain]);
+
+    // Read as text, these bytes lose their byte-order mark, but the signature covers the bytes
+    // sent: one over the text without the mark is wrong.
+    const overText = await post(datasetId, marked, { ...consumer, ...(await signed(text)) });
+    expect(overText.status).toBe(401);
+    expect(await overText.json()).toEqual({ error: 'The signature is missing or wrong.' });
+    // Signed over the bytes, the mark and all, the acknowledgment is taken: the mark isn't JSON's.
+    const overBytes = await post(datasetId, marked, { ...consumer, ...(await signed(marked)) });
+    expect(overBytes.status).toBe(201);
+    // A repeat is told from a conflict by the bytes too: the same bytes again are a repeat, and the
+    // same text without the mark is another acknowledgment.
+    expect((await post(datasetId, marked, { ...consumer, ...(await signed(marked)) })).status).toBe(
+      200,
+    );
+    expect((await post(datasetId, plain, { ...consumer, ...(await signed(plain)) })).status).toBe(
+      409,
+    );
+
+    // A byte no UTF-8 text has, where the detail's one character was, signed as it was sent. Read as
+    // text it would turn into U+FFFD, and the JSON would hold; it's refused as what it is.
+    const broken = new TextEncoder().encode(JSON.stringify(applied(datasetId, { detail: '~' })));
+    broken[broken.indexOf(0x7e)] = 0xff;
+    const notUtf8 = await post(datasetId, broken, { ...consumer, ...(await signed(broken)) });
+    expect(notUtf8.status).toBe(400);
+    expectNoStore(notUtf8);
+    expect(await notUtf8.json()).toEqual({ error: 'The body isn’t UTF-8.' });
+  });
+
   it('say what is wrong with one that is signed but not right', async () => {
     const datasetId = 'ac-wrong';
     await subscribed(datasetId);

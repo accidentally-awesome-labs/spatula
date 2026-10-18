@@ -210,6 +210,18 @@ export async function getDataset(db: Executor, id: string): Promise<DatasetRow |
 }
 
 /**
+ * The dataset's definition revision, or null when it isn't stored. Like `datasetExists` it doesn't
+ * read the definition, so a stored definition that no longer passes the checks doesn't stop it.
+ */
+export async function revisionOf(db: Executor, datasetId: string): Promise<number | null> {
+  const [row] = await db
+    .select({ revision: datasets.revision })
+    .from(datasets)
+    .where(eq(datasets.id, datasetId));
+  return row?.revision ?? null;
+}
+
+/**
  * Whether the dataset is stored. Unlike `getDataset` it doesn't read the definition, so a dataset
  * whose stored definition no longer passes the checks still counts.
  */

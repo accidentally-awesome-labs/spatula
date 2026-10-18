@@ -16,7 +16,8 @@ for gates, held snapshots, consumer tokens, and signed acknowledgments.
   - `auto` publishes unless the guard trips;
   - `balanced` (the default) also holds the dataset's first publication, and the first after its
     definition changed, which is when new sources and fields arrive;
-  - `manual` holds every snapshot.
+  - `manual` holds every snapshot;
+  - and whatever the preset, a snapshot is held when the definition changed while its run went.
 
   The guard trips when a snapshot drops more of the last published records than
   `gates.maxRemovals` allows: more than `count` (default 25), or more than `share` (default 5%),
@@ -33,13 +34,19 @@ for gates, held snapshots, consumer tokens, and signed acknowledgments.
     the next generation, never one already taken. Publishing or discarding it closes its
     question in the same transaction.
 - **One run at a time.** A start while another run of the dataset is going is refused (409), and
-  that run is named. A run still going after six hours counts as dead. A run whose Workflow
-  stopped, or can't be found five minutes after its start, isn't going either: the next start
-  records its failure and starts. A complete run stays complete; a failed one can still complete,
-  as a Workflow replayed from its finished steps does. So an older run can't publish over a newer
-  one's held snapshot while it counts as going. One still running after six hours can, and so can
-  a Workflow that read as stopped or lost and then runs on, such as one restarted by hand:
-  publishing doesn't check which run is newer.
+  that run is named, with when it started.
+  - A run whose Workflow still reads as going (queued, running, waiting, paused, waiting to pause,
+    or rolling back) blocks however long it runs.
+  - One whose Workflow has stopped, or can't be found five minutes after its start, is recorded
+    failed by the next start, which then starts. So is one past six hours whose Workflow no longer
+    reads as going: it reads complete or unknown while the run's row still says running.
+  - A complete run stays complete; a failed one can still complete, as a Workflow replayed from its
+    finished steps does.
+  - Runs can still overlap when a Workflow that read as stopped or lost runs on, such as one
+    restarted by hand. So an older run never publishes, holds, or supersedes anything once a newer
+    run has a snapshot, in any state. Runs are ordered by when they started.
+  - A definition applied while a run goes holds that run's snapshot, whatever the approval: its
+    records came from the definition the run started with.
 - **Consumers.** A dataset lists its consumers by name. Each has two Worker secrets:
   `CONSUMER_<NAME>_TOKEN_HASH` (the SHA-256 of its bearer token) and `CONSUMER_<NAME>_HMAC_KEY`,
   where the name is the consumer's, in capitals, with underscores for hyphens.

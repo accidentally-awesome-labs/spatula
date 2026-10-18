@@ -337,6 +337,28 @@ describe('run', () => {
     }
   });
 
+  it('refuses, in the API’s words and with exit 1, when the stored definition no longer passes the checks', async () => {
+    // The start's other 409 names no run, because none was recorded: there's no run to follow, and
+    // the slot's sentence would be wrong. It's reported as any other refusal is.
+    const stale =
+      'Dataset cli-products’s stored definition no longer passes the checks (consumers.0: Use lowercase letters, digits, and hyphens, up to 63 characters.). Apply it again.';
+    const { fetch, sent } = stubApi(() => Response.json({ error: stale }, { status: 409 }));
+    for (const argv of [
+      ['run', 'cli-products', '--wait'],
+      ['run', 'cli-products'],
+    ]) {
+      sent.length = 0;
+      const { io, out, err } = memoryIo();
+      expect(await main(argv, { io, env: ENV, fetch }), argv.join(' ')).toBe(1);
+      expect(err, argv.join(' ')).toEqual([stale]);
+      expect(out, argv.join(' ')).toEqual([]);
+      expect(
+        sent.map(({ method, path }) => ({ method, path })),
+        argv.join(' '),
+      ).toEqual([{ method: 'POST', path: '/datasets/cli-products/runs' }]);
+    }
+  });
+
   it('says the slot’s sentence when the API gives a run but no words for it', async () => {
     const { fetch } = stubApi(() => Response.json({ runId: RUN_ID }, { status: 409 }));
     const { io, out } = memoryIo();
@@ -490,7 +512,7 @@ describe('run', () => {
     const out = await printed({ 'maker-a': 2, 'maker-b': 1, 'maker-c': 0 });
     expect(out.slice(2, 4)).toEqual([
       pages,
-      'Paused after blocks in a row: maker-a, 2 pages unread; maker-b, 1 page unread; maker-c, 0 pages unread.',
+      'Paused after pages in a row were blocked or strained: maker-a, 2 pages unread; maker-b, 1 page unread; maker-c, 0 pages unread.',
     ]);
     // Runs from before slice 1, and runs that paused nothing, say nothing of it.
     expect((await printed(undefined)).join('\n')).not.toContain('Paused');

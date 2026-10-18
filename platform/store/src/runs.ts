@@ -1,14 +1,8 @@
 import type { RunSummary, RunView } from '@spatula/core';
-import { and, desc, eq, gt, ne } from 'drizzle-orm';
+import { and, desc, eq, ne } from 'drizzle-orm';
 import type { Executor } from './client';
 import { runs } from './schema';
 import { lockDataset } from './snapshots';
-
-/**
- * A run still marked running this long after it started is taken as dead, so it can't hold its
- * dataset for good.
- */
-export const RUN_STALE_MS = 6 * 60 * 60 * 1000;
 
 /** Starts a run, unless one with this ID exists: then it's returned, and `created` is false. */
 export async function startRun(
@@ -27,15 +21,16 @@ export async function startRun(
 
 /**
  * Starts a run unless another run of the dataset is going: then that run is returned, as `running`,
- * and nothing is recorded. A run is going while its row says `running` and it started less than
- * RUN_STALE_MS before `at`. A run with the same ID isn't another: it's this one asked for again,
- * and `startRun` finds it. The dataset's row is taken first, as every change to its snapshots
- * takes it, so two starts at once go one at a time, and the second looks only after the first has
- * committed.
+ * and nothing is recorded. A run is going while its row says `running`, however long ago it
+ * started: only its Workflow can say it has stopped, so the API asks that (viewRun in the Worker's
+ * api.ts), records the run failed when it has, and starts again. A run with the same ID isn't
+ * another: it's this one asked for again, and `startRun` finds it. The dataset's row is taken
+ * first, as every change to its snapshots takes it, so two starts at once go one at a time, and the
+ * second looks only after the first has committed.
  */
 export async function startRunAlone(
   db: Executor,
-  run: { id: string; datasetId: string; at: Date },
+  run: { id: string; datasetId: string },
 ): Promise<{ created: boolean; run: RunView } | { running: RunView }> {
   return db.transaction(async (tx) => {
     await lockDataset(tx, run.datasetId);
@@ -43,12 +38,7 @@ export async function startRunAlone(
       .select()
       .from(runs)
       .where(
-        and(
-          eq(runs.datasetId, run.datasetId),
-          ne(runs.id, run.id),
-          eq(runs.status, 'running'),
-          gt(runs.startedAt, new Date(run.at.getTime() - RUN_STALE_MS)),
-        ),
+        and(eq(runs.datasetId, run.datasetId), ne(runs.id, run.id), eq(runs.status, 'running')),
       )
       .orderBy(desc(runs.startedAt))
       .limit(1);

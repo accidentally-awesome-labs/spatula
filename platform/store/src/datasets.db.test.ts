@@ -16,7 +16,7 @@ import {
 import { findDecision, saveDecision } from './decisions';
 import { testDefinition } from './fixtures';
 import { dueItems } from './listing';
-import { finishRun, getRun, RUN_STALE_MS, startRun, startRunAlone } from './runs';
+import { finishRun, getRun, startRun, startRunAlone } from './runs';
 import { datasets, entities, items, runs, sources } from './schema';
 
 const pagesOf = async (db: Executor) =>
@@ -518,7 +518,7 @@ describe('startRunAlone', () => {
     withRollback(async (db) => {
       await applyDefinition(db, testDefinition());
       const id = 'test-products-202610100000';
-      expect(await startRunAlone(db, { id, datasetId, at: new Date() })).toMatchObject({
+      expect(await startRunAlone(db, { id, datasetId })).toMatchObject({
         created: true,
         run: { id, datasetId, status: 'running', finishedAt: null },
       });
@@ -529,11 +529,7 @@ describe('startRunAlone', () => {
       await applyDefinition(db, testDefinition());
       const at = new Date();
       await runningSince(db, 'test-products-202610100000', at, HOUR);
-      const refused = await startRunAlone(db, {
-        id: 'test-products-202610100500',
-        datasetId,
-        at,
-      });
+      const refused = await startRunAlone(db, { id: 'test-products-202610100500', datasetId });
       expect(refused).toEqual({
         running: {
           id: 'test-products-202610100000',
@@ -557,7 +553,7 @@ describe('startRunAlone', () => {
       await runningSince(db, 'test-products-older', at, 3 * HOUR);
       await runningSince(db, 'test-products-newer', at, HOUR);
       expect(
-        await startRunAlone(db, { id: 'test-products-202610100500', datasetId, at }),
+        await startRunAlone(db, { id: 'test-products-202610100500', datasetId }),
       ).toMatchObject({ running: { id: 'test-products-newer' } });
     }));
 
@@ -568,7 +564,7 @@ describe('startRunAlone', () => {
       const id = 'test-products-202610100000';
       await runningSince(db, id, at, 60_000);
       // The run in the way is this one itself, so the start is a repeat, not a refusal.
-      expect(await startRunAlone(db, { id, datasetId, at })).toMatchObject({
+      expect(await startRunAlone(db, { id, datasetId })).toMatchObject({
         created: false,
         run: { id, status: 'running' },
       });
@@ -584,44 +580,29 @@ describe('startRunAlone', () => {
       await runningSince(db, 'test-products-202610100000', at, HOUR);
       await finishRun(db, 'test-products-202610100000', result);
       expect(
-        await startRunAlone(db, { id: 'test-products-202610100500', datasetId, at }),
+        await startRunAlone(db, { id: 'test-products-202610100500', datasetId }),
       ).toMatchObject({ created: true, run: { id: 'test-products-202610100500' } });
     }),
   );
 
-  it('takes a run still going after six hours as dead, and one still under six hours as going', () =>
+  it('turns a start away while another run is running, however long ago it started', () =>
     withRollback(async (db) => {
       await applyDefinition(db, testDefinition());
       const at = new Date();
-      const start = (id: string) => startRunAlone(db, { id, datasetId, at });
-      // Six hours and a minute: dead.
-      await runningSince(db, 'test-products-late', at, 6 * HOUR + 60_000);
-      expect(await start('test-products-a')).toMatchObject({ created: true });
-      await db.delete(runs).where(eq(runs.datasetId, datasetId));
-      // Five hours and 59 minutes: still going.
-      await runningSince(db, 'test-products-early', at, 6 * HOUR - 60_000);
-      expect(await start('test-products-b')).toMatchObject({
-        running: { id: 'test-products-early' },
-      });
-    }));
-
-  it('draws the line at RUN_STALE_MS: a run that began exactly that long ago is dead', () =>
-    withRollback(async (db) => {
-      await applyDefinition(db, testDefinition());
-      const at = new Date();
-      expect(RUN_STALE_MS).toBe(6 * HOUR);
-      // "Less than six hours ago" is going, so one millisecond short of the line still blocks.
-      await runningSince(db, 'test-products-edge', at, RUN_STALE_MS - 1);
-      expect(await startRunAlone(db, { id: 'test-products-a', datasetId, at })).toMatchObject({
-        running: { id: 'test-products-edge' },
-      });
-      await db
-        .update(runs)
-        .set({ startedAt: new Date(at.getTime() - RUN_STALE_MS) })
-        .where(eq(runs.id, 'test-products-edge'));
-      expect(await startRunAlone(db, { id: 'test-products-b', datasetId, at })).toMatchObject({
-        created: true,
-      });
+      // Six hours and a minute, and a week. Whether such a run is still going is for its Workflow
+      // to say, and the API asks it before it records the run failed (api.ts's viewRun).
+      for (const [id, ago] of [
+        ['test-products-late', 6 * HOUR + 60_000],
+        ['test-products-week', 7 * 24 * HOUR],
+      ] as const) {
+        await db.delete(runs).where(eq(runs.datasetId, datasetId));
+        await runningSince(db, id, at, ago);
+        expect(
+          await startRunAlone(db, { id: 'test-products-202610100500', datasetId }),
+          id,
+        ).toMatchObject({ running: { id } });
+        expect(await getRun(db, 'test-products-202610100500'), id).toBeNull();
+      }
     }));
 
   it('is not held up by another dataset’s run', () =>
@@ -631,7 +612,7 @@ describe('startRunAlone', () => {
       const at = new Date();
       await runningSince(db, 'test-other-202610100000', at, HOUR, 'test-other');
       expect(
-        await startRunAlone(db, { id: 'test-products-202610100500', datasetId, at }),
+        await startRunAlone(db, { id: 'test-products-202610100500', datasetId }),
       ).toMatchObject({ created: true });
     }));
 });

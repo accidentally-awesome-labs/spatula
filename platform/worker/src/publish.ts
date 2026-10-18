@@ -7,6 +7,7 @@ import {
   stableId,
   stableStringify,
   type EntityStatements,
+  type Excluded,
   type PublishResult,
   type Question,
   type Snapshot,
@@ -21,10 +22,15 @@ import {
   holdSnapshot,
   latestSnapshot,
   listOpenReviews,
+  newerRunSnapshot,
   publishHeld,
+  revisionOf,
   snapshotById,
   snapshotOfRun,
   supersedeHeld,
+  unlessNewerRun,
+  type Executor,
+  type NewerSnapshot,
   type SnapshotRow,
   type StoredSnapshot,
 } from '@spatula/store';
@@ -35,7 +41,9 @@ import { heldKey, snapshotKey, type Context, type RefreshPorts } from './pipelin
  * whether it publishes now or waits for the owner: held, its records wait in R2 and its row in the
  * database, with no generation, until the owner publishes or discards it, or a newer run
  * supersedes it. Publishing, now or later, moves the dataset's head generation compared and set,
- * so two publications never share a generation.
+ * so two publications never share a generation. A run publishes, holds, and supersedes nothing
+ * once a run that started after it has a snapshot, and a definition applied while a run goes
+ * holds that run's snapshot.
  */
 
 /** The owner's question about a held snapshot. */
@@ -87,6 +95,14 @@ export async function publish(context: Context, ports: RefreshPorts): Promise<Pu
     // A step that runs again finds what it made the first time.
     const made = await snapshotOfRun(db, runId);
     if (made !== null) return resultOf(made);
+    // The records come from the dataset's current statements, whichever run wrote them, so once a
+    // run that started after this one has a snapshot, in any state, this one publishes, holds, and
+    // supersedes nothing. Each change below asks again under the dataset's row, in the change's own
+    // transaction, so a snapshot that lands while this one is made counts too.
+    const newer = await newerRunSnapshot(db, { datasetId, runId });
+    if (newer !== null) return overtaken(newer, []);
+    const unlessNewer = <T>(change: (tx: Executor) => Promise<T>) =>
+      unlessNewerRun(db, { datasetId, runId }, change);
     const [recordType] = Object.values(definition.recordTypes);
     if (recordType === undefined) throw new Error(`Dataset ${datasetId} has no record type`);
     // Pushed in place: copying an entity's list for every statement would be quadratic.
@@ -105,10 +121,13 @@ export async function publish(context: Context, ports: RefreshPorts): Promise<Pu
     const { records, excluded } = buildRecords(recordType, entities);
     if (records.length === 0) {
       // Publishing a snapshot held earlier would bring back records no run finds now.
-      const superseded = await supersedeHeld(db, { datasetId, at: ports.now() });
+      const superseding = await unlessNewer((tx) =>
+        supersedeHeld(tx, { datasetId, at: ports.now() }),
+      );
+      if ('newer' in superseding) return overtaken(superseding.newer, excluded);
       return {
         published: false,
-        reason: `no record is complete${superseded > 0 ? ', so the snapshot held for review is superseded' : ''}`,
+        reason: `no record is complete${superseding.made > 0 ? ', so the snapshot held for review is superseded' : ''}`,
         excluded,
       };
     }
@@ -116,10 +135,13 @@ export async function publish(context: Context, ports: RefreshPorts): Promise<Pu
     const latest = await latestSnapshot(db, datasetId);
     if (latest !== null && latest.recordsSha256 === digest) {
       // A snapshot held earlier is older than these records, which are the published ones again.
-      const superseded = await supersedeHeld(db, { datasetId, at: ports.now() });
+      const superseding = await unlessNewer((tx) =>
+        supersedeHeld(tx, { datasetId, at: ports.now() }),
+      );
+      if ('newer' in superseding) return overtaken(superseding.newer, excluded);
       return {
         published: false,
-        reason: `nothing changed since generation ${latest.generation}${superseded > 0 ? ', so the snapshot held for review is superseded' : ''}`,
+        reason: `nothing changed since generation ${latest.generation}${superseding.made > 0 ? ', so the snapshot held for review is superseded' : ''}`,
         excluded,
       };
     }
@@ -161,6 +183,9 @@ export async function publish(context: Context, ports: RefreshPorts): Promise<Pu
           ? null
           : { canonicalIds: await recordIdsOf(ports, latest), revision: latest.revision },
       next: { canonicalIds: records.map((record) => record.canonicalId), revision },
+      // A definition applied while the run went holds what it made. A dataset that's gone has no
+      // revision, and the change below fails without its row.
+      revisionNow: (await revisionOf(db, datasetId)) ?? revision,
     });
 
     if (!gates.publish) {
@@ -172,7 +197,7 @@ export async function publish(context: Context, ports: RefreshPorts): Promise<Pu
       const draft = JSON.stringify({ project: datasetId, snapshotId, records });
       const key = heldKey(datasetId, snapshotId);
       await ports.blobs.put(key, draft, 'application/json');
-      await holdSnapshot(db, {
+      const held = {
         id: snapshotId,
         datasetId,
         runId,
@@ -200,7 +225,9 @@ export async function publish(context: Context, ports: RefreshPorts): Promise<Pu
             openMatch: open.filter((review) => review.kind === 'match').length,
           },
         },
-      });
+      };
+      const holding = await unlessNewer((tx) => holdSnapshot(tx, held));
+      if ('newer' in holding) return overtaken(holding.newer, excluded);
       return {
         published: false,
         reason: `it’s held for review: ${gates.reasons.join('; ')}`,
@@ -216,7 +243,7 @@ export async function publish(context: Context, ports: RefreshPorts): Promise<Pu
     // file against its hash.
     const key = snapshotKey(datasetId, `${snapshotId}.${newId('try')}`);
     await ports.blobs.put(key, body, 'application/json');
-    const committed = await commitSnapshot(db, {
+    const row = {
       id: snapshotId,
       datasetId,
       generation: snapshot.generation,
@@ -229,7 +256,10 @@ export async function publish(context: Context, ports: RefreshPorts): Promise<Pu
       bytes: new TextEncoder().encode(body).byteLength,
       publishedAt: snapshot.publishedAt,
       report: { excluded, gates },
-    });
+    };
+    const committing = await unlessNewer((tx) => commitSnapshot(tx, row));
+    if ('newer' in committing) return overtaken(committing.newer, excluded);
+    const committed = committing.made;
     // Another run took this generation first. The step fails, and its retry starts from the new
     // head.
     if (!committed.committed) {
@@ -302,6 +332,18 @@ async function recordIdsOf(ports: RefreshPorts, snapshot: SnapshotRow): Promise<
   if (body === null) throw new SnapshotFileMissingError(snapshot);
   const { records } = JSON.parse(new TextDecoder().decode(body)) as { records: SnapshotRecord[] };
   return records.map((record) => record.canonicalId);
+}
+
+/**
+ * What a run's snapshot step comes to when a run that started after it already has a snapshot: it
+ * publishes, holds, and supersedes nothing (ADR 0004).
+ */
+function overtaken(newer: NewerSnapshot, excluded: Excluded[]): PublishResult {
+  return {
+    published: false,
+    reason: `a newer run (${newer.runId}) already has a snapshot, so this run’s isn’t published`,
+    excluded,
+  };
 }
 
 function heldOf(snapshot: StoredSnapshot): {

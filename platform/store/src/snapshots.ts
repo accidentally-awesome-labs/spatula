@@ -1,13 +1,15 @@
 import type { Question } from '@spatula/core';
-import { and, desc, eq, ne } from 'drizzle-orm';
+import { and, desc, eq, gt, ne } from 'drizzle-orm';
+import { alias } from 'drizzle-orm/pg-core';
 import type { Executor } from './client';
 import { decideReviews, dismissReviews, openReview } from './decisions';
-import { datasets, snapshots, type SnapshotReport, type SnapshotState } from './schema';
+import { datasets, runs, snapshots, type SnapshotReport, type SnapshotState } from './schema';
 
 /*
  * Snapshots (ADR 0004). A published one has a generation, which moves the dataset's head compared
  * and set. A held one waits for the owner with none, and is published, discarded, or superseded
- * by a newer run's records; its question closes with it.
+ * by a newer run's records; its question closes with it. An older run changes none of them once a
+ * newer run has a snapshot (`unlessNewerRun`).
  *
  * One lock order. A publication moves the dataset's head and changes a snapshot's state, and a run
  * that commits supersedes what is held. If one took the snapshot's row first and the dataset's
@@ -58,6 +60,52 @@ export async function lockDataset(tx: Executor, datasetId: string): Promise<void
     .from(datasets)
     .where(eq(datasets.id, datasetId))
     .for('no key update');
+}
+
+/** A snapshot a run made, and that run. */
+export interface NewerSnapshot {
+  runId: string;
+  snapshotId: string;
+}
+
+/**
+ * The snapshot, in any state, of the newest run of the dataset that started after `runId` (ADR
+ * 0004). Runs are ordered by when they started, never by their IDs. A snapshot with no run, as
+ * slice 0's can be, is left out: it says nothing of which run is newer.
+ */
+export async function newerRunSnapshot(
+  db: Executor,
+  input: { datasetId: string; runId: string },
+): Promise<NewerSnapshot | null> {
+  const thisRun = alias(runs, 'this_run');
+  const [row] = await db
+    .select({ runId: runs.id, snapshotId: snapshots.id })
+    .from(snapshots)
+    .innerJoin(runs, eq(runs.id, snapshots.runId))
+    .innerJoin(thisRun, eq(thisRun.id, input.runId))
+    .where(and(eq(snapshots.datasetId, input.datasetId), gt(runs.startedAt, thisRun.startedAt)))
+    .orderBy(desc(runs.startedAt))
+    .limit(1);
+  return row ?? null;
+}
+
+/**
+ * Makes `change`, a run's change to its dataset's snapshots, unless a run that started after it has
+ * a snapshot by then: that snapshot is returned, and nothing changes (ADR 0004). The check and the
+ * change are one transaction, which takes the dataset's row first, as every change to a snapshot's
+ * state does. So a newer run's snapshot either committed before the check, which sees it, or waits
+ * until this change has committed, and is made after it, as a newer run's snapshot should be.
+ */
+export async function unlessNewerRun<T>(
+  db: Executor,
+  run: { datasetId: string; runId: string },
+  change: (tx: Executor) => Promise<T>,
+): Promise<{ newer: NewerSnapshot } | { made: T }> {
+  return db.transaction(async (tx) => {
+    await lockDataset(tx, run.datasetId);
+    const newer = await newerRunSnapshot(tx, run);
+    return newer === null ? { made: await change(tx) } : { newer };
+  });
 }
 
 /** The dataset's latest published generation, without reading its definition. */

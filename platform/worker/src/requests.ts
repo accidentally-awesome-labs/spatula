@@ -46,6 +46,11 @@ export type Requested =
       kind: 'failed';
       error: string;
       httpStatus: number | null;
+      /**
+       * Whether a request went out and no answer came: the network dropped it, or it timed out. A
+       * request the run gave up waiting to send never went out.
+       */
+      noAnswer: boolean;
       url: string;
       signals: ContentSignals;
     }
@@ -76,10 +81,14 @@ export async function requestThroughGate(
 ): Promise<Requested> {
   let url = options.resume?.url ?? address;
   let signals: ContentSignals = {};
-  const failed = (error: string, httpStatus: number | null = null): Requested => ({
+  const failed = (
+    error: string,
+    more: { httpStatus?: number; noAnswer?: boolean } = {},
+  ): Requested => ({
     kind: 'failed',
     error,
-    httpStatus,
+    httpStatus: more.httpStatus ?? null,
+    noAnswer: more.noAnswer ?? false,
     url,
     signals,
   });
@@ -111,19 +120,20 @@ export async function requestThroughGate(
         ? { status: response.status, retryAfter: response.headers['retry-after'] ?? null }
         : { status: 0, retryAfter: null },
     );
-    if (!response.ok) return failed(response.error);
+    if (!response.ok) return failed(response.error, { noAnswer: true });
 
     const location = response.headers.location;
     if (REDIRECTS.has(response.status) && location !== undefined) {
       const next = URL.canParse(location, url) ? new URL(location, url) : null;
+      const httpStatus = response.status;
       if (next === null) {
-        return failed(`redirected to ${location}, which isn’t an address`, response.status);
+        return failed(`redirected to ${location}, which isn’t an address`, { httpStatus });
       }
       if (next.protocol !== 'https:') {
-        return failed(`redirected to ${next.href}, which isn’t HTTPS`, response.status);
+        return failed(`redirected to ${next.href}, which isn’t HTTPS`, { httpStatus });
       }
       if (hop === MAX_REDIRECTS) {
-        return failed(`redirected more than ${MAX_REDIRECTS} times`, response.status);
+        return failed(`redirected more than ${MAX_REDIRECTS} times`, { httpStatus });
       }
       url = next.href;
       continue;

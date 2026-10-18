@@ -108,23 +108,29 @@ export async function staleDataset(datasetId: string, consumers: string[] = []):
   });
 }
 
-/** POSTs exactly this text to the dataset's acknowledgments, with these headers. */
+/** POSTs exactly this text, or these bytes, to the dataset's acknowledgments, with these headers. */
 export async function post(
   datasetId: string,
-  text: string,
+  body: string | Uint8Array,
   headers: Record<string, string>,
   using?: Env,
 ): Promise<Response> {
   return api.request(
     `/datasets/${datasetId}/acknowledgments`,
-    { method: 'POST', headers: { 'content-type': 'application/json', ...headers }, body: text },
+    { method: 'POST', headers: { 'content-type': 'application/json', ...headers }, body },
     using ?? (await consumerBindings()),
   );
 }
 
-/** The signature header for these bytes, under crowdio's key unless told another. */
-export async function signed(text: string, key = CONSUMER_KEY): Promise<Record<string, string>> {
-  return { 'x-spatula-signature': `sha256=${await hmacSha256Hex(key, text)}` };
+/**
+ * The signature header for this text, as its UTF-8 bytes, or for these bytes, under crowdio's key
+ * unless told another.
+ */
+export async function signed(
+  body: string | Uint8Array,
+  key = CONSUMER_KEY,
+): Promise<Record<string, string>> {
+  return { 'x-spatula-signature': `sha256=${await hmacSha256Hex(key, body)}` };
 }
 
 /** Sends crowdio's acknowledgment, signed unless told not to. */

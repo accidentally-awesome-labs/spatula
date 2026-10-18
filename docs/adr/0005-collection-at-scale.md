@@ -49,19 +49,22 @@ visitor.
     matters.
 - **Pacing.**
   - Within a run, each host's next request waits a full interval after the previous answer
-    arrived. Runs can overlap on a host: two datasets can share one, and a run that outlives six
-    hours stops blocking its dataset's next start (ADR 0004). Then the interval in force is
-    whichever reservation came last, and a slot reserved before an answer arrives isn't moved by
-    it.
+    arrived. Runs can still overlap on a host when two datasets share one, as one dataset's runs
+    go one at a time (ADR 0004). Then the interval in force is whichever reservation came last, and
+    a slot reserved before an answer arrives isn't moved by it.
   - The interval is the dataset's `perHostIntervalMs` (at least 1,000) or the site's Crawl-delay,
     whichever is longer, and reading robots.txt counts as a request: it waits for the host like
     any other. A robots.txt answered with a challenge keeps the rules stored before it (with none
     stored, the host is treated as refusing everything until robots.txt can be read).
   - A 429, a 5xx, a block (HTTP 401–403), or no answer at all backs the host off, with a break
     that doubles with each strain, or the longer one its Retry-After asks for.
-  - Three blocks in a row that the host answered (HTTP 401–403, or a challenge) pause the source
-    for the rest of the run. A refusal by robots.txt sends no request, so it counts toward no
-    pause. A page blocked three times in a row of its own is refused until `pnpm spatula revive`.
+  - Three pages in a row blocked or strained (429, 5xx, or no answer) pause the source for the
+    rest of the run, and its remaining pages wait for the next. A block counts when the host
+    answered it (HTTP 401–403, or a challenge). Each strain costs the run the host's break, which
+    it sleeps through before its next page, so a host that strained on every page would hold up
+    every other host. A refusal by robots.txt sends no request, so it starts the count again, and
+    so does any other answer, a failure such as "not HTML" included. A page blocked three times in
+    a row of its own is refused until `pnpm spatula revive`.
 - **Signatures (Web Bot Auth).**
   - With the `WEB_BOT_AUTH_KEY` secret (an Ed25519 private key as a JWK), every request carries
     `Signature-Agent`, `Signature-Input`, and `Signature` headers (RFC 9421) over its authority

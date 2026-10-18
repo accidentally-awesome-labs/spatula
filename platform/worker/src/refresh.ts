@@ -104,10 +104,15 @@ export const MAX_PAGE_STATEMENTS = 1_000;
  */
 const ITEMS_PER_STEP = 50;
 /**
- * Blocks in a row from one source that pause the rest of its pages for this run. A block here is
- * the host's: a 401, 402, or 403 it answered with, or a challenge. A page robots.txt turns away
- * sends no request, so it protects no host and counts for nothing. Challenges come with requests
- * close together, so the source rests until the next run; nothing is refused for it.
+ * Pages in a row from one source, each blocked or straining its host, that pause the rest of the
+ * source's pages for this run. A block here is the host's: a 401, 402, or 403 it answered with, or
+ * a challenge. A strain is a 429 or a 5xx it answered with, or a request that went out and got no
+ * answer. Each strain lengthens the host's break, and the run sleeps through it before its next
+ * page, on whatever host, so a host that strains on every page would hold up every other one.
+ * Anything else starts the count again: a page the gate turns away, or that the run gave up
+ * waiting to ask for, sent no request, so it protects no host; and any other answer, a failure
+ * such as "not HTML" included, shows the host answering. Challenges come with requests close
+ * together, so the source rests until the next run, and its pages stay due; nothing is refused.
  */
 export const SOURCE_PAUSE_AFTER = 3;
 
@@ -155,6 +160,11 @@ interface Fetched {
    * the host's.
    */
   hostAnswered: boolean;
+  /**
+   * Whether the fetch strained the host: it answered 429 or a 5xx, or a request went out and got
+   * no answer. A result kept by an earlier version has none, which reads as no strain.
+   */
+  strained?: boolean;
   finalUrl: string;
   signals: ContentSignals;
   /** The page the statements will come from: the fresh one, or the one stored before. */
@@ -251,11 +261,11 @@ export async function runRefresh(
       );
     }
 
-    // Blocks in a row by source, and the pages each paused source left unread. They stay due, so an
-    // ordinary run's next one reads them; under --all every page was due, so none is promised to
-    // the next run, as the note below says. Both come from steps' results, so a run that replays
-    // its steps pauses at the same page.
-    const blocksInARow = new Map<string, number>();
+    // Pages in a row by source that were blocked or that strained their host, and the pages each
+    // paused source left unread. They stay due, so an ordinary run's next one reads them; under --all every
+    // page was due, so none is promised to the next run, as the note below says. Both come from
+    // steps' results, so a run that replays its steps pauses at the same page.
+    const inARow = new Map<string, number>();
     const paused = new Map<string, number>();
     let budgetWaits = 0;
     for (let start = 0; start < plan.ids.length; start += ITEMS_PER_STEP) {
@@ -272,14 +282,13 @@ export async function runRefresh(
         // The pages read: a planned page that's no longer live when its batch loads isn't one, and
         // neither is one a paused source left unread.
         summary.items += 1;
-        // Only a block the host answered counts. A gate refusal sent no request, and starts the count
-        // again, as any answer that isn't a block does.
-        const blocks =
-          refreshed.outcome === 'blocked' && refreshed.hostAnswered
-            ? (blocksInARow.get(item.sourceId) ?? 0) + 1
-            : 0;
-        blocksInARow.set(item.sourceId, blocks);
-        if (blocks >= SOURCE_PAUSE_AFTER) paused.set(item.sourceId, 0);
+        // A block counts only when the host answered it; a strain always does. A gate refusal sent
+        // no request, and starts the count again, as any other answer does.
+        const counts =
+          (refreshed.outcome === 'blocked' && refreshed.hostAnswered) || refreshed.strained;
+        const count = counts ? (inARow.get(item.sourceId) ?? 0) + 1 : 0;
+        inARow.set(item.sourceId, count);
+        if (count >= SOURCE_PAUSE_AFTER) paused.set(item.sourceId, 0);
         if (refreshed.waitsForBudget) budgetWaits += 1;
       }
     }
@@ -294,7 +303,7 @@ export async function runRefresh(
           : `${left === 1 ? 'page waits' : 'pages wait'} for the next run`;
       note(
         summary,
-        `${sourceId}: paused after ${SOURCE_PAUSE_AFTER} blocks in a row; ${left} ${fate}`,
+        `${sourceId}: paused after ${SOURCE_PAUSE_AFTER} pages in a row were blocked or strained; ${left} ${fate}`,
       );
     }
     if (budgetWaits > 0) {
@@ -388,14 +397,23 @@ async function refreshItem(
   summary: RunSummary,
   step: StepRunner,
   ports: RefreshPorts,
-): Promise<{ outcome: Outcome; hostAnswered: boolean; waitsForBudget: boolean }> {
+): Promise<{
+  outcome: Outcome;
+  hostAnswered: boolean;
+  strained: boolean;
+  waitsForBudget: boolean;
+}> {
   const fetched = await fetchWithWaits(context, item, step, ports);
   summary.fetches[fetched.outcome] += 1;
   summary.statements.reseen += fetched.reseen;
   if (fetched.note !== null) note(summary, fetched.note);
-  if (!fetched.extract) {
-    return { outcome: fetched.outcome, hostAnswered: fetched.hostAnswered, waitsForBudget: false };
-  }
+  // What the fetch step's result says of the host, which a run that replays its steps reads again.
+  const host = {
+    outcome: fetched.outcome,
+    hostAnswered: fetched.hostAnswered,
+    strained: fetched.strained === true,
+  };
+  if (!fetched.extract) return { ...host, waitsForBudget: false };
   const extracted = await step.do(`extract:${item.id}`, () =>
     extractItem(context, item, fetched, budgetLeft(context, summary), ports),
   );
@@ -422,7 +440,7 @@ async function refreshItem(
     if (classified.note !== null) note(summary, classified.note);
     waitsForBudget ||= classified.outcome === 'skipped';
   }
-  return { outcome: fetched.outcome, hostAnswered: fetched.hostAnswered, waitsForBudget };
+  return { ...host, waitsForBudget };
 }
 
 /**
@@ -514,7 +532,7 @@ async function fetchItem(
   const startedAt = ports.now();
   const requested = await request(context, item, attempt >= MAX_WAITS, ports, resume);
   if (requested.kind === 'later') return requested;
-  const { attempt: answer, signals } = requested;
+  const { attempt: answer, signals, noAnswer } = requested;
 
   // The same run, page, and attempt make the same ID, so a step that runs again logs one fetch.
   const fetchId = await stableId('fe', context.runId, item.id, attempt);
@@ -565,6 +583,7 @@ async function fetchItem(
       fetchId,
       outcome: answer.outcome,
       hostAnswered: answer.httpStatus !== null,
+      strained: noAnswer || strains(answer.httpStatus),
       finalUrl: answer.finalUrl,
       signals,
       contentHash: answer.page?.contentHash ?? item.contentHash,
@@ -577,7 +596,18 @@ async function fetchItem(
   };
 }
 
-/** Asks for a page through its host's gate, and says what came of it. */
+/**
+ * Whether an answer's status strains its host, as the gate backs off on: a 429 or a 5xx. The gate
+ * backs off on blocks too, which the run counts as blocks.
+ */
+function strains(status: number | null): boolean {
+  return status !== null && (status === 429 || status >= 500);
+}
+
+/**
+ * Asks for a page through its host's gate, and says what came of it, and whether a request went
+ * out and got no answer.
+ */
 async function request(
   context: Context,
   item: ItemRef,
@@ -586,7 +616,7 @@ async function request(
   resume: Resume | undefined,
 ): Promise<
   | { kind: 'later'; retryAfterMs: number; resume: Resume }
-  | { kind: 'answered'; attempt: Attempt; signals: ContentSignals }
+  | { kind: 'answered'; attempt: Attempt; signals: ContentSignals; noAnswer: boolean }
 > {
   // Definitions keep a page as written and only validate it. From here on, every hop and the
   // fetch log's final address use its href, as the redirects already do.
@@ -602,6 +632,7 @@ async function request(
     return {
       kind: 'answered' as const,
       signals: answer.signals,
+      noAnswer: answer.kind === 'failed' && answer.noAnswer,
       // A reason or an error can quote the site, such as the Location of a redirect that isn't an
       // address or of a robots.txt's redirect. Both are stored as text, and Postgres refuses U+0000.
       attempt: {

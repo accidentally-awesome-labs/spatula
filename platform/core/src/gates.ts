@@ -4,7 +4,8 @@
  * publishes unless the guard trips; "balanced" also holds the dataset's first publication and its
  * first after the definition changed, which is when new sources and fields arrive; "manual" holds
  * every one. The guard trips when a snapshot drops more of the last published records than the
- * dataset allows: more than `count`, or more than `share` of them.
+ * dataset allows: more than `count`, or more than `share` of them. Whatever the preset, a snapshot
+ * is held when the definition changed while its run went.
  */
 
 export type Approval = 'auto' | 'balanced' | 'manual';
@@ -14,7 +15,14 @@ export interface GateInput {
   maxRemovals: { count: number; share: number };
   /** The last published snapshot: its records' IDs, and the definition revision it came from. */
   previous: { canonicalIds: readonly string[]; revision: number | null } | null;
+  /** The snapshot: its records' IDs, and the revision its run started with. */
   next: { canonicalIds: readonly string[]; revision: number };
+  /**
+   * The dataset's revision as the snapshot is made. It's `next.revision` unless a definition was
+   * applied while the run went, and then the run's records came from a definition the dataset no
+   * longer has.
+   */
+  revisionNow: number;
 }
 
 export interface GateResult {
@@ -31,6 +39,11 @@ export function checkGates(input: GateInput): GateResult {
   const removed = [...before].filter((id) => !after.has(id)).length;
   const added = [...after].filter((id) => !before.has(id)).length;
   const reasons: string[] = [];
+  if (input.revisionNow !== input.next.revision) {
+    reasons.push(
+      `the definition changed during this run (revision ${input.next.revision} to ${input.revisionNow})`,
+    );
+  }
   const { count, share } = input.maxRemovals;
   if (removed > count || removed > before.size * share) {
     reasons.push(

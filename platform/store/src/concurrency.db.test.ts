@@ -24,6 +24,7 @@ import {
   publishHeld,
   snapshotById,
   supersedeHeld,
+  unlessNewerRun,
 } from './snapshots';
 
 /*
@@ -582,6 +583,46 @@ describe('changing a snapshot’s state while another session does', () => {
   );
 });
 
+describe('an older run’s change while a newer run holds its snapshot', () => {
+  it('waits for the dataset’s row, and then changes nothing, having seen the newer snapshot', () =>
+    inDataset('newer-race', async (datasetId) => {
+      const older = `${datasetId}-older`;
+      const newer = `${datasetId}-newer`;
+      for (const [id, at] of [
+        [older, T(1)],
+        [newer, T(2)],
+      ] as const) {
+        await startRun(pool, { id, datasetId });
+        await pool.update(runs).set({ startedAt: at }).where(eq(runs.id, id));
+      }
+      // The newer run is holding its snapshot: it has the dataset's row, and hasn't committed.
+      const session = await holdingRow((tx) =>
+        holdSnapshot(tx, { ...heldIn(datasetId, 'sn_newer', T(3)), runId: newer }),
+      );
+      let finished = false;
+      let changing: Promise<unknown> = Promise.resolve();
+      try {
+        changing = unlessNewerRun(pool, { datasetId, runId: older }, (tx) =>
+          supersedeHeld(tx, { datasetId, at: T(4) }),
+        );
+        void changing.then(
+          () => (finished = true),
+          () => (finished = true),
+        );
+        await settledOrWaiting(changing);
+        expect(finished).toBe(false);
+      } finally {
+        session.release();
+        await session.done;
+        await changing.catch(() => undefined);
+      }
+      // It looked only once it had the row, so it saw the snapshot that committed while it
+      // waited. Had it looked first, it would have superseded that snapshot.
+      expect(await changing).toEqual({ newer: { runId: newer, snapshotId: 'sn_newer' } });
+      expect((await snapshotById(pool, 'sn_newer'))?.state).toBe('held');
+    }));
+});
+
 describe('lockPageVerdicts', () => {
   it('holds back another answer about the same page until its transaction ends, and none about another', async () => {
     // The lock is held by a session of its own, as an answer in progress would hold it.
@@ -624,11 +665,10 @@ describe('startRunAlone while another session starts a run', () => {
     inDataset('start-wait', async (datasetId) => {
       const first = `${datasetId}-202610100000`;
       const second = `${datasetId}-202610100005`;
-      const at = new Date();
       // The first start has the dataset's row and has recorded its run, and hasn't committed.
-      const session = await holdingRow((tx) => startRunAlone(tx, { id: first, datasetId, at }));
+      const session = await holdingRow((tx) => startRunAlone(tx, { id: first, datasetId }));
       let finished = false;
-      const starting = startRunAlone(pool, { id: second, datasetId, at });
+      const starting = startRunAlone(pool, { id: second, datasetId });
       void starting.then(
         () => (finished = true),
         () => (finished = true),
@@ -651,11 +691,8 @@ describe('startRunAlone while another session starts a run', () => {
 
   it('gives exactly one run to two starts made at once', () =>
     inDataset('start-both', async (datasetId) => {
-      const at = new Date();
       const ids = [`${datasetId}-202610100000`, `${datasetId}-202610100005`];
-      const results = await Promise.all(
-        ids.map((id) => startRunAlone(pool, { id, datasetId, at })),
-      );
+      const results = await Promise.all(ids.map((id) => startRunAlone(pool, { id, datasetId })));
       const started = results.filter((result) => 'created' in result);
       const refused = results.filter((result) => 'running' in result);
       expect(started).toHaveLength(1);

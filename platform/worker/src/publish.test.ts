@@ -6,12 +6,13 @@ import {
   listOpenReviews,
   setItemStatus,
   snapshotById,
+  snapshotOfRun,
 } from '@spatula/store';
 import { testDefinition } from '@spatula/store/fixtures';
 import { eq } from 'drizzle-orm';
 import { describe, expect, it } from 'vitest';
 import { db } from '../test/node/db';
-import { fakeDecider, fakeStep } from '../test/node/fakes';
+import { fakeDecider, fakeStep, type World } from '../test/node/fakes';
 import { decidedDefinition, published, refresh, worldFor } from '../test/node/runs';
 import { A1, productPage, standardRoutes, URLS } from '../test/pages';
 import { heldKey, type Context } from './pipeline';
@@ -48,6 +49,41 @@ const publicationQuestions = async (datasetId: string) =>
 
 const HOUR = 3_600_000;
 const NO_AI_INPUT = 'User-agent: *\nContent-Signal: ai-input=no\nAllow: /\n';
+
+/**
+ * A run that lets `meanwhile` happen just before its snapshot step, such as a newer run going from
+ * start to finish while this one is still at work. Then five minutes pass, as after `refresh`.
+ */
+async function runWith(world: World, datasetId: string, meanwhile: () => Promise<void>) {
+  const runId = runIdFor(datasetId, world.clock.now());
+  const { step } = fakeStep(world.clock);
+  const summary = await runRefresh(
+    { runId, datasetId, all: true },
+    {
+      ...step,
+      async do(name, fn) {
+        if (name === 'snapshot') await meanwhile();
+        return step.do(name, fn);
+      },
+    },
+    world.ports,
+  );
+  world.clock.advance(5 * 60_000);
+  return { runId, summary };
+}
+
+/** A newer run, from start to finish, in a slot after the one of the run it overtakes. */
+async function newerRun(world: World, datasetId: string) {
+  world.clock.advance(5 * 60_000);
+  return refresh(world, datasetId);
+}
+
+/** What an older run's snapshot step says once a newer run has a snapshot. */
+const overtaken = (newer: { runId: string }) => ({
+  published: false,
+  reason: `a newer run (${newer.runId}) already has a snapshot, so this run’s isn’t published`,
+  excluded: [],
+});
 
 describe('publishing through the gates', { timeout: 20_000 }, () => {
   it('holds a balanced dataset’s first publication until the owner publishes it', async () => {
@@ -428,6 +464,163 @@ describe('publishing through the gates', { timeout: 20_000 }, () => {
     ).toEqual({ kind: 'published', generation: 1 });
   });
 });
+
+describe(
+  'an older run’s snapshot step, once a newer run has a snapshot',
+  { timeout: 20_000 },
+  () => {
+    it('publishes, holds, and supersedes nothing when the newer run holds its snapshot', async () => {
+      const definition = gated('publish-older-held', 'balanced');
+      const { world } = await worldFor(definition, standardRoutes());
+      // The older run reads under revision 1. The owner applies revision 2 meanwhile, and a newer
+      // run under it holds its snapshot before the older one reaches its own.
+      let newer!: Awaited<ReturnType<typeof refresh>>;
+      const older = await runWith(world, 'publish-older-held', async () => {
+        await applyDefinition(db, { ...definition, freshness: { maxAgeDays: 6 } });
+        newer = await newerRun(world, 'publish-older-held');
+      });
+      const snapshotId = heldId(newer.summary);
+      expect(snapshotId).not.toBe('');
+
+      expect(older.summary.snapshot).toEqual(overtaken(newer));
+      expect(await snapshotOfRun(db, older.runId)).toBeNull();
+      // The newer run's snapshot is held as it was, and its question still waits for the owner.
+      expect((await snapshotById(db, snapshotId))?.state).toBe('held');
+      expect(
+        (await publicationQuestions('publish-older-held')).map((review) => review.subject),
+      ).toEqual([snapshotId]);
+    });
+
+    it('publishes nothing over the newer run’s publication', async () => {
+      // The guard lets a record leave, so nothing but the newer run's publication stands in the way.
+      const definition = gated('publish-older-published', 'auto', { count: 25, share: 1 });
+      const { world, pages } = await worldFor(definition, standardRoutes());
+      const b1 = pages.find((page) => page.locator === URLS.b1)!;
+      let newer!: Awaited<ReturnType<typeof refresh>>;
+      const older = await runWith(world, 'publish-older-published', async () => {
+        newer = await newerRun(world, 'publish-older-published');
+        // Once it has published, a person says B1 isn't one of the dataset's products, so the records
+        // the older run builds are no longer the published ones.
+        await setItemStatus(db, b1.id, 'irrelevant');
+      });
+      expect(newer.summary.snapshot).toMatchObject({ published: true, generation: 1 });
+
+      expect(older.summary.snapshot).toEqual(overtaken(newer));
+      expect(await latestSnapshot(db, 'publish-older-published')).toMatchObject({
+        generation: 1,
+        runId: newer.runId,
+      });
+    });
+
+    it('supersedes nothing the newer run holds when it finds no record complete', async () => {
+      const { world, pages } = await worldFor(
+        gated('publish-older-empty', 'balanced'),
+        standardRoutes(),
+      );
+      let newer!: Awaited<ReturnType<typeof refresh>>;
+      const older = await runWith(world, 'publish-older-empty', async () => {
+        newer = await newerRun(world, 'publish-older-empty');
+        // Then every page leaves the dataset, so the older run finds no record complete.
+        for (const page of pages) await setItemStatus(db, page.id, 'excluded');
+      });
+      const snapshotId = heldId(newer.summary);
+      expect(snapshotId).not.toBe('');
+
+      expect(older.summary.snapshot).toEqual(overtaken(newer));
+      expect((await snapshotById(db, snapshotId))?.state).toBe('held');
+      expect(
+        (await publicationQuestions('publish-older-empty')).map((review) => review.subject),
+      ).toEqual([snapshotId]);
+    });
+
+    it('changes nothing when the newer run’s snapshot lands while it writes its own file', async () => {
+      const definition = gated('publish-older-raced', 'balanced');
+      const { world } = await worldFor(definition, standardRoutes());
+      // The older run stops short of its snapshot step, which then runs by hand.
+      const runId = runIdFor('publish-older-raced', world.clock.now());
+      const { step } = fakeStep(world.clock);
+      await runRefresh(
+        { runId, datasetId: 'publish-older-raced', all: true },
+        {
+          ...step,
+          async do(name, fn) {
+            if (name === 'snapshot')
+              return { published: false, reason: 'stopped', excluded: [] } as never;
+            return step.do(name, fn);
+          },
+        },
+        world.ports,
+      );
+      const context: Context = {
+        runId,
+        datasetId: 'publish-older-raced',
+        revision: 1,
+        definition,
+        startedAt: world.clock.now(),
+      };
+
+      // The step finds no newer run's snapshot, and builds its own. While it writes its draft, a
+      // newer run goes from start to finish and holds a snapshot.
+      let newer: Awaited<ReturnType<typeof refresh>> | undefined;
+      const racing = {
+        ...world.ports,
+        blobs: {
+          ...world.ports.blobs,
+          async put(key: string, body: Uint8Array | string, contentType: string) {
+            newer ??= await newerRun(world, 'publish-older-raced');
+            await world.ports.blobs.put(key, body, contentType);
+          },
+        },
+      };
+      const result = await publish(context, racing);
+      const snapshotId = heldId(newer!.summary);
+      expect(snapshotId).not.toBe('');
+
+      // The hold looks again under the dataset's row, finds the newer snapshot, and holds nothing.
+      expect(result).toEqual(overtaken(newer!));
+      expect(await snapshotOfRun(db, runId)).toBeNull();
+      expect((await snapshotById(db, snapshotId))?.state).toBe('held');
+      expect(
+        (await publicationQuestions('publish-older-raced')).map((review) => review.subject),
+      ).toEqual([snapshotId]);
+    });
+
+    it('still reports what a run published when its own step runs again after a newer run’s', async () => {
+      const definition = gated('publish-replay-newer', 'auto');
+      const { world } = await worldFor(definition, standardRoutes());
+      const first = await refresh(world, 'publish-replay-newer');
+      world.web.routes.set(URLS.a1, { status: 200, body: renamedA1() });
+      const second = await refresh(world, 'publish-replay-newer');
+      expect(second.summary.snapshot).toMatchObject({ published: true, generation: 2 });
+
+      // A replay of the first run's step finds what it made, before it asks about newer runs.
+      const context: Context = {
+        runId: first.runId,
+        datasetId: 'publish-replay-newer',
+        revision: 1,
+        definition,
+        startedAt: world.clock.now(),
+      };
+      expect(await publish(context, world.ports)).toEqual(first.summary.snapshot);
+    });
+
+    it('holds the snapshot of a run whose definition changed while it went, whatever the approval', async () => {
+      // auto would publish this first snapshot at once.
+      const definition = gated('publish-moved', 'auto');
+      const { world } = await worldFor(definition, standardRoutes());
+      const run = await runWith(world, 'publish-moved', async () => {
+        await applyDefinition(db, { ...definition, freshness: { maxAgeDays: 6 } });
+      });
+      const during = 'the definition changed during this run (revision 1 to 2)';
+      expect(run.summary.snapshot).toMatchObject({
+        published: false,
+        reason: `it’s held for review: ${during}`,
+        held: { records: 3, reasons: [during] },
+      });
+      expect(await latestSnapshot(db, 'publish-moved')).toBeNull();
+    });
+  },
+);
 
 describe('what the owner is told about a hold', { timeout: 20_000 }, () => {
   it('says why records left, when a withdrawal makes the guard hold the snapshot', async () => {

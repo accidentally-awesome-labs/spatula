@@ -1,12 +1,13 @@
 import { newId } from '@spatula/core';
-import { sql } from 'drizzle-orm';
+import { eq, sql } from 'drizzle-orm';
 import { describe, expect, it } from 'vitest';
 import { withRollback } from '../test/db';
 import { seedDataset, T } from '../test/seed';
 import { applyDefinition, getDataset, StaleDefinitionError } from './datasets';
 import { listOpenReviews } from './decisions';
 import { testDefinition } from './fixtures';
-import { datasets, snapshots } from './schema';
+import { startRun } from './runs';
+import { datasets, runs, snapshots } from './schema';
 import {
   commitSnapshot,
   discardHeld,
@@ -15,6 +16,7 @@ import {
   heldSnapshot,
   holdSnapshot,
   latestSnapshot,
+  newerRunSnapshot,
   publishHeld,
   snapshotById,
   snapshotOfRun,
@@ -356,6 +358,90 @@ describe('held snapshots', () => {
       expect((await listOpenReviews(tx, 'test-products')).map((review) => review.subject)).toEqual([
         'sn_atomic',
       ]);
+    }));
+});
+
+describe('newerRunSnapshot', () => {
+  /** A snapshot that `runId` held in a dataset, with its question. */
+  const heldBy = (id: string, runId: string | null, datasetId = 'test-products') => ({
+    id,
+    datasetId,
+    runId,
+    revision: 1,
+    recordCount: 3,
+    recordsSha256: `records-${id}`,
+    key: `datasets/${datasetId}/held/${id}.json`,
+    sha256: `file-${id}`,
+    bytes: 100,
+    heldReason: 'it’s the dataset’s first publication',
+    report: { excluded: [] },
+    at: T(10),
+    review: {
+      id: `rv_${id}`,
+      question: {
+        type: 'choice' as const,
+        prompt: 'Publish this held snapshot?',
+        options: ['publish', 'discard'],
+      },
+      context: { snapshotId: id },
+    },
+  });
+
+  it('names the snapshot, in any state, of the newest run that started after a run', () =>
+    withRollback(async (tx) => {
+      await seedDataset(tx);
+      await applyDefinition(tx, testDefinition('other-products'));
+      const runAt = async (id: string, at: Date, datasetId = 'test-products') => {
+        await startRun(tx, { id, datasetId });
+        await tx.update(runs).set({ startedAt: at }).where(eq(runs.id, id));
+      };
+      // Their IDs sort the other way from when they started, so only start times can tell.
+      await runAt('test-products-c', T(1));
+      await runAt('test-products-b', T(2));
+      await runAt('test-products-a', T(3));
+      const newerThan = (runId: string) =>
+        newerRunSnapshot(tx, { datasetId: 'test-products', runId });
+      expect(await newerThan('test-products-c')).toBeNull();
+
+      // b's snapshot was discarded, and b still started after c.
+      await holdSnapshot(tx, heldBy('sn_b', 'test-products-b'));
+      await discardHeld(tx, { snapshotId: 'sn_b', at: T(11) });
+      expect(await newerThan('test-products-c')).toEqual({
+        runId: 'test-products-b',
+        snapshotId: 'sn_b',
+      });
+      // A run's own snapshot isn't newer than it, and neither is an older run's.
+      expect(await newerThan('test-products-b')).toBeNull();
+      expect(await newerThan('test-products-a')).toBeNull();
+
+      // A snapshot with no run, as slice 0's can be, says nothing of which run is newer, and
+      // another dataset's runs aren't this one's.
+      await holdSnapshot(tx, heldBy('sn_none', null));
+      await runAt('other-products-z', T(9), 'other-products');
+      await holdSnapshot(tx, heldBy('sn_other', 'other-products-z', 'other-products'));
+      expect(await newerThan('test-products-a')).toBeNull();
+
+      // Of several, the newest run's, published or held.
+      await commitSnapshot(tx, {
+        id: 'sn_a',
+        datasetId: 'test-products',
+        generation: 1,
+        runId: 'test-products-a',
+        revision: 1,
+        recordCount: 3,
+        recordsSha256: 'records-a',
+        key: 'datasets/test-products/snapshots/sn_a.json',
+        sha256: 'file-a',
+        bytes: 100,
+        publishedAt: T(12).toISOString(),
+        report: { excluded: [] },
+      });
+      for (const older of ['test-products-c', 'test-products-b']) {
+        expect(await newerThan(older), older).toEqual({
+          runId: 'test-products-a',
+          snapshotId: 'sn_a',
+        });
+      }
     }));
 });
 

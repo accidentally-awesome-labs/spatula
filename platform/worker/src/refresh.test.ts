@@ -15,7 +15,16 @@ import { describe, expect, it } from 'vitest';
 import { db } from '../test/node/db';
 import { fakeLlm, fakeStep, makeWorld, type StepCache, type World } from '../test/node/fakes';
 import { entityOf, fetchOf, published, refresh } from '../test/node/runs';
-import { A1, A2, answerFor, B1, standardRoutes, URLS } from '../test/pages';
+import {
+  A1,
+  A2,
+  answerFor,
+  B1,
+  productPage,
+  standardRoutes,
+  URLS,
+  type Reply,
+} from '../test/pages';
 import {
   classifyResponse,
   DatasetMissingError,
@@ -61,6 +70,37 @@ function alterPack(world: World, alter: (page: Page, found: Candidate[]) => Cand
     ...packs,
     'products/product': { ...real, extract: (page) => alter(page, real.extract(page)) },
   };
+}
+
+/** Applies the test definition with maker-a listing these pages, and returns their addresses. */
+async function makerAPages(datasetId: string, names: string[]): Promise<string[]> {
+  const base = testDefinition(datasetId);
+  const pages = names.map((name) => `https://maker-a.example/products/${name}`);
+  await applyDefinition(db, {
+    ...base,
+    sources: base.sources.map((source) =>
+      source.id === 'maker-a' && source.kind === 'pages' ? { ...source, pages } : source,
+    ),
+  });
+  return pages;
+}
+
+/**
+ * Has the web answer each of these pages with `reply` while `strain.on` holds; every other request
+ * goes on to the world's web. `asked` lists every page asked for, answered or not.
+ */
+function straining(world: World, pages: string[], reply: HttpResult) {
+  const strain = { on: true };
+  const asked: string[] = [];
+  const web = world.ports.http;
+  world.ports.http = {
+    async get(url, headers, options) {
+      asked.push(url);
+      if (strain.on && pages.includes(url)) return reply;
+      return web.get(url, headers, options);
+    },
+  };
+  return { strain, asked };
 }
 
 describe('runRefresh', () => {
@@ -1025,7 +1065,7 @@ describe('runRefresh', () => {
     // Four pages were read, and the two the pause left aren't counted as read.
     expect(run.summary.items).toBe(4);
     expect(run.summary.notes).toContain(
-      'maker-a: paused after 3 blocks in a row; 2 pages wait for the next run',
+      'maker-a: paused after 3 pages in a row were blocked or strained; 2 pages wait for the next run',
     );
     const asked = world.web.requests.map((sent) => sent.url);
     expect(asked).not.toContain(pages[3]);
@@ -1039,8 +1079,8 @@ describe('runRefresh', () => {
   });
 
   it.each([
-    [5, 'maker-a: paused after 3 blocks in a row; 2 pages weren’t read'],
-    [4, 'maker-a: paused after 3 blocks in a row; 1 page wasn’t read'],
+    [5, 'maker-a: paused after 3 pages in a row were blocked or strained; 2 pages weren’t read'],
+    [4, 'maker-a: paused after 3 pages in a row were blocked or strained; 1 page wasn’t read'],
   ])(
     'says, when every page counts as due, that a paused source of %i pages left some unread, not waiting',
     async (count, expected) => {
@@ -1123,7 +1163,7 @@ describe('runRefresh', () => {
     });
   });
 
-  it('says a host answered only when a response came back from it', async () => {
+  it('says a host answered only when a response came back from it, and was strained when none did', async () => {
     const base = testDefinition('refresh-answered');
     const pages = ['a1', 'a2', 'a3', 'a4', 'a5'].map(
       (name) => `https://maker-a.example/products/${name}`,
@@ -1173,12 +1213,33 @@ describe('runRefresh', () => {
       throw new Error(`${page} was put off every time`);
     };
     // A challenge and a page are the host's answers. A page robots.txt turns away, a request the
-    // network dropped, and one given up after the host kept asking for a wait are not.
-    expect(fetchedOf(pages[0]!)).toMatchObject({ outcome: 'blocked', hostAnswered: true });
-    expect(fetchedOf(pages[1]!)).toMatchObject({ outcome: 'blocked', hostAnswered: false });
-    expect(fetchedOf(pages[2]!)).toMatchObject({ outcome: 'failed', hostAnswered: false });
-    expect(fetchedOf(pages[3]!)).toMatchObject({ outcome: 'changed', hostAnswered: true });
-    expect(fetchedOf(pages[4]!)).toMatchObject({ outcome: 'failed', hostAnswered: false });
+    // network dropped, and one given up after the host kept asking for a wait are not. Of those,
+    // only the dropped request went out, so only it strained the host: the others sent nothing.
+    expect(fetchedOf(pages[0]!)).toMatchObject({
+      outcome: 'blocked',
+      hostAnswered: true,
+      strained: false,
+    });
+    expect(fetchedOf(pages[1]!)).toMatchObject({
+      outcome: 'blocked',
+      hostAnswered: false,
+      strained: false,
+    });
+    expect(fetchedOf(pages[2]!)).toMatchObject({
+      outcome: 'failed',
+      hostAnswered: false,
+      strained: true,
+    });
+    expect(fetchedOf(pages[3]!)).toMatchObject({
+      outcome: 'changed',
+      hostAnswered: true,
+      strained: false,
+    });
+    expect(fetchedOf(pages[4]!)).toMatchObject({
+      outcome: 'failed',
+      hostAnswered: false,
+      strained: false,
+    });
   });
 
   it('starts the count again at a page robots.txt turns away between challenges', async () => {
@@ -1210,6 +1271,112 @@ describe('runRefresh', () => {
     expect(run.summary.paused).toEqual({});
     expect(world.web.requests.map((sent) => sent.url)).toContain(pages[4]);
   });
+
+  const nothing = new Uint8Array();
+  it.each([
+    [
+      'answers 503',
+      'refresh-strain-503',
+      { ok: true, status: 503, headers: {}, body: nothing, truncated: false },
+    ],
+    [
+      'answers 429',
+      'refresh-strain-429',
+      { ok: true, status: 429, headers: {}, body: nothing, truncated: false },
+    ],
+    ['never answers', 'refresh-strain-silent', { ok: false, error: 'the connection timed out' }],
+  ] satisfies [string, string, HttpResult][])(
+    'pauses a source whose host %s for every page, still reads the others, and leaves its pages due',
+    async (_what, datasetId, reply) => {
+      const pages = await makerAPages(datasetId, ['a1', 'a2', 'a3', 'a4', 'a5']);
+      const routes = standardRoutes();
+      for (const [index, url] of pages.entries()) {
+        routes[url] = { status: 200, body: productPage({ name: `A${index + 1}` }) };
+      }
+      const world = makeWorld(db, routes, { llm: false });
+      const { strain, asked } = straining(world, pages, reply);
+
+      // a1, b1, a2, a3 are asked for. Each of maker-a's costs the run its host's break, so after
+      // a3, three pages in a row that strained the host pause maker-a, and b1 is still read.
+      const run = await refresh(world, datasetId, {});
+      expect(run.summary.fetches).toMatchObject({ failed: 3, changed: 1, blocked: 0 });
+      expect(run.summary.paused).toEqual({ 'maker-a': 2 });
+      expect(run.summary.items).toBe(4);
+      expect(run.summary.notes).toContain(
+        'maker-a: paused after 3 pages in a row were blocked or strained; 2 pages wait for the next run',
+      );
+      expect(asked).toContain(URLS.b1);
+      expect(asked).not.toContain(pages[3]);
+      expect(asked).not.toContain(pages[4]);
+
+      // The host recovers. The pages the pause left are still due, and so are the three that
+      // failed, so the next ordinary run reads all five.
+      strain.on = false;
+      asked.length = 0;
+      const next = await refresh(world, datasetId, {});
+      expect(next.summary).toMatchObject({ items: 5, paused: {} });
+      expect(asked).toEqual(expect.arrayContaining(pages));
+    },
+  );
+
+  it('pauses a source after a block, a strain, and a block in a row: one count covers both', async () => {
+    const pages = await makerAPages('refresh-strain-mixed', ['a1', 'a2', 'a3', 'a4', 'a5']);
+    const routes = standardRoutes();
+    routes[pages[0]!] = { status: 403, headers: { 'cf-mitigated': 'challenge' } };
+    routes[pages[1]!] = { status: 503 };
+    routes[pages[2]!] = { status: 403, headers: { 'cf-mitigated': 'challenge' } };
+    routes[pages[3]!] = { status: 200, body: A2() };
+    routes[pages[4]!] = { status: 200, body: A2() };
+    const world = makeWorld(db, routes, { llm: false });
+
+    const run = await refresh(world, 'refresh-strain-mixed', {});
+    expect(run.summary.fetches).toMatchObject({ blocked: 2, failed: 1, changed: 1 });
+    expect(run.summary.paused).toEqual({ 'maker-a': 2 });
+    const asked = world.web.requests.map((sent) => sent.url);
+    expect(asked).not.toContain(pages[3]);
+    expect(asked).not.toContain(pages[4]);
+  });
+
+  it.each([
+    [
+      'a page robots.txt turns away, which sends no request',
+      'refresh-strain-refused',
+      (routes: Record<string, Reply>) => {
+        routes['https://maker-a.example/robots.txt'] = {
+          status: 200,
+          body: 'User-agent: *\nDisallow: /products/a3\n',
+        };
+      },
+    ],
+    [
+      'an answer that isn’t HTML',
+      'refresh-strain-pdf',
+      (routes: Record<string, Reply>, pages: string[]) => {
+        routes[pages[2]!] = {
+          status: 200,
+          body: '%PDF-1.7',
+          headers: { 'content-type': 'application/pdf' },
+        };
+      },
+    ],
+  ])(
+    'starts the count again at %s',
+    async (_what, datasetId, between: (routes: Record<string, Reply>, pages: string[]) => void) => {
+      const pages = await makerAPages(datasetId, ['a1', 'a2', 'a3', 'a4', 'a5', 'a6', 'a7']);
+      const routes = standardRoutes();
+      for (const url of pages) routes[url] = { status: 503 };
+      between(routes, pages);
+      const world = makeWorld(db, routes, { llm: false });
+
+      // a1 and a2 strain the host and a3 doesn't, so the count starts again there: a4, a5, and a6
+      // are the three in a row that pause maker-a, and only a7 is left.
+      const run = await refresh(world, datasetId, {});
+      expect(run.summary.paused).toEqual({ 'maker-a': 1 });
+      const asked = world.web.requests.map((sent) => sent.url);
+      expect(asked).toEqual(expect.arrayContaining([pages[3], pages[4], pages[5]]));
+      expect(asked).not.toContain(pages[6]);
+    },
+  );
 
   it('stops asking the LLM once the run’s budget is spent, and reads those pages next run', async () => {
     const definition = testDefinition('refresh-llm-budget');
@@ -1615,5 +1782,74 @@ describe('a run replayed from the steps it finished', () => {
     expect(summary.fetches).toMatchObject({ blocked: 3, changed: 1 });
     expect(summary.paused).toEqual({ 'maker-a': 2 });
     expect(summary.items).toBe(4);
+  });
+
+  /**
+   * A dataset whose maker-a answers 503 to all five of its pages, and a run of it that stops at
+   * a2's request, after a1 strained its host and b1 was read. `cache` is what a replay reads.
+   */
+  async function strainedRunStoppedAtA2(datasetId: string) {
+    const pages = await makerAPages(datasetId, ['a1', 'a2', 'a3', 'a4', 'a5']);
+    const routes = standardRoutes();
+    for (const url of pages) routes[url] = { status: 503 };
+    const world = makeWorld(db, routes);
+    const [a1] = await listLiveItems(db, datasetId);
+    const cache: StepCache = new Map();
+    const params = { runId: runIdFor(datasetId, world.clock.now()), datasetId };
+    const web = world.ports.http;
+    let failing = true;
+    world.ports.http = {
+      async get(url, headers) {
+        if (failing && url === pages[1]) {
+          failing = false;
+          throw new Error('the connection was reset');
+        }
+        return web.get(url, headers);
+      },
+    };
+    const first = fakeStep(world.clock, cache);
+    await expect(runRefresh(params, first.step, world.ports)).rejects.toThrow(
+      'the connection was reset',
+    );
+    return { world, pages, a1: a1!, cache, params };
+  }
+
+  it('pauses a straining source at the same page as a run that wasn’t stopped', async () => {
+    const { world, pages, a1, cache, params } =
+      await strainedRunStoppedAtA2('refresh-strain-replayed');
+
+    // The replay counts a1's strain from its finished step, which is not run again, and so pauses
+    // maker-a after a3 as a run that wasn't stopped does.
+    const askedBefore = world.web.requests.length;
+    const second = fakeStep(world.clock, cache);
+    const summary = await runRefresh(params, second.step, world.ports);
+    expect(second.replayed).toContain(`fetch:${a1.id}:0`);
+    const asked = world.web.requests.slice(askedBefore).map((sent) => sent.url);
+    expect(asked).not.toContain(pages[0]);
+    expect(asked).toEqual(expect.arrayContaining([pages[1], pages[2]]));
+    expect(asked).not.toContain(pages[3]);
+    expect(asked).not.toContain(pages[4]);
+    expect(summary.fetches).toMatchObject({ failed: 3, changed: 1 });
+    expect(summary.paused).toEqual({ 'maker-a': 2 });
+    expect(summary.items).toBe(4);
+  });
+
+  it('counts no strain for a page whose fetch step an earlier version kept', async () => {
+    const { world, pages, a1, cache, params } =
+      await strainedRunStoppedAtA2('refresh-strain-earlier');
+    // The Worker was deployed while the run was stopped, and a1's step result is the earlier
+    // version's, which said nothing of strain.
+    const key = `fetch:${a1.id}:0`;
+    const kept = JSON.parse(cache.get(key)!) as { fetched: Record<string, unknown> };
+    delete kept.fetched.strained;
+    cache.set(key, JSON.stringify(kept));
+
+    // a1 doesn't count, so the count starts at a2, and a4 is the third page in a row.
+    const askedBefore = world.web.requests.length;
+    const summary = await runRefresh(params, fakeStep(world.clock, cache).step, world.ports);
+    const asked = world.web.requests.slice(askedBefore).map((sent) => sent.url);
+    expect(asked).toEqual(expect.arrayContaining([pages[1], pages[2], pages[3]]));
+    expect(asked).not.toContain(pages[4]);
+    expect(summary.paused).toEqual({ 'maker-a': 1 });
   });
 });

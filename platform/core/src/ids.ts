@@ -81,8 +81,12 @@ export async function sha256Hex(data: string | Uint8Array): Promise<string> {
   return Array.from(new Uint8Array(digest), (byte) => byte.toString(16).padStart(2, '0')).join('');
 }
 
-/** HMAC-SHA256 of the data under the key, in hex: how consumers sign their acknowledgments. */
-export async function hmacSha256Hex(key: string, data: string): Promise<string> {
+/**
+ * HMAC-SHA256 of text (as UTF-8) or of bytes under the key, in hex: how consumers sign their
+ * acknowledgments. A body's signature is checked over its bytes, which may be ones no text
+ * encodes to, such as a byte-order mark.
+ */
+export async function hmacSha256Hex(key: string, data: string | Uint8Array): Promise<string> {
   const encoder = new TextEncoder();
   const imported = await crypto.subtle.importKey(
     'raw',
@@ -91,6 +95,7 @@ export async function hmacSha256Hex(key: string, data: string): Promise<string> 
     false,
     ['sign'],
   );
-  const signature = await crypto.subtle.sign('HMAC', imported, encoder.encode(data));
+  const bytes = typeof data === 'string' ? encoder.encode(data) : new Uint8Array(data);
+  const signature = await crypto.subtle.sign('HMAC', imported, bytes);
   return [...new Uint8Array(signature)].map((byte) => byte.toString(16).padStart(2, '0')).join('');
 }

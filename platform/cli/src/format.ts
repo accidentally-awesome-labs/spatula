@@ -53,7 +53,7 @@ export function formatRun(run: RunView): string[] {
     const sources = paused.map(
       ([source, left]) => `${source}, ${left} ${left === 1 ? 'page' : 'pages'} unread`,
     );
-    lines.push(`Paused after blocks in a row: ${sources.join('; ')}.`);
+    lines.push(`Paused after pages in a row were blocked or strained: ${sources.join('; ')}.`);
   }
   // Runs from before slice 1, and datasets with no sitemap source, say nothing of sitemaps.
   const discovery = summary.discovery;

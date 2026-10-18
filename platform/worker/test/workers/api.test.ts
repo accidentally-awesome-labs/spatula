@@ -29,7 +29,7 @@ import {
 import { testDefinition } from '@spatula/store/fixtures';
 import { introspectWorkflow, introspectWorkflowInstance } from 'cloudflare:test';
 import { env, exports } from 'cloudflare:workers';
-import { and, eq } from 'drizzle-orm';
+import { and, eq, inArray } from 'drizzle-orm';
 import { http, HttpResponse } from 'msw';
 import { describe, expect, it, vi } from 'vitest';
 import { RUN_START_GRACE_MS } from '../../src/api';
@@ -87,8 +87,27 @@ async function runWithoutWorkflow(
 }
 
 /**
- * An hour. The tests write the six hours after which a run still going is taken as dead as
- * 6 * HOUR, so a change to the store's RUN_STALE_MS shows.
+ * Runs' rows with no Workflow created for them, as `runWithoutWorkflow` makes them, each in a
+ * dataset of its own and started `ago` ms ago, through one database client.
+ */
+async function runsStartedAgo(
+  started: readonly (readonly [id: string, ago: number, datasetId: string])[],
+): Promise<void> {
+  await withDatabase(env, async (db) => {
+    for (const [id, ago, datasetId] of started) {
+      await applyDefinition(db, testDefinition(datasetId));
+      await startRun(db, { id, datasetId });
+      await db
+        .update(runs)
+        .set({ startedAt: new Date(Date.now() - ago) })
+        .where(eq(runs.id, id));
+    }
+  });
+}
+
+/**
+ * An hour. The tests write the six hours after which a run whose Workflow no longer reads as going
+ * is recorded failed as 6 * HOUR, so a change to the API's RUN_STALE_MS shows.
  */
 const HOUR = 60 * 60 * 1000;
 
@@ -118,6 +137,16 @@ function goingWorkflows(...ids: string[]): (id: string) => Promise<unknown> {
     ids.includes(id)
       ? Promise.resolve({ status: () => Promise.resolve({ status: 'running' }) })
       : Promise.reject(new Error('no such instance'));
+}
+
+/** Finds, for each run named, a Workflow whose status reads as given, and none for any other. */
+function workflowsReading(statuses: Record<string, string>): (id: string) => Promise<unknown> {
+  return (id) => {
+    const status = statuses[id];
+    return status === undefined
+      ? Promise.reject(new Error('no such instance'))
+      : Promise.resolve({ status: () => Promise.resolve({ status }) });
+  };
 }
 
 /**
@@ -483,7 +512,7 @@ describe('the owner routes', () => {
     expect(refused.status).toBe(409);
     expectNoStore(refused);
     expect(await refused.json()).toEqual({
-      error: `A run of ${datasetId} is already running (${going}). Wait for it to finish.`,
+      error: `A run of ${datasetId} is already running (${going}, started 1 hour ago). Wait for it to finish.`,
       runId: going,
     });
     // Nothing was recorded for the request, and no Workflow was created.
@@ -510,18 +539,98 @@ describe('the owner routes', () => {
     expect(created).toEqual([runId]);
   });
 
-  it('take a run still going after six hours as dead, and one that began under six hours ago as going', async () => {
-    // The same request either side of the line: a minute over six hours, and a minute under.
-    await runWithoutWorkflow('api-dead-202601010000', 6 * HOUR + 60_000, 'api-dead');
-    await runWithoutWorkflow('api-going-202601010000', 6 * HOUR - 60_000, 'api-going');
-    const { bindings, created } = recordingWorkflows(goingWorkflows('api-going-202601010000'));
+  it('refuse a run beside one whose Workflow still reads as going, however long it has run', async () => {
+    // Each dataset's run started six hours and a minute ago, and its Workflow reads as one of the
+    // statuses of a Workflow still at work. The statuses are the Worker's InstanceStatus type's.
+    const going = ['queued', 'running', 'waiting', 'paused', 'waitingForPause', 'rollingBack'];
+    const datasetOf = (status: string) => `api-long-${status.toLowerCase()}`;
+    const runOf = (status: string) => `${datasetOf(status)}-202601010000`;
+    await runsStartedAgo(
+      going.map((status) => [runOf(status), 6 * HOUR + 60_000, datasetOf(status)] as const),
+    );
+    const { bindings, created } = recordingWorkflows(
+      workflowsReading(Object.fromEntries(going.map((status) => [runOf(status), status] as const))),
+    );
 
-    const afterDead = await call('POST', '/datasets/api-dead/runs', { bindings });
-    expect(afterDead.status).toBe(202);
-    const afterGoing = await call('POST', '/datasets/api-going/runs', { bindings });
-    expect(afterGoing.status).toBe(409);
-    expect(await afterGoing.json()).toMatchObject({ runId: 'api-going-202601010000' });
-    expect(created).toHaveLength(1);
+    for (const status of going) {
+      const refused = await call('POST', `/datasets/${datasetOf(status)}/runs`, { bindings });
+      expect(refused.status, status).toBe(409);
+      expect(await refused.json(), status).toEqual({
+        error: `A run of ${datasetOf(status)} is already running (${runOf(status)}, started 6 hours ago). Wait for it to finish.`,
+        runId: runOf(status),
+      });
+    }
+    expect(created).toEqual([]);
+    const left = await withDatabase(env, (db) =>
+      db
+        .select({ id: runs.id, status: runs.status })
+        .from(runs)
+        .where(inArray(runs.id, going.map(runOf))),
+    );
+    expect(left).toHaveLength(going.length);
+    expect(new Set(left.map((row) => row.status))).toEqual(new Set(['running']));
+  });
+
+  it('record a run as failed and start the next once its Workflow has stopped, or past six hours when it reads as neither going nor stopped', async () => {
+    const PAST = 6 * HOUR + 60_000;
+    // Each dataset's run: how long ago it started, what its Workflow reads (null when none can be
+    // found), and what the start that finds it records.
+    const healed = [
+      [
+        'api-past-complete',
+        PAST,
+        'complete',
+        'This run’s Workflow reads complete, though the run never finished, and it started more than 6 hours ago.',
+      ],
+      [
+        'api-past-unknown',
+        PAST,
+        'unknown',
+        'This run’s Workflow reads unknown, though the run never finished, and it started more than 6 hours ago.',
+      ],
+      ['api-past-lost', PAST, null, 'Spatula can’t find this run’s Workflow: no such instance'],
+      ['api-early-errored', HOUR, 'errored', 'The Workflow stopped before the run finished.'],
+    ] as const;
+    // Within six hours, a Workflow that reads complete still blocks: only a stopped or lost one is
+    // recorded failed so soon.
+    const early = 'api-early-complete';
+    const runOf = (datasetId: string) => `${datasetId}-202601010000`;
+    await runsStartedAgo([
+      ...healed.map(([datasetId, ago]) => [runOf(datasetId), ago, datasetId] as const),
+      [runOf(early), 6 * HOUR - 60_000, early],
+    ]);
+    const reading: Record<string, string> = { [runOf(early)]: 'complete' };
+    for (const [datasetId, , status] of healed) {
+      if (status !== null) reading[runOf(datasetId)] = status;
+    }
+    const { bindings, created } = recordingWorkflows(workflowsReading(reading));
+
+    const started: string[] = [];
+    for (const [datasetId] of healed) {
+      const response = await call('POST', `/datasets/${datasetId}/runs`, { bindings });
+      expect(response.status, datasetId).toBe(202);
+      started.push(((await response.json()) as { runId: string }).runId);
+    }
+    expect(created).toEqual(started);
+    const refused = await call('POST', `/datasets/${early}/runs`, { bindings });
+    expect(refused.status).toBe(409);
+    expect(await refused.json()).toMatchObject({ runId: runOf(early) });
+
+    const rows = await withDatabase(env, (db) =>
+      db
+        .select({ id: runs.id, status: runs.status, error: runs.error })
+        .from(runs)
+        .where(inArray(runs.id, [...healed.map(([datasetId]) => runOf(datasetId)), runOf(early)])),
+    );
+    const byId = new Map(rows.map((row) => [row.id, row]));
+    for (const [datasetId, , , error] of healed) {
+      expect(byId.get(runOf(datasetId)), datasetId).toEqual({
+        id: runOf(datasetId),
+        status: 'failed',
+        error,
+      });
+    }
+    expect(byId.get(runOf(early))).toMatchObject({ status: 'running', error: null });
   });
 
   it('record a run whose Workflow can’t be found as failed once its slot is over, and start the next', async () => {
@@ -560,7 +669,7 @@ describe('the owner routes', () => {
     const refused = await call('POST', `/datasets/${datasetId}/runs`, { bindings });
     expect(refused.status).toBe(409);
     expect(await refused.json()).toEqual({
-      error: `A run of ${datasetId} is already running (${old}). Wait for it to finish.`,
+      error: `A run of ${datasetId} is already running (${old}, started 1 minute ago). Wait for it to finish.`,
       runId: old,
     });
     expect(created).toEqual([]);
@@ -586,7 +695,7 @@ describe('the owner routes', () => {
     const refused = await call('POST', `/datasets/${datasetId}/runs`, { bindings });
     expect(refused.status).toBe(409);
     expect(await refused.json()).toEqual({
-      error: `A run of ${datasetId} is already running (${going}). Wait for it to finish.`,
+      error: `A run of ${datasetId} is already running (${going}, started 2 hours ago). Wait for it to finish.`,
       runId: going,
     });
     expect(created).toEqual([]);
