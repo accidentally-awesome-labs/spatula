@@ -429,7 +429,7 @@ describe('runs', () => {
       expect(await getRun(db, 'no-such-run')).toBeNull();
     }));
 
-  it('finishes a run once: one that is complete or failed is left as it is', () =>
+  it('leaves a complete run complete, and lets a failed run complete', () =>
     withRollback(async (db) => {
       await applyDefinition(db, testDefinition());
       const done = 'test-products-202610100000';
@@ -437,26 +437,30 @@ describe('runs', () => {
       await startRun(db, { id: done, datasetId: 'test-products' });
       await startRun(db, { id: lost, datasetId: 'test-products' });
 
-      // Complete, then failed: it stays complete, with its summary. This is a Workflow that
-      // finished a run another request had already given up on, or the other way round.
+      // Complete, then failed: it stays complete, with its summary. A failure recorded late, such
+      // as a start of the next run recording this one as lost, doesn't undo a completion.
       await finishRun(db, done, { status: 'complete', summary: SUMMARY });
       const complete = await getRun(db, done);
       expect(complete).toMatchObject({ status: 'complete', summary: SUMMARY, error: null });
       await finishRun(db, done, { status: 'failed', error: 'The Workflow was lost.' });
       expect(await getRun(db, done)).toEqual(complete);
 
-      // Failed, then complete: it stays failed, with its error. A second failure doesn't replace
-      // the first either.
+      // Failed, then complete: it completes, with its summary and without the failure's error.
+      // A Workflow replayed or restarted from its finished steps ends a run that had failed, and
+      // the row says how the run ended last.
       await finishRun(db, lost, { status: 'failed', error: 'robots.txt is unreachable' });
-      const failed = await getRun(db, lost);
-      expect(failed).toMatchObject({
+      expect(await getRun(db, lost)).toMatchObject({
         status: 'failed',
         error: 'robots.txt is unreachable',
         summary: null,
       });
       await finishRun(db, lost, { status: 'complete', summary: SUMMARY });
-      await finishRun(db, lost, { status: 'failed', error: 'The Workflow was lost.' });
-      expect(await getRun(db, lost)).toEqual(failed);
+      expect(await getRun(db, lost)).toMatchObject({
+        status: 'complete',
+        summary: SUMMARY,
+        error: null,
+        finishedAt: expect.any(String),
+      });
     }));
 });
 

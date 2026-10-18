@@ -213,7 +213,8 @@ api.post('/datasets/:id/runs', async (c) => {
   // same five-minute slot finds it. A dataset has one run going at a time: while another is, the
   // request is refused, and that run is named. A run that reads as failed (see viewRun) isn't
   // going, and mustn't block its dataset for hours: the start records its failure, which
-  // GET /runs/:id only reports, and tries once more.
+  // GET /runs/:id only reports, and tries once more. Should that run's Workflow finish it after
+  // all, finishRun lets a failed run complete, so the row ends up saying how it ended.
   const started = await withDatabase(c.env, async (db) => {
     // A definition stored by an earlier version that no longer passes the checks throws here, and
     // onError answers it.

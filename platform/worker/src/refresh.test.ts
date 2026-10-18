@@ -1492,13 +1492,10 @@ describe('a run replayed from the steps it finished', () => {
       statements: { added: 19, reseen: 0, withdrawn: 0 },
       snapshot: { published: true, generation: 1, records: 3 },
     });
-    // The run's record is the first attempt's. A run finishes once (finishRun), so the replay's
-    // finish step doesn't turn a run that failed into a complete one: the totals above are what the
-    // replay returned, and the row says how the run first ended.
     expect(await getRun(db, params.runId)).toMatchObject({
-      status: 'failed',
-      error: 'the connection was reset',
-      summary: null,
+      status: 'complete',
+      summary,
+      error: null,
     });
   });
 
