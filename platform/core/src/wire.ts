@@ -2,6 +2,7 @@ import { z } from 'zod';
 import type { Question } from './decisions';
 import type { Outcome } from './gate';
 import type { EvalScores } from './golden';
+import type { SourceProbe } from './refusals';
 import type { Excluded } from './snapshot';
 
 /*
@@ -91,6 +92,16 @@ export interface RunSummary {
    * as due (--all) promises nothing.
    */
   paused?: Record<string, number>;
+  /**
+   * How the run went for the sources that refused it (ADR 0006): those it found blocked, with their
+   * blocked runs in a row; those it refused, at the third; and the refused sources it probed, with
+   * what each probe met. Absent in runs before phase 1, and when there was nothing to say.
+   */
+  sources?: {
+    blocked: { id: string; blockedRuns: number }[];
+    refused: string[];
+    probed: { id: string; outcome: 'through' | SourceProbe }[];
+  };
   fetches: Record<Outcome, number>;
   statements: { added: number; reseen: number; withdrawn: number };
   llm: {

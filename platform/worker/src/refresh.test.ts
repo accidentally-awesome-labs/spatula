@@ -131,6 +131,7 @@ describe('runRefresh', () => {
       `extract:${b1.id}`,
       `fetch:${a2.id}:0`,
       `extract:${a2.id}`,
+      'sources',
       'resolve',
       'snapshot',
       'finish',
@@ -937,7 +938,7 @@ describe('runRefresh', () => {
     // Read five minutes ago, so nothing is due and nothing is fetched.
     const before = world.web.requests.length;
     const second = await refresh(world, 'refresh-plan', {});
-    expect(second.names).toEqual(['load', 'plan', 'resolve', 'snapshot', 'finish']);
+    expect(second.names).toEqual(['load', 'plan', 'sources', 'resolve', 'snapshot', 'finish']);
     expect(second.summary).toMatchObject({ items: 0, due: 0, live: 3 });
     expect(world.web.requests.length).toBe(before);
 
@@ -1023,6 +1024,7 @@ describe('runRefresh', () => {
       ...ids.slice(0, 50).map((id) => `fetch:${id}:0`),
       'items:50',
       ...ids.slice(50).map((id) => `fetch:${id}:0`),
+      'sources',
       'resolve',
       'snapshot',
       'finish',
@@ -1848,6 +1850,7 @@ describe('a run replayed from the steps it finished', () => {
       `extract:${b1.id}`,
       `fetch:${a2.id}:0`,
       `extract:${a2.id}`,
+      'sources',
       'resolve',
       'snapshot',
       'finish',

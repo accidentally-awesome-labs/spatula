@@ -8,7 +8,7 @@ import {
   type SitemapSource,
 } from '@spatula/core';
 import { finishListing, listPages, recordSitemapFetch } from '@spatula/store';
-import type { RefreshPorts, StepRunner } from './pipeline';
+import { intervalFor, type RefreshPorts, type Standing, type StepRunner } from './pipeline';
 import {
   isChallenge,
   MAX_WAITS,
@@ -43,6 +43,8 @@ export interface DiscoveryContext {
   definition: Definition;
   /** The run's time, which every page this read lists carries. */
   startedAt: Date;
+  /** Each source's standing as the run started (ADR 0006), which sets its pacing. */
+  standing?: Record<string, Standing>;
 }
 
 export interface SourceDiscovery {
@@ -79,11 +81,16 @@ interface SitemapStep {
   site?: SiteAnswer | null;
 }
 
+/**
+ * Reads a sitemap source's sitemaps. A refused source's read is its probe (ADR 0006): its first
+ * sitemap, and the rest only when that one gets through.
+ */
 export async function discoverSource(
   context: DiscoveryContext,
   source: SitemapSource,
   step: StepRunner,
   ports: RefreshPorts,
+  options: { probe?: boolean } = {},
 ): Promise<SourceDiscovery> {
   const found: SourceDiscovery = {
     sitemaps: 0,
@@ -122,6 +129,11 @@ export async function discoverSource(
     over += read.over;
     if (read.incomplete !== null) found.incomplete ??= read.incomplete;
     if (read.note !== null) found.notes.push(read.note);
+    // A probe that didn't get through stops the read, and nothing of the source is marked missing.
+    if (options.probe === true && index === 0 && read.site !== 'through') {
+      found.incomplete ??= 'it’s refused, and its probe didn’t get through';
+      break;
+    }
     for (const child of read.children) {
       if (!queued.has(child)) {
         queued.add(child);
@@ -186,7 +198,7 @@ async function readSitemap(
 > {
   const startedAt = ports.now();
   const answer = await requestThroughGate(ports, url, {
-    minIntervalMs: context.definition.policy.perHostIntervalMs,
+    minIntervalMs: intervalFor(context, source.id),
     giveUp: attempt >= MAX_WAITS,
     headers: {},
     resume,

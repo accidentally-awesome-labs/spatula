@@ -1,5 +1,6 @@
 import {
   EXTRACTION_VERSION,
+  sourceIntervalMs,
   type Decider,
   type DecisionSummary,
   type Definition,
@@ -73,12 +74,36 @@ export interface RefreshPorts {
   wait(ms: number): Promise<void>;
 }
 
+/** A source's standing as a run starts (ADR 0006). */
+export interface Standing {
+  /** Blocked runs in a row. */
+  blockedRuns: number;
+  /** Whether they refused it, so the run only probes it. */
+  refused: boolean;
+}
+
 export interface Context {
   runId: string;
   datasetId: string;
   revision: number;
   definition: Definition;
   startedAt: Date;
+  /** Each source's standing as the run started, by ID. A source without one is live. */
+  standing?: Record<string, Standing>;
+}
+
+/**
+ * How far apart this run asks a source's hosts: the definition's interval, doubled for each blocked
+ * run in a row, up to four times (ADR 0006). robots.txt's crawl delay still applies on top.
+ */
+export function intervalFor(
+  context: { definition: Definition; standing?: Record<string, Standing> },
+  sourceId: string,
+): number {
+  return sourceIntervalMs(
+    context.definition.policy.perHostIntervalMs,
+    context.standing?.[sourceId]?.blockedRuns ?? 0,
+  );
 }
 
 export const NO_USAGE: LlmUsage = { inputTokens: 0, outputTokens: 0 };
