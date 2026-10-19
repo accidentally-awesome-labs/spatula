@@ -311,7 +311,7 @@ describe('the status of a dataset', () => {
         { id: 'maker-a', ...live },
         { id: 'maker-b', ...live },
       ],
-      // wrangler.jsonc's VERIFIED_BOT says "false" until the owner sets it.
+      // The test run pins VERIFIED_BOT to "false" (vitest.workers.config.ts).
       verified: false,
     });
   });

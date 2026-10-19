@@ -150,7 +150,7 @@ describe('a source’s standing across runs', { timeout: 30_000 }, () => {
     // count, not the page's (ADR 0006), so ADR 0005 refused neither page: both are live to be probed.
     expect(await livePages(datasetId)).toEqual([URLS.a1, URLS.a2, URLS.b1]);
 
-    // Refused, it gets one probe a run, though this run counts every page as due (Review Focus 3),
+    // Refused, it gets one probe a run, though this run counts every page as due (all: true),
     // and its hosts stay at four times the interval. A probe that's refused counts no fourth run.
     const from = world.web.requests.length;
     const fromPace = pace.asked.length;
@@ -261,7 +261,7 @@ describe('a source’s standing across runs', { timeout: 30_000 }, () => {
     });
   });
 
-  it('reads a load without standing, and fetches without a site, as nothing (Review Focus 2)', async () => {
+  it('reads a load without standing, and fetches without a site, as nothing', async () => {
     const datasetId = 'standing-old-results';
     await applyDefinition(db, testDefinition(datasetId));
     const routes = standardRoutes();
@@ -450,7 +450,7 @@ describe('what a run counts of a source', { timeout: 30_000 }, () => {
     expect(run.summary.sources?.probed).toEqual([{ id: 'maker-c', outcome: 'blocked' }]);
   });
 
-  it('counts a blocked run once, however often its sources step runs (Review Focus 1)', async () => {
+  it('counts a blocked run once, however often its sources step runs', async () => {
     const datasetId = 'standing-counted-once';
     await applyDefinition(db, testDefinition(datasetId));
     const routes = standardRoutes();

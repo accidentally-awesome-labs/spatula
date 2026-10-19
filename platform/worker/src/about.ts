@@ -36,7 +36,7 @@ nothing from that site. A site with no robots.txt (any other 4xx answer) has no 
 a second, and longer when robots.txt sets a Crawl-delay. It backs off when a site is busy or
 failing.</li>
 <li>When a site refuses it, it waits twice as long on its next visit, up to four times as long.
-After three visits in a row that a site refused, it asks for one page a visit until the site
+After three visits in a row that a site refused, it sends one request a visit until the site
 answers again.</li>
 <li>It follows Content Signals: it reads a page with an AI model unless the site's Content Signals
 say <code>ai-input=no</code>. It uses an AI model only to read pages, and nothing it reads is used

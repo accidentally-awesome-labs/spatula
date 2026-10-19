@@ -221,7 +221,7 @@ describe('the public page', () => {
       'When a site refuses it, it waits twice as long on its next visit, up to four times as long.',
     );
     expect(page).toContain(
-      'After three visits in a row that a site refused, it asks for one page a visit until the site answers again.',
+      'After three visits in a row that a site refused, it sends one request a visit until the site answers again.',
     );
     expect(page).toContain('<a href="mailto:bot@spatula.run">bot@spatula.run</a>');
     expect(page).not.toContain('open an issue');
@@ -1230,7 +1230,8 @@ describe('verification', () => {
           await call('GET', '/datasets/api-verified/status', bindings ? { bindings } : {})
         ).json()) as DatasetStatus
       ).verified;
-    // wrangler.jsonc says "false" until the owner sets it.
+    // The test run pins VERIFIED_BOT to "false" (vitest.workers.config.ts), whatever
+    // wrangler.jsonc says.
     expect(await verified()).toBe(false);
     // The generated Env types the variable as "false", the value wrangler.jsonc holds, so another
     // value goes through unknown.

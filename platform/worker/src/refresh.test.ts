@@ -151,7 +151,7 @@ describe('runRefresh', () => {
     const file = (await published(world, 'refresh-basics'))!;
     expect(file.row).toMatchObject({ generation: 1, runId: first.runId, recordCount: 3 });
     expect(file.snapshot).toMatchObject({ project: 'refresh-basics', generation: 1 });
-    // Review Focus 1: the UPC in A1's mpn is published as a GTIN, never as a part number.
+    // The UPC in A1's mpn is published as a GTIN, never as a part number.
     expect(file.byName.A1!.fields).toEqual({
       brand: 'Maker A',
       name: 'A1',
@@ -189,7 +189,7 @@ describe('runRefresh', () => {
       snapshot: { published: false, reason: 'nothing changed since generation 1' },
     });
     expect(second.summary.notes).toEqual([`${URLS.b1}: failed (HTTP 503)`]);
-    // Review Focus 4: A2's text was the same, so the LLM wasn't asked again.
+    // A2's text was the same, so the LLM wasn't asked again.
     expect(world.llm.calls).toHaveLength(3);
     const a1Requests = world.web.requests.filter((sent) => sent.url === URLS.a1);
     expect(a1Requests.at(-1)!.headers).toEqual({ 'if-none-match': '"a1-v1"' });
@@ -204,7 +204,7 @@ describe('runRefresh', () => {
     const before = world.web.requests.length;
     const second = await refresh(world, 'refresh-robots-down');
     const asked = world.web.requests.slice(before).map((sent) => sent.url);
-    // Review Focus 3: robots.txt was asked for, and the page wasn't.
+    // robots.txt was asked for, and the page wasn't.
     expect(asked).toContain('https://maker-b.example/robots.txt');
     expect(asked).not.toContain(URLS.b1);
     expect(second.summary.fetches).toMatchObject({ unchanged: 2, failed: 1 });
@@ -419,7 +419,7 @@ describe('runRefresh', () => {
     world.web.routes.set(URLS.b1, { status: 200, body: B1('<h2>B1 Amp</h2>') });
 
     const second = await refresh(world, 'refresh-lost-name');
-    // Review Focus 2: the name isn't taken from og:title; the record is left out and listed.
+    // The name isn't taken from og:title; the record is left out and listed.
     expect(second.summary.snapshot).toEqual({
       published: true,
       generation: 2,

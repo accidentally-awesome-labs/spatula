@@ -638,7 +638,7 @@ describe('run', () => {
       'Refused: audeze, moondrop, after 3 blocked runs in a row. Later runs only probe them.',
     ]);
     expect(await printed({ blocked: [], refused: [], probed: [] })).toEqual([]);
-    // A run from a Worker before phase 1 says nothing of sources (Review Focus 5).
+    // A run from a Worker before ADR 0006 sends no sources, and the CLI prints as before.
     expect(await printed(undefined)).toEqual([]);
   });
 
@@ -1452,7 +1452,7 @@ describe('status', () => {
       'moondrop: blocked, 2 of 3 runs in a row.',
     ]);
     expect(await printed([{ id: 'chord', ...live }])).toEqual(['Every source is live.']);
-    // A Worker from before phase 1 says nothing of sources, and neither does the CLI (Review Focus 5).
+    // A Worker from before ADR 0006 sends no sources, and the CLI prints as before.
     expect(await printed(undefined)).toEqual([]);
   });
 
@@ -1467,8 +1467,27 @@ describe('status', () => {
     };
     expect(await lastLine(true)).toBe('Cloudflare lists Spatula as a verified bot.');
     expect(await lastLine(false)).toBe('Cloudflare doesn’t list Spatula as a verified bot yet.');
-    // A Worker from before phase 1 says nothing, and neither does the CLI (Review Focus 5).
+    // A Worker from before ADR 0006 sends no `verified`, and the CLI prints as before.
     expect(await lastLine(undefined)).toBe('other: has acknowledged nothing yet.');
+  });
+
+  it('puts the verified bot line after the lines for the sources', async () => {
+    const { fetch } = stubApi(() =>
+      Response.json({
+        ...STATUS,
+        sources: [
+          { id: 'moondrop', blockedRuns: 2, refusedAt: null, lastProbeAt: null, lastProbe: null },
+        ],
+        verified: true,
+      }),
+    );
+    const { io, out } = memoryIo();
+    expect(await main(['status', 'cli-products'], { io, env: ENV, fetch })).toBe(0);
+    // STATUS's own five lines come first.
+    expect(out.slice(5)).toEqual([
+      'moondrop: blocked, 2 of 3 runs in a row.',
+      'Cloudflare lists Spatula as a verified bot.',
+    ]);
   });
 
   it('keeps a dataset’s name to its place in the address', async () => {
