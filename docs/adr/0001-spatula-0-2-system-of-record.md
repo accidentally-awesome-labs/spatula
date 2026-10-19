@@ -64,5 +64,5 @@ data your app depends on true, and can show why."
 
 - ADR 0006, "Refusals and routes", narrows "never works around one". Stated rules (robots.txt,
   terms, Content Signals, a 402) are never crossed, by any route. A challenge may one day be met by
-  an intermediary, only for a source that opts in and only while Spatula is unverified. Phase 1
-  adds no such route.
+  an intermediary, only for a source that opts in and only while Spatula is unverified. Spatula
+  has no such route yet.

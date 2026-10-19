@@ -1,6 +1,6 @@
 # 0006. Refusals and routes
 
-- Status: proposed with phase 1 of refusals and routes
+- Status: proposed with the first part of refusals and routes
 - Date: 2026-10-18
 
 ## Context
@@ -32,7 +32,7 @@ dropped their records.
   1. The maker: its own site, and its sanctioned channels (sitemaps, product JSON, APIs, feeds).
   2. Other honest sources that allow Spatula: authorized retailers, affiliate feeds, GS1, and
      Wikidata, each with its own robots.txt and terms evidence, and its own pacing. None is built
-     yet: phase 2 adds retailers first.
+     yet: retailers come first, with slice 2.
   3. An intermediary, Firecrawl's `basic` proxy or Cloudflare's Browser Run, under all of these:
      - only for facts still missing;
      - only after a challenge;
@@ -79,7 +79,7 @@ dropped their records.
     and a page those blocks refused is live again. So the source's pages stay live with their last
     values while the source is blocked or refused, and a refused pages source keeps its pages to
     probe. A run that fails before it's counted keeps the refusals its blocks made, until
-    `spatula revive --refused`.
+    `pnpm spatula revive <dataset> --refused`.
   - **Partial blocks.** A run in which anything of a source gets through, a sitemap included,
     counts as getting through for that source. So a page the site challenges in three such runs
     in a row is refused on its own, and leaves the snapshot until it's revived (ADR 0005). A site
@@ -91,8 +91,8 @@ dropped their records.
     so the status reads "after 3 blocked runs" however long the source stays refused. Only a
     blocked run refuses a source, and a probe's date and what it met are kept only while the
     source is still refused.
-  - **The owner's view.** `spatula status` shows each blocked or refused source.
-    `spatula revive <dataset> --source <id>` puts one back.
+  - **The owner's view.** `pnpm spatula status` shows each blocked or refused source.
+    `pnpm spatula revive <dataset> --source <id>` puts one back.
 
 - **Identity.**
   - **The address.** Spatula's Worker serves `spatula.run`: the public page, the key directory,
@@ -119,8 +119,8 @@ dropped their records.
     sitemap source keeps its own spelling: if discovery spells the address differently, it adds
     its own page, and the moved one turns gone after three complete reads, its history kept.
   - **Earlier removals.** Pages that an earlier apply excluded move the same way, at any later
-    apply. `spatula plan` mentions them only when they move.
-  - **Left excluded.** These pages stay excluded, and `spatula plan` counts them by reason:
+    apply. `pnpm spatula plan` mentions them only when they move.
+  - **Left excluded.** These pages stay excluded, and `pnpm spatula plan` counts them by reason:
     - a page two sources cover;
     - a page no source covers;
     - a page whose new source already has a page at that exact address, or is a pages source
@@ -137,4 +137,4 @@ dropped their records.
     around a block.
 - **Verification closes it.** Once Cloudflare verifies Spatula, every challenge is a stated rule,
   and the intermediary route closes for good.
-- **Phase 2**, with slice 2, adds retailers as sources that cover refusing makers.
+- **Retailers next.** Slice 2 adds retailers as sources that cover refusing makers.
