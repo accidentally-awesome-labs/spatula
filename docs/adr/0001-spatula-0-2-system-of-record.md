@@ -59,3 +59,10 @@ data your app depends on true, and can show why."
 - A deployment needs a Postgres that Hyperdrive can reach.
 - Rules live in `core` and run in Node tests; the Worker only wires them to Cloudflare. Leaving
   Cloudflare means replacing the Worker, not the rules or the data.
+
+## Update, 2026-10-18 (ADR 0006)
+
+- ADR 0006, "Refusals and routes", narrows "never works around one". Stated rules (robots.txt,
+  terms, Content Signals, a 402) are never crossed, by any route. A challenge may one day be met by
+  an intermediary, only for a source that opts in and only while Spatula is unverified. Phase 1
+  adds no such route.

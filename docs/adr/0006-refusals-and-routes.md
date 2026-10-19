@@ -5,10 +5,11 @@
 
 ## Context
 
-Slice 1's first full run (2026-10-18) read four of its six makers cleanly. Sennheiser's and
-Audeze's storefronts answered Spatula's Worker with Cloudflare challenges, sitemaps and pages
-alike. The spec said repeated blocks mark a source as refused, but a source only paused for the
-rest of a run (ADR 0005), so every run would knock on the same doors at the same pace.
+Slice 1's first full run (2026-10-18) read four of its six makers cleanly. Sennheiser's and Audeze's
+storefronts answered Spatula's Worker with Cloudflare challenges: both makers' sitemaps, and the two
+Audeze pages the run asked for. The spec said repeated blocks mark a source as refused, but a source
+only paused for the rest of a run (ADR 0005), so every run would knock on the same doors at the same
+pace.
 
 The run showed a second gap. The definition's new revision replaced Sennheiser's two sources with
 one, and applying it excluded the old sources' 11 pages, history and all, so the run's snapshot
@@ -18,11 +19,11 @@ dropped their records.
 
 - **Three kinds of "no".**
 
-  | Kind          | What it looks like                                                                                       | What Spatula does                                                                                                       |
-  | ------------- | -------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------- |
-  | A stated rule | robots.txt disallows the page; the terms forbid automated access; Content Signals; a 402 (pay per crawl) | Never fetched, by any route, and recorded.                                                                              |
-  | A challenge   | A 401 or a 403, or a challenge page                                                                      | Recorded, and the host backs off. Counts toward refusal. Once Spatula is verified, a challenge counts as a stated rule. |
-  | Strain        | A 429, a 5xx, or no answer                                                                               | The host backs off (ADR 0005). A 429 counts toward refusal. A 5xx or no answer is an outage, and never does.            |
+  | Kind          | What it looks like                                                                                       | What Spatula does                                                                                                                                                            |
+  | ------------- | -------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+  | A stated rule | robots.txt disallows the page; the terms forbid automated access; Content Signals; a 402 (pay per crawl) | Never crossed, by any route, and recorded.                                                                                                                                   |
+  | A challenge   | A 401 or a 403, or a challenge page                                                                      | Recorded, and the host backs off. Counts toward refusal. Once Spatula is verified, a challenge counts as a stated rule.                                                      |
+  | Strain        | A 429, a 5xx, or no answer                                                                               | The host backs off (ADR 0005). A 429 counts toward refusal. A 5xx or no answer is an outage, and doesn't count by itself (robots.txt's answer, below, is the one exception). |
 
   A 402 counts toward refusal as a challenge does, but it's a stated rule: a site that asks to be
   paid has said how it may be read, so no route goes around it.
@@ -30,11 +31,12 @@ dropped their records.
 - **Where a fact may come from, in order.**
   1. The maker: its own site, and its sanctioned channels (sitemaps, product JSON, APIs, feeds).
   2. Other honest sources that allow Spatula: authorized retailers, affiliate feeds, GS1, and
-     Wikidata, each with its own robots.txt and terms evidence, and its own pacing.
+     Wikidata, each with its own robots.txt and terms evidence, and its own pacing. None is built
+     yet: phase 2 adds retailers first.
   3. An intermediary, Firecrawl's `basic` proxy or Cloudflare's Browser Run, under all of these:
      - only for facts still missing;
      - only after a challenge;
-     - only while Spatula is unverified;
+     - only while Spatula is unverified (Cloudflare doesn't list it as a verified bot);
      - only for a source whose definition opts in by name.
 
      It isn't built. It comes only if a refused maker stays uncovered by the first two.
@@ -68,14 +70,14 @@ dropped their records.
     - The run plans none of its pages, under `--all` too. They stay live with their last values,
       so blocks never remove a record.
     - Each run sends one probe: the source's first sitemap, or its least recently read page.
-    - A probe that gets through makes the source live again before the plan, so the same run
-      reads its due pages.
+    - A probe that gets through makes the source live again before the run plans its pages, so the
+      same run reads its due pages.
     - A probe that doesn't leaves the source refused, and the run says what it met.
-  - **A page's own refusal.** A page is still refused after three blocks of its own (ADR 0005),
-    but only blocks in runs where its source got through count. A run that read nothing of a
-    source, or only probed it, takes back the blocks it gave the source's pages, so they stay live
-    with their last values while the source is blocked or refused, and a refused pages source
-    keeps its pages to probe.
+  - **A page's own refusal.** A page is still refused after three blocks of its own (ADR 0005), but
+    only blocks in runs where its source got through count. A run that was blocked for a source, or
+    only probed it, takes back the blocks it gave the source's pages, so they stay live with their
+    last values while the source is blocked or refused, and a refused pages source keeps its pages
+    to probe.
   - **Sitemaps that get through.** A sitemap that gets through makes the run count as getting
     through for its source. So a site that serves its sitemaps but challenges every page isn't
     blocked as a source: each of those pages is refused after three blocks of its own, and leaves
@@ -106,15 +108,15 @@ dropped their records.
   - **Moved.** Applying a definition moves a removed source's pages to the one remaining source
     that covers their address. Each keeps its history, where before it was excluded.
   - **Kept as it was.** A moved page keeps its status, its statements and their history, and its
-    links to records. It loses only its listing fields, which reset. A page that `apply` had
-    excluded comes back live; a page that is gone, refused, or out of the dataset ("None of
-    these") stays so.
+    links to records. It takes its new source's record type, and loses only its listing fields,
+    which reset. A page that `apply` had excluded comes back live; a page that is gone, refused, or
+    out of the dataset ("None of these") stays so.
   - **Spelling.** A pages source takes a page only under the spelling it lists. A page moved into a
     sitemap source keeps its own spelling: if discovery spells the address differently, it adds
     its own page, and the moved one turns gone after three complete reads, its history kept.
   - **Earlier removals.** Pages that an earlier apply excluded move the same way, at any later
-    apply. The plan mentions them only when they move.
-  - **Left excluded.** These pages stay excluded, and the plan counts them by reason:
+    apply. `spatula plan` mentions them only when they move.
+  - **Left excluded.** These pages stay excluded, and `spatula plan` counts them by reason:
     - a page two sources cover;
     - a page no source covers;
     - a page whose new source already lists its address, under any spelling.
@@ -122,7 +124,7 @@ dropped their records.
 ## Consequences
 
 - **Gentler only.** Spatula only ever gets gentler with a site that refuses it, and a refusing
-  source costs a run one request.
+  source costs a run one request, besides robots.txt when it's due.
 - **"Never escalate," narrowed.** The spec's "Never escalate" now means the rules above: one day,
   an intermediary may meet a challenge, within the limits of the third route. Nothing else changes.
   - That route changes the legal footing, so the lawyer's review before launch covers it.
