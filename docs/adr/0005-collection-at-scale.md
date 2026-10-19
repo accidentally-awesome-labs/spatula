@@ -102,6 +102,9 @@ visitor.
     run, up to four times the definition's.
   - Three blocked runs in a row refuse the source, and its runs then only probe it.
   - The pause within a run is unchanged.
+- **Page refusal.** A page is still refused after three blocks of its own, but only blocks in
+  runs where its source got through count: when a run that was blocked for the source, or only
+  probed it, is counted, its pages start their count of blocks again.
 - **Signatures.**
   - The Worker serves `spatula.run`, so requests carry `Signature-Agent: "https://spatula.run"`,
     and the key directory is at `https://spatula.run/.well-known/http-message-signatures-directory`.

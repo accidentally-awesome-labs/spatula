@@ -74,14 +74,16 @@ dropped their records.
       same run reads its due pages.
     - A probe that doesn't leaves the source refused, and the run says what it met.
   - **A page's own refusal.** A page is still refused after three blocks of its own (ADR 0005), but
-    only blocks in runs where its source got through count. A run that was blocked for a source, or
-    only probed it, takes back the blocks it gave the source's pages, so they stay live with their
-    last values while the source is blocked or refused, and a refused pages source keeps its pages
-    to probe.
-  - **Sitemaps that get through.** A sitemap that gets through makes the run count as getting
-    through for its source. So a site that serves its sitemaps but challenges every page isn't
-    blocked as a source: each of those pages is refused after three blocks of its own, and leaves
-    the snapshot until it's revived (ADR 0005).
+    only blocks in runs where its source got through count. When a run that was blocked for a
+    source, or only probed it, is counted, each page it blocked starts its count of blocks again,
+    and a page those blocks refused is live again. So the source's pages stay live with their last
+    values while the source is blocked or refused, and a refused pages source keeps its pages to
+    probe. A run that fails before it's counted keeps the refusals its blocks made, until
+    `spatula revive --refused`.
+  - **Partial blocks.** A run in which anything of a source gets through, a sitemap included,
+    counts as getting through for that source. So a page the site challenges in three such runs
+    in a row is refused on its own, and leaves the snapshot until it's revived (ADR 0005). A site
+    that serves its sitemaps but challenges every page is the plainest case.
   - **Counted once.** A run's `sources` step counts its verdicts once, however often the step
     runs (`sources.counted_at`). A repeat reports what the first count reported and changes
     nothing, and a run older than the last one counted counts nothing.
@@ -109,8 +111,10 @@ dropped their records.
     that covers their address. Each keeps its history, where before it was excluded.
   - **Kept as it was.** A moved page keeps its status, its statements and their history, and its
     links to records. It takes its new source's record type, and loses only its listing fields,
-    which reset. A page that `apply` had excluded comes back live; a page that is gone, refused, or
-    out of the dataset ("None of these") stays so.
+    which reset. A page that is gone, refused, or out of the dataset ("None of these") stays so,
+    and a page that `apply` had excluded comes back live. Excluding a page forgets the status it
+    had, so a page of a source removed earlier comes back live even if it was gone, refused, or
+    out of the dataset then; its next read decides again.
   - **Spelling.** A pages source takes a page only under the spelling it lists. A page moved into a
     sitemap source keeps its own spelling: if discovery spells the address differently, it adds
     its own page, and the moved one turns gone after three complete reads, its history kept.
@@ -119,7 +123,8 @@ dropped their records.
   - **Left excluded.** These pages stay excluded, and `spatula plan` counts them by reason:
     - a page two sources cover;
     - a page no source covers;
-    - a page whose new source already lists its address, under any spelling.
+    - a page whose new source already has a page at that exact address, or is a pages source
+      that lists it only under another spelling.
 
 ## Consequences
 
