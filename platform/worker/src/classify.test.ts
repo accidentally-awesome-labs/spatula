@@ -115,6 +115,7 @@ describe('classifying pages', { timeout: 20_000 }, () => {
       `fetch:${a2!.id}:0`,
       `extract:${a2!.id}`,
       `classify:${a2!.id}`,
+      'sources',
       'resolve',
       'snapshot',
       'finish',

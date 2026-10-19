@@ -1,6 +1,7 @@
 import {
   EVAL_TARGETS,
   optionsOf,
+  REFUSE_AFTER_RUNS,
   type ApplySummary,
   type DatasetStatus,
   type EvalScores,
@@ -25,8 +26,26 @@ export function formatApplySummary(summary: ApplySummary, dryRun: boolean): stri
   if (added.length > 0) lines.push(`Sources added: ${added.join(', ')}.`);
   if (removed.length > 0) lines.push(`Sources removed: ${removed.join(', ')}.`);
   if (changed.length > 0) lines.push(`Sources changed: ${changed.join(', ')}.`);
-  if (summary.pages.added + summary.pages.removed > 0) {
+  // A Worker before ADR 0006 sends no moves, and its plans read as they always did.
+  const moved = summary.pages.moved ?? 0;
+  if (moved > 0) {
+    const where = (summary.moves ?? [])
+      .map((move) => `${move.from.join(', ')} → ${move.to}`)
+      .join('; ');
+    lines.push(
+      `Pages: ${summary.pages.added} added, ${moved} moved (${where}), ${summary.pages.removed} removed.`,
+    );
+  } else if (summary.pages.added + summary.pages.removed > 0) {
     lines.push(`Pages: ${summary.pages.added} added, ${summary.pages.removed} removed.`);
+  }
+  const unmoved = summary.unmoved;
+  if (unmoved !== undefined) {
+    const why = [
+      unmoved.uncovered > 0 ? `${unmoved.uncovered} that no remaining source covers` : null,
+      unmoved.ambiguous > 0 ? `${unmoved.ambiguous} that two or more sources cover` : null,
+      unmoved.taken > 0 ? `${unmoved.taken} that their new source already has` : null,
+    ].filter((part) => part !== null);
+    if (why.length > 0) lines.push(`Pages left excluded: ${why.join(', ')}.`);
   }
   return lines;
 }
@@ -54,6 +73,28 @@ export function formatRun(run: RunView): string[] {
       ([source, left]) => `${source}, ${left} ${left === 1 ? 'page' : 'pages'} unread`,
     );
     lines.push(`Paused after pages in a row were blocked or strained: ${sources.join('; ')}.`);
+  }
+  // What the run found of its sources' standing (ADR 0006); runs before phase 1 say nothing.
+  const standing = summary.sources;
+  if (standing !== undefined) {
+    if (standing.blocked.length > 0) {
+      const blocked = standing.blocked.map(
+        (source) => `${source.id}, ${source.blockedRuns} of ${REFUSE_AFTER_RUNS} runs in a row`,
+      );
+      lines.push(`Blocked: ${blocked.join('; ')}.`);
+    }
+    if (standing.refused.length > 0) {
+      lines.push(
+        `Refused: ${standing.refused.join(', ')}, after ${REFUSE_AFTER_RUNS} blocked runs in a row. Later runs only probe ${standing.refused.length === 1 ? 'it' : 'them'}.`,
+      );
+    }
+    if (standing.probed.length > 0) {
+      const probed = standing.probed.map(
+        (probe) =>
+          `${probe.id}, ${probe.outcome === 'through' ? 'got through, so it’s live again' : probe.outcome}`,
+      );
+      lines.push(`Probed: ${probed.join('; ')}.`);
+    }
   }
   // Runs from before slice 1, and datasets with no sitemap source, say nothing of sitemaps.
   const discovery = summary.discovery;
@@ -195,6 +236,37 @@ export function formatStatus(status: DatasetStatus): string[] {
       consumer.generation === null
         ? `${consumer.name}: has acknowledged nothing yet.`
         : `${consumer.name}: ${consumer.outcome} generation ${consumer.generation} at ${consumer.receivedAt}.`,
+    );
+  }
+  // A Worker from before phase 1 says nothing of its sources' standing (ADR 0006).
+  if (status.sources !== undefined) {
+    const day = (iso: string) => iso.slice(0, 10);
+    const standing = status.sources.filter(
+      (source) => source.blockedRuns > 0 || source.refusedAt !== null,
+    );
+    if (standing.length === 0) lines.push('Every source is live.');
+    for (const source of standing) {
+      if (source.refusedAt === null) {
+        lines.push(
+          `${source.id}: blocked, ${source.blockedRuns} of ${REFUSE_AFTER_RUNS} runs in a row.`,
+        );
+        continue;
+      }
+      const probe =
+        source.lastProbeAt === null || source.lastProbe === null
+          ? 'not probed yet'
+          : `last probe ${day(source.lastProbeAt)}: ${source.lastProbe}`;
+      lines.push(
+        `${source.id}: refused since ${day(source.refusedAt)}, after ${source.blockedRuns} blocked runs in a row; ${probe}.`,
+      );
+    }
+  }
+  // A Worker from before phase 1 doesn't say.
+  if (status.verified !== undefined) {
+    lines.push(
+      status.verified
+        ? 'Cloudflare lists Spatula as a verified bot.'
+        : 'Cloudflare doesn’t list Spatula as a verified bot yet.',
     );
   }
   return lines;

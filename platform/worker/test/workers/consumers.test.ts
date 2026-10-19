@@ -38,6 +38,7 @@ describe('consumers', () => {
       ['GET', '/datasets/cr-not-listed/snapshots/latest'],
       ['GET', '/datasets/cr-listed/review'],
       ['POST', '/datasets/cr-listed/runs'],
+      ['POST', '/datasets/cr-listed/sources/revive'],
       ['GET', '/datasets/cr-listed/status'],
       ['GET', '/datasets/cr-listed/items'],
       ['POST', '/datasets/cr-listed/evals'],
@@ -242,6 +243,9 @@ describe('consumers', () => {
 });
 
 describe('the status of a dataset', () => {
+  // No run has blocked the test definition's sources, maker-a and maker-b.
+  const live = { blockedRuns: 0, refusedAt: null, lastProbeAt: null, lastProbe: null };
+
   it('says where it stands: its head, what is held, what waits, and what consumers acknowledged', async () => {
     const datasetId = 'cr-status';
     await subscribed(datasetId, ['crowdio', 'quiet']);
@@ -303,6 +307,12 @@ describe('the status of a dataset', () => {
         },
         { name: 'quiet', generation: null, outcome: null, receivedAt: null },
       ],
+      sources: [
+        { id: 'maker-a', ...live },
+        { id: 'maker-b', ...live },
+      ],
+      // The test run pins VERIFIED_BOT to "false" (vitest.workers.config.ts).
+      verified: false,
     });
   });
 
@@ -319,6 +329,11 @@ describe('the status of a dataset', () => {
       held: null,
       reviews: { classify: 0, match: 0, publication: 0 },
       consumers: [{ name: 'crowdio', generation: null, outcome: null, receivedAt: null }],
+      sources: [
+        { id: 'maker-a', ...live },
+        { id: 'maker-b', ...live },
+      ],
+      verified: false,
     });
   });
 

@@ -1,5 +1,5 @@
 import { gzipSync } from 'node:zlib';
-import { applyDefinition, fetches, getRun, items, listLiveItems } from '@spatula/store';
+import { applyDefinition, fetches, getRun, items, listLiveItems, startRun } from '@spatula/store';
 import { testSitemapDefinition } from '@spatula/store/fixtures';
 import { runIdFor, type Definition } from '@spatula/core';
 import { and, eq } from 'drizzle-orm';
@@ -17,7 +17,7 @@ import {
   URLS_C,
   type Reply,
 } from '../test/pages';
-import { SITEMAP_MAX_BYTES } from './discovery';
+import { discoverSource, SITEMAP_MAX_BYTES } from './discovery';
 import { runRefresh, type StepRunner } from './refresh';
 
 /**
@@ -48,6 +48,22 @@ async function setUp(
 ) {
   await applyDefinition(db, change(testSitemapDefinition(datasetId)));
   return makeWorld(db, routes);
+}
+
+/** Reads maker-c's sitemaps on their own, without a run's other steps, and says what came of it. */
+async function discoverMakerC(datasetId: string, routes: Record<string, Reply>) {
+  const definition = testSitemapDefinition(datasetId);
+  const world = await setUp(datasetId, routes);
+  const runId = runIdFor(datasetId, world.clock.now());
+  await startRun(db, { id: runId, datasetId });
+  const source = definition.sources.find((one) => one.kind === 'sitemap')!;
+  const found = await discoverSource(
+    { runId, datasetId, definition, startedAt: world.clock.now() },
+    source,
+    fakeStep(world.clock).step,
+    world.ports,
+  );
+  return { found, world };
 }
 
 /** Maker C's pages, by address, with their status and listing. */
@@ -502,6 +518,34 @@ describe('discovery', { timeout: 20_000 }, () => {
         .where(and(eq(fetches.runId, runId), eq(fetches.kind, 'sitemap')));
       expect(logged).toEqual([{ outcome, httpStatus: reply.status, error }]);
     }
+  });
+
+  it('keeps what each sitemap’s answer says of the site', async () => {
+    const routes = sitemapRoutes();
+    routes[SITEMAPS.products] = { status: 403, headers: { 'cf-mitigated': 'challenge' } };
+    const world = await setUp('discovery-site-answers', routes);
+    const run = await refresh(world, 'discovery-site-answers');
+    const siteOf = (name: string) =>
+      (run.results.get(name) as { kind: 'done'; read: { site?: string | null } }).read.site;
+    expect(siteOf('sitemap:maker-c:0:0')).toBe('through');
+    expect(siteOf('sitemap:maker-c:1:0')).toBe('refused');
+  });
+
+  it('lists what each sitemap the read asked for says of the site, in the order asked', async () => {
+    const routes = sitemapRoutes();
+    routes[SITEMAPS.products] = { status: 403, headers: { 'cf-mitigated': 'challenge' } };
+    const { found } = await discoverMakerC('discovery-sites', routes);
+    expect(found).toMatchObject({ sitemaps: 2, sites: ['through', 'refused'] });
+  });
+
+  it('reads a sitemap on a host whose robots.txt answers 429 as refused, though none is asked for', async () => {
+    const routes = sitemapRoutes();
+    routes['https://maker-c.example/robots.txt'] = { status: 429 };
+    const { found, world } = await discoverMakerC('discovery-robots-429', routes);
+    // The gate holds the host back while its robots.txt can't be read, as it always has.
+    expect(found).toMatchObject({ sitemaps: 1, sites: ['refused'] });
+    const asked = world.web.requests.map((sent) => sent.url);
+    expect(asked).toEqual(['https://maker-c.example/robots.txt']);
   });
 
   it('puts a sitemap off while its host has a break, then reads it', async () => {

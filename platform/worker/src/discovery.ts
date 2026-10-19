@@ -4,14 +4,16 @@ import {
   stableId,
   type Definition,
   type Outcome,
+  type SiteAnswer,
   type SitemapSource,
 } from '@spatula/core';
 import { finishListing, listPages, recordSitemapFetch } from '@spatula/store';
-import type { RefreshPorts, StepRunner } from './pipeline';
+import { intervalFor, type RefreshPorts, type Standing, type StepRunner } from './pipeline';
 import {
   isChallenge,
   MAX_WAITS,
   requestThroughGate,
+  siteAnswerOf,
   type Requested,
   type Resume,
 } from './requests';
@@ -41,6 +43,8 @@ export interface DiscoveryContext {
   definition: Definition;
   /** The run's time, which every page this read lists carries. */
   startedAt: Date;
+  /** Each source's standing as the run started (ADR 0006), which sets its pacing. */
+  standing?: Record<string, Standing>;
 }
 
 export interface SourceDiscovery {
@@ -53,6 +57,8 @@ export interface SourceDiscovery {
   /** Why the read wasn't complete, or null when it was. */
   incomplete: string | null;
   notes: string[];
+  /** What each sitemap the read asked for says of the site, in order (ADR 0006). */
+  sites: (SiteAnswer | null)[];
 }
 
 /** What one sitemap's step did. Its result is kept as JSON, so it carries counts, not pages. */
@@ -71,13 +77,20 @@ interface SitemapStep {
   /** Why this sitemap leaves the read incomplete, or null. */
   incomplete: string | null;
   note: string | null;
+  /** What the answer says of the site (ADR 0006); a result kept by an earlier version has none. */
+  site?: SiteAnswer | null;
 }
 
+/**
+ * Reads a sitemap source's sitemaps. A refused source's read is its probe (ADR 0006): its first
+ * sitemap, and the rest only when that one gets through.
+ */
 export async function discoverSource(
   context: DiscoveryContext,
   source: SitemapSource,
   step: StepRunner,
   ports: RefreshPorts,
+  options: { probe?: boolean } = {},
 ): Promise<SourceDiscovery> {
   const found: SourceDiscovery = {
     sitemaps: 0,
@@ -88,6 +101,7 @@ export async function discoverSource(
     gone: 0,
     incomplete: null,
     notes: [],
+    sites: [],
   };
   // A sitemap is read once, however often and however a definition spells it.
   const queue = [...new Set(source.sitemaps.map((url) => new URL(url).href))];
@@ -108,12 +122,18 @@ export async function discoverSource(
       ports,
     );
     found.sitemaps += 1;
+    found.sites.push(read.site ?? null);
     found.listed += read.listed;
     found.added += read.added;
     found.revived += read.revived;
     over += read.over;
     if (read.incomplete !== null) found.incomplete ??= read.incomplete;
     if (read.note !== null) found.notes.push(read.note);
+    // A probe that didn't get through stops the read, and nothing of the source is marked missing.
+    if (options.probe === true && index === 0 && read.site !== 'through') {
+      found.incomplete ??= 'it’s refused, and its probe didn’t get through';
+      break;
+    }
     for (const child of read.children) {
       if (!queued.has(child)) {
         queued.add(child);
@@ -178,7 +198,7 @@ async function readSitemap(
 > {
   const startedAt = ports.now();
   const answer = await requestThroughGate(ports, url, {
-    minIntervalMs: context.definition.policy.perHostIntervalMs,
+    minIntervalMs: intervalFor(context, source.id),
     giveUp: attempt >= MAX_WAITS,
     headers: {},
     resume,
@@ -186,6 +206,7 @@ async function readSitemap(
     accept: SITEMAP_ACCEPT,
   });
   if (answer.kind === 'later') return answer;
+  const site = siteAnswerOf(answer);
 
   const read = await readAnswer(answer, url);
   const log = {
@@ -218,6 +239,7 @@ async function readSitemap(
       over: 0,
       incomplete: null,
       note: null,
+      site,
       ...result,
     },
   });

@@ -33,6 +33,10 @@ export default defineConfig({
                 // The SHA-256 of "test-token", which the API tests send.
                 OWNER_TOKEN_HASH:
                   '4c5dc9b7708905f77f5e5d16316b5dfb425e68cb326dcd55a860e90a7707031e',
+                // wrangler.jsonc says whether Cloudflare lists Spatula as a verified bot, and the
+                // owner will change it to "true". The status tests expect the shipped "false", so
+                // the run pins it. The test that sets it does so on bindings of its own.
+                VERIFIED_BOT: 'false',
               },
             },
           })),

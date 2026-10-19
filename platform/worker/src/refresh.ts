@@ -9,7 +9,9 @@ import {
   PAGE_METHODS,
   parsePage,
   pathPatternMatches,
+  REFUSE_AFTER_RUNS,
   sha256Hex,
+  sourceVerdict,
   stableId,
   type ContentSignals,
   type Definition,
@@ -19,16 +21,23 @@ import {
   type PageExtraction,
   type RecordType,
   type RunSummary,
+  type SiteAnswer,
+  type SourceProbe,
+  type SourceVerdict,
 } from '@spatula/core';
 import {
   dueItems,
   finishRun,
   getDataset,
   itemsByIds,
+  liveAgain,
+  probeItem,
   recordExtraction,
   recordFetch,
+  recordSourceRuns,
   reseeStatements,
   resolveEntities,
+  sourceStates,
   startRun,
   writeStatements,
   type FetchInput,
@@ -42,16 +51,18 @@ import {
   budgetLeft,
   decisionsOf,
   extractionTag,
+  intervalFor,
   NO_CHANGE,
   NO_USAGE,
   pageKey,
   retryTag,
   type Context,
   type RefreshPorts,
+  type Standing,
   type StepRunner,
 } from './pipeline';
 import { publish } from './publish';
-import { isChallenge, MAX_WAITS, requestThroughGate, type Resume } from './requests';
+import { isChallenge, MAX_WAITS, requestThroughGate, siteAnswerOf, type Resume } from './requests';
 import { storable } from './text';
 
 // What other modules have always imported from here.
@@ -80,7 +91,8 @@ export {
  * of its own (match.ts), and defers them until they're answered. If the records changed, they go
  * through the dataset's gates (publish.ts): a snapshot is published when the gates allow it, and
  * held for the owner's review when they don't. Nothing here imports Cloudflare: the Workflow
- * passes real ports, and the tests pass fakes.
+ * passes real ports, and the tests pass fakes. A source that refused three runs in a row gets only
+ * a probe; a step after the pages counts each source's standing (ADR 0006).
  */
 
 export interface RefreshParams {
@@ -113,7 +125,8 @@ const ITEMS_PER_STEP = 50;
  * else starts the count again: a page the gate turns away, or that the run gave up waiting to ask
  * for, sent no request and lengthened no break; and any other answer, a failure such as "not
  * HTML" included, shows the host answering. Challenges come with requests close together, so the
- * source rests until the next run, and its pages stay due; nothing is refused.
+ * source rests until the next run, and its pages stay due. Across runs, its blocked runs are
+ * counted (ADR 0006).
  */
 export const SOURCE_PAUSE_AFTER = 3;
 
@@ -166,6 +179,11 @@ interface Fetched {
    * the gate let go. A result kept by an earlier version has none, which reads as no strain.
    */
   strained?: boolean;
+  /**
+   * What the answer says of the site (ADR 0006): Spatula got through, or was refused. A result
+   * kept by an earlier version has none, which reads as neither, as an outage does.
+   */
+  site?: SiteAnswer | null;
   finalUrl: string;
   signals: ContentSignals;
   /** The page the statements will come from: the fresh one, or the one stored before. */
@@ -187,6 +205,14 @@ interface Extracted {
   waitsForBudget: boolean;
 }
 
+/** What the load step returns. One kept by an earlier version has no standing. */
+interface Loaded {
+  revision: number;
+  definition: Definition;
+  startedAt: string;
+  standing?: Record<string, Standing>;
+}
+
 export async function runRefresh(
   params: RefreshParams,
   step: StepRunner,
@@ -194,7 +220,7 @@ export async function runRefresh(
 ): Promise<RunSummary> {
   const { runId, datasetId } = params;
   try {
-    const loaded = await step.do('load', () =>
+    const loaded = await step.do<Loaded>('load', () =>
       ports.withDb(async (db) => {
         const dataset = await getDataset(db, datasetId);
         if (dataset === null) throw new DatasetMissingError(datasetId);
@@ -205,6 +231,14 @@ export async function runRefresh(
           revision: dataset.revision,
           definition: dataset.definition,
           startedAt: ports.now().toISOString(),
+          // Each source's standing as the run starts (ADR 0006): it sets the source's pacing, and
+          // whether the run only probes it.
+          standing: Object.fromEntries(
+            (await sourceStates(db, datasetId)).map((state) => [
+              state.id,
+              { blockedRuns: state.blockedRuns, refused: state.refusedAt !== null },
+            ]),
+          ),
         };
       }),
     );
@@ -214,12 +248,27 @@ export async function runRefresh(
       revision: loaded.revision,
       definition: loaded.definition,
       startedAt: new Date(loaded.startedAt),
+      standing: loaded.standing ?? {},
     };
     const summary = emptySummary();
 
+    // What each source's answers said of its site, and what each refused source's probe met (ADR
+    // 0006). Both come from steps' results, so a run that replays its steps counts the same.
+    const answers = new Map<string, (SiteAnswer | null)[]>();
+    const heard = (sourceId: string, site: SiteAnswer | null) => {
+      const list = answers.get(sourceId);
+      if (list === undefined) answers.set(sourceId, [site]);
+      else list.push(site);
+    };
+    const probed = new Map<string, SiteAnswer | null>();
+    const isRefused = (sourceId: string) => context.standing?.[sourceId]?.refused === true;
+
     for (const source of context.definition.sources) {
       if (source.kind !== 'sitemap') continue;
-      const found = await discoverSource(context, source, step, ports);
+      const probe = isRefused(source.id);
+      const found = await discoverSource(context, source, step, ports, { probe });
+      for (const site of found.sites) heard(source.id, site);
+      if (probe) probed.set(source.id, found.sites[0] ?? null);
       const discovery = summary.discovery!;
       discovery.sources += 1;
       discovery.sitemaps += found.sitemaps;
@@ -232,6 +281,32 @@ export async function runRefresh(
         discovery.incomplete.push(storable(`${source.id}: ${found.incomplete}`));
       }
       for (const text of found.notes) note(summary, text);
+    }
+
+    // The pages that wait for the next run because the run's LLM budget is spent, a probe's included.
+    let budgetWaits = 0;
+    // A refused pages source is probed with its least recently read page.
+    const probedPages = new Set<string>();
+    for (const source of context.definition.sources) {
+      if (source.kind !== 'pages' || !isRefused(source.id)) continue;
+      const item = await step.do(`probe:${source.id}`, () =>
+        ports.withDb((db) => probeItem(db, { datasetId, sourceId: source.id })),
+      );
+      if (item === null) continue;
+      probedPages.add(item.id);
+      const refreshed = await refreshItem(context, item, summary, step, ports);
+      summary.items += 1;
+      heard(source.id, refreshed.site);
+      probed.set(source.id, refreshed.site);
+      if (refreshed.waitsForBudget) budgetWaits += 1;
+    }
+    // A probe that got through makes its source live again before the plan, so this run reads its
+    // due pages.
+    const back = [...probed].filter(([, site]) => site === 'through').map(([id]) => id);
+    if (back.length > 0) {
+      await step.do('sources:back', () =>
+        ports.withDb((db) => liveAgain(db, { datasetId, sourceIds: back })),
+      );
     }
 
     const plan = await step.do('plan', () =>
@@ -247,7 +322,6 @@ export async function runRefresh(
       ),
     );
     summary.live = plan.live;
-    summary.due = plan.due;
     const waiting = plan.due - plan.ids.length;
     if (waiting > 0) {
       const { itemsPerRun } = context.definition.budget;
@@ -261,6 +335,11 @@ export async function runRefresh(
           : `${waiting} due ${waiting === 1 ? 'page waits' : 'pages wait'} for the next run: ${budget}`,
       );
     }
+    // A probe already read its page this run, and a page is read once a run.
+    const ids = plan.ids.filter((id) => !probedPages.has(id));
+    // A probe's page is due, like the pages the plan chose. The plan has counted it already if it
+    // chose it too; one that the item budget left out of its choice is counted twice.
+    summary.due = plan.due + probedPages.size - (plan.ids.length - ids.length);
 
     // Pages in a row by source that were blocked or that strained their host, and the pages each
     // paused source left unread. They stay due, so an ordinary run's next one reads them; under --all every
@@ -268,10 +347,9 @@ export async function runRefresh(
     // steps' results, so a run that replays its steps pauses at the same page.
     const inARow = new Map<string, number>();
     const paused = new Map<string, number>();
-    let budgetWaits = 0;
-    for (let start = 0; start < plan.ids.length; start += ITEMS_PER_STEP) {
+    for (let start = 0; start < ids.length; start += ITEMS_PER_STEP) {
       const batch = await step.do(`items:${start}`, () =>
-        ports.withDb((db) => itemsByIds(db, plan.ids.slice(start, start + ITEMS_PER_STEP))),
+        ports.withDb((db) => itemsByIds(db, ids.slice(start, start + ITEMS_PER_STEP))),
       );
       for (const item of batch) {
         const left = paused.get(item.sourceId);
@@ -280,6 +358,7 @@ export async function runRefresh(
           continue;
         }
         const refreshed = await refreshItem(context, item, summary, step, ports);
+        heard(item.sourceId, refreshed.site);
         // The pages read: a planned page that's no longer live when its batch loads isn't one, and
         // neither is one a paused source left unread.
         summary.items += 1;
@@ -312,6 +391,53 @@ export async function runRefresh(
       note(
         summary,
         `${budgetWaits} ${budgetWaits === 1 ? 'page waits' : 'pages wait'} for the next run: this run’s LLM budget of ${llmTokensPerRun.toLocaleString('en-US')} tokens is spent`,
+      );
+    }
+
+    // The run's verdict for each source, counted across runs (ADR 0006). A refused source whose
+    // probe didn't get through counts no blocked run: what its probe met is kept as the probe's.
+    // Counting a blocked source also takes back this run's blocks on its pages, which would count
+    // toward refusing them (ADR 0005), and a refused page leaves resolution and the snapshot. So
+    // this step comes before them.
+    const verdicts: Record<string, SourceVerdict> = {};
+    const probes: Record<string, SourceProbe> = {};
+    for (const source of context.definition.sources) {
+      const probe = probed.get(source.id);
+      if (probed.has(source.id) && probe !== 'through') {
+        verdicts[source.id] = 'untouched';
+        probes[source.id] = probe === 'refused' ? 'blocked' : 'no answer';
+      } else {
+        verdicts[source.id] = sourceVerdict(answers.get(source.id) ?? []);
+      }
+    }
+    const counted = await step.do('sources', () =>
+      ports.withDb((db) =>
+        recordSourceRuns(db, { datasetId, at: context.startedAt, verdicts, probes }),
+      ),
+    );
+    const probedOutcomes = [...probed.keys()].map((id) => ({
+      id,
+      outcome: probes[id] ?? ('through' as const),
+    }));
+    if (counted.blocked.length + counted.refused.length + probedOutcomes.length > 0) {
+      summary.sources = {
+        blocked: counted.blocked,
+        refused: counted.refused,
+        probed: probedOutcomes,
+      };
+    }
+    for (const id of counted.refused) {
+      note(
+        summary,
+        `${id}: refused after ${REFUSE_AFTER_RUNS} blocked runs in a row; later runs only probe it, until a probe gets through or it’s revived`,
+      );
+    }
+    for (const { id, outcome } of probedOutcomes) {
+      note(
+        summary,
+        outcome === 'through'
+          ? `${id}: its probe got through, so it’s live again`
+          : `${id}: still refused; its probe ${outcome === 'blocked' ? 'was blocked' : 'got no answer'}`,
       );
     }
 
@@ -402,6 +528,7 @@ async function refreshItem(
   outcome: Outcome;
   hostAnswered: boolean;
   strained: boolean;
+  site: SiteAnswer | null;
   waitsForBudget: boolean;
 }> {
   const fetched = await fetchWithWaits(context, item, step, ports);
@@ -413,6 +540,7 @@ async function refreshItem(
     outcome: fetched.outcome,
     hostAnswered: fetched.hostAnswered,
     strained: fetched.strained === true,
+    site: fetched.site ?? null,
   };
   if (!fetched.extract) return { ...host, waitsForBudget: false };
   const extracted = await step.do(`extract:${item.id}`, () =>
@@ -533,7 +661,7 @@ async function fetchItem(
   const startedAt = ports.now();
   const requested = await request(context, item, attempt >= MAX_WAITS, ports, resume);
   if (requested.kind === 'later') return requested;
-  const { attempt: answer, signals, noAnswer } = requested;
+  const { attempt: answer, signals, noAnswer, site } = requested;
 
   // The same run, page, and attempt make the same ID, so a step that runs again logs one fetch.
   const fetchId = await stableId('fe', context.runId, item.id, attempt);
@@ -585,6 +713,7 @@ async function fetchItem(
       outcome: answer.outcome,
       hostAnswered: answer.httpStatus !== null,
       strained: noAnswer || strains(answer.httpStatus),
+      site,
       finalUrl: answer.finalUrl,
       signals,
       contentHash: answer.page?.contentHash ?? item.contentHash,
@@ -617,23 +746,31 @@ async function request(
   resume: Resume | undefined,
 ): Promise<
   | { kind: 'later'; retryAfterMs: number; resume: Resume }
-  | { kind: 'answered'; attempt: Attempt; signals: ContentSignals; noAnswer: boolean }
+  | {
+      kind: 'answered';
+      attempt: Attempt;
+      signals: ContentSignals;
+      noAnswer: boolean;
+      site: SiteAnswer | null;
+    }
 > {
   // Definitions keep a page as written and only validate it. From here on, every hop and the
   // fetch log's final address use its href, as the redirects already do.
   const answer = await requestThroughGate(ports, new URL(item.locator).href, {
-    minIntervalMs: context.definition.policy.perHostIntervalMs,
+    minIntervalMs: intervalFor(context, item.sourceId),
     giveUp,
     headers: validators(item),
     resume,
   });
   if (answer.kind === 'later') return answer;
+  const site = siteAnswerOf(answer);
   const answered = (attempt: Omit<Attempt, 'policy' | 'policyReason'> & Partial<Attempt>) => {
     const whole = { policy: 'allowed' as const, policyReason: null, ...attempt };
     return {
       kind: 'answered' as const,
       signals: answer.signals,
       noAnswer: answer.kind === 'failed' && answer.noAnswer,
+      site,
       // A reason or an error can quote the site, such as the Location of a redirect that isn't an
       // address or of a robots.txt's redirect. Both are stored as text, and Postgres refuses U+0000.
       attempt: {

@@ -82,7 +82,7 @@ describe('RefreshWorkflow', () => {
       URLS.a2,
     ]);
     expect(new Set(asked.map((sent) => sent.agent))).toEqual(
-      new Set(['Spatula/0.2.0-dev (+https://spatula-platform.salar-sayyad.workers.dev)']),
+      new Set(['Spatula/0.2.0-dev (+https://spatula.run)']),
     );
 
     await withDb(async (db) => {

@@ -3,6 +3,7 @@ import {
   DIRECTORY_PATH,
   matchQuestion,
   sha256Hex,
+  type DatasetStatus,
   type PagesSource,
   type RunSummary,
   type RunView,
@@ -24,6 +25,7 @@ import {
   runs,
   snapshotById,
   snapshots,
+  sources,
   startRun,
 } from '@spatula/store';
 import { testDefinition } from '@spatula/store/fixtures';
@@ -199,6 +201,30 @@ describe('the public page', () => {
     // What it said before promised more than the code does.
     expect(page).not.toContain("robots.txt can't be read");
     expect(page).not.toContain('only where the site allows');
+  });
+
+  it('says what it collects and for whom, how it reads and slows down, and whom to write to', async () => {
+    // The page's text, with its line breaks collapsed.
+    const page = (await (await call('GET', '/', { token: null })).text()).replace(/\s+/gu, ' ');
+    expect(page).toContain(
+      'names, identifiers such as GTINs and part numbers, and specifications. Prices come later.',
+    );
+    expect(page).toContain('It collects them for Crowdio, a site about audio gear.');
+    expect(page).toContain('It collects facts only, never descriptions or photos.');
+    expect(page).toContain(
+      'It uses an AI model only to read pages, and nothing it reads is used to train one.',
+    );
+    expect(page).toContain(
+      'It waits 15 seconds between requests to a site for the datasets it keeps today',
+    );
+    expect(page).toContain(
+      'When a site refuses it, it waits twice as long on its next visit, up to four times as long.',
+    );
+    expect(page).toContain(
+      'After three visits in a row that a site refused, it sends one request a visit until the site answers again.',
+    );
+    expect(page).toContain('<a href="mailto:bot@spatula.run">bot@spatula.run</a>');
+    expect(page).not.toContain('open an issue');
   });
 
   /** The page's text for these bindings, with its line breaks collapsed. */
@@ -1116,6 +1142,102 @@ describe('reviving pages', () => {
         ),
     );
     expect(other).toEqual({ status: 'refused' });
+  });
+});
+
+describe('reviving sources', () => {
+  it('shows each source’s standing, and puts a blocked or refused source back', async () => {
+    await call('PUT', '/datasets/api-revive-sources', {
+      body: testDefinition('api-revive-sources'),
+    });
+    await withDatabase(env, (db) =>
+      db
+        .update(sources)
+        .set({
+          blockedRuns: 3,
+          refusedAt: new Date('2026-10-20T08:00:00Z'),
+          lastProbeAt: new Date('2026-10-21T08:00:00Z'),
+          lastProbe: 'blocked',
+        })
+        .where(and(eq(sources.datasetId, 'api-revive-sources'), eq(sources.id, 'maker-a'))),
+    );
+    const live = { blockedRuns: 0, refusedAt: null, lastProbeAt: null, lastProbe: null };
+    const standing = async () =>
+      ((await (await call('GET', '/datasets/api-revive-sources/status')).json()) as DatasetStatus)
+        .sources;
+    expect(await standing()).toEqual([
+      {
+        id: 'maker-a',
+        blockedRuns: 3,
+        refusedAt: '2026-10-20T08:00:00.000Z',
+        lastProbeAt: '2026-10-21T08:00:00.000Z',
+        lastProbe: 'blocked',
+      },
+      { id: 'maker-b', ...live },
+    ]);
+
+    // Only maker-a was blocked or refused, so only it counts; a source the dataset lacks is none.
+    const revived = await call('POST', '/datasets/api-revive-sources/sources/revive', {
+      body: { sources: ['maker-a', 'maker-b', 'nobody'] },
+    });
+    expect(revived.status).toBe(200);
+    expectNoStore(revived);
+    expect(await revived.json()).toEqual({ revived: 1 });
+    expect(await standing()).toEqual([
+      { id: 'maker-a', ...live },
+      { id: 'maker-b', ...live },
+    ]);
+  });
+
+  it('refuses a body that names no source, and answers 404 and 401 as the other routes do', async () => {
+    await call('PUT', '/datasets/api-revive-sources-checks', {
+      body: testDefinition('api-revive-sources-checks'),
+    });
+    for (const body of [
+      {},
+      { sources: [] },
+      { sources: [''] },
+      { sources: ['maker-a'], all: true },
+      'maker-a',
+    ]) {
+      const refused = await call('POST', '/datasets/api-revive-sources-checks/sources/revive', {
+        body,
+      });
+      expect(refused.status, JSON.stringify(body)).toBe(400);
+      expectNoStore(refused);
+    }
+    const missing = await call('POST', '/datasets/api-revive-sources-nothing/sources/revive', {
+      body: { sources: ['maker-a'] },
+    });
+    expect(missing.status).toBe(404);
+    expect(await missing.json()).toEqual({
+      error: 'Dataset api-revive-sources-nothing doesn’t exist.',
+    });
+    const anonymous = await call('POST', '/datasets/api-revive-sources-checks/sources/revive', {
+      body: { sources: ['maker-a'] },
+      token: null,
+    });
+    expect(anonymous.status).toBe(401);
+  });
+});
+
+describe('verification', () => {
+  it('says in the status whether Cloudflare lists Spatula as a verified bot', async () => {
+    await call('PUT', '/datasets/api-verified', { body: testDefinition('api-verified') });
+    const verified = async (bindings?: Env) =>
+      (
+        (await (
+          await call('GET', '/datasets/api-verified/status', bindings ? { bindings } : {})
+        ).json()) as DatasetStatus
+      ).verified;
+    // The test run pins VERIFIED_BOT to "false" (vitest.workers.config.ts), whatever
+    // wrangler.jsonc says.
+    expect(await verified()).toBe(false);
+    // The generated Env types the variable as "false", the value wrangler.jsonc holds, so another
+    // value goes through unknown.
+    expect(await verified({ ...env, VERIFIED_BOT: 'true' } as unknown as Env)).toBe(true);
+    // Anything but "true" reads as not verified.
+    expect(await verified({ ...env, VERIFIED_BOT: 'yes' } as unknown as Env)).toBe(false);
   });
 });
 

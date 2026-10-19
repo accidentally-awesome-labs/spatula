@@ -1,9 +1,12 @@
+import { siteAnswer } from './refusals';
 import { isAllowed, parseRobots, type ContentSignals, type RobotsGroup } from './robots';
 
 /*
  * The politeness each host gets, as pure functions of its state. HostGate, a Durable Object per
  * host, keeps the state and asks these before every request. robots.txt follows RFC 9309: a 4xx
  * means everything is allowed; a 5xx, a 429, or no answer means nothing is, until it recovers.
+ * Whether robots.txt refused Spatula (a challenge, a 401 to 403, or a 429) is said on every
+ * decision as well, for the run to count (ADR 0006); it changes nothing the gate allows.
  * Requests to a host start at least a second apart, or further apart when robots.txt asks for a
  * crawl delay or the dataset for a longer interval. The interval counts from when the last answer
  * arrived, so a slow host isn't asked again sooner. After a 429, a 5xx, a block (401, 402, or
@@ -25,14 +28,25 @@ const BACKOFF_MAX_MS = 600_000;
 
 interface RobotsRead {
   fetchedAt: number;
-  /** When a refresh of it was last answered with a challenge, which left it in force. */
+  /**
+   * When a refresh of it was last answered with a challenge. A record that held rules, or none,
+   * stays in force; one that couldn't be read is replaced by the challenge (`robotsToKeep`).
+   */
   challengedAt?: number;
 }
 
 export type RobotsRecord =
   | (RobotsRead & { status: 'ok'; text: string })
   | (RobotsRead & { status: 'unavailable'; httpStatus: number })
-  | (RobotsRead & { status: 'unreachable'; reason: string });
+  | (RobotsRead & {
+      status: 'unreachable';
+      reason: string;
+      /**
+       * The status robots.txt answered with, when it answered: a 429 or a 5xx. An error, a
+       * challenge, and a record kept by an earlier version have none.
+       */
+      httpStatus?: number;
+    });
 
 export interface GateState {
   robots: RobotsRecord | null;
@@ -54,10 +68,16 @@ export const INITIAL_GATE_STATE: GateState = {
   failures: 0,
 };
 
+/**
+ * Whether a request may go. Every kind of decision, held back or going, says `robotsRefused` when
+ * the host's latest answer to robots.txt refused Spatula: a challenge, a 401 to 403, or a 429 (ADR
+ * 0006). The gate reads the status as RFC 9309 does, so a 403 still lets everything go and a 429
+ * still holds everything back; the flag is for the run to count, and changes nothing here.
+ */
 export type GateDecision =
-  | { kind: 'deny'; outcome: 'blocked' | 'failed'; reason: string }
-  | { kind: 'later'; retryAfterMs: number; reason: string }
-  | { kind: 'go'; waitMs: number; signals: ContentSignals };
+  | { kind: 'deny'; outcome: 'blocked' | 'failed'; reason: string; robotsRefused?: true }
+  | { kind: 'later'; retryAfterMs: number; reason: string; robotsRefused?: true }
+  | { kind: 'go'; waitMs: number; signals: ContentSignals; robotsRefused?: true };
 
 /**
  * robots.txt is read again after a day, or after an hour while it's unreachable. A refresh that
@@ -94,18 +114,36 @@ export function robotsRecord(
   if (status >= 400 && status < 500 && status !== 429) {
     return { status: 'unavailable', fetchedAt: now, httpStatus: status };
   }
-  return { status: 'unreachable', fetchedAt: now, reason: `HTTP ${status}` };
+  return { status: 'unreachable', fetchedAt: now, reason: `HTTP ${status}`, httpStatus: status };
 }
 
 /**
  * The record that stays in force once robots.txt has been read again. A read that met a challenge
- * doesn't replace the record held: the host is refusing Spatula, not saying it has no rules, so
- * those rules and their Crawl-delay stay, and the read is tried again in an hour. Any other answer
- * replaces it.
+ * doesn't replace what the record held, rules or none: the host is refusing Spatula, not changing
+ * them, so they and their Crawl-delay stay, and the read is tried again in an hour. A record that
+ * couldn't be read holds nothing to keep, so the challenge replaces it, and a denial gives the
+ * challenge as its reason, not the outage before it. The read is due an hour after the challenge
+ * either way, so no request changes. Any other answer replaces the record.
  */
 export function robotsToKeep(held: RobotsRecord | null, read: RobotsRecord): RobotsRecord {
-  if (read.challengedAt === undefined || held === null) return read;
+  if (read.challengedAt === undefined || held === null || held.status === 'unreachable') {
+    return read;
+  }
   return { ...held, challengedAt: read.challengedAt };
+}
+
+/**
+ * Whether the host's latest answer to robots.txt refused Spatula (ADR 0006): a challenge, whether
+ * rules are held or not, a 429, or a 401, 402, or 403. RFC 9309 reads the 429 as nothing allowed
+ * and the others as no rules at all, and the gate keeps doing so; this only says the host refused.
+ * Which statuses refuse is `siteAnswer`'s to say. A record kept by an earlier version has no status
+ * for a 429, and reads as not refusing until robots.txt is read again, within the hour.
+ */
+export function robotsRefused(robots: RobotsRecord | null): boolean {
+  if (robots === null) return false;
+  if (robots.challengedAt !== undefined) return true;
+  const status = robots.status === 'ok' ? null : (robots.httpStatus ?? null);
+  return siteAnswer({ status, challenge: false }) === 'refused';
 }
 
 /** The interval a group's Crawl-delay and the dataset ask for, and never less than a second. */
@@ -124,7 +162,8 @@ export function gateInterval(robots: RobotsRecord | null, minIntervalMs: number)
 
 /**
  * Whether a request may go, and when. A wait longer than `maxWaitMs` comes back as `later`,
- * without reserving a slot, so the caller can sleep outside its step and ask again.
+ * without reserving a slot, so the caller can sleep outside its step and ask again. Whether the
+ * host's latest answer to robots.txt refused Spatula rides on every decision.
  */
 export function reserve(
   state: GateState,
@@ -132,6 +171,7 @@ export function reserve(
 ): { state: GateState; decision: GateDecision } {
   const url = new URL(request.url);
   const { robots } = state;
+  const refused: { robotsRefused?: true } = robotsRefused(robots) ? { robotsRefused: true } : {};
   if (robots === null || robots.status === 'unreachable') {
     const why = robots === null ? '' : ` (${robots.reason})`;
     return {
@@ -140,6 +180,7 @@ export function reserve(
         kind: 'deny',
         outcome: 'failed',
         reason: `robots.txt is unreachable${why}, so nothing on ${url.host} is fetched until it answers`,
+        ...refused,
       },
     };
   }
@@ -151,6 +192,7 @@ export function reserve(
         kind: 'deny',
         outcome: 'blocked',
         reason: `robots.txt disallows ${url.pathname}${url.search} for ${PRODUCT_TOKEN}`,
+        ...refused,
       },
     };
   }
@@ -159,12 +201,12 @@ export function reserve(
   if (waitMs > request.maxWaitMs) {
     const reason =
       state.backoffUntil > request.now ? `${url.host} asked for a break` : `${url.host} is paced`;
-    return { state, decision: { kind: 'later', retryAfterMs: waitMs, reason } };
+    return { state, decision: { kind: 'later', retryAfterMs: waitMs, reason, ...refused } };
   }
   const interval = intervalOf(group, request.minIntervalMs);
   return {
     state: { ...state, nextAt: start + interval, intervalMs: interval },
-    decision: { kind: 'go', waitMs, signals: group?.signals ?? {} },
+    decision: { kind: 'go', waitMs, signals: group?.signals ?? {}, ...refused },
   };
 }
 

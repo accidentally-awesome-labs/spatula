@@ -2,6 +2,7 @@ import {
   newId,
   parseDefinition,
   sha256Hex,
+  sourceCoverage,
   stableStringify,
   type ApplySummary,
   type Definition,
@@ -33,11 +34,114 @@ export interface ItemRef {
   extractedWith: string | null;
 }
 
+/** A page as `applyDefinition` reads it. */
+interface PageRow {
+  id: string;
+  sourceId: string;
+  locator: string;
+  status: ItemStatus;
+}
+
+/** A page of a removed source, and the source it moves to. */
+interface Move {
+  id: string;
+  from: string;
+  to: string;
+  locator: string;
+}
+
+/**
+ * Where each page of a removed source goes (ADR 0006): to the one remaining source that covers its
+ * address, unless that source already has a page there. A source removed now gives up every page; a
+ * source removed before gives up its excluded pages, which come back. A page that can't move stays
+ * excluded. Only those of sources removed now are counted, so a page an earlier apply couldn't move
+ * isn't reported on every apply. Pages that aren't excluded claim an address before excluded ones,
+ * then by source and address, so the outcome doesn't depend on the order the rows came in.
+ */
+function planMoves(input: {
+  definition: Definition;
+  current: { id: string; removedAt: Date | null }[];
+  listed: PageRow[];
+  removed: string[];
+}): { moved: Move[]; unmoved: NonNullable<ApplySummary['unmoved']> } {
+  const wanted = new Set(input.definition.sources.map((source) => source.id));
+  const removedNow = new Set(input.removed);
+  const removedBefore = new Set(
+    input.current
+      .filter((source) => source.removedAt !== null && !wanted.has(source.id))
+      .map((source) => source.id),
+  );
+  const leaving = input.listed.filter(
+    (page) =>
+      removedNow.has(page.sourceId) ||
+      (removedBefore.has(page.sourceId) && page.status === 'excluded'),
+  );
+  // An address a remaining source already has stays that page's.
+  const claimed = new Set(
+    input.listed
+      .filter((page) => wanted.has(page.sourceId))
+      .map((page) => `${page.sourceId} ${page.locator}`),
+  );
+  // What each remaining source covers, worked out once. The store keys a page by its text, so a
+  // pages source holds an address under the spelling it lists. A page it lists another way stays
+  // where it is: moved, it would be a second page for the address, beside the source's own.
+  const remaining = input.definition.sources.map((source) => ({
+    id: source.id,
+    covers: sourceCoverage(source),
+    listed: source.kind === 'pages' ? new Set(source.pages) : null,
+  }));
+  const ordered = [...leaving].sort(
+    (a, b) =>
+      Number(a.status === 'excluded') - Number(b.status === 'excluded') ||
+      a.sourceId.localeCompare(b.sourceId) ||
+      a.locator.localeCompare(b.locator),
+  );
+  const moved: Move[] = [];
+  const unmoved = { uncovered: 0, ambiguous: 0, taken: 0 };
+  for (const page of ordered) {
+    const covering = remaining.filter((source) => source.covers(page.locator));
+    const to = covering.length === 1 ? covering[0]! : null;
+    const why =
+      covering.length === 0
+        ? ('uncovered' as const)
+        : to === null
+          ? ('ambiguous' as const)
+          : claimed.has(`${to.id} ${page.locator}`) ||
+              (to.listed !== null && !to.listed.has(page.locator))
+            ? ('taken' as const)
+            : null;
+    if (why === null && to !== null) {
+      claimed.add(`${to.id} ${page.locator}`);
+      moved.push({ id: page.id, from: page.sourceId, to: to.id, locator: page.locator });
+    } else if (why !== null && removedNow.has(page.sourceId) && page.status !== 'excluded') {
+      unmoved[why] += 1;
+    }
+  }
+  return { moved, unmoved };
+}
+
+/** The moves, by the source that took the pages in, each with the sources they left, in order. */
+function movesByTarget(moved: Move[]): NonNullable<ApplySummary['moves']> {
+  const byTarget = new Map<string, { from: Set<string>; pages: number }>();
+  for (const move of moved) {
+    const entry = byTarget.get(move.to) ?? { from: new Set<string>(), pages: 0 };
+    entry.from.add(move.from);
+    entry.pages += 1;
+    byTarget.set(move.to, entry);
+  }
+  return [...byTarget]
+    .sort(([a], [b]) => a.localeCompare(b))
+    .map(([to, entry]) => ({ from: [...entry.from].sort(), to, pages: entry.pages }));
+}
+
 /**
  * Applies a definition: the dataset, its sources, and an item for each page a pages source lists.
  * Pages and sources that leave the definition are excluded, not deleted, and come back if they
  * return. A sitemap source's pages are not the definition's to make or exclude: discovery does.
- * Nothing changes, and the revision stays, when the definition is the same. A dry run only reports.
+ * A removed source's page instead moves to the one remaining source that covers its address, with
+ * its status and history, and an excluded page of a source removed earlier comes back live the same
+ * way (ADR 0006). Nothing else changes, and the revision stays, when the definition is the same. A
+ * dry run only reports.
  */
 export async function applyDefinition(
   db: Executor,
@@ -59,11 +163,16 @@ export async function applyDefinition(
           .where(eq(sources.datasetId, id))
           // In a fixed order, so the summary lists removed sources the same way every time.
           .orderBy(sources.id);
-  const listed =
+  const listed: PageRow[] =
     existing === undefined
       ? []
       : await db
-          .select({ sourceId: items.sourceId, locator: items.locator, status: items.status })
+          .select({
+            id: items.id,
+            sourceId: items.sourceId,
+            locator: items.locator,
+            status: items.status,
+          })
           .from(items)
           .where(eq(items.datasetId, id));
 
@@ -89,6 +198,11 @@ export async function applyDefinition(
       .map((item) => `${item.sourceId} ${item.locator}`),
   );
   const changed = existing === undefined || existing.definitionHash !== hash;
+  const removed = [...active.keys()].filter((sourceId) => !wanted.has(sourceId));
+  const moves = planMoves({ definition, current, listed, removed });
+  // A page a move fills in a pages source isn't new, and one it takes away isn't removed.
+  const movedIn = new Set(moves.moved.map((move) => `${move.to} ${move.locator}`));
+  const movedOut = new Set(moves.moved.map((move) => `${move.from} ${move.locator}`));
   const summary: ApplySummary = {
     dataset: id,
     revision: existing === undefined ? 1 : changed ? existing.revision + 1 : existing.revision,
@@ -96,7 +210,7 @@ export async function applyDefinition(
     changed,
     sources: {
       added: [...wanted.keys()].filter((sourceId) => !active.has(sourceId)),
-      removed: [...active.keys()].filter((sourceId) => !wanted.has(sourceId)),
+      removed,
       changed: [...wanted]
         .filter(
           ([sourceId, source]) =>
@@ -106,70 +220,106 @@ export async function applyDefinition(
         .map(([sourceId]) => sourceId),
     },
     pages: {
-      added: [...wantedPages].filter((page) => !livePages.has(page)).length,
-      removed: [...livePages].filter((page) => !wantedPages.has(page)).length,
+      added: [...wantedPages].filter((page) => !livePages.has(page) && !movedIn.has(page)).length,
+      removed: [...livePages].filter((page) => !wantedPages.has(page) && !movedOut.has(page))
+        .length,
+      moved: moves.moved.length,
     },
+    moves: movesByTarget(moves.moved),
+    unmoved: moves.unmoved,
   };
-  if (dryRun || !changed) return summary;
+  if (dryRun || (!changed && moves.moved.length === 0)) return summary;
 
   await db.transaction(async (tx) => {
     const now = new Date();
-    await tx
-      .insert(datasets)
-      .values({ id, revision: summary.revision, definition, definitionHash: hash })
-      .onConflictDoUpdate({
-        target: datasets.id,
-        set: { revision: summary.revision, definition, definitionHash: hash, updatedAt: now },
-      });
-    for (const source of definition.sources) {
+    if (changed) {
       await tx
-        .insert(sources)
-        .values({ datasetId: id, id: source.id, kind: source.kind, config: source })
+        .insert(datasets)
+        .values({ id, revision: summary.revision, definition, definitionHash: hash })
         .onConflictDoUpdate({
-          target: [sources.datasetId, sources.id],
-          set: { kind: source.kind, config: source, removedAt: null },
+          target: datasets.id,
+          set: { revision: summary.revision, definition, definitionHash: hash, updatedAt: now },
         });
-      if (source.kind === 'pages') {
-        for (const page of source.pages) {
-          await tx
-            .insert(items)
-            .values({
-              id: newId('it'),
-              datasetId: id,
-              sourceId: source.id,
-              recordType: source.recordType,
-              locator: page,
-            })
-            .onConflictDoUpdate({
-              target: [items.datasetId, items.sourceId, items.locator],
-              // A page listed again comes back; one that's gone or refused stays as it is.
-              set: {
-                recordType: source.recordType,
-                status: sql`case when ${items.status} = 'excluded' then 'live' else ${items.status} end`,
-              },
-            });
-        }
+      for (const source of definition.sources) {
         await tx
-          .update(items)
-          .set({ status: 'excluded' })
-          .where(
-            and(
-              eq(items.datasetId, id),
-              eq(items.sourceId, source.id),
-              notInArray(items.locator, source.pages),
-            ),
-          );
+          .insert(sources)
+          .values({ datasetId: id, id: source.id, kind: source.kind, config: source })
+          .onConflictDoUpdate({
+            target: [sources.datasetId, sources.id],
+            set: { kind: source.kind, config: source, removedAt: null },
+          });
       }
     }
-    if (summary.sources.removed.length > 0) {
+    // Pages move once every source they move to exists, and before anything is excluded or a pages
+    // source's own pages are written. So a moved page keeps its status and history, and is the
+    // page its new pages source lists, not a second one.
+    const byTarget = new Map<string, string[]>();
+    for (const move of moves.moved) {
+      const ids = byTarget.get(move.to);
+      if (ids === undefined) byTarget.set(move.to, [move.id]);
+      else ids.push(move.id);
+    }
+    for (const source of definition.sources) {
+      const ids = byTarget.get(source.id);
+      if (ids === undefined) continue;
       await tx
-        .update(sources)
-        .set({ removedAt: now })
-        .where(and(eq(sources.datasetId, id), inArray(sources.id, summary.sources.removed)));
+        .update(items)
+        .set({
+          sourceId: source.id,
+          // The new source's record type, as its own listing writes it.
+          recordType: source.recordType,
+          // A page that apply had excluded comes back live, as a listing brings one back: whether
+          // its source was removed earlier, or had dropped the page from its list before it left.
+          // Every other status stays: gone, refused, and irrelevant, the owner's "None of these".
+          status: sql`case when ${items.status} = 'excluded' then 'live' else ${items.status} end`,
+          // The new source's first complete read takes the page over.
+          listedAt: null,
+          listedLastmod: null,
+          missingStreak: 0,
+        })
+        .where(inArray(items.id, ids));
+    }
+    if (!changed) return;
+    for (const source of pageSources) {
+      for (const page of source.pages) {
+        await tx
+          .insert(items)
+          .values({
+            id: newId('it'),
+            datasetId: id,
+            sourceId: source.id,
+            recordType: source.recordType,
+            locator: page,
+          })
+          .onConflictDoUpdate({
+            target: [items.datasetId, items.sourceId, items.locator],
+            // A page listed again comes back; one that's gone or refused stays as it is.
+            set: {
+              recordType: source.recordType,
+              status: sql`case when ${items.status} = 'excluded' then 'live' else ${items.status} end`,
+            },
+          });
+      }
       await tx
         .update(items)
         .set({ status: 'excluded' })
-        .where(and(eq(items.datasetId, id), inArray(items.sourceId, summary.sources.removed)));
+        .where(
+          and(
+            eq(items.datasetId, id),
+            eq(items.sourceId, source.id),
+            notInArray(items.locator, source.pages),
+          ),
+        );
+    }
+    if (removed.length > 0) {
+      await tx
+        .update(sources)
+        .set({ removedAt: now })
+        .where(and(eq(sources.datasetId, id), inArray(sources.id, removed)));
+      await tx
+        .update(items)
+        .set({ status: 'excluded' })
+        .where(and(eq(items.datasetId, id), inArray(items.sourceId, removed)));
     }
   });
   return summary;

@@ -176,7 +176,8 @@ export async function finishListing(
  * The live pages a run reads, at most `limit`, and how many were due. A page is due when it was
  * never read, was read more than `maxAgeDays` ago, has statements from older code (`current` is the
  * extraction mark a page read now gets), was listed with a lastmod it wasn't read at, or its last
- * fetch failed, was blocked, or found it gone once. `all` makes every live page due. Pages come
+ * fetch failed, was blocked, or found it gone once. `all` makes every live page due. A refused
+ * source's pages are never due, under `all` too: its runs only probe it (ADR 0006). Pages come
  * least recently read first, each host's first page, then each host's second, and so on.
  */
 export async function dueItems(
@@ -201,12 +202,20 @@ export async function dueItems(
         ${items.lastFetchedAt} as last_fetched_at,
         substring(${items.locator} from '^https://([^/?#]+)') as host,
         (
-          ${input.all === true}::boolean
-          or ${items.lastFetchedAt} is null
-          or ${items.lastFetchedAt} < ${cutoff.toISOString()}::timestamptz
-          or ${items.extractedWith} is distinct from ${input.current}
-          or (${items.listedLastmod} is not null and ${items.listedLastmod} is distinct from ${items.fetchedLastmod})
-          or ${items.lastOutcome} in ('failed', 'blocked', 'gone')
+          (
+            ${input.all === true}::boolean
+            or ${items.lastFetchedAt} is null
+            or ${items.lastFetchedAt} < ${cutoff.toISOString()}::timestamptz
+            or ${items.extractedWith} is distinct from ${input.current}
+            or (${items.listedLastmod} is not null and ${items.listedLastmod} is distinct from ${items.fetchedLastmod})
+            or ${items.lastOutcome} in ('failed', 'blocked', 'gone')
+          )
+          and not exists (
+            select 1 from ${sources}
+            where ${sources.datasetId} = ${items.datasetId}
+              and ${sources.id} = ${items.sourceId}
+              and ${sources.refusedAt} is not null
+          )
         ) as due
       from ${items}
       where ${items.datasetId} = ${input.datasetId} and ${items.status} = 'live'

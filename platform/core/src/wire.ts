@@ -2,6 +2,7 @@ import { z } from 'zod';
 import type { Question } from './decisions';
 import type { Outcome } from './gate';
 import type { EvalScores } from './golden';
+import type { SourceProbe } from './refusals';
 import type { Excluded } from './snapshot';
 
 /*
@@ -17,7 +18,15 @@ export interface ApplySummary {
   created: boolean;
   changed: boolean;
   sources: { added: string[]; removed: string[]; changed: string[] };
-  pages: { added: number; removed: number };
+  /** Pages added and excluded, and pages of removed sources that moved (absent before ADR 0006). */
+  pages: { added: number; removed: number; moved?: number };
+  /** Where the moved pages went: the sources they left, by the source that took them in. */
+  moves?: { from: string[]; to: string; pages: number }[];
+  /**
+   * Pages of sources removed now that stayed excluded, by why: no remaining source covers their
+   * address, two or more do, or the one that does already has a page there.
+   */
+  unmoved?: { uncovered: number; ambiguous: number; taken: number };
 }
 
 /** What a run's snapshot step did. */
@@ -72,7 +81,10 @@ export interface DecisionSummary {
 export interface RunSummary {
   /** The pages read this run. */
   items: number;
-  /** The live pages when the run planned, and how many of them were due. Absent in runs from before slice 1. */
+  /**
+   * The live pages when the run planned, and how many of them were due, counting the page a refused
+   * source was probed with (ADR 0006). Absent in runs from before slice 1.
+   */
   live?: number;
   due?: number;
   /** What the sitemap sources listed. Absent in runs from before slice 1. */
@@ -83,6 +95,16 @@ export interface RunSummary {
    * as due (--all) promises nothing.
    */
   paused?: Record<string, number>;
+  /**
+   * How the run went for the sources that refused it (ADR 0006): those it found blocked, with their
+   * blocked runs in a row; those it refused, at the third; and the refused sources it probed, with
+   * what each probe met. Absent in runs before phase 1, and when there was nothing to say.
+   */
+  sources?: {
+    blocked: { id: string; blockedRuns: number }[];
+    refused: string[];
+    probed: { id: string; outcome: 'through' | SourceProbe }[];
+  };
   fetches: Record<Outcome, number>;
   statements: { added: number; reseen: number; withdrawn: number };
   llm: {
@@ -171,6 +193,19 @@ export interface DatasetStatus {
     outcome: 'applied' | 'refused' | null;
     receivedAt: string | null;
   }[];
+  /**
+   * Each source's standing (ADR 0006), by ID: its blocked runs in a row, when they refused it, and
+   * when it was last probed and what the probe met. Absent from a Worker before phase 1.
+   */
+  sources?: {
+    id: string;
+    blockedRuns: number;
+    refusedAt: string | null;
+    lastProbeAt: string | null;
+    lastProbe: SourceProbe | null;
+  }[];
+  /** Whether Cloudflare lists Spatula as a verified bot (ADR 0006). Absent before phase 1. */
+  verified?: boolean;
 }
 
 /** A saved score, as the API lists it. */

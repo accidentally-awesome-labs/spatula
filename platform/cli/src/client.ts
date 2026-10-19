@@ -151,6 +151,17 @@ export function createClient(options: {
       return { revived: Number(answer.revived) };
     },
 
+    async reviveSources(datasetId: string, sources: string[]): Promise<{ revived: number }> {
+      const response = await request(
+        'POST',
+        `/datasets/${encodeURIComponent(datasetId)}/sources/revive`,
+        { sources },
+      );
+      const answer = await json(response);
+      if (!response.ok) throw refused(response.status, answer);
+      return { revived: Number(answer.revived) };
+    },
+
     async listReviews(datasetId: string): Promise<ReviewView[]> {
       const response = await request('GET', `/datasets/${encodeURIComponent(datasetId)}/review`);
       const answer = await json(response);

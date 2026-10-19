@@ -146,13 +146,16 @@ describe('a robots.txt that meets a challenge', () => {
     clock.advance(25 * HOUR);
     web.routes.set(robots, challenge);
     const asked = web.requests.length;
+    // Held rules decide the pages, and every decision says the host refused robots.txt (ADR 0006).
     expect(await gate.reserve('https://maker-a.example/private/x', request)).toMatchObject({
       kind: 'deny',
       outcome: 'blocked',
+      robotsRefused: true,
     });
     expect(await gate.reserve('https://maker-a.example/products/a2', request)).toMatchObject({
       kind: 'go',
       waitMs: 5000,
+      robotsRefused: true,
     });
     expect(web.requests.slice(asked).map((sent) => sent.url)).toEqual([robots]);
 
@@ -162,9 +165,9 @@ describe('a robots.txt that meets a challenge', () => {
     expect(web.requests.slice(asked).map((sent) => sent.url)).toEqual([robots]);
     web.routes.set(robots, { status: 200, body: ROBOTS_OPEN });
     clock.advance(120_000);
-    expect(await gate.reserve('https://maker-a.example/private/x', request)).toMatchObject({
-      kind: 'go',
-    });
+    const again = await gate.reserve('https://maker-a.example/private/x', request);
+    expect(again).toMatchObject({ kind: 'go' });
+    expect(again).not.toHaveProperty('robotsRefused');
     expect(web.requests.slice(asked).map((sent) => sent.url)).toEqual([robots, robots]);
   });
 
@@ -179,6 +182,8 @@ describe('a robots.txt that meets a challenge', () => {
         outcome: 'failed',
         reason:
           'robots.txt is unreachable (the site answered robots.txt with a challenge), so nothing on maker-a.example is fetched until it answers',
+        // The gate says the host refused robots.txt, which the run reads as a refusal (ADR 0006).
+        robotsRefused: true,
       });
       const asked = web.requests.length;
       clock.advance(HOUR - 60_000);
@@ -203,10 +208,12 @@ describe('a robots.txt that meets a challenge', () => {
     await gate.reserve('https://maker-a.example/products/a1', request);
     clock.advance(25 * HOUR);
     web.routes.set(robots, { status: 403 });
+    // Everything goes, as before. A 403 is a refusal all the same, and the decision says so.
     expect(await gate.reserve('https://maker-a.example/private/x', request)).toEqual({
       kind: 'go',
       waitMs: 1000,
       signals: {},
+      robotsRefused: true,
     });
   });
 });

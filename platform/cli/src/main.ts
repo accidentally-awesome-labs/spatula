@@ -24,8 +24,9 @@ export const USAGE = `Usage: spatula <command>
                                reads the pages that are due; --all counts every live
                                page as due, however recently it was read. The budget
                                still caps the run
-  revive <dataset> [--refused] [<page>...]
-                               Put refused pages, or the pages named, back for the next run
+  revive <dataset> [--refused] [--source <id>]... [<page>...]
+                               Put refused pages, or the pages named, back for the next
+                               run; --source puts a blocked or refused source back
   review <dataset> [<id> <answer>]
                                List the questions waiting for an answer, or answer one
   status <dataset>             Where a dataset stands: its head, what’s held, what waits,
@@ -47,6 +48,7 @@ const OPTIONS = {
   wait: { type: 'boolean' },
   all: { type: 'boolean' },
   refused: { type: 'boolean' },
+  source: { type: 'string', multiple: true },
   save: { type: 'boolean' },
   out: { type: 'string' },
   generation: { type: 'string' },
@@ -121,10 +123,18 @@ export async function main(
         : usage();
     case 'revive': {
       const [datasetId, ...pages] = rest;
-      if (datasetId === undefined || (pages.length === 0 && values.refused !== true)) {
+      const sources = values.source ?? [];
+      if (
+        datasetId === undefined ||
+        (pages.length === 0 && values.refused !== true && sources.length === 0)
+      ) {
         return usage();
       }
-      return revive(io, client, datasetId, { refused: values.refused === true, pages });
+      return revive(io, client, datasetId, {
+        refused: values.refused === true,
+        pages,
+        sources,
+      });
     }
     case 'review': {
       const [datasetId, reviewId, answer, ...extra] = rest;

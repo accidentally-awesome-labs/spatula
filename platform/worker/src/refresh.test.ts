@@ -103,6 +103,19 @@ function straining(world: World, pages: string[], reply: HttpResult) {
   return { strain, asked };
 }
 
+/**
+ * What a page's fetch step returned in a run: its last attempt's, since a page that waited behind
+ * its host's break took more than one. Undefined when no attempt finished.
+ */
+function lastFetched(run: { results: Map<string, unknown> }, itemId: string) {
+  const attempts = [...run.results.keys()].filter((name) => name.startsWith(`fetch:${itemId}:`));
+  const result = run.results.get(attempts.at(-1) ?? '') as
+    | { kind: 'done'; fetched: { site?: string | null; hostAnswered: boolean; outcome: string } }
+    | { kind: 'later' }
+    | undefined;
+  return result?.kind === 'done' ? result.fetched : undefined;
+}
+
 describe('runRefresh', () => {
   it('collects, identifies, and publishes, then publishes nothing when nothing changed', async () => {
     const { world, a1, a2, b1 } = await setUp('refresh-basics');
@@ -118,6 +131,7 @@ describe('runRefresh', () => {
       `extract:${b1.id}`,
       `fetch:${a2.id}:0`,
       `extract:${a2.id}`,
+      'sources',
       'resolve',
       'snapshot',
       'finish',
@@ -137,7 +151,7 @@ describe('runRefresh', () => {
     const file = (await published(world, 'refresh-basics'))!;
     expect(file.row).toMatchObject({ generation: 1, runId: first.runId, recordCount: 3 });
     expect(file.snapshot).toMatchObject({ project: 'refresh-basics', generation: 1 });
-    // Review Focus 1: the UPC in A1's mpn is published as a GTIN, never as a part number.
+    // The UPC in A1's mpn is published as a GTIN, never as a part number.
     expect(file.byName.A1!.fields).toEqual({
       brand: 'Maker A',
       name: 'A1',
@@ -175,7 +189,7 @@ describe('runRefresh', () => {
       snapshot: { published: false, reason: 'nothing changed since generation 1' },
     });
     expect(second.summary.notes).toEqual([`${URLS.b1}: failed (HTTP 503)`]);
-    // Review Focus 4: A2's text was the same, so the LLM wasn't asked again.
+    // A2's text was the same, so the LLM wasn't asked again.
     expect(world.llm.calls).toHaveLength(3);
     const a1Requests = world.web.requests.filter((sent) => sent.url === URLS.a1);
     expect(a1Requests.at(-1)!.headers).toEqual({ 'if-none-match': '"a1-v1"' });
@@ -190,7 +204,7 @@ describe('runRefresh', () => {
     const before = world.web.requests.length;
     const second = await refresh(world, 'refresh-robots-down');
     const asked = world.web.requests.slice(before).map((sent) => sent.url);
-    // Review Focus 3: robots.txt was asked for, and the page wasn't.
+    // robots.txt was asked for, and the page wasn't.
     expect(asked).toContain('https://maker-b.example/robots.txt');
     expect(asked).not.toContain(URLS.b1);
     expect(second.summary.fetches).toMatchObject({ unchanged: 2, failed: 1 });
@@ -405,7 +419,7 @@ describe('runRefresh', () => {
     world.web.routes.set(URLS.b1, { status: 200, body: B1('<h2>B1 Amp</h2>') });
 
     const second = await refresh(world, 'refresh-lost-name');
-    // Review Focus 2: the name isn't taken from og:title; the record is left out and listed.
+    // The name isn't taken from og:title; the record is left out and listed.
     expect(second.summary.snapshot).toEqual({
       published: true,
       generation: 2,
@@ -924,7 +938,7 @@ describe('runRefresh', () => {
     // Read five minutes ago, so nothing is due and nothing is fetched.
     const before = world.web.requests.length;
     const second = await refresh(world, 'refresh-plan', {});
-    expect(second.names).toEqual(['load', 'plan', 'resolve', 'snapshot', 'finish']);
+    expect(second.names).toEqual(['load', 'plan', 'sources', 'resolve', 'snapshot', 'finish']);
     expect(second.summary).toMatchObject({ items: 0, due: 0, live: 3 });
     expect(world.web.requests.length).toBe(before);
 
@@ -1010,6 +1024,7 @@ describe('runRefresh', () => {
       ...ids.slice(0, 50).map((id) => `fetch:${id}:0`),
       'items:50',
       ...ids.slice(50).map((id) => `fetch:${id}:0`),
+      'sources',
       'resolve',
       'snapshot',
       'finish',
@@ -1215,30 +1230,125 @@ describe('runRefresh', () => {
     // A challenge and a page are the host's answers. A page robots.txt turns away, a request the
     // network dropped, and one given up after the host kept asking for a wait are not. Of those,
     // only the dropped request went out, so only it strained the host: the others sent nothing.
+    // What each says of the site (ADR 0006): the challenge is a refusal and the page got through,
+    // while the three that weren't the host's answers say nothing either way.
     expect(fetchedOf(pages[0]!)).toMatchObject({
       outcome: 'blocked',
       hostAnswered: true,
       strained: false,
+      site: 'refused',
     });
     expect(fetchedOf(pages[1]!)).toMatchObject({
       outcome: 'blocked',
       hostAnswered: false,
       strained: false,
+      site: null,
     });
     expect(fetchedOf(pages[2]!)).toMatchObject({
       outcome: 'failed',
       hostAnswered: false,
       strained: true,
+      site: null,
     });
     expect(fetchedOf(pages[3]!)).toMatchObject({
       outcome: 'changed',
       hostAnswered: true,
       strained: false,
+      site: 'through',
     });
     expect(fetchedOf(pages[4]!)).toMatchObject({
       outcome: 'failed',
       hostAnswered: false,
       strained: false,
+      site: null,
+    });
+  });
+
+  it('keeps what each page’s answer says of the site in its fetch step’s result', async () => {
+    const datasetId = 'refresh-site-answers';
+    // Read in this order (by address): through, through, refused, refused, neither.
+    const names = ['p1-ok', 'p2-gone', 'p3-busy', 'p4-challenged', 'p5-down'];
+    const pages = await makerAPages(datasetId, names);
+    const routes = standardRoutes();
+    routes[pages[0]!] = { status: 200, body: A1() };
+    routes[pages[1]!] = { status: 404 };
+    routes[pages[2]!] = { status: 429 };
+    routes[pages[3]!] = { status: 403, headers: { 'cf-mitigated': 'challenge' } };
+    routes[pages[4]!] = { status: 503 };
+    const world = makeWorld(db, routes);
+    const run = await refresh(world, datasetId);
+    const live = await listLiveItems(db, datasetId);
+    // A page that waited behind its host's break took more than one attempt: the last answered.
+    const fetchedOf = (url: string) =>
+      lastFetched(run, live.find((row) => row.locator === url)!.id);
+    const siteOf = (url: string) => {
+      const fetched = fetchedOf(url);
+      return fetched === undefined ? 'not asked' : (fetched.site ?? null);
+    };
+    expect(pages.map(siteOf)).toEqual(['through', 'through', 'refused', 'refused', null]);
+    // The last is a 503, which the host answered: it says nothing of the site, as a page given up
+    // on would, but it is not one.
+    expect(fetchedOf(pages[4]!)).toMatchObject({ outcome: 'failed', hostAnswered: true });
+  });
+
+  it('reads a page held back for a challenged robots.txt as refused', async () => {
+    const routes = standardRoutes();
+    routes['https://maker-b.example/robots.txt'] = {
+      status: 403,
+      headers: { 'cf-mitigated': 'challenge' },
+    };
+    const { world, b1 } = await setUp('refresh-robots-challenged', routes);
+    const run = await refresh(world, 'refresh-robots-challenged');
+    const result = run.results.get(`fetch:${b1.id}:0`) as {
+      kind: 'done';
+      fetched: { site?: string | null; hostAnswered: boolean };
+    };
+    expect(result.fetched).toMatchObject({ site: 'refused', hostAnswered: false });
+  });
+
+  it('reads every page of a host whose robots.txt answers 429 as refused, though none is asked for', async () => {
+    const routes = standardRoutes();
+    routes['https://maker-a.example/robots.txt'] = { status: 429 };
+    const { world, a1, a2, b1 } = await setUp('refresh-robots-429', routes, { llm: false });
+    const run = await refresh(world, 'refresh-robots-429');
+    // The gate holds maker-a's pages back while its robots.txt can't be read, as it always has.
+    const asked = world.web.requests.map((sent) => sent.url);
+    expect(asked).not.toContain(URLS.a1);
+    expect(asked).not.toContain(URLS.a2);
+    for (const page of [a1, a2]) {
+      expect(lastFetched(run, page.id)).toMatchObject({
+        outcome: 'failed',
+        hostAnswered: false,
+        site: 'refused',
+      });
+    }
+    // The other host's page is its own.
+    expect(lastFetched(run, b1.id)).toMatchObject({ outcome: 'changed', site: 'through' });
+  });
+
+  it('reads a page that says nothing as refused when robots.txt answered 403, and one that got through as through', async () => {
+    const pages = await makerAPages('refresh-robots-403', ['p1-busy', 'p2-ok']);
+    const routes = standardRoutes();
+    routes['https://maker-a.example/robots.txt'] = { status: 403 };
+    routes[pages[0]!] = { status: 503 };
+    routes[pages[1]!] = { status: 200, body: A1() };
+    const world = makeWorld(db, routes, { llm: false });
+    const run = await refresh(world, 'refresh-robots-403');
+    const live = await listLiveItems(db, 'refresh-robots-403');
+    const fetchedOf = (url: string) =>
+      lastFetched(run, live.find((row) => row.locator === url)!.id);
+    // A 403 for robots.txt means it holds no rules, so both pages are asked for. The 503 says
+    // nothing of its own, so the refusal is what it comes to; the page that got through stays so.
+    expect(world.web.requests.map((sent) => sent.url)).toEqual(expect.arrayContaining(pages));
+    expect(fetchedOf(pages[0]!)).toMatchObject({
+      outcome: 'failed',
+      hostAnswered: true,
+      site: 'refused',
+    });
+    expect(fetchedOf(pages[1]!)).toMatchObject({
+      outcome: 'changed',
+      hostAnswered: true,
+      site: 'through',
     });
   });
 
@@ -1548,6 +1658,111 @@ describe('a request put off partway through its redirects', () => {
   });
 });
 
+describe('a request that learns the host refused robots.txt', () => {
+  const address = 'https://maker-a.example/products/a1';
+  const moved = 'https://maker-b.example/products/a1';
+  const options = { minIntervalMs: 1000, giveUp: false, headers: {} };
+  const go: GateDecision = { kind: 'go', waitMs: 0, signals: {} };
+  const deny: GateDecision = {
+    kind: 'deny',
+    outcome: 'failed',
+    reason: 'robots.txt is unreachable (HTTP 429)',
+  };
+  const refused = { robotsRefused: true } as const;
+  const page: HttpResult = {
+    ok: true,
+    status: 200,
+    headers: { 'content-type': 'text/html' },
+    body: new Uint8Array(),
+    truncated: false,
+  };
+  const redirect: HttpResult = { ...page, status: 301, headers: { location: moved } };
+
+  /** Ports whose gate gives these decisions in turn, and whose web answers with `reply`. */
+  function ports(decisions: GateDecision[], reply: (url: string) => HttpResult) {
+    const left = [...decisions];
+    return {
+      gate: {
+        async reserve(): Promise<GateDecision> {
+          return left.shift()!;
+        },
+        async record() {},
+      },
+      http: {
+        async get(url: string): Promise<HttpResult> {
+          return reply(url);
+        },
+      },
+      async wait() {},
+    };
+  }
+
+  it('says so on a page that came back, whatever the page said', async () => {
+    const flagged = ports([{ ...go, ...refused }], () => page);
+    expect(await requestThroughGate(flagged, address, options)).toMatchObject({
+      kind: 'answered',
+      robotsRefused: true,
+    });
+    const plain = ports([go], () => page);
+    expect(await requestThroughGate(plain, address, options)).toMatchObject({
+      kind: 'answered',
+      robotsRefused: false,
+    });
+  });
+
+  it('says so on a request the gate held back', async () => {
+    const flagged = ports([{ ...deny, ...refused }], () => page);
+    expect(await requestThroughGate(flagged, address, options)).toMatchObject({
+      kind: 'denied',
+      robotsRefused: true,
+    });
+    const plain = ports([deny], () => page);
+    expect(await requestThroughGate(plain, address, options)).toMatchObject({
+      kind: 'denied',
+      robotsRefused: false,
+    });
+  });
+
+  it('says so on a request that got no answer, and on one that stopped waiting', async () => {
+    const dropped: HttpResult = { ok: false, error: 'connection reset' };
+    const unanswered = ports([{ ...go, ...refused }], () => dropped);
+    expect(await requestThroughGate(unanswered, address, options)).toMatchObject({
+      kind: 'failed',
+      noAnswer: true,
+      robotsRefused: true,
+    });
+    const busy: GateDecision = { kind: 'later', retryAfterMs: 20_000, reason: 'busy' };
+    const stopped = ports([{ ...busy, ...refused }], () => page);
+    expect(await requestThroughGate(stopped, address, { ...options, giveUp: true })).toMatchObject({
+      kind: 'failed',
+      noAnswer: false,
+      robotsRefused: true,
+    });
+    const idle = ports([busy], () => page);
+    expect(await requestThroughGate(idle, address, { ...options, giveUp: true })).toMatchObject({
+      kind: 'failed',
+      noAnswer: false,
+      robotsRefused: false,
+    });
+  });
+
+  it('says what the decision for the hop it ended at said', async () => {
+    const web = (url: string) => (url === address ? redirect : page);
+    const refusedFirst = ports([{ ...go, ...refused }, go], web);
+    expect(await requestThroughGate(refusedFirst, address, options)).toMatchObject({
+      kind: 'answered',
+      url: moved,
+      robotsRefused: false,
+    });
+    const refusedLast = ports([go, { ...go, ...refused }], web);
+    expect(await requestThroughGate(refusedLast, address, options)).toMatchObject({
+      kind: 'answered',
+      url: moved,
+      robotsRefused: true,
+    });
+  });
+});
+
 describe('a fetch step that runs again', () => {
   it('logs the fetch once and moves the page’s streak once', async () => {
     const { world, a1 } = await setUp('replayed-fetch');
@@ -1635,6 +1850,7 @@ describe('a run replayed from the steps it finished', () => {
       `extract:${b1.id}`,
       `fetch:${a2.id}:0`,
       `extract:${a2.id}`,
+      'sources',
       'resolve',
       'snapshot',
       'finish',

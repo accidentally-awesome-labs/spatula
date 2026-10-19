@@ -138,14 +138,26 @@ export async function run(
   });
 }
 
-/** Puts refused pages, or the pages named, back for the next run. */
+/**
+ * Puts sources back (ADR 0006), then refused pages or the pages named, for the next run. A source
+ * put back starts its count of blocked runs again, and a refused one is live.
+ */
 export async function revive(
   io: Io,
   client: Client,
   datasetId: string,
-  options: { refused: boolean; pages: string[] },
+  options: { refused: boolean; pages: string[]; sources: string[] },
 ): Promise<number> {
   return withApi(io, async () => {
+    if (options.sources.length > 0) {
+      const { revived } = await client.reviveSources(datasetId, options.sources);
+      io.out(
+        revived === 0
+          ? `No source named was blocked or refused in ${datasetId}, so none was revived.`
+          : `Revived ${count(revived, 'source')} of ${datasetId}. The next run reads ${revived === 1 ? 'its' : 'their'} due pages.`,
+      );
+    }
+    if (!options.refused && options.pages.length === 0) return 0;
     const { revived } = await client.reviveItems(datasetId, {
       ...(options.refused ? { refused: true as const } : {}),
       ...(options.pages.length > 0 ? { pages: options.pages } : {}),

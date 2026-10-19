@@ -34,7 +34,9 @@ import {
   listOpenReviews,
   recordAcknowledgment,
   reviveItems,
+  reviveSources,
   saveEval,
+  sourceStates,
   StaleDefinitionError,
   startRunAlone,
 } from '@spatula/store';
@@ -43,7 +45,7 @@ import { bodyLimit } from 'hono/body-limit';
 import { z } from 'zod';
 import { aboutPage } from './about';
 import { r2Blobs } from './blobs';
-import { consumerSecret, secret } from './config';
+import { consumerSecret, secret, verifiedBot } from './config';
 import { withDatabase } from './database';
 import { answerReview } from './review';
 
@@ -388,6 +390,31 @@ api.post('/datasets/:id/items/revive', async (c) => {
   return c.json({ revived });
 });
 
+const reviveSourcesSchema = z.strictObject({
+  // Source IDs are slugs of up to 63 characters (definition.ts).
+  sources: z.array(z.string().min(1).max(63)).min(1).max(100),
+});
+
+/** Puts blocked or refused sources back (ADR 0006): their count starts again, and they're live. */
+api.post('/datasets/:id/sources/revive', async (c) => {
+  let body: unknown;
+  try {
+    body = await c.req.json();
+  } catch {
+    return c.json({ error: 'The body isn’t JSON.' }, 400);
+  }
+  const parsed = reviveSourcesSchema.safeParse(body);
+  if (!parsed.success) return c.json({ error: 'Send { "sources": [source IDs] }.' }, 400);
+  const datasetId = c.req.param('id');
+  const revived = await withDatabase(c.env, async (db) =>
+    (await datasetExists(db, datasetId))
+      ? reviveSources(db, { datasetId, sources: parsed.data.sources })
+      : null,
+  );
+  if (revived === null) return c.json({ error: `Dataset ${datasetId} doesn’t exist.` }, 404);
+  return c.json({ revived });
+});
+
 api.get('/datasets/:id/review', async (c) => {
   const datasetId = c.req.param('id');
   // A dataset that isn't there has no questions, but an empty list would read as nothing waiting.
@@ -550,6 +577,14 @@ api.get('/datasets/:id/status', async (c) => {
           receivedAt: last?.receivedAt ?? null,
         };
       }),
+      sources: (await sourceStates(db, datasetId)).map((state) => ({
+        id: state.id,
+        blockedRuns: state.blockedRuns,
+        refusedAt: state.refusedAt?.toISOString() ?? null,
+        lastProbeAt: state.lastProbeAt?.toISOString() ?? null,
+        lastProbe: state.lastProbe,
+      })),
+      verified: verifiedBot(c.env),
     };
   });
   if (status === null) return c.json({ error: `Dataset ${datasetId} doesn’t exist.` }, 404);

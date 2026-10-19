@@ -1,4 +1,4 @@
-import type { ContentSignals } from '@spatula/core';
+import { siteAnswer, type ContentSignals, type SiteAnswer } from '@spatula/core';
 import type { GatePort, HttpPort } from './pipeline';
 
 /*
@@ -33,12 +33,18 @@ export interface Resume {
   hop: number;
 }
 
+/**
+ * How a request ended. Every kind but `later` says `robotsRefused`: whether the request's latest
+ * gate decision found that the host's latest answer to robots.txt refused Spatula (ADR 0006), which
+ * `siteAnswerOf` reads with the answer. It's false when no decision came.
+ */
 export type Requested =
   | { kind: 'later'; retryAfterMs: number; resume: Resume }
   | {
       kind: 'denied';
       outcome: 'blocked' | 'failed';
       reason: string;
+      robotsRefused: boolean;
       url: string;
       signals: ContentSignals;
     }
@@ -53,6 +59,7 @@ export type Requested =
        * gave up waiting to send was never let go.
        */
       noAnswer: boolean;
+      robotsRefused: boolean;
       url: string;
       signals: ContentSignals;
     }
@@ -60,6 +67,7 @@ export type Requested =
       kind: 'answered';
       url: string;
       signals: ContentSignals;
+      robotsRefused: boolean;
       status: number;
       headers: Record<string, string>;
       body: Uint8Array;
@@ -83,6 +91,8 @@ export async function requestThroughGate(
 ): Promise<Requested> {
   let url = options.resume?.url ?? address;
   let signals: ContentSignals = {};
+  // What the latest gate decision said of robots.txt, whichever way the request goes on from it.
+  let robotsRefused = false;
   const failed = (
     error: string,
     more: { httpStatus?: number; noAnswer?: boolean } = {},
@@ -91,6 +101,7 @@ export async function requestThroughGate(
     error,
     httpStatus: more.httpStatus ?? null,
     noAnswer: more.noAnswer ?? false,
+    robotsRefused,
     url,
     signals,
   });
@@ -100,6 +111,7 @@ export async function requestThroughGate(
       minIntervalMs: options.minIntervalMs,
       maxWaitMs: MAX_INLINE_WAIT_MS,
     });
+    robotsRefused = decision.robotsRefused === true;
     if (decision.kind === 'later') {
       if (!options.giveUp) {
         return { kind: 'later', retryAfterMs: decision.retryAfterMs, resume: { url, hop } };
@@ -107,7 +119,14 @@ export async function requestThroughGate(
       return failed(`${decision.reason}, and the run stopped waiting after ${MAX_WAITS} tries`);
     }
     if (decision.kind === 'deny') {
-      return { kind: 'denied', outcome: decision.outcome, reason: decision.reason, url, signals };
+      return {
+        kind: 'denied',
+        outcome: decision.outcome,
+        reason: decision.reason,
+        robotsRefused,
+        url,
+        signals,
+      };
     }
     signals = decision.signals;
     if (decision.waitMs > 0) await ports.wait(decision.waitMs);
@@ -144,10 +163,27 @@ export async function requestThroughGate(
       kind: 'answered',
       url,
       signals,
+      robotsRefused,
       status: response.status,
       headers: response.headers,
       body: response.body,
       truncated: response.truncated,
     };
   }
+}
+
+/** What a request's answer says of the site (ADR 0006), however the request ended. */
+export function siteAnswerOf(answer: Exclude<Requested, { kind: 'later' }>): SiteAnswer | null {
+  const { robotsRefused } = answer;
+  if (answer.kind === 'denied') {
+    return siteAnswer({ status: null, challenge: false, robotsRefused });
+  }
+  if (answer.kind === 'failed') {
+    return siteAnswer({ status: answer.httpStatus, challenge: false, robotsRefused });
+  }
+  return siteAnswer({
+    status: answer.status,
+    challenge: isChallenge(answer.headers),
+    robotsRefused,
+  });
 }

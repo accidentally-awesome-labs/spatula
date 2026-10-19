@@ -187,6 +187,62 @@ describe('plan and apply', () => {
     ]);
   });
 
+  it('says which pages moved where, and which stayed excluded and why', async () => {
+    const summary: ApplySummary = {
+      dataset: 'crowdio-audio-products',
+      revision: 2,
+      created: false,
+      changed: false,
+      sources: { added: [], removed: [], changed: [] },
+      pages: { added: 0, removed: 0, moved: 11 },
+      moves: [
+        { from: ['sennheiser-amplifiers', 'sennheiser-headphones'], to: 'sennheiser', pages: 11 },
+      ],
+      unmoved: { uncovered: 1, ambiguous: 0, taken: 2 },
+    };
+    const { fetch } = stubApi(() => Response.json(summary));
+    const { io, out } = memoryIo(FILES);
+    expect(await main(['plan', 'cli-products.yaml'], { io, env: ENV, fetch })).toBe(0);
+    expect(out).toEqual([
+      'crowdio-audio-products is unchanged, at revision 2.',
+      'Pages: 0 added, 11 moved (sennheiser-amplifiers, sennheiser-headphones → sennheiser), 0 removed.',
+      'Pages left excluded: 1 that no remaining source covers, 2 that their new source already has.',
+    ]);
+  });
+
+  it('prints a plan from a Worker before ADR 0006 as before', async () => {
+    const summary = {
+      dataset: 'cli-products',
+      revision: 2,
+      created: false,
+      changed: true,
+      sources: { added: [], removed: [], changed: [] },
+      pages: { added: 3, removed: 1 },
+    } satisfies ApplySummary;
+    const { fetch } = stubApi(() => Response.json(summary));
+    const { io, out } = memoryIo(FILES);
+    expect(await main(['plan', 'cli-products.yaml'], { io, env: ENV, fetch })).toBe(0);
+    expect(out).toEqual(['cli-products would move to revision 2.', 'Pages: 3 added, 1 removed.']);
+  });
+
+  it('says nothing of pages an earlier apply left excluded, when this one moves none', async () => {
+    // What a Worker answers on the second apply of a definition that left pages excluded.
+    const summary: ApplySummary = {
+      dataset: 'cli-products',
+      revision: 2,
+      created: false,
+      changed: false,
+      sources: { added: [], removed: [], changed: [] },
+      pages: { added: 0, removed: 0, moved: 0 },
+      moves: [],
+      unmoved: { uncovered: 0, ambiguous: 0, taken: 0 },
+    };
+    const { fetch } = stubApi(() => Response.json(summary));
+    const { io, out } = memoryIo(FILES);
+    expect(await main(['plan', 'cli-products.yaml'], { io, env: ENV, fetch })).toBe(0);
+    expect(out).toEqual(['cli-products is unchanged, at revision 2.']);
+  });
+
   it('show what the API refused, and why', async () => {
     const { fetch } = stubApi(() =>
       Response.json(
@@ -519,6 +575,73 @@ describe('run', () => {
     expect((await printed({})).join('\n')).not.toContain('Paused');
   });
 
+  it('says which sources a run found blocked, which it refused, and what each probe met', async () => {
+    const printed = async (sources: RunSummary['sources']) => {
+      const complete: RunView = {
+        ...RUNNING,
+        status: 'complete',
+        summary: {
+          items: 4,
+          live: 6,
+          due: 5,
+          fetches: { changed: 1, unchanged: 0, gone: 0, failed: 0, blocked: 3 },
+          statements: { added: 0, reseen: 0, withdrawn: 0 },
+          llm: { ran: 0, reused: 0, skipped: 0, failed: 0, inputTokens: 0, outputTokens: 0 },
+          entities: { created: 0, linked: 0, conflicts: 0, unresolved: 0 },
+          snapshot: {
+            published: false,
+            reason: 'nothing changed since generation 1',
+            excluded: [],
+          },
+          notes: [],
+          ...(sources === undefined ? {} : { sources }),
+        },
+      };
+      const { fetch } = stubApi(({ method }) =>
+        method === 'POST'
+          ? Response.json({ runId: RUN_ID }, { status: 202 })
+          : Response.json(complete),
+      );
+      const { io, out } = memoryIo();
+      expect(await main(['run', 'cli-products', '--wait'], { io, env: ENV, fetch })).toBe(0);
+      return out.filter((line) => /^(?:Blocked|Refused|Probed):/u.test(line));
+    };
+    expect(
+      await printed({
+        blocked: [
+          { id: 'audeze', blockedRuns: 3 },
+          { id: 'moondrop', blockedRuns: 1 },
+        ],
+        refused: ['audeze'],
+        probed: [
+          { id: 'sennheiser', outcome: 'through' },
+          { id: 'focal', outcome: 'no answer' },
+        ],
+      }),
+    ).toEqual([
+      'Blocked: audeze, 3 of 3 runs in a row; moondrop, 1 of 3 runs in a row.',
+      'Refused: audeze, after 3 blocked runs in a row. Later runs only probe it.',
+      'Probed: sennheiser, got through, so it’s live again; focal, no answer.',
+    ]);
+    // More than one refused source reads "them", and a run with nothing to say prints nothing.
+    expect(
+      await printed({
+        blocked: [
+          { id: 'audeze', blockedRuns: 3 },
+          { id: 'moondrop', blockedRuns: 3 },
+        ],
+        refused: ['audeze', 'moondrop'],
+        probed: [],
+      }),
+    ).toEqual([
+      'Blocked: audeze, 3 of 3 runs in a row; moondrop, 3 of 3 runs in a row.',
+      'Refused: audeze, moondrop, after 3 blocked runs in a row. Later runs only probe them.',
+    ]);
+    expect(await printed({ blocked: [], refused: [], probed: [] })).toEqual([]);
+    // A run from a Worker before ADR 0006 sends no sources, and the CLI prints as before.
+    expect(await printed(undefined)).toEqual([]);
+  });
+
   it('says nothing of sitemaps when no source has any, and counts one page and one source', async () => {
     const printed = async (discovery: DiscoverySummary) => {
       const complete: RunView = {
@@ -847,9 +970,71 @@ describe('revive', () => {
     expect(out).toEqual([]);
   });
 
-  it('needs pages to revive, or --refused', async () => {
+  it('needs pages to revive, --refused, or --source', async () => {
     const { io } = memoryIo();
     expect(await main(['revive', 'cli-products'], { io, env: ENV })).toBe(2);
+  });
+
+  it('puts blocked or refused sources back with --source, before any pages', async () => {
+    const { fetch, sent } = stubApi(() => Response.json({ revived: 2 }));
+    const { io, out } = memoryIo();
+    const argv = [
+      'revive',
+      'cli-products',
+      '--source',
+      'audeze',
+      '--source',
+      'sennheiser',
+      'https://maker-a.example/products/a1',
+    ];
+    expect(await main(argv, { io, env: ENV, fetch })).toBe(0);
+    expect(sent.map((request) => [request.method, request.path, request.body])).toEqual([
+      ['POST', '/datasets/cli-products/sources/revive', { sources: ['audeze', 'sennheiser'] }],
+      [
+        'POST',
+        '/datasets/cli-products/items/revive',
+        { pages: ['https://maker-a.example/products/a1'] },
+      ],
+    ]);
+    expect(out).toEqual([
+      'Revived 2 sources of cli-products. The next run reads their due pages.',
+      'Revived 2 pages of cli-products. The next run reads them.',
+    ]);
+  });
+
+  it('says when no source named was blocked or refused', async () => {
+    const { fetch, sent } = stubApi(() => Response.json({ revived: 0 }));
+    const { io, out } = memoryIo();
+    expect(
+      await main(['revive', 'cli-products', '--source', 'chord'], { io, env: ENV, fetch }),
+    ).toBe(0);
+    expect(sent).toHaveLength(1);
+    expect(out).toEqual([
+      'No source named was blocked or refused in cli-products, so none was revived.',
+    ]);
+  });
+
+  it('says its due pages when a single source was put back', async () => {
+    const { fetch } = stubApi(() => Response.json({ revived: 1 }));
+    const { io, out } = memoryIo();
+    expect(
+      await main(['revive', 'cli-products', '--source', 'audeze'], { io, env: ENV, fetch }),
+    ).toBe(0);
+    expect(out).toEqual(['Revived 1 source of cli-products. The next run reads its due pages.']);
+  });
+
+  it('puts sources back first, and revives no page after the API refuses', async () => {
+    const { fetch, sent } = stubApi(() =>
+      Response.json({ error: 'Dataset nothing doesn’t exist.' }, { status: 404 }),
+    );
+    const { io, out, err } = memoryIo();
+    const argv = ['revive', 'nothing', '--source', 'audeze', '--refused'];
+    expect(await main(argv, { io, env: ENV, fetch })).toBe(1);
+    expect(sent.map((request) => [request.method, request.path])).toEqual([
+      ['POST', '/datasets/nothing/sources/revive'],
+    ]);
+    expect(err).toEqual(['Dataset nothing doesn’t exist.']);
+    expect(out).toEqual([]);
   });
 });
 
@@ -1228,6 +1413,80 @@ describe('status', () => {
       'Held: sn_held, 2 records.',
       'Waiting for review: 0 classify, 0 match, 1 publication.',
       'crowdio: refused generation 2 at 2026-10-12T09:00:00.000Z.',
+    ]);
+  });
+
+  it('names the sources that are blocked or refused, and says when every source is live', async () => {
+    const printed = async (sources: DatasetStatus['sources']) => {
+      const { fetch } = stubApi(() =>
+        Response.json({ ...STATUS, ...(sources === undefined ? {} : { sources }) }),
+      );
+      const { io, out } = memoryIo();
+      expect(await main(['status', 'cli-products'], { io, env: ENV, fetch })).toBe(0);
+      // STATUS's own five lines come first.
+      return out.slice(5);
+    };
+    const live = { blockedRuns: 0, refusedAt: null, lastProbeAt: null, lastProbe: null };
+    expect(
+      await printed([
+        {
+          id: 'audeze',
+          blockedRuns: 3,
+          refusedAt: '2026-10-21T08:00:00.000Z',
+          lastProbeAt: '2026-11-08T08:00:00.000Z',
+          lastProbe: 'blocked',
+        },
+        {
+          id: 'sennheiser',
+          blockedRuns: 3,
+          refusedAt: '2026-10-21T08:00:00.000Z',
+          lastProbeAt: null,
+          lastProbe: null,
+        },
+        { id: 'moondrop', blockedRuns: 2, refusedAt: null, lastProbeAt: null, lastProbe: null },
+        { id: 'chord', ...live },
+      ]),
+    ).toEqual([
+      'audeze: refused since 2026-10-21, after 3 blocked runs in a row; last probe 2026-11-08: blocked.',
+      'sennheiser: refused since 2026-10-21, after 3 blocked runs in a row; not probed yet.',
+      'moondrop: blocked, 2 of 3 runs in a row.',
+    ]);
+    expect(await printed([{ id: 'chord', ...live }])).toEqual(['Every source is live.']);
+    // A Worker from before ADR 0006 sends no sources, and the CLI prints as before.
+    expect(await printed(undefined)).toEqual([]);
+  });
+
+  it('says whether Cloudflare lists Spatula as a verified bot, when the Worker says', async () => {
+    const lastLine = async (verified: boolean | undefined) => {
+      const { fetch } = stubApi(() =>
+        Response.json({ ...STATUS, ...(verified === undefined ? {} : { verified }) }),
+      );
+      const { io, out } = memoryIo();
+      expect(await main(['status', 'cli-products'], { io, env: ENV, fetch })).toBe(0);
+      return out.at(-1);
+    };
+    expect(await lastLine(true)).toBe('Cloudflare lists Spatula as a verified bot.');
+    expect(await lastLine(false)).toBe('Cloudflare doesn’t list Spatula as a verified bot yet.');
+    // A Worker from before ADR 0006 sends no `verified`, and the CLI prints as before.
+    expect(await lastLine(undefined)).toBe('other: has acknowledged nothing yet.');
+  });
+
+  it('puts the verified bot line after the lines for the sources', async () => {
+    const { fetch } = stubApi(() =>
+      Response.json({
+        ...STATUS,
+        sources: [
+          { id: 'moondrop', blockedRuns: 2, refusedAt: null, lastProbeAt: null, lastProbe: null },
+        ],
+        verified: true,
+      }),
+    );
+    const { io, out } = memoryIo();
+    expect(await main(['status', 'cli-products'], { io, env: ENV, fetch })).toBe(0);
+    // STATUS's own five lines come first.
+    expect(out.slice(5)).toEqual([
+      'moondrop: blocked, 2 of 3 runs in a row.',
+      'Cloudflare lists Spatula as a verified bot.',
     ]);
   });
 
