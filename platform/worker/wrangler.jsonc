@@ -5,11 +5,10 @@
   "compatibility_date": "2026-09-23",
   "compatibility_flags": ["nodejs_compat"],
   "observability": { "enabled": true },
-  // spatula.run, Spatula's own domain (ADR 0006): its public page, key directory, and API. The
-  // workers.dev address stays on until the CLI and the owner's scripts have moved; a follow-up
-  // turns it off, so that one address names Spatula.
+  // spatula.run, Spatula's own domain (ADR 0006): its public page, key directory, and API. It's
+  // the only address that names Spatula, so workers.dev is off.
   "routes": [{ "pattern": "spatula.run", "custom_domain": true }],
-  "workers_dev": true,
+  "workers_dev": false,
   "vars": {
     "SPATULA_VERSION": "0.2.0-dev",
     // Where the user agent sends a site that wants to know who's asking: the Worker's public page.
