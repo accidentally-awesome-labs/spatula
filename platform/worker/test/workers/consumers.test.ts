@@ -311,6 +311,8 @@ describe('the status of a dataset', () => {
         { id: 'maker-a', ...live },
         { id: 'maker-b', ...live },
       ],
+      // wrangler.jsonc's VERIFIED_BOT says "false" until the owner sets it.
+      verified: false,
     });
   });
 
@@ -331,6 +333,7 @@ describe('the status of a dataset', () => {
         { id: 'maker-a', ...live },
         { id: 'maker-b', ...live },
       ],
+      verified: false,
     });
   });
 

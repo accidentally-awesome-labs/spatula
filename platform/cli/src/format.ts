@@ -261,6 +261,14 @@ export function formatStatus(status: DatasetStatus): string[] {
       );
     }
   }
+  // A Worker from before phase 1 doesn't say.
+  if (status.verified !== undefined) {
+    lines.push(
+      status.verified
+        ? 'Cloudflare lists Spatula as a verified bot.'
+        : 'Cloudflare doesn’t list Spatula as a verified bot yet.',
+    );
+  }
   return lines;
 }
 

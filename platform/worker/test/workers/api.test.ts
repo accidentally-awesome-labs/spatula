@@ -203,6 +203,30 @@ describe('the public page', () => {
     expect(page).not.toContain('only where the site allows');
   });
 
+  it('says what it collects and for whom, how it reads and slows down, and whom to write to', async () => {
+    // The page's text, with its line breaks collapsed.
+    const page = (await (await call('GET', '/', { token: null })).text()).replace(/\s+/gu, ' ');
+    expect(page).toContain(
+      'names, identifiers such as GTINs and part numbers, and specifications. Prices come later.',
+    );
+    expect(page).toContain('It collects them for Crowdio, a site about audio gear.');
+    expect(page).toContain('It collects facts only, never descriptions or photos.');
+    expect(page).toContain(
+      'It uses an AI model only to read pages, and nothing it reads is used to train one.',
+    );
+    expect(page).toContain(
+      'It waits 15 seconds between requests to a site for the datasets it keeps today',
+    );
+    expect(page).toContain(
+      'When a site refuses it, it waits twice as long on its next visit, up to four times as long.',
+    );
+    expect(page).toContain(
+      'After three visits in a row that a site refused, it asks for one page a visit until the site answers again.',
+    );
+    expect(page).toContain('<a href="mailto:bot@spatula.run">bot@spatula.run</a>');
+    expect(page).not.toContain('open an issue');
+  });
+
   /** The page's text for these bindings, with its line breaks collapsed. */
   const textWith = async (bindings: Env) =>
     (await (await call('GET', '/', { token: null, bindings })).text()).replace(/\s+/gu, ' ');
@@ -1194,6 +1218,25 @@ describe('reviving sources', () => {
       token: null,
     });
     expect(anonymous.status).toBe(401);
+  });
+});
+
+describe('verification', () => {
+  it('says in the status whether Cloudflare lists Spatula as a verified bot', async () => {
+    await call('PUT', '/datasets/api-verified', { body: testDefinition('api-verified') });
+    const verified = async (bindings?: Env) =>
+      (
+        (await (
+          await call('GET', '/datasets/api-verified/status', bindings ? { bindings } : {})
+        ).json()) as DatasetStatus
+      ).verified;
+    // wrangler.jsonc says "false" until the owner sets it.
+    expect(await verified()).toBe(false);
+    // The generated Env types the variable as "false", the value wrangler.jsonc holds, so another
+    // value goes through unknown.
+    expect(await verified({ ...env, VERIFIED_BOT: 'true' } as unknown as Env)).toBe(true);
+    // Anything but "true" reads as not verified.
+    expect(await verified({ ...env, VERIFIED_BOT: 'yes' } as unknown as Env)).toBe(false);
   });
 });
 

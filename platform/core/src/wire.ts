@@ -204,6 +204,8 @@ export interface DatasetStatus {
     lastProbeAt: string | null;
     lastProbe: SourceProbe | null;
   }[];
+  /** Whether Cloudflare lists Spatula as a verified bot (ADR 0006). Absent before phase 1. */
+  verified?: boolean;
 }
 
 /** A saved score, as the API lists it. */

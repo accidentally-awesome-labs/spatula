@@ -1456,6 +1456,21 @@ describe('status', () => {
     expect(await printed(undefined)).toEqual([]);
   });
 
+  it('says whether Cloudflare lists Spatula as a verified bot, when the Worker says', async () => {
+    const lastLine = async (verified: boolean | undefined) => {
+      const { fetch } = stubApi(() =>
+        Response.json({ ...STATUS, ...(verified === undefined ? {} : { verified }) }),
+      );
+      const { io, out } = memoryIo();
+      expect(await main(['status', 'cli-products'], { io, env: ENV, fetch })).toBe(0);
+      return out.at(-1);
+    };
+    expect(await lastLine(true)).toBe('Cloudflare lists Spatula as a verified bot.');
+    expect(await lastLine(false)).toBe('Cloudflare doesn’t list Spatula as a verified bot yet.');
+    // A Worker from before phase 1 says nothing, and neither does the CLI (Review Focus 5).
+    expect(await lastLine(undefined)).toBe('other: has acknowledged nothing yet.');
+  });
+
   it('keeps a dataset’s name to its place in the address', async () => {
     const { fetch, sent } = stubApi(() => Response.json(STATUS));
     const { io } = memoryIo();

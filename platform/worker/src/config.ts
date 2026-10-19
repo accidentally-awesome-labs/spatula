@@ -40,3 +40,12 @@ export function consumerSecret(
 export function spatulaUserAgent(env: Env): string {
   return userAgent(env.SPATULA_VERSION, env.PUBLIC_URL);
 }
+
+/**
+ * Whether Cloudflare lists Spatula as a verified bot (ADR 0006): the VERIFIED_BOT variable says
+ * "true". It's read by name, as secrets are, because the generated Env types a variable as the
+ * very value wrangler.jsonc holds, which a comparison with "true" wouldn't pass the type check.
+ */
+export function verifiedBot(env: Env): boolean {
+  return (env as unknown as Record<string, unknown>).VERIFIED_BOT === 'true';
+}

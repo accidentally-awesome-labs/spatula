@@ -45,7 +45,7 @@ import { bodyLimit } from 'hono/body-limit';
 import { z } from 'zod';
 import { aboutPage } from './about';
 import { r2Blobs } from './blobs';
-import { consumerSecret, secret } from './config';
+import { consumerSecret, secret, verifiedBot } from './config';
 import { withDatabase } from './database';
 import { answerReview } from './review';
 
@@ -584,6 +584,7 @@ api.get('/datasets/:id/status', async (c) => {
         lastProbeAt: state.lastProbeAt?.toISOString() ?? null,
         lastProbe: state.lastProbe,
       })),
+      verified: verifiedBot(c.env),
     };
   });
   if (status === null) return c.json({ error: `Dataset ${datasetId} doesn’t exist.` }, 404);
