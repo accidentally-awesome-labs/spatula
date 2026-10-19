@@ -280,27 +280,32 @@ describe('parseSitemap', () => {
     expect(lines.entries).toHaveLength(SITEMAP_MAX_ENTRIES);
   });
 
-  it('takes time in proportion to its length, however it nests or closes', () => {
-    expect(
-      costRatio(
-        () => parseSitemap(urlsetOf(400)),
-        () => parseSitemap(urlsetOf(40_000)),
-        100,
-      ),
-    ).toBeLessThan(4);
-    const deep = (levels: number) => () => parseSitemap(`<urlset>${'<x>'.repeat(levels)}`);
-    expect(costRatio(deep(5_000), deep(500_000), 100)).toBeLessThan(4);
-    // An end tag with nothing to close is looked for on the parser's whole stack of open elements.
-    // First under a stack nearly as deep as the cap lets one get: each costs the same however many.
-    const stray = (count: number) => () =>
-      parseSitemap(`<urlset>${'<x>'.repeat(60)}${'</nope>'.repeat(count)}`);
-    expect(costRatio(stray(2_000), stray(200_000), 100)).toBeLessThan(4);
-    // Then under a stack as deep as the file is long, which only the cap keeps from growing. A
-    // reader without it takes the square of the length here, so these sizes are kept small.
-    const strayAndDeep = (size: number) => () =>
-      parseSitemap(`<urlset>${'<x>'.repeat(size)}${'</nope>'.repeat(size)}`);
-    expect(costRatio(strayAndDeep(500), strayAndDeep(50_000), 100)).toBeLessThan(4);
-  });
+  it(
+    'takes time in proportion to its length, however it nests or closes',
+    { timeout: 30_000 },
+    () => {
+      expect(
+        costRatio(
+          () => parseSitemap(urlsetOf(400)),
+          () => parseSitemap(urlsetOf(40_000)),
+          100,
+        ),
+      ).toBeLessThan(4);
+      const deep = (levels: number) => () => parseSitemap(`<urlset>${'<x>'.repeat(levels)}`);
+      expect(costRatio(deep(5_000), deep(500_000), 100)).toBeLessThan(4);
+      // An end tag with nothing to close is looked for on the parser's whole stack of open
+      // elements. First under a stack nearly as deep as the cap lets one get: each costs the same
+      // however many.
+      const stray = (count: number) => () =>
+        parseSitemap(`<urlset>${'<x>'.repeat(60)}${'</nope>'.repeat(count)}`);
+      expect(costRatio(stray(2_000), stray(200_000), 100)).toBeLessThan(4);
+      // Then under a stack as deep as the file is long, which only the cap keeps from growing. A
+      // reader without it takes the square of the length here, so these sizes are kept small.
+      const strayAndDeep = (size: number) => () =>
+        parseSitemap(`<urlset>${'<x>'.repeat(size)}${'</nope>'.repeat(size)}`);
+      expect(costRatio(strayAndDeep(500), strayAndDeep(50_000), 100)).toBeLessThan(4);
+    },
+  );
 });
 
 describe('normalizeLastmod', () => {

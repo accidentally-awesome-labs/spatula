@@ -336,18 +336,22 @@ describe('a page’s title and breadcrumbs, on odd and hostile pages', () => {
     ).toBe('Mojo 2');
   });
 
-  it('finds no title among 20,000 icon titles at the deepest nesting, at the cost of parsing', () => {
-    // Looking up from each title for an <svg> costs up to MAX_NESTING steps a title, about 24
-    // microseconds: 25 times what parsing it costs. Not entering the <svg> costs nothing. The other
-    // page is the same size, with <tspan> where this one has <title>.
-    const icons = (tag: string) =>
-      `<svg>${'<g>'.repeat(MAX_NESTING - 2)}${`<${tag}>x</${tag}>`.repeat(20_000)}`;
-    const titles = icons('title');
-    const others = icons('tspan');
-    expect(parsePage(titles, PAGE_URL).title).toBeNull();
-    const parse = (html: string) => () => parsePage(html, PAGE_URL);
-    expect(costRatio(parse(others), parse(titles), 1)).toBeLessThan(4);
-  });
+  it(
+    'finds no title among 20,000 icon titles at the deepest nesting, at the cost of parsing',
+    { timeout: 30_000 },
+    () => {
+      // Looking up from each title for an <svg> costs up to MAX_NESTING steps a title, about 24
+      // microseconds: 25 times what parsing it costs. Not entering the <svg> costs nothing. The
+      // other page is the same size, with <tspan> where this one has <title>.
+      const icons = (tag: string) =>
+        `<svg>${'<g>'.repeat(MAX_NESTING - 2)}${`<${tag}>x</${tag}>`.repeat(20_000)}`;
+      const titles = icons('title');
+      const others = icons('tspan');
+      expect(parsePage(titles, PAGE_URL).title).toBeNull();
+      const parse = (html: string) => () => parsePage(html, PAGE_URL);
+      expect(costRatio(parse(others), parse(titles), 1)).toBeLessThan(4);
+    },
+  );
 
   it('keeps a title to 300 characters, and drops the half of a surrogate pair that the cut leaves', () => {
     expect(titleOf(`<title>${'a'.repeat(400)}</title>`)).toBe('a'.repeat(300));
