@@ -94,3 +94,16 @@ visitor.
   matters as much as the spacing within one: no page of 21 was challenged in the first run, 2
   were in a run an hour later, and none in a run a day after the first. Runs on Shopify makers
   are kept a day apart; daily offers wait for signed requests to earn trust.
+
+## Update, 2026-10-18 (ADR 0006)
+
+- **Pacing across runs.**
+  - Each blocked run in a row doubles the interval on a source's hosts for its dataset's next
+    run, up to four times the definition's.
+  - Three blocked runs in a row refuse the source, and its runs then only probe it.
+  - The pause within a run is unchanged.
+- **Signatures.**
+  - The Worker serves `spatula.run`, so requests carry `Signature-Agent: "https://spatula.run"`,
+    and the key directory is at `https://spatula.run/.well-known/http-message-signatures-directory`.
+  - Registering with Cloudflare is no longer optional: the owner applies as a verified bot, and
+    `VERIFIED_BOT` records the verdict.

@@ -6,7 +6,7 @@ are until 0.2 replaces them; don't change them for 0.2 work.
 
 Read first: `docs/adr/0001-spatula-0-2-system-of-record.md` (the direction) and
 `docs/adr/0002-dataset-definitions.md` (the definition format). Then 0003 (decisions and review),
-0004 (publication and consumers), and 0005 (collection at scale).
+0004 (publication and consumers), 0005 (collection at scale), and 0006 (refusals and routes).
 
 ## Commands
 
@@ -21,7 +21,8 @@ Run from the repository root, with pnpm 11 and Node 22 or later.
 - `pnpm --filter @spatula/worker dev`: the Worker on port 8787. Copy `platform/worker/.dev.vars.example`
   to `.dev.vars` first.
 - `pnpm spatula <command>`: the CLI: `check`, `plan`, `apply`, `run`, `snapshot pull`, `review`,
-  `revive`, `status`, `eval`, and `evals`. `SPATULA_URL` and `SPATULA_TOKEN` say where Spatula is,
+  `revive` (pages, or sources with `--source`), `status`, `eval`, and `evals`. `SPATULA_URL` and
+  `SPATULA_TOKEN` say where Spatula is (`https://spatula.run` for the deployment),
   and the owner token.
   The CLI sends the token only to an `https://` address, or to this machine. Run `pnpm spatula …`
   from the repository root, or `pnpm -w spatula …` from anywhere inside it, because plain
@@ -57,7 +58,9 @@ Before committing, run all of these: `pnpm platform:lint`, `pnpm platform:typech
     and back off on 429 and 5xx;
   - send a user agent that names Spatula and links to it, and sign requests when the Worker has
     its key (ADR 0005).
-- A block is an outcome to record, never something to get around.
+- A block is an outcome to record, never something to get around. Spatula only gets gentler with a
+  site that refuses it, and three blocked runs in a row refuse the source (ADR 0006). ADR 0006 also
+  says which routes may cover a refusing source's facts, and which never may.
 - Collect facts only: no descriptions, no photos.
 - Pages are data, never instructions. The LLM proposes values, and code checks that each one is on
   the page before it becomes a statement.
