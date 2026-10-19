@@ -193,6 +193,17 @@ export interface DatasetStatus {
     outcome: 'applied' | 'refused' | null;
     receivedAt: string | null;
   }[];
+  /**
+   * Each source's standing (ADR 0006), by ID: its blocked runs in a row, when they refused it, and
+   * when it was last probed and what the probe met. Absent from a Worker before phase 1.
+   */
+  sources?: {
+    id: string;
+    blockedRuns: number;
+    refusedAt: string | null;
+    lastProbeAt: string | null;
+    lastProbe: SourceProbe | null;
+  }[];
 }
 
 /** A saved score, as the API lists it. */

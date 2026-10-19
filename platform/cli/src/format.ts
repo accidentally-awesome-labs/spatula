@@ -1,6 +1,7 @@
 import {
   EVAL_TARGETS,
   optionsOf,
+  REFUSE_AFTER_RUNS,
   type ApplySummary,
   type DatasetStatus,
   type EvalScores,
@@ -72,6 +73,28 @@ export function formatRun(run: RunView): string[] {
       ([source, left]) => `${source}, ${left} ${left === 1 ? 'page' : 'pages'} unread`,
     );
     lines.push(`Paused after pages in a row were blocked or strained: ${sources.join('; ')}.`);
+  }
+  // What the run found of its sources' standing (ADR 0006); runs before phase 1 say nothing.
+  const standing = summary.sources;
+  if (standing !== undefined) {
+    if (standing.blocked.length > 0) {
+      const blocked = standing.blocked.map(
+        (source) => `${source.id}, ${source.blockedRuns} of ${REFUSE_AFTER_RUNS} runs in a row`,
+      );
+      lines.push(`Blocked: ${blocked.join('; ')}.`);
+    }
+    if (standing.refused.length > 0) {
+      lines.push(
+        `Refused: ${standing.refused.join(', ')}, after ${REFUSE_AFTER_RUNS} blocked runs in a row. Later runs only probe ${standing.refused.length === 1 ? 'it' : 'them'}.`,
+      );
+    }
+    if (standing.probed.length > 0) {
+      const probed = standing.probed.map(
+        (probe) =>
+          `${probe.id}, ${probe.outcome === 'through' ? 'got through, so it’s live again' : probe.outcome}`,
+      );
+      lines.push(`Probed: ${probed.join('; ')}.`);
+    }
   }
   // Runs from before slice 1, and datasets with no sitemap source, say nothing of sitemaps.
   const discovery = summary.discovery;
@@ -214,6 +237,29 @@ export function formatStatus(status: DatasetStatus): string[] {
         ? `${consumer.name}: has acknowledged nothing yet.`
         : `${consumer.name}: ${consumer.outcome} generation ${consumer.generation} at ${consumer.receivedAt}.`,
     );
+  }
+  // A Worker from before phase 1 says nothing of its sources' standing (ADR 0006).
+  if (status.sources !== undefined) {
+    const day = (iso: string) => iso.slice(0, 10);
+    const standing = status.sources.filter(
+      (source) => source.blockedRuns > 0 || source.refusedAt !== null,
+    );
+    if (standing.length === 0) lines.push('Every source is live.');
+    for (const source of standing) {
+      if (source.refusedAt === null) {
+        lines.push(
+          `${source.id}: blocked, ${source.blockedRuns} of ${REFUSE_AFTER_RUNS} runs in a row.`,
+        );
+        continue;
+      }
+      const probe =
+        source.lastProbeAt === null || source.lastProbe === null
+          ? 'not probed yet'
+          : `last probe ${day(source.lastProbeAt)}: ${source.lastProbe}`;
+      lines.push(
+        `${source.id}: refused since ${day(source.refusedAt)}, after ${source.blockedRuns} blocked runs in a row; ${probe}.`,
+      );
+    }
   }
   return lines;
 }
