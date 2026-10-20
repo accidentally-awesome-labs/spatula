@@ -6,11 +6,12 @@ import { survivingValues, type StatementView } from './survivorship';
 /*
  * A record's base page and its editions (ADR 0003). A record takes its name and its other single
  * values from its base page: the page whose name every other page's differing name extends, as
- * "DJ 300 PRO X Club" extends "DJ 300 PRO X". Where no name is extended so, the base is the
- * earliest page that didn't join as an edition. Pages whose names are written as the base's, once
- * normalized, count with it. The other pages' values fill only the fields those leave unstated, so
- * a recently read edition never takes over the record's name, whichever page Spatula met first.
- * Each page whose name differs from the record's is listed as an edition, with its own GTINs.
+ * "DJ 300 PRO X Club" extends "DJ 300 PRO X", however either is spelled. Where no name is extended
+ * so, the base is the earliest page that gives a name and didn't join as an edition. Pages whose
+ * names are written as the base's, once normalized, count with it. The other pages' values fill
+ * only the fields those leave unstated, so a recently read edition never takes over the record's
+ * name, whichever page Spatula met first. Each page whose name differs from the record's is listed
+ * as an edition, with its own GTINs.
  */
 
 /** A page of a record, with its own statements. */
@@ -49,7 +50,9 @@ function extendsName(longer: string, shorter: string): boolean {
 
 /**
  * A record's base page, with the pages whose names are written as its: null for a record without
- * pages. Where every page joined as an edition, the earliest page is the base.
+ * pages. A name group extends another when any of its spellings extends any of the other's. Where
+ * every page that gives a name joined as an edition, the earliest of those is the base, and a page
+ * without a name is the base only where no page gives one.
  */
 export function basePages(
   recordType: RecordType,
@@ -57,20 +60,26 @@ export function basePages(
 ): EntityMember[] | null {
   if (members.length === 0) return null;
   const named = members.map((member) => ({ member, name: ownName(recordType, member) }));
-  // Each way of writing a name once, by its key, with the first page's spelling.
-  const names = new Map<string, string>();
+  // Each name by its key, with every spelling of it: spellings alike once normalized can still
+  // split into different words ("Moon River 2", "MoonRiver2"), so which page came first can't
+  // decide whether a name extends another.
+  const names = new Map<string, Set<string>>();
   for (const { name } of named) {
-    if (name !== null && !names.has(textKey(name))) names.set(textKey(name), name);
+    if (name !== null) names.set(textKey(name), (names.get(textKey(name)) ?? new Set()).add(name));
   }
-  const extended = [...names].filter(([key, name]) =>
-    [...names].every(([other, longer]) => other === key || extendsName(longer, name)),
+  const extendsAny = (longer: ReadonlySet<string>, shorter: ReadonlySet<string>) =>
+    [...longer].some((spelling) => [...shorter].some((base) => extendsName(spelling, base)));
+  const extended = [...names].filter(([key, spellings]) =>
+    [...names].every(([other, longer]) => other === key || extendsAny(longer, spellings)),
   );
   let key: string;
   if (extended.length === 1) {
     key = extended[0]![0];
   } else {
+    // A page that gives a name comes first, so a page without one is the base only where none does.
     const [first] = [...named].sort(
       (a, b) =>
+        Number(a.name === null) - Number(b.name === null) ||
         Number(a.member.edition) - Number(b.member.edition) ||
         compareText(a.member.firstSeen, b.member.firstSeen) ||
         compareText(a.member.url, b.member.url),

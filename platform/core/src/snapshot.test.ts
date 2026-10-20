@@ -307,6 +307,84 @@ describe('basePages', () => {
     expect(base?.map((member) => member.url)).toEqual(['https://maker.example/p/Hugo']);
     expect(basePages(product, [])).toBeNull();
   });
+
+  it('takes the same base whichever spelling of a name Spatula met first', () => {
+    // "Moon River 2" and "MoonRiver2" are one name written two ways, in different words. The Ti
+    // extends the name as one of them writes it.
+    const named = (name: string, firstSeen: string, edition: boolean) => {
+      const url = `https://maker.example/p/${encodeURIComponent(name)}`;
+      return page(
+        url,
+        firstSeen,
+        edition,
+        said(url, SEEN, { brand: 'Moondrop', name, category: 'Headphones' }),
+      );
+    };
+    const ti = named('MoonRiver 2 Ti', '2026-10-01T00:00:00.000Z', false);
+    const orders = [
+      [
+        ti,
+        named('Moon River 2', '2026-10-02T00:00:00.000Z', false),
+        named('MoonRiver2', '2026-10-03T00:00:00.000Z', true),
+      ],
+      [
+        ti,
+        named('MoonRiver2', '2026-10-02T00:00:00.000Z', false),
+        named('Moon River 2', '2026-10-03T00:00:00.000Z', true),
+      ],
+    ];
+    for (const members of orders) {
+      expect(
+        basePages(product, members)
+          ?.map((member) => member.url)
+          .sort(),
+      ).toEqual(['https://maker.example/p/Moon%20River%202', 'https://maker.example/p/MoonRiver2']);
+      const [record] = buildRecords(product, [
+        {
+          canonicalId: 'sp_mr',
+          statements: members.flatMap((member) => member.statements),
+          members,
+        },
+      ]).records;
+      expect(record!.fields.name).toBe('Moon River 2');
+      expect(record!.editions).toEqual([
+        { name: 'MoonRiver 2 Ti', officialUrl: ti.url, gtins: [] },
+      ]);
+    }
+  });
+
+  it('never takes a page without a name as the base while another page gives one', () => {
+    const nameless = page(
+      'https://maker.example/p/echo',
+      '2026-10-01T00:00:00.000Z',
+      false,
+      said('https://maker.example/p/echo', SEEN, { brand: 'Moondrop', category: 'Headphones' }),
+    );
+    const echo = (letter: string, firstSeen: string, lastSeen: string) => {
+      const url = `https://maker.example/p/echo-${letter.toLowerCase()}`;
+      return page(url, firstSeen, true, said(url, lastSeen, { name: `Echo ${letter}` }));
+    };
+    // Echo B was read last, so survivorship across every page would name the record after it.
+    const members = [
+      nameless,
+      echo('A', '2026-10-02T00:00:00.000Z', SEEN),
+      echo('B', '2026-10-03T00:00:00.000Z', LATER),
+    ];
+    expect(basePages(product, members)?.map((member) => member.url)).toEqual([
+      'https://maker.example/p/echo-a',
+    ]);
+    const [record] = buildRecords(product, [
+      {
+        canonicalId: 'sp_echo',
+        statements: members.flatMap((member) => member.statements),
+        members,
+      },
+    ]).records;
+    expect(record!.fields).toEqual({ brand: 'Moondrop', name: 'Echo A', category: 'Headphones' });
+    expect(record!.editions).toEqual([
+      { name: 'Echo B', officialUrl: 'https://maker.example/p/echo-b', gtins: [] },
+    ]);
+  });
 });
 
 describe('snapshotSchema', () => {

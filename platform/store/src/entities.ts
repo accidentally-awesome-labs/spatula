@@ -5,7 +5,6 @@ import {
   editionsOf,
   identityClaims,
   lineupOf,
-  MAX_LINEUP,
   MAX_MATCH_QUESTIONS,
   mergeValues,
   nameField,
@@ -437,8 +436,11 @@ export interface MatchSides {
 /** At most this many values of each field go into a question's state. */
 const SIDE_VALUES_MAX = 20;
 
-/** At most this many edition names go into a question's state, as many as its lineup shows. */
-const SIDE_EDITIONS_MAX = MAX_LINEUP;
+/**
+ * At most this many edition names go into a question's state, and so into its key. Not the
+ * lineup's size, which isn't part of the key: changing that must not ask settled questions again.
+ */
+const SIDE_EDITIONS_MAX = 10;
 
 /**
  * A match question's two sides: the page's surviving values, and the record's, merged from its base
