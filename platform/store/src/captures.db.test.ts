@@ -75,15 +75,25 @@ describe('recordCapture', () => {
       expect(await captureById(db, input.id)).toEqual(first);
       expect(await captureById(db, 'cp_none')).toBeNull();
 
-      await setCaptureRead(db, {
-        id: input.id,
-        readKey: 'captures/test-products/x.json.gz',
-        reader: 1,
-      });
+      expect(
+        await setCaptureRead(db, {
+          id: input.id,
+          readKey: 'captures/test-products/x.json.gz',
+          reader: 1,
+        }),
+      ).toBe(1);
       expect(await captureById(db, input.id)).toMatchObject({
         readKey: 'captures/test-products/x.json.gz',
         reader: 1,
       });
+      // A capture that isn't there takes no read.
+      expect(
+        await setCaptureRead(db, {
+          id: 'cp_none',
+          readKey: 'captures/test-products/none.json.gz',
+          reader: 1,
+        }),
+      ).toBe(0);
     }));
 });
 

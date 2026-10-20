@@ -306,6 +306,30 @@ describe('the page archive', { timeout: 20_000 }, () => {
     warn.mockRestore();
   });
 
+  it('keeps no read for a capture deleted since it was read, but gives the read', async () => {
+    const {
+      world,
+      pages: [a1],
+    } = await worldFor(testDefinition('archive-read-gone'), {
+      ...standardRoutes(),
+      [URLS.a1]: { status: 200, body: A1('read-gone') },
+    });
+    await refresh(world, 'archive-read-gone');
+    // A caller holds A1's capture as the database gave it, without its read's file, and then a
+    // cleanup deletes the row. A1's page still holds the body.
+    const [capture] = await capturesOf(a1!.id);
+    world.stored.delete(capture!.readKey!);
+    await db.delete(captures).where(eq(captures.id, capture!.id));
+    const files = [...world.stored.keys()];
+
+    // The read is made from the body and given, but no row names a file for it, so none is written.
+    expect(await readCapture(world.ports, capture!)).toMatchObject({
+      url: URLS.a1,
+      title: 'A1 | Maker A',
+    });
+    expect([...world.stored.keys()]).toEqual(files);
+  });
+
   it('cites the capture in a decided category, and in a person’s answer', async () => {
     const sure = await worldFor(decidedDefinition('archive-decided'), standardRoutes());
     await refresh(sure.world, 'archive-decided');

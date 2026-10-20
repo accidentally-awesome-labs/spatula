@@ -62,6 +62,8 @@ export async function readPageBody(
  * names the file before the file is written. Cleanup and a purge find reads only through the row's
  * key, so a write that fails between the two must leave a key with no file, which they delete
  * harmlessly and `readCapture` makes again, not a file no row names, which they would never delete.
+ * For the same reason, a capture that a cleanup or a purge has deleted since its caller read it
+ * gets no file.
  */
 export async function storeRead(
   ports: ArchivePorts,
@@ -72,17 +74,18 @@ export async function storeRead(
   const key = readKey(capture.datasetId, capture.id);
   const json = new TextEncoder().encode(JSON.stringify(pageRead(page)));
   const packed = await gzip(json);
-  await ports.withDb((db) =>
+  const noted = await ports.withDb((db) =>
     setCaptureRead(db, { id: capture.id, readKey: key, reader: PAGE_READ_VERSION }),
   );
+  if (noted === 0) return;
   await ports.blobs.put(key, packed, 'application/gzip');
 }
 
 /**
  * What Spatula read from a capture's page: the read kept with it, or, for a capture without one, a
- * read made now from its body, and kept. Null when the body is gone (a purge took it) or can't be
- * read (it nests too deep, ADR 0005). This is how a later change reads a page again without
- * fetching it.
+ * read made now from its body, and kept while the capture is. Null when the body is gone (a purge
+ * took it) or can't be read (it nests too deep, ADR 0005). This is how a later change reads a page
+ * again without fetching it.
  */
 export async function readCapture(
   ports: ArchivePorts,

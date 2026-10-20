@@ -98,15 +98,20 @@ export async function latestCaptures(
   return new Map(rows.map((row) => [row.itemId, row]));
 }
 
-/** Notes where what Spatula read from a capture is kept, and the version that read it. */
+/**
+ * Notes where what Spatula read from a capture is kept, and the version that read it. Returns how
+ * many captures it noted that on: none when the capture has been deleted.
+ */
 export async function setCaptureRead(
   db: Executor,
   input: { id: string; readKey: string; reader: number },
-): Promise<void> {
-  await db
+): Promise<number> {
+  const rows = await db
     .update(captures)
     .set({ readKey: input.readKey, reader: input.reader })
-    .where(eq(captures.id, input.id));
+    .where(eq(captures.id, input.id))
+    .returning({ id: captures.id });
+  return rows.length;
 }
 
 /**
