@@ -118,6 +118,7 @@ describe('classifying pages', { timeout: 20_000 }, () => {
       'sources',
       'resolve',
       'snapshot',
+      'captures',
       'finish',
     ]);
     expect(first.summary.classify).toEqual({

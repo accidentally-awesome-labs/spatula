@@ -8,8 +8,15 @@ import {
   type Page,
   type PageRead,
 } from '@spatula/core';
-import { setCaptureRead, type CaptureRow } from '@spatula/store';
-import { pageKey, type BlobPort, type RefreshPorts } from './pipeline';
+import {
+  deleteCaptures,
+  freedKeys,
+  prunableCaptures,
+  setCaptureRead,
+  type CaptureRow,
+} from '@spatula/store';
+import { pageKey, type BlobPort, type Context, type RefreshPorts } from './pipeline';
+import { storable } from './text';
 
 /*
  * The page archive's files (ADR 0008). A page's body is kept gzipped under its SHA-256, so an
@@ -105,5 +112,40 @@ function parseKept(bytes: Uint8Array): PageRead | null {
     return parsePageRead(JSON.parse(new TextDecoder().decode(bytes)));
   } catch {
     return null;
+  }
+}
+
+/** At most this many captures are deleted in one run; the next run goes on (ADR 0008). */
+export const MAX_PRUNED_PER_RUN = 1_000;
+
+/**
+ * The archive's cleanup, a step of every run (ADR 0008): the dataset's captures that retention no
+ * longer keeps, their reads, and the bodies nothing else holds. The files go first and the rows
+ * after, so a step that runs again finds the same rows and finishes the job. The run's start is its
+ * clock, so a run that replays its steps prunes the same captures. A failure is a note, never a
+ * failed run: the snapshot is out by now, and the next run cleans up.
+ */
+export async function cleanUpCaptures(
+  context: Pick<Context, 'datasetId' | 'startedAt'>,
+  ports: ArchivePorts,
+): Promise<{ pruned: number; note: string | null }> {
+  try {
+    return await ports.withDb(async (db) => {
+      const ids = await prunableCaptures(db, {
+        datasetId: context.datasetId,
+        now: context.startedAt,
+        limit: MAX_PRUNED_PER_RUN,
+      });
+      if (ids.length === 0) return { pruned: 0, note: null };
+      const freed = await freedKeys(db, ids);
+      await ports.blobs.delete([
+        ...freed.hashes.flatMap((hash) => [pageKey(hash), rawPageKey(hash)]),
+        ...freed.reads,
+      ]);
+      return { pruned: await deleteCaptures(db, ids), note: null };
+    });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    return { pruned: 0, note: storable(`The archive wasn’t cleaned up this run: ${message}`) };
   }
 }

@@ -134,6 +134,7 @@ describe('runRefresh', () => {
       'sources',
       'resolve',
       'snapshot',
+      'captures',
       'finish',
     ]);
     expect(first.summary).toMatchObject({
@@ -938,7 +939,15 @@ describe('runRefresh', () => {
     // Read five minutes ago, so nothing is due and nothing is fetched.
     const before = world.web.requests.length;
     const second = await refresh(world, 'refresh-plan', {});
-    expect(second.names).toEqual(['load', 'plan', 'sources', 'resolve', 'snapshot', 'finish']);
+    expect(second.names).toEqual([
+      'load',
+      'plan',
+      'sources',
+      'resolve',
+      'snapshot',
+      'captures',
+      'finish',
+    ]);
     expect(second.summary).toMatchObject({ items: 0, due: 0, live: 3 });
     expect(world.web.requests.length).toBe(before);
 
@@ -1027,6 +1036,7 @@ describe('runRefresh', () => {
       'sources',
       'resolve',
       'snapshot',
+      'captures',
       'finish',
     ]);
     expect(first.summary).toMatchObject({ items: 52, due: 52, live: 52, fetches: { gone: 52 } });
@@ -1853,6 +1863,7 @@ describe('a run replayed from the steps it finished', () => {
       'sources',
       'resolve',
       'snapshot',
+      'captures',
       'finish',
     ]);
     expect(new Set(second.names).size).toBe(second.names.length);

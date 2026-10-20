@@ -2,12 +2,12 @@ import { gunzip, runIdFor, sha256Hex } from '@spatula/core';
 import { captures, latestCapture, listOpenReviews, statements } from '@spatula/store';
 import { testDefinition } from '@spatula/store/fixtures';
 import { and, asc, eq, isNull } from 'drizzle-orm';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { db } from '../test/node/db';
 import { fakeDecider, fakeStep, type StepCache } from '../test/node/fakes';
 import { decidedDefinition, refresh, worldFor } from '../test/node/runs';
 import { A1, standardRoutes, URLS } from '../test/pages';
-import { rawPageKey, readCapture, readKey, readPageBody } from './captures';
+import { cleanUpCaptures, rawPageKey, readCapture, readKey, readPageBody } from './captures';
 import { pageKey } from './pipeline';
 import { runRefresh } from './refresh';
 import { answerReview } from './review';
@@ -176,17 +176,24 @@ describe('the page archive', { timeout: 20_000 }, () => {
         await real.put(key, body, contentType);
       },
     };
+    // Keeping a read that fails is a warning, which the test reads instead of printing.
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
     const { summary } = await refresh(world, 'archive-read-fails');
     expect(summary.captures).toEqual({ stored: 3, pruned: 0 });
     const [capture] = await capturesOf(a1!.id);
     const key = readKey('archive-read-fails', capture!.id);
     expect(capture!.readKey).toBe(key);
     expect(world.stored.has(key)).toBe(false);
+    expect(warn).toHaveBeenCalledWith(
+      expect.stringContaining(capture!.id),
+      expect.stringContaining('R2 refused the write'),
+    );
 
     // With the store back, the read is made again from the body, and kept under the same key.
     world.ports.blobs = real;
     expect(await readCapture(world.ports, capture!)).toMatchObject({ title: 'A1 | Maker A' });
     expect(world.stored.has(key)).toBe(true);
+    warn.mockRestore();
   });
 
   it('cites the capture in a decided category, and in a person’s answer', async () => {
@@ -237,5 +244,75 @@ describe('the page archive', { timeout: 20_000 }, () => {
     const cited = Object.values(await citations(a1!.id));
     expect(cited.length).toBeGreaterThan(0);
     expect(cited.every((captureId) => captureId === null)).toBe(true);
+  });
+});
+
+const DAY = 24 * 60 * 60 * 1000;
+
+describe('the archive’s cleanup', { timeout: 30_000 }, () => {
+  it('deletes what retention lets go, with its files, and nothing twice', async () => {
+    const {
+      world,
+      pages: [a1],
+    } = await worldFor(testDefinition('archive-clean'), standardRoutes());
+    // Three runs, each finding A1's page under a new token, as Shopify's pages change: three
+    // captures. A1's values were all found in the first. The tokens are this test's own, since a
+    // body that another test's dataset holds too is a file cleanup keeps.
+    for (const token of ['clean-one', 'clean-two', 'clean-three']) {
+      world.web.routes.set(URLS.a1, { status: 200, body: A1(token) });
+      await refresh(world, 'archive-clean');
+    }
+    const [first, second, third] = await capturesOf(a1!.id);
+    expect(third).toBeDefined();
+
+    // A year on, A1 changes once more. The first capture stays, since A1's current values cite it;
+    // the second and third go, with their files.
+    world.clock.advance(366 * DAY);
+    world.web.routes.set(URLS.a1, { status: 200, body: A1('clean-four') });
+    const later = await refresh(world, 'archive-clean');
+    expect(later.names.slice(-3)).toEqual(['snapshot', 'captures', 'finish']);
+    expect(later.summary.captures).toEqual({ stored: 1, pruned: 2 });
+    const left = await capturesOf(a1!.id);
+    expect(left.map((capture) => capture.id)).toEqual([first!.id, expect.any(String)]);
+    for (const gone of [second!, third!]) {
+      expect(world.stored.has(pageKey(gone.contentHash))).toBe(false);
+      expect(world.stored.has(gone.readKey!)).toBe(false);
+    }
+    expect(world.stored.has(pageKey(first!.contentHash))).toBe(true);
+    expect(world.stored.has(pageKey(left[1]!.contentHash))).toBe(true);
+
+    // The step again, as a Workflow runs a step again: nothing more goes.
+    const context = { datasetId: 'archive-clean', startedAt: world.clock.now() };
+    expect(await cleanUpCaptures(context, world.ports)).toEqual({ pruned: 0, note: null });
+  });
+
+  it('notes a cleanup that failed, finishes the run, and cleans up in the next', async () => {
+    const {
+      world,
+      pages: [a1],
+    } = await worldFor(testDefinition('archive-clean-fails'), standardRoutes());
+    for (const token of ['one', 'two', 'three']) {
+      world.web.routes.set(URLS.a1, { status: 200, body: A1(token) });
+      await refresh(world, 'archive-clean-fails');
+    }
+    world.clock.advance(366 * DAY);
+    const blobs = world.ports.blobs;
+    world.ports.blobs = {
+      ...blobs,
+      async delete() {
+        throw new Error('the blob store is down');
+      },
+    };
+    const failed = await refresh(world, 'archive-clean-fails');
+    expect(failed.summary.captures).toEqual({ stored: 0, pruned: 0 });
+    expect(failed.summary.notes).toContain(
+      'The archive wasn’t cleaned up this run: the blob store is down',
+    );
+    expect(await capturesOf(a1!.id)).toHaveLength(3);
+
+    world.ports.blobs = blobs;
+    const next = await refresh(world, 'archive-clean-fails');
+    expect(next.summary.captures).toEqual({ stored: 0, pruned: 1 });
+    expect(await capturesOf(a1!.id)).toHaveLength(2);
   });
 });

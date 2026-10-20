@@ -343,6 +343,41 @@ describe('run', () => {
     ]);
   });
 
+  it('says what the run kept in the archive, and cleaned up', async () => {
+    const complete: RunView = {
+      ...RUNNING,
+      status: 'complete',
+      finishedAt: '2026-10-10T00:01:00.000Z',
+      summary: {
+        items: 3,
+        fetches: { changed: 3, unchanged: 0, gone: 0, failed: 0, blocked: 0 },
+        statements: { added: 19, reseen: 0, withdrawn: 0 },
+        captures: { stored: 3, pruned: 1 },
+        llm: { ran: 3, reused: 0, skipped: 0, failed: 0, inputTokens: 3000, outputTokens: 150 },
+        entities: { created: 3, linked: 0, conflicts: 0, unresolved: 0 },
+        snapshot: { published: true, generation: 1, snapshotId: 'sn_x', records: 3, excluded: [] },
+        notes: [],
+      },
+    };
+    const { fetch } = stubApi(({ method }) =>
+      method === 'POST'
+        ? Response.json({ runId: RUN_ID }, { status: 202 })
+        : Response.json(complete),
+    );
+    const { io, out } = memoryIo();
+    expect(await main(['run', 'cli-products', '--wait'], { io, env: ENV, fetch })).toBe(0);
+    expect(out).toEqual([
+      `Started ${RUN_ID}.`,
+      `Run ${RUN_ID}: complete.`,
+      'Pages: 3. Changed 3, unchanged 0, gone 0, failed 0, blocked 0.',
+      'Statements: 19 added, 0 seen again, 0 withdrawn.',
+      'LLM: ran 3, reused 0, skipped 0, failed 0; 3000 tokens in, 150 out.',
+      'Archive: 3 captures stored, 1 cleaned up.',
+      'Entities: 3 new, 0 linked, 0 conflicts, 0 without an identity yet.',
+      'Snapshot: generation 1, 3 records.',
+    ]);
+  });
+
   it('follows the run already started in this slot, and fails when it fails', async () => {
     const failed: RunView = {
       ...RUNNING,

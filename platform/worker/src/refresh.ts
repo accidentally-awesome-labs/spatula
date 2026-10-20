@@ -49,7 +49,7 @@ import {
   type ItemRef,
   type StatementCounts,
 } from '@spatula/store';
-import { readPageBody, storeBody, storeRead } from './captures';
+import { cleanUpCaptures, readPageBody, storeBody, storeRead } from './captures';
 import { cascadeField, classifyItem, classifyTarget, decidedByLlm } from './classify';
 import { discoverSource } from './discovery';
 import { matchItem } from './match';
@@ -97,7 +97,8 @@ export {
  * through the dataset's gates (publish.ts): a snapshot is published when the gates allow it, and
  * held for the owner's review when they don't. Nothing here imports Cloudflare: the Workflow
  * passes real ports, and the tests pass fakes. A source that refused three runs in a row gets only
- * a probe; a step after the pages counts each source's standing (ADR 0006).
+ * a probe; a step after the pages counts each source's standing (ADR 0006). The last step before
+ * the run finishes cleans up the page archive (ADR 0008).
  */
 
 export interface RefreshParams {
@@ -488,6 +489,10 @@ export async function runRefresh(
     for (const text of resolved.notes) note(summary, text);
 
     summary.snapshot = await step.do('snapshot', () => publish(context, ports));
+    // The archive's cleanup comes after publishing, so it never holds a snapshot up (ADR 0008).
+    const cleaned = await step.do('captures', () => cleanUpCaptures(context, ports));
+    if (summary.captures !== undefined) summary.captures.pruned = cleaned.pruned;
+    if (cleaned.note !== null) note(summary, cleaned.note);
     await step.do('finish', () =>
       ports.withDb((db) => finishRun(db, runId, { status: 'complete', summary })),
     );
