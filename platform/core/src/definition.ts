@@ -2,6 +2,7 @@ import { z } from 'zod';
 import { selectorError } from './css';
 import { NONE_OF_THESE } from './decision-types';
 import { FIELD_TYPES, normalizeValue, type FieldDef } from './fields';
+import { SCOPE_MAX, TAXONOMY_FIELDS } from './taxonomy';
 
 /*
  * A dataset definition: the record type a dataset keeps, its fields and identity, the sources it
@@ -154,6 +155,9 @@ const recordTypeSchema = z.strictObject({
     keys: z.array(z.array(name).min(1)).default([]),
   }),
   fields: z.record(name, fieldSchema),
+  // The taxonomy's decided fields (ADR 0007): shelf, functions, and features, with category kept for
+  // one release. The taxonomy itself is the dataset's, seeded and versioned in Spatula.
+  taxonomy: z.strictObject({ decide: z.literal(true) }).optional(),
 });
 
 const policySchema = z.strictObject({
@@ -192,6 +196,8 @@ const budgetSchema = z.strictObject({
 
 const shapeSchema = z.strictObject({
   dataset: slug,
+  // What the dataset holds and what it leaves out, in words (ADR 0007). A taxonomy keeps to it.
+  scope: z.string().trim().min(1).max(SCOPE_MAX).optional(),
   recordTypes: z.record(name, recordTypeSchema),
   sources: z.array(sourceSchema).min(1),
   // These defaults are functions, so each parse gets objects of its own. Zod copies only the outer
@@ -221,6 +227,11 @@ export type SitemapSource = Extract<Source, { kind: 'sitemap' }>;
 /** The record type's field that the decision cascade may fill, if it has one. */
 export function decidedField(recordType: RecordType): [string, FieldDef] | null {
   return Object.entries(recordType.fields).find(([, field]) => field.decide === true) ?? null;
+}
+
+/** Whether the record type takes its decided fields from the dataset's taxonomy (ADR 0007). */
+export function hasTaxonomy(recordType: RecordType): boolean {
+  return recordType.taxonomy?.decide === true;
 }
 
 /** A definition, with defaults filled in, or every problem with it as `path: message`. */
@@ -277,6 +288,12 @@ function checkDefinition(definition: z.output<typeof shapeSchema>, report: Repor
       ['recordTypes'],
       'Declare exactly one record type. Datasets with several arrive in a later version.',
     );
+  }
+  if (
+    definition.scope === undefined &&
+    Object.values(definition.recordTypes).some((recordType) => recordType.taxonomy !== undefined)
+  ) {
+    report(['scope'], 'A dataset with a taxonomy states its scope: what is in, and what is out.');
   }
   for (const [typeName, recordType] of Object.entries(definition.recordTypes)) {
     checkRecordType(['recordTypes', typeName], recordType, report);
@@ -407,10 +424,32 @@ function checkRecordType(at: Path, recordType: RecordType, report: Report): void
   if (Object.values(fields).filter((field) => field.decide).length > 1) {
     report([...at, 'fields'], 'Only one field of a record type can be decided.');
   }
+  if (recordType.taxonomy !== undefined) {
+    for (const reserved of [...TAXONOMY_FIELDS, 'category']) {
+      if (Object.hasOwn(fields, reserved)) {
+        report(
+          [...at, 'fields', reserved],
+          `A record type with a taxonomy gets shelf, functions, and features from it, and category for one release, so it can’t declare ${reserved}.`,
+        );
+      }
+    }
+    if (Object.values(fields).some((field) => field.decide)) {
+      report([...at, 'taxonomy'], 'A record type has a decided field or a taxonomy, never both.');
+    }
+  }
 }
 
 function checkSource(at: Path, source: Source, recordType: RecordType, report: Report): void {
   for (const [fieldName, value] of Object.entries(source.fixed)) {
+    if (fieldName === 'shelf' && recordType.taxonomy !== undefined) {
+      if (typeof value !== 'string' || value.trim() === '' || value.length > 80) {
+        report([...at, 'fixed', fieldName], 'Fix the shelf by its slug or its name.');
+      }
+      if ('shelf' in source.extract) {
+        report([...at, 'extract', 'shelf'], 'shelf is fixed, so it can’t also be extracted.');
+      }
+      continue;
+    }
     const field = recordType.fields[fieldName];
     const path = [...at, 'fixed', fieldName];
     if (field === undefined) {
@@ -429,6 +468,19 @@ function checkSource(at: Path, source: Source, recordType: RecordType, report: R
     }
   }
   for (const [fieldName, rule] of Object.entries(source.extract)) {
+    if (fieldName === 'shelf' && recordType.taxonomy !== undefined) {
+      if ('url' in rule) {
+        report(
+          [...at, 'extract', fieldName],
+          'A shelf comes from a selector’s text, not the page address.',
+        );
+      } else {
+        const error = selectorError(rule.css);
+        if (error !== null)
+          report([...at, 'extract', fieldName, 'css'], `The selector doesn’t parse: ${error}`);
+      }
+      continue;
+    }
     const field = recordType.fields[fieldName];
     const path = [...at, 'extract', fieldName];
     if (field === undefined) {
