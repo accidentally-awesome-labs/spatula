@@ -152,6 +152,8 @@ export const items = pgTable(
     }).onDelete('cascade'),
     uniqueIndex('items_source_locator').on(t.datasetId, t.sourceId, t.locator),
     index('items_entity').on(t.entityId),
+    // A file is deleted only when no page holds it (ADR 0008).
+    index('items_content').on(t.contentHash),
     check(
       'items_status',
       sql`${t.status} in ('live', 'gone', 'refused', 'excluded', 'irrelevant')`,
@@ -233,6 +235,59 @@ export const fetches = pgTable(
   ],
 );
 
+/**
+ * The page archive (ADR 0008): a page as a fetch found it. Its body is kept gzipped in R2 under its
+ * SHA-256, `pages/<content_hash>.gz`, and what Spatula read from it under `read_key`. A page read
+ * again unchanged adds none, so a page's captures differ from one to the next. Captures are private
+ * evidence: they never reach a snapshot.
+ */
+export const captures = pgTable(
+  'captures',
+  {
+    /** `cp_` and 20 characters, from the fetch and the body, so a step that runs again keeps one. */
+    id: text('id').primaryKey(),
+    datasetId: text('dataset_id')
+      .notNull()
+      .references(() => datasets.id, { onDelete: 'cascade' }),
+    itemId: text('item_id')
+      .notNull()
+      .references(() => items.id, { onDelete: 'cascade' }),
+    /**
+     * The source the page belonged to when it was captured. Pages move between sources (ADR 0006),
+     * and a purge takes what was captured under a source too. Like a sitemap fetch's source, it has
+     * no foreign key: sources are keyed by dataset and ID, and are never deleted.
+     */
+    sourceId: text('source_id').notNull(),
+    fetchId: text('fetch_id')
+      .notNull()
+      .references(() => fetches.id, { onDelete: 'cascade' }),
+    url: text('url').notNull(),
+    finalUrl: text('final_url').notNull(),
+    httpStatus: integer('http_status'),
+    etag: text('etag'),
+    lastModified: text('last_modified'),
+    fetchedAt: time('fetched_at').notNull(),
+    /** The body's SHA-256 as it arrived, which names its file. */
+    contentHash: text('content_hash').notNull(),
+    /** The body's size as it arrived; null when the fetch brought no body (a 304). */
+    bytes: integer('bytes'),
+    /** The gzipped file's size; null when this capture stored no file of its own. */
+    storedBytes: integer('stored_bytes'),
+    /** The Content Signals the host's robots.txt gave for the fetch, which robots.txt allowed. */
+    signals: jsonb('signals').$type<ContentSignals>(),
+    /** Where what Spatula read from the page is kept, and the version that read it; null until then. */
+    readKey: text('read_key'),
+    reader: integer('reader'),
+    createdAt: time('created_at').notNull().defaultNow(),
+  },
+  (t) => [
+    index('captures_item').on(t.itemId, t.fetchedAt),
+    index('captures_dataset_source').on(t.datasetId, t.sourceId),
+    index('captures_content').on(t.contentHash),
+    index('captures_fetch').on(t.fetchId),
+  ],
+);
+
 export const statements = pgTable(
   'statements',
   {
@@ -258,6 +313,8 @@ export const statements = pgTable(
     lastFetchId: text('last_fetch_id')
       .notNull()
       .references(() => fetches.id, { onDelete: 'no action' }),
+    /** The capture the value was first found in (ADR 0008); null before the archive, or once it's gone. */
+    captureId: text('capture_id').references(() => captures.id, { onDelete: 'set null' }),
     firstSeen: time('first_seen').notNull(),
     lastSeen: time('last_seen').notNull(),
     withdrawnAt: time('withdrawn_at'),
@@ -271,6 +328,7 @@ export const statements = pgTable(
     index('statements_dataset').on(t.datasetId),
     index('statements_fetch').on(t.fetchId),
     index('statements_last_fetch').on(t.lastFetchId),
+    index('statements_capture').on(t.captureId),
     check(
       'statements_method',
       sql`${t.method} in ('jsonld', 'microdata', 'opengraph', 'rule', 'llm', 'api', 'feed', 'human')`,
