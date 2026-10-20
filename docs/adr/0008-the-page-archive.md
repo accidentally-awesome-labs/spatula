@@ -45,10 +45,12 @@ it is now. So Spatula keeps what it reads.
     that fails is a note in the run's summary, never a failed run.
 - **Purging.** `pnpm spatula purge <dataset> --source <id>` deletes a source's captures (those of
   the pages it holds, and those taken under it), and forgets its pages' stored copies, for when a
-  site asks, a policy changes, or a source is retired. It keeps the source's statements, which are
-  facts, and refuses while a run of the dataset is going: run it again once the run has finished.
-  It holds the dataset's lock while it works, the lock a run takes to start, so no run starts
-  mid-purge. It leaves the source in the definition, whose next run would capture its pages again.
+  site asks, a policy changes, or a source is retired. It also deletes the copies its pages' fetches
+  stored before the archive, and forgets the hashes those fetches logged, so a purge run again finds
+  nothing left. It keeps the source's statements, which are facts, and refuses while a run of the
+  dataset is going: run it again once the run has finished. It holds the dataset's lock while it
+  works, the lock a run takes to start, so no run starts mid-purge. It leaves the source in the
+  definition, whose next run would capture its pages again.
 - **Reading history.** A later change reads a page again without fetching it: the store's
   `latestCapture` finds a page's capture, and the Worker's `readCapture` gives what Spatula read
   from it, made from the body when a capture has no read of its own.
@@ -72,4 +74,7 @@ it is now. So Spatula keeps what it reads.
   and this is left as it is.
 - A run that stops between storing a page's body and recording its fetch can leave that body's file
   with nothing naming it, so neither cleanup nor a purge finds it.
+- A purge finds the copies stored before the archive through the fetches of the pages a source holds
+  now. Those of pages that have since moved away from the source can't be attributed to it, and
+  stay.
 - Sitemaps aren't archived: the pages they list are.
