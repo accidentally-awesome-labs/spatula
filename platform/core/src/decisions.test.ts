@@ -4,10 +4,13 @@ import {
   cascade,
   createLlmDecider,
   optionsOf,
+  outcomeProbability,
   questionError,
   readProbabilities,
+  sharingOutcome,
   type Decider,
   type DecisionRequest,
+  type Question,
 } from './decisions';
 import type { LlmPort } from './llm';
 
@@ -548,5 +551,104 @@ describe('the LLM decider', () => {
       `It converts audio. ${'x'.repeat(481)}`,
     );
     expect(await evidence(`${'x'.repeat(499)}😀`)).toBe(`${'x'.repeat(499)}\uFFFD`);
+  });
+});
+
+describe('a question whose answers share outcomes', () => {
+  const GROUPED: DecisionRequest = {
+    type: 'match',
+    question: {
+      type: 'choice',
+      prompt: 'How is record A related to record B?',
+      options: ['same', 'edition', 'spec-version', 'other-model', 'unrelated'],
+      outcomes: {
+        same: 'join',
+        edition: 'edition',
+        'spec-version': 'apart',
+        'other-model': 'apart',
+        unrelated: 'apart',
+      },
+    },
+    criteria: 'Compare the names and the specifications.',
+    evidence: 'Record A: Hugo 2. Record B: Hugo.',
+  };
+  const ask = (request: DecisionRequest, probabilities: Record<string, number>) =>
+    cascade({ request, rule: null, deciders: [decider('llm:a', probabilities)], accept: 0.95 });
+
+  it('takes the likeliest answer when its outcome is sure enough, though the answer alone isn’t', async () => {
+    const probabilities = { 'other-model': 0.6, 'spec-version': 0.38, same: 0.02 };
+    expect(await ask(GROUPED, probabilities)).toEqual({
+      by: 'adapter',
+      adapter: 'llm:a',
+      answer: 'other-model',
+      probability: 0.98,
+      probabilities,
+      evidence: 'llm:a says so',
+      usage,
+    });
+  });
+
+  it('reaches the threshold with a total that floating point puts a hair under it', async () => {
+    // Added in the order offered, 0.29 + 0.57 + 0.09 is 0.9499999999999998.
+    const probabilities = {
+      'spec-version': 0.29,
+      'other-model': 0.57,
+      unrelated: 0.09,
+      same: 0.05,
+    };
+    expect(await ask(GROUPED, probabilities)).toMatchObject({
+      by: 'adapter',
+      answer: 'other-model',
+      probability: 0.95,
+    });
+  });
+
+  it('asks a person when the answers split between outcomes, though both would join', async () => {
+    const probabilities = { same: 0.5, edition: 0.48, unrelated: 0.02 };
+    expect(await ask(GROUPED, probabilities)).toEqual({
+      by: 'person',
+      adapter: 'llm:a',
+      proposed: 'same',
+      probabilities,
+      evidence: 'llm:a says so',
+      usage,
+    });
+  });
+
+  it('decides a question that groups nothing exactly as before', async () => {
+    const probabilities = { Headphones: 0.6, DAC: 0.38 };
+    expect(await ask(REQUEST, probabilities)).toMatchObject({
+      by: 'person',
+      proposed: 'Headphones',
+    });
+    expect(outcomeProbability(REQUEST.question, probabilities, 'Headphones')).toBe(0.6);
+    expect(sharingOutcome(REQUEST.question, 'DAC')).toEqual(['DAC']);
+  });
+
+  it('measures an answer by its outcome’s total, in the order offered', () => {
+    const probabilities = { 'other-model': 0.6, 'spec-version': 0.38 };
+    expect(outcomeProbability(GROUPED.question, probabilities, 'spec-version')).toBe(0.98);
+    expect(outcomeProbability(GROUPED.question, probabilities, 'same')).toBe(0);
+    expect(sharingOutcome(GROUPED.question, 'unrelated')).toEqual([
+      'spec-version',
+      'other-model',
+      'unrelated',
+    ]);
+    expect(sharingOutcome(GROUPED.question, 'edition')).toEqual(['edition']);
+  });
+
+  it('refuses outcomes that leave an answer out, or name one the question doesn’t offer', () => {
+    const question = GROUPED.question as Extract<Question, { type: 'choice' }>;
+    const missing = Object.fromEntries(
+      Object.entries(question.outcomes!).filter(([option]) => option !== 'unrelated'),
+    );
+    expect(questionError({ ...question, outcomes: missing })).toBe('an answer has no outcome');
+    expect(questionError({ ...question, outcomes: { ...question.outcomes, same: ' ' } })).toBe(
+      'an answer has no outcome',
+    );
+    expect(questionError({ ...question, outcomes: { ...question.outcomes, maybe: 'apart' } })).toBe(
+      'an outcome names an answer the question doesn’t offer',
+    );
+    expect(questionError(question)).toBeNull();
   });
 });

@@ -4,12 +4,17 @@ import {
   classifyQuestion,
   classifyRule,
   classifyState,
+  MATCH_OUTCOMES,
+  MATCH_RELATIONSHIPS,
   matchEvidence,
   matchQuestion,
+  matchVerdictOf,
   NONE_OF_THESE,
+  reviewAnswers,
   stateEvidence,
   stateHash,
 } from './decision-types';
+import type { Question } from './decisions';
 import type { FieldDef } from './fields';
 import { parsePage } from './page';
 
@@ -452,5 +457,55 @@ describe('matching a page to an entity', () => {
         'Record B (https://maker.example/p/b):',
       ].join('\n'),
     );
+  });
+});
+
+describe('the relationships a match question offers', () => {
+  it('maps each relationship to what it does to the page', () => {
+    expect(MATCH_RELATIONSHIPS).toEqual([
+      'same',
+      'edition',
+      'spec-version',
+      'other-model',
+      'unrelated',
+    ]);
+    expect(MATCH_OUTCOMES).toEqual({
+      same: 'join',
+      edition: 'edition',
+      'spec-version': 'apart',
+      'other-model': 'apart',
+      unrelated: 'apart',
+    });
+  });
+
+  it('records a join for same and edition, and keeps the page apart for every other answer, old ones included', () => {
+    expect(matchVerdictOf('same')).toBe('same');
+    expect(matchVerdictOf('edition')).toBe('edition');
+    for (const answer of ['spec-version', 'other-model', 'unrelated', 'variant', 'different']) {
+      expect(matchVerdictOf(answer)).toBe('not_same');
+    }
+  });
+
+  it('lets a person answer a match question from before with the relationships too', () => {
+    const old: Question = {
+      type: 'choice',
+      prompt: 'Are these two records the same product?',
+      options: ['same', 'variant', 'different'],
+    };
+    expect(reviewAnswers('match', old)).toEqual([
+      'same',
+      'variant',
+      'different',
+      'edition',
+      'spec-version',
+      'other-model',
+      'unrelated',
+    ]);
+    const classify: Question = {
+      type: 'choice',
+      prompt: 'Which category?',
+      options: ['Headphones', 'None of these'],
+    };
+    expect(reviewAnswers('classify', classify)).toEqual(['Headphones', 'None of these']);
   });
 });

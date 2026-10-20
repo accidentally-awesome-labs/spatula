@@ -1,4 +1,4 @@
-import type { Question } from './decisions';
+import { optionsOf, type Question } from './decisions';
 import type { FieldDef, FieldValue } from './fields';
 import { sha256Hex, stableStringify } from './ids';
 import { jsonLdTypes, type Page } from './page';
@@ -174,6 +174,47 @@ export function matchQuestion(): Question {
     prompt: 'Are these two records the same product?',
     options: [...MATCH_ANSWERS],
   };
+}
+
+/**
+ * How a page can relate to a record (ADR 0003), and what each does to it: `same` joins the page to
+ * the record, `edition` joins it as an edition, which the record lists, and the other three keep
+ * it apart.
+ */
+export const MATCH_RELATIONSHIPS = [
+  'same',
+  'edition',
+  'spec-version',
+  'other-model',
+  'unrelated',
+] as const;
+export type MatchRelationship = (typeof MATCH_RELATIONSHIPS)[number];
+export type MatchOutcome = 'join' | 'edition' | 'apart';
+export const MATCH_OUTCOMES: Readonly<Record<MatchRelationship, MatchOutcome>> = {
+  same: 'join',
+  edition: 'edition',
+  'spec-version': 'apart',
+  'other-model': 'apart',
+  unrelated: 'apart',
+};
+
+/**
+ * The verdict a match answer records: "same" joins, "edition" joins as an edition, and every other
+ * answer keeps the page apart, the answers of a question from before the relationships ("variant",
+ * "different") included.
+ */
+export function matchVerdictOf(answer: string): 'same' | 'edition' | 'not_same' {
+  return answer === 'same' ? 'same' : answer === 'edition' ? 'edition' : 'not_same';
+}
+
+/**
+ * The answers a person may give a question: its own options. A match question asked before the
+ * relationships offered same, variant, or different, and takes the relationships as well, so that a
+ * person can say a page is an edition.
+ */
+export function reviewAnswers(kind: string, question: Question): string[] {
+  const own = optionsOf(question);
+  return kind === 'match' ? [...new Set([...own, ...MATCH_RELATIONSHIPS])] : own;
 }
 
 export interface MatchSide {
