@@ -20,7 +20,7 @@ it is now. So Spatula keeps what it reads.
     microdata yet; the kept body lets a later reader find it.
   - How it was fetched: the address, the final address, the status, the ETag and Last-Modified,
     the time, and the Content Signals that applied. A capture exists only for a fetch that
-    robots.txt allowed, and its fetch, which it names, records that.
+    robots.txt allowed; the fetch it names records that.
 - **Storage.**
   - Bodies are filed in the `spatula-store` bucket under their SHA-256 as they arrived,
     `pages/<sha256>.gz`, so an unchanged page is stored once, whichever page or dataset holds it.
@@ -66,7 +66,10 @@ it is now. So Spatula keeps what it reads.
 - Storing page copies for processing is part of the lawyer's review before launch, with ADR 0006's
   intermediary route.
 - **A known limit.** Bodies are shared by hash, so a capture recorded in another dataset at the very
-  moment a cleanup deletes the same body would lose its file, and that page would lack its stored
-  copy until its body next changes. The makers Spatula reads stamp every page, so their bodies
-  differ between fetches, and this is left as it is.
+  moment a cleanup deletes the same body would lose its file. That page then finds its stored copy
+  missing: it's left unread that run, with a note, and fetched afresh the next, which stores its
+  body again. The makers Spatula reads stamp every page, so their bodies differ between fetches,
+  and this is left as it is.
+- A run that stops between storing a page's body and recording its fetch can leave that body's file
+  with nothing naming it, so neither cleanup nor a purge finds it.
 - Sitemaps aren't archived: the pages they list are.
