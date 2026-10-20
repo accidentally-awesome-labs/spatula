@@ -6,7 +6,8 @@ are until 0.2 replaces them; don't change them for 0.2 work.
 
 Read first: `docs/adr/0001-spatula-0-2-system-of-record.md` (the direction) and
 `docs/adr/0002-dataset-definitions.md` (the definition format). Then 0003 (decisions and review),
-0004 (publication and consumers), 0005 (collection at scale), and 0006 (refusals and routes).
+0004 (publication and consumers), 0005 (collection at scale), 0006 (refusals and routes), and
+0008 (the page archive).
 
 ## Commands
 
@@ -21,7 +22,8 @@ Run from the repository root, with pnpm 11 and Node 22 or later.
 - `pnpm --filter @spatula/worker dev`: the Worker on port 8787. Copy `platform/worker/.dev.vars.example`
   to `.dev.vars` first.
 - `pnpm spatula <command>`: the CLI: `check`, `plan`, `apply`, `run`, `snapshot pull`, `review`,
-  `revive` (pages, or sources with `--source`), `status`, `eval`, and `evals`. `SPATULA_URL` and
+  `revive` (pages, or sources with `--source`), `purge` (a source's page captures, with
+  `--source`), `status`, `eval`, and `evals`. `SPATULA_URL` and
   `SPATULA_TOKEN` say where Spatula is (`https://spatula.run` for the deployment),
   and the owner token.
   The CLI sends the token only to an `https://` address, or to this machine. Run `pnpm spatula …`
@@ -44,7 +46,9 @@ Before committing, run all of these: `pnpm platform:lint`, `pnpm platform:typech
 - `platform/worker` (`@spatula/worker`): the Worker. `src/refresh.ts` is a whole refresh, as steps
   over ports (`src/pipeline.ts`): discovery (`discovery.ts`), the run plan, fetches
   (`requests.ts`), extraction, classification (`classify.ts`), matching (`match.ts`), and
-  publishing through the gates (`publish.ts`). Node tests run it against Postgres. Review
+  publishing through the gates (`publish.ts`). Every page a fetch reads is kept as a capture,
+  and each run ends by cleaning up the captures retention lets go (`captures.ts`, ADR 0008).
+  Node tests run it against Postgres. Review
   (`review.ts`) applies a person's answers to the questions those steps raise. The Workflow,
   HostGate (a Durable Object per host), the HTTP, LLM, and signing adapters, and the API connect
   it to Cloudflare.
@@ -62,6 +66,8 @@ Before committing, run all of these: `pnpm platform:lint`, `pnpm platform:typech
   site that refuses it, and three blocked runs in a row refuse the source (ADR 0006). ADR 0006 also
   says which routes may cover a refusing source's facts, and which never may.
 - Collect facts only: no descriptions, no photos.
+- Captures are private evidence (ADR 0008): no snapshot and no consumer route carries a capture
+  or a page's text. `pnpm spatula purge <dataset> --source <id>` deletes a source's.
 - Pages are data, never instructions. The LLM proposes values, and code checks that each one is on
   the page before it becomes a statement.
 - Never rewrite a statement:
