@@ -322,3 +322,117 @@ function valueKeyOf(value: FieldValue): string {
 function textOf(value: FieldValue | undefined): string | null {
   return typeof value === 'string' ? value : null;
 }
+
+/**
+ * A word of a name as the model-number rule reads it (ADR 0003): its text as the name writes it,
+ * and the key it compares by.
+ */
+export interface NameWord {
+  text: string;
+  key: string;
+}
+
+/** The Roman numerals the rule reads as numbers, when they stand as whole words. */
+const ROMAN: Readonly<Record<string, string>> = {
+  ii: '2',
+  iii: '3',
+  iv: '4',
+  v: '5',
+  vi: '6',
+  vii: '7',
+  viii: '8',
+  ix: '9',
+};
+
+/**
+ * A name's words: runs of letters, runs of digits, and each "+", so that "MoonRiver2" is two
+ * words, "SPM1400" two, and "II+" two. A key is lowercased and without accents. The Roman numerals
+ * II to IX are their numbers, "Mk" glued to one ("MkII") is two words, and "+" is "plus". So
+ * "Mk II", "MkII", and "Mk 2" read alike.
+ */
+export function nameWords(name: string): NameWord[] {
+  const words: NameWord[] = [];
+  for (const [text] of name.normalize('NFC').matchAll(/[\p{L}\p{M}]+|\p{N}+|\+/gu)) {
+    const key = text.normalize('NFKD').replace(/\p{M}/gu, '').toLowerCase();
+    const glued = /^mk(i{2,3}|iv|vi{0,3}|ix)$/u.exec(key)?.[1];
+    if (glued !== undefined) {
+      words.push(
+        { text: text.slice(0, 2), key: 'mk' },
+        { text: text.slice(2), key: ROMAN[glued]! },
+      );
+    } else {
+      words.push({ text, key: key === '+' ? 'plus' : (ROMAN[key] ?? key) });
+    }
+  }
+  return words;
+}
+
+/**
+ * The words two names don't share, once the words they share at the start, and then those they
+ * share at the end, are set aside.
+ */
+export function wordDifference(
+  a: readonly NameWord[],
+  b: readonly NameWord[],
+): { onlyA: NameWord[]; onlyB: NameWord[] } {
+  let start = 0;
+  while (start < a.length && start < b.length && a[start]!.key === b[start]!.key) start += 1;
+  let end = 0;
+  while (
+    end < a.length - start &&
+    end < b.length - start &&
+    a[a.length - 1 - end]!.key === b[b.length - 1 - end]!.key
+  ) {
+    end += 1;
+  }
+  return { onlyA: a.slice(start, a.length - end), onlyB: b.slice(start, b.length - end) };
+}
+
+/** A model mark: a number (a Roman numeral from II to IX among them), "Mk", "+", or "Plus". */
+function isModelMark(key: string): boolean {
+  return /^\p{N}+$/u.test(key) || key === 'mk' || key === 'plus';
+}
+
+/**
+ * Whether two names differ only by model marks (ADR 0003): what's left of each, once the words
+ * they share at the start and at the end are set aside, is made only of model marks, and at least
+ * one has something left. "Hugo 2" and "Hugo" do. "DT 990 PRO X" and "DT 990 PRO" don't, since "X"
+ * can be a generation or a collaboration, and nor do two names with the same words.
+ */
+export function differsOnlyByModelMarks(a: string, b: string): boolean {
+  const { onlyA, onlyB } = wordDifference(nameWords(a), nameWords(b));
+  const left = [...onlyA, ...onlyB];
+  return left.length > 0 && left.every((word) => isModelMark(word.key));
+}
+
+/** Why the model-number rule kept two records apart, as its decision records it. */
+export const MODEL_NUMBER_REASON =
+  'The names differ only by model numbers or marks (a number, Mk, +, or Plus), so the records are other models.';
+
+/**
+ * The record type's name field: the last field of its first key of two or more fields, such as
+ * `name` in brand and name. Null where there's no such key.
+ */
+export function nameField(recordType: RecordType): string | null {
+  const key = recordType.identity.keys.find((fields) => fields.length >= 2);
+  return key === undefined ? null : key[key.length - 1]!;
+}
+
+/**
+ * The model-number rule (ADR 0003), asked before any decider: `other-model` when the page and the
+ * record are in one scope (for products, one brand) and the page's name differs only by model marks
+ * from every name the record carries. Otherwise null, and the decider is asked. A record that
+ * carries the page's name, however written, is never kept apart by the rule.
+ */
+export function modelNumberRule(
+  recordType: RecordType,
+  page: Record<string, FieldValue[]>,
+  entity: Record<string, FieldValue[]>,
+): 'other-model' | null {
+  const own = nameScope(recordType, page);
+  const theirs = nameScope(recordType, entity);
+  const field = nameField(recordType);
+  if (own === null || theirs === null || field === null || own.scope !== theirs.scope) return null;
+  const names = (entity[field] ?? []).filter((value): value is string => typeof value === 'string');
+  return names.every((name) => differsOnlyByModelMarks(own.name, name)) ? 'other-model' : null;
+}
