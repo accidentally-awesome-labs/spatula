@@ -27,6 +27,18 @@ export const MATCH_SIMILARITY = 0.6;
 export const MAX_MATCH_CANDIDATES = 3;
 /** The most match questions one run asks. The rest wait for the next run. */
 export const MAX_MATCH_QUESTIONS = 100;
+/** At most this many other records are shown beside a match question (its lineup). */
+export const MAX_LINEUP = 10;
+/** A name in a lineup is cut to this many characters. */
+const LINEUP_NAME_MAX = 100;
+
+/** Another record in the page's scope, shown beside a match question (ADR 0003). */
+export interface LineupEntry {
+  /** Its name closest to the page's. */
+  name: string;
+  /** Whether a person kept it apart from the record the question asks about. */
+  keptApart: boolean;
+}
 
 /** What "same" means when a record type's pack doesn't say. */
 export const GENERIC_MATCH_CRITERIA = [
@@ -435,4 +447,41 @@ export function modelNumberRule(
   if (own === null || theirs === null || field === null || own.scope !== theirs.scope) return null;
   const names = (entity[field] ?? []).filter((value): value is string => typeof value === 'string');
   return names.every((name) => differsOnlyByModelMarks(own.name, name)) ? 'other-model' : null;
+}
+
+/**
+ * A match question's lineup: the records in the page's scope other than the one asked about, each
+ * by its name closest to the page's, closest first, at most 10. It is evidence, and never part of
+ * the question's key, so a new record in the scope doesn't ask a settled pair again.
+ */
+export function lineupOf(input: {
+  /** The page's name. */
+  name: string;
+  /** The entities in the page's scope, with their pages' names. */
+  sameScope: readonly { id: string; names: readonly string[] }[];
+  /** The entity the question asks about, which isn't listed. */
+  entityId: string;
+  /** The entities a person kept apart from that one. */
+  apart: ReadonlySet<string>;
+}): LineupEntry[] {
+  return input.sameScope
+    .filter(({ id, names }) => id !== input.entityId && names.length > 0)
+    .map(({ id, names }) => {
+      const [closest] = names
+        .map((name) => ({ name, score: similarity(input.name, name) }))
+        .sort((a, b) => b.score - a.score || compareText(a.name, b.name));
+      return { id, name: closest!.name, score: closest!.score };
+    })
+    .sort((a, b) => b.score - a.score || compareText(a.id, b.id))
+    .slice(0, MAX_LINEUP)
+    .map(({ id, name }) => ({
+      // Cut at whole characters, so a pair is never split.
+      name: [...name].slice(0, LINEUP_NAME_MAX).join(''),
+      keptApart: input.apart.has(id),
+    }));
+}
+
+/** Compares by code unit, the same in every runtime. */
+function compareText(a: string, b: string): number {
+  return a < b ? -1 : a > b ? 1 : 0;
 }

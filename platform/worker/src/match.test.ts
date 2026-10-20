@@ -184,7 +184,7 @@ describe('matching pages', { timeout: 20_000 }, () => {
     });
     expect(world.decider.calls[0]!.criteria).toContain('variant: a version of the model');
     expect(world.decider.calls[0]!.evidence).toContain(`Record A (${URLS.a2}):`);
-    expect(world.decider.calls[0]!.evidence).toContain('name: HD 660S2');
+    expect(world.decider.calls[0]!.evidence).toContain('A: HD 660S2');
     expect(world.decider.calls[0]!.evidence).toContain(`Record B (${URLS.a1}):`);
     // The default fake answers "different", so each is its own record.
     expect(first.summary.entities).toMatchObject({ created: 3, waiting: 0 });

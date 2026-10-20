@@ -59,7 +59,8 @@ export async function matchItem(
   const sides = await ports.withDb((db) => matchSides(db, { definition, itemId, entityId }));
   if (sides === null) return result('skipped');
   const recordType = definition.recordTypes[sides.recordType];
-  const pack = recordType?.pack === undefined ? undefined : ports.packs[recordType.pack];
+  if (recordType === undefined) return result('skipped');
+  const pack = recordType.pack === undefined ? undefined : ports.packs[recordType.pack];
   const criteria = pack?.match?.criteria ?? GENERIC_MATCH_CRITERIA;
   const criteriaVersion = pack?.match?.version ?? 0;
   const state = { page: sides.page, entity: sides.entity };
@@ -100,7 +101,12 @@ export async function matchItem(
   let outcome: CascadeOutcome;
   try {
     outcome = await cascade({
-      request: { type: 'match', question: asked, criteria, evidence: matchEvidence(state) },
+      request: {
+        type: 'match',
+        question: asked,
+        criteria,
+        evidence: matchEvidence({ recordType, page: sides.page, entity: sides.entity }),
+      },
       rule: null,
       deciders: decider === null ? [] : [decider],
       accept,

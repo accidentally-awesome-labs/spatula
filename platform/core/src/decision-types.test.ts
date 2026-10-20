@@ -6,7 +6,6 @@ import {
   classifyState,
   MATCH_OUTCOMES,
   MATCH_RELATIONSHIPS,
-  matchEvidence,
   matchQuestion,
   matchVerdictOf,
   NONE_OF_THESE,
@@ -415,48 +414,6 @@ describe('matching a page to an entity', () => {
       prompt: 'Are these two records the same product?',
       options: ['same', 'variant', 'different'],
     });
-    expect(
-      matchEvidence({
-        page: {
-          url: 'https://maker.example/p/dt-770-80',
-          values: { name: ['DT 770 PRO 80 Ohm'], gtins: ['04010118471067'] },
-        },
-        entity: {
-          url: 'https://maker.example/p/dt-770-250',
-          values: { name: ['DT 770 PRO 250 Ohm'], gtins: ['04010118471074'] },
-        },
-      }),
-    ).toBe(
-      [
-        'Record A (https://maker.example/p/dt-770-80):',
-        'gtins: 04010118471067',
-        'name: DT 770 PRO 80 Ohm',
-        '',
-        'Record B (https://maker.example/p/dt-770-250):',
-        'gtins: 04010118471074',
-        'name: DT 770 PRO 250 Ohm',
-      ].join('\n'),
-    );
-  });
-
-  it('writes specs as label and value, at most 20 values of a property, and a record with none', () => {
-    const mpns = Array.from({ length: 25 }, (_, n) => `M${n}`);
-    const evidence = matchEvidence({
-      page: {
-        url: 'https://maker.example/p/a',
-        values: { specs: [{ label: 'Impedance', value: '80 Ω' }], mpns },
-      },
-      entity: { url: 'https://maker.example/p/b', values: {} },
-    });
-    expect(evidence).toBe(
-      [
-        'Record A (https://maker.example/p/a):',
-        `mpns: ${mpns.slice(0, 20).join('; ')}`,
-        'specs: Impedance: 80 Ω',
-        '',
-        'Record B (https://maker.example/p/b):',
-      ].join('\n'),
-    );
   });
 });
 

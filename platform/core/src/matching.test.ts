@@ -6,6 +6,7 @@ import {
   claimLabel,
   contestedNames,
   identifiersDisagree,
+  lineupOf,
   mergeValues,
   nameScope,
   planMatch,
@@ -460,5 +461,40 @@ describe('the helpers', () => {
     const into: Values = { gtins: ['04010118471063'] };
     mergeValues(into, { gtins: ['04010118471063', '04010118471070'], name: ['DT 770 PRO'] });
     expect(into).toEqual({ gtins: ['04010118471063', '04010118471070'], name: ['DT 770 PRO'] });
+  });
+});
+
+describe('lineupOf', () => {
+  it('lists the other records in the scope, closest to the page’s name first, marking those a person kept apart', () => {
+    const sameScope = [
+      { id: 'sp_b', names: ['DT 70 IE'] },
+      { id: 'sp_73', names: ['DT 73 IE Black', 'DT 73 IE'] },
+      { id: 'sp_far', names: ['AVENTHO 300'] },
+      { id: 'sp_72', names: ['DT 72 IE'] },
+      { id: 'sp_none', names: [] },
+    ];
+    // The record asked about isn't listed. A tie goes by ID, and each record shows its closest name.
+    expect(
+      lineupOf({ name: 'DT 71 IE', sameScope, entityId: 'sp_b', apart: new Set(['sp_73']) }),
+    ).toEqual([
+      { name: 'DT 72 IE', keptApart: false },
+      { name: 'DT 73 IE', keptApart: true },
+      { name: 'AVENTHO 300', keptApart: false },
+    ]);
+  });
+
+  it('lists at most 10, each name cut to 100 characters', () => {
+    const many = Array.from({ length: 12 }, (_, n) => ({
+      id: `sp_${String(n).padStart(2, '0')}`,
+      names: [`DT ${n}${'x'.repeat(120)}`],
+    }));
+    const lineup = lineupOf({
+      name: 'DT 71 IE',
+      sameScope: many,
+      entityId: 'sp_b',
+      apart: new Set(),
+    });
+    expect(lineup).toHaveLength(10);
+    expect(lineup.every((entry) => [...entry.name].length === 100)).toBe(true);
   });
 });

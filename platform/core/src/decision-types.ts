@@ -217,25 +217,6 @@ export function reviewAnswers(kind: string, question: Question): string[] {
   return kind === 'match' ? [...new Set([...own, ...MATCH_RELATIONSHIPS])] : own;
 }
 
-export interface MatchSide {
-  url: string;
-  values: Record<string, FieldValue[]>;
-}
-
-/** Both sides of a match question as evidence: each record's values, by property. */
-export function matchEvidence(state: { page: MatchSide; entity: MatchSide }): string {
-  const side = (label: string, record: MatchSide) => [
-    `Record ${label} (${record.url}):`,
-    ...Object.keys(record.values)
-      .sort()
-      .map(
-        (name) =>
-          `${name}: ${(record.values[name] ?? []).slice(0, STATE_VALUES_MAX).map(valueText).join('; ')}`,
-      ),
-  ];
-  return [...side('A', state.page), '', ...side('B', state.entity)].join('\n');
-}
-
 function valueText(value: FieldValue): string {
   return typeof value === 'string' ? value : `${value.label}: ${value.value}`;
 }

@@ -24,4 +24,5 @@ export * from './decisions';
 export * from './decision-types';
 export * from './trigrams';
 export * from './matching';
+export * from './match-evidence';
 export * from './golden';
