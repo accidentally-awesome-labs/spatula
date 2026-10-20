@@ -108,10 +108,10 @@ whose every answer is recorded and can be corrected by a person.
   summary counts these pairs with the rule's answers, and names up to 10. Two names that differ
   only by an impedance are kept apart as `other-model`, where `spec-version` would be truer; the
   outcome is right. No question overrides the rule yet.
-- **A known limit of the rule.** It drops punctuation and treats any number as a model mark, so a
-  name that adds a year or a version number ("DT 770 PRO 2024" against "DT 770 PRO", "Hugo 2.0"
-  against "Hugo 2") is kept apart as another model. A year edition would therefore become a record
-  of its own.
+- **A known limit of the rule.** It drops punctuation other than "+" and treats any number as a
+  model mark, so a name that adds a year or a version number ("DT 770 PRO 2024" against
+  "DT 770 PRO", "Hugo 2.0" against "Hugo 2") is kept apart as another model. A year edition would
+  therefore become a record of its own.
 - **What the decider sees.** Field values only, still wrapped as untrusted: the names with the
   words that differ called out, each side's identifiers and whether any match, the other values
   side by side (the same in both, different, only in A, only in B), and up to 10 other records in
@@ -122,14 +122,15 @@ whose every answer is recorded and can be corrected by a person.
   again, and the decision keeps it in its evidence text. A lineup shows other records' names, so
   the consent rule covers it: it leaves out any record with a page whose site says `ai-input=no`.
 - **Editions.** `edition` is a verdict of its own. It joins the page as `same` does: a page still
-  joins one record, a decider's join about a page already joined to another record goes to a
-  person, and a person's second join about another record is refused. A record takes its name and
-  its other single values from its base page: the page whose name every other page's differing name
-  extends, however either is spelled, or else the earliest page that gives a name, one that didn't
-  join as an edition first, with the pages written as it. A page without a name is the base only
-  where no page gives one, so the base never depends on which spelling Spatula met first. The other
-  pages fill only what it leaves unstated, and a person's statement counts wherever it was said.
-  List fields, GTINs and part numbers among them, still hold every page's values.
+  joins one record. A decider's join about a page already judged to join another record goes to a
+  person, and a person's join is refused when a person already chose another record for the page, or
+  the page is already joined to one. A record takes its name and its other single values from its
+  base page: the page whose name every other page's differing name extends, however either is
+  spelled, or else the earliest page that gives a name, one that didn't join as an edition first,
+  with the pages written as it. A page without a name is the base only where no page gives one, so
+  the base never depends on which spelling Spatula met first. The other pages fill only what it
+  leaves unstated, and a person's statement counts wherever it was said. List fields, GTINs and part
+  numbers among them, still hold every page's values.
 - **Snapshots.** A record may list its `editions`: each page whose name differs from the record's,
   once normalized, with its name, its address as `officialUrl`, and its own GTINs, sorted by name.
   A record without editions has no `editions` key and digests as before; a newly found edition
