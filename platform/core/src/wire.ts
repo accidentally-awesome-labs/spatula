@@ -124,6 +124,11 @@ export interface RunSummary {
   classify?: DecisionSummary;
   /** The run's match questions. Absent in runs before slice 1. */
   match?: DecisionSummary;
+  /**
+   * The pairs the model-number rule kept apart this run, by name ("Hugo 2 and Hugo"): at most 10,
+   * while `match.rule` counts them all (ADR 0003). Absent in runs before the rule.
+   */
+  ruleApart?: string[];
   /** Pages this run found aren't the dataset's ("None of these"). */
   irrelevant?: number;
   entities: {

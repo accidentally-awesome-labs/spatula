@@ -32,6 +32,8 @@ export const MAX_MATCH_QUESTIONS = 100;
 export const MAX_LINEUP = 10;
 /** A name in a lineup is cut to this many characters. */
 const LINEUP_NAME_MAX = 100;
+/** A run's summary names at most this many pairs the model-number rule kept apart. */
+export const RULE_PAIRS_NAMED = 10;
 
 /** Another record in the page's scope, shown beside a match question (ADR 0003). */
 export interface LineupEntry {
@@ -452,6 +454,8 @@ export function modelNumberRule(
   const field = nameField(recordType);
   if (own === null || theirs === null || field === null || own.scope !== theirs.scope) return null;
   const names = (entity[field] ?? []).filter((value): value is string => typeof value === 'string');
+  // `every` is true of no names at all, and a record that carries none is never kept apart.
+  if (names.length === 0) return null;
   return names.every((name) => differsOnlyByModelMarks(own.name, name)) ? 'other-model' : null;
 }
 

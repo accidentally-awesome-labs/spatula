@@ -5,13 +5,19 @@ import {
   matchEvidence,
   matchQuestion,
   matchVerdictOf,
+  MODEL_NUMBER_REASON,
+  modelNumberRule,
+  nameField,
+  nameScope,
   optionsOf,
   outcomeProbability,
   stableId,
   stateHash,
   type CascadeOutcome,
+  type FieldValue,
   type LineupEntry,
   type LlmUsage,
+  type RecordType,
 } from '@spatula/core';
 import {
   anyRefusesAiInput,
@@ -32,6 +38,8 @@ import { storable } from './text';
 /*
  * One match question (ADR 0003): how is this page related to this entity? The same product, an
  * edition of it, a version whose specifications differ, another model, or an unrelated product.
+ * The model-number rule answers first: names that differ only by model marks are other models. It
+ * asks no model, so it needs neither AI input nor the budget, and its verdict is the rule's.
  * The decider sees both records' values side by side, the entity's known editions, and the other
  * records in the page's brand, never their pages' text, and answers where the dataset and every
  * page's site allow AI input. Its likeliest relationship is taken when the relationships with the
@@ -45,9 +53,11 @@ import { storable } from './text';
  */
 
 export interface Matched {
-  outcome: 'accepted' | 'escalated' | 'reused' | 'skipped' | 'failed';
+  outcome: 'rule' | 'accepted' | 'escalated' | 'reused' | 'skipped' | 'failed';
   usage: LlmUsage;
   note: string | null;
+  /** The two records' names, when the rule kept them apart in this step. Absent in older results. */
+  pair?: string;
 }
 
 export async function matchItem(
@@ -90,6 +100,8 @@ export async function matchItem(
   const decider = consent ? ports.decider : null;
   const accept = definition.decisions.match.accept;
   const at = ports.now();
+  const rule = ruleFor(recordType, sides);
+  const pair = rule === null ? undefined : pairNames(recordType, sides);
   const apply = (decision: DecisionRow) =>
     ports.withDb((db) =>
       applyVerdict(db, { datasetId, itemId, entityId, subject, sides, decision, at }),
@@ -103,16 +115,20 @@ export async function matchItem(
     const waiting = (await apply(earlier)) === 'waiting';
     // A step that runs again finds its own decision, and reports it as it was made.
     const again = earlier.id === decisionId;
+    const ruled = again && earlier.outcome === 'rule';
     return result(
-      waiting ? 'escalated' : again ? 'accepted' : 'reused',
+      waiting ? 'escalated' : ruled ? 'rule' : again ? 'accepted' : 'reused',
       again
-        ? { usage: { inputTokens: earlier.inputTokens, outputTokens: earlier.outputTokens } }
+        ? {
+            usage: { inputTokens: earlier.inputTokens, outputTokens: earlier.outputTokens },
+            ...(ruled && pair !== undefined ? { pair } : {}),
+          }
         : {},
     );
   }
 
-  // Asked next run, with a budget of its own; the page waits meanwhile.
-  if (decider !== null && budgetLeft <= 0) return result('skipped');
+  // Asked next run, with a budget of its own; the page waits meanwhile. The rule costs nothing.
+  if (rule === null && decider !== null && budgetLeft <= 0) return result('skipped');
   let outcome: CascadeOutcome;
   try {
     outcome = await cascade({
@@ -128,7 +144,7 @@ export async function matchItem(
           lineup,
         }),
       },
-      rule: null,
+      rule,
       deciders: decider === null ? [] : [decider],
       accept,
     });
@@ -158,13 +174,12 @@ export async function matchItem(
       };
     }
   }
-  // The cascade has no rule for matching yet, so its outcome is a decider's or a person's.
   const usage = outcome.by === 'rule' ? NO_USAGE : outcome.usage;
   // The decision keeps the lineup it showed in its evidence text, since the lineup isn't part of
-  // its state.
+  // its state. The rule was shown none, and says why it answered.
   const evidence =
     outcome.by === 'rule'
-      ? ''
+      ? MODEL_NUMBER_REASON
       : [outcome.evidence, lineupNote(lineup)].filter((part) => part !== '').join('\n');
   const decision = await ports.withDb((db) =>
     saveDecision(db, {
@@ -189,16 +204,17 @@ export async function matchItem(
     }),
   );
   const waiting = (await apply(decision)) === 'waiting';
+  if (outcome.by === 'rule') return result('rule', pair === undefined ? {} : { pair });
   return result(waiting ? 'escalated' : 'accepted', { usage });
 }
 
 /**
  * A match decision as a verdict: "same" joins, "edition" joins as an edition, every other answer
  * (another relationship, or the "variant" or "different" of a question from before) keeps the page
- * apart, and no answer yet asks a person. A judgement is as sure as its answer's outcome. A
- * decision that no decider weighed, because none was asked or because its answer fit no schema and
- * named no probabilities, is recorded as the rule's ("rule" means no decider weighed it), so that
- * resolution asks the pair again once one can.
+ * apart, and no answer yet asks a person. A judgement is as sure as its answer's outcome, and the
+ * model-number rule's verdict is the rule's. A decision that no decider weighed, because none was
+ * asked or because its answer fit no schema and named no probabilities, is recorded as the rule's
+ * ("rule" means no decider weighed it), so that resolution asks the pair again once one can.
  */
 async function applyVerdict(
   db: Executor,
@@ -257,7 +273,7 @@ async function applyVerdict(
     itemId,
     entityId,
     verdict: matchVerdictOf(answer),
-    who: decision.finalAnswer !== null ? 'person' : 'llm',
+    who: decision.finalAnswer !== null ? 'person' : decision.outcome === 'rule' ? 'rule' : 'llm',
     confidence:
       decision.finalAnswer !== null
         ? 1
@@ -267,4 +283,40 @@ async function applyVerdict(
   });
   await dismissReviews(db, { datasetId, kind: 'match', subject, at });
   return 'judged';
+}
+
+/**
+ * The model-number rule's answer for the page and the record. It compares the page's name with
+ * every name the record carries, its edition pages' included, not only the name its merged side
+ * shows, so a record that carries a name the page differs from by more than model marks is left to
+ * the decider.
+ */
+function ruleFor(
+  recordType: RecordType,
+  sides: {
+    page: { values: Record<string, FieldValue[]> };
+    entity: { values: Record<string, FieldValue[]> };
+    entityNames: readonly string[];
+  },
+): 'other-model' | null {
+  const field = nameField(recordType);
+  if (field === null) return null;
+  const record = { ...sides.entity.values, [field]: [...sides.entityNames] };
+  return modelNumberRule(recordType, sides.page.values, record);
+}
+
+/** At most this many characters of each name go into a pair the run's summary names. */
+const PAIR_NAME_MAX = 80;
+
+/** The two records' names, as the run's summary names a pair the rule kept apart. */
+function pairNames(
+  recordType: RecordType,
+  sides: {
+    page: { values: Record<string, FieldValue[]> };
+    entity: { values: Record<string, FieldValue[]> };
+  },
+): string {
+  const name = (values: Record<string, FieldValue[]>) =>
+    storable(nameScope(recordType, values)?.name ?? '', PAIR_NAME_MAX);
+  return `${name(sides.page.values)} and ${name(sides.entity.values)}`;
 }

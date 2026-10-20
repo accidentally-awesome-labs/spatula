@@ -1,12 +1,15 @@
 import {
   createLlmDecider,
   GENERIC_MATCH_CRITERIA,
+  MODEL_NUMBER_REASON,
   runIdFor,
   type Decider,
   type Definition,
+  type PagesSource,
 } from '@spatula/core';
 import { packs } from '@spatula/pack-products';
 import {
+  applyDefinition,
   decisionRecords,
   finalizeDecision,
   judge,
@@ -174,7 +177,7 @@ describe('matching pages', { timeout: 20_000 }, () => {
       pages: [a1, a2],
     } = await worldFor(
       testDefinition('match-similar'),
-      routesWith({ name: 'HD 660S' }, { name: 'HD 660S2' }),
+      routesWith({ name: 'HD 660S' }, { name: 'HD 660SE' }),
     );
     const first = await refresh(world, 'match-similar');
     const e1 = await entityOf(a1!.id);
@@ -186,7 +189,7 @@ describe('matching pages', { timeout: 20_000 }, () => {
       'spec-version: the same model name, but a specification differs',
     );
     expect(world.decider.calls[0]!.evidence).toContain(`Record A (${URLS.a2}):`);
-    expect(world.decider.calls[0]!.evidence).toContain('A: HD 660S2');
+    expect(world.decider.calls[0]!.evidence).toContain('A: HD 660SE');
     expect(world.decider.calls[0]!.evidence).toContain(`Record B (${URLS.a1}):`);
     // The default fake answers "different", so each is its own record.
     expect(first.summary.entities).toMatchObject({ created: 3, waiting: 0 });
@@ -203,6 +206,160 @@ describe('matching pages', { timeout: 20_000 }, () => {
         criteriaVersion: PACK_VERSION,
       },
     ]);
+  });
+
+  it('keeps two models apart by the model-number rule, asking no decider, and names the pair', async () => {
+    const {
+      world,
+      pages: [a1, a2],
+    } = await worldFor(
+      testDefinition('match-rule'),
+      routesWith({ name: 'HD 660S' }, { name: 'HD 660S2' }),
+    );
+    const scripted = fakeDecider(() => ({ same: 0.98 }));
+    world.ports.decider = scripted.decider;
+    const first = await refresh(world, 'match-rule');
+    const e1 = await entityOf(a1!.id);
+    expect(scripted.calls).toEqual([]);
+    expect(first.summary.match).toEqual({
+      rule: 1,
+      accepted: 0,
+      escalated: 0,
+      reused: 0,
+      skipped: 0,
+      failed: 0,
+      inputTokens: 0,
+      outputTokens: 0,
+    });
+    expect(first.summary.ruleApart).toEqual(['HD 660S2 and HD 660S']);
+    expect(await judgementsFor(db, 'match-rule')).toMatchObject([
+      { itemId: a2!.id, entityId: e1, verdict: 'not_same', who: 'rule', confidence: 1 },
+    ]);
+    expect(await decisionsAbout('match-rule')).toMatchObject([
+      {
+        outcome: 'rule',
+        adapter: null,
+        answer: 'other-model',
+        probabilities: { 'other-model': 1 },
+        evidence: MODEL_NUMBER_REASON,
+        inputTokens: 0,
+        outputTokens: 0,
+      },
+    ]);
+    expect(first.summary.entities).toMatchObject({ created: 3, waiting: 0 });
+
+    // The pair is settled, so the next run asks nothing.
+    const second = await refresh(world, 'match-rule');
+    expect(matchSteps(second.names)).toEqual([]);
+  });
+
+  it('applies the rule where the dataset allows no AI input', async () => {
+    const definition = testDefinition('match-rule-no-ai');
+    const {
+      world,
+      pages: [a1, a2],
+    } = await worldFor(
+      { ...definition, policy: { ...definition.policy, purposes: [] } },
+      routesWith({ name: 'HD 660S' }, { name: 'HD 660S2' }),
+    );
+    const first = await refresh(world, 'match-rule-no-ai');
+    expect(first.summary.match).toMatchObject({ rule: 1, escalated: 0 });
+    expect(world.decider.calls).toEqual([]);
+    expect(await judgementsFor(db, 'match-rule-no-ai')).toMatchObject([
+      { itemId: a2!.id, entityId: await entityOf(a1!.id), verdict: 'not_same', who: 'rule' },
+    ]);
+    expect(await listOpenReviews(db, 'match-rule-no-ai')).toEqual([]);
+  });
+
+  it('applies the rule after the run’s LLM budget is spent', async () => {
+    const base = withThirdPage(testDefinition('match-rule-spent'));
+    const routes = routesWith({ name: 'HD 660S' }, { name: 'HD 660SE' });
+    routes[URL_A3] = { status: 200, body: productPage({ name: 'HD 660S2' }) };
+    const {
+      world,
+      pages: [a1, a2, a3],
+    } = await worldFor({ ...base, budget: { ...base.budget, llmTokensPerRun: 500 } }, routes, {
+      llm: false,
+    });
+    const scripted = fakeDecider(() => ({ unrelated: 0.97 }));
+    world.ports.decider = scripted.decider;
+    // A2's question spends 520 tokens, more than the budget. A3's is the rule's all the same.
+    const first = await refresh(world, 'match-rule-spent');
+    const e1 = await entityOf(a1!.id);
+    expect(matchSteps(first.names)).toEqual([`match:${a2!.id}:${e1}`, `match:${a3!.id}:${e1}`]);
+    expect(first.summary.match).toMatchObject({ accepted: 1, rule: 1, skipped: 0 });
+    expect(scripted.calls).toHaveLength(1);
+  });
+
+  it('leaves a page to the decider when the record carries another name, an edition’s, that it differs from by more than model marks', async () => {
+    const definition = testDefinition('match-rule-editions');
+    const {
+      world,
+      pages: [a1, a2],
+    } = await worldFor(definition, routesWith({ name: 'DT 990 PRO' }, { name: 'DT 990 PRO Club' }));
+    world.ports.decider = fakeDecider(() => ({ edition: 0.97, same: 0.02 })).decider;
+    await refresh(world, 'match-rule-editions');
+    const e1 = await entityOf(a1!.id);
+    expect(await entityOf(a2!.id)).toBe(e1);
+
+    // A third page joins the picture. It differs from the record's base page, "DT 990 PRO", by a
+    // model number alone, but not from its edition, "DT 990 PRO Club", which the record carries too.
+    await applyDefinition(db, withThirdPage(definition));
+    world.web.routes.set(URL_A3, { status: 200, body: productPage({ name: 'DT 990 PRO 2' }) });
+    const scripted = fakeDecider(() => ({ 'other-model': 0.97 }));
+    world.ports.decider = scripted.decider;
+    const second = await refresh(world, 'match-rule-editions');
+    expect(second.summary.match).toMatchObject({ rule: 0, accepted: 1 });
+    expect(second.summary.ruleApart).toBeUndefined();
+    expect(scripted.calls).toHaveLength(1);
+    expect(scripted.calls[0]!.evidence).toContain('A: DT 990 PRO 2');
+    // Listed by item ID, which is random, so found by verdict.
+    const judged = await judgementsFor(db, 'match-rule-editions');
+    expect(judged).toHaveLength(2);
+    expect(judged.find((judgement) => judgement.verdict === 'edition')).toMatchObject({
+      itemId: a2!.id,
+      entityId: e1,
+      who: 'llm',
+    });
+    expect(judged.find((judgement) => judgement.verdict === 'not_same')).toMatchObject({
+      entityId: e1,
+      who: 'llm',
+    });
+  });
+
+  it('names at most ten pairs the rule kept apart, and counts them all', async () => {
+    const base = testDefinition('match-rule-many');
+    const makerA = base.sources[0] as PagesSource;
+    const routes = routesWith({ name: 'HD 660S' }, { name: 'HD 660S2' });
+    // Ten pages more, whose addresses sort after the first two.
+    const more = Array.from({ length: 10 }, (_, index) => {
+      const url = `https://maker-a.example/products/z${String(index + 1).padStart(2, '0')}`;
+      routes[url] = { status: 200, body: productPage({ name: `HD 660S${index + 3}` }) };
+      return url;
+    });
+    const { world } = await worldFor(
+      { ...base, sources: [{ ...makerA, pages: [...makerA.pages, ...more] }, base.sources[1]!] },
+      routes,
+    );
+    const first = await refresh(world, 'match-rule-many');
+    expect(first.summary.match).toMatchObject({ rule: 11, accepted: 0, escalated: 0 });
+    expect(first.summary.ruleApart).toEqual(
+      Array.from({ length: 10 }, (_, index) => `HD 660S${index + 2} and HD 660S`),
+    );
+    expect(world.decider.calls).toEqual([]);
+  });
+
+  it('cuts each name of a pair at eighty characters', async () => {
+    // Longer than 80 characters, and within the test dataset's 120 for a name.
+    const long = `Orpheus ${'Xanadu '.repeat(13).trim()}`;
+    expect(long.length).toBeGreaterThan(80);
+    const { world } = await worldFor(
+      testDefinition('match-rule-long'),
+      routesWith({ name: long }, { name: `${long} 2` }),
+    );
+    const first = await refresh(world, 'match-rule-long');
+    expect(first.summary.match).toMatchObject({ rule: 1 });
+    expect(first.summary.ruleApart).toEqual([`${long.slice(0, 80)} and ${long.slice(0, 80)}`]);
   });
 
   it('proposes the option offered first when the decider is torn, whichever it ranked first', async () => {
@@ -775,6 +932,42 @@ describe('a question that isn’t answered in the run that raised it', { timeout
       });
       expect(await decisionsAbout(datasetId), datasetId).toHaveLength(1);
     }
+  });
+
+  it('counts the rule’s pair once when its step runs again', async () => {
+    const datasetId = 'match-rule-replayed';
+    const { world } = await worldFor(
+      testDefinition(datasetId),
+      routesWith({ name: 'HD 660S' }, { name: 'HD 660S2' }),
+    );
+    const runId = runIdFor(datasetId, world.clock.now());
+    // Each match step runs twice, as Workflows runs a step again after a crash.
+    const ran = new Set<string>();
+    const replaying: StepRunner = {
+      async do(name, fn) {
+        if (name.startsWith('match:') && !ran.has(name)) {
+          ran.add(name);
+          await fn();
+        }
+        return JSON.parse(JSON.stringify((await fn()) ?? null)) as never;
+      },
+      async sleep(_name, ms) {
+        world.clock.advance(ms);
+      },
+    };
+    const summary = await runRefresh({ runId, datasetId }, replaying, world.ports);
+    expect(summary.match).toEqual({
+      rule: 1,
+      accepted: 0,
+      escalated: 0,
+      reused: 0,
+      skipped: 0,
+      failed: 0,
+      inputTokens: 0,
+      outputTokens: 0,
+    });
+    expect(summary.ruleApart).toEqual(['HD 660S2 and HD 660S']);
+    expect(await decisionsAbout(datasetId)).toHaveLength(1);
   });
 });
 

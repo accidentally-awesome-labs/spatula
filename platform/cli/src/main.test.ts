@@ -820,6 +820,20 @@ describe('run', () => {
     expect(at('LLM:')).toBeLessThan(at('Matched:'));
     expect(at('Matched:')).toBeLessThan(at('Not the dataset’s:'));
     expect(at('Not the dataset’s:')).toBeLessThan(at('Entities:'));
+
+    // A summary from before the rule names no pair.
+    expect(busy.some((line) => line.startsWith('Kept apart by the model-number rule'))).toBe(false);
+    const ruled = await printed({
+      match: { ...none, rule: 3 },
+      ruleApart: ['Hugo 2 and Hugo', 'Mojo 2 and Mojo'],
+    });
+    const matched = ruled.findIndex((line) => line.startsWith('Matched:'));
+    expect(ruled[matched]).toBe(
+      'Matched: 3 by rule, 0 by the decider, 0 for review, 0 as before, 0 for the next run, 0 failed; 0 tokens in, 0 out.',
+    );
+    expect(ruled[matched + 1]).toBe(
+      'Kept apart by the model-number rule: Hugo 2 and Hugo; Mojo 2 and Mojo; and 1 more.',
+    );
   });
 
   it('says how many pages wait for a match answer', async () => {

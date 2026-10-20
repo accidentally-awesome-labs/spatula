@@ -10,6 +10,7 @@ import {
   parsePage,
   pathPatternMatches,
   REFUSE_AFTER_RUNS,
+  RULE_PAIRS_NAMED,
   sha256Hex,
   sourceVerdict,
   stableId,
@@ -474,6 +475,11 @@ export async function runRefresh(
       counts.inputTokens += matched.usage.inputTokens;
       counts.outputTokens += matched.usage.outputTokens;
       if (matched.note !== null) note(summary, matched.note);
+      // The pairs the rule kept apart, by name, at most 10; `counts.rule` counts them all.
+      if (matched.outcome === 'rule' && matched.pair !== undefined) {
+        const named = (summary.ruleApart ??= []);
+        if (named.length < RULE_PAIRS_NAMED) named.push(matched.pair);
+      }
     }
     if (questions.length > 0) {
       const again = await step.do('resolve:matched', () => resolveStep(context, ports));

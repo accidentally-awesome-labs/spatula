@@ -267,4 +267,16 @@ describe('modelNumberRule', () => {
       ),
     ).toBe('other-model');
   });
+
+  it('says nothing of a record that carries no name, since every one of none differs', () => {
+    const page = { brand: ['Chord'], name: ['Hugo 2'] };
+    expect(modelNumberRule(product, page, { brand: ['Chord'], name: [] })).toBeNull();
+    expect(modelNumberRule(product, page, { brand: ['Chord'] })).toBeNull();
+    // A name field that holds a spec, not text, carries no name either.
+    const spec = { label: 'Hugo', value: '2' };
+    expect(modelNumberRule(product, page, { brand: ['Chord'], name: [spec] })).toBeNull();
+    expect(modelNumberRule(product, page, { brand: ['Chord'], name: ['Hugo'] })).toBe(
+      'other-model',
+    );
+  });
 });
