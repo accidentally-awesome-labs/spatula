@@ -162,6 +162,28 @@ export function createClient(options: {
       return { revived: Number(answer.revived) };
     },
 
+    async purgeCaptures(
+      datasetId: string,
+      sourceId: string,
+    ): Promise<{ captures: number; pages: number; bodies: number }> {
+      const response = await request(
+        'POST',
+        `/datasets/${encodeURIComponent(datasetId)}/captures/purge`,
+        { source: sourceId },
+      );
+      const answer = await json(response);
+      if (!response.ok) throw refused(response.status, answer);
+      const purged =
+        typeof answer.purged === 'object' && answer.purged !== null
+          ? (answer.purged as Record<string, unknown>)
+          : {};
+      return {
+        captures: Number(purged.captures ?? 0),
+        pages: Number(purged.pages ?? 0),
+        bodies: Number(purged.bodies ?? 0),
+      };
+    },
+
     async listReviews(datasetId: string): Promise<ReviewView[]> {
       const response = await request('GET', `/datasets/${encodeURIComponent(datasetId)}/review`);
       const answer = await json(response);

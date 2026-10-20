@@ -1,7 +1,7 @@
 import type { ContentSignals } from '@spatula/core';
-import { and, desc, eq, inArray, notInArray, sql } from 'drizzle-orm';
+import { and, desc, eq, inArray, isNotNull, notInArray, or, sql } from 'drizzle-orm';
 import type { Executor } from './client';
-import { captures, items, statements } from './schema';
+import { captures, items, sources, statements } from './schema';
 
 /*
  * The page archive (ADR 0008). A capture is a page as a fetch found it: its body, kept once under its
@@ -204,4 +204,93 @@ export async function deleteCaptures(db: Executor, captureIds: readonly string[]
     .where(inArray(captures.id, [...captureIds]))
     .returning({ id: captures.id });
   return rows.length;
+}
+
+/**
+ * What purging a source would delete (ADR 0008): the hashes of the page bodies that only its
+ * captures and its pages hold, and its captures' reads. A source's captures are those of the pages
+ * it holds now, and those taken under it while a page belonged to it (pages move, ADR 0006). Null
+ * when the dataset never had the source; a removed source has rows still. It deletes nothing, so a
+ * purge can delete the files first.
+ */
+export async function purgeKeys(
+  db: Executor,
+  input: { datasetId: string; sourceId: string },
+): Promise<{ hashes: string[]; reads: string[] } | null> {
+  const [source] = await db
+    .select({ id: sources.id })
+    .from(sources)
+    .where(and(eq(sources.datasetId, input.datasetId), eq(sources.id, input.sourceId)));
+  if (source === undefined) return null;
+  const rows = await db.execute<{ kind: 'body' | 'read'; key: string }>(sql`
+    with pages as (
+      select ${items.id} as id, ${items.contentHash} as content_hash
+      from ${items}
+      where ${items.datasetId} = ${input.datasetId} and ${items.sourceId} = ${input.sourceId}
+    ),
+    purged as (
+      select ${captures.id} as id, ${captures.contentHash} as content_hash, ${captures.readKey} as read_key
+      from ${captures}
+      where ${captures.datasetId} = ${input.datasetId}
+        and (${captures.sourceId} = ${input.sourceId} or ${captures.itemId} in (select id from pages))
+    ),
+    hashes as (
+      select content_hash as hash from purged
+      union
+      select content_hash from pages where content_hash is not null
+    )
+    select 'body' as kind, hash as key from hashes
+    where not exists (
+      select 1 from ${captures} as other
+      where other.content_hash = hashes.hash and other.id not in (select id from purged)
+    )
+    and not exists (
+      select 1 from ${items} as page
+      where page.content_hash = hashes.hash and page.id not in (select id from pages)
+    )
+    union all
+    select 'read' as kind, read_key as key from purged where read_key is not null
+  `);
+  const keys = (kind: 'body' | 'read') =>
+    rows.flatMap((row) => (row.kind === kind ? [row.key] : [])).sort();
+  return { hashes: keys('body'), reads: keys('read') };
+}
+
+/**
+ * Purges a source (ADR 0008): deletes its captures, and forgets its pages' stored copies, their hash
+ * and validators, so nothing points at a deleted file and each page's next fetch is unconditional.
+ * Its statements stay: they're facts, and their citations become null. Returns how many captures
+ * went, and how many pages lost their copy.
+ */
+export async function purgeSource(
+  db: Executor,
+  input: { datasetId: string; sourceId: string },
+): Promise<{ captures: number; pages: number }> {
+  return db.transaction(async (tx) => {
+    const pages = tx
+      .select({ id: items.id })
+      .from(items)
+      .where(and(eq(items.datasetId, input.datasetId), eq(items.sourceId, input.sourceId)));
+    const deleted = await tx
+      .delete(captures)
+      .where(
+        and(
+          eq(captures.datasetId, input.datasetId),
+          or(eq(captures.sourceId, input.sourceId), inArray(captures.itemId, pages)),
+        ),
+      )
+      .returning({ id: captures.id });
+    const forgotten = await tx
+      .update(items)
+      .set({ contentHash: null, etag: null, lastModified: null })
+      .where(
+        and(
+          eq(items.datasetId, input.datasetId),
+          eq(items.sourceId, input.sourceId),
+          isNotNull(items.contentHash),
+        ),
+      )
+      .returning({ id: items.id });
+    return { captures: deleted.length, pages: forgotten.length };
+  });
 }

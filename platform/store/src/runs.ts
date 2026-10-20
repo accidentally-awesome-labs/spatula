@@ -48,6 +48,20 @@ export async function startRunAlone(
 }
 
 /**
+ * The dataset's latest run whose row says it's going, or null. Its Workflow may have stopped since:
+ * the API's viewRun asks the Workflow.
+ */
+export async function runningRun(db: Executor, datasetId: string): Promise<RunView | null> {
+  const [row] = await db
+    .select()
+    .from(runs)
+    .where(and(eq(runs.datasetId, datasetId), eq(runs.status, 'running')))
+    .orderBy(desc(runs.startedAt))
+    .limit(1);
+  return row === undefined ? null : toView(row);
+}
+
+/**
  * Records how a run ended. A complete run stays complete: a failure recorded later, such as a
  * start of the next run recording this one as lost, can't overwrite it. A failed run can still
  * complete, as a Workflow replayed or restarted from its finished steps does, so the row says how

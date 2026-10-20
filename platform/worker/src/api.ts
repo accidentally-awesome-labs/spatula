@@ -32,9 +32,12 @@ import {
   listEvals,
   listItems,
   listOpenReviews,
+  purgeKeys,
+  purgeSource,
   recordAcknowledgment,
   reviveItems,
   reviveSources,
+  runningRun,
   saveEval,
   sourceStates,
   StaleDefinitionError,
@@ -45,8 +48,10 @@ import { bodyLimit } from 'hono/body-limit';
 import { z } from 'zod';
 import { aboutPage } from './about';
 import { r2Blobs } from './blobs';
+import { rawPageKey } from './captures';
 import { consumerSecret, secret, verifiedBot } from './config';
 import { withDatabase } from './database';
+import { pageKey } from './pipeline';
 import { answerReview } from './review';
 
 /*
@@ -413,6 +418,61 @@ api.post('/datasets/:id/sources/revive', async (c) => {
   );
   if (revived === null) return c.json({ error: `Dataset ${datasetId} doesn’t exist.` }, 404);
   return c.json({ revived });
+});
+
+const purgeSchema = z.strictObject({
+  // Source IDs are slugs of up to 63 characters (definition.ts).
+  source: z.string().min(1).max(63),
+});
+
+/**
+ * Deletes a source's captures (ADR 0008), for when a site asks, a policy changes, or a source is
+ * retired: the files first, then the rows, so a purge that fails partway is finished by running it
+ * again. Not while a run of the dataset is going, which could capture the source's pages again as
+ * they're deleted; a run whose Workflow has stopped doesn't count (viewRun). The source stays in the
+ * definition, and its statements stay.
+ */
+api.post('/datasets/:id/captures/purge', async (c) => {
+  let body: unknown;
+  try {
+    body = await c.req.json();
+  } catch {
+    return c.json({ error: 'The body isn’t JSON.' }, 400);
+  }
+  const parsed = purgeSchema.safeParse(body);
+  if (!parsed.success) return c.json({ error: 'Send { "source": a source ID }.' }, 400);
+  const datasetId = c.req.param('id');
+  const sourceId = parsed.data.source;
+  const found = await withDatabase(c.env, async (db) =>
+    (await datasetExists(db, datasetId))
+      ? {
+          keys: await purgeKeys(db, { datasetId, sourceId }),
+          running: await runningRun(db, datasetId),
+        }
+      : null,
+  );
+  if (found === null) return c.json({ error: `Dataset ${datasetId} doesn’t exist.` }, 404);
+  if (found.keys === null) {
+    return c.json({ error: `${datasetId} has no source called ${sourceId}.` }, 404);
+  }
+  if (found.running !== null) {
+    const view = await viewRun(c.env, found.running);
+    if (view.status === 'running') {
+      return c.json(
+        {
+          error: `A run of ${datasetId} is going (${view.id}). Purge once it has finished.`,
+          runId: view.id,
+        },
+        409,
+      );
+    }
+  }
+  await r2Blobs(c.env.STORE).delete([
+    ...found.keys.hashes.flatMap((hash) => [pageKey(hash), rawPageKey(hash)]),
+    ...found.keys.reads,
+  ]);
+  const purged = await withDatabase(c.env, (db) => purgeSource(db, { datasetId, sourceId }));
+  return c.json({ purged: { ...purged, bodies: found.keys.hashes.length } });
 });
 
 api.get('/datasets/:id/review', async (c) => {

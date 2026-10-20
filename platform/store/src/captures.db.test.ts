@@ -11,6 +11,8 @@ import {
   latestCapture,
   latestCaptures,
   prunableCaptures,
+  purgeKeys,
+  purgeSource,
   recordCapture,
   setCaptureRead,
   type NewCapture,
@@ -305,5 +307,52 @@ describe('freedKeys', () => {
           .where(and(eq(items.id, a2!.id), eq(items.contentHash, 'held'))),
       ).toHaveLength(1);
       expect(await captureById(db, alone.id)).not.toBeNull();
+    }));
+});
+
+describe('purging a source', () => {
+  it('deletes a source’s captures and forgets its pages’ copies, and leaves the other source’s', () =>
+    withRollback(async (db) => {
+      const {
+        items: [a1, a2, b1],
+        runId,
+      } = await seedDataset(db);
+      // A1 and A2 are maker-a's, B1 maker-b's.
+      const a1Capture = await capture(db, runId, a1!, 0, 'a1-body');
+      await setCaptureRead(db, {
+        id: a1Capture.id,
+        readKey: 'captures/test-products/a1.json.gz',
+        reader: 1,
+      });
+      await capture(db, runId, a2!, 1, 'shared');
+      const b1Capture = await capture(db, runId, b1!, 2, 'shared');
+      // B1, captured while it was maker-a's, before a definition moved it to maker-b (ADR 0006).
+      await capture(db, runId, b1!, 3, 'moved-body', { sourceId: 'maker-a' });
+      await db.update(items).set({ contentHash: 'a1-body' }).where(eq(items.id, a1!.id));
+      await db
+        .update(items)
+        .set({ contentHash: 'a2-copy', etag: '"a2"', lastModified: 'Sat, 10 Oct 2026' })
+        .where(eq(items.id, a2!.id));
+
+      const source = { datasetId: DATASET, sourceId: 'maker-a' };
+      // 'shared' stays: B1's capture holds it.
+      expect(await purgeKeys(db, source)).toEqual({
+        hashes: ['a1-body', 'a2-copy', 'moved-body'],
+        reads: ['captures/test-products/a1.json.gz'],
+      });
+      expect(await purgeSource(db, source)).toEqual({ captures: 3, pages: 2 });
+      expect(await latestCapture(db, b1!.id)).toEqual(b1Capture);
+      expect(await latestCapture(db, a1!.id)).toBeNull();
+      const [a2Now] = await db.select().from(items).where(eq(items.id, a2!.id));
+      expect(a2Now).toMatchObject({ contentHash: null, etag: null, lastModified: null });
+      // Again: nothing is left to purge.
+      expect(await purgeKeys(db, source)).toEqual({ hashes: [], reads: [] });
+      expect(await purgeSource(db, source)).toEqual({ captures: 0, pages: 0 });
+    }));
+
+  it('knows a source the dataset never had', () =>
+    withRollback(async (db) => {
+      await seedDataset(db);
+      expect(await purgeKeys(db, { datasetId: DATASET, sourceId: 'maker-z' })).toBeNull();
     }));
 });
