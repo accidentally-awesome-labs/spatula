@@ -1203,6 +1203,15 @@ describe('review', () => {
     ]);
   });
 
+  it('shows a match question’s reason with the lineup it was asked beside, on one line', async () => {
+    // The reason is the decision's evidence: the decider's own, then the lineup it was shown.
+    const reason =
+      'The names agree. Shown beside it: HD 600; HD 660S (a person kept it apart from B).';
+    const out = await listed([{ ...MATCH, context: { ...MATCH.context, reason } }]);
+    expect(out).toContain(`  Proposed: same (0.50). ${reason}`);
+    expect(out.join('\n')).not.toContain(String.raw`\u{a}`);
+  });
+
   it('names the two pages alone for a match question asked before it named the record', async () => {
     const out = await listed([{ ...MATCH, context: MATCH_CONTEXT }]);
     expect(out[2]).toBe(

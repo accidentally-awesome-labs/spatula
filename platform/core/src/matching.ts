@@ -454,7 +454,8 @@ export function modelNumberRule(
   const field = nameField(recordType);
   if (own === null || theirs === null || field === null || own.scope !== theirs.scope) return null;
   const names = (entity[field] ?? []).filter((value): value is string => typeof value === 'string');
-  // `every` is true of no names at all, and a record that carries none is never kept apart.
+  // `every` is true of no names at all, and a record that carries none is never kept apart. That
+  // already follows from `nameScope`, which needs a text name; this keeps it true if that changes.
   if (names.length === 0) return null;
   return names.every((name) => differsOnlyByModelMarks(own.name, name)) ? 'other-model' : null;
 }

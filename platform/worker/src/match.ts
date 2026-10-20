@@ -169,18 +169,19 @@ export async function matchItem(
         adapter: outcome.adapter,
         proposed: outcome.answer,
         probabilities: outcome.probabilities,
-        evidence: `${outcome.evidence} The page is judged the same as ${also} already.`,
+        evidence: `${outcome.evidence} The page is judged to join ${also} already.`,
         usage: outcome.usage,
       };
     }
   }
   const usage = outcome.by === 'rule' ? NO_USAGE : outcome.usage;
   // The decision keeps the lineup it showed in its evidence text, since the lineup isn't part of
-  // its state. The rule was shown none, and says why it answered.
+  // its state. The rule was shown none, and says why it answered. The evidence is one line, since
+  // an escalated question shows it as its reason, and the CLI spells a newline out as \u{a}.
   const evidence =
     outcome.by === 'rule'
       ? MODEL_NUMBER_REASON
-      : [outcome.evidence, lineupNote(lineup)].filter((part) => part !== '').join('\n');
+      : [outcome.evidence, lineupNote(lineup)].filter((part) => part !== '').join(' ');
   const decision = await ports.withDb((db) =>
     saveDecision(db, {
       id: decisionId,

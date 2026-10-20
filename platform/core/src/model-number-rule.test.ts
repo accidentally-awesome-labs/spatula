@@ -268,7 +268,12 @@ describe('modelNumberRule', () => {
     ).toBe('other-model');
   });
 
-  it('says nothing of a record that carries no name, since every one of none differs', () => {
+  it('says nothing of a record that carries no name', () => {
+    // The null comes from `nameScope` today: a record whose first name isn't text has no scope, so
+    // the rule never gets as far as its names. The `names.length === 0` guard after it makes sure
+    // an empty list of names never settles a pair either, since `every` is true of none, even if
+    // `nameScope` changes. No input reaches that guard now: a record that has a scope has a text
+    // first name, which is among the names the guard counts.
     const page = { brand: ['Chord'], name: ['Hugo 2'] };
     expect(modelNumberRule(product, page, { brand: ['Chord'], name: [] })).toBeNull();
     expect(modelNumberRule(product, page, { brand: ['Chord'] })).toBeNull();

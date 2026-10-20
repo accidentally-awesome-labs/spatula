@@ -462,8 +462,19 @@ describe('matching pages', { timeout: 20_000 }, () => {
       'Other records with the same brand, each already a record of its own:\n- HD 600',
     );
     expect(await decisionsAbout('match-lineup')).toMatchObject([
-      { evidence: 'the test’s reason\nShown beside it: HD 600.' },
+      { evidence: 'the test’s reason Shown beside it: HD 600.' },
     ]);
+  });
+
+  it('keeps the lineup on one line in the reason of a question a person is asked', async () => {
+    const routes = routesWith({ name: 'HD 660S' }, { name: 'HD 660SE' });
+    routes[URL_A3] = { status: 200, body: productPage({ name: 'HD 600', gtin13: DT_600.gtin13 }) };
+    const { world } = await worldFor(withThirdPage(testDefinition('match-lineup-review')), routes);
+    world.ports.decider = fakeDecider(() => ({ same: 0.5, edition: 0.48 })).decider;
+    const first = await refresh(world, 'match-lineup-review');
+    expect(first.summary.match).toMatchObject({ escalated: 1 });
+    const [review] = await listOpenReviews(db, 'match-lineup-review');
+    expect(review!.context.reason).toBe('the test’s reason Shown beside it: HD 600.');
   });
 });
 
@@ -559,6 +570,7 @@ describe('a decider that says a page is the same as two entities', { timeout: 20
       outcome: 'escalated',
       answer: null,
       probabilities: { same: 0.98 },
+      evidence: expect.stringContaining('The page is judged to join another entity already.'),
     });
   });
 
