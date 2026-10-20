@@ -10,6 +10,7 @@ export * from './gate';
 export * from './refusals';
 export * from './gates';
 export * from './page';
+export * from './captures';
 export * from './statements';
 export * from './pack';
 export * from './candidates';
