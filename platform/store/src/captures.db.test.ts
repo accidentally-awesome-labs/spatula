@@ -310,6 +310,29 @@ describe('freedKeys', () => {
       ).toHaveLength(1);
       expect(await captureById(db, alone.id)).not.toBeNull();
     }));
+
+  it('keeps a body that a capture or a page of another dataset holds', () =>
+    withRollback(async (db) => {
+      const {
+        items: [a1],
+        runId,
+      } = await seedDataset(db);
+      await applyDefinition(db, testDefinition('another'));
+      const otherRun = 'another-202610100000';
+      await startRun(db, { id: otherRun, datasetId: 'another' });
+      const [otherA1, otherA2] = await listLiveItems(db, 'another');
+      const byCapture = await capture(db, runId, a1!, 0, 'held-by-capture');
+      const byPage = await capture(db, runId, a1!, 1, 'held-by-page');
+      const alone = await capture(db, runId, a1!, 2, 'alone');
+      // The other dataset's capture holds one body, and its page's stored copy the other.
+      await capture(db, otherRun, otherA2!, 3, 'held-by-capture', { datasetId: 'another' });
+      await db.update(items).set({ contentHash: 'held-by-page' }).where(eq(items.id, otherA1!.id));
+
+      expect(await freedKeys(db, [byCapture.id, byPage.id, alone.id])).toEqual({
+        hashes: ['alone'],
+        reads: [],
+      });
+    }));
 });
 
 describe('purging a source', () => {
