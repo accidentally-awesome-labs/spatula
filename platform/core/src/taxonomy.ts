@@ -347,7 +347,8 @@ const seedShelf = { ...seedItem, implies: z.array(taxonomySlugSchema).max(50).de
 /**
  * The seed file (the contract's `audiophile-taxonomy-v1.yaml`): the scope, the functions, the shelves
  * with their children, and the features, by slug. List order sets each item's place. An export adds
- * each item's ID, and seeding keeps an ID it's given.
+ * each item's ID, and seeding keeps an ID it's given. A feature may list no shelves: one whose
+ * shelves were all retired is inert, and an export of it still seeds.
  */
 export const taxonomySeedSchema = z.strictObject({
   scope: scopeSchema,
@@ -366,7 +367,7 @@ export const taxonomySeedSchema = z.strictObject({
       z.strictObject({
         ...seedItem,
         cardinality: z.enum(['one', 'many']),
-        shelves: z.array(taxonomySlugSchema).min(1).max(MAX_SHELVES),
+        shelves: z.array(taxonomySlugSchema).max(MAX_SHELVES),
         values: z.array(z.strictObject(seedItem)).min(1).max(200),
       }),
     )
@@ -461,7 +462,11 @@ export function seedTaxonomy(
   return problems.length > 0 ? { ok: false, issues: problems } : { ok: true, taxonomy };
 }
 
-/** The live taxonomy in the seed file's shape, with each item's ID: what `taxonomy export` writes. */
+/**
+ * The live taxonomy in the seed file's shape, with each item's ID: what `taxonomy export` writes. A
+ * feature lists the live shelves it names, a merged shelf as the shelf it was merged into, and none
+ * for a retired one.
+ */
 export function exportTaxonomy(taxonomy: Taxonomy): TaxonomySeed {
   const functionSlugs = new Map(taxonomy.functions.map((fn) => [fn.id, fn.slug]));
   const shelfSlugs = new Map(taxonomy.shelves.map((shelf) => [shelf.id, shelf.slug]));
@@ -488,12 +493,14 @@ export function exportTaxonomy(taxonomy: Taxonomy): TaxonomySeed {
       .map((feature) => ({
         ...base(feature),
         cardinality: feature.cardinality,
-        shelves: feature.shelves
-          .filter((shelfId) => {
-            const found = shelfById(taxonomy, shelfId);
-            return found !== undefined && isLive(found);
-          })
-          .map((shelfId) => shelfSlugs.get(shelfId) ?? shelfId),
+        shelves: [
+          ...new Set(
+            feature.shelves.flatMap((shelfId) => {
+              const live = resolveId(taxonomy, 'shelf', shelfId);
+              return live === null ? [] : [shelfSlugs.get(live) ?? live];
+            }),
+          ),
+        ],
         values: feature.values.filter(isLive).sort(bySortOrder).map(base),
       })),
   };
