@@ -138,6 +138,42 @@ describe('the page archive', { timeout: 20_000 }, () => {
     expect(world.stored.has(readKey('archive-older', first!.id))).toBe(true);
   });
 
+  it('captures a page’s stored copy when its latest capture is of another body', async () => {
+    const body = new TextEncoder().encode(A1('stale-one'));
+    const {
+      world,
+      pages: [a1],
+    } = await worldFor(testDefinition('archive-stale'), {
+      ...standardRoutes(),
+      [URLS.a1]: { status: 200, body: A1('stale-one') },
+    });
+    await refresh(world, 'archive-stale');
+    // A1 as a run that stopped after its fetch, or a purge of a source it left, can leave it: its
+    // latest capture is of a body other than its stored copy, and its values cite none.
+    const [latest] = await capturesOf(a1!.id);
+    await db
+      .update(captures)
+      .set({ contentHash: await sha256Hex(A1('stale-zero')) })
+      .where(eq(captures.id, latest!.id));
+    await db.update(statements).set({ captureId: null }).where(eq(statements.itemId, a1!.id));
+
+    // It comes back the same on a 200, unchanged by its hash: its stored copy is captured, and its
+    // values cite that capture, not the other body's.
+    const { summary } = await refresh(world, 'archive-stale');
+    expect(summary.fetches.unchanged).toBe(3);
+    expect(summary.captures).toEqual({ stored: 1, pruned: 0 });
+    const [, fresh] = await capturesOf(a1!.id);
+    expect(fresh).toMatchObject({
+      contentHash: await sha256Hex(body),
+      httpStatus: 200,
+      bytes: body.byteLength,
+      storedBytes: null,
+    });
+    const cited = Object.values(await citations(a1!.id));
+    expect(cited.length).toBeGreaterThan(0);
+    expect(new Set(cited)).toEqual(new Set([fresh!.id]));
+  });
+
   it('cites a changed page’s new capture in its new values, and the first in the rest', async () => {
     const {
       world,

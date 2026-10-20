@@ -764,10 +764,12 @@ async function fetchItem(
 
 /**
  * The capture a fetch leaves (ADR 0008). A body that differs from the page's stored copy makes a new
- * one. A page read unchanged, by its hash or by a 304, adds none and keeps its latest; a page stored
- * before the archive, which has none, gets its first, of its stored copy. Its ID comes from the
- * fetch and the body, so a step that runs again records one. A failed or blocked fetch, or a page
- * with no stored copy, leaves none.
+ * one. A page read unchanged, by its hash or by a 304, adds none and keeps its latest, when that
+ * capture is of the stored copy. Otherwise the stored copy gets a capture of its own: a page stored
+ * before the archive has none yet, and a page's latest capture can be of another body after a run
+ * that stopped between a fetch and its capture, a rollback, or a purge of a source the page left.
+ * Its ID comes from the fetch and the body, so a step that runs again records one. A failed or
+ * blocked fetch, or a page with no stored copy, leaves none.
  */
 async function captureOf(
   db: Executor,
@@ -783,11 +785,11 @@ async function captureOf(
 ): Promise<CaptureRow | null> {
   const { answer } = fetch;
   if (answer.outcome !== 'changed' && answer.outcome !== 'unchanged') return null;
+  const contentHash = answer.page?.contentHash ?? item.contentHash;
   if (answer.outcome === 'unchanged') {
     const latest = await latestCapture(db, item.id);
-    if (latest !== null) return latest;
+    if (latest !== null && latest.contentHash === contentHash) return latest;
   }
-  const contentHash = answer.page?.contentHash ?? item.contentHash;
   if (contentHash === null) return null;
   return recordCapture(db, {
     id: await stableId('cp', fetch.fetchId, contentHash),
