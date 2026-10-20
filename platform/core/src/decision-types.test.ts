@@ -13,7 +13,7 @@ import {
   stateEvidence,
   stateHash,
 } from './decision-types';
-import type { Question } from './decisions';
+import { questionError, type Question } from './decisions';
 import type { FieldDef } from './fields';
 import { parsePage } from './page';
 
@@ -408,12 +408,20 @@ describe('a hostile page’s classification state', () => {
 });
 
 describe('matching a page to an entity', () => {
-  it('asks whether two records are the same product, a variant, or different', () => {
+  it('asks how two records are related, offering five relationships in three outcomes', () => {
     expect(matchQuestion()).toEqual({
       type: 'choice',
-      prompt: 'Are these two records the same product?',
-      options: ['same', 'variant', 'different'],
+      prompt: 'How is record A related to record B?',
+      options: ['same', 'edition', 'spec-version', 'other-model', 'unrelated'],
+      outcomes: {
+        same: 'join',
+        edition: 'edition',
+        'spec-version': 'apart',
+        'other-model': 'apart',
+        unrelated: 'apart',
+      },
     });
+    expect(questionError(matchQuestion())).toBeNull();
   });
 });
 

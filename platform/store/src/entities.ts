@@ -76,7 +76,7 @@ export interface EntityResolution {
  *
  * A claim another entity already owns is reported as a conflict and changes nothing. The
  * exception is a name that two entities share once their pages have been judged not the same:
- * that is what a "variant" answer leaves. A GTIN or part number two entities claim is always a
+ * that is what a "spec-version" answer leaves. A GTIN or part number two entities claim is always a
  * conflict.
  *
  * A pair that was escalated when no decider could be asked is recorded as unsure "by rule". While

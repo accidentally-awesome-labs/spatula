@@ -1183,7 +1183,7 @@ describe('review', () => {
       'rv_match  match  https://maker-a.example/products/a3 and sp_one (https://maker-a.example/products/a1)',
       '  Is this page the same product as the record?',
       '  Proposed: same (0.50). The names agree.',
-      '  Answers: same | variant | different',
+      '  Answers: same | variant | different | edition | spec-version | other-model | unrelated',
       '',
       'Answer with: spatula review cli-products <id> "<answer>"',
     ]);
@@ -1333,7 +1333,7 @@ describe('review', () => {
 
   it('shows why the API refused an answer, and exits 1', async () => {
     const reason =
-      'A person already said this page is the same product as sp_one, and a page joins one record. Answer variant or different.';
+      'A person already said this page joins sp_one, and a page joins one record. Answer spec-version, other-model, or unrelated.';
     const { fetch } = stubApi(() => Response.json({ error: reason }, { status: 409 }));
     const { io, out, err } = memoryIo();
     expect(await main(['review', 'cli-products', 'rv_m', 'same'], { io, env: ENV, fetch })).toBe(1);

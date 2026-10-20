@@ -462,9 +462,12 @@ export async function runRefresh(
     let resolved = first;
     // A resolution kept by an earlier version has no questions: its pages wait for the next run.
     const questions = first.questions ?? [];
+    // Nor has it lineups: its questions are asked without one.
+    const lineups = first.lineups ?? {};
     for (const question of questions) {
+      const lineup = lineups[`${question.itemId}|${question.entityId}`] ?? [];
       const matched = await step.do(`match:${question.itemId}:${question.entityId}`, () =>
-        matchItem(context, question, budgetLeft(context, summary), ports),
+        matchItem(context, { ...question, lineup }, budgetLeft(context, summary), ports),
       );
       const counts = decisionsOf(summary, 'match');
       counts[matched.outcome] += 1;

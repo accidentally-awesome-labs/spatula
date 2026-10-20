@@ -1,4 +1,4 @@
-import { NONE_OF_THESE, optionsOf, type StatementInput } from '@spatula/core';
+import { matchVerdictOf, NONE_OF_THESE, reviewAnswers, type StatementInput } from '@spatula/core';
 import {
   closeReview,
   discardHeld,
@@ -20,7 +20,8 @@ import type { RefreshPorts } from './pipeline';
 import { publishHeldSnapshot } from './publish';
 
 /*
- * A person's answers (ADR 0003). An answer is one of the question's options. It finalizes the
+ * A person's answers (ADR 0003). An answer is one of the question's options, and a match question
+ * asked before the relationships takes the relationships too (`reviewAnswers`). It finalizes the
  * decision that asked, and takes effect as a person's word: a classification becomes a human
  * statement, which outranks every other, or takes the page out of the dataset; a match becomes a
  * person's verdict, which only a person can change. Both reach the snapshot at the next run. A
@@ -43,16 +44,16 @@ export async function answerReview(
   const review = await ports.withDb((db) => getReview(db, input.reviewId));
   if (review === null || review.datasetId !== input.datasetId) return { kind: 'missing' };
   if (review.status !== 'open') return { kind: 'closed' };
-  const options = optionsOf(review.question);
+  const options = reviewAnswers(review.kind, review.question);
   if (!options.includes(input.answer)) {
     return { kind: 'refused', status: 400, reason: `Answer with one of: ${options.join(', ')}.` };
   }
   if (review.kind === 'publication') return answerPublication(ports, review, input.answer, at);
   return ports.withDb((db) =>
     db.transaction(async (tx): Promise<ReviewAnswer> => {
-      // A "same" about a page is checked first, under the page's lock, and closing is the first
-      // write, so two answers sent at once can't both take effect.
-      if (review.kind === 'match' && input.answer === 'same') {
+      // A join about a page, as the same product or an edition, is checked first, under the page's
+      // lock, and closing is the first write, so two answers sent at once can't both take effect.
+      if (review.kind === 'match' && matchVerdictOf(input.answer) !== 'not_same') {
         const refusal = await refuseSecondRecord(tx, review);
         if (refusal !== null) return refusal;
       }
@@ -132,28 +133,29 @@ async function answerMatch(
   if (review.itemId === null || review.entityId === null) {
     throw new Error(`Review ${review.id} doesn’t say which page and record it’s about`);
   }
+  const verdict = matchVerdictOf(answer);
   await judge(tx, {
     datasetId: review.datasetId,
     itemId: review.itemId,
     entityId: review.entityId,
-    verdict: answer === 'same' ? 'same' : 'not_same',
+    verdict,
     who: 'person',
     confidence: 1,
     decisionId: review.decisionId,
     at,
   });
-  return answer === 'same'
-    ? 'The page joins that record at the next run.'
-    : 'The page stays apart from that record; the next run gives it its own, or asks about another.';
+  if (verdict === 'same') return 'The page joins that record at the next run.';
+  if (verdict === 'edition') return 'The page joins that record as an edition at the next run.';
+  return 'The page stays apart from that record; the next run gives it its own, or asks about another.';
 }
 
 /**
- * A page joins one record. Resolution joins a page only to the one a person chose, so two persons'
- * "same" for one page about two records would leave it joined to neither. The second is refused
- * here, where the person can see why, and its question stays open. A decider's "same" about
- * another record doesn't refuse it: a person's answer overrides a decider's. The page's lock is
- * held to the end of the transaction, so the check reads what any other answer about the page
- * committed.
+ * A page joins one record, as the same product or as an edition. Resolution joins a page only to
+ * the one a person chose, so two persons' joins for one page about two records would leave it
+ * joined to neither. The second is refused here, where the person can see why, and its question
+ * stays open. A decider's "same" about another record doesn't refuse it: a person's answer
+ * overrides a decider's. The page's lock is held to the end of the transaction, so the check reads
+ * what any other answer about the page committed.
  */
 async function refuseSecondRecord(tx: Executor, review: ReviewRow): Promise<ReviewAnswer | null> {
   if (review.itemId === null || review.entityId === null) return null;
@@ -165,7 +167,7 @@ async function refuseSecondRecord(tx: Executor, review: ReviewRow): Promise<Revi
     return {
       kind: 'refused',
       status: 409,
-      reason: `A person already said this page is the same product as ${chosen.entityId}, and a page joins one record. Answer variant or different.`,
+      reason: `A person already said this page joins ${chosen.entityId}, and a page joins one record. Answer spec-version, other-model, or unrelated.`,
     };
   }
   const joined = await joinedEntityOf(tx, review.itemId);
@@ -173,7 +175,7 @@ async function refuseSecondRecord(tx: Executor, review: ReviewRow): Promise<Revi
     return {
       kind: 'refused',
       status: 409,
-      reason: `This page is already joined to ${joined}, and a page joins one record. Answer variant or different.`,
+      reason: `This page is already joined to ${joined}, and a page joins one record. Answer spec-version, other-model, or unrelated.`,
     };
   }
   return null;

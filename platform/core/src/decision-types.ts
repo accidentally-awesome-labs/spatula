@@ -5,8 +5,8 @@ import { jsonLdTypes, type Page } from './page';
 
 /*
  * The decisions slice 1 makes. Classifying: which value of a decided field a page's one product
- * has, or "None of these", which takes the page out of the dataset. Matching: whether a page that
- * isn't joined yet describes the same product as an entity, a variant of it, or a different one.
+ * has, or "None of these", which takes the page out of the dataset. Matching: how a page that
+ * isn't joined yet is related to an entity, as one of five relationships (ADR 0003).
  * Each question's state is what its answer rests on, and its hash is how an unchanged question is
  * recognized and never asked again. A state holds facts already accepted and what a page says
  * about itself, never its free text, which changes with every price.
@@ -165,17 +165,6 @@ export function stateHash(state: unknown): Promise<string> {
   return sha256Hex(stableStringify(state));
 }
 
-export const MATCH_ANSWERS = ['same', 'variant', 'different'] as const;
-
-/** The matching question. What "same" means is the record type's pack's criteria. */
-export function matchQuestion(): Question {
-  return {
-    type: 'choice',
-    prompt: 'Are these two records the same product?',
-    options: [...MATCH_ANSWERS],
-  };
-}
-
 /**
  * How a page can relate to a record (ADR 0003), and what each does to it: `same` joins the page to
  * the record, `edition` joins it as an edition, which the record lists, and the other three keep
@@ -215,6 +204,20 @@ export function matchVerdictOf(answer: string): 'same' | 'edition' | 'not_same' 
 export function reviewAnswers(kind: string, question: Question): string[] {
   const own = optionsOf(question);
   return kind === 'match' ? [...new Set([...own, ...MATCH_RELATIONSHIPS])] : own;
+}
+
+/**
+ * The matching question: how the page is related to the record, as one of the five
+ * relationships, grouped by what each does to the page. What each means is the record type's
+ * pack's criteria.
+ */
+export function matchQuestion(): Question {
+  return {
+    type: 'choice',
+    prompt: 'How is record A related to record B?',
+    options: [...MATCH_RELATIONSHIPS],
+    outcomes: { ...MATCH_OUTCOMES },
+  };
 }
 
 function valueText(value: FieldValue): string {

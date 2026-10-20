@@ -73,7 +73,7 @@ describe('matching pages', { timeout: 20_000 }, () => {
       world,
       pages: [a1, a2],
     } = await worldFor(testDefinition('match-variant'), routesWith(DT_80, DT_250));
-    world.ports.decider = fakeDecider(() => ({ variant: 0.97, same: 0.02 })).decider;
+    world.ports.decider = fakeDecider(() => ({ 'spec-version': 0.97, same: 0.02 })).decider;
     const first = await refresh(world, 'match-variant');
     const e1 = await entityOf(a1!.id);
     expect(first.names.slice(-6)).toEqual([
@@ -121,7 +121,7 @@ describe('matching pages', { timeout: 20_000 }, () => {
       world,
       pages: [a1, a2],
     } = await worldFor(testDefinition('match-unsure'), routesWith(DT_80, DT_250));
-    const scripted = fakeDecider(() => ({ same: 0.5, variant: 0.45 }));
+    const scripted = fakeDecider(() => ({ same: 0.5, 'spec-version': 0.45 }));
     world.ports.decider = scripted.decider;
     const first = await refresh(world, 'match-unsure');
     const e1 = await entityOf(a1!.id);
@@ -136,7 +136,7 @@ describe('matching pages', { timeout: 20_000 }, () => {
           page: URLS.a2,
           entity: URLS.a1,
           proposed: 'same',
-          probabilities: { same: 0.5, variant: 0.45 },
+          probabilities: { same: 0.5, 'spec-version': 0.45 },
         },
       },
     ]);
@@ -158,7 +158,7 @@ describe('matching pages', { timeout: 20_000 }, () => {
       world,
       pages: [a1],
     } = await worldFor(testDefinition('match-record'), routesWith(DT_80, DT_250));
-    world.ports.decider = fakeDecider(() => ({ same: 0.5, variant: 0.45 })).decider;
+    world.ports.decider = fakeDecider(() => ({ same: 0.5, 'spec-version': 0.45 })).decider;
     await refresh(world, 'match-record');
     // A refusal names a record by its ID, so the listing has to show which question that is.
     const e1 = await entityOf(a1!.id);
@@ -180,9 +180,11 @@ describe('matching pages', { timeout: 20_000 }, () => {
     const e1 = await entityOf(a1!.id);
     expect(first.names).toContain(`match:${a2!.id}:${e1}`);
     expect(world.decider.calls[0]!.question).toMatchObject({
-      options: ['same', 'variant', 'different'],
+      options: ['same', 'edition', 'spec-version', 'other-model', 'unrelated'],
     });
-    expect(world.decider.calls[0]!.criteria).toContain('variant: a version of the model');
+    expect(world.decider.calls[0]!.criteria).toContain(
+      'spec-version: the same model name, but a specification differs',
+    );
     expect(world.decider.calls[0]!.evidence).toContain(`Record A (${URLS.a2}):`);
     expect(world.decider.calls[0]!.evidence).toContain('A: HD 660S2');
     expect(world.decider.calls[0]!.evidence).toContain(`Record B (${URLS.a1}):`);
@@ -197,7 +199,7 @@ describe('matching pages', { timeout: 20_000 }, () => {
         type: 'match',
         subject: `${a2!.id}|${e1}`,
         outcome: 'accepted',
-        answer: 'different',
+        answer: 'unrelated',
         criteriaVersion: PACK_VERSION,
       },
     ]);
@@ -208,13 +210,67 @@ describe('matching pages', { timeout: 20_000 }, () => {
       world,
       pages: [a1, a2],
     } = await worldFor(testDefinition('match-torn'), routesWith(DT_80, DT_250));
-    world.ports.decider = fakeDecider(() => ({ variant: 0.45, same: 0.45 })).decider;
+    world.ports.decider = fakeDecider(() => ({ 'spec-version': 0.45, same: 0.45 })).decider;
     await refresh(world, 'match-torn');
     expect(await listOpenReviews(db, 'match-torn')).toMatchObject([
       {
         subject: `${a2!.id}|${await entityOf(a1!.id)}`,
-        context: { proposed: 'same', probabilities: { variant: 0.45, same: 0.45 } },
+        context: { proposed: 'same', probabilities: { 'spec-version': 0.45, same: 0.45 } },
       },
+    ]);
+  });
+
+  it('joins a page the decider says is an edition, and records the verdict edition', async () => {
+    const {
+      world,
+      pages: [a1, a2],
+    } = await worldFor(
+      testDefinition('match-edition'),
+      routesWith(
+        { name: 'DJ 300 PRO X', gtin13: DT_80.gtin13 },
+        { name: 'DJ 300 PRO X Club', gtin13: DT_250.gtin13 },
+      ),
+    );
+    world.ports.decider = fakeDecider(() => ({ edition: 0.97, same: 0.02 })).decider;
+    const first = await refresh(world, 'match-edition');
+    const e1 = await entityOf(a1!.id);
+    expect(first.summary.match).toMatchObject({ accepted: 1, escalated: 0 });
+    expect(await judgementsFor(db, 'match-edition')).toMatchObject([
+      { itemId: a2!.id, entityId: e1, verdict: 'edition', who: 'llm', confidence: 0.97 },
+    ]);
+    expect(await entityOf(a2!.id)).toBe(e1);
+  });
+
+  it('asks a person when the decider is torn between the same product and an edition', async () => {
+    const {
+      world,
+      pages: [a1, a2],
+    } = await worldFor(testDefinition('match-torn-edition'), routesWith(DT_80, DT_250));
+    world.ports.decider = fakeDecider(() => ({ same: 0.5, edition: 0.48 })).decider;
+    const first = await refresh(world, 'match-torn-edition');
+    expect(first.summary.match).toMatchObject({ escalated: 1 });
+    expect(await listOpenReviews(db, 'match-torn-edition')).toMatchObject([
+      { subject: `${a2!.id}|${await entityOf(a1!.id)}`, context: { proposed: 'same' } },
+    ]);
+    expect(await entityOf(a2!.id)).toBeNull();
+  });
+
+  it('shows the decider the brand’s other records, and keeps them in the decision’s evidence', async () => {
+    const routes = routesWith({ name: 'HD 660S' }, { name: 'HD 660SE' });
+    // A3 gives a GTIN, so it is placed first, and is a record of its own when A2 is asked about A1.
+    routes[URL_A3] = { status: 200, body: productPage({ name: 'HD 600', gtin13: DT_600.gtin13 }) };
+    const {
+      world,
+      pages: [a1, a2],
+    } = await worldFor(withThirdPage(testDefinition('match-lineup')), routes);
+    const first = await refresh(world, 'match-lineup');
+    const e1 = await entityOf(a1!.id);
+    expect(matchSteps(first.names)).toEqual([`match:${a2!.id}:${e1}`]);
+    expect(world.decider.calls[0]!.evidence).toContain(
+      'Other records with the same brand, each already a record of its own:\n- HD 600',
+    );
+    expect(await decisionsAbout('match-lineup')).toMatchObject([
+      { evidence: 'the test’s reason\nShown beside it: HD 600.' },
     ]);
   });
 });
@@ -241,10 +297,10 @@ describe('a page that gives only a name', { timeout: 20_000 }, () => {
       const v250Url = order === 'before' ? URL_A3 : URLS.a2;
       // The 250 is a version of the 80. The page is the 250 ohm one: the same as that, not the 80.
       const scripted = fakeDecider((request): Record<string, number> => {
-        if (request.evidence.startsWith(`Record A (${v250Url}):`)) return { variant: 0.97 };
+        if (request.evidence.startsWith(`Record A (${v250Url}):`)) return { 'spec-version': 0.97 };
         return request.evidence.includes(`Record B (${v250Url}):`)
           ? { same: 0.98 }
-          : { different: 0.97 };
+          : { unrelated: 0.97 };
       });
       world.ports.decider = scripted.decider;
 
@@ -337,7 +393,7 @@ describe('a decider that says a page is the same as two entities', { timeout: 20
     // The page is the same as the first entity already: a "same" about that entity again agrees
     // with it, and a "different" about the other disagrees with nothing.
     expect(await ask(e1)).toMatchObject({ outcome: 'accepted' });
-    world.ports.decider = fakeDecider(() => ({ different: 0.97 })).decider;
+    world.ports.decider = fakeDecider(() => ({ unrelated: 0.97 })).decider;
     expect(await ask(e2)).toMatchObject({ outcome: 'accepted' });
     const verdicts = await verdictsAbout(datasetId, page.id);
     expect(verdicts.get(e1)).toMatchObject({ verdict: 'same' });
@@ -348,7 +404,7 @@ describe('a decider that says a page is the same as two entities', { timeout: 20
     const datasetId = 'match-contradiction-different';
     const { world, definition, page, e1, e2 } = await versionsAndAPage(datasetId);
     const asked = await decisionAbout(datasetId, page.id, e2);
-    await finalizeDecision(db, { id: asked.id, finalAnswer: 'different', at: world.clock.now() });
+    await finalizeDecision(db, { id: asked.id, finalAnswer: 'unrelated', at: world.clock.now() });
     // In the pipeline the answer reaches the next run through the `judge` call in `answerReview`
     // (review.ts). This applies it by the step, as the test of a person’s answer does.
     expect(
@@ -390,7 +446,9 @@ describe('a decider that says a page is the same as two entities', { timeout: 20
     } = await worldFor(definition, routes);
     const scripted = fakeDecider(
       (request): Record<string, number> =>
-        request.evidence.startsWith(`Record A (${URLS.a2}):`) ? { variant: 0.97 } : { same: 0.98 },
+        request.evidence.startsWith(`Record A (${URLS.a2}):`)
+          ? { 'spec-version': 0.97 }
+          : { same: 0.98 },
     );
     world.ports.decider = scripted.decider;
     await refresh(world, datasetId);
@@ -525,7 +583,7 @@ describe('a question that isn’t answered in the run that raised it', { timeout
     } = await worldFor(testDefinition('match-decider-fails'), routesWith(DT_80, DT_250));
     // The decider's message quotes what the model said, and runs past what a note may hold.
     const noisy = `overloaded \u0000 ${'x'.repeat(600)}`;
-    const working = fakeDecider(() => ({ variant: 0.97 }));
+    const working = fakeDecider(() => ({ 'spec-version': 0.97 }));
     let failing = true;
     world.ports.decider = {
       name: working.decider.name,
@@ -576,7 +634,7 @@ describe('a question that isn’t answered in the run that raised it', { timeout
     ]);
     expect(await listOpenReviews(db, 'match-off-schema')).toHaveLength(1);
 
-    const answering = fakeDecider(() => ({ variant: 0.97 }));
+    const answering = fakeDecider(() => ({ 'spec-version': 0.97 }));
     world.ports.decider = answering.decider;
     const second = await refresh(world, 'match-off-schema');
     expect(matchSteps(second.names)).toEqual([`match:${a2!.id}:${e1}`]);
@@ -606,7 +664,7 @@ describe('a question that isn’t answered in the run that raised it', { timeout
       (request): Record<string, number> =>
         request.evidence.startsWith(`Record A (${URLS.a2}):`)
           ? { same: 0.98 }
-          : { different: 0.97 },
+          : { unrelated: 0.97 },
     );
     world.ports.decider = scripted.decider;
     // A2's question spends 520 tokens, so A3's waits.
@@ -684,8 +742,8 @@ describe('a question that isn’t answered in the run that raised it', { timeout
 
   it('reports the decision it made when it runs again, and counts it once', async () => {
     const cases: [string, Record<string, number>, { accepted: number; escalated: number }][] = [
-      ['match-replayed', { variant: 0.97 }, { accepted: 1, escalated: 0 }],
-      ['match-replayed-unsure', { same: 0.5, variant: 0.45 }, { accepted: 0, escalated: 1 }],
+      ['match-replayed', { 'spec-version': 0.97 }, { accepted: 1, escalated: 0 }],
+      ['match-replayed-unsure', { same: 0.5, 'spec-version': 0.45 }, { accepted: 0, escalated: 1 }],
     ];
     for (const [datasetId, answer, expected] of cases) {
       const { world } = await worldFor(testDefinition(datasetId), routesWith(DT_80, DT_250));
@@ -734,7 +792,7 @@ describe('the match step', { timeout: 20_000 }, () => {
   it('reuses an answer as sure as the dataset asks, and asks again when it asks for more', async () => {
     const definition = testDefinition('match-sure');
     const { world, a2, e1 } = await unanswered(definition);
-    const scripted = fakeDecider(() => ({ variant: 0.96, same: 0.02 }));
+    const scripted = fakeDecider(() => ({ 'spec-version': 0.96, same: 0.02 }));
     world.ports.decider = scripted.decider;
     const askedAt = async (accept: number) => {
       const stricter = { ...definition, decisions: { ...definition.decisions, match: { accept } } };
@@ -765,13 +823,67 @@ describe('the match step', { timeout: 20_000 }, () => {
     expect(await listOpenReviews(db, 'match-sure')).toHaveLength(1);
   });
 
+  it('accepts a relationship on its outcome’s total, and asks the decider once', async () => {
+    const definition = testDefinition('match-outcome');
+    const { world, a2, e1 } = await unanswered(definition);
+    const scripted = fakeDecider(() => ({ 'other-model': 0.6, 'spec-version': 0.38, same: 0.02 }));
+    world.ports.decider = scripted.decider;
+    const ask = async () => {
+      const matched = await matchItem(
+        contextOf(world, definition),
+        { itemId: a2.id, entityId: e1 },
+        10_000,
+        world.ports,
+      );
+      nextRun(world);
+      return matched;
+    };
+    expect(await ask()).toMatchObject({ outcome: 'accepted' });
+    expect((await decisionsAbout('match-outcome')).map((row) => row.answer)).toEqual([
+      'other-model',
+    ]);
+    expect(await judgementsFor(db, 'match-outcome')).toMatchObject([
+      { itemId: a2.id, entityId: e1, verdict: 'not_same', who: 'llm', confidence: 0.98 },
+    ]);
+    // The answer was as sure as its outcome, so asking again reuses it, at no cost.
+    expect(await ask()).toEqual({
+      outcome: 'reused',
+      usage: { inputTokens: 0, outputTokens: 0 },
+      note: null,
+    });
+    expect(scripted.calls).toHaveLength(1);
+  });
+
+  it('finds its decision again whatever lineup it is shown, since the lineup isn’t part of its key', async () => {
+    const definition = testDefinition('match-lineup-key');
+    const { world, a2, e1 } = await unanswered(definition);
+    const scripted = fakeDecider(() => ({ unrelated: 0.97 }));
+    world.ports.decider = scripted.decider;
+    const ask = async (lineup: { name: string; keptApart: boolean }[]) => {
+      const matched = await matchItem(
+        contextOf(world, definition),
+        { itemId: a2.id, entityId: e1, lineup },
+        10_000,
+        world.ports,
+      );
+      nextRun(world);
+      return matched;
+    };
+    expect(await ask([])).toMatchObject({ outcome: 'accepted' });
+    // A new record in the brand doesn't ask a settled pair again.
+    expect(await ask([{ name: 'DT 990 PRO', keptApart: false }])).toMatchObject({
+      outcome: 'reused',
+    });
+    expect(scripted.calls).toHaveLength(1);
+  });
+
   it('applies a person’s answer, and closes the question', async () => {
     const definition = testDefinition('match-person');
     const {
       world,
       pages: [a1, a2],
     } = await worldFor(definition, routesWith(DT_80, DT_250));
-    const scripted = fakeDecider(() => ({ same: 0.5, variant: 0.45 }));
+    const scripted = fakeDecider(() => ({ same: 0.5, 'spec-version': 0.45 }));
     world.ports.decider = scripted.decider;
     await refresh(world, 'match-person');
     const e1 = (await entityOf(a1!.id))!;
@@ -819,7 +931,7 @@ describe('the match step', { timeout: 20_000 }, () => {
   it('asks no decider once the run’s budget is spent, but still sends a person what none could answer', async () => {
     const definition = testDefinition('match-spent');
     const { world, a2, e1 } = await unanswered(definition);
-    const scripted = fakeDecider(() => ({ variant: 0.97 }));
+    const scripted = fakeDecider(() => ({ 'spec-version': 0.97 }));
     world.ports.decider = scripted.decider;
     const question = { itemId: a2.id, entityId: e1 };
     expect(await matchItem(contextOf(world, definition), question, 0, world.ports)).toMatchObject({
@@ -841,7 +953,7 @@ describe('the match step', { timeout: 20_000 }, () => {
   it('asks again when the pack words "same" differently, and says so with a new version', async () => {
     const definition = testDefinition('match-criteria');
     const { world, a2, e1 } = await unanswered(definition);
-    const scripted = fakeDecider(() => ({ different: 0.97 }));
+    const scripted = fakeDecider(() => ({ unrelated: 0.97 }));
     world.ports.decider = scripted.decider;
     const ask = async () => {
       const matched = await matchItem(
@@ -878,7 +990,7 @@ describe('the match step', { timeout: 20_000 }, () => {
   it('describes "same" with the generic criteria where the record type has no pack', async () => {
     const definition = testDefinition('match-generic');
     const { world, a2, e1 } = await unanswered(definition);
-    const scripted = fakeDecider(() => ({ different: 0.97 }));
+    const scripted = fakeDecider(() => ({ unrelated: 0.97 }));
     world.ports.decider = scripted.decider;
     world.ports.packs = {};
     await matchItem(
@@ -897,7 +1009,7 @@ describe('the match step', { timeout: 20_000 }, () => {
       world,
       pages: [a1, , b1],
     } = await worldFor(definition, routesWith(DT_80, DT_250), { llm: false });
-    const scripted = fakeDecider(() => ({ different: 0.97 }));
+    const scripted = fakeDecider(() => ({ unrelated: 0.97 }));
     world.ports.decider = scripted.decider;
     await refresh(world, 'match-hosts');
     const e1 = (await entityOf(a1!.id))!;

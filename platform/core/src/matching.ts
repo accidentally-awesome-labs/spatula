@@ -41,11 +41,13 @@ export interface LineupEntry {
   keptApart: boolean;
 }
 
-/** What "same" means when a record type's pack doesn't say. */
+/** What each relationship means when a record type's pack doesn't say. */
 export const GENERIC_MATCH_CRITERIA = [
-  'same: the two records describe the same thing.',
-  'variant: a version of the same thing that differs in a specification.',
-  'different: different things.',
+  'same: the two records describe the same thing, listed twice.',
+  'edition: the same thing in another look or packaging, with the same specifications.',
+  'spec-version: the same name, but a specification differs.',
+  'other-model: another model of the same line, with another number, generation, or tier.',
+  'unrelated: different things.',
 ].join('\n');
 
 /** A verdict on a page and an entity: "same" and "edition" join them (ADR 0003). */
@@ -264,8 +266,9 @@ export function planMatch(input: {
     const owner = strongest.entityId;
     if (pending.has(owner)) return { kind: 'wait' };
     if (strongest.claim.rank < keyRank) return { kind: 'join', entityId: owner };
-    // A name belongs to whichever entity claimed it first, but others may carry it too: a "variant"
-    // answer splits a version off with the name it shares. The page could be any of them.
+    // A name belongs to whichever entity claimed it first, but others may carry it too: an answer
+    // that keeps a version apart ("spec-version") splits it off with the name it shares. The page
+    // could be any of them.
     const sharing = sharingName(recordType, values, input.sameScope).filter(
       (entityId) => entityId !== owner && !apart.has(entityId),
     );

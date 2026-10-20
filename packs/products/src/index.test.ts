@@ -774,19 +774,26 @@ describe('productPack.finish, with product types', () => {
 });
 
 describe('productPack.match', () => {
-  it('says what makes two products the same, versioned', () => {
-    expect(productPack.match).toMatchObject({ version: 2 });
-    expect(productPack.match?.criteria).toContain('variant: a version of the model');
+  it('defines the five relationships, at version 3', () => {
+    expect(productPack.match).toMatchObject({ version: 3 });
+    const lines = productPack.match?.criteria.split('\n') ?? [];
+    expect(lines.slice(0, 5).map((line) => line.slice(0, line.indexOf(':')))).toEqual([
+      'same',
+      'edition',
+      'spec-version',
+      'other-model',
+      'unrelated',
+    ]);
+    // A successor is another product (owner, 2026-10-20), so a generation is another model.
+    expect(lines[3]).toContain('a newer or older generation');
+    expect(productPack.match?.criteria).not.toContain('variant');
   });
 
   it('doesn’t let identifiers decide alone, since each color has its own GTIN', () => {
     const lines = productPack.match?.criteria.split('\n') ?? [];
-    // Colors of one model are the same product, so a different GTIN can't make them another.
-    expect(lines[0]).toContain(
-      'Colors, finishes, and bundles of the same model are the same product',
-    );
+    expect(lines[1]).toContain('a color, a finish, a special or limited edition, or a bundle');
     expect(lines).toContain(
-      "Identifiers don't decide alone: each color, finish, and bundle has its own GTIN, and often its own part number. Compare the model name and the specifications.",
+      "When specifications differ, it isn't an edition. Identifiers don't decide alone: each color, finish, and bundle has its own GTIN, and often its own part number. Compare the names and the specifications.",
     );
     expect(productPack.match?.criteria).not.toContain('Identifiers decide');
   });

@@ -671,7 +671,7 @@ describe('what the owner is told about a hold', { timeout: 20_000 }, () => {
       body: productPage({ name: 'DT 770 PRO', gtin13: '4010118471070' }),
     };
     const { world } = await worldFor(gated('publish-asks', 'balanced'), routes);
-    world.ports.decider = fakeDecider(() => ({ same: 0.5, variant: 0.45 })).decider;
+    world.ports.decider = fakeDecider(() => ({ same: 0.5, 'spec-version': 0.45 })).decider;
     await refresh(world, 'publish-asks');
     const [question] = await publicationQuestions('publish-asks');
     expect(question!.context).toMatchObject({ incomplete: 0, openClassify: 0, openMatch: 1 });

@@ -1,12 +1,16 @@
 import {
   cascade,
   GENERIC_MATCH_CRITERIA,
+  lineupNote,
   matchEvidence,
   matchQuestion,
+  matchVerdictOf,
   optionsOf,
+  outcomeProbability,
   stableId,
   stateHash,
   type CascadeOutcome,
+  type LineupEntry,
   type LlmUsage,
 } from '@spatula/core';
 import {
@@ -26,14 +30,18 @@ import { NO_USAGE, type Context, type RefreshPorts } from './pipeline';
 import { storable } from './text';
 
 /*
- * One match question (ADR 0003): is this page the same product as this entity, a variant of it, or
- * a different one? The decider sees both records' values, never their pages' text, and answers
- * where the dataset and every page's site allow AI input. "Same" becomes a verdict that joins them,
- * "variant" and "different" one that keeps them apart, and an answer that isn't sure enough goes to
- * a person while the page waits. A decider's "same" is no exception to that where the page is
- * judged the same as another entity already: that contradicts it, and a person says which. A
- * question answered before, on the same evidence, isn't asked again unless asking might now come to
- * something else (`stands`, in classify.ts).
+ * One match question (ADR 0003): how is this page related to this entity? The same product, an
+ * edition of it, a version whose specifications differ, another model, or an unrelated product.
+ * The decider sees both records' values side by side, the entity's known editions, and the other
+ * records in the page's brand, never their pages' text, and answers where the dataset and every
+ * page's site allow AI input. Its likeliest relationship is taken when the relationships with the
+ * same outcome add up to the threshold: "same" joins the page to the entity, "edition" joins it as
+ * an edition, and the rest keep it apart. An answer that isn't sure enough goes to a person while
+ * the page waits. A decider's join is no exception to that where the page is judged to join
+ * another entity already: that contradicts it, and a person says which. A question answered
+ * before, on the same evidence, isn't asked again unless asking might now come to something else
+ * (`stands`, in classify.ts). The lineup is shown, and kept in the decision's evidence text, but it
+ * isn't part of the question's key.
  */
 
 export interface Matched {
@@ -44,12 +52,14 @@ export interface Matched {
 
 export async function matchItem(
   context: Context,
-  question: { itemId: string; entityId: string },
+  question: { itemId: string; entityId: string; lineup?: readonly LineupEntry[] },
   budgetLeft: number,
   ports: RefreshPorts,
 ): Promise<Matched> {
   const { datasetId, definition, runId } = context;
   const { itemId, entityId } = question;
+  // A question from a resolution that an earlier version kept has no lineup.
+  const lineup = question.lineup ?? [];
   const result = (outcome: Matched['outcome'], more: Partial<Matched> = {}): Matched => ({
     outcome,
     usage: NO_USAGE,
@@ -63,7 +73,12 @@ export async function matchItem(
   const pack = recordType.pack === undefined ? undefined : ports.packs[recordType.pack];
   const criteria = pack?.match?.criteria ?? GENERIC_MATCH_CRITERIA;
   const criteriaVersion = pack?.match?.version ?? 0;
-  const state = { page: sides.page, entity: sides.entity };
+  // The entity's editions are facts about it, as its values are, so they are part of the question.
+  const state = {
+    page: sides.page,
+    entity: sides.entity,
+    ...(sides.editions.length > 0 ? { editions: sides.editions } : {}),
+  };
   const asked = matchQuestion();
   const hash = await stateHash({ question: asked, criteria, state });
   const subject = `${itemId}|${entityId}`;
@@ -105,7 +120,13 @@ export async function matchItem(
         type: 'match',
         question: asked,
         criteria,
-        evidence: matchEvidence({ recordType, page: sides.page, entity: sides.entity }),
+        evidence: matchEvidence({
+          recordType,
+          page: sides.page,
+          entity: sides.entity,
+          editions: sides.editions,
+          lineup,
+        }),
       },
       rule: null,
       deciders: decider === null ? [] : [decider],
@@ -117,10 +138,11 @@ export async function matchItem(
       note: storable(`${sides.page.url}: the decider failed on a match question: ${message}`),
     });
   }
-  // A decider's "same" about a page that is judged the same as another entity already contradicts
-  // that, whoever gave it: the entities were kept apart, or the page tells them too little apart.
-  // It isn't accepted. A person is asked, with the decider's answer proposed.
-  if (outcome.by === 'adapter' && outcome.answer === 'same') {
+  // A decider's join, as the same product or an edition, about a page that is judged to join
+  // another entity already contradicts that, whoever gave it: the entities were kept apart, or the
+  // page tells them too little apart. It isn't accepted. A person is asked, with the decider's
+  // answer proposed.
+  if (outcome.by === 'adapter' && matchVerdictOf(outcome.answer) !== 'not_same') {
     const others = (await ports.withDb((db) => sameVerdictsOf(db, itemId))).filter(
       (verdict) => verdict.entityId !== entityId,
     );
@@ -129,15 +151,21 @@ export async function matchItem(
       outcome = {
         by: 'person',
         adapter: outcome.adapter,
-        proposed: 'same',
+        proposed: outcome.answer,
         probabilities: outcome.probabilities,
         evidence: `${outcome.evidence} The page is judged the same as ${also} already.`,
         usage: outcome.usage,
       };
     }
   }
-  // The cascade has no rule for matching, so its outcome is a decider's or a person's.
+  // The cascade has no rule for matching yet, so its outcome is a decider's or a person's.
   const usage = outcome.by === 'rule' ? NO_USAGE : outcome.usage;
+  // The decision keeps the lineup it showed in its evidence text, since the lineup isn't part of
+  // its state.
+  const evidence =
+    outcome.by === 'rule'
+      ? ''
+      : [outcome.evidence, lineupNote(lineup)].filter((part) => part !== '').join('\n');
   const decision = await ports.withDb((db) =>
     saveDecision(db, {
       id: decisionId,
@@ -151,7 +179,7 @@ export async function matchItem(
       criteriaVersion,
       adapter: outcome.by === 'rule' ? null : outcome.adapter,
       probabilities: outcome.by === 'rule' ? { [outcome.answer]: 1 } : outcome.probabilities,
-      evidence: outcome.by === 'rule' ? '' : outcome.evidence,
+      evidence,
       thresholds: { accept },
       outcome: outcome.by === 'adapter' ? 'accepted' : outcome.by === 'rule' ? 'rule' : 'escalated',
       answer: outcome.by === 'person' ? null : outcome.answer,
@@ -165,10 +193,12 @@ export async function matchItem(
 }
 
 /**
- * A match decision as a verdict: "same" joins, "variant" and "different" keep the page apart, and
- * no answer yet asks a person. A decision that no decider weighed, because none was asked or
- * because its answer fit no schema and named no probabilities, is recorded as the rule's ("rule"
- * means no decider weighed it), so that resolution asks the pair again once one can.
+ * A match decision as a verdict: "same" joins, "edition" joins as an edition, every other answer
+ * (another relationship, or the "variant" or "different" of a question from before) keeps the page
+ * apart, and no answer yet asks a person. A judgement is as sure as its answer's outcome. A
+ * decision that no decider weighed, because none was asked or because its answer fit no schema and
+ * named no probabilities, is recorded as the rule's ("rule" means no decider weighed it), so that
+ * resolution asks the pair again once one can.
  */
 async function applyVerdict(
   db: Executor,
@@ -192,7 +222,10 @@ async function applyVerdict(
       entityId,
       verdict: 'unsure',
       who: weighed(decision) ? 'llm' : 'rule',
-      confidence: proposed === null ? 0 : (decision.probabilities[proposed] ?? 0),
+      confidence:
+        proposed === null
+          ? 0
+          : outcomeProbability(decision.question, decision.probabilities, proposed),
       decisionId: decision.id,
       at,
     });
@@ -223,9 +256,12 @@ async function applyVerdict(
     datasetId,
     itemId,
     entityId,
-    verdict: answer === 'same' ? 'same' : 'not_same',
+    verdict: matchVerdictOf(answer),
     who: decision.finalAnswer !== null ? 'person' : 'llm',
-    confidence: decision.finalAnswer !== null ? 1 : (decision.probabilities[answer] ?? 0),
+    confidence:
+      decision.finalAnswer !== null
+        ? 1
+        : outcomeProbability(decision.question, decision.probabilities, answer),
     decisionId: decision.id,
     at,
   });
