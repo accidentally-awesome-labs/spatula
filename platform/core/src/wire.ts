@@ -107,6 +107,11 @@ export interface RunSummary {
   };
   fetches: Record<Outcome, number>;
   statements: { added: number; reseen: number; withdrawn: number };
+  /**
+   * The page archive's work this run (ADR 0008): captures stored, and earlier ones the cleanup
+   * deleted. Absent in runs from before the archive.
+   */
+  captures?: { stored: number; pruned: number };
   llm: {
     ran: number;
     reused: number;

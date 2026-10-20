@@ -6,6 +6,7 @@ import {
   evaluate,
   plan,
   pullSnapshot,
+  purge,
   revive,
   review,
   run,
@@ -27,6 +28,9 @@ export const USAGE = `Usage: spatula <command>
   revive <dataset> [--refused] [--source <id>]... [<page>...]
                                Put refused pages, or the pages named, back for the next
                                run; --source puts a blocked or refused source back
+  purge <dataset> --source <id>
+                               Delete a source’s page captures, and its pages’ stored
+                               copies. Its next run captures them again
   review <dataset> [<id> <answer>]
                                List the questions waiting for an answer, or answer one
   status <dataset>             Where a dataset stands: its head, what’s held, what waits,
@@ -135,6 +139,12 @@ export async function main(
         pages,
         sources,
       });
+    }
+    case 'purge': {
+      const sources = values.source ?? [];
+      return rest.length === 1 && sources.length === 1
+        ? purge(io, client, rest[0]!, sources[0]!)
+        : usage();
     }
     case 'review': {
       const [datasetId, reviewId, answer, ...extra] = rest;

@@ -171,6 +171,32 @@ export async function revive(
   });
 }
 
+/**
+ * Deletes a source's page captures, and its pages' stored copies (ADR 0008). The source's statements
+ * stay, and so does the source, whose next run captures its pages again.
+ */
+export async function purge(
+  io: Io,
+  client: Client,
+  datasetId: string,
+  sourceId: string,
+): Promise<number> {
+  return withApi(io, async () => {
+    const purged = await client.purgeCaptures(datasetId, sourceId);
+    if (purged.captures + purged.pages + purged.bodies === 0) {
+      io.out(`Nothing of ${sourceId} was captured in ${datasetId}.`);
+      return 0;
+    }
+    io.out(
+      `Purged ${count(purged.captures, 'capture')} of ${sourceId} in ${datasetId}, and ${count(purged.bodies, 'stored page')}.`,
+    );
+    io.out(
+      `The next run that reads ${sourceId}’s pages captures them again. Remove ${sourceId} from the definition if they mustn’t be read.`,
+    );
+    return 0;
+  });
+}
+
 /** Lists the dataset's open questions, or answers one. */
 export async function review(
   io: Io,

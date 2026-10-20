@@ -165,6 +165,9 @@ export function makeWorld(
       async get(key) {
         return stored.get(key) ?? null;
       },
+      async delete(keys) {
+        for (const key of keys) stored.delete(key);
+      },
     },
     llm: options.llm === false ? null : llm.llm,
     decider: options.decider === false ? null : decider.decider,

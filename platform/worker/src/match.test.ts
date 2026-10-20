@@ -76,11 +76,12 @@ describe('matching pages', { timeout: 20_000 }, () => {
     world.ports.decider = fakeDecider(() => ({ variant: 0.97, same: 0.02 })).decider;
     const first = await refresh(world, 'match-variant');
     const e1 = await entityOf(a1!.id);
-    expect(first.names.slice(-5)).toEqual([
+    expect(first.names.slice(-6)).toEqual([
       'resolve',
       `match:${a2!.id}:${e1}`,
       'resolve:matched',
       'snapshot',
+      'captures',
       'finish',
     ]);
     expect(first.summary.match).toMatchObject({ accepted: 1, inputTokens: 500, outputTokens: 20 });

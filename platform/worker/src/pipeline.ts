@@ -58,6 +58,8 @@ export interface HttpPort {
 export interface BlobPort {
   put(key: string, body: Uint8Array | string, contentType: string): Promise<void>;
   get(key: string): Promise<Uint8Array | null>;
+  /** Deletes these keys. A key that isn't there is no error. */
+  delete(keys: readonly string[]): Promise<void>;
 }
 
 export interface RefreshPorts {
@@ -110,8 +112,12 @@ export function intervalFor(
 export const NO_USAGE: LlmUsage = { inputTokens: 0, outputTokens: 0 };
 export const NO_CHANGE: StatementCounts = { added: 0, reseen: 0, withdrawn: 0 };
 
-/** Where a page's HTML is kept: under its SHA-256, so an unchanged page is stored once. */
-export const pageKey = (contentHash: string) => `pages/${contentHash}`;
+/**
+ * Where a page's body is kept: gzipped, under its SHA-256 as it arrived, so an unchanged page is
+ * stored once (ADR 0008). A copy stored before the archive is under the bare hash
+ * (`rawPageKey` in captures.ts).
+ */
+export const pageKey = (contentHash: string) => `pages/${contentHash}.gz`;
 export const snapshotKey = (datasetId: string, snapshotId: string) =>
   `datasets/${datasetId}/snapshots/${snapshotId}.json`;
 /** Where a held snapshot's records wait, before it has a generation. */

@@ -1,5 +1,5 @@
 import { newId, type Method, type StatementInput, type StatementView } from '@spatula/core';
-import { and, asc, eq, inArray, isNull } from 'drizzle-orm';
+import { and, asc, eq, inArray, isNull, sql } from 'drizzle-orm';
 import type { Executor } from './client';
 import { items, statements } from './schema';
 
@@ -41,6 +41,12 @@ export async function writeStatements(
      */
     properties?: readonly string[];
     statements: StatementInput[];
+    /**
+     * The capture the values were read from (ADR 0008). A new value cites it; a value seen again
+     * keeps the capture it cites, or takes this one if it has none, as a value from before the
+     * archive does. Absent or null cites nothing.
+     */
+    captureId?: string | null;
   },
 ): Promise<StatementCounts> {
   const outside = write.statements.find((statement) => !write.methods.includes(statement.method));
@@ -95,7 +101,7 @@ export async function writeStatements(
     if (reseen.length > 0) {
       await tx
         .update(statements)
-        .set({ lastSeen: write.seenAt, lastFetchId: write.fetchId })
+        .set({ lastSeen: write.seenAt, lastFetchId: write.fetchId, ...citing(write.captureId) })
         .where(inArray(statements.id, reseen));
     }
     if (withdrawn.length > 0) {
@@ -113,6 +119,7 @@ export async function writeStatements(
           ...statement,
           fetchId: write.fetchId,
           lastFetchId: write.fetchId,
+          captureId: write.captureId ?? null,
           firstSeen: write.seenAt,
           lastSeen: write.seenAt,
         })),
@@ -136,12 +143,14 @@ export async function reseeStatements(
     seenAt: Date;
     methods?: readonly Method[];
     properties?: readonly string[];
+    /** The capture that saw them again: a value that cites none takes it (ADR 0008). */
+    captureId?: string | null;
   },
 ): Promise<number> {
   if (input.properties !== undefined && input.properties.length === 0) return 0;
   const rows = await db
     .update(statements)
-    .set({ lastSeen: input.seenAt, lastFetchId: input.fetchId })
+    .set({ lastSeen: input.seenAt, lastFetchId: input.fetchId, ...citing(input.captureId) })
     .where(
       and(
         eq(statements.itemId, input.itemId),
@@ -218,4 +227,14 @@ export async function statementsOf(
     else list.push(view);
   }
   return said;
+}
+
+/**
+ * What a write that re-sees values sets of their citation: a value that cites a capture keeps it,
+ * and one that cites none, as a value from before the archive does, takes this one (ADR 0008).
+ */
+function citing(captureId: string | null | undefined) {
+  return captureId === undefined || captureId === null
+    ? {}
+    : { captureId: sql`coalesce(${statements.captureId}, ${captureId})` };
 }

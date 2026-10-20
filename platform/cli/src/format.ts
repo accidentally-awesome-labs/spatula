@@ -108,6 +108,13 @@ export function formatRun(run: RunView): string[] {
     `Statements: ${statements.added} added, ${statements.reseen} seen again, ${statements.withdrawn} withdrawn.`,
     `LLM: ran ${llm.ran}, reused ${llm.reused}, skipped ${llm.skipped}, failed ${llm.failed}; ${llm.inputTokens} tokens in, ${llm.outputTokens} out.`,
   );
+  // What the run kept of the pages it read (ADR 0008). A Worker before the archive says nothing.
+  if (summary.captures !== undefined) {
+    const { stored, pruned } = summary.captures;
+    lines.push(
+      `Archive: ${stored} ${stored === 1 ? 'capture' : 'captures'} stored, ${pruned} cleaned up.`,
+    );
+  }
   // Runs from before slice 1, and datasets that decide nothing, say nothing of decisions.
   for (const [label, counts] of [
     ['Classified', summary.classify],

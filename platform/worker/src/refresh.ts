@@ -26,12 +26,16 @@ import {
   type SourceVerdict,
 } from '@spatula/core';
 import {
+  captureById,
   dueItems,
   finishRun,
+  forgetStoredCopy,
   getDataset,
   itemsByIds,
+  latestCapture,
   liveAgain,
   probeItem,
+  recordCapture,
   recordExtraction,
   recordFetch,
   recordSourceRuns,
@@ -40,10 +44,13 @@ import {
   sourceStates,
   startRun,
   writeStatements,
+  type CaptureRow,
+  type Executor,
   type FetchInput,
   type ItemRef,
   type StatementCounts,
 } from '@spatula/store';
+import { cleanUpCaptures, readPageBody, storeBody, storeRead } from './captures';
 import { cascadeField, classifyItem, classifyTarget, decidedByLlm } from './classify';
 import { discoverSource } from './discovery';
 import { matchItem } from './match';
@@ -54,7 +61,6 @@ import {
   intervalFor,
   NO_CHANGE,
   NO_USAGE,
-  pageKey,
   retryTag,
   type Context,
   type RefreshPorts,
@@ -92,7 +98,8 @@ export {
  * through the dataset's gates (publish.ts): a snapshot is published when the gates allow it, and
  * held for the owner's review when they don't. Nothing here imports Cloudflare: the Workflow
  * passes real ports, and the tests pass fakes. A source that refused three runs in a row gets only
- * a probe; a step after the pages counts each source's standing (ADR 0006).
+ * a probe; a step after the pages counts each source's standing (ADR 0006). The last step before
+ * the run finishes cleans up the page archive (ADR 0008).
  */
 
 export interface RefreshParams {
@@ -191,6 +198,13 @@ interface Fetched {
   /** Whether to extract: the page changed, or its statements came from older code. */
   extract: boolean;
   reseen: number;
+  /**
+   * The capture the page's values are read from (ADR 0008): a new one, or the page's latest. Null
+   * when there's none, and absent from a result kept by an earlier version, which cites none.
+   */
+  captureId?: string | null;
+  /** Whether this fetch recorded a capture. Absent from a result kept by an earlier version. */
+  captured?: boolean;
   note: string | null;
 }
 
@@ -476,6 +490,10 @@ export async function runRefresh(
     for (const text of resolved.notes) note(summary, text);
 
     summary.snapshot = await step.do('snapshot', () => publish(context, ports));
+    // The archive's cleanup comes after publishing, so it never holds a snapshot up (ADR 0008).
+    const cleaned = await step.do('captures', () => cleanUpCaptures(context, ports));
+    if (summary.captures !== undefined) summary.captures.pruned = cleaned.pruned;
+    if (cleaned.note !== null) note(summary, cleaned.note);
     await step.do('finish', () =>
       ports.withDb((db) => finishRun(db, runId, { status: 'complete', summary })),
     );
@@ -506,6 +524,7 @@ function emptySummary(): RunSummary {
     },
     fetches: { changed: 0, unchanged: 0, gone: 0, failed: 0, blocked: 0 },
     statements: { ...NO_CHANGE },
+    captures: { stored: 0, pruned: 0 },
     llm: { ran: 0, reused: 0, skipped: 0, failed: 0, inputTokens: 0, outputTokens: 0 },
     entities: { created: 0, linked: 0, conflicts: 0, unresolved: 0, waiting: 0 },
     snapshot: { published: false, reason: 'the run didn’t reach publishing', excluded: [] },
@@ -534,6 +553,7 @@ async function refreshItem(
   const fetched = await fetchWithWaits(context, item, step, ports);
   summary.fetches[fetched.outcome] += 1;
   summary.statements.reseen += fetched.reseen;
+  if (fetched.captured === true && summary.captures !== undefined) summary.captures.stored += 1;
   if (fetched.note !== null) note(summary, fetched.note);
   // What the fetch step's result says of the host, which a run that replays its steps reads again.
   const host = {
@@ -661,7 +681,7 @@ async function fetchItem(
   const startedAt = ports.now();
   const requested = await request(context, item, attempt >= MAX_WAITS, ports, resume);
   if (requested.kind === 'later') return requested;
-  const { attempt: answer, signals, noAnswer, site } = requested;
+  const { attempt: answer, signals, noAnswer, site, stored = null } = requested;
 
   // The same run, page, and attempt make the same ID, so a step that runs again logs one fetch.
   const fetchId = await stableId('fe', context.runId, item.id, attempt);
@@ -679,7 +699,7 @@ async function fetchItem(
     current = !(await decidedByLlm(context, item, ports));
   }
   const extract = answer.outcome === 'changed' || (answer.outcome === 'unchanged' && !current);
-  const reseen = await ports.withDb(async (db) => {
+  const { reseen, capture } = await ports.withDb(async (db) => {
     const logged: FetchInput = {
       id: fetchId,
       runId: context.runId,
@@ -699,10 +719,25 @@ async function fetchItem(
         : {}),
     };
     await recordFetch(db, logged);
-    // An unchanged page whose statements are current says what it said before.
-    return answer.outcome === 'unchanged' && current
-      ? reseeStatements(db, { itemId: item.id, fetchId, seenAt: ports.now() })
-      : 0;
+    const capture = await captureOf(db, context, item, {
+      fetchId,
+      answer,
+      signals,
+      startedAt,
+      stored,
+    });
+    // An unchanged page whose statements are current says what it said before. A value from before
+    // the archive takes this capture as its evidence (ADR 0008).
+    const reseen =
+      answer.outcome === 'unchanged' && current
+        ? await reseeStatements(db, {
+            itemId: item.id,
+            fetchId,
+            seenAt: ports.now(),
+            captureId: capture?.id ?? null,
+          })
+        : 0;
+    return { reseen, capture };
   });
   const settled = answer.outcome === 'changed' || answer.outcome === 'unchanged';
   const why = answer.error ?? answer.policyReason;
@@ -719,11 +754,63 @@ async function fetchItem(
       contentHash: answer.page?.contentHash ?? item.contentHash,
       extract,
       reseen,
+      captureId: capture?.id ?? null,
+      captured: capture !== null && capture.fetchId === fetchId,
       note: settled
         ? null
         : storable(`${item.locator}: ${answer.outcome}${why === null ? '' : ` (${why})`}`),
     },
   };
+}
+
+/**
+ * The capture a fetch leaves (ADR 0008). A body that differs from the page's stored copy makes a new
+ * one. A page read unchanged, by its hash or by a 304, adds none and keeps its latest, when that
+ * capture is of the stored copy. Otherwise the stored copy gets a capture of its own: a page stored
+ * before the archive has none yet, and a page's latest capture can be of another body after a run
+ * that stopped between a fetch and its capture, a rollback, or a purge of a source the page left.
+ * Its ID comes from the fetch and the body, so a step that runs again records one. A failed or
+ * blocked fetch, or a page with no stored copy, leaves none.
+ */
+async function captureOf(
+  db: Executor,
+  context: Context,
+  item: ItemRef,
+  fetch: {
+    fetchId: string;
+    answer: Attempt;
+    signals: ContentSignals;
+    startedAt: Date;
+    stored: number | null;
+  },
+): Promise<CaptureRow | null> {
+  const { answer } = fetch;
+  if (answer.outcome !== 'changed' && answer.outcome !== 'unchanged') return null;
+  const contentHash = answer.page?.contentHash ?? item.contentHash;
+  if (answer.outcome === 'unchanged') {
+    const latest = await latestCapture(db, item.id);
+    if (latest !== null && latest.contentHash === contentHash) return latest;
+  }
+  if (contentHash === null) return null;
+  return recordCapture(db, {
+    id: await stableId('cp', fetch.fetchId, contentHash),
+    datasetId: context.datasetId,
+    itemId: item.id,
+    sourceId: item.sourceId,
+    fetchId: fetch.fetchId,
+    url: item.locator,
+    finalUrl: answer.finalUrl,
+    httpStatus: answer.httpStatus,
+    // The validators its own response carried, none included. A 304 brings no page: it confirmed
+    // the validators the request sent, which are the item's.
+    etag: answer.page === undefined ? item.etag : answer.page.etag,
+    lastModified: answer.page === undefined ? item.lastModified : answer.page.lastModified,
+    fetchedAt: fetch.startedAt,
+    contentHash,
+    bytes: answer.bytes,
+    storedBytes: fetch.stored,
+    signals: fetch.signals,
+  });
 }
 
 /**
@@ -752,6 +839,8 @@ async function request(
       signals: ContentSignals;
       noAnswer: boolean;
       site: SiteAnswer | null;
+      /** The gzipped body's size, when this answer stored a body (ADR 0008). */
+      stored?: number | null;
     }
 > {
   // Definitions keep a page as written and only validate it. From here on, every hop and the
@@ -830,21 +919,27 @@ async function request(
     });
   }
   const contentHash = await sha256Hex(answer.body);
-  if (contentHash !== item.contentHash) {
-    await ports.blobs.put(pageKey(contentHash), answer.body, 'text/html; charset=utf-8');
-  }
-  return answered({
-    outcome: contentHash === item.contentHash ? 'unchanged' : 'changed',
-    httpStatus: answer.status,
-    finalUrl: answer.url,
-    bytes: answer.body.byteLength,
-    error: null,
-    page: {
-      contentHash,
-      etag: answer.headers.etag ?? null,
-      lastModified: answer.headers['last-modified'] ?? null,
-    },
-  });
+  // A body that differs from the page's stored copy is kept, gzipped, under its hash (ADR 0008).
+  // The same body again is stored already.
+  const stored =
+    contentHash === item.contentHash
+      ? null
+      : await storeBody(ports.blobs, contentHash, answer.body);
+  return {
+    ...answered({
+      outcome: contentHash === item.contentHash ? 'unchanged' : 'changed',
+      httpStatus: answer.status,
+      finalUrl: answer.url,
+      bytes: answer.body.byteLength,
+      error: null,
+      page: {
+        contentHash,
+        etag: answer.headers.etag ?? null,
+        lastModified: answer.headers['last-modified'] ?? null,
+      },
+    }),
+    stored,
+  };
 }
 
 /**
@@ -937,8 +1032,20 @@ async function extractItem(
     throw new Error(`${item.locator} has no source or record type in revision ${revision}`);
   }
   const body =
-    fetched.contentHash === null ? null : await ports.blobs.get(pageKey(fetched.contentHash));
-  if (body === null) throw new Error(`The stored copy of ${item.locator} is missing`);
+    fetched.contentHash === null ? null : await readPageBody(ports.blobs, fetched.contentHash);
+  if (body === null) {
+    // Another dataset's cleanup or purge can delete a body this page holds, and so can a purge
+    // whose commit failed after its deletes (ADR 0008). The page forgets its copy, so its next
+    // fetch is unconditional and stores the body again, and waits for that run.
+    await ports.withDb((db) => forgetStoredCopy(db, item.id));
+    return unread(
+      context,
+      item,
+      fetched,
+      'its stored copy was missing, so it’s fetched afresh next run',
+      ports,
+    );
+  }
 
   const pack = recordType.pack === undefined ? null : (ports.packs[recordType.pack] ?? null);
   let page: Page;
@@ -959,6 +1066,7 @@ async function extractItem(
       ports,
     );
   }
+  await keepRead(ports, fetched, page);
   const seenAt = ports.now();
   const decided = cascadeField(source, recordType);
   // The cascade owns the decided field, so the page and the LLM speak for every other field, and
@@ -970,6 +1078,7 @@ async function extractItem(
       itemId: item.id,
       fetchId: fetched.fetchId,
       seenAt,
+      captureId: fetched.captureId ?? null,
       methods: PAGE_METHODS,
       statements:
         decided === null
@@ -1031,6 +1140,26 @@ async function extractItem(
 }
 
 /**
+ * Keeps what Spatula read from the page with its capture, once (ADR 0008). A capture can do without
+ * it: `readCapture` makes one from the body when it's needed. So keeping it never fails the read.
+ */
+async function keepRead(ports: RefreshPorts, fetched: Fetched, page: Page): Promise<void> {
+  const captureId = fetched.captureId;
+  if (captureId === undefined || captureId === null) return;
+  try {
+    const capture = await ports.withDb((db) => captureById(db, captureId));
+    if (capture !== null) await storeRead(ports, capture, page);
+  } catch (error) {
+    // Left for readCapture, which makes the read from the body. The capture's ID and the error's
+    // message only: never the page's text.
+    console.warn(
+      `Keeping the read of capture ${captureId} failed:`,
+      error instanceof Error ? error.message : String(error),
+    );
+  }
+}
+
+/**
  * The properties a write by the page's extraction or by the LLM speaks for: every field but the
  * one the cascade decides. With no decided field none is named, so the write speaks for every
  * property, as it did before there was a cascade.
@@ -1082,6 +1211,7 @@ async function askLlm(
     itemId: item.id,
     fetchId: fetched.fetchId,
     seenAt,
+    captureId: fetched.captureId ?? null,
     methods: ['llm'] as const,
     ...own,
   };
@@ -1111,6 +1241,7 @@ async function askLlm(
         itemId: item.id,
         fetchId: fetched.fetchId,
         seenAt,
+        captureId: fetched.captureId ?? null,
         methods: ['llm'],
         ...own,
       }),

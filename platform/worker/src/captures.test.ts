@@ -1,0 +1,452 @@
+import { gunzip, runIdFor, sha256Hex } from '@spatula/core';
+import {
+  applyDefinition,
+  captures,
+  items,
+  latestCapture,
+  listOpenReviews,
+  statements,
+} from '@spatula/store';
+import { testDefinition } from '@spatula/store/fixtures';
+import { and, asc, eq, isNull } from 'drizzle-orm';
+import { describe, expect, it, vi } from 'vitest';
+import { db } from '../test/node/db';
+import { fakeDecider, fakeStep, type StepCache } from '../test/node/fakes';
+import { decidedDefinition, refresh, worldFor } from '../test/node/runs';
+import { A1, standardRoutes, URLS } from '../test/pages';
+import { cleanUpCaptures, rawPageKey, readCapture, readKey, readPageBody } from './captures';
+import { extractionTag, pageKey } from './pipeline';
+import { runRefresh } from './refresh';
+import { answerReview } from './review';
+
+/** A page's captures, oldest first. */
+const capturesOf = (itemId: string) =>
+  db
+    .select()
+    .from(captures)
+    .where(eq(captures.itemId, itemId))
+    .orderBy(asc(captures.fetchedAt), asc(captures.id));
+
+/** A page's stored copy, its validators, and what its statements came from. */
+const pageOf = async (itemId: string) =>
+  (
+    await db
+      .select({
+        contentHash: items.contentHash,
+        etag: items.etag,
+        lastModified: items.lastModified,
+        extractedWith: items.extractedWith,
+      })
+      .from(items)
+      .where(eq(items.id, itemId))
+  )[0];
+
+/** The capture each of a page's current statements cites, by its method and value. */
+async function citations(itemId: string): Promise<Record<string, string | null>> {
+  const rows = await db
+    .select({
+      method: statements.method,
+      valueKey: statements.valueKey,
+      captureId: statements.captureId,
+    })
+    .from(statements)
+    .where(and(eq(statements.itemId, itemId), isNull(statements.withdrawnAt)));
+  return Object.fromEntries(rows.map((row) => [`${row.method} ${row.valueKey}`, row.captureId]));
+}
+
+// Each test runs the pipeline against a real database, several runs in most.
+describe('the page archive', { timeout: 20_000 }, () => {
+  it('keeps a changed page’s body gzipped under its hash, with how it was fetched', async () => {
+    const {
+      world,
+      pages: [a1],
+    } = await worldFor(testDefinition('archive-first'), standardRoutes());
+    const { summary } = await refresh(world, 'archive-first');
+    const body = new TextEncoder().encode(A1());
+    const hash = await sha256Hex(body);
+    const file = world.stored.get(pageKey(hash))!;
+    expect(await gunzip(file)).toEqual(body);
+    expect(world.stored.has(rawPageKey(hash))).toBe(false);
+    const [capture] = await capturesOf(a1!.id);
+    expect(capture).toMatchObject({
+      datasetId: 'archive-first',
+      sourceId: 'maker-a',
+      url: URLS.a1,
+      finalUrl: URLS.a1,
+      httpStatus: 200,
+      etag: '"a1-v1"',
+      lastModified: null,
+      contentHash: hash,
+      bytes: body.byteLength,
+      storedBytes: file.byteLength,
+      signals: {},
+      readKey: readKey('archive-first', capture!.id),
+      reader: 1,
+    });
+    expect(capture!.id).toMatch(/^cp_/u);
+    expect(summary.captures).toEqual({ stored: 3, pruned: 0 });
+    // What Spatula read is kept with it, and reads back.
+    expect(await readCapture(world.ports, capture!)).toMatchObject({
+      url: URLS.a1,
+      canonicalUrl: URLS.a1,
+      title: 'A1 | Maker A',
+      jsonLd: [expect.objectContaining({ name: 'A1' })],
+      text: 'A1 Impedance: 300 Ω Weight: 350 g',
+    });
+  });
+
+  it('stores nothing new when a page comes back the same, and a 304 adds nothing', async () => {
+    const {
+      world,
+      pages: [a1],
+    } = await worldFor(testDefinition('archive-same'), standardRoutes());
+    await refresh(world, 'archive-same');
+    const files = world.stored.size;
+    expect((await refresh(world, 'archive-same')).summary.captures).toEqual({
+      stored: 0,
+      pruned: 0,
+    });
+    // A1's ETag goes with the request, and the site says nothing changed.
+    world.web.routes.set(URLS.a1, { status: 304 });
+    const unchanged = await refresh(world, 'archive-same');
+    expect(unchanged.summary.fetches.unchanged).toBe(3);
+    expect(unchanged.summary.captures).toEqual({ stored: 0, pruned: 0 });
+    expect(await capturesOf(a1!.id)).toHaveLength(1);
+    expect(world.stored.size).toBe(files);
+  });
+
+  it('gives a page stored before the archive its first capture, and its values their evidence', async () => {
+    const {
+      world,
+      pages: [a1],
+    } = await worldFor(testDefinition('archive-older'), standardRoutes());
+    await refresh(world, 'archive-older');
+    // A1 as the archive finds it: its page kept raw under its bare hash, and no capture of it.
+    const hash = await sha256Hex(A1());
+    const raw = await gunzip(world.stored.get(pageKey(hash))!);
+    world.stored.delete(pageKey(hash));
+    world.stored.set(rawPageKey(hash), raw);
+    await db.delete(captures).where(eq(captures.itemId, a1!.id));
+    expect(Object.values(await citations(a1!.id)).every((captureId) => captureId === null)).toBe(
+      true,
+    );
+    expect(await readPageBody(world.ports.blobs, hash)).toEqual(raw);
+    expect(await readPageBody(world.ports.blobs, '0'.repeat(64))).toBeNull();
+
+    // It answers 304: its stored copy becomes its first capture, and its values cite it.
+    world.web.routes.set(URLS.a1, { status: 304 });
+    const { summary } = await refresh(world, 'archive-older');
+    expect(summary.captures).toEqual({ stored: 1, pruned: 0 });
+    const [first] = await capturesOf(a1!.id);
+    expect(first).toMatchObject({
+      contentHash: hash,
+      httpStatus: 304,
+      bytes: null,
+      storedBytes: null,
+      etag: '"a1-v1"',
+      readKey: null,
+    });
+    const cited = Object.values(await citations(a1!.id));
+    expect(cited.length).toBeGreaterThan(0);
+    expect(new Set(cited)).toEqual(new Set([first!.id]));
+
+    // Its read is made from the copy stored before the archive, and kept.
+    expect(await readCapture(world.ports, first!)).toMatchObject({
+      url: URLS.a1,
+      title: 'A1 | Maker A',
+    });
+    expect((await latestCapture(db, a1!.id))!.readKey).toBe(readKey('archive-older', first!.id));
+    expect(world.stored.has(readKey('archive-older', first!.id))).toBe(true);
+  });
+
+  it('captures a page’s stored copy when its latest capture is of another body', async () => {
+    const body = new TextEncoder().encode(A1('stale-one'));
+    const {
+      world,
+      pages: [a1],
+    } = await worldFor(testDefinition('archive-stale'), {
+      ...standardRoutes(),
+      [URLS.a1]: { status: 200, body: A1('stale-one') },
+    });
+    await refresh(world, 'archive-stale');
+    // A1 as a run that stopped after its fetch, or a purge of a source it left, can leave it: its
+    // latest capture is of a body other than its stored copy, and its values cite none.
+    const [latest] = await capturesOf(a1!.id);
+    await db
+      .update(captures)
+      .set({ contentHash: await sha256Hex(A1('stale-zero')) })
+      .where(eq(captures.id, latest!.id));
+    await db.update(statements).set({ captureId: null }).where(eq(statements.itemId, a1!.id));
+
+    // It comes back the same on a 200, unchanged by its hash: its stored copy is captured, and its
+    // values cite that capture, not the other body's.
+    const { summary } = await refresh(world, 'archive-stale');
+    expect(summary.fetches.unchanged).toBe(3);
+    expect(summary.captures).toEqual({ stored: 1, pruned: 0 });
+    const [, fresh] = await capturesOf(a1!.id);
+    expect(fresh).toMatchObject({
+      contentHash: await sha256Hex(body),
+      httpStatus: 200,
+      bytes: body.byteLength,
+      storedBytes: null,
+    });
+    const cited = Object.values(await citations(a1!.id));
+    expect(cited.length).toBeGreaterThan(0);
+    expect(new Set(cited)).toEqual(new Set([fresh!.id]));
+  });
+
+  it('forgets a stored copy that went missing, and fetches the page afresh next run', async () => {
+    const definition = testDefinition('archive-missing');
+    const {
+      world,
+      pages: [a1],
+    } = await worldFor(definition, {
+      ...standardRoutes(),
+      [URLS.a1]: { status: 200, body: A1('missing-one'), headers: { etag: '"a1-missing"' } },
+    });
+    await refresh(world, 'archive-missing');
+    // A1's body goes, as another dataset's cleanup or purge can take it (ADR 0008). A new revision
+    // of the definition has every page read again from its stored copy.
+    const hash = await sha256Hex(A1('missing-one'));
+    world.stored.delete(pageKey(hash));
+    world.stored.delete(rawPageKey(hash));
+    await applyDefinition(db, {
+      ...definition,
+      budget: { ...definition.budget, itemsPerRun: 500 },
+    });
+
+    // A1 comes back the same, so its stored copy is what's read. The run goes on without A1,
+    // forgets its copy, and says so.
+    const missing = await refresh(world, 'archive-missing');
+    expect(missing.names).toContain(`extract:${a1!.id}`);
+    expect(missing.summary.notes).toContain(
+      `${URLS.a1}: its stored copy was missing, so it’s fetched afresh next run`,
+    );
+    expect(await pageOf(a1!.id)).toEqual({
+      contentHash: null,
+      etag: null,
+      lastModified: null,
+      extractedWith: `${extractionTag(2)}.retry`,
+    });
+
+    // The next run asks for A1 without its validators, finds it changed, stores it again, and
+    // reads it.
+    const asked = world.web.requests.length;
+    const afresh = await refresh(world, 'archive-missing');
+    expect(afresh.summary.fetches).toMatchObject({ changed: 1, unchanged: 2 });
+    const sent = world.web.requests.slice(asked).find((request) => request.url === URLS.a1)!;
+    expect(sent.headers).not.toHaveProperty('if-none-match');
+    expect(await gunzip(world.stored.get(pageKey(hash))!)).toEqual(
+      new TextEncoder().encode(A1('missing-one')),
+    );
+    expect(afresh.names).toContain(`extract:${a1!.id}`);
+    expect(await pageOf(a1!.id)).toEqual({
+      contentHash: hash,
+      etag: '"a1-missing"',
+      lastModified: null,
+      extractedWith: extractionTag(2),
+    });
+  });
+
+  it('cites a changed page’s new capture in its new values, and the first in the rest', async () => {
+    const {
+      world,
+      pages: [a1],
+    } = await worldFor(testDefinition('archive-cited'), standardRoutes());
+    await refresh(world, 'archive-cited');
+    world.web.routes.set(URLS.a1, {
+      status: 200,
+      body: A1('two').replace('"name":"A1"', '"name":"A1 Pro"'),
+    });
+    await refresh(world, 'archive-cited');
+    const [first, second] = await capturesOf(a1!.id);
+    // A capture records the validators its own response carried: the second's sent none.
+    expect(first!.etag).toBe('"a1-v1"');
+    expect(second!.etag).toBeNull();
+    expect(second!.lastModified).toBeNull();
+    const cited = await citations(a1!.id);
+    expect(cited['jsonld A1 Pro']).toBe(second!.id);
+    expect(cited['rule Maker A']).toBe(first!.id);
+    expect(await readCapture(world.ports, second!)).toMatchObject({
+      jsonLd: [expect.objectContaining({ name: 'A1 Pro' })],
+    });
+  });
+
+  it('records a capture’s read key before its file, so a failed write leaves a read to remake', async () => {
+    const {
+      world,
+      pages: [a1],
+    } = await worldFor(testDefinition('archive-read-fails'), standardRoutes());
+    const real = world.ports.blobs;
+    // Every write under captures/ fails; the pages' bodies and the snapshot still go through.
+    world.ports.blobs = {
+      ...real,
+      async put(key, body, contentType) {
+        if (key.startsWith('captures/')) throw new Error('R2 refused the write');
+        await real.put(key, body, contentType);
+      },
+    };
+    // Keeping a read that fails is a warning, which the test reads instead of printing.
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+    const { summary } = await refresh(world, 'archive-read-fails');
+    expect(summary.captures).toEqual({ stored: 3, pruned: 0 });
+    const [capture] = await capturesOf(a1!.id);
+    const key = readKey('archive-read-fails', capture!.id);
+    expect(capture!.readKey).toBe(key);
+    expect(world.stored.has(key)).toBe(false);
+    expect(warn).toHaveBeenCalledWith(
+      expect.stringContaining(capture!.id),
+      expect.stringContaining('R2 refused the write'),
+    );
+
+    // With the store back, the read is made again from the body, and kept under the same key.
+    world.ports.blobs = real;
+    expect(await readCapture(world.ports, capture!)).toMatchObject({ title: 'A1 | Maker A' });
+    expect(world.stored.has(key)).toBe(true);
+    warn.mockRestore();
+  });
+
+  it('keeps no read for a capture deleted since it was read, but gives the read', async () => {
+    const {
+      world,
+      pages: [a1],
+    } = await worldFor(testDefinition('archive-read-gone'), {
+      ...standardRoutes(),
+      [URLS.a1]: { status: 200, body: A1('read-gone') },
+    });
+    await refresh(world, 'archive-read-gone');
+    // A caller holds A1's capture as the database gave it, without its read's file, and then a
+    // cleanup deletes the row. A1's page still holds the body.
+    const [capture] = await capturesOf(a1!.id);
+    world.stored.delete(capture!.readKey!);
+    await db.delete(captures).where(eq(captures.id, capture!.id));
+    const files = [...world.stored.keys()];
+
+    // The read is made from the body and given, but no row names a file for it, so none is written.
+    expect(await readCapture(world.ports, capture!)).toMatchObject({
+      url: URLS.a1,
+      title: 'A1 | Maker A',
+    });
+    expect([...world.stored.keys()]).toEqual(files);
+  });
+
+  it('cites the capture in a decided category, and in a person’s answer', async () => {
+    const sure = await worldFor(decidedDefinition('archive-decided'), standardRoutes());
+    await refresh(sure.world, 'archive-decided');
+    const decidedPage = sure.pages[0]!;
+    const [decidedCapture] = await capturesOf(decidedPage.id);
+    expect((await citations(decidedPage.id))['llm Headphones']).toBe(decidedCapture!.id);
+
+    const unsure = await worldFor(decidedDefinition('archive-asked'), standardRoutes());
+    unsure.world.ports.decider = fakeDecider(() => ({ Headphones: 0.6, 'DAC/Amp': 0.3 })).decider;
+    await refresh(unsure.world, 'archive-asked');
+    const asked = unsure.pages[0]!;
+    const question = (await listOpenReviews(db, 'archive-asked')).find(
+      (review) => review.subject === asked.id,
+    )!;
+    await answerReview(unsure.world.ports, {
+      datasetId: 'archive-asked',
+      reviewId: question.id,
+      answer: 'Headphones',
+    });
+    const [capture] = await capturesOf(asked.id);
+    expect((await citations(asked.id))['human Headphones']).toBe(capture!.id);
+  });
+
+  it('reads a fetch result without a capture, as an earlier version kept it, as none', async () => {
+    const {
+      world,
+      pages: [a1],
+    } = await worldFor(testDefinition('archive-replay'), standardRoutes());
+    const runId = runIdFor('archive-replay', world.clock.now());
+    const cache: StepCache = new Map();
+    const first = fakeStep(world.clock, cache);
+    await runRefresh({ runId, datasetId: 'archive-replay', all: true }, first.step, world.ports);
+    // As an earlier version kept it: the fetch's result names no capture. Its extract step runs again.
+    const fetchStep = `fetch:${a1!.id}:0`;
+    const kept = JSON.parse(cache.get(fetchStep)!) as { fetched: Record<string, unknown> };
+    delete kept.fetched.captureId;
+    delete kept.fetched.captured;
+    cache.set(fetchStep, JSON.stringify(kept));
+    cache.delete(`extract:${a1!.id}`);
+    await db.delete(statements).where(eq(statements.itemId, a1!.id));
+
+    const again = fakeStep(world.clock, cache);
+    await runRefresh({ runId, datasetId: 'archive-replay', all: true }, again.step, world.ports);
+    expect(again.replayed).toContain(fetchStep);
+    expect(again.replayed).not.toContain(`extract:${a1!.id}`);
+    const cited = Object.values(await citations(a1!.id));
+    expect(cited.length).toBeGreaterThan(0);
+    expect(cited.every((captureId) => captureId === null)).toBe(true);
+  });
+});
+
+const DAY = 24 * 60 * 60 * 1000;
+
+describe('the archive’s cleanup', { timeout: 30_000 }, () => {
+  it('deletes what retention lets go, with its files, and nothing twice', async () => {
+    const {
+      world,
+      pages: [a1],
+    } = await worldFor(testDefinition('archive-clean'), standardRoutes());
+    // Three runs, each finding A1's page under a new token, as Shopify's pages change: three
+    // captures. A1's values were all found in the first. The tokens are this test's own, since a
+    // body that another test's dataset holds too is a file cleanup keeps.
+    for (const token of ['clean-one', 'clean-two', 'clean-three']) {
+      world.web.routes.set(URLS.a1, { status: 200, body: A1(token) });
+      await refresh(world, 'archive-clean');
+    }
+    const [first, second, third] = await capturesOf(a1!.id);
+    expect(third).toBeDefined();
+
+    // A year on, A1 changes once more. The first capture stays, since A1's current values cite it;
+    // the second and third go, with their files.
+    world.clock.advance(366 * DAY);
+    world.web.routes.set(URLS.a1, { status: 200, body: A1('clean-four') });
+    const later = await refresh(world, 'archive-clean');
+    expect(later.names.slice(-3)).toEqual(['snapshot', 'captures', 'finish']);
+    expect(later.summary.captures).toEqual({ stored: 1, pruned: 2 });
+    const left = await capturesOf(a1!.id);
+    expect(left.map((capture) => capture.id)).toEqual([first!.id, expect.any(String)]);
+    for (const gone of [second!, third!]) {
+      expect(world.stored.has(pageKey(gone.contentHash))).toBe(false);
+      expect(world.stored.has(gone.readKey!)).toBe(false);
+    }
+    expect(world.stored.has(pageKey(first!.contentHash))).toBe(true);
+    expect(world.stored.has(pageKey(left[1]!.contentHash))).toBe(true);
+
+    // The step again, as a Workflow runs a step again: nothing more goes.
+    const context = { datasetId: 'archive-clean', startedAt: world.clock.now() };
+    expect(await cleanUpCaptures(context, world.ports)).toEqual({ pruned: 0, note: null });
+  });
+
+  it('notes a cleanup that failed, finishes the run, and cleans up in the next', async () => {
+    const {
+      world,
+      pages: [a1],
+    } = await worldFor(testDefinition('archive-clean-fails'), standardRoutes());
+    for (const token of ['one', 'two', 'three']) {
+      world.web.routes.set(URLS.a1, { status: 200, body: A1(token) });
+      await refresh(world, 'archive-clean-fails');
+    }
+    world.clock.advance(366 * DAY);
+    const blobs = world.ports.blobs;
+    world.ports.blobs = {
+      ...blobs,
+      async delete() {
+        throw new Error('the blob store is down');
+      },
+    };
+    const failed = await refresh(world, 'archive-clean-fails');
+    expect(failed.summary.captures).toEqual({ stored: 0, pruned: 0 });
+    expect(failed.summary.notes).toContain(
+      'The archive wasn’t cleaned up this run: the blob store is down',
+    );
+    expect(await capturesOf(a1!.id)).toHaveLength(3);
+
+    world.ports.blobs = blobs;
+    const next = await refresh(world, 'archive-clean-fails');
+    expect(next.summary.captures).toEqual({ stored: 0, pruned: 1 });
+    expect(await capturesOf(a1!.id)).toHaveLength(2);
+  });
+});

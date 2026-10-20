@@ -6,6 +6,7 @@ import {
   getReview,
   joinedEntityOf,
   judge,
+  latestCapture,
   latestFetchId,
   lockPageVerdicts,
   sameVerdictsOf,
@@ -91,12 +92,15 @@ async function answerClassification(
   if (fetchId === null) {
     throw new Error(`${review.itemId} has no fetch to record the answer against`);
   }
+  // It cites the page's latest capture, which shows what the person judged (ADR 0008).
+  const capture = await latestCapture(tx, review.itemId);
   const write = {
     datasetId: review.datasetId,
     itemId: review.itemId,
     fetchId,
     seenAt: at,
     properties: [field],
+    captureId: capture?.id ?? null,
   };
   await writeStatements(tx, { ...write, methods: CASCADE_METHODS, statements: [] });
   if (answer === NONE_OF_THESE) {

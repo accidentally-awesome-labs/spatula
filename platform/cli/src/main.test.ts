@@ -343,6 +343,41 @@ describe('run', () => {
     ]);
   });
 
+  it('says what the run kept in the archive, and cleaned up', async () => {
+    const complete: RunView = {
+      ...RUNNING,
+      status: 'complete',
+      finishedAt: '2026-10-10T00:01:00.000Z',
+      summary: {
+        items: 3,
+        fetches: { changed: 3, unchanged: 0, gone: 0, failed: 0, blocked: 0 },
+        statements: { added: 19, reseen: 0, withdrawn: 0 },
+        captures: { stored: 3, pruned: 1 },
+        llm: { ran: 3, reused: 0, skipped: 0, failed: 0, inputTokens: 3000, outputTokens: 150 },
+        entities: { created: 3, linked: 0, conflicts: 0, unresolved: 0 },
+        snapshot: { published: true, generation: 1, snapshotId: 'sn_x', records: 3, excluded: [] },
+        notes: [],
+      },
+    };
+    const { fetch } = stubApi(({ method }) =>
+      method === 'POST'
+        ? Response.json({ runId: RUN_ID }, { status: 202 })
+        : Response.json(complete),
+    );
+    const { io, out } = memoryIo();
+    expect(await main(['run', 'cli-products', '--wait'], { io, env: ENV, fetch })).toBe(0);
+    expect(out).toEqual([
+      `Started ${RUN_ID}.`,
+      `Run ${RUN_ID}: complete.`,
+      'Pages: 3. Changed 3, unchanged 0, gone 0, failed 0, blocked 0.',
+      'Statements: 19 added, 0 seen again, 0 withdrawn.',
+      'LLM: ran 3, reused 0, skipped 0, failed 0; 3000 tokens in, 150 out.',
+      'Archive: 3 captures stored, 1 cleaned up.',
+      'Entities: 3 new, 0 linked, 0 conflicts, 0 without an identity yet.',
+      'Snapshot: generation 1, 3 records.',
+    ]);
+  });
+
   it('follows the run already started in this slot, and fails when it fails', async () => {
     const failed: RunView = {
       ...RUNNING,
@@ -2815,5 +2850,66 @@ describe('failures', () => {
     expect(failureLine(Object.create(null))).toBe(
       'Spatula’s CLI failed: an error that can’t be shown as text',
     );
+  });
+});
+
+describe('purge', () => {
+  it('purges a source’s captures, and says what went and what comes back', async () => {
+    const { fetch, sent } = stubApi(() =>
+      Response.json({ purged: { captures: 412, pages: 40, bodies: 398 } }),
+    );
+    const { io, out } = memoryIo();
+    expect(
+      await main(['purge', 'cli-products', '--source', 'maker-a'], { io, env: ENV, fetch }),
+    ).toBe(0);
+    expect(sent).toEqual([
+      {
+        method: 'POST',
+        origin: 'https://spatula.test',
+        path: '/datasets/cli-products/captures/purge',
+        body: { source: 'maker-a' },
+        authorization: 'Bearer owner-token',
+      },
+    ]);
+    expect(out).toEqual([
+      'Purged 412 captures of maker-a in cli-products, and 398 stored pages.',
+      'The next run that reads maker-a’s pages captures them again. Remove maker-a from the definition if they mustn’t be read.',
+    ]);
+  });
+
+  it('says when a source had nothing captured', async () => {
+    const { fetch } = stubApi(() =>
+      Response.json({ purged: { captures: 0, pages: 0, bodies: 0 } }),
+    );
+    const { io, out } = memoryIo();
+    expect(
+      await main(['purge', 'cli-products', '--source', 'maker-a'], { io, env: ENV, fetch }),
+    ).toBe(0);
+    expect(out).toEqual(['Nothing of maker-a was captured in cli-products.']);
+  });
+
+  it('prints the API’s refusal', async () => {
+    const error =
+      'A run of cli-products is going (cli-products-202610100000). Purge once it has finished.';
+    const { fetch } = stubApi(() => Response.json({ error }, { status: 409 }));
+    const { io, err } = memoryIo();
+    expect(
+      await main(['purge', 'cli-products', '--source', 'maker-a'], { io, env: ENV, fetch }),
+    ).toBe(1);
+    expect(err).toEqual([error]);
+  });
+
+  it.each([
+    [['purge', 'cli-products']],
+    [['purge', 'cli-products', '--source', 'maker-a', '--source', 'maker-b']],
+    [['purge', '--source', 'maker-a']],
+    [['purge', 'cli-products', 'extra', '--source', 'maker-a']],
+  ])('is called wrongly as %j, and sends nothing', async (argv) => {
+    const { fetch, sent } = stubApi(() => {
+      throw new Error('nothing is sent');
+    });
+    const { io } = memoryIo();
+    expect(await main(argv, { io, env: ENV, fetch })).toBe(2);
+    expect(sent).toHaveLength(0);
   });
 });
