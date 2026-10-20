@@ -82,3 +82,58 @@ whose every answer is recorded and can be corrected by a person.
 - A person's review time goes to the uncertain middle only.
 - Corrections that teach the rules, splitting an entity, and moving a joined page come later, and
   so does merging entities, which would make "same" transitive.
+
+## Update, 2026-10-20 (matching by relationship, with editions)
+
+- **The question.** A match question asks how record A is related to record B, with five
+  relationships, which replace same, variant, and different: `same` (the same product and edition,
+  listed twice), `edition` (the same model with the same specifications, differing only in looks or
+  packaging), `spec-version` (the same model name, but a specification differs), `other-model`
+  (another number, generation, or tier of the line), and `unrelated`. `same` joins the page to the
+  record, `edition` joins it as an edition, and the other three keep it apart. The products pack
+  words them at criteria version 3: a successor or a tier is another model, and a color, finish,
+  special edition, or bundle is an edition. Pairs not yet settled are asked the new question;
+  settled ones stand.
+- **The threshold is per outcome.** A question can group its answers into outcomes. A decider's
+  likeliest answer is taken when the answers that share its outcome add up to the threshold, so a
+  decider 0.6 sure of `other-model` and 0.38 of `spec-version` keeps the page apart, and its
+  decision stands in later runs. `same` and `edition` are separate outcomes, so a split between
+  them goes to a person. A question that groups nothing is decided as before, so classifying is
+  unchanged.
+- **The model-number rule** comes before any decider. When the page and the record are in one
+  brand, and the page's name differs from every name the record carries, edition pages' included,
+  only by model marks (numbers, Roman numerals from II to IX, "Mk", "+", "Plus") once the words
+  they share at the start and at the end are set aside, the answer is `other-model`. No model is
+  asked, so the rule needs no AI input and no budget, and its judgement's `who` is `rule`. The run
+  summary counts these pairs with the rule's answers, and names up to 10. Two names that differ
+  only by an impedance are kept apart as `other-model`, where `spec-version` would be truer; the
+  outcome is right. No question overrides the rule yet.
+- **A known limit of the rule.** It drops punctuation and treats any number as a model mark, so a
+  name that adds a year or a version number ("DT 770 PRO 2024" against "DT 770 PRO", "Hugo 2.0"
+  against "Hugo 2") is kept apart as another model. A year edition would therefore become a record
+  of its own.
+- **What the decider sees.** Field values only, still wrapped as untrusted: the names with the
+  words that differ called out, each side's identifiers and whether any match, the other values
+  side by side (the same in both, different, only in A, only in B), and up to 10 other records in
+  the brand, closest by name, marked when a person kept one apart from the record. B is the record
+  by its base page, with the pages written as it, and its known editions are the names of its pages
+  that differ from the record's name, at most 10. They are part of the question's key, as the
+  record's values are. The lineup isn't, so a new record in the brand doesn't ask settled pairs
+  again, and the decision keeps it in its evidence text. A lineup shows other records' names, so
+  the consent rule covers it: it leaves out any record with a page whose site says `ai-input=no`.
+- **Editions.** `edition` is a verdict of its own. It joins the page as `same` does: a page still
+  joins one record, a decider's join about a page already joined to another record goes to a
+  person, and a person's second join about another record is refused. A record takes its name and
+  its other single values from its base page: the page whose name every other page's differing name
+  extends, however either is spelled, or else the earliest page that gives a name, one that didn't
+  join as an edition first, with the pages written as it. A page without a name is the base only
+  where no page gives one, so the base never depends on which spelling Spatula met first. The other
+  pages fill only what it leaves unstated, and a person's statement counts wherever it was said.
+  List fields, GTINs and part numbers among them, still hold every page's values.
+- **Snapshots.** A record may list its `editions`: each page whose name differs from the record's,
+  once normalized, with its name, its address as `officialUrl`, and its own GTINs, sorted by name.
+  A record without editions has no `editions` key and digests as before; a newly found edition
+  publishes.
+- **Answers from before.** An open question asked with same, variant, or different takes the five
+  relationships too, so a page can be called an edition. "Variant" and "different" still keep a
+  page apart.
