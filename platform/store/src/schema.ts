@@ -409,7 +409,7 @@ export const snapshots = pgTable(
 
 export const DECISION_OUTCOMES = ['rule', 'accepted', 'escalated'] as const;
 export type DecisionOutcome = (typeof DECISION_OUTCOMES)[number];
-export const VERDICTS = ['same', 'not_same', 'unsure'] as const;
+export const VERDICTS = ['same', 'edition', 'not_same', 'unsure'] as const;
 export type Verdict = (typeof VERDICTS)[number];
 export const JUDGES = ['rule', 'llm', 'person', 'consumer'] as const;
 export type Judge = (typeof JUDGES)[number];
@@ -464,8 +464,9 @@ export const decisionRecords = pgTable(
 );
 
 /**
- * Whether a page and an entity describe the same product. "Same" joins them; "not the same" keeps
- * them apart for good; "unsure" waits for a person. A person's verdict outranks any other.
+ * Whether a page and an entity describe the same product. "Same" joins them; "edition" joins them,
+ * and the record lists the page as an edition (ADR 0003); "not the same" keeps them apart for good;
+ * "unsure" waits for a person. A person's verdict outranks any other.
  */
 export const judgements = pgTable(
   'judgements',
@@ -490,7 +491,7 @@ export const judgements = pgTable(
     index('judgements_dataset').on(t.datasetId),
     index('judgements_entity').on(t.entityId),
     index('judgements_decision').on(t.decisionId),
-    check('judgements_verdict', sql`${t.verdict} in ('same', 'not_same', 'unsure')`),
+    check('judgements_verdict', sql`${t.verdict} in ('same', 'edition', 'not_same', 'unsure')`),
     check('judgements_who', sql`${t.who} in ('rule', 'llm', 'person', 'consumer')`),
     check('judgements_confidence', sql`${t.confidence} >= 0 and ${t.confidence} <= 1`),
   ],

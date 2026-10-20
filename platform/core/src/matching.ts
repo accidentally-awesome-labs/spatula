@@ -15,8 +15,9 @@ import { similarity } from './trigrams';
  * person has yet to say whether a page of that name is an entity's (`contestedNames`).
  * A page that matches nothing starts its own entity, unless an entity within its scope (for
  * products, its brand) has a similar name: then the cascade is asked about the closest few first.
- * Verdicts decide: "same" joins, "not the same" keeps the page apart for good, and "unsure" waits
- * for a person. Several "same" verdicts join the page to nothing, unless exactly one is a person's:
+ * Verdicts decide: "same" joins, "edition" joins as an edition, "not the same" keeps the page apart
+ * for good, and "unsure" waits for a person. Below, "same" means either join. Several "same"
+ * verdicts join the page to nothing, unless exactly one is a person's:
  * the page joins that entity. A decider's lone "same" beside a question that waits for a person
  * waits for that question.
  */
@@ -47,7 +48,8 @@ export const GENERIC_MATCH_CRITERIA = [
   'different: different things.',
 ].join('\n');
 
-export type MatchVerdict = 'same' | 'not_same' | 'unsure';
+/** A verdict on a page and an entity: "same" and "edition" join them (ADR 0003). */
+export type MatchVerdict = 'same' | 'edition' | 'not_same' | 'unsure';
 
 export type MatchPlan =
   | { kind: 'unresolvable' }
@@ -233,7 +235,8 @@ export function planMatch(input: {
   // only one a person gave. Several "same" verdicts contradict each other, as the entities were
   // kept apart: the page joins none of them. One beside a question that waits for a person waits
   // for that question.
-  const same = given('same');
+  // An edition joins the page to the entity, as "same" does (ADR 0003).
+  const same = [...new Set([...given('same'), ...given('edition')])].sort();
   const chosen = same.filter((entityId) => input.byPerson.has(entityId));
   if (chosen.length === 1) return { kind: 'join', entityId: chosen[0]! };
   if (same.length === 1 && pending.size === 0) return { kind: 'join', entityId: same[0]! };

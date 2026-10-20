@@ -8,6 +8,7 @@ import { applyDefinition, listLiveItems, type ItemRef } from './datasets';
 import {
   anyRefusesAiInput,
   latestFetchId,
+  pagesRefusingAiInput,
   recordExtraction,
   recordFetch,
   setExtractedWith,
@@ -540,5 +541,49 @@ describe('setExtractedWith', () => {
       await setExtractedWith(db, a1!.id, 'r1.v2');
       await setExtractedWith(db, a1!.id, 'r1.v2');
       expect((await itemRow(db, a1!.id)).extractedWith).toBe('r1.v2');
+    }));
+});
+
+describe('pagesRefusingAiInput', () => {
+  it('names the dataset’s pages whose latest fetch found its site saying ai-input=no', () =>
+    withRollback(async (db) => {
+      const {
+        items: [a1, a2, b1],
+        runId,
+      } = await seedDataset(db);
+      const fetched = (
+        item: ItemRef,
+        id: string,
+        minute: number,
+        signals: Record<string, string>,
+      ) =>
+        recordFetch(db, {
+          id,
+          runId,
+          itemId: item.id,
+          url: item.locator,
+          finalUrl: item.locator,
+          policy: 'allowed',
+          policyReason: null,
+          method: 'http',
+          outcome: 'unchanged',
+          httpStatus: 200,
+          bytes: 100,
+          signals,
+          startedAt: T(minute),
+          durationMs: 10,
+          error: null,
+        });
+      expect(await pagesRefusingAiInput(db, 'test-products')).toEqual(new Set());
+      // A1 refused and then allowed it, and A2 refuses.
+      await fetched(a1!, 'fe_pr_a1_1', 1, { 'ai-input': 'no' });
+      await fetched(a1!, 'fe_pr_a1_2', 2, { 'ai-input': 'yes' });
+      await fetched(a2!, 'fe_pr_a2_1', 1, { 'ai-input': 'no' });
+      expect(await pagesRefusingAiInput(db, 'test-products')).toEqual(new Set([a2!.id]));
+      // Fetches that started together: the greater ID is the latest, as anyRefusesAiInput has it.
+      await fetched(b1!, 'fe_pr_b1_b', 3, { 'ai-input': 'no' });
+      await fetched(b1!, 'fe_pr_b1_a', 3, { 'ai-input': 'yes' });
+      expect(await pagesRefusingAiInput(db, 'test-products')).toEqual(new Set([a2!.id, b1!.id]));
+      expect(await pagesRefusingAiInput(db, 'another-dataset')).toEqual(new Set());
     }));
 });

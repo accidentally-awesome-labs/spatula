@@ -498,3 +498,39 @@ describe('lineupOf', () => {
     expect(lineup.every((entry) => [...entry.name].length === 100)).toBe(true);
   });
 });
+
+describe('planMatch with an edition verdict', () => {
+  const plan = (verdicts: [string, MatchVerdict][], byPerson: string[] = []) =>
+    planMatch({
+      recordType: product,
+      values: DT_250,
+      owners: owning('e1', DT_80),
+      identifiers: new Map([['e1', { gtins: DT_80.gtins! }]]),
+      sameScope: [{ id: 'e1', names: ['DT 770 PRO'] }],
+      verdicts: new Map(verdicts),
+      byPerson: new Set(byPerson),
+      contested: new Set(),
+    });
+
+  it('joins the page to the entity it is an edition of, as “same” does', () => {
+    expect(plan([['e1', 'edition']])).toEqual({ kind: 'join', entityId: 'e1' });
+  });
+
+  it('counts an edition and a “same” about two entities as two joins, which contradict each other', () => {
+    expect(
+      plan([
+        ['e1', 'edition'],
+        ['e2', 'same'],
+      ]),
+    ).toEqual({ kind: 'dispute', entityIds: ['e1', 'e2'] });
+    expect(
+      plan(
+        [
+          ['e1', 'edition'],
+          ['e2', 'same'],
+        ],
+        ['e1'],
+      ),
+    ).toEqual({ kind: 'join', entityId: 'e1' });
+  });
+});

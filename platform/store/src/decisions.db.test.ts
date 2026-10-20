@@ -192,6 +192,32 @@ describe('the entities a page was judged the same as', () => {
       expect(await sameVerdictsOf(tx, a2!.id)).toEqual([{ entityId: two, who: 'llm' }]);
       expect(await sameVerdictsOf(tx, 'it_nobody00000000000')).toEqual([]);
     }));
+
+  it('count an edition as a join, since an edition joins the record', () =>
+    withRollback(async (tx) => {
+      const {
+        items: [a1],
+      } = await seedDataset(tx);
+      const [one, two] = await Promise.all(
+        ['sp_entityone000000000000', 'sp_entitytwo000000000000'].map((id) => anEntity(tx, id)),
+      );
+      for (const [entityId, verdict] of [
+        [one!, 'edition'],
+        [two!, 'not_same'],
+      ] as const) {
+        await judge(tx, {
+          datasetId: 'test-products',
+          itemId: a1!.id,
+          entityId,
+          verdict,
+          who: 'person',
+          confidence: 1,
+          decisionId: null,
+          at: T(1),
+        });
+      }
+      expect(await sameVerdictsOf(tx, a1!.id)).toEqual([{ entityId: one, who: 'person' }]);
+    }));
 });
 
 describe('the entity a page is joined to', () => {
