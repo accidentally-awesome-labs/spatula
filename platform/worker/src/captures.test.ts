@@ -1,5 +1,12 @@
 import { gunzip, runIdFor, sha256Hex } from '@spatula/core';
-import { captures, latestCapture, listOpenReviews, statements } from '@spatula/store';
+import {
+  applyDefinition,
+  captures,
+  items,
+  latestCapture,
+  listOpenReviews,
+  statements,
+} from '@spatula/store';
 import { testDefinition } from '@spatula/store/fixtures';
 import { and, asc, eq, isNull } from 'drizzle-orm';
 import { describe, expect, it, vi } from 'vitest';
@@ -8,7 +15,7 @@ import { fakeDecider, fakeStep, type StepCache } from '../test/node/fakes';
 import { decidedDefinition, refresh, worldFor } from '../test/node/runs';
 import { A1, standardRoutes, URLS } from '../test/pages';
 import { cleanUpCaptures, rawPageKey, readCapture, readKey, readPageBody } from './captures';
-import { pageKey } from './pipeline';
+import { extractionTag, pageKey } from './pipeline';
 import { runRefresh } from './refresh';
 import { answerReview } from './review';
 
@@ -19,6 +26,20 @@ const capturesOf = (itemId: string) =>
     .from(captures)
     .where(eq(captures.itemId, itemId))
     .orderBy(asc(captures.fetchedAt), asc(captures.id));
+
+/** A page's stored copy, its validators, and what its statements came from. */
+const pageOf = async (itemId: string) =>
+  (
+    await db
+      .select({
+        contentHash: items.contentHash,
+        etag: items.etag,
+        lastModified: items.lastModified,
+        extractedWith: items.extractedWith,
+      })
+      .from(items)
+      .where(eq(items.id, itemId))
+  )[0];
 
 /** The capture each of a page's current statements cites, by its method and value. */
 async function citations(itemId: string): Promise<Record<string, string | null>> {
@@ -172,6 +193,59 @@ describe('the page archive', { timeout: 20_000 }, () => {
     const cited = Object.values(await citations(a1!.id));
     expect(cited.length).toBeGreaterThan(0);
     expect(new Set(cited)).toEqual(new Set([fresh!.id]));
+  });
+
+  it('forgets a stored copy that went missing, and fetches the page afresh next run', async () => {
+    const definition = testDefinition('archive-missing');
+    const {
+      world,
+      pages: [a1],
+    } = await worldFor(definition, {
+      ...standardRoutes(),
+      [URLS.a1]: { status: 200, body: A1('missing-one'), headers: { etag: '"a1-missing"' } },
+    });
+    await refresh(world, 'archive-missing');
+    // A1's body goes, as another dataset's cleanup or purge can take it (ADR 0008). A new revision
+    // of the definition has every page read again from its stored copy.
+    const hash = await sha256Hex(A1('missing-one'));
+    world.stored.delete(pageKey(hash));
+    world.stored.delete(rawPageKey(hash));
+    await applyDefinition(db, {
+      ...definition,
+      budget: { ...definition.budget, itemsPerRun: 500 },
+    });
+
+    // A1 comes back the same, so its stored copy is what's read. The run goes on without A1,
+    // forgets its copy, and says so.
+    const missing = await refresh(world, 'archive-missing');
+    expect(missing.names).toContain(`extract:${a1!.id}`);
+    expect(missing.summary.notes).toContain(
+      `${URLS.a1}: its stored copy was missing, so it’s fetched afresh next run`,
+    );
+    expect(await pageOf(a1!.id)).toEqual({
+      contentHash: null,
+      etag: null,
+      lastModified: null,
+      extractedWith: `${extractionTag(2)}.retry`,
+    });
+
+    // The next run asks for A1 without its validators, finds it changed, stores it again, and
+    // reads it.
+    const asked = world.web.requests.length;
+    const afresh = await refresh(world, 'archive-missing');
+    expect(afresh.summary.fetches).toMatchObject({ changed: 1, unchanged: 2 });
+    const sent = world.web.requests.slice(asked).find((request) => request.url === URLS.a1)!;
+    expect(sent.headers).not.toHaveProperty('if-none-match');
+    expect(await gunzip(world.stored.get(pageKey(hash))!)).toEqual(
+      new TextEncoder().encode(A1('missing-one')),
+    );
+    expect(afresh.names).toContain(`extract:${a1!.id}`);
+    expect(await pageOf(a1!.id)).toEqual({
+      contentHash: hash,
+      etag: '"a1-missing"',
+      lastModified: null,
+      extractedWith: extractionTag(2),
+    });
   });
 
   it('cites a changed page’s new capture in its new values, and the first in the rest', async () => {

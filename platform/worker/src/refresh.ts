@@ -29,6 +29,7 @@ import {
   captureById,
   dueItems,
   finishRun,
+  forgetStoredCopy,
   getDataset,
   itemsByIds,
   latestCapture,
@@ -1032,7 +1033,19 @@ async function extractItem(
   }
   const body =
     fetched.contentHash === null ? null : await readPageBody(ports.blobs, fetched.contentHash);
-  if (body === null) throw new Error(`The stored copy of ${item.locator} is missing`);
+  if (body === null) {
+    // Another dataset's cleanup or purge can delete a body this page holds, and so can a purge
+    // whose commit failed after its deletes (ADR 0008). The page forgets its copy, so its next
+    // fetch is unconditional and stores the body again, and waits for that run.
+    await ports.withDb((db) => forgetStoredCopy(db, item.id));
+    return unread(
+      context,
+      item,
+      fetched,
+      'its stored copy was missing, so it’s fetched afresh next run',
+      ports,
+    );
+  }
 
   const pack = recordType.pack === undefined ? null : (ports.packs[recordType.pack] ?? null);
   let page: Page;

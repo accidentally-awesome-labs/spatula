@@ -294,3 +294,15 @@ export async function purgeSource(
     return { captures: deleted.length, pages: forgotten.length };
   });
 }
+
+/**
+ * Forgets one page's stored copy, its hash and validators, as a purge forgets a source's: for a
+ * page whose copy's file has gone missing (ADR 0008), so its next fetch is unconditional and stores
+ * the body again.
+ */
+export async function forgetStoredCopy(db: Executor, itemId: string): Promise<void> {
+  await db
+    .update(items)
+    .set({ contentHash: null, etag: null, lastModified: null })
+    .where(eq(items.id, itemId));
+}
