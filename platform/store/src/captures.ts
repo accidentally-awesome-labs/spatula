@@ -1,7 +1,7 @@
 import type { ContentSignals } from '@spatula/core';
 import { and, desc, eq, inArray, isNotNull, notInArray, or, sql } from 'drizzle-orm';
 import type { Executor } from './client';
-import { captures, items, sources, statements } from './schema';
+import { captures, fetches, items, sources, statements } from './schema';
 
 /*
  * The page archive (ADR 0008). A capture is a page as a fetch found it: its body, kept once under its
@@ -214,9 +214,11 @@ export async function deleteCaptures(db: Executor, captureIds: readonly string[]
 /**
  * What purging a source would delete (ADR 0008): the hashes of the page bodies that only its
  * captures and its pages hold, and its captures' reads. A source's captures are those of the pages
- * it holds now, and those taken under it while a page belonged to it (pages move, ADR 0006). Null
- * when the dataset never had the source; a removed source has rows still. It deletes nothing, so a
- * purge can delete the files first.
+ * it holds now, and those taken under it while a page belonged to it (pages move, ADR 0006). Its
+ * pages' bodies are their stored copies, and every body their fetches stored, which before the
+ * archive was a raw copy per changed fetch that no capture names. Null when the dataset never had
+ * the source; a removed source has rows still. It deletes nothing, so a purge can delete the files
+ * first.
  */
 export async function purgeKeys(
   db: Executor,
@@ -243,6 +245,9 @@ export async function purgeKeys(
       select content_hash as hash from purged
       union
       select content_hash from pages where content_hash is not null
+      union
+      select ${fetches.contentHash} from ${fetches}
+      where ${fetches.itemId} in (select id from pages) and ${fetches.contentHash} is not null
     )
     select 'body' as kind, hash as key from hashes
     where not exists (
@@ -264,8 +269,9 @@ export async function purgeKeys(
 /**
  * Purges a source (ADR 0008): deletes its captures, and forgets its pages' stored copies, their hash
  * and validators, so nothing points at a deleted file and each page's next fetch is unconditional.
- * Its statements stay: they're facts, and their citations become null. Returns how many captures
- * went, and how many pages lost their copy.
+ * For the same reason it forgets the hashes its pages' fetches logged, so a purge run again finds
+ * nothing left. Its statements stay: they're facts, and their citations become null. Returns how
+ * many captures went, and how many pages lost their copy.
  */
 export async function purgeSource(
   db: Executor,
@@ -296,6 +302,10 @@ export async function purgeSource(
         ),
       )
       .returning({ id: items.id });
+    await tx
+      .update(fetches)
+      .set({ contentHash: null })
+      .where(and(inArray(fetches.itemId, pages), isNotNull(fetches.contentHash)));
     return { captures: deleted.length, pages: forgotten.length };
   });
 }

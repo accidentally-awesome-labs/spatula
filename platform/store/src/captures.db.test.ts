@@ -1,5 +1,5 @@
 import { newId } from '@spatula/core';
-import { and, eq } from 'drizzle-orm';
+import { and, asc, eq, inArray } from 'drizzle-orm';
 import { describe, expect, it } from 'vitest';
 import { withRollback } from '../test/db';
 import { fetchOf, seedDataset, statementOf, T } from '../test/seed';
@@ -21,7 +21,7 @@ import type { Executor } from './client';
 import { applyDefinition, listLiveItems, type ItemRef } from './datasets';
 import { testDefinition } from './fixtures';
 import { startRun } from './runs';
-import { items, statements } from './schema';
+import { fetches, items, statements } from './schema';
 import { reseeStatements, writeStatements } from './statements';
 
 const DAY = 24 * 60 * 60 * 1000;
@@ -345,6 +345,24 @@ describe('freedKeys', () => {
     }));
 });
 
+/**
+ * The hash the seed's `fetchOf` names for a fetch at T(minute). Every page fetch it logs stored a
+ * body, as every changed fetch did before the archive, so a purge takes that body's file too.
+ */
+const fetchedHash = (minute: number) => `hash-${T(minute).getTime()}`;
+
+/** A fetch of the item at T(minute) that stored a body with this hash, and no capture of it. */
+async function fetchStoring(
+  db: Executor,
+  runId: string,
+  item: ItemRef,
+  minute: number,
+  contentHash: string,
+): Promise<void> {
+  const id = await fetchOf(db, runId, item, T(minute));
+  await db.update(fetches).set({ contentHash }).where(eq(fetches.id, id));
+}
+
 describe('purging a source', () => {
   it('deletes a source’s captures and forgets its pages’ copies, and leaves the other source’s', () =>
     withRollback(async (db) => {
@@ -372,7 +390,7 @@ describe('purging a source', () => {
       const source = { datasetId: DATASET, sourceId: 'maker-a' };
       // 'shared' stays: B1's capture holds it.
       expect(await purgeKeys(db, source)).toEqual({
-        hashes: ['a1-body', 'a2-copy', 'moved-body'],
+        hashes: ['a1-body', 'a2-copy', fetchedHash(0), fetchedHash(1), 'moved-body'],
         reads: ['captures/test-products/a1.json.gz'],
       });
       expect(await purgeSource(db, source)).toEqual({ captures: 3, pages: 2 });
@@ -397,7 +415,7 @@ describe('purging a source', () => {
       await db.update(items).set({ contentHash: 'a1-body' }).where(eq(items.id, b1!.id));
 
       const source = { datasetId: DATASET, sourceId: 'maker-a' };
-      expect(await purgeKeys(db, source)).toEqual({ hashes: [], reads: [] });
+      expect(await purgeKeys(db, source)).toEqual({ hashes: [fetchedHash(0)], reads: [] });
       // The purge still deletes A1's capture, and forgets A1's copy, not B1's.
       expect(await purgeSource(db, source)).toEqual({ captures: 1, pages: 1 });
       expect(await latestCapture(db, a1!.id)).toBeNull();
@@ -426,12 +444,54 @@ describe('purging a source', () => {
       });
 
       const source = { datasetId: DATASET, sourceId: 'maker-a' };
-      expect(await purgeKeys(db, source)).toEqual({ hashes: ['alone'], reads: [] });
+      expect(await purgeKeys(db, source)).toEqual({
+        hashes: ['alone', fetchedHash(0), fetchedHash(1), fetchedHash(2)],
+        reads: [],
+      });
       expect(await purgeSource(db, source)).toEqual({ captures: 3, pages: 1 });
       // Nothing of the other dataset went.
       expect(await latestCapture(db, otherA2!.id)).toEqual(held);
       const [otherPage] = await db.select().from(items).where(eq(items.id, otherA1!.id));
       expect(otherPage).toMatchObject({ contentHash: 'held-by-page' });
+    }));
+
+  it('takes the copies its pages’ fetches stored before the archive, and forgets them', () =>
+    withRollback(async (db) => {
+      const {
+        items: [a1, a2, b1],
+        runId,
+      } = await seedDataset(db);
+      // Before the archive, A1's fetches stored two raw copies, and A2's one, which no capture
+      // names. B1, maker-b's page, holds A2's as its copy now.
+      await fetchStoring(db, runId, a1!, 0, 'raw-earlier');
+      await fetchStoring(db, runId, a1!, 1, 'raw-now');
+      await fetchStoring(db, runId, a2!, 2, 'raw-shared');
+      await fetchStoring(db, runId, b1!, 3, 'b1-raw');
+      await db.update(items).set({ contentHash: 'raw-now' }).where(eq(items.id, a1!.id));
+      await db.update(items).set({ contentHash: 'a2-now' }).where(eq(items.id, a2!.id));
+      await db.update(items).set({ contentHash: 'raw-shared' }).where(eq(items.id, b1!.id));
+
+      const source = { datasetId: DATASET, sourceId: 'maker-a' };
+      // 'raw-earlier' is named only by A1's fetch. 'raw-shared' stays: B1's copy is that body.
+      expect(await purgeKeys(db, source)).toEqual({
+        hashes: ['a2-now', 'raw-earlier', 'raw-now'],
+        reads: [],
+      });
+      expect(await purgeSource(db, source)).toEqual({ captures: 0, pages: 2 });
+      // The source's pages' fetches no longer name the files the purge deleted; B1's still does.
+      const named = await db
+        .select({ itemId: fetches.itemId, contentHash: fetches.contentHash })
+        .from(fetches)
+        .where(inArray(fetches.itemId, [a1!.id, a2!.id, b1!.id]))
+        .orderBy(asc(fetches.startedAt));
+      expect(named).toEqual([
+        { itemId: a1!.id, contentHash: null },
+        { itemId: a1!.id, contentHash: null },
+        { itemId: a2!.id, contentHash: null },
+        { itemId: b1!.id, contentHash: 'b1-raw' },
+      ]);
+      // Again: nothing is left to purge.
+      expect(await purgeKeys(db, source)).toEqual({ hashes: [], reads: [] });
     }));
 
   it('knows a source the dataset never had', () =>

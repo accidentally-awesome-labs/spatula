@@ -17,6 +17,7 @@ import { RUN_START_GRACE_MS } from '../../src/api';
 import { rawPageKey, readKey } from '../../src/captures';
 import { withDatabase } from '../../src/database';
 import { pageKey } from '../../src/pipeline';
+import { URLS } from '../pages';
 import { call, expectNoStore } from './api-support';
 
 /** Bindings whose Workflow binding has no instance to give, as for a run whose Workflow never started. */
@@ -133,6 +134,49 @@ describe('POST /datasets/:id/captures/purge', () => {
     // Again: nothing is left of the source, which is no error.
     const again = await purge('purge-one', { source: 'maker-a' });
     expect(await again.json()).toEqual({ purged: { captures: 0, pages: 0, bodies: 0 } });
+  });
+
+  it('deletes a raw copy a page’s fetch stored before the archive, and counts it', async () => {
+    await archived('purge-raw');
+    const raw = hashOf('purge-raw-before');
+    await withDatabase(env, async (db) => {
+      const [a1] = await db
+        .select()
+        .from(items)
+        .where(and(eq(items.datasetId, 'purge-raw'), eq(items.locator, URLS.a1)));
+      // A1's fetch before the archive kept its body raw under its hash, and no capture names it.
+      // A1's copy is its later body.
+      await recordFetch(db, {
+        id: 'fe_purge-raw_before',
+        runId: 'purge-raw-202610100000',
+        itemId: a1!.id,
+        url: a1!.locator,
+        finalUrl: a1!.locator,
+        policy: 'allowed',
+        policyReason: null,
+        method: 'http',
+        outcome: 'changed',
+        httpStatus: 200,
+        bytes: 10,
+        signals: {},
+        startedAt: new Date(Date.now() - 24 * 60 * 60 * 1000),
+        durationMs: 1,
+        error: null,
+        page: { contentHash: raw, etag: null, lastModified: null },
+      });
+      await db
+        .update(items)
+        .set({ contentHash: hashOf('purge-raw-maker-a') })
+        .where(eq(items.id, a1!.id));
+    });
+    await env.STORE.put(rawPageKey(raw), 'raw');
+
+    const response = await purge('purge-raw', { source: 'maker-a' });
+    expect(response.status).toBe(200);
+    // Two bodies: the capture's, and the raw copy only the fetch named.
+    expect(await response.json()).toEqual({ purged: { captures: 1, pages: 1, bodies: 2 } });
+    expect(await env.STORE.get(rawPageKey(raw))).toBeNull();
+    expect(await env.STORE.get(pageKey(hashOf('purge-raw-maker-b')))).not.toBeNull();
   });
 
   it.each(['page', 'capture'] as const)(
