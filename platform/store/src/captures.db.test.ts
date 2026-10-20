@@ -18,7 +18,9 @@ import {
   type NewCapture,
 } from './captures';
 import type { Executor } from './client';
-import type { ItemRef } from './datasets';
+import { applyDefinition, listLiveItems, type ItemRef } from './datasets';
+import { testDefinition } from './fixtures';
+import { startRun } from './runs';
 import { items, statements } from './schema';
 import { reseeStatements, writeStatements } from './statements';
 
@@ -348,6 +350,55 @@ describe('purging a source', () => {
       // Again: nothing is left to purge.
       expect(await purgeKeys(db, source)).toEqual({ hashes: [], reads: [] });
       expect(await purgeSource(db, source)).toEqual({ captures: 0, pages: 0 });
+    }));
+
+  it('keeps a body that a page of another source holds', () =>
+    withRollback(async (db) => {
+      const {
+        items: [a1, , b1],
+        runId,
+      } = await seedDataset(db);
+      await capture(db, runId, a1!, 0, 'a1-body');
+      // A1's stored copy is that body, and so is B1's, which maker-b's page holds without a capture.
+      await db.update(items).set({ contentHash: 'a1-body' }).where(eq(items.id, a1!.id));
+      await db.update(items).set({ contentHash: 'a1-body' }).where(eq(items.id, b1!.id));
+
+      const source = { datasetId: DATASET, sourceId: 'maker-a' };
+      expect(await purgeKeys(db, source)).toEqual({ hashes: [], reads: [] });
+      // The purge still deletes A1's capture, and forgets A1's copy, not B1's.
+      expect(await purgeSource(db, source)).toEqual({ captures: 1, pages: 1 });
+      expect(await latestCapture(db, a1!.id)).toBeNull();
+      const [b1Now] = await db.select().from(items).where(eq(items.id, b1!.id));
+      expect(b1Now).toMatchObject({ contentHash: 'a1-body' });
+    }));
+
+  it('keeps a body that a page or a capture of another dataset holds', () =>
+    withRollback(async (db) => {
+      const {
+        items: [a1],
+        runId,
+      } = await seedDataset(db);
+      await applyDefinition(db, testDefinition('another'));
+      const otherRun = 'another-202610100000';
+      await startRun(db, { id: otherRun, datasetId: 'another' });
+      const [otherA1, otherA2] = await listLiveItems(db, 'another');
+      await capture(db, runId, a1!, 0, 'alone');
+      await capture(db, runId, a1!, 1, 'held-by-page');
+      await capture(db, runId, a1!, 2, 'held-by-capture');
+      await db.update(items).set({ contentHash: 'alone' }).where(eq(items.id, a1!.id));
+      // The other dataset's page holds one body, and its capture the other.
+      await db.update(items).set({ contentHash: 'held-by-page' }).where(eq(items.id, otherA1!.id));
+      const held = await capture(db, otherRun, otherA2!, 3, 'held-by-capture', {
+        datasetId: 'another',
+      });
+
+      const source = { datasetId: DATASET, sourceId: 'maker-a' };
+      expect(await purgeKeys(db, source)).toEqual({ hashes: ['alone'], reads: [] });
+      expect(await purgeSource(db, source)).toEqual({ captures: 3, pages: 1 });
+      // Nothing of the other dataset went.
+      expect(await latestCapture(db, otherA2!.id)).toEqual(held);
+      const [otherPage] = await db.select().from(items).where(eq(items.id, otherA1!.id));
+      expect(otherPage).toMatchObject({ contentHash: 'held-by-page' });
     }));
 
   it('knows a source the dataset never had', () =>

@@ -11,7 +11,7 @@ import {
 } from '@spatula/store';
 import { testDefinition } from '@spatula/store/fixtures';
 import { env } from 'cloudflare:workers';
-import { eq } from 'drizzle-orm';
+import { and, eq } from 'drizzle-orm';
 import { describe, expect, it } from 'vitest';
 import { RUN_START_GRACE_MS } from '../../src/api';
 import { rawPageKey, readKey } from '../../src/captures';
@@ -134,6 +134,55 @@ describe('POST /datasets/:id/captures/purge', () => {
     const again = await purge('purge-one', { source: 'maker-a' });
     expect(await again.json()).toEqual({ purged: { captures: 0, pages: 0, bodies: 0 } });
   });
+
+  it.each(['page', 'capture'] as const)(
+    'keeps a body that a %s of another dataset holds, and deletes the rest of the source',
+    async (kind) => {
+      const datasetId = `purge-shared-${kind}`;
+      const holder = `purge-holder-${kind}`;
+      await archived(datasetId);
+      await archived(holder);
+      const shared = hashOf(`${datasetId}-maker-a`);
+      await withDatabase(env, async (db) => {
+        if (kind === 'page') {
+          await db
+            .update(items)
+            .set({ contentHash: shared })
+            .where(and(eq(items.datasetId, holder), eq(items.sourceId, 'maker-a')));
+        } else {
+          await db
+            .update(captures)
+            .set({ contentHash: shared })
+            .where(eq(captures.id, `cp_${holder}_maker-a`));
+        }
+      });
+
+      const response = await purge(datasetId, { source: 'maker-a' });
+      expect(response.status).toBe(200);
+      // The source's capture and page went, but no body: the other dataset holds it.
+      expect(await response.json()).toEqual({ purged: { captures: 1, pages: 1, bodies: 0 } });
+      expect(await env.STORE.get(pageKey(shared))).not.toBeNull();
+      expect(await env.STORE.get(rawPageKey(shared))).not.toBeNull();
+      // The capture's own read is still deleted.
+      expect(await env.STORE.get(readKey(datasetId, `cp_${datasetId}_maker-a`))).toBeNull();
+      await withDatabase(env, async (db) => {
+        expect(
+          await db
+            .select({ id: captures.id })
+            .from(captures)
+            .where(eq(captures.datasetId, datasetId)),
+        ).toEqual([{ id: `cp_${datasetId}_maker-b` }]);
+        // Nothing of the holder's was touched.
+        expect(
+          await db
+            .select({ id: captures.id })
+            .from(captures)
+            .where(eq(captures.datasetId, holder))
+            .orderBy(captures.id),
+        ).toEqual([{ id: `cp_${holder}_maker-a` }, { id: `cp_${holder}_maker-b` }]);
+      });
+    },
+  );
 
   it('answers 404 for a dataset or a source that isn’t there, 400 for a body that’s wrong, and 401 to anyone but the owner', async () => {
     await archived('purge-missing');
