@@ -36,14 +36,8 @@ import {
   type Executor,
   type ItemRef,
 } from '@spatula/store';
-import {
-  extractionTag,
-  NO_USAGE,
-  pageKey,
-  retryTag,
-  type Context,
-  type RefreshPorts,
-} from './pipeline';
+import { readPageBody } from './captures';
+import { extractionTag, NO_USAGE, retryTag, type Context, type RefreshPorts } from './pipeline';
 import { storable } from './text';
 
 /*
@@ -132,6 +126,8 @@ export interface ClassifyFetch {
   contentHash: string | null;
   finalUrl: string;
   signals: ContentSignals;
+  /** The capture the page was read from (ADR 0008); absent or null for none. */
+  captureId?: string | null;
 }
 
 /** How a recorded decision was made, as a run counts it. */
@@ -227,7 +223,7 @@ async function classifyPage(
     return result('reused');
   }
   const body =
-    fetched.contentHash === null ? null : await ports.blobs.get(pageKey(fetched.contentHash));
+    fetched.contentHash === null ? null : await readPageBody(ports.blobs, fetched.contentHash);
   if (body === null) throw new Error(`The stored copy of ${item.locator} is missing`);
   const page = parsePage(new TextDecoder().decode(body), fetched.finalUrl);
   const values = survivingValues(recordType, said);
@@ -250,7 +246,15 @@ async function classifyPage(
   const at = ports.now();
   const apply = (decision: DecisionRow) =>
     ports.withDb((db) =>
-      applyClassification(db, { datasetId, item, name, fetchId: fetched.fetchId, decision, at }),
+      applyClassification(db, {
+        datasetId,
+        item,
+        name,
+        fetchId: fetched.fetchId,
+        captureId: fetched.captureId ?? null,
+        decision,
+        at,
+      }),
     );
 
   const earlier = await ports.withDb((db) =>
@@ -357,12 +361,13 @@ async function applyClassification(
     item: ItemRef;
     name: string;
     fetchId: string;
+    captureId: string | null;
     decision: DecisionRow;
     at: Date;
   },
 ): Promise<'answered' | 'irrelevant' | 'waiting'> {
-  const { datasetId, item, name, fetchId, decision, at } = input;
-  const write = { datasetId, itemId: item.id, fetchId, seenAt: at, properties: [name] };
+  const { datasetId, item, name, fetchId, captureId, decision, at } = input;
+  const write = { datasetId, itemId: item.id, fetchId, seenAt: at, properties: [name], captureId };
   const withdrawAutomatic = () =>
     withdrawCascade(db, { datasetId, itemId: item.id, name, fetchId, at });
   const answer = decision.finalAnswer ?? decision.answer;
