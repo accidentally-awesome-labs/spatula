@@ -150,12 +150,43 @@ describe('the page archive', { timeout: 20_000 }, () => {
     });
     await refresh(world, 'archive-cited');
     const [first, second] = await capturesOf(a1!.id);
+    // A capture records the validators its own response carried: the second's sent none.
+    expect(first!.etag).toBe('"a1-v1"');
+    expect(second!.etag).toBeNull();
+    expect(second!.lastModified).toBeNull();
     const cited = await citations(a1!.id);
     expect(cited['jsonld A1 Pro']).toBe(second!.id);
     expect(cited['rule Maker A']).toBe(first!.id);
     expect(await readCapture(world.ports, second!)).toMatchObject({
       jsonLd: [expect.objectContaining({ name: 'A1 Pro' })],
     });
+  });
+
+  it('records a capture’s read key before its file, so a failed write leaves a read to remake', async () => {
+    const {
+      world,
+      pages: [a1],
+    } = await worldFor(testDefinition('archive-read-fails'), standardRoutes());
+    const real = world.ports.blobs;
+    // Every write under captures/ fails; the pages' bodies and the snapshot still go through.
+    world.ports.blobs = {
+      ...real,
+      async put(key, body, contentType) {
+        if (key.startsWith('captures/')) throw new Error('R2 refused the write');
+        await real.put(key, body, contentType);
+      },
+    };
+    const { summary } = await refresh(world, 'archive-read-fails');
+    expect(summary.captures).toEqual({ stored: 3, pruned: 0 });
+    const [capture] = await capturesOf(a1!.id);
+    const key = readKey('archive-read-fails', capture!.id);
+    expect(capture!.readKey).toBe(key);
+    expect(world.stored.has(key)).toBe(false);
+
+    // With the store back, the read is made again from the body, and kept under the same key.
+    world.ports.blobs = real;
+    expect(await readCapture(world.ports, capture!)).toMatchObject({ title: 'A1 | Maker A' });
+    expect(world.stored.has(key)).toBe(true);
   });
 
   it('cites the capture in a decided category, and in a person’s answer', async () => {

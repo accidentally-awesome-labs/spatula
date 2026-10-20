@@ -50,7 +50,12 @@ export async function readPageBody(
   return blobs.get(rawPageKey(contentHash));
 }
 
-/** Keeps what Spatula read from a capture's page, unless the capture has its read already. */
+/**
+ * Keeps what Spatula read from a capture's page, unless the capture has its read already. The row
+ * names the file before the file is written. Cleanup and a purge find reads only through the row's
+ * key, so a write that fails between the two must leave a key with no file, which they delete
+ * harmlessly and `readCapture` makes again, not a file no row names, which they would never delete.
+ */
 export async function storeRead(
   ports: ArchivePorts,
   capture: Pick<CaptureRow, 'id' | 'datasetId' | 'readKey'>,
@@ -59,10 +64,11 @@ export async function storeRead(
   if (capture.readKey !== null) return;
   const key = readKey(capture.datasetId, capture.id);
   const json = new TextEncoder().encode(JSON.stringify(pageRead(page)));
-  await ports.blobs.put(key, await gzip(json), 'application/gzip');
+  const packed = await gzip(json);
   await ports.withDb((db) =>
     setCaptureRead(db, { id: capture.id, readKey: key, reader: PAGE_READ_VERSION }),
   );
+  await ports.blobs.put(key, packed, 'application/gzip');
 }
 
 /**

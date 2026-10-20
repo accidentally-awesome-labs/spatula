@@ -793,8 +793,10 @@ async function captureOf(
     url: item.locator,
     finalUrl: answer.finalUrl,
     httpStatus: answer.httpStatus,
-    etag: answer.page?.etag ?? item.etag,
-    lastModified: answer.page?.lastModified ?? item.lastModified,
+    // The validators its own response carried, none included. A 304 brings no page: it confirmed
+    // the validators the request sent, which are the item's.
+    etag: answer.page === undefined ? item.etag : answer.page.etag,
+    lastModified: answer.page === undefined ? item.lastModified : answer.page.lastModified,
     fetchedAt: fetch.startedAt,
     contentHash,
     bytes: answer.bytes,
@@ -1127,8 +1129,13 @@ async function keepRead(ports: RefreshPorts, fetched: Fetched, page: Page): Prom
   try {
     const capture = await ports.withDb((db) => captureById(db, captureId));
     if (capture !== null) await storeRead(ports, capture, page);
-  } catch {
-    // Left for readCapture, which makes the read from the body.
+  } catch (error) {
+    // Left for readCapture, which makes the read from the body. The capture's ID and the error's
+    // message only: never the page's text.
+    console.warn(
+      `Keeping the read of capture ${captureId} failed:`,
+      error instanceof Error ? error.message : String(error),
+    );
   }
 }
 
