@@ -17,6 +17,7 @@ export * from './candidates';
 export * from './llm';
 export * from './identity';
 export * from './survivorship';
+export * from './editions';
 export * from './snapshot';
 export * from './wire';
 export * from './signatures';

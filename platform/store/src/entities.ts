@@ -1,8 +1,11 @@
 import {
+  basePages,
   claimLabel,
   contestedNames,
+  editionsOf,
   identityClaims,
   lineupOf,
+  MAX_LINEUP,
   MAX_MATCH_QUESTIONS,
   mergeValues,
   nameField,
@@ -11,12 +14,13 @@ import {
   planMatch,
   survivingValues,
   type Definition,
+  type EntityMember,
   type FieldValue,
   type LineupEntry,
   type MatchVerdict,
   type RecordType,
 } from '@spatula/core';
-import { and, asc, eq } from 'drizzle-orm';
+import { and, asc, eq, isNotNull } from 'drizzle-orm';
 import type { Executor } from './client';
 import { judgementsFor } from './decisions';
 import { pagesRefusingAiInput } from './fetches';
@@ -411,11 +415,14 @@ export interface MatchSides {
   recordType: string;
   page: { url: string; values: Record<string, FieldValue[]> };
   /**
-   * The record, by its pages that didn't join it as editions, or by all its pages where every one
-   * did: the first one's address, by address, and their values merged.
+   * The record, by its base page and the pages written as it (`basePages`): the first one's
+   * address, by address, and their values merged.
    */
   entity: { url: string; values: Record<string, FieldValue[]> };
-  /** The names of the record's pages that joined it as editions, each once, in order of text. */
+  /**
+   * The names of the record's editions (`editionsOf`): its pages whose names differ from the
+   * record's, each once, in order of text, at most 10.
+   */
   editions: string[];
   /**
    * The names of every live page of the record, editions included, each once, by address: every
@@ -430,9 +437,12 @@ export interface MatchSides {
 /** At most this many values of each field go into a question's state. */
 const SIDE_VALUES_MAX = 20;
 
+/** At most this many edition names go into a question's state, as many as its lineup shows. */
+const SIDE_EDITIONS_MAX = MAX_LINEUP;
+
 /**
- * A match question's two sides: the page's surviving values, and the record's, merged from its
- * live pages other than its editions, whose names it gives apart (ADR 0003). Null when the page
+ * A match question's two sides: the page's surviving values, and the record's, merged from its base
+ * page and the pages written as it, with its editions' names apart (ADR 0003). Null when the page
  * isn't live or the entity has no live page.
  */
 export async function matchSides(
@@ -444,7 +454,7 @@ export async function matchSides(
     .from(items)
     .where(and(eq(items.id, input.itemId), eq(items.status, 'live')));
   const members = await db
-    .select({ id: items.id, locator: items.locator })
+    .select({ id: items.id, locator: items.locator, createdAt: items.createdAt })
     .from(items)
     .where(and(eq(items.entityId, input.entityId), eq(items.status, 'live')))
     .orderBy(asc(items.locator));
@@ -464,33 +474,82 @@ export async function matchSides(
       Object.entries(values).map(([name, list]) => [name, list.slice(0, SIDE_VALUES_MAX)]),
     );
   const valuesOf = (itemId: string) => survivingValues(recordType, said.get(itemId) ?? []);
-  const others = members.filter((member) => !editionIds.has(member.id));
-  const shown = others.length > 0 ? others : members;
+  // The record's pages as a snapshot sees them, by address, each with its own statements.
+  const pages: EntityMember[] = members.map((member) => ({
+    url: member.locator,
+    firstSeen: member.createdAt.toISOString(),
+    edition: editionIds.has(member.id),
+    statements: said.get(member.id) ?? [],
+  }));
+  // Never null: the record has a live page.
+  const base = basePages(recordType, pages)!;
   const theirs: Record<string, FieldValue[]> = {};
-  for (const member of shown) mergeValues(theirs, valuesOf(member.id));
+  for (const member of base) mergeValues(theirs, survivingValues(recordType, member.statements));
   const field = nameField(recordType);
-  const namesOf = (memberIds: readonly string[], each?: number) =>
+  const [recordName] = field === null ? [] : (theirs[field] ?? []);
+  const editions = [
+    ...new Set(
+      editionsOf(recordType, pages, typeof recordName === 'string' ? recordName : null).map(
+        (edition) => edition.name,
+      ),
+    ),
+  ].slice(0, SIDE_EDITIONS_MAX);
+  const entityNames =
     field === null
       ? []
       : [
           ...new Set(
-            memberIds
-              .flatMap((id) => valuesOf(id)[field]?.slice(0, each) ?? [])
+            members
+              .flatMap((member) => valuesOf(member.id)[field] ?? [])
               .filter((name): name is string => typeof name === 'string'),
           ),
         ];
-  const editions = namesOf(
-    members.filter((member) => editionIds.has(member.id)).map((member) => member.id),
-    1,
-  )
-    .sort()
-    .slice(0, SIDE_VALUES_MAX);
   return {
     recordType: page.recordType,
     page: { url: page.locator, values: capped(valuesOf(page.id)) },
-    entity: { url: shown[0]!.locator, values: capped(theirs) },
+    entity: { url: base[0]!.url, values: capped(theirs) },
     editions,
-    entityNames: namesOf(members.map((member) => member.id)),
+    entityNames,
     entityItemIds: members.map((member) => member.id),
   };
+}
+
+/** A page of a record, as publishing reads it. */
+export interface EntityMemberRow {
+  itemId: string;
+  entityId: string;
+  /** The page's address. */
+  url: string;
+  /** When Spatula first met the page. */
+  firstSeen: Date;
+  /** Whether the page joined its record as an edition. */
+  edition: boolean;
+}
+
+/**
+ * Each live page that belongs to a record, with when Spatula first met it and whether it joined
+ * its record as an edition: what a record's base page and editions are worked out from (ADR 0003).
+ * Earliest first, then by address.
+ */
+export async function entityMembers(db: Executor, datasetId: string): Promise<EntityMemberRow[]> {
+  const rows = await db
+    .select({
+      itemId: items.id,
+      entityId: items.entityId,
+      url: items.locator,
+      firstSeen: items.createdAt,
+      verdict: judgements.verdict,
+    })
+    .from(items)
+    .leftJoin(
+      judgements,
+      and(eq(judgements.itemId, items.id), eq(judgements.entityId, items.entityId)),
+    )
+    .where(and(eq(items.datasetId, datasetId), eq(items.status, 'live'), isNotNull(items.entityId)))
+    .orderBy(asc(items.createdAt), asc(items.locator));
+  return rows.map(({ verdict, entityId, ...row }) => ({
+    ...row,
+    entityId: entityId!,
+    edition: verdict === 'edition',
+  }));
 }

@@ -398,6 +398,41 @@ describe('matching pages', { timeout: 20_000 }, () => {
     expect(await entityOf(a2!.id)).toBe(e1);
   });
 
+  it('shows the decider the record by its base page, though its edition started it, and the edition as known', async () => {
+    // The Club's page sorts first, so it starts the record, and the base page joins it as an
+    // edition.
+    const definition = testDefinition('match-base-page');
+    const {
+      world,
+      pages: [a1, a2],
+    } = await worldFor(
+      definition,
+      routesWith(
+        { name: 'DJ 300 PRO X Club', gtin13: DT_80.gtin13 },
+        { name: 'DJ 300 PRO X', gtin13: DT_250.gtin13 },
+      ),
+    );
+    world.ports.decider = fakeDecider(() => ({ edition: 0.97 })).decider;
+    await refresh(world, 'match-base-page');
+    expect(await entityOf(a2!.id)).toBe(await entityOf(a1!.id));
+
+    // A third page is asked about the record.
+    await applyDefinition(db, withThirdPage(definition));
+    world.web.routes.set(URL_A3, {
+      status: 200,
+      body: productPage({ name: 'DJ 300 PRO X Silver' }),
+    });
+    const scripted = fakeDecider(() => ({ edition: 0.97 }));
+    world.ports.decider = scripted.decider;
+    await refresh(world, 'match-base-page');
+    expect(scripted.calls).toHaveLength(1);
+    const { evidence } = scripted.calls[0]!;
+    expect(evidence).toContain(`Record B (${URLS.a2}):`);
+    expect(evidence).toContain('A: DJ 300 PRO X Silver\nB: DJ 300 PRO X\nA adds: Silver');
+    expect(evidence).toContain('B’s known editions: DJ 300 PRO X Club');
+    expect(evidence).not.toContain('B: DJ 300 PRO X Club');
+  });
+
   it('asks a person when the decider is torn between the same product and an edition', async () => {
     const {
       world,

@@ -6,7 +6,7 @@ import { fetchOf, seedDataset, statementOf, T } from '../test/seed';
 import type { Executor } from './client';
 import { applyDefinition, listLiveItems, type ItemRef } from './datasets';
 import { judge } from './decisions';
-import { matchSides, resolveEntities, type MatchSides } from './entities';
+import { entityMembers, matchSides, resolveEntities, type MatchSides } from './entities';
 import { recordFetch, setItemStatus } from './fetches';
 import { testDefinition } from './fixtures';
 import { items, type Judge } from './schema';
@@ -968,16 +968,17 @@ describe('matchSides', () => {
     definition = testDefinition(),
   ) => matchSides(db, { definition, itemId, entityId });
 
-  it('gives the page’s values, and the entity’s merged from its live pages', () =>
+  it('gives the page’s values, and the entity’s merged from its base page and the pages written as it', () =>
     withRollback(async (db) => {
       const {
         items: [a1, a2, b1],
         runId,
       } = await seedDataset(db);
-      // A1 and A2 share a GTIN, so they're one entity. B1 is the page that asks.
+      // A1 and A2 share a GTIN, so they're one entity, and A2 writes A1's name another way, so it
+      // counts with the base page. B1 is the page that asks.
       await says(db, runId, a1!, 0, product('Maker A', 'DT 770 PRO', '04010118471063'));
       await says(db, runId, a2!, 0, [
-        ...product('Maker A', 'DT 770 PRO (2024)', '04010118471063'),
+        ...product('Maker A', 'DT-770 PRO', '04010118471063'),
         statementOf('mpns', 'DT-770-250', 'jsonld'),
       ]);
       await resolve(db);
@@ -995,19 +996,20 @@ describe('matchSides', () => {
           url: a1!.locator,
           values: {
             brand: ['Maker A'],
-            name: ['DT 770 PRO', 'DT 770 PRO (2024)'],
+            name: ['DT 770 PRO', 'DT-770 PRO'],
             gtins: ['04010118471063'],
             mpns: ['DT-770-250'],
           },
         },
+        // A name written as the record's is no edition.
         editions: [],
         // Every live page's name, by the page's address, for the model-number rule.
-        entityNames: ['DT 770 PRO', 'DT 770 PRO (2024)'],
+        entityNames: ['DT 770 PRO', 'DT-770 PRO'],
         entityItemIds: [a1!.id, a2!.id],
       });
     }));
 
-  it('gives the record’s editions by name, and its values and address from its other pages', () =>
+  it('gives the record’s editions by name, and its values and address from its base page', () =>
     withRollback(async (db) => {
       const { runId } = await seedDataset(db);
       const [a1, a2, a3] = await makerAThree(db);
@@ -1029,6 +1031,68 @@ describe('matchSides', () => {
         entityNames: ['DJ 300 PRO X', 'DJ 300 PRO X Club'],
         entityItemIds: [a1.id, a2.id],
       });
+    }));
+
+  it('gives the record by its base page, though its edition started it and the base joined as an edition', () =>
+    withRollback(async (db) => {
+      const { runId } = await seedDataset(db);
+      const [a1, a2, a3] = await makerAThree(db);
+      // The Club's page starts the record, and the base page joins it as an edition.
+      await says(db, runId, a1, 0, product('Maker A', 'DJ 300 PRO X Club', '04010118471063'));
+      await says(db, runId, a2, 0, product('Maker A', 'DJ 300 PRO X', '04010118471070'));
+      await resolve(db);
+      const e1 = (await entityOf(db, a1))!;
+      await judged(db, a2, e1, 'edition', 'person');
+      await resolve(db);
+      expect(await entityOf(db, a2)).toBe(e1);
+      await says(db, runId, a3, 0, product('Maker A', 'DJ 300 PRO X Silver', '04010118471087'));
+      expect(await sidesFor(db, a3.id, e1)).toMatchObject({
+        entity: {
+          url: a2.locator,
+          values: { brand: ['Maker A'], name: ['DJ 300 PRO X'], gtins: ['04010118471070'] },
+        },
+        editions: ['DJ 300 PRO X Club'],
+        entityNames: ['DJ 300 PRO X Club', 'DJ 300 PRO X'],
+        entityItemIds: [a1.id, a2.id],
+      });
+    }));
+
+  it('names at most ten of the record’s editions, the first by name, and every name for the rule', () =>
+    withRollback(async (db) => {
+      const {
+        items: [, , b1],
+        runId,
+      } = await seedDataset(db);
+      // A1 and eleven more pages of maker A, each an edition by name, all with one GTIN.
+      const full = testDefinition();
+      const makerA = full.sources[0] as PagesSource;
+      const extra = Array.from(
+        { length: 10 },
+        (_, index) => `https://maker-a.example/products/a${index + 3}`,
+      );
+      await applyDefinition(db, {
+        ...full,
+        sources: [{ ...makerA, pages: [...makerA.pages, ...extra] }, full.sources[1]!],
+      });
+      const pages = (await listLiveItems(db, 'test-products')).filter(
+        (item) => item.sourceId === 'maker-a',
+      );
+      expect(pages).toHaveLength(12);
+      const editionNames = Array.from(
+        { length: 11 },
+        (_, index) => `DJ 300 PRO X Edition ${String(index + 1).padStart(2, '0')}`,
+      );
+      const names = ['DJ 300 PRO X', ...editionNames];
+      for (const [index, page] of pages.entries()) {
+        await says(db, runId, page, 0, product('Maker A', names[index]!, '04010118471063'));
+      }
+      await resolve(db);
+      const e1 = (await entityOf(db, pages[0]!))!;
+      await says(db, runId, b1!, 0, product('Maker B', 'B1 Amp', '04006381333931'));
+      const sides = (await sidesFor(db, b1!.id, e1))!;
+      expect(sides.entity.values.name).toEqual(['DJ 300 PRO X']);
+      expect(sides.editions).toEqual(editionNames.slice(0, 10));
+      expect([...sides.entityNames].sort()).toEqual([...names].sort());
     }));
 
   it('is null when the page isn’t live, the entity has no live page, or the record type is gone', () =>
@@ -1233,4 +1297,27 @@ describe('resolveEntities’ lineups', () => {
         ]);
       }));
   });
+});
+
+describe('entityMembers', () => {
+  it('lists each joined live page with its record, its address, when it was met, and whether it joined as an edition', () =>
+    withRollback(async (db) => {
+      const {
+        items: [a1, a2],
+        runId,
+      } = await seedDataset(db);
+      await says(db, runId, a1!, 0, product('Maker A', 'DJ 300 PRO X', '04010118471063'));
+      await says(db, runId, a2!, 0, product('Maker A', 'DJ 300 PRO X Club', '04010118471070'));
+      await resolve(db);
+      const e1 = (await entityOf(db, a1!))!;
+      await judged(db, a2!, e1, 'edition', 'person');
+      await resolve(db);
+      // B1 says nothing, so it has no record and isn't listed.
+      const rows = await entityMembers(db, 'test-products');
+      expect(rows.map(({ firstSeen: _, ...row }) => row)).toEqual([
+        { itemId: a1!.id, entityId: e1, url: a1!.locator, edition: false },
+        { itemId: a2!.id, entityId: e1, url: a2!.locator, edition: true },
+      ]);
+      expect(rows.every((row) => row.firstSeen instanceof Date)).toBe(true);
+    }));
 });
