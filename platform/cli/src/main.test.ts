@@ -1,4 +1,5 @@
 import {
+  exportTaxonomy,
   sha256Hex,
   type ApplySummary,
   type DatasetStatus,
@@ -9,9 +10,9 @@ import {
   type RunSummary,
   type RunView,
 } from '@spatula/core';
-import { testDefinition } from '@spatula/store/fixtures';
+import { testDefinition, testTaxonomy, testTaxonomySeed } from '@spatula/store/fixtures';
 import { describe, expect, it } from 'vitest';
-import { stringify } from 'yaml';
+import { parse as parseYaml, stringify } from 'yaml';
 import { POLL_MS, WAIT_LIMIT_MS, type Io } from './commands';
 import { describeError, printable } from './format';
 import { failureLine, main, USAGE } from './main';
@@ -2934,5 +2935,93 @@ describe('purge', () => {
     const { io } = memoryIo();
     expect(await main(argv, { io, env: ENV, fetch })).toBe(2);
     expect(sent).toHaveLength(0);
+  });
+});
+
+describe('taxonomy', () => {
+  it('seeds a taxonomy from a YAML file, checked here first', async () => {
+    const { fetch, sent } = stubApi(() =>
+      Response.json({ version: 1, shelves: 8, functions: 4, features: 2 }, { status: 201 }),
+    );
+    const { io, out } = memoryIo({ 'taxonomy.yaml': stringify(testTaxonomySeed()) });
+    expect(
+      await main(['taxonomy', 'seed', 'cli-products', 'taxonomy.yaml'], { io, env: ENV, fetch }),
+    ).toBe(0);
+    expect(sent).toEqual([
+      {
+        method: 'POST',
+        origin: 'https://spatula.test',
+        path: '/datasets/cli-products/taxonomy',
+        body: testTaxonomySeed(),
+        authorization: 'Bearer owner-token',
+      },
+    ]);
+    expect(out).toEqual([
+      'Seeded cli-products’s taxonomy as version 1: 8 shelves, 4 functions, and 2 features.',
+    ]);
+  });
+
+  it('prints a file’s problems and sends nothing', async () => {
+    const { fetch, sent } = stubApi(() => {
+      throw new Error('nothing is sent');
+    });
+    const { io, err } = memoryIo({ 'taxonomy.yaml': 'scope: Audio\nshelves: []\n' });
+    expect(
+      await main(['taxonomy', 'seed', 'cli-products', 'taxonomy.yaml'], { io, env: ENV, fetch }),
+    ).toBe(1);
+    expect(sent).toHaveLength(0);
+    expect(err[0]).toBe('taxonomy.yaml isn’t a taxonomy seed:');
+    expect(err).toContain('  functions: Invalid input: expected array, received undefined');
+  });
+
+  it('exports the current version as YAML, with each item’s ID', async () => {
+    const taxonomy = testTaxonomy();
+    const { fetch, sent } = stubApi(() =>
+      Response.json({ version: 3, export: exportTaxonomy(taxonomy) }),
+    );
+    const { io, out, written } = memoryIo();
+    expect(
+      await main(['taxonomy', 'export', 'cli-products', '--out', 'v3.yaml'], {
+        io,
+        env: ENV,
+        fetch,
+      }),
+    ).toBe(0);
+    expect(sent[0]).toMatchObject({
+      method: 'GET',
+      path: '/datasets/cli-products/taxonomy?format=export',
+    });
+    expect(parseYaml(written.get('v3.yaml')!)).toEqual(exportTaxonomy(taxonomy));
+    expect(out).toEqual(['Wrote version 3 of cli-products’s taxonomy to v3.yaml.']);
+  });
+
+  it.each([
+    [['taxonomy', 'seed', 'cli-products']],
+    [['taxonomy', 'export', 'cli-products']],
+    [['taxonomy', 'drop', 'cli-products']],
+  ])('is called wrongly as %j, and sends nothing', async (argv) => {
+    const { fetch, sent } = stubApi(() => {
+      throw new Error('nothing is sent');
+    });
+    const { io } = memoryIo();
+    expect(await main(argv, { io, env: ENV, fetch })).toBe(2);
+    expect(sent).toHaveLength(0);
+  });
+
+  it('says when a plan changes the taxonomy’s scope', async () => {
+    const { fetch } = stubApi(() =>
+      Response.json({
+        dataset: 'cli-products',
+        revision: 4,
+        created: false,
+        changed: true,
+        sources: { added: [], removed: [], changed: [] },
+        pages: { added: 0, removed: 0 },
+        taxonomyVersion: 5,
+      }),
+    );
+    const { io, out } = memoryIo(FILES);
+    expect(await main(['plan', 'cli-products.yaml'], { io, env: ENV, fetch })).toBe(0);
+    expect(out).toContain('The new scope would make taxonomy version 5.');
   });
 });

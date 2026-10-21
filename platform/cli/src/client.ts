@@ -7,6 +7,8 @@ import type {
   ItemView,
   ReviewView,
   RunView,
+  Taxonomy,
+  TaxonomySeed,
 } from '@spatula/core';
 import { describeError } from './format';
 
@@ -182,6 +184,39 @@ export function createClient(options: {
         pages: Number(purged.pages ?? 0),
         bodies: Number(purged.bodies ?? 0),
       };
+    },
+
+    async seedTaxonomy(
+      datasetId: string,
+      seed: TaxonomySeed,
+    ): Promise<{ version: number; shelves: number; functions: number; features: number }> {
+      const response = await request(
+        'POST',
+        `/datasets/${encodeURIComponent(datasetId)}/taxonomy`,
+        seed,
+      );
+      const answer = await json(response);
+      if (!response.ok) throw refused(response.status, answer);
+      return {
+        version: Number(answer.version),
+        shelves: Number(answer.shelves),
+        functions: Number(answer.functions),
+        features: Number(answer.features),
+      };
+    },
+
+    async getTaxonomy(
+      datasetId: string,
+      format?: 'export',
+    ): Promise<{ version: number; taxonomy?: Taxonomy; export?: TaxonomySeed }> {
+      const query = format === undefined ? '' : `?format=${format}`;
+      const response = await request(
+        'GET',
+        `/datasets/${encodeURIComponent(datasetId)}/taxonomy${query}`,
+      );
+      const answer = await json(response);
+      if (!response.ok) throw refused(response.status, answer);
+      return answer as unknown as { version: number; taxonomy?: Taxonomy; export?: TaxonomySeed };
     },
 
     async listReviews(datasetId: string): Promise<ReviewView[]> {

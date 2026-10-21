@@ -47,6 +47,14 @@ export function formatApplySummary(summary: ApplySummary, dryRun: boolean): stri
     ].filter((part) => part !== null);
     if (why.length > 0) lines.push(`Pages left excluded: ${why.join(', ')}.`);
   }
+  // A Worker before the taxonomy sends none (ADR 0007).
+  if (summary.taxonomyVersion !== undefined) {
+    lines.push(
+      dryRun
+        ? `The new scope would make taxonomy version ${summary.taxonomyVersion}.`
+        : `The new scope made taxonomy version ${summary.taxonomyVersion}.`,
+    );
+  }
   return lines;
 }
 

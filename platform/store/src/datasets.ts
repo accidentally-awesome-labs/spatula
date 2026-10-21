@@ -1,4 +1,5 @@
 import {
+  applyChanges,
   newId,
   parseDefinition,
   sha256Hex,
@@ -12,7 +13,8 @@ import {
 import { and, eq, inArray, notInArray, or, sql } from 'drizzle-orm';
 import type { Executor } from './client';
 import { supersedeDecisions } from './decisions';
-import { datasets, items, sources, type ItemStatus } from './schema';
+import { datasets, items, sources, taxonomyVersions, type ItemStatus } from './schema';
+import { currentTaxonomy } from './taxonomy';
 
 export interface DatasetRow {
   id: string;
@@ -228,6 +230,18 @@ export async function applyDefinition(
     moves: movesByTarget(moves.moved),
     unmoved: moves.unmoved,
   };
+  // The taxonomy keeps to the definition's scope: a new scope is a new taxonomy version (ADR 0007).
+  const taxonomyNow = existing === undefined ? null : await currentTaxonomy(db, id);
+  const rescoped =
+    changed &&
+    definition.scope !== undefined &&
+    taxonomyNow !== null &&
+    taxonomyNow.taxonomy.scope !== definition.scope
+      ? applyChanges(taxonomyNow.taxonomy, [{ kind: 'scope', scope: definition.scope }], () =>
+          newId('tx'),
+        )
+      : null;
+  if (rescoped?.ok === true) summary.taxonomyVersion = rescoped.taxonomy.version;
   if (dryRun || (!changed && moves.moved.length === 0)) return summary;
 
   await db.transaction(async (tx) => {
@@ -248,6 +262,19 @@ export async function applyDefinition(
             target: [sources.datasetId, sources.id],
             set: { kind: source.kind, config: source, removedAt: null },
           });
+      }
+      if (rescoped?.ok === true && taxonomyNow !== null) {
+        await tx.insert(taxonomyVersions).values({
+          datasetId: id,
+          version: rescoped.taxonomy.version,
+          taxonomy: rescoped.taxonomy,
+          changes: rescoped.applied,
+          actor: { role: 'owner', client: 'cli' },
+          autonomous: false,
+          proposalId: null,
+          undoes: null,
+          createdAt: now,
+        });
       }
     }
     // Pages move once every source they move to exists, and before anything is excluded or a pages

@@ -27,6 +27,11 @@ export interface ApplySummary {
    * address, two or more do, or the one that does already has a page there.
    */
   unmoved?: { uncovered: number; ambiguous: number; taken: number };
+  /**
+   * The taxonomy version the definition's new scope made, or would make on a dry run (ADR 0007).
+   * Absent when the scope didn't change it, and from a Worker before the taxonomy.
+   */
+  taxonomyVersion?: number;
 }
 
 /** What a run's snapshot step did. */

@@ -3,16 +3,20 @@ import {
   acknowledgmentSchema,
   DIRECTORY_CONTENT_TYPE,
   DIRECTORY_PATH,
+  exportTaxonomy,
   hmacSha256Hex,
   importSigningKey,
   keyDirectory,
+  newId,
   packIssues,
   parseDefinition,
   randomNonce,
   RUN_SLOT_TAKEN,
   runIdFor,
+  seedTaxonomy,
   sha256Hex,
   signDirectory,
+  taxonomySeedSchema,
   type DatasetStatus,
   type EvalScores,
   type RunView,
@@ -21,6 +25,7 @@ import { packs } from '@spatula/pack-products';
 import {
   applyDefinition,
   countOpenReviews,
+  currentTaxonomy,
   datasetExists,
   finishRun,
   getDataset,
@@ -40,6 +45,7 @@ import {
   reviveSources,
   runningRun,
   saveEval,
+  seedTaxonomyVersion,
   sourceStates,
   StaleDefinitionError,
   startRunAlone,
@@ -487,6 +493,104 @@ api.post('/datasets/:id/captures/purge', async (c) => {
     return c.json(answer, status);
   }
   return c.json({ purged: outcome.purged });
+});
+
+/** A seed file is a few dozen kilobytes. The limit bounds what one can store. */
+const SEED_MAX_BYTES = 256 * 1024;
+
+/**
+ * Seeds a dataset's taxonomy (ADR 0007): version 1, with an ID for every item the file doesn't give
+ * one. Once only: after that, the taxonomy changes through proposals. A definition that states its
+ * scope must state the seed's.
+ */
+api.post(
+  '/datasets/:id/taxonomy',
+  bodyLimit({
+    maxSize: SEED_MAX_BYTES,
+    onError: (c) => c.json({ error: `A seed file is at most ${SEED_MAX_BYTES / 1024} KiB.` }, 413),
+  }),
+  async (c) => {
+    let body: unknown;
+    try {
+      body = await c.req.json();
+    } catch {
+      return c.json({ error: 'The body isn’t JSON.' }, 400);
+    }
+    const parsed = taxonomySeedSchema.safeParse(body);
+    if (!parsed.success) {
+      return c.json(
+        {
+          error: 'The taxonomy has problems.',
+          issues: parsed.error.issues.map(
+            (issue) => `${issue.path.join('.') || '(file)'}: ${issue.message}`,
+          ),
+        },
+        400,
+      );
+    }
+    const seeded = seedTaxonomy(parsed.data, () => newId('tx'));
+    if (!seeded.ok)
+      return c.json({ error: 'The taxonomy has problems.', issues: seeded.issues }, 400);
+    const datasetId = c.req.param('id');
+    const outcome = await withDatabase(c.env, async (db) => {
+      const dataset = await getDataset(db, datasetId);
+      if (dataset === null) return 'missing' as const;
+      const scope = dataset.definition.scope;
+      if (scope !== undefined && scope !== parsed.data.scope) return 'scope' as const;
+      const current = await currentTaxonomy(db, datasetId);
+      if (current !== null) return { exists: current.version };
+      const result = await seedTaxonomyVersion(db, {
+        datasetId,
+        taxonomy: seeded.taxonomy,
+        actor: { role: 'owner', client: 'cli' },
+        at: new Date(),
+      });
+      return result === 'exists' ? { exists: 1 } : ('seeded' as const);
+    });
+    if (outcome === 'missing') return c.json({ error: `Dataset ${datasetId} doesn’t exist.` }, 404);
+    if (outcome === 'scope') {
+      return c.json(
+        { error: 'The seed’s scope differs from the definition’s. Make them the same, then seed.' },
+        409,
+      );
+    }
+    if (outcome !== 'seeded') {
+      return c.json(
+        {
+          error: `${datasetId} has a taxonomy already (version ${outcome.exists}). Change it through proposals and the console.`,
+        },
+        409,
+      );
+    }
+    const { taxonomy } = seeded;
+    return c.json(
+      {
+        version: taxonomy.version,
+        shelves: taxonomy.shelves.length,
+        functions: taxonomy.functions.length,
+        features: taxonomy.features.length,
+      },
+      201,
+    );
+  },
+);
+
+/** The dataset's current taxonomy, whole, or in the seed file's shape with `?format=export`. */
+api.get('/datasets/:id/taxonomy', async (c) => {
+  const format = c.req.query('format');
+  if (format !== undefined && format !== 'export') {
+    return c.json({ error: 'format is export, or left out.' }, 400);
+  }
+  const datasetId = c.req.param('id');
+  const found = await withDatabase(c.env, async (db) =>
+    (await datasetExists(db, datasetId)) ? { current: await currentTaxonomy(db, datasetId) } : null,
+  );
+  if (found === null) return c.json({ error: `Dataset ${datasetId} doesn’t exist.` }, 404);
+  if (found.current === null) return c.json({ error: `${datasetId} has no taxonomy yet.` }, 404);
+  const { version, taxonomy } = found.current;
+  return c.json(
+    format === 'export' ? { version, export: exportTaxonomy(taxonomy) } : { version, taxonomy },
+  );
 });
 
 api.get('/datasets/:id/review', async (c) => {

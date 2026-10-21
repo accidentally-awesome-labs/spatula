@@ -4,12 +4,14 @@ import {
   check,
   evals,
   evaluate,
+  exportTaxonomyFile,
   plan,
   pullSnapshot,
   purge,
   revive,
   review,
   run,
+  seedTaxonomyFile,
   status,
   type Io,
 } from './commands';
@@ -40,6 +42,10 @@ export const USAGE = `Usage: spatula <command>
   evals <dataset>              The history of a dataset’s scores
   snapshot pull <dataset> --out <file> [--generation <n>]
                                Download a snapshot, check its hash, and write it
+  taxonomy seed <dataset> <file.yaml>
+                               Seed a dataset’s taxonomy, once, from its seed file
+  taxonomy export <dataset> --out <file.yaml>
+                               Write the current taxonomy, with each item’s ID
 
 Environment:
   SPATULA_URL    where Spatula is (http://localhost:8787 if unset)
@@ -179,6 +185,21 @@ export async function main(
         return usage();
       }
       return pullSnapshot(io, client, rest[1]!, { generation, out: values.out });
+    }
+    case 'taxonomy': {
+      const [action, datasetId, file, ...extra] = rest;
+      if (
+        action === 'seed' &&
+        datasetId !== undefined &&
+        file !== undefined &&
+        extra.length === 0
+      ) {
+        return seedTaxonomyFile(io, client, datasetId, file);
+      }
+      if (action === 'export' && datasetId !== undefined && file === undefined && values.out) {
+        return exportTaxonomyFile(io, client, datasetId, values.out);
+      }
+      return usage();
     }
     default:
       return usage();

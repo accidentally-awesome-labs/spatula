@@ -6,11 +6,12 @@ import {
   scoreDataset,
   sha256Hex,
   snapshotSchema,
+  taxonomySeedSchema,
   type Definition,
   type GoldenSet,
 } from '@spatula/core';
 import { packs } from '@spatula/pack-products';
-import { parse } from 'yaml';
+import { parse, stringify } from 'yaml';
 import { ApiError, type Client } from './client';
 import {
   describeError,
@@ -193,6 +194,57 @@ export async function purge(
     io.out(
       `The next run that reads ${sourceId}’s pages captures them again. Remove ${sourceId} from the definition if they mustn’t be read.`,
     );
+    return 0;
+  });
+}
+
+/** Seeds a dataset's taxonomy from a YAML file, checked here as the API checks it (ADR 0007). */
+export async function seedTaxonomyFile(
+  io: Io,
+  client: Client,
+  datasetId: string,
+  file: string,
+): Promise<number> {
+  let data: unknown;
+  try {
+    data = parse(await io.readFile(file));
+  } catch (error) {
+    io.err(`${file} can’t be read as YAML: ${describeError(error).split('\n')[0]}`);
+    return 1;
+  }
+  const parsed = taxonomySeedSchema.safeParse(data);
+  if (!parsed.success) {
+    io.err(`${file} isn’t a taxonomy seed:`);
+    for (const issue of parsed.error.issues.slice(0, 20)) {
+      io.err(`  ${issue.path.join('.') || '(file)'}: ${issue.message}`);
+    }
+    return 1;
+  }
+  return withApi(io, async () => {
+    const seeded = await client.seedTaxonomy(datasetId, parsed.data);
+    io.out(
+      `Seeded ${datasetId}’s taxonomy as version ${seeded.version}: ${count(seeded.shelves, 'shelf').replace(/shelfs$/u, 'shelves')}, ${count(seeded.functions, 'function')}, and ${count(seeded.features, 'feature')}.`,
+    );
+    return 0;
+  });
+}
+
+/** Writes the dataset's current taxonomy in the seed file's shape, with each item's ID. */
+export async function exportTaxonomyFile(
+  io: Io,
+  client: Client,
+  datasetId: string,
+  out: string,
+): Promise<number> {
+  return withApi(io, async () => {
+    const got = await client.getTaxonomy(datasetId, 'export');
+    try {
+      await io.writeFile(out, stringify(got.export, { lineWidth: 100 }));
+    } catch (error) {
+      io.err(`Couldn’t write ${out}: ${describeError(error)}`);
+      return 1;
+    }
+    io.out(`Wrote version ${got.version} of ${datasetId}’s taxonomy to ${out}.`);
     return 0;
   });
 }
