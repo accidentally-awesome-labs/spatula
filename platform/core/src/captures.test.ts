@@ -21,11 +21,15 @@ const PAGE =
 
 describe('gzip and gunzip', () => {
   it('give back the bytes they were given', { timeout: 30_000 }, async () => {
-    const body = new TextEncoder().encode(`${'Impedance: 300 Ω. '.repeat(100_000)}end`);
+    const text = `${'Impedance: 300 Ω. '.repeat(100_000)}end`;
+    const body = new TextEncoder().encode(text);
     const packed = await gzip(body);
     expect([...packed.subarray(0, 2)]).toEqual([0x1f, 0x8b]);
     expect(packed.byteLength).toBeLessThan(body.byteLength / 10);
-    expect(await gunzip(packed)).toEqual(body);
+    // Compared as text: a deep equality over two megabytes of bytes takes most of a minute in CI.
+    const unpacked = await gunzip(packed);
+    expect(unpacked.byteLength).toBe(body.byteLength);
+    expect(new TextDecoder().decode(unpacked)).toBe(text);
     expect(await gunzip(await gzip(new Uint8Array()))).toEqual(new Uint8Array());
   });
 
