@@ -117,6 +117,11 @@ export interface RunSummary {
    * deleted. Absent in runs from before the archive.
    */
   captures?: { stored: number; pruned: number };
+  /**
+   * Pages read again from their captures, with no request (ADR 0008): due only because the code
+   * that read them is older. Absent in runs from before re-reading.
+   */
+  reread?: number;
   llm: {
     ran: number;
     reused: number;

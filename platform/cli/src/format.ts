@@ -74,6 +74,13 @@ export function formatRun(run: RunView): string[] {
   lines.push(
     `${pages} Changed ${fetches.changed}, unchanged ${fetches.unchanged}, gone ${fetches.gone}, failed ${fetches.failed}, blocked ${fetches.blocked}.`,
   );
+  // Pages read again from their captures (ADR 0008); a Worker before re-reading says nothing.
+  const reread = summary.reread ?? 0;
+  if (reread > 0) {
+    lines.push(
+      `Re-read from the archive: ${reread} ${reread === 1 ? 'page' : 'pages'}, with no request.`,
+    );
+  }
   // The run's notes are held to a few, and this is how a pause is seen when they ran out.
   const paused = Object.entries(summary.paused ?? {});
   if (paused.length > 0) {

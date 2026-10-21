@@ -8,6 +8,7 @@ import { applyDefinition, listLiveItems, type ItemRef } from './datasets';
 import {
   anyRefusesAiInput,
   latestFetchId,
+  latestRead,
   pagesRefusingAiInput,
   recordExtraction,
   recordFetch,
@@ -376,6 +377,34 @@ describe('latestFetchId', () => {
       await startedTogether(a2!, ['fe_tie_d', 'fe_tie_c']);
       expect(await latestFetchId(db, a1!.id)).toBe('fe_tie_b');
       expect(await latestFetchId(db, a2!.id)).toBe('fe_tie_d');
+    }));
+});
+
+describe('latestRead', () => {
+  it('names the item’s latest fetch that read its page, past later ones that didn’t', () =>
+    withRollback(async (db) => {
+      const {
+        items: [a1, a2],
+        runId,
+      } = await seedDataset(db);
+      expect(await latestRead(db, a1!.id)).toBeNull();
+      const read = attempt(runId, a1!, {
+        outcome: 'unchanged',
+        finalUrl: `${a1!.locator}?region=eu`,
+        httpStatus: 304,
+        signals: { 'ai-input': 'yes' },
+        startedAt: T(2),
+      });
+      await recordFetch(db, read);
+      // A later failure read nothing, and another page's read is never this one's.
+      await recordFetch(db, attempt(runId, a1!, { outcome: 'failed', startedAt: T(3) }));
+      await recordFetch(db, attempt(runId, a2!, { outcome: 'changed', startedAt: T(4) }));
+      expect(await latestRead(db, a1!.id)).toEqual({
+        id: read.id,
+        startedAt: T(2),
+        signals: { 'ai-input': 'yes' },
+        finalUrl: `${a1!.locator}?region=eu`,
+      });
     }));
 });
 

@@ -140,7 +140,11 @@ export async function recordExtraction(
   db: Executor,
   input: {
     itemId: string;
-    fetchId: string;
+    /**
+     * The fetch whose log says what the LLM step did. Null for a page read again from its capture
+     * (ADR 0008), which no fetch brought: its last fetch's log stays as it was.
+     */
+    fetchId: string | null;
     extractedWith: string;
     extractInputHash?: string | null;
     llm: string;
@@ -154,6 +158,7 @@ export async function recordExtraction(
       ...(input.extractInputHash === undefined ? {} : { extractInputHash: input.extractInputHash }),
     })
     .where(eq(items.id, input.itemId));
+  if (input.fetchId === null) return;
   await db
     .update(fetches)
     .set({
@@ -176,6 +181,34 @@ export async function latestFetchId(db: Executor, itemId: string): Promise<strin
     .orderBy(desc(fetches.startedAt), desc(fetches.id))
     .limit(1);
   return row?.id ?? null;
+}
+
+/**
+ * The item's latest fetch that read its page, changed or unchanged, with the signals its site gave
+ * and where it ended up: what a page read again from its capture counts as (ADR 0008). Of fetches
+ * that started together, the one with the greater ID.
+ */
+export async function latestRead(
+  db: Executor,
+  itemId: string,
+): Promise<{
+  id: string;
+  startedAt: Date;
+  signals: ContentSignals | null;
+  finalUrl: string | null;
+} | null> {
+  const [row] = await db
+    .select({
+      id: fetches.id,
+      startedAt: fetches.startedAt,
+      signals: fetches.signals,
+      finalUrl: fetches.finalUrl,
+    })
+    .from(fetches)
+    .where(and(eq(fetches.itemId, itemId), inArray(fetches.outcome, ['changed', 'unchanged'])))
+    .orderBy(desc(fetches.startedAt), desc(fetches.id))
+    .limit(1);
+  return row ?? null;
 }
 
 /** Sets an item's status, as a decision does when it finds a page isn't one of the dataset's. */

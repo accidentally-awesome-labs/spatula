@@ -152,6 +152,13 @@ export const madeBy = (decision: DecisionRow): Classified['outcome'] =>
   decision.outcome === 'rule' ? 'rule' : decision.outcome === 'accepted' ? 'accepted' : 'escalated';
 
 /**
+ * When a write's statements count as seen: now, or, for a page read again from its capture, its
+ * last fetch (ADR 0008).
+ */
+const seenAtOf = (fetched: ClassifyFetch, now: Date) =>
+  fetched.seenAt === undefined ? now : new Date(fetched.seenAt);
+
+/**
  * Whether a decider weighed a decision: one was asked, and it named probabilities. One that named
  * none, as it does when its answer doesn't fit the schema, gave no answer, and what it escalated
  * is a person's to settle only until a decider can be asked again.
@@ -239,7 +246,7 @@ async function classifyPage(
         itemId: item.id,
         name,
         fetchId: fetched.fetchId,
-        at: ports.now(),
+        at: seenAtOf(fetched, ports.now()),
       }),
     );
     return result('reused');
@@ -266,6 +273,7 @@ async function classifyPage(
   const readAgain = () =>
     ports.withDb((db) => setExtractedWith(db, item.id, retryTag(context.revision)));
   const at = ports.now();
+  const seenAt = seenAtOf(fetched, at);
   const apply = (decision: DecisionRow) =>
     ports.withDb((db) =>
       applyClassification(db, {
@@ -276,6 +284,7 @@ async function classifyPage(
         captureId: fetched.captureId ?? null,
         decision,
         at,
+        seenAt,
       }),
     );
 
@@ -386,12 +395,14 @@ async function applyClassification(
     captureId: string | null;
     decision: DecisionRow;
     at: Date;
+    /** When its statements count as seen: `at`, or a page's last fetch (ADR 0008). */
+    seenAt: Date;
   },
 ): Promise<'answered' | 'irrelevant' | 'waiting'> {
-  const { datasetId, item, name, fetchId, captureId, decision, at } = input;
-  const write = { datasetId, itemId: item.id, fetchId, seenAt: at, properties: [name], captureId };
+  const { datasetId, item, name, fetchId, captureId, decision, at, seenAt } = input;
+  const write = { datasetId, itemId: item.id, fetchId, seenAt, properties: [name], captureId };
   const withdrawAutomatic = () =>
-    withdrawCascade(db, { datasetId, itemId: item.id, name, fetchId, at });
+    withdrawCascade(db, { datasetId, itemId: item.id, name, fetchId, at: seenAt });
   const answer = decision.finalAnswer ?? decision.answer;
   if (answer === null) {
     await withdrawAutomatic();

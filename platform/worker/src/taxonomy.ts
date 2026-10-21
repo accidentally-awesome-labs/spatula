@@ -198,6 +198,30 @@ export function placeStands(
   return !now.canAsk || (asked !== undefined && isEmptyParts(asked));
 }
 
+/**
+ * Whether a person took the page out: their latest answer about it is "None of these", whether a
+ * classification kept it before the taxonomy or a place decision did (ruling 7). It stays out until
+ * a person answers again. A page that is live again, as a revived one is, goes back out here, so
+ * placing it as an irrelevant page (`irrelevant`) keeps it out and reopens their question when
+ * the decider finds it a shelf, rather than publishing it with the decider's.
+ */
+export async function keepOut(
+  context: Pick<Context, 'datasetId'>,
+  item: ItemRef,
+  ports: Pick<RefreshPorts, 'withDb'>,
+): Promise<boolean> {
+  const last = readFinalAnswer(
+    (
+      await ports.withDb((db) =>
+        latestFinalized(db, { datasetId: context.datasetId, subject: item.id }),
+      )
+    )?.finalAnswer ?? null,
+  );
+  if (last?.answer.shelf !== NONE_SHELF) return false;
+  await ports.withDb((db) => setItemStatus(db, item.id, 'irrelevant'));
+  return true;
+}
+
 /** A person's answer that can't carry over, which reopens the question, showing it (ruling 7). */
 interface Reopen {
   earlier: TaxonomyAnswer;

@@ -36,6 +36,7 @@ import {
   getDataset,
   itemsByIds,
   latestCapture,
+  latestRead,
   liveAgain,
   probeItem,
   recordCapture,
@@ -77,7 +78,7 @@ import {
   type StepRunner,
 } from './pipeline';
 import { publish } from './publish';
-import { decideTaxonomy, taxonomyTarget } from './taxonomy';
+import { decideTaxonomy, keepOut, taxonomyTarget } from './taxonomy';
 import { isChallenge, MAX_WAITS, requestThroughGate, siteAnswerOf, type Resume } from './requests';
 import { storable } from './text';
 
@@ -96,20 +97,21 @@ export {
 
 /*
  * One refresh of one dataset. A sitemap source's sitemaps are read first (discovery.ts), which
- * lists its pages. Each page is fetched in its own step, through the gate, and only a
- * page that changed (or whose statements came from older code) is extracted, in a step of its
- * own, from the copy kept under its hash. A failed or blocked fetch changes no values. The LLM is
- * asked only for fields nothing else filled, only where the dataset and the site allow AI input,
- * and only when its question changed. A page whose source leaves the record type's decided field
- * to the cascade is then classified, in a step of its own (classify.ts), and isn't current until
- * that step has finished. The LLM and the decider share the run's token budget (pipeline.ts). Then
- * entities are resolved. Resolution asks about the pairs it can't settle by rule, each in a step
- * of its own (match.ts), and defers them until they're answered. If the records changed, they go
- * through the dataset's gates (publish.ts): a snapshot is published when the gates allow it, and
- * held for the owner's review when they don't. Nothing here imports Cloudflare: the Workflow
- * passes real ports, and the tests pass fakes. A source that refused three runs in a row gets only
- * a probe; a step after the pages counts each source's standing (ADR 0006). The last step before
- * the run finishes cleans up the page archive (ADR 0008).
+ * lists its pages. Each page is fetched in its own step, through the gate, and only a page that
+ * changed (or whose statements came from older code) is extracted, in a step of its own, from the
+ * copy kept under its hash. A page due only because its statements came from older code isn't
+ * fetched: it's read again from its capture, with no request (ADR 0008). A failed or blocked fetch
+ * changes no values. The LLM is asked only for fields nothing else filled, only where the dataset
+ * and the site allow AI input, and only when its question changed. A page whose source leaves the
+ * record type's decided field to the cascade is then classified, in a step of its own
+ * (classify.ts), and isn't current until that step has finished. The LLM and the decider share the
+ * run's token budget (pipeline.ts). Then entities are resolved. Resolution asks about the pairs it
+ * can't settle by rule, each in a step of its own (match.ts), and defers them until they're
+ * answered. If the records changed, they go through the dataset's gates (publish.ts): a snapshot is
+ * published when the gates allow it, and held for the owner's review when they don't. Nothing here
+ * imports Cloudflare: the Workflow passes real ports, and the tests pass fakes. A source that
+ * refused three runs in a row gets only a probe; a step after the pages counts each source's
+ * standing (ADR 0006). The last step before the run finishes cleans up the page archive (ADR 0008).
  */
 
 export interface RefreshParams {
@@ -215,6 +217,11 @@ interface Fetched {
   captureId?: string | null;
   /** Whether this fetch recorded a capture. Absent from a result kept by an earlier version. */
   captured?: boolean;
+  /**
+   * When the page's statements count as seen, as an ISO time: its last fetch's, for a page read
+   * again from its capture with no request (ADR 0008). Absent for a fetch, which counts as now.
+   */
+  seenAt?: string;
   note: string | null;
 }
 
@@ -362,6 +369,8 @@ export async function runRefresh(
       ),
     );
     summary.live = plan.live;
+    // A plan kept by an earlier version has no pages to read again: they are fetched.
+    const rereading = new Set(plan.reread ?? []);
     const waiting = plan.due - plan.ids.length;
     if (waiting > 0) {
       const { itemsPerRun } = context.definition.budget;
@@ -392,6 +401,16 @@ export async function runRefresh(
         ports.withDb((db) => itemsByIds(db, ids.slice(start, start + ITEMS_PER_STEP))),
       );
       for (const item of batch) {
+        // Read again from its capture, the page makes no request, so it says nothing of its site,
+        // and a paused source doesn't hold it up. It's fetched when its capture is gone.
+        if (rereading.has(item.id)) {
+          const reread = await rereadItem(context, item, summary, step, ports);
+          if (reread !== null) {
+            summary.items += 1;
+            if (reread.waitsForBudget) budgetWaits += 1;
+            continue;
+          }
+        }
         const left = paused.get(item.sourceId);
         if (left !== undefined) {
           paused.set(item.sourceId, left + 1);
@@ -559,6 +578,7 @@ function emptySummary(): RunSummary {
     fetches: { changed: 0, unchanged: 0, gone: 0, failed: 0, blocked: 0 },
     statements: { ...NO_CHANGE },
     captures: { stored: 0, pruned: 0 },
+    reread: 0,
     llm: { ran: 0, reused: 0, skipped: 0, failed: 0, inputTokens: 0, outputTokens: 0 },
     entities: { created: 0, linked: 0, conflicts: 0, unresolved: 0, waiting: 0 },
     snapshot: { published: false, reason: 'the run didn’t reach publishing', excluded: [] },
@@ -570,7 +590,7 @@ function note(summary: RunSummary, text: string) {
   if (summary.notes.length < MAX_NOTES) summary.notes.push(storable(text));
 }
 
-/** Fetches one page; reads it when it changed or its statements came from older code; classifies it. */
+/** Fetches one page, and reads it when it changed or its statements came from older code. */
 async function refreshItem(
   context: Context,
   item: ItemRef,
@@ -597,6 +617,70 @@ async function refreshItem(
     site: fetched.site ?? null,
   };
   if (!fetched.extract) return { ...host, waitsForBudget: false };
+  return { ...host, waitsForBudget: await readItem(context, item, fetched, summary, step, ports) };
+}
+
+/**
+ * Reads a page again from its capture, with no request (ADR 0008): a page due only because its
+ * statements came from older code. Null when the capture, or the copy it holds, is gone: then the
+ * page is fetched.
+ */
+async function rereadItem(
+  context: Context,
+  item: ItemRef,
+  summary: RunSummary,
+  step: StepRunner,
+  ports: RefreshPorts,
+): Promise<{ waitsForBudget: boolean } | null> {
+  const fetched = await step.do(`reread:${item.id}`, () => rereadOf(item, ports));
+  if (fetched === null) return null;
+  summary.reread = (summary.reread ?? 0) + 1;
+  return { waitsForBudget: await readItem(context, item, fetched, summary, step, ports) };
+}
+
+/**
+ * A page's latest read and its capture, as the result of a fetch that found the page unchanged,
+ * whose statements count as seen at that read. Null when either is missing, when the capture
+ * doesn't hold the copy the page's statements came from, or when that copy's body is gone.
+ */
+async function rereadOf(item: ItemRef, ports: RefreshPorts): Promise<Fetched | null> {
+  const { capture, read } = await ports.withDb(async (db) => ({
+    capture: await latestCapture(db, item.id),
+    read: await latestRead(db, item.id),
+  }));
+  if (capture === null || read === null || read.signals === null) return null;
+  if (capture.contentHash !== item.contentHash) return null;
+  if ((await readPageBody(ports.blobs, capture.contentHash)) === null) return null;
+  return {
+    fetchId: read.id,
+    outcome: 'unchanged',
+    hostAnswered: true,
+    strained: false,
+    site: null,
+    finalUrl: read.finalUrl ?? capture.finalUrl,
+    signals: read.signals,
+    contentHash: capture.contentHash,
+    extract: true,
+    reseen: 0,
+    note: null,
+    captureId: capture.id,
+    captured: false,
+    seenAt: read.startedAt.toISOString(),
+  };
+}
+
+/**
+ * Reads a page from its stored copy, then classifies it or places it in the taxonomy, whether a
+ * fetch brought the page or its capture did. Says whether it waits for the next run's LLM budget.
+ */
+async function readItem(
+  context: Context,
+  item: ItemRef,
+  fetched: Fetched,
+  summary: RunSummary,
+  step: StepRunner,
+  ports: RefreshPorts,
+): Promise<boolean> {
   const extracted = await step.do(`extract:${item.id}`, () =>
     extractItem(context, item, fetched, budgetLeft(context, summary), ports),
   );
@@ -624,14 +708,18 @@ async function refreshItem(
     context.taxonomyVersion !== null &&
     taxonomyTarget(context.definition, item) !== null
   ) {
-    const placed = await step.do(`decide:${item.id}`, () =>
-      decideTaxonomy(context, item, fetched, budgetLeft(context, summary), ports, {
+    const placed = await step.do(`decide:${item.id}`, async () => {
+      // A page a person took out stays out when it is revived and read again (ruling 7), so it's
+      // placed as the irrelevant page it is.
+      const keptOut = await keepOut(context, item, ports);
+      return decideTaxonomy(context, item, fetched, budgetLeft(context, summary), ports, {
         extractionComplete: complete,
-      }),
-    );
+        ...(keptOut ? { irrelevant: true } : {}),
+      });
+    });
     waitsForBudget = countDecision(summary, placed) || waitsForBudget;
   }
-  return { ...host, waitsForBudget };
+  return waitsForBudget;
 }
 
 /**
@@ -1039,6 +1127,14 @@ function validators(item: ItemRef): Record<string, string> {
 }
 
 /**
+ * The fetch whose log says what reading the page did: the one that brought it. A page read again
+ * from its capture has none of its own (ADR 0008), and its last fetch's log stays as it was.
+ */
+function loggedFetch(fetched: Fetched): string | null {
+  return fetched.seenAt === undefined ? fetched.fetchId : null;
+}
+
+/**
  * A page that wasn't read costs only itself. Nothing is written but the retry mark, and its
  * statements stay as they were. A changed page already carries the fetch step's mark, and that is
  * what has the next run read its stored copy again. This mark matters for a page that was current
@@ -1056,7 +1152,7 @@ async function unread(
   await ports.withDb((db) =>
     recordExtraction(db, {
       itemId: item.id,
-      fetchId: fetched.fetchId,
+      fetchId: loggedFetch(fetched),
       extractedWith: retryTag(context.revision),
       llm: 'skipped: the page wasn’t read',
       usage: NO_USAGE,
@@ -1123,7 +1219,8 @@ async function extractItem(
     );
   }
   await keepRead(ports, fetched, page);
-  const seenAt = ports.now();
+  // A page read again from its capture counts as seen at its last fetch (ADR 0008).
+  const seenAt = fetched.seenAt === undefined ? ports.now() : new Date(fetched.seenAt);
   const decided = cascadeField(source, recordType);
   const placed = hasTaxonomy(recordType);
   // The cascade owns the decided field, and the taxonomy's three (ADR 0007), so the page and the
@@ -1159,7 +1256,7 @@ async function extractItem(
   await ports.withDb((db) =>
     recordExtraction(db, {
       itemId: item.id,
-      fetchId: fetched.fetchId,
+      fetchId: loggedFetch(fetched),
       // A failed LLM step leaves the page not current, so the next run reads the stored copy and
       // asks again, even after a 304 or an unchanged hash. So does an LLM step that waited for the
       // run's budget. A page whose category the cascade decides isn't current until its classify

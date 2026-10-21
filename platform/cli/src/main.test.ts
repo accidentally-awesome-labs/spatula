@@ -525,6 +525,53 @@ describe('run', () => {
     );
   });
 
+  it('says how many pages were read again from the archive, and nothing when none were', async () => {
+    const printed = async (more: Partial<RunSummary>) => {
+      const complete: RunView = {
+        ...RUNNING,
+        status: 'complete',
+        summary: {
+          items: 3,
+          live: 3,
+          due: 3,
+          fetches: { changed: 0, unchanged: 0, gone: 0, failed: 0, blocked: 0 },
+          statements: { added: 0, reseen: 21, withdrawn: 0 },
+          llm: { ran: 0, reused: 3, skipped: 0, failed: 0, inputTokens: 0, outputTokens: 0 },
+          entities: { created: 0, linked: 3, conflicts: 0, unresolved: 0 },
+          snapshot: {
+            published: false,
+            reason: 'nothing changed since generation 2',
+            excluded: [],
+          },
+          notes: [],
+          ...more,
+        },
+      };
+      const { fetch } = stubApi(({ method }) =>
+        method === 'POST'
+          ? Response.json({ runId: RUN_ID }, { status: 202 })
+          : Response.json(complete),
+      );
+      const { io, out } = memoryIo();
+      expect(await main(['run', 'cli-products', '--wait'], { io, env: ENV, fetch })).toBe(0);
+      return out;
+    };
+
+    const three = await printed({ reread: 3 });
+    // Right after the pages it counts among those read.
+    expect(three.slice(2, 4)).toEqual([
+      'Pages: 3 read, of 3 due and 3 live. Changed 0, unchanged 0, gone 0, failed 0, blocked 0.',
+      'Re-read from the archive: 3 pages, with no request.',
+    ]);
+    expect(await printed({ reread: 1 })).toContain(
+      'Re-read from the archive: 1 page, with no request.',
+    );
+    // A run that read nothing again says nothing of it, nor does one from before re-reading.
+    for (const more of [{ reread: 0 }, {}]) {
+      expect((await printed(more)).some((line) => line.startsWith('Re-read'))).toBe(false);
+    }
+  });
+
   it('says what the sitemaps listed, and which sources weren’t read completely', async () => {
     const complete: RunView = {
       ...RUNNING,

@@ -2,7 +2,7 @@ import { newId, type Outcome } from '@spatula/core';
 import { and, eq, inArray, isNull, lt, or, sql } from 'drizzle-orm';
 import type { Executor } from './client';
 import type { ItemRef } from './datasets';
-import { fetches, items, sources } from './schema';
+import { captures, fetches, items, sources } from './schema';
 
 /*
  * What discovery found, and what a run reads. A sitemap source's pages come and go with its
@@ -179,6 +179,9 @@ export async function finishListing(
  * fetch failed, was blocked, or found it gone once. `all` makes every live page due. A refused
  * source's pages are never due, under `all` too: its runs only probe it (ADR 0006). Pages come
  * least recently read first, each host's first page, then each host's second, and so on.
+ * `reread` names the planned pages due only because their statements came from older code, whose
+ * latest capture holds the copy they came from: the run reads them again from it, with no request
+ * (ADR 0008).
  */
 export async function dueItems(
   db: Executor,
@@ -190,16 +193,24 @@ export async function dueItems(
     limit: number;
     all?: boolean;
   },
-): Promise<{ ids: string[]; due: number; live: number }> {
+): Promise<{ ids: string[]; due: number; live: number; reread: string[] }> {
   const cutoff = new Date(input.now.getTime() - input.maxAgeDays * 24 * 60 * 60 * 1000);
   // A Date can't go into a raw sql template: drizzle's postgres-js driver passes it unencoded,
-  // and postgres.js can't bind it. Its ISO text, cast, compares the same.
-  const rows = await db.execute<{ id: string | null; due: string; live: string }>(sql`
+  // and postgres.js can't bind it. Its ISO text, cast, compares the same. A page is `outdated`
+  // when its statements' code is the only reason it's due: it was read, by a fetch that read it,
+  // within `maxAgeDays`, at the lastmod it was listed with, and `all` isn't set.
+  const rows = await db.execute<{
+    id: string | null;
+    due: string;
+    live: string;
+    reread: boolean | null;
+  }>(sql`
     with live as (
       select
         ${items.id} as id,
         ${items.locator} as locator,
         ${items.lastFetchedAt} as last_fetched_at,
+        ${items.contentHash} as content_hash,
         substring(${items.locator} from '^https://([^/?#]+)') as host,
         (
           (
@@ -216,23 +227,38 @@ export async function dueItems(
               and ${sources.id} = ${items.sourceId}
               and ${sources.refusedAt} is not null
           )
-        ) as due
+        ) as due,
+        coalesce(
+          not ${input.all === true}::boolean
+          and ${items.lastFetchedAt} >= ${cutoff.toISOString()}::timestamptz
+          and ${items.extractedWith} is distinct from ${input.current}
+          and (${items.listedLastmod} is null or ${items.listedLastmod} is not distinct from ${items.fetchedLastmod})
+          and ${items.lastOutcome} in ('changed', 'unchanged'),
+          false
+        ) as outdated
       from ${items}
       where ${items.datasetId} = ${input.datasetId} and ${items.status} = 'live'
     ),
     ranked as (
-      select id, host, row_number() over (
+      select id, host, outdated, content_hash, row_number() over (
         partition by host order by last_fetched_at asc nulls first, locator
       ) as turn
       from live where due
     ),
     chosen as (
-      select id, turn, host from ranked order by turn, host limit ${input.limit}
+      select id, turn, host, outdated, content_hash from ranked
+      order by turn, host limit ${input.limit}
     )
     select
       chosen.id,
       (select count(*) from ranked)::text as due,
-      (select count(*) from live)::text as live
+      (select count(*) from live)::text as live,
+      chosen.outdated and chosen.content_hash = (
+        select ${captures.contentHash} from ${captures}
+        where ${captures.itemId} = chosen.id
+        order by ${captures.fetchedAt} desc, ${captures.id} desc
+        limit 1
+      ) as reread
     from (select 1) as one
     left join chosen on true
     order by chosen.turn, chosen.host
@@ -242,6 +268,7 @@ export async function dueItems(
     ids: rows.flatMap((row) => (row.id === null ? [] : [row.id])),
     due: Number(first?.due ?? 0),
     live: Number(first?.live ?? 0),
+    reread: rows.flatMap((row) => (row.id !== null && row.reread === true ? [row.id] : [])),
   };
 }
 

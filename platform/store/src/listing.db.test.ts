@@ -2,8 +2,9 @@ import { eq, sql } from 'drizzle-orm';
 import { describe, expect, it } from 'vitest';
 import { withRollback } from '../test/db';
 import { T } from '../test/seed';
+import { recordCapture } from './captures';
 import type { Executor } from './client';
-import { applyDefinition, listLiveItems } from './datasets';
+import { applyDefinition, listLiveItems, type ItemRef } from './datasets';
 import { recordFetch } from './fetches';
 import { testSitemapDefinition } from './fixtures';
 import {
@@ -308,7 +309,7 @@ describe('dueItems', () => {
           fetchedLastmod: sql`${items.listedLastmod}`,
         })
         .where(eq(items.datasetId, DATASET));
-      expect(await plan()).toEqual({ ids: [], due: 0, live: 6 });
+      expect(await plan()).toEqual({ ids: [], due: 0, live: 6, reread: [] });
 
       // c1's lastmod moved, a2's last read failed, b1's statements came from older code, and c3
       // was read eight days ago.
@@ -328,10 +329,89 @@ describe('dueItems', () => {
       const second = await plan();
       expect(short(second.ids)).toEqual(['a2', 'b1', 'c3', 'c1']);
       expect(second.due).toBe(4);
+      // B1 is due only because its code is older, but no capture holds its copy: it's fetched.
+      expect(second.reread).toEqual([]);
 
       expect((await plan({ all: true })).ids).toHaveLength(6);
       expect(await plan({ limit: 2 })).toMatchObject({ due: 4, live: 6 });
       expect(short((await plan({ limit: 2 })).ids)).toEqual(['a2', 'b1']);
+    }));
+});
+
+/** A capture of the copy a page's fetch stored (ADR 0008), named by the copy's hash. */
+const captureOf = (tx: Executor, item: ItemRef, fetchId: string, contentHash: string, at: Date) =>
+  recordCapture(tx, {
+    id: `cp_${contentHash}`,
+    datasetId: DATASET,
+    itemId: item.id,
+    sourceId: item.sourceId,
+    fetchId,
+    url: item.locator,
+    finalUrl: item.locator,
+    httpStatus: 200,
+    etag: null,
+    lastModified: null,
+    fetchedAt: at,
+    contentHash,
+    bytes: 100,
+    storedBytes: 80,
+    signals: {},
+  });
+
+describe('dueItems’s re-reads', () => {
+  it('names the pages due only because their code is older, whose capture holds their copy', () =>
+    withRollback(async (tx) => {
+      await seed(tx);
+      await list(tx, T(1), [page(1, '2026-10-01T00:00:00.000Z')]);
+      const [a1, a2, b1, c1] = await listLiveItems(tx, DATASET);
+      // Each page read at T(5) by revision 1's code, and the copy it stored captured.
+      for (const item of [a1!, a2!, b1!, c1!]) {
+        const name = item.locator.split('/').pop()!;
+        await recordFetch(tx, {
+          id: `fe_${name}_read`,
+          runId: RUN,
+          itemId: item.id,
+          url: item.locator,
+          finalUrl: item.locator,
+          policy: 'allowed',
+          policyReason: null,
+          method: 'http',
+          outcome: 'changed',
+          httpStatus: 200,
+          bytes: 100,
+          signals: {},
+          startedAt: T(5),
+          durationMs: 50,
+          error: null,
+          page: { contentHash: `hash-${name}`, etag: null, lastModified: null },
+          extractedWith: 'r1.v1',
+        });
+        await captureOf(tx, item, `fe_${name}_read`, `hash-${name}`, T(5));
+      }
+      const plan = (options: { current?: string; now?: Date; all?: boolean } = {}) =>
+        dueItems(tx, {
+          datasetId: DATASET,
+          now: options.now ?? T(10),
+          maxAgeDays: 7,
+          current: options.current ?? 'r2.v1',
+          limit: 100,
+          all: options.all,
+        });
+      expect(await plan({ current: 'r1.v1' })).toEqual({ ids: [], due: 0, live: 4, reread: [] });
+      // Revision 2's code: every page is due for that alone, and read again from its capture.
+      const ids = [a1!.id, b1!.id, c1!.id, a2!.id];
+      expect(await plan()).toEqual({ ids, due: 4, live: 4, reread: ids });
+
+      // A2's latest capture holds another copy than its statements came from, B1's last fetch
+      // failed, and C1 was listed again with a lastmod it wasn't read at. All four are due, and
+      // only A1 is read again from its capture.
+      await captureOf(tx, a2!, 'fe_a2_read', 'hash-a2-later', T(6));
+      await tx.update(items).set({ lastOutcome: 'failed' }).where(eq(items.id, b1!.id));
+      await list(tx, T(6), [page(1, '2026-10-09T00:00:00.000Z')]);
+      expect(await plan()).toEqual({ ids, due: 4, live: 4, reread: [a1!.id] });
+      // Under all, and once its freshness has run out, A1 is fetched.
+      expect((await plan({ all: true })).reread).toEqual([]);
+      expect((await plan({ now: new Date(T(10).getTime() + 8 * DAY) })).reread).toEqual([]);
     }));
 });
 
