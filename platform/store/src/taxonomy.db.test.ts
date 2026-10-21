@@ -92,6 +92,25 @@ describe('taxonomy versions', () => {
       );
     }));
 
+  it('refuses to commit a version on a base below 1: the dataset is seeded first', () =>
+    withRollback(async (db) => {
+      await applyDefinition(db, testTaxonomyDefinition());
+      const first = testTaxonomy();
+      // An unseeded dataset has no version, so a commit on base 0 would write version 1 around
+      // seedTaxonomyVersion, which is the one place version 1 is made.
+      await expect(
+        commitTaxonomy(db, {
+          datasetId: DATASET,
+          base: 0,
+          taxonomy: { ...first, version: 1 },
+          changes: [],
+          actor: OWNER,
+          at: AT,
+        }),
+      ).rejects.toThrow('Seed the taxonomy before committing a version');
+      expect(await currentTaxonomy(db, DATASET)).toBeNull();
+    }));
+
   it('remembers the key a page was decided under', () =>
     withRollback(async (db) => {
       await applyDefinition(db, testTaxonomyDefinition());

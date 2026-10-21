@@ -97,7 +97,9 @@ export async function seedTaxonomyVersion(
 
 /**
  * Commits the version after `base`, when `base` is still the latest. Otherwise it commits nothing
- * and says which version is the latest, so the caller can apply its change again on that one.
+ * and says which version is the latest, so the caller can apply its change again on that one. A
+ * base below 1 is a caller's mistake, not a stale base: version 1 is made only by
+ * `seedTaxonomyVersion`, which checks the seed's invariants, so an unseeded dataset throws.
  */
 export async function commitTaxonomy(
   db: Executor,
@@ -113,6 +115,11 @@ export async function commitTaxonomy(
     at: Date;
   },
 ): Promise<{ committed: true; version: number } | { committed: false; version: number }> {
+  if (input.base < 1) {
+    throw new Error(
+      `Seed the taxonomy before committing a version: ${input.datasetId} was given base ${input.base}, and versions start at 1`,
+    );
+  }
   return db.transaction(async (tx) => {
     await lockDataset(tx, input.datasetId);
     const latest = (await currentTaxonomy(tx, input.datasetId))?.version ?? 0;

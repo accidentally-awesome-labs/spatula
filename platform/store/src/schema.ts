@@ -9,6 +9,8 @@ import type {
   GateResult,
   Method,
   Outcome,
+  ProposalEvidence,
+  ProposalImpact,
   Question,
   ReviewActionKind,
   ReviewSuggestion,
@@ -664,6 +666,86 @@ export const reviewActions = pgTable(
     check(
       'review_actions_action',
       sql`${t.action} in ('answer', 'flag', 'suggest', 'accept', 'edit', 'reject', 'apply', 'undo', 'revoke')`,
+    ),
+  ],
+);
+
+export const PROPOSAL_STATUSES = ['open', 'accepted', 'rejected', 'applied', 'dropped'] as const;
+export type ProposalStatus = (typeof PROPOSAL_STATUSES)[number];
+
+/**
+ * The taxonomy review's proposals (ADR 0007): each change with why, its evidence, its impact, and
+ * what became of it. A proposal that fails a check is kept as dropped, with the reason and the text
+ * the review sent. Accepting applies a proposal at once, so `accepted` is never written: an
+ * accepted proposal is `applied`, with the version it made. The partial unique index holds an
+ * open, rejected, or applied change once, which is how a change isn't proposed again. It indexes
+ * the change's hash, because a change's text can outgrow what a btree entry holds.
+ */
+export const taxonomyProposals = pgTable(
+  'taxonomy_proposals',
+  {
+    id: text('id').primaryKey(),
+    datasetId: text('dataset_id')
+      .notNull()
+      .references(() => datasets.id, { onDelete: 'cascade' }),
+    /** The run whose review proposed it: null once the run is gone, or for a test's own. */
+    runId: text('run_id').references(() => runs.id, { onDelete: 'set null' }),
+    kind: text('kind').notNull(),
+    /** The change, its items named by ID; a dropped proposal's is the text the review sent. */
+    change: jsonb('change').$type<unknown>().notNull(),
+    changeText: text('change_text').notNull(),
+    changeHash: text('change_hash').notNull(),
+    /** The change in words; null for a dropped proposal. */
+    summary: text('summary'),
+    why: text('why').notNull(),
+    evidence: jsonb('evidence').$type<ProposalEvidence>().notNull(),
+    impact: jsonb('impact').$type<ProposalImpact>(),
+    status: text('status').$type<ProposalStatus>().notNull().default('open'),
+    dropReason: text('drop_reason'),
+    /** The version it was checked against. */
+    base: integer('base').notNull(),
+    /** The version applying it made. */
+    version: integer('version'),
+    decidedBy: jsonb('decided_by').$type<ActorRecord>(),
+    /** Whether the owner changed it before it was applied, which resets its kind's run. */
+    edited: boolean('edited').notNull().default(false),
+    note: text('note'),
+    createdAt: time('created_at').notNull(),
+    decidedAt: time('decided_at'),
+  },
+  (t) => [
+    uniqueIndex('taxonomy_proposals_change')
+      .on(t.datasetId, t.changeHash)
+      .where(sql`${t.status} in ('open', 'rejected', 'applied')`),
+    index('taxonomy_proposals_dataset').on(t.datasetId, t.status, t.createdAt),
+    index('taxonomy_proposals_run').on(t.runId),
+    check(
+      'taxonomy_proposals_status',
+      sql`${t.status} in ('open', 'accepted', 'rejected', 'applied', 'dropped')`,
+    ),
+  ],
+);
+
+/**
+ * Each kind's run of unedited acceptances (ADR 0007), from someone allowed to approve the kind. A
+ * kind applies on its own while its run is AUTONOMY_AFTER or more. Only the earnable kinds have one.
+ */
+export const autonomy = pgTable(
+  'autonomy',
+  {
+    datasetId: text('dataset_id')
+      .notNull()
+      .references(() => datasets.id, { onDelete: 'cascade' }),
+    kind: text('kind').notNull(),
+    streak: integer('streak').notNull().default(0),
+    updatedAt: time('updated_at').notNull(),
+  },
+  (t) => [
+    primaryKey({ columns: [t.datasetId, t.kind] }),
+    check('autonomy_streak', sql`${t.streak} >= 0`),
+    check(
+      'autonomy_kind',
+      sql`${t.kind} in ('add-subcategory', 'add-feature', 'add-value', 'describe')`,
     ),
   ],
 );
