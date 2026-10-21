@@ -2144,6 +2144,115 @@ describe('eval', () => {
     ]);
   });
 
+  it('scores the taxonomy by slug, reading the record’s IDs through the snapshot’s taxonomy', async () => {
+    const T = testTaxonomy();
+    const idOf = (list: readonly { id: string; slug: string }[], slug: string) =>
+      list.find((entry) => entry.slug === slug)!.id;
+    const back = T.features.find((feature) => feature.slug === 'back')!;
+    const snapshot = JSON.stringify({
+      project: 'cli-products',
+      snapshotId: 'sn_x',
+      generation: 3,
+      publishedAt: '2026-10-14T00:00:00.000Z',
+      taxonomy: T,
+      records: [
+        {
+          canonicalId: 'sp_a2',
+          fields: {
+            brand: 'Maker A',
+            name: 'A2',
+            gtins: ['04006381333931'],
+            shelf: idOf(T.shelves, 'on-ear'),
+            functions: [idOf(T.functions, 'headphones')],
+            features: { [back.id]: [idOf(back.values, 'closed')] },
+            category: 'Headphones',
+          },
+          provenance: {},
+        },
+      ],
+    });
+    const golden = {
+      ...GOLDEN,
+      products: [
+        {
+          ...GOLDEN.products[0]!,
+          fields: {
+            ...GOLDEN.products[0]!.fields,
+            shelf: 'on-ear',
+            functions: ['headphones'],
+            features: { back: ['open'] },
+          },
+        },
+      ],
+    };
+    const { fetch, sent } = await serve({ snapshot });
+    const { io, out } = memoryIo({ 'golden.json': JSON.stringify(golden) });
+    expect(await main(['eval', 'golden.json', '--save'], { io, env: ENV, fetch })).toBe(0);
+    expect(out).toEqual([
+      'cli-products, generation 3, against golden set version 2 (1 product):',
+      'Precision: 100.0% (target 99%): met.',
+      'Recall: 100.0%, 1 of 1 found (target 90%): met.',
+      'Identifiers: 100.0% of 1 stated (target 98%): met.',
+      'Key specs: none checked.',
+      'Shelf: 100.0% of 1 stated (target 95%): met.',
+      'Functions: precision 100.0% of 1 stated, recall 100.0% of 1 golden (target 90%): met.',
+      'Features: 0.0% of 1 stated.',
+      'Fields: brand 100.0% of 1, gtins 100.0% of 1, name 100.0% of 1.',
+      'Misses:',
+      '  maker-a-a2: features back is closed, not open',
+      'Saved the score.',
+    ]);
+    expect(sent.at(-1)).toMatchObject({
+      method: 'POST',
+      path: '/datasets/cli-products/evals',
+      body: {
+        scores: {
+          taxonomy: {
+            shelf: { checked: 1, correct: 1, accuracy: 1 },
+            functions: { stated: 1, expected: 1, correct: 1, precision: 1, recall: 1 },
+            features: { checked: 1, correct: 0, accuracy: 0 },
+            targets: { shelf: true, functions: true },
+          },
+        },
+      },
+    });
+  });
+
+  it('counts a golden set’s taxonomy as left out of a snapshot that has none', async () => {
+    const golden = {
+      ...GOLDEN,
+      products: [
+        {
+          ...GOLDEN.products[0]!,
+          fields: {
+            ...GOLDEN.products[0]!.fields,
+            shelf: 'on-ear',
+            functions: ['headphones'],
+            features: { back: ['closed'] },
+          },
+        },
+      ],
+    };
+    const { fetch } = await serve();
+    const { io, out } = memoryIo({ 'golden.json': JSON.stringify(golden) });
+    expect(await main(['eval', 'golden.json'], { io, env: ENV, fetch })).toBe(0);
+    expect(out).toEqual([
+      'cli-products, generation 3, against golden set version 2 (1 product):',
+      'Precision: 100.0% (target 99%): met.',
+      'Recall: 100.0%, 1 of 1 found (target 90%): met.',
+      'Identifiers: 100.0% of 1 stated (target 98%): met.',
+      'Key specs: none checked.',
+      'Shelf: none checked, 1 left out: not met.',
+      'Functions: none stated, recall 0.0% of 1 golden (target 90%): not met.',
+      'Features: none checked, 1 left out.',
+      'Fields: brand 100.0% of 1, gtins 100.0% of 1, name 100.0% of 1.',
+      'Misses:',
+      '  maker-a-a2: shelf is missing, not on-ear',
+      '  maker-a-a2: functions is missing, not headphones',
+      '  maker-a-a2: features back is missing, not closed',
+    ]);
+  });
+
   it('scores nothing when the snapshot’s hash isn’t the one Spatula sent', async () => {
     const { fetch, sent } = await serve({ headers: { 'x-spatula-sha256': '0'.repeat(64) } });
     const { io, out, err } = memoryIo({ 'golden.json': JSON.stringify(GOLDEN) });
@@ -2320,6 +2429,33 @@ describe('evals', () => {
     const { io, out } = memoryIo();
     expect(await main(['evals', 'cli-products'], { io, env: ENV, fetch })).toBe(0);
     expect(out).toEqual(['No scores are kept yet. spatula eval <golden.json> --save keeps one.']);
+  });
+
+  it('shows the taxonomy’s figures of a score that has them', async () => {
+    const saved: EvalView[] = [
+      {
+        id: 'ev_5',
+        generation: 7,
+        goldenVersion: 3,
+        createdAt: '2026-11-03T00:00:00.000Z',
+        scores: {
+          precision: 1,
+          recall: 0.96,
+          identifiers: { checked: 40, accuracy: 1 },
+          keySpecs: { checked: 30, accuracy: 0.99 },
+          taxonomy: {
+            shelf: { checked: 50, accuracy: 0.96 },
+            functions: { precision: 0.95, recall: 0.925 },
+          },
+        } as unknown as EvalView['scores'],
+      },
+    ];
+    const { fetch } = stubApi(() => Response.json({ evals: saved }));
+    const { io, out } = memoryIo();
+    expect(await main(['evals', 'cli-products'], { io, env: ENV, fetch })).toBe(0);
+    expect(out).toEqual([
+      '2026-11-03T00:00:00.000Z  generation 7  golden v3  precision 100.0%  recall 96.0%  identifiers 100.0%  key specs 99.0%  shelf 96.0%  functions precision 95.0% recall 92.5%',
+    ]);
   });
 
   it('keeps a dataset’s name to its place in the address', async () => {

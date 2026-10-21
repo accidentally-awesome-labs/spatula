@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { goldenSetSchema, scoreDataset, type GoldenSet, type ItemView } from './golden';
 import type { Snapshot } from './snapshot';
+import { exampleTaxonomySnapshot } from './testing/taxonomy';
 
 const page = (slug: string) => `https://maker.example/products/${slug}`;
 
@@ -484,6 +485,167 @@ describe('scoreDataset', () => {
   });
 });
 
+describe('scoring the taxonomy', () => {
+  // The example snapshot: BerTTi on Power amps, LCD-X on Over-ear, and Qutest on DACs.
+  const EXAMPLE = exampleTaxonomySnapshot();
+  const PAGES: Record<string, string> = {
+    'chord-bertti': 'https://chordelectronics.co.uk/product/bertti',
+    'audeze-lcd-x': 'https://www.audeze.com/products/lcd-x',
+    'chord-qutest': 'https://chordelectronics.co.uk/product/qutest',
+  };
+  /** The item for a product's page, joined to its record. */
+  const item = (key: string, sourceId: string, entityId: string): ItemView => ({
+    locator: PAGES[key]!,
+    sourceId,
+    status: 'live',
+    entityId,
+  });
+  const PLACED: ItemView[] = [
+    item('chord-bertti', 'chord', 'sp_00000000000000000001'),
+    item('audeze-lcd-x', 'audeze', 'sp_00000000000000000002'),
+    item('chord-qutest', 'chord', 'sp_00000000000000000003'),
+  ];
+  /** A golden set of the example's products, by key, with these fields. */
+  const goldenOf = (fields: Record<string, Record<string, unknown>>): GoldenSet =>
+    goldenSetSchema.parse({
+      ...GOLDEN,
+      dataset: 'crowdio-audio-products',
+      products: Object.entries(fields).map(([key, values]) => ({
+        key,
+        pages: [PAGES[key]],
+        fields: values,
+        checkedAgainst: ['https://retailer.example/x'],
+      })),
+    });
+  const RIGHT = {
+    'chord-bertti': {
+      shelf: 'power-amps',
+      functions: ['amplifier'],
+      features: { drives: ['speakers'] },
+    },
+    'audeze-lcd-x': { shelf: 'over-ear', functions: ['headphones'], features: { back: ['open'] } },
+    'chord-qutest': { shelf: 'dacs', functions: ['dac'] },
+  };
+
+  it('reads a record’s IDs as slugs through the snapshot’s taxonomy, and meets the targets', () => {
+    const scores = scoreDataset({ golden: goldenOf(RIGHT), snapshot: EXAMPLE, items: PLACED });
+    expect(scores.taxonomy).toEqual({
+      shelf: { checked: 3, correct: 3, missing: 0, accuracy: 1 },
+      functions: { stated: 3, expected: 3, correct: 3, precision: 1, recall: 1 },
+      features: { checked: 2, correct: 2, missing: 0, accuracy: 1 },
+      targets: { shelf: true, functions: true },
+    });
+    // The taxonomy's fields aren't compared as text: a record's ID is never a golden slug.
+    expect(scores.fields).toEqual({});
+    expect(scores.misses).toEqual([]);
+  });
+
+  it('names each miss by slug, and counts functions one by one over every product', () => {
+    const scores = scoreDataset({
+      golden: goldenOf({
+        // Version 2 merged preamps into power amps: a golden set names the shelf it means now.
+        'chord-bertti': {
+          shelf: 'preamps',
+          functions: ['amplifier', 'pre-amp'],
+          features: { drives: ['headphones'] },
+        },
+        'audeze-lcd-x': {
+          shelf: 'over-ear',
+          functions: ['headphones'],
+          features: { back: ['closed'] },
+        },
+        'chord-qutest': { shelf: 'dacs', functions: ['dac'] },
+      }),
+      snapshot: EXAMPLE,
+      items: PLACED,
+    });
+    expect(scores.taxonomy).toEqual({
+      shelf: { checked: 3, correct: 2, missing: 0, accuracy: 2 / 3 },
+      functions: { stated: 3, expected: 4, correct: 3, precision: 1, recall: 0.75 },
+      features: { checked: 2, correct: 0, missing: 0, accuracy: 0 },
+      targets: { shelf: false, functions: false },
+    });
+    expect(scores.misses).toEqual([
+      'chord-bertti: shelf is power-amps, not preamps',
+      'chord-bertti: functions is amplifier, not amplifier, pre-amp',
+      'chord-bertti: features drives is speakers, not headphones',
+      'audeze-lcd-x: features back is open, not closed',
+    ]);
+  });
+
+  it('counts a golden set’s taxonomy as left out of a snapshot that has none', () => {
+    const scores = scoreOne(
+      {
+        name: 'HD 600',
+        shelf: 'over-ear',
+        functions: ['headphones'],
+        features: { back: ['open'] },
+      },
+      { name: 'HD 600', category: 'Headphones' },
+    );
+    expect(scores.taxonomy).toEqual({
+      shelf: { checked: 0, correct: 0, missing: 1, accuracy: 1 },
+      functions: { stated: 0, expected: 1, correct: 0, precision: 1, recall: 0 },
+      features: { checked: 0, correct: 0, missing: 1, accuracy: 1 },
+      targets: { shelf: false, functions: false },
+    });
+    expect(scores.fields).toEqual({ name: { checked: 1, correct: 1, missing: 0, accuracy: 1 } });
+    expect(scores.misses).toEqual([
+      'maker-hd-600: shelf is missing, not over-ear',
+      'maker-hd-600: functions is missing, not headphones',
+      'maker-hd-600: features back is missing, not open',
+    ]);
+  });
+
+  it('says nothing of the taxonomy for a golden set that names none of its fields', () => {
+    expect(scoreDataset({ golden: GOLDEN, snapshot: SNAPSHOT, items: ITEMS })).not.toHaveProperty(
+      'taxonomy',
+    );
+    const named = goldenOf({ 'chord-bertti': { brand: 'Chord Electronics', name: 'BerTTi' } });
+    const scores = scoreDataset({ golden: named, snapshot: EXAMPLE, items: PLACED });
+    expect(scores).not.toHaveProperty('taxonomy');
+    expect(scores.fields).toEqual({
+      brand: { checked: 1, correct: 1, missing: 0, accuracy: 1 },
+      name: { checked: 1, correct: 1, missing: 0, accuracy: 1 },
+    });
+  });
+
+  it('meets the taxonomy’s targets by reaching them exactly', () => {
+    // Twenty LCD-Xs. The golden set puts the first on-ear, and gives the second a wrong function.
+    const lcdX = EXAMPLE.records[1]!;
+    const snapshot: Snapshot = {
+      ...EXAMPLE,
+      records: Array.from({ length: 20 }, (_, index) => ({ ...lcdX, canonicalId: `sp_${index}` })),
+    };
+    const page = (index: number) => `https://maker.example/products/p-${index}`;
+    const golden = goldenSetSchema.parse({
+      ...GOLDEN,
+      products: Array.from({ length: 20 }, (_, index) => ({
+        key: `maker-p-${index}`,
+        pages: [page(index)],
+        fields: {
+          shelf: index === 0 ? 'on-ear' : 'over-ear',
+          ...(index < 10 ? { functions: [index === 1 ? 'amplifier' : 'headphones'] } : {}),
+        },
+        checkedAgainst: ['https://retailer.example/p'],
+      })),
+    });
+    const items: ItemView[] = Array.from({ length: 20 }, (_, index) => ({
+      locator: page(index),
+      sourceId: 'maker',
+      status: 'live',
+      entityId: `sp_${index}`,
+    }));
+    const scores = scoreDataset({ golden, snapshot, items });
+    // Nineteen shelves of twenty is 0.95; nine functions of ten, stated and golden, is 0.9.
+    expect(scores.taxonomy).toMatchObject({
+      shelf: { checked: 20, correct: 19, accuracy: 0.95 },
+      functions: { stated: 10, expected: 10, correct: 9, precision: 0.9, recall: 0.9 },
+      targets: { shelf: true, functions: true },
+    });
+  });
+});
+
 describe('goldenSetSchema', () => {
   it.each([
     [
@@ -515,5 +677,35 @@ describe('goldenSetSchema', () => {
     expect(goldenSetSchema.safeParse(withLabel('')).success).toBe(false);
     const taken = goldenSetSchema.parse(withLabel(' Impedance '));
     expect(taken.products[0]!.fields.specs).toEqual([{ label: 'Impedance', value: '300 Ω' }]);
+  });
+
+  it('takes the taxonomy’s fields by slug, and refuses them in another shape', () => {
+    const withFields = (fields: Record<string, unknown>) => ({
+      ...GOLDEN,
+      products: [{ ...GOLDEN.products[0], fields }],
+    });
+    const placed = { shelf: 'over-ear', functions: ['headphones'], features: { back: ['open'] } };
+    expect(goldenSetSchema.parse(withFields(placed)).products[0]!.fields).toEqual(placed);
+    const issuesOf = (fields: Record<string, unknown>) =>
+      goldenSetSchema
+        .safeParse(withFields(fields))
+        .error?.issues.map(({ path, message }) => ({ path, message }));
+    const at = (name: string) => ['products', 0, 'fields', name];
+    expect(issuesOf({ shelf: ['over-ear'] })).toEqual([
+      { path: at('shelf'), message: 'shelf is one shelf’s slug.' },
+    ]);
+    expect(issuesOf({ functions: ['Headphones'] })).toEqual([
+      { path: at('functions'), message: 'functions lists function slugs.' },
+    ]);
+    expect(issuesOf({ features: { Back: ['open'] } })).toEqual([
+      { path: at('features'), message: 'features lists value slugs by feature slug.' },
+    ]);
+    expect(issuesOf({ category: { headphones: ['over-ear'] } })).toEqual([
+      { path: at('category'), message: 'Only features maps names to lists.' },
+    ]);
+    // A feature whose values aren't a list fits no shape a field takes.
+    expect(goldenSetSchema.safeParse(withFields({ features: { back: 'open' } })).success).toBe(
+      false,
+    );
   });
 });

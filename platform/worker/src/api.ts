@@ -698,12 +698,18 @@ const evalSchema = z.strictObject({
   generation: z.number().int().min(1).max(999_999_999),
   goldenVersion: z.number().int().min(1).max(999_999_999),
   // The CLI computes the scores, and the Worker keeps them as they are, checking only their size
-  // and the four figures spatula evals shows.
+  // and the figures spatula evals shows: four, and the taxonomy's three when a score has them.
   scores: z.looseObject({
     precision: share,
     recall: share,
     identifiers: z.looseObject({ accuracy: share }),
     keySpecs: z.looseObject({ accuracy: share }),
+    taxonomy: z
+      .looseObject({
+        shelf: z.looseObject({ accuracy: share }),
+        functions: z.looseObject({ precision: share, recall: share }),
+      })
+      .optional(),
   }),
 });
 

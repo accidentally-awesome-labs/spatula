@@ -19,6 +19,9 @@ const SCORES = {
   keySpecs: { accuracy: 1 },
 };
 
+/** And the taxonomy's three, which it shows when a score has them (ADR 0007). */
+const TAXONOMY = { shelf: { accuracy: 0.96 }, functions: { precision: 0.95, recall: 0.925 } };
+
 describe('items and evals', () => {
   it('lists a dataset’s items', async () => {
     const applied = await call('PUT', '/datasets/api-items', { body: testDefinition('api-items') });
@@ -117,6 +120,16 @@ describe('items and evals', () => {
         { ...ok, scores: { ...SCORES, identifiers: 1 } },
         'scores.identifiers',
       ],
+      [
+        'a shelf accuracy above 1',
+        { ...ok, scores: { ...SCORES, taxonomy: { ...TAXONOMY, shelf: { accuracy: 1.5 } } } },
+        'scores.taxonomy.shelf.accuracy',
+      ],
+      [
+        'functions with no recall',
+        { ...ok, scores: { ...SCORES, taxonomy: { ...TAXONOMY, functions: { precision: 1 } } } },
+        'scores.taxonomy.functions.recall',
+      ],
       ['an array', [], 'the body'],
       ['null', null, 'the body'],
     ];
@@ -146,6 +159,27 @@ describe('items and evals', () => {
     expect(await history.json()).toEqual({
       evals: [expect.objectContaining({ generation: 999_999_999, goldenVersion: 999_999_999 })],
     });
+  });
+
+  it('keeps a score with the taxonomy’s figures, as it was sent', async () => {
+    await call('PUT', '/datasets/api-evals-taxonomy', {
+      body: testDefinition('api-evals-taxonomy'),
+    });
+    const sent = {
+      ...SCORES,
+      taxonomy: {
+        shelf: { checked: 25, correct: 24, missing: 0, accuracy: 0.96 },
+        functions: { stated: 40, expected: 40, correct: 38, precision: 0.95, recall: 0.95 },
+        features: { checked: 10, correct: 9, missing: 1, accuracy: 0.9 },
+        targets: { shelf: true, functions: true },
+      },
+    };
+    const saved = await call('POST', '/datasets/api-evals-taxonomy/evals', {
+      body: { generation: 1, goldenVersion: 3, scores: sent },
+    });
+    expect(saved.status).toBe(201);
+    expectNoStore(saved);
+    expect(((await saved.json()) as EvalView).scores).toEqual(sent);
   });
 
   it('takes no more than 512 KiB, counted in bytes, and keeps nothing over it', async () => {

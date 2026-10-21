@@ -494,16 +494,44 @@ export function formatScores(golden: GoldenSet, scores: EvalScores): string[] {
     `Precision: ${percent(scores.precision)} (target ${EVAL_TARGETS.precision * 100}%): ${verdict(scores.targets.precision)}.`,
     `Recall: ${percent(scores.recall)}, ${scores.found} of ${scores.products} found (target ${EVAL_TARGETS.recall * 100}%): ${verdict(scores.targets.recall)}.`,
   ];
-  for (const [label, tally, met, target] of [
+  // A golden set that names no shelf, function, or feature, as every one before ADR 0007, gets no
+  // taxonomy lines.
+  const taxonomy = scores.taxonomy;
+  const tallies: (readonly [string, Tally, boolean, number])[] = [
     ['Identifiers', scores.identifiers, scores.targets.identifiers, EVAL_TARGETS.identifiers],
     ['Key specs', scores.keySpecs, scores.targets.keySpecs, EVAL_TARGETS.keySpecs],
-  ] as const) {
+  ];
+  if (taxonomy !== undefined) {
+    tallies.push(['Shelf', taxonomy.shelf, taxonomy.targets.shelf, EVAL_TARGETS.shelf]);
+  }
+  for (const [label, tally, met, target] of tallies) {
     const left = tally.missing === 0 ? '' : `, ${tally.missing} left out`;
     lines.push(
       tally.checked === 0
         ? `${label}: none checked${left}${tally.missing === 0 ? '' : ': not met'}.`
         : `${label}: ${percent(tally.accuracy)} of ${tally.checked} stated${left} (target ${target * 100}%): ${verdict(met)}.`,
     );
+  }
+  if (taxonomy !== undefined) {
+    const { functions, features } = taxonomy;
+    if (functions.stated + functions.expected > 0) {
+      const precision =
+        functions.stated === 0
+          ? 'none stated'
+          : `precision ${percent(functions.precision)} of ${functions.stated} stated`;
+      lines.push(
+        `Functions: ${precision}, recall ${percent(functions.recall)} of ${functions.expected} golden (target ${EVAL_TARGETS.functions * 100}%): ${verdict(taxonomy.targets.functions)}.`,
+      );
+    }
+    // Features have no target, so they read as a field does.
+    if (features.checked + features.missing > 0) {
+      const figure =
+        features.checked === 0
+          ? 'none checked'
+          : `${percent(features.accuracy)} of ${features.checked} stated`;
+      const left = features.missing === 0 ? '' : `, ${features.missing} left out`;
+      lines.push(`Features: ${figure}${left}.`);
+    }
   }
   const fields = Object.entries(scores.fields).sort(([a], [b]) => (a < b ? -1 : 1));
   if (fields.length > 0) {
@@ -528,10 +556,15 @@ export function formatEvals(evals: EvalView[]): string[] {
   // Nothing checked is not a perfect score, so a tally with nothing checked shows no percentage.
   const accuracy = (tally: Tally) =>
     tally.checked === 0 ? 'none checked' : percent(tally.accuracy);
-  return evals.map(
-    (saved) =>
-      `${saved.createdAt}  generation ${saved.generation}  golden v${saved.goldenVersion}  precision ${percent(saved.scores.precision)}  recall ${percent(saved.scores.recall)}  identifiers ${accuracy(saved.scores.identifiers)}  key specs ${accuracy(saved.scores.keySpecs)}`,
-  );
+  return evals.map((saved) => {
+    // Scores from before the taxonomy, or of a golden set without it, say nothing of it.
+    const taxonomy = saved.scores.taxonomy;
+    const placed =
+      taxonomy === undefined
+        ? ''
+        : `  shelf ${accuracy(taxonomy.shelf)}  functions precision ${percent(taxonomy.functions.precision)} recall ${percent(taxonomy.functions.recall)}`;
+    return `${saved.createdAt}  generation ${saved.generation}  golden v${saved.goldenVersion}  precision ${percent(saved.scores.precision)}  recall ${percent(saved.scores.recall)}  identifiers ${accuracy(saved.scores.identifiers)}  key specs ${accuracy(saved.scores.keySpecs)}${placed}`;
+  });
 }
 
 /*
