@@ -129,6 +129,31 @@ describe('reading a page again from its capture', { timeout: 20_000 }, () => {
     expect(second.summary).toMatchObject({ items: 3, reread: 2, fetches: { changed: 1 } });
   });
 
+  it('fetches a page whose copy is gone though its site sends it unchanged, and stores it again a run later', async () => {
+    const definition = testDefinition('reread-gone-same');
+    const {
+      world,
+      pages: [a1],
+    } = await worldFor(definition, standardRoutes());
+    await refresh(world, 'reread-gone-same');
+    const key = pageKey(await sha256Hex(A1()));
+    world.stored.delete(key);
+    await applyDefinition(db, { ...definition, freshness: { maxAgeDays: 8 } });
+    const second = await refresh(world, 'reread-gone-same', {});
+    // Nothing to read again, so A1 is fetched. Its site sends the same page, which the archive
+    // doesn't store again, so the page forgets its copy and waits for the next run.
+    expect(second.results.get(`reread:${a1!.id}`)).toBeNull();
+    expect(second.names).toContain(`fetch:${a1!.id}:0`);
+    expect(second.summary.notes).toContain(
+      `${URLS.a1}: its stored copy was missing, so it’s fetched afresh next run`,
+    );
+    expect(world.stored.has(key)).toBe(false);
+    const third = await refresh(world, 'reread-gone-same', {});
+    expect(third.names).toContain(`fetch:${a1!.id}:0`);
+    expect(third.summary.fetches.changed).toBe(1);
+    expect(world.stored.has(key)).toBe(true);
+  });
+
   it('reads the pages of a taxonomy dataset again from their captures while it has no taxonomy', async () => {
     const {
       world,
