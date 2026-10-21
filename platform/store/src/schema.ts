@@ -1,4 +1,6 @@
 import type {
+  ActorRecord,
+  AppliedChange,
   ContentSignals,
   Definition,
   EvalScores,
@@ -11,9 +13,11 @@ import type {
   RunStatus,
   RunSummary,
   SourceProbe,
+  Taxonomy,
 } from '@spatula/core';
 import { sql } from 'drizzle-orm';
 import {
+  boolean,
   check,
   doublePrecision,
   foreignKey,
@@ -127,6 +131,11 @@ export const items = pgTable(
     extractInputHash: text('extract_input_hash'),
     /** The definition revision and extraction version the statements came from. */
     extractedWith: text('extracted_with'),
+    /**
+     * The taxonomy key the page's decision was made under (ADR 0007): what of the taxonomy its
+     * question covered. A taxonomy change that alters it asks the page again.
+     */
+    taxonomyKey: text('taxonomy_key'),
     lastOutcome: text('last_outcome').$type<Outcome>(),
     outcomeStreak: integer('outcome_streak').notNull().default(0),
     /**
@@ -578,4 +587,34 @@ export const evals = pgTable(
     createdAt: time('created_at').notNull(),
   },
   (t) => [index('evals_dataset').on(t.datasetId, t.createdAt)],
+);
+
+/**
+ * A dataset's taxonomy (ADR 0007), one row per version, each whole. Version 1 is the seed; each
+ * change or batch of changes makes the next, with what it applied and who applied it. A version is
+ * never rewritten: undoing one makes another.
+ */
+export const taxonomyVersions = pgTable(
+  'taxonomy_versions',
+  {
+    datasetId: text('dataset_id')
+      .notNull()
+      .references(() => datasets.id, { onDelete: 'cascade' }),
+    version: integer('version').notNull(),
+    taxonomy: jsonb('taxonomy').$type<Taxonomy>().notNull(),
+    /** The changes it applied, with what undoing each needs; empty for the seed. */
+    changes: jsonb('changes').$type<AppliedChange[]>().notNull(),
+    actor: jsonb('actor').$type<ActorRecord>().notNull(),
+    /** Whether Spatula applied it on its own, with a kind's earned autonomy. */
+    autonomous: boolean('autonomous').notNull().default(false),
+    /** The proposal it applied. No foreign key: a version outlives any proposal row. */
+    proposalId: text('proposal_id'),
+    /** The version it undid. */
+    undoes: integer('undoes'),
+    createdAt: time('created_at').notNull(),
+  },
+  (t) => [
+    primaryKey({ columns: [t.datasetId, t.version] }),
+    check('taxonomy_versions_version', sql`${t.version} > 0`),
+  ],
 );

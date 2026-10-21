@@ -160,6 +160,20 @@ export interface RunView {
   error: string | null;
 }
 
+export const ACTOR_ROLES = ['owner', 'reviewer', 'decider'] as const;
+export const ACTOR_CLIENTS = ['cli', 'console', 'consumer', 'run'] as const;
+
+/**
+ * Who made a write (ADR 0009): the owner, a consumer's reviewer, or Spatula's decider, and through
+ * which client. A reviewer answers for a consumer, under the opaque ID the consumer gave it.
+ */
+export interface ActorRecord {
+  role: (typeof ACTOR_ROLES)[number];
+  client: (typeof ACTOR_CLIENTS)[number];
+  consumer?: string;
+  reviewer?: string;
+}
+
 /** A question waiting for a person, as the API lists it. */
 export interface ReviewView {
   id: string;
