@@ -1,11 +1,13 @@
 import {
   answerText,
   findItem,
+  NONE_SHELF,
   parseDefinition,
   type Definition,
   type TaxonomySubject,
 } from '@spatula/core';
 import {
+  applyDefinition,
   decisionRecords,
   items,
   latestFetchId,
@@ -20,13 +22,19 @@ import { describe, expect, it } from 'vitest';
 import { db } from '../test/node/db';
 import { fakeTaxonomyDecider, type World } from '../test/node/fakes';
 import { refresh, taxonomyWorld, worldFor } from '../test/node/runs';
-import { A1, B1, standardRoutes, taxonomyFor, URLS } from '../test/pages';
+import { A1, B1, ROBOTS_OPEN, standardRoutes, taxonomyFor, URLS } from '../test/pages';
 import { extractionTag, retryTag } from './pipeline';
 import { keyHash, placeSubject } from './taxonomy';
 
 const T = testTaxonomy();
 const id = (subject: TaxonomySubject, slug: string) => findItem(T, subject, slug)!.id;
 const SUBJECTS = { shelf: 'shelf', functions: 'function', features: 'value' } as const;
+const HOUR = 3_600_000;
+const NO_AI_INPUT = 'User-agent: *\nContent-Signal: ai-input=no\nAllow: /\n';
+const ROBOTS = {
+  a: 'https://maker-a.example/robots.txt',
+  b: 'https://maker-b.example/robots.txt',
+} as const;
 
 /** An item's current taxonomy statements, as "property method slug confidence", sorted. */
 async function placedOf(itemId: string): Promise<string[]> {
@@ -51,17 +59,30 @@ async function placedOf(itemId: string): Promise<string[]> {
 const keyOf = async (itemId: string) =>
   (await db.select({ key: items.taxonomyKey }).from(items).where(eq(items.id, itemId)))[0]!.key;
 
+/** The definition with these top-level parts changed. */
+function redefine(definition: Definition, changes: Record<string, unknown>): Definition {
+  const parsed = parseDefinition({ ...definition, ...changes });
+  if (!parsed.ok) throw new Error(parsed.issues.join('\n'));
+  return parsed.definition;
+}
+
 /** The test dataset with a source's shelf fixed by a rule. */
 function withShelfRule(definition: Definition, sourceId: string, shelf: string): Definition {
-  const parsed = parseDefinition({
-    ...definition,
+  return redefine(definition, {
     sources: definition.sources.map((source) =>
       source.id === sourceId ? { ...source, fixed: { ...source.fixed, shelf } } : source,
     ),
   });
-  if (!parsed.ok) throw new Error(parsed.issues.join('\n'));
-  return parsed.definition;
 }
+
+/** How many decisions there are about placing a page, current or not. */
+const placeDecisionsOf = async (itemId: string) =>
+  (
+    await db
+      .select({ id: decisionRecords.id })
+      .from(decisionRecords)
+      .where(eq(decisionRecords.subjectKey, placeSubject(itemId)))
+  ).length;
 
 /** A person's shelf for a page, written as an answer writes it. */
 async function personSays(world: World, datasetId: string, itemId: string, shelf: string) {
@@ -348,6 +369,112 @@ describe('placing pages in the taxonomy', { timeout: 20_000 }, () => {
       retryTag(1),
       retryTag(1),
     ]);
+  });
+});
+
+describe('placing pages with AI input only where it’s allowed', { timeout: 20_000 }, () => {
+  it('asks a person, not the decider, where the dataset doesn’t declare ai-input', async () => {
+    const policy = { purposes: [], perHostIntervalMs: 1000 };
+    const definition = redefine(testTaxonomyDefinition('place-no-purpose'), { policy });
+    const {
+      world,
+      pages: [a1, a2, b1],
+    } = await taxonomyWorld(definition);
+    const first = await refresh(world, 'place-no-purpose');
+    expect(first.summary.classify).toMatchObject({ escalated: 3, accepted: 0, inputTokens: 0 });
+    expect(world.taxonomyDecider.calls).toEqual([]);
+    expect(world.llm.calls).toEqual([]);
+    for (const page of [a1!, a2!, b1!]) expect(await placedOf(page.id)).toEqual([]);
+    // Each page's shelf is a person's to choose, among every shelf and none.
+    const open = await listOpenReviews(db, 'place-no-purpose');
+    expect(open.map((review) => review.subject).sort()).toEqual([a1!.id, a2!.id, b1!.id].sort());
+    const shelves = [
+      ...['headphones', 'over-ear', 'on-ear', 'dacs', 'amplifiers', 'headphone-amps'],
+      ...['preamps', 'power-amps'],
+    ].map((slug) => id('shelf', slug));
+    for (const review of open) {
+      expect(review.question).toEqual({
+        type: 'taxonomy',
+        prompt: 'Where does the one product this page is about sit in the taxonomy?',
+        parts: { shelves: [...shelves, NONE_SHELF], functions: [], features: {} },
+      });
+    }
+
+    // Read again with nothing more to ask than before, it is the same escalation, not a new one.
+    await applyDefinition(db, redefine(definition, { freshness: { maxAgeDays: 6 } }));
+    const second = await refresh(world, 'place-no-purpose');
+    expect(second.names).toContain(`decide:${a1!.id}`);
+    expect(second.summary.classify).toMatchObject({ escalated: 3, accepted: 0 });
+    expect(await placeDecisionsOf(a1!.id)).toBe(1);
+    expect(world.taxonomyDecider.calls).toEqual([]);
+  });
+
+  it('takes back the decider’s parts once a site says ai-input=no, and keeps a rule’s shelf', async () => {
+    // Without LLM extraction, a page read unchanged is current, so only the decider's statements
+    // put it off, and only the consent check keeps its earlier decision from being used again.
+    const definition = withShelfRule(
+      testTaxonomyDefinition('place-consent'),
+      'maker-b',
+      'headphone-amps',
+    );
+    const {
+      world,
+      pages: [a1, a2, b1],
+    } = await taxonomyWorld(definition, standardRoutes(), { llm: false });
+    await refresh(world, 'place-consent');
+    const before = {
+      a1: await placedOf(a1!.id),
+      a2: await placedOf(a2!.id),
+      b1: await placedOf(b1!.id),
+    };
+    expect(before.a1).toEqual(['features llm open 0.95', 'shelf llm over-ear 0.96']);
+    expect(before.b1).toEqual([
+      'features llm headphones 0.95',
+      'functions llm dac 0.95',
+      'shelf rule headphone-amps 1',
+    ]);
+    expect(world.taxonomyDecider.calls).toHaveLength(3);
+
+    // Both sites now refuse AI input. The pages are current and say what they said: only what
+    // their sites now say puts them off, with no new revision.
+    world.clock.advance(25 * HOUR);
+    world.web.routes.set(ROBOTS.a, { status: 200, body: NO_AI_INPUT });
+    world.web.routes.set(ROBOTS.b, { status: 200, body: NO_AI_INPUT });
+    const second = await refresh(world, 'place-consent');
+    for (const page of [a1!, a2!, b1!]) expect(second.names).toContain(`decide:${page.id}`);
+    expect(second.summary.classify).toMatchObject({
+      escalated: 2,
+      rule: 1,
+      reused: 0,
+      inputTokens: 0,
+    });
+    expect(world.taxonomyDecider.calls).toHaveLength(3);
+    expect(await placedOf(a1!.id)).toEqual([]);
+    expect(await placedOf(a2!.id)).toEqual([]);
+    expect(await placedOf(b1!.id)).toEqual(['shelf rule headphone-amps 1']);
+    const open = await listOpenReviews(db, 'place-consent');
+    expect(open.map((review) => review.subject).sort()).toEqual([a1!.id, a2!.id].sort());
+
+    // That happens once: the pages are current now, and the sites' answers don't put them off.
+    const third = await refresh(world, 'place-consent');
+    expect(third.names.filter((name) => /^(?:extract|decide):/u.test(name))).toEqual([]);
+    expect(world.taxonomyDecider.calls).toHaveLength(3);
+
+    // The sites change their minds. Nothing was weighed without a decider, so once the pages are
+    // read again, it's asked, and its answers close the questions.
+    world.clock.advance(25 * HOUR);
+    world.web.routes.set(ROBOTS.a, { status: 200, body: ROBOTS_OPEN });
+    world.web.routes.set(ROBOTS.b, standardRoutes()[ROBOTS.b]!);
+    await applyDefinition(db, redefine(definition, { freshness: { maxAgeDays: 6 } }));
+    const fourth = await refresh(world, 'place-consent');
+    expect(fourth.summary.classify).toMatchObject({ accepted: 3, escalated: 0 });
+    expect(world.taxonomyDecider.calls).toHaveLength(6);
+    expect(await listOpenReviews(db, 'place-consent')).toEqual([]);
+    expect({
+      a1: await placedOf(a1!.id),
+      a2: await placedOf(a2!.id),
+      b1: await placedOf(b1!.id),
+    }).toEqual(before);
   });
 });
 
