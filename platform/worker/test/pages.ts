@@ -80,6 +80,8 @@ export const standardRoutes = (): Record<string, Reply> => ({
 
 /** What the fake LLM answers for each page. B1's price isn't on the page, so it's dropped. */
 export function answerFor(user: string): Record<string, unknown> | null {
+  // The taxonomy review's request names pages too, so it's answered first: with nothing to propose.
+  if (user.startsWith('The taxonomy to review:')) return { proposals: [] };
   if (user.includes('/products/a1')) {
     return {
       specs: [

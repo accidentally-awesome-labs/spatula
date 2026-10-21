@@ -184,6 +184,21 @@ export function formatRun(run: RunView): string[] {
   }
   for (const left of snapshot.excluded)
     lines.push(`Left out: ${left.canonicalId}, missing ${left.missing.join(', ')}.`);
+  // The taxonomy review after the run (ADR 0007). Runs from before it, and datasets without a
+  // taxonomy, say nothing.
+  const review = summary.taxonomy;
+  if (review !== undefined) {
+    lines.push(
+      review.skipped === undefined
+        ? `Taxonomy review: ${review.proposed} ${review.proposed === 1 ? 'proposal' : 'proposals'}, ${review.dropped} dropped by the checks; ${review.inputTokens} tokens in, ${review.outputTokens} out.`
+        : `Taxonomy review: skipped, because ${review.skipped}.`,
+    );
+    for (const change of review.applied) {
+      lines.push(
+        `Applied on its own: ${change.summary}, as version ${change.version}. The console can undo it.`,
+      );
+    }
+  }
   if (summary.notes.length > 0) lines.push('Notes:', ...summary.notes.map((note) => `  ${note}`));
   return lines;
 }

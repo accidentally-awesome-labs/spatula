@@ -356,6 +356,66 @@ describe('autonomy', () => {
         updatedAt: T(2),
       });
     }));
+
+  it('applies on its own only an unedited change whose kind has autonomy as it applies', () =>
+    withRollback(async (db) => {
+      await seeded(db);
+      await db
+        .insert(autonomy)
+        .values({ datasetId: DATASET, kind: 'add-value', streak: 10, updatedAt: T(1) });
+      const describeFunction = changeSchema.parse({
+        kind: 'describe',
+        subject: 'function',
+        item: id('function', 'pre-amp'),
+        description: 'Raises a line-level signal',
+      });
+      await saveProposals(db, [
+        proposal('tp_line_out', LINE_OUT),
+        proposal('tp_describe_function', describeFunction),
+      ]);
+      const own = (proposalId: string, more: { decision?: 'edit'; change?: ProposableChange }) =>
+        decideProposal(db, {
+          id: proposalId,
+          decision: 'accept',
+          actor: DECIDER,
+          autonomous: true,
+          makeId,
+          at: T(3),
+          ...more,
+        });
+      // The review read add-value as earned. The owner revokes it before Spatula applies the change.
+      await revokeAutonomy(db, { datasetId: DATASET, kind: 'add-value', at: T(2) });
+      expect(await own('tp_line_out', {})).toEqual({
+        kind: 'stale',
+        reason: 'Its kind, add-value, doesn’t have autonomy now.',
+      });
+      // A function's description is the owner's, whatever describe's run.
+      await db
+        .insert(autonomy)
+        .values({ datasetId: DATASET, kind: 'describe', streak: 10, updatedAt: T(2) });
+      expect(await own('tp_describe_function', {})).toEqual({
+        kind: 'stale',
+        reason: 'Its kind is always the owner’s to apply.',
+      });
+      // Spatula applies a change only as it was proposed.
+      await db.update(autonomy).set({ streak: 10 }).where(eq(autonomy.kind, 'add-value'));
+      expect(
+        await own('tp_line_out', { decision: 'edit', change: valueChange('line-in', 'Line in') }),
+      ).toEqual({
+        kind: 'stale',
+        reason: 'Spatula applies a change on its own only as it was proposed.',
+      });
+      for (const proposalId of ['tp_line_out', 'tp_describe_function']) {
+        expect(await getProposal(db, proposalId)).toMatchObject({
+          status: 'open',
+          version: null,
+          decidedBy: null,
+        });
+      }
+      expect((await currentTaxonomy(db, DATASET))!.version).toBe(1);
+      // With its autonomy back, the same call applies it.
+      expect(await own('tp_line_out', {})).toMatchObject({ kind: 'applied', version: 2 });
+    }));
 });
 
 describe('what the review reads', () => {

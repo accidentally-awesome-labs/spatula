@@ -868,6 +868,80 @@ describe('run', () => {
     expect(out.some((line) => line.startsWith('Matched:'))).toBe(false);
   });
 
+  it('says what the taxonomy review proposed, and what it applied on its own', async () => {
+    const complete: RunView = {
+      ...RUNNING,
+      status: 'complete',
+      finishedAt: '2026-10-10T00:01:00.000Z',
+      summary: {
+        items: 3,
+        fetches: { changed: 3, unchanged: 0, gone: 0, failed: 0, blocked: 0 },
+        statements: { added: 12, reseen: 0, withdrawn: 0 },
+        llm: { ran: 3, reused: 0, skipped: 0, failed: 0, inputTokens: 3000, outputTokens: 150 },
+        entities: { created: 3, linked: 0, conflicts: 0, unresolved: 0 },
+        snapshot: { published: true, generation: 2, snapshotId: 'sn_x', records: 3, excluded: [] },
+        taxonomy: {
+          proposed: 2,
+          dropped: 1,
+          applied: [{ version: 4, summary: 'Add Line out to Drives' }],
+          inputTokens: 2000,
+          outputTokens: 300,
+        },
+        notes: ['A note.'],
+      },
+    };
+    const { fetch } = stubApi(({ method }) =>
+      method === 'POST'
+        ? Response.json({ runId: RUN_ID }, { status: 202 })
+        : Response.json(complete),
+    );
+    const { io, out } = memoryIo();
+    expect(await main(['run', 'cli-products', '--wait'], { io, env: ENV, fetch })).toBe(0);
+    const at = out.indexOf(
+      'Taxonomy review: 2 proposals, 1 dropped by the checks; 2000 tokens in, 300 out.',
+    );
+    expect(at).toBeGreaterThan(-1);
+    expect(out.slice(at + 1, at + 4)).toEqual([
+      'Applied on its own: Add Line out to Drives, as version 4. The console can undo it.',
+      'Notes:',
+      '  A note.',
+    ]);
+  });
+
+  it('says why the taxonomy review was skipped', async () => {
+    const complete: RunView = {
+      ...RUNNING,
+      status: 'complete',
+      finishedAt: '2026-10-10T00:01:00.000Z',
+      summary: {
+        items: 0,
+        fetches: { changed: 0, unchanged: 0, gone: 0, failed: 0, blocked: 0 },
+        statements: { added: 0, reseen: 0, withdrawn: 0 },
+        llm: { ran: 0, reused: 0, skipped: 0, failed: 0, inputTokens: 0, outputTokens: 0 },
+        entities: { created: 0, linked: 0, conflicts: 0, unresolved: 0 },
+        snapshot: { published: false, reason: 'nothing changed', excluded: [] },
+        taxonomy: {
+          proposed: 0,
+          dropped: 0,
+          applied: [],
+          inputTokens: 0,
+          outputTokens: 0,
+          skipped: 'this run’s LLM budget is spent',
+        },
+        notes: [],
+      },
+    };
+    const { fetch } = stubApi(({ method }) =>
+      method === 'POST'
+        ? Response.json({ runId: RUN_ID }, { status: 202 })
+        : Response.json(complete),
+    );
+    const { io, out } = memoryIo();
+    expect(await main(['run', 'cli-products', '--wait'], { io, env: ENV, fetch })).toBe(0);
+    expect(out).toContain('Taxonomy review: skipped, because this run’s LLM budget is spent.');
+    expect(out.some((line) => line.startsWith('Applied on its own:'))).toBe(false);
+  });
+
   it('says each kind of decision that was asked, in order, and nothing of one that wasn’t', async () => {
     const none = {
       rule: 0,

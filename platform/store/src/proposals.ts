@@ -185,7 +185,9 @@ export async function seenChanges(db: Executor, datasetId: string): Promise<Set<
  * makes instead, applies on the current version as the next one: the proposal was checked against
  * its base, which may be older by now. A change that no longer applies leaves the proposal open, and
  * says why. The kind's run moves only for someone allowed to approve the kind, and never for
- * Spatula's own application. The caller logs the decision in the same transaction.
+ * Spatula's own application, which takes only an unedited change whose kind has autonomy when it
+ * applies: otherwise the proposal stays open, and the result says why. The caller logs the decision
+ * in the same transaction.
  */
 export async function decideProposal(
   db: Executor,
@@ -234,6 +236,19 @@ export async function decideProposal(
       return { kind: 'stale' as const, reason: 'Its change no longer reads as one Spatula takes.' };
     }
     const earnable = autonomyKind(proposed.data);
+    // Spatula applies a change on its own only as it was proposed, and only while its kind has
+    // autonomy, read here under the dataset's lock: the owner can revoke it at any time (ADR 0007).
+    if (input.autonomous === true) {
+      const refused =
+        input.decision !== 'accept'
+          ? 'Spatula applies a change on its own only as it was proposed.'
+          : earnable === null
+            ? 'Its kind is always the owner’s to apply.'
+            : (await streakOf(tx, datasetId, earnable)) < AUTONOMY_AFTER
+              ? `Its kind, ${earnable}, doesn’t have autonomy now.`
+              : null;
+      if (refused !== null) return { kind: 'stale' as const, reason: refused };
+    }
     const counted: ChangeKind | null =
       earnable !== null && input.autonomous !== true && mayApprove(input.actor.role, earnable)
         ? earnable

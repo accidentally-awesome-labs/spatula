@@ -84,6 +84,7 @@ import {
 } from './pipeline';
 import { publish } from './publish';
 import { decideTaxonomy, keepOut, runTaxonomy, taxonomyTarget } from './taxonomy';
+import { reviewTaxonomy } from './taxonomy-review';
 import { isChallenge, MAX_WAITS, requestThroughGate, siteAnswerOf, type Resume } from './requests';
 import { storable } from './text';
 
@@ -116,7 +117,9 @@ export {
  * published when the gates allow it, and held for the owner's review when they don't. Nothing here
  * imports Cloudflare: the Workflow passes real ports, and the tests pass fakes. A source that
  * refused three runs in a row gets only a probe; a step after the pages counts each source's
- * standing (ADR 0006). The last step before the run finishes cleans up the page archive (ADR 0008).
+ * standing (ADR 0006). After publishing, a step cleans up the page archive (ADR 0008). In a dataset
+ * with a taxonomy, the last step before the run finishes reviews the taxonomy, and applies the
+ * changes of kinds that have earned it (ADR 0007).
  */
 
 export interface RefreshParams {
@@ -583,6 +586,16 @@ export async function runRefresh(
     const cleaned = await step.do('captures', () => cleanUpCaptures(context, ports));
     if (summary.captures !== undefined) summary.captures.pruned = cleaned.pruned;
     if (cleaned.note !== null) note(summary, cleaned.note);
+    // The taxonomy review comes last (ADR 0007): it reads what the run decided, and what it applies
+    // on its own reaches the next run's pages and snapshot. A run without a taxonomy version has
+    // none: its record type has no taxonomy, or its taxonomy isn't seeded yet.
+    if (placing && taxonomyVersion !== null) {
+      const reviewed = await step.do('taxonomy:review', () =>
+        reviewTaxonomy(context, budgetLeft(context, summary), ports),
+      );
+      summary.taxonomy = reviewed.taxonomy;
+      for (const text of reviewed.notes) note(summary, text);
+    }
     await step.do('finish', () =>
       ports.withDb((db) => finishRun(db, runId, { status: 'complete', summary })),
     );

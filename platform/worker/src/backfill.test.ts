@@ -267,6 +267,7 @@ describe('backfilling from the archive', { timeout: 20_000 }, () => {
       `backfill:${b1!.id}`,
       'resolve',
     ]);
+    expect(run.names.slice(-3)).toEqual(['captures', 'taxonomy:review', 'finish']);
     expect(run.names).not.toContain('plan');
     expect(run.names).not.toContain('sources');
     expect(run.names.some((name) => /^(?:probe|fetch|reread):/u.test(name))).toBe(false);

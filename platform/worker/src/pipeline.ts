@@ -136,10 +136,13 @@ export const extractionTag = (revision: number) => `r${revision}.v${EXTRACTION_V
 /** What a page is marked with when it has to be read again though nothing about it changed. */
 export const retryTag = (revision: number) => `${extractionTag(revision)}.retry`;
 
-/** The tokens a run has spent on the LLM: reading pages, classifying them, and matching them. */
+/**
+ * The tokens a run has spent on the LLM: reading pages, classifying and placing them, matching
+ * them, and reviewing the taxonomy (ADR 0007).
+ */
 export function tokensSpent(summary: RunSummary): number {
   let spent = summary.llm.inputTokens + summary.llm.outputTokens;
-  for (const counts of [summary.classify, summary.match]) {
+  for (const counts of [summary.classify, summary.match, summary.taxonomy]) {
     spent += (counts?.inputTokens ?? 0) + (counts?.outputTokens ?? 0);
   }
   return spent;

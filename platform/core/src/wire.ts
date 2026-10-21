@@ -158,6 +158,19 @@ export interface RunSummary {
     waiting?: number;
   };
   snapshot: PublishResult;
+  /**
+   * The taxonomy review after the run (ADR 0007): the proposals its checks kept, those they
+   * dropped, the changes Spatula applied on its own, and the tokens it spent. `skipped` says why
+   * it didn't ask. Absent for a dataset without a taxonomy, and in runs from before the review.
+   */
+  taxonomy?: {
+    proposed: number;
+    dropped: number;
+    applied: { version: number; summary: string }[];
+    inputTokens: number;
+    outputTokens: number;
+    skipped?: string;
+  };
   /** What deserves a look, such as an LLM failure or an identity conflict: at most 50. */
   notes: string[];
 }

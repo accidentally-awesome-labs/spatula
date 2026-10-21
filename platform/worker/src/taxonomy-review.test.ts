@@ -1,0 +1,259 @@
+import {
+  findItem,
+  parseDefinition,
+  reviewOutputSchema,
+  runIdFor,
+  stableId,
+  type Definition,
+  type ReviewProposal,
+} from '@spatula/core';
+import { autonomy, autonomyOf, listActions, proposalsOfRun, taxonomyHistory } from '@spatula/store';
+import { testTaxonomy, testTaxonomyDefinition } from '@spatula/store/fixtures';
+import { describe, expect, it } from 'vitest';
+import { db } from '../test/node/db';
+import { fakeStep, type StepCache, type World } from '../test/node/fakes';
+import { refresh, taxonomyWorld } from '../test/node/runs';
+import { standardRoutes, URLS } from '../test/pages';
+import { runRefresh } from './refresh';
+
+const PHONO: ReviewProposal = {
+  kind: 'add-subcategory',
+  change: JSON.stringify({
+    kind: 'add-subcategory',
+    parent: 'amplifiers',
+    slug: 'phono-stages',
+    name: 'Phono stages',
+    description: 'Raise and equalize a turntable cartridge’s signal',
+    implies: ['pre-amp'],
+    scopeClause: 'amplifiers',
+  }),
+  why: 'Three pages are amplifiers for turntables',
+  pages: [URLS.a1, URLS.a2, URLS.b1],
+};
+/** PHONO under DACs, which has no subcategories: its first ones are a split. */
+const UNDER_DACS: ReviewProposal = {
+  ...PHONO,
+  change: PHONO.change.replace('"parent":"amplifiers"', '"parent":"dacs"'),
+};
+const LINE_OUT: ReviewProposal = {
+  kind: 'add-value',
+  change: JSON.stringify({
+    kind: 'add-value',
+    feature: 'drives',
+    slug: 'line-out',
+    name: 'Line out',
+    description: 'Feeds a line-level input',
+  }),
+  why: 'B1 drives line-level gear too',
+  pages: [URLS.b1],
+};
+
+/**
+ * The run's LLM, with the taxonomy review answered by these proposals (null: an answer that doesn't
+ * fit the schema), at 2000 tokens in and 300 out. Returns the review's requests, as they come.
+ */
+function reviewing(world: World, proposals: ReviewProposal[] | null): string[] {
+  const asked: string[] = [];
+  const llm = world.ports.llm!;
+  world.ports.llm = {
+    model: llm.model,
+    async structured(request) {
+      // The port is generic over its schema, so the review's is told apart by identity.
+      if ((request.schema as unknown) !== reviewOutputSchema) return llm.structured(request);
+      asked.push(request.user);
+      const parsed = request.schema.safeParse({ proposals });
+      return {
+        output: parsed.success ? parsed.data : null,
+        usage: { inputTokens: 2000, outputTokens: 300 },
+      };
+    },
+  };
+  return asked;
+}
+
+/** The test taxonomy dataset, with some of its definition changed. */
+function changed(
+  datasetId: string,
+  changes: (definition: Definition) => Partial<Definition>,
+): Definition {
+  const base = testTaxonomyDefinition(datasetId);
+  const parsed = parseDefinition({ ...base, ...changes(base) });
+  if (!parsed.ok) throw new Error(parsed.issues.join('\n'));
+  return parsed.definition;
+}
+
+// Each test runs the pipeline against a real database, several runs in some.
+describe('the taxonomy review', { timeout: 20_000 }, () => {
+  it('applies an earned kind once, however often the review step runs', async () => {
+    const { world } = await taxonomyWorld(testTaxonomyDefinition('review-once'));
+    await db.insert(autonomy).values({
+      datasetId: 'review-once',
+      kind: 'add-value',
+      streak: 10,
+      updatedAt: world.clock.now(),
+    });
+    const asked = reviewing(world, [LINE_OUT]);
+    const params = {
+      runId: runIdFor('review-once', world.clock.now()),
+      datasetId: 'review-once',
+      all: true,
+    };
+    const cache: StepCache = new Map();
+    const first = fakeStep(world.clock, cache);
+    const summary = await runRefresh(params, first.step, world.ports);
+    expect(first.names.slice(-4)).toEqual(['snapshot', 'captures', 'taxonomy:review', 'finish']);
+    expect(summary.taxonomy).toEqual({
+      proposed: 1,
+      dropped: 0,
+      applied: [{ version: 2, summary: 'Add Line out to Drives' }],
+      inputTokens: 2000,
+      outputTokens: 300,
+    });
+
+    // The step runs again, twice, as after a crash that came after it applied the change.
+    for (let replay = 0; replay < 2; replay += 1) {
+      cache.delete('taxonomy:review');
+      cache.delete('finish');
+      const again = fakeStep(world.clock, cache);
+      const replayed = await runRefresh(params, again.step, world.ports);
+      expect(again.replayed).not.toContain('taxonomy:review');
+      expect(replayed.taxonomy).toMatchObject({
+        applied: [{ version: 2, summary: 'Add Line out to Drives' }],
+      });
+    }
+    expect(asked).toHaveLength(1);
+    expect((await taxonomyHistory(db, 'review-once')).map((row) => row.version)).toEqual([2, 1]);
+    const applied = (await listActions(db, 'review-once', {})).filter(
+      (action) => action.action === 'apply',
+    );
+    expect(applied).toHaveLength(1);
+    // Spatula's own application doesn't add to the kind's run.
+    expect(await autonomyOf(db, 'review-once')).toContainEqual(
+      expect.objectContaining({ kind: 'add-value', streak: 10, earned: true }),
+    );
+  });
+
+  it('keeps what passes the checks, with its evidence and impact, and what fails as dropped', async () => {
+    const { world } = await taxonomyWorld(testTaxonomyDefinition('review-kept'));
+    const asked = reviewing(world, [PHONO, UNDER_DACS]);
+    const run = await refresh(world, 'review-kept');
+    expect(run.names.slice(-3)).toEqual(['captures', 'taxonomy:review', 'finish']);
+    expect(run.summary.taxonomy).toEqual({
+      proposed: 1,
+      dropped: 1,
+      applied: [],
+      inputTokens: 2000,
+      outputTokens: 300,
+    });
+    // The pages' titles reach the model inside the untrusted wrapper.
+    expect(asked).toHaveLength(1);
+    expect(asked[0]!.startsWith('The taxonomy to review:')).toBe(true);
+    expect(asked[0]!.indexOf('A1 | Maker A')).toBeGreaterThan(
+      asked[0]!.indexOf('<UNTRUSTED_CONTENT>'),
+    );
+
+    const rows = new Map(
+      (await proposalsOfRun(db, run.runId)).map((row) => [row.id, row] as const),
+    );
+    const T = testTaxonomy();
+    expect(rows.get(await stableId('tp', run.runId, 0))).toMatchObject({
+      kind: 'add-subcategory',
+      change: { parent: findItem(T, 'shelf', 'amplifiers')!.id },
+      status: 'open',
+      summary: 'Add Phono stages under Amplifiers',
+      why: 'Three pages are amplifiers for turntables',
+      base: 1,
+      evidence: {
+        pages: [
+          { address: URLS.a1, title: 'A1 | Maker A', shelf: 'over-ear' },
+          { address: URLS.a2, title: 'A2 | Maker A', shelf: 'on-ear' },
+          { address: URLS.b1, title: 'B1 Amp', shelf: 'headphone-amps' },
+        ],
+      },
+      // Only B1's key covers Amplifiers, so only B1 is decided again, at 640 tokens a page.
+      impact: {
+        pagesToRedecide: 1,
+        moves: [],
+        questions: 0,
+        leaving: 0,
+        tokens: 640,
+        migration: [],
+      },
+    });
+    expect(rows.get(await stableId('tp', run.runId, 1))).toMatchObject({
+      status: 'dropped',
+      dropReason:
+        'It doesn’t apply to version 1: changes.0: DACs has no subcategories yet: its first ones are a split, which is the owner’s.',
+      impact: null,
+    });
+  });
+
+  it('leaves out the pages whose site says ai-input=no', async () => {
+    const routes = {
+      ...standardRoutes(),
+      'https://maker-a.example/robots.txt': {
+        status: 200,
+        body: 'User-agent: *\nContent-Signal: ai-input=no\nAllow: /\n',
+        headers: { 'content-type': 'text/plain' },
+      },
+    };
+    const { world } = await taxonomyWorld(testTaxonomyDefinition('review-consent'), routes);
+    const asked = reviewing(world, []);
+    await refresh(world, 'review-consent');
+    expect(asked).toHaveLength(1);
+    expect(asked[0]).toContain(URLS.b1);
+    for (const text of [URLS.a1, URLS.a2, 'A1 | Maker A', 'A2 | Maker A']) {
+      expect(asked[0]).not.toContain(text);
+    }
+  });
+
+  it('skips the review, and says why, when it may not ask', async () => {
+    const cases: [Definition, { llm?: boolean }, string][] = [
+      [
+        changed('review-budget', (definition) => ({
+          budget: { ...definition.budget, llmTokensPerRun: 0 },
+        })),
+        {},
+        'this run’s LLM budget is spent',
+      ],
+      [
+        changed('review-purpose', (definition) => ({
+          policy: { ...definition.policy, purposes: [] },
+        })),
+        {},
+        'the dataset doesn’t allow AI input',
+      ],
+      [testTaxonomyDefinition('review-model'), { llm: false }, 'no model is configured'],
+    ];
+    for (const [definition, options, reason] of cases) {
+      const { world } = await taxonomyWorld(definition, standardRoutes(), options);
+      const asked = options.llm === false ? [] : reviewing(world, [PHONO]);
+      const run = await refresh(world, definition.dataset);
+      expect(run.summary.taxonomy).toEqual({
+        proposed: 0,
+        dropped: 0,
+        applied: [],
+        inputTokens: 0,
+        outputTokens: 0,
+        skipped: reason,
+      });
+      expect(asked).toEqual([]);
+    }
+  });
+
+  it('notes an answer that doesn’t fit the schema, and proposes nothing', async () => {
+    const { world } = await taxonomyWorld(testTaxonomyDefinition('review-unfit'));
+    reviewing(world, null);
+    const run = await refresh(world, 'review-unfit');
+    expect(run.summary.taxonomy).toEqual({
+      proposed: 0,
+      dropped: 0,
+      applied: [],
+      inputTokens: 2000,
+      outputTokens: 300,
+    });
+    expect(run.summary.notes).toContain(
+      'The taxonomy review’s answer didn’t fit the schema, so it proposed nothing.',
+    );
+  });
+});
