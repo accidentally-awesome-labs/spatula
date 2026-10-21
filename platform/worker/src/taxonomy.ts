@@ -198,26 +198,45 @@ export function placeStands(
   return !now.canAsk || (asked !== undefined && isEmptyParts(asked));
 }
 
+/** What a person last said about a page, read as a taxonomy answer, or null when they said nothing. */
+async function lastAnswer(
+  context: Pick<Context, 'datasetId'>,
+  item: ItemRef,
+  ports: Pick<RefreshPorts, 'withDb'>,
+): Promise<ReturnType<typeof readFinalAnswer>> {
+  const row = await ports.withDb((db) =>
+    latestFinalized(db, { datasetId: context.datasetId, subject: item.id }),
+  );
+  return readFinalAnswer(row?.finalAnswer ?? null);
+}
+
+const isNone = (answer: ReturnType<typeof readFinalAnswer>) => answer?.answer.shelf === NONE_SHELF;
+
 /**
  * Whether a person took the page out: their latest answer about it is "None of these", whether a
  * classification kept it before the taxonomy or a place decision did (ruling 7). It stays out until
- * a person answers again. A page that is live again, as a revived one is, goes back out here, so
- * placing it as an irrelevant page (`irrelevant`) keeps it out and reopens their question when
- * the decider finds it a shelf, rather than publishing it with the decider's.
+ * a person answers again.
+ */
+export async function saidNone(
+  context: Pick<Context, 'datasetId'>,
+  item: ItemRef,
+  ports: Pick<RefreshPorts, 'withDb'>,
+): Promise<boolean> {
+  return isNone(await lastAnswer(context, item, ports));
+}
+
+/**
+ * Whether a person took the page out (`saidNone`), and if so, makes it irrelevant. A page that is
+ * live again, as a revived one is, goes back out here, so placing it as an irrelevant page
+ * (`irrelevant`) keeps it out and reopens their question when the decider finds it a shelf, rather
+ * than publishing it with the decider's.
  */
 export async function keepOut(
   context: Pick<Context, 'datasetId'>,
   item: ItemRef,
   ports: Pick<RefreshPorts, 'withDb'>,
 ): Promise<boolean> {
-  const last = readFinalAnswer(
-    (
-      await ports.withDb((db) =>
-        latestFinalized(db, { datasetId: context.datasetId, subject: item.id }),
-      )
-    )?.finalAnswer ?? null,
-  );
-  if (last?.answer.shelf !== NONE_SHELF) return false;
+  if (!(await saidNone(context, item, ports))) return false;
   await ports.withDb((db) => setItemStatus(db, item.id, 'irrelevant'));
   return true;
 }
@@ -284,11 +303,8 @@ async function placePage(
     state,
   });
   const standing = standingShelf(taxonomy, said);
-  const last = readFinalAnswer(
-    (await ports.withDb((db) => latestFinalized(db, { datasetId, subject: item.id })))
-      ?.finalAnswer ?? null,
-  );
-  const personNone = last?.answer.shelf === NONE_SHELF;
+  const last = await lastAnswer(context, item, ports);
+  const personNone = isNone(last);
   const reopen: Reopen | null =
     standing.retired !== null
       ? {

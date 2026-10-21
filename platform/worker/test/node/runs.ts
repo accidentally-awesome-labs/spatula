@@ -30,12 +30,13 @@ import { fakeStep, makeWorld, type World } from './fakes';
  * One run of the dataset, then five minutes, so the next run gets its own ID. Workflows keep each
  * step's result, so the run keeps them too, for tests that look at what a step returned. A run
  * counts every page as due unless it's told otherwise, so tests that run again five minutes later
- * still see every page read.
+ * still see every page read. A backfill run (`backfill`) only decides again what a taxonomy change
+ * touched (ADR 0008).
  */
 export async function refresh(
   world: World,
   datasetId: string,
-  options: { all?: boolean } = { all: true },
+  options: { all?: boolean; backfill?: boolean } = { all: true },
 ) {
   const runId = runIdFor(datasetId, world.clock.now());
   const { step, names } = fakeStep(world.clock);
@@ -48,7 +49,11 @@ export async function refresh(
       return result;
     },
   };
-  const summary = await runRefresh({ runId, datasetId, all: options.all }, recording, world.ports);
+  const summary = await runRefresh(
+    { runId, datasetId, all: options.all, backfill: options.backfill },
+    recording,
+    world.ports,
+  );
   world.clock.advance(5 * 60_000);
   return { summary, names, runId, results };
 }

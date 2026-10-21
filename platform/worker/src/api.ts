@@ -4,6 +4,7 @@ import {
   DIRECTORY_CONTENT_TYPE,
   DIRECTORY_PATH,
   exportTaxonomy,
+  hasTaxonomy,
   hmacSha256Hex,
   importSigningKey,
   keyDirectory,
@@ -224,6 +225,17 @@ api.post('/datasets/:id/runs', async (c) => {
   if (all !== undefined && all !== '0' && all !== '1') {
     return c.json({ error: 'all is 1 or 0.' }, 400);
   }
+  // A backfill-only run decides again, from captures, what a taxonomy change touched (ADR 0008).
+  const backfill = c.req.query('backfill');
+  if (backfill !== undefined && backfill !== '0' && backfill !== '1') {
+    return c.json({ error: 'backfill is 1 or 0.' }, 400);
+  }
+  if (all === '1' && backfill === '1') {
+    return c.json(
+      { error: 'A backfill run reads no page, so it can’t count every page as due.' },
+      400,
+    );
+  }
   const datasetId = c.req.param('id');
   const now = new Date();
   const runId = runIdFor(datasetId, now);
@@ -236,7 +248,17 @@ api.post('/datasets/:id/runs', async (c) => {
   const started = await withDatabase(c.env, async (db) => {
     // A definition stored by an earlier version that no longer passes the checks throws here, and
     // onError answers it.
-    if ((await getDataset(db, datasetId)) === null) return 'missing' as const;
+    const dataset = await getDataset(db, datasetId);
+    if (dataset === null) return 'missing' as const;
+    // A backfill places pages in the dataset's taxonomy, so the record type must have one, and it
+    // must be seeded. A decided enum isn't a taxonomy.
+    if (
+      backfill === '1' &&
+      (!Object.values(dataset.definition.recordTypes).some(hasTaxonomy) ||
+        (await currentTaxonomy(db, datasetId)) === null)
+    ) {
+      return 'no taxonomy' as const;
+    }
     const first = await startRunAlone(db, { id: runId, datasetId });
     if (!('running' in first)) return first;
     const view = await viewRun(c.env, first.running);
@@ -247,6 +269,9 @@ api.post('/datasets/:id/runs', async (c) => {
     return startRunAlone(db, { id: runId, datasetId });
   });
   if (started === 'missing') return c.json({ error: `Dataset ${datasetId} doesn’t exist.` }, 404);
+  if (started === 'no taxonomy') {
+    return c.json({ error: `${datasetId} has no taxonomy to backfill.` }, 409);
+  }
   if ('running' in started) {
     const going = started.running;
     const since = ago(now.getTime() - Date.parse(going.startedAt));
@@ -260,7 +285,10 @@ api.post('/datasets/:id/runs', async (c) => {
   }
   if (!started.created) return c.json({ error: RUN_SLOT_TAKEN, runId }, 409);
   try {
-    await c.env.REFRESH.create({ id: runId, params: { runId, datasetId, all: all === '1' } });
+    await c.env.REFRESH.create({
+      id: runId,
+      params: { runId, datasetId, all: all === '1', backfill: backfill === '1' },
+    });
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     await withDatabase(c.env, (db) =>

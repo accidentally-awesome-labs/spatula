@@ -22,11 +22,13 @@ export const USAGE = `Usage: spatula <command>
   check <definition.yaml>      Check a definition here, sending nothing
   plan <definition.yaml>       Show what applying it would change
   apply <definition.yaml>      Apply it
-  run <dataset> [--wait] [--all]
+  run <dataset> [--wait] [--all | --backfill]
                                Start a refresh, and wait for it with --wait. A refresh
                                reads the pages that are due; --all counts every live
                                page as due, however recently it was read. The budget
-                               still caps the run
+                               still caps the run. --backfill only decides again, from
+                               their captures, the pages a taxonomy change touched,
+                               and fetches nothing
   revive <dataset> [--refused] [--irrelevant [--from-captures]] [--source <id>]... [<page>...]
                                Put refused pages, irrelevant ones, or the pages named, back
                                for the next run; --from-captures reads an irrelevant page
@@ -59,6 +61,7 @@ const USAGE_LINES = USAGE.split('\n');
 const OPTIONS = {
   wait: { type: 'boolean' },
   all: { type: 'boolean' },
+  backfill: { type: 'boolean' },
   refused: { type: 'boolean' },
   irrelevant: { type: 'boolean' },
   'from-captures': { type: 'boolean' },
@@ -132,8 +135,13 @@ export async function main(
         ? plan(io, client, rest[0]!, { apply: command === 'apply' })
         : usage();
     case 'run':
-      return rest.length === 1
-        ? run(io, client, rest[0]!, { wait: values.wait === true, all: values.all === true })
+      // A backfill run reads no page, so it can't count every page as due.
+      return rest.length === 1 && !(values.all === true && values.backfill === true)
+        ? run(io, client, rest[0]!, {
+            wait: values.wait === true,
+            all: values.all === true,
+            backfill: values.backfill === true,
+          })
         : usage();
     case 'revive': {
       const [datasetId, ...pages] = rest;

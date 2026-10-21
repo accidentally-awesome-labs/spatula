@@ -88,7 +88,8 @@ export interface RunSummary {
   items: number;
   /**
    * The live pages when the run planned, and how many of them were due, counting the page a refused
-   * source was probed with (ADR 0006). Absent in runs from before slice 1.
+   * source was probed with (ADR 0006). Absent in runs from before slice 1, and in a run that only
+   * backfilled (ADR 0008).
    */
   live?: number;
   due?: number;
@@ -141,6 +142,12 @@ export interface RunSummary {
   ruleApart?: string[];
   /** Pages this run found aren't the dataset's ("None of these"). */
   irrelevant?: number;
+  /**
+   * What the run decided again, from captures and with no request, of the pages a taxonomy change
+   * touched (ADR 0008): how many were due, decided, marked for the next run to fetch, and left for
+   * the next run. Absent for a dataset without a taxonomy, and in runs from before backfill.
+   */
+  backfill?: { due: number; decided: number; fetch: number; waiting: number };
   entities: {
     created: number;
     linked: number;

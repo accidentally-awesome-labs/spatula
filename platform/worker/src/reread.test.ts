@@ -318,6 +318,23 @@ describe('reading a page a person took out', { timeout: 20_000 }, () => {
     expect(await listOpenReviews(db, 'reread-none-again')).toEqual([]);
   });
 
+  it('doesn’t count it as taken out again, but counts a page the decider takes out', async () => {
+    const { world, page, pages } = await switched('reread-none-count', URLS.a1);
+    const a2 = pages.find((item) => item.locator === URLS.a2)!;
+    // The decider finds both A1, which a person took out, and A2, which no one did, none of these.
+    world.ports.taxonomyDecider = fakeTaxonomyDecider((request) =>
+      request.evidence.includes(URLS.a1) || request.evidence.includes(URLS.a2)
+        ? { shelves: { none: 0.95 } }
+        : taxonomyFor(request),
+    ).decider;
+    const second = await refresh(world, 'reread-none-count', {});
+    expect(second.names).toEqual(expect.arrayContaining([`decide:${page.id}`, `decide:${a2.id}`]));
+    expect(await statusOf(page.id)).toBe('irrelevant');
+    expect(await statusOf(a2.id)).toBe('irrelevant');
+    // A1 was out already: only A2 is a page this run found isn't the dataset's.
+    expect(second.summary.irrelevant).toBe(1);
+  });
+
   it('keeps it out and reopens its question when it is fetched instead', async () => {
     const { world, page } = await switched('reread-none-fetched', URLS.a1);
     // --all fetches every page, a revived one included.

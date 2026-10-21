@@ -162,6 +162,15 @@ export function formatRun(run: RunView): string[] {
       `Not the dataset’s: ${irrelevant} ${irrelevant === 1 ? 'page' : 'pages'}, out until revived.`,
     );
   }
+  // What the run decided again of the pages a taxonomy change touched (ADR 0008).
+  const backfill = summary.backfill;
+  if (backfill !== undefined) {
+    lines.push(
+      backfill.due === 0
+        ? 'Backfill: nothing to decide again.'
+        : `Backfill: ${backfill.decided} of ${backfill.due} ${backfill.due === 1 ? 'page' : 'pages'} decided again, ${backfill.fetch} marked to be fetched, ${backfill.waiting} left for the next run.`,
+    );
+  }
   lines.push(
     `Entities: ${entities.created} new, ${entities.linked} linked, ${entities.conflicts} conflicts, ${entities.unresolved} without an identity yet${(entities.waiting ?? 0) > 0 ? `, ${entities.waiting} waiting for a match answer` : ''}.`,
     snapshot.published

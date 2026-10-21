@@ -15,6 +15,8 @@ import {
   sha256Hex,
   sourceVerdict,
   stableId,
+  stateHash,
+  taxonomyKeys,
   type ContentSignals,
   type Definition,
   type LlmUsage,
@@ -47,6 +49,8 @@ import {
   resolveEntities,
   sourceStates,
   startRun,
+  taxonomyItemsByIds,
+  taxonomyPages,
   writeStatements,
   type CaptureRow,
   type Executor,
@@ -54,6 +58,7 @@ import {
   type ItemRef,
   type StatementCounts,
 } from '@spatula/store';
+import { backfillPage } from './backfill';
 import { cleanUpCaptures, readPageBody, storeBody, storeRead } from './captures';
 import {
   cascadeField,
@@ -78,7 +83,7 @@ import {
   type StepRunner,
 } from './pipeline';
 import { publish } from './publish';
-import { decideTaxonomy, keepOut, taxonomyTarget } from './taxonomy';
+import { decideTaxonomy, keepOut, runTaxonomy, taxonomyTarget } from './taxonomy';
 import { isChallenge, MAX_WAITS, requestThroughGate, siteAnswerOf, type Resume } from './requests';
 import { storable } from './text';
 
@@ -119,6 +124,12 @@ export interface RefreshParams {
   datasetId: string;
   /** Treat every live page as due, however recently it was read. The budget still applies. */
   all?: boolean;
+  /**
+   * Only backfill (ADR 0008): decide again, from their captures, the pages a taxonomy change
+   * touched. The run discovers, probes, plans, and fetches nothing, and counts no source's
+   * verdict; it resolves and publishes as usual.
+   */
+  backfill?: boolean;
 }
 
 export const MAX_NOTES = 50;
@@ -250,6 +261,8 @@ export async function runRefresh(
   ports: RefreshPorts,
 ): Promise<RunSummary> {
   const { runId, datasetId } = params;
+  // A backfill-only run reads no page: it asks no site anything (ADR 0008).
+  const backfillOnly = params.backfill === true;
   try {
     const loaded = await step.do<Loaded>('load', () =>
       ports.withDb(async (db) => {
@@ -282,6 +295,13 @@ export async function runRefresh(
           ports.withDb(async (db) => (await currentTaxonomy(db, datasetId))?.version ?? null),
         )
       : null;
+    // Whether the dataset has a taxonomy to place pages in, and a version of it. `taxonomyVersion` is
+    // null for a record type without one as it is for one not seeded, so the record type is asked.
+    const backfilling = placing && taxonomyVersion !== null;
+    if (backfillOnly && !backfilling) {
+      // The API refuses these runs too (409), so this is a dataset changed since.
+      throw new Error(`${datasetId} has no taxonomy to backfill`);
+    }
     const context: Context = {
       runId,
       datasetId,
@@ -311,7 +331,7 @@ export async function runRefresh(
     const isRefused = (sourceId: string) => context.standing?.[sourceId]?.refused === true;
 
     for (const source of context.definition.sources) {
-      if (source.kind !== 'sitemap') continue;
+      if (backfillOnly || source.kind !== 'sitemap') continue;
       const probe = isRefused(source.id);
       const found = await discoverSource(context, source, step, ports, { probe });
       for (const site of found.sites) heard(source.id, site);
@@ -335,7 +355,7 @@ export async function runRefresh(
     // A refused pages source is probed with its least recently read page.
     const probedPages = new Set<string>();
     for (const source of context.definition.sources) {
-      if (source.kind !== 'pages' || !isRefused(source.id)) continue;
+      if (backfillOnly || source.kind !== 'pages' || !isRefused(source.id)) continue;
       const item = await step.do(`probe:${source.id}`, () =>
         ports.withDb((db) => probeItem(db, { datasetId, sourceId: source.id })),
       );
@@ -356,18 +376,21 @@ export async function runRefresh(
       );
     }
 
-    const plan = await step.do('plan', () =>
-      ports.withDb((db) =>
-        dueItems(db, {
-          datasetId,
-          now: context.startedAt,
-          maxAgeDays: context.definition.freshness.maxAgeDays,
-          current: extractionTag(context.revision),
-          limit: context.definition.budget.itemsPerRun,
-          all: params.all === true,
-        }),
-      ),
-    );
+    // A backfill-only run has no plan.
+    const plan: Awaited<ReturnType<typeof dueItems>> = backfillOnly
+      ? { ids: [], due: 0, live: 0, reread: [] }
+      : await step.do('plan', () =>
+          ports.withDb((db) =>
+            dueItems(db, {
+              datasetId,
+              now: context.startedAt,
+              maxAgeDays: context.definition.freshness.maxAgeDays,
+              current: extractionTag(context.revision),
+              limit: context.definition.budget.itemsPerRun,
+              all: params.all === true,
+            }),
+          ),
+        );
     summary.live = plan.live;
     // A plan kept by an earlier version has no pages to read again: they are fetched.
     const rereading = new Set(plan.reread ?? []);
@@ -453,6 +476,16 @@ export async function runRefresh(
       );
     }
 
+    // The pages a taxonomy change touched are decided again from their captures (ADR 0008),
+    // before resolution, so this run's snapshot carries them.
+    if (backfilling) summary.backfill = await backfill(context, summary, step, ports);
+    // A backfill-only run planned nothing, so it says nothing of what was live, due, or paused.
+    if (backfillOnly) {
+      delete summary.live;
+      delete summary.due;
+      delete summary.paused;
+    }
+
     // The run's verdict for each source, counted across runs (ADR 0006). A refused source whose
     // probe didn't get through counts no blocked run: what its probe met is kept as the probe's.
     // Counting a blocked source also takes back this run's blocks on its pages, which would count
@@ -469,11 +502,14 @@ export async function runRefresh(
         verdicts[source.id] = sourceVerdict(answers.get(source.id) ?? []);
       }
     }
-    const counted = await step.do('sources', () =>
-      ports.withDb((db) =>
-        recordSourceRuns(db, { datasetId, at: context.startedAt, verdicts, probes }),
-      ),
-    );
+    // A backfill-only run asked no site anything, so it has no verdict to count.
+    const counted: Awaited<ReturnType<typeof recordSourceRuns>> = backfillOnly
+      ? { blocked: [], refused: [] }
+      : await step.do('sources', () =>
+          ports.withDb((db) =>
+            recordSourceRuns(db, { datasetId, at: context.startedAt, verdicts, probes }),
+          ),
+        );
     const probedOutcomes = [...probed.keys()].map((id) => ({
       id,
       outcome: probes[id] ?? ('through' as const),
@@ -712,10 +748,16 @@ async function readItem(
       // A page a person took out stays out when it is revived and read again (ruling 7), so it's
       // placed as the irrelevant page it is.
       const keptOut = await keepOut(context, item, ports);
-      return decideTaxonomy(context, item, fetched, budgetLeft(context, summary), ports, {
-        extractionComplete: complete,
-        ...(keptOut ? { irrelevant: true } : {}),
-      });
+      const decided = await decideTaxonomy(
+        context,
+        item,
+        fetched,
+        budgetLeft(context, summary),
+        ports,
+        { extractionComplete: complete, ...(keptOut ? { irrelevant: true } : {}) },
+      );
+      // A page that was out and stays out isn't found out again, as a backfill counts it.
+      return keptOut ? { ...decided, irrelevant: false } : decided;
     });
     waitsForBudget = countDecision(summary, placed) || waitsForBudget;
   }
@@ -734,6 +776,51 @@ function countDecision(summary: RunSummary, decided: Classified): boolean {
   if (decided.irrelevant) summary.irrelevant = (summary.irrelevant ?? 0) + 1;
   if (decided.note !== null) note(summary, decided.note);
   return decided.outcome === 'skipped';
+}
+
+/**
+ * Decides again, from their captures, the pages a taxonomy change touched (ADR 0008): at most the
+ * pages the run's item budget has left, which keeps the run within Workflows' steps (ADR 0005), and
+ * while its LLM budget lasts. The pages are planned in a step, loaded in steps of 50, and decided
+ * each in its own step. Those left wait for the next run.
+ */
+async function backfill(
+  context: Context,
+  summary: RunSummary,
+  step: StepRunner,
+  ports: RefreshPorts,
+): Promise<NonNullable<RunSummary['backfill']>> {
+  const limit = Math.max(0, context.definition.budget.itemsPerRun - summary.items);
+  const planned = await step.do<{ ids: string[]; due: number }>('backfill:plan', async () => {
+    const taxonomy = await runTaxonomy(context, ports);
+    if (taxonomy === null) return { ids: [], due: 0 };
+    // The keys a page can have now. A page whose key is none of them was asked another question.
+    const keys = await Promise.all(taxonomyKeys(taxonomy).map((key) => stateHash(key)));
+    return ports.withDb((db) => taxonomyPages(db, { datasetId: context.datasetId, keys, limit }));
+  });
+  let decided = 0;
+  let toFetch = 0;
+  for (
+    let start = 0;
+    start < planned.ids.length && budgetLeft(context, summary) > 0;
+    start += ITEMS_PER_STEP
+  ) {
+    const batch = await step.do(`backfill:items:${start}`, () =>
+      ports.withDb((db) =>
+        taxonomyItemsByIds(db, planned.ids.slice(start, start + ITEMS_PER_STEP)),
+      ),
+    );
+    for (const item of batch) {
+      if (budgetLeft(context, summary) <= 0) break;
+      const done = await step.do(`backfill:${item.id}`, () =>
+        backfillPage(context, item, budgetLeft(context, summary), ports),
+      );
+      if (done.classified !== undefined) countDecision(summary, done.classified);
+      if (done.outcome === 'decided') decided += 1;
+      if (done.outcome === 'fetch') toFetch += 1;
+    }
+  }
+  return { due: planned.due, decided, fetch: toFetch, waiting: planned.due - decided - toFetch };
 }
 
 /**

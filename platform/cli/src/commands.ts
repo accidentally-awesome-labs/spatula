@@ -108,10 +108,13 @@ export async function run(
   io: Io,
   client: Client,
   datasetId: string,
-  options: { wait: boolean; all: boolean },
+  options: { wait: boolean; all: boolean; backfill?: boolean },
 ): Promise<number> {
   return withApi(io, async () => {
-    const { runId, existing, message } = await client.startRun(datasetId, { all: options.all });
+    const { runId, existing, message } = await client.startRun(datasetId, {
+      all: options.all,
+      backfill: options.backfill === true,
+    });
     // The API names a run of an earlier slot that is still going in its own words. The run asked
     // for never started, so this is a refusal, and the other run is not followed: a script that
     // waits for this run would go on to use the result of one that isn't it. The slot's sentence is

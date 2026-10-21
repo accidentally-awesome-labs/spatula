@@ -1,5 +1,5 @@
 import { newId, type Outcome } from '@spatula/core';
-import { and, eq, inArray, isNull, lt, or, sql } from 'drizzle-orm';
+import { and, count, eq, inArray, isNotNull, isNull, lt, notInArray, or, sql } from 'drizzle-orm';
 import type { Executor } from './client';
 import type { ItemRef } from './datasets';
 import { captures, fetches, items, sources } from './schema';
@@ -272,25 +272,100 @@ export async function dueItems(
   };
 }
 
+/** What a run reads of an item: its `ItemRef`. */
+const ITEM_REF = {
+  id: items.id,
+  sourceId: items.sourceId,
+  recordType: items.recordType,
+  locator: items.locator,
+  etag: items.etag,
+  lastModified: items.lastModified,
+  contentHash: items.contentHash,
+  extractInputHash: items.extractInputHash,
+  extractedWith: items.extractedWith,
+};
+
 /** The live items with these IDs, in the order asked. */
 export async function itemsByIds(db: Executor, ids: string[]): Promise<ItemRef[]> {
   if (ids.length === 0) return [];
   const rows = await db
-    .select({
-      id: items.id,
-      sourceId: items.sourceId,
-      recordType: items.recordType,
-      locator: items.locator,
-      etag: items.etag,
-      lastModified: items.lastModified,
-      contentHash: items.contentHash,
-      extractInputHash: items.extractInputHash,
-      extractedWith: items.extractedWith,
-    })
+    .select(ITEM_REF)
     .from(items)
     .where(and(inArray(items.id, ids), eq(items.status, 'live')));
   const byId = new Map(rows.map((row) => [row.id, row]));
   return ids.flatMap((id) => byId.get(id) ?? []);
+}
+
+/**
+ * The pages a taxonomy change touched (ADR 0008), at most `limit`, and how many there are. `keys`
+ * are the hashes of the keys a page can have under the taxonomy now (ADR 0007). A live page is
+ * touched when its key isn't one of them; one never decided under the taxonomy has no key, and
+ * waits for its own read. A page out of the dataset is touched when its key isn't one of them, or
+ * when it has none: it went out before the taxonomy. Live pages come first, then by source and
+ * address.
+ */
+export async function taxonomyPages(
+  db: Executor,
+  input: { datasetId: string; keys: string[]; limit: number },
+): Promise<{ ids: string[]; due: number }> {
+  const touched = and(
+    eq(items.datasetId, input.datasetId),
+    or(
+      and(
+        eq(items.status, 'live'),
+        isNotNull(items.taxonomyKey),
+        notInArray(items.taxonomyKey, input.keys),
+      ),
+      and(
+        eq(items.status, 'irrelevant'),
+        or(isNull(items.taxonomyKey), notInArray(items.taxonomyKey, input.keys)),
+      ),
+    ),
+  );
+  const [counted] = await db.select({ due: count() }).from(items).where(touched);
+  const rows = await db
+    .select({ id: items.id })
+    .from(items)
+    .where(touched)
+    .orderBy(sql`${items.status} = 'irrelevant'`, items.sourceId, items.locator)
+    .limit(input.limit);
+  return { ids: rows.map((row) => row.id), due: counted?.due ?? 0 };
+}
+
+/** The pages with these IDs that a backfill decides again, live or out, in the order asked. */
+export async function taxonomyItemsByIds(
+  db: Executor,
+  ids: string[],
+): Promise<(ItemRef & { status: 'live' | 'irrelevant' })[]> {
+  if (ids.length === 0) return [];
+  const rows = await db
+    .select({ ...ITEM_REF, status: items.status })
+    .from(items)
+    .where(and(inArray(items.id, ids), inArray(items.status, ['live', 'irrelevant'])));
+  const byId = new Map(rows.map((row) => [row.id, row]));
+  return ids.flatMap((id) => {
+    const row = byId.get(id);
+    return row === undefined ? [] : [{ ...row, status: row.status as 'live' | 'irrelevant' }];
+  });
+}
+
+/**
+ * Marks pages for the next run to fetch, as a backfill does with a page it has no capture of
+ * (ADR 0008): the extraction mark is cleared, so the page is due, and a page out of the dataset is
+ * live again, so the run reads it and decides it anew. A page gone, refused, or excluded is left
+ * alone. Returns how many were marked.
+ */
+export async function markForFetch(db: Executor, ids: readonly string[]): Promise<number> {
+  if (ids.length === 0) return 0;
+  const marked = await db
+    .update(items)
+    .set({
+      extractedWith: null,
+      status: sql`case when ${items.status} = 'irrelevant' then 'live' else ${items.status} end`,
+    })
+    .where(and(inArray(items.id, [...ids]), inArray(items.status, ['live', 'irrelevant'])))
+    .returning({ id: items.id });
+  return marked.length;
 }
 
 export interface SitemapFetchInput {

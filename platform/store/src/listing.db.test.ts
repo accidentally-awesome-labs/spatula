@@ -5,18 +5,22 @@ import { T } from '../test/seed';
 import { recordCapture } from './captures';
 import type { Executor } from './client';
 import { applyDefinition, listLiveItems, reviveItems, type ItemRef } from './datasets';
-import { recordFetch } from './fetches';
-import { testSitemapDefinition } from './fixtures';
+import { recordFetch, setExtractedWith, setItemStatus } from './fetches';
+import { testSitemapDefinition, testTaxonomyDefinition } from './fixtures';
 import {
   dueItems,
   finishListing,
   itemsByIds,
   listPages,
+  markForFetch,
   MISSING_GONE_AFTER,
   recordSitemapFetch,
+  taxonomyItemsByIds,
+  taxonomyPages,
 } from './listing';
 import { startRun } from './runs';
 import { fetches, items } from './schema';
+import { setTaxonomyKey } from './taxonomy';
 
 const DATASET = 'test-sitemaps';
 const RUN = 'test-sitemaps-202610100000';
@@ -552,6 +556,58 @@ describe('itemsByIds', () => {
       await tx.update(items).set({ status: 'refused' }).where(eq(items.id, c1!.id));
       const loaded = await itemsByIds(tx, [c2!.id, c1!.id, live[0]!.id]);
       expect(loaded.map((item) => item.id)).toEqual([c2!.id, live[0]!.id]);
+    }));
+});
+
+describe('taxonomyPages, taxonomyItemsByIds, and markForFetch', () => {
+  it('plan the pages a taxonomy change touched, live ones first, and mark them to be fetched', () =>
+    withRollback(async (tx) => {
+      await applyDefinition(tx, testTaxonomyDefinition('backfill-plan'));
+      const [a1, a2, b1] = await listLiveItems(tx, 'backfill-plan');
+      const plan = (keys: string[], limit = 10) =>
+        taxonomyPages(tx, { datasetId: 'backfill-plan', keys, limit });
+      // A live page never decided under the taxonomy waits for its own read.
+      expect(await plan(['key-none'])).toEqual({ ids: [], due: 0 });
+
+      // A1 was decided under a key the taxonomy no longer has. A2 was taken out under a key it
+      // still has, and B1 before the taxonomy, with no key.
+      await setTaxonomyKey(tx, a1!.id, 'key-old');
+      await setTaxonomyKey(tx, a2!.id, 'key-now');
+      await setItemStatus(tx, a2!.id, 'irrelevant');
+      await setItemStatus(tx, b1!.id, 'irrelevant');
+      expect(await plan(['key-none', 'key-now'])).toEqual({ ids: [a1!.id, b1!.id], due: 2 });
+      // A change to A2's key too: live pages come first, then by source and address.
+      expect(await plan(['key-none'])).toEqual({ ids: [a1!.id, a2!.id, b1!.id], due: 3 });
+      expect(await plan(['key-none'], 1)).toEqual({ ids: [a1!.id], due: 3 });
+      // A run whose item budget the pages used up plans none, and still says how many wait.
+      expect(await plan(['key-none'], 0)).toEqual({ ids: [], due: 3 });
+      expect(
+        (await taxonomyItemsByIds(tx, [b1!.id, a1!.id])).map((item) => [item.id, item.status]),
+      ).toEqual([
+        [b1!.id, 'irrelevant'],
+        [a1!.id, 'live'],
+      ]);
+
+      // Marked to be fetched, B1 is live again, and neither page is current.
+      await setExtractedWith(tx, a1!.id, 'r1.v1');
+      await setExtractedWith(tx, b1!.id, 'r1.v1');
+      expect(await markForFetch(tx, [a1!.id, b1!.id])).toBe(2);
+      expect(
+        await tx
+          .select({ id: items.id, status: items.status, extractedWith: items.extractedWith })
+          .from(items)
+          .where(inArray(items.id, [a1!.id, b1!.id]))
+          .orderBy(items.locator),
+      ).toEqual([
+        { id: a1!.id, status: 'live', extractedWith: null },
+        { id: b1!.id, status: 'live', extractedWith: null },
+      ]);
+
+      // A page that's gone is neither planned, loaded, nor marked.
+      await setItemStatus(tx, a2!.id, 'gone');
+      expect(await plan(['key-none'])).toEqual({ ids: [a1!.id], due: 1 });
+      expect(await taxonomyItemsByIds(tx, [a2!.id])).toEqual([]);
+      expect(await markForFetch(tx, [a2!.id])).toBe(0);
     }));
 });
 

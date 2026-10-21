@@ -112,11 +112,14 @@ export function createClient(options: {
      */
     async startRun(
       datasetId: string,
-      options: { all?: boolean } = {},
+      options: { all?: boolean; backfill?: boolean } = {},
     ): Promise<{ runId: string; existing: boolean; message: string | null }> {
+      // A backfill run reads no page, so the API takes one flag or the other.
+      const query =
+        options.backfill === true ? '?backfill=1' : options.all === true ? '?all=1' : '';
       const response = await request(
         'POST',
-        `/datasets/${encodeURIComponent(datasetId)}/runs${options.all === true ? '?all=1' : ''}`,
+        `/datasets/${encodeURIComponent(datasetId)}/runs${query}`,
       );
       const answer = await json(response);
       if (

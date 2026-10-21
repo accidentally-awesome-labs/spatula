@@ -97,3 +97,77 @@ describe('POST /datasets/:id/taxonomy', () => {
     expect(seeded.status).toBe(201);
   });
 });
+
+/** Bindings whose Workflow binding only records the runs it's asked to create. */
+function recordingRuns(): { bindings: Env; created: { params: unknown }[] } {
+  const created: { params: unknown }[] = [];
+  const bindings = {
+    ...env,
+    REFRESH: {
+      create: async (options: { params: unknown }) => {
+        created.push(options);
+      },
+    },
+  } as unknown as Env;
+  return { bindings, created };
+}
+
+describe('POST /datasets/:id/runs?backfill=1', () => {
+  it('starts a run that only backfills, for a dataset with a taxonomy', async () => {
+    const { bindings, created } = recordingRuns();
+    // Each in its own dataset: a second run of one in the same five-minute slot is refused.
+    for (const [dataset, query] of [
+      ['backfill-on', '?backfill=1'],
+      ['backfill-off', '?backfill=0'],
+    ] as const) {
+      await ready(dataset);
+      expect(
+        (await call('POST', `/datasets/${dataset}/taxonomy`, { body: testTaxonomySeed() })).status,
+      ).toBe(201);
+      expect((await call('POST', `/datasets/${dataset}/runs${query}`, { bindings })).status).toBe(
+        202,
+      );
+    }
+    expect(created.map(({ params }) => params)).toMatchObject([
+      { datasetId: 'backfill-on', all: false, backfill: true },
+      { datasetId: 'backfill-off', all: false, backfill: false },
+    ]);
+  });
+
+  it('refuses a backfill with no taxonomy to backfill, a flag that isn’t 1 or 0, and one with all', async () => {
+    const { bindings, created } = recordingRuns();
+    await ready('backfill-unseeded');
+    const unseeded = await call('POST', '/datasets/backfill-unseeded/runs?backfill=1', {
+      bindings,
+    });
+    expect(unseeded.status).toBe(409);
+    expectNoStore(unseeded);
+    expect(await unseeded.json()).toEqual({
+      error: 'backfill-unseeded has no taxonomy to backfill.',
+    });
+    // A decided enum isn't a taxonomy, whether or not one was seeded for it.
+    await withDatabase(env, (db) => applyDefinition(db, testDefinition('backfill-enum')));
+    expect(
+      (await call('POST', '/datasets/backfill-enum/runs?backfill=1', { bindings })).status,
+    ).toBe(409);
+    expect(
+      (await call('POST', '/datasets/backfill-enum/taxonomy', { body: testTaxonomySeed() })).status,
+    ).toBe(201);
+    const seededEnum = await call('POST', '/datasets/backfill-enum/runs?backfill=1', { bindings });
+    expect(seededEnum.status).toBe(409);
+    expect(await seededEnum.json()).toEqual({
+      error: 'backfill-enum has no taxonomy to backfill.',
+    });
+    const flag = await call('POST', '/datasets/backfill-unseeded/runs?backfill=yes', { bindings });
+    expect(flag.status).toBe(400);
+    expect(await flag.json()).toEqual({ error: 'backfill is 1 or 0.' });
+    const both = await call('POST', '/datasets/backfill-unseeded/runs?all=1&backfill=1', {
+      bindings,
+    });
+    expect(both.status).toBe(400);
+    expect(await both.json()).toEqual({
+      error: 'A backfill run reads no page, so it can’t count every page as due.',
+    });
+    expect(created).toEqual([]);
+  });
+});

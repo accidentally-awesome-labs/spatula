@@ -572,6 +572,63 @@ describe('run', () => {
     }
   });
 
+  it('starts a run that only backfills with --backfill, and says what it decided again', async () => {
+    const printed = async (backfill: RunSummary['backfill']) => {
+      const complete: RunView = {
+        ...RUNNING,
+        status: 'complete',
+        summary: {
+          items: 0,
+          fetches: { changed: 0, unchanged: 0, gone: 0, failed: 0, blocked: 0 },
+          statements: { added: 0, reseen: 0, withdrawn: 0 },
+          llm: { ran: 0, reused: 0, skipped: 0, failed: 0, inputTokens: 0, outputTokens: 0 },
+          ...(backfill === undefined ? {} : { backfill }),
+          entities: { created: 0, linked: 0, conflicts: 0, unresolved: 0 },
+          snapshot: {
+            published: false,
+            reason: 'nothing changed since generation 2',
+            excluded: [],
+          },
+          notes: [],
+        },
+      };
+      const { fetch, sent } = stubApi(({ method }) =>
+        method === 'POST'
+          ? Response.json({ runId: RUN_ID }, { status: 202 })
+          : Response.json(complete),
+      );
+      const { io, out } = memoryIo();
+      expect(
+        await main(['run', 'cli-products', '--backfill', '--wait'], { io, env: ENV, fetch }),
+      ).toBe(0);
+      expect(sent[0]!.path).toBe('/datasets/cli-products/runs?backfill=1');
+      return out;
+    };
+
+    expect(await printed({ due: 9, decided: 5, fetch: 1, waiting: 3 })).toContain(
+      'Backfill: 5 of 9 pages decided again, 1 marked to be fetched, 3 left for the next run.',
+    );
+    expect(await printed({ due: 1, decided: 1, fetch: 0, waiting: 0 })).toContain(
+      'Backfill: 1 of 1 page decided again, 0 marked to be fetched, 0 left for the next run.',
+    );
+    expect(await printed({ due: 0, decided: 0, fetch: 0, waiting: 0 })).toContain(
+      'Backfill: nothing to decide again.',
+    );
+    // A dataset without a taxonomy, or a Worker before backfill, says nothing of it.
+    expect((await printed(undefined)).some((line) => line.startsWith('Backfill:'))).toBe(false);
+  });
+
+  it('takes --all or --backfill, not both, and sends nothing', async () => {
+    const { fetch, sent } = stubApi(() => {
+      throw new Error('nothing is sent');
+    });
+    const { io } = memoryIo();
+    expect(
+      await main(['run', 'cli-products', '--all', '--backfill'], { io, env: ENV, fetch }),
+    ).toBe(2);
+    expect(sent).toHaveLength(0);
+  });
+
   it('says what the sitemaps listed, and which sources weren’t read completely', async () => {
     const complete: RunView = {
       ...RUNNING,
