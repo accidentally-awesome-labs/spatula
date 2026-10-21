@@ -66,8 +66,10 @@ import {
   type ActorApi,
 } from './actors';
 import { r2Blobs } from './blobs';
+import { captureRoutes } from './capture-api';
 import { rawPageKey } from './captures';
 import { consumerSecret, secret, verifiedBot } from './config';
+import { consolePages } from './console/routes';
 import { withDatabase } from './database';
 import { pageKey } from './pipeline';
 import { proposalRoutes } from './proposal-api';
@@ -134,13 +136,13 @@ const owner: MiddlewareHandler<Api> = async (c, next) => {
  * The routes a consumer may call as well as the owner: reading a dataset's snapshots, and
  * acknowledging them; and the review API's, the taxonomy's, and the proposals' and autonomy's,
  * which check the token themselves (bearerActor), and answer a consumer with a 403 on the owner's
- * among them: suggestions, the log, seeding, versions, undo, and autonomy. Every other route under
- * /datasets is the owner's alone, including any added later, so a new route can't be left open by
- * mistake. A route is a method and a path, so one added later at the same path with another method
- * is the owner's too, and so is one added later at a path of the snapshot route's shape: the
- * pattern is the snapshot route's own forms, `latest` and a generation of up to nine digits from 1
- * (see the route, which answers any other with a 400). An answer's path takes a question's ID,
- * which starts `rv_`, and a decision's a proposal's, which starts `tp_`.
+ * among them: suggestions, the log, seeding, versions, undo, autonomy, and a capture. Every other
+ * route under /datasets is the owner's alone, including any added later, so a new route can't be
+ * left open by mistake. A route is a method and a path, so one added later at the same path with
+ * another method is the owner's too, and so is one added later at a path of the snapshot route's
+ * shape: the pattern is the snapshot route's own forms, `latest` and a generation of up to nine
+ * digits from 1 (see the route, which answers any other with a 400). An answer's path takes a
+ * question's ID, which starts `rv_`, and a decision's a proposal's, which starts `tp_`.
  */
 const CONSUMER_ROUTES = [
   { method: 'GET', path: /^\/datasets\/[^/]+\/snapshots\/(?:latest|[1-9]\d{0,8})$/u },
@@ -159,6 +161,11 @@ const CONSUMER_ROUTES = [
   { method: 'POST', path: /^\/datasets\/[^/]+\/taxonomy\/versions\/[1-9]\d{0,8}\/undo$/u },
   { method: 'GET', path: /^\/datasets\/[^/]+\/autonomy$/u },
   { method: 'POST', path: /^\/datasets\/[^/]+\/autonomy\/[a-z-]{1,40}\/revoke$/u },
+  // The owner's capture route, listed so a consumer's token reaches ownerOnly and gets its 403,
+  // not the owner check's 401 (Review Focus 3). The path is under ACTOR_PATHS, so bearerActor
+  // answers a request without a token or with a wrong one. Plan 1's POST …/captures/purge is not
+  // listed: it stays behind the owner check.
+  { method: 'GET', path: /^\/datasets\/[^/]+\/captures\/[^/]+$/u },
 ];
 
 api.use('/datasets/*', async (c, next) =>
@@ -769,6 +776,8 @@ const ACTOR_PATHS = [
   '/datasets/:id/taxonomy/*',
   '/datasets/:id/proposals/*',
   '/datasets/:id/autonomy/*',
+  // The owner's capture route (ruling 27). Without this, a request to it carries no actor.
+  '/datasets/:id/captures/*',
 ];
 for (const path of ACTOR_PATHS) bearerApi.use(path, bearerActor);
 
@@ -859,6 +868,7 @@ bearerApi.post(
 
 reviewRoutes(bearerApi);
 proposalRoutes(bearerApi);
+captureRoutes(bearerApi);
 
 // Hono copies a sub-app's routes when it's mounted, so every route of bearerApi is registered
 // above this line.
@@ -875,9 +885,14 @@ consoleApi.get('/datasets', async (c) =>
 );
 reviewRoutes(consoleApi);
 proposalRoutes(consoleApi);
+captureRoutes(consoleApi);
 
 // As with bearerApi, every route of consoleApi is registered above this line.
 api.route('/console/api', consoleApi);
+
+// The console's own files (ADR 0009). Each of their routes names accessActor, rather than this
+// mount using it for all of /console/*, which would check every console API request twice.
+api.route('/console', consolePages);
 
 // These two answer whatever the path, including ones outside the owner routes, which set the
 // header themselves.
