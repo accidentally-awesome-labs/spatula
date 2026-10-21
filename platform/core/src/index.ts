@@ -29,3 +29,4 @@ export * from './match-evidence';
 export * from './golden';
 export * from './taxonomy';
 export * from './taxonomy-changes';
+export * from './taxonomy-decision';
