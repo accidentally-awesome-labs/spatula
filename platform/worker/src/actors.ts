@@ -159,14 +159,15 @@ export const ownerOnly: MiddlewareHandler<ActorApi> = async (c, next) => {
 };
 
 /**
- * A write the limiter counts (ruling 15): REVIEW_LIMITER takes 120 a minute from the owner, and
- * from each of a consumer's reviewers. A bulk request is one write.
+ * A write the limiters count (ruling 15): REVIEW_LIMITER takes 120 a minute from the owner, and
+ * from each of a consumer's reviewers; CONSUMER_REVIEW_LIMITER takes 240 a minute from each
+ * consumer's reviewers together. A consumer names its reviewers itself, so the consumer's count
+ * comes first: a reviewer it names anew gets a fresh 120 of their own, but no more of the 240. A
+ * bulk request is one write.
  */
 export const limited: MiddlewareHandler<ActorApi> = async (c, next) => {
   const actor = c.get('actor');
-  const key = actor.role === 'owner' ? 'owner' : `${actor.consumer ?? ''}:${actor.reviewer ?? ''}`;
-  const { success } = await c.env.REVIEW_LIMITER.limit({ key });
-  if (!success) {
+  if (!(await withinLimits(c.env, actor))) {
     c.header('retry-after', '60');
     return c.json(
       {
@@ -178,3 +179,12 @@ export const limited: MiddlewareHandler<ActorApi> = async (c, next) => {
   }
   return next();
 };
+
+/** Whether the limiters take one more write from this caller (see limited). */
+async function withinLimits(env: Env, actor: Actor): Promise<boolean> {
+  if (actor.role === 'owner') return (await env.REVIEW_LIMITER.limit({ key: 'owner' })).success;
+  const consumer = actor.consumer ?? '';
+  if (!(await env.CONSUMER_REVIEW_LIMITER.limit({ key: consumer })).success) return false;
+  const reviewer = `${consumer}:${actor.reviewer ?? ''}`;
+  return (await env.REVIEW_LIMITER.limit({ key: reviewer })).success;
+}

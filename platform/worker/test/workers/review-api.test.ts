@@ -24,6 +24,8 @@ const NO_SCOPE = 'This needs the review:answer scope, which the owner hasn’t g
 const NO_REVIEWER =
   'Name the person answering in X-Spatula-Reviewer: 1 to 128 letters, digits, dots, underscores, colons, at signs, and hyphens.';
 const OWNERS = 'Only the owner can do this.';
+const LIMITED =
+  'That’s more writes this minute than the review API takes. Wait a minute, then send the rest.';
 
 describe('the review API', () => {
   it('still answers the review routes an older CLI calls', async () => {
@@ -400,5 +402,63 @@ describe('the review API', () => {
     expect(await withDatabase(env, (db) => heldSnapshot(db, datasetId))).toMatchObject({
       id: `sn_${datasetId}`,
     });
+  });
+
+  it('limits a consumer’s reviewers together too, so a reviewer it names anew gets no more room', async () => {
+    const datasetId = 'rv-limits-consumer';
+    await questionsIn(datasetId);
+    const { match0, match1, classify } = questions(datasetId);
+    // A limiter that takes this many writes a key, and records whose they were.
+    const perKey = (limit: number) => {
+      const keys: string[] = [];
+      const limiter: RateLimit = {
+        limit: ({ key }) => {
+          keys.push(key);
+          return Promise.resolve({ success: keys.filter((one) => one === key).length <= limit });
+        },
+      };
+      return { limiter, keys };
+    };
+    const reviewers = perKey(120);
+    const consumers = perKey(2);
+    const bindings = {
+      ...(await reviewerBindings()),
+      REVIEW_LIMITER: reviewers.limiter,
+      CONSUMER_REVIEW_LIMITER: consumers.limiter,
+    } as Env;
+    const asCrowdio = (reviewer: string, path: string, body: unknown) =>
+      call('POST', `/datasets/${datasetId}/review/${path}`, {
+        token: CONSUMER_TOKEN,
+        bindings,
+        headers: { 'x-spatula-reviewer': reviewer },
+        body,
+      });
+
+    // Each write names a reviewer anew, whose own bucket has room, but the consumer's fills.
+    expect((await asCrowdio('reviewer-1', classify, { answer: 'Headphones' })).status).toBe(200);
+    expect((await asCrowdio('reviewer-2', match0, { answer: 'spec-version' })).status).toBe(200);
+    const refused = await asCrowdio('reviewer-3', match1, { answer: 'spec-version' });
+    expect(refused.status).toBe(429);
+    expect(refused.headers.get('retry-after')).toBe('60');
+    expectNoStore(refused);
+    expect(await refused.json()).toEqual({ error: LIMITED });
+    const bulk = await asCrowdio('reviewer-4', 'bulk', {
+      answers: [{ reviewId: match1, answer: 'spec-version' }],
+    });
+    expect(bulk.status).toBe(429);
+    expect(await bulk.json()).toEqual({ error: LIMITED });
+    // The consumer's bucket is checked first, so a write it refuses takes nothing from a
+    // reviewer's.
+    expect(consumers.keys).toEqual(['crowdio', 'crowdio', 'crowdio', 'crowdio']);
+    expect(reviewers.keys).toEqual(['crowdio:reviewer-1', 'crowdio:reviewer-2']);
+
+    // The owner's writes count apart from any consumer's, and the question refused still waits.
+    const owner = await call('POST', `/datasets/${datasetId}/review/${match1}`, {
+      bindings,
+      body: { answer: 'spec-version' },
+    });
+    expect(owner.status).toBe(200);
+    expect(reviewers.keys.at(-1)).toBe('owner');
+    expect(consumers.keys).toHaveLength(4);
   });
 });

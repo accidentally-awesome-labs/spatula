@@ -42,10 +42,15 @@ export default defineConfig({
                 // the run pins it. The test that sets it does so on bindings of its own.
                 VERIFIED_BOT: 'false',
               },
-              // wrangler.jsonc's limiter, with room for every write the tests make. The test of
-              // the limit sets a limiter of its own.
+              // wrangler.jsonc's limiters. The first has room for every write the tests make, and
+              // the consumers' keeps its own limit, which the tests' few consumer writes don't
+              // reach. The tests of the limits set limiters of their own.
               ratelimits: {
                 REVIEW_LIMITER: { namespace_id: '2001', simple: { limit: 1_000_000, period: 60 } },
+                CONSUMER_REVIEW_LIMITER: {
+                  namespace_id: '2002',
+                  simple: { limit: 240, period: 60 },
+                },
               },
             },
           })),
