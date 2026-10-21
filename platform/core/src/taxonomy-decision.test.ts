@@ -205,6 +205,87 @@ describe('acceptParts', () => {
     );
     expect(fresh.proposed.shelf).toBe(id('shelf', 'power-amps'));
   });
+
+  describe('at the edge of a threshold', () => {
+    const at = (
+      accept: number,
+      probabilities: TaxonomyProbabilities,
+      fixedShelf: string | null = null,
+    ) =>
+      acceptParts({
+        taxonomy: T,
+        asked: askedParts(T, fixedShelf),
+        fixedShelf,
+        probabilities,
+        accept,
+      });
+
+    it('adds a category’s family up without floating point error: 0.70 and 0.20 are 0.90', () => {
+      // The sum in floating point is a hair under 0.9.
+      expect(0.7 + 0.2).toBeLessThan(0.9);
+      const decision = decide(chances({ shelves: { 'headphone-amps': 0.7, 'power-amps': 0.2 } }));
+      expect(decision.fallback).toBe(true);
+      expect(decision.settled.shelf).toBe(id('shelf', 'amplifiers'));
+      expect(decision.open.shelves).toEqual(
+        ['amplifiers', 'headphone-amps', 'preamps', 'power-amps'].map((slug) => id('shelf', slug)),
+      );
+      expect(decision.proposed.shelf).toBe(id('shelf', 'headphone-amps'));
+      // Just under it, the shelf stays open.
+      const under = decide(chances({ shelves: { 'headphone-amps': 0.7, 'power-amps': 0.19 } }));
+      expect(under.fallback).toBe(false);
+      expect(under.settled.shelf).toBeNull();
+    });
+
+    it('rejects a function at exactly one minus the threshold, and asks above it', () => {
+      const over = id('shelf', 'over-ear');
+      const rejected = decide(
+        chances({ shelves: { 'over-ear': 0.96 }, functions: { dac: 0.1, 'pre-amp': 0.11 } }),
+      );
+      expect(rejected.settled).toEqual({ shelf: over, functions: [], values: [] });
+      expect(rejected.open.functions).toEqual([id('function', 'pre-amp')]);
+    });
+
+    it('rejects a value at exactly one minus the threshold, of either cardinality', () => {
+      const many = decide(
+        chances({ values: { iems: 0.1, headphones: 0.11 } }),
+        id('shelf', 'power-amps'),
+      );
+      expect(many.open.features).toEqual({
+        [id('feature', 'drives')]: [id('value', 'headphones')],
+      });
+      const one = decide(chances({ values: { open: 0.1, closed: 0.1 } }), id('shelf', 'over-ear'));
+      expect(one.open.features).toEqual({});
+      expect(one.proposed.values).toEqual([]);
+    });
+
+    it('holds at a threshold other than 0.9', () => {
+      // 0.7 and 0.1 are 0.8 together; one minus 0.8 is 0.2.
+      expect(0.7 + 0.1).toBeLessThan(0.8);
+      expect(1 - 0.8).toBeLessThan(0.2);
+      const family = at(0.8, chances({ shelves: { 'headphone-amps': 0.7, 'power-amps': 0.1 } }));
+      expect(family.fallback).toBe(true);
+      expect(family.settled.shelf).toBe(id('shelf', 'amplifiers'));
+      const power = id('shelf', 'power-amps');
+      const parts = at(
+        0.8,
+        chances({
+          functions: { dac: 0.2, 'pre-amp': 0.21, amplifier: 0.8 },
+          values: { iems: 0.2, headphones: 0.21, speakers: 0.8 },
+        }),
+        power,
+      );
+      // Amplifier is the shelf's own. Dac and IEMs are rejected at exactly 0.2.
+      expect(parts.settled).toEqual({
+        shelf: power,
+        functions: [],
+        values: [id('value', 'speakers')],
+      });
+      expect(parts.open.functions).toEqual([id('function', 'pre-amp')]);
+      expect(parts.open.features).toEqual({
+        [id('feature', 'drives')]: [id('value', 'headphones')],
+      });
+    });
+  });
 });
 
 describe('what is asked, and what carries over', () => {
@@ -243,7 +324,11 @@ describe('what is asked, and what carries over', () => {
       values: [id('value', 'speakers')],
     };
     const final = {
-      answer: mergeAnswers({ shelf: id('shelf', 'power-amps'), functions: [], values: [] }, given),
+      answer: mergeAnswers(
+        T,
+        { shelf: id('shelf', 'power-amps'), functions: [], values: [] },
+        given,
+      ),
       asked,
       given,
     };
@@ -548,6 +633,103 @@ describe('a person’s answer', () => {
     expect(checkTaxonomyAnswer(T, back.open, { shelf: 'dacs' })).toEqual({
       ok: false,
       reason: 'This question doesn’t ask for the shelf: it’s settled.',
+    });
+  });
+
+  it('refuses a value whose feature isn’t on the shelf the person chose', () => {
+    // Drives is offered for the likeliest shelf, headphone amps; DACs have no features.
+    expect(
+      checkTaxonomyAnswer(T, unsure.open, { shelf: 'dacs', features: { drives: ['iems'] } }),
+    ).toEqual({
+      ok: false,
+      reason: 'iems is a value of Drives, which isn’t a feature of DACs.',
+    });
+    // By ID, and for a subcategory, whose category's features it has.
+    const back = id('feature', 'back');
+    const open = decide(chances({ shelves: { 'over-ear': 0.5 }, values: { open: 0.5 } })).open;
+    expect(open.features[back]).toBeDefined();
+    expect(
+      checkTaxonomyAnswer(T, open, { shelf: 'headphone-amps', features: { back: ['open'] } }),
+    ).toEqual({
+      ok: false,
+      reason: 'open is a value of Back, which isn’t a feature of Amplifiers › Headphone amps.',
+    });
+    expect(
+      checkTaxonomyAnswer(T, unsure.open, {
+        shelf: 'power-amps',
+        features: { drives: [id('value', 'iems')] },
+      }),
+    ).toMatchObject({ ok: true });
+  });
+
+  it('checks values against the settled shelf when the question doesn’t ask for it', () => {
+    const stale = {
+      shelves: [],
+      functions: [],
+      features: { [id('feature', 'back')]: [id('value', 'open')] },
+    };
+    expect(
+      checkTaxonomyAnswer(T, stale, { features: { back: ['open'] } }, id('shelf', 'dacs')),
+    ).toEqual({
+      ok: false,
+      reason: 'open is a value of Back, which isn’t a feature of DACs.',
+    });
+    expect(
+      checkTaxonomyAnswer(T, stale, { features: { back: ['open'] } }, id('shelf', 'over-ear')),
+    ).toMatchObject({ ok: true, given: { shelf: null, values: [id('value', 'open')] } });
+  });
+
+  it('refuses a value on a shelf that is none, and takes none alone', () => {
+    expect(
+      checkTaxonomyAnswer(T, unsure.open, { shelf: 'none', features: { drives: ['iems'] } }),
+    ).toEqual({ ok: false, reason: 'A page that’s none of these takes no values: iems.' });
+    expect(
+      checkTaxonomyAnswer(T, unsure.open, { shelf: 'none', features: { drives: [] } }),
+    ).toEqual({
+      ok: true,
+      given: { shelf: NONE_SHELF, functions: [], values: [] },
+    });
+  });
+});
+
+describe('mergeAnswers', () => {
+  const amplifier = id('function', 'amplifier');
+  const speakers = id('value', 'speakers');
+  const settled = { shelf: id('shelf', 'amplifiers'), functions: [amplifier], values: [speakers] };
+
+  it('drops the decider’s settled values that the person’s shelf lacks the features for', () => {
+    // The decider fell back to Amplifiers and settled Drives: speakers; the person chose DACs.
+    const given = { shelf: id('shelf', 'dacs'), functions: [], values: [] };
+    expect(mergeAnswers(T, settled, given)).toEqual({
+      shelf: id('shelf', 'dacs'),
+      functions: [amplifier],
+      values: [],
+    });
+  });
+
+  it('keeps the settled values when the shelf keeps their features', () => {
+    const given = {
+      shelf: id('shelf', 'power-amps'),
+      functions: [],
+      values: [id('value', 'iems')],
+    };
+    expect(mergeAnswers(T, settled, given)).toEqual({
+      shelf: id('shelf', 'power-amps'),
+      functions: [amplifier],
+      values: [speakers, id('value', 'iems')],
+    });
+    // A shelf the question settled isn't given again: the settled one stands.
+    const kept = { shelf: null, functions: [], values: [] };
+    expect(mergeAnswers(T, { ...settled, shelf: id('shelf', 'power-amps') }, kept).values).toEqual([
+      speakers,
+    ]);
+  });
+
+  it('takes a none whole', () => {
+    expect(mergeAnswers(T, settled, { shelf: NONE_SHELF, functions: [], values: [] })).toEqual({
+      shelf: NONE_SHELF,
+      functions: [],
+      values: [],
     });
   });
 });

@@ -75,10 +75,19 @@ export function sharingOutcome(question: Question, answer: string): string[] {
 }
 
 /**
+ * A sum of probabilities, or a bound derived from a threshold, rounded to nine places. One floating
+ * point puts a hair under a threshold otherwise: 0.29 + 0.57 + 0.09 is 0.9499999999999998, 0.7 +
+ * 0.2 is 0.8999999999999999, and 1 - 0.9 is 0.09999999999999998.
+ */
+export function roundProbability(probability: number): number {
+  return Math.round(probability * 1e9) / 1e9;
+}
+
+/**
  * How sure an answer is: its own probability, or, where the question groups its answers into
- * outcomes, the total of the answers that share its outcome (ADR 0003). A total is rounded to nine
- * places, so that one floating point puts a hair under the threshold still reaches it: 0.29 + 0.57 +
- * 0.09 is 0.9499999999999998. An answer without a probability of its own counts as 0.
+ * outcomes, the total of the answers that share its outcome (ADR 0003). A total is rounded
+ * (`roundProbability`), so that one floating point puts a hair under the threshold still reaches
+ * it. An answer without a probability of its own counts as 0.
  */
 export function outcomeProbability(
   question: Question,
@@ -90,7 +99,7 @@ export function outcomeProbability(
   const shared = sharingOutcome(question, answer);
   if (shared.length === 1) return own(answer);
   const total = shared.reduce((sum, option) => sum + own(option), 0);
-  return Math.round(total * 1e9) / 1e9;
+  return roundProbability(total);
 }
 
 /** What's wrong with a question, or null when nothing is. */

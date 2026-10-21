@@ -1,6 +1,6 @@
 import { z } from 'zod';
 import { NONE_OF_THESE, type ClassifyState } from './decision-types';
-import { readProbabilities, type TaxonomyParts } from './decisions';
+import { readProbabilities, roundProbability, type TaxonomyParts } from './decisions';
 import { stableStringify } from './ids';
 import { withoutWrapperTags, type LlmPort, type LlmUsage } from './llm';
 import { compareStatements, type StatementView } from './survivorship';
@@ -420,7 +420,9 @@ export function acceptParts(input: {
   accept: number;
 }): PartsDecision {
   const { taxonomy, asked, fixedShelf, probabilities, accept } = input;
-  const reject = 1 - accept;
+  // A part is rejected at or below one minus the threshold, and a category's family reaches the
+  // threshold at its total: both rounded, as an outcome's total is (`roundProbability`).
+  const reject = roundProbability(1 - accept);
   const chance = (record: Record<string, number>, id: string) => record[id] ?? 0;
 
   let shelf: string | null = fixedShelf;
@@ -434,9 +436,8 @@ export function acceptParts(input: {
     } else {
       const category = categoriesOf(taxonomy).find((candidate) => {
         const family = [candidate, ...subcategoriesOf(taxonomy, candidate.id)];
-        const total = family.reduce(
-          (sum, member) => sum + chance(probabilities.shelves, member.id),
-          0,
+        const total = roundProbability(
+          family.reduce((sum, member) => sum + chance(probabilities.shelves, member.id), 0),
         );
         return family.length > 1 && total >= accept;
       });
@@ -761,12 +762,16 @@ export interface GivenParts {
 /**
  * A person's answer to a taxonomy question, checked against what it asks (ruling 11). The shelf,
  * when it's asked, is any live shelf or none, and must be given. Functions and values are among
- * those offered; one left unticked is a no. A feature that takes one value takes one.
+ * those offered; one left unticked is a no. A feature that takes one value takes one. Only the
+ * features on the page's shelf take values (the spec's §2): the shelf the person chose, or, when
+ * the question doesn't ask for it, `settledShelf`, the one a rule or the decider settled. A page
+ * on none takes no values.
  */
 export function checkTaxonomyAnswer(
   taxonomy: Taxonomy,
   asked: TaxonomyParts,
   given: GivenParts,
+  settledShelf: string | null = null,
 ): { ok: true; given: TaxonomyAnswer } | { ok: false; reason: string } {
   let shelf: string | null = null;
   if (asked.shelves.length > 0) {
@@ -793,6 +798,12 @@ export function checkTaxonomyAnswer(
     if (!functions.includes(found.id)) functions.push(found.id);
   }
   const values: string[] = [];
+  const onShelf = shelf ?? settledShelf;
+  const shelfFeatures = new Set(
+    onShelf === null || onShelf === NONE_SHELF
+      ? []
+      : featuresFor(taxonomy, onShelf).map((entry) => entry.id),
+  );
   for (const [featureRef, valueRefs] of Object.entries(given.features ?? {})) {
     const feature = findItem(taxonomy, 'feature', featureRef) as Feature | undefined;
     const offered = feature === undefined ? undefined : asked.features[feature.id];
@@ -805,6 +816,15 @@ export function checkTaxonomyAnswer(
       if (value === undefined || !offered.includes(value.id)) {
         return { ok: false, reason: `This question doesn’t offer ${ref} for ${feature.name}.` };
       }
+      if (onShelf === NONE_SHELF) {
+        return { ok: false, reason: `A page that’s none of these takes no values: ${ref}.` };
+      }
+      if (onShelf !== null && !shelfFeatures.has(feature.id)) {
+        return {
+          ok: false,
+          reason: `${ref} is a value of ${feature.name}, which isn’t a feature of ${shelfPath(taxonomy, onShelf)}.`,
+        };
+      }
       if (!chosen.includes(value.id)) chosen.push(value.id);
     }
     if (feature.cardinality === 'one' && chosen.length > 1) {
@@ -816,12 +836,32 @@ export function checkTaxonomyAnswer(
   return { ok: true, given: { shelf, functions, values } };
 }
 
-/** The page's whole answer once a person's parts are in: theirs, and what the decider settled. */
-export function mergeAnswers(settled: TaxonomyAnswer, given: TaxonomyAnswer): TaxonomyAnswer {
+/**
+ * The page's whole answer once a person's parts are in: theirs, and what the decider settled. The
+ * decider's settled values stay only where the final shelf has their feature (the spec's §2: only
+ * the features on the chosen shelf), so a person who moves the page off the shelf the decider
+ * fell back to doesn't keep that shelf's features. A person's own values were checked against
+ * their shelf (`checkTaxonomyAnswer`).
+ */
+export function mergeAnswers(
+  taxonomy: Taxonomy,
+  settled: TaxonomyAnswer,
+  given: TaxonomyAnswer,
+): TaxonomyAnswer {
   if (given.shelf === NONE_SHELF) return { shelf: NONE_SHELF, functions: [], values: [] };
+  const shelf = given.shelf ?? settled.shelf;
+  const onShelf = new Set(
+    shelf === null || shelf === NONE_SHELF
+      ? []
+      : featuresFor(taxonomy, shelf).map((feature) => feature.id),
+  );
+  const fits = (value: string) => {
+    const feature = featureOfValue(taxonomy, value);
+    return feature !== undefined && onShelf.has(feature.id);
+  };
   return {
-    shelf: given.shelf ?? settled.shelf,
+    shelf,
     functions: [...new Set([...settled.functions, ...given.functions])],
-    values: [...new Set([...settled.values, ...given.values])],
+    values: [...new Set([...settled.values.filter(fits), ...given.values])],
   };
 }
