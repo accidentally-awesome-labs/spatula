@@ -8,11 +8,12 @@ import {
   snapshotSchema,
   taxonomySeedSchema,
   type Definition,
+  type GivenParts,
   type GoldenSet,
 } from '@spatula/core';
 import { packs } from '@spatula/pack-products';
 import { parse, stringify } from 'yaml';
-import { ApiError, type Client } from './client';
+import { ApiError, type BulkAnswer, type Client, type ReviewFilters } from './client';
 import {
   describeError,
   formatApplySummary,
@@ -262,26 +263,187 @@ export async function exportTaxonomyFile(
   });
 }
 
-/** Lists the dataset's open questions, or answers one. */
+/** What `spatula review` was asked to do (ADR 0009). */
+export type ReviewRequest =
+  | { kind: 'list'; filters: ReviewFilters }
+  | { kind: 'answer'; reviewId: string; answer: string }
+  | { kind: 'parts'; reviewId: string; parts: GivenParts; note?: string }
+  | { kind: 'suggestion'; reviewId: string }
+  | { kind: 'answers'; file: string }
+  | { kind: 'suggest'; file: string };
+
+/**
+ * Lists the dataset's open questions, or answers one: with one of its answers, in parts, or with
+ * its suggestion. Or sends a file of answers, or of suggestions.
+ */
 export async function review(
   io: Io,
   client: Client,
   datasetId: string,
-  answering: { reviewId: string; answer: string } | null,
+  request: ReviewRequest,
 ): Promise<number> {
+  if (request.kind === 'answers') return answerFile(io, client, datasetId, request.file);
+  if (request.kind === 'suggest') return suggestFile(io, client, datasetId, request.file);
   return withApi(io, async () => {
-    if (answering === null) {
-      const reviews = await client.listReviews(datasetId);
-      for (const line of formatReviews(datasetId, reviews)) io.out(line);
-      return 0;
+    switch (request.kind) {
+      case 'list':
+        return listQuestions(io, client, datasetId, request.filters);
+      case 'answer': {
+        const { effect } = await client.answerReview(datasetId, request.reviewId, request.answer);
+        io.out(
+          `Answered ${request.reviewId}: ${request.answer}.${effect === '' ? '' : ` ${effect}`}`,
+        );
+        return 0;
+      }
+      case 'parts': {
+        const { effect } = await client.answerParts(datasetId, request.reviewId, {
+          parts: request.parts,
+          ...(request.note === undefined ? {} : { note: request.note }),
+        });
+        const said = partsText(request.parts);
+        io.out(`Answered ${request.reviewId}: ${said}.${effect === '' ? '' : ` ${effect}`}`);
+        return 0;
+      }
+      case 'suggestion': {
+        const { effect } = await client.answerParts(datasetId, request.reviewId, {
+          suggestion: true,
+        });
+        io.out(
+          `Answered ${request.reviewId} with its suggestion.${effect === '' ? '' : ` ${effect}`}`,
+        );
+        return 0;
+      }
     }
-    const { effect } = await client.answerReview(datasetId, answering.reviewId, answering.answer);
-    io.out(
-      `Answered ${answering.reviewId}: ${answering.answer}.${effect === '' ? '' : ` ${effect}`}`,
-    );
-    return 0;
   });
 }
+
+/**
+ * Lists the open questions, naming a taxonomy question's parts from the taxonomy. A shelf filter
+ * goes as typed: the API takes the shelf's slug as well as its ID.
+ */
+async function listQuestions(
+  io: Io,
+  client: Client,
+  datasetId: string,
+  filters: ReviewFilters,
+): Promise<number> {
+  const reviews = await client.listReviews(datasetId, filters);
+  const taxonomy = reviews.some((one) => one.question.type === 'taxonomy')
+    ? ((await client.getTaxonomy(datasetId)).taxonomy ?? null)
+    : null;
+  for (const line of formatReviews(datasetId, reviews, taxonomy)) io.out(line);
+  return 0;
+}
+
+/** Parts as they were typed: "shelf on-ear, function amplifier, back=closed". */
+function partsText(parts: GivenParts): string {
+  const words = [
+    ...(parts.shelf === undefined ? [] : [`shelf ${parts.shelf}`]),
+    ...(parts.functions ?? []).map((ref) => `function ${ref}`),
+    ...Object.entries(parts.features ?? {}).flatMap(([feature, values]) =>
+      values.map((value) => `${feature}=${value}`),
+    ),
+  ];
+  return words.length === 0 ? 'none of the parts offered' : words.join(', ');
+}
+
+/** The most answers one bulk request takes (ruling 13). */
+const BULK_MAX = 500;
+
+/** Sends a file of answers, `{ "answers": [...], "note"?: "..." }`, as one bulk request. */
+async function answerFile(
+  io: Io,
+  client: Client,
+  datasetId: string,
+  file: string,
+): Promise<number> {
+  const data = await readJson(io, file);
+  if (data === undefined) return 1;
+  const body = bulkAnswers(data);
+  if (body === null) {
+    io.err(
+      `${file} isn’t a file of answers: { "answers": [...] }, 1 to ${BULK_MAX} of them, each with a "reviewId".`,
+    );
+    return 1;
+  }
+  return withApi(io, async () => {
+    const results = await client.answerBulk(datasetId, body);
+    // Each answer has the status it would have got alone: 200 answered it, 202 sent it to the
+    // owner, and anything else refused it.
+    const left = results.filter((one) => one.status !== 200 && one.status !== 202);
+    const answered = results.length - left.length;
+    io.out(`Answered ${answered} of ${count(body.answers.length, 'question')}.`);
+    for (const one of left) io.err(`  ${one.reviewId}: ${reasonOf(one)}`);
+    return answered === body.answers.length ? 0 : 1;
+  });
+}
+
+/** A bulk request's body, if the file holds one: the API checks each answer itself. */
+function bulkAnswers(data: unknown): { answers: BulkAnswer[]; note?: string } | null {
+  if (!isRecord(data) || !Array.isArray(data.answers)) return null;
+  const answers: unknown[] = data.answers;
+  const named = answers.every((one) => isRecord(one) && typeof one.reviewId === 'string');
+  if (!named || answers.length === 0 || answers.length > BULK_MAX) return null;
+  if (data.note !== undefined && typeof data.note !== 'string') return null;
+  return {
+    answers: answers as BulkAnswer[],
+    ...(data.note === undefined ? {} : { note: data.note }),
+  };
+}
+
+/** Sends the owner's suggestions, `{ "suggestions": [{ "page": ..., "parts": {...} }] }`. */
+async function suggestFile(
+  io: Io,
+  client: Client,
+  datasetId: string,
+  file: string,
+): Promise<number> {
+  const data = await readJson(io, file);
+  if (data === undefined) return 1;
+  const suggestions = isRecord(data) && Array.isArray(data.suggestions) ? data.suggestions : [];
+  const whole = suggestions.every(
+    (one) => isRecord(one) && typeof one.page === 'string' && isRecord(one.parts),
+  );
+  if (suggestions.length === 0 || !whole) {
+    io.err(
+      `${file} isn’t a file of suggestions: { "suggestions": [...] }, each with a "page" and its "parts".`,
+    );
+    return 1;
+  }
+  const sent = suggestions as { page: string; parts: GivenParts }[];
+  return withApi(io, async () => {
+    const results = await client.suggest(datasetId, sent);
+    const left = results.filter((one) => one.status !== 200);
+    const suggested = results.length - left.length;
+    io.out(`Suggested answers for ${suggested} of ${count(sent.length, 'page')}.`);
+    for (const one of left) io.err(`  ${one.page}: ${reasonOf(one)}`);
+    return suggested === sent.length ? 0 : 1;
+  });
+}
+
+/** Why the API didn't take an answer or a suggestion: its reason, or at least its status. */
+const reasonOf = (result: { status: number; error: string }): string =>
+  result.error === '' ? `Spatula answered HTTP ${result.status}.` : result.error;
+
+/** A JSON file's contents, or undefined once what's wrong with it is printed. */
+async function readJson(io: Io, file: string): Promise<unknown> {
+  let text: string;
+  try {
+    text = await io.readFile(file);
+  } catch (error) {
+    io.err(`${file} can’t be read: ${describeError(error)}`);
+    return undefined;
+  }
+  try {
+    return JSON.parse(text) as unknown;
+  } catch (error) {
+    io.err(`${file} isn’t JSON: ${describeError(error)}`);
+    return undefined;
+  }
+}
+
+const isRecord = (value: unknown): value is Record<string, unknown> =>
+  typeof value === 'object' && value !== null && !Array.isArray(value);
 
 /** Says where a dataset stands. */
 export async function status(io: Io, client: Client, datasetId: string): Promise<number> {

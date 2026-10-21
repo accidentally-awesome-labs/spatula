@@ -1,5 +1,5 @@
 import { parseArgs } from 'node:util';
-import { createClient } from './client';
+import { createClient, type ReviewFilters } from './client';
 import {
   check,
   evals,
@@ -14,6 +14,7 @@ import {
   seedTaxonomyFile,
   status,
   type Io,
+  type ReviewRequest,
 } from './commands';
 import { describeError, printable } from './format';
 
@@ -37,8 +38,22 @@ export const USAGE = `Usage: spatula <command>
   purge <dataset> --source <id>
                                Delete a source’s page captures, and its pages’ stored
                                copies. Its next run captures them again
-  review <dataset> [<id> <answer>]
-                               List the questions waiting for an answer, or answer one
+  review <dataset> [--kind <kind>] [--shelf <slug>] [--source <id>] [--below <p>]
+                               List the questions waiting for an answer: of a kind,
+                               about pages proposed for a shelf or settled on it, from
+                               a source, or proposed with less than probability p
+  review <dataset> <id> <answer>
+                               Answer a question with one of its answers
+  review <dataset> <id> [--shelf <slug>] [--function <slug>]...
+         [--feature <feature>=<value>]... [--note <text>]
+                               Answer a taxonomy question in parts. A function or a
+                               value left out is a no
+  review <dataset> <id> --suggestion
+                               Answer a question with its suggestion
+  review <dataset> --answers <file.json>
+                               Answer up to 500 questions at once
+  review <dataset> --suggest <file.json>
+                               Suggest answers, each for the question about a page
   status <dataset>             Where a dataset stands: its head, what’s held, what waits,
                                and what its consumers acknowledged
   eval <golden.json> [--save]  Score the latest snapshot against a golden set, and keep
@@ -69,11 +84,99 @@ const OPTIONS = {
   save: { type: 'boolean' },
   out: { type: 'string' },
   generation: { type: 'string' },
+  kind: { type: 'string' },
+  shelf: { type: 'string' },
+  below: { type: 'string' },
+  function: { type: 'string', multiple: true },
+  feature: { type: 'string', multiple: true },
+  note: { type: 'string' },
+  suggestion: { type: 'boolean' },
+  answers: { type: 'string' },
+  suggest: { type: 'string' },
   help: { type: 'boolean', short: 'h' },
 } as const;
 
 const parse = (argv: string[]) =>
   parseArgs({ args: argv, allowPositionals: true, options: OPTIONS });
+
+const REVIEW_KINDS: readonly string[] = ['classify', 'match', 'publication'];
+
+/**
+ * What `review` was asked to do: list with filters, answer one question (with one of its answers,
+ * in parts, or with its suggestion), or send a file. A call that mixes them is wrong: a string
+ * says why, and null leaves it to the usage.
+ */
+function reviewRequest(
+  values: ReturnType<typeof parse>['values'],
+  reviewId: string | undefined,
+  answer: string | undefined,
+): ReviewRequest | string | null {
+  const { kind, shelf, source, below, note, suggestion, answers, suggest } = values;
+  const functions = values.function ?? [];
+  const features = values.feature ?? [];
+  const filtered = kind !== undefined || source !== undefined || below !== undefined;
+  const inParts =
+    shelf !== undefined || functions.length > 0 || features.length > 0 || note !== undefined;
+  if (answers !== undefined || suggest !== undefined) {
+    const alone = reviewId === undefined && !filtered && !inParts && suggestion !== true;
+    if (!alone || (answers !== undefined && suggest !== undefined)) return null;
+    return answers !== undefined
+      ? { kind: 'answers', file: answers }
+      : { kind: 'suggest', file: suggest! };
+  }
+  if (reviewId === undefined) {
+    // Without a question, --shelf filters the list.
+    if (functions.length > 0 || features.length > 0 || note !== undefined) return null;
+    if (suggestion === true) return null;
+    const filters: ReviewFilters = {};
+    if (kind !== undefined) {
+      if (!REVIEW_KINDS.includes(kind)) return '--kind is classify, match, or publication.';
+      filters.kind = kind as ReviewFilters['kind'];
+    }
+    if (shelf !== undefined) filters.shelf = shelf;
+    if (source !== undefined) {
+      if (source.length !== 1) return '--source names one source to filter by.';
+      filters.source = source[0];
+    }
+    if (below !== undefined) {
+      // The API takes a probability above 0 and up to 1.
+      const chance = Number(below);
+      if (below.trim() === '' || !(chance > 0 && chance <= 1)) {
+        return '--below is a probability from 0 to 1.';
+      }
+      filters.below = chance;
+    }
+    return { kind: 'list', filters };
+  }
+  if (filtered) return null;
+  if (answer !== undefined) {
+    return inParts || suggestion === true ? null : { kind: 'answer', reviewId, answer };
+  }
+  if (suggestion === true) return inParts ? null : { kind: 'suggestion', reviewId };
+  if (!inParts) return null;
+  const parts: { shelf?: string; functions?: string[]; features?: Record<string, string[]> } = {};
+  if (shelf !== undefined) parts.shelf = shelf;
+  if (functions.length > 0) parts.functions = functions;
+  for (const pair of features) {
+    const at = pair.indexOf('=');
+    const feature = pair.slice(0, at).trim();
+    const value = pair.slice(at + 1).trim();
+    if (at < 0 || feature === '' || value === '') {
+      return '--feature takes <feature>=<value>, as in --feature back=closed.';
+    }
+    parts.features = {
+      ...parts.features,
+      [feature]: [...(parts.features?.[feature] ?? []), value],
+    };
+  }
+  // A note goes with an answer, never alone: with no parts, it would answer no to every function and
+  // value offered without saying so.
+  if (shelf === undefined && functions.length === 0 && features.length === 0) {
+    return 'A note goes with an answer: give the parts it answers, with --shelf <slug>, --function <slug>, or --feature <feature>=<value>.';
+  }
+  if (note !== undefined && note.trim() === '') return '--note needs some words.';
+  return { kind: 'parts', reviewId, parts, ...(note === undefined ? {} : { note: note.trim() }) };
+}
 
 /**
  * What the commands print goes through this, so no line they print can drive the terminal. A call
@@ -171,19 +274,13 @@ export async function main(
     }
     case 'review': {
       const [datasetId, reviewId, answer, ...extra] = rest;
-      if (
-        datasetId === undefined ||
-        extra.length > 0 ||
-        (reviewId !== undefined) !== (answer !== undefined)
-      ) {
+      if (datasetId === undefined || extra.length > 0) return usage();
+      const request = reviewRequest(values, reviewId, answer);
+      if (request === null || typeof request === 'string') {
+        if (typeof request === 'string') io.err(request);
         return usage();
       }
-      return review(
-        io,
-        client,
-        datasetId,
-        reviewId === undefined ? null : { reviewId, answer: answer! },
-      );
+      return review(io, client, datasetId, request);
     }
     case 'status':
       return rest.length === 1 ? status(io, client, rest[0]!) : usage();

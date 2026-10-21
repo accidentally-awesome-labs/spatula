@@ -1,15 +1,23 @@
 import {
   EVAL_TARGETS,
+  findItem,
+  NONE_OF_THESE,
+  NONE_SHELF,
   REFUSE_AFTER_RUNS,
   reviewAnswers,
+  shelfPath,
   type ApplySummary,
   type DatasetStatus,
   type EvalScores,
   type EvalView,
+  type Feature,
   type GoldenSet,
   type ReviewView,
   type RunView,
   type Tally,
+  type Taxonomy,
+  type TaxonomyParts,
+  type TaxonomySubject,
 } from '@spatula/core';
 
 /** What applying a definition changed, or would change. */
@@ -203,8 +211,16 @@ export function formatRun(run: RunView): string[] {
   return lines;
 }
 
-/** The open questions, each with what it proposes and the answers it takes. */
-export function formatReviews(datasetId: string, reviews: ReviewView[]): string[] {
+/**
+ * The open questions, each with what it proposes and the answers it takes. A taxonomy question
+ * names its shelves, functions, and values from the taxonomy (ADR 0007), with the slug to answer
+ * each by.
+ */
+export function formatReviews(
+  datasetId: string,
+  reviews: ReviewView[],
+  taxonomy: Taxonomy | null = null,
+): string[] {
   if (reviews.length === 0) return ['No questions wait for an answer.'];
   const lines = [
     `${reviews.length} ${reviews.length === 1 ? 'question waits' : 'questions wait'} for an answer.`,
@@ -247,6 +263,11 @@ export function formatReviews(datasetId: string, reviews: ReviewView[]): string[
           : []),
       ];
       if (why.length > 0) lines.push(`  ${why.join(' ')}`);
+    } else if (review.question.type === 'taxonomy') {
+      lines.push(
+        `  ${review.question.prompt}`,
+        ...partsLines(taxonomy, review.question.parts, context),
+      );
     } else {
       lines.push(`  ${review.question.prompt}`);
       const proposed = text('proposed');
@@ -261,12 +282,143 @@ export function formatReviews(datasetId: string, reviews: ReviewView[]): string[
         lines.push(`  Nothing proposed. ${reason}`);
       }
     }
-    // A match question asked before the relationships takes them too (ADR 0003).
-    lines.push(`  Answers: ${reviewAnswers(review.kind, review.question).join(' | ')}`);
+    // A reviewer's answer differed from one that stood, so the question waits for the owner's.
+    if (review.flagged === true) {
+      lines.push(
+        '  Flagged: a reviewer’s answer differs from the one that stood. Yours closes it.',
+      );
+    }
+    if (review.suggestion !== undefined) {
+      lines.push(`  Suggested: ${suggestionWords(taxonomy, review.suggestion)}.`);
+    }
+    if (review.question.type !== 'taxonomy') {
+      // A match question asked before the relationships takes them too (ADR 0003).
+      lines.push(`  Answers: ${reviewAnswers(review.kind, review.question).join(' | ')}`);
+    }
   }
-  lines.push('', `Answer with: spatula review ${datasetId} <id> "<answer>"`);
+  lines.push('');
+  if (reviews.some((review) => review.question.type !== 'taxonomy')) {
+    lines.push(`Answer with: spatula review ${datasetId} <id> "<answer>"`);
+  }
+  if (reviews.some((review) => review.question.type === 'taxonomy')) {
+    lines.push(
+      `Answer in parts with: spatula review ${datasetId} <id> --shelf <slug> --function <slug> --feature <feature>=<value>`,
+    );
+  }
+  if (reviews.some((review) => review.suggestion !== undefined)) {
+    lines.push(`Take a suggestion with: spatula review ${datasetId} <id> --suggestion`);
+  }
   return lines;
 }
+
+/** A taxonomy question's lines: what's proposed and settled, then each part it asks. */
+function partsLines(
+  taxonomy: Taxonomy | null,
+  parts: TaxonomyParts,
+  context: Record<string, unknown>,
+): string[] {
+  const lines: string[] = [];
+  const chances = isRecord(context.probabilities) ? context.probabilities : {};
+  const reason = typeof context.reason === 'string' ? context.reason : '';
+  const proposed = answerWords(taxonomy, context.proposed, chances);
+  if (proposed !== '') lines.push(`  Proposed: ${proposed}.${reason === '' ? '' : ` ${reason}`}`);
+  else if (reason !== '') lines.push(`  Nothing proposed. ${reason}`);
+  const settled = answerWords(taxonomy, context.settled, {});
+  if (settled !== '') lines.push(`  Settled already: ${settled}.`);
+  const earlier = answerWords(taxonomy, context.earlier, {});
+  if (earlier !== '') lines.push(`  A person said before: ${earlier}.`);
+  const offered = (subject: 'shelf' | 'function' | 'value', ids: string[]) =>
+    ids.map((id) => choice(taxonomy, subject, id)).join(', ');
+  if (parts.shelves.length > 0) lines.push(`  Shelf, one of: ${offered('shelf', parts.shelves)}`);
+  if (parts.functions.length > 0) {
+    lines.push(`  Functions, any of: ${offered('function', parts.functions)}`);
+  }
+  for (const [featureId, values] of Object.entries(parts.features)) {
+    if (values.length === 0) continue;
+    const found = taxonomy === null ? undefined : findItem(taxonomy, 'feature', featureId);
+    const feature = found as Feature | undefined;
+    const named = feature === undefined ? featureId : `${feature.slug} (${feature.name})`;
+    const takes = feature?.cardinality === 'one' ? 'one of' : 'any of';
+    lines.push(`  Feature ${named}, ${takes}: ${offered('value', values)}`);
+  }
+  return lines;
+}
+
+/** A part as it's typed, then what it means: "over-ear (Headphones › Over-ear)". */
+function choice(
+  taxonomy: Taxonomy | null,
+  subject: 'shelf' | 'function' | 'value',
+  id: string,
+): string {
+  if (subject === 'shelf' && id === NONE_SHELF) return `${NONE_SHELF} (${NONE_OF_THESE})`;
+  const found = taxonomy === null ? undefined : findItem(taxonomy, subject, id);
+  if (taxonomy === null || found === undefined) return id;
+  return `${found.slug} (${subject === 'shelf' ? shelfPath(taxonomy, found.id) : found.name})`;
+}
+
+/** A three-part answer in words, each part with its probability where there is one. */
+function answerWords(
+  taxonomy: Taxonomy | null,
+  answer: unknown,
+  chances: Record<string, unknown>,
+): string {
+  if (!isRecord(answer)) return '';
+  const sure = (key: string) => {
+    const chance = chances[key];
+    return typeof chance === 'number' ? ` (${chance.toFixed(2)})` : '';
+  };
+  const words: string[] = [];
+  if (typeof answer.shelf === 'string') {
+    words.push(`${shelfWords(taxonomy, answer.shelf)}${sure(`shelf:${answer.shelf}`)}`);
+  }
+  for (const id of strings(answer.functions)) {
+    words.push(`${nameOf(taxonomy, 'function', id)}${sure(`function:${id}`)}`);
+  }
+  for (const id of strings(answer.values)) {
+    words.push(`${valueWords(taxonomy, id)}${sure(`value:${id}`)}`);
+  }
+  return words.join(', ');
+}
+
+/** A suggestion in words: its answer, or its parts, which name items by slug or by ID. */
+function suggestionWords(taxonomy: Taxonomy | null, suggestion: unknown): string {
+  if (!isRecord(suggestion)) return '';
+  if (typeof suggestion.answer === 'string') return suggestion.answer;
+  const words: string[] = [];
+  if (typeof suggestion.shelf === 'string') words.push(shelfWords(taxonomy, suggestion.shelf));
+  for (const ref of strings(suggestion.functions)) words.push(nameOf(taxonomy, 'function', ref));
+  const features = isRecord(suggestion.features) ? suggestion.features : {};
+  for (const refs of Object.values(features)) {
+    for (const ref of strings(refs)) words.push(valueWords(taxonomy, ref));
+  }
+  return words.length === 0 ? 'none of the parts offered' : words.join(', ');
+}
+
+/** A shelf as people read it, "Headphones › Over-ear", or "None of these". */
+function shelfWords(taxonomy: Taxonomy | null, ref: string): string {
+  if (ref === NONE_SHELF || ref === NONE_OF_THESE) return NONE_OF_THESE;
+  const found = taxonomy === null ? undefined : findItem(taxonomy, 'shelf', ref);
+  return taxonomy === null || found === undefined ? ref : shelfPath(taxonomy, found.id);
+}
+
+/** A feature's value with its feature, "Drives: Speakers". */
+function valueWords(taxonomy: Taxonomy | null, ref: string): string {
+  const value = taxonomy === null ? undefined : findItem(taxonomy, 'value', ref);
+  const feature = taxonomy?.features.find((one) =>
+    one.values.some((entry) => entry.id === value?.id),
+  );
+  return value === undefined || feature === undefined ? ref : `${feature.name}: ${value.name}`;
+}
+
+function nameOf(taxonomy: Taxonomy | null, subject: TaxonomySubject, ref: string): string {
+  return (taxonomy === null ? undefined : findItem(taxonomy, subject, ref))?.name ?? ref;
+}
+
+const isRecord = (value: unknown): value is Record<string, unknown> =>
+  typeof value === 'object' && value !== null && !Array.isArray(value);
+
+const strings = (value: unknown): string[] =>
+  Array.isArray(value) ? value.filter((entry): entry is string => typeof entry === 'string') : [];
 
 /** Where a dataset stands: its head, what's held, what waits, and what consumers acknowledged. */
 export function formatStatus(status: DatasetStatus): string[] {
