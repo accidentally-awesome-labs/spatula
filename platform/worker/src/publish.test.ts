@@ -1,13 +1,20 @@
 import {
+  applyChanges,
+  findItem,
+  newId,
   runIdFor,
+  serializeSnapshot,
   sha256Hex,
   stableStringify,
   type Definition,
   type RunSummary,
   type SnapshotRecord,
+  type TaxonomySubject,
 } from '@spatula/core';
 import {
   applyDefinition,
+  commitTaxonomy,
+  currentTaxonomy,
   datasets,
   latestSnapshot,
   listOpenReviews,
@@ -15,13 +22,20 @@ import {
   snapshotById,
   snapshotOfRun,
 } from '@spatula/store';
-import { testDefinition } from '@spatula/store/fixtures';
+import { testDefinition, testTaxonomy, testTaxonomyDefinition } from '@spatula/store/fixtures';
 import { eq } from 'drizzle-orm';
 import { describe, expect, it } from 'vitest';
 import { db } from '../test/node/db';
 import { fakeDecider, fakeStep, type World } from '../test/node/fakes';
 import { routesWith } from '../test/node/match-world';
-import { decidedDefinition, entityOf, published, refresh, worldFor } from '../test/node/runs';
+import {
+  decidedDefinition,
+  entityOf,
+  published,
+  refresh,
+  taxonomyWorld,
+  worldFor,
+} from '../test/node/runs';
 import { A1, productPage, standardRoutes, URLS } from '../test/pages';
 import { heldKey, type Context } from './pipeline';
 import { publish, publishHeldSnapshot, recordsDigest, SnapshotFileMissingError } from './publish';
@@ -767,5 +781,187 @@ describe('a record’s editions', { timeout: 20_000 }, () => {
     expect(await recordsDigest([{ ...record, editions: [{ ...edition, gtins: [] }] }])).not.toBe(
       withEdition,
     );
+  });
+});
+
+describe('publishing a dataset’s taxonomy', { timeout: 20_000 }, () => {
+  const T = testTaxonomy();
+  const id = (subject: TaxonomySubject, slug: string) => findItem(T, subject, slug)!.id;
+
+  /** Commits the next taxonomy version: DACs described anew, which no page's question used. */
+  async function describeDacs(datasetId: string, at: Date): Promise<void> {
+    const now = (await currentTaxonomy(db, datasetId))!;
+    const next = applyChanges(
+      now.taxonomy,
+      [
+        {
+          kind: 'describe',
+          subject: 'shelf',
+          item: 'dacs',
+          description: 'Convert digital audio to analog, on their own',
+        },
+      ],
+      () => newId('tx'),
+    );
+    if (!next.ok) throw new Error(next.issues.join('\n'));
+    const committed = await commitTaxonomy(db, {
+      datasetId,
+      base: now.version,
+      taxonomy: next.taxonomy,
+      changes: next.applied,
+      actor: { role: 'owner', client: 'console' },
+      at,
+    });
+    expect(committed).toEqual({ committed: true, version: now.version + 1 });
+  }
+
+  it('publishes the taxonomy whole, and each record’s place in it, in the contract’s order', async () => {
+    const { world } = await taxonomyWorld(testTaxonomyDefinition('publish-taxonomy'));
+    const first = await refresh(world, 'publish-taxonomy');
+    expect(first.summary.snapshot).toMatchObject({
+      published: true,
+      generation: 1,
+      records: 3,
+      excluded: [],
+    });
+    const file = (await published(world, 'publish-taxonomy'))!;
+    expect(file.snapshot.taxonomy).toEqual(T);
+    expect(file.byName.A1).toMatchObject({
+      fields: {
+        shelf: id('shelf', 'over-ear'),
+        functions: [id('function', 'headphones')],
+        features: { [id('feature', 'back')]: [id('value', 'open')] },
+        category: 'Headphones',
+      },
+      // Over-ear implies headphones, and nothing else is stated, so functions take the shelf's.
+      provenance: {
+        shelf: { sourceUrl: URLS.a1, method: 'llm', confidence: 0.96 },
+        functions: { sourceUrl: URLS.a1, method: 'llm', confidence: 0.96 },
+        features: { sourceUrl: URLS.a1, method: 'llm', confidence: 0.95 },
+        category: { sourceUrl: URLS.a1, method: 'llm', confidence: 0.96 },
+      },
+    });
+    expect(file.byName['B1 Amp']).toMatchObject({
+      fields: {
+        shelf: id('shelf', 'headphone-amps'),
+        functions: [id('function', 'dac'), id('function', 'amplifier')],
+        features: { [id('feature', 'drives')]: [id('value', 'headphones')] },
+        category: 'Amplifiers',
+      },
+      provenance: { functions: { method: 'llm', confidence: 0.95 } },
+    });
+    // The file is the serializer's: the taxonomy, read back from jsonb, is in the contract's order.
+    const body = new TextDecoder().decode(world.stored.get(file.row.key)!);
+    expect(body).toBe(serializeSnapshot(file.snapshot));
+    const raw = JSON.parse(body) as { taxonomy: { shelves: object[]; features: object[] } };
+    expect(Object.keys(raw)).toEqual([
+      'project',
+      'snapshotId',
+      'generation',
+      'publishedAt',
+      'taxonomy',
+      'records',
+    ]);
+    expect(Object.keys(raw.taxonomy.shelves[0]!)).toEqual([
+      'id',
+      'slug',
+      'name',
+      'description',
+      'parentId',
+      'implies',
+      'sortOrder',
+      'retiredIn',
+    ]);
+    expect(Object.keys(raw.taxonomy.features[0]!)).toEqual([
+      'id',
+      'slug',
+      'name',
+      'description',
+      'cardinality',
+      'shelves',
+      'sortOrder',
+      'retiredIn',
+      'values',
+    ]);
+  });
+
+  it('publishes a taxonomy change though no record changed, and then nothing until another', async () => {
+    const datasetId = 'publish-taxonomy-moved';
+    const { world } = await taxonomyWorld(testTaxonomyDefinition(datasetId));
+    await refresh(world, datasetId);
+    const before = (await published(world, datasetId))!.snapshot.records.map(
+      (record) => record.fields,
+    );
+
+    await describeDacs(datasetId, world.clock.now());
+    const second = await refresh(world, datasetId);
+    expect(second.summary.snapshot).toMatchObject({ published: true, generation: 2, records: 3 });
+    const file = (await published(world, datasetId))!;
+    expect(file.snapshot.taxonomy).toMatchObject({ version: 2 });
+    expect(file.snapshot.records.map((record) => record.fields)).toEqual(before);
+    expect(file.row.recordsSha256).toBe(await recordsDigest(file.snapshot.records, 2));
+
+    const third = await refresh(world, datasetId);
+    expect(third.summary.snapshot).toMatchObject({
+      published: false,
+      reason: 'nothing changed since generation 2',
+    });
+  });
+
+  it('holds a snapshot with the taxonomy its records were placed in, and publishes it so', async () => {
+    const datasetId = 'publish-taxonomy-held';
+    const { world } = await taxonomyWorld({
+      ...testTaxonomyDefinition(datasetId),
+      publication: { approval: 'balanced' },
+    });
+    const snapshotId = heldId((await refresh(world, datasetId)).summary);
+    expect(snapshotId).not.toBe('');
+    const draft = JSON.parse(
+      new TextDecoder().decode(world.stored.get(heldKey(datasetId, snapshotId))!),
+    ) as Record<string, unknown>;
+    expect(Object.keys(draft)).toEqual(['project', 'snapshotId', 'taxonomy', 'records']);
+    expect(draft.taxonomy).toEqual(T);
+
+    // The taxonomy moves on before the owner publishes: the snapshot keeps the version its records
+    // name.
+    await describeDacs(datasetId, world.clock.now());
+    expect(await publishHeldSnapshot(world.ports, { datasetId, snapshotId })).toEqual({
+      kind: 'published',
+      generation: 1,
+    });
+    const file = (await published(world, datasetId))!;
+    expect(file.snapshot.taxonomy).toEqual(T);
+    expect(new TextDecoder().decode(world.stored.get(file.row.key)!)).toBe(
+      serializeSnapshot(file.snapshot),
+    );
+  });
+
+  it('publishes a dataset without a taxonomy as before: the same bytes, and the same digest', async () => {
+    const { world } = await worldFor(gated('publish-plain', 'auto'), standardRoutes());
+    await refresh(world, 'publish-plain');
+    const file = (await published(world, 'publish-plain'))!;
+    expect(file.snapshot).not.toHaveProperty('taxonomy');
+    expect(new TextDecoder().decode(world.stored.get(file.row.key)!)).toBe(
+      JSON.stringify(file.snapshot),
+    );
+    // The digest as it was before the taxonomy. If it changed, every dataset would publish its
+    // records again once, with nothing new in them.
+    const before = await sha256Hex(
+      stableStringify(
+        file.snapshot.records.map((record) => ({
+          canonicalId: record.canonicalId,
+          fields: record.fields,
+          provenance: Object.fromEntries(
+            Object.entries(record.provenance).map(([name, { sourceUrl, method, confidence }]) => [
+              name,
+              { sourceUrl, method, confidence },
+            ]),
+          ),
+        })),
+      ),
+    );
+    expect(file.row.recordsSha256).toBe(before);
+    expect(await recordsDigest(file.snapshot.records)).toBe(before);
+    expect(await recordsDigest(file.snapshot.records, 1)).not.toBe(before);
   });
 });

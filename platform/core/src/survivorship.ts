@@ -75,7 +75,7 @@ export function survive(
     const best = own[0];
     if (best === undefined) continue;
     if (!field.list) {
-      results.set(name, { values: [best.value], provenance: provenance(best, [best]) });
+      results.set(name, { values: [best.value], provenance: provenanceOf(best, [best]) });
       continue;
     }
     // Best first, so the first statement for each value (or spec label) is the one that survives.
@@ -88,7 +88,7 @@ export function survive(
     const kept = [...chosen.values()].sort(inPageOrder);
     results.set(name, {
       values: kept.map((statement) => statement.value),
-      provenance: provenance(best, kept),
+      provenance: provenanceOf(best, kept),
     });
   }
   return results;
@@ -131,7 +131,11 @@ function inPageOrder(a: StatementView, b: StatementView): number {
   );
 }
 
-function provenance(best: StatementView, kept: StatementView[]): Provenance {
+/**
+ * A field's provenance: where its best statement came from, and the lowest confidence among the
+ * statements kept for it. A snapshot gives a taxonomy's fields theirs the same way (ADR 0007).
+ */
+export function provenanceOf(best: StatementView, kept: readonly StatementView[]): Provenance {
   // Reduced rather than spread into Math.min(...), which throws a RangeError on very long lists.
   return {
     sourceUrl: best.sourceUrl,
