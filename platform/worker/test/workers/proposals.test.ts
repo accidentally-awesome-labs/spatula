@@ -11,9 +11,11 @@ import {
 import {
   applyDefinition,
   autonomy,
+  autonomyOf,
   commitTaxonomy,
   currentTaxonomy,
   decideProposal,
+  getProposal,
   listActions,
   saveProposals,
   seedTaxonomyVersion,
@@ -24,7 +26,13 @@ import { env } from 'cloudflare:workers';
 import { describe, expect, it } from 'vitest';
 import { api } from '../../src/api';
 import { withDatabase } from '../../src/database';
-import { call, CONSUMER_TOKEN, consumerBindings, expectNoStore } from './api-support';
+import {
+  call,
+  CONSUMER_TOKEN,
+  consumerBindings,
+  expectNoStore,
+  reviewerBindings,
+} from './api-support';
 
 const T = testTaxonomy();
 const id = (subject: TaxonomySubject, slug: string) => findItem(T, subject, slug)!.id;
@@ -60,42 +68,50 @@ const MERGE_PREAMPS = changeSchema.parse({
 });
 
 /**
- * A taxonomy dataset crowdio reads, seeded, with these proposals open. Each names B1 as its
- * evidence, with its title, which a consumer must never see. It opens one database client.
+ * A taxonomy dataset crowdio reads, seeded, with these proposals open and these dropped. Each
+ * names B1 as its evidence, with its title, which a consumer must never see. It opens one database
+ * client.
  */
-async function ready(datasetId: string, proposals: Record<string, ProposableChange> = {}) {
+async function ready(
+  datasetId: string,
+  proposals: Record<string, ProposableChange> = {},
+  dropped: Record<string, ProposableChange> = {},
+) {
+  const row = (
+    proposalId: string,
+    change: ProposableChange,
+    status: 'open' | 'dropped',
+  ): NewProposal => ({
+    id: proposalId,
+    datasetId,
+    runId: null,
+    kind: change.kind,
+    change,
+    changeText: changeText(change),
+    summary: null,
+    why: 'The run’s pages call for it',
+    evidence: {
+      pages: [
+        {
+          address: 'https://maker-b.example/products/b1',
+          title: 'B1 Amp',
+          shelf: 'headphone-amps',
+        },
+      ],
+    },
+    impact: null,
+    status,
+    dropReason: status === 'dropped' ? 'It quotes nothing from the scope.' : null,
+    base: 1,
+    createdAt: new Date(),
+  });
   await withDatabase(env, async (db) => {
     await applyDefinition(db, { ...testTaxonomyDefinition(datasetId), consumers: ['crowdio'] });
     await seedTaxonomyVersion(db, { datasetId, taxonomy: T, actor: OWNER, at: new Date() });
-    await saveProposals(
-      db,
-      Object.entries(proposals).map(
-        ([proposalId, change]): NewProposal => ({
-          id: proposalId,
-          datasetId,
-          runId: null,
-          kind: change.kind,
-          change,
-          changeText: changeText(change),
-          summary: null,
-          why: 'The run’s pages call for it',
-          evidence: {
-            pages: [
-              {
-                address: 'https://maker-b.example/products/b1',
-                title: 'B1 Amp',
-                shelf: 'headphone-amps',
-              },
-            ],
-          },
-          impact: null,
-          status: 'open',
-          dropReason: null,
-          base: 1,
-          createdAt: new Date(),
-        }),
-      ),
-    );
+    await saveProposals(db, [
+      ...Object.entries(proposals).map(([proposalId, change]) => row(proposalId, change, 'open')),
+      ...Object.entries(dropped).map(([proposalId, change]) => row(proposalId, change, 'dropped')),
+    ]);
   });
 }
 
@@ -317,6 +333,47 @@ describe('proposals, for a consumer’s reviewer', () => {
     ]);
   });
 
+  it('never shows a consumer a dropped proposal, which the owner still sees', async () => {
+    const balanced = changeSchema.parse({
+      kind: 'add-value',
+      feature: id('feature', 'drives'),
+      slug: 'balanced',
+      name: 'Balanced',
+      description: 'Feeds a balanced input',
+    });
+    await ready(
+      'proposals-dropped',
+      { tp_dropped_line_out: LINE_OUT },
+      { tp_dropped_balanced: balanced },
+    );
+    const idsOf = async (response: Response) =>
+      ((await response.json()) as { proposals: { id: string }[] }).proposals
+        .map((proposal) => proposal.id)
+        .sort();
+
+    // A dropped proposal's text is the review's, unchecked: not in the reviewer's list, however
+    // the reviewer asks for it.
+    const listed = await asCrowdio('GET', '/datasets/proposals-dropped/proposals');
+    expect(await idsOf(listed)).toEqual(['tp_dropped_line_out']);
+    const asked = await asCrowdio('GET', '/datasets/proposals-dropped/proposals?status=dropped');
+    expect(asked.status).toBe(200);
+    expect(await idsOf(asked)).toEqual([]);
+    // The owner sees both, and why one was dropped.
+    expect(await idsOf(await call('GET', '/datasets/proposals-dropped/proposals'))).toEqual([
+      'tp_dropped_balanced',
+      'tp_dropped_line_out',
+    ]);
+    const dropped = (await (
+      await call('GET', '/datasets/proposals-dropped/proposals?status=dropped')
+    ).json()) as { proposals: { id: string; dropReason: string }[] };
+    expect(dropped.proposals).toEqual([
+      expect.objectContaining({
+        id: 'tp_dropped_balanced',
+        dropReason: 'It quotes nothing from the scope.',
+      }),
+    ]);
+  });
+
   it('answers 401 to a missing or wrong token on every route it reaches', async () => {
     await ready('proposals-token', { tp_token_line_out: LINE_OUT });
     for (const [method, route] of [
@@ -335,6 +392,171 @@ describe('proposals, for a consumer’s reviewer', () => {
         expectNoStore(refused);
       }
     }
+  });
+});
+
+describe('the limiters, on the writes of proposals, undo, and autonomy', () => {
+  const LIMITED =
+    'That’s more writes this minute than the review API takes. Wait a minute, then send the rest.';
+
+  /**
+   * Bindings whose two limiters count the writes they are asked about, in order, and refuse every
+   * one while `refusing` says so. A consumer's write asks the consumer's bucket, then the
+   * reviewer's; the owner's asks one.
+   */
+  async function counting(scopes = BOTH_SCOPES) {
+    const asked: string[] = [];
+    const state = { refusing: false };
+    const limiter = (name: string): RateLimit => ({
+      limit: ({ key }) => {
+        asked.push(`${name} ${key}`);
+        return Promise.resolve({ success: !state.refusing });
+      },
+    });
+    const bindings = {
+      ...(await reviewerBindings(scopes)),
+      CONSUMER_REVIEW_LIMITER: limiter('consumer'),
+      REVIEW_LIMITER: limiter('reviewer'),
+    } as Env;
+    return { asked, state, bindings };
+  }
+
+  const reviewer = (bindings: Env, method: string, path: string, body?: unknown) =>
+    call(method, path, {
+      token: CONSUMER_TOKEN,
+      bindings,
+      headers: { 'x-spatula-reviewer': 'r-7' },
+      body,
+    });
+
+  it('counts a reviewer’s decision against its consumer and then itself, and refuses it past either', async () => {
+    await ready('proposals-limits', {
+      tp_limits_line_out: LINE_OUT,
+      tp_limits_phono: PHONO,
+    });
+    const { asked, state, bindings } = await counting();
+    const decide = (proposalId: string, decision: string) =>
+      reviewer(bindings, 'POST', `/datasets/proposals-limits/proposals/${proposalId}`, {
+        decision,
+      });
+
+    // A read costs nothing. A decision asks the consumer's bucket first.
+    expect((await reviewer(bindings, 'GET', '/datasets/proposals-limits/proposals')).status).toBe(
+      200,
+    );
+    expect(asked).toEqual([]);
+    expect((await decide('tp_limits_line_out', 'accept')).status).toBe(200);
+    expect(asked).toEqual(['consumer crowdio', 'reviewer crowdio:r-7']);
+
+    // Refused, it answers 429 and applies nothing: no new version, and the proposal is open.
+    state.refusing = true;
+    const refused = await decide('tp_limits_phono', 'accept');
+    expect(refused.status).toBe(429);
+    expect(refused.headers.get('retry-after')).toBe('60');
+    expectNoStore(refused);
+    expect(await refused.json()).toEqual({ error: LIMITED });
+    // The consumer's bucket said no first, so the reviewer's was not asked.
+    expect(asked.slice(2)).toEqual(['consumer crowdio']);
+    expect(await withDatabase(env, (db) => currentTaxonomy(db, 'proposals-limits'))).toMatchObject({
+      version: 2,
+    });
+    expect(await withDatabase(env, (db) => getProposal(db, 'tp_limits_phono'))).toMatchObject({
+      status: 'open',
+    });
+    expect(await withDatabase(env, (db) => listActions(db, 'proposals-limits', {}))).toHaveLength(
+      1,
+    );
+  });
+
+  it('counts the owner’s decision, undo, and revoke, and a refused one changes nothing', async () => {
+    await ready('proposals-limits-owner', {
+      tp_limitsown_line_out: LINE_OUT,
+      tp_limitsown_phono: PHONO,
+    });
+    await withDatabase(env, (db) =>
+      db.insert(autonomy).values({
+        datasetId: 'proposals-limits-owner',
+        kind: 'describe',
+        streak: 12,
+        updatedAt: new Date(),
+      }),
+    );
+    const { asked, state, bindings } = await counting();
+    const owner = (path: string, body?: unknown) =>
+      call('POST', `/datasets/proposals-limits-owner/${path}`, { bindings, body });
+    const accept = (proposalId: string) => owner(`proposals/${proposalId}`, { decision: 'accept' });
+    const version = async () =>
+      (await withDatabase(env, (db) => currentTaxonomy(db, 'proposals-limits-owner')))?.version;
+    const streak = async () =>
+      (await withDatabase(env, (db) => autonomyOf(db, 'proposals-limits-owner'))).find(
+        ({ kind }) => kind === 'describe',
+      )?.streak;
+
+    expect((await accept('tp_limitsown_line_out')).status).toBe(200);
+    expect(await version()).toBe(2);
+
+    // With the limiter refusing, each write answers 429 and changes nothing.
+    state.refusing = true;
+    const decision = await accept('tp_limitsown_phono');
+    expect(decision.status).toBe(429);
+    expect(await decision.json()).toEqual({ error: LIMITED });
+    expect(await withDatabase(env, (db) => getProposal(db, 'tp_limitsown_phono'))).toMatchObject({
+      status: 'open',
+    });
+    const undo = await owner('taxonomy/versions/2/undo');
+    expect(undo.status).toBe(429);
+    expect(undo.headers.get('retry-after')).toBe('60');
+    expectNoStore(undo);
+    expect(await undo.json()).toEqual({ error: LIMITED });
+    expect(await version()).toBe(2);
+    const revoke = await owner('autonomy/describe/revoke');
+    expect(revoke.status).toBe(429);
+    expect(await revoke.json()).toEqual({ error: LIMITED });
+    expect(await streak()).toBe(12);
+
+    // With room again, the same writes go through.
+    state.refusing = false;
+    expect((await owner('taxonomy/versions/2/undo')).status).toBe(200);
+    expect(await version()).toBe(3);
+    expect(await (await owner('autonomy/describe/revoke')).json()).toEqual({
+      kind: 'describe',
+      streak: 0,
+      was: 12,
+    });
+    // Every one was the owner's, and counted: the accepted, the three refused, the two that went
+    // through.
+    expect(asked).toEqual(Array.from({ length: 6 }, () => 'reviewer owner'));
+  });
+
+  it('spends no limiter tokens on a write it turns away before the limiter', async () => {
+    await ready('proposals-limits-turned', { tp_limitsturned_phono: PHONO });
+    const { asked, bindings } = await counting();
+    const withoutScope = await counting('review:answer');
+    const base = '/datasets/proposals-limits-turned';
+    // The owner's routes answer a consumer 403 before anything is counted.
+    expect((await reviewer(bindings, 'POST', `${base}/taxonomy/versions/1/undo`)).status).toBe(403);
+    expect((await reviewer(bindings, 'POST', `${base}/autonomy/add-value/revoke`)).status).toBe(
+      403,
+    );
+    // So do a decision without the scope, and one that doesn't name its reviewer.
+    expect(
+      (
+        await reviewer(withoutScope.bindings, 'POST', `${base}/proposals/tp_limitsturned_phono`, {
+          decision: 'reject',
+        })
+      ).status,
+    ).toBe(403);
+    expect(
+      (
+        await call('POST', `${base}/proposals/tp_limitsturned_phono`, {
+          token: CONSUMER_TOKEN,
+          bindings,
+          body: { decision: 'reject' },
+        })
+      ).status,
+    ).toBe(400);
+    expect(asked).toEqual([]);
+    expect(withoutScope.asked).toEqual([]);
   });
 });
 
