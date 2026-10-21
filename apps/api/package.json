@@ -47,7 +47,7 @@
     "clean": "rm -rf dist .turbo *.tsbuildinfo"
   },
   "dependencies": {
-    "@bull-board/api": "^6.20.6",
+    "@bull-board/api": "^8.1.2",
     "@bull-board/hono": "^6.20.6",
     "@bull-board/ui": "^6.20.6",
     "@hono/node-server": "^1.19.13",
