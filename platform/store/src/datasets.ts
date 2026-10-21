@@ -10,7 +10,7 @@ import {
   type ItemView,
   type PagesSource,
 } from '@spatula/core';
-import { and, eq, inArray, notInArray, or, sql, type AnyColumn } from 'drizzle-orm';
+import { and, asc, eq, inArray, notInArray, or, sql, type AnyColumn } from 'drizzle-orm';
 import type { Executor } from './client';
 import { supersedeDecisions } from './decisions';
 import { captures, datasets, items, sources, taxonomyVersions, type ItemStatus } from './schema';
@@ -405,6 +405,24 @@ export async function revisionOf(db: Executor, datasetId: string): Promise<numbe
 export async function datasetExists(db: Executor, id: string): Promise<boolean> {
   const [row] = await db.select({ id: datasets.id }).from(datasets).where(eq(datasets.id, id));
   return row !== undefined;
+}
+
+/**
+ * Every dataset, by ID, with its revision and the generation at its head: what the console opens
+ * with. Like `datasetExists`, it doesn't read the definitions, so one that no longer passes the
+ * checks is listed too.
+ */
+export async function listDatasets(
+  db: Executor,
+): Promise<{ id: string; revision: number; headGeneration: number }[]> {
+  return db
+    .select({
+      id: datasets.id,
+      revision: datasets.revision,
+      headGeneration: datasets.headGeneration,
+    })
+    .from(datasets)
+    .orderBy(asc(datasets.id));
 }
 
 /** The dataset's live items, by source and page. */

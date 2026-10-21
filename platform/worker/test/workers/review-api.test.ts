@@ -461,4 +461,33 @@ describe('the review API', () => {
     expect(reviewers.keys.at(-1)).toBe('owner');
     expect(consumers.keys).toHaveLength(4);
   });
+
+  it('turns away a missing or wrong token at every route the owner guard lets through', async () => {
+    const datasetId = 'rv-anonymous';
+    await questionsIn(datasetId);
+    // These shapes pass the owner guard (CONSUMER_ROUTES), so bearerActor alone keeps an
+    // anonymous caller out: with no consumer's token set, and with crowdio's, which isn't sent.
+    const routes: [string, string][] = [
+      ['POST', `/datasets/${datasetId}/review/bulk`],
+      ['POST', `/datasets/${datasetId}/review/suggestions`],
+      ['GET', `/datasets/${datasetId}/review/log`],
+      ['POST', `/datasets/${datasetId}/taxonomy`],
+    ];
+    for (const bindings of [env, await reviewerBindings()]) {
+      for (const [method, path] of routes) {
+        for (const token of [null, 'wrong-token']) {
+          const name = `${method} ${path} with ${token ?? 'no token'}`;
+          const response = await call(method, path, {
+            token,
+            bindings,
+            body: method === 'POST' ? {} : undefined,
+          });
+          expect(response.status, name).toBe(401);
+          expect(response.headers.get('www-authenticate'), name).toBe('Bearer');
+          expectNoStore(response);
+          expect(await response.json(), name).toEqual({ error: 'The token is missing or wrong.' });
+        }
+      }
+    }
+  });
 });

@@ -34,6 +34,7 @@ import {
   heldSnapshot,
   latestAcknowledgments,
   latestSnapshot,
+  listDatasets,
   listEvals,
   listItems,
   lockDataset,
@@ -53,6 +54,7 @@ import { Hono, type MiddlewareHandler } from 'hono';
 import { bodyLimit } from 'hono/body-limit';
 import { z } from 'zod';
 import { aboutPage } from './about';
+import { accessActor } from './access';
 import {
   actorRecord,
   bearer,
@@ -71,10 +73,12 @@ import { pageKey } from './pipeline';
 import { reviewRoutes } from './review-api';
 
 /*
- * The owner's API, the consumers' routes, the review API (review-api.ts), the public page, and the
- * key directory. Callers send a bearer token; the Worker keeps only SHA-256s and compares in
- * constant time. Answers to callers are personal, so nothing caches them, and the same goes for
- * every other answer but the page and the key directory: an unknown path's 404 and a failure's 500.
+ * The owner's API, the consumers' routes, the review API (review-api.ts), the console's API, the
+ * public page, and the key directory. Callers send a bearer token, and the console's API takes
+ * Cloudflare Access's instead (access.ts); the Worker keeps only SHA-256s of bearer tokens and
+ * compares in constant time. Answers to callers are personal, so nothing caches them, and the same
+ * goes for every other answer but the page and the key directory: an unknown path's 404 and a
+ * failure's 500.
  */
 
 /** `consumer` is who a route's `reader` found: a listed consumer's name, or null for the owner. */
@@ -839,6 +843,20 @@ reviewRoutes(bearerApi);
 // Hono copies a sub-app's routes when it's mounted, so every route of bearerApi is registered
 // above this line.
 api.route('/', bearerApi);
+
+/*
+ * The console's API (ADR 0009): the datasets, and the review API, for the owner Cloudflare Access
+ * signed in. accessActor guards every path under it, a path no route answers included.
+ */
+const consoleApi = new Hono<ActorApi>();
+consoleApi.use('*', accessActor);
+consoleApi.get('/datasets', async (c) =>
+  c.json({ datasets: await withDatabase(c.env, listDatasets) }),
+);
+reviewRoutes(consoleApi);
+
+// As with bearerApi, every route of consoleApi is registered above this line.
+api.route('/console/api', consoleApi);
 
 // These two answer whatever the path, including ones outside the owner routes, which set the
 // header themselves.

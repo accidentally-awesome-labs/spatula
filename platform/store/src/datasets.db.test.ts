@@ -16,6 +16,7 @@ import {
   applyDefinition,
   datasetExists,
   getDataset,
+  listDatasets,
   listItems,
   listLiveItems,
   reviveItems,
@@ -1084,5 +1085,19 @@ describe('a definition’s scope', () => {
       ]);
       // The same definition again changes nothing.
       expect((await applyDefinition(db, { ...definition, scope })).taxonomyVersion).toBeUndefined();
+    }));
+});
+
+describe('listDatasets', () => {
+  it('lists every dataset by ID, with its revision and the generation at its head', () =>
+    withRollback(async (db) => {
+      await applyDefinition(db, testDefinition('list-b'));
+      await applyDefinition(db, testDefinition('list-a'));
+      await applyDefinition(db, { ...testDefinition('list-a'), consumers: ['crowdio'] });
+      const listed = (await listDatasets(db)).filter((dataset) => dataset.id.startsWith('list-'));
+      expect(listed).toEqual([
+        { id: 'list-a', revision: 2, headGeneration: 0 },
+        { id: 'list-b', revision: 1, headGeneration: 0 },
+      ]);
     }));
 });

@@ -20,3 +20,9 @@ OWNER_TOKEN_HASH=ef260e9aa3c673af240d17a2660480361a8e081d1ffeca2a5ed0e3219fc1856
 # CONSUMER_CROWDIO_TOKEN_HASH=
 # CONSUMER_CROWDIO_HMAC_KEY=
 # CONSUMER_CROWDIO_SCOPES=review:answer
+# The console's API sits behind Cloudflare Access (ADR 0009): the team's address, the Access
+# application's audience tag, and the owner's email, the only one it lets in. A local console
+# has no Access in front of it, so leave these out and the console's API answers 503.
+# ACCESS_TEAM_DOMAIN=https://<team>.cloudflareaccess.com
+# ACCESS_AUD=
+# OWNER_EMAIL=
