@@ -141,7 +141,7 @@ export function createClient(options: {
 
     async reviveItems(
       datasetId: string,
-      body: { refused?: true; pages?: string[] },
+      body: { refused?: true; irrelevant?: true; fromCaptures?: true; pages?: string[] },
     ): Promise<{ revived: number }> {
       const response = await request(
         'POST',

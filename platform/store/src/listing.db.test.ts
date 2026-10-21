@@ -1,10 +1,10 @@
-import { eq, sql } from 'drizzle-orm';
+import { eq, inArray, sql } from 'drizzle-orm';
 import { describe, expect, it } from 'vitest';
 import { withRollback } from '../test/db';
 import { T } from '../test/seed';
 import { recordCapture } from './captures';
 import type { Executor } from './client';
-import { applyDefinition, listLiveItems, type ItemRef } from './datasets';
+import { applyDefinition, listLiveItems, reviveItems, type ItemRef } from './datasets';
 import { recordFetch } from './fetches';
 import { testSitemapDefinition } from './fixtures';
 import {
@@ -412,6 +412,133 @@ describe('dueItems’s re-reads', () => {
       // Under all, and once its freshness has run out, A1 is fetched.
       expect((await plan({ all: true })).reread).toEqual([]);
       expect((await plan({ now: new Date(T(10).getTime() + 8 * DAY) })).reread).toEqual([]);
+    }));
+
+  it('reads a revived irrelevant page again from its capture, and fetches one with none', () =>
+    withRollback(async (tx) => {
+      await seed(tx);
+      await list(tx, T(1), [page(1, '2026-10-01T00:00:00.000Z')]);
+      const [a1, a2] = await listLiveItems(tx, DATASET);
+      for (const item of [a1!, a2!]) {
+        const name = item.locator.split('/').pop()!;
+        await recordFetch(tx, {
+          id: `fe_${name}_read`,
+          runId: RUN,
+          itemId: item.id,
+          url: item.locator,
+          finalUrl: item.locator,
+          policy: 'allowed',
+          policyReason: null,
+          method: 'http',
+          outcome: 'changed',
+          httpStatus: 200,
+          bytes: 100,
+          signals: {},
+          startedAt: T(5),
+          durationMs: 50,
+          error: null,
+          page: { contentHash: `hash-${name}`, etag: null, lastModified: null },
+          extractedWith: 'r1.v1',
+        });
+      }
+      // Only A1's copy was captured: A2 was read before the archive.
+      await captureOf(tx, a1!, 'fe_a1_read', 'hash-a1', T(5));
+      // The old categories had no place for either: "None of these" left both irrelevant.
+      await tx
+        .update(items)
+        .set({ status: 'irrelevant' })
+        .where(inArray(items.id, [a1!.id, a2!.id]));
+      expect(
+        await reviveItems(tx, { datasetId: DATASET, irrelevant: true, fromCaptures: true }),
+      ).toBe(2);
+      const planned = await dueItems(tx, {
+        datasetId: DATASET,
+        now: T(10),
+        maxAgeDays: 7,
+        current: 'r2.v1',
+        limit: 100,
+      });
+      // Revision 2's code makes both due: A1 is read again from its capture, and A2 fetched.
+      expect(planned.reread).toEqual([a1!.id]);
+      expect(planned.ids).toEqual(expect.arrayContaining([a1!.id, a2!.id]));
+      const kept = await tx
+        .select({
+          id: items.id,
+          lastFetchedAt: items.lastFetchedAt,
+          lastOutcome: items.lastOutcome,
+          status: items.status,
+        })
+        .from(items)
+        .where(inArray(items.id, [a1!.id, a2!.id]));
+      expect(kept.map(({ status }) => status)).toEqual(['live', 'live']);
+      // A2 is never read, and A1 keeps its last fetch and what it found.
+      expect(kept.find((row) => row.id === a2!.id)).toMatchObject({
+        lastFetchedAt: null,
+        lastOutcome: null,
+      });
+      expect(kept.find((row) => row.id === a1!.id)).toMatchObject({
+        lastFetchedAt: T(5),
+        lastOutcome: 'changed',
+      });
+    }));
+
+  it('revives irrelevant pages to be fetched without fromCaptures, and only irrelevant ones with it', () =>
+    withRollback(async (tx) => {
+      await seed(tx);
+      await list(tx, T(1), [page(1, '2026-10-01T00:00:00.000Z')]);
+      const [a1, a2] = await listLiveItems(tx, DATASET);
+      await recordFetch(tx, {
+        id: 'fe_a1_read',
+        runId: RUN,
+        itemId: a1!.id,
+        url: a1!.locator,
+        finalUrl: a1!.locator,
+        policy: 'allowed',
+        policyReason: null,
+        method: 'http',
+        outcome: 'changed',
+        httpStatus: 200,
+        bytes: 100,
+        signals: {},
+        startedAt: T(5),
+        durationMs: 50,
+        error: null,
+        page: { contentHash: 'hash-a1', etag: null, lastModified: null },
+        extractedWith: 'r1.v1',
+      });
+      await captureOf(tx, a1!, 'fe_a1_read', 'hash-a1', T(5));
+      await tx.update(items).set({ status: 'irrelevant' }).where(eq(items.id, a1!.id));
+      // A2 is refused, not irrelevant: --irrelevant leaves it, and a named one is fetched.
+      await tx.update(items).set({ status: 'refused' }).where(eq(items.id, a2!.id));
+      expect(await reviveItems(tx, { datasetId: DATASET, irrelevant: true })).toBe(1);
+      const revived = (id: string) =>
+        tx
+          .select({ status: items.status, lastFetchedAt: items.lastFetchedAt })
+          .from(items)
+          .where(eq(items.id, id))
+          .then(([row]) => row);
+      expect(await revived(a1!.id)).toEqual({ status: 'live', lastFetchedAt: null });
+      expect((await revived(a2!.id))!.status).toBe('refused');
+      // With fromCaptures, a refused page named beside it is still fetched: only an irrelevant
+      // page whose capture holds its copy keeps its last fetch.
+      await tx
+        .update(items)
+        .set({ status: 'irrelevant', lastFetchedAt: T(5), lastOutcome: 'changed' })
+        .where(eq(items.id, a1!.id));
+      await tx
+        .update(items)
+        .set({ lastFetchedAt: T(5) })
+        .where(eq(items.id, a2!.id));
+      expect(
+        await reviveItems(tx, {
+          datasetId: DATASET,
+          irrelevant: true,
+          fromCaptures: true,
+          pages: [a2!.locator],
+        }),
+      ).toBe(2);
+      expect(await revived(a1!.id)).toEqual({ status: 'live', lastFetchedAt: T(5) });
+      expect(await revived(a2!.id)).toEqual({ status: 'live', lastFetchedAt: null });
     }));
 });
 

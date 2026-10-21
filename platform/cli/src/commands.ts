@@ -140,14 +140,22 @@ export async function run(
 }
 
 /**
- * Puts sources back (ADR 0006), then refused pages or the pages named, for the next run. A source
- * put back starts its count of blocked runs again, and a refused one is live.
+ * Puts sources back (ADR 0006), then refused pages, irrelevant ones, or the pages named, for the
+ * next run. A source put back starts its count of blocked runs again, and a refused one is live.
+ * With `fromCaptures`, an irrelevant page whose capture holds its stored copy is read again from it,
+ * with no request, once its code is older (ADR 0008).
  */
 export async function revive(
   io: Io,
   client: Client,
   datasetId: string,
-  options: { refused: boolean; pages: string[]; sources: string[] },
+  options: {
+    refused: boolean;
+    irrelevant: boolean;
+    fromCaptures: boolean;
+    pages: string[];
+    sources: string[];
+  },
 ): Promise<number> {
   return withApi(io, async () => {
     if (options.sources.length > 0) {
@@ -158,9 +166,11 @@ export async function revive(
           : `Revived ${count(revived, 'source')} of ${datasetId}. The next run reads ${revived === 1 ? 'its' : 'their'} due pages.`,
       );
     }
-    if (!options.refused && options.pages.length === 0) return 0;
+    if (!options.refused && !options.irrelevant && options.pages.length === 0) return 0;
     const { revived } = await client.reviveItems(datasetId, {
       ...(options.refused ? { refused: true as const } : {}),
+      ...(options.irrelevant ? { irrelevant: true as const } : {}),
+      ...(options.fromCaptures ? { fromCaptures: true as const } : {}),
       ...(options.pages.length > 0 ? { pages: options.pages } : {}),
     });
     io.out(

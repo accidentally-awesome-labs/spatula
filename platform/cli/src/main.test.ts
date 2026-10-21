@@ -1049,6 +1049,31 @@ describe('revive', () => {
     expect(out).toEqual(['Revived 2 pages of cli-products. The next run reads them.']);
   });
 
+  it('revives irrelevant pages, to be read again from their captures', async () => {
+    const { fetch, sent } = stubApi(() => Response.json({ revived: 12 }));
+    const { io, out } = memoryIo();
+    const argv = ['revive', 'cli-products', '--irrelevant', '--from-captures'];
+    expect(await main(argv, { io, env: ENV, fetch })).toBe(0);
+    expect(sent[0]).toMatchObject({
+      method: 'POST',
+      path: '/datasets/cli-products/items/revive',
+      body: { irrelevant: true, fromCaptures: true },
+    });
+    expect(out).toEqual(['Revived 12 pages of cli-products. The next run reads them.']);
+  });
+
+  it('revives irrelevant pages to be fetched without --from-captures', async () => {
+    const { fetch, sent } = stubApi(() => Response.json({ revived: 1 }));
+    const { io } = memoryIo();
+    expect(await main(['revive', 'cli-products', '--irrelevant'], { io, env: ENV, fetch })).toBe(0);
+    expect(sent[0]!.body).toEqual({ irrelevant: true });
+  });
+
+  it('needs something to revive beside --from-captures', async () => {
+    const { io } = memoryIo();
+    expect(await main(['revive', 'cli-products', '--from-captures'], { io, env: ENV })).toBe(2);
+  });
+
   it('says when nothing matched, not that the next run reads it', async () => {
     const { fetch } = stubApi(() => Response.json({ revived: 0 }));
     const { io, out, err } = memoryIo();
@@ -1067,7 +1092,7 @@ describe('revive', () => {
     expect(out).toEqual([]);
   });
 
-  it('needs pages to revive, --refused, or --source', async () => {
+  it('needs pages to revive, --refused, --irrelevant, or --source', async () => {
     const { io } = memoryIo();
     expect(await main(['revive', 'cli-products'], { io, env: ENV })).toBe(2);
   });

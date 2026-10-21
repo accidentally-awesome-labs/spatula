@@ -22,8 +22,8 @@ Run from the repository root, with pnpm 11 and Node 22 or later.
 - `pnpm --filter @spatula/worker dev`: the Worker on port 8787. Copy `platform/worker/.dev.vars.example`
   to `.dev.vars` first.
 - `pnpm spatula <command>`: the CLI: `check`, `plan`, `apply`, `run`, `snapshot pull`, `review`,
-  `revive` (pages, or sources with `--source`), `purge` (a source's page captures, with
-  `--source`), `status`, `eval`, and `evals`. `SPATULA_URL` and
+  `revive` (pages, `--irrelevant` pages, or sources with `--source`), `purge` (a source's page
+  captures, with `--source`), `status`, `eval`, and `evals`. `SPATULA_URL` and
   `SPATULA_TOKEN` say where Spatula is (`https://spatula.run` for the deployment),
   and the owner token.
   The CLI sends the token only to an `https://` address, or to this machine. Run `pnpm spatula …`

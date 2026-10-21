@@ -369,9 +369,13 @@ api.get('/datasets/:id/snapshots/:generation', reader, async (c) => {
 const reviveSchema = z
   .strictObject({
     refused: z.literal(true).optional(),
+    irrelevant: z.literal(true).optional(),
+    fromCaptures: z.literal(true).optional(),
     pages: z.array(z.string().max(2048)).max(1000).optional(),
   })
-  .refine((body) => body.refused === true || (body.pages?.length ?? 0) > 0);
+  .refine(
+    (body) => body.refused === true || body.irrelevant === true || (body.pages?.length ?? 0) > 0,
+  );
 
 api.post('/datasets/:id/items/revive', async (c) => {
   let body: unknown;
@@ -383,7 +387,10 @@ api.post('/datasets/:id/items/revive', async (c) => {
   const parsed = reviveSchema.safeParse(body);
   if (!parsed.success) {
     return c.json(
-      { error: 'Send { "refused": true }, or { "pages": [addresses] }, or both.' },
+      {
+        error:
+          'Send { "refused": true }, { "irrelevant": true }, or { "pages": [addresses] }, with "fromCaptures": true to read irrelevant pages again from their captures.',
+      },
       400,
     );
   }
@@ -395,7 +402,13 @@ api.post('/datasets/:id/items/revive', async (c) => {
   const datasetId = c.req.param('id');
   const revived = await withDatabase(c.env, async (db) =>
     (await datasetExists(db, datasetId))
-      ? reviveItems(db, { datasetId, refused: parsed.data.refused, pages })
+      ? reviveItems(db, {
+          datasetId,
+          refused: parsed.data.refused,
+          irrelevant: parsed.data.irrelevant,
+          fromCaptures: parsed.data.fromCaptures,
+          pages,
+        })
       : null,
   );
   if (revived === null) return c.json({ error: `Dataset ${datasetId} doesn’t exist.` }, 404);

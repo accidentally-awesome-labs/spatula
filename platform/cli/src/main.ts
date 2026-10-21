@@ -27,9 +27,11 @@ export const USAGE = `Usage: spatula <command>
                                reads the pages that are due; --all counts every live
                                page as due, however recently it was read. The budget
                                still caps the run
-  revive <dataset> [--refused] [--source <id>]... [<page>...]
-                               Put refused pages, or the pages named, back for the next
-                               run; --source puts a blocked or refused source back
+  revive <dataset> [--refused] [--irrelevant [--from-captures]] [--source <id>]... [<page>...]
+                               Put refused pages, irrelevant ones, or the pages named, back
+                               for the next run; --from-captures reads an irrelevant page
+                               again from its capture, with no request, once its code is
+                               older; --source puts a blocked or refused source back
   purge <dataset> --source <id>
                                Delete a source’s page captures, and its pages’ stored
                                copies. Its next run captures them again
@@ -58,6 +60,8 @@ const OPTIONS = {
   wait: { type: 'boolean' },
   all: { type: 'boolean' },
   refused: { type: 'boolean' },
+  irrelevant: { type: 'boolean' },
+  'from-captures': { type: 'boolean' },
   source: { type: 'string', multiple: true },
   save: { type: 'boolean' },
   out: { type: 'string' },
@@ -136,12 +140,17 @@ export async function main(
       const sources = values.source ?? [];
       if (
         datasetId === undefined ||
-        (pages.length === 0 && values.refused !== true && sources.length === 0)
+        (pages.length === 0 &&
+          values.refused !== true &&
+          values.irrelevant !== true &&
+          sources.length === 0)
       ) {
         return usage();
       }
       return revive(io, client, datasetId, {
         refused: values.refused === true,
+        irrelevant: values.irrelevant === true,
+        fromCaptures: values['from-captures'] === true,
         pages,
         sources,
       });

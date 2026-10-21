@@ -6,6 +6,7 @@ import {
   items,
   listLiveItems,
   listOpenReviews,
+  reviveItems,
   saveDecision,
   seedTaxonomyVersion,
   setItemStatus,
@@ -16,7 +17,14 @@ import { and, eq, isNull } from 'drizzle-orm';
 import { describe, expect, it } from 'vitest';
 import { db } from '../test/node/db';
 import { fakeStep, fakeTaxonomyDecider, type World } from '../test/node/fakes';
-import { decidedDefinition, fetchOf, published, refresh, worldFor } from '../test/node/runs';
+import {
+  decidedDefinition,
+  fetchOf,
+  published,
+  refresh,
+  taxonomyWorld,
+  worldFor,
+} from '../test/node/runs';
 import { A1, standardRoutes, taxonomyFor, URLS } from '../test/pages';
 import { extractionTag, pageKey } from './pipeline';
 import { runRefresh, type StepRunner } from './refresh';
@@ -164,7 +172,7 @@ describe('reading a page again from its capture', { timeout: 20_000 }, () => {
 
 /**
  * A person's "None of these" about a page, as a classification kept it before the taxonomy, which
- * took the page out. Then the page is live again with the last fetch it had, as a revive leaves it.
+ * took the page out.
  */
 async function personTookOut(world: World, datasetId: string, itemId: string) {
   const decision = await saveDecision(db, {
@@ -193,7 +201,6 @@ async function personTookOut(world: World, datasetId: string, itemId: string) {
     at: world.clock.now(),
   });
   await setItemStatus(db, itemId, 'irrelevant');
-  await setItemStatus(db, itemId, 'live');
 }
 
 const statusOf = async (itemId: string) =>
@@ -201,13 +208,15 @@ const statusOf = async (itemId: string) =>
 
 /**
  * A taxonomy dataset whose pages were read before its taxonomy was seeded, as the switch leaves
- * them: not placed, and due. A page a person took out is live again, and the taxonomy is seeded.
+ * them: not placed, and due. A page a person took out is revived from its capture, and the taxonomy
+ * is seeded.
  */
 async function switched(datasetId: string, tookOut: string) {
   const made = await worldFor(testTaxonomyDefinition(datasetId), standardRoutes());
   await refresh(made.world, datasetId);
   const page = made.pages.find((item) => item.locator === tookOut)!;
   await personTookOut(made.world, datasetId, page.id);
+  expect(await reviveItems(db, { datasetId, irrelevant: true, fromCaptures: true })).toBe(1);
   await seedTaxonomyVersion(db, {
     datasetId,
     taxonomy: testTaxonomy(),
@@ -234,6 +243,43 @@ describe('reading a page a person took out', { timeout: 20_000 }, () => {
     expect(open[0]!.context).toMatchObject({
       earlier: { shelf: NONE_SHELF, functions: [], values: [] },
     });
+  });
+
+  it('keeps a placed page out when it is revived, read from its capture, and found a shelf', async () => {
+    const definition = testTaxonomyDefinition('reread-none-placed');
+    const {
+      world,
+      pages: [a1, a2, b1],
+    } = await taxonomyWorld(definition);
+    await refresh(world, 'reread-none-placed');
+    // After its placement, a person said "None of these", and the page was revived from its
+    // capture. Only A1 is due, and it's read again.
+    await personTookOut(world, 'reread-none-placed', a1!.id);
+    expect(
+      await reviveItems(db, {
+        datasetId: 'reread-none-placed',
+        irrelevant: true,
+        fromCaptures: true,
+      }),
+    ).toBe(1);
+    const before = world.web.requests.length;
+    const second = await refresh(world, 'reread-none-placed', {});
+    expect(world.web.requests.length).toBe(before);
+    expect(second.names.filter((name) => /^(?:reread|fetch|decide):/u.test(name))).toEqual([
+      `reread:${a1!.id}`,
+      `decide:${a1!.id}`,
+    ]);
+    expect(second.summary).toMatchObject({ items: 1, due: 1, reread: 1 });
+    expect(await statusOf(a1!.id)).toBe('irrelevant');
+    expect(await statusOf(a2!.id)).toBe('live');
+    expect(await statusOf(b1!.id)).toBe('live');
+    const open = await listOpenReviews(db, 'reread-none-placed');
+    expect(open.map((review) => review.subject)).toEqual([a1!.id]);
+    expect(open[0]!.context).toMatchObject({ earlier: { shelf: NONE_SHELF } });
+    expect(Object.keys((await published(world, 'reread-none-placed'))!.byName).sort()).toEqual([
+      'A2',
+      'B1 Amp',
+    ]);
   });
 
   it('keeps it out, and asks nothing, when the decider finds it none of these too', async () => {
