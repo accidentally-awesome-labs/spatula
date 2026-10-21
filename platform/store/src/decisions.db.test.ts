@@ -6,6 +6,7 @@ import { seedDataset, T } from '../test/seed';
 import type { Executor } from './client';
 import {
   closeReview,
+  decisionById,
   dismissReviews,
   findDecision,
   finalizeDecision,
@@ -13,6 +14,7 @@ import {
   joinedEntityOf,
   judge,
   judgementsFor,
+  latestFinalized,
   listOpenReviews,
   openReview,
   saveDecision,
@@ -524,5 +526,40 @@ describe('deleting', () => {
       expect(await left()).toEqual({ judgements: 0, reviews: 1, decisions: 1 });
       await tx.delete(datasets).where(eq(datasets.id, 'test-products'));
       expect(await left()).toEqual({ judgements: 0, reviews: 0, decisions: 0 });
+    }));
+});
+
+describe('decisionById and latestFinalized', () => {
+  it('finds a current decision by its ID, and a subject’s latest finalized one, superseded or not', () =>
+    withRollback(async (db) => {
+      await seedDataset(db);
+      const first = await saveDecision(
+        db,
+        decision({ id: 'dc_first0000000000000000', decidedAt: T(1) }),
+      );
+      expect(await decisionById(db, first.id)).toEqual(first);
+      expect(
+        await latestFinalized(db, { datasetId: 'test-products', subject: 'it_a1' }),
+      ).toBeNull();
+      await finalizeDecision(db, { id: first.id, finalAnswer: 'Headphones', at: T(2) });
+      const second = await saveDecision(
+        db,
+        decision({ id: 'dc_second000000000000000', stateHash: 'hash-2', decidedAt: T(3) }),
+      );
+      // The first is superseded now: a step that runs again doesn't find it by its ID.
+      expect(await decisionById(db, first.id)).toBeNull();
+      expect(
+        await latestFinalized(db, { datasetId: 'test-products', subject: 'it_a1' }),
+      ).toMatchObject({
+        id: first.id,
+        finalAnswer: 'Headphones',
+      });
+      await finalizeDecision(db, { id: second.id, finalAnswer: 'DAC/Amp', at: T(4) });
+      expect(
+        (await latestFinalized(db, { datasetId: 'test-products', subject: 'it_a1' }))!.id,
+      ).toBe(second.id);
+      expect(
+        await latestFinalized(db, { datasetId: 'test-products', subject: 'it_b1' }),
+      ).toBeNull();
     }));
 });

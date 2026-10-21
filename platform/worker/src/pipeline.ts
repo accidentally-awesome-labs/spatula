@@ -9,6 +9,7 @@ import {
   type LlmUsage,
   type PackRegistry,
   type RunSummary,
+  type TaxonomyDecider,
 } from '@spatula/core';
 import type { Executor, StatementCounts } from '@spatula/store';
 
@@ -70,6 +71,8 @@ export interface RefreshPorts {
   llm: LlmPort | null;
   /** The decision cascade's decider, or null when no model is configured: then a person decides. */
   decider: Decider | null;
+  /** The taxonomy's three-part decider (ADR 0007), or null when no model is configured. */
+  taxonomyDecider: TaxonomyDecider | null;
   packs: PackRegistry;
   now(): Date;
   /** A wait inside a step, never longer than MAX_INLINE_WAIT_MS. */
@@ -92,6 +95,11 @@ export interface Context {
   startedAt: Date;
   /** Each source's standing as the run started, by ID. A source without one is live. */
   standing?: Record<string, Standing>;
+  /**
+   * The taxonomy version the run places pages in (ADR 0007): null when the dataset's record type
+   * has a taxonomy that isn't seeded yet, and absent for a record type without one.
+   */
+  taxonomyVersion?: number | null;
 }
 
 /**

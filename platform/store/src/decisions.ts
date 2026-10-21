@@ -1,5 +1,5 @@
 import type { Question, ReviewView } from '@spatula/core';
-import { and, asc, eq, inArray, isNull, sql } from 'drizzle-orm';
+import { and, asc, desc, eq, inArray, isNotNull, isNull, sql } from 'drizzle-orm';
 import type { Executor } from './client';
 import {
   decisionRecords,
@@ -85,6 +85,39 @@ export async function findDecision(
         isNull(decisionRecords.supersededAt),
       ),
     );
+  return row ?? null;
+}
+
+/** The decision with this ID while it's current: a step that runs again finds what it decided. */
+export async function decisionById(db: Executor, id: string): Promise<DecisionRow | null> {
+  const [row] = await db
+    .select(DECISION)
+    .from(decisionRecords)
+    .where(and(eq(decisionRecords.id, id), isNull(decisionRecords.supersededAt)));
+  return row ?? null;
+}
+
+/**
+ * The subject's latest decision a person finalized, current or superseded: what a person last said
+ * about it, whichever question they answered (ADR 0007). A newer question supersedes the one a
+ * person answered, and what they said still carries over to it.
+ */
+export async function latestFinalized(
+  db: Executor,
+  input: { datasetId: string; subject: string },
+): Promise<DecisionRow | null> {
+  const [row] = await db
+    .select(DECISION)
+    .from(decisionRecords)
+    .where(
+      and(
+        eq(decisionRecords.datasetId, input.datasetId),
+        eq(decisionRecords.subject, input.subject),
+        isNotNull(decisionRecords.finalizedAt),
+      ),
+    )
+    .orderBy(desc(decisionRecords.finalizedAt), desc(decisionRecords.id))
+    .limit(1);
   return row ?? null;
 }
 

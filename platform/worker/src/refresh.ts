@@ -2,6 +2,7 @@ import {
   acceptLlmOutput,
   buildLlmRequest,
   extractFromPage,
+  hasTaxonomy,
   LLM_MAX_TOKENS,
   llmFields,
   llmInputHash,
@@ -28,6 +29,7 @@ import {
 } from '@spatula/core';
 import {
   captureById,
+  currentTaxonomy,
   dueItems,
   finishRun,
   forgetStoredCopy,
@@ -52,7 +54,13 @@ import {
   type StatementCounts,
 } from '@spatula/store';
 import { cleanUpCaptures, readPageBody, storeBody, storeRead } from './captures';
-import { cascadeField, classifyItem, classifyTarget, decidedByLlm } from './classify';
+import {
+  cascadeField,
+  classifyItem,
+  classifyTarget,
+  decidedByLlm,
+  type Classified,
+} from './classify';
 import { discoverSource } from './discovery';
 import { matchItem } from './match';
 import {
@@ -69,6 +77,7 @@ import {
   type StepRunner,
 } from './pipeline';
 import { publish } from './publish';
+import { decideTaxonomy, taxonomyTarget } from './taxonomy';
 import { isChallenge, MAX_WAITS, requestThroughGate, siteAnswerOf, type Resume } from './requests';
 import { storable } from './text';
 
@@ -257,6 +266,15 @@ export async function runRefresh(
         };
       }),
     );
+    const [recordType] = Object.values(loaded.definition.recordTypes);
+    const placing = recordType !== undefined && hasTaxonomy(recordType);
+    // The taxonomy version the run places pages in (ADR 0007). The step keeps only the number, and
+    // each step reads that version itself, so a result stays small.
+    const taxonomyVersion = placing
+      ? await step.do('taxonomy', () =>
+          ports.withDb(async (db) => (await currentTaxonomy(db, datasetId))?.version ?? null),
+        )
+      : null;
     const context: Context = {
       runId,
       datasetId,
@@ -264,8 +282,15 @@ export async function runRefresh(
       definition: loaded.definition,
       startedAt: new Date(loaded.startedAt),
       standing: loaded.standing ?? {},
+      taxonomyVersion,
     };
     const summary = emptySummary();
+    if (placing && taxonomyVersion === null) {
+      note(
+        summary,
+        `${datasetId} has no taxonomy yet, so its pages wait to be placed: seed one with pnpm spatula taxonomy seed`,
+      );
+    }
 
     // What each source's answers said of its site, and what each refused source's probe met (ADR
     // 0006). Both come from steps' results, so a run that replays its steps counts the same.
@@ -583,22 +608,44 @@ async function refreshItem(
   summary.llm.outputTokens += extracted.usage.outputTokens;
   for (const text of extracted.notes) note(summary, text);
   let waitsForBudget = extracted.waitsForBudget;
+  // A page whose LLM step failed or waited for the budget is read again next run, whatever
+  // classifying or placing it comes to.
+  const complete = extracted.llm !== 'failed' && !extracted.waitsForBudget;
   if (extracted.read && classifyTarget(context.definition, item) !== null) {
-    // A page whose LLM step failed or waited for the budget is read again next run, whatever
-    // classifying it comes to.
-    const complete = extracted.llm !== 'failed' && !extracted.waitsForBudget;
     const classified = await step.do(`classify:${item.id}`, () =>
       classifyItem(context, item, fetched, budgetLeft(context, summary), ports, complete),
     );
-    const counts = decisionsOf(summary, 'classify');
-    counts[classified.outcome] += 1;
-    counts.inputTokens += classified.usage.inputTokens;
-    counts.outputTokens += classified.usage.outputTokens;
-    if (classified.irrelevant) summary.irrelevant = (summary.irrelevant ?? 0) + 1;
-    if (classified.note !== null) note(summary, classified.note);
-    waitsForBudget ||= classified.outcome === 'skipped';
+    waitsForBudget = countDecision(summary, classified) || waitsForBudget;
+  }
+  // A dataset whose taxonomy isn't seeded yet leaves its pages marked for another read.
+  if (
+    extracted.read &&
+    context.taxonomyVersion !== undefined &&
+    context.taxonomyVersion !== null &&
+    taxonomyTarget(context.definition, item) !== null
+  ) {
+    const placed = await step.do(`decide:${item.id}`, () =>
+      decideTaxonomy(context, item, fetched, budgetLeft(context, summary), ports, {
+        extractionComplete: complete,
+      }),
+    );
+    waitsForBudget = countDecision(summary, placed) || waitsForBudget;
   }
   return { ...host, waitsForBudget };
+}
+
+/**
+ * Counts a page's classification or placement in the run's summary, which share their counts, and
+ * says whether it waits for the next run's budget.
+ */
+function countDecision(summary: RunSummary, decided: Classified): boolean {
+  const counts = decisionsOf(summary, 'classify');
+  counts[decided.outcome] += 1;
+  counts.inputTokens += decided.usage.inputTokens;
+  counts.outputTokens += decided.usage.outputTokens;
+  if (decided.irrelevant) summary.irrelevant = (summary.irrelevant ?? 0) + 1;
+  if (decided.note !== null) note(summary, decided.note);
+  return decided.outcome === 'skipped';
 }
 
 /**
@@ -1078,9 +1125,10 @@ async function extractItem(
   await keepRead(ports, fetched, page);
   const seenAt = ports.now();
   const decided = cascadeField(source, recordType);
-  // The cascade owns the decided field, so the page and the LLM speak for every other field, and
-  // neither gives or withdraws a decided answer.
-  const own = speaksFor(recordType, decided?.[0] ?? null);
+  const placed = hasTaxonomy(recordType);
+  // The cascade owns the decided field, and the taxonomy's three (ADR 0007), so the page and the
+  // LLM speak for the record type's other fields, and neither gives or withdraws a decided answer.
+  const own = speaksFor(recordType, decided?.[0] ?? null, placed);
   const pageCounts = await ports.withDb((db) =>
     writeStatements(db, {
       datasetId,
@@ -1115,9 +1163,10 @@ async function extractItem(
       // A failed LLM step leaves the page not current, so the next run reads the stored copy and
       // asks again, even after a 304 or an unchanged hash. So does an LLM step that waited for the
       // run's budget. A page whose category the cascade decides isn't current until its classify
-      // step has finished, and that step marks it.
+      // step has finished, and that step marks it. So is a page placed in a taxonomy, until its
+      // decide step has.
       extractedWith:
-        llm.outcome === 'failed' || llm.waitsForBudget === true || decided !== null
+        llm.outcome === 'failed' || llm.waitsForBudget === true || decided !== null || placed
           ? retryTag(revision)
           : extractionTag(revision),
       extractInputHash: llm.inputHash,
@@ -1169,12 +1218,17 @@ async function keepRead(ports: RefreshPorts, fetched: Fetched, page: Page): Prom
 }
 
 /**
- * The properties a write by the page's extraction or by the LLM speaks for: every field but the
- * one the cascade decides. With no decided field none is named, so the write speaks for every
- * property, as it did before there was a cascade.
+ * The properties a write by the page's extraction or by the LLM speaks for: the record type's own
+ * fields, but the one the cascade decides. A record type with a taxonomy has its three fields
+ * beside its own, which are the decide step's. With neither, none is named, so the write speaks for
+ * every property, as it did before there was a cascade.
  */
-function speaksFor(recordType: RecordType, decided: string | null): { properties?: string[] } {
-  return decided === null
+function speaksFor(
+  recordType: RecordType,
+  decided: string | null,
+  placed: boolean,
+): { properties?: string[] } {
+  return decided === null && !placed
     ? {}
     : { properties: Object.keys(recordType.fields).filter((name) => name !== decided) };
 }

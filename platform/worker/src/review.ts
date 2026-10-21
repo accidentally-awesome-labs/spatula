@@ -44,6 +44,14 @@ export async function answerReview(
   const review = await ports.withDb((db) => getReview(db, input.reviewId));
   if (review === null || review.datasetId !== input.datasetId) return { kind: 'missing' };
   if (review.status !== 'open') return { kind: 'closed' };
+  // Answered part by part (ADR 0007), which the review API's taxonomy answers do.
+  if (review.question.type === 'taxonomy') {
+    return {
+      kind: 'refused',
+      status: 400,
+      reason: 'A taxonomy question is answered part by part.',
+    };
+  }
   const options = reviewAnswers(review.kind, review.question);
   if (!options.includes(input.answer)) {
     return { kind: 'refused', status: 400, reason: `Answer with one of: ${options.join(', ')}.` };

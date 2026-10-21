@@ -6,6 +6,7 @@ import {
   classifyRule,
   classifyState,
   decidedField,
+  hasTaxonomy,
   NONE_OF_THESE,
   optionsOf,
   outcomeProbability,
@@ -14,6 +15,7 @@ import {
   stateEvidence,
   stateHash,
   survivingValues,
+  TAXONOMY_FIELDS,
   type CascadeOutcome,
   type ContentSignals,
   type Definition,
@@ -80,7 +82,8 @@ export function classifyTarget(definition: Definition, item: ItemRef): ClassifyT
 
 /**
  * Whether the page's decided field holds a decider's answer: its current statement has the method
- * llm. A rule's answer and a person's don't rest on AI input.
+ * llm. A rule's answer and a person's don't rest on AI input. A taxonomy's shelf, functions, and
+ * features count the same way.
  */
 export async function decidedByLlm(
   context: Context,
@@ -88,10 +91,18 @@ export async function decidedByLlm(
   ports: RefreshPorts,
 ): Promise<boolean> {
   const target = classifyTarget(context.definition, item);
-  if (target === null) return false;
+  const recordType = context.definition.recordTypes[item.recordType];
+  // A taxonomy's three fields are the decider's too (ADR 0007).
+  const names: readonly string[] =
+    target !== null
+      ? [target.name]
+      : recordType !== undefined && hasTaxonomy(recordType)
+        ? TAXONOMY_FIELDS
+        : [];
+  if (names.length === 0) return false;
   const said = await ports.withDb((db) => statementsOf(db, [item.id]));
   return (said.get(item.id) ?? []).some(
-    (statement) => statement.property === target.name && statement.method === 'llm',
+    (statement) => names.includes(statement.property) && statement.method === 'llm',
   );
 }
 
@@ -129,10 +140,15 @@ export interface ClassifyFetch {
   signals: ContentSignals;
   /** The capture the page was read from (ADR 0008); absent or null for none. */
   captureId?: string | null;
+  /**
+   * When the page's statements count as seen, as an ISO time: its last fetch's, for a page read
+   * again from its capture (ADR 0008). Absent means now.
+   */
+  seenAt?: string;
 }
 
 /** How a recorded decision was made, as a run counts it. */
-const madeBy = (decision: DecisionRow): Classified['outcome'] =>
+export const madeBy = (decision: DecisionRow): Classified['outcome'] =>
   decision.outcome === 'rule' ? 'rule' : decision.outcome === 'accepted' ? 'accepted' : 'escalated';
 
 /**

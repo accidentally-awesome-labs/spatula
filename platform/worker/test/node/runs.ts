@@ -5,12 +5,19 @@ import {
   snapshotSchema,
   type Definition,
 } from '@spatula/core';
-import { applyDefinition, fetches, items, latestSnapshot, listLiveItems } from '@spatula/store';
-import { testDefinition } from '@spatula/store/fixtures';
+import {
+  applyDefinition,
+  fetches,
+  items,
+  latestSnapshot,
+  listLiveItems,
+  seedTaxonomyVersion,
+} from '@spatula/store';
+import { testDefinition, testTaxonomy } from '@spatula/store/fixtures';
 import { and, eq } from 'drizzle-orm';
 import { expect } from 'vitest';
 import { runRefresh, type StepRunner } from '../../src/refresh';
-import type { Reply } from '../pages';
+import { standardRoutes, type Reply } from '../pages';
 import { db } from './db';
 import { fakeStep, makeWorld, type World } from './fakes';
 
@@ -75,7 +82,7 @@ export const entityOf = async (itemId: string) =>
 export async function worldFor(
   definition: Definition,
   routes: Record<string, Reply>,
-  options: { llm?: boolean; decider?: boolean } = {},
+  options: { llm?: boolean; decider?: boolean; taxonomyDecider?: boolean } = {},
 ) {
   await applyDefinition(db, definition);
   const world = makeWorld(db, routes, options);
@@ -107,4 +114,23 @@ export function decidedDefinition(
   });
   if (!parsed.ok) throw new Error(parsed.issues.join('\n'));
   return parsed.definition;
+}
+
+/**
+ * Applies a definition whose record type has a taxonomy, seeds the test taxonomy as its version 1,
+ * and makes a world whose pages answer as `routes` say.
+ */
+export async function taxonomyWorld(
+  definition: Definition,
+  routes: Record<string, Reply> = standardRoutes(),
+  options: { llm?: boolean; decider?: boolean; taxonomyDecider?: boolean } = {},
+) {
+  const made = await worldFor(definition, routes, options);
+  await seedTaxonomyVersion(db, {
+    datasetId: definition.dataset,
+    taxonomy: testTaxonomy(),
+    actor: { role: 'owner', client: 'cli' },
+    at: made.world.clock.now(),
+  });
+  return made;
 }
