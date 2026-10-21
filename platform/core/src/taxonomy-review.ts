@@ -12,6 +12,7 @@ import {
   shelfById,
   shelfPath,
   subcategoriesOf,
+  TAXONOMY_SUBJECTS,
   type Taxonomy,
   type TaxonomyMigration,
   type TaxonomySubject,
@@ -600,12 +601,15 @@ export interface ProposalImpact {
   leaving: number;
   /** The LLM tokens deciding those pages again would cost, at the run's average. */
   tokens: number;
+  /** What accepting it adds to the taxonomy's migrations; an item it creates is named by its slug. */
   migration: TaxonomyMigration[];
 }
 
 /**
  * A change's impact on pages that sit on these shelves (each a shelf's ID, NONE_SHELF for a page
- * out of the dataset, or null while unknown), or null when it doesn't apply.
+ * out of the dataset, or null while unknown), or null when it doesn't apply. The change is applied
+ * with made-up IDs and nothing is stored, so in a preview an item the change creates is named by
+ * its slug, never by one of those IDs: a split's migration lists its new shelves by slug.
  */
 export function impactOf(input: {
   taxonomy: Taxonomy;
@@ -619,6 +623,16 @@ export function impactOf(input: {
   const next = result.taxonomy;
   const applied = result.applied[0]!.change;
   const splitting = applied.kind === 'split' ? applied.item : null;
+  // The IDs the change made up stand for items that don't exist yet: the preview names each by slug.
+  const made = new Set(result.applied.flatMap((entry) => entry.created));
+  const named = (itemId: string): string => {
+    if (!made.has(itemId)) return itemId;
+    for (const subject of TAXONOMY_SUBJECTS) {
+      const found = findItem(next, subject, itemId);
+      if (found !== undefined) return found.slug;
+    }
+    return itemId;
+  };
   // Each key is worked out once: a dataset has many pages on few shelves.
   const keys = new Map<string, string>();
   const keyOf = (t: Taxonomy, shelf: string | null) => {
@@ -660,7 +674,16 @@ export function impactOf(input: {
     questions,
     leaving,
     tokens: Math.round(pagesToRedecide * input.tokensPerPage),
-    migration: next.migrations.slice(taxonomy.migrations.length),
+    migration: next.migrations.slice(taxonomy.migrations.length).map((migration) => ({
+      ...migration,
+      from: named(migration.from),
+      to:
+        typeof migration.to === 'string'
+          ? named(migration.to)
+          : migration.to === null
+            ? null
+            : migration.to.map(named),
+    })),
   };
 }
 

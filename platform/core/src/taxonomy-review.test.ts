@@ -240,6 +240,22 @@ describe('checkProposals', () => {
     expect(seen).toEqual(new Set([changeText(RESOLVED)]));
   });
 
+  it('keeps no ID it made up: a split’s children stay as the review named them', () => {
+    const split = {
+      kind: 'split',
+      item: 'dacs',
+      children: [
+        { slug: 'desktop-dacs', name: 'Desktop', description: 'For a desk', implies: ['dac'] },
+        { slug: 'portable-dacs', name: 'Portable', description: 'To carry', implies: ['dac'] },
+      ],
+      scopeClause: 'DACs',
+    };
+    const { kept, dropped } = check([proposal(split)]);
+    expect(dropped).toEqual([]);
+    expect(kept).toHaveLength(1);
+    expect(JSON.stringify(kept)).not.toContain('tx_zzzz');
+  });
+
   it.each<[string, ReviewProposal, string]>([
     ['one that gives no reason', proposal(PHONO, { why: '  ' }), 'It doesn’t say why.'],
     [
@@ -427,8 +443,80 @@ describe('impactOf', () => {
       questions: 2,
       leaving: 0,
       tokens: 1400,
-      migration: [{ version: 2, kind: 'split', from: shelf('dacs') }],
+      // The new shelves don't exist yet, so a preview names them by slug, not by an ID it made up.
+      migration: [
+        {
+          version: 2,
+          kind: 'split',
+          subject: 'shelf',
+          from: shelf('dacs'),
+          to: ['desktop-dacs', 'portable-dacs'],
+        },
+      ],
     });
+  });
+
+  it.each<[string, Record<string, unknown>]>([
+    [
+      'a category',
+      {
+        kind: 'add-category',
+        slug: 'cables',
+        name: 'Cables',
+        description: 'Carry a signal',
+        implies: ['pre-amp'],
+        scopeClause: 'audio',
+      },
+    ],
+    [
+      'a subcategory',
+      {
+        kind: 'add-subcategory',
+        parent: 'amplifiers',
+        slug: 'phono-stages',
+        name: 'Phono stages',
+        description: 'Raise a cartridge’s signal',
+        implies: ['pre-amp'],
+        scopeClause: 'amplifiers',
+      },
+    ],
+    [
+      'a function',
+      { kind: 'add-function', slug: 'phono', name: 'Phono', description: 'Takes a cartridge' },
+    ],
+    [
+      'a feature, with its values',
+      {
+        kind: 'add-feature',
+        slug: 'finish',
+        name: 'Finish',
+        description: 'The look of the case',
+        cardinality: 'one',
+        shelves: ['over-ear'],
+        values: [{ slug: 'black', name: 'Black', description: 'A black case' }],
+      },
+    ],
+    [
+      'a value',
+      {
+        kind: 'add-value',
+        feature: 'drives',
+        slug: 'line-out',
+        name: 'Line out',
+        description: 'x',
+      },
+    ],
+  ])('shows no ID it made up when the change adds %s', (_, change) => {
+    const impact = impactOf({
+      taxonomy: T,
+      change: changeSchema.parse(change),
+      shelves: [shelf('over-ear'), shelf('amplifiers'), NONE_SHELF, null],
+      tokensPerPage: 700,
+    });
+    expect(impact).not.toBeNull();
+    expect(JSON.stringify(impact)).not.toContain('tx_zzzz');
+    // Nothing that exists changes meaning, so nothing moves and no migration is made.
+    expect(impact).toMatchObject({ moves: [], migration: [] });
   });
 
   it('has no impact to show for a change that doesn’t apply', () => {
