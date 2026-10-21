@@ -713,9 +713,10 @@ describe('mergeAnswers', () => {
       functions: [],
       values: [id('value', 'iems')],
     };
+    // Power amps implies Amplifier, so it isn't stated.
     expect(mergeAnswers(T, settled, given)).toEqual({
       shelf: id('shelf', 'power-amps'),
-      functions: [amplifier],
+      functions: [],
       values: [speakers, id('value', 'iems')],
     });
     // A shelf the question settled isn't given again: the settled one stands.
@@ -723,6 +724,21 @@ describe('mergeAnswers', () => {
     expect(mergeAnswers(T, { ...settled, shelf: id('shelf', 'power-amps') }, kept).values).toEqual([
       speakers,
     ]);
+  });
+
+  it('drops the functions the final shelf implies, the decider’s and the person’s', () => {
+    const dac = id('function', 'dac');
+    // The decider fell back to Amplifiers and settled Amplifier; the person chose Headphone amps,
+    // which implies it, and ticked DAC, which it doesn't.
+    const onHeadphoneAmps = { shelf: id('shelf', 'headphone-amps'), functions: [dac], values: [] };
+    expect(mergeAnswers(T, settled, onHeadphoneAmps).functions).toEqual([dac]);
+    // On DACs, which implies DAC, a person's DAC says nothing more.
+    const onDacs = { shelf: id('shelf', 'dacs'), functions: [], values: [] };
+    expect(mergeAnswers(T, onDacs, { shelf: null, functions: [dac], values: [] })).toEqual({
+      shelf: id('shelf', 'dacs'),
+      functions: [],
+      values: [],
+    });
   });
 
   it('takes a none whole', () => {

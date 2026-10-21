@@ -1,4 +1,4 @@
-import type { Question } from '@spatula/core';
+import { matchQuestion, stableId, type ActorRecord, type Question } from '@spatula/core';
 import { count, eq } from 'drizzle-orm';
 import { describe, expect, it } from 'vitest';
 import { withRollback } from '../test/db';
@@ -6,10 +6,13 @@ import { seedDataset, T } from '../test/seed';
 import type { Executor } from './client';
 import {
   closeReview,
+  decideReviews,
   decisionById,
+  decisionWithId,
   dismissReviews,
   findDecision,
   finalizeDecision,
+  flagReview,
   getReview,
   joinedEntityOf,
   judge,
@@ -17,10 +20,14 @@ import {
   latestFinalized,
   listOpenReviews,
   openReview,
+  recordAnswerer,
+  reopenFlagged,
   saveDecision,
   sameVerdictsOf,
+  setSuggestion,
   supersedeDecisions,
   type NewDecision,
+  type ReviewFilters,
 } from './decisions';
 import { datasets, decisionRecords, entities, items, judgements, reviewItems } from './schema';
 
@@ -561,5 +568,315 @@ describe('decisionById and latestFinalized', () => {
       expect(
         await latestFinalized(db, { datasetId: 'test-products', subject: 'it_b1' }),
       ).toBeNull();
+    }));
+});
+
+const OWNER: ActorRecord = { role: 'owner', client: 'console' };
+const REVIEWER: ActorRecord = {
+  role: 'reviewer',
+  client: 'consumer',
+  consumer: 'crowdio',
+  reviewer: 'reviewer-7',
+};
+
+/** A question about a page's category, as a run asks it. */
+const askAbout = (tx: Executor, id: string, itemId: string) =>
+  openReview(tx, {
+    id,
+    datasetId: 'test-products',
+    kind: 'classify',
+    subject: itemId,
+    itemId,
+    question: QUESTION,
+    context: { proposed: 'Headphones' },
+    at: T(1),
+  });
+
+describe('review items, by role', () => {
+  it('record who answered, and their note', () =>
+    withRollback(async (tx) => {
+      const {
+        items: [a1],
+      } = await seedDataset(tx);
+      const id = await askAbout(tx, 'rv_answered0000000000000', a1!.id);
+      expect(
+        await closeReview(tx, {
+          id,
+          status: 'decided',
+          answer: 'DAC/Amp',
+          at: T(2),
+          answeredBy: REVIEWER,
+          note: 'Its box says DAC.',
+        }),
+      ).toMatchObject({ status: 'decided', answeredBy: REVIEWER, note: 'Its box says DAC.' });
+    }));
+
+  it('record who answered a question that closed another way, once', () =>
+    withRollback(async (tx) => {
+      await seedDataset(tx);
+      const id = await openReview(tx, {
+        id: 'rv_published000000000000',
+        datasetId: 'test-products',
+        kind: 'publication',
+        subject: 'sn_published',
+        question: { type: 'choice', prompt: 'Publish it?', options: ['publish', 'discard'] },
+        context: {},
+        at: T(1),
+      });
+      const record = (answeredBy: ActorRecord, note?: string) =>
+        recordAnswerer(tx, { id, answeredBy, note });
+      // While it's open, there is no answer to record.
+      expect(await record(OWNER)).toBe(false);
+      // A publication question closes as its snapshot is published or discarded.
+      await decideReviews(tx, {
+        datasetId: 'test-products',
+        kind: 'publication',
+        subject: 'sn_published',
+        answer: 'publish',
+        at: T(2),
+      });
+      expect(await record(OWNER, 'Looks right.')).toBe(true);
+      expect(await record(REVIEWER)).toBe(false);
+      expect(await getReview(tx, id)).toMatchObject({
+        status: 'decided',
+        answeredBy: OWNER,
+        note: 'Looks right.',
+      });
+    }));
+
+  it('send a reviewer’s different answer to the owner, which a run doesn’t dismiss and only the owner closes', () =>
+    withRollback(async (tx) => {
+      const {
+        items: [a1],
+      } = await seedDataset(tx);
+      const id = await askAbout(tx, 'rv_flagged00000000000000', a1!.id);
+      const flag = { actor: REVIEWER, answer: 'DAC/Amp', at: T(2).toISOString() };
+      expect(await flagReview(tx, { id, flag, at: T(2) })).toBe(true);
+      // The first flag is the one kept.
+      expect(await flagReview(tx, { id, flag: { ...flag, answer: 'Headphones' }, at: T(3) })).toBe(
+        false,
+      );
+      expect(await getReview(tx, id)).toMatchObject({ status: 'open', flaggedAt: T(2), flag });
+      expect(await listOpenReviews(tx, 'test-products')).toMatchObject([{ id, flagged: true }]);
+      // A run that finds the answer another way leaves the question to the owner.
+      expect(
+        await dismissReviews(tx, {
+          datasetId: 'test-products',
+          kind: 'classify',
+          subject: a1!.id,
+          at: T(4),
+        }),
+      ).toBe(0);
+      // A reviewer's answer doesn't close it; the owner's does.
+      const close = (answeredBy: ActorRecord) =>
+        closeReview(tx, { id, status: 'decided', answer: 'Headphones', at: T(5), answeredBy });
+      expect(await close(REVIEWER)).toBeNull();
+      expect(await close(OWNER)).toMatchObject({ status: 'decided', answeredBy: OWNER, flag });
+    }));
+
+  it('reopen a question a person answered for the owner, once for each disagreement', () =>
+    withRollback(async (tx) => {
+      const {
+        items: [a1],
+      } = await seedDataset(tx);
+      const saved = await saveDecision(tx, decision({ outcome: 'escalated', answer: null }));
+      const id = await openReview(tx, {
+        id: 'rv_reopened0000000000000',
+        datasetId: 'test-products',
+        kind: 'classify',
+        subject: a1!.id,
+        itemId: a1!.id,
+        decisionId: saved.id,
+        question: QUESTION,
+        context: { url: a1!.locator, proposed: 'Headphones' },
+        at: T(1),
+      });
+      const flag = { actor: REVIEWER, answer: 'DAC/Amp', at: T(3).toISOString() };
+      // Nobody has answered it yet, so there is nothing to reopen.
+      expect(
+        await reopenFlagged(tx, { review: (await getReview(tx, id))!, flag, at: T(2) }),
+      ).toBeNull();
+      const answered = (await closeReview(tx, {
+        id,
+        status: 'decided',
+        answer: 'Headphones',
+        at: T(2),
+        answeredBy: OWNER,
+      }))!;
+      const copy = await reopenFlagged(tx, { review: answered, flag, at: T(3) });
+      expect(copy).toBe(await stableId('rv', id, 'flag', 1));
+      expect(await getReview(tx, copy!)).toMatchObject({
+        status: 'open',
+        kind: 'classify',
+        subject: a1!.id,
+        itemId: a1!.id,
+        decisionId: saved.id,
+        question: QUESTION,
+        context: answered.context,
+        answer: null,
+        flaggedAt: T(3),
+        flag,
+      });
+      // While the copy is open, no other is.
+      expect(await reopenFlagged(tx, { review: answered, flag, at: T(4) })).toBeNull();
+      // Once the owner has answered it, the next disagreement reopens the question again.
+      await closeReview(tx, {
+        id: copy!,
+        status: 'decided',
+        answer: 'DAC/Amp',
+        at: T(5),
+        answeredBy: OWNER,
+      });
+      expect(await reopenFlagged(tx, { review: answered, flag, at: T(6) })).toBe(
+        await stableId('rv', id, 'flag', 2),
+      );
+    }));
+
+  it('hold the owner’s suggestion while open', () =>
+    withRollback(async (tx) => {
+      const {
+        items: [a1],
+      } = await seedDataset(tx);
+      const id = await askAbout(tx, 'rv_suggested000000000000', a1!.id);
+      expect(await setSuggestion(tx, { id, suggestion: { answer: 'DAC/Amp' } })).toBe(true);
+      expect(await listOpenReviews(tx, 'test-products')).toMatchObject([
+        { id, suggestion: { answer: 'DAC/Amp' } },
+      ]);
+      await closeReview(tx, { id, status: 'dismissed', answer: null, at: T(2) });
+      expect(await setSuggestion(tx, { id, suggestion: { answer: 'Headphones' } })).toBe(false);
+    }));
+
+  it('list by kind, source, shelf, and how sure the decider was, and leave out what a consumer doesn’t see', () =>
+    withRollback(async (tx) => {
+      const {
+        items: [a1, a2, b1],
+      } = await seedDataset(tx);
+      const record = await anEntity(tx, 'sp_listed000000000000000');
+      // The test taxonomy's Headphone amps shelf, and its DAC function.
+      const headphoneAmps = 'tx_00000000000000000010';
+      const dac = 'tx_00000000000000000001';
+      await openReview(tx, {
+        id: 'rv_list_a1',
+        datasetId: 'test-products',
+        kind: 'classify',
+        subject: a1!.id,
+        itemId: a1!.id,
+        question: QUESTION,
+        context: {
+          url: a1!.locator,
+          probabilities: { Headphones: 0.62, 'DAC/Amp': 0.3 },
+          captureId: 'cp_a1',
+        },
+        at: T(1),
+      });
+      await openReview(tx, {
+        id: 'rv_list_b1',
+        datasetId: 'test-products',
+        kind: 'classify',
+        subject: b1!.id,
+        itemId: b1!.id,
+        question: {
+          type: 'taxonomy',
+          prompt: 'Where does the one product this page is about sit in the taxonomy?',
+          parts: { shelves: [], functions: [dac], features: {} },
+        },
+        context: {
+          url: b1!.locator,
+          proposed: { shelf: headphoneAmps, functions: [dac], values: [] },
+          settled: { shelf: headphoneAmps, functions: [], values: [] },
+          probabilities: { [`function:${dac}`]: 0.7 },
+        },
+        at: T(2),
+      });
+      await openReview(tx, {
+        id: 'rv_list_match',
+        datasetId: 'test-products',
+        kind: 'match',
+        subject: `${a2!.id}|${record}`,
+        itemId: a2!.id,
+        entityId: record,
+        question: {
+          type: 'choice',
+          prompt: 'Are these two records the same product?',
+          options: ['same', 'variant', 'different'],
+        },
+        context: { probabilities: { same: 0.55, variant: 0.4 } },
+        at: T(3),
+      });
+      await flagReview(tx, {
+        id: 'rv_list_match',
+        flag: { actor: REVIEWER, answer: 'same', at: T(4).toISOString() },
+        at: T(4),
+      });
+      await openReview(tx, {
+        id: 'rv_list_held',
+        datasetId: 'test-products',
+        kind: 'publication',
+        subject: 'sn_listed',
+        question: { type: 'choice', prompt: 'Publish it?', options: ['publish', 'discard'] },
+        context: {},
+        at: T(5),
+      });
+      const ids = async (filters?: ReviewFilters) =>
+        (await listOpenReviews(tx, 'test-products', filters)).map((review) => review.id);
+      expect(await ids()).toEqual(['rv_list_a1', 'rv_list_b1', 'rv_list_match', 'rv_list_held']);
+      expect(await ids({ kind: 'classify' })).toEqual(['rv_list_a1', 'rv_list_b1']);
+      expect(await ids({ source: 'maker-a' })).toEqual(['rv_list_a1', 'rv_list_match']);
+      expect(await ids({ shelf: headphoneAmps })).toEqual(['rv_list_b1']);
+      // Each question's likeliest option: A1's at 0.62, B1's at 0.7, the match's at 0.55. A
+      // publication question has none.
+      expect(await ids({ below: 0.6 })).toEqual(['rv_list_match']);
+      expect(await ids({ below: 0.65 })).toEqual(['rv_list_a1', 'rv_list_match']);
+      expect(await ids({ forConsumer: true })).toEqual(['rv_list_a1', 'rv_list_b1']);
+      // A consumer's reviewers see no capture, and a question nobody flagged says nothing of flags.
+      const [owner] = await listOpenReviews(tx, 'test-products');
+      const [consumer] = await listOpenReviews(tx, 'test-products', { forConsumer: true });
+      expect(owner!.context).toMatchObject({ captureId: 'cp_a1' });
+      expect(consumer!.context).toEqual({
+        url: a1!.locator,
+        probabilities: { Headphones: 0.62, 'DAC/Amp': 0.3 },
+      });
+      expect(owner).not.toHaveProperty('flagged');
+    }));
+
+  it('measure a question whose answers share outcomes by its likeliest answer’s outcome', () =>
+    withRollback(async (tx) => {
+      const {
+        items: [, a2],
+      } = await seedDataset(tx);
+      const record = await anEntity(tx, 'sp_outcomes0000000000000');
+      await openReview(tx, {
+        id: 'rv_list_outcomes',
+        datasetId: 'test-products',
+        kind: 'match',
+        subject: `${a2!.id}|${record}`,
+        itemId: a2!.id,
+        entityId: record,
+        question: matchQuestion(),
+        context: { probabilities: { 'other-model': 0.5, 'spec-version': 0.3, same: 0.2 } },
+        at: T(1),
+      });
+      const ids = async (below: number) =>
+        (await listOpenReviews(tx, 'test-products', { below })).map((review) => review.id);
+      // Other-model is likeliest at 0.5, and keeps the page apart with spec-version: 0.8 together.
+      expect(await ids(0.6)).toEqual([]);
+      expect(await ids(0.85)).toEqual(['rv_list_outcomes']);
+    }));
+});
+
+describe('decisionWithId', () => {
+  it('finds a decision by its ID, current or superseded', () =>
+    withRollback(async (tx) => {
+      await seedDataset(tx);
+      const first = await saveDecision(tx, decision());
+      await saveDecision(
+        tx,
+        decision({ id: 'dc_classifya200000000000', stateHash: 'hash-2', decidedAt: T(2) }),
+      );
+      expect(await decisionWithId(tx, first.id)).toMatchObject({
+        id: first.id,
+        answer: 'Headphones',
+      });
+      expect(await decisionWithId(tx, 'dc_nowhere00000000000000')).toBeNull();
     }));
 });

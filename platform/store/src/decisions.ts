@@ -1,5 +1,13 @@
-import type { Question, ReviewView } from '@spatula/core';
-import { and, asc, desc, eq, inArray, isNotNull, isNull, sql } from 'drizzle-orm';
+import {
+  optionsOf,
+  outcomeProbability,
+  stableId,
+  type ActorRecord,
+  type Question,
+  type ReviewSuggestion,
+  type ReviewView,
+} from '@spatula/core';
+import { and, asc, count, desc, eq, inArray, isNotNull, isNull, ne, sql } from 'drizzle-orm';
 import type { Executor } from './client';
 import {
   decisionRecords,
@@ -8,6 +16,7 @@ import {
   reviewItems,
   type DecisionOutcome,
   type Judge,
+  type ReviewFlag,
   type ReviewKind,
   type ReviewStatus,
   type Verdict,
@@ -118,6 +127,15 @@ export async function latestFinalized(
     )
     .orderBy(desc(decisionRecords.finalizedAt), desc(decisionRecords.id))
     .limit(1);
+  return row ?? null;
+}
+
+/**
+ * A decision by its ID, current or superseded: the one a question was asked under, whatever was
+ * decided about its subject since.
+ */
+export async function decisionWithId(db: Executor, id: string): Promise<DecisionRow | null> {
+  const [row] = await db.select(DECISION).from(decisionRecords).where(eq(decisionRecords.id, id));
   return row ?? null;
 }
 
@@ -279,6 +297,14 @@ export interface ReviewRow {
   context: Record<string, unknown>;
   status: ReviewStatus;
   answer: string | null;
+  /** Who answered it; null before roles, and for a question nobody answered. */
+  answeredBy: ActorRecord | null;
+  note: string | null;
+  /** When a reviewer's answer that differs from a person's sent it to the owner. */
+  flaggedAt: Date | null;
+  flag: ReviewFlag | null;
+  /** The owner's suggested answer. */
+  suggestion: ReviewSuggestion | null;
   createdAt: Date;
   closedAt: Date | null;
 }
@@ -345,8 +371,33 @@ export async function openReview(
   });
 }
 
-/** The dataset's open questions, oldest first. */
-export async function listOpenReviews(db: Executor, datasetId: string): Promise<ReviewView[]> {
+/** Which open questions a list shows. A filter left out lets every question through. */
+export interface ReviewFilters {
+  kind?: ReviewKind;
+  /** A shelf's ID: the taxonomy questions that propose it, or have it settled. */
+  shelf?: string;
+  /** A source's ID: the questions about its pages. */
+  source?: string;
+  /**
+   * The questions whose likeliest option has a probability below this: its outcome's, where options
+   * share one (`topChance`).
+   */
+  below?: number;
+  /** What a consumer's reviewers see (ruling 11): no flagged question, no publication one. */
+  forConsumer?: boolean;
+}
+
+/**
+ * The dataset's open questions, oldest first. A flag and a suggestion are listed only where there
+ * is one, so a question has the shape it had before roles until something sets them. A consumer's
+ * reviewers don't see the capture a question cites: captures are the owner's (ADR 0008).
+ */
+export async function listOpenReviews(
+  db: Executor,
+  datasetId: string,
+  filters: ReviewFilters = {},
+): Promise<ReviewView[]> {
+  const consumer = filters.forConsumer === true;
   const rows = await db
     .select({
       id: reviewItems.id,
@@ -355,32 +406,235 @@ export async function listOpenReviews(db: Executor, datasetId: string): Promise<
       question: reviewItems.question,
       context: reviewItems.context,
       createdAt: reviewItems.createdAt,
+      flaggedAt: reviewItems.flaggedAt,
+      suggestion: reviewItems.suggestion,
     })
     .from(reviewItems)
-    .where(and(eq(reviewItems.datasetId, datasetId), eq(reviewItems.status, 'open')))
+    .leftJoin(items, eq(items.id, reviewItems.itemId))
+    .where(
+      and(
+        eq(reviewItems.datasetId, datasetId),
+        eq(reviewItems.status, 'open'),
+        filters.kind === undefined ? undefined : eq(reviewItems.kind, filters.kind),
+        filters.source === undefined ? undefined : eq(items.sourceId, filters.source),
+        consumer ? isNull(reviewItems.flaggedAt) : undefined,
+        consumer ? ne(reviewItems.kind, 'publication') : undefined,
+      ),
+    )
     .orderBy(asc(reviewItems.createdAt), asc(reviewItems.id));
-  return rows.map((row) => ({ ...row, createdAt: row.createdAt.toISOString() }));
+  const { shelf, below } = filters;
+  return rows
+    .filter((row) => shelf === undefined || onShelf(row.context, shelf))
+    .filter((row) => {
+      if (below === undefined) return true;
+      const top = topChance(row.question, row.context);
+      return top !== null && top < below;
+    })
+    .map((row) => ({
+      id: row.id,
+      kind: row.kind,
+      subject: row.subject,
+      question: row.question,
+      context: consumer ? withoutCapture(row.context) : row.context,
+      createdAt: row.createdAt.toISOString(),
+      ...(row.flaggedAt === null ? {} : { flagged: true as const }),
+      ...(row.suggestion === null ? {} : { suggestion: row.suggestion }),
+    }));
 }
 
-export async function getReview(db: Executor, id: string): Promise<ReviewRow | null> {
-  const [row] = await db.select().from(reviewItems).where(eq(reviewItems.id, id));
+/** Whether a taxonomy question proposes the shelf, or has it settled. */
+function onShelf(context: Record<string, unknown>, shelf: string): boolean {
+  const shelfOf = (answer: unknown) =>
+    typeof answer === 'object' && answer !== null
+      ? (answer as Record<string, unknown>).shelf
+      : undefined;
+  return shelfOf(context.proposed) === shelf || shelfOf(context.settled) === shelf;
+}
+
+/**
+ * How sure the decider was of a question's likeliest option, or null when no option has a
+ * probability. Where the question groups its options into outcomes, as a match question does, the
+ * likeliest option is measured by its outcome's total (`outcomeProbability`), as accepting it would
+ * be (ADR 0003).
+ */
+function topChance(question: Question, context: Record<string, unknown>): number | null {
+  const given = context.probabilities;
+  if (typeof given !== 'object' || given === null) return null;
+  const chances = given as Record<string, unknown>;
+  const numbers: Record<string, number> = {};
+  let top: string | null = null;
+  for (const option of optionsOf(question)) {
+    const chance = Object.hasOwn(chances, option) ? chances[option] : undefined;
+    if (typeof chance !== 'number') continue;
+    numbers[option] = chance;
+    if (top === null || chance > numbers[top]!) top = option;
+  }
+  return top === null ? null : outcomeProbability(question, numbers, top);
+}
+
+/** A question's context without the capture it cites. */
+function withoutCapture(context: Record<string, unknown>): Record<string, unknown> {
+  return Object.fromEntries(Object.entries(context).filter(([key]) => key !== 'captureId'));
+}
+
+/**
+ * A question by its ID. With `lock`, the row is held until the transaction ends, so an answer
+ * checks the question as it is when it closes.
+ */
+export async function getReview(
+  db: Executor,
+  id: string,
+  options: { lock?: boolean } = {},
+): Promise<ReviewRow | null> {
+  const query = db.select().from(reviewItems).where(eq(reviewItems.id, id));
+  const [row] = options.lock === true ? await query.for('update') : await query;
   return row ?? null;
 }
 
-/** Closes an open question, once. Returns null when it wasn't open. */
+/**
+ * Closes an open question, once, with who answered and their note. Returns null when it wasn't
+ * open. A flagged question waits for the owner (ruling 11): anyone else's answer doesn't close it.
+ * A close that names no one is Spatula's own, as when the answer came another way.
+ */
 export async function closeReview(
   db: Executor,
-  input: { id: string; status: 'decided' | 'dismissed'; answer: string | null; at: Date },
+  input: {
+    id: string;
+    status: 'decided' | 'dismissed';
+    answer: string | null;
+    at: Date;
+    answeredBy?: ActorRecord;
+    note?: string;
+  },
 ): Promise<ReviewRow | null> {
+  const byOwner = input.answeredBy === undefined || input.answeredBy.role === 'owner';
   const [row] = await db
     .update(reviewItems)
-    .set({ status: input.status, answer: input.answer, closedAt: input.at })
-    .where(and(eq(reviewItems.id, input.id), eq(reviewItems.status, 'open')))
+    .set({
+      status: input.status,
+      answer: input.answer,
+      closedAt: input.at,
+      answeredBy: input.answeredBy ?? null,
+      note: input.note ?? null,
+    })
+    .where(
+      and(
+        eq(reviewItems.id, input.id),
+        eq(reviewItems.status, 'open'),
+        byOwner ? undefined : isNull(reviewItems.flaggedAt),
+      ),
+    )
     .returning();
   return row ?? null;
 }
 
-/** Dismisses the open question about a subject, when its answer came another way. */
+/**
+ * Records who answered a question that closed another way: a publication question closes as its
+ * snapshot is published or discarded (`publishHeld`, `discardHeld`). Returns false when the
+ * question isn't decided, or says who answered it already.
+ */
+export async function recordAnswerer(
+  db: Executor,
+  input: { id: string; answeredBy: ActorRecord; note?: string },
+): Promise<boolean> {
+  const rows = await db
+    .update(reviewItems)
+    .set({ answeredBy: input.answeredBy, note: input.note ?? null })
+    .where(
+      and(
+        eq(reviewItems.id, input.id),
+        eq(reviewItems.status, 'decided'),
+        isNull(reviewItems.answeredBy),
+      ),
+    )
+    .returning({ id: reviewItems.id });
+  return rows.length > 0;
+}
+
+/**
+ * Sends an open question to the owner with a reviewer's answer that differs from a person's
+ * (ruling 12). The first such answer is the one kept. Returns false when the question isn't open,
+ * or was flagged already.
+ */
+export async function flagReview(
+  db: Executor,
+  input: { id: string; flag: ReviewFlag; at: Date },
+): Promise<boolean> {
+  const rows = await db
+    .update(reviewItems)
+    .set({ flaggedAt: input.at, flag: input.flag })
+    .where(
+      and(
+        eq(reviewItems.id, input.id),
+        eq(reviewItems.status, 'open'),
+        isNull(reviewItems.flaggedAt),
+      ),
+    )
+    .returning({ id: reviewItems.id });
+  return rows.length > 0;
+}
+
+/**
+ * Reopens a question a person answered, for the owner, with a reviewer's answer that differs
+ * (ruling 12): an open copy, flagged. Its ID comes from the question's and the number of questions
+ * its subject has had, so two answers sent at once make one copy, and a later disagreement another.
+ * Returns the copy's ID, or null when no person answered the question, or another question about
+ * its subject is open: that one is the question to answer.
+ */
+export async function reopenFlagged(
+  db: Executor,
+  input: { review: ReviewRow; flag: ReviewFlag; at: Date },
+): Promise<string | null> {
+  const { review } = input;
+  if (review.status !== 'decided') return null;
+  const [asked] = await db
+    .select({ n: count() })
+    .from(reviewItems)
+    .where(
+      and(
+        eq(reviewItems.datasetId, review.datasetId),
+        eq(reviewItems.kind, review.kind),
+        eq(reviewItems.subject, review.subject),
+      ),
+    );
+  const [row] = await db
+    .insert(reviewItems)
+    .values({
+      id: await stableId('rv', review.id, 'flag', asked?.n ?? 0),
+      datasetId: review.datasetId,
+      kind: review.kind,
+      subject: review.subject,
+      itemId: review.itemId,
+      entityId: review.entityId,
+      decisionId: review.decisionId,
+      question: review.question,
+      context: review.context,
+      flaggedAt: input.at,
+      flag: input.flag,
+      createdAt: input.at,
+    })
+    .onConflictDoNothing()
+    .returning({ id: reviewItems.id });
+  return row?.id ?? null;
+}
+
+/** Puts the owner's suggested answer on an open question. Returns false when it isn't open. */
+export async function setSuggestion(
+  db: Executor,
+  input: { id: string; suggestion: ReviewSuggestion },
+): Promise<boolean> {
+  const rows = await db
+    .update(reviewItems)
+    .set({ suggestion: input.suggestion })
+    .where(and(eq(reviewItems.id, input.id), eq(reviewItems.status, 'open')))
+    .returning({ id: reviewItems.id });
+  return rows.length > 0;
+}
+
+/**
+ * Dismisses the open question about a subject, when its answer came another way. A flagged one
+ * waits for the owner (ruling 11), whatever a run finds meanwhile.
+ */
 export async function dismissReviews(
   db: Executor,
   input: { datasetId: string; kind: ReviewKind; subject: string; at: Date },
@@ -394,6 +648,7 @@ export async function dismissReviews(
         eq(reviewItems.kind, input.kind),
         eq(reviewItems.subject, input.subject),
         eq(reviewItems.status, 'open'),
+        isNull(reviewItems.flaggedAt),
       ),
     )
     .returning({ id: reviewItems.id });

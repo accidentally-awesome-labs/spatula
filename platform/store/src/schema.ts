@@ -10,6 +10,8 @@ import type {
   Method,
   Outcome,
   Question,
+  ReviewActionKind,
+  ReviewSuggestion,
   RunStatus,
   RunSummary,
   SourceProbe,
@@ -506,6 +508,14 @@ export const judgements = pgTable(
   ],
 );
 
+/** A reviewer's answer that differs from a person's, kept for the owner to see (ruling 12). */
+export interface ReviewFlag {
+  actor: ActorRecord;
+  /** What the reviewer answered: an option, or parts by ID. */
+  answer: unknown;
+  at: string;
+}
+
 /** Questions waiting for a person: at most one open per subject. */
 export const reviewItems = pgTable(
   'review_items',
@@ -523,6 +533,16 @@ export const reviewItems = pgTable(
     context: jsonb('context').$type<Record<string, unknown>>().notNull(),
     status: text('status').$type<ReviewStatus>().notNull().default('open'),
     answer: text('answer'),
+    /** Who answered it (ADR 0009): the owner, or a consumer's reviewer. */
+    answeredBy: jsonb('answered_by').$type<ActorRecord>(),
+    /** What the person who answered added, in their words. */
+    note: text('note'),
+    /** When a reviewer's answer that differs from a person's sent it to the owner (ruling 12). */
+    flaggedAt: time('flagged_at'),
+    /** That answer, and who gave it. */
+    flag: jsonb('flag').$type<ReviewFlag>(),
+    /** The owner's suggested answer, which an answer with `suggestion: true` takes. */
+    suggestion: jsonb('suggestion').$type<ReviewSuggestion>(),
     createdAt: time('created_at').notNull(),
     closedAt: time('closed_at'),
   },
@@ -536,6 +556,7 @@ export const reviewItems = pgTable(
     index('review_items_decision').on(t.decisionId),
     check('review_items_kind', sql`${t.kind} in ('classify', 'match', 'publication')`),
     check('review_items_status', sql`${t.status} in ('open', 'decided', 'dismissed')`),
+    check('review_items_flagged', sql`(${t.flaggedAt} is null) = (${t.flag} is null)`),
   ],
 );
 
@@ -616,5 +637,33 @@ export const taxonomyVersions = pgTable(
   (t) => [
     primaryKey({ columns: [t.datasetId, t.version] }),
     check('taxonomy_versions_version', sql`${t.version} > 0`),
+  ],
+);
+
+/**
+ * The review log (ADR 0009): every write through the review API, and each change Spatula applies to
+ * a taxonomy on its own (ruling 14), with who made it. A run's ordinary decisions stay in their
+ * decision records. Rows are only ever added.
+ */
+export const reviewActions = pgTable(
+  'review_actions',
+  {
+    id: text('id').primaryKey(),
+    datasetId: text('dataset_id')
+      .notNull()
+      .references(() => datasets.id, { onDelete: 'cascade' }),
+    action: text('action').$type<ReviewActionKind>().notNull(),
+    /** What it was about: a question, a proposal, a taxonomy version, or a kind of change. */
+    subject: text('subject').notNull(),
+    actor: jsonb('actor').$type<ActorRecord>().notNull(),
+    detail: jsonb('detail').$type<Record<string, unknown>>().notNull(),
+    at: time('at').notNull(),
+  },
+  (t) => [
+    index('review_actions_dataset').on(t.datasetId, t.at),
+    check(
+      'review_actions_action',
+      sql`${t.action} in ('answer', 'flag', 'suggest', 'accept', 'edit', 'reject', 'apply', 'undo', 'revoke')`,
+    ),
   ],
 );

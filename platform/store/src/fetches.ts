@@ -221,6 +221,19 @@ export async function setItemStatus(
 }
 
 /**
+ * Brings back a page a decision took out, when a person now places it (ADR 0007). A page that left
+ * for another reason, gone or refused, stays as it is. Returns whether it came back.
+ */
+export async function liveIfIrrelevant(db: Executor, itemId: string): Promise<boolean> {
+  const rows = await db
+    .update(items)
+    .set({ status: 'live' })
+    .where(and(eq(items.id, itemId), eq(items.status, 'irrelevant')))
+    .returning({ id: items.id });
+  return rows.length > 0;
+}
+
+/**
  * Marks which code an item's statements came from, as a step does that reads a page without a
  * fetch of its own. The retry tag has the next run read the page again.
  */

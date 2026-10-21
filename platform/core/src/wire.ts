@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import type { Question } from './decisions';
+import type { GivenParts } from './taxonomy-decision';
 import type { Outcome } from './gate';
 import type { EvalScores } from './golden';
 import type { SourceProbe } from './refusals';
@@ -201,6 +202,44 @@ export interface ReviewView {
   /** What the person needs to answer: addresses, the proposal and its probabilities, counts. */
   context: Record<string, unknown>;
   createdAt: string;
+  /**
+   * Whether a reviewer's answer that differs from a person's sent it to the owner (ADR 0009). Absent
+   * means it wasn't.
+   */
+  flagged?: true;
+  /** The owner's suggested answer, which an answer with `suggestion: true` takes (ADR 0009). */
+  suggestion?: ReviewSuggestion;
+}
+
+/** A suggested answer: a taxonomy question's parts, by ID, or one of another question's options. */
+export type ReviewSuggestion = GivenParts | { answer: string };
+
+/**
+ * What the review log records (ADR 0009): answers, flags, and suggestions, and what is done to the
+ * taxonomy through proposals, versions, and autonomy.
+ */
+export const REVIEW_ACTIONS = [
+  'answer',
+  'flag',
+  'suggest',
+  'accept',
+  'edit',
+  'reject',
+  'apply',
+  'undo',
+  'revoke',
+] as const;
+export type ReviewActionKind = (typeof REVIEW_ACTIONS)[number];
+
+/** A write in the review log, as the API lists it. */
+export interface ReviewAction {
+  id: string;
+  action: ReviewActionKind;
+  /** What it was about: a question, a proposal, a taxonomy version, or a kind of change. */
+  subject: string;
+  actor: ActorRecord;
+  detail: Record<string, unknown>;
+  at: string;
 }
 
 /** How far an acknowledgment's sentAt may be from Spatula's clock: older ones may be replays. */

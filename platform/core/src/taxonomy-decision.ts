@@ -841,7 +841,8 @@ export function checkTaxonomyAnswer(
  * decider's settled values stay only where the final shelf has their feature (the spec's §2: only
  * the features on the chosen shelf), so a person who moves the page off the shelf the decider
  * fell back to doesn't keep that shelf's features. A person's own values were checked against
- * their shelf (`checkTaxonomyAnswer`).
+ * their shelf (`checkTaxonomyAnswer`). The functions are those beyond what the final shelf implies
+ * (the spec's §2), whoever named them: every record on the shelf has those.
  */
 export function mergeAnswers(
   taxonomy: Taxonomy,
@@ -859,9 +860,14 @@ export function mergeAnswers(
     const feature = featureOfValue(taxonomy, value);
     return feature !== undefined && onShelf.has(feature.id);
   };
+  const implied = new Set(
+    shelf === null || shelf === NONE_SHELF ? [] : impliedFunctions(taxonomy, shelf),
+  );
   return {
     shelf,
-    functions: [...new Set([...settled.functions, ...given.functions])],
+    functions: [...new Set([...settled.functions, ...given.functions])].filter(
+      (fn) => !implied.has(fn),
+    ),
     values: [...new Set([...settled.values.filter(fits), ...given.values])],
   };
 }

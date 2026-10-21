@@ -1,4 +1,4 @@
-import { METHODS, OUTCOMES, SOURCE_PROBES } from '@spatula/core';
+import { METHODS, OUTCOMES, REVIEW_ACTIONS, SOURCE_PROBES } from '@spatula/core';
 import { sql } from 'drizzle-orm';
 import { describe, expect, it } from 'vitest';
 import { withRollback } from '../test/db';
@@ -45,6 +45,7 @@ describe('the CHECK lists', () => {
       expect(await allowed(tx, 'judgements_who')).toEqual([...JUDGES].sort());
       expect(await allowed(tx, 'review_items_kind')).toEqual([...REVIEW_KINDS].sort());
       expect(await allowed(tx, 'review_items_status')).toEqual([...REVIEW_STATUSES].sort());
+      expect(await allowed(tx, 'review_actions_action')).toEqual([...REVIEW_ACTIONS].sort());
     }));
 
   it('allow exactly the snapshot states the store names', () =>

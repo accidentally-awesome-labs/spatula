@@ -9,6 +9,7 @@ import {
   anyRefusesAiInput,
   latestFetchId,
   latestRead,
+  liveIfIrrelevant,
   pagesRefusingAiInput,
   recordExtraction,
   recordFetch,
@@ -543,6 +544,21 @@ describe('setItemStatus', () => {
       expect((await listLiveItems(db, 'test-products')).map((item) => item.id)).not.toContain(
         a1!.id,
       );
+    }));
+});
+
+describe('liveIfIrrelevant', () => {
+  it('brings back a page a decision took out, and only such a page', () =>
+    withRollback(async (db) => {
+      const {
+        items: [a1, a2],
+      } = await seedDataset(db);
+      await setItemStatus(db, a1!.id, 'irrelevant');
+      await setItemStatus(db, a2!.id, 'gone');
+      expect(await liveIfIrrelevant(db, a1!.id)).toBe(true);
+      expect(await liveIfIrrelevant(db, a2!.id)).toBe(false);
+      expect((await itemRow(db, a1!.id)).status).toBe('live');
+      expect((await itemRow(db, a2!.id)).status).toBe('gone');
     }));
 });
 
