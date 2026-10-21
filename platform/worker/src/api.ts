@@ -3,7 +3,6 @@ import {
   acknowledgmentSchema,
   DIRECTORY_CONTENT_TYPE,
   DIRECTORY_PATH,
-  exportTaxonomy,
   hasTaxonomy,
   hmacSha256Hex,
   importSigningKey,
@@ -37,7 +36,6 @@ import {
   latestSnapshot,
   listEvals,
   listItems,
-  listOpenReviews,
   lockDataset,
   purgeKeys,
   purgeSource,
@@ -55,30 +53,32 @@ import { Hono, type MiddlewareHandler } from 'hono';
 import { bodyLimit } from 'hono/body-limit';
 import { z } from 'zod';
 import { aboutPage } from './about';
+import {
+  actorRecord,
+  bearer,
+  bearerActor,
+  listedConsumer,
+  ownerOnly,
+  PRIVATE_NO_STORE,
+  sameText,
+  type ActorApi,
+} from './actors';
 import { r2Blobs } from './blobs';
 import { rawPageKey } from './captures';
 import { consumerSecret, secret, verifiedBot } from './config';
 import { withDatabase } from './database';
 import { pageKey } from './pipeline';
-import { answerReview } from './review';
+import { reviewRoutes } from './review-api';
 
 /*
- * The owner's API, the consumers' routes, the public page, and the key directory. Callers send a
- * bearer token; the Worker keeps only SHA-256s and compares in constant time. Answers to callers
- * are personal, so nothing caches them, and the same goes for every other answer but the page and
- * the key directory: an unknown path's 404 and a failure's 500.
+ * The owner's API, the consumers' routes, the review API (review-api.ts), the public page, and the
+ * key directory. Callers send a bearer token; the Worker keeps only SHA-256s and compares in
+ * constant time. Answers to callers are personal, so nothing caches them, and the same goes for
+ * every other answer but the page and the key directory: an unknown path's 404 and a failure's 500.
  */
 
 /** `consumer` is who a route's `reader` found: a listed consumer's name, or null for the owner. */
 type Api = { Bindings: Env; Variables: { consumer: string | null } };
-
-/**
- * Every answer carries this but the public page and the key directory's (which a site may keep
- * for a few minutes). The owner and reader middlewares, notFound and onError set it with
- * c.header, which Hono copies into the responses it builds (c.json). A handler that returns a raw
- * Response has to set it by hand, as the snapshot route does.
- */
-const PRIVATE_NO_STORE = 'private, no-store';
 
 export const api = new Hono<Api>();
 
@@ -112,13 +112,6 @@ api.get(DIRECTORY_PATH, async (c) => {
   });
 });
 
-/**
- * The bearer token sent, if any. The scheme's name is case-insensitive (RFC 9110); the token isn't.
- */
-function bearer(c: { req: { header(name: string): string | undefined } }): string | undefined {
-  return /^bearer (.+)$/iu.exec(c.req.header('authorization') ?? '')?.[1];
-}
-
 const owner: MiddlewareHandler<Api> = async (c, next) => {
   c.header('cache-control', PRIVATE_NO_STORE);
   const expected = secret(c.env, 'OWNER_TOKEN_HASH');
@@ -134,15 +127,22 @@ const owner: MiddlewareHandler<Api> = async (c, next) => {
 
 /**
  * The routes a consumer may call as well as the owner: reading a dataset's snapshots, and
- * acknowledging them. Every other route under /datasets is the owner's alone, including any added
- * later, so a new route can't be left open by mistake. A route is a method and a path, so one added
- * later at the same path with another method is the owner's too, and so is one added later at a
- * path of the snapshot route's shape: the pattern is the snapshot route's own forms, `latest` and a
- * generation of up to nine digits from 1 (see the route, which answers any other with a 400).
+ * acknowledging them; and the review API's and the taxonomy's, which check the token themselves
+ * (bearerActor), and answer a consumer with a 403 on the owner's among them: suggestions, the log,
+ * and seeding. Every other route under /datasets is the owner's alone, including any added later,
+ * so a new route can't be left open by mistake. A route is a method and a path, so one added later
+ * at the same path with another method is the owner's too, and so is one added later at a path of
+ * the snapshot route's shape: the pattern is the snapshot route's own forms, `latest` and a
+ * generation of up to nine digits from 1 (see the route, which answers any other with a 400). An
+ * answer's path takes a question's ID, which starts `rv_`.
  */
 const CONSUMER_ROUTES = [
   { method: 'GET', path: /^\/datasets\/[^/]+\/snapshots\/(?:latest|[1-9]\d{0,8})$/u },
   { method: 'POST', path: /^\/datasets\/[^/]+\/acknowledgments$/u },
+  { method: 'GET', path: /^\/datasets\/[^/]+\/review(?:\/log)?$/u },
+  { method: 'POST', path: /^\/datasets\/[^/]+\/review\/(?:bulk|suggestions|rv_[^/]+)$/u },
+  { method: 'GET', path: /^\/datasets\/[^/]+\/taxonomy$/u },
+  { method: 'POST', path: /^\/datasets\/[^/]+\/taxonomy$/u },
 ];
 
 api.use('/datasets/*', async (c, next) =>
@@ -172,21 +172,9 @@ const reader: MiddlewareHandler<Api> = async (c, next) => {
     c.set('consumer', null);
     return next();
   }
-  const dataset = await withDatabase(c.env, async (db) => {
-    try {
-      return await getDataset(db, c.req.param('id') ?? '');
-    } catch (error) {
-      // A consumer can't fix a definition, and a stranger mustn't learn of one.
-      if (error instanceof StaleDefinitionError) return null;
-      throw error;
-    }
-  });
-  const consumer = dataset?.definition.consumers.find((name) => {
-    const expected = consumerSecret(c.env, name, 'TOKEN_HASH');
-    return expected !== undefined && sameText(hash, expected.toLowerCase());
-  });
+  const consumer = await listedConsumer(c.env, c.req.param('id') ?? '', hash);
   // Whether the dataset exists isn't said to a token that can't read it.
-  if (consumer === undefined) return refuse();
+  if (consumer === null) return refuse();
   c.set('consumer', consumer);
   return next();
 };
@@ -536,147 +524,6 @@ api.post('/datasets/:id/captures/purge', async (c) => {
   return c.json({ purged: outcome.purged });
 });
 
-/** A seed file is a few dozen kilobytes. The limit bounds what one can store. */
-const SEED_MAX_BYTES = 256 * 1024;
-
-/**
- * Seeds a dataset's taxonomy (ADR 0007): version 1, with an ID for every item the file doesn't give
- * one. Once only: after that, the taxonomy changes through proposals. A definition that states its
- * scope must state the seed's.
- */
-api.post(
-  '/datasets/:id/taxonomy',
-  bodyLimit({
-    maxSize: SEED_MAX_BYTES,
-    onError: (c) => c.json({ error: `A seed file is at most ${SEED_MAX_BYTES / 1024} KiB.` }, 413),
-  }),
-  async (c) => {
-    let body: unknown;
-    try {
-      body = await c.req.json();
-    } catch {
-      return c.json({ error: 'The body isn’t JSON.' }, 400);
-    }
-    const parsed = taxonomySeedSchema.safeParse(body);
-    if (!parsed.success) {
-      return c.json(
-        {
-          error: 'The taxonomy has problems.',
-          issues: parsed.error.issues.map(
-            (issue) => `${issue.path.join('.') || '(file)'}: ${issue.message}`,
-          ),
-        },
-        400,
-      );
-    }
-    const seeded = seedTaxonomy(parsed.data, () => newId('tx'));
-    if (!seeded.ok)
-      return c.json({ error: 'The taxonomy has problems.', issues: seeded.issues }, 400);
-    const datasetId = c.req.param('id');
-    const outcome = await withDatabase(c.env, async (db) => {
-      const dataset = await getDataset(db, datasetId);
-      if (dataset === null) return 'missing' as const;
-      const scope = dataset.definition.scope;
-      if (scope !== undefined && scope !== parsed.data.scope) return 'scope' as const;
-      const current = await currentTaxonomy(db, datasetId);
-      if (current !== null) return { exists: current.version };
-      const result = await seedTaxonomyVersion(db, {
-        datasetId,
-        taxonomy: seeded.taxonomy,
-        actor: { role: 'owner', client: 'cli' },
-        at: new Date(),
-      });
-      return result === 'exists' ? { exists: 1 } : ('seeded' as const);
-    });
-    if (outcome === 'missing') return c.json({ error: `Dataset ${datasetId} doesn’t exist.` }, 404);
-    if (outcome === 'scope') {
-      return c.json(
-        { error: 'The seed’s scope differs from the definition’s. Make them the same, then seed.' },
-        409,
-      );
-    }
-    if (outcome !== 'seeded') {
-      return c.json(
-        {
-          error: `${datasetId} has a taxonomy already (version ${outcome.exists}). Change it through proposals and the console.`,
-        },
-        409,
-      );
-    }
-    const { taxonomy } = seeded;
-    return c.json(
-      {
-        version: taxonomy.version,
-        shelves: taxonomy.shelves.length,
-        functions: taxonomy.functions.length,
-        features: taxonomy.features.length,
-      },
-      201,
-    );
-  },
-);
-
-/** The dataset's current taxonomy, whole, or in the seed file's shape with `?format=export`. */
-api.get('/datasets/:id/taxonomy', async (c) => {
-  const format = c.req.query('format');
-  if (format !== undefined && format !== 'export') {
-    return c.json({ error: 'format is export, or left out.' }, 400);
-  }
-  const datasetId = c.req.param('id');
-  const found = await withDatabase(c.env, async (db) =>
-    (await datasetExists(db, datasetId)) ? { current: await currentTaxonomy(db, datasetId) } : null,
-  );
-  if (found === null) return c.json({ error: `Dataset ${datasetId} doesn’t exist.` }, 404);
-  if (found.current === null) return c.json({ error: `${datasetId} has no taxonomy yet.` }, 404);
-  const { version, taxonomy } = found.current;
-  return c.json(
-    format === 'export' ? { version, export: exportTaxonomy(taxonomy) } : { version, taxonomy },
-  );
-});
-
-api.get('/datasets/:id/review', async (c) => {
-  const datasetId = c.req.param('id');
-  // A dataset that isn't there has no questions, but an empty list would read as nothing waiting.
-  const reviews = await withDatabase(c.env, async (db) =>
-    (await datasetExists(db, datasetId)) ? listOpenReviews(db, datasetId) : null,
-  );
-  if (reviews === null) return c.json({ error: `Dataset ${datasetId} doesn’t exist.` }, 404);
-  return c.json({ reviews });
-});
-
-const answerSchema = z.strictObject({ answer: z.string().min(1).max(600) });
-
-api.post('/datasets/:id/review/:reviewId', async (c) => {
-  let body: unknown;
-  try {
-    body = await c.req.json();
-  } catch {
-    return c.json({ error: 'The body isn’t JSON.' }, 400);
-  }
-  const parsed = answerSchema.safeParse(body);
-  if (!parsed.success) {
-    return c.json({ error: 'Send { "answer": one of the question’s options }.' }, 400);
-  }
-  const result = await answerReview(
-    { withDb: (fn) => withDatabase(c.env, fn), blobs: r2Blobs(c.env.STORE), now: () => new Date() },
-    { datasetId: c.req.param('id'), reviewId: c.req.param('reviewId'), answer: parsed.data.answer },
-  );
-  switch (result.kind) {
-    case 'missing':
-      return c.json({ error: 'No such question for this dataset.' }, 404);
-    case 'closed':
-      return c.json({ error: 'That question has been answered already.' }, 409);
-    case 'refused':
-      return c.json({ error: result.reason }, result.status);
-    case 'answered':
-      return c.json({
-        answered: c.req.param('reviewId'),
-        answer: parsed.data.answer,
-        effect: result.effect,
-      });
-  }
-});
-
 /** Crowdio's acknowledgments are a few hundred bytes. The limit bounds what one can store. */
 const ACK_MAX_BYTES = 16 * 1024;
 
@@ -893,6 +740,106 @@ api.get('/datasets/:id/evals', async (c) => {
   return c.json({ evals });
 });
 
+/*
+ * The routes that know who's calling (ADR 0009): the review API's and the taxonomy's, which a
+ * listed consumer's reviewers may call as well as the owner. bearerActor guards every path under
+ * them, as the owner guard does under /datasets, so a route added there later knows its caller.
+ */
+const bearerApi = new Hono<ActorApi>();
+const ACTOR_PATHS = ['/datasets/:id/review/*', '/datasets/:id/taxonomy/*'];
+for (const path of ACTOR_PATHS) bearerApi.use(path, bearerActor);
+
+/** A seed file is a few dozen kilobytes. The limit bounds what one can store. */
+const SEED_MAX_BYTES = 256 * 1024;
+
+/**
+ * Seeds a dataset's taxonomy (ADR 0007): version 1, with an ID for every item the file doesn't give
+ * one. Once only: after that, the taxonomy changes through proposals. A definition that states its
+ * scope must state the seed's. It's the owner's alone, though a consumer's token reaches it.
+ */
+bearerApi.post(
+  '/datasets/:id/taxonomy',
+  ownerOnly,
+  bodyLimit({
+    maxSize: SEED_MAX_BYTES,
+    onError: (c) => c.json({ error: `A seed file is at most ${SEED_MAX_BYTES / 1024} KiB.` }, 413),
+  }),
+  async (c) => {
+    let body: unknown;
+    try {
+      body = await c.req.json();
+    } catch {
+      return c.json({ error: 'The body isn’t JSON.' }, 400);
+    }
+    const parsed = taxonomySeedSchema.safeParse(body);
+    if (!parsed.success) {
+      return c.json(
+        {
+          error: 'The taxonomy has problems.',
+          issues: parsed.error.issues.map(
+            (issue) => `${issue.path.join('.') || '(file)'}: ${issue.message}`,
+          ),
+        },
+        400,
+      );
+    }
+    const seeded = seedTaxonomy(parsed.data, () => newId('tx'));
+    if (!seeded.ok) {
+      return c.json({ error: 'The taxonomy has problems.', issues: seeded.issues }, 400);
+    }
+    const datasetId = c.req.param('id');
+    const actor = actorRecord(c.get('actor'));
+    const outcome = await withDatabase(c.env, async (db) => {
+      const dataset = await getDataset(db, datasetId);
+      if (dataset === null) return 'missing' as const;
+      const scope = dataset.definition.scope;
+      if (scope !== undefined && scope !== parsed.data.scope) return 'scope' as const;
+      const current = await currentTaxonomy(db, datasetId);
+      if (current !== null) return { exists: current.version };
+      const result = await seedTaxonomyVersion(db, {
+        datasetId,
+        taxonomy: seeded.taxonomy,
+        actor,
+        at: new Date(),
+      });
+      return result === 'exists' ? { exists: 1 } : ('seeded' as const);
+    });
+    if (outcome === 'missing') return c.json({ error: `Dataset ${datasetId} doesn’t exist.` }, 404);
+    if (outcome === 'scope') {
+      return c.json(
+        {
+          error: 'The seed’s scope differs from the definition’s. Make them the same, then seed.',
+        },
+        409,
+      );
+    }
+    if (outcome !== 'seeded') {
+      return c.json(
+        {
+          error: `${datasetId} has a taxonomy already (version ${outcome.exists}). Change it through proposals and the console.`,
+        },
+        409,
+      );
+    }
+    const { taxonomy } = seeded;
+    return c.json(
+      {
+        version: taxonomy.version,
+        shelves: taxonomy.shelves.length,
+        functions: taxonomy.functions.length,
+        features: taxonomy.features.length,
+      },
+      201,
+    );
+  },
+);
+
+reviewRoutes(bearerApi);
+
+// Hono copies a sub-app's routes when it's mounted, so every route of bearerApi is registered
+// above this line.
+api.route('/', bearerApi);
+
 // These two answer whatever the path, including ones outside the owner routes, which set the
 // header themselves.
 api.notFound((c) => {
@@ -908,15 +855,6 @@ api.onError((error, c) => {
   console.error('API error:', error instanceof Error ? error.message : String(error));
   return c.json({ error: 'Something went wrong. The Worker’s logs say what.' }, 500);
 });
-
-/** Compares two strings in time that doesn't depend on where they differ. */
-function sameText(a: string, b: string): boolean {
-  if (a.length !== b.length) return false;
-  let difference = 0;
-  for (let index = 0; index < a.length; index += 1)
-    difference |= a.charCodeAt(index) ^ b.charCodeAt(index);
-  return difference === 0;
-}
 
 /**
  * A run whose row says `running` but whose Workflow can't be found. Just after the row is

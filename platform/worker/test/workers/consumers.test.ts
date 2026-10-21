@@ -13,6 +13,7 @@ import {
   consumerBindings,
   expectNoStore,
   post,
+  reviewerBindings,
   signed,
   staleDataset,
   subscribed,
@@ -36,7 +37,6 @@ describe('consumers', () => {
     expectNoStore(read);
     for (const [method, path] of [
       ['GET', '/datasets/cr-not-listed/snapshots/latest'],
-      ['GET', '/datasets/cr-listed/review'],
       ['POST', '/datasets/cr-listed/runs'],
       ['POST', '/datasets/cr-listed/sources/revive'],
       ['GET', '/datasets/cr-listed/status'],
@@ -47,6 +47,20 @@ describe('consumers', () => {
       const response = await call(method, path, { token: CONSUMER_TOKEN, bindings });
       expect(response.status, `${method} ${path}`).toBe(401);
     }
+    // The questions are the review API's, which a consumer reads once the owner grants it the
+    // scope, for a dataset that lists it.
+    const review = (path: string, using: Env) =>
+      call('GET', path, { token: CONSUMER_TOKEN, bindings: using });
+    const ungranted = await review('/datasets/cr-listed/review', bindings);
+    expect(ungranted.status).toBe(403);
+    expectNoStore(ungranted);
+    const granted = await reviewerBindings();
+    const waiting = await review('/datasets/cr-listed/review', granted);
+    expect(waiting.status).toBe(200);
+    expect(await waiting.json()).toEqual({ reviews: [] });
+    const elsewhere = await review('/datasets/cr-not-listed/review', granted);
+    expect(elsewhere.status).toBe(401);
+    expect(elsewhere.headers.get('www-authenticate')).toBe('Bearer');
   });
 
   it('read the scheme of a consumer’s token in any case, and the token exactly', async () => {
@@ -177,6 +191,10 @@ describe('consumers', () => {
       ['DELETE', `/datasets/${datasetId}/snapshots/1`],
       ['GET', `/datasets/${datasetId}/acknowledgments`],
       ['PUT', `/datasets/${datasetId}/acknowledgments`],
+      ['PUT', `/datasets/${datasetId}/review`],
+      ['GET', `/datasets/${datasetId}/review/rv_one`],
+      ['DELETE', `/datasets/${datasetId}/review/rv_one`],
+      ['PUT', `/datasets/${datasetId}/taxonomy`],
     ] as const;
     for (const [method, path] of shapes) {
       for (const token of [null, 'wrong', CONSUMER_TOKEN]) {
