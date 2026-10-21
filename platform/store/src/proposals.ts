@@ -4,6 +4,7 @@ import {
   autonomyKind,
   changeSchema,
   EARNABLE_KINDS,
+  inverseChanges,
   mayApprove,
   readFinalAnswer,
   sha256Hex,
@@ -28,10 +29,11 @@ import {
   reviewItems,
   statements,
   taxonomyProposals,
+  taxonomyVersions,
   type ProposalStatus,
 } from './schema';
 import { lockDataset } from './snapshots';
-import { commitTaxonomy, currentTaxonomy } from './taxonomy';
+import { commitTaxonomy, currentTaxonomy, taxonomyAt } from './taxonomy';
 
 /*
  * The taxonomy review's proposals and each kind's autonomy (ADR 0007). A proposal is decided once:
@@ -332,6 +334,86 @@ export async function revokeAutonomy(
     const was = await streakOf(tx, input.datasetId, input.kind);
     await setStreak(tx, input.datasetId, input.kind, 0, input.at);
     return was;
+  });
+}
+
+/**
+ * Undoes a version (ADR 0007): its changes' inverse, applied on the current version as the next
+ * one, which names the version it undid. History is never rewritten. The seed has nothing before
+ * it, and a version is undone once: the inverse of a rename, a description, what a shelf implies,
+ * or the scope would apply again, so core wouldn't stop a second undo. Undoing a change Spatula
+ * applied on its own sets its kind's run to zero (ruling 16).
+ */
+export async function undoVersion(
+  db: Executor,
+  input: { datasetId: string; version: number; actor: ActorRecord; makeId: () => string; at: Date },
+): Promise<
+  | { kind: 'undone'; version: number; summary: string; revoked: ChangeKind | null }
+  | { kind: 'missing' }
+  | { kind: 'refused'; reason: string }
+> {
+  return db.transaction(async (tx) => {
+    await lockDataset(tx, input.datasetId);
+    const target = await taxonomyAt(tx, input.datasetId, input.version);
+    if (target === null) return { kind: 'missing' as const };
+    if (input.version === 1) {
+      return {
+        kind: 'refused' as const,
+        reason: 'Version 1 is the seed: there’s nothing before it to go back to.',
+      };
+    }
+    const [undoneBy] = await tx
+      .select({ version: taxonomyVersions.version })
+      .from(taxonomyVersions)
+      .where(
+        and(
+          eq(taxonomyVersions.datasetId, input.datasetId),
+          eq(taxonomyVersions.undoes, input.version),
+        ),
+      )
+      .orderBy(asc(taxonomyVersions.version))
+      .limit(1);
+    if (undoneBy !== undefined) {
+      return {
+        kind: 'refused' as const,
+        reason: `Version ${input.version} was undone already, by version ${undoneBy.version}.`,
+      };
+    }
+    const current = await currentTaxonomy(tx, input.datasetId);
+    if (current === null) return { kind: 'missing' as const };
+    // The inverses come last change first, so a batch that made a function and then used it undoes
+    // the use before it retires the function.
+    const applied = applyChanges(current.taxonomy, inverseChanges(target.changes), input.makeId);
+    if (!applied.ok) {
+      return {
+        kind: 'refused' as const,
+        reason: `Undoing version ${input.version} doesn’t apply to version ${current.version}: ${applied.issues.join(' ')}`,
+      };
+    }
+    const committed = await commitTaxonomy(tx, {
+      datasetId: input.datasetId,
+      base: current.version,
+      taxonomy: applied.taxonomy,
+      changes: applied.applied,
+      actor: input.actor,
+      undoes: input.version,
+      at: input.at,
+    });
+    if (!committed.committed) {
+      return {
+        kind: 'refused' as const,
+        reason: `Version ${committed.version} came first; undo again.`,
+      };
+    }
+    const first = target.changes[0];
+    const revoked = target.autonomous && first !== undefined ? autonomyKind(first.change) : null;
+    if (revoked !== null) await setStreak(tx, input.datasetId, revoked, 0, input.at);
+    return {
+      kind: 'undone' as const,
+      version: committed.version,
+      summary: applied.applied.map((entry) => entry.summary).join('; '),
+      revoked,
+    };
   });
 }
 

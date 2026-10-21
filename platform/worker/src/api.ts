@@ -70,6 +70,7 @@ import { rawPageKey } from './captures';
 import { consumerSecret, secret, verifiedBot } from './config';
 import { withDatabase } from './database';
 import { pageKey } from './pipeline';
+import { proposalRoutes } from './proposal-api';
 import { reviewRoutes } from './review-api';
 
 /*
@@ -131,14 +132,15 @@ const owner: MiddlewareHandler<Api> = async (c, next) => {
 
 /**
  * The routes a consumer may call as well as the owner: reading a dataset's snapshots, and
- * acknowledging them; and the review API's and the taxonomy's, which check the token themselves
- * (bearerActor), and answer a consumer with a 403 on the owner's among them: suggestions, the log,
- * and seeding. Every other route under /datasets is the owner's alone, including any added later,
- * so a new route can't be left open by mistake. A route is a method and a path, so one added later
- * at the same path with another method is the owner's too, and so is one added later at a path of
- * the snapshot route's shape: the pattern is the snapshot route's own forms, `latest` and a
- * generation of up to nine digits from 1 (see the route, which answers any other with a 400). An
- * answer's path takes a question's ID, which starts `rv_`.
+ * acknowledging them; and the review API's, the taxonomy's, and the proposals' and autonomy's,
+ * which check the token themselves (bearerActor), and answer a consumer with a 403 on the owner's
+ * among them: suggestions, the log, seeding, versions, undo, and autonomy. Every other route under
+ * /datasets is the owner's alone, including any added later, so a new route can't be left open by
+ * mistake. A route is a method and a path, so one added later at the same path with another method
+ * is the owner's too, and so is one added later at a path of the snapshot route's shape: the
+ * pattern is the snapshot route's own forms, `latest` and a generation of up to nine digits from 1
+ * (see the route, which answers any other with a 400). An answer's path takes a question's ID,
+ * which starts `rv_`, and a decision's a proposal's, which starts `tp_`.
  */
 const CONSUMER_ROUTES = [
   { method: 'GET', path: /^\/datasets\/[^/]+\/snapshots\/(?:latest|[1-9]\d{0,8})$/u },
@@ -147,6 +149,16 @@ const CONSUMER_ROUTES = [
   { method: 'POST', path: /^\/datasets\/[^/]+\/review\/(?:bulk|suggestions|rv_[^/]+)$/u },
   { method: 'GET', path: /^\/datasets\/[^/]+\/taxonomy$/u },
   { method: 'POST', path: /^\/datasets\/[^/]+\/taxonomy$/u },
+  // The taxonomy's proposals, versions, and autonomy (ADR 0007). A reviewer with
+  // taxonomy:approve-additive lists and decides the additive kinds. On the owner's routes among
+  // them, a consumer gets ownerOnly's 403, not the owner check's 401. Each path is under
+  // ACTOR_PATHS, where bearerActor knows the caller.
+  { method: 'GET', path: /^\/datasets\/[^/]+\/proposals$/u },
+  { method: 'POST', path: /^\/datasets\/[^/]+\/proposals\/tp_[^/]+$/u },
+  { method: 'GET', path: /^\/datasets\/[^/]+\/taxonomy\/versions$/u },
+  { method: 'POST', path: /^\/datasets\/[^/]+\/taxonomy\/versions\/[1-9]\d{0,8}\/undo$/u },
+  { method: 'GET', path: /^\/datasets\/[^/]+\/autonomy$/u },
+  { method: 'POST', path: /^\/datasets\/[^/]+\/autonomy\/[a-z-]{1,40}\/revoke$/u },
 ];
 
 api.use('/datasets/*', async (c, next) =>
@@ -745,12 +757,19 @@ api.get('/datasets/:id/evals', async (c) => {
 });
 
 /*
- * The routes that know who's calling (ADR 0009): the review API's and the taxonomy's, which a
- * listed consumer's reviewers may call as well as the owner. bearerActor guards every path under
- * them, as the owner guard does under /datasets, so a route added there later knows its caller.
+ * The routes that know who's calling (ADR 0009): the review API's, the taxonomy's, and the
+ * proposals' and autonomy's, which a listed consumer's reviewers may call as well as the owner.
+ * bearerActor guards every path under them, as the owner guard does under /datasets, so a route
+ * added there later knows its caller. A path in CONSUMER_ROUTES skips the owner guard, so it must
+ * sit under one of these.
  */
 const bearerApi = new Hono<ActorApi>();
-const ACTOR_PATHS = ['/datasets/:id/review/*', '/datasets/:id/taxonomy/*'];
+const ACTOR_PATHS = [
+  '/datasets/:id/review/*',
+  '/datasets/:id/taxonomy/*',
+  '/datasets/:id/proposals/*',
+  '/datasets/:id/autonomy/*',
+];
 for (const path of ACTOR_PATHS) bearerApi.use(path, bearerActor);
 
 /** A seed file is a few dozen kilobytes. The limit bounds what one can store. */
@@ -839,6 +858,7 @@ bearerApi.post(
 );
 
 reviewRoutes(bearerApi);
+proposalRoutes(bearerApi);
 
 // Hono copies a sub-app's routes when it's mounted, so every route of bearerApi is registered
 // above this line.
@@ -854,6 +874,7 @@ consoleApi.get('/datasets', async (c) =>
   c.json({ datasets: await withDatabase(c.env, listDatasets) }),
 );
 reviewRoutes(consoleApi);
+proposalRoutes(consoleApi);
 
 // As with bearerApi, every route of consoleApi is registered above this line.
 api.route('/console/api', consoleApi);

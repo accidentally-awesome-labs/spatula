@@ -1,4 +1,5 @@
 import {
+  applyChanges,
   changeSchema,
   changeText,
   emptyParts,
@@ -32,12 +33,13 @@ import {
   seenChanges,
   shelvesEverHeld,
   specLabels,
+  undoVersion,
   type NewProposal,
 } from './proposals';
 import { startRun } from './runs';
 import { autonomy, fetches } from './schema';
 import { writeStatements } from './statements';
-import { currentTaxonomy, seedTaxonomyVersion, taxonomyHistory } from './taxonomy';
+import { commitTaxonomy, currentTaxonomy, seedTaxonomyVersion, taxonomyHistory } from './taxonomy';
 
 const DATASET = 'test-taxonomy';
 const RUN = 'test-taxonomy-202610100000';
@@ -534,5 +536,124 @@ describe('what the review reads', () => {
       ]);
       expect(await specLabels(db, DATASET)).toEqual(new Map([[a1!.id, ['impedance']]]));
       expect(await shelvesEverHeld(db, DATASET)).toEqual([overEar, onEar].sort());
+    }));
+});
+
+describe('undoing a version', () => {
+  it('undoes a version as a new one, and takes autonomy from a kind Spatula applied it as', () =>
+    withRollback(async (db) => {
+      await seeded(db);
+      await db
+        .insert(autonomy)
+        .values({ datasetId: DATASET, kind: 'add-value', streak: 10, updatedAt: T(1) });
+      await saveProposals(db, [
+        proposal('tp_line_out', LINE_OUT),
+        proposal('tp_describe', DESCRIBE_DACS),
+      ]);
+      await decideProposal(db, {
+        id: 'tp_line_out',
+        decision: 'accept',
+        actor: DECIDER,
+        autonomous: true,
+        makeId,
+        at: T(2),
+      });
+      await accept(db, 'tp_describe');
+      const undo = (version: number) =>
+        undoVersion(db, { datasetId: DATASET, version, actor: OWNER, makeId, at: T(3) });
+
+      expect(await undo(2)).toEqual({
+        kind: 'undone',
+        version: 4,
+        summary: 'Retire Line out',
+        revoked: 'add-value',
+      });
+      const current = (await currentTaxonomy(db, DATASET))!.taxonomy;
+      expect(findItem(current, 'value', 'line-out')!.retiredIn).toBe(4);
+      // Version 3 stands: undoing 2 took back 2's change alone.
+      expect(findItem(current, 'shelf', 'dacs')!.description).toBe(
+        'Turn digital audio into an analog signal',
+      );
+      expect((await taxonomyHistory(db, DATASET))[0]).toMatchObject({
+        version: 4,
+        actor: OWNER,
+        autonomous: false,
+        undoes: 2,
+      });
+      expect(await streakOf(db, 'add-value')).toBe(0);
+
+      // Undoing the owner's own change takes no autonomy away.
+      expect(await undo(3)).toEqual({
+        kind: 'undone',
+        version: 5,
+        summary: 'Describe DACs anew',
+        revoked: null,
+      });
+      // A version is undone once. Undoing a description again would apply, as core doesn't stop
+      // it, so the store does.
+      expect(await undo(3)).toEqual({
+        kind: 'refused',
+        reason: 'Version 3 was undone already, by version 5.',
+      });
+      expect(await undo(2)).toEqual({
+        kind: 'refused',
+        reason: 'Version 2 was undone already, by version 4.',
+      });
+      expect(await undo(1)).toEqual({
+        kind: 'refused',
+        reason: 'Version 1 is the seed: there’s nothing before it to go back to.',
+      });
+      expect(await undo(9)).toEqual({ kind: 'missing' });
+      // The refusals commit nothing.
+      expect((await currentTaxonomy(db, DATASET))!.version).toBe(5);
+    }));
+
+  it('undoes a batch with the inverses in reverse order', () =>
+    withRollback(async (db) => {
+      await seeded(db);
+      const seed = (await currentTaxonomy(db, DATASET))!;
+      // A function and the change that makes a shelf imply it: undone in the order they were
+      // applied, the function would be retired while the shelf still implies it.
+      const batch = applyChanges(
+        seed.taxonomy,
+        [
+          {
+            kind: 'add-function',
+            slug: 'streamer',
+            name: 'Streamer',
+            description: 'Plays a stream',
+          },
+          { kind: 'implies', shelf: 'dacs', implies: ['dac', 'streamer'] },
+        ],
+        makeId,
+      );
+      if (!batch.ok) throw new Error(batch.issues.join(' '));
+      await commitTaxonomy(db, {
+        datasetId: DATASET,
+        base: 1,
+        taxonomy: batch.taxonomy,
+        changes: batch.applied,
+        actor: OWNER,
+        at: T(2),
+      });
+
+      const undone = await undoVersion(db, {
+        datasetId: DATASET,
+        version: 2,
+        actor: OWNER,
+        makeId,
+        at: T(3),
+      });
+      expect(undone).toEqual({
+        kind: 'undone',
+        version: 3,
+        summary: 'Change what DACs implies; Retire Streamer',
+        revoked: null,
+      });
+      const current = (await currentTaxonomy(db, DATASET))!.taxonomy;
+      expect(findItem(current, 'function', 'streamer')!.retiredIn).toBe(3);
+      expect(current.shelves.find((shelf) => shelf.slug === 'dacs')!.implies).toEqual([
+        id('function', 'dac'),
+      ]);
     }));
 });
