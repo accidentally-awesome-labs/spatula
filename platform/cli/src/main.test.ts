@@ -820,6 +820,20 @@ describe('run', () => {
     expect(at('LLM:')).toBeLessThan(at('Matched:'));
     expect(at('Matched:')).toBeLessThan(at('Not the dataset’s:'));
     expect(at('Not the dataset’s:')).toBeLessThan(at('Entities:'));
+
+    // A summary from before the rule names no pair.
+    expect(busy.some((line) => line.startsWith('Kept apart by the model-number rule'))).toBe(false);
+    const ruled = await printed({
+      match: { ...none, rule: 3 },
+      ruleApart: ['Hugo 2 and Hugo', 'Mojo 2 and Mojo'],
+    });
+    const matched = ruled.findIndex((line) => line.startsWith('Matched:'));
+    expect(ruled[matched]).toBe(
+      'Matched: 3 by rule, 0 by the decider, 0 for review, 0 as before, 0 for the next run, 0 failed; 0 tokens in, 0 out.',
+    );
+    expect(ruled[matched + 1]).toBe(
+      'Kept apart by the model-number rule: Hugo 2 and Hugo; Mojo 2 and Mojo; and 1 more.',
+    );
   });
 
   it('says how many pages wait for a match answer', async () => {
@@ -1183,10 +1197,19 @@ describe('review', () => {
       'rv_match  match  https://maker-a.example/products/a3 and sp_one (https://maker-a.example/products/a1)',
       '  Is this page the same product as the record?',
       '  Proposed: same (0.50). The names agree.',
-      '  Answers: same | variant | different',
+      '  Answers: same | variant | different | edition | spec-version | other-model | unrelated',
       '',
       'Answer with: spatula review cli-products <id> "<answer>"',
     ]);
+  });
+
+  it('shows a match question’s reason with the lineup it was asked beside, on one line', async () => {
+    // The reason is the decision's evidence: the decider's own, then the lineup it was shown.
+    const reason =
+      'The names agree. Shown beside it: HD 600; HD 660S (a person kept it apart from B).';
+    const out = await listed([{ ...MATCH, context: { ...MATCH.context, reason } }]);
+    expect(out).toContain(`  Proposed: same (0.50). ${reason}`);
+    expect(out.join('\n')).not.toContain(String.raw`\u{a}`);
   });
 
   it('names the two pages alone for a match question asked before it named the record', async () => {
@@ -1333,7 +1356,7 @@ describe('review', () => {
 
   it('shows why the API refused an answer, and exits 1', async () => {
     const reason =
-      'A person already said this page is the same product as sp_one, and a page joins one record. Answer variant or different.';
+      'A person already said this page joins sp_one, and a page joins one record. Answer spec-version, other-model, or unrelated.';
     const { fetch } = stubApi(() => Response.json({ error: reason }, { status: 409 }));
     const { io, out, err } = memoryIo();
     expect(await main(['review', 'cli-products', 'rv_m', 'same'], { io, env: ENV, fetch })).toBe(1);

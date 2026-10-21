@@ -1,4 +1,4 @@
-import type { StatementInput } from '@spatula/core';
+import type { Question, StatementInput } from '@spatula/core';
 import {
   decisionRecords,
   discardHeld,
@@ -11,6 +11,7 @@ import {
   listOpenReviews,
   lockPageVerdicts,
   openReview,
+  reviewItems,
   saveDecision,
   snapshotById,
   statements,
@@ -189,7 +190,7 @@ async function classifyAsked(datasetId: string, probabilities: Record<string, nu
 }
 
 /** What a decider says of a page and a record when it can't tell whether they are the same. */
-const UNSURE = { same: 0.5, variant: 0.45 };
+const UNSURE = { same: 0.5, 'spec-version': 0.45 };
 
 /** Two versions of one headphone, and a decider that can't tell whether the page is the same. */
 async function matchAsked(datasetId: string) {
@@ -390,7 +391,26 @@ describe('answering review', { timeout: 20_000 }, () => {
     expect(await entityOf(page.id)).toBe(await entityOf(a1.id));
   });
 
-  it.each(['variant', 'different'])(
+  it('joins the page as an edition when a person says so', async () => {
+    const { world, a1, page, question } = await matchAsked('review-edition');
+    expect(
+      await answerReview(world.ports, {
+        datasetId: 'review-edition',
+        reviewId: question.id,
+        answer: 'edition',
+      }),
+    ).toEqual({
+      kind: 'answered',
+      effect: 'The page joins that record as an edition at the next run.',
+    });
+    expect(await judgementsFor(db, 'review-edition')).toMatchObject([
+      { itemId: page.id, verdict: 'edition', who: 'person', confidence: 1 },
+    ]);
+    await refresh(world, 'review-edition');
+    expect(await entityOf(page.id)).toBe(await entityOf(a1.id));
+  });
+
+  it.each(['spec-version', 'other-model', 'unrelated'])(
     'keeps the page apart from the record when a person says %s',
     async (verdict) => {
       const datasetId = `review-apart-${verdict}`;
@@ -661,7 +681,7 @@ describe('a page that two questions ask about', { timeout: 20_000 }, () => {
     expect(await answer(world, datasetId, about(e2).id, 'same')).toEqual({
       kind: 'refused',
       status: 409,
-      reason: `A person already said this page is the same product as ${e1}, and a page joins one record. Answer variant or different.`,
+      reason: `A person already said this page joins ${e1}, and a page joins one record. Answer spec-version, other-model, or unrelated.`,
     });
     // Nothing was written for the refused answer: its question waits, and it speaks for nothing.
     expect(await listOpenReviews(db, datasetId)).toMatchObject([{ id: about(e2).id }]);
@@ -678,12 +698,31 @@ describe('a page that two questions ask about', { timeout: 20_000 }, () => {
     });
 
     // The person can still say what the page isn't.
-    expect(await answer(world, datasetId, about(e2).id, 'different')).toMatchObject({
+    expect(await answer(world, datasetId, about(e2).id, 'unrelated')).toMatchObject({
       kind: 'answered',
     });
     expect(await listOpenReviews(db, datasetId)).toEqual([]);
     await refresh(world, datasetId);
     expect(await entityOf(page.id)).toBe(e1);
+  });
+
+  it('refuses a join about a second record, as the same product or an edition, after an edition', async () => {
+    const datasetId = 'review-two-joins';
+    const { world, page, e1, e2 } = await versionsAndAPage(datasetId, UNSURE);
+    const about = await askedAbout(datasetId, page.id);
+    expect(await answer(world, datasetId, about(e1).id, 'edition')).toMatchObject({
+      kind: 'answered',
+    });
+    const refused = {
+      kind: 'refused',
+      status: 409,
+      reason: `A person already said this page joins ${e1}, and a page joins one record. Answer spec-version, other-model, or unrelated.`,
+    };
+    expect(await answer(world, datasetId, about(e2).id, 'same')).toEqual(refused);
+    expect(await answer(world, datasetId, about(e2).id, 'edition')).toEqual(refused);
+    expect(await answer(world, datasetId, about(e2).id, 'spec-version')).toMatchObject({
+      kind: 'answered',
+    });
   });
 
   it('takes a person’s “same” again about the record they already chose', async () => {
@@ -717,14 +756,14 @@ describe('a page that two questions ask about', { timeout: 20_000 }, () => {
     expect(await answer(world, datasetId, about(e2).id, 'same')).toEqual({
       kind: 'refused',
       status: 409,
-      reason: `This page is already joined to ${e1}, and a page joins one record. Answer variant or different.`,
+      reason: `This page is already joined to ${e1}, and a page joins one record. Answer spec-version, other-model, or unrelated.`,
     });
     expect(await listOpenReviews(db, datasetId)).toHaveLength(2);
     // The record it is joined to can be confirmed, and the other ruled out.
     expect(await answer(world, datasetId, about(e1).id, 'same')).toMatchObject({
       kind: 'answered',
     });
-    expect(await answer(world, datasetId, about(e2).id, 'variant')).toMatchObject({
+    expect(await answer(world, datasetId, about(e2).id, 'other-model')).toMatchObject({
       kind: 'answered',
     });
   });
@@ -781,7 +820,7 @@ describe('a page that two questions ask about', { timeout: 20_000 }, () => {
     expect(await answering).toEqual({
       kind: 'refused',
       status: 409,
-      reason: `A person already said this page is the same product as ${e1}, and a page joins one record. Answer variant or different.`,
+      reason: `A person already said this page joins ${e1}, and a page joins one record. Answer spec-version, other-model, or unrelated.`,
     });
     expect(await listOpenReviews(db, datasetId)).toHaveLength(2);
   });
@@ -802,5 +841,77 @@ describe('a page that two questions ask about', { timeout: 20_000 }, () => {
       (row) => row.itemId === page.id && row.who === 'person',
     );
     expect(said).toMatchObject([{ entityId: chosen, verdict: 'same' }]);
+  });
+});
+
+describe('a match question asked before the relationships', { timeout: 20_000 }, () => {
+  /** The question as run 1 asked it: three answers, and no outcomes. */
+  const OLD: Question = {
+    type: 'choice',
+    prompt: 'Are these two records the same product?',
+    options: ['same', 'variant', 'different'],
+  };
+  async function oldAsked(datasetId: string) {
+    const asked = await matchAsked(datasetId);
+    await db
+      .update(reviewItems)
+      .set({ question: OLD })
+      .where(eq(reviewItems.id, asked.question.id));
+    return asked;
+  }
+
+  it('takes edition, which joins the page as an edition', async () => {
+    const { world, a1, page, question } = await oldAsked('review-old-edition');
+    expect(
+      await answerReview(world.ports, {
+        datasetId: 'review-old-edition',
+        reviewId: question.id,
+        answer: 'edition',
+      }),
+    ).toEqual({
+      kind: 'answered',
+      effect: 'The page joins that record as an edition at the next run.',
+    });
+    expect(await judgementsFor(db, 'review-old-edition')).toMatchObject([
+      { itemId: page.id, verdict: 'edition', who: 'person' },
+    ]);
+    await refresh(world, 'review-old-edition');
+    expect(await entityOf(page.id)).toBe(await entityOf(a1.id));
+  });
+
+  it.each(['variant', 'different', 'other-model'])(
+    'keeps the page apart when a person says %s',
+    async (said) => {
+      const datasetId = `review-old-${said}`;
+      const { world, a1, page, question } = await oldAsked(datasetId);
+      expect(
+        await answerReview(world.ports, { datasetId, reviewId: question.id, answer: said }),
+      ).toEqual({
+        kind: 'answered',
+        effect:
+          'The page stays apart from that record; the next run gives it its own, or asks about another.',
+      });
+      expect(await judgementsFor(db, datasetId)).toMatchObject([
+        { itemId: page.id, verdict: 'not_same', who: 'person' },
+      ]);
+      await refresh(world, datasetId);
+      expect(await entityOf(page.id)).not.toBe(await entityOf(a1.id));
+    },
+  );
+
+  it('names every answer it takes when it refuses one', async () => {
+    const { world, question } = await oldAsked('review-old-refused');
+    expect(
+      await answerReview(world.ports, {
+        datasetId: 'review-old-refused',
+        reviewId: question.id,
+        answer: 'maybe',
+      }),
+    ).toEqual({
+      kind: 'refused',
+      status: 400,
+      reason:
+        'Answer with one of: same, variant, different, edition, spec-version, other-model, unrelated.',
+    });
   });
 });

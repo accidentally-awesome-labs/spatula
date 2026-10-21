@@ -6,6 +6,7 @@ import {
   snapshotSchema,
   stableId,
   stableStringify,
+  type EntityMember,
   type EntityStatements,
   type Excluded,
   type PublishResult,
@@ -17,6 +18,7 @@ import {
 import {
   commitSnapshot,
   currentStatements,
+  entityMembers,
   headGenerationOf,
   heldSnapshot,
   holdSnapshot,
@@ -68,8 +70,10 @@ export class SnapshotFileMissingError extends Error {
 }
 
 /**
- * What a snapshot's records say, without when each value was last seen. A run that only sees
- * the same values again publishes nothing; consumers already have them.
+ * What a snapshot's records say, their editions included, without when each value was last seen.
+ * A run that only sees the same values again publishes nothing; consumers already have them. A
+ * newly found edition publishes (ADR 0003), and a record without editions digests as it did before
+ * them.
  */
 export async function recordsDigest(records: SnapshotRecord[]): Promise<string> {
   return sha256Hex(
@@ -83,6 +87,7 @@ export async function recordsDigest(records: SnapshotRecord[]): Promise<string> 
             { sourceUrl, method, confidence },
           ]),
         ),
+        ...(record.editions === undefined ? {} : { editions: record.editions }),
       })),
     ),
   );
@@ -105,7 +110,23 @@ export async function publish(context: Context, ports: RefreshPorts): Promise<Pu
       unlessNewerRun(db, { datasetId, runId }, change);
     const [recordType] = Object.values(definition.recordTypes);
     if (recordType === undefined) throw new Error(`Dataset ${datasetId} has no record type`);
-    // Pushed in place: copying an entity's list for every statement would be quadratic.
+    // Each record's pages, for its base page and its editions (ADR 0003).
+    const members = new Map<string, EntityMember[]>();
+    const memberOf = new Map<string, EntityMember>();
+    for (const row of await entityMembers(db, datasetId)) {
+      const member: EntityMember = {
+        url: row.url,
+        firstSeen: row.firstSeen.toISOString(),
+        edition: row.edition,
+        statements: [],
+      };
+      memberOf.set(row.itemId, member);
+      const list = members.get(row.entityId);
+      if (list === undefined) members.set(row.entityId, [member]);
+      else list.push(member);
+    }
+    // Pushed in place: copying an entity's list for every statement would be quadratic. A page's
+    // list holds the same statements as its record's.
     const said = new Map<string, StatementView[]>();
     for (const statement of await currentStatements(db, datasetId)) {
       const id = statement.entityId;
@@ -113,10 +134,12 @@ export async function publish(context: Context, ports: RefreshPorts): Promise<Pu
       const list = said.get(id);
       if (list === undefined) said.set(id, [statement]);
       else list.push(statement);
+      memberOf.get(statement.itemId)?.statements.push(statement);
     }
     const entities: EntityStatements[] = [...said].map(([canonicalId, statements]) => ({
       canonicalId,
       statements,
+      members: members.get(canonicalId) ?? [],
     }));
     const { records, excluded } = buildRecords(recordType, entities);
     if (records.length === 0) {

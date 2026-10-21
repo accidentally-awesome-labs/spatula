@@ -184,7 +184,10 @@ export async function judge(
     });
 }
 
-/** The entities a page is judged the same as, with who judged each, by entity. */
+/**
+ * The entities a page is judged to join, as the same product or an edition (ADR 0003), with who
+ * judged each, by entity. A page joins one record, whichever verdict joins it.
+ */
 export async function sameVerdictsOf(
   db: Executor,
   itemId: string,
@@ -192,7 +195,7 @@ export async function sameVerdictsOf(
   return db
     .select({ entityId: judgements.entityId, who: judgements.who })
     .from(judgements)
-    .where(and(eq(judgements.itemId, itemId), eq(judgements.verdict, 'same')))
+    .where(and(eq(judgements.itemId, itemId), inArray(judgements.verdict, ['same', 'edition'])))
     .orderBy(asc(judgements.entityId));
 }
 

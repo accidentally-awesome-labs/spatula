@@ -199,6 +199,9 @@ export async function setExtractedWith(
   await db.update(items).set({ extractedWith }).where(eq(items.id, itemId));
 }
 
+/** Whether a fetch's signals say its site refuses AI input. */
+const refusesAiInput = (signals: ContentSignals | null) => signals?.['ai-input'] === 'no';
+
 /**
  * Whether the latest fetch of any of these pages found its site saying ai-input=no. A question
  * that shows a decider what pages said needs every one of their sites' consent. Of fetches that
@@ -215,5 +218,24 @@ export async function anyRefusesAiInput(
     .from(fetches)
     .where(and(inArray(fetches.itemId, [...itemIds]), isNotNull(fetches.signals)))
     .orderBy(fetches.itemId, desc(fetches.startedAt), desc(fetches.id));
-  return latest.some((row) => row.signals?.['ai-input'] === 'no');
+  return latest.some((row) => refusesAiInput(row.signals));
+}
+
+/**
+ * The dataset's pages whose latest fetch found their site saying ai-input=no, as
+ * `anyRefusesAiInput` reads it for any of them: what a lineup shows of a record needs the consent
+ * of every page that record has.
+ */
+export async function pagesRefusingAiInput(db: Executor, datasetId: string): Promise<Set<string>> {
+  const latest = await db
+    .selectDistinctOn([fetches.itemId], { itemId: fetches.itemId, signals: fetches.signals })
+    .from(fetches)
+    .innerJoin(items, eq(items.id, fetches.itemId))
+    .where(and(eq(items.datasetId, datasetId), isNotNull(fetches.signals)))
+    .orderBy(fetches.itemId, desc(fetches.startedAt), desc(fetches.id));
+  return new Set(
+    latest.flatMap((row) =>
+      row.itemId !== null && refusesAiInput(row.signals) ? [row.itemId] : [],
+    ),
+  );
 }

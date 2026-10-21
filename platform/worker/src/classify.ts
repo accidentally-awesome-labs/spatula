@@ -8,6 +8,7 @@ import {
   decidedField,
   NONE_OF_THESE,
   optionsOf,
+  outcomeProbability,
   parsePage,
   stableId,
   stateEvidence,
@@ -157,7 +158,12 @@ export function stands(
 ): boolean {
   if (earlier.finalAnswer !== null || earlier.outcome === 'rule') return true;
   if (earlier.outcome === 'accepted') {
-    const probability = earlier.answer === null ? 0 : (earlier.probabilities[earlier.answer] ?? 0);
+    // As sure as its outcome, where the question groups its answers (ADR 0003): a match decider
+    // 0.6 sure of other-model and 0.38 of spec-version was 0.98 sure the page stays apart.
+    const probability =
+      earlier.answer === null
+        ? 0
+        : outcomeProbability(earlier.question, earlier.probabilities, earlier.answer);
     return now.consent && probability >= now.accept;
   }
   return weighed(earlier) || !now.canAsk;

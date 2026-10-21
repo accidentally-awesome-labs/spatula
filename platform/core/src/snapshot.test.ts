@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { parseDefinition, type RecordType } from './definition';
+import { basePages, type EntityMember } from './editions';
 import { buildRecords, snapshotSchema } from './snapshot';
 import type { StatementView } from './survivorship';
 
@@ -52,6 +53,33 @@ const view = (
   sourceUrl: 'https://www.audeze.com/products/lcd-x',
   position: property === 'gtins' ? 0 : null,
 });
+
+const LATER = '2026-10-12T00:00:00.000Z';
+
+/** A page's statements, each seen at `lastSeen`, as structured data says them unless told. */
+const said = (
+  url: string,
+  lastSeen: string,
+  values: Record<string, string>,
+  method: StatementView['method'] = 'jsonld',
+): StatementView[] =>
+  Object.entries(values).map(([property, value]) => ({
+    property,
+    value,
+    valueKey: value,
+    method,
+    confidence: 0.9,
+    lastSeen,
+    sourceUrl: url,
+    position: property === 'gtins' ? 0 : null,
+  }));
+
+const page = (
+  url: string,
+  firstSeen: string,
+  edition: boolean,
+  statements: StatementView[],
+): EntityMember => ({ url, firstSeen, edition, statements });
 
 describe('buildRecords', () => {
   it('writes records in the published format, in canonical-ID order, and leaves out incomplete ones', () => {
@@ -119,6 +147,246 @@ describe('buildRecords', () => {
   });
 });
 
+describe('buildRecords with the record’s pages', () => {
+  const CLUB = 'https://maker.example/p/dj-300-pro-x-club';
+  const BASE = 'https://maker.example/p/dj-300-pro-x';
+  const recordOf = (members: EntityMember[]) =>
+    buildRecords(product, [
+      {
+        canonicalId: 'sp_dj',
+        statements: members.flatMap((member) => member.statements),
+        members,
+      },
+    ]).records[0]!;
+
+  it('takes the name and single values from the base page, though its edition was met first and read last', () => {
+    // The Club's page started the record, so the base page is the one that joined as an edition.
+    const club = page(
+      CLUB,
+      '2026-10-01T00:00:00.000Z',
+      false,
+      said(CLUB, LATER, {
+        brand: 'beyerdynamic',
+        name: 'DJ 300 PRO X Club',
+        category: 'Headphones',
+        gtins: '04010118471063',
+        officialUrl: CLUB,
+      }),
+    );
+    const base = page(
+      BASE,
+      '2026-10-05T00:00:00.000Z',
+      true,
+      said(BASE, SEEN, {
+        brand: 'beyerdynamic',
+        name: 'DJ 300 PRO X',
+        category: 'Headphones',
+        gtins: '04010118471070',
+        officialUrl: BASE,
+      }),
+    );
+    const record = recordOf([club, base]);
+    expect(record.fields).toEqual({
+      brand: 'beyerdynamic',
+      name: 'DJ 300 PRO X',
+      category: 'Headphones',
+      gtins: ['04010118471063', '04010118471070'],
+      officialUrl: BASE,
+    });
+    expect(record.provenance.name).toMatchObject({ sourceUrl: BASE });
+    expect(record.editions).toEqual([
+      { name: 'DJ 300 PRO X Club', officialUrl: CLUB, gtins: ['04010118471063'] },
+    ]);
+  });
+
+  it('fills a field only an edition states, and lets a person’s word count wherever it was said', () => {
+    const base = page(
+      BASE,
+      '2026-10-01T00:00:00.000Z',
+      false,
+      said(
+        BASE,
+        SEEN,
+        { brand: 'beyerdynamic', name: 'DJ 300 PRO X', category: 'Speakers' },
+        'llm',
+      ),
+    );
+    const club = page(CLUB, '2026-10-05T00:00:00.000Z', true, [
+      ...said(CLUB, LATER, {
+        name: 'DJ 300 PRO X Club',
+        gtins: '04010118471063',
+        officialUrl: CLUB,
+      }),
+      ...said(CLUB, LATER, { category: 'Headphones' }, 'human'),
+    ]);
+    expect(recordOf([base, club]).fields).toEqual({
+      brand: 'beyerdynamic',
+      name: 'DJ 300 PRO X',
+      category: 'Headphones',
+      gtins: ['04010118471063'],
+      officialUrl: CLUB,
+    });
+  });
+
+  it('takes the earliest page that didn’t join as an edition when no name extends another', () => {
+    const echo = (letter: string, firstSeen: string, edition: boolean) => {
+      const url = `https://maker.example/p/echo-${letter.toLowerCase()}`;
+      return page(
+        url,
+        firstSeen,
+        edition,
+        said(url, SEEN, { brand: 'Moondrop', name: `Echo ${letter}`, category: 'Headphones' }),
+      );
+    };
+    const record = recordOf([
+      echo('A', '2026-10-03T00:00:00.000Z', false),
+      echo('B', '2026-10-01T00:00:00.000Z', true),
+      echo('C', '2026-10-02T00:00:00.000Z', false),
+    ]);
+    expect(record.fields.name).toBe('Echo C');
+    expect(record.editions).toEqual([
+      { name: 'Echo A', officialUrl: 'https://maker.example/p/echo-a', gtins: [] },
+      { name: 'Echo B', officialUrl: 'https://maker.example/p/echo-b', gtins: [] },
+    ]);
+  });
+
+  it('counts pages written as the base with it, and lists no editions when every name is alike', () => {
+    const one = page(
+      'https://maker.example/p/hd-650',
+      '2026-10-01T00:00:00.000Z',
+      false,
+      said('https://maker.example/p/hd-650', SEEN, {
+        brand: 'Sennheiser',
+        name: 'HD 650',
+        category: 'Headphones',
+      }),
+    );
+    const two = page(
+      'https://maker.example/p/hd650',
+      '2026-10-02T00:00:00.000Z',
+      false,
+      said('https://maker.example/p/hd650', LATER, {
+        brand: 'Sennheiser',
+        name: 'HD-650',
+        category: 'Headphones',
+      }),
+    );
+    const record = recordOf([one, two]);
+    // Both pages are the base, so survivorship chooses between them as before: the newer name.
+    expect(record.fields.name).toBe('HD-650');
+    expect('editions' in record).toBe(false);
+  });
+
+  it('builds a record without its pages as before, with no editions', () => {
+    const { records } = buildRecords(product, [
+      {
+        canonicalId: 'sp_x',
+        statements: said('https://maker.example/p/x', SEEN, {
+          brand: 'Audeze',
+          name: 'LCD-X',
+          category: 'Headphones',
+        }),
+      },
+    ]);
+    expect(records[0]!.fields).toEqual({ brand: 'Audeze', name: 'LCD-X', category: 'Headphones' });
+    expect('editions' in records[0]!).toBe(false);
+  });
+});
+
+describe('basePages', () => {
+  it('takes the page whose name every other page’s differing name extends', () => {
+    const named = (name: string, edition = false) => {
+      const url = `https://maker.example/p/${encodeURIComponent(name)}`;
+      return page(url, SEEN, edition, said(url, SEEN, { name }));
+    };
+    const base = basePages(product, [
+      named('Hugo Silver'),
+      named('Hugo', true),
+      named('Hugo Black'),
+    ]);
+    expect(base?.map((member) => member.url)).toEqual(['https://maker.example/p/Hugo']);
+    expect(basePages(product, [])).toBeNull();
+  });
+
+  it('takes the same base whichever spelling of a name Spatula met first', () => {
+    // "Moon River 2" and "MoonRiver2" are one name written two ways, in different words. The Ti
+    // extends the name as one of them writes it.
+    const named = (name: string, firstSeen: string, edition: boolean) => {
+      const url = `https://maker.example/p/${encodeURIComponent(name)}`;
+      return page(
+        url,
+        firstSeen,
+        edition,
+        said(url, SEEN, { brand: 'Moondrop', name, category: 'Headphones' }),
+      );
+    };
+    const ti = named('MoonRiver 2 Ti', '2026-10-01T00:00:00.000Z', false);
+    const orders = [
+      [
+        ti,
+        named('Moon River 2', '2026-10-02T00:00:00.000Z', false),
+        named('MoonRiver2', '2026-10-03T00:00:00.000Z', true),
+      ],
+      [
+        ti,
+        named('MoonRiver2', '2026-10-02T00:00:00.000Z', false),
+        named('Moon River 2', '2026-10-03T00:00:00.000Z', true),
+      ],
+    ];
+    for (const members of orders) {
+      expect(
+        basePages(product, members)
+          ?.map((member) => member.url)
+          .sort(),
+      ).toEqual(['https://maker.example/p/Moon%20River%202', 'https://maker.example/p/MoonRiver2']);
+      const [record] = buildRecords(product, [
+        {
+          canonicalId: 'sp_mr',
+          statements: members.flatMap((member) => member.statements),
+          members,
+        },
+      ]).records;
+      expect(record!.fields.name).toBe('Moon River 2');
+      expect(record!.editions).toEqual([
+        { name: 'MoonRiver 2 Ti', officialUrl: ti.url, gtins: [] },
+      ]);
+    }
+  });
+
+  it('never takes a page without a name as the base while another page gives one', () => {
+    const nameless = page(
+      'https://maker.example/p/echo',
+      '2026-10-01T00:00:00.000Z',
+      false,
+      said('https://maker.example/p/echo', SEEN, { brand: 'Moondrop', category: 'Headphones' }),
+    );
+    const echo = (letter: string, firstSeen: string, lastSeen: string) => {
+      const url = `https://maker.example/p/echo-${letter.toLowerCase()}`;
+      return page(url, firstSeen, true, said(url, lastSeen, { name: `Echo ${letter}` }));
+    };
+    // Echo B was read last, so survivorship across every page would name the record after it.
+    const members = [
+      nameless,
+      echo('A', '2026-10-02T00:00:00.000Z', SEEN),
+      echo('B', '2026-10-03T00:00:00.000Z', LATER),
+    ];
+    expect(basePages(product, members)?.map((member) => member.url)).toEqual([
+      'https://maker.example/p/echo-a',
+    ]);
+    const [record] = buildRecords(product, [
+      {
+        canonicalId: 'sp_echo',
+        statements: members.flatMap((member) => member.statements),
+        members,
+      },
+    ]).records;
+    expect(record!.fields).toEqual({ brand: 'Moondrop', name: 'Echo A', category: 'Headphones' });
+    expect(record!.editions).toEqual([
+      { name: 'Echo B', officialUrl: 'https://maker.example/p/echo-b', gtins: [] },
+    ]);
+  });
+});
+
 describe('snapshotSchema', () => {
   const snapshot = {
     project: 'crowdio-audio-products',
@@ -175,5 +443,25 @@ describe('snapshotSchema', () => {
         path: ['records', 1, 'canonicalId'],
       },
     ]);
+  });
+
+  it('reads a record’s editions, refuses an edition with keys it doesn’t know, and reads a record without them', () => {
+    const edition = {
+      name: 'DJ 300 PRO X Club',
+      officialUrl: 'https://north-america.beyerdynamic.com/p/dj-300-pro-x-club',
+      gtins: ['04010118471063'],
+    };
+    const withEditions = {
+      ...snapshot,
+      records: [{ ...snapshot.records[0]!, editions: [edition] }],
+    };
+    expect(snapshotSchema.parse(withEditions)).toEqual(withEditions);
+    expect(
+      snapshotSchema.safeParse({
+        ...snapshot,
+        records: [{ ...snapshot.records[0]!, editions: [{ ...edition, color: 'Silver' }] }],
+      }).success,
+    ).toBe(false);
+    expect(snapshotSchema.parse(snapshot).records[0]).not.toHaveProperty('editions');
   });
 });

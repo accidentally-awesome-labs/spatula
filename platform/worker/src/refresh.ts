@@ -10,6 +10,7 @@ import {
   parsePage,
   pathPatternMatches,
   REFUSE_AFTER_RUNS,
+  RULE_PAIRS_NAMED,
   sha256Hex,
   sourceVerdict,
   stableId,
@@ -462,15 +463,23 @@ export async function runRefresh(
     let resolved = first;
     // A resolution kept by an earlier version has no questions: its pages wait for the next run.
     const questions = first.questions ?? [];
+    // Nor has it lineups: its questions are asked without one.
+    const lineups = first.lineups ?? {};
     for (const question of questions) {
+      const lineup = lineups[`${question.itemId}|${question.entityId}`] ?? [];
       const matched = await step.do(`match:${question.itemId}:${question.entityId}`, () =>
-        matchItem(context, question, budgetLeft(context, summary), ports),
+        matchItem(context, { ...question, lineup }, budgetLeft(context, summary), ports),
       );
       const counts = decisionsOf(summary, 'match');
       counts[matched.outcome] += 1;
       counts.inputTokens += matched.usage.inputTokens;
       counts.outputTokens += matched.usage.outputTokens;
       if (matched.note !== null) note(summary, matched.note);
+      // The pairs the rule kept apart, by name, at most 10; `counts.rule` counts them all.
+      if (matched.outcome === 'rule' && matched.pair !== undefined) {
+        const named = (summary.ruleApart ??= []);
+        if (named.length < RULE_PAIRS_NAMED) named.push(matched.pair);
+      }
     }
     if (questions.length > 0) {
       const again = await step.do('resolve:matched', () => resolveStep(context, ports));

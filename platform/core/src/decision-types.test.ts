@@ -4,12 +4,16 @@ import {
   classifyQuestion,
   classifyRule,
   classifyState,
-  matchEvidence,
+  MATCH_OUTCOMES,
+  MATCH_RELATIONSHIPS,
   matchQuestion,
+  matchVerdictOf,
   NONE_OF_THESE,
+  reviewAnswers,
   stateEvidence,
   stateHash,
 } from './decision-types';
+import { questionError, type Question } from './decisions';
 import type { FieldDef } from './fields';
 import { parsePage } from './page';
 
@@ -404,53 +408,69 @@ describe('a hostile page’s classification state', () => {
 });
 
 describe('matching a page to an entity', () => {
-  it('asks whether two records are the same product, a variant, or different', () => {
+  it('asks how two records are related, offering five relationships in three outcomes', () => {
     expect(matchQuestion()).toEqual({
+      type: 'choice',
+      prompt: 'How is record A related to record B?',
+      options: ['same', 'edition', 'spec-version', 'other-model', 'unrelated'],
+      outcomes: {
+        same: 'join',
+        edition: 'edition',
+        'spec-version': 'apart',
+        'other-model': 'apart',
+        unrelated: 'apart',
+      },
+    });
+    expect(questionError(matchQuestion())).toBeNull();
+  });
+});
+
+describe('the relationships a match question offers', () => {
+  it('maps each relationship to what it does to the page', () => {
+    expect(MATCH_RELATIONSHIPS).toEqual([
+      'same',
+      'edition',
+      'spec-version',
+      'other-model',
+      'unrelated',
+    ]);
+    expect(MATCH_OUTCOMES).toEqual({
+      same: 'join',
+      edition: 'edition',
+      'spec-version': 'apart',
+      'other-model': 'apart',
+      unrelated: 'apart',
+    });
+  });
+
+  it('records a join for same and edition, and keeps the page apart for every other answer, old ones included', () => {
+    expect(matchVerdictOf('same')).toBe('same');
+    expect(matchVerdictOf('edition')).toBe('edition');
+    for (const answer of ['spec-version', 'other-model', 'unrelated', 'variant', 'different']) {
+      expect(matchVerdictOf(answer)).toBe('not_same');
+    }
+  });
+
+  it('lets a person answer a match question from before with the relationships too', () => {
+    const old: Question = {
       type: 'choice',
       prompt: 'Are these two records the same product?',
       options: ['same', 'variant', 'different'],
-    });
-    expect(
-      matchEvidence({
-        page: {
-          url: 'https://maker.example/p/dt-770-80',
-          values: { name: ['DT 770 PRO 80 Ohm'], gtins: ['04010118471067'] },
-        },
-        entity: {
-          url: 'https://maker.example/p/dt-770-250',
-          values: { name: ['DT 770 PRO 250 Ohm'], gtins: ['04010118471074'] },
-        },
-      }),
-    ).toBe(
-      [
-        'Record A (https://maker.example/p/dt-770-80):',
-        'gtins: 04010118471067',
-        'name: DT 770 PRO 80 Ohm',
-        '',
-        'Record B (https://maker.example/p/dt-770-250):',
-        'gtins: 04010118471074',
-        'name: DT 770 PRO 250 Ohm',
-      ].join('\n'),
-    );
-  });
-
-  it('writes specs as label and value, at most 20 values of a property, and a record with none', () => {
-    const mpns = Array.from({ length: 25 }, (_, n) => `M${n}`);
-    const evidence = matchEvidence({
-      page: {
-        url: 'https://maker.example/p/a',
-        values: { specs: [{ label: 'Impedance', value: '80 Ω' }], mpns },
-      },
-      entity: { url: 'https://maker.example/p/b', values: {} },
-    });
-    expect(evidence).toBe(
-      [
-        'Record A (https://maker.example/p/a):',
-        `mpns: ${mpns.slice(0, 20).join('; ')}`,
-        'specs: Impedance: 80 Ω',
-        '',
-        'Record B (https://maker.example/p/b):',
-      ].join('\n'),
-    );
+    };
+    expect(reviewAnswers('match', old)).toEqual([
+      'same',
+      'variant',
+      'different',
+      'edition',
+      'spec-version',
+      'other-model',
+      'unrelated',
+    ]);
+    const classify: Question = {
+      type: 'choice',
+      prompt: 'Which category?',
+      options: ['Headphones', 'None of these'],
+    };
+    expect(reviewAnswers('classify', classify)).toEqual(['Headphones', 'None of these']);
   });
 });

@@ -1,0 +1,2 @@
+ALTER TABLE "judgements" DROP CONSTRAINT "judgements_verdict";--> statement-breakpoint
+ALTER TABLE "judgements" ADD CONSTRAINT "judgements_verdict" CHECK ("judgements"."verdict" in ('same', 'edition', 'not_same', 'unsure'));

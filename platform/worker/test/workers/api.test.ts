@@ -1560,9 +1560,9 @@ describe('review', () => {
     expect(second.status).toBe(409);
     expectNoStore(second);
     expect(await second.json()).toEqual({
-      error: `A person already said this page is the same product as ${records[0]}, and a page joins one record. Answer variant or different.`,
+      error: `A person already said this page joins ${records[0]}, and a page joins one record. Answer spec-version, other-model, or unrelated.`,
     });
-    expect((await answer(1, 'variant')).status).toBe(200);
+    expect((await answer(1, 'other-model')).status).toBe(200);
     expect(await withDatabase(env, (db) => judgementsFor(db, datasetId))).toMatchObject([
       { itemId: page!.id, entityId: records[0], verdict: 'same', who: 'person' },
       { itemId: page!.id, entityId: records[1], verdict: 'not_same', who: 'person' },

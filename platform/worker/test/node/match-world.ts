@@ -51,7 +51,7 @@ export async function versionsAndAPage(
   } = await worldFor(definition, routes);
   const scripted = fakeDecider(
     (request): Record<string, number> =>
-      request.evidence.startsWith(`Record A (${URLS.a2}):`) ? { variant: 0.97 } : otherwise,
+      request.evidence.startsWith(`Record A (${URLS.a2}):`) ? { 'spec-version': 0.97 } : otherwise,
   );
   world.ports.decider = scripted.decider;
   await refresh(world, datasetId);

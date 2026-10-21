@@ -6,8 +6,8 @@ import { fetchOf, seedDataset, statementOf, T } from '../test/seed';
 import type { Executor } from './client';
 import { applyDefinition, listLiveItems, type ItemRef } from './datasets';
 import { judge } from './decisions';
-import { matchSides, resolveEntities, type MatchSides } from './entities';
-import { setItemStatus } from './fetches';
+import { entityMembers, matchSides, resolveEntities, type MatchSides } from './entities';
+import { recordFetch, setItemStatus } from './fetches';
 import { testDefinition } from './fixtures';
 import { items, type Judge } from './schema';
 import { writeStatements } from './statements';
@@ -92,7 +92,7 @@ const judged = (
   db: Executor,
   item: ItemRef,
   entityId: string,
-  verdict: 'same' | 'not_same' | 'unsure',
+  verdict: 'same' | 'edition' | 'not_same' | 'unsure',
   who: Judge = 'llm',
 ) =>
   judge(db, {
@@ -124,6 +124,7 @@ describe('resolveEntities', () => {
         unresolved: 1,
         waiting: 0,
         questions: [],
+        lineups: {},
         notes: [`${b1!.locator} has nothing to identify it by yet, so it has no entity`],
       });
       const first = [await entityOf(db, a1!), await entityOf(db, a2!)];
@@ -176,6 +177,7 @@ describe('resolveEntities', () => {
         unresolved: 1,
         waiting: 0,
         questions: [],
+        lineups: {},
         notes: [
           `${a2!.locator} claims gtins:00036000291452, which belongs to ${e1}, while the page belongs to ${e2}`,
           expect.stringContaining('has nothing to identify it by yet'),
@@ -966,16 +968,17 @@ describe('matchSides', () => {
     definition = testDefinition(),
   ) => matchSides(db, { definition, itemId, entityId });
 
-  it('gives the page’s values, and the entity’s merged from its live pages', () =>
+  it('gives the page’s values, and the entity’s merged from its base page and the pages written as it', () =>
     withRollback(async (db) => {
       const {
         items: [a1, a2, b1],
         runId,
       } = await seedDataset(db);
-      // A1 and A2 share a GTIN, so they're one entity. B1 is the page that asks.
+      // A1 and A2 share a GTIN, so they're one entity, and A2 writes A1's name another way, so it
+      // counts with the base page. B1 is the page that asks.
       await says(db, runId, a1!, 0, product('Maker A', 'DT 770 PRO', '04010118471063'));
       await says(db, runId, a2!, 0, [
-        ...product('Maker A', 'DT 770 PRO (2024)', '04010118471063'),
+        ...product('Maker A', 'DT-770 PRO', '04010118471063'),
         statementOf('mpns', 'DT-770-250', 'jsonld'),
       ]);
       await resolve(db);
@@ -993,13 +996,103 @@ describe('matchSides', () => {
           url: a1!.locator,
           values: {
             brand: ['Maker A'],
-            name: ['DT 770 PRO', 'DT 770 PRO (2024)'],
+            name: ['DT 770 PRO', 'DT-770 PRO'],
             gtins: ['04010118471063'],
             mpns: ['DT-770-250'],
           },
         },
+        // A name written as the record's is no edition.
+        editions: [],
+        // Every live page's name, by the page's address, for the model-number rule.
+        entityNames: ['DT 770 PRO', 'DT-770 PRO'],
         entityItemIds: [a1!.id, a2!.id],
       });
+    }));
+
+  it('gives the record’s editions by name, and its values and address from its base page', () =>
+    withRollback(async (db) => {
+      const { runId } = await seedDataset(db);
+      const [a1, a2, a3] = await makerAThree(db);
+      await says(db, runId, a1, 0, product('Maker A', 'DJ 300 PRO X', '04010118471063'));
+      await says(db, runId, a2, 0, product('Maker A', 'DJ 300 PRO X Club', '04010118471070'));
+      await resolve(db);
+      const e1 = (await entityOf(db, a1))!;
+      await judged(db, a2, e1, 'edition', 'person');
+      await resolve(db);
+      expect(await entityOf(db, a2)).toBe(e1);
+      await says(db, runId, a3, 0, product('Maker A', 'DJ 300 PRO X Silver', '04010118471087'));
+      expect(await sidesFor(db, a3.id, e1)).toMatchObject({
+        entity: {
+          url: a1.locator,
+          values: { brand: ['Maker A'], name: ['DJ 300 PRO X'], gtins: ['04010118471063'] },
+        },
+        editions: ['DJ 300 PRO X Club'],
+        // The edition page's name is among the record's names, though not among its values.
+        entityNames: ['DJ 300 PRO X', 'DJ 300 PRO X Club'],
+        entityItemIds: [a1.id, a2.id],
+      });
+    }));
+
+  it('gives the record by its base page, though its edition started it and the base joined as an edition', () =>
+    withRollback(async (db) => {
+      const { runId } = await seedDataset(db);
+      const [a1, a2, a3] = await makerAThree(db);
+      // The Club's page starts the record, and the base page joins it as an edition.
+      await says(db, runId, a1, 0, product('Maker A', 'DJ 300 PRO X Club', '04010118471063'));
+      await says(db, runId, a2, 0, product('Maker A', 'DJ 300 PRO X', '04010118471070'));
+      await resolve(db);
+      const e1 = (await entityOf(db, a1))!;
+      await judged(db, a2, e1, 'edition', 'person');
+      await resolve(db);
+      expect(await entityOf(db, a2)).toBe(e1);
+      await says(db, runId, a3, 0, product('Maker A', 'DJ 300 PRO X Silver', '04010118471087'));
+      expect(await sidesFor(db, a3.id, e1)).toMatchObject({
+        entity: {
+          url: a2.locator,
+          values: { brand: ['Maker A'], name: ['DJ 300 PRO X'], gtins: ['04010118471070'] },
+        },
+        editions: ['DJ 300 PRO X Club'],
+        entityNames: ['DJ 300 PRO X Club', 'DJ 300 PRO X'],
+        entityItemIds: [a1.id, a2.id],
+      });
+    }));
+
+  it('names at most ten of the record’s editions, the first by name, and every name for the rule', () =>
+    withRollback(async (db) => {
+      const {
+        items: [, , b1],
+        runId,
+      } = await seedDataset(db);
+      // A1 and eleven more pages of maker A, each an edition by name, all with one GTIN.
+      const full = testDefinition();
+      const makerA = full.sources[0] as PagesSource;
+      const extra = Array.from(
+        { length: 10 },
+        (_, index) => `https://maker-a.example/products/a${index + 3}`,
+      );
+      await applyDefinition(db, {
+        ...full,
+        sources: [{ ...makerA, pages: [...makerA.pages, ...extra] }, full.sources[1]!],
+      });
+      const pages = (await listLiveItems(db, 'test-products')).filter(
+        (item) => item.sourceId === 'maker-a',
+      );
+      expect(pages).toHaveLength(12);
+      const editionNames = Array.from(
+        { length: 11 },
+        (_, index) => `DJ 300 PRO X Edition ${String(index + 1).padStart(2, '0')}`,
+      );
+      const names = ['DJ 300 PRO X', ...editionNames];
+      for (const [index, page] of pages.entries()) {
+        await says(db, runId, page, 0, product('Maker A', names[index]!, '04010118471063'));
+      }
+      await resolve(db);
+      const e1 = (await entityOf(db, pages[0]!))!;
+      await says(db, runId, b1!, 0, product('Maker B', 'B1 Amp', '04006381333931'));
+      const sides = (await sidesFor(db, b1!.id, e1))!;
+      expect(sides.entity.values.name).toEqual(['DJ 300 PRO X']);
+      expect(sides.editions).toEqual(editionNames.slice(0, 10));
+      expect([...sides.entityNames].sort()).toEqual([...names].sort());
     }));
 
   it('is null when the page isn’t live, the entity has no live page, or the record type is gone', () =>
@@ -1072,4 +1165,159 @@ describe('matchSides', () => {
       'https://maker-a.example/products/a2',
     ]);
   });
+});
+
+describe('resolveEntities where a page is an edition', () => {
+  it('joins the page to the entity it is an edition of, as a “same” verdict does', () =>
+    withRollback(async (db) => {
+      const {
+        items: [a1, a2],
+        runId,
+      } = await seedDataset(db);
+      await says(db, runId, a1!, 0, product('Maker A', 'DJ 300 PRO X', '04010118471063'));
+      await says(db, runId, a2!, 0, product('Maker A', 'DJ 300 PRO X Club', '04010118471070'));
+      const first = await resolve(db);
+      const e1 = (await entityOf(db, a1!))!;
+      expect(first.questions).toEqual([{ itemId: a2!.id, entityId: e1 }]);
+      // Maker A has no other record, so the question has no lineup.
+      expect(first.lineups).toEqual({});
+      await judged(db, a2!, e1, 'edition');
+      expect(await resolve(db)).toMatchObject({ created: 0, linked: 1, conflicts: 0, waiting: 0 });
+      expect(await entityOf(db, a2!)).toBe(e1);
+    }));
+});
+
+describe('resolveEntities’ lineups', () => {
+  /** A page that gives only its name. */
+  const named = (name: string) => [
+    statementOf('brand', 'Maker A'),
+    statementOf('name', name, 'jsonld'),
+  ];
+
+  it('hands each question the other records of the page’s brand, marking those a person kept apart', () =>
+    withRollback(async (db) => {
+      const { runId } = await seedDataset(db);
+      const [a1, a2, a3] = await makerAThree(db);
+      // A1 gives a GTIN, so it is placed first. A2 starts a record of its own, and A3 is asked about
+      // A2's.
+      await says(db, runId, a1, 0, product('Maker A', 'HD 600', '04010118471087'));
+      await says(db, runId, a2, 0, named('HD 660S'));
+      await says(db, runId, a3, 0, named('HD 660SE'));
+      const first = await resolve(db);
+      const e660 = (await entityOf(db, a2))!;
+      expect(first.questions).toEqual([{ itemId: a3.id, entityId: e660 }]);
+      expect(first.lineups).toEqual({
+        [`${a3.id}|${e660}`]: [{ name: 'HD 600', keptApart: false }],
+      });
+
+      // A person says the 600's page isn't the 660S's record, which keeps the two apart.
+      await judged(db, a1, e660, 'not_same', 'person');
+      expect((await resolve(db)).lineups).toEqual({
+        [`${a3.id}|${e660}`]: [{ name: 'HD 600', keptApart: true }],
+      });
+    }));
+
+  describe('where a site refuses AI input', () => {
+    /** A newer fetch of the page, which saw its site say these things about AI. */
+    const siteSays = (
+      db: Executor,
+      runId: string,
+      item: ItemRef,
+      minute: number,
+      signals: Record<string, string>,
+    ) =>
+      recordFetch(db, {
+        id: `fe_signals_${item.id}_${minute}`,
+        runId,
+        itemId: item.id,
+        url: item.locator,
+        finalUrl: item.locator,
+        policy: 'allowed',
+        policyReason: null,
+        method: 'http',
+        outcome: 'unchanged',
+        httpStatus: 200,
+        bytes: 100,
+        signals,
+        startedAt: T(minute),
+        durationMs: 10,
+        error: null,
+      });
+
+    it('leaves out a record whose page’s site refuses it, joined before or during the pass', () =>
+      withRollback(async (db) => {
+        const { runId } = await seedDataset(db);
+        const [a1, a2, a3, a4] = await makerAFour(db);
+        // A1 and A4 give the same GTIN, so they are one record. A2 starts another, and A3 is asked
+        // about A2's.
+        await says(db, runId, a1, 0, product('Maker A', 'HD 600', '04010118471087'));
+        await says(db, runId, a4, 0, product('Maker A', 'HD 600 Silver', '04010118471087'));
+        await says(db, runId, a2, 0, named('HD 660S'));
+        await says(db, runId, a3, 0, named('HD 660SE'));
+        // The record's name is in the lineup, as long as all its sites are willing.
+        const open = await resolve(db);
+        const e660 = (await entityOf(db, a2))!;
+        expect(open.questions).toEqual([{ itemId: a3.id, entityId: e660 }]);
+        expect(Object.values(open.lineups ?? {})).toEqual([[{ name: 'HD 600', keptApart: false }]]);
+
+        // One of its pages' sites refuses. Both pages are joined to the record now.
+        await siteSays(db, runId, a4, 5, { 'ai-input': 'no' });
+        expect((await resolve(db)).lineups).toEqual({});
+      }));
+
+    it('leaves out a record that a page whose site refuses joins in the same pass', () =>
+      withRollback(async (db) => {
+        const { runId } = await seedDataset(db);
+        const [a1, a2, a3, a4] = await makerAFour(db);
+        await says(db, runId, a1, 0, product('Maker A', 'HD 600', '04010118471087'));
+        await says(db, runId, a4, 0, product('Maker A', 'HD 600 Silver', '04010118471087'));
+        await says(db, runId, a2, 0, named('HD 660S'));
+        await says(db, runId, a3, 0, named('HD 660SE'));
+        await siteSays(db, runId, a4, 5, { 'ai-input': 'no' });
+        const first = await resolve(db);
+        const e660 = (await entityOf(db, a2))!;
+        // The question is still asked: whether to ask it is for the match step to decide, from the
+        // sites of the pages it shows.
+        expect(first.questions).toEqual([{ itemId: a3.id, entityId: e660 }]);
+        expect(first.lineups).toEqual({});
+      }));
+
+    it('keeps a record whose site refused once but allows AI input in its latest fetch', () =>
+      withRollback(async (db) => {
+        const { runId } = await seedDataset(db);
+        const [a1, a2, a3] = await makerAThree(db);
+        await says(db, runId, a1, 0, product('Maker A', 'HD 600', '04010118471087'));
+        await says(db, runId, a2, 0, named('HD 660S'));
+        await says(db, runId, a3, 0, named('HD 660SE'));
+        await siteSays(db, runId, a1, 3, { 'ai-input': 'no' });
+        await siteSays(db, runId, a1, 4, { 'ai-input': 'yes' });
+        const first = await resolve(db);
+        expect(Object.values(first.lineups ?? {})).toEqual([
+          [{ name: 'HD 600', keptApart: false }],
+        ]);
+      }));
+  });
+});
+
+describe('entityMembers', () => {
+  it('lists each joined live page with its record, its address, when it was met, and whether it joined as an edition', () =>
+    withRollback(async (db) => {
+      const {
+        items: [a1, a2],
+        runId,
+      } = await seedDataset(db);
+      await says(db, runId, a1!, 0, product('Maker A', 'DJ 300 PRO X', '04010118471063'));
+      await says(db, runId, a2!, 0, product('Maker A', 'DJ 300 PRO X Club', '04010118471070'));
+      await resolve(db);
+      const e1 = (await entityOf(db, a1!))!;
+      await judged(db, a2!, e1, 'edition', 'person');
+      await resolve(db);
+      // B1 says nothing, so it has no record and isn't listed.
+      const rows = await entityMembers(db, 'test-products');
+      expect(rows.map(({ firstSeen: _, ...row }) => row)).toEqual([
+        { itemId: a1!.id, entityId: e1, url: a1!.locator, edition: false },
+        { itemId: a2!.id, entityId: e1, url: a2!.locator, edition: true },
+      ]);
+      expect(rows.every((row) => row.firstSeen instanceof Date)).toBe(true);
+    }));
 });

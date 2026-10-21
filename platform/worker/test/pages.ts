@@ -113,13 +113,13 @@ export const productPage = (data: Record<string, unknown>) =>
 
 /**
  * What the fake decider answers: maker-a's pages are headphones, B1 is a DAC/amp, and every match
- * question is about different products.
+ * question is about unrelated products.
  */
 export function decisionFor(request: DecisionRequest): Record<string, number> | null {
   if (request.type === 'classify') {
     return request.evidence.includes(URLS.b1) ? { 'DAC/Amp': 0.97 } : { Headphones: 0.97 };
   }
-  if (request.type === 'match') return { different: 0.97 };
+  if (request.type === 'match') return { unrelated: 0.97 };
   return null;
 }
 

@@ -12,7 +12,16 @@ import { withoutWrapperTags, type LlmPort, type LlmUsage } from './llm';
 
 export type Question =
   | { type: 'boolean'; prompt: string }
-  | { type: 'choice'; prompt: string; options: string[] }
+  | {
+      type: 'choice';
+      prompt: string;
+      options: string[];
+      /**
+       * Each option's outcome, where options share one (ADR 0003): an answer is then accepted on
+       * the total of the options that share its outcome. Absent: each option is its own outcome.
+       */
+      outcomes?: Record<string, string>;
+    }
   | { type: 'score'; prompt: string; levels: string[] };
 
 export const MAX_OPTIONS = 255;
@@ -29,6 +38,38 @@ export function optionsOf(question: Question): string[] {
   }
 }
 
+/**
+ * The answers that share an answer's outcome, the answer among them, in the order offered. Just the
+ * answer where the question groups nothing, or gives it no outcome.
+ */
+export function sharingOutcome(question: Question, answer: string): string[] {
+  const outcomes = question.type === 'choice' ? question.outcomes : undefined;
+  if (outcomes === undefined || !Object.hasOwn(outcomes, answer)) return [answer];
+  const outcome = outcomes[answer];
+  return optionsOf(question).filter(
+    (option) => Object.hasOwn(outcomes, option) && outcomes[option] === outcome,
+  );
+}
+
+/**
+ * How sure an answer is: its own probability, or, where the question groups its answers into
+ * outcomes, the total of the answers that share its outcome (ADR 0003). A total is rounded to nine
+ * places, so that one floating point puts a hair under the threshold still reaches it: 0.29 + 0.57 +
+ * 0.09 is 0.9499999999999998. An answer without a probability of its own counts as 0.
+ */
+export function outcomeProbability(
+  question: Question,
+  probabilities: Record<string, number>,
+  answer: string,
+): number {
+  const own = (option: string) =>
+    Object.hasOwn(probabilities, option) ? (probabilities[option] ?? 0) : 0;
+  const shared = sharingOutcome(question, answer);
+  if (shared.length === 1) return own(answer);
+  const total = shared.reduce((sum, option) => sum + own(option), 0);
+  return Math.round(total * 1e9) / 1e9;
+}
+
 /** What's wrong with a question, or null when nothing is. */
 export function questionError(question: Question): string | null {
   const options = optionsOf(question);
@@ -38,6 +79,17 @@ export function questionError(question: Question): string | null {
   if (new Set(options).size !== options.length) return 'it offers an answer twice';
   if (options.some((option) => option.trim() === '' || option.length > 600)) {
     return 'an answer is empty, or longer than 600 characters';
+  }
+  if (question.type === 'choice' && question.outcomes !== undefined) {
+    const outcomes = question.outcomes;
+    const outcomeOf = (option: string) =>
+      Object.hasOwn(outcomes, option) ? outcomes[option] : undefined;
+    if (options.some((option) => (outcomeOf(option) ?? '').trim() === '')) {
+      return 'an answer has no outcome';
+    }
+    if (Object.keys(outcomes).some((option) => !options.includes(option))) {
+      return 'an outcome names an answer the question doesn’t offer';
+    }
   }
   return null;
 }
@@ -74,6 +126,7 @@ export type CascadeOutcome =
       by: 'adapter';
       adapter: string;
       answer: string;
+      /** How sure the answer is: its own probability, or its outcome's total (`outcomeProbability`). */
       probability: number;
       probabilities: Record<string, number>;
       evidence: string;
@@ -110,8 +163,9 @@ function offeredProbabilities(
  * A question through the cascade. A decider that throws fails the call, and the caller records the
  * failure and asks again on a later run: a person isn't asked what a decider could still answer.
  * What a decider answers is checked: an answer that wasn't offered is neither taken nor proposed,
- * and an answer is taken only on its own probability. Only the offered answers' probabilities,
- * each above 0 and at most 1, are passed on.
+ * and an answer is taken only on its own probability, or its outcome's total where the question
+ * groups its answers (`outcomeProbability`). Only the offered answers' probabilities, each above 0
+ * and at most 1, are passed on.
  */
 export async function cascade(input: {
   request: DecisionRequest;
@@ -143,9 +197,10 @@ export async function cascade(input: {
     const proposed =
       answer.answer !== null && allowed.includes(answer.answer) ? answer.answer : null;
     last = { name: decider.name, proposed, probabilities, evidence: answer.evidence };
+    // The answer needs a probability of its own, and is as sure as its outcome.
     const probability =
       proposed !== null && Object.hasOwn(probabilities, proposed)
-        ? probabilities[proposed]
+        ? outcomeProbability(input.request.question, probabilities, proposed)
         : undefined;
     if (proposed !== null && probability !== undefined && probability >= input.accept) {
       return {

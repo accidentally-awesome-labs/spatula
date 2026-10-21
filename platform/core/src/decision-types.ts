@@ -1,12 +1,12 @@
-import type { Question } from './decisions';
+import { optionsOf, type Question } from './decisions';
 import type { FieldDef, FieldValue } from './fields';
 import { sha256Hex, stableStringify } from './ids';
 import { jsonLdTypes, type Page } from './page';
 
 /*
  * The decisions slice 1 makes. Classifying: which value of a decided field a page's one product
- * has, or "None of these", which takes the page out of the dataset. Matching: whether a page that
- * isn't joined yet describes the same product as an entity, a variant of it, or a different one.
+ * has, or "None of these", which takes the page out of the dataset. Matching: how a page that
+ * isn't joined yet is related to an entity, as one of five relationships (ADR 0003).
  * Each question's state is what its answer rests on, and its hash is how an unchanged question is
  * recognized and never asked again. A state holds facts already accepted and what a page says
  * about itself, never its free text, which changes with every price.
@@ -165,34 +165,59 @@ export function stateHash(state: unknown): Promise<string> {
   return sha256Hex(stableStringify(state));
 }
 
-export const MATCH_ANSWERS = ['same', 'variant', 'different'] as const;
+/**
+ * How a page can relate to a record (ADR 0003), and what each does to it: `same` joins the page to
+ * the record, `edition` joins it as an edition, which the record lists, and the other three keep
+ * it apart.
+ */
+export const MATCH_RELATIONSHIPS = [
+  'same',
+  'edition',
+  'spec-version',
+  'other-model',
+  'unrelated',
+] as const;
+export type MatchRelationship = (typeof MATCH_RELATIONSHIPS)[number];
+export type MatchOutcome = 'join' | 'edition' | 'apart';
+export const MATCH_OUTCOMES: Readonly<Record<MatchRelationship, MatchOutcome>> = {
+  same: 'join',
+  edition: 'edition',
+  'spec-version': 'apart',
+  'other-model': 'apart',
+  unrelated: 'apart',
+};
 
-/** The matching question. What "same" means is the record type's pack's criteria. */
+/**
+ * The verdict a match answer records: "same" joins, "edition" joins as an edition, and every other
+ * answer keeps the page apart, the answers of a question from before the relationships ("variant",
+ * "different") included.
+ */
+export function matchVerdictOf(answer: string): 'same' | 'edition' | 'not_same' {
+  return answer === 'same' ? 'same' : answer === 'edition' ? 'edition' : 'not_same';
+}
+
+/**
+ * The answers a person may give a question: its own options. A match question asked before the
+ * relationships offered same, variant, or different, and takes the relationships as well, so that a
+ * person can say a page is an edition.
+ */
+export function reviewAnswers(kind: string, question: Question): string[] {
+  const own = optionsOf(question);
+  return kind === 'match' ? [...new Set([...own, ...MATCH_RELATIONSHIPS])] : own;
+}
+
+/**
+ * The matching question: how the page is related to the record, as one of the five
+ * relationships, grouped by what each does to the page. What each means is the record type's
+ * pack's criteria.
+ */
 export function matchQuestion(): Question {
   return {
     type: 'choice',
-    prompt: 'Are these two records the same product?',
-    options: [...MATCH_ANSWERS],
+    prompt: 'How is record A related to record B?',
+    options: [...MATCH_RELATIONSHIPS],
+    outcomes: { ...MATCH_OUTCOMES },
   };
-}
-
-export interface MatchSide {
-  url: string;
-  values: Record<string, FieldValue[]>;
-}
-
-/** Both sides of a match question as evidence: each record's values, by property. */
-export function matchEvidence(state: { page: MatchSide; entity: MatchSide }): string {
-  const side = (label: string, record: MatchSide) => [
-    `Record ${label} (${record.url}):`,
-    ...Object.keys(record.values)
-      .sort()
-      .map(
-        (name) =>
-          `${name}: ${(record.values[name] ?? []).slice(0, STATE_VALUES_MAX).map(valueText).join('; ')}`,
-      ),
-  ];
-  return [...side('A', state.page), '', ...side('B', state.entity)].join('\n');
 }
 
 function valueText(value: FieldValue): string {

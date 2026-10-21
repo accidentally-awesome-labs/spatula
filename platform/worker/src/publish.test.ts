@@ -1,4 +1,11 @@
-import { runIdFor, type Definition, type RunSummary } from '@spatula/core';
+import {
+  runIdFor,
+  sha256Hex,
+  stableStringify,
+  type Definition,
+  type RunSummary,
+  type SnapshotRecord,
+} from '@spatula/core';
 import {
   applyDefinition,
   datasets,
@@ -13,10 +20,11 @@ import { eq } from 'drizzle-orm';
 import { describe, expect, it } from 'vitest';
 import { db } from '../test/node/db';
 import { fakeDecider, fakeStep, type World } from '../test/node/fakes';
-import { decidedDefinition, published, refresh, worldFor } from '../test/node/runs';
+import { routesWith } from '../test/node/match-world';
+import { decidedDefinition, entityOf, published, refresh, worldFor } from '../test/node/runs';
 import { A1, productPage, standardRoutes, URLS } from '../test/pages';
 import { heldKey, type Context } from './pipeline';
-import { publish, publishHeldSnapshot, SnapshotFileMissingError } from './publish';
+import { publish, publishHeldSnapshot, recordsDigest, SnapshotFileMissingError } from './publish';
 import { runRefresh } from './refresh';
 
 /** The test dataset, under another approval preset and removal guard. */
@@ -671,7 +679,7 @@ describe('what the owner is told about a hold', { timeout: 20_000 }, () => {
       body: productPage({ name: 'DT 770 PRO', gtin13: '4010118471070' }),
     };
     const { world } = await worldFor(gated('publish-asks', 'balanced'), routes);
-    world.ports.decider = fakeDecider(() => ({ same: 0.5, variant: 0.45 })).decider;
+    world.ports.decider = fakeDecider(() => ({ same: 0.5, 'spec-version': 0.45 })).decider;
     await refresh(world, 'publish-asks');
     const [question] = await publicationQuestions('publish-asks');
     expect(question!.context).toMatchObject({ incomplete: 0, openClassify: 0, openMatch: 1 });
@@ -701,5 +709,63 @@ describe('a snapshot’s file that is gone', { timeout: 20_000 }, () => {
       publishHeldSnapshot(world.ports, { datasetId: 'publish-draft', snapshotId }),
     ).rejects.toBeInstanceOf(SnapshotFileMissingError);
     expect((await snapshotById(db, snapshotId))?.state).toBe('held');
+  });
+});
+
+describe('a record’s editions', { timeout: 20_000 }, () => {
+  it('lists an edition, and takes the record’s name from its base page', async () => {
+    // The Club's page sorts first, so it starts the record, and the base page joins it as an
+    // edition.
+    const routes = routesWith(
+      { name: 'DJ 300 PRO X Club', gtin13: '4010118471063' },
+      { name: 'DJ 300 PRO X', gtin13: '4010118471070' },
+    );
+    const {
+      world,
+      pages: [a1, a2],
+    } = await worldFor(testDefinition('publish-editions'), routes);
+    world.ports.decider = fakeDecider(() => ({ edition: 0.97 })).decider;
+    await refresh(world, 'publish-editions');
+    expect(await entityOf(a2!.id)).toBe(await entityOf(a1!.id));
+    const file = (await published(world, 'publish-editions'))!;
+    const record = file.byName['DJ 300 PRO X']!;
+    expect(record.provenance.name).toMatchObject({ sourceUrl: URLS.a2 });
+    expect(record.fields.gtins).toEqual(['04010118471063', '04010118471070']);
+    expect(record.editions).toEqual([
+      { name: 'DJ 300 PRO X Club', officialUrl: URLS.a1, gtins: ['04010118471063'] },
+    ]);
+    expect(file.byName['DJ 300 PRO X Club']).toBeUndefined();
+  });
+
+  it('digests editions with the records, and a record without them as before', async () => {
+    const record: SnapshotRecord = {
+      canonicalId: 'sp_dj',
+      fields: { name: 'DJ 300 PRO X' },
+      provenance: {
+        name: {
+          sourceUrl: URLS.a2,
+          fetchedAt: '2026-10-10T00:00:00.000Z',
+          method: 'jsonld',
+          confidence: 0.9,
+        },
+      },
+    };
+    // The digest a record without editions had before them.
+    const before = await sha256Hex(
+      stableStringify([
+        {
+          canonicalId: 'sp_dj',
+          fields: { name: 'DJ 300 PRO X' },
+          provenance: { name: { sourceUrl: URLS.a2, method: 'jsonld', confidence: 0.9 } },
+        },
+      ]),
+    );
+    expect(await recordsDigest([record])).toBe(before);
+    const edition = { name: 'DJ 300 PRO X Club', officialUrl: URLS.a1, gtins: ['04010118471063'] };
+    const withEdition = await recordsDigest([{ ...record, editions: [edition] }]);
+    expect(withEdition).not.toBe(before);
+    expect(await recordsDigest([{ ...record, editions: [{ ...edition, gtins: [] }] }])).not.toBe(
+      withEdition,
+    );
   });
 });

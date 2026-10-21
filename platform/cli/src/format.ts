@@ -1,7 +1,7 @@
 import {
   EVAL_TARGETS,
-  optionsOf,
   REFUSE_AFTER_RUNS,
+  reviewAnswers,
   type ApplySummary,
   type DatasetStatus,
   type EvalScores,
@@ -132,6 +132,14 @@ export function formatRun(run: RunView): string[] {
     lines.push(
       `${label}: ${counts.rule} by rule, ${counts.accepted} by the decider, ${counts.escalated} for review, ${counts.reused} as before, ${counts.skipped} for the next run, ${counts.failed} failed; ${counts.inputTokens} tokens in, ${counts.outputTokens} out.`,
     );
+    // The pairs the model-number rule kept apart, by name (ADR 0003). Runs before it name none.
+    const named = label === 'Matched' ? (summary.ruleApart ?? []) : [];
+    if (named.length > 0) {
+      const rest = counts.rule - named.length;
+      lines.push(
+        `Kept apart by the model-number rule: ${named.join('; ')}${rest > 0 ? `; and ${rest} more` : ''}.`,
+      );
+    }
   }
   const irrelevant = summary.irrelevant ?? 0;
   if (irrelevant > 0) {
@@ -214,7 +222,8 @@ export function formatReviews(datasetId: string, reviews: ReviewView[]): string[
         lines.push(`  Nothing proposed. ${reason}`);
       }
     }
-    lines.push(`  Answers: ${optionsOf(review.question).join(' | ')}`);
+    // A match question asked before the relationships takes them too (ADR 0003).
+    lines.push(`  Answers: ${reviewAnswers(review.kind, review.question).join(' | ')}`);
   }
   lines.push('', `Answer with: spatula review ${datasetId} <id> "<answer>"`);
   return lines;
