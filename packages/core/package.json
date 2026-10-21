@@ -64,7 +64,7 @@
     "better-sqlite3": "^12.8.0",
     "cheerio": "^1.2.0",
     "hyparquet": "^1.25.1",
-    "hyparquet-writer": "^0.13.0",
+    "hyparquet-writer": "^0.16.1",
     "playwright": "^1.58.2",
     "robots-parser": "^3.0.1",
     "yaml": "^2.8.3",
