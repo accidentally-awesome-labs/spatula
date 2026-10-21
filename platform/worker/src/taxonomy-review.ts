@@ -16,6 +16,7 @@ import {
   type EvidencePage,
   type LlmUsage,
   type ProposalEvidence,
+  type ReviewOutput,
   type RunSummary,
   type Taxonomy,
 } from '@spatula/core';
@@ -34,6 +35,7 @@ import {
   type NewProposal,
 } from '@spatula/store';
 import { NO_USAGE, type Context, type RefreshPorts } from './pipeline';
+import { storable } from './text';
 
 /*
  * The taxonomy review after a run (ADR 0007). One call to the run's model reads the run's evidence
@@ -143,11 +145,22 @@ async function propose(
   }
   const seeded = first.taxonomy.shelves.map((shelf) => shelf.id);
   const evidence = summarizeEvidence({ taxonomy, pages: shown, seeded, everHeld: read.everHeld });
-  const answer = await llm.structured({
-    ...buildReviewRequest(taxonomy, evidence),
-    schema: reviewOutputSchema,
-    maxTokens: TAXONOMY_REVIEW_MAX_TOKENS,
-  });
+  let answer: { output: ReviewOutput | null; usage: LlmUsage };
+  try {
+    answer = await llm.structured({
+      ...buildReviewRequest(taxonomy, evidence),
+      schema: reviewOutputSchema,
+      maxTokens: TAXONOMY_REVIEW_MAX_TOKENS,
+    });
+  } catch (error) {
+    // A failed call proposes nothing, as the run's other calls do: the run still finishes, with
+    // what it published, and the next run's review asks again.
+    const message = error instanceof Error ? error.message : String(error);
+    return {
+      usage: NO_USAGE,
+      notes: [storable(`The taxonomy review’s call failed: ${message}`)],
+    };
+  }
   if (answer.output === null) {
     return {
       usage: answer.usage,

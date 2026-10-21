@@ -7,12 +7,19 @@ import {
   type Definition,
   type ReviewProposal,
 } from '@spatula/core';
-import { autonomy, autonomyOf, listActions, proposalsOfRun, taxonomyHistory } from '@spatula/store';
+import {
+  autonomy,
+  autonomyOf,
+  getRun,
+  listActions,
+  proposalsOfRun,
+  taxonomyHistory,
+} from '@spatula/store';
 import { testTaxonomy, testTaxonomyDefinition } from '@spatula/store/fixtures';
 import { describe, expect, it } from 'vitest';
 import { db } from '../test/node/db';
 import { fakeStep, type StepCache, type World } from '../test/node/fakes';
-import { refresh, taxonomyWorld } from '../test/node/runs';
+import { published, refresh, taxonomyWorld } from '../test/node/runs';
 import { standardRoutes, URLS } from '../test/pages';
 import { runRefresh } from './refresh';
 
@@ -255,5 +262,31 @@ describe('the taxonomy review', { timeout: 20_000 }, () => {
     expect(run.summary.notes).toContain(
       'The taxonomy review’s answer didn’t fit the schema, so it proposed nothing.',
     );
+  });
+
+  it('notes a call that fails, and finishes the run with what it published', async () => {
+    const { world } = await taxonomyWorld(testTaxonomyDefinition('review-failed'));
+    const llm = world.ports.llm!;
+    world.ports.llm = {
+      model: llm.model,
+      async structured(request) {
+        if ((request.schema as unknown) !== reviewOutputSchema) return llm.structured(request);
+        throw new Error('529 Overloaded');
+      },
+    };
+    const run = await refresh(world, 'review-failed');
+    expect(run.names.slice(-3)).toEqual(['captures', 'taxonomy:review', 'finish']);
+    expect(run.summary.taxonomy).toEqual({
+      proposed: 0,
+      dropped: 0,
+      applied: [],
+      inputTokens: 0,
+      outputTokens: 0,
+    });
+    expect(run.summary.notes).toContain('The taxonomy review’s call failed: 529 Overloaded');
+    expect(run.summary.snapshot).toMatchObject({ published: true });
+    expect(await published(world, 'review-failed')).not.toBeNull();
+    expect(await getRun(db, run.runId)).toMatchObject({ status: 'complete' });
+    expect(await proposalsOfRun(db, run.runId)).toEqual([]);
   });
 });
