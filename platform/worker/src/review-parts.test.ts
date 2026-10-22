@@ -676,7 +676,7 @@ describe('a person’s answers across questions about a page', { timeout: 30_000
     ]);
   });
 
-  it('keeps the owner’s answer when a reviewer answers a later question about the page', async () => {
+  it('keeps the owner’s answer when a reviewer answers a later question, and lets the owner replace the reviewer’s', async () => {
     const datasetId = 'parts-whole-reviewer';
     const { world, a2, says } = await answeredA2(datasetId, OWNER);
     const changed = await commitChanges(datasetId, [CONNECTION], world.clock.now());
@@ -695,6 +695,45 @@ describe('a person’s answers across questions about a page', { timeout: 30_000
     expect(await placedOf(a2.id, changed)).toEqual([
       'features human closed 1',
       'features human wired 1',
+      'functions human pre-amp 1',
+      'shelf human on-ear 1',
+    ]);
+
+    // The owner replaces the reviewer's answer: theirs stands, with the owner's first answer.
+    world.clock.advance(60_000);
+    const replaced = await answerReview(world.ports, {
+      datasetId,
+      reviewId: second!.id,
+      parts: { features: { connection: [] } },
+      actor: OWNER,
+    });
+    expect(replaced).toEqual({
+      kind: 'answered',
+      effect:
+        'It replaces a reviewer’s answer. The page sits on Headphones › On-ear. The next run publishes it.',
+    });
+    expect(await placedOf(a2.id, changed)).toEqual([
+      'features human closed 1',
+      'functions human pre-amp 1',
+      'shelf human on-ear 1',
+    ]);
+    const copy = await stableId('rv', second!.id, 'flag', 2);
+    expect(await getReview(db, copy)).toMatchObject({ status: 'decided', answeredBy: OWNER });
+    // An answer the owner gave stands: answering again changes nothing.
+    expect(
+      await answerReview(world.ports, {
+        datasetId,
+        reviewId: second!.id,
+        parts: { features: { connection: ['wired'] } },
+        actor: OWNER,
+      }),
+    ).toEqual({ kind: 'closed' });
+    // A run that reads A2 again keeps the owner's answer, and asks nothing.
+    world.web.routes.set(URLS.a2, { status: 200, body: A2('two') });
+    await refresh(world, datasetId);
+    expect(await questionAbout(datasetId, a2.id)).toBeUndefined();
+    expect(await placedOf(a2.id, changed)).toEqual([
+      'features human closed 1',
       'functions human pre-amp 1',
       'shelf human on-ear 1',
     ]);

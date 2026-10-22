@@ -27,6 +27,7 @@ import {
   withCarried,
 } from '@spatula/core';
 import {
+  answeredAgainByOwner,
   closeReview,
   currentTaxonomy,
   decisionWithId,
@@ -71,8 +72,9 @@ import { keyHash, partStatements, placeHash, placeSubject, type PlaceState } fro
  *
  * Who answers ranks (ruling 12): the owner, then a consumer's reviewer, then the decider. A
  * reviewer's answer that differs from a person's never replaces it: it flags the question for the
- * owner, and a flagged question waits for the owner alone. Every answer, flag, and suggestion goes
- * in the review log with who made it (ruling 14).
+ * owner, and a flagged question waits for the owner alone. The owner's answer replaces a
+ * reviewer's, even once it has closed the question. Every answer, flag, and suggestion goes in the
+ * review log with who made it (ruling 14).
  */
 
 export type ReviewAnswer =
@@ -128,13 +130,18 @@ export async function answerReview(ports: ReviewPorts, input: AnswerInput): Prom
   }
   // A flagged question waits for the owner (ruling 11): to anyone else, it isn't there.
   if (review.status === 'open' && review.flaggedAt !== null && !owner) return { kind: 'missing' };
-  // The owner's answer to a closed question changes nothing, whatever it is, as before roles.
-  if (review.status !== 'open' && (owner || review.status !== 'decided')) {
+  // A dismissed question takes no answer, and the owner's answer to a question the owner answered
+  // changes nothing, whatever it is, as before roles.
+  if (review.status !== 'open' && (review.status !== 'decided' || (owner && byOwner(review)))) {
     return { kind: 'closed' };
   }
   const said = whatWasSaid(review, input);
   if ('kind' in said) return said;
-  if (review.status !== 'open') return flagAnswered(ports, review, said, actor, at);
+  if (review.status !== 'open') {
+    return owner
+      ? replaceAnswer(ports, review.id, said, input.note, actor, at)
+      : flagAnswered(ports, review, said, actor, at);
+  }
   if ('parts' in said) return answerParts(ports, review.id, said.parts, input.note, actor, at);
   const options = reviewAnswers(review.kind, review.question);
   if (!options.includes(said.option)) {
@@ -169,6 +176,55 @@ function whatWasSaid(review: ReviewRow, input: AnswerInput): Said | Refusal {
   return refused(400, `Answer with one of: ${options.join(', ')}.`);
 }
 
+/** Whether the owner gave a question's answer. One from before roles is the owner's, by the CLI. */
+const byOwner = (review: ReviewRow) =>
+  review.answeredBy === null || review.answeredBy.role === 'owner';
+
+/**
+ * What an answer to a closed question says, checked against the question: its parts under the
+ * taxonomy as it is now, or one of its options. With it, its text, as the question's answer is
+ * kept, to compare with that.
+ */
+async function readSaid(
+  tx: Executor,
+  review: ReviewRow,
+  said: Said,
+): Promise<{ answer: unknown; text: string } | Refusal> {
+  if ('parts' in said) {
+    const taxonomy = await taxonomyNow(tx, review.datasetId);
+    const checked = checkParts(taxonomy, review.question, review.context, said.parts);
+    if (!checked.ok) return refused(400, checked.reason);
+    return { answer: checked.given, text: answerText(checked.given) };
+  }
+  const options = reviewAnswers(review.kind, review.question);
+  if (!options.includes(said.option)) {
+    return refused(400, `Answer with one of: ${options.join(', ')}.`);
+  }
+  return { answer: said.option, text: said.option };
+}
+
+/** Reopens a question a person answered for the owner, with a different answer, and logs it. */
+async function reopenWith(
+  tx: Executor,
+  review: ReviewRow,
+  answer: unknown,
+  actor: ActorRecord,
+  at: Date,
+): Promise<string | null> {
+  const flag = { actor, answer, at: at.toISOString() };
+  const reopened = await reopenFlagged(tx, { review, flag, at });
+  if (reopened === null) return null;
+  await logAction(tx, {
+    datasetId: review.datasetId,
+    action: 'flag',
+    subject: review.id,
+    actor,
+    detail: { kind: review.kind, about: review.subject, answer, reopened },
+    at,
+  });
+  return reopened;
+}
+
 /**
  * A reviewer's answer to a question a person answered (ruling 12). The same answer changes
  * nothing, and a match answer that does to the page what the person's did is the same answer
@@ -184,37 +240,70 @@ async function flagAnswered(
 ): Promise<ReviewAnswer> {
   return ports.withDb((db) =>
     db.transaction(async (tx): Promise<ReviewAnswer> => {
-      let answer: unknown;
-      let text: string;
-      if ('parts' in said) {
-        const taxonomy = await taxonomyNow(tx, review.datasetId);
-        const checked = checkParts(taxonomy, review.question, review.context, said.parts);
-        if (!checked.ok) return refused(400, checked.reason);
-        answer = checked.given;
-        text = answerText(checked.given);
-      } else {
-        const options = reviewAnswers(review.kind, review.question);
-        if (!options.includes(said.option)) {
-          return refused(400, `Answer with one of: ${options.join(', ')}.`);
-        }
-        answer = said.option;
-        text = said.option;
-      }
-      if (saysTheSame(review, text)) return { kind: 'closed' };
-      const flag = { actor, answer, at: at.toISOString() };
-      const reopened = await reopenFlagged(tx, { review, flag, at });
+      const read = await readSaid(tx, review, said);
+      if ('kind' in read) return read;
+      if (saysTheSame(review, read.text)) return { kind: 'closed' };
+      const reopened = await reopenWith(tx, review, read.answer, actor, at);
       if (reopened === null) return { kind: 'closed' };
-      await logAction(tx, {
-        datasetId: review.datasetId,
-        action: 'flag',
-        subject: review.id,
-        actor,
-        detail: { kind: review.kind, about: review.subject, answer, reopened },
-        at,
-      });
       return { kind: 'flagged', reviewId: reopened };
     }),
   );
+}
+
+/** What a transaction that must not commit carries out: its answer, which was refused. */
+class Refused extends Error {
+  constructor(readonly answer: ReviewAnswer) {
+    super('The answer was refused, so nothing it did is kept.');
+  }
+}
+
+/**
+ * The owner's answer to a question a reviewer answered (ruling 12): only the owner's answer
+ * replaces a person's, and a reviewer's that closed a question is one. The owner's different answer
+ * reopens the question as a reviewer's does (`flagAnswered`), and answers the copy at once, in the
+ * same transaction, so the log has the flag and then the answer. The same answer changes nothing,
+ * nor does one to a question whose copy the owner has answered already, as an answer to a
+ * question the owner answered doesn't. Another question about its subject that is open is the one
+ * to answer. An answer the copy refuses leaves nothing behind: no copy, and no flag.
+ */
+async function replaceAnswer(
+  ports: ReviewPorts,
+  reviewId: string,
+  said: Said,
+  note: string | undefined,
+  actor: ActorRecord,
+  at: Date,
+): Promise<ReviewAnswer> {
+  try {
+    return await ports.withDb((db) =>
+      db.transaction(async (tx): Promise<ReviewAnswer> => {
+        // The question's lock keeps two of the owner's answers from both replacing it.
+        const review = await getReview(tx, reviewId, { lock: true });
+        if (review === null || review.status !== 'decided' || byOwner(review)) {
+          return { kind: 'closed' };
+        }
+        if (await answeredAgainByOwner(tx, review)) return { kind: 'closed' };
+        const read = await readSaid(tx, review, said);
+        if ('kind' in read) return read;
+        if (saysTheSame(review, read.text)) return { kind: 'closed' };
+        const reopened = await reopenWith(tx, review, read.answer, actor, at);
+        if (reopened === null) {
+          return refused(409, 'Another question about this is open: answer that one.');
+        }
+        const copy = await getReview(tx, reopened);
+        if (copy === null) throw new Error(`Review ${reopened} vanished as it was reopened`);
+        const answered =
+          'parts' in said
+            ? await answerPartsIn(tx, copy.id, said.parts, note, actor, at)
+            : await answerOptionIn(tx, copy, said.option, note, actor, at);
+        if (answered.kind !== 'answered') throw new Refused(answered);
+        return { kind: 'answered', effect: `It replaces a reviewer’s answer. ${answered.effect}` };
+      }),
+    );
+  } catch (error) {
+    if (error instanceof Refused) return error.answer;
+    throw error;
+  }
 }
 
 /**
@@ -282,7 +371,7 @@ function logAnswer(
 }
 
 /** An option for a classification or a match. */
-async function answerOption(
+function answerOption(
   ports: ReviewPorts,
   review: ReviewRow,
   answer: string,
@@ -291,38 +380,47 @@ async function answerOption(
   at: Date,
 ): Promise<ReviewAnswer> {
   return ports.withDb((db) =>
-    db.transaction(async (tx): Promise<ReviewAnswer> => {
-      // A join about a page, as the same product or an edition, is checked first, under the page's
-      // lock, and closing is the first write, so two answers sent at once can't both take effect.
-      if (review.kind === 'match' && matchVerdictOf(answer) !== 'not_same') {
-        const refusal = await refuseSecondRecord(tx, review);
-        // What the owner is refused, a reviewer's answer sends to the owner (ruling 12).
-        if (refusal !== null) {
-          return actor.role === 'owner' ? refusal : flagOpen(tx, review, answer, actor, at);
-        }
-      }
-      const closed = await closeReview(tx, {
-        id: review.id,
-        status: 'decided',
-        answer,
-        at,
-        answeredBy: actor,
-        note,
-      });
-      if (closed === null) return { kind: 'closed' };
-      // While a question waits, a run that asks again moves it to a newer decision (`openReview`),
-      // so what follows goes by the row that closed, not by the one read before.
-      if (closed.decisionId !== null) {
-        await finalizeDecision(tx, { id: closed.decisionId, finalAnswer: answer, at });
-      }
-      const effect =
-        closed.kind === 'classify'
-          ? await answerClassification(tx, closed, answer, at)
-          : await answerMatch(tx, closed, answer, at);
-      await logAnswer(tx, closed, { answer }, effect, note, actor, at);
-      return { kind: 'answered', effect };
-    }),
+    db.transaction((tx) => answerOptionIn(tx, review, answer, note, actor, at)),
   );
+}
+
+async function answerOptionIn(
+  tx: Executor,
+  review: ReviewRow,
+  answer: string,
+  note: string | undefined,
+  actor: ActorRecord,
+  at: Date,
+): Promise<ReviewAnswer> {
+  // A join about a page, as the same product or an edition, is checked first, under the page's
+  // lock, and closing is the first write, so two answers sent at once can't both take effect.
+  if (review.kind === 'match' && matchVerdictOf(answer) !== 'not_same') {
+    const refusal = await refuseSecondRecord(tx, review);
+    // What the owner is refused, a reviewer's answer sends to the owner (ruling 12).
+    if (refusal !== null) {
+      return actor.role === 'owner' ? refusal : flagOpen(tx, review, answer, actor, at);
+    }
+  }
+  const closed = await closeReview(tx, {
+    id: review.id,
+    status: 'decided',
+    answer,
+    at,
+    answeredBy: actor,
+    note,
+  });
+  if (closed === null) return { kind: 'closed' };
+  // While a question waits, a run that asks again moves it to a newer decision (`openReview`),
+  // so what follows goes by the row that closed, not by the one read before.
+  if (closed.decisionId !== null) {
+    await finalizeDecision(tx, { id: closed.decisionId, finalAnswer: answer, at });
+  }
+  const effect =
+    closed.kind === 'classify'
+      ? await answerClassification(tx, closed, answer, at)
+      : await answerMatch(tx, closed, answer, at);
+  await logAnswer(tx, closed, { answer }, effect, note, actor, at);
+  return { kind: 'answered', effect };
 }
 
 async function answerClassification(
@@ -496,7 +594,7 @@ function staleReason(state: string): string {
  * parts, and a merge since can rename what it offered. A reviewer's shelf that differs from a
  * person's standing one goes to the owner instead (ruling 12).
  */
-async function answerParts(
+function answerParts(
   ports: ReviewPorts,
   reviewId: string,
   parts: GivenParts,
@@ -505,50 +603,58 @@ async function answerParts(
   at: Date,
 ): Promise<ReviewAnswer> {
   return ports.withDb((db) =>
-    db.transaction(async (tx): Promise<ReviewAnswer> => {
-      const review = await getReview(tx, reviewId, { lock: true });
-      if (review === null || review.status !== 'open') return { kind: 'closed' };
-      const owner = actor.role === 'owner';
-      if (review.flaggedAt !== null && !owner) return { kind: 'missing' };
-      const taxonomy = await taxonomyNow(tx, review.datasetId);
-      const checked = checkParts(taxonomy, review.question, review.context, parts);
-      if (!checked.ok) return refused(400, checked.reason);
-      const { asked, settled, given } = checked;
-      if (!owner && differsFromPerson(taxonomy, review.context, given)) {
-        return flagOpen(tx, review, given, actor, at);
-      }
-      const asking =
-        review.decisionId === null ? null : await decisionWithId(tx, review.decisionId);
-      const state = (asking?.state ?? {}) as Partial<PlaceState>;
-      const itemId = review.itemId;
-      if (asking === null || state.page === undefined || itemId === null) {
-        throw new Error(`Review ${review.id} has no page and place decision to answer for`);
-      }
-      const closed = await closeReview(tx, {
-        id: review.id,
-        status: 'decided',
-        answer: answerText(given),
-        at,
-        answeredBy: actor,
-        note,
-      });
-      if (closed === null) return { kind: 'closed' };
-      const effect = await place(tx, {
-        taxonomy,
-        review: closed,
-        itemId,
-        asking,
-        state: { page: state.page, rule: state.rule ?? null, asked: state.asked ?? emptyParts() },
-        asked,
-        given,
-        answer: mergeAnswers(taxonomy, settled, given),
-        note,
-        at,
-      });
-      await logAnswer(tx, closed, { parts: given }, effect, note, actor, at);
-      return { kind: 'answered', effect };
-    }),
+    db.transaction((tx) => answerPartsIn(tx, reviewId, parts, note, actor, at)),
   );
+}
+
+async function answerPartsIn(
+  tx: Executor,
+  reviewId: string,
+  parts: GivenParts,
+  note: string | undefined,
+  actor: ActorRecord,
+  at: Date,
+): Promise<ReviewAnswer> {
+  const review = await getReview(tx, reviewId, { lock: true });
+  if (review === null || review.status !== 'open') return { kind: 'closed' };
+  const owner = actor.role === 'owner';
+  if (review.flaggedAt !== null && !owner) return { kind: 'missing' };
+  const taxonomy = await taxonomyNow(tx, review.datasetId);
+  const checked = checkParts(taxonomy, review.question, review.context, parts);
+  if (!checked.ok) return refused(400, checked.reason);
+  const { asked, settled, given } = checked;
+  if (!owner && differsFromPerson(taxonomy, review.context, given)) {
+    return flagOpen(tx, review, given, actor, at);
+  }
+  const asking = review.decisionId === null ? null : await decisionWithId(tx, review.decisionId);
+  const state = (asking?.state ?? {}) as Partial<PlaceState>;
+  const itemId = review.itemId;
+  if (asking === null || state.page === undefined || itemId === null) {
+    throw new Error(`Review ${review.id} has no page and place decision to answer for`);
+  }
+  const closed = await closeReview(tx, {
+    id: review.id,
+    status: 'decided',
+    answer: answerText(given),
+    at,
+    answeredBy: actor,
+    note,
+  });
+  if (closed === null) return { kind: 'closed' };
+  const effect = await place(tx, {
+    taxonomy,
+    review: closed,
+    itemId,
+    asking,
+    state: { page: state.page, rule: state.rule ?? null, asked: state.asked ?? emptyParts() },
+    asked,
+    given,
+    answer: mergeAnswers(taxonomy, settled, given),
+    note,
+    at,
+  });
+  await logAnswer(tx, closed, { parts: given }, effect, note, actor, at);
+  return { kind: 'answered', effect };
 }
 
 /**

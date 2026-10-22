@@ -618,6 +618,40 @@ export async function reopenFlagged(
   return row?.id ?? null;
 }
 
+/**
+ * Whether the owner answered a copy of a question (`reopenFlagged`), found by the IDs its copies
+ * take: the question's, and the number of questions its subject had then. Then the owner's answer
+ * is the one that stands.
+ */
+export async function answeredAgainByOwner(db: Executor, review: ReviewRow): Promise<boolean> {
+  const [asked] = await db
+    .select({ n: count() })
+    .from(reviewItems)
+    .where(
+      and(
+        eq(reviewItems.datasetId, review.datasetId),
+        eq(reviewItems.kind, review.kind),
+        eq(reviewItems.subject, review.subject),
+      ),
+    );
+  const copies = await Promise.all(
+    Array.from({ length: asked?.n ?? 0 }, (_, n) => stableId('rv', review.id, 'flag', n + 1)),
+  );
+  if (copies.length === 0) return false;
+  const [row] = await db
+    .select({ id: reviewItems.id })
+    .from(reviewItems)
+    .where(
+      and(
+        inArray(reviewItems.id, copies),
+        eq(reviewItems.status, 'decided'),
+        sql`${reviewItems.answeredBy}->>'role' = 'owner'`,
+      ),
+    )
+    .limit(1);
+  return row !== undefined;
+}
+
 /** Puts the owner's suggested answer on an open question. Returns false when it isn't open. */
 export async function setSuggestion(
   db: Executor,

@@ -1241,6 +1241,8 @@ export const CONSOLE_SCRIPT = String.raw`'use strict';
     const versions = list(history.versions).filter((one) => isObject(one) && one.version > 0);
     const undone = new Set(versions.map((one) => one.undoes).filter((n) => typeof n === 'number'));
     const actions = list(log.actions).filter(isObject);
+    const replacing = el('div', { class: 'cards' });
+    const replace = (action) => replaceControl(dataset, known, action, replacing);
     return {
       heading: el('h1', { tabindex: '-1' }, 'History'),
       body: [
@@ -1250,7 +1252,8 @@ export const CONSOLE_SCRIPT = String.raw`'use strict';
           : el('ol', { class: 'versions', reversed: true },
               versions.map((one) => versionItem(dataset, one, undone))),
         el('h2', {}, 'Answers and changes, by who made them'),
-        actions.length === 0 ? el('p', {}, 'Nothing is logged yet.') : logTable(t, actions),
+        actions.length === 0 ? el('p', {}, 'Nothing is logged yet.') : logTable(t, actions, replace),
+        replacing,
       ],
     };
   }
@@ -1312,7 +1315,7 @@ export const CONSOLE_SCRIPT = String.raw`'use strict';
     return words.length > 0 ? words.join(' · ') : brief(detail);
   }
 
-  function logTable(t, actions) {
+  function logTable(t, actions, replace) {
     const head = ['When', 'Who', 'What', 'About', 'Detail'].map((label) =>
       el('th', { scope: 'col' }, label));
     const rows = actions.map((action) =>
@@ -1323,9 +1326,51 @@ export const CONSOLE_SCRIPT = String.raw`'use strict';
         el('td', {}, actorWords(action.actor)),
         el('td', {}, ACTION_WORDS.get(action.action) || text(action.action)),
         el('td', { class: 'mono' }, text(action.subject)),
-        el('td', {}, detailWords(t, action.detail)),
+        el('td', {}, detailWords(t, action.detail), replace(action)),
       ));
     return el('table', {}, el('thead', {}, el('tr', {}, head)), el('tbody', {}, rows));
+  }
+
+  /**
+   * A reviewer's answer, which the owner can replace (ADR 0009): its question, shown as on the
+   * questions screen, whose answer reopens it and answers it at once.
+   */
+  function replaceControl(dataset, known, action, holder) {
+    const reviewer = isObject(action.actor) && action.actor.role === 'reviewer';
+    const subject = typeof action.subject === 'string' ? action.subject : '';
+    if (action.action !== 'answer' || !reviewer || !subject.startsWith('rv_')) return null;
+    const open = el('button', { type: 'button', class: 'quiet' }, 'Answer it yourself');
+    open.addEventListener('click', async () => {
+      open.disabled = true;
+      try {
+        const got = await api('GET', path(dataset, '/review/' + encodeURIComponent(subject)));
+        const review = isObject(got.review) ? got.review : null;
+        if (review === null) throw new Error('Spatula didn’t send the question.');
+        const unbulked = { offer() {}, forget() {}, update() {} };
+        const said = el('p', { class: 'flag', tabindex: '-1' }, 'A reviewer answered ' +
+          subject + ': ' + answeredWords(known === null ? null : known.taxonomy, review.answer) +
+          '. Your different answer replaces theirs.');
+        holder.replaceChildren(said, questionCard(dataset, known, review, unbulked));
+        said.focus();
+      } catch (error) {
+        say(errorText(error));
+      } finally {
+        open.disabled = false;
+      }
+    });
+    return el('div', {}, open);
+  }
+
+  /** A closed question's answer: one of its options, or a taxonomy answer's parts. */
+  function answeredWords(t, answer) {
+    if (typeof answer !== 'string') return 'nothing';
+    try {
+      const parts = JSON.parse(answer);
+      if (isObject(parts)) return answerWords(t, parts, null) || 'none of the parts offered';
+    } catch (error) {
+      // Not a taxonomy answer: an option, as it is.
+    }
+    return answer;
   }
 
   // A capture.

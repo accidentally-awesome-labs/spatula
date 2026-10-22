@@ -3,6 +3,7 @@ import {
   createDatabase,
   currentTaxonomy,
   datasetExists,
+  getReview,
   listActions,
   listOpenReviews,
   MAX_ACTIONS,
@@ -26,7 +27,8 @@ import {
 
 /*
  * The review API (ADR 0009): the questions waiting, answers to them one at a time or in bulk, the
- * owner's suggestions, the log, and the taxonomy the questions are asked in. The routes don't say
+ * owner's suggestions, the log, one question as the owner reads it, and the taxonomy the questions
+ * are asked in. The routes don't say
  * who may call them: the app they're registered on knows its callers (bearerActor, accessActor),
  * and each route says what a caller needs. An answer as an older CLI sends it, `{ answer }`, gets
  * the reply and the refusals it always got.
@@ -277,6 +279,34 @@ export function reviewRoutes(app: Hono<ActorApi>): void {
     );
     if (actions === null) return c.json({ error: `Dataset ${datasetId} doesn’t exist.` }, 404);
     return c.json({ actions });
+  });
+
+  // One question, open or closed, with its answer and who gave it: the console shows a question
+  // a reviewer answered, so the owner can replace their answer (ADR 0009). It's the owner's: a
+  // closed question's answer may name a reviewer and carry their note.
+  app.get('/datasets/:id/review/:reviewId', ownerOnly, async (c) => {
+    const datasetId = c.req.param('id');
+    const review = await withDatabase(c.env, (db) => getReview(db, c.req.param('reviewId')));
+    if (review === null || review.datasetId !== datasetId) {
+      return c.json({ error: 'No such question for this dataset.' }, 404);
+    }
+    return c.json({
+      review: {
+        id: review.id,
+        kind: review.kind,
+        subject: review.subject,
+        question: review.question,
+        context: review.context,
+        createdAt: review.createdAt.toISOString(),
+        ...(review.flaggedAt === null ? {} : { flagged: true }),
+        ...(review.suggestion === null ? {} : { suggestion: review.suggestion }),
+        status: review.status,
+        answer: review.answer,
+        answeredBy: review.answeredBy,
+        note: review.note,
+        closedAt: review.closedAt === null ? null : review.closedAt.toISOString(),
+      },
+    });
   });
 
   app.post(

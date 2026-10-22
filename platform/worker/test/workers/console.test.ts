@@ -272,6 +272,17 @@ describe('the console', () => {
     });
     expect(answered.status).toBe(200);
     expect((await questions()).map((one) => one.id)).not.toContain(a1.id);
+    // History reads an answered question, to offer the owner a reviewer's answer to replace.
+    const read = await fromConsole('GET', `${base}/review/${encodeURIComponent(a1.id)}`);
+    expect(read.status).toBe(200);
+    expect(await read.json()).toMatchObject({
+      review: {
+        id: a1.id,
+        status: 'decided',
+        answeredBy: { role: 'owner', client: 'console' },
+        note: 'Cups around the ears.',
+      },
+    });
 
     // What the page reads of a bulk request: a status for each answer, and beside it `answered` or
     // `flagged`, or the `error` that refused it. Not a kind and a reason.

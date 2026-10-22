@@ -347,6 +347,61 @@ describe('the review API', () => {
     });
   });
 
+  it('lets the owner read a question a reviewer answered, and replace the answer', async () => {
+    const datasetId = 'rv-replaced';
+    await questionsIn(datasetId);
+    const { classify } = questions(datasetId);
+    const bindings = await reviewerBindings();
+    const path = `/datasets/${datasetId}/review/${classify}`;
+    const byReviewer = await call('POST', path, {
+      token: CONSUMER_TOKEN,
+      bindings,
+      body: { answer: 'DAC/Amp', note: 'Its box says DAC.' },
+      headers: { 'x-spatula-reviewer': 'reviewer-7' },
+    });
+    expect(byReviewer.status).toBe(200);
+
+    // The owner reads the question, closed, with who answered it. A consumer can't.
+    const read = await call('GET', path, { bindings });
+    expect(read.status).toBe(200);
+    expectNoStore(read);
+    expect(await read.json()).toMatchObject({
+      review: {
+        id: classify,
+        kind: 'classify',
+        status: 'decided',
+        answer: 'DAC/Amp',
+        answeredBy: { role: 'reviewer', consumer: 'crowdio', reviewer: 'reviewer-7' },
+        note: 'Its box says DAC.',
+        context: { proposed: 'Headphones' },
+      },
+    });
+    expect((await call('GET', path, { token: CONSUMER_TOKEN, bindings })).status).toBe(401);
+    const nowhere = await call('GET', `/datasets/${datasetId}/review/rv_nowhere`, { bindings });
+    expect(nowhere.status).toBe(404);
+    expect(await nowhere.json()).toEqual({ error: 'No such question for this dataset.' });
+
+    // The owner's different answer replaces the reviewer's; after that, the owner's stands.
+    const replaced = await call('POST', path, { bindings, body: { answer: 'Headphones' } });
+    expect(replaced.status).toBe(200);
+    expect(await replaced.json()).toEqual({
+      answered: classify,
+      answer: 'Headphones',
+      effect:
+        'It replaces a reviewer’s answer. The page’s category is Headphones. The next run publishes it.',
+    });
+    const again = await call('POST', path, { bindings, body: { answer: 'DAC/Amp' } });
+    expect(again.status).toBe(409);
+    expect(await again.json()).toEqual({ error: 'That question has been answered already.' });
+    const log = await call('GET', `/datasets/${datasetId}/review/log`, { bindings });
+    const { actions } = (await log.json()) as { actions: ReviewAction[] };
+    expect(actions.map((action) => `${action.action} ${action.actor.role}`).sort()).toEqual([
+      'answer owner',
+      'answer reviewer',
+      'flag owner',
+    ]);
+  });
+
   it('limits each owner’s and each reviewer’s writes, and counts a bulk request once', async () => {
     const datasetId = 'rv-limits';
     await questionsIn(datasetId);

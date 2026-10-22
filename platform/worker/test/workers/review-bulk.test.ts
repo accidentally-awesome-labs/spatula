@@ -309,6 +309,25 @@ describe('the review API in bulk', () => {
     });
     expect(taxonomy.status).toBe(200);
     expect(await taxonomy.json()).toMatchObject({ version: 1 });
+
+    // The owner replaces the reviewer's answer in bulk, as one at a time.
+    const replaced = await call('POST', `/datasets/${datasetId}/review/bulk`, {
+      body: { answers: [{ reviewId, parts: { features: { back: ['closed'] } } }] },
+    });
+    expect(replaced.status).toBe(200);
+    expect(await replaced.json()).toEqual({
+      results: [
+        {
+          reviewId,
+          status: 200,
+          answered: reviewId,
+          effect: `It replaces a reviewer’s answer. ${ON_EAR}`,
+        },
+      ],
+    });
+    expect(await humanSaid(a2.id)).toEqual(
+      [`features ${id('value', 'closed')}`, `shelf ${id('shelf', 'on-ear')}`].sort(),
+    );
   });
 
   it('refuses a bulk request, or suggestions, it can’t read, whole', async () => {

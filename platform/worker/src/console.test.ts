@@ -573,6 +573,54 @@ describe('the console', () => {
     expect(sent.some((one) => one.url.endsWith('/taxonomy/versions/2/undo'))).toBe(true);
   });
 
+  it('offers the owner each reviewer’s answer in the history, to replace with their own', async () => {
+    const answered = {
+      ...PLACE,
+      status: 'decided',
+      answer: JSON.stringify({ shelf: tx(6), functions: [], values: [tx(14)] }),
+      answeredBy: LOGGED.actor,
+      note: '<img src=x>',
+      closedAt: '2026-10-20T10:00:00.000Z',
+    };
+    const { document, main, sent } = await opened('#history', {
+      'GET /console/api/datasets/hostile/review/rv_place': { review: answered },
+      'POST /console/api/datasets/hostile/review/rv_place': {
+        answered: 'rv_place',
+        effect: 'It replaces a reviewer’s answer. The page sits on Headphones › On-ear.',
+      },
+    });
+    const offered = [...main.all()].filter(
+      (node) => node.tagName === 'button' && node.textContent === 'Answer it yourself',
+    );
+    // One answer is logged, a reviewer's.
+    expect(offered).toHaveLength(1);
+    await offered[0]!.fire('click');
+    await settle();
+    expect(sent.at(-1)).toMatchObject({
+      method: 'GET',
+      url: '/console/api/datasets/hostile/review/rv_place',
+    });
+    checked(main);
+    const said = 'A reviewer answered rv_place: Headphones › Over-ear; Back: Open.';
+    expect(document.activeElement!.textContent).toBe(
+      `${said} Your different answer replaces theirs.`,
+    );
+    const card = [...main.all()].find((node) => node.tagName === 'article')!;
+    expect(card.textContent).toContain(HOSTILE_REASON);
+    const inCard = [...card.all()];
+    inCard.find((node) => node.tagName === 'select')!.value = tx(7);
+    await inCard.find((node) => node.tagName === 'form')!.fire('submit');
+    await settle();
+    expect(sent.at(-1)).toMatchObject({
+      method: 'POST',
+      url: '/console/api/datasets/hostile/review/rv_place',
+      body: { parts: { shelf: tx(7), features: { [tx(13)]: [tx(14)] } } },
+    });
+    expect(card.textContent).toBe(
+      'Answered rv_place. It replaces a reviewer’s answer. The page sits on Headphones › On-ear.',
+    );
+  });
+
   it('reads Task 12’s bulk answer: a status for each, and the reason for the ones not taken', async () => {
     const second = { ...PLACE, id: 'rv_second', suggestion: { shelf: 'dacs' } };
     const third = { ...PLACE, id: 'rv_third', suggestion: { shelf: 'on-ear' } };
