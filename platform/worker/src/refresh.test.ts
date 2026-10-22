@@ -1407,6 +1407,8 @@ describe('runRefresh', () => {
     ['never answers', 'refresh-strain-silent', { ok: false, error: 'the connection timed out' }],
   ] satisfies [string, string, HttpResult][])(
     'pauses a source whose host %s for every page, still reads the others, and leaves its pages due',
+    // Two runs, each waiting out a host's breaks, so it gets more than the default 5 s.
+    { timeout: 20_000 },
     async (_what, datasetId, reply) => {
       const pages = await makerAPages(datasetId, ['a1', 'a2', 'a3', 'a4', 'a5']);
       const routes = standardRoutes();
