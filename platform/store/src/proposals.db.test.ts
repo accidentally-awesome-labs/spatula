@@ -423,7 +423,7 @@ describe('autonomy', () => {
         db
           .insert(autonomy)
           .values({ datasetId: DATASET, kind: 'describe', streak: 1, updatedAt: T(1) }),
-      ).rejects.toThrow();
+      ).rejects.toMatchObject({ cause: { constraint_name: 'autonomy_kind' } });
     }));
 
   it('applies on its own only an unedited change whose kind has autonomy as it applies', () =>

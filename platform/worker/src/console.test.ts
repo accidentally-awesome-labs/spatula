@@ -782,15 +782,19 @@ describe('the console', () => {
         was: 7,
       },
     });
-    const text = main.textContent;
+    // The autonomy section alone: a proposal's card on the same screen names its kind too.
+    const section = [...main.all()].find((node) => node.tagName === 'section')!;
+    const text = section.textContent;
     expect(text).toContain('once you’ve accepted 7 of its proposals in a row');
-    expect(text).toContain('A new feature value');
     expect(text).toContain('Applies on its own');
     expect(text).toContain('Waits for you');
-    // Only the kinds the API listed have a row: a header, and two kinds.
-    expect(text).toContain('A new subcategory');
-    const section = [...main.all()].find((node) => node.tagName === 'section')!;
+    // Only the kinds the API listed have a row: a header, and two kinds, in the API's order.
     expect([...section.all()].filter((node) => node.tagName === 'tr')).toHaveLength(3);
+    expect(
+      [...section.all()]
+        .filter((node) => node.tagName === 'th' && node.attributes.get('scope') === 'row')
+        .map((node) => node.textContent),
+    ).toEqual(['A new feature value', 'A new subcategory']);
     const revoke = [...main.all()].find(
       (node) => node.tagName === 'button' && node.textContent === 'Revoke it',
     )!;

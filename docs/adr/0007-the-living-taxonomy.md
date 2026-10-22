@@ -124,7 +124,7 @@ publishes.
 A description no longer applies on its own: it applies only on the owner's approval, because its
 text reaches later prompts as trusted text. A change applied under earned autonomy puts its text
 into the taxonomy, and the taxonomy sits in the trusted part of every later decider and review
-prompt; a description is the freest of the earnable kinds, with no new item and no page count
+prompt; a description is the freest of the kinds that were earnable, with no new item and no page count
 behind it. Earned autonomy now covers a new subcategory, a new feature, and a new value. A
 description stays proposable, and the owner can still approve, edit, or reject it. Migration 0012
 narrows the stored kinds to those three; marking text that was applied on its own as untrusted in
