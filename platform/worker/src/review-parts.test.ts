@@ -30,7 +30,7 @@ import { testTaxonomy, testTaxonomyDefinition } from '@spatula/store/fixtures';
 import { and, eq, isNull } from 'drizzle-orm';
 import { describe, expect, it } from 'vitest';
 import { db } from '../test/node/db';
-import { fakeTaxonomyDecider, makeWorld } from '../test/node/fakes';
+import { fakeTaxonomyDecider, makeWorld, type World } from '../test/node/fakes';
 import { refresh, taxonomyWorld } from '../test/node/runs';
 import { A2, taxonomyFor, URLS } from '../test/pages';
 import { answerReview, answerReviews, MAX_BULK, suggestAnswers } from './review';
@@ -735,6 +735,250 @@ describe('a person’s answers across questions about a page', { timeout: 30_000
     await refresh(world, datasetId);
     expect(await questionAbout(datasetId, a2.id)).toBeUndefined();
     expect(await placedOf(a2.id, changed)).toEqual([
+      'features human closed 1',
+      'functions human pre-amp 1',
+      'shelf human on-ear 1',
+    ]);
+  });
+});
+
+/**
+ * A dataset where a reviewer answered A2's first question (the pre-amp, and Closed, on On-ear),
+ * On-ear was retired, and a person (`later`) moved the page to Over-ear in the question that
+ * reopened.
+ */
+async function movedLater(datasetId: string, later: ActorRecord) {
+  const { world, a2, question: first } = await unsureA2(datasetId);
+  expect(
+    await answerReview(world.ports, {
+      datasetId,
+      reviewId: first.id,
+      parts: { functions: ['pre-amp'], features: { back: ['closed'] } },
+      actor: REVIEWER,
+    }),
+  ).toMatchObject({ kind: 'answered' });
+  await commitChanges(
+    datasetId,
+    [{ kind: 'retire', subject: 'shelf', item: 'on-ear' }],
+    world.clock.now(),
+  );
+  world.web.routes.set(URLS.a2, { status: 200, body: A2('two') });
+  world.clock.advance(60_000);
+  await refresh(world, datasetId);
+  const reopened = (await questionAbout(datasetId, a2.id))!;
+  expect(
+    await answerReview(world.ports, {
+      datasetId,
+      reviewId: reopened.id,
+      parts: { shelf: 'over-ear' },
+      actor: later,
+    }),
+  ).toMatchObject({ kind: 'answered' });
+  expect(await placedOf(a2.id)).toEqual([
+    'features human closed 1',
+    'functions human pre-amp 1',
+    'shelf human over-ear 1',
+  ]);
+  world.clock.advance(60_000);
+  return { world, a2, first, reopened };
+}
+
+/** The owner's answer to the first question about A2, which a reviewer answered: no pre-amp, Open. */
+const replaceFirst = (world: World, datasetId: string, reviewId: string) =>
+  answerReview(world.ports, {
+    datasetId,
+    reviewId,
+    parts: { functions: [], features: { back: ['open'] } },
+    actor: OWNER,
+  });
+
+// The owner's answer to an older question changes only the parts that question asks: a person's
+// later word stands for the rest, whatever the older question had settled then (N1).
+describe('the owner’s answer to an older question about a page', { timeout: 30_000 }, () => {
+  it('keeps a reviewer’s later shelf', async () => {
+    const datasetId = 'parts-older-reviewer-shelf';
+    const { world, a2, first } = await movedLater(datasetId, REVIEWER);
+    expect(await replaceFirst(world, datasetId, first.id)).toEqual({
+      kind: 'answered',
+      effect:
+        'It replaces a reviewer’s answer. The page sits on Headphones › Over-ear. The next run publishes it.',
+    });
+    expect(await placedOf(a2.id)).toEqual(['features human open 1', 'shelf human over-ear 1']);
+  });
+
+  it('keeps the owner’s later shelf, after the older one comes back', async () => {
+    const datasetId = 'parts-older-owner-shelf';
+    const { world, a2, first, reopened } = await movedLater(datasetId, OWNER);
+    await commitChanges(
+      datasetId,
+      [{ kind: 'restore', subject: 'shelf', item: id('shelf', 'on-ear') }],
+      world.clock.now(),
+    );
+    expect(await replaceFirst(world, datasetId, first.id)).toMatchObject({ kind: 'answered' });
+    expect(await placedOf(a2.id)).toEqual(['features human open 1', 'shelf human over-ear 1']);
+    // The owner's later answer stands: answering it again changes nothing, and a run keeps it.
+    expect(
+      await answerReview(world.ports, {
+        datasetId,
+        reviewId: reopened.id,
+        parts: { shelf: 'over-ear' },
+        actor: OWNER,
+      }),
+    ).toEqual({ kind: 'closed' });
+    world.web.routes.set(URLS.a2, { status: 200, body: A2('three') });
+    await refresh(world, datasetId);
+    expect(await questionAbout(datasetId, a2.id)).toBeUndefined();
+    expect(await placedOf(a2.id)).toEqual(['features human open 1', 'shelf human over-ear 1']);
+  });
+
+  it('keeps a person’s later no to a function the older question had settled', async () => {
+    const datasetId = 'parts-older-no';
+    const {
+      world,
+      pages: [, a2],
+    } = await taxonomyWorld(testTaxonomyDefinition(datasetId));
+    const says = {
+      functions: { headphones: 0.99, 'pre-amp': 0.5, dac: 0.95 } as Record<string, number>,
+      values: { open: 0.6, closed: 0.35 } as Record<string, number>,
+    };
+    world.ports.taxonomyDecider = fakeTaxonomyDecider((request) =>
+      request.evidence.includes(URLS.a2)
+        ? { shelves: { 'on-ear': 0.95 }, functions: says.functions, values: says.values }
+        : taxonomyFor(request),
+    ).decider;
+    await refresh(world, datasetId);
+    // The decider settles DAC; a reviewer answers the rest: the pre-amp, and Closed.
+    const first = (await questionAbout(datasetId, a2!.id))!;
+    await answerReview(world.ports, {
+      datasetId,
+      reviewId: first.id,
+      parts: { functions: ['pre-amp'], features: { back: ['closed'] } },
+      actor: REVIEWER,
+    });
+    // Connection asks again, and the decider is unsure of DAC now: the owner says no to it.
+    const changed = await commitChanges(datasetId, [CONNECTION], world.clock.now());
+    says.functions = { headphones: 0.99, dac: 0.5 };
+    says.values = { wired: 0.6 };
+    world.clock.advance(60_000);
+    await refresh(world, datasetId);
+    const second = (await questionAbout(datasetId, a2!.id))!;
+    expect(
+      await answerReview(world.ports, {
+        datasetId,
+        reviewId: second.id,
+        parts: { functions: [], features: { connection: ['wired'] } },
+        actor: OWNER,
+      }),
+    ).toMatchObject({ kind: 'answered' });
+    const whole = [
+      'features human closed 1',
+      'features human wired 1',
+      'functions human pre-amp 1',
+      'shelf human on-ear 1',
+    ];
+    expect(await placedOf(a2!.id, changed)).toEqual(whole);
+    // The owner replaces the reviewer's first answer: no pre-amp, and Closed. The DAC the first
+    // question had settled stays out: the owner's later no stands.
+    world.clock.advance(60_000);
+    expect(
+      await answerReview(world.ports, {
+        datasetId,
+        reviewId: first.id,
+        parts: { functions: [], features: { back: ['closed'] } },
+        actor: OWNER,
+      }),
+    ).toMatchObject({ kind: 'answered' });
+    expect(await placedOf(a2!.id, changed)).toEqual([
+      'features human closed 1',
+      'features human wired 1',
+      'shelf human on-ear 1',
+    ]);
+  });
+
+  it('refuses when the shelf a person gave since is retired, or they said none of these', async () => {
+    const retiredSince = 'parts-older-retired';
+    const { world, a2, question: first } = await unsureA2(retiredSince);
+    await answerReview(world.ports, {
+      datasetId: retiredSince,
+      reviewId: first.id,
+      parts: { functions: ['pre-amp'], features: { back: ['closed'] } },
+      actor: REVIEWER,
+    });
+    await commitChanges(
+      retiredSince,
+      [{ kind: 'retire', subject: 'shelf', item: 'on-ear' }],
+      world.clock.now(),
+    );
+    world.clock.advance(60_000);
+    expect(await replaceFirst(world, retiredSince, first.id)).toEqual({
+      kind: 'refused',
+      status: 409,
+      reason:
+        'A person put this page on Headphones › On-ear, which is retired since, and this question doesn’t ask for its shelf. Answer the question about its shelf, which the page’s next run asks.',
+    });
+    expect(await getReview(db, await stableId('rv', first.id, 'flag', 1))).toBeNull();
+    expect(await placedOf(a2.id)).toEqual([
+      'features human closed 1',
+      'functions human pre-amp 1',
+      'shelf human on-ear 1',
+    ]);
+
+    // A person's "None of these" since: the page stays out.
+    const noneSince = 'parts-older-none';
+    const later = await unsureA2(noneSince);
+    await answerReview(later.world.ports, {
+      datasetId: noneSince,
+      reviewId: later.question.id,
+      parts: { functions: ['pre-amp'], features: { back: ['closed'] } },
+      actor: REVIEWER,
+    });
+    await commitChanges(
+      noneSince,
+      [{ kind: 'retire', subject: 'shelf', item: 'on-ear' }],
+      later.world.clock.now(),
+    );
+    later.world.web.routes.set(URLS.a2, { status: 200, body: A2('two') });
+    later.world.clock.advance(60_000);
+    await refresh(later.world, noneSince);
+    const reopened = (await questionAbout(noneSince, later.a2.id))!;
+    await answerReview(later.world.ports, {
+      datasetId: noneSince,
+      reviewId: reopened.id,
+      parts: { shelf: 'none' },
+      actor: OWNER,
+    });
+    later.world.clock.advance(60_000);
+    expect(await replaceFirst(later.world, noneSince, later.question.id)).toEqual({
+      kind: 'refused',
+      status: 409,
+      reason:
+        'A person said since that this page is none of these, and this question doesn’t ask for its shelf. spatula revive puts the page back, to be placed again.',
+    });
+    expect(await placedOf(later.a2.id)).toEqual([]);
+    expect((await listLiveItems(db, noneSince)).map((item) => item.id)).not.toContain(later.a2.id);
+  });
+
+  it('refuses while another question about the page is open, and leaves nothing behind', async () => {
+    const datasetId = 'parts-older-open';
+    const { world, a2, says } = await answeredA2(datasetId, REVIEWER);
+    await commitChanges(datasetId, [CONNECTION], world.clock.now());
+    says.values = { wired: 0.6 };
+    world.clock.advance(60_000);
+    await refresh(world, datasetId);
+    const open = await questionAbout(datasetId, a2.id);
+    expect(open).toBeDefined();
+    const first = (await listActions(db, datasetId)).find((action) => action.action === 'answer')!;
+    const before = await listActions(db, datasetId);
+    expect(await replaceFirst(world, datasetId, first.subject)).toEqual({
+      kind: 'refused',
+      status: 409,
+      reason: 'Another question about this is open: answer that one.',
+    });
+    expect(await listActions(db, datasetId)).toEqual(before);
+    for (const n of [1, 2, 3]) {
+      expect(await getReview(db, await stableId('rv', first.subject, 'flag', n))).toBeNull();
+    }
+    expect(await placedOf(a2.id)).toEqual([
       'features human closed 1',
       'functions human pre-amp 1',
       'shelf human on-ear 1',

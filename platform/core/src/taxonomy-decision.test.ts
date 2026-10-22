@@ -366,6 +366,12 @@ describe('what is asked, and what carries over', () => {
       given: { shelf: null, functions: [preAmp], values: [closed] },
     };
     const nothing = { shelf: null, functions: [], values: [] };
+    /** The whole answer, which these tests expect withCarried to make. */
+    const made = (...input: Parameters<typeof withCarried>) => {
+      const result = withCarried(...input);
+      if (!result.ok) throw new Error(result.reason);
+      return result.final;
+    };
 
     it('makes a later answer whole with what the earlier one decided', () => {
       const now = {
@@ -373,7 +379,7 @@ describe('what is asked, and what carries over', () => {
         asked: { shelves: [], functions: [amplifier], features: {} },
         given: { shelf: null, functions: [amplifier], values: [] },
       };
-      const whole = withCarried(T, now, previous);
+      const whole = made(T, now, previous);
       expect(whole).toEqual({
         answer: { shelf: onEar, functions: [amplifier, preAmp], values: [closed] },
         asked: {
@@ -397,7 +403,7 @@ describe('what is asked, and what carries over', () => {
         asked: { shelves: [], functions: [preAmp], features: { [id('feature', 'back')]: [open] } },
         given: { shelf: null, functions: [], values: [open] },
       };
-      expect(withCarried(T, now, previous).answer).toEqual({
+      expect(made(T, now, previous).answer).toEqual({
         shelf: onEar,
         functions: [],
         values: [open],
@@ -411,7 +417,7 @@ describe('what is asked, and what carries over', () => {
         given: { ...nothing, shelf: id('shelf', 'preamps') },
       };
       // Preamps implies Pre-amp, and has no Back.
-      expect(withCarried(T, onPreamps, previous).answer).toEqual({
+      expect(made(T, onPreamps, previous).answer).toEqual({
         shelf: id('shelf', 'preamps'),
         functions: [],
         values: [],
@@ -425,14 +431,84 @@ describe('what is asked, and what carries over', () => {
         asked: { shelves: ALL_SHELVES, functions: [], features: {} },
         given: none,
       };
-      expect(withCarried(T, saidNone, previous)).toEqual(saidNone);
+      expect(made(T, saidNone, previous)).toEqual(saidNone);
       const after = {
         answer: { shelf: onEar, functions: [], values: [] },
         asked: { shelves: ALL_SHELVES, functions: [], features: {} },
         given: { ...nothing, shelf: onEar },
       };
-      expect(withCarried(T, after, saidNone)).toEqual(after);
-      expect(withCarried(T, after, null)).toEqual(after);
+      expect(made(T, after, saidNone)).toEqual(after);
+      expect(made(T, after, null)).toEqual(after);
+    });
+
+    // An older question's copy holds what it had settled then; a person's later word outranks it
+    // wherever the question doesn't ask the part (N1).
+    describe('an answer to an older question', () => {
+      const overEar = id('shelf', 'over-ear');
+      // Later: the person put the page on Over-ear, said no to the DAC, and chose Closed.
+      const later = {
+        answer: { shelf: overEar, functions: [], values: [closed] },
+        asked: {
+          shelves: ALL_SHELVES,
+          functions: [dac],
+          features: { [id('feature', 'back')]: [open, closed] },
+        },
+        given: { shelf: overEar, functions: [], values: [closed] },
+      };
+      // The older question asks only the pre-amp. It had settled On-ear, the DAC, and Open.
+      const older = (shelf: string | null = onEar) => ({
+        answer: { shelf, functions: [dac], values: [open] },
+        asked: { shelves: [], functions: [preAmp], features: {} },
+        given: { shelf: null, functions: [], values: [] },
+      });
+
+      it('keeps the person’s shelf, their no, and their one value over what it had settled', () => {
+        expect(made(T, older(), later).answer).toEqual({
+          shelf: overEar,
+          functions: [],
+          values: [closed],
+        });
+        // A stale shelf retired since (freshened to none) is the person's too.
+        expect(made(T, older(null), later).answer.shelf).toBe(overEar);
+      });
+
+      it('changes nothing in a fresh question, whose settled parts are the person’s', () => {
+        const fresh = {
+          answer: { shelf: overEar, functions: [amplifier], values: [closed] },
+          asked: { shelves: [], functions: [amplifier], features: {} },
+          given: { shelf: null, functions: [amplifier], values: [] },
+        };
+        expect(made(T, fresh, later).answer).toEqual(fresh.answer);
+      });
+
+      it('refuses when the person’s shelf is retired, or none, or lacks a value given now', () => {
+        const retired = applyChanges(
+          T,
+          [{ kind: 'retire', subject: 'shelf', item: 'over-ear' }],
+          () => 'tx_00000000000000000099',
+        );
+        if (!retired.ok) throw new Error(retired.issues.join('\n'));
+        expect(withCarried(retired.taxonomy, older(), later)).toEqual({
+          ok: false,
+          reason:
+            'A person put this page on Headphones › Over-ear, which is retired since, and this question doesn’t ask for its shelf. Answer the question about its shelf, which the page’s next run asks.',
+        });
+        const none = { shelf: NONE_SHELF, functions: [], values: [] };
+        const saidNone = { answer: none, asked: later.asked, given: none };
+        expect(withCarried(T, older(), saidNone)).toMatchObject({ ok: false });
+        // On DACs, which has no Back, a Back value given now has nowhere to go.
+        const onDacs = { ...later, answer: { ...later.answer, shelf: id('shelf', 'dacs') } };
+        const givesBack = {
+          answer: { shelf: onEar, functions: [], values: [open] },
+          asked: { shelves: [], functions: [], features: { [id('feature', 'back')]: [open] } },
+          given: { shelf: null, functions: [], values: [open] },
+        };
+        expect(withCarried(T, givesBack, onDacs)).toEqual({
+          ok: false,
+          reason:
+            'Open is a value of Back, which isn’t a feature of DACs, where a person put this page since.',
+        });
+      });
     });
   });
 });

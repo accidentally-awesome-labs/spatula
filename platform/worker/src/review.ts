@@ -17,6 +17,7 @@ import {
   TAXONOMY_FIELDS,
   TAXONOMY_PROMPT,
   type ActorRecord,
+  type FinalTaxonomyAnswer,
   type GivenParts,
   type Question,
   type ReviewView,
@@ -592,7 +593,9 @@ function staleReason(state: string): string {
  * A person's parts for a taxonomy question (ADR 0007), checked against the question as it is when
  * it closes, under the taxonomy as it is now: a run that asks again can change the question's
  * parts, and a merge since can rename what it offered. A reviewer's shelf that differs from a
- * person's standing one goes to the owner instead (ruling 12).
+ * person's standing one goes to the owner instead (ruling 12). An answer that can't be made whole
+ * with a person's later word (`withCarried`), as when the shelf they gave since is retired, is
+ * refused (409), and the question stays open.
  */
 function answerParts(
   ports: ReviewPorts,
@@ -632,6 +635,15 @@ async function answerPartsIn(
   if (asking === null || state.page === undefined || itemId === null) {
     throw new Error(`Review ${review.id} has no page and place decision to answer for`);
   }
+  // The answer, made whole with what a person decided before it, whose latest word stands for
+  // the parts this question doesn't ask (`withCarried`).
+  const previous = await latestFinalized(tx, { datasetId: review.datasetId, subject: itemId });
+  const whole = withCarried(
+    taxonomy,
+    { answer: mergeAnswers(taxonomy, settled, given), asked, given },
+    readFinalAnswer(previous?.finalAnswer ?? null),
+  );
+  if (!whole.ok) return refused(409, whole.reason);
   const closed = await closeReview(tx, {
     id: review.id,
     status: 'decided',
@@ -648,8 +660,7 @@ async function answerPartsIn(
     asking,
     state: { page: state.page, rule: state.rule ?? null, asked: state.asked ?? emptyParts() },
     asked,
-    given,
-    answer: mergeAnswers(taxonomy, settled, given),
+    whole: whole.final,
     note,
     at,
   });
@@ -660,9 +671,10 @@ async function answerPartsIn(
 /**
  * Places a page as a person answered (ADR 0007). Their answer is a decision of its own, found again
  * under the key of the shelf it puts the page on, and finalized with what they were asked and said,
- * which carries over to the page's next question (ruling 7). It's their whole answer: what a
- * person's earlier answer about the page decided, and this question didn't ask again, joins it
- * (`withCarried`), so answering a later question keeps the earlier one. Its parts are human
+ * which carries over to the page's next question (ruling 7). It's their whole answer, which the
+ * caller made with `withCarried`: what a person's earlier answer about the page decided, and this
+ * question didn't ask again, joins it, so answering a later question keeps the earlier one, and an
+ * answer to an older question changes only what it asks. Its parts are human
  * statements in place of the cascade's and the earlier answer's, citing the page's latest fetch and
  * capture, which the person judged. "None of these" takes the page out; a shelf brings back a page
  * the decider took out. Returns what the answer does.
@@ -675,21 +687,15 @@ async function place(
     itemId: string;
     asking: DecisionRow;
     state: Pick<PlaceState, 'page' | 'rule' | 'asked'>;
+    /** What the question asked. */
     asked: TaxonomyParts;
-    given: TaxonomyAnswer;
-    answer: TaxonomyAnswer;
+    /** The person's whole answer (`withCarried`). */
+    whole: FinalTaxonomyAnswer;
     note: string | undefined;
     at: Date;
   },
 ): Promise<string> {
-  const { taxonomy, review, itemId, asking, at } = input;
-  // Read before this answer's decision is saved and finalized, which would be the latest then.
-  const previous = await latestFinalized(tx, { datasetId: review.datasetId, subject: itemId });
-  const whole = withCarried(
-    taxonomy,
-    { answer: input.answer, asked: input.asked, given: input.given },
-    readFinalAnswer(previous?.finalAnswer ?? null),
-  );
+  const { taxonomy, review, itemId, asking, whole, at } = input;
   const shelf = whole.answer.shelf;
   const state: PlaceState = { ...input.state, key: await keyHash(taxonomy, shelf) };
   const decision = await saveDecision(tx, {
