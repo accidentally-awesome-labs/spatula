@@ -8,6 +8,7 @@ import {
   mergeAnswers,
   NONE_OF_THESE,
   NONE_SHELF,
+  readFinalAnswer,
   resolveId,
   reviewAnswers,
   shelfPath,
@@ -23,6 +24,7 @@ import {
   type Taxonomy,
   type TaxonomyAnswer,
   type TaxonomyParts,
+  withCarried,
 } from '@spatula/core';
 import {
   closeReview,
@@ -36,6 +38,7 @@ import {
   judge,
   latestCapture,
   latestFetchId,
+  latestFinalized,
   listOpenReviews,
   liveIfIrrelevant,
   lockPageVerdicts,
@@ -551,10 +554,12 @@ async function answerParts(
 /**
  * Places a page as a person answered (ADR 0007). Their answer is a decision of its own, found again
  * under the key of the shelf it puts the page on, and finalized with what they were asked and said,
- * which carries over to the page's next question (ruling 7). Its parts are human statements in
- * place of the cascade's, citing the page's latest fetch and capture, which the person judged.
- * "None of these" takes the page out; a shelf brings back a page the decider took out. Returns what
- * the answer does.
+ * which carries over to the page's next question (ruling 7). It's their whole answer: what a
+ * person's earlier answer about the page decided, and this question didn't ask again, joins it
+ * (`withCarried`), so answering a later question keeps the earlier one. Its parts are human
+ * statements in place of the cascade's and the earlier answer's, citing the page's latest fetch and
+ * capture, which the person judged. "None of these" takes the page out; a shelf brings back a page
+ * the decider took out. Returns what the answer does.
  */
 async function place(
   tx: Executor,
@@ -571,8 +576,15 @@ async function place(
     at: Date;
   },
 ): Promise<string> {
-  const { taxonomy, review, itemId, asking, asked, given, answer, at } = input;
-  const shelf = answer.shelf;
+  const { taxonomy, review, itemId, asking, at } = input;
+  // Read before this answer's decision is saved and finalized, which would be the latest then.
+  const previous = await latestFinalized(tx, { datasetId: review.datasetId, subject: itemId });
+  const whole = withCarried(
+    taxonomy,
+    { answer: input.answer, asked: input.asked, given: input.given },
+    readFinalAnswer(previous?.finalAnswer ?? null),
+  );
+  const shelf = whole.answer.shelf;
   const state: PlaceState = { ...input.state, key: await keyHash(taxonomy, shelf) };
   const decision = await saveDecision(tx, {
     id: await stableId('dc', review.id, 'answer'),
@@ -582,21 +594,21 @@ async function place(
     subjectKey: placeSubject(itemId),
     state,
     stateHash: await placeHash(state),
-    question: { type: 'taxonomy', prompt: TAXONOMY_PROMPT, parts: asked },
+    question: { type: 'taxonomy', prompt: TAXONOMY_PROMPT, parts: input.asked },
     criteriaVersion: TAXONOMY_CRITERIA_VERSION,
     adapter: null,
     probabilities: asking.probabilities,
     evidence: input.note ?? 'A person answered.',
     thresholds: asking.thresholds,
     outcome: 'escalated',
-    answer: answerText(answer),
+    answer: answerText(whole.answer),
     inputTokens: 0,
     outputTokens: 0,
     decidedAt: at,
   });
   await finalizeDecision(tx, {
     id: decision.id,
-    finalAnswer: finalAnswerText({ answer, asked, given }),
+    finalAnswer: finalAnswerText(whole),
     at,
   });
   const fetchId = await latestFetchId(tx, itemId);
@@ -620,7 +632,7 @@ async function place(
     methods: ['human'],
     statements: none
       ? []
-      : partStatements(taxonomy, answer, {
+      : partStatements(taxonomy, whole.answer, {
           shelf: 'human',
           parts: 'human',
           confidence: () => 1,

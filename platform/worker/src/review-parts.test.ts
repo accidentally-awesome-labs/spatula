@@ -2,16 +2,20 @@ import {
   answerText,
   applyChanges,
   findItem,
+  newId,
   orderedShelves,
   readFinalAnswer,
   stableId,
   type ActorRecord,
   type GivenParts,
   type Question,
+  type Taxonomy,
+  type TaxonomyChange,
   type TaxonomySubject,
 } from '@spatula/core';
 import {
   commitTaxonomy,
+  currentTaxonomy,
   decisionRecords,
   getReview,
   items,
@@ -44,7 +48,7 @@ const REVIEWER: ActorRecord = {
 };
 
 /** An item's current taxonomy statements, as "property method slug confidence", sorted. */
-async function placedOf(itemId: string): Promise<string[]> {
+async function placedOf(itemId: string, taxonomy: Taxonomy = T): Promise<string[]> {
   const rows = await db
     .select({
       property: statements.property,
@@ -58,7 +62,7 @@ async function placedOf(itemId: string): Promise<string[]> {
     .filter((row) => row.property in SUBJECTS)
     .map((row) => {
       const subject = SUBJECTS[row.property as keyof typeof SUBJECTS];
-      return `${row.property} ${row.method} ${findItem(T, subject, String(row.value))?.slug} ${row.confidence}`;
+      return `${row.property} ${row.method} ${findItem(taxonomy, subject, String(row.value))?.slug} ${row.confidence}`;
     })
     .sort();
 }
@@ -467,5 +471,232 @@ describe('answering a taxonomy question', { timeout: 20_000 }, () => {
     await expect(answerReviews(ports, { datasetId: 'parts-many', answers })).rejects.toThrow(
       'At most 500 answers at once',
     );
+  });
+});
+
+/** Connection, a new feature on Headphones: it changes the question of every page on Headphones. */
+const CONNECTION: TaxonomyChange = {
+  kind: 'add-feature',
+  slug: 'connection',
+  name: 'Connection',
+  description: 'How it receives audio',
+  cardinality: 'many',
+  shelves: ['headphones'],
+  values: [
+    { slug: 'wired', name: 'Wired', description: 'A cable' },
+    { slug: 'bluetooth', name: 'Bluetooth', description: 'Radio' },
+  ],
+};
+
+/** A third way to connect: it changes those pages' question again. */
+const OPTICAL: TaxonomyChange = {
+  kind: 'add-value',
+  feature: 'connection',
+  slug: 'optical',
+  name: 'Optical',
+  description: 'Light through a fibre',
+};
+
+/** Commits changes as the owner, as the dataset's next taxonomy version, and returns it. */
+async function commitChanges(
+  datasetId: string,
+  changes: TaxonomyChange[],
+  at: Date,
+): Promise<Taxonomy> {
+  const current = (await currentTaxonomy(db, datasetId))!;
+  const next = applyChanges(current.taxonomy, changes, () => newId('tx'));
+  if (!next.ok) throw new Error(next.issues.join('\n'));
+  expect(
+    await commitTaxonomy(db, {
+      datasetId,
+      base: current.version,
+      taxonomy: next.taxonomy,
+      changes: next.applied,
+      actor: OWNER,
+      at,
+    }),
+  ).toEqual({ committed: true, version: current.version + 1 });
+  return next.taxonomy;
+}
+
+/**
+ * A dataset whose decider puts A2 on On-ear, unsure of its pre-amp and of its back, and whose
+ * person (`first`) answered: they ticked the pre-amp and chose Closed. What the decider says of A2's
+ * functions and values can be changed (`says`).
+ */
+async function answeredA2(datasetId: string, first: ActorRecord = OWNER) {
+  const {
+    world,
+    pages: [, a2],
+  } = await taxonomyWorld(testTaxonomyDefinition(datasetId));
+  const says = {
+    functions: { headphones: 0.99, 'pre-amp': 0.5 } as Record<string, number>,
+    values: { open: 0.6, closed: 0.35 } as Record<string, number>,
+  };
+  const decider = fakeTaxonomyDecider((request) =>
+    request.evidence.includes(URLS.a2)
+      ? { shelves: { 'on-ear': 0.95 }, functions: says.functions, values: says.values }
+      : taxonomyFor(request),
+  );
+  world.ports.taxonomyDecider = decider.decider;
+  await refresh(world, datasetId);
+  const [question] = await listOpenReviews(db, datasetId);
+  expect(
+    await answerReview(world.ports, {
+      datasetId,
+      reviewId: question!.id,
+      parts: { functions: ['pre-amp'], features: { back: ['closed'] } },
+      actor: first,
+    }),
+  ).toMatchObject({ kind: 'answered' });
+  expect(await placedOf(a2!.id)).toEqual([
+    'features human closed 1',
+    'functions human pre-amp 1',
+    'shelf human on-ear 1',
+  ]);
+  return { world, a2: a2!, says, calls: decider.calls };
+}
+
+/** The open question about a page. */
+const questionAbout = async (datasetId: string, itemId: string) =>
+  (await listOpenReviews(db, datasetId)).find((review) => review.subject === itemId);
+
+// A person's decision is their whole answer about the page (ruling 7): what they said before and
+// what they say now, so a later question neither drops the first nor asks it again.
+describe('a person’s answers across questions about a page', { timeout: 30_000 }, () => {
+  it('keeps what a person answered when they answer a later question, and asks neither again', async () => {
+    const datasetId = 'parts-whole-answer';
+    const { world, a2, says, calls } = await answeredA2(datasetId);
+    // Connection changes A2's question. The pre-amp and the back are the person's, so the decider
+    // is asked neither, and is unsure of Wired.
+    const changed = await commitChanges(datasetId, [CONNECTION], world.clock.now());
+    const cid = (subject: TaxonomySubject, slug: string) => findItem(changed, subject, slug)!.id;
+    says.values = { wired: 0.6 };
+    world.clock.advance(60_000);
+    await refresh(world, datasetId);
+    const second = await questionAbout(datasetId, a2.id);
+    expect(second!.question).toMatchObject({
+      parts: {
+        shelves: [],
+        functions: [],
+        features: { [cid('feature', 'connection')]: [cid('value', 'wired')] },
+      },
+    });
+    expect(
+      await answerReview(world.ports, {
+        datasetId,
+        reviewId: second!.id,
+        parts: { features: { connection: ['wired'] } },
+        actor: OWNER,
+      }),
+    ).toMatchObject({ kind: 'answered' });
+    const whole = [
+      'features human closed 1',
+      'features human wired 1',
+      'functions human pre-amp 1',
+      'shelf human on-ear 1',
+    ];
+    expect(await placedOf(a2.id, changed)).toEqual(whole);
+    // The decision the answer finalized holds the whole answer: what was asked, and what was said.
+    const final = readFinalAnswer((await answerDecision(second!.id)).finalAnswer)!;
+    expect(answerText(final.answer)).toBe(
+      answerText({
+        shelf: cid('shelf', 'on-ear'),
+        functions: [cid('function', 'pre-amp')],
+        values: [cid('value', 'closed'), cid('value', 'wired')],
+      }),
+    );
+    expect(final.asked.functions).toEqual([cid('function', 'pre-amp')]);
+    expect(Object.values(final.asked.features).flat().sort()).toEqual(
+      [cid('value', 'open'), cid('value', 'closed'), cid('value', 'wired')].sort(),
+    );
+    expect([...final.given.values].sort()).toEqual(
+      [cid('value', 'closed'), cid('value', 'wired')].sort(),
+    );
+
+    // Read again, unchanged, the page keeps the whole answer, and nothing is asked.
+    world.web.routes.set(URLS.a2, { status: 200, body: A2('two') });
+    await refresh(world, datasetId);
+    expect(await questionAbout(datasetId, a2.id)).toBeUndefined();
+    expect(await placedOf(a2.id, changed)).toEqual(whole);
+
+    // Optical changes the question again. The decider isn't asked about anything the person
+    // answered, so a sure decider can't override their no to Open, nor its doubt their pre-amp.
+    const optical = await commitChanges(datasetId, [OPTICAL], world.clock.now());
+    says.functions = { headphones: 0.99, 'pre-amp': 0.01 };
+    says.values = { open: 0.99, wired: 0.01, bluetooth: 0.01, optical: 0.01 };
+    const before = calls.length;
+    world.clock.advance(60_000);
+    await refresh(world, datasetId);
+    const asked = calls.slice(before).filter((request) => request.evidence.includes(URLS.a2));
+    expect(asked.length).toBeGreaterThan(0);
+    for (const request of asked) {
+      expect(request.parts.functions).not.toContain(cid('function', 'pre-amp'));
+      expect(request.parts.features).not.toHaveProperty(cid('feature', 'back'));
+      expect(request.parts.features[cid('feature', 'connection')]).toEqual([
+        cid('value', 'bluetooth'),
+        findItem(optical, 'value', 'optical')!.id,
+      ]);
+    }
+    expect(await questionAbout(datasetId, a2.id)).toBeUndefined();
+    expect(await placedOf(a2.id, optical)).toEqual(whole);
+  });
+
+  it('keeps a person’s functions and values when they answer the question a retired shelf reopens', async () => {
+    const datasetId = 'parts-whole-retired';
+    const { world, a2 } = await answeredA2(datasetId);
+    const retired = await commitChanges(
+      datasetId,
+      [{ kind: 'retire', subject: 'shelf', item: 'on-ear' }],
+      world.clock.now(),
+    );
+    world.web.routes.set(URLS.a2, { status: 200, body: A2('two') });
+    world.clock.advance(60_000);
+    await refresh(world, datasetId);
+    const reopened = await questionAbout(datasetId, a2.id);
+    expect(reopened!.context).toMatchObject({ earlier: { shelf: id('shelf', 'on-ear') } });
+    // Their pre-amp still stands, so it isn't asked again.
+    expect(reopened!.question).toMatchObject({ parts: { functions: [] } });
+    expect(
+      await answerReview(world.ports, {
+        datasetId,
+        reviewId: reopened!.id,
+        parts: { shelf: 'over-ear' },
+        actor: OWNER,
+      }),
+    ).toEqual({
+      kind: 'answered',
+      effect: 'The page sits on Headphones › Over-ear. The next run publishes it.',
+    });
+    // Over-ear has Back too, so their Closed carries over with their pre-amp.
+    expect(await placedOf(a2.id, retired)).toEqual([
+      'features human closed 1',
+      'functions human pre-amp 1',
+      'shelf human over-ear 1',
+    ]);
+  });
+
+  it('keeps the owner’s answer when a reviewer answers a later question about the page', async () => {
+    const datasetId = 'parts-whole-reviewer';
+    const { world, a2, says } = await answeredA2(datasetId, OWNER);
+    const changed = await commitChanges(datasetId, [CONNECTION], world.clock.now());
+    says.values = { wired: 0.6 };
+    world.clock.advance(60_000);
+    await refresh(world, datasetId);
+    const second = await questionAbout(datasetId, a2.id);
+    expect(
+      await answerReview(world.ports, {
+        datasetId,
+        reviewId: second!.id,
+        parts: { features: { connection: ['wired'] } },
+        actor: REVIEWER,
+      }),
+    ).toMatchObject({ kind: 'answered' });
+    expect(await placedOf(a2.id, changed)).toEqual([
+      'features human closed 1',
+      'features human wired 1',
+      'functions human pre-amp 1',
+      'shelf human on-ear 1',
+    ]);
   });
 });

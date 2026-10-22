@@ -26,6 +26,7 @@ import {
   splitProbabilities,
   standingShelf,
   taxonomyKey,
+  withCarried,
   type GivenParts,
   type TaxonomyProbabilities,
 } from './taxonomy-decision';
@@ -347,6 +348,92 @@ describe('what is asked, and what carries over', () => {
     expect(readFinalAnswer(NONE_OF_THESE)?.answer.shelf).toBe(NONE_SHELF);
     expect(readFinalAnswer('Headphones')).toBeNull();
     expect(readAnswerText(answerText(final.answer))).toEqual(final.answer);
+  });
+
+  describe('withCarried', () => {
+    const preAmp = id('function', 'pre-amp');
+    const dac = id('function', 'dac');
+    const [open, closed] = [id('value', 'open'), id('value', 'closed')];
+    const onEar = id('shelf', 'on-ear');
+    // Before: asked the pre-amp, the DAC, and the back; ticked the pre-amp, and chose Closed.
+    const previous = {
+      answer: { shelf: onEar, functions: [preAmp], values: [closed] },
+      asked: {
+        shelves: [],
+        functions: [preAmp, dac],
+        features: { [id('feature', 'back')]: [open, closed] },
+      },
+      given: { shelf: null, functions: [preAmp], values: [closed] },
+    };
+    const nothing = { shelf: null, functions: [], values: [] };
+
+    it('makes a later answer whole with what the earlier one decided', () => {
+      const now = {
+        answer: { shelf: onEar, functions: [amplifier], values: [] },
+        asked: { shelves: [], functions: [amplifier], features: {} },
+        given: { shelf: null, functions: [amplifier], values: [] },
+      };
+      const whole = withCarried(T, now, previous);
+      expect(whole).toEqual({
+        answer: { shelf: onEar, functions: [amplifier, preAmp], values: [closed] },
+        asked: {
+          shelves: [],
+          functions: [amplifier, preAmp, dac],
+          features: { [id('feature', 'back')]: [closed, open] },
+        },
+        given: { shelf: null, functions: [amplifier, preAmp], values: [closed] },
+      });
+      // Its yes and no carry on to the next question as the earlier answer's did.
+      expect(carriedOver(T, whole, onEar)).toEqual({
+        functions: { yes: [amplifier, preAmp], no: [dac] },
+        values: { yes: [closed], no: [open] },
+      });
+    });
+
+    it('takes what a question asks again from the answer given now', () => {
+      // A reopened question asks the pre-amp and the back again: unticked, and Open.
+      const now = {
+        answer: { shelf: onEar, functions: [], values: [open] },
+        asked: { shelves: [], functions: [preAmp], features: { [id('feature', 'back')]: [open] } },
+        given: { shelf: null, functions: [], values: [open] },
+      };
+      expect(withCarried(T, now, previous).answer).toEqual({
+        shelf: onEar,
+        functions: [],
+        values: [open],
+      });
+    });
+
+    it('carries values only to a shelf that has their feature, and drops implied functions', () => {
+      const onPreamps = {
+        answer: { shelf: id('shelf', 'preamps'), functions: [], values: [] },
+        asked: { shelves: ALL_SHELVES, functions: [], features: {} },
+        given: { ...nothing, shelf: id('shelf', 'preamps') },
+      };
+      // Preamps implies Pre-amp, and has no Back.
+      expect(withCarried(T, onPreamps, previous).answer).toEqual({
+        shelf: id('shelf', 'preamps'),
+        functions: [],
+        values: [],
+      });
+    });
+
+    it('carries nothing over a "None of these", given now or before', () => {
+      const none = { shelf: NONE_SHELF, functions: [], values: [] };
+      const saidNone = {
+        answer: none,
+        asked: { shelves: ALL_SHELVES, functions: [], features: {} },
+        given: none,
+      };
+      expect(withCarried(T, saidNone, previous)).toEqual(saidNone);
+      const after = {
+        answer: { shelf: onEar, functions: [], values: [] },
+        asked: { shelves: ALL_SHELVES, functions: [], features: {} },
+        given: { ...nothing, shelf: onEar },
+      };
+      expect(withCarried(T, after, saidNone)).toEqual(after);
+      expect(withCarried(T, after, null)).toEqual(after);
+    });
   });
 });
 

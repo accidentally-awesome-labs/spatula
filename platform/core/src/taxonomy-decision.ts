@@ -331,6 +331,75 @@ export function carriedOver(
   return carried;
 }
 
+/**
+ * A person's answer made whole (ruling 7): what they answer now, with what they decided before that
+ * still carries over to the page's final shelf (`carriedOver`). Their yes joins the answer and what
+ * they said, and their yes and no join what they were asked, so the decision their answer finalizes
+ * carries all they said to the page's next question. A part this question asks again, as a reopened
+ * one does, takes the answer given now; so does a feature that takes one value, once it's asked now
+ * or the answer has its value. "None of these", now or before, carries nothing over: it says nothing
+ * of functions or features.
+ */
+export function withCarried(
+  taxonomy: Taxonomy,
+  final: FinalTaxonomyAnswer,
+  previous: FinalTaxonomyAnswer | null,
+): FinalTaxonomyAnswer {
+  const shelf = final.answer.shelf;
+  if (previous === null || previous.answer.shelf === NONE_SHELF || shelf === NONE_SHELF) {
+    return final;
+  }
+  const carried = carriedOver(taxonomy, previous, shelf);
+  const askedNow = new Set([
+    ...final.asked.functions,
+    ...Object.values(final.asked.features).flat(),
+  ]);
+  const featureOf = (value: string) => featureOfValue(taxonomy, value)?.id;
+  const takesOne = (feature: string | undefined) =>
+    feature !== undefined &&
+    (findItem(taxonomy, 'feature', feature) as Feature | undefined)?.cardinality === 'one';
+  const takenWhole = new Set(
+    [...Object.keys(final.asked.features), ...final.answer.values.map(featureOf)].filter(takesOne),
+  );
+  const functionStands = (fn: string) => !askedNow.has(fn);
+  const valueStands = (value: string) => !askedNow.has(value) && !takenWhole.has(featureOf(value));
+  const yes = {
+    functions: carried.functions.yes.filter(functionStands),
+    values: carried.values.yes.filter(valueStands),
+  };
+  const no = {
+    functions: carried.functions.no.filter(functionStands),
+    values: carried.values.no.filter(valueStands),
+  };
+  const unique = (ids: readonly string[]) => [...new Set(ids)];
+  const features: Record<string, string[]> = { ...final.asked.features };
+  for (const value of [...yes.values, ...no.values]) {
+    const feature = featureOf(value)!;
+    features[feature] = unique([...(features[feature] ?? []), value]);
+  }
+  // The functions the final shelf implies aren't stated, as `mergeAnswers` has it.
+  const implied = new Set(shelf === null ? [] : impliedFunctions(taxonomy, shelf));
+  return {
+    answer: {
+      shelf,
+      functions: unique([...final.answer.functions, ...yes.functions]).filter(
+        (fn) => !implied.has(fn),
+      ),
+      values: unique([...final.answer.values, ...yes.values]),
+    },
+    asked: {
+      shelves: final.asked.shelves,
+      functions: unique([...final.asked.functions, ...yes.functions, ...no.functions]),
+      features,
+    },
+    given: {
+      shelf: final.given.shelf,
+      functions: unique([...final.given.functions, ...yes.functions]),
+      values: unique([...final.given.values, ...yes.values]),
+    },
+  };
+}
+
 /** Every live shelf, each category followed by its subcategories. */
 export function orderedShelves(taxonomy: Taxonomy): Shelf[] {
   return categoriesOf(taxonomy).flatMap((category) => [
