@@ -33,7 +33,8 @@ evidence, the owner's alone.
   ID. It keeps them ten minutes, reads them again for a key ID it hasn't seen at most once every 30
   seconds, and gives a read 5 seconds. When it can't read them, it answers 500. A check that fails
   for a reason other than the token, such as a key Access listed that can't be imported, answers
-  401 and is logged by its error's name, never with the token.
+  401 and is logged by its error's name, never with the token. So is a token for another audience
+  or issuer, which every token is while `ACCESS_AUD` or `ACCESS_TEAM_DOMAIN` is set wrong.
 - A consumer's reviewers: the consumer's token, with scopes from `CONSUMER_<NAME>_SCOPES`:
   `review:answer`, and `taxonomy:approve-additive` if the owner grants it, which approves new
   subcategories, features, and values. Each write names its reviewer in `X-Spatula-Reviewer`, an
@@ -49,7 +50,9 @@ the owner, whose answer closes it. A reviewer's match answer counts as the stand
 the same verdict, whether to join the page, join it as an edition, or keep it apart; only a
 different verdict flags it. A flagged question waits for the owner. Only the owner's answer replaces
 a person's, a reviewer's included once it has closed a question: the owner's different answer to
-that question reopens it and answers it at once, and the log records both. The console's history
+that question reopens it and answers it at once. The log has a flag by the owner, then the owner's
+answer. While another question about the page is open, that one is the question to answer (409).
+Like any answer, it changes only the parts its question asks (ADR 0007). The console's history
 offers it beside each reviewer's answer. An owner's answer to a question the owner answered changes
 nothing.
 
