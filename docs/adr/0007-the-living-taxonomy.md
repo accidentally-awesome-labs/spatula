@@ -71,8 +71,9 @@ what they answer then, so answering a later question keeps the first, whoever an
 changes only the parts its question asks. When a person has answered about the page since the
 question was asked, as with an older question reopened for the owner, every other part is the page
 as it stands: that answer, and what a run settled after it, never what the older question had
-settled then. While the shelf a person gave since is retired, or "None of these", an answer that
-doesn't ask the shelf is refused (409).
+settled then. What a later run settled becomes the answering person's answer, as a fresh answer's
+settled parts do. While the shelf a person gave since is retired, or "None of these", an answer
+that doesn't ask the shelf is refused (409).
 
 **Evolving the taxonomy.** Every run of a seeded taxonomy dataset ends with a review, after it
 publishes and before it finishes: one call to the Worker's LLM reads the run's evidence, summed up,
