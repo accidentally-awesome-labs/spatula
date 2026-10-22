@@ -1,0 +1,2 @@
+ALTER TABLE "autonomy" DROP CONSTRAINT "autonomy_kind";--> statement-breakpoint
+ALTER TABLE "autonomy" ADD CONSTRAINT "autonomy_kind" CHECK ("autonomy"."kind" in ('add-subcategory', 'add-feature', 'add-value'));

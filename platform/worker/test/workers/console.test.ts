@@ -313,11 +313,14 @@ describe('the console', () => {
     expect(await versions.json()).toMatchObject({ versions: [{ version: 1, undoes: null }] });
     const autonomy = await fromConsole('GET', `${base}/autonomy`);
     expect(autonomy.status).toBe(200);
+    // A description never earns autonomy, so it isn't listed.
     expect(await autonomy.json()).toEqual({
       after: 10,
-      kinds: expect.arrayContaining([
-        expect.objectContaining({ kind: 'describe', streak: 0, earned: false }),
-      ]),
+      kinds: [
+        expect.objectContaining({ kind: 'add-subcategory', streak: 0, earned: false }),
+        expect.objectContaining({ kind: 'add-feature', streak: 0, earned: false }),
+        expect.objectContaining({ kind: 'add-value', streak: 0, earned: false }),
+      ],
     });
 
     const log = await fromConsole('GET', `${base}/review/log`);

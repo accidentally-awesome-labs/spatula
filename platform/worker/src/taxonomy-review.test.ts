@@ -55,6 +55,18 @@ const LINE_OUT: ReviewProposal = {
   pages: [URLS.b1],
 };
 
+const DESCRIBE_DACS: ReviewProposal = {
+  kind: 'describe',
+  change: JSON.stringify({
+    kind: 'describe',
+    subject: 'shelf',
+    item: 'dacs',
+    description: 'Turn digital audio into an analog signal',
+  }),
+  why: 'A1 and A2 call them converters',
+  pages: [URLS.a1, URLS.a2],
+};
+
 /**
  * The run's LLM, with the taxonomy review answered by these proposals (null: an answer that doesn't
  * fit the schema), at 2000 tokens in and 300 out. Returns the review's requests, as they come.
@@ -138,6 +150,34 @@ describe('the taxonomy review', { timeout: 20_000 }, () => {
     expect(await autonomyOf(db, 'review-once')).toContainEqual(
       expect.objectContaining({ kind: 'add-value', streak: 10, earned: true }),
     );
+  });
+
+  it('applies an earned kind and leaves a description for the owner, whatever else has been earned', async () => {
+    const { world } = await taxonomyWorld(testTaxonomyDefinition('review-describe'));
+    await db.insert(autonomy).values(
+      ['add-subcategory', 'add-feature', 'add-value'].map((kind) => ({
+        datasetId: 'review-describe',
+        kind,
+        streak: 12,
+        updatedAt: world.clock.now(),
+      })),
+    );
+    reviewing(world, [DESCRIBE_DACS, LINE_OUT]);
+    const run = await refresh(world, 'review-describe');
+    // The value applied on its own; the description, proposed by the same run, didn't.
+    expect(run.summary.taxonomy).toMatchObject({
+      proposed: 2,
+      dropped: 0,
+      applied: [{ version: 2, summary: 'Add Line out to Drives' }],
+    });
+    const rows = await proposalsOfRun(db, run.runId);
+    expect(rows.map(({ kind, status }) => `${kind} ${status}`).sort()).toEqual([
+      'add-value applied',
+      'describe open',
+    ]);
+    expect((await taxonomyHistory(db, 'review-describe')).map((row) => row.version)).toEqual([
+      2, 1,
+    ]);
   });
 
   it('keeps what passes the checks, with its evidence and impact, and what fails as dropped', async () => {
