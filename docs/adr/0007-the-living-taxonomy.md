@@ -68,10 +68,11 @@ the page stays out until they answer. Functions and values a person left unticke
 statements, and aren't asked again while they still apply. A person's answer is their whole word
 about the page: what their earlier answer decided, and a later question doesn't ask again, joins
 what they answer then, so answering a later question keeps the first, whoever answers it. An answer
-changes only the parts its question asks. Where it doesn't ask one, as an older question reopened
-for the owner may not, the person's latest word stands over what that question had settled then:
-their shelf, their no, and their value of a feature that takes one. While the shelf they gave since
-is retired, or "None of these", such an answer is refused (409).
+changes only the parts its question asks. When a person has answered about the page since the
+question was asked, as with an older question reopened for the owner, every other part is the page
+as it stands: that answer, and what a run settled after it, never what the older question had
+settled then. While the shelf a person gave since is retired, or "None of these", an answer that
+doesn't ask the shelf is refused (409).
 
 **Evolving the taxonomy.** Every run of a seeded taxonomy dataset ends with a review, after it
 publishes and before it finishes: one call to the Worker's LLM reads the run's evidence, summed up,
