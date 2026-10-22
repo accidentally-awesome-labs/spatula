@@ -410,6 +410,9 @@ function checked(main: FakeNode): FakeNode[] {
 
 const hrefs = (nodes: FakeNode[]) => nodes.flatMap((node) => node.attributes.get('href') ?? []);
 
+/** What an answered question's card says of the parts it doesn't ask. */
+const STANDS = 'Parts this question doesn’t ask stay as the page has them now.';
+
 describe('the console', () => {
   it('never puts data into markup', () => {
     // Nothing in the script parses markup, runs text as code, or writes the document.
@@ -448,6 +451,8 @@ describe('the console', () => {
     expect(main.textContent).toContain('Proposed: Headphones › Over-ear (0.60); Back: Open');
     expect(main.textContent).toContain('Suggested: Headphones › On-ear; Back: Closed');
     expect(main.textContent).toContain('Flagged: a reviewer’s answer differs');
+    // An open question says nothing of the page as it stands: what it settled is current.
+    expect(main.textContent).not.toContain(STANDS);
     expect(hrefs(nodes)).toEqual([CAPTURE_VIEW, new URL(HOSTILE_PAGE).href]);
   });
 
@@ -607,6 +612,8 @@ describe('the console', () => {
     );
     const card = [...main.all()].find((node) => node.tagName === 'article')!;
     expect(card.textContent).toContain(HOSTILE_REASON);
+    // What it settled then isn't what the answer keeps: the page as it stands is.
+    expect(card.textContent).toContain(STANDS);
     const inCard = [...card.all()];
     inCard.find((node) => node.tagName === 'select')!.value = tx(7);
     await inCard.find((node) => node.tagName === 'form')!.fire('submit');

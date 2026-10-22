@@ -714,6 +714,12 @@ export const CONSOLE_SCRIPT = String.raw`'use strict';
       add(evidence, labelled('Proposed', proposed === '' ? 'nothing' : proposed));
       if (settled !== '') add(evidence, labelled('Settled already', settled));
       if (earlier !== '') add(evidence, labelled('A person said before', earlier));
+      // An answered question, which the owner answers again from History: what it settled is as
+      // it was asked, and the page has moved on since (ADR 0007).
+      if (review.status === 'decided') {
+        add(evidence, el('p', { class: 'meta' },
+          'Parts this question doesn’t ask stay as the page has them now.'));
+      }
     } else if (typeof context.proposed === 'string' && context.proposed !== '') {
       add(evidence, labelled('Proposed', context.proposed));
     }
