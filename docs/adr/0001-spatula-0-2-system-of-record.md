@@ -66,3 +66,9 @@ data your app depends on true, and can show why."
   terms, Content Signals, a 402) are never crossed, by any route. A challenge may one day be met by
   an intermediary, only for a source that opts in and only while Spatula is unverified. Spatula
   has no such route yet.
+
+## Update, 2026-10-19 (ADR 0007)
+
+- ADR 0007, "The living taxonomy", amends 0.2: Spatula proposes and evolves the taxonomy a dataset
+  fills, under earned autonomy, and backfills from its page archive (ADR 0008). The consumer still
+  writes the definition, and the honesty rules don't change.

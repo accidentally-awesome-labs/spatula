@@ -78,3 +78,13 @@ it is now. So Spatula keeps what it reads.
   now. Those of pages that have since moved away from the source can't be attributed to it, and
   stay.
 - Sitemaps aren't archived: the pages they list are.
+
+## Update, 2026-10-19 (ADR 0007)
+
+- **Re-reading.** A page due only because its extraction is out of date, whose stored copy has a
+  capture, is read again from the capture, with no request. Its statements count as seen at its
+  last fetch. So applying a definition fetches nothing; `pnpm spatula run --all` still fetches.
+- **Backfill.** Every run of a taxonomy dataset re-decides, from their captures, the pages whose
+  taxonomy key a change has made stale: at most what the run's pages left of its page budget,
+  within its LLM budget. A page without a capture is marked due, and the next run fetches it.
+  `pnpm spatula run <dataset> --backfill` starts a run that only backfills, and publishes as usual.

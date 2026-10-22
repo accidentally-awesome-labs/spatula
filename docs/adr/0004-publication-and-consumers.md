@@ -93,3 +93,13 @@ for gates, held snapshots, consumer tokens, and signed acknowledgments.
 - A held snapshot's draft is read when it is published, but nothing deletes it once the snapshot
   is published, superseded, or discarded, nor the file of a publish attempt that lost a race.
   They stay in R2 until a later slice's cleanup deletes them.
+
+## Update, 2026-10-19 (ADR 0007)
+
+- A snapshot of a taxonomy dataset carries a `taxonomy` block: the full current version, with every
+  migration since version 1. Records carry `shelf`, `functions`, and `features` in their fields,
+  with `category` kept for one release. A snapshot without the block reads as before.
+- A record's `editions` (ADR 0003) sit beside its `fields`, which hold its taxonomy fields.
+- The taxonomy's version is part of the records' digest, so a taxonomy change publishes. A held
+  snapshot keeps the taxonomy its records were built with.
+- Consumers' tokens gain scopes for reviewing (ADR 0009).
