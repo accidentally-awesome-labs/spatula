@@ -118,3 +118,14 @@ publishes.
   a failed call never fails the run.
 - A taxonomy change re-decides only the pages it touches, from their captures (ADR 0008).
 - Datasets whose record type keeps a decided enum work as before.
+
+## Update, 2026-10-22
+
+A description no longer applies on its own: it applies only on the owner's approval, because its
+text reaches later prompts as trusted text. A change applied under earned autonomy puts its text
+into the taxonomy, and the taxonomy sits in the trusted part of every later decider and review
+prompt; a description is the freest of the earnable kinds, with no new item and no page count
+behind it. Earned autonomy now covers a new subcategory, a new feature, and a new value. A
+description stays proposable, and the owner can still approve, edit, or reject it. Migration 0012
+narrows the stored kinds to those three; marking text that was applied on its own as untrusted in
+the prompts is a later change.
