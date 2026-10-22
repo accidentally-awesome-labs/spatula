@@ -45,12 +45,14 @@ export const CHANGE_KINDS = [
 ] as const;
 export type ChangeKind = (typeof CHANGE_KINDS)[number];
 
-/** The kinds that can apply on their own, once the owner has accepted enough of them unedited. */
+/**
+ * The kinds that can apply on their own, once the owner has accepted enough of them unedited. A
+ * description is not one (ADR 0007): its text reaches later prompts as trusted text.
+ */
 export const EARNABLE_KINDS: readonly ChangeKind[] = [
   'add-subcategory',
   'add-feature',
   'add-value',
-  'describe',
 ];
 /** The kinds a consumer's `taxonomy:approve-additive` scope approves. */
 export const ADDITIVE_KINDS: readonly ChangeKind[] = [
@@ -547,10 +549,14 @@ export function inverseChanges(applied: readonly AppliedChange[]): TaxonomyChang
   });
 }
 
-/** The kind a change earns autonomy as, or null for a change that is always the owner's. */
+/**
+ * The kind a change earns autonomy as, or null for a change that is always the owner's. A
+ * description is never earnable, whatever it describes: a change Spatula applies on its own puts
+ * its text into the taxonomy, which later decider and review prompts trust, and a description is
+ * the freest text of the kinds that could earn it, with no new item and no page count behind it
+ * (ADR 0007). It applies only on the owner's approval.
+ */
 export function autonomyKind(change: TaxonomyChange): ChangeKind | null {
-  // A function's description is part of the functions list, which is the owner's.
-  if (change.kind === 'describe' && change.subject === 'function') return null;
   return EARNABLE_KINDS.includes(change.kind) ? change.kind : null;
 }
 

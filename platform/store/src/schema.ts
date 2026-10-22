@@ -743,9 +743,6 @@ export const autonomy = pgTable(
   (t) => [
     primaryKey({ columns: [t.datasetId, t.kind] }),
     check('autonomy_streak', sql`${t.streak} >= 0`),
-    check(
-      'autonomy_kind',
-      sql`${t.kind} in ('add-subcategory', 'add-feature', 'add-value', 'describe')`,
-    ),
+    check('autonomy_kind', sql`${t.kind} in ('add-subcategory', 'add-feature', 'add-value')`),
   ],
 );

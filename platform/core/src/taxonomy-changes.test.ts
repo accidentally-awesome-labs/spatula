@@ -5,6 +5,7 @@ import {
   applyChanges,
   autonomyKind,
   changeSchema,
+  EARNABLE_KINDS,
   inScope,
   inverseChanges,
   type TaxonomyChange,
@@ -15,6 +16,7 @@ import {
   isLive,
   resolveId,
   seedTaxonomy,
+  TAXONOMY_SUBJECTS,
   taxonomyIssues,
   type Taxonomy,
 } from './taxonomy';
@@ -296,7 +298,8 @@ describe('inverseChanges', () => {
 });
 
 describe('the rules around changes', () => {
-  it('lets only the earnable kinds earn autonomy, and keeps describing a function the owner’s', () => {
+  it('lets only a new subcategory, feature, or value earn autonomy', () => {
+    expect([...EARNABLE_KINDS]).toEqual(['add-subcategory', 'add-feature', 'add-value']);
     expect(
       autonomyKind({
         kind: 'add-value',
@@ -306,13 +309,14 @@ describe('the rules around changes', () => {
         description: 'X',
       }),
     ).toBe('add-value');
-    expect(
-      autonomyKind({ kind: 'describe', subject: 'shelf', item: 'dacs', description: 'x' }),
-    ).toBe('describe');
-    expect(
-      autonomyKind({ kind: 'describe', subject: 'function', item: 'dac', description: 'x' }),
-    ).toBeNull();
     expect(autonomyKind({ kind: 'merge', subject: 'shelf', from: 'a', into: 'b' })).toBeNull();
+  });
+
+  it('never lets a description earn autonomy: its text reaches later prompts as trusted text', () => {
+    expect(EARNABLE_KINDS).not.toContain('describe');
+    for (const subject of TAXONOMY_SUBJECTS) {
+      expect(autonomyKind({ kind: 'describe', subject, item: 'x', description: 'x' })).toBeNull();
+    }
   });
 
   it('records a restore when undoing a merge or a retirement: live again, its to repeating its from', () => {

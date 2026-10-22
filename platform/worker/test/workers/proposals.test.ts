@@ -23,6 +23,7 @@ import {
 } from '@spatula/store';
 import { testTaxonomy, testTaxonomyDefinition } from '@spatula/store/fixtures';
 import { env } from 'cloudflare:workers';
+import { eq } from 'drizzle-orm';
 import { describe, expect, it } from 'vitest';
 import { api } from '../../src/api';
 import { withDatabase } from '../../src/database';
@@ -230,7 +231,6 @@ describe('proposals, for the owner', () => {
       ['add-subcategory', 0],
       ['add-feature', 0],
       ['add-value', 1],
-      ['describe', 0],
     ]);
     const log = await withDatabase(env, (db) => listActions(db, 'proposals-owner', {}));
     expect(log.map(({ action, subject }) => `${action} ${subject}`).sort()).toEqual([
@@ -238,6 +238,36 @@ describe('proposals, for the owner', () => {
       'edit tp_owner_describe',
       'reject tp_owner_phono',
     ]);
+  });
+});
+
+describe('a description, for the owner', () => {
+  it('applies when the owner approves it, and counts toward no run', async () => {
+    await ready('proposals-describe', { tp_describe_dacs: DESCRIBE_DACS });
+    const accepted = await call('POST', '/datasets/proposals-describe/proposals/tp_describe_dacs', {
+      body: { decision: 'accept' },
+    });
+    expect(accepted.status).toBe(200);
+    expect(await accepted.json()).toEqual({
+      proposal: 'tp_describe_dacs',
+      status: 'applied',
+      version: 2,
+      summary: 'Describe DACs anew',
+    });
+    // No kind of its own to list, and no row behind any kind.
+    const runs = (await (await call('GET', '/datasets/proposals-describe/autonomy')).json()) as {
+      kinds: { kind: string; streak: number }[];
+    };
+    expect(runs.kinds.map(({ kind, streak }) => [kind, streak])).toEqual([
+      ['add-subcategory', 0],
+      ['add-feature', 0],
+      ['add-value', 0],
+    ]);
+    expect(
+      await withDatabase(env, (db) =>
+        db.select().from(autonomy).where(eq(autonomy.datasetId, 'proposals-describe')),
+      ),
+    ).toEqual([]);
   });
 });
 
@@ -488,7 +518,7 @@ describe('the limiters, on the writes of proposals, undo, and autonomy', () => {
     await withDatabase(env, (db) =>
       db.insert(autonomy).values({
         datasetId: 'proposals-limits-owner',
-        kind: 'describe',
+        kind: 'add-feature',
         streak: 12,
         updatedAt: new Date(),
       }),
@@ -501,7 +531,7 @@ describe('the limiters, on the writes of proposals, undo, and autonomy', () => {
       (await withDatabase(env, (db) => currentTaxonomy(db, 'proposals-limits-owner')))?.version;
     const streak = async () =>
       (await withDatabase(env, (db) => autonomyOf(db, 'proposals-limits-owner'))).find(
-        ({ kind }) => kind === 'describe',
+        ({ kind }) => kind === 'add-feature',
       )?.streak;
 
     expect((await accept('tp_limitsown_line_out')).status).toBe(200);
@@ -521,7 +551,7 @@ describe('the limiters, on the writes of proposals, undo, and autonomy', () => {
     expectNoStore(undo);
     expect(await undo.json()).toEqual({ error: LIMITED });
     expect(await version()).toBe(2);
-    const revoke = await owner('autonomy/describe/revoke');
+    const revoke = await owner('autonomy/add-feature/revoke');
     expect(revoke.status).toBe(429);
     expect(await revoke.json()).toEqual({ error: LIMITED });
     expect(await streak()).toBe(12);
@@ -530,8 +560,8 @@ describe('the limiters, on the writes of proposals, undo, and autonomy', () => {
     state.refusing = false;
     expect((await owner('taxonomy/versions/2/undo')).status).toBe(200);
     expect(await version()).toBe(3);
-    expect(await (await owner('autonomy/describe/revoke')).json()).toEqual({
-      kind: 'describe',
+    expect(await (await owner('autonomy/add-feature/revoke')).json()).toEqual({
+      kind: 'add-feature',
       streak: 0,
       was: 12,
     });
@@ -673,31 +703,38 @@ describe('taxonomy versions and autonomy', () => {
     expect(await twice.json()).toEqual({ error: 'Version 4 was undone already, by version 5.' });
   });
 
-  it('revokes a kind’s autonomy, and says which kinds never have any', async () => {
+  it('revokes a kind’s autonomy, and says which kinds never have any, a description among them', async () => {
     await ready('proposals-revoke');
     await withDatabase(env, (db) =>
       db.insert(autonomy).values({
         datasetId: 'proposals-revoke',
-        kind: 'describe',
+        kind: 'add-value',
         streak: 12,
         updatedAt: new Date(),
       }),
     );
     const revoke = (kind: string) =>
       call('POST', `/datasets/proposals-revoke/autonomy/${kind}/revoke`);
-    const revoked = await revoke('describe');
+    const revoked = await revoke('add-value');
     expect(revoked.status).toBe(200);
-    expect(await revoked.json()).toEqual({ kind: 'describe', streak: 0, was: 12 });
+    expect(await revoked.json()).toEqual({ kind: 'add-value', streak: 0, was: 12 });
     const merge = await revoke('merge');
     expect(merge.status).toBe(400);
     expect(await merge.json()).toEqual({
       error:
         'merge never applies on its own: it’s always the owner’s, so there’s nothing to revoke.',
     });
+    // A description is a kind of change, but never one that applies on its own.
+    const describing = await revoke('describe');
+    expect(describing.status).toBe(400);
+    expect(await describing.json()).toEqual({
+      error:
+        'describe never applies on its own: it’s always the owner’s, so there’s nothing to revoke.',
+    });
     expect((await revoke('teleport')).status).toBe(404);
     const log = await withDatabase(env, (db) => listActions(db, 'proposals-revoke', {}));
     expect(log.map(({ action, subject }) => `${action} ${subject}`)).toEqual([
-      'revoke autonomy:describe',
+      'revoke autonomy:add-value',
     ]);
   });
 

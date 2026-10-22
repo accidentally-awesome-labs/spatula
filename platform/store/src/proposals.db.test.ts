@@ -276,7 +276,8 @@ describe('deciding a proposal', () => {
       expect(await streakOf(db, 'add-value')).toBe(1);
       // A reviewer's word on a description doesn't count: the owner approves those.
       await accept(db, 'tp_describe', REVIEWER);
-      expect(await streakOf(db, 'describe')).toBe(0);
+      expect(await getProposal(db, 'tp_describe')).toMatchObject({ status: 'applied' });
+      expect(await streakOf(db, 'add-value')).toBe(1);
       expect(
         await decideProposal(db, {
           id: 'tp_d',
@@ -294,6 +295,60 @@ describe('deciding a proposal', () => {
         version: null,
       });
       expect(await streakOf(db, 'add-value')).toBe(0);
+    }));
+
+  it('never counts a description toward any run, whoever approves it, edits it, or rejects it', () =>
+    withRollback(async (db) => {
+      await seeded(db);
+      const shelfDescription = (item: string, description: string) =>
+        changeSchema.parse({
+          kind: 'describe',
+          subject: 'shelf',
+          item: id('shelf', item),
+          description,
+        });
+      await saveProposals(db, [
+        proposal('tp_accepted', DESCRIBE_DACS),
+        proposal('tp_edited', shelfDescription('amplifiers', 'Raise a signal’s level')),
+        proposal('tp_rejected', shelfDescription('over-ear', 'Cups that sit around the ear')),
+        proposal('tp_function', {
+          kind: 'describe',
+          subject: 'function',
+          item: id('function', 'pre-amp'),
+          description: 'Raises a line-level signal',
+        }),
+      ]);
+      // A run for add-value, to see that the others leave it alone.
+      await saveProposals(db, [proposal('tp_value', valueChange('balanced', 'Balanced'))]);
+      await accept(db, 'tp_value');
+      expect(await accept(db, 'tp_accepted')).toMatchObject({ kind: 'applied' });
+      expect(await accept(db, 'tp_function')).toMatchObject({ kind: 'applied' });
+      expect(
+        await decideProposal(db, {
+          id: 'tp_edited',
+          decision: 'edit',
+          change: shelfDescription('amplifiers', 'Raise a signal'),
+          actor: OWNER,
+          makeId,
+          at: T(3),
+        }),
+      ).toMatchObject({ kind: 'applied' });
+      expect(
+        await decideProposal(db, {
+          id: 'tp_rejected',
+          decision: 'reject',
+          actor: OWNER,
+          makeId,
+          at: T(4),
+        }),
+      ).toEqual({ kind: 'rejected' });
+      // Four decisions on descriptions: no run for describe, and add-value's is as it was.
+      expect(await db.select().from(autonomy).where(eq(autonomy.kind, 'describe'))).toEqual([]);
+      expect((await autonomyOf(db, DATASET)).map(({ kind, streak }) => [kind, streak])).toEqual([
+        ['add-subcategory', 0],
+        ['add-feature', 0],
+        ['add-value', 1],
+      ]);
     }));
 
   it('applies a proposal on the version that’s current, and leaves one that no longer applies open', () =>
@@ -339,25 +394,36 @@ describe('a dataset that was never seeded', () => {
 });
 
 describe('autonomy', () => {
-  it('lists every kind that can earn it, and revokes one back to zero', () =>
+  it('lists every kind that can earn it, never a description, and revokes one back to zero', () =>
     withRollback(async (db) => {
       await seeded(db);
       await db
         .insert(autonomy)
-        .values({ datasetId: DATASET, kind: 'describe', streak: 12, updatedAt: T(1) });
+        .values({ datasetId: DATASET, kind: 'add-value', streak: 12, updatedAt: T(1) });
       expect(await autonomyOf(db, DATASET)).toEqual([
         { kind: 'add-subcategory', streak: 0, earned: false, updatedAt: null },
         { kind: 'add-feature', streak: 0, earned: false, updatedAt: null },
-        { kind: 'add-value', streak: 0, earned: false, updatedAt: null },
-        { kind: 'describe', streak: 12, earned: true, updatedAt: T(1) },
+        { kind: 'add-value', streak: 12, earned: true, updatedAt: T(1) },
       ]);
-      expect(await revokeAutonomy(db, { datasetId: DATASET, kind: 'describe', at: T(2) })).toBe(12);
-      expect((await autonomyOf(db, DATASET))[3]).toEqual({
-        kind: 'describe',
+      expect(await revokeAutonomy(db, { datasetId: DATASET, kind: 'add-value', at: T(2) })).toBe(
+        12,
+      );
+      expect((await autonomyOf(db, DATASET))[2]).toEqual({
+        kind: 'add-value',
         streak: 0,
         earned: false,
         updatedAt: T(2),
       });
+    }));
+
+  it('keeps no run for a description: the table’s CHECK refuses one', () =>
+    withRollback(async (db) => {
+      await seeded(db);
+      await expect(
+        db
+          .insert(autonomy)
+          .values({ datasetId: DATASET, kind: 'describe', streak: 1, updatedAt: T(1) }),
+      ).rejects.toMatchObject({ cause: { constraint_name: 'autonomy_kind' } });
     }));
 
   it('applies on its own only an unedited change whose kind has autonomy as it applies', () =>
@@ -375,6 +441,7 @@ describe('autonomy', () => {
       await saveProposals(db, [
         proposal('tp_line_out', LINE_OUT),
         proposal('tp_describe_function', describeFunction),
+        proposal('tp_describe_shelf', DESCRIBE_DACS),
       ]);
       const own = (proposalId: string, more: { decision?: 'edit'; change?: ProposableChange }) =>
         decideProposal(db, {
@@ -392,14 +459,14 @@ describe('autonomy', () => {
         kind: 'stale',
         reason: 'Its kind, add-value, doesn’t have autonomy now.',
       });
-      // A function's description is the owner's, whatever describe's run.
-      await db
-        .insert(autonomy)
-        .values({ datasetId: DATASET, kind: 'describe', streak: 10, updatedAt: T(2) });
-      expect(await own('tp_describe_function', {})).toEqual({
-        kind: 'stale',
-        reason: 'Its kind is always the owner’s to apply.',
-      });
+      // A description is the owner's, of a function or of anything else: its text would reach
+      // later prompts as trusted text, so no kind of it has autonomy to earn.
+      for (const proposalId of ['tp_describe_function', 'tp_describe_shelf']) {
+        expect(await own(proposalId, {})).toEqual({
+          kind: 'stale',
+          reason: 'Its kind is always the owner’s to apply.',
+        });
+      }
       // Spatula applies a change only as it was proposed.
       await db.update(autonomy).set({ streak: 10 }).where(eq(autonomy.kind, 'add-value'));
       expect(
@@ -408,7 +475,7 @@ describe('autonomy', () => {
         kind: 'stale',
         reason: 'Spatula applies a change on its own only as it was proposed.',
       });
-      for (const proposalId of ['tp_line_out', 'tp_describe_function']) {
+      for (const proposalId of ['tp_line_out', 'tp_describe_function', 'tp_describe_shelf']) {
         expect(await getProposal(db, proposalId)).toMatchObject({
           status: 'open',
           version: null,

@@ -314,11 +314,11 @@ const ROUTES: Record<string, unknown> = {
     kinds: [
       { kind: 'add-subcategory', streak: 4, earned: false, updatedAt: '2026-10-19T09:00:00.000Z' },
       { kind: 'add-feature', streak: 0, earned: false, updatedAt: null },
-      { kind: 'describe', streak: 11, earned: true, updatedAt: '2026-10-20T09:00:00.000Z' },
+      { kind: 'add-value', streak: 11, earned: true, updatedAt: '2026-10-20T09:00:00.000Z' },
     ],
   },
-  'POST /console/api/datasets/hostile/autonomy/describe/revoke': {
-    kind: 'describe',
+  'POST /console/api/datasets/hostile/autonomy/add-value/revoke': {
+    kind: 'add-value',
     streak: 0,
     was: 11,
   },
@@ -768,7 +768,12 @@ describe('the console', () => {
         after: 7,
         kinds: [
           { kind: 'add-value', streak: 7, earned: true, updatedAt: '2026-10-20T09:00:00.000Z' },
-          { kind: 'describe', streak: 2, earned: false, updatedAt: '2026-10-20T09:00:00.000Z' },
+          {
+            kind: 'add-subcategory',
+            streak: 2,
+            earned: false,
+            updatedAt: '2026-10-20T09:00:00.000Z',
+          },
         ],
       },
       'POST /console/api/datasets/hostile/autonomy/add-value/revoke': {
@@ -777,15 +782,19 @@ describe('the console', () => {
         was: 7,
       },
     });
-    const text = main.textContent;
+    // The autonomy section alone: a proposal's card on the same screen names its kind too.
+    const section = [...main.all()].find((node) => node.tagName === 'section')!;
+    const text = section.textContent;
     expect(text).toContain('once you’ve accepted 7 of its proposals in a row');
-    expect(text).toContain('A new feature value');
     expect(text).toContain('Applies on its own');
     expect(text).toContain('Waits for you');
-    // Only the kinds the API listed have a row: a header, and two kinds.
-    expect(text).toContain('A sharper description');
-    const section = [...main.all()].find((node) => node.tagName === 'section')!;
+    // Only the kinds the API listed have a row: a header, and two kinds, in the API's order.
     expect([...section.all()].filter((node) => node.tagName === 'tr')).toHaveLength(3);
+    expect(
+      [...section.all()]
+        .filter((node) => node.tagName === 'th' && node.attributes.get('scope') === 'row')
+        .map((node) => node.textContent),
+    ).toEqual(['A new feature value', 'A new subcategory']);
     const revoke = [...main.all()].find(
       (node) => node.tagName === 'button' && node.textContent === 'Revoke it',
     )!;
