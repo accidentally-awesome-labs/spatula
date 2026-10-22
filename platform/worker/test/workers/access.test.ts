@@ -151,6 +151,8 @@ describe('the console’s API', () => {
       ['one signed with another key under the same ID', await tokenFor(stranger.signing)],
       ['one signed with a shared secret', await tokenFor(shared)],
     ];
+    // Another application's and another team's are logged by name (see below); not here.
+    vi.spyOn(console, 'warn').mockImplementation(() => {});
     for (const [name, token] of refused) {
       const response = await read(token);
       expect(response.status, name).toBe(401);
@@ -264,11 +266,37 @@ describe('the console’s API', () => {
     // A token that doesn't check out is the caller's, and isn't logged.
     warned.mockClear();
     certs(TEAM, [owner.listed]);
-    const another = await tokenFor(owner.signing, { aud: ['another-aud'] });
-    expect((await consoleCall('GET', '/console/api/datasets', { token: another })).status).toBe(
+    const now = Math.floor(Date.now() / 1000);
+    const expired = await tokenFor(owner.signing, { exp: now - 60 });
+    expect((await consoleCall('GET', '/console/api/datasets', { token: expired })).status).toBe(
       401,
     );
     expect(warned).not.toHaveBeenCalled();
+  });
+
+  it('logs a token for another audience or issuer by its error’s name, as ACCESS_AUD or ACCESS_TEAM_DOMAIN set wrong would make every one', async () => {
+    certs(TEAM, [owner.listed]);
+    const warned = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const wrong: [string, string][] = [
+      [await tokenFor(owner.signing, { aud: ['another-aud'] }), 'JwtTokenAudience'],
+      [
+        await tokenFor(owner.signing, { iss: 'https://elsewhere.cloudflareaccess.com' }),
+        'JwtTokenIssuer',
+      ],
+    ];
+    for (const [token, name] of wrong) {
+      warned.mockClear();
+      const response = await consoleCall('GET', '/console/api/datasets', { token });
+      expect(response.status, name).toBe(401);
+      expect(await response.json(), name).toEqual({ error: MISSING });
+      expect(warned.mock.calls, name).toEqual([
+        [
+          'Access’s token is for another audience or issuer: check ACCESS_AUD and ACCESS_TEAM_DOMAIN.',
+          name,
+        ],
+      ]);
+      expect(JSON.stringify(warned.mock.calls), name).not.toContain(token);
+    }
   });
 
   it('answers 503 for a team that isn’t an https address, and 500 when Access’s keys can’t be read', async () => {

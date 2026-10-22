@@ -115,12 +115,21 @@ export async function accessEmail(env: Env, request: Request): Promise<string | 
       verification: { iss: config.team, aud: config.aud },
     });
   } catch (error) {
-    // Hono's Jwt… errors say the token doesn't check out. Anything else, such as a key Access
-    // listed that can't be imported, is the Worker's to look into, so its name is logged: never
-    // the token, which signs the owner in.
+    // Hono's Jwt… errors say the token doesn't check out. Two of them may be the Worker's own
+    // doing: a token for another audience or issuer is every token, while ACCESS_AUD or
+    // ACCESS_TEAM_DOMAIN is set wrong. Those, and anything else, such as a key Access listed that
+    // can't be imported, are the Worker's to look into, so their name is logged: never the token,
+    // which signs the owner in.
     const named = typeof error === 'object' && error !== null && 'name' in error;
     const name = named && typeof error.name === 'string' ? error.name : typeof error;
-    if (!name.startsWith('Jwt')) console.warn('Access’s token couldn’t be checked:', name);
+    if (name === 'JwtTokenAudience' || name === 'JwtTokenIssuer') {
+      console.warn(
+        'Access’s token is for another audience or issuer: check ACCESS_AUD and ACCESS_TEAM_DOMAIN.',
+        name,
+      );
+    } else if (!name.startsWith('Jwt')) {
+      console.warn('Access’s token couldn’t be checked:', name);
+    }
     return null;
   }
   // Hono checks the expiry only of a token that has one.
