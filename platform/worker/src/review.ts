@@ -5,7 +5,6 @@ import {
   finalAnswerText,
   freshen,
   matchVerdictOf,
-  mergeAnswers,
   NONE_OF_THESE,
   NONE_SHELF,
   readFinalAnswer,
@@ -13,6 +12,7 @@ import {
   reviewAnswers,
   shelfPath,
   stableId,
+  standingAnswer,
   TAXONOMY_CRITERIA_VERSION,
   TAXONOMY_FIELDS,
   TAXONOMY_PROMPT,
@@ -52,6 +52,7 @@ import {
   setItemStatus,
   setSuggestion,
   setTaxonomyKey,
+  statementsOf,
   writeStatements,
   type DecisionRow,
   type Executor,
@@ -635,13 +636,20 @@ async function answerPartsIn(
   if (asking === null || state.page === undefined || itemId === null) {
     throw new Error(`Review ${review.id} has no page and place decision to answer for`);
   }
-  // The answer, made whole with what a person decided before it, whose latest word stands for
-  // the parts this question doesn't ask (`withCarried`).
+  // The answer changes only the parts this question asks (`withCarried`). When a person has
+  // answered about the page since it was asked, as for an older question reopened for the owner,
+  // the rest is the page as its statements say it now; otherwise, what the question settled.
   const previous = await latestFinalized(tx, { datasetId: review.datasetId, subject: itemId });
+  const answeredAt = previous?.finalizedAt ?? null;
+  const since = answeredAt !== null && answeredAt > asking.decidedAt;
+  const standing = since
+    ? standingAnswer(taxonomy, (await statementsOf(tx, [itemId])).get(itemId) ?? [])
+    : null;
   const whole = withCarried(
     taxonomy,
-    { answer: mergeAnswers(taxonomy, settled, given), asked, given },
+    { asked, settled, given },
     readFinalAnswer(previous?.finalAnswer ?? null),
+    standing,
   );
   if (!whole.ok) return refused(409, whole.reason);
   const closed = await closeReview(tx, {

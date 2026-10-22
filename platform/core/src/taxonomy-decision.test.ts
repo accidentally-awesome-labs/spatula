@@ -26,6 +26,7 @@ import {
   splitProbabilities,
   standingShelf,
   taxonomyKey,
+  standingAnswer,
   withCarried,
   type GivenParts,
   type TaxonomyProbabilities,
@@ -355,14 +356,12 @@ describe('what is asked, and what carries over', () => {
     const dac = id('function', 'dac');
     const [open, closed] = [id('value', 'open'), id('value', 'closed')];
     const onEar = id('shelf', 'on-ear');
+    const overEar = id('shelf', 'over-ear');
+    const back = id('feature', 'back');
     // Before: asked the pre-amp, the DAC, and the back; ticked the pre-amp, and chose Closed.
     const previous = {
       answer: { shelf: onEar, functions: [preAmp], values: [closed] },
-      asked: {
-        shelves: [],
-        functions: [preAmp, dac],
-        features: { [id('feature', 'back')]: [open, closed] },
-      },
+      asked: { shelves: [], functions: [preAmp, dac], features: { [back]: [open, closed] } },
       given: { shelf: null, functions: [preAmp], values: [closed] },
     };
     const nothing = { shelf: null, functions: [], values: [] };
@@ -375,8 +374,8 @@ describe('what is asked, and what carries over', () => {
 
     it('makes a later answer whole with what the earlier one decided', () => {
       const now = {
-        answer: { shelf: onEar, functions: [amplifier], values: [] },
         asked: { shelves: [], functions: [amplifier], features: {} },
+        settled: { shelf: onEar, functions: [], values: [] },
         given: { shelf: null, functions: [amplifier], values: [] },
       };
       const whole = made(T, now, previous);
@@ -385,7 +384,7 @@ describe('what is asked, and what carries over', () => {
         asked: {
           shelves: [],
           functions: [amplifier, preAmp, dac],
-          features: { [id('feature', 'back')]: [closed, open] },
+          features: { [back]: [closed, open] },
         },
         given: { shelf: null, functions: [amplifier, preAmp], values: [closed] },
       });
@@ -399,8 +398,8 @@ describe('what is asked, and what carries over', () => {
     it('takes what a question asks again from the answer given now', () => {
       // A reopened question asks the pre-amp and the back again: unticked, and Open.
       const now = {
-        answer: { shelf: onEar, functions: [], values: [open] },
-        asked: { shelves: [], functions: [preAmp], features: { [id('feature', 'back')]: [open] } },
+        asked: { shelves: [], functions: [preAmp], features: { [back]: [open] } },
+        settled: { shelf: onEar, functions: [], values: [] },
         given: { shelf: null, functions: [], values: [open] },
       };
       expect(made(T, now, previous).answer).toEqual({
@@ -412,8 +411,8 @@ describe('what is asked, and what carries over', () => {
 
     it('carries values only to a shelf that has their feature, and drops implied functions', () => {
       const onPreamps = {
-        answer: { shelf: id('shelf', 'preamps'), functions: [], values: [] },
         asked: { shelves: ALL_SHELVES, functions: [], features: {} },
+        settled: nothing,
         given: { ...nothing, shelf: id('shelf', 'preamps') },
       };
       // Preamps implies Pre-amp, and has no Back.
@@ -426,40 +425,29 @@ describe('what is asked, and what carries over', () => {
 
     it('carries nothing over a "None of these", given now or before', () => {
       const none = { shelf: NONE_SHELF, functions: [], values: [] };
-      const saidNone = {
-        answer: none,
-        asked: { shelves: ALL_SHELVES, functions: [], features: {} },
-        given: none,
-      };
-      expect(made(T, saidNone, previous)).toEqual(saidNone);
-      const after = {
-        answer: { shelf: onEar, functions: [], values: [] },
-        asked: { shelves: ALL_SHELVES, functions: [], features: {} },
-        given: { ...nothing, shelf: onEar },
-      };
-      expect(made(T, after, saidNone)).toEqual(after);
-      expect(made(T, after, null)).toEqual(after);
+      const asked = { shelves: ALL_SHELVES, functions: [], features: {} };
+      const saidNone = { answer: none, asked, given: none };
+      expect(made(T, { asked, settled: nothing, given: none }, previous)).toEqual(saidNone);
+      const after = { asked, settled: nothing, given: { ...nothing, shelf: onEar } };
+      const placed = { answer: { ...nothing, shelf: onEar }, asked, given: after.given };
+      expect(made(T, after, saidNone)).toEqual(placed);
+      expect(made(T, after, null)).toEqual(placed);
     });
 
     // An older question's copy holds what it had settled then; a person's later word outranks it
     // wherever the question doesn't ask the part (N1).
     describe('an answer to an older question', () => {
-      const overEar = id('shelf', 'over-ear');
       // Later: the person put the page on Over-ear, said no to the DAC, and chose Closed.
       const later = {
         answer: { shelf: overEar, functions: [], values: [closed] },
-        asked: {
-          shelves: ALL_SHELVES,
-          functions: [dac],
-          features: { [id('feature', 'back')]: [open, closed] },
-        },
+        asked: { shelves: ALL_SHELVES, functions: [dac], features: { [back]: [open, closed] } },
         given: { shelf: overEar, functions: [], values: [closed] },
       };
       // The older question asks only the pre-amp. It had settled On-ear, the DAC, and Open.
       const older = (shelf: string | null = onEar) => ({
-        answer: { shelf, functions: [dac], values: [open] },
         asked: { shelves: [], functions: [preAmp], features: {} },
-        given: { shelf: null, functions: [], values: [] },
+        settled: { shelf, functions: [dac], values: [open] },
+        given: nothing,
       });
 
       it('keeps the person’s shelf, their no, and their one value over what it had settled', () => {
@@ -472,13 +460,37 @@ describe('what is asked, and what carries over', () => {
         expect(made(T, older(null), later).answer.shelf).toBe(overEar);
       });
 
+      it('takes the parts it doesn’t ask from the page as it stands, and only those', () => {
+        // The page says more than the later answer: Amplifier, which that answer had settled,
+        // and Drives: Speakers… on Over-ear, which has no Drives, so that one goes.
+        const standing = {
+          shelf: overEar,
+          functions: [amplifier],
+          values: [closed, id('value', 'speakers')],
+        };
+        const asksBack = {
+          asked: { shelves: [], functions: [preAmp], features: { [back]: [open, closed] } },
+          settled: { shelf: onEar, functions: [dac], values: [] },
+          given: { shelf: null, functions: [preAmp], values: [open] },
+        };
+        expect(made(T, asksBack, later, standing)).toEqual({
+          answer: { shelf: overEar, functions: [amplifier, preAmp], values: [open] },
+          asked: { shelves: [], functions: [preAmp, dac], features: { [back]: [open, closed] } },
+          given: { shelf: null, functions: [preAmp], values: [open] },
+        });
+      });
+
       it('changes nothing in a fresh question, whose settled parts are the person’s', () => {
         const fresh = {
-          answer: { shelf: overEar, functions: [amplifier], values: [closed] },
           asked: { shelves: [], functions: [amplifier], features: {} },
+          settled: { shelf: overEar, functions: [], values: [closed] },
           given: { shelf: null, functions: [amplifier], values: [] },
         };
-        expect(made(T, fresh, later).answer).toEqual(fresh.answer);
+        expect(made(T, fresh, later).answer).toEqual({
+          shelf: overEar,
+          functions: [amplifier],
+          values: [closed],
+        });
       });
 
       it('refuses when the person’s shelf is retired, or none, or lacks a value given now', () => {
@@ -499,8 +511,8 @@ describe('what is asked, and what carries over', () => {
         // On DACs, which has no Back, a Back value given now has nowhere to go.
         const onDacs = { ...later, answer: { ...later.answer, shelf: id('shelf', 'dacs') } };
         const givesBack = {
-          answer: { shelf: onEar, functions: [], values: [open] },
-          asked: { shelves: [], functions: [], features: { [id('feature', 'back')]: [open] } },
+          asked: { shelves: [], functions: [], features: { [back]: [open] } },
+          settled: { shelf: onEar, functions: [], values: [] },
           given: { shelf: null, functions: [], values: [open] },
         };
         expect(withCarried(T, givesBack, onDacs)).toEqual({
@@ -509,6 +521,43 @@ describe('what is asked, and what carries over', () => {
             'Open is a value of Back, which isn’t a feature of DACs, where a person put this page since.',
         });
       });
+    });
+  });
+
+  describe('standingAnswer', () => {
+    const said = (
+      property: string,
+      value: string,
+      method: 'human' | 'llm',
+      lastSeen = '2026-10-20T00:00:00.000Z',
+    ): StatementView => ({
+      property,
+      value,
+      valueKey: value,
+      method,
+      confidence: 1,
+      lastSeen,
+      sourceUrl: 'https://maker-a.example/a2',
+      position: null,
+    });
+
+    it('reads a page’s place from its statements, a person’s first, one value to a one-value feature', () => {
+      expect(
+        standingAnswer(T, [
+          said('shelf', id('shelf', 'over-ear'), 'human'),
+          said('shelf', id('shelf', 'on-ear'), 'llm'),
+          said('functions', id('function', 'amplifier'), 'llm'),
+          said('functions', id('function', 'pre-amp'), 'human'),
+          said('features', id('value', 'open'), 'llm', '2026-10-21T00:00:00.000Z'),
+          said('features', id('value', 'closed'), 'human'),
+          said('name', 'A2', 'llm'),
+        ]),
+      ).toEqual({
+        shelf: id('shelf', 'over-ear'),
+        functions: [id('function', 'pre-amp'), id('function', 'amplifier')],
+        values: [id('value', 'closed')],
+      });
+      expect(standingAnswer(T, [])).toEqual({ shelf: null, functions: [], values: [] });
     });
   });
 });

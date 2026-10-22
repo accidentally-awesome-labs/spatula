@@ -554,7 +554,7 @@ async function answeredA2(datasetId: string, first: ActorRecord = OWNER) {
     'functions human pre-amp 1',
     'shelf human on-ear 1',
   ]);
-  return { world, a2: a2!, says, calls: decider.calls };
+  return { world, a2: a2!, says, calls: decider.calls, question: question! };
 }
 
 /** The open question about a page. */
@@ -890,6 +890,104 @@ describe('the owner’s answer to an older question about a page', { timeout: 30
     ).toMatchObject({ kind: 'answered' });
     expect(await placedOf(a2!.id, changed)).toEqual([
       'features human closed 1',
+      'features human wired 1',
+      'shelf human on-ear 1',
+    ]);
+  });
+
+  it('keeps what a later answer had settled, and changes only the parts it asks', async () => {
+    const datasetId = 'parts-older-settled';
+    const {
+      world,
+      pages: [, a2],
+    } = await taxonomyWorld(testTaxonomyDefinition(datasetId));
+    const says = {
+      functions: { headphones: 0.99, 'pre-amp': 0.5, dac: 0.95 } as Record<string, number>,
+      values: { open: 0.6, closed: 0.35 } as Record<string, number>,
+    };
+    world.ports.taxonomyDecider = fakeTaxonomyDecider((request) =>
+      request.evidence.includes(URLS.a2)
+        ? { shelves: { 'on-ear': 0.95 }, functions: says.functions, values: says.values }
+        : taxonomyFor(request),
+    ).decider;
+    await refresh(world, datasetId);
+    const first = (await questionAbout(datasetId, a2!.id))!;
+    await answerReview(world.ports, {
+      datasetId,
+      reviewId: first.id,
+      parts: { functions: ['pre-amp'], features: { back: ['closed'] } },
+      actor: REVIEWER,
+    });
+    // Connection asks again. The decider is sure of DAC and Amplifier now, and unsure of Wired:
+    // the owner's answer, Wired, states them all as the owner's.
+    const changed = await commitChanges(datasetId, [CONNECTION], world.clock.now());
+    says.functions = { headphones: 0.99, dac: 0.95, amplifier: 0.95 };
+    says.values = { wired: 0.6 };
+    world.clock.advance(60_000);
+    await refresh(world, datasetId);
+    const second = (await questionAbout(datasetId, a2!.id))!;
+    await answerReview(world.ports, {
+      datasetId,
+      reviewId: second.id,
+      parts: { features: { connection: ['wired'] } },
+      actor: OWNER,
+    });
+    const later = [
+      'features human closed 1',
+      'features human wired 1',
+      'functions human amplifier 1',
+      'functions human dac 1',
+      'functions human pre-amp 1',
+      'shelf human on-ear 1',
+    ];
+    expect(await placedOf(a2!.id, changed)).toEqual(later);
+    // The owner replaces the reviewer's first answer: no pre-amp, and Closed. The first question
+    // never had Amplifier, which stays, as all it doesn't ask does.
+    world.clock.advance(60_000);
+    expect(
+      await answerReview(world.ports, {
+        datasetId,
+        reviewId: first.id,
+        parts: { functions: [], features: { back: ['closed'] } },
+        actor: OWNER,
+      }),
+    ).toMatchObject({ kind: 'answered' });
+    const replaced = later.filter((said) => said !== 'functions human pre-amp 1');
+    expect(await placedOf(a2!.id, changed)).toEqual(replaced);
+    // A run that finds the page unchanged keeps it so.
+    world.clock.advance(60_000);
+    await refresh(world, datasetId);
+    expect(await questionAbout(datasetId, a2!.id)).toBeUndefined();
+    expect(await placedOf(a2!.id, changed)).toEqual(replaced);
+  });
+
+  it('keeps what a run settled after a person’s later answer, with no question', async () => {
+    const datasetId = 'parts-older-run';
+    const { world, a2, says, question: first } = await answeredA2(datasetId, REVIEWER);
+    await commitChanges(datasetId, [CONNECTION], world.clock.now());
+    says.values = { wired: 0.6 };
+    world.clock.advance(60_000);
+    await refresh(world, datasetId);
+    const second = (await questionAbout(datasetId, a2.id))!;
+    await answerReview(world.ports, {
+      datasetId,
+      reviewId: second.id,
+      parts: { features: { connection: ['wired'] } },
+      actor: OWNER,
+    });
+    // Optical is added, and the decider is sure of it: a run states it, and asks nothing.
+    const optical = await commitChanges(datasetId, [OPTICAL], world.clock.now());
+    says.values = { optical: 0.95 };
+    world.clock.advance(60_000);
+    await refresh(world, datasetId);
+    expect(await questionAbout(datasetId, a2.id)).toBeUndefined();
+    expect(await placedOf(a2.id, optical)).toContain('features llm optical 0.95');
+    // The owner replaces the reviewer's first answer. Optical stays, now the owner's word too.
+    world.clock.advance(60_000);
+    expect(await replaceFirst(world, datasetId, first.id)).toMatchObject({ kind: 'answered' });
+    expect(await placedOf(a2.id, optical)).toEqual([
+      'features human open 1',
+      'features human optical 1',
       'features human wired 1',
       'shelf human on-ear 1',
     ]);

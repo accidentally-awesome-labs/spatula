@@ -332,18 +332,57 @@ export function carriedOver(
 }
 
 /**
- * A person's answer made whole (ruling 7): what they answer now, with what they decided before that
- * still carries over to the page's shelf (`carriedOver`). Their yes joins the answer and what they
- * said, and their yes and no join what they were asked, so the decision their answer finalizes
- * carries all they said to the page's next question.
+ * What a page's current statements say of its place, as an answer: its standing shelf
+ * (`standingShelf`), every function stated, and every value stated, a feature that takes one value
+ * keeping its best-ranked one (`compareStatements`). Retired items drop out, and merged ones count
+ * as what they were merged into.
+ */
+export function standingAnswer(
+  taxonomy: Taxonomy,
+  statements: readonly StatementView[],
+): TaxonomyAnswer {
+  const ranked = [...statements].sort(compareStatements);
+  const ids = (property: string, subject: 'function' | 'value') =>
+    ranked
+      .filter((statement) => statement.property === property && typeof statement.value === 'string')
+      .map((statement) => resolveId(taxonomy, subject, statement.value as string))
+      .filter((id): id is string => id !== null);
+  const values: string[] = [];
+  const taken = new Set<string>();
+  for (const value of ids('features', 'value')) {
+    const feature = featureOfValue(taxonomy, value);
+    if (feature === undefined || values.includes(value)) continue;
+    if (feature.cardinality === 'one') {
+      if (taken.has(feature.id)) continue;
+      taken.add(feature.id);
+    }
+    values.push(value);
+  }
+  return {
+    shelf: standingShelf(taxonomy, statements).shelf,
+    functions: [...new Set(ids('functions', 'function'))],
+    values,
+  };
+}
+
+/**
+ * A person's answer to a taxonomy question, made whole (ruling 7). The answer changes only the
+ * parts the question asks: what is given now replaces those, and every other part comes from one
+ * base.
  *
- * A question's answer changes only the parts it asks. Where it doesn't ask a part, a person's
- * latest word outranks what the question had settled when it was asked, as an older question's
- * copy holds it: their shelf stands for the settled one, their no takes a settled yes out, and a
- * feature that takes one value keeps theirs. A part the question asks takes the answer given now;
- * so does a feature that takes one value, once it's asked or given now. In a fresh question none
- * of that changes anything: it never asks the decider what a person decided, and the shelf it
- * settles is the person's.
+ * - **The base.** When a person has answered about the page since the question was asked
+ *   (`standing`, what the page's statements say now: that answer, whole since it carried what came
+ *   before it, and what a run settled after it), the base is the page as it stands. Otherwise it is
+ *   what the question settled, as a fresh question's decision put it.
+ * - **The person's latest word** (`previous`, through `carriedOver`) lies over the base: their shelf,
+ *   where the question doesn't ask it; their yes; their no, which takes a yes out; and their value
+ *   of a feature that takes one. A part the question asks takes the answer given now; so does a
+ *   feature that takes one value, once it's asked or given now. On the page as it stands this
+ *   changes nothing, as it already says the person's word. On a fresh question it changes only a
+ *   part the decider was asked although a person had decided it, as when a question reopened for a
+ *   retired shelf asked the decider their values: their word wins over the decider's.
+ * - **What carries on.** Their yes joins what they said, and their yes and no join what they were
+ *   asked, so the decision their answer finalizes carries all they said to the page's next question.
  *
  * It refuses, with the reason, an answer that doesn't ask for the shelf while the shelf a person
  * gave since is retired, or "None of these", or that gives a value the person's shelf lacks the
@@ -352,112 +391,120 @@ export function carriedOver(
  */
 export function withCarried(
   taxonomy: Taxonomy,
-  final: FinalTaxonomyAnswer,
+  question: { asked: TaxonomyParts; settled: TaxonomyAnswer; given: TaxonomyAnswer },
   previous: FinalTaxonomyAnswer | null,
+  standing: TaxonomyAnswer | null = null,
 ): { ok: true; final: FinalTaxonomyAnswer } | { ok: false; reason: string } {
-  const kept = { ok: true as const, final };
-  if (previous === null || final.answer.shelf === NONE_SHELF) return kept;
-  const asksShelf = final.asked.shelves.length > 0;
-  if (previous.answer.shelf === NONE_SHELF) {
-    return asksShelf
-      ? kept
-      : {
-          ok: false,
-          reason:
-            'A person said since that this page is none of these, and this question doesn’t ask for its shelf. spatula revive puts the page back, to be placed again.',
-        };
+  const { asked, settled, given } = question;
+  if (given.shelf === NONE_SHELF) {
+    const none = { shelf: NONE_SHELF, functions: [], values: [] };
+    return { ok: true, final: { answer: none, asked, given } };
   }
-  let shelf = final.answer.shelf;
-  if (!asksShelf && previous.answer.shelf !== null) {
-    const live = resolveId(taxonomy, 'shelf', previous.answer.shelf);
-    if (live === null) {
-      return {
-        ok: false,
-        reason: `A person put this page on ${shelfPath(taxonomy, previous.answer.shelf)}, which is retired since, and this question doesn’t ask for its shelf. Answer the question about its shelf, which the page’s next run asks.`,
-      };
+  const asksShelf = asked.shelves.length > 0;
+  const base = standing ?? settled;
+  let shelf = asksShelf ? (given.shelf ?? base.shelf) : base.shelf;
+  if (previous !== null && previous.answer.shelf === NONE_SHELF && !asksShelf) {
+    return {
+      ok: false,
+      reason:
+        'A person said since that this page is none of these, and this question doesn’t ask for its shelf. spatula revive puts the page back, to be placed again.',
+    };
+  }
+  if (previous !== null && previous.answer.shelf !== NONE_SHELF) {
+    if (!asksShelf && previous.answer.shelf !== null) {
+      const live = resolveId(taxonomy, 'shelf', previous.answer.shelf);
+      if (live === null) {
+        return {
+          ok: false,
+          reason: `A person put this page on ${shelfPath(taxonomy, previous.answer.shelf)}, which is retired since, and this question doesn’t ask for its shelf. Answer the question about its shelf, which the page’s next run asks.`,
+        };
+      }
+      shelf = live;
     }
-    shelf = live;
   }
   const featureOf = (value: string) => featureOfValue(taxonomy, value);
   const onShelf = new Set(
-    shelf === null ? [] : featuresFor(taxonomy, shelf).map((feature) => feature.id),
+    shelf === null || shelf === NONE_SHELF
+      ? []
+      : featuresFor(taxonomy, shelf).map((feature) => feature.id),
   );
   const fits = (value: string) => onShelf.has(featureOf(value)?.id ?? '');
-  const moved = shelf !== final.answer.shelf;
-  if (moved && shelf !== null) {
-    const misfit = final.given.values.find((value) => !fits(value));
-    if (misfit !== undefined) {
-      const feature = featureOf(misfit);
-      const name = feature?.values.find((value) => value.id === misfit)?.name ?? misfit;
-      return {
-        ok: false,
-        reason: `${name} is a value of ${feature?.name ?? 'a feature'}, which isn’t a feature of ${shelfPath(taxonomy, shelf)}, where a person put this page since.`,
-      };
-    }
+  const misfit = shelf === null ? undefined : given.values.find((value) => !fits(value));
+  if (misfit !== undefined && shelf !== null) {
+    const feature = featureOf(misfit);
+    const name = feature?.values.find((value) => value.id === misfit)?.name ?? misfit;
+    return {
+      ok: false,
+      reason: `${name} is a value of ${feature?.name ?? 'a feature'}, which isn’t a feature of ${shelfPath(taxonomy, shelf)}, where a person put this page since.`,
+    };
   }
 
-  const carried = carriedOver(taxonomy, previous, shelf);
-  const askedNow = new Set([
-    ...final.asked.functions,
-    ...Object.values(final.asked.features).flat(),
-  ]);
+  // The person's word, as far as this question doesn't ask it again.
+  const carried =
+    previous === null || previous.answer.shelf === NONE_SHELF
+      ? nothingCarried()
+      : carriedOver(taxonomy, previous, shelf);
+  const askedValues = Object.values(asked.features).flat();
+  const askedNow = new Set([...asked.functions, ...askedValues]);
   const takesOne = (feature: string | undefined) =>
     feature !== undefined &&
     (findItem(taxonomy, 'feature', feature) as Feature | undefined)?.cardinality === 'one';
   const takenWhole = new Set(
-    [
-      ...Object.keys(final.asked.features),
-      ...final.given.values.map((value) => featureOf(value)?.id),
-    ].filter(takesOne),
+    [...Object.keys(asked.features), ...given.values.map((value) => featureOf(value)?.id)].filter(
+      takesOne,
+    ),
   );
-  const functionStands = (fn: string) => !askedNow.has(fn);
-  const valueStands = (value: string) =>
-    !askedNow.has(value) && !takenWhole.has(featureOf(value)?.id);
+  const stands = (id: string, value: boolean) =>
+    !askedNow.has(id) && !(value && takenWhole.has(featureOf(id)?.id));
   const yes = {
-    functions: carried.functions.yes.filter(functionStands),
-    values: carried.values.yes.filter(valueStands),
+    functions: carried.functions.yes.filter((fn) => stands(fn, false)),
+    values: carried.values.yes.filter((value) => stands(value, true)),
   };
   const no = {
-    functions: carried.functions.no.filter(functionStands),
-    values: carried.values.no.filter(valueStands),
+    functions: carried.functions.no.filter((fn) => stands(fn, false)),
+    values: carried.values.no.filter((value) => stands(value, true)),
   };
-  // What the person decided outranks what this question settled: their no takes a settled yes
-  // out, and a one-value feature they gave a value keeps theirs alone.
   const saidNo = new Set([...no.functions, ...no.values]);
-  const theirsWhole = new Set(
-    yes.values.map((value) => featureOf(value)?.id).filter((feature) => takesOne(feature)),
-  );
-  const settledStands = (value: string) =>
-    !saidNo.has(value) &&
-    (!moved || fits(value)) &&
-    !(theirsWhole.has(featureOf(value)?.id) && !yes.values.includes(value));
+  const theirsWhole = new Set(yes.values.map((value) => featureOf(value)?.id).filter(takesOne));
   const unique = (ids: readonly string[]) => [...new Set(ids)];
-  const features: Record<string, string[]> = { ...final.asked.features };
+
+  // The answer: the base, with the person's word over it, and what this question asks given now.
+  const keptValue = (value: string) =>
+    fits(value) &&
+    !saidNo.has(value) &&
+    !askedNow.has(value) &&
+    !takenWhole.has(featureOf(value)?.id) &&
+    !(theirsWhole.has(featureOf(value)?.id) && !yes.values.includes(value));
+  // The functions the final shelf implies aren't stated, as `mergeAnswers` has it.
+  const implied = new Set(
+    shelf === null || shelf === NONE_SHELF ? [] : impliedFunctions(taxonomy, shelf),
+  );
+  const features: Record<string, string[]> = { ...asked.features };
   for (const value of [...yes.values, ...no.values]) {
     const feature = featureOf(value)!.id;
     features[feature] = unique([...(features[feature] ?? []), value]);
   }
-  // The functions the final shelf implies aren't stated, as `mergeAnswers` has it.
-  const implied = new Set(shelf === null ? [] : impliedFunctions(taxonomy, shelf));
   return {
     ok: true,
     final: {
       answer: {
         shelf,
-        functions: unique([...final.answer.functions, ...yes.functions]).filter(
-          (fn) => !implied.has(fn) && !saidNo.has(fn),
-        ),
-        values: unique([...final.answer.values.filter(settledStands), ...yes.values]),
+        functions: unique([
+          ...base.functions.filter((fn) => !saidNo.has(fn) && !askedNow.has(fn)),
+          ...given.functions,
+          ...yes.functions,
+        ]).filter((fn) => !implied.has(fn)),
+        values: unique([...base.values.filter(keptValue), ...given.values, ...yes.values]),
       },
       asked: {
-        shelves: final.asked.shelves,
-        functions: unique([...final.asked.functions, ...yes.functions, ...no.functions]),
+        shelves: asked.shelves,
+        functions: unique([...asked.functions, ...yes.functions, ...no.functions]),
         features,
       },
       given: {
-        shelf: final.given.shelf,
-        functions: unique([...final.given.functions, ...yes.functions]),
-        values: unique([...final.given.values, ...yes.values]),
+        shelf: given.shelf,
+        functions: unique([...given.functions, ...yes.functions]),
+        values: unique([...given.values, ...yes.values]),
       },
     },
   };
