@@ -1,4 +1,5 @@
 import {
+  exportTaxonomy,
   sha256Hex,
   type ApplySummary,
   type DatasetStatus,
@@ -9,9 +10,9 @@ import {
   type RunSummary,
   type RunView,
 } from '@spatula/core';
-import { testDefinition } from '@spatula/store/fixtures';
+import { testDefinition, testTaxonomy, testTaxonomySeed } from '@spatula/store/fixtures';
 import { describe, expect, it } from 'vitest';
-import { stringify } from 'yaml';
+import { parse as parseYaml, stringify } from 'yaml';
 import { POLL_MS, WAIT_LIMIT_MS, type Io } from './commands';
 import { describeError, printable } from './format';
 import { failureLine, main, USAGE } from './main';
@@ -524,6 +525,110 @@ describe('run', () => {
     );
   });
 
+  it('says how many pages were read again from the archive, and nothing when none were', async () => {
+    const printed = async (more: Partial<RunSummary>) => {
+      const complete: RunView = {
+        ...RUNNING,
+        status: 'complete',
+        summary: {
+          items: 3,
+          live: 3,
+          due: 3,
+          fetches: { changed: 0, unchanged: 0, gone: 0, failed: 0, blocked: 0 },
+          statements: { added: 0, reseen: 21, withdrawn: 0 },
+          llm: { ran: 0, reused: 3, skipped: 0, failed: 0, inputTokens: 0, outputTokens: 0 },
+          entities: { created: 0, linked: 3, conflicts: 0, unresolved: 0 },
+          snapshot: {
+            published: false,
+            reason: 'nothing changed since generation 2',
+            excluded: [],
+          },
+          notes: [],
+          ...more,
+        },
+      };
+      const { fetch } = stubApi(({ method }) =>
+        method === 'POST'
+          ? Response.json({ runId: RUN_ID }, { status: 202 })
+          : Response.json(complete),
+      );
+      const { io, out } = memoryIo();
+      expect(await main(['run', 'cli-products', '--wait'], { io, env: ENV, fetch })).toBe(0);
+      return out;
+    };
+
+    const three = await printed({ reread: 3 });
+    // Right after the pages it counts among those read.
+    expect(three.slice(2, 4)).toEqual([
+      'Pages: 3 read, of 3 due and 3 live. Changed 0, unchanged 0, gone 0, failed 0, blocked 0.',
+      'Re-read from the archive: 3 pages, with no request.',
+    ]);
+    expect(await printed({ reread: 1 })).toContain(
+      'Re-read from the archive: 1 page, with no request.',
+    );
+    // A run that read nothing again says nothing of it, nor does one from before re-reading.
+    for (const more of [{ reread: 0 }, {}]) {
+      expect((await printed(more)).some((line) => line.startsWith('Re-read'))).toBe(false);
+    }
+  });
+
+  it('starts a run that only backfills with --backfill, and says what it decided again', async () => {
+    const printed = async (backfill: RunSummary['backfill']) => {
+      const complete: RunView = {
+        ...RUNNING,
+        status: 'complete',
+        summary: {
+          items: 0,
+          fetches: { changed: 0, unchanged: 0, gone: 0, failed: 0, blocked: 0 },
+          statements: { added: 0, reseen: 0, withdrawn: 0 },
+          llm: { ran: 0, reused: 0, skipped: 0, failed: 0, inputTokens: 0, outputTokens: 0 },
+          ...(backfill === undefined ? {} : { backfill }),
+          entities: { created: 0, linked: 0, conflicts: 0, unresolved: 0 },
+          snapshot: {
+            published: false,
+            reason: 'nothing changed since generation 2',
+            excluded: [],
+          },
+          notes: [],
+        },
+      };
+      const { fetch, sent } = stubApi(({ method }) =>
+        method === 'POST'
+          ? Response.json({ runId: RUN_ID }, { status: 202 })
+          : Response.json(complete),
+      );
+      const { io, out } = memoryIo();
+      expect(
+        await main(['run', 'cli-products', '--backfill', '--wait'], { io, env: ENV, fetch }),
+      ).toBe(0);
+      expect(sent[0]!.path).toBe('/datasets/cli-products/runs?backfill=1');
+      return out;
+    };
+
+    expect(await printed({ due: 9, decided: 5, fetch: 1, waiting: 3 })).toContain(
+      'Backfill: 5 of 9 pages decided again, 1 marked to be fetched, 3 left for the next run.',
+    );
+    expect(await printed({ due: 1, decided: 1, fetch: 0, waiting: 0 })).toContain(
+      'Backfill: 1 of 1 page decided again, 0 marked to be fetched, 0 left for the next run.',
+    );
+    expect(await printed({ due: 0, decided: 0, fetch: 0, waiting: 0 })).toContain(
+      'Backfill: nothing to decide again.',
+    );
+    // A dataset without a taxonomy, or a Worker before backfill, says nothing of it.
+    expect((await printed(undefined)).some((line) => line.startsWith('Backfill:'))).toBe(false);
+  });
+
+  it('takes --all or --backfill, not both, and sends nothing', async () => {
+    const { fetch, sent } = stubApi(() => {
+      throw new Error('nothing is sent');
+    });
+    const { io } = memoryIo();
+    expect(
+      await main(['run', 'cli-products', '--all', '--backfill'], { io, env: ENV, fetch }),
+    ).toBe(2);
+    expect(sent).toHaveLength(0);
+  });
+
   it('says what the sitemaps listed, and which sources weren’t read completely', async () => {
     const complete: RunView = {
       ...RUNNING,
@@ -761,6 +866,80 @@ describe('run', () => {
     );
     expect(out).toContain('Not the dataset’s: 1 page, out until revived.');
     expect(out.some((line) => line.startsWith('Matched:'))).toBe(false);
+  });
+
+  it('says what the taxonomy review proposed, and what it applied on its own', async () => {
+    const complete: RunView = {
+      ...RUNNING,
+      status: 'complete',
+      finishedAt: '2026-10-10T00:01:00.000Z',
+      summary: {
+        items: 3,
+        fetches: { changed: 3, unchanged: 0, gone: 0, failed: 0, blocked: 0 },
+        statements: { added: 12, reseen: 0, withdrawn: 0 },
+        llm: { ran: 3, reused: 0, skipped: 0, failed: 0, inputTokens: 3000, outputTokens: 150 },
+        entities: { created: 3, linked: 0, conflicts: 0, unresolved: 0 },
+        snapshot: { published: true, generation: 2, snapshotId: 'sn_x', records: 3, excluded: [] },
+        taxonomy: {
+          proposed: 2,
+          dropped: 1,
+          applied: [{ version: 4, summary: 'Add Line out to Drives' }],
+          inputTokens: 2000,
+          outputTokens: 300,
+        },
+        notes: ['A note.'],
+      },
+    };
+    const { fetch } = stubApi(({ method }) =>
+      method === 'POST'
+        ? Response.json({ runId: RUN_ID }, { status: 202 })
+        : Response.json(complete),
+    );
+    const { io, out } = memoryIo();
+    expect(await main(['run', 'cli-products', '--wait'], { io, env: ENV, fetch })).toBe(0);
+    const at = out.indexOf(
+      'Taxonomy review: 2 proposals, 1 dropped by the checks; 2000 tokens in, 300 out.',
+    );
+    expect(at).toBeGreaterThan(-1);
+    expect(out.slice(at + 1, at + 4)).toEqual([
+      'Applied on its own: Add Line out to Drives, as version 4. The console can undo it.',
+      'Notes:',
+      '  A note.',
+    ]);
+  });
+
+  it('says why the taxonomy review was skipped', async () => {
+    const complete: RunView = {
+      ...RUNNING,
+      status: 'complete',
+      finishedAt: '2026-10-10T00:01:00.000Z',
+      summary: {
+        items: 0,
+        fetches: { changed: 0, unchanged: 0, gone: 0, failed: 0, blocked: 0 },
+        statements: { added: 0, reseen: 0, withdrawn: 0 },
+        llm: { ran: 0, reused: 0, skipped: 0, failed: 0, inputTokens: 0, outputTokens: 0 },
+        entities: { created: 0, linked: 0, conflicts: 0, unresolved: 0 },
+        snapshot: { published: false, reason: 'nothing changed', excluded: [] },
+        taxonomy: {
+          proposed: 0,
+          dropped: 0,
+          applied: [],
+          inputTokens: 0,
+          outputTokens: 0,
+          skipped: 'this run’s LLM budget is spent',
+        },
+        notes: [],
+      },
+    };
+    const { fetch } = stubApi(({ method }) =>
+      method === 'POST'
+        ? Response.json({ runId: RUN_ID }, { status: 202 })
+        : Response.json(complete),
+    );
+    const { io, out } = memoryIo();
+    expect(await main(['run', 'cli-products', '--wait'], { io, env: ENV, fetch })).toBe(0);
+    expect(out).toContain('Taxonomy review: skipped, because this run’s LLM budget is spent.');
+    expect(out.some((line) => line.startsWith('Applied on its own:'))).toBe(false);
   });
 
   it('says each kind of decision that was asked, in order, and nothing of one that wasn’t', async () => {
@@ -1001,6 +1180,31 @@ describe('revive', () => {
     expect(out).toEqual(['Revived 2 pages of cli-products. The next run reads them.']);
   });
 
+  it('revives irrelevant pages, to be read again from their captures', async () => {
+    const { fetch, sent } = stubApi(() => Response.json({ revived: 12 }));
+    const { io, out } = memoryIo();
+    const argv = ['revive', 'cli-products', '--irrelevant', '--from-captures'];
+    expect(await main(argv, { io, env: ENV, fetch })).toBe(0);
+    expect(sent[0]).toMatchObject({
+      method: 'POST',
+      path: '/datasets/cli-products/items/revive',
+      body: { irrelevant: true, fromCaptures: true },
+    });
+    expect(out).toEqual(['Revived 12 pages of cli-products. The next run reads them.']);
+  });
+
+  it('revives irrelevant pages to be fetched without --from-captures', async () => {
+    const { fetch, sent } = stubApi(() => Response.json({ revived: 1 }));
+    const { io } = memoryIo();
+    expect(await main(['revive', 'cli-products', '--irrelevant'], { io, env: ENV, fetch })).toBe(0);
+    expect(sent[0]!.body).toEqual({ irrelevant: true });
+  });
+
+  it('needs something to revive beside --from-captures', async () => {
+    const { io } = memoryIo();
+    expect(await main(['revive', 'cli-products', '--from-captures'], { io, env: ENV })).toBe(2);
+  });
+
   it('says when nothing matched, not that the next run reads it', async () => {
     const { fetch } = stubApi(() => Response.json({ revived: 0 }));
     const { io, out, err } = memoryIo();
@@ -1019,7 +1223,7 @@ describe('revive', () => {
     expect(out).toEqual([]);
   });
 
-  it('needs pages to revive, --refused, or --source', async () => {
+  it('needs pages to revive, --refused, --irrelevant, or --source', async () => {
     const { io } = memoryIo();
     expect(await main(['revive', 'cli-products'], { io, env: ENV })).toBe(2);
   });
@@ -1940,6 +2144,115 @@ describe('eval', () => {
     ]);
   });
 
+  it('scores the taxonomy by slug, reading the record’s IDs through the snapshot’s taxonomy', async () => {
+    const T = testTaxonomy();
+    const idOf = (list: readonly { id: string; slug: string }[], slug: string) =>
+      list.find((entry) => entry.slug === slug)!.id;
+    const back = T.features.find((feature) => feature.slug === 'back')!;
+    const snapshot = JSON.stringify({
+      project: 'cli-products',
+      snapshotId: 'sn_x',
+      generation: 3,
+      publishedAt: '2026-10-14T00:00:00.000Z',
+      taxonomy: T,
+      records: [
+        {
+          canonicalId: 'sp_a2',
+          fields: {
+            brand: 'Maker A',
+            name: 'A2',
+            gtins: ['04006381333931'],
+            shelf: idOf(T.shelves, 'on-ear'),
+            functions: [idOf(T.functions, 'headphones')],
+            features: { [back.id]: [idOf(back.values, 'closed')] },
+            category: 'Headphones',
+          },
+          provenance: {},
+        },
+      ],
+    });
+    const golden = {
+      ...GOLDEN,
+      products: [
+        {
+          ...GOLDEN.products[0]!,
+          fields: {
+            ...GOLDEN.products[0]!.fields,
+            shelf: 'on-ear',
+            functions: ['headphones'],
+            features: { back: ['open'] },
+          },
+        },
+      ],
+    };
+    const { fetch, sent } = await serve({ snapshot });
+    const { io, out } = memoryIo({ 'golden.json': JSON.stringify(golden) });
+    expect(await main(['eval', 'golden.json', '--save'], { io, env: ENV, fetch })).toBe(0);
+    expect(out).toEqual([
+      'cli-products, generation 3, against golden set version 2 (1 product):',
+      'Precision: 100.0% (target 99%): met.',
+      'Recall: 100.0%, 1 of 1 found (target 90%): met.',
+      'Identifiers: 100.0% of 1 stated (target 98%): met.',
+      'Key specs: none checked.',
+      'Shelf: 100.0% of 1 stated (target 95%): met.',
+      'Functions: precision 100.0% of 1 stated, recall 100.0% of 1 golden (target 90%): met.',
+      'Features: 0.0% of 1 stated.',
+      'Fields: brand 100.0% of 1, gtins 100.0% of 1, name 100.0% of 1.',
+      'Misses:',
+      '  maker-a-a2: features back is closed, not open',
+      'Saved the score.',
+    ]);
+    expect(sent.at(-1)).toMatchObject({
+      method: 'POST',
+      path: '/datasets/cli-products/evals',
+      body: {
+        scores: {
+          taxonomy: {
+            shelf: { checked: 1, correct: 1, accuracy: 1 },
+            functions: { stated: 1, expected: 1, correct: 1, precision: 1, recall: 1 },
+            features: { checked: 1, correct: 0, accuracy: 0 },
+            targets: { shelf: true, functions: true },
+          },
+        },
+      },
+    });
+  });
+
+  it('counts a golden set’s taxonomy as left out of a snapshot that has none', async () => {
+    const golden = {
+      ...GOLDEN,
+      products: [
+        {
+          ...GOLDEN.products[0]!,
+          fields: {
+            ...GOLDEN.products[0]!.fields,
+            shelf: 'on-ear',
+            functions: ['headphones'],
+            features: { back: ['closed'] },
+          },
+        },
+      ],
+    };
+    const { fetch } = await serve();
+    const { io, out } = memoryIo({ 'golden.json': JSON.stringify(golden) });
+    expect(await main(['eval', 'golden.json'], { io, env: ENV, fetch })).toBe(0);
+    expect(out).toEqual([
+      'cli-products, generation 3, against golden set version 2 (1 product):',
+      'Precision: 100.0% (target 99%): met.',
+      'Recall: 100.0%, 1 of 1 found (target 90%): met.',
+      'Identifiers: 100.0% of 1 stated (target 98%): met.',
+      'Key specs: none checked.',
+      'Shelf: none checked, 1 left out: not met.',
+      'Functions: none stated, recall 0.0% of 1 golden (target 90%): not met.',
+      'Features: none checked, 1 left out.',
+      'Fields: brand 100.0% of 1, gtins 100.0% of 1, name 100.0% of 1.',
+      'Misses:',
+      '  maker-a-a2: shelf is missing, not on-ear',
+      '  maker-a-a2: functions is missing, not headphones',
+      '  maker-a-a2: features back is missing, not closed',
+    ]);
+  });
+
   it('scores nothing when the snapshot’s hash isn’t the one Spatula sent', async () => {
     const { fetch, sent } = await serve({ headers: { 'x-spatula-sha256': '0'.repeat(64) } });
     const { io, out, err } = memoryIo({ 'golden.json': JSON.stringify(GOLDEN) });
@@ -2116,6 +2429,33 @@ describe('evals', () => {
     const { io, out } = memoryIo();
     expect(await main(['evals', 'cli-products'], { io, env: ENV, fetch })).toBe(0);
     expect(out).toEqual(['No scores are kept yet. spatula eval <golden.json> --save keeps one.']);
+  });
+
+  it('shows the taxonomy’s figures of a score that has them', async () => {
+    const saved: EvalView[] = [
+      {
+        id: 'ev_5',
+        generation: 7,
+        goldenVersion: 3,
+        createdAt: '2026-11-03T00:00:00.000Z',
+        scores: {
+          precision: 1,
+          recall: 0.96,
+          identifiers: { checked: 40, accuracy: 1 },
+          keySpecs: { checked: 30, accuracy: 0.99 },
+          taxonomy: {
+            shelf: { checked: 50, accuracy: 0.96 },
+            functions: { precision: 0.95, recall: 0.925 },
+          },
+        } as unknown as EvalView['scores'],
+      },
+    ];
+    const { fetch } = stubApi(() => Response.json({ evals: saved }));
+    const { io, out } = memoryIo();
+    expect(await main(['evals', 'cli-products'], { io, env: ENV, fetch })).toBe(0);
+    expect(out).toEqual([
+      '2026-11-03T00:00:00.000Z  generation 7  golden v3  precision 100.0%  recall 96.0%  identifiers 100.0%  key specs 99.0%  shelf 96.0%  functions precision 95.0% recall 92.5%',
+    ]);
   });
 
   it('keeps a dataset’s name to its place in the address', async () => {
@@ -2933,6 +3273,652 @@ describe('purge', () => {
     });
     const { io } = memoryIo();
     expect(await main(argv, { io, env: ENV, fetch })).toBe(2);
+    expect(sent).toHaveLength(0);
+  });
+});
+
+describe('taxonomy', () => {
+  it('seeds a taxonomy from a YAML file, checked here first', async () => {
+    const { fetch, sent } = stubApi(() =>
+      Response.json({ version: 1, shelves: 8, functions: 4, features: 2 }, { status: 201 }),
+    );
+    const { io, out } = memoryIo({ 'taxonomy.yaml': stringify(testTaxonomySeed()) });
+    expect(
+      await main(['taxonomy', 'seed', 'cli-products', 'taxonomy.yaml'], { io, env: ENV, fetch }),
+    ).toBe(0);
+    expect(sent).toEqual([
+      {
+        method: 'POST',
+        origin: 'https://spatula.test',
+        path: '/datasets/cli-products/taxonomy',
+        body: testTaxonomySeed(),
+        authorization: 'Bearer owner-token',
+      },
+    ]);
+    expect(out).toEqual([
+      'Seeded cli-products’s taxonomy as version 1: 8 shelves, 4 functions, and 2 features.',
+    ]);
+  });
+
+  it('prints a file’s problems and sends nothing', async () => {
+    const { fetch, sent } = stubApi(() => {
+      throw new Error('nothing is sent');
+    });
+    const { io, err } = memoryIo({ 'taxonomy.yaml': 'scope: Audio\nshelves: []\n' });
+    expect(
+      await main(['taxonomy', 'seed', 'cli-products', 'taxonomy.yaml'], { io, env: ENV, fetch }),
+    ).toBe(1);
+    expect(sent).toHaveLength(0);
+    expect(err[0]).toBe('taxonomy.yaml isn’t a taxonomy seed:');
+    expect(err).toContain('  functions: Invalid input: expected array, received undefined');
+  });
+
+  it('exports the current version as YAML, with each item’s ID', async () => {
+    const taxonomy = testTaxonomy();
+    const { fetch, sent } = stubApi(() =>
+      Response.json({ version: 3, export: exportTaxonomy(taxonomy) }),
+    );
+    const { io, out, written } = memoryIo();
+    expect(
+      await main(['taxonomy', 'export', 'cli-products', '--out', 'v3.yaml'], {
+        io,
+        env: ENV,
+        fetch,
+      }),
+    ).toBe(0);
+    expect(sent[0]).toMatchObject({
+      method: 'GET',
+      path: '/datasets/cli-products/taxonomy?format=export',
+    });
+    expect(parseYaml(written.get('v3.yaml')!)).toEqual(exportTaxonomy(taxonomy));
+    expect(out).toEqual(['Wrote version 3 of cli-products’s taxonomy to v3.yaml.']);
+  });
+
+  it.each([
+    [['taxonomy', 'seed', 'cli-products']],
+    [['taxonomy', 'export', 'cli-products']],
+    [['taxonomy', 'drop', 'cli-products']],
+  ])('is called wrongly as %j, and sends nothing', async (argv) => {
+    const { fetch, sent } = stubApi(() => {
+      throw new Error('nothing is sent');
+    });
+    const { io } = memoryIo();
+    expect(await main(argv, { io, env: ENV, fetch })).toBe(2);
+    expect(sent).toHaveLength(0);
+  });
+
+  it('says when a plan changes the taxonomy’s scope', async () => {
+    const { fetch } = stubApi(() =>
+      Response.json({
+        dataset: 'cli-products',
+        revision: 4,
+        created: false,
+        changed: true,
+        sources: { added: [], removed: [], changed: [] },
+        pages: { added: 0, removed: 0 },
+        taxonomyVersion: 5,
+      }),
+    );
+    const { io, out } = memoryIo(FILES);
+    expect(await main(['plan', 'cli-products.yaml'], { io, env: ENV, fetch })).toBe(0);
+    expect(out).toContain('The new scope would make taxonomy version 5.');
+  });
+});
+
+describe('review in parts and in bulk', () => {
+  const tx = (n: number) => `tx_${String(n).padStart(20, '0')}`;
+  const PROMPT = 'Where does the one product this page is about sit in the taxonomy?';
+  // A1's shelf and back are asked; B1 is on Headphone amps already, and its functions and what it
+  // drives are asked (the test taxonomy's IDs: Task 4's fixture).
+  const PLACE: ReviewView = {
+    id: 'rv_place',
+    kind: 'classify',
+    subject: 'it_a1',
+    question: {
+      type: 'taxonomy',
+      prompt: PROMPT,
+      parts: {
+        shelves: [tx(5), tx(6), tx(7), 'none'],
+        functions: [],
+        features: { [tx(13)]: [tx(14), tx(15)] },
+      },
+    },
+    context: {
+      url: 'https://maker-a.example/products/a1',
+      field: 'taxonomy',
+      version: 1,
+      proposed: { shelf: tx(6), functions: [], values: [tx(14)] },
+      settled: { shelf: null, functions: [], values: [] },
+      probabilities: { [`shelf:${tx(6)}`]: 0.6, [`value:${tx(14)}`]: 0.7 },
+      reason: 'It sits over the ears.',
+      captureId: 'cp_a1',
+    },
+    createdAt: '2026-10-20T08:00:00.000Z',
+    suggestion: { shelf: 'on-ear', features: { back: ['closed'] } },
+  };
+  const AMP: ReviewView = {
+    id: 'rv_amp',
+    kind: 'classify',
+    subject: 'it_b1',
+    question: {
+      type: 'taxonomy',
+      prompt: PROMPT,
+      parts: {
+        shelves: [],
+        functions: [tx(1), tx(2)],
+        features: { [tx(16)]: [tx(17), tx(18), tx(19)] },
+      },
+    },
+    context: {
+      url: 'https://maker-b.example/products/b1',
+      field: 'taxonomy',
+      version: 1,
+      proposed: { shelf: null, functions: [tx(1)], values: [tx(19)] },
+      settled: { shelf: tx(10), functions: [], values: [] },
+      probabilities: { [`function:${tx(1)}`]: 0.55, [`value:${tx(19)}`]: 0.4 },
+      reason: '',
+      captureId: null,
+    },
+    createdAt: '2026-10-20T08:00:00.000Z',
+    flagged: true,
+  };
+  // A question of the old kind: one of its answers is the reply.
+  const CHOICE: ReviewView = {
+    id: 'rv_choice',
+    kind: 'classify',
+    subject: 'it_a3',
+    question: {
+      type: 'choice',
+      prompt: 'Which category does the one product this page is about have?',
+      options: ['Headphones', 'DAC/Amp', 'None of these'],
+    },
+    context: {
+      url: 'https://maker-a.example/products/a3',
+      field: 'category',
+      proposed: 'Headphones',
+      probabilities: { Headphones: 0.62 },
+      reason: '',
+    },
+    createdAt: '2026-10-20T08:00:00.000Z',
+  };
+  const TAXONOMY = { version: 1, taxonomy: testTaxonomy() };
+  // The review API's reply to an answer taken: the question, what it was answered with, its effect.
+  const answering = (effect: string) =>
+    stubApi(({ path }) => Response.json({ answered: path.split('/').pop(), effect }));
+  const ON_EAR = 'The page sits on Headphones › On-ear.';
+
+  it('names a taxonomy question’s parts from the taxonomy, with the slug to answer each by', async () => {
+    const { fetch, sent } = stubApi(({ path }) =>
+      Response.json(path.endsWith('/taxonomy') ? TAXONOMY : { reviews: [PLACE, AMP] }),
+    );
+    const { io, out, err } = memoryIo();
+    expect(await main(['review', 'cli-taxonomy'], { io, env: ENV, fetch })).toBe(0);
+    expect(err).toEqual([]);
+    expect(sent.map(({ method, path }) => `${method} ${path}`)).toEqual([
+      'GET /datasets/cli-taxonomy/review',
+      'GET /datasets/cli-taxonomy/taxonomy',
+    ]);
+    expect(out).toEqual([
+      '2 questions wait for an answer.',
+      '',
+      'rv_place  classify  https://maker-a.example/products/a1',
+      `  ${PROMPT}`,
+      '  Proposed: Headphones › Over-ear (0.60), Back: Open (0.70). It sits over the ears.',
+      '  Shelf, one of: headphones (Headphones), over-ear (Headphones › Over-ear), on-ear (Headphones › On-ear), none (None of these)',
+      '  Feature back (Back), one of: open (Open), closed (Closed)',
+      '  Suggested: Headphones › On-ear, Back: Closed.',
+      '',
+      'rv_amp  classify  https://maker-b.example/products/b1',
+      `  ${PROMPT}`,
+      '  Proposed: DAC (0.55), Drives: Speakers (0.40).',
+      '  Settled already: Amplifiers › Headphone amps.',
+      '  Functions, any of: dac (DAC), pre-amp (Pre-amp)',
+      '  Feature drives (Drives), any of: iems (IEMs), headphones (Headphones), speakers (Speakers)',
+      '  Flagged: a reviewer’s answer differs from the one that stood. Yours closes it.',
+      '',
+      'Answer in parts with: spatula review cli-taxonomy <id> --shelf <slug> --function <slug> --feature <feature>=<value>',
+      'Take a suggestion with: spatula review cli-taxonomy <id> --suggestion',
+    ]);
+  });
+
+  it('lists a taxonomy question and a question with answers together, each as it reads', async () => {
+    const { fetch } = stubApi(({ path }) =>
+      Response.json(path.endsWith('/taxonomy') ? TAXONOMY : { reviews: [CHOICE, AMP] }),
+    );
+    const { io, out } = memoryIo();
+    expect(await main(['review', 'cli-taxonomy'], { io, env: ENV, fetch })).toBe(0);
+    expect(out).toEqual([
+      '2 questions wait for an answer.',
+      '',
+      'rv_choice  classify  https://maker-a.example/products/a3',
+      '  Which category does the one product this page is about have?',
+      '  Proposed: Headphones (0.62).',
+      '  Answers: Headphones | DAC/Amp | None of these',
+      '',
+      'rv_amp  classify  https://maker-b.example/products/b1',
+      `  ${PROMPT}`,
+      '  Proposed: DAC (0.55), Drives: Speakers (0.40).',
+      '  Settled already: Amplifiers › Headphone amps.',
+      '  Functions, any of: dac (DAC), pre-amp (Pre-amp)',
+      '  Feature drives (Drives), any of: iems (IEMs), headphones (Headphones), speakers (Speakers)',
+      '  Flagged: a reviewer’s answer differs from the one that stood. Yours closes it.',
+      '',
+      'Answer with: spatula review cli-taxonomy <id> "<answer>"',
+      'Answer in parts with: spatula review cli-taxonomy <id> --shelf <slug> --function <slug> --feature <feature>=<value>',
+    ]);
+  });
+
+  it('shows a flagged question and a suggestion on a question of the old kind', async () => {
+    const asked: ReviewView = {
+      ...CHOICE,
+      flagged: true,
+      suggestion: { answer: 'DAC/Amp' },
+    };
+    const { fetch } = stubApi(() => Response.json({ reviews: [asked] }));
+    const { io, out } = memoryIo();
+    expect(await main(['review', 'cli-taxonomy'], { io, env: ENV, fetch })).toBe(0);
+    expect(out).toEqual([
+      '1 question waits for an answer.',
+      '',
+      'rv_choice  classify  https://maker-a.example/products/a3',
+      '  Which category does the one product this page is about have?',
+      '  Proposed: Headphones (0.62).',
+      '  Flagged: a reviewer’s answer differs from the one that stood. Yours closes it.',
+      '  Suggested: DAC/Amp.',
+      '  Answers: Headphones | DAC/Amp | None of these',
+      '',
+      'Answer with: spatula review cli-taxonomy <id> "<answer>"',
+      'Take a suggestion with: spatula review cli-taxonomy <id> --suggestion',
+    ]);
+  });
+
+  it('filters the list, sending the shelf as typed: the API takes its slug', async () => {
+    const { fetch, sent } = stubApi(({ path }) =>
+      Response.json(path.endsWith('/taxonomy') ? TAXONOMY : { reviews: [] }),
+    );
+    const { io, out } = memoryIo();
+    const argv = [
+      ...['review', 'cli-taxonomy', '--kind', 'classify', '--shelf', 'over-ear'],
+      ...['--source', 'maker-a', '--below', '0.8'],
+    ];
+    expect(await main(argv, { io, env: ENV, fetch })).toBe(0);
+    expect(sent.map(({ method, path }) => `${method} ${path}`)).toEqual([
+      'GET /datasets/cli-taxonomy/review?kind=classify&shelf=over-ear&source=maker-a&below=0.8',
+    ]);
+    expect(out).toEqual(['No questions wait for an answer.']);
+  });
+
+  it('names the parts of the questions a filtered list finds', async () => {
+    const { fetch, sent } = stubApi(({ path }) =>
+      Response.json(path.endsWith('/taxonomy') ? TAXONOMY : { reviews: [PLACE] }),
+    );
+    const { io, out } = memoryIo();
+    expect(
+      await main(['review', 'cli-taxonomy', '--shelf', 'on-ear'], { io, env: ENV, fetch }),
+    ).toBe(0);
+    expect(sent.map(({ method, path }) => `${method} ${path}`)).toEqual([
+      'GET /datasets/cli-taxonomy/review?shelf=on-ear',
+      'GET /datasets/cli-taxonomy/taxonomy',
+    ]);
+    expect(out).toContain(
+      '  Shelf, one of: headphones (Headphones), over-ear (Headphones › Over-ear), on-ear (Headphones › On-ear), none (None of these)',
+    );
+  });
+
+  it('says what’s wrong with a filter, and with a shelf the taxonomy hasn’t', async () => {
+    const { fetch, sent } = stubApi(() => Response.json(TAXONOMY));
+    for (const [argv, said] of [
+      [['--kind', 'shelf'], '--kind is classify, match, or publication.'],
+      [['--below', '2'], '--below is a probability from 0 to 1.'],
+      [['--below', '0'], '--below is a probability from 0 to 1.'],
+      [['--below', 'often'], '--below is a probability from 0 to 1.'],
+      [['--source', 'maker-a', '--source', 'maker-b'], '--source names one source to filter by.'],
+    ] as const) {
+      const { io, err } = memoryIo();
+      expect(await main(['review', 'cli-taxonomy', ...argv], { io, env: ENV, fetch })).toBe(2);
+      expect(err[0], argv.join(' ')).toBe(said);
+    }
+    expect(sent).toHaveLength(0);
+    // The API looks the shelf up, and says when the taxonomy has none.
+    const refusing = stubApi(() =>
+      Response.json({ error: 'cli-taxonomy has no shelf turntables.' }, { status: 400 }),
+    );
+    const { io, out, err } = memoryIo();
+    const argv = ['review', 'cli-taxonomy', '--shelf', 'turntables'];
+    expect(await main(argv, { io, env: ENV, fetch: refusing.fetch })).toBe(1);
+    expect(err).toEqual(['cli-taxonomy has no shelf turntables.']);
+    expect(out).toEqual([]);
+    expect(refusing.sent.map(({ path }) => path)).toEqual([
+      '/datasets/cli-taxonomy/review?shelf=turntables',
+    ]);
+  });
+
+  it('answers a question in parts, by slug, with a note or without', async () => {
+    const { fetch, sent } = answering(ON_EAR);
+    const { io, out } = memoryIo();
+    const answer = (...argv: string[]) =>
+      main(['review', 'cli-taxonomy', ...argv], { io, env: ENV, fetch });
+    expect(await answer('rv_place', '--shelf', 'on-ear', '--feature', 'back=closed')).toBe(0);
+    expect(
+      await answer(
+        ...['rv_amp', '--function', 'dac', '--feature', 'drives=iems'],
+        ...['--feature', 'drives=speakers', '--note', ' Drives both. '],
+      ),
+    ).toBe(0);
+    expect(sent.map(({ method, path, body }) => ({ method, path, body }))).toEqual([
+      {
+        method: 'POST',
+        path: '/datasets/cli-taxonomy/review/rv_place',
+        body: { parts: { shelf: 'on-ear', features: { back: ['closed'] } } },
+      },
+      {
+        method: 'POST',
+        path: '/datasets/cli-taxonomy/review/rv_amp',
+        body: {
+          parts: { functions: ['dac'], features: { drives: ['iems', 'speakers'] } },
+          note: 'Drives both.',
+        },
+      },
+    ]);
+    expect(out).toEqual([
+      `Answered rv_place: shelf on-ear, back=closed. ${ON_EAR}`,
+      `Answered rv_amp: function dac, drives=iems, drives=speakers. ${ON_EAR}`,
+    ]);
+  });
+
+  it('refuses a note with no parts, and says which parts to give', async () => {
+    const { fetch, sent } = answering(ON_EAR);
+    const { io, out, err } = memoryIo();
+    const argv = ['review', 'cli-taxonomy', 'rv_amp', '--note', 'Neither.'];
+    expect(await main(argv, { io, env: ENV, fetch })).toBe(2);
+    expect(err[0]).toBe(
+      'A note goes with an answer: give the parts it answers, with --shelf <slug>, --function <slug>, or --feature <feature>=<value>.',
+    );
+    expect(sent).toHaveLength(0);
+    expect(out).toEqual([]);
+  });
+
+  it('says what’s wrong with a feature or a note, and sends nothing', async () => {
+    const { fetch, sent } = answering(ON_EAR);
+    for (const [argv, said] of [
+      [['--feature', 'back'], '--feature takes <feature>=<value>, as in --feature back=closed.'],
+      [['--feature', '=closed'], '--feature takes <feature>=<value>, as in --feature back=closed.'],
+      [['--feature', 'back='], '--feature takes <feature>=<value>, as in --feature back=closed.'],
+      [['--shelf', 'on-ear', '--note', ' '], '--note needs some words.'],
+    ] as const) {
+      const { io, err } = memoryIo();
+      expect(
+        await main(['review', 'cli-taxonomy', 'rv_place', ...argv], { io, env: ENV, fetch }),
+      ).toBe(2);
+      expect(err[0], argv.join(' ')).toBe(said);
+    }
+    expect(sent).toHaveLength(0);
+  });
+
+  it('takes a question’s suggestion as its answer', async () => {
+    const { fetch, sent } = answering(ON_EAR);
+    const { io, out } = memoryIo();
+    const argv = ['review', 'cli-taxonomy', 'rv_place', '--suggestion'];
+    expect(await main(argv, { io, env: ENV, fetch })).toBe(0);
+    expect(sent).toMatchObject([
+      {
+        method: 'POST',
+        path: '/datasets/cli-taxonomy/review/rv_place',
+        body: { suggestion: true },
+      },
+    ]);
+    expect(out).toEqual([`Answered rv_place with its suggestion. ${ON_EAR}`]);
+  });
+
+  it('shows why the API refused an answer in parts, and exits 1', async () => {
+    const reason = 'There’s no live shelf turntables.';
+    const { fetch } = stubApi(() => Response.json({ error: reason }, { status: 400 }));
+    const { io, out, err } = memoryIo();
+    const argv = ['review', 'cli-taxonomy', 'rv_place', '--shelf', 'turntables'];
+    expect(await main(argv, { io, env: ENV, fetch })).toBe(1);
+    expect(err).toEqual([reason]);
+    expect(out).toEqual([]);
+  });
+
+  // The review API's reply to a bulk request: a status for each answer, and for one not taken the
+  // reason, as it says it to a single answer.
+  const NO_SUCH = 'No such question for this dataset.';
+
+  it('answers many questions from a file in one request, and says which weren’t taken', async () => {
+    const answers = {
+      answers: [
+        { reviewId: 'rv_place', suggestion: true },
+        { reviewId: 'rv_amp', parts: { functions: ['dac'] } },
+        { reviewId: 'rv_gone', answer: 'Headphones' },
+      ],
+      note: 'Checked against the makers’ pages.',
+    };
+    const { fetch, sent } = stubApi(() =>
+      Response.json({
+        results: [
+          { reviewId: 'rv_place', status: 200, answered: 'rv_place', effect: ON_EAR },
+          { reviewId: 'rv_amp', status: 200, answered: 'rv_amp', effect: ON_EAR },
+          { reviewId: 'rv_gone', status: 404, error: NO_SUCH },
+        ],
+      }),
+    );
+    const { io, out, err } = memoryIo({ 'answers.json': JSON.stringify(answers) });
+    const argv = ['review', 'cli-taxonomy', '--answers', 'answers.json'];
+    expect(await main(argv, { io, env: ENV, fetch })).toBe(1);
+    expect(sent).toMatchObject([
+      { method: 'POST', path: '/datasets/cli-taxonomy/review/bulk', body: answers },
+    ]);
+    expect(out).toEqual(['Answered 2 of 3 questions.']);
+    expect(err).toEqual([`  rv_gone: ${NO_SUCH}`]);
+  });
+
+  it('counts an answer sent to the owner as taken, and says why the others weren’t', async () => {
+    const answers = {
+      answers: ['rv_a', 'rv_b', 'rv_c', 'rv_d', 'rv_e'].map((reviewId) => ({
+        reviewId,
+        suggestion: true,
+      })),
+    };
+    const { fetch } = stubApi(() =>
+      Response.json({
+        results: [
+          { reviewId: 'rv_a', status: 200, answered: 'rv_a', effect: ON_EAR },
+          {
+            reviewId: 'rv_b',
+            status: 202,
+            flagged: 'rv_b',
+            effect: 'It differs from a person’s answer, so it waits for the owner.',
+          },
+          { reviewId: 'rv_c', status: 400, error: 'A taxonomy question is answered part by part.' },
+          { reviewId: 'rv_d', status: 409, error: 'That question has been answered already.' },
+          { reviewId: 'rv_e', status: 500 },
+        ],
+      }),
+    );
+    const { io, out, err } = memoryIo({ 'answers.json': JSON.stringify(answers) });
+    const argv = ['review', 'cli-taxonomy', '--answers', 'answers.json'];
+    expect(await main(argv, { io, env: ENV, fetch })).toBe(1);
+    expect(out).toEqual(['Answered 2 of 5 questions.']);
+    expect(err).toEqual([
+      '  rv_c: A taxonomy question is answered part by part.',
+      '  rv_d: That question has been answered already.',
+      '  rv_e: Spatula answered HTTP 500.',
+    ]);
+  });
+
+  it('exits 0 when every answer was taken, one of them by the owner’s say-so', async () => {
+    const answers = {
+      answers: [
+        { reviewId: 'rv_a', suggestion: true },
+        { reviewId: 'rv_b', suggestion: true },
+      ],
+    };
+    const { fetch } = stubApi(() =>
+      Response.json({
+        results: [
+          { reviewId: 'rv_a', status: 200, answered: 'rv_a', effect: ON_EAR },
+          { reviewId: 'rv_b', status: 202, flagged: 'rv_b', effect: 'It waits for the owner.' },
+        ],
+      }),
+    );
+    const { io, out, err } = memoryIo({ 'answers.json': JSON.stringify(answers) });
+    const argv = ['review', 'cli-taxonomy', '--answers', 'answers.json'];
+    expect(await main(argv, { io, env: ENV, fetch })).toBe(0);
+    expect(out).toEqual(['Answered 2 of 2 questions.']);
+    expect(err).toEqual([]);
+  });
+
+  it('exits 1 when a reply names fewer answers than were sent', async () => {
+    const answers = {
+      answers: [
+        { reviewId: 'rv_a', suggestion: true },
+        { reviewId: 'rv_b', suggestion: true },
+      ],
+    };
+    const { fetch } = stubApi(() =>
+      Response.json({ results: [{ reviewId: 'rv_a', status: 200, effect: ON_EAR }] }),
+    );
+    const { io, out } = memoryIo({ 'answers.json': JSON.stringify(answers) });
+    const argv = ['review', 'cli-taxonomy', '--answers', 'answers.json'];
+    expect(await main(argv, { io, env: ENV, fetch })).toBe(1);
+    expect(out).toEqual(['Answered 1 of 2 questions.']);
+  });
+
+  it('shows why the API refused a whole file of answers, and exits 1', async () => {
+    const reason = 'The request is wrong at answers.0: Invalid input';
+    const { fetch } = stubApi(() => Response.json({ error: reason }, { status: 400 }));
+    const answers = { answers: [{ reviewId: 'rv_a', suggestion: true }] };
+    const { io, out, err } = memoryIo({ 'answers.json': JSON.stringify(answers) });
+    const argv = ['review', 'cli-taxonomy', '--answers', 'answers.json'];
+    expect(await main(argv, { io, env: ENV, fetch })).toBe(1);
+    expect(err).toEqual([reason]);
+    expect(out).toEqual([]);
+  });
+
+  it('sends the owner’s suggestions by page address, and says which found no question', async () => {
+    const suggestions = {
+      suggestions: [
+        {
+          page: 'https://maker-a.example/products/a1',
+          parts: { shelf: 'on-ear', features: { back: ['closed'] } },
+        },
+        { page: 'https://maker-z.example/x', parts: { shelf: 'dacs' } },
+      ],
+    };
+    const { fetch, sent } = stubApi(() =>
+      Response.json({
+        suggestions: [
+          { page: 'https://maker-a.example/products/a1', status: 200, reviewId: 'rv_place' },
+          {
+            page: 'https://maker-z.example/x',
+            status: 404,
+            error: 'No open question about this page.',
+          },
+        ],
+      }),
+    );
+    const { io, out, err } = memoryIo({ 'suggest.json': JSON.stringify(suggestions) });
+    const argv = ['review', 'cli-taxonomy', '--suggest', 'suggest.json'];
+    expect(await main(argv, { io, env: ENV, fetch })).toBe(1);
+    expect(sent).toMatchObject([
+      { method: 'POST', path: '/datasets/cli-taxonomy/review/suggestions', body: suggestions },
+    ]);
+    expect(out).toEqual(['Suggested answers for 1 of 2 pages.']);
+    expect(err).toEqual(['  https://maker-z.example/x: No open question about this page.']);
+  });
+
+  it('says why a suggestion was refused, and exits 0 when every one was taken', async () => {
+    const suggestions = {
+      suggestions: [
+        { page: 'https://maker-a.example/products/a1', parts: { shelf: 'dacs' } },
+        { page: 'https://maker-a.example/products/a2', parts: { functions: ['dac'] } },
+      ],
+    };
+    const refused = stubApi(() =>
+      Response.json({
+        suggestions: [
+          {
+            page: 'https://maker-a.example/products/a1',
+            status: 400,
+            error: 'This question doesn’t ask for the shelf: it’s settled.',
+          },
+          { page: 'https://maker-a.example/products/a2', status: 200, reviewId: 'rv_two' },
+        ],
+      }),
+    );
+    const files = { 'suggest.json': JSON.stringify(suggestions) };
+    const first = memoryIo(files);
+    const argv = ['review', 'cli-taxonomy', '--suggest', 'suggest.json'];
+    expect(await main(argv, { io: first.io, env: ENV, fetch: refused.fetch })).toBe(1);
+    expect(first.out).toEqual(['Suggested answers for 1 of 2 pages.']);
+    expect(first.err).toEqual([
+      '  https://maker-a.example/products/a1: This question doesn’t ask for the shelf: it’s settled.',
+    ]);
+    const taken = stubApi(() =>
+      Response.json({
+        suggestions: suggestions.suggestions.map(({ page }) => ({
+          page,
+          status: 200,
+          reviewId: 'rv_one',
+        })),
+      }),
+    );
+    const second = memoryIo(files);
+    expect(await main(argv, { io: second.io, env: ENV, fetch: taken.fetch })).toBe(0);
+    expect(second.out).toEqual(['Suggested answers for 2 of 2 pages.']);
+    expect(second.err).toEqual([]);
+  });
+
+  it('sends nothing from a file that isn’t one of answers or of suggestions', async () => {
+    const { fetch, sent } = stubApi(() => Response.json({ results: [] }));
+    const many = Array.from({ length: 501 }, (_, n) => ({ reviewId: `rv_${n}`, suggestion: true }));
+    const { io, err } = memoryIo({
+      'broken.json': '{ "answers": [',
+      'empty.json': JSON.stringify({ answers: [] }),
+      'many.json': JSON.stringify({ answers: many }),
+      'unnamed.json': JSON.stringify({ answers: [{ answer: 'Headphones' }] }),
+      'pageless.json': JSON.stringify({ suggestions: [{ parts: { shelf: 'dacs' } }] }),
+    });
+    for (const argv of [
+      ['--answers', 'missing.json'],
+      ['--answers', 'broken.json'],
+      ['--answers', 'empty.json'],
+      ['--answers', 'many.json'],
+      ['--answers', 'unnamed.json'],
+      ['--suggest', 'pageless.json'],
+    ]) {
+      expect(await main(['review', 'cli-taxonomy', ...argv], { io, env: ENV, fetch })).toBe(1);
+    }
+    expect(sent).toHaveLength(0);
+    const notAnswers = (file: string) =>
+      `${file} isn’t a file of answers: { "answers": [...] }, 1 to 500 of them, each with a "reviewId".`;
+    expect(err).toEqual([
+      'missing.json can’t be read: no such file',
+      expect.stringMatching(/^broken\.json isn’t JSON: /u),
+      notAnswers('empty.json'),
+      notAnswers('many.json'),
+      notAnswers('unnamed.json'),
+      'pageless.json isn’t a file of suggestions: { "suggestions": [...] }, each with a "page" and its "parts".',
+    ]);
+  });
+
+  it('takes one thing to do at a time', async () => {
+    const { fetch, sent } = stubApi(() => Response.json({ reviews: [] }));
+    for (const argv of [
+      ['rv_place', 'on-ear', '--note', 'Pads.'],
+      ['rv_place', '--suggestion', '--shelf', 'on-ear'],
+      ['rv_place', '--kind', 'classify'],
+      ['rv_place', '--feature', 'back'],
+      ['rv_place', '--shelf', 'on-ear', '--note', ' '],
+      ['--function', 'dac'],
+      ['--suggestion'],
+      ['--answers', 'answers.json', '--suggest', 'suggest.json'],
+      ['rv_place', '--answers', 'answers.json'],
+    ]) {
+      const { io } = memoryIo();
+      const code = await main(['review', 'cli-taxonomy', ...argv], { io, env: ENV, fetch });
+      expect(code, argv.join(' ')).toBe(2);
+    }
     expect(sent).toHaveLength(0);
   });
 });

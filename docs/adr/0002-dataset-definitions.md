@@ -71,3 +71,13 @@ fields.
 Feeds, APIs, and Shopify's product JSON are refused until the slices that add them: a clear error,
 not a silently ignored key. A run reads at most `budget.itemsPerRun` pages, which keeps it inside
 Workflows' 10,000 steps (ADR 0005).
+
+## Update, 2026-10-19 (ADR 0007)
+
+- A definition may state its `scope`: what the dataset holds and what it leaves out. A dataset
+  with a taxonomy must.
+- A record type with `taxonomy: { decide: true }` gets the decided fields `shelf`, `functions`, and
+  `features` from the dataset's taxonomy, in place of a decided enum, never both. It can't declare
+  those names, or `category`.
+- A source can fix its pages' shelf (`fixed.shelf`, a slug or a name) or read it with a selector
+  (`extract.shelf`).

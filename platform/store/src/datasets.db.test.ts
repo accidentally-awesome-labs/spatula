@@ -16,16 +16,23 @@ import {
   applyDefinition,
   datasetExists,
   getDataset,
+  listDatasets,
   listItems,
   listLiveItems,
   reviveItems,
   StaleDefinitionError,
 } from './datasets';
 import { findDecision, saveDecision } from './decisions';
-import { testDefinition, testSitemapDefinition } from './fixtures';
+import {
+  testDefinition,
+  testSitemapDefinition,
+  testTaxonomy,
+  testTaxonomyDefinition,
+} from './fixtures';
 import { dueItems } from './listing';
 import { finishRun, getRun, startRun, startRunAlone } from './runs';
 import { datasets, entities, items, runs, sources } from './schema';
+import { currentTaxonomy, seedTaxonomyVersion } from './taxonomy';
 
 const pagesOf = async (db: Executor) =>
   (await listLiveItems(db, 'test-products')).map((item) => item.locator);
@@ -1046,5 +1053,51 @@ describe('startRunAlone', () => {
       expect(
         await startRunAlone(db, { id: 'test-products-202610100500', datasetId }),
       ).toMatchObject({ created: true });
+    }));
+});
+
+describe('a definition’s scope', () => {
+  it('moves the taxonomy to a new version when it changes, and says so on a dry run', () =>
+    withRollback(async (db) => {
+      const definition = testTaxonomyDefinition('scoped');
+      await applyDefinition(db, definition);
+      await seedTaxonomyVersion(db, {
+        datasetId: 'scoped',
+        taxonomy: testTaxonomy(),
+        actor: { role: 'owner', client: 'cli' },
+        at: new Date(),
+      });
+      const scope =
+        'Hi-fi made for audio: headphones, DACs, amplifiers, and speakers. Out of scope: cables.';
+      const dry = await applyDefinition(db, { ...definition, scope }, { dryRun: true });
+      expect(dry.taxonomyVersion).toBe(2);
+      expect((await currentTaxonomy(db, 'scoped'))!.version).toBe(1);
+      const applied = await applyDefinition(db, { ...definition, scope });
+      expect(applied.taxonomyVersion).toBe(2);
+      const now = (await currentTaxonomy(db, 'scoped'))!;
+      expect(now).toMatchObject({ version: 2, actor: { role: 'owner', client: 'cli' } });
+      expect(now.taxonomy.scope).toBe(scope);
+      expect(now.changes).toEqual([
+        expect.objectContaining({
+          change: { kind: 'scope', scope },
+          summary: 'Change the scope statement',
+        }),
+      ]);
+      // The same definition again changes nothing.
+      expect((await applyDefinition(db, { ...definition, scope })).taxonomyVersion).toBeUndefined();
+    }));
+});
+
+describe('listDatasets', () => {
+  it('lists every dataset by ID, with its revision and the generation at its head', () =>
+    withRollback(async (db) => {
+      await applyDefinition(db, testDefinition('list-b'));
+      await applyDefinition(db, testDefinition('list-a'));
+      await applyDefinition(db, { ...testDefinition('list-a'), consumers: ['crowdio'] });
+      const listed = (await listDatasets(db)).filter((dataset) => dataset.id.startsWith('list-'));
+      expect(listed).toEqual([
+        { id: 'list-a', revision: 2, headGeneration: 0 },
+        { id: 'list-b', revision: 1, headGeneration: 0 },
+      ]);
     }));
 });

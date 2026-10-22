@@ -8,6 +8,8 @@ import { applyDefinition, listLiveItems, type ItemRef } from './datasets';
 import {
   anyRefusesAiInput,
   latestFetchId,
+  latestRead,
+  liveIfIrrelevant,
   pagesRefusingAiInput,
   recordExtraction,
   recordFetch,
@@ -379,6 +381,34 @@ describe('latestFetchId', () => {
     }));
 });
 
+describe('latestRead', () => {
+  it('names the item’s latest fetch that read its page, past later ones that didn’t', () =>
+    withRollback(async (db) => {
+      const {
+        items: [a1, a2],
+        runId,
+      } = await seedDataset(db);
+      expect(await latestRead(db, a1!.id)).toBeNull();
+      const read = attempt(runId, a1!, {
+        outcome: 'unchanged',
+        finalUrl: `${a1!.locator}?region=eu`,
+        httpStatus: 304,
+        signals: { 'ai-input': 'yes' },
+        startedAt: T(2),
+      });
+      await recordFetch(db, read);
+      // A later failure read nothing, and another page's read is never this one's.
+      await recordFetch(db, attempt(runId, a1!, { outcome: 'failed', startedAt: T(3) }));
+      await recordFetch(db, attempt(runId, a2!, { outcome: 'changed', startedAt: T(4) }));
+      expect(await latestRead(db, a1!.id)).toEqual({
+        id: read.id,
+        startedAt: T(2),
+        signals: { 'ai-input': 'yes' },
+        finalUrl: `${a1!.locator}?region=eu`,
+      });
+    }));
+});
+
 describe('anyRefusesAiInput', () => {
   /** An unchanged fetch of the page, which saw its site say these things about AI. */
   const fetched = (
@@ -514,6 +544,21 @@ describe('setItemStatus', () => {
       expect((await listLiveItems(db, 'test-products')).map((item) => item.id)).not.toContain(
         a1!.id,
       );
+    }));
+});
+
+describe('liveIfIrrelevant', () => {
+  it('brings back a page a decision took out, and only such a page', () =>
+    withRollback(async (db) => {
+      const {
+        items: [a1, a2],
+      } = await seedDataset(db);
+      await setItemStatus(db, a1!.id, 'irrelevant');
+      await setItemStatus(db, a2!.id, 'gone');
+      expect(await liveIfIrrelevant(db, a1!.id)).toBe(true);
+      expect(await liveIfIrrelevant(db, a2!.id)).toBe(false);
+      expect((await itemRow(db, a1!.id)).status).toBe('live');
+      expect((await itemRow(db, a2!.id)).status).toBe('gone');
     }));
 });
 

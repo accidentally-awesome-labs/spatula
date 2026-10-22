@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import type { Question } from './decisions';
+import type { GivenParts } from './taxonomy-decision';
 import type { Outcome } from './gate';
 import type { EvalScores } from './golden';
 import type { SourceProbe } from './refusals';
@@ -27,6 +28,11 @@ export interface ApplySummary {
    * address, two or more do, or the one that does already has a page there.
    */
   unmoved?: { uncovered: number; ambiguous: number; taken: number };
+  /**
+   * The taxonomy version the definition's new scope made, or would make on a dry run (ADR 0007).
+   * Absent when the scope didn't change it, and from a Worker before the taxonomy.
+   */
+  taxonomyVersion?: number;
 }
 
 /** What a run's snapshot step did. */
@@ -83,7 +89,8 @@ export interface RunSummary {
   items: number;
   /**
    * The live pages when the run planned, and how many of them were due, counting the page a refused
-   * source was probed with (ADR 0006). Absent in runs from before slice 1.
+   * source was probed with (ADR 0006). Absent in runs from before slice 1, and in a run that only
+   * backfilled (ADR 0008).
    */
   live?: number;
   due?: number;
@@ -112,6 +119,11 @@ export interface RunSummary {
    * deleted. Absent in runs from before the archive.
    */
   captures?: { stored: number; pruned: number };
+  /**
+   * Pages read again from their captures, with no request (ADR 0008): due only because the code
+   * that read them is older. Absent in runs from before re-reading.
+   */
+  reread?: number;
   llm: {
     ran: number;
     reused: number;
@@ -131,6 +143,12 @@ export interface RunSummary {
   ruleApart?: string[];
   /** Pages this run found aren't the dataset's ("None of these"). */
   irrelevant?: number;
+  /**
+   * What the run decided again, from captures and with no request, of the pages a taxonomy change
+   * touched (ADR 0008): how many were due, decided, marked for the next run to fetch, and left for
+   * the next run. Absent for a dataset without a taxonomy, and in runs from before backfill.
+   */
+  backfill?: { due: number; decided: number; fetch: number; waiting: number };
   entities: {
     created: number;
     linked: number;
@@ -140,6 +158,19 @@ export interface RunSummary {
     waiting?: number;
   };
   snapshot: PublishResult;
+  /**
+   * The taxonomy review after the run (ADR 0007): the proposals its checks kept, those they
+   * dropped, the changes Spatula applied on its own, and the tokens it spent. `skipped` says why
+   * it didn't ask. Absent for a dataset without a taxonomy, and in runs from before the review.
+   */
+  taxonomy?: {
+    proposed: number;
+    dropped: number;
+    applied: { version: number; summary: string }[];
+    inputTokens: number;
+    outputTokens: number;
+    skipped?: string;
+  };
   /** What deserves a look, such as an LLM failure or an identity conflict: at most 50. */
   notes: string[];
 }
@@ -160,6 +191,20 @@ export interface RunView {
   error: string | null;
 }
 
+export const ACTOR_ROLES = ['owner', 'reviewer', 'decider'] as const;
+export const ACTOR_CLIENTS = ['cli', 'console', 'consumer', 'run'] as const;
+
+/**
+ * Who made a write (ADR 0009): the owner, a consumer's reviewer, or Spatula's decider, and through
+ * which client. A reviewer answers for a consumer, under the opaque ID the consumer gave it.
+ */
+export interface ActorRecord {
+  role: (typeof ACTOR_ROLES)[number];
+  client: (typeof ACTOR_CLIENTS)[number];
+  consumer?: string;
+  reviewer?: string;
+}
+
 /** A question waiting for a person, as the API lists it. */
 export interface ReviewView {
   id: string;
@@ -170,6 +215,44 @@ export interface ReviewView {
   /** What the person needs to answer: addresses, the proposal and its probabilities, counts. */
   context: Record<string, unknown>;
   createdAt: string;
+  /**
+   * Whether a reviewer's answer that differs from a person's sent it to the owner (ADR 0009). Absent
+   * means it wasn't.
+   */
+  flagged?: true;
+  /** The owner's suggested answer, which an answer with `suggestion: true` takes (ADR 0009). */
+  suggestion?: ReviewSuggestion;
+}
+
+/** A suggested answer: a taxonomy question's parts, by ID, or one of another question's options. */
+export type ReviewSuggestion = GivenParts | { answer: string };
+
+/**
+ * What the review log records (ADR 0009): answers, flags, and suggestions, and what is done to the
+ * taxonomy through proposals, versions, and autonomy.
+ */
+export const REVIEW_ACTIONS = [
+  'answer',
+  'flag',
+  'suggest',
+  'accept',
+  'edit',
+  'reject',
+  'apply',
+  'undo',
+  'revoke',
+] as const;
+export type ReviewActionKind = (typeof REVIEW_ACTIONS)[number];
+
+/** A write in the review log, as the API lists it. */
+export interface ReviewAction {
+  id: string;
+  action: ReviewActionKind;
+  /** What it was about: a question, a proposal, a taxonomy version, or a kind of change. */
+  subject: string;
+  actor: ActorRecord;
+  detail: Record<string, unknown>;
+  at: string;
 }
 
 /** How far an acknowledgment's sentAt may be from Spatula's clock: older ones may be replays. */

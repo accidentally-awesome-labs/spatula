@@ -140,7 +140,11 @@ export async function recordExtraction(
   db: Executor,
   input: {
     itemId: string;
-    fetchId: string;
+    /**
+     * The fetch whose log says what the LLM step did. Null for a page read again from its capture
+     * (ADR 0008), which no fetch brought: its last fetch's log stays as it was.
+     */
+    fetchId: string | null;
     extractedWith: string;
     extractInputHash?: string | null;
     llm: string;
@@ -154,6 +158,7 @@ export async function recordExtraction(
       ...(input.extractInputHash === undefined ? {} : { extractInputHash: input.extractInputHash }),
     })
     .where(eq(items.id, input.itemId));
+  if (input.fetchId === null) return;
   await db
     .update(fetches)
     .set({
@@ -178,6 +183,34 @@ export async function latestFetchId(db: Executor, itemId: string): Promise<strin
   return row?.id ?? null;
 }
 
+/**
+ * The item's latest fetch that read its page, changed or unchanged, with the signals its site gave
+ * and where it ended up: what a page read again from its capture counts as (ADR 0008). Of fetches
+ * that started together, the one with the greater ID.
+ */
+export async function latestRead(
+  db: Executor,
+  itemId: string,
+): Promise<{
+  id: string;
+  startedAt: Date;
+  signals: ContentSignals | null;
+  finalUrl: string | null;
+} | null> {
+  const [row] = await db
+    .select({
+      id: fetches.id,
+      startedAt: fetches.startedAt,
+      signals: fetches.signals,
+      finalUrl: fetches.finalUrl,
+    })
+    .from(fetches)
+    .where(and(eq(fetches.itemId, itemId), inArray(fetches.outcome, ['changed', 'unchanged'])))
+    .orderBy(desc(fetches.startedAt), desc(fetches.id))
+    .limit(1);
+  return row ?? null;
+}
+
 /** Sets an item's status, as a decision does when it finds a page isn't one of the dataset's. */
 export async function setItemStatus(
   db: Executor,
@@ -185,6 +218,19 @@ export async function setItemStatus(
   status: ItemStatus,
 ): Promise<void> {
   await db.update(items).set({ status }).where(eq(items.id, itemId));
+}
+
+/**
+ * Brings back a page a decision took out, when a person now places it (ADR 0007). A page that left
+ * for another reason, gone or refused, stays as it is. Returns whether it came back.
+ */
+export async function liveIfIrrelevant(db: Executor, itemId: string): Promise<boolean> {
+  const rows = await db
+    .update(items)
+    .set({ status: 'live' })
+    .where(and(eq(items.id, itemId), eq(items.status, 'irrelevant')))
+    .returning({ id: items.id });
+  return rows.length > 0;
 }
 
 /**

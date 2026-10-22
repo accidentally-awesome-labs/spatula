@@ -12,3 +12,6 @@ export * from './consumers';
 export * from './evals';
 export * from './source-states';
 export * from './captures';
+export * from './taxonomy';
+export * from './proposals';
+export * from './actions';

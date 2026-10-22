@@ -1,4 +1,6 @@
 import type {
+  ActorRecord,
+  AppliedChange,
   ContentSignals,
   Definition,
   EvalScores,
@@ -7,13 +9,19 @@ import type {
   GateResult,
   Method,
   Outcome,
+  ProposalEvidence,
+  ProposalImpact,
   Question,
+  ReviewActionKind,
+  ReviewSuggestion,
   RunStatus,
   RunSummary,
   SourceProbe,
+  Taxonomy,
 } from '@spatula/core';
 import { sql } from 'drizzle-orm';
 import {
+  boolean,
   check,
   doublePrecision,
   foreignKey,
@@ -127,6 +135,11 @@ export const items = pgTable(
     extractInputHash: text('extract_input_hash'),
     /** The definition revision and extraction version the statements came from. */
     extractedWith: text('extracted_with'),
+    /**
+     * The taxonomy key the page's decision was made under (ADR 0007): what of the taxonomy its
+     * question covered. A taxonomy change that alters it asks the page again.
+     */
+    taxonomyKey: text('taxonomy_key'),
     lastOutcome: text('last_outcome').$type<Outcome>(),
     outcomeStreak: integer('outcome_streak').notNull().default(0),
     /**
@@ -497,6 +510,14 @@ export const judgements = pgTable(
   ],
 );
 
+/** A reviewer's answer that differs from a person's, kept for the owner to see (ruling 12). */
+export interface ReviewFlag {
+  actor: ActorRecord;
+  /** What the reviewer answered: an option, or parts by ID. */
+  answer: unknown;
+  at: string;
+}
+
 /** Questions waiting for a person: at most one open per subject. */
 export const reviewItems = pgTable(
   'review_items',
@@ -514,6 +535,16 @@ export const reviewItems = pgTable(
     context: jsonb('context').$type<Record<string, unknown>>().notNull(),
     status: text('status').$type<ReviewStatus>().notNull().default('open'),
     answer: text('answer'),
+    /** Who answered it (ADR 0009): the owner, or a consumer's reviewer. */
+    answeredBy: jsonb('answered_by').$type<ActorRecord>(),
+    /** What the person who answered added, in their words. */
+    note: text('note'),
+    /** When a reviewer's answer that differs from a person's sent it to the owner (ruling 12). */
+    flaggedAt: time('flagged_at'),
+    /** That answer, and who gave it. */
+    flag: jsonb('flag').$type<ReviewFlag>(),
+    /** The owner's suggested answer, which an answer with `suggestion: true` takes. */
+    suggestion: jsonb('suggestion').$type<ReviewSuggestion>(),
     createdAt: time('created_at').notNull(),
     closedAt: time('closed_at'),
   },
@@ -527,6 +558,7 @@ export const reviewItems = pgTable(
     index('review_items_decision').on(t.decisionId),
     check('review_items_kind', sql`${t.kind} in ('classify', 'match', 'publication')`),
     check('review_items_status', sql`${t.status} in ('open', 'decided', 'dismissed')`),
+    check('review_items_flagged', sql`(${t.flaggedAt} is null) = (${t.flag} is null)`),
   ],
 );
 
@@ -578,4 +610,142 @@ export const evals = pgTable(
     createdAt: time('created_at').notNull(),
   },
   (t) => [index('evals_dataset').on(t.datasetId, t.createdAt)],
+);
+
+/**
+ * A dataset's taxonomy (ADR 0007), one row per version, each whole. Version 1 is the seed; each
+ * change or batch of changes makes the next, with what it applied and who applied it. A version is
+ * never rewritten: undoing one makes another.
+ */
+export const taxonomyVersions = pgTable(
+  'taxonomy_versions',
+  {
+    datasetId: text('dataset_id')
+      .notNull()
+      .references(() => datasets.id, { onDelete: 'cascade' }),
+    version: integer('version').notNull(),
+    taxonomy: jsonb('taxonomy').$type<Taxonomy>().notNull(),
+    /** The changes it applied, with what undoing each needs; empty for the seed. */
+    changes: jsonb('changes').$type<AppliedChange[]>().notNull(),
+    actor: jsonb('actor').$type<ActorRecord>().notNull(),
+    /** Whether Spatula applied it on its own, with a kind's earned autonomy. */
+    autonomous: boolean('autonomous').notNull().default(false),
+    /** The proposal it applied. No foreign key: a version outlives any proposal row. */
+    proposalId: text('proposal_id'),
+    /** The version it undid. */
+    undoes: integer('undoes'),
+    createdAt: time('created_at').notNull(),
+  },
+  (t) => [
+    primaryKey({ columns: [t.datasetId, t.version] }),
+    check('taxonomy_versions_version', sql`${t.version} > 0`),
+  ],
+);
+
+/**
+ * The review log (ADR 0009): every write through the review API, and each change Spatula applies to
+ * a taxonomy on its own (ruling 14), with who made it. A run's ordinary decisions stay in their
+ * decision records. Rows are only ever added.
+ */
+export const reviewActions = pgTable(
+  'review_actions',
+  {
+    id: text('id').primaryKey(),
+    datasetId: text('dataset_id')
+      .notNull()
+      .references(() => datasets.id, { onDelete: 'cascade' }),
+    action: text('action').$type<ReviewActionKind>().notNull(),
+    /** What it was about: a question, a proposal, a taxonomy version, or a kind of change. */
+    subject: text('subject').notNull(),
+    actor: jsonb('actor').$type<ActorRecord>().notNull(),
+    detail: jsonb('detail').$type<Record<string, unknown>>().notNull(),
+    at: time('at').notNull(),
+  },
+  (t) => [
+    index('review_actions_dataset').on(t.datasetId, t.at),
+    check(
+      'review_actions_action',
+      sql`${t.action} in ('answer', 'flag', 'suggest', 'accept', 'edit', 'reject', 'apply', 'undo', 'revoke')`,
+    ),
+  ],
+);
+
+export const PROPOSAL_STATUSES = ['open', 'accepted', 'rejected', 'applied', 'dropped'] as const;
+export type ProposalStatus = (typeof PROPOSAL_STATUSES)[number];
+
+/**
+ * The taxonomy review's proposals (ADR 0007): each change with why, its evidence, its impact, and
+ * what became of it. A proposal that fails a check is kept as dropped, with the reason and the text
+ * the review sent. Accepting applies a proposal at once, so `accepted` is never written: an
+ * accepted proposal is `applied`, with the version it made. The partial unique index holds an
+ * open, rejected, or applied change once, which is how a change isn't proposed again. It indexes
+ * the change's hash, because a change's text can outgrow what a btree entry holds.
+ */
+export const taxonomyProposals = pgTable(
+  'taxonomy_proposals',
+  {
+    id: text('id').primaryKey(),
+    datasetId: text('dataset_id')
+      .notNull()
+      .references(() => datasets.id, { onDelete: 'cascade' }),
+    /** The run whose review proposed it: null once the run is gone, or for a test's own. */
+    runId: text('run_id').references(() => runs.id, { onDelete: 'set null' }),
+    kind: text('kind').notNull(),
+    /** The change, its items named by ID; a dropped proposal's is the text the review sent. */
+    change: jsonb('change').$type<unknown>().notNull(),
+    changeText: text('change_text').notNull(),
+    changeHash: text('change_hash').notNull(),
+    /** The change in words; null for a dropped proposal. */
+    summary: text('summary'),
+    why: text('why').notNull(),
+    evidence: jsonb('evidence').$type<ProposalEvidence>().notNull(),
+    impact: jsonb('impact').$type<ProposalImpact>(),
+    status: text('status').$type<ProposalStatus>().notNull().default('open'),
+    dropReason: text('drop_reason'),
+    /** The version it was checked against. */
+    base: integer('base').notNull(),
+    /** The version applying it made. */
+    version: integer('version'),
+    decidedBy: jsonb('decided_by').$type<ActorRecord>(),
+    /** Whether the owner changed it before it was applied, which resets its kind's run. */
+    edited: boolean('edited').notNull().default(false),
+    note: text('note'),
+    createdAt: time('created_at').notNull(),
+    decidedAt: time('decided_at'),
+  },
+  (t) => [
+    uniqueIndex('taxonomy_proposals_change')
+      .on(t.datasetId, t.changeHash)
+      .where(sql`${t.status} in ('open', 'rejected', 'applied')`),
+    index('taxonomy_proposals_dataset').on(t.datasetId, t.status, t.createdAt),
+    index('taxonomy_proposals_run').on(t.runId),
+    check(
+      'taxonomy_proposals_status',
+      sql`${t.status} in ('open', 'accepted', 'rejected', 'applied', 'dropped')`,
+    ),
+  ],
+);
+
+/**
+ * Each kind's run of unedited acceptances (ADR 0007), from someone allowed to approve the kind. A
+ * kind applies on its own while its run is AUTONOMY_AFTER or more. Only the earnable kinds have one.
+ */
+export const autonomy = pgTable(
+  'autonomy',
+  {
+    datasetId: text('dataset_id')
+      .notNull()
+      .references(() => datasets.id, { onDelete: 'cascade' }),
+    kind: text('kind').notNull(),
+    streak: integer('streak').notNull().default(0),
+    updatedAt: time('updated_at').notNull(),
+  },
+  (t) => [
+    primaryKey({ columns: [t.datasetId, t.kind] }),
+    check('autonomy_streak', sql`${t.streak} >= 0`),
+    check(
+      'autonomy_kind',
+      sql`${t.kind} in ('add-subcategory', 'add-feature', 'add-value', 'describe')`,
+    ),
+  ],
 );

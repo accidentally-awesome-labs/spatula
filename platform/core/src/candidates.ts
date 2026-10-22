@@ -114,7 +114,8 @@ export function normalizeCandidates(
   };
 }
 
-function applyRule(page: Page, rule: Rule): string | null {
+/** The text a source's rule finds on a page: its canonical address, or a selector's text. */
+export function applyRule(page: Page, rule: Rule): string | null {
   return 'url' in rule ? page.canonicalUrl : page.select(rule.css, rule.attr);
 }
 

@@ -1,4 +1,4 @@
-import { METHODS, OUTCOMES, SOURCE_PROBES } from '@spatula/core';
+import { EARNABLE_KINDS, METHODS, OUTCOMES, REVIEW_ACTIONS, SOURCE_PROBES } from '@spatula/core';
 import { sql } from 'drizzle-orm';
 import { describe, expect, it } from 'vitest';
 import { withRollback } from '../test/db';
@@ -9,6 +9,7 @@ import {
   FETCH_KINDS,
   ITEM_STATUSES,
   JUDGES,
+  PROPOSAL_STATUSES,
   REVIEW_KINDS,
   REVIEW_STATUSES,
   SNAPSHOT_STATES,
@@ -45,6 +46,7 @@ describe('the CHECK lists', () => {
       expect(await allowed(tx, 'judgements_who')).toEqual([...JUDGES].sort());
       expect(await allowed(tx, 'review_items_kind')).toEqual([...REVIEW_KINDS].sort());
       expect(await allowed(tx, 'review_items_status')).toEqual([...REVIEW_STATUSES].sort());
+      expect(await allowed(tx, 'review_actions_action')).toEqual([...REVIEW_ACTIONS].sort());
     }));
 
   it('allow exactly the snapshot states the store names', () =>
@@ -55,5 +57,11 @@ describe('the CHECK lists', () => {
   it('allow exactly the acknowledgment outcomes the store names', () =>
     withRollback(async (tx) => {
       expect(await allowed(tx, 'acknowledgments_outcome')).toEqual([...ACK_OUTCOMES].sort());
+    }));
+
+  it('allow exactly the proposal statuses the store names, and the kinds core lets earn autonomy', () =>
+    withRollback(async (tx) => {
+      expect(await allowed(tx, 'taxonomy_proposals_status')).toEqual([...PROPOSAL_STATUSES].sort());
+      expect(await allowed(tx, 'autonomy_kind')).toEqual([...EARNABLE_KINDS].sort());
     }));
 });

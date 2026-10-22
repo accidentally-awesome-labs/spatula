@@ -5,7 +5,7 @@
  * in its head that changes on every fetch, as Shopify's do, while its text stays the same.
  */
 
-import type { DecisionRequest } from '@spatula/core';
+import type { DecisionRequest, TaxonomyRequest } from '@spatula/core';
 
 const page = (head: string, main: string) =>
   `<!doctype html><html><head>${head}</head><body><header><nav>Shop</nav></header><main>${main}</main><footer>Maker</footer></body></html>`;
@@ -80,6 +80,8 @@ export const standardRoutes = (): Record<string, Reply> => ({
 
 /** What the fake LLM answers for each page. B1's price isn't on the page, so it's dropped. */
 export function answerFor(user: string): Record<string, unknown> | null {
+  // The taxonomy review's request names pages too, so it's answered first: with nothing to propose.
+  if (user.startsWith('The taxonomy to review:')) return { proposals: [] };
   if (user.includes('/products/a1')) {
     return {
       specs: [
@@ -121,6 +123,40 @@ export function decisionFor(request: DecisionRequest): Record<string, number> | 
   }
   if (request.type === 'match') return { unrelated: 0.97 };
   return null;
+}
+
+/** A taxonomy decider's answer by slug, as the tests think of it. */
+export interface SlugChances {
+  shelves?: Record<string, number>;
+  functions?: Record<string, number>;
+  values?: Record<string, number>;
+}
+
+/**
+ * What the fake taxonomy decider answers: B1 is a headphone amp that's a DAC too, built for
+ * headphones; A2 is a closed on-ear headphone; any other page an open over-ear one.
+ */
+export function taxonomyFor(request: TaxonomyRequest): SlugChances {
+  const low = { dac: 0.01, 'pre-amp': 0.01, amplifier: 0.02 };
+  if (request.evidence.includes(URLS.b1)) {
+    return {
+      shelves: { 'headphone-amps': 0.97 },
+      functions: { amplifier: 0.99, dac: 0.95, 'pre-amp': 0.05, headphones: 0.01 },
+      values: { headphones: 0.95, iems: 0.05, speakers: 0.02 },
+    };
+  }
+  if (request.evidence.includes(URLS.a2)) {
+    return {
+      shelves: { 'on-ear': 0.95 },
+      functions: { headphones: 0.99, ...low },
+      values: { closed: 0.94, open: 0.04 },
+    };
+  }
+  return {
+    shelves: { 'over-ear': 0.96 },
+    functions: { headphones: 0.99, ...low },
+    values: { open: 0.95, closed: 0.03 },
+  };
 }
 
 const C = (name: string, path: string, mpn: string) =>

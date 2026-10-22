@@ -6,8 +6,8 @@ are until 0.2 replaces them; don't change them for 0.2 work.
 
 Read first: `docs/adr/0001-spatula-0-2-system-of-record.md` (the direction) and
 `docs/adr/0002-dataset-definitions.md` (the definition format). Then 0003 (decisions and review),
-0004 (publication and consumers), 0005 (collection at scale), 0006 (refusals and routes), and
-0008 (the page archive).
+0004 (publication and consumers), 0005 (collection at scale), 0006 (refusals and routes), 0007
+(the living taxonomy), 0008 (the page archive), and 0009 (the review API and console).
 
 ## Commands
 
@@ -22,8 +22,10 @@ Run from the repository root, with pnpm 11 and Node 22 or later.
 - `pnpm --filter @spatula/worker dev`: the Worker on port 8787. Copy `platform/worker/.dev.vars.example`
   to `.dev.vars` first.
 - `pnpm spatula <command>`: the CLI: `check`, `plan`, `apply`, `run`, `snapshot pull`, `review`,
-  `revive` (pages, or sources with `--source`), `purge` (a source's page captures, with
-  `--source`), `status`, `eval`, and `evals`. `SPATULA_URL` and
+  `revive` (pages, `--irrelevant` pages, or sources with `--source`), `purge` (a source's page
+  captures, with `--source`), `taxonomy` (`seed` and `export`), `status`, `eval`, and `evals`.
+  `review` answers a question part by part, or many from a file, and takes the owner's
+  suggestions from a file; `run --backfill` only backfills. `SPATULA_URL` and
   `SPATULA_TOKEN` say where Spatula is (`https://spatula.run` for the deployment),
   and the owner token.
   The CLI sends the token only to an `https://` address, or to this machine. Run `pnpm spatula …`
@@ -39,7 +41,8 @@ Before committing, run all of these: `pnpm platform:lint`, `pnpm platform:typech
 - `platform/core` (`@spatula/core`): the rules, in plain TypeScript with no Cloudflare imports.
   It covers definitions, sitemaps, robots.txt and the gate, pages, extraction, the LLM port and
   its checks, decisions, identity and matching, survivorship, publication gates, snapshots,
-  request signatures, acknowledgments, and golden sets.
+  request signatures, acknowledgments, golden sets, and the living taxonomy: its model, its
+  changes and their migrations, the three-part decision, and the review's checks (ADR 0007).
 - `packs/products` (`@spatula/pack-products`): reads products from schema.org JSON-LD and OpenGraph.
 - `platform/store` (`@spatula/store`): the Drizzle schema, its migrations, and every query.
   Nothing else writes SQL.
@@ -48,7 +51,11 @@ Before committing, run all of these: `pnpm platform:lint`, `pnpm platform:typech
   (`requests.ts`), extraction, classification (`classify.ts`), matching (`match.ts`), and
   publishing through the gates (`publish.ts`). Every page a fetch reads is kept as a capture,
   and each run ends by cleaning up the captures retention lets go (`captures.ts`, ADR 0008).
-  Node tests run it against Postgres. Review
+  A taxonomy dataset's pages are placed in a `decide:` step (`taxonomy.ts`), stale ones are
+  backfilled from captures (`backfill.ts`), and the run ends with the taxonomy's review
+  (`taxonomy-review.ts`). Node tests run it against Postgres. The review API (`review-api.ts`)
+  serves the CLI, consumers' reviewers, and the console, which Cloudflare Access guards
+  (`access.ts`, ADR 0009). Review
   (`review.ts`) applies a person's answers to the questions those steps raise. The Workflow,
   HostGate (a Durable Object per host), the HTTP, LLM, and signing adapters, and the API connect
   it to Cloudflare.
@@ -78,6 +85,9 @@ Before committing, run all of these: `pnpm platform:lint`, `pnpm platform:typech
 - Canonical IDs (`sp_…`) are assigned once and stored, never derived from values again.
 - Decisions are typed questions whose answers code applies. A person's answer outranks every
   other, and a decider's decision needs `ai-input` (ADR 0003).
+- A taxonomy changes only as a new version, applied on an approval (the owner's, or a reviewer's
+  for the additive kinds) or by a kind's earned autonomy, and undone by another version
+  (ADR 0007, ADR 0009). The console shows page text as text, never markup.
 - Snapshots publish only through the gates; a held snapshot waits for the owner (ADR 0004).
 - Consumers read only the datasets that list them, and sign their acknowledgments.
 - Snapshots use the format Crowdio reads (its ADR 0021). The head generation moves by compare-and-set.

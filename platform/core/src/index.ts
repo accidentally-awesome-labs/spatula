@@ -27,3 +27,8 @@ export * from './trigrams';
 export * from './matching';
 export * from './match-evidence';
 export * from './golden';
+export * from './taxonomy';
+export * from './taxonomy-changes';
+export * from './taxonomy-decision';
+export * from './taxonomy-review';
+export * from './taxonomy-records';

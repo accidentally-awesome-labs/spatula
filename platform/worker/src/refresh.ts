@@ -2,6 +2,7 @@ import {
   acceptLlmOutput,
   buildLlmRequest,
   extractFromPage,
+  hasTaxonomy,
   LLM_MAX_TOKENS,
   llmFields,
   llmInputHash,
@@ -14,6 +15,8 @@ import {
   sha256Hex,
   sourceVerdict,
   stableId,
+  stateHash,
+  taxonomyKeys,
   type ContentSignals,
   type Definition,
   type LlmUsage,
@@ -28,12 +31,14 @@ import {
 } from '@spatula/core';
 import {
   captureById,
+  currentTaxonomy,
   dueItems,
   finishRun,
   forgetStoredCopy,
   getDataset,
   itemsByIds,
   latestCapture,
+  latestRead,
   liveAgain,
   probeItem,
   recordCapture,
@@ -44,6 +49,8 @@ import {
   resolveEntities,
   sourceStates,
   startRun,
+  taxonomyItemsByIds,
+  taxonomyPages,
   writeStatements,
   type CaptureRow,
   type Executor,
@@ -51,8 +58,15 @@ import {
   type ItemRef,
   type StatementCounts,
 } from '@spatula/store';
+import { backfillPage } from './backfill';
 import { cleanUpCaptures, readPageBody, storeBody, storeRead } from './captures';
-import { cascadeField, classifyItem, classifyTarget, decidedByLlm } from './classify';
+import {
+  cascadeField,
+  classifyItem,
+  classifyTarget,
+  decidedByLlm,
+  type Classified,
+} from './classify';
 import { discoverSource } from './discovery';
 import { matchItem } from './match';
 import {
@@ -69,6 +83,8 @@ import {
   type StepRunner,
 } from './pipeline';
 import { publish } from './publish';
+import { decideTaxonomy, keepOut, runTaxonomy, taxonomyTarget } from './taxonomy';
+import { reviewTaxonomy } from './taxonomy-review';
 import { isChallenge, MAX_WAITS, requestThroughGate, siteAnswerOf, type Resume } from './requests';
 import { storable } from './text';
 
@@ -87,20 +103,23 @@ export {
 
 /*
  * One refresh of one dataset. A sitemap source's sitemaps are read first (discovery.ts), which
- * lists its pages. Each page is fetched in its own step, through the gate, and only a
- * page that changed (or whose statements came from older code) is extracted, in a step of its
- * own, from the copy kept under its hash. A failed or blocked fetch changes no values. The LLM is
- * asked only for fields nothing else filled, only where the dataset and the site allow AI input,
- * and only when its question changed. A page whose source leaves the record type's decided field
- * to the cascade is then classified, in a step of its own (classify.ts), and isn't current until
- * that step has finished. The LLM and the decider share the run's token budget (pipeline.ts). Then
- * entities are resolved. Resolution asks about the pairs it can't settle by rule, each in a step
- * of its own (match.ts), and defers them until they're answered. If the records changed, they go
- * through the dataset's gates (publish.ts): a snapshot is published when the gates allow it, and
- * held for the owner's review when they don't. Nothing here imports Cloudflare: the Workflow
- * passes real ports, and the tests pass fakes. A source that refused three runs in a row gets only
- * a probe; a step after the pages counts each source's standing (ADR 0006). The last step before
- * the run finishes cleans up the page archive (ADR 0008).
+ * lists its pages. Each page is fetched in its own step, through the gate, and only a page that
+ * changed (or whose statements came from older code) is extracted, in a step of its own, from the
+ * copy kept under its hash. A page due only because its statements came from older code isn't
+ * fetched: it's read again from its capture, with no request (ADR 0008). A failed or blocked fetch
+ * changes no values. The LLM is asked only for fields nothing else filled, only where the dataset
+ * and the site allow AI input, and only when its question changed. A page whose source leaves the
+ * record type's decided field to the cascade is then classified, in a step of its own
+ * (classify.ts), and isn't current until that step has finished. The LLM and the decider share the
+ * run's token budget (pipeline.ts). Then entities are resolved. Resolution asks about the pairs it
+ * can't settle by rule, each in a step of its own (match.ts), and defers them until they're
+ * answered. If the records changed, they go through the dataset's gates (publish.ts): a snapshot is
+ * published when the gates allow it, and held for the owner's review when they don't. Nothing here
+ * imports Cloudflare: the Workflow passes real ports, and the tests pass fakes. A source that
+ * refused three runs in a row gets only a probe; a step after the pages counts each source's
+ * standing (ADR 0006). After publishing, a step cleans up the page archive (ADR 0008). In a dataset
+ * with a taxonomy, the last step before the run finishes reviews the taxonomy, and applies the
+ * changes of kinds that have earned it (ADR 0007).
  */
 
 export interface RefreshParams {
@@ -108,6 +127,12 @@ export interface RefreshParams {
   datasetId: string;
   /** Treat every live page as due, however recently it was read. The budget still applies. */
   all?: boolean;
+  /**
+   * Only backfill (ADR 0008): decide again, from their captures, the pages a taxonomy change
+   * touched. The run discovers, probes, plans, and fetches nothing, and counts no source's
+   * verdict; it resolves and publishes as usual.
+   */
+  backfill?: boolean;
 }
 
 export const MAX_NOTES = 50;
@@ -206,6 +231,11 @@ interface Fetched {
   captureId?: string | null;
   /** Whether this fetch recorded a capture. Absent from a result kept by an earlier version. */
   captured?: boolean;
+  /**
+   * When the page's statements count as seen, as an ISO time: its last fetch's, for a page read
+   * again from its capture with no request (ADR 0008). Absent for a fetch, which counts as now.
+   */
+  seenAt?: string;
   note: string | null;
 }
 
@@ -234,6 +264,8 @@ export async function runRefresh(
   ports: RefreshPorts,
 ): Promise<RunSummary> {
   const { runId, datasetId } = params;
+  // A backfill-only run reads no page: it asks no site anything (ADR 0008).
+  const backfillOnly = params.backfill === true;
   try {
     const loaded = await step.do<Loaded>('load', () =>
       ports.withDb(async (db) => {
@@ -257,6 +289,22 @@ export async function runRefresh(
         };
       }),
     );
+    const [recordType] = Object.values(loaded.definition.recordTypes);
+    const placing = recordType !== undefined && hasTaxonomy(recordType);
+    // The taxonomy version the run places pages in (ADR 0007). The step keeps only the number, and
+    // each step reads that version itself, so a result stays small.
+    const taxonomyVersion = placing
+      ? await step.do('taxonomy', () =>
+          ports.withDb(async (db) => (await currentTaxonomy(db, datasetId))?.version ?? null),
+        )
+      : null;
+    // Whether the dataset has a taxonomy to place pages in, and a version of it. `taxonomyVersion` is
+    // null for a record type without one as it is for one not seeded, so the record type is asked.
+    const backfilling = placing && taxonomyVersion !== null;
+    if (backfillOnly && !backfilling) {
+      // The API refuses these runs too (409), so this is a dataset changed since.
+      throw new Error(`${datasetId} has no taxonomy to backfill`);
+    }
     const context: Context = {
       runId,
       datasetId,
@@ -264,8 +312,15 @@ export async function runRefresh(
       definition: loaded.definition,
       startedAt: new Date(loaded.startedAt),
       standing: loaded.standing ?? {},
+      taxonomyVersion,
     };
     const summary = emptySummary();
+    if (placing && taxonomyVersion === null) {
+      note(
+        summary,
+        `${datasetId} has no taxonomy yet, so its pages wait to be placed: seed one with pnpm spatula taxonomy seed`,
+      );
+    }
 
     // What each source's answers said of its site, and what each refused source's probe met (ADR
     // 0006). Both come from steps' results, so a run that replays its steps counts the same.
@@ -279,7 +334,7 @@ export async function runRefresh(
     const isRefused = (sourceId: string) => context.standing?.[sourceId]?.refused === true;
 
     for (const source of context.definition.sources) {
-      if (source.kind !== 'sitemap') continue;
+      if (backfillOnly || source.kind !== 'sitemap') continue;
       const probe = isRefused(source.id);
       const found = await discoverSource(context, source, step, ports, { probe });
       for (const site of found.sites) heard(source.id, site);
@@ -303,7 +358,7 @@ export async function runRefresh(
     // A refused pages source is probed with its least recently read page.
     const probedPages = new Set<string>();
     for (const source of context.definition.sources) {
-      if (source.kind !== 'pages' || !isRefused(source.id)) continue;
+      if (backfillOnly || source.kind !== 'pages' || !isRefused(source.id)) continue;
       const item = await step.do(`probe:${source.id}`, () =>
         ports.withDb((db) => probeItem(db, { datasetId, sourceId: source.id })),
       );
@@ -324,19 +379,24 @@ export async function runRefresh(
       );
     }
 
-    const plan = await step.do('plan', () =>
-      ports.withDb((db) =>
-        dueItems(db, {
-          datasetId,
-          now: context.startedAt,
-          maxAgeDays: context.definition.freshness.maxAgeDays,
-          current: extractionTag(context.revision),
-          limit: context.definition.budget.itemsPerRun,
-          all: params.all === true,
-        }),
-      ),
-    );
+    // A backfill-only run has no plan.
+    const plan: Awaited<ReturnType<typeof dueItems>> = backfillOnly
+      ? { ids: [], due: 0, live: 0, reread: [] }
+      : await step.do('plan', () =>
+          ports.withDb((db) =>
+            dueItems(db, {
+              datasetId,
+              now: context.startedAt,
+              maxAgeDays: context.definition.freshness.maxAgeDays,
+              current: extractionTag(context.revision),
+              limit: context.definition.budget.itemsPerRun,
+              all: params.all === true,
+            }),
+          ),
+        );
     summary.live = plan.live;
+    // A plan kept by an earlier version has no pages to read again: they are fetched.
+    const rereading = new Set(plan.reread ?? []);
     const waiting = plan.due - plan.ids.length;
     if (waiting > 0) {
       const { itemsPerRun } = context.definition.budget;
@@ -367,6 +427,16 @@ export async function runRefresh(
         ports.withDb((db) => itemsByIds(db, ids.slice(start, start + ITEMS_PER_STEP))),
       );
       for (const item of batch) {
+        // Read again from its capture, the page makes no request, so it says nothing of its site,
+        // and a paused source doesn't hold it up. It's fetched when its capture is gone.
+        if (rereading.has(item.id)) {
+          const reread = await rereadItem(context, item, summary, step, ports);
+          if (reread !== null) {
+            summary.items += 1;
+            if (reread.waitsForBudget) budgetWaits += 1;
+            continue;
+          }
+        }
         const left = paused.get(item.sourceId);
         if (left !== undefined) {
           paused.set(item.sourceId, left + 1);
@@ -409,6 +479,16 @@ export async function runRefresh(
       );
     }
 
+    // The pages a taxonomy change touched are decided again from their captures (ADR 0008),
+    // before resolution, so this run's snapshot carries them.
+    if (backfilling) summary.backfill = await backfill(context, summary, step, ports);
+    // A backfill-only run planned nothing, so it says nothing of what was live, due, or paused.
+    if (backfillOnly) {
+      delete summary.live;
+      delete summary.due;
+      delete summary.paused;
+    }
+
     // The run's verdict for each source, counted across runs (ADR 0006). A refused source whose
     // probe didn't get through counts no blocked run: what its probe met is kept as the probe's.
     // Counting a blocked source also takes back this run's blocks on its pages, which would count
@@ -425,11 +505,14 @@ export async function runRefresh(
         verdicts[source.id] = sourceVerdict(answers.get(source.id) ?? []);
       }
     }
-    const counted = await step.do('sources', () =>
-      ports.withDb((db) =>
-        recordSourceRuns(db, { datasetId, at: context.startedAt, verdicts, probes }),
-      ),
-    );
+    // A backfill-only run asked no site anything, so it has no verdict to count.
+    const counted: Awaited<ReturnType<typeof recordSourceRuns>> = backfillOnly
+      ? { blocked: [], refused: [] }
+      : await step.do('sources', () =>
+          ports.withDb((db) =>
+            recordSourceRuns(db, { datasetId, at: context.startedAt, verdicts, probes }),
+          ),
+        );
     const probedOutcomes = [...probed.keys()].map((id) => ({
       id,
       outcome: probes[id] ?? ('through' as const),
@@ -503,6 +586,16 @@ export async function runRefresh(
     const cleaned = await step.do('captures', () => cleanUpCaptures(context, ports));
     if (summary.captures !== undefined) summary.captures.pruned = cleaned.pruned;
     if (cleaned.note !== null) note(summary, cleaned.note);
+    // The taxonomy review comes last (ADR 0007): it reads what the run decided, and what it applies
+    // on its own reaches the next run's pages and snapshot. A run without a taxonomy version has
+    // none: its record type has no taxonomy, or its taxonomy isn't seeded yet.
+    if (placing && taxonomyVersion !== null) {
+      const reviewed = await step.do('taxonomy:review', () =>
+        reviewTaxonomy(context, budgetLeft(context, summary), ports),
+      );
+      summary.taxonomy = reviewed.taxonomy;
+      for (const text of reviewed.notes) note(summary, text);
+    }
     await step.do('finish', () =>
       ports.withDb((db) => finishRun(db, runId, { status: 'complete', summary })),
     );
@@ -534,6 +627,7 @@ function emptySummary(): RunSummary {
     fetches: { changed: 0, unchanged: 0, gone: 0, failed: 0, blocked: 0 },
     statements: { ...NO_CHANGE },
     captures: { stored: 0, pruned: 0 },
+    reread: 0,
     llm: { ran: 0, reused: 0, skipped: 0, failed: 0, inputTokens: 0, outputTokens: 0 },
     entities: { created: 0, linked: 0, conflicts: 0, unresolved: 0, waiting: 0 },
     snapshot: { published: false, reason: 'the run didn’t reach publishing', excluded: [] },
@@ -545,7 +639,7 @@ function note(summary: RunSummary, text: string) {
   if (summary.notes.length < MAX_NOTES) summary.notes.push(storable(text));
 }
 
-/** Fetches one page; reads it when it changed or its statements came from older code; classifies it. */
+/** Fetches one page, and reads it when it changed or its statements came from older code. */
 async function refreshItem(
   context: Context,
   item: ItemRef,
@@ -572,6 +666,70 @@ async function refreshItem(
     site: fetched.site ?? null,
   };
   if (!fetched.extract) return { ...host, waitsForBudget: false };
+  return { ...host, waitsForBudget: await readItem(context, item, fetched, summary, step, ports) };
+}
+
+/**
+ * Reads a page again from its capture, with no request (ADR 0008): a page due only because its
+ * statements came from older code. Null when the capture, or the copy it holds, is gone: then the
+ * page is fetched.
+ */
+async function rereadItem(
+  context: Context,
+  item: ItemRef,
+  summary: RunSummary,
+  step: StepRunner,
+  ports: RefreshPorts,
+): Promise<{ waitsForBudget: boolean } | null> {
+  const fetched = await step.do(`reread:${item.id}`, () => rereadOf(item, ports));
+  if (fetched === null) return null;
+  summary.reread = (summary.reread ?? 0) + 1;
+  return { waitsForBudget: await readItem(context, item, fetched, summary, step, ports) };
+}
+
+/**
+ * A page's latest read and its capture, as the result of a fetch that found the page unchanged,
+ * whose statements count as seen at that read. Null when either is missing, when the capture
+ * doesn't hold the copy the page's statements came from, or when that copy's body is gone.
+ */
+async function rereadOf(item: ItemRef, ports: RefreshPorts): Promise<Fetched | null> {
+  const { capture, read } = await ports.withDb(async (db) => ({
+    capture: await latestCapture(db, item.id),
+    read: await latestRead(db, item.id),
+  }));
+  if (capture === null || read === null || read.signals === null) return null;
+  if (capture.contentHash !== item.contentHash) return null;
+  if ((await readPageBody(ports.blobs, capture.contentHash)) === null) return null;
+  return {
+    fetchId: read.id,
+    outcome: 'unchanged',
+    hostAnswered: true,
+    strained: false,
+    site: null,
+    finalUrl: read.finalUrl ?? capture.finalUrl,
+    signals: read.signals,
+    contentHash: capture.contentHash,
+    extract: true,
+    reseen: 0,
+    note: null,
+    captureId: capture.id,
+    captured: false,
+    seenAt: read.startedAt.toISOString(),
+  };
+}
+
+/**
+ * Reads a page from its stored copy, then classifies it or places it in the taxonomy, whether a
+ * fetch brought the page or its capture did. Says whether it waits for the next run's LLM budget.
+ */
+async function readItem(
+  context: Context,
+  item: ItemRef,
+  fetched: Fetched,
+  summary: RunSummary,
+  step: StepRunner,
+  ports: RefreshPorts,
+): Promise<boolean> {
   const extracted = await step.do(`extract:${item.id}`, () =>
     extractItem(context, item, fetched, budgetLeft(context, summary), ports),
   );
@@ -583,22 +741,99 @@ async function refreshItem(
   summary.llm.outputTokens += extracted.usage.outputTokens;
   for (const text of extracted.notes) note(summary, text);
   let waitsForBudget = extracted.waitsForBudget;
+  // A page whose LLM step failed or waited for the budget is read again next run, whatever
+  // classifying or placing it comes to.
+  const complete = extracted.llm !== 'failed' && !extracted.waitsForBudget;
   if (extracted.read && classifyTarget(context.definition, item) !== null) {
-    // A page whose LLM step failed or waited for the budget is read again next run, whatever
-    // classifying it comes to.
-    const complete = extracted.llm !== 'failed' && !extracted.waitsForBudget;
     const classified = await step.do(`classify:${item.id}`, () =>
       classifyItem(context, item, fetched, budgetLeft(context, summary), ports, complete),
     );
-    const counts = decisionsOf(summary, 'classify');
-    counts[classified.outcome] += 1;
-    counts.inputTokens += classified.usage.inputTokens;
-    counts.outputTokens += classified.usage.outputTokens;
-    if (classified.irrelevant) summary.irrelevant = (summary.irrelevant ?? 0) + 1;
-    if (classified.note !== null) note(summary, classified.note);
-    waitsForBudget ||= classified.outcome === 'skipped';
+    waitsForBudget = countDecision(summary, classified) || waitsForBudget;
   }
-  return { ...host, waitsForBudget };
+  // A dataset whose taxonomy isn't seeded yet leaves its pages marked for another read.
+  if (
+    extracted.read &&
+    context.taxonomyVersion !== undefined &&
+    context.taxonomyVersion !== null &&
+    taxonomyTarget(context.definition, item) !== null
+  ) {
+    const placed = await step.do(`decide:${item.id}`, async () => {
+      // A page a person took out stays out when it is revived and read again (ruling 7), so it's
+      // placed as the irrelevant page it is.
+      const keptOut = await keepOut(context, item, ports);
+      const decided = await decideTaxonomy(
+        context,
+        item,
+        fetched,
+        budgetLeft(context, summary),
+        ports,
+        { extractionComplete: complete, ...(keptOut ? { irrelevant: true } : {}) },
+      );
+      // A page that was out and stays out isn't found out again, as a backfill counts it.
+      return keptOut ? { ...decided, irrelevant: false } : decided;
+    });
+    waitsForBudget = countDecision(summary, placed) || waitsForBudget;
+  }
+  return waitsForBudget;
+}
+
+/**
+ * Counts a page's classification or placement in the run's summary, which share their counts, and
+ * says whether it waits for the next run's budget.
+ */
+function countDecision(summary: RunSummary, decided: Classified): boolean {
+  const counts = decisionsOf(summary, 'classify');
+  counts[decided.outcome] += 1;
+  counts.inputTokens += decided.usage.inputTokens;
+  counts.outputTokens += decided.usage.outputTokens;
+  if (decided.irrelevant) summary.irrelevant = (summary.irrelevant ?? 0) + 1;
+  if (decided.note !== null) note(summary, decided.note);
+  return decided.outcome === 'skipped';
+}
+
+/**
+ * Decides again, from their captures, the pages a taxonomy change touched (ADR 0008): at most the
+ * pages the run's item budget has left, which keeps the run within Workflows' steps (ADR 0005), and
+ * while its LLM budget lasts. The pages are planned in a step, loaded in steps of 50, and decided
+ * each in its own step. Those left wait for the next run.
+ */
+async function backfill(
+  context: Context,
+  summary: RunSummary,
+  step: StepRunner,
+  ports: RefreshPorts,
+): Promise<NonNullable<RunSummary['backfill']>> {
+  const limit = Math.max(0, context.definition.budget.itemsPerRun - summary.items);
+  const planned = await step.do<{ ids: string[]; due: number }>('backfill:plan', async () => {
+    const taxonomy = await runTaxonomy(context, ports);
+    if (taxonomy === null) return { ids: [], due: 0 };
+    // The keys a page can have now. A page whose key is none of them was asked another question.
+    const keys = await Promise.all(taxonomyKeys(taxonomy).map((key) => stateHash(key)));
+    return ports.withDb((db) => taxonomyPages(db, { datasetId: context.datasetId, keys, limit }));
+  });
+  let decided = 0;
+  let toFetch = 0;
+  for (
+    let start = 0;
+    start < planned.ids.length && budgetLeft(context, summary) > 0;
+    start += ITEMS_PER_STEP
+  ) {
+    const batch = await step.do(`backfill:items:${start}`, () =>
+      ports.withDb((db) =>
+        taxonomyItemsByIds(db, planned.ids.slice(start, start + ITEMS_PER_STEP)),
+      ),
+    );
+    for (const item of batch) {
+      if (budgetLeft(context, summary) <= 0) break;
+      const done = await step.do(`backfill:${item.id}`, () =>
+        backfillPage(context, item, budgetLeft(context, summary), ports),
+      );
+      if (done.classified !== undefined) countDecision(summary, done.classified);
+      if (done.outcome === 'decided') decided += 1;
+      if (done.outcome === 'fetch') toFetch += 1;
+    }
+  }
+  return { due: planned.due, decided, fetch: toFetch, waiting: planned.due - decided - toFetch };
 }
 
 /**
@@ -992,6 +1227,14 @@ function validators(item: ItemRef): Record<string, string> {
 }
 
 /**
+ * The fetch whose log says what reading the page did: the one that brought it. A page read again
+ * from its capture has none of its own (ADR 0008), and its last fetch's log stays as it was.
+ */
+function loggedFetch(fetched: Fetched): string | null {
+  return fetched.seenAt === undefined ? fetched.fetchId : null;
+}
+
+/**
  * A page that wasn't read costs only itself. Nothing is written but the retry mark, and its
  * statements stay as they were. A changed page already carries the fetch step's mark, and that is
  * what has the next run read its stored copy again. This mark matters for a page that was current
@@ -1009,7 +1252,7 @@ async function unread(
   await ports.withDb((db) =>
     recordExtraction(db, {
       itemId: item.id,
-      fetchId: fetched.fetchId,
+      fetchId: loggedFetch(fetched),
       extractedWith: retryTag(context.revision),
       llm: 'skipped: the page wasn’t read',
       usage: NO_USAGE,
@@ -1076,11 +1319,13 @@ async function extractItem(
     );
   }
   await keepRead(ports, fetched, page);
-  const seenAt = ports.now();
+  // A page read again from its capture counts as seen at its last fetch (ADR 0008).
+  const seenAt = fetched.seenAt === undefined ? ports.now() : new Date(fetched.seenAt);
   const decided = cascadeField(source, recordType);
-  // The cascade owns the decided field, so the page and the LLM speak for every other field, and
-  // neither gives or withdraws a decided answer.
-  const own = speaksFor(recordType, decided?.[0] ?? null);
+  const placed = hasTaxonomy(recordType);
+  // The cascade owns the decided field, and the taxonomy's three (ADR 0007), so the page and the
+  // LLM speak for the record type's other fields, and neither gives or withdraws a decided answer.
+  const own = speaksFor(recordType, decided?.[0] ?? null, placed);
   const pageCounts = await ports.withDb((db) =>
     writeStatements(db, {
       datasetId,
@@ -1111,13 +1356,14 @@ async function extractItem(
   await ports.withDb((db) =>
     recordExtraction(db, {
       itemId: item.id,
-      fetchId: fetched.fetchId,
+      fetchId: loggedFetch(fetched),
       // A failed LLM step leaves the page not current, so the next run reads the stored copy and
       // asks again, even after a 304 or an unchanged hash. So does an LLM step that waited for the
       // run's budget. A page whose category the cascade decides isn't current until its classify
-      // step has finished, and that step marks it.
+      // step has finished, and that step marks it. So is a page placed in a taxonomy, until its
+      // decide step has.
       extractedWith:
-        llm.outcome === 'failed' || llm.waitsForBudget === true || decided !== null
+        llm.outcome === 'failed' || llm.waitsForBudget === true || decided !== null || placed
           ? retryTag(revision)
           : extractionTag(revision),
       extractInputHash: llm.inputHash,
@@ -1169,12 +1415,17 @@ async function keepRead(ports: RefreshPorts, fetched: Fetched, page: Page): Prom
 }
 
 /**
- * The properties a write by the page's extraction or by the LLM speaks for: every field but the
- * one the cascade decides. With no decided field none is named, so the write speaks for every
- * property, as it did before there was a cascade.
+ * The properties a write by the page's extraction or by the LLM speaks for: the record type's own
+ * fields, but the one the cascade decides. A record type with a taxonomy has its three fields
+ * beside its own, which are the decide step's. With neither, none is named, so the write speaks for
+ * every property, as it did before there was a cascade.
  */
-function speaksFor(recordType: RecordType, decided: string | null): { properties?: string[] } {
-  return decided === null
+function speaksFor(
+  recordType: RecordType,
+  decided: string | null,
+  placed: boolean,
+): { properties?: string[] } {
+  return decided === null && !placed
     ? {}
     : { properties: Object.keys(recordType.fields).filter((name) => name !== decided) };
 }

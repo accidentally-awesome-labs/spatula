@@ -29,6 +29,14 @@ describe('the run’s LLM budget', () => {
     expect(tokensSpent({ ...spent, classify: undefined })).toBe(1360);
   });
 
+  it('counts what the taxonomy review spent too', () => {
+    const reviewed: RunSummary = {
+      ...spent,
+      taxonomy: { proposed: 1, dropped: 0, applied: [], inputTokens: 2000, outputTokens: 300 },
+    };
+    expect(tokensSpent(reviewed)).toBe(4180);
+  });
+
   it('is what the definition allows less what the run spent, and can end below zero', () => {
     const definition = testDefinition('pipeline-budget');
     const context: Context = {

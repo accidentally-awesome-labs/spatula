@@ -2,7 +2,14 @@ import { z } from 'zod';
 import { specLabelKey } from './fields';
 import { normalizeGtin } from './gtin';
 import { textKey } from './identity';
-import type { Snapshot } from './snapshot';
+import type { Snapshot, SnapshotRecord } from './snapshot';
+import {
+  itemsOf,
+  TAXONOMY_FIELDS,
+  taxonomySlugSchema,
+  type Taxonomy,
+  type TaxonomySubject,
+} from './taxonomy';
 
 /*
  * The golden set (ADR 0004): products a person checked against sources Spatula doesn't read, and a
@@ -16,10 +23,26 @@ import type { Snapshot } from './snapshot';
  * 14 digits, and a list is right when every value the record states is in the golden list. Key
  * specs compare by value, under a label that contains the golden label or is contained by it,
  * because specs' labels differ from one sheet to the next while their values don't (ruling 13).
+ *
+ * A dataset with a taxonomy (ADR 0007) is scored on each record's place too. The golden set names
+ * a shelf, functions, and feature values by slug, since IDs are made when a taxonomy is seeded, and
+ * a record's IDs are read as slugs through the snapshot's own taxonomy. The shelf is right when it
+ * is the golden one. Functions count one by one, over every product found, for precision and
+ * recall. A feature is right, as a list is, when every value the record states is a golden one.
  */
 
-/** Crowdio's ADR 0021 targets for products. */
-export const EVAL_TARGETS = { precision: 0.99, recall: 0.9, identifiers: 0.98, keySpecs: 0.98 };
+/**
+ * Crowdio's ADR 0021 targets for products, and the living taxonomy's (ADR 0007): the shelf exact,
+ * and functions' precision and recall.
+ */
+export const EVAL_TARGETS = {
+  precision: 0.99,
+  recall: 0.9,
+  identifiers: 0.98,
+  keySpecs: 0.98,
+  shelf: 0.95,
+  functions: 0.9,
+};
 /** At most this many misses are listed, and then how many more there were. */
 const MAX_MISSES = 200;
 
@@ -33,6 +56,31 @@ const specSchema = z.strictObject({
   label: z.string().trim().min(1).max(60),
   value: z.string().min(1).max(200),
 });
+
+const isSlug = (value: unknown): boolean => taxonomySlugSchema.safeParse(value).success;
+
+/**
+ * What's wrong with a golden field's shape. The taxonomy's three name its items by slug: a shelf as
+ * one, functions as a list, and features as lists of values by feature. No other field is a map.
+ */
+function fieldShapeProblem(name: string, value: unknown): string | null {
+  const isMap = typeof value === 'object' && value !== null && !Array.isArray(value);
+  switch (name) {
+    case 'shelf':
+      return isSlug(value) ? null : 'shelf is one shelf’s slug.';
+    case 'functions':
+      return Array.isArray(value) && value.every(isSlug) ? null : 'functions lists function slugs.';
+    case 'features':
+      return isMap &&
+        Object.entries(value).every(
+          ([feature, values]) => isSlug(feature) && Array.isArray(values) && values.every(isSlug),
+        )
+        ? null
+        : 'features lists value slugs by feature slug.';
+    default:
+      return isMap ? 'Only features maps names to lists.' : null;
+  }
+}
 
 export const goldenSetSchema = z
   .strictObject({
@@ -56,6 +104,8 @@ export const goldenSetSchema = z
               z.string().min(1).max(500),
               z.array(z.string().min(1).max(500)).max(50),
               z.array(specSchema).max(100),
+              // A taxonomy's features (ADR 0007): value slugs by feature slug.
+              z.record(z.string(), z.array(z.string().min(1).max(500)).max(50)),
             ]),
           ),
           /** Where the person checked the values. */
@@ -76,6 +126,17 @@ export const goldenSetSchema = z
         });
       }
       seen.add(product.key);
+      // The taxonomy's fields name its items by slug, and only features maps names to lists.
+      for (const [name, value] of Object.entries(product.fields)) {
+        const problem = fieldShapeProblem(name, value);
+        if (problem !== null) {
+          ctx.addIssue({
+            code: 'custom',
+            message: problem,
+            path: ['products', index, 'fields', name],
+          });
+        }
+      }
     }
   });
 
@@ -112,6 +173,27 @@ export interface EvalScores {
   fields: Record<string, Tally>;
   identifiers: Tally;
   keySpecs: Tally;
+  /**
+   * The taxonomy's scores (ADR 0007), when the golden set names a shelf, functions, or features:
+   * the shelf exact; functions counted one by one over every product found, for precision and
+   * recall; and features as list fields are. Absent for a golden set that names none, as before.
+   */
+  taxonomy?: {
+    shelf: Tally;
+    functions: {
+      /** Functions the records state, for products whose golden functions are listed. */
+      stated: number;
+      /** The golden functions. */
+      expected: number;
+      correct: number;
+      /** Correct of stated; 1 when none is stated. */
+      precision: number;
+      /** Correct of expected; 1 when none is expected. */
+      recall: number;
+    };
+    features: Tally;
+    targets: { shelf: boolean; functions: boolean };
+  };
   targets: { precision: boolean; recall: boolean; identifiers: boolean; keySpecs: boolean };
   /**
    * The merges of golden products into one record, then the products' misses: the first 200 of
@@ -122,6 +204,12 @@ export interface EvalScores {
 
 type Spec = { label: string; value: string };
 type Counts = { checked: number; correct: number; missing: number };
+type GoldenProduct = GoldenSet['products'][number];
+interface Placements {
+  shelf: Counts;
+  functions: { stated: number; expected: number; correct: number };
+  features: Counts;
+}
 
 export function scoreDataset(input: {
   golden: GoldenSet;
@@ -147,6 +235,15 @@ export function scoreDataset(input: {
   const misses: string[] = [];
   let found = 0;
   let split = 0;
+  // The taxonomy is scored when the golden set names a shelf, functions, or features (ADR 0007).
+  const placing = golden.products.some((product) =>
+    TAXONOMY_FIELDS.some((name) => Object.hasOwn(product.fields, name)),
+  );
+  const placements: Placements = {
+    shelf: { checked: 0, correct: 0, missing: 0 },
+    functions: { stated: 0, expected: 0, correct: 0 },
+    features: { checked: 0, correct: 0, missing: 0 },
+  };
 
   for (const product of golden.products) {
     const ids = [
@@ -173,6 +270,8 @@ export function scoreDataset(input: {
     }
     const record = records.get(ids[0]!)!;
     for (const [name, expected] of Object.entries(product.fields)) {
+      // The taxonomy's fields name items by slug, and are scored through the taxonomy below.
+      if ((TAXONOMY_FIELDS as readonly string[]).includes(name)) continue;
       const actual = record.fields[name];
       if (name === golden.specs) {
         const theirs = Array.isArray(actual) ? actual.filter(isSpec) : [];
@@ -207,6 +306,7 @@ export function scoreDataset(input: {
       if (!right)
         misses.push(`${product.key}: ${name} is ${shown(actual)}, not ${shown(expected)}`);
     }
+    if (placing) scorePlacement(placements, product, record, snapshot.taxonomy, misses);
   }
   const touching = [...goldenOf];
   const mixes = touching
@@ -223,6 +323,16 @@ export function scoreDataset(input: {
     identifiers: tallied(identifiers),
     keySpecs: tallied(keySpecs),
   };
+  const fns = placements.functions;
+  const placed = {
+    shelf: tallied(placements.shelf),
+    functions: {
+      ...fns,
+      precision: fns.stated === 0 ? 1 : fns.correct / fns.stated,
+      recall: fns.expected === 0 ? 1 : fns.correct / fns.expected,
+    },
+    features: tallied(placements.features),
+  };
   // A merge is what a precision failure comes from, and a run can miss more than 200 values, so the
   // merges go first and the cut takes other misses before them.
   const all = [...mixes, ...misses];
@@ -238,6 +348,22 @@ export function scoreDataset(input: {
     fields: Object.fromEntries([...fields].map(([name, tally]) => [name, tallied(tally)])),
     identifiers: scores.identifiers,
     keySpecs: scores.keySpecs,
+    ...(placing
+      ? {
+          taxonomy: {
+            ...placed,
+            targets: {
+              // As for identifiers, shelves all left out don't pass.
+              shelf:
+                (placed.shelf.checked > 0 || placed.shelf.missing === 0) &&
+                placed.shelf.accuracy >= EVAL_TARGETS.shelf,
+              functions:
+                placed.functions.precision >= EVAL_TARGETS.functions &&
+                placed.functions.recall >= EVAL_TARGETS.functions,
+            },
+          },
+        }
+      : {}),
     targets: {
       precision: scores.precision >= EVAL_TARGETS.precision,
       recall: scores.recall >= EVAL_TARGETS.recall,
@@ -261,6 +387,88 @@ function count(tally: Counts, stated: boolean, right: boolean): void {
   }
   tally.checked += 1;
   if (right) tally.correct += 1;
+}
+
+/**
+ * A record's shelf, functions, and features by slug, read through the snapshot's taxonomy by ID, as
+ * a golden set names them. A snapshot without a taxonomy states none.
+ */
+function placedSlugs(
+  taxonomy: Taxonomy | undefined,
+  fields: Record<string, unknown>,
+): { shelf: string | null; functions: string[]; features: Map<string, string[]> } {
+  if (taxonomy === undefined) return { shelf: null, functions: [], features: new Map() };
+  const slugOf = (subject: TaxonomySubject, itemId: unknown): string | null =>
+    typeof itemId === 'string'
+      ? (itemsOf(taxonomy, subject).find((entry) => entry.id === itemId)?.slug ?? null)
+      : null;
+  const slugsOf = (subject: TaxonomySubject, ids: unknown): string[] =>
+    (Array.isArray(ids) ? ids : [])
+      .map((itemId) => slugOf(subject, itemId))
+      .filter((slug): slug is string => slug !== null);
+  // A Map, since a feature's slug can be "constructor", which a plain object already has.
+  const features = new Map<string, string[]>();
+  const stated = fields.features;
+  if (typeof stated === 'object' && stated !== null && !Array.isArray(stated)) {
+    for (const [featureId, valueIds] of Object.entries(stated)) {
+      const feature = slugOf('feature', featureId);
+      if (feature !== null) features.set(feature, slugsOf('value', valueIds));
+    }
+  }
+  return {
+    shelf: slugOf('shelf', fields.shelf),
+    functions: slugsOf('function', fields.functions),
+    features,
+  };
+}
+
+/**
+ * Scores a product's place (ruling 20): its shelf, exact; its functions one by one, counted with
+ * every product's for precision and recall; and each golden feature, right when every value the
+ * record states for it is a golden one.
+ */
+function scorePlacement(
+  placements: Placements,
+  product: GoldenProduct,
+  record: SnapshotRecord,
+  taxonomy: Taxonomy | undefined,
+  misses: string[],
+): void {
+  const placed = placedSlugs(taxonomy, record.fields);
+  const { shelf, functions, features } = product.fields;
+  const listed = (slugs: readonly string[]) => (slugs.length === 0 ? 'missing' : slugs.join(', '));
+  if (typeof shelf === 'string') {
+    const right = placed.shelf === shelf;
+    count(placements.shelf, placed.shelf !== null, right);
+    if (!right) misses.push(`${product.key}: shelf is ${placed.shelf ?? 'missing'}, not ${shelf}`);
+  }
+  if (Array.isArray(functions)) {
+    const want = new Set(functions.filter((slug): slug is string => typeof slug === 'string'));
+    const correct = placed.functions.filter((slug) => want.has(slug)).length;
+    placements.functions.stated += placed.functions.length;
+    placements.functions.expected += want.size;
+    placements.functions.correct += correct;
+    if (correct !== placed.functions.length || correct !== want.size) {
+      misses.push(
+        `${product.key}: functions is ${listed(placed.functions)}, not ${[...want].join(', ') || 'none'}`,
+      );
+    }
+  }
+  if (typeof features === 'object' && features !== null && !Array.isArray(features)) {
+    for (const [feature, values] of Object.entries(features)) {
+      // A golden feature with no values has nothing to check or to leave out.
+      const want = new Set(values);
+      if (want.size === 0) continue;
+      const have = placed.features.get(feature) ?? [];
+      const right = have.length > 0 && have.every((slug) => want.has(slug));
+      count(placements.features, have.length > 0, right);
+      if (!right) {
+        misses.push(
+          `${product.key}: features ${feature} is ${listed(have)}, not ${[...want].join(', ')}`,
+        );
+      }
+    }
+  }
 }
 
 function href(address: string): string {

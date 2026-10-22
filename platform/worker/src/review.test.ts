@@ -1,4 +1,4 @@
-import type { Question, StatementInput } from '@spatula/core';
+import { stableId, type ActorRecord, type Question, type StatementInput } from '@spatula/core';
 import {
   decisionRecords,
   discardHeld,
@@ -8,11 +8,13 @@ import {
   judgements,
   judgementsFor,
   latestFetchId,
+  listActions,
   listOpenReviews,
   lockPageVerdicts,
   openReview,
   reviewItems,
   saveDecision,
+  setSuggestion,
   snapshotById,
   statements,
   statementsOf,
@@ -912,6 +914,361 @@ describe('a match question asked before the relationships', { timeout: 20_000 },
       status: 400,
       reason:
         'Answer with one of: same, variant, different, edition, spec-version, other-model, unrelated.',
+    });
+  });
+});
+
+const OWNER: ActorRecord = { role: 'owner', client: 'console' };
+const REVIEWER: ActorRecord = {
+  role: 'reviewer',
+  client: 'consumer',
+  consumer: 'crowdio',
+  reviewer: 'reviewer-7',
+};
+
+describe('who answers', { timeout: 20_000 }, () => {
+  it('takes a reviewer’s answer, and records who gave it and their note', async () => {
+    const datasetId = 'who-reviewer';
+    const { world, page, question } = await classifyAsked(datasetId, {
+      Headphones: 0.6,
+      'DAC/Amp': 0.3,
+    });
+    const effect = 'The page’s category is DAC/Amp. The next run publishes it.';
+    expect(
+      await answerReview(world.ports, {
+        datasetId,
+        reviewId: question.id,
+        answer: 'DAC/Amp',
+        note: 'Its box says DAC.',
+        actor: REVIEWER,
+      }),
+    ).toEqual({ kind: 'answered', effect });
+    expect(await getReview(db, question.id)).toMatchObject({
+      status: 'decided',
+      answer: 'DAC/Amp',
+      answeredBy: REVIEWER,
+      note: 'Its box says DAC.',
+    });
+    expect(await currentlySaid(page.id, 'category')).toMatchObject([
+      { method: 'human', value: 'DAC/Amp' },
+    ]);
+    expect(await listActions(db, datasetId)).toMatchObject([
+      {
+        action: 'answer',
+        subject: question.id,
+        actor: REVIEWER,
+        detail: {
+          kind: 'classify',
+          about: page.id,
+          answer: 'DAC/Amp',
+          effect,
+          note: 'Its box says DAC.',
+        },
+      },
+    ]);
+  });
+
+  it('sends a reviewer’s different answer to the owner, whose answer replaces the person’s', async () => {
+    const datasetId = 'who-flag';
+    const { world, page, question } = await classifyAsked(datasetId, {
+      Headphones: 0.6,
+      'DAC/Amp': 0.3,
+    });
+    const answer = (reviewId: string, value: string, actor: ActorRecord) =>
+      answerReview(world.ports, { datasetId, reviewId, answer: value, actor });
+    await answer(question.id, 'DAC/Amp', REVIEWER);
+    world.clock.advance(60_000);
+    const another = { ...REVIEWER, reviewer: 'reviewer-8' };
+    // The same answer changes nothing, and one that isn't an option is refused, as ever.
+    expect(await answer(question.id, 'DAC/Amp', another)).toEqual({ kind: 'closed' });
+    expect(await answer(question.id, 'Speakers', another)).toMatchObject({
+      kind: 'refused',
+      status: 400,
+    });
+    // A different one reopens the question for the owner, and the person's answer stands meanwhile.
+    const reopened = await stableId('rv', question.id, 'flag', 1);
+    expect(await answer(question.id, 'Headphones', another)).toEqual({
+      kind: 'flagged',
+      reviewId: reopened,
+    });
+    expect(await currentlySaid(page.id, 'category')).toMatchObject([
+      { method: 'human', value: 'DAC/Amp' },
+    ]);
+    expect(await getReview(db, reopened)).toMatchObject({
+      status: 'open',
+      flag: { actor: another, answer: 'Headphones' },
+    });
+    // Consumers neither list nor answer it; the owner sees it flagged.
+    const forConsumers = await listOpenReviews(db, datasetId, { forConsumer: true });
+    expect(forConsumers.map((review) => review.id)).not.toContain(reopened);
+    expect(await listOpenReviews(db, datasetId)).toContainEqual(
+      expect.objectContaining({ id: reopened, flagged: true }),
+    );
+    expect(await answer(reopened, 'DAC/Amp', REVIEWER)).toEqual({ kind: 'missing' });
+    // The owner's answer closes it, and replaces the person's.
+    world.clock.advance(60_000);
+    expect(await answer(reopened, 'Headphones', OWNER)).toMatchObject({ kind: 'answered' });
+    expect(await currentlySaid(page.id, 'category')).toMatchObject([
+      { method: 'human', value: 'Headphones' },
+    ]);
+    expect(
+      (await listActions(db, datasetId)).map(
+        (action) => `${action.action} ${action.actor.reviewer ?? action.actor.role}`,
+      ),
+    ).toEqual(['answer owner', 'flag reviewer-8', 'answer reviewer-7']);
+  });
+
+  it('lets the owner replace a reviewer’s answer once it closed the question', async () => {
+    const datasetId = 'who-replaced';
+    const { world, page, question } = await classifyAsked(datasetId, {
+      Headphones: 0.6,
+      'DAC/Amp': 0.3,
+    });
+    const answer = (reviewId: string, value: string, actor: ActorRecord) =>
+      answerReview(world.ports, { datasetId, reviewId, answer: value, actor, note: 'Checked.' });
+    expect(await answer(question.id, 'DAC/Amp', REVIEWER)).toMatchObject({ kind: 'answered' });
+    world.clock.advance(60_000);
+    // The same answer from the owner changes nothing, and one that isn't an option is refused.
+    expect(await answer(question.id, 'DAC/Amp', OWNER)).toEqual({ kind: 'closed' });
+    expect(await answer(question.id, 'Speakers', OWNER)).toMatchObject({
+      kind: 'refused',
+      status: 400,
+    });
+    // A different one reopens the question and answers it at once: the owner's answer stands.
+    expect(await answer(question.id, 'Headphones', OWNER)).toEqual({
+      kind: 'answered',
+      effect:
+        'It replaces a reviewer’s answer. The page’s category is Headphones. The next run publishes it.',
+    });
+    expect(await currentlySaid(page.id, 'category')).toMatchObject([
+      { method: 'human', value: 'Headphones' },
+    ]);
+    const copy = await stableId('rv', question.id, 'flag', 1);
+    expect(await getReview(db, copy)).toMatchObject({
+      status: 'decided',
+      answer: 'Headphones',
+      answeredBy: OWNER,
+      note: 'Checked.',
+    });
+    expect(await getReview(db, question.id)).toMatchObject({
+      status: 'decided',
+      answer: 'DAC/Amp',
+      answeredBy: REVIEWER,
+    });
+    const open = await listOpenReviews(db, datasetId);
+    expect(open.map((review) => review.subject)).not.toContain(page.id);
+    // The flag and the owner's answer share a moment, so their order isn't checked here.
+    expect(
+      (await listActions(db, datasetId))
+        .map(
+          (action) =>
+            `${action.action} ${action.actor.reviewer ?? action.actor.role} ${action.subject}`,
+        )
+        .sort(),
+    ).toEqual(
+      [
+        `answer owner ${copy}`,
+        `flag owner ${question.id}`,
+        `answer reviewer-7 ${question.id}`,
+      ].sort(),
+    );
+    // Now the owner's answer stands: another from the owner changes nothing, by either question.
+    world.clock.advance(60_000);
+    expect(await answer(question.id, 'DAC/Amp', OWNER)).toEqual({ kind: 'closed' });
+    expect(await answer(copy, 'DAC/Amp', OWNER)).toEqual({ kind: 'closed' });
+    expect(await currentlySaid(page.id, 'category')).toMatchObject([
+      { method: 'human', value: 'Headphones' },
+    ]);
+  });
+
+  it('leaves no trace of the owner’s replacement when the reopened question refuses it', async () => {
+    const datasetId = 'who-replaced-refused';
+    const { world, page, e1, e2 } = await versionsAndAPage(datasetId, UNSURE);
+    const asked = await listOpenReviews(db, datasetId);
+    const about = (entityId: string) =>
+      asked.find((review) => review.subject === `${page.id}|${entityId}`)!;
+    const answer = (entityId: string, value: string, actor: ActorRecord) =>
+      answerReview(world.ports, { datasetId, reviewId: about(entityId).id, answer: value, actor });
+    expect(await answer(e1, 'same', REVIEWER)).toMatchObject({ kind: 'answered' });
+    expect(await answer(e2, 'unrelated', REVIEWER)).toMatchObject({ kind: 'answered' });
+    world.clock.advance(60_000);
+    // The page joins one record, and a person joined it to e1: the owner's "same" about e2 is
+    // refused, as it would be on an open question, and leaves no copy and no flag behind.
+    expect(await answer(e2, 'same', OWNER)).toMatchObject({ kind: 'refused', status: 409 });
+    expect(await getReview(db, await stableId('rv', about(e2).id, 'flag', 1))).toBeNull();
+    expect((await listActions(db, datasetId)).map((action) => action.actor.role)).toEqual([
+      'reviewer',
+      'reviewer',
+    ]);
+    // The owner's answer about e1 replaces the reviewer's join.
+    expect(await answer(e1, 'unrelated', OWNER)).toMatchObject({ kind: 'answered' });
+    expect(await verdictOn(datasetId, page.id, e1)).toMatchObject({
+      verdict: 'not_same',
+      who: 'person',
+    });
+  });
+
+  it('measures a reviewer’s match answer against a person’s by what each does to the page', async () => {
+    const datasetId = 'who-match-verdict';
+    const { world, page, question } = await matchAsked(datasetId);
+    const answer = (value: string, actor: ActorRecord) =>
+      answerReview(world.ports, { datasetId, reviewId: question.id, answer: value, actor });
+    expect(await answer('unrelated', OWNER)).toMatchObject({ kind: 'answered' });
+    world.clock.advance(60_000);
+    // Other-model keeps the page apart, as unrelated does: the person's answer, in other words.
+    expect(await answer('other-model', REVIEWER)).toEqual({ kind: 'closed' });
+    expect(await listOpenReviews(db, datasetId)).toEqual([]);
+    // An edition would join it, so it goes to the owner, and the person's verdict stands.
+    expect(await answer('edition', REVIEWER)).toEqual({
+      kind: 'flagged',
+      reviewId: await stableId('rv', question.id, 'flag', 1),
+    });
+    expect(await judgementsFor(db, datasetId)).toMatchObject([
+      { itemId: page.id, verdict: 'not_same', who: 'person' },
+    ]);
+  });
+
+  it('keeps publication answers to the owner', async () => {
+    const datasetId = 'who-publish';
+    const { world, question } = await heldSnapshotIn(datasetId);
+    const publish = (actor: ActorRecord) =>
+      answerReview(world.ports, { datasetId, reviewId: question.id, answer: 'publish', actor });
+    expect(await publish(REVIEWER)).toEqual({
+      kind: 'refused',
+      status: 403,
+      reason: 'Only the owner answers a publication question.',
+    });
+    expect(await listOpenReviews(db, datasetId)).toHaveLength(1);
+    expect(await publish(OWNER)).toEqual({
+      kind: 'answered',
+      effect: 'Published as generation 1.',
+    });
+    // Who answered is recorded, as for any question.
+    expect(await getReview(db, question.id)).toMatchObject({
+      status: 'decided',
+      answer: 'publish',
+      answeredBy: OWNER,
+    });
+    expect(await listActions(db, datasetId)).toMatchObject([
+      {
+        action: 'answer',
+        actor: OWNER,
+        detail: { kind: 'publication', answer: 'publish', effect: 'Published as generation 1.' },
+      },
+    ]);
+  });
+
+  it('sends a reviewer’s “same” for a page a person joined to another record to the owner', async () => {
+    const datasetId = 'who-match';
+    const { world, page, e1, e2 } = await versionsAndAPage(datasetId, UNSURE);
+    const asked = await listOpenReviews(db, datasetId);
+    const about = (entityId: string) =>
+      asked.find((review) => review.subject === `${page.id}|${entityId}`)!;
+    const same = (reviewId: string, actor: ActorRecord) =>
+      answerReview(world.ports, { datasetId, reviewId, answer: 'same', actor });
+    expect(await same(about(e1).id, OWNER)).toMatchObject({ kind: 'answered' });
+    expect(await same(about(e2).id, REVIEWER)).toEqual({
+      kind: 'flagged',
+      reviewId: about(e2).id,
+    });
+    // The person's verdict stands, and the other record's question waits for the owner.
+    expect(await verdictOn(datasetId, page.id, e1)).toMatchObject({
+      verdict: 'same',
+      who: 'person',
+    });
+    expect(await verdictOn(datasetId, page.id, e2)).toMatchObject({
+      verdict: 'unsure',
+      who: 'llm',
+    });
+    expect(await getReview(db, about(e2).id)).toMatchObject({
+      status: 'open',
+      flag: { actor: REVIEWER, answer: 'same' },
+    });
+    // The owner is refused, as before roles, and can still say what the page isn't.
+    expect(await same(about(e2).id, OWNER)).toMatchObject({ kind: 'refused', status: 409 });
+  });
+
+  it('sends a reviewer’s edition for a page a person joined to another record to the owner', async () => {
+    const datasetId = 'who-match-edition';
+    const { world, page, e1, e2 } = await versionsAndAPage(datasetId, UNSURE);
+    const asked = await listOpenReviews(db, datasetId);
+    const about = (entityId: string) =>
+      asked.find((review) => review.subject === `${page.id}|${entityId}`)!;
+    expect(
+      await answerReview(world.ports, {
+        datasetId,
+        reviewId: about(e1).id,
+        answer: 'same',
+        actor: OWNER,
+      }),
+    ).toMatchObject({ kind: 'answered' });
+    // An edition joins the page too, and a page joins one record.
+    expect(
+      await answerReview(world.ports, {
+        datasetId,
+        reviewId: about(e2).id,
+        answer: 'edition',
+        actor: REVIEWER,
+      }),
+    ).toEqual({ kind: 'flagged', reviewId: about(e2).id });
+    expect(await verdictOn(datasetId, page.id, e2)).toMatchObject({
+      verdict: 'unsure',
+      who: 'llm',
+    });
+  });
+
+  it('answers with the suggestion a question holds, and refuses when it holds none', async () => {
+    const datasetId = 'who-suggestion';
+    const { world, page, question } = await classifyAsked(datasetId, {
+      Headphones: 0.6,
+      'DAC/Amp': 0.3,
+    });
+    const take = () =>
+      answerReview(world.ports, {
+        datasetId,
+        reviewId: question.id,
+        suggestion: true,
+        actor: REVIEWER,
+      });
+    expect(await take()).toEqual({
+      kind: 'refused',
+      status: 409,
+      reason: 'This question has no suggestion.',
+    });
+    await setSuggestion(db, { id: question.id, suggestion: { answer: 'DAC/Amp' } });
+    expect(await take()).toMatchObject({ kind: 'answered' });
+    expect(await currentlySaid(page.id, 'category')).toMatchObject([
+      { method: 'human', value: 'DAC/Amp' },
+    ]);
+  });
+
+  it('refuses an answer that sends none, or more than one, of an option, parts, and a suggestion', async () => {
+    const datasetId = 'who-shape';
+    const { world, question } = await classifyAsked(datasetId, {
+      Headphones: 0.6,
+      'DAC/Amp': 0.3,
+    });
+    const reason = 'Send one of: an answer, parts, or suggestion: true.';
+    for (const sent of [
+      {},
+      { answer: 'DAC/Amp', suggestion: true },
+      { answer: 'DAC/Amp', parts: {} },
+    ]) {
+      expect(
+        await answerReview(world.ports, { datasetId, reviewId: question.id, ...sent }),
+      ).toEqual({ kind: 'refused', status: 400, reason });
+    }
+    // A question with options takes one of them, not parts.
+    expect(
+      await answerReview(world.ports, {
+        datasetId,
+        reviewId: question.id,
+        parts: { shelf: 'dacs' },
+      }),
+    ).toEqual({
+      kind: 'refused',
+      status: 400,
+      reason: 'Answer with one of: Headphones, DAC/Amp, None of these.',
     });
   });
 });

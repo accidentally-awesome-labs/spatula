@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { addressError, decidedField, parseDefinition } from './definition';
+import { addressError, decidedField, hasTaxonomy, parseDefinition } from './definition';
 import { costRatio } from './testing/cost';
 
 const EVIDENCE = {
@@ -645,5 +645,101 @@ describe('dataset settings', () => {
       ok: false,
       issues: ['consumers.1: Use lowercase letters, digits, and hyphens, up to 63 characters.'],
     });
+  });
+});
+
+describe('a record type with a taxonomy', () => {
+  const SCOPE = 'Hi-fi made for audio. Out of scope: accessories.';
+
+  /** A copy of the object without one key; the lint rules don't let a destructured key go unused. */
+  function without(object: Record<string, unknown>, omitted: string): Record<string, unknown> {
+    return Object.fromEntries(Object.entries(object).filter(([key]) => key !== omitted));
+  }
+
+  /** The fixture with its category enum replaced by the taxonomy's decided fields. */
+  function withTaxonomy(overrides: Record<string, unknown> = {}): any {
+    const base = definition();
+    const fields = without(base.recordTypes.product.fields, 'category');
+    return {
+      ...base,
+      scope: SCOPE,
+      recordTypes: { product: { ...base.recordTypes.product, taxonomy: { decide: true }, fields } },
+      sources: [{ ...base.sources[0], fixed: { brand: 'Maker' } }],
+      ...overrides,
+    };
+  }
+
+  it('reads the scope and the taxonomy', () => {
+    const result = parseDefinition(withTaxonomy());
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.definition.scope).toBe(SCOPE);
+    expect(result.definition.recordTypes.product?.taxonomy).toEqual({ decide: true });
+    expect(hasTaxonomy(result.definition.recordTypes.product!)).toBe(true);
+  });
+
+  it('keeps a decided enum working as before, with no scope', () => {
+    const base = definition();
+    base.recordTypes.product.fields.category.decide = true;
+    base.sources[0].fixed = { brand: 'Maker' };
+    const result = parseDefinition(base);
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(hasTaxonomy(result.definition.recordTypes.product!)).toBe(false);
+    expect(result.definition.scope).toBeUndefined();
+    expect(result.definition.recordTypes.product).not.toHaveProperty('taxonomy');
+  });
+
+  it('takes a taxonomy or a decided field, never both, and reserves the taxonomy’s names', () => {
+    const both = withTaxonomy();
+    both.recordTypes.product.fields.kind = {
+      type: 'enum',
+      required: true,
+      decide: true,
+      values: ['A', 'B'],
+    };
+    expect(issuesOf(both)).toContain(
+      'recordTypes.product.taxonomy: A record type has a decided field or a taxonomy, never both.',
+    );
+    const named = withTaxonomy();
+    named.recordTypes.product.fields.category = { type: 'enum', required: true, values: ['A'] };
+    expect(issuesOf(named)).toContain(
+      'recordTypes.product.fields.category: A record type with a taxonomy gets shelf, functions, and features from it, and category for one release, so it can’t declare category.',
+    );
+  });
+
+  it('wants the scope a taxonomy keeps to', () => {
+    const unscoped = without(withTaxonomy(), 'scope');
+    expect(issuesOf(unscoped)).toContain(
+      'scope: A dataset with a taxonomy states its scope: what is in, and what is out.',
+    );
+  });
+
+  it('lets a source fix or extract the shelf only when the record type has a taxonomy', () => {
+    const fixed = withTaxonomy();
+    fixed.sources[0].fixed.shelf = 'power-amps';
+    expect(issuesOf(fixed)).toEqual([]);
+    const extracted = withTaxonomy();
+    extracted.sources[0].extract.shelf = { css: '.breadcrumb li:last-child' };
+    expect(issuesOf(extracted)).toEqual([]);
+    const both = withTaxonomy();
+    both.sources[0].fixed.shelf = 'power-amps';
+    both.sources[0].extract.shelf = { css: 'h2' };
+    expect(issuesOf(both)).toContain(
+      'sources.0.extract.shelf: shelf is fixed, so it can’t also be extracted.',
+    );
+    const address = withTaxonomy();
+    address.sources[0].extract.shelf = { url: 'canonical' };
+    expect(issuesOf(address)).toContain(
+      'sources.0.extract.shelf: A shelf comes from a selector’s text, not the page address.',
+    );
+    const blank = withTaxonomy();
+    blank.sources[0].fixed.shelf = '  ';
+    expect(issuesOf(blank)).toContain(
+      'sources.0.fixed.shelf: Fix the shelf by its slug or its name.',
+    );
+    const enumOnly = definition();
+    enumOnly.sources[0].fixed.shelf = 'power-amps';
+    expect(issuesOf(enumOnly)).toContain('sources.0.fixed.shelf: There’s no field called shelf.');
   });
 });

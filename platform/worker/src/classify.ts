@@ -6,6 +6,7 @@ import {
   classifyRule,
   classifyState,
   decidedField,
+  hasTaxonomy,
   NONE_OF_THESE,
   optionsOf,
   outcomeProbability,
@@ -14,6 +15,7 @@ import {
   stateEvidence,
   stateHash,
   survivingValues,
+  TAXONOMY_FIELDS,
   type CascadeOutcome,
   type ContentSignals,
   type Definition,
@@ -80,7 +82,8 @@ export function classifyTarget(definition: Definition, item: ItemRef): ClassifyT
 
 /**
  * Whether the page's decided field holds a decider's answer: its current statement has the method
- * llm. A rule's answer and a person's don't rest on AI input.
+ * llm. A rule's answer and a person's don't rest on AI input. A taxonomy's shelf, functions, and
+ * features count the same way.
  */
 export async function decidedByLlm(
   context: Context,
@@ -88,10 +91,18 @@ export async function decidedByLlm(
   ports: RefreshPorts,
 ): Promise<boolean> {
   const target = classifyTarget(context.definition, item);
-  if (target === null) return false;
+  const recordType = context.definition.recordTypes[item.recordType];
+  // A taxonomy's three fields are the decider's too (ADR 0007).
+  const names: readonly string[] =
+    target !== null
+      ? [target.name]
+      : recordType !== undefined && hasTaxonomy(recordType)
+        ? TAXONOMY_FIELDS
+        : [];
+  if (names.length === 0) return false;
   const said = await ports.withDb((db) => statementsOf(db, [item.id]));
   return (said.get(item.id) ?? []).some(
-    (statement) => statement.property === target.name && statement.method === 'llm',
+    (statement) => names.includes(statement.property) && statement.method === 'llm',
   );
 }
 
@@ -129,11 +140,23 @@ export interface ClassifyFetch {
   signals: ContentSignals;
   /** The capture the page was read from (ADR 0008); absent or null for none. */
   captureId?: string | null;
+  /**
+   * When the page's statements count as seen, as an ISO time: its last fetch's, for a page read
+   * again from its capture (ADR 0008). Absent means now.
+   */
+  seenAt?: string;
 }
 
 /** How a recorded decision was made, as a run counts it. */
-const madeBy = (decision: DecisionRow): Classified['outcome'] =>
+export const madeBy = (decision: DecisionRow): Classified['outcome'] =>
   decision.outcome === 'rule' ? 'rule' : decision.outcome === 'accepted' ? 'accepted' : 'escalated';
+
+/**
+ * When a write's statements count as seen: now, or, for a page read again from its capture, its
+ * last fetch (ADR 0008).
+ */
+const seenAtOf = (fetched: ClassifyFetch, now: Date) =>
+  fetched.seenAt === undefined ? now : new Date(fetched.seenAt);
 
 /**
  * Whether a decider weighed a decision: one was asked, and it named probabilities. One that named
@@ -223,7 +246,7 @@ async function classifyPage(
         itemId: item.id,
         name,
         fetchId: fetched.fetchId,
-        at: ports.now(),
+        at: seenAtOf(fetched, ports.now()),
       }),
     );
     return result('reused');
@@ -250,6 +273,7 @@ async function classifyPage(
   const readAgain = () =>
     ports.withDb((db) => setExtractedWith(db, item.id, retryTag(context.revision)));
   const at = ports.now();
+  const seenAt = seenAtOf(fetched, at);
   const apply = (decision: DecisionRow) =>
     ports.withDb((db) =>
       applyClassification(db, {
@@ -260,6 +284,7 @@ async function classifyPage(
         captureId: fetched.captureId ?? null,
         decision,
         at,
+        seenAt,
       }),
     );
 
@@ -370,12 +395,14 @@ async function applyClassification(
     captureId: string | null;
     decision: DecisionRow;
     at: Date;
+    /** When its statements count as seen: `at`, or a page's last fetch (ADR 0008). */
+    seenAt: Date;
   },
 ): Promise<'answered' | 'irrelevant' | 'waiting'> {
-  const { datasetId, item, name, fetchId, captureId, decision, at } = input;
-  const write = { datasetId, itemId: item.id, fetchId, seenAt: at, properties: [name], captureId };
+  const { datasetId, item, name, fetchId, captureId, decision, at, seenAt } = input;
+  const write = { datasetId, itemId: item.id, fetchId, seenAt, properties: [name], captureId };
   const withdrawAutomatic = () =>
-    withdrawCascade(db, { datasetId, itemId: item.id, name, fetchId, at });
+    withdrawCascade(db, { datasetId, itemId: item.id, name, fetchId, at: seenAt });
   const answer = decision.finalAnswer ?? decision.answer;
   if (answer === null) {
     await withdrawAutomatic();

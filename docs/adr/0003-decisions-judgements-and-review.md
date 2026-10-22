@@ -138,3 +138,17 @@ whose every answer is recorded and can be corrected by a person.
 - **Answers from before.** An open question asked with same, variant, or different takes the five
   relationships too, so a page can be called an edition. "Variant" and "different" still keep a
   page apart.
+
+## Update, 2026-10-21 (ADR 0007, ADR 0009)
+
+- A taxonomy question has three parts, each accepted on its own, and a person answers only the
+  uncertain ones. Its review keeps the kind `classify`.
+- A page is asked again only when the taxonomy key its decision covered changes, not on every
+  change to the categories.
+- A person's answer no longer stands forever. It carries over a rename, a move, and a merge; a
+  retirement reopens the question, showing it (ADR 0007).
+- Answers come with an actor, a note, and a client, and a lower rank's differing answer flags the
+  question for the owner (ADR 0009).
+- Match questions keep the five relationships through the review API.
+- A reviewer's match answer counts as the standing answer when it has the same verdict (join,
+  edition, or keep apart), and only a different verdict flags it.

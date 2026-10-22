@@ -10,6 +10,17 @@ import { withoutWrapperTags, type LlmPort, type LlmUsage } from './llm';
  * applies the pick. Evidence is untrusted, wrapped, and never followed.
  */
 
+/**
+ * The open parts of a taxonomy question (ADR 0007), by ID: the shelves it offers, with `none` for
+ * none of them; the functions; and the values it offers, by feature. A part that's settled is
+ * empty.
+ */
+export interface TaxonomyParts {
+  shelves: string[];
+  functions: string[];
+  features: Record<string, string[]>;
+}
+
 export type Question =
   | { type: 'boolean'; prompt: string }
   | {
@@ -22,9 +33,19 @@ export type Question =
        */
       outcomes?: Record<string, string>;
     }
-  | { type: 'score'; prompt: string; levels: string[] };
+  | { type: 'score'; prompt: string; levels: string[] }
+  | { type: 'taxonomy'; prompt: string; parts: TaxonomyParts };
 
 export const MAX_OPTIONS = 255;
+
+/** A taxonomy question's options as its probabilities name them: `shelf:<id>`, `function:<id>`, `value:<id>`. */
+export function partKeys(parts: TaxonomyParts): string[] {
+  return [
+    ...parts.shelves.map((id) => `shelf:${id}`),
+    ...parts.functions.map((id) => `function:${id}`),
+    ...Object.values(parts.features).flatMap((values) => values.map((id) => `value:${id}`)),
+  ];
+}
 
 /** The answers a question allows, in order. */
 export function optionsOf(question: Question): string[] {
@@ -35,6 +56,8 @@ export function optionsOf(question: Question): string[] {
       return question.options;
     case 'score':
       return question.levels;
+    case 'taxonomy':
+      return partKeys(question.parts);
   }
 }
 
@@ -52,10 +75,19 @@ export function sharingOutcome(question: Question, answer: string): string[] {
 }
 
 /**
+ * A sum of probabilities, or a bound derived from a threshold, rounded to nine places. One floating
+ * point puts a hair under a threshold otherwise: 0.29 + 0.57 + 0.09 is 0.9499999999999998, 0.7 +
+ * 0.2 is 0.8999999999999999, and 1 - 0.9 is 0.09999999999999998.
+ */
+export function roundProbability(probability: number): number {
+  return Math.round(probability * 1e9) / 1e9;
+}
+
+/**
  * How sure an answer is: its own probability, or, where the question groups its answers into
- * outcomes, the total of the answers that share its outcome (ADR 0003). A total is rounded to nine
- * places, so that one floating point puts a hair under the threshold still reaches it: 0.29 + 0.57 +
- * 0.09 is 0.9499999999999998. An answer without a probability of its own counts as 0.
+ * outcomes, the total of the answers that share its outcome (ADR 0003). A total is rounded
+ * (`roundProbability`), so that one floating point puts a hair under the threshold still reaches
+ * it. An answer without a probability of its own counts as 0.
  */
 export function outcomeProbability(
   question: Question,
@@ -67,11 +99,22 @@ export function outcomeProbability(
   const shared = sharingOutcome(question, answer);
   if (shared.length === 1) return own(answer);
   const total = shared.reduce((sum, option) => sum + own(option), 0);
-  return Math.round(total * 1e9) / 1e9;
+  return roundProbability(total);
 }
 
 /** What's wrong with a question, or null when nothing is. */
 export function questionError(question: Question): string | null {
+  if (question.type === 'taxonomy') {
+    const keys = partKeys(question.parts);
+    if (question.prompt.trim() === '' || keys.length === 0) return 'it asks nothing';
+    // A shelf part offers the shelves and none, or a category and its subcategories.
+    if (question.parts.shelves.length === 1) return 'it offers one shelf';
+    if (question.parts.shelves.length > MAX_OPTIONS) {
+      return `it offers more than ${MAX_OPTIONS} shelves`;
+    }
+    if (new Set(keys).size !== keys.length) return 'it offers an answer twice';
+    return null;
+  }
   const options = optionsOf(question);
   if (question.prompt.trim() === '') return 'it asks nothing';
   if (options.length < 2) return 'it offers fewer than two answers';

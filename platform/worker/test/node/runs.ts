@@ -5,12 +5,19 @@ import {
   snapshotSchema,
   type Definition,
 } from '@spatula/core';
-import { applyDefinition, fetches, items, latestSnapshot, listLiveItems } from '@spatula/store';
-import { testDefinition } from '@spatula/store/fixtures';
+import {
+  applyDefinition,
+  fetches,
+  items,
+  latestSnapshot,
+  listLiveItems,
+  seedTaxonomyVersion,
+} from '@spatula/store';
+import { testDefinition, testTaxonomy } from '@spatula/store/fixtures';
 import { and, eq } from 'drizzle-orm';
 import { expect } from 'vitest';
 import { runRefresh, type StepRunner } from '../../src/refresh';
-import type { Reply } from '../pages';
+import { standardRoutes, type Reply } from '../pages';
 import { db } from './db';
 import { fakeStep, makeWorld, type World } from './fakes';
 
@@ -23,12 +30,13 @@ import { fakeStep, makeWorld, type World } from './fakes';
  * One run of the dataset, then five minutes, so the next run gets its own ID. Workflows keep each
  * step's result, so the run keeps them too, for tests that look at what a step returned. A run
  * counts every page as due unless it's told otherwise, so tests that run again five minutes later
- * still see every page read.
+ * still see every page read. A backfill run (`backfill`) only decides again what a taxonomy change
+ * touched (ADR 0008).
  */
 export async function refresh(
   world: World,
   datasetId: string,
-  options: { all?: boolean } = { all: true },
+  options: { all?: boolean; backfill?: boolean } = { all: true },
 ) {
   const runId = runIdFor(datasetId, world.clock.now());
   const { step, names } = fakeStep(world.clock);
@@ -41,7 +49,11 @@ export async function refresh(
       return result;
     },
   };
-  const summary = await runRefresh({ runId, datasetId, all: options.all }, recording, world.ports);
+  const summary = await runRefresh(
+    { runId, datasetId, all: options.all, backfill: options.backfill },
+    recording,
+    world.ports,
+  );
   world.clock.advance(5 * 60_000);
   return { summary, names, runId, results };
 }
@@ -75,7 +87,7 @@ export const entityOf = async (itemId: string) =>
 export async function worldFor(
   definition: Definition,
   routes: Record<string, Reply>,
-  options: { llm?: boolean; decider?: boolean } = {},
+  options: { llm?: boolean; decider?: boolean; taxonomyDecider?: boolean } = {},
 ) {
   await applyDefinition(db, definition);
   const world = makeWorld(db, routes, options);
@@ -107,4 +119,23 @@ export function decidedDefinition(
   });
   if (!parsed.ok) throw new Error(parsed.issues.join('\n'));
   return parsed.definition;
+}
+
+/**
+ * Applies a definition whose record type has a taxonomy, seeds the test taxonomy as its version 1,
+ * and makes a world whose pages answer as `routes` say.
+ */
+export async function taxonomyWorld(
+  definition: Definition,
+  routes: Record<string, Reply> = standardRoutes(),
+  options: { llm?: boolean; decider?: boolean; taxonomyDecider?: boolean } = {},
+) {
+  const made = await worldFor(definition, routes, options);
+  await seedTaxonomyVersion(db, {
+    datasetId: definition.dataset,
+    taxonomy: testTaxonomy(),
+    actor: { role: 'owner', client: 'cli' },
+    at: made.world.clock.now(),
+  });
+  return made;
 }

@@ -64,6 +64,27 @@
       "when": 1792524348985,
       "tag": "0008_match_relationships",
       "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "7",
+      "when": 1792599814989,
+      "tag": "0009_taxonomy_versions",
+      "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "7",
+      "when": 1792609109629,
+      "tag": "0010_review_roles",
+      "breakpoints": true
+    },
+    {
+      "idx": 11,
+      "version": "7",
+      "when": 1792613910731,
+      "tag": "0011_taxonomy_proposals",
+      "breakpoints": true
     }
   ]
 }

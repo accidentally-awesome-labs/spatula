@@ -32,4 +32,15 @@
   "workflows": [
     { "name": "spatula-refresh", "binding": "REFRESH", "class_name": "RefreshWorkflow" },
   ],
+  // The review API's writes (ADR 0009): 120 a minute for the owner, and for each of a consumer's
+  // reviewers; and 240 a minute for each consumer's reviewers together, since a consumer names its
+  // reviewers itself. A bulk request counts once.
+  "ratelimits": [
+    { "name": "REVIEW_LIMITER", "namespace_id": "2001", "simple": { "limit": 120, "period": 60 } },
+    {
+      "name": "CONSUMER_REVIEW_LIMITER",
+      "namespace_id": "2002",
+      "simple": { "limit": 240, "period": 60 },
+    },
+  ],
 }

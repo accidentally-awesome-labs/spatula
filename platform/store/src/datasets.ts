@@ -1,4 +1,5 @@
 import {
+  applyChanges,
   newId,
   parseDefinition,
   sha256Hex,
@@ -9,10 +10,11 @@ import {
   type ItemView,
   type PagesSource,
 } from '@spatula/core';
-import { and, eq, inArray, notInArray, or, sql } from 'drizzle-orm';
+import { and, asc, eq, inArray, notInArray, or, sql, type AnyColumn } from 'drizzle-orm';
 import type { Executor } from './client';
 import { supersedeDecisions } from './decisions';
-import { datasets, items, sources, type ItemStatus } from './schema';
+import { captures, datasets, items, sources, taxonomyVersions, type ItemStatus } from './schema';
+import { currentTaxonomy } from './taxonomy';
 
 export interface DatasetRow {
   id: string;
@@ -228,6 +230,18 @@ export async function applyDefinition(
     moves: movesByTarget(moves.moved),
     unmoved: moves.unmoved,
   };
+  // The taxonomy keeps to the definition's scope: a new scope is a new taxonomy version (ADR 0007).
+  const taxonomyNow = existing === undefined ? null : await currentTaxonomy(db, id);
+  const rescoped =
+    changed &&
+    definition.scope !== undefined &&
+    taxonomyNow !== null &&
+    taxonomyNow.taxonomy.scope !== definition.scope
+      ? applyChanges(taxonomyNow.taxonomy, [{ kind: 'scope', scope: definition.scope }], () =>
+          newId('tx'),
+        )
+      : null;
+  if (rescoped?.ok === true) summary.taxonomyVersion = rescoped.taxonomy.version;
   if (dryRun || (!changed && moves.moved.length === 0)) return summary;
 
   await db.transaction(async (tx) => {
@@ -248,6 +262,19 @@ export async function applyDefinition(
             target: [sources.datasetId, sources.id],
             set: { kind: source.kind, config: source, removedAt: null },
           });
+      }
+      if (rescoped?.ok === true && taxonomyNow !== null) {
+        await tx.insert(taxonomyVersions).values({
+          datasetId: id,
+          version: rescoped.taxonomy.version,
+          taxonomy: rescoped.taxonomy,
+          changes: rescoped.applied,
+          actor: { role: 'owner', client: 'cli' },
+          autonomous: false,
+          proposalId: null,
+          undoes: null,
+          createdAt: now,
+        });
       }
     }
     // Pages move once every source they move to exists, and before anything is excluded or a pages
@@ -380,6 +407,24 @@ export async function datasetExists(db: Executor, id: string): Promise<boolean> 
   return row !== undefined;
 }
 
+/**
+ * Every dataset, by ID, with its revision and the generation at its head: what the console opens
+ * with. Like `datasetExists`, it doesn't read the definitions, so one that no longer passes the
+ * checks is listed too.
+ */
+export async function listDatasets(
+  db: Executor,
+): Promise<{ id: string; revision: number; headGeneration: number }[]> {
+  return db
+    .select({
+      id: datasets.id,
+      revision: datasets.revision,
+      headGeneration: datasets.headGeneration,
+    })
+    .from(datasets)
+    .orderBy(asc(datasets.id));
+}
+
 /** The dataset's live items, by source and page. */
 export async function listLiveItems(db: Executor, datasetId: string): Promise<ItemRef[]> {
   return db
@@ -417,10 +462,21 @@ export async function listItems(db: Executor, datasetId: string): Promise<ItemVi
 export const REVIVABLE_STATUSES: ItemStatus[] = ['refused', 'gone', 'irrelevant'];
 
 /**
- * Puts pages back to live: every refused page with `refused`, and the pages named, from any
- * revivable status. Their streaks start again, and a revived page counts as never read, so the
- * next run reads it whenever it was last read. A revived irrelevant page also loses the decision
- * that made it irrelevant and its extraction mark, so the next run reads it and asks afresh.
+ * A column a page keeps while it is revived from its capture (ADR 0008): an irrelevant page whose
+ * capture holds its stored copy keeps it, and every other page has it null, as a page never read.
+ */
+const keptFromCapture = (column: AnyColumn) =>
+  sql`case when ${items.status} = 'irrelevant' and exists (select 1 from ${captures} where ${captures.itemId} = ${items.id} and ${captures.contentHash} = ${items.contentHash}) then ${column} else null end`;
+
+/**
+ * Puts pages back to live: every refused page with `refused`, every irrelevant one with
+ * `irrelevant`, and the pages named, from any revivable status. Their streaks start again, and a
+ * revived page counts as never read, so the next run reads it whenever it was last read. A revived
+ * irrelevant page also loses the decision that made it irrelevant and its extraction mark, so the
+ * next run reads it and asks afresh. With `fromCaptures` (ADR 0008), an irrelevant page whose
+ * capture holds its stored copy isn't counted as never read: it keeps its last fetch and what that
+ * found, so once its code is older, as applying a definition makes it, the run reads it again from
+ * the capture with no request. Every other page is fetched.
  *
  * The revival is one transaction: a failure partway leaves every page as it was. It starts by
  * locking the pages it will revive, and then acts on those and no others. A run can commit between
@@ -431,10 +487,17 @@ export const REVIVABLE_STATUSES: ItemStatus[] = ['refused', 'gone', 'irrelevant'
  */
 export async function reviveItems(
   db: Executor,
-  input: { datasetId: string; pages?: string[]; refused?: boolean },
+  input: {
+    datasetId: string;
+    pages?: string[];
+    refused?: boolean;
+    irrelevant?: boolean;
+    fromCaptures?: boolean;
+  },
 ): Promise<number> {
   const which = [
     ...(input.refused === true ? [eq(items.status, 'refused')] : []),
+    ...(input.irrelevant === true ? [eq(items.status, 'irrelevant')] : []),
     ...(input.pages !== undefined && input.pages.length > 0
       ? [and(inArray(items.locator, input.pages), inArray(items.status, REVIVABLE_STATUSES))]
       : []),
@@ -453,10 +516,12 @@ export async function reviveItems(
       .update(items)
       .set({
         status: 'live',
-        lastOutcome: null,
+        // Postgres evaluates every `set` against the row as it was, so these read the page's old
+        // status. Without `fromCaptures`, they're null: the page counts as never read.
+        lastOutcome: input.fromCaptures === true ? keptFromCapture(items.lastOutcome) : null,
         outcomeStreak: 0,
         missingStreak: 0,
-        lastFetchedAt: null,
+        lastFetchedAt: input.fromCaptures === true ? keptFromCapture(items.lastFetchedAt) : null,
       })
       .where(
         inArray(

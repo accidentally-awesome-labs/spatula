@@ -5,6 +5,8 @@ pnpm-lock.yaml
 THIRD_PARTY_NOTICES.md
 **/CHANGELOG.md
 platform/store/drizzle/meta/
+# The snapshot serializer's bytes, which a core test compares byte for byte (ADR 0007).
+platform/core/src/testing/example-taxonomy-snapshot.json
 **/.wrangler
 **/worker-configuration.d.ts
 .superpowers/

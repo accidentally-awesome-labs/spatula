@@ -1,5 +1,6 @@
 import {
   createLlmDecider,
+  createTaxonomyDecider,
   importSigningKey,
   randomNonce,
   signRequest,
@@ -50,6 +51,7 @@ export function workerPorts(env: Env): RefreshPorts {
     blobs: r2Blobs(env.STORE),
     llm,
     decider: llm === null ? null : createLlmDecider(llm),
+    taxonomyDecider: llm === null ? null : createTaxonomyDecider(llm),
     packs,
     now: () => new Date(),
     wait: (ms) => scheduler.wait(ms),

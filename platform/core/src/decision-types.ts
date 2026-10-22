@@ -95,9 +95,13 @@ function stateTexts(texts: readonly string[], max: number, sorted: boolean): str
  * What a page's classification rests on. A title is cut to 300 characters and a crumb to 100, the
  * lengths a page keeps them to already. A type or a category is cut to 200, because either can be
  * as long as the page. Breadcrumbs keep their order, which is a path. A property's values are
- * sorted, so the state and its hash don't depend on the order they were read in.
+ * sorted, so the state and its hash don't depend on the order they were read in. It reads only what
+ * a capture keeps of a page too (ADR 0008), so a page is decided again from its archive.
  */
-export function classifyState(page: Page, values: Record<string, FieldValue[]>): ClassifyState {
+export function classifyState(
+  page: Pick<Page, 'url' | 'title' | 'breadcrumbs' | 'jsonLd'>,
+  values: Record<string, FieldValue[]>,
+): ClassifyState {
   let products = 0;
   const categories: string[] = [];
   for (const node of page.jsonLd) {

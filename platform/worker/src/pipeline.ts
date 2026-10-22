@@ -9,6 +9,7 @@ import {
   type LlmUsage,
   type PackRegistry,
   type RunSummary,
+  type TaxonomyDecider,
 } from '@spatula/core';
 import type { Executor, StatementCounts } from '@spatula/store';
 
@@ -70,6 +71,8 @@ export interface RefreshPorts {
   llm: LlmPort | null;
   /** The decision cascade's decider, or null when no model is configured: then a person decides. */
   decider: Decider | null;
+  /** The taxonomy's three-part decider (ADR 0007), or null when no model is configured. */
+  taxonomyDecider: TaxonomyDecider | null;
   packs: PackRegistry;
   now(): Date;
   /** A wait inside a step, never longer than MAX_INLINE_WAIT_MS. */
@@ -92,6 +95,11 @@ export interface Context {
   startedAt: Date;
   /** Each source's standing as the run started, by ID. A source without one is live. */
   standing?: Record<string, Standing>;
+  /**
+   * The taxonomy version the run places pages in (ADR 0007): null when the dataset's record type
+   * has a taxonomy that isn't seeded yet, and absent for a record type without one.
+   */
+  taxonomyVersion?: number | null;
 }
 
 /**
@@ -128,10 +136,13 @@ export const extractionTag = (revision: number) => `r${revision}.v${EXTRACTION_V
 /** What a page is marked with when it has to be read again though nothing about it changed. */
 export const retryTag = (revision: number) => `${extractionTag(revision)}.retry`;
 
-/** The tokens a run has spent on the LLM: reading pages, classifying them, and matching them. */
+/**
+ * The tokens a run has spent on the LLM: reading pages, classifying and placing them, matching
+ * them, and reviewing the taxonomy (ADR 0007).
+ */
 export function tokensSpent(summary: RunSummary): number {
   let spent = summary.llm.inputTokens + summary.llm.outputTokens;
-  for (const counts of [summary.classify, summary.match]) {
+  for (const counts of [summary.classify, summary.match, summary.taxonomy]) {
     spent += (counts?.inputTokens ?? 0) + (counts?.outputTokens ?? 0);
   }
   return spent;

@@ -4,9 +4,12 @@ import type {
   Definition,
   EvalScores,
   EvalView,
+  GivenParts,
   ItemView,
   ReviewView,
   RunView,
+  Taxonomy,
+  TaxonomySeed,
 } from '@spatula/core';
 import { describeError } from './format';
 
@@ -110,11 +113,14 @@ export function createClient(options: {
      */
     async startRun(
       datasetId: string,
-      options: { all?: boolean } = {},
+      options: { all?: boolean; backfill?: boolean } = {},
     ): Promise<{ runId: string; existing: boolean; message: string | null }> {
+      // A backfill run reads no page, so the API takes one flag or the other.
+      const query =
+        options.backfill === true ? '?backfill=1' : options.all === true ? '?all=1' : '';
       const response = await request(
         'POST',
-        `/datasets/${encodeURIComponent(datasetId)}/runs${options.all === true ? '?all=1' : ''}`,
+        `/datasets/${encodeURIComponent(datasetId)}/runs${query}`,
       );
       const answer = await json(response);
       if (
@@ -139,7 +145,7 @@ export function createClient(options: {
 
     async reviveItems(
       datasetId: string,
-      body: { refused?: true; pages?: string[] },
+      body: { refused?: true; irrelevant?: true; fromCaptures?: true; pages?: string[] },
     ): Promise<{ revived: number }> {
       const response = await request(
         'POST',
@@ -184,8 +190,51 @@ export function createClient(options: {
       };
     },
 
-    async listReviews(datasetId: string): Promise<ReviewView[]> {
-      const response = await request('GET', `/datasets/${encodeURIComponent(datasetId)}/review`);
+    async seedTaxonomy(
+      datasetId: string,
+      seed: TaxonomySeed,
+    ): Promise<{ version: number; shelves: number; functions: number; features: number }> {
+      const response = await request(
+        'POST',
+        `/datasets/${encodeURIComponent(datasetId)}/taxonomy`,
+        seed,
+      );
+      const answer = await json(response);
+      if (!response.ok) throw refused(response.status, answer);
+      return {
+        version: Number(answer.version),
+        shelves: Number(answer.shelves),
+        functions: Number(answer.functions),
+        features: Number(answer.features),
+      };
+    },
+
+    async getTaxonomy(
+      datasetId: string,
+      format?: 'export',
+    ): Promise<{ version: number; taxonomy?: Taxonomy; export?: TaxonomySeed }> {
+      const query = format === undefined ? '' : `?format=${format}`;
+      const response = await request(
+        'GET',
+        `/datasets/${encodeURIComponent(datasetId)}/taxonomy${query}`,
+      );
+      const answer = await json(response);
+      if (!response.ok) throw refused(response.status, answer);
+      return answer as unknown as { version: number; taxonomy?: Taxonomy; export?: TaxonomySeed };
+    },
+
+    /** The open questions the filters let through; with none, it asks what it always asked. */
+    async listReviews(datasetId: string, filters: ReviewFilters = {}): Promise<ReviewView[]> {
+      const query = new URLSearchParams();
+      if (filters.kind !== undefined) query.set('kind', filters.kind);
+      if (filters.shelf !== undefined) query.set('shelf', filters.shelf);
+      if (filters.source !== undefined) query.set('source', filters.source);
+      if (filters.below !== undefined) query.set('below', String(filters.below));
+      const search = query.toString();
+      const response = await request(
+        'GET',
+        `/datasets/${encodeURIComponent(datasetId)}/review${search === '' ? '' : `?${search}`}`,
+      );
       const answer = await json(response);
       if (!response.ok) throw refused(response.status, answer);
       return Array.isArray(answer.reviews) ? (answer.reviews as ReviewView[]) : [];
@@ -204,6 +253,62 @@ export function createClient(options: {
       const body = await json(response);
       if (!response.ok) throw refused(response.status, body);
       return { effect: typeof body.effect === 'string' ? body.effect : '' };
+    },
+
+    /** Answers a question in parts, or with its suggestion (ADR 0009). */
+    async answerParts(
+      datasetId: string,
+      reviewId: string,
+      body: { parts: GivenParts; note?: string } | { suggestion: true },
+    ): Promise<{ effect: string }> {
+      const response = await request(
+        'POST',
+        `/datasets/${encodeURIComponent(datasetId)}/review/${encodeURIComponent(reviewId)}`,
+        body,
+      );
+      const answer = await json(response);
+      if (!response.ok) throw refused(response.status, answer);
+      return { effect: textOf(answer.effect) };
+    },
+
+    /** Sends up to 500 answers in one request. Each is taken or refused on its own. */
+    async answerBulk(
+      datasetId: string,
+      body: { answers: BulkAnswer[]; note?: string },
+    ): Promise<BulkResult[]> {
+      const response = await request(
+        'POST',
+        `/datasets/${encodeURIComponent(datasetId)}/review/bulk`,
+        body,
+      );
+      const answer = await json(response);
+      if (!response.ok) throw refused(response.status, answer);
+      return objectsOf(answer.results).map((row) => ({
+        reviewId: textOf(row.reviewId),
+        status: Number(row.status) || 0,
+        effect: textOf(row.effect),
+        error: textOf(row.error),
+      }));
+    },
+
+    /** The owner's suggested answers, each for the open question about the page it names. */
+    async suggest(
+      datasetId: string,
+      suggestions: { page: string; parts: GivenParts }[],
+    ): Promise<SuggestResult[]> {
+      const response = await request(
+        'POST',
+        `/datasets/${encodeURIComponent(datasetId)}/review/suggestions`,
+        { suggestions },
+      );
+      const answer = await json(response);
+      if (!response.ok) throw refused(response.status, answer);
+      return objectsOf(answer.suggestions).map((row) => ({
+        page: textOf(row.page),
+        status: Number(row.status) || 0,
+        reviewId: typeof row.reviewId === 'string' ? row.reviewId : null,
+        error: textOf(row.error),
+      }));
     },
 
     async getStatus(datasetId: string): Promise<DatasetStatus> {
@@ -259,3 +364,47 @@ export function createClient(options: {
 }
 
 export type Client = ReturnType<typeof createClient>;
+
+/** What a list of questions can be filtered by: the review API's filters (ADR 0009). */
+export interface ReviewFilters {
+  kind?: ReviewView['kind'];
+  /** A shelf, by slug or ID: the questions about pages proposed for it, or settled on it. */
+  shelf?: string;
+  source?: string;
+  /** The questions whose likeliest answer is less likely than this. */
+  below?: number;
+}
+
+/** One answer of a bulk request: one of the question's answers, its parts, or its suggestion. */
+export type BulkAnswer =
+  | { reviewId: string; answer: string }
+  | { reviewId: string; parts: GivenParts }
+  | { reviewId: string; suggestion: true };
+
+/**
+ * How one answer of a bulk request went, as the API says it: the status the answer would have got
+ * alone (200 answered, 202 sent to the owner, anything else refused), and for a refusal its reason.
+ */
+export interface BulkResult {
+  reviewId: string;
+  status: number;
+  effect: string;
+  error: string;
+}
+
+/** How one suggestion went: 200, on the question it's now on, or why not. */
+export interface SuggestResult {
+  page: string;
+  status: number;
+  reviewId: string | null;
+  error: string;
+}
+
+/** The objects in a list an answer holds; a newer API's extra fields don't matter. */
+function objectsOf(value: unknown): Record<string, unknown>[] {
+  return Array.isArray(value)
+    ? value.filter((row): row is Record<string, unknown> => typeof row === 'object' && row !== null)
+    : [];
+}
+
+const textOf = (value: unknown): string => (typeof value === 'string' ? value : '');

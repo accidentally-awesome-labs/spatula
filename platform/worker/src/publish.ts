@@ -1,7 +1,10 @@
 import {
   buildRecords,
+  canonicalTaxonomy,
   checkGates,
+  hasTaxonomy,
   newId,
+  serializeSnapshot,
   sha256Hex,
   snapshotSchema,
   stableId,
@@ -14,6 +17,7 @@ import {
   type Snapshot,
   type SnapshotRecord,
   type StatementView,
+  type Taxonomy,
 } from '@spatula/core';
 import {
   commitSnapshot,
@@ -37,6 +41,7 @@ import {
   type StoredSnapshot,
 } from '@spatula/store';
 import { heldKey, snapshotKey, type Context, type RefreshPorts } from './pipeline';
+import { runTaxonomy } from './taxonomy';
 
 /*
  * Publishing (ADR 0004). A run's records become a snapshot only when they changed. The gates decide
@@ -45,7 +50,9 @@ import { heldKey, snapshotKey, type Context, type RefreshPorts } from './pipelin
  * supersedes it. Publishing, now or later, moves the dataset's head generation compared and set,
  * so two publications never share a generation. A run publishes, holds, and supersedes nothing
  * once a run that started after it has a snapshot, and a definition applied while a run goes
- * holds that run's snapshot.
+ * holds that run's snapshot. A dataset with a taxonomy (ADR 0007) publishes it whole beside its
+ * records, at the version the run placed its pages in, and a held snapshot keeps that version
+ * until it's published.
  */
 
 /** The owner's question about a held snapshot. */
@@ -70,32 +77,41 @@ export class SnapshotFileMissingError extends Error {
 }
 
 /**
- * What a snapshot's records say, their editions included, without when each value was last seen.
- * A run that only sees the same values again publishes nothing; consumers already have them. A
- * newly found edition publishes (ADR 0003), and a record without editions digests as it did before
- * them.
+ * What a snapshot's records say, their editions included, without when each value was last seen,
+ * and the taxonomy version they were placed in (ADR 0007). A run that only sees the same values
+ * again publishes nothing; consumers already have them. A newly found edition publishes (ADR 0003),
+ * and so does a new taxonomy version, though no record changed: readers need its names,
+ * descriptions, and migrations. A record without editions, under no taxonomy version, digests as
+ * records always did, so no dataset publishes again for either.
  */
-export async function recordsDigest(records: SnapshotRecord[]): Promise<string> {
-  return sha256Hex(
-    stableStringify(
-      records.map((record) => ({
-        canonicalId: record.canonicalId,
-        fields: record.fields,
-        provenance: Object.fromEntries(
-          Object.entries(record.provenance).map(([name, { sourceUrl, method, confidence }]) => [
-            name,
-            { sourceUrl, method, confidence },
-          ]),
-        ),
-        ...(record.editions === undefined ? {} : { editions: record.editions }),
-      })),
+export async function recordsDigest(
+  records: SnapshotRecord[],
+  taxonomyVersion?: number,
+): Promise<string> {
+  const said = records.map((record) => ({
+    canonicalId: record.canonicalId,
+    fields: record.fields,
+    provenance: Object.fromEntries(
+      Object.entries(record.provenance).map(([name, { sourceUrl, method, confidence }]) => [
+        name,
+        { sourceUrl, method, confidence },
+      ]),
     ),
+    ...(record.editions === undefined ? {} : { editions: record.editions }),
+  }));
+  return sha256Hex(
+    stableStringify(taxonomyVersion === undefined ? said : { records: said, taxonomyVersion }),
   );
 }
 
 /** Publishes the dataset's records if they changed and the gates allow it, or holds them. */
 export async function publish(context: Context, ports: RefreshPorts): Promise<PublishResult> {
   const { runId, datasetId, definition, revision } = context;
+  const [recordType] = Object.values(definition.recordTypes);
+  if (recordType === undefined) throw new Error(`Dataset ${datasetId} has no record type`);
+  // The version the run placed its pages in (ADR 0007), read before the database is opened for the
+  // rest, since runTaxonomy opens it on its own. Null without a taxonomy, or before one is seeded.
+  const taxonomy = hasTaxonomy(recordType) ? await runTaxonomy(context, ports) : null;
   return ports.withDb(async (db) => {
     // A step that runs again finds what it made the first time.
     const made = await snapshotOfRun(db, runId);
@@ -108,8 +124,6 @@ export async function publish(context: Context, ports: RefreshPorts): Promise<Pu
     if (newer !== null) return overtaken(newer, []);
     const unlessNewer = <T>(change: (tx: Executor) => Promise<T>) =>
       unlessNewerRun(db, { datasetId, runId }, change);
-    const [recordType] = Object.values(definition.recordTypes);
-    if (recordType === undefined) throw new Error(`Dataset ${datasetId} has no record type`);
     // Each record's pages, for its base page and its editions (ADR 0003).
     const members = new Map<string, EntityMember[]>();
     const memberOf = new Map<string, EntityMember>();
@@ -141,7 +155,7 @@ export async function publish(context: Context, ports: RefreshPorts): Promise<Pu
       statements,
       members: members.get(canonicalId) ?? [],
     }));
-    const { records, excluded } = buildRecords(recordType, entities);
+    const { records, excluded } = buildRecords(recordType, entities, taxonomy);
     if (records.length === 0) {
       // Publishing a snapshot held earlier would bring back records no run finds now.
       const superseding = await unlessNewer((tx) =>
@@ -154,7 +168,7 @@ export async function publish(context: Context, ports: RefreshPorts): Promise<Pu
         excluded,
       };
     }
-    const digest = await recordsDigest(records);
+    const digest = await recordsDigest(records, taxonomy?.version);
     const latest = await latestSnapshot(db, datasetId);
     if (latest !== null && latest.recordsSha256 === digest) {
       // A snapshot held earlier is older than these records, which are the published ones again.
@@ -184,6 +198,7 @@ export async function publish(context: Context, ports: RefreshPorts): Promise<Pu
       snapshotId,
       generation: (await headGenerationOf(db, datasetId)) + 1,
       publishedAt: ports.now().toISOString(),
+      ...(taxonomy === null ? {} : { taxonomy }),
       records,
     };
     // Checked before the gates, so a held snapshot can always be published as it is.
@@ -217,7 +232,13 @@ export async function publish(context: Context, ports: RefreshPorts): Promise<Pu
       // that waits for an answer stays out. So the owner is told how many records are incomplete
       // and how many questions are open.
       const open = await listOpenReviews(db, datasetId);
-      const draft = JSON.stringify({ project: datasetId, snapshotId, records });
+      // The draft keeps the taxonomy its records were placed in, so it publishes as it was held.
+      const draft = JSON.stringify({
+        project: datasetId,
+        snapshotId,
+        ...(taxonomy === null ? {} : { taxonomy: canonicalTaxonomy(taxonomy) }),
+        records,
+      });
       const key = heldKey(datasetId, snapshotId);
       await ports.blobs.put(key, draft, 'application/json');
       const held = {
@@ -259,7 +280,7 @@ export async function publish(context: Context, ports: RefreshPorts): Promise<Pu
       };
     }
 
-    const body = JSON.stringify(snapshot);
+    const body = serializeSnapshot(snapshot);
     // A file of its own for each attempt, which the row names once it commits. A step that runs
     // twice at once makes the same snapshot ID twice, and the attempt that loses the
     // compare-and-set mustn't overwrite the file the winner's row names: every reader checks the
@@ -312,7 +333,11 @@ export async function publishHeldSnapshot(
   if (row.state !== 'held') return { kind: 'stale', state: row.state };
   const draft = await ports.blobs.get(row.key);
   if (draft === null) throw new SnapshotFileMissingError(row);
-  const { records } = JSON.parse(new TextDecoder().decode(draft)) as { records: SnapshotRecord[] };
+  // A draft held before the taxonomy has none, and publishes as it always did.
+  const { records, taxonomy } = JSON.parse(new TextDecoder().decode(draft)) as {
+    records: SnapshotRecord[];
+    taxonomy?: Taxonomy;
+  };
   for (let attempt = 0; attempt < PUBLISH_ATTEMPTS; attempt += 1) {
     const generation = (await ports.withDb((db) => headGenerationOf(db, input.datasetId))) + 1;
     const snapshot = snapshotSchema.parse({
@@ -320,9 +345,10 @@ export async function publishHeldSnapshot(
       snapshotId: row.id,
       generation,
       publishedAt: ports.now().toISOString(),
+      ...(taxonomy === undefined ? {} : { taxonomy }),
       records,
     });
-    const body = JSON.stringify(snapshot);
+    const body = serializeSnapshot(snapshot);
     // Each attempt writes a file of its own, which its row names once it's published. Two
     // answers sent at once both get this far, and the one that loses the compare-and-set mustn't
     // overwrite the file the winner's row names: every reader checks the file against its hash.

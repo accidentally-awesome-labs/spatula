@@ -1050,6 +1050,12 @@ describe('reviving pages', () => {
     expect(revived.status).toBe(200);
     expectNoStore(revived);
     expect(await revived.json()).toEqual({ revived: 0 });
+    // Irrelevant pages, with their captures' reading, are taken too (ADR 0008).
+    const irrelevant = await call('POST', '/datasets/api-revive/items/revive', {
+      body: { irrelevant: true, fromCaptures: true },
+    });
+    expect(irrelevant.status).toBe(200);
+    expect(await irrelevant.json()).toEqual({ revived: 0 });
     expect((await call('POST', '/datasets/api-revive/items/revive', { body: {} })).status).toBe(
       400,
     );
@@ -1066,6 +1072,9 @@ describe('reviving pages', () => {
     // list, a key it doesn't know, and text where an object belongs.
     for (const body of [
       { refused: false },
+      { irrelevant: false },
+      { fromCaptures: true },
+      { irrelevant: true, fromCaptures: false },
       { pages: [] },
       { pages: ['https://maker-a.example/products/a1'], everything: true },
       'refused',
