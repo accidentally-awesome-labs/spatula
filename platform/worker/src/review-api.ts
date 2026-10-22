@@ -24,6 +24,7 @@ import {
   type BulkResult,
   type ReviewPorts,
 } from './review';
+import { noteSchema } from './text';
 
 /*
  * The review API (ADR 0009): the questions waiting, answers to them one at a time or in bulk, the
@@ -60,7 +61,6 @@ const partsSchema = z.strictObject({
     .optional(),
 });
 
-const noteSchema = z.string().trim().min(1).max(1000);
 const optionSchema = z.string().min(1).max(600);
 
 /** An answer as an older CLI sends it: one of the question's options. */
@@ -327,7 +327,16 @@ export function reviewRoutes(app: Hono<ActorApi>): void {
       } else {
         const parsed = answerSchema.safeParse(body);
         if (!parsed.success) {
-          return c.json({ error: 'Send { "answer": one of the question’s options }.' }, 400);
+          // A note it can't keep is named; anything else gets the words an older CLI knows.
+          const atNote = parsed.error.issues[0]?.path[0] === 'note';
+          return c.json(
+            {
+              error: atNote
+                ? wrongAt('answer', parsed.error)
+                : 'Send { "answer": one of the question’s options }.',
+            },
+            400,
+          );
         }
         sent = parsed.data;
       }

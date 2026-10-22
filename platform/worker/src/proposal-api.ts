@@ -27,6 +27,7 @@ import { bodyLimit } from 'hono/body-limit';
 import { z } from 'zod';
 import { actorRecord, limited, needs, ownerOnly, type ActorApi } from './actors';
 import { withDatabase } from './database';
+import { noteSchema } from './text';
 
 /*
  * The taxonomy's proposals, versions, and autonomy (ADR 0007, ADR 0009), registered on the bearer
@@ -38,17 +39,6 @@ import { withDatabase } from './database';
 
 /** A decision's body: a change and a note come to a few kilobytes at most. */
 const DECISION_MAX_BYTES = 64 * 1024;
-
-const noteSchema = z
-  .string()
-  .trim()
-  .min(1)
-  .max(1000)
-  // Kept as text, and in the log's jsonb, which refuses U+0000 and a lone surrogate.
-  .refine(
-    (note) => note.isWellFormed() && !note.includes('\u0000'),
-    'A note can’t hold U+0000 or a lone surrogate.',
-  );
 
 const decisionSchema = z.discriminatedUnion('decision', [
   z.strictObject({ decision: z.literal('accept'), note: noteSchema.optional() }),

@@ -1,3 +1,20 @@
+import { z } from 'zod';
+
+/**
+ * A person's note on an answer or a decision, as the review API takes it. It's kept as text, and in
+ * the log's jsonb, which refuses U+0000 and a lone surrogate: a note holding one is the caller's
+ * mistake, so it's refused with a 400, not stored.
+ */
+export const noteSchema = z
+  .string()
+  .trim()
+  .min(1)
+  .max(1000)
+  .refine(
+    (note) => note.isWellFormed() && !note.includes('\u0000'),
+    'A note can’t hold U+0000 or a lone surrogate.',
+  );
+
 /** The most code units of a stored message: a note, a reason, or a failed run's error. */
 const MAX_STORED_TEXT = 500;
 

@@ -402,6 +402,34 @@ describe('the review API', () => {
     ]);
   });
 
+  it('refuses a note Postgres can’t keep as a bad request, and answers nothing', async () => {
+    const datasetId = 'rv-notes';
+    await questionsIn(datasetId);
+    const { match0, classify } = questions(datasetId);
+    const why = 'A note can’t hold U+0000 or a lone surrogate.';
+    for (const note of ['Its box\u0000says DAC.', 'Its box says \ud800.']) {
+      const name = JSON.stringify(note);
+      const older = await call('POST', `/datasets/${datasetId}/review/${match0}`, {
+        body: { answer: 'same', note },
+      });
+      expect(older.status, name).toBe(400);
+      expect(await older.json(), name).toEqual({ error: `The answer is wrong at note: ${why}` });
+      const parts = await call('POST', `/datasets/${datasetId}/review/${classify}`, {
+        body: { parts: {}, note },
+      });
+      expect(parts.status, name).toBe(400);
+      expect(await parts.json(), name).toEqual({ error: `The answer is wrong at note: ${why}` });
+      const bulk = await call('POST', `/datasets/${datasetId}/review/bulk`, {
+        body: { answers: [{ reviewId: match0, answer: 'same' }], note },
+      });
+      expect(bulk.status, name).toBe(400);
+      expect(await bulk.json(), name).toEqual({ error: `The request is wrong at note: ${why}` });
+    }
+    const listed = await call('GET', `/datasets/${datasetId}/review`);
+    const { reviews } = (await listed.json()) as { reviews: { id: string }[] };
+    expect(reviews.map((review) => review.id)).toContain(match0);
+  });
+
   it('limits each owner’s and each reviewer’s writes, and counts a bulk request once', async () => {
     const datasetId = 'rv-limits';
     await questionsIn(datasetId);
