@@ -644,6 +644,61 @@ describe('scoring the taxonomy', () => {
       targets: { shelf: true, functions: true },
     });
   });
+
+  it('does not meet the functions target when precision alone falls short', () => {
+    // Ten LCD-Xs whose golden functions are headphones. Two records state a DAC function too, so
+    // recall is 10 of 10 while precision is 10 of 12, under the target.
+    const [headphones, dac] = [4, 1].map((n) => `tx_${String(n).padStart(20, '0')}`);
+    const lcdX = EXAMPLE.records[1]!;
+    const snapshot: Snapshot = {
+      ...EXAMPLE,
+      records: Array.from({ length: 10 }, (_, index) => ({
+        ...lcdX,
+        canonicalId: `sp_${index}`,
+        fields: { ...lcdX.fields, functions: index < 2 ? [headphones, dac] : [headphones] },
+      })),
+    };
+    const page = (index: number) => `https://maker.example/products/p-${index}`;
+    const golden = goldenSetSchema.parse({
+      ...GOLDEN,
+      products: Array.from({ length: 10 }, (_, index) => ({
+        key: `maker-p-${index}`,
+        pages: [page(index)],
+        fields: { shelf: 'over-ear', functions: ['headphones'] },
+        checkedAgainst: ['https://retailer.example/p'],
+      })),
+    });
+    const items: ItemView[] = Array.from({ length: 10 }, (_, index) => ({
+      locator: page(index),
+      sourceId: 'maker',
+      status: 'live',
+      entityId: `sp_${index}`,
+    }));
+    const scores = scoreDataset({ golden, snapshot, items });
+    expect(scores.taxonomy).toMatchObject({
+      functions: { stated: 12, expected: 10, correct: 10, precision: 10 / 12, recall: 1 },
+      targets: { shelf: true, functions: false },
+    });
+    expect(scores.misses).toEqual([
+      'maker-p-0: functions is headphones, dac, not headphones',
+      'maker-p-1: functions is headphones, dac, not headphones',
+    ]);
+  });
+
+  it('scores a golden feature named like a property every object has, as left out', () => {
+    // "constructor" is a valid slug, and a plain object would answer for it.
+    const scores = scoreDataset({
+      golden: goldenOf({
+        'chord-bertti': { shelf: 'power-amps', features: { constructor: ['speakers'] } },
+      }),
+      snapshot: EXAMPLE,
+      items: PLACED,
+    });
+    expect(scores.taxonomy).toMatchObject({
+      features: { checked: 0, correct: 0, missing: 1, accuracy: 1 },
+    });
+    expect(scores.misses).toEqual(['chord-bertti: features constructor is missing, not speakers']);
+  });
 });
 
 describe('goldenSetSchema', () => {

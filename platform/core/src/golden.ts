@@ -396,8 +396,8 @@ function count(tally: Counts, stated: boolean, right: boolean): void {
 function placedSlugs(
   taxonomy: Taxonomy | undefined,
   fields: Record<string, unknown>,
-): { shelf: string | null; functions: string[]; features: Record<string, string[]> } {
-  if (taxonomy === undefined) return { shelf: null, functions: [], features: {} };
+): { shelf: string | null; functions: string[]; features: Map<string, string[]> } {
+  if (taxonomy === undefined) return { shelf: null, functions: [], features: new Map() };
   const slugOf = (subject: TaxonomySubject, itemId: unknown): string | null =>
     typeof itemId === 'string'
       ? (itemsOf(taxonomy, subject).find((entry) => entry.id === itemId)?.slug ?? null)
@@ -406,12 +406,13 @@ function placedSlugs(
     (Array.isArray(ids) ? ids : [])
       .map((itemId) => slugOf(subject, itemId))
       .filter((slug): slug is string => slug !== null);
-  const features: Record<string, string[]> = {};
+  // A Map, since a feature's slug can be "constructor", which a plain object already has.
+  const features = new Map<string, string[]>();
   const stated = fields.features;
   if (typeof stated === 'object' && stated !== null && !Array.isArray(stated)) {
     for (const [featureId, valueIds] of Object.entries(stated)) {
       const feature = slugOf('feature', featureId);
-      if (feature !== null) features[feature] = slugsOf('value', valueIds);
+      if (feature !== null) features.set(feature, slugsOf('value', valueIds));
     }
   }
   return {
@@ -458,7 +459,7 @@ function scorePlacement(
       // A golden feature with no values has nothing to check or to leave out.
       const want = new Set(values);
       if (want.size === 0) continue;
-      const have = placed.features[feature] ?? [];
+      const have = placed.features.get(feature) ?? [];
       const right = have.length > 0 && have.every((slug) => want.has(slug));
       count(placements.features, have.length > 0, right);
       if (!right) {

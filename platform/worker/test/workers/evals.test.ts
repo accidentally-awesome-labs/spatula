@@ -126,6 +126,22 @@ describe('items and evals', () => {
         'scores.taxonomy.shelf.accuracy',
       ],
       [
+        'functions with no precision',
+        { ...ok, scores: { ...SCORES, taxonomy: { ...TAXONOMY, functions: { recall: 1 } } } },
+        'scores.taxonomy.functions.precision',
+      ],
+      [
+        'a functions precision below 0',
+        {
+          ...ok,
+          scores: {
+            ...SCORES,
+            taxonomy: { ...TAXONOMY, functions: { precision: -0.1, recall: 1 } },
+          },
+        },
+        'scores.taxonomy.functions.precision',
+      ],
+      [
         'functions with no recall',
         { ...ok, scores: { ...SCORES, taxonomy: { ...TAXONOMY, functions: { precision: 1 } } } },
         'scores.taxonomy.functions.recall',
