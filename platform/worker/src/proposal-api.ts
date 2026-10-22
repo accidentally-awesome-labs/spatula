@@ -17,6 +17,7 @@ import {
   logAction,
   PROPOSAL_STATUSES,
   revokeAutonomy,
+  SCOPE_REFUSAL,
   taxonomyHistory,
   undoVersion,
   type ProposalRow,
@@ -139,6 +140,7 @@ export function proposalRoutes(app: Hono<ActorApi>): void {
         if (!storableChange(checked.data)) {
           return c.json({ error: 'The change holds control characters.' }, 400);
         }
+        if (checked.data.kind === 'scope') return c.json({ error: SCOPE_REFUSAL }, 400);
         change = checked.data;
       }
       const datasetId = c.req.param('id');

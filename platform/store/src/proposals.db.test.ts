@@ -30,6 +30,7 @@ import {
   proposalsOfRun,
   revokeAutonomy,
   saveProposals,
+  SCOPE_REFUSAL,
   seenChanges,
   shelvesEverHeld,
   specLabels,
@@ -606,6 +607,46 @@ describe('undoing a version', () => {
       expect(await undo(9)).toEqual({ kind: 'missing' });
       // The refusals commit nothing.
       expect((await currentTaxonomy(db, DATASET))!.version).toBe(5);
+    }));
+
+  it('leaves the scope to the definition: no edit into a scope change, and no undo of one', () =>
+    withRollback(async (db) => {
+      await seeded(db);
+      await saveProposals(db, [proposal('tp_describe', DESCRIBE_DACS)]);
+      const narrower = 'Hi-fi made for audio: headphones and DACs. Out of scope: amplifiers.';
+      const scope = changeSchema.parse({ kind: 'scope', scope: narrower });
+      expect(
+        await decideProposal(db, {
+          id: 'tp_describe',
+          decision: 'edit',
+          change: scope,
+          actor: OWNER,
+          makeId,
+          at: T(2),
+        }),
+      ).toEqual({ kind: 'stale', reason: SCOPE_REFUSAL });
+      expect((await currentTaxonomy(db, DATASET))!.version).toBe(1);
+
+      // A definition with a new scope makes a version with it, which isn't undone.
+      const seed = (await currentTaxonomy(db, DATASET))!;
+      const rescoped = applyChanges(seed.taxonomy, [scope], makeId);
+      if (!rescoped.ok) throw new Error(rescoped.issues.join(' '));
+      await commitTaxonomy(db, {
+        datasetId: DATASET,
+        base: 1,
+        taxonomy: rescoped.taxonomy,
+        changes: rescoped.applied,
+        actor: OWNER,
+        at: T(3),
+      });
+      expect(
+        await undoVersion(db, { datasetId: DATASET, version: 2, actor: OWNER, makeId, at: T(4) }),
+      ).toEqual({
+        kind: 'refused',
+        reason:
+          'Version 2 changed the scope, which comes from the dataset’s definition: change it there, and apply the definition.',
+      });
+      expect((await currentTaxonomy(db, DATASET))!.taxonomy.scope).toBe(narrower);
     }));
 
   it('undoes a batch with the inverses in reverse order', () =>

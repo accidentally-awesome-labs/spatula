@@ -196,6 +196,18 @@ describe('proposals, for the owner', () => {
       body: { decision: 'edit', change: { kind: 'restore', subject: 'shelf', item: 'dacs' } },
     });
     expect(restore.status).toBe(400);
+    // The definition owns the scope: no edit makes a proposal change it.
+    const rescope = await call('POST', path('tp_owner_phono'), {
+      body: {
+        decision: 'edit',
+        change: { kind: 'scope', scope: 'Headphones alone. Out of scope: everything else.' },
+      },
+    });
+    expect(rescope.status).toBe(400);
+    expect(await rescope.json()).toEqual({
+      error:
+        'A proposal can’t change the scope: it comes from the dataset’s definition, which the owner changes.',
+    });
     expect((await call('GET', '/datasets/proposals-owner/proposals?status=maybe')).status).toBe(
       400,
     );

@@ -267,6 +267,8 @@ export async function decideProposal(
     }
     const change = input.decision === 'edit' ? input.change : proposed.data;
     if (change === undefined) throw new Error('An edit needs the change it makes');
+    // The definition owns the scope (ADR 0007): only applying a definition changes it.
+    if (change.kind === 'scope') return { kind: 'stale' as const, reason: SCOPE_REFUSAL };
     const current = await currentTaxonomy(tx, datasetId);
     if (current === null) return { kind: 'stale' as const, reason: 'The dataset has no taxonomy.' };
     const applied = applyChanges(current.taxonomy, [change], input.makeId);
@@ -337,12 +339,17 @@ export async function revokeAutonomy(
   });
 }
 
+/** Why a proposal can't change the scope: the dataset's definition owns it (ADR 0007). */
+export const SCOPE_REFUSAL =
+  'A proposal can’t change the scope: it comes from the dataset’s definition, which the owner changes.';
+
 /**
  * Undoes a version (ADR 0007): its changes' inverse, applied on the current version as the next
  * one, which names the version it undid. History is never rewritten. The seed has nothing before
- * it, and a version is undone once: the inverse of a rename, a description, what a shelf implies,
- * or the scope would apply again, so core wouldn't stop a second undo. Undoing a change Spatula
- * applied on its own sets its kind's run to zero (ruling 16).
+ * it, and a version is undone once: the inverse of a rename, a description, or what a shelf implies
+ * would apply again, so core wouldn't stop a second undo. A version that changed the scope isn't
+ * undone: the definition owns the scope, and undoing it would set the taxonomy's apart from the
+ * definition's. Undoing a change Spatula applied on its own sets its kind's run to zero (ruling 16).
  */
 export async function undoVersion(
   db: Executor,
@@ -377,6 +384,12 @@ export async function undoVersion(
       return {
         kind: 'refused' as const,
         reason: `Version ${input.version} was undone already, by version ${undoneBy.version}.`,
+      };
+    }
+    if (target.changes.some((entry) => entry.change.kind === 'scope')) {
+      return {
+        kind: 'refused' as const,
+        reason: `Version ${input.version} changed the scope, which comes from the dataset’s definition: change it there, and apply the definition.`,
       };
     }
     const current = await currentTaxonomy(tx, input.datasetId);
