@@ -621,6 +621,35 @@ describe('the console', () => {
     );
   });
 
+  it('warns that undoing the undo of a merge retires the item rather than merging it again', async () => {
+    const restored = {
+      ...VERSIONS[0],
+      version: 3,
+      changes: [
+        {
+          change: { kind: 'restore', subject: 'shelf', item: tx(9) },
+          summary: 'Restore Preamps',
+        },
+      ],
+      actor: { role: 'owner', client: 'console' },
+      autonomous: false,
+      undoes: 2,
+    };
+    const { main } = await opened('#history', {
+      'GET /console/api/datasets/hostile/taxonomy/versions': {
+        versions: [restored, ...VERSIONS],
+      },
+    });
+    const warnings = [...main.all()]
+      .filter((node) => node.tagName === 'details')
+      .map((node) => node.textContent);
+    expect(warnings).toHaveLength(1);
+    expect(warnings[0]).toContain(
+      'Undoing a restore retires the item again: an undone merge isn’t merged again, so answers' +
+        ' about the item reopen.',
+    );
+  });
+
   it('reads Task 12’s bulk answer: a status for each, and the reason for the ones not taken', async () => {
     const second = { ...PLACE, id: 'rv_second', suggestion: { shelf: 'dacs' } };
     const third = { ...PLACE, id: 'rv_third', suggestion: { shelf: 'on-ear' } };

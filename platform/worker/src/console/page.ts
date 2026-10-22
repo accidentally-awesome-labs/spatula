@@ -1301,8 +1301,13 @@ export const CONSOLE_SCRIPT = String.raw`'use strict';
         confirm.disabled = false;
       }
     });
+    // Undoing a merge or a retirement restores the item; a restore's inverse is a retirement.
+    const restores = list(version.changes).some((change) =>
+      isObject(change) && isObject(change.change) && change.change.kind === 'restore');
     const warning = el('p', {}, 'A new version reverses it, with its migration; history stays' +
-      ' as it was.' + (version.autonomous === true ? ' Its kind loses its autonomy.' : ''));
+      ' as it was.' + (version.autonomous === true ? ' Its kind loses its autonomy.' : '') +
+      (restores ? ' Undoing a restore retires the item again: an undone merge isn’t merged' +
+        ' again, so answers about the item reopen.' : ''));
     return el('details', {}, el('summary', {}, 'Undo'), warning, confirm, problem);
   }
 
