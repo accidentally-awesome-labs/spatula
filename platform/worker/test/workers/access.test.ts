@@ -57,7 +57,7 @@ afterEach(() => {
 
 /** A token as Access signs one for the owner, with these claims changed. */
 function tokenFor(
-  signing: JsonWebKey,
+  signing: JsonWebKey & { kid?: string },
   claims: Record<string, unknown> = {},
   team = TEAM,
 ): Promise<string> {
@@ -83,7 +83,7 @@ const consoleEnv = (team = TEAM) =>
   ({ ...env, ACCESS_TEAM_DOMAIN: team, ACCESS_AUD: AUD, OWNER_EMAIL: 'owner@example.com' }) as Env;
 
 /** Access's certs endpoint for a team, listing these keys as they are when it's read. */
-function certs(team: string, keys: JsonWebKey[]): { reads: () => number } {
+function certs(team: string, keys: (JsonWebKey & { kid: string })[]): { reads: () => number } {
   let reads = 0;
   network.use(
     http.get(`${team}/cdn-cgi/access/certs`, () => {
@@ -186,23 +186,89 @@ describe('the console’s API', () => {
           bindings: consoleEnv(team),
         })
       ).status;
+    const start = Date.now();
+    const at = (ms: number) => vi.spyOn(Date, 'now').mockReturnValue(start + ms);
 
     expect(await knock(owner)).toBe(404);
     expect(endpoint.reads()).toBe(1);
     expect(await knock(owner)).toBe(404);
     expect(endpoint.reads()).toBe(1);
-    // Access rotates its keys: one the Worker hasn't seen has it read them again.
+    // Access rotates its keys: one the Worker hasn't seen has it read them again, once half a
+    // minute has passed since it last did.
     keys.push(two.listed);
+    expect(await knock(two)).toBe(401);
+    expect(endpoint.reads()).toBe(1);
+    at(31_000);
     expect(await knock(two)).toBe(404);
     expect(endpoint.reads()).toBe(2);
     // Ten minutes on, it reads them again whatever the key.
-    const later = Date.now() + 11 * 60 * 1000;
-    vi.spyOn(Date, 'now').mockReturnValue(later);
+    at(31_000 + 11 * 60 * 1000);
     expect(await knock(owner)).toBe(404);
     expect(endpoint.reads()).toBe(3);
-    // A key Access doesn't list is refused, after one more look.
+    // A key Access doesn't list is refused, and looked for again only after half a minute.
+    expect(await knock(three)).toBe(401);
+    expect(endpoint.reads()).toBe(3);
+    at(31_000 + 11 * 60 * 1000 + 31_000);
     expect(await knock(three)).toBe(401);
     expect(endpoint.reads()).toBe(4);
+  });
+
+  it('reads Access’s keys only for a token Access could have signed, and once for many made-up keys', async () => {
+    const team = 'https://spatula-made-up.cloudflareaccess.com';
+    const endpoint = certs(team, [owner.listed]);
+    const knock = async (token: string) =>
+      (
+        await consoleCall('GET', '/console/api/nowhere', {
+          token,
+          bindings: consoleEnv(team),
+        })
+      ).status;
+    // Neither a token signed with a shared secret nor one that names no key has it look.
+    const shared = { kty: 'oct', k: 'c2VjcmV0', alg: 'HS256', kid: 'key-one' };
+    expect(await knock(await tokenFor(shared, {}, team))).toBe(401);
+    expect(await knock(await tokenFor({ ...owner.signing, kid: undefined }, {}, team))).toBe(401);
+    expect(endpoint.reads()).toBe(0);
+    // Key IDs Access never listed, sent at once and one after another, share one read.
+    const madeUp = (kid: string) => tokenFor({ ...stranger.signing, kid }, {}, team);
+    const knocks = await Promise.all(
+      ['made-up-1', 'made-up-2', 'made-up-3'].map(async (kid) => knock(await madeUp(kid))),
+    );
+    expect(knocks).toEqual([401, 401, 401]);
+    expect(await knock(await madeUp('made-up-4'))).toBe(401);
+    expect(endpoint.reads()).toBe(1);
+    // The owner's key was among those read, so the owner gets in meanwhile.
+    expect(await knock(await tokenFor(owner.signing, {}, team))).toBe(404);
+    expect(endpoint.reads()).toBe(1);
+  });
+
+  it('logs a check that fails for a reason other than the token by its name alone, and answers 401', async () => {
+    const team = 'https://spatula-broken.cloudflareaccess.com';
+    // A key Access lists that can't be imported: an RSA key without its modulus.
+    certs(team, [{ kty: 'RSA', e: 'AQAB', alg: 'RS256', kid: 'broken', use: 'sig' }]);
+    const warned = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const token = await tokenFor({ ...owner.signing, kid: 'broken' }, {}, team);
+    const response = await consoleCall('GET', '/console/api/datasets', {
+      token,
+      bindings: consoleEnv(team),
+    });
+    expect(response.status).toBe(401);
+    expectNoStore(response);
+    expect(await response.json()).toEqual({ error: MISSING });
+    expect(warned).toHaveBeenCalledTimes(1);
+    const [message, name] = warned.mock.calls[0]!;
+    expect(message).toBe('Access’s token couldn’t be checked:');
+    expect(name).toEqual(expect.any(String));
+    expect(name).not.toMatch(/^Jwt/u);
+    expect(JSON.stringify(warned.mock.calls)).not.toContain(token);
+
+    // A token that doesn't check out is the caller's, and isn't logged.
+    warned.mockClear();
+    certs(TEAM, [owner.listed]);
+    const another = await tokenFor(owner.signing, { aud: ['another-aud'] });
+    expect((await consoleCall('GET', '/console/api/datasets', { token: another })).status).toBe(
+      401,
+    );
+    expect(warned).not.toHaveBeenCalled();
   });
 
   it('answers 503 for a team that isn’t an https address, and 500 when Access’s keys can’t be read', async () => {
