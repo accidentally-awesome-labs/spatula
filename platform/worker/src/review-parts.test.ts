@@ -614,9 +614,11 @@ describe('a person’s answers across questions about a page', { timeout: 30_000
       [cid('value', 'closed'), cid('value', 'wired')].sort(),
     );
 
-    // Read again, unchanged, the page keeps the whole answer, and nothing is asked.
+    // Read again, unchanged, the page finds the person's decision again, and writes their whole
+    // answer from it: nothing is asked.
     world.web.routes.set(URLS.a2, { status: 200, body: A2('two') });
-    await refresh(world, datasetId);
+    const read = await refresh(world, datasetId);
+    expect(read.summary.classify).toMatchObject({ reused: 1, escalated: 0, inputTokens: 0 });
     expect(await questionAbout(datasetId, a2.id)).toBeUndefined();
     expect(await placedOf(a2.id, changed)).toEqual(whole);
 
