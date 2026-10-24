@@ -102,6 +102,9 @@ that ask one. The thresholds stay in `decisions` (ADR 0003).
 | `match`          | How a page and a record are related                            | 1 to 3 steps               |
 | `taxonomyReview` | The run's taxonomy review, which proposes changes              | One model, optional backup |
 
+An illustration of the shape, not a definition to apply: `groq/<cheap>` and `openai/<cheap>` are
+placeholders, and `apply` would refuse them.
+
 ```yaml
 models:
   extract: { model: anthropic/claude-opus-5-5, backup: openai/gpt-6.1-sol }
@@ -233,6 +236,14 @@ to a person included, whenever a step was added after Opus.
   the route becomes `/openrouter/chat/completions`. OpenRouter names Opus 5.5
   `anthropic/claude-opus-5.5`, with a dot, so Spatula's name for it is
   `openrouter/anthropic/claude-opus-5.5`.
+- **The backup, `openai/gpt-6.1-sol`,** has never been called live. Not yet verified: that it is
+  served on Chat Completions (some recent OpenAI models are Responses-only); that it takes strict
+  `json_schema` and `max_completion_tokens`; and, if it is a reasoning model, that its reasoning
+  tokens don't exhaust `DECIDER_MAX_TOKENS` (2000) or the taxonomy decider's cap, which would come
+  back as `finish_reason: "length"` and no answer. After the deploy, and before relying on it, make
+  one live call per job's request shape through the gateway. If answers come back truncated, the
+  fix is a `reasoning_effort` extra set per model, since non-reasoning models refuse that
+  parameter. It isn't added now.
 - **Cerebras and Groq** send `max_completion_tokens`, which their own API pages weren't read to
   confirm, and Cerebras's prices didn't show on its pricing page. Neither has a price in
   `LLM_PRICES` yet, so neither can be named.
@@ -241,6 +252,15 @@ to a person included, whenever a step was added after Opus.
 `anthropic/claude-opus-5-5` for every job, with `openai/gpt-6.1-sol` as each one's backup, and
 `llmUsdPerRun: 25`. Classify gets no cheap first step until a comparison has measured candidates on
 the owner's answers.
+
+**Rollout order.** After the deploy, every stored dataset, whose stored definition carries the old
+`budget.llmTokensPerRun`, throws `StaleDefinitionError` until it is applied again: runs are
+refused, owner routes such as `status` answer 409, and a consumer's token is refused for snapshots,
+acknowledgments, and the review API. And `apply` of a definition naming `openai/gpt-6.1-sol` is
+refused until `OPENAI_API_KEY` is set (or `openai` is in `LLM_GATEWAY_KEYS` with the gateway token
+set). So: set the key first (the old code ignores it), deploy, then apply at once. A run in flight
+across the deploy finishes without asking another model: its kept definition has no dollar budget,
+which reads as spent, and its pages wait for the next run.
 
 ## Set aside
 
