@@ -2,6 +2,7 @@ import { z } from 'zod';
 import { selectorError } from './css';
 import { NONE_OF_THESE } from './decision-types';
 import { FIELD_TYPES, normalizeValue, type FieldDef } from './fields';
+import { JOBS, modelsSchema } from './models';
 import { SCOPE_MAX, TAXONOMY_FIELDS } from './taxonomy';
 
 /*
@@ -210,6 +211,8 @@ const shapeSchema = z.strictObject({
     classify: { accept: 0.9 },
     match: { accept: 0.95 },
   })),
+  // The models of each job that asks one (ADR 0010); a job left out uses the deployment's default.
+  models: modelsSchema.optional(),
   budget: budgetSchema.default(() => ({ itemsPerRun: 1000, llmTokensPerRun: 2_000_000 })),
   consumers: z.array(slug).max(20).default([]),
 });
@@ -281,6 +284,42 @@ export function addressError(url: URL): string | null {
   return null;
 }
 
+/**
+ * A step may ask more of its model than the job does, never less, and a job names each model
+ * once, so a backup is another model (ADR 0010).
+ */
+function checkModels(definition: z.output<typeof shapeSchema>, report: Report): void {
+  const models = definition.models;
+  if (models === undefined) return;
+  for (const job of ['classify', 'match'] as const) {
+    const steps = models[job];
+    if (steps === undefined) continue;
+    const jobAccept = definition.decisions[job].accept;
+    steps.forEach((step, index) => {
+      if (typeof step !== 'string' && step.accept !== undefined && step.accept < jobAccept) {
+        report(
+          ['models', job, index, 'accept'],
+          `A step’s threshold may be stricter than decisions.${job}.accept (${jobAccept}), never looser.`,
+        );
+      }
+    });
+  }
+  for (const job of JOBS) {
+    const named = models[job];
+    if (named === undefined) continue;
+    const seen = new Set<string>();
+    for (const step of Array.isArray(named) ? named : [named]) {
+      for (const model of typeof step === 'string' ? [step] : [step.model, step.backup]) {
+        if (model === undefined) continue;
+        if (seen.has(model)) {
+          report(['models', job], `${model} is named twice. A backup is another model.`);
+        }
+        seen.add(model);
+      }
+    }
+  }
+}
+
 function checkDefinition(definition: z.output<typeof shapeSchema>, report: Report): void {
   const typeNames = Object.keys(definition.recordTypes);
   if (typeNames.length !== 1) {
@@ -298,6 +337,7 @@ function checkDefinition(definition: z.output<typeof shapeSchema>, report: Repor
   for (const [typeName, recordType] of Object.entries(definition.recordTypes)) {
     checkRecordType(['recordTypes', typeName], recordType, report);
   }
+  checkModels(definition, report);
   const sourceIds = new Set<string>();
   const pages = new Set<string>();
   definition.sources.forEach((source, index) => {

@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { addressError, decidedField, hasTaxonomy, parseDefinition } from './definition';
 import { costRatio } from './testing/cost';
+import { testDefinitionInput } from './testing/definitions';
 
 const EVIDENCE = {
   robots: '2026-10-09',
@@ -741,5 +742,45 @@ describe('a record type with a taxonomy', () => {
     const enumOnly = definition();
     enumOnly.sources[0].fixed.shelf = 'power-amps';
     expect(issuesOf(enumOnly)).toContain('sources.0.fixed.shelf: There’s no field called shelf.');
+  });
+});
+
+describe('models', () => {
+  const base = () => testDefinitionInput('models-def');
+
+  it('takes models per job', () => {
+    const parsed = parseDefinition({
+      ...base(),
+      models: {
+        extract: 'openai/small',
+        classify: [
+          { model: 'cerebras/cheap', backup: 'groq/cheap', accept: 0.96 },
+          'anthropic/claude-opus-5-5',
+        ],
+        match: ['anthropic/claude-opus-5-5'],
+        taxonomyReview: { model: 'anthropic/claude-opus-5-5', backup: 'openai/strong' },
+      },
+    });
+    expect(parsed.ok).toBe(true);
+  });
+
+  it('refuses a step looser than its job, a repeated model, too many steps, and bad names', () => {
+    const issues = (models: unknown) => {
+      const parsed = parseDefinition({ ...base(), models });
+      return parsed.ok ? [] : parsed.issues;
+    };
+    expect(issues({ classify: [{ model: 'a/x', accept: 0.8 }] })).toEqual([
+      'models.classify.0.accept: A step’s threshold may be stricter than decisions.classify.accept (0.9), never looser.',
+    ]);
+    expect(issues({ match: [{ model: 'a/x', backup: 'a/x' }] })).toEqual([
+      'models.match: a/x is named twice. A backup is another model.',
+    ]);
+    expect(issues({ classify: ['a/x', { model: 'b/y', backup: 'a/x' }] })).toEqual([
+      'models.classify: a/x is named twice. A backup is another model.',
+    ]);
+    expect(issues({ match: ['a/1', 'a/2', 'a/3', 'a/4'] }).length).toBe(1);
+    expect(issues({ extract: 'claude-opus-5-5' }).length).toBeGreaterThan(0);
+    expect(issues({ extract: { model: 'a/x', accept: 0.95 } }).length).toBeGreaterThan(0);
+    expect(issues({ review: 'a/x' }).length).toBeGreaterThan(0);
   });
 });
