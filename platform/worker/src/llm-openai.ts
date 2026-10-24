@@ -90,7 +90,9 @@ export function createOpenAiLlm(options: {
         },
       });
       // The deadline starts with the call and covers its attempts, its waits, and its answer.
-      const deadline = AbortSignal.timeout(options.deadlineMs ?? LLM_CALL_DEADLINE_MS);
+      const deadlineMs = options.deadlineMs ?? LLM_CALL_DEADLINE_MS;
+      const started = Date.now();
+      const deadline = AbortSignal.timeout(deadlineMs);
       let text: string;
       for (let attempt = 0; ; attempt += 1) {
         const signal = AbortSignal.any([
@@ -116,10 +118,12 @@ export function createOpenAiLlm(options: {
         if (!retryable || attempt >= RETRIES) {
           throw new LlmHttpError(response.status, `${response.status} ${message}`);
         }
-        await sleep(
-          retryAfterMs(response.headers.get('retry-after')) ?? backoff(attempt),
-          deadline,
-        );
+        const asked = retryAfterMs(response.headers.get('retry-after'));
+        // A wait longer than the time left can't be honoured: fail now, not at the deadline.
+        if (asked !== null && asked > deadlineMs - (Date.now() - started)) {
+          throw new LlmHttpError(response.status, `${response.status} ${message}`);
+        }
+        await sleep(asked ?? backoff(attempt), deadline);
       }
       let parsed: z.output<typeof completionSchema>;
       try {

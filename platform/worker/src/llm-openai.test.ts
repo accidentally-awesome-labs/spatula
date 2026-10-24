@@ -131,6 +131,21 @@ describe('createOpenAiLlm', () => {
     }
   });
 
+  it('replaces a key an error echoes, in JSON or in a page', async () => {
+    for (const [body, key] of [
+      ['{"error":{"message":"Incorrect API key provided: sk-test"}}', 'sk-test'],
+      ['<html>gateway-token is not allowed</html>', 'gateway-token'],
+    ] as const) {
+      const { llm } = setUp(() => new Response(body, { status: 401 }));
+      const failure = await llm
+        .structured({ ...question, maxTokens: LLM_MAX_TOKENS })
+        .catch((error) => error);
+      expect(failure).toMatchObject({ status: 401 });
+      expect(failure.message).toContain('[key]');
+      expect(failure.message).not.toContain(key);
+    }
+  });
+
   it('redacts keys and cuts long error bodies', async () => {
     const page = `<html>${'Bad gateway '.repeat(200)} Bearer sk-test gateway-token</html>`;
     const { llm } = setUp(() => new Response(page, { status: 502 }));
@@ -142,20 +157,49 @@ describe('createOpenAiLlm', () => {
     expect(failure.message).not.toContain('gateway-token');
   });
 
-  it('gives up at its deadline during a long retry-after', { timeout: 10_000 }, async () => {
+  it(
+    'fails with the 429 at once when retry-after is longer than the time left',
+    { timeout: 10_000 },
+    async () => {
+      const { llm, calls } = setUp(
+        () =>
+          new Response('{"error":{"message":"Slow down"}}', {
+            status: 429,
+            headers: { 'retry-after': '900' },
+          }),
+        { deadlineMs: 300, sleep: undefined },
+      );
+      await expect(
+        llm.structured({ ...question, maxTokens: LLM_MAX_TOKENS }),
+      ).rejects.toMatchObject({
+        status: 429,
+        message: '429 Slow down',
+      });
+      expect(calls).toHaveLength(1);
+    },
+  );
+
+  it('honours a retry-after that fits within the deadline', async () => {
+    const waits: number[] = [];
     const { llm, calls } = setUp(
-      () =>
-        new Response('{"error":{"message":"Slow down"}}', {
-          status: 429,
-          headers: { 'retry-after': '900' },
-        }),
-      { deadlineMs: 300, sleep: undefined },
+      (_init, attempt) =>
+        attempt === 1
+          ? new Response('{"error":{"message":"Slow down"}}', {
+              status: 429,
+              headers: { 'retry-after': '2' },
+            })
+          : completion('{"specs":[]}'),
+      {
+        sleep: async (ms) => {
+          waits.push(ms);
+        },
+      },
     );
-    await expect(llm.structured({ ...question, maxTokens: LLM_MAX_TOKENS })).rejects.toHaveProperty(
-      'name',
-      'TimeoutError',
-    );
-    expect(calls).toHaveLength(1);
+    expect((await llm.structured({ ...question, maxTokens: LLM_MAX_TOKENS })).output).toEqual({
+      specs: [],
+    });
+    expect(waits).toEqual([2000]);
+    expect(calls).toHaveLength(2);
   });
 });
 
