@@ -412,7 +412,7 @@ describe('what a run counts of a source', { timeout: 30_000 }, () => {
     const definition = testDefinition(datasetId);
     await applyDefinition(db, {
       ...definition,
-      budget: { ...definition.budget, llmTokensPerRun: 0 },
+      budget: { ...definition.budget, llmUsdPerRun: 0 },
     });
     const world = makeWorld(db, standardRoutes());
     await refresh(world, datasetId);
@@ -423,7 +423,7 @@ describe('what a run counts of a source', { timeout: 30_000 }, () => {
     const run = await refresh(world, datasetId, { all: true });
     expect(run.summary.sources?.probed).toEqual([{ id: 'maker-a', outcome: 'through' }]);
     expect(run.summary.notes).toContain(
-      '3 pages wait for the next run: this run’s LLM budget of 0 tokens is spent',
+      '3 pages wait for the next run: this run’s LLM budget of $0.00 is spent',
     );
   });
 

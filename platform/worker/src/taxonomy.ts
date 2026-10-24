@@ -11,6 +11,7 @@ import {
   freshen,
   hasTaxonomy,
   isEmptyParts,
+  jobSteps,
   NONE_SHELF,
   noProbabilities,
   nothingCarried,
@@ -62,7 +63,15 @@ import {
 } from '@spatula/store';
 import { readPageBody } from './captures';
 import { CASCADE_METHODS, madeBy, weighed, type Classified, type ClassifyFetch } from './classify';
-import { extractionTag, NO_USAGE, retryTag, type Context, type RefreshPorts } from './pipeline';
+import {
+  extractionTag,
+  NO_USAGE,
+  retryTag,
+  usageCalls,
+  type Context,
+  type LlmState,
+  type RefreshPorts,
+} from './pipeline';
 import { storable } from './text';
 
 /*
@@ -258,11 +267,11 @@ export async function decideTaxonomy(
   context: Context,
   item: ItemRef,
   fetched: ClassifyFetch,
-  budgetLeft: number,
+  llm: LlmState,
   ports: RefreshPorts,
   options: { extractionComplete: boolean; facts?: PageFacts; irrelevant?: boolean },
 ): Promise<Classified> {
-  const placed = await placePage(context, item, fetched, budgetLeft, ports, options);
+  const placed = await placePage(context, item, fetched, llm, ports, options);
   if (options.extractionComplete && placed.outcome !== 'skipped' && placed.outcome !== 'failed') {
     await ports.withDb((db) => setExtractedWith(db, item.id, extractionTag(context.revision)));
   }
@@ -273,7 +282,7 @@ async function placePage(
   context: Context,
   item: ItemRef,
   fetched: ClassifyFetch,
-  budgetLeft: number,
+  llm: LlmState,
   ports: RefreshPorts,
   options: { facts?: PageFacts; irrelevant?: boolean },
 ): Promise<Classified> {
@@ -283,13 +292,20 @@ async function placePage(
   const taxonomy = await runTaxonomy(context, ports);
   if (taxonomy === null)
     throw new Error(`${datasetId} has no taxonomy to place ${item.locator} in`);
-  const result = (outcome: Classified['outcome'], more: Partial<Classified> = {}): Classified => ({
-    outcome,
-    irrelevant: false,
-    usage: NO_USAGE,
-    note: null,
-    ...more,
-  });
+  // Until the cascade reports its calls itself, the step's usage is one call of the first model.
+  const firstModel = jobSteps(definition, 'classify', ports.models.defaultModel)[0]!.model;
+  const result = (outcome: Classified['outcome'], more: Partial<Classified> = {}): Classified => {
+    const usage = more.usage ?? NO_USAGE;
+    return {
+      outcome,
+      irrelevant: false,
+      usage,
+      note: null,
+      ...more,
+      calls: usageCalls(firstModel, usage, outcome === 'failed'),
+      down: {},
+    };
+  };
 
   const said = await ports.withDb(
     async (db) => (await statementsOf(db, [item.id])).get(item.id) ?? [],
@@ -382,7 +398,7 @@ async function placePage(
   }
 
   const asking = decider !== null && !isEmptyParts(asked) ? decider : null;
-  if (asking !== null && budgetLeft <= 0) {
+  if (asking !== null && llm.usdLeft <= 0) {
     // The next run reads the page again, with a budget of its own.
     await readAgain();
     return result('skipped');

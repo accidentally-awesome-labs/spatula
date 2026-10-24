@@ -5,6 +5,7 @@ import type { Outcome } from './gate';
 import type { EvalScores } from './golden';
 import type { SourceProbe } from './refusals';
 import type { Excluded } from './snapshot';
+import type { DownMarks, Job, ModelSpend } from './models';
 
 /*
  * What the API and the CLI exchange. The store and the Worker produce these shapes; the CLI only
@@ -131,7 +132,11 @@ export interface RunSummary {
     failed: number;
     inputTokens: number;
     outputTokens: number;
+    /** The providers this run found down (ADR 0010): since when, and why. Absent when none. */
+    down?: DownMarks;
   };
+  /** What each job's models cost the run, by model (ADR 0010). Absent in runs before it. */
+  spend?: Partial<Record<Job, Record<string, ModelSpend>>>;
   /** The run's classifications. Absent in runs before slice 1. */
   classify?: DecisionSummary;
   /** The run's match questions. Absent in runs before slice 1. */

@@ -192,7 +192,10 @@ const decisionsSchema = z.strictObject({
 
 const budgetSchema = z.strictObject({
   itemsPerRun: z.number().int().min(1).max(3000).default(1000),
-  llmTokensPerRun: z.number().int().min(0).max(50_000_000).default(2_000_000),
+  // Dollars a run may spend on models, at the deployment's list prices (ADR 0010).
+  llmUsdPerRun: z.number().min(0).max(500).default(10),
+  // Replaced by llmUsdPerRun (ADR 0010). It parses only so that checkDefinition can say so.
+  llmTokensPerRun: z.unknown().optional(),
 });
 
 const shapeSchema = z.strictObject({
@@ -213,7 +216,7 @@ const shapeSchema = z.strictObject({
   })),
   // The models of each job that asks one (ADR 0010); a job left out uses the deployment's default.
   models: modelsSchema.optional(),
-  budget: budgetSchema.default(() => ({ itemsPerRun: 1000, llmTokensPerRun: 2_000_000 })),
+  budget: budgetSchema.default(() => ({ itemsPerRun: 1000, llmUsdPerRun: 10 })),
   consumers: z.array(slug).max(20).default([]),
 });
 
@@ -338,6 +341,12 @@ function checkDefinition(definition: z.output<typeof shapeSchema>, report: Repor
     checkRecordType(['recordTypes', typeName], recordType, report);
   }
   checkModels(definition, report);
+  if (definition.budget.llmTokensPerRun !== undefined) {
+    report(
+      ['budget', 'llmTokensPerRun'],
+      'llmTokensPerRun is replaced by llmUsdPerRun, a run’s budget in dollars (ADR 0010). Apply the definition again with llmUsdPerRun.',
+    );
+  }
   const sourceIds = new Set<string>();
   const pages = new Set<string>();
   definition.sources.forEach((source, index) => {

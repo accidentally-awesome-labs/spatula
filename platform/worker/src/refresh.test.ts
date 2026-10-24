@@ -1504,14 +1504,14 @@ describe('runRefresh', () => {
     const definition = testDefinition('refresh-llm-budget');
     await applyDefinition(db, {
       ...definition,
-      budget: { ...definition.budget, llmTokensPerRun: 1000 },
+      budget: { ...definition.budget, llmUsdPerRun: 0.001 },
     });
     const world = makeWorld(db, standardRoutes());
     // A1 is read first, and its answer spends 1,050 tokens; B1 and A2 wait.
     const first = await refresh(world, 'refresh-llm-budget');
     expect(first.summary.llm).toMatchObject({ ran: 1, skipped: 2, inputTokens: 1000 });
     expect(first.summary.notes).toContain(
-      '2 pages wait for the next run: this run’s LLM budget of 1,000 tokens is spent',
+      '2 pages wait for the next run: this run’s LLM budget of $0.00 is spent',
     );
     expect(await fetchOf(first.runId, URLS.b1)).toMatchObject({
       llm: 'skipped: the run’s LLM budget is spent',
@@ -1526,7 +1526,7 @@ describe('runRefresh', () => {
     const definition = testDefinition('refresh-llm-budget-exact');
     await applyDefinition(db, {
       ...definition,
-      budget: { ...definition.budget, llmTokensPerRun: 1050 },
+      budget: { ...definition.budget, llmUsdPerRun: 0.00105 },
     });
     const world = makeWorld(db, standardRoutes());
     // A1's answer spends 1,050 tokens, which is all of the budget.

@@ -7,6 +7,7 @@ import {
   classifyState,
   decidedField,
   hasTaxonomy,
+  jobSteps,
   NONE_OF_THESE,
   optionsOf,
   outcomeProbability,
@@ -19,9 +20,11 @@ import {
   type CascadeOutcome,
   type ContentSignals,
   type Definition,
+  type DownMarks,
   type FieldDef,
   type LlmUsage,
   type Method,
+  type ModelCall,
   type RecordType,
   type Source,
   type StatementInput,
@@ -40,7 +43,15 @@ import {
   type ItemRef,
 } from '@spatula/store';
 import { readPageBody } from './captures';
-import { extractionTag, NO_USAGE, retryTag, type Context, type RefreshPorts } from './pipeline';
+import {
+  extractionTag,
+  NO_USAGE,
+  retryTag,
+  usageCalls,
+  type Context,
+  type LlmState,
+  type RefreshPorts,
+} from './pipeline';
 import { storable } from './text';
 
 /*
@@ -130,6 +141,10 @@ export interface Classified {
   irrelevant: boolean;
   usage: LlmUsage;
   note: string | null;
+  /** What the step asked of models (ADR 0010). Absent in results from before it. */
+  calls?: ModelCall[];
+  /** The providers the step found down. Absent in results from before it. */
+  down?: DownMarks;
 }
 
 /** The page's fetch, as classifying needs it. */
@@ -204,11 +219,11 @@ export async function classifyItem(
   context: Context,
   item: ItemRef,
   fetched: ClassifyFetch,
-  budgetLeft: number,
+  llm: LlmState,
   ports: RefreshPorts,
   extractionComplete: boolean,
 ): Promise<Classified> {
-  const classified = await classifyPage(context, item, fetched, budgetLeft, ports);
+  const classified = await classifyPage(context, item, fetched, llm, ports);
   if (extractionComplete && classified.outcome !== 'skipped' && classified.outcome !== 'failed') {
     await ports.withDb((db) => setExtractedWith(db, item.id, extractionTag(context.revision)));
   }
@@ -219,20 +234,27 @@ async function classifyPage(
   context: Context,
   item: ItemRef,
   fetched: ClassifyFetch,
-  budgetLeft: number,
+  llm: LlmState,
   ports: RefreshPorts,
 ): Promise<Classified> {
   const { datasetId, definition, runId } = context;
   const target = classifyTarget(definition, item);
   if (target === null) throw new Error(`${item.locator} has nothing for the cascade to classify`);
   const { name, field, recordType } = target;
-  const result = (outcome: Classified['outcome'], more: Partial<Classified> = {}): Classified => ({
-    outcome,
-    irrelevant: false,
-    usage: NO_USAGE,
-    note: null,
-    ...more,
-  });
+  // Until the cascade reports its calls itself, the step's usage is one call of the first model.
+  const firstModel = jobSteps(definition, 'classify', ports.models.defaultModel)[0]!.model;
+  const result = (outcome: Classified['outcome'], more: Partial<Classified> = {}): Classified => {
+    const usage = more.usage ?? NO_USAGE;
+    return {
+      outcome,
+      irrelevant: false,
+      usage,
+      note: null,
+      ...more,
+      calls: usageCalls(firstModel, usage, outcome === 'failed'),
+      down: {},
+    };
+  };
 
   const said = await ports.withDb(
     async (db) => (await statementsOf(db, [item.id])).get(item.id) ?? [],
@@ -310,7 +332,7 @@ async function classifyPage(
   }
 
   const rule = classifyRule(state, field);
-  if (rule === null && decider !== null && budgetLeft <= 0) {
+  if (rule === null && decider !== null && llm.usdLeft <= 0) {
     // The next run reads the page again, with a budget of its own.
     await readAgain();
     return result('skipped');

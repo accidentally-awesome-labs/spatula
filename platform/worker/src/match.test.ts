@@ -278,7 +278,7 @@ describe('matching pages', { timeout: 20_000 }, () => {
     const {
       world,
       pages: [a1, a2, a3],
-    } = await worldFor({ ...base, budget: { ...base.budget, llmTokensPerRun: 500 } }, routes, {
+    } = await worldFor({ ...base, budget: { ...base.budget, llmUsdPerRun: 0.0005 } }, routes, {
       llm: false,
     });
     const scripted = fakeDecider(() => ({ unrelated: 0.97 }));
@@ -590,7 +590,7 @@ describe('a decider that says a page is the same as two entities', { timeout: 20
       return matchItem(
         contextOf(world, definition),
         { itemId: page.id, entityId },
-        10_000,
+        { usdLeft: 0.01, down: {} },
         world.ports,
       );
     };
@@ -615,7 +615,7 @@ describe('a decider that says a page is the same as two entities', { timeout: 20
       await matchItem(
         contextOf(world, definition),
         { itemId: page.id, entityId: e2 },
-        10_000,
+        { usdLeft: 0.01, down: {} },
         world.ports,
       ),
     ).toMatchObject({ outcome: 'reused' });
@@ -632,7 +632,7 @@ describe('a decider that says a page is the same as two entities', { timeout: 20
     await matchItem(
       contextOf(world, definition),
       { itemId: page.id, entityId: e2 },
-      10_000,
+      { usdLeft: 0.01, down: {} },
       world.ports,
     );
     await refresh(world, datasetId);
@@ -671,7 +671,7 @@ describe('a decider that says a page is the same as two entities', { timeout: 20
     const matched = await matchItem(
       contextOf(world, definition),
       { itemId: page!.id, entityId: e2 },
-      10_000,
+      { usdLeft: 0.01, down: {} },
       world.ports,
     );
     expect(matched).toMatchObject({ outcome: 'escalated' });
@@ -859,7 +859,7 @@ describe('a question that isn’t answered in the run that raised it', { timeout
       world,
       pages: [a1, a2, a3],
     } = await worldFor(
-      { ...definition, budget: { ...definition.budget, llmTokensPerRun: 500 } },
+      { ...definition, budget: { ...definition.budget, llmUsdPerRun: 0.0005 } },
       routes,
       { llm: false },
     );
@@ -1039,7 +1039,7 @@ describe('the match step', { timeout: 20_000 }, () => {
       const matched = await matchItem(
         contextOf(world, stricter),
         { itemId: a2.id, entityId: e1 },
-        10_000,
+        { usdLeft: 0.01, down: {} },
         world.ports,
       );
       nextRun(world);
@@ -1052,6 +1052,8 @@ describe('the match step', { timeout: 20_000 }, () => {
     // The answer is as sure as the dataset now asks: it stands, and costs nothing.
     expect(await askedAt(0.96)).toEqual({
       outcome: 'reused',
+      calls: [],
+      down: {},
       usage: { inputTokens: 0, outputTokens: 0 },
       note: null,
     });
@@ -1072,7 +1074,7 @@ describe('the match step', { timeout: 20_000 }, () => {
       const matched = await matchItem(
         contextOf(world, definition),
         { itemId: a2.id, entityId: e1 },
-        10_000,
+        { usdLeft: 0.01, down: {} },
         world.ports,
       );
       nextRun(world);
@@ -1088,6 +1090,8 @@ describe('the match step', { timeout: 20_000 }, () => {
     // The answer was as sure as its outcome, so asking again reuses it, at no cost.
     expect(await ask()).toEqual({
       outcome: 'reused',
+      calls: [],
+      down: {},
       usage: { inputTokens: 0, outputTokens: 0 },
       note: null,
     });
@@ -1103,7 +1107,7 @@ describe('the match step', { timeout: 20_000 }, () => {
       const matched = await matchItem(
         contextOf(world, definition),
         { itemId: a2.id, entityId: e1, lineup },
-        10_000,
+        { usdLeft: 0.01, down: {} },
         world.ports,
       );
       nextRun(world);
@@ -1136,7 +1140,7 @@ describe('the match step', { timeout: 20_000 }, () => {
     const matched = await matchItem(
       contextOf(world, definition),
       { itemId: a2!.id, entityId: e1 },
-      10_000,
+      { usdLeft: 0.01, down: {} },
       world.ports,
     );
     expect(matched).toMatchObject({ outcome: 'reused' });
@@ -1156,11 +1160,13 @@ describe('the match step', { timeout: 20_000 }, () => {
     const matched = await matchItem(
       contextOf(world, definition),
       { itemId: a2.id, entityId: 'sp_00000000000000000000' },
-      10_000,
+      { usdLeft: 0.01, down: {} },
       world.ports,
     );
     expect(matched).toEqual({
       outcome: 'skipped',
+      calls: [],
+      down: {},
       usage: { inputTokens: 0, outputTokens: 0 },
       note: null,
     });
@@ -1174,7 +1180,14 @@ describe('the match step', { timeout: 20_000 }, () => {
     const scripted = fakeDecider(() => ({ 'spec-version': 0.97 }));
     world.ports.decider = scripted.decider;
     const question = { itemId: a2.id, entityId: e1 };
-    expect(await matchItem(contextOf(world, definition), question, 0, world.ports)).toMatchObject({
+    expect(
+      await matchItem(
+        contextOf(world, definition),
+        question,
+        { usdLeft: 0, down: {} },
+        world.ports,
+      ),
+    ).toMatchObject({
       outcome: 'skipped',
     });
     expect(scripted.calls).toEqual([]);
@@ -1183,7 +1196,9 @@ describe('the match step', { timeout: 20_000 }, () => {
     // Where the dataset allows no decider, the budget has nothing to hold back.
     nextRun(world);
     const noPurpose = { ...definition, policy: { ...definition.policy, purposes: [] } };
-    expect(await matchItem(contextOf(world, noPurpose), question, 0, world.ports)).toMatchObject({
+    expect(
+      await matchItem(contextOf(world, noPurpose), question, { usdLeft: 0, down: {} }, world.ports),
+    ).toMatchObject({
       outcome: 'escalated',
     });
     expect(scripted.calls).toEqual([]);
@@ -1199,7 +1214,7 @@ describe('the match step', { timeout: 20_000 }, () => {
       const matched = await matchItem(
         contextOf(world, definition),
         { itemId: a2.id, entityId: e1 },
-        10_000,
+        { usdLeft: 0.01, down: {} },
         world.ports,
       );
       nextRun(world);
@@ -1236,7 +1251,7 @@ describe('the match step', { timeout: 20_000 }, () => {
     await matchItem(
       contextOf(world, definition),
       { itemId: a2.id, entityId: e1 },
-      10_000,
+      { usdLeft: 0.01, down: {} },
       world.ports,
     );
     expect(scripted.calls[0]!.criteria).toBe(GENERIC_MATCH_CRITERIA);
@@ -1260,7 +1275,7 @@ describe('the match step', { timeout: 20_000 }, () => {
       const matched = await matchItem(
         contextOf(world, definition),
         { itemId: b1!.id, entityId: e1 },
-        10_000,
+        { usdLeft: 0.01, down: {} },
         world.ports,
       );
       return { matched, asked: scripted.calls.length - asked };

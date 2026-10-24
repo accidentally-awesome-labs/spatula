@@ -258,7 +258,7 @@ describe('the taxonomy review', { timeout: 20_000 }, () => {
     const cases: [Definition, { llm?: boolean }, string][] = [
       [
         changed('review-budget', (definition) => ({
-          budget: { ...definition.budget, llmTokensPerRun: 0 },
+          budget: { ...definition.budget, llmUsdPerRun: 0 },
         })),
         {},
         'this run’s LLM budget is spent',

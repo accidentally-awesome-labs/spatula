@@ -280,7 +280,7 @@ describe('classifying pages', { timeout: 20_000 }, () => {
       world,
       pages: [a1, a2],
     } = await worldFor(
-      { ...definition, budget: { ...definition.budget, llmTokensPerRun: 500 } },
+      { ...definition, budget: { ...definition.budget, llmUsdPerRun: 0.0005 } },
       standardRoutes(),
       { llm: false },
     );
@@ -288,7 +288,7 @@ describe('classifying pages', { timeout: 20_000 }, () => {
     const first = await refresh(world, 'classify-budget');
     expect(first.summary.classify).toMatchObject({ accepted: 1, skipped: 1 });
     expect(first.summary.notes).toContain(
-      '1 page waits for the next run: this run’s LLM budget of 500 tokens is spent',
+      '1 page waits for the next run: this run’s LLM budget of $0.00 is spent',
     );
     const second = await refresh(world, 'classify-budget');
     expect(second.names).toContain(`classify:${a2!.id}`);
@@ -299,7 +299,7 @@ describe('classifying pages', { timeout: 20_000 }, () => {
   it('stops asking when the run’s LLM budget is spent to the token', async () => {
     const definition = decided('classify-budget-exact');
     const { world } = await worldFor(
-      { ...definition, budget: { ...definition.budget, llmTokensPerRun: 520 } },
+      { ...definition, budget: { ...definition.budget, llmUsdPerRun: 0.00052 } },
       standardRoutes(),
       { llm: false },
     );
@@ -312,7 +312,7 @@ describe('classifying pages', { timeout: 20_000 }, () => {
   it('counts reading and deciding against one budget, and a page that waits for both once', async () => {
     const definition = decided('classify-budget-both');
     const { world } = await worldFor(
-      { ...definition, budget: { ...definition.budget, llmTokensPerRun: 2600 } },
+      { ...definition, budget: { ...definition.budget, llmUsdPerRun: 0.0026 } },
       standardRoutes(),
     );
     // A1's reading spends 1,050 tokens and its question 520. B1's reading starts with 1,030 left,
@@ -322,7 +322,7 @@ describe('classifying pages', { timeout: 20_000 }, () => {
     expect(first.summary.llm).toMatchObject({ ran: 2, skipped: 1 });
     expect(first.summary.classify).toMatchObject({ accepted: 1, skipped: 1 });
     expect(first.summary.notes).toContain(
-      '1 page waits for the next run: this run’s LLM budget of 2,600 tokens is spent',
+      '1 page waits for the next run: this run’s LLM budget of $0.00 is spent',
     );
     expect(world.llm.calls).toHaveLength(2);
     expect(world.decider.calls).toHaveLength(1);

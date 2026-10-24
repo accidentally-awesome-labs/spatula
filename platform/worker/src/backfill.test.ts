@@ -331,7 +331,7 @@ describe('backfilling from the archive', { timeout: 20_000 }, () => {
     await db
       .update(datasets)
       .set({
-        definition: { ...definition, budget: { ...definition.budget, llmTokensPerRun: 1000 } },
+        definition: { ...definition, budget: { ...definition.budget, llmUsdPerRun: 0.001 } },
       })
       .where(eq(datasets.id, 'backfill-budget'));
 

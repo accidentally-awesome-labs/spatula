@@ -1,6 +1,11 @@
 import {
   EXTRACTION_VERSION,
   sourceIntervalMs,
+  usdOf,
+  type DownMarks,
+  type Job,
+  type ModelCall,
+  type ModelPrice,
   type Decider,
   type DecisionSummary,
   type Definition,
@@ -148,24 +153,73 @@ export const extractionTag = (revision: number) => `r${revision}.v${EXTRACTION_V
 /** What a page is marked with when it has to be read again though nothing about it changed. */
 export const retryTag = (revision: number) => `${extractionTag(revision)}.retry`;
 
-/**
- * The tokens a run has spent on the LLM: reading pages, classifying and placing them, matching
- * them, and reviewing the taxonomy (ADR 0007).
- */
-export function tokensSpent(summary: RunSummary): number {
-  let spent = summary.llm.inputTokens + summary.llm.outputTokens;
-  for (const counts of [summary.classify, summary.match, summary.taxonomy]) {
-    spent += (counts?.inputTokens ?? 0) + (counts?.outputTokens ?? 0);
-  }
-  return spent;
+/** What a step needs to know of the run's LLM (ADR 0010): the dollars left, and the providers down. */
+export interface LlmState {
+  usdLeft: number;
+  down: DownMarks;
 }
 
 /**
- * What's left of the run's LLM budget. It's read from the summary, which a run rebuilds from its
- * steps' results, so a run that replays its steps stops asking at the same page.
+ * The run's spend so far, in dollars, rounded to a billionth, so that calls that add up to the
+ * budget exactly spend it however their sum rounds.
  */
-export function budgetLeft(context: Context, summary: RunSummary): number {
-  return context.definition.budget.llmTokensPerRun - tokensSpent(summary);
+export function usdSpent(summary: RunSummary): number {
+  let spent = 0;
+  for (const byModel of Object.values(summary.spend ?? {})) {
+    for (const spend of Object.values(byModel ?? {})) spent += spend.usd;
+  }
+  return Math.round(spent * 1e9) / 1e9;
+}
+
+/**
+ * The run's LLM state, read from its summary, which a run rebuilds from its steps' results: a run
+ * that replays its steps stops asking at the same page, and skips the same providers.
+ */
+export function llmState(context: Context, summary: RunSummary): LlmState {
+  return {
+    usdLeft: Math.round((context.definition.budget.llmUsdPerRun - usdSpent(summary)) * 1e9) / 1e9,
+    down: summary.llm.down ?? {},
+  };
+}
+
+/**
+ * Adds what a step asked of models to the run: each call, priced, under its job and model, and the
+ * providers it found down, the first mark standing. A step result from before ADR 0010 has neither,
+ * and adds nothing. A model with no price counts its calls and no dollars: `apply` refuses naming
+ * one, so only a price removed since can do that.
+ */
+export function countCalls(
+  summary: RunSummary,
+  job: Job,
+  step: { calls?: ModelCall[]; down?: DownMarks },
+  price: (model: string) => ModelPrice | null,
+): void {
+  for (const call of step.calls ?? []) {
+    const byJob = ((summary.spend ??= {})[job] ??= {});
+    const spend = (byJob[call.model] ??= {
+      calls: 0,
+      failed: 0,
+      inputTokens: 0,
+      outputTokens: 0,
+      usd: 0,
+    });
+    spend.calls += 1;
+    if (call.failed) spend.failed += 1;
+    spend.inputTokens += call.inputTokens;
+    spend.outputTokens += call.outputTokens;
+    const unit = price(call.model);
+    if (unit !== null) spend.usd += usdOf(call, unit);
+  }
+  for (const [provider, down] of Object.entries(step.down ?? {})) {
+    (summary.llm.down ??= {})[provider] ??= down;
+  }
+}
+
+/** A step's usage as one call of a model: none when it asked nothing. */
+export function usageCalls(model: string, usage: LlmUsage, failed: boolean): ModelCall[] {
+  return usage.inputTokens + usage.outputTokens === 0 && !failed
+    ? []
+    : [{ model, inputTokens: usage.inputTokens, outputTokens: usage.outputTokens, failed }];
 }
 
 export function emptyDecisions(): DecisionSummary {

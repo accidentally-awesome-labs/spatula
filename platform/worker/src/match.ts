@@ -1,6 +1,7 @@
 import {
   cascade,
   GENERIC_MATCH_CRITERIA,
+  jobSteps,
   lineupNote,
   matchEvidence,
   matchQuestion,
@@ -14,9 +15,11 @@ import {
   stableId,
   stateHash,
   type CascadeOutcome,
+  type DownMarks,
   type FieldValue,
   type LineupEntry,
   type LlmUsage,
+  type ModelCall,
   type RecordType,
 } from '@spatula/core';
 import {
@@ -32,7 +35,7 @@ import {
   type Executor,
 } from '@spatula/store';
 import { likeliest, stands, weighed } from './classify';
-import { NO_USAGE, type Context, type RefreshPorts } from './pipeline';
+import { NO_USAGE, usageCalls, type Context, type LlmState, type RefreshPorts } from './pipeline';
 import { storable } from './text';
 
 /*
@@ -56,6 +59,10 @@ export interface Matched {
   outcome: 'rule' | 'accepted' | 'escalated' | 'reused' | 'skipped' | 'failed';
   usage: LlmUsage;
   note: string | null;
+  /** What the step asked of models (ADR 0010). Absent in results from before it. */
+  calls?: ModelCall[];
+  /** The providers the step found down. Absent in results from before it. */
+  down?: DownMarks;
   /** The two records' names, when the rule kept them apart in this step. Absent in older results. */
   pair?: string;
 }
@@ -63,19 +70,26 @@ export interface Matched {
 export async function matchItem(
   context: Context,
   question: { itemId: string; entityId: string; lineup?: readonly LineupEntry[] },
-  budgetLeft: number,
+  llm: LlmState,
   ports: RefreshPorts,
 ): Promise<Matched> {
   const { datasetId, definition, runId } = context;
   const { itemId, entityId } = question;
   // A question from a resolution that an earlier version kept has no lineup.
   const lineup = question.lineup ?? [];
-  const result = (outcome: Matched['outcome'], more: Partial<Matched> = {}): Matched => ({
-    outcome,
-    usage: NO_USAGE,
-    note: null,
-    ...more,
-  });
+  // Until the cascade reports its calls itself, the step's usage is one call of the first model.
+  const firstModel = jobSteps(definition, 'match', ports.models.defaultModel)[0]!.model;
+  const result = (outcome: Matched['outcome'], more: Partial<Matched> = {}): Matched => {
+    const usage = more.usage ?? NO_USAGE;
+    return {
+      outcome,
+      usage,
+      note: null,
+      ...more,
+      calls: usageCalls(firstModel, usage, outcome === 'failed'),
+      down: {},
+    };
+  };
   const sides = await ports.withDb((db) => matchSides(db, { definition, itemId, entityId }));
   if (sides === null) return result('skipped');
   const recordType = definition.recordTypes[sides.recordType];
@@ -128,7 +142,7 @@ export async function matchItem(
   }
 
   // Asked next run, with a budget of its own; the page waits meanwhile. The rule costs nothing.
-  if (rule === null && decider !== null && budgetLeft <= 0) return result('skipped');
+  if (rule === null && decider !== null && llm.usdLeft <= 0) return result('skipped');
   let outcome: CascadeOutcome;
   try {
     outcome = await cascade({

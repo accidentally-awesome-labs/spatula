@@ -616,9 +616,30 @@ describe('dataset settings', () => {
       gates: { maxRemovals: { count: 25, share: 0.05 } },
       publication: { approval: 'balanced' },
       decisions: { classify: { accept: 0.9 }, match: { accept: 0.95 } },
-      budget: { itemsPerRun: 1000, llmTokensPerRun: 2_000_000 },
+      budget: { itemsPerRun: 1000, llmUsdPerRun: 10 },
       consumers: [],
     });
+  });
+
+  it('refuses llmTokensPerRun, naming llmUsdPerRun', () => {
+    const parsed = parseDefinition({
+      ...testDefinitionInput('budget'),
+      budget: { itemsPerRun: 10, llmTokensPerRun: 5_000_000 },
+    });
+    expect(parsed).toEqual({
+      ok: false,
+      issues: [
+        'budget.llmTokensPerRun: llmTokensPerRun is replaced by llmUsdPerRun, a run’s budget in dollars (ADR 0010). Apply the definition again with llmUsdPerRun.',
+      ],
+    });
+  });
+
+  it('takes a budget in dollars from 0 to 500', () => {
+    const budget = (llmUsdPerRun: number) =>
+      parseDefinition({ ...testDefinitionInput('budget'), budget: { llmUsdPerRun } }).ok;
+    expect(budget(25)).toBe(true);
+    expect(budget(501)).toBe(false);
+    expect(budget(-1)).toBe(false);
   });
 
   it('hand every parse its own objects for the defaults it fills in', () => {
