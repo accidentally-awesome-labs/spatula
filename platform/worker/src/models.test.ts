@@ -150,6 +150,24 @@ describe('tryStep', () => {
     ]);
   });
 
+  it('cuts a long failure, so the backup’s reason still fits a note', async () => {
+    const tried = await tryStep({
+      step,
+      setup: setup(),
+      down: {},
+      now: NOW,
+      ask: async (model) => {
+        throw new Error(model.startsWith('anthropic/') ? 'x'.repeat(2000) : 'backup broke');
+      },
+    });
+    expect(tried.failures).toHaveLength(2);
+    expect(tried.failures[0]).toMatch(/^anthropic\/claude-opus-5-5: x+…?$/);
+    expect(tried.failures[1]).toBe('openai/strong: backup broke');
+    for (const failure of tried.failures) {
+      expect(failure.length).toBeLessThanOrEqual('anthropic/claude-opus-5-5: '.length + 200);
+    }
+  });
+
   it('sends nothing to a provider that’s down, or to a model with a problem', async () => {
     const asked: string[] = [];
     const tried = await tryStep({

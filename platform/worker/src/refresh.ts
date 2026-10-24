@@ -119,7 +119,7 @@ export {
  * and the site allow AI input, and only when its question changed. A page whose source leaves the
  * record type's decided field to the cascade is then classified, in a step of its own
  * (classify.ts), and isn't current until that step has finished. The LLM and the decider share the
- * run's token budget (pipeline.ts). Then entities are resolved. Resolution asks about the pairs it
+ * run's dollar budget (pipeline.ts). Then entities are resolved. Resolution asks about the pairs it
  * can't settle by rule, each in a step of its own (match.ts), and defers them until they're
  * answered. If the records changed, they go through the dataset's gates (publish.ts): a snapshot is
  * published when the gates allow it, and held for the owner's review when they don't. Nothing here
@@ -262,7 +262,10 @@ interface Extracted {
   down?: DownMarks;
 }
 
-/** What the load step returns. One kept by an earlier version has no standing. */
+/**
+ * What the load step returns. One kept by an earlier version has no standing, and one kept before
+ * ADR 0010 has a definition whose budget lacks `llmUsdPerRun` (it counted tokens).
+ */
 interface Loaded {
   revision: number;
   definition: Definition;
@@ -321,7 +324,15 @@ export async function runRefresh(
       runId,
       datasetId,
       revision: loaded.revision,
-      definition: loaded.definition,
+      // A definition kept before ADR 0010 has no dollar budget: 0 asks no more models, so its
+      // pages wait for the next run, which reads the applied definition.
+      definition: {
+        ...loaded.definition,
+        budget: {
+          ...loaded.definition.budget,
+          llmUsdPerRun: loaded.definition.budget.llmUsdPerRun ?? 0,
+        },
+      },
       startedAt: new Date(loaded.startedAt),
       standing: loaded.standing ?? {},
       taxonomyVersion,

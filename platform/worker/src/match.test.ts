@@ -803,7 +803,7 @@ describe('a question that isn’t answered in the run that raised it', { timeout
     expect(first.summary.match).toMatchObject({ failed: 1, accepted: 0 });
     // Workflows keep what a step returns, so the note is clean and short where it is made.
     const note =
-      `${URLS.a2}: the decider failed on a match question: llm:test/model: test/model: overloaded  ${'x'.repeat(600)}`.slice(
+      `${URLS.a2}: the decider failed on a match question: llm:test/model: test/model: overloaded  ${'x'.repeat(186)}…`.slice(
         0,
         500,
       );

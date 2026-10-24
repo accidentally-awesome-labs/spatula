@@ -223,7 +223,8 @@ export async function tryStep<T>(input: {
   const tried: Tried<T> = { answered: null, calls: [], down: {}, failures: [] };
   const failed = (model: string, why: string) => {
     tried.calls.push({ model, inputTokens: 0, outputTokens: 0, failed: true });
-    tried.failures.push(`${model}: ${why}`);
+    // Cut, so a long error body can't crowd the backup's reason out of a note's 500 characters.
+    tried.failures.push(`${model}: ${why.length > 200 ? `${why.slice(0, 199)}…` : why}`);
   };
   for (const model of [input.step.model, input.step.backup]) {
     if (model === null) continue;

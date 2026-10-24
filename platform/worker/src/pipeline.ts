@@ -79,9 +79,9 @@ export interface RefreshPorts {
    * and nothing is extracted by a model.
    */
   llm: LlmPort | null;
-  /** The default model's (LLM_MODEL), or null when the deployment has no LLM: then a person decides, and nothing is extracted by a model. */
+  /** The default model's decider for classify and match questions, or null when the deployment has no LLM: then a person decides. */
   decider: Decider | null;
-  /** The default model's (LLM_MODEL), or null when the deployment has no LLM: then a person decides, and nothing is extracted by a model. */
+  /** The default model's taxonomy decider, or null when the deployment has no LLM: then a person decides. */
   taxonomyDecider: TaxonomyDecider | null;
   /** The deployment's models: the default, what keeps a model from being asked, prices (ADR 0010). */
   models: ModelSetup;

@@ -933,12 +933,12 @@ describe('runRefresh', () => {
       cut(`${URLS.a1}: the page couldn’t be read: pack  ${'x'.repeat(600)}`),
     ]);
     expect(notesOf(a2.id)).toEqual([
-      cut(`${URLS.a2}: the LLM call failed: test/model: llm  ${'x'.repeat(600)}`),
+      cut(`${URLS.a2}: the LLM call failed: test/model: llm  ${'x'.repeat(193)}…`),
     ]);
     // The fetch log says what the LLM step did. A NUL in that text would have failed the insert
     // after the LLM had been paid for.
     expect((await fetchOf(first.runId, URLS.a2)).llm).toBe(
-      cut(`failed: test/model: llm  ${'x'.repeat(600)}`),
+      cut(`failed: test/model: llm  ${'x'.repeat(193)}…`),
     );
   });
 
@@ -2128,6 +2128,43 @@ describe('a run replayed from the steps it finished', () => {
     expect(replayed).toEqual([`fetch:${a1.id}:0`, `wait:${a1.id}:0`]);
     expect(world.web.requests.filter((sent) => sent.url === URLS.a1)).toHaveLength(1);
     expect(summary.fetches).toMatchObject({ changed: 3 });
+  });
+
+  it('finishes a run whose kept definition has no dollar budget, asking no model', async () => {
+    const { world, a1 } = await setUp('refresh-kept-no-usd');
+    const cache: StepCache = new Map();
+    const params = {
+      runId: runIdFor('refresh-kept-no-usd', world.clock.now()),
+      datasetId: 'refresh-kept-no-usd',
+    };
+    // The first run stops at its first page, after the load step.
+    const web = world.ports.http;
+    let failing = true;
+    world.ports.http = {
+      async get(url, headers) {
+        if (failing && url === URLS.a1) {
+          failing = false;
+          throw new Error('the connection was reset');
+        }
+        return web.get(url, headers);
+      },
+    };
+    await expect(
+      runRefresh(params, fakeStep(world.clock, cache).step, world.ports),
+    ).rejects.toThrow('the connection was reset');
+    // The Worker was deployed meanwhile: the load step's result is the earlier version's, whose
+    // budget counted tokens (ADR 0010).
+    const kept = JSON.parse(cache.get('load')!) as {
+      definition: { budget: Record<string, unknown> };
+    };
+    delete kept.definition.budget.llmUsdPerRun;
+    kept.definition.budget.llmTokensPerRun = 1_000_000;
+    cache.set('load', JSON.stringify(kept));
+
+    const summary = await runRefresh(params, fakeStep(world.clock, cache).step, world.ports);
+    expect(world.llm.calls).toHaveLength(0);
+    expect(summary.notes.join('\n')).toMatch(/pages? waits? for the next run: .*budget of \$0\.00/);
+    expect(a1.id).toBeDefined();
   });
 
   it('pauses a source at the same page as a run that wasn’t stopped', async () => {
