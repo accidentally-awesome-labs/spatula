@@ -1,12 +1,17 @@
 import {
+  adapterName,
   createLlmDecider,
   createTaxonomyDecider,
   downReason,
+  jobSteps,
   MODEL_NAME,
   namedModels,
   providerModel,
   providerOf,
+  stepAccept,
+  type CascadeStep,
   type Decider,
+  type DecidingJob,
   type Definition,
   type DownMarks,
   type LlmPort,
@@ -20,7 +25,7 @@ import { secret } from './config';
 import { createAnthropicLlm } from './llm-anthropic';
 import { createOpenAiLlm } from './llm-openai';
 import { gatewayBase, providerNamed, type Provider } from './llm-providers';
-import type { RefreshPorts } from './pipeline';
+import type { LlmState, RefreshPorts } from './pipeline';
 
 /*
  * The deployment's models (ADR 0010), from its variables and secrets: LLM_MODEL, the default;
@@ -259,6 +264,48 @@ export const noneAsked = (): Asked => ({ calls: [], down: {} });
 export function gather(into: Asked, tried: Tried<unknown>): void {
   into.calls.push(...tried.calls);
   for (const [provider, down] of Object.entries(tried.down)) into.down[provider] ??= down;
+}
+
+/**
+ * A deciding job's steps as the cascade asks them (ADR 0010). Each asks its model through its own
+ * ports, or its backup when that fails, and gathers what it asked into `asked`, so that the step of
+ * the run can count it. A provider a step finds down is skipped by the steps after it. The answer
+ * carries the adapter of the port that gave it.
+ */
+export function cascadeSteps(input: {
+  definition: Definition;
+  job: DecidingJob;
+  ports: Pick<
+    RefreshPorts,
+    'llm' | 'decider' | 'taxonomyDecider' | 'modelPorts' | 'models' | 'now'
+  >;
+  llm: LlmState;
+  asked: Asked;
+}): CascadeStep[] {
+  const { definition, job, ports, llm, asked } = input;
+  return jobSteps(definition, job, ports.models.defaultModel).map((step) => ({
+    accept: stepAccept(definition, job, step),
+    decider: {
+      name: adapterName(step.model),
+      async decide(request) {
+        const tried = await tryStep({
+          step,
+          setup: ports.models,
+          down: { ...llm.down, ...asked.down },
+          now: ports.now(),
+          async ask(model) {
+            const decider = portsFor(ports, model).decider;
+            if (decider === null) throw new Error('no decider is configured');
+            const answer = await decider.decide(request);
+            return { value: { ...answer, adapter: decider.name }, usage: answer.usage };
+          },
+        });
+        gather(asked, tried);
+        if (tried.answered === null) throw new Error(tried.failures.join('; '));
+        return tried.answered.value;
+      },
+    },
+  }));
 }
 
 /** What keeps the deployment from asking the models a definition names: `plan` lists it, `apply` refuses. */

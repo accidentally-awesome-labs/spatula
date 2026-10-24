@@ -1,4 +1,10 @@
-import { createLlmDecider, runIdFor, sha256Hex } from '@spatula/core';
+import {
+  createLlmDecider,
+  runIdFor,
+  sha256Hex,
+  type Decider,
+  type DecisionRequest,
+} from '@spatula/core';
 import { packs } from '@spatula/pack-products';
 import {
   applyDefinition,
@@ -16,7 +22,7 @@ import { testDefinition } from '@spatula/store/fixtures';
 import { and, eq, isNull } from 'drizzle-orm';
 import { describe, expect, it } from 'vitest';
 import { db } from '../test/node/db';
-import { fakeDecider, fakeLlm, type World } from '../test/node/fakes';
+import { fakeDecider, fakeLlm, modelPortsOf, type World } from '../test/node/fakes';
 import {
   decidedDefinition as decided,
   entityOf,
@@ -26,6 +32,7 @@ import {
 } from '../test/node/runs';
 import { A1, A2, answerFor, decisionFor, ROBOTS_OPEN, standardRoutes, URLS } from '../test/pages';
 import { cascadeField, CASCADE_METHODS, classifyTarget, likeliest } from './classify';
+import { LlmHttpError } from './llm-openai';
 import { extractionTag, pageKey, runRefresh, type StepRunner } from './refresh';
 
 const HOUR = 3_600_000;
@@ -475,7 +482,7 @@ describe('a page is current only once it is classified', { timeout: 20_000 }, ()
     expect(first.summary.classify).toMatchObject({ failed: 2, accepted: 0 });
     // Workflows keep what a step returns, so the note is clean and short where it is made.
     const note =
-      `${URLS.a1}: the decider failed: ${answers.decider.name}: overloaded  ${'x'.repeat(600)}`.slice(
+      `${URLS.a1}: the decider failed: llm:test/model: test/model: overloaded  ${'x'.repeat(600)}`.slice(
         0,
         500,
       );
@@ -1002,5 +1009,154 @@ describe('what the cascade classifies', () => {
     // An answer the question doesn't offer is not one to propose, and an option is a key of its own.
     expect(likeliest({ Speakers: 0.9 }, options)).toBeNull();
     expect(likeliest({ Headphones: 0.5 }, ['constructor', 'Headphones'])).toBe('Headphones');
+  });
+});
+
+/** A fake decider that answers as the model named, so its decisions record `llm:<model>`. */
+const named = (
+  model: string,
+  answer: (request: DecisionRequest) => Record<string, number> | null,
+) => {
+  const fake = fakeDecider(answer);
+  return { ...fake, decider: { ...fake.decider, name: `llm:${model}` } };
+};
+
+/** The category question answered with one chance for Headphones; anything else as the world does. */
+const headphones = (chance: number) => (request: DecisionRequest) =>
+  request.type === 'classify' ? { Headphones: chance } : decisionFor(request);
+
+/** A decider that throws what a provider's failed call throws. */
+const failing = (model: string, error: Error): Decider & { calls: number } => {
+  const decider = {
+    name: `llm:${model}`,
+    calls: 0,
+    async decide(): Promise<never> {
+      decider.calls += 1;
+      throw error;
+    },
+  };
+  return decider;
+};
+
+describe('classify through steps (ADR 0010)', { timeout: 20_000 }, () => {
+  it('asks the next step when the first is unsure, and records the step that answered', async () => {
+    const id = 'classify-steps';
+    const { world } = await worldFor(
+      decided(id, { models: { classify: [{ model: 'cheap/x', accept: 0.96 }, 'strong/y'] } }),
+      standardRoutes(),
+    );
+    const cheap = named('cheap/x', headphones(0.93));
+    const strong = named('strong/y', headphones(0.92));
+    world.ports.modelPorts = modelPortsOf(world, {
+      decider: { 'cheap/x': cheap.decider, 'strong/y': strong.decider },
+    });
+    const run = await refresh(world, id);
+    expect(run.summary.classify).toMatchObject({ accepted: 2, escalated: 0, failed: 0 });
+    // The cheap model was unsure at its own 0.96, so the strong one was asked, at the job's 0.9.
+    expect(cheap.calls).toHaveLength(2);
+    expect(strong.calls).toHaveLength(2);
+    const [a1] = (await listLiveItems(db, id)).filter((item) => item.locator === URLS.a1);
+    expect(await decisionsAbout(id, a1!.id)).toMatchObject([
+      {
+        outcome: 'accepted',
+        answer: 'Headphones',
+        adapter: 'llm:strong/y',
+        thresholds: { accept: 0.9 },
+      },
+    ]);
+    // Each page asked each model once (the fake answers 500 and 20 tokens).
+    expect(run.summary.spend?.classify?.['cheap/x']).toMatchObject({ calls: 2, failed: 0 });
+    expect(run.summary.spend?.classify?.['strong/y']).toMatchObject({ calls: 2, failed: 0 });
+  });
+
+  it('holds a reused answer to the threshold of the step that gave it', async () => {
+    const id = 'classify-step-threshold';
+    const models = (accept: number) => ({ classify: [{ model: 'cheap/x', accept }] });
+    const { world } = await worldFor(decided(id, { models: models(0.96) }), standardRoutes());
+    const cheap = named('cheap/x', headphones(0.97));
+    world.ports.modelPorts = modelPortsOf(world, { decider: { 'cheap/x': cheap.decider } });
+    const first = await refresh(world, id);
+    expect(first.summary.classify).toMatchObject({ accepted: 2 });
+    const [a1] = (await listLiveItems(db, id)).filter((item) => item.locator === URLS.a1);
+    expect(await decisionsAbout(id, a1!.id)).toMatchObject([
+      { adapter: 'llm:cheap/x', thresholds: { accept: 0.96 } },
+    ]);
+    expect(cheap.calls).toHaveLength(2);
+
+    // The page is unchanged: the answer stands, and nothing is asked.
+    await applyDefinition(db, decided(id, { models: models(0.96), freshness: { maxAgeDays: 6 } }));
+    const second = await refresh(world, id);
+    expect(second.summary.classify).toMatchObject({ reused: 2, accepted: 0 });
+    expect(cheap.calls).toHaveLength(2);
+
+    // The step now asks for more than its answer gave, so the question is asked again.
+    await applyDefinition(db, decided(id, { models: models(0.98), freshness: { maxAgeDays: 6 } }));
+    const third = await refresh(world, id);
+    expect(third.summary.classify).toMatchObject({ escalated: 2, reused: 0 });
+    expect(cheap.calls).toHaveLength(4);
+  });
+
+  it('asks the backup when the model fails, and marks its provider down for the run', async () => {
+    const id = 'classify-step-backup';
+    const { world } = await worldFor(
+      decided(id, { models: { classify: [{ model: 'down/x', backup: 'up/y' }] } }),
+      standardRoutes(),
+    );
+    const down = failing('down/x', new LlmHttpError(402, '402 Insufficient credits'));
+    const up = named('up/y', headphones(0.97));
+    world.ports.modelPorts = modelPortsOf(world, {
+      decider: { 'down/x': down, 'up/y': up.decider },
+    });
+    const run = await refresh(world, id);
+    expect(run.summary.classify).toMatchObject({ accepted: 2, failed: 0 });
+    const [a1] = (await listLiveItems(db, id)).filter((item) => item.locator === URLS.a1);
+    expect(await decisionsAbout(id, a1!.id)).toMatchObject([{ adapter: 'llm:up/y' }]);
+    // The first page found the provider down; the second sent it nothing.
+    expect(down.calls).toBe(1);
+    expect(up.calls).toHaveLength(2);
+    expect(run.summary.llm.down?.down?.reason).toBe('payment required');
+    expect(run.summary.spend?.classify?.['down/x']).toMatchObject({ calls: 2, failed: 2 });
+    expect(run.summary.spend?.classify?.['up/y']).toMatchObject({ calls: 2, failed: 0 });
+  });
+
+  it('asks a person only what every step weighed', async () => {
+    const id = 'classify-step-weighed';
+    const { world } = await worldFor(
+      decided(id, { models: { classify: ['cheap/x', 'strong/y'] } }),
+      standardRoutes(),
+    );
+    const cheap = named('cheap/x', headphones(0.6));
+    let strongDown = true;
+    const strong = named('strong/y', headphones(0.7));
+    const strongFails = failing('strong/y', new LlmHttpError(500, 'overloaded'));
+    world.ports.modelPorts = modelPortsOf(world, {
+      decider: {
+        'cheap/x': cheap.decider,
+        'strong/y': {
+          name: 'llm:strong/y',
+          decide: (request) =>
+            strongDown ? strongFails.decide(request) : strong.decider.decide(request),
+        },
+      },
+    });
+    const first = await refresh(world, id);
+    const [a1] = (await listLiveItems(db, id)).filter((item) => item.locator === URLS.a1);
+    // The strong model could not weigh it, so no person is asked: the page is read again.
+    expect(first.summary.classify).toMatchObject({ failed: 2, escalated: 0 });
+    expect(await listOpenReviews(db, id)).toEqual([]);
+    expect(await decisionsAbout(id, a1!.id)).toEqual([]);
+    expect(first.summary.notes.some((note) => note.includes('strong/y'))).toBe(true);
+    expect(await marksOf(id)).toMatchObject({ [URLS.a1]: `${extractionTag(1)}.retry` });
+
+    strongDown = false;
+    const second = await refresh(world, id);
+    expect(second.summary.classify).toMatchObject({ escalated: 2, failed: 0 });
+    expect(await listOpenReviews(db, id)).toMatchObject([
+      { kind: 'classify', context: { proposed: 'Headphones', probabilities: { Headphones: 0.7 } } },
+      { kind: 'classify' },
+    ]);
+    expect(await decisionsAbout(id, a1!.id)).toMatchObject([
+      { outcome: 'escalated', adapter: 'llm:strong/y' },
+    ]);
   });
 });

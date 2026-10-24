@@ -1,7 +1,7 @@
 import {
+  acceptFor,
   cascade,
   GENERIC_MATCH_CRITERIA,
-  jobSteps,
   lineupNote,
   matchEvidence,
   matchQuestion,
@@ -35,7 +35,8 @@ import {
   type Executor,
 } from '@spatula/store';
 import { likeliest, stands, weighed } from './classify';
-import { NO_USAGE, usageCalls, type Context, type LlmState, type RefreshPorts } from './pipeline';
+import { cascadeSteps, noneAsked } from './models';
+import { NO_USAGE, type Context, type LlmState, type RefreshPorts } from './pipeline';
 import { storable } from './text';
 
 /*
@@ -77,19 +78,14 @@ export async function matchItem(
   const { itemId, entityId } = question;
   // A question from a resolution that an earlier version kept has no lineup.
   const lineup = question.lineup ?? [];
-  // Until the cascade reports its calls itself, the step's usage is one call of the first model.
-  const firstModel = jobSteps(definition, 'match', ports.models.defaultModel)[0]!.model;
-  const result = (outcome: Matched['outcome'], more: Partial<Matched> = {}): Matched => {
-    const usage = more.usage ?? NO_USAGE;
-    return {
-      outcome,
-      usage,
-      note: null,
-      ...more,
-      calls: usageCalls(firstModel, usage, outcome === 'failed'),
-      down: {},
-    };
-  };
+  const result = (outcome: Matched['outcome'], more: Partial<Matched> = {}): Matched => ({
+    outcome,
+    usage: NO_USAGE,
+    note: null,
+    calls: [],
+    down: {},
+    ...more,
+  });
   const sides = await ports.withDb((db) => matchSides(db, { definition, itemId, entityId }));
   if (sides === null) return result('skipped');
   const recordType = definition.recordTypes[sides.recordType];
@@ -111,8 +107,7 @@ export async function matchItem(
   const consent =
     definition.policy.purposes.includes('ai-input') &&
     !(await ports.withDb((db) => anyRefusesAiInput(db, [itemId, ...sides.entityItemIds])));
-  const decider = consent ? ports.decider : null;
-  const accept = definition.decisions.match.accept;
+  const canAsk = consent && ports.decider !== null;
   const at = ports.now();
   const rule = ruleFor(recordType, sides);
   const pair = rule === null ? undefined : pairNames(recordType, sides);
@@ -125,7 +120,14 @@ export async function matchItem(
     findDecision(db, { datasetId, subjectKey, stateHash: hash, criteriaVersion }),
   );
   // A question asked before isn't asked again, unless asking might now come to something else.
-  if (earlier !== null && stands(earlier, { consent, canAsk: decider !== null, accept })) {
+  if (
+    earlier !== null &&
+    stands(earlier, {
+      consent,
+      canAsk,
+      accept: acceptFor(definition, 'match', earlier.adapter),
+    })
+  ) {
     const waiting = (await apply(earlier)) === 'waiting';
     // A step that runs again finds its own decision, and reports it as it was made.
     const again = earlier.id === decisionId;
@@ -142,7 +144,8 @@ export async function matchItem(
   }
 
   // Asked next run, with a budget of its own; the page waits meanwhile. The rule costs nothing.
-  if (rule === null && decider !== null && llm.usdLeft <= 0) return result('skipped');
+  if (rule === null && canAsk && llm.usdLeft <= 0) return result('skipped');
+  const spent = noneAsked();
   let outcome: CascadeOutcome;
   try {
     outcome = await cascade({
@@ -159,12 +162,13 @@ export async function matchItem(
         }),
       },
       rule,
-      steps: decider === null ? [] : [{ decider, accept }],
+      steps: canAsk ? cascadeSteps({ definition, job: 'match', ports, llm, asked: spent }) : [],
     });
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     return result('failed', {
       note: storable(`${sides.page.url}: the decider failed on a match question: ${message}`),
+      ...spent,
     });
   }
   // A decider's join, as the same product or an edition, about a page that is judged to join
@@ -209,7 +213,9 @@ export async function matchItem(
       adapter: outcome.by === 'rule' ? null : outcome.adapter,
       probabilities: outcome.by === 'rule' ? { [outcome.answer]: 1 } : outcome.probabilities,
       evidence,
-      thresholds: { accept },
+      thresholds: {
+        accept: acceptFor(definition, 'match', outcome.by === 'rule' ? null : outcome.adapter),
+      },
       outcome: outcome.by === 'adapter' ? 'accepted' : outcome.by === 'rule' ? 'rule' : 'escalated',
       answer: outcome.by === 'person' ? null : outcome.answer,
       inputTokens: usage.inputTokens,
@@ -219,7 +225,7 @@ export async function matchItem(
   );
   const waiting = (await apply(decision)) === 'waiting';
   if (outcome.by === 'rule') return result('rule', pair === undefined ? {} : { pair });
-  return result(waiting ? 'escalated' : 'accepted', { usage });
+  return result(waiting ? 'escalated' : 'accepted', { usage, ...spent });
 }
 
 /**

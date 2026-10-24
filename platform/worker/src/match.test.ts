@@ -4,6 +4,7 @@ import {
   MODEL_NUMBER_REASON,
   runIdFor,
   type Decider,
+  type DecisionRequest,
   type Definition,
   type PagesSource,
 } from '@spatula/core';
@@ -20,7 +21,7 @@ import { testDefinition } from '@spatula/store/fixtures';
 import { eq } from 'drizzle-orm';
 import { describe, expect, it } from 'vitest';
 import { db } from '../test/node/db';
-import { fakeDecider, fakeLlm, type World } from '../test/node/fakes';
+import { fakeDecider, fakeLlm, modelPortsOf, type World } from '../test/node/fakes';
 import {
   DT_250,
   DT_80,
@@ -31,6 +32,7 @@ import {
 } from '../test/node/match-world';
 import { entityOf, published, refresh, worldFor } from '../test/node/runs';
 import { productPage, ROBOTS_OPEN, URLS } from '../test/pages';
+import { LlmHttpError } from './llm-openai';
 import { matchItem } from './match';
 import type { Context } from './pipeline';
 import { runRefresh, type StepRunner } from './refresh';
@@ -801,7 +803,7 @@ describe('a question that isn’t answered in the run that raised it', { timeout
     expect(first.summary.match).toMatchObject({ failed: 1, accepted: 0 });
     // Workflows keep what a step returns, so the note is clean and short where it is made.
     const note =
-      `${URLS.a2}: the decider failed on a match question: ${working.decider.name}: overloaded  ${'x'.repeat(600)}`.slice(
+      `${URLS.a2}: the decider failed on a match question: llm:test/model: test/model: overloaded  ${'x'.repeat(600)}`.slice(
         0,
         500,
       );
@@ -1295,5 +1297,97 @@ describe('the match step', { timeout: 20_000 }, () => {
     world.web.routes.set('https://maker-b.example/robots.txt', { status: 200, body: NO_AI_INPUT });
     await refresh(world, 'match-hosts');
     expect(await hosts()).toMatchObject({ matched: { outcome: 'escalated' }, asked: 1 });
+  });
+});
+
+/** A fake decider that answers as the model named, so its decisions record `llm:<model>`. */
+const named = (
+  model: string,
+  answer: (request: DecisionRequest) => Record<string, number> | null,
+) => {
+  const fake = fakeDecider(answer);
+  return { ...fake, decider: { ...fake.decider, name: `llm:${model}` } };
+};
+
+describe('match through steps (ADR 0010)', { timeout: 20_000 }, () => {
+  it('asks the backup when the model fails, and marks its provider down for the run', async () => {
+    const id = 'match-step-backup';
+    const {
+      world,
+      pages: [a1, a2],
+    } = await worldFor(
+      { ...testDefinition(id), models: { match: [{ model: 'down/x', backup: 'up/y' }] } },
+      routesWith(DT_80, DT_250),
+    );
+    let downCalls = 0;
+    const down: Decider = {
+      name: 'llm:down/x',
+      async decide() {
+        downCalls += 1;
+        throw new LlmHttpError(402, '402 Insufficient credits');
+      },
+    };
+    const up = named('up/y', () => ({ 'spec-version': 0.97 }));
+    world.ports.modelPorts = modelPortsOf(world, {
+      decider: { 'down/x': down, 'up/y': up.decider },
+    });
+    const run = await refresh(world, id);
+    const e1 = await entityOf(a1!.id);
+    expect(run.summary.match).toMatchObject({ accepted: 1, failed: 0 });
+    expect(downCalls).toBe(1);
+    expect(up.calls).toHaveLength(1);
+    expect(await decisionsAbout(id)).toMatchObject([
+      { adapter: 'llm:up/y', answer: 'spec-version', subject: `${a2!.id}|${e1}` },
+    ]);
+    expect(run.summary.llm.down?.down?.reason).toBe('payment required');
+    expect(run.summary.spend?.match?.['down/x']).toMatchObject({ calls: 1, failed: 1 });
+    expect(run.summary.spend?.match?.['up/y']).toMatchObject({ calls: 1, failed: 0 });
+  });
+
+  it('asks a person only what every step weighed', async () => {
+    const id = 'match-step-weighed';
+    const {
+      world,
+      pages: [a1, a2],
+    } = await worldFor(
+      { ...testDefinition(id), models: { match: ['cheap/x', 'strong/y'] } },
+      routesWith(DT_80, DT_250),
+    );
+    const cheap = named('cheap/x', () => ({ same: 0.5, 'spec-version': 0.45 }));
+    const strong = named('strong/y', () => ({ same: 0.6, 'spec-version': 0.35 }));
+    let strongDown = true;
+    world.ports.modelPorts = modelPortsOf(world, {
+      decider: {
+        'cheap/x': cheap.decider,
+        'strong/y': {
+          name: 'llm:strong/y',
+          async decide(request) {
+            if (strongDown) throw new LlmHttpError(500, 'overloaded');
+            return strong.decider.decide(request);
+          },
+        },
+      },
+    });
+    const first = await refresh(world, id);
+    const e1 = await entityOf(a1!.id);
+    expect(first.summary.match).toMatchObject({ failed: 1, escalated: 0 });
+    expect(first.summary.notes.some((note) => note.includes('strong/y'))).toBe(true);
+    expect(await decisionsAbout(id)).toEqual([]);
+    expect(await judgementsFor(db, id)).toEqual([]);
+    expect(await listOpenReviews(db, id)).toEqual([]);
+
+    strongDown = false;
+    const second = await refresh(world, id);
+    expect(second.summary.match).toMatchObject({ escalated: 1, failed: 0 });
+    expect(await listOpenReviews(db, id)).toMatchObject([
+      {
+        kind: 'match',
+        subject: `${a2!.id}|${e1}`,
+        context: { proposed: 'same', probabilities: { same: 0.6, 'spec-version': 0.35 } },
+      },
+    ]);
+    expect(await decisionsAbout(id)).toMatchObject([
+      { outcome: 'escalated', adapter: 'llm:strong/y' },
+    ]);
   });
 });

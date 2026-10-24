@@ -1,4 +1,5 @@
 import {
+  acceptFor,
   cascade,
   CLASSIFY_CRITERIA_VERSION,
   classifyCriteria,
@@ -7,7 +8,6 @@ import {
   classifyState,
   decidedField,
   hasTaxonomy,
-  jobSteps,
   NONE_OF_THESE,
   optionsOf,
   outcomeProbability,
@@ -47,11 +47,11 @@ import {
   extractionTag,
   NO_USAGE,
   retryTag,
-  usageCalls,
   type Context,
   type LlmState,
   type RefreshPorts,
 } from './pipeline';
+import { cascadeSteps, noneAsked } from './models';
 import { storable } from './text';
 
 /*
@@ -241,20 +241,15 @@ async function classifyPage(
   const target = classifyTarget(definition, item);
   if (target === null) throw new Error(`${item.locator} has nothing for the cascade to classify`);
   const { name, field, recordType } = target;
-  // Until the cascade reports its calls itself, the step's usage is one call of the first model.
-  const firstModel = jobSteps(definition, 'classify', ports.models.defaultModel)[0]!.model;
-  const result = (outcome: Classified['outcome'], more: Partial<Classified> = {}): Classified => {
-    const usage = more.usage ?? NO_USAGE;
-    return {
-      outcome,
-      irrelevant: false,
-      usage,
-      note: null,
-      ...more,
-      calls: usageCalls(firstModel, usage, outcome === 'failed'),
-      down: {},
-    };
-  };
+  const result = (outcome: Classified['outcome'], more: Partial<Classified> = {}): Classified => ({
+    outcome,
+    irrelevant: false,
+    usage: NO_USAGE,
+    note: null,
+    calls: [],
+    down: {},
+    ...more,
+  });
 
   const said = await ports.withDb(
     async (db) => (await statementsOf(db, [item.id])).get(item.id) ?? [],
@@ -289,8 +284,7 @@ async function classifyPage(
   const decisionId = await stableId('dc', runId, subjectKey);
   const consent =
     definition.policy.purposes.includes('ai-input') && fetched.signals['ai-input'] !== 'no';
-  const decider = consent ? ports.decider : null;
-  const accept = definition.decisions.classify.accept;
+  const canAsk = consent && ports.decider !== null;
   // Extraction marked the page for another read already; this keeps classifyItem safe on its own.
   const readAgain = () =>
     ports.withDb((db) => setExtractedWith(db, item.id, retryTag(context.revision)));
@@ -319,7 +313,14 @@ async function classifyPage(
     }),
   );
   // A question asked before isn't asked again, unless asking might now come to something else.
-  if (earlier !== null && stands(earlier, { consent, canAsk: decider !== null, accept })) {
+  if (
+    earlier !== null &&
+    stands(earlier, {
+      consent,
+      canAsk,
+      accept: acceptFor(definition, 'classify', earlier.adapter),
+    })
+  ) {
     const applied = await apply(earlier);
     // A step that runs again finds its own decision, and reports it as it was made.
     const again = earlier.id === decisionId;
@@ -332,11 +333,12 @@ async function classifyPage(
   }
 
   const rule = classifyRule(state, field);
-  if (rule === null && decider !== null && llm.usdLeft <= 0) {
+  if (rule === null && canAsk && llm.usdLeft <= 0) {
     // The next run reads the page again, with a budget of its own.
     await readAgain();
     return result('skipped');
   }
+  const asked = noneAsked();
   let outcome: CascadeOutcome;
   try {
     outcome = await cascade({
@@ -347,12 +349,15 @@ async function classifyPage(
         evidence: stateEvidence(state),
       },
       rule,
-      steps: decider === null ? [] : [{ decider, accept }],
+      steps: canAsk ? cascadeSteps({ definition, job: 'classify', ports, llm, asked }) : [],
     });
   } catch (error) {
     await readAgain();
     const message = error instanceof Error ? error.message : String(error);
-    return result('failed', { note: storable(`${item.locator}: the decider failed: ${message}`) });
+    return result('failed', {
+      note: storable(`${item.locator}: the decider failed: ${message}`),
+      ...asked,
+    });
   }
   const usage = outcome.by === 'rule' ? NO_USAGE : outcome.usage;
   const decision = await ports.withDb((db) =>
@@ -372,7 +377,9 @@ async function classifyPage(
         outcome.by === 'rule'
           ? 'The page’s structured data gives this category.'
           : outcome.evidence,
-      thresholds: { accept },
+      thresholds: {
+        accept: acceptFor(definition, 'classify', outcome.by === 'rule' ? null : outcome.adapter),
+      },
       outcome: outcome.by === 'rule' ? 'rule' : outcome.by === 'adapter' ? 'accepted' : 'escalated',
       answer: outcome.by === 'person' ? null : outcome.answer,
       inputTokens: usage.inputTokens,
@@ -381,7 +388,7 @@ async function classifyPage(
     }),
   );
   const applied = await apply(decision);
-  return result(madeBy(decision), { irrelevant: applied === 'irrelevant', usage });
+  return result(madeBy(decision), { irrelevant: applied === 'irrelevant', usage, ...asked });
 }
 
 /** Withdraws the cascade's own statements about the decided field: a rule's and a decider's. */
