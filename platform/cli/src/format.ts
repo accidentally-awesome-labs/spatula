@@ -172,7 +172,8 @@ export function formatRun(run: RunView): string[] {
     }
   }
   // What the models cost, and the providers found down (ADR 0010). Runs before it say nothing.
-  lines.push(...spendLines(summary.spend), ...downLines(llm.down));
+  lines.push(...spendLines(summary.spend));
+  for (const { provider, since } of downs(llm.down)) lines.push(`Down: ${provider} ${since}`);
   const irrelevant = summary.irrelevant ?? 0;
   if (irrelevant > 0) {
     lines.push(
@@ -252,12 +253,15 @@ function spendLines(spend: RunSummary['spend']): string[] {
   return lines;
 }
 
-/** Each provider a run found down, since when and why. */
-function downLines(down: DownMarks | undefined): string[] {
-  return Object.entries(down ?? {}).map(
-    ([provider, { at, reason }]) =>
-      `Down: ${provider} since ${minute(at)}: ${reason}. Its later calls went to their backups.`,
-  );
+/**
+ * Each provider a run found down, with since when and why, and what became of its later calls: a
+ * step without a backup, as a job left to the default model always is, failed.
+ */
+function downs(down: DownMarks | undefined): { provider: string; since: string }[] {
+  return Object.entries(down ?? {}).map(([provider, { at, reason }]) => ({
+    provider,
+    since: `since ${minute(at)}: ${reason}. Its later calls went to their backups, or failed where there was none.`,
+  }));
 }
 
 /**
@@ -528,7 +532,9 @@ export function formatStatus(status: DatasetStatus): string[] {
   // Only when the latest run found a provider down, and never from a Worker before ADR 0010.
   if (status.llm !== undefined) {
     const { runId, down } = status.llm;
-    for (const line of downLines(down)) lines.push(`In the latest run (${runId}), ${line}`);
+    for (const { provider, since } of downs(down)) {
+      lines.push(`In the latest run (${runId}), ${provider} was down ${since}`);
+    }
   }
   return lines;
 }

@@ -1011,8 +1011,8 @@ describe('run', () => {
     expect(out.slice(after, after + 4)).toEqual([
       'Spend, classify: $0.04. anthropic/claude-opus-5-5 $0.04 (12 calls, 3 failed).',
       'Spend in all: $0.04.',
-      'Down: anthropic since 2026-10-24 12:31 UTC: usage limit. Its later calls went to their backups.',
-      'Down: openai since 2026-10-24 12:40 UTC: the key was refused. Its later calls went to their backups.',
+      'Down: anthropic since 2026-10-24 12:31 UTC: usage limit. Its later calls went to their backups, or failed where there was none.',
+      'Down: openai since 2026-10-24 12:40 UTC: the key was refused. Its later calls went to their backups, or failed where there was none.',
     ]);
   });
 
@@ -1931,7 +1931,7 @@ describe('status', () => {
     // STATUS's own five lines come first.
     expect(out.slice(5)).toEqual([
       'Cloudflare doesn’t list Spatula as a verified bot yet.',
-      'In the latest run (cli-products-202610241200), Down: anthropic since 2026-10-24 12:31 UTC: usage limit. Its later calls went to their backups.',
+      'In the latest run (cli-products-202610241200), anthropic was down since 2026-10-24 12:31 UTC: usage limit. Its later calls went to their backups, or failed where there was none.',
     ]);
   });
 
