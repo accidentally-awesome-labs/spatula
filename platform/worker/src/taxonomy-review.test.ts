@@ -5,6 +5,7 @@ import {
   runIdFor,
   stableId,
   type Definition,
+  type LlmPort,
   type ReviewProposal,
 } from '@spatula/core';
 import {
@@ -21,6 +22,7 @@ import { db } from '../test/node/db';
 import { fakeStep, type StepCache, type World } from '../test/node/fakes';
 import { published, refresh, taxonomyWorld } from '../test/node/runs';
 import { standardRoutes, URLS } from '../test/pages';
+import { LlmHttpError } from './llm-openai';
 import { runRefresh } from './refresh';
 
 const PHONO: ReviewProposal = {
@@ -89,6 +91,33 @@ function reviewing(world: World, proposals: ReviewProposal[] | null): string[] {
   };
   return asked;
 }
+
+/** An LLM that counts what it's asked and answers every call as the table says, or throws. */
+function review(
+  world: World,
+  answer: { throws: Error } | { proposals: ReviewProposal[] },
+  model: string,
+): LlmPort & { asked: number } {
+  const real = world.llm.llm;
+  const port = {
+    model,
+    asked: 0,
+    async structured(request: Parameters<LlmPort['structured']>[0]) {
+      if ((request.schema as unknown) !== reviewOutputSchema) return real.structured(request);
+      port.asked += 1;
+      if ('throws' in answer) throw answer.throws;
+      const parsed = request.schema.safeParse({ proposals: answer.proposals });
+      return {
+        output: parsed.success ? parsed.data : null,
+        usage: { inputTokens: 2000, outputTokens: 300 },
+      };
+    },
+  } as LlmPort & { asked: number };
+  return port;
+}
+
+const USAGE_LIMIT = () =>
+  new LlmHttpError(400, '400 You have reached your specified API usage limits.');
 
 /** The test taxonomy dataset, with some of its definition changed. */
 function changed(
@@ -323,10 +352,109 @@ describe('the taxonomy review', { timeout: 20_000 }, () => {
       inputTokens: 0,
       outputTokens: 0,
     });
-    expect(run.summary.notes).toContain('The taxonomy review’s call failed: 529 Overloaded');
+    expect(run.summary.notes).toContain(
+      'The taxonomy review’s call failed: test/model: 529 Overloaded',
+    );
     expect(run.summary.snapshot).toMatchObject({ published: true });
     expect(await published(world, 'review-failed')).not.toBeNull();
     expect(await getRun(db, run.runId)).toMatchObject({ status: 'complete' });
     expect(await proposalsOfRun(db, run.runId)).toEqual([]);
+  });
+
+  it('asks the review’s backup when its model fails, and counts both', async () => {
+    const definition = changed('review-backup', () => ({
+      models: { taxonomyReview: { model: 'down/x', backup: 'up/y' } },
+    }));
+    const { world } = await taxonomyWorld(definition);
+    const down = review(world, { throws: USAGE_LIMIT() }, 'down/x');
+    const up = review(world, { proposals: [PHONO] }, 'up/y');
+    world.ports.modelPorts = (model) => ({
+      llm: model === 'down/x' ? down : model === 'up/y' ? up : world.llm.llm,
+      decider: world.decider.decider,
+      taxonomyDecider: world.taxonomyDecider.decider,
+    });
+    const run = await refresh(world, 'review-backup');
+    expect(run.summary.taxonomy).toMatchObject({ proposed: 1, dropped: 0 });
+    expect(down.asked).toBe(1);
+    expect(up.asked).toBe(1);
+    expect(run.summary.spend?.taxonomyReview?.['down/x']).toMatchObject({
+      calls: 1,
+      failed: 1,
+      inputTokens: 0,
+      outputTokens: 0,
+    });
+    expect(run.summary.spend?.taxonomyReview?.['up/y']).toMatchObject({
+      calls: 1,
+      failed: 0,
+      inputTokens: 2000,
+      outputTokens: 300,
+    });
+    expect(run.summary.llm.down?.down?.reason).toBe('usage limit');
+    expect(await proposalsOfRun(db, run.runId)).toHaveLength(1);
+  });
+
+  it('proposes nothing, with a note naming each failure, when both fail', async () => {
+    const definition = changed('review-both', () => ({
+      models: { taxonomyReview: { model: 'down/x', backup: 'up/y' } },
+    }));
+    const { world } = await taxonomyWorld(definition);
+    const down = review(world, { throws: USAGE_LIMIT() }, 'down/x');
+    const up = review(world, { throws: new Error('529 Overloaded') }, 'up/y');
+    world.ports.modelPorts = (model) => ({
+      llm: model === 'down/x' ? down : model === 'up/y' ? up : world.llm.llm,
+      decider: world.decider.decider,
+      taxonomyDecider: world.taxonomyDecider.decider,
+    });
+    const run = await refresh(world, 'review-both');
+    expect(run.summary.taxonomy).toMatchObject({ proposed: 0, dropped: 0, applied: [] });
+    expect(run.summary.notes).toContain(
+      'The taxonomy review’s call failed: down/x: 400 You have reached your specified API usage limits.; up/y: 529 Overloaded',
+    );
+    expect(run.summary.spend?.taxonomyReview?.['down/x']).toMatchObject({ calls: 1, failed: 1 });
+    expect(run.summary.spend?.taxonomyReview?.['up/y']).toMatchObject({ calls: 1, failed: 1 });
+    expect(await proposalsOfRun(db, run.runId)).toEqual([]);
+    expect(await getRun(db, run.runId)).toMatchObject({ status: 'complete' });
+  });
+
+  it('sends nothing to a provider an earlier step of the run found down', async () => {
+    // A whole run: extraction's model is on 'down', which answers a usage limit on the first page
+    // and so is down for the rest of the run, review included.
+    const definition = changed('review-skip-down', () => ({
+      models: {
+        extract: { model: 'down/e', backup: 'up/y' },
+        taxonomyReview: { model: 'down/x', backup: 'up/y' },
+      },
+    }));
+    const { world } = await taxonomyWorld(definition);
+    const throwing: LlmPort = {
+      model: 'down/e',
+      async structured() {
+        throw USAGE_LIMIT();
+      },
+    };
+    const down = review(world, { throws: USAGE_LIMIT() }, 'down/x');
+    const up = review(world, { proposals: [PHONO] }, 'up/y');
+    world.ports.modelPorts = (model) => ({
+      llm:
+        model === 'down/e'
+          ? throwing
+          : model === 'down/x'
+            ? down
+            : model === 'up/y'
+              ? up
+              : world.llm.llm,
+      decider: world.decider.decider,
+      taxonomyDecider: world.taxonomyDecider.decider,
+    });
+    const run = await refresh(world, 'review-skip-down');
+    expect(run.summary.llm.down?.down).toBeDefined();
+    expect(down.asked).toBe(0);
+    expect(up.asked).toBe(1);
+    expect(run.summary.taxonomy).toMatchObject({ proposed: 1 });
+    expect(run.summary.spend?.taxonomyReview?.['down/x']).toMatchObject({
+      calls: 1,
+      failed: 1,
+      inputTokens: 0,
+    });
   });
 });

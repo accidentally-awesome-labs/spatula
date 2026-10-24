@@ -217,13 +217,6 @@ export function countCalls(
   }
 }
 
-/** A step's usage as one call of a model: none when it asked nothing. */
-export function usageCalls(model: string, usage: LlmUsage, failed: boolean): ModelCall[] {
-  return usage.inputTokens + usage.outputTokens === 0 && !failed
-    ? []
-    : [{ model, inputTokens: usage.inputTokens, outputTokens: usage.outputTokens, failed }];
-}
-
 export function emptyDecisions(): DecisionSummary {
   return {
     rule: 0,
