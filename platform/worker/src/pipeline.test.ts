@@ -105,6 +105,23 @@ describe('the run’s LLM state', () => {
     expect(usdSpent(summary)).toBe(6.5);
   });
 
+  it('fails closed when the spend is not a finite number', () => {
+    const definition = testDefinition('pipeline-nan');
+    const context: Context = {
+      runId: 'pipeline-nan-202610100000',
+      datasetId: 'pipeline-nan',
+      revision: 1,
+      definition,
+      startedAt: new Date(Date.UTC(2026, 9, 10)),
+    };
+    const corrupt = summaryOf({
+      spend: {
+        match: { 'b/y': { calls: 1, failed: 0, inputTokens: 0, outputTokens: 0, usd: Number.NaN } },
+      },
+    });
+    expect(llmState(context, corrupt).usdLeft).toBe(0);
+  });
+
   it('an old step result adds no spend', () => {
     const summary = emptySummaryForTest();
     countCalls(summary, 'match', {}, price);

@@ -176,8 +176,10 @@ export function usdSpent(summary: RunSummary): number {
  * that replays its steps stops asking at the same page, and skips the same providers.
  */
 export function llmState(context: Context, summary: RunSummary): LlmState {
+  const left = Math.round((context.definition.budget.llmUsdPerRun - usdSpent(summary)) * 1e9) / 1e9;
   return {
-    usdLeft: Math.round((context.definition.budget.llmUsdPerRun - usdSpent(summary)) * 1e9) / 1e9,
+    // Fail closed: every gate tests `usdLeft <= 0`, which a NaN from a corrupt summary would pass.
+    usdLeft: Number.isFinite(left) ? left : 0,
     down: summary.llm.down ?? {},
   };
 }
