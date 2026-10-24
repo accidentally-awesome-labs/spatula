@@ -7,7 +7,7 @@ import {
   type ReviewSuggestion,
   type ReviewView,
 } from '@spatula/core';
-import { and, asc, count, desc, eq, inArray, isNotNull, isNull, ne, sql } from 'drizzle-orm';
+import { and, asc, count, desc, eq, inArray, isNotNull, isNull, ne, or, sql } from 'drizzle-orm';
 import type { Executor } from './client';
 import {
   decisionRecords,
@@ -95,6 +95,50 @@ export async function findDecision(
       ),
     );
   return row ?? null;
+}
+
+/** The most decisions a comparison asks again; a `limit` outside 1 to 500 is clamped into it. */
+const MAX_COMPARABLE = 500;
+
+/**
+ * A dataset's current decisions of these types under the criteria version, that a person answered
+ * or a decider accepted: what a model comparison asks again (ADR 0010). The person-answered first,
+ * then the newest, up to `limit` (clamped to 1 to 500, as the action log's is).
+ */
+export async function comparableDecisions(
+  db: Executor,
+  input: {
+    datasetId: string;
+    types: readonly string[];
+    criteriaVersions: Readonly<Record<string, number>>;
+    limit: number;
+  },
+): Promise<DecisionRow[]> {
+  const versions = input.types.flatMap((type) => {
+    const version = input.criteriaVersions[type];
+    return version === undefined
+      ? []
+      : [and(eq(decisionRecords.type, type), eq(decisionRecords.criteriaVersion, version))];
+  });
+  if (versions.length === 0) return [];
+  const limit = Math.min(Math.max(Math.trunc(input.limit) || 1, 1), MAX_COMPARABLE);
+  return db
+    .select(DECISION)
+    .from(decisionRecords)
+    .where(
+      and(
+        eq(decisionRecords.datasetId, input.datasetId),
+        isNull(decisionRecords.supersededAt),
+        or(...versions),
+        or(isNotNull(decisionRecords.finalAnswer), eq(decisionRecords.outcome, 'accepted')),
+      ),
+    )
+    .orderBy(
+      asc(sql`${decisionRecords.finalAnswer} is null`),
+      desc(decisionRecords.decidedAt),
+      asc(decisionRecords.id),
+    )
+    .limit(limit);
 }
 
 /** The decision with this ID while it's current: a step that runs again finds what it decided. */

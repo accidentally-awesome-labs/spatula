@@ -6,6 +6,7 @@ import { seedDataset, T } from '../test/seed';
 import type { Executor } from './client';
 import {
   closeReview,
+  comparableDecisions,
   decideReviews,
   decisionById,
   decisionWithId,
@@ -29,6 +30,8 @@ import {
   type NewDecision,
   type ReviewFilters,
 } from './decisions';
+import { applyDefinition } from './datasets';
+import { testDefinition } from './fixtures';
 import { datasets, decisionRecords, entities, items, judgements, reviewItems } from './schema';
 
 const QUESTION: Question = {
@@ -878,5 +881,72 @@ describe('decisionWithId', () => {
         answer: 'Headphones',
       });
       expect(await decisionWithId(tx, 'dc_nowhere00000000000000')).toBeNull();
+    }));
+});
+
+describe('comparableDecisions', () => {
+  const asked = (n: number, overrides: Partial<NewDecision> = {}) =>
+    decision({
+      id: `dc_cmp${n}0000000000000000`,
+      subject: `it_c${n}`,
+      subjectKey: `classify:it_c${n}`,
+      stateHash: `hash-c${n}`,
+      decidedAt: T(n),
+      ...overrides,
+    });
+  const input = {
+    datasetId: 'test-products',
+    types: ['classify'],
+    criteriaVersions: { classify: 1 },
+    limit: 100,
+  };
+
+  it('lists person-answered decisions first, then the newest', () =>
+    withRollback(async (db) => {
+      await seedDataset(db);
+      const old = await saveDecision(db, asked(1, { outcome: 'escalated', answer: null }));
+      await finalizeDecision(db, { id: old.id, finalAnswer: 'Headphones', at: T(9) });
+      await saveDecision(db, asked(2));
+      await saveDecision(db, asked(3));
+      const rows = await comparableDecisions(db, input);
+      expect(rows.map((r) => r.id)).toEqual([old.id, asked(3).id, asked(2).id]);
+      expect(rows[0]).toMatchObject({ finalAnswer: 'Headphones' });
+      expect(await comparableDecisions(db, { ...input, limit: 2 })).toHaveLength(2);
+      expect(await comparableDecisions(db, { ...input, limit: 0 })).toHaveLength(1);
+    }));
+
+  it('skips superseded ones, other criteria versions, unanswered escalations, and the rule’s', () =>
+    withRollback(async (db) => {
+      await seedDataset(db);
+      await saveDecision(db, asked(1));
+      await saveDecision(db, asked(1, { id: 'dc_cmp1b00000000000000', stateHash: 'hash-new' }));
+      await saveDecision(db, asked(2, { criteriaVersion: 2 }));
+      await saveDecision(db, asked(3, { outcome: 'escalated', answer: null }));
+      await saveDecision(db, asked(4, { outcome: 'rule', adapter: null, answer: 'Headphones' }));
+      await saveDecision(db, asked(5, { type: 'match' }));
+      expect((await comparableDecisions(db, input)).map((r) => r.id)).toEqual([
+        'dc_cmp1b00000000000000',
+      ]);
+      expect(
+        (
+          await comparableDecisions(db, {
+            ...input,
+            types: ['classify', 'match'],
+            criteriaVersions: { classify: 1, match: 1 },
+          })
+        ).map((r) => r.id),
+      ).toEqual([asked(5).id, 'dc_cmp1b00000000000000']);
+    }));
+
+  it('keeps to its dataset', () =>
+    withRollback(async (db) => {
+      await seedDataset(db);
+      await applyDefinition(db, testDefinition('another'));
+      await saveDecision(db, asked(1));
+      await saveDecision(db, asked(2, { datasetId: 'another' }));
+      expect((await comparableDecisions(db, input)).map((r) => r.id)).toEqual([asked(1).id]);
+      expect(
+        (await comparableDecisions(db, { ...input, datasetId: 'another' })).map((r) => r.id),
+      ).toEqual([asked(2).id]);
     }));
 });
