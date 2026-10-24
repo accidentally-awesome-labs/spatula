@@ -53,7 +53,14 @@ definitions through the schema again, so they get the defaults too.
 - **`publication`:** `approval` is `auto`, `balanced` (the default), or `manual` (ADR 0004).
 - **`decisions`:** the probability at which the cascade accepts an answer: `classify.accept`
   (default 0.9) and `match.accept` (default 0.95).
-- **`budget`:** `itemsPerRun` (default 1,000) and `llmTokensPerRun` (default 2,000,000).
+- **`budget`:** `itemsPerRun` (default 1,000) and `llmUsdPerRun`, a run's spend on models in
+  dollars (default 10, at most 500; ADR 0010). A definition that names `llmTokensPerRun`, the
+  token budget it replaced, is refused.
+- **`models`:** optional. The models of each job that asks one (`extract`, `classify`, `match`,
+  and `taxonomyReview`), each named `provider/model`. Classify and match take 1 to 3 steps, each a
+  name or `{ model, backup?, accept? }`, where `accept` is at least the job's threshold in
+  `decisions`; the other two take one model and an optional backup. A job left out uses the
+  deployment's default model (ADR 0010).
 - **`consumers`:** the names of the apps that may read the snapshots (ADR 0004).
 
 Names are camelCase, and the few that every object already has, such as `constructor` and
@@ -81,3 +88,12 @@ Workflows' 10,000 steps (ADR 0005).
   those names, or `category`.
 - A source can fix its pages' shelf (`fixed.shelf`, a slug or a name) or read it with a selector
   (`extract.shelf`).
+
+## Update, 2026-10-24 (ADR 0010)
+
+- A definition may name its models per job in `models:`, with steps, backups, and thresholds of
+  their own. `apply` refuses a model the deployment can't ask: an unknown provider, no price, or no
+  key.
+- `budget.llmUsdPerRun` replaces `budget.llmTokensPerRun`. A dataset whose stored definition
+  still names the token budget doesn't run, and the API answers 409 naming `llmUsdPerRun`, until
+  the owner applies it again with the dollar one.

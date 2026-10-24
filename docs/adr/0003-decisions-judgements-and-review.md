@@ -15,12 +15,13 @@ whose every answer is recorded and can be corrected by a person.
 - **Questions are typed:** true or false, a choice among up to 255 options, or an ordered score.
   An answer is one of the question's options. Code applies it; text on a page can't become an
   action.
-- **The cascade is rules, then the Claude decider, then a person.** The decider calls the
-  Worker's LLM through AI Gateway and answers with probabilities. An answer at or above the
-  dataset's threshold (`decisions.classify.accept`, default 0.9; `decisions.match.accept`, 0.95)
-  is accepted; below it, the question goes to a person. A Worker with no LLM set up has no
-  decider, and a person answers what the rules can't. Jev isn't on the account; when it is, it
-  goes first, and Claude becomes System Two.
+- **The cascade is rules, then the decider: the definition's models, in steps (ADR 0010), then a
+  person.** Each step's model answers through AI Gateway with probabilities, and the step's backup
+  answers when that call fails. An answer at or above the step's threshold (the dataset's
+  `decisions.classify.accept`, default 0.9, or `decisions.match.accept`, 0.95, unless the step asks
+  more) is accepted; below it, the question goes to the next step, and after the last, to a person.
+  A Worker with no LLM set up has no decider, and a person answers what the rules can't. Jev isn't
+  on the account; when it is, it goes first, and Claude becomes System Two.
 - **Consent.** A decider reads what pages said, so it is AI input: the dataset must declare
   `ai-input`, and no site whose page it would read may say `ai-input=no`. Otherwise the question
   goes to a person. An earlier decider answer is reused only while that consent holds, and only
@@ -70,10 +71,11 @@ whose every answer is recorded and can be corrected by a person.
   them, and `pnpm spatula review <dataset> <id> <answer>` answers one. A person's classification
   and match answers take effect at the next run; a publication answer takes effect at once
   (ADR 0004).
-- **Budget.** A run stops asking the LLM once it has spent `budget.llmTokensPerRun` tokens
-  (default 2,000,000) on extraction and decisions together; the call that crosses the line still
-  finishes. The run's summary counts what's spent. A page the budget didn't reach is read again
-  in the next run, and a match question it didn't reach is asked again.
+- **Budget.** A run stops asking models once it has spent `budget.llmUsdPerRun` dollars (default
+  10, at most 500) on extraction, decisions, and the taxonomy review together, at the prices in
+  `LLM_PRICES` (ADR 0010); the question that crosses the line still finishes, its later steps
+  included. The run's summary counts what's spent, by job and by model. A page the budget didn't
+  reach is read again in the next run, and a question it didn't reach is asked again.
 
 ## Consequences
 
@@ -152,3 +154,17 @@ whose every answer is recorded and can be corrected by a person.
 - Match questions keep the five relationships through the review API.
 - A reviewer's match answer counts as the standing answer when it has the same verdict (join,
   edition, or keep apart), and only a different verdict flags it.
+
+## Update, 2026-10-24 (ADR 0010)
+
+- The decider is no longer one model. A dataset names up to three steps for classify and for match,
+  each a model with an optional backup and a threshold of its own, and a job it doesn't name uses
+  the deployment's default model as one step.
+- A step's answer stands or falls on its own threshold, and an answer is held to the threshold of
+  the step that gave it when a later run reuses it. Doubt moves a question to the next step; a
+  failed call moves it to the step's backup.
+- A person is asked only what every step weighed: when no step accepted and any step failed, the
+  question is retried next run.
+- A decision's adapter names the model that answered, `llm:<provider/model>`. Decisions recorded
+  before keep `llm:claude-opus-5-5`, and still stand.
+- The budget is in dollars, `budget.llmUsdPerRun`, in place of `budget.llmTokensPerRun`.

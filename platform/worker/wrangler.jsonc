@@ -19,10 +19,18 @@
     // The providers whose keys the gateway holds, comma-separated; they need AI_GATEWAY_TOKEN.
     "LLM_GATEWAY_KEYS": "",
     // Each model's list price, dollars per million tokens in and out, as its provider's pricing
-    // page gave it on the date beside it. A model without one can't be named (ADR 0010).
+    // page gave it on the date in its comment. A model without one can't be named (ADR 0010).
     "LLM_PRICES": {
-      "anthropic/claude-opus-5-5": [4, 20], // anthropic.com/pricing, 2026-10-24
-      "anthropic/claude-haiku-5-5": [0.1, 0.5], // anthropic.com/pricing, 2026-10-24
+      // Flat across the whole context window.
+      // platform.claude.com/docs/en/about-claude/pricing, 2026-10-24
+      "anthropic/claude-opus-5-5": [4, 20],
+      // Haiku 5.5 is priced by prompt length: $0.10 in and $0.50 out up to 100K prompt tokens,
+      // $0.50 and $2.50 over. This is the higher pair, so a run never counts it as cheaper than it
+      // was. platform.claude.com/docs/en/about-claude/pricing, 2026-10-24
+      "anthropic/claude-haiku-5-5": [0.5, 2.5],
+      // The standard tier; prompts over 272K tokens cost $4 in and $15 out, and Spatula's are far
+      // shorter. developers.openai.com/api/docs/pricing, 2026-10-24
+      "openai/gpt-6.1-sol": [2, 10],
     },
     // "true" once Cloudflare lists Spatula as a verified bot, which the owner sets (ADR 0006).
     "VERIFIED_BOT": "false",

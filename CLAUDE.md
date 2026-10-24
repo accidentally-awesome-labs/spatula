@@ -7,7 +7,8 @@ are until 0.2 replaces them; don't change them for 0.2 work.
 Read first: `docs/adr/0001-spatula-0-2-system-of-record.md` (the direction) and
 `docs/adr/0002-dataset-definitions.md` (the definition format). Then 0003 (decisions and review),
 0004 (publication and consumers), 0005 (collection at scale), 0006 (refusals and routes), 0007
-(the living taxonomy), 0008 (the page archive), and 0009 (the review API and console).
+(the living taxonomy), 0008 (the page archive), 0009 (the review API and console), and 0010
+(models and providers).
 
 ## Commands
 
@@ -56,9 +57,12 @@ Before committing, run all of these: `pnpm platform:lint`, `pnpm platform:typech
   (`taxonomy-review.ts`). Node tests run it against Postgres. The review API (`review-api.ts`)
   serves the CLI, consumers' reviewers, and the console, which Cloudflare Access guards
   (`access.ts`, ADR 0009). Review
-  (`review.ts`) applies a person's answers to the questions those steps raise. The Workflow,
-  HostGate (a Durable Object per host), the HTTP, LLM, and signing adapters, and the API connect
-  it to Cloudflare.
+  (`review.ts`) applies a person's answers to the questions those steps raise. Each job asks its
+  models in steps, with backups, through `models.ts` (ADR 0010): the deployment's models, prices,
+  and keys, and providers down for the run. `llm-providers.ts` is the provider table, and the LLM
+  adapters are `llm-anthropic.ts` and `llm-openai.ts`, one per API format. The Workflow, HostGate
+  (a Durable Object per host), the HTTP, LLM, and signing adapters, and the API connect it to
+  Cloudflare.
 - `platform/cli` (`@spatula/cli`): the CLI, over the API.
 
 ## Rules
@@ -85,6 +89,8 @@ Before committing, run all of these: `pnpm platform:lint`, `pnpm platform:typech
 - Canonical IDs (`sp_…`) are assigned once and stored, never derived from values again.
 - Decisions are typed questions whose answers code applies. A person's answer outranks every
   other, and a decider's decision needs `ai-input` (ADR 0003).
+- Every model call goes through AI Gateway; a model is named provider/model, and one a definition
+  names must have a price and a key in the deployment (ADR 0010).
 - A taxonomy changes only as a new version, applied on an approval (the owner's, or a reviewer's
   for the additive kinds) or by a kind's earned autonomy, and undone by another version
   (ADR 0007, ADR 0009). The console shows page text as text, never markup.
