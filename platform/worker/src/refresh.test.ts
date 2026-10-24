@@ -1,9 +1,15 @@
 import {
+  extractFromPage,
+  legacyLlmInputHash,
+  llmFields,
+  llmInputHash,
   normalizeGtin,
   parseDefinition,
+  parsePage,
   runIdFor,
   type Candidate,
   type GateDecision,
+  type LlmPort,
   type Page,
   type PagesSource,
 } from '@spatula/core';
@@ -35,6 +41,7 @@ import {
   type HttpResult,
   type StepRunner,
 } from './refresh';
+import { LlmHttpError } from './llm-openai';
 import { MAX_REDIRECTS, MAX_WAITS, requestThroughGate } from './requests';
 
 const HOUR = 3_600_000;
@@ -919,11 +926,13 @@ describe('runRefresh', () => {
       cut(`${URLS.a1}: the page couldn’t be read: pack  ${'x'.repeat(600)}`),
     ]);
     expect(notesOf(a2.id)).toEqual([
-      cut(`${URLS.a2}: the LLM call failed: llm  ${'x'.repeat(600)}`),
+      cut(`${URLS.a2}: the LLM call failed: test/model: llm  ${'x'.repeat(600)}`),
     ]);
     // The fetch log says what the LLM step did. A NUL in that text would have failed the insert
     // after the LLM had been paid for.
-    expect((await fetchOf(first.runId, URLS.a2)).llm).toBe(cut(`failed: llm  ${'x'.repeat(600)}`));
+    expect((await fetchOf(first.runId, URLS.a2)).llm).toBe(
+      cut(`failed: test/model: llm  ${'x'.repeat(600)}`),
+    );
   });
 
   it('reads only the pages that are due, taking turns between hosts', async () => {
@@ -1533,6 +1542,116 @@ describe('runRefresh', () => {
     const first = await refresh(world, 'refresh-llm-budget-exact');
     expect(first.summary.llm).toMatchObject({ ran: 1, skipped: 2 });
     expect(world.llm.calls).toHaveLength(1);
+  });
+
+  it('asks the extraction step’s backup when its model fails, and counts both', async () => {
+    const definition = testDefinition('refresh-llm-backup');
+    await applyDefinition(db, {
+      ...definition,
+      models: { extract: { model: 'down/x', backup: 'up/y' } },
+    });
+    const world = makeWorld(db, standardRoutes());
+    let downCalls = 0;
+    const throwing: LlmPort = {
+      model: 'down/x',
+      async structured() {
+        downCalls += 1;
+        throw new LlmHttpError(400, '400 You have reached your specified API usage limits.');
+      },
+    };
+    world.ports.modelPorts = (model) => ({
+      llm: model === 'down/x' ? throwing : world.llm.llm,
+      decider: world.decider.decider,
+      taxonomyDecider: world.taxonomyDecider.decider,
+    });
+
+    const run = await refresh(world, 'refresh-llm-backup');
+    // Every page was read by the backup.
+    expect(run.summary.llm).toMatchObject({ ran: 3, failed: 0, inputTokens: 3000 });
+    expect(world.llm.calls).toHaveLength(3);
+    const file = (await published(world, 'refresh-llm-backup'))!;
+    expect(file.byName.A1!.fields).toMatchObject({
+      specs: [
+        { label: 'Impedance', value: '300 Ω' },
+        { label: 'Weight', value: '350 g' },
+      ],
+    });
+    // The first page was sent to down/x; the usage limit marked its provider down, so the other two
+    // went straight to the backup and sent nothing.
+    expect(downCalls).toBe(1);
+    expect(run.summary.spend?.extract?.['down/x']).toMatchObject({
+      calls: 3,
+      failed: 3,
+      inputTokens: 0,
+      outputTokens: 0,
+    });
+    expect(run.summary.spend?.extract?.['up/y']).toMatchObject({
+      calls: 3,
+      failed: 0,
+      inputTokens: 3000,
+      outputTokens: 150,
+    });
+    expect(run.summary.llm.down?.down?.reason).toBe('usage limit');
+  });
+
+  it('asks no page again after the extraction model changes', async () => {
+    const definition = testDefinition('refresh-llm-switch');
+    await applyDefinition(db, { ...definition, models: { extract: 'a/x' } });
+    const world = makeWorld(db, standardRoutes());
+    const asked: string[] = [];
+    world.ports.modelPorts = (model) => {
+      asked.push(model);
+      return {
+        llm: world.llm.llm,
+        decider: world.decider.decider,
+        taxonomyDecider: world.taxonomyDecider.decider,
+      };
+    };
+    const first = await refresh(world, 'refresh-llm-switch');
+    expect(first.summary.llm).toMatchObject({ ran: 3, reused: 0 });
+    expect(new Set(asked)).toEqual(new Set(['a/x']));
+
+    await applyDefinition(db, { ...definition, models: { extract: 'b/y' } });
+    asked.length = 0;
+    const second = await refresh(world, 'refresh-llm-switch');
+    expect(second.summary.llm).toMatchObject({ ran: 0, reused: 3, inputTokens: 0 });
+    expect(asked).toEqual([]);
+    expect(world.llm.calls).toHaveLength(3);
+  });
+
+  it('takes a page asked before ADR 0010 as answered, and stores the new hash', async () => {
+    const { world, a1 } = await setUp('refresh-llm-legacy');
+    await refresh(world, 'refresh-llm-legacy');
+    const stored = async () =>
+      (await db.select().from(items).where(eq(items.id, a1.id)))[0]!.extractInputHash;
+
+    // The text and fields A1 was asked with, rebuilt as the extraction builds them.
+    const definition = testDefinition('refresh-llm-legacy');
+    const row = (await db.select().from(items).where(eq(items.id, a1.id)))[0]!;
+    const source = definition.sources.find((candidate) => candidate.id === row.sourceId)!;
+    const recordType = definition.recordTypes[row.recordType]!;
+    const body = world.web.routes.get(URLS.a1)!.body as string;
+    const page = parsePage(body, URLS.a1);
+    const extraction = extractFromPage({
+      page,
+      source,
+      recordType,
+      pack: recordType.pack === undefined ? null : (packs[recordType.pack] ?? null),
+    });
+    const asked = { text: page.text, fields: llmFields(recordType, extraction.missing) };
+    const hash = await llmInputHash(asked);
+    expect(await stored()).toBe(hash);
+
+    await db
+      .update(items)
+      // Older code's tag, so the page is read again from its stored copy.
+      .set({ extractInputHash: await legacyLlmInputHash(asked), extractedWith: 'r1.v1' })
+      .where(eq(items.id, a1.id));
+    const callsBefore = world.llm.calls.length;
+    const next = await refresh(world, 'refresh-llm-legacy');
+    expect(next.summary.llm).toMatchObject({ ran: 0, reused: 1, inputTokens: 0 });
+    expect(world.llm.calls).toHaveLength(callsBefore);
+    expect(await stored()).toBe(hash);
   });
 });
 

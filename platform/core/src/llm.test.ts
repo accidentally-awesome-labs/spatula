@@ -4,6 +4,7 @@ import {
   acceptLlmOutput,
   buildLlmRequest,
   llmFields,
+  legacyLlmInputHash,
   llmInputHash,
   SYSTEM_PROMPT,
   withoutWrapperTags,
@@ -471,17 +472,33 @@ describe('acceptLlmOutput', () => {
 });
 
 describe('llmInputHash', () => {
-  it('changes with the text, the model, or the fields, and only then', async () => {
-    const base = { model: 'claude-opus-5-5', text: TEXT, fields: FIELDS };
+  const base = { text: TEXT, fields: FIELDS };
+
+  it('changes with the text or the fields, and only then', async () => {
     const hash = await llmInputHash(base);
     expect(await llmInputHash({ ...base })).toBe(hash);
     expect(await llmInputHash({ ...base, text: `${TEXT}.` })).not.toBe(hash);
-    expect(await llmInputHash({ ...base, model: 'claude-haiku-5-5' })).not.toBe(hash);
     expect(
       await llmInputHash({
         ...base,
         fields: [['specs', { ...specs, description: 'Audio specs' }]],
       }),
     ).not.toBe(hash);
+  });
+
+  it('doesn’t name the model, so a switch or a backup asks no page again', async () => {
+    const hash = await llmInputHash({ text: 'A1 Impedance: 300 Ω', fields: FIELDS });
+    expect(hash).toBe(await llmInputHash({ text: 'A1 Impedance: 300 Ω', fields: FIELDS }));
+    expect(hash).not.toBe(await llmInputHash({ text: 'A1 Impedance: 250 Ω', fields: FIELDS }));
+    // The legacy formula named claude-opus-5-5, so the two differ.
+    expect(hash).not.toBe(
+      await legacyLlmInputHash({ text: 'A1 Impedance: 300 Ω', fields: FIELDS }),
+    );
+  });
+
+  it('still reads the hash every page was asked under before ADR 0010', async () => {
+    expect(await legacyLlmInputHash({ text: 'A1 Impedance: 300 Ω', fields: FIELDS })).toBe(
+      '209ad80308965142e35e283e1cf941fc9e1f37b8f511ee748c69fcfed4bf47ed',
+    );
   });
 });

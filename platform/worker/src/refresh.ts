@@ -6,6 +6,7 @@ import {
   jobSteps,
   LLM_MAX_TOKENS,
   llmFields,
+  legacyLlmInputHash,
   llmInputHash,
   MAX_MATCH_QUESTIONS,
   PAGE_METHODS,
@@ -73,6 +74,7 @@ import {
 } from './classify';
 import { discoverSource } from './discovery';
 import { matchItem } from './match';
+import { portsFor, tryStep } from './models';
 import {
   countCalls,
   decisionsOf,
@@ -82,7 +84,6 @@ import {
   NO_CHANGE,
   NO_USAGE,
   retryTag,
-  usageCalls,
   type Context,
   type LlmState,
   type RefreshPorts,
@@ -1411,13 +1412,8 @@ async function extractItem(
     notes,
     read: true,
     waitsForBudget: asked.waitsForBudget === true,
-    // Until the cascade reports its calls itself, the usage is one call of the first model.
-    calls: usageCalls(
-      jobSteps(definition, 'extract', ports.models.defaultModel)[0]!.model,
-      asked.usage,
-      asked.outcome === 'failed',
-    ),
-    down: {},
+    calls: asked.calls,
+    down: asked.down,
   };
 }
 
@@ -1468,6 +1464,9 @@ interface LlmStep {
   note: string | null;
   /** Whether the LLM wasn't asked because the run's budget was spent. */
   waitsForBudget?: boolean;
+  /** What the step asked of models, and the providers it found down (ADR 0010). */
+  calls: ModelCall[];
+  down: DownMarks;
 }
 
 async function askLlm(
@@ -1489,6 +1488,8 @@ async function askLlm(
     counts: NO_CHANGE,
     inputHash: undefined,
     note: null,
+    calls: [],
+    down: {},
     ...more,
   });
   // The LLM speaks for every field but the cascade's, so what it said of a field it no longer
@@ -1516,13 +1517,18 @@ async function askLlm(
     const counts = await ports.withDb((db) => writeStatements(db, { ...write, statements: [] }));
     return skipped(refusal, { counts, inputHash: null });
   }
-  const port = ports.llm;
-  if (port === null) return skipped('no LLM is configured');
+  if (ports.llm === null) return skipped('no LLM is configured');
 
-  const inputHash = await llmInputHash({ model: port.model, text: page.text, fields });
-  if (inputHash === item.extractInputHash) {
-    // The same text, fields, and model would get the same answer, so its statements are re-seen.
-    // The cascade's answer isn't among them: nothing has confirmed it until its own step has.
+  const hashed = { text: page.text, fields };
+  const inputHash = await llmInputHash(hashed);
+  // A page asked before ADR 0010 holds the old hash, which named the model; it was asked the same
+  // thing. Its answer is reused, and the new hash replaces the old.
+  if (
+    item.extractInputHash === inputHash ||
+    item.extractInputHash === (await legacyLlmInputHash(hashed))
+  ) {
+    // The same text and fields would get the same answer, so its statements are re-seen. The
+    // cascade's answer isn't among them: nothing has confirmed it until its own step has.
     const reseen = await ports.withDb((db) =>
       reseeStatements(db, {
         itemId: item.id,
@@ -1540,6 +1546,8 @@ async function askLlm(
       counts: { ...NO_CHANGE, reseen },
       inputHash,
       note: null,
+      calls: [],
+      down: {},
     };
   }
   // A reused answer costs nothing; a new one waits for the next run's budget.
@@ -1549,28 +1557,46 @@ async function askLlm(
   // redirect the final address is the site's text, and it would sit outside the wrapper around
   // untrusted content.
   const question = buildLlmRequest({ url: new URL(item.locator).href, text: page.text, fields });
-  let answer: { output: Record<string, unknown> | null; usage: LlmUsage };
-  try {
-    answer = await port.structured({ ...question, maxTokens: LLM_MAX_TOKENS });
-  } catch (error) {
-    const message = error instanceof Error ? error.message : String(error);
+  const [step] = jobSteps(context.definition, 'extract', ports.models.defaultModel);
+  const tried = await tryStep({
+    step: step!,
+    setup: ports.models,
+    down: llm.down,
+    now: ports.now(),
+    async ask(model) {
+      const port = portsFor(ports, model).llm;
+      if (port === null) throw new Error('no LLM is configured');
+      const answer = await port.structured({ ...question, maxTokens: LLM_MAX_TOKENS });
+      return { value: answer.output, usage: answer.usage };
+    },
+  });
+  const asked = { calls: tried.calls, down: tried.down };
+  if (tried.answered === null) {
+    const message = tried.failures.join('; ');
     return {
       ...skipped(''),
+      ...asked,
       outcome: 'failed',
       detail: `failed: ${message}`,
       note: storable(`${item.locator}: the LLM call failed: ${message}`),
     };
   }
-  if (answer.output === null) {
+  // The answering call is the last one: a no-answer is still a call that was answered.
+  const answered = tried.calls.at(-1)!;
+  const usage = { inputTokens: answered.inputTokens, outputTokens: answered.outputTokens };
+  const output = tried.answered.value;
+  if (output === null) {
+    // No answer is a failure to read the page again next run, never a call for the backup.
     return {
       ...skipped(''),
+      ...asked,
       outcome: 'failed',
       detail: 'failed: the answer didn’t fit the schema',
-      usage: answer.usage,
+      usage,
       note: `${item.locator}: the LLM’s answer didn’t fit the schema`,
     };
   }
-  const accepted = acceptLlmOutput({ output: answer.output, text: page.text, fields });
+  const accepted = acceptLlmOutput({ output, text: page.text, fields });
   const counts = await ports.withDb((db) =>
     writeStatements(db, { ...write, statements: accepted.statements }),
   );
@@ -1578,7 +1604,8 @@ async function askLlm(
   return {
     outcome: 'ran',
     detail: `ran: kept ${accepted.statements.length}, dropped ${dropped}`,
-    usage: answer.usage,
+    usage,
+    ...asked,
     counts,
     inputHash,
     note: dropped === 0 ? null : `${item.locator}: dropped ${dropped} of the LLM’s values`,
