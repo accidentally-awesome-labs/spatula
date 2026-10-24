@@ -980,6 +980,12 @@ describe('a question that isn’t answered in the run that raised it', { timeout
         outputTokens: 20,
       });
       expect(await decisionsAbout(datasetId), datasetId).toHaveLength(1);
+      expect(summary.spend?.match?.['test-model'], datasetId).toMatchObject({
+        calls: 1,
+        failed: 0,
+        inputTokens: 500,
+        outputTokens: 20,
+      });
     }
   });
 

@@ -6,6 +6,7 @@ import {
   gather,
   modelIssues,
   noneAsked,
+  savedCalls,
   tryStep,
   workerModels,
   type ModelSetup,
@@ -222,5 +223,19 @@ describe('modelIssues', () => {
     ).toEqual([
       'models.match[0].backup: cerebras/fast: no key: set CEREBRAS_API_KEY, or name cerebras in LLM_GATEWAY_KEYS.',
     ]);
+  });
+});
+
+describe('savedCalls', () => {
+  it('charges a model’s decision to the model that answered', () => {
+    expect(savedCalls({ adapter: 'llm:a/x', inputTokens: 500, outputTokens: 20 })).toEqual([
+      { model: 'a/x', inputTokens: 500, outputTokens: 20, failed: false },
+    ]);
+  });
+
+  it('reports nothing for a rule, a person, or a decision without tokens', () => {
+    expect(savedCalls({ adapter: null, inputTokens: 500, outputTokens: 20 })).toEqual([]);
+    expect(savedCalls({ adapter: 'person', inputTokens: 5, outputTokens: 2 })).toEqual([]);
+    expect(savedCalls({ adapter: 'llm:a/x', inputTokens: 0, outputTokens: 0 })).toEqual([]);
   });
 });

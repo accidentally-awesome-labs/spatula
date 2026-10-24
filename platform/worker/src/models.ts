@@ -258,6 +258,29 @@ export interface Asked {
   down: DownMarks;
 }
 
+/**
+ * The call a saved decision stands for, for a step that runs again and reports it as it was made.
+ * A decision keeps no usage per step, so its tokens are charged to the model that answered: the
+ * safe direction for a budget. A rule's or a person's decision, and one with no tokens, report none.
+ */
+export function savedCalls(decision: {
+  adapter: string | null;
+  inputTokens: number;
+  outputTokens: number;
+}): ModelCall[] {
+  const prefix = adapterName('');
+  if (decision.adapter === null || !decision.adapter.startsWith(prefix)) return [];
+  if (decision.inputTokens === 0 && decision.outputTokens === 0) return [];
+  return [
+    {
+      model: decision.adapter.slice(prefix.length),
+      inputTokens: decision.inputTokens,
+      outputTokens: decision.outputTokens,
+      failed: false,
+    },
+  ];
+}
+
 export const noneAsked = (): Asked => ({ calls: [], down: {} });
 
 /** Adds what one step asked; the first mark for a provider stands. */

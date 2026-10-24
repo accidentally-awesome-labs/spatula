@@ -778,6 +778,13 @@ describe('the classify step', { timeout: 20_000 }, () => {
       inputTokens: 1000,
       outputTokens: 40,
     });
+    // The replayed steps charge the saved decisions to the model that answered.
+    expect(summary.spend?.classify?.['test-model']).toMatchObject({
+      calls: 2,
+      failed: 0,
+      inputTokens: 1000,
+      outputTokens: 40,
+    });
   });
 
   it('keeps the category statements it wrote when a page is read again, by the page or the LLM', async () => {

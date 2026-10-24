@@ -35,7 +35,7 @@ import {
   type Executor,
 } from '@spatula/store';
 import { likeliest, stands, weighed } from './classify';
-import { cascadeSteps, noneAsked } from './models';
+import { cascadeSteps, noneAsked, savedCalls } from './models';
 import { NO_USAGE, type Context, type LlmState, type RefreshPorts } from './pipeline';
 import { storable } from './text';
 
@@ -137,6 +137,7 @@ export async function matchItem(
       again
         ? {
             usage: { inputTokens: earlier.inputTokens, outputTokens: earlier.outputTokens },
+            calls: savedCalls(earlier),
             ...(ruled && pair !== undefined ? { pair } : {}),
           }
         : {},

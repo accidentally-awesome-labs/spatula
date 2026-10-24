@@ -51,7 +51,7 @@ import {
   type LlmState,
   type RefreshPorts,
 } from './pipeline';
-import { cascadeSteps, noneAsked } from './models';
+import { cascadeSteps, noneAsked, savedCalls } from './models';
 import { storable } from './text';
 
 /*
@@ -329,6 +329,7 @@ async function classifyPage(
       usage: again
         ? { inputTokens: earlier.inputTokens, outputTokens: earlier.outputTokens }
         : NO_USAGE,
+      ...(again ? { calls: savedCalls(earlier) } : {}),
     });
   }
 
