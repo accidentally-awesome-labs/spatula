@@ -115,25 +115,23 @@ describe('the Worker’s ports', () => {
     }
   });
 
-  it('give the decider the LLM they have, and neither where there is no LLM', async () => {
-    // The Workers tests blank the key and the gateway's address, so a deployment's secrets can't
-    // reach them.
-    expect(workerPorts(env)).toMatchObject({ llm: null, decider: null });
+  it('give every port the default model, and none without the gateway', async () => {
+    // The Workers tests blank the keys and the gateway's address.
+    expect(workerPorts(env)).toMatchObject({ llm: null, decider: null, taxonomyDecider: null });
+    expect(workerPorts(env).modelPorts).toBeUndefined();
 
     const ports = workerPorts({
       ...env,
       ANTHROPIC_API_KEY: 'sk-test',
-      AI_GATEWAY_URL: 'https://gateway.example/v1/anthropic',
+      AI_GATEWAY_URL: 'https://gateway.example/v1/acct/spatula-llm/anthropic',
     } as Env);
-    expect(ports.llm?.model).toBe(env.LLM_MODEL);
-    expect(ports.decider?.name).toBe(`llm:${env.LLM_MODEL}`);
-
-    // A key without the gateway's address would call Anthropic directly, unlogged. It gets no LLM,
-    // and so no decider.
-    expect(workerPorts({ ...env, ANTHROPIC_API_KEY: 'sk-test' } as Env)).toMatchObject({
-      llm: null,
-      decider: null,
-    });
+    expect(env.LLM_MODEL).toBe('anthropic/claude-opus-5-5');
+    expect(ports.llm?.model).toBe('anthropic/claude-opus-5-5');
+    expect(ports.decider?.name).toBe('llm:anthropic/claude-opus-5-5');
+    expect(ports.modelPorts?.('anthropic/claude-opus-5-5').decider.name).toBe(
+      'llm:anthropic/claude-opus-5-5',
+    );
+    expect(ports.models.problem('anthropic/claude-opus-5-5')).toBeNull();
   });
 
   it('fail before sending anything where the key won’t import', async () => {

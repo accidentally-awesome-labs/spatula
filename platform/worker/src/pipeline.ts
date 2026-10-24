@@ -12,6 +12,7 @@ import {
   type TaxonomyDecider,
 } from '@spatula/core';
 import type { Executor, StatementCounts } from '@spatula/store';
+import type { ModelPortSet, ModelSetup } from './models';
 
 /*
  * What every step of a refresh shares: the ports the Workflow or the tests pass in, the run's
@@ -68,11 +69,22 @@ export interface RefreshPorts {
   gate: GatePort;
   http: HttpPort;
   blobs: BlobPort;
+  /**
+   * The default model's (LLM_MODEL), or null when the deployment has no LLM: then a person decides,
+   * and nothing is extracted by a model.
+   */
   llm: LlmPort | null;
-  /** The decision cascade's decider, or null when no model is configured: then a person decides. */
+  /** The default model's (LLM_MODEL), or null when the deployment has no LLM: then a person decides, and nothing is extracted by a model. */
   decider: Decider | null;
-  /** The taxonomy's three-part decider (ADR 0007), or null when no model is configured. */
+  /** The default model's (LLM_MODEL), or null when the deployment has no LLM: then a person decides, and nothing is extracted by a model. */
   taxonomyDecider: TaxonomyDecider | null;
+  /** The deployment's models: the default, what keeps a model from being asked, prices (ADR 0010). */
+  models: ModelSetup;
+  /**
+   * A named model's ports (ADR 0010). Absent in the tests: every model answers through the three
+   * ports above, which hold the fakes.
+   */
+  modelPorts?: (model: string) => ModelPortSet;
   packs: PackRegistry;
   now(): Date;
   /** A wait inside a step, never longer than MAX_INLINE_WAIT_MS. */

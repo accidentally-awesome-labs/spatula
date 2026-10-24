@@ -14,7 +14,16 @@
     // Where the user agent sends a site that wants to know who's asking: the Worker's public page.
     // The Signature-Agent names its origin too.
     "PUBLIC_URL": "https://spatula.run",
-    "LLM_MODEL": "claude-opus-5-5",
+    // The model of a job a definition doesn't name (ADR 0010).
+    "LLM_MODEL": "anthropic/claude-opus-5-5",
+    // The providers whose keys the gateway holds, comma-separated; they need AI_GATEWAY_TOKEN.
+    "LLM_GATEWAY_KEYS": "",
+    // Each model's list price, dollars per million tokens in and out, as its provider's pricing
+    // page gave it on the date beside it. A model without one can't be named (ADR 0010).
+    "LLM_PRICES": {
+      "anthropic/claude-opus-5-5": [4, 20], // anthropic.com/pricing, 2026-10-24
+      "anthropic/claude-haiku-5-5": [0.1, 0.5], // anthropic.com/pricing, 2026-10-24
+    },
     // "true" once Cloudflare lists Spatula as a verified bot, which the owner sets (ADR 0006).
     "VERIFIED_BOT": "false",
   },

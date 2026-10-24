@@ -12,6 +12,7 @@ import {
 import { packs } from '@spatula/pack-products';
 import type { Executor } from '@spatula/store';
 import { createGatePort, GateKeeper } from '../../src/gate-port';
+import type { ModelSetup } from '../../src/models';
 import type { HttpPort, RefreshPorts, StepRunner } from '../../src/refresh';
 import { answerFor, decisionFor, taxonomyFor, type Reply, type SlugChances } from '../pages';
 
@@ -181,6 +182,16 @@ export function fakeTaxonomyDecider(answer: (request: TaxonomyRequest) => SlugCh
   return { decider, calls };
 }
 
+/** The tests' models: every model can be asked, at $1 per million tokens each way. */
+export function testModelSetup(overrides: Partial<ModelSetup> = {}): ModelSetup {
+  return {
+    defaultModel: 'test/model',
+    problem: () => null,
+    price: () => ({ input: 1, output: 1 }),
+    ...overrides,
+  };
+}
+
 /** Everything a refresh touches, faked, around a real database. State lasts across runs. */
 export function makeWorld(
   db: Executor,
@@ -213,6 +224,7 @@ export function makeWorld(
     llm: options.llm === false ? null : llm.llm,
     decider: options.decider === false ? null : decider.decider,
     taxonomyDecider: options.taxonomyDecider === false ? null : taxonomyDecider.decider,
+    models: testModelSetup(),
     packs,
     now: clock.now,
     wait: async (ms) => clock.advance(ms),

@@ -2,8 +2,9 @@ import { userAgent } from './http';
 
 /*
  * Secrets are set with `wrangler secret put`, or in .dev.vars locally, and every one is optional:
- * without OWNER_TOKEN_HASH the API answers 503, and runs skip the LLM unless both
- * ANTHROPIC_API_KEY and AI_GATEWAY_URL are set (AI_GATEWAY_TOKEN is optional).
+ * without OWNER_TOKEN_HASH the API answers 503, and runs skip the LLM unless AI_GATEWAY_URL is set;
+ * each provider's key is ANTHROPIC_API_KEY, OPENAI_API_KEY, OPENROUTER_API_KEY, CEREBRAS_API_KEY,
+ * or GROQ_API_KEY, or the gateway holds it (LLM_GATEWAY_KEYS, which needs AI_GATEWAY_TOKEN). ADR 0010.
  * WEB_BOT_AUTH_KEY, an Ed25519 private key as a JWK, makes the Worker sign its requests and serve
  * its key directory. ACCESS_TEAM_DOMAIN, ACCESS_AUD, and OWNER_EMAIL open the console's API,
  * behind Cloudflare Access (ADR 0009). Each consumer has up to three more, named after it (see
@@ -14,6 +15,10 @@ import { userAgent } from './http';
 export type SecretName =
   | 'OWNER_TOKEN_HASH'
   | 'ANTHROPIC_API_KEY'
+  | 'OPENAI_API_KEY'
+  | 'OPENROUTER_API_KEY'
+  | 'CEREBRAS_API_KEY'
+  | 'GROQ_API_KEY'
   | 'AI_GATEWAY_URL'
   | 'AI_GATEWAY_TOKEN'
   | 'WEB_BOT_AUTH_KEY'
