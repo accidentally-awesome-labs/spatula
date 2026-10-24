@@ -74,7 +74,7 @@ import {
 } from './classify';
 import { discoverSource } from './discovery';
 import { matchItem } from './match';
-import { portsFor, tryStep } from './models';
+import { portsFor, runModelIssues, tryStep } from './models';
 import {
   countCalls,
   decisionsOf,
@@ -332,6 +332,11 @@ export async function runRefresh(
         summary,
         `${datasetId} has no taxonomy yet, so its pages wait to be placed: seed one with pnpm spatula taxonomy seed`,
       );
+    }
+    // The models the run would ask that the deployment can't, as it is now (ADR 0010): a key may
+    // have gone since the definition was applied. The run goes on, and their calls fail.
+    for (const issue of runModelIssues(context.definition, ports.models)) {
+      note(summary, `${issue} Its calls count as failed until that’s fixed.`);
     }
 
     // What each source's answers said of its site, and what each refused source's probe met (ADR

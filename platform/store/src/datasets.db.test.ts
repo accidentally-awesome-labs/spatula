@@ -1088,6 +1088,67 @@ describe('a definition’s scope', () => {
     }));
 });
 
+describe('a definition’s models', () => {
+  const CHANGE = [
+    {
+      job: 'classify',
+      before: 'the default',
+      after: 'cerebras/cheap, then anthropic/claude-opus-5-5',
+    },
+  ];
+
+  it('says which jobs’ models change, on a dry run too, and nothing when only a source does', () =>
+    withRollback(async (db) => {
+      const definition = testDefinition('modelled');
+      // A new dataset has nothing to compare with.
+      expect(await applyDefinition(db, definition)).not.toHaveProperty('models');
+      const stepped: Definition = {
+        ...definition,
+        models: { classify: ['cerebras/cheap', 'anthropic/claude-opus-5-5'] },
+      };
+      expect((await applyDefinition(db, stepped, { dryRun: true })).models).toEqual(CHANGE);
+      expect(await getDataset(db, 'modelled')).toMatchObject({ revision: 1 });
+      expect(await applyDefinition(db, stepped)).toMatchObject({ revision: 2, models: CHANGE });
+      // The same definition again changes nothing.
+      expect(await applyDefinition(db, stepped)).not.toHaveProperty('models');
+
+      const [makerA, makerB] = stepped.sources as [PagesSource, PagesSource];
+      const fewer = {
+        ...stepped,
+        sources: [{ ...makerA, pages: makerA.pages.slice(0, 1) }, makerB],
+      };
+      const sourceOnly = await applyDefinition(db, fewer);
+      expect(sourceOnly).toMatchObject({ revision: 3, sources: { changed: ['maker-a'] } });
+      expect(sourceOnly).not.toHaveProperty('models');
+    }));
+
+  it('reads a stored definition that no longer passes the checks as naming no models', () =>
+    withRollback(async (db) => {
+      // What a dataset applied before ADR 0010 holds: a token budget, which no longer parses.
+      await db.insert(datasets).values({
+        id: 'stored-tokens',
+        revision: 1,
+        definition: {
+          ...testDefinition('stored-tokens'),
+          budget: { itemsPerRun: 1000, llmTokensPerRun: 5_000_000 },
+        } as unknown as Definition,
+        definitionHash: 'tokens',
+      });
+      await expect(getDataset(db, 'stored-tokens')).rejects.toBeInstanceOf(StaleDefinitionError);
+
+      const stepped: Definition = {
+        ...testDefinition('stored-tokens'),
+        models: { classify: ['cerebras/cheap', 'anthropic/claude-opus-5-5'] },
+      };
+      expect(await applyDefinition(db, stepped, { dryRun: true })).toMatchObject({
+        revision: 2,
+        models: CHANGE,
+      });
+      expect(await applyDefinition(db, stepped)).toMatchObject({ revision: 2, models: CHANGE });
+      expect((await getDataset(db, 'stored-tokens'))?.definition.models).toEqual(stepped.models);
+    }));
+});
+
 describe('listDatasets', () => {
   it('lists every dataset by ID, with its revision and the generation at its head', () =>
     withRollback(async (db) => {

@@ -3,6 +3,7 @@ import {
   createLlmDecider,
   createTaxonomyDecider,
   downReason,
+  JOBS,
   jobSteps,
   MODEL_NAME,
   namedModels,
@@ -337,4 +338,18 @@ export function modelIssues(definition: Definition, setup: ModelSetup): string[]
     const problem = setup.problem(model);
     return problem === null ? [] : [`${at}: ${model}: ${problem}.`];
   });
+}
+
+/**
+ * What a run notes at its start, checked against the deployment as it is then: `modelIssues`, and
+ * the default model's problem when a job the definition leaves out falls back to it. A key removed
+ * since `apply` would otherwise go unnoticed.
+ */
+export function runModelIssues(definition: Definition, setup: ModelSetup): string[] {
+  const issues = modelIssues(definition, setup);
+  const fallsBack = JOBS.some((job) => definition.models?.[job] === undefined);
+  const problem = fallsBack ? setup.problem(setup.defaultModel) : null;
+  if (problem === null) return issues;
+  const named = setup.defaultModel === '' ? '' : `: ${setup.defaultModel}`;
+  return [...issues, `LLM_MODEL${named}: ${problem}.`];
 }

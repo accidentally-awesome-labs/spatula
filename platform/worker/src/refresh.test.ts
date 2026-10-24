@@ -19,7 +19,14 @@ import { testDefinition } from '@spatula/store/fixtures';
 import { and, eq, isNull } from 'drizzle-orm';
 import { describe, expect, it } from 'vitest';
 import { db } from '../test/node/db';
-import { fakeLlm, fakeStep, makeWorld, type StepCache, type World } from '../test/node/fakes';
+import {
+  fakeLlm,
+  fakeStep,
+  makeWorld,
+  testModelSetup,
+  type StepCache,
+  type World,
+} from '../test/node/fakes';
 import { entityOf, fetchOf, published, refresh } from '../test/node/runs';
 import {
   A1,
@@ -1652,6 +1659,53 @@ describe('runRefresh', () => {
     expect(next.summary.llm).toMatchObject({ ran: 0, reused: 1, inputTokens: 0 });
     expect(world.llm.calls).toHaveLength(callsBefore);
     expect(await stored()).toBe(hash);
+  });
+
+  it('notes a named model the deployment can’t ask, and runs on with its backup', async () => {
+    const definition = testDefinition('refresh-model-problem');
+    await applyDefinition(db, {
+      ...definition,
+      models: { extract: { model: 'gone/x', backup: 'up/y' } },
+    });
+    const world = makeWorld(db, standardRoutes());
+    world.ports.models = testModelSetup({
+      problem: (model) => (model === 'gone/x' ? 'no key: set X' : null),
+    });
+
+    const run = await refresh(world, 'refresh-model-problem');
+    expect(run.summary.notes).toContain(
+      'models.extract.model: gone/x: no key: set X. Its calls count as failed until that’s fixed.',
+    );
+    // The jobs the definition leaves out use the default, which can be asked: nothing says it can't.
+    expect(run.summary.notes.filter((text) => text.startsWith('LLM_MODEL'))).toEqual([]);
+    // The run didn't stop: gone/x was never sent anything, and its backup read every page.
+    expect(run.summary.llm).toMatchObject({ ran: 3, failed: 0 });
+    expect(run.summary.spend?.extract?.['gone/x']).toMatchObject({ calls: 3, failed: 3 });
+    expect((await getRun(db, run.runId))?.status).toBe('complete');
+  });
+
+  it('notes the default model when the deployment can’t ask it and a job falls back to it', async () => {
+    const problem = (model: string) => (model === 'test/model' ? 'no key: set TEST_API_KEY' : null);
+    const NOTE =
+      'LLM_MODEL: test/model: no key: set TEST_API_KEY. Its calls count as failed until that’s fixed.';
+    const { world } = await setUp('refresh-default-problem');
+    world.ports.models = testModelSetup({ problem });
+    const run = await refresh(world, 'refresh-default-problem');
+    expect(run.summary.notes).toContain(NOTE);
+    expect(run.summary.llm).toMatchObject({ ran: 0, failed: 3 });
+    expect((await getRun(db, run.runId))?.status).toBe('complete');
+
+    // A definition that names every job's models never falls back to the default.
+    const definition = testDefinition('refresh-default-unused');
+    await applyDefinition(db, {
+      ...definition,
+      models: { extract: 'up/y', classify: ['up/y'], match: ['up/y'], taxonomyReview: 'up/y' },
+    });
+    const named = makeWorld(db, standardRoutes());
+    named.ports.models = testModelSetup({ problem });
+    const unused = await refresh(named, 'refresh-default-unused');
+    expect(unused.summary.notes).not.toContain(NOTE);
+    expect(unused.summary.llm).toMatchObject({ ran: 3, failed: 0 });
   });
 });
 

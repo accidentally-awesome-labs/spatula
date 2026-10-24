@@ -226,6 +226,41 @@ describe('plan and apply', () => {
     expect(out).toEqual(['cli-products would move to revision 2.', 'Pages: 3 added, 1 removed.']);
   });
 
+  it('says which jobs’ models change, one line each, in a plan and in an apply', async () => {
+    const summary: ApplySummary = {
+      dataset: 'cli-products',
+      revision: 4,
+      created: false,
+      changed: true,
+      sources: { added: [], removed: [], changed: [] },
+      pages: { added: 0, removed: 0, moved: 0 },
+      moves: [],
+      unmoved: { uncovered: 0, ambiguous: 0, taken: 0 },
+      models: [
+        {
+          job: 'classify',
+          before: 'the default',
+          after: 'cerebras/cheap, then anthropic/claude-opus-5-5',
+        },
+        { job: 'extract', before: 'anthropic/claude-opus-5-5', after: 'the default' },
+      ],
+    };
+    const { fetch } = stubApi(() => Response.json(summary));
+    const { io, out } = memoryIo(FILES);
+    expect(await main(['plan', 'cli-products.yaml'], { io, env: ENV, fetch })).toBe(0);
+    expect(await main(['apply', 'cli-products.yaml'], { io, env: ENV, fetch })).toBe(0);
+    const lines = [
+      'Models, classify: the default → cerebras/cheap, then anthropic/claude-opus-5-5.',
+      'Models, extract: anthropic/claude-opus-5-5 → the default.',
+    ];
+    expect(out).toEqual([
+      'cli-products would move to revision 4.',
+      ...lines,
+      'cli-products moved to revision 4.',
+      ...lines,
+    ]);
+  });
+
   it('says nothing of pages an earlier apply left excluded, when this one moves none', async () => {
     // What a Worker answers on the second apply of a definition that left pages excluded.
     const summary: ApplySummary = {
@@ -866,6 +901,134 @@ describe('run', () => {
     );
     expect(out).toContain('Not the dataset’s: 1 page, out until revived.');
     expect(out.some((line) => line.startsWith('Matched:'))).toBe(false);
+  });
+
+  /** A finished run that read 12 pages and classified them, with these fields added. */
+  const decided = (more: Partial<RunSummary>): RunView => ({
+    ...RUNNING,
+    status: 'complete',
+    finishedAt: '2026-10-10T00:01:00.000Z',
+    summary: {
+      items: 12,
+      fetches: { changed: 12, unchanged: 0, gone: 0, failed: 0, blocked: 0 },
+      statements: { added: 60, reseen: 0, withdrawn: 0 },
+      llm: { ran: 12, reused: 0, skipped: 0, failed: 0, inputTokens: 12000, outputTokens: 600 },
+      classify: {
+        rule: 0,
+        accepted: 10,
+        escalated: 2,
+        reused: 0,
+        skipped: 0,
+        failed: 0,
+        inputTokens: 5000,
+        outputTokens: 200,
+      },
+      irrelevant: 1,
+      entities: { created: 9, linked: 0, conflicts: 0, unresolved: 0 },
+      snapshot: { published: true, generation: 3, snapshotId: 'sn_x', records: 9, excluded: [] },
+      notes: [],
+      ...more,
+    },
+  });
+
+  /** What `spatula run --wait` prints for a run that finishes as given. */
+  const printed = async (complete: RunView): Promise<string[]> => {
+    const { fetch } = stubApi(({ method }) =>
+      method === 'POST'
+        ? Response.json({ runId: RUN_ID }, { status: 202 })
+        : Response.json(complete),
+    );
+    const { io, out } = memoryIo();
+    expect(await main(['run', 'cli-products', '--wait'], { io, env: ENV, fetch })).toBe(0);
+    return out;
+  };
+
+  const CLASSIFIED =
+    'Classified: 0 by rule, 10 by the decider, 2 for review, 0 as before, 0 for the next run, 0 failed; 5000 tokens in, 200 out.';
+
+  it('says what each job’s models cost, most first, after the decisions, and the run’s total', async () => {
+    const spend = (calls: number, failed: number, usd: number) => ({
+      calls,
+      failed,
+      inputTokens: calls * 1000,
+      outputTokens: calls * 50,
+      usd,
+    });
+    const out = await printed(
+      decided({
+        // In no order: the lines follow the jobs', and each job's models go by what they cost.
+        spend: {
+          taxonomyReview: { 'anthropic/claude-haiku-5-5': spend(1, 0, 0.004) },
+          classify: {
+            'cerebras/cheap': spend(181, 0, 0.20999999999999996),
+            'anthropic/claude-opus-5-5': spend(22, 1, 10.500000000000002),
+          },
+          match: { 'anthropic/claude-opus-5-5': spend(2, 2, 0) },
+          extract: { 'anthropic/claude-haiku-5-5': spend(369, 0, 0.48) },
+        },
+      }),
+    );
+    const after = out.indexOf(CLASSIFIED) + 1;
+    expect(out.slice(after, after + 6)).toEqual([
+      'Spend, extract: $0.48. anthropic/claude-haiku-5-5 $0.48 (369 calls).',
+      'Spend, classify: $10.71. anthropic/claude-opus-5-5 $10.50 (22 calls, 1 failed), cerebras/cheap $0.21 (181 calls).',
+      'Spend, match: $0.00. anthropic/claude-opus-5-5 $0.00 (2 calls, 2 failed).',
+      'Spend, taxonomyReview: <$0.01. anthropic/claude-haiku-5-5 <$0.01 (1 call).',
+      'Spend in all: $11.19.',
+      'Not the dataset’s: 1 page, out until revived.',
+    ]);
+  });
+
+  it('says which providers were down, since when and why, after what the run spent', async () => {
+    const out = await printed(
+      decided({
+        llm: {
+          ran: 12,
+          reused: 0,
+          skipped: 0,
+          failed: 0,
+          inputTokens: 12000,
+          outputTokens: 600,
+          down: {
+            anthropic: { at: '2026-10-24T12:31:07.512Z', reason: 'usage limit' },
+            openai: { at: '2026-10-24T12:40:00.000Z', reason: 'the key was refused' },
+          },
+        },
+        spend: {
+          classify: {
+            'anthropic/claude-opus-5-5': {
+              calls: 12,
+              failed: 3,
+              inputTokens: 9000,
+              outputTokens: 300,
+              usd: 0.042,
+            },
+          },
+        },
+      }),
+    );
+    const after = out.indexOf(CLASSIFIED) + 1;
+    expect(out.slice(after, after + 4)).toEqual([
+      'Spend, classify: $0.04. anthropic/claude-opus-5-5 $0.04 (12 calls, 3 failed).',
+      'Spend in all: $0.04.',
+      'Down: anthropic since 2026-10-24 12:31 UTC: usage limit. Its later calls went to their backups.',
+      'Down: openai since 2026-10-24 12:40 UTC: the key was refused. Its later calls went to their backups.',
+    ]);
+  });
+
+  it('prints a run without spend or providers down as before ADR 0010', async () => {
+    const out = await printed(decided({}));
+    expect(out).toEqual([
+      `Started ${RUN_ID}.`,
+      `Run ${RUN_ID}: complete.`,
+      'Pages: 12. Changed 12, unchanged 0, gone 0, failed 0, blocked 0.',
+      'Statements: 60 added, 0 seen again, 0 withdrawn.',
+      'LLM: ran 12, reused 0, skipped 0, failed 0; 12000 tokens in, 600 out.',
+      CLASSIFIED,
+      'Not the dataset’s: 1 page, out until revived.',
+      'Entities: 9 new, 0 linked, 0 conflicts, 0 without an identity yet.',
+      'Snapshot: generation 3, 9 records.',
+    ]);
   });
 
   it('says what the taxonomy review proposed, and what it applied on its own', async () => {
@@ -1749,6 +1912,26 @@ describe('status', () => {
     expect(out.slice(5)).toEqual([
       'moondrop: blocked, 2 of 3 runs in a row.',
       'Cloudflare lists Spatula as a verified bot.',
+    ]);
+  });
+
+  it('says which providers the latest run found down, last', async () => {
+    const { fetch } = stubApi(() =>
+      Response.json({
+        ...STATUS,
+        verified: false,
+        llm: {
+          runId: 'cli-products-202610241200',
+          down: { anthropic: { at: '2026-10-24T12:31:07.512Z', reason: 'usage limit' } },
+        },
+      } satisfies DatasetStatus),
+    );
+    const { io, out } = memoryIo();
+    expect(await main(['status', 'cli-products'], { io, env: ENV, fetch })).toBe(0);
+    // STATUS's own five lines come first.
+    expect(out.slice(5)).toEqual([
+      'Cloudflare doesn’t list Spatula as a verified bot yet.',
+      'In the latest run (cli-products-202610241200), Down: anthropic since 2026-10-24 12:31 UTC: usage limit. Its later calls went to their backups.',
     ]);
   });
 

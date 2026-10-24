@@ -1,6 +1,7 @@
 import {
   EVAL_TARGETS,
   findItem,
+  JOBS,
   NONE_OF_THESE,
   NONE_SHELF,
   REFUSE_AFTER_RUNS,
@@ -8,11 +9,13 @@ import {
   shelfPath,
   type ApplySummary,
   type DatasetStatus,
+  type DownMarks,
   type EvalScores,
   type EvalView,
   type Feature,
   type GoldenSet,
   type ReviewView,
+  type RunSummary,
   type RunView,
   type Tally,
   type Taxonomy,
@@ -54,6 +57,10 @@ export function formatApplySummary(summary: ApplySummary, dryRun: boolean): stri
       unmoved.taken > 0 ? `${unmoved.taken} that their new source already has` : null,
     ].filter((part) => part !== null);
     if (why.length > 0) lines.push(`Pages left excluded: ${why.join(', ')}.`);
+  }
+  // A Worker before ADR 0010 sends none.
+  for (const change of summary.models ?? []) {
+    lines.push(`Models, ${change.job}: ${change.before} → ${change.after}.`);
   }
   // A Worker before the taxonomy sends none (ADR 0007).
   if (summary.taxonomyVersion !== undefined) {
@@ -164,6 +171,8 @@ export function formatRun(run: RunView): string[] {
       );
     }
   }
+  // What the models cost, and the providers found down (ADR 0010). Runs before it say nothing.
+  lines.push(...spendLines(summary.spend), ...downLines(llm.down));
   const irrelevant = summary.irrelevant ?? 0;
   if (irrelevant > 0) {
     lines.push(
@@ -209,6 +218,46 @@ export function formatRun(run: RunView): string[] {
   }
   if (summary.notes.length > 0) lines.push('Notes:', ...summary.notes.map((note) => `  ${note}`));
   return lines;
+}
+
+/** Dollars to the cent. Spend under a cent isn't nothing, so it doesn't read as $0.00. */
+const dollars = (usd: number) => (usd > 0 && usd < 0.01 ? '<$0.01' : `$${usd.toFixed(2)}`);
+
+/** An ISO time to the minute, in UTC, as 2026-10-24 12:31 UTC. */
+const minute = (iso: string) => `${iso.slice(0, 10)} ${iso.slice(11, 16)} UTC`;
+
+/**
+ * What each job's models cost a run, a line for each job with its models by what they cost, most
+ * first, then the run's total. Each sum is of the unrounded figures, so the total isn't off by the
+ * rounding of its parts.
+ */
+function spendLines(spend: RunSummary['spend']): string[] {
+  if (spend === undefined) return [];
+  const lines: string[] = [];
+  let total = 0;
+  for (const job of JOBS) {
+    const models = Object.entries(spend[job] ?? {});
+    if (models.length === 0) continue;
+    const sum = models.reduce((usd, [, model]) => usd + model.usd, 0);
+    total += sum;
+    const each = models
+      .sort(([a, x], [b, y]) => y.usd - x.usd || a.localeCompare(b))
+      .map(
+        ([model, { usd, calls, failed }]) =>
+          `${model} ${dollars(usd)} (${calls} ${calls === 1 ? 'call' : 'calls'}${failed > 0 ? `, ${failed} failed` : ''})`,
+      );
+    lines.push(`Spend, ${job}: ${dollars(sum)}. ${each.join(', ')}.`);
+  }
+  if (lines.length > 0) lines.push(`Spend in all: ${dollars(total)}.`);
+  return lines;
+}
+
+/** Each provider a run found down, since when and why. */
+function downLines(down: DownMarks | undefined): string[] {
+  return Object.entries(down ?? {}).map(
+    ([provider, { at, reason }]) =>
+      `Down: ${provider} since ${minute(at)}: ${reason}. Its later calls went to their backups.`,
+  );
 }
 
 /**
@@ -475,6 +524,11 @@ export function formatStatus(status: DatasetStatus): string[] {
         ? 'Cloudflare lists Spatula as a verified bot.'
         : 'Cloudflare doesn’t list Spatula as a verified bot yet.',
     );
+  }
+  // Only when the latest run found a provider down, and never from a Worker before ADR 0010.
+  if (status.llm !== undefined) {
+    const { runId, down } = status.llm;
+    for (const line of downLines(down)) lines.push(`In the latest run (${runId}), ${line}`);
   }
   return lines;
 }

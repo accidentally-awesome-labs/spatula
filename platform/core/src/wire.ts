@@ -34,6 +34,11 @@ export interface ApplySummary {
    * Absent when the scope didn't change it, and from a Worker before the taxonomy.
    */
   taxonomyVersion?: number;
+  /**
+   * The jobs whose models the definition changes, each before and after in words (ADR 0010).
+   * Absent when none change, for a new dataset, and from a Worker before ADR 0010.
+   */
+  models?: { job: Job; before: string; after: string }[];
 }
 
 /** What a run's snapshot step did. */
@@ -304,6 +309,11 @@ export interface DatasetStatus {
   }[];
   /** Whether Cloudflare lists Spatula as a verified bot (ADR 0006). Absent before phase 1. */
   verified?: boolean;
+  /**
+   * The providers the latest finished run found down, and that run (ADR 0010). Absent when it found
+   * none, before any run has finished, and from a Worker before ADR 0010.
+   */
+  llm?: { runId: string; down: DownMarks };
 }
 
 /** A saved score, as the API lists it. */

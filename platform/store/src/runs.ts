@@ -1,5 +1,5 @@
 import type { RunSummary, RunView } from '@spatula/core';
-import { and, desc, eq, ne } from 'drizzle-orm';
+import { and, desc, eq, isNotNull, ne } from 'drizzle-orm';
 import type { Executor } from './client';
 import { runs } from './schema';
 import { lockDataset } from './snapshots';
@@ -81,6 +81,23 @@ export async function finishRun(
         : { status: 'failed', error: result.error.slice(0, 2000), finishedAt },
     )
     .where(and(eq(runs.id, id), ne(runs.status, 'complete')));
+}
+
+/**
+ * The dataset's latest run with a summary, by when it finished, or null. Only a complete run has
+ * one: a failed run's row keeps its error instead.
+ */
+export async function latestRunSummary(
+  db: Executor,
+  datasetId: string,
+): Promise<{ id: string; summary: RunSummary } | null> {
+  const [row] = await db
+    .select({ id: runs.id, summary: runs.summary })
+    .from(runs)
+    .where(and(eq(runs.datasetId, datasetId), isNotNull(runs.summary), isNotNull(runs.finishedAt)))
+    .orderBy(desc(runs.finishedAt))
+    .limit(1);
+  return row === undefined || row.summary === null ? null : { id: row.id, summary: row.summary };
 }
 
 export async function getRun(db: Executor, id: string): Promise<RunView | null> {
