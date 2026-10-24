@@ -16,6 +16,7 @@ export * from './pack';
 export * from './candidates';
 export * from './llm';
 export * from './models';
+export * from './compare';
 export * from './identity';
 export * from './survivorship';
 export * from './editions';
