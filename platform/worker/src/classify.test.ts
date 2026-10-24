@@ -474,7 +474,11 @@ describe('a page is current only once it is classified', { timeout: 20_000 }, ()
     const first = await refresh(world, 'classify-decider-fails', {});
     expect(first.summary.classify).toMatchObject({ failed: 2, accepted: 0 });
     // Workflows keep what a step returns, so the note is clean and short where it is made.
-    const note = `${URLS.a1}: the decider failed: overloaded  ${'x'.repeat(600)}`.slice(0, 500);
+    const note =
+      `${URLS.a1}: the decider failed: ${answers.decider.name}: overloaded  ${'x'.repeat(600)}`.slice(
+        0,
+        500,
+      );
     expect(first.summary.notes).toContain(note);
     expect(first.results.get(`classify:${a1!.id}`)).toMatchObject({ note });
     expect(await decisionsAbout('classify-decider-fails', a1!.id)).toEqual([]);

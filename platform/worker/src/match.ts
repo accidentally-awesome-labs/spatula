@@ -145,8 +145,7 @@ export async function matchItem(
         }),
       },
       rule,
-      deciders: decider === null ? [] : [decider],
-      accept,
+      steps: decider === null ? [] : [{ decider, accept }],
     });
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);

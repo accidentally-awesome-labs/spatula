@@ -325,8 +325,7 @@ async function classifyPage(
         evidence: stateEvidence(state),
       },
       rule,
-      deciders: decider === null ? [] : [decider],
-      accept,
+      steps: decider === null ? [] : [{ decider, accept }],
     });
   } catch (error) {
     await readAgain();
