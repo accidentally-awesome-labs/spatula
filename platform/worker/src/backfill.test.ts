@@ -4,6 +4,7 @@ import {
   newId,
   NONE_OF_THESE,
   NONE_SHELF,
+  parseDefinition,
   runIdFor,
   type Taxonomy,
   type TaxonomyChange,
@@ -30,7 +31,7 @@ import { testTaxonomy, testTaxonomyDefinition } from '@spatula/store/fixtures';
 import { and, eq, isNull } from 'drizzle-orm';
 import { describe, expect, it } from 'vitest';
 import { db } from '../test/node/db';
-import { fakeTaxonomyDecider, type World } from '../test/node/fakes';
+import { fakeTaxonomyDecider, modelPortsOf, type World } from '../test/node/fakes';
 import {
   decidedDefinition,
   fetchOf,
@@ -40,6 +41,7 @@ import {
   worldFor,
 } from '../test/node/runs';
 import { standardRoutes, taxonomyFor, URLS } from '../test/pages';
+import { LlmHttpError } from './llm-openai';
 import { keyHash } from './taxonomy';
 
 const T = testTaxonomy();
@@ -195,6 +197,43 @@ describe('backfilling from the archive', { timeout: 20_000 }, () => {
       read.startedAt.getTime(),
       read.startedAt.getTime(),
     ]);
+  });
+
+  it('counts a backfilled page’s calls in the run’s spend, and the providers it found down', async () => {
+    const parsed = parseDefinition({
+      ...testTaxonomyDefinition('backfill-spend'),
+      models: { classify: [{ model: 'down/x', backup: 'up/y' }] },
+    });
+    if (!parsed.ok) throw new Error(parsed.issues.join('\n'));
+    const {
+      world,
+      pages: [, , b1],
+    } = await taxonomyWorld(parsed.definition);
+    await refresh(world, 'backfill-spend');
+    await commitChange(world, 'backfill-spend', [PHONO_STAGES]);
+    // The step's model now refuses its key, and its backup answers.
+    const up = fakeTaxonomyDecider(taxonomyFor);
+    world.ports.modelPorts = modelPortsOf(world, {
+      taxonomyDecider: {
+        'down/x': {
+          name: 'llm:down/x',
+          async decide() {
+            throw new LlmHttpError(401, '401 invalid x-api-key');
+          },
+        },
+        'up/y': { ...up.decider, name: 'llm:up/y' },
+      },
+    });
+
+    const second = await refresh(world, 'backfill-spend', {});
+    expect(second.names).toContain(`backfill:${b1!.id}`);
+    expect(second.summary.backfill).toEqual({ due: 1, decided: 1, fetch: 0, waiting: 0 });
+    expect(up.calls).toHaveLength(1);
+    expect(second.summary.spend?.classify).toEqual({
+      'down/x': { calls: 1, failed: 1, inputTokens: 0, outputTokens: 0, usd: 0 },
+      'up/y': { calls: 1, failed: 0, inputTokens: 600, outputTokens: 40, usd: 0.00064 },
+    });
+    expect(second.summary.llm.down?.down?.reason).toBe('the key was refused');
   });
 
   it('marks a page with no capture to be fetched, and the next run fetches and decides it', async () => {
