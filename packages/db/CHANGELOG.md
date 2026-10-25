@@ -1,5 +1,20 @@
 # Changelog
 
+## [0.1.2](https://github.com/accidentally-awesome-labs/spatula/compare/db-v0.1.1...db-v0.1.2) (2026-10-25)
+
+
+### Miscellaneous Chores
+
+* **db:** Synchronize platform-public versions
+
+
+### Dependencies
+
+* The following workspace dependencies were updated
+  * dependencies
+    * @accidentally-awesome-labs/spatula-core bumped to 0.1.2
+    * @accidentally-awesome-labs/spatula-shared bumped to 0.1.2
+
 ## [0.1.1](https://github.com/accidentally-awesome-labs/spatula/compare/db-v0.1.0...db-v0.1.1) (2026-07-15)
 
 
