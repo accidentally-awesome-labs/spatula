@@ -17,6 +17,7 @@ import { ApiError, type BulkAnswer, type Client, type ReviewFilters } from './cl
 import {
   describeError,
   formatApplySummary,
+  formatComparison,
   formatEvals,
   formatReviews,
   formatRun,
@@ -140,6 +141,72 @@ export async function run(
     }
     io.err(`Stopped waiting after ${WAIT_LIMIT_MS / 60_000} minutes; ${runId} is still running.`);
     return 1;
+  });
+}
+
+/**
+ * Starts a model comparison (ADR 0010), which asks a dataset's answered questions again of a model
+ * and spends up to `maxUsd`, and with `wait` prints its report. A comparison that failed exits 1.
+ */
+export async function compareModels(
+  io: Io,
+  client: Client,
+  datasetId: string,
+  options: {
+    job: string;
+    model: string;
+    backup?: string;
+    accept?: number;
+    limit?: number;
+    maxUsd: number;
+    wait: boolean;
+  },
+): Promise<number> {
+  return withApi(io, async () => {
+    const { wait, ...body } = options;
+    const { comparisonId } = await client.startComparison(datasetId, body);
+    io.out(`Started ${comparisonId}.`);
+    if (!wait) {
+      io.out(`Read its report with: spatula models comparison ${comparisonId}`);
+      return 0;
+    }
+    for (let polls = 0; polls < WAIT_LIMIT_MS / POLL_MS; polls += 1) {
+      const view = await client.getComparison(comparisonId);
+      if (view.status === 'complete') {
+        for (const line of formatComparison(view.report)) io.out(line);
+        return 0;
+      }
+      if (view.status === 'failed') {
+        io.err(view.error);
+        return 1;
+      }
+      await io.sleep(POLL_MS);
+    }
+    io.err(
+      `Stopped waiting after ${WAIT_LIMIT_MS / 60_000} minutes; ${comparisonId} is still running.`,
+    );
+    return 1;
+  });
+}
+
+/** A comparison's report, or that it is still going. */
+export async function showComparison(
+  io: Io,
+  client: Client,
+  comparisonId: string,
+): Promise<number> {
+  return withApi(io, async () => {
+    const view = await client.getComparison(comparisonId);
+    if (view.status === 'running') {
+      io.out(`Comparison ${comparisonId} is still running.`);
+      return 0;
+    }
+    if (view.status === 'failed') {
+      io.err(view.error);
+      return 1;
+    }
+    for (const line of formatComparison(view.report)) io.out(line);
+    return 0;
   });
 }
 

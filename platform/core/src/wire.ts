@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import type { ComparisonReport } from './compare';
 import type { Question } from './decisions';
 import type { GivenParts } from './taxonomy-decision';
 import type { Outcome } from './gate';
@@ -200,6 +201,12 @@ export interface RunView {
   summary: RunSummary | null;
   error: string | null;
 }
+
+/** What `GET /comparisons/:id` answers (ADR 0010): the report once there is one. */
+export type ComparisonStatusView =
+  | { status: 'running' }
+  | { status: 'complete'; report: ComparisonReport }
+  | { status: 'failed'; error: string };
 
 export const ACTOR_ROLES = ['owner', 'reviewer', 'decider'] as const;
 export const ACTOR_CLIENTS = ['cli', 'console', 'consumer', 'run'] as const;

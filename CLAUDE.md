@@ -23,7 +23,9 @@ Run from the repository root, with pnpm 11 and Node 22 or later.
 - `pnpm --filter @spatula/worker dev`: the Worker on port 8787. Copy `platform/worker/.dev.vars.example`
   to `.dev.vars` first.
 - `pnpm spatula <command>`: the CLI: `check`, `plan`, `apply`, `run`, `snapshot pull`, `review`,
-  `revive` (pages, `--irrelevant` pages, or sources with `--source`), `purge` (a source's page
+  `revive` (pages, `--irrelevant` pages, or sources with `--source`), `models compare` (asks a
+  dataset's answered questions again of a model, spending up to `--max-usd`, and scores it) and
+  `models comparison` (shows a report), `purge` (a source's page
   captures, with `--source`), `taxonomy` (`seed` and `export`), `status`, `eval`, and `evals`.
   `review` answers a question part by part, or many from a file, and takes the owner's
   suggestions from a file; `run --backfill` only backfills. `SPATULA_URL` and

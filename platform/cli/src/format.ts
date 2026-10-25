@@ -8,6 +8,8 @@ import {
   reviewAnswers,
   shelfPath,
   type ApplySummary,
+  type ComparisonColumn,
+  type ComparisonReport,
   type DatasetStatus,
   type DownMarks,
   type EvalScores,
@@ -677,4 +679,83 @@ function causeMessage(cause: unknown): string {
     inner instanceof Error ? inner.message : '',
   );
   return [...new Set(messages.filter((message) => message !== ''))].join('; ');
+}
+
+/**
+ * A model comparison's report (ADR 0010, spec §10): two columns, the questions a person answered
+ * and the current model's sure ones. The model column has no person's answer to be wrong against,
+ * so it shows a dash for "accepted wrongly" and "would go to you". "All parts right" appears only
+ * for shelf placements, which carry it.
+ */
+export function formatComparison(report: ComparisonReport): string[] {
+  const { person, model } = report.columns;
+  const percent = (column: ComparisonColumn, count: number) => {
+    const asked = column.questions - column.failed;
+    return asked > 0 ? `${Math.round((count / asked) * 100)}%` : '—';
+  };
+  const seconds = (ms: number | null) => (ms === null ? '—' : `${(ms / 1000).toFixed(1)} s`);
+  const rows: [string, string, string][] = [
+    ['questions', String(person.questions), String(model.questions)],
+    ['right / agrees', percent(person, person.right), percent(model, model.right)],
+  ];
+  if (person.allRight !== undefined || model.allRight !== undefined) {
+    rows.push([
+      'all parts right',
+      percent(person, person.allRight ?? 0),
+      percent(model, model.allRight ?? 0),
+    ]);
+  }
+  rows.push(
+    ['accepted wrongly', String(person.acceptedWrongly), '—'],
+    ['would go to you', String(person.toPerson), '—'],
+  );
+  if (person.failed > 0 || model.failed > 0) {
+    rows.push(['failed calls', String(person.failed), String(model.failed)]);
+  }
+  rows.push(['median time', seconds(person.medianMs), seconds(model.medianMs)]);
+  const labelWidth = Math.max(...rows.map(([label]) => label.length));
+  const head = ['your answers', 'current model’s sure ones'];
+  const widths = [
+    Math.max(head[0]!.length, ...rows.map((row) => row[1].length)),
+    Math.max(head[1]!.length, ...rows.map((row) => row[2].length)),
+  ];
+  const table = (label: string, one: string, two: string) =>
+    `  ${label.padEnd(labelWidth)}  ${one.padStart(widths[0]!)}  ${two.padStart(widths[1]!)}`;
+  const usd = person.usd + model.usd;
+  const asked = person.questions + model.questions;
+  const currents = [person.currentUsd, model.currentUsd].filter((one) => one !== null);
+  const current =
+    currents.length === 0 ? '' : `; current ${dollars(currents.reduce((a, b) => a + b, 0))}`;
+  const per100 = asked > 0 ? `${dollars((usd / asked) * 100)} per 100` : '';
+  const cost = `${dollars(usd)} (${per100}${current})`;
+  const lines = [
+    `Comparison ${report.id}: ${report.model}${report.backup === null ? '' : ` (backup ${report.backup})`} on ${report.job}, at ${report.accept}.`,
+    `  ${' '.repeat(labelWidth)}  ${head[0]!.padStart(widths[0]!)}  ${head[1]!.padStart(widths[1]!)}`,
+  ];
+  const at = rows.findIndex(([label]) => label === 'median time');
+  rows.slice(0, at).forEach(([label, one, two]) => lines.push(table(label, one, two)));
+  lines.push(`  ${'cost'.padEnd(labelWidth)}  ${cost}`);
+  rows.slice(at).forEach(([label, one, two]) => lines.push(table(label, one, two)));
+  if (report.stoppedAtBudget) {
+    lines.push(
+      `Stopped at --max-usd before asking every question${report.skipped > 0 ? `: ${report.skipped} skipped` : ''}.`,
+    );
+  } else if (report.skipped > 0) {
+    lines.push(`Skipped ${report.skipped} questions.`);
+  }
+  lines.push(
+    report.suggestedAccept === null
+      ? 'Suggested threshold: none.'
+      : `Suggested threshold: ${report.suggestedAccept.toFixed(2)} (at most 1% of what it accepts disagrees with your answers).`,
+  );
+  if (report.disagreements.length > 0) {
+    lines.push(`Where it disagreed with you (${report.disagreements.length}):`);
+    for (const one of report.disagreements) {
+      lines.push(
+        `  ${one.subject}: it said ${one.answered} (${one.sureness.toFixed(2)}); you said ${one.expected}.`,
+      );
+    }
+  }
+  lines.push(...report.notes);
+  return lines;
 }

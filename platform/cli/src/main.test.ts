@@ -2,6 +2,7 @@ import {
   exportTaxonomy,
   sha256Hex,
   type ApplySummary,
+  type ComparisonReport,
   type DatasetStatus,
   type DiscoverySummary,
   type EvalView,
@@ -4103,5 +4104,247 @@ describe('review in parts and in bulk', () => {
       expect(code, argv.join(' ')).toBe(2);
     }
     expect(sent).toHaveLength(0);
+  });
+
+  describe('models compare', () => {
+    const COMPARISON_ID = 'cmp-cli-products-20261101090000';
+    const column = (over: Record<string, unknown> = {}) => ({
+      questions: 207,
+      failed: 0,
+      right: 190,
+      acceptedWrongly: 4,
+      toPerson: 31,
+      usd: 0.2,
+      currentUsd: 6.1,
+      medianMs: 2100,
+      ...over,
+    });
+    const REPORT: ComparisonReport = {
+      id: COMPARISON_ID,
+      dataset: 'cli-products',
+      job: 'classify',
+      model: 'cerebras/x',
+      backup: 'groq/y',
+      accept: 0.9,
+      startedAt: '2026-11-01T09:00:00.000Z',
+      finishedAt: '2026-11-01T09:05:00.000Z',
+      skipped: 0,
+      stoppedAtBudget: false,
+      columns: {
+        person: column(),
+        model: column({ questions: 181, right: 172, acceptedWrongly: 0, toPerson: 12, usd: 0.23 }),
+      },
+      suggestedAccept: 0.96,
+      disagreements: [
+        { subject: 'Maker A One', answered: 'Amplifier', sureness: 0.97, expected: 'DAC' },
+      ],
+      notes: ['Asked without the lineup, which decisions don’t keep: match questions only.'],
+    };
+    const COMPARE = [
+      'models',
+      'compare',
+      'cli-products',
+      '--job',
+      'classify',
+      '--model',
+      'cerebras/x',
+    ];
+
+    it('refuses a call without --max-usd, --job, or --model, with the usage', async () => {
+      for (const argv of [
+        COMPARE,
+        ['models', 'compare', 'cli-products', '--model', 'a/b', '--max-usd', '1'],
+        ['models', 'compare', 'cli-products', '--job', 'match', '--max-usd', '1'],
+        ['models', 'compare', '--job', 'match', '--model', 'a/b', '--max-usd', '1'],
+        ['models', 'comparison'],
+        ['models'],
+      ]) {
+        const { fetch, sent } = stubApi(() => Response.json({}));
+        const { io, err } = memoryIo();
+        expect(await main(argv, { io, env: ENV, fetch }), argv.join(' ')).toBe(2);
+        expect(err.join('\n')).toContain('models compare <dataset>');
+        expect(sent).toHaveLength(0);
+      }
+    });
+
+    it('refuses values out of range before any request', async () => {
+      const cases: [string[], string][] = [
+        [['--accept', '1.5', '--max-usd', '1'], '--accept'],
+        [['--accept', '0.4', '--max-usd', '1'], '--accept'],
+        [['--limit', '0', '--max-usd', '1'], '--limit'],
+        [['--limit', '501', '--max-usd', '1'], '--limit'],
+        [['--limit', '2.5', '--max-usd', '1'], '--limit'],
+        [['--max-usd', '0'], '--max-usd'],
+        [['--max-usd', '50.01'], '--max-usd'],
+        [['--max-usd', 'lots'], '--max-usd'],
+        [['--job', 'extract', '--max-usd', '1'], '--job'],
+      ];
+      for (const [extra, named] of cases) {
+        const argv = [...COMPARE, ...extra];
+        const { fetch, sent } = stubApi(() => Response.json({}));
+        const { io, err } = memoryIo();
+        expect(await main(argv, { io, env: ENV, fetch }), argv.join(' ')).toBe(2);
+        expect(err[0]).toContain(named);
+        expect(sent).toHaveLength(0);
+      }
+    });
+
+    it('starts a comparison, waits, and prints the report', async () => {
+      const answers: unknown[] = [
+        { status: 'running' },
+        { status: 'running' },
+        { status: 'complete', report: REPORT },
+      ];
+      const { fetch, sent } = stubApi(({ method }) =>
+        method === 'POST'
+          ? Response.json({ comparisonId: COMPARISON_ID }, { status: 202 })
+          : Response.json(answers.shift()),
+      );
+      const { io, out, sleeps } = memoryIo();
+      const argv = [
+        ...COMPARE,
+        '--backup',
+        'groq/y',
+        '--accept',
+        '0.9',
+        '--limit',
+        '100',
+        '--max-usd',
+        '2.5',
+        '--wait',
+      ];
+      expect(await main(argv, { io, env: ENV, fetch })).toBe(0);
+      expect(sent[0]).toMatchObject({
+        method: 'POST',
+        path: '/datasets/cli-products/comparisons',
+        body: {
+          job: 'classify',
+          model: 'cerebras/x',
+          backup: 'groq/y',
+          accept: 0.9,
+          limit: 100,
+          maxUsd: 2.5,
+        },
+      });
+      expect(sent.slice(1).map((one) => one.path)).toEqual(
+        Array(3).fill(`/comparisons/${COMPARISON_ID}`),
+      );
+      expect(sleeps).toEqual([2000, 2000]);
+      expect(out).toEqual([
+        `Started ${COMPARISON_ID}.`,
+        `Comparison ${COMPARISON_ID}: cerebras/x (backup groq/y) on classify, at 0.9.`,
+        '                    your answers  current model’s sure ones',
+        '  questions                  207                        181',
+        '  right / agrees             92%                        95%',
+        '  accepted wrongly             4                          —',
+        '  would go to you             31                          —',
+        '  cost              $0.43 ($0.11 per 100; current $12.20)',
+        '  median time              2.1 s                      2.1 s',
+        'Suggested threshold: 0.96 (at most 1% of what it accepts disagrees with your answers).',
+        'Where it disagreed with you (1):',
+        '  Maker A One: it said Amplifier (0.97); you said DAC.',
+        'Asked without the lineup, which decisions don’t keep: match questions only.',
+      ]);
+    });
+
+    it('without --wait, starts and prints how to read it', async () => {
+      const { fetch, sent } = stubApi(() =>
+        Response.json({ comparisonId: COMPARISON_ID }, { status: 202 }),
+      );
+      const { io, out } = memoryIo();
+      expect(await main([...COMPARE, '--max-usd', '1'], { io, env: ENV, fetch })).toBe(0);
+      expect(sent).toHaveLength(1);
+      expect((sent[0]!.body as Record<string, unknown>).limit).toBeUndefined();
+      expect(out.join('\n')).toContain(`spatula models comparison ${COMPARISON_ID}`);
+    });
+
+    it('shows the all-parts row only for placements, and none when nothing suggests', async () => {
+      const placement: ComparisonReport = {
+        ...REPORT,
+        suggestedAccept: null,
+        disagreements: [],
+        notes: [],
+        stoppedAtBudget: true,
+        skipped: 12,
+        columns: {
+          person: column({ allRight: 182 }),
+          model: column({ allRight: 160, failed: 3 }),
+        },
+      };
+      const { fetch } = stubApi(() => Response.json({ status: 'complete', report: placement }));
+      const { io, out } = memoryIo();
+      expect(await main(['models', 'comparison', COMPARISON_ID], { io, env: ENV, fetch })).toBe(0);
+      const text = out.join('\n');
+      expect(text).toContain('all parts right');
+      expect(text).toContain('Suggested threshold: none.');
+      expect(text).toContain('Stopped at --max-usd');
+      expect(text).toContain('12');
+      expect(text).not.toContain('Where it disagreed');
+    });
+
+    it('exits 1 for a comparison that failed', async () => {
+      const { fetch } = stubApi(({ method }) =>
+        method === 'POST'
+          ? Response.json({ comparisonId: COMPARISON_ID }, { status: 202 })
+          : Response.json({ status: 'failed', error: 'The Workflow stopped.' }),
+      );
+      const { io, out, err } = memoryIo();
+      expect(await main([...COMPARE, '--max-usd', '1', '--wait'], { io, env: ENV, fetch })).toBe(1);
+      expect(err).toEqual(['The Workflow stopped.']);
+      expect(out).toEqual([`Started ${COMPARISON_ID}.`]);
+    });
+
+    it('prints the server’s message when the start is refused', async () => {
+      const { fetch } = stubApi(() =>
+        Response.json({ error: 'The model x/y can’t be asked: no price.' }, { status: 400 }),
+      );
+      const { io, err } = memoryIo();
+      expect(await main([...COMPARE, '--max-usd', '1'], { io, env: ENV, fetch })).toBe(1);
+      expect(err).toEqual(['The model x/y can’t be asked: no price.']);
+    });
+
+    it('gives up waiting after 60 minutes', async () => {
+      const { fetch } = stubApi(({ method }) =>
+        method === 'POST'
+          ? Response.json({ comparisonId: COMPARISON_ID }, { status: 202 })
+          : Response.json({ status: 'running' }),
+      );
+      const { io, err, sleeps } = memoryIo();
+      expect(await main([...COMPARE, '--max-usd', '1', '--wait'], { io, env: ENV, fetch })).toBe(1);
+      expect(sleeps).toHaveLength(WAIT_LIMIT_MS / POLL_MS);
+      expect(err[0]).toContain('Stopped waiting');
+    });
+
+    it('models comparison prints a stored report, and says when it is still running', async () => {
+      const first = stubApi(() => Response.json({ status: 'complete', report: REPORT }));
+      const a = memoryIo();
+      expect(
+        await main(['models', 'comparison', COMPARISON_ID], {
+          io: a.io,
+          env: ENV,
+          fetch: first.fetch,
+        }),
+      ).toBe(0);
+      expect(first.sent[0]!.path).toBe(`/comparisons/${COMPARISON_ID}`);
+      expect(a.out[0]).toBe(
+        `Comparison ${COMPARISON_ID}: cerebras/x (backup groq/y) on classify, at 0.9.`,
+      );
+      const second = stubApi(() => Response.json({ status: 'running' }));
+      const b = memoryIo();
+      expect(
+        await main(['models', 'comparison', COMPARISON_ID], {
+          io: b.io,
+          env: ENV,
+          fetch: second.fetch,
+        }),
+      ).toBe(0);
+      expect(b.out).toEqual([`Comparison ${COMPARISON_ID} is still running.`]);
+      const third = stubApi(() => Response.json({ error: 'No such comparison.' }, { status: 404 }));
+      const c = memoryIo();
+      expect(
+        await main(['models', 'comparison', 'nope'], { io: c.io, env: ENV, fetch: third.fetch }),
+      ).toBe(1);
+      expect(c.err).toEqual(['No such comparison.']);
+    });
   });
 });

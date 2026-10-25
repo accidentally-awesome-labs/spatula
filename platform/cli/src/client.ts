@@ -1,5 +1,6 @@
 import type {
   ApplySummary,
+  ComparisonStatusView,
   DatasetStatus,
   Definition,
   EvalScores,
@@ -141,6 +142,38 @@ export function createClient(options: {
       const answer = await json(response);
       if (!response.ok) throw refused(response.status, answer);
       return answer as unknown as RunView;
+    },
+
+    /** Starts a model comparison (ADR 0010), which spends up to `maxUsd`. */
+    async startComparison(
+      datasetId: string,
+      body: {
+        job: string;
+        model: string;
+        backup?: string;
+        accept?: number;
+        limit?: number;
+        maxUsd: number;
+      },
+    ): Promise<{ comparisonId: string }> {
+      const response = await request(
+        'POST',
+        `/datasets/${encodeURIComponent(datasetId)}/comparisons`,
+        body,
+      );
+      const answer = await json(response);
+      if (response.status === 202 && typeof answer.comparisonId === 'string') {
+        return { comparisonId: answer.comparisonId };
+      }
+      // A 409 is a second comparison in the same second: the server's message says to wait.
+      throw refused(response.status, answer);
+    },
+
+    async getComparison(comparisonId: string): Promise<ComparisonStatusView> {
+      const response = await request('GET', `/comparisons/${encodeURIComponent(comparisonId)}`);
+      const answer = await json(response);
+      if (!response.ok) throw refused(response.status, answer);
+      return answer as unknown as ComparisonStatusView;
     },
 
     async reviveItems(

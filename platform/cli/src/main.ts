@@ -2,6 +2,7 @@ import { parseArgs } from 'node:util';
 import { createClient, type ReviewFilters } from './client';
 import {
   check,
+  compareModels,
   evals,
   evaluate,
   exportTaxonomyFile,
@@ -12,6 +13,7 @@ import {
   review,
   run,
   seedTaxonomyFile,
+  showComparison,
   status,
   type Io,
   type ReviewRequest,
@@ -59,6 +61,13 @@ export const USAGE = `Usage: spatula <command>
   eval <golden.json> [--save]  Score the latest snapshot against a golden set, and keep
                                the score with --save
   evals <dataset>              The history of a dataset’s scores
+  models compare <dataset> --job <classify|match> --model <provider/model>
+         [--backup <provider/model>] [--accept <p>] [--limit <n>] --max-usd <usd> [--wait]
+                               Ask a dataset’s answered questions again of a model, and
+                               score it: against a person’s answers, and the current
+                               model’s sure ones. It spends up to --max-usd; nothing in
+                               the dataset changes
+  models comparison <id>       Show a comparison’s report
   snapshot pull <dataset> --out <file> [--generation <n>]
                                Download a snapshot, check its hash, and write it
   taxonomy seed <dataset> <file.yaml>
@@ -93,6 +102,12 @@ const OPTIONS = {
   suggestion: { type: 'boolean' },
   answers: { type: 'string' },
   suggest: { type: 'string' },
+  job: { type: 'string' },
+  model: { type: 'string' },
+  backup: { type: 'string' },
+  accept: { type: 'string' },
+  limit: { type: 'string' },
+  'max-usd': { type: 'string' },
   help: { type: 'boolean', short: 'h' },
 } as const;
 
@@ -290,6 +305,49 @@ export async function main(
         : usage();
     case 'evals':
       return rest.length === 1 ? evals(io, client, rest[0]!) : usage();
+    case 'models': {
+      const [action, target, ...extra] = rest;
+      if (target === undefined || extra.length > 0) return usage();
+      if (action === 'comparison') return showComparison(io, client, target);
+      if (action !== 'compare') return usage();
+      const { job, model, backup, 'max-usd': maxText } = values;
+      if (!job || !model || maxText === undefined) return usage();
+      const refuse = (message: string) => {
+        io.err(message);
+        return 2;
+      };
+      if (job !== 'classify' && job !== 'match') return refuse('--job is classify or match.');
+      const maxUsd = Number(maxText);
+      if (maxText.trim() === '' || !(maxUsd > 0 && maxUsd <= 50)) {
+        return refuse('--max-usd is an amount in dollars above 0 and up to 50.');
+      }
+      let accept: number | undefined;
+      if (values.accept !== undefined) {
+        accept = Number(values.accept);
+        if (values.accept.trim() === '' || !(accept >= 0.5 && accept <= 1)) {
+          return refuse('--accept is a probability from 0.5 to 1.');
+        }
+      }
+      let limit: number | undefined;
+      if (values.limit !== undefined) {
+        limit = Number(values.limit);
+        if (
+          values.limit.trim() === '' ||
+          !(Number.isInteger(limit) && limit >= 1 && limit <= 500)
+        ) {
+          return refuse('--limit is a whole number from 1 to 500.');
+        }
+      }
+      return compareModels(io, client, target, {
+        job,
+        model,
+        ...(backup === undefined ? {} : { backup }),
+        ...(accept === undefined ? {} : { accept }),
+        ...(limit === undefined ? {} : { limit }),
+        maxUsd,
+        wait: values.wait === true,
+      });
+    }
     case 'snapshot': {
       // An empty --out names no file, as a missing one doesn't.
       if (rest[0] !== 'pull' || rest.length !== 2 || !values.out) return usage();
