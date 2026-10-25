@@ -25,7 +25,7 @@ The owner's goals (2026-10-24), all four:
    to a stronger model, and only what that one is unsure of goes to a person.
 4. **Free choice of model.** Any job can switch to any model, and a candidate can be compared, on
    questions the owner has already answered, before the switch. The comparison,
-   `spatula models compare`, comes with a later change.
+   a comparison command, comes with a later change.
 
 ## Decision
 
