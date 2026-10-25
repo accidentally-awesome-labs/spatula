@@ -1,6 +1,7 @@
 import {
   finalAnswerText,
   findItem,
+  parseDefinition,
   type Decider,
   type Definition,
   type TaxonomySubject,
@@ -9,9 +10,11 @@ import {
   decisionRecords,
   finalizeDecision,
   items,
+  latestFetchId,
   judgements,
   reviewItems,
   statements,
+  writeStatements,
 } from '@spatula/store';
 import { testDefinition, testTaxonomy, testTaxonomyDefinition } from '@spatula/store/fixtures';
 import { asc, eq } from 'drizzle-orm';
@@ -20,7 +23,7 @@ import { db } from '../test/node/db';
 import { fakeDecider, fakeStep, modelPortsOf, type World } from '../test/node/fakes';
 import { DT_250, DT_80, routesWith } from '../test/node/match-world';
 import { decidedDefinition as decided, refresh, taxonomyWorld, worldFor } from '../test/node/runs';
-import { standardRoutes, URLS } from '../test/pages';
+import { B1, standardRoutes, URLS } from '../test/pages';
 import {
   COMPARISON_ID,
   comparisonIdFor,
@@ -324,6 +327,66 @@ describe('a model comparison', { timeout: 20_000 }, () => {
       },
     ]);
     expect(await datasetRows(id)).toEqual(before);
+  });
+
+  it('gives a placement the shelf the live step gave it: a person’s, over a rule’s', async () => {
+    const id = 'compare-place-person';
+    const base = testTaxonomyDefinition(id);
+    // A rule puts maker B's pages on Headphone amps.
+    const parsed = parseDefinition({
+      ...base,
+      sources: base.sources.map((source) =>
+        source.id === 'maker-b'
+          ? { ...source, fixed: { ...source.fixed, shelf: 'headphone-amps' } }
+          : source,
+      ),
+    });
+    if (!parsed.ok) throw new Error(parsed.issues.join('\n'));
+    const { world } = await taxonomyWorld(parsed.definition);
+    await refresh(world, id);
+    const taxonomy = testTaxonomy();
+    const idOf = (subject: TaxonomySubject, slug: string) => findItem(taxonomy, subject, slug)!.id;
+    // A person puts B1 on Over-ear, in another category, so the next read asks again under it.
+    const b1 = (await decisionsByPage(id)).b1;
+    await writeStatements(db, {
+      datasetId: id,
+      itemId: b1.subject,
+      fetchId: (await latestFetchId(db, b1.subject))!,
+      seenAt: world.clock.now(),
+      methods: ['human'],
+      properties: ['shelf'],
+      statements: [
+        {
+          property: 'shelf',
+          value: idOf('shelf', 'over-ear'),
+          valueKey: idOf('shelf', 'over-ear'),
+          original: idOf('shelf', 'over-ear'),
+          method: 'human',
+          path: 'review:test',
+          confidence: 1,
+          position: null,
+        },
+      ],
+    });
+    world.web.routes.set(URLS.b1, { status: 200, body: B1('<h1>B1 Amp</h1><p>New</p>') });
+    await refresh(world, id);
+    const live = world.taxonomyDecider.calls.at(-1)!;
+    expect(live.evidence).toContain(URLS.b1);
+    expect(live).toMatchObject({ shelf: idOf('shelf', 'over-ear'), parts: { shelves: [] } });
+    const decision = (await decisionsByPage(id)).b1;
+    expect((decision.state as PlaceState).rule).toBe(idOf('shelf', 'headphone-amps'));
+
+    const asked = world.taxonomyDecider.calls.length;
+    const { step } = fakeStep(world.clock);
+    const report = await runComparison(paramsFor(world, id), step, world.ports);
+    // B1 was asked as the live step asked it, on the person's shelf, and the candidate, saying
+    // what the live decider said, is right in every part.
+    const again = world.taxonomyDecider.calls
+      .slice(asked)
+      .filter((request) => request.evidence.includes(URLS.b1));
+    expect(again).toEqual([live]);
+    expect(report.columns.model).toMatchObject({ questions: 3, right: 3, allRight: 3 });
+    expect(report.disagreements).toEqual([]);
   });
 
   it('skips a question whose site says ai-input=no, and counts it as skipped', async () => {

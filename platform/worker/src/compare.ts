@@ -650,10 +650,10 @@ function placementText(taxonomy: Taxonomy, answer: TaxonomyAnswer): string {
 }
 
 /**
- * Asks a shelf placement again: what the decider was asked (`asked`), with the rule's shelf where
- * it gave one, in the current taxonomy. A placement that asked about parts the taxonomy no longer
- * has is skipped, as is one whose shelf a person gave, which its state doesn't keep. It is scored
- * for the shelf (`right`), and for every part (`allRight`).
+ * Asks a shelf placement again, as the live step asked it, in the current taxonomy: what the
+ * decider was asked (`asked`), and when that didn't include the shelf, the shelf it was given. A
+ * placement that asked about parts the taxonomy no longer has, or was given a shelf it no longer
+ * has, is skipped. It is scored for the shelf (`right`), and for every part (`allRight`).
  */
 async function askPlacement(
   input: Parameters<typeof askAgain>[0],
@@ -663,17 +663,15 @@ async function askPlacement(
 ): Promise<Asked> {
   const { loaded, ports } = input;
   const state = decision.state as Partial<PlaceState>;
-  if (
-    !isObject(state) ||
-    !isClassifyState(state.page) ||
-    !isParts(state.asked) ||
-    !(state.rule === null || state.rule === undefined || typeof state.rule === 'string')
-  ) {
+  if (!isObject(state) || !isClassifyState(state.page) || !isParts(state.asked)) {
     return { skipped: 'state' };
   }
   const { page } = state;
-  const given = state.rule ?? null;
-  // Asked nothing, or the shelf was settled by a person, which the state doesn't keep.
+  // The shelf the live step gave the decider when it didn't ask one: a person's standing shelf, or
+  // else a rule's (`state.rule` keeps only the rule's). Its answer starts from that shelf, so the
+  // decision's own answer names it, and never a person's later one.
+  const given =
+    state.asked.shelves.length === 0 ? (readAnswerText(decision.answer)?.shelf ?? null) : null;
   if (isEmptyParts(state.asked) || (state.asked.shelves.length === 0 && given === null)) {
     return { skipped: 'state' };
   }
