@@ -195,7 +195,12 @@ export async function runComparison(
   return step.do<ComparisonReport>('report', async () => {
     const questions = results.flatMap((result) => ('question' in result ? [result.question] : []));
     const skipped = results.flatMap((result) => ('skipped' in result ? [result.skipped] : []));
-    const scored = scoreComparison({ questions, accept, placement });
+    const scored = scoreComparison({
+      questions,
+      accept,
+      placement,
+      floor: definition.decisions[job].accept,
+    });
     const report: ComparisonReport = {
       id: params.comparisonId,
       dataset: datasetId,
@@ -215,6 +220,7 @@ export async function runComparison(
         skipped,
         stoppedAtBudget,
         maxUsd: params.maxUsd,
+        given: questions.filter((question) => question.givenShelf === true).length,
       }),
     };
     await ports.blobs.put(
@@ -234,6 +240,8 @@ function notesFor(input: {
   skipped: readonly SkipReason[];
   stoppedAtBudget: boolean;
   maxUsd: number;
+  /** The placements that were given their shelf. */
+  given: number;
 }): string[] {
   const notes: string[] = [];
   if (input.found === 0) {
@@ -253,6 +261,9 @@ function notesFor(input: {
   );
   if (failures.length > 0) {
     notes.push(`${failures.length} failed on the model and its backup. The first: ${failures[0]}`);
+  }
+  if (input.given > 0) {
+    notes.push(`${input.given} placements were given their shelf, so their shelf counts as right.`);
   }
   if (input.stoppedAtBudget) {
     const unasked = input.found - input.results.length;
@@ -286,9 +297,11 @@ function currentUsdOf(
   const prefix = adapterName('');
   if (decision.adapter === null || !decision.adapter.startsWith(prefix)) return null;
   const model = decision.adapter.slice(prefix.length);
-  // A decision from before ADR 0010 names no provider (`llm:claude-opus-5-5`): its price isn't known.
-  if (!MODEL_NAME.test(model)) return null;
-  const unit = price(model);
+  // A decision from before ADR 0010 names no provider (`llm:claude-opus-5-5`). Every decider then
+  // was Anthropic's Claude, so its bare name is priced as Anthropic's.
+  const named = MODEL_NAME.test(model) ? model : model.includes('/') ? null : `anthropic/${model}`;
+  if (named === null) return null;
+  const unit = price(named);
   return unit === null ? null : usdOf(decision, unit);
 }
 
@@ -709,6 +722,7 @@ async function askPlacement(
     column,
     usd,
     currentUsd,
+    ...(given === null ? {} : { givenShelf: true }),
     ms,
     expected: placementText(taxonomy, expected),
   };

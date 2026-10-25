@@ -21,6 +21,8 @@ export interface ComparedQuestion {
   usd: number;
   /** What the current decision cost, at its model's price; null when that price isn't known. */
   currentUsd: number | null;
+  /** A placement that was given its shelf: its shelf counts as right whatever the candidate said. */
+  givenShelf?: boolean;
   ms: number;
   /** The candidate's answer and the expected one, in words, for the report's list. */
   answered: string;
@@ -39,6 +41,8 @@ export interface ComparisonColumn {
   toPerson: number;
   usd: number;
   currentUsd: number | null;
+  /** The questions whose current price isn't known: `currentUsd` leaves them out. */
+  currentUnpriced?: number;
   medianMs: number | null;
 }
 
@@ -59,6 +63,8 @@ export interface ComparisonReport {
   suggestedAccept: number | null;
   /** Each disagreement with a person's answer, at most 200. */
   disagreements: { subject: string; answered: string; sureness: number; expected: string }[];
+  /** All the disagreements with a person, of which `disagreements` lists the first 200. */
+  disagreementCount?: number;
   notes: string[];
 }
 
@@ -97,17 +103,20 @@ function column(
     toPerson: asked.filter((question) => !accepted(question, accept)).length,
     usd: questions.reduce((total, question) => total + question.usd, 0),
     currentUsd: known.length === 0 ? null : known.reduce((total, usd) => total + usd, 0),
+    currentUnpriced: questions.length - known.length,
     medianMs: median(asked.map((question) => question.ms)),
   };
   if (placement) result.allRight = asked.filter((question) => question.allRight).length;
   return result;
 }
 
-/** The lowest threshold, 0.50 to 1.00, that accepts something and gets at most 1% of it wrong. */
-function suggest(person: readonly ComparedQuestion[]): number | null {
+/** The lowest threshold, `floor` (at least 0.50) to 1.00, that accepts something and gets at most 1% of it wrong. */
+function suggest(person: readonly ComparedQuestion[], floor: number): number | null {
   if (person.length < MIN_SUGGESTION_QUESTIONS) return null;
   for (let step = 0; step <= 50; step++) {
     const threshold = roundProbability(0.5 + step / 100);
+    // No step may be looser than its job.
+    if (threshold < floor) continue;
     const taken = person.filter((question) => accepted(question, threshold));
     if (taken.length === 0) continue;
     const wrong = taken.filter((question) => !question.allRight).length;
@@ -126,25 +135,26 @@ export function scoreComparison(input: {
   questions: readonly ComparedQuestion[];
   accept: number;
   placement?: boolean;
-}): Pick<ComparisonReport, 'columns' | 'suggestedAccept' | 'disagreements'> {
+  /** The job's own threshold: no suggestion is looser. */
+  floor?: number;
+}): Pick<ComparisonReport, 'columns' | 'suggestedAccept' | 'disagreements' | 'disagreementCount'> {
   const placement = input.placement === true;
   const person = input.questions.filter((question) => question.column === 'person');
   const model = input.questions.filter((question) => question.column === 'model');
   const answered = person.filter((question) => !question.failed);
+  const disagreeing = answered.filter((question) => !question.allRight);
   return {
     columns: {
       person: column(person, input.accept, placement),
       model: column(model, input.accept, placement),
     },
-    suggestedAccept: suggest(answered),
-    disagreements: answered
-      .filter((question) => !question.allRight)
-      .slice(0, MAX_DISAGREEMENTS)
-      .map((question) => ({
-        subject: question.subject,
-        answered: question.answered,
-        sureness: question.sureness,
-        expected: question.expected,
-      })),
+    suggestedAccept: suggest(answered, input.floor ?? 0.5),
+    disagreementCount: disagreeing.length,
+    disagreements: disagreeing.slice(0, MAX_DISAGREEMENTS).map((question) => ({
+      subject: question.subject,
+      answered: question.answered,
+      sureness: question.sureness,
+      expected: question.expected,
+    })),
   };
 }

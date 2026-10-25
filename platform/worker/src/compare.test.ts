@@ -20,7 +20,13 @@ import { testDefinition, testTaxonomy, testTaxonomyDefinition } from '@spatula/s
 import { asc, eq } from 'drizzle-orm';
 import { describe, expect, it } from 'vitest';
 import { db } from '../test/node/db';
-import { fakeDecider, fakeStep, modelPortsOf, type World } from '../test/node/fakes';
+import {
+  fakeDecider,
+  fakeStep,
+  modelPortsOf,
+  testModelSetup,
+  type World,
+} from '../test/node/fakes';
 import { DT_250, DT_80, routesWith } from '../test/node/match-world';
 import { decidedDefinition as decided, refresh, taxonomyWorld, worldFor } from '../test/node/runs';
 import { B1, standardRoutes, URLS } from '../test/pages';
@@ -33,6 +39,7 @@ import {
   type CompareParams,
 } from './compare';
 import { LlmHttpError } from './llm-openai';
+import type { ModelSetup } from './models';
 import type { PlaceState } from './taxonomy';
 
 const HOUR = 3_600_000;
@@ -50,7 +57,10 @@ function everyPageDecided(datasetId: string): Definition {
 }
 
 /** The world's fake decider, under a model name a price can be found for. */
-const priced = (world: World): Decider => ({ ...world.decider.decider, name: 'llm:test/model' });
+const priced = (world: World, name = 'llm:test/model'): Decider => ({
+  ...world.decider.decider,
+  name,
+});
 
 /** Everything a comparison must leave alone in a dataset, as rows. */
 async function datasetRows(datasetId: string) {
@@ -101,11 +111,11 @@ async function decisionsByPage(datasetId: string) {
  * Three pages classified by the world's fake decider, all accepted, and then a person's answers to
  * two of them: A1 Headphones, as the decider said, and A2 DAC/Amp, which it didn't.
  */
-async function decidedWorld(datasetId: string) {
+async function decidedWorld(datasetId: string, adapter = 'llm:test/model') {
   // Without LLM extraction a page's state stays the same from run to run, so a later run keeps
   // the decisions this one makes current.
   const { world } = await worldFor(everyPageDecided(datasetId), standardRoutes(), { llm: false });
-  world.ports.decider = priced(world);
+  world.ports.decider = priced(world, adapter);
   await refresh(world, datasetId);
   const decisions = await decisionsByPage(datasetId);
   expect([decisions.a1, decisions.a2, decisions.b1].map((row) => row.outcome)).toEqual([
@@ -387,6 +397,38 @@ describe('a model comparison', { timeout: 20_000 }, () => {
     expect(again).toEqual([live]);
     expect(report.columns.model).toMatchObject({ questions: 3, right: 3, allRight: 3 });
     expect(report.disagreements).toEqual([]);
+    expect(report.notes).toContain(
+      '1 placements were given their shelf, so their shelf counts as right.',
+    );
+  });
+
+  it('prices a decision from before ADR 0010 as Anthropic’s, and counts those it cannot price', async () => {
+    const only = (...names: string[]): ModelSetup =>
+      testModelSetup({
+        price: (model) => (names.includes(model) ? { input: 1, output: 1 } : null),
+      });
+    const legacy = await decidedWorld('compare-legacy', 'llm:claude-opus-5-5');
+    legacy.world.ports.models = only('anthropic/claude-opus-5-5', 'cheap/x');
+    const known = await runComparison(
+      paramsFor(legacy.world, 'compare-legacy'),
+      fakeStep(legacy.world.clock).step,
+      legacy.world.ports,
+    );
+    expect(known.columns.person.currentUsd).toBeCloseTo(2 * CALL_USD, 12);
+    expect(known.columns.person.currentUnpriced).toBe(0);
+    expect(known.columns.model.currentUnpriced).toBe(0);
+
+    // A model nobody can price.
+    const unknown = await decidedWorld('compare-unpriced', 'llm:mystery/x');
+    unknown.world.ports.models = only('cheap/x');
+    const unpriced = await runComparison(
+      paramsFor(unknown.world, 'compare-unpriced'),
+      fakeStep(unknown.world.clock).step,
+      unknown.world.ports,
+    );
+    expect(unpriced.columns.person.currentUsd).toBeNull();
+    expect(unpriced.columns.person.currentUnpriced).toBe(2);
+    expect(unpriced.columns.model.currentUnpriced).toBe(1);
   });
 
   it('skips a question whose site says ai-input=no, and counts it as skipped', async () => {

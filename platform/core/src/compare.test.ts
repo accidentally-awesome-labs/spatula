@@ -167,4 +167,37 @@ describe('scoreComparison', () => {
     const none = scoreComparison({ accept: 0.9, questions: [question({ currentUsd: null })] });
     expect(none.columns.person.currentUsd).toBeNull();
   });
+
+  it('counts the questions whose current price is unknown', () => {
+    const { columns } = scoreComparison({
+      accept: 0.9,
+      questions: [
+        question({ currentUsd: 0.5 }),
+        question({ currentUsd: null }),
+        question({ currentUsd: null, column: 'model' }),
+      ],
+    });
+    expect(columns.person.currentUnpriced).toBe(1);
+    expect(columns.model.currentUnpriced).toBe(1);
+  });
+
+  it('never suggests a threshold below the floor it is given', () => {
+    const questions = [
+      ...many(15, () => ({ sureness: 0.9 })),
+      ...many(15, () => ({ sureness: 0.89, right: false, allRight: false })),
+    ];
+    expect(scoreComparison({ accept: 0.95, questions }).suggestedAccept).toBe(0.9);
+    expect(scoreComparison({ accept: 0.95, floor: 0.95, questions }).suggestedAccept).toBeNull();
+    const sure = many(30, () => ({ sureness: 0.97 }));
+    expect(scoreComparison({ accept: 0.95, floor: 0.95, questions: sure }).suggestedAccept).toBe(
+      0.95,
+    );
+  });
+
+  it('carries the total number of disagreements', () => {
+    const questions = many(250, () => ({ right: false, allRight: false, sureness: 0.7 }));
+    const report = scoreComparison({ accept: 0.95, questions });
+    expect(report.disagreements).toHaveLength(200);
+    expect(report.disagreementCount).toBe(250);
+  });
 });

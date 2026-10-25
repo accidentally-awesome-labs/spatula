@@ -4237,14 +4237,33 @@ describe('review in parts and in bulk', () => {
         '  questions                  207                        181',
         '  right / agrees             92%                        95%',
         '  accepted wrongly             4                          —',
-        '  would go to you             31                          —',
-        '  cost              $0.43 ($0.11 per 100; current $12.20)',
+        '  would go to you             31                         12',
+        '  cost              $0.43 ($0.11 per 100; current $3.14 per 100)',
         '  median time              2.1 s                      2.1 s',
         'Suggested threshold: 0.96 (at most 1% of what it accepts disagrees with your answers).',
         'Where it disagreed with you (1):',
         '  Maker A One: it said Amplifier (0.97); you said DAC.',
         'Asked without the lineup, which decisions don’t keep: match questions only.',
       ]);
+    });
+
+    it('prices the current cost over the priced questions, and counts those it could not price', async () => {
+      const partly: ComparisonReport = {
+        ...REPORT,
+        columns: {
+          person: column({ failed: 7, currentUsd: 3, currentUnpriced: 107 }),
+          model: column({ questions: 181, usd: 0.23, currentUsd: null, currentUnpriced: 181 }),
+        },
+        disagreementCount: 450,
+      };
+      const { fetch } = stubApi(() => Response.json({ status: 'complete', report: partly }));
+      const { io, out } = memoryIo();
+      expect(await main(['models', 'comparison', COMPARISON_ID], { io, env: ENV, fetch })).toBe(0);
+      // $0.43 over the 381 questions asked without failing; $3 over the 100 priced ones.
+      expect(out.map((line) => line.trim().replace(/\s+/gu, ' '))).toContain(
+        'cost $0.43 ($0.11 per 100; current $3.00 per 100; current unknown for 288)',
+      );
+      expect(out).toContain('Where it disagreed with you (first 1 of 450):');
     });
 
     it('without --wait, starts and prints how to read it', async () => {

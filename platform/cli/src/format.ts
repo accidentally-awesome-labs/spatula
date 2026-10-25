@@ -684,8 +684,8 @@ function causeMessage(cause: unknown): string {
 /**
  * A model comparison's report (ADR 0010, spec §10): two columns, the questions a person answered
  * and the current model's sure ones. The model column has no person's answer to be wrong against,
- * so it shows a dash for "accepted wrongly" and "would go to you". "All parts right" appears only
- * for shelf placements, which carry it.
+ * so it shows a dash for "accepted wrongly" only; "would go to you" counts there too. "All parts
+ * right" appears only for shelf placements, which carry it.
  */
 export function formatComparison(report: ComparisonReport): string[] {
   const { person, model } = report.columns;
@@ -707,7 +707,7 @@ export function formatComparison(report: ComparisonReport): string[] {
   }
   rows.push(
     ['accepted wrongly', String(person.acceptedWrongly), '—'],
-    ['would go to you', String(person.toPerson), '—'],
+    ['would go to you', String(person.toPerson), String(model.toPerson)],
   );
   if (person.failed > 0 || model.failed > 0) {
     rows.push(['failed calls', String(person.failed), String(model.failed)]);
@@ -722,12 +722,20 @@ export function formatComparison(report: ComparisonReport): string[] {
   const table = (label: string, one: string, two: string) =>
     `  ${label.padEnd(labelWidth)}  ${one.padStart(widths[0]!)}  ${two.padStart(widths[1]!)}`;
   const usd = person.usd + model.usd;
-  const asked = person.questions + model.questions;
+  const questions = person.questions + model.questions;
+  // Calls that failed cost nothing and aren't questions the candidate answered.
+  const asked = questions - person.failed - model.failed;
+  const per100 = asked > 0 ? `${dollars((usd / asked) * 100)} per 100` : '';
+  // What the current decisions cost, over the questions whose price is known.
+  const unpriced = (person.currentUnpriced ?? 0) + (model.currentUnpriced ?? 0);
+  const priced = questions - unpriced;
   const currents = [person.currentUsd, model.currentUsd].filter((one) => one !== null);
   const current =
-    currents.length === 0 ? '' : `; current ${dollars(currents.reduce((a, b) => a + b, 0))}`;
-  const per100 = asked > 0 ? `${dollars((usd / asked) * 100)} per 100` : '';
-  const cost = `${dollars(usd)} (${per100}${current})`;
+    currents.length === 0 || priced <= 0
+      ? ''
+      : `; current ${dollars((currents.reduce((a, b) => a + b, 0) / priced) * 100)} per 100`;
+  const unknown = unpriced > 0 ? `; current unknown for ${unpriced}` : '';
+  const cost = `${dollars(usd)} (${per100}${current}${unknown})`;
   const lines = [
     `Comparison ${report.id}: ${report.model}${report.backup === null ? '' : ` (backup ${report.backup})`} on ${report.job}, at ${report.accept}.`,
     `  ${' '.repeat(labelWidth)}  ${head[0]!.padStart(widths[0]!)}  ${head[1]!.padStart(widths[1]!)}`,
@@ -749,7 +757,12 @@ export function formatComparison(report: ComparisonReport): string[] {
       : `Suggested threshold: ${report.suggestedAccept.toFixed(2)} (at most 1% of what it accepts disagrees with your answers).`,
   );
   if (report.disagreements.length > 0) {
-    lines.push(`Where it disagreed with you (${report.disagreements.length}):`);
+    const total = report.disagreementCount ?? report.disagreements.length;
+    lines.push(
+      total > report.disagreements.length
+        ? `Where it disagreed with you (first ${report.disagreements.length} of ${total}):`
+        : `Where it disagreed with you (${report.disagreements.length}):`,
+    );
     for (const one of report.disagreements) {
       lines.push(
         `  ${one.subject}: it said ${one.answered} (${one.sureness.toFixed(2)}); you said ${one.expected}.`,

@@ -395,6 +395,10 @@ async function viewRun(env: Env, run: RunView): Promise<RunView> {
   return run;
 }
 
+/** Whether a Workflows binding's error says the instance doesn't exist. */
+const isNotFound = (error: unknown) =>
+  error instanceof Error && /instance\.not_found/iu.test(error.message);
+
 /**
  * A model comparison (ADR 0010): its report once the Workflow has put it in R2, where its ID says
  * (ruling 10); until then, whether its Workflow is still going or has stopped.
@@ -411,8 +415,10 @@ api.get('/comparisons/:id', async (c) => {
   let instance: WorkflowInstance;
   try {
     instance = await c.env.COMPARE.get(id);
-  } catch {
-    return none();
+  } catch (error) {
+    // Only an unknown instance is "no such comparison"; any other failure surfaces as a 5xx.
+    if (isNotFound(error)) return none();
+    throw error;
   }
   const state = await instance.status();
   if (state.status === 'errored' || state.status === 'terminated') {
@@ -977,6 +983,9 @@ bearerApi.post('/datasets/:id/comparisons', ownerOnly, async (c) => {
     if (problem !== null) {
       return c.json({ error: `The ${which} ${model} can’t be asked: ${problem}.` }, 400);
     }
+  }
+  if (request.backup === request.model) {
+    return c.json({ error: 'The backup must be another model.' }, 400);
   }
   // Without the gateway's address, every call would fail.
   if (models.ports === null) return c.json({ error: 'This Worker asks no model.' }, 400);

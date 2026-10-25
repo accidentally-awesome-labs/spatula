@@ -120,6 +120,11 @@ describe('comparisons', () => {
         asking(),
         'The model openai/gpt-6.1-sol can’t be asked: no key: set OPENAI_API_KEY, or name openai in LLM_GATEWAY_KEYS.',
       ],
+      [
+        body({ backup: 'anthropic/claude-haiku-5-5' }),
+        asking(),
+        'The backup must be another model.',
+      ],
       // The tests' own bindings have no gateway: the model passes, and the Worker asks none.
       [body(), env, 'This Worker asks no model.'],
     ] as const;
@@ -278,6 +283,17 @@ describe('comparisons', () => {
       ...env,
       COMPARE: { get: () => Promise.reject(new Error('instance.not_found')) },
     } as unknown as Env;
+    // Any other failure to find the instance is a failure, not "no such comparison".
+    const down = {
+      ...env,
+      COMPARE: { get: () => Promise.reject(new Error('the Workflows service is down')) },
+    } as unknown as Env;
+    const transient = await call('GET', '/comparisons/cmp-cmp-never-20261101090000', {
+      bindings: down,
+    });
+    expect(transient.status).toBe(500);
+    expectNoStore(transient);
+
     for (const [unknown, bindings] of [
       ['cmp-cmp-never-20261101090000', noInstance],
       ['nope', env],
