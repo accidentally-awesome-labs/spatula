@@ -17,6 +17,7 @@ import {
   sha256Hex,
   signDirectory,
   taxonomySeedSchema,
+  type ComparisonReport,
   type DatasetStatus,
   type EvalScores,
   type RunView,
@@ -69,6 +70,7 @@ import {
 import { r2Blobs } from './blobs';
 import { captureRoutes } from './capture-api';
 import { rawPageKey } from './captures';
+import { comparisonIdFor, comparisonKey, datasetOfComparison, type CompareParams } from './compare';
 import { consumerSecret, secret, verifiedBot } from './config';
 import { consolePages } from './console/routes';
 import { withDatabase } from './database';
@@ -138,9 +140,9 @@ const owner: MiddlewareHandler<Api> = async (c, next) => {
  * The routes a consumer may call as well as the owner: reading a dataset's snapshots, and
  * acknowledging them; and the review API's, the taxonomy's, and the proposals' and autonomy's,
  * which check the token themselves (bearerActor), and answer a consumer with a 403 on the owner's
- * among them: suggestions, the log, seeding, versions, undo, autonomy, and a capture. Every other
- * route under /datasets is the owner's alone, including any added later, so a new route can't be
- * left open by mistake. A route is a method and a path, so one added later at the same path with
+ * among them: suggestions, the log, seeding, versions, undo, autonomy, a capture, and starting a
+ * model comparison. Every other route under /datasets is the owner's alone, including any added
+ * later, so a new route can't be left open by mistake. A route is a method and a path, so one added later at the same path with
  * another method is the owner's too, and so is one added later at a path of the snapshot route's
  * shape: the pattern is the snapshot route's own forms, `latest` and a generation of up to nine
  * digits from 1 (see the route, which answers any other with a 400). An answer's path takes a
@@ -168,6 +170,9 @@ const CONSUMER_ROUTES = [
   // answers a request without a token or with a wrong one. Plan 1's POST …/captures/purge is not
   // listed: it stays behind the owner check.
   { method: 'GET', path: /^\/datasets\/[^/]+\/captures\/[^/]+$/u },
+  // Starting a model comparison, which spends the owner's money (ADR 0010): listed for the same
+  // reason, so a consumer's token gets ownerOnly's 403. The path is under ACTOR_PATHS.
+  { method: 'POST', path: /^\/datasets\/[^/]+\/comparisons$/u },
 ];
 
 api.use('/datasets/*', async (c, next) =>
@@ -176,6 +181,7 @@ api.use('/datasets/*', async (c, next) =>
     : owner(c, next),
 );
 api.use('/runs/*', owner);
+api.use('/comparisons/*', owner);
 
 /**
  * The owner, or a consumer the dataset lists. A consumer is known by its token alone: its hash is
@@ -373,7 +379,11 @@ async function viewRun(env: Env, run: RunView): Promise<RunView> {
   }
   const state = await instance.status();
   if (state.status === 'errored' || state.status === 'terminated') {
-    return { ...run, status: 'failed', error: describeStop(state.error) };
+    return {
+      ...run,
+      status: 'failed',
+      error: describeStop(state.error, 'The Workflow stopped before the run finished.'),
+    };
   }
   if (!GOING.has(state.status) && Date.now() - Date.parse(run.startedAt) > RUN_STALE_MS) {
     return {
@@ -384,6 +394,41 @@ async function viewRun(env: Env, run: RunView): Promise<RunView> {
   }
   return run;
 }
+
+/**
+ * A model comparison (ADR 0010): its report once the Workflow has put it in R2, where its ID says
+ * (ruling 10); until then, whether its Workflow is still going or has stopped.
+ */
+api.get('/comparisons/:id', async (c) => {
+  const id = c.req.param('id');
+  const none = () => c.json({ error: 'No such comparison.' }, 404);
+  const datasetId = datasetOfComparison(id);
+  if (datasetId === null) return none();
+  const kept = await c.env.STORE.get(comparisonKey(datasetId, id));
+  if (kept !== null) {
+    return c.json({ status: 'complete', report: await kept.json<ComparisonReport>() });
+  }
+  let instance: WorkflowInstance;
+  try {
+    instance = await c.env.COMPARE.get(id);
+  } catch {
+    return none();
+  }
+  const state = await instance.status();
+  if (state.status === 'errored' || state.status === 'terminated') {
+    return c.json({
+      status: 'failed',
+      error: describeStop(state.error, 'The Workflow stopped before the comparison finished.'),
+    });
+  }
+  // A Workflow that finished between the read above and this one: its output is the report.
+  if (state.status === 'complete') {
+    return state.output === undefined || state.output === null
+      ? c.json({ status: 'failed', error: 'The comparison finished without a report.' })
+      : c.json({ status: 'complete', report: state.output as ComparisonReport });
+  }
+  return c.json({ status: 'running' });
+});
 
 api.get('/datasets/:id/snapshots/:generation', reader, async (c) => {
   const datasetId = c.req.param('id');
@@ -795,6 +840,8 @@ const ACTOR_PATHS = [
   '/datasets/:id/autonomy/*',
   // The owner's capture route (ruling 27). Without this, a request to it carries no actor.
   '/datasets/:id/captures/*',
+  // The owner's route that starts a model comparison, for the same reason.
+  '/datasets/:id/comparisons/*',
 ];
 for (const path of ACTOR_PATHS) bearerApi.use(path, bearerActor);
 
@@ -883,6 +930,85 @@ bearerApi.post(
   },
 );
 
+/**
+ * A model comparison's request (ADR 0010, spec §10). Zod's numbers are finite, so neither NaN nor
+ * an infinity passes.
+ */
+const comparisonSchema = z.strictObject({
+  job: z.enum(['classify', 'match']),
+  model: z.string(),
+  backup: z.string().optional(),
+  accept: z.number().min(0.5).max(1).optional(),
+  limit: z.number().int().min(1).max(500).default(200),
+  maxUsd: z.number().positive().max(50),
+});
+
+/**
+ * Starts a model comparison (ADR 0010): a dataset's answered questions asked again of a candidate
+ * model, in a Workflow of its own, which writes nothing to the dataset and spends up to maxUsd.
+ * It's the owner's alone, though a consumer's token reaches it. The model and its backup must pass
+ * the checks a definition's models do, and the dataset must allow AI input, as a decider's
+ * questions need; the Workflow checks each page's site as it asks.
+ */
+bearerApi.post('/datasets/:id/comparisons', ownerOnly, async (c) => {
+  let body: unknown;
+  try {
+    body = await c.req.json();
+  } catch {
+    return c.json({ error: 'The body isn’t JSON.' }, 400);
+  }
+  const parsed = comparisonSchema.safeParse(body);
+  if (!parsed.success) {
+    const issue = parsed.error.issues[0];
+    return c.json(
+      {
+        error: `The comparison is wrong at ${issue?.path.join('.') || 'the body'}: ${issue?.message}`,
+      },
+      400,
+    );
+  }
+  const request = parsed.data;
+  const models = workerModels(c.env);
+  for (const [which, model] of [
+    ['model', request.model],
+    ['backup', request.backup],
+  ] as const) {
+    const problem = model === undefined ? null : models.setup.problem(model);
+    if (problem !== null) {
+      return c.json({ error: `The ${which} ${model} can’t be asked: ${problem}.` }, 400);
+    }
+  }
+  // Without the gateway's address, every call would fail.
+  if (models.ports === null) return c.json({ error: 'This Worker asks no model.' }, 400);
+  const datasetId = c.req.param('id');
+  // A definition stored by an earlier version that no longer passes the checks throws here, and
+  // onError answers it.
+  const dataset = await withDatabase(c.env, (db) => getDataset(db, datasetId));
+  if (dataset === null) return c.json({ error: `Dataset ${datasetId} doesn’t exist.` }, 404);
+  if (!dataset.definition.policy.purposes.includes('ai-input')) {
+    return c.json(
+      { error: `${datasetId} doesn’t allow AI input, so no model is asked its questions.` },
+      400,
+    );
+  }
+  const now = new Date();
+  const comparisonId = comparisonIdFor(datasetId, now);
+  const params: CompareParams = {
+    comparisonId,
+    datasetId,
+    job: request.job,
+    model: request.model,
+    backup: request.backup ?? null,
+    accept: request.accept ?? null,
+    limit: request.limit,
+    maxUsd: request.maxUsd,
+    startedAt: now.toISOString(),
+  };
+  await c.env.COMPARE.create({ id: comparisonId, params });
+  c.header('location', `/comparisons/${comparisonId}`);
+  return c.json({ comparisonId }, 202);
+});
+
 reviewRoutes(bearerApi);
 proposalRoutes(bearerApi);
 captureRoutes(bearerApi);
@@ -950,9 +1076,10 @@ function ago(ms: number): string {
   return `${hours} ${hours === 1 ? 'hour' : 'hours'} ago`;
 }
 
-function describeStop(error: unknown): string {
+/** Why a Workflow stopped, as its status gives it, or else what it stopped before. */
+function describeStop(error: unknown, otherwise: string): string {
   if (typeof error === 'string') return error;
   if (typeof error === 'object' && error !== null && 'message' in error)
     return String(error.message);
-  return 'The Workflow stopped before the run finished.';
+  return otherwise;
 }

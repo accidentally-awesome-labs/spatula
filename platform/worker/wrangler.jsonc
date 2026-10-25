@@ -48,6 +48,8 @@
   "migrations": [{ "tag": "v1", "new_sqlite_classes": ["HostGate"] }],
   "workflows": [
     { "name": "spatula-refresh", "binding": "REFRESH", "class_name": "RefreshWorkflow" },
+    // Model comparisons (ADR 0010): a dataset's answered questions asked again of a candidate.
+    { "name": "spatula-compare", "binding": "COMPARE", "class_name": "CompareWorkflow" },
   ],
   // The review API's writes (ADR 0009): 120 a minute for the owner, and for each of a consumer's
   // reviewers; and 240 a minute for each consumer's reviewers together, since a consumer names its

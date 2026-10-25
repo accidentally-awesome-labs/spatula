@@ -1,7 +1,8 @@
-import type { RunSummary } from '@spatula/core';
+import type { ComparisonReport, RunSummary } from '@spatula/core';
 import { StaleDefinitionError } from '@spatula/store';
 import { WorkflowEntrypoint, type WorkflowEvent, type WorkflowStep } from 'cloudflare:workers';
 import { NonRetryableError } from 'cloudflare:workflows';
+import { runComparison, type CompareParams } from './compare';
 import { workerPorts } from './ports';
 import { SnapshotFileMissingError } from './publish';
 import { DatasetMissingError, runRefresh, type RefreshParams, type StepRunner } from './refresh';
@@ -13,6 +14,19 @@ export class RefreshWorkflow extends WorkflowEntrypoint<Env, RefreshParams> {
     step: WorkflowStep,
   ): Promise<RunSummary> {
     return runRefresh(event.payload, stepRunner(step), workerPorts(this.env));
+  }
+}
+
+/**
+ * The Compare Workflow (ADR 0010): a model comparison over the same ports as a run. Its instance ID
+ * is the comparison's ID, and its output is the report it also puts in R2.
+ */
+export class CompareWorkflow extends WorkflowEntrypoint<Env, CompareParams> {
+  async run(
+    event: Readonly<WorkflowEvent<CompareParams>>,
+    step: WorkflowStep,
+  ): Promise<ComparisonReport> {
+    return runComparison(event.payload, stepRunner(step), workerPorts(this.env));
   }
 }
 
