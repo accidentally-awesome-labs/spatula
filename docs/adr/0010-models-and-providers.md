@@ -273,16 +273,20 @@ dataset must allow AI input.
 - **Two columns.** One scores the candidate against the questions a person answered, the other
   against the current model's sure answers. "Right" is the same option, match outcome, or shelf;
   for shelf placements "all parts right" also counts the functions and values. The model column
-  shows no "accepted wrongly" or "would go to you", since there is no person's answer to be wrong
-  against.
-- **A threshold to read it at.** `--accept` (0.5 to 1, the job's own by default) says what would be
-  accepted and what would go to a person. The report suggests the lowest threshold at which at
-  most 1% of what the model accepts disagrees with a person, and says none when fewer than 30
-  answers rest on it.
+  shows no "accepted wrongly", since there is no person's answer to be wrong against; "would go to
+  you" counts there too. A placement that was given its shelf counts its shelf as right, and the
+  report says how many were.
+- **A threshold to read it at.** `--accept` (0.5 to 1) says what would be accepted and what would go
+  to a person; by default it is the candidate's own step `accept` when the definition names that
+  model, and the job's otherwise. The report suggests the lowest threshold at which at most 1% of
+  what the model accepts disagrees with a person, never below the job's own `accept`, since no step
+  may be looser than its job. It says none when fewer than 30 answers rest on it.
 - **It spends what it is allowed.** `--max-usd` (above 0, at most 50) is required. The comparison
   stops when it has spent that, and says so. `--limit` (1 to 500, 200 by default) caps the
-  questions. The report shows the cost, the cost per 100 questions, and what the current decisions
-  cost at their model's price.
+  questions. The report shows the cost, the cost per 100 questions asked without failing, and what
+  the current decisions cost per 100 at their model's price. A decision made before this ADR names
+  no provider (`llm:claude-opus-5-5`) and is priced as Anthropic's, as every decider then was; the
+  report counts the questions whose current price is still unknown, and leaves them out.
 - **It runs in its own Workflow** and the report is kept at `datasets/<dataset>/comparisons/<id>.json`.
   `--wait` polls every 2 seconds for up to an hour; `spatula models comparison <id>` reads it later.
 - **Match questions are asked without the lineup,** which a decision doesn't keep. The report says
