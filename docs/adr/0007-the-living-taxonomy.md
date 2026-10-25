@@ -88,7 +88,7 @@ whose site says `ai-input=no`, and is skipped when the run's budget is spent; th
 why.
 
 If the model call fails, the run goes on: the review proposes nothing and leaves a note in the
-run's summary. A step that runs again after it finished asks nothing and counts no tokens. One that
+run's summary. A step that runs again after it finished asks nothing and spends nothing. One that
 crashed after the model answered, but before its result was saved, may ask once more: an accepted
 at-least-once limit, as with the run's other LLM steps.
 
@@ -129,3 +129,15 @@ behind it. Earned autonomy now covers a new subcategory, a new feature, and a ne
 description stays proposable, and the owner can still approve, edit, or reject it. Migration 0012
 narrows the stored kinds to those three; marking text that was applied on its own as untrusted in
 the prompts is a later change.
+
+## Update, 2026-10-24 (ADR 0010)
+
+- Placing a page asks the classify job's steps in order, each with its backup and its threshold, and
+  a step whose answer leaves a part open passes the whole question to the next. A person is asked
+  only the parts the last step isn't sure of, once every step weighed them. A page may therefore
+  take more than one decider call.
+- A placement a step weighed stands while consent holds, held to that step's threshold. When the
+  owner raises the threshold, parts that fall below it open as a person's question, and no model is
+  asked again: a page is still asked again only when its taxonomy key changes.
+- The review asks the definition's `taxonomyReview` model, and its backup when that call fails. It
+  is skipped once the run's dollar budget, `budget.llmUsdPerRun`, is spent.

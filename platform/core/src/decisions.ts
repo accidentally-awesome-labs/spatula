@@ -155,6 +155,8 @@ export interface AdapterAnswer {
   /** The decider's reason, briefly. */
   evidence: string;
   usage: LlmUsage;
+  /** The adapter that answered, when it isn't the decider's own name: its step's backup (ADR 0010). */
+  adapter?: string;
 }
 
 export interface Decider {
@@ -202,9 +204,24 @@ function offeredProbabilities(
   );
 }
 
+/** One step of the cascade: a decider, and the threshold its answer must reach. */
+export interface CascadeStep {
+  decider: Decider;
+  accept: number;
+}
+
+/** Thrown when no step accepted and a step failed: the question is asked again on a later run. */
+export class CascadeFailedError extends Error {
+  constructor(readonly failures: string[]) {
+    super(failures.join('; '));
+    this.name = 'CascadeFailedError';
+  }
+}
+
 /**
- * A question through the cascade. A decider that throws fails the call, and the caller records the
- * failure and asks again on a later run: a person isn't asked what a decider could still answer.
+ * A question through the cascade's steps (ADR 0010): each is asked in turn, and its answer stands
+ * or falls on its own threshold. A step whose decider throws is skipped; when no step accepts and
+ * one failed, the cascade throws, and the caller asks again on a later run.
  * What a decider answers is checked: an answer that wasn't offered is neither taken nor proposed,
  * and an answer is taken only on its own probability, or its outcome's total where the question
  * groups its answers (`outcomeProbability`). Only the offered answers' probabilities, each above 0
@@ -213,8 +230,7 @@ function offeredProbabilities(
 export async function cascade(input: {
   request: DecisionRequest;
   rule: string | null;
-  deciders: readonly Decider[];
-  accept: number;
+  steps: readonly CascadeStep[];
 }): Promise<CascadeOutcome> {
   const problem = questionError(input.request.question);
   if (problem !== null) throw new Error(`The question can’t be asked: ${problem}`);
@@ -232,23 +248,31 @@ export async function cascade(input: {
     probabilities: Record<string, number>;
     evidence: string;
   } | null = null;
-  for (const decider of input.deciders) {
-    const answer = await decider.decide(input.request);
+  const failures: string[] = [];
+  for (const { decider, accept } of input.steps) {
+    let answer: AdapterAnswer;
+    try {
+      answer = await decider.decide(input.request);
+    } catch (error) {
+      failures.push(`${decider.name}: ${error instanceof Error ? error.message : String(error)}`);
+      continue;
+    }
+    const name = answer.adapter ?? decider.name;
     usage.inputTokens += answer.usage.inputTokens;
     usage.outputTokens += answer.usage.outputTokens;
     const probabilities = offeredProbabilities(allowed, answer.probabilities);
     const proposed =
       answer.answer !== null && allowed.includes(answer.answer) ? answer.answer : null;
-    last = { name: decider.name, proposed, probabilities, evidence: answer.evidence };
+    last = { name, proposed, probabilities, evidence: answer.evidence };
     // The answer needs a probability of its own, and is as sure as its outcome.
     const probability =
       proposed !== null && Object.hasOwn(probabilities, proposed)
         ? outcomeProbability(input.request.question, probabilities, proposed)
         : undefined;
-    if (proposed !== null && probability !== undefined && probability >= input.accept) {
+    if (proposed !== null && probability !== undefined && probability >= accept) {
       return {
         by: 'adapter',
-        adapter: decider.name,
+        adapter: name,
         answer: proposed,
         probability,
         probabilities,
@@ -257,6 +281,9 @@ export async function cascade(input: {
       };
     }
   }
+  // A person is asked only what every step weighed (ADR 0003): a step that failed could still
+  // settle the question on a later run.
+  if (failures.length > 0) throw new CascadeFailedError(failures);
   return {
     by: 'person',
     adapter: last?.name ?? null,

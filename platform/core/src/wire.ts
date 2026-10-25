@@ -5,6 +5,7 @@ import type { Outcome } from './gate';
 import type { EvalScores } from './golden';
 import type { SourceProbe } from './refusals';
 import type { Excluded } from './snapshot';
+import type { DownMarks, Job, ModelSpend } from './models';
 
 /*
  * What the API and the CLI exchange. The store and the Worker produce these shapes; the CLI only
@@ -33,6 +34,11 @@ export interface ApplySummary {
    * Absent when the scope didn't change it, and from a Worker before the taxonomy.
    */
   taxonomyVersion?: number;
+  /**
+   * The jobs whose models the definition changes, each before and after in words (ADR 0010).
+   * Absent when none change, for a new dataset, and from a Worker before ADR 0010.
+   */
+  models?: { job: Job; before: string; after: string }[];
 }
 
 /** What a run's snapshot step did. */
@@ -131,7 +137,11 @@ export interface RunSummary {
     failed: number;
     inputTokens: number;
     outputTokens: number;
+    /** The providers this run found down (ADR 0010): since when, and why. Absent when none. */
+    down?: DownMarks;
   };
+  /** What each job's models cost the run, by model (ADR 0010). Absent in runs before it. */
+  spend?: Partial<Record<Job, Record<string, ModelSpend>>>;
   /** The run's classifications. Absent in runs before slice 1. */
   classify?: DecisionSummary;
   /** The run's match questions. Absent in runs before slice 1. */
@@ -299,6 +309,11 @@ export interface DatasetStatus {
   }[];
   /** Whether Cloudflare lists Spatula as a verified bot (ADR 0006). Absent before phase 1. */
   verified?: boolean;
+  /**
+   * The providers the latest finished run found down, and that run (ADR 0010). Absent when it found
+   * none, before any run has finished, and from a Worker before ADR 0010.
+   */
+  llm?: { runId: string; down: DownMarks };
 }
 
 /** A saved score, as the API lists it. */

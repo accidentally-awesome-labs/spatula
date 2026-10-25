@@ -9,7 +9,7 @@ import {
 } from '@spatula/store';
 import { readCapture, readPageBody } from './captures';
 import type { Classified, ClassifyFetch } from './classify';
-import type { Context, RefreshPorts } from './pipeline';
+import type { Context, LlmState, RefreshPorts } from './pipeline';
 import { decideTaxonomy, factsOf, keepOut, taxonomyTarget, type PageFacts } from './taxonomy';
 
 /*
@@ -26,7 +26,7 @@ import { decideTaxonomy, factsOf, keepOut, taxonomyTarget, type PageFacts } from
 export async function backfillPage(
   context: Context,
   item: ItemRef & { status: 'live' | 'irrelevant' },
-  budgetLeft: number,
+  llm: LlmState,
   ports: RefreshPorts,
 ): Promise<{ outcome: 'decided' | 'fetch' | 'skipped' | 'failed'; classified?: Classified }> {
   const target = taxonomyTarget(context.definition, item);
@@ -38,7 +38,7 @@ export async function backfillPage(
   const captured = await fromCapture(ports, target.source, item);
   const decided =
     captured !== null
-      ? await decideTaxonomy(context, item, captured.fetched, budgetLeft, ports, {
+      ? await decideTaxonomy(context, item, captured.fetched, llm, ports, {
           extractionComplete: false,
           facts: captured.facts,
           irrelevant,
@@ -135,7 +135,7 @@ async function reopenNone(
       signals: {},
       captureId: null,
     },
-    0,
+    { usdLeft: 0, down: {} },
     { ...ports, taxonomyDecider: null },
     {
       extractionComplete: false,

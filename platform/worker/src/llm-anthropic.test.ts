@@ -51,6 +51,43 @@ function setUp(
 }
 
 describe('createAnthropicLlm', () => {
+  it('sends no x-api-key where the gateway holds the key', async () => {
+    const calls: { init: RequestInit }[] = [];
+    const llm = createAnthropicLlm({
+      model: 'claude-opus-5-5',
+      name: 'anthropic/claude-opus-5-5',
+      baseURL: 'https://gateway.example/v1/account/spatula-llm/anthropic',
+      gatewayToken: 'gateway-token',
+      fetch: (async (_input: string | URL | Request, init?: RequestInit) => {
+        calls.push({ init: init ?? {} });
+        return answer('{"specs": []}');
+      }) as typeof fetch,
+    });
+    expect(llm.model).toBe('anthropic/claude-opus-5-5');
+    await llm.structured({ ...question, maxTokens: LLM_MAX_TOKENS });
+    const headers = new Headers(calls[0]!.init.headers);
+    expect(headers.has('x-api-key')).toBe(false);
+    expect(headers.get('cf-aig-authorization')).toBe('Bearer gateway-token');
+  });
+
+  it('replaces a key an error echoes, keeping the status', async () => {
+    const { llm } = setUp(
+      () =>
+        new Response(
+          '{"type":"error","error":{"type":"invalid_request_error","message":"bad key test-key"}}',
+          {
+            status: 401,
+          },
+        ),
+    );
+    const failure = await llm
+      .structured({ ...question, maxTokens: LLM_MAX_TOKENS })
+      .catch((e) => e);
+    expect(failure).toMatchObject({ status: 401 });
+    expect(failure.message).not.toContain('test-key');
+    expect(failure.message).toContain('[key]');
+  });
+
   it('asks through the gateway with the schema, and returns the checked answer and its usage', async () => {
     const specs = [{ label: 'Impedance', value: '300 Ω' }];
     const { llm, calls } = setUp(() => answer(JSON.stringify({ specs })));

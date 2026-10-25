@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   buildDeciderRequest,
   cascade,
+  CascadeFailedError,
   createLlmDecider,
   optionsOf,
   outcomeProbability,
@@ -84,26 +85,29 @@ describe('cascade', () => {
       },
     };
     expect(
-      await cascade({ request: REQUEST, rule: 'Headphones', deciders: [watching], accept: 0.9 }),
+      await cascade({
+        request: REQUEST,
+        rule: 'Headphones',
+        steps: [{ decider: watching, accept: 0.9 }],
+      }),
     ).toEqual({
       by: 'rule',
       answer: 'Headphones',
     });
     expect(asked).toEqual([]);
-    await expect(
-      cascade({ request: REQUEST, rule: 'Speakers', deciders: [], accept: 0.9 }),
-    ).rejects.toThrow('The rule answered Speakers, which the question doesn’t offer');
+    await expect(cascade({ request: REQUEST, rule: 'Speakers', steps: [] })).rejects.toThrow(
+      'The rule answered Speakers, which the question doesn’t offer',
+    );
   });
 
   it('takes the first decider that is sure enough, and passes the unsure on', async () => {
     const outcome = await cascade({
       request: REQUEST,
       rule: null,
-      deciders: [
-        decider('first', { Headphones: 0.6, DAC: 0.4 }),
-        decider('second', { Headphones: 0.95, DAC: 0.05 }),
+      steps: [
+        { decider: decider('first', { Headphones: 0.6, DAC: 0.4 }), accept: 0.9 },
+        { decider: decider('second', { Headphones: 0.95, DAC: 0.05 }), accept: 0.9 },
       ],
-      accept: 0.9,
     });
     expect(outcome).toEqual({
       by: 'adapter',
@@ -121,8 +125,7 @@ describe('cascade', () => {
       await cascade({
         request: REQUEST,
         rule: null,
-        deciders: [decider('only', { Headphones: 0.7, DAC: 0.3 })],
-        accept: 0.9,
+        steps: [{ decider: decider('only', { Headphones: 0.7, DAC: 0.3 }), accept: 0.9 }],
       }),
     ).toEqual({
       by: 'person',
@@ -132,7 +135,7 @@ describe('cascade', () => {
       evidence: 'only says so',
       usage,
     });
-    expect(await cascade({ request: REQUEST, rule: null, deciders: [], accept: 0.9 })).toEqual({
+    expect(await cascade({ request: REQUEST, rule: null, steps: [] })).toEqual({
       by: 'person',
       adapter: null,
       proposed: null,
@@ -146,8 +149,7 @@ describe('cascade', () => {
     const outcome = await cascade({
       request: REQUEST,
       rule: null,
-      deciders: [decider('exact', { Headphones: 0.9, DAC: 0.1 })],
-      accept: 0.9,
+      steps: [{ decider: decider('exact', { Headphones: 0.9, DAC: 0.1 }), accept: 0.9 }],
     });
     expect(outcome).toMatchObject({ by: 'adapter', adapter: 'exact', probability: 0.9 });
   });
@@ -164,8 +166,10 @@ describe('cascade', () => {
     const outcome = await cascade({
       request: REQUEST,
       rule: null,
-      deciders: [decider('first', { Headphones: 0.97, DAC: 0.03 }), later],
-      accept: 0.9,
+      steps: [
+        { decider: decider('first', { Headphones: 0.97, DAC: 0.03 }), accept: 0.9 },
+        { decider: later, accept: 0.9 },
+      ],
     });
     expect(outcome).toMatchObject({ by: 'adapter', adapter: 'first', answer: 'Headphones' });
     expect(asked).toEqual([]);
@@ -176,11 +180,10 @@ describe('cascade', () => {
       await cascade({
         request: REQUEST,
         rule: null,
-        deciders: [
-          decider('first', { Headphones: 0.6, DAC: 0.4 }),
-          decider('second', { DAC: 0.7, Headphones: 0.3 }),
+        steps: [
+          { decider: decider('first', { Headphones: 0.6, DAC: 0.4 }), accept: 0.9 },
+          { decider: decider('second', { DAC: 0.7, Headphones: 0.3 }), accept: 0.9 },
         ],
-        accept: 0.9,
       }),
     ).toEqual({
       by: 'person',
@@ -204,7 +207,9 @@ describe('cascade', () => {
         usage,
       }),
     };
-    expect(await cascade({ request: REQUEST, rule: null, deciders: [junk], accept: 0.9 })).toEqual({
+    expect(
+      await cascade({ request: REQUEST, rule: null, steps: [{ decider: junk, accept: 0.9 }] }),
+    ).toEqual({
       by: 'person',
       adapter: 'off-menu',
       proposed: null,
@@ -230,17 +235,17 @@ describe('cascade', () => {
         usage,
       }),
     };
-    expect(await cascade({ request: REQUEST, rule: null, deciders: [mixed], accept: 0.9 })).toEqual(
-      {
-        by: 'adapter',
-        adapter: 'mixed',
-        answer: 'Headphones',
-        probability: 0.95,
-        probabilities: { Headphones: 0.95, DAC: 0.04, 'None of these': 0.01 },
-        evidence: 'Mostly headphones.',
-        usage,
-      },
-    );
+    expect(
+      await cascade({ request: REQUEST, rule: null, steps: [{ decider: mixed, accept: 0.9 }] }),
+    ).toEqual({
+      by: 'adapter',
+      adapter: 'mixed',
+      answer: 'Headphones',
+      probability: 0.95,
+      probabilities: { Headphones: 0.95, DAC: 0.04, 'None of these': 0.01 },
+      evidence: 'Mostly headphones.',
+      usage,
+    });
   });
 
   it('doesn’t take an answer whose own probability is no probability, but still proposes it', async () => {
@@ -268,8 +273,7 @@ describe('cascade', () => {
         await cascade({
           request: REQUEST,
           rule: null,
-          deciders: [claiming(probability)],
-          accept: 0.5,
+          steps: [{ decider: claiming(probability), accept: 0.5 }],
         }),
         `a probability of ${String(probability)}`,
       ).toEqual({
@@ -283,14 +287,17 @@ describe('cascade', () => {
     }
     // Exactly 1 is a probability, and so is the smallest number above 0.
     expect(
-      await cascade({ request: REQUEST, rule: null, deciders: [claiming(1)], accept: 0.9 }),
+      await cascade({
+        request: REQUEST,
+        rule: null,
+        steps: [{ decider: claiming(1), accept: 0.9 }],
+      }),
     ).toMatchObject({ by: 'adapter', probability: 1, probabilities: { Headphones: 1 } });
     expect(
       await cascade({
         request: REQUEST,
         rule: null,
-        deciders: [claiming(Number.MIN_VALUE)],
-        accept: Number.MIN_VALUE,
+        steps: [{ decider: claiming(Number.MIN_VALUE), accept: Number.MIN_VALUE }],
       }),
     ).toMatchObject({ by: 'adapter', probabilities: { Headphones: Number.MIN_VALUE } });
   });
@@ -306,7 +313,7 @@ describe('cascade', () => {
       }),
     };
     expect(
-      await cascade({ request: REQUEST, rule: null, deciders: [silent], accept: 0.9 }),
+      await cascade({ request: REQUEST, rule: null, steps: [{ decider: silent, accept: 0.9 }] }),
     ).toMatchObject({ by: 'person', adapter: 'silent', proposed: null, evidence: 'no pick' });
   });
 
@@ -318,7 +325,7 @@ describe('cascade', () => {
       },
     };
     await expect(
-      cascade({ request: REQUEST, rule: null, deciders: [failing], accept: 0.9 }),
+      cascade({ request: REQUEST, rule: null, steps: [{ decider: failing, accept: 0.9 }] }),
     ).rejects.toThrow('overloaded');
   });
 
@@ -327,9 +334,108 @@ describe('cascade', () => {
       ...REQUEST,
       question: { type: 'choice' as const, prompt: 'Which?', options: ['a', 'a'] },
     };
-    await expect(cascade({ request, rule: null, deciders: [], accept: 0.9 })).rejects.toThrow(
+    await expect(cascade({ request, rule: null, steps: [] })).rejects.toThrow(
       'The question can’t be asked: it offers an answer twice',
     );
+  });
+});
+
+describe('cascade steps', () => {
+  const request: DecisionRequest = {
+    type: 'classify',
+    question: { type: 'choice', prompt: 'Which?', options: ['a', 'b'] },
+    criteria: 'Pick one.',
+    evidence: 'page',
+  };
+  const answering = (
+    name: string,
+    probabilities: Record<string, number>,
+    adapter?: string,
+  ): Decider => ({
+    name,
+    async decide() {
+      const [best] = Object.entries(probabilities).sort((x, y) => y[1] - x[1]);
+      return {
+        answer: best?.[0] ?? null,
+        probabilities,
+        evidence: `${name} says`,
+        usage: { inputTokens: 10, outputTokens: 1 },
+        ...(adapter === undefined ? {} : { adapter }),
+      };
+    },
+  });
+  const failing = (name: string): Decider => ({
+    name,
+    async decide() {
+      throw new Error(`${name} is out`);
+    },
+  });
+
+  it('asks the next step when one is unsure, each on its own threshold', async () => {
+    const outcome = await cascade({
+      request,
+      rule: null,
+      steps: [
+        { decider: answering('llm:cheap/x', { a: 0.93, b: 0.07 }), accept: 0.96 },
+        { decider: answering('llm:strong/y', { a: 0.92, b: 0.08 }), accept: 0.9 },
+      ],
+    });
+    expect(outcome).toMatchObject({
+      by: 'adapter',
+      adapter: 'llm:strong/y',
+      answer: 'a',
+      probability: 0.92,
+    });
+    expect(outcome.by === 'adapter' && outcome.usage).toEqual({ inputTokens: 20, outputTokens: 2 });
+  });
+
+  it('records the adapter that answered when a backup did', async () => {
+    const outcome = await cascade({
+      request,
+      rule: null,
+      steps: [{ decider: answering('llm:cheap/x', { a: 0.99 }, 'llm:backup/z'), accept: 0.9 }],
+    });
+    expect(outcome).toMatchObject({ by: 'adapter', adapter: 'llm:backup/z' });
+  });
+
+  it('skips a step that fails, and takes a later step’s sure answer', async () => {
+    const outcome = await cascade({
+      request,
+      rule: null,
+      steps: [
+        { decider: failing('llm:cheap/x'), accept: 0.9 },
+        { decider: answering('llm:strong/y', { b: 0.97 }), accept: 0.9 },
+      ],
+    });
+    expect(outcome).toMatchObject({ by: 'adapter', adapter: 'llm:strong/y', answer: 'b' });
+  });
+
+  it('asks a person only what every step weighed: a failed step makes it wait', async () => {
+    await expect(
+      cascade({
+        request,
+        rule: null,
+        steps: [
+          { decider: answering('llm:cheap/x', { a: 0.6, b: 0.4 }), accept: 0.9 },
+          { decider: failing('llm:strong/y'), accept: 0.9 },
+        ],
+      }),
+    ).rejects.toThrow(CascadeFailedError);
+    await expect(
+      cascade({ request, rule: null, steps: [{ decider: failing('llm:only/x'), accept: 0.9 }] }),
+    ).rejects.toThrow('llm:only/x: llm:only/x is out');
+  });
+
+  it('asks a person with the last step’s answer when every step weighed it and none was sure', async () => {
+    const outcome = await cascade({
+      request,
+      rule: null,
+      steps: [
+        { decider: answering('llm:cheap/x', { a: 0.6, b: 0.4 }), accept: 0.9 },
+        { decider: answering('llm:strong/y', { b: 0.7, a: 0.3 }), accept: 0.9 },
+      ],
+    });
+    expect(outcome).toMatchObject({ by: 'person', adapter: 'llm:strong/y', proposed: 'b' });
   });
 });
 
@@ -573,7 +679,11 @@ describe('a question whose answers share outcomes', () => {
     evidence: 'Record A: Hugo 2. Record B: Hugo.',
   };
   const ask = (request: DecisionRequest, probabilities: Record<string, number>) =>
-    cascade({ request, rule: null, deciders: [decider('llm:a', probabilities)], accept: 0.95 });
+    cascade({
+      request,
+      rule: null,
+      steps: [{ decider: decider('llm:a', probabilities), accept: 0.95 }],
+    });
 
   it('takes the likeliest answer when its outcome is sure enough, though the answer alone isn’t', async () => {
     const probabilities = { 'other-model': 0.6, 'spec-version': 0.38, same: 0.02 };

@@ -1,11 +1,16 @@
 # Copy to .dev.vars for `pnpm --filter @spatula/worker dev`. Never commit .dev.vars.
 # The SHA-256 of the owner token "dev", so `SPATULA_TOKEN=dev` works with a local Worker.
 OWNER_TOKEN_HASH=ef260e9aa3c673af240d17a2660480361a8e081d1ffeca2a5ed0e3219fc18567
-# Runs skip the LLM unless both ANTHROPIC_API_KEY and AI_GATEWAY_URL are set, so every call is
-# logged and costed. AI_GATEWAY_TOKEN is optional.
-# ANTHROPIC_API_KEY=
-# AI_GATEWAY_URL=https://gateway.ai.cloudflare.com/v1/<account ID>/spatula-llm/anthropic
+# Runs skip the LLM unless AI_GATEWAY_URL is set, so every call is logged and costed (ADR 0010).
+# Each provider needs its key here, or the gateway holds it (LLM_GATEWAY_KEYS in wrangler.jsonc,
+# which needs AI_GATEWAY_TOKEN).
+# AI_GATEWAY_URL=https://gateway.ai.cloudflare.com/v1/<account ID>/spatula-llm
 # AI_GATEWAY_TOKEN=
+# ANTHROPIC_API_KEY=
+# OPENAI_API_KEY=
+# OPENROUTER_API_KEY=
+# CEREBRAS_API_KEY=
+# GROQ_API_KEY=
 # WEB_BOT_AUTH_KEY, an Ed25519 private key as a JWK on one line, makes the Worker sign its requests
 # (Web Bot Auth) and serve its public key at /.well-known/http-message-signatures-directory. Leave
 # it out to run unsigned. One way to make a key (it prints the key, so keep that out of any log):

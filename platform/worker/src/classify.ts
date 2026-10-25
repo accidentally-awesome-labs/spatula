@@ -1,4 +1,5 @@
 import {
+  acceptFor,
   cascade,
   CLASSIFY_CRITERIA_VERSION,
   classifyCriteria,
@@ -19,9 +20,11 @@ import {
   type CascadeOutcome,
   type ContentSignals,
   type Definition,
+  type DownMarks,
   type FieldDef,
   type LlmUsage,
   type Method,
+  type ModelCall,
   type RecordType,
   type Source,
   type StatementInput,
@@ -40,7 +43,15 @@ import {
   type ItemRef,
 } from '@spatula/store';
 import { readPageBody } from './captures';
-import { extractionTag, NO_USAGE, retryTag, type Context, type RefreshPorts } from './pipeline';
+import {
+  extractionTag,
+  NO_USAGE,
+  retryTag,
+  type Context,
+  type LlmState,
+  type RefreshPorts,
+} from './pipeline';
+import { cascadeSteps, noneAsked, savedCalls } from './models';
 import { storable } from './text';
 
 /*
@@ -130,6 +141,10 @@ export interface Classified {
   irrelevant: boolean;
   usage: LlmUsage;
   note: string | null;
+  /** What the step asked of models (ADR 0010). Absent in results from before it. */
+  calls?: ModelCall[];
+  /** The providers the step found down. Absent in results from before it. */
+  down?: DownMarks;
 }
 
 /** The page's fetch, as classifying needs it. */
@@ -204,11 +219,11 @@ export async function classifyItem(
   context: Context,
   item: ItemRef,
   fetched: ClassifyFetch,
-  budgetLeft: number,
+  llm: LlmState,
   ports: RefreshPorts,
   extractionComplete: boolean,
 ): Promise<Classified> {
-  const classified = await classifyPage(context, item, fetched, budgetLeft, ports);
+  const classified = await classifyPage(context, item, fetched, llm, ports);
   if (extractionComplete && classified.outcome !== 'skipped' && classified.outcome !== 'failed') {
     await ports.withDb((db) => setExtractedWith(db, item.id, extractionTag(context.revision)));
   }
@@ -219,7 +234,7 @@ async function classifyPage(
   context: Context,
   item: ItemRef,
   fetched: ClassifyFetch,
-  budgetLeft: number,
+  llm: LlmState,
   ports: RefreshPorts,
 ): Promise<Classified> {
   const { datasetId, definition, runId } = context;
@@ -231,6 +246,8 @@ async function classifyPage(
     irrelevant: false,
     usage: NO_USAGE,
     note: null,
+    calls: [],
+    down: {},
     ...more,
   });
 
@@ -267,8 +284,7 @@ async function classifyPage(
   const decisionId = await stableId('dc', runId, subjectKey);
   const consent =
     definition.policy.purposes.includes('ai-input') && fetched.signals['ai-input'] !== 'no';
-  const decider = consent ? ports.decider : null;
-  const accept = definition.decisions.classify.accept;
+  const canAsk = consent && ports.decider !== null;
   // Extraction marked the page for another read already; this keeps classifyItem safe on its own.
   const readAgain = () =>
     ports.withDb((db) => setExtractedWith(db, item.id, retryTag(context.revision)));
@@ -297,7 +313,14 @@ async function classifyPage(
     }),
   );
   // A question asked before isn't asked again, unless asking might now come to something else.
-  if (earlier !== null && stands(earlier, { consent, canAsk: decider !== null, accept })) {
+  if (
+    earlier !== null &&
+    stands(earlier, {
+      consent,
+      canAsk,
+      accept: acceptFor(definition, 'classify', earlier.adapter),
+    })
+  ) {
     const applied = await apply(earlier);
     // A step that runs again finds its own decision, and reports it as it was made.
     const again = earlier.id === decisionId;
@@ -306,15 +329,17 @@ async function classifyPage(
       usage: again
         ? { inputTokens: earlier.inputTokens, outputTokens: earlier.outputTokens }
         : NO_USAGE,
+      ...(again ? { calls: savedCalls(earlier) } : {}),
     });
   }
 
   const rule = classifyRule(state, field);
-  if (rule === null && decider !== null && budgetLeft <= 0) {
+  if (rule === null && canAsk && llm.usdLeft <= 0) {
     // The next run reads the page again, with a budget of its own.
     await readAgain();
     return result('skipped');
   }
+  const asked = noneAsked();
   let outcome: CascadeOutcome;
   try {
     outcome = await cascade({
@@ -325,13 +350,15 @@ async function classifyPage(
         evidence: stateEvidence(state),
       },
       rule,
-      deciders: decider === null ? [] : [decider],
-      accept,
+      steps: canAsk ? cascadeSteps({ definition, job: 'classify', ports, llm, asked }) : [],
     });
   } catch (error) {
     await readAgain();
     const message = error instanceof Error ? error.message : String(error);
-    return result('failed', { note: storable(`${item.locator}: the decider failed: ${message}`) });
+    return result('failed', {
+      note: storable(`${item.locator}: the decider failed: ${message}`),
+      ...asked,
+    });
   }
   const usage = outcome.by === 'rule' ? NO_USAGE : outcome.usage;
   const decision = await ports.withDb((db) =>
@@ -351,7 +378,9 @@ async function classifyPage(
         outcome.by === 'rule'
           ? 'The page’s structured data gives this category.'
           : outcome.evidence,
-      thresholds: { accept },
+      thresholds: {
+        accept: acceptFor(definition, 'classify', outcome.by === 'rule' ? null : outcome.adapter),
+      },
       outcome: outcome.by === 'rule' ? 'rule' : outcome.by === 'adapter' ? 'accepted' : 'escalated',
       answer: outcome.by === 'person' ? null : outcome.answer,
       inputTokens: usage.inputTokens,
@@ -360,7 +389,7 @@ async function classifyPage(
     }),
   );
   const applied = await apply(decision);
-  return result(madeBy(decision), { irrelevant: applied === 'irrelevant', usage });
+  return result(madeBy(decision), { irrelevant: applied === 'irrelevant', usage, ...asked });
 }
 
 /** Withdraws the cascade's own statements about the decided field: a rule's and a decider's. */

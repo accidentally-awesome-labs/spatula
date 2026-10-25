@@ -1,9 +1,15 @@
 import {
+  extractFromPage,
+  legacyLlmInputHash,
+  llmFields,
+  llmInputHash,
   normalizeGtin,
   parseDefinition,
+  parsePage,
   runIdFor,
   type Candidate,
   type GateDecision,
+  type LlmPort,
   type Page,
   type PagesSource,
 } from '@spatula/core';
@@ -13,7 +19,14 @@ import { testDefinition } from '@spatula/store/fixtures';
 import { and, eq, isNull } from 'drizzle-orm';
 import { describe, expect, it } from 'vitest';
 import { db } from '../test/node/db';
-import { fakeLlm, fakeStep, makeWorld, type StepCache, type World } from '../test/node/fakes';
+import {
+  fakeLlm,
+  fakeStep,
+  makeWorld,
+  testModelSetup,
+  type StepCache,
+  type World,
+} from '../test/node/fakes';
 import { entityOf, fetchOf, published, refresh } from '../test/node/runs';
 import {
   A1,
@@ -35,6 +48,7 @@ import {
   type HttpResult,
   type StepRunner,
 } from './refresh';
+import { LlmHttpError } from './llm-openai';
 import { MAX_REDIRECTS, MAX_WAITS, requestThroughGate } from './requests';
 
 const HOUR = 3_600_000;
@@ -919,11 +933,13 @@ describe('runRefresh', () => {
       cut(`${URLS.a1}: the page couldn’t be read: pack  ${'x'.repeat(600)}`),
     ]);
     expect(notesOf(a2.id)).toEqual([
-      cut(`${URLS.a2}: the LLM call failed: llm  ${'x'.repeat(600)}`),
+      cut(`${URLS.a2}: the LLM call failed: test/model: llm  ${'x'.repeat(193)}…`),
     ]);
     // The fetch log says what the LLM step did. A NUL in that text would have failed the insert
     // after the LLM had been paid for.
-    expect((await fetchOf(first.runId, URLS.a2)).llm).toBe(cut(`failed: llm  ${'x'.repeat(600)}`));
+    expect((await fetchOf(first.runId, URLS.a2)).llm).toBe(
+      cut(`failed: test/model: llm  ${'x'.repeat(193)}…`),
+    );
   });
 
   it('reads only the pages that are due, taking turns between hosts', async () => {
@@ -1504,14 +1520,14 @@ describe('runRefresh', () => {
     const definition = testDefinition('refresh-llm-budget');
     await applyDefinition(db, {
       ...definition,
-      budget: { ...definition.budget, llmTokensPerRun: 1000 },
+      budget: { ...definition.budget, llmUsdPerRun: 0.001 },
     });
     const world = makeWorld(db, standardRoutes());
     // A1 is read first, and its answer spends 1,050 tokens; B1 and A2 wait.
     const first = await refresh(world, 'refresh-llm-budget');
     expect(first.summary.llm).toMatchObject({ ran: 1, skipped: 2, inputTokens: 1000 });
     expect(first.summary.notes).toContain(
-      '2 pages wait for the next run: this run’s LLM budget of 1,000 tokens is spent',
+      '2 pages wait for the next run: this run’s LLM budget of $0.00 is spent',
     );
     expect(await fetchOf(first.runId, URLS.b1)).toMatchObject({
       llm: 'skipped: the run’s LLM budget is spent',
@@ -1526,13 +1542,170 @@ describe('runRefresh', () => {
     const definition = testDefinition('refresh-llm-budget-exact');
     await applyDefinition(db, {
       ...definition,
-      budget: { ...definition.budget, llmTokensPerRun: 1050 },
+      budget: { ...definition.budget, llmUsdPerRun: 0.00105 },
     });
     const world = makeWorld(db, standardRoutes());
     // A1's answer spends 1,050 tokens, which is all of the budget.
     const first = await refresh(world, 'refresh-llm-budget-exact');
     expect(first.summary.llm).toMatchObject({ ran: 1, skipped: 2 });
     expect(world.llm.calls).toHaveLength(1);
+  });
+
+  it('asks the extraction step’s backup when its model fails, and counts both', async () => {
+    const definition = testDefinition('refresh-llm-backup');
+    await applyDefinition(db, {
+      ...definition,
+      models: { extract: { model: 'down/x', backup: 'up/y' } },
+    });
+    const world = makeWorld(db, standardRoutes());
+    let downCalls = 0;
+    const throwing: LlmPort = {
+      model: 'down/x',
+      async structured() {
+        downCalls += 1;
+        throw new LlmHttpError(400, '400 You have reached your specified API usage limits.');
+      },
+    };
+    world.ports.modelPorts = (model) => ({
+      llm: model === 'down/x' ? throwing : world.llm.llm,
+      decider: world.decider.decider,
+      taxonomyDecider: world.taxonomyDecider.decider,
+    });
+
+    const run = await refresh(world, 'refresh-llm-backup');
+    // Every page was read by the backup.
+    expect(run.summary.llm).toMatchObject({ ran: 3, failed: 0, inputTokens: 3000 });
+    expect(world.llm.calls).toHaveLength(3);
+    const file = (await published(world, 'refresh-llm-backup'))!;
+    expect(file.byName.A1!.fields).toMatchObject({
+      specs: [
+        { label: 'Impedance', value: '300 Ω' },
+        { label: 'Weight', value: '350 g' },
+      ],
+    });
+    // The first page was sent to down/x; the usage limit marked its provider down, so the other two
+    // went straight to the backup and sent nothing.
+    expect(downCalls).toBe(1);
+    expect(run.summary.spend?.extract?.['down/x']).toMatchObject({
+      calls: 3,
+      failed: 3,
+      inputTokens: 0,
+      outputTokens: 0,
+    });
+    expect(run.summary.spend?.extract?.['up/y']).toMatchObject({
+      calls: 3,
+      failed: 0,
+      inputTokens: 3000,
+      outputTokens: 150,
+    });
+    expect(run.summary.llm.down?.down?.reason).toBe('usage limit');
+  });
+
+  it('asks no page again after the extraction model changes', async () => {
+    const definition = testDefinition('refresh-llm-switch');
+    await applyDefinition(db, { ...definition, models: { extract: 'a/x' } });
+    const world = makeWorld(db, standardRoutes());
+    const asked: string[] = [];
+    world.ports.modelPorts = (model) => {
+      asked.push(model);
+      return {
+        llm: world.llm.llm,
+        decider: world.decider.decider,
+        taxonomyDecider: world.taxonomyDecider.decider,
+      };
+    };
+    const first = await refresh(world, 'refresh-llm-switch');
+    expect(first.summary.llm).toMatchObject({ ran: 3, reused: 0 });
+    expect(new Set(asked)).toEqual(new Set(['a/x']));
+
+    await applyDefinition(db, { ...definition, models: { extract: 'b/y' } });
+    asked.length = 0;
+    const second = await refresh(world, 'refresh-llm-switch');
+    expect(second.summary.llm).toMatchObject({ ran: 0, reused: 3, inputTokens: 0 });
+    expect(asked).toEqual([]);
+    expect(world.llm.calls).toHaveLength(3);
+  });
+
+  it('takes a page asked before ADR 0010 as answered, and stores the new hash', async () => {
+    const { world, a1 } = await setUp('refresh-llm-legacy');
+    await refresh(world, 'refresh-llm-legacy');
+    const stored = async () =>
+      (await db.select().from(items).where(eq(items.id, a1.id)))[0]!.extractInputHash;
+
+    // The text and fields A1 was asked with, rebuilt as the extraction builds them.
+    const definition = testDefinition('refresh-llm-legacy');
+    const row = (await db.select().from(items).where(eq(items.id, a1.id)))[0]!;
+    const source = definition.sources.find((candidate) => candidate.id === row.sourceId)!;
+    const recordType = definition.recordTypes[row.recordType]!;
+    const body = world.web.routes.get(URLS.a1)!.body as string;
+    const page = parsePage(body, URLS.a1);
+    const extraction = extractFromPage({
+      page,
+      source,
+      recordType,
+      pack: recordType.pack === undefined ? null : (packs[recordType.pack] ?? null),
+    });
+    const asked = { text: page.text, fields: llmFields(recordType, extraction.missing) };
+    const hash = await llmInputHash(asked);
+    expect(await stored()).toBe(hash);
+
+    await db
+      .update(items)
+      // Older code's tag, so the page is read again from its stored copy.
+      .set({ extractInputHash: await legacyLlmInputHash(asked), extractedWith: 'r1.v1' })
+      .where(eq(items.id, a1.id));
+    const callsBefore = world.llm.calls.length;
+    const next = await refresh(world, 'refresh-llm-legacy');
+    expect(next.summary.llm).toMatchObject({ ran: 0, reused: 1, inputTokens: 0 });
+    expect(world.llm.calls).toHaveLength(callsBefore);
+    expect(await stored()).toBe(hash);
+  });
+
+  it('notes a named model the deployment can’t ask, and runs on with its backup', async () => {
+    const definition = testDefinition('refresh-model-problem');
+    await applyDefinition(db, {
+      ...definition,
+      models: { extract: { model: 'gone/x', backup: 'up/y' } },
+    });
+    const world = makeWorld(db, standardRoutes());
+    world.ports.models = testModelSetup({
+      problem: (model) => (model === 'gone/x' ? 'no key: set X' : null),
+    });
+
+    const run = await refresh(world, 'refresh-model-problem');
+    expect(run.summary.notes).toContain(
+      'models.extract.model: gone/x: no key: set X. Its calls count as failed until that’s fixed.',
+    );
+    // The jobs the definition leaves out use the default, which can be asked: nothing says it can't.
+    expect(run.summary.notes.filter((text) => text.startsWith('LLM_MODEL'))).toEqual([]);
+    // The run didn't stop: gone/x was never sent anything, and its backup read every page.
+    expect(run.summary.llm).toMatchObject({ ran: 3, failed: 0 });
+    expect(run.summary.spend?.extract?.['gone/x']).toMatchObject({ calls: 3, failed: 3 });
+    expect((await getRun(db, run.runId))?.status).toBe('complete');
+  });
+
+  it('notes the default model when the deployment can’t ask it and a job falls back to it', async () => {
+    const problem = (model: string) => (model === 'test/model' ? 'no key: set TEST_API_KEY' : null);
+    const NOTE =
+      'LLM_MODEL: test/model: no key: set TEST_API_KEY. Its calls count as failed until that’s fixed.';
+    const { world } = await setUp('refresh-default-problem');
+    world.ports.models = testModelSetup({ problem });
+    const run = await refresh(world, 'refresh-default-problem');
+    expect(run.summary.notes).toContain(NOTE);
+    expect(run.summary.llm).toMatchObject({ ran: 0, failed: 3 });
+    expect((await getRun(db, run.runId))?.status).toBe('complete');
+
+    // A definition that names every job's models never falls back to the default.
+    const definition = testDefinition('refresh-default-unused');
+    await applyDefinition(db, {
+      ...definition,
+      models: { extract: 'up/y', classify: ['up/y'], match: ['up/y'], taxonomyReview: 'up/y' },
+    });
+    const named = makeWorld(db, standardRoutes());
+    named.ports.models = testModelSetup({ problem });
+    const unused = await refresh(named, 'refresh-default-unused');
+    expect(unused.summary.notes).not.toContain(NOTE);
+    expect(unused.summary.llm).toMatchObject({ ran: 3, failed: 0 });
   });
 });
 
@@ -1955,6 +2128,43 @@ describe('a run replayed from the steps it finished', () => {
     expect(replayed).toEqual([`fetch:${a1.id}:0`, `wait:${a1.id}:0`]);
     expect(world.web.requests.filter((sent) => sent.url === URLS.a1)).toHaveLength(1);
     expect(summary.fetches).toMatchObject({ changed: 3 });
+  });
+
+  it('finishes a run whose kept definition has no dollar budget, asking no model', async () => {
+    const { world, a1 } = await setUp('refresh-kept-no-usd');
+    const cache: StepCache = new Map();
+    const params = {
+      runId: runIdFor('refresh-kept-no-usd', world.clock.now()),
+      datasetId: 'refresh-kept-no-usd',
+    };
+    // The first run stops at its first page, after the load step.
+    const web = world.ports.http;
+    let failing = true;
+    world.ports.http = {
+      async get(url, headers) {
+        if (failing && url === URLS.a1) {
+          failing = false;
+          throw new Error('the connection was reset');
+        }
+        return web.get(url, headers);
+      },
+    };
+    await expect(
+      runRefresh(params, fakeStep(world.clock, cache).step, world.ports),
+    ).rejects.toThrow('the connection was reset');
+    // The Worker was deployed meanwhile: the load step's result is the earlier version's, whose
+    // budget counted tokens (ADR 0010).
+    const kept = JSON.parse(cache.get('load')!) as {
+      definition: { budget: Record<string, unknown> };
+    };
+    delete kept.definition.budget.llmUsdPerRun;
+    kept.definition.budget.llmTokensPerRun = 1_000_000;
+    cache.set('load', JSON.stringify(kept));
+
+    const summary = await runRefresh(params, fakeStep(world.clock, cache).step, world.ports);
+    expect(world.llm.calls).toHaveLength(0);
+    expect(summary.notes.join('\n')).toMatch(/pages? waits? for the next run: .*budget of \$0\.00/);
+    expect(a1.id).toBeDefined();
   });
 
   it('pauses a source at the same page as a run that wasn’t stopped', async () => {

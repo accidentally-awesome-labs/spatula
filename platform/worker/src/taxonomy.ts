@@ -1,4 +1,5 @@
 import {
+  acceptFor,
   acceptParts,
   answerText,
   applyRule,
@@ -11,6 +12,7 @@ import {
   freshen,
   hasTaxonomy,
   isEmptyParts,
+  jobSteps,
   NONE_SHELF,
   noProbabilities,
   nothingCarried,
@@ -24,6 +26,7 @@ import {
   standingShelf,
   stateEvidence,
   stateHash,
+  stepAccept,
   subcategoriesOf,
   survivingValues,
   TAXONOMY_CRITERIA_VERSION,
@@ -62,18 +65,28 @@ import {
 } from '@spatula/store';
 import { readPageBody } from './captures';
 import { CASCADE_METHODS, madeBy, weighed, type Classified, type ClassifyFetch } from './classify';
-import { extractionTag, NO_USAGE, retryTag, type Context, type RefreshPorts } from './pipeline';
+import { gather, noneAsked, portsFor, savedCalls, tryStep } from './models';
+import {
+  extractionTag,
+  NO_USAGE,
+  retryTag,
+  type Context,
+  type LlmState,
+  type RefreshPorts,
+} from './pipeline';
 import { storable } from './text';
 
 /*
  * Placing a page in its dataset's taxonomy (ADR 0007): one question in three parts, its shelf, the
  * functions beyond those the shelf implies, and the values of the features on the shelf. A person's
- * shelf, then a rule's, settles the shelf part. The decider is asked the rest where the dataset and
- * the site allow AI input and the run has budget left, and a person is asked only the parts it
- * isn't sure of, in one question. A decision is found again by the page's state, the rule's shelf,
- * and the taxonomy key of the shelf it put the page on, so a change to the taxonomy asks a page again
- * only when it touches what the page's question covered. Each settled part is a statement; an
- * unknown shelf leaves the record out, and "None of these" takes the page out of the dataset.
+ * shelf, then a rule's, settles the shelf part. The classify job's steps are asked the rest, in
+ * order, where the dataset and the site allow AI input and the run has budget left (ADR 0010): a
+ * step whose answer leaves a part open passes the whole question to the next, and a person is asked
+ * only the parts the last step isn't sure of, in one question, and only once every step weighed it.
+ * A decision is found again by the page's state, the rule's shelf, and the taxonomy key of the shelf
+ * it put the page on, so a change to the taxonomy asks a page again only when it touches what the
+ * page's question covered. Each settled part is a statement; an unknown shelf leaves the record
+ * out, and "None of these" takes the page out of the dataset.
  */
 
 /** What deciding reads of a page: what a capture keeps of it, and the text its source's shelf rule finds. */
@@ -258,11 +271,11 @@ export async function decideTaxonomy(
   context: Context,
   item: ItemRef,
   fetched: ClassifyFetch,
-  budgetLeft: number,
+  llm: LlmState,
   ports: RefreshPorts,
   options: { extractionComplete: boolean; facts?: PageFacts; irrelevant?: boolean },
 ): Promise<Classified> {
-  const placed = await placePage(context, item, fetched, budgetLeft, ports, options);
+  const placed = await placePage(context, item, fetched, llm, ports, options);
   if (options.extractionComplete && placed.outcome !== 'skipped' && placed.outcome !== 'failed') {
     await ports.withDb((db) => setExtractedWith(db, item.id, extractionTag(context.revision)));
   }
@@ -273,7 +286,7 @@ async function placePage(
   context: Context,
   item: ItemRef,
   fetched: ClassifyFetch,
-  budgetLeft: number,
+  llm: LlmState,
   ports: RefreshPorts,
   options: { facts?: PageFacts; irrelevant?: boolean },
 ): Promise<Classified> {
@@ -288,6 +301,8 @@ async function placePage(
     irrelevant: false,
     usage: NO_USAGE,
     note: null,
+    calls: [],
+    down: {},
     ...more,
   });
 
@@ -327,8 +342,7 @@ async function placePage(
   const decisionId = await stableId('dc', runId, subjectKey);
   const consent =
     definition.policy.purposes.includes('ai-input') && fetched.signals['ai-input'] !== 'no';
-  const decider = consent ? ports.taxonomyDecider : null;
-  const accept = definition.decisions.classify.accept;
+  const canAsk = consent && ports.taxonomyDecider !== null;
   const at = ports.now();
   const seenAt = fetched.seenAt === undefined ? at : new Date(fetched.seenAt);
   const readAgain = () =>
@@ -344,7 +358,8 @@ async function placePage(
         personShelf,
         reopen,
         irrelevant: options.irrelevant === true,
-        accept,
+        // Each answer is held to the threshold of the step that gave it (ADR 0010).
+        accept: acceptFor(definition, 'classify', decision.adapter),
         seenAt,
         at,
       }),
@@ -369,7 +384,7 @@ async function placePage(
   );
   if (
     earlier !== null &&
-    (earlier.id === decisionId || placeStands(earlier, { consent, canAsk: decider !== null }))
+    (earlier.id === decisionId || placeStands(earlier, { consent, canAsk }))
   ) {
     const applied = await apply(earlier);
     const again = earlier.id === decisionId;
@@ -378,11 +393,12 @@ async function placePage(
       usage: again
         ? { inputTokens: earlier.inputTokens, outputTokens: earlier.outputTokens }
         : NO_USAGE,
+      ...(again ? { calls: savedCalls(earlier) } : {}),
     });
   }
 
-  const asking = decider !== null && !isEmptyParts(asked) ? decider : null;
-  if (asking !== null && budgetLeft <= 0) {
+  const asking = canAsk && !isEmptyParts(asked);
+  if (asking && llm.usdLeft <= 0) {
     // The next run reads the page again, with a budget of its own.
     await readAgain();
     return result('skipped');
@@ -395,22 +411,58 @@ async function placePage(
         ? 'A rule names the shelf.'
         : 'No decider could be asked.';
   let usage = NO_USAGE;
-  if (asking !== null) {
-    try {
-      const answered = await asking.decide({
-        taxonomy,
-        parts: asked,
-        shelf: fixedShelf,
-        evidence: stateEvidence(state),
+  let adapter: string | null = null;
+  let accept = definition.decisions.classify.accept;
+  const gathered = noneAsked();
+  if (asking) {
+    const failures: string[] = [];
+    let settled = false;
+    const evidence = stateEvidence(state);
+    for (const step of jobSteps(definition, 'classify', ports.models.defaultModel)) {
+      const tried = await tryStep({
+        step,
+        setup: ports.models,
+        down: { ...llm.down, ...gathered.down },
+        now: ports.now(),
+        async ask(model) {
+          const decider = portsFor(ports, model).taxonomyDecider;
+          if (decider === null) throw new Error('no decider is configured');
+          const answer = await decider.decide({
+            taxonomy,
+            parts: asked,
+            shelf: fixedShelf,
+            evidence,
+          });
+          return { value: { answer, adapter: decider.name }, usage: answer.usage };
+        },
       });
-      probabilities = answered.probabilities;
-      reason = answered.evidence;
-      usage = answered.usage;
-    } catch (error) {
+      gather(gathered, tried);
+      if (tried.answered === null) {
+        failures.push(...tried.failures);
+        continue;
+      }
+      // Each step's answer is taken whole, on its own threshold (ADR 0010).
+      const { answer } = tried.answered.value;
+      probabilities = answer.probabilities;
+      reason = answer.evidence;
+      usage = {
+        inputTokens: usage.inputTokens + answer.usage.inputTokens,
+        outputTokens: usage.outputTokens + answer.usage.outputTokens,
+      };
+      adapter = tried.answered.value.adapter;
+      accept = stepAccept(definition, 'classify', step);
+      const placed = acceptParts({ taxonomy, asked, fixedShelf, probabilities, accept });
+      if (isEmptyParts(placed.open)) {
+        settled = true;
+        break;
+      }
+    }
+    // A person is asked only what every step weighed (ADR 0003).
+    if (!settled && failures.length > 0) {
       await readAgain();
-      const message = error instanceof Error ? error.message : String(error);
       return result('failed', {
-        note: storable(`${item.locator}: the decider failed: ${message}`),
+        note: storable(`${item.locator}: the decider failed: ${failures.join('; ')}`),
+        ...gathered,
       });
     }
   }
@@ -434,11 +486,11 @@ async function placePage(
       stateHash: stateHashOf,
       question: { type: 'taxonomy', prompt: TAXONOMY_PROMPT, parts: decided.open },
       criteriaVersion: TAXONOMY_CRITERIA_VERSION,
-      adapter: asking === null ? null : asking.name,
+      adapter,
       probabilities: flatProbabilities(probabilities),
       evidence: reason,
       thresholds: { accept },
-      outcome: !settledAll ? 'escalated' : asking === null ? 'rule' : 'accepted',
+      outcome: !settledAll ? 'escalated' : adapter === null ? 'rule' : 'accepted',
       answer: answerText(decided.settled),
       inputTokens: usage.inputTokens,
       outputTokens: usage.outputTokens,
@@ -450,6 +502,7 @@ async function placePage(
     irrelevant: applied === 'irrelevant',
     usage,
     note: rule.note === null ? null : storable(`${item.locator}: ${rule.note}`),
+    ...gathered,
   });
 }
 
@@ -483,11 +536,12 @@ function shelfChance(
 
 /**
  * Applies a decision about a page's place. A person's decision is applied as they gave it, as their
- * statements. Any other is accepted again, under the dataset's threshold now and this taxonomy
- * version, and its settled parts are the cascade's statements: a rule's shelf as the rule's, the
- * rest as the decider's. A shelf a person chose isn't stated by the cascade. "None of these" takes
- * the page out. The parts left open are a person's one question, and so is a person's earlier
- * answer that can't carry over. The page keeps the key its decision was made under.
+ * statements. Any other is accepted again, under the threshold its step has now (the job's, for a
+ * rule's) and this taxonomy version, and its settled parts are the cascade's statements: a rule's
+ * shelf as the rule's, the rest as the decider's. A shelf a person chose isn't stated by the
+ * cascade. "None of these" takes the page out. The parts left open are a person's one question, and
+ * so is a person's earlier answer that can't carry over. The page keeps the key its decision was
+ * made under.
  */
 async function applyPlace(
   db: Executor,

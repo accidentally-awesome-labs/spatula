@@ -1,5 +1,6 @@
 import {
   applyChanges,
+  modelChanges,
   newId,
   parseDefinition,
   sha256Hex,
@@ -152,8 +153,14 @@ export async function applyDefinition(
 ): Promise<ApplySummary> {
   const id = definition.dataset;
   const hash = await sha256Hex(stableStringify(definition));
+  // The stored definition is read as it is, not through the schema: one an earlier version stored
+  // may no longer pass the checks, and applying a new one is how the owner fixes that.
   const [existing] = await db
-    .select({ revision: datasets.revision, definitionHash: datasets.definitionHash })
+    .select({
+      revision: datasets.revision,
+      definitionHash: datasets.definitionHash,
+      definition: datasets.definition,
+    })
     .from(datasets)
     .where(eq(datasets.id, id));
   const current =
@@ -242,6 +249,10 @@ export async function applyDefinition(
         )
       : null;
   if (rescoped?.ok === true) summary.taxonomyVersion = rescoped.taxonomy.version;
+  // The jobs whose models the definition changes (ADR 0010), as `plan` shows any other change.
+  const models =
+    existing !== undefined && changed ? modelChanges(existing.definition, definition) : [];
+  if (models.length > 0) summary.models = models;
   if (dryRun || (!changed && moves.moved.length === 0)) return summary;
 
   await db.transaction(async (tx) => {

@@ -219,15 +219,35 @@ spatula admin tenant delete --tenant <id> [--yes]
 
 ## Secret management
 
-| Secret                        | Where stored                        | Rotation                    |
-| ----------------------------- | ----------------------------------- | --------------------------- |
-| `DATABASE_URL`                | Environment variable / secret store | Manual, per-deploy          |
-| `REDIS_URL`                   | Environment variable / secret store | Manual, per-deploy          |
-| `JWT_JWKS_URL` / `JWT_ISSUER` | Environment variable                | OIDC provider rotation      |
-| `OPENROUTER_API_KEY`          | Environment variable                | Manual, per provider policy |
-| API keys (raw)                | Shown to user once, never stored    | User-driven rotation        |
+| Secret                        | Where stored                         | Rotation               |
+| ----------------------------- | ------------------------------------ | ---------------------- |
+| `DATABASE_URL`                | Environment variable / secret store  | Manual, per-deploy     |
+| `REDIS_URL`                   | Environment variable / secret store  | Manual, per-deploy     |
+| `JWT_JWKS_URL` / `JWT_ISSUER` | Environment variable                 | OIDC provider rotation |
+| `ANTHROPIC_API_KEY`           | Worker secret, or held by AI Gateway | By the owner           |
+| `OPENAI_API_KEY`              | Worker secret, or held by AI Gateway | By the owner           |
+| `OPENROUTER_API_KEY`          | Worker secret, or held by AI Gateway | By the owner           |
+| `CEREBRAS_API_KEY`            | Worker secret, or held by AI Gateway | By the owner           |
+| `GROQ_API_KEY`                | Worker secret, or held by AI Gateway | By the owner           |
+| `AI_GATEWAY_URL`              | Worker secret                        | By the owner           |
+| `AI_GATEWAY_TOKEN`            | Worker secret                        | By the owner           |
+| API keys (raw)                | Shown to user once, never stored     | User-driven rotation   |
 
 No secrets are committed to the repository. `.env` files are gitignored.
+
+### Models and providers
+
+Spatula 0.2's Worker asks models of five providers
+([ADR 0010](adr/0010-models-and-providers.md)). Every call goes through the `spatula-llm` AI
+Gateway, which logs it; a Worker without `AI_GATEWAY_URL` asks no model. OpenRouter's requests deny
+data collection (`data_collection: "deny"`), so only hosts that, by OpenRouter's own tags, don't
+collect what they're sent are used. The same `<UNTRUSTED_CONTENT>` wrapper, schemas, and checks
+apply to every model: an answer that doesn't fit its schema is no answer, a decider can answer only
+with one of its question's options, and an extracted value is kept only if it is on the page. A
+provider's key is a Worker secret, or the gateway holds it, which counts only while
+`AI_GATEWAY_TOKEN` is set. Keys are redacted from errors: an adapter's error names the status and
+the provider's message, with any key or token replaced by `[key]`, and never includes the request's
+headers.
 
 ---
 

@@ -3,8 +3,10 @@ import {
   buildLlmRequest,
   extractFromPage,
   hasTaxonomy,
+  jobSteps,
   LLM_MAX_TOKENS,
   llmFields,
+  legacyLlmInputHash,
   llmInputHash,
   MAX_MATCH_QUESTIONS,
   PAGE_METHODS,
@@ -19,7 +21,10 @@ import {
   taxonomyKeys,
   type ContentSignals,
   type Definition,
+  type DownMarks,
   type LlmUsage,
+  type ModelCall,
+  type ModelPrice,
   type Outcome,
   type Page,
   type PageExtraction,
@@ -69,15 +74,18 @@ import {
 } from './classify';
 import { discoverSource } from './discovery';
 import { matchItem } from './match';
+import { portsFor, runModelIssues, tryStep } from './models';
 import {
-  budgetLeft,
+  countCalls,
   decisionsOf,
   extractionTag,
   intervalFor,
+  llmState,
   NO_CHANGE,
   NO_USAGE,
   retryTag,
   type Context,
+  type LlmState,
   type RefreshPorts,
   type Standing,
   type StepRunner,
@@ -111,7 +119,7 @@ export {
  * and the site allow AI input, and only when its question changed. A page whose source leaves the
  * record type's decided field to the cascade is then classified, in a step of its own
  * (classify.ts), and isn't current until that step has finished. The LLM and the decider share the
- * run's token budget (pipeline.ts). Then entities are resolved. Resolution asks about the pairs it
+ * run's dollar budget (pipeline.ts). Then entities are resolved. Resolution asks about the pairs it
  * can't settle by rule, each in a step of its own (match.ts), and defers them until they're
  * answered. If the records changed, they go through the dataset's gates (publish.ts): a snapshot is
  * published when the gates allow it, and held for the owner's review when they don't. Nothing here
@@ -248,9 +256,16 @@ interface Extracted {
   read: boolean;
   /** Whether the LLM wasn't asked because the run's budget was spent. */
   waitsForBudget: boolean;
+  /** What the step asked of models (ADR 0010). Absent in results from before it. */
+  calls?: ModelCall[];
+  /** The providers the step found down. Absent in results from before it. */
+  down?: DownMarks;
 }
 
-/** What the load step returns. One kept by an earlier version has no standing. */
+/**
+ * What the load step returns. One kept by an earlier version has no standing, and one kept before
+ * ADR 0010 has a definition whose budget lacks `llmUsdPerRun` (it counted tokens).
+ */
 interface Loaded {
   revision: number;
   definition: Definition;
@@ -309,7 +324,15 @@ export async function runRefresh(
       runId,
       datasetId,
       revision: loaded.revision,
-      definition: loaded.definition,
+      // A definition kept before ADR 0010 has no dollar budget: 0 asks no more models, so its
+      // pages wait for the next run, which reads the applied definition.
+      definition: {
+        ...loaded.definition,
+        budget: {
+          ...loaded.definition.budget,
+          llmUsdPerRun: loaded.definition.budget.llmUsdPerRun ?? 0,
+        },
+      },
       startedAt: new Date(loaded.startedAt),
       standing: loaded.standing ?? {},
       taxonomyVersion,
@@ -320,6 +343,11 @@ export async function runRefresh(
         summary,
         `${datasetId} has no taxonomy yet, so its pages wait to be placed: seed one with pnpm spatula taxonomy seed`,
       );
+    }
+    // The models the run would ask that the deployment can't, as it is now (ADR 0010): a key may
+    // have gone since the definition was applied. The run goes on, and their calls fail.
+    for (const issue of runModelIssues(context.definition, ports.models)) {
+      note(summary, `${issue} Its calls count as failed until that’s fixed.`);
     }
 
     // What each source's answers said of its site, and what each refused source's probe met (ADR
@@ -472,10 +500,10 @@ export async function runRefresh(
       );
     }
     if (budgetWaits > 0) {
-      const { llmTokensPerRun } = context.definition.budget;
+      const { llmUsdPerRun } = context.definition.budget;
       note(
         summary,
-        `${budgetWaits} ${budgetWaits === 1 ? 'page waits' : 'pages wait'} for the next run: this run’s LLM budget of ${llmTokensPerRun.toLocaleString('en-US')} tokens is spent`,
+        `${budgetWaits} ${budgetWaits === 1 ? 'page waits' : 'pages wait'} for the next run: this run’s LLM budget of $${llmUsdPerRun.toFixed(2)} is spent`,
       );
     }
 
@@ -551,12 +579,13 @@ export async function runRefresh(
     for (const question of questions) {
       const lineup = lineups[`${question.itemId}|${question.entityId}`] ?? [];
       const matched = await step.do(`match:${question.itemId}:${question.entityId}`, () =>
-        matchItem(context, { ...question, lineup }, budgetLeft(context, summary), ports),
+        matchItem(context, { ...question, lineup }, llmState(context, summary), ports),
       );
       const counts = decisionsOf(summary, 'match');
       counts[matched.outcome] += 1;
       counts.inputTokens += matched.usage.inputTokens;
       counts.outputTokens += matched.usage.outputTokens;
+      countCalls(summary, 'match', matched, ports.models.price);
       if (matched.note !== null) note(summary, matched.note);
       // The pairs the rule kept apart, by name, at most 10; `counts.rule` counts them all.
       if (matched.outcome === 'rule' && matched.pair !== undefined) {
@@ -591,9 +620,10 @@ export async function runRefresh(
     // none: its record type has no taxonomy, or its taxonomy isn't seeded yet.
     if (placing && taxonomyVersion !== null) {
       const reviewed = await step.do('taxonomy:review', () =>
-        reviewTaxonomy(context, budgetLeft(context, summary), ports),
+        reviewTaxonomy(context, llmState(context, summary), ports),
       );
       summary.taxonomy = reviewed.taxonomy;
+      countCalls(summary, 'taxonomyReview', reviewed, ports.models.price);
       for (const text of reviewed.notes) note(summary, text);
     }
     await step.do('finish', () =>
@@ -731,7 +761,7 @@ async function readItem(
   ports: RefreshPorts,
 ): Promise<boolean> {
   const extracted = await step.do(`extract:${item.id}`, () =>
-    extractItem(context, item, fetched, budgetLeft(context, summary), ports),
+    extractItem(context, item, fetched, llmState(context, summary), ports),
   );
   summary.statements.added += extracted.statements.added;
   summary.statements.reseen += extracted.statements.reseen;
@@ -739,6 +769,7 @@ async function readItem(
   summary.llm[extracted.llm] += 1;
   summary.llm.inputTokens += extracted.usage.inputTokens;
   summary.llm.outputTokens += extracted.usage.outputTokens;
+  countCalls(summary, 'extract', extracted, ports.models.price);
   for (const text of extracted.notes) note(summary, text);
   let waitsForBudget = extracted.waitsForBudget;
   // A page whose LLM step failed or waited for the budget is read again next run, whatever
@@ -746,9 +777,9 @@ async function readItem(
   const complete = extracted.llm !== 'failed' && !extracted.waitsForBudget;
   if (extracted.read && classifyTarget(context.definition, item) !== null) {
     const classified = await step.do(`classify:${item.id}`, () =>
-      classifyItem(context, item, fetched, budgetLeft(context, summary), ports, complete),
+      classifyItem(context, item, fetched, llmState(context, summary), ports, complete),
     );
-    waitsForBudget = countDecision(summary, classified) || waitsForBudget;
+    waitsForBudget = countDecision(summary, classified, ports.models.price) || waitsForBudget;
   }
   // A dataset whose taxonomy isn't seeded yet leaves its pages marked for another read.
   if (
@@ -765,14 +796,14 @@ async function readItem(
         context,
         item,
         fetched,
-        budgetLeft(context, summary),
+        llmState(context, summary),
         ports,
         { extractionComplete: complete, ...(keptOut ? { irrelevant: true } : {}) },
       );
       // A page that was out and stays out isn't found out again, as a backfill counts it.
       return keptOut ? { ...decided, irrelevant: false } : decided;
     });
-    waitsForBudget = countDecision(summary, placed) || waitsForBudget;
+    waitsForBudget = countDecision(summary, placed, ports.models.price) || waitsForBudget;
   }
   return waitsForBudget;
 }
@@ -781,11 +812,16 @@ async function readItem(
  * Counts a page's classification or placement in the run's summary, which share their counts, and
  * says whether it waits for the next run's budget.
  */
-function countDecision(summary: RunSummary, decided: Classified): boolean {
+function countDecision(
+  summary: RunSummary,
+  decided: Classified,
+  price: (model: string) => ModelPrice | null,
+): boolean {
   const counts = decisionsOf(summary, 'classify');
   counts[decided.outcome] += 1;
   counts.inputTokens += decided.usage.inputTokens;
   counts.outputTokens += decided.usage.outputTokens;
+  countCalls(summary, 'classify', decided, price);
   if (decided.irrelevant) summary.irrelevant = (summary.irrelevant ?? 0) + 1;
   if (decided.note !== null) note(summary, decided.note);
   return decided.outcome === 'skipped';
@@ -815,7 +851,7 @@ async function backfill(
   let toFetch = 0;
   for (
     let start = 0;
-    start < planned.ids.length && budgetLeft(context, summary) > 0;
+    start < planned.ids.length && llmState(context, summary).usdLeft > 0;
     start += ITEMS_PER_STEP
   ) {
     const batch = await step.do(`backfill:items:${start}`, () =>
@@ -824,11 +860,12 @@ async function backfill(
       ),
     );
     for (const item of batch) {
-      if (budgetLeft(context, summary) <= 0) break;
+      if (llmState(context, summary).usdLeft <= 0) break;
       const done = await step.do(`backfill:${item.id}`, () =>
-        backfillPage(context, item, budgetLeft(context, summary), ports),
+        backfillPage(context, item, llmState(context, summary), ports),
       );
-      if (done.classified !== undefined) countDecision(summary, done.classified);
+      if (done.classified !== undefined)
+        countDecision(summary, done.classified, ports.models.price);
       if (done.outcome === 'decided') decided += 1;
       if (done.outcome === 'fetch') toFetch += 1;
     }
@@ -1274,7 +1311,7 @@ async function extractItem(
   context: Context,
   item: ItemRef,
   fetched: Fetched,
-  tokensLeft: number,
+  llm: LlmState,
   ports: RefreshPorts,
 ): Promise<Extracted> {
   const { definition, revision, datasetId } = context;
@@ -1341,7 +1378,7 @@ async function extractItem(
       ...own,
     }),
   );
-  const llm = await askLlm(
+  const asked = await askLlm(
     context,
     item,
     fetched,
@@ -1350,7 +1387,7 @@ async function extractItem(
     own,
     extraction.missing,
     seenAt,
-    tokensLeft,
+    llm,
     ports,
   );
   await ports.withDb((db) =>
@@ -1363,14 +1400,14 @@ async function extractItem(
       // step has finished, and that step marks it. So is a page placed in a taxonomy, until its
       // decide step has.
       extractedWith:
-        llm.outcome === 'failed' || llm.waitsForBudget === true || decided !== null || placed
+        asked.outcome === 'failed' || asked.waitsForBudget === true || decided !== null || placed
           ? retryTag(revision)
           : extractionTag(revision),
-      extractInputHash: llm.inputHash,
+      extractInputHash: asked.inputHash,
       // The detail can quote an LLM error's message, and a NUL in it would fail this write after
       // the LLM has been paid for.
-      llm: storable(llm.detail),
-      usage: llm.usage,
+      llm: storable(asked.detail),
+      usage: asked.usage,
     }),
   );
   const notes = capped(
@@ -1379,18 +1416,20 @@ async function extractItem(
       `${item.locator}: ${rejected.property} from ${rejected.path} is ${rejected.reason}`,
     (count) => `${item.locator}: ${count} more values were rejected`,
   );
-  if (llm.note !== null) notes.push(llm.note);
+  if (asked.note !== null) notes.push(asked.note);
   return {
     statements: {
-      added: pageCounts.added + llm.counts.added,
-      reseen: pageCounts.reseen + llm.counts.reseen,
-      withdrawn: pageCounts.withdrawn + llm.counts.withdrawn,
+      added: pageCounts.added + asked.counts.added,
+      reseen: pageCounts.reseen + asked.counts.reseen,
+      withdrawn: pageCounts.withdrawn + asked.counts.withdrawn,
     },
-    llm: llm.outcome,
-    usage: llm.usage,
+    llm: asked.outcome,
+    usage: asked.usage,
     notes,
     read: true,
-    waitsForBudget: llm.waitsForBudget === true,
+    waitsForBudget: asked.waitsForBudget === true,
+    calls: asked.calls,
+    down: asked.down,
   };
 }
 
@@ -1441,6 +1480,9 @@ interface LlmStep {
   note: string | null;
   /** Whether the LLM wasn't asked because the run's budget was spent. */
   waitsForBudget?: boolean;
+  /** What the step asked of models, and the providers it found down (ADR 0010). */
+  calls: ModelCall[];
+  down: DownMarks;
 }
 
 async function askLlm(
@@ -1452,7 +1494,7 @@ async function askLlm(
   own: { properties?: string[] },
   missing: string[],
   seenAt: Date,
-  tokensLeft: number,
+  llm: LlmState,
   ports: RefreshPorts,
 ): Promise<LlmStep> {
   const skipped = (why: string, more: Partial<LlmStep> = {}): LlmStep => ({
@@ -1462,6 +1504,8 @@ async function askLlm(
     counts: NO_CHANGE,
     inputHash: undefined,
     note: null,
+    calls: [],
+    down: {},
     ...more,
   });
   // The LLM speaks for every field but the cascade's, so what it said of a field it no longer
@@ -1489,13 +1533,18 @@ async function askLlm(
     const counts = await ports.withDb((db) => writeStatements(db, { ...write, statements: [] }));
     return skipped(refusal, { counts, inputHash: null });
   }
-  const llm = ports.llm;
-  if (llm === null) return skipped('no LLM is configured');
+  if (ports.llm === null) return skipped('no LLM is configured');
 
-  const inputHash = await llmInputHash({ model: llm.model, text: page.text, fields });
-  if (inputHash === item.extractInputHash) {
-    // The same text, fields, and model would get the same answer, so its statements are re-seen.
-    // The cascade's answer isn't among them: nothing has confirmed it until its own step has.
+  const hashed = { text: page.text, fields };
+  const inputHash = await llmInputHash(hashed);
+  // A page asked before ADR 0010 holds the old hash, which named the model; it was asked the same
+  // thing. Its answer is reused, and the new hash replaces the old.
+  if (
+    item.extractInputHash === inputHash ||
+    item.extractInputHash === (await legacyLlmInputHash(hashed))
+  ) {
+    // The same text and fields would get the same answer, so its statements are re-seen. The
+    // cascade's answer isn't among them: nothing has confirmed it until its own step has.
     const reseen = await ports.withDb((db) =>
       reseeStatements(db, {
         itemId: item.id,
@@ -1513,37 +1562,57 @@ async function askLlm(
       counts: { ...NO_CHANGE, reseen },
       inputHash,
       note: null,
+      calls: [],
+      down: {},
     };
   }
   // A reused answer costs nothing; a new one waits for the next run's budget.
-  if (tokensLeft <= 0) return skipped('the run’s LLM budget is spent', { waitsForBudget: true });
+  if (llm.usdLeft <= 0) return skipped('the run’s LLM budget is spent', { waitsForBudget: true });
 
   // The question names the page that was listed, which the dataset's owner chose. After a
   // redirect the final address is the site's text, and it would sit outside the wrapper around
   // untrusted content.
   const question = buildLlmRequest({ url: new URL(item.locator).href, text: page.text, fields });
-  let answer: { output: Record<string, unknown> | null; usage: LlmUsage };
-  try {
-    answer = await llm.structured({ ...question, maxTokens: LLM_MAX_TOKENS });
-  } catch (error) {
-    const message = error instanceof Error ? error.message : String(error);
+  const [step] = jobSteps(context.definition, 'extract', ports.models.defaultModel);
+  const tried = await tryStep({
+    step: step!,
+    setup: ports.models,
+    down: llm.down,
+    now: ports.now(),
+    async ask(model) {
+      const port = portsFor(ports, model).llm;
+      if (port === null) throw new Error('no LLM is configured');
+      const answer = await port.structured({ ...question, maxTokens: LLM_MAX_TOKENS });
+      return { value: answer.output, usage: answer.usage };
+    },
+  });
+  const asked = { calls: tried.calls, down: tried.down };
+  if (tried.answered === null) {
+    const message = tried.failures.join('; ');
     return {
       ...skipped(''),
+      ...asked,
       outcome: 'failed',
       detail: `failed: ${message}`,
       note: storable(`${item.locator}: the LLM call failed: ${message}`),
     };
   }
-  if (answer.output === null) {
+  // The answering call is the last one: a no-answer is still a call that was answered.
+  const answered = tried.calls.at(-1)!;
+  const usage = { inputTokens: answered.inputTokens, outputTokens: answered.outputTokens };
+  const output = tried.answered.value;
+  if (output === null) {
+    // No answer is a failure to read the page again next run, never a call for the backup.
     return {
       ...skipped(''),
+      ...asked,
       outcome: 'failed',
       detail: 'failed: the answer didn’t fit the schema',
-      usage: answer.usage,
+      usage,
       note: `${item.locator}: the LLM’s answer didn’t fit the schema`,
     };
   }
-  const accepted = acceptLlmOutput({ output: answer.output, text: page.text, fields });
+  const accepted = acceptLlmOutput({ output, text: page.text, fields });
   const counts = await ports.withDb((db) =>
     writeStatements(db, { ...write, statements: accepted.statements }),
   );
@@ -1551,7 +1620,8 @@ async function askLlm(
   return {
     outcome: 'ran',
     detail: `ran: kept ${accepted.statements.length}, dropped ${dropped}`,
-    usage: answer.usage,
+    usage,
+    ...asked,
     counts,
     inputHash,
     note: dropped === 0 ? null : `${item.locator}: dropped ${dropped} of the LLM’s values`,

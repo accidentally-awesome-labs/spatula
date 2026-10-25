@@ -426,6 +426,47 @@ describe('the owner routes', () => {
     expect(await notJson.json()).toEqual({ error: 'The body isn’t JSON.' });
   });
 
+  it('refuse a definition naming a model the deployment can’t ask, in a plan and in an apply', async () => {
+    const definition = { ...testDefinition('api-models'), models: { match: ['openai/strong'] } };
+    const refusal = (issue: string) => ({ error: 'The definition has problems.', issues: [issue] });
+    // wrangler.jsonc prices no OpenAI model.
+    const unpriced = await call('PUT', '/datasets/api-models?dryRun=1', { body: definition });
+    expect(unpriced.status).toBe(400);
+    expectNoStore(unpriced);
+    expect(await unpriced.json()).toEqual(
+      refusal('models.match[0].model: openai/strong: it has no price: add it to LLM_PRICES.'),
+    );
+
+    // Priced, and with the gateway's address, a model needs its provider's key: the tests have none.
+    const priced = {
+      ...env,
+      LLM_PRICES: { ...env.LLM_PRICES, 'openai/strong': [2, 8] },
+    } as unknown as Env;
+    const gateway = {
+      ...priced,
+      AI_GATEWAY_URL: 'https://gateway.example/v1/acct/spatula-llm',
+    } as unknown as Env;
+    for (const path of ['/datasets/api-models?dryRun=1', '/datasets/api-models']) {
+      const refused = await call('PUT', path, { body: definition, bindings: gateway });
+      expect(refused.status, path).toBe(400);
+      expectNoStore(refused);
+      expect(await refused.json()).toEqual(
+        refusal(
+          'models.match[0].model: openai/strong: no key: set OPENAI_API_KEY, or name openai in LLM_GATEWAY_KEYS.',
+        ),
+      );
+    }
+    expect(await withDatabase(env, (db) => getDataset(db, 'api-models'))).toBeNull();
+
+    // Without the gateway's address the Worker asks no model, so the key isn't checked.
+    const applied = await call('PUT', '/datasets/api-models', {
+      body: definition,
+      bindings: priced,
+    });
+    expect(applied.status).toBe(200);
+    expect(await applied.json()).toMatchObject({ created: true, changed: true });
+  });
+
   it('start one run per five-minute slot, and report it', async () => {
     await call('PUT', '/datasets/api-runs', { body: testDefinition('api-runs') });
     const introspector = await introspectWorkflow(env.REFRESH);
@@ -837,6 +878,46 @@ describe('the owner routes', () => {
     } finally {
       logged.mockRestore();
     }
+  });
+
+  it('say in the status which providers the latest finished run found down', async () => {
+    const datasetId = 'api-status-down';
+    const down = `${datasetId}-202610241200`;
+    const after = `${datasetId}-202610241300`;
+    const summary: RunSummary = {
+      items: 0,
+      fetches: { changed: 0, unchanged: 0, gone: 0, failed: 0, blocked: 0 },
+      statements: { added: 0, reseen: 0, withdrawn: 0 },
+      llm: { ran: 0, reused: 0, skipped: 0, failed: 0, inputTokens: 0, outputTokens: 0 },
+      entities: { created: 0, linked: 0, conflicts: 0, unresolved: 0 },
+      snapshot: { published: false, reason: 'nothing changed', excluded: [] },
+      notes: [],
+    };
+    const mark = { at: '2026-10-24T12:31:07.000Z', reason: 'usage limit' };
+    const status = async () =>
+      (await (await call('GET', `/datasets/${datasetId}/status`)).json()) as DatasetStatus;
+
+    await runWithoutWorkflow(down, 2 * HOUR, datasetId);
+    // Before any run has finished, there is nothing to say.
+    expect(await status()).not.toHaveProperty('llm');
+    await withDatabase(env, (db) =>
+      finishRun(db, down, {
+        status: 'complete',
+        summary: { ...summary, llm: { ...summary.llm, down: { anthropic: mark } } },
+      }),
+    );
+    expect((await status()).llm).toEqual({ runId: down, down: { anthropic: mark } });
+
+    // A later run that found every provider up says nothing, as one from before ADR 0010 does.
+    await runWithoutWorkflow(after, HOUR, datasetId);
+    await withDatabase(env, async (db) => {
+      await finishRun(db, after, { status: 'complete', summary });
+      await db
+        .update(runs)
+        .set({ finishedAt: new Date(Date.now() + 60_000) })
+        .where(eq(runs.id, after));
+    });
+    expect(await status()).not.toHaveProperty('llm');
   });
 
   it('report a run that is still going as running', async () => {

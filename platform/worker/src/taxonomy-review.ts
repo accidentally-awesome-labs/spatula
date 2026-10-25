@@ -4,6 +4,7 @@ import {
   changeSchema,
   checkProposals,
   impactOf,
+  jobSteps,
   newId,
   NONE_SHELF,
   reviewOutputSchema,
@@ -13,10 +14,11 @@ import {
   summarizeEvidence,
   TAXONOMY_REVIEW_MAX_TOKENS,
   type ActorRecord,
+  type DownMarks,
   type EvidencePage,
   type LlmUsage,
+  type ModelCall,
   type ProposalEvidence,
-  type ReviewOutput,
   type RunSummary,
   type Taxonomy,
 } from '@spatula/core';
@@ -34,7 +36,8 @@ import {
   taxonomyAt,
   type NewProposal,
 } from '@spatula/store';
-import { NO_USAGE, type Context, type RefreshPorts } from './pipeline';
+import { portsFor, tryStep } from './models';
+import { NO_USAGE, type Context, type LlmState, type RefreshPorts } from './pipeline';
 import { storable } from './text';
 
 /*
@@ -51,6 +54,10 @@ import { storable } from './text';
 export interface TaxonomyReviewStep {
   taxonomy: NonNullable<RunSummary['taxonomy']>;
   notes: string[];
+  /** What the review asked of models (ADR 0010). Absent in results from before it. */
+  calls?: ModelCall[];
+  /** The providers the review found down. Absent in results from before it. */
+  down?: DownMarks;
 }
 
 /** Spatula itself, applying a change of a kind that has earned it. */
@@ -69,7 +76,7 @@ const APPLY_TRIES = 3;
  */
 export async function reviewTaxonomy(
   context: Context,
-  budgetLeft: number,
+  llm: LlmState,
   ports: RefreshPorts,
 ): Promise<TaxonomyReviewStep> {
   const { runId } = context;
@@ -80,11 +87,15 @@ export async function reviewTaxonomy(
   // the schema) is asked once more, and only the re-run's tokens are counted.
   const saved = await ports.withDb((db) => proposalsOfRun(db, runId));
   const asked =
-    saved.length > 0 ? { usage: NO_USAGE, notes: [] } : await propose(context, budgetLeft, ports);
+    saved.length > 0
+      ? { usage: NO_USAGE, notes: [], calls: [], down: {} }
+      : await propose(context, llm, ports);
   if ('skipped' in asked) {
     return {
       taxonomy: { proposed: 0, dropped: 0, applied: [], ...NO_USAGE, skipped: asked.skipped },
       notes: [],
+      calls: [],
+      down: {},
     };
   }
   const notes = [...asked.notes, ...(await applyEarned(context, ports))];
@@ -105,23 +116,26 @@ export async function reviewTaxonomy(
       outputTokens: asked.usage.outputTokens,
     },
     notes,
+    calls: asked.calls,
+    down: asked.down,
   };
 }
 
 /** Asks the review and keeps its proposals; or says why it may not ask. */
 async function propose(
   context: Context,
-  budgetLeft: number,
+  llm: LlmState,
   ports: RefreshPorts,
-): Promise<{ usage: LlmUsage; notes: string[] } | { skipped: string }> {
+): Promise<
+  { usage: LlmUsage; notes: string[]; calls: ModelCall[]; down: DownMarks } | { skipped: string }
+> {
   const { datasetId, definition, runId } = context;
   // It shows a model what the dataset's pages said, which takes what deciding takes (ADR 0003).
   if (!definition.policy.purposes.includes('ai-input')) {
     return { skipped: 'the dataset doesn’t allow AI input' };
   }
-  const llm = ports.llm;
-  if (llm === null) return { skipped: 'no model is configured' };
-  if (budgetLeft <= 0) return { skipped: 'this run’s LLM budget is spent' };
+  if (ports.llm === null) return { skipped: 'no model is configured' };
+  if (llm.usdLeft <= 0) return { skipped: 'this run’s LLM budget is spent' };
   const read = await ports.withDb(async (db) => ({
     current: await currentTaxonomy(db, datasetId),
     first: await taxonomyAt(db, datasetId, 1),
@@ -145,25 +159,42 @@ async function propose(
   }
   const seeded = first.taxonomy.shelves.map((shelf) => shelf.id);
   const evidence = summarizeEvidence({ taxonomy, pages: shown, seeded, everHeld: read.everHeld });
-  let answer: { output: ReviewOutput | null; usage: LlmUsage };
-  try {
-    answer = await llm.structured({
-      ...buildReviewRequest(taxonomy, evidence),
-      schema: reviewOutputSchema,
-      maxTokens: TAXONOMY_REVIEW_MAX_TOKENS,
-    });
-  } catch (error) {
+  const [step] = jobSteps(definition, 'taxonomyReview', ports.models.defaultModel);
+  const request = buildReviewRequest(taxonomy, evidence);
+  const tried = await tryStep({
+    step: step!,
+    setup: ports.models,
+    down: llm.down,
+    now: ports.now(),
+    async ask(model) {
+      const port = portsFor(ports, model).llm;
+      if (port === null) throw new Error('no model is configured');
+      const answer = await port.structured({
+        ...request,
+        schema: reviewOutputSchema,
+        maxTokens: TAXONOMY_REVIEW_MAX_TOKENS,
+      });
+      return { value: answer.output, usage: answer.usage };
+    },
+  });
+  const asked = { calls: tried.calls, down: tried.down };
+  if (tried.answered === null) {
     // A failed call proposes nothing, as the run's other calls do: the run still finishes, with
     // what it published, and the next run's review asks again.
-    const message = error instanceof Error ? error.message : String(error);
     return {
       usage: NO_USAGE,
-      notes: [storable(`The taxonomy review’s call failed: ${message}`)],
+      ...asked,
+      notes: [storable(`The taxonomy review’s call failed: ${tried.failures.join('; ')}`)],
     };
   }
-  if (answer.output === null) {
+  // The answering call is the last one: a no-answer is still a call that was answered.
+  const answered = tried.calls.at(-1)!;
+  const usage = { inputTokens: answered.inputTokens, outputTokens: answered.outputTokens };
+  const output = tried.answered.value;
+  if (output === null) {
     return {
-      usage: answer.usage,
+      usage,
+      ...asked,
       notes: ['The taxonomy review’s answer didn’t fit the schema, so it proposed nothing.'],
     };
   }
@@ -173,7 +204,7 @@ async function propose(
   );
   const checked = checkProposals({
     taxonomy,
-    proposals: answer.output.proposals,
+    proposals: output.proposals,
     pagesInDataset: new Set(shown.map((page) => page.address)),
     seen: read.seen,
     seededShelfHistory: {
@@ -223,7 +254,7 @@ async function propose(
     ),
   ]);
   await ports.withDb((db) => saveProposals(db, rows));
-  return { usage: answer.usage, notes: [] };
+  return { usage, ...asked, notes: [] };
 }
 
 /** A proposal's evidence: the pages it names, with their titles and the shelves they're on. */

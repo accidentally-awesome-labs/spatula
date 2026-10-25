@@ -21,10 +21,16 @@ export default defineConfig({
               hyperdrives: { HYPERDRIVE: inject('databaseUrl') },
               bindings: {
                 // The Worker reads an empty secret as unset, so a key the owner later puts in
-                // .dev.vars can't make these tests call a paid model, sign their requests, give
+                // .dev.vars (Anthropic's, OpenAI's, OpenRouter's, Cerebras's, or Groq's) can't make
+                // these tests call a paid model, sign their requests, give
                 // crowdio a token, a key, or scopes (.dev.vars.example lists crowdio's three), or
                 // open the console. The tests that need them set them on bindings of their own.
                 ANTHROPIC_API_KEY: '',
+                OPENAI_API_KEY: '',
+                OPENROUTER_API_KEY: '',
+                CEREBRAS_API_KEY: '',
+                GROQ_API_KEY: '',
+                LLM_GATEWAY_KEYS: '',
                 AI_GATEWAY_URL: '',
                 AI_GATEWAY_TOKEN: '',
                 WEB_BOT_AUTH_KEY: '',

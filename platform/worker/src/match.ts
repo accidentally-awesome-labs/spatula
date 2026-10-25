@@ -1,4 +1,5 @@
 import {
+  acceptFor,
   cascade,
   GENERIC_MATCH_CRITERIA,
   lineupNote,
@@ -14,9 +15,11 @@ import {
   stableId,
   stateHash,
   type CascadeOutcome,
+  type DownMarks,
   type FieldValue,
   type LineupEntry,
   type LlmUsage,
+  type ModelCall,
   type RecordType,
 } from '@spatula/core';
 import {
@@ -32,7 +35,8 @@ import {
   type Executor,
 } from '@spatula/store';
 import { likeliest, stands, weighed } from './classify';
-import { NO_USAGE, type Context, type RefreshPorts } from './pipeline';
+import { cascadeSteps, noneAsked, savedCalls } from './models';
+import { NO_USAGE, type Context, type LlmState, type RefreshPorts } from './pipeline';
 import { storable } from './text';
 
 /*
@@ -56,6 +60,10 @@ export interface Matched {
   outcome: 'rule' | 'accepted' | 'escalated' | 'reused' | 'skipped' | 'failed';
   usage: LlmUsage;
   note: string | null;
+  /** What the step asked of models (ADR 0010). Absent in results from before it. */
+  calls?: ModelCall[];
+  /** The providers the step found down. Absent in results from before it. */
+  down?: DownMarks;
   /** The two records' names, when the rule kept them apart in this step. Absent in older results. */
   pair?: string;
 }
@@ -63,7 +71,7 @@ export interface Matched {
 export async function matchItem(
   context: Context,
   question: { itemId: string; entityId: string; lineup?: readonly LineupEntry[] },
-  budgetLeft: number,
+  llm: LlmState,
   ports: RefreshPorts,
 ): Promise<Matched> {
   const { datasetId, definition, runId } = context;
@@ -74,6 +82,8 @@ export async function matchItem(
     outcome,
     usage: NO_USAGE,
     note: null,
+    calls: [],
+    down: {},
     ...more,
   });
   const sides = await ports.withDb((db) => matchSides(db, { definition, itemId, entityId }));
@@ -97,8 +107,7 @@ export async function matchItem(
   const consent =
     definition.policy.purposes.includes('ai-input') &&
     !(await ports.withDb((db) => anyRefusesAiInput(db, [itemId, ...sides.entityItemIds])));
-  const decider = consent ? ports.decider : null;
-  const accept = definition.decisions.match.accept;
+  const canAsk = consent && ports.decider !== null;
   const at = ports.now();
   const rule = ruleFor(recordType, sides);
   const pair = rule === null ? undefined : pairNames(recordType, sides);
@@ -111,7 +120,14 @@ export async function matchItem(
     findDecision(db, { datasetId, subjectKey, stateHash: hash, criteriaVersion }),
   );
   // A question asked before isn't asked again, unless asking might now come to something else.
-  if (earlier !== null && stands(earlier, { consent, canAsk: decider !== null, accept })) {
+  if (
+    earlier !== null &&
+    stands(earlier, {
+      consent,
+      canAsk,
+      accept: acceptFor(definition, 'match', earlier.adapter),
+    })
+  ) {
     const waiting = (await apply(earlier)) === 'waiting';
     // A step that runs again finds its own decision, and reports it as it was made.
     const again = earlier.id === decisionId;
@@ -121,6 +137,7 @@ export async function matchItem(
       again
         ? {
             usage: { inputTokens: earlier.inputTokens, outputTokens: earlier.outputTokens },
+            calls: savedCalls(earlier),
             ...(ruled && pair !== undefined ? { pair } : {}),
           }
         : {},
@@ -128,7 +145,8 @@ export async function matchItem(
   }
 
   // Asked next run, with a budget of its own; the page waits meanwhile. The rule costs nothing.
-  if (rule === null && decider !== null && budgetLeft <= 0) return result('skipped');
+  if (rule === null && canAsk && llm.usdLeft <= 0) return result('skipped');
+  const spent = noneAsked();
   let outcome: CascadeOutcome;
   try {
     outcome = await cascade({
@@ -145,13 +163,13 @@ export async function matchItem(
         }),
       },
       rule,
-      deciders: decider === null ? [] : [decider],
-      accept,
+      steps: canAsk ? cascadeSteps({ definition, job: 'match', ports, llm, asked: spent }) : [],
     });
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     return result('failed', {
       note: storable(`${sides.page.url}: the decider failed on a match question: ${message}`),
+      ...spent,
     });
   }
   // A decider's join, as the same product or an edition, about a page that is judged to join
@@ -196,7 +214,9 @@ export async function matchItem(
       adapter: outcome.by === 'rule' ? null : outcome.adapter,
       probabilities: outcome.by === 'rule' ? { [outcome.answer]: 1 } : outcome.probabilities,
       evidence,
-      thresholds: { accept },
+      thresholds: {
+        accept: acceptFor(definition, 'match', outcome.by === 'rule' ? null : outcome.adapter),
+      },
       outcome: outcome.by === 'adapter' ? 'accepted' : outcome.by === 'rule' ? 'rule' : 'escalated',
       answer: outcome.by === 'person' ? null : outcome.answer,
       inputTokens: usage.inputTokens,
@@ -206,7 +226,7 @@ export async function matchItem(
   );
   const waiting = (await apply(decision)) === 'waiting';
   if (outcome.by === 'rule') return result('rule', pair === undefined ? {} : { pair });
-  return result(waiting ? 'escalated' : 'accepted', { usage });
+  return result(waiting ? 'escalated' : 'accepted', { usage, ...spent });
 }
 
 /**

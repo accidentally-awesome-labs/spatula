@@ -113,16 +113,33 @@ export function buildLlmRequest(input: {
   return { system: SYSTEM_PROMPT, user, schema: z.object(shape) };
 }
 
-/** What an LLM answer depends on. Equal hashes mean asking again would be asking the same thing. */
+/**
+ * What an LLM answer depends on: the prompt's version, the fields, and the page's text. Equal hashes
+ * mean asking again would be asking the same thing. The model isn't part of it (ADR 0010): a value
+ * any model gives is kept only if the page holds it, so switching models, or a backup answering,
+ * asks no page again. Raising LLM_PROMPT_VERSION does.
+ */
 export async function llmInputHash(input: {
-  model: string;
+  text: string;
+  fields: [string, FieldDef][];
+}): Promise<string> {
+  return sha256Hex(
+    stableStringify({ version: LLM_PROMPT_VERSION, fields: input.fields, text: input.text }),
+  );
+}
+
+/**
+ * The hash before ADR 0010, which named the model. Every page asked before then was asked of
+ * claude-opus-5-5, so a page whose stored hash is this one was asked the same thing.
+ */
+export async function legacyLlmInputHash(input: {
   text: string;
   fields: [string, FieldDef][];
 }): Promise<string> {
   return sha256Hex(
     stableStringify({
       version: LLM_PROMPT_VERSION,
-      model: input.model,
+      model: 'claude-opus-5-5',
       fields: input.fields,
       text: input.text,
     }),

@@ -4,6 +4,7 @@ import {
   MODEL_NUMBER_REASON,
   runIdFor,
   type Decider,
+  type DecisionRequest,
   type Definition,
   type PagesSource,
 } from '@spatula/core';
@@ -20,7 +21,7 @@ import { testDefinition } from '@spatula/store/fixtures';
 import { eq } from 'drizzle-orm';
 import { describe, expect, it } from 'vitest';
 import { db } from '../test/node/db';
-import { fakeDecider, fakeLlm, type World } from '../test/node/fakes';
+import { fakeDecider, fakeLlm, modelPortsOf, type World } from '../test/node/fakes';
 import {
   DT_250,
   DT_80,
@@ -31,6 +32,7 @@ import {
 } from '../test/node/match-world';
 import { entityOf, published, refresh, worldFor } from '../test/node/runs';
 import { productPage, ROBOTS_OPEN, URLS } from '../test/pages';
+import { LlmHttpError } from './llm-openai';
 import { matchItem } from './match';
 import type { Context } from './pipeline';
 import { runRefresh, type StepRunner } from './refresh';
@@ -278,7 +280,7 @@ describe('matching pages', { timeout: 20_000 }, () => {
     const {
       world,
       pages: [a1, a2, a3],
-    } = await worldFor({ ...base, budget: { ...base.budget, llmTokensPerRun: 500 } }, routes, {
+    } = await worldFor({ ...base, budget: { ...base.budget, llmUsdPerRun: 0.0005 } }, routes, {
       llm: false,
     });
     const scripted = fakeDecider(() => ({ unrelated: 0.97 }));
@@ -590,7 +592,7 @@ describe('a decider that says a page is the same as two entities', { timeout: 20
       return matchItem(
         contextOf(world, definition),
         { itemId: page.id, entityId },
-        10_000,
+        { usdLeft: 0.01, down: {} },
         world.ports,
       );
     };
@@ -615,7 +617,7 @@ describe('a decider that says a page is the same as two entities', { timeout: 20
       await matchItem(
         contextOf(world, definition),
         { itemId: page.id, entityId: e2 },
-        10_000,
+        { usdLeft: 0.01, down: {} },
         world.ports,
       ),
     ).toMatchObject({ outcome: 'reused' });
@@ -632,7 +634,7 @@ describe('a decider that says a page is the same as two entities', { timeout: 20
     await matchItem(
       contextOf(world, definition),
       { itemId: page.id, entityId: e2 },
-      10_000,
+      { usdLeft: 0.01, down: {} },
       world.ports,
     );
     await refresh(world, datasetId);
@@ -671,7 +673,7 @@ describe('a decider that says a page is the same as two entities', { timeout: 20
     const matched = await matchItem(
       contextOf(world, definition),
       { itemId: page!.id, entityId: e2 },
-      10_000,
+      { usdLeft: 0.01, down: {} },
       world.ports,
     );
     expect(matched).toMatchObject({ outcome: 'escalated' });
@@ -801,7 +803,7 @@ describe('a question that isn’t answered in the run that raised it', { timeout
     expect(first.summary.match).toMatchObject({ failed: 1, accepted: 0 });
     // Workflows keep what a step returns, so the note is clean and short where it is made.
     const note =
-      `${URLS.a2}: the decider failed on a match question: overloaded  ${'x'.repeat(600)}`.slice(
+      `${URLS.a2}: the decider failed on a match question: llm:test/model: test/model: overloaded  ${'x'.repeat(186)}…`.slice(
         0,
         500,
       );
@@ -859,7 +861,7 @@ describe('a question that isn’t answered in the run that raised it', { timeout
       world,
       pages: [a1, a2, a3],
     } = await worldFor(
-      { ...definition, budget: { ...definition.budget, llmTokensPerRun: 500 } },
+      { ...definition, budget: { ...definition.budget, llmUsdPerRun: 0.0005 } },
       routes,
       { llm: false },
     );
@@ -978,6 +980,12 @@ describe('a question that isn’t answered in the run that raised it', { timeout
         outputTokens: 20,
       });
       expect(await decisionsAbout(datasetId), datasetId).toHaveLength(1);
+      expect(summary.spend?.match?.['test-model'], datasetId).toMatchObject({
+        calls: 1,
+        failed: 0,
+        inputTokens: 500,
+        outputTokens: 20,
+      });
     }
   });
 
@@ -1039,7 +1047,7 @@ describe('the match step', { timeout: 20_000 }, () => {
       const matched = await matchItem(
         contextOf(world, stricter),
         { itemId: a2.id, entityId: e1 },
-        10_000,
+        { usdLeft: 0.01, down: {} },
         world.ports,
       );
       nextRun(world);
@@ -1052,6 +1060,8 @@ describe('the match step', { timeout: 20_000 }, () => {
     // The answer is as sure as the dataset now asks: it stands, and costs nothing.
     expect(await askedAt(0.96)).toEqual({
       outcome: 'reused',
+      calls: [],
+      down: {},
       usage: { inputTokens: 0, outputTokens: 0 },
       note: null,
     });
@@ -1072,7 +1082,7 @@ describe('the match step', { timeout: 20_000 }, () => {
       const matched = await matchItem(
         contextOf(world, definition),
         { itemId: a2.id, entityId: e1 },
-        10_000,
+        { usdLeft: 0.01, down: {} },
         world.ports,
       );
       nextRun(world);
@@ -1088,6 +1098,8 @@ describe('the match step', { timeout: 20_000 }, () => {
     // The answer was as sure as its outcome, so asking again reuses it, at no cost.
     expect(await ask()).toEqual({
       outcome: 'reused',
+      calls: [],
+      down: {},
       usage: { inputTokens: 0, outputTokens: 0 },
       note: null,
     });
@@ -1103,7 +1115,7 @@ describe('the match step', { timeout: 20_000 }, () => {
       const matched = await matchItem(
         contextOf(world, definition),
         { itemId: a2.id, entityId: e1, lineup },
-        10_000,
+        { usdLeft: 0.01, down: {} },
         world.ports,
       );
       nextRun(world);
@@ -1136,7 +1148,7 @@ describe('the match step', { timeout: 20_000 }, () => {
     const matched = await matchItem(
       contextOf(world, definition),
       { itemId: a2!.id, entityId: e1 },
-      10_000,
+      { usdLeft: 0.01, down: {} },
       world.ports,
     );
     expect(matched).toMatchObject({ outcome: 'reused' });
@@ -1156,11 +1168,13 @@ describe('the match step', { timeout: 20_000 }, () => {
     const matched = await matchItem(
       contextOf(world, definition),
       { itemId: a2.id, entityId: 'sp_00000000000000000000' },
-      10_000,
+      { usdLeft: 0.01, down: {} },
       world.ports,
     );
     expect(matched).toEqual({
       outcome: 'skipped',
+      calls: [],
+      down: {},
       usage: { inputTokens: 0, outputTokens: 0 },
       note: null,
     });
@@ -1174,7 +1188,14 @@ describe('the match step', { timeout: 20_000 }, () => {
     const scripted = fakeDecider(() => ({ 'spec-version': 0.97 }));
     world.ports.decider = scripted.decider;
     const question = { itemId: a2.id, entityId: e1 };
-    expect(await matchItem(contextOf(world, definition), question, 0, world.ports)).toMatchObject({
+    expect(
+      await matchItem(
+        contextOf(world, definition),
+        question,
+        { usdLeft: 0, down: {} },
+        world.ports,
+      ),
+    ).toMatchObject({
       outcome: 'skipped',
     });
     expect(scripted.calls).toEqual([]);
@@ -1183,7 +1204,9 @@ describe('the match step', { timeout: 20_000 }, () => {
     // Where the dataset allows no decider, the budget has nothing to hold back.
     nextRun(world);
     const noPurpose = { ...definition, policy: { ...definition.policy, purposes: [] } };
-    expect(await matchItem(contextOf(world, noPurpose), question, 0, world.ports)).toMatchObject({
+    expect(
+      await matchItem(contextOf(world, noPurpose), question, { usdLeft: 0, down: {} }, world.ports),
+    ).toMatchObject({
       outcome: 'escalated',
     });
     expect(scripted.calls).toEqual([]);
@@ -1199,7 +1222,7 @@ describe('the match step', { timeout: 20_000 }, () => {
       const matched = await matchItem(
         contextOf(world, definition),
         { itemId: a2.id, entityId: e1 },
-        10_000,
+        { usdLeft: 0.01, down: {} },
         world.ports,
       );
       nextRun(world);
@@ -1236,7 +1259,7 @@ describe('the match step', { timeout: 20_000 }, () => {
     await matchItem(
       contextOf(world, definition),
       { itemId: a2.id, entityId: e1 },
-      10_000,
+      { usdLeft: 0.01, down: {} },
       world.ports,
     );
     expect(scripted.calls[0]!.criteria).toBe(GENERIC_MATCH_CRITERIA);
@@ -1260,7 +1283,7 @@ describe('the match step', { timeout: 20_000 }, () => {
       const matched = await matchItem(
         contextOf(world, definition),
         { itemId: b1!.id, entityId: e1 },
-        10_000,
+        { usdLeft: 0.01, down: {} },
         world.ports,
       );
       return { matched, asked: scripted.calls.length - asked };
@@ -1280,5 +1303,97 @@ describe('the match step', { timeout: 20_000 }, () => {
     world.web.routes.set('https://maker-b.example/robots.txt', { status: 200, body: NO_AI_INPUT });
     await refresh(world, 'match-hosts');
     expect(await hosts()).toMatchObject({ matched: { outcome: 'escalated' }, asked: 1 });
+  });
+});
+
+/** A fake decider that answers as the model named, so its decisions record `llm:<model>`. */
+const named = (
+  model: string,
+  answer: (request: DecisionRequest) => Record<string, number> | null,
+) => {
+  const fake = fakeDecider(answer);
+  return { ...fake, decider: { ...fake.decider, name: `llm:${model}` } };
+};
+
+describe('match through steps (ADR 0010)', { timeout: 20_000 }, () => {
+  it('asks the backup when the model fails, and marks its provider down for the run', async () => {
+    const id = 'match-step-backup';
+    const {
+      world,
+      pages: [a1, a2],
+    } = await worldFor(
+      { ...testDefinition(id), models: { match: [{ model: 'down/x', backup: 'up/y' }] } },
+      routesWith(DT_80, DT_250),
+    );
+    let downCalls = 0;
+    const down: Decider = {
+      name: 'llm:down/x',
+      async decide() {
+        downCalls += 1;
+        throw new LlmHttpError(402, '402 Insufficient credits');
+      },
+    };
+    const up = named('up/y', () => ({ 'spec-version': 0.97 }));
+    world.ports.modelPorts = modelPortsOf(world, {
+      decider: { 'down/x': down, 'up/y': up.decider },
+    });
+    const run = await refresh(world, id);
+    const e1 = await entityOf(a1!.id);
+    expect(run.summary.match).toMatchObject({ accepted: 1, failed: 0 });
+    expect(downCalls).toBe(1);
+    expect(up.calls).toHaveLength(1);
+    expect(await decisionsAbout(id)).toMatchObject([
+      { adapter: 'llm:up/y', answer: 'spec-version', subject: `${a2!.id}|${e1}` },
+    ]);
+    expect(run.summary.llm.down?.down?.reason).toBe('payment required');
+    expect(run.summary.spend?.match?.['down/x']).toMatchObject({ calls: 1, failed: 1 });
+    expect(run.summary.spend?.match?.['up/y']).toMatchObject({ calls: 1, failed: 0 });
+  });
+
+  it('asks a person only what every step weighed', async () => {
+    const id = 'match-step-weighed';
+    const {
+      world,
+      pages: [a1, a2],
+    } = await worldFor(
+      { ...testDefinition(id), models: { match: ['cheap/x', 'strong/y'] } },
+      routesWith(DT_80, DT_250),
+    );
+    const cheap = named('cheap/x', () => ({ same: 0.5, 'spec-version': 0.45 }));
+    const strong = named('strong/y', () => ({ same: 0.6, 'spec-version': 0.35 }));
+    let strongDown = true;
+    world.ports.modelPorts = modelPortsOf(world, {
+      decider: {
+        'cheap/x': cheap.decider,
+        'strong/y': {
+          name: 'llm:strong/y',
+          async decide(request) {
+            if (strongDown) throw new LlmHttpError(500, 'overloaded');
+            return strong.decider.decide(request);
+          },
+        },
+      },
+    });
+    const first = await refresh(world, id);
+    const e1 = await entityOf(a1!.id);
+    expect(first.summary.match).toMatchObject({ failed: 1, escalated: 0 });
+    expect(first.summary.notes.some((note) => note.includes('strong/y'))).toBe(true);
+    expect(await decisionsAbout(id)).toEqual([]);
+    expect(await judgementsFor(db, id)).toEqual([]);
+    expect(await listOpenReviews(db, id)).toEqual([]);
+
+    strongDown = false;
+    const second = await refresh(world, id);
+    expect(second.summary.match).toMatchObject({ escalated: 1, failed: 0 });
+    expect(await listOpenReviews(db, id)).toMatchObject([
+      {
+        kind: 'match',
+        subject: `${a2!.id}|${e1}`,
+        context: { proposed: 'same', probabilities: { same: 0.6, 'spec-version': 0.35 } },
+      },
+    ]);
+    expect(await decisionsAbout(id)).toMatchObject([
+      { outcome: 'escalated', adapter: 'llm:strong/y' },
+    ]);
   });
 });

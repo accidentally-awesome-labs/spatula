@@ -33,6 +33,7 @@ import {
   getSnapshot,
   heldSnapshot,
   latestAcknowledgments,
+  latestRunSummary,
   latestSnapshot,
   listDatasets,
   listEvals,
@@ -71,6 +72,7 @@ import { rawPageKey } from './captures';
 import { consumerSecret, secret, verifiedBot } from './config';
 import { consolePages } from './console/routes';
 import { withDatabase } from './database';
+import { modelIssues, workerModels } from './models';
 import { pageKey } from './pipeline';
 import { proposalRoutes } from './proposal-api';
 import { reviewRoutes } from './review-api';
@@ -219,11 +221,14 @@ api.put('/datasets/:id', async (c) => {
   if (!parsed.ok)
     return c.json({ error: 'The definition has problems.', issues: parsed.issues }, 400);
   const { definition } = parsed;
+  // A model the deployment can't ask, as it is set up now, is a problem too (ADR 0010). A run
+  // checks again at its start, since a key may go after the definition is applied.
   const issues = [
     ...(definition.dataset === id
       ? []
       : [`dataset: it says ${definition.dataset}, but the address says ${id}`]),
     ...packIssues(definition, packs),
+    ...modelIssues(definition, workerModels(c.env).setup),
   ];
   if (issues.length > 0) return c.json({ error: 'The definition has problems.', issues }, 400);
   const dryRun = flag === '1';
@@ -643,6 +648,9 @@ api.get('/datasets/:id/status', async (c) => {
     if (dataset === null) return null;
     const held = await heldSnapshot(db, datasetId);
     const acks = await latestAcknowledgments(db, datasetId);
+    // The providers the latest finished run found down (ADR 0010); a run before it marks none.
+    const latest = await latestRunSummary(db, datasetId);
+    const down = latest?.summary.llm.down ?? {};
     return {
       dataset: datasetId,
       revision: dataset.revision,
@@ -674,6 +682,9 @@ api.get('/datasets/:id/status', async (c) => {
         lastProbe: state.lastProbe,
       })),
       verified: verifiedBot(c.env),
+      ...(latest !== null && Object.keys(down).length > 0
+        ? { llm: { runId: latest.id, down } }
+        : {}),
     };
   });
   if (status === null) return c.json({ error: `Dataset ${datasetId} doesn’t exist.` }, 404);

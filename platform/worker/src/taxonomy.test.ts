@@ -3,7 +3,10 @@ import {
   findItem,
   NONE_SHELF,
   parseDefinition,
+  runIdFor,
   type Definition,
+  type TaxonomyDecider,
+  type TaxonomyRequest,
   type TaxonomySubject,
 } from '@spatula/core';
 import {
@@ -20,10 +23,20 @@ import { testTaxonomy, testTaxonomyDefinition } from '@spatula/store/fixtures';
 import { and, eq, isNull } from 'drizzle-orm';
 import { describe, expect, it } from 'vitest';
 import { db } from '../test/node/db';
-import { fakeTaxonomyDecider, type World } from '../test/node/fakes';
+import { fakeTaxonomyDecider, modelPortsOf, type World } from '../test/node/fakes';
 import { refresh, taxonomyWorld, worldFor } from '../test/node/runs';
-import { A1, B1, ROBOTS_OPEN, standardRoutes, taxonomyFor, URLS } from '../test/pages';
+import {
+  A1,
+  B1,
+  ROBOTS_OPEN,
+  standardRoutes,
+  taxonomyFor,
+  URLS,
+  type SlugChances,
+} from '../test/pages';
+import { LlmHttpError } from './llm-openai';
 import { extractionTag, retryTag } from './pipeline';
+import { runRefresh, type StepRunner } from './refresh';
 import { keyHash, placeSubject } from './taxonomy';
 
 const T = testTaxonomy();
@@ -475,6 +488,311 @@ describe('placing pages with AI input only where it’s allowed', { timeout: 20_
       a2: await placedOf(a2!.id),
       b1: await placedOf(b1!.id),
     }).toEqual(before);
+  });
+});
+
+/** A fake taxonomy decider that answers as the model named, so its decisions record `llm:<model>`. */
+const named = (model: string, answer: (request: TaxonomyRequest) => SlugChances | null) => {
+  const fake = fakeTaxonomyDecider(answer);
+  return { ...fake, decider: { ...fake.decider, name: `llm:${model}` } };
+};
+
+/** A taxonomy decider that throws what a provider's failed call throws. */
+const failing = (model: string, error: Error): TaxonomyDecider & { calls: number } => {
+  const decider = {
+    name: `llm:${model}`,
+    calls: 0,
+    async decide(): Promise<never> {
+      decider.calls += 1;
+      throw error;
+    },
+  };
+  return decider;
+};
+
+/** The world's answer with each option it likes at one chance, and each other at 0.01. */
+const allAt =
+  (chance: number) =>
+  (request: TaxonomyRequest): SlugChances => {
+    const at = (chances: Record<string, number> = {}) =>
+      Object.fromEntries(
+        Object.entries(chances).map(([slug, p]) => [slug, p > 0.5 ? chance : 0.01]),
+      );
+    const given = taxonomyFor(request);
+    return {
+      shelves: at(given.shelves),
+      functions: at(given.functions),
+      values: at(given.values),
+    };
+  };
+
+/** The answer for B1 when the page is B1, and the world's at 0.99 for any other. */
+const forB1 = (answer: (request: TaxonomyRequest) => SlugChances) => (request: TaxonomyRequest) =>
+  request.evidence.includes(URLS.b1) ? answer(request) : allAt(0.99)(request);
+
+describe('placing through steps (ADR 0010)', { timeout: 20_000 }, () => {
+  it('asks the next step when the first leaves a part open, and takes that step’s answer whole', async () => {
+    const datasetId = 'place-steps';
+    const {
+      world,
+      pages: [, , b1],
+    } = await taxonomyWorld(
+      redefine(testTaxonomyDefinition(datasetId), {
+        models: { classify: [{ model: 'cheap/x', accept: 0.96 }, 'strong/y'] },
+      }),
+    );
+    // The cheap model is sure B1 is a headphone amp, and unsure it's a DAC; the strong one is sure
+    // of everything, on another shelf.
+    const cheap = named(
+      'cheap/x',
+      forB1((request) => {
+        const sure = allAt(0.99)(request);
+        return { ...sure, functions: { ...sure.functions, dac: 0.5 } };
+      }),
+    );
+    const strong = named(
+      'strong/y',
+      forB1(() => ({
+        shelves: { 'power-amps': 0.99 },
+        functions: { dac: 0.99 },
+        values: { speakers: 0.99 },
+      })),
+    );
+    world.ports.modelPorts = modelPortsOf(world, {
+      taxonomyDecider: { 'cheap/x': cheap.decider, 'strong/y': strong.decider },
+    });
+    const run = await refresh(world, datasetId);
+    expect(run.summary.classify).toMatchObject({
+      accepted: 3,
+      escalated: 0,
+      failed: 0,
+      inputTokens: 2400,
+      outputTokens: 160,
+    });
+    // Only B1 had a part left open, so only B1 asked the strong model.
+    expect(cheap.calls).toHaveLength(3);
+    expect(strong.calls).toHaveLength(1);
+    expect(strong.calls[0]!.evidence).toContain(URLS.b1);
+    const [decision] = await db
+      .select()
+      .from(decisionRecords)
+      .where(eq(decisionRecords.subjectKey, placeSubject(b1!.id)));
+    expect(decision).toMatchObject({
+      adapter: 'llm:strong/y',
+      outcome: 'accepted',
+      answer: answerText({
+        shelf: id('shelf', 'power-amps'),
+        functions: [id('function', 'dac')],
+        values: [id('value', 'speakers')],
+      }),
+      thresholds: { accept: 0.9 },
+      inputTokens: 1200,
+      outputTokens: 80,
+    });
+    // The cheap model's sure shelf isn't kept: the strong model's answer is taken whole.
+    expect(await placedOf(b1!.id)).toEqual([
+      'features llm speakers 0.99',
+      'functions llm dac 0.99',
+      'shelf llm power-amps 0.99',
+    ]);
+    expect(run.summary.spend?.classify?.['cheap/x']).toMatchObject({ calls: 3, failed: 0 });
+    expect(run.summary.spend?.classify?.['strong/y']).toMatchObject({
+      calls: 1,
+      failed: 0,
+      inputTokens: 600,
+      outputTokens: 40,
+    });
+  });
+
+  it('asks the backup when the model fails, and marks its provider down for the run', async () => {
+    const datasetId = 'place-step-backup';
+    const {
+      world,
+      pages: [, , b1],
+    } = await taxonomyWorld(
+      redefine(testTaxonomyDefinition(datasetId), {
+        models: { classify: [{ model: 'down/x', backup: 'up/y' }] },
+      }),
+    );
+    const down = failing('down/x', new LlmHttpError(401, '401 invalid x-api-key'));
+    const up = named('up/y', taxonomyFor);
+    world.ports.modelPorts = modelPortsOf(world, {
+      taxonomyDecider: { 'down/x': down, 'up/y': up.decider },
+    });
+    const run = await refresh(world, datasetId);
+    expect(run.summary.classify).toMatchObject({ accepted: 3, failed: 0 });
+    const [decision] = await db
+      .select()
+      .from(decisionRecords)
+      .where(eq(decisionRecords.subjectKey, placeSubject(b1!.id)));
+    expect(decision).toMatchObject({ adapter: 'llm:up/y', thresholds: { accept: 0.9 } });
+    expect(await placedOf(b1!.id)).toEqual([
+      'features llm headphones 0.95',
+      'functions llm dac 0.95',
+      'shelf llm headphone-amps 0.97',
+    ]);
+    // The first page found the provider down; the others sent it nothing.
+    expect(down.calls).toBe(1);
+    expect(up.calls).toHaveLength(3);
+    expect(run.summary.llm.down?.down?.reason).toBe('the key was refused');
+    expect(run.summary.spend?.classify?.['down/x']).toMatchObject({ calls: 3, failed: 3 });
+    expect(run.summary.spend?.classify?.['up/y']).toMatchObject({ calls: 3, failed: 0 });
+  });
+
+  it('asks a person only what every step weighed', async () => {
+    const datasetId = 'place-step-weighed';
+    const {
+      world,
+      pages: [, , b1],
+    } = await taxonomyWorld(
+      redefine(testTaxonomyDefinition(datasetId), {
+        models: { classify: ['cheap/x', 'strong/y'] },
+      }),
+    );
+    // Both models are unsure whether B1 is a DAC, and the strong one is down at first.
+    const unsure = forB1((request) => {
+      const sure = allAt(0.99)(request);
+      return { ...sure, functions: { ...sure.functions, dac: 0.6 } };
+    });
+    const cheap = named('cheap/x', unsure);
+    const strong = named('strong/y', unsure);
+    const strongFails = failing('strong/y', new LlmHttpError(503, '503 overloaded'));
+    let strongDown = true;
+    world.ports.modelPorts = modelPortsOf(world, {
+      taxonomyDecider: {
+        'cheap/x': cheap.decider,
+        'strong/y': {
+          name: 'llm:strong/y',
+          decide: (request) =>
+            strongDown ? strongFails.decide(request) : strong.decider.decide(request),
+        },
+      },
+    });
+    const first = await refresh(world, datasetId);
+    // The strong model couldn't weigh B1, so no person is asked: the page is read again.
+    expect(first.summary.classify).toMatchObject({ accepted: 2, escalated: 0, failed: 1 });
+    expect(await listOpenReviews(db, datasetId)).toEqual([]);
+    expect(await placeDecisionsOf(b1!.id)).toBe(0);
+    expect(first.summary.notes).toContainEqual(
+      expect.stringContaining(`${URLS.b1}: the decider failed: strong/y: 503 overloaded`),
+    );
+    expect((await marks(datasetId))[URLS.b1]).toBe(retryTag(1));
+    // B1's failed step still counts the cheap model's answer, and the strong model's failed call.
+    expect(first.summary.spend?.classify?.['cheap/x']).toMatchObject({ calls: 3, failed: 0 });
+    expect(first.summary.spend?.classify?.['strong/y']).toMatchObject({
+      calls: 1,
+      failed: 1,
+      inputTokens: 0,
+    });
+
+    // The strong model is back next run: it weighs B1, and a person is asked what it isn't sure of.
+    strongDown = false;
+    const second = await refresh(world, datasetId);
+    expect(second.names).toContain(`decide:${b1!.id}`);
+    expect(second.summary.classify).toMatchObject({ escalated: 1, failed: 0 });
+    const reviews = await listOpenReviews(db, datasetId);
+    expect(reviews).toHaveLength(1);
+    expect(reviews[0]).toMatchObject({
+      subject: b1!.id,
+      question: { parts: { shelves: [], functions: [id('function', 'dac')], features: {} } },
+    });
+    const [decision] = await db
+      .select()
+      .from(decisionRecords)
+      .where(eq(decisionRecords.subjectKey, placeSubject(b1!.id)));
+    expect(decision).toMatchObject({ outcome: 'escalated', adapter: 'llm:strong/y' });
+  });
+
+  it('applies an answer again under the threshold of the step that gave it', async () => {
+    const datasetId = 'place-step-threshold';
+    const definition = (accept: number, maxAgeDays?: number) =>
+      redefine(testTaxonomyDefinition(datasetId), {
+        models: { classify: [{ model: 'cheap/x', accept }] },
+        ...(maxAgeDays === undefined ? {} : { freshness: { maxAgeDays } }),
+      });
+    const {
+      world,
+      pages: [a1, a2, b1],
+    } = await taxonomyWorld(definition(0.96));
+    const cheap = named('cheap/x', allAt(0.97));
+    world.ports.modelPorts = modelPortsOf(world, { taxonomyDecider: { 'cheap/x': cheap.decider } });
+    const first = await refresh(world, datasetId);
+    expect(first.summary.classify).toMatchObject({ accepted: 3, escalated: 0 });
+    const settled = [
+      'features llm headphones 0.97',
+      'functions llm dac 0.97',
+      'shelf llm headphone-amps 0.97',
+    ];
+    expect(await placedOf(b1!.id)).toEqual(settled);
+    const [decision] = await db
+      .select()
+      .from(decisionRecords)
+      .where(eq(decisionRecords.subjectKey, placeSubject(b1!.id)));
+    expect(decision).toMatchObject({ adapter: 'llm:cheap/x', thresholds: { accept: 0.96 } });
+
+    // The pages are read again, unchanged: the decisions apply again, and stay settled.
+    await applyDefinition(db, definition(0.96, 6));
+    const second = await refresh(world, datasetId);
+    expect(second.summary.classify).toMatchObject({ reused: 3, escalated: 0, accepted: 0 });
+    expect(cheap.calls).toHaveLength(3);
+    expect(await placedOf(b1!.id)).toEqual(settled);
+    expect(await listOpenReviews(db, datasetId)).toEqual([]);
+
+    // The step now asks for more than its answers gave: what they settled at 0.97 is open again,
+    // as a person's question, and the model isn't asked again.
+    await applyDefinition(db, definition(0.98, 6));
+    const third = await refresh(world, datasetId);
+    expect(third.summary.classify).toMatchObject({ escalated: 3, reused: 0, accepted: 0 });
+    expect(cheap.calls).toHaveLength(3);
+    expect(await placedOf(b1!.id)).toEqual([]);
+    const reviews = await listOpenReviews(db, datasetId);
+    expect(reviews.map((review) => review.subject).sort()).toEqual([a1!.id, a2!.id, b1!.id].sort());
+    expect(reviews.find((review) => review.subject === b1!.id)!.question).toMatchObject({
+      parts: {
+        shelves: expect.arrayContaining([id('shelf', 'headphone-amps')]),
+        functions: [id('function', 'dac'), id('function', 'amplifier')],
+        features: { [id('feature', 'drives')]: [id('value', 'headphones')] },
+      },
+    });
+  });
+
+  it('reports the placement it made when its step runs again, and counts its spend once', async () => {
+    const datasetId = 'place-replayed';
+    const { world } = await taxonomyWorld(testTaxonomyDefinition(datasetId));
+    const runId = runIdFor(datasetId, world.clock.now());
+    // Each decide step runs twice, as Workflows runs a step again after a crash.
+    const ran = new Set<string>();
+    const replaying: StepRunner = {
+      async do(name, fn) {
+        if (name.startsWith('decide:') && !ran.has(name)) {
+          ran.add(name);
+          await fn();
+        }
+        return JSON.parse(JSON.stringify((await fn()) ?? null)) as never;
+      },
+      async sleep(_name, ms) {
+        world.clock.advance(ms);
+      },
+    };
+    const summary = await runRefresh({ runId, datasetId, all: true }, replaying, world.ports);
+    expect(world.taxonomyDecider.calls).toHaveLength(3);
+    expect(summary.classify).toEqual({
+      rule: 0,
+      accepted: 3,
+      escalated: 0,
+      reused: 0,
+      skipped: 0,
+      failed: 0,
+      inputTokens: 1800,
+      outputTokens: 120,
+    });
+    // The replayed steps charge the saved decisions to the model that answered.
+    expect(summary.spend?.classify?.['test-model']).toMatchObject({
+      calls: 3,
+      failed: 0,
+      inputTokens: 1800,
+      outputTokens: 120,
+    });
   });
 });
 
