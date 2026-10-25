@@ -3,7 +3,7 @@ import { applyDefinition } from '@spatula/store';
 import { testDefinition } from '@spatula/store/fixtures';
 import { introspectWorkflow, introspectWorkflowInstance } from 'cloudflare:test';
 import { env } from 'cloudflare:workers';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { comparisonIdFor, comparisonKey, type CompareParams } from '../../src/compare';
 import { withDatabase } from '../../src/database';
 import { call, CONSUMER_TOKEN, consumerBindings, expectNoStore } from './api-support';
@@ -190,6 +190,48 @@ describe('comparisons', () => {
     } finally {
       await introspector.dispose();
     }
+  });
+
+  it('refuse a second start in the same second, which would have the same ID', async () => {
+    const datasetId = 'cmp-twice';
+    await withDatabase(env, (db) => applyDefinition(db, testDefinition(datasetId)));
+    const introspector = await introspectWorkflow(env.COMPARE);
+    // The clock is pinned for the two requests, so both fall in one second. Only Date is faked.
+    vi.useFakeTimers({ toFake: ['Date'] });
+    vi.setSystemTime(new Date(Date.UTC(2026, 10, 1, 9, 0, 0, 100)));
+    try {
+      const first = await start(datasetId, body());
+      expect(first.status).toBe(202);
+      const id = 'cmp-cmp-twice-20261101090000';
+      expect(await first.json()).toEqual({ comparisonId: id });
+      vi.setSystemTime(new Date(Date.UTC(2026, 10, 1, 9, 0, 0, 900)));
+      const second = await start(datasetId, body({ job: 'match' }));
+      expect(second.status).toBe(409);
+      expectNoStore(second);
+      expect(await second.json()).toEqual({
+        error: `A comparison of ${datasetId} started this second (${id}). Wait a moment, then start another.`,
+        comparisonId: id,
+      });
+      vi.useRealTimers();
+      const instances = await introspector.get();
+      expect(instances).toHaveLength(1);
+      await instances[0]!.waitForStatus('complete');
+    } finally {
+      vi.useRealTimers();
+      await introspector.dispose();
+    }
+
+    // Any other failure to start is a failure, not a refusal: no instance has the ID.
+    const failing = {
+      ...asking(),
+      COMPARE: {
+        create: () => Promise.reject(new Error('the Workflows service is down')),
+        get: () => Promise.reject(new Error('instance.not_found')),
+      },
+    } as unknown as Env;
+    const failed = await start(datasetId, body(), failing);
+    expect(failed.status).toBe(500);
+    expectNoStore(failed);
   });
 
   it('read a report from R2, a failed Workflow, and nothing for an ID that isn’t one', async () => {

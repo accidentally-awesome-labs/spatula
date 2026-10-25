@@ -1004,7 +1004,24 @@ bearerApi.post('/datasets/:id/comparisons', ownerOnly, async (c) => {
     maxUsd: request.maxUsd,
     startedAt: now.toISOString(),
   };
-  await c.env.COMPARE.create({ id: comparisonId, params });
+  try {
+    await c.env.COMPARE.create({ id: comparisonId, params });
+  } catch (error) {
+    // Two starts in one second have one ID (ruling 10), so the second finds the first's instance.
+    // Any other failure to start is a failure.
+    const taken = await c.env.COMPARE.get(comparisonId).then(
+      () => true,
+      () => false,
+    );
+    if (!taken) throw error;
+    return c.json(
+      {
+        error: `A comparison of ${datasetId} started this second (${comparisonId}). Wait a moment, then start another.`,
+        comparisonId,
+      },
+      409,
+    );
+  }
   c.header('location', `/comparisons/${comparisonId}`);
   return c.json({ comparisonId }, 202);
 });
