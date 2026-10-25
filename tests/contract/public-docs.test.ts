@@ -161,7 +161,21 @@ function registeredCliCommands(): Set<string> {
   for (const match of source.matchAll(/^  \.command\(\s*['`]([^'`\s]+)/gm)) {
     commands.add(match[1]);
   }
+  // The 0.2 platform CLI counts too. Its USAGE table lists each top-level command at a
+  // two-space indent; continuation lines are indented deeper, so they never match.
+  for (const command of platformCliCommands(
+    readFileSync(join(root, 'platform/cli/src/main.ts'), 'utf8'),
+  )) {
+    commands.add(command);
+  }
   return commands;
+}
+
+function platformCliCommands(source: string): Set<string> {
+  const start = source.indexOf('export const USAGE = `');
+  const end = source.indexOf('`;', start);
+  const usage = start === -1 || end === -1 ? '' : source.slice(start, end);
+  return new Set([...usage.matchAll(/^  ([a-z][a-z-]*)(?=\s)/gm)].map((match) => match[1]));
 }
 
 function registeredAdminTenantActions(): Set<string> {
@@ -267,6 +281,15 @@ describe('public documentation guard', () => {
       .map(({ rel, invocation }) => `${rel}: ${invocation}`);
 
     expect(unknown).toEqual([]);
+  });
+
+  it('reads the platform CLI commands from its usage table, and flags unknown ones', () => {
+    const commands = platformCliCommands(
+      readFileSync(join(root, 'platform/cli/src/main.ts'), 'utf8'),
+    );
+
+    expect(commands.has('models')).toBe(true);
+    expect(commands.has('nosuchcommand')).toBe(false);
   });
 
   it('only documents implemented admin tenant CLI actions in public docs', () => {
